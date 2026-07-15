@@ -485,19 +485,25 @@ onBeforeUnmount(() => {
 <style lang="scss" scoped>
 .field { width: 100%; min-height: 88rpx; display: flex; align-items: center; box-sizing: border-box; }
 .field--vertical { align-items: stretch; flex-direction: column; gap: 12rpx; }
+.field--chip { min-width: 0; min-height: 52rpx; gap: 8rpx; }
 .field--embedded.field--horizontal { min-height: 92rpx; gap: 16rpx; border-bottom: 2rpx solid #f3f4f6; }
 .label { width: 170rpx; flex-shrink: 0; color: #334155; font-size: 28rpx; }
 .field--vertical .label { width: auto; font-size: 26rpx; font-weight: 600; }
+.field--chip .label { width: auto; font-size: 22rpx; font-weight: 600; }
 .field--embedded .label { font-weight: 600; }
 .field--embedded.field--horizontal .label { width: 150rpx; font-size: 26rpx; }
 .req { margin-right: 6rpx; color: #ef4444; }
 .value { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: flex-end; overflow: hidden; color: #0f172a; font-size: 28rpx; }
+.field--chip .value { justify-content: flex-start; color: inherit; font-size: 23rpx; }
 .field--vertical .value, .field--embedded .value { min-height: 72rpx; padding: 0 18rpx; justify-content: space-between; background: #f8fafc; border: 2rpx solid transparent; border-radius: 12rpx; box-sizing: border-box; }
 .field--on .value { background: #f8fbff; border-color: #3b6ef5; }
+.field--chip.field--on .value { background: transparent; border-color: transparent; }
 .value--ph { color: #c4c8cf; }
 .truncate { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .clear-icon { padding: 10rpx; color: #94a3b8; font-size: 26rpx; }
+.field--chip .clear-icon { padding: 6rpx; font-size: 21rpx; }
 .arrow { margin-left: 8rpx; color: #c4c8cf; font-size: 24rpx; }
+.field--chip .arrow { margin-left: 2rpx; font-size: 20rpx; }
 
 .popup { height: 90vh; display: flex; flex-direction: column; overflow: hidden; background: #fff; }
 .head { flex-shrink: 0; padding: 24rpx 28rpx 14rpx; display: flex; align-items: center; justify-content: space-between; }

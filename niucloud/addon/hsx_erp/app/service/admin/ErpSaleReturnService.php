@@ -14,6 +14,7 @@ use addon\hsx_erp\app\model\ErpSaleReturnOrder;
 use addon\hsx_erp\app\model\ErpSaleReturnItem;
 use addon\hsx_erp\app\model\ErpWarehouse;
 use addon\hsx_erp\app\support\ErpIdempotency;
+use addon\hsx_erp\app\support\ErpPartyMemberNames;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -657,6 +658,9 @@ class ErpSaleReturnService extends BaseAdminService
         if (!empty($where['status'])) {
             $query->where('status', '=', (string)$where['status']);
         }
+        if (!empty($where['business_type'])) {
+            $query->where('business_type', '=', (string)$where['business_type']);
+        }
         if (!empty($where['party_id'])) {
             $query->where('party_id', '=', (int)$where['party_id']);
         }
@@ -710,6 +714,7 @@ class ErpSaleReturnService extends BaseAdminService
                 || ((string)$row['status'] === 'confirmed' && (string)$row['refund_mode'] === 'payable' && empty($settledMap[(int)$row['id']]));
         }
         unset($row);
+        ErpPartyMemberNames::append($this->site_id, $page['data']);
         return $page;
     }
 
@@ -783,6 +788,9 @@ class ErpSaleReturnService extends BaseAdminService
         $return['can_cancel'] = (string)$return['status'] === 'pending'
             || ((string)$return['status'] === 'confirmed' && (string)$return['business_type'] !== 'after_sale_compensation'
                 && (string)$return['refund_mode'] === 'payable' && !$hasSettledRefund);
+        $partyRows = [$return];
+        ErpPartyMemberNames::append($this->site_id, $partyRows);
+        $return = $partyRows[0];
         return $return;
     }
 

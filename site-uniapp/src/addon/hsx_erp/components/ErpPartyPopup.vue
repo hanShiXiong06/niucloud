@@ -5,16 +5,17 @@
   1. 搜索会员列表（erp/counterparty/member_options）
   2. 用户选中会员
   3. 调用 resolve_contact(member_id, role_type) 获取或创建往来主体
-  4. 返回 party_id + party_name
+  4. 统一返回 party_id + party_name + member_name
 -->
 <template>
     <u-popup :show="show" mode="bottom" :safe-area-inset-bottom="true" border-radius="32rpx" @close="close">
         <view class="popup-wrap">
             <view class="popup-header">
-                <text class="popup-title">{{ editingMember ? '修改会员昵称' : (roleType === 'supplier' ? '选择供应商' : '选择客户') }}</text>
+                <text class="popup-title">{{ editingMember ? '修改会员昵称' : (existingOnly ? '选择往来主体' : (roleType === 'supplier' ? '选择供应商' : '选择客户')) }}</text>
                 <view class="popup-header__actions">
                     <text v-if="editingMember" class="create-link" @click="cancelMemberEdit">返回列表</text>
-                    <text v-else class="create-link" @click="showCreate = !showCreate">{{ showCreate ? '返回列表' : '新增' }}</text>
+                    <text v-else-if="existingOnly && partyId" class="create-link" @click="clearSelection">清除筛选</text>
+                    <text v-else-if="!existingOnly" class="create-link" @click="showCreate = !showCreate">{{ showCreate ? '返回列表' : '新增' }}</text>
                     <u-icon name="close" size="20" color="#94a3b8" @click="close" />
                 </view>
             </view>
@@ -41,14 +42,14 @@
             <view class="popup-search">
                 <u-search
                     v-model="keyword"
-                    placeholder="搜索姓名 / 手机号 / 会员号"
+                    :placeholder="existingOnly ? '搜索主体名称 / 联系人 / 手机 / M号' : '搜索姓名 / 手机号 / 会员号'"
                     :showAction="false"
                     bgColor="#f1f5f9"
                     height="34"
                     @search="onSearch"
                     @clear="onSearch"
                 />
-                <text class="popup-hint">{{ roleType === 'supplier' ? '全部会员都可以作为供货商，选择后自动建立供应商往来关系' : '全部会员都可以作为客户，选择后自动建立客户往来关系' }}</text>
+                <text class="popup-hint">{{ existingOnly ? '选择已有往来主体进行精确筛选，不会新建或修改往来关系' : (roleType === 'supplier' ? '全部会员都可以作为供货商，选择后自动建立供应商往来关系' : '全部会员都可以作为客户，选择后自动建立客户往来关系') }}</text>
                 <view v-if="roleType === 'supplier'" class="role-filters">
                     <view v-for="item in supplierFilters" :key="item.value" :class="{ active: activeRoleFilter === item.value }" @click="setRoleFilter(item.value)">{{ item.label }}</view>
                 </view>
@@ -69,12 +70,12 @@
                                     <text class="party-item__name">
                                         {{ item.party_name || item.counterparty_name || item.nickname || item.username || '未命名' }}
                                     </text>
-                                    <view class="party-item__edit" @click.stop="beginMemberEdit(item)">
+                                    <view v-if="!existingOnly" class="party-item__edit" @click.stop="beginMemberEdit(item)">
                                         <u-icon name="edit-pen" color="#2563eb" size="14" />
                                         <text>改会员名</text>
                                     </view>
                                 </view>
-                                <text v-if="item.party_name" class="party-item__member">
+                                <text v-if="item.party_name && (item.nickname || item.username)" class="party-item__member">
                                     会员：{{ item.nickname || item.username }}
                                 </text>
                             </view>
@@ -83,6 +84,9 @@
                                 <text v-if="item.m_no" class="party-item__mno">M号 {{ item.m_no }}</text>
                                  <text v-if="item.party_id" class="party-item__badge">
                                     <u-tag text="已有往来主体" type="success" plain plainFill size="mini" />
+                                </text>
+                                <text v-if="creditLabel(item)" class="party-item__badge">
+                                    <u-tag :text="creditLabel(item)" :type="item.credit_profile?.can_sale === false ? 'error' : 'warning'" plain plainFill size="mini" />
                                 </text>
                             </view>
                         </view>
@@ -119,6 +123,9 @@ const props = withDefaults(defineProps<{
     roleType?: 'supplier' | 'customer'
     partyId?: number
     partyName?: string
+    memberName?: string
+    /** 仅选择已绑定主体，用于列表筛选；不会创建主体或修改会员关系。 */
+    existingOnly?: boolean
     initialRoleFilter?: 'all' | 'purchase_supplier' | 'refurbish_provider'
     roleContext?: 'supplier' | 'customer' | 'purchase_supplier' | 'refurbish_provider' | 'recycle_customer'
 }>(), {
@@ -126,6 +133,8 @@ const props = withDefaults(defineProps<{
     roleType: 'customer',
     partyId: 0,
     partyName: '',
+    memberName: '',
+    existingOnly: false,
     initialRoleFilter: 'all',
     roleContext: undefined,
 })
@@ -134,6 +143,7 @@ const emit = defineEmits<{
     (e: 'update:show', v: boolean): void
     (e: 'update:partyId', v: number): void
     (e: 'update:partyName', v: string): void
+    (e: 'update:memberName', v: string): void
     (e: 'select', v: any): void
 }>()
 
@@ -158,6 +168,14 @@ const supplierFilters = [
 ]
 const page = ref(1)
 const hasMore = ref(true)
+const creditLabel = (item: any) => {
+    const profile = item?.credit_profile
+    if (!profile) return ''
+    if (profile.policy === 'blocked') return '暂停交易'
+    if (profile.policy === 'cash_only' || profile.can_credit === false) return '仅现结'
+    if (profile.has_outstanding) return `欠款 ¥${Number(profile.outstanding_amount || 0).toFixed(2)}`
+    return ''
+}
 
 watch(() => props.show, (v) => {
     if (v) {
@@ -176,8 +194,15 @@ async function search(reset = true) {
     if (reset) loading.value = true
     else loadingMore.value = true
     try {
-        // 第一步：搜索会员（包含已绑定往来主体信息）
-        const res: any = await request.get('erp/counterparty/member_options', { keyword: keyword.value, page: page.value, limit: 30, paginate: 1, role_filter: activeRoleFilter.value }, { showLoading: false })
+        // 筛选场景直接查询往来主体，避免一个主体绑定多个会员时出现重复项。
+        // 业务选择场景仍从会员入口解析/创建主体，保留原有快速建档能力。
+        const endpoint = props.existingOnly ? 'erp/counterparty/options' : 'erp/counterparty/member_options'
+        const params: Record<string, any> = { keyword: keyword.value, page: page.value, limit: 30, paginate: 1 }
+        if (activeRoleFilter.value !== 'all') {
+            if (props.existingOnly) params.role_type = activeRoleFilter.value
+            else params.role_filter = activeRoleFilter.value
+        }
+        const res: any = await request.get(endpoint, params, { showLoading: false })
         const rows = Array.isArray(res?.data) ? res.data : (res?.data?.data || [])
         list.value = reset ? rows : [...list.value, ...rows]
         const current = Number(res?.data?.current_page || page.value)
@@ -222,6 +247,19 @@ async function saveMemberNickname() {
 }
 
 async function selectMember(member: any) {
+    if (props.existingOnly) {
+        const partyId = Number(member?.party_id || member?.counterparty_id || 0)
+        if (partyId <= 0) return uni.showToast({ title: '往来主体数据异常', icon: 'none' })
+        const partyName = String(member.party_name || member.counterparty_name || '').trim()
+        const memberName = String(member.nickname || member.username || '').trim()
+        const party = { ...member, party_id: partyId, party_name: partyName, member_name: memberName }
+        emit('update:partyId', partyId)
+        emit('update:partyName', partyName)
+        emit('update:memberName', memberName)
+        emit('select', party)
+        close()
+        return
+    }
     resolving.value = true
     try {
         // 第二步：获取已有主体 or 自动创建并绑定
@@ -232,10 +270,15 @@ async function selectMember(member: any) {
             role_type: props.roleContext || (activeRoleFilter.value !== 'all' ? activeRoleFilter.value : props.roleType),
         })
         const party = res?.data || {}
-        if (!party.party_id) { uni.showToast({ title: '获取往来主体失败', icon: 'none' }); return }
-        emit('update:partyId', party.party_id)
-        emit('update:partyName', party.party_name || party.counterparty_name)
-        emit('select', party)
+        const partyId = Number(party.party_id || party.counterparty_id || 0)
+        if (partyId <= 0) { uni.showToast({ title: '获取往来主体失败', icon: 'none' }); return }
+        const partyName = String(party.party_name || party.counterparty_name || '').trim()
+        const memberName = String(party.member_name || member.nickname || member.username || '').trim()
+        const selectedParty = { ...party, party_id: partyId, party_name: partyName, member_name: memberName }
+        emit('update:partyId', partyId)
+        emit('update:partyName', partyName)
+        emit('update:memberName', memberName)
+        emit('select', selectedParty)
         close()
     } catch (e: any) {
         uni.showToast({ title: e?.message || '操作失败', icon: 'none' })
@@ -256,13 +299,22 @@ async function createAndSelect() {
         const partyName = String(party.party_name || party.counterparty_name || createName.value.trim())
         emit('update:partyId', partyId)
         emit('update:partyName', partyName)
-        emit('select', { ...party, party_id: partyId, party_name: partyName })
+        const memberName = String(party.member_name || (createMember.value ? createName.value.trim() : ''))
+        emit('update:memberName', memberName)
+        emit('select', { ...party, party_id: partyId, party_name: partyName, member_name: memberName })
         createName.value = ''; createMobile.value = ''; close()
     } catch (e: any) { uni.showToast({ title: e?.message || '创建失败', icon: 'none' }) }
     finally { creating.value = false }
 }
 
 function close() { emit('update:show', false) }
+function clearSelection() {
+    emit('update:partyId', 0)
+    emit('update:partyName', '')
+    emit('update:memberName', '')
+    emit('select', null)
+    close()
+}
 </script>
 
 <style scoped lang="scss">

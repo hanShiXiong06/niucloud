@@ -33,14 +33,26 @@
             </view>
 
             <view class="filter-row">
-                <view class="filter-chip" :class="{ active: filterWarehouseName }" @click="showWarehouseFilter = true">
+                <view class="filter-chip filter-chip--warehouse" :class="{ active: filterWarehouseName }" @click="showWarehouseFilter = true">
                     <u-icon name="home" size="14" :color="filterWarehouseName ? '#3b6ef5' : '#64748b'" />
                     <text>{{ warehouseFilterText || '仓库' }}</text>
                 </view>
-                <view class="filter-chip" :class="{ active: catalogProductId }">
-                    <ErpCatalogProductPopup v-model="catalogProductId" :selected-label="catalogProductName" label="商品型号" :required="false" @change="onCatalogProductChange" />
+                <view class="filter-chip filter-chip--catalog" :class="{ active: catalogProductId }">
+                    <ErpCatalogProductPopup
+                        v-model="catalogProductId"
+                        :selected-label="catalogProductName"
+                        label="型号"
+                        placeholder="商品型号"
+                        layout="chip"
+                        :required="false"
+                        :clearable="true"
+                        @change="onCatalogProductChange"
+                    />
                 </view>
-                <view v-if="hasFilter" class="filter-clear" @click="clearFilters">清空</view>
+                <view v-if="hasFilter" class="filter-clear" @click="clearFilters">
+                    <u-icon name="reload" color="#64748b" size="14" />
+                    <text>重置</text>
+                </view>
             </view>
 
             <!-- 扫码提示 -->
@@ -78,10 +90,10 @@
                                 <u-icon name="home" color="#64748b" size="12" />
                                 <text>{{ row.warehouse_name || '-' }}{{ row.location_name ? ' / ' + row.location_name : '' }}</text>
                             </view>
-                            <view v-if="row.category_name" class="stock-tag">
+                            <!-- <view v-if="row.catalog_product_name || row.category_name" class="stock-tag">
                                 <u-icon name="grid" color="#64748b" size="12" />
-                                <text>{{ row.category_name }}</text>
-                            </view>
+                                <text>{{ row.catalog_product_name || row.category_name }}</text>
+                            </view> -->
                             <view v-if="row.party_name" class="stock-tag muted">
                                 <text>来源 {{ row.party_name }}</text>
                             </view>
@@ -273,14 +285,17 @@ function suggestProfit(row: any) {
 .popup-search { padding: 0 24rpx 12rpx; display: flex; align-items: center; gap: 12rpx; }
 .popup-search :deep(.u-search) { flex: 1; }
 .popup-scan { width: 68rpx; height: 68rpx; border-radius: 50%; background: #eff3ff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.filter-row { display:flex; align-items:center; gap:12rpx; padding:0 24rpx 12rpx; overflow-x:auto; white-space:nowrap; }
-.filter-chip { min-height:56rpx; display:flex; align-items:center; gap:8rpx; padding:0 18rpx; border-radius:28rpx; background:#f8fafc; border:1rpx solid #e2e8f0; color:#64748b; font-size:24rpx; flex-shrink:0; }
+.filter-row { display:flex; align-items:center; gap:10rpx; min-width:0; padding:0 24rpx 12rpx; overflow:hidden; }
+.filter-chip { min-width:0; min-height:56rpx; display:flex; align-items:center; gap:8rpx; padding:0 16rpx; border-radius:28rpx; background:#f8fafc; border:1rpx solid #e2e8f0; color:#64748b; font-size:23rpx; box-sizing:border-box; }
 .filter-chip.active { color:#3b6ef5; background:#eff6ff; border-color:#bfdbfe; }
-.filter-chip :deep(.field) { min-height:54rpx; }
-.filter-chip :deep(.label) { display:none; }
-.filter-chip :deep(.value) { justify-content:center; font-size:24rpx; color:inherit; }
+.filter-chip--warehouse { max-width:42%; flex:0 1 auto; }
+.filter-chip--warehouse text { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.filter-chip--catalog { flex:1; padding-right:10rpx; overflow:hidden; }
+.filter-chip :deep(.field) { width:100%; min-width:0; min-height:54rpx; }
+.filter-chip :deep(.label) { color:inherit; }
+.filter-chip :deep(.value) { color:inherit; }
 .filter-chip :deep(.value--ph) { color:#64748b; }
-.filter-clear { font-size:24rpx; color:#ef4444; padding:0 8rpx; flex-shrink:0; }
+.filter-clear { min-height:56rpx; display:flex; align-items:center; gap:4rpx; color:#64748b; font-size:21rpx; flex-shrink:0; }
 .scan-hint { padding: 0 32rpx 12rpx; }
 .scan-hint__text { font-size: 24rpx; color: #94a3b8; }
 .popup-list { flex: 1; overflow-y: auto; padding: 0 24rpx; box-sizing: border-box; }

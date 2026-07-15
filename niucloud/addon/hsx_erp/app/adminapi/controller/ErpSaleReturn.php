@@ -22,6 +22,7 @@ class ErpSaleReturn extends BaseAdminController
         $params = $this->request->params([
             ['keyword', ''],
             ['status', ''],
+            ['business_type', ''],
             ['party_id', 0],
             ['imei', ''],
             ['operator_id', 0],
