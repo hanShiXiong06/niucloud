@@ -24,6 +24,16 @@ final class ErpIdempotency
         return $requestId;
     }
 
+    /**
+     * 数据库幂等键使用可空唯一索引：没有请求号时必须写 NULL，不能写空字符串。
+     * MySQL 允许唯一索引中存在多个 NULL，但同一站点只能存在一个空字符串。
+     */
+    public static function nullable($value): ?string
+    {
+        $requestId = self::normalize($value);
+        return $requestId === '' ? null : $requestId;
+    }
+
     public static function child(string $requestId, string $suffix): string
     {
         if ($requestId === '') {

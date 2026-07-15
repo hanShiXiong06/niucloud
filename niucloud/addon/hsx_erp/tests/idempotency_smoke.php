@@ -15,6 +15,8 @@ $assert = static function (bool $condition, string $message): void {
 
 $assert(ErpIdempotency::normalize(' payment:abc-123 ') === 'payment:abc-123', 'request_id应去除首尾空白');
 $assert(ErpIdempotency::normalize('') === '', '空request_id应兼容旧客户端');
+$assert(ErpIdempotency::nullable('') === null, '空request_id写入可空唯一索引时必须转换为NULL');
+$assert(ErpIdempotency::nullable(' payment:abc-123 ') === 'payment:abc-123', '有效request_id写入前必须规范化');
 $child = ErpIdempotency::child(str_repeat('a', 80), 'difference-payment');
 $assert(strlen($child) <= ErpIdempotency::MAX_REQUEST_ID_LENGTH, '派生request_id不得超过数据库字段长度');
 $assert(str_ends_with($child, ':difference-payment'), '派生request_id应保留业务后缀');
@@ -27,8 +29,12 @@ $assert(substr_count($sql, '`request_id` varchar(80) DEFAULT NULL') === 6, '六�
 $assert(substr_count($sql, 'UNIQUE KEY `uk_site_request` (`site_id`,`request_id`)') === 6, '六个幂等业务表都必须包含唯一索引');
 
 $finance = (string)file_get_contents($root . '/app/service/admin/ErpFinanceService.php');
+$schema = (string)file_get_contents($root . '/app/support/ErpSchema.php');
 $assert(str_contains($finance, 'runIdempotentSettlement'), '财务写入必须经过统一幂等入口');
-$assert(str_contains($finance, "'request_id' => \$data['request_id'] ?? null"), '结算单必须保存request_id');
+$assert(str_contains($finance, "ErpIdempotency::nullable(\$data['request_id'] ?? null)"), '结算单必须把空request_id转换为NULL');
+$settlementModel = (string)file_get_contents($root . '/app/model/ErpSettlement.php');
+$assert(str_contains($settlementModel, 'setRequestIdAttr') && str_contains($settlementModel, 'ErpIdempotency::nullable'), '结算模型必须兜底规范化幂等键');
+$assert(str_contains($schema, "SET `request_id` = NULL WHERE `request_id` = ''"), '升级迁移必须清理历史空结算request_id');
 $assert(str_contains($finance, 'existingOffsetId'), '折账必须支持重复请求回放');
 
 $purchase = (string)file_get_contents($root . '/app/service/admin/ErpPurchaseService.php');

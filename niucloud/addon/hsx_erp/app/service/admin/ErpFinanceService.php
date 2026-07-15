@@ -2931,9 +2931,10 @@ class ErpFinanceService extends BaseAdminService
     {
         $confirmedAt = (int)($data['confirmed_at'] ?? 0);
         if ($confirmedAt <= 0) $confirmedAt = time();
+        $requestId = ErpIdempotency::nullable($data['request_id'] ?? null);
         return ErpSettlement::create([
             'site_id' => $this->site_id,
-            'request_id' => $data['request_id'] ?? null,
+            'request_id' => $requestId,
             'settlement_no' => ErpLedgerService::makeNo('ST'),
             'party_id' => (int)$target->party_id,
             'party_name' => (string)$target->party_name,

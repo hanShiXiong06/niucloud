@@ -286,6 +286,10 @@ final class ErpSchema
             }
         }
 
+        // 早期业务入口曾把缺省幂等键保存成空字符串，导致同站点第二次结算撞唯一索引。
+        // 空请求号不代表同一个请求，统一迁移成 NULL 后仍由真实 request_id 保证幂等。
+        Db::execute("UPDATE `{$prefix}erp_settlement` SET `request_id` = NULL WHERE `request_id` = ''");
+
         self::ensureIndex($prefix . 'erp_asset', 'idx_site_sn', 'KEY `idx_site_sn` (`site_id`,`sn`)');
         self::ensureIndex($prefix . 'erp_asset', 'idx_site_ownership', 'KEY `idx_site_ownership` (`site_id`,`ownership_type`,`owner_party_id`,`status`)');
         self::ensureIndex($prefix . 'erp_asset', 'idx_site_catalog_product', 'KEY `idx_site_catalog_product` (`site_id`,`catalog_product_id`,`status`)');
