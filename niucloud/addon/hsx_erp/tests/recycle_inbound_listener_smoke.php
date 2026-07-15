@@ -17,6 +17,7 @@ class FakeRecycleInboundListener extends ErpDeviceInboundRequested
 {
     public int $siteId = 100005;
     public array $created = [];
+    public array $registeredConsignments = [];
     public array $existing = [];
     public array $inboxes = [];
     private int $nextId = 900;
@@ -36,6 +37,12 @@ class FakeRecycleInboundListener extends ErpDeviceInboundRequested
     {
         $this->created[] = $data;
         return ++$this->nextId;
+    }
+
+    protected function registerConsignment(array $event, array $device, array $item): array
+    {
+        $this->registeredConsignments[] = compact('event', 'device', 'item');
+        return ['asset_id' => ++$this->nextId, 'created' => true];
     }
 
     protected function resolveBusinessSource(string $sourceType): ?array
@@ -225,6 +232,21 @@ $assert(($genericResult['status'] ?? '') === 'processed', '注册采购来源的
 $assert(($genericListener->created[0]['origin_plugin'] ?? '') === 'partner_purchase', '标准入库Hook不得把来源硬编码为回收插件');
 $assert(($genericListener->created[0]['origin_type'] ?? '') === 'partner_purchase.device_purchase', '标准入库Hook必须保留插件注册来源类型');
 $assert(($genericListener->created[0]['purchase_channel'] ?? '') === '合作方接口', '标准入库Hook必须保留独立业务渠道');
+
+$consignmentEvent = $event;
+$consignmentEvent['event_id'] = 'recycle-consignment-inbound-001';
+$consignmentDevice = $device(21, 201, 'RC20260711021', $counterpartyA, 3, 33);
+$consignmentDevice['ownership_type'] = 'consign';
+$consignmentDevice['purchase_cost'] = 0;
+$consignmentDevice['paid_amount'] = 0;
+$consignmentEvent['devices'] = [$consignmentDevice];
+$consignmentListener = new FakeRecycleInboundListener();
+$consignmentResult = $consignmentListener->handle($consignmentEvent);
+$assert(($consignmentResult['status'] ?? '') === 'processed', '代卖设备首次登记必须返回processed');
+$assert(($consignmentResult['order_ids'] ?? []) === [], '代卖登记不得生成ERP采购单');
+$assert(count($consignmentResult['consignment_asset_ids'] ?? []) === 1, '代卖登记必须返回客户物权资产ID');
+$assert($consignmentListener->created === [], '代卖登记不得调用采购创建服务');
+$assert(count($consignmentListener->registeredConsignments) === 1, '代卖设备必须进入独立登记服务');
 
 $eventConfig = require dirname(__DIR__) . '/app/event.php';
 $listeners = (array)($eventConfig['listen']['ErpDeviceInboundRequested'] ?? []);

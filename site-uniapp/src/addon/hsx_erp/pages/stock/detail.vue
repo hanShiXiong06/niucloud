@@ -16,7 +16,10 @@
                             <text class="asset-title__model">{{ asset.model || '-' }}</text>
                             <text class="asset-title__sub">{{ deviceIdentityLine(asset) }}</text>
                         </view>
-                        <u-tag :text="statusLabel(asset.status)" :type="statusType(asset.status)" plain plainFill size="mini" />
+                        <view class="asset-head__tags">
+                            <u-tag v-if="asset.ownership_type === 'consigned' || asset.warehouse_policy?.warehouse_type === 'consignment'" text="客户代卖" type="warning" plain plainFill size="mini" />
+                            <u-tag :text="statusLabel(asset.status)" :type="statusType(asset.status)" plain plainFill size="mini" />
+                        </view>
                     </view>
 
                     <view v-if="asset.status === 'sold'" class="asset-banner sold">
@@ -72,6 +75,10 @@
                     <view class="field">
                         <text class="label">仓库</text>
                         <text class="value">{{ asset.warehouse_name || '-' }}{{ asset.location_name ? ' / '+asset.location_name : '' }}</text>
+                    </view>
+                    <view v-if="asset.ownership_type === 'consigned' || asset.owner_party_name" class="field">
+                        <text class="label">物权归属</text>
+                        <text class="value">{{ asset.ownership_type === 'consigned' ? (asset.owner_party_name || asset.party_name || '客户') : '本公司' }}</text>
                     </view>
                     <view v-if="asset.category_name" class="field">
                         <text class="label">分类</text>
@@ -170,7 +177,7 @@
                     <view v-if="asset.status === 'in_stock'" class="bottom-action-row">
                         <view class="bottom-action-btn"><u-button type="primary" text="调整成本" @click="goAdjust" /></view>
                         <view class="bottom-action-btn">
-                            <u-button type="primary" plain text="库存调拨" :loading="transferring" :disabled="!canOpenTransfer" @click="openTransfer" />
+                            <u-button type="primary" plain :text="asset.ownership_type === 'consigned' || asset.warehouse_policy?.warehouse_type === 'consignment' ? '转为自有' : '库存调拨'" :loading="transferring" :disabled="!canOpenTransfer" @click="openTransfer" />
                         </view>
                         <view class="bottom-action-btn">
                             <u-button
@@ -217,13 +224,23 @@
         </u-popup>
 
         <ErpWarehousePopup v-model:show="warehouseVisible" v-model:warehouse-id="transferForm.warehouse_id" v-model:warehouse-name="transferForm.warehouse_name" v-model:location-id="transferForm.location_id" v-model:location-name="transferForm.location_name" @change="submitTransfer" />
+        <u-popup :show="buyoutVisible" mode="bottom" round="20" :safe-area-inset-bottom="true" @close="buyoutVisible=false">
+            <view class="action-popup action-popup--compact">
+                <view class="action-popup__head"><view><text class="action-popup__title">代卖设备转为自有</text><text class="action-popup__sub">确认回收价后生成设备级采购应付</text></view><u-icon name="close" color="#94a3b8" size="20" @click="buyoutVisible=false" /></view>
+                <view class="buyout-summary"><text>{{ asset?.model || '-' }}</text><text>物权客户 {{ buyoutPreview?.items?.[0]?.party_name || '-' }} · IMEI {{ asset?.imei || '-' }}</text></view>
+                <view class="popup-form-row"><text>确认回收价</text><u-input v-model="buyoutForm.amount" type="number" placeholder="0.00" border="none" inputAlign="right" /></view>
+                <view class="popup-form-row"><text>买断说明</text><u-input v-model="buyoutForm.reason" placeholder="可选" border="none" inputAlign="right" /></view>
+                <view class="buyout-tip">回收价形成应付给客户的采购本金；设备原有内部整备费用不会重复付给客户。</view>
+                <view class="action-popup__foot"><u-button type="primary" :loading="transferring" text="确认转为自有" @click="confirmBuyout" /></view>
+            </view>
+        </u-popup>
     </view>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { adjustMobileStockRetailPrice, getMobileStockInfo, syncMobileStockListing, transferMobileStock, updateMobileStockFlow } from '@/addon/hsx_erp/api/erp'
+import { adjustMobileStockRetailPrice, buyoutMobileConsignment, getMobileStockInfo, previewMobileStockTransfer, syncMobileStockListing, transferMobileStock, updateMobileStockFlow } from '@/addon/hsx_erp/api/erp'
 import { confirmErpSensitiveAction } from '@/addon/hsx_erp/hooks/useErpSensitiveConfirm'
 import { erpNetSaleAmount, erpOriginalSaleAmount, erpSaleCompensationAmount, firstPositiveErpAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
 import { erpDeviceIdentityLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
@@ -251,6 +268,9 @@ const retailForm = ref({ retail_price: '', reason: '' })
 const warehouseVisible = ref(false)
 const transferring = ref(false)
 const transferForm = ref({ warehouse_id: 0, warehouse_name: '', location_id: 0, location_name: '' })
+const buyoutVisible = ref(false)
+const buyoutPreview = ref<any>(null)
+const buyoutForm = ref({ amount: '', reason: '' })
 let loadSeq = 0
 
 onLoad((query: any) => {
@@ -306,7 +326,7 @@ function reload() {
 }
 
 const primaryActionType = computed(() => ['transfer', 'resolve_warehouse', 'complete_refurbish', 'resolve_refurbish'].includes(String(asset.value?.turnover_action_key || '')) ? 'warning' : 'primary')
-const canOpenTransfer = computed(() => Number(asset.value?.can_transfer ?? asset.value?.warehouse_policy?.can_transfer ?? 0) === 1
+const canOpenTransfer = computed(() => Number(asset.value?.can_warehouse_action ?? asset.value?.warehouse_policy?.can_warehouse_action ?? asset.value?.can_transfer ?? asset.value?.warehouse_policy?.can_transfer ?? 0) === 1
     || String(asset.value?.turnover_action_key || asset.value?.warehouse_policy?.primary_action || '') === 'resolve_warehouse')
 
 function handlePrimaryAction() {
@@ -386,6 +406,20 @@ function openTransfer() {
 
 async function submitTransfer(warehouse: any, location: any) {
     if (!asset.value?.id || !warehouse?.id || !location?.id) return
+    let preview: any
+    try {
+        const res: any = await previewMobileStockTransfer({ asset_ids: [Number(asset.value.id)], warehouse_id: Number(warehouse.id), location_id: Number(location.id) })
+        preview = res?.data || null
+    } catch (e: any) {
+        return uni.showToast({ title: e?.message || '目标仓规则校验失败', icon: 'none' })
+    }
+    if (!preview?.allowed) return uni.showToast({ title: preview?.reason || '当前设备不能调入所选仓库', icon: 'none' })
+    if (preview.action === 'buyout') {
+        buyoutPreview.value = preview
+        buyoutForm.value = { amount: '', reason: '' }
+        buyoutVisible.value = true
+        return
+    }
     const confirmed = await confirmErpSensitiveAction({ title: '确认库存调拨', content: `设备将调拨到「${warehouse.warehouse_name} / ${location.location_name}」，并重新应用目标仓库的销售和商城规则。`, confirmText: '确认调拨' })
     if (!confirmed) return
     transferring.value = true
@@ -394,6 +428,22 @@ async function submitTransfer(warehouse: any, location: any) {
         uni.showToast({ title: '调拨完成', icon: 'success' })
         await reload()
     } catch (e: any) { uni.showToast({ title: e?.message || '调拨失败', icon: 'none' }) }
+    finally { transferring.value = false }
+}
+
+async function confirmBuyout() {
+    const amount = Number(buyoutForm.value.amount || 0)
+    if (!asset.value?.id || amount <= 0) return uni.showToast({ title: '请填写有效回收价', icon: 'none' })
+    const customer = buyoutPreview.value?.items?.[0]?.party_name || '物权客户'
+    const confirmed = await confirmErpSensitiveAction({ title: '确认代卖转自有', content: `确认按 ¥${money(amount)} 向「${customer}」买断该设备？确认后将生成设备级采购应付。`, confirmText: '确认买断' })
+    if (!confirmed) return
+    transferring.value = true
+    try {
+        const response: any = await buyoutMobileConsignment({ asset_id: Number(asset.value.id), warehouse_id: Number(transferForm.value.warehouse_id), location_id: Number(transferForm.value.location_id), buyout_amount: amount, reason: buyoutForm.value.reason || '移动端代卖转自有' })
+        buyoutVisible.value = false
+        uni.showToast({ title: response?.data?.plugin_sync?.ok === false ? '已完成，回收端同步待重试' : '已转为自有并生成应付', icon: 'none' })
+        await reload()
+    } catch (e: any) { uni.showToast({ title: e?.message || '转为自有失败', icon: 'none' }) }
     finally { transferring.value = false }
 }
 
@@ -487,7 +537,7 @@ const actionLabel = (a: string) => ({
     inbound: '采购入库', sold: '销售出库', purchase_return: '采购退货',
     sale_return: '销售退货', cost_adjust: '成本调整', purchase_cancel: '采购撤销',
     sale_cancel: '整单销售撤销', sale_item_cancel: '单台销售撤销', refurbish: '整备',
-    retail_price_adjust: '零售价调整', transfer: '库存调拨', flow: '流转设置', flow_set: '流转设置'
+    retail_price_adjust: '零售价调整', transfer: '库存调拨', ownership_purchase: '代卖转自有', flow: '流转设置', flow_set: '流转设置'
 }[a] || '库存调整')
 
 function mergeAccountTimeline(rows: any[] = []) {
@@ -521,6 +571,7 @@ function accountBizLabel(row: any) {
     const type = String(row?.biz_type || '').toLowerCase()
     const map: Record<string, string> = {
         purchase: '采购应付', purchase_cancel: '采购撤销冲回', purchase_return: '采购退货冲回', purchase_return_loss: '采购退货损失',
+        consignment_buyout: '代卖买断应付',
         sale: '销售应收', sale_cancel: '整单销售撤销', sale_item_cancel: '单台销售撤销', sale_return: '销售退货冲回',
         sale_compensation: '售后补差应付', adjust: '成本调整', refurbish: '整备成本',
         payment: '实际付款', receipt: '实际收款', offset: '往来折账'
@@ -533,6 +584,7 @@ function accountImpactText(row: any) {
     const type = String(row?.biz_type || '').toLowerCase()
     if (row?._merged_compensation) return '公司已向客户支付售后补差'
     if (type === 'purchase') return '采购入库形成应付款'
+    if (type === 'consignment_buyout') return '买断客户代卖设备并形成应付款'
     if (['purchase_cancel', 'purchase_return'].includes(type)) return '原采购应付已经冲回'
     if (type === 'purchase_return_loss') return '采购退货形成不可收回损失'
     if (type === 'sale') return row?.business_state === 'reversed' ? '原销售应收已经冲销' : '销售出库形成应收款'
@@ -588,6 +640,7 @@ function accountRemark(row: any) {
 .detail-wrap { padding: 16rpx 0 120rpx; }
 .asset-summary-card { padding-top:24rpx; }
 .asset-head { display:flex; align-items:flex-start; justify-content:space-between; gap:18rpx; }
+.asset-head__tags { display:flex; flex-shrink:0; flex-direction:column; align-items:flex-end; gap:8rpx; }
 .asset-title { flex:1; min-width:0; display:flex; flex-direction:column; gap:8rpx; }
 .asset-title__model { font-size:32rpx; font-weight:700; color:#0f172a; line-height:1.35; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .asset-title__sub { font-size:24rpx; color:#64748b; line-height:1.35; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -641,4 +694,8 @@ function accountRemark(row: any) {
 .retry-btn { margin-top:24rpx; width:180rpx; }
 .loading-wrap { display:flex; justify-content:center; align-items:center; height:400rpx; }
 .action-popup { height:78vh; display:flex; flex-direction:column; background:#fff; }.action-popup--compact { height:auto; min-height:520rpx; }.action-popup__head { display:flex; align-items:flex-start; justify-content:space-between; gap:20rpx; padding:28rpx 30rpx 20rpx; border-bottom:1rpx solid #f1f5f9; }.action-popup__title,.action-popup__sub { display:block; }.action-popup__title { color:#0f172a; font-size:32rpx; font-weight:750; }.action-popup__sub { margin-top:5rpx; color:#94a3b8; font-size:21rpx; }.action-popup__body { flex:1; min-height:0; padding:12rpx 30rpx; box-sizing:border-box; }.action-popup__foot { padding:20rpx 30rpx calc(20rpx + env(safe-area-inset-bottom)); border-top:1rpx solid #f1f5f9; }.popup-form-row { display:flex; align-items:center; gap:20rpx; min-height:96rpx; padding:0 30rpx; border-bottom:1rpx solid #f1f5f9; color:#334155; font-size:25rpx; }.action-popup__body .popup-form-row { padding:0; }
+.buyout-summary { margin:22rpx 30rpx 8rpx; padding:18rpx 20rpx; border-radius:14rpx; background:#fff7ed; }
+.buyout-summary text { display:block; color:#0f172a; font-size:26rpx; font-weight:650; }
+.buyout-summary text + text { margin-top:7rpx; color:#64748b; font-size:21rpx; font-weight:400; }
+.buyout-tip { margin:18rpx 30rpx 0; padding:15rpx 17rpx; border-radius:12rpx; background:#f8fafc; color:#64748b; font-size:21rpx; line-height:1.55; }
 </style>

@@ -5,6 +5,7 @@
             placeholder="搜索型号 / IMEI / 规格 / 仓位"
             :show-filter="true"
             :filter-count="filterCount"
+            :compact-mp="true"
             @search="handleSearch"
             @filter="filterVisible = true"
         >
@@ -44,6 +45,7 @@
                         </view>
                         <view class="stock-statuses">
                             <u-tag :text="statusLabel(row.status)" :type="statusType(row.status)" plain plainFill size="mini" />
+                            <u-tag v-if="row.ownership_type === 'consigned' || row.warehouse_policy?.warehouse_type === 'consignment'" text="客户代卖" type="warning" plain plainFill size="mini" />
                             <text v-if="operationStatusText(row)" class="stock-operation-status">{{ operationStatusText(row) }}</text>
                         </view>
                     </view>
@@ -93,7 +95,7 @@
                         <text class="stock-actions__reason">{{ row.turnover_action || '查看设备当前处理建议' }}</text>
                         <view class="stock-actions__buttons">
                             <view v-if="showTransferShortcut(row)" class="stock-transfer-btn" @click="openTransfer(row)">
-                                <u-icon name="reload" color="#2563eb" size="13" /><text>调拨</text>
+                                <u-icon name="reload" color="#2563eb" size="13" /><text>{{ row.ownership_type === 'consigned' || row.warehouse_policy?.warehouse_type === 'consignment' ? '转自有' : '调拨' }}</text>
                             </view>
                             <view class="stock-actions__btn">
                                 <u-button size="small" :type="turnoverActionType(row)" :plain="row.turnover_action_key !== 'direct_sale'" :loading="publishingId === Number(row.id) || transferringId === Number(row.id)" :text="row.turnover_action_label || '查看处理'" @click="handleTurnoverAction(row)" />
@@ -144,6 +146,22 @@
             v-model:location-name="transferForm.location_name"
             @change="submitTransfer"
         />
+        <u-popup :show="buyoutVisible" mode="bottom" round="20" :safe-area-inset-bottom="true" @close="buyoutVisible = false">
+            <view class="buyout-popup">
+                <view class="buyout-popup__head">
+                    <view><text class="buyout-popup__title">代卖设备转为自有</text><text class="buyout-popup__sub">确认后生成设备级采购应付，不是普通调拨</text></view>
+                    <u-icon name="close" size="20" color="#94a3b8" @click="buyoutVisible = false" />
+                </view>
+                <view class="buyout-device">
+                    <text class="buyout-device__model">{{ buyoutPreview?.items?.[0]?.model || transferRow?.model || '-' }}</text>
+                    <text class="buyout-device__meta">物权客户 {{ buyoutPreview?.items?.[0]?.party_name || '-' }} · IMEI {{ buyoutPreview?.items?.[0]?.imei || '-' }}</text>
+                </view>
+                <view class="buyout-row"><text>确认回收价</text><u-input v-model="buyoutForm.amount" type="number" placeholder="0.00" border="none" inputAlign="right" /></view>
+                <view class="buyout-row"><text>买断说明</text><u-input v-model="buyoutForm.reason" placeholder="可选，例如客户同意转自有" border="none" inputAlign="right" /></view>
+                <view class="buyout-popup__tip">该金额将成为设备采购本金，并形成应付给物权客户的账单；内部整备费用不会付给客户。</view>
+                <view class="buyout-popup__foot"><u-button type="primary" :loading="Boolean(transferringId)" text="确认转为自有" @click="confirmBuyout" /></view>
+            </view>
+        </u-popup>
         <ErpPartyPopup v-model:show="providerPopupVisible" v-model:partyId="providerPartyId" v-model:partyName="providerPartyName" roleType="supplier" roleContext="refurbish_provider" @select="confirmExternalRefurbish" />
     </view>
 </template>
@@ -152,7 +170,7 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 
-import { getMobileErpConfig, getMobileStockList, getMobileStockTurnoverSummary, syncMobileStockListing, transferMobileStock } from '@/addon/hsx_erp/api/erp'
+import { buyoutMobileConsignment, getMobileErpConfig, getMobileStockList, getMobileStockTurnoverSummary, previewMobileStockTransfer, syncMobileStockListing, transferMobileStock } from '@/addon/hsx_erp/api/erp'
 import { dictLabel, dictTabs, dictType, ERP_DICT_FALLBACK, loadErpDicts, type ErpDictMap } from '@/addon/hsx_erp/api/dict'
 import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
 import ErpFilterPopup from '@/addon/hsx_erp/components/ErpFilterPopup.vue'
@@ -166,7 +184,7 @@ import { confirmErpSensitiveAction } from '@/addon/hsx_erp/hooks/useErpSensitive
 
 
 
-const { pagingStyle } = useListHeader({ tabs: true })
+const { pagingStyle } = useListHeader({ tabs: true, compactMp: true })
 
 
 
@@ -184,6 +202,9 @@ const transferringId = ref(0)
 const transferVisible = ref(false)
 const transferRow = ref<any>(null)
 const transferForm = ref({ warehouse_id: 0, warehouse_name: '', location_id: 0, location_name: '' })
+const buyoutVisible = ref(false)
+const buyoutPreview = ref<any>(null)
+const buyoutForm = ref({ amount: '', reason: '' })
 const turnoverSummary = ref<any>({ thresholds: {} })
 const quickFilterVisible = ref(false)
 const quickFilterKey = ref<'status' | 'turnover' | 'listing'>('status')
@@ -355,7 +376,7 @@ const isVoid = (row: any) => row?.status === 'void'
 const ageClass = (row: any) => row?.status !== 'in_stock' ? '' : row?.turnover_level === 'critical' ? 'red' : row?.turnover_level === 'warning' ? 'orange' : ''
 
 const turnoverActionType = (row: any) => ['transfer', 'resolve_warehouse', 'complete_refurbish', 'resolve_refurbish'].includes(row?.turnover_action_key) ? 'warning' : 'primary'
-const canTransfer = (row: any) => Number(row?.can_transfer ?? row?.warehouse_policy?.can_transfer ?? 0) === 1 || String(row?.turnover_action_key || row?.warehouse_policy?.primary_action || '') === 'resolve_warehouse'
+const canTransfer = (row: any) => Number(row?.can_warehouse_action ?? row?.warehouse_policy?.can_warehouse_action ?? row?.can_transfer ?? row?.warehouse_policy?.can_transfer ?? 0) === 1 || String(row?.turnover_action_key || row?.warehouse_policy?.primary_action || '') === 'resolve_warehouse'
 const showTransferShortcut = (row: any) => canTransfer(row) && String(row?.turnover_action_key || '') !== 'transfer'
 function handleTurnoverAction(row: any) {
     const action = String(row?.turnover_action_key || 'view')
@@ -378,6 +399,20 @@ function openTransfer(row: any) {
 async function submitTransfer(warehouse: any, location: any) {
     const row = transferRow.value
     if (!row?.id || !warehouse?.id || !location?.id || transferringId.value) return
+    let preview: any
+    try {
+        const res: any = await previewMobileStockTransfer({ asset_ids: [Number(row.id)], warehouse_id: Number(warehouse.id), location_id: Number(location.id) })
+        preview = res?.data || null
+    } catch (e: any) {
+        return uni.showToast({ title: e?.message || '目标仓规则校验失败', icon: 'none' })
+    }
+    if (!preview?.allowed) return uni.showToast({ title: preview?.reason || '当前设备不能调入所选仓库', icon: 'none' })
+    if (preview.action === 'buyout') {
+        buyoutPreview.value = preview
+        buyoutForm.value = { amount: '', reason: '' }
+        buyoutVisible.value = true
+        return
+    }
     const from = stockPosition(row)
     const target = `${warehouse.warehouse_name} / ${location.location_name}`
     const confirmed = await confirmErpSensitiveAction({
@@ -397,6 +432,33 @@ async function submitTransfer(warehouse: any, location: any) {
     } finally {
         transferringId.value = 0
     }
+}
+
+async function confirmBuyout() {
+    const row = transferRow.value
+    const amount = Number(buyoutForm.value.amount || 0)
+    if (!row?.id || amount <= 0) return uni.showToast({ title: '请填写有效回收价', icon: 'none' })
+    const customer = buyoutPreview.value?.items?.[0]?.party_name || '物权客户'
+    const confirmed = await confirmErpSensitiveAction({
+        title: '确认代卖转自有',
+        content: `确认按 ¥${money(amount)} 向「${customer}」买断该设备？确认后设备转入自有库存，并生成设备级采购应付。`,
+        confirmText: '确认买断',
+    })
+    if (!confirmed) return
+    transferringId.value = Number(row.id)
+    try {
+        const response: any = await buyoutMobileConsignment({
+            asset_id: Number(row.id), warehouse_id: Number(transferForm.value.warehouse_id),
+            location_id: Number(transferForm.value.location_id), buyout_amount: amount,
+            reason: buyoutForm.value.reason || '移动端代卖转自有',
+        })
+        buyoutVisible.value = false
+        transferRow.value = null
+        uni.showToast({ title: response?.data?.plugin_sync?.ok === false ? '已完成，回收端同步待重试' : '已转为自有并生成应付', icon: 'none' })
+        reload()
+    } catch (e: any) {
+        uni.showToast({ title: e?.message || '转为自有失败', icon: 'none' })
+    } finally { transferringId.value = 0 }
 }
 async function publishListing(row: any) {
     if (!row?.id || publishingId.value) return
@@ -490,4 +552,15 @@ const listingLabel = (s: string) => dictLabel(erpDicts.value, 'listing_status', 
 .quick-popup__options { padding:8rpx 30rpx 28rpx; overflow-y:auto; }
 .quick-option { min-height:88rpx; padding:0 10rpx; border-bottom:1rpx solid #f1f5f9; display:flex; align-items:center; justify-content:space-between; color:#334155; font-size:27rpx; }
 .quick-option.active { color:#2563eb; font-weight:600; }
+.buyout-popup { background:#fff; }
+.buyout-popup__head { display:flex; align-items:flex-start; justify-content:space-between; gap:20rpx; padding:28rpx 30rpx 20rpx; border-bottom:1rpx solid #f1f5f9; }
+.buyout-popup__title,.buyout-popup__sub,.buyout-device__model,.buyout-device__meta { display:block; }
+.buyout-popup__title { color:#0f172a; font-size:31rpx; font-weight:750; }
+.buyout-popup__sub { margin-top:6rpx; color:#94a3b8; font-size:21rpx; }
+.buyout-device { margin:22rpx 30rpx 8rpx; padding:20rpx; border-radius:14rpx; background:#fff7ed; }
+.buyout-device__model { color:#0f172a; font-size:27rpx; font-weight:650; }
+.buyout-device__meta { margin-top:8rpx; color:#64748b; font-size:22rpx; }
+.buyout-row { display:flex; align-items:center; gap:18rpx; min-height:94rpx; margin:0 30rpx; border-bottom:1rpx solid #f1f5f9; color:#334155; font-size:25rpx; }
+.buyout-popup__tip { margin:20rpx 30rpx 0; padding:16rpx; border-radius:12rpx; background:#f8fafc; color:#64748b; font-size:21rpx; line-height:1.55; }
+.buyout-popup__foot { padding:22rpx 30rpx calc(22rpx + env(safe-area-inset-bottom)); }
 </style>

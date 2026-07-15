@@ -513,7 +513,12 @@
 				},
 				{
 					"path": "pages/stock/list",
-					"style": { "navigationBarTitleText": "库存设备" },
+					"style": {
+						// #ifdef MP
+						"navigationStyle": "custom",
+						// #endif
+						"navigationBarTitleText": "库存设备"
+					},
 					"needLogin": true
 				},
 				{

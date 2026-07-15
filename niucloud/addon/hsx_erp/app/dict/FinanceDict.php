@@ -18,6 +18,7 @@ class FinanceDict
             'purchase_cancel' => '采购撤销冲回',
             'purchase_return' => '采购退货冲回',
             'purchase_return_loss' => '采购退货损失',
+            'consignment_buyout' => '代卖买断应付',
             'sale' => '销售应收',
             'sale_cancel' => '整单销售撤销',
             'sale_item_cancel' => '单台销售撤销',
@@ -38,6 +39,7 @@ class FinanceDict
         return [
             'purchase' => '采购单',
             'purchase_asset' => '采购设备',
+            'consignment_buyout' => '代卖买断单',
             'purchase_cancel' => '采购撤销单',
             'purchase_return' => '采购退货单',
             'sale' => '销售单',

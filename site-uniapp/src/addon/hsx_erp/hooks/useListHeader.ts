@@ -1,11 +1,14 @@
 import { computed, ref } from 'vue'
-import { getErpListHeaderHeightRpx } from '@/addon/hsx_erp/utils/navbar'
+import { pxToRpx } from '@/utils/common'
+import { getErpListHeaderHeightRpx, getErpNavbarMetrics } from '@/addon/hsx_erp/utils/navbar'
 
 type ListHeaderOptions = {
     title?: boolean
     search?: boolean
     tabs?: boolean
     h5TopRpx?: number
+    compactMp?: boolean
+    compactToolsHeightRpx?: number
 }
 
 export const useListHeader = (options: ListHeaderOptions | number = {}, legacyH5Top = 186) => {
@@ -15,13 +18,16 @@ export const useListHeader = (options: ListHeaderOptions | number = {}, legacyH5
     isMp.value = true
     // #endif
 
-    const normalized = typeof options === 'number'
+    const normalized: ListHeaderOptions & { mpTopRpx?: number } = typeof options === 'number'
         ? { title: false, search: true, tabs: true, mpTopRpx: options, h5TopRpx: legacyH5Top }
-        : { title: false, search: true, tabs: true, h5TopRpx: 186, ...options }
-    const mpTopRpx = 'mpTopRpx' in normalized
+        : { title: false, search: true, tabs: true, h5TopRpx: 186, compactMp: false, compactToolsHeightRpx: 74, ...options }
+    const compactMpTopRpx = pxToRpx(getErpNavbarMetrics().navbarHeightPx) + Number(normalized.compactToolsHeightRpx || 74)
+    const mpTopRpx = normalized.compactMp
+        ? compactMpTopRpx
+        : 'mpTopRpx' in normalized
         ? Number(normalized.mpTopRpx || 0)
         : getErpListHeaderHeightRpx(normalized)
-    // 小程序 viewport 已位于原生导航栏下方，此处只计算列表工具区，不能再加 navbarHeightRpx。
+    // 普通模式的 viewport 已位于原生导航栏下；紧凑模式使用自定义导航，需要把导航栏高度计入列表 top。
     const pagingTop = computed(() => `${ isMp.value ? mpTopRpx : Number(normalized.h5TopRpx || mpTopRpx) }rpx`)
     const pagingStyle = computed(() => ({ top: pagingTop.value }))
 

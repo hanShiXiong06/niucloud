@@ -49,11 +49,14 @@ return [
         'ErpDomainEvent' => [
             'addon\hsx_recycle\app\listener\downstream\ErpAssetDownstreamListener',
             'addon\hsx_recycle\app\listener\downstream\ErpSettlementCompletedListener',
+            'addon\hsx_recycle\app\listener\downstream\ConsignDeviceBoughtOutListener',
         ],
         'DeviceAssetPriceCompleted' => [ 'addon\hsx_recycle\app\listener\downstream\DeviceAssetPricedListener' ],
 
         // 代卖转回收：ERP 把代卖设备买断为自有时，回收侧把该设备由代卖标记为回收（成本转移到我方）
         'ErpConsignDeviceBoughtOut' => [ 'addon\hsx_recycle\app\listener\downstream\ConsignDeviceBoughtOutListener' ],
+        // ERP 执行代卖买断前的只读校验，防止已成交/待结算代卖单被错误转为自有。
+        'HsxErpConsignmentBuyoutValidate' => [ 'addon\hsx_recycle\app\listener\downstream\ConsignmentBuyoutValidateListener' ],
 
         // ERP 财务中心折账结清回收应付 → 回写设备打款状态(折账)+备注结算单号，形成闭环
         'FinanceSettlementCompleted' => [ 'addon\hsx_recycle\app\listener\downstream\FinanceSettlementCompletedListener' ],

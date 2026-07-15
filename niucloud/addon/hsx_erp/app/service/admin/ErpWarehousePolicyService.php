@@ -28,7 +28,7 @@ class ErpWarehousePolicyService extends BaseAdminService
         if ($warehouseIds !== []) {
             $warehouses = ErpWarehouse::where('site_id', '=', $this->site_id)
                 ->whereIn('id', $warehouseIds)
-                ->field('id,warehouse_name,warehouse_type,need_photo,need_pricing,allow_direct_sale,allow_transfer,default_sale_target,status')
+                ->field('id,warehouse_name,warehouse_type,ownership_type,need_photo,need_pricing,allow_direct_sale,allow_transfer,default_sale_target,status')
                 ->select()->toArray();
             foreach ($warehouses as $warehouse) {
                 $warehouseMap[(int)$warehouse['id']] = $warehouse;
@@ -43,6 +43,7 @@ class ErpWarehousePolicyService extends BaseAdminService
             $row['warehouse_policy'] = $policy;
             $row['can_direct_sale'] = $policy['can_direct_sale'];
             $row['can_transfer'] = $policy['can_transfer'];
+            $row['can_warehouse_action'] = $policy['can_warehouse_action'];
             $row['can_list_mall'] = $policy['can_list_mall'];
             $row['missing_listing_fields'] = $policy['missing_fields'];
         }
@@ -86,6 +87,9 @@ class ErpWarehousePolicyService extends BaseAdminService
 
         $canDirectSale = $inStock && $allowDirectSale && !$refurbishBlocking;
         $canTransfer = $inStock && $allowTransfer && !$refurbishBlocking;
+        // 代卖设备不能做普通调拨，但允许从统一入口发起“买断转自有”。
+        $canWarehouseAction = $inStock && !$refurbishBlocking
+            && ($canTransfer || $warehouseType === 'consignment' || (string)($warehouse['ownership_type'] ?? '') === 'consigned');
         $canPrepareMall = $inStock && $allowMall && !$refurbishBlocking;
         $canListMall = $canPrepareMall && $missingFields === [];
         $marketplaceAvailable = $this->marketplaceAvailable();
@@ -114,6 +118,7 @@ class ErpWarehousePolicyService extends BaseAdminService
             'need_pricing' => $needPricing ? 1 : 0,
             'can_direct_sale' => $canDirectSale ? 1 : 0,
             'can_transfer' => $canTransfer ? 1 : 0,
+            'can_warehouse_action' => $canWarehouseAction ? 1 : 0,
             'can_prepare_mall' => $canPrepareMall ? 1 : 0,
             'can_list_mall' => $canListMall ? 1 : 0,
             'marketplace_available' => $marketplaceAvailable ? 1 : 0,
@@ -122,6 +127,128 @@ class ErpWarehousePolicyService extends BaseAdminService
             'primary_action' => $actionKey,
             'primary_action_label' => $actionLabel,
             'primary_action_reason' => $actionReason,
+        ];
+    }
+
+    /**
+     * 判断一台设备从来源仓到目标仓应执行的业务动作。
+     *
+     * 调拨只改变保管位置，绝不能隐式改变物权。代卖转自有会形成新的采购与
+     * 设备级应付，因此返回 buyout，由独立事务处理。所有端统一消费本结论。
+     *
+     * @return array{action:string,allowed:int,label:string,reason:string,missing_fields:array,missing_labels:array,requires_finance:int}
+     */
+    public function transferDecision(array $asset, ?array $sourceWarehouse, array $targetWarehouse): array
+    {
+        $sourceType = (string)($sourceWarehouse['warehouse_type'] ?? '');
+        $targetType = (string)($targetWarehouse['warehouse_type'] ?? '');
+        $sourceOwnership = $this->assetOwnership($asset, $sourceWarehouse);
+        $targetOwnership = $targetType === 'consignment'
+            ? 'consigned'
+            : (string)($targetWarehouse['ownership_type'] ?? 'owned');
+
+        if ((int)($targetWarehouse['status'] ?? 0) !== 1) {
+            return $this->transferResult('blocked', false, '不可调入', '目标仓库已停用', [], [], false);
+        }
+        if ($sourceOwnership !== 'consigned' && $targetOwnership === 'consigned') {
+            return $this->transferResult(
+                'blocked', false, '禁止调入代卖仓',
+                '自有设备不能通过库存调拨变成客户物权；如需委托代卖，请使用独立的委托业务',
+                [], [], false
+            );
+        }
+        if ($sourceOwnership !== 'consigned' && (int)($sourceWarehouse['allow_transfer'] ?? 0) !== 1) {
+            return $this->transferResult(
+                'blocked', false, '不可调拨',
+                '当前来源仓库未开启调拨权限，请先调整仓库规则或使用对应业务流程',
+                [], [], false
+            );
+        }
+        if ($sourceOwnership === 'consigned' && $targetOwnership !== 'consigned') {
+            if (!in_array($targetType, ['owned', 'peer'], true)) {
+                return $this->transferResult(
+                    'blocked', false, '不可调入',
+                    '代卖设备只能在确认回收价后转入二手机仓或同行仓；异常处理请使用设备异常流程',
+                    [], [], false
+                );
+            }
+            return $this->transferResult(
+                'buyout', true, '转为自有',
+                '该设备属于客户，转入自有仓前需要确认回收价并生成设备级采购应付',
+                [], [], true
+            );
+        }
+        if ($sourceOwnership === 'consigned' && $targetOwnership === 'consigned') {
+            if ((int)($sourceWarehouse['allow_transfer'] ?? 0) !== 1) {
+                return $this->transferResult('blocked', false, '不可调拨', '当前代卖仓未开启同物权位置调拨', [], [], false);
+            }
+            return $this->transferResult('transfer', true, '普通调拨', '仅改变代卖设备保管位置，物权主体保持不变', [], [], false);
+        }
+
+        if ($sourceType === 'peer' && $targetType === 'owned') {
+            // 同行仓追求快速入库，通常不会强制维护商城资料；转入二手机仓时
+            // 则必须具备最基本的销售能力。这里按业务硬约束图片和零售价，
+            // 不能仅依赖目标仓是否开启商城，否则配置变化会造成漏判。
+            $missingFields = [];
+            $missingLabels = [];
+            if (!$this->hasImages($asset['image_urls'] ?? '')) {
+                $missingFields[] = 'image';
+                $missingLabels[] = '图片';
+            }
+            if ((float)($asset['retail_price'] ?? 0) <= 0) {
+                $missingFields[] = 'retail_price';
+                $missingLabels[] = '零售价';
+            }
+            $projected = array_merge($asset, [
+                'warehouse_id' => (int)($targetWarehouse['id'] ?? 0),
+                'warehouse_name' => (string)($targetWarehouse['warehouse_name'] ?? ''),
+            ]);
+            $policy = $this->evaluate($projected, $targetWarehouse);
+            foreach ((array)($policy['missing_fields'] ?? []) as $index => $field) {
+                if (in_array($field, $missingFields, true)) continue;
+                $missingFields[] = $field;
+                $missingLabels[] = (string)(($policy['missing_labels'] ?? [])[$index] ?? $field);
+            }
+            if ($missingFields !== []) {
+                return $this->transferResult(
+                    'complete_profile', false, '先完善资料',
+                    '同行仓转入二手机仓前，请先补齐：' . implode('、', $missingLabels),
+                    $missingFields, $missingLabels, false
+                );
+            }
+        }
+
+        return $this->transferResult('transfer', true, '普通调拨', '物权不变，仅调整库存位置', [], [], false);
+    }
+
+    private function assetOwnership(array $asset, ?array $sourceWarehouse): string
+    {
+        $sourceConsigned = (string)($sourceWarehouse['ownership_type'] ?? '') === 'consigned'
+            || (string)($sourceWarehouse['warehouse_type'] ?? '') === 'consignment';
+        $ownership = trim((string)($asset['ownership_type'] ?? ''));
+        // 新字段上线前，旧代卖设备会被数据库默认值填成 owned。来源仓仍是最可靠的兼容证据。
+        if ($sourceConsigned && trim((string)($asset['ownership_source_type'] ?? '')) === '') return 'consigned';
+        if (in_array($ownership, ['owned', 'consigned', 'pending'], true)) return $ownership;
+        return $sourceConsigned ? 'consigned' : 'owned';
+    }
+
+    private function transferResult(
+        string $action,
+        bool $allowed,
+        string $label,
+        string $reason,
+        array $missingFields,
+        array $missingLabels,
+        bool $requiresFinance
+    ): array {
+        return [
+            'action' => $action,
+            'allowed' => $allowed ? 1 : 0,
+            'label' => $label,
+            'reason' => $reason,
+            'missing_fields' => array_values($missingFields),
+            'missing_labels' => array_values($missingLabels),
+            'requires_finance' => $requiresFinance ? 1 : 0,
         ];
     }
 

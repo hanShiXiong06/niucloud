@@ -263,7 +263,7 @@ onBeforeUnmount(() => { selectedSequence++; searchSequence++ })
 <style scoped>
 .catalog-node { width: 100%; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .catalog-node__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.catalog-node__count { flex-shrink: 0; color: var(--el-text-color-placeholder); font-size: 11px; }
+.catalog-node__count { flex-shrink: 0; color: var(--el-text-color-placeholder); font-size: 11px;  margin-right: 4px; }
 .catalog-empty { padding: 18px; color: var(--el-text-color-secondary); text-align: center; }
 </style>
 

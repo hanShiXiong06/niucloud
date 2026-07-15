@@ -48,6 +48,7 @@ class ErpDict
     {
         return [
             'inbound' => '采购入库',
+            'consignment_inbound' => '代卖登记入库',
             'sold' => '销售出库',
             'purchase_return' => '采购退货出库',
             'sale_return' => '销售退货入库',
@@ -63,6 +64,7 @@ class ErpDict
             'flow' => '流转设置',
             'flow_set' => '流转设置',
             'transfer' => '库存调拨',
+            'ownership_purchase' => '代卖转自有',
             'listing_publish' => '商城上架',
         ];
     }

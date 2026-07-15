@@ -85,6 +85,34 @@ class ErpStock extends BaseAdminController
         ));
     }
 
+    public function transferPreview()
+    {
+        $params = $this->request->params([
+            ['asset_ids', []], ['warehouse_id', 0], ['location_id', 0],
+        ]);
+        return success($this->service->transferPreview(
+            (array)$params['asset_ids'],
+            (int)$params['warehouse_id'],
+            (int)$params['location_id']
+        ));
+    }
+
+    public function buyoutConsignment()
+    {
+        $params = $this->request->params([
+            ['asset_id', 0], ['warehouse_id', 0], ['location_id', 0],
+            ['buyout_amount', 0], ['reason', ''], ['request_id', ''],
+        ]);
+        return success($this->service->buyoutConsignment(
+            (int)$params['asset_id'],
+            (int)$params['warehouse_id'],
+            (int)$params['location_id'],
+            (float)$params['buyout_amount'],
+            (string)$params['reason'],
+            (string)$params['request_id']
+        ));
+    }
+
     public function serialTrace()
     {
         $params = $this->request->params([

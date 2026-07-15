@@ -59,7 +59,9 @@ Route::group('erp', function () {
 
     Route::get('stock/lists', 'addon\hsx_erp\app\adminapi\controller\ErpStock@lists');
     Route::get('stock/turnover_summary', 'addon\hsx_erp\app\adminapi\controller\ErpStock@turnoverSummary');
+    Route::post('stock/transfer/preview', 'addon\hsx_erp\app\adminapi\controller\ErpStock@transferPreview');
     Route::post('stock/transfer', 'addon\hsx_erp\app\adminapi\controller\ErpStock@transfer');
+    Route::post('stock/consignment/buyout', 'addon\hsx_erp\app\adminapi\controller\ErpStock@buyoutConsignment');
     Route::get('stock/serial_trace', 'addon\hsx_erp\app\adminapi\controller\ErpStock@serialTrace');
     Route::get('stock/serial_trace/:id', 'addon\hsx_erp\app\adminapi\controller\ErpStock@serialTraceDetail');
     Route::get('stock/ledger', 'addon\hsx_erp\app\adminapi\controller\ErpStock@ledger');

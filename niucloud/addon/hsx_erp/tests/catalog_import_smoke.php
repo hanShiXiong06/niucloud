@@ -48,5 +48,7 @@ $assert(str_contains($service, 'max(sp.sort) as sort') && str_contains($service,
 $assert(str_contains($routes, 'goods/catalog/product/save/:id') && str_contains($routes, 'goods/catalog/product/:id'), '商品型号 CRUD 接口必须注册');
 $assert(str_contains($pc, '新增型号') && str_contains($pc, 'submitCatalogProduct') && str_contains($pc, 'removeCatalogProduct'), '商品目录元组件必须提供型号新增、编辑、排序、启停和删除入口');
 $assert(str_contains($mobilePicker, 'branchCache') && str_contains($mobilePicker, 'scheduleSearch') && str_contains($mobilePicker, 'resolveSelected'), '移动商品目录选择器必须支持懒加载缓存、模糊搜索和ID反显');
+$assert(str_contains($mobilePicker, 'category-tabs') && str_contains($mobilePicker, 'brand-rail') && str_contains($mobilePicker, 'series-tabs'), '移动商品目录必须以品类、品牌、系列和型号工作台呈现');
+$assert(str_contains($mobilePicker, 'workspaceReady') && str_contains($mobilePicker, 'navigationSequence'), '移动商品目录必须能从中断加载恢复并防止异步竞态覆盖');
 
 echo "[PASS] ERP multi-site product catalog import smoke test\n";

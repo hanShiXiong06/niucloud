@@ -121,6 +121,13 @@ final class ErpSchema
                 'quality_remark' => "`quality_remark` varchar(500) NOT NULL DEFAULT '' COMMENT '质检/外观备注' AFTER `image_urls`",
             ],
             'erp_asset' => [
+                'ownership_type' => "`ownership_type` varchar(20) NOT NULL DEFAULT 'owned' COMMENT 'owned自有/consigned代卖/pending待确认' AFTER `party_name`",
+                'owner_party_id' => "`owner_party_id` int NOT NULL DEFAULT 0 COMMENT '当前物权主体，0表示本公司' AFTER `ownership_type`",
+                'owner_party_name' => "`owner_party_name` varchar(100) NOT NULL DEFAULT '' COMMENT '当前物权主体名称快照' AFTER `owner_party_id`",
+                'ownership_source_type' => "`ownership_source_type` varchar(40) NOT NULL DEFAULT '' COMMENT '最近一次物权取得业务类型' AFTER `owner_party_name`",
+                'ownership_source_id' => "`ownership_source_id` int NOT NULL DEFAULT 0 COMMENT '最近一次物权取得业务ID' AFTER `ownership_source_type`",
+                'ownership_source_no' => "`ownership_source_no` varchar(40) NOT NULL DEFAULT '' COMMENT '最近一次物权取得业务单号' AFTER `ownership_source_id`",
+                'ownership_changed_at' => "`ownership_changed_at` int NOT NULL DEFAULT 0 COMMENT '最近一次物权变更时间' AFTER `ownership_source_no`",
                 'location_id' => "`location_id` int NOT NULL DEFAULT 0 COMMENT '库位ID' AFTER `warehouse_name`",
                 'location_name' => "`location_name` varchar(100) NOT NULL DEFAULT '' COMMENT '库位名称快照' AFTER `location_id`",
                 'spec_json' => "`spec_json` longtext COMMENT '结构化规格JSON' AFTER `spec`",
@@ -280,6 +287,7 @@ final class ErpSchema
         }
 
         self::ensureIndex($prefix . 'erp_asset', 'idx_site_sn', 'KEY `idx_site_sn` (`site_id`,`sn`)');
+        self::ensureIndex($prefix . 'erp_asset', 'idx_site_ownership', 'KEY `idx_site_ownership` (`site_id`,`ownership_type`,`owner_party_id`,`status`)');
         self::ensureIndex($prefix . 'erp_asset', 'idx_site_catalog_product', 'KEY `idx_site_catalog_product` (`site_id`,`catalog_product_id`,`status`)');
         self::ensureIndex($prefix . 'erp_purchase_item', 'idx_site_catalog_product', 'KEY `idx_site_catalog_product` (`site_id`,`catalog_product_id`)');
         self::ensureIndex($prefix . 'erp_warehouse', 'idx_site_manager', 'KEY `idx_site_manager` (`site_id`,`manager_uid`,`status`)');
@@ -296,6 +304,7 @@ final class ErpSchema
         self::ensureIndex($prefix . 'erp_purchase_return', 'uk_site_request', 'UNIQUE KEY `uk_site_request` (`site_id`,`request_id`)');
         self::ensureIndex($prefix . 'erp_sale_return', 'uk_site_request', 'UNIQUE KEY `uk_site_request` (`site_id`,`request_id`)');
         Db::execute("UPDATE `{$prefix}erp_party` SET role_flags = CASE party_type WHEN 'supplier' THEN 'purchase_supplier' WHEN 'customer' THEN 'sale_customer' WHEN 'channel' THEN 'sale_customer' ELSE 'other' END WHERE role_flags = ''");
+        Db::execute("UPDATE `{$prefix}erp_asset` a LEFT JOIN `{$prefix}erp_warehouse` w ON w.site_id = a.site_id AND w.id = a.warehouse_id SET a.ownership_type = 'consigned', a.owner_party_id = a.party_id, a.owner_party_name = a.party_name WHERE w.ownership_type = 'consigned' AND a.ownership_type = 'owned'");
         self::backfillHistoricalFinanceState($prefix);
         self::backfillFinanceSourceSnapshots($prefix);
     }

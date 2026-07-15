@@ -6,6 +6,7 @@ namespace addon\hsx_erp\app\listener;
 use addon\hsx_erp\app\model\ErpInboxEvent;
 use addon\hsx_erp\app\model\ErpPurchaseOrder;
 use addon\hsx_erp\app\service\admin\ErpConfigService;
+use addon\hsx_erp\app\service\admin\ErpConsignmentInboundService;
 use addon\hsx_erp\app\service\admin\ErpPurchaseService;
 use addon\hsx_erp\app\support\ErpIdempotency;
 use core\exception\CommonException;
@@ -117,28 +118,18 @@ class ErpDeviceInboundRequested
     protected function processDevices(array $event, array $devices, string $eventId, int $currentSiteId): array
     {
         $ownedDevices = [];
-        $skipped = [];
+        $consignedDevices = [];
         foreach ($devices as $device) {
             if ((string)($device['ownership_type'] ?? 'owned') === 'consign') {
-                $skipped[] = [
-                    'source_device_id' => trim((string)($device['source_device_id'] ?? '')),
-                    'reason' => '代卖设备不能生成采购应付，请走代卖登记流程',
-                ];
+                $consignedDevices[] = $device;
                 continue;
             }
             $ownedDevices[] = $device;
         }
 
-        if ($ownedDevices === []) {
-            return [
-                'consumer' => 'hsx_erp', 'target' => 'self_erp', 'status' => 'skipped',
-                'order_ids' => [], 'created_count' => 0, 'existing_count' => 0,
-                'skipped_count' => count($skipped), 'skipped' => $skipped,
-            ];
-        }
-
         $groups = $this->groupDevices($ownedDevices);
         $orderIds = [];
+        $assetIds = [];
         $createdCount = 0;
         $existingCount = 0;
         foreach ($groups as $groupKey => $group) {
@@ -152,16 +143,39 @@ class ErpDeviceInboundRequested
             else $createdCount += $deviceCount;
         }
 
+        $source = (array)($event['_erp_source'] ?? []);
+        $sourcePlugin = trim((string)($source['plugin'] ?? ''));
+        $sourcePluginName = trim((string)($source['plugin_name'] ?? '')) ?: $sourcePlugin;
+        foreach ($consignedDevices as $device) {
+            $warehouseId = (int)($device['target_warehouse_id'] ?? 0);
+            $locationId = (int)($device['target_location_id'] ?? 0);
+            $item = $this->mapDeviceItem($device, $warehouseId, $locationId, 0, $sourcePlugin, $sourcePluginName);
+            $registered = $this->registerConsignment($event, $device, $item);
+            $assetIds[] = (int)$registered['asset_id'];
+            if (!empty($registered['created'])) $createdCount++;
+            else $existingCount++;
+        }
+
         return [
             'consumer' => 'hsx_erp',
             'target' => 'self_erp',
-            'status' => $createdCount > 0 ? ($skipped === [] ? 'processed' : 'partial') : 'duplicate',
+            'status' => $createdCount > 0 ? 'processed' : 'duplicate',
             'order_ids' => array_values(array_unique(array_map('intval', $orderIds))),
+            'consignment_asset_ids' => array_values(array_unique(array_filter(array_map('intval', $assetIds)))),
             'created_count' => $createdCount,
             'existing_count' => $existingCount,
-            'skipped_count' => count($skipped),
-            'skipped' => $skipped,
+            'skipped_count' => 0,
+            'skipped' => [],
         ];
+    }
+
+    /**
+     * 独立封装代卖登记入口，避免没有代卖设备时初始化带请求上下文的后台服务，
+     * 同时允许契约测试替换持久化实现。
+     */
+    protected function registerConsignment(array $event, array $device, array $item): array
+    {
+        return (new ErpConsignmentInboundService())->register($event, $device, $item);
     }
 
     /** @return array<string,array{source_id:string,source_order_no:string,counterparty:array,devices:array}> */

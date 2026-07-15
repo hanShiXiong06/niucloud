@@ -520,6 +520,326 @@ class ErpStockService extends BaseAdminService
         return $this->info($id);
     }
 
+    /** 调拨前置决策：前端据此展示普通调拨、完善资料、禁止或代卖转自有。 */
+    public function transferPreview(array $assetIds, int $warehouseId, int $locationId): array
+    {
+        $assetIds = array_values(array_unique(array_filter(array_map('intval', $assetIds))));
+        if ($assetIds === []) throw new CommonException('请选择要调拨的设备');
+        if (count($assetIds) > 200) throw new CommonException('单次最多判断200台设备');
+        [$targetWarehouse, $targetLocation] = (new ErpWarehouseService())->validateInboundLocation($warehouseId, $locationId);
+        $assets = ErpAsset::where('site_id', '=', $this->site_id)->whereIn('id', $assetIds)->select();
+        if (count($assets) !== count($assetIds)) throw new CommonException('部分设备不存在，请刷新库存后重试');
+        $warehouseIds = [];
+        foreach ($assets as $asset) $warehouseIds[] = (int)$asset->warehouse_id;
+        $warehouseIds = array_values(array_unique(array_filter($warehouseIds)));
+        $sourceMap = [];
+        if ($warehouseIds !== []) {
+            foreach (ErpWarehouse::where('site_id', '=', $this->site_id)->whereIn('id', $warehouseIds)->select()->toArray() as $warehouse) {
+                $sourceMap[(int)$warehouse['id']] = $warehouse;
+            }
+        }
+        $policy = new ErpWarehousePolicyService();
+        $items = [];
+        $actions = [];
+        foreach ($assets as $asset) {
+            if ((int)$asset->warehouse_id === (int)$targetWarehouse->id && (int)$asset->location_id === (int)$targetLocation->id) {
+                $decision = [
+                    'action' => 'blocked', 'allowed' => 0, 'label' => '无需调拨',
+                    'reason' => '设备已经位于所选仓库和库位', 'missing_fields' => [],
+                    'missing_labels' => [], 'requires_finance' => 0,
+                ];
+            } else {
+                $decision = $policy->transferDecision(
+                    $asset->toArray(),
+                    $sourceMap[(int)$asset->warehouse_id] ?? null,
+                    $targetWarehouse->toArray()
+                );
+            }
+            $actions[] = (string)$decision['action'];
+            $items[] = array_merge([
+                'asset_id' => (int)$asset->id,
+                'asset_no' => (string)$asset->asset_no,
+                'model' => (string)$asset->model,
+                'imei' => (string)$asset->imei,
+                'party_id' => (int)($asset->owner_party_id ?: $asset->party_id),
+                'party_name' => (string)($asset->owner_party_name ?: $asset->party_name),
+                'source_warehouse_id' => (int)$asset->warehouse_id,
+                'source_warehouse_name' => (string)$asset->warehouse_name,
+            ], $decision);
+        }
+        $actions = array_values(array_unique($actions));
+        $batchAction = count($actions) === 1 ? $actions[0] : 'mixed';
+        $allowed = $batchAction !== 'mixed' && !in_array($batchAction, ['blocked', 'complete_profile'], true);
+        if ($batchAction === 'buyout' && count($items) > 1) {
+            $allowed = false;
+        }
+        return [
+            'action' => $batchAction,
+            'allowed' => $allowed ? 1 : 0,
+            'label' => $batchAction === 'buyout' ? '转为自有' : ($batchAction === 'transfer' ? '普通调拨' : '需要分别处理'),
+            'reason' => $batchAction === 'mixed'
+                ? '所选设备包含不同物权或不同处理方式，请按处理类型分别操作'
+                : ($batchAction === 'buyout' && count($items) > 1 ? '代卖转自有必须逐台确认回收价' : (string)($items[0]['reason'] ?? '')),
+            'target_warehouse' => [
+                'id' => (int)$targetWarehouse->id,
+                'warehouse_name' => (string)$targetWarehouse->warehouse_name,
+                'warehouse_type' => (string)$targetWarehouse->warehouse_type,
+                'ownership_type' => (string)$targetWarehouse->ownership_type,
+            ],
+            'target_location' => ['id' => (int)$targetLocation->id, 'location_name' => (string)$targetLocation->location_name],
+            'items' => $items,
+        ];
+    }
+
+    /**
+     * 代卖设备转为自有：一次提交完成物权变更、采购事实、设备应付、库存移动和插件同步事件。
+     */
+    public function buyoutConsignment(
+        int $assetId,
+        int $warehouseId,
+        int $locationId,
+        float $buyoutAmount,
+        string $reason = '',
+        string $requestId = ''
+    ): array {
+        if ($assetId <= 0) throw new CommonException('请选择代卖设备');
+        $buyoutAmount = round($buyoutAmount, 2);
+        if ($buyoutAmount <= 0) throw new CommonException('请填写有效回收价');
+        [$targetWarehouse, $targetLocation] = (new ErpWarehouseService())->validateInboundLocation($warehouseId, $locationId);
+        if ((string)$targetWarehouse->ownership_type === 'consigned' || (string)$targetWarehouse->warehouse_type === 'consignment') {
+            throw new CommonException('转为自有必须选择二手机仓或其他自有仓');
+        }
+        $requestId = ErpIdempotency::normalize($requestId);
+        if ($requestId !== '') {
+            $existing = ErpAssetLedger::where([
+                ['site_id', '=', $this->site_id], ['request_id', '=', $requestId], ['action', '=', 'ownership_purchase'],
+            ])->findOrEmpty();
+            if (!$existing->isEmpty()) {
+                $payable = ErpPayable::where([
+                    ['site_id', '=', $this->site_id], ['source_type', '=', 'purchase_asset'], ['asset_id', '=', $assetId],
+                    ['source_no', '=', (string)$existing->source_no],
+                ])->findOrEmpty();
+                return [
+                    'asset_id' => $assetId, 'purchase_order_id' => (int)$existing->source_id,
+                    'purchase_no' => (string)$existing->source_no, 'payable_id' => (int)($payable->id ?? 0),
+                    'idempotent' => true,
+                ];
+            }
+        }
+
+        $result = [];
+        $outboxId = 0;
+        Db::transaction(function () use (
+            $assetId, $targetWarehouse, $targetLocation, $buyoutAmount, $reason, $requestId, &$result, &$outboxId
+        ) {
+            $asset = ErpAsset::where([['site_id', '=', $this->site_id], ['id', '=', $assetId]])->lock(true)->findOrEmpty();
+            if ($asset->isEmpty()) throw new CommonException('代卖设备不存在');
+            if ((string)$asset->status !== ErpDict::ASSET_IN_STOCK) throw new CommonException('只有在库代卖设备可以转为自有');
+            $sourceWarehouse = ErpWarehouse::where([['site_id', '=', $this->site_id], ['id', '=', (int)$asset->warehouse_id]])->findOrEmpty();
+            $decision = (new ErpWarehousePolicyService())->transferDecision(
+                $asset->toArray(),
+                $sourceWarehouse->isEmpty() ? null : $sourceWarehouse->toArray(),
+                $targetWarehouse->toArray()
+            );
+            if ((string)$decision['action'] !== 'buyout') {
+                throw new CommonException((string)($decision['reason'] ?? '当前设备不是可收购的代卖设备'));
+            }
+            $this->validateConsignmentBuyoutExtension($asset);
+            $partyId = (int)($asset->owner_party_id ?: $asset->party_id);
+            $partyName = trim((string)($asset->owner_party_name ?: $asset->party_name));
+            if ($partyId <= 0 || $partyName === '') throw new CommonException('代卖设备缺少物权客户，请先完善往来主体');
+            $party = ErpParty::where([['site_id', '=', $this->site_id], ['id', '=', $partyId], ['status', '=', 1]])->findOrEmpty();
+            if ($party->isEmpty()) throw new CommonException('代卖设备物权客户不存在或已停用');
+            $partyRoles = array_values(array_unique(array_filter(array_map('trim', explode(',', (string)$party->role_flags)))));
+            if (!in_array('purchase_supplier', $partyRoles, true)) {
+                $partyRoles[] = 'purchase_supplier';
+                $party->save(['role_flags' => implode(',', $partyRoles), 'update_at' => time()]);
+            }
+
+            $now = time();
+            $purchaseNo = ErpLedgerService::makeNo('PO');
+            $sourceSnapshot = json_decode((string)$asset->spec_json, true);
+            if (!is_array($sourceSnapshot)) $sourceSnapshot = [];
+            $purchaseSourceService = new ErpFinanceSourceService();
+            $purchaseSource = $purchaseSourceService->purchase([
+                'origin_plugin' => (string)($asset->source_plugin ?: 'hsx_erp'),
+                'origin_plugin_name' => (string)$asset->source_plugin === 'hsx_recycle' ? '回收插件' : '二手机ERP',
+                'origin_type' => 'hsx_erp.consignment_buyout',
+                'origin_name' => '代卖转自有',
+                'origin_id' => (string)($sourceSnapshot['source_device_id'] ?? $asset->source_id),
+                'origin_no' => (string)($sourceSnapshot['source_order_no'] ?? ''),
+                'purchase_channel_key' => 'consignment_buyout',
+                'purchase_channel' => '代卖买断',
+            ]);
+            $order = ErpPurchaseOrder::create([
+                'site_id' => $this->site_id,
+                'request_id' => $requestId !== '' ? ErpIdempotency::child($requestId, 'purchase') : null,
+                'purchase_no' => $purchaseNo,
+                'party_id' => $partyId, 'party_name' => $partyName,
+                'm_no' => (string)$party->m_no,
+                'purchase_channel' => '代卖买断', 'settle_method' => '挂账',
+                'warehouse_id' => (int)$targetWarehouse->id, 'warehouse_name' => (string)$targetWarehouse->warehouse_name,
+                'location_id' => (int)$targetLocation->id, 'location_name' => (string)$targetLocation->location_name,
+                'purchaser_uid' => (int)$this->uid, 'purchaser_name' => (string)$this->username,
+                'total_cost' => $buyoutAmount, 'paid_amount' => 0, 'payable_amount' => $buyoutAmount,
+                'finance_status' => ErpDict::STATUS_PENDING, 'status' => ErpDict::STATUS_COMPLETED,
+                'source_plugin' => 'erp', 'source_type' => 'consignment_buyout', 'source_id' => (string)$asset->id,
+                'origin_plugin' => (string)$purchaseSource['origin_plugin'],
+                'origin_plugin_name' => (string)$purchaseSource['origin_plugin_name'],
+                'origin_type' => (string)$purchaseSource['origin_type'], 'origin_name' => (string)$purchaseSource['origin_name'],
+                'origin_id' => (string)$purchaseSource['origin_id'], 'origin_no' => (string)$purchaseSource['origin_no'],
+                'operator_uid' => (int)$this->uid, 'operator_name' => (string)$this->username,
+                'purchase_at' => $now,
+                'remark' => trim($reason) ?: '代卖设备确认收购并转为自有库存',
+                'create_at' => $now, 'update_at' => $now,
+            ]);
+            $purchaseItem = ErpPurchaseItem::create([
+                'site_id' => $this->site_id, 'purchase_order_id' => (int)$order->id, 'asset_id' => (int)$asset->id,
+                'warehouse_id' => (int)$targetWarehouse->id, 'warehouse_name' => (string)$targetWarehouse->warehouse_name,
+                'location_id' => (int)$targetLocation->id, 'location_name' => (string)$targetLocation->location_name,
+                'imei' => (string)$asset->imei, 'sn' => (string)$asset->sn, 'model' => (string)$asset->model,
+                'spec' => (string)$asset->spec, 'spec_json' => (string)$asset->spec_json,
+                'color' => (string)$asset->color, 'battery' => (int)$asset->battery, 'warranty' => (int)$asset->warranty,
+                'catalog_product_id' => (int)$asset->catalog_product_id,
+                'category_name' => (string)$asset->category_name, 'category_path' => (string)$asset->category_path,
+                'inspector_uid' => (int)$asset->inspector_uid, 'inspector_name' => (string)$asset->inspector_name,
+                'estimate_sale_price' => (float)$asset->estimate_sale_price, 'retail_price' => (float)$asset->retail_price,
+                'image_urls' => (string)$asset->image_urls, 'quality_remark' => (string)$asset->quality_remark,
+                'purchase_cost' => $buyoutAmount, 'adjust_cost' => 0, 'total_cost' => $buyoutAmount,
+                'status' => ErpDict::ASSET_IN_STOCK,
+                'remark' => trim($reason) ?: '代卖转自有', 'create_at' => $now, 'update_at' => $now,
+            ]);
+            $before = $asset->toArray();
+            $internalCost = max(0, round((float)$asset->adjust_cost + (float)$asset->refurbish_cost, 2));
+            $afterCost = round($buyoutAmount + $internalCost, 2);
+            $projected = array_merge($before, [
+                'warehouse_id' => (int)$targetWarehouse->id, 'warehouse_name' => (string)$targetWarehouse->warehouse_name,
+                'location_id' => (int)$targetLocation->id, 'location_name' => (string)$targetLocation->location_name,
+                'ownership_type' => 'owned', 'purchase_cost' => $buyoutAmount, 'total_cost' => $afterCost,
+                'sale_target' => (string)$targetWarehouse->default_sale_target,
+            ]);
+            $targetPolicy = (new ErpWarehousePolicyService())->evaluate($projected, $targetWarehouse->toArray());
+            $listingStatus = 'none';
+            if ((int)$targetPolicy['can_prepare_mall'] === 1) {
+                $listingStatus = (int)$targetPolicy['can_list_mall'] === 1 ? 'ready'
+                    : (in_array('image', (array)$targetPolicy['missing_fields'], true) ? 'need_photo' : 'need_price');
+            }
+            $asset->save([
+                'purchase_order_id' => (int)$order->id, 'purchase_item_id' => (int)$purchaseItem->id,
+                'party_id' => $partyId, 'party_name' => $partyName,
+                'ownership_type' => 'owned', 'owner_party_id' => 0, 'owner_party_name' => '本公司',
+                'ownership_source_type' => 'consignment_buyout', 'ownership_source_id' => (int)$order->id,
+                'ownership_source_no' => $purchaseNo, 'ownership_changed_at' => $now,
+                'warehouse_id' => (int)$targetWarehouse->id, 'warehouse_name' => (string)$targetWarehouse->warehouse_name,
+                'location_id' => (int)$targetLocation->id, 'location_name' => (string)$targetLocation->location_name,
+                'purchase_cost' => $buyoutAmount, 'total_cost' => $afterCost,
+                'sale_target' => (string)$targetWarehouse->default_sale_target, 'listing_status' => $listingStatus,
+                'update_at' => $now,
+            ]);
+            $businessReason = sprintf(
+                '向客户【%s】买断代卖设备【%s / IMEI %s】，回收价 ¥%.2f，形成设备级采购应付。',
+                $partyName, (string)($asset->model ?: $asset->asset_no), (string)($asset->imei ?: '-'), $buyoutAmount
+            );
+            $payable = ErpPayable::create(array_merge([
+                'site_id' => $this->site_id, 'payable_no' => ErpLedgerService::makeNo('AP'),
+                'party_id' => $partyId, 'party_name' => $partyName,
+                // 继续使用财务模块统一的设备级采购关联；“代卖买断”通过来源快照、
+                // 业务说明和采购单 source_type 表达，确保应付详情/批次结算能直接复用。
+                'source_type' => 'purchase_asset', 'source_id' => (int)$asset->id, 'source_no' => $purchaseNo,
+                'asset_id' => (int)$asset->id, 'amount' => $buyoutAmount, 'settled_amount' => 0,
+                'status' => ErpDict::STATUS_PENDING, 'occurred_at' => $now,
+                'remark' => '代卖转自有：' . (string)($asset->model ?: $asset->asset_no),
+                'create_at' => $now, 'update_at' => $now,
+            ], $purchaseSourceService->persistable(array_merge($purchaseSource, [
+                'business_reason' => $businessReason,
+            ]))));
+            $ledger = new ErpLedgerService();
+            $ledger->asset([
+                'asset_id' => (int)$asset->id, 'request_id' => $requestId !== '' ? $requestId : null,
+                'action' => 'ownership_purchase',
+                'before_status' => (string)$before['status'], 'after_status' => (string)$before['status'],
+                'before_warehouse_id' => (int)$before['warehouse_id'], 'before_warehouse_name' => (string)$before['warehouse_name'],
+                'before_location_id' => (int)$before['location_id'], 'before_location_name' => (string)$before['location_name'],
+                'after_warehouse_id' => (int)$targetWarehouse->id, 'after_warehouse_name' => (string)$targetWarehouse->warehouse_name,
+                'after_location_id' => (int)$targetLocation->id, 'after_location_name' => (string)$targetLocation->location_name,
+                'before_total_cost' => (float)$before['total_cost'], 'after_total_cost' => $afterCost,
+                'cost_delta' => round($afterCost - (float)$before['total_cost'], 2),
+                'party_id' => $partyId, 'party_name' => $partyName,
+                'source_type' => 'consignment_buyout', 'source_id' => (int)$order->id, 'source_no' => $purchaseNo,
+                'remark' => trim($reason) ?: '代卖设备转为自有库存并生成采购应付',
+                'extra' => [
+                    'business_action' => 'consignment_buyout', 'before_ownership' => 'consigned', 'after_ownership' => 'owned',
+                    'buyout_amount' => $buyoutAmount, 'internal_cost' => $internalCost,
+                    'purchase_order_id' => (int)$order->id, 'purchase_no' => $purchaseNo,
+                    'payable_id' => (int)$payable->id, 'payable_no' => (string)$payable->payable_no,
+                    'source_warehouse_type' => (string)$sourceWarehouse->warehouse_type,
+                    'target_warehouse_type' => (string)$targetWarehouse->warehouse_type,
+                ],
+            ]);
+            $ledger->account([
+                'biz_type' => 'consignment_buyout', 'direction' => 'increase', 'amount' => $buyoutAmount,
+                'party_id' => $partyId, 'party_name' => $partyName, 'asset_id' => (int)$asset->id,
+                'source_type' => 'consignment_buyout', 'source_id' => (int)$order->id, 'source_no' => $purchaseNo,
+                'remark' => '代卖买断形成自有设备采购成本',
+            ]);
+            (new ErpOperationLogService())->record(
+                'consignment_buyout', 'asset', (int)$asset->id, (string)$asset->asset_no,
+                '代卖设备转为自有并生成采购应付',
+                ['buyout_amount' => $buyoutAmount, 'purchase_no' => $purchaseNo, 'payable_no' => (string)$payable->payable_no]
+            );
+
+            $sourceDeviceId = (int)($sourceSnapshot['source_device_id'] ?? ((string)$asset->source_plugin === 'hsx_recycle' ? $asset->source_id : 0));
+            if ((string)$asset->source_plugin === 'hsx_recycle' && $sourceDeviceId > 0) {
+                $queued = (new ErpIntegrationService())->enqueueDomainEvent(
+                    'erp.asset.consignment_bought_out.v1', 'asset', (int)$asset->id,
+                    [
+                        'asset_id' => (int)$asset->id, 'asset_no' => (string)$asset->asset_no,
+                        'source_device_id' => $sourceDeviceId,
+                        'source_order_no' => (string)($sourceSnapshot['source_order_no'] ?? ''),
+                        'buyout_amount' => $buyoutAmount, 'purchase_order_id' => (int)$order->id,
+                        'purchase_no' => $purchaseNo, 'payable_id' => (int)$payable->id,
+                        'payable_no' => (string)$payable->payable_no, 'occurred_at' => $now,
+                    ],
+                    ['plugin' => 'hsx_erp', 'type' => 'consignment_buyout', 'id' => (int)$asset->id],
+                    ['hsx_recycle']
+                );
+                $outboxId = (int)$queued['id'];
+            }
+            $result = [
+                'asset_id' => (int)$asset->id, 'purchase_order_id' => (int)$order->id, 'purchase_no' => $purchaseNo,
+                'payable_id' => (int)$payable->id, 'payable_no' => (string)$payable->payable_no,
+                'buyout_amount' => $buyoutAmount, 'idempotent' => false,
+            ];
+        });
+        if ($outboxId > 0) {
+            $result['plugin_sync'] = (new ErpIntegrationService())->dispatchDomainEvent($outboxId);
+        }
+        return $result;
+    }
+
+    /**
+     * 插件侧只做买断前的只读校验，避免 ERP 已生成应付后才发现原代卖单已成交。
+     * 未安装来源插件时不阻塞 ERP；安装后的插件可通过 Hook 明确拒绝操作。
+     */
+    private function validateConsignmentBuyoutExtension(ErpAsset $asset): void
+    {
+        if ((string)$asset->source_plugin !== 'hsx_recycle') return;
+        $snapshot = json_decode((string)$asset->spec_json, true);
+        if (!is_array($snapshot)) $snapshot = [];
+        $deviceId = (int)($snapshot['source_device_id'] ?? $asset->source_id ?? 0);
+        if ($deviceId <= 0) return;
+        $responses = (array)event('HsxErpConsignmentBuyoutValidate', [
+            'site_id' => $this->site_id,
+            'asset_id' => (int)$asset->id,
+            'source_device_id' => $deviceId,
+        ]);
+        foreach ($responses as $response) {
+            if (!is_array($response) || (int)($response['handled'] ?? 0) !== 1) continue;
+            if ((int)($response['allowed'] ?? 0) === 1) continue;
+            throw new CommonException((string)($response['message'] ?? '来源业务状态不允许买断'));
+        }
+    }
+
     /** 批量调拨库存设备；仓库配置决定是否允许调拨及调拨后的销售去向。 */
     public function transfer(array $assetIds, int $warehouseId, int $locationId, string $reason = '', string $requestId = ''): array
     {
@@ -546,8 +866,16 @@ class ErpStockService extends BaseAdminService
                     throw new CommonException('设备【' . (string)($asset->model ?: $asset->asset_no) . '】处于整备流程，不能普通调拨');
                 }
                 $sourceWarehouse = ErpWarehouse::where([
-                    ['site_id', '=', $this->site_id], ['id', '=', (int)$asset->warehouse_id], ['status', '=', 1],
+                    ['site_id', '=', $this->site_id], ['id', '=', (int)$asset->warehouse_id],
                 ])->findOrEmpty();
+                $decision = (new ErpWarehousePolicyService())->transferDecision(
+                    $asset->toArray(),
+                    $sourceWarehouse->isEmpty() ? null : $sourceWarehouse->toArray(),
+                    $targetWarehouse->toArray()
+                );
+                if ((string)$decision['action'] !== 'transfer' || (int)$decision['allowed'] !== 1) {
+                    throw new CommonException((string)$decision['reason']);
+                }
                 // 历史仓库被停用或删除时允许纠正性调拨，否则设备会永久卡在无效仓库。
                 // 有效仓库仍严格服从 allow_transfer 配置。
                 if (!$sourceWarehouse->isEmpty() && (int)$sourceWarehouse->allow_transfer !== 1) {
@@ -596,6 +924,14 @@ class ErpStockService extends BaseAdminService
                     'before_total_cost' => (float)$before['total_cost'], 'after_total_cost' => (float)$before['total_cost'],
                     'source_type' => 'stock_transfer', 'source_id' => (int)$asset->id, 'source_no' => $transferNo,
                     'remark' => trim($reason) ?: ('库存调拨至' . (string)$targetWarehouse->warehouse_name . ' / ' . (string)$targetLocation->location_name),
+                    'extra' => [
+                        'business_action' => 'stock_transfer',
+                        'source_warehouse_type' => (string)($sourceWarehouse->warehouse_type ?? ''),
+                        'target_warehouse_type' => (string)$targetWarehouse->warehouse_type,
+                        'before_ownership' => (string)($asset->ownership_type ?? 'owned'),
+                        'after_ownership' => (string)($asset->ownership_type ?? 'owned'),
+                        'reason' => trim($reason),
+                    ],
                 ]);
             }
         });

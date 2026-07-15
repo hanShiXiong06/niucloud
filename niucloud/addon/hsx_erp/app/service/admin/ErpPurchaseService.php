@@ -24,6 +24,44 @@ use think\facade\Db;
 
 class ErpPurchaseService extends BaseAdminService
 {
+    /**
+     * 为外部插件解析或创建 ERP 往来主体。
+     *
+     * 代卖登记等非采购事实也需要复用会员绑定和昵称/手机号同步，但不能为了
+     * 创建主体而伪造采购单，因此提供这一窄入口给领域服务使用。
+     */
+    public function resolveExternalParty(array $counterparty, string $sourcePlugin = '', array $roles = []): ErpParty
+    {
+        $name = trim((string)($counterparty['name'] ?? $counterparty['contact_name'] ?? ''));
+        $mobile = trim((string)($counterparty['mobile'] ?? ''));
+        if ($name === '') $name = $mobile;
+        if ($name === '') {
+            $name = '来源客户#' . (trim((string)($counterparty['source_id'] ?? '')) ?: '未知');
+        }
+        $party = $this->ensureParty(
+            (int)($counterparty['party_id'] ?? 0),
+            $name,
+            trim((string)($counterparty['m_no'] ?? $mobile)),
+            (string)($counterparty['party_type'] ?? 'customer'),
+            (int)($counterparty['member_id'] ?? (($counterparty['source_type'] ?? '') === 'member' ? ($counterparty['source_id'] ?? 0) : 0)),
+            trim((string)($counterparty['contact_name'] ?? $name)),
+            $mobile,
+            $sourcePlugin,
+            $roles
+        );
+        if ($roles !== []) {
+            $current = array_values(array_unique(array_filter(array_map('trim', explode(',', (string)$party->role_flags)))));
+            foreach ($roles as $role) {
+                $role = trim((string)$role);
+                if ($role !== '' && !in_array($role, $current, true)) $current[] = $role;
+            }
+            if (implode(',', $current) !== (string)$party->role_flags) {
+                $party->save(['role_flags' => implode(',', $current), 'update_at' => time()]);
+            }
+        }
+        return $party;
+    }
+
     public function getPage(array $where): array
     {
         $orderTable = (new ErpPurchaseOrder())->getTable();
@@ -640,6 +678,13 @@ class ErpPurchaseService extends BaseAdminService
                     'purchase_item_id' => (int)$purchaseItem->id,
                     'party_id' => (int)$party->id,
                     'party_name' => $partyName,
+                    'ownership_type' => 'owned',
+                    'owner_party_id' => 0,
+                    'owner_party_name' => '本公司',
+                    'ownership_source_type' => 'purchase',
+                    'ownership_source_id' => $orderId,
+                    'ownership_source_no' => $purchaseNo,
+                    'ownership_changed_at' => $purchaseAt,
                     'warehouse_id' => $itemWarehouseId,
                     'warehouse_name' => $itemWarehouseName,
                     'location_id' => $itemLocationId,
@@ -1033,7 +1078,8 @@ class ErpPurchaseService extends BaseAdminService
         int $memberId = 0,
         string $contactName = '',
         string $contactMobile = '',
-        string $sourcePlugin = ''
+        string $sourcePlugin = '',
+        array $roleOverrides = []
     ): ErpParty
     {
         $contactName = trim($contactName) ?: $name;
@@ -1052,7 +1098,7 @@ class ErpPurchaseService extends BaseAdminService
                 if (!$relation->isEmpty()) {
                     $boundParty = ErpParty::where([['site_id', '=', $this->site_id], ['id', '=', (int)$relation->party_id]])->findOrEmpty();
                     if (!$boundParty->isEmpty()) {
-                        $this->syncPartyIdentity($boundParty, $name, $contactName, $contactMobile, $sourcePlugin);
+                        $this->syncPartyIdentity($boundParty, $name, $contactName, $contactMobile, $sourcePlugin, $roleOverrides);
                         return $boundParty;
                     }
                 }
@@ -1064,7 +1110,7 @@ class ErpPurchaseService extends BaseAdminService
         if ($id > 0) {
             $party = ErpParty::where([['site_id', '=', $this->site_id], ['id', '=', $id]])->findOrEmpty();
             if (!$party->isEmpty()) {
-                $this->syncPartyIdentity($party, $name, $contactName, $contactMobile, $sourcePlugin);
+                $this->syncPartyIdentity($party, $name, $contactName, $contactMobile, $sourcePlugin, $roleOverrides);
                 if ($memberId > 0) $this->bindPartyMember((int)$party->id, $memberId);
                 return $party;
             }
@@ -1075,14 +1121,14 @@ class ErpPurchaseService extends BaseAdminService
                 $party = ErpParty::where([['site_id', '=', $this->site_id], ['m_no', '=', $contactMobile]])->findOrEmpty();
             }
             if (!$party->isEmpty()) {
-                $this->syncPartyIdentity($party, $name, $contactName, $contactMobile, $sourcePlugin);
+                $this->syncPartyIdentity($party, $name, $contactName, $contactMobile, $sourcePlugin, $roleOverrides);
                 if ($memberId > 0) $this->bindPartyMember((int)$party->id, $memberId);
                 return $party;
             }
         }
         $party = ErpParty::where([['site_id', '=', $this->site_id], ['party_name', '=', $name]])->findOrEmpty();
         if (!$party->isEmpty()) {
-            $this->syncPartyIdentity($party, $name, $contactName, $contactMobile, $sourcePlugin);
+            $this->syncPartyIdentity($party, $name, $contactName, $contactMobile, $sourcePlugin, $roleOverrides);
             if ($memberId > 0) $this->bindPartyMember((int)$party->id, $memberId);
             return $party;
         }
@@ -1092,7 +1138,9 @@ class ErpPurchaseService extends BaseAdminService
             'party_no' => ErpLedgerService::makeNo('PT'),
             'party_name' => $name,
             'party_type' => $type,
-            'role_flags' => $sourcePlugin === 'hsx_recycle' ? 'purchase_supplier,recycle_customer' : 'purchase_supplier',
+            'role_flags' => implode(',', $roleOverrides !== []
+                ? array_values(array_unique(array_filter(array_map('trim', $roleOverrides))))
+                : ($sourcePlugin === 'hsx_recycle' ? ['purchase_supplier', 'recycle_customer'] : ['purchase_supplier'])),
             'contact_name' => $contactName,
             'contact_mobile' => $contactMobile,
             'm_no' => $mNo,
@@ -1104,7 +1152,7 @@ class ErpPurchaseService extends BaseAdminService
         return $party;
     }
 
-    private function syncPartyIdentity(ErpParty $party, string $name, string $contactName, string $mobile, string $sourcePlugin): void
+    private function syncPartyIdentity(ErpParty $party, string $name, string $contactName, string $mobile, string $sourcePlugin, array $roleOverrides = []): void
     {
         $save = [];
         $currentName = trim((string)$party->party_name);
@@ -1113,7 +1161,10 @@ class ErpPurchaseService extends BaseAdminService
         if (trim((string)$party->contact_mobile) === '' && $mobile !== '') $save['contact_mobile'] = $mobile;
         if (trim((string)$party->m_no) === '' && $mobile !== '') $save['m_no'] = $mobile;
         $roles = array_values(array_unique(array_filter(array_map('trim', explode(',', (string)$party->role_flags)))));
-        foreach ($sourcePlugin === 'hsx_recycle' ? ['purchase_supplier', 'recycle_customer'] : ['purchase_supplier'] as $role) {
+        $requiredRoles = $roleOverrides !== []
+            ? array_values(array_unique(array_filter(array_map('trim', $roleOverrides))))
+            : ($sourcePlugin === 'hsx_recycle' ? ['purchase_supplier', 'recycle_customer'] : ['purchase_supplier']);
+        foreach ($requiredRoles as $role) {
             if (!in_array($role, $roles, true)) $roles[] = $role;
         }
         if (implode(',', $roles) !== (string)$party->role_flags) $save['role_flags'] = implode(',', $roles);

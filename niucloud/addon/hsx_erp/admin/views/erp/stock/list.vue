@@ -207,6 +207,8 @@
                             <div class="mb-2 text-xs text-gray-500">{{ [row.warehouse_name, row.location_name].filter(Boolean).join(' / ') || '当前无库存位置' }}</div>
                             <div class="flex flex-wrap gap-1">
                                 <el-tag type="success">库存中</el-tag>
+                                <el-tag v-if="row.ownership_type === 'consigned' || row.warehouse_policy?.warehouse_type === 'consignment'" type="warning" effect="plain">客户代卖</el-tag>
+                                <el-tag v-else type="info" effect="plain">本店自有</el-tag>
                                 <el-tag :type="refurbishMeta(row.refurbish_status).type" effect="plain">{{ refurbishMeta(row.refurbish_status).label }}</el-tag>
                                 <el-tag :type="targetMeta(row.sale_target).type" effect="plain">{{ targetMeta(row.sale_target).label }}</el-tag>
                                 <el-tag v-if="row.sale_target === 'mall'" :type="listingMeta(row.listing_status).type" effect="plain">{{ listingMeta(row.listing_status).label }}</el-tag>
@@ -251,7 +253,7 @@
                             <template #dropdown><el-dropdown-menu>
                                 <el-dropdown-item command="flow">完善资料</el-dropdown-item>
                                 <el-dropdown-item command="retail">设置/调整零售价</el-dropdown-item>
-                                <el-dropdown-item command="transfer" :disabled="!row.can_transfer">调拨</el-dropdown-item>
+                                <el-dropdown-item command="transfer" :disabled="!row.can_warehouse_action">{{ row.ownership_type === 'consigned' || row.warehouse_policy?.warehouse_type === 'consignment' ? '转为自有' : '调拨' }}</el-dropdown-item>
                                 <el-dropdown-item command="expense">成本调整</el-dropdown-item>
                                 <el-dropdown-item v-if="row.refurbish_status === 'pending'" command="start_refurbish">开始整备</el-dropdown-item>
                                 <el-dropdown-item v-if="['pending','processing','failed'].includes(row.refurbish_status)" command="complete_refurbish">登记整备结果</el-dropdown-item>
@@ -344,14 +346,24 @@
             <template #footer><el-button @click="retail.visible=false">取消</el-button><el-button type="primary" :loading="retail.saving" @click="submitRetailPrice">确认保存</el-button></template>
         </el-dialog>
 
-        <el-dialog v-model="transfer.visible" title="库存调拨" width="520px" destroy-on-close>
-            <el-alert :title="`本次调拨 ${transfer.assetIds.length} 台设备，调拨后自动应用目标仓库的销售、拍照和定价规则。`" type="info" :closable="false" show-icon />
+        <el-dialog v-model="transfer.visible" :title="transfer.preview?.action === 'buyout' ? '代卖设备转为自有' : '库存调拨'" width="560px" destroy-on-close>
+            <el-alert :title="`本次处理 ${transfer.assetIds.length} 台设备。系统会先核对物权和目标仓规则，不会通过普通调拨隐式改变物权。`" type="info" :closable="false" show-icon />
             <el-form class="mt-4" label-width="88px">
-                <el-form-item label="目标仓库" required><el-select v-model="transfer.form.warehouse_id" class="w-full" placeholder="选择目标仓库" @change="transfer.form.location_id=0"><el-option v-for="item in warehouses" :key="item.id" :label="item.warehouse_name" :value="item.id" /></el-select></el-form-item>
-                <el-form-item label="目标库位" required><el-select v-model="transfer.form.location_id" class="w-full" placeholder="选择目标库位"><el-option v-for="item in transferLocations" :key="item.id" :label="item.location_name" :value="item.id" /></el-select></el-form-item>
-                <el-form-item label="调拨原因"><el-input v-model.trim="transfer.form.reason" type="textarea" :rows="3" placeholder="例如：长库龄转同行仓、调整销售渠道" /></el-form-item>
+                <el-form-item label="目标仓库" required><el-select v-model="transfer.form.warehouse_id" class="w-full" placeholder="选择目标仓库" @change="onTransferWarehouseChange"><el-option v-for="item in warehouses" :key="item.id" :label="item.warehouse_name" :value="item.id" /></el-select></el-form-item>
+                <el-form-item label="目标库位" required><el-select v-model="transfer.form.location_id" class="w-full" placeholder="选择目标库位" @change="loadTransferPreview"><el-option v-for="item in transferLocations" :key="item.id" :label="item.location_name" :value="item.id" /></el-select></el-form-item>
+                <div v-loading="transfer.previewLoading" class="mb-4 min-h-[44px]">
+                    <el-alert v-if="transfer.preview" :title="transfer.preview.label" :description="transfer.preview.reason" :type="transfer.preview.allowed ? (transfer.preview.action === 'buyout' ? 'warning' : 'success') : 'error'" :closable="false" show-icon />
+                </div>
+                <template v-if="transfer.preview?.action === 'buyout'">
+                    <div class="mb-4 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm">
+                        <div class="font-medium text-slate-800">{{ transfer.preview.items?.[0]?.model || '代卖设备' }}</div>
+                        <div class="mt-1 text-slate-500">物权客户：{{ transfer.preview.items?.[0]?.party_name || '-' }} · IMEI {{ transfer.preview.items?.[0]?.imei || '-' }}</div>
+                    </div>
+                    <el-form-item label="确认回收价" required><el-input-number v-model="transfer.form.buyout_amount" :min="0.01" :precision="2" :controls="false" class="!w-full" placeholder="形成该设备采购应付" /></el-form-item>
+                </template>
+                <el-form-item :label="transfer.preview?.action === 'buyout' ? '买断说明' : '调拨原因'"><el-input v-model.trim="transfer.form.reason" type="textarea" :rows="3" :placeholder="transfer.preview?.action === 'buyout' ? '例如：客户同意按该价格转为本店自有设备' : '例如：长库龄转同行仓、调整销售渠道'" /></el-form-item>
             </el-form>
-            <template #footer><el-button @click="transfer.visible=false">取消</el-button><el-button type="primary" :loading="transfer.saving" @click="submitTransfer">确认调拨</el-button></template>
+            <template #footer><el-button @click="transfer.visible=false">取消</el-button><el-button type="primary" :disabled="!transfer.preview?.allowed" :loading="transfer.saving" @click="submitTransfer">{{ transfer.preview?.action === 'buyout' ? '确认转为自有' : '确认调拨' }}</el-button></template>
         </el-dialog>
 
         <el-dialog v-model="serialTrace.visible" title="串号追踪" width="920px" destroy-on-close>
@@ -513,6 +525,7 @@
 
                     <el-descriptions class="mt-5" :column="3" border>
                         <el-descriptions-item label="采购来源">{{ detail.data.party_name || '-' }}</el-descriptions-item>
+                        <el-descriptions-item label="物权归属">{{ detail.data.ownership_type === 'consigned' ? (detail.data.owner_party_name || detail.data.party_name || '客户') : '本公司' }}</el-descriptions-item>
                         <el-descriptions-item :label="detail.data.status === 'in_stock' ? '当前仓库' : '出库仓库'">{{ [detail.data.warehouse_name, detail.data.location_name].filter(Boolean).join(' / ') || '-' }}</el-descriptions-item>
                         <el-descriptions-item label="质检员">{{ detail.data.inspector_name || '-' }}</el-descriptions-item>
                         <el-descriptions-item v-if="detail.data.status === 'in_stock'" label="销售零售价">{{ Number(detail.data.retail_price || 0) ? money(detail.data.retail_price) : '未设置' }}</el-descriptions-item>
@@ -620,7 +633,7 @@ import { computed, nextTick, onActivated, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
-import { adjustErpStockCost, adjustErpStockRetailPrice, completeErpStockRefurbish, getErpSerialTraceDetail, getErpSerialTraceList, getErpStockInfo, getErpStockList, getErpStockTurnoverSummary, sendErpStockRefurbish, syncErpStockListing, transferErpStock, updateErpStockFlow } from '@/addon/hsx_erp/api/erp'
+import { adjustErpStockCost, adjustErpStockRetailPrice, buyoutErpConsignment, completeErpStockRefurbish, getErpSerialTraceDetail, getErpSerialTraceList, getErpStockInfo, getErpStockList, getErpStockTurnoverSummary, previewErpStockTransfer, sendErpStockRefurbish, syncErpStockListing, transferErpStock, updateErpStockFlow } from '@/addon/hsx_erp/api/erp'
 import { getErpFinanceCategories } from '@/addon/hsx_erp/api/config'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 import ErpDeviceIdentity from '@/addon/hsx_erp/components/ErpDeviceIdentity.vue'
@@ -646,7 +659,7 @@ const detail = reactive({ visible: false, loading: false, data: null as any })
 const detailActivePanels = ref<string[]>([])
 const flow = reactive({ visible: false, saving: false, row: null as any, form: defaultFlowForm() })
 const retail = reactive({ visible: false, saving: false, row: null as any, form: { retail_price: 0, reason: '' } })
-const transfer = reactive({ visible: false, saving: false, assetIds: [] as number[], form: { warehouse_id: 0, location_id: 0, reason: '' } })
+const transfer = reactive({ visible: false, saving: false, previewLoading: false, preview: null as any, assetIds: [] as number[], form: { warehouse_id: 0, location_id: 0, buyout_amount: 0, reason: '' } })
 const expense = reactive({ visible: false, saving: false, row: null as any, form: { cost_type: 'refurbish', expense_type_key: '', party_id: 0, party_name: '', amount: 0, after_cost: 0, reason: '' } })
 const serialTrace = reactive({ visible: false, loading: false, keyword: '', data: [] as any[], page: 1, limit: 10, total: 0 })
 const serialTraceDetail = reactive({ visible: false, loading: false, data: null as any })
@@ -661,7 +674,7 @@ const searchLocations = computed(() => searchWarehouse.value?.locations || [])
 const refurbishExpenseTypes = computed(() => financeCategories.value.filter((row: any) => row.direction === 'expense' && row.scope === 'refurbish' && Number(row.enabled ?? 1) === 1))
 const selectedPendingIds = computed(() => selectedRows.value.filter(row => row.status === 'in_stock' && row.refurbish_status === 'pending').map(row => Number(row.id)))
 const selectedSaleableIds = computed(() => selectedRows.value.filter(row => Number(row.can_direct_sale || 0) === 1).map(row => Number(row.id)))
-const selectedTransferableIds = computed(() => selectedRows.value.filter(row => Number(row.can_transfer || 0) === 1).map(row => Number(row.id)))
+const selectedTransferableIds = computed(() => selectedRows.value.filter(row => Number(row.can_warehouse_action ?? row.can_transfer ?? 0) === 1).map(row => Number(row.id)))
 const transferWarehouse = computed(() => warehouses.value.find(row => Number(row.id) === Number(transfer.form.warehouse_id)) || null)
 const transferLocations = computed(() => transferWarehouse.value?.locations || [])
 const completeWarehouse = computed(() => warehouses.value.find(row => Number(row.id) === Number(completeRefurbish.form.warehouse_id)) || null)
@@ -1014,23 +1027,53 @@ function openTransfer(row?: any) {
     const ids = row?.id ? [Number(row.id)] : selectedTransferableIds.value
     if (!ids.length) return ElMessage.warning('请先选择允许调拨的库存设备')
     transfer.assetIds = ids
-    transfer.form = { warehouse_id: 0, location_id: 0, reason: '' }
+    transfer.form = { warehouse_id: 0, location_id: 0, buyout_amount: 0, reason: '' }
+    transfer.preview = null
     transfer.visible = true
+}
+
+function onTransferWarehouseChange() {
+    transfer.form.location_id = 0
+    transfer.form.buyout_amount = 0
+    transfer.preview = null
+}
+
+async function loadTransferPreview() {
+    transfer.preview = null
+    if (!transfer.form.warehouse_id || !transfer.form.location_id || !transfer.assetIds.length) return
+    transfer.previewLoading = true
+    try {
+        const res: any = await previewErpStockTransfer({ asset_ids: transfer.assetIds, warehouse_id: transfer.form.warehouse_id, location_id: transfer.form.location_id })
+        transfer.preview = res?.data || null
+    } finally { transfer.previewLoading = false }
 }
 
 async function submitTransfer() {
     if (!transfer.form.warehouse_id || !transfer.form.location_id) return ElMessage.warning('请选择目标仓库和库位')
+    if (!transfer.preview) await loadTransferPreview()
+    if (!transfer.preview?.allowed) return ElMessage.warning(transfer.preview?.reason || '当前设备不能执行该操作')
+    if (transfer.preview.action === 'buyout' && Number(transfer.form.buyout_amount || 0) <= 0) return ElMessage.warning('请填写有效回收价')
     const warehouse = transferWarehouse.value
+    const isBuyout = transfer.preview.action === 'buyout'
     const confirmed = await ElMessageBox.confirm(
-        `确认将 ${transfer.assetIds.length} 台设备调拨至「${warehouse?.warehouse_name || '-'}」？调拨后将按目标仓库规则重新判断是否可售、是否需要图片和定价。`,
-        '确认库存调拨',
-        { type: 'warning', confirmButtonText: '确认调拨', cancelButtonText: '返回检查' }
+        isBuyout
+            ? `确认按 ${money(transfer.form.buyout_amount)} 向「${transfer.preview.items?.[0]?.party_name || '物权客户'}」买断该设备并转入「${warehouse?.warehouse_name || '-'}」？确认后会生成设备级采购应付。`
+            : `确认将 ${transfer.assetIds.length} 台设备调拨至「${warehouse?.warehouse_name || '-'}」？调拨后将按目标仓库规则重新判断是否可售、是否需要图片和定价。`,
+        isBuyout ? '确认代卖转自有' : '确认库存调拨',
+        { type: 'warning', confirmButtonText: isBuyout ? '确认买断' : '确认调拨', cancelButtonText: '返回检查' }
     ).then(() => true).catch(() => false)
     if (!confirmed) return
     transfer.saving = true
     try {
-        await transferErpStock({ asset_ids: transfer.assetIds, ...transfer.form })
-        ElMessage.success('库存调拨完成')
+        let syncPending = false
+        if (isBuyout) {
+            const response: any = await buyoutErpConsignment({ asset_id: transfer.assetIds[0], ...transfer.form })
+            syncPending = response?.data?.plugin_sync?.ok === false
+        } else {
+            await transferErpStock({ asset_ids: transfer.assetIds, warehouse_id: transfer.form.warehouse_id, location_id: transfer.form.location_id, reason: transfer.form.reason })
+        }
+        if (syncPending) ElMessage.warning('设备与应付已生成；回收端同步进入自动重试，请稍后查看日志')
+        else ElMessage.success(isBuyout ? '设备已转为自有，采购应付已生成' : '库存调拨完成')
         transfer.visible = false
         selectedRows.value = []
         await loadList()
@@ -1234,6 +1277,7 @@ function financeStatusMeta(status: string) {
 function bizTypeLabel(type: string) {
     const map: any = {
         purchase: '采购应付', purchase_cancel: '采购撤销冲回', purchase_return: '采购退货冲回', purchase_return_loss: '采购退货损失',
+        consignment_buyout: '代卖买断应付',
         sale: '销售应收', sale_cancel: '整单销售撤销', sale_item_cancel: '单台销售撤销', sale_return: '销售退货冲回',
         sale_compensation: '售后补差应付', adjust: '成本调整', refurbish: '整备成本',
         payment: '实际付款', receipt: '实际收款', offset: '往来折账'
@@ -1244,6 +1288,7 @@ function bizTypeLabel(type: string) {
 function sourceTypeLabel(type: string) {
     const map: any = {
         purchase: '采购单', purchase_asset: '采购设备', sale: '销售单', payable: '应付款', receivable: '应收款',
+        consignment_buyout: '代卖买断单',
         purchase_cancel: '采购撤销', purchase_return: '采购退货', sale_cancel: '整单销售撤销', sale_item_cancel: '单台销售撤销',
         sale_return: '销售退货', sale_compensation: '售后补差', offset: '往来折账', asset: '设备档案', refurbish: '设备整备'
     }
@@ -1264,6 +1309,7 @@ function assetActionLabel(action: string) {
         flow: '流转设置',
         return: '退货',
         transfer: '库存调拨',
+        ownership_purchase: '代卖转自有',
         refurbish: '整备',
         void: '作废'
     }

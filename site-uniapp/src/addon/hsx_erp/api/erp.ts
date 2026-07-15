@@ -106,6 +106,12 @@ export function adjustMobileStockRetailPrice(id: number, data: Record<string, an
 export function transferMobileStock(data: Record<string, any>) {
     return request.post('erp/stock/transfer', withErpRequestId(data, 'stock-transfer'))
 }
+export function previewMobileStockTransfer(data: Record<string, any>) {
+    return request.post('erp/stock/transfer/preview', data)
+}
+export function buyoutMobileConsignment(data: Record<string, any>) {
+    return request.post('erp/stock/consignment/buyout', withErpRequestId(data, 'consignment-buyout'))
+}
 export function getMobileSerialTraceList(params: Record<string, any>) {
     return request.get('erp/stock/serial_trace', params)
 }

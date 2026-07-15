@@ -581,7 +581,7 @@ function safeRepeatedDecode(value: any) {
 .loading-center { display: flex; justify-content: center; padding: 48rpx; }
 .load-error-card { display:flex; flex-direction:column; align-items:center; gap:14rpx; margin:16rpx 24rpx; padding:28rpx; border:1rpx solid #fecaca; border-radius:18rpx; background:#fff7f7; color:#b91c1c; font-size:22rpx; line-height:1.5; text-align:center; }
 .empty-tip { text-align: center; color: #94a3b8; font-size: 26rpx; padding: 48rpx 0; }
-.handover-check { display:flex; align-items:flex-start; gap:12rpx; margin-top:18rpx; padding:18rpx; border:1rpx solid #fed7aa; border-radius:14rpx; background:#fffaf5; color:#7c2d12; font-size:23rpx; line-height:1.5; }
+.handover-check { display:flex; align-items:center; gap:12rpx; margin-top:18rpx; padding:18rpx; border:1rpx solid #fed7aa; border-radius:14rpx; background:#fffaf5; color:#7c2d12; font-size:23rpx; line-height:1.5; }
 .handover-check text { flex:1; }
 .handover-check__tip { display:block; margin-top:8rpx; color:#9a3412; font-size:20rpx; }
 </style>

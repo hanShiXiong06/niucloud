@@ -10,7 +10,37 @@
     />
 -->
 <template>
-    <view class="erp-top-bar">
+    <view class="erp-top-bar" :class="{ 'erp-top-bar--compact-mp': useCompactMp }">
+        <!-- 小程序紧凑模式：将搜索框放进自定义导航区域，避免“原生标题 + 搜索框”占两行。 -->
+        <!-- #ifdef MP -->
+        <view v-if="useCompactMp" class="compact-mp-nav" :style="compactNavStyle">
+            <view class="compact-mp-back" @tap="handleNavAction">
+                <u-icon :name="canGoBack ? 'arrow-left' : 'home'" color="#0f172a" size="22" />
+            </view>
+            <view v-if="showSearch" class="search-pill search-pill--compact">
+                <u-icon name="search" color="#9098A3" size="17" />
+                <input
+                    class="search-input-text search-input-text--compact"
+                    v-model="localKeyword"
+                    :placeholder="placeholder"
+                    placeholder-class="search-ph search-ph--compact"
+                    confirm-type="search"
+                    @confirm="onSearch"
+                />
+                <u-icon v-if="localKeyword" name="close-circle-fill" color="#c4c4c4" size="17"
+                    @click="localKeyword = ''; onSearch()" />
+                <view v-if="showScan" class="scan-btn scan-btn--compact" @click="onScan">
+                    <u-icon name="scan" color="#3b6ef5" size="19" />
+                </view>
+                <view v-if="showFilter" class="filter-btn filter-btn--compact" :class="{ 'filter-btn--on': filterCount > 0 }" @click="emit('filter')">
+                    <u-icon name="list" :color="filterCount > 0 ? '#3b6ef5' : '#64748b'" size="19" />
+                    <text v-if="filterCount > 0" class="filter-badge">{{ filterCount > 9 ? '9+' : filterCount }}</text>
+                </view>
+            </view>
+        </view>
+        <!-- #endif -->
+
+        <template v-if="!useCompactMp">
         <!-- 标题行（可选，有标题时显示标题+右侧slot） -->
         <view v-if="title" class="title-row">
             <text class="title-text">{{ title }}</text>
@@ -38,6 +68,7 @@
                 <text v-if="filterCount > 0" class="filter-badge">{{ filterCount > 9 ? '9+' : filterCount }}</text>
             </view>
         </view>
+        </template>
 
         <!-- 状态 Tab（胶囊式，对齐 phone_shop .tab） -->
         <view v-if="tabs && tabs.length" class="tab-row">
@@ -63,7 +94,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, useSlots } from 'vue'
 import { scanErpCode } from '@/addon/hsx_erp/hooks/useErpScan'
-import { getErpListHeaderHeightRpx } from '@/addon/hsx_erp/utils/navbar'
+import { getErpListHeaderHeightRpx, getErpNavbarMetrics } from '@/addon/hsx_erp/utils/navbar'
 
 const props = withDefaults(defineProps<{
     modelValue?: string        // keyword v-model
@@ -75,6 +106,7 @@ const props = withDefaults(defineProps<{
     showScan?: boolean
     showFilter?: boolean
     filterCount?: number
+    compactMp?: boolean
 }>(), {
     modelValue: '',
     activeTab: '',
@@ -85,6 +117,7 @@ const props = withDefaults(defineProps<{
     showScan: true,
     showFilter: false,
     filterCount: 0,
+    compactMp: false,
 })
 
 const emit = defineEmits<{
@@ -97,13 +130,28 @@ const emit = defineEmits<{
 }>()
 
 const slots = useSlots()
+const navbarMetrics = getErpNavbarMetrics()
+const useCompactMp = ref(false)
+
+// #ifdef MP
+useCompactMp.value = props.compactMp
+// #endif
+
+const compactNavStyle = computed(() => [
+    `height:${navbarMetrics.navbarHeightPx}px`,
+    `padding-top:${navbarMetrics.statusTopPx}px`,
+    `padding-bottom:${navbarMetrics.bottomGapPx}px`,
+    `padding-right:${navbarMetrics.sideWidthRpx}rpx`,
+].join(';') + ';')
 
 // 与 useListHeader 使用同一公式，避免 fixed 工具区与 z-paging 各算一套高度。
-const placeholderHeight = computed(() => `${getErpListHeaderHeightRpx({
-    title: !!props.title,
-    search: props.showSearch,
-    tabs: !!props.tabs?.length || !!slots.below,
-})}rpx`)
+const placeholderHeight = computed(() => useCompactMp.value
+    ? `calc(${navbarMetrics.navbarHeightPx}px + 74rpx)`
+    : `${getErpListHeaderHeightRpx({
+        title: !!props.title,
+        search: props.showSearch,
+        tabs: !!props.tabs?.length || !!slots.below,
+    })}rpx`)
 
 const localKeyword = ref(props.modelValue)
 const localTab = ref(props.activeTab)
@@ -134,6 +182,15 @@ function onTab(val: string) {
     emit('update:activeTab', val)
     emit('tab-change', val)
 }
+
+const canGoBack = computed(() => getCurrentPages().length > 1)
+function handleNavAction() {
+    if (!canGoBack.value) {
+        uni.reLaunch({ url: '/app/pages/index/index' })
+        return
+    }
+    uni.navigateBack({ delta: 1, fail: () => uni.reLaunch({ url: '/app/pages/index/index' }) })
+}
 </script>
 
 <style scoped lang="scss">
@@ -144,6 +201,27 @@ function onTab(val: string) {
     background: var(--page-bg-color, #f3f4f6);
     padding: 16rpx 24rpx;
     box-sizing: border-box;
+}
+.erp-top-bar--compact-mp {
+    padding: 0 18rpx 12rpx;
+    background: #fff;
+    border-bottom: 1rpx solid #eef2f7;
+    box-shadow: 0 4rpx 14rpx rgba(15, 23, 42, 0.04);
+}
+.compact-mp-nav {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8rpx;
+    box-sizing: border-box;
+}
+.compact-mp-back {
+    width: 56rpx;
+    height: 56rpx;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .title-row {
@@ -168,6 +246,18 @@ function onTab(val: string) {
     gap: 12rpx;
     box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.04);
 }
+.search-pill--compact {
+    height: 60rpx;
+    min-width: 0;
+    flex: 1;
+    padding: 0 16rpx;
+    gap: 8rpx;
+    background: #f5f7fa;
+    border-radius: 30rpx;
+    box-shadow: none;
+}
+.search-input-text--compact { font-size: 24rpx; }
+.search-ph--compact { font-size: 24rpx; }
 .search-input-text {
     flex: 1;
     font-size: 28rpx;
@@ -183,6 +273,11 @@ function onTab(val: string) {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+}
+.scan-btn--compact,
+.filter-btn--compact {
+    width: 42rpx;
+    height: 42rpx;
 }
 .filter-btn {
     position: relative;
@@ -226,6 +321,7 @@ function onTab(val: string) {
 .below-row {
     margin-top: 16rpx;
 }
+.erp-top-bar--compact-mp .below-row { margin-top: 10rpx; }
 .erp-tab {
     padding: 8rpx 26rpx;
     font-size: 26rpx;

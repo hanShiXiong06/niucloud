@@ -190,6 +190,12 @@ export function adjustErpStockRetailPrice(id: number, data: Record<string, any>)
 export function transferErpStock(data: Record<string, any>) {
     return request.post('erp/stock/transfer', withErpRequestId(data, 'stock-transfer'))
 }
+export function previewErpStockTransfer(data: Record<string, any>) {
+    return request.post('erp/stock/transfer/preview', data)
+}
+export function buyoutErpConsignment(data: Record<string, any>) {
+    return request.post('erp/stock/consignment/buyout', withErpRequestId(data, 'consignment-buyout'))
+}
 export function getErpSerialTraceList(params: Record<string, any>) { return request.get('erp/stock/serial_trace', { params }) }
 export function getErpSerialTraceDetail(id: number) { return request.get(`erp/stock/serial_trace/${id}`) }
 
