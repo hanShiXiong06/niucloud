@@ -233,13 +233,13 @@ class ErpGoodsCatalogService extends BaseAdminService
             else $query->whereLike('sp.product_name|sp.brand_name|sp.series_name|sp.category_path|mp.source_product_id', '%' . $keyword . '%');
             $rows = $query
                 ->field('sp.site_product_id,sp.category_path,sp.product_name,sp.brand_name,sp.series_name,sp.is_enabled,sp.sort,mp.source_product_id')
-                ->order('sp.sort desc,sp.brand_name asc,sp.series_name asc,sp.product_name asc')->limit($limit)->select()->toArray();
+                ->order('sp.sort asc,sp.site_product_id asc')->limit($limit)->select()->toArray();
             foreach ($rows as $row) $nodes[] = $this->productHierarchyNode($row, true);
         } elseif (in_array($nodeType, ['root', 'category'], true)) {
             // Excel 的“品类”允许写成“智能数码/智能手表”。这里按路径逐级投影，
             // 不再依赖旧分类表，也不会把品牌、系列伪装成分类记录。
-            $pathRows = (clone $query)->field('sp.category_path,count(*) as product_count,max(sp.sort) as sort')
-                ->group('sp.category_path')->order('sort desc,sp.category_path asc')->select()->toArray();
+            $pathRows = (clone $query)->field('sp.category_path,count(*) as product_count,min(sp.sort) as sort,min(sp.site_product_id) as first_id')
+                ->group('sp.category_path')->order('sort asc,first_id asc')->select()->toArray();
             $parent = $categoryPath === '' ? [] : $this->catalogPathSegments($categoryPath);
             $children = [];
             foreach ($pathRows as $row) {
@@ -248,7 +248,8 @@ class ErpGoodsCatalogService extends BaseAdminService
                 if ($nodeType === 'root' && !$segments) {
                     $children[''] = [
                         'count' => (int)($children['']['count'] ?? 0) + (int)$row['product_count'],
-                        'sort' => max((int)($children['']['sort'] ?? PHP_INT_MIN), (int)$row['sort']),
+                        'sort' => min((int)($children['']['sort'] ?? PHP_INT_MAX), (int)$row['sort']),
+                        'first_id' => min((int)($children['']['first_id'] ?? PHP_INT_MAX), (int)$row['first_id']),
                     ];
                     continue;
                 }
@@ -261,12 +262,15 @@ class ErpGoodsCatalogService extends BaseAdminService
                 $childPath = implode('/', array_slice($segments, 0, $depth + 1));
                 $children[$childPath] = [
                     'count' => (int)($children[$childPath]['count'] ?? 0) + (int)$row['product_count'],
-                    'sort' => max((int)($children[$childPath]['sort'] ?? PHP_INT_MIN), (int)$row['sort']),
+                    'sort' => min((int)($children[$childPath]['sort'] ?? PHP_INT_MAX), (int)$row['sort']),
+                    'first_id' => min((int)($children[$childPath]['first_id'] ?? PHP_INT_MAX), (int)$row['first_id']),
                 ];
             }
             uksort($children, static function (string $left, string $right) use ($children): int {
-                $sortCompare = (int)$children[$right]['sort'] <=> (int)$children[$left]['sort'];
-                return $sortCompare !== 0 ? $sortCompare : strnatcasecmp($left, $right);
+                $sortCompare = (int)$children[$left]['sort'] <=> (int)$children[$right]['sort'];
+                if ($sortCompare !== 0) return $sortCompare;
+                $idCompare = (int)$children[$left]['first_id'] <=> (int)$children[$right]['first_id'];
+                return $idCompare !== 0 ? $idCompare : strnatcasecmp($left, $right);
             });
             foreach (array_slice($children, 0, $limit, true) as $path => $aggregate) {
                 $parts = $this->catalogPathSegments($path);
@@ -281,7 +285,7 @@ class ErpGoodsCatalogService extends BaseAdminService
             // 当前品类没有更深的子品类，下一层直接进入品牌。
             if ($nodeType === 'category' && !$nodes) {
                 $brandQuery = (clone $query)->where('sp.category_path', '=', $categoryPath);
-                $rows = $brandQuery->field('sp.brand_name,count(*) as product_count,max(sp.sort) as sort')->group('sp.brand_name')->order('sort desc,sp.brand_name asc')->limit($limit)->select()->toArray();
+                $rows = $brandQuery->field('sp.brand_name,count(*) as product_count,min(sp.sort) as sort,min(sp.site_product_id) as first_id')->group('sp.brand_name')->order('sort asc,first_id asc')->limit($limit)->select()->toArray();
                 foreach ($rows as $row) {
                     $name = (string)$row['brand_name'];
                     $nodes[] = [
@@ -293,7 +297,7 @@ class ErpGoodsCatalogService extends BaseAdminService
                 }
             }
         } elseif ($nodeType === 'brand') {
-            $rows = $query->field('sp.series_name,count(*) as product_count,max(sp.sort) as sort')->group('sp.series_name')->order('sort desc,sp.series_name asc')->limit($limit)->select()->toArray();
+            $rows = $query->field('sp.series_name,count(*) as product_count,min(sp.sort) as sort,min(sp.site_product_id) as first_id')->group('sp.series_name')->order('sort asc,first_id asc')->limit($limit)->select()->toArray();
             foreach ($rows as $row) {
                 $name = (string)$row['series_name'];
                 $nodes[] = [
@@ -305,7 +309,7 @@ class ErpGoodsCatalogService extends BaseAdminService
             }
         } else {
             $rows = $query->field('sp.site_product_id,sp.category_path,sp.product_name,sp.brand_name,sp.series_name,sp.is_enabled,sp.sort,mp.source_product_id')
-                ->order('sp.sort desc,sp.product_name asc')->limit($limit)->select()->toArray();
+                ->order('sp.sort asc,sp.site_product_id asc')->limit($limit)->select()->toArray();
             foreach ($rows as $row) $nodes[] = $this->productHierarchyNode($row);
         }
 

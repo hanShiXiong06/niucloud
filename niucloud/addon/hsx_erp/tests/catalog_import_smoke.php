@@ -44,7 +44,7 @@ $assert(str_contains($pc, '产品目录树') && str_contains($pc, 'loadCatalogTr
 $assert(str_contains($pcPicker, '<el-cascader') && str_contains($pcPicker, 'loadCascaderChildren') && str_contains($pcPicker, 'branchCache'), 'PC商品目录选择器必须使用标准 Cascader、级联懒加载和短时分支缓存');
 $assert(str_contains($pcPicker, 'beforeRemoteFilter') && str_contains($pcPicker, 'site_product_id: value') && str_contains($pcPicker, 'searchSequence'), 'PC商品目录选择器必须支持服务端模糊搜索、ID反显和竞态保护');
 $assert(str_contains($service, 'public function add') && str_contains($service, 'public function edit') && str_contains($service, 'public function delete'), '商品目录元组件必须具备站点级型号 CRUD');
-$assert(str_contains($service, 'max(sp.sort) as sort') && str_contains($service, 'sp.sort desc'), '目录树各级节点必须消费型号排序，排序值越大越靠前');
+$assert(str_contains($service, 'min(sp.sort) as sort') && str_contains($service, 'sp.sort asc,sp.site_product_id asc'), '目录树必须按排序值升序，并在排序值相同时保持创建顺序');
 $assert(str_contains($routes, 'goods/catalog/product/save/:id') && str_contains($routes, 'goods/catalog/product/:id'), '商品型号 CRUD 接口必须注册');
 $assert(str_contains($pc, '新增型号') && str_contains($pc, 'submitCatalogProduct') && str_contains($pc, 'removeCatalogProduct'), '商品目录元组件必须提供型号新增、编辑、排序、启停和删除入口');
 $assert(str_contains($mobilePicker, 'branchCache') && str_contains($mobilePicker, 'scheduleSearch') && str_contains($mobilePicker, 'resolveSelected'), '移动商品目录选择器必须支持懒加载缓存、模糊搜索和ID反显');
