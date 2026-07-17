@@ -204,6 +204,18 @@ defineExpose({ open })
 </script>
 
 <style scoped>
+:global(.member-card-product-dialog) {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 32px);
+    margin: 16px auto !important;
+    overflow: hidden;
+}
+:global(.member-card-product-dialog .el-dialog__body) {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
 .dialog-body { min-height: 160px; }
 .form-section { margin-bottom: 20px; padding: 16px; border: 1px solid var(--el-border-color-lighter); border-radius: 4px; background: var(--el-fill-color-extra-light); }
 .section-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 16px; }

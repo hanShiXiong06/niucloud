@@ -83,13 +83,13 @@
                 </el-form-item>
             </el-form>
 
-            <el-table :data="table.data" v-loading="table.loading" size="large">
+            <el-table :data="table.data" v-loading="table.loading" size="large" table-layout="fixed">
                 <el-table-column label="往来主体" min-width="190">
                     <template #default="{ row }">
-                        <div class="font-medium text-gray-900">{{ row.party_name || '-' }}</div>
+                        <div class="font-medium text-gray-900"><ErpOverflowText :text="row.party_name" max-width="165px" /></div>
                         <div class="mt-1 flex items-center gap-2 text-xs text-gray-500">
                             <el-tag size="small" effect="plain" type="info">{{ partyRoleLabel(row, '往来主体') }}</el-tag>
-                            <span>{{ contactText(row) }}</span>
+                            <ErpOverflowText :text="contactText(row)" max-width="120px" />
                         </div>
                     </template>
                 </el-table-column>
@@ -104,7 +104,11 @@
                         <div>应收 <span class="font-medium">{{ money(row.amount) }}</span></div>
                         <div class="mt-1 text-xs text-gray-500">已结算 {{ money(row.settled_amount) }} · 剩余 {{ money(row.remain_amount ?? remain(row)) }}</div>
                         <div class="mt-2 flex flex-wrap gap-1">
-                            <el-tag size="small" effect="plain" type="info">结算约定：{{ row.opening_settle_method || row.settle_method || '-' }}</el-tag>
+                            <el-tooltip :content="`结算约定：${row.opening_settle_method || row.settle_method || '-'}`" placement="top" :show-after="250">
+                                <el-tag class="max-w-[190px] !inline-flex" size="small" effect="plain" type="info">
+                                    <span class="truncate">结算约定：{{ row.opening_settle_method || row.settle_method || '-' }}</span>
+                                </el-tag>
+                            </el-tooltip>
                             <el-tag v-if="!(row.settle_summary_items || []).length" size="small" effect="plain" :type="remain(row) > 0 ? 'warning' : 'success'">{{ remain(row) > 0 ? '待清算' : '已结清' }}</el-tag>
                             <el-tag v-for="item in row.settle_summary_items" :key="item.label" size="small" effect="plain" :type="settleSummaryTagType(item.label)">
                                 {{ item.label }} {{ money(item.amount) }}
@@ -114,8 +118,15 @@
                 </el-table-column>
                 <el-table-column label="业务 / 财务负责人" min-width="160">
                     <template #default="{ row }">
-                        <div>{{ row.business_operator_name || row.salesman_name || '-' }}</div>
-                        <div v-if="row.task_assignee_name" class="mt-1 text-xs text-gray-500">财务 {{ row.task_assignee_name }}</div>
+                        <div class="responsible-line">
+                            <span>开单</span><ErpOverflowText :text="row.business_operator_name || row.salesman_name" max-width="105px" />
+                        </div>
+                        <div v-if="row.settlement_operator_name" class="responsible-line mt-1 text-xs text-green-700">
+                            <span>收款</span><ErpOverflowText :text="row.settlement_operator_names?.join('、') || row.settlement_operator_name" max-width="105px" />
+                        </div>
+                        <div v-if="row.task_assignee_name && row.task_assignee_name !== row.settlement_operator_name" class="responsible-line mt-1 text-xs text-gray-500">
+                            <span>待办</span><ErpOverflowText :text="row.task_assignee_name" max-width="105px" />
+                        </div>
                         <div class="mt-1 text-xs text-gray-500"><ErpCopyText :value="row.receivable_no" title="应收单号" max-width="135px" /></div>
                     </template>
                 </el-table-column>
@@ -352,6 +363,7 @@ import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVouche
 import ErpSettlementCards from '@/addon/hsx_erp/components/ErpSettlementCards.vue'
 import ErpFinanceSourceMeta from '@/addon/hsx_erp/components/ErpFinanceSourceMeta.vue'
 import ErpCopyText from '@/addon/hsx_erp/components/ErpCopyText.vue'
+import ErpOverflowText from '@/addon/hsx_erp/components/ErpOverflowText.vue'
 
 const receivableRoleFocus = [
     { role: '财务', focus: '收入类型、业务来源、往来余额、到账账户与核销事实' },
@@ -793,6 +805,8 @@ function staffName(user: any) { return user?.name || user?.real_name || user?.us
 .summary-tile { border-radius: 8px; background: #f8fafc; padding: 14px 16px; }
 .summary-label { color: #64748b; font-size: 13px; }
 .summary-value { margin-top: 6px; color: #0f172a; font-size: 22px; font-weight: 700; }
+.responsible-line { display:flex; min-width:0; align-items:center; gap:7px; }
+.responsible-line > span:first-child { flex:none; width:28px; color:#94a3b8; font-size:12px; }
 .receipt-business-reason { display:flex; gap:10px; margin-top:10px; padding:9px 11px; border:1px solid #fed7aa; border-radius:7px; background:#fff7ed; line-height:1.55; }
 .receipt-business-reason span { flex:none; color:#9a3412; font-size:12px; font-weight:650; }
 .receipt-business-reason b { color:#7c2d12; font-size:12px; font-weight:500; }

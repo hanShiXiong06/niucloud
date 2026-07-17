@@ -1829,7 +1829,8 @@ class ErpFinanceService extends BaseAdminService
             $query->whereLike('party.contact_mobile', '%' . trim((string)$where['contact_mobile']) . '%');
         }
         if (!empty($where['salesman_name'])) {
-            $query->whereLike('o.salesman_name', '%' . trim((string)$where['salesman_name']) . '%');
+            $operatorName = trim((string)$where['salesman_name']);
+            $query->whereLike('o.salesman_name|r.business_operator_name', '%' . $operatorName . '%');
         }
         if (!empty($where['salesman_uid'])) {
             $query->where('o.salesman_uid', '=', (int)$where['salesman_uid']);
@@ -1841,6 +1842,9 @@ class ErpFinanceService extends BaseAdminService
                     $sale->where('r.source_type', '=', 'sale')->where('o.salesman_uid', '=', $operatorUid);
                 })->whereOr(function ($purchaseReturn) use ($operatorUid) {
                     $purchaseReturn->where('r.source_type', '=', 'purchase_return')->where('pr.operator_id', '=', $operatorUid);
+                })->whereOr(function ($external) use ($operatorUid) {
+                    $external->whereNotIn('r.source_type', ['sale', 'purchase_return'])
+                        ->where('r.business_operator_uid', '=', $operatorUid);
                 });
             });
         }
@@ -1934,6 +1938,10 @@ class ErpFinanceService extends BaseAdminService
             'r.channel_code',
             'r.channel_name',
             'r.business_reason',
+            'r.settlement_mode',
+            'r.settlement_mode_name',
+            'r.business_operator_uid',
+            'r.business_operator_name',
             'r.amount',
             'r.settled_amount',
             'r.status',
@@ -2018,7 +2026,7 @@ class ErpFinanceService extends BaseAdminService
                 $row['return_remark'] = (string)($returnRow['remark'] ?? '');
                 $row['business_operator_uid'] = (int)($row['return_operator_uid'] ?? 0);
                 $row['business_operator_name'] = (string)($row['return_operator_name'] ?? '');
-            } else {
+            } elseif ((string)$row['source_type'] === 'sale') {
                 $row['item_count'] = $itemCountMap[(int)$row['source_id']] ?? ((int)($row['asset_id'] ?? 0) > 0 ? 1 : 0);
                 $row['opening_settle_method'] = (string)($row['settle_method'] ?? '');
                 $row['business_operator_uid'] = (int)($row['salesman_uid'] ?? 0);
@@ -2030,6 +2038,14 @@ class ErpFinanceService extends BaseAdminService
                 }
                 if (empty($row['channel_code'])) $row['channel_code'] = (string)($row['sale_channel_key'] ?? '');
                 if (empty($row['channel_name'])) $row['channel_name'] = (string)($row['sale_channel'] ?? '');
+            } else {
+                // 插件财务事实不是 ERP 销售单，不能再从左连接失败的 sale_order 读取结算方式和销售员。
+                // 新数据读取不可变快照；历史数据由插件只读 Hook 回填，业务说明只作最后兜底。
+                $row['item_count'] = (int)((int)($row['asset_id'] ?? 0) > 0 ? 1 : 0);
+                $row['opening_settle_method'] = (string)($row['settlement_mode_name'] ?? '');
+                if ((string)$row['business_operator_name'] === '') {
+                    $row['business_operator_name'] = $this->extractBusinessOperatorName((string)($row['business_reason'] ?? ''));
+                }
             }
             $row['source_meta'] = (new ErpFinanceSourceService())->sourceMeta($row, 'receivable');
             $row['source_label'] = (string)$row['source_meta']['finance_type_name'];
@@ -2039,12 +2055,17 @@ class ErpFinanceService extends BaseAdminService
             $row['status'] = $row['finance_status'];
         }
         unset($row);
+        $this->enrichFinanceDisplayRows($page['data'], 'receivable');
         $this->appendFinanceDevices($page['data'], ErpDict::TARGET_RECEIVABLE);
         $summaryMap = $this->settlementSummaryForTargets(ErpDict::TARGET_RECEIVABLE, array_column($page['data'], 'id'));
         foreach ($page['data'] as &$row) {
             $summary = $summaryMap[(int)$row['id']] ?? [];
             $row['settle_summary'] = $summary['text'] ?? ((float)$row['amount'] <= 0.0001 ? '已冲销，无剩余应收' : $this->emptySettleSummary((float)$row['settled_amount']));
             $row['settle_summary_items'] = $summary['items'] ?? [];
+            $row['settlement_operator_uid'] = (int)($summary['operator_uid'] ?? 0);
+            $row['settlement_operator_name'] = (string)($summary['operator_name'] ?? '');
+            $row['settlement_operator_names'] = (array)($summary['operator_names'] ?? []);
+            $row['settlement_confirmed_at'] = (int)($summary['confirmed_at'] ?? 0);
         }
         unset($row);
         $this->fillOffsetState($page['data'], 'receivable');
@@ -2368,12 +2389,14 @@ class ErpFinanceService extends BaseAdminService
                 ['l.target_type', '=', $targetType],
             ])
             ->whereIn('l.target_id', $targetIds)
-            ->field('l.target_id,l.applied_amount,s.settlement_type,s.capital_account_name')
+            ->field('l.target_id,l.applied_amount,s.settlement_type,s.capital_account_name,s.operator_uid,s.operator_name,s.confirmed_at')
             ->order('s.confirmed_at asc,l.id asc')
             ->select()
             ->toArray();
 
         $itemsByTarget = [];
+        $operatorNamesByTarget = [];
+        $latestSettlementByTarget = [];
         foreach ($rows as $row) {
             $targetId = (int)$row['target_id'];
             $label = $this->settleSummaryLabel((string)($row['settlement_type'] ?? ''), (string)($row['capital_account_name'] ?? ''));
@@ -2381,6 +2404,13 @@ class ErpFinanceService extends BaseAdminService
                 $itemsByTarget[$targetId][$label] = ['label' => $label, 'amount' => 0.0];
             }
             $itemsByTarget[$targetId][$label]['amount'] = round((float)$itemsByTarget[$targetId][$label]['amount'] + (float)$row['applied_amount'], 2);
+            $operatorName = trim((string)($row['operator_name'] ?? ''));
+            if ($operatorName !== '') $operatorNamesByTarget[$targetId][$operatorName] = true;
+            $latestSettlementByTarget[$targetId] = [
+                'operator_uid' => (int)($row['operator_uid'] ?? 0),
+                'operator_name' => $operatorName,
+                'confirmed_at' => (int)($row['confirmed_at'] ?? 0),
+            ];
         }
 
         $map = [];
@@ -2389,9 +2419,62 @@ class ErpFinanceService extends BaseAdminService
             $map[$targetId] = [
                 'text' => $this->formatSettleSummary($items),
                 'items' => $items,
+                'operator_uid' => (int)($latestSettlementByTarget[$targetId]['operator_uid'] ?? 0),
+                'operator_name' => (string)($latestSettlementByTarget[$targetId]['operator_name'] ?? ''),
+                'operator_names' => array_keys($operatorNamesByTarget[$targetId] ?? []),
+                'confirmed_at' => (int)($latestSettlementByTarget[$targetId]['confirmed_at'] ?? 0),
             ];
         }
         return $map;
+    }
+
+    /**
+     * 允许来源插件批量补齐自身历史单据的展示快照，不让 ERP 直接依赖插件模型或数据表。
+     * 返回格式：['rows' => [erp_receivable_id => ['opening_settle_method' => ..., ...]]]。
+     */
+    private function enrichFinanceDisplayRows(array &$rows, string $side): void
+    {
+        if (empty($rows)) return;
+        $payloadRows = array_map(static fn(array $row): array => [
+            'id' => (int)($row['id'] ?? 0),
+            'source_type' => (string)($row['source_type'] ?? ''),
+            'source_id' => (int)($row['source_id'] ?? 0),
+            'source_no' => (string)($row['source_no'] ?? ''),
+            'origin_plugin' => (string)($row['origin_plugin'] ?? ''),
+            'origin_type' => (string)($row['origin_type'] ?? ''),
+            'origin_id' => (string)($row['origin_id'] ?? ''),
+            'origin_no' => (string)($row['origin_no'] ?? ''),
+        ], $rows);
+        $allowed = ['opening_settle_method', 'business_operator_uid', 'business_operator_name'];
+        foreach ((array)event('HsxErpFinanceDisplayRows', [
+            'site_id' => (int)$this->site_id,
+            'side' => $side,
+            'rows' => $payloadRows,
+        ]) as $result) {
+            if (!is_array($result)) continue;
+            $patches = (array)($result['rows'] ?? $result);
+            foreach ($rows as &$row) {
+                $patch = $patches[(int)($row['id'] ?? 0)] ?? null;
+                if (!is_array($patch)) continue;
+                foreach ($allowed as $field) {
+                    if (!array_key_exists($field, $patch)) continue;
+                    if ($field === 'business_operator_uid') {
+                        if ((int)($row[$field] ?? 0) <= 0) $row[$field] = max(0, (int)$patch[$field]);
+                    } elseif (trim((string)($row[$field] ?? '')) === '') {
+                        $row[$field] = trim((string)$patch[$field]);
+                    }
+                }
+            }
+            unset($row);
+        }
+    }
+
+    private function extractBusinessOperatorName(string $reason): string
+    {
+        if ($reason === '') return '';
+        return preg_match('/经办人[：:\s]*([^，；;]+)/u', $reason, $match) === 1
+            ? mb_substr(trim((string)$match[1]), 0, 60)
+            : '';
     }
 
     private function settleSummaryLabel(string $type, string $accountName): string

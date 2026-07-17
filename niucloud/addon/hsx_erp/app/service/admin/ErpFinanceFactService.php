@@ -31,7 +31,8 @@ class ErpFinanceFactService extends BaseAdminService
     /**
      * 契约字段：event_id/site_id、source_plugin/source_plugin_name/source_name/source_type、
      * order_no/line_id、category_key、ERP party_id/party_name、ERP asset_id、amount、
-     * channel(code/name)、occurred_at、remark。event_name/event_version 可省略，默认 v1。
+     * channel(code/name)、settlement(mode/name)、operator(id/name)、occurred_at、remark。
+     * event_name/event_version 可省略，默认 v1。
      *
      * @return array{consumer:string,event_id:string,status:string,target_type?:string,target_id?:int,target_no?:string,direction?:string}
      */
@@ -167,6 +168,7 @@ class ErpFinanceFactService extends BaseAdminService
 
         [$channelCode, $channelName] = $this->normalizeChannel($event);
         $operator = (array)($event['operator'] ?? []);
+        $settlement = (array)($event['settlement'] ?? []);
         return [
             'event_name' => self::CONTRACT_NAME,
             'event_version' => self::CONTRACT_VERSION,
@@ -190,6 +192,8 @@ class ErpFinanceFactService extends BaseAdminService
             'occurred_at' => $occurredAt,
             'operator_id' => max(0, (int)($operator['id'] ?? $event['operator_id'] ?? 0)),
             'operator_name' => mb_substr(trim((string)($operator['name'] ?? $event['operator_name'] ?? '')), 0, 60),
+            'settlement_mode' => $this->stableKey((string)($settlement['mode'] ?? $event['settlement_mode'] ?? ''), 20, false),
+            'settlement_mode_name' => mb_substr(trim((string)($settlement['name'] ?? $event['settlement_mode_name'] ?? '')), 0, 60),
             'remark' => mb_substr(trim((string)($event['remark'] ?? '')), 0, 255),
         ];
     }
@@ -263,6 +267,10 @@ class ErpFinanceFactService extends BaseAdminService
             'channel_code' => (string)$snapshot['channel_code'],
             'channel_name' => (string)$snapshot['channel_name'],
             'business_reason' => (string)$snapshot['business_reason'],
+            'settlement_mode' => (string)$snapshot['settlement_mode'],
+            'settlement_mode_name' => (string)$snapshot['settlement_mode_name'],
+            'business_operator_uid' => (int)$snapshot['operator_id'],
+            'business_operator_name' => (string)$snapshot['operator_name'],
             'asset_id' => (int)$snapshot['asset_id'],
             'amount' => (string)$snapshot['amount'],
             // 这里只生成债权/债务事实，不能伪造任何实际收付款。

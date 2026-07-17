@@ -5,6 +5,7 @@ require dirname(__DIR__, 3) . '/vendor/autoload.php';
 
 use addon\hsx_erp\app\service\admin\ErpExternalContractService;
 use addon\hsx_erp\app\service\admin\ErpFinanceFactVoidService;
+use addon\hsx_erp\app\service\admin\ErpFinanceFactService;
 use addon\hsx_erp\app\service\admin\ErpFinanceSettlementRequestService;
 use addon\hsx_erp\app\service\admin\ErpPartyBridgeService;
 use core\exception\CommonException;
@@ -99,6 +100,12 @@ class TestFactVoidService extends ErpFinanceFactVoidService
     public function normalized(array $event): array { return $this->normalizePayload($event); }
 }
 
+class TestFinanceFactService extends ErpFinanceFactService
+{
+    public function __construct() { $this->site_id = 100005; }
+    public function normalized(array $event): array { return $this->normalizePayload($event); }
+}
+
 $envelope = [
     'site_id' => 100005,
     'event_id' => 'hsx_member_card:test:1',
@@ -134,6 +141,26 @@ $partyPayload = (new TestPartyBridgeService())->normalized([
     'role' => 'sale_customer',
 ]);
 $assert($partyPayload['member_id'] === 8 && $partyPayload['role'] === 'sale_customer', '会员往来主体解析契约必须保留会员ID和业务身份');
+
+$factPayload = (new TestFinanceFactService())->normalized([
+    'site_id' => 100005,
+    'event_id' => 'hsx_member_card:fact:issue-9',
+    'source_plugin' => 'hsx_member_card',
+    'source_plugin_name' => '会员服务卡',
+    'source_name' => '会员卡开卡订单',
+    'source_type' => 'hsx_member_card.card_order',
+    'order_no' => 'MC202607170001',
+    'line_id' => 'order:9',
+    'category_key' => 'hsx_member_card.card_sale',
+    'party_id' => 12,
+    'party_name' => '测试客户',
+    'amount' => '100.00',
+    'settlement' => ['mode' => 'immediate', 'name' => '现结'],
+    'operator' => ['id' => 1, 'name' => 'admin'],
+    'occurred_at' => 1784160000,
+]);
+$assert($factPayload['settlement_mode'] === 'immediate' && $factPayload['settlement_mode_name'] === '现结', '财务事实必须保存开单时结算约定快照');
+$assert($factPayload['operator_id'] === 1 && $factPayload['operator_name'] === 'admin', '财务事实必须保存开单/业务经办人快照');
 
 $settlementService = new TestSettlementRequestService();
 $settlementPayload = $settlementService->normalized([

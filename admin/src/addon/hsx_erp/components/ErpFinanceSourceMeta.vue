@@ -2,7 +2,9 @@
     <div class="finance-source" :class="{ 'is-compact': compact }">
         <div class="finance-source__head">
             <el-tag size="small" effect="light" :type="directionMeta.type">{{ financeTypeName }}</el-tag>
-            <span v-if="showBusinessSource" class="finance-source__business" :title="businessSourceName">业务来源：{{ businessSourceName }}</span>
+            <el-tooltip v-if="showBusinessSource" :content="`业务来源：${businessSourceName}`" placement="top" :show-after="250">
+                <span class="finance-source__business">业务来源：{{ businessSourceName }}</span>
+            </el-tooltip>
             <el-tag v-if="channelName" size="small" effect="plain" type="info">{{ channelName }}</el-tag>
         </div>
         <div class="finance-source__meta">
@@ -11,17 +13,19 @@
             <span v-if="partyRoleLabel">对象：{{ partyRoleLabel }}</span>
             <span>方向：{{ directionMeta.label }}</span>
         </div>
-        <div class="finance-source__order" :title="sourceNo">来源单号：<b>{{ sourceNo }}</b></div>
-        <div v-if="showInternalSourceNo" class="finance-source__order finance-source__order--internal" :title="internalSourceNo">
-            ERP关联单号：<b>{{ internalSourceNo }}</b>
-        </div>
+        <el-tooltip :content="`来源单号：${sourceNo}`" placement="top" :show-after="250">
+            <div class="finance-source__order">来源单号：<b>{{ sourceNo }}</b></div>
+        </el-tooltip>
+        <el-tooltip v-if="showInternalSourceNo" :content="`ERP关联单号：${internalSourceNo}`" placement="top" :show-after="250">
+            <div class="finance-source__order finance-source__order--internal">ERP关联单号：<b>{{ internalSourceNo }}</b></div>
+        </el-tooltip>
         <div v-if="!compact && (openingSettleMethod || settleSummary)" class="finance-source__settlement">
             <span v-if="openingSettleMethod">结算约定：{{ openingSettleMethod }}</span>
             <span v-if="settleSummary">结算进度：{{ settleSummary }}</span>
         </div>
-        <div v-if="showReason && businessReason" class="finance-source__reason" :title="businessReason">
-            <span>{{ reasonLabel }}</span>{{ businessReason }}
-        </div>
+        <el-tooltip v-if="showReason && businessReason" :content="businessReason" placement="top" :show-after="250">
+            <div class="finance-source__reason"><span>{{ reasonLabel }}</span>{{ businessReason }}</div>
+        </el-tooltip>
     </div>
 </template>
 
@@ -106,7 +110,7 @@ function readable(name: any, key: any, fallback: string, map: Record<string, str
 <style scoped>
 .finance-source { min-width:0; color:#475569; font-size:12px; line-height:1.5; }
 .finance-source__head { display:flex; min-width:0; align-items:center; flex-wrap:wrap; gap:6px; }
-.finance-source__business { overflow:hidden; color:#1e293b; font-size:13px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
+.finance-source__business { display:block; overflow:hidden; min-width:0; max-width:200px; color:#1e293b; font-size:13px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
 .finance-source__meta { display:flex; margin-top:7px; flex-wrap:wrap; gap:4px 12px; color:#64748b; }
 .finance-source__order { overflow:hidden; margin-top:5px; color:#64748b; text-overflow:ellipsis; white-space:nowrap; }
 .finance-source__order b { color:#334155; font-weight:550; }

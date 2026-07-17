@@ -50,6 +50,10 @@ final class MemberCardFinanceGateway extends BaseAdminService
             'asset_id' => 0,
             'amount' => (string)$order['order_amount'],
             'channel' => ['code' => 'erp_store', 'name' => '门店开卡'],
+            'settlement' => [
+                'mode' => (string)$order['settlement_mode'],
+                'name' => (string)$order['settlement_mode'] === 'immediate' ? '现结' : '挂账',
+            ],
             'occurred_at' => (int)$order['create_at'],
             'operator' => ['id' => (int)$order['issuer_uid'], 'name' => (string)$order['issuer_name']],
             'remark' => (string)$order['product_name'] . ((string)$order['remark'] !== '' ? '；' . (string)$order['remark'] : ''),
@@ -108,6 +112,10 @@ final class MemberCardFinanceGateway extends BaseAdminService
             'asset_id' => 0,
             'amount' => (string)$refund['refund_amount'],
             'channel' => ['code' => 'erp_store', 'name' => '门店会员卡退款'],
+            'settlement' => [
+                'mode' => (string)$refund['refund_mode'],
+                'name' => (string)$refund['refund_mode'] === 'immediate' ? '现退' : '财务退款',
+            ],
             'occurred_at' => (int)$refund['create_at'],
             'operator' => ['id' => (int)$refund['apply_uid'], 'name' => (string)$refund['apply_name']],
             'remark' => '原开卡单 ' . (string)$refund['order_no'] . '；' . (string)$refund['reason'],

@@ -54,6 +54,7 @@ $assert(str_contains($installSql, 'holder_mobile_last4'), '会员卡必须建立
 $eventConfig = require dirname(__DIR__) . '/app/event.php';
 $assert(isset($eventConfig['listen']['HsxErpFinanceCategories']), '插件必须向ERP提供动态财务分类');
 $assert(isset($eventConfig['listen']['HsxErpBusinessSourceOptions']), '插件必须向ERP提供业务来源');
+$assert(isset($eventConfig['listen']['HsxErpFinanceDisplayRows']), '插件必须为升级前财务事实提供只读展示投影');
 $assert(isset($eventConfig['listen']['ErpDomainEvent']), '插件必须消费ERP结算完成回调');
 
 $serviceDir = dirname(__DIR__) . '/app/service';

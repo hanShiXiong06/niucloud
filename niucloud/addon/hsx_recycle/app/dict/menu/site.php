@@ -1,7 +1,7 @@
 <?php
 return [
     [
-        'menu_name' => '手机回收系统',
+        'menu_name' => '手机回收',
         'menu_key' => 'recycle',
         'menu_short_name' => '回收',
         'parent_select_key' => '',

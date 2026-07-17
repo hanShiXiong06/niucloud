@@ -688,6 +688,88 @@
     color: var(--el-color-success);
 }
 
+.qs-scope .row-sort-native {
+    box-sizing: border-box;
+    width: 72px;
+    height: 30px;
+    padding: 0 8px;
+    border: 1px solid var(--el-border-color);
+    border-radius: var(--el-border-radius-base);
+    outline: none;
+    background: var(--el-fill-color-blank);
+    color: var(--el-text-color-primary);
+    font: inherit;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.qs-scope .row-sort-native:focus {
+    border-color: var(--el-color-primary);
+}
+
+.qs-scope .row-native-switch {
+    position: relative;
+    width: 34px;
+    height: 18px;
+    padding: 0;
+    border: 0;
+    border-radius: 9px;
+    background: var(--el-border-color);
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.qs-scope .row-native-switch span {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 18%);
+    transition: transform 0.15s ease;
+}
+
+.qs-scope .row-native-switch.is-on {
+    background: var(--el-color-primary);
+}
+
+.qs-scope .row-native-switch.is-on span {
+    transform: translateX(16px);
+}
+
+.qs-scope .row-native-switch:focus-visible,
+.qs-scope .row-native-actions button:focus-visible {
+    outline: 2px solid var(--el-color-primary-light-5);
+    outline-offset: 2px;
+}
+
+.qs-scope .row-native-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+}
+
+.qs-scope .row-native-actions button {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--el-color-primary);
+    font: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.qs-scope .row-native-actions button:hover {
+    color: var(--el-color-primary-light-3);
+}
+
+.qs-scope .row-native-actions .is-danger {
+    color: var(--el-color-danger);
+}
+
 .qs-scope .empty-price-cell {
     display: block;
     color: var(--el-text-color-placeholder);

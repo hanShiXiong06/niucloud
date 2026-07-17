@@ -161,29 +161,62 @@
                         </template>
                         <el-table-column label="排序" width="100">
                             <template #default="{ row }">
-                                <el-input-number v-model="row.source.sort" :min="0" :controls="false" class="sort-input" @change="saveRow(row.source, true)" />
+                                <input
+                                    class="row-sort-native"
+                                    type="number"
+                                    min="0"
+                                    :value="row.source.sort"
+                                    :aria-label="`${row.model_name} 排序`"
+                                    @change="handleRowSortChange(row.source, $event)"
+                                />
                             </template>
                         </el-table-column>
                         <el-table-column label="跟随" width="80">
                             <template #default="{ row }">
-                                <el-switch v-model="row.source.follow_source" :active-value="1" :inactive-value="0" @change="saveRow(row.source, true)" />
+                                <button
+                                    type="button"
+                                    class="row-native-switch"
+                                    :class="{ 'is-on': Number(row.source.follow_source) === 1 }"
+                                    role="switch"
+                                    :aria-checked="Number(row.source.follow_source) === 1"
+                                    :aria-label="`${row.model_name} 跟随数据源`"
+                                    @click="toggleRowField(row.source, 'follow_source')"
+                                ><span /></button>
                             </template>
                         </el-table-column>
                         <el-table-column label="显示" width="72">
                             <template #default="{ row }">
-                                <el-switch v-model="row.source.is_show" :active-value="1" :inactive-value="0" @change="saveRow(row.source, true)" />
+                                <button
+                                    type="button"
+                                    class="row-native-switch"
+                                    :class="{ 'is-on': Number(row.source.is_show) === 1 }"
+                                    role="switch"
+                                    :aria-checked="Number(row.source.is_show) === 1"
+                                    :aria-label="`${row.model_name} 前台显示`"
+                                    @click="toggleRowField(row.source, 'is_show')"
+                                ><span /></button>
                             </template>
                         </el-table-column>
                         <el-table-column label="热门" width="72">
                             <template #default="{ row }">
-                                <el-switch v-model="row.source.is_hot" :active-value="1" :inactive-value="0" @change="saveRow(row.source, true)" />
+                                <button
+                                    type="button"
+                                    class="row-native-switch"
+                                    :class="{ 'is-on': Number(row.source.is_hot) === 1 }"
+                                    role="switch"
+                                    :aria-checked="Number(row.source.is_hot) === 1"
+                                    :aria-label="`${row.model_name} 热门`"
+                                    @click="toggleRowField(row.source, 'is_hot')"
+                                ><span /></button>
                             </template>
                         </el-table-column>
                         <el-table-column label="操作" width="168" fixed="right">
                             <template #default="{ row }">
-                                <el-button link type="primary" @click.stop="openPriceHistory(row)">7/30天走势</el-button>
-                                <el-button link type="primary" @click.stop="openEditDialog('row', row.source)">编辑</el-button>
-                                <el-button link type="danger" @click.stop="deleteRow(row)">删除</el-button>
+                                <div class="row-native-actions">
+                                    <button type="button" @click.stop="openPriceHistory(row)">7/30天走势</button>
+                                    <button type="button" @click.stop="openEditDialog('row', row.source)">编辑</button>
+                                    <button type="button" class="is-danger" @click.stop="deleteRow(row)">删除</button>
+                                </div>
                             </template>
                                 </el-table-column>
                             </el-table>
@@ -398,6 +431,18 @@ const setMatrixZoom = (value: number) => {
     window.localStorage.setItem('recycle_quote_spider_matrix_zoom', String(matrixZoom.value))
 }
 const changeMatrixZoom = (step: number) => setMatrixZoom(matrixZoom.value + step)
+
+type RowToggleField = 'follow_source' | 'is_show' | 'is_hot'
+const toggleRowField = (source: any, field: RowToggleField) => {
+    source[field] = Number(source[field]) === 1 ? 0 : 1
+    saveRow(source, true)
+}
+
+const handleRowSortChange = (source: any, event: Event) => {
+    const input = event.currentTarget as HTMLInputElement
+    source.sort = Math.max(0, Number.parseInt(input.value || '0', 10) || 0)
+    saveRow(source, true)
+}
 
 const handleSectionSelectionChange = (sectionKey: string, rows: any[]) => {
     sectionSelections[sectionKey] = rows.map(row => row.source || row)

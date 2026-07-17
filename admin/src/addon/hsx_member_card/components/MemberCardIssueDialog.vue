@@ -8,7 +8,7 @@
                         <div class="member-option"><span>{{ item.display_name }}</span><small>{{ item.mobile_masked }} · {{ item.card_count || 0 }} 张卡</small></div>
                     </el-option>
                 </el-select>
-                <el-button link type="primary" class="quick-create" @click="createVisible = true">没有客户？快速创建</el-button>
+                <el-button link type="primary" class="quick-create" @click="openQuickCreate">没有客户？快速创建</el-button>
             </el-form-item>
             <el-form-item label="选择卡种" prop="product_id">
                 <el-select v-model="form.product_id" placeholder="选择已启用卡种" class="w-full">
@@ -37,7 +37,14 @@
     </el-dialog>
 
     <el-dialog v-model="createVisible" title="快速创建客户" width="440px" append-to-body>
-        <el-form label-width="74px"><el-form-item label="姓名"><el-input v-model="newMember.name" maxlength="100" placeholder="用于核销时人工核对" /></el-form-item><el-form-item label="手机号"><el-input v-model="newMember.mobile" maxlength="11" placeholder="11 位手机号" /></el-form-item></el-form>
+        <el-form label-width="82px">
+            <el-form-item label="姓名"><el-input v-model="newMember.name" maxlength="100" placeholder="用于核销时人工核对" /></el-form-item>
+            <el-form-item label="手机号"><el-input v-model="newMember.mobile" maxlength="11" placeholder="11 位手机号" /></el-form-item>
+            <el-form-item label="初始密码">
+                <el-input v-model="newMember.password" type="password" show-password maxlength="32" placeholder="默认手机号后六位" @input="passwordCustomized = true" />
+                <div class="form-help">默认取手机号后六位，可在创建前修改</div>
+            </el-form-item>
+        </el-form>
         <template #footer><el-button @click="createVisible = false">取消</el-button><el-button type="primary" :loading="creating" @click="quickCreate">创建并选中</el-button></template>
     </el-dialog>
 </template>
@@ -55,18 +62,22 @@ const formRef = ref<any>(), loading = ref(false), submitting = ref(false), membe
 const createVisible = ref(false), creating = ref(false), voucherValue = ref('')
 const members = ref<any[]>([]), products = ref<any[]>([]), config = reactive<any>({ allow_receivable: 1, default_capital_account_id: 0, capital_account_options: [] })
 const form = reactive<any>({ member_id: undefined, product_id: undefined, settlement_mode: 'immediate', capital_account_id: undefined, remark: '' })
-const newMember = reactive({ name: '', mobile: '' })
+const newMember = reactive({ name: '', mobile: '', password: '' })
+const passwordCustomized = ref(false)
 const rules = { member_id: [{ required: true, message: '请选择购卡客户', trigger: 'change' }], product_id: [{ required: true, message: '请选择卡种', trigger: 'change' }], settlement_mode: [{ required: true, message: '请选择结算方式', trigger: 'change' }], capital_account_id: [{ validator: (_: any, value: any, callback: any) => form.settlement_mode === 'immediate' && !value ? callback(new Error('现场收款必须选择到账账户')) : callback(), trigger: 'change' }] }
 const money = (value: any) => Number(value || 0).toFixed(2)
 const reset = () => { Object.assign(form, { member_id: undefined, product_id: undefined, settlement_mode: 'immediate', capital_account_id: config.default_capital_account_id || undefined, remark: '' }); voucherValue.value = '' }
 const loadBase = async () => { loading.value = true; try { const [p, c] = await Promise.all([getCardProductOptions(), getMemberCardConfig()]); products.value = (p as any).data || []; Object.assign(config, (c as any).data || {}); reset(); await searchMembers('') } finally { loading.value = false } }
 const searchMembers = async (keyword: string) => { memberLoading.value = true; try { members.value = ((await getCardMemberOptions({ keyword, limit: 30 })) as any).data || [] } finally { memberLoading.value = false } }
-const quickCreate = async () => { if (!newMember.name.trim() || !/^1\d{10}$/.test(newMember.mobile)) return ElMessage.warning('请填写姓名和正确的11位手机号'); creating.value = true; try { const row: any = (await quickCreateCardMember({ ...newMember, request_id: memberCardRequestId('member') })).data; members.value.unshift({ member_id: row.member_id, display_name: row.member_name, mobile_masked: row.mobile_masked, card_count: 0 }); form.member_id = row.member_id; createVisible.value = false; Object.assign(newMember, { name: '', mobile: '' }); ElMessage.success(row.created ? '客户已创建' : '已找到原客户并选中') } finally { creating.value = false } }
+const openQuickCreate = () => { Object.assign(newMember, { name: '', mobile: '', password: '' }); passwordCustomized.value = false; createVisible.value = true }
+const quickCreate = async () => { if (!newMember.name.trim() || !/^1\d{10}$/.test(newMember.mobile)) return ElMessage.warning('请填写姓名和正确的11位手机号'); if (newMember.password.length < 6 || newMember.password.length > 32 || /\s/.test(newMember.password)) return ElMessage.warning('密码需为6至32位且不能包含空格'); creating.value = true; try { const row: any = (await quickCreateCardMember({ ...newMember, request_id: memberCardRequestId('member') })).data; members.value.unshift({ member_id: row.member_id, display_name: row.member_name, mobile_masked: row.mobile_masked, card_count: 0 }); form.member_id = row.member_id; createVisible.value = false; Object.assign(newMember, { name: '', mobile: '', password: '' }); passwordCustomized.value = false; ElMessage.success(row.created ? '客户已创建' : '已找到原客户并选中') } finally { creating.value = false } }
 const submit = async () => { await formRef.value?.validate(); submitting.value = true; try { const result: any = (await createCardOrder({ ...form, request_id: memberCardRequestId('issue'), voucher_urls: voucherValue.value ? voucherValue.value.split(',').map(v => v.trim()).filter(Boolean) : [] })).data; if (!result.success) ElMessage.warning(result.message || '开卡单已保存，请处理财务异常'); else ElMessage.success(result.message || '开卡成功'); emit('success', result); visible.value = false } finally { submitting.value = false } }
 watch(visible, value => { if (value) loadBase() })
+watch(() => newMember.mobile, mobile => { if (!passwordCustomized.value) newMember.password = /^1\d{5,10}$/.test(mobile) ? mobile.slice(-6) : '' })
 </script>
 
 <style scoped>
 .issue-tip { margin: -4px 0 20px; padding: 11px 14px; background: var(--el-color-primary-light-9); color: var(--el-text-color-regular); line-height: 1.6; }
 .w-full { width: 100%; }.quick-create { margin-top: 6px; }.member-option,.product-option { display:flex; align-items:center; justify-content:space-between; gap:20px; }.member-option small,.product-option small { color:var(--el-text-color-secondary); }
+.form-help { margin-top: 5px; color: var(--el-text-color-secondary); font-size: 12px; line-height: 1.4; }
 </style>

@@ -1,0 +1,143 @@
+$mc-primary: #2563eb;
+$mc-success: #16a34a;
+$mc-warning: #d97706;
+$mc-danger: #dc2626;
+$mc-text: #0f172a;
+$mc-secondary: #64748b;
+$mc-muted: #94a3b8;
+$mc-border: #e6ebf2;
+$mc-bg: #f5f7fb;
+
+.mc-page {
+    min-height: 100vh;
+    padding: 24rpx;
+    box-sizing: border-box;
+    background: $mc-bg;
+    color: $mc-text;
+}
+
+.mc-surface {
+    border: 1rpx solid $mc-border;
+    border-radius: 18rpx;
+    background: #fff;
+    box-shadow: 0 5rpx 18rpx rgba(15, 23, 42, .035);
+}
+
+.mc-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18rpx;
+    margin: 30rpx 2rpx 16rpx;
+}
+
+.mc-section-head__main {
+    display: flex;
+    align-items: center;
+    gap: 11rpx;
+}
+
+.mc-section-head__title {
+    color: $mc-text;
+    font-size: 29rpx;
+    font-weight: 700;
+}
+
+.mc-section-head__sub {
+    color: $mc-muted;
+    font-size: 21rpx;
+}
+
+.mc-icon-box {
+    display: flex;
+    width: 64rpx;
+    height: 64rpx;
+    flex: 0 0 64rpx;
+    align-items: center;
+    justify-content: center;
+    border-radius: 15rpx;
+    background: #eff6ff;
+}
+
+.mc-icon-box--green { background: #ecfdf3; }
+.mc-icon-box--orange { background: #fff7ed; }
+.mc-icon-box--violet { background: #f5f3ff; }
+
+.mc-tabs {
+    border-bottom: 1rpx solid #edf1f6;
+    background: #fff;
+}
+
+.mc-list-wrap {
+    padding: 18rpx 24rpx 32rpx;
+}
+
+.mc-meta-line {
+    display: flex;
+    align-items: center;
+    gap: 9rpx;
+    min-width: 0;
+    color: $mc-secondary;
+    font-size: 22rpx;
+}
+
+.mc-meta-line text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mc-sheet {
+    padding: 30rpx 26rpx calc(30rpx + env(safe-area-inset-bottom));
+    background: #fff;
+}
+
+.mc-sheet-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18rpx;
+    padding-bottom: 22rpx;
+}
+
+.mc-sheet-title {
+    display: block;
+    color: $mc-text;
+    font-size: 32rpx;
+    font-weight: 750;
+}
+
+.mc-sheet-sub {
+    display: block;
+    margin-top: 7rpx;
+    color: $mc-muted;
+    font-size: 22rpx;
+}
+
+.mc-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16rpx;
+    margin-top: 24rpx;
+}
+
+.mc-bottom-action {
+    position: fixed;
+    z-index: 20;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    padding: 16rpx 24rpx calc(16rpx + env(safe-area-inset-bottom));
+    border-top: 1rpx solid $mc-border;
+    background: rgba(255, 255, 255, .97);
+    box-shadow: 0 -8rpx 24rpx rgba(15, 23, 42, .05);
+}
+
+.mc-link {
+    color: $mc-primary;
+    font-size: 24rpx;
+}
+
+.mc-empty {
+    padding: 90rpx 24rpx;
+}

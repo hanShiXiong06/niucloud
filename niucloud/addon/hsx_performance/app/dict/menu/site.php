@@ -4,7 +4,7 @@ declare(strict_types=1);
 return [
     [
         'menu_name' => '经营分析', 'menu_key' => 'hsx_performance', 'menu_short_name' => '经营分析',
-        'parent_select_key' => '', 'parent_key' => '', 'menu_type' => '0', 'icon' => 'iconfont icontongji',
+        'parent_select_key' => '', 'parent_key' => '', 'menu_type' => '0', 'icon' => 'nc-iconfont nc-icon-wendangV6xx',
         'api_url' => '', 'router_path' => '', 'view_path' => '', 'methods' => '', 'sort' => '175', 'status' => '1', 'is_show' => '1',
         'children' => [
             [

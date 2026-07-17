@@ -70,6 +70,9 @@ try {
         'mobile' => '199' . str_pad((string)random_int(0, 99999999), 8, '0', STR_PAD_LEFT),
     ]);
     $assert(($testMember['created'] ?? false) === true, '快速创建客户未创建新会员');
+    $initialPasswordHash = (string)Db::name('member')->where('site_id', (int)$member['site_id'])
+        ->where('member_id', (int)$testMember['member_id'])->value('password');
+    $assert(check_password(substr((string)$testMember['mobile'], -6), $initialPasswordHash), '快速创建客户默认密码必须为手机号后六位');
 
     $order = (new MemberCardOrderService())->create([
         'request_id' => 'integration:issue:' . bin2hex(random_bytes(8)),

@@ -46,6 +46,14 @@ final class MemberCardMemberService extends BaseAdminService
         if ($name === '') throw new CommonException('请填写客户姓名');
         if (!preg_match('/^1\d{10}$/', $mobile)) throw new CommonException('请输入正确的11位手机号');
 
+        // 快速创建默认使用手机号后六位，前端允许店员在创建前覆盖。
+        // 该值仅用于新会员初始化；命中已有会员时绝不重置原密码。
+        $password = trim((string)($data['password'] ?? ''));
+        if ($password === '') $password = substr($mobile, -6);
+        if (mb_strlen($password) < 6 || mb_strlen($password) > 32 || preg_match('/\s/', $password)) {
+            throw new CommonException('初始密码需为6至32位且不能包含空格');
+        }
+
         $member = Member::where([['site_id', '=', $this->site_id], ['mobile', '=', $mobile]])->findOrEmpty();
         $created = false;
         if ($member->isEmpty()) {
@@ -56,7 +64,7 @@ final class MemberCardMemberService extends BaseAdminService
                 'mobile' => $mobile,
                 'member_no' => $memberNo,
                 'init_member_no' => $memberNo,
-                'password' => bin2hex(random_bytes(8)),
+                'password' => $password,
                 'headimg' => '',
                 'member_label' => [],
                 'sex' => 0,
