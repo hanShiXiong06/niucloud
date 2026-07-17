@@ -10,6 +10,7 @@
                     <el-button v-if="selectedPendingIds.length" type="warning" @click="openSendRefurbish()">批量开始整备（{{ selectedPendingIds.length }}）</el-button>
                     <el-button v-if="selectedSaleableIds.length" type="primary" @click="goSale(selectedSaleableIds)">批量销售（{{ selectedSaleableIds.length }}）</el-button>
                     <el-button v-if="selectedTransferableIds.length" @click="openTransfer()">批量调拨（{{ selectedTransferableIds.length }}）</el-button>
+                    <el-button type="primary" plain @click="router.push('/site/hsx_erp/stocktake')">库存盘点</el-button>
                     <el-button type="primary" plain @click="openSerialTrace">串号追踪</el-button>
                     <el-button :icon="Refresh" :loading="table.loading" @click="loadList">刷新</el-button>
                 </div>
@@ -64,6 +65,7 @@
                 <el-tab-pane label="已售" name="sold" />
                 <el-tab-pane label="已退" name="returned" />
                 <el-tab-pane label="作废" name="void" />
+                <el-tab-pane label="已盘亏" name="lost" />
             </el-tabs>
 
             <el-form :inline="true" class="mt-2" @submit.prevent>
@@ -102,9 +104,11 @@
                 <el-form-item label="上架">
                     <el-select v-model="search.listing_status" clearable class="!w-[140px]" placeholder="全部">
                         <el-option label="不需要" value="none" />
-                        <el-option label="待补图片" value="need_photo" />
-                        <el-option label="待补售价" value="need_price" />
-                        <el-option label="资料完整" value="ready" />
+                        <el-option label="待拍照" value="need_photo" />
+                        <el-option label="待商城定价" value="need_price" />
+                        <el-option label="待完善资料" value="need_material" />
+                        <el-option label="待上架" value="ready" />
+                        <el-option label="待商城运营完善" value="pending_shop" />
                         <el-option label="商城已上架" value="listed" />
                     </el-select>
                 </el-form-item>
@@ -174,7 +178,7 @@
                 <el-table-column label="成本 / 价值" min-width="175" align="right">
                     <template #default="{ row }">
                         <div class="font-medium text-gray-900">{{ money(row.total_cost) }}</div>
-                        <div v-if="row.status === 'in_stock'" class="mt-1 text-xs text-gray-500">{{ Number(row.retail_price || 0) ? '零售价' : '内部预估' }} {{ Number(row.retail_price || row.estimate_sale_price || 0) ? money(row.retail_price || row.estimate_sale_price) : '-' }}</div>
+                        <div v-if="row.status === 'in_stock'" class="mt-1 text-xs text-gray-500">{{ Number(row.retail_price || 0) > 0 ? '零售价' : '内部预估' }} {{ firstPositiveErpAmount(row.retail_price, row.estimate_sale_price) ? money(firstPositiveErpAmount(row.retail_price, row.estimate_sale_price)) : '-' }}</div>
                         <div v-else-if="hasEffectiveOutbound(row)" class="mt-1 text-xs" :class="Number(row.outbound_profit || 0) >= 0 ? 'text-green-600' : 'text-red-600'">实际毛利 {{ money(row.outbound_profit) }}</div>
                         <div v-else class="mt-1 text-xs text-gray-400">历史成本</div>
                     </template>
@@ -212,6 +216,7 @@
                                 <el-tag :type="refurbishMeta(row.refurbish_status).type" effect="plain">{{ refurbishMeta(row.refurbish_status).label }}</el-tag>
                                 <el-tag :type="targetMeta(row.sale_target).type" effect="plain">{{ targetMeta(row.sale_target).label }}</el-tag>
                                 <el-tag v-if="row.sale_target === 'mall'" :type="listingMeta(row.listing_status).type" effect="plain">{{ listingMeta(row.listing_status).label }}</el-tag>
+                                <span v-if="row.task_assignee_name" class="text-xs text-gray-400">负责人 {{ row.task_assignee_name }}</span>
                             </div>
                             <div v-if="row.quality_remark" class="mt-2 text-xs text-gray-500 line-clamp-1">{{ row.quality_remark }}</div>
                         </template>
@@ -249,7 +254,7 @@
                         <el-button type="primary" link @click="openDetail(row)">档案</el-button>
                         <el-button v-if="row.status === 'in_stock'" type="primary" link @click="handleTurnoverAction(row)">{{ row.turnover_action_label || '处理' }}</el-button>
                         <el-dropdown v-if="row.status === 'in_stock'" trigger="click" @command="command => handleRowCommand(command, row)">
-                            <el-button link>更多</el-button>
+                            <el-button class="mt-[3px] ml-2" link>更多</el-button>
                             <template #dropdown><el-dropdown-menu>
                                 <el-dropdown-item command="flow">完善资料</el-dropdown-item>
                                 <el-dropdown-item command="retail">设置/调整零售价</el-dropdown-item>
@@ -257,7 +262,7 @@
                                 <el-dropdown-item command="expense">成本调整</el-dropdown-item>
                                 <el-dropdown-item v-if="row.refurbish_status === 'pending'" command="start_refurbish">开始整备</el-dropdown-item>
                                 <el-dropdown-item v-if="['pending','processing','failed'].includes(row.refurbish_status)" command="complete_refurbish">登记整备结果</el-dropdown-item>
-                                <el-dropdown-item v-if="row.listing_status === 'ready' && row.warehouse_policy?.marketplace_available" command="publish_listing">上架商城</el-dropdown-item>
+                                <el-dropdown-item v-if="(row.listing_status === 'ready' || row.can_handoff_shop === 1) && row.warehouse_policy?.marketplace_available" command="publish_listing">{{ row.can_handoff_shop === 1 ? '交接商城运营' : '上架商城' }}</el-dropdown-item>
                             </el-dropdown-menu></template>
                         </el-dropdown>
                     </template>
@@ -304,9 +309,10 @@
                     <el-form-item label="上架状态">
                         <el-select v-model="flow.form.listing_status" class="w-full" :disabled="flow.form.sale_target !== 'mall'">
                             <el-option label="不需要" value="none" />
-                            <el-option label="待补图片" value="need_photo" />
-                            <el-option label="待补售价" value="need_price" />
-                            <el-option label="资料完整" value="ready" />
+                            <el-option label="待拍照" value="need_photo" />
+                            <el-option label="待商城定价" value="need_price" />
+                            <el-option label="待完善资料" value="need_material" />
+                            <el-option label="待上架" value="ready" />
                             <el-option label="商城已上架" value="listed" />
                         </el-select>
                     </el-form-item>
@@ -642,6 +648,7 @@ import ErpImageGallery from '@/addon/hsx_erp/components/ErpImageGallery.vue'
 import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/index.vue'
 import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVoucherUpload.vue'
 import ErpCatalogProductSelect from '@/addon/hsx_erp/components/ErpCatalogProductSelect.vue'
+import { firstPositiveErpAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
 
 const search = reactive<any>({ keyword: '', status: '', refurbish_status: '', sale_target: '', listing_status: '', turnover_level: '', warehouse_id: '', location_id: '', catalog_product_id: '', dateRange: [], stock_age_min: undefined, stock_age_max: undefined, min_cost: undefined, max_cost: undefined, min_price: undefined, max_price: undefined })
 const route = useRoute()
@@ -702,6 +709,12 @@ const summary = computed(() => table.data.reduce((acc, row: any) => {
 onMounted(() => {
     if (route.query.refurbish_status) search.refurbish_status = String(route.query.refurbish_status)
     if (route.query.turnover_level) search.turnover_level = String(route.query.turnover_level)
+    if (route.query.listing_status) search.listing_status = String(route.query.listing_status)
+    if (route.query.keyword) search.keyword = String(route.query.keyword)
+    if (route.query.status) {
+        search.status = String(route.query.status)
+        activeTab.value = String(route.query.status)
+    }
     loadList()
     loadWarehouses()
     loadFinanceCategories()
@@ -1251,9 +1264,11 @@ function targetMeta(status: string) {
 function listingMeta(status: string) {
     const map: any = {
         none: { label: '不上架', type: 'info' },
-        need_photo: { label: '待补图片', type: 'warning' },
-        need_price: { label: '待补售价', type: 'warning' },
-        ready: { label: '资料完整', type: 'success' },
+        need_photo: { label: '待拍照', type: 'warning' },
+        need_price: { label: '待商城定价', type: 'warning' },
+        need_material: { label: '待完善资料', type: 'warning' },
+        ready: { label: '待上架', type: 'success' },
+        pending_shop: { label: '待商城运营完善', type: 'warning' },
         listed: { label: '商城已上架', type: 'primary' }
     }
     return map[status || 'none'] || { label: status || '-', type: 'info' }

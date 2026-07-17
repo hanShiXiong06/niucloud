@@ -108,8 +108,11 @@
                         </div>
                     </template>
                 </el-table-column>
-                <el-table-column label="业务操作人" min-width="130">
-                    <template #default="{ row }"><ErpOverflowText :text="row.business_operator_name || row.purchaser_name" max-width="120px" /></template>
+                <el-table-column label="业务 / 财务负责人" min-width="150">
+                    <template #default="{ row }">
+                        <div><ErpOverflowText :text="row.business_operator_name || row.purchaser_name" max-width="135px" /></div>
+                        <div v-if="row.task_assignee_name" class="mt-1 text-xs text-gray-500">财务 {{ row.task_assignee_name }}</div>
+                    </template>
                 </el-table-column>
                 <el-table-column label="状态" width="120">
                     <template #default="{ row }">
@@ -579,7 +582,8 @@ const payableRoleFocus = [
     { role: '负责人', focus: '现金支出、未付风险与折账事实' },
 ]
 
-const activeStatus = ref('')
+const routeStatus = String(route.query.status || '')
+const activeStatus = ref(['', 'pending', 'partial', 'settled'].includes(routeStatus) ? routeStatus : '')
 const search = reactive({ keyword: '', party_id: null as number | null, party_name: '', source_no: String(route.query.source_no || ''), contact_mobile: '', finance_type_key: '', business_source_key: '', channel_code: '', can_offset: '' })
 const advancedVisible = ref(false)
 const dateRange = ref<any[]>([])

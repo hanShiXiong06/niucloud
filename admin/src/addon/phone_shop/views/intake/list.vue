@@ -11,6 +11,9 @@
                 </div>
             </div>
 
+            <el-alert class="mt-3" :type="policy.can_phone_shop_operate === 1 ? 'success' : 'info'" :closable="false" show-icon
+                :title="policy.can_phone_shop_operate === 1 ? '当前由商城运营专员完善回收设备的分类、规格并上架，完成后会自动回写 ERP。' : '当前由 ERP 库存人员一次完善并直接上架；本页仅保留历史货源查看。'" />
+
             <el-card class="box-card !border-none my-[10px] table-search-wrap" shadow="never">
                 <el-form :inline="true" :model="table.searchParam">
                     <el-form-item label="状态">
@@ -69,7 +72,7 @@
                     <el-table-column label="操作" fixed="right" width="200" align="right">
                         <template #default="{ row }">
                             <el-button type="primary" link @click="showDetail(row)">详情</el-button>
-                            <el-button v-if="row.status === 0" type="success" link @click="openBuild(row)">建品上架</el-button>
+                            <el-button v-if="row.status === 0 && policy.can_phone_shop_operate === 1" type="success" link @click="openBuild(row)">完善资料并上架</el-button>
                             <el-button v-if="row.status === 0" type="info" link @click="markStatus(row, 2)">忽略</el-button>
                             <el-button v-if="row.status === 1 && row.goods_id" type="primary" link @click="goGoods(row)">查看商品</el-button>
                             <el-button v-if="row.status === 2" type="primary" link @click="markStatus(row, 0)">恢复</el-button>
@@ -212,12 +215,15 @@ import { reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { img } from '@/utils/common'
 import { ElMessage } from 'element-plus'
-import { getDeviceIntakePages, getDeviceIntakeInfo, setDeviceIntakeStatus, seedTestDeviceIntake, buildDeviceIntake, syncDeviceIntakeSchema, previewDeviceIntake } from '@/addon/phone_shop/api/device_intake'
+import { getDeviceIntakePages, getDeviceIntakeInfo, setDeviceIntakeStatus, seedTestDeviceIntake, buildDeviceIntake, syncDeviceIntakeSchema, previewDeviceIntake, getDeviceIntakeMaterialPolicy } from '@/addon/phone_shop/api/device_intake'
 import { getBrandList, getCategoryTree, getLabelList } from '@/addon/phone_shop/api/goods'
 import { getSpecOptionsByCategory, getGrades } from '@/addon/phone_shop/api/spec'
 import CheckResultPanel from '@/addon/phone_shop/components/CheckResultPanel.vue'
 
 const router = useRouter()
+// 未加载到 ERP 策略前默认禁用商城侧操作，避免接口返回前短暂出现越权按钮。
+const policy = reactive({ owner: 'erp', owner_label: 'ERP 库存人员', can_phone_shop_operate: 0 })
+getDeviceIntakeMaterialPolicy().then((res: any) => Object.assign(policy, res?.data || {}))
 
 const table = reactive({
     page: 1,

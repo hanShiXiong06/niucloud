@@ -63,6 +63,14 @@ final class PhoneShopDirectListing
                 return compact('provider') + ['status' => 'duplicate', 'goods_id' => (int)$intake->goods_id, 'message' => '设备已经在商城建品'];
             }
 
+            if ((string)($payload['completion_mode'] ?? 'erp') === 'phone_shop') {
+                return compact('provider') + [
+                    'status' => 'pending',
+                    'intake_id' => (int)$intake->intake_id,
+                    'message' => '已进入商城待上架货源，由商城运营完善资料',
+                ];
+            }
+
             $goodsId = (new DeviceIntakeService())->build([
                 'intake_id' => (int)$intake->intake_id,
                 'goods_name' => trim((string)($payload['goods_name'] ?? $payload['model_name'] ?? '')),
@@ -75,6 +83,8 @@ final class PhoneShopDirectListing
                 'cost_price' => round((float)($payload['cost_price'] ?? 0), 2),
                 'goods_desc' => trim((string)($payload['goods_desc'] ?? '')),
                 'status' => 1,
+                // ERP 发起的直上架由 ErpStockService 统一落状态、记流水。
+                'sync_back_erp' => false,
             ]);
             return compact('provider') + ['status' => 'published', 'goods_id' => $goodsId, 'message' => '已直接上架商城'];
         } catch (\Throwable $e) {

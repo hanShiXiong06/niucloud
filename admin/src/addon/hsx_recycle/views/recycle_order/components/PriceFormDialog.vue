@@ -218,6 +218,12 @@
               </template>
             </section>
 
+            <NextAssigneeSelect
+              v-model="deviceForm.next_assignee_uid"
+              stage-key="confirm"
+              label="下一步 · 报价确认负责人"
+            />
+
             <div
               v-if="!isFormValid && deviceForm.final_price !== undefined"
               class="pfd-alert pfd-alert--error"
@@ -242,6 +248,7 @@ import DeviceInfoCard from './DeviceInfoCard.vue'
 import FormDialog from '@/addon/hsx_recycle/components/FormDialog.vue'
 import { getDevice, getRefurbishmentOptions, getSaleDestinationOptions, getRefurbishmentAssigneeOptions } from '@/addon/hsx_recycle/api/recycle_order'
 import CheckResultPanel from './CheckResultPanel.vue'
+import NextAssigneeSelect from '@/addon/hsx_recycle/components/task/NextAssigneeSelect.vue'
 
 interface DeviceInfo {
     id?: string | number;
@@ -326,6 +333,7 @@ const deviceForm = reactive<{
     refurbishment_item_keys: string[];
     refurbishment_custom_item: string;
     refurbishment_estimated_cost: number;
+    next_assignee_uid: number;
 }>({
     final_price: typeof props.device.final_price === 'number'
         ? props.device.final_price
@@ -348,7 +356,8 @@ const deviceForm = reactive<{
     refurbishment_reason: props.device.refurbishment_reason || '',
     refurbishment_item_keys: [],
     refurbishment_custom_item: '',
-    refurbishment_estimated_cost: Number(props.device.refurbishment_estimated_cost || 0)
+    refurbishment_estimated_cost: Number(props.device.refurbishment_estimated_cost || 0),
+    next_assignee_uid: 0
 })
 
 const isFormValid = computed(() =>
@@ -417,6 +426,7 @@ const applyRefurbishmentFromDevice = (device: DeviceInfo) => {
 }
 
 const applyDeviceToForm = (device: DeviceInfo) => {
+    deviceForm.next_assignee_uid = 0
     deviceData.value = { ...device }
     deviceForm.final_price = typeof device.final_price === 'number' ? device.final_price
         : typeof device.final_price === 'string' ? parseFloat(device.final_price) || undefined : undefined
@@ -591,7 +601,8 @@ const handleConfirm = () => {
         refurbishment_assignee_uid: deviceForm.refurbishment_required === 1 ? deviceForm.refurbishment_assignee_uid : 0,
         refurbishment_reason: deviceForm.refurbishment_required === 1 ? deviceForm.refurbishment_reason : '',
         refurbishment_items: deviceForm.refurbishment_required === 1 ? buildRefurbishmentItems() : [],
-        refurbishment_estimated_cost: deviceForm.refurbishment_required === 1 ? deviceForm.refurbishment_estimated_cost : 0
+        refurbishment_estimated_cost: deviceForm.refurbishment_required === 1 ? deviceForm.refurbishment_estimated_cost : 0,
+        next_assignee_uid: deviceForm.next_assignee_uid
     })
 }
 

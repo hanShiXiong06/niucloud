@@ -1048,6 +1048,7 @@ const handleDeviceConfirm = async (data: {
     // 提交设备信息
     const result = await updateRecycleOrder(data.orderId, {
       action: "order_sign",
+      next_assignee_uid: Number(data.next_assignee_uid || 0),
       devices: data.devices.map((device) => {
         const { editing, _originalData, isNew, ...rest } = device
         return rest

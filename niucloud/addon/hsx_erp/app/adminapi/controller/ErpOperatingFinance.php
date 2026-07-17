@@ -15,7 +15,7 @@ class ErpOperatingFinance extends BaseAdminController
     public function lists()
     {
         $params = $this->request->params([
-            ['direction', ''], ['status', ''], ['category_key', ''], ['keyword', ''],
+            ['direction', ''], ['status', ''], ['category_key', ''], ['party_id', 0], ['keyword', ''],
             ['start_at', 0], ['end_at', 0], ['page', 1], ['limit', 15],
         ]);
         return success($this->service->lists($params));

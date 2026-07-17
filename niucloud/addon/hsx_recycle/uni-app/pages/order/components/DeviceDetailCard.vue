@@ -1,59 +1,45 @@
 <template>
-  <view class="bg-white rounded-lg shadow-sm overflow-hidden mb-2">
-    <!-- 设备头部 -->
-    <view class="p-3 flex items-start relative">
-      <!-- 选择框 -->
-      <view class="mr-2 mt-0.5" @tap.stop="$emit('toggle-select')">
-        <up-checkbox :checked="isSelected" shape="square"></up-checkbox>
+  <view class="device-detail-card" :class="{ 'device-detail-card--selected': isSelected }">
+    <view class="device-detail-card__head">
+      <view class="device-detail-card__check" :class="{ active: isSelected }" @tap.stop="$emit('toggle-select')">
+        <up-icon v-if="isSelected" name="checkmark" size="11" color="#fff" />
       </view>
-
-      <!-- 设备信息 -->
-      <view class="flex-1 pr-16">
-        <!-- 设备名称 -->
-        <view class="mb-1">
-          <text class="text-sm font-medium text-gray-800">
-            <text class="text-blue-500">{{ index + 1 }}.</text>
-            {{ device.model || '待识别' }}
+      <view class="device-detail-card__main">
+        <view class="device-detail-card__title-row">
+          <text class="device-detail-card__index">{{ index + 1 }}</text>
+          <text class="device-detail-card__title">{{ device.model || '待识别设备' }}</text>
+          <view class="device-detail-card__status" :style="{ color: statusColor, background: statusBg }">
+            {{ device.status_name }}
+          </view>
+        </view>
+        <view class="device-detail-card__meta">
+          <view class="device-detail-card__imei" @longpress="handleCopyIMEI">
+            <text class="device-detail-card__meta-label">IMEI</text>
+            <text class="device-detail-card__meta-value">{{ device.imei || '-' }}</text>
+            <view class="device-detail-card__copy" @tap.stop="handleCopyIMEI">
+              <up-icon name="file-text" size="11" color="#8b96a9" />
+            </view>
+          </view>
+          <text v-if="device.capacity || device.color" class="device-detail-card__spec">
+            {{ [device.capacity, device.color].filter(Boolean).join(' · ') }}
           </text>
         </view>
-
-        <!-- IMEI -->
-        <view class="flex items-center mb-1.5" @longpress="handleCopyIMEI">
-          <text class="text-xs text-gray-500">IMEI: {{ device.imei }}</text>
-          <view
-            class="ml-1 w-4 h-4 flex items-center justify-center rounded bg-gray-100"
-            @tap.stop="handleCopyIMEI"
-          >
-            <up-icon name="file-text" size="10" color="#94a3b8"></up-icon>
+        <view class="device-price-grid">
+          <view class="device-price-grid__item">
+            <text class="device-price-grid__label">预估价格</text>
+            <text v-if="device.initial_price && device.initial_price !== '0.00'" class="device-price-grid__value">¥{{ device.initial_price }}</text>
+            <text v-else class="device-price-grid__empty">未报价</text>
+          </view>
+          <view class="device-price-grid__item device-price-grid__item--primary">
+            <text class="device-price-grid__label">最终价格</text>
+            <text v-if="device.final_price && device.final_price !== '0.00'" class="device-price-grid__value">¥{{ device.final_price }}</text>
+            <text v-else class="device-price-grid__empty">待定价</text>
           </view>
         </view>
-
-        <!-- 价格信息 -->
-        <view class="flex items-center gap-3 text-xs">
-          <view v-if="device.initial_price && device.initial_price !== '0.00'" class="flex items-center gap-0.5">
-            <text class="text-gray-400">预估</text>
-            <text class="text-orange-500 font-medium">¥{{ device.initial_price }}</text>
-          </view>
-          <view v-if="device.final_price && device.final_price !== '0.00'" class="flex items-center gap-0.5">
-            <text class="text-gray-400">最终</text>
-            <text class="font-bold" style="color: #ff6b00;">¥{{ device.final_price }}</text>
-          </view>
-          <text v-if="!device.final_price || device.final_price === '0.00'" class="text-gray-400">
-            待定价
-          </text>
-        </view>
-      </view>
-
-      <!-- 状态标签 -->
-      <view
-        class="absolute top-0 right-0 text-xs py-1 px-2 rounded-bl-lg"
-        :style="{ color: statusColor, background: statusBg }"
-      >
-        {{ device.status_name }}
       </view>
     </view>
 
-    <view v-if="hasCostAdjustment" class="px-3 pb-2">
+    <view v-if="hasCostAdjustment" class="device-detail-card__section">
       <view class="cost-adjust-notice">
         <view class="cost-adjust-notice__main">
           <text class="cost-adjust-notice__title">商家已调整最终回收成本</text>
@@ -65,7 +51,7 @@
     </view>
 
     <!-- 验机报告入口 -->
-    <view v-if="inspectionVisible" class="px-3 pb-2">
+    <view v-if="inspectionVisible" class="device-detail-card__section">
       <view class="inspection-entry" @tap.stop="$emit('view-report')">
         <view class="inspection-icon">
           <up-icon name="file-text" size="16" color="#2563eb"></up-icon>
@@ -83,7 +69,7 @@
     </view>
 
     <!-- 代卖信息入口 -->
-    <view v-if="allowViewConsignment" class="px-3 pb-2">
+    <view v-if="allowViewConsignment" class="device-detail-card__section">
       <view class="consignment-entry" @tap.stop="$emit('view-consignment')">
         <view class="consignment-icon">
           <up-icon name="order" size="16" color="#4f46e5"></up-icon>
@@ -100,72 +86,65 @@
     </view>
 
     <!-- 操作按钮 -->
-    <view v-if="showActions" class="action-grid px-3 py-2 border-t border-gray-50">
+    <view v-if="showActions" class="action-grid">
       <!-- #ifdef MP-WEIXIN -->
       <button
         v-if="canUserDecide && useWechatContact"
-        class="action-btn"
-        style="background: linear-gradient(135deg, #14b8a6, #0d9488);"
+        class="action-btn action-btn--secondary"
         open-type="contact"
       >
-        <up-icon name="chat-fill" size="13" color="#fff" class="mr-1"></up-icon>
+        <up-icon name="chat-fill" size="13" color="#5f6b7d" />
         议价
       </button>
       <button
         v-else-if="canUserDecide"
-        class="action-btn"
-        style="background: linear-gradient(135deg, #14b8a6, #0d9488);"
+        class="action-btn action-btn--secondary"
         @tap.stop="$emit('negotiate')"
       >
-        <up-icon name="chat-fill" size="13" color="#fff" class="mr-1"></up-icon>
+        <up-icon name="chat-fill" size="13" color="#5f6b7d" />
         议价
       </button>
       <!-- #endif -->
       <!-- #ifndef MP-WEIXIN -->
       <button
         v-if="canUserDecide"
-        class="action-btn"
-        style="background: linear-gradient(135deg, #14b8a6, #0d9488);"
+        class="action-btn action-btn--secondary"
         @tap.stop="$emit('negotiate')"
       >
-        <up-icon name="chat-fill" size="13" color="#fff" class="mr-1"></up-icon>
+        <up-icon name="chat-fill" size="13" color="#5f6b7d" />
         议价
       </button>
       <!-- #endif -->
       <button
         v-if="allowApplyConsignment && canUserDecide"
-        class="action-btn"
-        style="background: linear-gradient(135deg, #6366f1, #2563eb);"
+        class="action-btn action-btn--secondary"
         @tap.stop="$emit('apply-consignment')"
       >
-        <up-icon name="order" size="13" color="#fff" class="mr-1"></up-icon>
+        <up-icon name="order" size="13" color="#5f6b7d" />
         申请代卖
       </button>
       <button
         v-if="allowViewConsignment"
-        class="action-btn"
-        style="background: linear-gradient(135deg, #4f46e5, #2563eb);"
+        class="action-btn action-btn--secondary"
         @tap.stop="$emit('view-consignment')"
       >
-        <up-icon name="order" size="13" color="#fff" class="mr-1"></up-icon>
+        <up-icon name="order" size="13" color="#5f6b7d" />
         查看代卖
       </button>
       <button
         v-if="allowRejectSale && canUserDecide"
-        class="action-btn"
-        style="background: linear-gradient(135deg, #f97316, #ef4444);"
+        class="action-btn action-btn--danger"
         @tap.stop="$emit('reject-sale')"
       >
-        <up-icon name="close" size="13" color="#fff" class="mr-1"></up-icon>
+        <up-icon name="close" size="13" color="#dc6262" />
         拒绝出售
       </button>
       <button
         v-if="canUserDecide"
-        class="action-btn"
-        style="background: linear-gradient(135deg, #f472b6, #ec4899);"
+        class="action-btn action-btn--primary"
         @tap.stop="$emit('confirm')"
       >
-        <up-icon name="checkmark" size="13" color="#fff" class="mr-1"></up-icon>
+        <up-icon name="checkmark" size="13" color="#fff" />
         确认价格
       </button>
     </view>
@@ -310,26 +289,203 @@ const formatSignedMoney = (value: any) => {
 </script>
 
 <style scoped lang="scss">
+.device-detail-card {
+  overflow: hidden;
+  margin-bottom: 16rpx;
+  border: 1rpx solid #e9edf2;
+  border-radius: 22rpx;
+  background: #fff;
+  box-shadow: 0 6rpx 20rpx rgba(31, 41, 55, 0.04);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.device-detail-card--selected {
+  border-color: rgba(59, 130, 246, 0.42);
+  box-shadow: 0 8rpx 24rpx rgba(59, 130, 246, 0.09);
+}
+
+.device-detail-card__head {
+  padding: 24rpx;
+  display: flex;
+  align-items: flex-start;
+  gap: 16rpx;
+}
+
+.device-detail-card__check {
+  width: 32rpx;
+  height: 32rpx;
+  margin-top: 4rpx;
+  border: 2rpx solid #cfd5de;
+  border-radius: 8rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.device-detail-card__check.active {
+  border-color: var(--recycle-brand);
+  background: var(--recycle-brand);
+}
+
+.device-detail-card__main {
+  min-width: 0;
+  flex: 1;
+}
+
+.device-detail-card__title-row {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.device-detail-card__index {
+  width: 34rpx;
+  height: 34rpx;
+  border-radius: 10rpx;
+  background: #f1f4f8;
+  color: #7b8798;
+  font-size: 19rpx;
+  line-height: 34rpx;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.device-detail-card__title {
+  min-width: 0;
+  flex: 1;
+  color: #172033;
+  font-size: 27rpx;
+  line-height: 38rpx;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-detail-card__status {
+  height: 40rpx;
+  padding: 0 13rpx;
+  border-radius: 999rpx;
+  font-size: 20rpx;
+  line-height: 40rpx;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.device-detail-card__meta {
+  margin-top: 10rpx;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10rpx 18rpx;
+}
+
+.device-detail-card__imei {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7rpx;
+}
+
+.device-detail-card__meta-label {
+  color: #a1a9b6;
+  font-size: 19rpx;
+}
+
+.device-detail-card__meta-value,
+.device-detail-card__spec {
+  color: #667085;
+  font-size: 21rpx;
+  line-height: 30rpx;
+}
+
+.device-detail-card__copy {
+  width: 30rpx;
+  height: 30rpx;
+  border-radius: 8rpx;
+  background: #f2f4f7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.device-price-grid {
+  margin-top: 18rpx;
+  padding: 16rpx 18rpx;
+  border-radius: 16rpx;
+  background: #f7f9fc;
+  display: flex;
+}
+
+.device-price-grid__item {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.device-price-grid__item + .device-price-grid__item {
+  padding-left: 18rpx;
+  border-left: 1rpx solid #e7ebf0;
+}
+
+.device-price-grid__label {
+  color: #9aa4b2;
+  font-size: 19rpx;
+  line-height: 28rpx;
+}
+
+.device-price-grid__value {
+  margin-top: 4rpx;
+  color: #4d596c;
+  font-size: 27rpx;
+  line-height: 36rpx;
+  font-weight: 700;
+}
+
+.device-price-grid__item--primary .device-price-grid__value {
+  color: var(--recycle-price);
+}
+
+.device-price-grid__empty {
+  margin-top: 4rpx;
+  color: #a1a9b6;
+  font-size: 22rpx;
+  line-height: 36rpx;
+}
+
+.device-detail-card__section {
+  padding: 0 24rpx 18rpx;
+}
+
 .action-grid {
   display: flex;
   flex-wrap: wrap;
-  padding-left: 18rpx;
-  padding-right: 18rpx;
+  gap: 12rpx;
+  padding: 18rpx 24rpx 20rpx;
+  border-top: 1rpx solid #edf0f4;
   box-sizing: border-box;
 }
 
 .action-btn {
-  width: 48%;
-  height: 64rpx;
-  border-radius: 999rpx;
+  min-width: calc(50% - 6rpx);
+  flex: 1 1 calc(50% - 6rpx);
+  height: 66rpx;
+  margin: 0;
+  padding: 0 16rpx;
+  border: 1rpx solid #e2e7ee;
+  border-radius: 14rpx;
+  background: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  gap: 8rpx;
+  color: #5f6b7d;
   font-size: 24rpx;
   line-height: 1;
-  margin: 7rpx 1%;
-  padding: 0 14rpx;
   box-sizing: border-box;
 }
 
@@ -337,10 +493,30 @@ const formatSignedMoney = (value: any) => {
   border: 0;
 }
 
+.action-btn--secondary:active {
+  background: #f5f7fa;
+}
+
+.action-btn--danger {
+  border-color: #f2d4d4;
+  color: #dc6262;
+  background: #fffafa;
+}
+
+.action-btn--primary {
+  border-color: transparent;
+  color: #fff;
+  background: var(--recycle-button-bg);
+}
+
+.action-btn--primary:active {
+  opacity: 0.84;
+}
+
 .inspection-entry {
   padding: 18rpx;
   border-radius: 16rpx;
-  background: #f8fafc;
+  background: #f7f9fc;
   border: 1rpx solid #eef2f7;
   display: flex;
   align-items: center;

@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace addon\hsx_erp\app\adminapi\controller;
 
 use addon\hsx_erp\app\service\admin\ErpStockService;
+use addon\hsx_erp\app\service\admin\ErpListingTaskService;
 use core\base\BaseAdminController;
 use think\App;
 
@@ -63,12 +64,14 @@ class ErpStock extends BaseAdminController
         $params = $this->request->params([
             ['retail_price', 0], ['reason', ''], ['request_id', ''],
         ]);
-        return success($this->service->adjustRetailPrice(
+        $result = $this->service->adjustRetailPrice(
             $id,
             (float)$params['retail_price'],
             (string)$params['reason'],
             (string)$params['request_id']
-        ));
+        );
+        (new ErpListingTaskService())->sync($id);
+        return success($result);
     }
 
     public function transfer()
@@ -76,13 +79,16 @@ class ErpStock extends BaseAdminController
         $params = $this->request->params([
             ['asset_ids', []], ['warehouse_id', 0], ['location_id', 0], ['reason', ''], ['request_id', ''],
         ]);
-        return success($this->service->transfer(
+        $result = $this->service->transfer(
             (array)$params['asset_ids'],
             (int)$params['warehouse_id'],
             (int)$params['location_id'],
             (string)$params['reason'],
             (string)$params['request_id']
-        ));
+        );
+        $taskService = new ErpListingTaskService();
+        foreach ((array)$params['asset_ids'] as $assetId) $taskService->sync((int)$assetId);
+        return success($result);
     }
 
     public function transferPreview()
@@ -103,20 +109,22 @@ class ErpStock extends BaseAdminController
             ['asset_id', 0], ['warehouse_id', 0], ['location_id', 0],
             ['buyout_amount', 0], ['reason', ''], ['request_id', ''],
         ]);
-        return success($this->service->buyoutConsignment(
+        $result = $this->service->buyoutConsignment(
             (int)$params['asset_id'],
             (int)$params['warehouse_id'],
             (int)$params['location_id'],
             (float)$params['buyout_amount'],
             (string)$params['reason'],
             (string)$params['request_id']
-        ));
+        );
+        (new ErpListingTaskService())->sync((int)$params['asset_id']);
+        return success($result);
     }
 
     public function serialTrace()
     {
         $params = $this->request->params([
-            ['keyword', ''], ['page', 1], ['limit', 15],
+            ['keyword', ''], ['status', ''], ['start_at', 0], ['end_at', 0], ['page', 1], ['limit', 15],
         ]);
         return success($this->service->serialTracePage($params));
     }
@@ -186,7 +194,9 @@ class ErpStock extends BaseAdminController
             ['result', ''], ['refurbish_items', []], ['expense_type_key', 'refurbish_mixed'],
             ['warehouse_id', 0], ['location_id', 0], ['voucher_urls', []], ['remark', ''], ['request_id', ''],
         ]);
-        return success($this->service->completeRefurbish($id, $params));
+        $result = $this->service->completeRefurbish($id, $params);
+        (new ErpListingTaskService())->sync($id);
+        return success($result);
     }
 
     public function flow(int $id)
@@ -206,13 +216,17 @@ class ErpStock extends BaseAdminController
             ['remark_public', null],
             ['remark_internal', null],
             ['remark', ''],
+            ['next_assignee_uid', 0],
         ]);
         $this->service->updateFlow($id, $params);
+        (new ErpListingTaskService())->sync($id, (int)$params['next_assignee_uid']);
         return success('SUCCESS');
     }
 
     public function syncListing(int $id)
     {
-        return success($this->service->syncListing($id));
+        $result = $this->service->syncListing($id);
+        (new ErpListingTaskService())->sync($id);
+        return success($result);
     }
 }

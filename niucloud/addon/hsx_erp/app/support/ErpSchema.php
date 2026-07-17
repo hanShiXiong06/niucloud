@@ -64,6 +64,50 @@ final class ErpSchema
             PRIMARY KEY (`id`), KEY `idx_site_status` (`site_id`,`status`), KEY `idx_site_create` (`site_id`,`create_at`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-商品目录异步导入任务'");
 
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_stocktake` (
+            `id` int unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+            `request_id` varchar(80) DEFAULT NULL, `stocktake_no` varchar(40) NOT NULL DEFAULT '',
+            `warehouse_id` int NOT NULL DEFAULT 0, `warehouse_name` varchar(100) NOT NULL DEFAULT '',
+            `location_id` int NOT NULL DEFAULT 0, `location_name` varchar(100) NOT NULL DEFAULT '',
+            `scope_type` varchar(20) NOT NULL DEFAULT 'all', `workflow_mode` varchar(20) NOT NULL DEFAULT 'simple',
+            `status` varchar(20) NOT NULL DEFAULT 'counting', `snapshot_at` int NOT NULL DEFAULT 0,
+            `expected_count` int NOT NULL DEFAULT 0, `scanned_count` int NOT NULL DEFAULT 0,
+            `normal_count` int NOT NULL DEFAULT 0, `missing_count` int NOT NULL DEFAULT 0,
+            `surplus_count` int NOT NULL DEFAULT 0, `location_mismatch_count` int NOT NULL DEFAULT 0,
+            `status_abnormal_count` int NOT NULL DEFAULT 0, `unresolved_count` int NOT NULL DEFAULT 0,
+            `counter_uid` int NOT NULL DEFAULT 0, `counter_name` varchar(60) NOT NULL DEFAULT '',
+            `reviewer_uid` int NOT NULL DEFAULT 0, `reviewer_name` varchar(60) NOT NULL DEFAULT '',
+            `creator_uid` int NOT NULL DEFAULT 0, `creator_name` varchar(60) NOT NULL DEFAULT '',
+            `started_at` int NOT NULL DEFAULT 0, `submitted_at` int NOT NULL DEFAULT 0,
+            `completed_at` int NOT NULL DEFAULT 0, `cancelled_at` int NOT NULL DEFAULT 0,
+            `remark` varchar(500) NOT NULL DEFAULT '', `completion_remark` varchar(500) NOT NULL DEFAULT '',
+            `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`), UNIQUE KEY `uk_site_no` (`site_id`,`stocktake_no`),
+            UNIQUE KEY `uk_site_request` (`site_id`,`request_id`),
+            KEY `idx_site_status` (`site_id`,`status`,`create_at`), KEY `idx_scope` (`site_id`,`warehouse_id`,`location_id`,`status`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-库存盘点任务'");
+
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_stocktake_item` (
+            `id` bigint unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+            `stocktake_id` int NOT NULL DEFAULT 0, `identity_key` varchar(100) NOT NULL DEFAULT '',
+            `asset_id` int NOT NULL DEFAULT 0, `asset_no` varchar(40) NOT NULL DEFAULT '',
+            `imei` varchar(80) NOT NULL DEFAULT '', `sn` varchar(80) NOT NULL DEFAULT '',
+            `model` varchar(255) NOT NULL DEFAULT '', `spec` varchar(255) NOT NULL DEFAULT '',
+            `expected_status` varchar(20) NOT NULL DEFAULT '', `expected_warehouse_id` int NOT NULL DEFAULT 0,
+            `expected_warehouse_name` varchar(100) NOT NULL DEFAULT '', `expected_location_id` int NOT NULL DEFAULT 0,
+            `expected_location_name` varchar(100) NOT NULL DEFAULT '', `actual_warehouse_id` int NOT NULL DEFAULT 0,
+            `actual_warehouse_name` varchar(100) NOT NULL DEFAULT '', `actual_location_id` int NOT NULL DEFAULT 0,
+            `actual_location_name` varchar(100) NOT NULL DEFAULT '', `result` varchar(30) NOT NULL DEFAULT 'pending',
+            `resolution_status` varchar(20) NOT NULL DEFAULT 'pending', `resolution_action` varchar(40) NOT NULL DEFAULT '',
+            `resolution_remark` varchar(500) NOT NULL DEFAULT '', `scan_code` varchar(100) NOT NULL DEFAULT '',
+            `scan_count` int NOT NULL DEFAULT 0, `scanner_uid` int NOT NULL DEFAULT 0, `scanner_name` varchar(60) NOT NULL DEFAULT '',
+            `scanned_at` int NOT NULL DEFAULT 0, `resolver_uid` int NOT NULL DEFAULT 0, `resolver_name` varchar(60) NOT NULL DEFAULT '',
+            `resolved_at` int NOT NULL DEFAULT 0, `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`), UNIQUE KEY `uk_task_identity` (`site_id`,`stocktake_id`,`identity_key`),
+            KEY `idx_task_result` (`site_id`,`stocktake_id`,`result`,`resolution_status`),
+            KEY `idx_asset` (`site_id`,`asset_id`), KEY `idx_scan_code` (`site_id`,`scan_code`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-库存盘点设备明细'");
+
         $columns = [
             'erp_catalog_product_master' => [
                 'created_site_id' => "`created_site_id` int NOT NULL DEFAULT 0 COMMENT '首次写入站点，仅用于审计' AFTER `master_product_id`",
@@ -71,6 +115,12 @@ final class ErpSchema
             'erp_party' => [
                 'role_flags' => "`role_flags` varchar(255) NOT NULL DEFAULT '' COMMENT '多身份：purchase_supplier,sale_customer,recycle_customer,refurbish_provider' AFTER `party_type`",
                 'group_keys' => "`group_keys` varchar(255) NOT NULL DEFAULT '' COMMENT '业务分组，逗号分隔' AFTER `role_flags`",
+                'credit_policy' => "`credit_policy` varchar(20) NOT NULL DEFAULT 'inherit' COMMENT 'inherit跟随规则/normal正常/remind提醒/cash_only仅现结/blocked暂停交易' AFTER `group_keys`",
+                'credit_limit' => "`credit_limit` decimal(14,2) NOT NULL DEFAULT 0.00 COMMENT '允许挂账的信用额度，0表示不限额' AFTER `credit_policy`",
+                'credit_remark' => "`credit_remark` varchar(255) NOT NULL DEFAULT '' COMMENT '信用限制原因或备注' AFTER `credit_limit`",
+                'credit_update_uid' => "`credit_update_uid` int NOT NULL DEFAULT 0 COMMENT '信用策略最后调整人UID' AFTER `credit_remark`",
+                'credit_update_name' => "`credit_update_name` varchar(60) NOT NULL DEFAULT '' COMMENT '信用策略最后调整人名称' AFTER `credit_update_uid`",
+                'credit_update_at' => "`credit_update_at` int NOT NULL DEFAULT 0 COMMENT '信用策略最后调整时间' AFTER `credit_update_name`",
             ],
             'erp_warehouse' => [
                 'manager_uid' => "`manager_uid` int NOT NULL DEFAULT 0 COMMENT '仓库负责人UID' AFTER `warehouse_code`",
@@ -119,6 +169,8 @@ final class ErpSchema
                 'retail_price' => "`retail_price` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '零售价' AFTER `estimate_sale_price`",
                 'image_urls' => "`image_urls` text COMMENT '入库图片JSON/逗号分隔' AFTER `retail_price`",
                 'quality_remark' => "`quality_remark` varchar(500) NOT NULL DEFAULT '' COMMENT '质检/外观备注' AFTER `image_urls`",
+                'qc_template_id' => "`qc_template_id` int NOT NULL DEFAULT 0 COMMENT '来源质检模板ID快照' AFTER `quality_remark`",
+                'qc_report' => "`qc_report` longtext COMMENT '标准化质检报告JSON快照' AFTER `qc_template_id`",
             ],
             'erp_asset' => [
                 'ownership_type' => "`ownership_type` varchar(20) NOT NULL DEFAULT 'owned' COMMENT 'owned自有/consigned代卖/pending待确认' AFTER `party_name`",
@@ -143,6 +195,8 @@ final class ErpSchema
                 'retail_price' => "`retail_price` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '零售价（上架商城定价，由库管设置）' AFTER `estimate_sale_price`",
                 'image_urls' => "`image_urls` text COMMENT '入库图片JSON/逗号分隔' AFTER `retail_price`",
                 'quality_remark' => "`quality_remark` varchar(500) NOT NULL DEFAULT '' COMMENT '质检/外观备注' AFTER `image_urls`",
+                'qc_template_id' => "`qc_template_id` int NOT NULL DEFAULT 0 COMMENT '来源质检模板ID快照' AFTER `quality_remark`",
+                'qc_report' => "`qc_report` longtext COMMENT '标准化质检报告JSON快照' AFTER `qc_template_id`",
                 'refurbish_status' => "`refurbish_status` varchar(20) NOT NULL DEFAULT 'none' COMMENT 'none无需/pending待整备/processing整备中/done已完成/failed整备异常' AFTER `total_cost`",
                 'refurbish_pending_at' => "`refurbish_pending_at` int NOT NULL DEFAULT 0 COMMENT '进入待整备时间' AFTER `refurbish_status`",
                 'refurbish_batch_no' => "`refurbish_batch_no` varchar(40) NOT NULL DEFAULT '' COMMENT '整备交接批次号' AFTER `refurbish_pending_at`",
@@ -158,7 +212,13 @@ final class ErpSchema
                 'refurbish_voucher_urls' => "`refurbish_voucher_urls` text COMMENT '整备结果/费用凭证图片' AFTER `refurbish_completed_name`",
                 'refurbish_remark' => "`refurbish_remark` varchar(500) NOT NULL DEFAULT '' COMMENT '整备交接及结果说明' AFTER `refurbish_voucher_urls`",
                 'sale_target' => "`sale_target` varchar(20) NOT NULL DEFAULT 'unset' COMMENT 'unset未定/peer卖同行/mall上商城' AFTER `refurbish_status`",
-                'listing_status' => "`listing_status` varchar(20) NOT NULL DEFAULT 'none' COMMENT 'none无需/need_photo待补图片/need_price待补售价/ready资料完整/listed商城已上架' AFTER `sale_target`",
+                'listing_status' => "`listing_status` varchar(20) NOT NULL DEFAULT 'none' COMMENT 'none无需/need_photo待拍照/need_price待商城定价/need_material待完善资料/ready待上架/pending_shop待商城完善/listed已上架' AFTER `sale_target`",
+                'task_stage_key' => "`task_stage_key` varchar(40) NOT NULL DEFAULT '' COMMENT '当前ERP待办环节' AFTER `listing_status`",
+                'task_assignee_uid' => "`task_assignee_uid` int NOT NULL DEFAULT 0 COMMENT '当前待办责任人UID' AFTER `task_stage_key`",
+                'task_assignee_name' => "`task_assignee_name` varchar(60) NOT NULL DEFAULT '' COMMENT '当前待办责任人名称快照' AFTER `task_assignee_uid`",
+                'task_assigner_uid' => "`task_assigner_uid` int NOT NULL DEFAULT 0 COMMENT '最近分配人UID' AFTER `task_assignee_name`",
+                'task_assigner_name' => "`task_assigner_name` varchar(60) NOT NULL DEFAULT '' COMMENT '最近分配人名称快照' AFTER `task_assigner_uid`",
+                'task_assigned_at' => "`task_assigned_at` int NOT NULL DEFAULT 0 COMMENT '最近分配时间' AFTER `task_assigner_name`",
                 'remark_public' => "`remark_public` varchar(500) NOT NULL DEFAULT '' COMMENT '对外说明' AFTER `remark`",
                 'remark_internal' => "`remark_internal` varchar(500) NOT NULL DEFAULT '' COMMENT '对内备注' AFTER `remark_public`",
                 'stock_in_at' => "`stock_in_at` int NOT NULL DEFAULT 0 COMMENT '实际入库时间戳（计算库龄）' AFTER `remark_internal`",
@@ -232,6 +292,12 @@ final class ErpSchema
                 'channel_name' => "`channel_name` varchar(60) NOT NULL DEFAULT '' COMMENT '业务渠道名称快照' AFTER `channel_code`",
                 'business_reason' => "`business_reason` varchar(255) NOT NULL DEFAULT '' COMMENT '形成应付的业务原因' AFTER `channel_name`",
                 'asset_id' => "`asset_id` int NOT NULL DEFAULT 0 COMMENT '设备级应付关联资产ID' AFTER `business_reason`",
+                'task_stage_key' => "`task_stage_key` varchar(40) NOT NULL DEFAULT '' COMMENT '当前财务待办环节' AFTER `asset_id`",
+                'task_assignee_uid' => "`task_assignee_uid` int NOT NULL DEFAULT 0 COMMENT '当前待办责任人UID' AFTER `task_stage_key`",
+                'task_assignee_name' => "`task_assignee_name` varchar(60) NOT NULL DEFAULT '' COMMENT '当前待办责任人' AFTER `task_assignee_uid`",
+                'task_assigner_uid' => "`task_assigner_uid` int NOT NULL DEFAULT 0 COMMENT '分配人UID' AFTER `task_assignee_name`",
+                'task_assigner_name' => "`task_assigner_name` varchar(60) NOT NULL DEFAULT '' COMMENT '分配人' AFTER `task_assigner_uid`",
+                'task_assigned_at' => "`task_assigned_at` int NOT NULL DEFAULT 0 COMMENT '最近分配时间' AFTER `task_assigner_name`",
             ],
             'erp_receivable' => [
                 'origin_plugin' => "`origin_plugin` varchar(40) NOT NULL DEFAULT 'hsx_erp' COMMENT '真实业务来源插件' AFTER `source_no`",
@@ -250,6 +316,12 @@ final class ErpSchema
                 'channel_name' => "`channel_name` varchar(60) NOT NULL DEFAULT '' COMMENT '业务渠道名称快照' AFTER `channel_code`",
                 'business_reason' => "`business_reason` varchar(255) NOT NULL DEFAULT '' COMMENT '形成应收的业务原因' AFTER `channel_name`",
                 'asset_id' => "`asset_id` int NOT NULL DEFAULT 0 COMMENT '设备级应收关联资产ID' AFTER `business_reason`",
+                'task_stage_key' => "`task_stage_key` varchar(40) NOT NULL DEFAULT '' COMMENT '当前财务待办环节' AFTER `asset_id`",
+                'task_assignee_uid' => "`task_assignee_uid` int NOT NULL DEFAULT 0 COMMENT '当前待办责任人UID' AFTER `task_stage_key`",
+                'task_assignee_name' => "`task_assignee_name` varchar(60) NOT NULL DEFAULT '' COMMENT '当前待办责任人' AFTER `task_assignee_uid`",
+                'task_assigner_uid' => "`task_assigner_uid` int NOT NULL DEFAULT 0 COMMENT '分配人UID' AFTER `task_assignee_name`",
+                'task_assigner_name' => "`task_assigner_name` varchar(60) NOT NULL DEFAULT '' COMMENT '分配人' AFTER `task_assigner_uid`",
+                'task_assigned_at' => "`task_assigned_at` int NOT NULL DEFAULT 0 COMMENT '最近分配时间' AFTER `task_assigner_name`",
             ],
             'erp_settlement_link' => [
                 'asset_id' => "`asset_id` int NOT NULL DEFAULT 0 COMMENT '关联设备' AFTER `target_id`",
@@ -291,6 +363,7 @@ final class ErpSchema
         Db::execute("UPDATE `{$prefix}erp_settlement` SET `request_id` = NULL WHERE `request_id` = ''");
 
         self::ensureIndex($prefix . 'erp_asset', 'idx_site_sn', 'KEY `idx_site_sn` (`site_id`,`sn`)');
+        self::ensureIndex($prefix . 'erp_party', 'idx_site_credit', 'KEY `idx_site_credit` (`site_id`,`credit_policy`,`status`)');
         self::ensureIndex($prefix . 'erp_asset', 'idx_site_ownership', 'KEY `idx_site_ownership` (`site_id`,`ownership_type`,`owner_party_id`,`status`)');
         self::ensureIndex($prefix . 'erp_asset', 'idx_site_catalog_product', 'KEY `idx_site_catalog_product` (`site_id`,`catalog_product_id`,`status`)');
         self::ensureIndex($prefix . 'erp_purchase_item', 'idx_site_catalog_product', 'KEY `idx_site_catalog_product` (`site_id`,`catalog_product_id`)');
@@ -298,6 +371,9 @@ final class ErpSchema
         self::ensureIndex($prefix . 'erp_warehouse_location', 'idx_site_manager', 'KEY `idx_site_manager` (`site_id`,`manager_uid`,`status`)');
         self::ensureIndex($prefix . 'erp_asset', 'idx_site_refurbish', 'KEY `idx_site_refurbish` (`site_id`,`refurbish_status`,`refurbish_pending_at`)');
         self::ensureIndex($prefix . 'erp_asset', 'idx_site_refurbish_provider', 'KEY `idx_site_refurbish_provider` (`site_id`,`refurbish_provider_id`,`refurbish_status`)');
+        self::ensureIndex($prefix . 'erp_asset', 'idx_site_task_assignee', 'KEY `idx_site_task_assignee` (`site_id`,`task_stage_key`,`task_assignee_uid`,`task_assigned_at`)');
+        self::ensureIndex($prefix . 'erp_payable', 'idx_task_assignee', 'KEY `idx_task_assignee` (`site_id`,`task_stage_key`,`task_assignee_uid`,`status`)');
+        self::ensureIndex($prefix . 'erp_receivable', 'idx_task_assignee', 'KEY `idx_task_assignee` (`site_id`,`task_stage_key`,`task_assignee_uid`,`status`)');
         self::ensureIndex($prefix . 'erp_asset_ledger', 'idx_action_source_no', 'KEY `idx_action_source_no` (`site_id`,`action`,`source_no`)');
         self::ensureIndex($prefix . 'erp_purchase_order', 'uk_site_request', 'UNIQUE KEY `uk_site_request` (`site_id`,`request_id`)');
         self::ensureIndex($prefix . 'erp_sale_order', 'uk_site_request', 'UNIQUE KEY `uk_site_request` (`site_id`,`request_id`)');

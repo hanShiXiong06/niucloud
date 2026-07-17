@@ -15,6 +15,7 @@ class ErpDict
     public const ASSET_SOLD = 'sold';
     public const ASSET_RETURNED = 'returned';
     public const ASSET_VOID = 'void';
+    public const ASSET_LOST = 'lost';
 
     public const TARGET_PAYABLE = 'payable';
     public const TARGET_RECEIVABLE = 'receivable';
@@ -66,6 +67,8 @@ class ErpDict
             'transfer' => '库存调拨',
             'ownership_purchase' => '代卖转自有',
             'listing_publish' => '商城上架',
+            'stocktake_loss' => '盘点确认盘亏',
+            'stocktake_location' => '盘点修正库位',
         ];
     }
 
@@ -98,6 +101,7 @@ class ErpDict
             self::ASSET_SOLD => '已售',
             self::ASSET_RETURNED => '已退货',
             self::ASSET_VOID => '已作废',
+            self::ASSET_LOST => '已盘亏',
             'available_for_sale' => '可销售',
         ][$value] ?? ($value !== '' ? '其他状态' : '未记录状态');
     }
@@ -172,6 +176,7 @@ class ErpDict
                 ['value' => self::ASSET_SOLD, 'label' => '已售', 'type' => 'primary', 'filterable' => true],
                 ['value' => self::ASSET_RETURNED, 'label' => '已退货', 'type' => 'warning', 'filterable' => true],
                 ['value' => self::ASSET_VOID, 'label' => '已作废', 'type' => 'info', 'filterable' => true],
+                ['value' => self::ASSET_LOST, 'label' => '已盘亏', 'type' => 'danger', 'filterable' => true],
             ],
             'finance_status' => [
                 ['value' => self::STATUS_PENDING, 'label' => '待结算', 'type' => 'warning', 'filterable' => true],
@@ -219,10 +224,26 @@ class ErpDict
             ],
             'listing_status' => [
                 ['value' => 'none', 'label' => '无需上架', 'type' => 'info', 'filterable' => true],
-                ['value' => 'need_photo', 'label' => '待补图片', 'type' => 'warning', 'filterable' => true],
-                ['value' => 'need_price', 'label' => '待补售价', 'type' => 'warning', 'filterable' => true],
-                ['value' => 'ready', 'label' => '资料完整', 'type' => 'primary', 'filterable' => true],
+                ['value' => 'need_photo', 'label' => '待拍照', 'type' => 'warning', 'filterable' => true],
+                ['value' => 'need_price', 'label' => '待商城定价', 'type' => 'warning', 'filterable' => true],
+                ['value' => 'need_material', 'label' => '待完善资料', 'type' => 'warning', 'filterable' => true],
+                ['value' => 'ready', 'label' => '待上架', 'type' => 'primary', 'filterable' => true],
+                ['value' => 'pending_shop', 'label' => '待商城运营完善', 'type' => 'warning', 'filterable' => true],
                 ['value' => 'listed', 'label' => '商城已上架', 'type' => 'success', 'filterable' => true],
+            ],
+            'stocktake_status' => [
+                ['value' => 'counting', 'label' => '盘点中', 'type' => 'primary', 'filterable' => true],
+                ['value' => 'pending_review', 'label' => '待复核', 'type' => 'warning', 'filterable' => true],
+                ['value' => 'completed', 'label' => '已完成', 'type' => 'success', 'filterable' => true],
+                ['value' => 'cancelled', 'label' => '已取消', 'type' => 'info', 'filterable' => true],
+            ],
+            'stocktake_result' => [
+                ['value' => 'pending', 'label' => '待盘', 'type' => 'info', 'filterable' => true],
+                ['value' => 'normal', 'label' => '正常', 'type' => 'success', 'filterable' => true],
+                ['value' => 'missing', 'label' => '盘亏', 'type' => 'danger', 'filterable' => true],
+                ['value' => 'surplus', 'label' => '盘盈', 'type' => 'warning', 'filterable' => true],
+                ['value' => 'location_mismatch', 'label' => '位置不符', 'type' => 'warning', 'filterable' => true],
+                ['value' => 'status_abnormal', 'label' => '状态异常', 'type' => 'danger', 'filterable' => true],
             ],
             'ledger_action' => self::mapOptions(self::getLedgerActionMap()),
             'cost_type' => self::mapOptions(self::getCostTypeMap()),

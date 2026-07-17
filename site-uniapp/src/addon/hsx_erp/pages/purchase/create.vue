@@ -16,8 +16,8 @@
                     <view class="form-row" @click="showPartyPicker = true">
                         <text class="form-label required">供应商</text>
                         <view class="form-input" :class="{ 'form-input--on': form.party_id }">
-                            <text :class="form.party_name ? 'input-text' : 'input-placeholder'">
-                                {{ form.party_name || '点击选择供应商' }}
+                            <text :class="form.party_id ? 'input-text' : 'input-placeholder'">
+                                {{ erpPartyDisplayName(form, '点击选择供应商') }}
                             </text>
                             <view v-if="form.party_id" class="inline-clear" @click.stop="clearParty">
                                 <u-icon name="close-circle-fill" color="#94a3b8" size="17" />
@@ -141,6 +141,7 @@
             role-type="supplier"
             v-model:party-id="form.party_id"
             v-model:party-name="form.party_name"
+            v-model:member-name="form.member_name"
         />
 
         <ErpWarehousePopup
@@ -182,6 +183,7 @@ import { scanErpCode } from '@/addon/hsx_erp/hooks/useErpScan'
 import ErpCatalogProductPopup from '@/addon/hsx_erp/components/ErpCatalogProductPopup.vue'
 import { confirmErpSensitiveAction } from '@/addon/hsx_erp/hooks/useErpSensitiveConfirm'
 import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
+import { erpPartyDisplayName } from '@/addon/hsx_erp/hooks/useErpPartyText'
 
 
 
@@ -202,7 +204,7 @@ const itemWarehousePicker = ref({
     location_name: '',
 })
 const form = ref({
-    party_id: 0, party_name: '', m_no: '',
+    party_id: 0, party_name: '', member_name: '', m_no: '',
     warehouse_id: 0, warehouse_name: '',
     location_id: 0, location_name: '',
     settle_mode: 'credit' as 'credit' | 'cash',
@@ -275,6 +277,7 @@ function removeDevice(idx: number) { form.value.items.splice(idx, 1) }
 function clearParty() {
     form.value.party_id = 0
     form.value.party_name = ''
+    form.value.member_name = ''
 }
 
 function newDeviceItem(imei = '') {
@@ -594,7 +597,7 @@ async function submit() {
     submitting.value = true
     const confirmed = await confirmErpSensitiveAction({
         title: '确认采购开单',
-        content: `供货商：${form.value.party_name || '-'}\n设备：${form.value.items.length} 台\n采购总额：¥${money(totalCost.value)}\n${form.value.settle_mode === 'cash' ? `将立即从所选账户付款 ¥${money(form.value.paid_amount)}，无需再次到财务确认。` : '本次全部挂账，后续到应付款结算。'}`,
+        content: `供货商：${erpPartyDisplayName(form.value)}\n设备：${form.value.items.length} 台\n采购总额：¥${money(totalCost.value)}\n${form.value.settle_mode === 'cash' ? `将立即从所选账户付款 ¥${money(form.value.paid_amount)}，无需再次到财务确认。` : '本次全部挂账，后续到应付款结算。'}`,
         confirmText: '确认开单',
     })
     if (!confirmed) {

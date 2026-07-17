@@ -56,6 +56,7 @@ return [
         'icon' => '/addon/hsx_erp/site-app/icon_07.png'
     ],
 
+
     [
         'name' => '采购退货',
         'key' => 'hsx_erp_purchase_return',
@@ -101,5 +102,13 @@ return [
         'sort' => 18,
         'page' => '/addon/hsx_erp/pages/serial_trace/list',
         'icon' => '/addon/hsx_erp/site-app/icon_09.png'
+    ],[
+        'name' => '库存盘点',
+        'key' => 'hsx_erp_stocktake',
+        'group' => 'hsx_erp',
+        'menu_key' => 'hsx_erp_stocktake',
+        'sort' => 19,
+        'page' => '/addon/hsx_erp/pages/stocktake/list',
+        'icon' => '/addon/hsx_erp/site-app/icon_11.png'
     ],
 ];

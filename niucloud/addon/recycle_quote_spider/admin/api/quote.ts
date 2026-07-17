@@ -52,6 +52,10 @@ export function getQuoteItemFilterOptions(params: Record<string, any>) {
     return request.get('recycle_quote_spider/item/filter-options', { params })
 }
 
+export function getQuoteWorkbenchSummary(params: Record<string, any>) {
+    return request.get('recycle_quote_spider/item/summary', { params })
+}
+
 export function editQuoteItem(id: number, params: Record<string, any>) {
     return request.put(`recycle_quote_spider/item/${id}`, params, { showErrorMessage: true })
 }
@@ -105,4 +109,8 @@ export function batchConfirmQuoteExcel(params: Record<string, any>) {
 
 export function getQuoteSyncLogList(params: Record<string, any>) {
     return request.get('recycle_quote_spider/log', { params })
+}
+
+export function getQuoteImportTaskList(params: Record<string, any>) {
+    return request.get('recycle_quote_spider/import', { params })
 }

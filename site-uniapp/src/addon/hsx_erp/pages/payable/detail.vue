@@ -7,7 +7,7 @@
             <template v-else>
                 <view class="form-card">
                     <view class="form-card-title">付款对象</view>
-                    <view class="party-name">{{ partyName || '-' }}</view>
+                    <view class="party-name">{{ erpPartyDisplayName({ party_name: partyName, member_name: memberName }) }}</view>
                     <ErpFinanceSourceSummary v-if="items[0]" :row="items[0]" direction="payable" />
                     <view class="summary-grid">
                         <view><text>应付合计</text><strong>¥{{ money(total.amount) }}</strong></view>
@@ -53,13 +53,14 @@ import ErpVoucherUploader from '@/addon/hsx_erp/components/ErpVoucherUploader.vu
 import ErpCopyText from '@/addon/hsx_erp/components/ErpCopyText.vue'
 import ErpPayConfirmModal from '@/addon/hsx_erp/components/ErpPayConfirmModal.vue'
 import ErpOffsetConfirmModal from '@/addon/hsx_erp/components/ErpOffsetConfirmModal.vue'
-const payableId=ref(0),partyId=ref(0), partyName=ref(''), sourceType=ref(''), purchaseOrderId=ref(0), items=ref<any[]>([]), loading=ref(false), error=ref(''),accounts=ref<any[]>([]),payVisible=ref(false),offsetVisible=ref(false)
+import { erpPartyDisplayName } from '@/addon/hsx_erp/hooks/useErpPartyText'
+const payableId=ref(0),partyId=ref(0), partyName=ref(''), memberName=ref(''), sourceType=ref(''), purchaseOrderId=ref(0), items=ref<any[]>([]), loading=ref(false), error=ref(''),accounts=ref<any[]>([]),payVisible=ref(false),offsetVisible=ref(false)
 const total=computed(()=>items.value.reduce((sum,row)=>({amount:sum.amount+Number(row.payable_amount||0),paid:sum.paid+Number(row.allocated_paid||0),remain:sum.remain+Number(row.allocated_remain||0)}),{amount:0,paid:0,remain:0}))
 const isNonDevicePay=computed(()=>String(sourceType.value||'').includes('operating_')||items.value.some((row:any)=>String(row.biz_scene||'').includes('operating_')||String(row.category_statement_group||'').includes('operating_')))
-onLoad((q:any)=>{payableId.value=Number(q?.id||q?.payable_id||0);partyId.value=Number(q?.party_id||0);partyName.value=decodeURIComponent(String(q?.party_name||''));sourceType.value=decodeURIComponent(String(q?.source_type||''));purchaseOrderId.value=Number(q?.purchase_order_id||0)})
+onLoad((q:any)=>{payableId.value=Number(q?.id||q?.payable_id||0);partyId.value=Number(q?.party_id||0);partyName.value=decodeURIComponent(String(q?.party_name||''));memberName.value=decodeURIComponent(String(q?.member_name||''));sourceType.value=decodeURIComponent(String(q?.source_type||''));purchaseOrderId.value=Number(q?.purchase_order_id||0)})
 onShow(()=>{load();loadAccounts()})
 async function loadAccounts(){try{const res:any=await getMobileCapitalAccounts();accounts.value=res?.data?.list||[]}catch(_){accounts.value=[]}}
-async function load(){loading.value=true;error.value='';try{if(!partyId.value&&payableId.value){const infoRes:any=await getMobilePayableInfo(payableId.value);const info=infoRes?.data||{};partyId.value=Number(info.party_id||0);partyName.value=String(info.party_name||'');sourceType.value=String(info.source_type||'');purchaseOrderId.value=Number(info.purchase_order_id||0)}if(!partyId.value)throw new Error('未找到该应付对应的付款对象');const params:any={page:1,limit:200,source_type:sourceType.value};if(payableId.value)params.payable_id=payableId.value;if(purchaseOrderId.value)params.purchase_order_id=purchaseOrderId.value;const res:any=await getMobilePayablePartyItems(partyId.value,params);items.value=res?.data?.data||[]}catch(e:any){error.value=e?.message||'应付详情加载失败'}finally{loading.value=false}}
+async function load(){loading.value=true;error.value='';try{if(payableId.value){const infoRes:any=await getMobilePayableInfo(payableId.value);const info=infoRes?.data||{};partyId.value=Number(info.party_id||partyId.value||0);partyName.value=String(info.party_name||partyName.value||'');memberName.value=String(info.member_name||memberName.value||'');sourceType.value=String(info.source_type||sourceType.value||'');purchaseOrderId.value=Number(info.purchase_order_id||purchaseOrderId.value||0)}if(!partyId.value)throw new Error('未找到该应付对应的付款对象');const params:any={page:1,limit:200,source_type:sourceType.value};if(payableId.value)params.payable_id=payableId.value;if(purchaseOrderId.value)params.purchase_order_id=purchaseOrderId.value;const res:any=await getMobilePayablePartyItems(partyId.value,params);items.value=res?.data?.data||[]}catch(e:any){error.value=e?.message||'应付详情加载失败'}finally{loading.value=false}}
 const money=(v:any)=>Number(v||0).toFixed(2)
 const identity=(row:any)=>[row.imei?`IMEI ${row.imei}`:'',row.asset_no?`资产号 ${row.asset_no}`:''].filter(Boolean).join(' · ')||'未关联设备'
 const statusLabel=(s:string)=>({pending:'待付款',partial:'部分付款',settled:'已结清',void:'已作废'}[s]||s||'-')

@@ -112,9 +112,10 @@
                         </div>
                     </template>
                 </el-table-column>
-                <el-table-column label="业务操作人" min-width="150">
+                <el-table-column label="业务 / 财务负责人" min-width="160">
                     <template #default="{ row }">
                         <div>{{ row.business_operator_name || row.salesman_name || '-' }}</div>
+                        <div v-if="row.task_assignee_name" class="mt-1 text-xs text-gray-500">财务 {{ row.task_assignee_name }}</div>
                         <div class="mt-1 text-xs text-gray-500"><ErpCopyText :value="row.receivable_no" title="应收单号" max-width="135px" /></div>
                     </template>
                 </el-table-column>
@@ -359,7 +360,8 @@ const receivableRoleFocus = [
 ]
 
 const route = useRoute()
-const activeStatus = ref('')
+const routeStatus = String(route.query.status || '')
+const activeStatus = ref(['', 'pending', 'partial', 'settled'].includes(routeStatus) ? routeStatus : '')
 const search = reactive({
     imei: '',
     party_id: null as number | null,

@@ -65,6 +65,10 @@ class ErpConsignmentInboundService extends BaseAdminService
         if (is_array($specJson)) {
             $specJson = json_encode($specJson, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '';
         }
+        $qcReport = $item['qc_report'] ?? '';
+        if (is_array($qcReport)) {
+            $qcReport = json_encode($qcReport, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '';
+        }
 
         $asset = ErpAsset::create([
             'site_id' => $this->site_id,
@@ -99,6 +103,8 @@ class ErpConsignmentInboundService extends BaseAdminService
             'retail_price' => $retailPrice,
             'image_urls' => $images,
             'quality_remark' => trim((string)($item['quality_remark'] ?? '')),
+            'qc_template_id' => max(0, (int)($item['qc_template_id'] ?? 0)),
+            'qc_report' => trim((string)$qcReport),
             'remark_public' => trim((string)($item['remark_public'] ?? '')),
             'remark_internal' => trim((string)($item['remark_internal'] ?? '')),
             'purchase_cost' => 0,

@@ -10,6 +10,14 @@ export function getTaskList(params: Record<string, any> = {}) {
     return request.get('recycle/stat/task/list', params)
 }
 
+export function getAssignableUsers(stageKey: string) {
+    return request.get('recycle/stat/task/assignable_users', { stage_key: stageKey })
+}
+
+export function assignTask(data: Record<string, any>) {
+    return request.put('recycle/stat/task/assign', data, { showSuccessMessage: true })
+}
+
 /** 认领 */
 export function claimTask(data: Record<string, any>) {
     return request.put('recycle/stat/task/claim', data, { showSuccessMessage: true })

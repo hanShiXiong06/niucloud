@@ -122,7 +122,7 @@ class ErpGoodsMetaService extends BaseAdminService
 
     private function phoneShopCategories(): array
     {
-        $service = 'addon\\phone_shop\\app\\service\\admin\\goods\\CategoryService';
+        $service = 'addon\phone_shop\app\service\admin\goods\CategoryService';
         if (!class_exists($service)) {
             return [];
         }
@@ -292,7 +292,9 @@ class ErpGoodsMetaService extends BaseAdminService
                 ['label' => '自动', 'value' => 'auto', 'desc' => '三级分类默认取二级+三级，二级分类取一级+二级'],
                 ['label' => '一级+二级', 'value' => 'level_1_2'],
                 ['label' => '二级+三级', 'value' => 'level_2_3'],
+                 ['label' => '三级+四级', 'value' => 'level_3_4'],
                 ['label' => '单独三级', 'value' => 'level_3'],
+                 ['label' => '单独四级', 'value' => 'level_4'],
                 ['label' => '完整路径', 'value' => 'full'],
             ],
             'spec_in_title' => true,

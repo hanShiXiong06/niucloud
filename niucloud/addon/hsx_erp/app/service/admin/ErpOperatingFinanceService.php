@@ -6,6 +6,7 @@ namespace addon\hsx_erp\app\service\admin;
 use addon\hsx_erp\app\model\ErpPayable;
 use addon\hsx_erp\app\model\ErpReceivable;
 use addon\hsx_erp\app\support\ErpIdempotency;
+use addon\hsx_erp\app\support\ErpPartyMemberNames;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 
@@ -101,6 +102,7 @@ class ErpOperatingFinanceService extends BaseAdminService
         if ($direction !== 'expense') {
             foreach ($this->queryRows(ErpReceivable::class, 'income', $where) as $row) $rows[] = $row;
         }
+        ErpPartyMemberNames::append($this->site_id, $rows);
         usort($rows, static fn(array $a, array $b): int => ((int)$b['occurred_at'] <=> (int)$a['occurred_at']) ?: ((int)$b['id'] <=> (int)$a['id']));
         $summary = [
             'income' => round(array_sum(array_map(static fn(array $row): float => $row['direction'] === 'income' ? (float)$row['amount'] : 0, $rows)), 2),
@@ -121,9 +123,10 @@ class ErpOperatingFinanceService extends BaseAdminService
         $query = $model::where([['site_id', '=', $this->site_id], ['source_type', '=', 'hsx_erp.operating_' . $direction]]);
         if (!empty($where['status'])) $query->where('status', '=', (string)$where['status']);
         if (!empty($where['category_key'])) $query->where('category_key', '=', (string)$where['category_key']);
+        if (!empty($where['party_id'])) $query->where('party_id', '=', (int)$where['party_id']);
         if (!empty($where['keyword'])) {
             $keyword = trim((string)$where['keyword']);
-            $query->whereLike('source_no|party_name|category_name|business_reason|remark', '%' . $keyword . '%');
+            $query->whereLike('source_no|business_reason|remark', '%' . $keyword . '%');
         }
         if (!empty($where['start_at'])) $query->where('occurred_at', '>=', (int)$where['start_at']);
         if (!empty($where['end_at'])) $query->where('occurred_at', '<=', (int)$where['end_at']);
@@ -136,4 +139,5 @@ class ErpOperatingFinanceService extends BaseAdminService
         unset($row);
         return $rows;
     }
+
 }

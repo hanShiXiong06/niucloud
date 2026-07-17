@@ -5,7 +5,9 @@ namespace addon\hsx_erp\app\adminapi\controller;
 
 use addon\hsx_erp\app\model\ErpParty;
 use addon\hsx_erp\app\model\ErpPartyMember;
+use addon\hsx_erp\app\service\admin\ErpCustomerCreditService;
 use addon\hsx_erp\app\service\admin\ErpLedgerService;
+use addon\hsx_erp\app\support\ErpPartyMemberNames;
 use app\model\member\Member;
 use core\base\BaseAdminController;
 use core\exception\CommonException;
@@ -26,7 +28,17 @@ class ErpCounterparty extends BaseAdminController
         $keyword = trim((string)$params['keyword']);
         $query = ErpParty::where([['site_id', '=', $this->siteId()], ['status', '=', 1]]);
         if ($keyword !== '') {
-            $query->whereLike('party_name|contact_name|contact_mobile|m_no', '%' . $keyword . '%');
+            $memberPartyIds = ctype_digit($keyword)
+                ? ErpPartyMember::where([
+                    ['site_id', '=', $this->siteId()],
+                    ['member_id', '=', (int)$keyword],
+                    ['status', '=', 1],
+                ])->column('party_id')
+                : [];
+            $query->where(function ($subQuery) use ($keyword, $memberPartyIds) {
+                $subQuery->whereLike('party_name|contact_name|contact_mobile|m_no', '%' . $keyword . '%');
+                if ($memberPartyIds !== []) $subQuery->whereOr('id', 'in', $memberPartyIds);
+            });
         }
         if (!empty($params['role_type']) && (string)$params['role_type'] !== 'all') {
             $role = $this->normalizeRole((string)$params['role_type']);
@@ -34,13 +46,18 @@ class ErpCounterparty extends BaseAdminController
         }
         $page = max(1, (int)$params['page']);
         $limit = max(10, min(50, (int)$params['limit']));
-        $query->field('id,party_no,party_name,party_type,role_flags,group_keys,contact_name,contact_mobile,m_no')->order('id desc');
+        $query->field('id,party_no,party_name,party_type,role_flags,group_keys,contact_name,contact_mobile,m_no,credit_policy,credit_limit,credit_remark,credit_update_uid,credit_update_name,credit_update_at')->order('id desc');
         if ((int)$params['paginate'] !== 1) {
-            return success(array_map(fn($row) => $this->formatRow($row), $query->limit(50)->select()->toArray()));
+            $rows = $query->limit(50)->select()->toArray();
+            ErpPartyMemberNames::append($this->siteId(), $rows, 'id');
+            $profiles = (new ErpCustomerCreditService())->profiles(array_column($rows, 'id'));
+            return success(array_map(fn($row) => $this->formatRow($row, $profiles[(int)$row['id']] ?? []), $rows));
         }
         $result = $query->paginate(['list_rows' => $limit, 'page' => $page])->toArray();
         $rows = (array)($result['data'] ?? []);
-        $result['data'] = array_map(fn($row) => $this->formatRow($row), $rows);
+        ErpPartyMemberNames::append($this->siteId(), $rows, 'id');
+        $profiles = (new ErpCustomerCreditService())->profiles(array_column($rows, 'id'));
+        $result['data'] = array_map(fn($row) => $this->formatRow($row, $profiles[(int)$row['id']] ?? []), $rows);
 
         return success($result);
     }
@@ -102,6 +119,19 @@ class ErpCounterparty extends BaseAdminController
         return success($this->formatRow($party->toArray()));
     }
 
+    public function credit(int $id)
+    {
+        return success((new ErpCustomerCreditService())->profile($id));
+    }
+
+    public function updateCredit(int $id)
+    {
+        $params = $this->request->params([
+            ['credit_policy', 'inherit'], ['credit_limit', 0], ['credit_remark', ''],
+        ]);
+        return success((new ErpCustomerCreditService())->updatePolicy($id, $params));
+    }
+
     public function memberOptions()
     {
         $keyword = trim((string)$this->request->param('keyword', ''));
@@ -120,7 +150,10 @@ class ErpCounterparty extends BaseAdminController
             $query->whereIn('member_id', $memberIds);
         }
         if ($keyword !== '') {
-            $query->whereLike('member_no|username|nickname|mobile', '%' . $keyword . '%');
+            $query->where(function ($subQuery) use ($keyword) {
+                $subQuery->whereLike('member_no|username|nickname|mobile', '%' . $keyword . '%');
+                if (ctype_digit($keyword)) $subQuery->whereOr('member_id', '=', (int)$keyword);
+            });
         }
         $baseQuery = $query->field('member_id,member_no,username,nickname,mobile,status')->order('member_id desc');
         $pageResult = $paginate ? $baseQuery->paginate(['list_rows' => $limit, 'page' => $page])->toArray() : null;
@@ -138,11 +171,12 @@ class ErpCounterparty extends BaseAdminController
         if (!empty($partyIds)) {
             $parties = ErpParty::where([['site_id', '=', $this->siteId()]])
                 ->whereIn('id', $partyIds)
-                ->field('id,party_name,m_no,role_flags,group_keys')
+                ->field('id,party_name,m_no,role_flags,group_keys,contact_name,contact_mobile,credit_policy,credit_limit,credit_remark,credit_update_uid,credit_update_name,credit_update_at')
                 ->select()
                 ->toArray();
             $partyMap = array_column($parties, null, 'id');
         }
+        $creditProfiles = (new ErpCustomerCreditService())->profiles($partyIds);
         foreach ($members as &$member) {
             $relation = $relationMap[$member['member_id']] ?? [];
             $partyId = (int)($relation['party_id'] ?? 0);
@@ -154,6 +188,7 @@ class ErpCounterparty extends BaseAdminController
             $member['m_no'] = (string)($party['m_no'] ?? '');
             $member['role_flags'] = $this->csvValues((string)($party['role_flags'] ?? ''));
             $member['group_keys'] = $this->csvValues((string)($party['group_keys'] ?? ''));
+            $member['credit_profile'] = $creditProfiles[$partyId] ?? null;
         }
         unset($member);
         if (!$paginate) return success($members);
@@ -319,30 +354,35 @@ class ErpCounterparty extends BaseAdminController
     private function formatContact(array $member, array $party, bool $autoCreated): array
     {
         $memberName = (string)($member['nickname'] ?: $member['username'] ?: ('会员#' . ($member['member_id'] ?? 0)));
+        $partyId = (int)($party['id'] ?? 0);
         return [
             'member_id' => (int)($member['member_id'] ?? 0),
             'member_name' => $memberName,
             'mobile' => (string)($member['mobile'] ?? ''),
-            'party_id' => (int)($party['id'] ?? 0),
+            'party_id' => $partyId,
             'party_name' => (string)($party['party_name'] ?? ''),
             'counterparty_id' => (int)($party['id'] ?? 0),
             'counterparty_name' => (string)($party['party_name'] ?? ''),
             'm_no' => (string)($party['m_no'] ?? ''),
             'role_flags' => $this->csvValues((string)($party['role_flags'] ?? '')),
             'group_keys' => $this->csvValues((string)($party['group_keys'] ?? '')),
+            'credit_profile' => $partyId > 0 ? (new ErpCustomerCreditService())->profile($partyId) : null,
             'auto_created' => $autoCreated,
         ];
     }
 
-    private function formatRow(array $row): array
+    private function formatRow(array $row, array $creditProfile = []): array
     {
         $id = (int)$row['id'];
+        if ($creditProfile === [] && $id > 0) $creditProfile = (new ErpCustomerCreditService())->profile($id);
         return [
             'id' => $id,
             'member_id' => $id,
             'party_id' => $id,
             'party_no' => (string)($row['party_no'] ?? ''),
             'party_name' => (string)($row['party_name'] ?? ''),
+            'member_name' => (string)($row['member_name'] ?? ''),
+            'member_names' => (array)($row['member_names'] ?? []),
             'name' => (string)($row['party_name'] ?? ''),
             'party_type' => (string)($row['party_type'] ?? 'customer'),
             'role_flags' => $this->csvValues((string)($row['role_flags'] ?? '')),
@@ -351,6 +391,10 @@ class ErpCounterparty extends BaseAdminController
             'contact_mobile' => (string)($row['contact_mobile'] ?? ''),
             'mobile' => (string)($row['contact_mobile'] ?? ''),
             'm_no' => (string)($row['m_no'] ?? ''),
+            'credit_policy' => (string)($row['credit_policy'] ?? 'inherit'),
+            'credit_limit' => (float)($row['credit_limit'] ?? 0),
+            'credit_remark' => (string)($row['credit_remark'] ?? ''),
+            'credit_profile' => $creditProfile,
         ];
     }
 }

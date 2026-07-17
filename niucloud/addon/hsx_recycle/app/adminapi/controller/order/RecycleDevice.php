@@ -365,7 +365,8 @@ class RecycleDevice extends BaseAdminController
             ['final_price', 0],
             ['sell_price', ''],
             ['remark', ''],
-            ['action', 'check']  // 新增：check=完成质检，save_draft=暂存质检
+            ['action', 'check'],  // 新增：check=完成质检，save_draft=暂存质检
+            ['next_assignee_uid', 0]
         ]);
 
         // 参数验证
@@ -383,7 +384,7 @@ class RecycleDevice extends BaseAdminController
             $checkData['check_template_id'] = $data['check_data']['check_template_id'];
         }
 
-        return success($this->service->completeCheck($id, $checkData, $data['remark'], $data['action']));
+        return success($this->service->completeCheck($id, $checkData, $data['remark'], $data['action'], (int)$data['next_assignee_uid']));
     }
 
     /**
@@ -406,7 +407,8 @@ class RecycleDevice extends BaseAdminController
             ['refurbishment_assignee_uid', 0],
             ['refurbishment_reason', ''],
             ['refurbishment_items', []],
-            ['refurbishment_estimated_cost', 0]
+            ['refurbishment_estimated_cost', 0],
+            ['next_assignee_uid', 0]
         ];
         $data = $this->request->params($defaults);
         $requestData = $this->request->param();
@@ -435,6 +437,7 @@ class RecycleDevice extends BaseAdminController
             'refurbishment_reason' => $data['refurbishment_reason'],
             'refurbishment_items' => $data['refurbishment_items'],
             'refurbishment_estimated_cost' => $data['refurbishment_estimated_cost'],
+            'next_assignee_uid' => (int)$data['next_assignee_uid'],
         ]));
     }
 

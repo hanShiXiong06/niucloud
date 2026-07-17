@@ -4,8 +4,11 @@ declare(strict_types=1);
 namespace addon\hsx_recycle\app\service\admin\order;
 
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
+use addon\hsx_recycle\app\dict\stat\RecycleStageDict;
+use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
 use addon\hsx_recycle\app\service\admin\dashboard\RecycleDashboardFilterService;
+use addon\hsx_recycle\app\service\admin\stat\TaskService;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderFlowService;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderNotifyService;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderService;
@@ -80,6 +83,17 @@ class RecycleOrderService extends BaseAdminService
     public function sign(int $orderId, array $data): bool
     {
         $result = $this->execute($orderId, 'sign', $data);
+        if (!empty($result['success'])) {
+            try {
+                $deviceIds = RecycleDevice::where([['site_id', '=', $this->site_id], ['order_id', '=', $orderId]])->column('id');
+                $taskService = new TaskService();
+                foreach ($deviceIds as $deviceId) {
+                    $taskService->assignPreferredOrDefault((int)$deviceId, RecycleStageDict::STAGE_CHECK, (int)($data['next_assignee_uid'] ?? 0));
+                }
+            } catch (\Throwable $e) {
+                Log::warning('签收后分配质检任务失败', ['order_id' => $orderId, 'message' => $e->getMessage()]);
+            }
+        }
         return $result['success'];
     }
 
@@ -247,6 +261,13 @@ class RecycleOrderService extends BaseAdminService
 
         $coreService = new CoreRecycleOrderService();
         $order = $coreService->create($data);
+
+        try {
+            TaskService::forSite($this->site_id, (int)$this->uid, $this->getOperatorName())
+                ->assignPreferredOrDefault((int)$order->id, RecycleStageDict::STAGE_SIGN, (int)($data['next_assignee_uid'] ?? 0));
+        } catch (\Throwable $e) {
+            Log::warning('创建订单后分配签收任务失败', ['order_id' => (int)$order->id, 'message' => $e->getMessage()]);
+        }
 
         $signed = false;
         if (!empty($data['sign_after_create']) && !empty($data['devices']) && is_array($data['devices'])) {

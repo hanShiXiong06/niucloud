@@ -31,11 +31,11 @@ export const INVENTORY_STATUS_MAP: Record<string, string> = {
 
 export const ERP_DICT_FALLBACK: ErpDictMap = {
     asset_status: Object.entries(INVENTORY_STATUS_MAP)
-        .filter(([value]) => ['in_stock', 'sold', 'returned', 'void'].includes(value))
+        .filter(([value]) => ['in_stock', 'sold', 'returned', 'void', 'lost'].includes(value))
         .map(([value, label]) => ({
             value,
             label,
-            type: ({ in_stock: 'success', sold: 'primary', returned: 'warning', void: 'info' } as Record<string, string>)[value] || 'info',
+            type: ({ in_stock: 'success', sold: 'primary', returned: 'warning', void: 'info', lost: 'error' } as Record<string, string>)[value] || 'info',
             filterable: true
         })),
     purchase_finance_status: [
@@ -43,6 +43,20 @@ export const ERP_DICT_FALLBACK: ErpDictMap = {
         { value: 'partial', label: '部分付款', type: 'primary', filterable: true },
         { value: 'settled', label: '已结清', type: 'success', filterable: true },
         { value: 'void', label: '已撤销', type: 'info', filterable: true }
+    ],
+    stocktake_status: [
+        { value: 'counting', label: '盘点中', type: 'primary', filterable: true },
+        { value: 'pending_review', label: '待复核', type: 'warning', filterable: true },
+        { value: 'completed', label: '已完成', type: 'success', filterable: true },
+        { value: 'cancelled', label: '已取消', type: 'info', filterable: true }
+    ],
+    stocktake_result: [
+        { value: 'pending', label: '待盘', type: 'info', filterable: true },
+        { value: 'normal', label: '正常', type: 'success', filterable: true },
+        { value: 'missing', label: '盘亏', type: 'error', filterable: true },
+        { value: 'surplus', label: '盘盈', type: 'warning', filterable: true },
+        { value: 'location_mismatch', label: '位置不符', type: 'warning', filterable: true },
+        { value: 'status_abnormal', label: '状态异常', type: 'error', filterable: true }
     ],
     purchase_order_status: [
         { value: 'completed', label: '已完成', type: 'success', filterable: true },
@@ -78,9 +92,11 @@ export const ERP_DICT_FALLBACK: ErpDictMap = {
     ],
     listing_status: [
         { value: 'none', label: '无需上架', type: 'info', filterable: true },
-        { value: 'need_photo', label: '待补图片', type: 'warning', filterable: true },
-        { value: 'need_price', label: '待补售价', type: 'warning', filterable: true },
-        { value: 'ready', label: '资料完整', type: 'primary', filterable: true },
+        { value: 'need_photo', label: '待拍照', type: 'warning', filterable: true },
+        { value: 'need_price', label: '待商城定价', type: 'warning', filterable: true },
+        { value: 'need_material', label: '待完善资料', type: 'warning', filterable: true },
+        { value: 'ready', label: '待上架', type: 'primary', filterable: true },
+        { value: 'pending_shop', label: '待商城运营完善', type: 'warning', filterable: true },
         { value: 'listed', label: '商城已上架', type: 'success', filterable: true }
     ]
 }

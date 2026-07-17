@@ -38,7 +38,7 @@
 
                     <view class="field">
                         <text class="label">客户</text>
-                        <text class="value">{{ order.party_name || '-' }}</text>
+                        <text class="value">{{ erpPartyDisplayName(order) }}</text>
                     </view>
                     <view class="field">
                         <text class="label">销售渠道</text>
@@ -138,6 +138,7 @@ import { cancelMobileSale, cancelMobileSaleItem, getMobileSaleInfo } from '@/add
 import { erpTimeLine, formatErpTime } from '@/addon/hsx_erp/hooks/useErpTime'
 import { erpNetSaleAmount, erpSaleCompensationAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
 import { erpDeviceIdentityLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
+import { erpPartyDisplayName } from '@/addon/hsx_erp/hooks/useErpPartyText'
 import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
 
 const order = ref<any>(null)

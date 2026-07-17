@@ -200,7 +200,10 @@
 
     <template #footer>
       <div class="cdd-footer">
-        <span class="cdd-footer__info">已填质检项：{{ checkedCount }}</span>
+        <div class="cdd-footer__handoff">
+          <span class="cdd-footer__info">已填质检项：{{ checkedCount }}</span>
+          <NextAssigneeSelect v-model="nextAssigneeUid" stage-key="price" label="下一步 · 定价负责人" compact />
+        </div>
         <div class="cdd-footer__btns">
           <el-button class="cdd-footer__cancel" size="large" @click="handleCancel">取消</el-button>
           <el-button v-permission="'recycle_device_batch_return'" class="cdd-return-btn" type="danger" plain size="large" :disabled="savingDraft || submitting" @click="handleReturnDevice">退回设备</el-button>
@@ -233,6 +236,7 @@ import { useCameraUpload } from './composables/useCameraUpload'
 import CheckTemplateSchemaPanel from './CheckTemplateSchemaPanel.vue'
 import CheckTemplateMobilePanel from './CheckTemplateMobilePanel.vue'
 import CheckTemplateSelector from './CheckTemplateSelector.vue'
+import NextAssigneeSelect from '@/addon/hsx_recycle/components/task/NextAssigneeSelect.vue'
 import { resolveCheckFieldValue } from '@/addon/hsx_recycle/utils/checkValue'
 
 interface DeviceInfo {
@@ -263,6 +267,7 @@ const props = withDefaults(
 )
 
 const emit = defineEmits(['update:visible', 'confirm', 'cancel', 'save-draft', 'return-device'])
+const nextAssigneeUid = ref(0)
 
 const checkSchemaLoading = ref(false)
 const checkTemplateLoading = ref(false)
@@ -858,11 +863,13 @@ function buildSubmitPayload(action: 'check' | 'save_draft') {
     system_version: deviceForm.system_version,
     warranty_info: deviceForm.warranty_info,
     capacity: deviceForm.capacity,
-    color: deviceForm.color
+    color: deviceForm.color,
+    next_assignee_uid: action === 'check' ? nextAssigneeUid.value : 0
   }
 }
 
 const initializeFormFromDevice = (device: DeviceInfo) => {
+  nextAssigneeUid.value = 0
   activationLockInfo.value = null
   mdmInfo.value = null
   isEditingDeviceInfo.value = false
@@ -3295,6 +3302,7 @@ $cdd-warning: #d97706;
   background: #eff6ff;
   color: #1d4ed8;
 }
+.cdd-footer__handoff { display: flex; align-items: center; gap: 14px; min-width: 0; }
 
 .cdd-footer__btns {
   .el-button {

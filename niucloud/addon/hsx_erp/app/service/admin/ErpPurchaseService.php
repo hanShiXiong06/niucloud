@@ -16,6 +16,7 @@ use addon\hsx_erp\app\model\ErpPurchaseReturnItem;
 use addon\hsx_erp\app\model\ErpPurchaseReturnOrder;
 use addon\hsx_erp\app\model\ErpWarehouse;
 use addon\hsx_erp\app\support\ErpIdempotency;
+use addon\hsx_erp\app\support\ErpPartyMemberNames;
 use addon\hsx_erp\app\support\ErpPurchaseReturnPolicy;
 use app\model\member\Member;
 use core\base\BaseAdminService;
@@ -190,6 +191,7 @@ class ErpPurchaseService extends BaseAdminService
         ])->toArray();
         $this->appendPurchasePaymentSummary($page['data']);
         $this->appendPurchaseReturnSummary($page['data']);
+        ErpPartyMemberNames::append($this->site_id, $page['data']);
         return $page;
     }
 
@@ -436,6 +438,9 @@ class ErpPurchaseService extends BaseAdminService
             $item['return_flow'] = ErpPurchaseReturnPolicy::assess($item, $amount, $paid);
         }
         unset($item);
+        $partyRows = [$order];
+        ErpPartyMemberNames::append($this->site_id, $partyRows);
+        $order = $partyRows[0];
         return $order;
     }
 
@@ -637,7 +642,21 @@ class ErpPurchaseService extends BaseAdminService
                 $catalog = $catalogProductId > 0
                     ? (new ErpGoodsCatalogService())->productSnapshot($catalogProductId)
                     : ['category_name' => '', 'category_path' => '', 'product_name' => ''];
-                $modelName = trim((string)($item['model'] ?? '')) ?: (string)$catalog['product_name'];
+                $modelName = trim((string)($item['model'] ?? ''));
+                if ($catalogProductId > 0) {
+                    $catalogProductName = trim((string)($catalog['product_name'] ?? ''));
+                    $catalogSeriesName = trim((string)($catalog['series_name'] ?? ''));
+                    $catalogBrandName = trim((string)($catalog['brand_name'] ?? ''));
+                    $seriesTitles = array_values(array_filter(array_unique([
+                        $catalogSeriesName,
+                        trim($catalogBrandName . ' ' . $catalogSeriesName),
+                    ])));
+                    // 兼容旧版 PC：旧页面会把已经选中的叶子型号错误重建成“品牌 + 系列”。
+                    // 服务端以目录叶子为准兜底，但保留“叶子型号 + 规格”的合法自定义名称。
+                    if ($modelName === '' || in_array($modelName, $seriesTitles, true)) {
+                        $modelName = $catalogProductName;
+                    }
+                }
                 $categoryName = $catalogProductId > 0 ? (string)$catalog['category_name'] : trim((string)($item['category_name'] ?? ''));
                 $categoryPath = $catalogProductId > 0 ? (string)$catalog['category_path'] : $this->normalizeCategoryPath($item['category_path'] ?? []);
                 $purchaseItem = ErpPurchaseItem::create([
@@ -663,6 +682,8 @@ class ErpPurchaseService extends BaseAdminService
                     'estimate_sale_price' => $estimateSalePrice,
                     'image_urls' => trim((string)($item['image_urls'] ?? '')),
                     'quality_remark' => trim((string)($item['quality_remark'] ?? '')),
+                    'qc_template_id' => max(0, (int)($item['qc_template_id'] ?? 0)),
+                    'qc_report' => $this->normalizeJsonSnapshot($item['qc_report'] ?? []),
                     'purchase_cost' => $cost,
                     'adjust_cost' => 0,
                     'total_cost' => $cost,
@@ -706,6 +727,8 @@ class ErpPurchaseService extends BaseAdminService
                     'retail_price' => round((float)($item['retail_price'] ?? 0), 2),
                     'image_urls' => trim((string)($item['image_urls'] ?? '')),
                     'quality_remark' => trim((string)($item['quality_remark'] ?? '')),
+                    'qc_template_id' => max(0, (int)($item['qc_template_id'] ?? 0)),
+                    'qc_report' => $this->normalizeJsonSnapshot($item['qc_report'] ?? []),
                     'remark_public' => trim((string)($item['remark_public'] ?? '')),
                     'remark_internal' => trim((string)($item['remark_internal'] ?? '')),
                     'purchase_cost' => $cost,
@@ -1281,6 +1304,19 @@ class ErpPurchaseService extends BaseAdminService
             return '';
         }
         return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '';
+    }
+
+    private function normalizeJsonSnapshot($value): string
+    {
+        if (is_string($value)) {
+            $value = trim($value);
+            if ($value === '') return '';
+            json_decode($value, true);
+            return json_last_error() === JSON_ERROR_NONE ? $value : json_encode(['raw' => $value], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
+        return is_array($value)
+            ? (json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '')
+            : '';
     }
 
     private function normalizeCategoryPath(mixed $path): string

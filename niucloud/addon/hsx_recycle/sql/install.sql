@@ -1282,12 +1282,36 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_task_claim` (
   `stage_key` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '' COMMENT '环节标识',
   `assignee_uid` int NOT NULL DEFAULT 0 COMMENT '认领人UID',
   `assignee_name` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '' COMMENT '认领人名称快照',
+  `assigner_uid` int NOT NULL DEFAULT 0 COMMENT '分配人UID',
+  `assigner_name` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '' COMMENT '分配人名称快照',
+  `assignment_mode` varchar(20) NOT NULL DEFAULT 'claim' COMMENT 'claim认领/assign指定/transfer转交',
   `claimed_at` int NOT NULL DEFAULT 0 COMMENT '认领时间',
+  `assigned_at` int NOT NULL DEFAULT 0 COMMENT '最近分配时间',
   `update_time` int NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `uk_site_device_stage` (`site_id`,`device_id`,`stage_key`) USING BTREE,
   KEY `assignee` (`site_id`,`assignee_uid`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci ROW_FORMAT=DYNAMIC COMMENT='回收任务认领(责任到人)';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_task_assignment_log` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `device_id` int NOT NULL DEFAULT 0 COMMENT '设备ID，签收环节为订单ID',
+  `stage_key` varchar(50) NOT NULL DEFAULT '' COMMENT '环节标识',
+  `from_uid` int NOT NULL DEFAULT 0 COMMENT '原责任人UID',
+  `from_name` varchar(50) NOT NULL DEFAULT '' COMMENT '原责任人名称',
+  `to_uid` int NOT NULL DEFAULT 0 COMMENT '新责任人UID',
+  `to_name` varchar(50) NOT NULL DEFAULT '' COMMENT '新责任人名称',
+  `operator_uid` int NOT NULL DEFAULT 0 COMMENT '操作人UID',
+  `operator_name` varchar(50) NOT NULL DEFAULT '' COMMENT '操作人名称',
+  `assignment_mode` varchar(20) NOT NULL DEFAULT 'assign' COMMENT 'claim/assign/transfer',
+  `event_id` varchar(100) NOT NULL DEFAULT '' COMMENT '分配事件唯一标识',
+  `create_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_event` (`site_id`,`event_id`),
+  KEY `idx_task` (`site_id`,`device_id`,`stage_key`,`create_at`),
+  KEY `idx_assignee` (`site_id`,`to_uid`,`create_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='回收任务分配与转交日志';
 
 -- 0.0.7 每日维度汇总(型号/分类/成色/来源),分析页读它，抗千万级
 CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_stat_daily_dim` (

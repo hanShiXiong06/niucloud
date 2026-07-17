@@ -50,9 +50,13 @@
             <el-table-column label="身份" min-width="120">
                 <template #default="{ row }"><el-tag v-for="role in row.role_flags || []" :key="role" size="small" class="mr-1">{{ roleLabel(role) }}</el-tag></template>
             </el-table-column>
-            <el-table-column label="操作" width="110" fixed="right">
+            <el-table-column label="信用" width="110">
+                <template #default="{ row }"><el-tag v-if="row.credit_profile?.policy !== 'normal' || row.credit_profile?.has_outstanding" size="small" :type="row.credit_profile?.can_sale === false ? 'danger' : 'warning'">{{ row.credit_profile?.policy_label || '有欠款' }}</el-tag><span v-else class="text-gray-400">正常</span></template>
+            </el-table-column>
+            <el-table-column label="操作" width="150" fixed="right">
                 <template #default="{ row }">
                     <el-button type="primary" link size="small" @click.stop="openManage(row)">管理</el-button>
+                    <el-button v-if="(row.role_flags || []).includes('sale_customer')" type="warning" link size="small" @click.stop="openCredit(row)">信用</el-button>
                     <el-button type="primary" link size="small" @click="selectRow(row)">选择</el-button>
                 </template>
             </el-table-column>
@@ -84,6 +88,7 @@
         <el-form label-width="86px"><el-form-item label="主体名称"><el-input v-model="manageForm.party_name" /></el-form-item><el-form-item label="联系电话"><el-input v-model="manageForm.contact_mobile" /></el-form-item><el-form-item label="多重身份"><el-checkbox-group v-model="manageForm.role_flags"><el-checkbox v-for="item in roleOptions" :key="item.value" :label="item.value">{{ item.label }}</el-checkbox></el-checkbox-group></el-form-item><el-form-item label="业务分组"><el-select v-model="manageForm.group_keys" multiple allow-create filterable default-first-option placeholder="选择或输入分组"><el-option label="重点客户" value="key_customer" /><el-option label="长期合作" value="long_term" /><el-option label="整备服务" value="refurbish" /></el-select></el-form-item></el-form>
         <template #footer><el-button @click="manageVisible=false">取消</el-button><el-button type="primary" :loading="manageSaving" @click="saveManage">保存</el-button></template>
     </el-dialog>
+    <ErpPartyCreditDialog v-model="creditVisible" :party="creditParty" @saved="onCreditSaved" />
 </template>
 
 <script lang="ts">
@@ -97,6 +102,7 @@ import { ref, computed, useAttrs } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
+import ErpPartyCreditDialog from '@/addon/hsx_erp/components/ErpPartyCreditDialog.vue'
 
 interface Party {
     id: number
@@ -105,6 +111,7 @@ interface Party {
     contact_mobile?: string
     m_no?: string
     role_flags?: string[]
+    credit_profile?: any
 }
 
 const attrs = useAttrs()
@@ -142,6 +149,8 @@ const total = ref(0)
 const quickName = ref('')
 const manageVisible = ref(false)
 const manageSaving = ref(false)
+const creditVisible = ref(false)
+const creditParty = ref<any>(null)
 const manageForm = ref<any>({ id: 0, party_name: '', contact_mobile: '', role_flags: [], group_keys: [] })
 const roleOptions = [{label:'采购供货商',value:'purchase_supplier'},{label:'销售客户',value:'sale_customer'},{label:'回收客户',value:'recycle_customer'},{label:'整备服务商',value:'refurbish_provider'}]
 const activeRoleFilter = ref('all')
@@ -210,6 +219,8 @@ function handleClear() {
 }
 
 function openManage(row: Party) { manageForm.value = { ...row, role_flags: [...(row.role_flags || [])], group_keys: [...((row as any).group_keys || [])] }; manageVisible.value = true }
+function openCredit(row: Party) { creditParty.value = row; creditVisible.value = true }
+function onCreditSaved(profile: any) { if (creditParty.value) creditParty.value.credit_profile = profile }
 async function saveManage() {
     if (!manageForm.value.party_name || !manageForm.value.role_flags.length) return ElMessage.warning('请填写名称并至少选择一个身份')
     manageSaving.value = true

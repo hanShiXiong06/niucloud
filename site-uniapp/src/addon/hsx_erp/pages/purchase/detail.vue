@@ -19,7 +19,7 @@
                     </view>
                     <view class="field">
                         <text class="label">供货方</text>
-                        <text class="value">{{ order.party_name }}</text>
+                        <text class="value">{{ erpPartyDisplayName(order) }}</text>
                     </view>
                     <view v-if="order.m_no" class="field">
                         <text class="label">M号</text>
@@ -161,6 +161,7 @@ import { onLoad, onShow } from '@dcloudio/uni-app'
 import { getMobilePurchaseInfo } from '@/addon/hsx_erp/api/erp'
 import { erpTimeLine, formatErpTime } from '@/addon/hsx_erp/hooks/useErpTime'
 import { erpSpecLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
+import { erpPartyDisplayName } from '@/addon/hsx_erp/hooks/useErpPartyText'
 import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
 import { ERP_DICT_FALLBACK, dictLabel, dictType, loadErpDicts, type ErpDictMap } from '@/addon/hsx_erp/api/dict'
 

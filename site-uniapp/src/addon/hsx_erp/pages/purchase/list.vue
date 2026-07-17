@@ -2,15 +2,17 @@
     <view class="erp-page">
         <ErpListHeader
             v-model="keyword"
-            v-model:activeTab="activeTab"
-            placeholder="型号/IMEI/采购单号/供应商"
-            :tabs="tabs"
+            placeholder="型号 / IMEI / 供应商"
             :show-filter="true"
             :filter-count="filterCount"
+            :compact-mp="true"
             @search="handleSearch"
-            @tab-change="onTab"
             @filter="filterVisible = true"
-        />
+        >
+            <template #below>
+                <ErpQuickFilterBar :items="quickFilters" @change="onQuickFilter" />
+            </template>
+        </ErpListHeader>
         <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true"
             :default-page-size="15" :paging-style="pagingStyle">
             <template #empty><u-empty mode="list" text="暂无采购记录" /></template>
@@ -25,11 +27,10 @@
                             <view class="batch-main">
                                 <view class="batch-title-line">
                                     <text class="batch-dot" :class="`batch-dot--${batch.tone}`"></text>
-                                    <text class="batch-title">{{ batch.party_name || '未设置供应商' }}</text>
+                                    <text class="batch-title">{{ erpPartyDisplayName(batch, '未设置供应商') }}</text>
                                     <text class="batch-count">{{ batch.rows.length }} 台</text>
                                 </view>
                                 <text class="batch-machine">{{ batchMachineSummary(batch) }}</text>
-                                <text v-if="batch.m_no" class="batch-machine">M号 {{ batch.m_no }}</text>
                             </view>
                             <view class="batch-toggle">
                                 <text>{{ isBatchExpanded(batch.key) ? '收起' : '展开' }}</text>
@@ -46,14 +47,7 @@
                             <text class="batch-payment-text">采购款：已付 ¥{{ money(batch.paid_amount) }} · 未付 ¥{{ money(batch.unpaid_amount) }}</text>
                         </view>
                         <view class="batch-meta">
-                            <view class="batch-number">
-                                <text class="batch-number__label">采购单号</text>
-                                <text class="batch-number__value">{{ batch.purchase_no }}</text>
-                            </view>
-                            <text class="batch-time">采购于 {{ formatErpTime(batch.rows[0]?.purchase_at) }}</text>
-                        </view>
-                        <view class="batch-meta">
-                            <text class="batch-time">来源 {{ batch.origin_name || 'ERP采购' }}{{ batch.origin_plugin_name ? ' · ' + batch.origin_plugin_name : '' }}</text>
+                            <text class="batch-time">{{ formatErpTime(batch.rows[0]?.purchase_at) }} · {{ batch.origin_name || 'ERP采购' }}{{ batch.origin_plugin_name ? ' · ' + batch.origin_plugin_name : '' }}</text>
                         </view>
                     </view>
                     <view
@@ -93,8 +87,7 @@
                             </view>
                         </view>
                         <view class="device-foot">
-                            <text v-if="row.asset_no" class="device-asset-no">资产号 {{ row.asset_no }}</text>
-                            <text v-else class="device-asset-no">暂未生成资产号</text>
+                            <text class="device-asset-no">查看设备详情</text>
                             <view v-if="row.status === 'in_stock' && row.return_flow?.returnable !== false" class="return-action-link" @click.stop="goReturn(row)">
                                 <text>采购退货</text>
                                 <u-icon name="arrow-right" color="#ea580c" size="11" />
@@ -110,7 +103,10 @@
             </view>
         </z-paging>
 
-        <view v-if="!returnMode" class="fab" @click="goCreate" ><u-icon name="plus" color="#fff" size="26"></u-icon></view>
+        <view v-if="!returnMode" class="fab fab--label" @click="goCreate">
+            <u-icon name="plus" color="#fff" size="20" />
+            <text class="fab__text">新建采购</text>
+        </view>
 
         <ErpFilterPopup
             v-model:show="filterVisible"
@@ -130,10 +126,12 @@ import { onLoad, onShow } from '@dcloudio/uni-app'
 import { getMobilePurchaseList } from '@/addon/hsx_erp/api/erp'
 import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
 import ErpFilterPopup from '@/addon/hsx_erp/components/ErpFilterPopup.vue'
+import ErpQuickFilterBar from '@/addon/hsx_erp/components/ErpQuickFilterBar.vue'
 // useListHeader hook
 import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
 import { erpTimeLine, formatErpTime } from '@/addon/hsx_erp/hooks/useErpTime'
 import { erpSpecLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
+import { erpPartyDisplayName } from '@/addon/hsx_erp/hooks/useErpPartyText'
 import { ERP_DICT_FALLBACK, dictLabel, dictTabs, dictType, loadErpDicts, type ErpDictMap } from '@/addon/hsx_erp/api/dict'
 
 const keyword = ref('')
@@ -145,6 +143,10 @@ const returnMode = ref(false)
 const dicts = ref<ErpDictMap>(ERP_DICT_FALLBACK)
 const tabs = computed(() => dictTabs(dicts.value, 'purchase_finance_status'))
 const activeTab = ref('')
+const quickFilters = computed(() => [
+    { key: 'finance_status', label: '付款状态', title: '付款状态', value: activeTab.value, options: tabs.value },
+    { key: 'status', label: '采购状态', title: '采购状态', value: filters.value.status || '', options: dictTabs(dicts.value, 'purchase_order_status', true) },
+])
 const filterVisible = ref(false)
 const filters = ref<Record<string, any>>({})
 const filterFields = [
@@ -163,7 +165,12 @@ const filterCount = computed(() => Object.entries(filters.value).filter(([key, v
 const reload = () => pagingRef.value?.reload()
 const handleSearch = () => reload()
 const onTab = (val: string) => { activeTab.value = val; reload() }
-const { pagingStyle } = useListHeader({ tabs: true })
+const onQuickFilter = ({ key, value }: { key: string; value: string | number }) => {
+    if (key === 'finance_status') return onTab(String(value))
+    filters.value = { ...filters.value, [key]: value }
+    reload()
+}
+const { pagingStyle } = useListHeader({ tabs: true, compactMp: true })
 onShow(async () => {
     dicts.value = await loadErpDicts()
     reload()
@@ -217,6 +224,7 @@ const groupedBatches = computed(() => {
                 tone: groups.length % 4,
                 purchase_no: row.purchase_no || '-',
                 party_name: row.party_name || '',
+                member_name: row.member_name || '',
                 m_no: row.m_no || '',
                 finance_status: row.finance_status || '',
                 order_status: row.order_status || '',

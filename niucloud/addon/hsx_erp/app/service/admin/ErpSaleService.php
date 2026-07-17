@@ -11,8 +11,10 @@ use addon\hsx_erp\app\model\ErpSaleItem;
 use addon\hsx_erp\app\model\ErpSaleOrder;
 use addon\hsx_erp\app\model\ErpSaleReturnItem;
 use addon\hsx_erp\app\model\ErpSaleReturnOrder;
+use addon\hsx_erp\app\model\ErpSiteCatalogProduct;
 use addon\hsx_erp\app\model\ErpWarehouse;
 use addon\hsx_erp\app\support\ErpIdempotency;
+use addon\hsx_erp\app\support\ErpPartyMemberNames;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -25,8 +27,10 @@ class ErpSaleService extends BaseAdminService
     public function stockPage(array $where): array
     {
         $warehouseTable = (new ErpWarehouse())->getTable();
+        $catalogTable = (new ErpSiteCatalogProduct())->getTable();
         $query = ErpAsset::alias('a')
             ->leftJoin($warehouseTable . ' w', 'w.id = a.warehouse_id AND w.site_id = a.site_id')
+            ->leftJoin($catalogTable . ' c', 'c.site_product_id = a.catalog_product_id AND c.site_id = a.site_id')
             ->where([
                 ['a.site_id', '=', $this->site_id],
                 ['a.status', '=', ErpDict::ASSET_IN_STOCK],
@@ -35,7 +39,7 @@ class ErpSaleService extends BaseAdminService
             ->where('w.allow_direct_sale', '=', 1);
         if (!empty($where['keyword'])) {
             $kw = trim((string)$where['keyword']);
-            $query->whereLike('a.asset_no|a.imei|a.sn|a.model|a.spec|a.category_name|a.party_name|a.warehouse_name|a.location_name', '%' . $kw . '%');
+            $query->whereLike('a.asset_no|a.imei|a.sn|a.model|a.spec|a.category_name|c.product_name|a.party_name|a.warehouse_name|a.location_name', '%' . $kw . '%');
         }
         $assetIds = array_values(array_unique(array_filter(array_map('intval', (array)($where['asset_ids'] ?? [])))));
         if ($assetIds !== []) {
@@ -65,7 +69,10 @@ class ErpSaleService extends BaseAdminService
                 $query->whereLike($column, '%' . trim((string)$where[$key]) . '%');
             }
         }
-        return $query->field('a.*')->order('a.id desc')->paginate([
+        return $query->field([
+            'a.*',
+            "COALESCE(c.product_name, '') as catalog_product_name",
+        ])->order('a.id desc')->paginate([
             'list_rows' => (int)($where['limit'] ?? 15),
             'page' => (int)($where['page'] ?? 1),
         ])->toArray();
@@ -194,16 +201,31 @@ class ErpSaleService extends BaseAdminService
             'page' => (int)($where['page'] ?? 1),
         ])->toArray();
         $page['data'] = $this->appendReturnContext((array)($page['data'] ?? []));
+        ErpPartyMemberNames::append($this->site_id, $page['data']);
         return $page;
     }
 
     public function info(int $id): array
     {
         $order = $this->findOrder($id)->toArray();
-        $order['items'] = ErpSaleItem::where([
-            ['site_id', '=', $this->site_id],
-            ['sale_order_id', '=', $id],
-        ])->order('id asc')->select()->toArray();
+        $assetTable = (new ErpAsset())->getTable();
+        $order['items'] = ErpSaleItem::alias('i')
+            ->leftJoin($assetTable . ' a', 'a.id = i.asset_id AND a.site_id = i.site_id')
+            ->where([
+                ['i.site_id', '=', $this->site_id],
+                ['i.sale_order_id', '=', $id],
+            ])->field([
+                'i.*',
+                'a.asset_no', 'a.sn', 'a.spec',
+                'a.warehouse_id', 'a.warehouse_name',
+                'a.location_id', 'a.location_name',
+            ])->order('i.id asc')->select()->toArray();
+        foreach ($order['items'] as &$item) {
+            $item['sale_no'] = (string)($order['sale_no'] ?? '');
+            $item['party_id'] = (int)($order['party_id'] ?? 0);
+            $item['party_name'] = (string)($order['party_name'] ?? '');
+        }
+        unset($item);
         $order['items'] = $this->appendReturnContext((array)$order['items']);
         $order['gross_total_amount'] = round((float)($order['total_amount'] ?? 0), 2);
         $order['sale_compensation_amount'] = round(array_sum(array_column($order['items'], 'sale_compensation_amount')), 2);
@@ -213,6 +235,9 @@ class ErpSaleService extends BaseAdminService
             ['source_type', '=', 'sale'],
             ['source_id', '=', $id],
         ])->order('id asc')->select()->toArray();
+        $partyRows = [$order];
+        ErpPartyMemberNames::append($this->site_id, $partyRows);
+        $order = $partyRows[0];
         return $order;
     }
 
@@ -228,6 +253,7 @@ class ErpSaleService extends BaseAdminService
         }
         $now = time();
         $orderId = 0;
+        $financeService = null;
         $channel = $this->resolveSaleChannel($data);
         $requestId = ErpIdempotency::normalize($data['request_id'] ?? $data['event_id'] ?? '');
         $data['request_id'] = $requestId !== '' ? $requestId : null;
@@ -237,7 +263,7 @@ class ErpSaleService extends BaseAdminService
             return (int)$existing->id;
         }
         try {
-        Db::transaction(function () use ($data, $items, $partyName, $channel, $now, &$orderId) {
+        Db::transaction(function () use ($data, $items, $partyName, $channel, $now, &$orderId, &$financeService) {
             $saleAt = (int)($data['sale_at'] ?? 0);
             if ($saleAt <= 0) {
                 $saleAt = $now;
@@ -291,6 +317,19 @@ class ErpSaleService extends BaseAdminService
                 $totalCost += $cost;
                 $resolved[] = [$asset, $price, trim((string)($item['remark'] ?? ''))];
             }
+            $settleMode = in_array((string)($data['settle_mode'] ?? ''), ['credit', 'cash'], true)
+                ? (string)$data['settle_mode']
+                : (str_contains((string)($data['settle_method'] ?? ''), '现结') ? 'cash' : 'credit');
+            if ($settleMode === 'cash') {
+                $receivedAmount = round((float)($data['received_amount'] ?? 0), 2);
+                if ($receivedAmount <= 0 || $receivedAmount > round($totalAmount, 2) + 0.0001) {
+                    throw new CommonException('现结收款必须大于0且不能超过销售总额');
+                }
+                if ((int)($data['capital_account_id'] ?? 0) <= 0) {
+                    throw new CommonException('现结销售必须选择收款账户');
+                }
+            }
+            (new ErpCustomerCreditService())->assertSaleAllowed($party, array_merge($data, ['settle_mode' => $settleMode]), round($totalAmount, 2));
             $profit = round($totalAmount - $totalCost, 2);
             $order = ErpSaleOrder::create([
                 'site_id' => $this->site_id,
@@ -309,7 +348,7 @@ class ErpSaleService extends BaseAdminService
                 'origin_id' => (string)$saleSource['origin_id'],
                 'origin_no' => (string)$saleSource['origin_no'],
                 'origin_event_id' => trim((string)($data['origin_event_id'] ?? $data['event_id'] ?? '')),
-                'settle_method' => trim((string)($data['settle_method'] ?? '')),
+                'settle_method' => $settleMode === 'cash' ? '现结' : '挂账',
                 'salesman_uid' => (int)$salesman['uid'],
                 'salesman_name' => (string)$salesman['name'],
                 'total_amount' => $totalAmount,
@@ -386,7 +425,7 @@ class ErpSaleService extends BaseAdminService
                     'party_name' => $partyName,
                     'sale_price' => $price,
                     'cost' => $cost,
-                    'settle_method' => trim((string)($data['settle_method'] ?? '')),
+                    'settle_method' => $settleMode === 'cash' ? '现结' : '挂账',
                     'sale_channel_key' => (string)$channel['key'],
                     'channel_source_plugin' => (string)$channel['source_plugin'],
                     'origin_plugin' => (string)$saleSource['origin_plugin'],
@@ -394,7 +433,7 @@ class ErpSaleService extends BaseAdminService
                     'result_status' => 'sold',
                 ]);
             }
-            ErpReceivable::create(array_merge([
+            $receivable = ErpReceivable::create(array_merge([
                 'site_id' => $this->site_id,
                 'receivable_no' => ErpLedgerService::makeNo('AR'),
                 'party_id' => (int)$party->id,
@@ -410,6 +449,18 @@ class ErpSaleService extends BaseAdminService
                 'create_at' => $now,
                 'update_at' => $now,
             ], $financeSourceService->persistable($saleSource)));
+            if ($settleMode === 'cash') {
+                $financeService = new ErpFinanceService();
+                $financeService->confirmReceivableItemsInTransaction((int)$party->id, [[
+                    'receivable_id' => (int)$receivable->id,
+                    'amount' => round((float)$data['received_amount'], 2),
+                ]], [
+                    'request_id' => ErpIdempotency::child((string)($data['request_id'] ?? ''), 'sale-receipt') ?: null,
+                    'capital_account_id' => (int)($data['capital_account_id'] ?? 0),
+                    'voucher_urls' => $data['voucher_urls'] ?? '',
+                    'remark' => trim((string)($data['remark'] ?? '')) ?: '销售现结收款',
+                ]);
+            }
         });
         } catch (\Throwable $e) {
             $existing = $this->existingSaleRequest($requestId);
@@ -420,6 +471,7 @@ class ErpSaleService extends BaseAdminService
             throw $e;
         }
         $this->flushDomainEvents();
+        if ($financeService instanceof ErpFinanceService) $financeService->flushPendingSettlementDomainEvents();
         return $orderId;
     }
 
@@ -768,8 +820,13 @@ class ErpSaleService extends BaseAdminService
                 break;
             }
         }
+        $expectedSettleMode = in_array((string)($data['settle_mode'] ?? ''), ['credit', 'cash'], true)
+            ? (string)$data['settle_mode']
+            : (str_contains((string)($data['settle_method'] ?? ''), '现结') ? 'cash' : 'credit');
+        $storedSettleMode = str_contains((string)$order->settle_method, '现结') ? 'cash' : 'credit';
         if ($partyMismatch
             || (string)$order->sale_channel_key !== (string)$channel['key']
+            || $storedSettleMode !== $expectedSettleMode
             || $originMismatch
             || $expectedItems !== $storedItems
         ) {
@@ -780,12 +837,12 @@ class ErpSaleService extends BaseAdminService
     private function ensureParty(int $id, string $name): ErpParty
     {
         if ($id > 0) {
-            $party = ErpParty::where([['site_id', '=', $this->site_id], ['id', '=', $id]])->findOrEmpty();
+            $party = ErpParty::where([['site_id', '=', $this->site_id], ['id', '=', $id]])->lock(true)->findOrEmpty();
             if (!$party->isEmpty()) {
                 return $party;
             }
         }
-        $party = ErpParty::where([['site_id', '=', $this->site_id], ['party_name', '=', $name]])->findOrEmpty();
+        $party = ErpParty::where([['site_id', '=', $this->site_id], ['party_name', '=', $name]])->lock(true)->findOrEmpty();
         if (!$party->isEmpty()) {
             return $party;
         }

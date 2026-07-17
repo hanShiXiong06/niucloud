@@ -2,15 +2,17 @@
     <view class="erp-page">
         <ErpListHeader
             v-model="keyword"
-            v-model:activeTab="activeTab"
-            placeholder="往来单位/销售单号/退货单号"
-            :tabs="tabs"
+            placeholder="往来单位 / 设备 IMEI"
             :show-filter="true"
             :filter-count="filterCount"
+            :compact-mp="true"
             @search="handleSearch"
-            @tab-change="onTab"
             @filter="filterVisible = true"
-        />
+        >
+            <template #below>
+                <ErpQuickFilterBar :items="quickFilters" @change="onQuickFilter" />
+            </template>
+        </ErpListHeader>
 
         <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true"
             :default-page-size="15" :paging-style="pagingStyle">
@@ -18,11 +20,11 @@
             <view class="list-wrap">
                 <view v-for="row in list" :key="row.id" class="erp-card" @click="goDetail(row)">
                     <view class="erp-card__head">
-                        <text class="card-title">{{ row.party_name }}</text>
+                        <text class="card-title">{{ erpPartyDisplayName(row) }}</text>
                         <u-tag :text="statusLabel(row.status)" :type="statusType(row.status)" plain plainFill size="mini" />
                     </view>
                     <ErpFinanceSourceSummary :row="row" direction="receivable" compact />
-                    <view class="card-meta" v-if="row.purchase_no">原采购单：{{ row.purchase_no }}</view>
+                    <view class="card-meta" v-if="row.task_assignee_name">财务负责人：{{ row.task_assignee_name }}</view>
                     <view class="card-meta" v-if="row.salesman_name">销售员：{{ row.salesman_name }}</view>
                     <view class="card-meta" v-if="row.item_count">共 {{ row.item_count }} 台设备</view>
                     <view class="card-meta" v-if="row.return_remark">说明：{{ row.return_remark }}</view>
@@ -59,7 +61,7 @@
                 <view class="popup-head">
                     <view>
                         <text class="popup-title">确认收款</text>
-                        <text class="popup-subtitle">{{ receiptRow.party_name }}</text>
+                        <text class="popup-subtitle">{{ erpPartyDisplayName(receiptRow) }}</text>
                     </view>
                     <view class="popup-close" @click="receiptVisible = false">
                         <u-icon name="close" color="#64748b" size="20" />
@@ -186,6 +188,7 @@ import ErpReceiptConfirmModal from '@/addon/hsx_erp/components/ErpReceiptConfirm
 import ErpOffsetConfirmModal from '@/addon/hsx_erp/components/ErpOffsetConfirmModal.vue'
 import ErpFilterPopup from '@/addon/hsx_erp/components/ErpFilterPopup.vue'
 import ErpFinanceSourceSummary from '@/addon/hsx_erp/components/ErpFinanceSourceSummary.vue'
+import ErpQuickFilterBar from '@/addon/hsx_erp/components/ErpQuickFilterBar.vue'
 
 import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
 import { erpTimeLine } from '@/addon/hsx_erp/hooks/useErpTime'
@@ -193,8 +196,9 @@ import { cloneErpSubmitSnapshot, confirmErpPopupAction } from '@/addon/hsx_erp/h
 import { erpFinanceSourceFilterOptions, erpFinanceSourceMeta } from '@/addon/hsx_erp/hooks/useErpFinanceSource'
 import { useErpSaleChannels } from '@/addon/hsx_erp/hooks/useErpSaleChannels'
 import { useErpFinanceOptions } from '@/addon/hsx_erp/hooks/useErpFinanceOptions'
+import { erpPartyDisplayName } from '@/addon/hsx_erp/hooks/useErpPartyText'
 
-const { pagingStyle } = useListHeader({ tabs: true })
+const { pagingStyle } = useListHeader({ tabs: true, compactMp: true })
 
 const keyword = ref('')
 const list = ref<any[]>([])
@@ -206,6 +210,11 @@ const tabs = [
     { label: '全部', value: '' },
 ]
 const activeTab = ref('pending')
+const quickFilters = computed(() => [
+    { key: 'status', label: '收款状态', title: '收款状态', value: activeTab.value, options: tabs },
+    { key: 'finance_type_key', label: '收入类型', title: '收入类型', value: filters.value.finance_type_key || '', options: [{ label: '全部类型', value: '' }, ...categoryOptions('income')] },
+    { key: 'business_source_key', label: '业务来源', title: '业务来源', value: filters.value.business_source_key || '', options: [{ label: '全部来源', value: '' }, ...sourceOptions('income')] },
+])
 const filterVisible = ref(false)
 const filters = ref<Record<string, any>>({})
 const { options: saleChannelOptions, load: loadSaleChannels } = useErpSaleChannels()
@@ -229,6 +238,11 @@ const filterFields = computed(() => [
     { key: 'date', label: '发生日期', type: 'dateRange', startKey: 'start_at', endKey: 'end_at' },
 ] as any[])
 const filterCount = computed(() => Object.entries(filters.value).filter(([key, v]) => !key.endsWith('_name') && v !== '' && v !== undefined && v !== null).length)
+const onQuickFilter = ({ key, value }: { key: string; value: string | number }) => {
+    if (key === 'status') return onTab(String(value))
+    filters.value = { ...filters.value, [key]: value }
+    reload()
+}
 
 const accounts = ref<any[]>([])
 
@@ -271,10 +285,17 @@ const onTab = (val: string) => { activeTab.value = val; reload() }
 
 onShow(() => reload())
 onLoad((query: any) => {
-    const sourceKeyword = String(query?.keyword || query?.source_no || '')
-    if (sourceKeyword) {
-        try { keyword.value = decodeURIComponent(sourceKeyword) } catch { keyword.value = sourceKeyword }
-        activeTab.value = ''
+    const status = String(query?.status ?? 'pending').trim()
+    const sourceNo = String(query?.source_no || '').trim()
+    const routeKeyword = String(query?.keyword || '').trim()
+    activeTab.value = ['', 'pending', 'partial'].includes(status) ? status : 'pending'
+    if (sourceNo) {
+        try { filters.value = { ...filters.value, source_no: decodeURIComponent(sourceNo) } }
+        catch { filters.value = { ...filters.value, source_no: sourceNo } }
+    }
+    if (routeKeyword) {
+        try { keyword.value = decodeURIComponent(routeKeyword) }
+        catch { keyword.value = routeKeyword }
     }
 })
 

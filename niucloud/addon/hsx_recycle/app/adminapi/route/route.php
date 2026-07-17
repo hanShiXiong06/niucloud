@@ -775,6 +775,10 @@ Route::group('recycle', function () {
     Route::get('stat/dim', 'addon\hsx_recycle\app\adminapi\controller\stat\Task@dim');
     Route::get('stat/task/my_stages', 'addon\hsx_recycle\app\adminapi\controller\stat\Task@myStages');
     Route::get('stat/task/list', 'addon\hsx_recycle\app\adminapi\controller\stat\Task@lists');
+    Route::get('stat/task/assignable_users', 'addon\hsx_recycle\app\adminapi\controller\stat\Task@assignableUsers');
+    Route::get('stat/task/assignment_settings', 'addon\hsx_recycle\app\adminapi\controller\stat\Task@assignmentSettings');
+    Route::post('stat/task/assignment_settings', 'addon\hsx_recycle\app\adminapi\controller\stat\Task@saveAssignmentSettings');
+    Route::put('stat/task/assign', 'addon\hsx_recycle\app\adminapi\controller\stat\Task@assign');
     Route::put('stat/task/claim', 'addon\hsx_recycle\app\adminapi\controller\stat\Task@claim');
     Route::put('stat/task/release', 'addon\hsx_recycle\app\adminapi\controller\stat\Task@release');
 })->middleware([

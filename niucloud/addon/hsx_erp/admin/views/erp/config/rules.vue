@@ -31,6 +31,42 @@
                 </section>
 
                 <section class="rule-section">
+                    <div class="section-title">商城资料协作</div>
+                    <el-alert class="mb-4" type="info" :closable="false" show-icon title="仅影响回收插件进入 ERP 的设备；ERP 手工采购时资料已完整，仍可直接同步商城。" />
+                    <el-form label-width="180px">
+                        <el-form-item label="回收设备资料由谁完善">
+                            <div>
+                                <el-radio-group v-model="form.marketplace.recycle_material_owner">
+                                    <el-radio-button label="erp">ERP 库存人员</el-radio-button>
+                                    <el-radio-button label="phone_shop">商城运营专员</el-radio-button>
+                                </el-radio-group>
+                                <div class="mt-2 text-xs text-gray-400">
+                                    ERP 库存人员：图片、售价、分类和规格在库存中心一次完成并直接上架；商城运营专员：ERP 先交接到商城待上架货源，由运营补齐后回写 ERP。
+                                </div>
+                            </div>
+                        </el-form-item>
+                    </el-form>
+                </section>
+
+                <section class="rule-section">
+                    <div class="section-title">自动任务默认负责人</div>
+                    <el-alert class="mb-4" type="info" :closable="false" show-icon title="只需设置一次。应收应付或设备进入拍照、商城定价、资料上架环节时，系统自动写入责任人并通知本人。" />
+                    <el-form label-width="180px">
+                        <el-form-item v-for="stage in taskStages" :key="stage.stage_key" :label="stage.name">
+                            <div class="flex items-center gap-3">
+                                <el-select v-model="stage.default_uid" class="!w-[240px]" clearable placeholder="自动选择首位岗位员工">
+                                    <el-option v-for="user in stage.users" :key="user.uid" :label="user.name" :value="user.uid">
+                                        <span>{{ user.name }}</span><span class="float-right text-xs text-gray-400">{{ user.username }}</span>
+                                    </el-option>
+                                </el-select>
+                                <span v-if="stage.users?.length" class="text-xs text-gray-400">候选人来自角色动作权限</span>
+                                <el-tag v-else type="danger" effect="plain">未配置岗位权限</el-tag>
+                            </div>
+                        </el-form-item>
+                    </el-form>
+                </section>
+
+                <section class="rule-section">
                     <div class="section-title">采购规则</div>
                     <el-form label-width="180px">
                         <el-form-item label="入库立即生成应付">
@@ -98,6 +134,26 @@
                                 <el-radio-button label="settlement">结算确认</el-radio-button>
                                 <el-radio-button label="outbound">出库预估</el-radio-button>
                             </el-radio-group>
+                        </el-form-item>
+                        <el-divider content-position="left">客户信用控制</el-divider>
+                        <el-form-item label="启用开单信用检查">
+                            <el-switch v-model="form.sale.credit_control.enabled" :active-value="1" :inactive-value="0" />
+                        </el-form-item>
+                        <el-form-item label="默认处理方式">
+                            <el-select v-model="form.sale.credit_control.default_policy" class="!w-[220px]" :disabled="form.sale.credit_control.enabled !== 1">
+                                <el-option label="正常交易，不提醒" value="normal" />
+                                <el-option label="有欠款时提醒" value="remind" />
+                                <el-option label="有欠款时仅现结" value="cash_only" />
+                                <el-option label="有欠款时暂停交易" value="blocked" />
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="最低欠款金额">
+                            <el-input-number v-model="form.sale.credit_control.min_outstanding_amount" :min="0" :precision="2" :controls="false" :disabled="form.sale.credit_control.enabled !== 1" />
+                            <span class="ml-3 text-sm text-gray-500">达到该金额才触发，0 表示任意欠款。</span>
+                        </el-form-item>
+                        <el-form-item label="最低欠款账龄">
+                            <el-input-number v-model="form.sale.credit_control.min_outstanding_days" :min="0" :max="3650" :precision="0" :disabled="form.sale.credit_control.enabled !== 1" />
+                            <span class="ml-3 text-sm text-gray-500">最早未结应收达到该天数才触发，0 表示立即。</span>
                         </el-form-item>
                     </el-form>
                 </section>
@@ -173,19 +229,21 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getErpConfig, saveErpConfig } from '@/addon/hsx_erp/api/config'
+import { getErpConfig, saveErpConfig, getErpTaskAssignmentSettings, saveErpTaskAssignmentSettings } from '@/addon/hsx_erp/api/config'
 
 const loading = ref(false)
 const saving = ref(false)
 const form = reactive(defaultRules())
+const taskStages = ref<any[]>([])
 
 function defaultRules() {
     return {
         finance: { enable_offset: 1, finance_fact_lock: 1, settlement_requires_account: 1 },
         purchase: { create_payable_on_inbound: 1, allow_cancel_before_finance_fact: 1 },
         product_title: { category_mode: 'auto', spec_in_title: 1, grade_in_title: 0, separator: ' ' },
-        sale: { create_receivable_on_outbound: 1, allow_cancel_before_finance_fact: 1, return_to_original_location_on_cancel: 1, enable_peer_pending: 1, enable_trial_sale: 0, profit_confirm_mode: 'settlement' },
+        sale: { create_receivable_on_outbound: 1, allow_cancel_before_finance_fact: 1, return_to_original_location_on_cancel: 1, enable_peer_pending: 1, enable_trial_sale: 0, profit_confirm_mode: 'settlement', credit_control: { enabled: 1, default_policy: 'remind', min_outstanding_amount: 0, min_outstanding_days: 0 } },
         refurbish: { enabled: 1, default_required: 0, tracking_mode: 'simple', daily_reminder_enabled: 1, daily_reminder_threshold: 25, reminder_dismiss_date: '' },
+        marketplace: { recycle_material_owner: 'erp' },
         turnover: { attention_days: 7, warning_days: 15, critical_days: 30, reminder_enabled: 1, reminder_count_threshold: 1, reminder_dismiss_date: '' },
         consignment: { enabled: 0, settle_payable_after_receipt: 1, transfer_to_owned_requires_repurchase: 1 }
     }
@@ -194,14 +252,16 @@ function defaultRules() {
 async function loadConfig() {
     loading.value = true
     try {
-        const res: any = await getErpConfig()
+        const [res, taskRes]: any[] = await Promise.all([getErpConfig(), getErpTaskAssignmentSettings()])
         Object.assign(form.finance, res?.data?.finance || {})
         Object.assign(form.purchase, res?.data?.purchase || {})
         Object.assign(form.product_title, res?.data?.product_title || {})
         Object.assign(form.sale, res?.data?.sale || {})
         Object.assign(form.refurbish, res?.data?.refurbish || {})
+        Object.assign(form.marketplace, res?.data?.marketplace || {})
         Object.assign(form.turnover, res?.data?.turnover || {})
         Object.assign(form.consignment, res?.data?.consignment || {})
+        taskStages.value = (taskRes?.data || []).map((item: any) => ({ ...item, default_uid: Number(item.default_uid || 0) || undefined }))
     } finally {
         loading.value = false
     }
@@ -210,12 +270,17 @@ async function loadConfig() {
 async function submit() {
     saving.value = true
     try {
-        const res: any = await saveErpConfig(JSON.parse(JSON.stringify(form)))
+        const defaults = Object.fromEntries(taskStages.value.map((item: any) => [item.stage_key, Number(item.default_uid || 0)]))
+        const [res]: any[] = await Promise.all([
+            saveErpConfig(JSON.parse(JSON.stringify(form))),
+            saveErpTaskAssignmentSettings(defaults)
+        ])
         Object.assign(form.finance, res?.data?.finance || {})
         Object.assign(form.purchase, res?.data?.purchase || {})
         Object.assign(form.product_title, res?.data?.product_title || {})
         Object.assign(form.sale, res?.data?.sale || {})
         Object.assign(form.refurbish, res?.data?.refurbish || {})
+        Object.assign(form.marketplace, res?.data?.marketplace || {})
         Object.assign(form.turnover, res?.data?.turnover || {})
         Object.assign(form.consignment, res?.data?.consignment || {})
         ElMessage.success('业务规则已保存')

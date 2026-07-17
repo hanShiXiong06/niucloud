@@ -1,38 +1,30 @@
 <template>
-  <view class="flex items-center justify-end gap-2 mt-3">
-    <!-- 查看详情按钮 -->
-    <view
-      class="action-btn secondary"
-      @click="$emit('view-detail')"
-    >
-      <text>查看详情</text>
-    </view>
-
-    <!-- 退货信息按钮 -->
+  <view class="order-actions">
     <view
       v-if="hasReturnOrder"
-      class="action-btn return-info"
-      @click="goToReturnOrder(order.id)"
+      class="order-actions__link order-actions__link--warning"
+      @tap="goToReturnOrder(order.id)"
     >
       <text>退货信息</text>
     </view>
-
-    <!-- 状态1-待签收：可以取消订单 -->
     <view
       v-if="order.status === 1"
-      class="action-btn danger"
-      @click="$emit('cancel')"
+      class="order-actions__link order-actions__link--danger"
+      @tap="$emit('cancel')"
     >
       <text>取消订单</text>
     </view>
-
-    <!-- 状态9-已取消：可以删除订单 -->
     <view
       v-if="order.status === 9"
-      class="action-btn danger"
-      @click="$emit('delete')"
+      class="order-actions__link order-actions__link--danger"
+      @tap="$emit('delete')"
     >
       <text>删除订单</text>
+    </view>
+    <view class="order-actions__spacer" />
+    <view class="order-actions__primary" @tap="$emit('view-detail')">
+      <text>查看详情</text>
+      <up-icon name="arrow-right" size="13" color="#fff" />
     </view>
   </view>
 </template>
@@ -67,52 +59,48 @@ watch(
 </script>
 
 <style scoped lang="scss">
-.action-btn {
-  padding: 6px 16px;
-  border-radius: 16px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: 1px solid;
+.order-actions {
+  min-height: 78rpx;
+  padding-top: 18rpx;
+  display: flex;
+  align-items: center;
+  gap: 22rpx;
+}
 
-  &.primary {
-    background: var(--recycle-button-bg);
-    color: var(--recycle-button-text);
-    border-color: transparent;
+.order-actions__spacer {
+  flex: 1;
+}
 
-    &:active {
-      opacity: 0.8;
-    }
-  }
+.order-actions__link {
+  padding: 10rpx 0;
+  color: #7b8798;
+  font-size: 22rpx;
+  line-height: 32rpx;
+}
 
-  &.secondary {
-    background: var(--recycle-bg-card);
-    color: var(--recycle-text-sub);
-    border-color: var(--recycle-line);
+.order-actions__link--warning {
+  color: #d97706;
+}
 
-    &:active {
-      background: var(--recycle-bg-soft);
-    }
-  }
+.order-actions__link--danger {
+  color: #dc6262;
+}
 
-  &.danger {
-    background: #fff;
-    color: #ef4444;
-    border-color: #fecaca;
+.order-actions__primary {
+  height: 58rpx;
+  padding: 0 22rpx;
+  border-radius: 999rpx;
+  background: var(--recycle-button-bg);
+  color: var(--recycle-button-text);
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  font-size: 23rpx;
+  line-height: 58rpx;
+  font-weight: 600;
 
-    &:active {
-      background: #fef2f2;
-    }
-  }
-
-  &.return-info {
-    background: var(--recycle-notice-bg);
-    color: var(--recycle-notice-text);
-    border-color: rgba(245, 158, 11, 0.24);
-
-    &:active {
-      background: #fffbeb;
-    }
+  &:active {
+    opacity: 0.84;
   }
 }
 </style>

@@ -147,6 +147,13 @@ class ErpConfigService extends BaseAdminService
         $rules['sale']['profit_confirm_mode'] = in_array(($rules['sale']['profit_confirm_mode'] ?? 'settlement'), ['outbound', 'settlement'], true)
             ? $rules['sale']['profit_confirm_mode']
             : 'settlement';
+        $creditControl = (array)($rules['sale']['credit_control'] ?? []);
+        $rules['sale']['credit_control']['enabled'] = $this->boolInt($creditControl['enabled'] ?? 1);
+        $rules['sale']['credit_control']['default_policy'] = in_array((string)($creditControl['default_policy'] ?? 'remind'), ['normal', 'remind', 'cash_only', 'blocked'], true)
+            ? (string)$creditControl['default_policy']
+            : 'remind';
+        $rules['sale']['credit_control']['min_outstanding_amount'] = max(0, round((float)($creditControl['min_outstanding_amount'] ?? 0), 2));
+        $rules['sale']['credit_control']['min_outstanding_days'] = max(0, min(3650, (int)($creditControl['min_outstanding_days'] ?? 0)));
 
         $rules['refurbish']['enabled'] = $this->boolInt($rules['refurbish']['enabled'] ?? 0);
         $rules['refurbish']['default_required'] = $this->boolInt($rules['refurbish']['default_required'] ?? 0);
@@ -180,6 +187,12 @@ class ErpConfigService extends BaseAdminService
         $rules['category_sync']['last_action'] = in_array((string)($rules['category_sync']['last_action'] ?? ''), ['', 'pull', 'push', 'reconcile', 'bootstrap'], true)
             ? (string)$rules['category_sync']['last_action']
             : '';
+
+        $rules['marketplace']['recycle_material_owner'] = in_array(
+            (string)($rules['marketplace']['recycle_material_owner'] ?? 'erp'),
+            ['erp', 'phone_shop'],
+            true
+        ) ? (string)$rules['marketplace']['recycle_material_owner'] : 'erp';
 
         $rules['consignment']['enabled'] = $this->boolInt($rules['consignment']['enabled'] ?? 0);
         $rules['consignment']['settle_payable_after_receipt'] = $this->boolInt($rules['consignment']['settle_payable_after_receipt'] ?? 1);
@@ -284,7 +297,7 @@ class ErpConfigService extends BaseAdminService
                 }
             }
             $statementGroup = (string)($row['statement_group'] ?? '');
-            $allowedStatementGroups = ['revenue', 'revenue_reversal', 'purchase', 'purchase_reversal', 'operating_expense', 'other_income', 'other_expense'];
+            $allowedStatementGroups = ['revenue', 'revenue_reversal', 'purchase', 'purchase_reversal', 'operating_expense', 'other_income', 'other_expense', 'advance_receipt', 'advance_receipt_reversal'];
             if (!in_array($statementGroup, $allowedStatementGroups, true)) {
                 $statementGroup = $scope === 'refurbish'
                     ? 'operating_expense'
@@ -437,6 +450,12 @@ class ErpConfigService extends BaseAdminService
                 'enable_peer_pending' => 1,
                 'enable_trial_sale' => 0,
                 'profit_confirm_mode' => 'settlement',
+                'credit_control' => [
+                    'enabled' => 1,
+                    'default_policy' => 'remind',
+                    'min_outstanding_amount' => 0,
+                    'min_outstanding_days' => 0,
+                ],
             ],
             'refurbish' => [
                 'enabled' => 1,
@@ -460,6 +479,10 @@ class ErpConfigService extends BaseAdminService
                 'provider' => 'phone_shop',
                 'mode' => 'disabled',
                 'last_action' => '',
+            ],
+            'marketplace' => [
+                // erp：小团队在库存中心一次完成；phone_shop：商城运营专员在待上架货源完善。
+                'recycle_material_owner' => 'erp',
             ],
             'consignment' => [
                 'enabled' => 0,

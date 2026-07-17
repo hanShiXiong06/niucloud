@@ -24,17 +24,16 @@
                         <el-tag v-if="item.party_name || item.counterparty_name" size="small" effect="plain" class="ml-2">{{ item.party_name || item.counterparty_name }}</el-tag>
                         <span v-else class="ml-2 text-xs text-orange-500">无主体 · 选后自动建</span>
                         <el-tag v-for="role in item.role_flags || []" :key="role" size="small" type="info" class="ml-1">{{ roleLabel(role) }}</el-tag>
+                        <el-tag v-if="creditTag(item)" size="small" :type="creditTag(item).type" class="ml-1">{{ creditTag(item).label }}</el-tag>
                     </div>
-                    <el-tooltip content="修改会员昵称" placement="top">
-                        <el-button
-                            link
-                            type="primary"
-                            :icon="EditPen"
-                            aria-label="修改会员昵称"
-                            @mousedown.stop
-                            @click.stop="editMemberNickname(item)"
-                        />
-                    </el-tooltip>
+                    <div class="member-option__actions">
+                        <el-tooltip v-if="item.party_id && roleType === 'customer'" content="客户信用设置" placement="top">
+                            <el-button link type="warning" :icon="Lock" aria-label="客户信用设置" @mousedown.stop @click.stop="openCredit(item)" />
+                        </el-tooltip>
+                        <el-tooltip content="修改会员昵称" placement="top">
+                            <el-button link type="primary" :icon="EditPen" aria-label="修改会员昵称" @mousedown.stop @click.stop="editMemberNickname(item)" />
+                        </el-tooltip>
+                    </div>
                 </div>
             </el-option>
         </el-select>
@@ -59,15 +58,17 @@
                 <el-button type="primary" :loading="creating" @click="doCreate">建并选用</el-button>
             </template>
         </el-dialog>
+        <ErpPartyCreditDialog v-model="creditVisible" :party="creditParty" @saved="onCreditSaved" />
     </div>
 </template>
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { EditPen } from '@element-plus/icons-vue'
+import { EditPen, Lock } from '@element-plus/icons-vue'
 import { getErpMemberOptions, quickCreateErpParty, resolveErpContact } from '@/addon/hsx_erp/api/counterparty'
 import { editMemberDetail } from '@/app/api/member'
+import ErpPartyCreditDialog from '@/addon/hsx_erp/components/ErpPartyCreditDialog.vue'
 
 const props = withDefaults(defineProps<{
     modelValue?: number | string
@@ -87,9 +88,19 @@ const picked = ref<number | undefined>(undefined)
 const options = ref<any[]>([])
 const loading = ref(false)
 const resolving = ref(false)
+const creditVisible = ref(false)
+const creditParty = ref<any>(null)
 const roleFilter = ref('all')
 const supplierFilters = [{label:'全部人员',value:'all'},{label:'采购供货商',value:'purchase_supplier'},{label:'整备服务商',value:'refurbish_provider'}]
 const roleLabel = (role:string) => ({purchase_supplier:'采购',refurbish_provider:'整备',sale_customer:'销售',recycle_customer:'回收'} as Record<string,string>)[role] || '其他'
+const creditTag = (item: any) => {
+    const profile = item?.credit_profile
+    if (!profile) return null
+    if (profile.policy === 'blocked') return { label: '暂停交易', type: 'danger' }
+    if (profile.policy === 'cash_only' || profile.can_credit === false) return { label: '仅现结', type: 'warning' }
+    if (profile.has_outstanding) return { label: `欠款 ¥${Number(profile.outstanding_amount || 0).toFixed(2)}`, type: 'warning' }
+    return null
+}
 
 const nameOf = (item: any) => item.nickname || item.username || item.member_name || `会员#${item.member_id}`
 const labelOf = (item: any) => {
@@ -157,6 +168,16 @@ async function editMemberNickname(item: any) {
     }
 }
 
+function openCredit(item: any) {
+    if (!Number(item?.party_id || 0)) return ElMessage.warning('请先选择该会员建立往来主体')
+    creditParty.value = item
+    creditVisible.value = true
+}
+
+function onCreditSaved(profile: any) {
+    if (creditParty.value) creditParty.value.credit_profile = profile
+}
+
 function onClear() {
     picked.value = undefined
     emit('update:modelValue', 0)
@@ -222,4 +243,5 @@ watch(() => props.modelValue, value => {
 .role-filter { display:flex; width:100%; gap:6px; }
 .member-option { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; }
 .member-option__info { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.member-option__actions { display:flex; align-items:center; flex:none; }
 </style>

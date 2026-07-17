@@ -186,6 +186,9 @@
                 <template v-if="component.componentName == 'ShopGoodsRecommend'">
                    <diy-shop-goods-recommend ref="diyShopGoodsRecommendRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.ShopGoodsRecommend" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
+                <template v-if="component.componentName == 'ShopMemberBarcode'">
+                   <diy-shop-member-barcode ref="diyShopMemberBarcodeRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.ShopMemberBarcode" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
                 <template v-if="component.componentName == 'ShopMemberInfo'">
                    <diy-shop-member-info ref="diyShopMemberInfoRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.ShopMemberInfo" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
@@ -236,6 +239,7 @@
    import diyShopGoodsHot from '@/addon/phone_shop/components/diy/shop-goods-hot/index.vue';
    import diyShopGoodsRanking from '@/addon/phone_shop/components/diy/shop-goods-ranking/index.vue';
    import diyShopGoodsRecommend from '@/addon/phone_shop/components/diy/shop-goods-recommend/index.vue';
+   import diyShopMemberBarcode from '@/addon/phone_shop/components/diy/shop-member-barcode/index.vue';
    import diyShopMemberInfo from '@/addon/phone_shop/components/diy/shop-member-info/index.vue';
    import diyShopNewcomer from '@/addon/phone_shop/components/diy/shop-newcomer/index.vue';
    import diyShopOrderInfo from '@/addon/phone_shop/components/diy/shop-order-info/index.vue';

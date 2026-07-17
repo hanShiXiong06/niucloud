@@ -5,7 +5,7 @@
             <view v-if="loading" class="empty-card">正在加载...</view>
             <template v-else-if="detail">
                 <view class="form-card hero-card">
-                    <view class="hero-head"><view><text class="hero-label">{{ isCompensation ? '补差客户' : '退货客户' }}</text><text class="hero-name">{{ detail.party_name || '-' }}</text></view><u-tag :text="statusLabel(detail.status)" :type="statusType(detail.status)" plain plainFill /></view>
+                    <view class="hero-head"><view><text class="hero-label">{{ isCompensation ? '补差客户' : '退货客户' }}</text><text class="hero-name">{{ erpPartyDisplayName(detail) }}</text></view><u-tag :text="statusLabel(detail.status)" :type="statusType(detail.status)" plain plainFill /></view>
                     <view class="identity"><ErpCopyText :value="detail.return_no" :title="isCompensation ? '补差单号' : '退货单号'" block /><ErpCopyText :value="detail.sale_no" title="原销售单号" block /></view>
                     <view class="meta-grid"><view><text>处理方式</text><strong>{{ refundModeLabel(detail.refund_mode) }}</strong></view><view><text>操作人</text><strong>{{ detail.operator_name || '-' }}</strong></view><view><text>设备</text><strong>{{ items.length }} 台</strong></view><view><text>{{ isCompensation ? '补差金额' : '退款金额' }}</text><strong class="orange">¥{{ money(detail.total_amount) }}</strong></view></view>
                     <view v-if="detail.remark" class="reason">{{ detail.remark }}</view>
@@ -23,9 +23,13 @@
                 <view class="process-card"><text class="process-card__title">处理结果</text><text>{{ processText }}</text></view>
             </template>
         </view>
-        <view v-if="detail" class="float-bar">
-            <u-button v-if="hasPayable" type="primary" plain @click="goPayable">查看并处理应付</u-button>
+        <view v-if="detail" class="float-bar flex flex-end">
+            <view>
+            <u-button v-if="hasPayable" type="primary" plain @click="goPayable">{{ hasOpenPayable ? '查看并处理应付' : '查看应付详情' }}</u-button>
+            </view>
+               <view>
             <u-button v-if="detail.can_cancel" type="error" :loading="cancelling" @click="cancelReturn">撤销退货</u-button>
+            </view>
         </view>
     </view>
 </template>
@@ -35,10 +39,11 @@ import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { cancelMobileSaleReturn, getMobileSaleReturnInfo } from '@/addon/hsx_erp/api/erp'
 import { confirmErpSensitiveAction } from '@/addon/hsx_erp/hooks/useErpSensitiveConfirm'
+import { erpPartyDisplayName } from '@/addon/hsx_erp/hooks/useErpPartyText'
 import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
 import ErpCopyText from '@/addon/hsx_erp/components/ErpCopyText.vue'
 const id=ref(0),detail=ref<any>(null),loading=ref(false),cancelling=ref(false)
-const items=computed(()=>detail.value?.items||[]),isCompensation=computed(()=>detail.value?.business_type==='after_sale_compensation'),hasPayable=computed(()=>items.value.some((row:any)=>row.refund_payable_no))
+const items=computed(()=>detail.value?.items||[]),isCompensation=computed(()=>detail.value?.business_type==='after_sale_compensation'),hasPayable=computed(()=>items.value.some((row:any)=>row.refund_payable_no)),hasOpenPayable=computed(()=>items.value.some((row:any)=>Number(row.refund_remain_amount||0)>0))
 const processText=computed(()=>{if(detail.value?.status==='cancelled')return '本单已撤销，未继续执行退款。';if(isCompensation.value)return detail.value?.refund_mode==='cash'?'补差已从指定账户实际支付，设备继续由客户持有。':'补差已形成客户应付，等待财务付款或折账。';return detail.value?.refund_mode==='cash'?'设备已回库，退款已从指定账户支出。':'设备已回库，已按设备生成客户退款应付。'})
 onLoad((q:any)=>id.value=Number(q?.id||0));onShow(load)
 async function load(){if(!id.value)return;loading.value=true;try{const res:any=await getMobileSaleReturnInfo(id.value);detail.value=res?.data||null}finally{loading.value=false}}

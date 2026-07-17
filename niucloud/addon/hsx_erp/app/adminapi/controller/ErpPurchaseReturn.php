@@ -22,6 +22,7 @@ class ErpPurchaseReturn extends BaseAdminController
         $params = $this->request->params([
             ['keyword', ''],
             ['status', ''],
+            ['refund_mode', ''],
             ['party_id', 0],
             ['start_at', 0],
             ['end_at', 0],

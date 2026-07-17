@@ -42,12 +42,12 @@ export const COLORS = {
 
 // ============ 订单状态 ============
 export const ORDER_STATUS = {
-  1: { text: '待签收', color: '#f59e0b', bgColor: '#fef3c7', gradient: 'linear-gradient(135deg, #ffa726, #fb8c00)' },
-  2: { text: '已签收', color: '#06b6d4', bgColor: '#cffafe', gradient: 'linear-gradient(135deg, #26c6da, #0097a7)' },
-  3: { text: '质检中', color: '#3b82f6', bgColor: '#dbeafe', gradient: 'linear-gradient(135deg, #42a5f5, #1e88e5)' },
-  4: { text: '已质检', color: '#6366f1', bgColor: '#e0e7ff', gradient: 'linear-gradient(135deg, #7c4dff, #651fff)' },
-  5: { text: '待确认', color: '#8b5cf6', bgColor: '#ede9fe', gradient: 'linear-gradient(135deg, #b388ff, #7c4dff)' },
-  6: { text: '待打款', color: '#ec4899', bgColor: '#fce7f3', gradient: 'linear-gradient(135deg, #f06292, #e91e63)' },
+  1: { text: '待签收', color: '#d97706', bgColor: '#fff7df', gradient: 'linear-gradient(135deg, #f59e0b, #d97706)' },
+  2: { text: '已签收', color: '#2563eb', bgColor: '#eaf2ff', gradient: 'linear-gradient(135deg, #3b82f6, #2563eb)' },
+  3: { text: '质检中', color: '#2563eb', bgColor: '#eaf2ff', gradient: 'linear-gradient(135deg, #3b82f6, #2563eb)' },
+  4: { text: '已质检', color: '#2563eb', bgColor: '#eaf2ff', gradient: 'linear-gradient(135deg, #3b82f6, #2563eb)' },
+  5: { text: '待确认', color: '#2563eb', bgColor: '#eaf2ff', gradient: 'linear-gradient(135deg, #3b82f6, #2563eb)' },
+  6: { text: '待打款', color: '#d97706', bgColor: '#fff7df', gradient: 'linear-gradient(135deg, #f59e0b, #d97706)' },
   7: { text: '已完成', color: '#10b981', bgColor: '#d1fae5', gradient: 'linear-gradient(135deg, #4caf50, #2e7d32)' },
   8: { text: '已关闭', color: '#6b7280', bgColor: '#f3f4f6', gradient: 'linear-gradient(135deg, #90a4ae, #607d8b)' },
   9: { text: '已取消', color: '#6b7280', bgColor: '#f3f4f6', gradient: 'linear-gradient(135deg, #90a4ae, #607d8b)' },
@@ -55,13 +55,13 @@ export const ORDER_STATUS = {
 
 // ============ 设备状态 ============
 export const DEVICE_STATUS = {
-  1: { text: '待质检', color: '#f59e0b', bgColor: '#fef3c7' },
-  2: { text: '质检中', color: '#3b82f6', bgColor: '#dbeafe' },
-  3: { text: '已质检', color: '#6366f1', bgColor: '#e0e7ff' },
-  4: { text: '待确认', color: '#8b5cf6', bgColor: '#ede9fe' },
+  1: { text: '待质检', color: '#d97706', bgColor: '#fff7df' },
+  2: { text: '质检中', color: '#2563eb', bgColor: '#eaf2ff' },
+  3: { text: '已质检', color: '#2563eb', bgColor: '#eaf2ff' },
+  4: { text: '待确认', color: '#2563eb', bgColor: '#eaf2ff' },
   5: { text: '已回收', color: '#10b981', bgColor: '#d1fae5' },
   6: { text: '已退回', color: '#ef4444', bgColor: '#fee2e2' },
-  7: { text: '已定价', color: '#06b6d4', bgColor: '#cffafe' },
+  7: { text: '已定价', color: '#2563eb', bgColor: '#eaf2ff' },
 } as const
 
 // ============ 退货订单状态 ============

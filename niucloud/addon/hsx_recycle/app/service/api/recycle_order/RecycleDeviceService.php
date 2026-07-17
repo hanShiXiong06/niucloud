@@ -5,6 +5,7 @@ namespace addon\hsx_recycle\app\service\api\recycle_order;
 
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\dict\order\RecycleReturnOrderDict;
+use addon\hsx_recycle\app\dict\stat\RecycleStageDict;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\model\order\RecycleDeviceLog;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
@@ -12,6 +13,7 @@ use addon\hsx_recycle\app\model\order\RecycleReturnDevice;
 use addon\hsx_recycle\app\model\order\RecycleReturnOrder;
 use addon\hsx_recycle\app\service\core\order\OrderSubmitConfigService;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleDeviceService;
+use addon\hsx_recycle\app\service\admin\stat\TaskService;
 use core\base\BaseApiService;
 use core\exception\ApiException;
 use think\facade\Log;
@@ -312,6 +314,15 @@ class RecycleDeviceService extends BaseApiService
             $this->updateOrderStatus($device['order_id']);
 
             $this->model->commit();
+            try {
+                $stageKey = RecycleStageDict::stageOf($new_status);
+                if ($stageKey !== '') {
+                    TaskService::forSite((int)$this->site_id, 0, $is_sell ? '客户确认出售' : '客户拒绝出售')
+                        ->assignPreferredOrDefault((int)$device->id, $stageKey);
+                }
+            } catch (\Throwable $e) {
+                // 任务通知失败不影响客户确认结果。
+            }
             return true;
         } catch (\Exception $e) {
             $this->model->rollback();

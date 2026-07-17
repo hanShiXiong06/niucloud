@@ -64,98 +64,84 @@
         :mobile="orderInfo.member?.mobile || orderInfo.customer_phone || ''"
       />
 
+      <view class="order-detail-links">
       <!-- 客服入口 -->
-      <view v-if="customerServiceEnabled" class="mx-3 mb-3">
+      <view v-if="customerServiceEnabled">
         <!-- #ifdef MP-WEIXIN -->
-        <button
+        <RecycleLinkCard
           v-if="customerServiceType === 'wechat'"
-          class="customer-service-card"
-          open-type="contact"
-        >
-          <view class="customer-service-icon">
-            <up-icon name="server-man" size="18" color="var(--recycle-brand)"></up-icon>
-          </view>
-          <view class="customer-service-copy">
-            <text class="customer-service-title">{{ customerServiceConfig.title || '联系客服' }}</text>
-            <text class="customer-service-desc">{{ customerServiceConfig.content || '如需议价或咨询订单进度，请联系客服处理' }}</text>
-          </view>
-          <up-icon name="arrow-right" size="16" color="#cbd5e1"></up-icon>
-        </button>
-        <view v-else class="customer-service-card" @tap="openCustomerService">
-          <view class="customer-service-icon">
-            <up-icon name="server-man" size="18" color="var(--recycle-brand)"></up-icon>
-          </view>
-          <view class="customer-service-copy">
-            <text class="customer-service-title">{{ customerServiceConfig.title || '联系客服' }}</text>
-            <text class="customer-service-desc">{{ customerServiceConfig.content || '长按识别二维码添加工作人员' }}</text>
-          </view>
-          <up-icon name="arrow-right" size="16" color="#cbd5e1"></up-icon>
-        </view>
+          button
+          openType="contact"
+          icon="server-man"
+          :title="customerServiceConfig.title || '联系客服'"
+          :description="customerServiceConfig.content || '如需议价或咨询订单进度，请联系客服处理'"
+        />
+        <RecycleLinkCard
+          v-else
+          icon="server-man"
+          :title="customerServiceConfig.title || '联系客服'"
+          :description="customerServiceConfig.content || '长按识别二维码添加工作人员'"
+          @tap="openCustomerService"
+        />
         <!-- #endif -->
         <!-- #ifndef MP-WEIXIN -->
-        <view class="customer-service-card" @tap="openCustomerService">
-          <view class="customer-service-icon">
-            <up-icon name="server-man" size="18" color="var(--recycle-brand)"></up-icon>
-          </view>
-          <view class="customer-service-copy">
-            <text class="customer-service-title">{{ customerServiceConfig.title || '联系客服' }}</text>
-            <text class="customer-service-desc">{{ customerServiceConfig.content || '如需议价或咨询订单进度，请联系客服处理' }}</text>
-          </view>
-          <up-icon name="arrow-right" size="16" color="#cbd5e1"></up-icon>
-        </view>
+        <RecycleLinkCard
+          icon="server-man"
+          :title="customerServiceConfig.title || '联系客服'"
+          :description="customerServiceConfig.content || '如需议价或咨询订单进度，请联系客服处理'"
+          @tap="openCustomerService"
+        />
         <!-- #endif -->
       </view>
 
       <!-- 催办入口 -->
-      <view v-if="urgeEnabled" class="mx-3 mb-3">
-        <button class="urge-card" :disabled="urging || urgeOnCooldown" @tap="handleUrgeOrder">
-          <view class="urge-icon">
-            <up-icon name="bell" size="18" color="#f97316"></up-icon>
-          </view>
-          <view class="urge-copy">
-            <text class="urge-title">催一下</text>
-            <text class="urge-desc">{{ urgeOnCooldown ? urgeCooldownText : '提醒工作人员尽快处理当前订单' }}</text>
-          </view>
-          <view class="urge-action">
-            <text>{{ urging ? '发送中' : (urgeOnCooldown ? '稍后再试' : '发送提醒') }}</text>
-          </view>
-        </button>
+      <view v-if="urgeEnabled">
+        <RecycleLinkCard
+          button
+          icon="bell"
+          iconColor="#d97706"
+          iconBackground="#fff7e6"
+          title="催办订单"
+          :description="urgeOnCooldown ? urgeCooldownText : '提醒工作人员尽快处理当前订单'"
+          :actionText="urging ? '发送中' : (urgeOnCooldown ? '稍后再试' : '发送提醒')"
+          actionColor="#d97706"
+          :disabled="urging || urgeOnCooldown"
+          @tap="handleUrgeOrder"
+        />
       </view>
 
       <!-- 退货信息入口 -->
-      <view v-if="hasReturnOrder" class="mx-3 mb-3">
-        <view
-          class="bg-white rounded-lg shadow-sm p-3 flex items-center justify-between active:bg-gray-50"
+      <view v-if="hasReturnOrder">
+        <RecycleLinkCard
+          icon="order"
+          iconColor="#dc6262"
+          iconBackground="#fff1f1"
+          title="查看退货信息"
+          description="查看退回设备和处理进度"
+          :badge="`${returnOrderList.length} 条`"
+          badgeColor="#dc6262"
+          badgeBackground="#fff1f1"
           @tap="goToReturnOrder(orderInfo.id)"
-        >
-          <view class="flex items-center gap-2">
-            <view class="w-7 h-7 rounded-full bg-red-50 flex items-center justify-center">
-              <up-icon name="order" size="16" color="#ef4444"></up-icon>
-            </view>
-            <view>
-              <text class="text-sm font-medium text-gray-800">查看退货信息</text>
-              <text class="text-xs text-gray-400 ml-1">({{ returnOrderList.length }}条)</text>
-            </view>
-          </view>
-          <up-icon name="arrow-right" size="16" color="#cbd5e1"></up-icon>
-        </view>
+        />
+      </view>
       </view>
 
       <!-- 无设备提示 -->
-      <view v-if="hasNoDevices" class="mx-3 mt-1">
-        <view class="bg-white rounded-lg shadow-sm p-6 flex flex-col items-center">
-          <up-icon name="clock" size="40" color="#cbd5e1" class="mb-2"></up-icon>
-          <text class="text-sm text-gray-500">订单等待更新</text>
+      <view v-if="hasNoDevices" class="order-empty-card">
+        <view class="order-empty-card__icon">
+          <up-icon name="clock" size="28" color="#a6afbd" />
         </view>
+        <text class="order-empty-card__title">订单等待更新</text>
+        <text class="order-empty-card__description">工作人员接收设备后，设备明细会显示在这里</text>
       </view>
 
       <!-- 设备列表 -->
-      <view v-else class="mx-3">
-        <view class="flex items-center gap-1.5 mb-2">
-          <view class="w-1 h-4 rounded bg-orange-500"></view>
-          <text class="text-base font-bold text-gray-800">设备列表</text>
-          <text class="text-xs text-gray-400">({{ orderInfo.devices.length }}台)</text>
-        </view>
+      <view v-else class="order-device-section">
+        <RecycleSectionHeader
+          title="设备明细"
+          description="逐台查看质检、报价与确认结果"
+          :count="`${orderInfo.devices.length} 台`"
+        />
 
         <!-- 批量操作工具栏 -->
         <DeviceBatchToolbar
@@ -192,14 +178,13 @@
       <!-- 底部批量确认按钮 -->
       <view
         v-if="selectedActionableCount > 0 && orderInfo.status == 5"
-        class="fixed left-0 right-0 bottom-0 bg-white bg-opacity-95 p-3 shadow-up backdrop-blur-sm"
+        class="order-confirm-bar"
       >
         <button
-          class="w-full h-11 rounded-full flex items-center justify-center text-white text-sm font-medium"
-          style="background: linear-gradient(135deg, #10b981, #059669);"
+          class="order-confirm-bar__button"
           @tap="handleConfirmSelected"
         >
-          <up-icon name="checkmark-circle" size="16" color="#fff" class="mr-1"></up-icon>
+          <up-icon name="checkmark-circle" size="16" color="#fff" />
           确认选中设备 ({{ selectedActionableCount }})
         </button>
       </view>
@@ -236,6 +221,8 @@ import DeviceDetailCard from './components/DeviceDetailCard.vue'
 import CustomerServicePopup from './components/CustomerServicePopup.vue'
 import InspectionReportPopup from './components/InspectionReportPopup.vue'
 import RecyclePageHeader from '../components/RecyclePageHeader.vue'
+import RecycleLinkCard from '../components/RecycleLinkCard.vue'
+import RecycleSectionHeader from '../components/RecycleSectionHeader.vue'
 import { buildRecycleThemeVars } from '../../utils/theme'
 import { urgeOrder } from '../../api/order'
 import type { OrderDetailDevice } from '../../types/order'
@@ -501,7 +488,7 @@ onShow(async () => {
 .recycle-order-detail-page {
   min-height: 100vh;
   padding-bottom: calc(120rpx + env(safe-area-inset-bottom));
-  background: var(--recycle-bg-main);
+  background: #f5f6f8;
   color: var(--recycle-text-main);
 }
 
@@ -522,122 +509,92 @@ onShow(async () => {
   from { opacity: 0; }
   to { opacity: 1; }
 }
-.shadow-up {
-  box-shadow: 0 -2rpx 10rpx rgba(0, 0, 0, 0.05);
-}
-
-.customer-service-card {
-  width: 100%;
-  margin: 0;
-  border: 0;
-  padding: 24rpx;
-  border-radius: 16rpx;
-  background: var(--recycle-bg-card);
-  box-shadow: 0 2rpx 10rpx rgba(15, 23, 42, 0.06);
+.order-detail-links {
+  margin: 0 24rpx 18rpx;
   display: flex;
-  align-items: center;
-  gap: 20rpx;
-  text-align: left;
-  line-height: 1;
-  box-sizing: border-box;
+  flex-direction: column;
+  gap: 12rpx;
 }
 
-.customer-service-card::after {
-  border: 0;
-}
-
-.urge-card {
+.order-detail-links > view {
   width: 100%;
-  margin: 0;
-  border: 0;
-  padding: 24rpx;
-  border-radius: 16rpx;
-  background: var(--recycle-bg-card);
-  box-shadow: 0 2rpx 10rpx rgba(15, 23, 42, 0.06);
+}
+
+.order-empty-card {
+  margin: 0 24rpx 18rpx;
+  padding: 48rpx 32rpx;
+  border: 1rpx solid #e9edf2;
+  border-radius: 24rpx;
+  background: #fff;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 20rpx;
-  text-align: left;
-  line-height: 1;
-  box-sizing: border-box;
+  text-align: center;
 }
 
-.urge-card::after {
-  border: 0;
-}
-
-.urge-card[disabled] {
-  opacity: 0.72;
-}
-
-.urge-icon {
-  width: 56rpx;
-  height: 56rpx;
-  border-radius: 50%;
-  background: rgba(249, 115, 22, 0.12);
+.order-empty-card__icon {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 24rpx;
+  background: #f2f4f7;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
 }
 
-.urge-copy {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10rpx;
+.order-empty-card__title {
+  margin-top: 20rpx;
+  color: #4f5c70;
+  font-size: 27rpx;
+  line-height: 38rpx;
+  font-weight: 650;
 }
 
-.urge-title {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: var(--recycle-text-main);
+.order-empty-card__description {
+  margin-top: 8rpx;
+  color: #9aa4b2;
+  font-size: 22rpx;
+  line-height: 34rpx;
 }
 
-.urge-desc {
-  font-size: 24rpx;
-  color: var(--recycle-text-sub);
-  line-height: 1.4;
+.order-device-section {
+  margin: 0 24rpx;
 }
 
-.urge-action {
-  padding: 12rpx 18rpx;
-  border-radius: 999rpx;
-  background: rgba(249, 115, 22, 0.12);
-  color: #f97316;
-  font-size: 24rpx;
-  flex-shrink: 0;
+.order-device-section > .recycle-section-header {
+  margin-bottom: 16rpx;
 }
 
-.customer-service-icon {
-  width: 56rpx;
-  height: 56rpx;
-  border-radius: 50%;
-  background: rgba(34, 197, 94, 0.12);
+.order-confirm-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom));
+  border-top: 1rpx solid #edf0f4;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(18rpx);
+  box-shadow: 0 -8rpx 28rpx rgba(31, 41, 55, 0.07);
+}
+
+.order-confirm-bar__button {
+  width: 100%;
+  height: 82rpx;
+  margin: 0;
+  border-radius: 18rpx;
+  background: var(--recycle-button-bg);
+  color: var(--recycle-button-text);
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-}
-
-.customer-service-copy {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
   gap: 10rpx;
+  font-size: 26rpx;
+  line-height: 82rpx;
+  font-weight: 650;
 }
 
-.customer-service-title {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: var(--recycle-text-main);
-}
-
-.customer-service-desc {
-  font-size: 24rpx;
-  color: var(--recycle-text-sub);
-  line-height: 1.4;
+.order-confirm-bar__button::after {
+  border: 0;
 }
 </style>

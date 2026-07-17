@@ -206,6 +206,8 @@
                 </view>
             </scroll-view>
 
+            <NextAssigneePicker v-model="nextAssigneeUid" stage-key="confirm" label="下一步 · 报价确认负责人" />
+
             <!-- 常驻定价输入：永远显示，突出"写价格"这一步 -->
             <view class="price-bar">
                 <view class="price-bar__label">
@@ -250,6 +252,7 @@ import { img } from '@/utils/common'
 import { previewImages as openPreview } from '@/addon/hsx_recycle/utils/preview'
 import { useRecycleSubmit } from '@/addon/hsx_recycle/hooks/useRecycleSubmit'
 import { confirmDanger } from '@/addon/hsx_recycle/utils/confirm'
+import NextAssigneePicker from '@/addon/hsx_recycle/components/NextAssigneePicker.vue'
 
 interface Props {
     visible: boolean
@@ -264,6 +267,7 @@ const submitting = ref(false)
 // 提交守卫复用现有 submitting，模板 :loading 绑定无需改动
 const submit = useRecycleSubmit(submitting)
 const detailLoading = ref(false)
+const nextAssigneeUid = ref(0)
 const deviceDetail = ref<any>(null)
 const device = computed(() => deviceDetail.value || props.deviceData || {})
 const staffOptions = ref<Array<{ uid: number, label: string }>>([])
@@ -629,7 +633,8 @@ const handleSubmit = async () => {
             refurbishment_assignee_uid: formData.value.refurbishment_required === 1 ? formData.value.refurbishment_assignee_uid : 0,
             refurbishment_reason: formData.value.refurbishment_required === 1 ? formData.value.refurbishment_reason : '',
             refurbishment_items: formData.value.refurbishment_required === 1 ? buildRefurbishmentItems() : [],
-            refurbishment_estimated_cost: formData.value.refurbishment_required === 1 ? Number(formData.value.refurbishment_estimated_cost || 0) : 0
+            refurbishment_estimated_cost: formData.value.refurbishment_required === 1 ? Number(formData.value.refurbishment_estimated_cost || 0) : 0,
+            next_assignee_uid: nextAssigneeUid.value
         })
         emit('success')
         handleClose()

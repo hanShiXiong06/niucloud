@@ -64,6 +64,166 @@
     font-size: 12px;
 }
 
+/* ---------- 报价中心工作台 ---------- */
+.qs-scope .quote-page-header {
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.qs-scope .quote-main-tabs > .el-tabs__header {
+    margin: 0 0 16px;
+}
+
+.qs-scope .quote-main-tabs > .el-tabs__header .el-tabs__nav-wrap::after {
+    height: 1px;
+}
+
+.qs-scope .workbench-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin-bottom: 16px;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 8px;
+    background: var(--el-fill-color-blank);
+}
+
+.qs-scope .summary-item {
+    display: flex;
+    min-width: 0;
+    min-height: 92px;
+    padding: 16px 20px;
+    flex-direction: column;
+    justify-content: center;
+    border-right: 1px solid var(--el-border-color-lighter);
+}
+
+.qs-scope .summary-item:last-child {
+    border-right: 0;
+}
+
+.qs-scope .summary-item strong {
+    margin: 4px 0 2px;
+    font-size: 24px;
+    line-height: 1.2;
+}
+
+.qs-scope .summary-item .summary-date {
+    font-size: 18px;
+}
+
+.qs-scope .summary-label,
+.qs-scope .summary-note {
+    color: var(--el-text-color-secondary);
+    font-size: 12px;
+}
+
+.qs-scope .workbench-toolbar,
+.qs-scope .section-switcher,
+.qs-scope .settings-filter {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+
+.qs-scope .workbench-search {
+    width: 280px;
+}
+
+.qs-scope .toolbar-select {
+    width: 170px;
+}
+
+.qs-scope .toolbar-spacer {
+    flex: 1;
+}
+
+.qs-scope .advanced-filter {
+    display: grid;
+    gap: 8px;
+}
+
+.qs-scope .advanced-filter label {
+    color: var(--el-text-color-secondary);
+    font-size: 12px;
+}
+
+.qs-scope .workbench-table,
+.qs-scope .records-table,
+.qs-scope .settings-table {
+    border: 1px solid var(--el-border-color-lighter);
+}
+
+.qs-scope .metric-main {
+    color: var(--el-text-color-primary);
+    font-weight: 500;
+    line-height: 1.6;
+}
+
+.qs-scope .history-coverage {
+    max-width: 150px;
+}
+
+.qs-scope .history-coverage .el-progress {
+    margin: 3px 0 4px;
+}
+
+.qs-scope .status-control,
+.qs-scope .status-tags {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.qs-scope .status-control {
+    font-size: 12px;
+}
+
+.qs-scope .status-tags {
+    margin-top: 6px;
+    flex-wrap: wrap;
+}
+
+.qs-scope .section-switcher {
+    min-height: 48px;
+    padding: 10px 12px;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 8px;
+    background: var(--el-fill-color-lighter);
+}
+
+.qs-scope .section-switcher-copy {
+    display: flex;
+    min-width: 260px;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.qs-scope .section-switcher-copy span {
+    color: var(--el-text-color-secondary);
+    font-size: 12px;
+}
+
+.qs-scope .data-access-panel .table-search-wrap,
+.qs-scope .quote-settings .table-search-wrap {
+    margin-top: 0 !important;
+}
+
+@media (max-width: 1200px) {
+    .qs-scope .workbench-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .qs-scope .summary-item:nth-child(2) {
+        border-right: 0;
+    }
+
+    .qs-scope .summary-item:nth-child(-n + 2) {
+        border-bottom: 1px solid var(--el-border-color-lighter);
+    }
+}
+
 /* ---------- 报价源切换器（数据管理顶部） ---------- */
 .qs-scope .source-switcher {
     display: flex;
@@ -299,6 +459,19 @@
     height: 100%;
 }
 
+.qs-scope .drawer-meta-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 0;
+}
+
+.qs-scope .drawer-meta-line span + span::before {
+    content: '·';
+    margin: 0 7px;
+    color: var(--el-text-color-placeholder);
+}
+
 /* 行价格页：表单不占高，表格占满剩余空间 */
 .qs-scope .rows-pane {
     display: flex;
@@ -311,6 +484,47 @@
     margin-bottom: 6px;
 }
 
+.qs-scope .rows-pane .row-filter-form {
+    display: flex;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.qs-scope .rows-pane .row-filter-form .matrix-zoom-form-item {
+    margin-left: auto;
+    margin-right: 0;
+}
+
+.qs-scope .matrix-zoom-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.qs-scope .matrix-zoom-control .el-button {
+    width: 28px;
+    height: 28px;
+}
+
+.qs-scope .matrix-zoom-value {
+    width: 42px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--el-text-color-regular);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.qs-scope .inline-edit-alert {
+    flex: 0 0 auto;
+    margin-bottom: 10px;
+}
+
+.qs-scope .inline-edit-alert .el-alert__title {
+    font-size: 12px;
+}
+
 .qs-scope .rows-pane .row-filter-form .el-form-item {
     margin-bottom: 8px;
 }
@@ -318,6 +532,59 @@
 .qs-scope .rows-table-wrap {
     flex: 1;
     min-height: 0;
+    overflow: auto;
+    padding-right: 2px;
+}
+
+.qs-scope .price-section {
+    margin-bottom: 18px;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--el-fill-color-blank);
+}
+
+.qs-scope .price-sections-zoom {
+    transform-origin: left top;
+}
+
+.qs-scope .price-section:last-child {
+    margin-bottom: 0;
+}
+
+.qs-scope .price-section-head {
+    display: flex;
+    min-height: 42px;
+    padding: 8px 12px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid var(--el-border-color-lighter);
+    background: var(--el-fill-color-lighter);
+}
+
+.qs-scope .price-section-head > div {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+}
+
+.qs-scope .price-section-head strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.qs-scope .price-section-head span {
+    color: var(--el-text-color-secondary);
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.qs-scope .price-section .el-table {
+    border: 0;
+    border-radius: 0;
 }
 
 .qs-scope .row-toolbar {
@@ -342,6 +609,91 @@
     font-weight: 600;
 }
 
+.qs-scope .inline-price-input {
+    position: relative;
+    width: 100%;
+    min-width: 92px;
+}
+
+.qs-scope .inline-price-native {
+    box-sizing: border-box;
+    width: 100%;
+    height: 32px;
+    padding: 0 24px 0 8px;
+    border: 1px solid var(--el-border-color);
+    border-radius: var(--el-border-radius-base);
+    outline: none;
+    background: var(--el-fill-color-blank);
+    color: var(--el-color-primary);
+    font: inherit;
+    font-weight: 600;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    transition: border-color 0.15s ease;
+}
+
+.qs-scope .inline-price-native:hover,
+.qs-scope .inline-price-native:focus,
+.qs-scope .inline-price-input.is-dirty .inline-price-native,
+.qs-scope .inline-price-input.is-saving .inline-price-native {
+    border-color: var(--el-color-primary);
+}
+
+.qs-scope .inline-price-input.is-saved .inline-price-native {
+    border-color: var(--el-color-success);
+}
+
+.qs-scope .inline-price-input.is-error .inline-price-native {
+    border-color: var(--el-color-danger);
+}
+
+.qs-scope .inline-save-indicator {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--el-color-primary);
+    transform: translateY(-50%);
+    pointer-events: none;
+}
+
+.qs-scope .inline-price-input.is-saving .inline-save-indicator {
+    width: 9px;
+    height: 9px;
+    border: 1px solid var(--el-border-color-light);
+    border-top-color: var(--el-color-primary);
+    background: transparent;
+    animation: quote-inline-spin 0.8s linear infinite;
+}
+
+@keyframes quote-inline-spin {
+    to { transform: translateY(-50%) rotate(360deg); }
+}
+
+.qs-scope .inline-price-input.is-saved .inline-save-indicator {
+    background: var(--el-color-success);
+}
+
+.qs-scope .inline-price-input.is-error .inline-save-indicator {
+    background: var(--el-color-danger);
+}
+
+.qs-scope .inline-price-input.price-up .inline-price-native {
+    color: var(--el-color-danger);
+}
+
+.qs-scope .inline-price-input.price-down .inline-price-native {
+    color: var(--el-color-success);
+}
+
+.qs-scope .empty-price-cell {
+    display: block;
+    color: var(--el-text-color-placeholder);
+    text-align: center;
+}
+
 .qs-scope .excel-plain-cell {
     display: block;
     min-height: 24px;
@@ -351,6 +703,10 @@
 .qs-scope .excel-remark-cell {
     display: block;
     min-height: 24px;
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     color: var(--el-text-color-secondary);
 }
 

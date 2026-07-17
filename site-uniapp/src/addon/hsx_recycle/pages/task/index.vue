@@ -60,24 +60,45 @@
                     <view class="card-foot">
                         <text class="claim-state" :class="claimClass(item)">{{ claimText(item) }}</text>
                         <view class="btns">
-                            <u-button v-if="item.assignee_uid == 0" text="认领" size="mini" :plain="true" type="primary" shape="circle" @click="doClaim(item)"></u-button>
-                            <u-button v-else-if="item.is_mine" text="释放" size="mini" :plain="true" type="warning" shape="circle" @click="doRelease(item)"></u-button>
+                            <u-button v-if="item.assignee_uid" text="转交" size="mini" :plain="true" shape="circle" @click="openAssign(item)"></u-button>
+                            <u-button v-if="item.assignee_uid == 0" text="我来处理" size="mini" :plain="true" shape="circle" @click="doClaim(item)"></u-button>
                             <u-button text="处理" size="mini" type="primary" shape="circle" @click="toProcess(item)"></u-button>
                         </view>
                     </view>
                 </view>
             </view>
         </mescroll-body>
+
+        <u-popup :show="assignVisible" mode="bottom" round="20" :safeAreaInsetBottom="true" @close="assignVisible = false">
+            <view class="assign-popup">
+                <view class="assign-head">
+                    <view>
+                        <text class="assign-title">{{ assigningItem?.assignee_uid ? '转交任务' : '分配任务' }}</text>
+                        <text class="assign-subtitle">{{ assigningItem?.model || assigningItem?.order_no || '选择责任人' }}</text>
+                    </view>
+                    <u-icon name="close" size="20" color="#64748b" @click="assignVisible = false"></u-icon>
+                </view>
+                <scroll-view scroll-y class="assign-list">
+                    <view v-for="user in assignUsers" :key="user.uid" class="assign-user" :class="{ active: selectedAssigneeUid === user.uid }" @click="selectedAssigneeUid = user.uid">
+                        <view class="user-avatar">{{ (user.name || '员').slice(0, 1) }}</view>
+                        <view class="user-info"><text class="user-name">{{ user.name }}</text><text v-if="user.username && user.username !== user.name" class="user-account">{{ user.username }}</text></view>
+                        <u-icon v-if="selectedAssigneeUid === user.uid" name="checkmark-circle-fill" size="22" color="var(--primary-color)"></u-icon>
+                    </view>
+                    <view v-if="!assignLoading && !assignUsers.length" class="assign-empty">当前环节没有可分配员工，请先配置角色权限</view>
+                </scroll-view>
+                <view class="assign-action"><u-button text="确认分配" type="primary" shape="circle" :loading="assignSaving" :disabled="!selectedAssigneeUid" @click="confirmAssign"></u-button></view>
+            </view>
+        </u-popup>
     </view>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { onShow, onPageScroll, onReachBottom } from '@dcloudio/uni-app';
+import { onLoad, onShow, onPageScroll, onReachBottom } from '@dcloudio/uni-app';
 import { redirect } from '@/utils/common';
 import MescrollBody from '@/components/mescroll/mescroll-body/mescroll-body.vue';
 import useMescroll from '@/components/mescroll/hooks/useMescroll.js';
-import { getMyStages, getTaskList, claimTask, releaseTask } from '@/addon/hsx_recycle/api/task';
+import { getMyStages, getTaskList, getAssignableUsers, assignTask, claimTask } from '@/addon/hsx_recycle/api/task';
 
 const { mescrollInit, downCallback, getMescroll } = useMescroll(onPageScroll, onReachBottom);
 
@@ -99,6 +120,12 @@ const keyword = ref('');
 const activeStage = ref('');
 const myStages = ref<string[]>([]);
 const firstLoaded = ref(false);
+const assignVisible = ref(false);
+const assignLoading = ref(false);
+const assignSaving = ref(false);
+const assigningItem = ref<any>(null);
+const assignUsers = ref<any[]>([]);
+const selectedAssigneeUid = ref(0);
 
 const tabList = computed(() => {
     const arr = [{ name: '全部', key: '' }];
@@ -122,6 +149,7 @@ const loadStages = async () => {
     try {
         const res: any = await getMyStages();
         myStages.value = res.data || [];
+        if (activeStage.value && !myStages.value.includes(activeStage.value)) activeStage.value = '';
     } catch (e) {}
 };
 
@@ -146,13 +174,48 @@ const onTab = (tab: any) => {
 const doClaim = (item: any) => {
     claimTask({ device_id: item.device_id, stage_key: item.stage_key }).then(() => reload());
 };
-const doRelease = (item: any) => {
-    releaseTask({ device_id: item.device_id, stage_key: item.stage_key }).then(() => reload());
+const openAssign = async (item: any) => {
+    assigningItem.value = item;
+    assignUsers.value = [];
+    selectedAssigneeUid.value = 0;
+    assignVisible.value = true;
+    assignLoading.value = true;
+    try {
+        const res: any = await getAssignableUsers(item.stage_key);
+        assignUsers.value = res.data || [];
+        const remembered = Number(uni.getStorageSync(`hsx_recycle_last_assignee_${ item.stage_key }`) || 0);
+        const preferred = Number(item.assignee_uid || remembered || assignUsers.value[0]?.uid || 0);
+        selectedAssigneeUid.value = assignUsers.value.some(user => Number(user.uid) === preferred) ? preferred : Number(assignUsers.value[0]?.uid || 0);
+    } finally {
+        assignLoading.value = false;
+    }
+};
+const confirmAssign = async () => {
+    if (!assigningItem.value || !selectedAssigneeUid.value) return;
+    assignSaving.value = true;
+    try {
+        await assignTask({ device_id: assigningItem.value.device_id, stage_key: assigningItem.value.stage_key, assignee_uid: selectedAssigneeUid.value });
+        uni.setStorageSync(`hsx_recycle_last_assignee_${ assigningItem.value.stage_key }`, selectedAssigneeUid.value);
+        assignVisible.value = false;
+        reload();
+    } finally {
+        assignSaving.value = false;
+    }
 };
 const toProcess = (item: any) => {
     const imei = item.is_order ? '' : (item.imei || item.sn || '');
     redirect({ url: `/addon/hsx_recycle/pages/order/detail?id=${ item.order_id }&imei=${ encodeURIComponent(imei) }` });
 };
+
+onLoad((query: Record<string, any>) => {
+    const stage = String(query?.stage || '').trim();
+    const routeKeyword = String(query?.keyword || '').trim();
+    activeStage.value = stage;
+    if (routeKeyword) {
+        try { keyword.value = decodeURIComponent(routeKeyword); }
+        catch { keyword.value = routeKeyword; }
+    }
+});
 
 onShow(async () => {
     if (!firstLoaded.value) {
@@ -188,4 +251,11 @@ onShow(async () => {
 .cs-other { color: #f59e0b; }
 .btns { display: flex; gap: 16rpx; }
 .btns :deep(.u-button) { padding: 0 28rpx; }
+.assign-popup { background: #fff; padding: 30rpx 28rpx 24rpx; }
+.assign-head { display: flex; align-items: flex-start; justify-content: space-between; padding-bottom: 22rpx; border-bottom: 2rpx solid #f1f3f6; }
+.assign-title, .assign-subtitle { display: block; }.assign-title { font-size: 34rpx; font-weight: 600; color: #1f2937; }.assign-subtitle { margin-top: 8rpx; font-size: 24rpx; color: #94a3b8; }
+.assign-list { max-height: 600rpx; min-height: 220rpx; }.assign-user { display: flex; align-items: center; min-height: 104rpx; padding: 0 14rpx; border-bottom: 2rpx solid #f5f6f8; }
+.assign-user.active { background: #f6f9ff; }.user-avatar { display: flex; align-items: center; justify-content: center; width: 64rpx; height: 64rpx; border-radius: 50%; background: #eef3ff; color: var(--primary-color); font-size: 26rpx; font-weight: 600; }
+.user-info { flex: 1; margin-left: 18rpx; }.user-name, .user-account { display: block; }.user-name { font-size: 28rpx; color: #1f2937; }.user-account { margin-top: 4rpx; font-size: 22rpx; color: #94a3b8; }
+.assign-empty { padding: 80rpx 30rpx; text-align: center; color: #94a3b8; font-size: 25rpx; }.assign-action { padding-top: 22rpx; }
 </style>

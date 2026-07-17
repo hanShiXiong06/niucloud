@@ -134,7 +134,8 @@ class RecycleOrder extends BaseAdminController
             ['agent_name', ''],
             ['agent_mobile', ''],
             ['sign_after_create', false],
-            ['draft_device_entry', false]
+            ['draft_device_entry', false],
+            ['next_assignee_uid', 0]
         ]);
 
         // 参数验证
@@ -152,13 +153,14 @@ class RecycleOrder extends BaseAdminController
     {
         $data = $this->request->params([
             ['devices', []],
-            ['remark', '']
+            ['remark', ''],
+            ['next_assignee_uid', 0]
         ]);
 
         // 参数验证
         $this->validate->scene('sign')->check(array_merge(['id' => $id], $data));
 
-        return success($this->flowService->sign($id, $data));
+        return success($this->service->sign($id, $data));
     }
 
     /**
@@ -607,7 +609,8 @@ class RecycleOrder extends BaseAdminController
             ['remark', ''],
             ['cancel_reason', ''],
             ['close_reason', ''],
-            ['device_ids', []]
+            ['device_ids', []],
+            ['next_assignee_uid', 0]
         ]);
         // 参数验证
         $this->validate->scene('update')->check(array_merge(['id' => $id], $data));

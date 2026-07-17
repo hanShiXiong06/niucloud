@@ -1,45 +1,33 @@
 <template>
-  <view class="bg-white rounded-lg shadow-sm mx-3 mb-3 overflow-hidden">
-    <!-- 区块标题 -->
-    <view class="flex items-center gap-1.5 px-4 pt-3 pb-2">
-      <view class="w-1 h-4 rounded" style="background: var(--recycle-brand);"></view>
-      <text class="text-base font-bold text-gray-800">订单信息</text>
-    </view>
-
-    <view class="px-4 pb-3 space-y-2.5">
-      <!-- 订单号 -->
-      <view class="flex items-center justify-between">
-        <text class="text-sm text-gray-400">订单号</text>
-        <view class="flex items-center gap-1.5">
-          <text class="text-sm text-gray-800 font-medium">{{ orderNo }}</text>
-          <view
-            class="w-5 h-5 flex items-center justify-center rounded bg-gray-100 active:bg-gray-200"
-            @tap="handleCopyOrderNo"
-          >
-            <up-icon name="file-text" size="12" color="#94a3b8"></up-icon>
+  <view class="order-detail-card">
+    <RecycleSectionHeader title="订单信息" description="订单、设备与结算概览" />
+    <view class="order-detail-card__body">
+      <view class="order-detail-row">
+        <text class="order-detail-row__label">订单号</text>
+        <view class="order-detail-row__value-wrap">
+          <text class="order-detail-row__value order-detail-row__value--number">{{ orderNo }}</text>
+          <view class="order-detail-row__copy" @tap="handleCopyOrderNo">
+            <up-icon name="file-text" size="12" color="#8b96a9" />
           </view>
         </view>
       </view>
-
-      <!-- 设备数量 -->
-      <view v-if="deviceCount > 0" class="flex items-center justify-between">
-        <text class="text-sm text-gray-400">设备数量</text>
-        <text class="text-sm text-gray-800">{{ deviceCount }} 台</text>
+      <view v-if="deviceCount > 0" class="order-detail-row">
+        <text class="order-detail-row__label">设备数量</text>
+        <text class="order-detail-row__value">{{ deviceCount }} 台</text>
       </view>
-
-      <!-- 快递单号 -->
-      <view v-if="expressNo" class="flex items-center justify-between">
-        <text class="text-sm text-gray-400">快递单号</text>
-        <view class="flex items-center gap-1.5" @tap="handleShowExpressTracking">
-          <text class="text-sm text-blue-500 font-medium">{{ expressNo }}</text>
-          <up-icon name="arrow-right" size="12" color="#3b82f6"></up-icon>
+      <view v-if="expressNo" class="order-detail-row">
+        <text class="order-detail-row__label">物流单号</text>
+        <view class="order-detail-row__value-wrap" @tap="handleShowExpressTracking">
+          <text class="order-detail-row__value order-detail-row__value--link">{{ expressNo }}</text>
+          <up-icon name="arrow-right" size="12" color="var(--recycle-brand)" />
         </view>
       </view>
-
-      <!-- 总价值 -->
-      <view class="flex items-center justify-between pt-1 border-t border-gray-50">
-        <text class="text-sm text-gray-400">订单总价</text>
-        <text class="text-lg font-bold" style="color: var(--recycle-price);">¥{{ totalPrice }}</text>
+      <view class="order-detail-total">
+        <view>
+          <text class="order-detail-total__label">回收总价</text>
+          <text class="order-detail-total__tip">以最终确认价格为准</text>
+        </view>
+        <text class="order-detail-total__value">¥{{ totalPrice }}</text>
       </view>
     </view>
 
@@ -56,6 +44,7 @@
 import { ref } from 'vue'
 import { copyOrderNo } from '../../../utils/clipboard'
 import ExpressTrackingModal from './ExpressTrackingModal.vue'
+import RecycleSectionHeader from '../../components/RecycleSectionHeader.vue'
 
 interface Props {
   orderNo: string
@@ -75,3 +64,105 @@ const handleShowExpressTracking = () => {
   showExpressModal.value = true
 }
 </script>
+
+<style scoped lang="scss">
+.order-detail-card {
+  margin: 0 24rpx 18rpx;
+  padding: 24rpx;
+  border: 1rpx solid #e9edf2;
+  border-radius: 24rpx;
+  background: #fff;
+  box-shadow: 0 8rpx 24rpx rgba(31, 41, 55, 0.045);
+}
+
+.order-detail-card__body {
+  margin-top: 18rpx;
+}
+
+.order-detail-row {
+  min-height: 66rpx;
+  border-top: 1rpx solid #f0f2f5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24rpx;
+}
+
+.order-detail-row__label {
+  flex-shrink: 0;
+  color: #8b96a9;
+  font-size: 22rpx;
+}
+
+.order-detail-row__value-wrap {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10rpx;
+}
+
+.order-detail-row__value {
+  min-width: 0;
+  color: #4d596c;
+  font-size: 23rpx;
+  line-height: 32rpx;
+  font-weight: 550;
+}
+
+.order-detail-row__value--number {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.order-detail-row__value--link {
+  color: var(--recycle-brand);
+}
+
+.order-detail-row__copy {
+  width: 36rpx;
+  height: 36rpx;
+  border-radius: 9rpx;
+  background: #f2f4f7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.order-detail-total {
+  margin-top: 10rpx;
+  padding: 20rpx;
+  border-radius: 16rpx;
+  background: #f7f9fc;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.order-detail-total__label {
+  display: block;
+  color: #4d596c;
+  font-size: 23rpx;
+  line-height: 32rpx;
+  font-weight: 600;
+}
+
+.order-detail-total__tip {
+  display: block;
+  margin-top: 3rpx;
+  color: #a1a9b6;
+  font-size: 19rpx;
+  line-height: 28rpx;
+}
+
+.order-detail-total__value {
+  color: var(--recycle-price);
+  font-size: 34rpx;
+  line-height: 44rpx;
+  font-weight: 750;
+  white-space: nowrap;
+}
+</style>

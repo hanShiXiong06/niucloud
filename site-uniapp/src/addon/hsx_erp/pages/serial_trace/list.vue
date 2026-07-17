@@ -1,6 +1,10 @@
 <template>
     <view class="erp-page">
-        <ErpListHeader v-model="keyword" placeholder="输入 IMEI / SN / 型号 / 供货商" :show-scan="true" @search="reload" @scan="scan" />
+        <ErpListHeader v-model="keyword" placeholder="输入 IMEI / SN / 型号 / 供货商" :show-scan="true" :compact-mp="true" @search="reload" @scan="scan">
+            <template #below>
+                <ErpQuickFilterBar :items="quickFilters" @change="onQuickFilter" />
+            </template>
+        </ErpListHeader>
 
         <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true" :default-page-size="15" :paging-style="pagingStyle">
               <view class="trace-tip">同一串号允许多次入库；每次入库作为独立记录，最新记录排在最上面。</view>
@@ -24,20 +28,39 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { getMobileSerialTraceList } from '@/addon/hsx_erp/api/erp'
 import { formatErpTime } from '@/addon/hsx_erp/hooks/useErpTime'
 import { scanErpCode } from '@/addon/hsx_erp/hooks/useErpScan'
 import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
 import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
-const { pagingStyle } = useListHeader({ tabs: false, h5TopRpx: 106 })
+import ErpQuickFilterBar from '@/addon/hsx_erp/components/ErpQuickFilterBar.vue'
+const { pagingStyle } = useListHeader({ tabs: true, compactMp: true, h5TopRpx: 178 })
 const keyword=ref(''),list=ref<any[]>([]),pagingRef=ref<any>(null)
+const status=ref(''),datePreset=ref('')
+const quickFilters=computed(()=>[
+    {key:'status',label:'设备状态',title:'设备状态',value:status.value,options:[
+        {label:'全部状态',value:''},{label:'在库',value:'in_stock'},{label:'已售',value:'sold'},{label:'已退货',value:'returned'},{label:'已作废',value:'void'},
+    ]},
+    {key:'date',label:'入库时间',title:'入库时间',value:datePreset.value,options:[
+        {label:'全部时间',value:''},{label:'今日入库',value:'today'},{label:'本月入库',value:'month'},{label:'上月入库',value:'last_month'},
+    ]},
+])
 const reload=()=>pagingRef.value?.reload()
-async function queryList(page:number,limit:number){try{const res:any=await getMobileSerialTraceList({keyword:keyword.value,page,limit});pagingRef.value?.complete(res?.data?.data||[])}catch(_){pagingRef.value?.complete(false)}}
+const onQuickFilter=({key,value}:{key:string,value:string|number})=>{if(key==='status')status.value=String(value);if(key==='date')datePreset.value=String(value);reload()}
+async function queryList(page:number,limit:number){try{const range=dateRange(datePreset.value);const res:any=await getMobileSerialTraceList({keyword:keyword.value,status:status.value,...range,page,limit});pagingRef.value?.complete(res?.data?.data||[])}catch(_){pagingRef.value?.complete(false)}}
 async function scan(){try{keyword.value=await scanErpCode();reload()}catch(e:any){if(!String(e?.errMsg||'').includes('cancel'))uni.showToast({title:e?.message||'扫码失败',icon:'none'})}}
 function goDetail(row:any){uni.navigateTo({url:`/addon/hsx_erp/pages/serial_trace/detail?id=${Number(row.id||0)}`})}
 const statusLabel=(s:string)=>({in_stock:'在库',sold:'已售',returned:'已退货',void:'已作废'}[s]||s||'-')
 const statusType=(s:string)=>({in_stock:'success',sold:'primary',returned:'warning',void:'info'}[s]||'info')
+function dateRange(value:string){
+    if(!value)return {}
+    const now=new Date(),year=now.getFullYear(),month=now.getMonth()
+    let start=new Date(year,month,1),end=new Date(year,month+1,1)
+    if(value==='today'){start=new Date(year,month,now.getDate());end=new Date(year,month,now.getDate()+1)}
+    if(value==='last_month'){start=new Date(year,month-1,1);end=new Date(year,month,1)}
+    return {start_at:Math.floor(start.getTime()/1000),end_at:Math.floor(end.getTime()/1000)-1}
+}
 </script>
 <style scoped lang="scss">
 @import '@/addon/hsx_erp/styles/erp-mobile.scss';

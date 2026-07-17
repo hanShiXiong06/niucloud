@@ -1,7 +1,7 @@
 <template>
     <el-dialog
         v-model="historyDialog.visible"
-        :title="`历史价格 · ${historyDialog.row.model_name || historyDialog.row.name || ''}`"
+        :title="`价格快照 · ${historyDialog.row.model_name || historyDialog.row.name || ''}`"
         width="860px"
         class="qs-scope quote-spider-dialog"
         append-to-body
@@ -13,7 +13,6 @@
             <el-radio-group :model-value="historyDialog.days" @change="setHistoryDays">
                 <el-radio-button :value="7">近 7 天</el-radio-button>
                 <el-radio-button :value="30">近 30 天</el-radio-button>
-                <el-radio-button :value="90">近 90 天</el-radio-button>
             </el-radio-group>
             <span class="muted">点击图例可单独查看某个等级的价格走势</span>
         </div>

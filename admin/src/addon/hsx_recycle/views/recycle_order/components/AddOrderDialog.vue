@@ -42,7 +42,7 @@
                             @change="handleMemberChange"
                         />
 
-                        <div v-if="selectedMember" class="selected-member">
+                        <!-- <div v-if="selectedMember" class="selected-member">
                             <el-avatar :size="38" :src="selectedMember.headimg ? img(selectedMember.headimg) : ''">
                                 {{ memberInitial }}
                             </el-avatar>
@@ -64,7 +64,7 @@
                                 type="primary"
                                 @click="clearSelectedMember"
                             >更换客户</el-button>
-                        </div>
+                        </div> -->
                     </div>
 
                     <div class="base-field">
@@ -120,13 +120,16 @@
 
         <template #footer>
             <div class="dialog-footer" :class="{ 'is-mobile': isMobile }">
-                <div class="dialog-footer__status">
-                    <el-icon :class="{ 'is-warning': pendingDeviceCount, 'is-success': !pendingDeviceCount && savedDeviceCount }">
-                        <component :is="savedDeviceCount && !pendingDeviceCount ? CircleCheck : InfoFilled" />
-                    </el-icon>
-                    <span v-if="pendingDeviceCount">还有 {{ pendingDeviceCount }} 台已录入设备尚未保存</span>
-                    <span v-else-if="savedDeviceCount">已保存 {{ savedDeviceCount }} 台设备，可以完成签收</span>
-                    <span v-else>请先选择客户并保存至少一台设备</span>
+                <div class="dialog-footer__left">
+                    <div class="dialog-footer__status">
+                        <el-icon :class="{ 'is-warning': pendingDeviceCount, 'is-success': !pendingDeviceCount && savedDeviceCount }">
+                            <component :is="savedDeviceCount && !pendingDeviceCount ? CircleCheck : InfoFilled" />
+                        </el-icon>
+                        <span v-if="pendingDeviceCount">还有 {{ pendingDeviceCount }} 台已录入设备尚未保存</span>
+                        <span v-else-if="savedDeviceCount">已保存 {{ savedDeviceCount }} 台设备，可以完成签收</span>
+                        <span v-else>请先选择客户并保存至少一台设备</span>
+                    </div>
+                    <NextAssigneeSelect v-model="nextAssigneeUid" stage-key="check" label="下一步 · 质检负责人" compact />
                 </div>
                 <div class="dialog-footer__actions">
                     <el-button @click="closeDialog">
@@ -161,6 +164,7 @@ import {
 } from '@element-plus/icons-vue'
 import { createRecycleOrder, updateRecycleOrder } from '@/addon/hsx_recycle/api/recycle_order'
 import DeviceEntryList from '@/addon/hsx_recycle/components/device-entry/DeviceEntryList.vue'
+import NextAssigneeSelect from '@/addon/hsx_recycle/components/task/NextAssigneeSelect.vue'
 import MemberSelect from '@/addon/hsx_recycle/components/member-select/index.vue'
 import { normalizeDevice } from '@/addon/hsx_recycle/components/device-entry/deviceUtil'
 import type { DeviceEntryRow } from '@/addon/hsx_recycle/components/device-entry/types'
@@ -180,6 +184,7 @@ const props = defineProps({
     visible: { type: Boolean, default: false }
 })
 const emit = defineEmits(['update:visible', 'success', 'closed'])
+const nextAssigneeUid = ref(0)
 
 const dialogVisible = computed({
     get: () => props.visible,
@@ -309,6 +314,7 @@ const handleConfirm = async () => {
         loading.value = true
         const res = await updateRecycleOrder(Number(draftOrder.value.id), {
             action: 'order_sign',
+            next_assignee_uid: nextAssigneeUid.value,
             devices: savedDevices.map(device => ({ id: device.id, ...normalizeDevice(device) }))
         })
         if (res.code !== 1) throw new Error(res.message || '签收失败')
@@ -334,6 +340,7 @@ const resetForm = () => {
     draftOrder.value = { id: '', order_no: '' }
     selectedMember.value = null
     isScanMode.value = false
+    nextAssigneeUid.value = 0
 }
 
 const handleClosed = () => {
@@ -517,6 +524,7 @@ const handleClosed = () => {
     justify-content: space-between;
     gap: 16px;
 }
+.dialog-footer__left { min-width: 0; display: flex; align-items: center; gap: 16px; }
 
 .dialog-footer__status {
     min-width: 0;
@@ -580,6 +588,8 @@ const handleClosed = () => {
         align-items: stretch;
         flex-direction: column;
     }
+
+    .dialog-footer__left { align-items: stretch; flex-direction: column; }
 
     .dialog-footer__actions {
         width: 100%;

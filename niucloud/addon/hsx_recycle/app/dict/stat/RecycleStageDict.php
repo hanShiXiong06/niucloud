@@ -54,7 +54,8 @@ class RecycleStageDict
             self::STAGE_CHECK    => ['recycle_device_check'],
             self::STAGE_PRICE    => ['recycle_device_confirm_price', 'recycle_device_re_confirm_price'],
             self::STAGE_CONFIRM  => ['recycle_device_batch_recycle', 'recycle_device_batch_return'],
-            self::STAGE_PAY      => ['recycle_order_payment_confirm'],
+            // ERP 接管财务时，允许拥有 ERP 应付权限的财务人员成为待打款责任人。
+            self::STAGE_PAY      => ['recycle_order_payment_confirm', 'hsx_erp_payable', 'hsx_erp_confirm_payment'],
             self::STAGE_ABNORMAL => ['recycle_device_batch_return'],
         ];
     }

@@ -48,6 +48,8 @@
                 </view>
             </scroll-view>
 
+            <NextAssigneePicker v-model="nextAssigneeUid" stage-key="check" label="下一步 · 质检负责人" />
+
             <!-- 底部 -->
             <view class="popup-footer">
                 <u-button @click="handleClose" :customStyle="{ flex: 1 }">取消</u-button>
@@ -235,6 +237,7 @@ import { getDeviceModelDictChildren, searchDeviceModelDictOptions, updateOrder }
 import { getCheckTemplateSchema } from '@/addon/hsx_recycle/api/check-template'
 import ScanCodeInput from '@/addon/hsx_recycle/components/ScanCodeInput.vue'
 import RecycleTagGroup from '@/addon/hsx_recycle/components/RecycleTagGroup.vue'
+import NextAssigneePicker from '@/addon/hsx_recycle/components/NextAssigneePicker.vue'
 
 interface Props {
     visible: boolean
@@ -249,6 +252,7 @@ const show = ref(false)
 const submitting = ref(false)
 const summaryLoading = ref(false) // 质检摘要字段加载中
 const devices = ref<any[]>([])
+const nextAssigneeUid = ref(0)
 
 // 摘要字段类型判断 / 取值（与 PC device-entry 口径一致）
 const isMultiSummaryField = (field: any) => field?.component === 'checkbox' || field?.selection_mode === 'multiple'
@@ -635,6 +639,7 @@ const handleSubmit = async () => {
     try {
         await updateOrder(props.orderId, {
             action: 'order_sign',
+            next_assignee_uid: nextAssigneeUid.value,
             devices: devices.value.map(d => ({
                 id: d.id,
                 imei: d.imei,

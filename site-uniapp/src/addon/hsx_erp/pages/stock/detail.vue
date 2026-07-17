@@ -467,11 +467,13 @@ const goAdjust = () => {
 }
 
 const publishListing = async () => {
-    if (!asset.value || syncingListing.value || Number(asset.value.warehouse_policy?.can_list_mall || 0) !== 1) return
+    if (!asset.value || syncingListing.value || (Number(asset.value.warehouse_policy?.can_list_mall || 0) !== 1 && Number(asset.value.can_handoff_shop || 0) !== 1)) return
     const confirmed = await confirmErpSensitiveAction({
-        title: '上架商城',
-        content: `确认将「${asset.value.model || asset.value.imei || '-'}」直接上架商城？系统将使用当前分类、规格、图片和零售价创建一机一品商品。`,
-        confirmText: '确认上架',
+        title: Number(asset.value.can_handoff_shop || 0) === 1 ? '交接商城运营' : '上架商城',
+        content: Number(asset.value.can_handoff_shop || 0) === 1
+            ? `确认把「${asset.value.model || asset.value.imei || '-'}」交给商城运营完善分类、规格并上架？完成后资料会自动回写 ERP。`
+            : `确认将「${asset.value.model || asset.value.imei || '-'}」直接上架商城？系统将使用当前分类、规格、图片和零售价创建一机一品商品。`,
+        confirmText: Number(asset.value.can_handoff_shop || 0) === 1 ? '确认交接' : '确认上架',
     })
     if (!confirmed) return
     syncingListing.value = true

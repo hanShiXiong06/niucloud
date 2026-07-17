@@ -8,6 +8,8 @@ DROP TABLE IF EXISTS `{{prefix}}erp_goods_grade`;
 DROP TABLE IF EXISTS `{{prefix}}erp_goods_spec_item`;
 DROP TABLE IF EXISTS `{{prefix}}erp_goods_spec_group`;
 DROP TABLE IF EXISTS `{{prefix}}erp_kpi_rule`;
+DROP TABLE IF EXISTS `{{prefix}}erp_stocktake_item`;
+DROP TABLE IF EXISTS `{{prefix}}erp_stocktake`;
 DROP TABLE IF EXISTS `{{prefix}}erp_operation_log`;
 DROP TABLE IF EXISTS `{{prefix}}erp_sale_return_item`;
 DROP TABLE IF EXISTS `{{prefix}}erp_sale_return`;

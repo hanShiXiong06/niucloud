@@ -2,13 +2,15 @@
     <view class="erp-page">
         <ErpListHeader
             v-model="keyword"
-            v-model:activeTab="activeTab"
-            :tabs="tabs"
-            placeholder="供货商 / 退货单号 / 采购单号"
+            placeholder="供货商 / 处理说明"
             :show-scan="false"
+            :compact-mp="true"
             @search="reload"
-            @tab-change="onTab"
-        />
+        >
+            <template #below>
+                <ErpQuickFilterBar :items="quickFilters" @change="onQuickFilter" />
+            </template>
+        </ErpListHeader>
         <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true"
             :default-page-size="15" :paging-style="pagingStyle">
             <template #empty><u-empty mode="list" text="暂无退货记录" /></template>
@@ -18,8 +20,6 @@
                         <text class="card-title">{{ row.party_name }}</text>
                         <u-tag :text="statusLabel(row.status)" :type="statusType(row.status)" plain plainFill size="mini" />
                     </view>
-                    <view class="card-meta">退货单：{{ row.return_no }}</view>
-                    <view class="card-meta">原采购单：{{ row.purchase_no || '-' }}</view>
                     <view class="card-meta">退货金额：¥{{ money(row.total_amount) }}</view>
                     <view class="accounting-line" :class="{ 'accounting-line--refund': row.refund_mode !== 'none' }">
                         <text>账务处理</text>
@@ -52,16 +52,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 
 import { getMobilePurchaseReturnList, confirmMobilePurchaseReturn, cancelMobilePurchaseReturn } from '@/addon/hsx_erp/api/erp'
 import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
+import ErpQuickFilterBar from '@/addon/hsx_erp/components/ErpQuickFilterBar.vue'
 import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
 import { erpTimeLine } from '@/addon/hsx_erp/hooks/useErpTime'
 import { confirmErpSensitiveAction } from '@/addon/hsx_erp/hooks/useErpSensitiveConfirm'
 
-const { pagingStyle } = useListHeader({ tabs: true })
+const { pagingStyle } = useListHeader({ tabs: true, compactMp: true })
 
 const list = ref<any[]>([])
 const pagingRef = ref<any>(null)
@@ -76,15 +77,28 @@ const tabs = [
     { label: '已取消', value: 'cancelled' },
 ]
 const activeTab = ref('')
+const refundMode = ref('')
+const quickFilters = computed(() => [
+    { key: 'status', label: '退货状态', title: '退货状态', value: activeTab.value, options: tabs },
+    { key: 'refund_mode', label: '退款处理', title: '退款处理', value: refundMode.value, options: [
+        { label: '全部处理', value: '' }, { label: '无需退款', value: 'none' },
+        { label: '现场到账', value: 'cash' }, { label: '记账待收', value: 'receivable' }, { label: '历史折抵', value: 'offset' },
+    ] },
+])
 const reload = () => pagingRef.value?.reload()
 const onTab = (val: string) => { activeTab.value = val; reload() }
+const onQuickFilter = ({ key, value }: { key: string; value: string | number }) => {
+    if (key === 'status') return onTab(String(value))
+    refundMode.value = String(value)
+    reload()
+}
 const goCreate = () => uni.navigateTo({ url: '/addon/hsx_erp/pages/purchase/list?mode=return' })
 
 onShow(reload)
 
 const queryList = async (pageNo: number, pageSize: number) => {
     try {
-        const res: any = await getMobilePurchaseReturnList({ keyword: keyword.value, status: activeTab.value, page: pageNo, limit: pageSize })
+        const res: any = await getMobilePurchaseReturnList({ keyword: keyword.value, status: activeTab.value, refund_mode: refundMode.value, page: pageNo, limit: pageSize })
         pagingRef.value?.complete(res?.data?.data || [])
     } catch { pagingRef.value?.complete(false) }
 }

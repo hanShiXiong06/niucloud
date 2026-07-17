@@ -1,0 +1,42 @@
+CREATE TABLE IF NOT EXISTS `{{prefix}}wecom_staff_binding` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `uid` int NOT NULL DEFAULT 0 COMMENT '系统员工UID',
+  `wecom_userid` varchar(100) NOT NULL DEFAULT '' COMMENT '企业微信成员UserID',
+  `status` tinyint(1) NOT NULL DEFAULT 1 COMMENT '1启用0停用',
+  `create_at` int NOT NULL DEFAULT 0,
+  `update_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_uid` (`site_id`,`uid`),
+  KEY `idx_site_wecom_userid` (`site_id`,`wecom_userid`),
+  KEY `idx_site_status` (`site_id`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='企业微信员工绑定';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}wecom_message_log` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `event_id` varchar(100) NOT NULL DEFAULT '' COMMENT '业务事件唯一标识',
+  `scene` varchar(50) NOT NULL DEFAULT '' COMMENT '通知场景',
+  `source_plugin` varchar(50) NOT NULL DEFAULT '' COMMENT '来源插件',
+  `source_type` varchar(50) NOT NULL DEFAULT '' COMMENT '来源类型',
+  `source_id` int NOT NULL DEFAULT 0 COMMENT '来源业务ID',
+  `receiver_uid` int NOT NULL DEFAULT 0 COMMENT '接收员工UID',
+  `receiver_name` varchar(60) NOT NULL DEFAULT '' COMMENT '接收员工名称快照',
+  `wecom_userid` varchar(100) NOT NULL DEFAULT '' COMMENT '企业微信成员UserID快照',
+  `title` varchar(200) NOT NULL DEFAULT '' COMMENT '消息标题',
+  `content` text NULL COMMENT '消息内容',
+  `target_url` varchar(1000) NOT NULL DEFAULT '' COMMENT '任务跳转地址',
+  `payload_json` longtext NULL COMMENT '业务事件快照',
+  `response_json` longtext NULL COMMENT '企业微信响应',
+  `status` varchar(20) NOT NULL DEFAULT 'pending' COMMENT 'pending/success/failed/skipped',
+  `retry_count` tinyint unsigned NOT NULL DEFAULT 0,
+  `next_retry_at` int NOT NULL DEFAULT 0,
+  `sent_at` int NOT NULL DEFAULT 0,
+  `error_message` varchar(500) NOT NULL DEFAULT '',
+  `create_at` int NOT NULL DEFAULT 0,
+  `update_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_event` (`site_id`,`event_id`),
+  KEY `idx_retry` (`status`,`next_retry_at`,`retry_count`),
+  KEY `idx_site_receiver` (`site_id`,`receiver_uid`,`create_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='企业微信消息发件箱与发送日志';

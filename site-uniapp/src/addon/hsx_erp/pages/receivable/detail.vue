@@ -17,7 +17,7 @@
                 <view class="form-card">
                     <view class="form-card-title">应收信息</view>
                     <ErpFinanceSourceSummary :row="detail" direction="receivable" />
-                    <view class="field"><text class="label">往来单位</text><text class="value">{{ detail.party_name || '-' }}</text></view>
+                    <view class="field"><text class="label">往来单位</text><text class="value">{{ erpPartyDisplayName(detail) }}</text></view>
                     <view class="field"><text class="label">应收单号</text><view class="value copy-value"><ErpCopyText :value="detail.receivable_no" title="应收单号" /></view></view>
                     <view v-if="detail.purchase_no" class="field"><text class="label">原采购单</text><text class="value">{{ detail.purchase_no }}</text></view>
                     <view v-if="sourceOrder?.salesman_name" class="field"><text class="label">销售员</text><text class="value">{{ sourceOrder.salesman_name }}</text></view>
@@ -138,6 +138,7 @@ import { onLoad, onShow } from '@dcloudio/uni-app'
 import { getMobileCapitalAccounts, getMobileReceivableInfo } from '@/addon/hsx_erp/api/erp'
 import { erpTimeLine, formatErpTime } from '@/addon/hsx_erp/hooks/useErpTime'
 import { erpFinanceSourceMeta } from '@/addon/hsx_erp/hooks/useErpFinanceSource'
+import { erpPartyDisplayName } from '@/addon/hsx_erp/hooks/useErpPartyText'
 import ErpFinanceSourceSummary from '@/addon/hsx_erp/components/ErpFinanceSourceSummary.vue'
 import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
 import ErpReceiptConfirmModal from '@/addon/hsx_erp/components/ErpReceiptConfirmModal.vue'

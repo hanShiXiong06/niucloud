@@ -7,6 +7,7 @@ use addon\hsx_erp\app\model\ErpInboxEvent;
 use addon\hsx_erp\app\model\ErpPurchaseOrder;
 use addon\hsx_erp\app\service\admin\ErpConfigService;
 use addon\hsx_erp\app\service\admin\ErpConsignmentInboundService;
+use addon\hsx_erp\app\service\admin\ErpListingTaskService;
 use addon\hsx_erp\app\service\admin\ErpPurchaseService;
 use addon\hsx_erp\app\support\ErpIdempotency;
 use core\exception\CommonException;
@@ -87,7 +88,7 @@ class ErpDeviceInboundRequested
         }
 
         try {
-            return $this->withinTransaction(function () use ($event, $devices, $eventId, $currentSiteId, $requestPayload): array {
+            $result = $this->withinTransaction(function () use ($event, $devices, $eventId, $currentSiteId, $requestPayload): array {
                 $locked = $this->findInbox($currentSiteId, $eventId, true);
                 if ($locked !== null) {
                     $this->assertSameInboxRequest($locked, $requestPayload);
@@ -104,6 +105,14 @@ class ErpDeviceInboundRequested
                 $this->completeInbox($inboxId, $requestPayload, $result);
                 return $result;
             });
+            $operator = (array)($event['operator'] ?? []);
+            $taskService = ErpListingTaskService::forSite(
+                $currentSiteId,
+                (int)($operator['id'] ?? 0),
+                trim((string)($operator['name'] ?? '')) ?: '回收入库'
+            );
+            foreach ((array)($result['asset_ids'] ?? []) as $assetId) $taskService->sync((int)$assetId);
+            return $result;
         } catch (\Throwable $e) {
             $processed = $this->findInbox($currentSiteId, $eventId);
             if ($processed !== null) {
@@ -156,12 +165,19 @@ class ErpDeviceInboundRequested
             else $existingCount++;
         }
 
+        if ($orderIds !== []) {
+            $assetIds = array_merge($assetIds, array_map('intval', \addon\hsx_erp\app\model\ErpAsset::where([
+                ['site_id', '=', $currentSiteId],
+            ])->whereIn('purchase_order_id', array_values(array_unique($orderIds)))->column('id')));
+        }
+
         return [
             'consumer' => 'hsx_erp',
             'target' => 'self_erp',
             'status' => $createdCount > 0 ? 'processed' : 'duplicate',
             'order_ids' => array_values(array_unique(array_map('intval', $orderIds))),
             'consignment_asset_ids' => array_values(array_unique(array_filter(array_map('intval', $assetIds)))),
+            'asset_ids' => array_values(array_unique(array_filter(array_map('intval', $assetIds)))),
             'created_count' => $createdCount,
             'existing_count' => $existingCount,
             'skipped_count' => 0,
@@ -303,6 +319,7 @@ class ErpDeviceInboundRequested
     protected function mapDeviceItem(array $device, int $warehouseId, int $locationId, float $cost, string $sourcePlugin, string $sourcePluginName): array
     {
         $check = (array)($device['check_snapshot'] ?? []);
+        $qcSnapshot = $this->buildQcSnapshot($device, $check, $sourcePlugin);
         $refurbishment = (array)($device['refurbishment'] ?? []);
         $refurbishmentReason = mb_substr(trim((string)($refurbishment['reason'] ?? '')), 0, 500);
         $refurbishmentItems = array_values(array_filter((array)($refurbishment['suggested_items'] ?? []), 'is_array'));
@@ -359,6 +376,8 @@ class ErpDeviceInboundRequested
             'retail_price' => round((float)($device['suggested_sale_price'] ?? 0), 2),
             'image_urls' => trim((string)$images),
             'quality_remark' => mb_substr(implode('；', $qualityParts), 0, 500),
+            'qc_template_id' => (int)($check['check_template_id'] ?? 0),
+            'qc_report' => json_encode($qcSnapshot, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '',
             'purchase_cost' => $cost,
             'refurbish_required' => (bool)($refurbishment['required'] ?? false),
             'refurbish_reason' => $refurbishmentReason,
@@ -367,6 +386,60 @@ class ErpDeviceInboundRequested
                 ? '来源插件 ' . ($sourcePluginName ?: $sourcePlugin) . '；来源设备ID ' . $sourceDeviceId
                 : '来源插件 ' . ($sourcePluginName ?: $sourcePlugin),
         ];
+    }
+
+    /**
+     * 把回收端事件中的模板、结果、图片和操作信息固化为 ERP 标准快照。
+     *
+     * 不修改回收插件表结构：安装回收插件时优先复用其公开增强服务补齐结构化
+     * result_items；服务不可用时仍完整保留事件原始字段，避免跨插件链路丢数据。
+     */
+    private function buildQcSnapshot(array $device, array $check, string $sourcePlugin): array
+    {
+        $sourceDeviceId = (int)($device['source_device_id'] ?? 0);
+        $report = [];
+        if ($sourcePlugin === 'hsx_recycle' && $sourceDeviceId > 0) {
+            $service = '\\addon\\hsx_recycle\\app\\service\\admin\\order\\RecycleDeviceService';
+            if (class_exists($service)) {
+                try {
+                    $candidate = (new $service())->enrichedCheckMetaForDevice($sourceDeviceId);
+                    if (is_array($candidate)) $report = $candidate;
+                } catch (\Throwable) {
+                    // 事件快照仍可用；回收插件读取失败不能阻断采购入库。
+                }
+            }
+        }
+        if ($report === []) {
+            foreach (['check_result_buyer', 'check_result_seller', 'check_result'] as $key) {
+                $candidate = $this->decodeSnapshotArray($check[$key] ?? null);
+                if ($candidate !== []) {
+                    $report = $candidate;
+                    break;
+                }
+            }
+        }
+
+        return [
+            'version' => 1,
+            'source_plugin' => $sourcePlugin,
+            'source_device_id' => $sourceDeviceId,
+            'template' => ['id' => (int)($check['check_template_id'] ?? 0)],
+            'report' => $report,
+            'raw' => $check,
+            'inspector' => [
+                'uid' => (int)($check['check_uid'] ?? 0),
+                'checked_at' => (int)($check['check_at'] ?? 0),
+            ],
+            'synced_at' => time(),
+        ];
+    }
+
+    private function decodeSnapshotArray($value): array
+    {
+        if (is_array($value)) return $value;
+        if (!is_string($value) || trim($value) === '') return [];
+        $decoded = json_decode($value, true);
+        return is_array($decoded) ? $decoded : [];
     }
 
     protected function currentSiteId(): int

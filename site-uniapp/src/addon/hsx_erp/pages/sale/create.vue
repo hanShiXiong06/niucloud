@@ -9,11 +9,15 @@
                     <view class="form-row" @click="showPartyPicker = true">
                         <text class="form-label required">客户</text>
                         <view class="form-input">
-                            <text :class="form.party_name ? 'input-text' : 'input-placeholder'">
-                                {{ form.party_name || '点击选择客户' }}
+                            <text :class="form.party_id ? 'input-text' : 'input-placeholder'">
+                                {{ erpPartyDisplayName(form, '点击选择客户') }}
                             </text>
                             <text class="input-arrow">›</text>
                         </view>
+                    </view>
+                    <view v-if="creditNotice" class="credit-alert" :class="`credit-alert--${creditProfile?.severity || 'warning'}`">
+                        <u-icon :name="creditProfile.can_sale === false ? 'close-circle' : 'info-circle'" :color="creditProfile.can_sale === false ? '#dc2626' : '#d97706'" size="18" />
+                        <text>{{ creditNotice }}</text>
                     </view>
                     <view class="form-row" @click="showChannelPicker = true">
                         <text class="form-label required">销售渠道</text>
@@ -82,6 +86,8 @@
                     :accounts="accounts"
                     label-cash="本次收款"
                     label-credit="全部挂账"
+                    :credit-disabled="!creditAllowedForOrder"
+                    :force-full-cash="!creditAllowedForOrder"
                 />
                 <ErpVoucherUploader v-if="form.settle_mode === 'cash'" v-model="form.voucher_urls" title="收款凭证" @uploading="voucherUploading = $event" />
 
@@ -102,6 +108,8 @@
             role-type="customer"
             v-model:party-id="form.party_id"
             v-model:party-name="form.party_name"
+            v-model:member-name="form.member_name"
+            @select="onPartySelected"
         />
 
         <ErpStockPickerPopup
@@ -121,7 +129,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { confirmMobileSaleReceipt, createMobileSale, getMobileCapitalAccounts, getMobileSaleInfo, getMobileSaleStock } from '@/addon/hsx_erp/api/erp'
+import { createMobileSale, getMobileCapitalAccounts, getMobileSaleStock } from '@/addon/hsx_erp/api/erp'
 import ErpPartyPopup from '@/addon/hsx_erp/components/ErpPartyPopup.vue'
 import ErpStockPickerPopup from '@/addon/hsx_erp/components/ErpStockPickerPopup.vue'
 import ErpSaleChannelPopup from '@/addon/hsx_erp/components/ErpSaleChannelPopup.vue'
@@ -130,12 +138,14 @@ import ErpVoucherUploader from '@/addon/hsx_erp/components/ErpVoucherUploader.vu
 import { confirmErpSensitiveAction } from '@/addon/hsx_erp/hooks/useErpSensitiveConfirm'
 import { useErpSaleChannels } from '@/addon/hsx_erp/hooks/useErpSaleChannels'
 import { firstPositiveErpAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
+import { erpPartyDisplayName } from '@/addon/hsx_erp/hooks/useErpPartyText'
 import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
 
 const submitting = ref(false)
 const voucherUploading = ref(false)
 const goBack = () => uni.navigateBack()
 const accounts = ref<any[]>([])
+const creditProfile = ref<any>(null)
 const selectedAssets = ref<any[]>([])
 const showPartyPicker = ref(false)
 const showStockPicker = ref(false)
@@ -144,7 +154,7 @@ const showChannelPicker = ref(false)
 const { load: loadSaleChannels, preferred: preferredSaleChannel } = useErpSaleChannels()
 
 const form = ref({
-    party_id: 0, party_name: '',
+    party_id: 0, party_name: '', member_name: '',
     sale_channel: '', sale_channel_key: '', channel_source_plugin: '', channel_source_key: '', remark: '',
     settle_mode: 'credit' as 'credit' | 'cash',
     received_amount: 0, capital_account_id: 0, voucher_urls: '',
@@ -154,9 +164,24 @@ const inputStyle = { background: '#f8fafc', borderRadius: '8rpx', padding: '8rpx
 const totalSale = computed(() => selectedAssets.value.reduce((s, a) => s + Number(a._sale_price || 0), 0))
 const totalCost = computed(() => selectedAssets.value.reduce((s, a) => s + Number(a.total_cost || 0), 0))
 const totalProfit = computed(() => totalSale.value - totalCost.value)
+const creditAllowedForOrder = computed(() => {
+    const profile = creditProfile.value
+    if (!profile || profile.can_credit === false) return !profile
+    const limit = Number(profile.credit_limit || 0)
+    return limit <= 0 || Number(profile.outstanding_amount || 0) + totalSale.value <= limit + 0.0001
+})
+const creditNotice = computed(() => {
+    if (creditProfile.value?.message) return creditProfile.value.message
+    if (!creditAllowedForOrder.value && Number(creditProfile.value?.credit_limit || 0) > 0) {
+        return `本单挂账后将超过客户信用额度 ¥${money(creditProfile.value.credit_limit)}，请改为现结。`
+    }
+    return ''
+})
 
 const canSubmit = computed(() =>
     form.value.party_id > 0 &&
+    creditProfile.value?.can_sale !== false &&
+    (form.value.settle_mode !== 'credit' || creditAllowedForOrder.value) &&
     Boolean(form.value.sale_channel_key) &&
     selectedAssets.value.length > 0 &&
     selectedAssets.value.every(a => Number(a._sale_price) > 0) &&
@@ -222,6 +247,16 @@ function onSaleChannelChange(channel: any) {
     form.value.channel_source_key = String(channel?.source_key || '')
 }
 
+function onPartySelected(party: any) {
+    form.value.member_name = String(party?.member_name || '')
+    creditProfile.value = party?.credit_profile || null
+    if (creditProfile.value?.can_sale !== false && !creditAllowedForOrder.value) {
+        form.value.settle_mode = 'cash'
+        form.value.received_amount = totalSale.value
+        uni.showToast({ title: '该客户当前仅允许现结', icon: 'none' })
+    }
+}
+
 function removeAsset(idx: number) { selectedAssets.value.splice(idx, 1) }
 
 function openScanStockPicker() {
@@ -235,6 +270,8 @@ const suggestedSalePrice = (asset: any) => firstPositiveErpAmount(asset?.retail_
 async function submit() {
     if (submitting.value) return
     if (!canSubmit.value) {
+        if (creditProfile.value?.can_sale === false) return uni.showToast({ title: creditProfile.value.message || '该客户已暂停交易', icon: 'none' })
+        if (form.value.settle_mode === 'credit' && !creditAllowedForOrder.value) return uni.showToast({ title: '该客户不允许继续挂账，请改为现结', icon: 'none' })
         uni.showToast({ title: '请完善客户、销售渠道、设备和收款信息', icon: 'none' })
         return
     }
@@ -242,7 +279,7 @@ async function submit() {
     const saleTotal = selectedAssets.value.reduce((sum, item) => sum + Number(item._sale_price || 0), 0)
     const confirmed = await confirmErpSensitiveAction({
         title: '确认销售出库',
-        content: `客户：${form.value.party_name || '-'}\n渠道：${form.value.sale_channel || '-'}\n设备：${selectedAssets.value.length} 台\n销售总额：¥${money(saleTotal)}\n提交后设备立即退出库存并生成应收，不能普通撤销。`,
+        content: `客户：${erpPartyDisplayName(form.value)}\n渠道：${form.value.sale_channel || '-'}\n设备：${selectedAssets.value.length} 台\n销售总额：¥${money(saleTotal)}\n提交后设备立即退出库存并生成应收，不能普通撤销。`,
         confirmText: '确认出库',
     })
     if (!confirmed) {
@@ -250,35 +287,24 @@ async function submit() {
         return
     }
     try {
-        const res: any = await createMobileSale({
+        await createMobileSale({
             party_id: form.value.party_id,
             party_name: form.value.party_name,
             sale_channel: form.value.sale_channel,
             sale_channel_key: form.value.sale_channel_key,
             channel_source_plugin: form.value.channel_source_plugin,
             channel_source_key: form.value.channel_source_key,
+            settle_mode: form.value.settle_mode,
+            settle_method: form.value.settle_mode === 'cash' ? '现结' : '挂账',
+            received_amount: form.value.received_amount,
+            capital_account_id: form.value.capital_account_id,
+            voucher_urls: form.value.voucher_urls,
             remark: form.value.remark,
             items: selectedAssets.value.map(a => ({
                 asset_id: a.id,
                 sale_price: Number(a._sale_price),
             }))
         })
-        // 现结：自动调用收款接口（对齐PC端逻辑）
-        if (form.value.settle_mode === 'cash' && form.value.received_amount > 0) {
-            const saleId = res?.data?.id || res?.data
-            if (saleId) {
-                const detail: any = await getMobileSaleInfo(Number(saleId))
-                const receivableId = detail?.data?.receivables?.[0]?.id
-                if (receivableId) {
-                    await confirmMobileSaleReceipt(Number(receivableId), {
-                        amount: form.value.received_amount,
-                        capital_account_id: form.value.capital_account_id,
-                        remark: '销售现结收款',
-                        voucher_urls: form.value.voucher_urls,
-                    })
-                }
-            }
-        }
         uni.showToast({ title: '销售出库成功', icon: 'success' })
         setTimeout(() => uni.navigateBack(), 1200)
     } catch (e: any) {
@@ -298,6 +324,8 @@ const money = (v: any) => Number(v || 0).toFixed(2)
 .form-section__title { font-size:28rpx; font-weight:600; color:#374151; }
 .form-row { display:flex; align-items:center; gap:16rpx; margin-bottom:16rpx; &:last-child { margin-bottom:0; } }
 .channel-source-tip { margin:-6rpx 0 16rpx 176rpx; color:#94a3b8; font-size:20rpx; }
+.credit-alert { display:flex; align-items:flex-start; gap:10rpx; margin:0 0 16rpx 166rpx; padding:14rpx 16rpx; border:1rpx solid #fde68a; background:#fffbeb; color:#92400e; font-size:22rpx; line-height:1.5; }
+.credit-alert--error { border-color:#fecaca; background:#fef2f2; color:#991b1b; }
 .form-label { font-size:26rpx; color:#374151; width:150rpx; flex-shrink:0; }
 .form-label.required::before { content:'*'; color:#dc2626; margin-right:4rpx; }
 .form-input { flex:1; display:flex; align-items:center; justify-content:space-between; background:#f8fafc; border-radius:8rpx; padding:12rpx 16rpx; }

@@ -99,6 +99,16 @@ export function getMobileStockTurnoverSummary() {
     return request.get('erp/stock/turnover_summary')
 }
 
+export function getMobileStocktakeList(params: Record<string, any> = {}) { return request.get('erp/stocktake/lists', params) }
+export function getMobileStocktakeInfo(id: number) { return request.get(`erp/stocktake/${id}`) }
+export function getMobileStocktakeItems(id: number, params: Record<string, any> = {}) { return request.get(`erp/stocktake/${id}/items`, params) }
+export function createMobileStocktake(data: Record<string, any>) { return request.post('erp/stocktake/create', withErpRequestId(data, 'stocktake')) }
+export function scanMobileStocktake(id: number, data: Record<string, any>) { return request.post(`erp/stocktake/${id}/scan`, data) }
+export function submitMobileStocktake(id: number, autoComplete = false) { return request.post(`erp/stocktake/${id}/submit`, { auto_complete: autoComplete }) }
+export function resolveMobileStocktakeItem(id: number, itemId: number, data: Record<string, any>) { return request.post(`erp/stocktake/${id}/items/${itemId}/resolve`, data) }
+export function completeMobileStocktake(id: number, remark = '') { return request.post(`erp/stocktake/${id}/complete`, { remark }) }
+export function cancelMobileStocktake(id: number, remark: string) { return request.post(`erp/stocktake/${id}/cancel`, { remark }) }
+
 export function adjustMobileStockRetailPrice(id: number, data: Record<string, any>) {
     return request.post(`erp/stock/${id}/retail_price`, withErpRequestId(data, `stock-retail-price-${id}`))
 }

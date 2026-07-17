@@ -485,6 +485,9 @@ class ErpPurchaseReturnService extends BaseAdminService
         if (!empty($where['status'])) {
             $query->where('status', '=', (string)$where['status']);
         }
+        if (!empty($where['refund_mode'])) {
+            $query->where('refund_mode', '=', (string)$where['refund_mode']);
+        }
         if (!empty($where['party_id'])) {
             $query->where('party_id', '=', (int)$where['party_id']);
         }

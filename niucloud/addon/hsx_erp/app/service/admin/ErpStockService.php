@@ -20,6 +20,7 @@ use addon\hsx_erp\app\model\ErpSettlementLink;
 use addon\hsx_erp\app\model\ErpWarehouse;
 use addon\hsx_erp\app\model\ErpWarehouseLocation;
 use addon\hsx_erp\app\support\ErpIdempotency;
+use addon\hsx_erp\app\support\ErpListingWorkflow;
 use addon\hsx_erp\app\support\ErpPurchaseReturnPolicy;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
@@ -172,8 +173,7 @@ class ErpStockService extends BaseAdminService
         ]);
         $policy = (new ErpWarehousePolicyService())->evaluate($projected, $warehouseData);
         if ((int)$policy['allow_mall'] !== 1) return 'none';
-        if ((int)$policy['can_list_mall'] === 1) return 'ready';
-        return in_array('image', (array)$policy['missing_fields'], true) ? 'need_photo' : 'need_price';
+        return ErpListingWorkflow::statusFromPolicy($policy);
     }
 
     private function completeRefurbishWithoutCost(int $id, string $result, string $reason, string $requestId, array $destination, mixed $voucherUrls): void
@@ -232,6 +232,16 @@ class ErpStockService extends BaseAdminService
         $keyword = trim((string)($where['keyword'] ?? ''));
         if ($keyword !== '') {
             $query->whereLike('imei|sn|asset_no|model|spec|party_name', '%' . $keyword . '%');
+        }
+        if (!empty($where['status'])) {
+            $query->where('status', '=', (string)$where['status']);
+        }
+        $stockInExpr = 'COALESCE(NULLIF(stock_in_at, 0), create_at)';
+        if (!empty($where['start_at'])) {
+            $query->whereRaw($stockInExpr . ' >= ' . (int)$where['start_at']);
+        }
+        if (!empty($where['end_at'])) {
+            $query->whereRaw($stockInExpr . ' <= ' . (int)$where['end_at']);
         }
         $page = $query->field('id,asset_no,imei,sn,model,spec,status,party_id,party_name,purchase_order_id,warehouse_name,location_name,stock_in_at,create_at,update_at,total_cost')
             ->order('stock_in_at desc,id desc')->paginate([
@@ -355,7 +365,9 @@ class ErpStockService extends BaseAdminService
         if (!empty($where['listing_status'])) {
             $listingStatus = (string)$where['listing_status'];
             if ($listingStatus === 'incomplete') {
-                $query->whereIn('a.listing_status', ['need_photo', 'need_price']);
+                $query->whereIn('a.listing_status', ['need_photo', 'need_price', 'need_material']);
+            } elseif ($listingStatus === 'publish') {
+                $query->whereIn('a.listing_status', ['need_material', 'ready', 'pending_shop']);
             } else {
                 $query->where('a.listing_status', '=', $listingStatus);
             }
@@ -496,9 +508,7 @@ class ErpStockService extends BaseAdminService
                 ])->findOrEmpty();
                 $policy = (new ErpWarehousePolicyService())->evaluate($projected, $warehouse->isEmpty() ? null : $warehouse->toArray());
                 if ((int)$policy['can_prepare_mall'] === 1) {
-                    $save['listing_status'] = (int)$policy['can_list_mall'] === 1 ? 'ready' : (
-                        in_array('image', (array)$policy['missing_fields'], true) ? 'need_photo' : 'need_price'
-                    );
+                    $save['listing_status'] = ErpListingWorkflow::statusFromPolicy($policy);
                 }
             }
             $asset->save($save);
@@ -721,8 +731,7 @@ class ErpStockService extends BaseAdminService
             $targetPolicy = (new ErpWarehousePolicyService())->evaluate($projected, $targetWarehouse->toArray());
             $listingStatus = 'none';
             if ((int)$targetPolicy['can_prepare_mall'] === 1) {
-                $listingStatus = (int)$targetPolicy['can_list_mall'] === 1 ? 'ready'
-                    : (in_array('image', (array)$targetPolicy['missing_fields'], true) ? 'need_photo' : 'need_price');
+                $listingStatus = ErpListingWorkflow::statusFromPolicy($targetPolicy);
             }
             $asset->save([
                 'purchase_order_id' => (int)$order->id, 'purchase_item_id' => (int)$purchaseItem->id,
@@ -899,9 +908,7 @@ class ErpStockService extends BaseAdminService
                 $policy = (new ErpWarehousePolicyService())->evaluate($projected, $targetWarehouse->toArray());
                 $listingStatus = 'none';
                 if ((int)$policy['can_prepare_mall'] === 1) {
-                    $listingStatus = (int)$policy['can_list_mall'] === 1 ? 'ready' : (
-                        in_array('image', (array)$policy['missing_fields'], true) ? 'need_photo' : 'need_price'
-                    );
+                    $listingStatus = ErpListingWorkflow::statusFromPolicy($policy);
                 }
                 $asset->save([
                     'warehouse_id' => (int)$targetWarehouse->id,
@@ -1224,15 +1231,30 @@ class ErpStockService extends BaseAdminService
     /** 返回用户能直接理解的商城上架状态，不暴露拍照中台或 Outbox 等内部实现。 */
     private function appendListingSyncState(array $rows): array
     {
+        $rules = (new ErpConfigService())->getRules();
+        $materialOwner = (string)($rules['marketplace']['recycle_material_owner'] ?? 'erp');
         foreach ($rows as &$row) {
             $status = (string)($row['listing_status'] ?? 'none');
+            $row['listing_material_owner'] = $materialOwner;
+            $row['can_handoff_shop'] = (int)(
+                (string)($row['source_plugin'] ?? '') === 'hsx_recycle'
+                && $materialOwner === 'phone_shop'
+                && !in_array($status, ['pending_shop', 'listed'], true)
+            );
+            if ((int)$row['can_handoff_shop'] === 1 && (string)($row['status'] ?? '') === ErpDict::ASSET_IN_STOCK) {
+                $row['turnover_action_key'] = 'publish_listing';
+                $row['turnover_action_label'] = '交接商城运营';
+                $row['turnover_action_reason'] = '由商城运营补齐分类、规格后发布并回写 ERP';
+            }
             $row['listing_sync'] = [
                 'status' => $status,
                 'status_label' => match ($status) {
                     'listed' => '商城已上架',
                     'ready' => '商品资料完整',
+                    'pending_shop' => '待商城运营完善',
                     'need_photo' => '待补商品图片',
                     'need_price' => '待补商品售价',
+                    'need_material' => '待完善分类和规格',
                     default => (string)($row['sale_target'] ?? '') === 'mall' ? '待完善商品资料' : '无需上架',
                 },
                 'last_error' => '',
@@ -1490,7 +1512,7 @@ class ErpStockService extends BaseAdminService
         $listingStatus = (string)($data['listing_status'] ?? '');
         $allowedRefurbish = ['none', 'pending'];
         $allowedTarget = ['unset', 'peer', 'mall'];
-        $allowedListing = ['none', 'need_photo', 'need_price', 'ready', 'listed'];
+        $allowedListing = ['none', 'need_photo', 'need_price', 'need_material', 'ready', 'pending_shop', 'listed'];
         $warehouse = ErpWarehouse::where([
             ['site_id', '=', $this->site_id], ['id', '=', (int)$asset->warehouse_id], ['status', '=', 1],
         ])->findOrEmpty();
@@ -1598,8 +1620,7 @@ class ErpStockService extends BaseAdminService
             if ($projectedTarget === 'mall') {
                 $projected = array_merge($asset->toArray(), $save, ['sale_target' => $projectedTarget]);
                 $policy = (new ErpWarehousePolicyService())->evaluate($projected, $warehouse->isEmpty() ? null : $warehouse->toArray());
-                $missingFields = (array)($policy['missing_fields'] ?? []);
-                $autoListingStatus = $missingFields === [] ? 'ready' : (in_array('image', $missingFields, true) ? 'need_photo' : 'need_price');
+                $autoListingStatus = ErpListingWorkflow::statusFromPolicy($policy);
             } elseif ($saleTarget !== '' && in_array($projectedTarget, ['peer', 'unset'], true)) {
                 $autoListingStatus = 'none';
             }
@@ -1645,13 +1666,16 @@ class ErpStockService extends BaseAdminService
             ['site_id', '=', $this->site_id], ['id', '=', (int)$asset->warehouse_id], ['status', '=', 1],
         ])->findOrEmpty();
         $policy = (new ErpWarehousePolicyService())->evaluate($asset->toArray(), $warehouse->isEmpty() ? null : $warehouse->toArray());
+        $rules = (new ErpConfigService())->getRules();
+        $materialOwner = (string)($rules['marketplace']['recycle_material_owner'] ?? 'erp');
+        $shopCompletion = (string)$asset->source_plugin === 'hsx_recycle' && $materialOwner === 'phone_shop';
         if ((int)$policy['allow_mall'] !== 1) {
             throw new CommonException('当前仓库未配置为商城销售仓，请先调拨到允许上商城的仓库');
         }
         if (in_array((string)$asset->refurbish_status, ['pending', 'processing', 'failed'], true)) {
             throw new CommonException('设备整备完成前不能上架商城');
         }
-        if ((int)($policy['can_list_mall'] ?? 0) !== 1) {
+        if (!$shopCompletion && (int)($policy['can_list_mall'] ?? 0) !== 1) {
             $missing = implode('、', (array)($policy['missing_labels'] ?? []));
             throw new CommonException($missing !== '' ? ('请先补充' . $missing) : '商品资料未达到上架条件');
         }
@@ -1684,7 +1708,7 @@ class ErpStockService extends BaseAdminService
             'sale_price' => round((float)$asset->retail_price, 2),
             'peer_price' => round((float)$asset->estimate_sale_price, 2),
             'cost_price' => round((float)$asset->total_cost, 2),
-            'qc_info' => array_filter(['规格' => (string)$asset->spec, '质检说明' => $qualityRemark]),
+            'qc_info' => $this->marketplaceQcSnapshot($asset, $qualityRemark),
             'goods_name' => (string)$asset->model,
             'sub_title' => (string)$asset->spec,
             'goods_desc' => $description,
@@ -1692,9 +1716,11 @@ class ErpStockService extends BaseAdminService
             'source_plugin' => (string)$asset->source_plugin,
             'source_type' => (string)$asset->source_type,
             'source_id' => (string)$asset->source_id,
+            'completion_mode' => $shopCompletion ? 'phone_shop' : 'erp',
         ];
 
         $success = null;
+        $pending = null;
         $failureMessage = '';
         foreach ((array)event('HsxErpPublishListing', ['site_id' => $this->site_id, 'payload' => $payload]) as $result) {
             if (!is_array($result) || (string)($result['provider'] ?? '') !== 'phone_shop') continue;
@@ -1702,7 +1728,26 @@ class ErpStockService extends BaseAdminService
                 $success = $result;
                 break;
             }
+            if ((string)($result['status'] ?? '') === 'pending' && (int)($result['intake_id'] ?? 0) > 0) {
+                $pending = $result;
+                break;
+            }
             $failureMessage = trim((string)($result['message'] ?? $failureMessage));
+        }
+        if ($pending !== null) {
+            $beforeListingStatus = (string)$asset->listing_status;
+            $asset->save(['listing_status' => 'pending_shop', 'update_at' => time()]);
+            (new ErpLedgerService())->asset([
+                'asset_id' => $id,
+                'action' => 'listing_handoff',
+                'before_status' => (string)$asset->status . '/' . $beforeListingStatus,
+                'after_status' => (string)$asset->status . '/pending_shop',
+                'source_type' => 'phone_shop_intake',
+                'source_id' => (int)$pending['intake_id'],
+                'remark' => '设备已交接商城运营完善分类、规格并上架',
+                'extra' => ['provider' => 'phone_shop', 'intake_id' => (int)$pending['intake_id']],
+            ]);
+            return ['ok' => true, 'status' => 'pending', 'intake_id' => (int)$pending['intake_id'], 'message' => '已交接商城运营完善资料'];
         }
         if ($success === null) throw new CommonException($failureMessage ?: '商城上架失败，请稍后重试');
 
@@ -1719,6 +1764,21 @@ class ErpStockService extends BaseAdminService
             'extra' => ['provider' => 'phone_shop', 'goods_id' => (int)$success['goods_id']],
         ]);
         return ['ok' => true, 'status' => (string)$success['status'], 'goods_id' => (int)$success['goods_id'], 'message' => '已直接上架商城'];
+    }
+
+    /** 商城只消费 ERP 快照，不再要求运行时回查回收插件数据库。 */
+    private function marketplaceQcSnapshot(ErpAsset $asset, string $qualityRemark): array
+    {
+        $snapshot = $this->decodeJsonObject($asset->qc_report ?? '');
+        if ($snapshot === []) {
+            $snapshot = ['version' => 1, 'report' => [], 'raw' => []];
+        }
+        $snapshot['template_id'] = (int)($asset->qc_template_id ?? 0);
+        $snapshot['summary'] = array_filter([
+            '规格' => (string)$asset->spec,
+            '质检说明' => $qualityRemark,
+        ]);
+        return $snapshot;
     }
 
     private function marketplaceCategoryPath(ErpAsset $asset): array

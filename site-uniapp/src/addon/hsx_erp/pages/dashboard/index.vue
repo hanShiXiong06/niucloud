@@ -165,7 +165,7 @@
         <view class="section-title">最近结算</view>
         <view class="erp-card settlement-card" v-for="row in recent.settlements" :key="'s'+row.id" @click="goSettlement(row)">
             <view class="erp-card__head">
-                <text class="card-title">{{ row.party_name || '-' }}</text>
+                <text class="card-title">{{ erpPartyDisplayName(row) }}</text>
                 <u-tag :text="settlementLabel(row.settlement_type)" :type="settlementType(row.settlement_type)" plain plainFill size="mini" />
             </view>
             <view class="card-meta">{{ row.settlement_no }} · {{ row.capital_account_name || '无资金账户' }}</view>
@@ -182,7 +182,7 @@
         <view class="section-title">最近采购</view>
         <view v-for="row in (recent.purchases || [])" :key="'p'+row.id" class="erp-card recent-order" @click="goPurchase(row)">
             <view class="erp-card__head">
-                <view class="recent-order__main"><text class="card-title">{{ row.party_name || '未填写供应商' }}</text><text class="card-meta">{{ row.purchase_no || '-' }}</text></view>
+                <view class="recent-order__main"><text class="card-title">{{ erpPartyDisplayName(row, '未填写供应商') }}</text><text class="card-meta">{{ row.purchase_no || '-' }}</text></view>
                 <u-tag :text="financeStatus(row.finance_status, '付款')" :type="financeStatusType(row.finance_status)" plain plainFill size="mini" />
             </view>
             <view class="compact-foot"><text class="compact-amount">¥{{ money(row.total_cost) }}</text><text class="card-time">{{ time(row.purchase_at) }} · 查看采购单</text></view>
@@ -192,7 +192,7 @@
         <view class="section-title">最近销售</view>
         <view v-for="row in (recent.sales || [])" :key="'sale'+row.id" class="erp-card recent-order" @click="goSale(row)">
             <view class="erp-card__head">
-                <view class="recent-order__main"><text class="card-title">{{ row.party_name || '未填写客户' }}</text><text class="card-meta">{{ row.sale_no || '-' }}</text></view>
+                <view class="recent-order__main"><text class="card-title">{{ erpPartyDisplayName(row, '未填写客户') }}</text><text class="card-meta">{{ row.sale_no || '-' }}</text></view>
                 <u-tag :text="financeStatus(row.finance_status, '收款')" :type="financeStatusType(row.finance_status)" plain plainFill size="mini" />
             </view>
             <view class="recent-sale-metrics"><text>销售 ¥{{ money(row.total_amount) }}</text><text :class="Number(row.profit || 0) >= 0 ? 'green' : 'red'">毛利 {{ signedMoney(row.profit) }}</text></view>
@@ -208,6 +208,7 @@ import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { dismissMobileErpRefurbishReminder, dismissMobileErpTurnoverReminder, getMobileErpDashboard, getMobileErpKpiDashboard } from '@/addon/hsx_erp/api/erp'
 import qiunDataCharts from '@/components/qiun-data-charts/components/qiun-data-charts/qiun-data-charts.vue'
+import { erpPartyDisplayName } from '@/addon/hsx_erp/hooks/useErpPartyText'
 
 const loading = ref(false)
 const period = ref('month')

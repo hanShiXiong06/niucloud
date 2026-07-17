@@ -3,7 +3,7 @@
     <view class="recycle-page-header__content" :style="contentStyle">
       <view class="recycle-page-header__side" :style="sideStyle">
         <view v-if="showBack" class="recycle-page-header__back" @tap="handleNavAction">
-          <up-icon :name="navIcon" size="40rpx" color="var(--recycle-button-text)"></up-icon>
+          <up-icon :name="navIcon" size="38rpx" color="#172033"></up-icon>
         </view>
       </view>
       <view class="recycle-page-header__center" :style="centerStyle">
@@ -87,13 +87,14 @@ defineExpose({
   right: 0;
   top: 0;
   z-index: 999;
-  background: var(--recycle-button-bg);
-  color: var(--recycle-button-text);
-  box-shadow: 0 8rpx 20rpx rgba(31, 41, 55, 0.14);
+  background: rgba(255, 255, 255, 0.96);
+  color: #172033;
+  border-bottom: 1rpx solid rgba(229, 231, 235, 0.9);
+  backdrop-filter: blur(18rpx);
 }
 
 .recycle-page-header.compact {
-  background: var(--recycle-button-bg);
+  background: rgba(255, 255, 255, 0.96);
 }
 
 .recycle-page-header__content {
@@ -121,6 +122,10 @@ defineExpose({
   display: flex;
   align-items: center;
   justify-content: center;
+
+  &:active {
+    background: #f2f4f7;
+  }
 }
 
 .recycle-page-header__center {
@@ -140,7 +145,7 @@ defineExpose({
   width: 100%;
   font-size: 31rpx;
   line-height: 40rpx;
-  font-weight: 800;
+  font-weight: 700;
   text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -153,7 +158,7 @@ defineExpose({
   margin-top: 2rpx;
   font-size: 20rpx;
   line-height: 28rpx;
-  color: rgba(255, 255, 255, 0.78);
+  color: #8b96a9;
   text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;

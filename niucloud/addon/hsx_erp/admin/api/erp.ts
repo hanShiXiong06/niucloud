@@ -183,6 +183,16 @@ export function getErpStockTurnoverSummary() {
     return request.get('erp/stock/turnover_summary')
 }
 
+export function getErpStocktakeList(params: Record<string, any> = {}) { return request.get('erp/stocktake/lists', { params }) }
+export function getErpStocktakeInfo(id: number) { return request.get(`erp/stocktake/${id}`) }
+export function getErpStocktakeItems(id: number, params: Record<string, any> = {}) { return request.get(`erp/stocktake/${id}/items`, { params }) }
+export function createErpStocktake(data: Record<string, any>) { return request.post('erp/stocktake/create', withErpRequestId(data, 'stocktake')) }
+export function scanErpStocktake(id: number, data: Record<string, any>) { return request.post(`erp/stocktake/${id}/scan`, data) }
+export function submitErpStocktake(id: number, autoComplete = false) { return request.post(`erp/stocktake/${id}/submit`, { auto_complete: autoComplete }) }
+export function resolveErpStocktakeItem(id: number, itemId: number, data: Record<string, any>) { return request.post(`erp/stocktake/${id}/items/${itemId}/resolve`, data) }
+export function completeErpStocktake(id: number, remark = '') { return request.post(`erp/stocktake/${id}/complete`, { remark }) }
+export function cancelErpStocktake(id: number, remark: string) { return request.post(`erp/stocktake/${id}/cancel`, { remark }) }
+
 export function adjustErpStockRetailPrice(id: number, data: Record<string, any>) {
     return request.post(`erp/stock/${id}/retail_price`, withErpRequestId(data, `stock-retail-price-${id}`))
 }
@@ -303,6 +313,9 @@ export function getErpSaleReturnInfo(id: number) {
 
 export function createErpSaleReturn(data: Record<string, any>) {
     return request.post('erp/sale/return/create', withErpRequestId(data, 'sale-return'))
+}
+export function createAndConfirmErpSaleReturn(data: Record<string, any>) {
+    return request.post('erp/sale/return/create_and_confirm', withErpRequestId(data, 'sale-return-direct'))
 }
 export function createErpSaleCompensation(data: Record<string, any>) { return request.post('erp/sale/return/compensate', withErpRequestId(data, 'sale-compensation')) }
 

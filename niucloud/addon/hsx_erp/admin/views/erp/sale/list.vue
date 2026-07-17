@@ -169,6 +169,7 @@
                         </el-select>
                     </el-form-item>
                 </div>
+                <el-alert v-if="creditNotice" class="mb-4" :type="creditProfile?.severity || 'warning'" :closable="false" show-icon :title="creditNotice" />
 
                 <div class="section-title">2. 货品</div>
                 <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -233,12 +234,12 @@
                 <div class="grid grid-cols-1 gap-x-4 md:grid-cols-3">
                     <el-form-item label="结算方式">
                         <el-select v-model="create.form.settle_mode" class="w-full">
-                            <el-option label="挂账，稍后收款" value="credit" />
+                            <el-option label="挂账，稍后收款" value="credit" :disabled="!creditAllowedForOrder" />
                             <el-option label="现结，本次收款" value="cash" />
                         </el-select>
                     </el-form-item>
                     <el-form-item v-if="create.form.settle_mode === 'cash'" label="本次收款" required>
-                        <el-input-number v-model="create.form.received_amount" :min="0" :precision="2" :controls="false" class="!w-full" />
+                        <el-input-number v-model="create.form.received_amount" :min="0" :precision="2" :controls="false" :disabled="creditProfile?.policy === 'cash_only'" class="!w-full" />
                     </el-form-item>
                     <el-form-item v-if="create.form.settle_mode === 'cash'" label="收款账户" required>
                         <el-select v-model="create.form.capital_account_id" class="w-full" placeholder="选择账户">
@@ -254,7 +255,7 @@
 
             <template #footer>
                 <el-button @click="create.visible = false">取消</el-button>
-                <el-button type="primary" :loading="create.saving" @click="submitCreate">确认出库</el-button>
+                <el-button type="primary" :loading="create.saving" :disabled="creditProfile?.can_sale === false" @click="submitCreate">确认出库</el-button>
             </template>
         </el-dialog>
 
@@ -311,13 +312,14 @@ import { Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import { getErpSaleChannelOptions } from '@/addon/hsx_erp/api/config'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
-import { cancelErpSaleItem, confirmErpReceipt, createErpSale, getErpSaleInfo, getErpSaleList, getErpSaleStock, getErpStaffOptions } from '@/addon/hsx_erp/api/erp'
+import { cancelErpSaleItem, createErpSale, getErpSaleInfo, getErpSaleList, getErpSaleStock, getErpStaffOptions } from '@/addon/hsx_erp/api/erp'
 import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/index.vue'
 import ErpDeviceIdentity from '@/addon/hsx_erp/components/ErpDeviceIdentity.vue'
 import ErpRoleFocus from '@/addon/hsx_erp/components/ErpRoleFocus.vue'
 import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVoucherUpload.vue'
 import ErpCatalogProductSelect from '@/addon/hsx_erp/components/ErpCatalogProductSelect.vue'
 import { useErpPageRefresh } from '@/addon/hsx_erp/hooks/useErpPageRefresh'
+import { firstPositiveErpAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
 
 const search = reactive<any>({ keyword: '', finance_status: '', status: '', warehouse_id: '', location_id: '', catalog_product_id: '', salesman_uid: '', dateRange: [], min_amount: undefined, max_amount: undefined, min_profit: undefined, max_profit: undefined })
 const activeTab = ref('')
@@ -347,6 +349,7 @@ const staffOptions = ref<any[]>([])
 const warehouses = ref<any[]>([])
 const saleChannelOptions = ref<any[]>([])
 const currentUid = ref(0)
+const creditProfile = ref<any>(null)
 const selectedAssets = ref<any[]>([])
 const pendingAssetIds = ref<number[]>([])
 const stockTableRef = ref<any>()
@@ -365,6 +368,20 @@ const summary = computed(() => table.data.reduce((acc, row: any) => {
 const selectedCost = computed(() => selectedAssets.value.reduce((sum, row) => sum + Number(row.total_cost || 0), 0))
 const selectedAmount = computed(() => selectedAssets.value.reduce((sum, row) => sum + Number(salePrices[row.id] || 0), 0))
 const selectedProfit = computed(() => selectedAmount.value - selectedCost.value)
+const creditAllowedForOrder = computed(() => {
+    const profile = creditProfile.value
+    if (!profile) return true
+    if (profile.can_credit === false) return false
+    const limit = Number(profile.credit_limit || 0)
+    return limit <= 0 || Number(profile.outstanding_amount || 0) + selectedAmount.value <= limit + 0.0001
+})
+const creditNotice = computed(() => {
+    if (creditProfile.value?.message) return creditProfile.value.message
+    if (!creditAllowedForOrder.value && Number(creditProfile.value?.credit_limit || 0) > 0) {
+        return `本单挂账后将超过客户信用额度 ¥${money(creditProfile.value.credit_limit)}，请改为现结。`
+    }
+    return ''
+})
 const searchWarehouse = computed(() => warehouses.value.find(row => Number(row.id) === Number(search.warehouse_id)) || null)
 const searchLocations = computed(() => searchWarehouse.value?.locations || [])
 const stockWarehouse = computed(() => warehouses.value.find(row => Number(row.id) === Number(stock.warehouse_id)) || null)
@@ -375,6 +392,9 @@ watch(() => create.form.settle_mode, () => {
 })
 watch(selectedAmount, amount => {
     if (create.form.settle_mode === 'cash') create.form.received_amount = amount
+})
+watch(creditAllowedForOrder, allowed => {
+    if (!allowed && creditProfile.value?.can_sale !== false) create.form.settle_mode = 'cash'
 })
 
 onMounted(() => {
@@ -434,7 +454,7 @@ async function loadStock() {
         stock.data = res?.data?.data || []
         stock.total = res?.data?.total || 0
         stock.data.forEach((row: any) => {
-            if (!salePrices[row.id]) salePrices[row.id] = Number(row.retail_price || row.estimate_sale_price || row.total_cost || 0)
+            salePrices[row.id] = firstPositiveErpAmount(row.retail_price, row.estimate_sale_price, row.total_cost)
         })
         if (pendingAssetIds.value.length) {
             selectedAssets.value = stock.data.filter((row: any) => pendingAssetIds.value.includes(Number(row.id)))
@@ -482,6 +502,7 @@ function buildSearchParams() {
 
 function openCreate(assetIds: number[] = []) {
     create.form = defaultForm()
+    creditProfile.value = null
     create.form.salesman_uid = currentUid.value || staffOptions.value[0]?.uid || 0
     const preferredChannel = saleChannelOptions.value.find((row: any) => Number(row.is_default || 0) === 1) || saleChannelOptions.value[0]
     if (preferredChannel) onSaleChannelChange(preferredChannel.key)
@@ -511,6 +532,8 @@ function onStockRowClick(row: any, _column: any, event: MouseEvent) {
 
 async function submitCreate() {
     if (!create.form.party_id && !create.form.party_name) return ElMessage.warning('请选择销售客户')
+    if (creditProfile.value?.can_sale === false) return ElMessage.error(creditProfile.value.message || '该客户已暂停交易')
+    if (create.form.settle_mode === 'credit' && !creditAllowedForOrder.value) return ElMessage.warning(creditNotice.value || '该客户不允许挂账，请改为现结')
     if (!create.form.sale_channel_key) return ElMessage.warning('请选择销售渠道')
     if (!create.form.salesman_uid) return ElMessage.warning('请选择制单员')
     if (!selectedAssets.value.length) return ElMessage.warning('请选择要销售的库存机器')
@@ -528,23 +551,15 @@ async function submitCreate() {
     if (!confirmed) return
     create.saving = true
     try {
-        const saleRes: any = await createErpSale({
+        await createErpSale({
             ...create.form,
+            settle_mode: create.form.settle_mode,
             settle_method: create.form.settle_mode === 'cash' ? '现结' : '挂账',
+            received_amount: create.form.received_amount,
+            capital_account_id: create.form.capital_account_id,
+            voucher_urls: create.form.voucher_urls,
             items: selectedAssets.value.map(row => ({ asset_id: row.id, sale_price: Number(salePrices[row.id] || 0) }))
         })
-        if (create.form.settle_mode === 'cash' && Number(create.form.received_amount || 0) > 0) {
-            const infoRes: any = await getErpSaleInfo(saleRes?.data?.id)
-            const receivable = infoRes?.data?.receivables?.[0]
-            if (receivable?.id) {
-                await confirmErpReceipt(receivable.id, {
-                    amount: Number(create.form.received_amount),
-                    capital_account_id: create.form.capital_account_id,
-                    remark: '销售现结收款',
-                    voucher_urls: create.form.voucher_urls
-                })
-            }
-        }
         ElMessage.success('销售出库已完成')
         create.visible = false
         await loadList()
@@ -555,6 +570,11 @@ async function submitCreate() {
 
 function onPartyResolved(row: any) {
     create.form.party_name = row?.party_name || row?.name || ''
+    creditProfile.value = row?.credit_profile || null
+    if (creditProfile.value?.can_sale !== false && !creditAllowedForOrder.value) {
+        create.form.settle_mode = 'cash'
+        ElMessage.warning(creditProfile.value.message || '该客户当前仅允许现结')
+    }
 }
 
 async function openDetail(row: any) {

@@ -2,15 +2,17 @@
     <view class="erp-page">
         <ErpListHeader
             v-model="keyword"
-            v-model:activeTab="activeTab"
-            placeholder="付款对象 / IMEI / 来源单"
-            :tabs="tabs"
+            placeholder="付款对象 / 设备 IMEI"
             :show-filter="true"
             :filter-count="filterCount"
+            :compact-mp="true"
             @search="handleSearch"
-            @tab-change="onTab"
             @filter="filterVisible = true"
-        />
+        >
+            <template #below>
+                <ErpQuickFilterBar :items="quickFilters" @change="onQuickFilter" />
+            </template>
+        </ErpListHeader>
 
         <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true"
             :default-page-size="15" :paging-style="pagingStyle">
@@ -19,7 +21,7 @@
                 <view v-for="row in list" :key="String(row.party_id)+'_'+String(row.source_type)+'_'+String(row.purchase_order_id)" class="erp-card payable-card">
                     <view class="payable-card__head">
                         <view class="payable-title">
-                            <text class="card-title payable-title__name">{{ row.party_name || '-' }}</text>
+                            <text class="card-title payable-title__name">{{ erpPartyDisplayName(row) }}</text>
                             <text class="payable-title__sub">剩余应付 ¥{{ money(row.remain_amount) }}</text>
                         </view>
                         <u-tag :text="statusLabel(row.finance_status)" :type="statusType(row.finance_status)" plain plainFill size="mini" />
@@ -28,6 +30,7 @@
                     <ErpFinanceSourceSummary :row="row" direction="payable" compact />
 
                     <view class="payable-chips">
+                        <view v-if="row.task_assignee_name" class="payable-chip">财务负责人 {{ row.task_assignee_name }}</view>
                         <view v-if="row.purchaser_name" class="payable-chip">业务操作人 {{ row.purchaser_name }}</view>
                         <view v-if="row.warehouse_name" class="payable-chip">{{ row.warehouse_name }}</view>
                         <view v-if="row.payable_count" class="payable-chip muted">{{ row.payable_count }} 笔应付</view>
@@ -75,7 +78,7 @@
                 <view class="popup-head">
                     <view>
                         <text class="popup-title">确认付款</text>
-                        <text class="popup-subtitle">{{ payRow.party_name }}</text>
+                        <text class="popup-subtitle">{{ erpPartyDisplayName(payRow) }}</text>
                     </view>
                     <view class="popup-close" @click="payVisible = false">
                         <u-icon name="close" color="#64748b" size="20" />
@@ -195,7 +198,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 
 import { getMobilePayableList, confirmMobilePurchasePayment, getMobileCapitalAccounts } from '@/addon/hsx_erp/api/erp'
 import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
@@ -204,14 +207,16 @@ import ErpOffsetConfirmModal from '@/addon/hsx_erp/components/ErpOffsetConfirmMo
 import ErpFilterPopup from '@/addon/hsx_erp/components/ErpFilterPopup.vue'
 import ErpFinanceSourceSummary from '@/addon/hsx_erp/components/ErpFinanceSourceSummary.vue'
 import ErpVoucherUploader from '@/addon/hsx_erp/components/ErpVoucherUploader.vue'
+import ErpQuickFilterBar from '@/addon/hsx_erp/components/ErpQuickFilterBar.vue'
 import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
 import { erpTimeLine } from '@/addon/hsx_erp/hooks/useErpTime'
 import { cloneErpSubmitSnapshot, confirmErpPopupAction } from '@/addon/hsx_erp/hooks/useErpPopupConfirm'
 import { erpFinanceSourceFilterOptions, erpFinanceSourceMeta } from '@/addon/hsx_erp/hooks/useErpFinanceSource'
 import { useErpFinanceOptions } from '@/addon/hsx_erp/hooks/useErpFinanceOptions'
 import { useErpSaleChannels } from '@/addon/hsx_erp/hooks/useErpSaleChannels'
+import { erpPartyDisplayName } from '@/addon/hsx_erp/hooks/useErpPartyText'
 
-const { pagingStyle } = useListHeader({ tabs: true })
+const { pagingStyle } = useListHeader({ tabs: true, compactMp: true })
 
 const keyword = ref('')
 const list = ref<any[]>([])
@@ -223,6 +228,11 @@ const tabs = [
     { label: '全部', value: '' },
 ]
 const activeTab = ref('pending')
+const quickFilters = computed(() => [
+    { key: 'status', label: '付款状态', title: '付款状态', value: activeTab.value, options: tabs },
+    { key: 'finance_type_key', label: '支出类型', title: '支出类型', value: filters.value.finance_type_key || '', options: [{ label: '全部类型', value: '' }, ...categoryOptions('expense')] },
+    { key: 'business_source_key', label: '业务来源', title: '业务来源', value: filters.value.business_source_key || '', options: [{ label: '全部来源', value: '' }, ...sourceOptions('expense')] },
+])
 const filterVisible = ref(false)
 const filters = ref<Record<string, any>>({})
 const { load: loadFinanceOptions, categoryOptions, sourceOptions } = useErpFinanceOptions()
@@ -245,6 +255,11 @@ const filterFields = computed(() => [
     { key: 'date', label: '发生日期', type: 'dateRange', startKey: 'start_at', endKey: 'end_at' },
 ] as any[])
 const filterCount = computed(() => Object.entries(filters.value).filter(([key, v]) => !key.endsWith('_name') && v !== '' && v !== undefined && v !== null).length)
+const onQuickFilter = ({ key, value }: { key: string; value: string | number }) => {
+    if (key === 'status') return onTab(String(value))
+    filters.value = { ...filters.value, [key]: value }
+    reload()
+}
 
 const accounts = ref<any[]>([])
 
@@ -274,6 +289,21 @@ onMounted(async () => {
     loadFinanceOptions().catch(() => undefined)
     loadSaleChannels().catch(() => undefined)
     await loadAccounts()
+})
+
+onLoad((query: Record<string, any>) => {
+    const status = String(query?.status ?? 'pending').trim()
+    const sourceNo = String(query?.source_no || '').trim()
+    const routeKeyword = String(query?.keyword || '').trim()
+    activeTab.value = ['', 'pending', 'partial'].includes(status) ? status : 'pending'
+    if (sourceNo) {
+        try { filters.value = { ...filters.value, source_no: decodeURIComponent(sourceNo) } }
+        catch { filters.value = { ...filters.value, source_no: sourceNo } }
+    }
+    if (routeKeyword) {
+        try { keyword.value = decodeURIComponent(routeKeyword) }
+        catch { keyword.value = routeKeyword }
+    }
 })
 
 async function loadAccounts() {
@@ -336,6 +366,7 @@ function openDetail(row: any) {
         `source_type=${encodeURIComponent(String(row.source_type || ''))}`,
         `purchase_order_id=${Number(row.purchase_order_id || 0)}`,
         `party_name=${encodeURIComponent(String(row.party_name || ''))}`,
+        `member_name=${encodeURIComponent(String(row.member_name || ''))}`,
     ].join('&')
     uni.navigateTo({ url: `/addon/hsx_erp/pages/payable/detail?${query}` })
 }

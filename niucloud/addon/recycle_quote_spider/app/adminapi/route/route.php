@@ -24,6 +24,7 @@ Route::group('recycle_quote_spider', function () {
 
     Route::get('item', 'addon\recycle_quote_spider\app\adminapi\controller\Item@lists');
     Route::get('item/filter-options', 'addon\recycle_quote_spider\app\adminapi\controller\Item@filterOptions');
+    Route::get('item/summary', 'addon\recycle_quote_spider\app\adminapi\controller\Item@summary');
     Route::get('item/:id', 'addon\recycle_quote_spider\app\adminapi\controller\Item@info');
     Route::post('item', 'addon\recycle_quote_spider\app\adminapi\controller\Item@add');
     Route::put('item/:id', 'addon\recycle_quote_spider\app\adminapi\controller\Item@edit');

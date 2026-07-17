@@ -8,10 +8,17 @@ use addon\hsx_recycle\app\dict\stat\RecycleStageDict;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
 use addon\hsx_recycle\app\model\stat\RecycleTaskClaim;
+use addon\hsx_recycle\app\model\stat\RecycleTaskAssignmentLog;
+use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpCapabilityService;
 use addon\hsx_recycle\app\service\core\stat\CoreRecycleStatService;
+use app\model\sys\SysRole;
+use app\model\sys\SysUser;
+use app\model\sys\SysUserRole;
 use app\service\admin\auth\AuthService;
+use app\service\core\sys\CoreConfigService;
 use core\base\BaseAdminService;
 use core\exception\AdminException;
+use think\facade\Log;
 
 /**
  * 店员「我的任务」服务
@@ -19,6 +26,81 @@ use core\exception\AdminException;
  */
 class TaskService extends BaseAdminService
 {
+    private const DEFAULT_CONFIG_KEY = 'HSX_RECYCLE_TASK_DEFAULT_ASSIGNEES';
+    /**
+     * 为 API、队列等非管理端请求创建明确的站点上下文。
+     * 责任人始终写数据库；这里仅补齐执行上下文，不承载任何缓存状态。
+     */
+    public static function forSite(int $siteId, int $operatorUid = 0, string $operatorName = '系统自动分配'): self
+    {
+        $service = new self();
+        $service->site_id = $siteId;
+        $service->uid = $operatorUid;
+        $service->username = $operatorName;
+        return $service;
+    }
+
+    /** 当前环节可接收任务的员工，按站点管理员、员工UID稳定排序。 */
+    public function getAssignableUsers(string $stageKey): array
+    {
+        $permissions = RecycleStageDict::getStagePermissions()[$stageKey] ?? [];
+        if ($stageKey === '' || $permissions === []) return [];
+
+        $relations = SysUserRole::where([
+            ['site_id', '=', $this->site_id], ['status', '=', 1],
+        ])->field('uid,is_admin,role_ids')->order('is_admin desc,uid asc')->select()->toArray();
+        if ($relations === []) return [];
+
+        $roleIds = [];
+        foreach ($relations as $relation) {
+            foreach ((array)($relation['role_ids'] ?? []) as $roleId) $roleIds[] = (int)$roleId;
+        }
+        $roles = $roleIds === [] ? [] : SysRole::where([
+            ['site_id', '=', $this->site_id], ['status', '=', 1],
+        ])->whereIn('role_id', array_values(array_unique($roleIds)))->field('role_id,rules')->select()->toArray();
+        $roleRuleMap = [];
+        foreach ($roles as $role) $roleRuleMap[(int)$role['role_id']] = array_values((array)($role['rules'] ?? []));
+
+        $roleMatched = [];
+        $adminFallback = [];
+        foreach ($relations as $relation) {
+            $matched = false;
+            foreach ((array)($relation['role_ids'] ?? []) as $roleId) {
+                if (array_intersect($permissions, $roleRuleMap[(int)$roleId] ?? [])) {
+                    $matched = true;
+                    break;
+                }
+            }
+            if ($matched) $roleMatched[] = (int)$relation['uid'];
+            elseif ((int)($relation['is_admin'] ?? 0) === 1) $adminFallback[] = (int)$relation['uid'];
+        }
+        // 有岗位员工时只在岗位内自动分配，避免站点管理员因为拥有全部权限而接走所有工单。
+        $eligible = $roleMatched !== [] ? $roleMatched : $adminFallback;
+        $eligible = array_values(array_unique(array_filter($eligible)));
+        if ($eligible === []) return [];
+        $users = SysUser::whereIn('uid', $eligible)->where('status', '=', 1)
+            ->field('uid,username,real_name,head_img')->select()->toArray();
+        $map = [];
+        foreach ($users as $user) $map[(int)$user['uid']] = $user;
+        $result = [];
+        foreach ($eligible as $uid) {
+            if (!isset($map[$uid])) continue;
+            $user = $map[$uid];
+            $result[] = [
+                'uid' => $uid,
+                'name' => trim((string)($user['real_name'] ?? '')) ?: (string)($user['username'] ?? ('员工' . $uid)),
+                'username' => (string)($user['username'] ?? ''),
+                'head_img' => (string)($user['head_img'] ?? ''),
+            ];
+        }
+        $defaultUid = (int)($this->defaultAssignees()[$stageKey] ?? 0);
+        foreach ($result as &$item) {
+            $item['is_default'] = $defaultUid > 0 && (int)$item['uid'] === $defaultUid ? 1 : 0;
+        }
+        unset($item);
+        return $result;
+    }
+
     /**
      * 当前用户负责的环节 key 列表（超管/站点管理员看全部）
      */
@@ -29,6 +111,9 @@ class TaskService extends BaseAdminService
         $stagePerms = RecycleStageDict::getStagePermissions();
         $stages = [];
         foreach ($stagePerms as $stage => $perms) {
+            if ($stage === RecycleStageDict::STAGE_PAY && (new RecycleErpCapabilityService())->isPaymentManaged($this->site_id)) {
+                continue;
+            }
             if (!empty($perms) && !empty(array_intersect($perms, $myMenuKeys))) {
                 $stages[] = $stage;
             }
@@ -51,7 +136,11 @@ class TaskService extends BaseAdminService
      */
     public function getTaskList(array $params): array
     {
-        $stages = !empty($params['stage']) ? [(string)$params['stage']] : $this->getMyStages();
+        $myStages = $this->getMyStages();
+        $requestedStage = trim((string)($params['stage'] ?? ''));
+        $stages = $requestedStage !== '' && in_array($requestedStage, $myStages, true)
+            ? [$requestedStage]
+            : ($requestedStage === '' ? $myStages : []);
         $page = max(1, (int)($params['page'] ?? 1));
         $limit = max(1, (int)($params['limit'] ?? 15));
 
@@ -77,6 +166,10 @@ class TaskService extends BaseAdminService
         $plainStatuses = RecycleStageDict::statusesOfStages(array_values(array_diff($stages, ['pay'])));
 
         $query = (new RecycleDevice())->where('site_id', '=', $this->site_id);
+        $assignedDeviceIds = RecycleTaskClaim::where([
+            ['site_id', '=', $this->site_id], ['assignee_uid', '=', (int)$this->uid],
+        ])->whereIn('stage_key', $stages)->column('device_id');
+        $query->whereIn('id', $assignedDeviceIds !== [] ? array_map('intval', $assignedDeviceIds) : [0]);
         $query->where(function ($q) use ($plainStatuses, $payWanted, $recycled, $hasPayStatus) {
             $matched = false;
             if (!empty($plainStatuses)) {
@@ -159,6 +252,12 @@ class TaskService extends BaseAdminService
             ['site_id', '=', $this->site_id],
             ['status', '=', RecycleOrderDict::ORDER_STATUS_PENDING_SIGN],
         ]);
+        $assignedOrderIds = RecycleTaskClaim::where([
+            ['site_id', '=', $this->site_id],
+            ['stage_key', '=', RecycleStageDict::STAGE_SIGN],
+            ['assignee_uid', '=', (int)$this->uid],
+        ])->column('device_id');
+        $query->whereIn('id', $assignedOrderIds !== [] ? array_map('intval', $assignedOrderIds) : [0]);
         $keyword = trim((string)($params['keyword'] ?? ''));
         if ($keyword !== '') {
             $query->where(function ($q) use ($keyword) {
@@ -235,7 +334,7 @@ class TaskService extends BaseAdminService
             if ((int)$order['status'] !== RecycleOrderDict::ORDER_STATUS_PENDING_SIGN) {
                 throw new AdminException('该订单已不在待签收环节');
             }
-            return $this->upsertClaim($deviceId, $stageKey);
+            return $this->upsertAssignment($deviceId, $stageKey, (int)$this->uid, (string)$this->username, 'claim', false);
         }
         $device = (new RecycleDevice())->where([['site_id', '=', $this->site_id], ['id', '=', $deviceId]])->findOrEmpty();
         if ($device->isEmpty()) {
@@ -244,41 +343,303 @@ class TaskService extends BaseAdminService
         if (RecycleStageDict::stageOf((int)$device['status'], (int)($device['pay_status'] ?? 0)) !== $stageKey) {
             throw new AdminException('该设备已不在此环节');
         }
-        return $this->upsertClaim($deviceId, $stageKey);
+        return $this->upsertAssignment($deviceId, $stageKey, (int)$this->uid, (string)$this->username, 'claim', false);
+    }
+
+    /** 管理员或上一步操作员把当前环节明确分配给指定员工。 */
+    public function assign(int $deviceId, string $stageKey, int $assigneeUid): bool
+    {
+        if ($assigneeUid <= 0) throw new AdminException('请选择任务责任人');
+        $this->assertTaskInStage($deviceId, $stageKey);
+        $candidates = $this->getAssignableUsers($stageKey);
+        $candidate = null;
+        foreach ($candidates as $item) {
+            if ((int)$item['uid'] === $assigneeUid) {
+                $candidate = $item;
+                break;
+            }
+        }
+        if ($candidate === null) throw new AdminException('该员工没有处理当前环节的权限');
+        $current = RecycleTaskClaim::where([
+            ['site_id', '=', $this->site_id], ['device_id', '=', $deviceId], ['stage_key', '=', $stageKey],
+        ])->findOrEmpty();
+        $mode = !$current->isEmpty() && (int)$current->assignee_uid > 0 && (int)$current->assignee_uid !== $assigneeUid
+            ? 'transfer'
+            : 'assign';
+        return $this->upsertAssignment($deviceId, $stageKey, $assigneeUid, (string)$candidate['name'], $mode, true);
+    }
+
+    /** 流程流转后的默认分配：优先使用表单指定人员，否则使用权限候选中的第一人。 */
+    public function assignPreferredOrDefault(int $deviceId, string $stageKey, int $preferredUid = 0): bool
+    {
+        // ERP 接管财务时，应付事实和责任人统一落在 ERP，避免回收与 ERP 重复派单、重复通知。
+        if ($stageKey === RecycleStageDict::STAGE_PAY && (new RecycleErpCapabilityService())->isPaymentManaged($this->site_id)) {
+            return true;
+        }
+        $candidates = $this->getAssignableUsers($stageKey);
+        if ($candidates === []) return false;
+        $defaults = $this->defaultAssignees();
+        $configuredUid = (int)($defaults[$stageKey] ?? 0);
+        $assigneeUid = $configuredUid > 0 ? $configuredUid : (int)$candidates[0]['uid'];
+        if (!in_array($assigneeUid, array_map(static fn(array $row): int => (int)$row['uid'], $candidates), true)) $assigneeUid = (int)$candidates[0]['uid'];
+        if ($preferredUid > 0) {
+            foreach ($candidates as $candidate) {
+                if ((int)$candidate['uid'] === $preferredUid) {
+                    $assigneeUid = $preferredUid;
+                    break;
+                }
+            }
+        }
+        return $this->assign($deviceId, $stageKey, $assigneeUid);
+    }
+
+    public function defaultAssignees(): array
+    {
+        $value = (new CoreConfigService())->getConfigValue($this->site_id, self::DEFAULT_CONFIG_KEY);
+        return is_array($value) ? $value : [];
+    }
+
+    public function saveDefaultAssignees(array $values): array
+    {
+        $stored = [];
+        foreach (array_column(RecycleStageDict::getStages(), 'stage_key') as $stage) {
+            $uid = (int)($values[$stage] ?? 0);
+            if ($uid <= 0) continue;
+            $candidateUids = array_map(static fn(array $row): int => (int)$row['uid'], $this->getAssignableUsers($stage));
+            if (!in_array($uid, $candidateUids, true)) throw new AdminException('默认负责人没有处理「' . $stage . '」的权限');
+            $stored[$stage] = $uid;
+        }
+        (new CoreConfigService())->setConfig($this->site_id, self::DEFAULT_CONFIG_KEY, $stored);
+        $this->assignOpenTasksWithoutOwner();
+        return $stored;
+    }
+
+    public function assignmentSettings(): array
+    {
+        $defaults = $this->defaultAssignees();
+        $stages = RecycleStageDict::getStages();
+        if ((new RecycleErpCapabilityService())->isPaymentManaged($this->site_id)) {
+            $stages = array_values(array_filter($stages, static fn(array $stage): bool => (string)$stage['stage_key'] !== RecycleStageDict::STAGE_PAY));
+        }
+        return array_map(function (array $stage) use ($defaults): array {
+            $key = (string)$stage['stage_key'];
+            return $stage + ['default_uid' => (int)($defaults[$key] ?? 0), 'users' => $this->getAssignableUsers($key)];
+        }, $stages);
+    }
+
+    /** 保存默认负责人后补齐当前在途且尚未分配的任务，不覆盖已有责任人。 */
+    private function assignOpenTasksWithoutOwner(): void
+    {
+        $signOrderIds = RecycleOrder::where([
+            ['site_id', '=', $this->site_id],
+            ['status', '=', RecycleOrderDict::ORDER_STATUS_PENDING_SIGN],
+        ])->column('id');
+        foreach (array_map('intval', $signOrderIds) as $orderId) {
+            $this->ensureAssigned($orderId, RecycleStageDict::STAGE_SIGN);
+        }
+
+        $deviceRows = RecycleDevice::where([['site_id', '=', $this->site_id]])
+            ->whereIn('status', array_values(array_unique(array_merge(
+                RecycleStageDict::statusesOfStages(array_keys(RecycleStageDict::getStageStatuses())),
+                [RecycleStageDict::statusRecycled()]
+            ))))->field('id,status,pay_status')->select()->toArray();
+        foreach ($deviceRows as $device) {
+            $stage = RecycleStageDict::stageOf((int)$device['status'], (int)($device['pay_status'] ?? 0));
+            if ($stage !== '') $this->ensureAssigned((int)$device['id'], $stage);
+        }
+    }
+
+    private function ensureAssigned(int $deviceId, string $stageKey): void
+    {
+        if ($stageKey === RecycleStageDict::STAGE_PAY && (new RecycleErpCapabilityService())->isPaymentManaged($this->site_id)) return;
+        $claim = RecycleTaskClaim::where([
+            ['site_id', '=', $this->site_id], ['device_id', '=', $deviceId], ['stage_key', '=', $stageKey],
+        ])->findOrEmpty();
+        if (!$claim->isEmpty() && (int)$claim->assignee_uid > 0) return;
+        $this->assignPreferredOrDefault($deviceId, $stageKey);
     }
 
     /**
      * 写入/更新认领记录（device_id 在 sign 环节里承载 order_id）
      */
-    protected function upsertClaim(int $deviceId, string $stageKey): bool
+    protected function upsertAssignment(int $deviceId, string $stageKey, int $assigneeUid, string $assigneeName, string $mode, bool $allowTransfer): bool
     {
         $model = new RecycleTaskClaim();
         $where = [['site_id', '=', $this->site_id], ['device_id', '=', $deviceId], ['stage_key', '=', $stageKey]];
         $exists = $model->where($where)->findOrEmpty();
-        if (!$exists->isEmpty() && (int)$exists['assignee_uid'] > 0 && (int)$exists['assignee_uid'] !== (int)$this->uid) {
+        if (!$allowTransfer && !$exists->isEmpty() && (int)$exists['assignee_uid'] > 0 && (int)$exists['assignee_uid'] !== $assigneeUid) {
             throw new AdminException('该任务已被「' . $exists['assignee_name'] . '」认领');
         }
 
         $now = time();
+        $previousUid = $exists->isEmpty() ? 0 : (int)$exists['assignee_uid'];
+        $previousName = $exists->isEmpty() ? '' : (string)$exists['assignee_name'];
+        $eventId = 'recycle-task-' . md5(implode(':', [$this->site_id, $deviceId, $stageKey, $assigneeUid, microtime(true)]));
+        $save = [
+            'assignee_uid' => $assigneeUid,
+            'assignee_name' => $assigneeName,
+            'assigner_uid' => (int)$this->uid,
+            'assigner_name' => (string)$this->username,
+            'assignment_mode' => $mode,
+            'claimed_at' => $now,
+            'assigned_at' => $now,
+            'update_time' => $now,
+        ];
         if ($exists->isEmpty()) {
-            $model->create([
+            $model->create(array_merge([
                 'site_id'       => $this->site_id,
                 'device_id'     => $deviceId,
                 'stage_key'     => $stageKey,
-                'assignee_uid'  => $this->uid,
-                'assignee_name' => $this->username,
-                'claimed_at'    => $now,
-                'update_time'   => $now,
-            ]);
+            ], $save));
         } else {
-            $model->where($where)->update([
-                'assignee_uid'  => $this->uid,
-                'assignee_name' => $this->username,
-                'claimed_at'    => $now,
-                'update_time'   => $now,
-            ]);
+            $model->where($where)->update($save);
         }
+        RecycleTaskAssignmentLog::create([
+            'site_id' => $this->site_id,
+            'device_id' => $deviceId,
+            'stage_key' => $stageKey,
+            'from_uid' => $previousUid,
+            'from_name' => $previousName,
+            'to_uid' => $assigneeUid,
+            'to_name' => $assigneeName,
+            'operator_uid' => (int)$this->uid,
+            'operator_name' => (string)$this->username,
+            'assignment_mode' => $mode,
+            'event_id' => $eventId,
+            'create_at' => $now,
+        ]);
+        $this->publishTaskAssigned($deviceId, $stageKey, $assigneeUid, $assigneeName, $eventId);
         return true;
+    }
+
+    private function assertTaskInStage(int $deviceId, string $stageKey): void
+    {
+        if ($stageKey === RecycleStageDict::STAGE_SIGN) {
+            $order = RecycleOrder::where([['site_id', '=', $this->site_id], ['id', '=', $deviceId]])->findOrEmpty();
+            if ($order->isEmpty()) throw new AdminException('订单不存在');
+            if ((int)$order->status !== RecycleOrderDict::ORDER_STATUS_PENDING_SIGN) throw new AdminException('该订单已不在待签收环节');
+            return;
+        }
+        $device = RecycleDevice::where([['site_id', '=', $this->site_id], ['id', '=', $deviceId]])->findOrEmpty();
+        if ($device->isEmpty()) throw new AdminException('设备不存在');
+        if (RecycleStageDict::stageOf((int)$device->status, (int)($device->pay_status ?? 0)) !== $stageKey) {
+            throw new AdminException('该设备已不在此环节');
+        }
+    }
+
+    private function publishTaskAssigned(int $deviceId, string $stageKey, int $assigneeUid, string $assigneeName, string $eventId): void
+    {
+        try {
+            $isOrder = RecycleStageDict::isOrderStage($stageKey);
+            $orderId = $isOrder ? $deviceId : 0;
+            $businessNo = '';
+            $imei = '';
+            $model = '';
+            if ($isOrder) {
+                $order = RecycleOrder::where([['site_id', '=', $this->site_id], ['id', '=', $deviceId]])->findOrEmpty();
+                $businessNo = $order->isEmpty() ? '' : (string)$order->order_no;
+            } else {
+                $device = RecycleDevice::where([['site_id', '=', $this->site_id], ['id', '=', $deviceId]])->findOrEmpty();
+                if (!$device->isEmpty()) {
+                    $orderId = (int)$device->order_id;
+                    $imei = (string)($device->imei ?: $device->sn);
+                    $model = (string)$device->model;
+                }
+                if ($orderId > 0) $businessNo = (string)RecycleOrder::where([['site_id', '=', $this->site_id], ['id', '=', $orderId]])->value('order_no');
+            }
+            $stageNames = array_column(RecycleStageDict::getStages(), 'name', 'stage_key');
+            $stageName = (string)($stageNames[$stageKey] ?? '待办');
+            $taskActionName = str_starts_with($stageName, '待') ? $stageName : ('待' . $stageName);
+            $target = $this->taskTarget($stageKey, $orderId, $deviceId, $businessNo, $imei);
+            event('HsxBusinessTaskAssigned', [
+                'event_id' => $eventId,
+                'event_name' => 'task.assigned.v1',
+                'site_id' => $this->site_id,
+                'source_plugin' => 'hsx_recycle',
+                'source_type' => $isOrder ? 'recycle_order' : 'recycle_device',
+                'source_id' => $deviceId,
+                'stage_key' => $stageKey,
+                'assignee_uid' => $assigneeUid,
+                'assignee_name' => $assigneeName,
+                'assigner_uid' => (int)$this->uid,
+                'assigner_name' => (string)$this->username,
+                'title' => trim(($model !== '' ? $model . ' ' : '') . $taskActionName),
+                'business_no' => $businessNo,
+                'imei' => $imei,
+                'pending_count' => $this->countAssignedPending($assigneeUid, $stageKey),
+                'target' => $target,
+                // 兼容仅识别单一移动管理端路径的通知消费者。
+                'target_path' => (string)$target['miniapp_path'],
+                'occurred_at' => time(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('回收任务分配事件发布失败', ['event_id' => $eventId, 'message' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * 跳转目标由当前业务环节决定，不能按事件来源插件猜测。
+     * 回收仍是任务来源；ERP 接管财务后，待打款任务的处理入口属于 ERP 应付款。
+     */
+    private function taskTarget(string $stageKey, int $orderId, int $deviceId, string $businessNo, string $imei): array
+    {
+        if ($stageKey === RecycleStageDict::STAGE_PAY
+            && (new RecycleErpCapabilityService())->isPaymentManaged($this->site_id)) {
+            $params = array_filter([
+                'status' => 'pending',
+                'source_no' => $businessNo,
+                'source_device_id' => $deviceId > 0 ? $deviceId : null,
+            ], static fn($value): bool => $value !== '' && $value !== null);
+            $query = $params === [] ? '' : ('?' . http_build_query($params));
+            return [
+                'plugin' => 'hsx_erp',
+                'route_key' => 'hsx_erp.payable.list',
+                'params' => $params,
+                'web_path' => 'site/hsx_erp/payable' . $query,
+                'miniapp_path' => 'addon/hsx_erp/pages/payable/list' . $query,
+            ];
+        }
+
+        // 企业微信分配的是一条具体任务，应直接进入可操作的订单详情。
+        // “我的任务”列表只用于主动查看全部待办，不作为单条通知的落点。
+        $params = array_filter([
+            'id' => $orderId,
+            'device_id' => $deviceId > 0 && $stageKey !== RecycleStageDict::STAGE_SIGN ? $deviceId : null,
+            'stage' => $stageKey,
+        ], static fn($value): bool => $value !== '' && $value !== null && $value !== 0);
+        $miniappParams = ['id' => $orderId];
+        if ($deviceId > 0 && $stageKey !== RecycleStageDict::STAGE_SIGN) $miniappParams['device_id'] = $deviceId;
+        $miniappParams['stage'] = $stageKey;
+        return [
+            'plugin' => 'hsx_recycle',
+            'route_key' => 'hsx_recycle.order.detail',
+            'params' => $params,
+            // PC 没有独立详情路由，订单列表会根据 order_id 自动定位并打开详情。
+            'web_path' => 'site/recycle_order/list?' . http_build_query([
+                'order_id' => $orderId,
+                'device_id' => $deviceId,
+                'stage' => $stageKey,
+            ]),
+            'miniapp_path' => 'addon/hsx_recycle/pages/order/detail?' . http_build_query($miniappParams),
+        ];
+    }
+
+    private function countAssignedPending(int $uid, string $stageKey): int
+    {
+        $claimTable = (new RecycleTaskClaim())->getTable();
+        if ($stageKey === RecycleStageDict::STAGE_SIGN) {
+            return (int)RecycleOrder::alias('o')->join($claimTable . ' c', 'c.device_id = o.id AND c.site_id = o.site_id')
+                ->where([['o.site_id', '=', $this->site_id], ['o.status', '=', RecycleOrderDict::ORDER_STATUS_PENDING_SIGN], ['c.stage_key', '=', $stageKey], ['c.assignee_uid', '=', $uid]])->count();
+        }
+        $statuses = $stageKey === RecycleStageDict::STAGE_PAY
+            ? [RecycleStageDict::statusRecycled()]
+            : (RecycleStageDict::getStageStatuses()[$stageKey] ?? []);
+        if ($statuses === []) return 0;
+        $query = RecycleDevice::alias('d')->join($claimTable . ' c', 'c.device_id = d.id AND c.site_id = d.site_id')
+            ->where([['d.site_id', '=', $this->site_id], ['c.stage_key', '=', $stageKey], ['c.assignee_uid', '=', $uid]])
+            ->whereIn('d.status', $statuses);
+        if ($stageKey === RecycleStageDict::STAGE_PAY && in_array('pay_status', (new RecycleDevice())->getTableFields(), true)) $query->where('d.pay_status', '=', 0);
+        return (int)$query->count();
     }
 
     /**

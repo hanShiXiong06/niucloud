@@ -5,7 +5,7 @@
                 <u-tag :text="meta.finance_type_name" :type="tagType" plain plainFill size="mini" />
                 <text v-if="showBusinessSource" class="finance-source__business">业务来源：{{ meta.business_source_name }}</text>
             </view>
-            <view v-if="meta.source_no || showInternalSourceNo" class="finance-source__numbers">
+            <view v-if="!compact && (meta.source_no || showInternalSourceNo)" class="finance-source__numbers">
                 <text v-if="meta.source_no" class="finance-source__no">来源单号：{{ meta.source_no }}</text>
                 <text v-if="showInternalSourceNo" class="finance-source__no finance-source__no--internal">
                     ERP关联单号：{{ meta.internal_source_no }}

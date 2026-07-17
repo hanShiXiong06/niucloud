@@ -65,8 +65,8 @@
             :model-value="mode === 'create'"
             :title="createType === 'compensation' ? '新建售后补差单' : '新建销售退货单'"
             :subtitle="createType === 'compensation' ? '客户继续持有设备；补差按设备减少毛利并生成客户应付。' : '选择客户和实际退回的设备，系统自动关联原销售记录并处理回库与退款。'"
-            :confirm-text="createType === 'compensation' ? '确认售后补差' : '保存退货单'"
-            :tip="createType === 'compensation' ? '提交前请核对设备、补差金额和付款方式；确认后将直接影响设备毛利和客户应付。' : '保存前请核对设备和实际退款金额；回库位置由系统按设备原仓位确定。'"
+            :confirm-text="createType === 'compensation' ? '确认售后补差' : '确认退货'"
+            :tip="createType === 'compensation' ? '提交前请核对设备、补差金额和付款方式；确认后将直接影响设备毛利和客户应付。' : '确认前请核对设备、实际退款金额和交接事实；提交后立即回库并处理账务。'"
             :loading="submitting"
             @close="resetCreate"
             @confirm="submitCreate"
@@ -97,7 +97,7 @@
                             <el-form-item v-else :label="createType === 'compensation' ? '设备处理' : '回库规则'"><div class="original-location-rule">{{ createType === 'compensation' ? '客户继续持有设备，不改变库存；补差直接减少该设备毛利' : '自动退回每台设备的原仓库 / 原库位' }}</div></el-form-item>
                         </div>
                         <el-alert :title="saleRefundModeTip(form.refund_mode)" type="info" :closable="false" show-icon />
-                        <div v-if="createType === 'compensation' && form.refund_mode === 'cash'" class="mt-3"><div class="mb-2 text-sm text-gray-600">付款凭证（选填）</div><ErpFinanceVoucherUpload v-model="form.voucher_urls" /></div>
+                        <div v-if="form.refund_mode === 'cash'" class="mt-3"><div class="mb-2 text-sm text-gray-600">退款凭证（选填）</div><ErpFinanceVoucherUpload v-model="form.voucher_urls" /></div>
                     </section>
 
                     <div class="sale-return-grid">
@@ -127,7 +127,7 @@
                         <aside class="sale-decision-panel">
                             <section class="sale-decision-card">
                                 <div class="decision-label">{{ createType === 'compensation' ? '本次补差结果' : '本次退货结果' }}</div><div class="decision-title">{{ form.items.length ? `已选 ${form.items.length} 台` : '请先选择设备' }}</div>
-                                <div class="decision-copy">{{ createType === 'compensation' ? '设备继续保持已售；补差逐台减少销售毛利，并生成客户退款应付。' : '确认收到设备后，每台设备自动回到销售前的原仓位；已收款部分逐台生成客户退款应付。' }}</div>
+                                <div class="decision-copy">{{ createType === 'compensation' ? '设备继续保持已售；补差逐台减少销售毛利，并生成客户退款应付。' : '提交即表示设备已经实际交回；系统立即按原仓位回库，并按单台已收款情况冲应收或生成退款应付。' }}</div>
                                 <div class="decision-metrics"><div><span>{{ createType === 'compensation' ? '涉及设备' : '退回库存' }}</span><b>{{ form.items.length }} 台</b></div><div><span>{{ createType === 'compensation' ? '补差合计' : '退款合计' }}</span><b class="text-orange-600">¥{{ totalReturnAmount }}</b></div></div>
                             </section>
                             <section class="side-form-card"><label class="side-form-label">整单备注</label><el-input v-model="form.remark" type="textarea" :rows="3" :placeholder="createType === 'compensation' ? '选填，记录售后协商背景' : '选填，记录退货背景或特殊说明'" /></section>
@@ -162,7 +162,7 @@ import { Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
     getErpSaleReturnList,
-    createErpSaleReturn,
+    createAndConfirmErpSaleReturn,
     createErpSaleCompensation,
 } from '@/addon/hsx_erp/api/erp'
 import { getErpSaleList, getErpSaleInfo } from '@/addon/hsx_erp/api/erp'
@@ -402,7 +402,7 @@ async function submitCreate() {
     const confirmed = await ElMessageBox.confirm(
         createType.value === 'compensation'
             ? `确认对 ${form.items.length} 台设备补差 ¥${totalReturnAmount.value}？设备仍由客户持有，补差将逐台减少销售毛利并生成客户退款应付。`
-            : `确认发起销售退货 ${form.items.length} 台，退货金额 ¥${totalReturnAmount.value}。提交后等待实际收货；确认收到设备后自动回到各自原仓位，并逐台处理客户账款。`,
+            : `确认发起销售退货：已收到客户退回的 ${form.items.length} 台设备，退货金额 ¥${totalReturnAmount.value}？提交后设备立即按原仓位回库，并逐台冲销应收或生成退款应付。`,
         `确认${actionName}`,
         { type: 'warning', confirmButtonText: `确认${actionName}`, cancelButtonText: '返回检查' }
     ).then(() => true).catch(() => false)
@@ -419,8 +419,8 @@ async function submitCreate() {
             items: form.items,
         }
         if (createType.value === 'compensation') await createErpSaleCompensation(payload)
-        else await createErpSaleReturn(payload)
-        ElMessage.success(createType.value === 'compensation' ? '售后补差已生成设备级客户应付' : '退货单已创建，等待确认收到设备')
+        else await createAndConfirmErpSaleReturn(payload)
+        ElMessage.success(createType.value === 'compensation' ? '售后补差已生成设备级客户应付' : '销售退货已完成，库存和账务已同步处理')
         mode.value = 'idle'
         loadList()
     } finally {

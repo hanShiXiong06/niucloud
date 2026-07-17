@@ -1,6 +1,6 @@
 <template>
   <view
-    class="inline-flex  items-center px-2 py-1 rounded text-[22rpx] font-medium"
+    class="order-status-badge"
     :style="badgeStyle"
   >
     <text>{{ text }}</text>
@@ -22,5 +22,16 @@ const badgeStyle = computed(() => `color:${props.color};background-color:${props
 </script>
 
 <style scoped lang="scss">
-// 使用 Windi CSS，无需额外样式
+.order-status-badge {
+  height: 42rpx;
+  padding: 0 14rpx;
+  border-radius: 999rpx;
+  display: inline-flex;
+  align-items: center;
+  font-size: 21rpx;
+  line-height: 42rpx;
+  font-weight: 600;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
 </style>

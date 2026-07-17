@@ -92,7 +92,7 @@ const pageVars = computed(() => [
 ].join(''))
 const pagingStyle = computed(() => ({
   height: `calc(100vh - ${navbarMetrics.navbarHeightPx}px - var(--recycle-tabbar-height) - env(safe-area-inset-bottom))`,
-  background: 'var(--recycle-bg-main)'
+  background: '#f5f6f8'
 }))
 
 onShow(() => {
@@ -127,17 +127,16 @@ const handleActionSuccess = (action: string) => {
 <style scoped lang="scss">
 .recycle-order-list-page {
   min-height: 100vh;
-  background: var(--recycle-bg-main);
+  background: #f5f6f8;
   color: var(--recycle-text-main);
 }
 
 .order-list-filter-shell {
-  padding: 12rpx 16rpx;
-  background: var(--recycle-bg-main);
+  background: #fff;
 }
 
 .order-list-content {
-  padding: 0 0 12rpx;
+  padding: 18rpx 0 20rpx;
 }
 
 </style>

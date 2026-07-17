@@ -15,14 +15,15 @@
                 <el-tab-pane label="全部" name="" /><el-tab-pane label="收入" name="income" /><el-tab-pane label="支出" name="expense" />
             </el-tabs>
             <div class="mb-4 flex flex-wrap items-center gap-2">
-                <el-input v-model.trim="query.keyword" placeholder="往来主体/类型/单号/说明" clearable class="!w-[250px]" @keyup.enter="resetLoad" />
+                <ErpPartySelect v-model="query.party_id" v-model:party-name="query.party_name" party-type="all" :allow-create="false" placeholder="选择往来主体" class="!w-[220px]" @change="resetLoad" />
+                <el-input v-model.trim="query.keyword" placeholder="单号 / 经营说明" clearable class="!w-[250px]" @keyup.enter="resetLoad" />
                 <el-select v-model="query.category_key" placeholder="收支类型" clearable class="!w-[160px]"><el-option v-for="item in operatingCategories" :key="item.key" :label="item.name" :value="item.key" /></el-select>
                 <el-select v-model="query.status" placeholder="结算状态" clearable class="!w-[130px]"><el-option label="待结算" value="pending" /><el-option label="部分结算" value="partial" /><el-option label="已结清" value="settled" /></el-select>
                 <el-button type="primary" @click="resetLoad">查询</el-button><el-button @click="resetFilter">重置</el-button>
             </div>
             <el-table :data="list" v-loading="loading" size="large" empty-text="暂无经营收支">
                 <el-table-column label="收支事项" min-width="220"><template #default="{row}"><div class="font-semibold text-gray-800">{{ row.category_name || '-' }}</div><div class="mt-1 text-xs text-gray-400">{{ row.source_no || row.finance_no }}</div></template></el-table-column>
-                <el-table-column prop="party_name" label="往来主体" min-width="160" show-overflow-tooltip />
+                <el-table-column label="往来主体" min-width="180" show-overflow-tooltip><template #default="{row}"><div>{{ row.party_name || '-' }}</div><div v-if="row.member_name && row.member_name !== row.party_name" class="mt-1 text-xs text-gray-400">会员：{{ row.member_name }}</div></template></el-table-column>
                 <el-table-column label="方向" width="90" align="center"><template #default="{row}"><el-tag :type="row.direction==='income'?'success':'warning'" effect="light">{{ row.direction==='income'?'收入':'支出' }}</el-tag></template></el-table-column>
                 <el-table-column label="金额" width="140" align="right"><template #default="{row}"><strong :class="row.direction==='income'?'text-green-600':'text-orange-600'">{{ row.direction==='income'?'+':'-' }}¥{{ money(row.amount) }}</strong></template></el-table-column>
                 <el-table-column label="结算" width="170"><template #default="{row}"><div>{{ statusLabel(row.status) }}</div><div class="mt-1 text-xs text-gray-400">已结 ¥{{ money(row.settled_amount) }} · 剩余 ¥{{ money(row.remain_amount) }}</div></template></el-table-column>
@@ -62,12 +63,12 @@ import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import ErpPartySelect from '@/addon/hsx_erp/components/ErpPartySelect.vue'
 import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVoucherUpload.vue'
 const router=useRouter(),loading=ref(false),saving=ref(false),visible=ref(false),list=ref<any[]>([]),total=ref(0),categories=ref<any[]>([]),accounts=ref<any[]>([]),summary=reactive({income:0,expense:0,unsettled:0})
-const query=reactive({direction:'',status:'',category_key:'',keyword:'',page:1,limit:15})
+const query=reactive({direction:'',status:'',category_key:'',party_id:null as number|null,party_name:'',keyword:'',page:1,limit:15})
 const form=reactive<any>({direction:'expense',category_key:'',party_id:null,party_name:'',amount:0,settlement_mode:'pending',capital_account_id:null,occurred_at:'',remark:'',voucher_urls:''})
 const operatingCategories=computed(()=>categories.value.filter(row=>row.scope==='operating'&&Number(row.enabled??1)===1)),formCategories=computed(()=>operatingCategories.value.filter(row=>row.direction===form.direction)),enabledAccounts=computed(()=>accounts.value.filter(row=>Number(row.status)===1))
 const money=(v:any)=>Number(v||0).toFixed(2),formatTime=(v:any)=>v?new Date(Number(v)*1000).toLocaleString():'-',statusLabel=(s:string)=>({pending:'待结算',partial:'部分结算',settled:'已结清',void:'已作废'}[s]||s||'-')
 async function loadData(){loading.value=true;try{const res:any=await getErpOperatingFinanceList(query);list.value=res?.data?.data||[];total.value=Number(res?.data?.total||0);Object.assign(summary,res?.data?.summary||{})}finally{loading.value=false}}
-function resetLoad(){query.page=1;loadData()} function resetFilter(){Object.assign(query,{direction:'',status:'',category_key:'',keyword:'',page:1});loadData()}
+function resetLoad(){query.page=1;loadData()} function resetFilter(){Object.assign(query,{direction:'',status:'',category_key:'',party_id:null,party_name:'',keyword:'',page:1});loadData()}
 async function loadOptions(){const [c,a]:any[]=await Promise.all([getErpFinanceCategories(),getCapitalAccounts()]);categories.value=c?.data||[];accounts.value=a?.data?.list||a?.data||[]}
 function openCreate(){Object.assign(form,{direction:'expense',category_key:'',party_id:null,party_name:'',amount:0,settlement_mode:'pending',capital_account_id:enabledAccounts.value[0]?.id||null,occurred_at:String(Math.floor(Date.now()/1000)),remark:'',voucher_urls:''});onDirectionChange();visible.value=true}
 function onDirectionChange(){if(!formCategories.value.some(row=>row.key===form.category_key))form.category_key=formCategories.value[0]?.key||''}

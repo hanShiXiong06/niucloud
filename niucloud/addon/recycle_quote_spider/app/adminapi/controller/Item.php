@@ -40,6 +40,16 @@ class Item extends BaseAdminController
         return success((new QuoteItemService())->getFilterOptions($data));
     }
 
+    public function summary()
+    {
+        $data = $this->request->params([
+            ['source_id', ''],
+            ['category_id', ''],
+            ['category_ids', ''],
+        ]);
+        return success((new QuoteItemService())->summary($data));
+    }
+
     public function info(int $id)
     {
         return success((new QuoteItemService())->getInfo($id));

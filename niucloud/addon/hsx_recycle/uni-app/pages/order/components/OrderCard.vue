@@ -2,10 +2,14 @@
   <view class="order-card">
     <view class="order-header">
       <view class="header-top">
-        <view class="order-no-wrap">
-          <text class="text-xs text-gray-500">订单号:</text>
-          <text class="text-xs font-medium text-gray-800">{{ order.order_no }}</text>
-          <up-icon name="cut" size="14" color="#94a3b8" @click="handleCopyOrderNo"></up-icon>
+        <view class="order-title-wrap">
+          <view class="order-title-wrap__icon">
+            <up-icon name="order" size="17" color="var(--recycle-brand)" />
+          </view>
+          <view class="order-title-wrap__copy">
+            <text class="order-title">回收订单</text>
+            <text class="order-time">{{ order.create_at }}</text>
+          </view>
         </view>
         <OrderStatusBadge
           :text="statusInfo.text"
@@ -14,30 +18,42 @@
         />
       </view>
 
+      <view class="order-no-wrap" @longpress="handleCopyOrderNo">
+        <text class="order-no-wrap__label">订单号</text>
+        <text class="order-no-wrap__value">{{ order.order_no }}</text>
+        <view class="order-no-wrap__copy" @tap.stop="handleCopyOrderNo">
+          <up-icon name="file-text" size="12" color="#8b96a9" />
+        </view>
+      </view>
+
+      <view class="meta-row">
+        <view class="delivery-tag" :style="{ color: deliveryColor }">
+          <view class="delivery-tag__dot" :style="{ backgroundColor: deliveryColor }" />
+          <text>{{ order.delivery_type_name }}</text>
+        </view>
+        <text class="meta-row__count">共 {{ order.count }} 台设备</text>
+      </view>
+
       <view
         v-if="isMailOrder && order.express_no"
         class="express-row"
         @tap="openExpressTracking"
       >
         <view class="express-main">
-          <up-icon name="car" size="14" color="#3b82f6"></up-icon>
-          <text class="text-sm font-medium text-gray-800">{{ order.express_no }}</text>
+          <view class="express-main__icon">
+            <up-icon name="car" size="15" color="var(--recycle-brand)" />
+          </view>
+          <view class="express-main__copy">
+            <text class="express-main__label">物流单号</text>
+            <text class="express-main__value">{{ order.express_no }}</text>
+          </view>
         </view>
         <view class="express-actions">
-          <view class="arrow-btn" @tap.stop="openExpressTracking">
-            <up-icon name="arrow-right" size="14" color="#3b82f6"></up-icon>
+          <view class="express-copy" @tap.stop="handleCopyExpressNo">
+            <up-icon name="file-text" size="12" color="#8b96a9" />
           </view>
+          <up-icon name="arrow-right" size="14" color="#aab2bf" />
         </view>
-      </view>
-
-      <view class="meta-row">
-        <view class="flex items-center gap-2">
-          <text class="text-xs text-gray-400">{{ order.create_at }}</text>
-          <view class="delivery-tag" :style="{ color: deliveryColor }">
-            <text>{{ order.delivery_type_name }}</text>
-          </view>
-        </view>
-        <text class="text-xs text-gray-500">共 {{ order.count }} 台</text>
       </view>
     </view>
 
@@ -52,12 +68,14 @@
         <text class="text-xs text-gray-500">{{ emptyDeviceTip }}</text>
       </view>
 
-      <view v-if="order.remark" class="mt-2 text-xs text-gray-500">
-        <text>备注: {{ order.remark }}</text>
+      <view v-if="order.remark" class="order-note">
+        <text class="order-note__label">备注</text>
+        <text class="order-note__content">{{ order.remark }}</text>
       </view>
 
-      <view v-if="order.cancel_reason" class="mt-2 text-xs text-red-500">
-        <text>取消原因: {{ order.cancel_reason }}</text>
+      <view v-if="order.cancel_reason" class="order-note order-note--danger">
+        <text class="order-note__label">取消原因</text>
+        <text class="order-note__content">{{ order.cancel_reason }}</text>
       </view>
     </view>
 
@@ -251,37 +269,101 @@ const handleDelete = async () => {
 
 <style scoped lang="scss">
 .order-card {
-  background: var(--recycle-bg-card);
-  border: 1rpx solid var(--recycle-line);
-  border-radius: 16rpx;
-  padding: 12px;
-  margin: 8px 12px;
-  box-shadow: 0 8rpx 20rpx rgba(31, 41, 55, 0.06);
+  padding: 24rpx;
+  margin: 0 24rpx 18rpx;
+  border: 1rpx solid #e9edf2;
+  border-radius: 24rpx;
+  background: #fff;
+  box-shadow: 0 8rpx 24rpx rgba(31, 41, 55, 0.045);
 }
 
 .order-header {
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--recycle-line);
+  padding-bottom: 20rpx;
+  border-bottom: 1rpx solid #edf0f4;
 }
 
 .header-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 6px;
+  margin-bottom: 20rpx;
+}
+
+.order-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+}
+
+.order-title-wrap__icon {
+  width: 58rpx;
+  height: 58rpx;
+  border-radius: 16rpx;
+  background: rgba(59, 130, 246, 0.09);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.order-title-wrap__copy {
+  display: flex;
+  flex-direction: column;
+}
+
+.order-title {
+  color: #172033;
+  font-size: 27rpx;
+  line-height: 36rpx;
+  font-weight: 700;
+}
+
+.order-time {
+  margin-top: 2rpx;
+  color: #9aa4b2;
+  font-size: 20rpx;
+  line-height: 28rpx;
 }
 
 .order-no-wrap {
+  min-width: 0;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 10rpx;
+}
+
+.order-no-wrap__label {
+  color: #9aa4b2;
+  font-size: 21rpx;
+}
+
+.order-no-wrap__value {
+  min-width: 0;
+  color: #596579;
+  font-size: 22rpx;
+  line-height: 32rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.order-no-wrap__copy,
+.express-copy {
+  width: 36rpx;
+  height: 36rpx;
+  border-radius: 9rpx;
+  background: #f2f4f7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .express-row {
-  margin-top: 6px;
-  padding: 6px 8px;
-  background: var(--recycle-bg-soft);
-  border-radius: 10rpx;
+  margin-top: 16rpx;
+  padding: 16rpx;
+  background: #f8fafc;
+  border: 1rpx solid #edf0f4;
+  border-radius: 16rpx;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -290,48 +372,112 @@ const handleDelete = async () => {
 .express-main {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 12rpx;
+}
+
+.express-main__icon {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 14rpx;
+  background: #edf5ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.express-main__copy {
+  display: flex;
+  flex-direction: column;
+}
+
+.express-main__label {
+  color: #9aa4b2;
+  font-size: 19rpx;
+  line-height: 26rpx;
+}
+
+.express-main__value {
+  margin-top: 2rpx;
+  color: #4f5c70;
+  font-size: 22rpx;
+  line-height: 30rpx;
+  font-weight: 600;
 }
 
 .express-actions {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-}
-
-.arrow-btn {
-  font-size: 24rpx;
-  line-height: 1;
-  color: var(--recycle-brand);
-  font-weight: 700;
+  gap: 12rpx;
 }
 
 .meta-row {
-  margin-top: 6px;
+  margin-top: 14rpx;
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
+.meta-row__count {
+  color: #7c8798;
+  font-size: 21rpx;
+}
+
 .order-content {
-  padding-top: 8px;
+  padding-top: 20rpx;
 }
 
 .empty-devices {
-  padding: 12px;
+  padding: 24rpx;
   text-align: center;
-  background: var(--recycle-bg-soft);
-  border-radius: 12rpx;
-  border: 1px dashed var(--recycle-line);
+  background: #f8fafc;
+  border-radius: 16rpx;
+  border: 1rpx dashed #dce2e9;
+  color: #8b96a9;
+  font-size: 22rpx;
 }
 
 .delivery-tag {
   display: inline-flex;
   align-items: center;
-  padding: 1px 6px;
-  background: var(--recycle-bg-soft);
-  border-radius: 8px;
-  font-size: 10px;
-  font-weight: 500;
+  gap: 8rpx;
+  font-size: 21rpx;
+  line-height: 30rpx;
+  font-weight: 600;
+}
+
+.delivery-tag__dot {
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 50%;
+}
+
+.order-note {
+  margin-top: 14rpx;
+  padding: 14rpx 16rpx;
+  border-radius: 12rpx;
+  background: #f8fafc;
+  display: flex;
+  align-items: flex-start;
+  gap: 12rpx;
+  font-size: 21rpx;
+  line-height: 32rpx;
+}
+
+.order-note__label {
+  flex-shrink: 0;
+  color: #9aa4b2;
+}
+
+.order-note__content {
+  color: #687589;
+}
+
+.order-note--danger {
+  background: #fff5f5;
+
+  .order-note__label,
+  .order-note__content {
+    color: #d15b5b;
+  }
 }
 </style>

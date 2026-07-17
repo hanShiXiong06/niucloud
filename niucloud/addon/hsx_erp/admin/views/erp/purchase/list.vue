@@ -706,6 +706,7 @@ function blankItem() {
         battery: undefined,
         warranty: undefined,
         catalog_product_id: 0,
+        catalog_product_name: '',
         category_name: '',
         category_names: [],
         category_path: '',
@@ -900,11 +901,12 @@ function openGoodsMeta() {
 
 function onItemCatalogChange(item: any, node: any) {
     item.catalog_product_id = Number(node?.site_product_id || 0)
+    item.catalog_product_name = String(node?.product_name || node?.label || '')
     item.category_path = String(node?.category_path || '')
     const categoryParts = item.category_path.split('/').map((value: string) => value.trim()).filter(Boolean)
     item.category_name = categoryParts[categoryParts.length - 1] || ''
-    item.category_names = [...categoryParts, node?.brand_name, node?.series_name, node?.label].filter(Boolean)
-    if (node?.label) item.model = String(node.label)
+    item.category_names = categoryParts
+    if (item.catalog_product_name) item.model = item.catalog_product_name
     item.selected_specs = {}
     item.selected_grade = null
     item.spec = ''
@@ -1026,7 +1028,10 @@ function categoryTitleByRule(item: any) {
 }
 
 function buildItemModel(item: any) {
-    const parts = [categoryTitleByRule(item), ...selectedTitleSpecParts(item)]
+    // 目录叶子型号是设备名称的主数据，不能再被“品牌 + 系列”的展示规则覆盖。
+    // 非目录录入仍沿用原有分类标题规则，兼容历史手工录入。
+    const baseTitle = String(item?.catalog_product_name || '').trim() || categoryTitleByRule(item)
+    const parts = [baseTitle, ...selectedTitleSpecParts(item)]
     if (Number(titleRules.grade_in_title) === 1 && item?.selected_grade?.value) parts.push(item.selected_grade.value)
     return uniqueParts(parts).join(titleRules.separator || ' ')
 }

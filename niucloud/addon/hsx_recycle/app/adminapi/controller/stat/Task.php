@@ -30,6 +30,34 @@ class Task extends BaseAdminController
         return success((new TaskService())->getTaskList($data));
     }
 
+    /** 当前环节可分配员工 */
+    public function assignableUsers(): Response
+    {
+        $stageKey = (string)$this->request->param('stage_key', '');
+        return success((new TaskService())->getAssignableUsers($stageKey));
+    }
+
+    public function assignmentSettings(): Response
+    {
+        return success((new TaskService())->assignmentSettings());
+    }
+
+    public function saveAssignmentSettings(): Response
+    {
+        $data = $this->request->params([['defaults', []]]);
+        return success((new TaskService())->saveDefaultAssignees((array)$data['defaults']));
+    }
+
+    /** 指定或转交责任人 */
+    public function assign(): Response
+    {
+        $data = $this->request->params([
+            ['device_id', 0], ['stage_key', ''], ['assignee_uid', 0],
+        ]);
+        (new TaskService())->assign((int)$data['device_id'], (string)$data['stage_key'], (int)$data['assignee_uid']);
+        return success('任务已分配');
+    }
+
     /** 认领 */
     public function claim(): Response
     {

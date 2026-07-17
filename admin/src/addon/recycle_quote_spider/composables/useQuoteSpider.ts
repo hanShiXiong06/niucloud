@@ -21,10 +21,12 @@ import {
     getQuoteCategoryTree,
     getQuoteItemFilterOptions,
     getQuoteItemList,
+    getQuoteImportTaskList,
     getQuoteRowList,
     getQuoteSourceAll,
     getQuoteSourceList,
     getQuoteSyncLogList,
+    getQuoteWorkbenchSummary,
     previewQuoteExcel,
     syncQuoteSource,
     uploadQuoteExcel
@@ -37,12 +39,15 @@ export type EditType = 'category' | 'item' | 'row'
  * 所有 tab / 抽屉 / 弹窗共享同一份状态与方法，组件只负责展示。
  */
 
-const activeTab = ref('source')
+const activeTab = ref('workbench')
+const accessMode = ref<'sync' | 'excel'>('sync')
 const sourceLoading = ref(false)
 const categoryLoading = ref(false)
 const itemLoading = ref(false)
 const rowLoading = ref(false)
 const logLoading = ref(false)
+const importLogLoading = ref(false)
+const summaryLoading = ref(false)
 const syncingId = ref(0)
 const selectedSourceId = ref<number | ''>('')
 const selectedCategoryId = ref<number | ''>('')
@@ -71,6 +76,19 @@ const categoryTable = reactive({ data: [] as any[], total: 0 })
 const itemTable = reactive({ data: [] as any[], page: 1, limit: 20, total: 0 })
 const rowTable = reactive({ data: [] as any[], page: 1, limit: 20, total: 0 })
 const logTable = reactive({ data: [] as any[] })
+const importLogTable = reactive({ data: [] as any[] })
+const workbenchSummary = reactive({
+    source_count: 0,
+    enabled_source_count: 0,
+    item_count: 0,
+    row_count: 0,
+    visible_row_count: 0,
+    history_row_count: 0,
+    snapshot_day_count: 0,
+    latest_record_date: '',
+    latest_price_at: 0,
+    latest_sync_at: 0
+})
 const sourceQuery = reactive({ keyword: '', status: '' as number | '' })
 const categoryQuery = reactive({ keyword: '' })
 const itemQuery = reactive({
@@ -191,9 +209,15 @@ function emptySourceForm(): Record<string, any> {
 
 /* ------------------------------ 纯函数 / 工具 ------------------------------ */
 
-const formatTime = (value: number) => {
+const formatTime = (value: number | string) => {
     if (!value) return '-'
-    return new Date(value * 1000).toLocaleString()
+    const numeric = Number(value)
+    const date = Number.isFinite(numeric)
+        ? new Date(numeric < 1_000_000_000_000 ? numeric * 1000 : numeric)
+        : new Date(String(value).replace(/-/g, '/'))
+    if (Number.isNaN(date.getTime())) return String(value)
+    const pad = (part: number) => String(part).padStart(2, '0')
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
 
 const syncIntervalText = (seconds: number) => {
@@ -516,18 +540,10 @@ const rowPriceTable = computed(() => {
     }))
 })
 
-const rowMatrixPriceColumns = computed(() => {
-    const labels: string[] = []
-    let hasRowRemark = false
-    rowTable.data.forEach(row => {
-        if (String(row.remark || '').trim()) hasRowRemark = true
-        normalizePriceArray(row.columns).forEach((column: any, index: number) => {
-            const label = String(column || `价格${index + 1}`).trim()
-            if (label && !labels.includes(label)) labels.push(label)
-        })
-    })
-    if (hasRowRemark && !labels.some(label => isRemarkColumn(label))) labels.push('备注')
-    return labels.map((label, index) => ({
+const buildMatrixPriceColumns = (labels: string[], hasRemark: boolean) => {
+    const normalized = [...labels]
+    if (hasRemark && !normalized.some(label => isRemarkColumn(label))) normalized.push('备注')
+    return normalized.map((label, index) => ({
         key: `${index}-${label}`,
         label,
         index,
@@ -535,50 +551,106 @@ const rowMatrixPriceColumns = computed(() => {
         align: isRemarkColumn(label) ? 'left' : 'right',
         minWidth: isRemarkColumn(label) ? 180 : Math.max(110, Math.min(180, label.length * 16 + 44))
     }))
-})
-
-const rowMatrixRows = computed(() =>
-    rowTable.data.map((row, index) => ({
-        ...row,
-        id: row.id,
-        source: row,
-        rowIndex: index,
-        group_name: row.tab || row.parent_name || '未分组',
-        model_name: row.model_name || row.name || '-',
-        capacity_name: getCapacityName(row),
-        modelSpanKey: `${row.tab || ''}__${row.model_name || ''}`,
-        groupSpanKey: row.tab || '未分组'
-    }))
-)
-
-const rowMatrixSpanMaps = computed(() => {
-    const rows = rowMatrixRows.value
-    return {
-        group: buildSpanMap(rows, row => row.groupSpanKey),
-        model: buildSpanMap(rows, row => row.modelSpanKey)
-    }
-})
-
-const rowMatrixSpanMethod = ({ rowIndex, columnIndex }: { rowIndex: number; columnIndex: number }) => {
-    if (columnIndex === 1) {
-        const rowspan = rowMatrixSpanMaps.value.group[rowIndex] ?? 1
-        return { rowspan, colspan: rowspan === 0 ? 0 : 1 }
-    }
-    if (columnIndex === 2) {
-        const rowspan = rowMatrixSpanMaps.value.model[rowIndex] ?? 1
-        return { rowspan, colspan: rowspan === 0 ? 0 : 1 }
-    }
-    return { rowspan: 1, colspan: 1 }
 }
+
+const buildMatrixPriceColumnGroups = (columns: any[]) => {
+    const parsed = columns.map(column => {
+        const match = String(column.label || '').match(/^(.+?)\s+([^\s]+)$/u)
+        return {
+            column,
+            groupLabel: match?.[1]?.trim() || '',
+            childLabel: match?.[2]?.trim() || column.label
+        }
+    })
+    const groupCounts = parsed.reduce<Record<string, number>>((result, item) => {
+        if (item.groupLabel) result[item.groupLabel] = (result[item.groupLabel] || 0) + 1
+        return result
+    }, {})
+    const result: Array<{ key: string; label: string; grouped: boolean; children: any[] }> = []
+    const groupMap = new Map<string, (typeof result)[number]>()
+    parsed.forEach(item => {
+        if (item.groupLabel && groupCounts[item.groupLabel] > 1) {
+            let group = groupMap.get(item.groupLabel)
+            if (!group) {
+                group = { key: `group-${item.groupLabel}`, label: item.groupLabel, grouped: true, children: [] }
+                groupMap.set(item.groupLabel, group)
+                result.push(group)
+            }
+            group.children.push({ ...item.column, displayLabel: item.childLabel })
+        } else {
+            result.push({
+                key: `column-${item.column.key}`,
+                label: item.column.label,
+                grouped: false,
+                children: [{ ...item.column, displayLabel: item.column.label }]
+            })
+        }
+    })
+    return result
+}
+
+/** 完整表头相同的型号共用一张表；表头签名不同则另起一张表。 */
+const rowMatrixSections = computed(() => {
+    const buckets = new Map<string, any[]>()
+    rowTable.data.forEach(row => {
+        const labels = normalizePriceArray(row.columns).map((column: any, index: number) =>
+            String(column || `价格${index + 1}`).trim()
+        )
+        const signature = JSON.stringify(labels)
+        if (!buckets.has(signature)) buckets.set(signature, [])
+        buckets.get(signature)!.push(row)
+    })
+
+    return Array.from(buckets.entries()).map(([signature, sourceRows], sectionIndex) => {
+        const labels = JSON.parse(signature) as string[]
+        // 这里只保留矩阵结构需要的字段。不要展开 source，否则任意价格输入都会
+        // 让 computed 订阅 final_prices 等所有字段，进而重建全部分表。
+        const rows = sourceRows.map((source, rowIndex) => ({
+            id: source.id,
+            source,
+            rowIndex,
+            brand: source.brand,
+            tab: source.tab,
+            group_name: source.tab || source.parent_name || '未分组',
+            model_name: source.model_name || source.name || '-',
+            capacity_name: getCapacityName(source),
+            modelSpanKey: `${source.tab || ''}__${source.model_name || ''}`,
+            groupSpanKey: source.tab || '未分组'
+        }))
+        const modelNames = Array.from(new Set(rows.map(row => row.model_name).filter(Boolean)))
+        const columns = buildMatrixPriceColumns(labels, sourceRows.some(row => String(row.remark || '').trim()))
+        const spanMaps = {
+            group: buildSpanMap(rows, row => row.groupSpanKey),
+            model: buildSpanMap(rows, row => row.modelSpanKey)
+        }
+        return {
+            key: `section-${sectionIndex}`,
+            title: modelNames.slice(0, 3).join('、') + (modelNames.length > 3 ? ' 等' : ''),
+            rowCount: rows.length,
+            modelCount: modelNames.length,
+            rows,
+            columnGroups: buildMatrixPriceColumnGroups(columns),
+            spanMaps,
+            spanMethod: ({ rowIndex, columnIndex }: { rowIndex: number; columnIndex: number }) => {
+                if (columnIndex === 1) {
+                    const rowspan = spanMaps.group[rowIndex] ?? 1
+                    return { rowspan, colspan: rowspan === 0 ? 0 : 1 }
+                }
+                if (columnIndex === 2) {
+                    const rowspan = spanMaps.model[rowIndex] ?? 1
+                    return { rowspan, colspan: rowspan === 0 ? 0 : 1 }
+                }
+                return { rowspan: 1, colspan: 1 }
+            }
+        }
+    })
+})
 
 const getRowMatrixCell = (row: any, column: any) => {
     const source = row.source || row
     if (column.isRemark && column.label === '备注') return source.remark || '-'
-    const columns = normalizePriceArray(source.columns).map((item: any, index: number) =>
-        String(item || `价格${index + 1}`).trim()
-    )
-    const prices = normalizePriceArray(source.final_prices)
-    const matchedIndex = columns.findIndex((label: string) => label === column.label)
+    const prices = Array.isArray(source.final_prices) ? source.final_prices : []
+    const matchedIndex = Number(column.index)
     const value = matchedIndex > -1 ? prices[matchedIndex] : ''
     if ((value === '' || value === null || value === undefined) && column.isRemark) return source.remark || '-'
     return formatMoney(value)
@@ -588,11 +660,10 @@ const getRowMatrixCell = (row: any, column: any) => {
 const getPriceTrend = (row: any, column: any): '' | 'up' | 'down' => {
     if (!column || column.isRemark) return ''
     const source = row.source || row
-    const cols = normalizePriceArray(source.columns).map((c: any, i: number) => String(c || `价格${i + 1}`).trim())
-    const idx = cols.findIndex((label: string) => label === column.label)
+    const idx = Number(column.index)
     if (idx < 0) return ''
-    const cur = Number(normalizePriceArray(source.final_prices)[idx])
-    const prev = Number(normalizePriceArray(source.prev_final_prices)[idx])
+    const cur = Number((Array.isArray(source.final_prices) ? source.final_prices : [])[idx])
+    const prev = Number((Array.isArray(source.prev_final_prices) ? source.prev_final_prices : [])[idx])
     if (!Number.isFinite(cur) || !Number.isFinite(prev) || !prev || cur === prev) return ''
     return cur > prev ? 'up' : 'down'
 }
@@ -724,6 +795,20 @@ const loadFilterOptions = async () => {
     filterOptions.quote_types = res.data.quote_types || []
 }
 
+const loadWorkbenchSummary = async () => {
+    summaryLoading.value = true
+    try {
+        const res: any = await getQuoteWorkbenchSummary({
+            source_id: selectedSourceId.value,
+            category_id: selectedCategoryId.value,
+            category_ids: selectedCategoryScopeIds.value.join(',')
+        })
+        Object.assign(workbenchSummary, res.data || {})
+    } finally {
+        summaryLoading.value = false
+    }
+}
+
 const loadItem = async () => {
     itemLoading.value = true
     try {
@@ -778,6 +863,16 @@ const loadLogs = async () => {
     }
 }
 
+const loadImportLogs = async () => {
+    importLogLoading.value = true
+    try {
+        const res: any = await getQuoteImportTaskList({ source_id: selectedSourceId.value, page: 1, limit: 20 })
+        importLogTable.data = res.data.data || []
+    } finally {
+        importLogLoading.value = false
+    }
+}
+
 const refreshManage = () => {
     itemTable.page = 1
     rowTable.page = 1
@@ -786,6 +881,7 @@ const refreshManage = () => {
     loadFilterOptions()
     loadItem()
     loadRows()
+    loadWorkbenchSummary()
 }
 
 const searchManage = () => {
@@ -851,11 +947,12 @@ const handleCategoryFilterChange = () => {
     loadFilterOptions()
     loadItem()
     loadRows()
+    loadWorkbenchSummary()
 }
 
 const openSourceData = (source: any) => {
     selectedSourceId.value = source.id
-    activeTab.value = 'manage'
+    activeTab.value = 'workbench'
     handleSourceFilterChange()
 }
 
@@ -869,6 +966,7 @@ const selectCategory = (row: any) => {
     loadFilterOptions()
     loadItem()
     loadRows()
+    loadWorkbenchSummary()
 }
 
 const clearCategorySelection = () => {
@@ -880,6 +978,7 @@ const clearCategorySelection = () => {
     loadFilterOptions()
     loadItem()
     loadRows()
+    loadWorkbenchSummary()
 }
 
 const selectItem = (row: any) => {
@@ -958,8 +1057,15 @@ const handleRowSelectionChange = (rows: any[]) => {
 }
 
 const handleTabChange = () => {
-    if (activeTab.value === 'manage') refreshManage()
-    if (activeTab.value === 'log') loadLogs()
+    if (activeTab.value === 'workbench') refreshManage()
+    if (activeTab.value === 'records') {
+        loadLogs()
+        loadImportLogs()
+    }
+    if (activeTab.value === 'settings') {
+        loadSources()
+        loadCategory()
+    }
 }
 
 /* ------------------------------ 报价源弹窗 ------------------------------ */
@@ -1050,7 +1156,7 @@ const syncSource = async (row: any) => {
         const res: any = await syncQuoteSource(row.id)
         const data = res.data || {}
         selectedSourceId.value = row.id
-        activeTab.value = 'log'
+        activeTab.value = 'records'
         const message = data.message || '同步任务已创建，请在同步日志中查看进度'
         if (data.async) {
             ElMessage.success(message)
@@ -1142,6 +1248,24 @@ const saveRow = (row: any, notify = false) =>
         if (notify) ElMessage.success('行价格已保存')
         loadRows()
     })
+
+/** 价格矩阵轻量编辑：整行转为人工维护并直接落库，不刷新列表以避免输入焦点跳动。 */
+const saveInlineRowPrices = async (row: any) => {
+    const source = row.source || row
+    const finalPrices = normalizeManualPrices(source.final_prices, normalizePriceArray(source.columns).length)
+    await editQuoteRow(source.id, {
+        manual_prices: finalPrices,
+        follow_source: 0,
+        adjust_type: 0,
+        adjust_value: 0,
+        adjust_ratio: 1,
+        round_mode: source.round_mode || 'round'
+    })
+    source.follow_source = 0
+    source.adjust_type = 0
+    source.adjust_value = 0
+    source.adjust_ratio = 1
+}
 
 /* ------------------------------ 新增 / 编辑弹窗 ------------------------------ */
 
@@ -1482,7 +1606,8 @@ const prepareExcelImport = (row: any) => {
         rowDrawer.visible = true
         rowDrawer.activeTab = 'import'
     } else {
-        activeTab.value = 'excel'
+        activeTab.value = 'access'
+        accessMode.value = 'excel'
     }
 }
 
@@ -1513,7 +1638,10 @@ const handleExcelChange = async (file: UploadFile) => {
         buildBatchTargets()
     }
     if (rowDrawer.visible) rowDrawer.activeTab = 'import'
-    else activeTab.value = 'excel'
+    else {
+        activeTab.value = 'access'
+        accessMode.value = 'excel'
+    }
 }
 
 /* ----------------------- 按品牌批量导入 ----------------------- */
@@ -1622,7 +1750,7 @@ const batchConfirmExcelImport = async () => {
         } else {
             ElMessage.success(`批量导入完成，共 ${data.sheet_count || 0} 个工作表 / ${data.total_rows || 0} 行`)
         }
-        activeTab.value = 'manage'
+        activeTab.value = 'workbench'
         selectedSourceId.value = excelImportForm.source_id
         selectedCategoryId.value = excelImportForm.category_id
         refreshManage()
@@ -1704,7 +1832,7 @@ const confirmExcelImport = async () => {
             mode: 'replace'
         })
         ElMessage.success(`导入完成，已写入 ${res.data.rows || 0} 行`)
-        activeTab.value = 'manage'
+        activeTab.value = 'workbench'
         selectedSourceId.value = excelImportForm.source_id
         selectedCategoryId.value = excelImportForm.category_id
         selectedItemId.value = Number(res.data.item_id || 0)
@@ -1731,11 +1859,14 @@ export function useQuoteSpider() {
     return {
         // state
         activeTab,
+        accessMode,
         sourceLoading,
         categoryLoading,
         itemLoading,
         rowLoading,
         logLoading,
+        importLogLoading,
+        summaryLoading,
         syncingId,
         selectedSourceId,
         selectedCategoryId,
@@ -1756,6 +1887,8 @@ export function useQuoteSpider() {
         itemTable,
         rowTable,
         logTable,
+        importLogTable,
+        workbenchSummary,
         sourceQuery,
         categoryQuery,
         itemQuery,
@@ -1783,9 +1916,7 @@ export function useQuoteSpider() {
         editDialogTitle,
         rowEditModeTip,
         rowPriceTable,
-        rowMatrixPriceColumns,
-        rowMatrixRows,
-        rowMatrixSpanMethod,
+        rowMatrixSections,
         getRowMatrixCell,
         getPriceTrend,
         openPriceHistory,
@@ -1818,6 +1949,8 @@ export function useQuoteSpider() {
         loadItem,
         loadRows,
         loadLogs,
+        loadImportLogs,
+        loadWorkbenchSummary,
         refreshManage,
         searchManage,
         resetFilters,
@@ -1852,6 +1985,7 @@ export function useQuoteSpider() {
         saveItem,
         saveDrawerItem,
         saveRow,
+        saveInlineRowPrices,
         // edit dialog
         openEditDialog,
         openCreateCategory,

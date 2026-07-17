@@ -2,13 +2,15 @@
     <view class="cost-list-page">
         <ErpListHeader
             v-model="keyword"
-            v-model:active-tab="activeTab"
-            placeholder="型号 / 资产号 / IMEI / SN"
-            :tabs="statusTabs"
+            placeholder="型号 / IMEI / SN"
             :show-scan="true"
+            :compact-mp="true"
             @search="reload"
-            @tab-change="onTabClick"
-        />
+        >
+            <template #below>
+                <ErpQuickFilterBar :items="quickFilters" @change="onQuickFilter" />
+            </template>
+        </ErpListHeader>
         <z-paging
             ref="pagingRef"
             v-model="list"
@@ -45,7 +47,7 @@
                             size="mini"
                         ></u-tag>
                     </view>
-                    <view class="asset-meta">资产 {{ row.asset_no || '-' }} · IMEI {{ row.imei || '-' }}</view>
+                    <view class="asset-meta">IMEI {{ row.imei || '未录入' }}</view>
                     <view class="asset-meta" v-if="row.warehouse_name">
                         仓库 {{ row.warehouse_name }}<text v-if="row.location_name"> / {{ row.location_name }}</text>
                     </view>
@@ -72,19 +74,27 @@ import { dictLabel, dictTabs, dictType, ERP_DICT_FALLBACK, isCostAdjustAllowed, 
 import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
 import { erpTimeLine } from '@/addon/hsx_erp/hooks/useErpTime'
 import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
+import ErpQuickFilterBar from '@/addon/hsx_erp/components/ErpQuickFilterBar.vue'
 
 
 const keyword = ref('')
 const list = ref<any[]>([])
 const pagingRef = ref<any>(null)
 const erpDicts = ref<ErpDictMap>(ERP_DICT_FALLBACK)
-const { pagingStyle } = useListHeader({ tabs: true, h5TopRpx: 264 })
+const { pagingStyle } = useListHeader({ tabs: true, compactMp: true, h5TopRpx: 178 })
 // 详情页调整成本后返回需要刷新
 const dirty = ref(false)
 
 const statusTabs = computed(() => dictTabs(erpDicts.value, 'asset_status', true))
 const activeTab = ref('')
+const refurbishStatus = ref('')
+const listingStatus = ref('')
 const status = computed(() => activeTab.value)
+const quickFilters = computed(() => [
+    { key: 'status', label: '设备状态', title: '设备状态', value: activeTab.value, options: statusTabs.value },
+    { key: 'refurbish_status', label: '整备状态', title: '整备状态', value: refurbishStatus.value, options: dictTabs(erpDicts.value, 'refurbish_status', true) },
+    { key: 'listing_status', label: '上架状态', title: '上架状态', value: listingStatus.value, options: dictTabs(erpDicts.value, 'listing_status', true) },
+])
 
 const statusLabel = (s: string) => dictLabel(erpDicts.value, 'asset_status', s)
 const statusType = (s: string) => dictType(erpDicts.value, 'asset_status', s)
@@ -97,6 +107,12 @@ const onTabClick = (value: string) => {
     activeTab.value = value
     reload()
 }
+const onQuickFilter = ({ key, value }: { key: string; value: string | number }) => {
+    if (key === 'status') return onTabClick(String(value))
+    if (key === 'refurbish_status') refurbishStatus.value = String(value)
+    if (key === 'listing_status') listingStatus.value = String(value)
+    reload()
+}
 
 // z-paging 查询：自动管理下拉刷新 / 上拉加载
 const queryList = async (pageNo: number, pageSize: number) => {
@@ -104,6 +120,8 @@ const queryList = async (pageNo: number, pageSize: number) => {
         const res: any = await getErpAssetList({
             keyword: keyword.value,
             inventory_status: status.value,
+            refurbish_status: refurbishStatus.value,
+            listing_status: listingStatus.value,
             page: pageNo,
             limit: pageSize
         })

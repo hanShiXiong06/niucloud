@@ -3,7 +3,10 @@
         <el-card shadow="never">
             <div class="flex justify-between items-center mb-[12px]">
                 <span class="text-page-title">{{ t('我的任务') }}</span>
-                <el-button :icon="Refresh" @click="loadAll">{{ t('刷新') }}</el-button>
+                <div class="flex gap-2">
+                    <el-button :icon="Setting" @click="openAssignmentSettings">{{ t('默认负责人') }}</el-button>
+                    <el-button :icon="Refresh" @click="loadAll">{{ t('刷新') }}</el-button>
+                </div>
             </div>
 
             <!-- 无负责环节 -->
@@ -78,19 +81,20 @@
                         </template>
                     </el-table-column>
 
-                    <el-table-column :label="t('认领人')" width="130" align="center">
+                    <el-table-column :label="t('责任人')" width="130" align="center">
                         <template #default="{ row }">
                             <el-tag v-if="row.assignee_uid" size="small" :type="row.is_mine ? 'success' : 'info'" effect="plain">
                                 {{ row.is_mine ? t('我') : row.assignee_name }}
                             </el-tag>
-                            <span v-else class="text-gray-400 text-xs">{{ t('未认领') }}</span>
+                            <span v-else class="text-gray-400 text-xs">{{ t('待分配') }}</span>
                         </template>
                     </el-table-column>
 
-                    <el-table-column :label="t('operation')" fixed="right" align="right" width="220">
+                    <el-table-column :label="t('operation')" fixed="right" align="right" width="240">
                         <template #default="{ row }">
-                            <el-button v-if="!row.assignee_uid" type="primary" link @click="onClaim(row)">{{ t('认领') }}</el-button>
-                            <el-button v-else-if="row.is_mine" type="warning" link @click="onRelease(row)">{{ t('释放') }}</el-button>
+                            <el-button v-if="row.assignee_uid" link @click="openAssign(row)">{{ t('转交') }}</el-button>
+                            <el-button v-else type="warning" link @click="openAssignmentSettings">{{ t('检查分配规则') }}</el-button>
+                            <el-button v-if="!row.assignee_uid" link @click="onClaim(row)">{{ t('我来处理') }}</el-button>
                             <el-button type="primary" link @click="onProcess(row)">{{ t('去处理') }}</el-button>
                         </template>
                     </el-table-column>
@@ -109,6 +113,49 @@
                 </div>
             </template>
         </el-card>
+
+        <el-dialog v-model="assignDialog.visible" :title="assignDialog.row?.assignee_uid ? '转交任务' : '分配任务'" width="480px" destroy-on-close>
+            <div class="assign-summary">
+                <div class="font-medium">{{ assignDialog.row?.is_order ? `订单 ${assignDialog.row?.order_no || ''}` : (assignDialog.row?.model || '待处理设备') }}</div>
+                <div class="text-gray-400 text-xs mt-1">{{ stageName(assignDialog.row?.stage_key || '') }}<span v-if="assignDialog.row?.imei"> · {{ assignDialog.row.imei }}</span></div>
+            </div>
+            <div v-loading="assignDialog.loading" class="assignee-list">
+                <el-radio-group v-model="assignDialog.assigneeUid">
+                    <el-radio v-for="user in assignDialog.users" :key="user.uid" :value="user.uid" class="assignee-option">
+                        <el-avatar :size="32" :src="user.head_img || ''">{{ user.name?.slice(0, 1) }}</el-avatar>
+                        <span class="assignee-name">{{ user.name }}</span>
+                        <span v-if="user.username && user.username !== user.name" class="assignee-account">{{ user.username }}</span>
+                    </el-radio>
+                </el-radio-group>
+                <EmptyState v-if="!assignDialog.loading && !assignDialog.users.length" icon="user" title="没有可分配员工" description="请先为员工角色开通当前环节的处理权限。" />
+            </div>
+            <template #footer>
+                <el-button @click="assignDialog.visible = false">取消</el-button>
+                <el-button type="primary" :disabled="!assignDialog.assigneeUid" :loading="assignDialog.saving" @click="confirmAssign">确认分配</el-button>
+            </template>
+        </el-dialog>
+
+        <el-dialog v-model="settingsDialog.visible" title="默认负责人" width="620px" destroy-on-close>
+            <el-alert type="info" :closable="false" show-icon title="只需设置一次。订单进入新环节后，系统会自动落库责任人并通知本人；转交只用于请假、调岗等特殊情况。" />
+            <div v-loading="settingsDialog.loading" class="default-assignee-list">
+                <div v-for="stage in settingsDialog.stages" :key="stage.stage_key" class="default-assignee-row">
+                    <div class="default-assignee-stage">
+                        <div class="font-medium">{{ stage.name }}</div>
+                        <div class="text-xs text-gray-400">按角色动作权限匹配</div>
+                    </div>
+                    <el-select v-model="stage.default_uid" class="w-[280px]" placeholder="自动选择首位岗位员工" clearable>
+                        <el-option v-for="user in stage.users" :key="user.uid" :label="user.name" :value="user.uid">
+                            <span>{{ user.name }}</span><span class="float-right text-xs text-gray-400">{{ user.username }}</span>
+                        </el-option>
+                    </el-select>
+                    <el-tag v-if="!stage.users?.length" type="danger" effect="plain">未配置岗位权限</el-tag>
+                </div>
+            </div>
+            <template #footer>
+                <el-button @click="settingsDialog.visible = false">取消</el-button>
+                <el-button type="primary" :loading="settingsDialog.saving" @click="saveAssignmentDefaults">保存</el-button>
+            </template>
+        </el-dialog>
     </PremiumTheme>
 </template>
 
@@ -118,9 +165,9 @@ import EmptyState from '@/addon/hsx_recycle/components/empty-state/index.vue'
 import { t } from '@/lang'
 import { ref, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Refresh } from '@element-plus/icons-vue'
-import { getMyStages, getTaskList, claimTask, releaseTask } from '../../api/task'
+import { ElMessage } from 'element-plus'
+import { Search, Refresh, Setting } from '@element-plus/icons-vue'
+import { getMyStages, getTaskList, getAssignableUsers, assignTask, claimTask, getTaskAssignmentSettings, saveTaskAssignmentSettings } from '../../api/task'
 
 const route = useRoute()
 const router = useRouter()
@@ -128,9 +175,11 @@ const router = useRouter()
 const loading = ref(false)
 const stages = ref<any[]>([])
 const activeStage = ref<string>(typeof route.query.stage === 'string' ? route.query.stage : '')
-const keyword = ref('')
+const keyword = ref(typeof route.query.keyword === 'string' ? route.query.keyword : '')
 const tableData = ref<any[]>([])
 const pagination = reactive({ page: 1, limit: 15, total: 0 })
+const assignDialog = reactive<any>({ visible: false, loading: false, saving: false, row: null, users: [], assigneeUid: 0 })
+const settingsDialog = reactive<any>({ visible: false, loading: false, saving: false, stages: [] })
 
 const STAGE_NAME: Record<string, string> = {
     sign: '待签收', check: '质检', price: '定价', confirm: '报价确认', pay: '打款', abnormal: '异常处理'
@@ -197,14 +246,58 @@ const onClaim = async (row: any) => {
     loadList()
 }
 
-const onRelease = async (row: any) => {
+const openAssign = async (row: any) => {
+    assignDialog.visible = true
+    assignDialog.loading = true
+    assignDialog.row = row
+    assignDialog.users = []
+    assignDialog.assigneeUid = 0
     try {
-        await ElMessageBox.confirm(t('确定释放该任务？释放后其他人可认领。'), t('提示'), { type: 'warning' })
-    } catch (e) {
-        return
+        const res: any = await getAssignableUsers(row.stage_key)
+        assignDialog.users = res.data || []
+        const cacheKey = `hsx_recycle_last_assignee_${row.stage_key}`
+        const remembered = Number(localStorage.getItem(cacheKey) || 0)
+        const preferred = Number(row.assignee_uid || remembered || assignDialog.users[0]?.uid || 0)
+        assignDialog.assigneeUid = assignDialog.users.some((item: any) => Number(item.uid) === preferred) ? preferred : Number(assignDialog.users[0]?.uid || 0)
+    } finally {
+        assignDialog.loading = false
     }
-    await releaseTask({ device_id: row.device_id, stage_key: row.stage_key })
-    loadList()
+}
+
+const confirmAssign = async () => {
+    if (!assignDialog.row || !assignDialog.assigneeUid) return
+    assignDialog.saving = true
+    try {
+        await assignTask({ device_id: assignDialog.row.device_id, stage_key: assignDialog.row.stage_key, assignee_uid: assignDialog.assigneeUid })
+        localStorage.setItem(`hsx_recycle_last_assignee_${assignDialog.row.stage_key}`, String(assignDialog.assigneeUid))
+        assignDialog.visible = false
+        loadList()
+    } finally {
+        assignDialog.saving = false
+    }
+}
+
+const openAssignmentSettings = async () => {
+    settingsDialog.visible = true
+    settingsDialog.loading = true
+    try {
+        const res: any = await getTaskAssignmentSettings()
+        settingsDialog.stages = (res.data || []).map((item: any) => ({ ...item, default_uid: Number(item.default_uid || 0) || undefined }))
+    } finally {
+        settingsDialog.loading = false
+    }
+}
+
+const saveAssignmentDefaults = async () => {
+    settingsDialog.saving = true
+    try {
+        const defaults = Object.fromEntries(settingsDialog.stages.map((item: any) => [item.stage_key, Number(item.default_uid || 0)]))
+        await saveTaskAssignmentSettings(defaults)
+        settingsDialog.visible = false
+        ElMessage.success('默认负责人已保存，后续任务将自动分配')
+    } finally {
+        settingsDialog.saving = false
+    }
 }
 
 // 去回收订单管理页定位订单/设备，执行真正的签收/质检/定价/确认/打款动作
@@ -223,4 +316,13 @@ onMounted(() => {
 .recycle-my-task {
     :deep(.el-tabs__header) { margin-bottom: 12px; }
 }
+.assign-summary { padding: 12px 14px; background: var(--el-fill-color-light); border-radius: 6px; margin-bottom: 14px; }
+.assignee-list { min-height: 120px; max-height: 360px; overflow-y: auto; }
+.assignee-list :deep(.el-radio-group) { width: 100%; display: block; }
+.assignee-option { width: 100%; height: 54px; margin: 0; padding: 0 10px; border-bottom: 1px solid var(--el-border-color-lighter); }
+.assignee-option :deep(.el-radio__label) { display: inline-flex; align-items: center; width: calc(100% - 24px); }
+.assignee-name { margin-left: 10px; color: var(--el-text-color-primary); }.assignee-account { margin-left: auto; color: var(--el-text-color-secondary); font-size: 12px; }
+.default-assignee-list { min-height: 180px; margin-top: 16px; }
+.default-assignee-row { min-height: 68px; display: flex; align-items: center; gap: 16px; border-bottom: 1px solid var(--el-border-color-lighter); }
+.default-assignee-stage { width: 170px; flex: none; }
 </style>

@@ -4,8 +4,8 @@
             <div class="drawer-head">
                 <div>
                     <div class="drawer-title">{{ selectedItemName || '价格管理' }}</div>
-                    <div class="panel-subtitle">
-                        {{ rowDrawer.item.brand || '-' }} · {{ rowDrawer.item.tab || '-' }} · {{ rowDrawer.item.parent_name || selectedCategoryName || '-' }}
+                    <div class="panel-subtitle drawer-meta-line">
+                        <span v-for="meta in drawerMetaItems" :key="meta">{{ meta }}</span>
                     </div>
                 </div>
                 <div class="drawer-actions">
@@ -18,6 +18,12 @@
                 <!-- 行价格 -->
                 <el-tab-pane label="行价格" name="rows">
                     <div class="rows-pane">
+                        <el-alert
+                            class="inline-edit-alert"
+                            type="info"
+                            :closable="false"
+                            title="价格可直接修改，输入后自动保存。首次手改会把该型号切换为人工维护，后续数据源同步不会覆盖人工价格。"
+                        />
                         <el-form :inline="true" :model="rowQuery" class="row-filter-form">
                             <el-form-item label="型号">
                                 <el-input v-model="rowQuery.keyword" clearable placeholder="型号、备注" class="w-[200px]" @keyup.enter="handleRowSearch" />
@@ -61,19 +67,37 @@
                                 </el-dropdown>
                                 <span class="panel-subtitle ml-[6px]">共 {{ rowTable.total }} 行 · 已选 {{ rowSelection.length }}</span>
                             </el-form-item>
+                            <el-form-item class="matrix-zoom-form-item">
+                                <div class="matrix-zoom-control">
+                                    <el-tooltip content="缩小表格" placement="top">
+                                        <el-button :icon="ZoomOut" circle :disabled="matrixZoom <= 75" aria-label="缩小表格" @click="changeMatrixZoom(-5)" />
+                                    </el-tooltip>
+                                    <button type="button" class="matrix-zoom-value" title="恢复默认缩放" @click="setMatrixZoom(85)">{{ matrixZoom }}%</button>
+                                    <el-tooltip content="放大表格" placement="top">
+                                        <el-button :icon="ZoomIn" circle :disabled="matrixZoom >= 100" aria-label="放大表格" @click="changeMatrixZoom(5)" />
+                                    </el-tooltip>
+                                </div>
+                            </el-form-item>
                         </el-form>
 
-                        <div class="rows-table-wrap">
+                        <div v-loading="rowLoading" class="rows-table-wrap">
+                            <div class="price-sections-zoom" :style="matrixZoomStyle">
+                            <section v-for="section in rowMatrixSections" :key="section.key" class="price-section">
+                                <div class="price-section-head">
+                                    <div>
+                                        <strong>{{ section.title || '未命名型号' }}</strong>
+                                        <span>{{ section.modelCount }} 个型号 · {{ section.rowCount }} 行</span>
+                                    </div>
+                                    <el-tag size="small" type="info">独立表头</el-tag>
+                                </div>
                             <el-table
-                                v-loading="rowLoading"
-                                :data="rowMatrixRows"
+                                :data="section.rows"
                                 border
                                 size="large"
-                                height="100%"
                                 row-key="id"
-                                :span-method="rowMatrixSpanMethod"
+                                :span-method="section.spanMethod"
                                 class="excel-matrix-table row-price-matrix"
-                                @selection-change="handleRowSelectionChange"
+                                @selection-change="handleSectionSelectionChange(section.key, $event)"
                             >
                                 <template #empty>
                                     <el-empty v-if="!rowLoading" description="该报价项还没有行价格，点“新增行价格”或用 Excel 覆盖导入" /> </template>
@@ -92,27 +116,49 @@
                         <el-table-column prop="capacity_name" label="内存/规格" width="120" show-overflow-tooltip>
                             <template #default="{ row }">{{ row.capacity_name || '-' }}</template>
                         </el-table-column>
-                        <el-table-column
-                            v-for="column in rowMatrixPriceColumns"
-                            :key="column.key"
-                            :label="column.label"
-                            :min-width="column.minWidth"
-                            :align="column.align"
-                            show-overflow-tooltip
-                        >
-                            <template #default="{ row }">
-                                <span
-                                    :class="[
-                                        column.isRemark ? 'excel-remark-cell' : 'excel-price-cell',
-                                        getPriceTrend(row, column) === 'up' ? 'price-up' : getPriceTrend(row, column) === 'down' ? 'price-down' : ''
-                                    ]"
+                        <template v-for="group in section.columnGroups" :key="group.key">
+                            <el-table-column v-if="group.grouped" :label="group.label" align="center">
+                                <el-table-column
+                                    v-for="column in group.children"
+                                    :key="column.key"
+                                    :label="column.displayLabel"
+                                    :min-width="column.minWidth"
+                                    :align="column.align"
                                 >
-                                    {{ getRowMatrixCell(row, column) }}
-                                    <i v-if="getPriceTrend(row, column) === 'up'" class="trend-arrow">▲</i>
-                                    <i v-else-if="getPriceTrend(row, column) === 'down'" class="trend-arrow">▼</i>
-                                </span>
-                            </template>
-                        </el-table-column>
+                                    <template #default="{ row }">
+                                        <QuoteInlinePriceCell
+                                            :value="column.isRemark ? getRowMatrixCell(row, column) : getInlinePriceValue(row, column)"
+                                            :label="`${row.model_name} ${column.label}`"
+                                            :editable="getInlinePriceIndex(row, column) >= 0"
+                                            :is-remark="column.isRemark"
+                                            :save-state="rowSaveState[row.id]"
+                                            :trend="getPriceTrend(row, column)"
+                                            @update="handleInlinePriceInput(row, column, $event)"
+                                            @flush="flushInlinePrice(row)"
+                                        />
+                                    </template>
+                                </el-table-column>
+                            </el-table-column>
+                            <el-table-column
+                                v-else
+                                :label="group.label"
+                                :min-width="group.children[0].minWidth"
+                                :align="group.children[0].align"
+                            >
+                                <template #default="{ row }">
+                                    <QuoteInlinePriceCell
+                                        :value="group.children[0].isRemark ? getRowMatrixCell(row, group.children[0]) : getInlinePriceValue(row, group.children[0])"
+                                        :label="`${row.model_name} ${group.children[0].label}`"
+                                        :editable="getInlinePriceIndex(row, group.children[0]) >= 0"
+                                        :is-remark="group.children[0].isRemark"
+                                        :save-state="rowSaveState[row.id]"
+                                        :trend="getPriceTrend(row, group.children[0])"
+                                        @update="handleInlinePriceInput(row, group.children[0], $event)"
+                                        @flush="flushInlinePrice(row)"
+                                    />
+                                </template>
+                            </el-table-column>
+                        </template>
                         <el-table-column label="排序" width="100">
                             <template #default="{ row }">
                                 <el-input-number v-model="row.source.sort" :min="0" :controls="false" class="sort-input" @change="saveRow(row.source, true)" />
@@ -135,12 +181,15 @@
                         </el-table-column>
                         <el-table-column label="操作" width="168" fixed="right">
                             <template #default="{ row }">
-                                <el-button link type="primary" @click.stop="openPriceHistory(row)">趋势</el-button>
+                                <el-button link type="primary" @click.stop="openPriceHistory(row)">7/30天走势</el-button>
                                 <el-button link type="primary" @click.stop="openEditDialog('row', row.source)">编辑</el-button>
                                 <el-button link type="danger" @click.stop="deleteRow(row)">删除</el-button>
                             </template>
                                 </el-table-column>
                             </el-table>
+                            </section>
+                            <el-empty v-if="!rowLoading && !rowMatrixSections.length" description="该报价项还没有行价格，点“新增行价格”或用 Excel 覆盖导入" />
+                            </div>
                         </div>
                     </div>
                 </el-tab-pane>
@@ -272,8 +321,11 @@
 </template>
 
 <script lang="ts" setup>
-import { ArrowDown } from '@element-plus/icons-vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { ArrowDown, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import { useQuoteSpider } from '@/addon/recycle_quote_spider/composables/useQuoteSpider'
+import QuoteInlinePriceCell from './QuoteInlinePriceCell.vue'
 
 const {
     rowDrawer,
@@ -287,9 +339,7 @@ const {
     rowLoading,
     rowTable,
     rowSelection,
-    rowMatrixRows,
-    rowMatrixPriceColumns,
-    rowMatrixSpanMethod,
+    rowMatrixSections,
     sourceOptions,
     categoryOptions,
     itemTable,
@@ -302,13 +352,15 @@ const {
     openEditDialog,
     openCreateRow,
     handleRowSearch,
-    handleRowSelectionChange,
     batchRowCommand,
     getDisplayBrand,
     getRowMatrixCell,
     getPriceTrend,
+    normalizePriceArray,
+    formatTime,
     openPriceHistory,
     saveRow,
+    saveInlineRowPrices,
     deleteRow,
     handleExcelChange,
     downloadExcelTemplate,
@@ -316,4 +368,129 @@ const {
     confirmExcelImport,
     saveDrawerItem
 } = useQuoteSpider()
+
+type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
+const rowSaveState = reactive<Record<number, SaveState>>({})
+const rowSaveTimers = new Map<number, number>()
+const savedPriceSnapshots = new Map<number, any[]>()
+const rowVersions = new Map<number, number>()
+const sectionSelections = reactive<Record<string, any[]>>({})
+const storedMatrixZoom = Number(window.localStorage.getItem('recycle_quote_spider_matrix_zoom') || 85)
+const matrixZoom = ref(Math.min(100, Math.max(75, Number.isFinite(storedMatrixZoom) ? storedMatrixZoom : 85)))
+const matrixZoomStyle = computed(() => ({
+    zoom: matrixZoom.value / 100,
+    width: `${10000 / matrixZoom.value}%`
+}))
+
+const drawerMetaItems = computed(() => {
+    const item = rowDrawer.item || {}
+    const values = [item.source_name, item.category_name || selectedCategoryName.value, item.brand, item.tab]
+        .map(value => String(value || '').trim())
+        .filter((value, index, list) => value && list.indexOf(value) === index)
+    const priceUpdatedAt = Number(item.latest_price_at || item.update_at || 0)
+    if (priceUpdatedAt > 0) values.push(`价格更新于 ${formatTime(priceUpdatedAt)}`)
+    if (String(item.latest_record_date || '').trim()) values.push(`最新快照 ${item.latest_record_date}`)
+    return values.length ? values : ['暂无有效报价时间']
+})
+
+const setMatrixZoom = (value: number) => {
+    matrixZoom.value = Math.min(100, Math.max(75, value))
+    window.localStorage.setItem('recycle_quote_spider_matrix_zoom', String(matrixZoom.value))
+}
+const changeMatrixZoom = (step: number) => setMatrixZoom(matrixZoom.value + step)
+
+const handleSectionSelectionChange = (sectionKey: string, rows: any[]) => {
+    sectionSelections[sectionKey] = rows.map(row => row.source || row)
+    rowSelection.value = Object.values(sectionSelections).flat()
+}
+
+watch(
+    () => rowMatrixSections.value.map(section => section.key).join(','),
+    () => {
+        Object.keys(sectionSelections).forEach(key => delete sectionSelections[key])
+        rowSelection.value = []
+    }
+)
+
+const getInlinePriceIndex = (row: any, column: any) => {
+    if (column?.isRemark) return -1
+    const source = row.source || row
+    const index = Number(column?.index)
+    return index >= 0 && index < (Array.isArray(source.columns) ? source.columns.length : 0) ? index : -1
+}
+
+const getInlinePriceValue = (row: any, column: any) => {
+    const source = row.source || row
+    const index = getInlinePriceIndex(row, column)
+    return index < 0 ? '' : ((Array.isArray(source.final_prices) ? source.final_prices : [])[index] ?? '')
+}
+
+const handleInlinePriceInput = (row: any, column: any, value: string) => {
+    const source = row.source || row
+    const rowId = Number(source.id)
+    const index = getInlinePriceIndex(row, column)
+    if (index < 0) return
+    if (!savedPriceSnapshots.has(rowId)) savedPriceSnapshots.set(rowId, normalizePriceArray(source.final_prices))
+
+    const nextPrices = normalizePriceArray(source.final_prices)
+    while (nextPrices.length < normalizePriceArray(source.columns).length) nextPrices.push('')
+    const trimmed = String(value ?? '').trim()
+    nextPrices[index] = trimmed === '' ? '' : trimmed
+    source.final_prices = nextPrices
+    source.manual_prices = [...nextPrices]
+    source.follow_source = 0
+    source.adjust_type = 0
+    source.adjust_value = 0
+    source.adjust_ratio = 1
+    rowSaveState[rowId] = 'dirty'
+    rowVersions.set(rowId, (rowVersions.get(rowId) || 0) + 1)
+    scheduleInlinePriceSave(row)
+}
+
+const scheduleInlinePriceSave = (row: any) => {
+    const rowId = Number((row.source || row).id)
+    const current = rowSaveTimers.get(rowId)
+    if (current) window.clearTimeout(current)
+    rowSaveTimers.set(rowId, window.setTimeout(() => persistInlinePrice(row), 600))
+}
+
+const flushInlinePrice = (row: any) => {
+    const rowId = Number((row.source || row).id)
+    if (rowSaveState[rowId] !== 'dirty') return
+    const current = rowSaveTimers.get(rowId)
+    if (current) window.clearTimeout(current)
+    rowSaveTimers.delete(rowId)
+    persistInlinePrice(row)
+}
+
+const persistInlinePrice = async (row: any) => {
+    const source = row.source || row
+    const rowId = Number(source.id)
+    const version = rowVersions.get(rowId) || 0
+    const submittedPrices = normalizePriceArray(source.final_prices)
+    rowSaveState[rowId] = 'saving'
+    try {
+        await saveInlineRowPrices(source)
+        savedPriceSnapshots.set(rowId, submittedPrices)
+        if ((rowVersions.get(rowId) || 0) === version) {
+            rowSaveState[rowId] = 'saved'
+            window.setTimeout(() => {
+                if (rowSaveState[rowId] === 'saved') rowSaveState[rowId] = 'idle'
+            }, 1200)
+        }
+    } catch (error) {
+        if ((rowVersions.get(rowId) || 0) === version) {
+            const snapshot = savedPriceSnapshots.get(rowId) || []
+            source.final_prices = [...snapshot]
+            source.manual_prices = [...snapshot]
+            rowSaveState[rowId] = 'error'
+            ElMessage.error('价格保存失败，已恢复到上一次保存结果')
+        }
+    }
+}
+
+onBeforeUnmount(() => {
+    rowSaveTimers.forEach(timer => window.clearTimeout(timer))
+    rowSaveTimers.clear()
+})
 </script>

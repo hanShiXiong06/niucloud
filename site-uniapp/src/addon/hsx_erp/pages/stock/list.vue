@@ -34,7 +34,18 @@
                 <view class="stock-overview__item"><text class="stock-overview__value">{{ inventoryTotal }}</text><text class="stock-overview__label">当前在库</text></view>
                 <view class="stock-overview__item"><text class="stock-overview__value">{{ turnoverSummary.average_age_days || 0 }}天</text><text class="stock-overview__label">平均库龄</text></view>
                 <view class="stock-overview__item warning" @click="filterTurnover('risk')"><text class="stock-overview__value">{{ turnoverSummary.warning_total_count || 0 }}</text><text class="stock-overview__label">周转预警</text></view>
-                <view class="stock-overview__item trace" @click="goSerialTrace"><u-icon name="scan" color="#2563eb" size="18" /><text class="stock-overview__label">串号追踪</text></view>
+            </view>
+            <view class="stock-tools">
+                <view class="stock-tool" @click="goSerialTrace">
+                    <view class="stock-tool__icon blue"><u-icon name="scan" color="#2563eb" size="18" /></view>
+                    <view><text class="stock-tool__title">串号追踪</text><text class="stock-tool__desc">查询设备全流程</text></view>
+                    <u-icon name="arrow-right" color="#cbd5e1" size="14" />
+                </view>
+                <view class="stock-tool" @click="goStocktake">
+                    <view class="stock-tool__icon green"><u-icon name="checkmark-circle" color="#16a34a" size="18" /></view>
+                    <view><text class="stock-tool__title">库存盘点</text><text class="stock-tool__desc">扫码核对实物库存</text></view>
+                    <u-icon name="arrow-right" color="#cbd5e1" size="14" />
+                </view>
             </view>
             <view class="list-wrap">
                 <view v-for="row in list" :key="row.id" class="erp-card stock-card" :class="{ 'stock-card--sold': isSold(row), 'stock-card--void': isVoid(row) }" @click="goDetail(row)">
@@ -269,6 +280,7 @@ const listingFilterLabel = computed(() => filters.value.listing_status ? optionL
 const reload = () => pagingRef.value?.reload()
 function filterTurnover(level: string) { filters.value = { ...filters.value, turnover_level: level }; activeTab.value = 'in_stock'; reload() }
 const goSerialTrace = () => uni.navigateTo({ url: '/addon/hsx_erp/pages/serial_trace/list' })
+const goStocktake = () => uni.navigateTo({ url: '/addon/hsx_erp/pages/stocktake/list' })
 const handleSearch = () => reload()
 function openQuickFilter(key: 'status' | 'turnover' | 'listing') {
     quickFilterKey.value = key
@@ -299,6 +311,9 @@ onShow(async () => {
     reload()
 })
 onLoad((options: any) => {
+    if (options?.status) activeTab.value = String(options.status)
+    if (options?.listing_status) filters.value.listing_status = String(options.listing_status)
+    if (options?.keyword) keyword.value = decodeURIComponent(String(options.keyword))
     if (options?.refurbish_status) filters.value.refurbish_status = String(options.refurbish_status)
     if (options?.turnover_level) filters.value.turnover_level = String(options.turnover_level)
 })
@@ -340,6 +355,7 @@ const stockPosition = (row: any) => row.location_name ? `${row.warehouse_name ||
 const operationStatusText = (row: any) => [
     row.refurbish_status && row.refurbish_status !== 'none' ? refurbishLabel(row.refurbish_status) : '',
     row.listing_status && row.listing_status !== 'none' ? listingLabel(row.listing_status) : '',
+    row.task_assignee_name ? `负责人 ${row.task_assignee_name}` : '',
 ].filter(Boolean).join(' · ')
 
 const goDetail = (row: any) => uni.navigateTo({
@@ -463,9 +479,11 @@ async function confirmBuyout() {
 async function publishListing(row: any) {
     if (!row?.id || publishingId.value) return
     const confirmed = await confirmErpSensitiveAction({
-        title: '上架商城',
-        content: `确认将「${row.model || row.imei || '-'}」直接上架商城？系统将使用当前分类、规格、图片和零售价创建一机一品商品。`,
-        confirmText: '确认上架',
+        title: Number(row.can_handoff_shop || 0) === 1 ? '交接商城运营' : '上架商城',
+        content: Number(row.can_handoff_shop || 0) === 1
+            ? `确认把「${row.model || row.imei || '-'}」交给商城运营完善分类、规格并上架？完成后资料会自动回写 ERP。`
+            : `确认将「${row.model || row.imei || '-'}」直接上架商城？系统将使用当前分类、规格、图片和零售价创建一机一品商品。`,
+        confirmText: Number(row.can_handoff_shop || 0) === 1 ? '确认交接' : '确认上架',
     })
     if (!confirmed) return
     publishingId.value = Number(row.id)
@@ -504,15 +522,21 @@ const listingLabel = (s: string) => dictLabel(erpDicts.value, 'listing_status', 
 .quick-filter text { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .quick-filter.active { color:#2563eb; background:#eff6ff; font-weight:600; }
 
-.stock-overview { margin:16rpx 22rpx 0; padding:18rpx 8rpx; border-radius:14rpx; background:#fff; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); }
+.stock-overview { margin:16rpx 22rpx 0; padding:18rpx 8rpx; border-radius:14rpx; background:#fff; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); }
 .stock-overview__item { min-width:0; text-align:center; border-right:1rpx solid #eef2f7; }
 .stock-overview__item:last-child { border-right:0; }
 .stock-overview__item text { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .stock-overview__item .stock-overview__value { color:#0f172a; font-size:27rpx; font-weight:700; line-height:1.2; }
 .stock-overview__item .stock-overview__label { margin-top:6rpx; color:#94a3b8; font-size:20rpx; }
 .stock-overview__item.warning .stock-overview__value { color:#d97706; }
-.stock-overview__item.trace { display:flex; flex-direction:column; align-items:center; justify-content:center; }
-.stock-overview__item.trace .stock-overview__label { color:#2563eb; }
+.stock-tools { margin:12rpx 22rpx 0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12rpx; }
+.stock-tool { min-width:0; padding:16rpx 18rpx; border-radius:14rpx; background:#fff; display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:12rpx; box-shadow:0 4rpx 16rpx rgba(15,23,42,.03); }
+.stock-tool__icon { width:52rpx; height:52rpx; border-radius:14rpx; display:flex; align-items:center; justify-content:center; }
+.stock-tool__icon.blue { background:#eff6ff; }
+.stock-tool__icon.green { background:#f0fdf4; }
+.stock-tool__title,.stock-tool__desc { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.stock-tool__title { color:#0f172a; font-size:24rpx; font-weight:650; }
+.stock-tool__desc { margin-top:3rpx; color:#94a3b8; font-size:19rpx; }
 
 .stock-card { padding:22rpx 26rpx; }
 .stock-card--sold { background:#f8fbff; border:2rpx solid #bfdbfe; }

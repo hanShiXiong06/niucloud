@@ -5,6 +5,7 @@ namespace addon\hsx_recycle\app\service\admin\order;
 
 use addon\hsx_recycle\app\dict\order\RecycleConsignmentDict;
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
+use addon\hsx_recycle\app\dict\stat\RecycleStageDict;
 use addon\hsx_recycle\app\model\order\RecycleConsignmentLog;
 use addon\hsx_recycle\app\dict\order\RecycleReturnOrderDict;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
@@ -18,6 +19,7 @@ use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderNotifyServi
 use addon\hsx_recycle\app\service\core\recycle_order\DeviceSummaryHelper;
 use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpCapabilityService;
 use addon\hsx_recycle\app\service\admin\printer\RecyclePrintSceneService;
+use addon\hsx_recycle\app\service\admin\stat\TaskService;
 use app\model\sys\SysUser;
 use app\model\sys\SysUserRole;
 use core\base\BaseAdminService;
@@ -1177,7 +1179,7 @@ class RecycleDeviceService extends BaseAdminService
      * @return bool
      * @throws CommonException
      */
-    public function completeCheck(int $id, array $checkData, string $remark = '', string $action = 'check')
+    public function completeCheck(int $id, array $checkData, string $remark = '', string $action = 'check', int $nextAssigneeUid = 0)
     {
 
 
@@ -1365,6 +1367,14 @@ class RecycleDeviceService extends BaseAdminService
             }
             
             Db::commit();
+            if ($action !== 'save_draft') {
+                try {
+                    $nextStage = RecycleStageDict::stageOf((int)$targetStatus);
+                    if ($nextStage !== '') (new TaskService())->assignPreferredOrDefault($id, $nextStage, $nextAssigneeUid);
+                } catch (\Throwable $e) {
+                    Log::warning('质检后分配下一环节任务失败', ['device_id' => $id, 'message' => $e->getMessage()]);
+                }
+            }
             return true;
         } catch (\Exception $e) {
             Db::rollback();
@@ -1600,6 +1610,11 @@ class RecycleDeviceService extends BaseAdminService
             }
             
             Db::commit();
+            try {
+                (new TaskService())->assignPreferredOrDefault($id, RecycleStageDict::STAGE_CONFIRM, (int)($refurbishment['next_assignee_uid'] ?? 0));
+            } catch (\Throwable $e) {
+                Log::warning('定价后分配确认任务失败', ['device_id' => $id, 'message' => $e->getMessage()]);
+            }
             return true;
         } catch (\Exception $e) {
             Db::rollback();
@@ -1742,6 +1757,12 @@ class RecycleDeviceService extends BaseAdminService
                 $this->autoSyncErpInbound([(int)$device->id]);
                 // 确认回收即生成"应付"(我欠客户回收价)。批量模式由 batchRecycle 统一发。
                 $this->autoEmitPayable([(int)$device->id]);
+                try {
+                    // 先让 ERP 落采购与应付，再通知财务，避免用户打开时目标账目尚不存在。
+                    (new TaskService())->assignPreferredOrDefault((int)$device->id, RecycleStageDict::STAGE_PAY);
+                } catch (\Throwable $e) {
+                    Log::warning('确认回收后分配待打款任务失败', ['device_id' => (int)$device->id, 'message' => $e->getMessage()]);
+                }
             }
 
             return true;
@@ -2011,6 +2032,13 @@ class RecycleDeviceService extends BaseAdminService
             // 整批提交成功后再统一同步到 ERP + 生成应付
             $this->autoSyncErpInbound(array_map('intval', $ids));
             $this->autoEmitPayable(array_map('intval', $ids));
+            foreach ($ids as $id) {
+                try {
+                    (new TaskService())->assignPreferredOrDefault((int)$id, RecycleStageDict::STAGE_PAY);
+                } catch (\Throwable $e) {
+                    Log::warning('批量回收后分配待打款任务失败', ['device_id' => (int)$id, 'message' => $e->getMessage()]);
+                }
+            }
             return true;
         } catch (\Exception $e) {
             Db::rollback();

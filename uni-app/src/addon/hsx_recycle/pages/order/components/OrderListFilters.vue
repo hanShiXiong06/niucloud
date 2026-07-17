@@ -1,5 +1,20 @@
 <template>
   <view class="order-list-filters">
+    <view class="filter-search">
+      <up-search
+        :modelValue="searchKeyword"
+        placeholder="订单号 / 快递单号 / 设备串号"
+        :showAction="false"
+        clearable
+        bgColor="#f3f5f8"
+        searchIconColor="#8b96a9"
+        placeholderColor="#a6afbd"
+        @update:modelValue="$emit('update:searchKeyword', $event)"
+        @search="$emit('search')"
+        @clear="$emit('search')"
+      />
+    </view>
+
     <view class="status-filter">
       <scroll-view scroll-x class="status-filter__scroll" show-scrollbar="false">
         <view class="status-filter__track">
@@ -18,6 +33,7 @@
     </view>
 
     <view class="filter-toolbar">
+      <text class="filter-toolbar__label">交付方式</text>
       <view class="delivery-filter">
         <view
           v-for="item in deliveryOptions"
@@ -28,20 +44,6 @@
         >
           <text>{{ item.label }}</text>
         </view>
-      </view>
-      <view class="filter-search">
-        <u-input
-          :modelValue="searchKeyword"
-          @update:modelValue="$emit('update:searchKeyword', $event)"
-          placeholder="搜索订单号、快递单号、设备串号"
-          border="surround"
-          clearable
-          @confirm="$emit('search')"
-        >
-          <template #suffix>
-            <up-icon name="search" size="18" color="#94a3b8" @tap="$emit('search')" />
-          </template>
-        </u-input>
       </view>
     </view>
   </view>
@@ -105,15 +107,16 @@ const handleStatusTap = (value: string) => {
 
 <style scoped lang="scss">
 .order-list-filters {
-  overflow: hidden;
-  border-radius: 16rpx;
-  background: var(--recycle-bg-card);
-  border: 1rpx solid var(--recycle-line);
-  box-shadow: 0 8rpx 20rpx rgba(31, 41, 55, 0.06);
+  background: #fff;
+  border-bottom: 1rpx solid #edf0f4;
+}
+
+.filter-search {
+  padding: 18rpx 24rpx 6rpx;
 }
 
 .status-filter {
-  padding: 16rpx 0 12rpx;
+  padding: 12rpx 0 10rpx;
 }
 
 .status-filter__scroll {
@@ -124,28 +127,29 @@ const handleStatusTap = (value: string) => {
 .status-filter__track {
   display: inline-flex;
   align-items: center;
-  gap: 12rpx;
-  padding: 0 18rpx;
+  gap: 10rpx;
+  padding: 0 24rpx;
 }
 
 .status-filter__item {
-  height: 60rpx;
-  padding: 0 20rpx;
+  height: 58rpx;
+  padding: 0 22rpx;
   display: inline-flex;
   align-items: center;
   gap: 8rpx;
   border-radius: 999rpx;
-  background: var(--recycle-bg-soft);
-  color: var(--recycle-text-sub);
+  border: 1rpx solid transparent;
+  background: #f4f6f8;
+  color: #5f6b7d;
   font-size: 24rpx;
-  line-height: 60rpx;
+  line-height: 58rpx;
   white-space: nowrap;
 
   &.active {
-    color: var(--recycle-button-text);
-    background: var(--recycle-button-bg);
+    color: var(--recycle-brand);
+    border-color: rgba(59, 130, 246, 0.18);
+    background: rgba(59, 130, 246, 0.09);
     font-weight: 700;
-    box-shadow: 0 6rpx 14rpx rgba(31, 41, 55, 0.12);
   }
 }
 
@@ -154,7 +158,8 @@ const handleStatusTap = (value: string) => {
   height: 28rpx;
   padding: 0 8rpx;
   border-radius: 999rpx;
-  background: rgba(255, 255, 255, 0.24);
+  color: inherit;
+  background: rgba(255, 255, 255, 0.75);
   font-size: 20rpx;
   line-height: 28rpx;
   text-align: center;
@@ -163,37 +168,42 @@ const handleStatusTap = (value: string) => {
 .filter-toolbar {
   display: flex;
   align-items: center;
-  gap: 14rpx;
-  padding: 10rpx 18rpx 18rpx;
-  border-top: 1rpx solid var(--recycle-line);
+  gap: 16rpx;
+  padding: 10rpx 24rpx 20rpx;
+}
+
+.filter-toolbar__label {
+  color: #8b96a9;
+  font-size: 22rpx;
+  line-height: 52rpx;
+  white-space: nowrap;
 }
 
 .delivery-filter {
   min-width: 0;
   display: flex;
-  background: var(--recycle-bg-soft);
-  border-radius: 6px;
-  padding: 2px;
-  gap: 2px;
+  background: #f3f5f8;
+  border-radius: 14rpx;
+  padding: 4rpx;
+  gap: 4rpx;
 
   .filter-item {
-    padding: 6px 12px;
-    border-radius: 4px;
-    font-size: 13px;
-    color: var(--recycle-text-sub);
+    min-width: 92rpx;
+    height: 48rpx;
+    padding: 0 18rpx;
+    border-radius: 11rpx;
+    font-size: 22rpx;
+    line-height: 48rpx;
+    color: #667085;
+    text-align: center;
     white-space: nowrap;
 
     &.active {
-      background: var(--recycle-bg-card);
+      background: #fff;
       color: var(--recycle-brand);
       font-weight: 600;
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+      box-shadow: 0 2rpx 8rpx rgba(31, 41, 55, 0.07);
     }
   }
-}
-
-.filter-search {
-  min-width: 0;
-  flex: 1;
 }
 </style>

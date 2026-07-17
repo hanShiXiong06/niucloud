@@ -5,6 +5,7 @@ namespace addon\hsx_erp\app\adminapi\controller;
 
 use addon\hsx_erp\app\dict\ErpDict;
 use addon\hsx_erp\app\service\admin\ErpConfigService;
+use addon\hsx_erp\app\service\admin\ErpListingTaskService;
 use core\base\BaseAdminController;
 
 class ErpConfig extends BaseAdminController
@@ -31,6 +32,17 @@ class ErpConfig extends BaseAdminController
             ['consignment', []],
         ]);
         return success((new ErpConfigService())->saveRules($params));
+    }
+
+    public function taskAssignmentSettings()
+    {
+        return success((new ErpListingTaskService())->assignmentSettings());
+    }
+
+    public function saveTaskAssignmentSettings()
+    {
+        $params = $this->request->params([['defaults', []]]);
+        return success((new ErpListingTaskService())->saveDefaultAssignees((array)$params['defaults']));
     }
 
     public function dismissRefurbishReminder()

@@ -22,7 +22,7 @@
             <view class="settle-tabs">
                 <view
                     class="settle-tab"
-                    :class="{ active: settleMode === 'credit' }"
+                    :class="{ active: settleMode === 'credit', disabled: creditDisabled }"
                     @click="setMode('credit')"
                 >
                     挂账
@@ -45,6 +45,7 @@
                     <u-input
                         v-model="localAmount"
                         type="number"
+                        :disabled="forceFullCash"
                         :placeholder="'最多 ¥' + money(total)"
                         :customStyle="inputStyle"
                         @blur="onAmountBlur"
@@ -122,6 +123,8 @@ const props = withDefaults(defineProps<{
     accounts?: any[]
     labelCash?: string
     labelCredit?: string
+    creditDisabled?: boolean
+    forceFullCash?: boolean
 }>(), {
     settleMode: 'credit',
     amount: 0,
@@ -130,6 +133,8 @@ const props = withDefaults(defineProps<{
     accounts: () => [],
     labelCash: '本次付款',
     labelCredit: '全部挂账',
+    creditDisabled: false,
+    forceFullCash: false,
 })
 
 const emit = defineEmits<{
@@ -155,6 +160,10 @@ const selectedAccountLabel = computed(() => {
 
 // PC 端对齐：切换到 cash 时自动填满
 function setMode(mode: 'credit' | 'cash') {
+    if (mode === 'credit' && props.creditDisabled) {
+        uni.showToast({ title: '该客户当前不允许挂账', icon: 'none' })
+        return
+    }
     emit('update:settleMode', mode)
     if (mode === 'cash') {
         localAmount.value = props.total
@@ -172,6 +181,14 @@ watch(() => props.total, (newTotal) => {
         localAmount.value = newTotal
         emit('update:amount', newTotal)
     }
+})
+
+watch(() => props.creditDisabled, disabled => {
+    if (disabled && props.settleMode === 'credit') setMode('cash')
+}, { immediate: true })
+
+watch(() => props.forceFullCash, force => {
+    if (force && props.settleMode === 'cash') fillMax()
 })
 
 watch(localAmount, (v) => emit('update:amount', Number(v || 0)))
@@ -223,6 +240,7 @@ const money = (v: any) => Number(v || 0).toFixed(2)
     font-size: 26rpx;
     color: #64748b;
     &.active { background: #3b6ef5; color: #fff; }
+    &.disabled { color:#cbd5e1; background:#f8fafc; }
 }
 .settle-amount-input { flex: 1; display: flex; align-items: center; gap: 12rpx; }
 .settle-max { font-size: 24rpx; color: #3b6ef5; white-space: nowrap; }

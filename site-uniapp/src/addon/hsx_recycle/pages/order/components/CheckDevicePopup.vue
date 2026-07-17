@@ -150,6 +150,12 @@
                 </view>
 
               
+                <NextAssigneePicker
+                    v-if="!isReject"
+                    v-model="nextAssigneeUid"
+                    stage-key="price"
+                    label="下一步 · 定价负责人"
+                />
             </scroll-view>
 
             <view class="check-footer">
@@ -171,6 +177,7 @@ import { computed, ref, watch } from 'vue'
 import { getCheckTemplateAll, getCheckTemplateSchema } from '@/addon/hsx_recycle/api/check-template'
 import RecycleTagGroup from '@/addon/hsx_recycle/components/RecycleTagGroup.vue'
 import { batchReturnDevices, getDevice, updateDevice } from '@/addon/hsx_recycle/api/order'
+import NextAssigneePicker from '@/addon/hsx_recycle/components/NextAssigneePicker.vue'
 import RecycleImageUploader from '@/addon/hsx_recycle/components/RecycleImageUploader.vue'
 import { confirmDanger } from '@/addon/hsx_recycle/utils/confirm'
 
@@ -213,6 +220,7 @@ const summaryAutoSync = ref(true)
 const checkConclusion = ref(1)
 // 退回：隐藏质检模板，提交时质检信息全部清空
 const isReject = computed(() => Number(checkConclusion.value) === 2)
+const nextAssigneeUid = ref(0)
 const originalInfo = ref<Record<string, any>>({})
 const latestDeviceData = ref<any>(null)
 
@@ -650,6 +658,7 @@ const buildSubmitPayload = (action: 'check' | 'save_draft') => {
             imei: String(deviceData.value.imei || deviceData.value.user_sn || ''),
             check_template_id: 0,
             model: String(deviceData.value.model || originalInfo.value.model || ''),
+            next_assignee_uid: 0,
             info: { ...originalInfo.value, goods_category: resolveGoodsCategory(), check_meta: {} }
         }
     }
@@ -669,6 +678,7 @@ const buildSubmitPayload = (action: 'check' | 'save_draft') => {
         model: String(deviceData.value.model || originalInfo.value.model || ''),
         capacity: info.capacity,
         color: info.color,
+        next_assignee_uid: nextAssigneeUid.value,
         system_version: info.system_version,
         warranty_info: info.warranty_info,
         info

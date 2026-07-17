@@ -2,15 +2,17 @@
     <view class="erp-page">
         <ErpListHeader
             v-model="keyword"
-            v-model:activeTab="activeTab"
-            placeholder="型号/IMEI/销售单号/客户"
-            :tabs="tabs"
+            placeholder="型号 / IMEI / 客户"
             :show-filter="true"
             :filter-count="filterCount"
+            :compact-mp="true"
             @search="handleSearch"
-            @tab-change="onTab"
             @filter="filterVisible = true"
-        />
+        >
+            <template #below>
+                <ErpQuickFilterBar :items="quickFilters" @change="onQuickFilter" />
+            </template>
+        </ErpListHeader>
         <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true"
             :default-page-size="15" :paging-style="pagingStyle">
             <template #empty><u-empty mode="list" :text="returnMode ? '暂无可发起退货的销售设备' : '暂无销售记录'" /></template>
@@ -40,12 +42,8 @@
                     </view>
 
                     <view class="sale-line">
-                        <text class="sale-line__label">销售单</text>
-                        <text class="sale-line__value">{{ row.sale_no || '-' }}</text>
-                    </view>
-                    <view class="sale-line">
                         <text class="sale-line__label">客户</text>
-                        <text class="sale-line__value">{{ row.party_name || '-' }}</text>
+                        <text class="sale-line__value">{{ erpPartyDisplayName(row) }}</text>
                     </view>
                     <view class="sale-line">
                         <text class="sale-line__label">来源 / 渠道</text>
@@ -95,7 +93,10 @@
                 </view>
             </view>
         </z-paging>
-            <view v-if="!returnMode" class="fab" @click="goCreate" ><u-icon name="plus" color="#fff" size="26"></u-icon></view>
+            <view v-if="!returnMode" class="fab fab--label" @click="goCreate">
+                <u-icon name="plus" color="#fff" size="20" />
+                <text class="fab__text">新建销售</text>
+            </view>
 
         <ErpFilterPopup
             v-model:show="filterVisible"
@@ -115,12 +116,15 @@ import { onLoad, onShow } from '@dcloudio/uni-app'
 import { getMobileSaleList } from '@/addon/hsx_erp/api/erp'
 import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
 import ErpFilterPopup from '@/addon/hsx_erp/components/ErpFilterPopup.vue'
+import ErpQuickFilterBar from '@/addon/hsx_erp/components/ErpQuickFilterBar.vue'
 import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
 import { erpTimeLine } from '@/addon/hsx_erp/hooks/useErpTime'
 import { erpNetSaleAmount, erpSaleCompensationAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
 import { erpDeviceIdentityLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
+import { erpPartyDisplayName } from '@/addon/hsx_erp/hooks/useErpPartyText'
+import { useErpSaleChannels } from '@/addon/hsx_erp/hooks/useErpSaleChannels'
 
-const { pagingStyle } = useListHeader({ tabs: true })
+const { pagingStyle } = useListHeader({ tabs: true, compactMp: true })
 
 
 const keyword = ref('')
@@ -137,6 +141,16 @@ const tabs = [
 const activeTab = ref('')
 const filterVisible = ref(false)
 const filters = ref<Record<string, any>>({})
+const { options: saleChannelOptions, load: loadSaleChannels } = useErpSaleChannels()
+const quickFilters = computed(() => [
+    { key: 'finance_status', label: '收款状态', title: '收款状态', value: activeTab.value, options: tabs },
+    { key: 'status', label: '销售状态', title: '销售状态', value: filters.value.status || '', options: [
+        { label: '全部状态', value: '' }, { label: '已完成', value: 'completed' }, { label: '已作废', value: 'void' },
+    ] },
+    { key: 'sale_channel', label: '销售渠道', title: '销售渠道', value: filters.value.sale_channel || '', options: [
+        { label: '全部渠道', value: '' }, ...saleChannelOptions.value.map(item => ({ label: item.name, value: item.name })),
+    ] },
+])
 const filterFields = [
     { key: 'asset_no', label: '资产号', type: 'text', placeholder: '输入资产编号' },
     { key: 'imei', label: 'IMEI / 串号', type: 'text', placeholder: '输入 IMEI 或串号' },
@@ -156,12 +170,20 @@ const filterCount = computed(() => Object.entries(filters.value).filter(([key, v
 const reload = () => pagingRef.value?.reload()
 const handleSearch = () => reload()
 const onTab = (val: string) => { activeTab.value = val; reload() }
+const onQuickFilter = ({ key, value }: { key: string; value: string | number }) => {
+    if (key === 'finance_status') return onTab(String(value))
+    filters.value = { ...filters.value, [key]: value }
+    reload()
+}
 
 onLoad((query: any) => {
     returnMode.value = String(query?.mode || '') === 'return'
 })
 
-onShow(() => reload())
+onShow(() => {
+    loadSaleChannels()
+    reload()
+})
 
 
 const queryList = async (pageNo: number, pageSize: number) => {

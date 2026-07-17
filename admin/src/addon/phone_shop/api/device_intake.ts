@@ -28,6 +28,10 @@ export function getDeviceIntakePendingCount() {
     return request.get('phone_shop/device_intake/pending_count')
 }
 
+export function getDeviceIntakeMaterialPolicy() {
+    return request.get('phone_shop/device_intake/material_policy')
+}
+
 /**
  * 由货源建品并上架
  */

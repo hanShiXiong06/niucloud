@@ -34,6 +34,7 @@ foreach (['erp_settlement', 'erp_settlement_link', 'erp_payable', 'erp_receivabl
     $assert(str_contains($schema, "'{$table}'"), "集中迁移缺少{$table}");
 }
 $assert(str_contains($schema, 'erp_catalog_product_master') && str_contains($schema, 'erp_site_catalog_product'), '集中迁移必须包含标准目录和站点目录');
+$assert(str_contains($schema, 'erp_stocktake') && str_contains($schema, 'erp_stocktake_item'), '集中迁移必须包含库存盘点任务和设备明细');
 $assert(!str_contains($schema, 'erp_category_mapping') && !str_contains($schema, 'erp_goods_category'), '旧分类及映射表已退役，不得继续创建');
 $assert(str_contains($schema, "'balance_after'"), '集中迁移必须补齐账目流水余额字段');
 $assert(str_contains($schema, "'refund_receivable_amount'"), '集中迁移必须补齐退货退款应收审计字段');
@@ -98,6 +99,9 @@ foreach (['retail_price', 'stock_in_at', 'remark_public', 'remark_internal'] as 
 }
 $assert(str_contains($sql, 'KEY `idx_action_source_no` (`site_id`,`action`,`source_no`)'), '全新安装结构必须包含整备来源号索引');
 $uninstall = (string)file_get_contents($root . '/sql/uninstall.sql');
+foreach (['erp_stocktake_item', 'erp_stocktake'] as $table) {
+    $assert(str_contains($uninstall, 'DROP TABLE IF EXISTS `{{prefix}}' . $table . '`'), '卸载必须清理库存盘点表：' . $table);
+}
 foreach (['erp_catalog_import_task', 'erp_site_catalog_product', 'erp_catalog_product_master', 'erp_goods_category', 'erp_category_mapping'] as $table) {
     $assert(str_contains($uninstall, 'DROP TABLE IF EXISTS `{{prefix}}' . $table . '`'), '卸载必须清理目录及旧分类残留：' . $table);
 }

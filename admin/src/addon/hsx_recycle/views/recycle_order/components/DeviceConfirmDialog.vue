@@ -15,15 +15,18 @@
         <DeviceEntryList :devices="rows" :order-id="orderId" />
 
         <template #footer>
-            <div :class="isMobile ? 'flex w-full flex-col gap-2' : 'dialog-footer'">
-                <el-button :class="isMobile ? '!ml-0 w-full' : ''" @click="handleCancel">取消</el-button>
-                <el-button
-                    type="primary"
-                    :class="isMobile ? '!ml-0 w-full' : ''"
-                    :loading="submitting"
-                    :disabled="savedCount === 0"
-                    @click="handleConfirm"
-                >确认并签收</el-button>
+            <div class="handoff-footer" :class="{ 'is-mobile': isMobile }">
+                <NextAssigneeSelect v-model="nextAssigneeUid" stage-key="check" label="下一步 · 质检负责人" compact />
+                <div :class="isMobile ? 'flex w-full flex-col gap-2' : 'dialog-footer'">
+                    <el-button :class="isMobile ? '!ml-0 w-full' : ''" @click="handleCancel">取消</el-button>
+                    <el-button
+                        type="primary"
+                        :class="isMobile ? '!ml-0 w-full' : ''"
+                        :loading="submitting"
+                        :disabled="savedCount === 0"
+                        @click="handleConfirm"
+                    >确认并签收</el-button>
+                </div>
             </div>
         </template>
     </el-dialog>
@@ -33,6 +36,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import DeviceEntryList from '@/addon/hsx_recycle/components/device-entry/DeviceEntryList.vue'
+import NextAssigneeSelect from '@/addon/hsx_recycle/components/task/NextAssigneeSelect.vue'
 import { normalizeDevice } from '@/addon/hsx_recycle/components/device-entry/deviceUtil'
 import type { DeviceEntryRow } from '@/addon/hsx_recycle/components/device-entry/types'
 
@@ -47,6 +51,7 @@ const emit = defineEmits(['update:visible', 'confirm', 'cancel'])
 const isMobile = ref(false)
 const submitting = ref(false)
 const rows = ref<DeviceEntryRow[]>([])
+const nextAssigneeUid = ref(0)
 
 const dialogVisible = computed({
     get: () => props.visible,
@@ -123,6 +128,7 @@ const handleConfirm = async () => {
     try {
         emit('confirm', {
             orderId: props.orderId,
+            next_assignee_uid: nextAssigneeUid.value,
             devices: savedDevices.map(r => ({ id: r.id, ...normalizeDevice(r) }))
         })
     } finally {
@@ -137,6 +143,7 @@ const handleCancel = () => {
 
 const handleClosed = () => {
     rows.value = []
+    nextAssigneeUid.value = 0
 }
 
 onMounted(() => {
@@ -155,4 +162,6 @@ onBeforeUnmount(() => {
     justify-content: flex-end;
     gap: 10px;
 }
+.handoff-footer { display: flex; align-items: center; justify-content: space-between; gap: 20px; width: 100%; }
+.handoff-footer.is-mobile { align-items: stretch; flex-direction: column; }
 </style>

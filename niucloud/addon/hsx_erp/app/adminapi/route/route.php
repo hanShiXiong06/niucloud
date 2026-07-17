@@ -31,6 +31,8 @@ Route::group('erp', function () {
     Route::get('dicts', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@dicts');
     Route::get('config', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@info');
     Route::post('config', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@save');
+    Route::get('config/task_assignment', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@taskAssignmentSettings');
+    Route::post('config/task_assignment', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@saveTaskAssignmentSettings');
     Route::post('config/refurbish_reminder/dismiss', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@dismissRefurbishReminder');
     Route::post('config/turnover_reminder/dismiss', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@dismissTurnoverReminder');
     Route::get('config/sale_channels', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@saleChannels');
@@ -45,6 +47,8 @@ Route::group('erp', function () {
     Route::post('counterparty/quick_contact', 'addon\hsx_erp\app\adminapi\controller\ErpCounterparty@quickContact');
     Route::post('counterparty/quick_party', 'addon\hsx_erp\app\adminapi\controller\ErpCounterparty@quickParty');
     Route::post('counterparty/update/<id>', 'addon\hsx_erp\app\adminapi\controller\ErpCounterparty@updateParty');
+    Route::get('counterparty/credit/<id>', 'addon\hsx_erp\app\adminapi\controller\ErpCounterparty@credit');
+    Route::post('counterparty/credit/<id>', 'addon\hsx_erp\app\adminapi\controller\ErpCounterparty@updateCredit');
     Route::post('counterparty/resolve_contact', 'addon\hsx_erp\app\adminapi\controller\ErpCounterparty@resolveContact');
     Route::get('staff/options', 'addon\hsx_erp\app\adminapi\controller\ErpStaff@options');
     Route::get('kpi/dashboard', 'addon\hsx_erp\app\adminapi\controller\ErpKpi@dashboard');
@@ -72,6 +76,16 @@ Route::group('erp', function () {
     Route::get('stock/:id', 'addon\hsx_erp\app\adminapi\controller\ErpStock@info');
     Route::post('stock/:id/flow', 'addon\hsx_erp\app\adminapi\controller\ErpStock@flow');
     Route::post('stock/:id/sync_listing', 'addon\hsx_erp\app\adminapi\controller\ErpStock@syncListing');
+
+    Route::get('stocktake/lists', 'addon\hsx_erp\app\adminapi\controller\ErpStocktake@lists');
+    Route::post('stocktake/create', 'addon\hsx_erp\app\adminapi\controller\ErpStocktake@create');
+    Route::get('stocktake/:id/items', 'addon\hsx_erp\app\adminapi\controller\ErpStocktake@items');
+    Route::get('stocktake/:id', 'addon\hsx_erp\app\adminapi\controller\ErpStocktake@info');
+    Route::post('stocktake/:id/scan', 'addon\hsx_erp\app\adminapi\controller\ErpStocktake@scan');
+    Route::post('stocktake/:id/submit', 'addon\hsx_erp\app\adminapi\controller\ErpStocktake@submit');
+    Route::post('stocktake/:id/items/:item_id/resolve', 'addon\hsx_erp\app\adminapi\controller\ErpStocktake@resolve');
+    Route::post('stocktake/:id/complete', 'addon\hsx_erp\app\adminapi\controller\ErpStocktake@complete');
+    Route::post('stocktake/:id/cancel', 'addon\hsx_erp\app\adminapi\controller\ErpStocktake@cancel');
 
     Route::get('warehouse/lists', 'addon\hsx_erp\app\adminapi\controller\ErpWarehouse@lists');
     Route::get('warehouse/options', 'addon\hsx_erp\app\adminapi\controller\ErpWarehouse@options');

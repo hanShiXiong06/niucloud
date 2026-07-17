@@ -4,7 +4,10 @@ declare(strict_types=1);
 namespace addon\recycle_quote_spider\app\service\admin;
 
 use addon\recycle_quote_spider\app\model\QuoteItem;
+use addon\recycle_quote_spider\app\model\QuoteCategory;
+use addon\recycle_quote_spider\app\model\QuotePriceHistory;
 use addon\recycle_quote_spider\app\model\QuoteRow;
+use addon\recycle_quote_spider\app\model\QuoteSource;
 use addon\recycle_quote_spider\app\service\core\QuoteApiCacheService;
 use addon\recycle_quote_spider\app\service\core\QuotePriceCalculator;
 use addon\recycle_quote_spider\app\service\core\QuotePriceHistoryService;
@@ -45,7 +48,46 @@ class QuoteItemService extends BaseAdminService
             ], $where)
             ->order($this->resolveItemOrder($where));
         $this->applyCategoryScope($search, $where);
-        return $this->pageQuery($search);
+        $page = $this->pageQuery($search);
+        $this->appendItemStatistics($page['data']);
+        return $page;
+    }
+
+    public function summary(array $where = []): array
+    {
+        $where['site_id'] = $this->site_id;
+        $itemQuery = $this->model->withSearch(['site_id', 'source_id'], $where);
+        $this->applyCategoryScope($itemQuery, $where);
+        $itemIds = array_values(array_unique(array_map('intval', (clone $itemQuery)->column('id'))));
+
+        $sourceQuery = (new QuoteSource())->where('site_id', $this->site_id);
+        if (($where['source_id'] ?? '') !== '' && $where['source_id'] !== null) {
+            $sourceQuery->where('id', '=', (int)$where['source_id']);
+        }
+        $rowQuery = (new QuoteRow())->where('site_id', $this->site_id)->whereIn('item_id', $itemIds ?: [0]);
+        $rowTable = (new QuoteRow())->getTable();
+        $historyQuery = (new QuotePriceHistory())->alias('h')
+            ->join($rowTable . ' r', 'r.id = h.row_id AND r.site_id = h.site_id')
+            ->where('h.site_id', '=', $this->site_id)
+            ->whereIn('h.item_id', $itemIds ?: [0]);
+        $historyStats = (clone $historyQuery)->field([
+            'COUNT(DISTINCT h.row_id) as history_row_count',
+            'COUNT(DISTINCT h.record_date) as snapshot_day_count',
+            'MAX(h.record_date) as latest_record_date',
+        ])->findOrEmpty()->toArray();
+
+        return [
+            'source_count' => (int)(clone $sourceQuery)->count(),
+            'enabled_source_count' => (int)(clone $sourceQuery)->where('status', '=', 1)->count(),
+            'item_count' => (int)(clone $itemQuery)->count(),
+            'row_count' => (int)(clone $rowQuery)->count(),
+            'visible_row_count' => (int)(clone $rowQuery)->where('is_show', '=', 1)->count(),
+            'history_row_count' => (int)($historyStats['history_row_count'] ?? 0),
+            'snapshot_day_count' => (int)($historyStats['snapshot_day_count'] ?? 0),
+            'latest_record_date' => (string)($historyStats['latest_record_date'] ?? ''),
+            'latest_price_at' => (int)((clone $rowQuery)->max('update_at') ?: 0),
+            'latest_sync_at' => (int)((clone $sourceQuery)->max('last_sync_at') ?: 0),
+        ];
     }
 
     private function resolveItemOrder(array $where): string
@@ -315,6 +357,48 @@ class QuoteItemService extends BaseAdminService
     private function refreshApiCache(): void
     {
         (new QuoteApiCacheService())->refresh($this->site_id);
+    }
+
+    private function appendItemStatistics(array &$rows): void
+    {
+        if ($rows === []) return;
+        $itemIds = array_values(array_unique(array_filter(array_map('intval', array_column($rows, 'id')))));
+        if ($itemIds === []) return;
+
+        $rowStats = (new QuoteRow())->where('site_id', $this->site_id)->whereIn('item_id', $itemIds)
+            ->field('item_id,COUNT(*) as row_count,MAX(update_at) as latest_price_at')
+            ->group('item_id')->select()->toArray();
+        $rowMap = [];
+        foreach ($rowStats as $stat) $rowMap[(int)$stat['item_id']] = $stat;
+
+        $rowTable = (new QuoteRow())->getTable();
+        $historyStats = (new QuotePriceHistory())->alias('h')
+            ->join($rowTable . ' r', 'r.id = h.row_id AND r.site_id = h.site_id')
+            ->where('h.site_id', '=', $this->site_id)
+            ->whereIn('h.item_id', $itemIds)
+            ->field('h.item_id,COUNT(DISTINCT h.row_id) as history_row_count,COUNT(DISTINCT h.record_date) as history_day_count,MAX(h.record_date) as latest_record_date')
+            ->group('h.item_id')->select()->toArray();
+        $historyMap = [];
+        foreach ($historyStats as $stat) $historyMap[(int)$stat['item_id']] = $stat;
+
+        $categoryIds = array_values(array_unique(array_filter(array_map('intval', array_column($rows, 'category_id')))));
+        $categoryMap = $categoryIds === [] ? [] : (new QuoteCategory())->where('site_id', $this->site_id)
+            ->whereIn('id', $categoryIds)->column('name', 'id');
+        $sourceIds = array_values(array_unique(array_filter(array_map('intval', array_column($rows, 'source_id')))));
+        $sourceMap = $sourceIds === [] ? [] : (new QuoteSource())->where('site_id', $this->site_id)
+            ->whereIn('id', $sourceIds)->column('source_name', 'id');
+
+        foreach ($rows as &$row) {
+            $itemId = (int)$row['id'];
+            $row['row_count'] = (int)($rowMap[$itemId]['row_count'] ?? 0);
+            $row['latest_price_at'] = (int)($rowMap[$itemId]['latest_price_at'] ?? $row['last_sync_at'] ?? 0);
+            $row['history_row_count'] = (int)($historyMap[$itemId]['history_row_count'] ?? 0);
+            $row['history_day_count'] = (int)($historyMap[$itemId]['history_day_count'] ?? 0);
+            $row['latest_record_date'] = (string)($historyMap[$itemId]['latest_record_date'] ?? '');
+            $row['category_name'] = (string)($categoryMap[(int)$row['category_id']] ?? '未分类');
+            $row['source_name'] = (string)($sourceMap[(int)$row['source_id']] ?? '未知来源');
+        }
+        unset($row);
     }
 
     private function appendRowDisplayFields($row)

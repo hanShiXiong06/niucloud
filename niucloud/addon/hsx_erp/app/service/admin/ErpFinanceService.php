@@ -26,6 +26,7 @@ use addon\hsx_erp\app\model\ErpSettlementLink;
 use addon\hsx_erp\app\model\ErpCapitalAccount;
 use addon\hsx_erp\app\support\ErpIdempotency;
 use addon\hsx_erp\app\support\ErpMoney;
+use addon\hsx_erp\app\support\ErpPartyMemberNames;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -194,6 +195,7 @@ class ErpFinanceService extends BaseAdminService
             $row['finance_status'] = ErpDict::financeStatus($totals['amount'], $totals['settled_amount']);
         }
         unset($row);
+        ErpPartyMemberNames::append($this->site_id, $rows);
         return $rows;
     }
 
@@ -247,6 +249,7 @@ class ErpFinanceService extends BaseAdminService
             $row['biz_scene'] = count(array_unique(array_filter(array_column($targets, 'biz_scene')))) === 1 ? (string)($targets[0]['biz_scene'] ?? '') : 'mixed';
         }
         unset($row);
+        ErpPartyMemberNames::append($this->site_id, $rows);
         return $rows;
     }
 
@@ -270,6 +273,7 @@ class ErpFinanceService extends BaseAdminService
             }
         }
         unset($row);
+        ErpPartyMemberNames::append($this->site_id, $rows);
         return $rows;
     }
 
@@ -415,6 +419,10 @@ class ErpFinanceService extends BaseAdminService
         $row['source_meta'] = (new ErpFinanceSourceService())->sourceMeta($sourceContext, 'receivable');
         $row['source_label'] = (string)$row['source_meta']['finance_type_name'];
         $row['business_reason'] = (string)($row['source_meta']['business_reason'] ?? $row['business_reason'] ?? '');
+
+        $partyRows = [$row];
+        ErpPartyMemberNames::append($this->site_id, $partyRows);
+        $row = $partyRows[0];
 
         return $row;
     }
@@ -1380,7 +1388,7 @@ class ErpFinanceService extends BaseAdminService
         } elseif ($sourceType === 'purchase') {
             $purchaseOrderId = (int)($payable['source_id'] ?? 0);
         }
-        return [
+        $row = [
             'id' => (int)$payable['id'],
             'payable_id' => (int)$payable['id'],
             'payable_no' => (string)$payable['payable_no'],
@@ -1394,6 +1402,9 @@ class ErpFinanceService extends BaseAdminService
             'settled_amount' => (float)$payable['settled_amount'],
             'status' => (string)$payable['status'],
         ];
+        $partyRows = [$row];
+        ErpPartyMemberNames::append($this->site_id, $partyRows);
+        return $partyRows[0];
     }
 
     /**
@@ -1904,6 +1915,10 @@ class ErpFinanceService extends BaseAdminService
             'r.source_id',
             'r.source_no',
             'r.asset_id',
+            'r.task_stage_key',
+            'r.task_assignee_uid',
+            'r.task_assignee_name',
+            'r.task_assigned_at',
             'r.origin_plugin',
             'r.origin_plugin_name',
             'r.origin_type',
@@ -2033,6 +2048,7 @@ class ErpFinanceService extends BaseAdminService
         }
         unset($row);
         $this->fillOffsetState($page['data'], 'receivable');
+        ErpPartyMemberNames::append($this->site_id, $page['data']);
         return $page;
     }
 
@@ -2156,6 +2172,10 @@ class ErpFinanceService extends BaseAdminService
             'MAX(p.channel_code) as channel_code',
             'MAX(p.channel_name) as channel_name',
             'MAX(p.business_reason) as business_reason',
+            'MAX(p.task_stage_key) as task_stage_key',
+            'MAX(p.task_assignee_uid) as task_assignee_uid',
+            'MAX(p.task_assignee_name) as task_assignee_name',
+            'MAX(p.task_assigned_at) as task_assigned_at',
             'MAX(party.contact_name) as contact_name',
             'MAX(party.contact_mobile) as contact_mobile',
             'MAX(party.m_no) as m_no',
@@ -2248,6 +2268,7 @@ class ErpFinanceService extends BaseAdminService
         unset($row);
         $this->fillPayableBatchSettleSummary($page['data']);
         $this->fillOffsetState($page['data'], 'payable');
+        ErpPartyMemberNames::append($this->site_id, $page['data']);
         return $page;
     }
 

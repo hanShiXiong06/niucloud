@@ -1,54 +1,43 @@
 <template>
-  <view class="mx-3 mt-2 mb-3 rounded-lg overflow-hidden shadow-sm">
-    <!-- 渐变横幅 -->
-    <view class="px-4 py-4 text-white" :style="{ background: gradient }">
-      <view class="flex items-center justify-between mb-1">
-        <text class="text-lg font-bold">{{ statusName }}</text>
-        <text class="text-xs opacity-80">{{ createTime }}</text>
+  <view class="order-progress-card">
+    <view class="order-progress-card__summary">
+      <view class="order-progress-card__icon" :style="{ backgroundColor: statusBg }">
+        <up-icon :name="statusIcon" size="21" :color="statusColor" />
       </view>
-      <text class="text-sm opacity-90">{{ statusDescription }}</text>
+      <view class="order-progress-card__copy">
+        <view class="order-progress-card__title-row">
+          <text class="order-progress-card__title">{{ statusName }}</text>
+          <text class="order-progress-card__time">{{ createTime }}</text>
+        </view>
+        <text class="order-progress-card__description">{{ statusDescription }}</text>
+      </view>
     </view>
 
-    <!-- 步骤进度条 -->
-    <view class="bg-white px-3 py-3">
-      <view v-if="isCancelled" class="flex items-center justify-center py-1">
-        <view class="flex items-center gap-1 text-sm text-gray-400">
-          <up-icon name="close-circle" size="16" color="#9ca3af"></up-icon>
-          <text>订单已取消</text>
-        </view>
+    <view class="order-progress-card__steps">
+      <view v-if="isCancelled" class="order-progress-card__cancelled">
+        <up-icon name="close-circle" size="17" color="#8b96a9" />
+        <text>流程已结束，不再继续处理</text>
       </view>
-      <view v-else class="flex items-center justify-between relative">
-        <!-- 底线（灰） -->
-        <view class="progress-track absolute top-3 h-0.5 bg-gray-200 z-0"></view>
-        <!-- 进度线（彩色），用 scaleX 控制宽度 -->
+      <view v-else class="order-progress">
+        <view class="order-progress__track" />
         <view
-          class="progress-track absolute top-3 h-0.5 z-1"
-          :style="{ background: statusColor, transform: `scaleX(${progressRatio})`, transformOrigin: 'left center' }"
-        ></view>
-
-        <!-- 步骤节点 -->
+          class="order-progress__track order-progress__track--active"
+          :style="{ backgroundColor: statusColor, transform: `scaleX(${progressRatio})` }"
+        />
         <view
           v-for="(step, index) in steps"
-          :key="index"
-          class="flex flex-col items-center z-10 flex-1"
+          :key="step.name"
+          class="order-progress__step"
+          :class="{ 'order-progress__step--active': index <= currentStep }"
         >
           <view
-            class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold mb-1"
-            :class="index < currentStep
-              ? 'text-white shadow-sm'
-              : index === currentStep
-                ? 'text-white shadow-sm'
-                : 'bg-gray-200 text-gray-400'"
-            :style="index <= currentStep ? { background: statusColor } : {}"
+            class="order-progress__node"
+            :style="index <= currentStep ? { backgroundColor: statusColor, borderColor: statusColor } : {}"
           >
-            <up-icon v-if="index < currentStep" name="checkmark" size="12" color="#fff"></up-icon>
-            <text v-else-if="index === currentStep && isCompleted">✓</text>
+            <up-icon v-if="index < currentStep || (index === currentStep && isCompleted)" name="checkmark" size="11" color="#fff" />
             <text v-else>{{ index + 1 }}</text>
           </view>
-          <text
-            :class="index <= currentStep ? 'text-xs font-medium text-gray-700' : 'text-xs text-gray-400'"
-            style="font-size: 20rpx;"
-          >{{ step.name }}</text>
+          <text class="order-progress__label">{{ step.name }}</text>
         </view>
       </view>
     </view>
@@ -57,7 +46,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { getOrderStatusInfo, ORDER_STATUS } from '../../../utils/theme'
+import { getOrderStatusInfo } from '../../../utils/theme'
 
 interface Props {
   status: number
@@ -80,9 +69,14 @@ const isCompleted = computed(() => props.status === 7)
 
 const statusInfo = computed(() => getOrderStatusInfo(props.status))
 const statusColor = computed(() => statusInfo.value.color)
-const gradient = computed(() => {
-  const info = ORDER_STATUS[props.status as keyof typeof ORDER_STATUS]
-  return info?.gradient || 'linear-gradient(135deg, #90a4ae, #607d8b)'
+const statusBg = computed(() => statusInfo.value.bgColor)
+const statusIcon = computed(() => {
+  if (isCancelled.value) return 'close-circle'
+  if (isCompleted.value) return 'checkmark-circle'
+  if ([2, 3].includes(props.status)) return 'search'
+  if ([4, 5].includes(props.status)) return 'order'
+  if (props.status === 6) return 'rmb-circle'
+  return 'clock'
 })
 
 const currentStep = computed(() => {
@@ -119,10 +113,136 @@ const statusDescription = computed(() => {
 })
 </script>
 
-<style scoped>
-/* 进度线：从第一个节点中心到最后一个节点中心 */
-.progress-track {
+<style scoped lang="scss">
+.order-progress-card {
+  margin: 18rpx 24rpx;
+  overflow: hidden;
+  border: 1rpx solid #e9edf2;
+  border-radius: 24rpx;
+  background: #fff;
+  box-shadow: 0 8rpx 24rpx rgba(31, 41, 55, 0.045);
+}
+
+.order-progress-card__summary {
+  padding: 26rpx 24rpx 22rpx;
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+}
+
+.order-progress-card__icon {
+  width: 70rpx;
+  height: 70rpx;
+  border-radius: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.order-progress-card__copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.order-progress-card__title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.order-progress-card__title {
+  color: #172033;
+  font-size: 32rpx;
+  line-height: 44rpx;
+  font-weight: 750;
+}
+
+.order-progress-card__time {
+  color: #a1a9b6;
+  font-size: 20rpx;
+  line-height: 28rpx;
+  white-space: nowrap;
+}
+
+.order-progress-card__description {
+  display: block;
+  margin-top: 5rpx;
+  color: #7b8798;
+  font-size: 22rpx;
+  line-height: 32rpx;
+}
+
+.order-progress-card__steps {
+  padding: 22rpx 18rpx 24rpx;
+  border-top: 1rpx solid #edf0f4;
+}
+
+.order-progress-card__cancelled {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10rpx;
+  color: #7b8798;
+  font-size: 23rpx;
+}
+
+.order-progress {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.order-progress__track {
+  position: absolute;
   left: 10%;
   right: 10%;
+  top: 20rpx;
+  height: 4rpx;
+  z-index: 0;
+  background: #e8ecf1;
+}
+
+.order-progress__track--active {
+  transform-origin: left center;
+}
+
+.order-progress__step {
+  position: relative;
+  z-index: 1;
+  width: 20%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.order-progress__node {
+  width: 42rpx;
+  height: 42rpx;
+  border: 4rpx solid #e8ecf1;
+  border-radius: 50%;
+  background: #fff;
+  color: #a2aab6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 19rpx;
+  font-weight: 700;
+  box-sizing: border-box;
+}
+
+.order-progress__label {
+  margin-top: 9rpx;
+  color: #a1a9b6;
+  font-size: 19rpx;
+  line-height: 28rpx;
+  white-space: nowrap;
+}
+
+.order-progress__step--active .order-progress__label {
+  color: #4f5c70;
+  font-weight: 600;
 }
 </style>

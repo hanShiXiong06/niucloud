@@ -1,0 +1,11 @@
+{
+  "title": "会员服务卡",
+  "desc": "贴膜次卡、期限卡、开卡收款、手机号核销和员工事实",
+  "key": "hsx_member_card",
+  "version": "0.0.1",
+  "author": "hsx",
+  "type": "addon",
+  "support_app": "hsx_erp",
+  "compile": [],
+  "support_version": "1.2.4"
+}
