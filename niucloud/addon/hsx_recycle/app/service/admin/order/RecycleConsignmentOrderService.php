@@ -15,6 +15,8 @@ use addon\hsx_recycle\app\service\admin\printer\RecyclePrintTriggerService;
 use addon\hsx_recycle\app\service\core\RecycleDateRangeService;
 use addon\hsx_recycle\app\service\core\order\OrderSubmitConfigService;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderNotifyService;
+use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpCapabilityService;
+use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpFinanceBridgeService;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -125,6 +127,13 @@ class RecycleConsignmentOrderService extends BaseAdminService
             throw new CommonException('代卖业务未开启，请先到下单设置中启用代卖业务');
         }
 
+        $erpCapability = new RecycleErpCapabilityService();
+        $erpEnabled = $erpCapability->isEnabled((int)$this->site_id);
+        $erpPlacement = $erpEnabled ? $erpCapability->defaultInboundPlacement((int)$this->site_id, 'consignment') : [];
+        if ($erpEnabled && $erpPlacement === []) {
+            throw new CommonException('ERP已接管库存，请先在ERP创建启用中的代卖仓和库位');
+        }
+
         Db::startTrans();
         try {
             $device = RecycleDevice::where([
@@ -200,6 +209,10 @@ class RecycleConsignmentOrderService extends BaseAdminService
                 'dispose_status' => RecycleOrderDict::DISPOSE_STATUS_CONSIGNED,
                 'consignment_order_id' => (int)$consignment->id,
                 'sell_price' => $listingPrice,
+                'target_warehouse_id' => (int)($erpPlacement['target_warehouse_id'] ?? $device->target_warehouse_id ?? 0),
+                'target_warehouse_name' => (string)($erpPlacement['target_warehouse_name'] ?? $device->target_warehouse_name ?? ''),
+                'target_location_id' => (int)($erpPlacement['target_location_id'] ?? $device->target_location_id ?? 0),
+                'target_location_name' => (string)($erpPlacement['target_location_name'] ?? $device->target_location_name ?? ''),
                 'update_at' => $now,
             ]);
 
@@ -222,7 +235,23 @@ class RecycleConsignmentOrderService extends BaseAdminService
 
             Db::commit();
             $this->afterConsignmentChanged((int)$consignment->id, 'create');
-            return $this->getInfo((int)$consignment->id);
+            $info = $this->getInfo((int)$consignment->id);
+            if ($erpEnabled) {
+                try {
+                    $sync = (new RecycleDeviceErpSyncService())->dispatch([(int)$device->id], ['self_erp']);
+                    $info['erp_sync'] = ['status' => 'processed', 'event_id' => (string)($sync['event_id'] ?? '')];
+                } catch (\Throwable $e) {
+                    // 代卖事实已经提交，不能把“同步失败”伪装成整单失败让用户重复转入。
+                    Log::error('【代卖入ERP】同步失败，等待重新同步', [
+                        'site_id' => $this->site_id,
+                        'consignment_id' => (int)$consignment->id,
+                        'device_id' => (int)$device->id,
+                        'message' => $e->getMessage(),
+                    ]);
+                    $info['erp_sync'] = ['status' => 'failed', 'message' => '已转入代卖，ERP入库待重新同步：' . $e->getMessage()];
+                }
+            }
+            return $info;
         } catch (\Throwable $e) {
             Db::rollback();
             throw new CommonException($e->getMessage());
@@ -256,6 +285,9 @@ class RecycleConsignmentOrderService extends BaseAdminService
 
     public function markSold(int $id, array $data): bool
     {
+        if ((new RecycleErpCapabilityService())->isEnabled((int)$this->site_id)) {
+            throw new CommonException('ERP已接管库存和销售，请在ERP完成销售出库；成交结果会自动回写代卖单');
+        }
         $order = $this->getModel($id);
         $before = $order->toArray();
         $soldPrice = round((float)($data['sold_price'] ?? 0), 2);
@@ -294,6 +326,22 @@ class RecycleConsignmentOrderService extends BaseAdminService
 
     public function settle(int $id, array $data): bool
     {
+        if ((new RecycleErpCapabilityService())->isPaymentManaged((int)$this->site_id)) {
+            $order = $this->getModel($id);
+            if ((int)$order->pay_status === RecycleConsignmentDict::PAY_STATUS_PAID || (int)$order->status === RecycleConsignmentDict::STATUS_SETTLED) {
+                throw new CommonException('该代卖订单已结算，请勿重复操作');
+            }
+            if ((int)$order->status !== RecycleConsignmentDict::STATUS_PENDING_SETTLEMENT) {
+                throw new CommonException('代卖设备尚未成交，不能结算');
+            }
+            (new RecycleErpFinanceBridgeService())->settleSourceDevices((int)$this->site_id, [(int)$order->source_device_id], [
+                'capital_account_id' => (int)($data['capital_account_id'] ?? 0),
+                'payment_images' => $data['payment_images'] ?? [],
+                'remark' => trim((string)($data['remark'] ?? '')) ?: '代卖成交结算',
+                'request_id' => trim((string)($data['request_id'] ?? '')),
+            ]);
+            return true;
+        }
         Db::startTrans();
         try {
             $order = $this->getModel($id);

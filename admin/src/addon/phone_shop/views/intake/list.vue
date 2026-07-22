@@ -2,17 +2,15 @@
     <div class="main-container">
         <el-card class="box-card !border-none" shadow="never">
 
-            <div class="flex justify-between items-center">
-                <span class="text-page-title">待上架货源</span>
-                <div class="flex items-center gap-3">
-                    <span class="text-sm text-gray-400">中台定价完成的设备会自动进入此列表，销售对照信息录入商品后标记"已建品"</span>
-                    <el-button type="danger" plain size="small" @click="syncSchema">同步表结构</el-button>
-                    <el-button type="warning" plain size="small" @click="seedTest">造测试数据(临时)</el-button>
+            <div class="flex justify-between items-center gap-6">
+                <div>
+                    <span class="text-page-title">商城资料运营</span>
+                    <div class="mt-1 text-sm text-gray-400">承接 ERP 已完成拍摄和定价的回收设备，核对分类、规格与标签后发布商城</div>
                 </div>
             </div>
 
             <el-alert class="mt-3" :type="policy.can_phone_shop_operate === 1 ? 'success' : 'info'" :closable="false" show-icon
-                :title="policy.can_phone_shop_operate === 1 ? '当前由商城运营专员完善回收设备的分类、规格并上架，完成后会自动回写 ERP。' : '当前由 ERP 库存人员一次完善并直接上架；本页仅保留历史货源查看。'" />
+                :title="policy.can_phone_shop_operate === 1 ? '当前由商城运营专员核对渠道分类、规格并上架，完成后记录映射和上架状态；不会覆盖 ERP 主资料。' : '当前由 ERP 库存人员一次完善并直接上架；本页仅保留历史货源查看。'" />
 
             <el-card class="box-card !border-none my-[10px] table-search-wrap" shadow="never">
                 <el-form :inline="true" :model="table.searchParam">
@@ -117,10 +115,10 @@
         </el-dialog>
 
         <!-- 建品上架 -->
-        <el-dialog v-model="build.visible" title="建品上架" width="720px" :close-on-click-modal="false">
+        <el-dialog v-model="build.visible" title="整理商城资料并上架" width="720px" :close-on-click-modal="false">
             <el-form :model="build.form" label-width="100px" v-loading="build.submitting || build.prefilling">
                 <el-alert type="success" :closable="false" show-icon class="mb-3"
-                          title="以下字段已按「上架映射规则」自动清洗预填，可直接修改后上架。默认规则（标题/副标题模板、默认服务标签、发货方式等）已留站点配置扩展口，需调整随时告诉我。" />
+                          title="图片、销售价格和质检报告已由 ERP 带入；请核对分类、规格与展示标签，发布后会自动回写 ERP。" />
                 <el-form-item label="标题" required>
                     <el-input v-model="build.form.goods_name" placeholder="商品标题（自动：品牌 型号 内存 颜色）" />
                 </el-form-item>
@@ -204,7 +202,7 @@
             </el-form>
             <template #footer>
                 <el-button @click="build.visible = false">取消</el-button>
-                <el-button type="primary" :loading="build.submitting" @click="submitBuild">确认建品上架</el-button>
+                <el-button type="primary" :loading="build.submitting" @click="submitBuild">确认发布商城</el-button>
             </template>
         </el-dialog>
     </div>
@@ -215,7 +213,7 @@ import { reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { img } from '@/utils/common'
 import { ElMessage } from 'element-plus'
-import { getDeviceIntakePages, getDeviceIntakeInfo, setDeviceIntakeStatus, seedTestDeviceIntake, buildDeviceIntake, syncDeviceIntakeSchema, previewDeviceIntake, getDeviceIntakeMaterialPolicy } from '@/addon/phone_shop/api/device_intake'
+import { getDeviceIntakePages, getDeviceIntakeInfo, setDeviceIntakeStatus, buildDeviceIntake, previewDeviceIntake, getDeviceIntakeMaterialPolicy } from '@/addon/phone_shop/api/device_intake'
 import { getBrandList, getCategoryTree, getLabelList } from '@/addon/phone_shop/api/goods'
 import { getSpecOptionsByCategory, getGrades } from '@/addon/phone_shop/api/spec'
 import CheckResultPanel from '@/addon/phone_shop/components/CheckResultPanel.vue'
@@ -287,21 +285,6 @@ const showDetail = (row: any) => {
 
 const markStatus = (row: any, status: number) => {
     setDeviceIntakeStatus({ intake_id: row.intake_id, status }).then(() => loadList(table.page))
-}
-
-// 手动同步表结构（补缺列）
-const syncSchema = () => {
-    syncDeviceIntakeSchema().then((res: any) => {
-        ElMessage.success('表结构已同步：' + JSON.stringify(res.data))
-    })
-}
-
-// 【临时】造测试数据
-const seedTest = () => {
-    seedTestDeviceIntake().then((res: any) => {
-        ElMessage.success('已灌入 ' + (res.data?.seeded ?? 0) + ' 条测试货源')
-        loadList(1)
-    })
 }
 
 // —— 建品表单选项 ——
@@ -403,6 +386,10 @@ const openBuild = (row: any) => {
         build.check = m.check || {}
         build.form.goods_name = m.goods_name || build.form.goods_name
         build.form.sub_title = m.sub_title || ''
+        if (Array.isArray(m.goods_category) && m.goods_category.length) {
+            build.form.goods_category = m.goods_category.map((id: any) => Number(id)).filter(Boolean)
+            loadSpecOptions(build.form.goods_category)
+        }
         build.form.memory = m.memory_group || build.form.memory
         build.form.condition_grade = m.condition_grade || build.form.condition_grade
         build.form.service_ids = m.service_ids || []

@@ -86,6 +86,9 @@ class RecycleConsignmentOrder extends BaseAdminController
         $data = $this->request->params([
             ['settlement_amount', 0],
             ['remark', ''],
+            ['capital_account_id', 0],
+            ['payment_images', []],
+            ['request_id', ''],
         ]);
         return success($this->service->settle($id, $data));
     }

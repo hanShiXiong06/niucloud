@@ -1,4 +1,8 @@
 -- hsx_erp clean uninstall SQL
+DROP TABLE IF EXISTS `{{prefix}}erp_channel_listing`;
+DROP TABLE IF EXISTS `{{prefix}}erp_channel_attribute_value_mapping`;
+DROP TABLE IF EXISTS `{{prefix}}erp_channel_attribute_mapping`;
+DROP TABLE IF EXISTS `{{prefix}}erp_channel_category_mapping`;
 DROP TABLE IF EXISTS `{{prefix}}erp_catalog_import_task`;
 DROP TABLE IF EXISTS `{{prefix}}erp_site_catalog_product`;
 DROP TABLE IF EXISTS `{{prefix}}erp_catalog_product_master`;
@@ -36,3 +40,7 @@ DROP TABLE IF EXISTS `{{prefix}}erp_warehouse`;
 DROP TABLE IF EXISTS `{{prefix}}erp_capital_account`;
 DROP TABLE IF EXISTS `{{prefix}}erp_inbox_event`;
 DROP TABLE IF EXISTS `{{prefix}}erp_outbox_event`;
+DROP TABLE IF EXISTS `{{prefix}}erp_print_job`;
+DROP TABLE IF EXISTS `{{prefix}}erp_print_scene`;
+DROP TABLE IF EXISTS `{{prefix}}erp_print_template`;
+DROP TABLE IF EXISTS `{{prefix}}erp_printer`;

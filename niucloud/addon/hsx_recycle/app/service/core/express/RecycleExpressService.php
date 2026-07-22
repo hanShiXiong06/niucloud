@@ -3,21 +3,17 @@ declare(strict_types=1);
 
 namespace addon\hsx_recycle\app\service\core\express;
 
-use addon\hsx_recycle\app\dict\express\ExpressProviderDict;
-use addon\hsx_recycle\app\model\express\ExpressProviderConfig;
 use addon\hsx_recycle\app\model\express\ExpressOrderRecord;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
-use addon\hsx_recycle\app\model\yisu\YisuProductConfig;
 use addon\hsx_recycle\app\service\core\ExpressOrderService;
 use addon\hsx_recycle\app\service\core\order\OrderSubmitConfigService;
-use addon\hsx_recycle\app\service\core\third_party\RecycleThirdPartyConfigService;
 use core\exception\CommonException;
 use think\facade\Db;
 use think\facade\Log;
 
 /**
  * 统一快递服务
- * 2.0 阶段仅保留亿速快递，订单侧仍通过本服务访问平台快递能力。
+ * 对回收业务保持原接口兼容，实际供应商由统一快递注册中心解析。
  * Class RecycleExpressService
  * @package addon\hsx_recycle\app\service\core\express
  */
@@ -31,25 +27,7 @@ class RecycleExpressService
      */
     public function getActiveProvider(int $siteId): string
     {
-        $configService = new RecycleThirdPartyConfigService();
-        if ($configService->hasSavedConfig($siteId)) {
-            if (!$configService->isServiceEnabled($siteId, 'express_order')) {
-                throw new CommonException('快递服务未启用，请在第三方配置中心启用亿速快递');
-            }
-            if (!$configService->isProviderConfigComplete($siteId, 'express_order', ExpressProviderDict::PROVIDER_YISU)) {
-                throw new CommonException('亿速快递配置不完整，请在第三方配置中心配置');
-            }
-            return ExpressProviderDict::PROVIDER_YISU;
-        }
-
-        $provider = ExpressProviderConfig::getDefaultProvider($siteId);
-        if (empty($provider)) {
-            throw new CommonException('未配置快递服务商，请在后台设置');
-        }
-        if ($provider !== ExpressProviderDict::PROVIDER_YISU) {
-            throw new CommonException('当前仅支持亿速快递，请在后台启用亿速快递服务');
-        }
-        return $provider;
+        return (string)(new ExpressGatewayService())->activeProvider($siteId)['key'];
     }
 
     /**
@@ -71,13 +49,13 @@ class RecycleExpressService
             throw new CommonException('未配置商户收货地址，请先在后台配置');
         }
 
-        return $this->getYisuQuote($siteId, $senderAddress, $shopAddress, $weight, $packageCount);
+        return $this->getProviderQuote($siteId, $provider, $senderAddress, $shopAddress, $weight, $packageCount);
     }
 
     /**
-     * 亿速报价
+     * 当前供应商报价
      */
-    private function getYisuQuote(int $siteId, array $sender, array $receiver, float $weight, int $packageCount): array
+    private function getProviderQuote(int $siteId, string $provider, array $sender, array $receiver, float $weight, int $packageCount): array
     {
         $expressService = new ExpressOrderService();
 
@@ -93,6 +71,7 @@ class RecycleExpressService
             'receiveAddress' => $receiver['address'] ?? '',
             'weight' => $weight,
             'packageCount' => $packageCount,
+            'provider' => $provider,
         ];
 
         $quoteList = $expressService->getQuote($siteId, $params);
@@ -112,15 +91,15 @@ class RecycleExpressService
                 'product_name' => $item['productName'] ?? $item['channelName'] ?? $item['typeName'] ?? '',
                 'price' => $price,
                 'estimated_time' => $item['aging'] ?? $item['promiseTimeType'] ?? '',
-                'provider' => ExpressProviderDict::PROVIDER_YISU,
+                'provider' => $provider,
                 'logo' => $item['logo'] ?? '',
                 'raw' => $item,
             ];
         }
 
         return [
-            'provider' => ExpressProviderDict::PROVIDER_YISU,
-            'provider_name' => '亿速物流',
+            'provider' => $provider,
+            'provider_name' => (string)(new ExpressGatewayService())->activeProvider($siteId)['name'],
             'list' => $result,
         ];
     }
@@ -144,7 +123,6 @@ class RecycleExpressService
             throw new CommonException('未配置商户收货地址，请先在后台配置');
         }
 
-        Db::startTrans();
         try {
             // 获取回收订单
             $order = RecycleOrder::where('site_id', $siteId)->find($recycleOrderId);
@@ -157,11 +135,9 @@ class RecycleExpressService
                 throw new CommonException('该订单已有快递单，运单号：' . $order->express_no);
             }
 
-            $result = [];
-
-            $result = $this->createYisuOrder($siteId, $order, $expressConfig, $shopAddress, $operatorInfo);
-
-            Db::commit();
+            // 外部下单不能被数据库事务回滚。先由统一快递能力完成幂等下单和本地运单留痕，
+            // 再更新回收订单；重试时会复用相同 third_order_no 的既有运单。
+            $result = $this->createProviderOrder($siteId, $provider, $order, $expressConfig, $shopAddress, $operatorInfo);
 
             Log::info("回收订单{$recycleOrderId}快递下单成功", [
                 'provider' => $provider,
@@ -172,25 +148,25 @@ class RecycleExpressService
             return $result;
 
         } catch (\Exception $e) {
-            Db::rollback();
             Log::error("回收订单{$recycleOrderId}快递下单失败: " . $e->getMessage());
             throw new CommonException('快递下单失败：' . $e->getMessage());
         }
     }
 
     /**
-     * 亿速下单
+     * 当前供应商下单
      */
-    private function createYisuOrder(int $siteId, $order, array $config, array $shopAddress, array $operatorInfo): array
+    private function createProviderOrder(int $siteId, string $provider, $order, array $config, array $shopAddress, array $operatorInfo): array
     {
         $expressService = new ExpressOrderService();
+        $providerInfo = (new ExpressGatewayService())->activeProvider($siteId);
 
-        $productCode = $this->resolveYisuProductCode($siteId, $config);
+        $productCode = $this->resolveProductCode($siteId, $config, $expressService->getProducts($siteId));
         if (empty($config['product_code'])) {
             $config['product_code'] = $productCode;
         }
         if (empty($productCode)) {
-            throw new CommonException('未配置可用的亿速快递产品，请先在后台启用快递产品');
+            throw new CommonException('未配置可用的快递产品，请先在后台启用快递产品');
         }
 
         foreach (['province' => '省份', 'city' => '城市', 'district' => '区县', 'address' => '详细地址'] as $field => $label) {
@@ -202,8 +178,8 @@ class RecycleExpressService
         $params = [
             // 快递产品
             'deliveryType' => $productCode,
-            'provider' => ExpressProviderDict::PROVIDER_YISU,
-            'provider_name' => trim((string)($config['provider_name'] ?? ExpressProviderDict::getProviderName(ExpressProviderDict::PROVIDER_YISU))),
+            'provider' => $provider,
+            'provider_name' => trim((string)($config['provider_name'] ?? $providerInfo['name'] ?? $provider)),
 
             // 寄件人(用户)
             'senderName' => $config['sender_name'] ?? '',
@@ -234,26 +210,26 @@ class RecycleExpressService
             'estimated_cost' => (float)($config['estimated_cost'] ?? 0),
         ];
 
-        // 调用亿速下单
+        // 调用当前供应商下单
         $apiResult = $expressService->createOrder($siteId, $params);
 
         $expressNo = $apiResult['deliveryId'] ?? $apiResult['orderNo'] ?? '';
         $orderNo = $apiResult['orderNo'] ?? '';
         if (empty($expressNo) && empty($orderNo)) {
-            throw new CommonException('亿速下单成功但未返回运单号');
+            throw new CommonException('快递下单成功但未返回运单号');
         }
         $estimatedCost = (float)($config['estimated_cost'] ?? 0);
 
         // 更新回收订单
         $order->save([
             'express_no' => $expressNo,
-            'delivery_platform' => ExpressProviderDict::PROVIDER_YISU,
+            'delivery_platform' => $provider,
             'delivery_fee' => $estimatedCost,
             'delivery_status' => 1, // 已下单
             'delivery_order_id' => $orderNo,
             'delivery_data' => json_encode([
-                'provider' => ExpressProviderDict::PROVIDER_YISU,
-                'provider_name' => $params['provider_name'] ?? ExpressProviderDict::getProviderName(ExpressProviderDict::PROVIDER_YISU),
+                'provider' => $provider,
+                'provider_name' => $params['provider_name'] ?? $provider,
                 'sender' => [
                     'name' => $config['sender_name'] ?? '',
                     'mobile' => $config['sender_mobile'] ?? '',
@@ -280,12 +256,12 @@ class RecycleExpressService
             'order_no' => $orderNo,
             'delivery_id' => $expressNo,
             'estimated_cost' => $estimatedCost,
-            'provider' => ExpressProviderDict::PROVIDER_YISU,
-            'provider_name' => $params['provider_name'] ?? ExpressProviderDict::getProviderName(ExpressProviderDict::PROVIDER_YISU),
+            'provider' => $provider,
+            'provider_name' => $params['provider_name'] ?? $provider,
         ];
     }
 
-    private function resolveYisuProductCode(int $siteId, array $config): string
+    private function resolveProductCode(int $siteId, array $config, array $enabledProducts): string
     {
         $productCode = trim((string)($config['product_code'] ?? ''));
         if ($productCode !== '') {
@@ -295,14 +271,17 @@ class RecycleExpressService
         try {
             $submitConfig = (new OrderSubmitConfigService())->getConfig($siteId);
             $defaultProductCode = trim((string)($submitConfig['platform_delivery']['product_code'] ?? ''));
-            if ($defaultProductCode !== '' && YisuProductConfig::isProductEnabled($siteId, $defaultProductCode)) {
-                return $defaultProductCode;
+            if ($defaultProductCode !== '') {
+                foreach ($enabledProducts as $product) {
+                    if ((string)($product['product_code'] ?? '') === $defaultProductCode && !empty($product['enabled'])) {
+                        return $defaultProductCode;
+                    }
+                }
             }
         } catch (\Throwable $e) {
             Log::warning('读取平台快递默认线路失败：' . $e->getMessage(), ['site_id' => $siteId]);
         }
 
-        $enabledProducts = YisuProductConfig::getEnabledProducts($siteId);
         return !empty($enabledProducts) ? (string)($enabledProducts[0]['product_code'] ?? '') : '';
     }
 
@@ -331,15 +310,10 @@ class RecycleExpressService
 
         $platform = $order->delivery_platform;
 
-        Db::startTrans();
         try {
-            if ($platform !== ExpressProviderDict::PROVIDER_YISU) {
-                throw new CommonException("未知的快递平台: {$platform}");
-            }
-
             $expressService = new ExpressOrderService();
             $orderNo = $order->delivery_order_id ?: $order->express_no;
-            $expressService->cancelOrder($siteId, $orderNo);
+            $expressService->cancelOrder($siteId, $orderNo, (string)$platform);
 
             // 更新回收订单
             $order->save([
@@ -358,8 +332,6 @@ class RecycleExpressService
                 'delivery_data' => json_encode($deliveryData, JSON_UNESCAPED_UNICODE),
             ]);
 
-            Db::commit();
-
             Log::info("回收订单{$recycleOrderId}快递已取消", [
                 'platform' => $platform,
                 'operator' => $operatorInfo,
@@ -368,7 +340,6 @@ class RecycleExpressService
             return true;
 
         } catch (\Exception $e) {
-            Db::rollback();
             throw new CommonException('取消快递失败：' . $e->getMessage());
         }
     }
@@ -387,14 +358,11 @@ class RecycleExpressService
             throw new CommonException('订单不存在或未下快递单');
         }
 
-        $platform = $order->delivery_platform;
-
-        if ($platform !== ExpressProviderDict::PROVIDER_YISU) {
-            throw new CommonException("未知的快递平台: {$platform}");
-        }
-
         $expressService = new ExpressOrderService();
-        return $expressService->trackOrder($siteId, $order->express_no);
+        return $expressService->getOrderDetail($siteId, [
+            'delivery_id' => $order->express_no,
+            'provider' => (string)$order->delivery_platform,
+        ])['trace_list'] ?? [];
     }
 
     /**
@@ -415,42 +383,19 @@ class RecycleExpressService
      */
     public function getAvailableProviders(int $siteId): array
     {
-        $configService = new RecycleThirdPartyConfigService();
-        if ($configService->hasSavedConfig($siteId)) {
-            if (!$configService->isServiceEnabled($siteId, 'express_order')) {
-                return [];
-            }
-
-            return [
-                [
-                    'provider' => ExpressProviderDict::PROVIDER_YISU,
-                    'provider_name' => ExpressProviderDict::getProviderName(ExpressProviderDict::PROVIDER_YISU),
-                    'is_default' => 1,
-                    'support_quote' => true,
-                    'support_cancel' => true,
-                    'support_track' => true,
-                ],
-            ];
+        $gateway = new ExpressGatewayService();
+        if (!$gateway->isReady($siteId)) {
+            return [];
         }
-
-        $providers = ExpressProviderConfig::getEnabledProviders($siteId);
-        $allProviders = ExpressProviderDict::getProviders();
-
-        $result = [];
-        foreach ($providers as $p) {
-            $key = $p['provider'];
-            $info = $allProviders[$key] ?? [];
-            $result[] = [
-                'provider' => $key,
-                'provider_name' => $p['provider_name'],
-                'is_default' => $p['is_default'],
-                'support_quote' => $info['support_quote'] ?? false,
-                'support_cancel' => $info['support_cancel'] ?? false,
-                'support_track' => $info['support_track'] ?? false,
-            ];
-        }
-
-        return $result;
+        $provider = $gateway->activeProvider($siteId);
+        return [[
+            'provider' => $provider['key'],
+            'provider_name' => $provider['name'],
+            'is_default' => 1,
+            'support_quote' => true,
+            'support_cancel' => true,
+            'support_track' => true,
+        ]];
     }
 
     /**
@@ -460,14 +405,7 @@ class RecycleExpressService
      */
     public function isExpressEnabled(int $siteId): bool
     {
-        $configService = new RecycleThirdPartyConfigService();
-        if ($configService->hasSavedConfig($siteId)) {
-            return $configService->isServiceEnabled($siteId, 'express_order')
-                && $configService->isProviderConfigComplete($siteId, 'express_order', ExpressProviderDict::PROVIDER_YISU);
-        }
-
-        $provider = ExpressProviderConfig::getDefaultProvider($siteId);
-        return !empty($provider);
+        return (new ExpressGatewayService())->isReady($siteId);
     }
 
     /**

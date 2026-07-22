@@ -23,11 +23,42 @@ class ErpConfigService extends BaseAdminService
         return $this->normalize($value);
     }
 
+    /** 跨插件只读渠道策略；调用方不需要也不允许读取 ERP 私有表。 */
+    public function getMarketplaceChannel(string $channelKey = 'phone_shop', ?int $siteId = null): array
+    {
+        $siteId = $siteId ?? (int)$this->site_id;
+        $value = (new CoreConfigService())->getConfigValue($siteId, self::CONFIG_KEY);
+        $marketplace = (array)((is_array($value) ? $value : [])['marketplace'] ?? []);
+        $legacyOwner = in_array((string)($marketplace['recycle_material_owner'] ?? 'erp'), ['erp', 'phone_shop'], true)
+            ? (string)$marketplace['recycle_material_owner'] : 'erp';
+        $channel = (array)($marketplace['channels'][$channelKey] ?? []);
+        if ($channel === []) {
+            $channel = $legacyOwner === 'phone_shop'
+                ? ['enabled' => 1, 'category_mode' => 'independent', 'spec_mode' => 'independent', 'publish_mode' => 'manual']
+                : ['enabled' => 1, 'category_mode' => 'erp', 'spec_mode' => 'erp', 'publish_mode' => 'direct'];
+        }
+        return [
+            'channel_key' => preg_replace('/[^a-zA-Z0-9_\-]/', '', $channelKey) ?: 'phone_shop',
+            'enabled' => $this->boolInt($channel['enabled'] ?? 1),
+            'category_mode' => in_array((string)($channel['category_mode'] ?? 'erp'), ['erp', 'independent'], true) ? (string)$channel['category_mode'] : 'erp',
+            'spec_mode' => in_array((string)($channel['spec_mode'] ?? 'erp'), ['erp', 'independent'], true) ? (string)$channel['spec_mode'] : 'erp',
+            'publish_mode' => in_array((string)($channel['publish_mode'] ?? 'direct'), ['direct', 'manual'], true) ? (string)$channel['publish_mode'] : 'direct',
+            'erp_is_master' => 1,
+            'channel_can_write_erp_master' => 0,
+        ];
+    }
+
     public function saveRules(array $data): array
     {
         $config = new CoreConfigService();
         $stored = $config->getConfigValue($this->site_id, self::CONFIG_KEY);
-        $rules = $this->normalize(array_replace_recursive(is_array($stored) ? $stored : [], $data));
+        $merged = array_replace_recursive(is_array($stored) ? $stored : [], $data);
+        // 兼容仍只提交旧 recycle_material_owner 的客户端：显式旧值应能覆盖已存的新策略。
+        if (array_key_exists('recycle_material_owner', (array)($data['marketplace'] ?? []))
+            && !isset($data['marketplace']['channels']['phone_shop'])) {
+            unset($merged['marketplace']['channels']['phone_shop']);
+        }
+        $rules = $this->normalize($merged);
         $config->setConfig($this->site_id, self::CONFIG_KEY, $rules);
         return $rules;
     }
@@ -181,18 +212,38 @@ class ErpConfigService extends BaseAdminService
         $rules['category_sync']['enabled'] = $this->boolInt($rules['category_sync']['enabled'] ?? 0);
         $rules['category_sync']['initialized'] = $this->boolInt($rules['category_sync']['initialized'] ?? 0);
         $rules['category_sync']['provider'] = preg_replace('/[^a-zA-Z0-9_\-]/', '', (string)($rules['category_sync']['provider'] ?? 'phone_shop')) ?: 'phone_shop';
-        $rules['category_sync']['mode'] = in_array((string)($rules['category_sync']['mode'] ?? 'disabled'), ['disabled', 'two_way', 'shop_master', 'erp_master'], true)
-            ? (string)$rules['category_sync']['mode']
+        // 旧字段只保留向后兼容。ERP 已确定为主数据，禁止继续保存 two_way/shop_master。
+        $rules['category_sync']['mode'] = (string)($rules['category_sync']['mode'] ?? 'disabled') === 'erp_master'
+            ? 'erp_master'
             : 'disabled';
         $rules['category_sync']['last_action'] = in_array((string)($rules['category_sync']['last_action'] ?? ''), ['', 'pull', 'push', 'reconcile', 'bootstrap'], true)
             ? (string)$rules['category_sync']['last_action']
             : '';
 
-        $rules['marketplace']['recycle_material_owner'] = in_array(
-            (string)($rules['marketplace']['recycle_material_owner'] ?? 'erp'),
-            ['erp', 'phone_shop'],
-            true
-        ) ? (string)$rules['marketplace']['recycle_material_owner'] : 'erp';
+        $owner = in_array((string)($rules['marketplace']['recycle_material_owner'] ?? 'erp'), ['erp', 'phone_shop'], true)
+            ? (string)$rules['marketplace']['recycle_material_owner']
+            : 'erp';
+        $storedChannel = (array)($data['marketplace']['channels']['phone_shop'] ?? []);
+        $channel = (array)($rules['marketplace']['channels']['phone_shop'] ?? []);
+        // 老站点只有资料负责人开关时，自动翻译成新渠道策略，保证升级后行为不变。
+        if ($storedChannel === []) {
+            $channel = $owner === 'phone_shop'
+                ? ['enabled' => 1, 'category_mode' => 'independent', 'spec_mode' => 'independent', 'publish_mode' => 'manual']
+                : ['enabled' => 1, 'category_mode' => 'erp', 'spec_mode' => 'erp', 'publish_mode' => 'direct'];
+        }
+        $channel['enabled'] = $this->boolInt($channel['enabled'] ?? 1);
+        $channel['category_mode'] = in_array((string)($channel['category_mode'] ?? 'erp'), ['erp', 'independent'], true)
+            ? (string)$channel['category_mode'] : 'erp';
+        $channel['spec_mode'] = in_array((string)($channel['spec_mode'] ?? 'erp'), ['erp', 'independent'], true)
+            ? (string)$channel['spec_mode'] : 'erp';
+        $channel['publish_mode'] = in_array((string)($channel['publish_mode'] ?? 'direct'), ['direct', 'manual'], true)
+            ? (string)$channel['publish_mode'] : 'direct';
+        $rules['marketplace']['channels']['phone_shop'] = $channel;
+        // 保留旧字段供已经部署的库存/商城页面读取，但它始终由新策略派生，避免两个开关互相打架。
+        $rules['marketplace']['recycle_material_owner'] = $channel['publish_mode'] === 'manual' ? 'phone_shop' : 'erp';
+        $rules['category_sync']['enabled'] = $channel['enabled'];
+        $rules['category_sync']['provider'] = 'phone_shop';
+        $rules['category_sync']['mode'] = $channel['category_mode'] === 'erp' ? 'erp_master' : 'disabled';
 
         $rules['consignment']['enabled'] = $this->boolInt($rules['consignment']['enabled'] ?? 0);
         $rules['consignment']['settle_payable_after_receipt'] = $this->boolInt($rules['consignment']['settle_payable_after_receipt'] ?? 1);
@@ -481,8 +532,18 @@ class ErpConfigService extends BaseAdminService
                 'last_action' => '',
             ],
             'marketplace' => [
-                // erp：小团队在库存中心一次完成；phone_shop：商城运营专员在待上架货源完善。
+                // 旧字段由 channels.phone_shop.publish_mode 派生，供旧调用方兼容。
                 'recycle_material_owner' => 'erp',
+                'channels' => [
+                    'phone_shop' => [
+                        'enabled' => 1,
+                        // erp：商城消费 ERP 投影；independent：商城保留独立数据并建立映射。
+                        'category_mode' => 'erp',
+                        'spec_mode' => 'erp',
+                        // direct：ERP 一键发布；manual：进入商城运营待办。
+                        'publish_mode' => 'direct',
+                    ],
+                ],
             ],
             'consignment' => [
                 'enabled' => 0,

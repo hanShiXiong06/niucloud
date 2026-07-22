@@ -1185,23 +1185,6 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_print_variable` (
   KEY `idx_site_category` (`site_id`,`category`,`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='回收打印变量配置表';
 
-CREATE TABLE IF NOT EXISTS `{{prefix}}yisu_product_config` (
-  `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-  `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',
-  `product_code` varchar(50) NOT NULL DEFAULT '' COMMENT '产品编码',
-  `product_name` varchar(100) NOT NULL DEFAULT '' COMMENT '产品名称',
-  `logo` varchar(255) NOT NULL DEFAULT '' COMMENT '产品图标',
-  `status` tinyint(1) NOT NULL DEFAULT '0' COMMENT '状态',
-  `sort` int NOT NULL DEFAULT '0' COMMENT '排序',
-  `create_at` int NOT NULL DEFAULT '0',
-  `update_at` int NOT NULL DEFAULT '0',
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_site_product` (`site_id`,`product_code`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='易速快递产品配置';
-
-
-
-
 -- ============ 质检：参考表 + 数据表(全ID映射) ============
 CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_check_dict` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,

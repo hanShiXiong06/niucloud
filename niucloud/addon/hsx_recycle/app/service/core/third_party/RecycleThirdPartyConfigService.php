@@ -60,7 +60,9 @@ class RecycleThirdPartyConfigService extends BaseCoreService
             $this->deviceQueryConfigService->setConfig($siteId, $data['device_query']);
             unset($data['device_query']);
         }
-        $config = $this->mergeConfig($this->getDefaultConfig(), $data);
+        // 独立服务页面只提交自己的配置段。必须基于旧配置做增量合并，
+        // 否则保存“地址解析”会把“快递发件”等其他服务重置为默认值。
+        $config = $this->mergeConfig($old, $data);
         $config = $this->keepMaskedSecret($config, $old);
         $this->configService->setConfig($siteId, RecycleConfigKeyDict::THIRD_PARTY, $config);
 

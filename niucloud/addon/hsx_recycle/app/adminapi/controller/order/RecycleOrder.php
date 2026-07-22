@@ -6,10 +6,10 @@ namespace addon\hsx_recycle\app\adminapi\controller\order;
 use addon\hsx_recycle\app\service\admin\order\RecycleOrderService;
 use addon\hsx_recycle\app\service\admin\order\RecycleOrderService as OrderFlowService;
 use addon\hsx_recycle\app\service\admin\order\RecycleDevicePaymentService;
-use addon\hsx_recycle\app\model\order\RecycleOrder as RecycleOrderModel;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\validate\RecycleOrderValidate;
 use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpCapabilityService;
+use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpFinanceBridgeService;
 use core\base\BaseAdminController;
 use core\exception\CommonException;
 use think\App;
@@ -238,13 +238,18 @@ class RecycleOrder extends BaseAdminController
             ['remark', ''],
             ['account', ''],
             ['payment_images', ''],
-            ['payment_info', []]
+            ['payment_info', []],
+            ['capital_account_id', 0],
+            ['request_id', '']
         ]);
         $data = $this->fillPaymentInfo($data);
 
         // 参数验证
         $this->validate->scene('payment')->check(array_merge(['id' => $id], $data));
 
+        if ((new RecycleErpCapabilityService())->isPaymentManaged($this->request->siteId())) {
+            return success($this->settleByErp($id, $this->orderDeviceIds($id), $data));
+        }
         (new RecycleDevicePaymentService())->assertOrderPaymentAllowed($id);
 
         return success($this->flowService->payment($id, $data));
@@ -268,28 +273,20 @@ class RecycleOrder extends BaseAdminController
             ['account', ''],           // 收款账号
             ['payment_images', ''],    // 打款凭证图片
             ['payment_info', []],
-            ['capital_account_id', 0]  // 出账户头ID（来自ERP资金账户，0=未选）
+            ['capital_account_id', 0], // 出账户头ID（来自ERP资金账户，0=未选）
+            ['request_id', '']
         ]);
         $data = $this->fillPaymentInfo($data);
 
         // 参数验证
         $this->validate->scene('payment')->check(array_merge(['id' => $id], $data));
 
+        if ((new RecycleErpCapabilityService())->isPaymentManaged($this->request->siteId())) {
+            return success($this->settleByErp($id, $this->orderDeviceIds($id), $data));
+        }
         (new RecycleDevicePaymentService())->assertOrderPaymentAllowed($id);
 
-        // 选了出账户头则先校验余额够不够, 不够提示换户头(不动打款)
-        $capId = (int)($data['capital_account_id'] ?? 0);
-        if ($capId > 0) {
-            $amt = (float)RecycleDevice::where([['order_id', '=', $id], ['site_id', '=', $this->request->siteId()]])->sum('final_price');
-            $this->assertCapitalEnough($capId, $amt);
-        }
-
-        $result = $this->flowService->payment($id, $data);
-        // 打款成功后，若选了出账户头则在ERP记一笔出账流水（整单：按设备final_price合计）
-        $this->recordCapitalOutflow($id, (int)($data['capital_account_id'] ?? 0), null, '');
-        // 同步核销该订单设备的应付（与资金扣减配套，形成完整账目往来），并把出账户头带给结算用于对账展示
-        $this->settleErpPayables($this->orderDeviceIds($id), (int)($data['capital_account_id'] ?? 0));
-        return success($result);
+        return success($this->flowService->payment($id, $data));
     }
 
     /**
@@ -311,37 +308,23 @@ class RecycleOrder extends BaseAdminController
             ['account', ''],
             ['payment_images', ''],
             ['payment_info', []],
-            ['capital_account_id', 0]  // 出账户头ID（来自ERP资金账户，0=未选）
+            ['capital_account_id', 0], // 出账户头ID（来自ERP资金账户，0=未选）
+            ['request_id', '']
         ]);
         $data = $this->fillPaymentInfo($data);
 
-        // 选了出账户头则先校验余额(按本批次设备final_price合计), 不够提示换户头
-        $capId = (int)($data['capital_account_id'] ?? 0);
-        if ($capId > 0) {
-            $dids = array_values(array_filter(array_map('intval', (array)($data['device_ids'] ?? []))));
-            if (!empty($dids)) {
-                $amt = (float)RecycleDevice::where([['site_id', '=', $this->request->siteId()]])->whereIn('id', $dids)->sum('final_price');
-                $this->assertCapitalEnough($capId, $amt);
-            }
+        $deviceIds = array_values(array_unique(array_filter(array_map('intval', (array)($data['device_ids'] ?? [])))));
+        if ((new RecycleErpCapabilityService())->isPaymentManaged($this->request->siteId())) {
+            return success($this->settleByErp($id, $deviceIds, $data));
         }
 
-        $result = (new RecycleDevicePaymentService())->payDevices($id, $data);
-        // 打款成功后，若选了出账户头则在ERP记一笔出账流水（设备级：本批次实付金额）
-        $this->recordCapitalOutflow(
-            $id,
-            (int)($data['capital_account_id'] ?? 0),
-            (float)($result['paid_amount'] ?? 0),
-            (string)($result['pay_no'] ?? '')
-        );
-        // 同步核销本批次设备的应付（与资金扣减配套），并把出账户头带给结算用于对账展示
-        $this->settleErpPayables(array_map('intval', (array)($data['device_ids'] ?? [])), (int)($data['capital_account_id'] ?? 0));
-        return success($result);
+        // 未安装ERP时继续使用回收插件原有本地打款事实。
+        return success((new RecycleDevicePaymentService())->payDevices($id, $data));
     }
 
     /**
      * 出账户头候选（打款弹框用）
-     * 解耦：发 GetErpCapitalAccountList 事件向 ERP 取启用资金账户；
-     * ERP 未安装则无人应答 → 返回空 → 前端隐藏户头选择，不影响原打款流程。
+     * 统一通过只读契约向 ERP 获取，不再直连 ERP 服务或使用旧事件。
      * @return mixed
      */
     public function capitalAccountOptions()
@@ -350,32 +333,7 @@ class RecycleOrder extends BaseAdminController
         $accounts = [];
         $erpConnected = (bool)$capability['erp_connected'];
         if ($erpConnected) {
-            try {
-                $raw = (array)event('GetErpCapitalAccountList', ['site_id' => $this->request->siteId()]);
-                foreach ($raw as $r) {
-                    if (is_array($r)) {
-                        $accounts = array_values($r);
-                        break;
-                    }
-                }
-            } catch (\Throwable $e) {
-                $accounts = [];
-            }
-        }
-
-        // 兜底：事件未应答时，若 ERP 类在场则直接取（避免依赖事件注册时机）
-        if ($erpConnected && empty($accounts)) {
-            $cls = '\\addon\\hsx_erp\\app\\service\\admin\\ErpCapitalAccountService';
-            if (class_exists($cls)) {
-                try {
-                    $all = (new $cls())->getAll();
-                    $accounts = array_values(array_filter($all, function ($a) {
-                        return (int)($a['status'] ?? 1) === 1;
-                    }));
-                } catch (\Throwable $e) {
-                    // ERP 在场但取数失败：保持已连接判断，账户留空
-                }
-            }
+            $accounts = (new RecycleErpFinanceBridgeService())->capitalAccountOptions($this->request->siteId());
         }
 
         return success(array_merge(['accounts' => $accounts], $capability));
@@ -396,109 +354,22 @@ class RecycleOrder extends BaseAdminController
         }
     }
 
-    /**
-     * 打款成功后：核销这些设备在 ERP 财务的应付（与资金账户扣减配套，形成完整账目往来）。
-     * 解耦：仅发事件，ERP 未装则无人应答；失败只吞日志，绝不影响打款主流程。
-     */
-    private function settleErpPayables(array $deviceIds, int $capitalAccountId = 0): void
+    private function settleByErp(int $orderId, array $deviceIds, array $data): array
     {
-        $deviceIds = array_values(array_filter(array_map('intval', $deviceIds)));
-        if (empty($deviceIds)) {
-            return;
-        }
-        try {
-            // 现金已在 recordCapitalOutflow 扣账，这里只核销+记录户头(record_cash=false 防重复扣账)。
-            $results = (array)event('SettleErpPayableByDevice', [
-                'site_id' => $this->request->siteId(),
-                'source_device_ids' => $deviceIds,
-                'capital_account_id' => $capitalAccountId,
-                'record_cash' => false,
-                'remark' => '回收打款核销应付',
-            ]);
-            $handled = false;
-            foreach ($results as $r) {
-                if (is_array($r) && !empty($r['ok'])) { $handled = true; break; }
-            }
-            if (!$handled) {
-                $cls = '\\addon\\hsx_erp\\app\\service\\admin\\FinanceSettlementService';
-                if (class_exists($cls)) {
-                    (new $cls())->settleByDeviceIds($deviceIds, [
-                        'remark' => '回收打款核销应付',
-                        'capital_account_id' => $capitalAccountId,
-                        'record_cash' => false,
-                    ]);
-                }
-            }
-        } catch (\Throwable $e) {
-            \think\facade\Log::warning('回收打款核销应付失败：' . $e->getMessage() . ' device_ids=' . implode(',', $deviceIds));
-        }
-    }
-
-    /**
-     * 打款成功后：若选了"出账户头"且已安装 ERP，则在 ERP 记一笔出账流水（扣余额）。
-     * 解耦：仅发事件，ERP 未装则无人应答；记账失败也绝不影响打款主流程。
-     *
-     * @param int $orderId 订单ID
-     * @param int $capitalAccountId 出账户头ID（0=未选，跳过）
-     * @param float|null $amount 出账金额；null 时按订单设备 final_price 合计计算（整单打款）
-     * @param string $sourceNo 来源单号；空时回退用订单号
-     */
-    /** 打款前校验所选 ERP 出账户头余额是否充足, 不足抛异常提示换户头(ERP未装则跳过) */
-    private function assertCapitalEnough(int $capitalAccountId, float $amount): void
-    {
-        if ($capitalAccountId <= 0 || $amount <= 0) {
-            return;
-        }
-        $cls = '\\addon\\hsx_erp\\app\\service\\admin\\ErpCapitalAccountService';
-        if (class_exists($cls)) {
-            (new $cls())->assertBalanceEnough($capitalAccountId, $amount);
-        }
-    }
-
-    private function recordCapitalOutflow(int $orderId, int $capitalAccountId, ?float $amount, string $sourceNo): void
-    {
-        if ($capitalAccountId <= 0) {
-            return;
-        }
-        try {
-            $order = RecycleOrderModel::where([['id', '=', $orderId], ['site_id', '=', $this->request->siteId()]])->findOrEmpty();
-            if ($amount === null) {
-                $amount = (float)RecycleDevice::where([
-                    ['order_id', '=', $orderId],
-                    ['site_id', '=', $this->request->siteId()],
-                ])->sum('final_price');
-            }
-            $amount = round((float)$amount, 2);
-            if ($amount <= 0) {
-                return;
-            }
-            $orderNo = $order->isEmpty() ? (string)$orderId : (string)$order->order_no;
-            $entry = [
-                'account_id'        => $capitalAccountId,
-                'direction'         => 'out',
-                'amount'            => $amount,
-                'biz_type'          => 'recycle_payment',
-                'counterparty_id'   => $order->isEmpty() ? 0 : (int)$order->member_id, // 客户=会员，供流水关联到人
-                'counterparty_name' => $order->isEmpty() ? '' : (string)$order->customer_name,
-                'source_type'       => 'recycle_order',
-                'source_no'         => $sourceNo !== '' ? $sourceNo : $orderNo,
-                'source_id'         => $orderId,
-                'remark'            => '回收打款 - 订单：' . $orderNo,
-            ];
-            // 先走事件；若无人成功应答(未注册/事件缓存未刷新等)，直连 ERP 兜底记账，避免静默丢账。
-            $results = (array)event('RecordErpCapitalFlow', array_merge(['site_id' => $this->request->siteId()], $entry));
-            if (!in_array(true, $results, true)) {
-                $cls = '\\addon\\hsx_erp\\app\\service\\admin\\ErpCapitalAccountService';
-                if (class_exists($cls)) {
-                    (new $cls())->recordEntry($entry);
-                }
-            }
-        } catch (\Throwable $e) {
-            // 记日志而非静默吞掉，便于排查（不影响打款主流程）
-            \think\facade\Log::warning('回收打款记ERP资金流水失败：' . $e->getMessage(), [
-                'order_id' => $orderId, 'capital_account_id' => $capitalAccountId,
-            ]);
-        }
+        $result = (new RecycleErpFinanceBridgeService())->settleSourceDevices(
+            $this->request->siteId(),
+            $deviceIds,
+            [
+                'capital_account_id' => (int)($data['capital_account_id'] ?? 0),
+                'payment_images' => $data['payment_images'] ?? [],
+                'pay_remark' => trim((string)($data['pay_remark'] ?? $data['remark'] ?? '')) ?: '回收设备付款',
+                'request_id' => trim((string)($data['request_id'] ?? '')),
+            ]
+        );
+        return array_merge((new RecycleDevicePaymentService())->getPaymentSummary($orderId), [
+            'erp_settlement' => $result,
+            'payment_managed_by_erp' => true,
+        ]);
     }
 
     /**

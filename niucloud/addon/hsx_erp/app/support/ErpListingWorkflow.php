@@ -20,6 +20,30 @@ final class ErpListingWorkflow
         return 'need_material';
     }
 
+    /**
+     * 设备进入商城前的统一状态机。
+     *
+     * 仓库规则决定“能不能上商城”，这里决定“当前该谁接手”。商城商品无论由
+     * ERP 直上还是交给商城运营，都必须先具备可售图片和销售价格；分类、规格
+     * 则可以根据站点配置在 ERP 或商城端完成。
+     */
+    public static function statusFromAsset(array $asset, array $policy): string
+    {
+        if ((int)($policy['can_prepare_mall'] ?? 0) !== 1) return 'none';
+        if (!self::hasImages($asset['image_urls'] ?? '')) return 'need_photo';
+        if ((float)($asset['retail_price'] ?? 0) <= 0) return 'need_price';
+        if ((int)($policy['can_list_mall'] ?? 0) === 1) return 'ready';
+        return 'need_material';
+    }
+
+    /** 商城运营接单前置条件：拍图和定价已经分别闭环。 */
+    public static function canHandoffToShop(array $asset, array $policy): bool
+    {
+        return (int)($policy['can_prepare_mall'] ?? 0) === 1
+            && self::hasImages($asset['image_urls'] ?? '')
+            && (float)($asset['retail_price'] ?? 0) > 0;
+    }
+
     public static function taskStage(array $asset): string
     {
         if ((string)($asset['status'] ?? '') !== 'in_stock'
@@ -38,9 +62,9 @@ final class ErpListingWorkflow
     public static function taskName(string $stage): string
     {
         return match ($stage) {
-            self::TASK_PHOTO => '待拍照',
-            self::TASK_PRICE => '待商城定价',
-            self::TASK_PUBLISH => '待完善资料并上架',
+            self::TASK_PHOTO => '待商品拍摄',
+            self::TASK_PRICE => '待销售定价',
+            self::TASK_PUBLISH => '待商城资料整理',
             default => '待处理',
         };
     }
@@ -53,5 +77,19 @@ final class ErpListingWorkflow
             self::TASK_PUBLISH => 'publish',
             default => '',
         };
+    }
+
+    private static function hasImages(mixed $value): bool
+    {
+        if (is_array($value)) {
+            return count(array_filter($value, static fn($item): bool => trim((string)$item) !== '')) > 0;
+        }
+        $text = trim((string)$value);
+        if ($text === '') return false;
+        $decoded = json_decode($text, true);
+        if (is_array($decoded)) {
+            return count(array_filter($decoded, static fn($item): bool => trim((string)$item) !== '')) > 0;
+        }
+        return count(array_filter(array_map('trim', explode(',', $text)))) > 0;
     }
 }

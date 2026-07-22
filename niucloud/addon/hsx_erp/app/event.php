@@ -27,8 +27,14 @@ return [
         'ErpCapitalAccountOptionsRequested' => [
             'addon\hsx_erp\app\listener\ErpCapitalAccountOptionsRequested',
         ],
+        'ErpWarehouseOptionsRequested' => [
+            'addon\hsx_erp\app\listener\ErpWarehouseOptionsRequested',
+        ],
         'ErpFinanceSettlementRequested' => [
             'addon\hsx_erp\app\listener\ErpFinanceSettlementRequested',
+        ],
+        'ErpSourcePayableSettlementRequested' => [
+            'addon\hsx_erp\app\listener\ErpSourcePayableSettlementRequested',
         ],
         'ErpFinanceFactVoidRequested' => [
             'addon\hsx_erp\app\listener\ErpFinanceFactVoidRequested',
@@ -36,14 +42,11 @@ return [
         'ErpSaleCreatedRequested' => [
             'addon\hsx_erp\app\listener\ErpSaleCreatedRequested',
         ],
-        'HsxErpMarketplaceProviders' => [
-            'addon\hsx_erp\app\listener\marketplace\PhoneShopMarketplaceProvider',
-        ],
-        'HsxErpPublishListing' => [
-            'addon\hsx_erp\app\listener\marketplace\PhoneShopDirectListing',
-        ],
         'HsxErpListingMaterialPolicy' => [
             'addon\hsx_erp\app\listener\marketplace\ListingMaterialPolicy',
+        ],
+        'HsxErpChannelMappingResolve' => [
+            'addon\hsx_erp\app\listener\marketplace\ChannelMappingResolver',
         ],
         'PhoneShopListingMaterialCompleted' => [
             'addon\hsx_erp\app\listener\marketplace\PhoneShopListingMaterialCompleted',

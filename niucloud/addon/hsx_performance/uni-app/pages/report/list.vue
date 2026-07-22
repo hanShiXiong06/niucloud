@@ -1,6 +1,6 @@
 <template>
     <view class="page">
-        <view class="head"><view><text class="title">经营报告</text><text class="subtitle">店铺经营与员工产出快照</text></view><view class="refresh" @click="load(true)"><u-icon name="reload" color="#3b6ef5" size="20" /></view></view>
+        <view class="head"><view><text class="title">经营报告</text><text class="subtitle">店铺经营与员工产出快照</text></view><view class="refresh" @click="load(true)"><u-icon name="reload" color="#2563eb" size="20" /></view></view>
         <scroll-view scroll-x class="tabs" :show-scrollbar="false"><view class="tabs-inner"><view v-for="item in types" :key="item.value" class="tab" :class="{ active: type === item.value }" @click="changeType(item.value)">{{ item.label }}</view></view></scroll-view>
         <view v-if="loading" class="state"><u-loading-icon size="28" /><text>正在读取经营报告</text></view>
         <view v-else-if="!rows.length" class="state"><u-empty mode="data" text="暂无经营报告" /></view>
@@ -31,8 +31,8 @@ onShow(() => load())
 </script>
 
 <style scoped lang="scss">
-.page { min-height: 100vh; padding: 28rpx; box-sizing: border-box; background: #f3f4f6; }
+.page { min-height: 100vh; padding: 28rpx; box-sizing: border-box; background: #f5f7fa; }
 .head { display: flex; align-items: center; justify-content: space-between; }.title { display: block; color: #111827; font-size: 38rpx; font-weight: 700; }.subtitle { display: block; margin-top: 6rpx; color: #64748b; font-size: 23rpx; }.refresh { width: 68rpx; height: 68rpx; display: flex; align-items: center; justify-content: center; background: #fff; border: 2rpx solid #e5e7eb; border-radius: 12rpx; }
-.tabs { margin: 24rpx 0 18rpx; white-space: nowrap; }.tabs-inner { display: inline-flex; gap: 12rpx; }.tab { min-width: 96rpx; padding: 14rpx 22rpx; box-sizing: border-box; color: #475569; font-size: 25rpx; text-align: center; background: #fff; border: 2rpx solid #e5e7eb; border-radius: 12rpx; }.tab.active { color: #fff; background: #3b6ef5; border-color: #3b6ef5; }
+.tabs { margin: 24rpx 0 18rpx; white-space: nowrap; }.tabs-inner { display: inline-flex; gap: 12rpx; }.tab { min-width: 96rpx; padding: 14rpx 22rpx; box-sizing: border-box; color: #475569; font-size: 25rpx; text-align: center; background: #fff; border: 2rpx solid #e5e7eb; border-radius: 12rpx; }.tab.active { color: #fff; background: #2563eb; border-color: #2563eb; }
 .list { display: flex; flex-direction: column; gap: 18rpx; }.report { padding: 24rpx; background: #fff; border: 2rpx solid #e8edf3; border-radius: 16rpx; }.report-head { display: flex; align-items: flex-start; justify-content: space-between; }.report-title { display: block; color: #111827; font-size: 29rpx; font-weight: 650; }.period { display: block; margin-top: 6rpx; color: #94a3b8; font-size: 21rpx; }.metrics { margin-top: 22rpx; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8rpx; }.metrics view { min-width: 0; display: flex; flex-direction: column; }.metrics strong { color: #111827; font-size: 28rpx; }.metrics text { margin-top: 4rpx; color: #64748b; font-size: 20rpx; }.report-foot { margin-top: 20rpx; padding-top: 16rpx; display: flex; justify-content: space-between; color: #64748b; font-size: 21rpx; border-top: 2rpx solid #f1f5f9; }.notify-success { color: #059669; }.notify-failed { color: #dc2626; }.notify-pending { color: #d97706; }.state { height: 500rpx; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18rpx; color: #94a3b8; font-size: 24rpx; }
 </style>

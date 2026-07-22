@@ -102,7 +102,8 @@
                     <template #default="{ row }">
                         <div>{{ money(row.net_sale_amount) }}</div>
                         <div v-if="Number(row.sale_compensation_amount || 0)" class="mt-1 text-xs text-orange-500">原成交 {{ money(row.sale_price) }} · 补差 -{{ money(row.sale_compensation_amount) }}</div>
-                        <div class="mt-1 text-xs text-gray-500">成本 {{ money(row.cost) }} · 毛利 {{ money(row.profit) }}</div>
+                        <div class="mt-1 text-xs text-gray-500">{{ isConsigned(row) ? '代卖结算' : '成本' }} {{ money(row.cost) }} · 毛利 {{ money(row.profit) }}</div>
+                        <div v-if="isConsigned(row)" class="mt-1 text-xs text-orange-500">货主 {{ row.owner_party_name || '-' }} · 服务收益 {{ money(row.consignment_service_fee) }}</div>
                     </template>
                 </el-table-column>
                 <el-table-column label="位置" min-width="160">
@@ -130,9 +131,10 @@
                         </div>
                     </template>
                 </el-table-column>
-                <el-table-column label="操作" fixed="right" width="210" align="center">
+                <el-table-column label="操作" fixed="right" width="270" align="center">
                     <template #default="{ row }">
                         <el-button type="primary" link @click="openDetail(row)">销售单</el-button>
+                        <el-button type="primary" link @click="printSaleReceipt(row)">打印小票</el-button>
                         <el-button v-if="canReturnSale(row)" type="warning" link @click="goSaleReturn(row)">销售退货</el-button>
                         <el-button v-if="canCancelSaleItemFromList(row)" type="danger" link @click="cancelSaleItem(row)">取消销售</el-button>
                     </template>
@@ -207,7 +209,8 @@
                             <div class="font-medium text-gray-900">{{ row.model || '-' }}</div>
                             <div class="mt-0.5 text-xs text-gray-500">{{ compactDeviceInfo(row) }}</div>
                             <div class="mt-1 flex flex-wrap gap-1">
-                                <el-tag v-if="row.category_name" size="small" effect="plain" type="info">{{ row.category_name }}</el-tag>
+                                <el-tag v-if="row.catalog_product_name || row.category_name" size="small" effect="plain" type="info">{{ row.catalog_product_name || row.category_name }}</el-tag>
+                                <el-tag v-if="isConsigned(row)" size="small" effect="plain" type="warning">客户代卖</el-tag>
                                 <el-tooltip v-if="row.asset_no" :content="`资产号：${row.asset_no}`" placement="top">
                                     <el-tag size="small" effect="plain">资产</el-tag>
                                 </el-tooltip>
@@ -216,17 +219,22 @@
                     </el-table-column>
                     <el-table-column label="来源 / 位置" min-width="170">
                         <template #default="{ row }">
-                            <div>{{ row.party_name || '-' }}</div>
+                            <div>{{ isConsigned(row) ? `货主：${row.owner_party_name || '-'}` : (row.party_name || '-') }}</div>
                             <div class="mt-0.5 text-xs text-gray-500">{{ [row.warehouse_name, row.location_name].filter(Boolean).join(' / ') || '-' }}</div>
                         </template>
                     </el-table-column>
-                    <el-table-column label="总成本" width="120" align="right"><template #default="{ row }">{{ money(row.total_cost) }}</template></el-table-column>
+                    <el-table-column label="成本 / 结算" width="130" align="right">
+                        <template #default="{ row }">
+                            <div>{{ money(saleCostBasis(row)) }}</div>
+                            <div v-if="isConsigned(row)" class="mt-0.5 text-xs text-orange-500">应付货主</div>
+                        </template>
+                    </el-table-column>
                     <el-table-column label="销售价" width="150" align="right">
                         <template #default="{ row }"><el-input-number v-model="salePrices[row.id]" :min="0" :precision="2" :controls="false" class="!w-[120px]" /></template>
                     </el-table-column>
                 </el-table>
                 <div class="mt-3 flex items-center justify-between">
-                    <div class="text-sm text-gray-500">成本 {{ money(selectedCost) }} · 当前筛选仅展示可直接销售库存</div>
+                    <div class="text-sm text-gray-500">成本/代卖结算 {{ money(selectedCost) }} · 当前筛选仅展示可直接销售库存</div>
                     <el-pagination v-model:current-page="stock.page" v-model:page-size="stock.limit" layout="total, prev, pager, next" :total="stock.total" @current-change="loadStock" />
                 </div>
 
@@ -283,7 +291,8 @@
                 <el-table class="mt-3" :data="detail.data?.items || []" size="large">
                     <el-table-column prop="model" label="型号" min-width="180" />
                     <el-table-column prop="imei" label="IMEI" min-width="170" />
-                    <el-table-column label="成本" width="130" align="right"><template #default="{ row }">{{ money(row.cost) }}</template></el-table-column>
+                    <el-table-column label="归属" min-width="150"><template #default="{ row }"><el-tag v-if="isConsigned(row)" type="warning" effect="plain">客户代卖</el-tag><span v-else>自有</span><div v-if="isConsigned(row)" class="mt-1 text-xs text-gray-500">{{ row.owner_party_name || '-' }}</div></template></el-table-column>
+                    <el-table-column label="成本 / 结算" width="140" align="right"><template #default="{ row }">{{ money(row.cost) }}<div v-if="isConsigned(row)" class="text-xs text-orange-500">应付货主</div></template></el-table-column>
                     <el-table-column label="销售收入" width="180" align="right"><template #default="{ row }"><div>{{ money(row.net_sale_amount) }}</div><div v-if="Number(row.sale_compensation_amount || 0)" class="text-xs text-orange-500">原价 {{ money(row.sale_price) }} · 补差 -{{ money(row.sale_compensation_amount) }}</div></template></el-table-column>
                     <el-table-column label="毛利" width="130" align="right"><template #default="{ row }">{{ money(row.profit) }}</template></el-table-column>
                     <el-table-column label="状态" width="100">
@@ -312,7 +321,7 @@ import { Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import { getErpSaleChannelOptions } from '@/addon/hsx_erp/api/config'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
-import { cancelErpSaleItem, createErpSale, getErpSaleInfo, getErpSaleList, getErpSaleStock, getErpStaffOptions } from '@/addon/hsx_erp/api/erp'
+import { cancelErpSaleItem, createErpSale, getErpSaleInfo, getErpSaleList, getErpSaleStock, getErpStaffOptions, printErpSaleReceipt } from '@/addon/hsx_erp/api/erp'
 import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/index.vue'
 import ErpDeviceIdentity from '@/addon/hsx_erp/components/ErpDeviceIdentity.vue'
 import ErpRoleFocus from '@/addon/hsx_erp/components/ErpRoleFocus.vue'
@@ -365,7 +374,7 @@ const summary = computed(() => table.data.reduce((acc, row: any) => {
     acc.profit += Number(row.profit || 0)
     return acc
 }, { count: 0, amount: 0, cost: 0, profit: 0 }))
-const selectedCost = computed(() => selectedAssets.value.reduce((sum, row) => sum + Number(row.total_cost || 0), 0))
+const selectedCost = computed(() => selectedAssets.value.reduce((sum, row) => sum + saleCostBasis(row), 0))
 const selectedAmount = computed(() => selectedAssets.value.reduce((sum, row) => sum + Number(salePrices[row.id] || 0), 0))
 const selectedProfit = computed(() => selectedAmount.value - selectedCost.value)
 const creditAllowedForOrder = computed(() => {
@@ -454,7 +463,7 @@ async function loadStock() {
         stock.data = res?.data?.data || []
         stock.total = res?.data?.total || 0
         stock.data.forEach((row: any) => {
-            salePrices[row.id] = firstPositiveErpAmount(row.retail_price, row.estimate_sale_price, row.total_cost)
+            salePrices[row.id] = firstPositiveErpAmount(row.retail_price, row.estimate_sale_price, saleCostBasis(row))
         })
         if (pendingAssetIds.value.length) {
             selectedAssets.value = stock.data.filter((row: any) => pendingAssetIds.value.includes(Number(row.id)))
@@ -543,8 +552,12 @@ async function submitCreate() {
         if (!create.form.capital_account_id) return ElMessage.warning('请选择收款账户')
         if (Number(create.form.received_amount) > selectedAmount.value) return ElMessage.warning('收款不能大于销售金额')
     }
+    const consignedRows = selectedAssets.value.filter(isConsigned)
+    const consignmentNotice = consignedRows.length
+        ? `其中客户代卖 ${consignedRows.length} 台，售出后将生成货主应付 ${money(consignedRows.reduce((sum, row) => sum + saleCostBasis(row), 0))}。`
+        : ''
     const confirmed = await ElMessageBox.confirm(
-        `确认向「${create.form.party_name || '所选客户'}」销售出库 ${selectedAssets.value.length} 台，销售总额 ${money(selectedAmount.value)}。提交后设备立即退出库存并生成应收；${create.form.settle_mode === 'cash' ? `同时确认现结收款 ${money(create.form.received_amount)}。` : '本次按挂账处理。'}普通操作不能直接撤销。`,
+        `确认向「${create.form.party_name || '所选客户'}」销售出库 ${selectedAssets.value.length} 台，销售总额 ${money(selectedAmount.value)}。${consignmentNotice}提交后设备立即退出库存并生成应收；${create.form.settle_mode === 'cash' ? `同时确认现结收款 ${money(create.form.received_amount)}。` : '本次按挂账处理。'}普通操作不能直接撤销。`,
         '确认销售出库',
         { type: 'warning', confirmButtonText: '确认出库', cancelButtonText: '返回检查' }
     ).then(() => true).catch(() => false)
@@ -586,6 +599,15 @@ async function openDetail(row: any) {
     } finally {
         detail.loading = false
     }
+}
+
+async function printSaleReceipt(row: any) {
+    const result: any = await printErpSaleReceipt(Number(row.sale_order_id || row.id || 0))
+    if (result?.data?.skipped) {
+        ElMessage.warning(result.data.message || '请先在打印中心启用销售开单场景')
+        return
+    }
+    ElMessage.success(result?.data?.status === 'waiting_client' ? '任务已生成，请在移动打印台连接蓝牙设备' : '销售小票已发送')
 }
 
 function handleSearch() {
@@ -705,6 +727,14 @@ function compactDeviceInfo(row: any) {
 
 function money(value: any) {
     return `¥${Number(value || 0).toFixed(2)}`
+}
+
+function isConsigned(row: any) {
+    return String(row?.ownership_type || '') === 'consigned'
+}
+
+function saleCostBasis(row: any) {
+    return Number(row?.sale_cost_basis ?? (isConsigned(row) ? row?.consignment_settlement_amount : row?.total_cost) ?? 0)
 }
 
 function formatTime(value: any) {

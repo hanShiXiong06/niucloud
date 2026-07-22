@@ -92,7 +92,7 @@
                                 <u-tag
                                     v-for="w in erpWarehouses"
                                     :key="w.id"
-                                    :text="`${ w.warehouse_name } · ${ WH_TYPE_LABEL[w.business_type || 'mall'] || '商城' }`"
+                                    :text="`${ w.warehouse_name } · ${ SALE_TARGET_LABEL[w.sale_target] || '暂存' }`"
                                     size="mini"
                                     :plain="Number(formData.target_warehouse_id) !== Number(w.id)"
                                     :type="Number(formData.target_warehouse_id) === Number(w.id) ? 'warning' : 'info'"
@@ -294,16 +294,33 @@ const formData = ref({
 interface ErpWarehouse {
     id: number
     warehouse_name: string
-    business_type?: string
+    sale_target: string
     is_default?: number
-    locations?: Array<{ id: number; location_name: string }>
+    locations: Array<{ id: number; location_name: string }>
 }
 const saleDestinationOptions = ref<Array<{ value: string; label: string; description?: string }>>([])
 const erpWarehouses = ref<ErpWarehouse[]>([])
 const erpConnected = ref(false)
-// 仓库业务类型 → 销售流向 / 中文标签（与后端 RecycleOrderDict 保持一致）
-const WH_TYPE_DEST: Record<string, string> = { mall: 'mall', peer: 'peer', scrap: 'scrap', hold: 'hold' }
-const WH_TYPE_LABEL: Record<string, string> = { mall: '商城', peer: '同行', scrap: '报废', hold: '暂存' }
+// ERP 仓库默认销售去向 → 回收定价销售流向 / 中文标签。
+const SALE_TARGET_DEST: Record<string, string> = { mall: 'mall', peer: 'peer', scrap: 'scrap', hold: 'hold' }
+const SALE_TARGET_LABEL: Record<string, string> = { mall: '商城', peer: '同行', scrap: '报废', hold: '暂存' }
+const normalizeWarehouse = (row: any): ErpWarehouse => {
+    const warehouseType = String(row?.warehouse_type || '')
+    const configuredTarget = String(row?.default_sale_target || row?.business_type || '')
+    const saleTarget = ['mall', 'peer', 'scrap', 'hold'].includes(configuredTarget)
+        ? configuredTarget
+        : (warehouseType === 'peer' ? 'peer' : (warehouseType === 'exception' ? 'hold' : 'mall'))
+    return {
+        id: Number(row?.id || 0),
+        warehouse_name: String(row?.warehouse_name || row?.name || '').trim() || '未命名仓库',
+        sale_target: saleTarget,
+        is_default: Number(row?.is_default || 0),
+        locations: (Array.isArray(row?.locations) ? row.locations : []).map((location: any) => ({
+            id: Number(location?.id || 0),
+            location_name: String(location?.location_name || location?.name || '').trim() || '未命名库位'
+        }))
+    }
+}
 // ERP 已连接且有可用仓库时，以仓库为主选项（选仓即定流向）
 const warehouseMode = computed(() => erpConnected.value && erpWarehouses.value.length > 0)
 const saleDestinationText = computed(() =>
@@ -329,7 +346,7 @@ const loadSaleDestinationOptions = async () => {
     try {
         const res: any = await getSaleDestinationOptions()
         saleDestinationOptions.value = res?.data?.items || []
-        erpWarehouses.value = res?.data?.warehouses || []
+        erpWarehouses.value = (Array.isArray(res?.data?.warehouses) ? res.data.warehouses : []).map(normalizeWarehouse)
         erpConnected.value = !!res?.data?.erp_connected
         if (warehouseMode.value) {
             // 仓库模式：无已选仓时默认选中默认仓 / 首个仓（对齐 PC，不再为空）
@@ -352,7 +369,7 @@ const selectWarehouse = (w: ErpWarehouse) => {
     formData.value.target_warehouse_id = Number(w.id)
     formData.value.target_warehouse_name = w.warehouse_name || ''
     // 选仓即定流向
-    formData.value.sale_destination = WH_TYPE_DEST[w.business_type || 'mall'] || 'hold'
+    formData.value.sale_destination = SALE_TARGET_DEST[w.sale_target] || 'hold'
     // 切换仓库后清空已选库位
     formData.value.target_location_id = 0
     formData.value.target_location_name = ''

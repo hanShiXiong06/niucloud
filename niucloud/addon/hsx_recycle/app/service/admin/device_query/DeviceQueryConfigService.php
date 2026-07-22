@@ -82,6 +82,7 @@ class DeviceQueryConfigService extends BaseAdminService
             'list' => $list,
             'total' => count($list),
             'config' => $config,
+            'dictionaries' => $this->catalog->dictionaries(),
         ];
     }
 

@@ -28,6 +28,7 @@ class ErpConfig extends BaseAdminController
             ['product_title', []],
             ['sale', []],
             ['refurbish', []],
+            ['marketplace', []],
             ['turnover', []],
             ['consignment', []],
         ]);

@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace addon\hsx_member_card\app\service\admin;
 
 use addon\hsx_member_card\app\model\MemberCard;
+use addon\hsx_member_card\app\model\MemberCardItem;
+use addon\hsx_member_card\app\model\MemberCardRedemption;
 use addon\hsx_member_card\app\support\MemberCardHookResult;
 use addon\hsx_member_card\app\support\MemberCardIdempotency;
 use app\model\member\Member;
@@ -13,6 +15,44 @@ use core\exception\CommonException;
 
 final class MemberCardMemberService extends BaseAdminService
 {
+    public function lists(array $where): array
+    {
+        $keyword = mb_substr(trim((string)($where['keyword'] ?? '')), 0, 100);
+        $query = MemberCard::where([['site_id', '=', $this->site_id]])
+            ->whereNotIn('status', ['cancelled', 'refunded']);
+        if ($keyword !== '') {
+            $query->whereLike('holder_name|holder_mobile|card_no|product_name', '%' . $keyword . '%');
+        }
+        $page = $query
+            ->fieldRaw('member_id,MAX(holder_name) AS holder_name,MAX(holder_mobile) AS holder_mobile,COUNT(*) AS card_count,MAX(create_at) AS latest_card_at')
+            ->group('member_id')
+            ->order('latest_card_at desc')
+            ->paginate([
+                'list_rows' => min(100, max(1, (int)($where['limit'] ?? 15))),
+                'page' => max(1, (int)($where['page'] ?? 1)),
+            ])->toArray();
+
+        $memberIds = array_map('intval', array_column($page['data'] ?? [], 'member_id'));
+        $statusRows = $memberIds === [] ? [] : MemberCard::where([['site_id', '=', $this->site_id]])
+            ->whereIn('member_id', $memberIds)
+            ->whereNotIn('status', ['cancelled', 'refunded'])
+            ->fieldRaw('member_id,status,COUNT(*) AS status_count')
+            ->group('member_id,status')->select()->toArray();
+        $statusMap = [];
+        foreach ($statusRows as $statusRow) {
+            $statusMap[(int)$statusRow['member_id']][(string)$statusRow['status']] = (int)$statusRow['status_count'];
+        }
+        foreach ($page['data'] as &$row) {
+            $statuses = $statusMap[(int)$row['member_id']] ?? [];
+            $row['display_name'] = trim((string)$row['holder_name']) !== '' ? (string)$row['holder_name'] : (string)$row['holder_mobile'];
+            $row['mobile_masked'] = $this->maskMobile((string)$row['holder_mobile']);
+            $row['available_card_count'] = (int)($statuses['active'] ?? 0) + (int)($statuses['pending'] ?? 0);
+            $row['expired_card_count'] = (int)($statuses['expired'] ?? 0) + (int)($statuses['exhausted'] ?? 0);
+        }
+        unset($row);
+        return $page;
+    }
+
     public function options(array $where): array
     {
         $keyword = mb_substr(trim((string)($where['keyword'] ?? '')), 0, 100);
@@ -94,9 +134,43 @@ final class MemberCardMemberService extends BaseAdminService
 
     public function cards(int $memberId): array
     {
-        $member = Member::where([['site_id', '=', $this->site_id], ['member_id', '=', $memberId]])->field('member_id')->findOrEmpty();
+        return $this->info($memberId)['cards'];
+    }
+
+    public function info(int $memberId): array
+    {
+        $member = Member::where([['site_id', '=', $this->site_id], ['member_id', '=', $memberId]])
+            ->field('member_id,member_no,username,nickname,mobile,headimg,status,register_channel,create_time')
+            ->findOrEmpty();
         if ($member->isEmpty()) throw new CommonException('会员不存在');
-        return MemberCard::where([['site_id', '=', $this->site_id], ['member_id', '=', $memberId]])->order('id desc')->select()->toArray();
+
+        $cards = MemberCard::where([['site_id', '=', $this->site_id], ['member_id', '=', $memberId]])
+            ->order('id desc')->select()->toArray();
+        $cardIds = array_map('intval', array_column($cards, 'id'));
+        $items = $cardIds === [] ? [] : MemberCardItem::where([['site_id', '=', $this->site_id], ['status', '=', 1]])
+            ->whereIn('card_id', $cardIds)->order('id asc')->select()->toArray();
+        $itemMap = [];
+        foreach ($items as $item) $itemMap[(int)$item['card_id']][] = $item;
+        foreach ($cards as &$card) {
+            $card['items'] = $itemMap[(int)$card['id']] ?? [];
+            $card['validity_text'] = $this->validityText($card);
+            $card['status_text'] = $this->cardStatusText((string)$card['status']);
+        }
+        unset($card);
+
+        $redemptions = MemberCardRedemption::where([['site_id', '=', $this->site_id], ['member_id', '=', $memberId]])
+            ->order('occurred_at desc,id desc')->limit(100)->select()->toArray();
+        $memberRow = $member->toArray();
+        return [
+            'member' => array_merge($memberRow, [
+                'display_name' => $this->displayName($memberRow),
+                'mobile_masked' => $this->maskMobile((string)($memberRow['mobile'] ?? '')),
+                'card_count' => count($cards),
+                'available_card_count' => count(array_filter($cards, static fn(array $card): bool => in_array((string)$card['status'], ['active', 'pending'], true))),
+            ]),
+            'cards' => $cards,
+            'redemptions' => $redemptions,
+        ];
     }
 
     public function resolveParty(array $member): array
@@ -136,5 +210,22 @@ final class MemberCardMemberService extends BaseAdminService
     private function maskMobile(string $mobile): string
     {
         return preg_match('/^\d{11}$/', $mobile) ? substr($mobile, 0, 3) . '****' . substr($mobile, -4) : $mobile;
+    }
+
+    private function validityText(array $card): string
+    {
+        $startAt = (int)($card['valid_start_at'] ?? 0);
+        $endAt = (int)($card['valid_end_at'] ?? 0);
+        if ($endAt <= 0) return '永久有效';
+        if ($startAt > time()) return date('Y-m-d', $startAt) . ' 生效';
+        return '有效至 ' . date('Y-m-d', $endAt);
+    }
+
+    private function cardStatusText(string $status): string
+    {
+        return [
+            'pending' => '待激活', 'active' => '可使用', 'exhausted' => '已用完', 'expired' => '已过期',
+            'frozen' => '已冻结', 'refund_pending' => '退款中', 'refunded' => '已退款', 'cancelled' => '已取消',
+        ][$status] ?? $status;
     }
 }

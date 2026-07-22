@@ -67,6 +67,12 @@ return [
 
         // 快递回调事件。易速推送统一在此分发，后续 ERP、通知、财务流水可挂载扩展。
         'RecycleExpressEvent' => [ 'addon\hsx_recycle\app\listener\express\RecycleExpressEventListener' ],
+        // 快递供应商注册钩子。后续快递鸟、快递100、京东/顺丰官方能力均通过此契约热插拔。
+        'HsxExpressProviderRegistry' => [ 'addon\hsx_recycle\app\listener\express\ExpressProviderRegistryListener' ],
+        // 快递轨迹、设备查询、地址解析分别注册，调用方只依赖能力契约，不依赖具体厂商。
+        'HsxExpressQueryProviderRegistry' => [ 'addon\hsx_recycle\app\listener\express\ExpressQueryProviderRegistryListener' ],
+        'HsxDeviceQueryProviderRegistry' => [ 'addon\hsx_recycle\app\listener\third_party\DeviceQueryProviderRegistryListener' ],
+        'HsxAddressParseProviderRegistry' => [ 'addon\hsx_recycle\app\listener\third_party\AddressParseProviderRegistryListener' ],
         
         // 微信转账场景
         'GetWechatTransferTradeScene' => [ 'addon\hsx_recycle\app\listener\pay\RecycleTransferSceneListener' ],

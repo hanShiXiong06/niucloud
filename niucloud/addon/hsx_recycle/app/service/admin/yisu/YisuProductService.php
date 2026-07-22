@@ -3,108 +3,52 @@ declare(strict_types=1);
 
 namespace addon\hsx_recycle\app\service\admin\yisu;
 
-use addon\hsx_recycle\app\dict\yisu\YisuProductDict;
-use addon\hsx_recycle\app\model\yisu\YisuProductConfig;
+use addon\hsx_recycle\app\dict\third_party\ThirdPartyDict;
+use addon\hsx_recycle\app\service\core\express\ExpressProductCatalogService;
 use core\base\BaseAdminService;
 
 /**
- * 易速产品配置服务类
- * Class YisuProductService
- * @package addon\hsx_recycle\app\service\admin\yisu
+ * 快递产品配置后台兼容入口。
+ *
+ * 保留原有类名和 API，内部统一走 sys_config 产品目录。
  */
 class YisuProductService extends BaseAdminService
 {
+    private ExpressProductCatalogService $catalogService;
+
     public function __construct()
     {
         parent::__construct();
-        $this->model = new YisuProductConfig();
+        $this->catalogService = new ExpressProductCatalogService();
     }
 
-    /**
-     * 获取产品列表（包含启用状态）
-     * @return array
-     */
     public function getList(): array
     {
-        // 获取所有可用产品saas_yisu_product_config
-        $allProducts = YisuProductDict::getProducts();
-        // var_dump($allProducts);
-        // exit;
-        // 获取已配置的产品
-        $configuredProducts =  $this->model
-            ->where('site_id', $this->site_id)
-            ->column('*', 'product_code');
-
-        // 合并数据
- 
-        foreach ($allProducts as $product) {
-            $productCode = $product['product_code'];
-            $configured = $configuredProducts[$productCode] ?? null;
-
-            $result[] = [
-                'id' => $configured['id'] ?? 0,
-                'product_code' => $productCode,
-                'product_name' => $product['product_name'],
-                'express_type' => $product['express_type'] ?? '快递',
-                'logo' => $product['logo'],
-                'status' => $configured['status'] ?? 0,
-                'sort' => $configured['sort'] ?? 0,
-                'is_configured' => !empty($configured),
-            ];
-        }
-
-        return $result;
+        return $this->catalogService->getProducts((int)$this->site_id, ThirdPartyDict::PROVIDER_YISU);
     }
 
-    /**
-     * 批量更新产品状态
-     * @param array $products
-     * @return bool
-     */
-    public function batchUpdate(array $products): bool
+    public function getView(string $provider = ThirdPartyDict::PROVIDER_YISU): array
     {
-        return YisuProductConfig::batchUpdateOrCreate($this->site_id, $products);
+        return $this->catalogService->getView((int)$this->site_id, $provider);
     }
 
-    /**
-     * 修改产品状态
-     * @param string $productCode
-     * @param int $status
-     * @return bool
-     */
-    public function modifyStatus(string $productCode, int $status): bool
+    public function batchUpdate(array $products, string $provider = ThirdPartyDict::PROVIDER_YISU): bool
     {
-        $product = $this->model->where([
-            ['site_id', '=', $this->site_id],
-            ['product_code', '=', $productCode]
-        ])->find();
-
-        if ($product) {
-            $product->save(['status' => $status]);
-        } else {
-            // 如果不存在，创建一个
-            $productInfo = YisuProductDict::getProduct($productCode);
-            if ($productInfo) {
-                $this->model->create([
-                    'site_id' => $this->site_id,
-                    'product_code' => $productCode,
-                    'product_name' => $productInfo['product_name'],
-                    'logo' => $productInfo['logo'],
-                    'status' => $status,
-                    'sort' => 0,
-                ]);
-            }
-        }
-
-        return true;
+        return $this->catalogService->saveProducts((int)$this->site_id, $provider, $products);
     }
 
-    /**
-     * 获取启用的产品列表
-     * @return array
-     */
-    public function getEnabledProducts(): array
+    public function modifyStatus(string $productCode, int $status, string $provider = ThirdPartyDict::PROVIDER_YISU): bool
     {
-        return YisuProductConfig::getEnabledProducts($this->site_id);
+        return $this->catalogService->modifyStatus(
+            (int)$this->site_id,
+            $provider,
+            $productCode,
+            $status
+        );
+    }
+
+    public function getEnabledProducts(string $provider = ThirdPartyDict::PROVIDER_YISU): array
+    {
+        return $this->catalogService->getEnabledProducts((int)$this->site_id, $provider);
     }
 }

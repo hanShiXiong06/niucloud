@@ -15,8 +15,9 @@ abstract class AbstractDeviceQueryProvider implements DeviceQueryProviderInterfa
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_TIMEOUT, max(1, (int)($channel['timeout'] ?? 300)));
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, max(1, (int)($channel['connect_timeout'] ?? 10)));
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        $verifySsl = !array_key_exists('verify_ssl', $channel) || (bool)$channel['verify_ssl'];
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, $verifySsl);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, $verifySsl ? 2 : 0);
         curl_setopt($ch, CURLOPT_DNS_CACHE_TIMEOUT, 28800);
 
         if (!empty($headers)) {
@@ -45,7 +46,11 @@ abstract class AbstractDeviceQueryProvider implements DeviceQueryProviderInterfa
         }
 
         $decoded['_http_code'] = $httpCode;
-        $decoded['_request_url'] = $url;
+
+        if ($httpCode >= 400 && !isset($decoded['code'])) {
+            $decoded['code'] = $httpCode;
+            $decoded['message'] = (string)($decoded['message'] ?? $decoded['msg'] ?? ('第三方接口 HTTP ' . $httpCode));
+        }
 
         return $decoded;
     }
@@ -66,7 +71,7 @@ abstract class AbstractDeviceQueryProvider implements DeviceQueryProviderInterfa
             $message .= '，返回内容：' . $preview;
         }
 
-        $message .= '。请在设备查询配置中检查渠道地址、接口映射和 API Key';
+        $message .= '。请在设备查询配置中检查渠道地址、接口映射和服务商凭证';
 
         return $message;
     }
@@ -122,5 +127,30 @@ abstract class AbstractDeviceQueryProvider implements DeviceQueryProviderInterfa
             'balance' => (float)($response['balance'] ?? 0),
             'raw_response' => $response,
         ];
+    }
+
+    /**
+     * 仅保留可审计但不泄露凭证的请求地址。
+     */
+    protected function sanitizeRequestUrl(string $url, array $sensitiveKeys = ['key', 'token', 'sign', 'appid']): string
+    {
+        $parts = parse_url($url);
+        if (!is_array($parts) || empty($parts['query'])) {
+            return $url;
+        }
+
+        parse_str((string)$parts['query'], $query);
+        foreach ($sensitiveKeys as $key) {
+            if (array_key_exists($key, $query)) {
+                $query[$key] = '***';
+            }
+        }
+
+        $scheme = isset($parts['scheme']) ? $parts['scheme'] . '://' : '';
+        $host = (string)($parts['host'] ?? '');
+        $port = isset($parts['port']) ? ':' . $parts['port'] : '';
+        $path = (string)($parts['path'] ?? '');
+
+        return $scheme . $host . $port . $path . ($query ? '?' . http_build_query($query) : '');
     }
 }

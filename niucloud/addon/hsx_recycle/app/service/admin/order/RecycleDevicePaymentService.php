@@ -4,6 +4,9 @@ declare(strict_types=1);
 namespace addon\hsx_recycle\app\service\admin\order;
 
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
+use addon\hsx_recycle\app\dict\order\RecycleConsignmentDict;
+use addon\hsx_recycle\app\model\order\RecycleConsignmentLog;
+use addon\hsx_recycle\app\model\order\RecycleConsignmentOrder;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\model\order\RecycleDeviceLog;
 use addon\hsx_recycle\app\model\order\RecycleDevicePayment;
@@ -207,17 +210,18 @@ class RecycleDevicePaymentService extends BaseAdminService
             ->toArray();
     }
 
-    public function getPaymentSummary(int $orderId): array
+    public function getPaymentSummary(int $orderId, int $siteId = 0): array
     {
+        $siteId = $siteId > 0 ? $siteId : (int)$this->site_id;
         $flowModeService = new RecycleOrderFlowModeService();
         $order = RecycleOrder::where([
-            ['site_id', '=', $this->site_id],
+            ['site_id', '=', $siteId],
             ['id', '=', $orderId],
             ['delete_at', '=', 0],
         ])->findOrEmpty();
         $mode = $order->isEmpty() ? $this->getPaymentMode() : $flowModeService->getOrderFlowMode($order->toArray());
         $devices = RecycleDevice::where([
-            ['site_id', '=', $this->site_id],
+            ['site_id', '=', $siteId],
             ['order_id', '=', $orderId],
         ])->select()->toArray();
 
@@ -267,6 +271,10 @@ class RecycleDevicePaymentService extends BaseAdminService
         if (empty($deviceIds)) {
             return 0;
         }
+        $siteId = (int)($info['site_id'] ?? $this->site_id);
+        if ($siteId <= 0) {
+            throw new CommonException('ERP结算回写缺少站点标识');
+        }
         $now = time();
         // 结清方式: 现金(有户头支出)/折账/折账+现金, 由结算事件带来的 method 决定, 不再写死"折账"
         $method = (string)($info['method'] ?? 'offset');
@@ -277,68 +285,116 @@ class RecycleDevicePaymentService extends BaseAdminService
         $marked = 0;
         Db::startTrans();
         try {
-            $devices = RecycleDevice::where([['site_id', '=', $this->site_id]])->whereIn('id', $deviceIds)->select();
+            $devices = RecycleDevice::where([['site_id', '=', $siteId]])->whereIn('id', $deviceIds)->select();
             // 设备表无 member_id/order_no, 从订单补
             $orderIdsAll = array_values(array_unique(array_filter(array_map(static fn($d) => (int)$d['order_id'], $devices->toArray()))));
             $orderMap = [];
             if (!empty($orderIdsAll)) {
-                foreach (RecycleOrder::where([['site_id', '=', $this->site_id]])->whereIn('id', $orderIdsAll)->field('id,order_no,member_id')->select()->toArray() as $o) {
+                foreach (RecycleOrder::where([['site_id', '=', $siteId]])->whereIn('id', $orderIdsAll)->field('id,order_no,member_id')->select()->toArray() as $o) {
                     $orderMap[(int)$o['id']] = $o;
                 }
             }
             $orderIds = [];
             foreach ($devices as $device) {
-                if ((int)($device->pay_status ?? 0) === RecycleOrderDict::PAY_STATUS_PAID) {
-                    continue; // 已打款/已结清, 跳过
-                }
                 $ord = $orderMap[(int)$device->order_id] ?? [];
                 $amount = round((float)($device->final_price ?: $device->initial_price ?: 0), 2);
-                $device->save([
-                    'pay_status' => RecycleOrderDict::PAY_STATUS_PAID,
-                    'pay_amount' => $amount,
-                    'pay_time'   => $now,
-                    'pay_uid'    => (int)$this->uid,
-                    'pay_no'     => $settlementNo,
-                    'pay_type'   => $payTypeText,
-                    'pay_remark' => $payRemark,
-                    'update_at'  => $now,
-                ]);
-                RecycleDevicePayment::create([
-                    'site_id'      => $this->site_id,
-                    'pay_no'       => $settlementNo,
-                    'order_id'     => (int)$device->order_id,
-                    'device_id'    => (int)$device->id,
-                    'member_id'    => (int)($ord['member_id'] ?? 0),
-                    'order_no'     => (string)($ord['order_no'] ?? ''),
-                    'device_imei'  => (string)$device->imei,
-                    'device_model' => (string)$device->model,
-                    'amount'       => $amount,
-                    'pay_type'     => $payTypeText,
-                    'pay_account'  => (string)($info['account'] ?? ''),
-                    'pay_name'     => (string)($info['operator'] ?? ''),
-                    'pay_remark'   => $payRemark,
-                    'pay_uid'      => (int)$this->uid,
-                    'pay_time'     => $now,
-                    'create_at'    => $now,
-                ]);
-                RecycleDeviceLog::create([
-                    'site_id'        => $this->site_id,
-                    'device_id'      => (int)$device->id,
-                    'order_id'       => (int)$device->order_id,
-                    'operator_id'    => (int)$this->uid,
-                    'operator_name'  => (string)($info['operator'] ?? $this->username),
-                    'operation_type' => 'device_payment',
-                    'action'         => 'device_offset_settle',
-                    'old_status'     => (int)$device->status,
-                    'new_status'     => RecycleOrderDict::DEVICE_OP_TYPE_PAYMENT,
-                    'remark'         => sprintf('%s结清 | 金额: %.2f | 结算单: %s', $payTypeText, $amount, $settlementNo),
-                    'create_at'      => $now,
-                ]);
-                $orderIds[(int)$device->order_id] = true;
+                $consignment = null;
+                if ((int)($device->consignment_order_id ?? 0) > 0) {
+                    $candidate = RecycleConsignmentOrder::where([
+                        ['site_id', '=', $siteId],
+                        ['id', '=', (int)$device->consignment_order_id],
+                        ['source_device_id', '=', (int)$device->id],
+                    ])->lock(true)->findOrEmpty();
+                    if (!$candidate->isEmpty()) {
+                        $consignment = $candidate;
+                        $consignmentAmount = round((float)$candidate->settlement_amount, 2);
+                        if ($consignmentAmount > 0) $amount = $consignmentAmount;
+                    }
+                }
+                $deviceNeedsSettlement = (int)($device->pay_status ?? 0) !== RecycleOrderDict::PAY_STATUS_PAID;
+                $consignmentNeedsSettlement = $consignment instanceof RecycleConsignmentOrder
+                    && (int)$consignment->pay_status !== RecycleConsignmentDict::PAY_STATUS_PAID;
+                if (!$deviceNeedsSettlement && !$consignmentNeedsSettlement) {
+                    continue;
+                }
+
+                if ($deviceNeedsSettlement) {
+                    $device->save([
+                        'pay_status' => RecycleOrderDict::PAY_STATUS_PAID,
+                        'pay_amount' => $amount,
+                        'pay_time'   => $now,
+                        'pay_uid'    => (int)$this->uid,
+                        'pay_no'     => $settlementNo,
+                        'pay_type'   => $payTypeText,
+                        'pay_remark' => $payRemark,
+                        'update_at'  => $now,
+                    ]);
+                    RecycleDevicePayment::create([
+                        'site_id'      => $siteId,
+                        'pay_no'       => $settlementNo,
+                        'order_id'     => (int)$device->order_id,
+                        'device_id'    => (int)$device->id,
+                        'member_id'    => (int)($ord['member_id'] ?? 0),
+                        'order_no'     => (string)($ord['order_no'] ?? ''),
+                        'device_imei'  => (string)$device->imei,
+                        'device_model' => (string)$device->model,
+                        'amount'       => $amount,
+                        'pay_type'     => $payTypeText,
+                        'pay_account'  => (string)($info['account'] ?? ''),
+                        'pay_name'     => (string)($info['operator'] ?? ''),
+                        'pay_remark'   => $payRemark,
+                        'pay_uid'      => (int)$this->uid,
+                        'pay_time'     => $now,
+                        'create_at'    => $now,
+                    ]);
+                    RecycleDeviceLog::create([
+                        'site_id'        => $siteId,
+                        'device_id'      => (int)$device->id,
+                        'order_id'       => (int)$device->order_id,
+                        'operator_id'    => (int)$this->uid,
+                        'operator_name'  => (string)($info['operator'] ?? $this->username),
+                        'operation_type' => 'device_payment',
+                        'action'         => 'device_offset_settle',
+                        'old_status'     => (int)$device->status,
+                        'new_status'     => RecycleOrderDict::DEVICE_OP_TYPE_PAYMENT,
+                        'remark'         => sprintf('%s结清 | 金额: %.2f | 结算单: %s', $payTypeText, $amount, $settlementNo),
+                        'create_at'      => $now,
+                    ]);
+                }
+                if ($consignmentNeedsSettlement) {
+                    $before = $consignment->toArray();
+                    $consignment->save([
+                        'settlement_amount' => $amount,
+                        'service_fee' => max(0, round((float)$consignment->sold_price - $amount, 2)),
+                        'status' => RecycleConsignmentDict::STATUS_SETTLED,
+                        'pay_status' => RecycleConsignmentDict::PAY_STATUS_PAID,
+                        'pay_time' => $now,
+                        'pay_uid' => (int)$this->uid,
+                        'settle_time' => $now,
+                        'operator_id' => (int)$this->uid,
+                        'update_time' => $now,
+                    ]);
+                    RecycleConsignmentLog::create([
+                        'site_id' => $siteId,
+                        'consignment_id' => (int)$consignment->id,
+                        'source_order_id' => (int)$consignment->source_order_id,
+                        'source_device_id' => (int)$device->id,
+                        'operator_id' => (int)$this->uid,
+                        'operator_name' => (string)($info['operator'] ?? 'ERP财务'),
+                        'action' => 'settle',
+                        'old_status' => (int)($before['status'] ?? 0),
+                        'new_status' => RecycleConsignmentDict::STATUS_SETTLED,
+                        'before_data' => $before,
+                        'after_data' => $consignment->toArray(),
+                        'remark' => sprintf('ERP财务结清代卖货款 | 金额: %.2f | 结算单: %s', $amount, $settlementNo),
+                        'create_time' => $now,
+                    ]);
+                }
+                if ($deviceNeedsSettlement) $orderIds[(int)$device->order_id] = true;
                 $marked++;
             }
             foreach (array_keys($orderIds) as $oid) {
-                $this->syncOrderPayStatus($oid, ['pay_type' => $payTypeText, 'pay_remark' => $payRemark, 'pay_time' => $now]);
+                $this->syncOrderPayStatus($oid, ['pay_type' => $payTypeText, 'pay_remark' => $payRemark, 'pay_time' => $now], $siteId);
             }
             Db::commit();
             return $marked;
@@ -348,9 +404,10 @@ class RecycleDevicePaymentService extends BaseAdminService
         }
     }
 
-    private function syncOrderPayStatus(int $orderId, array $paymentData): array
+    private function syncOrderPayStatus(int $orderId, array $paymentData, int $siteId = 0): array
     {
-        $summary = $this->getPaymentSummary($orderId);
+        $siteId = $siteId > 0 ? $siteId : (int)$this->site_id;
+        $summary = $this->getPaymentSummary($orderId, $siteId);
         $payStatus = RecycleOrderDict::PAY_STATUS_UNPAID;
         if ($summary['all_paid']) {
             $payStatus = RecycleOrderDict::PAY_STATUS_PAID;
@@ -378,7 +435,7 @@ class RecycleDevicePaymentService extends BaseAdminService
 
         RecycleOrder::where([
             ['id', '=', $orderId],
-            ['site_id', '=', $this->site_id],
+            ['site_id', '=', $siteId],
         ])->update($update);
 
         return $summary;

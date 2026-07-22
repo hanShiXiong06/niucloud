@@ -3,8 +3,6 @@ declare(strict_types=1);
 
 namespace addon\hsx_recycle\app\service\core\address;
 
-use addon\hsx_recycle\app\dict\third_party\ThirdPartyDict;
-use addon\hsx_recycle\app\service\core\third_party\CoreThirdPartyService;
 use app\model\sys\SysArea;
 use core\exception\CommonException;
 
@@ -13,11 +11,11 @@ use core\exception\CommonException;
  */
 class AddressParseService
 {
-    private $thirdPartyService;
+    private AddressParseGatewayService $gateway;
 
     public function __construct()
     {
-        $this->thirdPartyService = new CoreThirdPartyService();
+        $this->gateway = new AddressParseGatewayService();
     }
 
     public function parse(int $siteId, string $address): array
@@ -27,18 +25,7 @@ class AddressParseService
             throw new CommonException('地址内容不能为空');
         }
 
-        $result = $this->thirdPartyService->call(
-            ThirdPartyDict::SERVICE_TYPE_ADDRESS_PARSE,
-            'parse',
-            ['address' => $address],
-            $siteId
-        );
-
-        if (!$result['success']) {
-            throw new CommonException($result['message'] ?? '地址解析失败');
-        }
-
-        $parsed = $result['data']['data'] ?? [];
+        $parsed = $this->gateway->parse($siteId, $address);
         $area = $this->matchArea(
             (string)($parsed['province'] ?? ''),
             (string)($parsed['city'] ?? ''),

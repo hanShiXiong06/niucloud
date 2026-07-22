@@ -11,4 +11,6 @@ class RecycleConfigKeyDict
     const THIRD_PARTY = 'recycle_third_party_config';
     const DEVICE_QUERY = 'recycle_device_query_config';
     const ORDER_SUBMIT = 'recycle_order_submit_config';
+    const EXPRESS_PRODUCT_CATALOG = 'recycle_express_product_catalog';
+    const EXPRESS_PRODUCT_IMPORT = 'recycle_express_product_import';
 }

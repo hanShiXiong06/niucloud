@@ -21,8 +21,10 @@ Route::group('member_card', function () {
     Route::post('product/:id/disable', 'addon\hsx_member_card\app\adminapi\controller\Product@disable');
     Route::delete('product/:id', 'addon\hsx_member_card\app\adminapi\controller\Product@delete');
 
+    Route::get('member/lists', 'addon\hsx_member_card\app\adminapi\controller\Member@lists');
     Route::get('member/options', 'addon\hsx_member_card\app\adminapi\controller\Member@options');
     Route::post('member/quick_create', 'addon\hsx_member_card\app\adminapi\controller\Member@quickCreate');
+    Route::get('member/:member_id/info', 'addon\hsx_member_card\app\adminapi\controller\Member@info');
     Route::get('member/:member_id/cards', 'addon\hsx_member_card\app\adminapi\controller\Member@cards');
 
     Route::get('order/lists', 'addon\hsx_member_card\app\adminapi\controller\Order@lists');

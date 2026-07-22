@@ -61,6 +61,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
 import { memberCardRequestId, redeemMemberCard, searchMemberCards } from '../../api'
 import MemberCardButton from '../../components/MemberCardButton.vue'
 
@@ -107,6 +108,13 @@ const redeem = async () => {
         redeeming.value = false
     }
 }
+onLoad(async (options: any) => {
+    const value = String(options?.mobile || '').trim()
+    if (/^1\d{10}$/.test(value)) {
+        mobile.value = value
+        await search()
+    }
+})
 </script>
 
 <style scoped lang="scss">
@@ -117,7 +125,7 @@ const redeem = async () => {
 .search-panel__head > view:last-child { display: flex; flex-direction: column; gap: 5rpx; }
 .search-title { font-size: 31rpx; font-weight: 750; }
 .search-sub { color: #64748b; font-size: 21rpx; }
-.input-wrap { margin-bottom: 14rpx; padding: 0 14rpx; border: 1rpx solid #dfe6ef; border-radius: 14rpx; background: #f8fafc; }
+.input-wrap { margin-bottom: 14rpx; padding: 14rpx; border: 1rpx solid #dfe6ef; border-radius: 14rpx; background: #f8fafc; }
 .safe-tip { display: flex; margin-top: 15rpx; align-items: center; gap: 8rpx; color: #64748b; font-size: 20rpx; }
 .candidate { margin-bottom: 18rpx; overflow: hidden; }
 .candidate-head { display: flex; padding: 22rpx; align-items: center; gap: 14rpx; background: #f8fafc; }

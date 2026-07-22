@@ -1,5 +1,20 @@
 import request from '@/utils/request'
 
+// ── ERP 打印中心 ────────────────────────────────────────────────────────────
+export const getErpPrintMeta = () => request.get('erp/print/meta')
+export const getErpPrinters = () => request.get('erp/print/printers')
+export const saveErpPrinter = (id: number, data: Record<string, any>) => request.post(`erp/print/printer/save/${id || 0}`, data, { showSuccessMessage: true })
+export const deleteErpPrinter = (id: number) => request.delete(`erp/print/printer/${id}`, { showSuccessMessage: true })
+export const testErpPrinter = (id: number) => request.post(`erp/print/printer/${id}/test`, {}, { showSuccessMessage: true })
+export const getErpPrintTemplates = () => request.get('erp/print/templates')
+export const saveErpPrintTemplate = (id: number, data: Record<string, any>) => request.post(`erp/print/template/save/${id || 0}`, data, { showSuccessMessage: true })
+export const getErpPrintScenes = () => request.get('erp/print/scenes')
+export const saveErpPrintScene = (id: number, data: Record<string, any>) => request.post(`erp/print/scene/save/${id}`, data, { showSuccessMessage: true })
+export const getErpPrintJobs = (params: Record<string, any> = {}) => request.get('erp/print/jobs', { params })
+export const retryErpPrintJob = (id: number) => request.post(`erp/print/job/${id}/retry`, {}, { showSuccessMessage: true })
+export const printErpAssetLabel = (assetId: number) => request.post('erp/print/manual', { scene_key: 'asset_label', biz_type: 'asset', biz_id: assetId })
+export const printErpSaleReceipt = (saleOrderId: number) => request.post('erp/print/manual', { scene_key: 'sale_created', biz_type: 'sale', biz_id: saleOrderId })
+
 export function getErpOperatingFinanceList(params: Record<string, any> = {}) {
     return request.get('erp/operating_finance/lists', { params })
 }
@@ -181,6 +196,9 @@ export function getErpStockList(params: Record<string, any>) {
 }
 export function getErpStockTurnoverSummary() {
     return request.get('erp/stock/turnover_summary')
+}
+export function getErpStockListingWorkload() {
+    return request.get('erp/stock/listing_workload')
 }
 
 export function getErpStocktakeList(params: Record<string, any> = {}) { return request.get('erp/stocktake/lists', { params }) }

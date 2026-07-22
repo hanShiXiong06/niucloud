@@ -42,6 +42,19 @@ Route::group('erp', function () {
     Route::get('config/finance_categories', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@financeCategories');
     Route::post('config/finance_categories', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@saveFinanceCategories');
     Route::get('config/business_source_options', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@businessSourceOptions');
+    Route::get('print/meta', 'addon\hsx_erp\app\adminapi\controller\ErpPrint@meta');
+    Route::get('print/printers', 'addon\hsx_erp\app\adminapi\controller\ErpPrint@printers');
+    Route::post('print/printer/save/:id', 'addon\hsx_erp\app\adminapi\controller\ErpPrint@savePrinter');
+    Route::delete('print/printer/:id', 'addon\hsx_erp\app\adminapi\controller\ErpPrint@deletePrinter');
+    Route::post('print/printer/:id/test', 'addon\hsx_erp\app\adminapi\controller\ErpPrint@testPrinter');
+    Route::get('print/templates', 'addon\hsx_erp\app\adminapi\controller\ErpPrint@templates');
+    Route::post('print/template/save/:id', 'addon\hsx_erp\app\adminapi\controller\ErpPrint@saveTemplate');
+    Route::get('print/scenes', 'addon\hsx_erp\app\adminapi\controller\ErpPrint@scenes');
+    Route::post('print/scene/save/:id', 'addon\hsx_erp\app\adminapi\controller\ErpPrint@saveScene');
+    Route::get('print/jobs', 'addon\hsx_erp\app\adminapi\controller\ErpPrint@jobs');
+    Route::post('print/manual', 'addon\hsx_erp\app\adminapi\controller\ErpPrint@manual');
+    Route::post('print/job/:id/retry', 'addon\hsx_erp\app\adminapi\controller\ErpPrint@retry');
+    Route::post('print/job/:id/client_complete', 'addon\hsx_erp\app\adminapi\controller\ErpPrint@clientComplete');
     Route::get('counterparty/options', 'addon\hsx_erp\app\adminapi\controller\ErpCounterparty@options');
     Route::get('counterparty/member_options', 'addon\hsx_erp\app\adminapi\controller\ErpCounterparty@memberOptions');
     Route::post('counterparty/quick_contact', 'addon\hsx_erp\app\adminapi\controller\ErpCounterparty@quickContact');
@@ -63,6 +76,7 @@ Route::group('erp', function () {
 
     Route::get('stock/lists', 'addon\hsx_erp\app\adminapi\controller\ErpStock@lists');
     Route::get('stock/turnover_summary', 'addon\hsx_erp\app\adminapi\controller\ErpStock@turnoverSummary');
+    Route::get('stock/listing_workload', 'addon\hsx_erp\app\adminapi\controller\ErpStock@listingWorkload');
     Route::post('stock/transfer/preview', 'addon\hsx_erp\app\adminapi\controller\ErpStock@transferPreview');
     Route::post('stock/transfer', 'addon\hsx_erp\app\adminapi\controller\ErpStock@transfer');
     Route::post('stock/consignment/buyout', 'addon\hsx_erp\app\adminapi\controller\ErpStock@buyoutConsignment');

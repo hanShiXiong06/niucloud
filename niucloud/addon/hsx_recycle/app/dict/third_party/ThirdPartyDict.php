@@ -29,7 +29,6 @@ class ThirdPartyDict
     // ==================== 服务提供商 ====================
     const PROVIDER_3023 = '3023';                    // 3023设备查询
     const PROVIDER_YISU = 'yisu';                    // 亿速快递
-    const PROVIDER_ANGUO = 'anguo';                  // 安果ERP快递
     const PROVIDER_ALI_EXPRESS = 'ali_express';      // 阿里快递查询
     const PROVIDER_TENCENT_CLOUD_MARKET_ADDRESS = 'tencent_cloud_market_address'; // 腾讯云市场地址解析
     const PROVIDER_ALIYUN_SMS = 'aliyun_sms';        // 阿里云短信
@@ -60,7 +59,6 @@ class ThirdPartyDict
     const PROVIDER_TEXT = [
         self::PROVIDER_3023 => '3023设备查询',
         self::PROVIDER_YISU => '亿速快递',
-        self::PROVIDER_ANGUO => '安果ERP快递',
         self::PROVIDER_ALI_EXPRESS => '阿里快递查询',
         self::PROVIDER_TENCENT_CLOUD_MARKET_ADDRESS => '腾讯云市场地址解析',
         self::PROVIDER_ALIYUN_SMS => '阿里云短信',

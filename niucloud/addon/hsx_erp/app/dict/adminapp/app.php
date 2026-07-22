@@ -111,4 +111,13 @@ return [
         'page' => '/addon/hsx_erp/pages/stocktake/list',
         'icon' => '/addon/hsx_erp/site-app/icon_11.png'
     ],
+    [
+        'name' => '移动打印台',
+        'key' => 'hsx_erp_print',
+        'group' => 'hsx_erp',
+        'menu_key' => 'hsx_erp_print',
+        'sort' => 20,
+        'page' => '/addon/hsx_erp/pages/print/index',
+        'icon' => '/addon/hsx_erp/site-app/icon_07.png'
+    ],
 ];

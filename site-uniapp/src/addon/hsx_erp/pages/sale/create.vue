@@ -49,11 +49,15 @@
 
                     <view v-for="(asset, idx) in selectedAssets" :key="asset.id" class="device-form-card">
                         <view class="device-form__head">
-                            <text class="device-name">{{ asset.model }}</text>
+                            <view class="device-title-wrap">
+                                <text class="device-name">{{ asset.model }}</text>
+                                <view v-if="isConsigned(asset)" class="consigned-badge">客户代卖</view>
+                            </view>
                             <u-icon name="close-circle" color="#94a3b8" size="20" @click="removeAsset(idx)" />
                         </view>
                         <text class="card-meta">{{ asset.spec || '-' }} · IMEI {{ asset.imei }}</text>
-                        <text class="card-meta">成本 ¥{{ money(asset.total_cost) }}</text>
+                        <text v-if="isConsigned(asset)" class="card-meta consigned-meta">货主 {{ asset.owner_party_name || '-' }} · 结算 ¥{{ money(saleCostBasis(asset)) }}</text>
+                        <text v-else class="card-meta">成本 ¥{{ money(saleCostBasis(asset)) }}</text>
                         <view class="form-row" style="margin-top:12rpx">
                             <text class="form-label required">销售价</text>
                             <u-input
@@ -64,7 +68,7 @@
                             />
                         </view>
                         <view class="profit-hint" v-if="Number(asset._sale_price) > 0">
-                            预估毛利：<text :class="profitClass(asset)">¥{{ money(Number(asset._sale_price) - Number(asset.total_cost)) }}</text>
+                            预估毛利：<text :class="profitClass(asset)">¥{{ money(Number(asset._sale_price) - saleCostBasis(asset)) }}</text>
                         </view>
                     </view>
 
@@ -162,7 +166,7 @@ const form = ref({
 
 const inputStyle = { background: '#f8fafc', borderRadius: '8rpx', padding: '8rpx 16rpx' }
 const totalSale = computed(() => selectedAssets.value.reduce((s, a) => s + Number(a._sale_price || 0), 0))
-const totalCost = computed(() => selectedAssets.value.reduce((s, a) => s + Number(a.total_cost || 0), 0))
+const totalCost = computed(() => selectedAssets.value.reduce((s, a) => s + saleCostBasis(a), 0))
 const totalProfit = computed(() => totalSale.value - totalCost.value)
 const creditAllowedForOrder = computed(() => {
     const profile = creditProfile.value
@@ -264,8 +268,10 @@ function openScanStockPicker() {
     setTimeout(() => { stockPickerScanTrigger.value++ }, 80)
 }
 
-const profitClass = (a: any) => Number(a._sale_price) - Number(a.total_cost) >= 0 ? 'green' : 'red'
-const suggestedSalePrice = (asset: any) => firstPositiveErpAmount(asset?.retail_price, asset?.estimate_sale_price, asset?.total_cost)
+const isConsigned = (asset: any) => String(asset?.ownership_type || '') === 'consigned'
+const saleCostBasis = (asset: any) => Number(asset?.sale_cost_basis ?? (isConsigned(asset) ? asset?.consignment_settlement_amount : asset?.total_cost) ?? 0)
+const profitClass = (a: any) => Number(a._sale_price) - saleCostBasis(a) >= 0 ? 'green' : 'red'
+const suggestedSalePrice = (asset: any) => firstPositiveErpAmount(asset?.retail_price, asset?.estimate_sale_price, saleCostBasis(asset))
 
 async function submit() {
     if (submitting.value) return
@@ -277,9 +283,13 @@ async function submit() {
     }
     submitting.value = true
     const saleTotal = selectedAssets.value.reduce((sum, item) => sum + Number(item._sale_price || 0), 0)
+    const consignedAssets = selectedAssets.value.filter(isConsigned)
+    const consignmentNotice = consignedAssets.length
+        ? `\n客户代卖：${consignedAssets.length} 台，生成货主应付 ¥${money(consignedAssets.reduce((sum, asset) => sum + saleCostBasis(asset), 0))}`
+        : ''
     const confirmed = await confirmErpSensitiveAction({
         title: '确认销售出库',
-        content: `客户：${erpPartyDisplayName(form.value)}\n渠道：${form.value.sale_channel || '-'}\n设备：${selectedAssets.value.length} 台\n销售总额：¥${money(saleTotal)}\n提交后设备立即退出库存并生成应收，不能普通撤销。`,
+        content: `客户：${erpPartyDisplayName(form.value)}\n渠道：${form.value.sale_channel || '-'}\n设备：${selectedAssets.value.length} 台\n销售总额：¥${money(saleTotal)}${consignmentNotice}\n提交后设备立即退出库存并生成应收，不能普通撤销。`,
         confirmText: '确认出库',
     })
     if (!confirmed) {
@@ -322,6 +332,9 @@ const money = (v: any) => Number(v || 0).toFixed(2)
 .form-section__head { display:flex; align-items:center; justify-content:space-between; margin-bottom:16rpx; }
 .form-section__actions { display:flex; align-items:center; gap:12rpx; }
 .form-section__title { font-size:28rpx; font-weight:600; color:#374151; }
+.device-title-wrap { min-width:0; display:flex; align-items:center; gap:10rpx; }
+.consigned-badge { flex-shrink:0; padding:4rpx 10rpx; border-radius:12rpx; background:#fff7ed; color:#d97706; font-size:20rpx; }
+.consigned-meta { color:#d97706; }
 .form-row { display:flex; align-items:center; gap:16rpx; margin-bottom:16rpx; &:last-child { margin-bottom:0; } }
 .channel-source-tip { margin:-6rpx 0 16rpx 176rpx; color:#94a3b8; font-size:20rpx; }
 .credit-alert { display:flex; align-items:flex-start; gap:10rpx; margin:0 0 16rpx 166rpx; padding:14rpx 16rpx; border:1rpx solid #fde68a; background:#fffbeb; color:#92400e; font-size:22rpx; line-height:1.5; }

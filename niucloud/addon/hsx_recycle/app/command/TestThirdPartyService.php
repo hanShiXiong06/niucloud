@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace addon\hsx_recycle\app\command;
 
 use addon\hsx_recycle\app\service\core\third_party\CoreThirdPartyService;
+use addon\hsx_recycle\app\service\core\device_query\CoreDeviceQueryService;
+use addon\hsx_recycle\app\service\core\express_query\ExpressQueryGatewayService;
 use addon\hsx_recycle\app\dict\third_party\ThirdPartyDict;
 use think\console\Command;
 use think\console\Input;
@@ -82,16 +84,8 @@ class TestThirdPartyService extends Command
         $this->runTest(
             $output,
             '设备查询 - 3023 - 查询型号',
-            function() use ($service, $siteId) {
-                return $service->call(
-                    ThirdPartyDict::SERVICE_TYPE_DEVICE_QUERY,
-                    'queryByImei',
-                    [
-                        'imei' => '352000000000000',
-                        'api' => '/apple/model'
-                    ],
-                    $siteId
-                );
+            function() use ($siteId) {
+                return (new CoreDeviceQueryService())->queryByEndpoint($siteId, '352000000000000', '/apple/model');
             },
             $testResults
         );
@@ -100,15 +94,8 @@ class TestThirdPartyService extends Command
         $this->runTest(
             $output,
             '设备查询 - 3023 - 查询保修',
-            function() use ($service, $siteId) {
-                return $service->call(
-                    ThirdPartyDict::SERVICE_TYPE_DEVICE_QUERY,
-                    'getCoverage',
-                    [
-                        'imei' => '352000000000000'
-                    ],
-                    $siteId
-                );
+            function() use ($siteId) {
+                return (new CoreDeviceQueryService())->queryByEndpoint($siteId, '352000000000000', '/apple/coverage');
             },
             $testResults
         );
@@ -117,16 +104,12 @@ class TestThirdPartyService extends Command
         $this->runTest(
             $output,
             '快递查询 - 阿里云',
-            function() use ($service, $siteId) {
-                return $service->call(
-                    ThirdPartyDict::SERVICE_TYPE_EXPRESS_QUERY,
-                    'query',
-                    [
-                        'express_no' => '75******1234',
-                        'express_code' => 'YTO'
-                    ],
-                    $siteId
-                );
+            function() use ($siteId) {
+                return [
+                    'success' => true,
+                    'provider' => ThirdPartyDict::PROVIDER_ALI_EXPRESS,
+                    'data' => (new ExpressQueryGatewayService())->query($siteId, '75******1234'),
+                ];
             },
             $testResults
         );

@@ -19,6 +19,8 @@
                             <el-option label="设备查询" value="device_query" />
                             <el-option label="快递下单" value="express_order" />
                             <el-option label="快递查询" value="express_query" />
+                            <el-option label="地址解析" value="address_parse" />
+                            <el-option label="云打印" value="printer" />
                         </el-select>
                     </el-form-item>
                     <el-form-item label="服务商">
@@ -74,6 +76,8 @@
                             <el-tag v-if="row.service_type === 'device_query'" type="primary" size="small">设备查询</el-tag>
                             <el-tag v-else-if="row.service_type === 'express_order'" type="success" size="small">快递下单</el-tag>
                             <el-tag v-else-if="row.service_type === 'express_query'" type="info" size="small">快递查询</el-tag>
+                            <el-tag v-else-if="row.service_type === 'address_parse'" type="warning" size="small">地址解析</el-tag>
+                            <el-tag v-else-if="row.service_type === 'printer'" type="info" size="small">云打印</el-tag>
                             <el-tag v-else size="small">{{ row.service_type }}</el-tag>
                         </template>
                     </el-table-column>
@@ -155,17 +159,19 @@
 <script setup lang="ts">
 import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { ref, reactive, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete } from '@element-plus/icons-vue'
 import { timeStampTurnTime } from '@/utils/common'
 import { apiThirdPartyApiLogLists, apiThirdPartyApiLogInfo, apiThirdPartyApiLogClean } from '@/addon/hsx_recycle/api/third_party'
 
 const loading = ref(false)
+const route = useRoute()
 const detailVisible = ref(false)
 const dateRange = ref([])
 
 const formData = reactive({
-    service_type: '',
+    service_type: String(route.query.service_type || ''),
     provider_name: '',
     status: '',
     start_time: '',

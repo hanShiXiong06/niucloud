@@ -73,7 +73,7 @@ class DeviceQueryConfigService
         if (empty($config['channels']) && !empty($config['3023'])) {
             $legacy = is_array($config['3023']) ? $config['3023'] : [];
             $config['channels'][] = array_merge($this->default3023Channel(), [
-                'base_url' => $legacy['base_url'] ?? 'http://api.3023data.com',
+                'base_url' => $legacy['base_url'] ?? 'https://api.3023data.com',
                 'token' => $legacy['api_key'] ?? $legacy['token'] ?? '',
                 'timeout' => (int)($legacy['timeout'] ?? 300),
             ]);
@@ -82,9 +82,14 @@ class DeviceQueryConfigService
         $config['enabled'] = (int)(bool)($config['enabled'] ?? 1);
         $config['cache_enabled'] = (int)(bool)($config['cache_enabled'] ?? 1);
         $config['default_cache_ttl'] = max(0, (int)($config['default_cache_ttl'] ?? 2592000));
-        $config['services'] = $this->mergeServices($config['services'] ?? []);
+        // services 是站点可维护目录。初始化时使用字典默认值，保存后不再强制补回已删除项。
+        $config['services'] = $this->normalizeServices($config['services'] ?? []);
         $config['channels'] = $this->normalizeChannels($config['channels'] ?? []);
-        $config['mappings'] = $this->normalizeMappings($config['mappings'] ?? [], $config['services']);
+        $config['mappings'] = $this->normalizeMappings($config['mappings'] ?? [], $config['services'], $config['channels']);
+
+        usort($config['services'], static function (array $a, array $b) {
+            return (int)($a['sort'] ?? 0) <=> (int)($b['sort'] ?? 0);
+        });
 
         return $config;
     }
@@ -98,26 +103,16 @@ class DeviceQueryConfigService
             'default_cache_ttl' => 2592000,
             'default_channel_key' => '3023_main',
             'services' => $this->catalog->defaultServices(),
-            'channels' => [
-                $this->default3023Channel(),
-                [
-                    'key' => 'gkdt_main',
-                    'name' => '爱查助手',
-                    'provider' => 'service_id_query',
-                    'enabled' => 0,
-                    'priority' => 90,
-                    'base_url' => 'https://api-srv.gkdt.com/inquiry/async',
-                    'method' => 'GET',
-                    'token' => '',
-                    'auth_type' => 'query',
-                    'auth_key' => 'token',
-                    'service_id_key' => 'key',
-                    'timeout' => 300,
-                    'connect_timeout' => 10,
-                    'balance_warning' => 20,
-                ],
-            ],
-            'mappings' => $this->defaultMappings(),
+            'channels' => array_map(static function (array $provider) {
+                $provider['token'] = '';
+                $provider['appid'] = '';
+                $provider['secret'] = '';
+                $provider['timeout'] = 300;
+                $provider['connect_timeout'] = 10;
+                $provider['balance_warning'] = 20;
+                return $provider;
+            }, $this->catalog->defaultProviders()),
+            'mappings' => $this->catalog->defaultMappings(),
         ];
     }
 
@@ -129,7 +124,7 @@ class DeviceQueryConfigService
             'provider' => 'path_query',
             'enabled' => 1,
             'priority' => 100,
-            'base_url' => 'http://api.3023data.com',
+            'base_url' => 'https://api.3023data.com',
             'method' => 'GET',
             'token' => '',
             'auth_type' => 'header',
@@ -138,59 +133,6 @@ class DeviceQueryConfigService
             'connect_timeout' => 10,
             'balance_warning' => 20,
         ];
-    }
-
-    private function defaultMappings(): array
-    {
-        $priceMap = [];
-        $queryTypeMap = [];
-        foreach ($this->catalog->defaultServices() as $service) {
-            $priceMap[$service['code']] = (float)($service['cost_price'] ?? 0);
-            $queryTypeMap[$service['code']] = (string)($service['query_type'] ?? '');
-        }
-
-        $mappings = [];
-        foreach ($this->catalog->endpointMap() as $endpoint => $serviceCode) {
-            $mappings[] = [
-                'service_code' => $serviceCode,
-                'channel_key' => '3023_main',
-                'enabled' => 1,
-                'endpoint_type' => 'path',
-                'endpoint_value' => $endpoint,
-                'query_param' => $this->resolveQueryParam($queryTypeMap[$serviceCode] ?? '', $endpoint),
-                'cost_price' => $priceMap[$serviceCode] ?? 0,
-                'retry_on' => [410, 502, 503],
-                'switch_on_404' => 0,
-                'switch_on_no_data' => 0,
-            ];
-        }
-
-        $mappings[] = [
-            'service_code' => 'apple_coverage',
-            'channel_key' => 'gkdt_main',
-            'enabled' => 1,
-            'endpoint_type' => 'service_id',
-            'endpoint_value' => '10101',
-            'query_param' => 'sn',
-            'cost_price' => 0,
-            'retry_on' => [410, 502, 503],
-            'switch_on_404' => 0,
-            'switch_on_no_data' => 0,
-        ];
-        $mappings[] = [
-            'service_code' => 'apple_coverage_capacity',
-            'channel_key' => 'gkdt_main',
-            'enabled' => 1,
-            'endpoint_type' => 'service_id',
-            'endpoint_value' => '10102',
-            'query_param' => 'sn',
-            'cost_price' => 0,
-            'retry_on' => [410, 502, 503],
-            'switch_on_404' => 0,
-            'switch_on_no_data' => 0,
-        ];
-
-        return $mappings;
     }
 
     private function mergeConfig(array $default, array $data): array
@@ -206,17 +148,23 @@ class DeviceQueryConfigService
         return $default;
     }
 
-    private function mergeServices(array $services): array
+    private function normalizeServices(array $services): array
     {
         $merged = [];
-        foreach ($this->catalog->defaultServices() as $service) {
-            $merged[$service['code']] = $service;
-        }
         foreach ($services as $service) {
             if (!is_array($service) || empty($service['code'])) {
                 continue;
             }
-            $merged[(string)$service['code']] = array_merge($merged[(string)$service['code']] ?? [], $service);
+            $code = trim((string)$service['code']);
+            $service['code'] = $code;
+            $service['name'] = trim((string)($service['name'] ?? $code));
+            $service['category'] = (string)($service['category'] ?? 'other');
+            $service['query_type'] = (string)($service['query_type'] ?? 'imei');
+            $service['enabled'] = (int)(bool)($service['enabled'] ?? 1);
+            $service['sort'] = (int)($service['sort'] ?? 0);
+            $service['cost_price'] = max(0, (float)($service['cost_price'] ?? 0));
+            $service['cache_ttl'] = max(0, (int)($service['cache_ttl'] ?? 0));
+            $merged[$code] = array_merge($merged[$code] ?? [], $service);
         }
 
         foreach ($merged as $code => $service) {
@@ -254,27 +202,57 @@ class DeviceQueryConfigService
 
     private function normalizeChannels(array $channels): array
     {
+        $providerDefaults = [];
+        foreach ($this->catalog->defaultProviders() as $provider) {
+            if (!empty($provider['key'])) {
+                $providerDefaults[(string)$provider['key']] = $provider;
+            }
+        }
+
         $result = [];
         foreach ($channels as $channel) {
             if (!is_array($channel) || empty($channel['key'])) {
                 continue;
             }
+            $key = (string)$channel['key'];
+            $channel = array_merge($providerDefaults[$key] ?? [], $channel);
+            if ($key === 'gkdt_main') {
+                // 兼容旧版将爱查保存成通用 service_id_query + query token 的站点配置。
+                // 爱查实际是 appid/secret 签名协议，不能继续继承旧鉴权字段。
+                $channel['provider'] = 'gkdt_query';
+                $channel['auth_type'] = 'signed';
+                $channel['auth_key'] = '';
+                $channel['service_id_key'] = 'key';
+                $channel['query_param'] = 'code';
+            }
             $channel['enabled'] = (int)(bool)($channel['enabled'] ?? 1);
             $channel['priority'] = (int)($channel['priority'] ?? 0);
             $channel['timeout'] = max(1, (int)($channel['timeout'] ?? 300));
             $channel['connect_timeout'] = max(1, (int)($channel['connect_timeout'] ?? 10));
+            $channel['verify_ssl'] = (int)(bool)($channel['verify_ssl'] ?? 1);
+            $channel['style'] = (string)($channel['style'] ?? '11');
+            $channel['appid'] = trim((string)($channel['appid'] ?? ''));
+            $channel['secret'] = trim((string)($channel['secret'] ?? ''));
+            $channel['token'] = trim((string)($channel['token'] ?? $channel['api_key'] ?? ''));
             $result[] = $channel;
         }
 
         return $result;
     }
 
-    private function normalizeMappings(array $mappings, array $services): array
+    private function normalizeMappings(array $mappings, array $services, array $channels = []): array
     {
         $serviceMap = [];
         foreach ($services as $service) {
             if (!empty($service['code'])) {
                 $serviceMap[(string)$service['code']] = $service;
+            }
+        }
+
+        $channelMap = [];
+        foreach ($channels as $channel) {
+            if (!empty($channel['key'])) {
+                $channelMap[(string)$channel['key']] = $channel;
             }
         }
 
@@ -289,7 +267,8 @@ class DeviceQueryConfigService
             $mapping['retry_on'] = is_array($mapping['retry_on'] ?? null) ? $mapping['retry_on'] : [410, 502, 503];
             $mapping['switch_on_404'] = (int)(bool)($mapping['switch_on_404'] ?? 0);
             $mapping['switch_on_no_data'] = (int)(bool)($mapping['switch_on_no_data'] ?? 0);
-            $mapping['query_param'] = $this->resolveQueryParam(
+            $provider = (string)($channelMap[(string)$mapping['channel_key']]['provider'] ?? '');
+            $mapping['query_param'] = in_array($provider, ['gkdt_query', 'service_id_query'], true) ? 'code' : $this->resolveQueryParam(
                 (string)($mapping['query_param'] ?? ''),
                 (string)($mapping['endpoint_value'] ?? ''),
                 (string)($service['query_type'] ?? '')

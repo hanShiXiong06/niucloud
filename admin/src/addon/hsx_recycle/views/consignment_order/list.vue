@@ -87,7 +87,7 @@
                 <el-dropdown-menu>
                   <el-dropdown-item command="detail">查看详情</el-dropdown-item>
                   <el-dropdown-item command="listing" :disabled="row.status >= 4">设置挂牌价</el-dropdown-item>
-                  <el-dropdown-item command="sold" :disabled="![0,1,2].includes(Number(row.status))">登记售出</el-dropdown-item>
+                  <el-dropdown-item command="sold" :disabled="![0,1,2].includes(Number(row.status))">{{ erpManaged ? '前往ERP销售' : '登记售出' }}</el-dropdown-item>
                   <el-dropdown-item command="settle" :disabled="Number(row.status) !== 3">结算客户</el-dropdown-item>
                   <el-dropdown-item command="cancel" :disabled="row.status >= 4">取消代卖</el-dropdown-item>
                   <el-dropdown-item command="push_notify" divided>推送进度通知</el-dropdown-item>
@@ -186,6 +186,17 @@
         <el-form-item v-if="actionDialog.type === 'settle'" label="结算金额">
           <el-input-number v-model="actionForm.settlement_amount" :min="0" :precision="2" class="!w-full" />
         </el-form-item>
+        <template v-if="actionDialog.type === 'settle' && erpManaged">
+          <el-form-item label="付款账户" required>
+            <el-select v-model="actionForm.capital_account_id" class="!w-full" placeholder="选择ERP实际出款账户">
+              <el-option v-for="account in capitalAccounts" :key="account.id" :value="account.id" :label="capitalAccountLabel(account)" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="付款凭证">
+            <upload-image v-model="actionForm.payment_images" :limit="9" />
+          </el-form-item>
+          <el-alert type="info" :closable="false" title="ERP将统一生成应付结算与账户出账，成功后自动回写本代卖单。" />
+        </template>
         <el-form-item label="备注">
           <el-input v-model="actionForm.remark" type="textarea" rows="3" />
         </el-form-item>
@@ -215,6 +226,7 @@ import {
 } from '@/addon/hsx_recycle/api/consignment_order'
 import { getPrintSceneManualActions, getPrintScenePlan, printByScene } from '@/addon/hsx_recycle/api/printer'
 import EmptyState from '@/addon/hsx_recycle/components/empty-state/index.vue'
+import { getCapitalAccountOptions } from '@/addon/hsx_recycle/api/recycle_order'
 
 const route = useRoute()
 const router = useRouter()
@@ -225,6 +237,8 @@ const statusOptions = ref<any[]>([])
 const manualPrintActions = ref<any[]>([])
 const detailVisible = ref(false)
 const detail = ref<any>(null)
+const erpManaged = ref(false)
+const capitalAccounts = ref<any[]>([])
 
 const search = reactive({
   keyword: '',
@@ -241,8 +255,11 @@ const actionForm = reactive({
   listing_price: 0,
   sold_price: 0,
   settlement_amount: 0,
+  capital_account_id: undefined as number | undefined,
+  payment_images: '',
   remark: ''
 })
+const capitalAccountLabel = (account: any) => `${account.type_name ? `[${account.type_name}] ` : ''}${account.name || account.account_name || '未命名账户'}`
 
 const money = (value: any) => Number(value || 0).toFixed(2)
 const getDeviceField = (key: string) => detail.value?.sourceDevice?.[key] ?? detail.value?.source_device?.[key] ?? ''
@@ -289,6 +306,18 @@ const fetchManualPrintActions = async () => {
 const fetchStatus = async () => {
   const res: any = await getConsignmentStatusOptions()
   statusOptions.value = res.data || []
+}
+const fetchFinanceCapability = async () => {
+  try {
+    const res: any = await getCapitalAccountOptions()
+    erpManaged.value = !!res.data?.payment_managed_by_erp
+    capitalAccounts.value = Array.isArray(res.data?.accounts) ? res.data.accounts : []
+    const defaultAccount = capitalAccounts.value.find((item: any) => Number(item.is_default) === 1) || capitalAccounts.value[0]
+    actionForm.capital_account_id = defaultAccount?.id
+  } catch (error) {
+    erpManaged.value = false
+    capitalAccounts.value = []
+  }
 }
 const fetchList = async () => {
   loading.value = true
@@ -346,12 +375,19 @@ const handleCommand = async (command: string, row: any) => {
     fetchList()
     return
   }
+  if (command === 'sold' && erpManaged.value) {
+    router.push({ path: '/site/hsx_erp/sale', query: { imei: row.device_imei || '', asset_source_id: row.source_device_id || '', t: Date.now() } })
+    return
+  }
   actionDialog.type = command
   actionDialog.row = row
   actionDialog.title = command === 'listing' ? '设置挂牌价' : command === 'sold' ? '登记售出' : '结算客户'
   actionForm.listing_price = Number(row.listing_price || 0)
   actionForm.sold_price = Number(row.sold_price || 0)
   actionForm.settlement_amount = Number(row.settlement_amount || 0)
+  const defaultAccount = capitalAccounts.value.find((item: any) => Number(item.is_default) === 1) || capitalAccounts.value[0]
+  actionForm.capital_account_id = defaultAccount?.id
+  actionForm.payment_images = ''
   actionForm.remark = ''
   actionDialog.visible = true
 }
@@ -398,7 +434,17 @@ const submitAction = async () => {
     } else if (actionDialog.type === 'sold') {
       await markConsignmentSold(id, { sold_price: actionForm.sold_price, settlement_amount: actionForm.settlement_amount, remark: actionForm.remark })
     } else if (actionDialog.type === 'settle') {
-      await settleConsignment(id, { settlement_amount: actionForm.settlement_amount, remark: actionForm.remark })
+      if (erpManaged.value && !actionForm.capital_account_id) {
+        ElMessage.warning(capitalAccounts.value.length ? '请选择ERP实际出款账户' : 'ERP没有可用资金账户，请先完成资金账户配置')
+        return
+      }
+      await settleConsignment(id, {
+        settlement_amount: actionForm.settlement_amount,
+        capital_account_id: actionForm.capital_account_id || 0,
+        payment_images: actionForm.payment_images,
+        request_id: `consignment-${id}-${Date.now()}`,
+        remark: actionForm.remark
+      })
     }
     ElMessage.success('操作成功')
     actionDialog.visible = false
@@ -412,6 +458,7 @@ onMounted(() => {
   fetchStatus()
   fetchList()
   fetchManualPrintActions()
+  fetchFinanceCapability()
 })
 </script>
 

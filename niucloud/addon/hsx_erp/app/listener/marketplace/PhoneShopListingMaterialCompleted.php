@@ -4,10 +4,11 @@ declare(strict_types=1);
 namespace addon\hsx_erp\app\listener\marketplace;
 
 use addon\hsx_erp\app\model\ErpAsset;
+use addon\hsx_erp\app\service\admin\ErpChannelMappingService;
 use addon\hsx_erp\app\service\admin\ErpLedgerService;
 use addon\hsx_erp\app\service\admin\ErpListingTaskService;
 
-/** 商城运营完成建品后，把人工分类/规格映射及上架状态回写 ERP。 */
+/** 商城运营完成建品后，只回写映射、渠道关联和上架状态。 */
 final class PhoneShopListingMaterialCompleted
 {
     public function handle(array $event = []): array
@@ -20,45 +21,53 @@ final class PhoneShopListingMaterialCompleted
         $asset = ErpAsset::where([['site_id', '=', $siteId], ['id', '=', $assetId]])->findOrEmpty();
         if ($asset->isEmpty()) return ['updated' => false, 'reason' => 'asset_not_found'];
         $mapping = (array)($event['mapping'] ?? []);
+        $operator = (array)($event['operator'] ?? []);
+        $operatorUid = (int)($operator['uid'] ?? 0);
+        $operatorName = trim((string)($operator['name'] ?? '')) ?: '商城资料运营';
         $spec = json_decode(trim((string)$asset->spec_json), true);
         if (!is_array($spec)) $spec = [];
-        $spec['marketplace_mapping'] = [
-            'provider' => 'phone_shop',
-            'goods_id' => $goodsId,
-            'intake_id' => (int)($event['intake_id'] ?? 0),
-            'category_ids' => array_values((array)($mapping['category_ids'] ?? [])),
-            'brand_id' => (int)($mapping['brand_id'] ?? 0),
-            'label_ids' => array_values((array)($mapping['label_ids'] ?? [])),
-            'service_ids' => array_values((array)($mapping['service_ids'] ?? [])),
-            'completed_at' => time(),
-        ];
-        if (trim((string)($mapping['memory'] ?? '')) !== '') $spec['memory'] = trim((string)$mapping['memory']);
-        if (trim((string)($mapping['condition_grade'] ?? '')) !== '') $spec['condition_grade'] = trim((string)$mapping['condition_grade']);
+
+        // 商城可以学习并保存“ERP值 → 商城值”的映射，但不得反向覆盖 ERP 主资料。
+        $erpContext = (array)($event['erp_context'] ?? []);
+        $erpContext = array_replace([
+            'category_path' => (string)($asset->category_path ?? ''),
+            'memory' => $spec['memory'] ?? $spec['storage'] ?? $spec['capacity'] ?? '',
+            'condition_grade' => $spec['condition_grade'] ?? $spec['condition'] ?? $spec['grade'] ?? '',
+            'specs' => $spec,
+        ], $erpContext);
+        (new ErpChannelMappingService())->recordManualCompletion($event, $erpContext);
 
         $before = (string)$asset->listing_status;
-        $save = [
-            'spec_json' => json_encode($spec, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}',
-            'listing_status' => 'listed',
-            'update_at' => time(),
-        ];
-        if ((float)($mapping['price'] ?? 0) > 0) $save['retail_price'] = round((float)$mapping['price'], 2);
-        if (!empty($mapping['images'])) $save['image_urls'] = json_encode(array_values((array)$mapping['images']), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        if (!empty($mapping['qc_report'])) $save['qc_report'] = json_encode((array)$mapping['qc_report'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        $asset->save($save);
+        $asset->save(['listing_status' => 'listed', 'update_at' => time()]);
 
         if ($before !== 'listed') {
-            (new ErpLedgerService())->asset([
+            $ledger = ErpLedgerService::forSite($siteId, $operatorUid, $operatorName);
+            $ledger->asset([
+                'asset_id' => $assetId,
+                'action' => 'listing_material_complete',
+                'before_status' => (string)$asset->status . '/' . $before,
+                'after_status' => (string)$asset->status . '/listed',
+                'source_type' => 'phone_shop_intake',
+                'source_id' => (int)($event['intake_id'] ?? 0),
+                'operator_uid' => $operatorUid,
+                'operator_name' => $operatorName,
+                'remark' => '完成商城分类、规格映射并保留渠道关联',
+                'extra' => ['provider' => 'phone_shop', 'goods_id' => $goodsId],
+            ]);
+            $ledger->asset([
                 'asset_id' => $assetId,
                 'action' => 'listing_publish',
                 'before_status' => (string)$asset->status . '/' . $before,
                 'after_status' => (string)$asset->status . '/listed',
                 'source_type' => 'phone_shop_goods',
                 'source_id' => $goodsId,
-                'remark' => '商城运营已完成分类、规格映射并上架，资料已回写 ERP',
+                'operator_uid' => $operatorUid,
+                'operator_name' => $operatorName,
+                'remark' => '商城运营已完成映射并上架；ERP 主资料保持不变',
                 'extra' => ['provider' => 'phone_shop', 'goods_id' => $goodsId],
             ]);
         }
-        ErpListingTaskService::forSite($siteId, 0, '商城运营')->sync($assetId);
+        ErpListingTaskService::forSite($siteId, $operatorUid, $operatorName)->sync($assetId);
         return ['updated' => true, 'asset_id' => $assetId, 'goods_id' => $goodsId];
     }
 }

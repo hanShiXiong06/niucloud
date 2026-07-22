@@ -26,7 +26,7 @@ class HsxPhoneQueryCategoryDict
                 'channel_name' => '3023Data',
                 'type_id' => $item['type_id'],
                 'service_code' => $item['service_code'],
-                'query_param' => 'sn',
+                'query_param' => (string)($item['query_param'] ?? self::infer3023QueryParam((string)$item['endpoint'])),
                 'name' => $item['name'],
                 'price' => $item['price'],
                 'cost_price' => $item['cost_price'],
@@ -62,6 +62,7 @@ class HsxPhoneQueryCategoryDict
             $mappings[] = [
                 'service_code' => $item['service_code'],
                 'endpoint_value' => $item['endpoint'],
+                'query_param' => (string)($item['query_param'] ?? self::infer3023QueryParam((string)$item['endpoint'])),
                 'cost_price' => $item['cost_price'],
             ];
         }
@@ -91,13 +92,13 @@ class HsxPhoneQueryCategoryDict
             $queryParam = 'code';
         } elseif ($channelKey === '3023_main') {
             $items = self::provider3023Items();
-            $queryParam = 'sn';
+            $queryParam = '';
         } else {
             return [];
         }
 
         foreach ($items as &$item) {
-            $item['query_param'] = $queryParam;
+            $item['query_param'] = $queryParam ?: (string)($item['query_param'] ?? self::infer3023QueryParam((string)($item['endpoint'] ?? '')));
         }
         unset($item);
 
@@ -115,6 +116,28 @@ class HsxPhoneQueryCategoryDict
         }
 
         return $map;
+    }
+
+    /**
+     * 3023 的参数名由接口领域决定，不能全部写死为 sn。
+     */
+    public static function infer3023QueryParam(string $endpoint): string
+    {
+        $path = strtolower('/' . ltrim($endpoint, '/'));
+        if (str_starts_with($path, '/imei/')) {
+            return 'imei';
+        }
+        if (str_starts_with($path, '/item/')) {
+            return 'barcode';
+        }
+        if (str_starts_with($path, '/ip/')) {
+            return 'ip';
+        }
+        if (str_starts_with($path, '/phone/')) {
+            return 'phone';
+        }
+
+        return 'sn';
     }
 
     private static function loadInitOverrides(): array

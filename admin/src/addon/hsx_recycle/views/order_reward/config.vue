@@ -1,5 +1,5 @@
 <template>
-    <PremiumTheme class="main-container">
+    <div class="main-container">
         <el-card class="box-card !border-none" shadow="never">
             <div class="flex justify-between items-center mb-6">
                 <div>
@@ -83,21 +83,21 @@
 
                     <div class="flex justify-end gap-2 mt-4">
                         <el-button @click="loadConfig">重置</el-button>
-                        <el-button type="primary" @click="saveConfig">保存配置</el-button>
+                        <el-button type="primary" :loading="saving" @click="saveConfig">保存配置</el-button>
                     </div>
                 </el-card>
             </div>
         </el-card>
-    </PremiumTheme>
+    </div>
 </template>
 
 <script lang="ts" setup>
-import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getOrderRewardConfig, setOrderRewardConfig } from '@/addon/hsx_recycle/api/order_reward'
 
 const loading = ref(false)
+const saving = ref(false)
 
 const formData = reactive({
     is_enable: 0,
@@ -105,12 +105,28 @@ const formData = reactive({
     reward_times: 1
 })
 
+const toInteger = (value: unknown, fallback: number, min: number, max: number) => {
+    const number = Number(value)
+    if (!Number.isFinite(number)) return fallback
+    return Math.min(max, Math.max(min, Math.trunc(number)))
+}
+
+const applyConfig = (value: unknown) => {
+    const config = value && typeof value === 'object' && !Array.isArray(value)
+        ? value as Record<string, unknown>
+        : {}
+
+    formData.is_enable = Number(config.is_enable) === 1 ? 1 : 0
+    formData.reward_point = toInteger(config.reward_point, 0, 0, 10000)
+    formData.reward_times = toInteger(config.reward_times, 1, 1, 100)
+}
+
 // 加载配置
 const loadConfig = async () => {
     loading.value = true
     try {
-        const { data } = await getOrderRewardConfig()
-        Object.assign(formData, data)
+        const response = await getOrderRewardConfig()
+        applyConfig(response?.data)
     } catch (error) {
         console.error('加载配置失败:', error)
         ElMessage.error('加载配置失败')
@@ -134,15 +150,19 @@ const saveConfig = async () => {
     }
 
     try {
-        loading.value = true
-        await setOrderRewardConfig(formData)
+        saving.value = true
+        await setOrderRewardConfig({
+            is_enable: formData.is_enable,
+            reward_point: formData.reward_point,
+            reward_times: formData.reward_times
+        })
         ElMessage.success('保存成功')
         await loadConfig()
     } catch (error) {
         console.error('保存配置失败:', error)
         ElMessage.error('保存配置失败')
     } finally {
-        loading.value = false
+        saving.value = false
     }
 }
 
@@ -153,7 +173,9 @@ onMounted(() => {
 
 <script lang="ts">
 export default {
-    name: 'OrderRewardConfig'
+    name: 'OrderRewardConfig',
+    // 牛云页签缓存读取组件的 __name，显式声明 name 后 Vue 3.2 不会再自动生成该字段。
+    __name: 'OrderRewardConfig'
 }
 </script>
 

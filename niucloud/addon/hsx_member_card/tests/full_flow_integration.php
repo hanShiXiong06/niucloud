@@ -84,6 +84,16 @@ try {
     $assert(($order['success'] ?? false) === true, '挂账开卡未成功：' . (string)($order['last_error'] ?? ''));
     $assert((string)($order['finance_status'] ?? '') === 'pending', '挂账开卡应生成待收 ERP 应收');
 
+    $memberService = new MemberCardMemberService();
+    $memberPage = $memberService->lists([
+        'keyword' => substr((string)$testMember['mobile'], -4),
+        'page' => 1,
+        'limit' => 15,
+    ]);
+    $memberRows = (array)($memberPage['data'] ?? []);
+    $matchedMember = array_values(array_filter($memberRows, static fn(array $row): bool => (int)($row['member_id'] ?? 0) === (int)$testMember['member_id']));
+    $assert($matchedMember !== [] && (int)($matchedMember[0]['available_card_count'] ?? 0) === 1, '会员列表必须能按手机号检索并显示可用卡数量');
+
     $redemptionService = new MemberCardRedemptionService();
     $search = $redemptionService->search([
         'mobile_keyword' => substr((string)$testMember['mobile'], -4),
@@ -101,6 +111,10 @@ try {
         'remark' => 'integration redeem',
     ]);
     $assert((int)$redeem['before_remaining'] === 10 && (int)$redeem['after_remaining'] === 9, '核销必须固定扣减1次');
+
+    $memberInfo = $memberService->info((int)$testMember['member_id']);
+    $assert((int)($memberInfo['member']['card_count'] ?? 0) === 1, '会员详情必须展示持卡数量');
+    $assert(count((array)($memberInfo['redemptions'] ?? [])) === 1, '会员详情必须展示核销记录');
 
     $reverse = $redemptionService->reverse((int)$redeem['redeem_id'], [
         'request_id' => 'integration:reverse:' . bin2hex(random_bytes(8)),

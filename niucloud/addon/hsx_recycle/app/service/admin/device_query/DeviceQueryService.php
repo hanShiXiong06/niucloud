@@ -6,8 +6,7 @@ namespace addon\hsx_recycle\app\service\admin\device_query;
 use addon\hsx_recycle\app\model\third_party\DeviceQueryApi;
 use addon\hsx_recycle\app\model\third_party\DeviceQueryResult;
 use addon\hsx_recycle\app\service\core\device_query\CoreDeviceQueryService;
-use addon\hsx_recycle\app\service\core\third_party\CoreThirdPartyService;
-use addon\hsx_recycle\app\dict\third_party\ThirdPartyDict;
+use addon\hsx_recycle\app\service\core\express_query\ExpressQueryGatewayService;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 
@@ -505,27 +504,8 @@ class DeviceQueryService extends BaseAdminService
       }
 
       private function queryExpress(string $express_code = '' , string $mobile = ''){
-        // 使用新的第三方服务架构
-        $service = new CoreThirdPartyService();
-
         try {
-            $result = $service->call(
-                ThirdPartyDict::SERVICE_TYPE_EXPRESS_QUERY,
-                'query',
-                [
-                    'express_no' => $express_code,
-                    'mobile' => $mobile
-                ],
-                $this->site_id
-            );
-
-            if (!$result['success']) {
-                return [];
-            }
-
-            // 返回查询结果
-            return $result['data']['data'] ?? [];
-
+            return (new ExpressQueryGatewayService())->query($this->site_id, $express_code, $mobile);
         } catch (\Exception $e) {
             \think\facade\Log::error('快递查询失败: ' . $e->getMessage());
             return [];

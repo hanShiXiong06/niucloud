@@ -331,19 +331,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_category_quote_history` (
   KEY `idx_site_cat_time` (`site_id`,`category_id`,`create_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='回收分类报价单历史快照表';
 
--- 老数据回填：将现有非空 images 按分类回填一条历史
-INSERT INTO `{{prefix}}recycle_category_quote_history`
-  (`site_id`, `category_id`, `images`, `operator_id`, `operator_name`, `remark`, `create_time`)
-SELECT
-  `site_id`,
-  `category_id`,
-  `images`,
-  0,
-  '',
-  '初始化历史记录',
-  IF(`update_time` > 0, `update_time`, IF(`create_time` > 0, `create_time`, UNIX_TIMESTAMP()))
-FROM `{{prefix}}recycle_category`
-WHERE `images` IS NOT NULL AND `images` <> '';
+
 
 -- 历史表新增浏览量字段
 ALTER TABLE `{{prefix}}recycle_category_quote_history` ADD COLUMN `view_count` int NOT NULL DEFAULT 0 COMMENT '该报价单浏览次数' AFTER `create_time`;
@@ -427,3 +415,336 @@ ALTER TABLE `{{prefix}}recycle_device`
   ADD COLUMN `refurbishment_items` text COMMENT '建议整备项目JSON' AFTER `refurbishment_reason`,
   ADD COLUMN `refurbishment_estimated_cost` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '预估整备成本' AFTER `refurbishment_items`,
   ADD COLUMN  `sale_destination` varchar(20) NOT NULL DEFAULT 'mall' COMMENT '销售去向：mall-商城销售，peer-同行出货，hold-暂存';
+
+
+-- hsx_recycle 0.0.3
+-- 下游流转回流：在回收设备上镜像 ERP/中台 的生命周期阶段，使回收侧能看全程（已入库/转中台/已定价/已售）。
+-- 纯加法列，不改动现有状态机；由回收侧监听器幂等写入，缺失插件时列保持默认值，无副作用。
+
+ALTER TABLE `{{prefix}}recycle_device`
+  ADD COLUMN `downstream_stage` tinyint NOT NULL DEFAULT 0 COMMENT '下游流转阶段镜像：0-未流转,10-已入库,20-转中台待拍照,30-已定价可售,40-已售下架' AFTER `last_cost_adjust_time`,
+  ADD COLUMN `downstream_stage_at` int NOT NULL DEFAULT 0 COMMENT '下游流转阶段更新时间' AFTER `downstream_stage`,
+  ADD COLUMN `downstream_erp_asset_id` int NOT NULL DEFAULT 0 COMMENT '关联ERP资产ID(下游回流)' AFTER `downstream_stage_at`,
+  ADD COLUMN `downstream_sale_price` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '中台销售定价(下游回流)' AFTER `downstream_erp_asset_id`,
+  ADD COLUMN `downstream_event_id` varchar(64) NOT NULL DEFAULT '' COMMENT '最近一次应用的下游事件ID(幂等追溯)' AFTER `downstream_sale_price`,
+  ADD COLUMN `target_warehouse_id` int NOT NULL DEFAULT 0 COMMENT '目标仓库ID(ERP安装时定价选择,0为未指定)' AFTER `downstream_event_id`,
+  ADD COLUMN `target_warehouse_name` varchar(100) NOT NULL DEFAULT '' COMMENT '目标仓库名称快照' AFTER `target_warehouse_id`,
+  ADD COLUMN `target_location_id` int NOT NULL DEFAULT 0 COMMENT '目标库位ID(定价手动选择,0为未指定)' AFTER `target_warehouse_name`,
+  ADD COLUMN `target_location_name` varchar(100) NOT NULL DEFAULT '' COMMENT '目标库位名称快照' AFTER `target_location_id`;
+
+-- 修复历史安装中"报价单每日快照"任务的非法 cron：
+-- 旧 time JSON 误用 minute 且缺 day，type=day 拼出 `0 * 23 */* * *`，被 workerman/crontab 判为非法字符串导致调度进程崩溃。
+-- 修正为合法的"每天 23:00 执行"（day=1 即每天）。
+-- UPDATE `{{prefix}}sys_schedule`
+--   SET `time` = '{"type":"day","day":1,"hour":23,"min":0}'
+--   WHERE `addon` = 'hsx_recycle' AND `key` = 'quote_daily_snapshot';
+
+-- 选择频次统计表（通用：按场景记录某用户被选中的次数，用于"常用优先"排序，如整备负责人）
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_user_pick_stat` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `scene` varchar(50) NOT NULL DEFAULT '' COMMENT '选择场景，如 refurbishment_assignee',
+  `user_id` int NOT NULL DEFAULT 0 COMMENT '被选用户ID',
+  `pick_count` int NOT NULL DEFAULT 0 COMMENT '被选次数',
+  `last_pick_at` int NOT NULL DEFAULT 0 COMMENT '最近被选时间',
+  `create_at` int NOT NULL DEFAULT 0 COMMENT '创建时间',
+  `update_at` int NOT NULL DEFAULT 0 COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_scene_user` (`site_id`,`scene`,`user_id`),
+  KEY `idx_site_scene_count` (`site_id`,`scene`,`pick_count`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='回收选择频次统计表';
+
+-- ============ 质检：参考表 + 数据表(全ID映射) ============
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_check_dict` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `dict_type` varchar(10) NOT NULL DEFAULT '' COMMENT 'group分类/field检测项/option选项',
+  `text` varchar(255) NOT NULL DEFAULT '' COMMENT '中文文本',
+  `severity` varchar(16) NOT NULL DEFAULT 'normal' COMMENT '仅option用: normal/general/abnormal',
+  `is_user_modified` tinyint(1) NOT NULL DEFAULT 0 COMMENT '用户改过=1，重导不覆盖',
+  `sort` int NOT NULL DEFAULT 0,
+  `create_at` int NOT NULL DEFAULT 0,
+  `update_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_type_text` (`site_id`,`dict_type`,`text`(180)),
+  KEY `idx_site_type_sev` (`site_id`,`dict_type`,`severity`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='回收质检参考表(字典:分类/检测项/选项)';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_check_import_batch` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0,
+  `source` varchar(40) NOT NULL DEFAULT 'paijitang',
+  `file_name` varchar(255) NOT NULL DEFAULT '',
+  `total_rows` int NOT NULL DEFAULT 0,
+  `inserted` int NOT NULL DEFAULT 0,
+  `updated` int NOT NULL DEFAULT 0,
+  `skipped_same` int NOT NULL DEFAULT 0,
+  `skipped_user` int NOT NULL DEFAULT 0,
+  `new_dict` int NOT NULL DEFAULT 0,
+  `status` varchar(20) NOT NULL DEFAULT 'processing',
+  `error_message` varchar(1000) NOT NULL DEFAULT '',
+  `operator_uid` int NOT NULL DEFAULT 0,
+  `operator_name` varchar(60) NOT NULL DEFAULT '',
+  `create_at` int NOT NULL DEFAULT 0,
+  `update_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `idx_site` (`site_id`,`create_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='回收质检导入批次';
+
+-- recycle_check_option 加 severity(级别)列（仅 0.0.1/0.0.2 升级时执行；全新安装已在 install.sql 含此列）
+ALTER TABLE `{{prefix}}recycle_check_option`
+  ADD COLUMN `severity` varchar(16) NOT NULL DEFAULT 'normal' COMMENT '级别 normal/general/abnormal' AFTER `is_default`;
+
+-- 设备表加 电池效率/单机全套 列(供质检勾选回写 + 打印单独显示；全新安装已在 install.sql 含)
+ALTER TABLE `{{prefix}}recycle_device`
+  ADD COLUMN `battery` varchar(50) NOT NULL DEFAULT '' COMMENT '电池效率/健康（如85%）' AFTER `color`,
+  ADD COLUMN `package_type` varchar(50) NOT NULL DEFAULT '' COMMENT '单机/全套等套装情况' AFTER `battery`;
+
+-- 设备加 成色等级 列(质检「成色等级」单选回写 + 打印 {condition_grade}；全新安装已在 install.sql 含)
+ALTER TABLE `{{prefix}}recycle_device`
+  ADD COLUMN `condition_grade` varchar(20) NOT NULL DEFAULT '' COMMENT '成色等级（10新/99新…）' AFTER `package_type`;
+
+
+-- hsx_recycle 0.0.4（线上 0.0.3 → 0.0.4 一次性升级）
+-- 任务驱动工单系统数据地基 + 性能优化，全部合并在此一个升级文件：
+--   1) 实时在途计数 recycle_stat_current
+--   2) 按日流水汇总 recycle_stat_daily
+--   3) 任务认领 recycle_task_claim
+--   4) recycle_device / recycle_order 补高频索引（在线 DDL）
+--   5) 每日维度汇总 recycle_stat_daily_dim（型号/分类/成色/来源，抗千万级）
+-- 表均 CREATE TABLE IF NOT EXISTS，已手动建过的会自动跳过。
+
+
+-- 2. 实时态计数（看板/待办读它，免聚合）
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_stat_current` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `metric_key` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '' COMMENT '指标键:stage_check/stage_price/stage_confirm/stage_pay 等,当前在该环节台数',
+  `uid` int NOT NULL DEFAULT 0 COMMENT '维度:0=全站汇总,>0=经手人',
+  `value` int NOT NULL DEFAULT 0 COMMENT '当前数量',
+  `update_time` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE KEY `uk_site_metric_uid` (`site_id`,`metric_key`,`uid`) USING BTREE,
+  KEY `site_id` (`site_id`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci ROW_FORMAT=DYNAMIC COMMENT='回收实时态计数(看板/待办读它)';
+
+-- 3. 按日流水汇总（趋势/绩效读它）
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_stat_daily` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `stat_date` int NOT NULL DEFAULT 0 COMMENT '统计日 YYYYMMDD',
+  `metric_key` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '' COMMENT '指标键:enter_check/done_check/recycled/paid 等,当日发生量',
+  `uid` int NOT NULL DEFAULT 0 COMMENT '维度:0=全站,>0=经手人',
+  `value` int NOT NULL DEFAULT 0 COMMENT '台数',
+  `amount` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '金额',
+  `update_time` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE KEY `uk_site_date_metric_uid` (`site_id`,`stat_date`,`metric_key`,`uid`) USING BTREE,
+  KEY `site_date` (`site_id`,`stat_date`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci ROW_FORMAT=DYNAMIC COMMENT='回收按日流水汇总(趋势/绩效读它)';
+
+-- 任务驱动工单 · 认领表：店员将某环节的某台设备认领到人（责任到人）。
+-- 纯新增表，不改动设备主表/状态机。一台设备在一个环节最多一条认领记录；进入下一环节即另起。
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_task_claim` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `device_id` int NOT NULL DEFAULT 0 COMMENT '设备ID',
+  `stage_key` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '' COMMENT '环节标识',
+  `assignee_uid` int NOT NULL DEFAULT 0 COMMENT '认领人UID',
+  `assignee_name` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '' COMMENT '认领人名称快照',
+  `claimed_at` int NOT NULL DEFAULT 0 COMMENT '认领时间',
+  `update_time` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE KEY `uk_site_device_stage` (`site_id`,`device_id`,`stage_key`) USING BTREE,
+  KEY `assignee` (`site_id`,`assignee_uid`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci ROW_FORMAT=DYNAMIC COMMENT='回收任务认领(责任到人)';
+
+ALTER TABLE `{{prefix}}recycle_device` ADD INDEX `idx_site_status_pay` (`site_id`,`status`,`pay_status`), ALGORITHM=INPLACE, LOCK=NONE;
+ALTER TABLE `{{prefix}}recycle_device` ADD INDEX `idx_site_order` (`site_id`,`order_id`), ALGORITHM=INPLACE, LOCK=NONE;
+ALTER TABLE `{{prefix}}recycle_device` ADD INDEX `idx_site_create` (`site_id`,`create_at`), ALGORITHM=INPLACE, LOCK=NONE;
+ALTER TABLE `{{prefix}}recycle_device` ADD INDEX `idx_site_category` (`site_id`,`category_id`), ALGORITHM=INPLACE, LOCK=NONE;
+ALTER TABLE `{{prefix}}recycle_device` ADD INDEX `idx_site_check_uid` (`site_id`,`check_uid`,`check_at`), ALGORITHM=INPLACE, LOCK=NONE;
+ALTER TABLE `{{prefix}}recycle_device` ADD INDEX `idx_site_price_uid` (`site_id`,`price_uid`,`final_price_at`), ALGORITHM=INPLACE, LOCK=NONE;
+ALTER TABLE `{{prefix}}recycle_order` ADD INDEX `idx_site_status` (`site_id`,`status`), ALGORITHM=INPLACE, LOCK=NONE;
+ALTER TABLE `{{prefix}}recycle_order` ADD INDEX `idx_site_sign_at` (`site_id`,`sign_at`), ALGORITHM=INPLACE, LOCK=NONE;
+ALTER TABLE `{{prefix}}recycle_order` ADD INDEX `idx_site_pay_time` (`site_id`,`pay_time`), ALGORITHM=INPLACE, LOCK=NONE;
+ALTER TABLE `{{prefix}}recycle_order` ADD INDEX `idx_site_create` (`site_id`,`create_at`), ALGORITHM=INPLACE, LOCK=NONE;
+
+-- 每日维度汇总表：把"型号分布/分类排行/成色/来源"这类维度统计预聚合到按日小表，
+-- 分析页读这张小表(大小=天数×维度数,不随设备总量增长)，天然抗千万级；大表只留给明细钻取。
+-- 历史天由"懒回填"算一次即固定，当天实时算。
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_stat_daily_dim` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `stat_date` int NOT NULL DEFAULT 0 COMMENT '统计日 YYYYMMDD',
+  `dim_type` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '' COMMENT '维度类型:category/model/grade/source',
+  `dim_value` varchar(120) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '' COMMENT '维度值:分类ID/型号名/成色/来源',
+  `cnt` int NOT NULL DEFAULT 0 COMMENT '当日该维度设备数(按 create_at 归日)',
+  `amount` decimal(14,2) NOT NULL DEFAULT 0.00 COMMENT '当日该维度金额(final_price 合计)',
+  `update_time` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE KEY `uk_dim` (`site_id`,`stat_date`,`dim_type`,`dim_value`) USING BTREE,
+  KEY `idx_site_type_date` (`site_id`,`dim_type`,`stat_date`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci ROW_FORMAT=DYNAMIC COMMENT='回收每日维度汇总(型号/分类/成色/来源)';
+
+-- ===== 快递公司 + 电子面单模板（原 0.0.8，合并至此）=====
+
+-- 快递公司：统一字典，供电子面单模板/发件下拉选择；存各服务商的编码映射与可选业务类型/打印样式
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_delivery_company` (
+  `company_id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',
+  `company_name` varchar(60) NOT NULL DEFAULT '' COMMENT '快递公司名称',
+  `logo` varchar(255) NOT NULL DEFAULT '' COMMENT 'LOGO',
+  `url` varchar(255) NOT NULL DEFAULT '' COMMENT '官网链接',
+  `express_code` varchar(50) NOT NULL DEFAULT '' COMMENT '通用/物流跟踪编码',
+  `kuaidi100_com` varchar(50) NOT NULL DEFAULT '' COMMENT '快递100编码(kuaidicom)',
+  `yisu_product_code` varchar(50) NOT NULL DEFAULT '' COMMENT '易速产品编码(productCode)',
+  `electronic_sheet_switch` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否支持电子面单 0否1是',
+  `exp_type` text COMMENT '业务类型列表JSON [{text,value}]',
+  `print_style` text COMMENT '打印样式列表JSON [{template_name,template_size}]',
+  `sort` int NOT NULL DEFAULT '0' COMMENT '排序',
+  `status` tinyint(1) NOT NULL DEFAULT '1' COMMENT '状态 0停用1启用',
+  `create_at` int NOT NULL DEFAULT '0',
+  `update_at` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`company_id`),
+  KEY `idx_site_status` (`site_id`,`status`,`electronic_sheet_switch`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='回收-快递公司字典';
+
+-- 电子面单模板：可管理对象（列表+新建向导+设默认）。provider 指向执行引擎(yisu/kuaidi100)；print_channel 决定打印方式(可切换)
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_express_sheet` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',
+  `template_name` varchar(60) NOT NULL DEFAULT '' COMMENT '模板名称',
+  `provider` varchar(30) NOT NULL DEFAULT '' COMMENT '执行服务商 yisu/kuaidi100',
+  `express_company_id` int NOT NULL DEFAULT '0' COMMENT '快递公司ID',
+  `exp_type` varchar(50) NOT NULL DEFAULT '' COMMENT '业务类型值(来自公司exp_type)',
+  `exp_type_name` varchar(60) NOT NULL DEFAULT '' COMMENT '业务类型名称',
+  `print_style` varchar(60) NOT NULL DEFAULT '' COMMENT '打印样式标识(来自公司print_style)',
+  `customer_name` varchar(120) NOT NULL DEFAULT '' COMMENT '电子面单客户账号',
+  `customer_pwd` varchar(255) NOT NULL DEFAULT '' COMMENT '电子面单密码',
+  `send_site` varchar(60) NOT NULL DEFAULT '' COMMENT '发件网点',
+  `send_staff` varchar(60) NOT NULL DEFAULT '' COMMENT '发件员',
+  `month_code` varchar(60) NOT NULL DEFAULT '' COMMENT '月结编码',
+  `pay_type` tinyint(1) NOT NULL DEFAULT '1' COMMENT '邮费支付方式 1现付2到付3月结',
+  `output_type` varchar(10) NOT NULL DEFAULT 'IMAGE' COMMENT '面单形式 IMAGE/HTML/CLOUD',
+  `print_channel` varchar(10) NOT NULL DEFAULT 'browser' COMMENT '打印方式 browser网页/cloud云打印/lodop本地',
+  `temp_id` varchar(120) NOT NULL DEFAULT '' COMMENT '面单模板ID(快递100)',
+  `child_temp_id` varchar(120) NOT NULL DEFAULT '' COMMENT '子模板ID',
+  `back_temp_id` varchar(120) NOT NULL DEFAULT '' COMMENT '回单模板ID',
+  `siid` varchar(120) NOT NULL DEFAULT '' COMMENT '云打印机设备码(CLOUD)',
+  `is_notice` tinyint(1) NOT NULL DEFAULT '0' COMMENT '上门揽件 0否1是',
+  `status` tinyint(1) NOT NULL DEFAULT '1' COMMENT '状态 0停用1启用',
+  `is_default` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否默认 0否1是',
+  `create_at` int NOT NULL DEFAULT '0',
+  `update_at` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`),
+  KEY `idx_site_company` (`site_id`,`express_company_id`,`status`),
+  KEY `idx_site_default` (`site_id`,`is_default`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='回收-电子面单模板';
+
+-- 0.0.9 方案A：公司与服务商绑定拆分
+-- 1) 新增「公司-服务商绑定」表：一家公司可对接多个服务商，各自编码/面单能力独立
+-- 2) 从快递公司表移除"塞在一起"的服务商编码与面单字段（迁移到绑定表）
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_delivery_company_provider` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',
+  `company_id` int NOT NULL DEFAULT '0' COMMENT '快递公司ID',
+  `provider` varchar(30) NOT NULL DEFAULT '' COMMENT '服务商 yisu/kuaidi100',
+  `provider_code` varchar(60) NOT NULL DEFAULT '' COMMENT '该服务商下的公司编码(kuaidicom / 易速productCode)',
+  `electronic_sheet_switch` tinyint(1) NOT NULL DEFAULT '0' COMMENT '该服务商是否出面单 0否1是',
+  `exp_type` text COMMENT '业务类型列表JSON [{text,value}]',
+  `print_style` text COMMENT '打印样式列表JSON [{template_name,template_size}]',
+  `status` tinyint(1) NOT NULL DEFAULT '1' COMMENT '状态 0停用1启用',
+  `create_at` int NOT NULL DEFAULT '0',
+  `update_at` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_company_provider` (`site_id`,`company_id`,`provider`),
+  KEY `idx_site_provider` (`site_id`,`provider`,`electronic_sheet_switch`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='回收-快递公司服务商绑定';
+
+-- 快递公司表精简：移除按服务商的编码与面单字段（已迁到绑定表）
+ALTER TABLE `{{prefix}}recycle_delivery_company` DROP COLUMN `kuaidi100_com`;
+ALTER TABLE `{{prefix}}recycle_delivery_company` DROP COLUMN `yisu_product_code`;
+ALTER TABLE `{{prefix}}recycle_delivery_company` DROP COLUMN `electronic_sheet_switch`;
+ALTER TABLE `{{prefix}}recycle_delivery_company` DROP COLUMN `exp_type`;
+ALTER TABLE `{{prefix}}recycle_delivery_company` DROP COLUMN `print_style`;
+
+
+-- hsx_recycle 0.0.10
+-- 拍机堂质检模板导入改为紧凑结构存储：导入模板只写模板主表 schema_json，
+-- 验机 schema 接口按需展开，避免批量写入大量一次性 group/field/option 明细数据。
+
+ALTER TABLE `{{prefix}}recycle_check_template`
+  ADD COLUMN `schema_hash` varchar(32) NOT NULL DEFAULT '' COMMENT '紧凑模板结构hash' AFTER `version`,
+  ADD COLUMN `schema_json` longtext NULL COMMENT '导入模板紧凑结构JSON' AFTER `schema_hash`;
+
+
+-- hsx_recycle 0.0.11
+-- 设备分类 Excel 导入改为后台任务，支持进度、结果、失败重试和历史记录。
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_device_model_import_task` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '任务ID',
+  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `operator_uid` int NOT NULL DEFAULT 0 COMMENT '操作人UID',
+  `operator_name` varchar(60) NOT NULL DEFAULT '' COMMENT '操作人名称',
+  `source` varchar(50) NOT NULL DEFAULT 'recycle_spider' COMMENT '数据来源',
+  `file_name` varchar(255) NOT NULL DEFAULT '' COMMENT '原始文件名',
+  `file_path` varchar(500) NOT NULL DEFAULT '' COMMENT '服务端文件路径',
+  `sheet_name` varchar(120) NOT NULL DEFAULT '' COMMENT '工作表名称',
+  `status` varchar(20) NOT NULL DEFAULT 'pending' COMMENT 'pending/queued/processing/completed/partial/failed',
+  `queue_enabled` tinyint(1) NOT NULL DEFAULT 0 COMMENT '创建时是否启用队列',
+  `total_rows` int NOT NULL DEFAULT 0 COMMENT '数据总行数',
+  `processed_rows` int NOT NULL DEFAULT 0 COMMENT '已处理行数',
+  `created_count` int NOT NULL DEFAULT 0 COMMENT '新增数量',
+  `updated_count` int NOT NULL DEFAULT 0 COMMENT '更新数量',
+  `skipped_count` int NOT NULL DEFAULT 0 COMMENT '跳过数量',
+  `error_count` int NOT NULL DEFAULT 0 COMMENT '错误数量',
+  `result_json` longtext NULL COMMENT '结果与错误样例JSON',
+  `message` varchar(500) NOT NULL DEFAULT '' COMMENT '任务提示',
+  `error_message` varchar(1000) NOT NULL DEFAULT '' COMMENT '失败原因',
+  `start_at` int NOT NULL DEFAULT 0 COMMENT '开始时间',
+  `finish_at` int NOT NULL DEFAULT 0 COMMENT '完成时间',
+  `create_at` int NOT NULL DEFAULT 0 COMMENT '创建时间',
+  `update_at` int NOT NULL DEFAULT 0 COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_site_status` (`site_id`,`status`),
+  KEY `idx_site_create` (`site_id`,`create_at`)
+) COMMENT='回收设备分类异步导入任务';
+
+
+-- 回收任务从“自行认领”升级为“可指定、可转交、可追溯”。
+ALTER TABLE `{{prefix}}recycle_task_claim`
+  ADD COLUMN `assigner_uid` int NOT NULL DEFAULT 0 COMMENT '分配人UID' AFTER `assignee_name`,
+  ADD COLUMN `assigner_name` varchar(50) NOT NULL DEFAULT '' COMMENT '分配人名称快照' AFTER `assigner_uid`,
+  ADD COLUMN `assignment_mode` varchar(20) NOT NULL DEFAULT 'claim' COMMENT 'claim认领/assign指定/transfer转交' AFTER `assigner_name`,
+  ADD COLUMN `assigned_at` int NOT NULL DEFAULT 0 COMMENT '最近分配时间' AFTER `claimed_at`;
+
+-- UPDATE `{{prefix}}recycle_task_claim`
+-- SET `assigner_uid` = `assignee_uid`,
+--     `assigner_name` = `assignee_name`,
+--     `assignment_mode` = 'claim',
+--     `assigned_at` = `claimed_at`
+-- WHERE `assigned_at` = 0;
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_task_assignment_log` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `device_id` int NOT NULL DEFAULT 0 COMMENT '设备ID，签收环节为订单ID',
+  `stage_key` varchar(50) NOT NULL DEFAULT '' COMMENT '环节标识',
+  `from_uid` int NOT NULL DEFAULT 0 COMMENT '原责任人UID',
+  `from_name` varchar(50) NOT NULL DEFAULT '' COMMENT '原责任人名称',
+  `to_uid` int NOT NULL DEFAULT 0 COMMENT '新责任人UID',
+  `to_name` varchar(50) NOT NULL DEFAULT '' COMMENT '新责任人名称',
+  `operator_uid` int NOT NULL DEFAULT 0 COMMENT '操作人UID',
+  `operator_name` varchar(50) NOT NULL DEFAULT '' COMMENT '操作人名称',
+  `assignment_mode` varchar(20) NOT NULL DEFAULT 'assign' COMMENT 'claim/assign/transfer',
+  `event_id` varchar(100) NOT NULL DEFAULT '' COMMENT '分配事件唯一标识',
+  `create_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_event` (`site_id`,`event_id`),
+  KEY `idx_task` (`site_id`,`device_id`,`stage_key`,`create_at`),
+  KEY `idx_assignee` (`site_id`,`to_uid`,`create_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='回收任务分配与转交日志';

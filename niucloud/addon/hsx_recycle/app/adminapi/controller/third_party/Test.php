@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace addon\hsx_recycle\app\adminapi\controller\third_party;
 
 use addon\hsx_recycle\app\service\core\third_party\CoreThirdPartyService;
+use addon\hsx_recycle\app\service\core\device_query\CoreDeviceQueryService;
+use addon\hsx_recycle\app\service\core\express_query\ExpressQueryGatewayService;
 use addon\hsx_recycle\app\dict\third_party\ThirdPartyDict;
 use core\base\BaseAdminController;
 
@@ -20,21 +22,16 @@ class Test extends BaseAdminController
      */
     public function testAll()
     {
-        $service = new CoreThirdPartyService();
         $siteId = $this->site_id;
 
         $results = [];
 
         // 测试1: 设备查询 - 型号查询
         try {
-            $result = $service->call(
-                ThirdPartyDict::SERVICE_TYPE_DEVICE_QUERY,
-                'queryByImei',
-                [
-                    'imei' => '352000000000000',
-                    'api' => '/apple/model'
-                ],
-                $siteId
+            $result = (new CoreDeviceQueryService())->queryByEndpoint(
+                $siteId,
+                '352000000000000',
+                '/apple/model'
             );
             $results[] = [
                 'test' => '设备查询 - 型号查询',
@@ -51,13 +48,10 @@ class Test extends BaseAdminController
 
         // 测试2: 设备查询 - 保修查询
         try {
-            $result = $service->call(
-                ThirdPartyDict::SERVICE_TYPE_DEVICE_QUERY,
-                'getCoverage',
-                [
-                    'imei' => '352000000000000'
-                ],
-                $siteId
+            $result = (new CoreDeviceQueryService())->queryByEndpoint(
+                $siteId,
+                '352000000000000',
+                '/apple/coverage'
             );
             $results[] = [
                 'test' => '设备查询 - 保修查询',
@@ -74,15 +68,7 @@ class Test extends BaseAdminController
 
         // 测试3: 快递查询
         try {
-            $result = $service->call(
-                ThirdPartyDict::SERVICE_TYPE_EXPRESS_QUERY,
-                'query',
-                [
-                    'express_no' => '75******1234',
-                    'express_code' => 'YTO'
-                ],
-                $siteId
-            );
+            $result = (new ExpressQueryGatewayService())->query($siteId, '75******1234');
             $results[] = [
                 'test' => '快递查询',
                 'status' => 'success',
@@ -108,18 +94,8 @@ class Test extends BaseAdminController
         $imei = $this->request->param('imei', '352000000000000');
         $api = $this->request->param('api', '/apple/model');
 
-        $service = new CoreThirdPartyService();
-
         try {
-            $result = $service->call(
-                ThirdPartyDict::SERVICE_TYPE_DEVICE_QUERY,
-                'queryByImei',
-                [
-                    'imei' => $imei,
-                    'api' => $api
-                ],
-                $this->site_id
-            );
+            $result = (new CoreDeviceQueryService())->queryByEndpoint($this->site_id, $imei, $api);
 
             return success($result);
         } catch (\Exception $e) {
@@ -134,24 +110,14 @@ class Test extends BaseAdminController
     public function testExpressQuery()
     {
         $expressNo = $this->request->param('express_no', '');
-        $expressCode = $this->request->param('express_code', '');
+        $mobile = $this->request->param('mobile', '');
 
         if (empty($expressNo)) {
             return fail('请输入快递单号');
         }
 
-        $service = new CoreThirdPartyService();
-
         try {
-            $result = $service->call(
-                ThirdPartyDict::SERVICE_TYPE_EXPRESS_QUERY,
-                'query',
-                [
-                    'express_no' => $expressNo,
-                    'express_code' => $expressCode
-                ],
-                $this->site_id
-            );
+            $result = (new ExpressQueryGatewayService())->query($this->site_id, $expressNo, $mobile);
 
             return success($result);
         } catch (\Exception $e) {

@@ -104,7 +104,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { createCardOrder, getCardProductOptions, getMemberCardConfig, memberCardRequestId } from '../../api'
+import { createCardOrder, getCardMember, getCardProductOptions, getMemberCardConfig, memberCardRequestId } from '../../api'
 import MemberCardButton from '../../components/MemberCardButton.vue'
 import MemberCardMemberPopup from '../../components/MemberCardMemberPopup.vue'
 import ErpVoucherUploader from '@/addon/hsx_erp/components/ErpVoucherUploader.vue'
@@ -143,11 +143,16 @@ const submit = async () => {
     }
 }
 
-onLoad(async () => {
+onLoad(async (options: any) => {
     const [productResult, configResult]: any = await Promise.all([getCardProductOptions(), getMemberCardConfig()])
     products.value = productResult?.data || []
     config.value = configResult?.data || config.value
     form.capital_account_id = Number(config.value.default_capital_account_id || 0)
+    const memberId = Number(options?.member_id || 0)
+    if (memberId > 0) {
+        const memberResult: any = await getCardMember(memberId)
+        member.value = memberResult?.data?.member || {}
+    }
 })
 </script>
 
@@ -186,7 +191,7 @@ onLoad(async () => {
 .mode-card.active { border-color: #60a5fa; background: #eff6ff; }
 .mode-card > view { display: flex; min-width: 0; flex-direction: column; gap: 5rpx; }
 .mode-card text { font-size: 24rpx; font-weight: 650; }
-.account-row { margin: 16rpx 0;  padding: 16rpx;}
+.account-row { margin: 16rpx 0; padding: 16rpx;}
 .remark-section :deep(.u-textarea) { background: #f8fafc !important; }
 .account-item { display: flex; min-height: 88rpx; padding: 0 16rpx; align-items: center; gap: 15rpx; border-top: 1rpx solid #edf1f6; }
 .account-item.active { background: #f8fbff; }

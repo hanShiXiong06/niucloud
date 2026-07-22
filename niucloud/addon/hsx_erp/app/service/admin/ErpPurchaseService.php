@@ -463,10 +463,11 @@ class ErpPurchaseService extends BaseAdminService
         $now = time();
         $erpRules = (new ErpConfigService())->getRules();
         $orderId = 0;
+        $createdAssetIds = [];
         $cashSettlementCreated = false;
         $financeService = new ErpFinanceService();
         try {
-            Db::transaction(function () use ($data, $items, $partyName, $now, $erpRules, $financeService, &$orderId, &$cashSettlementCreated) {
+            Db::transaction(function () use ($data, $items, $partyName, $now, $erpRules, $financeService, &$orderId, &$createdAssetIds, &$cashSettlementCreated) {
             $party = $this->ensureParty(
                 (int)($data['party_id'] ?? 0),
                 $partyName,
@@ -749,6 +750,7 @@ class ErpPurchaseService extends BaseAdminService
                     'create_at' => $now,
                     'update_at' => $now,
                 ]);
+                $createdAssetIds[] = (int)$asset->id;
                 $purchaseItem->save(['asset_id' => (int)$asset->id, 'update_at' => $now]);
                 (new ErpLedgerService())->asset([
                     'asset_id' => (int)$asset->id,
@@ -833,6 +835,9 @@ class ErpPurchaseService extends BaseAdminService
         }
         if ($cashSettlementCreated) {
             $financeService->flushPendingSettlementDomainEvents();
+        }
+        foreach ($createdAssetIds as $assetId) {
+            (new ErpPrintService())->triggerSafely('asset_inbound', 'asset', $assetId);
         }
         return $orderId;
     }

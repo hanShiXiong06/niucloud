@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace addon\hsx_recycle\app\service\core\recycle_order;
 
 use app\service\core\site\CoreSiteService;
+use core\exception\CommonException;
 
 /** 统一判断当前站点是否由 ERP 接管回收财务。 */
 class RecycleErpCapabilityService
@@ -17,9 +18,7 @@ class RecycleErpCapabilityService
 
         try {
             $addons = (new CoreSiteService())->getAddonKeysBySiteId($siteId);
-            if (!in_array(self::ERP_ADDON, $addons, true)) return false;
-
-            return class_exists('\\addon\\hsx_erp\\app\\service\\admin\\ErpFinanceService');
+            return in_array(self::ERP_ADDON, $addons, true);
         } catch (\Throwable $e) {
             return false;
         }
@@ -32,36 +31,39 @@ class RecycleErpCapabilityService
 
     /**
      * 校验 ERP 入库位置，并以 ERP 主数据中的名称为准。
-     * 通过字符串类名保持回收插件可独立安装。
+     * 通过事件契约保持回收插件可独立安装。
      */
-    public function validateInboundPlacement(int $siteId, int $warehouseId, int $locationId): array
+    public function validateInboundPlacement(int $siteId, int $warehouseId, int $locationId, string $expectedWarehouseType = ''): array
     {
         if (!$this->isEnabled($siteId)) return [];
         if ($warehouseId <= 0 || $locationId <= 0) {
-            throw new \core\exception\CommonException('ERP 联动已开启，请选择入库仓库和具体库位');
+            throw new CommonException('ERP 联动已开启，请选择入库仓库和具体库位');
         }
-
-        $serviceClass = '\\addon\\hsx_erp\\app\\service\\admin\\ErpWarehouseService';
-        if (!class_exists($serviceClass)) {
-            throw new \core\exception\CommonException('ERP 仓库服务不可用，请检查插件安装状态');
+        $warehouses = $this->warehouseOptions($siteId, $expectedWarehouseType);
+        foreach ($warehouses as $warehouse) {
+            if ((int)($warehouse['id'] ?? 0) !== $warehouseId) continue;
+            foreach ((array)($warehouse['locations'] ?? []) as $location) {
+                if ((int)($location['id'] ?? 0) !== $locationId) continue;
+                return [
+                    'warehouse_id' => $warehouseId,
+                    'warehouse_name' => (string)($warehouse['name'] ?? ''),
+                    'warehouse_type' => (string)($warehouse['warehouse_type'] ?? ''),
+                    'ownership_type' => (string)($warehouse['ownership_type'] ?? ''),
+                    'location_id' => $locationId,
+                    'location_name' => (string)($location['name'] ?? ''),
+                ];
+            }
         }
-
-        [$warehouse, $location] = (new $serviceClass())->validateInboundLocation($warehouseId, $locationId);
-        return [
-            'warehouse_id' => (int)$warehouse->id,
-            'warehouse_name' => (string)$warehouse->warehouse_name,
-            'location_id' => (int)$location->id,
-            'location_name' => (string)$location->location_name,
-        ];
+        throw new CommonException($expectedWarehouseType === 'consignment'
+            ? '客户代卖设备只能进入启用中的代卖仓及其库位'
+            : '所选ERP仓库或库位不存在、已停用或类型不匹配');
     }
 
     /** 历史异常数据手动重同步时，回退到默认仓库的首个可用库位。 */
-    public function defaultInboundPlacement(int $siteId): array
+    public function defaultInboundPlacement(int $siteId, string $warehouseType = ''): array
     {
         if (!$this->isEnabled($siteId)) return [];
-        $serviceClass = '\\addon\\hsx_erp\\app\\service\\admin\\ErpWarehouseService';
-        if (!class_exists($serviceClass)) return [];
-        $warehouses = (new $serviceClass())->getOptions();
+        $warehouses = $this->warehouseOptions($siteId, $warehouseType);
         if (empty($warehouses)) return [];
         $warehouse = null;
         foreach ($warehouses as $item) {
@@ -83,7 +85,31 @@ class RecycleErpCapabilityService
         return [
             'target_warehouse_id' => (int)$warehouse['id'],
             'target_location_id' => (int)$location['id'],
+            'target_warehouse_name' => (string)($warehouse['name'] ?? ''),
+            'target_location_name' => (string)($location['name'] ?? ''),
         ];
+    }
+
+    public function warehouseOptions(int $siteId, string $warehouseType = ''): array
+    {
+        if (!$this->isEnabled($siteId)) return [];
+        $eventId = 'recycle-warehouse-options-' . date('YmdHis') . '-' . bin2hex(random_bytes(4));
+        $responses = (array)event('ErpWarehouseOptionsRequested', [
+            'event_id' => $eventId,
+            'event_name' => 'erp.warehouse.options_requested.v1',
+            'event_version' => 1,
+            'site_id' => $siteId,
+            'source_plugin' => 'hsx_recycle',
+            'occurred_at' => time(),
+            'warehouse_type' => $warehouseType,
+            'ownership_type' => $warehouseType === 'consignment' ? 'consigned' : '',
+        ]);
+        foreach ($responses as $response) {
+            if (is_array($response) && (string)($response['consumer'] ?? '') === 'hsx_erp') {
+                return array_values((array)($response['list'] ?? []));
+            }
+        }
+        throw new CommonException('ERP仓库服务未响应，请检查插件安装和事件缓存');
     }
 
     public function paymentCapability(int $siteId): array

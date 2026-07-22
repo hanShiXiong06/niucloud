@@ -35,6 +35,27 @@
                 <view class="stock-overview__item"><text class="stock-overview__value">{{ turnoverSummary.average_age_days || 0 }}天</text><text class="stock-overview__label">平均库龄</text></view>
                 <view class="stock-overview__item warning" @click="filterTurnover('risk')"><text class="stock-overview__value">{{ turnoverSummary.warning_total_count || 0 }}</text><text class="stock-overview__label">周转预警</text></view>
             </view>
+            <view class="listing-workload" @click="workloadExpanded = !workloadExpanded">
+                <view class="listing-workload__head">
+                    <view>
+                        <text class="listing-workload__title">今日商城上架协作</text>
+                        <text class="listing-workload__desc">拍摄、定价、资料整理各自留痕</text>
+                    </view>
+                    <u-icon :name="workloadExpanded ? 'arrow-up' : 'arrow-down'" color="#94a3b8" size="14" />
+                </view>
+                <view class="listing-workload__grid">
+                    <view v-for="item in listingStageItems" :key="item.key" class="listing-workload__metric">
+                        <text class="listing-workload__value">{{ item.count }}</text><text class="listing-workload__label">{{ item.label }}</text>
+                    </view>
+                </view>
+                <view v-if="workloadExpanded" class="listing-workload__staff" @click.stop>
+                    <view v-for="item in listingWorkload.staff || []" :key="`${item.uid}-${item.name}`" class="listing-workload__staff-row">
+                        <text class="listing-workload__staff-name">{{ item.name }}</text>
+                        <text>拍摄 {{ item.photo_count }} · 定价 {{ item.price_count }} · 资料 {{ item.material_count }} · 上架 {{ item.publish_count }}</text>
+                    </view>
+                    <u-empty v-if="!(listingWorkload.staff || []).length" mode="data" text="今天还没有完成记录" icon-size="44" />
+                </view>
+            </view>
             <view class="stock-tools">
                 <view class="stock-tool" @click="goSerialTrace">
                     <view class="stock-tool__icon blue"><u-icon name="scan" color="#2563eb" size="18" /></view>
@@ -181,7 +202,7 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 
-import { buyoutMobileConsignment, getMobileErpConfig, getMobileStockList, getMobileStockTurnoverSummary, previewMobileStockTransfer, syncMobileStockListing, transferMobileStock } from '@/addon/hsx_erp/api/erp'
+import { buyoutMobileConsignment, getMobileErpConfig, getMobileStockList, getMobileStockListingWorkload, getMobileStockTurnoverSummary, previewMobileStockTransfer, syncMobileStockListing, transferMobileStock } from '@/addon/hsx_erp/api/erp'
 import { dictLabel, dictTabs, dictType, ERP_DICT_FALLBACK, loadErpDicts, type ErpDictMap } from '@/addon/hsx_erp/api/dict'
 import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
 import ErpFilterPopup from '@/addon/hsx_erp/components/ErpFilterPopup.vue'
@@ -217,6 +238,14 @@ const buyoutVisible = ref(false)
 const buyoutPreview = ref<any>(null)
 const buyoutForm = ref({ amount: '', reason: '' })
 const turnoverSummary = ref<any>({ thresholds: {} })
+const listingWorkload = ref<any>({ totals: {}, staff: [] })
+const workloadExpanded = ref(false)
+const listingStageItems = computed(() => [
+    { key: 'photo', label: '拍摄', count: Number(listingWorkload.value?.totals?.photo || 0) },
+    { key: 'price', label: '定价', count: Number(listingWorkload.value?.totals?.price || 0) },
+    { key: 'material', label: '资料', count: Number(listingWorkload.value?.totals?.material || 0) },
+    { key: 'publish', label: '上架', count: Number(listingWorkload.value?.totals?.publish || 0) },
+])
 const quickFilterVisible = ref(false)
 const quickFilterKey = ref<'status' | 'turnover' | 'listing'>('status')
 const warehouseFilterVisible = ref(false)
@@ -321,10 +350,13 @@ onLoad((options: any) => {
 const queryList = async (pageNo: number, pageSize: number) => {
     try {
         const summaryRequest = pageNo === 1 ? getMobileStockTurnoverSummary() : Promise.resolve(null)
-        const [res, turnoverRes]: any[] = await Promise.all([
-            getMobileStockList({ keyword: keyword.value, status: activeTab.value, ...filterParams(), page: pageNo, limit: pageSize }), summaryRequest
+        // 协作量是增强投影，接口暂不可用时库存列表仍应正常工作。
+        const workloadRequest = pageNo === 1 ? getMobileStockListingWorkload().catch(() => null) : Promise.resolve(null)
+        const [res, turnoverRes, workloadRes]: any[] = await Promise.all([
+            getMobileStockList({ keyword: keyword.value, status: activeTab.value, ...filterParams(), page: pageNo, limit: pageSize }), summaryRequest, workloadRequest
         ])
         if (turnoverRes) turnoverSummary.value = turnoverRes?.data || { thresholds: {} }
+        if (workloadRes) listingWorkload.value = workloadRes?.data || { totals: {}, staff: [] }
         pagingRef.value?.complete(res?.data?.data || [])
     } catch { pagingRef.value?.complete(false) }
 }
@@ -400,6 +432,7 @@ function handleTurnoverAction(row: any) {
     if (['complete_refurbish', 'resolve_refurbish'].includes(action)) return goCompleteRefurbish(row)
     if (action === 'direct_sale') return uni.navigateTo({ url: `/addon/hsx_erp/pages/sale/create?asset_ids=${row.id}` })
     if (action === 'publish_listing') return publishListing(row)
+    if (['complete_listing_photo', 'complete_listing_price', 'complete_listing_material'].includes(action)) return goDetail(row)
     if (['transfer', 'resolve_warehouse'].includes(action)) return openTransfer(row)
     return goDetail(row)
 }
@@ -529,6 +562,20 @@ const listingLabel = (s: string) => dictLabel(erpDicts.value, 'listing_status', 
 .stock-overview__item .stock-overview__value { color:#0f172a; font-size:27rpx; font-weight:700; line-height:1.2; }
 .stock-overview__item .stock-overview__label { margin-top:6rpx; color:#94a3b8; font-size:20rpx; }
 .stock-overview__item.warning .stock-overview__value { color:#d97706; }
+.listing-workload { margin:12rpx 22rpx 0; padding:18rpx 20rpx; border-radius:14rpx; background:#fff; box-shadow:0 4rpx 16rpx rgba(15,23,42,.03); }
+.listing-workload__head { display:flex; align-items:center; justify-content:space-between; gap:16rpx; }
+.listing-workload__title,.listing-workload__desc { display:block; }
+.listing-workload__title { color:#0f172a; font-size:25rpx; font-weight:700; }
+.listing-workload__desc { margin-top:4rpx; color:#94a3b8; font-size:19rpx; }
+.listing-workload__grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); margin-top:16rpx; }
+.listing-workload__metric { text-align:center; border-right:1rpx solid #eef2f7; }
+.listing-workload__metric:last-child { border-right:0; }
+.listing-workload__value,.listing-workload__label { display:block; }
+.listing-workload__value { color:#2563eb; font-size:28rpx; font-weight:750; }
+.listing-workload__label { margin-top:4rpx; color:#64748b; font-size:19rpx; }
+.listing-workload__staff { margin-top:16rpx; padding-top:10rpx; border-top:1rpx solid #eef2f7; }
+.listing-workload__staff-row { display:flex; align-items:center; justify-content:space-between; gap:12rpx; padding:12rpx 2rpx; color:#64748b; font-size:20rpx; }
+.listing-workload__staff-name { max-width:150rpx; color:#334155; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .stock-tools { margin:12rpx 22rpx 0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12rpx; }
 .stock-tool { min-width:0; padding:16rpx 18rpx; border-radius:14rpx; background:#fff; display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:12rpx; box-shadow:0 4rpx 16rpx rgba(15,23,42,.03); }
 .stock-tool__icon { width:52rpx; height:52rpx; border-radius:14rpx; display:flex; align-items:center; justify-content:center; }

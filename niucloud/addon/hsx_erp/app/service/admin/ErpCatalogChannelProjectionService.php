@@ -33,25 +33,30 @@ final class ErpCatalogChannelProjectionService
         if ($brand !== '') $segments[] = $brand;
         if ($segments === []) throw new CommonException('商品目录缺少品类和品牌');
 
-        $ids = [];
-        $pid = 0;
-        $full = [];
-        foreach (array_slice($segments, 0, 3) as $index => $name) {
-            $full[] = $name;
-            $where = [['site_id', '=', $siteId], ['pid', '=', $pid], ['category_name', '=', $name]];
-            $row = Db::name('phone_shop_goods_category')->where($where)->field('category_id')->find();
-            if ($row) {
-                $id = (int)$row['category_id'];
-            } else {
-                $id = (int)Db::name('phone_shop_goods_category')->insertGetId([
-                    'site_id' => $siteId, 'category_name' => $name, 'pid' => $pid,
-                    'level' => $index + 1, 'category_full_name' => implode('/', $full),
-                    'is_show' => 1, 'sort' => 0, 'create_time' => time(), 'update_time' => time(),
-                ]);
+        $projection = null;
+        foreach ((array)event('HsxErpChannelCategoryProject', [
+            'site_id' => $siteId,
+            'channel_key' => 'phone_shop',
+            'segments' => array_slice($segments, 0, 3),
+            'erp_product' => $product,
+        ]) as $result) {
+            if (!is_array($result) || (string)($result['provider'] ?? '') !== 'phone_shop') continue;
+            if ((string)($result['status'] ?? '') === 'projected') {
+                $projection = $result;
+                break;
             }
-            $ids[] = $id;
-            $pid = $id;
         }
+        if ($projection === null) throw new CommonException('商城渠道未提供目录投影能力');
+        $ids = array_values(array_filter(array_map('intval', (array)($projection['category_ids'] ?? []))));
+        if ($ids === []) throw new CommonException('商城分类投影失败');
+        (new ErpChannelMappingService())->recordCategoryMapping([
+            'site_id' => $siteId,
+            'channel_key' => 'phone_shop',
+            'erp_category_path' => $categoryPath,
+            'channel_category_path' => $ids,
+            'channel_category_name' => trim((string)($projection['category_name'] ?? '')) ?: implode('/', array_slice($segments, 0, 3)),
+            'mapping_source' => 'projection',
+        ]);
         return ['category_ids' => $ids, 'product' => $product];
     }
 }

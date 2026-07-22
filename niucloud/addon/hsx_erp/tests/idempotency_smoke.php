@@ -25,8 +25,8 @@ $sql = (string)file_get_contents($root . '/sql/install.sql');
 foreach (['erp_settlement', 'erp_purchase_return', 'erp_sale_return', 'erp_purchase_order', 'erp_sale_order', 'erp_asset_ledger', 'erp_stocktake'] as $table) {
     $assert(str_contains($sql, "CREATE TABLE IF NOT EXISTS `{{prefix}}{$table}`"), "安装SQL缺少{$table}");
 }
-$assert(substr_count($sql, '`request_id` varchar(80) DEFAULT NULL') === 7, '七个幂等业务表都必须包含request_id');
-$assert(substr_count($sql, 'UNIQUE KEY `uk_site_request` (`site_id`,`request_id`)') === 7, '七个幂等业务表都必须包含唯一索引');
+$assert(substr_count($sql, '`request_id` varchar(80) DEFAULT NULL') >= 7, '核心幂等业务表都必须包含request_id，后续模块可继续扩展');
+$assert(substr_count($sql, 'UNIQUE KEY `uk_site_request` (`site_id`,`request_id`)') >= 7, '核心幂等业务表都必须包含唯一索引，后续模块可继续扩展');
 
 $finance = (string)file_get_contents($root . '/app/service/admin/ErpFinanceService.php');
 $schema = (string)file_get_contents($root . '/app/support/ErpSchema.php');

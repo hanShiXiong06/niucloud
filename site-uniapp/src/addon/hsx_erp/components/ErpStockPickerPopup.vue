@@ -86,6 +86,10 @@
                             <text class="ident-value">{{ row.imei || '-' }}</text>
                         </view>
                         <view class="stock-tags">
+                            <view v-if="isConsigned(row)" class="stock-tag consigned">
+                                <u-icon name="account" color="#d97706" size="12" />
+                                <text>客户代卖 · 货主 {{ row.owner_party_name || '-' }}</text>
+                            </view>
                             <view class="stock-tag">
                                 <u-icon name="home" color="#64748b" size="12" />
                                 <text>{{ row.warehouse_name || '-' }}{{ row.location_name ? ' / ' + row.location_name : '' }}</text>
@@ -100,8 +104,8 @@
                         </view>
                         <view class="stock-money">
                             <view class="money-box">
-                                <text class="money-label">成本</text>
-                                <text class="money-value">¥{{ money(row.total_cost) }}</text>
+                                <text class="money-label">{{ isConsigned(row) ? '货主结算' : '成本' }}</text>
+                                <text class="money-value">¥{{ money(saleCostBasis(row)) }}</text>
                             </view>
                             <view class="money-box">
                                 <text class="money-label">建议售价</text>
@@ -268,10 +272,16 @@ function select(row: any) {
 function close() { emit('update:show', false) }
 const money = (v: any) => Number(v || 0).toFixed(2)
 function suggestPrice(row: any) {
-    return firstPositiveErpAmount(row.retail_price, row.estimate_sale_price, row.sale_price, row.total_cost)
+    return firstPositiveErpAmount(row.retail_price, row.estimate_sale_price, row.sale_price, saleCostBasis(row))
 }
 function suggestProfit(row: any) {
-    return suggestPrice(row) - Number(row.total_cost || 0)
+    return suggestPrice(row) - saleCostBasis(row)
+}
+function isConsigned(row: any) {
+    return String(row?.ownership_type || '') === 'consigned'
+}
+function saleCostBasis(row: any) {
+    return Number(row?.sale_cost_basis ?? (isConsigned(row) ? row?.consignment_settlement_amount : row?.total_cost) ?? 0)
 }
 </script>
 
@@ -315,6 +325,7 @@ function suggestProfit(row: any) {
 .stock-tag { max-width: 100%; min-height: 38rpx; padding: 0 10rpx; border-radius: 19rpx; background: #f8fafc; color: #64748b; display: flex; align-items: center; gap: 6rpx; font-size: 21rpx; box-sizing: border-box; }
 .stock-tag text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stock-tag.muted { background: #f1f5f9; color: #94a3b8; }
+.stock-tag.consigned { background: #fff7ed; color: #d97706; }
 .stock-money { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8rpx; margin-top: 12rpx; padding-top: 10rpx; border-top: 2rpx solid #f1f5f9; }
 .money-box { min-width: 0; display: flex; flex-direction: column; gap: 4rpx; }
 .money-label { font-size: 20rpx; color: #94a3b8; }

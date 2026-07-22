@@ -379,7 +379,8 @@ foreach (['供应商结算本金', '整备成本', '当前总成本', '优先冲
 }
 
 $saleService = (string)file_get_contents($root . '/app/service/admin/ErpSaleService.php');
-$assert(str_contains($saleService, '$cost = round((float)$asset->total_cost, 2);'), '销售出库必须使用设备当前总成本计算毛利');
+$assert(str_contains($saleService, ': round((float)$asset->total_cost, 2);')
+    && str_contains($saleService, "\$ownershipType === 'consigned'"), '自有设备必须使用当前总成本，代卖设备必须使用客户结算金额计算毛利');
 $saleList = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/views/erp/sale/list.vue');
 foreach (['本页有效销售汇总', "row.status !== 'sold'", '已销售退货', '已取消销售', '本页同批', 'saleRowClassName', '取消销售'] as $needle) {
     $assert(str_contains($saleList, $needle), 'PC销售列表必须按有效设备展示批次、状态和汇总：' . $needle);

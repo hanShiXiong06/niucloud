@@ -121,7 +121,9 @@ class QueryResultFormatter
     {
         $candidates = [
             ['path' => 'coverage.status', 'label' => '保修状态'],
+            ['path' => 'coverage_status', 'label' => '保修状态'],
             ['path' => 'activationlock.locked', 'label' => '查找设备锁'],
+            ['path' => 'locked', 'label' => '激活锁状态'],
             ['path' => 'activationlock.lost', 'label' => '丢失模式'],
             ['path' => 'simlock', 'label' => '网络锁'],
             ['path' => 'blacklist', 'label' => '黑名单'],

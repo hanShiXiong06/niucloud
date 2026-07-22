@@ -31,17 +31,38 @@
                 </section>
 
                 <section class="rule-section">
-                    <div class="section-title">商城资料协作</div>
-                    <el-alert class="mb-4" type="info" :closable="false" show-icon title="仅影响回收插件进入 ERP 的设备；ERP 手工采购时资料已完整，仍可直接同步商城。" />
+                    <div class="section-title">自有商城渠道</div>
+                    <el-alert class="mb-4" type="info" :closable="false" show-icon title="ERP 始终是主数据；商城只能消费 ERP 数据或维护自己的数据映射，不能反向修改 ERP 分类和规格。" />
                     <el-form label-width="180px">
-                        <el-form-item label="回收设备资料由谁完善">
+                        <el-form-item label="启用商城联动">
+                            <el-switch v-model="form.marketplace.channels.phone_shop.enabled" :active-value="1" :inactive-value="0" />
+                        </el-form-item>
+                        <el-form-item label="商城分类来源">
                             <div>
-                                <el-radio-group v-model="form.marketplace.recycle_material_owner">
-                                    <el-radio-button label="erp">ERP 库存人员</el-radio-button>
-                                    <el-radio-button label="phone_shop">商城运营专员</el-radio-button>
+                                <el-radio-group v-model="form.marketplace.channels.phone_shop.category_mode" :disabled="form.marketplace.channels.phone_shop.enabled !== 1">
+                                    <el-radio-button label="erp">消费 ERP 目录</el-radio-button>
+                                    <el-radio-button label="independent">商城独立分类</el-radio-button>
+                                </el-radio-group>
+                                <div class="mt-2 text-xs text-gray-400">独立分类不会被 ERP 覆盖，由运营首次对应后保存映射，同类设备可自动复用。</div>
+                            </div>
+                        </el-form-item>
+                        <el-form-item label="商城规格来源">
+                            <div>
+                                <el-radio-group v-model="form.marketplace.channels.phone_shop.spec_mode" :disabled="form.marketplace.channels.phone_shop.enabled !== 1">
+                                    <el-radio-button label="erp">消费 ERP 规格</el-radio-button>
+                                    <el-radio-button label="independent">商城独立规格</el-radio-button>
+                                </el-radio-group>
+                                <div class="mt-2 text-xs text-gray-400">独立规格由运营对应；映射只做翻译，不会改写 ERP 规格。</div>
+                            </div>
+                        </el-form-item>
+                        <el-form-item label="渠道发布方式">
+                            <div>
+                                <el-radio-group v-model="form.marketplace.channels.phone_shop.publish_mode" :disabled="form.marketplace.channels.phone_shop.enabled !== 1">
+                                    <el-radio-button label="direct">资料齐全直接发布</el-radio-button>
+                                    <el-radio-button label="manual">商城运营逐台确认</el-radio-button>
                                 </el-radio-group>
                                 <div class="mt-2 text-xs text-gray-400">
-                                    ERP 库存人员：图片、售价、分类和规格在库存中心一次完成并直接上架；商城运营专员：ERP 先交接到商城待上架货源，由运营补齐后回写 ERP。
+                                    直接发布：ERP 资料齐全且已有必要映射时一键上架，缺少映射会自动转商城待办；逐台确认：所有 ERP 设备均由商城运营核对后发布。
                                 </div>
                             </div>
                         </el-form-item>
@@ -243,7 +264,10 @@ function defaultRules() {
         product_title: { category_mode: 'auto', spec_in_title: 1, grade_in_title: 0, separator: ' ' },
         sale: { create_receivable_on_outbound: 1, allow_cancel_before_finance_fact: 1, return_to_original_location_on_cancel: 1, enable_peer_pending: 1, enable_trial_sale: 0, profit_confirm_mode: 'settlement', credit_control: { enabled: 1, default_policy: 'remind', min_outstanding_amount: 0, min_outstanding_days: 0 } },
         refurbish: { enabled: 1, default_required: 0, tracking_mode: 'simple', daily_reminder_enabled: 1, daily_reminder_threshold: 25, reminder_dismiss_date: '' },
-        marketplace: { recycle_material_owner: 'erp' },
+        marketplace: {
+            recycle_material_owner: 'erp',
+            channels: { phone_shop: { enabled: 1, category_mode: 'erp', spec_mode: 'erp', publish_mode: 'direct' } }
+        },
         turnover: { attention_days: 7, warning_days: 15, critical_days: 30, reminder_enabled: 1, reminder_count_threshold: 1, reminder_dismiss_date: '' },
         consignment: { enabled: 0, settle_payable_after_receipt: 1, transfer_to_owned_requires_repurchase: 1 }
     }

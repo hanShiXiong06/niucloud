@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace addon\hsx_recycle\app\model\third_party;
 
+use addon\hsx_recycle\app\dict\device_query\DeviceQueryServiceDict;
 use core\base\BaseModel;
 
 /**
@@ -88,15 +89,28 @@ class DeviceQueryResult extends BaseModel
      */
     public function getQueryTypeNameAttr($value, $data)
     {
-        $types = [
-            'imei' => 'IMEI查询',
-            'serial' => '序列号查询',
-            'model' => '型号查询',
-            'coverage' => '保修查询',
-            'activationlock' => '激活锁查询',
-            'other' => '其他查询'
-        ];
+        $types = array_merge([
+            'serial' => '序列号',
+            'model' => '型号',
+            'coverage' => '保修信息',
+            'activationlock' => '激活锁',
+            'other' => '其他',
+        ], DeviceQueryServiceDict::QUERY_TYPES);
         return $types[$data['query_type'] ?? 'other'] ?? '其他查询';
+    }
+
+    /**
+     * 将历史记录中第三方的空错误文案转换为用户可理解的提示，数据库原值和
+     * raw_response 仍保持不变，便于后续审计与排障。
+     */
+    public function getErrorMessageAttr($value, $data): string
+    {
+        if ((string)($data['error_code'] ?? '') === '500001'
+            && (trim((string)$value) === '' || str_contains((string)$value, '接口返回错误'))) {
+            return '爱查未能识别该序列号或 IMEI，请核对号码后重试，或稍后再查';
+        }
+
+        return (string)$value;
     }
 
     /**

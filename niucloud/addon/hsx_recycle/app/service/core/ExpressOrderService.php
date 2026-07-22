@@ -3,13 +3,11 @@ declare(strict_types=1);
 
 namespace addon\hsx_recycle\app\service\core;
 
-use addon\hsx_recycle\app\dict\third_party\ThirdPartyDict;
-use addon\hsx_recycle\app\dict\yisu\YisuProductDict;
 use addon\hsx_recycle\app\model\express\ExpressAddressBook;
 use addon\hsx_recycle\app\model\express\ExpressOrderRecord;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
-use addon\hsx_recycle\app\model\yisu\YisuProductConfig;
-use addon\hsx_recycle\app\service\core\third_party\CoreThirdPartyService;
+use addon\hsx_recycle\app\service\core\express\ExpressDomainEventService;
+use addon\hsx_recycle\app\service\core\express\ExpressGatewayService;
 use core\exception\CommonException;
 use think\facade\Log;
 
@@ -20,11 +18,13 @@ use think\facade\Log;
  */
 class ExpressOrderService
 {
-    private $thirdPartyService;
+    private $expressGateway;
+    private $domainEventService;
 
     public function __construct()
     {
-        $this->thirdPartyService = new CoreThirdPartyService();
+        $this->expressGateway = new ExpressGatewayService();
+        $this->domainEventService = new ExpressDomainEventService();
     }
 
     /**
@@ -56,18 +56,23 @@ class ExpressOrderService
             return $this->getEnabledProductQuotes($siteId, $params);
         }
 
-        if (!YisuProductConfig::isProductEnabled($siteId, $productCode)) {
-            throw new CommonException('所选快递产品未启用，请先在易速产品配置中启用');
+        if (!$this->isProductEnabled($siteId, $productCode)) {
+            throw new CommonException('所选快递产品未启用，请先在快递产品配置中启用');
         }
 
         return $this->getSingleProductQuote($siteId, $params, $productCode);
     }
 
+    public function getProducts(int $siteId): array
+    {
+        return $this->expressGateway->products($siteId);
+    }
+
     private function getEnabledProductQuotes(int $siteId, array $params): array
     {
-        $enabledProducts = YisuProductConfig::getEnabledProducts($siteId);
+        $enabledProducts = $this->expressGateway->products($siteId);
         if (empty($enabledProducts)) {
-            throw new CommonException('暂无启用的快递产品，请先在易速产品配置中启用');
+            throw new CommonException('暂无启用的快递产品，请先在快递产品配置中启用');
         }
 
         $quotes = [];
@@ -85,7 +90,7 @@ class ExpressOrderService
                     }
                 }
             } catch (\Throwable $e) {
-                $errors[] = ($product['product_name'] ?? YisuProductDict::getProductName($productCode)) . '：' . $e->getMessage();
+                $errors[] = ($product['product_name'] ?? $productCode) . '：' . $e->getMessage();
             }
         }
 
@@ -109,18 +114,7 @@ class ExpressOrderService
         $quoteParams = $params;
         $quoteParams['productCode'] = $productCode;
         $quoteParams['deliveryType'] = $productCode;
-        $result = $this->thirdPartyService->call(
-            ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER,
-            'quote',
-            $quoteParams,
-            $siteId
-        );
-
-        if (!$result['success']) {
-            throw new CommonException($result['message'] ?? '获取报价失败');
-        }
-
-        $quote = $result['data']['data'] ?? [];
+        $quote = $this->expressGateway->quote($siteId, $quoteParams);
         if (empty($quote)) {
             return [];
         }
@@ -141,7 +135,7 @@ class ExpressOrderService
         $productCode = (string)($quote['productCode'] ?? $quote['product_code'] ?? $fallbackProductCode);
         if ($productCode !== '') {
             $quote['productCode'] = $productCode;
-            $quote['productName'] = $quote['productName'] ?? YisuProductDict::getProductName($productCode);
+            $quote['productName'] = $quote['productName'] ?? $quote['product_name'] ?? $productCode;
         } else {
             $quote['productName'] = $quote['productName'] ?? '智能报价';
         }
@@ -159,6 +153,21 @@ class ExpressOrderService
         }
 
         return '';
+    }
+
+    private function isProductEnabled(int $siteId, string $productCode): bool
+    {
+        return $this->findProduct($siteId, $productCode) !== null;
+    }
+
+    private function findProduct(int $siteId, string $productCode): ?array
+    {
+        foreach ($this->expressGateway->products($siteId) as $product) {
+            if ((string)($product['product_code'] ?? '') === $productCode && !empty($product['enabled'])) {
+                return $product;
+            }
+        }
+        return null;
     }
 
     private function resolveQuoteAmount(array $quote): float
@@ -223,7 +232,7 @@ class ExpressOrderService
                 throw new CommonException("缺少必填参数: {$field}");
             }
         }
-        if (!YisuProductConfig::isProductEnabled($siteId, (string)$params['deliveryType'])) {
+        if (!$this->isProductEnabled($siteId, (string)$params['deliveryType'])) {
             throw new CommonException('所选快递产品未启用，请重新获取报价后下单');
         }
         if (empty($params['thirdOrderNo'])) {
@@ -231,25 +240,51 @@ class ExpressOrderService
                 ?? (!empty($params['recycle_order_id']) ? 'recycle_' . $siteId . '_' . $params['recycle_order_id'] : 'recycle_express_' . $siteId . '_' . date('YmdHis') . mt_rand(1000, 9999));
         }
 
-        // 调用第三方服务
-        $result = $this->thirdPartyService->call(
-            ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER,
-            'create',
-            $params,
-            $siteId
-        );
-
-        if (!$result['success']) {
-            throw new CommonException($result['message'] ?? '下单失败');
+        $existingResult = $this->resolveIdempotentCreateResult($siteId, (string)$params['thirdOrderNo']);
+        if ($existingResult !== null) {
+            return $existingResult;
         }
 
-        $apiData = $result['data']['data'] ?? [];
+        $apiData = $this->expressGateway->create($siteId, $params);
 
         // 创建快递订单记录
-        $this->createExpressRecord($siteId, $params, $apiData);
+        $record = $this->createExpressRecord($siteId, $params, $apiData);
         $this->saveAddressBook($siteId, $params);
+        $this->domainEventService->dispatch('express.shipment.created', [
+            'site_id' => $siteId,
+            'record_id' => (int)$record->id,
+            'provider' => (string)($params['provider'] ?? ''),
+            'provider_name' => (string)($params['provider_name'] ?? ''),
+            'third_order_no' => (string)($params['thirdOrderNo'] ?? ''),
+            'order_no' => (string)($apiData['orderNo'] ?? $apiData['orderCode'] ?? ''),
+            'delivery_id' => (string)($apiData['deliveryId'] ?? $apiData['waybillNo'] ?? $apiData['trackingNum'] ?? ''),
+            'recycle_order_id' => (int)($params['recycle_order_id'] ?? 0),
+        ]);
 
         return $apiData;
+    }
+
+    private function resolveIdempotentCreateResult(int $siteId, string $thirdOrderNo): ?array
+    {
+        if ($thirdOrderNo === '') {
+            return null;
+        }
+
+        $record = ExpressOrderRecord::where([
+            ['site_id', '=', $siteId],
+            ['third_order_no', '=', $thirdOrderNo],
+            ['order_status', '<>', 'cancelled'],
+        ])->order('id desc')->find();
+        if (!$record || (empty($record->order_no) && empty($record->delivery_id))) {
+            return null;
+        }
+
+        return [
+            'orderNo' => (string)$record->order_no,
+            'deliveryId' => (string)$record->delivery_id,
+            'waybillNo' => (string)$record->delivery_id,
+            'idempotent' => true,
+        ];
     }
 
     private function saveAddressBook(int $siteId, array $params): void
@@ -324,22 +359,20 @@ class ExpressOrderService
      * @param int $siteId
      * @param array $params
      * @param array $apiResult
-     * @return void
+     * @return ExpressOrderRecord
      */
-    private function createExpressRecord(int $siteId, array $params, array $apiResult): void
+    private function createExpressRecord(int $siteId, array $params, array $apiResult): ExpressOrderRecord
     {
-        try {
-            // 获取产品信息
-            $productInfo = YisuProductDict::getProduct($params['deliveryType']);
+        $productInfo = $this->findProduct($siteId, (string)$params['deliveryType']) ?: [];
 
-            // 计算体积
-            $volume = 0;
-            if (!empty($params['vloumLong']) && !empty($params['vloumWidth']) && !empty($params['vloumHeight'])) {
-                $volume = ($params['vloumLong'] / 100) * ($params['vloumWidth'] / 100) * ($params['vloumHeight'] / 100);
-            }
+        // 计算体积
+        $volume = 0;
+        if (!empty($params['vloumLong']) && !empty($params['vloumWidth']) && !empty($params['vloumHeight'])) {
+            $volume = ($params['vloumLong'] / 100) * ($params['vloumWidth'] / 100) * ($params['vloumHeight'] / 100);
+        }
 
-            // 准备记录数据
-            $recordData = [
+        // 准备记录数据
+        $recordData = [
                 'site_id' => $siteId,
                 'order_no' => $apiResult['orderNo'] ?? $apiResult['orderCode'] ?? '',
                 'third_order_no' => $params['thirdOrderNo'] ?? $params['third_order_no'] ?? '',
@@ -403,14 +436,16 @@ class ExpressOrderService
                 // API响应数据
                 'api_response' => array_merge($apiResult, [
                     'thirdOrderNo' => $params['thirdOrderNo'] ?? $params['third_order_no'] ?? '',
+                    'provider' => $params['provider'] ?? $params['provider_key'] ?? '',
                 ]),
-            ];
+        ];
 
-            ExpressOrderRecord::createRecord($recordData);
-        } catch (\Exception $e) {
-            // 记录失败不影响主流程，只记录日志
-            Log::error('创建快递订单记录失败: ' . $e->getMessage());
+        $record = ExpressOrderRecord::createRecord($recordData);
+        if (!$record) {
+            throw new CommonException('快递下单成功，但本地运单记录保存失败，请勿重复下单并联系管理员核对');
         }
+
+        return $record;
     }
 
     /**
@@ -420,26 +455,23 @@ class ExpressOrderService
      * @return bool
      * @throws CommonException
      */
-    public function cancelOrder(int $siteId, string $orderNo): bool
+    public function cancelOrder(int $siteId, string $orderNo, string $providerKey = ''): bool
     {
         $record = $this->findLocalExpressRecord($siteId, ['order_no' => $orderNo, 'waybill_no' => $orderNo]);
         $cancelParams = ['order_no' => $orderNo];
         if ($record) {
             $cancelParams = $this->buildCancelIdentifierParams($record, $cancelParams);
         }
-
-        $result = $this->thirdPartyService->call(
-            ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER,
-            'cancel',
-            $cancelParams,
-            $siteId
-        );
-
-        if (!$result['success']) {
-            throw new CommonException($result['message'] ?? '取消订单失败');
+        if ($providerKey !== '') {
+            $cancelParams['provider'] = $providerKey;
         }
 
+        $this->expressGateway->cancel($siteId, $cancelParams);
+
         $this->markLocalExpressRecordClosed($siteId, $cancelParams, '用户取消订单');
+        $this->domainEventService->dispatch('express.shipment.cancelled', array_merge([
+            'site_id' => $siteId,
+        ], $cancelParams));
 
         return true;
     }
@@ -472,18 +504,7 @@ class ExpressOrderService
 
     public function getFund(int $siteId): array
     {
-        $result = $this->thirdPartyService->call(
-            ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER,
-            'fund',
-            [],
-            $siteId
-        );
-
-        if (!$result['success']) {
-            throw new CommonException($result['message'] ?? '查询余额失败');
-        }
-
-        return $result['data']['data'] ?? [];
+        return $this->expressGateway->account($siteId);
     }
 
     public function cancelOrInterceptOrder(int $siteId, array $params): bool
@@ -493,19 +514,14 @@ class ExpressOrderService
             $params = $this->buildCancelIdentifierParams($record, $params);
         }
 
-        $result = $this->thirdPartyService->call(
-            ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER,
-            'cancel',
-            $params,
-            $siteId
-        );
-
-        if (!$result['success']) {
-            throw new CommonException($result['message'] ?? '取消/拦截失败');
-        }
+        $this->expressGateway->cancel($siteId, $params);
 
         $remark = ((int)($params['genre'] ?? 1) === 3) ? '已拦截/关闭' : '用户取消订单';
         $this->markLocalExpressRecordClosed($siteId, $params, $remark);
+        $this->domainEventService->dispatch('express.shipment.cancelled', array_merge([
+            'site_id' => $siteId,
+            'remark' => $remark,
+        ], $params));
 
         return true;
     }
@@ -513,6 +529,9 @@ class ExpressOrderService
     private function buildCancelIdentifierParams(ExpressOrderRecord $record, array $params): array
     {
         $apiResponse = $record->api_response ?? [];
+        if (!empty($apiResponse['provider'])) {
+            $params['provider'] = $apiResponse['provider'];
+        }
         if (!empty($record->order_no)) {
             $params['order_no'] = $record->order_no;
         }
@@ -605,34 +624,16 @@ class ExpressOrderService
 
     public function modifyOrder(int $siteId, array $params): array
     {
-        $result = $this->thirdPartyService->call(
-            ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER,
-            'modify',
-            $params,
-            $siteId
-        );
-
-        if (!$result['success']) {
-            throw new CommonException($result['message'] ?? '修改运单失败');
-        }
-
-        return $result['data']['data'] ?? [];
+        return $this->expressGateway->modify($siteId, $params);
     }
 
     public function getOrderDetail(int $siteId, array $params): array
     {
-        $result = $this->thirdPartyService->call(
-            ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER,
-            'detail',
-            $params,
-            $siteId
-        );
-
-        if (!$result['success']) {
-            throw new CommonException($result['message'] ?? '查询运单详情失败');
+        $record = $this->findLocalExpressRecord($siteId, $params);
+        if ($record) {
+            $params = $this->buildCancelIdentifierParams($record, $params);
         }
-
-        $detail = $result['data']['data'] ?? [];
+        $detail = $this->expressGateway->detail($siteId, $params);
         $this->syncLocalExpressRecordFromDetail($siteId, $params, $detail);
 
         return $detail;
@@ -754,7 +755,7 @@ class ExpressOrderService
 
     private function dispatchExpressStatusSyncEvent(string $eventType, int $siteId, ExpressOrderRecord $record, string $oldStatus, string $newStatus, array $detail, array $extra = []): void
     {
-        event('RecycleExpressEvent', array_merge([
+        $payload = array_merge([
             'site_id' => $siteId,
             'event_type' => $eventType,
             'record_id' => (int)$record->id,
@@ -766,7 +767,10 @@ class ExpressOrderService
             'third_status' => (int)($detail['status'] ?? -1),
             'third_status_name' => (string)($detail['statusName'] ?? ''),
             'detail' => $detail,
-        ], $extra));
+        ], $extra);
+
+        event('RecycleExpressEvent', $payload);
+        $this->domainEventService->dispatch('express.shipment.status_changed', $payload);
     }
 
     private function mapYisuDetailStatus(int $status): string
@@ -802,18 +806,11 @@ class ExpressOrderService
 
     public function getWaybillPdf(int $siteId, array $params): array
     {
-        $result = $this->thirdPartyService->call(
-            ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER,
-            'waybillPdf',
-            $params,
-            $siteId
-        );
-
-        if (!$result['success']) {
-            throw new CommonException($result['message'] ?? '获取面单失败');
+        $record = $this->findLocalExpressRecord($siteId, $params);
+        if ($record) {
+            $params = $this->buildCancelIdentifierParams($record, $params);
         }
-
-        $data = $result['data']['data'] ?? [];
+        $data = $this->expressGateway->waybill($siteId, $params);
         $this->recordWaybillPdfResult($siteId, $params, $data);
 
         return $data;

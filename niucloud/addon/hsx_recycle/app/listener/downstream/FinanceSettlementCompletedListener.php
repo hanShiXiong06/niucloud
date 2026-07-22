@@ -42,6 +42,7 @@ class FinanceSettlementCompletedListener
                 return false;
             }
             $marked = (new RecycleDevicePaymentService())->settleByOffset($deviceIds, $settlementNo, [
+                'site_id'  => (int)($payload['site_id'] ?? 0),
                 'operator' => (string)($payload['operator'] ?? '财务折账'),
                 'method'   => (string)($payload['method'] ?? 'offset'),
             ]);

@@ -7,7 +7,7 @@ use addon\hsx_recycle\app\dict\config\RecycleConfigKeyDict;
 use addon\hsx_recycle\app\dict\express\ExpressProviderDict;
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\model\express\ExpressProviderConfig;
-use addon\hsx_recycle\app\model\yisu\YisuProductConfig;
+use addon\hsx_recycle\app\service\core\express\ExpressProductCatalogService;
 use app\model\diy\DiyTheme;
 use app\service\core\sys\CoreConfigService;
 use core\exception\CommonException;
@@ -706,7 +706,10 @@ class OrderSubmitConfigService
 
     private function getPlatformDeliveryProductOptions(int $siteId): array
     {
-        $products = YisuProductConfig::getEnabledProducts($siteId);
+        $products = (new ExpressProductCatalogService())->getEnabledProducts(
+            $siteId,
+            ExpressProviderDict::PROVIDER_YISU
+        );
         $result = [];
 
         foreach ($products as $product) {

@@ -120,7 +120,7 @@ const router = useRouter()
 const addEvent = () => {
     console.log(11);
     
-    router.push('/hsx_recycle/address/edit')
+    router.push('/recycle/address/edit')
 }
 
 /**
@@ -128,7 +128,7 @@ const addEvent = () => {
  * @param data
  */
 const editEvent = (data: any) => {
-    router.push('/hsx_recycle/address/edit?id=' + data.id)
+    router.push('/recycle/address/edit?id=' + data.id)
 }
 
 /**

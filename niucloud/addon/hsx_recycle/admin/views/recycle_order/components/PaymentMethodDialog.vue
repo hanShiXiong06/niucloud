@@ -7,7 +7,7 @@
     :loading="submitting"
     :confirm-disabled="!canConfirm"
     :confirm-text="confirmButtonText"
-    @update:visible="(v: boolean) => dialogVisible = v"
+    @update:visible="dialogVisible = $event"
     @confirm="handleConfirmPayment"
     @cancel="dialogVisible = false"
   >
@@ -217,17 +217,17 @@
       </el-empty>
     </div>
 
-    <!-- 出账户头（从哪个资金账户出钱）— 仅安装ERP且有启用账户时显示；不选不影响原打款 -->
+    <!-- ERP 接管财务后，资金账户是实际付款事实的必填项。 -->
     <el-card v-if="showCapitalAccount" shadow="never" class="capital-account-card">
       <template #header>
         <div class="card-header">
           <span>💰 出账户头</span>
-          <el-tag type="info" size="small">从哪个账户出钱（可选）</el-tag>
+          <el-tag type="warning" size="small">ERP接管时必选</el-tag>
         </div>
       </template>
       <el-select
         v-model="selectedCapitalAccountId"
-        placeholder="选择出账户头（不选则不记资金流水）"
+        placeholder="请选择实际出款账户"
         clearable
         filterable
         style="width: 100%"
@@ -241,7 +241,7 @@
       </el-select>
       <div class="capital-account-tip">
         <el-icon><InfoFilled /></el-icon>
-        <span>选了出账户头，确认打款后会在 ERP 该账户记一笔出账流水并扣减余额；不选则按原流程只记打款信息。</span>
+        <span>确认后由 ERP 统一生成付款结算、账户出账和设备级核销，回收插件只接收结算结果，不会重复记账。</span>
       </div>
     </el-card>
   </FormDialog>
@@ -338,10 +338,11 @@ const selectedCapitalAccountId = ref<number | undefined>(undefined)
 const showCapitalAccount = computed(() => erpConnected.value && capitalAccounts.value.length > 0)
 
 const capitalAccountLabel = (acc: any) => {
-  const typeText = acc.account_type_text ? `[${acc.account_type_text}] ` : ''
+  const typeName = acc.type_name || acc.account_type_text || ''
+  const typeText = typeName ? `[${typeName}] ` : ''
   const bal = (acc.balance !== undefined && acc.balance !== null && acc.balance !== '')
     ? ` · 余额¥${acc.balance}` : ''
-  return `${typeText}${acc.account_name || '未命名账户'}${bal}`
+  return `${typeText}${acc.name || acc.account_name || '未命名账户'}${bal}`
 }
 
 const loadCapitalAccounts = async () => {
@@ -483,6 +484,11 @@ const handleConfirmPayment = () => {
 
   if (isDevicePaymentMode.value && selectedDevices.value.length === 0) {
     ElMessage.warning('请选择本次需要打款的设备')
+    return
+  }
+
+  if (erpConnected.value && !selectedCapitalAccountId.value) {
+    ElMessage.warning(capitalAccounts.value.length ? '请选择ERP实际出款账户' : 'ERP未配置可用资金账户，请先在ERP资金账户中启用账户')
     return
   }
 

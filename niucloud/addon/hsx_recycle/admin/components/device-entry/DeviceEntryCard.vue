@@ -4,10 +4,6 @@
         <div class="device-card__main">
             <span class="device-card__index">{{ index + 1 }}</span>
 
-            <div class="device-card__model">
-                <slot name="model" />
-            </div>
-
             <el-tooltip v-if="device.user_sn" content="用户自助提交的串号" placement="top">
                 <span class="device-card__usersn">用户串号 {{ device.user_sn }}</span>
             </el-tooltip>
@@ -20,6 +16,9 @@
                 class="device-card__sn"
                 @input="markDirty"
             />
+             <div class="device-card__model">
+                <slot name="model" />
+            </div>
 
             <div class="device-card__price">
                 <span class="device-card__price-prefix">¥</span>

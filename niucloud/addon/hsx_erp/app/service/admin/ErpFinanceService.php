@@ -668,6 +668,10 @@ class ErpFinanceService extends BaseAdminService
             return $settlementId;
         }, ['amount' => $amount, 'target_type' => ErpDict::TARGET_PAYABLE, 'target_ids' => [$payableId]]);
         $this->flushSettlementDomainEvents();
+        (new ErpPrintService())->triggerSafely('payment_confirmed', 'payable', $payableId, [
+            'settlement_id' => $settlementId,
+            'amount' => number_format($amount, 2, '.', ''),
+        ]);
         return $settlementId;
     }
 
@@ -719,6 +723,17 @@ class ErpFinanceService extends BaseAdminService
             'batch_no' => trim((string)($data['batch_no'] ?? '')),
         ], static fn($value): bool => $value !== '' && $value !== []));
         $this->flushSettlementDomainEvents();
+        $printPayableId = (int)(Db::name('erp_settlement_link')->where([
+            ['site_id', '=', $this->site_id],
+            ['settlement_id', '=', $settlementId],
+            ['target_type', '=', ErpDict::TARGET_PAYABLE],
+        ])->order('id asc')->value('target_id') ?? 0);
+        if ($printPayableId > 0) {
+            (new ErpPrintService())->triggerSafely('payment_confirmed', 'payable', $printPayableId, [
+                'settlement_id' => $settlementId,
+                'amount' => number_format($amount, 2, '.', ''),
+            ]);
+        }
         return [$settlementId];
     }
 
@@ -1067,6 +1082,10 @@ class ErpFinanceService extends BaseAdminService
             return $settlementId;
         }, ['amount' => $expectedAmount, 'target_type' => ErpDict::TARGET_RECEIVABLE, 'target_ids' => [$receivableId]]);
         $this->flushSettlementDomainEvents();
+        (new ErpPrintService())->triggerSafely('receipt_confirmed', 'receivable', $receivableId, [
+            'settlement_id' => $settlementId,
+            'amount' => number_format($amount, 2, '.', ''),
+        ]);
         return $settlementId;
     }
 
@@ -3201,6 +3220,13 @@ class ErpFinanceService extends BaseAdminService
             ];
         }
 
+        $requiredConsumers = [];
+        foreach ($targets as $target) {
+            if ((string)($target['origin']['plugin'] ?? '') === 'hsx_recycle') {
+                $requiredConsumers[] = 'hsx_recycle';
+                break;
+            }
+        }
         $queued = (new ErpIntegrationService())->enqueueDomainEvent(
             'erp.settlement.completed.v1',
             'settlement',
@@ -3218,7 +3244,9 @@ class ErpFinanceService extends BaseAdminService
                 'confirmed_at' => (int)$settlement->confirmed_at,
                 'targets' => $targets,
                 'snapshot_at' => time(),
-            ]
+            ],
+            [],
+            $requiredConsumers
         );
         $this->settlementOutboxIds[] = (int)$queued['id'];
     }

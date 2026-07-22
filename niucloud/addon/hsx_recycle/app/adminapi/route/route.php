@@ -683,9 +683,15 @@ Route::group('recycle', function () {
 Route::group('recycle', function () {
     // 易速产品配置管理
     Route::get('yisu_product/lists', 'addon\hsx_recycle\app\adminapi\controller\yisu\YisuProduct@lists');
+    Route::get('yisu_product/catalog', 'addon\hsx_recycle\app\adminapi\controller\yisu\YisuProduct@catalog');
     Route::post('yisu_product/batch_update', 'addon\hsx_recycle\app\adminapi\controller\yisu\YisuProduct@batchUpdate');
     Route::post('yisu_product/modify_status', 'addon\hsx_recycle\app\adminapi\controller\yisu\YisuProduct@modifyStatus');
     Route::get('yisu_product/enabled', 'addon\hsx_recycle\app\adminapi\controller\yisu\YisuProduct@enabled');
+    Route::post('yisu_product/import', 'addon\hsx_recycle\app\adminapi\controller\yisu\YisuProduct@import');
+    Route::get('yisu_product/import_template', 'addon\hsx_recycle\app\adminapi\controller\yisu\YisuProduct@importTemplate');
+    Route::get('yisu_product/import_tasks', 'addon\hsx_recycle\app\adminapi\controller\yisu\YisuProduct@importTasks');
+    Route::get('yisu_product/import_tasks/:taskId', 'addon\hsx_recycle\app\adminapi\controller\yisu\YisuProduct@importTaskInfo');
+    Route::post('yisu_product/import_tasks/:taskId/retry', 'addon\hsx_recycle\app\adminapi\controller\yisu\YisuProduct@importTaskRetry');
     Route::post('yisu/create_order', 'addon\hsx_recycle\app\adminapi\controller\yisu\Yisu@createOrder');
 
     // yisu 业务相关接口

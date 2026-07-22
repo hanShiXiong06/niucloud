@@ -6,6 +6,7 @@ namespace addon\hsx_erp\app\service\admin;
 use addon\hsx_erp\app\dict\ErpDict;
 use addon\hsx_erp\app\model\ErpAsset;
 use addon\hsx_erp\app\model\ErpParty;
+use addon\hsx_erp\app\model\ErpPayable;
 use addon\hsx_erp\app\model\ErpReceivable;
 use addon\hsx_erp\app\model\ErpSaleItem;
 use addon\hsx_erp\app\model\ErpSaleOrder;
@@ -69,13 +70,26 @@ class ErpSaleService extends BaseAdminService
                 $query->whereLike($column, '%' . trim((string)$where[$key]) . '%');
             }
         }
-        return $query->field([
+        $page = $query->field([
             'a.*',
             "COALESCE(c.product_name, '') as catalog_product_name",
         ])->order('a.id desc')->paginate([
             'list_rows' => (int)($where['limit'] ?? 15),
             'page' => (int)($where['page'] ?? 1),
         ])->toArray();
+        foreach ($page['data'] as &$asset) {
+            $ownershipType = (string)($asset['ownership_type'] ?? 'owned');
+            $settlementAmount = $ownershipType === 'consigned'
+                ? $this->resolveConsignmentSettlementSnapshot((string)($asset['spec_json'] ?? ''))
+                : 0.0;
+            $asset['ownership_type'] = $ownershipType;
+            $asset['consignment_settlement_amount'] = $settlementAmount;
+            $asset['sale_cost_basis'] = $ownershipType === 'consigned'
+                ? $settlementAmount
+                : round((float)($asset['total_cost'] ?? 0), 2);
+        }
+        unset($asset);
+        return $page;
     }
 
     public function getPage(array $where): array
@@ -154,9 +168,15 @@ class ErpSaleService extends BaseAdminService
             'i.asset_id',
             'i.imei',
             'i.model',
+            'i.ownership_type',
+            'i.owner_party_id',
+            'i.owner_party_name',
             'i.cost',
             'i.sale_price',
             'i.profit',
+            'i.consignment_settlement_amount',
+            'i.consignment_service_fee',
+            'i.consignment_payable_id',
             'i.status',
             'i.remark',
             'i.create_at',
@@ -312,10 +332,38 @@ class ErpSaleService extends BaseAdminService
                 if ($price <= 0) {
                     throw new CommonException('销售金额必须大于0');
                 }
-                $cost = round((float)$asset->total_cost, 2);
+                $ownershipType = (string)($asset->ownership_type ?? 'owned');
+                $ownerPartyId = $ownershipType === 'consigned' ? (int)$asset->owner_party_id : 0;
+                $ownerPartyName = $ownershipType === 'consigned' ? trim((string)$asset->owner_party_name) : '';
+                $consignmentSettlement = 0.0;
+                if ($ownershipType === 'consigned') {
+                    if ($ownerPartyId <= 0 || $ownerPartyName === '') {
+                        throw new CommonException('代卖设备缺少货主主体，不能销售：' . ($asset->imei ?: $asset->model));
+                    }
+                    $consignmentSettlement = $this->resolveConsignmentSettlement($asset, (array)$item);
+                    if ($consignmentSettlement <= 0) {
+                        throw new CommonException('代卖设备必须填写给客户的结算金额：' . ($asset->imei ?: $asset->model));
+                    }
+                    if ($consignmentSettlement > $price) {
+                        throw new CommonException('代卖设备结算金额不能大于销售金额：' . ($asset->imei ?: $asset->model));
+                    }
+                }
+                $cost = $ownershipType === 'consigned'
+                    ? $consignmentSettlement
+                    : round((float)$asset->total_cost, 2);
                 $totalAmount += $price;
                 $totalCost += $cost;
-                $resolved[] = [$asset, $price, trim((string)($item['remark'] ?? ''))];
+                $resolved[] = [
+                    'asset' => $asset,
+                    'price' => $price,
+                    'cost' => $cost,
+                    'remark' => trim((string)($item['remark'] ?? '')),
+                    'ownership_type' => $ownershipType,
+                    'owner_party_id' => $ownerPartyId,
+                    'owner_party_name' => $ownerPartyName,
+                    'consignment_settlement_amount' => $consignmentSettlement,
+                    'consignment_service_fee' => $ownershipType === 'consigned' ? round($price - $consignmentSettlement, 2) : 0,
+                ];
             }
             $settleMode = in_array((string)($data['settle_mode'] ?? ''), ['credit', 'cash'], true)
                 ? (string)$data['settle_mode']
@@ -366,22 +414,87 @@ class ErpSaleService extends BaseAdminService
                 'update_at' => $now,
             ]);
             $orderId = (int)$order->id;
-            foreach ($resolved as [$asset, $price, $remark]) {
-                $cost = round((float)$asset->total_cost, 2);
+            foreach ($resolved as $resolvedItem) {
+                /** @var ErpAsset $asset */
+                $asset = $resolvedItem['asset'];
+                $price = (float)$resolvedItem['price'];
+                $cost = (float)$resolvedItem['cost'];
+                $remark = (string)$resolvedItem['remark'];
                 $item = ErpSaleItem::create([
                     'site_id' => $this->site_id,
                     'sale_order_id' => $orderId,
                     'asset_id' => (int)$asset->id,
                     'imei' => (string)$asset->imei,
                     'model' => (string)$asset->model,
+                    'ownership_type' => (string)$resolvedItem['ownership_type'],
+                    'owner_party_id' => (int)$resolvedItem['owner_party_id'],
+                    'owner_party_name' => (string)$resolvedItem['owner_party_name'],
                     'cost' => $cost,
                     'sale_price' => $price,
                     'profit' => round($price - $cost, 2),
+                    'consignment_settlement_amount' => (float)$resolvedItem['consignment_settlement_amount'],
+                    'consignment_service_fee' => (float)$resolvedItem['consignment_service_fee'],
+                    'consignment_payable_id' => 0,
                     'status' => ErpDict::ASSET_SOLD,
                     'remark' => $remark,
                     'create_at' => $now,
                     'update_at' => $now,
                 ]);
+                $consignmentPayable = null;
+                if ((string)$resolvedItem['ownership_type'] === 'consigned') {
+                    $sourceSnapshot = json_decode((string)($asset->spec_json ?? ''), true);
+                    if (!is_array($sourceSnapshot)) $sourceSnapshot = [];
+                    $consignmentSnapshot = is_array($sourceSnapshot['consignment'] ?? null) ? (array)$sourceSnapshot['consignment'] : [];
+                    $originPlugin = trim((string)$asset->source_plugin) ?: 'hsx_erp';
+                    $originNo = trim((string)($consignmentSnapshot['order_no'] ?? '')) ?: (string)$asset->ownership_source_no;
+                    $meta = $financeSourceService->consignmentSale([
+                        'origin_plugin' => $originPlugin,
+                        'origin_plugin_name' => $originPlugin === 'hsx_recycle' ? '回收插件' : '',
+                        'origin_id' => (string)($consignmentSnapshot['order_id'] ?? $asset->source_id),
+                        'origin_no' => $originNo,
+                        'business_reason' => sprintf(
+                            '代卖设备%s已售出，成交¥%.2f，应付货主¥%.2f，代卖收益¥%.2f。',
+                            (string)($asset->imei ?: $asset->asset_no),
+                            $price,
+                            (float)$resolvedItem['consignment_settlement_amount'],
+                            (float)$resolvedItem['consignment_service_fee']
+                        ),
+                    ]);
+                    $consignmentPayable = ErpPayable::create(array_merge([
+                        'site_id' => $this->site_id,
+                        'payable_no' => ErpLedgerService::makeNo('AP'),
+                        'party_id' => (int)$resolvedItem['owner_party_id'],
+                        'party_name' => (string)$resolvedItem['owner_party_name'],
+                        'source_type' => 'consignment_sale',
+                        'source_id' => (int)$item->id,
+                        'source_no' => $saleNo,
+                        'settlement_mode' => 'credit',
+                        'settlement_mode_name' => '财务结算',
+                        'business_operator_uid' => (int)$this->uid,
+                        'business_operator_name' => (string)$this->username,
+                        'asset_id' => (int)$asset->id,
+                        'amount' => (float)$resolvedItem['consignment_settlement_amount'],
+                        'settled_amount' => 0,
+                        'status' => ErpDict::STATUS_PENDING,
+                        'occurred_at' => $saleAt,
+                        'remark' => '代卖成交应付货主',
+                        'create_at' => $now,
+                        'update_at' => $now,
+                    ], $financeSourceService->persistable($meta)));
+                    $item->save(['consignment_payable_id' => (int)$consignmentPayable->id, 'update_at' => $now]);
+                    (new ErpLedgerService())->account([
+                        'biz_type' => 'consignment_sale',
+                        'direction' => 'increase',
+                        'amount' => (float)$resolvedItem['consignment_settlement_amount'],
+                        'party_id' => (int)$resolvedItem['owner_party_id'],
+                        'party_name' => (string)$resolvedItem['owner_party_name'],
+                        'asset_id' => (int)$asset->id,
+                        'source_type' => 'consignment_sale',
+                        'source_id' => (int)$item->id,
+                        'source_no' => $saleNo,
+                        'remark' => '代卖成交应付货主',
+                    ]);
+                }
                 $asset->save([
                     'sale_order_id' => $orderId,
                     'sale_item_id' => (int)$item->id,
@@ -425,6 +538,13 @@ class ErpSaleService extends BaseAdminService
                     'party_name' => $partyName,
                     'sale_price' => $price,
                     'cost' => $cost,
+                    'ownership_type' => (string)$resolvedItem['ownership_type'],
+                    'owner_party_id' => (int)$resolvedItem['owner_party_id'],
+                    'owner_party_name' => (string)$resolvedItem['owner_party_name'],
+                    'consignment_settlement_amount' => (float)$resolvedItem['consignment_settlement_amount'],
+                    'consignment_service_fee' => (float)$resolvedItem['consignment_service_fee'],
+                    'consignment_payable_id' => $consignmentPayable ? (int)$consignmentPayable->id : 0,
+                    'consignment_payable_no' => $consignmentPayable ? (string)$consignmentPayable->payable_no : '',
                     'settle_method' => $settleMode === 'cash' ? '现结' : '挂账',
                     'sale_channel_key' => (string)$channel['key'],
                     'channel_source_plugin' => (string)$channel['source_plugin'],
@@ -472,6 +592,7 @@ class ErpSaleService extends BaseAdminService
         }
         $this->flushDomainEvents();
         if ($financeService instanceof ErpFinanceService) $financeService->flushPendingSettlementDomainEvents();
+        (new ErpPrintService())->triggerSafely('sale_created', 'sale', $orderId);
         return $orderId;
     }
 
@@ -507,6 +628,7 @@ class ErpSaleService extends BaseAdminService
                 throw new CommonException('销售单内没有可取消的在售设备');
             }
             foreach ($items as $item) {
+                $this->voidConsignmentPayable($item, $remark !== '' ? $remark : '销售单撤销');
                 $asset = ErpAsset::where([['site_id', '=', $this->site_id], ['id', '=', (int)$item->asset_id]])->lock(true)->findOrEmpty();
                 if ($asset->isEmpty() || (int)$asset->sale_order_id !== $id || (string)$asset->status !== ErpDict::ASSET_SOLD) {
                     throw new CommonException('销售单内设备状态异常，不能直接撤销');
@@ -579,6 +701,8 @@ class ErpSaleService extends BaseAdminService
                     'party_name' => (string)$order->party_name,
                     'return_reason' => $remark !== '' ? $remark : '销售单撤销',
                     'return_type' => 'sale_cancel',
+                    'ownership_type' => (string)($item->ownership_type ?? 'owned'),
+                    'consignment_payable_id' => (int)($item->consignment_payable_id ?? 0),
                 ]);
             }
 
@@ -589,6 +713,7 @@ class ErpSaleService extends BaseAdminService
             ]);
         });
         $this->flushDomainEvents();
+        (new ErpPrintService())->triggerSafely('sale_cancelled', 'sale', $id);
         return true;
     }
 
@@ -639,6 +764,8 @@ class ErpSaleService extends BaseAdminService
             if ($asset->isEmpty() || (int)$asset->sale_order_id !== (int)$order->id || (int)$asset->sale_item_id !== (int)$item->id || (string)$asset->status !== ErpDict::ASSET_SOLD) {
                 throw new CommonException('设备销售状态异常，不能直接撤销');
             }
+
+            $this->voidConsignmentPayable($item, $remark !== '' ? $remark : '单台撤销销售');
 
             $item->save([
                 'status' => ErpDict::STATUS_VOID,
@@ -714,6 +841,8 @@ class ErpSaleService extends BaseAdminService
                 'party_name' => (string)$order->party_name,
                 'return_reason' => $remark !== '' ? $remark : '单台撤销销售',
                 'return_type' => 'sale_item_cancel',
+                'ownership_type' => (string)($item->ownership_type ?? 'owned'),
+                'consignment_payable_id' => (int)($item->consignment_payable_id ?? 0),
             ]);
             (new ErpOperationLogService())->record('sale_item_cancel', 'sale_item', (int)$item->id, (string)$order->sale_no, $remark, [
                 'party_name' => (string)$order->party_name,
@@ -733,6 +862,13 @@ class ErpSaleService extends BaseAdminService
             || (string)($context['origin_plugin'] ?? '') === 'phone_shop'
             ? ['phone_shop.erp_asset_state']
             : [];
+        // 回收侧当前只强消费代卖成交/撤销镜像；普通回收采购的销售状态不应
+        // 因监听器没有业务动作而把 ERP Outbox 误判为投递失败。
+        if ((string)$asset->source_plugin === 'hsx_recycle'
+            && in_array($eventName, ['erp.asset.sold.v1', 'erp.asset.returned.v1'], true)
+            && (string)($context['ownership_type'] ?? '') === 'consigned') {
+            $required[] = 'hsx_recycle';
+        }
         $sourceDeviceId = (string)$asset->source_plugin === 'hsx_recycle' && is_numeric((string)$asset->source_id)
             ? (int)$asset->source_id
             : 0;
@@ -756,6 +892,54 @@ class ErpSaleService extends BaseAdminService
             $required
         );
         $this->domainOutboxIds[] = (int)$queued['id'];
+    }
+
+    private function resolveConsignmentSettlement(ErpAsset $asset, array $item): float
+    {
+        $explicit = round((float)($item['consignment_settlement_amount'] ?? $item['settlement_amount'] ?? 0), 2);
+        if ($explicit > 0) return $explicit;
+
+        return $this->resolveConsignmentSettlementSnapshot((string)($asset->spec_json ?? ''));
+    }
+
+    private function resolveConsignmentSettlementSnapshot(string $specJson): float
+    {
+        $snapshot = json_decode($specJson, true);
+        if (!is_array($snapshot)) return 0.0;
+        $consignment = is_array($snapshot['consignment'] ?? null) ? (array)$snapshot['consignment'] : [];
+        foreach (['settlement_amount', 'min_settlement_price', 'expected_price', 'listing_price'] as $field) {
+            $amount = round((float)($consignment[$field] ?? 0), 2);
+            if ($amount > 0) return $amount;
+        }
+        return 0.0;
+    }
+
+    private function voidConsignmentPayable(ErpSaleItem $item, string $remark): void
+    {
+        $payableId = (int)($item->consignment_payable_id ?? 0);
+        if ($payableId <= 0) return;
+        $payable = ErpPayable::where([
+            ['site_id', '=', $this->site_id],
+            ['id', '=', $payableId],
+            ['asset_id', '=', (int)$item->asset_id],
+        ])->lock(true)->findOrEmpty();
+        if ($payable->isEmpty() || (string)$payable->status === ErpDict::STATUS_VOID) return;
+        if ((float)$payable->settled_amount > 0) {
+            throw new CommonException('代卖货款已经付款或折账，不能直接撤销销售，请走销售退货及追回款流程');
+        }
+        $payable->save(['status' => ErpDict::STATUS_VOID, 'update_at' => time(), 'remark' => $remark]);
+        (new ErpLedgerService())->account([
+            'biz_type' => 'consignment_sale_cancel',
+            'direction' => 'decrease',
+            'amount' => (float)$payable->amount,
+            'party_id' => (int)$payable->party_id,
+            'party_name' => (string)$payable->party_name,
+            'asset_id' => (int)$item->asset_id,
+            'source_type' => 'consignment_sale_cancel',
+            'source_id' => (int)$item->id,
+            'source_no' => (string)$payable->source_no,
+            'remark' => $remark,
+        ]);
     }
 
     /** 只在最外层事务提交后派发；嵌套的整单撤销由外层调用统一刷新。 */

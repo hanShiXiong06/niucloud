@@ -12,6 +12,7 @@ use addon\hsx_erp\app\service\admin\ErpPurchaseService;
 use addon\hsx_erp\app\support\ErpIdempotency;
 use core\exception\CommonException;
 use think\facade\Db;
+use think\facade\Log;
 
 /**
  * 消费回收插件的标准设备入库请求，并统一落为 ERP 采购、库存和设备级应付事实。
@@ -105,14 +106,6 @@ class ErpDeviceInboundRequested
                 $this->completeInbox($inboxId, $requestPayload, $result);
                 return $result;
             });
-            $operator = (array)($event['operator'] ?? []);
-            $taskService = ErpListingTaskService::forSite(
-                $currentSiteId,
-                (int)($operator['id'] ?? 0),
-                trim((string)($operator['name'] ?? '')) ?: '回收入库'
-            );
-            foreach ((array)($result['asset_ids'] ?? []) as $assetId) $taskService->sync((int)$assetId);
-            return $result;
         } catch (\Throwable $e) {
             $processed = $this->findInbox($currentSiteId, $eventId);
             if ($processed !== null) {
@@ -121,6 +114,39 @@ class ErpDeviceInboundRequested
             }
             $this->recordFailedInbox($currentSiteId, $eventId, $event, $requestPayload, $e->getMessage());
             throw $e;
+        }
+
+        // 上架待办属于入库后的可重建投影，不能反过来把已经提交成功的入库事件
+        // 伪装成 duplicate，也不能让采购、库存和应付事实失去真实返回结果。
+        $assetIds = array_values(array_unique(array_filter(array_map('intval', (array)($result['asset_ids'] ?? [])))));
+        if ($assetIds !== []) {
+            try {
+                $operator = (array)($event['operator'] ?? []);
+                $taskService = ErpListingTaskService::forSite(
+                    $currentSiteId,
+                    (int)($operator['id'] ?? 0),
+                    trim((string)($operator['name'] ?? '')) ?: '回收入库'
+                );
+                foreach ($assetIds as $assetId) $taskService->sync($assetId);
+            } catch (\Throwable $e) {
+                $this->recordProjectionWarning('ERP入库成功，但生成上架待办失败', [
+                    'site_id' => $currentSiteId,
+                    'event_id' => $eventId,
+                    'asset_ids' => $assetIds,
+                    'message' => $e->getMessage(),
+                ]);
+                $result['warnings'][] = '库存已入库，上架待办可在库存中心重新生成';
+            }
+        }
+        return $result;
+    }
+
+    /** 测试或命令行未完整初始化日志容器时，告警本身不能破坏已完成的业务事实。 */
+    protected function recordProjectionWarning(string $message, array $context): void
+    {
+        try {
+            Log::warning($message, $context);
+        } catch (\Throwable) {
         }
     }
 
@@ -166,9 +192,7 @@ class ErpDeviceInboundRequested
         }
 
         if ($orderIds !== []) {
-            $assetIds = array_merge($assetIds, array_map('intval', \addon\hsx_erp\app\model\ErpAsset::where([
-                ['site_id', '=', $currentSiteId],
-            ])->whereIn('purchase_order_id', array_values(array_unique($orderIds)))->column('id')));
+            $assetIds = array_merge($assetIds, $this->assetIdsForPurchaseOrders($currentSiteId, $orderIds));
         }
 
         return [
@@ -183,6 +207,16 @@ class ErpDeviceInboundRequested
             'skipped_count' => 0,
             'skipped' => [],
         ];
+    }
+
+    /** 独立查询边界，便于契约测试替换持久层，并统一保证站点隔离。 */
+    protected function assetIdsForPurchaseOrders(int $siteId, array $orderIds): array
+    {
+        $orderIds = array_values(array_unique(array_filter(array_map('intval', $orderIds))));
+        if ($siteId <= 0 || $orderIds === []) return [];
+        return array_map('intval', \addon\hsx_erp\app\model\ErpAsset::where([
+            ['site_id', '=', $siteId],
+        ])->whereIn('purchase_order_id', $orderIds)->column('id'));
     }
 
     /**
@@ -362,6 +396,7 @@ class ErpDeviceInboundRequested
                 'settlement_status' => trim((string)($device['settlement_status'] ?? '')),
                 'source_paid_amount' => round((float)($device['paid_amount'] ?? 0), 2),
                 'payee_methods' => array_values(array_filter((array)($device['payment_methods'] ?? []), 'is_array')),
+                'consignment' => is_array($device['consignment'] ?? null) ? (array)$device['consignment'] : null,
                 'refurbishment_suggestion' => [
                     'required' => (bool)($refurbishment['required'] ?? false),
                     'reason' => $refurbishmentReason,

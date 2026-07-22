@@ -18,7 +18,8 @@ $mobileStockDetail = (string)file_get_contents($repo . '/site-uniapp/src/addon/h
 $pcSale = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/views/erp/sale/list.vue');
 $mobileSale = (string)file_get_contents($repo . '/site-uniapp/src/addon/hsx_erp/pages/sale/create.vue');
 $eventConfig = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/app/event.php');
-$directListing = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/app/listener/marketplace/PhoneShopDirectListing.php');
+$shopEventConfig = (string)file_get_contents($repo . '/niucloud/addon/phone_shop/app/event.php');
+$directListing = (string)file_get_contents($repo . '/niucloud/addon/phone_shop/app/listener/erp/ErpPublishListing.php');
 
 $assert(str_contains($configService, "'turnover' => ["), '业务规则必须提供库存周转配置');
 $assert(str_contains($turnoverService, "'warning_total_cost'"), '周转汇总必须统计预警库存占用成本');
@@ -33,7 +34,8 @@ $assert(str_contains($stockService, 'listingStatusAfterRefurbish') && str_contai
 $updateFlowBody = explode('public function syncListing', explode('public function updateFlow', $stockService, 2)[1] ?? '', 2)[0] ?? '';
 $assert(!str_contains($updateFlowBody, '$this->syncListing('), '保存商品资料不能强依赖商城或拍照插件，外部同步必须显式触发');
 $assert(!str_contains($stockService, 'erp.asset.ready_for_photo.v1'), '库存上架不能再强制派发拍照中台事件');
-$assert(str_contains($stockService, "event('HsxErpPublishListing'") && str_contains($eventConfig, 'PhoneShopDirectListing'), '资料完整后必须通过插件Hook直接上架已安装商城');
+$assert(str_contains($stockService, "event('HsxErpPublishListing'") && !str_contains($eventConfig, 'PhoneShopDirectListing'), 'ERP必须只发布渠道上架Hook，不能装配商城实现');
+$assert(str_contains($shopEventConfig, 'HsxErpPublishListing') && str_contains($shopEventConfig, 'ErpPublishListing'), '已安装商城必须自行装配ERP上架消费监听器');
 $assert(str_contains($directListing, 'CoreDeviceIntakeService') && str_contains($directListing, 'DeviceIntakeService())->build'), '商城Hook必须复用现有货源和建品服务，不重复实现商品写入');
 $assert(str_contains($stockService, 'function specValueText') && str_contains($stockService, "['label', 'name', 'text'"), '结构化规格必须安全转换为商城文本，不能直接把数组强转为字符串');
 $assert(str_contains($stockService, "'action' => 'retail_price_adjust'") && str_contains($stockService, "'source_type' => 'stock_turnover'"), '零售价调整不能伪装成采购成本调整');

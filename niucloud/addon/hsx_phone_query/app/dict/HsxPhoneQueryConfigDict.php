@@ -18,7 +18,7 @@ class HsxPhoneQueryConfigDict
                 [
                     'key' => 'gkdt_main',
                     'name' => '爱查助手',
-                    'provider' => 'service_id_query',
+                    'provider' => 'gkdt_query',
                     'enabled' => 0,
                     'base_url' => 'https://api-srv.gkdt.com/inquiry/async',
                     'method' => 'GET',
@@ -28,19 +28,23 @@ class HsxPhoneQueryConfigDict
                     'query_param' => 'code',
                     'style' => '11',
                     'timeout' => 30,
+                    'connect_timeout' => 10,
+                    'verify_ssl' => 1,
                 ],
                 [
                     'key' => '3023_main',
                     'name' => '3023Data',
                     'provider' => 'path_query',
                     'enabled' => 1,
-                    'base_url' => 'http://api.3023data.com',
+                    'base_url' => 'https://api.3023data.com',
                     'method' => 'GET',
                     'token' => '',
                     'auth_type' => 'header',
                     'auth_key' => 'key',
                     'query_param' => 'sn',
-                    'timeout' => 30,
+                    'timeout' => 300,
+                    'connect_timeout' => 10,
+                    'verify_ssl' => 1,
                 ],
             ],
             'mappings' => self::defaultMappings(),
@@ -100,7 +104,7 @@ class HsxPhoneQueryConfigDict
                 'channel_key' => '3023_main',
                 'endpoint_type' => 'path',
                 'endpoint_value' => $mapping['endpoint_value'],
-                'query_param' => 'sn',
+                'query_param' => (string)($mapping['query_param'] ?? HsxPhoneQueryCategoryDict::infer3023QueryParam((string)$mapping['endpoint_value'])),
                 'cost_price' => $mapping['cost_price'],
                 'enabled' => 1,
             ];
@@ -148,16 +152,23 @@ class HsxPhoneQueryConfigDict
 
             $channel = array_replace_recursive($defaultChannels[$key] ?? [], $channel);
             $provider = trim((string)($channel['provider'] ?? ''));
+            if ($provider === 'service_id_query') {
+                $provider = 'gkdt_query';
+            }
             $appid = trim((string)($channel['appid'] ?? ''));
             $secret = trim((string)($channel['secret'] ?? ''));
             $token = trim((string)($channel['token'] ?? ''));
             $enabled = (int)(bool)($channel['enabled'] ?? 0);
             $queryParam = trim((string)($channel['query_param'] ?? 'sn'));
-            if ($provider === 'path_query') {
-                $queryParam = 'sn';
-            }
-            if ($provider === 'service_id_query') {
+            if ($provider === 'gkdt_query') {
                 $queryParam = 'code';
+            }
+            $baseUrl = trim((string)($channel['base_url'] ?? ''));
+            if ($provider === 'path_query' && str_starts_with(strtolower($baseUrl), 'http://api.3023data.com')) {
+                $baseUrl = 'https://' . substr($baseUrl, strlen('http://'));
+            }
+            if ($provider === 'gkdt_query' && str_contains($baseUrl, '?')) {
+                $baseUrl = explode('?', $baseUrl, 2)[0];
             }
 
             $channels[] = [
@@ -165,7 +176,7 @@ class HsxPhoneQueryConfigDict
                 'name' => trim((string)($channel['name'] ?? $key)),
                 'provider' => $provider,
                 'enabled' => $enabled,
-                'base_url' => trim((string)($channel['base_url'] ?? '')),
+                'base_url' => $baseUrl,
                 'method' => strtoupper(trim((string)($channel['method'] ?? 'GET'))) ?: 'GET',
                 'appid' => $appid,
                 'secret' => $secret,
@@ -176,6 +187,8 @@ class HsxPhoneQueryConfigDict
                 'auth_key' => trim((string)($channel['auth_key'] ?? 'key')),
                 'query_param' => $queryParam,
                 'timeout' => max(1, (int)($channel['timeout'] ?? 30)),
+                'connect_timeout' => max(1, (int)($channel['connect_timeout'] ?? 10)),
+                'verify_ssl' => (int)(bool)($channel['verify_ssl'] ?? 1),
             ];
         }
 
@@ -227,7 +240,10 @@ class HsxPhoneQueryConfigDict
                 $queryParam = 'code';
             }
             if ($channelKey === '3023_main' || $endpointType === 'path') {
-                $queryParam = 'sn';
+                $queryParam = $queryParam ?: HsxPhoneQueryCategoryDict::infer3023QueryParam($endpointValue);
+                if ($queryParam === 'sn') {
+                    $queryParam = HsxPhoneQueryCategoryDict::infer3023QueryParam($endpointValue);
+                }
             }
 
             $mappings[] = [
@@ -294,7 +310,7 @@ class HsxPhoneQueryConfigDict
 
     public static function hasChannelCredential(array $channel): bool
     {
-        if (($channel['provider'] ?? '') === 'service_id_query') {
+        if (in_array(($channel['provider'] ?? ''), ['gkdt_query', 'service_id_query'], true)) {
             return trim((string)($channel['appid'] ?? '')) !== '' && trim((string)($channel['secret'] ?? '')) !== '';
         }
 

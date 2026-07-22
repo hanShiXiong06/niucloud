@@ -4,7 +4,10 @@ declare(strict_types=1);
 namespace addon\hsx_recycle\app\service\core\recycle_device;
 
 use addon\hsx_recycle\app\dict\order\RecycleDownstreamDict;
+use addon\hsx_recycle\app\dict\order\RecycleConsignmentDict;
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
+use addon\hsx_recycle\app\model\order\RecycleConsignmentLog;
+use addon\hsx_recycle\app\model\order\RecycleConsignmentOrder;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\model\order\RecycleDeviceLog;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
@@ -27,6 +30,178 @@ use think\facade\Log;
  */
 class CoreRecycleDownstreamMirrorService
 {
+    /** ERP售出代卖设备后，回写成交金额并把代卖单推进到待结算。 */
+    public function applyConsignmentSale(int $deviceId, array $extra = [], string $eventId = ''): array
+    {
+        try {
+            return Db::transaction(function () use ($deviceId, $extra, $eventId): array {
+                $siteId = (int)($extra['site_id'] ?? 0);
+                if ($deviceId <= 0 || $siteId <= 0) return ['skipped' => true, 'reason' => 'invalid_args'];
+                $device = RecycleDevice::where([['site_id', '=', $siteId], ['id', '=', $deviceId]])->lock(true)->findOrEmpty();
+                if ($device->isEmpty()) return ['skipped' => true, 'reason' => 'device_not_found'];
+                if ($eventId !== '' && (string)$device->downstream_event_id === $eventId) {
+                    return ['skipped' => true, 'reason' => 'duplicate_event'];
+                }
+                $consignment = RecycleConsignmentOrder::where([
+                    ['site_id', '=', $siteId],
+                    ['id', '=', (int)$device->consignment_order_id],
+                    ['source_device_id', '=', (int)$device->id],
+                ])->lock(true)->findOrEmpty();
+                if ($consignment->isEmpty()) return ['error' => true, 'message' => '代卖设备未找到来源代卖单'];
+
+                $salePrice = round((float)($extra['sale_price'] ?? 0), 2);
+                $settlementAmount = round((float)($extra['consignment_settlement_amount'] ?? 0), 2);
+                if ($salePrice <= 0 || $settlementAmount <= 0 || $settlementAmount > $salePrice) {
+                    return ['error' => true, 'message' => 'ERP代卖成交金额快照不完整'];
+                }
+                $now = time();
+                $before = $consignment->toArray();
+                $consignment->save([
+                    'sold_price' => $salePrice,
+                    'settlement_amount' => $settlementAmount,
+                    'service_fee' => round($salePrice - $settlementAmount, 2),
+                    'status' => RecycleConsignmentDict::STATUS_PENDING_SETTLEMENT,
+                    'pay_status' => RecycleConsignmentDict::PAY_STATUS_UNPAID,
+                    'sold_time' => (int)($extra['sold_at'] ?? $now),
+                    'operator_id' => 0,
+                    'update_time' => $now,
+                ]);
+                $device->save([
+                    'sell_price' => $salePrice,
+                    'final_price' => $settlementAmount,
+                    'downstream_stage' => max((int)$device->downstream_stage, RecycleDownstreamDict::STAGE_SOLD),
+                    'downstream_stage_at' => $now,
+                    'downstream_sale_price' => $salePrice,
+                    'downstream_erp_asset_id' => (int)($extra['erp_asset_id'] ?? 0),
+                    'downstream_event_id' => $eventId,
+                    'update_at' => $now,
+                ]);
+                RecycleConsignmentLog::create([
+                    'site_id' => $siteId,
+                    'consignment_id' => (int)$consignment->id,
+                    'source_order_id' => (int)$consignment->source_order_id,
+                    'source_device_id' => (int)$device->id,
+                    'operator_id' => 0,
+                    'operator_name' => 'ERP同步',
+                    'action' => 'sold',
+                    'old_status' => (int)($before['status'] ?? 0),
+                    'new_status' => RecycleConsignmentDict::STATUS_PENDING_SETTLEMENT,
+                    'before_data' => $before,
+                    'after_data' => $consignment->toArray(),
+                    'remark' => sprintf('ERP销售出库：成交¥%.2f，应付客户¥%.2f，应付单%s', $salePrice, $settlementAmount, (string)($extra['consignment_payable_no'] ?? '')),
+                    'create_time' => $now,
+                ]);
+                RecycleDeviceLog::create([
+                    'site_id' => $siteId,
+                    'device_id' => (int)$device->id,
+                    'order_id' => (int)$device->order_id,
+                    'operator_id' => 0,
+                    'operator_name' => 'ERP同步',
+                    'operation_type' => 'erp_consignment_sale',
+                    'action' => 'erp_consignment_sale',
+                    'old_status' => (int)$device->status,
+                    'new_status' => (int)$device->status,
+                    'remark' => sprintf('代卖成交 | ERP销售单:%s | 成交:%.2f | 待付客户:%.2f', (string)($extra['sale_no'] ?? ''), $salePrice, $settlementAmount),
+                    'create_at' => $now,
+                ]);
+                return ['updated' => true, 'device_id' => $deviceId, 'consignment_id' => (int)$consignment->id];
+            });
+        } catch (\Throwable $e) {
+            Log::error('[hsx_recycle] consignment sale mirror failed: ' . $e->getMessage());
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /** ERP撤销代卖设备销售后，撤回待付款事实并恢复为可继续代卖。 */
+    public function applyConsignmentSaleCancellation(int $deviceId, array $extra = [], string $eventId = ''): array
+    {
+        try {
+            return Db::transaction(function () use ($deviceId, $extra, $eventId): array {
+                $siteId = (int)($extra['site_id'] ?? 0);
+                if ($deviceId <= 0 || $siteId <= 0) return ['skipped' => true, 'reason' => 'invalid_args'];
+                $device = RecycleDevice::where([
+                    ['site_id', '=', $siteId],
+                    ['id', '=', $deviceId],
+                ])->lock(true)->findOrEmpty();
+                if ($device->isEmpty()) return ['skipped' => true, 'reason' => 'device_not_found'];
+                if ($eventId !== '' && (string)$device->downstream_event_id === $eventId) {
+                    return ['skipped' => true, 'reason' => 'duplicate_event'];
+                }
+                $consignment = RecycleConsignmentOrder::where([
+                    ['site_id', '=', $siteId],
+                    ['id', '=', (int)$device->consignment_order_id],
+                    ['source_device_id', '=', (int)$device->id],
+                ])->lock(true)->findOrEmpty();
+                if ($consignment->isEmpty()) return ['error' => true, 'message' => '代卖设备未找到来源代卖单'];
+                if ((int)$consignment->pay_status === RecycleConsignmentDict::PAY_STATUS_PAID
+                    || (int)$consignment->status === RecycleConsignmentDict::STATUS_SETTLED) {
+                    return ['error' => true, 'message' => '代卖货款已经结清，不能直接撤销销售'];
+                }
+
+                $now = time();
+                $before = $consignment->toArray();
+                $restoredStatus = (float)$consignment->listing_price > 0
+                    ? RecycleConsignmentDict::STATUS_SELLING
+                    : RecycleConsignmentDict::STATUS_PENDING;
+                $restoredSettlement = round((float)($consignment->min_settlement_price ?: $consignment->expected_price ?: 0), 2);
+                $consignment->save([
+                    'sold_price' => 0,
+                    'settlement_amount' => 0,
+                    'service_fee' => 0,
+                    'status' => $restoredStatus,
+                    'pay_status' => RecycleConsignmentDict::PAY_STATUS_UNPAID,
+                    'sold_time' => 0,
+                    'operator_id' => 0,
+                    'update_time' => $now,
+                ]);
+                $device->save([
+                    'sell_price' => (float)$consignment->listing_price,
+                    'final_price' => $restoredSettlement,
+                    'downstream_stage' => RecycleDownstreamDict::STAGE_STOCKED,
+                    'downstream_stage_at' => $now,
+                    'downstream_sale_price' => 0,
+                    'downstream_erp_asset_id' => (int)($extra['erp_asset_id'] ?? $device->downstream_erp_asset_id ?? 0),
+                    'downstream_event_id' => $eventId,
+                    'update_at' => $now,
+                ]);
+
+                $reason = trim((string)($extra['return_reason'] ?? '')) ?: 'ERP撤销销售';
+                RecycleConsignmentLog::create([
+                    'site_id' => $siteId,
+                    'consignment_id' => (int)$consignment->id,
+                    'source_order_id' => (int)$consignment->source_order_id,
+                    'source_device_id' => (int)$device->id,
+                    'operator_id' => 0,
+                    'operator_name' => 'ERP同步',
+                    'action' => 'sale_cancel',
+                    'old_status' => (int)($before['status'] ?? 0),
+                    'new_status' => $restoredStatus,
+                    'before_data' => $before,
+                    'after_data' => $consignment->toArray(),
+                    'remark' => sprintf('%s，代卖设备恢复可售 | ERP销售单:%s', $reason, (string)($extra['sale_no'] ?? '')),
+                    'create_time' => $now,
+                ]);
+                RecycleDeviceLog::create([
+                    'site_id' => $siteId,
+                    'device_id' => (int)$device->id,
+                    'order_id' => (int)$device->order_id,
+                    'operator_id' => 0,
+                    'operator_name' => 'ERP同步',
+                    'operation_type' => 'erp_consignment_sale_cancel',
+                    'action' => 'erp_consignment_sale_cancel',
+                    'old_status' => (int)$device->status,
+                    'new_status' => (int)$device->status,
+                    'remark' => sprintf('%s | ERP销售单:%s', $reason, (string)($extra['sale_no'] ?? '')),
+                    'create_at' => $now,
+                ]);
+                return ['updated' => true, 'device_id' => $deviceId, 'consignment_id' => (int)$consignment->id];
+            });
+        } catch (\Throwable $e) {
+            Log::error('[hsx_recycle] consignment sale cancellation mirror failed: ' . $e->getMessage());
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
     /** ERP 采购退货完成后，同步回收设备业务状态；已付款事实保持不变。 */
     public function applyPurchaseReturn(int $deviceId, array $extra = [], string $eventId = ''): array
     {

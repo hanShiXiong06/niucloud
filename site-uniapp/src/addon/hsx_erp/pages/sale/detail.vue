@@ -68,6 +68,11 @@
                         <text class="label">更新时间</text>
                         <text class="value">{{ formatErpTime(order.update_at) }}</text>
                     </view>
+                    <view class="order-print-actions">
+                        <view class="action-button">
+                            <u-button type="primary" plain size="small" icon="printer" text="打印销售小票" @click="printSaleReceipt" />
+                        </view>
+                    </view>
                     <view class="order-actions" v-if="canCancelSale">
                         <view class="cancel-warning">
                             {{ cancelSaleNotice }}
@@ -134,7 +139,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { cancelMobileSale, cancelMobileSaleItem, getMobileSaleInfo } from '@/addon/hsx_erp/api/erp'
+import { cancelMobileSale, cancelMobileSaleItem, getMobileSaleInfo, printMobileErpSaleReceipt } from '@/addon/hsx_erp/api/erp'
 import { erpTimeLine, formatErpTime } from '@/addon/hsx_erp/hooks/useErpTime'
 import { erpNetSaleAmount, erpSaleCompensationAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
 import { erpDeviceIdentityLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
@@ -186,6 +191,25 @@ async function loadDetail() {
     } finally {
         loading.value = false
         detailLoaded.value = true
+    }
+}
+
+async function printSaleReceipt() {
+    if (!saleOrderId.value) return
+    try {
+        const result: any = await printMobileErpSaleReceipt(saleOrderId.value)
+        const data = result?.data || {}
+        if (data.skipped) {
+            uni.showToast({ title: data.message || '请先启用销售打印场景', icon: 'none' })
+            return
+        }
+        if (data.status === 'waiting_client') {
+            uni.navigateTo({ url: '/addon/hsx_erp/pages/print/index' })
+            return
+        }
+        uni.showToast({ title: '销售小票已发送', icon: 'success' })
+    } catch (error: any) {
+        uni.showToast({ title: error?.message || '打印任务创建失败', icon: 'none' })
     }
 }
 
@@ -271,6 +295,7 @@ const assetType = (s: string) => ({ in_stock: 'success', sold: 'primary', return
 .sale-adjust-note { margin:0 0 14rpx; padding:12rpx 15rpx; border-radius:12rpx; background:#fff7ed; color:#c2410c; font-size:21rpx; line-height:1.45; }
 .sale-adjust-note--device { margin:12rpx 0 0; }
 .form-card .value { word-break: break-all; }
+.order-print-actions { margin-top:18rpx; padding-top:18rpx; border-top:2rpx solid #f3f4f6; }
 .order-actions { margin-top:18rpx; padding:18rpx 0 22rpx; border-top:2rpx solid #f3f4f6; }
 .cancel-warning { margin-bottom:14rpx; padding:14rpx 16rpx; border-radius:14rpx; background:#fff7ed; color:#c2410c; font-size:24rpx; line-height:1.45; }
 .action-button { width:100%; }

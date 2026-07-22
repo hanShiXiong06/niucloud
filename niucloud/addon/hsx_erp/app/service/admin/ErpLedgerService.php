@@ -12,6 +12,16 @@ use core\base\BaseAdminService;
 
 class ErpLedgerService extends BaseAdminService
 {
+    /** 跨插件事件不能依赖当前 HTTP 上下文，显式固定站点和经办人。 */
+    public static function forSite(int $siteId, int $operatorUid = 0, string $operatorName = '系统自动'): self
+    {
+        $service = new self();
+        $service->site_id = $siteId;
+        $service->uid = $operatorUid;
+        $service->username = $operatorName;
+        return $service;
+    }
+
     public static function makeNo(string $prefix): string
     {
         [$micro] = explode(' ', microtime());
@@ -35,8 +45,8 @@ class ErpLedgerService extends BaseAdminService
             'source_type' => (string)($data['source_type'] ?? ''),
             'source_id' => (int)($data['source_id'] ?? 0),
             'source_no' => (string)($data['source_no'] ?? ''),
-            'operator_uid' => (int)$this->uid,
-            'operator_name' => (string)$this->username,
+            'operator_uid' => (int)($data['operator_uid'] ?? $this->uid),
+            'operator_name' => (string)($data['operator_name'] ?? $this->username),
             'occurred_at' => (int)($data['occurred_at'] ?? $now),
             'remark' => (string)($data['remark'] ?? ''),
             'create_at' => $now,
@@ -63,8 +73,8 @@ class ErpLedgerService extends BaseAdminService
             'balance_after' => ErpMoney::normalize($data['balance_after'] ?? 0),
             'party_id' => (int)($data['party_id'] ?? 0),
             'party_name' => (string)($data['party_name'] ?? ''),
-            'operator_uid' => (int)$this->uid,
-            'operator_name' => (string)$this->username,
+            'operator_uid' => (int)($data['operator_uid'] ?? $this->uid),
+            'operator_name' => (string)($data['operator_name'] ?? $this->username),
             'occurred_at' => (int)($data['occurred_at'] ?? $now),
             'voucher_urls' => is_array($data['voucher_urls'] ?? null) ? json_encode($data['voucher_urls'], JSON_UNESCAPED_UNICODE) : trim((string)($data['voucher_urls'] ?? '')),
             'remark' => (string)($data['remark'] ?? ''),
@@ -115,8 +125,8 @@ class ErpLedgerService extends BaseAdminService
             'source_type' => (string)($data['source_type'] ?? ''),
             'source_id' => (int)($data['source_id'] ?? 0),
             'source_no' => (string)($data['source_no'] ?? ''),
-            'operator_uid' => (int)$this->uid,
-            'operator_name' => (string)$this->username,
+            'operator_uid' => (int)($data['operator_uid'] ?? $this->uid),
+            'operator_name' => (string)($data['operator_name'] ?? $this->username),
             'remark' => (string)($data['remark'] ?? ''),
             'extra_json' => isset($data['extra']) ? json_encode($data['extra'], JSON_UNESCAPED_UNICODE) : (string)($data['extra_json'] ?? ''),
             'occurred_at' => (int)($data['occurred_at'] ?? $now),

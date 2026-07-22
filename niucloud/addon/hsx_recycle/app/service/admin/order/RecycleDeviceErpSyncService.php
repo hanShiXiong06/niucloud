@@ -230,10 +230,12 @@ class RecycleDeviceErpSyncService extends BaseAdminService
 
         $repair = [];
         if (!empty($placement)) {
+            $repairType = (string)($placement['warehouse_type'] ?? '');
             $repair = $capability->validateInboundPlacement(
                 $this->site_id,
                 (int)($placement['target_warehouse_id'] ?? 0),
-                (int)($placement['target_location_id'] ?? 0)
+                (int)($placement['target_location_id'] ?? 0),
+                $repairType
             );
         }
 
@@ -256,8 +258,12 @@ class RecycleDeviceErpSyncService extends BaseAdminService
             }
 
             $key = $warehouseId . ':' . $locationId;
+            $isConsign = (string)($device->dispose_type ?? '') === RecycleOrderDict::DISPOSE_TYPE_CONSIGN
+                || (int)($device->status ?? 0) === RecycleOrderDict::DEVICE_STATUS_CONSIGNED;
+            $expectedType = $isConsign ? 'consignment' : '';
+            $key .= ':' . $expectedType;
             if (!isset($validated[$key])) {
-                $validated[$key] = $capability->validateInboundPlacement($this->site_id, $warehouseId, $locationId);
+                $validated[$key] = $capability->validateInboundPlacement($this->site_id, $warehouseId, $locationId, $expectedType);
             }
         }
     }
@@ -365,7 +371,10 @@ class RecycleDeviceErpSyncService extends BaseAdminService
             'consignment' => $isConsign ? [
                 'order_id' => (int)($device['consignment_order_id'] ?? 0),
                 'order_no' => (string)($device['consignment_order']['consignment_no'] ?? ''),
+                'expected_price' => round((float)($device['consignment_order']['expected_price'] ?? 0), 2),
+                'min_settlement_price' => round((float)($device['consignment_order']['min_settlement_price'] ?? 0), 2),
                 'listing_price' => round((float)($device['consignment_order']['listing_price'] ?? 0), 2),
+                'settlement_amount' => round((float)($device['consignment_order']['settlement_amount'] ?? 0), 2),
             ] : null,
         ];
     }

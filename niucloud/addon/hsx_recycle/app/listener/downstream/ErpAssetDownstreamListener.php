@@ -27,6 +27,7 @@ class ErpAssetDownstreamListener
                 'erp.asset.stocked.v1'         => RecycleDownstreamDict::STAGE_STOCKED,
                 'erp.asset.ready_for_photo.v1' => RecycleDownstreamDict::STAGE_READY_FOR_PHOTO,
                 'erp.asset.sold.v1'            => RecycleDownstreamDict::STAGE_SOLD,
+                'erp.asset.returned.v1'        => RecycleDownstreamDict::STAGE_STOCKED,
                 'erp.asset.delisted.v1'        => RecycleDownstreamDict::STAGE_SOLD,
                 'erp.purchase_return.completed.v1' => RecycleDownstreamDict::STAGE_PURCHASE_RETURN_PENDING,
             ];
@@ -77,9 +78,31 @@ class ErpAssetDownstreamListener
                 'site_id' => (int)($event['site_id'] ?? 0),
             ];
 
-            $stage = $stageMap[$name];
+            if ($name === 'erp.asset.sold.v1' && (string)($payload['ownership_type'] ?? '') === 'consigned') {
+                $result = (new CoreRecycleDownstreamMirrorService())->applyConsignmentSale($deviceId, array_merge($extra, [
+                    'sale_price' => (float)($payload['sale_price'] ?? 0),
+                    'consignment_settlement_amount' => (float)($payload['consignment_settlement_amount'] ?? 0),
+                    'consignment_service_fee' => (float)($payload['consignment_service_fee'] ?? 0),
+                    'consignment_payable_no' => (string)($payload['consignment_payable_no'] ?? ''),
+                    'sale_no' => (string)($payload['outbound_no'] ?? ''),
+                    'sold_at' => (int)($payload['snapshot_at'] ?? time()),
+                ]), $eventId);
+                return $this->consumerResult($result);
+            }
 
-            return (new CoreRecycleDownstreamMirrorService())->applyStage($deviceId, $stage, $extra, $eventId);
+            if ($name === 'erp.asset.returned.v1' && (string)($payload['ownership_type'] ?? '') === 'consigned') {
+                return $this->consumerResult((new CoreRecycleDownstreamMirrorService())->applyConsignmentSaleCancellation(
+                    $deviceId,
+                    array_merge($extra, [
+                        'sale_no' => (string)($payload['outbound_no'] ?? ''),
+                        'return_reason' => (string)($payload['return_reason'] ?? ''),
+                    ]),
+                    $eventId
+                ));
+            }
+
+            $stage = $stageMap[$name];
+            return $this->consumerResult((new CoreRecycleDownstreamMirrorService())->applyStage($deviceId, $stage, $extra, $eventId));
         } catch (\Throwable $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }
@@ -88,5 +111,16 @@ class ErpAssetDownstreamListener
     protected function mirrorPurchaseReturn(int $deviceId, array $extra, string $eventId): array
     {
         return (new CoreRecycleDownstreamMirrorService())->applyPurchaseReturn($deviceId, $extra, $eventId);
+    }
+
+    private function consumerResult(array $result): array
+    {
+        if (!empty($result['error'])) {
+            return array_merge(['consumer' => 'hsx_recycle', 'status' => 'failed'], $result);
+        }
+        return array_merge([
+            'consumer' => 'hsx_recycle',
+            'status' => !empty($result['skipped']) ? 'duplicate' : 'processed',
+        ], $result);
     }
 }

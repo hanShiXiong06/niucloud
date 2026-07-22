@@ -95,6 +95,9 @@ class CoreThirdPartyService extends BaseCoreService
         try {
             // 4. 执行调用
             $result = $provider->execute($method, $params);
+            if (array_key_exists('success', $result) && empty($result['success'])) {
+                throw new CommonException((string)($result['message'] ?? '第三方服务调用失败'));
+            }
             $success = true;
 
             // 5. 计算耗时
@@ -145,7 +148,12 @@ class CoreThirdPartyService extends BaseCoreService
             // 更新统计
             $this->updateStats($siteId, $serviceType, $provider->getProviderName(), false, 0, $duration);
 
-            // 尝试备用服务商，若没有备用服务商则保留主服务商的真实错误原因。
+            // 新配置中心是严格手动选择服务商，不允许在用户不知情时切换线路。
+            if ((new RecycleThirdPartyConfigService())->hasSavedConfig($siteId)) {
+                throw new CommonException($errorMsg);
+            }
+
+            // 仅兼容旧配置的主备策略；完成配置迁移后删除此分支。
             try {
                 return $this->tryBackupProvider($serviceType, $method, $params, $siteId, $provider->getProviderName());
             } catch (\Exception $backupException) {
@@ -380,7 +388,7 @@ class CoreThirdPartyService extends BaseCoreService
     private function getProviderClass(string $serviceType, string $providerName): string
     {
         // 将provider_name转换为类名格式
-        // 例如: 3023 -> Provider3023, anguo -> ProviderAnguo
+        // 例如: 3023 -> Provider3023, ali_express -> ProviderAliExpress
         $className = 'Provider' . str_replace('_', '', ucwords($providerName, '_'));
 
         return "addon\\hsx_recycle\\app\\service\\core\\third_party\\provider\\{$serviceType}\\{$className}";
@@ -411,13 +419,14 @@ class CoreThirdPartyService extends BaseCoreService
         string $errorMsg = ''
     ) {
         try {
+            $sanitizer = new ThirdPartyLogSanitizer();
             ThirdPartyApiLog::log([
                 'site_id' => $siteId,
                 'service_type' => $serviceType,
                 'provider_name' => $providerName,
                 'method' => $method,
-                'request_params' => $requestParams,
-                'response_data' => $responseData,
+                'request_params' => $sanitizer->sanitize($requestParams),
+                'response_data' => $sanitizer->sanitize($responseData),
                 'cost' => $responseData['cost'] ?? 0,
                 'duration' => $duration,
                 'status' => $success ? ThirdPartyDict::CALL_STATUS_SUCCESS : ThirdPartyDict::CALL_STATUS_FAILED,

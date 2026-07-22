@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace addon\hsx_recycle\app\api\controller\recycle;
 
-use addon\hsx_recycle\app\service\api\DeviceQueryService;
+use addon\hsx_recycle\app\service\api\ExpressQueryService;
 use core\base\BaseApiController;
 
 /**
@@ -20,8 +20,8 @@ class DeviceQueryApiController extends BaseApiController
           ['express_code', ''],
           ['mobile', ''],
         ]);
-        $result = (new DeviceQueryService())->getExpress($data['express_code'], $data['mobile']);
+        $result = (new ExpressQueryService())->getExpress($data['express_code'], $data['mobile']);
         return success($result);
       }
     
-} 
+}

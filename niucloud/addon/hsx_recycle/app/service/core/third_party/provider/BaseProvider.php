@@ -169,9 +169,10 @@ abstract class BaseProvider
             }
         }
 
-        // SSL验证
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        // 默认严格校验 SSL；仅本地联调可通过明确配置 verify_ssl=false 临时关闭。
+        $verifySsl = !array_key_exists('verify_ssl', $this->config) || (bool)$this->config['verify_ssl'];
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, $verifySsl);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, $verifySsl ? 2 : 0);
 
         // 执行请求
         $response = curl_exec($ch);

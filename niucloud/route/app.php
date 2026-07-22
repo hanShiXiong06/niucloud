@@ -31,6 +31,11 @@ Route::rule('site', function () {
     return view(app()->getRootPath() . 'public/admin/index.html');
 })->pattern([ 'any' => '\w+' ]);
 
+Route::rule('adminapp', function () {
+    return view(app()->getRootPath() . 'public/adminapp/index.html');
+})->pattern([ 'any' => '\w+' ]);
+
+
 // 站点管理端
 Route::rule('home', function () {
     return view(app()->getRootPath() . 'public/admin/index.html');

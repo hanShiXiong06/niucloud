@@ -98,6 +98,9 @@ export function getMobileStockList(params: Record<string, any>) {
 export function getMobileStockTurnoverSummary() {
     return request.get('erp/stock/turnover_summary')
 }
+export function getMobileStockListingWorkload() {
+    return request.get('erp/stock/listing_workload')
+}
 
 export function getMobileStocktakeList(params: Record<string, any> = {}) { return request.get('erp/stocktake/lists', params) }
 export function getMobileStocktakeInfo(id: number) { return request.get(`erp/stocktake/${id}`) }
@@ -209,4 +212,30 @@ export function cancelMobileSaleReturn(id: number, data: Record<string, any> = {
 // ─── 资金账户 ────────────────────────────────────────────────────────────────
 export function getMobileCapitalAccounts() {
     return request.get('erp/capital_account/lists', { page: 1, limit: 50 })
+}
+
+// ─── 打印中心 ────────────────────────────────────────────────────────────────
+export function getMobileErpPrintMeta() {
+    return request.get('erp/print/meta')
+}
+export function getMobileErpPrinters() {
+    return request.get('erp/print/printers')
+}
+export function getMobileErpPrintJobs(params: Record<string, any> = {}) {
+    return request.get('erp/print/jobs', params)
+}
+export function testMobileErpPrinter(id: number) {
+    return request.post(`erp/print/printer/${id}/test`)
+}
+export function retryMobileErpPrintJob(id: number) {
+    return request.post(`erp/print/job/${id}/retry`)
+}
+export function completeMobileErpPrintJob(id: number, success: boolean, message = '') {
+    return request.post(`erp/print/job/${id}/client_complete`, { success: success ? 1 : 0, message })
+}
+export function printMobileErpAssetLabel(assetId: number) {
+    return request.post('erp/print/manual', { scene_key: 'asset_label', biz_type: 'asset', biz_id: assetId })
+}
+export function printMobileErpSaleReceipt(saleOrderId: number) {
+    return request.post('erp/print/manual', { scene_key: 'sale_created', biz_type: 'sale', biz_id: saleOrderId })
 }

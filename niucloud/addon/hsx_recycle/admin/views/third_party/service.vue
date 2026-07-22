@@ -110,7 +110,7 @@
                     </el-select>
                 </el-form-item>
                 <el-form-item label="服务商名称" prop="provider_name">
-                    <el-input v-model="editForm.provider_name" placeholder="如：3023、anguo、ali_express" :disabled="!!editForm.id" />
+                    <el-input v-model="editForm.provider_name" placeholder="如：3023、ali_express" :disabled="!!editForm.id" />
                 </el-form-item>
                 <el-form-item label="优先级" prop="priority">
                     <el-input-number v-model="editForm.priority" :min="1" :max="100" />

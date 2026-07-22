@@ -34,9 +34,9 @@ class ErpListingTaskService extends BaseAdminService
         return [
             ['stage_key' => self::TASK_PAYABLE, 'name' => '应付待付款', 'sort' => 40],
             ['stage_key' => self::TASK_RECEIVABLE, 'name' => '应收待收款', 'sort' => 50],
-            ['stage_key' => ErpListingWorkflow::TASK_PHOTO, 'name' => '待拍照', 'sort' => 60],
-            ['stage_key' => ErpListingWorkflow::TASK_PRICE, 'name' => '待商城定价', 'sort' => 70],
-            ['stage_key' => ErpListingWorkflow::TASK_PUBLISH, 'name' => '待完善资料并上架', 'sort' => 80],
+            ['stage_key' => ErpListingWorkflow::TASK_PHOTO, 'name' => '商品拍摄', 'sort' => 60],
+            ['stage_key' => ErpListingWorkflow::TASK_PRICE, 'name' => '销售定价', 'sort' => 70],
+            ['stage_key' => ErpListingWorkflow::TASK_PUBLISH, 'name' => '商城资料整理', 'sort' => 80],
         ];
     }
 
@@ -102,7 +102,7 @@ class ErpListingTaskService extends BaseAdminService
             && !in_array((string)$asset->listing_status, ['listed', 'pending_shop'], true)) {
             $warehouse = ErpWarehouse::where([['site_id', '=', $this->site_id], ['id', '=', (int)$asset->warehouse_id], ['status', '=', 1]])->findOrEmpty();
             $policy = (new ErpWarehousePolicyService())->evaluate($asset->toArray(), $warehouse->isEmpty() ? null : $warehouse->toArray());
-            $normalizedStatus = ErpListingWorkflow::statusFromPolicy($policy);
+            $normalizedStatus = ErpListingWorkflow::statusFromAsset($asset->toArray(), $policy);
             if ($normalizedStatus !== (string)$asset->listing_status) {
                 $asset->save(['listing_status' => $normalizedStatus, 'update_at' => time()]);
                 $asset->listing_status = $normalizedStatus;

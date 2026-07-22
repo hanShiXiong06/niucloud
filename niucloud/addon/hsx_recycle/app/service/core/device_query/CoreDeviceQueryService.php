@@ -4,8 +4,6 @@ declare(strict_types=1);
 namespace addon\hsx_recycle\app\service\core\device_query;
 
 use addon\hsx_recycle\app\model\third_party\DeviceQueryResult;
-use addon\hsx_recycle\app\service\core\device_query\provider\PathQueryProvider;
-use addon\hsx_recycle\app\service\core\device_query\provider\ServiceIdQueryProvider;
 use core\exception\CommonException;
 
 class CoreDeviceQueryService
@@ -16,6 +14,7 @@ class CoreDeviceQueryService
     private DeviceQueryNormalizer $normalizer;
     private DeviceQueryPriceCalculator $priceCalculator;
     private DeviceQueryResultRecorder $recorder;
+    private DeviceQueryProviderRegistry $providerRegistry;
 
     public function __construct()
     {
@@ -25,6 +24,7 @@ class CoreDeviceQueryService
         $this->normalizer = new DeviceQueryNormalizer();
         $this->priceCalculator = new DeviceQueryPriceCalculator();
         $this->recorder = new DeviceQueryResultRecorder();
+        $this->providerRegistry = new DeviceQueryProviderRegistry();
     }
 
     public function query(int $siteId, array $params): array
@@ -45,7 +45,10 @@ class CoreDeviceQueryService
             throw new CommonException('设备查询项未启用或不存在');
         }
 
-        $queryType = (string)($params['query_type'] ?? $service['query_type'] ?? $this->detectQueryType($queryCode));
+        $queryType = trim((string)($params['query_type'] ?? ''));
+        if ($queryType === '') {
+            $queryType = trim((string)($service['query_type'] ?? '')) ?: $this->detectQueryType($queryCode);
+        }
         $forceRefresh = (bool)($params['force_refresh'] ?? false);
         if (!$forceRefresh && !empty($config['cache_enabled'])) {
             $cached = $this->getCache($siteId, $queryCode, $service, $config);
@@ -65,7 +68,7 @@ class CoreDeviceQueryService
             $mapping = $candidate['mapping'];
             $start = microtime(true);
             try {
-                $provider = $this->makeProvider((string)($channel['provider'] ?? ''));
+                $provider = $this->providerRegistry->resolve((string)($channel['provider'] ?? ''));
                 $providerResult = $provider->query($channel, $mapping, $queryCode, $queryType);
                 $duration = (int)round((microtime(true) - $start) * 1000);
 
@@ -133,7 +136,32 @@ class CoreDeviceQueryService
                 ];
             } catch (CommonException $e) {
                 throw $e;
-            } catch (\Exception $e) {
+            } catch (\Throwable $e) {
+                $duration = (int)round((microtime(true) - $start) * 1000);
+                $providerResult = [
+                    'success' => false,
+                    'third_code' => -1,
+                    'message' => $e->getMessage(),
+                    'data' => [],
+                    'cost' => 0,
+                    'balance' => 0,
+                    'raw_response' => [],
+                ];
+                $price = $this->priceCalculator->calculate($providerResult, $service, $mapping, false, false);
+                $this->recorder->record([
+                    'site_id' => $siteId,
+                    'query_code' => $queryCode,
+                    'query_type' => $queryType,
+                    'service_code' => $serviceCode,
+                    'service' => $service,
+                    'channel' => $channel,
+                    'mapping' => $mapping,
+                    'provider_result' => $providerResult,
+                    'normalized_result' => [],
+                    'price' => $price,
+                    'success' => false,
+                    'duration' => $duration,
+                ]);
                 $errors[] = ($channel['name'] ?? $channel['key'] ?? '渠道') . ': ' . $e->getMessage();
                 continue;
             }
@@ -241,19 +269,6 @@ class CoreDeviceQueryService
             'response_time' => 0,
             'duration' => 0,
         ];
-    }
-
-    private function makeProvider(string $provider)
-    {
-        switch ($provider) {
-            case 'path_query':
-            case '3023':
-                return new PathQueryProvider();
-            case 'service_id_query':
-                return new ServiceIdQueryProvider();
-            default:
-                throw new \Exception('不支持的设备查询渠道类型: ' . $provider);
-        }
     }
 
     private function getUnavailableChannelMessage(array $config, string $serviceCode, string $channelKey = ''): string

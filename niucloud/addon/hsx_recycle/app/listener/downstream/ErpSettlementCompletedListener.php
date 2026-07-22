@@ -54,6 +54,7 @@ class ErpSettlementCompletedListener
                     $deviceIds,
                     (string)($payload['settlement_no'] ?? ''),
                     [
+                        'site_id' => (int)($event['site_id'] ?? 0),
                         'method' => $method,
                         'operator' => (string)($event['operator']['name'] ?? 'ERP财务'),
                         'account' => (string)($payload['capital_account_name'] ?? ''),

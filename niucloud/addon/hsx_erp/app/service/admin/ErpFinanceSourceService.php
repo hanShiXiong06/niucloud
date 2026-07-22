@@ -93,6 +93,20 @@ class ErpFinanceSourceService extends BaseAdminService
         );
     }
 
+    public function consignmentSale(array $context = []): array
+    {
+        return $this->build(
+            trim((string)($context['origin_type'] ?? '')) ?: 'hsx_recycle.consignment_sale',
+            '代卖成交结算',
+            $this->normalizePlugin((string)($context['origin_plugin'] ?? 'hsx_recycle')),
+            'consignment_sale',
+            $this->category('consignment_settlement', '代卖货款结算', 'expense', 'cost_of_sales'),
+            $context,
+            '货主',
+            '客户代卖设备已成交，财务按设备向货主支付约定结算金额。'
+        );
+    }
+
     public function refurbish(array $category, array $context = []): array
     {
         $financeCategory = $this->category(
@@ -126,10 +140,11 @@ class ErpFinanceSourceService extends BaseAdminService
                 'purchase_return' => 'purchase_return',
                 'sale_return' => ((string)($row['sale_return_business_type'] ?? '') === 'after_sale_compensation') ? 'after_sale_compensation' : 'sale_return',
                 'refurbish' => 'refurbish',
+                'consignment_sale' => 'consignment_sale',
                 default => 'purchase',
             };
         }
-        $knownScene = in_array($scene, ['sale', 'purchase_return', 'sale_return', 'after_sale_compensation', 'refurbish', 'purchase'], true);
+        $knownScene = in_array($scene, ['sale', 'purchase_return', 'sale_return', 'after_sale_compensation', 'refurbish', 'purchase', 'consignment_sale'], true);
 
         $defaults = match ($scene) {
             'sale' => $this->sale($row),
@@ -143,6 +158,7 @@ class ErpFinanceSourceService extends BaseAdminService
                 'source_plugin' => $row['category_source_plugin'] ?? 'hsx_erp',
                 'source_key' => $row['category_source_key'] ?? 'refurbish_labor',
             ], $row),
+            'consignment_sale' => $this->consignmentSale($row),
             default => $this->purchase($row),
         };
         $snapshot = array_replace($defaults, array_filter([
@@ -173,7 +189,7 @@ class ErpFinanceSourceService extends BaseAdminService
         $channelName = trim((string)($snapshot['channel_name'] ?? ''));
         // 兼容早期数据：曾把 purchase_return 等业务场景误存为“渠道”。
         // 场景已经单独展示，渠道只保留真实的同行、小程序等销售/采购入口。
-        $internalScenes = ['purchase', 'sale', 'purchase_return', 'sale_return', 'after_sale_compensation', 'refurbish'];
+        $internalScenes = ['purchase', 'sale', 'purchase_return', 'sale_return', 'after_sale_compensation', 'refurbish', 'consignment_sale'];
         if (in_array($channelName, $internalScenes, true)) $channelName = '';
         if (in_array($channelCode, $internalScenes, true)) $channelCode = '';
 

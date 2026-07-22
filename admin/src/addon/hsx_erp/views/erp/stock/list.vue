@@ -58,6 +58,30 @@
                 </div>
             </div>
 
+            <div class="listing-collab-panel">
+                <div class="listing-collab-panel__intro">
+                    <div class="font-medium text-slate-800">今日商城上架协作</div>
+                    <div class="mt-1 text-xs text-slate-400">拍摄、定价、资料运营各自闭环，小团队也可由同一人连续完成</div>
+                </div>
+                <div class="listing-collab-panel__stages">
+                    <div v-for="item in listingStageItems" :key="item.key" class="listing-stage">
+                        <span class="listing-stage__value">{{ item.count }}</span><span class="listing-stage__label">{{ item.label }}</span>
+                    </div>
+                </div>
+                <el-popover placement="bottom-end" :width="600" trigger="click">
+                    <template #reference><el-button link type="primary">查看员工完成量</el-button></template>
+                    <div class="mb-3 font-medium text-slate-800">{{ listingWorkload.date || '今日' }} 岗位完成量</div>
+                    <el-table :data="listingWorkload.staff || []" size="small" max-height="320" empty-text="今天还没有完成记录">
+                        <el-table-column prop="name" label="员工" min-width="120" />
+                        <el-table-column prop="photo_count" label="商品拍摄" width="90" align="center" />
+                        <el-table-column prop="price_count" label="销售定价" width="90" align="center" />
+                        <el-table-column prop="material_count" label="资料整理" width="90" align="center" />
+                        <el-table-column prop="publish_count" label="成功上架" width="90" align="center" />
+                        <el-table-column prop="total_count" label="合计" width="70" align="center" />
+                    </el-table>
+                </el-popover>
+            </div>
+
             <!-- 状态快筛 Tab -->
             <el-tabs v-model="activeTab" class="mt-4 erp-status-tabs" @tab-change="onTabChange">
                 <el-tab-pane label="全部" name="" />
@@ -105,8 +129,8 @@
                     <el-select v-model="search.listing_status" clearable class="!w-[140px]" placeholder="全部">
                         <el-option label="不需要" value="none" />
                         <el-option label="待拍照" value="need_photo" />
-                        <el-option label="待商城定价" value="need_price" />
-                        <el-option label="待完善资料" value="need_material" />
+                        <el-option label="待销售定价" value="need_price" />
+                        <el-option label="待商城资料整理" value="need_material" />
                         <el-option label="待上架" value="ready" />
                         <el-option label="待商城运营完善" value="pending_shop" />
                         <el-option label="商城已上架" value="listed" />
@@ -260,6 +284,7 @@
                                 <el-dropdown-item command="retail">设置/调整零售价</el-dropdown-item>
                                 <el-dropdown-item command="transfer" :disabled="!row.can_warehouse_action">{{ row.ownership_type === 'consigned' || row.warehouse_policy?.warehouse_type === 'consignment' ? '转为自有' : '调拨' }}</el-dropdown-item>
                                 <el-dropdown-item command="expense">成本调整</el-dropdown-item>
+                                <el-dropdown-item command="print_label">打印设备标签</el-dropdown-item>
                                 <el-dropdown-item v-if="row.refurbish_status === 'pending'" command="start_refurbish">开始整备</el-dropdown-item>
                                 <el-dropdown-item v-if="['pending','processing','failed'].includes(row.refurbish_status)" command="complete_refurbish">登记整备结果</el-dropdown-item>
                                 <el-dropdown-item v-if="(row.listing_status === 'ready' || row.can_handoff_shop === 1) && row.warehouse_policy?.marketplace_available" command="publish_listing">{{ row.can_handoff_shop === 1 ? '交接商城运营' : '上架商城' }}</el-dropdown-item>
@@ -281,14 +306,14 @@
             </div>
         </el-card>
 
-        <el-dialog v-model="flow.visible" title="设备流转设置" width="620px" destroy-on-close>
+        <el-dialog v-model="flow.visible" :title="flowDialogTitle" width="620px" destroy-on-close>
             <el-form label-width="96px">
-                <el-alert title="待整备或整备中的设备不会出现在销售出库的待售库存中。" type="warning" :closable="false" show-icon />
+                <el-alert :title="flowDialogTip" :type="flow.mode === 'all' ? 'warning' : 'info'" :closable="false" show-icon />
                 <div class="mt-4 rounded border border-gray-100 bg-gray-50 px-4 py-3">
                     <div class="font-medium">{{ flow.row?.model || '-' }}</div>
                     <div class="mt-1 text-xs text-gray-500">{{ flow.row?.spec || '未填写规格' }} · IMEI {{ flow.row?.imei || '-' }}</div>
                 </div>
-                <div class="mt-4 grid grid-cols-1 gap-x-4 md:grid-cols-2">
+                <div v-if="flow.mode === 'all'" class="mt-4 grid grid-cols-1 gap-x-4 md:grid-cols-2">
                     <el-form-item label="整备状态">
                         <el-select v-model="flow.form.refurbish_status" class="w-full" :disabled="!['none','pending'].includes(flow.row?.refurbish_status)">
                             <el-option label="无需整备" value="none" />
@@ -310,8 +335,8 @@
                         <el-select v-model="flow.form.listing_status" class="w-full" :disabled="flow.form.sale_target !== 'mall'">
                             <el-option label="不需要" value="none" />
                             <el-option label="待拍照" value="need_photo" />
-                            <el-option label="待商城定价" value="need_price" />
-                            <el-option label="待完善资料" value="need_material" />
+                            <el-option label="待销售定价" value="need_price" />
+                            <el-option label="待商城资料整理" value="need_material" />
                             <el-option label="待上架" value="ready" />
                             <el-option label="商城已上架" value="listed" />
                         </el-select>
@@ -323,22 +348,28 @@
                         <el-input-number v-model="flow.form.retail_price" :min="0" :precision="2" :controls="false" class="!w-full" placeholder="上架商城定价" />
                     </el-form-item>
                 </div>
-                <el-form-item label="设备图片">
+                <div v-else-if="flow.mode === 'material'" class="mt-4 grid grid-cols-1 gap-x-4 md:grid-cols-2">
+                    <el-form-item label="商品型号">
+                        <ErpCatalogProductSelect v-model="flow.form.catalog_product_id" placeholder="搜索并选择目录型号" @change="onFlowCatalogChange" />
+                    </el-form-item>
+                    <el-form-item label="设备规格"><el-input v-model.trim="flow.form.spec" placeholder="容量、颜色、成色、电池等" /></el-form-item>
+                </div>
+                <el-form-item v-if="flow.mode === 'all' || flow.mode === 'photo'" label="设备图片">
                     <upload-image v-model="flow.form.image_urls" :limit="9" width="72px" height="72px" image-text="上传/选择" />
                 </el-form-item>
-                <el-form-item label="质检备注">
+                <el-form-item v-if="flow.mode === 'all' || flow.mode === 'photo'" label="质检备注">
                     <el-input v-model.trim="flow.form.quality_remark" type="textarea" :rows="2" placeholder="质检、外观说明（内部使用）" />
                 </el-form-item>
-                <el-form-item label="对外说明">
+                <el-form-item v-if="flow.mode === 'all' || flow.mode === 'material'" label="对外说明">
                     <el-input v-model.trim="flow.form.remark_public" type="textarea" :rows="2" placeholder="展示给客户/商城的描述" />
                 </el-form-item>
-                <el-form-item label="对内备注">
+                <el-form-item v-if="flow.mode === 'all'" label="对内备注">
                     <el-input v-model.trim="flow.form.remark_internal" placeholder="员工内部备注，不对外展示" />
                 </el-form-item>
             </el-form>
             <template #footer>
                 <el-button @click="flow.visible = false">取消</el-button>
-                <el-button type="primary" :loading="flow.saving" @click="submitFlow">保存</el-button>
+                <el-button type="primary" :loading="flow.saving" @click="submitFlow">{{ flowSubmitLabel }}</el-button>
             </template>
         </el-dialog>
 
@@ -639,7 +670,7 @@ import { computed, nextTick, onActivated, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
-import { adjustErpStockCost, adjustErpStockRetailPrice, buyoutErpConsignment, completeErpStockRefurbish, getErpSerialTraceDetail, getErpSerialTraceList, getErpStockInfo, getErpStockList, getErpStockTurnoverSummary, previewErpStockTransfer, sendErpStockRefurbish, syncErpStockListing, transferErpStock, updateErpStockFlow } from '@/addon/hsx_erp/api/erp'
+import { adjustErpStockCost, adjustErpStockRetailPrice, buyoutErpConsignment, completeErpStockRefurbish, getErpSerialTraceDetail, getErpSerialTraceList, getErpStockInfo, getErpStockList, getErpStockListingWorkload, getErpStockTurnoverSummary, previewErpStockTransfer, printErpAssetLabel, sendErpStockRefurbish, syncErpStockListing, transferErpStock, updateErpStockFlow } from '@/addon/hsx_erp/api/erp'
 import { getErpFinanceCategories } from '@/addon/hsx_erp/api/config'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 import ErpDeviceIdentity from '@/addon/hsx_erp/components/ErpDeviceIdentity.vue'
@@ -662,9 +693,23 @@ function onTabChange(tab: string) {
 }
 const table = reactive({ loading: false, data: [] as any[], page: 1, limit: 15, total: 0 })
 const turnoverSummary = ref<any>({ thresholds: {} })
+const listingWorkload = ref<any>({ totals: {}, staff: [] })
+const listingStageItems = computed(() => [
+    { key: 'photo', label: '商品拍摄', count: Number(listingWorkload.value?.totals?.photo || 0) },
+    { key: 'price', label: '销售定价', count: Number(listingWorkload.value?.totals?.price || 0) },
+    { key: 'material', label: '资料整理', count: Number(listingWorkload.value?.totals?.material || 0) },
+    { key: 'publish', label: '成功上架', count: Number(listingWorkload.value?.totals?.publish || 0) },
+])
 const detail = reactive({ visible: false, loading: false, data: null as any })
 const detailActivePanels = ref<string[]>([])
-const flow = reactive({ visible: false, saving: false, row: null as any, form: defaultFlowForm() })
+const flow = reactive({ visible: false, saving: false, mode: 'all' as 'all' | 'photo' | 'material', row: null as any, form: defaultFlowForm() })
+const flowDialogTitle = computed(() => ({ all: '设备流转设置', photo: '完成商品拍摄', material: '整理商城资料' }[flow.mode]))
+const flowDialogTip = computed(() => ({
+    all: '待整备或整备中的设备不会出现在销售出库的待售库存中。',
+    photo: '本岗位只需上传标准商品图并记录必要的质检备注；保存后设备会自动进入销售定价。',
+    material: '请核对商品型号、规格和对外说明；保存后系统会重新判断是否满足上架条件。',
+}[flow.mode]))
+const flowSubmitLabel = computed(() => ({ all: '保存设置', photo: '完成拍摄', material: '完成资料整理' }[flow.mode]))
 const retail = reactive({ visible: false, saving: false, row: null as any, form: { retail_price: 0, reason: '' } })
 const transfer = reactive({ visible: false, saving: false, previewLoading: false, preview: null as any, assetIds: [] as number[], form: { warehouse_id: 0, location_id: 0, buyout_amount: 0, reason: '' } })
 const expense = reactive({ visible: false, saving: false, row: null as any, form: { cost_type: 'refurbish', expense_type_key: '', party_id: 0, party_name: '', amount: 0, after_cost: 0, reason: '' } })
@@ -765,13 +810,16 @@ function onFlowCatalogChange(node: any) {
 async function loadList() {
     table.loading = true
     try {
-        const [res, turnoverRes]: any[] = await Promise.all([
+        const [res, turnoverRes, workloadRes]: any[] = await Promise.all([
             getErpStockList({ ...buildSearchParams(), page: table.page, limit: table.limit }),
-            getErpStockTurnoverSummary()
+            getErpStockTurnoverSummary(),
+            // 协作量是增强投影，旧站点尚未刷新权限/路由时不能连带阻断库存主列表。
+            getErpStockListingWorkload().catch(() => null)
         ])
         table.data = res?.data?.data || []
         table.total = res?.data?.total || 0
         turnoverSummary.value = turnoverRes?.data || { thresholds: {} }
+        if (workloadRes) listingWorkload.value = workloadRes?.data || { totals: {}, staff: [] }
     } finally {
         table.loading = false
     }
@@ -994,8 +1042,9 @@ async function openDetail(row: any) {
     }
 }
 
-function openFlow(row: any) {
+function openFlow(row: any, mode: 'all' | 'photo' | 'material' = 'all') {
     flow.row = row
+    flow.mode = mode
     flow.form = {
         refurbish_status: row.refurbish_status || 'none',
         sale_target: row.sale_target || 'unset',
@@ -1100,12 +1149,14 @@ function goSale(assetIds: number[]) {
 
 function handleTurnoverAction(row: any) {
     const action = String(row?.turnover_action_key || row?.warehouse_policy?.primary_action || 'view')
-    if (['set_retail_price', 'adjust_retail_price'].includes(action)) return openRetailPrice(row)
+    if (['set_retail_price', 'adjust_retail_price', 'complete_listing_price'].includes(action)) return openRetailPrice(row)
     if (action === 'direct_sale') return goSale([Number(row.id)])
     if (action === 'transfer') return openTransfer(row)
     if (action === 'start_refurbish') return openSendRefurbish(row)
     if (['complete_refurbish', 'resolve_refurbish'].includes(action)) return openCompleteRefurbish(row)
     if (action === 'publish_listing') return publishListing(row)
+    if (action === 'complete_listing_photo') return openFlow(row, 'photo')
+    if (action === 'complete_listing_material') return openFlow(row, 'material')
     if (action === 'complete_listing') return openFlow(row)
     if (action === 'resolve_warehouse') return openTransfer(row)
     return openDetail(row)
@@ -1115,8 +1166,15 @@ function handleRowCommand(command: string, row: any) {
     const actions: Record<string, () => any> = {
         flow: () => openFlow(row), retail: () => openRetailPrice(row), transfer: () => openTransfer(row), expense: () => openExpense(row),
         start_refurbish: () => openSendRefurbish(row), complete_refurbish: () => openCompleteRefurbish(row), publish_listing: () => publishListing(row),
+        print_label: () => printAssetLabel(row),
     }
     return actions[command]?.()
+}
+
+async function printAssetLabel(row: any) {
+    const result: any = await printErpAssetLabel(Number(row.id))
+    if (result?.data?.skipped) return ElMessage.warning('请先在“打印中心 → 触发场景”启用手动设备标签')
+    ElMessage.success(result?.data?.status === 'waiting_client' ? '标签任务已生成，请在移动打印台连接蓝牙打印机' : '标签打印任务已发送')
 }
 
 function onTargetChange(value: string) {
@@ -1128,6 +1186,9 @@ function onTargetChange(value: string) {
 
 async function submitFlow() {
     if (!flow.row?.id) return
+    if (flow.mode === 'photo' && !String(flow.form.image_urls || '').trim()) return ElMessage.warning('请至少上传一张商品图片')
+    if (flow.mode === 'material' && !Number(flow.form.catalog_product_id || 0)) return ElMessage.warning('请选择商品型号')
+    if (flow.mode === 'material' && !String(flow.form.spec || '').trim()) return ElMessage.warning('请填写设备规格')
     const confirmed = await ElMessageBox.confirm(
         `确认更新设备「${flow.row.model || flow.row.imei || flow.row.asset_no || '-'}」的业务流转：${refurbishMeta(flow.form.refurbish_status).label}、${targetMeta(flow.form.sale_target).label}、${listingMeta(flow.form.listing_status).label}。该变更会影响仓管和销售后续操作，并保留设备流水。`,
         '确认更新设备流转',
@@ -1265,8 +1326,8 @@ function listingMeta(status: string) {
     const map: any = {
         none: { label: '不上架', type: 'info' },
         need_photo: { label: '待拍照', type: 'warning' },
-        need_price: { label: '待商城定价', type: 'warning' },
-        need_material: { label: '待完善资料', type: 'warning' },
+        need_price: { label: '待销售定价', type: 'warning' },
+        need_material: { label: '待商城资料整理', type: 'warning' },
         ready: { label: '待上架', type: 'success' },
         pending_shop: { label: '待商城运营完善', type: 'warning' },
         listed: { label: '商城已上架', type: 'primary' }
@@ -1435,6 +1496,12 @@ function formatTime(value: any) {
 .summary-tile--clickable { cursor: pointer; transition: transform .18s ease, box-shadow .18s ease, background .18s ease; }
 .summary-tile--clickable:hover { transform: translateY(-2px); background: #fff; box-shadow: 0 8px 24px rgba(15, 23, 42, .08); }
 .turnover-actions-panel { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-top: 14px; border: 1px solid #dbeafe; border-radius: 10px; background: linear-gradient(90deg, #eff6ff 0%, #f8fafc 100%); padding: 13px 16px; }
+.listing-collab-panel { display:flex; align-items:center; gap:22px; margin-top:12px; padding:12px 16px; border:1px solid #e2e8f0; border-radius:10px; background:#fff; }
+.listing-collab-panel__intro { min-width:260px; }
+.listing-collab-panel__stages { display:grid; grid-template-columns:repeat(4,minmax(84px,1fr)); flex:1; gap:8px; }
+.listing-stage { display:flex; align-items:baseline; justify-content:center; gap:7px; padding:7px 10px; border-radius:8px; background:#f8fafc; }
+.listing-stage__value { color:#2563eb; font-size:20px; font-weight:700; line-height:1; }
+.listing-stage__label { color:#64748b; font-size:12px; white-space:nowrap; }
 .warehouse-risk-chip { border: 1px solid #fed7aa; border-radius: 999px; background: #fff7ed; padding: 4px 9px; color: #c2410c; }
 .summary-label {
     color: #64748b;

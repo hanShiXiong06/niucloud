@@ -9,6 +9,7 @@ use addon\hsx_phone_query\app\model\HsxPhoneQueryCategory;
 use addon\hsx_phone_query\app\model\HsxPhoneQueryInfo;
 use addon\hsx_phone_query\app\model\HsxPhoneQueryOrder;
 use addon\hsx_phone_query\app\service\core\provider\ProviderChannelService;
+use addon\hsx_phone_query\app\service\core\provider\PhoneQueryGatewayService;
 use addon\hsx_phone_query\app\service\core\report\QueryResultFormatter;
 use app\dict\member\MemberAccountTypeDict;
 use app\dict\pay\RefundDict;
@@ -26,8 +27,6 @@ use think\facade\Log;
  */
 class HsxPhoneQueryService extends BaseApiService
 {
-    private const API_URL = 'https://api-srv.gkdt.com/inquiry/async';
-    private const API_STYLE = '11';
     private const CACHE_TTL = 86400;
 
     private HsxPhoneQueryCategory $categoryModel;
@@ -36,6 +35,7 @@ class HsxPhoneQueryService extends BaseApiService
     private Member $memberModel;
     private CoreMemberAccountService $accountService;
     private ProviderChannelService $providerChannelService;
+    private PhoneQueryGatewayService $phoneQueryGatewayService;
     private QueryResultFormatter $resultFormatter;
 
     public function __construct()
@@ -47,6 +47,7 @@ class HsxPhoneQueryService extends BaseApiService
         $this->memberModel = new Member();
         $this->accountService = new CoreMemberAccountService();
         $this->providerChannelService = new ProviderChannelService();
+        $this->phoneQueryGatewayService = new PhoneQueryGatewayService();
         $this->resultFormatter = new QueryResultFormatter();
     }
 
@@ -504,7 +505,7 @@ class HsxPhoneQueryService extends BaseApiService
             throw new CommonException('请先启用手机查询服务商渠道');
         }
 
-        if (($channel['provider'] ?? '') === 'service_id_query' && (empty($channel['appid']) || empty($channel['secret']))) {
+        if (in_array(($channel['provider'] ?? ''), ['gkdt_query', 'service_id_query'], true) && (empty($channel['appid']) || empty($channel['secret']))) {
             throw new CommonException('请先配置爱查 AppID 和 Secret');
         }
 
@@ -515,7 +516,7 @@ class HsxPhoneQueryService extends BaseApiService
         if (($channel['provider'] ?? '') === 'path_query' && empty($mapping['endpoint_value'])) {
             throw new CommonException('请先配置 3023 查询接口路径');
         }
-        if (($channel['provider'] ?? '') === 'service_id_query' && empty($mapping['endpoint_value'])) {
+        if (in_array(($channel['provider'] ?? ''), ['gkdt_query', 'service_id_query'], true) && empty($mapping['endpoint_value'])) {
             throw new CommonException('当前渠道暂不支持该查询项目，请切换渠道或补充接口映射');
         }
 
@@ -804,17 +805,40 @@ class HsxPhoneQueryService extends BaseApiService
     {
         $channel = $queryConfig['channel'] ?? [];
         $mapping = $queryConfig['mapping'] ?? [];
-        $provider = (string)($channel['provider'] ?? '');
-
-        if ($provider === 'path_query') {
-            return $this->callPathQueryProvider($channel, $mapping, $code, $queryConfig, $order);
+        if (empty($mapping['endpoint_value']) && $id > 0) {
+            $mapping['endpoint_value'] = (string)$id;
         }
 
-        if ($provider === 'service_id_query') {
-            return $this->callServiceIdQueryProvider($channel, $mapping, $code, $id, $queryConfig, $order);
+        $result = $this->phoneQueryGatewayService->query($channel, $mapping, $code);
+        $costPrice = (float)($mapping['cost_price'] ?? $queryConfig['cost_price'] ?? 0);
+        $apiLogId = $this->saveApiLog([
+            'channel' => $channel,
+            'mapping' => $mapping,
+            'query_config' => $queryConfig,
+            'order' => $order,
+            'query_code' => $code,
+            'request_method' => (string)($result['request_method'] ?? 'GET'),
+            'request_url' => (string)($result['request_url'] ?? ''),
+            'request_params' => (array)($result['request_params'] ?? []),
+            'response' => (array)($result['response'] ?? []),
+            'cost_price' => !empty($result['success']) ? $costPrice : 0,
+            'duration_ms' => (int)($result['duration_ms'] ?? 0),
+            'status' => !empty($result['success']) ? 'success' : 'fail',
+            'error_message' => !empty($result['success']) ? '' : (string)($result['message'] ?? '查询失败'),
+        ]);
+
+        if (empty($result['success'])) {
+            throw new CommonException((string)($result['message'] ?? '第三方查询失败'));
         }
 
-        throw new CommonException('不支持的手机查询服务商类型');
+        return [
+            'code' => 200,
+            'data' => (array)($result['data'] ?? []),
+            'third_cost' => $costPrice,
+            'provider' => (string)($result['provider'] ?? $channel['provider'] ?? ''),
+            'channel_name' => (string)($channel['name'] ?? ''),
+            'api_log_id' => $apiLogId,
+        ];
     }
 
     private function getProviderConfig(?int $siteId = null): array
@@ -830,143 +854,6 @@ class HsxPhoneQueryService extends BaseApiService
     private function getProviderMapping(array $config, int $typeId, string $serviceCode, string $channelKey, bool $includeDisabled = false): array
     {
         return $this->providerChannelService->getMapping($config, $typeId, $serviceCode, $channelKey, $includeDisabled);
-    }
-
-    private function callServiceIdQueryProvider(array $channel, array $mapping, string $code, int $id, array $queryConfig, array $order = []): array
-    {
-        $appid = (string)($channel['appid'] ?? '');
-        $secret = (string)($channel['secret'] ?? '');
-        $baseUrl = (string)($channel['base_url'] ?? self::API_URL);
-        $serviceId = (string)($mapping['endpoint_value'] ?? $id);
-        $serviceIdKey = (string)($channel['service_id_key'] ?? 'key');
-        $queryParam = 'code';
-        $method = (string)($channel['method'] ?? 'GET');
-        $costPrice = (float)($mapping['cost_price'] ?? $queryConfig['cost_price'] ?? 0);
-
-        $params = [
-            'appid' => $appid,
-            $queryParam => $code,
-            $serviceIdKey => $serviceId,
-            'style' => (string)($channel['style'] ?? self::API_STYLE),
-            'time' => time(),
-        ];
-
-        $params['sign'] = $this->generateMd5Sign($params, $secret);
-        $startedAt = microtime(true);
-        $apiLogId = 0;
-        try {
-            $response = $this->httpRequest($method, $baseUrl, $params, [], (int)($channel['timeout'] ?? 30));
-            $data = $this->normalizeProviderResponse($response);
-            $apiLogId = $this->saveApiLog([
-                'channel' => $channel,
-                'mapping' => $mapping,
-                'query_config' => $queryConfig,
-                'order' => $order,
-                'query_code' => $code,
-                'request_method' => $method,
-                'request_url' => $baseUrl,
-                'request_params' => $this->maskRequestParams($params),
-                'response' => $response,
-                'cost_price' => $costPrice,
-                'duration_ms' => $this->durationMs($startedAt),
-                'status' => 'success',
-            ]);
-        } catch (\Throwable $e) {
-            $this->saveApiLog([
-                'channel' => $channel,
-                'mapping' => $mapping,
-                'query_config' => $queryConfig,
-                'order' => $order,
-                'query_code' => $code,
-                'request_method' => $method,
-                'request_url' => $baseUrl,
-                'request_params' => $this->maskRequestParams($params),
-                'response' => $response ?? [],
-                'cost_price' => 0,
-                'duration_ms' => $this->durationMs($startedAt),
-                'status' => 'fail',
-                'error_message' => $e->getMessage(),
-            ]);
-            throw $e;
-        }
-
-        return [
-            'code' => 200,
-            'data' => $data,
-            'third_cost' => $costPrice,
-            'provider' => 'service_id_query',
-            'channel_name' => (string)($channel['name'] ?? '爱查助手'),
-            'api_log_id' => $apiLogId,
-        ];
-    }
-
-    private function callPathQueryProvider(array $channel, array $mapping, string $code, array $queryConfig, array $order = []): array
-    {
-        $baseUrl = rtrim((string)($channel['base_url'] ?? ''), '/');
-        $path = '/' . ltrim((string)($mapping['endpoint_value'] ?? ''), '/');
-        if ($baseUrl === '' || $path === '/') {
-            throw new CommonException('3023接口地址或路径未配置');
-        }
-
-        $params = ['sn' => $code];
-        $headers = [];
-        $requestParams = $params;
-        if (($channel['auth_type'] ?? 'header') === 'query') {
-            $authKey = (string)($channel['auth_key'] ?? 'key');
-            $params[$authKey] = (string)($channel['token'] ?? '');
-            $requestParams[$authKey] = '***';
-        } else {
-            $headers[] = ((string)($channel['auth_key'] ?? 'key')) . ': ' . (string)($channel['token'] ?? '');
-        }
-        $method = (string)($channel['method'] ?? 'GET');
-        $costPrice = (float)($mapping['cost_price'] ?? $queryConfig['cost_price'] ?? 0);
-
-        $startedAt = microtime(true);
-        $apiLogId = 0;
-        try {
-            $response = $this->httpRequest($method, $baseUrl . $path, $params, $headers, (int)($channel['timeout'] ?? 30));
-            $data = $this->normalizeProviderResponse($response);
-            $apiLogId = $this->saveApiLog([
-                'channel' => $channel,
-                'mapping' => $mapping,
-                'query_config' => $queryConfig,
-                'order' => $order,
-                'query_code' => $code,
-                'request_method' => $method,
-                'request_url' => $baseUrl . $path,
-                'request_params' => $requestParams,
-                'response' => $response,
-                'cost_price' => $costPrice,
-                'duration_ms' => $this->durationMs($startedAt),
-                'status' => 'success',
-            ]);
-        } catch (\Throwable $e) {
-            $this->saveApiLog([
-                'channel' => $channel,
-                'mapping' => $mapping,
-                'query_config' => $queryConfig,
-                'order' => $order,
-                'query_code' => $code,
-                'request_method' => $method,
-                'request_url' => $baseUrl . $path,
-                'request_params' => $requestParams,
-                'response' => $response ?? [],
-                'cost_price' => 0,
-                'duration_ms' => $this->durationMs($startedAt),
-                'status' => 'fail',
-                'error_message' => $e->getMessage(),
-            ]);
-            throw $e;
-        }
-
-        return [
-            'code' => 200,
-            'data' => $data,
-            'third_cost' => $costPrice,
-            'provider' => 'path_query',
-            'channel_name' => (string)($channel['name'] ?? '3023Data'),
-            'api_log_id' => $apiLogId,
-        ];
     }
 
     private function saveApiLog(array $data): int
@@ -1033,22 +920,6 @@ class HsxPhoneQueryService extends BaseApiService
         }
     }
 
-    private function maskRequestParams(array $params): array
-    {
-        foreach (['secret', 'sign', 'token', 'key'] as $sensitiveKey) {
-            if (array_key_exists($sensitiveKey, $params)) {
-                $params[$sensitiveKey] = '***';
-            }
-        }
-
-        return $params;
-    }
-
-    private function durationMs(float $startedAt): int
-    {
-        return max(0, (int)round((microtime(true) - $startedAt) * 1000));
-    }
-
     private function readResponseCode($response): string
     {
         if (!is_array($response)) {
@@ -1078,66 +949,6 @@ class HsxPhoneQueryService extends BaseApiService
         }
 
         return json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '';
-    }
-
-    private function httpRequest(string $method, string $url, array $params, array $headers = [], int $timeout = 30): array
-    {
-        $method = strtoupper($method ?: 'GET');
-        $ch = curl_init();
-        if ($method === 'GET') {
-            $url .= (str_contains($url, '?') ? '&' : '?') . http_build_query($params);
-            curl_setopt($ch, CURLOPT_URL, $url);
-        } else {
-            curl_setopt($ch, CURLOPT_URL, $url);
-            curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($params));
-        }
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
-        if (!empty($headers)) {
-            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-        }
-
-        $raw = curl_exec($ch);
-        if (curl_errno($ch)) {
-            $error = curl_error($ch);
-            curl_close($ch);
-            throw new CommonException('请求失败: ' . $error);
-        }
-        curl_close($ch);
-
-        $response = is_string($raw) ? json_decode($raw, true) : $raw;
-        if (!is_array($response)) {
-            throw new CommonException('查询接口返回异常');
-        }
-
-        return $response;
-    }
-
-    private function normalizeProviderResponse(array $response): array
-    {
-        $response = is_string($response) ? json_decode($response, true) : $response;
-
-        if (!is_array($response)) {
-            throw new CommonException('查询接口返回异常');
-        }
-
-        $code = (int)($response['code'] ?? $response['status'] ?? 200);
-        $success = $response['success'] ?? null;
-        if (($success === false) || (!in_array($code, [0, 1, 200], true))) {
-            throw new CommonException($response['message'] ?? $response['msg'] ?? '查询失败');
-        }
-
-        return $response['data'] ?? $response['result'] ?? $response;
-    }
-
-    private function generateMd5Sign(array $params, string $secret): string
-    {
-        ksort($params);
-        $signParams = array_filter($params, static fn($value) => $value !== '' && $value !== null);
-        $queryString = http_build_query($signParams);
-        $queryString .= '&secret=' . $secret;
-        return md5($queryString);
     }
 
     private function buildUserQueryListModel(array $params)

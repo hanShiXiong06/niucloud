@@ -364,110 +364,6 @@
 			]
         },
 // HSX_RECYCLE_PAGE_END
-        // HSX_PHONE_QUERY_PAGE_BEGIN
-        {
-            "root": "addon/hsx_phone_query", 
-            "pages": [
-				{
-					"path": "pages/index",
-					"style": {
-						"navigationBarTitleText": "查询界面"
-					},
-					"needLogin": true
-				},
-				{
-					"path": "pages/history",
-					"style": {
-						"navigationBarTitleText": "查询历史"
-					},
-					"needLogin": true
-				},
-				{
-					"path": "pages/detail",
-					"style": {
-						"navigationBarTitleText": "查询详情"
-					},
-					"needLogin": true,
-				}
-			]
-        },
-// HSX_PHONE_QUERY_PAGE_END
-        // RECYCLE_DAHENG_QUOTE_PAGE_BEGIN
-        {
-            "root": "addon/recycle_daheng_quote",
-            "pages": [
-                {
-                    "path": "pages/price/show_price",
-                    "style": {
-                        "navigationBarTitleText": "二手机回收报价单",
-                         // #ifndef H5
-                        "navigationStyle": "custom",
-                        // #endif
-                    },
-                    "needLogin": true
-                },
-                {
-                    "path": "pages/report/config",
-                    "style": {
-                        "navigationBarTitleText": "生成报价单"
-                    },
-                    "needLogin": true
-                },
-                {
-                    "path": "pages/report/preview",
-                    "style": {
-                        "navigationBarTitleText": "报价单预览"
-                    },
-                    "needLogin": true
-                },
-                {
-                    "path": "pages/report/personalize",
-                    "style": {
-                        "navigationBarTitleText": "个性化调整"
-                    },
-                    "needLogin": true
-                }
-            ]
-        },
-// RECYCLE_DAHENG_QUOTE_PAGE_END
-        // RECYCLE_QUOTE_SPIDER_PAGE_BEGIN
-        {
-            "root": "addon/recycle_quote_spider",
-            "pages": [
-                {
-                    "path": "pages/price/show_price",
-                    "style": {
-                        "navigationBarTitleText": "二手机回收报价单",
-                         // #ifndef H5
-                        "navigationStyle": "custom",
-                        // #endif
-                    },
-                    "needLogin": true
-                },
-                {
-                    "path": "pages/report/config",
-                    "style": {
-                        "navigationBarTitleText": "生成报价单"
-                    },
-                    "needLogin": true
-                },
-                {
-                    "path": "pages/report/preview",
-                    "style": {
-                        "navigationBarTitleText": "报价单预览"
-                    },
-                    "needLogin": true
-                },
-                {
-                    "path": "pages/report/personalize",
-                    "style": {
-                        "navigationBarTitleText": "个性化调整"
-                    },
-                    "needLogin": true
-                }
-            ]
-        },
-// RECYCLE_QUOTE_SPIDER_PAGE_END
         // PHONE_SHOP_PAGE_BEGIN
         {
             "root": "addon/phone_shop",
@@ -750,6 +646,82 @@
             ]
         },
         // PHONE_SHOP_PAGE_END
+        // RECYCLE_DAHENG_QUOTE_PAGE_BEGIN
+        {
+            "root": "addon/recycle_daheng_quote",
+            "pages": [
+                {
+                    "path": "pages/price/show_price",
+                    "style": {
+                        "navigationBarTitleText": "二手机回收报价单",
+                         // #ifndef H5
+                        "navigationStyle": "custom",
+                        // #endif
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "pages/report/config",
+                    "style": {
+                        "navigationBarTitleText": "生成报价单"
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "pages/report/preview",
+                    "style": {
+                        "navigationBarTitleText": "报价单预览"
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "pages/report/personalize",
+                    "style": {
+                        "navigationBarTitleText": "个性化调整"
+                    },
+                    "needLogin": true
+                }
+            ]
+        },
+// RECYCLE_DAHENG_QUOTE_PAGE_END
+        // RECYCLE_QUOTE_SPIDER_PAGE_BEGIN
+        {
+            "root": "addon/recycle_quote_spider",
+            "pages": [
+                {
+                    "path": "pages/price/show_price",
+                    "style": {
+                        "navigationBarTitleText": "二手机回收报价单",
+                         // #ifndef H5
+                        "navigationStyle": "custom",
+                        // #endif
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "pages/report/config",
+                    "style": {
+                        "navigationBarTitleText": "生成报价单"
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "pages/report/preview",
+                    "style": {
+                        "navigationBarTitleText": "报价单预览"
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "pages/report/personalize",
+                    "style": {
+                        "navigationBarTitleText": "个性化调整"
+                    },
+                    "needLogin": true
+                }
+            ]
+        },
+// RECYCLE_QUOTE_SPIDER_PAGE_END
 // {{ PAGE_END }}
         {
             "root": "app/components",

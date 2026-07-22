@@ -171,6 +171,9 @@
 
                 <!-- 底部操作 -->
                 <view class="bottom-actions">
+                    <view class="bottom-action-row">
+                        <view class="bottom-action-btn full"><u-button type="primary" plain text="打印设备标签" @click="printAssetLabel" /></view>
+                    </view>
                     <view v-if="asset.status === 'in_stock'" class="bottom-action-row primary-turnover-row">
                         <view class="bottom-action-btn full"><u-button type="primary" :text="asset.turnover_action_label || '处理库存'" @click="handlePrimaryAction" /></view>
                     </view>
@@ -203,14 +206,17 @@
 
         <u-popup :show="productVisible" mode="bottom" round="20" :safe-area-inset-bottom="true" @close="productVisible = false">
             <view class="action-popup">
-                <view class="action-popup__head"><view><text class="action-popup__title">完善商品资料</text><text class="action-popup__sub">用于商城展示和销售定价，不修改采购成本</text></view><u-icon name="close" color="#94a3b8" size="20" @click="productVisible=false" /></view>
+                <view class="action-popup__head"><view><text class="action-popup__title">{{ productPopupTitle }}</text><text class="action-popup__sub">{{ productPopupSubtitle }}</text></view><u-icon name="close" color="#94a3b8" size="20" @click="productVisible=false" /></view>
                 <scroll-view scroll-y class="action-popup__body">
-                    <ErpCatalogProductPopup v-model="productForm.catalog_product_id" :selected-label="productForm.catalog_product_name" label="商品型号" :embedded="true" :clearable="true" @change="onProductCatalogChange" />
-                    <view class="popup-form-row"><text>设备规格</text><u-input v-model="productForm.spec" placeholder="容量、颜色、成色、电池等" border="none" inputAlign="right" /></view>
-                    <view class="popup-form-row"><text>零售价</text><u-input v-model="productForm.retail_price" type="number" placeholder="0.00" border="none" inputAlign="right" /></view>
-                    <ErpVoucherUploader v-model="productForm.image_urls" title="商品图片" hint="上传正面、背面、边框和瑕疵图，支持点击预览" add-text="上传图片" :max-count="9" />
+                    <template v-if="productMode === 'all' || productMode === 'material'">
+                        <ErpCatalogProductPopup v-model="productForm.catalog_product_id" :selected-label="productForm.catalog_product_name" label="商品型号" :embedded="true" :clearable="true" @change="onProductCatalogChange" />
+                        <view class="popup-form-row"><text>设备规格</text><u-input v-model="productForm.spec" placeholder="容量、颜色、成色、电池等" border="none" inputAlign="right" /></view>
+                        <view class="popup-form-row popup-form-row--textarea"><text>对外说明</text><u-textarea v-model="productForm.remark_public" placeholder="展示给商城客户的商品说明" :maxlength="500" /></view>
+                    </template>
+                    <view v-if="productMode === 'all'" class="popup-form-row"><text>零售价</text><u-input v-model="productForm.retail_price" type="number" placeholder="0.00" border="none" inputAlign="right" /></view>
+                    <ErpVoucherUploader v-if="productMode === 'all' || productMode === 'photo'" v-model="productForm.image_urls" title="商品图片" hint="上传正面、背面、边框和瑕疵图，支持点击预览" add-text="上传图片" :max-count="9" />
                 </scroll-view>
-                <view class="action-popup__foot"><u-button type="primary" :loading="productSaving" text="保存商品资料" @click="submitProduct" /></view>
+                <view class="action-popup__foot"><u-button type="primary" :loading="productSaving" :text="productSubmitText" @click="submitProduct" /></view>
             </view>
         </u-popup>
 
@@ -240,7 +246,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { adjustMobileStockRetailPrice, buyoutMobileConsignment, getMobileStockInfo, previewMobileStockTransfer, syncMobileStockListing, transferMobileStock, updateMobileStockFlow } from '@/addon/hsx_erp/api/erp'
+import { adjustMobileStockRetailPrice, buyoutMobileConsignment, getMobileStockInfo, previewMobileStockTransfer, printMobileErpAssetLabel, syncMobileStockListing, transferMobileStock, updateMobileStockFlow } from '@/addon/hsx_erp/api/erp'
 import { confirmErpSensitiveAction } from '@/addon/hsx_erp/hooks/useErpSensitiveConfirm'
 import { erpNetSaleAmount, erpOriginalSaleAmount, erpSaleCompensationAmount, firstPositiveErpAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
 import { erpDeviceIdentityLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
@@ -261,7 +267,15 @@ const assetId = ref(0)
 const detailLoaded = ref(false)
 const productVisible = ref(false)
 const productSaving = ref(false)
-const productForm = ref<any>({ catalog_product_id: 0, catalog_product_name: '', category_name: '', category_path: '', spec: '', retail_price: '', image_urls: '' })
+const productMode = ref<'all' | 'photo' | 'material'>('all')
+const productForm = ref<any>({ catalog_product_id: 0, catalog_product_name: '', category_name: '', category_path: '', spec: '', retail_price: '', image_urls: '', remark_public: '' })
+const productPopupTitle = computed(() => ({ all: '完善商品资料', photo: '完成商品拍摄', material: '整理商城资料' }[productMode.value]))
+const productPopupSubtitle = computed(() => ({
+    all: '小团队可一次完成图片、售价和商城资料',
+    photo: '上传标准商品图，完成后自动流转到销售定价',
+    material: '核对型号、规格和对外说明，便于商城筛选展示',
+}[productMode.value]))
+const productSubmitText = computed(() => ({ all: '保存商品资料', photo: '完成拍摄', material: '完成资料整理' }[productMode.value]))
 const retailVisible = ref(false)
 const retailSaving = ref(false)
 const retailForm = ref({ retail_price: '', reason: '' })
@@ -325,6 +339,20 @@ function reload() {
     return loadDetail({ silent: true })
 }
 
+async function printAssetLabel() {
+    if (!asset.value?.id) return
+    try {
+        const result: any = await printMobileErpAssetLabel(Number(asset.value.id))
+        if (result?.data?.skipped) return uni.showToast({ title: '请先在 PC 打印中心启用手动设备标签', icon: 'none' })
+        if (result?.data?.status === 'waiting_client') {
+            uni.showToast({ title: '标签任务已生成', icon: 'none' })
+            setTimeout(() => uni.navigateTo({ url: '/addon/hsx_erp/pages/print/index' }), 400)
+            return
+        }
+        uni.showToast({ title: '标签任务已发送', icon: 'success' })
+    } catch (_) {}
+}
+
 const primaryActionType = computed(() => ['transfer', 'resolve_warehouse', 'complete_refurbish', 'resolve_refurbish'].includes(String(asset.value?.turnover_action_key || '')) ? 'warning' : 'primary')
 const canOpenTransfer = computed(() => Number(asset.value?.can_warehouse_action ?? asset.value?.warehouse_policy?.can_warehouse_action ?? asset.value?.can_transfer ?? asset.value?.warehouse_policy?.can_transfer ?? 0) === 1
     || String(asset.value?.turnover_action_key || asset.value?.warehouse_policy?.primary_action || '') === 'resolve_warehouse')
@@ -332,7 +360,9 @@ const canOpenTransfer = computed(() => Number(asset.value?.can_warehouse_action 
 function handlePrimaryAction() {
     if (!asset.value) return
     const action = String(asset.value.turnover_action_key || asset.value.warehouse_policy?.primary_action || 'view')
-    if (['set_retail_price', 'adjust_retail_price'].includes(action)) return openRetail()
+    if (['set_retail_price', 'adjust_retail_price', 'complete_listing_price'].includes(action)) return openRetail()
+    if (action === 'complete_listing_photo') return openProduct('photo')
+    if (action === 'complete_listing_material') return openProduct('material')
     if (action === 'complete_listing') return openProduct()
     if (action === 'publish_listing') return publishListing()
     if (['transfer', 'resolve_warehouse'].includes(action)) return openTransfer()
@@ -342,11 +372,12 @@ function handlePrimaryAction() {
     uni.showToast({ title: asset.value.warehouse_policy?.primary_action_reason || '当前仅支持查看设备档案', icon: 'none' })
 }
 
-function openProduct() {
+function openProduct(mode: 'all' | 'photo' | 'material' = 'all') {
     if (!asset.value) return
+    productMode.value = mode
     productForm.value = {
         catalog_product_id: Number(asset.value.catalog_product_id || 0), catalog_product_name: asset.value.model || '', category_name: asset.value.category_name || '', category_path: asset.value.category_path || '',
-        spec: asset.value.spec || '', retail_price: Number(asset.value.retail_price || 0) || '', image_urls: asset.value.image_urls || '',
+        spec: asset.value.spec || '', retail_price: Number(asset.value.retail_price || 0) || '', image_urls: asset.value.image_urls || '', remark_public: asset.value.remark_public || '',
     }
     productVisible.value = true
 }
@@ -360,13 +391,14 @@ function onProductCatalogChange(payload: any) {
 
 async function submitProduct() {
     if (!asset.value?.id) return
-    if (!Number(productForm.value.catalog_product_id || 0)) return uni.showToast({ title: '请选择商品型号', icon: 'none' })
-    if (!String(productForm.value.spec || '').trim()) return uni.showToast({ title: '请填写设备规格', icon: 'none' })
-    if (asset.value.warehouse_policy?.need_photo && !String(productForm.value.image_urls || '').trim()) return uni.showToast({ title: '当前仓库要求上传商品图片', icon: 'none' })
-    if (asset.value.warehouse_policy?.need_pricing && Number(productForm.value.retail_price || 0) <= 0) return uni.showToast({ title: '当前仓库要求填写零售价', icon: 'none' })
+    if (productMode.value !== 'photo' && !Number(productForm.value.catalog_product_id || 0)) return uni.showToast({ title: '请选择商品型号', icon: 'none' })
+    if (productMode.value !== 'photo' && !String(productForm.value.spec || '').trim()) return uni.showToast({ title: '请填写设备规格', icon: 'none' })
+    if (productMode.value !== 'material' && asset.value.warehouse_policy?.need_photo && !String(productForm.value.image_urls || '').trim()) return uni.showToast({ title: '当前仓库要求上传商品图片', icon: 'none' })
+    if (productMode.value === 'all' && asset.value.warehouse_policy?.need_pricing && Number(productForm.value.retail_price || 0) <= 0) return uni.showToast({ title: '当前仓库要求填写零售价', icon: 'none' })
     productSaving.value = true
     try {
-        await updateMobileStockFlow(asset.value.id, { ...productForm.value, retail_price: Number(productForm.value.retail_price || 0), remark: '移动端完善商城商品资料' })
+        const actionRemark = { all: '移动端完善商城商品资料', photo: '移动端完成商品拍摄', material: '移动端完成商城资料整理' }[productMode.value]
+        await updateMobileStockFlow(asset.value.id, { ...productForm.value, retail_price: Number(productForm.value.retail_price || 0), remark: actionRemark })
         productVisible.value = false
         uni.showToast({ title: '商品资料已保存', icon: 'success' })
         await reload()
@@ -696,6 +728,7 @@ function accountRemark(row: any) {
 .retry-btn { margin-top:24rpx; width:180rpx; }
 .loading-wrap { display:flex; justify-content:center; align-items:center; height:400rpx; }
 .action-popup { height:78vh; display:flex; flex-direction:column; background:#fff; }.action-popup--compact { height:auto; min-height:520rpx; }.action-popup__head { display:flex; align-items:flex-start; justify-content:space-between; gap:20rpx; padding:28rpx 30rpx 20rpx; border-bottom:1rpx solid #f1f5f9; }.action-popup__title,.action-popup__sub { display:block; }.action-popup__title { color:#0f172a; font-size:32rpx; font-weight:750; }.action-popup__sub { margin-top:5rpx; color:#94a3b8; font-size:21rpx; }.action-popup__body { flex:1; min-height:0; padding:12rpx 30rpx; box-sizing:border-box; }.action-popup__foot { padding:20rpx 30rpx calc(20rpx + env(safe-area-inset-bottom)); border-top:1rpx solid #f1f5f9; }.popup-form-row { display:flex; align-items:center; gap:20rpx; min-height:96rpx; padding:0 30rpx; border-bottom:1rpx solid #f1f5f9; color:#334155; font-size:25rpx; }.action-popup__body .popup-form-row { padding:0; }
+.popup-form-row--textarea { align-items:stretch; flex-direction:column; gap:12rpx; padding:24rpx 0 !important; }
 .buyout-summary { margin:22rpx 30rpx 8rpx; padding:18rpx 20rpx; border-radius:14rpx; background:#fff7ed; }
 .buyout-summary text { display:block; color:#0f172a; font-size:26rpx; font-weight:650; }
 .buyout-summary text + text { margin-top:7rpx; color:#64748b; font-size:21rpx; font-weight:400; }

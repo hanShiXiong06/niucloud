@@ -18,7 +18,8 @@ $runtimeActions = (string)file_get_contents($repo . '/admin/src/addon/hsx_recycl
 $packageActions = (string)file_get_contents($root . '/admin/hooks/useRecycleOrderActions.ts');
 
 $assert(str_contains($capability, 'getAddonKeysBySiteId') && str_contains($capability, "'hsx_erp'"), 'ERP接管必须按当前站点插件权限判断');
-$assert(str_contains($capability, "class_exists('\\\\addon\\\\hsx_erp"), 'ERP接管必须同时确认服务代码可用');
+$assert(str_contains($capability, 'ErpWarehouseOptionsRequested'), 'ERP接管必须通过跨插件事件契约确认仓库能力');
+$assert(!str_contains($capability, "class_exists('\\\\addon\\\\hsx_erp"), '回收插件不能通过ERP具体服务类形成硬依赖');
 $assert(str_contains($devicePayment, 'assertLocalPaymentAllowed') && str_contains($devicePayment, '财务已由 ERP 接管'), '设备级打款必须提供后端硬拦截');
 $assert(str_contains($orderPayment, 'assertLocalPaymentAllowed') && str_contains($orderPayment, '财务已由 ERP 接管'), '整单打款必须提供后端硬拦截');
 $assert(str_contains($controller, 'paymentCapability') && str_contains($controller, "array_merge(['accounts'"), '能力接口必须返回ERP财务接管状态');

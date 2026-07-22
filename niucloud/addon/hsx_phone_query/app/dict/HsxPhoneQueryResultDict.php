@@ -18,7 +18,7 @@ class HsxPhoneQueryResultDict
             'type' => '查询类型',
             'model' => '设备型号',
             'identifier' => '设备标识',
-            'description' => '型号代码',
+            'description' => '设备描述',
             'configuration' => '配置信息',
             'capacity' => '容量',
             'color' => '颜色',
@@ -36,18 +36,35 @@ class HsxPhoneQueryResultDict
             'coverage.date' => '保修到期',
             'coverage.days-remaining' => '剩余保修天数',
             'coverage.unable' => '保修查询状态',
+            'coverage_status' => '保修状态',
+            'coverage_description' => '保障情况',
+            'coverage_date' => '保修到期',
+            'coverage_days_remaining' => '剩余保修天数',
+            'coverage_denied' => '拒保记录',
+            'days_left' => '剩余保修天数',
             'warranty' => '保修状态',
             'support' => '技术支持',
             'applecare' => 'AppleCare+',
             'applecare-eligible' => '是否可购买 AppleCare+',
+            'apple_care' => 'AppleCare+',
+            'apple_care_eligible' => '是否可购买 AppleCare+',
             'brightstar' => 'Brightstar 设备',
+            'bright_star' => '是否资源机',
             'replaced' => '是否已更换',
             'pre-activated' => '预激活状态',
+            'pre_activated' => '预激活状态',
             'loaner' => '是否借用机',
+            'maintenance' => '苹果维护状态',
             'repair' => '维修状态',
             'manufacture' => '生产信息',
             'manufacture.date' => '生产日期',
+            'manufacture_date' => '生产日期',
             'manufacturer' => '制造商',
+            'model_number' => '型号号码',
+            'purchase_date' => '激活/购买日期',
+            'purchase_type' => '日期类型',
+            'purchase_validated' => '有效购买日期',
+            'registered' => '注册状态',
             'refurbished' => '是否翻新',
             'demo' => '是否演示机',
             'activationlock' => '查找设备锁',
@@ -103,9 +120,13 @@ class HsxPhoneQueryResultDict
             'activated',
             'activation.date',
             'purchase.date',
+            'purchase_date',
             'coverage.status',
+            'coverage_status',
             'coverage.date',
+            'coverage_date',
             'activationlock.locked',
+            'locked',
         ];
     }
 
@@ -217,7 +238,7 @@ class HsxPhoneQueryResultDict
             return in_array(strtolower($stringValue), ['1', 'true', 'yes', 'lost'], true) ? '丢失模式' : '正常';
         }
 
-        if (in_array($path, ['refurbished', 'demo', 'applecare', 'replaced', 'purchase.validated'], true)) {
+        if (in_array($path, ['refurbished', 'demo', 'applecare', 'apple_care', 'replaced', 'purchase.validated', 'purchase_validated', 'pre_activated', 'maintenance'], true)) {
             return in_array(strtolower($stringValue), ['1', 'true', 'yes'], true) ? '是' : '否';
         }
 
@@ -262,7 +283,7 @@ class HsxPhoneQueryResultDict
             'activationlock.lost' => $value ? '丢失模式' : '正常',
             'fmi', 'locked' => $value ? '已开启' : '未开启',
             'state', 'status' => '无状态',
-            'refurbished', 'demo', 'applecare', 'replaced', 'purchase.validated' => $value ? '是' : '否',
+            'refurbished', 'demo', 'applecare', 'apple_care', 'replaced', 'purchase.validated', 'purchase_validated', 'pre_activated', 'maintenance' => $value ? '是' : '否',
             default => $value ? '是' : '否',
         };
     }

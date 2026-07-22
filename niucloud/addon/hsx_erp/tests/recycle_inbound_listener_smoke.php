@@ -45,6 +45,11 @@ class FakeRecycleInboundListener extends ErpDeviceInboundRequested
         return ['asset_id' => ++$this->nextId, 'created' => true];
     }
 
+    protected function assetIdsForPurchaseOrders(int $siteId, array $orderIds): array
+    {
+        return [];
+    }
+
     protected function resolveBusinessSource(string $sourceType): ?array
     {
         return [

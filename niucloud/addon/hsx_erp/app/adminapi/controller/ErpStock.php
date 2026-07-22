@@ -59,6 +59,12 @@ class ErpStock extends BaseAdminController
         return success($this->service->turnoverSummary());
     }
 
+    /** 今日商品上架协作工作量，供库存中心 PC / 移动端统一展示。 */
+    public function listingWorkload()
+    {
+        return success($this->service->listingWorkloadSummary());
+    }
+
     public function adjustRetailPrice(int $id)
     {
         $params = $this->request->params([

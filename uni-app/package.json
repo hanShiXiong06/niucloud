@@ -57,7 +57,7 @@
         "@uni-helper/vite-plugin-uni-layouts": "^0.1.11",
         "html2canvas": "^1.4.1",
         "image-tools": "^1.4.0",
-        "lime-painter": "^11.11.11",
+        "lime-painter": "^0.9.10",
         "lodash-es": "^4.17.21",
         "pinia": "2.0.36",
         "qrcode": "^1.5.1",

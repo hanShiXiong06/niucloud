@@ -39,7 +39,7 @@
                         </el-radio-group>
                     </el-form-item>
 
-                    <template v-if="activeChannel.provider === 'service_id_query'">
+                    <template v-if="isGkdtProvider(activeChannel.provider)">
                         <el-form-item label="AppID">
                             <el-input v-model="activeChannel.appid" clearable placeholder="填写爱查 AppID" />
                         </el-form-item>
@@ -108,7 +108,7 @@
                                     </el-select>
                                 </el-form-item>
 
-                                <template v-if="activeChannel.provider === 'service_id_query'">
+                                <template v-if="isGkdtProvider(activeChannel.provider)">
                                     <el-form-item label="服务ID参数">
                                         <el-input v-model="activeChannel.service_id_key" placeholder="默认 key" />
                                     </el-form-item>
@@ -157,7 +157,14 @@
                                     </el-table-column>
                                     <el-table-column label="参数名" width="120">
                                         <template #default="{ row }">
-                                            <el-input v-model="row.query_param" disabled />
+                                            <el-select v-model="row.query_param" class="w-full">
+                                                <el-option label="序列号 sn" value="sn" />
+                                                <el-option label="IMEI imei" value="imei" />
+                                                <el-option label="爱查 code" value="code" />
+                                                <el-option label="条码 barcode" value="barcode" />
+                                                <el-option label="IP ip" value="ip" />
+                                                <el-option label="手机号 phone" value="phone" />
+                                            </el-select>
                                         </template>
                                     </el-table-column>
                                     <el-table-column label="成本价" width="120">
@@ -217,8 +224,10 @@ const channelChanged = computed(() => {
     return !!savedChannelKey.value && config.default_channel_key !== savedChannelKey.value
 })
 
+const isGkdtProvider = (provider: string) => ['gkdt_query', 'service_id_query'].includes(provider)
+
 const hasChannelCredential = (channel: any) => {
-    if (channel?.provider === 'service_id_query') return !!channel.appid && !!channel.secret
+    if (isGkdtProvider(channel?.provider)) return !!channel.appid && !!channel.secret
     if (channel?.provider === 'path_query') return !!channel.token
     return false
 }

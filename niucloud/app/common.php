@@ -788,10 +788,16 @@ function project_path()
  */
 function image_to_base64(string $path, $is_delete = false)
 {
-    if (!file_exists($path)) return 'image not exist';
+    // 插件封面、图标可能因上传中断留下空文件或非图片内容。
+    // 这类资源只影响展示，不应因为 getimagesize 的告警中断整个列表接口。
+    if (!is_file($path) || !is_readable($path) || filesize($path) <= 0) return '';
 
-    $mime = getimagesize($path)['mime'];
-    $image_data = file_get_contents($path);
+    $image_info = @getimagesize($path);
+    if (!is_array($image_info) || empty($image_info['mime'])) return '';
+
+    $image_data = @file_get_contents($path);
+    if ($image_data === false || $image_data === '') return '';
+    $mime = (string)$image_info['mime'];
     // 将图片转换为 base64
     $base64_data = base64_encode($image_data);
 
@@ -1136,33 +1142,51 @@ function checkDirPermissions($dir, $data = [], $exclude_dir = [])
  */
 function downloadImage($img_url, $file_name)
 {
+    $directory = dirname($file_name);
+    if (!is_dir($directory) && !mkdir($directory, 0777, true) && !is_dir($directory)) return false;
 
-    // 初始化 cURL 会话
+    // 必须先写临时文件并完成图片校验，成功后再原子替换目标文件。
+    // 直接以 wb 打开目标文件会在网络失败时把原资源截断成 0 字节。
+    $temp_file = $file_name . '.download-' . bin2hex(random_bytes(6));
+    $fp = @fopen($temp_file, 'wb');
+    if ($fp === false) return false;
+
     $ch = curl_init($img_url);
-
-    // 打开本地文件以写入模式
-    $fp = fopen($file_name, 'wb');
-
-    // 设置 cURL 选项
+    if ($ch === false) {
+        fclose($fp);
+        @unlink($temp_file);
+        return false;
+    }
     curl_setopt($ch, CURLOPT_FILE, $fp);
     curl_setopt($ch, CURLOPT_HEADER, 0);
-
-    // 跳过 SSL 验证
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
 
-    // 执行 cURL 会话
-    curl_exec($ch);
+    $executed = curl_exec($ch);
+    $curl_error = curl_errno($ch);
+    $http_code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    fclose($fp);
 
-    // 检查是否有错误发生
-    if (curl_errno($ch)) {
-//        echo 'Curl error: ' . curl_error($ch);
+    $valid_http_code = $http_code === 0 || ($http_code >= 200 && $http_code < 300);
+    $valid_image = $executed !== false
+        && $curl_error === 0
+        && $valid_http_code
+        && is_file($temp_file)
+        && filesize($temp_file) > 0
+        && @getimagesize($temp_file) !== false;
+    if (!$valid_image) {
+        @unlink($temp_file);
         return false;
     }
 
-    // 关闭 cURL 会话和文件句柄
-    curl_close($ch);
-    fclose($fp);
+    if (!@rename($temp_file, $file_name)) {
+        @unlink($temp_file);
+        return false;
+    }
     return true;
 }
 

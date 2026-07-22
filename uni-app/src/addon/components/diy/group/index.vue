@@ -132,12 +132,6 @@
                 <template v-if="component.componentName == 'RecycleSendButton'">
                    <diy-recycle-send-button ref="diyRecycleSendButtonRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.RecycleSendButton" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
-                <template v-if="component.componentName == 'RecycleQuotationList'">
-                   <diy-recycle-quotation-list ref="diyRecycleQuotationListRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.RecycleQuotationList" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'RecycleSpiderQuotationList'">
-                   <diy-recycle-spider-quotation-list ref="diyRecycleSpiderQuotationListRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.RecycleSpiderQuotationList" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
                 <template v-if="component.componentName == 'GoodsCoupon'">
                    <diy-goods-coupon ref="diyGoodsCouponRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.GoodsCoupon" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
@@ -204,6 +198,12 @@
                 <template v-if="component.componentName == 'SingleRecommend'">
                    <diy-single-recommend ref="diySingleRecommendRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.SingleRecommend" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
+                <template v-if="component.componentName == 'RecycleQuotationList'">
+                   <diy-recycle-quotation-list ref="diyRecycleQuotationListRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.RecycleQuotationList" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'RecycleSpiderQuotationList'">
+                   <diy-recycle-spider-quotation-list ref="diyRecycleSpiderQuotationListRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.RecycleSpiderQuotationList" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
                 </view>
             </view>
         </template>
@@ -221,8 +221,6 @@
    import diyRecycleCategory from '@/addon/hsx_recycle/components/diy/recycle-category/index.vue';
    import diyRecycleOrderOverview from '@/addon/hsx_recycle/components/diy/recycle-order-overview/index.vue';
    import diyRecycleSendButton from '@/addon/hsx_recycle/components/diy/recycle-send-button/index.vue';
-   import diyRecycleQuotationList from '@/addon/recycle_daheng_quote/components/diy/recycle-quotation-list/index.vue';
-   import diyRecycleSpiderQuotationList from '@/addon/recycle_quote_spider/components/diy/recycle-spider-quotation-list/index.vue';
    import diyGoodsCoupon from '@/addon/phone_shop/components/diy/goods-coupon/index.vue';
    import diyGoodsList from '@/addon/phone_shop/components/diy/goods-list/index.vue';
    import diyManyGoodsList from '@/addon/phone_shop/components/diy/many-goods-list/index.vue';
@@ -245,6 +243,8 @@
    import diyShopOrderInfo from '@/addon/phone_shop/components/diy/shop-order-info/index.vue';
    import diyShopSearch from '@/addon/phone_shop/components/diy/shop-search/index.vue';
    import diySingleRecommend from '@/addon/phone_shop/components/diy/single-recommend/index.vue';
+   import diyRecycleQuotationList from '@/addon/recycle_daheng_quote/components/diy/recycle-quotation-list/index.vue';
+   import diyRecycleSpiderQuotationList from '@/addon/recycle_quote_spider/components/diy/recycle-spider-quotation-list/index.vue';
    import topTabbar from '@/components/top-tabbar/top-tabbar.vue'
    import popAds from '@/components/pop-ads/pop-ads.vue'
    import useDiyStore from '@/app/stores/diy';

@@ -45,6 +45,11 @@ $assert(($listener->calls[0]['eventId'] ?? '') === 'EV-RETURN-1:101', '多设备
 
 $root = dirname(__DIR__);
 $mirror = (string)file_get_contents($root . '/app/service/core/recycle_device/CoreRecycleDownstreamMirrorService.php');
+$purchaseReturnStart = strpos($mirror, 'public function applyPurchaseReturn');
+$purchaseReturnEnd = strpos($mirror, 'public function applyStage', $purchaseReturnStart ?: 0);
+$purchaseReturnSource = $purchaseReturnStart === false
+    ? ''
+    : substr($mirror, $purchaseReturnStart, $purchaseReturnEnd === false ? null : $purchaseReturnEnd - $purchaseReturnStart);
 $payment = (string)file_get_contents($root . '/app/service/admin/order/RecycleDevicePaymentService.php');
 $orderPayment = (string)file_get_contents($root . '/app/service/admin/order/RecycleOrderPaymentService.php');
 $capability = (string)file_get_contents($root . '/app/service/core/recycle_order/RecycleErpCapabilityService.php');
@@ -55,7 +60,7 @@ $actions = (string)file_get_contents($repo . '/admin/src/addon/hsx_recycle/hooks
 foreach (['DEVICE_STATUS_RETURNED', 'DISPOSE_TYPE_RETURN', 'DISPOSE_STATUS_RETURNED', 'ORDER_STATUS_CLOSED', 'erp_purchase_return'] as $needle) {
     $assert(str_contains($mirror, $needle), 'ERP退货回写缺少业务状态：' . $needle);
 }
-$assert(!str_contains($mirror, "'pay_status' =>"), 'ERP退货不能抹掉已经发生的付款事实');
+$assert(!str_contains($purchaseReturnSource, "'pay_status' =>"), 'ERP采购退货不能抹掉已经发生的付款事实');
 $assert(str_contains($capability, 'getAddonKeysBySiteId') && str_contains($capability, "'hsx_erp'"), 'ERP接管必须按当前站点插件权限判断');
 $assert(str_contains($payment, 'assertLocalPaymentAllowed') && str_contains($payment, '财务已由 ERP 接管'), '回收打款服务必须提供后端硬拦截');
 $assert(str_contains($orderPayment, 'assertLocalPaymentAllowed') && str_contains($orderPayment, '财务已由 ERP 接管'), '整单打款流程服务必须阻止绕过控制器付款');

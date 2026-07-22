@@ -43,8 +43,10 @@ return [
                 'router_path' => 'hsx_member_card/order', 'view_path' => 'order/index', 'methods' => 'get',
                 'sort' => '100', 'status' => '1', 'is_show' => '1',
                 'children' => [
+                    $permission('会员卡客户列表', 'hsx_member_card_member_lists', 'member_card/member/lists', 'get', 101),
                     $permission('会员选择', 'hsx_member_card_member_options', 'member_card/member/options', 'get', 100),
                     $permission('快速建客户', 'hsx_member_card_member_create', 'member_card/member/quick_create', 'post', 99),
+                    $permission('会员卡客户详情', 'hsx_member_card_member_info', 'member_card/member/<member_id>/info', 'get', 98),
                     $permission('会员持卡', 'hsx_member_card_member_cards', 'member_card/member/<member_id>/cards', 'get', 98),
                     $permission('订单详情', 'hsx_member_card_order_info', 'member_card/order/<id>', 'get', 97),
                     $permission('快速开卡', 'hsx_member_card_order_create', 'member_card/order/create', 'post', 96),

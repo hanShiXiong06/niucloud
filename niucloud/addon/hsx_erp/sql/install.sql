@@ -194,6 +194,88 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_catalog_import_task` (
   KEY `idx_site_create` (`site_id`,`create_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-商品目录异步导入任务';
 
+CREATE TABLE IF NOT EXISTS `{{prefix}}erp_channel_category_mapping` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `channel_key` varchar(40) NOT NULL DEFAULT '' COMMENT '渠道稳定编码',
+  `erp_category_key` char(64) NOT NULL DEFAULT '' COMMENT 'ERP分类路径摘要',
+  `erp_category_path` varchar(255) NOT NULL DEFAULT '' COMMENT 'ERP分类路径快照',
+  `channel_category_id` varchar(80) NOT NULL DEFAULT '' COMMENT '渠道末级分类ID',
+  `channel_category_path` text COMMENT '渠道分类ID路径JSON',
+  `channel_category_name` varchar(255) NOT NULL DEFAULT '' COMMENT '渠道分类路径快照',
+  `mapping_source` varchar(20) NOT NULL DEFAULT 'manual' COMMENT 'manual/projection',
+  `status` varchar(20) NOT NULL DEFAULT 'active' COMMENT 'active/disabled',
+  `operator_uid` int NOT NULL DEFAULT 0,
+  `operator_name` varchar(60) NOT NULL DEFAULT '',
+  `create_at` int NOT NULL DEFAULT 0,
+  `update_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_channel_erp_category` (`site_id`,`channel_key`,`erp_category_key`),
+  KEY `idx_channel_category` (`site_id`,`channel_key`,`channel_category_id`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-渠道分类映射';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}erp_channel_attribute_mapping` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0,
+  `channel_key` varchar(40) NOT NULL DEFAULT '',
+  `erp_attribute_id` int NOT NULL DEFAULT 0 COMMENT 'ERP规格分组ID，0为内置字段',
+  `erp_attribute_key` varchar(100) NOT NULL DEFAULT '' COMMENT 'ERP规格稳定编码',
+  `erp_attribute_name` varchar(100) NOT NULL DEFAULT '' COMMENT 'ERP规格名称快照',
+  `channel_attribute_id` varchar(80) NOT NULL DEFAULT '' COMMENT '渠道参数ID/稳定编码',
+  `channel_attribute_name` varchar(100) NOT NULL DEFAULT '' COMMENT '渠道参数名称快照',
+  `mapping_source` varchar(20) NOT NULL DEFAULT 'manual',
+  `status` varchar(20) NOT NULL DEFAULT 'active',
+  `operator_uid` int NOT NULL DEFAULT 0,
+  `operator_name` varchar(60) NOT NULL DEFAULT '',
+  `create_at` int NOT NULL DEFAULT 0,
+  `update_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_channel_erp_attribute` (`site_id`,`channel_key`,`erp_attribute_key`),
+  KEY `idx_channel_attribute` (`site_id`,`channel_key`,`channel_attribute_id`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-渠道规格字段映射';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}erp_channel_attribute_value_mapping` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0,
+  `channel_key` varchar(40) NOT NULL DEFAULT '',
+  `erp_attribute_key` varchar(100) NOT NULL DEFAULT '',
+  `erp_value_key` varchar(100) NOT NULL DEFAULT '' COMMENT 'ERP规格值摘要/稳定编码',
+  `erp_value_name` varchar(150) NOT NULL DEFAULT '' COMMENT 'ERP规格值快照',
+  `channel_attribute_id` varchar(80) NOT NULL DEFAULT '',
+  `channel_value_id` varchar(100) NOT NULL DEFAULT '' COMMENT '渠道规格值ID/稳定编码',
+  `channel_value_name` varchar(150) NOT NULL DEFAULT '' COMMENT '渠道规格值快照',
+  `mapping_source` varchar(20) NOT NULL DEFAULT 'manual',
+  `status` varchar(20) NOT NULL DEFAULT 'active',
+  `operator_uid` int NOT NULL DEFAULT 0,
+  `operator_name` varchar(60) NOT NULL DEFAULT '',
+  `create_at` int NOT NULL DEFAULT 0,
+  `update_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_channel_erp_value` (`site_id`,`channel_key`,`erp_attribute_key`,`erp_value_key`),
+  KEY `idx_channel_value` (`site_id`,`channel_key`,`channel_attribute_id`,`channel_value_id`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-渠道规格值映射';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}erp_channel_listing` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0,
+  `channel_key` varchar(40) NOT NULL DEFAULT '',
+  `erp_asset_id` int NOT NULL DEFAULT 0 COMMENT 'ERP设备ID',
+  `channel_item_id` varchar(80) NOT NULL DEFAULT '' COMMENT '渠道商品ID',
+  `channel_intake_id` varchar(80) NOT NULL DEFAULT '' COMMENT '渠道待办/货源ID',
+  `status` varchar(20) NOT NULL DEFAULT 'pending' COMMENT 'pending/published/offline/sold/error',
+  `publish_mode` varchar(20) NOT NULL DEFAULT 'direct' COMMENT 'direct/manual',
+  `mapping_snapshot` longtext COMMENT '上架时映射快照JSON',
+  `payload_hash` char(64) NOT NULL DEFAULT '' COMMENT '上架载荷摘要',
+  `last_error` varchar(1000) NOT NULL DEFAULT '',
+  `published_at` int NOT NULL DEFAULT 0,
+  `create_at` int NOT NULL DEFAULT 0,
+  `update_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_channel_asset` (`site_id`,`channel_key`,`erp_asset_id`),
+  KEY `idx_channel_item` (`site_id`,`channel_key`,`channel_item_id`),
+  KEY `idx_site_status` (`site_id`,`channel_key`,`status`,`update_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-渠道商品关联';
+
 CREATE TABLE IF NOT EXISTS `{{prefix}}erp_goods_spec_group` (
   `group_id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '规格分组ID',
   `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
@@ -509,9 +591,15 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_sale_item` (
   `asset_id` int NOT NULL DEFAULT 0,
   `imei` varchar(64) NOT NULL DEFAULT '',
   `model` varchar(255) NOT NULL DEFAULT '',
+  `ownership_type` varchar(20) NOT NULL DEFAULT 'owned' COMMENT 'owned自有/consigned代卖',
+  `owner_party_id` int NOT NULL DEFAULT 0 COMMENT '代卖货主主体ID',
+  `owner_party_name` varchar(100) NOT NULL DEFAULT '' COMMENT '代卖货主名称快照',
   `cost` decimal(12,2) NOT NULL DEFAULT 0.00,
   `sale_price` decimal(12,2) NOT NULL DEFAULT 0.00,
   `profit` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `consignment_settlement_amount` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '本台应付货主金额',
+  `consignment_service_fee` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '本台代卖服务收益',
+  `consignment_payable_id` int NOT NULL DEFAULT 0 COMMENT '设备级代卖结算应付ID',
   `status` varchar(20) NOT NULL DEFAULT 'sold',
   `remark` varchar(255) NOT NULL DEFAULT '',
   `create_at` int NOT NULL DEFAULT 0,
@@ -519,6 +607,8 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_sale_item` (
   PRIMARY KEY (`id`),
   KEY `idx_order` (`sale_order_id`),
   KEY `idx_asset` (`asset_id`),
+  KEY `idx_owner` (`site_id`,`owner_party_id`,`status`),
+  KEY `idx_consignment_payable` (`site_id`,`consignment_payable_id`),
   KEY `idx_imei` (`site_id`,`imei`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-销售明细';
 
@@ -996,3 +1086,47 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_sale_return_item` (
   KEY `idx_asset` (`asset_id`),
   KEY `idx_sale_item` (`sale_item_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-销售退货明细';
+CREATE TABLE IF NOT EXISTS `{{prefix}}erp_printer` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+  `printer_name` varchar(100) NOT NULL DEFAULT '', `driver` varchar(40) NOT NULL DEFAULT '',
+  `connection_mode` varchar(20) NOT NULL DEFAULT 'cloud', `print_type` varchar(20) NOT NULL DEFAULT 'receipt',
+  `paper_width` int NOT NULL DEFAULT 58, `config_json` longtext NULL, `capabilities_json` longtext NULL,
+  `copies` tinyint NOT NULL DEFAULT 1, `is_default` tinyint(1) NOT NULL DEFAULT 0, `status` tinyint(1) NOT NULL DEFAULT 1,
+  `sort` int NOT NULL DEFAULT 0, `remark` varchar(255) NOT NULL DEFAULT '', `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`), KEY `idx_site_type` (`site_id`,`print_type`,`status`), KEY `idx_site_default` (`site_id`,`is_default`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-打印设备';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}erp_print_template` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+  `builtin_key` varchar(60) DEFAULT NULL, `template_name` varchar(100) NOT NULL DEFAULT '',
+  `print_type` varchar(20) NOT NULL DEFAULT 'receipt', `layout_mode` varchar(20) NOT NULL DEFAULT 'native',
+  `paper_width` int NOT NULL DEFAULT 58, `content` longtext NULL, `is_builtin` tinyint(1) NOT NULL DEFAULT 0,
+  `is_default` tinyint(1) NOT NULL DEFAULT 0, `status` tinyint(1) NOT NULL DEFAULT 1, `sort` int NOT NULL DEFAULT 0,
+  `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`), UNIQUE KEY `uk_site_builtin` (`site_id`,`builtin_key`), KEY `idx_site_type` (`site_id`,`print_type`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-打印模板';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}erp_print_scene` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+  `scene_key` varchar(60) NOT NULL DEFAULT '', `scene_name` varchar(100) NOT NULL DEFAULT '', `trigger_key` varchar(80) NOT NULL DEFAULT '',
+  `biz_type` varchar(40) NOT NULL DEFAULT '', `template_type` varchar(20) NOT NULL DEFAULT 'receipt', `description` varchar(500) NOT NULL DEFAULT '',
+  `printer_id` int NOT NULL DEFAULT 0, `template_id` int NOT NULL DEFAULT 0, `auto_print` tinyint(1) NOT NULL DEFAULT 0,
+  `enabled` tinyint(1) NOT NULL DEFAULT 0, `copies` tinyint NOT NULL DEFAULT 1, `granularity` varchar(20) NOT NULL DEFAULT 'order',
+  `condition_json` longtext NULL, `sort` int NOT NULL DEFAULT 0, `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`), UNIQUE KEY `uk_site_scene` (`site_id`,`scene_key`), KEY `idx_site_trigger` (`site_id`,`trigger_key`,`enabled`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-打印场景';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}erp_print_job` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+  `job_no` varchar(40) NOT NULL DEFAULT '', `request_id` varchar(80) DEFAULT NULL,
+  `scene_key` varchar(60) NOT NULL DEFAULT '', `scene_name` varchar(100) NOT NULL DEFAULT '',
+  `biz_type` varchar(40) NOT NULL DEFAULT '', `biz_id` int NOT NULL DEFAULT 0, `biz_no` varchar(80) NOT NULL DEFAULT '',
+  `printer_id` int NOT NULL DEFAULT 0, `printer_name` varchar(100) NOT NULL DEFAULT '', `driver` varchar(40) NOT NULL DEFAULT '',
+  `template_id` int NOT NULL DEFAULT 0, `template_name` varchar(100) NOT NULL DEFAULT '', `print_type` varchar(20) NOT NULL DEFAULT 'receipt',
+  `copies` tinyint NOT NULL DEFAULT 1, `rendered_content` longtext NULL, `client_payload` longtext NULL,
+  `status` varchar(20) NOT NULL DEFAULT 'queued', `attempts` int NOT NULL DEFAULT 0, `provider_job_no` varchar(100) NOT NULL DEFAULT '',
+  `error_message` varchar(1000) NOT NULL DEFAULT '', `operator_uid` int NOT NULL DEFAULT 0, `operator_name` varchar(60) NOT NULL DEFAULT '',
+  `start_at` int NOT NULL DEFAULT 0, `finish_at` int NOT NULL DEFAULT 0, `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`), UNIQUE KEY `uk_site_job` (`site_id`,`job_no`), UNIQUE KEY `uk_site_request` (`site_id`,`request_id`),
+  KEY `idx_site_status` (`site_id`,`status`,`create_at`), KEY `idx_site_biz` (`site_id`,`biz_type`,`biz_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-打印任务与日志';

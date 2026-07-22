@@ -296,21 +296,45 @@ const detailLoading = ref(false)
 
 const refurbishmentPresets = ref<Array<{ key: string; name: string; type: string }>>([])
 const saleDestinationOptions = ref<Array<{ value: string; label: string; description?: string }>>([])
-const erpWarehouses = ref<Array<{ id: number; warehouse_name: string; business_type?: string; is_default?: number; locations?: Array<{ id: number; location_name: string }> }>>([])
+interface ErpWarehouse {
+    id: number
+    warehouse_name: string
+    sale_target: string
+    is_default?: number
+    locations: Array<{ id: number; location_name: string }>
+}
+const erpWarehouses = ref<ErpWarehouse[]>([])
 const erpConnected = ref(false)
 // 级联选择：仓库 → 库位，一个控件搞定（可只选到仓库，也可选到库位）
 const warehousePath = ref<number[]>([])
 
-// 仓库业务类型 → 销售流向（与后端 RecycleOrderDict::saleDestinationFromWarehouseType 保持一致）
-const WH_TYPE_DEST: Record<string, string> = { mall: 'mall', peer: 'peer', scrap: 'scrap', hold: 'hold' }
-const WH_TYPE_LABEL: Record<string, string> = { mall: '商城', peer: '同行', scrap: '报废', hold: '暂存' }
+// ERP 仓库默认销售去向 → 回收定价销售流向。
+const SALE_TARGET_DEST: Record<string, string> = { mall: 'mall', peer: 'peer', scrap: 'scrap', hold: 'hold' }
+const SALE_TARGET_LABEL: Record<string, string> = { mall: '商城', peer: '同行', scrap: '报废', hold: '暂存' }
+const normalizeWarehouse = (row: any): ErpWarehouse => {
+    const warehouseType = String(row?.warehouse_type || '')
+    const configuredTarget = String(row?.default_sale_target || row?.business_type || '')
+    const saleTarget = ['mall', 'peer', 'scrap', 'hold'].includes(configuredTarget)
+        ? configuredTarget
+        : (warehouseType === 'peer' ? 'peer' : (warehouseType === 'exception' ? 'hold' : 'mall'))
+    return {
+        id: Number(row?.id || 0),
+        warehouse_name: String(row?.warehouse_name || row?.name || '').trim() || '未命名仓库',
+        sale_target: saleTarget,
+        is_default: Number(row?.is_default || 0),
+        locations: (Array.isArray(row?.locations) ? row.locations : []).map((location: any) => ({
+            id: Number(location?.id || 0),
+            location_name: String(location?.location_name || location?.name || '').trim() || '未命名库位'
+        }))
+    }
+}
 // 仓库模式：ERP 已连接且有可用仓库时，以仓库为主选项（选仓即定流向）
 const warehouseMode = computed(() => erpConnected.value && erpWarehouses.value.length > 0)
 // 级联选项：一级仓库(带业务类型)，二级库位
 const warehouseCascaderOptions = computed(() => erpWarehouses.value.map(w => {
     const node: any = {
         value: w.id,
-        label: `${w.warehouse_name} · ${WH_TYPE_LABEL[w.business_type || 'mall'] || '商城'}`,
+        label: `${w.warehouse_name} · ${SALE_TARGET_LABEL[w.sale_target] || '暂存'}`,
         disabled: !(w.locations || []).length
     }
     const locs = w.locations || []
@@ -492,7 +516,7 @@ const applyPath = (path: number[]) => {
     const w = erpWarehouses.value.find(item => item.id === wid)
     deviceForm.target_warehouse_id = wid
     deviceForm.target_warehouse_name = w?.warehouse_name || ''
-    if (w) deviceForm.sale_destination = WH_TYPE_DEST[w.business_type || 'mall'] || 'hold'
+    if (w) deviceForm.sale_destination = SALE_TARGET_DEST[w.sale_target] || 'hold'
     const loc = (w?.locations || []).find(item => item.id === lid)
     deviceForm.target_location_id = loc ? lid : 0
     deviceForm.target_location_name = loc?.location_name || ''
@@ -524,7 +548,7 @@ const loadSaleDestinationOptions = async () => {
     try {
         const res: any = await getSaleDestinationOptions()
         saleDestinationOptions.value = res.data?.items || []
-        erpWarehouses.value = res.data?.warehouses || []
+        erpWarehouses.value = (Array.isArray(res.data?.warehouses) ? res.data.warehouses : []).map(normalizeWarehouse)
         erpConnected.value = !!res.data?.erp_connected
         if (!saleDestinationOptions.value.some(item => item.value === deviceForm.sale_destination)) {
             deviceForm.sale_destination = saleDestinationOptions.value[0]?.value || ''
