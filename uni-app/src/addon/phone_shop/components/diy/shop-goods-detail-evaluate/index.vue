@@ -2,18 +2,32 @@
     <view :style="warpCss" class="overflow-hidden" v-if="diyComponent && diyComponent.goods && Object.keys(diyComponent.goods).length">
         <view v-if="diyComponent.evaluate_is_show" class="card-template">
             <view class="flex items-center justify-between min-h-[40rpx]" :class="{'mb-[30rpx]': evaluate && evaluate.list && evaluate.list.length}">
-                <text class="title !mb-[0]">宝贝评价({{ evaluate.count }})</text>
+                <text class="title !mb-[0]">{{ evaluate.subject?.type === 'category' ? '同型号真实评价' : '宝贝评价' }}({{ evaluate.count }})</text>
                 <view v-if="evaluate.count" class="h-[40rpx] flex items-center" @click="toLink(diyComponent.goods_id)">
                     <text class="text-[24rpx] text-[var(--text-color-light9)]">查看全部</text>
                     <text class="nc-iconfont nc-icon-youV6xx text-[26rpx] text-[var(--text-color-light9)]"></text>
                 </view>
                 <text v-if="!evaluate.count" class="text-[24rpx] text-[var(--text-color-light6)]">暂无评价</text>
             </view>
+            <view v-if="evaluate.subject?.type === 'category' && evaluate.subject?.category_path"
+                  class="flex items-center mb-[24rpx] px-[18rpx] py-[14rpx] rounded-[var(--rounded-small)] bg-[var(--temp-bg)]">
+                <u-icon name="checkmark-circle-fill" color="var(--primary-color)" size="16"></u-icon>
+                <text class="ml-[8rpx] text-[24rpx] text-[var(--text-color-light6)] truncate">
+                    以下评价来自 {{ evaluate.subject.category_path }} 的真实成交
+                </text>
+            </view>
             <view>
                 <view :class="{'pb-[34rpx]': index != (evaluate.list.length-1)}" v-for="(item, index) in evaluate.list" :key="index">
                     <view class="flex items-center w-full">
                         <u-avatar :default-url="img('static/resource/images/default_headimg.png')" :src="img(item.member_head)" :size="'50rpx'" leftIcon="none" />
                         <text class="ml-[10rpx] text-[28rpx] text-[#333]">{{ item.member_name }}</text>
+                        <view v-if="item.is_verified_purchase" class="ml-[12rpx] px-[10rpx] h-[34rpx] flex-center rounded-[6rpx] bg-[var(--primary-color-light)]">
+                            <text class="text-[20rpx] text-[var(--primary-color)]">真实购买</text>
+                        </view>
+                    </view>
+                    <view v-if="item.category_name || item.goods_name"
+                          class="mt-[12rpx] text-[22rpx] leading-[32rpx] text-[var(--text-color-light9)] truncate">
+                        {{ item.category_name || item.goods_name }}{{ item.sku_name ? ` · ${item.sku_name}` : '' }}
                     </view>
                     <view class="flex justify-between w-full mt-[16rpx]">
                         <view class="flex-1 w-[540rpx] text-[26rpx] text-[#333] max-h-[72rpx] leading-[36rpx] multi-hidden mr-[50rpx]">{{ item.content }}</view>
@@ -77,7 +91,9 @@ const warpCss = computed(() => {
 
 // 获取评价
 const evaluate = ref({
-    count: 0
+    count: 0,
+    list: [],
+    subject: {}
 })
 
 const getEvaluateListFn = () => {

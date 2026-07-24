@@ -4,7 +4,7 @@
             <div class="flex items-start justify-between gap-4">
                 <div>
                     <div class="text-page-title">销售出库</div>
-                    <div class="mt-1 text-sm text-gray-500">以每台设备为核心查看销售出库、成交金额、毛利、客户和收款状态；销售单作为批次凭证保留。</div>
+                    <div class="mt-1 text-sm text-gray-500">统一查看设备与商城商品的成交金额、成本、毛利、客户和收款状态；销售单作为批次凭证保留。</div>
                 </div>
                 <div class="flex gap-2">
                     <el-button :icon="Refresh" :loading="table.loading" @click="loadList">刷新</el-button>
@@ -16,11 +16,11 @@
 
             <div class="mt-5 flex flex-wrap items-center justify-between gap-2">
                 <div class="text-sm font-medium text-gray-700">本页有效销售汇总</div>
-                <div class="text-xs text-gray-400">已取消、已退货设备不计入；毛利为成交额减设备成本</div>
+                <div class="text-xs text-gray-400">已取消、已全部退款的明细不计入；毛利为实际销售收入减有效成本</div>
             </div>
             <div class="mt-2 grid grid-cols-1 gap-3 md:grid-cols-4">
                 <div class="summary-tile">
-                    <div class="summary-label">有效销售台数</div>
+                    <div class="summary-label">有效销售件数</div>
                     <div class="summary-value">{{ summary.count }}</div>
                 </div>
                 <div class="summary-tile">
@@ -28,7 +28,7 @@
                     <div class="summary-value">{{ money(summary.amount) }}</div>
                 </div>
                 <div class="summary-tile">
-                    <div class="summary-label">有效设备成本</div>
+                    <div class="summary-label">有效商品成本</div>
                     <div class="summary-value">{{ money(summary.cost) }}</div>
                 </div>
                 <div class="summary-tile">
@@ -87,9 +87,13 @@
             </el-form>
 
             <el-table :data="table.data" v-loading="table.loading" size="large" :row-class-name="saleRowClassName">
-                <el-table-column label="设备" min-width="240">
+                <el-table-column label="销售商品" min-width="240">
                     <template #default="{ row }">
                         <ErpDeviceIdentity :model="row.model" :spec="row.spec" :imei="row.imei" :sn="row.sn" :asset-no="row.asset_no" />
+                        <div v-if="isExternalGoods(row)" class="mt-2 flex items-center gap-2">
+                            <el-tag type="success" effect="plain" size="small">商城商品</el-tag>
+                            <span class="text-xs text-gray-500">{{ itemQuantity(row) }} 件 · 商城退款自动同步</span>
+                        </div>
                     </template>
                 </el-table-column>
                 <el-table-column label="客户 / 渠道" min-width="170">
@@ -102,6 +106,7 @@
                     <template #default="{ row }">
                         <div>{{ money(row.net_sale_amount) }}</div>
                         <div v-if="Number(row.sale_compensation_amount || 0)" class="mt-1 text-xs text-orange-500">原成交 {{ money(row.sale_price) }} · 补差 -{{ money(row.sale_compensation_amount) }}</div>
+                        <div v-if="Number(row.external_refunded_amount || 0)" class="mt-1 text-xs text-orange-500">商城累计退款 -{{ money(row.external_refunded_amount) }}</div>
                         <div class="mt-1 text-xs text-gray-500">{{ isConsigned(row) ? '代卖结算' : '成本' }} {{ money(row.cost) }} · 毛利 {{ money(row.profit) }}</div>
                         <div v-if="isConsigned(row)" class="mt-1 text-xs text-orange-500">货主 {{ row.owner_party_name || '-' }} · 服务收益 {{ money(row.consignment_service_fee) }}</div>
                     </template>
@@ -115,7 +120,7 @@
                             <span class="batch-dot" :class="`batch-dot--${batchTone(row)}`"></span>
                             <span class="font-medium">{{ row.sale_no || '-' }}</span>
                         </div>
-                        <div v-if="isBatchFirst($index)" class="mt-1 text-xs font-medium text-blue-600">本页同批 {{ batchPageSize(row) }} 台</div>
+                        <div v-if="isBatchFirst($index)" class="mt-1 text-xs font-medium text-blue-600">本页同批 {{ batchPageSize(row) }} 件</div>
                         <div class="mt-1 text-xs text-slate-500">来源：{{ row.origin_name || 'ERP销售' }}<span v-if="row.origin_plugin_name">· {{ row.origin_plugin_name }}</span></div>
                         <div class="mt-1 text-xs text-gray-500">渠道：{{ row.sale_channel || '-' }}</div>
                         <div class="mt-1 text-xs text-gray-500">{{ formatTime(row.sale_at || row.create_at) }}</div>
@@ -287,13 +292,14 @@
                     <el-descriptions-item label="剩余应收">{{ money(detail.data.receivable_amount) }}</el-descriptions-item>
                     <el-descriptions-item label="备注" :span="4">{{ detail.data.remark || '-' }}</el-descriptions-item>
                 </el-descriptions>
-                <div class="mt-5 font-medium">机器明细</div>
+                <div class="mt-5 font-medium">商品明细</div>
                 <el-table class="mt-3" :data="detail.data?.items || []" size="large">
                     <el-table-column prop="model" label="型号" min-width="180" />
-                    <el-table-column prop="imei" label="IMEI" min-width="170" />
+                    <el-table-column label="商品类型" width="130"><template #default="{ row }"><el-tag v-if="isExternalGoods(row)" type="success" effect="plain">商城商品</el-tag><span v-else>设备</span></template></el-table-column>
+                    <el-table-column label="IMEI / 数量" min-width="170"><template #default="{ row }"><span v-if="!isExternalGoods(row)">{{ row.imei || '-' }}</span><span v-else>{{ itemQuantity(row) }} 件</span></template></el-table-column>
                     <el-table-column label="归属" min-width="150"><template #default="{ row }"><el-tag v-if="isConsigned(row)" type="warning" effect="plain">客户代卖</el-tag><span v-else>自有</span><div v-if="isConsigned(row)" class="mt-1 text-xs text-gray-500">{{ row.owner_party_name || '-' }}</div></template></el-table-column>
                     <el-table-column label="成本 / 结算" width="140" align="right"><template #default="{ row }">{{ money(row.cost) }}<div v-if="isConsigned(row)" class="text-xs text-orange-500">应付货主</div></template></el-table-column>
-                    <el-table-column label="销售收入" width="180" align="right"><template #default="{ row }"><div>{{ money(row.net_sale_amount) }}</div><div v-if="Number(row.sale_compensation_amount || 0)" class="text-xs text-orange-500">原价 {{ money(row.sale_price) }} · 补差 -{{ money(row.sale_compensation_amount) }}</div></template></el-table-column>
+                    <el-table-column label="销售收入" width="190" align="right"><template #default="{ row }"><div>{{ money(row.net_sale_amount) }}</div><div v-if="Number(row.sale_compensation_amount || 0)" class="text-xs text-orange-500">原价 {{ money(row.sale_price) }} · 补差 -{{ money(row.sale_compensation_amount) }}</div><div v-if="Number(row.external_refunded_amount || 0)" class="text-xs text-orange-500">退款 -{{ money(row.external_refunded_amount) }}</div></template></el-table-column>
                     <el-table-column label="毛利" width="130" align="right"><template #default="{ row }">{{ money(row.profit) }}</template></el-table-column>
                     <el-table-column label="状态" width="100">
                         <template #default="{ row }">
@@ -368,7 +374,7 @@ const detail = reactive({ visible: false, loading: false, data: null as any })
 
 const summary = computed(() => table.data.reduce((acc, row: any) => {
     if (row.order_status === 'void' || row.status !== 'sold') return acc
-    acc.count += 1
+    acc.count += itemQuantity(row)
     acc.amount += Number(row.net_sale_amount || 0)
     acc.cost += Number(row.cost || 0)
     acc.profit += Number(row.profit || 0)
@@ -632,7 +638,9 @@ function onStockWarehouseChange() {
 
 /** 已形成收款事实的在售设备走销售退货；未收款设备直接取消销售。 */
 function canReturnSale(row: any) {
-    return row.status === 'sold'
+    return !isExternalGoods(row)
+        && Number(row.asset_id || 0) > 0
+        && row.status === 'sold'
         && row.order_status !== 'void'
         && row.return_status !== 'pending'
         && ['partial', 'settled'].includes(String(row.finance_status || ''))
@@ -646,14 +654,21 @@ function goSaleReturn(row: any) {
 }
 
 function canCancelSaleItemFromList(row: any) {
-    return row.status === 'sold'
+    return !isExternalGoods(row)
+        && Number(row.asset_id || 0) > 0
+        && row.status === 'sold'
         && row.order_status === 'completed'
         && row.finance_status === 'pending'
         && row.return_status !== 'pending'
 }
 
 function canCancelSaleItem(row: any) {
-    return detail.data?.status === 'completed' && detail.data?.finance_status === 'pending' && row.status === 'sold' && row.return_status !== 'pending'
+    return !isExternalGoods(row)
+        && Number(row.asset_id || 0) > 0
+        && detail.data?.status === 'completed'
+        && detail.data?.finance_status === 'pending'
+        && row.status === 'sold'
+        && row.return_status !== 'pending'
 }
 
 async function cancelSaleItem(row: any) {
@@ -762,7 +777,18 @@ function isBatchFirst(index: number) {
 
 function batchPageSize(row: any) {
     const key = batchKey(row)
-    return table.data.filter((item: any) => batchKey(item) === key).length
+    return table.data
+        .filter((item: any) => batchKey(item) === key)
+        .reduce((total: number, item: any) => total + itemQuantity(item), 0)
+}
+
+function isExternalGoods(row: any) {
+    return Number(row?.external_goods_id || 0) > 0
+        || (Number(row?.asset_id || 0) <= 0 && String(row?.inventory_source || '') !== 'erp_asset')
+}
+
+function itemQuantity(row: any) {
+    return Math.max(1, Number(row?.quantity || 1))
 }
 
 function saleRowClassName({ row, rowIndex }: { row: any; rowIndex: number }) {

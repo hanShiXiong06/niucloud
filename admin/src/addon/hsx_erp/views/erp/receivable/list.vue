@@ -23,6 +23,7 @@
                 <el-tab-pane label="待结算" name="pending" />
                 <el-tab-pane label="部分结算" name="partial" />
                 <el-tab-pane label="已结清" name="settled" />
+                <el-tab-pane label="已作废" name="void" />
             </el-tabs>
 
             <el-form :inline="true" class="mt-1" @submit.prevent>
@@ -81,9 +82,12 @@
                 <el-form-item>
                     <el-checkbox v-model="search.can_offset" true-label="1" false-label="">只看可折账</el-checkbox>
                 </el-form-item>
+                <el-form-item>
+                    <el-checkbox v-model="search.only_effective" true-label="1" false-label="">只看真实成交</el-checkbox>
+                </el-form-item>
             </el-form>
 
-            <el-table :data="table.data" v-loading="table.loading" size="large" table-layout="fixed">
+            <el-table :data="table.data" v-loading="table.loading" size="large" table-layout="fixed" :row-class-name="receivableRowClass">
                 <el-table-column label="往来主体" min-width="190">
                     <template #default="{ row }">
                         <div class="font-medium text-gray-900"><ErpOverflowText :text="row.party_name" max-width="165px" /></div>
@@ -96,6 +100,7 @@
                 <el-table-column label="款项来源" min-width="310">
                     <template #default="{ row }">
                         <ErpFinanceSourceMeta :row="row" compact default-direction="income" />
+                        <div v-if="isVoid(row)" class="mt-2 text-xs font-medium text-gray-500">{{ row.void_reason || '来源交易已撤回，不计入真实成交' }}</div>
                         <div class="mt-1 text-xs text-gray-400">{{ row.item_count || 0 }} 台 · 业务时间 {{ formatTime(row.sale_at || row.occurred_at) }}</div>
                     </template>
                 </el-table-column>
@@ -131,7 +136,10 @@
                     </template>
                 </el-table-column>
                 <el-table-column label="状态" width="120">
-                    <template #default="{ row }"><el-tag :type="statusMeta(row.status).type">{{ statusMeta(row.status).label }}</el-tag></template>
+                    <template #default="{ row }">
+                        <div v-if="isVoid(row)" class="void-stamp">已作废</div>
+                        <el-tag v-else :type="statusMeta(row.status).type">{{ statusMeta(row.status).label }}</el-tag>
+                    </template>
                 </el-table-column>
                 <el-table-column label="操作" fixed="right" width="220" align="center">
                     <template #default="{ row }">
@@ -373,7 +381,7 @@ const receivableRoleFocus = [
 
 const route = useRoute()
 const routeStatus = String(route.query.status || '')
-const activeStatus = ref(['', 'pending', 'partial', 'settled'].includes(routeStatus) ? routeStatus : '')
+const activeStatus = ref(['', 'pending', 'partial', 'settled', 'void'].includes(routeStatus) ? routeStatus : '')
 const search = reactive({
     imei: '',
     party_id: null as number | null,
@@ -384,7 +392,8 @@ const search = reactive({
     business_source_key: '',
     channel_code: '',
     operator_uid: null as number | null,
-    can_offset: ''
+    can_offset: '',
+    only_effective: ''
 })
 const searchPartyName = ref('')
 const staffOptions = ref<any[]>([])
@@ -397,7 +406,7 @@ const registeredChannels = ref<any[]>([])
 const detail = reactive({ visible: false, loading: false, row: null as any, items: [] as any[], settlements: [] as any[] })
 const offset = reactive({ visible: false, saving: false, loading: false, row: null as any, payables: [] as any[], receivables: [] as any[], form: { amount: 0, settle_diff: false, capital_account_id: 0, remark: '', voucher_urls: '' } })
 const receipt = reactive({ visible: false, saving: false, loading: false, row: null as any, items: [] as any[], form: { amount: 0, capital_account_id: 0, remark: '', voucher_urls: '' } })
-const summary = computed(() => table.data.reduce((acc, row: any) => {
+const summary = computed(() => table.data.filter((row: any) => !isVoid(row)).reduce((acc, row: any) => {
     acc.count += 1
     acc.amount += Number(row.amount || 0)
     acc.settled += Number(row.settled_amount || 0)
@@ -713,6 +722,7 @@ function handleReset() {
     search.channel_code = ''
     search.operator_uid = null
     search.can_offset = ''
+    search.only_effective = ''
     activeStatus.value = ''
     handleSearch()
 }
@@ -730,8 +740,10 @@ function syncReceiptAmount(row: any) {
 function syncReceiptFormAmount() {
     receipt.form.amount = Number(receiptTotal.value.toFixed(2))
 }
-function canConfirmReceipt(row: any) { return remain(row) > 0 && row.status !== 'settled' }
-function canOffset(row: any) { return Boolean(row.can_offset) && remain(row) > 0 }
+function isVoid(row: any) { return Boolean(row?.is_void) || row?.status === 'void' }
+function canConfirmReceipt(row: any) { return !isVoid(row) && remain(row) > 0 && row.status !== 'settled' }
+function canOffset(row: any) { return !isVoid(row) && Boolean(row.can_offset) && remain(row) > 0 }
+function receivableRowClass({ row }: any) { return isVoid(row) ? 'receivable-row--void' : '' }
 function contactText(row: any) { return [row.contact_name, row.contact_mobile || row.m_no].filter(Boolean).join(' / ') || '-' }
 function partyRoleLabel(row: any, fallback: string) { return row?.source_meta?.party_role_label || fallback }
 function sourceOptions(valueKey: string, labelKey: string, defaults: Array<{ value: string, label: string }>) {
@@ -793,7 +805,7 @@ function returnReceiptItemReason(row: any) {
     return `未付款部分已冲销应付 ${money(offset)}，本设备无需实际收款`
 }
 function statusMeta(status: string) {
-    const map: any = { pending: { label: '待结算', type: 'warning' }, partial: { label: '部分结算', type: 'primary' }, settled: { label: '已结清', type: 'success' } }
+    const map: any = { pending: { label: '待结算', type: 'warning' }, partial: { label: '部分结算', type: 'primary' }, settled: { label: '已结清', type: 'success' }, void: { label: '已作废', type: 'info' } }
     return map[status] || { label: status || '-', type: 'info' }
 }
 function money(value: any) { return `¥${Number(value || 0).toFixed(2)}` }
@@ -810,4 +822,7 @@ function staffName(user: any) { return user?.name || user?.real_name || user?.us
 .receipt-business-reason { display:flex; gap:10px; margin-top:10px; padding:9px 11px; border:1px solid #fed7aa; border-radius:7px; background:#fff7ed; line-height:1.55; }
 .receipt-business-reason span { flex:none; color:#9a3412; font-size:12px; font-weight:650; }
 .receipt-business-reason b { color:#7c2d12; font-size:12px; font-weight:500; }
+.void-stamp { display:inline-block; border:2px solid #94a3b8; border-radius:4px; padding:5px 8px; color:#64748b; font-size:15px; font-weight:800; letter-spacing:2px; transform:rotate(-5deg); }
+:deep(.receivable-row--void td.el-table__cell) { background:#f8fafc !important; color:#94a3b8; }
+:deep(.receivable-row--void .el-tag) { filter:grayscale(1); opacity:.72; }
 </style>

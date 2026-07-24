@@ -42,6 +42,12 @@ return [
         'ErpSaleCreatedRequested' => [
             'addon\hsx_erp\app\listener\ErpSaleCreatedRequested',
         ],
+        'ErpExternalSaleRecordedRequested' => [
+            'addon\hsx_erp\app\listener\ErpExternalSaleRecordedRequested',
+        ],
+        'ErpExternalSaleRefundedRequested' => [
+            'addon\hsx_erp\app\listener\ErpExternalSaleRefundedRequested',
+        ],
         'HsxErpListingMaterialPolicy' => [
             'addon\hsx_erp\app\listener\marketplace\ListingMaterialPolicy',
         ],

@@ -38,10 +38,11 @@ final class ErpPrintDict
     public static function scenes(): array
     {
         return [
-            'sale_created' => ['name' => '销售开单', 'trigger' => 'sale.created', 'biz_type' => 'sale', 'template_type' => 'receipt', 'granularity' => 'order', 'description' => '销售订单创建后打印销售小票。'],
-            'sale_cancelled' => ['name' => '销售撤销', 'trigger' => 'sale.cancelled', 'biz_type' => 'sale', 'template_type' => 'receipt', 'granularity' => 'order', 'description' => '销售订单撤销后打印红冲/退回凭证。'],
-            'receipt_confirmed' => ['name' => '确认收款', 'trigger' => 'finance.receipt.confirmed', 'biz_type' => 'receivable', 'template_type' => 'receipt', 'granularity' => 'settlement', 'description' => '财务确认实际到账后打印收款凭证。'],
-            'payment_confirmed' => ['name' => '确认付款', 'trigger' => 'finance.payment.confirmed', 'biz_type' => 'payable', 'template_type' => 'receipt', 'granularity' => 'settlement', 'description' => '财务确认实际出账后打印付款凭证。'],
+            'sale_created' => ['name' => '销售开单', 'document_title' => '销售单', 'trigger' => 'sale.created', 'biz_type' => 'sale', 'template_type' => 'receipt', 'granularity' => 'order', 'description' => '销售订单创建后打印销售小票。'],
+            'sale_cancelled' => ['name' => '销售撤销', 'document_title' => '销售撤销单', 'trigger' => 'sale.cancelled', 'biz_type' => 'sale', 'template_type' => 'receipt', 'granularity' => 'order', 'description' => '销售订单撤销后打印红冲/退回凭证。'],
+            'receipt_confirmed' => ['name' => '确认收款', 'document_title' => '收款单', 'trigger' => 'finance.receipt.confirmed', 'biz_type' => 'receivable', 'template_type' => 'receipt', 'granularity' => 'settlement', 'description' => '财务确认实际到账后打印收款凭证。'],
+            'payment_confirmed' => ['name' => '确认付款', 'document_title' => '付款单', 'trigger' => 'finance.payment.confirmed', 'biz_type' => 'payable', 'template_type' => 'receipt', 'granularity' => 'settlement', 'description' => '财务确认实际出账后打印付款凭证。'],
+            'offset_confirmed' => ['name' => '确认折账', 'document_title' => '折账单', 'trigger' => 'finance.offset.confirmed', 'biz_type' => 'offset', 'template_type' => 'receipt', 'granularity' => 'settlement', 'description' => '应收应付确认折账后打印非现金结算凭证。'],
             'asset_inbound' => ['name' => '设备入库标签', 'trigger' => 'asset.inbound', 'biz_type' => 'asset', 'template_type' => 'label', 'granularity' => 'device', 'description' => '设备完成入库后按设备打印标签。'],
             'asset_label' => ['name' => '手动设备标签', 'trigger' => 'manual.asset.label', 'biz_type' => 'asset', 'template_type' => 'label', 'granularity' => 'device', 'description' => '库存中心手动补打单台或多台设备标签。'],
         ];
@@ -50,7 +51,10 @@ final class ErpPrintDict
     public static function variables(): array
     {
         return [
-            ['key' => 'site_name', 'name' => '门店名称'], ['key' => 'document_no', 'name' => '单号'],
+            ['key' => 'site_name', 'name' => '门店名称'], ['key' => 'document_title', 'name' => '单据标题'],
+            ['key' => 'document_no', 'name' => '单号'], ['key' => 'source_no', 'name' => '来源单号'],
+            ['key' => 'settlement_no', 'name' => '结算单号'], ['key' => 'business_reason', 'name' => '业务说明'],
+            ['key' => 'settlement_method', 'name' => '结算方式/账户'],
             ['key' => 'occurred_at', 'name' => '业务时间'], ['key' => 'party_name', 'name' => '往来主体'],
             ['key' => 'operator_name', 'name' => '操作人'], ['key' => 'amount', 'name' => '金额'],
             ['key' => 'asset_no', 'name' => '资产号'], ['key' => 'imei', 'name' => 'IMEI/串号'],

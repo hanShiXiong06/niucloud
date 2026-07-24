@@ -48,8 +48,8 @@ export function getCheckFields(params: Record<string, any>) {
     return request.get('recycle/check_template_field', { params })
 }
 
-export function saveCheckField(params: Record<string, any>) {
-    return request.post('recycle/check_template_field', params, { showSuccessMessage: true })
+export function saveCheckField(params: Record<string, any>, showSuccessMessage = true) {
+    return request.post('recycle/check_template_field', params, { showSuccessMessage })
 }
 
 export function deleteCheckField(id: number) {

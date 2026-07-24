@@ -1848,7 +1848,8 @@ class ErpStockService extends BaseAdminService
         }
         $images = $this->normalizeImageUrls($asset->image_urls);
         $qualityRemark = trim((string)$asset->quality_remark);
-        $description = trim((string)$asset->remark_public) ?: ($qualityRemark ?: trim((string)$asset->spec));
+        // 商品详情仅传公开卖点/购买说明；质检备注通过 qc_info 独立进入商城质检组件。
+        $description = trim((string)$asset->remark_public);
         $assetColor = trim((string)$asset->color);
         $memory = $this->specFieldText($specMeta, ['memory', 'storage', 'capacity'], ['内存', '容量', '存储']);
         $specColor = $this->specFieldText($specMeta, ['color'], ['颜色', '色']);

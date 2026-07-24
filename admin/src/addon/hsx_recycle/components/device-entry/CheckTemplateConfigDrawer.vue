@@ -390,7 +390,7 @@ const saveConfig = async () => {
                 template_id: selectedTemplateId.value,
                 group_id: field.group_id,
                 extra_config: normalizeExtraConfig(field.extra_config)
-            })
+            }, false)
         }
 
         ElMessage.success('质检模板、打印模板与摘要字段已应用')

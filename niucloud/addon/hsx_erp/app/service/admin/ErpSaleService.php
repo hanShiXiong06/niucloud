@@ -166,6 +166,12 @@ class ErpSaleService extends BaseAdminService
             'i.id',
             'i.sale_order_id',
             'i.asset_id',
+            'i.external_goods_id',
+            'i.external_sku_id',
+            'i.external_line_id',
+            'i.supplier_id',
+            'i.inventory_source',
+            'i.quantity',
             'i.imei',
             'i.model',
             'i.ownership_type',
@@ -174,6 +180,8 @@ class ErpSaleService extends BaseAdminService
             'i.cost',
             'i.sale_price',
             'i.profit',
+            'i.refunded_amount',
+            'i.refunded_cost',
             'i.consignment_settlement_amount',
             'i.consignment_service_fee',
             'i.consignment_payable_id',
@@ -249,7 +257,13 @@ class ErpSaleService extends BaseAdminService
         $order['items'] = $this->appendReturnContext((array)$order['items']);
         $order['gross_total_amount'] = round((float)($order['total_amount'] ?? 0), 2);
         $order['sale_compensation_amount'] = round(array_sum(array_column($order['items'], 'sale_compensation_amount')), 2);
-        $order['net_total_amount'] = max(0, round((float)$order['gross_total_amount'] - (float)$order['sale_compensation_amount'], 2));
+        $order['external_refunded_amount'] = max(0, round((float)($order['refunded_amount'] ?? 0), 2));
+        $order['net_total_amount'] = max(0, round(
+            (float)$order['gross_total_amount']
+            - (float)$order['sale_compensation_amount']
+            - (float)$order['external_refunded_amount'],
+            2
+        ));
         $order['receivables'] = ErpReceivable::where([
             ['site_id', '=', $this->site_id],
             ['source_type', '=', 'sale'],
@@ -1103,7 +1117,13 @@ class ErpSaleService extends BaseAdminService
             $row['return_reason'] = (string)($context['reason'] ?? '');
             $row['return_at'] = (int)($context['return_at'] ?? 0);
             $row['sale_compensation_amount'] = max(0, round((float)($compensationMap[(int)($row['id'] ?? 0)] ?? 0), 2));
-            $row['net_sale_amount'] = max(0, round((float)($row['sale_price'] ?? 0) - (float)$row['sale_compensation_amount'], 2));
+            $row['external_refunded_amount'] = max(0, round((float)($row['refunded_amount'] ?? 0), 2));
+            $row['net_sale_amount'] = max(0, round(
+                (float)($row['sale_price'] ?? 0)
+                - (float)$row['sale_compensation_amount']
+                - (float)$row['external_refunded_amount'],
+                2
+            ));
         }
         unset($row);
         return $rows;

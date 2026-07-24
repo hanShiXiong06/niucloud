@@ -1,5 +1,5 @@
 <template>
-    <view :style="warpCss" class="overflow-hidden" v-if="diyComponent && diyComponent.goods && Object.keys(diyComponent.goods).length">
+    <view :style="warpCss" class="overflow-hidden" v-if="hasDescription">
         <view class="card-template overflow-hidden">
             <view class="title">商品详情</view>
             <view class="u-content">
@@ -29,6 +29,10 @@ const diyComponent = computed(() => {
     } else {
         return Object.assign({}, props.component, useGoodsDetailStore().goodsDetail);
     }
+})
+const hasDescription = computed(() => {
+    if (!diyComponent.value || !diyComponent.value.goods || diyComponent.value.isShow === false) return false;
+    return String(diyComponent.value.goods.goods_desc || '').trim() !== '';
 })
 
 const warpCss = computed(() => {
@@ -65,11 +69,7 @@ onMounted(() => {
             () => diyComponent.value,
             (newValue, oldValue) => {
                 if (newValue && newValue.componentName == 'ShopGoodsDetailDesc') {
-                    if (!diyComponent.value.isShow) {
-                        emits('update:componentIsShow', false)   
-                    }else{
-                        emits('update:componentIsShow', true)
-                    }
+                    emits('update:componentIsShow', hasDescription.value)
                 }
             },
             { immediate: true }

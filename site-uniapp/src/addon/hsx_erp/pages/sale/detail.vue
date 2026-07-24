@@ -35,6 +35,9 @@
                     <view v-if="compensationAmount(order) > 0" class="sale-adjust-note">
                         原成交 ¥{{ money(order.gross_total_amount ?? order.total_amount) }} · 售后补差 -¥{{ money(compensationAmount(order)) }} · 实际收入 ¥{{ money(netSaleAmount(order)) }}
                     </view>
+                    <view v-if="externalRefundAmount(order) > 0" class="sale-adjust-note">
+                        商城累计退款 -¥{{ money(externalRefundAmount(order)) }} · 当前有效收入 ¥{{ money(netSaleAmount(order)) }}
+                    </view>
 
                     <view class="field">
                         <text class="label">客户</text>
@@ -90,23 +93,27 @@
                     </view>
                 </view>
 
-                <view class="section-title">销售设备（{{ items.length }} 台）</view>
-                <view v-if="!items.length" class="empty-card">暂无销售设备</view>
+                <view class="section-title">销售商品（{{ saleItemCount }} 件）</view>
+                <view v-if="!items.length" class="empty-card">暂无销售商品</view>
                 <view v-for="item in items" :key="item.id" class="erp-card sale-device-card">
                     <view class="device-card__head">
                         <view class="device-title">
                             <text class="device-name">{{ item.model || '-' }}</text>
-                            <text class="device-spec">{{ deviceIdentityLine(item) }}</text>
+                            <text class="device-spec">{{ isExternalGoods(item) ? `商城商品 · ${itemQuantity(item)} 件` : deviceIdentityLine(item) }}</text>
                         </view>
                         <u-tag :text="assetLabel(item.status)" :type="assetType(item.status)" plain plainFill size="mini" />
                     </view>
                     <view class="sale-chips">
+                        <view v-if="isExternalGoods(item)" class="sale-chip">商城订单商品</view>
                         <view v-if="item.warehouse_name" class="sale-chip">{{ item.warehouse_name }}{{ item.location_name ? ' / ' + item.location_name : '' }}</view>
                         <view v-if="item.category_name" class="sale-chip muted">{{ item.category_name }}</view>
                     </view>
                     <view class="card-time">{{ erpTimeLine(item, ['sale_at', 'sold_at']) }}</view>
                     <view v-if="compensationAmount(item) > 0" class="sale-adjust-note sale-adjust-note--device">
                         原成交 ¥{{ money(item.sale_price) }} · 售后补差 -¥{{ money(compensationAmount(item)) }} · 实际收入 ¥{{ money(netSaleAmount(item)) }}
+                    </view>
+                    <view v-if="externalRefundAmount(item) > 0" class="sale-adjust-note sale-adjust-note--device">
+                        商城累计退款 -¥{{ money(externalRefundAmount(item)) }} · 当前有效收入 ¥{{ money(netSaleAmount(item)) }}
                     </view>
                     <view class="erp-card__foot sale-device-foot">
                         <view class="amount-box">
@@ -122,13 +129,17 @@
                             <text class="amt-value" :class="Number(item.profit)>=0?'green':'red'">¥{{ money(item.profit) }}</text>
                         </view>
                     </view>
-                    <view class="device-actions" v-if="item.status === 'sold'">
+                    <view class="device-actions" v-if="item.status === 'sold' && !isExternalGoods(item)">
                         <view v-if="canCancelSale" class="action-button mini">
-                            <u-button size="mini" plain type="warning" :text="saleItemCount > 1 ? '撤回此台' : '撤销此台'" @click.stop="cancelSaleItem(item)" />
+                            <u-button size="mini" plain type="warning" :text="items.length > 1 ? '撤回此台' : '撤销此台'" @click.stop="cancelSaleItem(item)" />
                         </view>
                         <view v-else-if="!canCancelSale" class="action-button mini">
                             <u-button size="mini" plain type="warning" text="销售退货" @click.stop="goReturn(item)" />
                         </view>
+                    </view>
+                    <view v-else-if="item.status === 'sold' && isExternalGoods(item)" class="external-refund-tip">
+                        <u-icon name="info-circle" color="#64748b" size="13" />
+                        <text>退款请在商城订单处理，退款结果会自动同步到 ERP</text>
                     </view>
                 </view>
             </view>
@@ -155,17 +166,19 @@ const detailLoaded = ref(false)
 const cancelling = ref(false)
 
 const pageTitle = computed(() => saleNo.value ? `销售单 ${saleNo.value}` : '销售单详情')
-const saleItemCount = computed(() => items.value.length || 0)
+const saleItemCount = computed(() => items.value.reduce((total, item) => total + itemQuantity(item), 0))
+const hasExternalGoods = computed(() => items.value.some(isExternalGoods))
 const canCancelSale = computed(() =>
     order.value &&
+    !hasExternalGoods.value &&
     order.value.status === 'completed' &&
     order.value.finance_status === 'pending' &&
     Number(order.value.received_amount || 0) <= 0
 )
-const cancelSaleText = computed(() => saleItemCount.value > 1 ? `整单撤销（${saleItemCount.value} 台）` : '撤销销售，退回库存')
+const cancelSaleText = computed(() => saleItemCount.value > 1 ? `整单撤销（${saleItemCount.value} 件）` : '撤销销售，退回库存')
 const cancelSaleNotice = computed(() => {
     if (saleItemCount.value > 1) {
-        return `整单操作：确认后会同时撤销本单 ${saleItemCount.value} 台设备，应收作废，设备全部退回库存。`
+        return `整单操作：确认后会同时撤销本单 ${saleItemCount.value} 件商品，应收作废，设备全部退回库存。`
     }
     return '确认后该设备应收作废，并退回原仓库库存。'
 })
@@ -213,9 +226,15 @@ async function printSaleReceipt() {
     }
 }
 
-const goReturn = (item?: any) => uni.navigateTo({
-    url: `/addon/hsx_erp/pages/sale_return/create?sale_order_id=${saleOrderId.value}&sale_no=${encodeURIComponent(saleNo.value)}&party_name=${encodeURIComponent(order.value?.party_name || '')}&asset_id=${Number(item?.asset_id || 0)}`
-})
+const goReturn = (item?: any) => {
+    if (isExternalGoods(item) || Number(item?.asset_id || 0) <= 0) {
+        uni.showToast({ title: '商城商品请在商城订单处理售后', icon: 'none' })
+        return
+    }
+    uni.navigateTo({
+        url: `/addon/hsx_erp/pages/sale_return/create?sale_order_id=${saleOrderId.value}&sale_no=${encodeURIComponent(saleNo.value)}&party_name=${encodeURIComponent(order.value?.party_name || '')}&asset_id=${Number(item?.asset_id || 0)}`
+    })
+}
 
 const cancelSale = () => {
     if (!canCancelSale.value || cancelling.value) return
@@ -271,7 +290,15 @@ const cancelSaleItem = (item: any) => {
 const money = (v: any) => Number(v || 0).toFixed(2)
 const netSaleAmount = (row: any) => erpNetSaleAmount(row)
 const compensationAmount = (row: any) => erpSaleCompensationAmount(row)
+const externalRefundAmount = (row: any) => Math.max(0, Number(row?.external_refunded_amount || row?.refunded_amount || 0))
 const deviceIdentityLine = (row: any) => erpDeviceIdentityLine(row)
+function isExternalGoods(row: any) {
+    return Number(row?.external_goods_id || 0) > 0
+        || (Number(row?.asset_id || 0) <= 0 && String(row?.inventory_source || '') !== 'erp_asset')
+}
+function itemQuantity(row: any) {
+    return Math.max(1, Number(row?.quantity || 1))
+}
 const financeLabel = (s: string) => ({ pending: '待收款', partial: '部分收款', settled: '已结清', void: '已作废' }[s] || s)
 const financeType = (s: string) => ({ pending: 'warning', partial: 'primary', settled: 'success', void: 'info' }[s] || 'info')
 const assetLabel = (s: string) => ({ in_stock: '在库', sold: '已售', returned: '已退', void: '已作废' }[s] || s || '-')
@@ -294,6 +321,7 @@ const assetType = (s: string) => ({ in_stock: 'success', sold: 'primary', return
 .sale-device-foot .amt-value { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .sale-adjust-note { margin:0 0 14rpx; padding:12rpx 15rpx; border-radius:12rpx; background:#fff7ed; color:#c2410c; font-size:21rpx; line-height:1.45; }
 .sale-adjust-note--device { margin:12rpx 0 0; }
+.external-refund-tip { display:flex; align-items:center; gap:8rpx; margin-top:16rpx; padding-top:14rpx; border-top:2rpx solid #f3f4f6; color:#64748b; font-size:22rpx; line-height:1.45; }
 .form-card .value { word-break: break-all; }
 .order-print-actions { margin-top:18rpx; padding-top:18rpx; border-top:2rpx solid #f3f4f6; }
 .order-actions { margin-top:18rpx; padding:18rpx 0 22rpx; border-top:2rpx solid #f3f4f6; }

@@ -196,6 +196,7 @@ class ErpFinance extends BaseAdminController
             ['min_remain', ''],
             ['max_remain', ''],
             ['can_offset', ''],
+            ['only_effective', ''],
             ['start_at', 0],
             ['end_at', 0],
             ['page', 1],

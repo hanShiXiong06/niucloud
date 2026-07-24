@@ -135,6 +135,13 @@ Route::group('erp', function () {
     Route::delete('capital_account/:id', 'addon\hsx_erp\app\adminapi\controller\CapitalAccount@delete');
     Route::post('capital_account/entry', 'addon\hsx_erp\app\adminapi\controller\CapitalAccount@entry');
     Route::get('capital_account/ledger', 'addon\hsx_erp\app\adminapi\controller\CapitalAccount@ledger');
+    Route::post('opening/upload', 'addon\hsx_erp\app\adminapi\controller\ErpOpening@upload');
+    Route::get('opening/lists', 'addon\hsx_erp\app\adminapi\controller\ErpOpening@lists');
+    Route::get('opening/:id', 'addon\hsx_erp\app\adminapi\controller\ErpOpening@info');
+    Route::get('opening/:id/items', 'addon\hsx_erp\app\adminapi\controller\ErpOpening@items');
+    Route::post('opening/:id/retry', 'addon\hsx_erp\app\adminapi\controller\ErpOpening@retry');
+    Route::post('opening/:id/confirm', 'addon\hsx_erp\app\adminapi\controller\ErpOpening@confirm');
+    Route::delete('opening/:id', 'addon\hsx_erp\app\adminapi\controller\ErpOpening@delete');
     Route::get('operating_finance/lists', 'addon\hsx_erp\app\adminapi\controller\ErpOperatingFinance@lists');
     Route::post('operating_finance/create', 'addon\hsx_erp\app\adminapi\controller\ErpOperatingFinance@create');
 

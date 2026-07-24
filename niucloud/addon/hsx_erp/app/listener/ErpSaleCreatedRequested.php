@@ -72,6 +72,8 @@ class ErpSaleCreatedRequested
                 'sale_order_id' => $saleId,
                 'sale_no' => (string)($sale['sale_no'] ?? ''),
                 'receivable_created' => true,
+                'source_payment_status' => (string)($payload['payment']['status'] ?? ''),
+                'payment_reconciliation_required' => (string)($payload['payment']['status'] ?? '') === 'paid',
             ];
             $this->completeInbox($inboxId, $payload, $result);
             return $result;
@@ -91,6 +93,7 @@ class ErpSaleCreatedRequested
         $source = (array)($event['source'] ?? []);
         $counterparty = (array)($event['counterparty'] ?? []);
         $operator = (array)($event['operator'] ?? []);
+        $payment = (array)($event['payment'] ?? []);
         $orderNo = mb_substr(trim((string)($source['order_no'] ?? $event['source_order_no'] ?? '')), 0, 80);
         if ($orderNo === '') throw new CommonException('ERP销售事件缺少来源订单号');
         $partyId = max(0, (int)($counterparty['party_id'] ?? $event['party_id'] ?? 0));
@@ -132,6 +135,25 @@ class ErpSaleCreatedRequested
             'operator_name' => mb_substr(trim((string)($operator['name'] ?? '')), 0, 60),
             'occurred_at' => $occurredAt,
             'remark' => mb_substr(trim((string)($event['remark'] ?? '')), 0, 255),
+            // 来源平台已收款只代表线上支付事实；没有明确ERP资金账户时不伪造到账流水。
+            // 该快照会保存在inbox中，供财务对账及后续自动结算扩展使用。
+            'payment' => [
+                'status' => in_array((string)($payment['status'] ?? ''), ['unpaid', 'paid', 'refunded'], true)
+                    ? (string)$payment['status']
+                    : '',
+                'mode' => $this->stableKey((string)($payment['mode'] ?? ''), 40, true),
+                'pricing_identity' => in_array((string)($payment['pricing_identity'] ?? ''), ['retail', 'peer'], true)
+                    ? (string)$payment['pricing_identity']
+                    : 'retail',
+                'gross_amount' => number_format(max(0, round((float)($payment['gross_amount'] ?? 0), 2)), 2, '.', ''),
+                'fee_rate' => number_format(max(0, min((float)($payment['fee_rate'] ?? 0), 0.2)), 6, '.', ''),
+                'fee_amount' => number_format(max(0, round((float)($payment['fee_amount'] ?? 0), 2)), 2, '.', ''),
+                'fee_bearer' => in_array((string)($payment['fee_bearer'] ?? ''), ['merchant', 'customer'], true)
+                    ? (string)$payment['fee_bearer']
+                    : 'merchant',
+                'merchant_net_amount' => number_format(max(0, round((float)($payment['merchant_net_amount'] ?? 0), 2)), 2, '.', ''),
+                'out_trade_no' => mb_substr(trim((string)($payment['out_trade_no'] ?? '')), 0, 100),
+            ],
             'items' => $items,
         ];
     }

@@ -46,6 +46,48 @@ export function useDiyGoodsDetail(params: any = {}) {
 
     const isShowTopTabbar = ref(false);
 
+    /**
+     * 兼容旧的商品详情装修数据：
+     * 质检组件上线前保存的模板里没有 ShopGoodsDetailQc，运行时自动插入到商品详情正文之前。
+     * 组件自身会在商品没有 qc_report 时隐藏，不影响普通商品。
+     */
+    const ensureQcComponent = (components: any[]) => {
+        if (!Array.isArray(components) || components.some((item: any) => item && item.componentName === 'ShopGoodsDetailQc')) return;
+        const qcComponent = {
+            path: 'edit-shop-goods-detail-qc',
+            uses: 1,
+            id: 'auto_shop_goods_detail_qc',
+            componentName: 'ShopGoodsDetailQc',
+            componentTitle: '质检报告',
+            ignore: [],
+            isShow: true,
+            title: '官方质检报告',
+            subTitle: '逐项检测 · 真实成色',
+            themeColor: '#1A6DFF',
+            titleColor: '#1D2129',
+            showSummaryBar: true,
+            showBadge: true,
+            textColor: '#303133',
+            pageStartBgColor: '',
+            pageEndBgColor: '',
+            pageGradientAngle: 'to bottom',
+            componentBgUrl: '',
+            componentBgAlpha: 2,
+            componentStartBgColor: '#FFFFFF',
+            componentEndBgColor: '',
+            componentGradientAngle: 'to bottom',
+            topRounded: 12,
+            bottomRounded: 12,
+            elementBgColor: '',
+            topElementRounded: 0,
+            bottomElementRounded: 0,
+            margin: { top: 12, bottom: 0, both: 10 },
+            isHidden: false
+        };
+        const descriptionIndex = components.findIndex((item: any) => item && item.componentName === 'ShopGoodsDetailDesc');
+        components.splice(descriptionIndex >= 0 ? descriptionIndex : components.length, 0, qcComponent);
+    }
+
     const pageStyle = () => {
         let style = '';
         if (data.value.global.pageStartBgColor) {
@@ -182,8 +224,9 @@ export function useDiyGoodsDetail(params: any = {}) {
             if (diyData.global.popWindow && diyData.global.popWindow.show) {
                 diyData.global.popWindow.id = requestData.id;
             }
-            
+
             diyData.value = sources.value;
+            if (diyStore.mode != 'decorate') ensureQcComponent(diyData.value);
             diyData.value.forEach((item: any, index) => {
                 let detailComponent:any = []
                 if(diyStore.mode != 'decorate'){

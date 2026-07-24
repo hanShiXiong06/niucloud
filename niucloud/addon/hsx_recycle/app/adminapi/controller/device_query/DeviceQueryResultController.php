@@ -22,8 +22,13 @@ class DeviceQueryResultController extends BaseAdminController
         $data = $this->request->params([
             ['query_code', ''],
             ['api_endpoint', ''],
+            ['service_keyword', ''],
+            ['channel_keyword', ''],
+            ['operator_name', ''],
             ['query_type', ''],
             ['status', ''],
+            ['min_cost', ''],
+            ['max_cost', ''],
             ['create_at', ['', '']],
         ]);
         
@@ -72,10 +77,16 @@ class DeviceQueryResultController extends BaseAdminController
     public function getStats()
     {
         $data = $this->request->params([
-            ['start_date', ''],
-            ['end_date', ''],
-            ['query_type', ''],
+            ['query_code', ''],
             ['api_endpoint', ''],
+            ['service_keyword', ''],
+            ['channel_keyword', ''],
+            ['operator_name', ''],
+            ['query_type', ''],
+            ['status', ''],
+            ['min_cost', ''],
+            ['max_cost', ''],
+            ['create_at', ['', '']],
         ]);
         
         $result = (new DeviceQueryResultService())->getStats($data);
@@ -125,8 +136,13 @@ class DeviceQueryResultController extends BaseAdminController
         $data = $this->request->params([
             ['query_code', ''],
             ['api_endpoint', ''],
+            ['service_keyword', ''],
+            ['channel_keyword', ''],
+            ['operator_name', ''],
             ['query_type', ''],
             ['status', ''],
+            ['min_cost', ''],
+            ['max_cost', ''],
             ['create_at', ['', '']],
         ]);
         

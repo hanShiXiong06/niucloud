@@ -8,9 +8,11 @@ $assert = static function (bool $condition, string $message): void {
 
 $pc = (string)file_get_contents($project . '/niucloud/addon/hsx_erp/admin/views/erp/workbench/index.vue');
 $mobile = (string)file_get_contents($project . '/site-uniapp/src/addon/hsx_erp/pages/dashboard/index.vue');
+$kpi = (string)file_get_contents($project . '/niucloud/addon/hsx_erp/app/service/admin/ErpKpiService.php');
 
 $assert(str_contains($pc, 'Promise.allSettled') && str_contains($pc, 'dashboardLoadSequence'), 'PC工作台必须隔离可选KPI失败并防止旧请求覆盖新筛选');
 $assert(str_contains($mobile, 'Promise.allSettled') && str_contains($mobile, 'loadSequence'), '移动工作台必须隔离可选KPI失败并防止请求竞态');
 $assert(str_contains($mobile, 'MUST_LOGIN') && str_contains($mobile, 'profitStructureHasData'), '移动工作台不得在登录页误报经营数据错误，空利润数据不得渲染异常环图');
+$assert(str_contains($kpi, "['i.status', '=', 'sold']") && str_contains($kpi, "'sale_profit'"), '员工销售额和毛利必须按未退货设备明细统计');
 
 echo "[PASS] ERP dashboard resilience smoke test\n";

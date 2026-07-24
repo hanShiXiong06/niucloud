@@ -8,6 +8,19 @@
             </scroll-view>
         </view>
         <mescroll-body ref="mescrollRef" top="88rpx" @init="mescrollInit" :down="{ use: false }" @up="getEvaluateListFn">
+            <view v-if="subject.type === 'category'" class="sidebar-margin pt-[var(--top-m)]">
+                <view class="card-template flex items-start">
+                    <view class="w-[64rpx] h-[64rpx] rounded-full flex-center bg-[var(--primary-color-light)] shrink-0">
+                        <u-icon name="checkmark-circle-fill" color="var(--primary-color)" size="21"></u-icon>
+                    </view>
+                    <view class="ml-[18rpx] min-w-0 flex-1">
+                        <text class="block text-[28rpx] font-500 text-[#333]">同型号真实成交评价</text>
+                        <text class="block mt-[8rpx] text-[24rpx] leading-[34rpx] text-[var(--text-color-light6)]">
+                            {{ subject.category_path || subject.category_name }} · 评价来自该型号历史成交设备
+                        </text>
+                    </view>
+                </view>
+            </view>
             <view class="sidebar-margin pt-[var(--top-m)]" v-if="list.length">
                 <template v-for="(item, index) in list">
                     <view class="mb-[var(--top-m)] card-template !pb-[20rpx]">
@@ -15,10 +28,25 @@
                             <view class="flex items-center">
                                 <u-avatar :src="img(item.member_head)" :default-url="img('static/resource/images/default_headimg.png')" :size="'50rpx'" leftIcon="none" />
                                 <text class="text-[30rpx] font-500 ml-[10rpx]">{{ item.member_name }}</text>
+                                <view v-if="item.is_verified_purchase" class="ml-[12rpx] px-[10rpx] h-[34rpx] flex-center rounded-[6rpx] bg-[var(--primary-color-light)]">
+                                    <text class="text-[20rpx] text-[var(--primary-color)]">真实购买</text>
+                                </view>
                             </view>
                             <text class="text-[24rpx] text-[var(--text-color-light9)]">{{ item.create_time ? item.create_time.slice(0, 10) : '' }}</text>
                         </view>
 
+                        <view v-if="item.category_path || item.category_name || item.goods_name"
+                              class="mt-[18rpx] px-[18rpx] py-[14rpx] rounded-[var(--rounded-small)] bg-[var(--temp-bg)]">
+                            <view class="flex items-center">
+                                <u-icon name="checkmark-circle" color="var(--primary-color)" size="15"></u-icon>
+                                <text class="ml-[8rpx] text-[24rpx] text-[var(--text-color-light6)] truncate">
+                                    {{ item.category_path || item.category_name || item.goods_name }}
+                                </text>
+                            </view>
+                            <text v-if="item.sku_name" class="block mt-[6rpx] ml-[38rpx] text-[22rpx] text-[var(--text-color-light9)] truncate">
+                                成交规格：{{ item.sku_name }}
+                            </text>
+                        </view>
                         <view class="pt-[30rpx] flex items-center">
                             <u-rate :count="5" v-model="item.scores" active-color="var(--primary-color)" :size="'36rpx'" gutter="1" readonly></u-rate>
                             <text class="ml-[20rpx] text-[26rpx] text-[var(--text-color-light9)]">{{ item.scores === 1 ? '差评' : item.scores === 2 || item.scores === 3 ? '中评' : '好评' }}</text>
@@ -154,6 +182,7 @@ const statusList = <Array<Object>>([
 const evaluateStatus = ref(1);
 const evaluateValue = ref([]);
 const goodsId = ref('')
+const subject = ref<Record<string, any>>({})
 onLoad((option: any) => {
     goodsId.value = option.goods_id || ''
 })
@@ -179,6 +208,7 @@ const getEvaluateListFn = (mescroll: any) => {
         //设置列表数据
         if (mescroll.num == 1) {
             list.value = []; //如果是第一页需手动制空列表
+            subject.value = res.data.subject || {}
         }
         list.value = list.value.concat(newArr);
 

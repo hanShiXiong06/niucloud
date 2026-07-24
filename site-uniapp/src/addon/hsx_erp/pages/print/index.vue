@@ -27,7 +27,7 @@
                         <u-tag text="待手机打印" type="warning" plain size="mini" />
                     </view>
                     <view class="task-meta">
-                        <view><u-icon name="printer" color="#94a3b8" size="15" /><text>{{ job.printer_name }}</text></view>
+                        <view><u-icon name="print" color="#94a3b8" size="15" /><text class="recycle recycle-printer"></text></view>
                         <view><u-icon name="clock" color="#94a3b8" size="15" /><text>{{ formatTime(job.create_at) }}</text></view>
                     </view>
                     <view class="task-actions"><view class="button-wrap"><u-button type="primary" plain text="选择蓝牙设备打印" @click="chooseDevice(job)" /></view></view>

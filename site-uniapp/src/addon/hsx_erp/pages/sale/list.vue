@@ -26,7 +26,7 @@
                     <view class="sale-card__head">
                         <view class="sale-title">
                             <text class="card-title sale-title__model">{{ row.model || '-' }}</text>
-                            <text class="sale-title__sub">{{ deviceIdentityLine(row) }}</text>
+                            <text class="sale-title__sub">{{ isExternalGoods(row) ? `商城商品 · ${itemQuantity(row)} 件` : deviceIdentityLine(row) }}</text>
                         </view>
                         <view class="tag-stack">
                             <u-tag v-if="isVoidSale(row)" text="已作废" type="info" plain plainFill size="mini" />
@@ -51,7 +51,7 @@
                     </view>
 
                     <view class="sale-chips">
-                        <view class="sale-chip">{{ row.warehouse_name || '-' }}</view>
+                        <view class="sale-chip">{{ isExternalGoods(row) ? '商城订单商品' : (row.warehouse_name || '-') }}</view>
                         <view v-if="row.salesman_name" class="sale-chip">开单人 {{ row.salesman_name }}</view>
                         <view v-if="row.operator_name && row.operator_name !== row.salesman_name" class="sale-chip muted">操作人 {{ row.operator_name }}</view>
                         <view class="sale-chip status" :class="{ void: isVoidSale(row) }">{{ assetLabel(row.status) }}</view>
@@ -62,6 +62,9 @@
 
                     <view v-if="compensationAmount(row) > 0" class="sale-adjust-note">
                         原成交 ¥{{ money(row.sale_price) }} · 售后补差 -¥{{ money(compensationAmount(row)) }} · 实际收入 ¥{{ money(netSaleAmount(row)) }}
+                    </view>
+                    <view v-if="externalRefundAmount(row) > 0" class="sale-adjust-note">
+                        商城累计退款 -¥{{ money(externalRefundAmount(row)) }} · 当前有效收入 ¥{{ money(netSaleAmount(row)) }}
                     </view>
 
                     <view class="erp-card__foot sale-card__foot">
@@ -83,12 +86,16 @@
                         </view>
                     </view>
                     <view v-if="returnMode" class="return-mode-action">
-                        <text>{{ row.status === 'sold' && !isVoidSale(row) ? '选择此设备退货' : '当前设备不可退货' }}</text>
-                        <u-icon v-if="row.status === 'sold' && !isVoidSale(row)" name="arrow-right" color="#ea580c" size="12" />
+                        <text>{{ isExternalGoods(row) ? '商城商品请在商城订单发起退款' : (row.status === 'sold' && !isVoidSale(row) ? '选择此设备退货' : '当前设备不可退货') }}</text>
+                        <u-icon v-if="!isExternalGoods(row) && row.status === 'sold' && !isVoidSale(row)" name="arrow-right" color="#ea580c" size="12" />
                     </view>
-                    <view v-else-if="row.status === 'sold' && !isVoidSale(row)" class="after-sale-actions">
+                    <view v-else-if="!isExternalGoods(row) && row.status === 'sold' && !isVoidSale(row)" class="after-sale-actions">
                         <u-button size="small" type="warning" plain text="销售退货" @click.stop="startAfterSale(row, 'return')" />
                         <u-button size="small" type="primary" plain text="售后补差" @click.stop="startAfterSale(row, 'compensation')" />
+                    </view>
+                    <view v-else-if="isExternalGoods(row) && row.status === 'sold'" class="external-refund-tip">
+                        <u-icon name="info-circle" color="#64748b" size="13" />
+                        <text>退款由商城订单处理，结果会自动同步到 ERP</text>
                     </view>
                 </view>
             </view>
@@ -213,6 +220,7 @@ function dateToRange(params: Record<string, any>) {
 const money = (v: any) => Number(v || 0).toFixed(2)
 const netSaleAmount = (row: any) => erpNetSaleAmount(row)
 const compensationAmount = (row: any) => erpSaleCompensationAmount(row)
+const externalRefundAmount = (row: any) => Math.max(0, Number(row?.external_refunded_amount || row?.refunded_amount || 0))
 const deviceIdentityLine = (row: any) => erpDeviceIdentityLine(row)
 
 const goDetail = (row: any) => uni.navigateTo({
@@ -223,7 +231,11 @@ function handleRowClick(row: any) {
         goDetail(row)
         return
     }
-    if (row.status !== 'sold' || isVoidSale(row)) {
+    if (isExternalGoods(row)) {
+        uni.showToast({ title: '商城商品请在商城订单发起退款', icon: 'none' })
+        return
+    }
+    if (row.status !== 'sold' || isVoidSale(row) || Number(row.asset_id || 0) <= 0) {
         uni.showToast({ title: '该设备当前不可销售退货', icon: 'none' })
         return
     }
@@ -232,6 +244,10 @@ function handleRowClick(row: any) {
     })
 }
 function startAfterSale(row: any, mode: 'return' | 'compensation') {
+    if (isExternalGoods(row) || Number(row.asset_id || 0) <= 0) {
+        uni.showToast({ title: '商城商品请在商城订单处理售后', icon: 'none' })
+        return
+    }
     uni.navigateTo({
         url: `/addon/hsx_erp/pages/sale_return/create?mode=${mode}&sale_order_id=${Number(row.sale_order_id || 0)}&sale_no=${encodeURIComponent(row.sale_no || '')}&party_name=${encodeURIComponent(row.party_name || '')}&asset_id=${Number(row.asset_id || row.id || 0)}`
     })
@@ -242,6 +258,9 @@ const financeType = (s: string) => ({ pending: 'warning', partial: 'primary', se
 const assetLabel = (s: string) => ({ in_stock: '在库', sold: '已售', returned: '已退', void: '已作废' }[s] || s || '-')
 const assetType = (s: string) => ({ in_stock: 'success', sold: 'primary', returned: 'warning', void: 'info' }[s] || 'info')
 const isVoidSale = (row: any) => row?.finance_status === 'void' || row?.order_status === 'void' || row?.status === 'void'
+const isExternalGoods = (row: any) => Number(row?.external_goods_id || 0) > 0
+    || (Number(row?.asset_id || 0) <= 0 && String(row?.inventory_source || '') !== 'erp_asset')
+const itemQuantity = (row: any) => Math.max(1, Number(row?.quantity || 1))
 function voidSummary(row: any) {
     const text = row?.received_amount && Number(row.received_amount) > 0 ? '该销售记录已作废，请核对收款流水' : '该销售记录已作废，设备已退回库存'
     return `${text}${row?.sale_no ? ' · ' + row.sale_no : ''}`
@@ -273,6 +292,7 @@ function voidSummary(row: any) {
 .return-mode-tip text { flex: 1; }
 .return-mode-action { display:flex; align-items:center; justify-content:flex-end; gap:8rpx; margin-top:14rpx; padding-top:14rpx; border-top:2rpx solid #f3f4f6; color:#ea580c; font-size:23rpx; }
 .after-sale-actions{display:grid;grid-template-columns:1fr 1fr;gap:12rpx;margin-top:14rpx;padding-top:14rpx;border-top:2rpx solid #f3f4f6}
+.external-refund-tip { display:flex; align-items:center; gap:8rpx; margin-top:14rpx; padding-top:14rpx; border-top:2rpx solid #f3f4f6; color:#64748b; font-size:22rpx; }
 
 .sale-card--void {
     background: #f8fafc;

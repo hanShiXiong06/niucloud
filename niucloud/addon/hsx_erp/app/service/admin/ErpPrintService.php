@@ -156,6 +156,8 @@ final class ErpPrintService extends BaseAdminService
         $type = $bizType ?: (string)$scene['biz_type'];
         $context = array_merge($this->context($type, $bizId), $extra);
         if (!empty($extra['settlement_id'])) $context = $this->withSettlementContext($context, (int)$extra['settlement_id']);
+        $sceneDef = ErpPrintDict::scenes()[$sceneKey] ?? [];
+        $context['document_title'] = (string)($sceneDef['document_title'] ?? $scene['scene_name'] ?? '业务单据');
 
         $contexts = [['context' => $context, 'biz_no' => (string)($context['document_no'] ?? '')]];
         if ((string)$scene['granularity'] === 'device' && $type === 'sale') {
@@ -241,24 +243,54 @@ final class ErpPrintService extends BaseAdminService
     private function context(string $type, int $id): array
     {
         $siteName = (string)(Db::name('site')->where('site_id', $this->site_id)->value('site_name') ?? '');
-        $context = ['site_name' => $siteName, 'document_no' => '', 'occurred_at' => date('Y-m-d H:i:s'), 'party_name' => '', 'operator_name' => (string)$this->username,
+        $context = ['site_name' => $siteName, 'document_title' => '业务单据', 'document_no' => '', 'source_no' => '', 'settlement_no' => '',
+            'business_reason' => '', 'settlement_method' => '', 'occurred_at' => date('Y-m-d H:i:s'), 'party_name' => '', 'operator_name' => (string)$this->username,
             'amount' => '0.00', 'asset_no' => '', 'imei' => '', 'model' => '', 'spec' => '', 'warehouse_name' => '', 'items_text' => ''];
         if ($type === 'sale') {
             $row = Db::name('erp_sale_order')->where([['site_id', '=', $this->site_id], ['id', '=', $id]])->find();
             if (!$row) throw new CommonException('销售订单不存在');
             $items = Db::name('erp_sale_item')->where([['site_id', '=', $this->site_id], ['sale_order_id', '=', $id]])->select()->toArray();
             $lines = []; foreach ($items as $item) $lines[] = trim((string)($item['model'] ?? '设备')) . '  ' . trim((string)($item['imei'] ?? '')) . '  ¥' . number_format((float)($item['sale_price'] ?? 0), 2);
-            return array_merge($context, ['document_no' => (string)$row['sale_no'], 'occurred_at' => date('Y-m-d H:i:s', (int)($row['occurred_at'] ?? $row['create_at'])),
-                'party_name' => (string)$row['party_name'], 'operator_name' => (string)($row['operator_name'] ?? $this->username), 'amount' => number_format((float)$row['total_amount'], 2), 'items_text' => implode("\n", $lines)]);
+            return array_merge($context, ['document_no' => (string)$row['sale_no'], 'source_no' => (string)$row['sale_no'],
+                'business_reason' => '销售出库', 'settlement_method' => (string)($row['settle_method'] ?? ''),
+                'occurred_at' => date('Y-m-d H:i:s', (int)($row['sale_at'] ?? $row['create_at'])),
+                'party_name' => (string)$row['party_name'],
+                'operator_name' => (string)(trim((string)($row['salesman_name'] ?? '')) ?: trim((string)($row['operator_name'] ?? '')) ?: $this->username),
+                'amount' => number_format((float)$row['total_amount'], 2), 'items_text' => implode("\n", $lines)]);
         }
         if (in_array($type, ['receivable', 'payable'], true)) {
             $row = Db::name('erp_' . $type)->where([['site_id', '=', $this->site_id], ['id', '=', $id]])->find();
             if (!$row) throw new CommonException($type === 'receivable' ? '应收单不存在' : '应付单不存在');
-            return array_merge($context, ['document_no' => (string)($row[$type . '_no'] ?? $row['source_no'] ?? ''), 'party_name' => (string)$row['party_name'],
+            $itemLines = $this->financeItemLines($type, $row);
+            return array_merge($context, ['document_no' => (string)($row[$type . '_no'] ?? $row['source_no'] ?? ''),
+                'source_no' => (string)($row['source_no'] ?? ''), 'business_reason' => trim((string)($row['business_reason'] ?? $row['remark'] ?? '')),
+                'settlement_method' => trim((string)($row['settlement_mode_name'] ?? $row['settlement_mode'] ?? '')),
+                'party_name' => (string)$row['party_name'],
                 'operator_name' => (string)($row['business_operator_name'] ?? $this->username),
                 'amount' => number_format((float)($row['settled_amount'] ?? $row['amount']), 2),
-                'items_text' => trim((string)($row['business_reason'] ?? $row['remark'] ?? '')),
+                'items_text' => implode("\n", $itemLines) ?: trim((string)($row['business_reason'] ?? $row['remark'] ?? '')),
                 'occurred_at' => date('Y-m-d H:i:s', (int)($row['update_at'] ?? time()))]);
+        }
+        if ($type === 'offset') {
+            $row = Db::name('erp_offset')->where([['site_id', '=', $this->site_id], ['id', '=', $id]])->find();
+            if (!$row) throw new CommonException('折账记录不存在');
+            $lines = [];
+            $links = Db::name('erp_offset_link')->where([['site_id', '=', $this->site_id], ['offset_id', '=', $id]])->order('id asc')->select()->toArray();
+            foreach ($links as $link) {
+                $targetType = (string)$link['target_type'];
+                if (!in_array($targetType, ['receivable', 'payable'], true)) continue;
+                $target = Db::name('erp_' . $targetType)->where([['site_id', '=', $this->site_id], ['id', '=', (int)$link['target_id']]])->find();
+                if (!$target) continue;
+                $label = $targetType === 'receivable' ? '应收' : '应付';
+                $no = (string)($target[$targetType . '_no'] ?? $target['source_no'] ?? '');
+                $lines[] = $label . ' ' . $no . '  抵 ¥' . number_format((float)$link['applied_amount'], 2);
+                array_push($lines, ...$this->financeItemLines($targetType, $target));
+            }
+            return array_merge($context, ['document_no' => (string)$row['offset_no'], 'source_no' => (string)$row['offset_no'],
+                'party_name' => (string)$row['party_name'], 'operator_name' => (string)($row['operator_name'] ?: $this->username),
+                'amount' => number_format((float)$row['amount'], 2), 'business_reason' => trim((string)($row['remark'] ?: '应收应付折账')),
+                'settlement_method' => '折账（不走现金）', 'items_text' => implode("\n", array_values(array_unique($lines))),
+                'occurred_at' => date('Y-m-d H:i:s', (int)($row['confirmed_at'] ?: $row['create_at']))]);
         }
         if ($type === 'asset') {
             $row = Db::name('erp_asset')->where([['site_id', '=', $this->site_id], ['id', '=', $id]])->find();
@@ -300,21 +332,55 @@ final class ErpPrintService extends BaseAdminService
         $row = Db::name('erp_settlement')->where([['site_id', '=', $this->site_id], ['id', '=', $settlementId]])->find();
         if (!$row) return $context;
         $summary = [];
-        if (trim((string)$row['capital_account_name']) !== '') $summary[] = '结算账户：' . trim((string)$row['capital_account_name']);
+        $settlementType = (string)$row['settlement_type'];
+        $method = match ($settlementType) { 'receipt' => '收款', 'payment' => '付款', 'offset' => '折账（不走现金）', default => $settlementType };
+        if (trim((string)$row['capital_account_name']) !== '') $method .= ' · ' . trim((string)$row['capital_account_name']);
+        $summary[] = '结算方式：' . $method;
         if (trim((string)$row['remark']) !== '') $summary[] = '说明：' . trim((string)$row['remark']);
+        $baseItems = trim((string)($context['items_text'] ?? ''));
         return array_merge($context, [
-            'document_no' => (string)$row['settlement_no'], 'party_name' => (string)$row['party_name'],
+            'document_no' => (string)$row['settlement_no'], 'settlement_no' => (string)$row['settlement_no'],
+            'settlement_method' => $method, 'party_name' => (string)$row['party_name'],
             'operator_name' => (string)($row['operator_name'] ?: $context['operator_name']),
             'amount' => number_format((float)$row['amount'], 2),
             'occurred_at' => date('Y-m-d H:i:s', (int)($row['confirmed_at'] ?: $row['create_at'])),
-            'items_text' => implode("\n", $summary) ?: (string)$context['items_text'],
+            'items_text' => implode("\n", array_filter([$baseItems, ...$summary])),
         ]);
+    }
+
+    /** 财务小票回到原业务设备，避免只打印一句“确认收款”而无法现场核对。 */
+    private function financeItemLines(string $type, array $row): array
+    {
+        $sourceType = (string)($row['source_type'] ?? '');
+        $sourceId = (int)($row['source_id'] ?? 0);
+        $items = [];
+        if ($type === 'receivable' && $sourceType === 'sale' && $sourceId > 0) {
+            $items = Db::name('erp_sale_item')->where([['site_id', '=', $this->site_id], ['sale_order_id', '=', $sourceId]])->field('model,imei,sale_price as amount')->order('id asc')->select()->toArray();
+        } elseif ($type === 'receivable' && $sourceType === 'purchase_return' && $sourceId > 0) {
+            $items = Db::name('erp_purchase_return_item')->where([['site_id', '=', $this->site_id], ['return_id', '=', $sourceId]])->field('model,imei,refund_receivable_amount as amount')->order('id asc')->select()->toArray();
+        } elseif ($type === 'payable' && $sourceType === 'sale_return' && $sourceId > 0) {
+            $items = Db::name('erp_sale_return_item')->where([['site_id', '=', $this->site_id], ['return_id', '=', $sourceId]])->field('model,imei,return_price as amount')->order('id asc')->select()->toArray();
+        } else {
+            $assetId = (int)($row['asset_id'] ?? 0);
+            if ($assetId > 0) {
+                $asset = Db::name('erp_asset')->where([['site_id', '=', $this->site_id], ['id', '=', $assetId]])->field('model,imei,total_cost as amount')->find();
+                if ($asset) $items[] = $asset;
+            }
+        }
+        $lines = [];
+        foreach ($items as $item) {
+            $identity = trim((string)($item['imei'] ?? ''));
+            $line = trim((string)($item['model'] ?? '设备')) . ($identity !== '' ? '  IMEI ' . $identity : '');
+            if ((float)($item['amount'] ?? 0) > 0) $line .= '  ¥' . number_format((float)$item['amount'], 2);
+            $lines[] = $line;
+        }
+        return $lines;
     }
 
     private function granularityOptions(string $bizType): array
     {
         if ($bizType === 'sale') return ['order', 'device'];
-        if (in_array($bizType, ['receivable', 'payable'], true)) return ['settlement'];
+        if (in_array($bizType, ['receivable', 'payable', 'offset'], true)) return ['settlement'];
         if ($bizType === 'asset') return ['device'];
         return ['order'];
     }
@@ -330,10 +396,14 @@ final class ErpPrintService extends BaseAdminService
     {
         $now = time();
         $receipt = Db::name('erp_print_template')->where([['site_id', '=', $this->site_id], ['builtin_key', '=', 'default_receipt']])->find();
+        $legacyReceiptContent = "<center><FH2>{{site_name}}</FH2></center>\n<center>{{document_no}}</center>\n--------------------------------\n往来主体：{{party_name}}\n业务时间：{{occurred_at}}\n经办人：{{operator_name}}\n--------------------------------\n{{items_text}}\n--------------------------------\n合计：¥{{amount}}\n\n";
+        $defaultReceiptContent = "<center><FH2>{{site_name}}</FH2></center>\n<center><FH2>{{document_title}}</FH2></center>\n<center>{{document_no}}</center>\n--------------------------------\n往来主体：{{party_name}}\n业务时间：{{occurred_at}}\n经办人：{{operator_name}}\n业务说明：{{business_reason}}\n--------------------------------\n{{items_text}}\n--------------------------------\n合计：¥{{amount}}\n\n";
         if (!$receipt) {
             $id = (int)Db::name('erp_print_template')->insertGetId(['site_id' => $this->site_id, 'builtin_key' => 'default_receipt', 'template_name' => '标准业务小票',
-                'print_type' => 'receipt', 'layout_mode' => 'native', 'paper_width' => 58, 'content' => "<center><FH2>{{site_name}}</FH2></center>\n<center>{{document_no}}</center>\n--------------------------------\n往来主体：{{party_name}}\n业务时间：{{occurred_at}}\n经办人：{{operator_name}}\n--------------------------------\n{{items_text}}\n--------------------------------\n合计：¥{{amount}}\n\n", 'is_builtin' => 1, 'is_default' => 1, 'status' => 1, 'sort' => 10, 'create_at' => $now, 'update_at' => $now]);
+                'print_type' => 'receipt', 'layout_mode' => 'native', 'paper_width' => 58, 'content' => $defaultReceiptContent, 'is_builtin' => 1, 'is_default' => 1, 'status' => 1, 'sort' => 10, 'create_at' => $now, 'update_at' => $now]);
             $receipt = ['id' => $id];
+        } elseif ((int)($receipt['is_builtin'] ?? 0) === 1 && (string)($receipt['content'] ?? '') === $legacyReceiptContent) {
+            Db::name('erp_print_template')->where('id', (int)$receipt['id'])->update(['content' => $defaultReceiptContent, 'update_at' => $now]);
         }
         $label = Db::name('erp_print_template')->where([['site_id', '=', $this->site_id], ['builtin_key', '=', 'default_asset_label']])->find();
         if (!$label) {
@@ -344,10 +414,14 @@ final class ErpPrintService extends BaseAdminService
         $sceneSort = 10;
         foreach (ErpPrintDict::scenes() as $key => $def) {
             if (Db::name('erp_print_scene')->where([['site_id', '=', $this->site_id], ['scene_key', '=', $key]])->count() > 0) continue;
+            $inherit = $key === 'offset_confirmed'
+                ? (array)(Db::name('erp_print_scene')->where([['site_id', '=', $this->site_id], ['scene_key', '=', 'receipt_confirmed']])->find() ?: [])
+                : [];
             Db::name('erp_print_scene')->insert(['site_id' => $this->site_id, 'scene_key' => $key, 'scene_name' => $def['name'], 'trigger_key' => $def['trigger'],
                 'biz_type' => $def['biz_type'], 'template_type' => $def['template_type'], 'description' => $def['description'],
-                'printer_id' => 0, 'template_id' => $def['template_type'] === 'label' ? (int)$label['id'] : (int)$receipt['id'], 'auto_print' => 0,
-                'enabled' => 0, 'copies' => 1, 'granularity' => $def['granularity'], 'condition_json' => '{}', 'sort' => $sceneSort,
+                'printer_id' => (int)($inherit['printer_id'] ?? 0), 'template_id' => (int)($inherit['template_id'] ?? ($def['template_type'] === 'label' ? $label['id'] : $receipt['id'])),
+                'auto_print' => (int)($inherit['auto_print'] ?? 0), 'enabled' => (int)($inherit['enabled'] ?? 0), 'copies' => (int)($inherit['copies'] ?? 1),
+                'granularity' => $def['granularity'], 'condition_json' => '{}', 'sort' => $sceneSort,
                 'create_at' => $now, 'update_at' => $now]);
             $sceneSort += 10;
         }

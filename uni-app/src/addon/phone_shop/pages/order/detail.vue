@@ -402,6 +402,17 @@
                         <view class="text-[28rpx]">满减优惠</view>
                         <view class="price-font font-500 text-[28rpx]">-￥{{ parseFloat(detail.manjian_discount_money).toFixed(2) }}</view>
                     </view>
+                    <view class="card-template-item justify-between" v-if="detail.pricing_identity === 'peer' && parseFloat(detail.payment_fee_amount)">
+                        <view class="text-[28rpx]">
+                            微信支付手续费
+                            <text class="ml-[8rpx] text-[22rpx] text-[#999]">
+                                ({{ (Number(detail.payment_fee_rate) * 100).toFixed(3) }}%)
+                            </text>
+                        </view>
+                        <view class="price-font font-500 text-[28rpx]" :class="detail.payment_fee_bearer === 'customer' ? 'text-[var(--price-text-color)]' : 'text-[#999]'">
+                            {{ detail.payment_fee_bearer === 'customer' ? '+' : '商家承担 ' }}￥{{ parseFloat(detail.payment_fee_amount).toFixed(2) }}
+                        </view>
+                    </view>
                     <view class=" card-template-item justify-between items-baseline">
                         <view class="text-[28rpx]">{{ t('orderMoney') }}</view>
                         <view class="text-[var(--price-text-color)] price-font">

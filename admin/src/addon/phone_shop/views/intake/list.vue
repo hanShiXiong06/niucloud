@@ -190,11 +190,11 @@
                             :abnormal-items="build.check.abnormal_items"
                             :items="build.check.result_items"
                         />
-                        <el-text v-else type="info" size="small">该货源无结构化质检项（已并入下方商品详情）</el-text>
+                        <el-text v-else type="info" size="small">该货源暂无可展示的结构化质检报告</el-text>
                     </div>
                 </el-form-item>
-                <el-form-item label="商品详情">
-                    <el-input v-model="build.form.goods_desc" type="textarea" :rows="3" placeholder="默认填入清洗后的质检报告，可改为卖点文案" />
+                <el-form-item label="商品详情文案（可选）">
+                    <el-input v-model="build.form.goods_desc" type="textarea" :rows="3" placeholder="填写卖点、售后或购买说明；质检内容由上方质检报告独立展示" />
                 </el-form-item>
                 <el-form-item v-if="build.imageCount === 0">
                     <el-alert type="warning" :closable="false" show-icon title="该货源暂无图片，建出的商品将没有主图，建议补图后再上架（测试数据无图可忽略）" />
@@ -397,8 +397,8 @@ const openBuild = (row: any) => {
         build.form.delivery_type = (m.delivery_type && m.delivery_type.length) ? m.delivery_type : ['express']
         build.form.price = Number(m.price) || build.form.price
         build.form.peer_price = Number(m.peer_price) || build.form.peer_price
-        // 商品详情默认用清洗后的质检报告文本（可改）
-        build.form.goods_desc = (m.qc_report && m.qc_report.text) ? m.qc_report.text : build.form.goods_name
+        // 商品详情只承载运营文案；质检报告通过 qc_report 独立保存和渲染。
+        build.form.goods_desc = ''
     }).finally(() => { build.prefilling = false })
 }
 

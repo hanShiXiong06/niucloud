@@ -1,0 +1,11 @@
+{
+  "title": "银盛支付",
+  "desc": "银盛 JS 支付、聚合收银台、查单、关单与原路退款",
+  "key": "hsx_ysepay",
+  "version": "1.0.0",
+  "author": "hsx",
+  "type": "addon",
+  "support_app": "",
+  "compile":[],
+  "support_version": "1.2.4"
+}

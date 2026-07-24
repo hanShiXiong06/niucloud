@@ -64,6 +64,41 @@ final class ErpSchema
             PRIMARY KEY (`id`), KEY `idx_site_status` (`site_id`,`status`), KEY `idx_site_create` (`site_id`,`create_at`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-商品目录异步导入任务'");
 
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_opening_batch` (
+            `id` int unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+            `batch_no` varchar(40) NOT NULL DEFAULT '', `opening_date` int NOT NULL DEFAULT 0,
+            `file_name` varchar(255) NOT NULL DEFAULT '', `file_path` varchar(500) NOT NULL DEFAULT '',
+            `status` varchar(20) NOT NULL DEFAULT 'pending', `queue_enabled` tinyint(1) NOT NULL DEFAULT 0,
+            `total_rows` int NOT NULL DEFAULT 0, `valid_rows` int NOT NULL DEFAULT 0,
+            `error_rows` int NOT NULL DEFAULT 0, `posted_rows` int NOT NULL DEFAULT 0,
+            `member_reused_count` int NOT NULL DEFAULT 0, `member_created_count` int NOT NULL DEFAULT 0,
+            `party_reused_count` int NOT NULL DEFAULT 0, `party_created_count` int NOT NULL DEFAULT 0,
+            `conflict_count` int NOT NULL DEFAULT 0, `summary_json` longtext NULL, `result_json` longtext NULL,
+            `message` varchar(500) NOT NULL DEFAULT '', `error_message` varchar(1000) NOT NULL DEFAULT '',
+            `operator_uid` int NOT NULL DEFAULT 0, `operator_name` varchar(60) NOT NULL DEFAULT '',
+            `start_at` int NOT NULL DEFAULT 0, `finish_at` int NOT NULL DEFAULT 0,
+            `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`), UNIQUE KEY `uk_site_batch_no` (`site_id`,`batch_no`),
+            KEY `idx_site_status` (`site_id`,`status`,`create_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-期初建账批次'");
+
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_opening_item` (
+            `id` bigint unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+            `batch_id` int NOT NULL DEFAULT 0, `item_type` varchar(20) NOT NULL DEFAULT '',
+            `sheet_name` varchar(60) NOT NULL DEFAULT '', `row_no` int NOT NULL DEFAULT 0,
+            `row_key` char(64) NOT NULL DEFAULT '', `mobile` varchar(30) NOT NULL DEFAULT '',
+            `display_name` varchar(100) NOT NULL DEFAULT '', `raw_json` longtext NULL,
+            `normalized_json` longtext NULL, `status` varchar(20) NOT NULL DEFAULT 'pending',
+            `error_code` varchar(60) NOT NULL DEFAULT '', `error_message` varchar(1000) NOT NULL DEFAULT '',
+            `member_action` varchar(20) NOT NULL DEFAULT '', `member_id` int NOT NULL DEFAULT 0,
+            `party_action` varchar(20) NOT NULL DEFAULT '', `party_id` int NOT NULL DEFAULT 0,
+            `target_type` varchar(40) NOT NULL DEFAULT '', `target_id` int NOT NULL DEFAULT 0,
+            `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`), UNIQUE KEY `uk_batch_sheet_row` (`batch_id`,`sheet_name`,`row_no`),
+            KEY `idx_batch_status` (`site_id`,`batch_id`,`status`,`item_type`),
+            KEY `idx_batch_mobile` (`site_id`,`batch_id`,`mobile`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-期初建账校验及入账明细'");
+
         Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_channel_category_mapping` (
             `id` bigint unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
             `channel_key` varchar(40) NOT NULL DEFAULT '', `erp_category_key` char(64) NOT NULL DEFAULT '',
@@ -331,14 +366,30 @@ final class ErpSchema
                 'origin_id' => "`origin_id` varchar(80) NOT NULL DEFAULT '' COMMENT '原系统业务ID' AFTER `origin_name`",
                 'origin_no' => "`origin_no` varchar(80) NOT NULL DEFAULT '' COMMENT '原系统业务单号' AFTER `origin_id`",
                 'origin_event_id' => "`origin_event_id` varchar(80) NOT NULL DEFAULT '' COMMENT '外部事件幂等键' AFTER `origin_no`",
+                'payment_mode' => "`payment_mode` varchar(40) NOT NULL DEFAULT '' COMMENT '支付方式快照' AFTER `origin_event_id`",
+                'payment_trade_no' => "`payment_trade_no` varchar(100) NOT NULL DEFAULT '' COMMENT '第三方支付单号' AFTER `payment_mode`",
+                'payment_gross_amount' => "`payment_gross_amount` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '客户实际支付金额' AFTER `payment_trade_no`",
+                'payment_fee_amount' => "`payment_fee_amount` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '渠道手续费' AFTER `payment_gross_amount`",
+                'payment_fee_bearer' => "`payment_fee_bearer` varchar(20) NOT NULL DEFAULT '' COMMENT 'merchant/customer' AFTER `payment_fee_amount`",
+                'merchant_net_amount' => "`merchant_net_amount` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '商户预计净入账' AFTER `payment_fee_bearer`",
+                'refunded_amount' => "`refunded_amount` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '累计退款收入冲销' AFTER `merchant_net_amount`",
+                'refunded_cost' => "`refunded_cost` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '累计退款成本转回' AFTER `refunded_amount`",
             ],
             'erp_sale_item' => [
+                'external_goods_id' => "`external_goods_id` int NOT NULL DEFAULT 0 COMMENT '外部商城商品ID' AFTER `model`",
+                'external_sku_id' => "`external_sku_id` int NOT NULL DEFAULT 0 COMMENT '外部商城SKU ID' AFTER `external_goods_id`",
+                'external_line_id' => "`external_line_id` varchar(80) NOT NULL DEFAULT '' COMMENT '外部订单明细ID' AFTER `external_sku_id`",
+                'supplier_id' => "`supplier_id` int NOT NULL DEFAULT 0 COMMENT '来源商品供应商ID快照，0为自有/期初' AFTER `external_line_id`",
+                'inventory_source' => "`inventory_source` varchar(30) NOT NULL DEFAULT 'erp_asset' COMMENT 'erp_asset/supplier/self_owned/opening' AFTER `supplier_id`",
+                'quantity' => "`quantity` int NOT NULL DEFAULT 1 COMMENT '标品数量' AFTER `inventory_source`",
                 'ownership_type' => "`ownership_type` varchar(20) NOT NULL DEFAULT 'owned' COMMENT 'owned自有/consigned代卖' AFTER `model`",
                 'owner_party_id' => "`owner_party_id` int NOT NULL DEFAULT 0 COMMENT '代卖货主主体ID' AFTER `ownership_type`",
                 'owner_party_name' => "`owner_party_name` varchar(100) NOT NULL DEFAULT '' COMMENT '代卖货主名称快照' AFTER `owner_party_id`",
                 'consignment_settlement_amount' => "`consignment_settlement_amount` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '本台应付货主金额' AFTER `profit`",
                 'consignment_service_fee' => "`consignment_service_fee` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '本台代卖服务收益' AFTER `consignment_settlement_amount`",
                 'consignment_payable_id' => "`consignment_payable_id` int NOT NULL DEFAULT 0 COMMENT '设备级代卖结算应付ID' AFTER `consignment_service_fee`",
+                'refunded_amount' => "`refunded_amount` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '累计退款收入冲销' AFTER `profit`",
+                'refunded_cost' => "`refunded_cost` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '累计退款成本转回' AFTER `refunded_amount`",
             ],
             'erp_account_ledger' => [
                 'balance_after' => "`balance_after` decimal(14,2) NOT NULL DEFAULT 0.00 COMMENT '记账后余额' AFTER `amount`",

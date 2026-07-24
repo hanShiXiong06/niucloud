@@ -124,32 +124,32 @@ final class ErpChannelMappingService
             'site_id' => $siteId,
             'channel_key' => $channelKey,
             'erp_attribute_key' => $attributeKey,
-        ], [
+        ], array_merge([
             'erp_attribute_id' => (int)($data['erp_attribute_id'] ?? 0),
             'erp_attribute_name' => trim((string)($data['erp_attribute_name'] ?? '')) ?: $attributeKey,
             'channel_attribute_id' => $channelAttributeId,
             'channel_attribute_name' => trim((string)($data['channel_attribute_name'] ?? '')) ?: $attributeKey,
             'mapping_source' => $source,
             'status' => 'active',
-            ...$operator,
+        ], $operator, [
             'update_at' => $now,
-        ], $now);
+        ]), $now);
 
         $this->upsert('erp_channel_attribute_value_mapping', [
             'site_id' => $siteId,
             'channel_key' => $channelKey,
             'erp_attribute_key' => $attributeKey,
             'erp_value_key' => $this->valueKey($erpValue),
-        ], [
+        ], array_merge([
             'erp_value_name' => $erpValue,
             'channel_attribute_id' => $channelAttributeId,
             'channel_value_id' => trim((string)($data['channel_value_id'] ?? '')) ?: $this->valueKey($channelValue),
             'channel_value_name' => $channelValue,
             'mapping_source' => $source,
             'status' => 'active',
-            ...$operator,
+        ], $operator, [
             'update_at' => $now,
-        ], $now);
+        ]), $now);
     }
 
     public function recordListing(array $data): void

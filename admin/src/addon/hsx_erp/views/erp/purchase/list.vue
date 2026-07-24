@@ -511,8 +511,12 @@
                             <div v-if="Number(row.refurbish_cost)" class="text-xs text-orange-500">整备 {{ money(row.refurbish_cost) }}（另付）</div>
                         </template>
                     </el-table-column>
-                    <el-table-column prop="quality_remark" label="质检备注" min-width="180" />
-                    <el-table-column prop="remark" label="备注" min-width="180" />
+                    <el-table-column label="质检备注" min-width="210">
+                        <template #default="{ row }"><ErpOverflowText :text="row.quality_remark" :lines="2" max-width="240px" /></template>
+                    </el-table-column>
+                    <el-table-column label="备注" min-width="180">
+                        <template #default="{ row }"><ErpOverflowText :text="row.remark" :lines="2" max-width="210px" /></template>
+                    </el-table-column>
                     <el-table-column label="操作" width="110" align="center">
                         <template #default="{ row }">
                             <el-button v-if="canAdjustSupplierPrice(row)" type="primary" link @click="openAdjust(row)">供应商调价</el-button>
@@ -589,6 +593,7 @@ import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/i
 import ErpPartySelect from '@/addon/hsx_erp/components/ErpPartySelect.vue'
 import ErpDeviceIdentity from '@/addon/hsx_erp/components/ErpDeviceIdentity.vue'
 import ErpCatalogProductSelect from '@/addon/hsx_erp/components/ErpCatalogProductSelect.vue'
+import ErpOverflowText from '@/addon/hsx_erp/components/ErpOverflowText.vue'
 import ErpRoleFocus from '@/addon/hsx_erp/components/ErpRoleFocus.vue'
 import { useErpPageRefresh } from '@/addon/hsx_erp/hooks/useErpPageRefresh'
 

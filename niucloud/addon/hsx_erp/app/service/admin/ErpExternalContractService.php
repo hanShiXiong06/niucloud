@@ -18,6 +18,20 @@ use think\facade\Db;
 abstract class ErpExternalContractService extends BaseAdminService
 {
     /**
+     * 为跨插件事件显式绑定站点。
+     *
+     * 支付回调、队列和定时任务不一定存在后台登录请求，不能依赖 request->siteId()。
+     * 站点仍必须来自事件信封，并继续参与收件箱隔离及幂等校验。
+     */
+    public static function forSite(int $siteId): static
+    {
+        if ($siteId <= 0) throw new CommonException('ERP外部请求缺少有效站点');
+        $service = new static();
+        $service->site_id = $siteId;
+        return $service;
+    }
+
+    /**
      * @param callable(array):array $processor
      */
     protected function consumeOnce(array $payload, string $eventName, callable $processor, bool $transactional = true): array

@@ -1782,6 +1782,13 @@ class ErpFinanceService extends BaseAdminService
             throw $e;
         }
         $this->flushSettlementDomainEvents();
+        $offset = ErpOffset::where([['site_id', '=', $this->site_id], ['id', '=', $offsetId]])->findOrEmpty();
+        if (!$offset->isEmpty()) {
+            (new ErpPrintService())->triggerSafely('offset_confirmed', 'offset', $offsetId, [
+                'settlement_id' => (int)$offset->settlement_id,
+                'amount' => number_format((float)$offset->amount, 2, '.', ''),
+            ]);
+        }
         return $offsetId;
     }
 
@@ -1797,13 +1804,19 @@ class ErpFinanceService extends BaseAdminService
             ->leftJoin($returnTable . ' pr', "r.source_type = 'purchase_return' AND pr.id = r.source_id AND pr.site_id = r.site_id")
             ->where([['r.site_id', '=', $this->site_id]]);
 
-        if (!empty($where['status'])) {
-            $query->where('r.status', '=', (string)$where['status']);
+        $invalidSourceSql = "(r.source_type = 'sale' AND COALESCE(o.status, '') IN ('returned','void'))"
+            . " OR (r.source_type = 'purchase_return' AND COALESCE(pr.status, '') IN ('cancelled','void'))";
+        if ((string)($where['status'] ?? '') === ErpDict::STATUS_VOID) {
+            $query->where(function ($voidQuery) use ($invalidSourceSql) {
+                $voidQuery->where('r.status', '=', ErpDict::STATUS_VOID)->whereOrRaw($invalidSourceSql);
+            });
+        } elseif (!empty($where['status'])) {
+            $query->where('r.status', '=', (string)$where['status'])->whereRaw('NOT (' . $invalidSourceSql . ')');
             if (in_array((string)$where['status'], [ErpDict::STATUS_PENDING, ErpDict::STATUS_PARTIAL], true)) {
                 $query->whereRaw('r.amount > r.settled_amount');
             }
-        } else {
-            $query->where('r.status', '<>', ErpDict::STATUS_VOID);
+        } elseif (!empty($where['only_effective'])) {
+            $query->where('r.status', '<>', ErpDict::STATUS_VOID)->whereRaw('NOT (' . $invalidSourceSql . ')');
         }
         if (!empty($where['party_id'])) {
             $query->where('r.party_id', '=', (int)$where['party_id']);
@@ -1983,8 +1996,10 @@ class ErpFinanceService extends BaseAdminService
             'o.received_amount',
             'o.receivable_amount',
             'o.finance_status',
+            'o.status as sale_status',
             'pr.operator_id as return_operator_uid',
             'pr.operator_name as return_operator_name',
+            'pr.status as purchase_return_status',
         ])->order('r.id desc')->paginate([
             'list_rows' => (int)($where['limit'] ?? 15),
             'page' => (int)($where['page'] ?? 1),
@@ -2035,6 +2050,14 @@ class ErpFinanceService extends BaseAdminService
         }
 
         foreach ($page['data'] as &$row) {
+            $row['ledger_status'] = (string)($row['status'] ?? '');
+            $sourceStatus = (string)$row['source_type'] === 'sale'
+                ? (string)($row['sale_status'] ?? '')
+                : ((string)$row['source_type'] === 'purchase_return' ? (string)($row['purchase_return_status'] ?? '') : '');
+            $row['is_void'] = $row['ledger_status'] === ErpDict::STATUS_VOID
+                || ((string)$row['source_type'] === 'sale' && in_array($sourceStatus, [ErpDict::ASSET_RETURNED, ErpDict::STATUS_VOID], true))
+                || ((string)$row['source_type'] === 'purchase_return' && in_array($sourceStatus, ['cancelled', ErpDict::STATUS_VOID], true));
+            $row['void_reason'] = !$row['is_void'] ? '' : ($row['ledger_status'] === ErpDict::STATUS_VOID ? '应收记录已作废' : '来源交易已撤回');
             $row['batch_no'] = $row['source_no'] ?: ($row['sale_no'] ?? '');
             if ((string)$row['source_type'] === 'purchase_return') {
                 $returnRow = $returnMap[(int)$row['source_id']] ?? [];
@@ -2070,7 +2093,7 @@ class ErpFinanceService extends BaseAdminService
             $row['source_label'] = (string)$row['source_meta']['finance_type_name'];
             $row['business_reason'] = (string)($row['source_meta']['business_reason'] ?? $row['business_reason'] ?? '');
             $row['remain_amount'] = max(0, round((float)$row['amount'] - (float)$row['settled_amount'], 2));
-            $row['finance_status'] = ErpDict::financeStatus((float)$row['amount'], (float)$row['settled_amount']);
+            $row['finance_status'] = $row['is_void'] ? ErpDict::STATUS_VOID : ErpDict::financeStatus((float)$row['amount'], (float)$row['settled_amount']);
             $row['status'] = $row['finance_status'];
         }
         unset($row);

@@ -127,6 +127,43 @@ export function deleteErpGoodsCatalogImportTask(id: number | string) {
     })
 }
 
+export function uploadErpOpening(data: FormData) {
+    return request.post('erp/opening/upload', data, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        showErrorMessage: true
+    })
+}
+
+export function getErpOpeningBatches(params: Record<string, any> = {}) {
+    return request.get('erp/opening/lists', { params })
+}
+
+export function getErpOpeningBatch(id: number | string) {
+    return request.get(`erp/opening/${id}`)
+}
+
+export function getErpOpeningItems(id: number | string, params: Record<string, any> = {}) {
+    return request.get(`erp/opening/${id}/items`, { params })
+}
+
+export function retryErpOpeningBatch(id: number | string) {
+    return request.post(`erp/opening/${id}/retry`, {}, { showErrorMessage: true })
+}
+
+export function confirmErpOpeningBatch(id: number | string) {
+    return request.post(`erp/opening/${id}/confirm`, {}, {
+        showErrorMessage: true,
+        showSuccessMessage: true
+    })
+}
+
+export function deleteErpOpeningBatch(id: number | string) {
+    return request.delete(`erp/opening/${id}`, {
+        showErrorMessage: true,
+        showSuccessMessage: true
+    })
+}
+
 export function exportErpGoodsCatalog() {
     return request.get('erp/goods/catalog/export')
 }

@@ -36,11 +36,11 @@
                         <span>{{ !evaluateTable.loading ? t('emptyData') : '' }}</span>
                     </template>
                     <el-table-column type="selection" width="55" />
-                    <el-table-column :label="t('goodsInfo')" min-width="120" align="left">
+                    <el-table-column :label="t('goodsInfo')" min-width="230" align="left">
                         <template #default="{ row }">
-                            <div class="flex cursor-pointer">
+                            <div class="flex">
                                 <div class="flex items-center min-w-[50px] mr-[10px]">
-                                    <el-image v-if="row.goods.goods_cover_thumb_small" class="w-[50px] h-[50px]" :src="img(row.goods.goods_cover_thumb_small)" fit="contain">
+                                    <el-image v-if="row.goods?.goods_cover_thumb_small || row.goods_image" class="w-[50px] h-[50px] rounded-[4px]" :src="img(row.goods?.goods_cover_thumb_small || row.goods_image)" fit="cover">
                                         <template #error>
                                             <div class="image-slot">
                                                 <img class="w-[50px] h-[50px]" src="@/addon/phone_shop/assets/goods_default.png" />
@@ -50,8 +50,19 @@
 
                                     <img v-else class="w-[50px] h-[50px]" src="@/addon/phone_shop/assets/goods_default.png" fit="contain" />
                                 </div>
-                                <div class="flex">
-                                    <p class="multi-hidden">{{ row.goods.goods_name }}</p>
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-[6px]">
+                                        <el-tooltip :content="row.goods_name || row.goods?.goods_name || '-'" placement="top" :disabled="!(row.goods_name || row.goods?.goods_name)">
+                                            <p class="truncate max-w-[180px]">{{ row.goods_name || row.goods?.goods_name || '-' }}</p>
+                                        </el-tooltip>
+                                        <el-tag v-if="row.is_verified_purchase" type="success" size="small" effect="light">真实购买</el-tag>
+                                    </div>
+                                    <el-tooltip v-if="row.category_path || row.category_name" :content="row.category_path || row.category_name" placement="top">
+                                        <p class="mt-[5px] text-[12px] text-color-info truncate max-w-[210px]">
+                                            评价归属：{{ row.category_path || row.category_name }}
+                                        </p>
+                                    </el-tooltip>
+                                    <p v-if="row.sku_name" class="mt-[3px] text-[12px] text-color-info truncate max-w-[210px]">成交规格：{{ row.sku_name }}</p>
                                 </div>
                             </div>
                         </template>

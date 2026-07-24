@@ -4,6 +4,8 @@ DROP TABLE IF EXISTS `{{prefix}}erp_channel_attribute_value_mapping`;
 DROP TABLE IF EXISTS `{{prefix}}erp_channel_attribute_mapping`;
 DROP TABLE IF EXISTS `{{prefix}}erp_channel_category_mapping`;
 DROP TABLE IF EXISTS `{{prefix}}erp_catalog_import_task`;
+DROP TABLE IF EXISTS `{{prefix}}erp_opening_item`;
+DROP TABLE IF EXISTS `{{prefix}}erp_opening_batch`;
 DROP TABLE IF EXISTS `{{prefix}}erp_site_catalog_product`;
 DROP TABLE IF EXISTS `{{prefix}}erp_catalog_product_master`;
 DROP TABLE IF EXISTS `{{prefix}}erp_category_mapping`;

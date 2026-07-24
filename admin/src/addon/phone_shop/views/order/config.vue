@@ -98,6 +98,39 @@
                     </el-form-item>
                 </el-card>
                 <el-card class="box-card !border-none" shadow="never">
+                    <h3 class="panel-title !text-sm pl-[15px]">小程序线上成交</h3>
+                    <el-form-item label="线上下单">
+                        <el-switch v-model="formData.online_order_enabled" :active-value="1" :inactive-value="0" />
+                        <span class="ml-[12px] text-[12px] text-[#999]">关闭后商品仍可浏览，提交订单时提示联系商家线下开单</span>
+                    </el-form-item>
+                    <el-form-item label="同行线上下单" v-if="formData.online_order_enabled == 1">
+                        <el-switch v-model="formData.peer_online_enabled" :active-value="1" :inactive-value="0" />
+                    </el-form-item>
+                    <template v-if="formData.online_order_enabled == 1 && formData.peer_online_enabled == 1">
+                        <el-form-item label="微信手续费">
+                            <el-input-number
+                                v-model="peerFeePercent"
+                                :min="0"
+                                :max="20"
+                                :precision="3"
+                                :step="0.1"
+                                controls-position="right"
+                            />
+                            <span class="ml-[8px]">%</span>
+                            <span class="ml-[12px] text-[12px] text-[#999]">例如微信千分之六填写 0.6%</span>
+                        </el-form-item>
+                        <el-form-item label="手续费承担">
+                            <el-radio-group v-model="formData.peer_fee_bearer">
+                                <el-radio label="merchant">商家承担</el-radio>
+                                <el-radio label="customer">同行客户承担</el-radio>
+                            </el-radio-group>
+                            <div class="w-full text-[12px] text-[#999] leading-[20px] mt-[5px]">
+                                零售价始终不追加手续费；同行客户承担时，系统按净额反推支付金额，确保扣费后覆盖同行销售价。
+                            </div>
+                        </el-form-item>
+                    </template>
+                </el-card>
+                <el-card class="box-card !border-none" shadow="never">
                     <h3 class="panel-title !text-sm pl-[15px]">{{ t('invoice') }}</h3>
                     <el-form-item>
                         <span>{{ t('isInvoice') }}</span>
@@ -150,7 +183,7 @@
     </div>
 </template>
 <script lang="ts" setup>
-import { ref,reactive } from 'vue'
+import { computed, ref,reactive } from 'vue'
 import { t } from '@/lang'
 import { getConfig, setConfig } from '@/addon/phone_shop/api/order'
 import { useRoute,useRouter } from 'vue-router'
@@ -175,7 +208,18 @@ const formData = ref({
     is_evaluate: 1,
     evaluate_is_to_examine: 1,
     evaluate_is_show: 1,
-    form_id: ''
+    form_id: '',
+    online_order_enabled: 1,
+    peer_online_enabled: 1,
+    peer_fee_rate: '0.006000',
+    peer_fee_bearer: 'merchant'
+})
+
+const peerFeePercent = computed({
+    get: () => Number(formData.value.peer_fee_rate || 0) * 100,
+    set: (value: number) => {
+        formData.value.peer_fee_rate = (Number(value || 0) / 100).toFixed(6)
+    }
 })
 
 const validCloseLength = (rule:any, value:any, callback:Function) => {

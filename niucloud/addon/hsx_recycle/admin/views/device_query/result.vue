@@ -40,8 +40,14 @@
         <el-form-item label="查询码">
           <el-input v-model.trim="queryParams.query_code" clearable placeholder="输入 IMEI 或序列号" />
         </el-form-item>
-        <el-form-item label="接口">
-          <el-input v-model.trim="queryParams.api_endpoint" clearable placeholder="/honor/coverage" />
+        <el-form-item label="查询服务">
+          <el-input v-model.trim="queryParams.service_keyword" clearable placeholder="服务名称或接口编号" />
+        </el-form-item>
+        <el-form-item label="服务商">
+          <el-input v-model.trim="queryParams.channel_keyword" clearable placeholder="爱查 / 3023" />
+        </el-form-item>
+        <el-form-item label="操作人">
+          <el-input v-model.trim="queryParams.operator_name" clearable placeholder="输入操作人" />
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="queryParams.status" clearable class="w-[140px]">
@@ -57,6 +63,13 @@
             start-placeholder="开始日期"
             end-placeholder="结束日期"
           />
+        </el-form-item>
+        <el-form-item label="成本">
+          <div class="cost-range">
+            <el-input-number v-model="queryParams.min_cost" :min="0" :precision="3" :controls="false" placeholder="最低" />
+            <span>至</span>
+            <el-input-number v-model="queryParams.max_cost" :min="0" :precision="3" :controls="false" placeholder="最高" />
+          </div>
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="loadList">查询</el-button>
@@ -177,7 +190,12 @@ const detailInfo = ref<any>({})
 const queryParams = reactive({
   query_code: '',
   api_endpoint: '',
+  service_keyword: '',
+  channel_keyword: '',
+  operator_name: '',
   status: '',
+  min_cost: undefined as number | undefined,
+  max_cost: undefined as number | undefined,
   create_at: []
 })
 
@@ -220,7 +238,12 @@ const openDetail = async (row: any) => {
 const resetSearch = () => {
   queryParams.query_code = ''
   queryParams.api_endpoint = ''
+  queryParams.service_keyword = ''
+  queryParams.channel_keyword = ''
+  queryParams.operator_name = ''
   queryParams.status = ''
+  queryParams.min_cost = undefined
+  queryParams.max_cost = undefined
   queryParams.create_at = []
   loadList()
 }
@@ -230,6 +253,15 @@ onMounted(loadList)
 
 <style lang="scss" scoped>
 .device-query-result-page {
+  .cost-range {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    :deep(.el-input-number) {
+      width: 105px;
+    }
+  }
   .page-head {
     display: flex;
     justify-content: space-between;

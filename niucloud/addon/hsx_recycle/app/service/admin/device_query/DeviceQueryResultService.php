@@ -30,8 +30,7 @@ class DeviceQueryResultService extends BaseAdminService
         $field = 'id,site_id,query_code,query_type,api_endpoint,api_name,status,cost_amount,response_time,error_code,error_message,operator_name,remark,raw_response,create_at';
         $order = 'create_at desc';
 
-        $search_model = $this->model->where([['site_id', '=', $this->site_id]])
-            ->withSearch(['query_code', 'api_endpoint', 'status', 'query_type', 'create_at'], $where)
+        $search_model = $this->applyFilters($this->model->where([['site_id', '=', $this->site_id]]), $where)
             ->field($field)
             ->order($order)
             ->append(['status_name', 'query_type_name']);
@@ -151,13 +150,7 @@ class DeviceQueryResultService extends BaseAdminService
      */
     public function getStats(array $where = [])
     {
-        $query = $this->model->where([['site_id', '=', $this->site_id]]);
-
-        // 添加时间范围筛选
-        if (!empty($where['create_at']) && is_array($where['create_at'])) {
-            [$startTime, $endTime] = $this->normalizeDateRange($where['create_at'][0], $where['create_at'][1]);
-            $query->whereBetweenTime('create_at', $startTime, $endTime);
-        }
+        $query = $this->applyFilters($this->model->where([['site_id', '=', $this->site_id]]), $where);
 
         $stats = [
             'total_queries' => (clone $query)->count(),
@@ -247,8 +240,7 @@ class DeviceQueryResultService extends BaseAdminService
     {
         $field = 'query_code,query_type,api_name,status,cost_amount,response_time,error_message,operator_name,create_at';
         
-        $list = $this->model->where([['site_id', '=', $this->site_id]])
-            ->withSearch(['query_code', 'api_endpoint', 'status', 'query_type', 'create_at'], $where)
+        $list = $this->applyFilters($this->model->where([['site_id', '=', $this->site_id]]), $where)
             ->field($field)
             ->order('create_at desc')
             ->append(['status_name', 'query_type_name'])
@@ -263,6 +255,34 @@ class DeviceQueryResultService extends BaseAdminService
         }
 
         return $list;
+    }
+
+    /**
+     * 查询记录本身就是成本事实。所有列表、统计和导出共用同一套筛选，
+     * 避免页面明细已过滤但顶部成本仍显示全站口径。
+     */
+    private function applyFilters($query, array $where)
+    {
+        $query->withSearch(['query_code', 'api_endpoint', 'status', 'query_type', 'create_at'], $where);
+        $serviceKeyword = trim((string)($where['service_keyword'] ?? ''));
+        if ($serviceKeyword !== '') {
+            $query->whereLike('api_name|api_endpoint', '%' . $serviceKeyword . '%');
+        }
+        $channelKeyword = trim((string)($where['channel_keyword'] ?? ''));
+        if ($channelKeyword !== '') {
+            $query->whereLike('raw_response', '%' . $channelKeyword . '%');
+        }
+        $operatorName = trim((string)($where['operator_name'] ?? ''));
+        if ($operatorName !== '') {
+            $query->whereLike('operator_name', '%' . $operatorName . '%');
+        }
+        if (($where['min_cost'] ?? '') !== '') {
+            $query->where('cost_amount', '>=', max(0, (float)$where['min_cost']));
+        }
+        if (($where['max_cost'] ?? '') !== '') {
+            $query->where('cost_amount', '<=', max(0, (float)$where['max_cost']));
+        }
+        return $query;
     }
     // 查询当前站点的总消费
     // 可以根据不同的 时间 筛选

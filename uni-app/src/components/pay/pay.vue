@@ -61,6 +61,13 @@ const loading = ref(false)
 const payInfo = ref<AnyObject | null>(null)
 const type = ref('')
 
+const rememberPayment = () => {
+    uni.setStorageSync('paymenting', {
+        trade_type: payInfo.value?.trade_type,
+        trade_id: payInfo.value?.trade_id
+    })
+}
+
 /**
  * 确认支付
  */
@@ -159,13 +166,90 @@ const confirmPay = () => {
                 // #endif
                 break;
             default:
-                if (res.data.url) {
-                    redirect({
-                        url: res.data.url,
-                        param: res.data.param || {},
-                        mode: 'redirectTo'
+                rememberPayment()
+                if (res.data.jsapi) {
+                    const jsapi = res.data.jsapi
+                    // #ifdef MP-WEIXIN
+                    uni.requestPayment({
+                        provider: 'wxpay',
+                        ...jsapi,
+                        success: () => {
+                            toPayResult()
+                        },
+                        fail: () => {
+                            loading.value = false
+                        }
+                    })
+                    return undefined
+                    // #endif
+
+                    // #ifdef H5
+                    if (!isWeixinBrowser()) {
+                        loading.value = false
+                        uni.showToast({ title: 'JS支付请在微信内打开', icon: 'none' })
+                        return undefined
+                    }
+                    const h5Jsapi = {
+                        ...jsapi,
+                        timestamp: jsapi.timeStamp
+                    }
+                    delete h5Jsapi.timeStamp
+                    wechat.pay({
+                        ...h5Jsapi,
+                        success: () => {
+                            toPayResult()
+                        },
+                        cancel: () => {
+                            loading.value = false
+                        }
+                    })
+                    return undefined
+                    // #endif
+
+                    loading.value = false
+                    uni.showToast({ title: '当前终端不支持JS支付', icon: 'none' })
+                    return undefined
+                }
+                if (res.data.mini_program) {
+                    // #ifdef MP-WEIXIN
+                    const miniProgram = res.data.mini_program
+                    uni.navigateToMiniProgram({
+                        appId: miniProgram.appId,
+                        path: miniProgram.path || 'pages/index/index',
+                        extraData: miniProgram.extraData || {},
+                        envVersion: miniProgram.envVersion || 'release',
+                        success: () => {
+                            loading.value = false
+                            show.value = false
+                        },
+                        fail: () => {
+                            loading.value = false
+                        }
                     })
                     return
+                    // #endif
+                }
+                if (res.data.url) {
+                    // #ifdef H5
+                    window.location.href = res.data.url
+                    return
+                    // #endif
+
+                    // #ifdef MP
+                    redirect({
+                        url: '/app/pages/webview/index',
+                        param: { src: encodeURIComponent(res.data.url) }
+                    })
+                    return
+                    // #endif
+
+                    // #ifdef APP-PLUS
+                    redirect({
+                        url: '/app/pages/webview/index',
+                        param: { src: encodeURIComponent(res.data.url) }
+                    })
+                    return
+                    // #endif
                 }
                 toPayResult()
                 break;

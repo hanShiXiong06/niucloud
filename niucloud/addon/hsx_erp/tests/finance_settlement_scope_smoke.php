@@ -64,6 +64,10 @@ foreach (['erp.settlement.completed.v1', 'queueSettlementCompletedEvent', 'flush
     $assert(str_contains($finance, $needle), '结算完成 outbox 事件缺少事务快照或提交后派发：' . $needle);
 }
 
+foreach (['only_effective', 'invalidSourceSql', "'is_void'", "'void_reason'"] as $needle) {
+    $assert(str_contains($finance, $needle), '应收列表必须保留撤回交易并支持真实成交筛选：' . $needle);
+}
+
 $assert(str_contains($finance, "sum(Db::raw('i.cost + i.profit'))"), '经营看板有效销售额必须按净销售收入计算');
 foreach (['sale_original_amount', 'sale_compensation_amount', 'original_total_amount', 'compensation_amount'] as $needle) {
     $assert(str_contains($finance, $needle), '净销售额必须保留原价与补差审计字段：' . $needle);

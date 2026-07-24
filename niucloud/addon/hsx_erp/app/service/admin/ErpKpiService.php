@@ -5,6 +5,7 @@ namespace addon\hsx_erp\app\service\admin;
 
 use addon\hsx_erp\app\model\ErpAsset;
 use addon\hsx_erp\app\model\ErpPurchaseOrder;
+use addon\hsx_erp\app\model\ErpSaleItem;
 use addon\hsx_erp\app\model\ErpSaleOrder;
 use addon\hsx_erp\app\model\ErpSettlement;
 use app\model\sys\SysUser;
@@ -61,8 +62,19 @@ class ErpKpiService extends BaseAdminService
         $facts = [];
         $add = static function (array &$target, int $uid, string $key, float $value): void { if ($uid > 0) $target[$uid][$key] = round(($target[$uid][$key] ?? 0) + $value, 2); };
 
-        $sales = ErpSaleOrder::where([['site_id', '=', $this->site_id], ['status', '<>', 'void']])->whereBetweenTime('sale_at', $start, $end)->field('salesman_uid,total_amount,profit')->select()->toArray();
-        foreach ($sales as $row) { $add($facts, (int)$row['salesman_uid'], 'sale_amount', (float)$row['total_amount']); $add($facts, (int)$row['salesman_uid'], 'sale_profit', (float)$row['profit']); }
+        // 员工销售绩效必须按仍然有效的设备明细计算。整单汇总无法排除部分销售退货，
+        // 会把已经退回设备的销售额和毛利继续记在员工名下。
+        $saleTable = (new ErpSaleOrder())->getTable();
+        $sales = ErpSaleItem::alias('i')
+            ->leftJoin($saleTable . ' o', 'o.id = i.sale_order_id AND o.site_id = i.site_id')
+            ->where([['i.site_id', '=', $this->site_id], ['i.status', '=', 'sold']])
+            ->whereBetweenTime('o.sale_at', $start, $end)
+            ->field('o.salesman_uid,i.cost,i.profit')
+            ->select()->toArray();
+        foreach ($sales as $row) {
+            $add($facts, (int)$row['salesman_uid'], 'sale_amount', (float)$row['cost'] + (float)$row['profit']);
+            $add($facts, (int)$row['salesman_uid'], 'sale_profit', (float)$row['profit']);
+        }
         $purchases = ErpPurchaseOrder::where([['site_id', '=', $this->site_id], ['status', '<>', 'void']])->whereBetweenTime('purchase_at', $start, $end)->field('purchaser_uid')->select()->toArray();
         foreach ($purchases as $row) $add($facts, (int)$row['purchaser_uid'], 'purchase_count', 1);
         $assets = ErpAsset::where('site_id', '=', $this->site_id)->whereBetweenTime('stock_in_at', $start, $end)->field('inspector_uid')->select()->toArray();

@@ -263,7 +263,26 @@
                         <view class="text-[26rpx] w-[170rpx] leading-[30rpx] text-[#303133]">满减优惠</view>
                         <view class="flex-1 w-0 text-right text-[var(--price-text-color)] text-[32rpx] price-font leading-[1]">-￥{{ parseFloat(orderData.basic.manjian_discount_money).toFixed(2) }}</view>
                     </view>
+                    <view class="card-template-item" v-if="orderData.basic.pricing_identity === 'peer' && parseFloat(orderData.basic.payment_fee_amount) > 0">
+                        <view class="text-[26rpx] leading-[30rpx] text-[#303133]">
+                            微信支付手续费
+                            <text class="text-[22rpx] text-[#999] ml-[8rpx]">({{ (Number(orderData.basic.payment_fee_rate) * 100).toFixed(3) }}%)</text>
+                        </view>
+                        <view
+                            class="flex-1 w-0 text-right text-[32rpx] price-font"
+                            :class="orderData.basic.payment_fee_bearer === 'customer' ? 'text-[var(--price-text-color)]' : 'text-[#999]'"
+                        >
+                            {{ orderData.basic.payment_fee_bearer === 'customer' ? '+' : '商家承担 ' }}￥{{ parseFloat(orderData.basic.payment_fee_amount).toFixed(2) }}
+                        </view>
+                    </view>
                 </view>
+                <u-alert
+                    v-if="onlineDisabledReason"
+                    type="warning"
+                    title="当前仅支持线下成交"
+                    :description="onlineDisabledReason"
+                    class="mb-[var(--top-m)]"
+                />
             </view>
             <u-tabbar :fixed="true" :placeholder="true" :safeAreaInsetBottom="true" zIndex="10">
                 <view class="flex-1 flex items-center justify-between pl-[30rpx] pr-[20rpx]">
@@ -275,7 +294,7 @@
                             <text class="text-[26rpx]  font-500  text-[var(--price-text-color)] price-font leading-[46rpx]">.{{ parseFloat(orderData.basic.order_money).toFixed(2).split('.')[1] }}</text>
                         </view>
                     </view>
-                    <button class="w-[196rpx]  h-[70rpx] font-500 text-[26rpx] leading-[70rpx] !text-[#fff] m-0  rounded-full primary-btn-bg remove-border" hover-class="none" :disabled="calculateLoading" :class="{'opacity-80': calculateLoading}" @click="create">提交订单</button>
+                    <button class="w-[196rpx]  h-[70rpx] font-500 text-[26rpx] leading-[70rpx] !text-[#fff] m-0  rounded-full primary-btn-bg remove-border" hover-class="none" :disabled="calculateLoading || !onlineOrderAllowed" :class="{'opacity-80': calculateLoading || !onlineOrderAllowed}" @click="create">{{ onlineOrderAllowed ? '提交订单' : '请联系商家' }}</button>
                 </view>
             </u-tabbar>
 
@@ -357,6 +376,19 @@ const createLoading = ref(false)
 const activeIndex = ref(0)//配送方式激活
 const delivery_type_list = ref([])
 const calculateLoading = ref(false)
+const onlineOrderAllowed = computed(() => {
+    const config = orderData.value?.basic?.online_trade_config
+    if (!config || Number(config.online_order_enabled) !== 1) return false
+    return orderData.value?.basic?.pricing_identity !== 'peer' || Number(config.peer_online_enabled) === 1
+})
+const onlineDisabledReason = computed(() => {
+    const config = orderData.value?.basic?.online_trade_config
+    if (!config || Number(config.online_order_enabled) !== 1) return '商品可以正常浏览，请联系商家由工作人员线下开单。'
+    if (orderData.value?.basic?.pricing_identity === 'peer' && Number(config.peer_online_enabled) !== 1) {
+        return '当前同行价仅支持联系商家线下开单。'
+    }
+    return ''
+})
 uni.getStorageSync('orderCreateData') && Object.assign(createData.value, uni.getStorageSync('orderCreateData'))
 
 const diyFormRef: any = ref(null)
@@ -623,6 +655,10 @@ const impulseBuyConfirm = (params: any = {}) => {
  * 订单创建
  */
 const create = () => {
+    if (!onlineOrderAllowed.value) {
+        uni.showToast({ title: orderData.value?.basic?.pricing_identity === 'peer' ? '同行客户暂未开放线上下单，请联系商家' : '商城暂未开放线上下单，请联系商家', icon: 'none' })
+        return
+    }
     if (!verify() || createLoading.value) return
     if (diyFormGoodsRef.value) {
         let pass = true;

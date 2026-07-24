@@ -28,6 +28,12 @@
                         <u-rate :count="5" v-model="form[index].scores" active-color="var(--primary-color)" :size="'36rpx'" gutter="1"></u-rate>
                         <text class="ml-[16rpx] text-[28rpx] pt-[2rpx] text-[var(--primary-color)]">{{ form[index].scores === 1 ? '差评' : form[index].scores === 2 || form[index].scores === 3 ? '中评' : '好评' }}</text>
                     </view>
+                    <view class="mt-[18rpx] flex items-start px-[18rpx] py-[14rpx] rounded-[var(--rounded-small)] bg-[var(--temp-bg)]">
+                        <u-icon name="info-circle" color="var(--text-color-light9)" size="15"></u-icon>
+                        <text class="ml-[8rpx] flex-1 text-[22rpx] leading-[32rpx] text-[var(--text-color-light9)]">
+                            评价将展示在同型号商品下，帮助其他客户选购；不会公开设备串号和成交价格。
+                        </text>
+                    </view>
                     <textarea class="!text-[26rpx] px-[2rpx] mt-[16rpx] w-[100%] !text-[#333] !leading-[1.5]"
                         v-model.trim="form[index].content" placeholder="请在此处输入你的评价"
                         placeholderClass="text-[26rpx] text-[var(--text-color-light9)]" maxlength="200" />

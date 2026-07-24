@@ -29,6 +29,41 @@ export function getGoodsPages(params: Record<string, any>) {
 }
 
 /**
+ * 获取商品列表筛选项
+ */
+export function getGoodsFilterOptions() {
+    return request.get(`phone_shop/goods/filter/options`)
+}
+
+/**
+ * 获取当前会员的商品筛选订阅
+ */
+export function getGoodsSubscriptionList(params: Record<string, any> = {}) {
+    return request.get(`phone_shop/goods/subscription`, params)
+}
+
+/**
+ * 查询指定筛选条件是否已订阅
+ */
+export function getGoodsSubscriptionStatus(rule: Record<string, any>) {
+    return request.post(`phone_shop/goods/subscription/status`, { rule })
+}
+
+/**
+ * 订阅当前筛选条件
+ */
+export function addGoodsSubscription(data: Record<string, any>) {
+    return request.post(`phone_shop/goods/subscription`, data, { showSuccessMessage: true })
+}
+
+/**
+ * 取消商品筛选订阅
+ */
+export function cancelGoodsSubscription(data: Record<string, any>) {
+    return request.put(`phone_shop/goods/subscription/cancel`, data, { showSuccessMessage: true })
+}
+
+/**
  * 仓库切换选项(本地仓/代理仓)
  */
 export function getGoodsWarehouses() {
