@@ -14,31 +14,48 @@
                     <view :class="['iconfont text-[32rpx] text-[#475569]', listType ? 'icona-yingyongzhongxinV6xx-32' : 'icona-yingyongliebiaoV6xx-32']"></view>
                 </view>
             </view>
-            <scroll-view scroll-x :show-scrollbar="false" class="filter-toolbar">
+            <scroll-view scroll-x :enable-flex="true" :show-scrollbar="false" class="filter-toolbar">
                 <view class="filter-toolbar__inner">
-                    <view class="filter-entry" :class="{ 'filter-entry--active': filters.category_ids.length }" @click="popup.category = true">
-                        分类<text v-if="filters.category_ids.length" class="filter-entry__count">{{ filters.category_ids.length }}</text><text class="filter-entry__arrow">⌄</text>
+                    <view class="filter-entry" :class="{ 'filter-entry--active': filters.category_ids.length || categorySubscriptionCount }" @click="openCategory">
+                        <u-icon
+                            :name="categorySubscriptionCount ? 'bell-fill' : 'bell'"
+                            :color="categorySubscriptionCount ? 'var(--primary-color)' : '#64748b'"
+                            size="15"
+                        />
+                        <text class="ml-[5rpx]">分类</text>
+                        <text v-if="categorySubscriptionCount" class="filter-entry__subscribed">已订阅{{ categorySubscriptionCount }}</text>
+                        <text v-else-if="filters.category_ids.length" class="filter-entry__count">{{ filters.category_ids.length }}</text>
+                        <u-icon name="arrow-down-fill" size="10" :color="filters.category_ids.length || categorySubscriptionCount ? 'var(--primary-color)' : '#94a3b8'" />
                     </view>
                     <view class="filter-entry" :class="{ 'filter-entry--active': filters.memory_group.length }" @click="popup.memory = true">
-                        内存<text v-if="filters.memory_group.length" class="filter-entry__count">{{ filters.memory_group.length }}</text><text class="filter-entry__arrow">⌄</text>
+                        内存<text v-if="filters.memory_group.length" class="filter-entry__count">{{ filters.memory_group.length }}</text><u-icon name="arrow-down-fill" size="10" :color="filters.memory_group.length ? 'var(--primary-color)' : '#94a3b8'" />
                     </view>
                     <view class="filter-entry" :class="{ 'filter-entry--active': filters.condition_grade.length }" @click="popup.grade = true">
-                        成色<text v-if="filters.condition_grade.length" class="filter-entry__count">{{ filters.condition_grade.length }}</text><text class="filter-entry__arrow">⌄</text>
+                        成色<text v-if="filters.condition_grade.length" class="filter-entry__count">{{ filters.condition_grade.length }}</text><u-icon name="arrow-down-fill" size="10" :color="filters.condition_grade.length ? 'var(--primary-color)' : '#94a3b8'" />
                     </view>
                     <view class="filter-entry" :class="{ 'filter-entry--active': filters.label_ids.length }" @click="popup.label = true">
-                        标签<text v-if="filters.label_ids.length" class="filter-entry__count">{{ filters.label_ids.length }}</text><text class="filter-entry__arrow">⌄</text>
+                        标签<text v-if="filters.label_ids.length" class="filter-entry__count">{{ filters.label_ids.length }}</text><u-icon name="arrow-down-fill" size="10" :color="filters.label_ids.length ? 'var(--primary-color)' : '#94a3b8'" />
                     </view>
                     <view class="filter-entry" :class="{ 'filter-entry--active': filters.service_ids.length }" @click="popup.service = true">
-                        服务<text v-if="filters.service_ids.length" class="filter-entry__count">{{ filters.service_ids.length }}</text><text class="filter-entry__arrow">⌄</text>
+                        服务<text v-if="filters.service_ids.length" class="filter-entry__count">{{ filters.service_ids.length }}</text><u-icon name="arrow-down-fill" size="10" :color="filters.service_ids.length ? 'var(--primary-color)' : '#94a3b8'" />
                     </view>
                     <view class="filter-entry" :class="{ 'filter-entry--active': moreFilterCount }" @click="openMore">
-                        更多<text v-if="moreFilterCount" class="filter-entry__count">{{ moreFilterCount }}</text><text class="filter-entry__arrow">⌄</text>
+                        更多<text v-if="moreFilterCount" class="filter-entry__count">{{ moreFilterCount }}</text><u-icon name="arrow-down-fill" size="10" :color="moreFilterCount ? 'var(--primary-color)' : '#94a3b8'" />
                     </view>
                 </view>
             </scroll-view>
         </view>
 
-        <GoodsCategoryFilterPopup v-model:show="popup.category" :categories="filterOptions.categories" :model-value="filters.category_ids" @confirm="applyFilter('category_ids', $event)" />
+        <GoodsCategoryFilterPopup
+            v-model:show="popup.category"
+            :categories="filterOptions.categories"
+            :model-value="filters.category_ids"
+            :subscription-map="categorySubscriptionMap"
+            :subscription-loading-id="categorySubscriptionLoadingId"
+            @confirm="applyFilter('category_ids', $event)"
+            @subscribe-node="subscribeCategoryNode"
+            @cancel-node="cancelCategoryNode"
+        />
         <GoodsOptionFilterPopup v-model:show="popup.memory" title="选择内存" :model-value="filters.memory_group" :groups="memoryGroups" @confirm="applyFilter('memory_group', $event)" />
         <GoodsOptionFilterPopup v-model:show="popup.grade" title="选择成色" :model-value="filters.condition_grade" :groups="gradeGroups" @confirm="applyFilter('condition_grade', $event)" />
         <GoodsOptionFilterPopup v-model:show="popup.label" title="选择标签" :model-value="filters.label_ids" :groups="labelGroups" @confirm="applyFilter('label_ids', $event)" />
@@ -75,9 +92,7 @@
                                 <view class="brand-tag" v-if="item.goods_brand" :style="diyGoods.baseTagStyle(item.goods_brand)">{{ item.goods_brand.brand_name }}</view>
                                 {{ item.goods_name }}
                             </view>
-							<view class="text-[24rpx] text-[#999] leading-[30rpx] using-hidden mb-[8rrpx]">
-							    {{ item.sub_title }}
-							</view>
+                            <PhoneGoodsMeta :subtitle="item.sub_title" :imei="item.goodsSku?.sku_no" />
                             <view v-if="item.goods_label_name && item.goods_label_name.length" class="flex flex-wrap">
                                 <template v-for="(tagItem, tagIndex) in item.goods_label_name">
                                     <image class="img-tag" v-if="tagItem.style_type == 'icon' && tagItem.icon" :src="img(tagItem.icon)" mode="heightFix" @error="diyGoods.error(tagItem,'icon')"/>
@@ -86,7 +101,7 @@
                                     </view>
                                 </template>
                             </view>
-                            <view class="mt-auto flex justify-between items-baseline">
+                            <view class="mt-auto flex items-baseline">
                                 <view class="flex items-baseline mt-[20rpx]">
                                     <view class="text-[var(--price-text-color)] price-font flex items-baseline">
                                         <text class="text-[24rpx] font-500 mr-[4rpx]">￥</text>
@@ -103,9 +118,6 @@
 									       class="max-w-[80rpx] h-[28rpx] ml-[6rpx]" :src="img('addon/phone_shop/discount.png')"
 									       mode="heightFix" />
                                 </view>
-                                <text class="text-[22rpx] mt-[20rpx] text-[var(--text-color-light9)]">
-                                    已售{{ item.sale_num }}{{ item.unit }}
-                                </text>
                             </view>
                         </view>
                     </view>
@@ -132,16 +144,14 @@
                                         <view class="brand-tag" v-if="item.goods_brand" :style="diyGoods.baseTagStyle(item.goods_brand)">{{ item.goods_brand.brand_name }}</view>
                                         {{ item.goods_name }}
                                     </view>
-									<view class="text-[24rpx] text-[#999] leading-[30rpx] using-hidden my-[5rpx]">
-									    {{ item.sub_title }}
-									</view>
+                                    <PhoneGoodsMeta :subtitle="item.sub_title" :imei="item.goodsSku?.sku_no" compact />
                                     <view v-if="item.goods_label_name && item.goods_label_name.length" class="flex flex-wrap">
                                         <template v-for="(tagItem, tagIndex) in item.goods_label_name">
                                             <image class="img-tag" v-if="tagItem.style_type == 'icon' && tagItem.icon" :src="img(tagItem.icon)" mode="heightFix" @error="diyGoods.error(tagItem,'icon')"/>
                                             <view class="base-tag" v-else-if="tagItem.style_type == 'diy' || !tagItem.icon" :style="diyGoods.baseTagStyle(tagItem)">{{ tagItem.label_name }}</view>
                                         </template>
                                     </view>
-                                    <view class="flex justify-between flex-wrap items-end">
+                                    <view class="flex flex-wrap items-end">
                                         <view class="flex items-baseline mt-[20rpx]">
                                             <view class="text-[var(--price-text-color)] price-font flex items-baseline">
                                                 <text class="text-[24rpx] font-500">￥</text>
@@ -150,9 +160,8 @@
                                             </view>
                                             <image v-if="diyGoods.priceType(item) == 'member_price'" class="max-w-[50rpx] h-[28rpx] ml-[6rpx]" :src="img('addon/phone_shop/VIP.png')" mode="heightFix" />
 											<image v-else-if="diyGoods.priceType(item) == 'newcomer_price'" class="max-w-[60rpx] h-[28rpx] ml-[6rpx]" :src="img('addon/phone_shop/newcomer.png')" mode="heightFix" />
-											<image v-else-if="diyGoods.priceType(item) == 'discount_price'" class="max-w-[80rpx] h-[28rpx] ml-[6rpx]" :src="img('addon/phone_shop/discount.png')" mode="heightFix" />	 
+											<image v-else-if="diyGoods.priceType(item) == 'discount_price'" class="max-w-[80rpx] h-[28rpx] ml-[6rpx]" :src="img('addon/phone_shop/discount.png')" mode="heightFix" />
                                         </view>
-                                        <text class="text-[22rpx] text-[var(--text-color-light9)] mt-[20rpx]">已售{{ item.sale_num }}{{ item.unit }}</text>
                                     </view>
                                 </view>
                             </view>
@@ -177,9 +186,7 @@
                                         </view>
                                         {{ item.goods_name }}
                                     </view>
-									<view class="text-[24rpx] text-[#999] leading-[30rpx] using-hidden my-[5rpx]">
-									    {{ item.sub_title }}
-									</view>
+                                    <PhoneGoodsMeta :subtitle="item.sub_title" :imei="item.goodsSku?.sku_no" compact />
                                     <view v-if="item.goods_label_name && item.goods_label_name.length" class="flex flex-wrap">
                                         <template v-for="(tagItem, tagIndex) in item.goods_label_name">
                                             <image class="img-tag" v-if="tagItem.style_type == 'icon' && tagItem.icon" :src="img(tagItem.icon)" mode="heightFix" @error="diyGoods.error(tagItem,'icon')" />
@@ -188,7 +195,7 @@
                                             </view>
                                         </template>
                                     </view>
-                                    <view class="flex justify-between flex-wrap items-baseline">
+                                    <view class="flex flex-wrap items-baseline">
                                         <view class="flex items-baseline mt-[20rpx]">
                                             <view class="text-[var(--price-text-color)] price-font flex items-baseline">
                                                 <text class="text-[24rpx] font-500">￥</text>
@@ -197,9 +204,8 @@
                                             </view>
                                             <image v-if="diyGoods.priceType(item) == 'member_price'" class="max-w-[50rpx] h-[28rpx] ml-[6rpx]" :src="img('addon/phone_shop/VIP.png')" mode="heightFix" />
 											<image v-else-if="diyGoods.priceType(item) == 'newcomer_price'"  class="max-w-[60rpx] h-[28rpx] ml-[6rpx]" :src="img('addon/phone_shop/newcomer.png')" mode="heightFix" />
-											<image v-else-if="diyGoods.priceType(item) == 'discount_price'" class="max-w-[80rpx] h-[28rpx] ml-[6rpx]" :src="img('addon/phone_shop/discount.png')" mode="heightFix" />	 
+											<image v-else-if="diyGoods.priceType(item) == 'discount_price'" class="max-w-[80rpx] h-[28rpx] ml-[6rpx]" :src="img('addon/phone_shop/discount.png')" mode="heightFix" />
                                         </view>
-                                        <text class="mt-[20rpx] text-[22rpx] text-[var(--text-color-light9)]">已售{{ item.sale_num }}{{ item.unit }}</text>
                                     </view>
                                 </view>
                             </view>
@@ -223,6 +229,7 @@ import {
     cancelGoodsSubscription,
     getGoodsFilterOptions,
     getGoodsPages,
+    getGoodsSubscriptionList,
     getGoodsSubscriptionStatus
 } from '@/addon/phone_shop/api/goods';
 import MescrollBody from '@/components/mescroll/mescroll-body/mescroll-body.vue';
@@ -233,6 +240,7 @@ import { useGoods } from '@/addon/phone_shop/hooks/useGoods'
 import GoodsCategoryFilterPopup from '@/addon/phone_shop/components/goods-filter/GoodsCategoryFilterPopup.vue'
 import GoodsOptionFilterPopup from '@/addon/phone_shop/components/goods-filter/GoodsOptionFilterPopup.vue'
 import GoodsMoreFilterPopup from '@/addon/phone_shop/components/goods-filter/GoodsMoreFilterPopup.vue'
+import PhoneGoodsMeta from '@/addon/phone_shop/components/PhoneGoodsMeta.vue'
 import useMemberStore from '@/stores/member'
 import { useLogin } from '@/hooks/useLogin'
 
@@ -276,6 +284,9 @@ const subscription = reactive({
     subscription_id: 0,
     loading: false
 })
+const categorySubscriptionMap = reactive<Record<string, number>>({})
+const categorySubscriptionLoadingId = ref('')
+const categorySubscriptionCount = computed(() => Object.keys(categorySubscriptionMap).length)
 
 const filterOptions = reactive<any>({
     categories: [],
@@ -374,6 +385,9 @@ onLoad(async(option: any) => {
     await getGoodsFilterOptions().then((res: any) => {
         Object.assign(filterOptions, res.data || {})
     }).catch(() => {})
+    if (memberStore.token) {
+        await loadCategorySubscriptions().catch(() => {})
+    }
 })
 
 interface mescrollStructure {
@@ -381,7 +395,7 @@ interface mescrollStructure {
     size: number,
     endSuccess: Function,
     [propName: string]: any
-} 
+}
 
 const getAllAppListFn = (mescroll: mescrollStructure) => {
     loading.value = false;
@@ -442,6 +456,59 @@ const ensureLogin = () => {
         param: goods_name.value ? { goods_name: goods_name.value } : {}
     })
     return false
+}
+
+const loadCategorySubscriptions = async() => {
+    Object.keys(categorySubscriptionMap).forEach(key => delete categorySubscriptionMap[key])
+    if (!memberStore.token) return
+    const res: any = await getGoodsSubscriptionList({ page: 1, limit: 120 })
+    const list = res.data?.data || res.data?.list || []
+    list.forEach((item: any) => {
+        if (Number(item.status) !== 1) return
+        const rule = item.rule || {}
+        const keys = Object.keys(rule)
+        const categories = Array.isArray(rule.category_ids) ? rule.category_ids : []
+        if (keys.length !== 1 || categories.length !== 1) return
+        categorySubscriptionMap[String(categories[0])] = Number(item.subscription_id || 0)
+    })
+}
+
+const openCategory = async() => {
+    popup.category = true
+    if (!memberStore.token) return
+    try {
+        await loadCategorySubscriptions()
+    } catch (e) {}
+}
+
+const subscribeCategoryNode = async(node: any) => {
+    if (!ensureLogin() || !node?.category_id || categorySubscriptionLoadingId.value) return
+    const id = String(node.category_id)
+    categorySubscriptionLoadingId.value = id
+    try {
+        const res: any = await addGoodsSubscription({
+            name: `分类上新 · ${node.category_name || '商品'}`,
+            rule: { category_ids: [id] }
+        })
+        categorySubscriptionMap[id] = Number(res.data?.subscription_id || res.data || 0)
+    } finally {
+        categorySubscriptionLoadingId.value = ''
+    }
+}
+
+const cancelCategoryNode = async(node: any) => {
+    if (!ensureLogin() || !node?.category_id || categorySubscriptionLoadingId.value) return
+    const id = String(node.category_id)
+    categorySubscriptionLoadingId.value = id
+    try {
+        const subscriptionId = Number(categorySubscriptionMap[id] || 0)
+        await cancelGoodsSubscription(subscriptionId
+            ? { subscription_id: subscriptionId }
+            : { rule: { category_ids: [id] } })
+        delete categorySubscriptionMap[id]
+    } finally {
+        categorySubscriptionLoadingId.value = ''
+    }
 }
 
 const loadSubscriptionStatus = async() => {
@@ -560,6 +627,8 @@ onMounted(() => {
 }
 
 .filter-toolbar__inner {
+    width: max-content;
+    min-width: 100%;
     height: 80rpx;
     padding: 0 20rpx;
     display: inline-flex;
@@ -580,19 +649,13 @@ onMounted(() => {
     color: #475569;
     background: #f5f7fa;
     font-size: 24rpx;
+    flex-shrink: 0;
 }
 
 .filter-entry--active {
     color: var(--primary-color);
     background: var(--primary-color-light);
     font-weight: 600;
-}
-
-.filter-entry__arrow {
-    margin-left: 5rpx;
-    transform: translateY(-2rpx);
-    color: currentColor;
-    font-size: 20rpx;
 }
 
 .filter-entry__count {
@@ -608,6 +671,19 @@ onMounted(() => {
     color: #fff;
     background: var(--primary-color);
     font-size: 18rpx;
+}
+
+.filter-entry__subscribed {
+    height: 30rpx;
+    margin-left: 6rpx;
+    padding: 0 8rpx;
+    display: inline-flex;
+    align-items: center;
+    border-radius: 15rpx;
+    color: var(--primary-color);
+    background: #fff;
+    font-size: 18rpx;
+    font-weight: 600;
 }
 
 :deep(.tab-bar-placeholder) {

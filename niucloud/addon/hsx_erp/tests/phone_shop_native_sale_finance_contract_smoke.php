@@ -39,6 +39,7 @@ $create = $read('addon/phone_shop/app/service/core/order/CoreOrderCreateService.
 $assert(str_contains($create, "'cost_price_snapshot'"), '下单时必须冻结成本价');
 $assert(str_contains($create, "'supplier_id_snapshot'"), '下单时必须冻结供应商ID');
 $assert(str_contains($create, "'erp_asset_id'"), '下单时必须识别ERP设备和商城原生商品');
+$assert(str_contains($create, "'offline_pending'"), '商城下单必须支持线下支付待业务员处理');
 $skuModel = $read('addon/phone_shop/app/model/goods/GoodsSku.php');
 $assert(str_contains($skuModel, 'goods_category,supplier_id,attr_ids'), 'SKU关联商品时必须读取供应商ID，订单快照不能静默丢失');
 
@@ -52,6 +53,27 @@ $accounting = $read('addon/hsx_erp/app/service/admin/ErpExternalSaleAccountingSe
 $assert(str_contains($accounting, '微信支付待结算'), '线上支付必须进入明确的清算账户');
 $assert(str_contains($record, "'category_key' => 'channel_payment_fee'"), '渠道手续费必须单独留痕');
 $assert(!str_contains($record, "'direction' => 'none'"), '已现结销售不能产生无法解释的账款方向');
+$assert(str_contains($record, "\$isOfflineCash"), '线下现结必须记录真实收款账户');
+$assert(str_contains($record, "\$isCredit"), '线下挂账必须形成ERP应收');
+
+$offlineService = $read('addon/phone_shop/app/service/admin/order/OfflineOrderService.php');
+$assert(str_contains($offlineService, 'ErpCapitalAccountOptionsRequested'), '线下收款账户必须由ERP Hook提供');
+$assert(str_contains($offlineService, "'confirm_paid'"), '订单详情必须支持确认实际收款');
+$assert(str_contains($offlineService, "'confirm_credit'"), '订单详情必须支持确认挂账');
+$assert(str_contains($offlineService, '$canRetryCash'), '收款回调失败后必须允许安全重试');
+$assert(str_contains($offlineService, 'applyDealTotal'), '线下订单必须支持单台议价和多台打包总价');
+$assert(str_contains($offlineService, "'deal_amount'"), '多台打包价必须分摊到订单明细，作为单台退款上限');
+$shopRoutes = $read('addon/phone_shop/app/adminapi/route/route.php');
+$assert(str_contains($shopRoutes, 'order/offline/capital_accounts'), '商城后台缺少ERP资金账户接口');
+$assert(str_contains($shopRoutes, 'order/offline/process'), '商城后台缺少线下订单处理接口');
+
+$assetBridge = $read('addon/phone_shop/app/listener/erp/PhoneShopOrderPaidToErp.php');
+$nativeBridge = $read('addon/phone_shop/app/listener/erp/PhoneShopNativeOrderPaidToErp.php');
+foreach ([$assetBridge, $nativeBridge] as $index => $bridge) {
+    $assert(str_contains($bridge, "':paid:v1'"), '第' . ($index + 1) . '个商城财务桥必须保留线上付款历史幂等键');
+    $assert(str_contains($bridge, "':offline_paid:v1'"), '第' . ($index + 1) . '个商城财务桥必须区分线下现结幂等键');
+    $assert(str_contains($bridge, "':credit_confirmed:v1'"), '第' . ($index + 1) . '个商城财务桥必须区分挂账幂等键');
+}
 
 $refund = $read('addon/hsx_erp/app/service/admin/ErpExternalSaleRefundedService.php');
 $assert(str_contains($refund, "'category_key' => 'sale_refund'"), '退款必须形成真实资金支出');

@@ -19,37 +19,79 @@
                         :class="{ 'category-root--active': activeRootId === String(root.category_id) }"
                         @click="activeRootId = String(root.category_id)"
                     >
-                        {{ root.category_name }}
+                        <text class="category-root__name">{{ root.category_name }}</text>
+                        <u-icon
+                            v-if="isSubscribed(root.category_id)"
+                            name="bell-fill"
+                            size="14"
+                            color="var(--primary-color)"
+                        />
                     </view>
                 </scroll-view>
                 <scroll-view scroll-y class="category-children">
                     <view v-if="activeRoot" class="category-section">
-                        <view
-                            class="category-all"
-                            :class="{ 'category-all--active': selected.includes(String(activeRoot.category_id)) }"
-                            @click="toggle(activeRoot.category_id)"
-                        >
-                            <view>
-                                <view class="category-all__name">全部{{ activeRoot.category_name }}</view>
-                                <view class="category-all__desc">包含该分类下所有商品</view>
+                        <view class="category-all" :class="{ 'category-all--active': selected.includes(String(activeRoot.category_id)) }">
+                            <view class="category-all__main" @click="toggle(activeRoot.category_id)">
+                                <view>
+                                    <view class="category-all__name">全部{{ activeRoot.category_name }}</view>
+                                </view>
+                                <view class="category-all__radio" :class="{ 'category-all__radio--active': selected.includes(String(activeRoot.category_id)) }">
+                                    <view v-if="selected.includes(String(activeRoot.category_id))" class="category-all__radio-dot"></view>
+                                </view>
                             </view>
-                            <view class="category-all__radio" :class="{ 'category-all__radio--active': selected.includes(String(activeRoot.category_id)) }">
-                                <view v-if="selected.includes(String(activeRoot.category_id))" class="category-all__radio-dot"></view>
+                            <view
+                                class="node-subscribe"
+                                :class="{ 'node-subscribe--active': isSubscribed(activeRoot.category_id) }"
+                                @click.stop="toggleSubscription(activeRoot)"
+                            >
+                                <u-icon
+                                    :name="isSubscribed(activeRoot.category_id) ? 'bell-fill' : 'bell'"
+                                    :color="isSubscribed(activeRoot.category_id) ? 'var(--primary-color)' : '#64748b'"
+                                    size="16"
+                                />
+                                <text>{{ nodeLoading(activeRoot.category_id) ? '处理中' : (isSubscribed(activeRoot.category_id) ? '已订阅 · 取消' : '订阅该节点') }}</text>
                             </view>
                         </view>
                         <view v-for="group in activeGroups" :key="group.category_id" class="category-child-group">
-                            <view class="category-child-group__title">{{ group.category_name }}</view>
+                            <view class="category-child-group__head">
+                                <view class="category-child-group__title">{{ group.category_name }}</view>
+                                <view
+                                    v-if="group.node"
+                                    class="group-subscribe"
+                                    :class="{ 'group-subscribe--active': isSubscribed(group.node.category_id) }"
+                                    @click.stop="toggleSubscription(group.node)"
+                                >
+                                    <u-icon
+                                        :name="isSubscribed(group.node.category_id) ? 'bell-fill' : 'bell'"
+                                        :color="isSubscribed(group.node.category_id) ? 'var(--primary-color)' : '#64748b'"
+                                        size="14"
+                                    />
+                                    <text>{{ nodeLoading(group.node.category_id) ? '处理中' : (isSubscribed(group.node.category_id) ? '取消订阅' : '订阅系列') }}</text>
+                                </view>
+                            </view>
                             <view class="category-chip-grid">
                                 <view
                                     v-for="item in group.items"
                                     :key="item.category_id"
                                     class="category-chip"
                                     :class="{ 'category-chip--active': selected.includes(String(item.category_id)) }"
-                                    @click="toggle(item.category_id)"
                                 >
-                                    {{ item.category_name }}
-                                    <view v-if="selected.includes(String(item.category_id))" class="category-chip__corner">
-                                        <u-icon name="checkmark" size="11" color="#fff" />
+                                    <view class="category-chip__name" @click="toggle(item.category_id)">
+                                        <text>{{ item.category_name }}</text>
+                                        <view v-if="selected.includes(String(item.category_id))" class="category-chip__corner">
+                                            <u-icon name="checkmark" size="11" color="#fff" />
+                                        </view>
+                                    </view>
+                                    <view
+                                        class="category-chip__bell"
+                                        :class="{ 'category-chip__bell--active': isSubscribed(item.category_id) }"
+                                        @click.stop="toggleSubscription(item)"
+                                    >
+                                        <u-icon
+                                            :name="isSubscribed(item.category_id) ? 'bell-fill' : 'bell'"
+                                            :color="isSubscribed(item.category_id) ? 'var(--primary-color)' : '#94a3b8'"
+                                            size="15"
+                                        />
                                     </view>
                                 </view>
                             </view>
@@ -75,8 +117,10 @@ const props = defineProps<{
     show: boolean
     categories: any[]
     modelValue: Array<string | number>
+    subscriptionMap?: Record<string, number>
+    subscriptionLoadingId?: string
 }>()
-const emit = defineEmits(['update:show', 'confirm'])
+const emit = defineEmits(['update:show', 'confirm', 'subscribe-node', 'cancel-node'])
 const selected = ref<string[]>([])
 const activeRootId = ref('')
 
@@ -102,6 +146,7 @@ const activeGroups = computed(() => {
         return {
             category_id: child.category_id,
             category_name: child.category_name,
+            node: child,
             items: descendants.length ? descendants : [child]
         }
     })
@@ -120,6 +165,13 @@ const toggle = (value: string | number) => {
         : [...selected.value, normalized]
 }
 
+const isSubscribed = (value: string | number) => Number(props.subscriptionMap?.[String(value)] || 0) > 0
+const nodeLoading = (value: string | number) => props.subscriptionLoadingId === String(value)
+const toggleSubscription = (node: any) => {
+    if (!node || nodeLoading(node.category_id)) return
+    emit(isSubscribed(node.category_id) ? 'cancel-node' : 'subscribe-node', node)
+}
+
 const close = () => emit('update:show', false)
 const confirm = () => {
     emit('confirm', [...selected.value])
@@ -136,7 +188,7 @@ const confirm = () => {
 }
 
 .category-popup__head {
-    height: 124rpx;
+    height: 96rpx;
     padding: 0 30rpx;
     display: flex;
     align-items: center;
@@ -151,14 +203,14 @@ const confirm = () => {
 }
 
 .category-popup__tip {
-    margin-top: 7rpx;
+    margin-top: 2rpx;
     color: #94a3b8;
     font-size: 22rpx;
 }
 
 .category-popup__close {
-    width: 60rpx;
-    height: 60rpx;
+    width: 52rpx;
+    height: 52rpx;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -180,12 +232,20 @@ const confirm = () => {
 
 .category-root {
     position: relative;
-    min-height: 92rpx;
+    min-height: 80rpx;
     padding: 0 18rpx;
     display: flex;
     align-items: center;
     color: #64748b;
     font-size: 25rpx;
+}
+
+.category-root__name {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 .category-root--active {
@@ -212,15 +272,23 @@ const confirm = () => {
 }
 
 .category-all {
-    min-height: 104rpx;
-    padding: 20rpx 22rpx;
+    min-height: 76rpx;
+    padding: 10rpx 14rpx 10rpx 18rpx;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 12rpx;
     box-sizing: border-box;
     border: 2rpx solid transparent;
     border-radius: 16rpx;
     background: #f7f9fc;
+}
+
+.category-all__main {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
 }
 
 .category-all--active {
@@ -268,10 +336,57 @@ const confirm = () => {
 }
 
 .category-child-group__title {
-    margin-bottom: 18rpx;
     color: #334155;
     font-size: 25rpx;
     font-weight: 600;
+}
+
+.category-child-group__head {
+    min-height: 52rpx;
+    margin-bottom: 14rpx;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16rpx;
+}
+
+.node-subscribe,
+.group-subscribe {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7rpx;
+    color: #64748b;
+    font-size: 21rpx;
+}
+
+.node-subscribe {
+    min-height: 48rpx;
+    padding: 0 12rpx;
+    flex-shrink: 0;
+    border-radius: 24rpx;
+    background: #fff;
+}
+
+.node-subscribe--active,
+.group-subscribe--active {
+    color: var(--primary-color);
+}
+
+.node-subscribe--active {
+    background: var(--primary-color-light);
+}
+
+.group-subscribe {
+    min-height: 48rpx;
+    padding: 0 13rpx;
+    flex-shrink: 0;
+    border-radius: 24rpx;
+    background: #f5f7fa;
+}
+
+.group-subscribe--active {
+    background: var(--primary-color-light);
 }
 
 .category-chip-grid {
@@ -283,10 +398,10 @@ const confirm = () => {
 .category-chip {
     position: relative;
     height: 70rpx;
-    padding: 0 14rpx;
+    padding: 0;
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: stretch;
     overflow: hidden;
     box-sizing: border-box;
     border: 2rpx solid transparent;
@@ -296,6 +411,37 @@ const confirm = () => {
     font-size: 23rpx;
     white-space: nowrap;
     text-overflow: ellipsis;
+}
+
+.category-chip__name {
+    min-width: 0;
+    height: 100%;
+    padding: 0 8rpx 0 13rpx;
+    display: flex;
+    flex: 1;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.category-chip__name text {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.category-chip__bell {
+    width: 52rpx;
+    height: 100%;
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-left: 1rpx solid rgba(148, 163, 184, 0.18);
+}
+
+.category-chip__bell--active {
+    background: var(--primary-color-light);
 }
 
 .category-chip--active {

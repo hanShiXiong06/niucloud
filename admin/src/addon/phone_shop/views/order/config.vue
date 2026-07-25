@@ -98,16 +98,78 @@
                     </el-form-item>
                 </el-card>
                 <el-card class="box-card !border-none" shadow="never">
-                    <h3 class="panel-title !text-sm pl-[15px]">小程序线上成交</h3>
+                    <h3 class="panel-title !text-sm pl-[15px]">商城成交方式</h3>
+                    <el-alert
+                        title="建议将线下支付设为首选：客户提交后立即锁定设备，由业务员在订单详情完成收款、挂账和交付。"
+                        type="info"
+                        :closable="false"
+                        show-icon
+                        class="mb-[18px]"
+                    />
+                    <el-form-item label="线下支付">
+                        <el-switch v-model="formData.offline_order_enabled" :active-value="1" :inactive-value="0" />
+                        <span class="ml-[12px] text-[12px] text-[#999]">客户无需上传转账截图，提交订单后由业务员接手</span>
+                    </el-form-item>
+                    <el-form-item label="设为首选" v-if="formData.offline_order_enabled == 1">
+                        <el-switch v-model="formData.offline_order_default" :active-value="1" :inactive-value="0" />
+                    </el-form-item>
+                    <el-form-item label="同行线下支付" v-if="formData.offline_order_enabled == 1">
+                        <el-switch v-model="formData.offline_peer_enabled" :active-value="1" :inactive-value="0" />
+                    </el-form-item>
+                    <el-form-item label="处理时限" v-if="formData.offline_order_enabled == 1">
+                        <el-input-number
+                            v-model="formData.offline_timeout_minutes"
+                            :min="15"
+                            :max="10080"
+                            :step="15"
+                            controls-position="right"
+                        />
+                        <span class="ml-[8px]">分钟</span>
+                        <span class="ml-[12px] text-[12px] text-[#999]">超时未处理将按未付款订单规则释放库存</span>
+                    </el-form-item>
+                    <el-form-item label="客户提示" v-if="formData.offline_order_enabled == 1">
+                        <el-input
+                            v-model.trim="formData.offline_contact_tip"
+                            maxlength="120"
+                            show-word-limit
+                            class="!w-[620px]"
+                        />
+                    </el-form-item>
                     <el-form-item label="线上下单">
                         <el-switch v-model="formData.online_order_enabled" :active-value="1" :inactive-value="0" />
-                        <span class="ml-[12px] text-[12px] text-[#999]">关闭后商品仍可浏览，提交订单时提示联系商家线下开单</span>
+                        <span class="ml-[12px] text-[12px] text-[#999]">实际可用方式与牛云支付中心保持同步</span>
+                    </el-form-item>
+                    <el-form-item label="当前支付渠道" v-if="formData.online_order_enabled == 1">
+                        <div class="w-full">
+                            <div v-if="enabledPayChannels.length" class="grid grid-cols-1 xl:grid-cols-2 gap-[10px] max-w-[760px]">
+                                <div
+                                    v-for="channel in enabledPayChannels"
+                                    :key="channel.key"
+                                    class="rounded-[8px] border border-solid border-[#e5e7eb] bg-[#fafbfc] px-[14px] py-[11px]"
+                                >
+                                    <div class="flex items-center justify-between gap-[12px]">
+                                        <span class="font-medium text-[#1f2937]">{{ channel.name }}</span>
+                                        <el-tag size="small" type="success" effect="plain">已同步</el-tag>
+                                    </div>
+                                    <div class="mt-[8px] flex flex-wrap gap-[6px]">
+                                        <el-tag v-for="payType in channel.payTypes" :key="payType.key" size="small" effect="plain">
+                                            {{ payType.name }}
+                                        </el-tag>
+                                    </div>
+                                </div>
+                            </div>
+                            <el-empty v-else :image-size="56" description="支付中心暂未启用在线支付方式" class="!py-[8px] max-w-[760px]" />
+                            <div class="mt-[8px] flex items-center gap-[10px]">
+                                <span class="text-[12px] text-[#999]">渠道开关、商户号与密钥仍由支付中心统一管理，订单设置只消费启用结果。</span>
+                                <el-button link type="primary" @click="toPayCenter">前往支付中心</el-button>
+                            </div>
+                        </div>
                     </el-form-item>
                     <el-form-item label="同行线上下单" v-if="formData.online_order_enabled == 1">
                         <el-switch v-model="formData.peer_online_enabled" :active-value="1" :inactive-value="0" />
                     </el-form-item>
                     <template v-if="formData.online_order_enabled == 1 && formData.peer_online_enabled == 1">
-                        <el-form-item label="微信手续费">
+                        <el-form-item label="默认线上手续费">
                             <el-input-number
                                 v-model="peerFeePercent"
                                 :min="0"
@@ -117,7 +179,7 @@
                                 controls-position="right"
                             />
                             <span class="ml-[8px]">%</span>
-                            <span class="ml-[12px] text-[12px] text-[#999]">例如微信千分之六填写 0.6%</span>
+                            <span class="ml-[12px] text-[12px] text-[#999]">订单创建时尚未选择具体网关，当前作为同行在线成交的统一费率快照</span>
                         </el-form-item>
                         <el-form-item label="手续费承担">
                             <el-radio-group v-model="formData.peer_fee_bearer">
@@ -189,6 +251,7 @@ import { getConfig, setConfig } from '@/addon/phone_shop/api/order'
 import { useRoute,useRouter } from 'vue-router'
 import { filterNumber } from '@/utils/common'
 import { getDiyFormList } from '@/app/api/diy_form'
+import { getPayConfigList } from '@/app/api/sys'
 import { ElMessage } from 'element-plus'
 
 const route = useRoute()
@@ -212,7 +275,12 @@ const formData = ref({
     online_order_enabled: 1,
     peer_online_enabled: 1,
     peer_fee_rate: '0.006000',
-    peer_fee_bearer: 'merchant'
+    peer_fee_bearer: 'merchant',
+    offline_order_enabled: 1,
+    offline_order_default: 1,
+    offline_peer_enabled: 1,
+    offline_timeout_minutes: 120,
+    offline_contact_tip: '提交后将锁定设备，业务员会尽快联系您确认收款与交付方式。'
 })
 
 const peerFeePercent = computed({
@@ -221,6 +289,36 @@ const peerFeePercent = computed({
         formData.value.peer_fee_rate = (Number(value || 0) / 100).toFixed(6)
     }
 })
+const payChannelData = ref<any[]>([])
+const enabledPayChannels = computed(() => {
+    const source: any = payChannelData.value || []
+    const channelMap = new Map<string, any>()
+    Object.values(source).forEach((channel: any) => {
+        const key = String(channel?.key || '')
+        if (!key || channelMap.has(key)) return
+        const payTypes = (channel.pay_type || []).filter((item: any) => Number(item.status) === 1)
+        if (!payTypes.length) return
+        channelMap.set(key, {
+            key,
+            name: channel.name || channel.title || key,
+            payTypes
+        })
+    })
+    return Array.from(channelMap.values())
+})
+
+const loadPayChannels = async() => {
+    try {
+        const res: any = await getPayConfigList()
+        payChannelData.value = res.data || []
+    } catch (e) {
+        payChannelData.value = []
+    }
+}
+
+const toPayCenter = () => {
+    router.push('/setting/pay')
+}
 
 const validCloseLength = (rule:any, value:any, callback:Function) => {
     if (formData.value.is_close != '2') {
@@ -345,6 +443,7 @@ const clearInvoiceContent = (index:number) => {
     formData.value.invoice_content.splice(index, 1)
 }
 getConfigFn()
+loadPayChannels()
 const formRef = ref()
 
 const onSave = async (formEl: any) => {

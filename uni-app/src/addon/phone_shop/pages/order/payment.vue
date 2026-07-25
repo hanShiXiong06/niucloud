@@ -4,7 +4,66 @@
             <!-- #ifdef MP || APP-PLUS -->
             <top-tabbar :data="topTabbarData" :scrollBool="topTabarObj.getScrollBool()"/>
             <!-- #endif -->
-            <view class="pt-[30rpx] sidebar-margin payment-bottom">
+            <OrderQuickConfirm
+                :class="{ 'has-extra': hasExtraOrderContent }"
+                :order-data="orderData"
+                :create-data="createData"
+                :delivery-types="delivery_type_list"
+                :trade-modes="tradeModeList"
+                :coupon-list="couponList"
+                :invoice-enabled="Boolean(invoiceRef && invoiceRef.invoiceOpen)"
+                @change-delivery="handleQuickDelivery"
+                @change-payment="selectPaymentMode"
+                @select-address="toSelectAddress"
+                @select-store="openSelectStore"
+                @select-time="handleTime"
+                @edit-message="toLeaveMessage"
+                @select-coupon="openCouponPopup"
+                @select-invoice="openInvoicePopup"
+                @update-receiver="updateReceiver"
+            />
+            <!-- 保留商城原有万能表单与顺手买能力，但统一收进简洁确认页中 -->
+            <view v-if="hasExtraOrderContent" class="quick-extra sidebar-margin">
+                <template v-for="item in orderData.goods" :key="`form-${item.sku_id}`">
+                    <view v-if="item.goods && item.goods.form_id" class="quick-extra__card">
+                        <view class="quick-extra__title">商品补充信息</view>
+                        <diy-form
+                            ref="diyFormGoodsRef"
+                            :form_id="item.goods.form_id"
+                            :relate_id="item.sku_id"
+                            :storage_name="'diyFormStorageByGoodsDetail_' + item.sku_id"
+                            form_border="none"
+                        />
+                    </view>
+                </template>
+                <view v-if="orderData.form_id" class="quick-extra__card">
+                    <view class="quick-extra__title">订单补充信息</view>
+                    <diy-form ref="diyFormRef" :form_id="orderData.form_id" storage_name="diyFormStorageByOrderPayment" />
+                </view>
+                <view
+                    v-if="systemStore.siteAddons.includes('shop_impulse_buy') && (!createData.extend_data || !createData.extend_data.activity_type || createData.extend_data.activity_type === 'discount')"
+                    class="quick-extra__card"
+                >
+                    <ns-impulse-buy
+                        :key="activeIndex"
+                        ref="impulseBuyRef"
+                        :data="orderData.goods"
+                        :order-key="orderData.order_key"
+                        :delivery-type="createData.delivery.delivery_type"
+                        :calculate-loading="calculateLoading"
+                        @confirm="impulseBuyConfirm"
+                    />
+                </view>
+            </view>
+            <view v-if="tradeDisabledReason" class="sidebar-margin mb-[20rpx]">
+                <u-alert
+                    type="warning"
+                    title="当前无法提交订单"
+                    :description="tradeDisabledReason"
+                    :show-icon="true"
+                />
+            </view>
+            <view v-if="false" class="pt-[30rpx] sidebar-margin payment-bottom">
                 <!-- 配送方式 -->
                 <view class="mb-[var(--top-m)] rounded-[var(--rounded-big)] bg-white" v-if="orderData.basic.has_goods_types.includes('real') && delivery_type_list.length"
                       :style="{backgroundImage: `url(${img('addon/phone_shop/payment/head_bg.png')})`, backgroundSize: '100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'bottom'}">
@@ -146,6 +205,7 @@
                                             <view class="mt-[14rpx] flex" v-if="item.sku_name">
                                                 <text class="truncate text-[24rpx] text-[var(--text-color-light9)] leading-[28rpx]">{{ item.sku_name }}</text>
                                             </view>
+                                            <PhoneGoodsMeta :subtitle="item.goods?.sub_title" :imei="item.sku_no" compact />
                                         </view>
                                         <view v-if="item.manjian_info && item.manjian_info.length >0" class="flex items-center mt-[10rpx] mb-[auto] flex-nowrap overflow-hidden" @click.stop="manjianOpenFn(item.manjian_info)">
                                             <view class="bg-[var(--primary-color-light)] text-[var(--primary-color)] rounded-[6rpx] text-[20rpx] flex items-center justify-center w-[88rpx] h-[36rpx] mr-[6rpx]">满减送</view>
@@ -245,6 +305,50 @@
                     <ns-impulse-buy :key="activeIndex" ref="impulseBuyRef" :data="orderData.goods" :order-key="orderData.order_key" :delivery-type="createData.delivery.delivery_type" :calculate-loading="calculateLoading" @confirm="impulseBuyConfirm"/>
                  </template>
 
+                <view class="card-template mb-[var(--top-m)]" v-if="tradeModeList.length">
+                    <view class="title">支付方式</view>
+                    <view
+                        v-for="item in tradeModeList"
+                        :key="item.key"
+                        class="flex items-center px-[24rpx] py-[26rpx] mb-[16rpx] rounded-[18rpx] border-[2rpx] border-solid"
+                        :class="createData.payment_mode === item.key
+                            ? 'border-[var(--primary-color)] bg-[var(--primary-color-light)]'
+                            : 'border-[#eef1f5] bg-[#f8fafc]'"
+                        @click="selectPaymentMode(item.key)"
+                    >
+                        <view class="w-[68rpx] h-[68rpx] rounded-[18rpx] flex-center mr-[20rpx]"
+                            :class="createData.payment_mode === item.key ? 'bg-[var(--primary-color)]' : 'bg-white'">
+                            <u-icon
+                                :name="item.key === 'offline_pending' ? 'account-fill' : 'weixin-fill'"
+                                :color="createData.payment_mode === item.key ? '#fff' : '#64748b'"
+                                size="24"
+                            />
+                        </view>
+                        <view class="flex-1">
+                            <view class="flex items-center">
+                                <text class="text-[28rpx] font-600 text-[#172033]">{{ item.name }}</text>
+                                <text
+                                    v-if="item.recommended"
+                                    class="ml-[12rpx] px-[10rpx] py-[4rpx] rounded-[8rpx] text-[20rpx] text-[var(--primary-color)] bg-white"
+                                >推荐</text>
+                            </view>
+                            <view class="mt-[8rpx] text-[23rpx] leading-[34rpx] text-[#718096]">{{ item.desc }}</view>
+                        </view>
+                        <u-icon
+                            :name="createData.payment_mode === item.key ? 'checkmark-circle-fill' : 'circle'"
+                            :color="createData.payment_mode === item.key ? 'var(--primary-color)' : '#cbd5e1'"
+                            size="22"
+                        />
+                    </view>
+                    <u-alert
+                        v-if="createData.payment_mode === 'offline_pending'"
+                        type="primary"
+                        title="提交后将锁定这台设备"
+                        :description="tradeConfig.offline_contact_tip"
+                        :show-icon="true"
+                    />
+                </view>
+
                 <view class="card-template">
                     <view class="title">价格明细</view>
                     <view class="card-template-item">
@@ -277,10 +381,10 @@
                     </view>
                 </view>
                 <u-alert
-                    v-if="onlineDisabledReason"
+                    v-if="tradeDisabledReason"
                     type="warning"
-                    title="当前仅支持线下成交"
-                    :description="onlineDisabledReason"
+                    title="当前无法提交订单"
+                    :description="tradeDisabledReason"
                     class="mb-[var(--top-m)]"
                 />
             </view>
@@ -294,7 +398,7 @@
                             <text class="text-[26rpx]  font-500  text-[var(--price-text-color)] price-font leading-[46rpx]">.{{ parseFloat(orderData.basic.order_money).toFixed(2).split('.')[1] }}</text>
                         </view>
                     </view>
-                    <button class="w-[196rpx]  h-[70rpx] font-500 text-[26rpx] leading-[70rpx] !text-[#fff] m-0  rounded-full primary-btn-bg remove-border" hover-class="none" :disabled="calculateLoading || !onlineOrderAllowed" :class="{'opacity-80': calculateLoading || !onlineOrderAllowed}" @click="create">{{ onlineOrderAllowed ? '提交订单' : '请联系商家' }}</button>
+                    <button class="min-w-[216rpx] px-[28rpx] h-[70rpx] font-500 text-[26rpx] leading-[70rpx] !text-[#fff] m-0 rounded-full primary-btn-bg remove-border" hover-class="none" :disabled="calculateLoading || !tradeSubmitAllowed" :class="{'opacity-80': calculateLoading || !tradeSubmitAllowed}" @click="create">{{ submitButtonText }}</button>
                 </view>
             </u-tabbar>
 
@@ -339,6 +443,8 @@ import { topTabar } from '@/utils/topTabbar'
 import diyForm from '@/addon/components/diy-form/index.vue'
 import useMemberStore from '@/stores/member'
 import { useLocation } from '@/hooks/useLocation'
+import PhoneGoodsMeta from '@/addon/phone_shop/components/PhoneGoodsMeta.vue'
+import OrderQuickConfirm from './components/OrderQuickConfirm.vue'
 
 /************** 定位-start ****************/
 const locationVal = useLocation(true);
@@ -353,6 +459,7 @@ const impulseBuyRef = ref()
 const createData: any = ref({
     order_key: '',
     member_remark: '',
+    payment_mode: '',
     discount: {},
     invoice: {},
     delivery: {
@@ -375,25 +482,80 @@ const invoiceRef = ref()
 const createLoading = ref(false)
 const activeIndex = ref(0)//配送方式激活
 const delivery_type_list = ref([])
+const deliveryPreferenceApplied = ref(false)
+const DELIVERY_PREFERENCE_KEY = 'phoneShopOrderDeliveryType'
+const STORE_PREFERENCE_KEY = 'phoneShopOrderTakeStoreId'
+const storeDefaultResolving = ref(false)
 const calculateLoading = ref(false)
+const tradeConfig = computed(() => orderData.value?.basic?.online_trade_config || {})
+const isPeerPricing = computed(() => orderData.value?.basic?.pricing_identity === 'peer')
+const offlineOrderAllowed = computed(() => {
+    if (Number(tradeConfig.value.offline_order_enabled) !== 1) return false
+    return !isPeerPricing.value || Number(tradeConfig.value.offline_peer_enabled) === 1
+})
 const onlineOrderAllowed = computed(() => {
-    const config = orderData.value?.basic?.online_trade_config
-    if (!config || Number(config.online_order_enabled) !== 1) return false
-    return orderData.value?.basic?.pricing_identity !== 'peer' || Number(config.peer_online_enabled) === 1
+    if (Number(tradeConfig.value.online_order_enabled) !== 1) return false
+    return !isPeerPricing.value || Number(tradeConfig.value.peer_online_enabled) === 1
 })
-const onlineDisabledReason = computed(() => {
-    const config = orderData.value?.basic?.online_trade_config
-    if (!config || Number(config.online_order_enabled) !== 1) return '商品可以正常浏览，请联系商家由工作人员线下开单。'
-    if (orderData.value?.basic?.pricing_identity === 'peer' && Number(config.peer_online_enabled) !== 1) {
-        return '当前同行价仅支持联系商家线下开单。'
+const tradeModeList = computed(() => {
+    const list: any[] = []
+    if (offlineOrderAllowed.value) {
+        list.push({
+            key: 'offline_pending',
+            name: '线下支付',
+            desc: '先锁定设备，由业务员联系您完成收款、挂账和交付。',
+            recommended: Number(tradeConfig.value.offline_order_default) === 1,
+        })
     }
-    return ''
+    if (onlineOrderAllowed.value) {
+        list.push({
+            key: 'online',
+            name: '在线支付',
+            desc: '提交订单后，通过商城已启用的支付渠道立即付款。',
+            recommended: !offlineOrderAllowed.value || Number(tradeConfig.value.offline_order_default) !== 1,
+        })
+    }
+    return list
 })
+const tradeSubmitAllowed = computed(() => {
+    return createData.value.payment_mode === 'offline_pending'
+        ? offlineOrderAllowed.value
+        : createData.value.payment_mode === 'online' && onlineOrderAllowed.value
+})
+const tradeDisabledReason = computed(() => {
+    if (tradeModeList.value.length) return ''
+    return isPeerPricing.value
+        ? '当前同行价暂未开放可用的成交方式，请联系商家。'
+        : '商城暂未开放可用的成交方式，请联系商家。'
+})
+const submitButtonText = computed(() => {
+    if (!tradeSubmitAllowed.value) return '请联系商家'
+    return createData.value.payment_mode === 'offline_pending' ? '提交线下订单' : '提交并支付'
+})
+const hasExtraOrderContent = computed(() => {
+    const goodsHasForm = (orderData.value?.goods || []).some((item: any) => Boolean(item.goods?.form_id))
+    const impulseBuyEnabled = systemStore.siteAddons.includes('shop_impulse_buy')
+        && (!createData.value.extend_data
+            || !createData.value.extend_data.activity_type
+            || createData.value.extend_data.activity_type === 'discount')
+    return goodsHasForm || Boolean(orderData.value?.form_id) || impulseBuyEnabled
+})
+const selectPaymentMode = (mode: string) => {
+    if (createData.value.payment_mode === mode || calculateLoading.value) return
+    createData.value.payment_mode = mode
+    calculate({ is_need_recalculate: 1 })
+}
+const handleQuickDelivery = ({ key, index }: { key: string; index: number }) => switchDeliveryType(key, index)
+const openCouponPopup = () => couponRef.value?.open(createData.value.discount?.coupon_id)
+const openInvoicePopup = () => invoiceRef.value?.open()
+const updateReceiver = ({ name, mobile }: { name: string; mobile: string }) => {
+    createData.value.delivery.taker_name = name
+    createData.value.delivery.taker_mobile = mobile
+}
 uni.getStorageSync('orderCreateData') && Object.assign(createData.value, uni.getStorageSync('orderCreateData'))
 
 const diyFormRef: any = ref(null)
 const diyFormGoodsRef: any = ref(null)
-const storeClickNum = ref(0) // 记录门店自提点击次数
 const service_time = ref({}) //获取配置时间
 const selectTime = ref(null)
 
@@ -459,12 +621,52 @@ const openSelectStore = () => {
     storeRef.value.open(obj)
 }
 
+/**
+ * 优先恢复用户上次确认的有效自提点；没有历史选择时使用第一家门店。
+ * 选定后重新计算订单，确保页面展示、运费和最终提交使用同一个门店。
+ */
+const applyPreferredStore = (list: any[] = []) => {
+    const storeList = Array.isArray(list) ? list.filter(item => Number(item?.store_id) > 0) : []
+    if (!storeList.length) return false
+
+    const cachedStoreId = Number(uni.getStorageSync(STORE_PREFERENCE_KEY) || 0)
+    const currentStoreId = Number(createData.value.delivery.take_store_id || 0)
+    const preferredStore = storeList.find(item => Number(item.store_id) === cachedStoreId)
+        || storeList.find(item => Number(item.store_id) === currentStoreId)
+        || storeList[0]
+    const preferredStoreId = Number(preferredStore.store_id)
+
+    uni.setStorageSync(STORE_PREFERENCE_KEY, preferredStoreId)
+    if (currentStoreId === preferredStoreId) return false
+
+    createData.value.delivery.take_store_id = preferredStoreId
+    createData.value.order_key = ''
+    calculate()
+    return true
+}
+
+const ensurePreferredStore = () => {
+    if (createData.value.delivery.delivery_type !== 'store') return false
+
+    const calculatedStoreList = orderData.value?.delivery?.take_store_list || []
+    if (calculatedStoreList.length) return applyPreferredStore(calculatedStoreList)
+    if (!storeRef.value || storeDefaultResolving.value) return false
+
+    storeDefaultResolving.value = true
+    storeRef.value.getData((list: any[]) => {
+        storeDefaultResolving.value = false
+        applyPreferredStore(list)
+    })
+    return false
+}
+
 // 选择地址之后跳转回来
 const selectAddress = uni.getStorageSync('selectAddressCallback')
 if (selectAddress) {
     createData.value.order_key = ''
     createData.value.delivery.delivery_type = selectAddress.delivery
     createData.value.delivery.take_address_id = selectAddress.address_id
+    uni.setStorageSync(DELIVERY_PREFERENCE_KEY, selectAddress.delivery)
     uni.removeStorage({ key: 'selectAddressCallback' })
 }
 
@@ -482,21 +684,12 @@ const switchDeliveryType = async (type: string, index: number) => {
         service_time.value = {}  //清空配置时间
     }
 
-    // 第一次进入时，加载门店自提并选中
-    if (type == 'store' && storeClickNum.value == 0) {
-        storeClickNum.value++;
-        storeRef.value.getData((data: any) => {
-            if (data.length) {
-                createData.value.delivery.take_store_id = data[0]?.store_id ?? 0
-                calculate()
-            }
-        });
-    }
     if (createData.value.delivery.delivery_type != type) {
         activeIndex.value = index
         createData.value.order_key = ''
         createData.value.delivery.delivery_type = type
         createData.value.delivery.take_address_id = 0
+        uni.setStorageSync(DELIVERY_PREFERENCE_KEY, type)
         calculate()
     }
 }
@@ -529,6 +722,10 @@ const calculate = (params: any = {}) => {
     orderCreateCalculate(calculateData).then(({ data }) => {
         orderData.value = cloneDeep(data);
         calculateLoading.value = false
+        if (!createData.value.payment_mode) {
+            createData.value.payment_mode = data.basic?.payment_mode
+                || (Number(data.basic?.online_trade_config?.offline_order_default) === 1 ? 'offline_pending' : 'online')
+        }
 
         orderData.value.goods = []; //购买商品
         if (orderData.value.goods_data && Object.values(orderData.value.goods_data).length) {
@@ -575,6 +772,19 @@ const calculate = (params: any = {}) => {
             }else{
                 delivery_type_list.value = cloneDeep(Object.values(orderData.value.delivery.delivery_type_list))
             }
+            if (!deliveryPreferenceApplied.value && !selectAddress && delivery_type_list.value.length) {
+                deliveryPreferenceApplied.value = true
+                const preferredType = String(uni.getStorageSync(DELIVERY_PREFERENCE_KEY) || '')
+                const preferredIndex = delivery_type_list.value.findIndex((item: any) => item.key === preferredType)
+                if (preferredIndex >= 0 && createData.value.delivery.delivery_type !== preferredType) {
+                    activeIndex.value = preferredIndex
+                    createData.value.delivery.delivery_type = preferredType
+                    createData.value.delivery.take_address_id = 0
+                    createData.value.order_key = ''
+                    calculate()
+                    return false
+                }
+            }
         }
         if (orderData.value.discount && orderData.value.discount.manjian) {
             orderData.value.manjian = orderData.value.discount.manjian
@@ -590,18 +800,8 @@ const calculate = (params: any = {}) => {
         if (selectAddress) activeIndex.value = delivery_type_list.value.findIndex(el => el.key === orderData.value.delivery.delivery_type)
         !createData.value.delivery.delivery_type && data.delivery.delivery_type && (createData.value.delivery.delivery_type = data.delivery.delivery_type)
 
-        // 用于自提点是第一种配送方式时，第一次进来加载门店自提并选中, 是对于onshow的补充
-        nextTick(() => {
-            setTimeout(() => {
-                if (delivery_type_list.value && Object.keys(delivery_type_list.value).length && delivery_type_list.value[0].key == 'store' && storeRef.value) {
-                    storeRef.value.getData((data: any) => {
-                        if (data.length) {
-                            createData.value.delivery.take_store_id = ((data[0] && data[0].store_id) ? data[0].store_id : 0)
-                        }
-                    });
-                }
-            }, 500);
-        })
+        // 自提模式自动恢复上次门店；无历史记录时选择第一家门店。
+        nextTick(() => ensurePreferredStore())
     }).catch(() => {
         calculateLoading.value = false
     })
@@ -655,8 +855,8 @@ const impulseBuyConfirm = (params: any = {}) => {
  * 订单创建
  */
 const create = () => {
-    if (!onlineOrderAllowed.value) {
-        uni.showToast({ title: orderData.value?.basic?.pricing_identity === 'peer' ? '同行客户暂未开放线上下单，请联系商家' : '商城暂未开放线上下单，请联系商家', icon: 'none' })
+    if (!tradeSubmitAllowed.value) {
+        uni.showToast({ title: tradeDisabledReason.value || '请选择可用的支付方式', icon: 'none' })
         return
     }
     if (!verify() || createLoading.value) return
@@ -705,7 +905,7 @@ const create = () => {
         }
         createData.value.form_data = {}
         createData.value.order_key = ''
-        if (orderData.value.basic.order_money == 0) {
+        if (createData.value.payment_mode === 'offline_pending' || orderData.value.basic.order_money == 0) {
             redirect({ url: '/addon/phone_shop/pages/order/detail', param: { order_id: orderId }, mode: 'redirectTo' })
         } else {
             payRef.value?.open(data.trade_type, data.order_id, `/addon/phone_shop/pages/order/detail?order_id=${ data.order_id }`)
@@ -803,6 +1003,11 @@ const confirmSelectCoupon = (coupon: any) => {
  */
 const confirmSelectStore = (store: any) => {
     createData.value.delivery.take_store_id = ((store && store.store_id) ? store.store_id : 0)
+    if (createData.value.delivery.take_store_id) {
+        uni.setStorageSync(STORE_PREFERENCE_KEY, createData.value.delivery.take_store_id)
+    } else {
+        uni.removeStorageSync(STORE_PREFERENCE_KEY)
+    }
     // if (store) {
     //     service_time.value = {
     //         time_interval: store.time_interval,
@@ -916,6 +1121,25 @@ const distanceFn = (distance: string | number) => {
 .payment-bottom {
     padding-bottom: calc(20rpx + constant(safe-area-inset-bottom));
     padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+}
+
+.quick-extra {
+    padding-bottom: 150rpx;
+}
+
+.quick-extra__card {
+    margin-bottom: 20rpx;
+    padding: 26rpx;
+    border-radius: 22rpx;
+    background: #fff;
+    box-shadow: 0 8rpx 28rpx rgba(15, 23, 42, .035);
+}
+
+.quick-extra__title {
+    margin-bottom: 20rpx;
+    color: #172033;
+    font-size: 28rpx;
+    font-weight: 600;
 }
 
 .payment-wrap {

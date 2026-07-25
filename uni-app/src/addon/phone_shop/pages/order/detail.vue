@@ -166,6 +166,7 @@
                                     <view v-if="goodsItem.sku_name">
                                         <view class="text-[22rpx] mt-[14rpx] text-[var(--text-color-light9)] truncate max-w-[490rpx] leading-[28rpx]">{{ goodsItem.sku_name }}</view>
                                     </view>
+                                    <PhoneGoodsMeta :subtitle="goodsItem.sub_title" :imei="goodsItem.sku_no" compact />
                                 </view>
                                 <view v-if="goodsItem.manjian_info &&goodsItem.manjian_info.length>0"
                                       class="flex items-center mt-[10rpx] mb-[auto] flex-nowrap overflow-hidden"
@@ -366,6 +367,23 @@
                     </view>
                 </template>
 
+                <view
+                    v-if="detail.status == 1 && detail.payment_mode === 'offline_pending'"
+                    class="sidebar-margin mt-[var(--top-m)] card-template"
+                >
+                    <view class="flex items-center">
+                        <view class="w-[72rpx] h-[72rpx] rounded-[20rpx] bg-[var(--primary-color-light)] flex-center mr-[20rpx]">
+                            <u-icon name="account-fill" color="var(--primary-color)" size="25" />
+                        </view>
+                        <view class="flex-1">
+                            <view class="text-[29rpx] font-600 text-[#172033]">订单已提交，设备已为您锁定</view>
+                            <view class="mt-[10rpx] text-[24rpx] leading-[36rpx] text-[#718096]">
+                                业务员将联系您确认线下收款或挂账，并安排后续交付。您无需重复支付或上传凭证。
+                            </view>
+                        </view>
+                    </view>
+                </view>
+
                 <!-- 待付款订单的万能表单信息 -->
                 <view :class="{'sidebar-margin mt-[var(--top-m)] card-template' : orderDiyFormData.length }"
                       v-if="detail.form_record_id">
@@ -459,7 +477,8 @@
                         <view class="order-grey-hollow-btn ml-[20rpx]"
                             @click="orderBtnFn('logistics')" v-if="showLogistics(detail)">{{ t('logisticsTracking') }}</view>
                         <view class="order-grey-hollow-btn ml-[20rpx]" v-if="detail.status == 1" @click="orderBtnFn('close')">{{ t('orderClose') }}</view>
-                        <view class="px-[24rpx] min-w-[144rpx] box-border  text-[24rpx] h-[56rpx] flex-center text-center text-[#fff] primary-btn-bg rounded-full ml-[20rpx]" v-if="detail.status == 1" @click="orderBtnFn('pay')">{{ t('topay') }}</view>
+                        <view class="px-[24rpx] min-w-[144rpx] box-border text-[24rpx] h-[56rpx] flex-center text-center text-[#fff] primary-btn-bg rounded-full ml-[20rpx]" v-if="detail.status == 1 && detail.payment_mode !== 'offline_pending'" @click="orderBtnFn('pay')">{{ t('topay') }}</view>
+                        <view class="px-[24rpx] min-w-[176rpx] box-border text-[24rpx] h-[56rpx] flex-center text-center text-[var(--primary-color)] bg-[var(--primary-color-light)] rounded-full ml-[20rpx]" v-if="detail.status == 1 && detail.payment_mode === 'offline_pending'">等待业务员联系</view>
                         <view v-if="detail.status == 3" class="px-[24rpx] min-w-[144rpx] box-border  text-[24rpx] h-[56rpx] flex-center text-center  text-[#fff]  primary-btn-bg rounded-full ml-[20rpx]" @click="orderBtnFn('finish')">{{ t('orderFinish') }}</view>
                         <template v-if="detail.status == 5 && isShowEvaluate">
                             <view v-if="detail.is_evaluate == 1 || (detail.is_evaluate != 1 && evaluateConfig.is_evaluate == 1)"
@@ -504,6 +523,7 @@ import { cloneDeep } from 'lodash-es';
 import diyFormDetail from '@/addon/components/diy-form-detail/index.vue'
 import mapShow from '@/addon/phone_shop/pages/order/components/map-show/map-show.vue'
 import useSystemStore from "@/stores/system";
+import PhoneGoodsMeta from '@/addon/phone_shop/components/PhoneGoodsMeta.vue'
 
 const systemStore = useSystemStore()
 

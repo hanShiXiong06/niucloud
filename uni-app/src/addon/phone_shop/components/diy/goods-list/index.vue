@@ -19,9 +19,7 @@
                                 <view class="brand-tag" v-if="item.goods_brand" :style="diyGoods.baseTagStyle(item.goods_brand)">{{ item.goods_brand.brand_name }}</view>
                                 {{ item.goods_name }}
                             </view>
-							<view class="text-[24rpx] text-[#999] leading-[30rpx] using-hidden mb-[5rpx]" v-if="item.sub_title">
-							    {{ item.sub_title }}
-							</view>
+                            <PhoneGoodsMeta :subtitle="item.sub_title" :imei="item.goodsSku?.sku_no || item.sku_no" />
                             <view v-if="item.goods_label_name && item.goods_label_name.length && diyComponent.labelStyle.control" class="flex flex-wrap mb-[10rpx]">
                                 <template v-for="(tagItem, tagIndex) in item.goods_label_name">
                                     <image class="img-tag" v-if="tagItem.style_type == 'icon' && tagItem.icon" :src="img(tagItem.icon)" mode="heightFix" @error="diyGoods.error(tagItem,'icon')"/>
@@ -41,11 +39,6 @@
 										<image v-else-if="diyGoods.priceType(item) == 'newcomer_price'"  class="max-w-[60rpx] h-[28rpx] ml-[6rpx]" :src="img('addon/phone_shop/newcomer.png')" mode="heightFix" />
 										<image v-else-if="diyGoods.priceType(item) == 'discount_price'" class="max-w-[80rpx] h-[28rpx] ml-[6rpx]" :src="img('addon/phone_shop/discount.png')" mode="heightFix" />
                                     </view>
-                                    <text v-if="diyComponent.saleStyle.control"
-                                          class="mt-[8rpx] text-[20rpx] text-[var(--text-color-light9)]"
-                                          :style="{ color : diyComponent.saleStyle.color }">
-                                        已售{{ item.sale_num }}{{ item.unit || '件' }}
-                                    </text>
                                 </view>
                                 <view class="absolute right-[16rpx] bottom-[16rpx]" @click.stop v-if="diyComponent.btnStyle.control && !item.isMaxBuy || diyStore.mode == 'decorate'">
 
@@ -85,9 +78,7 @@
                                         <view class="brand-tag" v-if="item.goods_brand" :style="diyGoods.baseTagStyle(item.goods_brand)">{{ item.goods_brand.brand_name }}</view>
                                         {{ item.goods_name }}
                                     </view>
-									<view class="text-[24rpx] text-[#999] leading-[30rpx] using-hidden my-[5rpx]" v-if="item.sub_title">
-									    {{ item.sub_title }}
-									</view>
+                                    <PhoneGoodsMeta :subtitle="item.sub_title" :imei="item.goodsSku?.sku_no || item.sku_no" compact />
                                     <view v-if="item.goods_label_name && item.goods_label_name.length && diyComponent.labelStyle.control" class="flex flex-wrap">
                                         <template v-for="(tagItem, tagIndex) in item.goods_label_name">
                                             <image class="img-tag" v-if="tagItem.style_type == 'icon' && tagItem.icon" :src="img(tagItem.icon)" mode="heightFix" @error="diyGoods.error(tagItem,'icon')" />
@@ -107,11 +98,6 @@
 												<image v-else-if="diyGoods.priceType(item) == 'newcomer_price'"  class="max-w-[60rpx] h-[28rpx] ml-[6rpx]" :src="img('addon/phone_shop/newcomer.png')" mode="heightFix" />
 												<image v-else-if="diyGoods.priceType(item) == 'discount_price'" class="max-w-[80rpx] h-[28rpx] ml-[6rpx]" :src="img('addon/phone_shop/discount.png')" mode="heightFix" />
                                             </view>
-                                            <text v-if="diyComponent.saleStyle.control"
-                                                  class="text-[20rpx] mt-[8rpx] text-[var(--text-color-light9)]"
-                                                  :style="{ color : diyComponent.saleStyle.color }">
-                                                已售{{ item.sale_num }}{{ item.unit || '件' }}
-                                            </text>
                                         </view>
                                         <view class="absolute right-[16rpx] bottom-[16rpx]" @click.stop v-if="diyComponent.btnStyle.control && !item.isMaxBuy || diyStore.mode == 'decorate'">
                                             <template v-if="(item.goods_type == 'virtual' && item.virtual_receive_type != 'verify') || item.goods_type == 'real' || diyStore.mode == 'decorate'">
@@ -148,9 +134,7 @@
                                         <view class="brand-tag" v-if="item.goods_brand" :style="diyGoods.baseTagStyle(item.goods_brand)">{{ item.goods_brand.brand_name }}</view>
                                         {{ item.goods_name }}
                                     </view>
-									<view class="text-[24rpx] text-[#999] leading-[30rpx] using-hidden my-[5rpx]" v-if="item.sub_title">
-									    {{ item.sub_title }}
-									</view>
+                                    <PhoneGoodsMeta :subtitle="item.sub_title" :imei="item.goodsSku?.sku_no || item.sku_no" compact />
                                     <view v-if="item.goods_label_name && item.goods_label_name.length && diyComponent.labelStyle.control" class="flex flex-wrap">
                                         <template v-for="(tagItem, tagIndex) in item.goods_label_name">
                                             <image class="img-tag" v-if="tagItem.style_type == 'icon' && tagItem.icon" :src="img(tagItem.icon)" mode="heightFix" @error="diyGoods.error(tagItem,'icon')" />
@@ -169,11 +153,6 @@
 												<image v-else-if="diyGoods.priceType(item) == 'newcomer_price'"  class="max-w-[60rpx] h-[28rpx] ml-[6rpx]" :src="img('addon/phone_shop/newcomer.png')" mode="heightFix" />
 												<image v-else-if="diyGoods.priceType(item) == 'discount_price'" class="max-w-[80rpx] h-[28rpx] ml-[6rpx]" :src="img('addon/phone_shop/discount.png')" mode="heightFix" />
                                             </view>
-                                            <text v-if="diyComponent.saleStyle.control"
-                                                  class="text-[20rpx] mt-[8rpx] text-[var(--text-color-light9)]"
-                                                  :style="{ color : diyComponent.saleStyle.color }">
-                                                已售{{ item.sale_num }}{{ item.unit || '件' }}
-                                            </text>
                                         </view>
                                         <view class="absolute right-[16rpx] bottom-[16rpx]" @click.stop v-if="diyComponent.btnStyle.control && !item.isMaxBuy || diyStore.mode == 'decorate'">
                                             <template v-if="(item.goods_type == 'virtual'  && item.virtual_receive_type != 'verify') || item.goods_type == 'real' || diyStore.mode == 'decorate'">
@@ -210,6 +189,7 @@
 <!--                                <easy-image class="w-[214rpx] h-[160rpx]" :image-src="item.goods_cover_thumb_small" :imageStyle="imageStyle3" />-->
                                 <view class="relative min-h-[40rpx] px-[10rpx] pt-[16rpx] pb-[10rpx]">
                                     <view class="text-[26rpx] text-[#303133] truncate" :style="{ color : diyComponent.goodsNameStyle.color, fontWeight : diyComponent.goodsNameStyle.fontWeight }" v-if="diyComponent.goodsNameStyle.control">{{ item.goods_name }}</view>
+                                    <PhoneGoodsMeta :subtitle="item.sub_title" :imei="item.goodsSku?.sku_no || item.sku_no" compact />
                                     <view class="text-[var(--price-text-color)] pt-[16rpx] pb-[6rpx] font-bold price-font block truncate max-w-[160rpx] leading-[1] overflow-hidden"
                                         :style="{ color : diyComponent.priceStyle.color }"
                                         v-if="diyComponent.priceStyle.control">
@@ -245,6 +225,7 @@ import useCartStore from '@/addon/phone_shop/stores/cart'
 import useMemberStore from '@/stores/member'
 import { useLogin } from '@/hooks/useLogin'
 import { cloneDeep } from 'lodash-es'
+import PhoneGoodsMeta from '@/addon/phone_shop/components/PhoneGoodsMeta.vue'
 
 const cartStore = useCartStore();
 // 查询购物车列表

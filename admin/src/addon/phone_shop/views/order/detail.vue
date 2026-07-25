@@ -124,6 +124,24 @@
                     </el-col>
                 </el-row>
                 <h3 class="panel-title">{{ t('orderStatus') }}</h3>
+                <div v-if="isOfflinePending" class="mx-[30px] mb-[20px] rounded-[8px] border border-[#d9e6ff] bg-[#f5f8ff] px-[20px] py-[18px]">
+                    <div class="flex items-start justify-between gap-[20px]">
+                        <div>
+                            <div class="flex items-center gap-[8px] text-[16px] font-medium text-[#1d2433]">
+                                <el-icon color="#3b6ef5"><Wallet /></el-icon>
+                                客户选择线下支付
+                                <el-tag type="warning" effect="plain">设备已锁定</el-tag>
+                            </div>
+                            <p class="mt-[8px] text-[13px] leading-[22px] text-[#718096]">
+                                业务员确认实际收款或挂账后，订单自动进入待交付；ERP 同步生成销售、收款或应收事实。
+                            </p>
+                        </div>
+                        <div class="flex shrink-0 gap-[10px]">
+                            <el-button type="primary" @click="openOfflineProcess('confirm_paid')">确认已收款</el-button>
+                            <el-button @click="openOfflineProcess('confirm_credit')">挂账并出库</el-button>
+                        </div>
+                    </div>
+                </div>
                 <div class="mb-[20px]">
                     <p>
                         <span class="ml-[30px] text-[14px] mr-[20px]">{{ t('orderStatus') }}：</span>
@@ -269,6 +287,60 @@
                     </div>
                 </div>
             </el-card>
+
+            <el-dialog v-model="offlineDialog.visible" :title="offlineDialog.action === 'confirm_paid' ? '确认线下收款' : '确认挂账出库'" width="480px" destroy-on-close>
+                <el-alert
+                    :title="offlineDialog.action === 'confirm_paid' ? '确认后将记录真实到账，并进入待交付。' : '确认后将生成 ERP 应收，并进入待交付。'"
+                    type="info"
+                    :closable="false"
+                    show-icon
+                    class="mb-[18px]"
+                />
+                <el-form label-position="top">
+                    <el-form-item :label="offlineOrderGoodsCount > 1 ? '一口打包成交价' : '本次实际成交价'" required>
+                        <el-input-number
+                            v-model="offlineDialog.deal_total"
+                            class="!w-full"
+                            :min="0.01"
+                            :max="99999999.99"
+                            :precision="2"
+                            :step="10"
+                            controls-position="right"
+                        />
+                        <div class="mt-[6px] text-[12px] text-[#909399]">
+                            <template v-if="offlineOrderGoodsCount > 1">
+                                共 {{ offlineOrderGoodsCount }} 台设备，系统按原成交金额比例分摊，分摊价同时作为单台退款上限。
+                            </template>
+                            <template v-else>修改后的实际成交价将作为该设备退款上限。</template>
+                        </div>
+                        <el-tag v-if="offlinePriceChange !== 0" class="mt-[8px]" :type="offlinePriceChange < 0 ? 'success' : 'warning'">
+                            {{ offlinePriceChange < 0 ? '优惠' : '加价' }} ￥{{ Math.abs(offlinePriceChange).toFixed(2) }}
+                        </el-tag>
+                    </el-form-item>
+                    <el-form-item v-if="offlineDialog.action === 'confirm_paid'" label="实际到账账户" required>
+                        <el-select v-model="offlineDialog.capital_account_id" class="w-full" placeholder="选择 ERP 资金账户" filterable>
+                            <el-option
+                                v-for="account in capitalAccounts"
+                                :key="account.id"
+                                :label="`${account.name} · ${account.type_name}`"
+                                :value="account.id"
+                            />
+                        </el-select>
+                        <div v-if="!capitalAccounts.length" class="mt-[6px] text-[12px] text-warning">
+                            暂无可用账户，请先在 ERP 资金账户中启用账户。
+                        </div>
+                    </el-form-item>
+                    <el-form-item label="处理备注">
+                        <el-input v-model="offlineDialog.remark" type="textarea" :rows="3" maxlength="255" show-word-limit placeholder="可填写收款方式、沟通结果等" />
+                    </el-form-item>
+                </el-form>
+                <template #footer>
+                    <el-button @click="offlineDialog.visible = false">取消</el-button>
+                    <el-button type="primary" :loading="offlineSubmitting" @click="submitOfflineProcess">
+                        {{ offlineDialog.action === 'confirm_paid' ? '确认收款' : '确认挂账' }}
+                    </el-button>
+                </template>
+            </el-dialog>
             <el-card class="box-card !border-none relative" shadow="never" v-if="!loading && !formData">
                 <el-empty :description="t('orderInfoEmpty')" />
             </el-card>
@@ -285,10 +357,10 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, defineAsyncComponent } from 'vue'
+import { ref, defineAsyncComponent, computed, reactive } from 'vue'
 import { t } from '@/lang'
-import { ArrowLeft } from "@element-plus/icons-vue"
-import { getOrderDetail, orderClose, orderFinish } from '@/addon/phone_shop/api/order'
+import { ArrowLeft, Wallet } from "@element-plus/icons-vue"
+import { getOrderDetail, orderClose, orderFinish, getOfflineCapitalAccounts, processOfflineOrder } from '@/addon/phone_shop/api/order'
 import { getFormRecordsInfo } from '@/app/api/diy_form'
 import { printTicket } from '@/app/api/printer'
 import DeliveryAction from '@/addon/phone_shop/views/order/components/delivery-action.vue'
@@ -311,6 +383,20 @@ const orderId: number = parseInt(route.query.order_id as string)
 const loading = ref(true)
 
 const formData: Record<string, any> | null = ref(null)
+const isOfflinePending = computed(() => Number(formData.value?.status) === 1 && formData.value?.payment_mode === 'offline_pending')
+const capitalAccounts = ref<any[]>([])
+const offlineSubmitting = ref(false)
+const offlineDialog = reactive({
+    visible: false,
+    action: 'confirm_paid',
+    capital_account_id: 0,
+    deal_total: 0,
+    remark: ''
+})
+const offlineOrderGoodsCount = computed(() => (formData.value?.order_goods || [])
+    .filter((item: any) => Number(item.is_gift || 0) !== 1)
+    .reduce((total: number, item: any) => total + Number(item.num || 1), 0))
+const offlinePriceChange = computed(() => Number(offlineDialog.deal_total || 0) - Number(formData.value?.order_money || 0))
 const tableData = ref([]);
 const modules: any = import.meta.glob('@/**/*.vue')
 const formDetailDialog: any = ref(null)
@@ -364,6 +450,45 @@ const setFormData = async(orderId: number = 0) => {
 
 if (orderId) setFormData(orderId)
 else loading.value = false
+
+const openOfflineProcess = async(action: 'confirm_paid' | 'confirm_credit') => {
+    offlineDialog.action = action
+    offlineDialog.capital_account_id = 0
+    offlineDialog.deal_total = Number(formData.value?.order_money || 0)
+    offlineDialog.remark = ''
+    if (action === 'confirm_paid') {
+        const { data } = await getOfflineCapitalAccounts()
+        capitalAccounts.value = Array.isArray(data) ? data : []
+        const defaultAccount = capitalAccounts.value.find((item: any) => Number(item.is_default) === 1)
+        offlineDialog.capital_account_id = Number(defaultAccount?.id || capitalAccounts.value[0]?.id || 0)
+    }
+    offlineDialog.visible = true
+}
+
+const submitOfflineProcess = async() => {
+    if (Number(offlineDialog.deal_total) <= 0) {
+        ElMessageBox.alert('请输入有效的实际成交价', '成交价不正确', { type: 'warning' })
+        return
+    }
+    if (offlineDialog.action === 'confirm_paid' && !offlineDialog.capital_account_id) {
+        ElMessageBox.alert('请选择实际到账的 ERP 资金账户', '缺少收款账户', { type: 'warning' })
+        return
+    }
+    offlineSubmitting.value = true
+    try {
+        await processOfflineOrder({
+            order_id: orderId,
+            action: offlineDialog.action,
+            capital_account_id: offlineDialog.capital_account_id,
+            deal_total: offlineDialog.deal_total,
+            remark: offlineDialog.remark
+        })
+        offlineDialog.visible = false
+        await setFormData(orderId)
+    } finally {
+        offlineSubmitting.value = false
+    }
+}
 
 const close = () => {
     ElMessageBox.confirm(t('orderCloseTips'), t('warning'),

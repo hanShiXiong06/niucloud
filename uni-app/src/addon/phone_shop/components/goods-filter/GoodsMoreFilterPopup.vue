@@ -149,7 +149,6 @@ const draft = reactive<MoreFilterValue>(emptyValue())
 const sortOptions = [
     { label: '综合', value: 'all', desc: '按商城默认规则' },
     { label: '最新', value: 'latest', desc: '新上架优先' },
-    { label: '销量', value: 'sale_num', desc: '热销商品优先' },
     { label: '价格', value: 'price', desc: '可选升序或降序' }
 ]
 
@@ -163,7 +162,7 @@ const reset = () => Object.assign(draft, emptyValue())
 
 const selectSort = (value: string) => {
     draft.order = value
-    draft.sort = value === 'price' ? (draft.sort || 'asc') : (value === 'sale_num' ? 'desc' : '')
+    draft.sort = value === 'price' ? (draft.sort || 'asc') : ''
 }
 
 const toggleBrand = (value: string | number) => {

@@ -33,6 +33,20 @@ export function getOrderDetail(order_id: number) {
 }
 
 /**
+ * 获取线下订单可选的 ERP 资金账户
+ */
+export function getOfflineCapitalAccounts() {
+    return request.get('phone_shop/order/offline/capital_accounts')
+}
+
+/**
+ * 线下订单确认收款或确认挂账
+ */
+export function processOfflineOrder(params: Record<string, any>) {
+    return request.post('phone_shop/order/offline/process', params, { showSuccessMessage: true })
+}
+
+/**
  * 获取订单状态
  * @return
  */

@@ -84,6 +84,7 @@
                                             <view class="flex justify-between items-baseline text-[#303133] mt-[14rpx]">
                                                 <view>
                                                     <view class="text-[24rpx] text-[var(--text-color-light6)] font-400 truncate leading-[34rpx] max-w-[369rpx] mb-[10rpx]" v-if="subItem.sku_name">{{ subItem.sku_name }}</view>
+                                                    <PhoneGoodsMeta :subtitle="subItem.sub_title" :imei="subItem.sku_no" compact />
                                                     <view class="text-[24rpx] font-400 leading-[34rpx] text-[var(--text-color-light6)]" v-if="item.delivery_type != 'virtual'">{{ t('deliveryType') }} ： {{ item.delivery_type_name }}</view>
                                                 </view>
                                                 <text class="text-right text-[26rpx] font-400 w-[90rpx] leading-[36rpx]">x{{ subItem.num }}</text>
@@ -178,6 +179,7 @@ import { onLoad, onPageScroll, onReachBottom, onShow } from '@dcloudio/uni-app';
 import useConfigStore from "@/stores/config";
 import { topTabar } from '@/utils/topTabbar';
 import useSystemStore from '@/stores/system';
+import PhoneGoodsMeta from '@/addon/phone_shop/components/PhoneGoodsMeta.vue'
 const systemStore = useSystemStore()
 /********* 自定义头部 - start ***********/
 const topTabarObj = topTabar()

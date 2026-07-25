@@ -118,6 +118,10 @@ const open = (data: any) => {
 }
 
 const getStoreListFn = (callback: any) => {
+    if (loaded.value) {
+        if (typeof callback == 'function') callback(storeList.value)
+        return
+    }
     if (!loaded.value) {
         loaded.value = true
 

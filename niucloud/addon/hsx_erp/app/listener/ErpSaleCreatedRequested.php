@@ -153,6 +153,7 @@ class ErpSaleCreatedRequested
                     : 'merchant',
                 'merchant_net_amount' => number_format(max(0, round((float)($payment['merchant_net_amount'] ?? 0), 2)), 2, '.', ''),
                 'out_trade_no' => mb_substr(trim((string)($payment['out_trade_no'] ?? '')), 0, 100),
+                'capital_account_id' => max(0, (int)($payment['capital_account_id'] ?? 0)),
             ],
             'items' => $items,
         ];
@@ -160,6 +161,10 @@ class ErpSaleCreatedRequested
 
     protected function saleData(array $payload): array
     {
+        $payment = (array)($payload['payment'] ?? []);
+        $isOfflineCash = (string)($payment['status'] ?? '') === 'paid'
+            && (string)($payment['mode'] ?? '') === 'offline_cash'
+            && (int)($payment['capital_account_id'] ?? 0) > 0;
         return [
             'request_id' => (string)$payload['event_id'],
             'event_id' => (string)$payload['event_id'],
@@ -168,7 +173,10 @@ class ErpSaleCreatedRequested
             'sale_channel_key' => (string)$payload['channel_code'],
             'sale_channel' => (string)$payload['channel_name'],
             'salesman_uid' => (int)$payload['salesman_uid'],
-            'settle_method' => '挂账',
+            'settle_mode' => $isOfflineCash ? 'cash' : 'credit',
+            'settle_method' => $isOfflineCash ? '现结' : '挂账',
+            'received_amount' => $isOfflineCash ? (float)($payment['gross_amount'] ?? 0) : 0,
+            'capital_account_id' => $isOfflineCash ? (int)($payment['capital_account_id'] ?? 0) : 0,
             'sale_at' => (int)$payload['occurred_at'],
             'origin_plugin' => (string)$payload['source_plugin'],
             'origin_plugin_name' => (string)$payload['source_plugin_name'],

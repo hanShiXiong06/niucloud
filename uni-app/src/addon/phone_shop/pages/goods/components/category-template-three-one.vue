@@ -96,10 +96,7 @@
 								</view>
 								<view class="goods-info">
 									<view class="goods-name multi-hidden">{{ item.goods_name }}</view>
-									<view class="goods-tags">
-									{{ item.sub_title }}
-									</view>
-									<view  class="goods-tags" > {{ 	(item.goodsSku && item.goodsSku.sku_no) ? ('IMEI ' + String(item.goodsSku.sku_no).slice(-6)) : '' }}</view>
+									<PhoneGoodsMeta :subtitle="item.sub_title" :imei="item.goodsSku?.sku_no" compact />
 										<!-- <view class="device-row" v-if="item.memory_group || (config.show_quality && (item.condition_grade || qcAbnormal(item)))">
 											<text v-if="item.memory_group" class="device-chip">{{ item.memory_group }}</text>
 											<text v-if="config.show_quality && item.condition_grade" class="device-chip">{{ item.condition_grade }}</text>
@@ -262,6 +259,7 @@ import useMemberStore from '@/stores/member';
 import useCartStore from '@/addon/phone_shop/stores/cart';
 import { useGoodsDownload } from '@/addon/phone_shop/hooks/useGoodsDownload';
 import DownloadConfigDialog from '@/addon/phone_shop/components/download-config-dialog/download-config-dialog.vue';
+import PhoneGoodsMeta from '@/addon/phone_shop/components/PhoneGoodsMeta.vue'
 
 const prop = defineProps({
 	config: {

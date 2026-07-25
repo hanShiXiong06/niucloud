@@ -5,6 +5,8 @@ namespace addon\hsx_erp\app\service\admin;
 
 use addon\hsx_erp\app\model\ErpSaleItem;
 use addon\hsx_erp\app\model\ErpSaleOrder;
+use addon\hsx_erp\app\model\ErpReceivable;
+use addon\hsx_erp\app\model\ErpCapitalAccount;
 use core\exception\CommonException;
 
 /** 已线上支付的商城自有商品销售事实：不触碰 ERP 设备库存与采购应付。 */
@@ -70,6 +72,7 @@ class ErpExternalSaleRecordedService extends ErpExternalSaleAccountingService
             'channel_name' => mb_substr(trim((string)($event['channel_name'] ?? '外部商城')), 0, 60),
             'items' => $items,
             'payment' => [
+                'status' => (string)($payment['status'] ?? 'paid') === 'unpaid' ? 'unpaid' : 'paid',
                 'mode' => mb_substr(trim((string)($payment['mode'] ?? 'online')), 0, 40),
                 'trade_no' => mb_substr(trim((string)($payment['out_trade_no'] ?? '')), 0, 100),
                 'gross' => $gross,
@@ -78,7 +81,10 @@ class ErpExternalSaleRecordedService extends ErpExternalSaleAccountingService
                 'fee_bearer' => in_array((string)($payment['fee_bearer'] ?? ''), ['merchant', 'customer'], true)
                     ? (string)$payment['fee_bearer'] : 'merchant',
                 'net' => $net,
+                'capital_account_id' => max(0, (int)($payment['capital_account_id'] ?? 0)),
             ],
+            'operator_id' => max(0, (int)($event['operator_id'] ?? 0)),
+            'operator_name' => mb_substr(trim((string)($event['operator_name'] ?? '')), 0, 60),
             'remark' => mb_substr(trim((string)($event['remark'] ?? '')), 0, 255),
         ]);
     }
@@ -89,6 +95,11 @@ class ErpExternalSaleRecordedService extends ErpExternalSaleAccountingService
         $totalAmount = round(array_sum(array_column($payload['items'], 'amount')), 2);
         $totalCost = round(array_sum(array_column($payload['items'], 'cost')), 2);
         $payment = (array)$payload['payment'];
+        $isCredit = (string)($payment['status'] ?? 'paid') === 'unpaid';
+        $isOfflineCash = !$isCredit && (string)($payment['mode'] ?? '') === 'offline_cash';
+        $operatorId = (int)($payload['operator_id'] ?? 0);
+        $operatorName = trim((string)($payload['operator_name'] ?? ''))
+            ?: ($isCredit || $isOfflineCash ? '商城业务员' : '商城自动入账');
         $sale = ErpSaleOrder::create([
             'site_id' => (int)$payload['site_id'],
             'request_id' => (string)$payload['event_id'],
@@ -114,18 +125,18 @@ class ErpExternalSaleRecordedService extends ErpExternalSaleAccountingService
             'merchant_net_amount' => (float)$payment['net'],
             'refunded_amount' => 0,
             'refunded_cost' => 0,
-            'settle_method' => '线上现结',
-            'salesman_uid' => 0,
-            'salesman_name' => '小程序自助下单',
+            'settle_method' => $isCredit ? '挂账' : ($isOfflineCash ? '线下现结' : '线上现结'),
+            'salesman_uid' => $operatorId,
+            'salesman_name' => $operatorName,
             'total_amount' => $totalAmount,
             'total_cost' => $totalCost,
             'profit' => round($totalAmount - $totalCost, 2),
-            'received_amount' => $totalAmount,
-            'receivable_amount' => 0,
-            'finance_status' => 'settled',
+            'received_amount' => $isCredit ? 0 : $totalAmount,
+            'receivable_amount' => $isCredit ? $totalAmount : 0,
+            'finance_status' => $isCredit ? 'pending' : 'settled',
             'status' => 'completed',
-            'operator_uid' => 0,
-            'operator_name' => '商城自动入账',
+            'operator_uid' => $operatorId,
+            'operator_name' => $operatorName,
             'sale_at' => (int)$payload['occurred_at'],
             'remark' => mb_substr(trim('商城自有商品线上成交；供应来源以订单快照为准。' . (string)$payload['remark']), 0, 255),
             'create_at' => $now,
@@ -160,59 +171,110 @@ class ErpExternalSaleRecordedService extends ErpExternalSaleAccountingService
             ]);
         }
 
-        $account = $this->clearingAccount((int)$payload['site_id'], $now);
-        $settlement = $this->settlement(
-            $payload,
-            $account,
-            'receipt',
-            (float)$payment['gross'],
-            'in',
-            '商城订单 ' . (string)$payload['source_order_no'] . ' 微信支付自动入账'
-        );
-        $balance = round((float)$account->balance + (float)$payment['gross'], 2);
-        $account->save(['balance' => $balance, 'update_at' => $now]);
         $ledger = $this->ledger((int)$payload['site_id']);
-        $ledger->money([
-            'settlement_id' => (int)$settlement->id,
-            'capital_account_id' => (int)$account->id,
-            'capital_account_name' => (string)$account->account_name,
-            'direction' => 'in',
-            'category_key' => 'sale_revenue',
-            'category_name' => '商城销售收入',
-            'category_statement_group' => 'sales_revenue',
-            'category_source_plugin' => 'phone_shop',
-            'category_source_key' => 'native_goods_sale',
-            'amount' => (float)$payment['gross'],
-            'balance_after' => $balance,
-            'party_name' => (string)$payload['party_name'],
-            'occurred_at' => (int)$payload['occurred_at'],
-            'remark' => '商城订单 ' . (string)$payload['source_order_no'] . ' 线上收款',
-        ]);
-        if ((float)$payment['fee'] > 0) {
-            $balance = round($balance - (float)$payment['fee'], 2);
+        $settlementId = 0;
+        $capitalAccountId = 0;
+        if ($isCredit) {
+            $receivable = ErpReceivable::create([
+                'site_id' => (int)$payload['site_id'],
+                'receivable_no' => ErpLedgerService::makeNo('AR'),
+                'party_id' => 0,
+                'party_name' => (string)$payload['party_name'],
+                'source_type' => (string)$payload['source_type'],
+                'source_id' => (int)$sale->id,
+                'source_no' => (string)$payload['source_order_no'],
+                'amount' => $totalAmount,
+                'settled_amount' => 0,
+                'status' => 'pending',
+                'occurred_at' => (int)$payload['occurred_at'],
+                'remark' => '商城线下挂账销售应收',
+                'create_at' => $now,
+                'update_at' => $now,
+            ]);
+            $ledger->account([
+                'biz_type' => 'external_sale',
+                'direction' => 'increase',
+                'amount' => $totalAmount,
+                'party_id' => 0,
+                'party_name' => (string)$payload['party_name'],
+                'source_type' => (string)$payload['source_type'],
+                'source_id' => (int)$receivable->id,
+                'source_no' => (string)$payload['source_order_no'],
+                'operator_uid' => $operatorId,
+                'operator_name' => $operatorName,
+                'occurred_at' => (int)$payload['occurred_at'],
+                'remark' => '商城订单线下挂账',
+            ]);
+        } else {
+            if ($isOfflineCash) {
+                $account = ErpCapitalAccount::where([
+                    ['site_id', '=', (int)$payload['site_id']],
+                    ['id', '=', (int)$payment['capital_account_id']],
+                    ['status', '=', 1],
+                ])->lock(true)->findOrEmpty();
+                if ($account->isEmpty()) throw new CommonException('线下收款账户不存在或已停用');
+            } else {
+                $account = $this->clearingAccount((int)$payload['site_id'], $now);
+            }
+            $settlement = $this->settlement(
+                $payload,
+                $account,
+                'receipt',
+                (float)$payment['gross'],
+                'in',
+                '商城订单 ' . (string)$payload['source_order_no'] . ($isOfflineCash ? ' 线下收款' : ' 微信支付自动入账')
+            );
+            $settlementId = (int)$settlement->id;
+            $capitalAccountId = (int)$account->id;
+            $balance = round((float)$account->balance + (float)$payment['gross'], 2);
             $account->save(['balance' => $balance, 'update_at' => $now]);
             $ledger->money([
-                'settlement_id' => (int)$settlement->id,
+                'settlement_id' => $settlementId,
                 'capital_account_id' => (int)$account->id,
                 'capital_account_name' => (string)$account->account_name,
-                'direction' => 'out',
-                'category_key' => 'channel_payment_fee',
-                'category_name' => '线上支付手续费',
-                'category_statement_group' => 'selling_expense',
+                'direction' => 'in',
+                'category_key' => 'sale_revenue',
+                'category_name' => '商城销售收入',
+                'category_statement_group' => 'sales_revenue',
                 'category_source_plugin' => 'phone_shop',
-                'category_source_key' => 'wechat_payment_fee',
-                'amount' => (float)$payment['fee'],
+                'category_source_key' => 'native_goods_sale',
+                'amount' => (float)$payment['gross'],
                 'balance_after' => $balance,
-                'party_name' => '微信支付',
+                'party_name' => (string)$payload['party_name'],
+                'operator_uid' => $operatorId,
+                'operator_name' => $operatorName,
                 'occurred_at' => (int)$payload['occurred_at'],
-                'remark' => '商城订单 ' . (string)$payload['source_order_no'] . ' 支付渠道手续费',
+                'remark' => '商城订单 ' . (string)$payload['source_order_no'] . ($isOfflineCash ? ' 线下收款' : ' 线上收款'),
             ]);
+            if ((float)$payment['fee'] > 0) {
+                $balance = round($balance - (float)$payment['fee'], 2);
+                $account->save(['balance' => $balance, 'update_at' => $now]);
+                $ledger->money([
+                    'settlement_id' => $settlementId,
+                    'capital_account_id' => (int)$account->id,
+                    'capital_account_name' => (string)$account->account_name,
+                    'direction' => 'out',
+                    'category_key' => 'channel_payment_fee',
+                    'category_name' => '线上支付手续费',
+                    'category_statement_group' => 'selling_expense',
+                    'category_source_plugin' => 'phone_shop',
+                    'category_source_key' => 'wechat_payment_fee',
+                    'amount' => (float)$payment['fee'],
+                    'balance_after' => $balance,
+                    'party_name' => '微信支付',
+                    'operator_uid' => $operatorId,
+                    'operator_name' => $operatorName,
+                    'occurred_at' => (int)$payload['occurred_at'],
+                    'remark' => '商城订单 ' . (string)$payload['source_order_no'] . ' 支付渠道手续费',
+                ]);
+            }
         }
         return [
             'sale_order_id' => (int)$sale->id,
             'sale_no' => (string)$sale->sale_no,
-            'settlement_id' => (int)$settlement->id,
-            'capital_account_id' => (int)$account->id,
+            'settlement_id' => $settlementId,
+            'capital_account_id' => $capitalAccountId,
+            'receivable_created' => $isCredit,
             'total_amount' => number_format($totalAmount, 2, '.', ''),
             'total_cost' => number_format($totalCost, 2, '.', ''),
             'profit' => number_format($totalAmount - $totalCost, 2, '.', ''),

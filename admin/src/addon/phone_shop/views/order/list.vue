@@ -5,6 +5,15 @@
             <div class="flex justify-between items-center">
                 <span class="text-page-title">{{ pageName }}</span>
             </div>
+            <el-alert
+                v-if="isOfflineView"
+                class="mt-[12px]"
+                title="这里集中处理客户在小程序提交的线下支付订单"
+                description="无需进入订单详情：核对客户和设备后，可直接确认到账或转为挂账。"
+                type="info"
+                :closable="false"
+                show-icon
+            />
 
             <el-card class="box-card !border-none my-[10px] table-search-wrap" shadow="never">
                 <el-form :inline="true" :model="orderTable.searchParam" ref="searchFormRef">
@@ -23,6 +32,14 @@
                     <el-form-item :label="t('payType')" prop='pay_type'>
                         <el-select v-model="orderTable.searchParam.pay_type" clearable class="input-item">
                             <el-option v-for="(item, index) in payTypeData" :key="index" :label="item.name" :value="item.key"></el-option>
+                        </el-select>
+                    </el-form-item>
+                    <el-form-item label="成交方式" prop="payment_mode" v-if="!isOfflineView">
+                        <el-select v-model="orderTable.searchParam.payment_mode" clearable class="input-item">
+                            <el-option label="在线支付" value="online" />
+                            <el-option label="线下待处理" value="offline_pending" />
+                            <el-option label="线下已收款" value="offline_cash" />
+                            <el-option label="线下挂账" value="offline_credit" />
                         </el-select>
                     </el-form-item>
                     <el-form-item :label="t('fromType')" prop='order_from'>
@@ -82,6 +99,9 @@
                                         <span class="ml-5">{{ t('createTime') }}：{{ (item as any).create_time }}</span>
                                         <!-- <span class="ml-5">{{ t('orderFrom') }}：{{ (item as any).order_form_name }}</span> -->
                                         <span class="ml-5" v-if="item.pay">{{ t('payType') }}：{{ (item as any).pay.type_name }}</span>
+                                        <el-tag v-if="item.payment_mode === 'offline_pending'" class="ml-5" type="warning" effect="dark" size="small">线下待处理</el-tag>
+                                        <el-tag v-else-if="item.payment_mode === 'offline_cash'" class="ml-5" type="success" size="small">线下已收款</el-tag>
+                                        <el-tag v-else-if="item.payment_mode === 'offline_credit'" class="ml-5" type="info" size="small">线下挂账</el-tag>
                                         <span class="ml-5" v-if="item.activity_type_name">{{ t('营销') }}：{{ (item as any).activity_type_name }}</span>
                                         <span class="ml-5" v-if="item.delivery_type =='store' && item.buyer_ask_delivery_time">{{ t('buyerAskDeliveryTime') }}：：{{ (item as any).buyer_ask_delivery_time }}</span>
                                     </div>
@@ -168,8 +188,12 @@
                                     <el-table-column align="right" min-width="120">
                                         <template #default>
                                             <template v-if="item.status == 1">
+                                                <template v-if="item.payment_mode === 'offline_pending'">
+                                                    <el-button type="success" link @click="openOfflineProcess(item, 'confirm_paid')">确认收款</el-button>
+                                                    <el-button type="warning" link @click="openOfflineProcess(item, 'confirm_credit')">确认挂账</el-button>
+                                                </template>
                                                 <el-button type="primary" link @click="close(item)">{{ t('orderClose') }}</el-button>
-                                                <el-button type="primary" link @click="orderAdjustMoney(item)">{{ t('editPrice') }}</el-button>
+                                                <el-button v-if="item.payment_mode !== 'offline_pending'" type="primary" link @click="orderAdjustMoney(item)">{{ t('editPrice') }}</el-button>
                                             </template>
                                             <el-button type="primary" v-if="(item.status == 2 || item.status == 1) && item.delivery_type != 'virtual' && item.delivery_type!='store' && item.activity_type != 'giftcard'" link @click="orderEditAddressFn(item)">{{ t('editAddress') }}</el-button>
                                             <el-button type="primary" link @click="delivery(item,'add')" v-if="item.status == 2 && item.delivery_type!='store'">{{ t('sendOutGoods') }}</el-button>
@@ -206,11 +230,83 @@
         <order-edit-address ref="orderEditAddressDialog" @complete="loadOrderList(getTablePageStorage(orderTable.searchParam).page)" />
         <electronic-sheet-print ref="electronicSheetPrintDialog" @complete="electronicSheetPrintComplete" />
         <shop-active-refund ref="shopActiveRefundDialog" @complete="loadOrderList(getTablePageStorage(orderTable.searchParam).page)" />
+        <el-dialog
+            v-model="offlineDialog.visible"
+            :title="offlineDialog.action === 'confirm_paid' ? '确认线下收款' : '确认挂账'"
+            width="500px"
+            destroy-on-close
+        >
+            <div v-if="offlineDialog.order" class="offline-order-summary">
+                <div>
+                    <span class="label">客户</span>
+                    <strong>{{ offlineDialog.order.member?.nickname || offlineDialog.order.taker_name || '—' }}</strong>
+                    <span class="ml-[8px] text-[13px] text-[#909399]">{{ offlineDialog.order.taker_mobile }}</span>
+                </div>
+                <div><span class="label">订单</span>{{ offlineDialog.order.order_no }}</div>
+                <div>
+                    <span class="label">原订单金额</span>
+                    <strong class="text-[18px] text-[var(--el-color-primary)]">￥{{ Number(offlineDialog.order.order_money || 0).toFixed(2) }}</strong>
+                </div>
+            </div>
+            <el-alert
+                class="mb-[18px]"
+                :title="offlineDialog.action === 'confirm_paid' ? '确认后将记录真实到账并进入待交付。' : '确认后将生成 ERP 应收并进入待交付。'"
+                type="info"
+                :closable="false"
+                show-icon
+            />
+            <el-form label-position="top">
+                <el-form-item :label="offlineOrderGoodsCount > 1 ? '一口打包成交价' : '本次实际成交价'" required>
+                    <el-input-number
+                        v-model="offlineDialog.deal_total"
+                        class="!w-full"
+                        :min="0.01"
+                        :max="99999999.99"
+                        :precision="2"
+                        :step="10"
+                        controls-position="right"
+                    />
+                    <div class="mt-[6px] text-[12px] text-[#909399]">
+                        <template v-if="offlineOrderGoodsCount > 1">
+                            共 {{ offlineOrderGoodsCount }} 台设备，系统会按原成交金额比例分摊；每台分摊价将作为后续退款上限。
+                        </template>
+                        <template v-else>
+                            可在收款或挂账前完成议价，修改后的成交价将作为退款上限。
+                        </template>
+                    </div>
+                    <el-tag v-if="offlinePriceChange !== 0" class="mt-[8px]" :type="offlinePriceChange < 0 ? 'success' : 'warning'">
+                        {{ offlinePriceChange < 0 ? '优惠' : '加价' }} ￥{{ Math.abs(offlinePriceChange).toFixed(2) }}
+                    </el-tag>
+                </el-form-item>
+                <el-form-item v-if="offlineDialog.action === 'confirm_paid'" label="实际到账账户" required>
+                    <el-select v-model="offlineDialog.capital_account_id" class="w-full" placeholder="选择 ERP 资金账户" filterable>
+                        <el-option
+                            v-for="account in capitalAccounts"
+                            :key="account.id"
+                            :label="`${account.name} · ${account.type_name}`"
+                            :value="account.id"
+                        />
+                    </el-select>
+                    <div v-if="!capitalAccounts.length" class="mt-[6px] text-[12px] text-warning">
+                        暂无可用账户，请先在 ERP 资金账户中启用账户。
+                    </div>
+                </el-form-item>
+                <el-form-item label="处理备注">
+                    <el-input v-model="offlineDialog.remark" type="textarea" :rows="3" maxlength="255" show-word-limit placeholder="可填写收款方式或沟通结果" />
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="offlineDialog.visible = false">取消</el-button>
+                <el-button type="primary" :loading="offlineSubmitting" @click="submitOfflineProcess">
+                    {{ offlineDialog.action === 'confirm_paid' ? '确认收款' : '确认挂账' }}
+                </el-button>
+            </template>
+        </el-dialog>
     </div>
 </template>
 
 <script lang="ts" setup>
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { t } from '@/lang'
 import {
     getOrderList,
@@ -219,7 +315,9 @@ import {
     orderFinish,
     getOrderPayType,
     getOrderFrom,
-    orderDelete
+    orderDelete,
+    getOfflineCapitalAccounts,
+    processOfflineOrder
 } from '@/addon/phone_shop/api/order'
 import { printTicket } from '@/app/api/printer'
 import DeliveryAction from '@/addon/phone_shop/views/order/components/delivery-action.vue'
@@ -237,7 +335,8 @@ import { cloneDeep } from 'lodash-es'
 const route = useRoute()
 const router = useRouter()
 const pageName = route.meta.title
-const activeName: any = ref(route.query.status || '')
+const isOfflineView = computed(() => route.path.includes('/order/offline'))
+const activeName: any = ref(isOfflineView.value ? '1' : (route.query.status || ''))
 
 const statusData = ref([])
 const payTypeData = ref<any[]>([])
@@ -328,7 +427,8 @@ const orderTable: any = reactive({
         keyword: '',
         pay_type: '',
         order_from: '',
-        status: route.query.status || '',
+        status: isOfflineView.value ? '1' : (route.query.status || ''),
+        payment_mode: isOfflineView.value ? 'offline_pending' : '',
         create_time: [],
         pay_time: []
     }
@@ -460,6 +560,62 @@ const exportSelectEvent = () => {
 // 订单详情
 const detailEvent = (data: any) => {
     router.push('/phone_shop/order/detail?order_id=' + data.order_id)
+}
+
+const capitalAccounts = ref<any[]>([])
+const offlineSubmitting = ref(false)
+const offlineDialog = reactive<any>({
+    visible: false,
+    action: 'confirm_paid',
+    capital_account_id: 0,
+    deal_total: 0,
+    remark: '',
+    order: null
+})
+const offlineOrderGoodsCount = computed(() => (offlineDialog.order?.order_goods || [])
+    .filter((item: any) => Number(item.is_gift || 0) !== 1)
+    .reduce((total: number, item: any) => total + Number(item.num || 1), 0))
+const offlinePriceChange = computed(() => Number(offlineDialog.deal_total || 0) - Number(offlineDialog.order?.order_money || 0))
+
+const openOfflineProcess = async(order: any, action: 'confirm_paid' | 'confirm_credit') => {
+    offlineDialog.order = order
+    offlineDialog.action = action
+    offlineDialog.capital_account_id = 0
+    offlineDialog.deal_total = Number(order.order_money || 0)
+    offlineDialog.remark = ''
+    if (action === 'confirm_paid') {
+        const { data } = await getOfflineCapitalAccounts()
+        capitalAccounts.value = Array.isArray(data) ? data : []
+        const defaultAccount = capitalAccounts.value.find((item: any) => Number(item.is_default) === 1)
+        offlineDialog.capital_account_id = Number(defaultAccount?.id || capitalAccounts.value[0]?.id || 0)
+    }
+    offlineDialog.visible = true
+}
+
+const submitOfflineProcess = async() => {
+    if (!offlineDialog.order) return
+    if (Number(offlineDialog.deal_total) <= 0) {
+        ElMessage.warning('请输入有效的实际成交价')
+        return
+    }
+    if (offlineDialog.action === 'confirm_paid' && !offlineDialog.capital_account_id) {
+        ElMessage.warning('请选择实际到账的 ERP 资金账户')
+        return
+    }
+    offlineSubmitting.value = true
+    try {
+        await processOfflineOrder({
+            order_id: offlineDialog.order.order_id,
+            action: offlineDialog.action,
+            capital_account_id: offlineDialog.capital_account_id,
+            deal_total: offlineDialog.deal_total,
+            remark: offlineDialog.remark
+        })
+        offlineDialog.visible = false
+        loadOrderList(orderTable.page)
+    } finally {
+        offlineSubmitting.value = false
+    }
 }
 
 const memberEvent = (id: number) => {
@@ -713,5 +869,21 @@ const toDelivery = (data: any) => {
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
+}
+
+.offline-order-summary {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding: 14px 16px;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 10px;
+    background: var(--el-fill-color-light);
+
+    .label {
+        display: inline-block;
+        width: 52px;
+        color: var(--el-text-color-secondary);
+    }
 }
 </style>

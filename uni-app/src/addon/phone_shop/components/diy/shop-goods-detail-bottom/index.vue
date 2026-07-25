@@ -104,6 +104,7 @@ import { collect, cancelCollect } from '@/addon/phone_shop/api/goods';
 import useGoodsDetailStore from '@/addon/phone_shop/stores/goodsDetail'
 import { useGoodsDownload } from '@/addon/phone_shop/hooks/useGoodsDownload'
 import DownloadConfigDialog from '@/addon/phone_shop/components/download-config-dialog/download-config-dialog.vue'
+import { useLogin } from '@/hooks/useLogin'
 
 const props = defineProps(['component', 'index', 'value', 'global']);
 const diyStore = useDiyStore();
@@ -277,7 +278,53 @@ const isShowSingleSku = computed(() => {
     return true;
 })
 
+const canDirectBuy = computed(() => {
+    const data: any = diyComponent.value || {}
+    const skuList = Array.isArray(data.skuList) ? data.skuList : []
+    const sku = skuList[0] || {}
+    const stock = Number(sku.stock ?? data.stock ?? 0)
+    const minBuy = Math.max(1, Number(data.goods?.min_buy || 1))
+    return skuList.length === 1
+        && stock === 1
+        && minBuy === 1
+        && !data.goods?.form_id
+        && Number(data.goods?.is_limit ? data.goods?.max_buy || 1 : 1) >= 1
+})
+
+const directBuy = () => {
+    const data: any = diyComponent.value || {}
+    const sku = data.skuList[0]
+    if (!userInfo.value) {
+        useLogin().setLoginBack({
+            url: '/addon/phone_shop/pages/goods/detail',
+            param: { sku_id: sku.sku_id, type: data.type || '' }
+        })
+        return
+    }
+    const detail = data.detail || sku
+    const extendData: any = {}
+    if (detail.type === 'newcomer_discount' && detail.newcomer_price) {
+        extendData.relate_id = ''
+        extendData.activity_type = 'newcomer_discount'
+    } else {
+        extendData.relate_id = detail.show_type === 'discount_price' ? (data.discount_info?.discount_id || '') : ''
+        extendData.activity_type = detail.show_type === 'discount_price' ? 'discount' : (detail.type || data.type || '')
+    }
+    uni.setStorage({
+        key: 'orderCreateData',
+        data: {
+            sku_data: [{ sku_id: sku.sku_id, num: 1 }],
+            extend_data: extendData
+        },
+        success: () => redirect({ url: '/addon/phone_shop/pages/order/payment' })
+    })
+}
+
 const buyFn = (type: any) => {
+    if (type === 'buy_now' && canDirectBuy.value) {
+        directBuy()
+        return
+    }
     useGoodsDetailStore().setGoodsDetail({isOpenSkuBuy: true, skuBuyType: type});
 }
 
