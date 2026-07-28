@@ -209,12 +209,31 @@
                 <view class="action-popup__head"><view><text class="action-popup__title">{{ productPopupTitle }}</text><text class="action-popup__sub">{{ productPopupSubtitle }}</text></view><u-icon name="close" color="#94a3b8" size="20" @click="productVisible=false" /></view>
                 <scroll-view scroll-y class="action-popup__body">
                     <template v-if="productMode === 'all' || productMode === 'material'">
-                        <ErpCatalogProductPopup v-model="productForm.catalog_product_id" :selected-label="productForm.catalog_product_name" label="商品型号" :embedded="true" :clearable="true" @change="onProductCatalogChange" />
+                        <ErpCatalogProductPopup
+                            v-model="productForm.catalog_product_id"
+                            :selected-label="productCatalogDisplayLabel"
+                            :category-path="productForm.category_path"
+                            label="分类"
+                            placeholder="先选品类，再选择品牌、系列和型号"
+                            :embedded="true"
+                            :clearable="true"
+                            @change="onProductCatalogChange"
+                        />
                         <view class="popup-form-row"><text>设备规格</text><u-input v-model="productForm.spec" placeholder="容量、颜色、成色、电池等" border="none" inputAlign="right" /></view>
                         <view class="popup-form-row popup-form-row--textarea"><text>对外说明</text><u-textarea v-model="productForm.remark_public" placeholder="展示给商城客户的商品说明" :maxlength="500" /></view>
                     </template>
                     <view v-if="productMode === 'all'" class="popup-form-row"><text>零售价</text><u-input v-model="productForm.retail_price" type="number" placeholder="0.00" border="none" inputAlign="right" /></view>
                     <ErpVoucherUploader v-if="productMode === 'all' || productMode === 'photo'" v-model="productForm.image_urls" title="商品图片" hint="上传正面、背面、边框和瑕疵图，支持点击预览" add-text="上传图片" :max-count="9" />
+                    <view v-if="productMode === 'all' || productMode === 'photo'" class="video-upload-card">
+                        <view class="video-upload-card__head">
+                            <view>
+                                <text class="video-upload-card__title">展示视频</text>
+                                <text class="video-upload-card__hint">选填，随商品资料同步商城</text>
+                            </view>
+                            <text class="video-upload-card__badge">最多 1 个</text>
+                        </view>
+                        <upload-video v-model="productForm.video_url" :max-count="1" />
+                    </view>
                 </scroll-view>
                 <view class="action-popup__foot"><u-button type="primary" :loading="productSaving" :text="productSubmitText" @click="submitProduct" /></view>
             </view>
@@ -246,7 +265,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { adjustMobileStockRetailPrice, buyoutMobileConsignment, getMobileStockInfo, previewMobileStockTransfer, printMobileErpAssetLabel, syncMobileStockListing, transferMobileStock, updateMobileStockFlow } from '@/addon/hsx_erp/api/erp'
+import { adjustMobileStockRetailPrice, buyoutMobileConsignment, getMobileStockInfo, prepareMobileStockListingMedia, previewMobileStockTransfer, printMobileErpAssetLabel, syncMobileStockListing, transferMobileStock, updateMobileStockFlow } from '@/addon/hsx_erp/api/erp'
 import { confirmErpSensitiveAction } from '@/addon/hsx_erp/hooks/useErpSensitiveConfirm'
 import { erpNetSaleAmount, erpOriginalSaleAmount, erpSaleCompensationAmount, firstPositiveErpAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
 import { erpDeviceIdentityLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
@@ -268,7 +287,13 @@ const detailLoaded = ref(false)
 const productVisible = ref(false)
 const productSaving = ref(false)
 const productMode = ref<'all' | 'photo' | 'material'>('all')
-const productForm = ref<any>({ catalog_product_id: 0, catalog_product_name: '', category_name: '', category_path: '', spec: '', retail_price: '', image_urls: '', remark_public: '' })
+const productForm = ref<any>({ catalog_product_id: 0, catalog_product_name: '', category_name: '', category_path: '', brand_name: '', series_name: '', spec: '', retail_price: '', image_urls: '', video_url: '', remark_public: '' })
+const productCatalogDisplayLabel = computed(() => [
+    productForm.value.category_path,
+    productForm.value.brand_name,
+    productForm.value.series_name,
+    productForm.value.catalog_product_name,
+].map(value => String(value || '').trim()).filter(Boolean).join(' / '))
 const productPopupTitle = computed(() => ({ all: '完善商品资料', photo: '完成商品拍摄', material: '整理商城资料' }[productMode.value]))
 const productPopupSubtitle = computed(() => ({
     all: '小团队可一次完成图片、售价和商城资料',
@@ -363,7 +388,9 @@ function handlePrimaryAction() {
     if (['set_retail_price', 'adjust_retail_price', 'complete_listing_price'].includes(action)) return openRetail()
     if (action === 'complete_listing_photo') return openProduct('photo')
     if (action === 'complete_listing_material') return openProduct('material')
+    if (action === 'complete_listing_media_price') return openProduct()
     if (action === 'complete_listing') return openProduct()
+    if (action === 'prepare_listing_media') return prepareListingMedia()
     if (action === 'publish_listing') return publishListing()
     if (['transfer', 'resolve_warehouse'].includes(action)) return openTransfer()
     if (action === 'direct_sale') return uni.navigateTo({ url: `/addon/hsx_erp/pages/sale/create?asset_ids=${asset.value.id}` })
@@ -372,26 +399,49 @@ function handlePrimaryAction() {
     uni.showToast({ title: asset.value.warehouse_policy?.primary_action_reason || '当前仅支持查看设备档案', icon: 'none' })
 }
 
+async function prepareListingMedia() {
+    if (!asset.value?.id || syncingListing.value) return
+    syncingListing.value = true
+    try {
+        const response: any = await prepareMobileStockListingMedia(Number(asset.value.id))
+        const data = response?.data || {}
+        if (data.provider === 'erp' || !data.mobile_path) {
+            if (data.degraded) uni.showToast({ title: data.message || '拍照中台不可用，已切换普通上传', icon: 'none' })
+            return openProduct()
+        }
+        uni.navigateTo({ url: String(data.mobile_path) })
+    } catch (e: any) {
+        uni.showToast({ title: e?.message || e?.msg || '拍照任务创建失败', icon: 'none' })
+    } finally {
+        syncingListing.value = false
+    }
+}
+
 function openProduct(mode: 'all' | 'photo' | 'material' = 'all') {
     if (!asset.value) return
     productMode.value = mode
     productForm.value = {
         catalog_product_id: Number(asset.value.catalog_product_id || 0), catalog_product_name: asset.value.model || '', category_name: asset.value.category_name || '', category_path: asset.value.category_path || '',
-        spec: asset.value.spec || '', retail_price: Number(asset.value.retail_price || 0) || '', image_urls: asset.value.image_urls || '', remark_public: asset.value.remark_public || '',
+        brand_name: asset.value.brand_name || '', series_name: asset.value.series_name || '',
+        spec: asset.value.spec || '', retail_price: Number(asset.value.retail_price || 0) || '', image_urls: asset.value.image_urls || '', video_url: asset.value.video_url || '', remark_public: asset.value.remark_public || '',
     }
     productVisible.value = true
 }
 
 function onProductCatalogChange(payload: any) {
     productForm.value.catalog_product_id = Number(payload?.catalog_product_id || payload?.site_product_id || 0)
-    productForm.value.catalog_product_name = payload?.product_name || payload?.label || ''
+    productForm.value.catalog_product_name = payload?.node_type === 'product'
+        ? (payload?.product_name || payload?.label || '')
+        : ''
     productForm.value.category_name = payload?.category_name || ''
     productForm.value.category_path = payload?.category_path || ''
+    productForm.value.brand_name = payload?.brand_name || ''
+    productForm.value.series_name = payload?.series_name || ''
 }
 
 async function submitProduct() {
     if (!asset.value?.id) return
-    if (productMode.value !== 'photo' && !Number(productForm.value.catalog_product_id || 0)) return uni.showToast({ title: '请选择商品型号', icon: 'none' })
+    if (productMode.value !== 'photo' && !String(productForm.value.category_path || '').trim()) return uni.showToast({ title: '请选择商品品类', icon: 'none' })
     if (productMode.value !== 'photo' && !String(productForm.value.spec || '').trim()) return uni.showToast({ title: '请填写设备规格', icon: 'none' })
     if (productMode.value !== 'material' && asset.value.warehouse_policy?.need_photo && !String(productForm.value.image_urls || '').trim()) return uni.showToast({ title: '当前仓库要求上传商品图片', icon: 'none' })
     if (productMode.value === 'all' && asset.value.warehouse_policy?.need_pricing && Number(productForm.value.retail_price || 0) <= 0) return uni.showToast({ title: '当前仓库要求填写零售价', icon: 'none' })
@@ -729,6 +779,12 @@ function accountRemark(row: any) {
 .loading-wrap { display:flex; justify-content:center; align-items:center; height:400rpx; }
 .action-popup { height:78vh; display:flex; flex-direction:column; background:#fff; }.action-popup--compact { height:auto; min-height:520rpx; }.action-popup__head { display:flex; align-items:flex-start; justify-content:space-between; gap:20rpx; padding:28rpx 30rpx 20rpx; border-bottom:1rpx solid #f1f5f9; }.action-popup__title,.action-popup__sub { display:block; }.action-popup__title { color:#0f172a; font-size:32rpx; font-weight:750; }.action-popup__sub { margin-top:5rpx; color:#94a3b8; font-size:21rpx; }.action-popup__body { flex:1; min-height:0; padding:12rpx 30rpx; box-sizing:border-box; }.action-popup__foot { padding:20rpx 30rpx calc(20rpx + env(safe-area-inset-bottom)); border-top:1rpx solid #f1f5f9; }.popup-form-row { display:flex; align-items:center; gap:20rpx; min-height:96rpx; padding:0 30rpx; border-bottom:1rpx solid #f1f5f9; color:#334155; font-size:25rpx; }.action-popup__body .popup-form-row { padding:0; }
 .popup-form-row--textarea { align-items:stretch; flex-direction:column; gap:12rpx; padding:24rpx 0 !important; }
+.video-upload-card { margin:18rpx 0; padding:22rpx; border:2rpx solid #e2e8f0; border-radius:18rpx; background:#f8fafc; }
+.video-upload-card__head { display:flex; align-items:flex-start; justify-content:space-between; gap:16rpx; margin-bottom:18rpx; }
+.video-upload-card__title,.video-upload-card__hint { display:block; }
+.video-upload-card__title { color:#1e293b; font-size:25rpx; font-weight:700; }
+.video-upload-card__hint { margin-top:5rpx; color:#94a3b8; font-size:21rpx; }
+.video-upload-card__badge { flex:none; padding:6rpx 12rpx; border-radius:999rpx; background:#eff6ff; color:#2563eb; font-size:20rpx; }
 .buyout-summary { margin:22rpx 30rpx 8rpx; padding:18rpx 20rpx; border-radius:14rpx; background:#fff7ed; }
 .buyout-summary text { display:block; color:#0f172a; font-size:26rpx; font-weight:650; }
 .buyout-summary text + text { margin-top:7rpx; color:#64748b; font-size:21rpx; font-weight:400; }

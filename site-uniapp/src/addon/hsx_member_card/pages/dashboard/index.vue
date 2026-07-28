@@ -111,6 +111,7 @@ const manageActions = [
     { label: '卡种设置', icon: 'order', color: '#7c3aed', background: '#f5f3ff', path: '/addon/hsx_member_card/pages/product/list' },
     { label: '快速开卡', icon: 'plus', color: '#16a34a', background: '#ecfdf3', path: '/addon/hsx_member_card/pages/order/create' },
     { label: '立即核销', icon: 'checkmark-circle', color: '#d97706', background: '#fff7ed', path: '/addon/hsx_member_card/pages/card/search' },
+    { label: '收款与耗材', icon: 'rmb-circle', color: '#0891b2', background: '#ecfeff', path: '/addon/hsx_member_card/pages/config/payment' },
 ]
 const money = (value: any) => Number(value || 0).toFixed(2)
 const metrics = computed(() => statMode.value === 'sale' ? [

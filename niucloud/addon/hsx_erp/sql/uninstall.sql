@@ -1,4 +1,7 @@
 -- hsx_erp clean uninstall SQL
+DROP TABLE IF EXISTS `{{prefix}}erp_quantity_stock_flow`;
+DROP TABLE IF EXISTS `{{prefix}}erp_quantity_stock`;
+DROP TABLE IF EXISTS `{{prefix}}erp_quantity_product`;
 DROP TABLE IF EXISTS `{{prefix}}erp_channel_listing`;
 DROP TABLE IF EXISTS `{{prefix}}erp_channel_attribute_value_mapping`;
 DROP TABLE IF EXISTS `{{prefix}}erp_channel_attribute_mapping`;

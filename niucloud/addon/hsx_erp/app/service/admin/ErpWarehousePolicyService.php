@@ -17,6 +17,13 @@ class ErpWarehousePolicyService extends BaseAdminService
 {
     private ?array $marketplaceProviders = null;
 
+    public static function forSite(int $siteId): self
+    {
+        $service = new self();
+        $service->site_id = $siteId;
+        return $service;
+    }
+
     public function decorate(array $rows): array
     {
         if ($rows === []) return [];

@@ -96,20 +96,17 @@
                 </el-form-item>
                 <el-form-item label="业务类型" required>
                     <el-select v-model="warehouseDialog.form.warehouse_type" class="w-full" @change="onWarehouseTypeChange">
-                        <el-option label="二手机仓" value="owned" />
-                        <el-option label="同行仓" value="peer" />
-                        <el-option label="代卖仓" value="consignment" />
-                        <el-option label="异常仓" value="exception" />
+                        <el-option v-for="item in warehouseTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
                     </el-select>
                 </el-form-item>
                 <div class="mb-4 rounded border border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-500">
-                    {{ warehouseTypeMeta(warehouseDialog.form.warehouse_type).desc }}
+                    {{ warehouseTypeMeta(warehouseDialog.form.warehouse_type).description }}
                 </div>
                 <div class="grid grid-cols-1 gap-x-4 md:grid-cols-2">
                     <el-form-item label="需要拍照"><el-switch v-model="warehouseDialog.form.need_photo" :active-value="1" :inactive-value="0" /></el-form-item>
                     <el-form-item label="需要定价"><el-switch v-model="warehouseDialog.form.need_pricing" :active-value="1" :inactive-value="0" /></el-form-item>
                     <el-form-item label="允许直售"><el-switch v-model="warehouseDialog.form.allow_direct_sale" :active-value="1" :inactive-value="0" /></el-form-item>
-                    <el-form-item label="允许调拨"><el-switch v-model="warehouseDialog.form.allow_transfer" :active-value="1" :inactive-value="0" :disabled="warehouseDialog.form.warehouse_type === 'consignment'" /></el-form-item>
+                    <el-form-item label="允许调拨"><el-switch v-model="warehouseDialog.form.allow_transfer" :active-value="1" :inactive-value="0" :disabled="warehouseTypeMeta(warehouseDialog.form.warehouse_type).constraints?.allow_transfer === 0" /></el-form-item>
                 </div>
                 <el-form-item label="默认去向">
                     <el-select v-model="warehouseDialog.form.default_sale_target" class="w-full">
@@ -156,12 +153,13 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { getErpStaffOptions } from '@/addon/hsx_erp/api/erp'
+import { getErpDicts, getErpStaffOptions } from '@/addon/hsx_erp/api/erp'
 import { deleteErpWarehouse, deleteErpWarehouseLocation, getErpWarehouseList, saveErpWarehouse, saveErpWarehouseLocation } from '@/addon/hsx_erp/api/warehouse'
 
 const loading = ref(false)
 const warehouses = ref<any[]>([])
 const staffOptions = ref<any[]>([])
+const warehouseTypeOptions = ref<any[]>([])
 const warehouseDialog = reactive<any>({
     visible: false,
     loading: false,
@@ -178,9 +176,10 @@ const locationDialog = reactive<any>({
 async function loadData() {
     loading.value = true
     try {
-        const [warehouseRes, staffRes]: any[] = await Promise.all([getErpWarehouseList(), getErpStaffOptions()])
+        const [warehouseRes, staffRes, dictRes]: any[] = await Promise.all([getErpWarehouseList(), getErpStaffOptions(), getErpDicts()])
         warehouses.value = Array.isArray(warehouseRes?.data) ? warehouseRes.data : []
         staffOptions.value = Array.isArray(staffRes?.data?.users) ? staffRes.data.users : []
+        warehouseTypeOptions.value = Array.isArray(dictRes?.data?.warehouse_type) ? dictRes.data.warehouse_type : []
     } finally {
         loading.value = false
     }
@@ -264,29 +263,15 @@ async function removeLocation(row: any) {
 }
 
 function onWarehouseTypeChange(value: string, applyPreset = true) {
-    if (value === 'owned' && applyPreset) {
-        Object.assign(warehouseDialog.form, { need_photo: 1, need_pricing: 1, allow_direct_sale: 1, allow_transfer: 1, default_sale_target: 'mall' })
-    }
-    if (value === 'peer' && applyPreset) {
-        Object.assign(warehouseDialog.form, { need_photo: 0, need_pricing: 0, allow_direct_sale: 1, allow_transfer: 1, default_sale_target: 'peer' })
-    }
-    if (value === 'consignment') {
-        Object.assign(warehouseDialog.form, { allow_transfer: 0 })
-        if (applyPreset) Object.assign(warehouseDialog.form, { need_photo: 1, need_pricing: 1, allow_direct_sale: 1, default_sale_target: 'mall' })
-    }
-    if (value === 'exception' && applyPreset) {
-        Object.assign(warehouseDialog.form, { need_photo: 0, need_pricing: 0, allow_direct_sale: 0, allow_transfer: 0, default_sale_target: 'unset' })
-    }
+    const meta = warehouseTypeMeta(value)
+    if (applyPreset && meta.preset) Object.assign(warehouseDialog.form, meta.preset)
+    if (meta.constraints) Object.assign(warehouseDialog.form, meta.constraints)
 }
 
 function warehouseTypeMeta(type: string) {
-    const map: any = {
-        owned: { label: '二手机仓', type: 'primary', desc: '自有库存仓，入库即生成采购应付；补齐分类、规格、图片和售价后可直接上商城，也可卖同行。' },
-        peer: { label: '同行仓', type: 'success', desc: '自有库存仓，通常无需商品图片，可直接同行出库，成交后按实际售价确认利润。' },
-        consignment: { label: '代卖仓', type: 'warning', desc: '寄售库存，不属于自有资产，入库不应生成普通采购应付，不能直接调拨为自有库存。' },
-        exception: { label: '异常仓', type: 'danger', desc: '退回、复检、争议或待处理设备，默认不允许直接销售。' }
-    }
-    return map[type || 'owned'] || map.owned
+    return warehouseTypeOptions.value.find(item => item.value === type)
+        || warehouses.value.find(item => item.warehouse_type === type)?.warehouse_type_meta
+        || { value: type, label: type || '未设置', type: 'info', description: '', preset: {}, constraints: {} }
 }
 
 function staffName(item: any) {

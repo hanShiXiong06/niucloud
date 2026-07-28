@@ -213,6 +213,10 @@ $expectedListeners = [
     'ErpCapitalAccountOptionsRequested' => 'addon\\hsx_erp\\app\\listener\\ErpCapitalAccountOptionsRequested',
     'ErpFinanceSettlementRequested' => 'addon\\hsx_erp\\app\\listener\\ErpFinanceSettlementRequested',
     'ErpFinanceFactVoidRequested' => 'addon\\hsx_erp\\app\\listener\\ErpFinanceFactVoidRequested',
+    'ErpQuantityInventoryCapabilityRequested' => 'addon\\hsx_erp\\app\\listener\\ErpQuantityInventoryCapabilityRequested',
+    'ErpQuantityInventoryConsumeRequested' => 'addon\\hsx_erp\\app\\listener\\ErpQuantityInventoryConsumeRequested',
+    'ErpQuantityInventoryRestoreRequested' => 'addon\\hsx_erp\\app\\listener\\ErpQuantityInventoryRestoreRequested',
+    'ErpQuantityInventoryAdjustRequested' => 'addon\\hsx_erp\\app\\listener\\ErpQuantityInventoryAdjustRequested',
 ];
 foreach ($expectedListeners as $eventName => $listener) {
     $listeners = (array)($eventConfig['listen'][$eventName] ?? []);
@@ -233,5 +237,14 @@ $assert(str_contains($voidSource, 'STATUS_VOID') && str_contains($voidSource, "'
 
 $configSource = (string)file_get_contents(dirname(__DIR__) . '/app/service/admin/ErpConfigService.php');
 $assert(str_contains($configSource, "'advance_receipt'") && str_contains($configSource, "'advance_receipt_reversal'"), 'ERP动态财务分类必须支持预收和预收冲回报表分组');
+
+$installSql = (string)file_get_contents(dirname(__DIR__) . '/sql/install.sql');
+foreach (['erp_quantity_product', 'erp_quantity_stock', 'erp_quantity_stock_flow'] as $table) {
+    $assert(str_contains($installSql, '{{prefix}}' . $table), "ERP安装SQL缺少数量库存表{$table}");
+}
+$quantitySource = (string)file_get_contents(dirname(__DIR__) . '/app/service/admin/ErpQuantityInventoryService.php');
+$assert(str_contains($quantitySource, "\$mode === 'strict' && \$after < 0"), '严格模式库存不足必须拒绝扣减');
+$assert(str_contains($quantitySource, "'inventory_status' => \$after < 0 ? 'negative' : 'deducted'"), '自动模式必须允许负库存并返回缺货状态');
+$assert(str_contains($quantitySource, "'direction' => 'in'"), '核销冲正必须生成数量库存入库流水');
 
 echo "ERP member-card bridge contract smoke passed.\n";

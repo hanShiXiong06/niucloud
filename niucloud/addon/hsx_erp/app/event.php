@@ -30,6 +30,18 @@ return [
         'ErpWarehouseOptionsRequested' => [
             'addon\hsx_erp\app\listener\ErpWarehouseOptionsRequested',
         ],
+        'ErpQuantityInventoryCapabilityRequested' => [
+            'addon\hsx_erp\app\listener\ErpQuantityInventoryCapabilityRequested',
+        ],
+        'ErpQuantityInventoryConsumeRequested' => [
+            'addon\hsx_erp\app\listener\ErpQuantityInventoryConsumeRequested',
+        ],
+        'ErpQuantityInventoryRestoreRequested' => [
+            'addon\hsx_erp\app\listener\ErpQuantityInventoryRestoreRequested',
+        ],
+        'ErpQuantityInventoryAdjustRequested' => [
+            'addon\hsx_erp\app\listener\ErpQuantityInventoryAdjustRequested',
+        ],
         'ErpFinanceSettlementRequested' => [
             'addon\hsx_erp\app\listener\ErpFinanceSettlementRequested',
         ],
@@ -56,6 +68,9 @@ return [
         ],
         'PhoneShopListingMaterialCompleted' => [
             'addon\hsx_erp\app\listener\marketplace\PhoneShopListingMaterialCompleted',
+        ],
+        'DeviceAssetPriceCompleted' => [
+            'addon\hsx_erp\app\listener\DeviceAssetPriceCompleted',
         ],
         'HsxErpCatalogProducts' => [
             'addon\hsx_erp\app\listener\catalog\ErpCatalogProducts',

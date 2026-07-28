@@ -13,6 +13,7 @@ use addon\hsx_member_card\app\model\MemberCardRedemption;
 use addon\hsx_member_card\app\service\core\MemberCardConfigService;
 use addon\hsx_member_card\app\service\core\MemberCardNoticeService;
 use addon\hsx_member_card\app\support\MemberCardIdempotency;
+use addon\hsx_member_card\app\support\MemberCardBinding;
 use addon\hsx_member_card\app\support\MemberCardMoney;
 use addon\hsx_member_card\app\support\MemberCardNumber;
 use addon\hsx_member_card\app\support\MemberCardValidity;
@@ -36,7 +37,8 @@ final class MemberCardRedemptionService extends BaseAdminService
         if ($name !== '') $query->where('holder_name', '=', $name);
         $cards = $query->order('status asc,id desc')->limit(100)->select()->toArray();
         $this->refreshTimeStatuses($cards);
-        if ($cards === []) return ['candidates' => []];
+        $inventoryConfig = $this->inventoryConfig();
+        if ($cards === []) return ['candidates' => [], 'inventory_config' => $inventoryConfig];
 
         $ids = array_map('intval', array_column($cards, 'id'));
         $items = MemberCardItem::where([['site_id', '=', $this->site_id], ['status', '=', 1]])
@@ -65,8 +67,15 @@ final class MemberCardRedemptionService extends BaseAdminService
                 'finance_status' => (string)$card['finance_status'],
                 'item_id' => (int)($firstItem['id'] ?? 0),
                 'item_name' => (string)($firstItem['item_name'] ?? ''),
+                'binding_mode' => MemberCardBinding::normalizeMode($firstItem['binding_mode'] ?? ''),
+                'binding_mode_text' => MemberCardBinding::label($firstItem['binding_mode'] ?? ''),
+                'bound_imei' => (string)($firstItem['bound_imei'] ?? ''),
+                'bound_model' => (string)($firstItem['bound_model'] ?? ''),
                 'usage_mode' => (string)($firstItem['usage_mode'] ?? ''),
                 'remaining_times' => (int)($firstItem['remaining_times'] ?? 0),
+                'consumable_name' => (string)($firstItem['consumable_name'] ?? ''),
+                'consumable_unit' => (string)($firstItem['consumable_unit'] ?? '张'),
+                'standard_consumable_qty' => (float)($firstItem['standard_consumable_qty'] ?? 0),
                 'validity_text' => $this->validityText($card),
                 'available' => $available,
                 'recommended' => false,
@@ -80,7 +89,7 @@ final class MemberCardRedemptionService extends BaseAdminService
             unset($card);
         }
         unset($candidate);
-        return ['candidates' => array_values($candidates)];
+        return ['candidates' => array_values($candidates), 'inventory_config' => $inventoryConfig];
     }
 
     public function cardInfo(int $cardId): array
@@ -114,6 +123,7 @@ final class MemberCardRedemptionService extends BaseAdminService
             if ((int)($data['card_item_id'] ?? 0) > 0) $itemQuery->where('id', '=', (int)$data['card_item_id']);
             $item = $itemQuery->order('id asc')->lock(true)->findOrEmpty();
             if ($item->isEmpty()) throw new CommonException('会员卡没有可核销的服务权益');
+            $serviceDevice = MemberCardBinding::redeem($item->toArray(), $data);
             if ((string)$item->usage_mode === 'limited' && (int)$item->remaining_times <= 0) throw new CommonException('该卡服务次数已用完');
             if ((int)$item->daily_limit > 0) {
                 $todayCount = MemberCardRedemption::where([
@@ -150,6 +160,15 @@ final class MemberCardRedemptionService extends BaseAdminService
                 'valid_end_at' => (int)$validity['valid_end_at'],
                 'update_at' => $now,
             ]);
+            $inventoryConfig = $this->inventoryConfig();
+            $inventoryMode = (string)$inventoryConfig['mode'];
+            $standardQuantity = round(max(0, (float)($item->standard_consumable_qty ?? 0)), 3);
+            $actualQuantity = $inventoryMode === 'none'
+                ? 0.0
+                : round(max(0, (float)($data['actual_consumable_qty'] ?? $standardQuantity)), 3);
+            if ($inventoryMode !== 'none' && (string)($item->consumable_name ?? '') !== '' && $actualQuantity <= 0) {
+                throw new CommonException('请填写本次实际耗材数量');
+            }
             $row = MemberCardRedemption::create([
                 'site_id' => (int)$this->site_id,
                 'redeem_no' => MemberCardNumber::make('MR'),
@@ -162,10 +181,21 @@ final class MemberCardRedemptionService extends BaseAdminService
                 'holder_mobile' => (string)$card->holder_mobile,
                 'item_code' => (string)$item->item_code,
                 'item_name' => (string)$item->item_name,
+                'binding_mode' => (string)$serviceDevice['binding_mode'],
+                'service_imei' => (string)$serviceDevice['service_imei'],
+                'service_model' => (string)$serviceDevice['service_model'],
                 'redeem_times' => 1,
                 'before_remaining' => $beforeRemaining,
                 'after_remaining' => $afterRemaining,
                 'recognized_amount' => $recognized,
+                'inventory_mode' => $inventoryMode,
+                'consumable_code' => (string)($item->consumable_code ?? ''),
+                'consumable_name' => (string)($item->consumable_name ?? ''),
+                'consumable_unit' => (string)($item->consumable_unit ?? '张'),
+                'standard_consumable_qty' => $standardQuantity,
+                'actual_consumable_qty' => $actualQuantity,
+                'loss_consumable_qty' => max(0, round($actualQuantity - $standardQuantity, 3)),
+                'inventory_status' => 'not_managed',
                 'verification_mode' => 'mobile_name_manual',
                 'verification_confirmed' => 1,
                 'operator_uid' => (int)$this->uid,
@@ -174,6 +204,19 @@ final class MemberCardRedemptionService extends BaseAdminService
                 'remark' => mb_substr(trim((string)($data['remark'] ?? '')), 0, 255),
                 'occurred_at' => $now,
                 'create_at' => $now,
+                'update_at' => $now,
+            ]);
+            $inventoryResult = $this->consumeInventory($row->toArray(), $item->toArray(), $inventoryConfig);
+            $row->save([
+                'inventory_status' => (string)$inventoryResult['inventory_status'],
+                'inventory_product_id' => (int)($inventoryResult['product_id'] ?? 0),
+                'inventory_warehouse_id' => (int)($inventoryResult['warehouse_id'] ?? 0),
+                'inventory_warehouse_name' => (string)($inventoryResult['warehouse_name'] ?? ''),
+                'inventory_location_id' => (int)($inventoryResult['location_id'] ?? 0),
+                'inventory_location_name' => (string)($inventoryResult['location_name'] ?? ''),
+                'inventory_stock_before' => (float)($inventoryResult['stock_before'] ?? 0),
+                'inventory_stock_after' => (float)($inventoryResult['stock_after'] ?? 0),
+                'inventory_message' => mb_substr((string)($inventoryResult['message'] ?? ''), 0, 255),
                 'update_at' => $now,
             ]);
             $redemption = $row->toArray();
@@ -213,8 +256,13 @@ final class MemberCardRedemptionService extends BaseAdminService
             ]);
             $status = MemberCardValidity::isExpired((int)$card->valid_end_at, $now) ? MemberCardDict::CARD_EXPIRED : MemberCardDict::CARD_ACTIVE;
             $card->save(['status' => $status, 'update_at' => $now]);
+            $inventoryRestore = $this->restoreInventory($redemption->toArray(), $item->toArray());
             $redemption->save([
                 'status' => 'reversed',
+                'inventory_status' => (string)$inventoryRestore['inventory_status'],
+                'inventory_stock_before' => (float)($inventoryRestore['stock_before'] ?? $redemption->inventory_stock_before),
+                'inventory_stock_after' => (float)($inventoryRestore['stock_after'] ?? $redemption->inventory_stock_after),
+                'inventory_message' => mb_substr((string)($inventoryRestore['message'] ?? ''), 0, 255),
                 'reversed_at' => $now,
                 'reverse_uid' => (int)$this->uid,
                 'reverse_name' => (string)$this->username,
@@ -236,7 +284,7 @@ final class MemberCardRedemptionService extends BaseAdminService
     {
         $query = MemberCardRedemption::where([['site_id', '=', $this->site_id]]);
         $keyword = trim((string)($where['keyword'] ?? ''));
-        if ($keyword !== '') $query->whereLike('redeem_no|card_no|holder_name|holder_mobile|item_name|operator_name', '%' . $keyword . '%');
+        if ($keyword !== '') $query->whereLike('redeem_no|card_no|holder_name|holder_mobile|item_name|service_imei|service_model|operator_name', '%' . $keyword . '%');
         if (trim((string)($where['status'] ?? '')) !== '') $query->where('status', '=', (string)$where['status']);
         return $query->order('id desc')->paginate([
             'list_rows' => min(100, max(1, (int)($where['limit'] ?? 15))),
@@ -372,8 +420,103 @@ final class MemberCardRedemptionService extends BaseAdminService
             'after_remaining' => (int)$row['after_remaining'],
             'card_status' => (string)$card->status,
             'redemption_status' => (string)$row['status'],
+            'inventory_mode' => (string)($row['inventory_mode'] ?? 'none'),
+            'inventory_status' => (string)($row['inventory_status'] ?? 'not_managed'),
+            'actual_consumable_qty' => (float)($row['actual_consumable_qty'] ?? 0),
+            'inventory_message' => (string)($row['inventory_message'] ?? ''),
             'message' => $message,
         ];
+    }
+
+    private function inventoryConfig(): array
+    {
+        $config = (new MemberCardConfigService())->get((int)$this->site_id);
+        $configuredMode = (string)($config['inventory_mode'] ?? 'none');
+        if (!in_array($configuredMode, ['none', 'auto', 'strict'], true)) $configuredMode = 'none';
+        $available = $configuredMode === 'none' || (new MemberCardInventoryGateway())->available();
+        $mode = $available ? $configuredMode : 'none';
+        return [
+            'mode' => $mode,
+            'configured_mode' => $configuredMode,
+            'available' => $available ? 1 : 0,
+            'warehouse_id' => max(0, (int)($config['inventory_warehouse_id'] ?? 0)),
+            'location_id' => max(0, (int)($config['inventory_location_id'] ?? 0)),
+        ];
+    }
+
+    private function consumeInventory(array $redemption, array $item, array $config): array
+    {
+        $mode = (string)($config['mode'] ?? 'none');
+        if ($mode === 'none') {
+            return ['inventory_status' => 'not_managed', 'message' => '当前模式不管理耗材库存'];
+        }
+        if (trim((string)($item['consumable_name'] ?? '')) === '') {
+            if ($mode === 'strict') throw new CommonException('该卡种尚未配置耗材，严格库存模式不能核销');
+            return ['inventory_status' => 'failed', 'message' => '未配置耗材，本次只完成权益核销'];
+        }
+        try {
+            return (new MemberCardInventoryGateway())->consume([
+                'event_id' => 'mc-stock:' . hash('sha256', (string)$redemption['request_id']),
+                'source_id' => 'consumable:' . ((string)($item['consumable_code'] ?? '') ?: ('product_item_' . (int)$item['product_item_id'])),
+                'product_name' => (string)$item['consumable_name'],
+                'unit' => (string)($item['consumable_unit'] ?? '张'),
+                'quantity' => (float)($redemption['actual_consumable_qty'] ?? 0),
+                'mode' => $mode,
+                'warehouse_id' => (int)($config['warehouse_id'] ?? 0),
+                'location_id' => (int)($config['location_id'] ?? 0),
+                'biz_type' => 'member_card_redemption',
+                'biz_id' => (int)$redemption['id'],
+                'biz_no' => (string)$redemption['redeem_no'],
+                'operator_uid' => (int)$this->uid,
+                'operator_name' => (string)$this->username,
+                'remark' => (float)($redemption['loss_consumable_qty'] ?? 0) > 0 ? '含贴坏/返工耗材' : '会员卡核销耗材',
+                'occurred_at' => (int)$redemption['occurred_at'],
+            ]);
+        } catch (\Throwable $e) {
+            if ($mode === 'strict') throw $e;
+            return [
+                'inventory_status' => 'failed',
+                'message' => '权益已核销，库存待补记：' . mb_substr($e->getMessage(), 0, 180),
+            ];
+        }
+    }
+
+    private function restoreInventory(array $redemption, array $item): array
+    {
+        $status = (string)($redemption['inventory_status'] ?? 'not_managed');
+        if (!in_array($status, ['deducted', 'negative'], true) || (float)($redemption['actual_consumable_qty'] ?? 0) <= 0) {
+            return [
+                'inventory_status' => $status,
+                'stock_before' => (float)($redemption['inventory_stock_before'] ?? 0),
+                'stock_after' => (float)($redemption['inventory_stock_after'] ?? 0),
+                'message' => (string)($redemption['inventory_message'] ?? '本次核销未发生库存扣减'),
+            ];
+        }
+        try {
+            return (new MemberCardInventoryGateway())->restore([
+                'event_id' => 'mc-stock-reverse:' . (int)$redemption['id'],
+                'source_id' => 'consumable:' . ((string)($item['consumable_code'] ?? '') ?: ('product_item_' . (int)$item['product_item_id'])),
+                'product_name' => (string)($redemption['consumable_name'] ?? $item['consumable_name'] ?? ''),
+                'unit' => (string)($redemption['consumable_unit'] ?? $item['consumable_unit'] ?? '张'),
+                'quantity' => (float)$redemption['actual_consumable_qty'],
+                'warehouse_id' => (int)($redemption['inventory_warehouse_id'] ?? 0),
+                'location_id' => (int)($redemption['inventory_location_id'] ?? 0),
+                'biz_type' => 'member_card_redemption_reverse',
+                'biz_id' => (int)$redemption['id'],
+                'biz_no' => (string)$redemption['redeem_no'],
+                'operator_uid' => (int)$this->uid,
+                'operator_name' => (string)$this->username,
+                'remark' => '会员卡核销冲正返库',
+                'occurred_at' => time(),
+            ]);
+        } catch (\Throwable $e) {
+            return [
+                'inventory_status' => 'restore_failed',
+                'stock_before' => (float)($redemption['inventory_stock_after'] ?? 0),
+                'stock_after' => (float)($redemption['inventory_stock_after'] ?? 0),
+                'message' => '权益已冲正，耗材待人工返库：' . mb_substr($e->getMessage(), 0, 180),
+            ];
+        }
     }
 
     private function findCard(int $id): MemberCard

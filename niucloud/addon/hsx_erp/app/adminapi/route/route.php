@@ -89,6 +89,7 @@ Route::group('erp', function () {
     Route::post('stock/:id/refurbish/complete', 'addon\hsx_erp\app\adminapi\controller\ErpStock@completeRefurbish');
     Route::get('stock/:id', 'addon\hsx_erp\app\adminapi\controller\ErpStock@info');
     Route::post('stock/:id/flow', 'addon\hsx_erp\app\adminapi\controller\ErpStock@flow');
+    Route::post('stock/:id/listing_media/prepare', 'addon\hsx_erp\app\adminapi\controller\ErpStock@prepareListingMedia');
     Route::post('stock/:id/sync_listing', 'addon\hsx_erp\app\adminapi\controller\ErpStock@syncListing');
 
     Route::get('stocktake/lists', 'addon\hsx_erp\app\adminapi\controller\ErpStocktake@lists');

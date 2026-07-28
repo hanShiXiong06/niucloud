@@ -120,6 +120,15 @@ final class MemberCardRefundService extends BaseAdminService
     {
         $refund = $this->find($refundId);
         try {
+            $gateway = new MemberCardFinanceGateway();
+            if (!$gateway->usesErp()) {
+                if ((string)$refund->refund_mode !== 'immediate') {
+                    throw new CommonException('独立使用会员卡时请选择现场退款');
+                }
+                $account = $gateway->requireCapitalAccount((int)($data['capital_account_id'] ?? $refund->capital_account_id));
+                $this->completeRefund($refundId, '', (string)$account['name']);
+                return $this->response($refundId, '整卡退款已完成，本地出账已登记');
+            }
             $link = $this->ensureFinanceFact($refund->toArray());
             if ((string)$refund->refund_mode === 'finance') {
                 $refund->save(['status' => 'pending', 'last_error' => '', 'update_at' => time()]);

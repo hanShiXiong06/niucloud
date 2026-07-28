@@ -8,6 +8,7 @@ $app->initialize();
 use addon\hsx_member_card\app\listener\MemberCardBusinessSources;
 use addon\hsx_member_card\app\listener\MemberCardFinanceCategories;
 use addon\hsx_member_card\app\support\MemberCardIdempotency;
+use addon\hsx_member_card\app\support\MemberCardBinding;
 use addon\hsx_member_card\app\support\MemberCardMigrationCipher;
 use addon\hsx_member_card\app\support\MemberCardMoney;
 use addon\hsx_member_card\app\support\MemberCardValidity;
@@ -23,6 +24,16 @@ $assert(MemberCardIdempotency::child('mc-issue-001', 'finance') === 'mc-issue-00
 $invalidRequestRejected = false;
 try { MemberCardIdempotency::normalize('bad request id'); } catch (CommonException) { $invalidRequestRejected = true; }
 $assert($invalidRequestRejected, '含空格的request_id必须拒绝');
+
+$imeiBinding = MemberCardBinding::issue(['binding_mode' => 'imei'], ['bind_imei' => ' 35 9167 074097936 ', 'bind_model' => 'iPhone 7']);
+$assert($imeiBinding['bound_imei'] === '359167074097936', '一机一卡开卡必须规范化并快照IMEI');
+$imeiService = MemberCardBinding::redeem($imeiBinding, ['service_imei' => '359167074097936']);
+$assert($imeiService['service_model'] === 'iPhone 7', '一机一卡核销必须保留开卡时的型号快照');
+$wrongDeviceRejected = false;
+try { MemberCardBinding::redeem($imeiBinding, ['service_imei' => '359167074097937']); } catch (CommonException) { $wrongDeviceRejected = true; }
+$assert($wrongDeviceRejected, '一机一卡必须拒绝非绑定设备核销');
+$modelBinding = MemberCardBinding::issue(['binding_mode' => 'model'], ['bind_model' => 'iPhone 17 Pro Max']);
+$assert(MemberCardBinding::redeem($modelBinding, ['service_model' => 'IPHONE 17 PRO MAX'])['service_model'] === 'IPHONE 17 PRO MAX', '限定型号校验应忽略英文大小写');
 
 $permanent = MemberCardValidity::calculate(['effective_mode' => 'immediate', 'validity_mode' => 'permanent'], 1784160000);
 $assert($permanent['valid_start_at'] === 1784160000 && $permanent['valid_end_at'] === 0, '立即生效永久卡有效期计算错误');
@@ -54,6 +65,11 @@ $assert(substr_count($installSql, '`site_id` int NOT NULL DEFAULT 0') >= count($
 $assert(!str_contains($installSql, '`request_id` varchar(80) NOT NULL DEFAULT \'\''), '幂等请求字段禁止默认空字符串');
 $assert(str_contains($installSql, 'UNIQUE KEY `uk_site_request` (`site_id`,`request_id`)'), '开卡与核销必须使用站点级请求幂等索引');
 $assert(str_contains($installSql, 'holder_mobile_last4'), '会员卡必须建立手机号后四位检索字段');
+$assert(str_contains($installSql, '`binding_mode` varchar(20)'), '卡种、持卡权益与核销记录必须保存适用对象规则');
+$assert(str_contains($installSql, '`service_imei` varchar(40)'), '设备核销必须留存实际服务IMEI');
+$assert(str_contains($installSql, '`inventory_mode` varchar(20)'), '核销记录必须快照不管理/自动/严格三档库存模式');
+$assert(str_contains($installSql, '`actual_consumable_qty` decimal(12,3)'), '核销必须区分权益次数与实际耗材数量');
+$assert(str_contains($installSql, '`loss_consumable_qty` decimal(12,3)'), '超出标准用量的耗材必须独立记录为损耗');
 $assert(str_contains($installSql, 'UNIQUE KEY `uk_site_source_entity` (`site_id`,`source_key`,`entity_type`,`external_id`)'), '第三方数据映射必须使用站点级唯一索引');
 
 $credential = '{"token_name":"recovery-token","token_value":"migration-test-token"}';
@@ -83,6 +99,10 @@ $assert(str_contains($orderSource, "'verification_confirmed'") === false, '开�
 $redemptionSource = (string)file_get_contents(dirname(__DIR__) . '/app/service/admin/MemberCardRedemptionService.php');
 $assert(str_contains($redemptionSource, "->lock(true)") && str_contains($redemptionSource, "'verification_confirmed'"), '核销必须使用行锁并强制姓名人工核验确认');
 $assert(str_contains($redemptionSource, "'status' => 'reversed'"), '核销撤销必须冲正原记录，不能删除');
+$assert(str_contains($redemptionSource, "if (\$mode === 'strict') throw \$e"), '严格库存扣减失败必须回滚权益核销');
+$assert(str_contains($redemptionSource, "'inventory_status' => 'failed'"), '自动库存扣减失败必须保留权益核销并形成待补记状态');
+$assert(str_contains($redemptionSource, 'MemberCardInventoryGateway())->restore'), '核销冲正必须通过库存契约返还已扣耗材');
+$assert(str_contains($redemptionSource, "'consumable:'"), '多个卡种必须按稳定耗材编码共用同一库存档案');
 $assert(substr_count($redemptionSource, 'MemberCardMoney::subtract($item->recognized_amount, $redemption->recognized_amount)') === 1, '核销冲正必须且只能在恢复权益时扣回确认收入');
 $financeSyncSource = (string)file_get_contents(dirname(__DIR__) . '/app/service/admin/MemberCardFinanceSyncService.php');
 $assert(str_contains($financeSyncSource, "':order:' . (int)\$order['id']") && str_contains($financeSyncSource, "':refund:' . (int)\$refund['id']"), '一笔结算关联多张单时，员工事实幂等键必须精确到业务单');
@@ -106,6 +126,10 @@ $assert(str_contains($apiRouteSource, 'ApiCheckToken::class, true'), '用户端�
 $portalSource = (string)file_get_contents(dirname(__DIR__) . '/app/service/api/MemberCardPortalService.php');
 $assert(str_contains($portalSource, "['member_id', '=', (int)\$this->member_id]"), '用户端会员卡查询必须按当前登录会员隔离');
 $assert(!str_contains($portalSource, "->order('sort asc,id asc')"), '持卡权益表没有sort字段，用户端查询不能引用不存在字段');
+$schemaSource = (string)file_get_contents(dirname(__DIR__) . '/app/support/MemberCardSchema.php');
+$assert(str_contains($schemaSource, '业务请求不得执行 DDL'), '会员卡结构迁移必须限定在插件生命周期内');
+$addonSource = (string)file_get_contents(dirname(__DIR__) . '/Addon.php');
+$assert(substr_count($addonSource, 'MemberCardSchema::migrate()') === 2, '新安装和老插件升级都必须幂等补齐终身卡绑定字段');
 $noticeServiceSource = (string)file_get_contents(dirname(__DIR__) . '/app/service/core/MemberCardNoticeService.php');
 $assert(str_contains($noticeServiceSource, 'NoticeService::send'), '核销通知必须调用牛云官方NoticeService');
 $assert(str_contains($noticeServiceSource, 'catch (\\Throwable $e)'), '通知失败不能影响已完成的核销事务');

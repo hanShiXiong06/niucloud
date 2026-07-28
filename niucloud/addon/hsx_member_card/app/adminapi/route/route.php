@@ -11,6 +11,8 @@ Route::group('member_card', function () {
     Route::get('dicts', 'addon\hsx_member_card\app\adminapi\controller\Config@dicts');
     Route::get('config', 'addon\hsx_member_card\app\adminapi\controller\Config@info');
     Route::post('config', 'addon\hsx_member_card\app\adminapi\controller\Config@save');
+    Route::post('config/capital_account', 'addon\hsx_member_card\app\adminapi\controller\Config@saveCapitalAccount');
+    Route::delete('config/capital_account/:id', 'addon\hsx_member_card\app\adminapi\controller\Config@deleteCapitalAccount');
 
     Route::get('product/lists', 'addon\hsx_member_card\app\adminapi\controller\Product@lists');
     Route::get('product/options', 'addon\hsx_member_card\app\adminapi\controller\Product@options');
@@ -20,6 +22,7 @@ Route::group('member_card', function () {
     Route::post('product/:id/enable', 'addon\hsx_member_card\app\adminapi\controller\Product@enable');
     Route::post('product/:id/disable', 'addon\hsx_member_card\app\adminapi\controller\Product@disable');
     Route::delete('product/:id', 'addon\hsx_member_card\app\adminapi\controller\Product@delete');
+    Route::post('product/:id/stock/adjust', 'addon\hsx_member_card\app\adminapi\controller\Product@adjustStock');
 
     Route::get('member/lists', 'addon\hsx_member_card\app\adminapi\controller\Member@lists');
     Route::get('member/options', 'addon\hsx_member_card\app\adminapi\controller\Member@options');

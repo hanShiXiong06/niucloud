@@ -21,6 +21,7 @@ class ErpPurchase extends BaseAdminController
     {
         $params = $this->request->params([
             ['keyword', ''],
+            ['item_type', 'device'],
             ['finance_status', ''],
             ['status', ''],
             ['asset_no', ''],

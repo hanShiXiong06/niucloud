@@ -137,6 +137,9 @@ export function getMobileStockInfo(id: number) {
 export function syncMobileStockListing(id: number) {
     return request.post(`erp/stock/${id}/sync_listing`)
 }
+export function prepareMobileStockListingMedia(id: number) {
+    return request.post(`erp/stock/${id}/listing_media/prepare`)
+}
 export function updateMobileStockFlow(id: number, data: Record<string, any>) {
     return request.post(`erp/stock/${id}/flow`, data)
 }

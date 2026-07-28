@@ -36,6 +36,7 @@ class ErpListingTaskService extends BaseAdminService
             ['stage_key' => self::TASK_RECEIVABLE, 'name' => '应收待收款', 'sort' => 50],
             ['stage_key' => ErpListingWorkflow::TASK_PHOTO, 'name' => '商品拍摄', 'sort' => 60],
             ['stage_key' => ErpListingWorkflow::TASK_PRICE, 'name' => '销售定价', 'sort' => 70],
+            ['stage_key' => ErpListingWorkflow::TASK_MEDIA_PRICE, 'name' => '拍摄与销售定价', 'sort' => 75],
             ['stage_key' => ErpListingWorkflow::TASK_PUBLISH, 'name' => '商城资料整理', 'sort' => 80],
         ];
     }
@@ -47,6 +48,7 @@ class ErpListingTaskService extends BaseAdminService
             self::TASK_RECEIVABLE => ['hsx_erp_receivable', 'hsx_erp_confirm_receipt'],
             ErpListingWorkflow::TASK_PHOTO => ['hsx_erp_stock_flow'],
             ErpListingWorkflow::TASK_PRICE => ['hsx_erp_stock_retail_price', 'hsx_erp_stock_flow'],
+            ErpListingWorkflow::TASK_MEDIA_PRICE => ['hsx_erp_stock_retail_price', 'hsx_erp_stock_flow'],
             ErpListingWorkflow::TASK_PUBLISH => ['hsx_erp_stock_flow', 'hsx_erp_stock_sync_listing'],
         ];
         $permissions = $permissionMap[$stage] ?? [];
@@ -108,7 +110,8 @@ class ErpListingTaskService extends BaseAdminService
                 $asset->listing_status = $normalizedStatus;
             }
         }
-        $stage = ErpListingWorkflow::taskStage($asset->toArray());
+        $mode = (string)(ErpConfigService::forSite((int)$this->site_id)->getRules()['listing_workspace']['mode'] ?? 'one_stop');
+        $stage = ErpListingWorkflow::taskStage($asset->toArray(), $mode);
         if ($stage === '') {
             if ((string)($asset->task_stage_key ?? '') !== '') $asset->save($this->emptyAssignment());
             return false;
@@ -173,7 +176,8 @@ class ErpListingTaskService extends BaseAdminService
     {
         $asset = ErpAsset::where([['site_id', '=', $this->site_id], ['id', '=', $assetId]])->findOrEmpty();
         if ($asset->isEmpty()) throw new CommonException('库存设备不存在');
-        if (ErpListingWorkflow::taskStage($asset->toArray()) !== $stage) throw new CommonException('设备已不在该待办环节');
+        $mode = (string)(ErpConfigService::forSite((int)$this->site_id)->getRules()['listing_workspace']['mode'] ?? 'one_stop');
+        if (ErpListingWorkflow::taskStage($asset->toArray(), $mode) !== $stage) throw new CommonException('设备已不在该待办环节');
         $candidate = null;
         foreach ($this->assignableUsers($stage) as $user) if ((int)$user['uid'] === $assigneeUid) $candidate = $user;
         if ($candidate === null) throw new CommonException('该员工没有处理当前环节的权限');

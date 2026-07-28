@@ -20,6 +20,24 @@ return [
         'page' => '/app/pages/site/info',
         'icon' => '/addon/home_service/admin/icon-2.png'
     ],
+    [
+        'name' => '管理员',
+        'key' => 'site_user_manage',
+        'group' => 'site',
+        'menu_key' => 'auth_list',
+        'sort' => 3,
+        'page' => '/app/pages/permission/user-list',
+        'icon' => '/addon/home_service/technician/user.png'
+    ],
+    [
+        'name' => '角色管理',
+        'key' => 'site_role_manage',
+        'group' => 'site',
+        'menu_key' => 'auth_role',
+        'sort' => 4,
+        'page' => '/app/pages/permission/role-list',
+        'icon' => '/addon/home_service/store/user.png'
+    ],
 //    [
 //        'name' => '运费模板',
 //        'key' => 'delivery_template',

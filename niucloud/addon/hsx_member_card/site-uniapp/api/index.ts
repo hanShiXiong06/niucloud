@@ -3,6 +3,9 @@ import request from '@/utils/request'
 export const memberCardRequestId = (prefix: string) => `${prefix}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 12)}`
 export const getMemberCardDashboard = (params: Record<string, any> = {}) => request.get('member_card/dashboard', params)
 export const getMemberCardConfig = () => request.get('member_card/config')
+export const saveMemberCardConfig = (data: Record<string, any>) => request.post('member_card/config', data)
+export const saveMemberCardCapitalAccount = (data: Record<string, any>) => request.post('member_card/config/capital_account', data)
+export const deleteMemberCardCapitalAccount = (id: number) => request.delete(`member_card/config/capital_account/${id}`)
 export const getCardProducts = (params: Record<string, any> = {}) => request.get('member_card/product/lists', params)
 export const getCardProductOptions = () => request.get('member_card/product/options')
 export const getCardProduct = (id: number) => request.get(`member_card/product/${id}`)
@@ -10,6 +13,7 @@ export const saveCardProduct = (data: Record<string, any>, id = 0) => request.po
 export const enableCardProduct = (id: number) => request.post(`member_card/product/${id}/enable`)
 export const disableCardProduct = (id: number) => request.post(`member_card/product/${id}/disable`)
 export const deleteCardProduct = (id: number) => request.delete(`member_card/product/${id}`)
+export const adjustCardProductStock = (id: number, data: Record<string, any>) => request.post(`member_card/product/${id}/stock/adjust`, data)
 export const getCardMembers = (params: Record<string, any> = {}) => request.get('member_card/member/lists', params)
 export const getCardMemberOptions = (params: Record<string, any> = {}) => request.get('member_card/member/options', params, { showLoading: false })
 export const getCardMember = (id: number) => request.get(`member_card/member/${id}/info`)

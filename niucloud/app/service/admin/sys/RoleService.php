@@ -58,7 +58,14 @@ class RoleService extends BaseAdminService
      * @return array
      */
     public function getInfo(int $role_id){
-        return $this->model->append(['status_name'])->findOrEmpty($role_id)->toArray();
+        return $this->model
+            ->where([
+                ['role_id', '=', $role_id],
+                ['site_id', '=', $this->site_id],
+            ])
+            ->append(['status_name'])
+            ->findOrEmpty()
+            ->toArray();
     }
 
     /**

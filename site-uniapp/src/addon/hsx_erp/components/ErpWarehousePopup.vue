@@ -106,6 +106,7 @@ const props = withDefaults(defineProps<{
     locationName?: string
     allowWarehouseOnly?: boolean
     allowClear?: boolean
+    filterTypes?: string[]
 }>(), {
     show: false,
     warehouseId: 0,
@@ -114,6 +115,7 @@ const props = withDefaults(defineProps<{
     locationName: '',
     allowWarehouseOnly: false,
     allowClear: false,
+    filterTypes: () => [],
 })
 
 const emit = defineEmits<{
@@ -143,7 +145,10 @@ async function loadWarehouses() {
     loading.value = true
     try {
         const res: any = await request.get('erp/warehouse/options')
-        warehouses.value = Array.isArray(res?.data) ? res.data : (res?.data?.data || [])
+        const rows = Array.isArray(res?.data) ? res.data : (res?.data?.data || [])
+        warehouses.value = props.filterTypes.length
+            ? rows.filter((item: any) => props.filterTypes.includes(String(item.warehouse_type || '')))
+            : rows
         const current = warehouses.value.find((item: any) => Number(item.id) === Number(props.warehouseId))
         activeWarehouseId.value = Number(current?.id || warehouses.value[0]?.id || 0)
     } catch {
@@ -190,7 +195,9 @@ function clearSelection() {
 function close() { emit('update:show', false) }
 
 const typeLabel = (t: string) => ({
-    owned: '自有仓',
+    owned: '二手机仓',
+    new_device: '新机仓',
+    accessory: '配件仓',
     second_hand: '二手仓',
     peer: '同行仓',
     consignment: '代卖仓',

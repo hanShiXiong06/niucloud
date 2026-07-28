@@ -73,6 +73,28 @@
 
                         <!-- 详细信息列表 -->
                         <view class="mt-[16rpx] grid gap-[8rpx] text-[23rpx] text-[#64748b]">
+                            <view v-if="row.inventory_mode !== 'none' && row.consumable_name" class="flex items-center gap-[8rpx]">
+                                <u-icon name="bag" color="#94a3b8" size="15" />
+                                <text class="truncate">
+                                    {{ row.consumable_name }} × {{ qty(row.actual_consumable_qty) }}{{ row.consumable_unit || '件' }}
+                                    · {{ inventoryStatusText(row.inventory_status) }}
+                                </text>
+                            </view>
+                            <view v-if="Number(row.loss_consumable_qty || 0) > 0" class="flex items-center gap-[8rpx] text-[#d97706]">
+                                <u-icon name="warning" color="#d97706" size="15" />
+                                <text>贴坏 / 返工损耗 {{ qty(row.loss_consumable_qty) }}{{ row.consumable_unit || '件' }}</text>
+                            </view>
+                            <view v-if="row.inventory_warehouse_name" class="flex items-center gap-[8rpx]">
+                                <u-icon name="home" color="#94a3b8" size="15" />
+                                <text class="truncate">
+                                    {{ row.inventory_warehouse_name }}{{ row.inventory_location_name ? ` / ${row.inventory_location_name}` : '' }}
+                                    · {{ qty(row.inventory_stock_before) }} → {{ qty(row.inventory_stock_after) }}
+                                </text>
+                            </view>
+                            <view v-if="row.service_imei || row.service_model" class="flex items-center gap-[8rpx]">
+                                <u-icon name="tags" color="#94a3b8" size="15" />
+                                <text class="truncate">{{ row.service_imei ? `设备 ${row.service_imei}` : `型号 ${row.service_model}` }}</text>
+                            </view>
                             <view class="flex items-center gap-[8rpx]">
                                 <u-icon name="account" color="#94a3b8" size="15" />
                                 <text>操作人 {{ row.operator_name || '—' }}</text>
@@ -129,10 +151,23 @@ const query = async (page: number, limit: number) => {
     } catch { paging.value?.complete(false) }
 }
 const money = (value: any) => Number(value || 0).toFixed(2)
+const qty = (value: any) => {
+    const number = Number(value || 0)
+    return Number.isInteger(number) ? String(number) : number.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
+}
+const inventoryStatusMap: Record<string, string> = {
+    deducted: '已扣库存',
+    negative: '库存不足',
+    failed: '库存待补记',
+    restored: '已返库',
+    restore_failed: '返库失败',
+    not_managed: '未管理库存',
+}
+const inventoryStatusText = (status: string) => inventoryStatusMap[status] || '库存状态未知'
 const mask = (value: string) => /^\d{11}$/.test(value || '') ? `${value.slice(0, 3)}****${value.slice(-4)}` : (value || '—')
 const time = (value: any) => value ? new Date(Number(value) * 1000).toLocaleString('zh-CN', { hour12: false }).slice(0, 16) : '—'
 const reverse = async (row: any) => {
-    const modal = await uni.showModal({ title: '核销冲正', editable: true, placeholderText: '必须填写冲正原因', content: '冲正会恢复本次扣减的次数，原记录永久保留。', confirmText: '确认冲正' })
+    const modal = await uni.showModal({ title: '核销冲正', editable: true, placeholderText: '必须填写冲正原因', content: '冲正会恢复次数，并按原扣减数量返还耗材库存。', confirmText: '确认冲正' })
     if (!modal.confirm) return
     const reason = String((modal as any).content || '').trim()
     if (!reason) return uni.showToast({ title: '必须填写冲正原因', icon: 'none' })

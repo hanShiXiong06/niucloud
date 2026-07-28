@@ -5,6 +5,15 @@ namespace addon\hsx_erp\app\dict;
 
 class ErpDict
 {
+    public const WAREHOUSE_OWNED = 'owned';
+    public const WAREHOUSE_NEW_DEVICE = 'new_device';
+    public const WAREHOUSE_ACCESSORY = 'accessory';
+    public const WAREHOUSE_PEER = 'peer';
+    public const WAREHOUSE_CONSIGNMENT = 'consignment';
+    public const WAREHOUSE_EXCEPTION = 'exception';
+    // 配件仓
+    public const WAREHOUSE_ACCESSORY_OWNED = 'accessory_owned';
+
     public const STATUS_PENDING = 'pending';
     public const STATUS_PARTIAL = 'partial';
     public const STATUS_SETTLED = 'settled';
@@ -85,6 +94,67 @@ class ErpDict
             'refurbish' => '整备费用',
             'internal_adjust' => '内部成本修正',
             'cost_adjust' => '成本调整',
+        ];
+    }
+
+    /**
+     * 仓库类型是稳定的业务枚举，不是允许商户随意增删的展示字典。
+     * 调拨、物权、应收应付和上架策略均依赖 value；前端只消费这里的展示与预设。
+     */
+    public static function getWarehouseTypeOptions(): array
+    {
+        return [
+            [
+                'value' => self::WAREHOUSE_OWNED,
+                'label' => '二手机仓',
+                'type' => 'primary',
+                'description' => '自有库存仓，入库即生成采购应付；补齐分类、规格、图片和售价后可直接上商城，也可卖同行。',
+                'preset' => ['need_photo' => 1, 'need_pricing' => 1, 'allow_direct_sale' => 1, 'allow_transfer' => 1, 'default_sale_target' => 'mall'],
+                'constraints' => [],
+            ],
+            [
+                'value' => self::WAREHOUSE_NEW_DEVICE,
+                'label' => '新机仓',
+                'type' => 'primary',
+                'description' => '公司自有的新机库存仓，可直接销售和调拨；通常按标准商品资料及数量库存管理。',
+                'preset' => ['need_photo' => 0, 'need_pricing' => 0, 'allow_direct_sale' => 1, 'allow_transfer' => 1, 'default_sale_target' => 'mall'],
+                'constraints' => [],
+            ],
+            [
+                'value' => self::WAREHOUSE_ACCESSORY,
+                'label' => '配件仓',
+                'type' => 'success',
+                'description' => '公司自有的膜、壳及其他配件库存仓，可供零售、会员卡核销和库存调拨共同消费。',
+                'preset' => ['need_photo' => 0, 'need_pricing' => 0, 'allow_direct_sale' => 1, 'allow_transfer' => 1, 'default_sale_target' => 'mall'],
+                'constraints' => [],
+            ],
+            [
+                'value' => self::WAREHOUSE_PEER,
+                'label' => '同行仓',
+                'type' => 'success',
+                'description' => '自有库存仓，通常无需商品图片，可直接同行出库，成交后按实际售价确认利润。',
+                'preset' => ['need_photo' => 0, 'need_pricing' => 0, 'allow_direct_sale' => 1, 'allow_transfer' => 1, 'default_sale_target' => 'peer'],
+                'constraints' => [],
+            ],
+            [
+                'value' => self::WAREHOUSE_CONSIGNMENT,
+                'label' => '代卖仓',
+                'type' => 'warning',
+                'description' => '寄售库存，不属于自有资产，入库不生成普通采购应付，不能通过普通调拨转为自有库存。',
+                'preset' => ['need_photo' => 1, 'need_pricing' => 1, 'allow_direct_sale' => 1, 'allow_transfer' => 0, 'default_sale_target' => 'mall'],
+                'constraints' => ['allow_transfer' => 0],
+            ],
+            [
+                'value' => self::WAREHOUSE_EXCEPTION,
+                'label' => '异常仓',
+                'type' => 'danger',
+                'description' => '退回、复检、争议或待处理设备，默认不允许直接销售。',
+                'preset' => ['need_photo' => 0, 'need_pricing' => 0, 'allow_direct_sale' => 0, 'allow_transfer' => 0, 'default_sale_target' => 'unset'],
+                'constraints' => [],
+            ],
+            // 手机配件仓 -> 自有库存仓 -> 自有的 -> 自己花钱买的
+
+
         ];
     }
 
@@ -175,6 +245,7 @@ class ErpDict
     public static function lists(): array
     {
         return [
+            'warehouse_type' => self::getWarehouseTypeOptions(),
             'asset_status' => [
                 ['value' => self::ASSET_IN_STOCK, 'label' => '在库', 'type' => 'success', 'filterable' => true],
                 ['value' => self::ASSET_SOLD, 'label' => '已售', 'type' => 'primary', 'filterable' => true],

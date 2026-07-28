@@ -34,7 +34,7 @@
                                 {{ row.product_name }}
                             </text>
                             <text class="text-[23rpx] text-[#64748b]">
-                                {{ row.item?.item_name || '服务权益' }}
+                                {{ row.item?.item_name || '服务权益' }} · {{ bindingText(row.item) }}
                             </text>
                         </view>
                         <u-tag
@@ -144,6 +144,7 @@ const query = async (page: number, limit: number) => {
 }
 const money = (value: any) => Number(value || 0).toFixed(2)
 const usageText = (item: any) => item?.usage_mode === 'unlimited' ? '不限次' : `${Number(item?.total_times || 0)} 次`
+const bindingText = (item: any) => ({ imei: '一机一卡', model: '限定型号', member: '按会员' }[item?.binding_mode || 'member'] || '按会员')
 const statusText = (value: string) => ({ draft: '草稿', enabled: '已启用', disabled: '已停用' }[value] || value)
 const statusType = (value: string) => ({ enabled: 'success', disabled: 'warning', draft: 'info' }[value] || 'info') as any
 const add = () => uni.navigateTo({ url: '/addon/hsx_member_card/pages/product/edit' })

@@ -39,7 +39,8 @@
                     </el-table-column>
                     <el-table-column label="服务权益" min-width="210">
                         <template #default="{ row }">
-                            {{ row.item?.item_name || '—' }} · {{ row.item?.usage_mode === 'unlimited' ? '不限次' : `${row.item?.total_times || 0} 次` }}
+                            <div>{{ row.item?.item_name || '—' }} · {{ row.item?.usage_mode === 'unlimited' ? '不限次' : `${row.item?.total_times || 0} 次` }}</div>
+                            <div class="sub">{{ bindingText(row.item) }}<span v-if="Number(row.item?.daily_limit || 0) > 0"> · 每日限 {{ row.item.daily_limit }} 次</span></div>
                         </template>
                     </el-table-column>
                     <el-table-column prop="validity_text" label="有效期" min-width="150" />
@@ -79,6 +80,7 @@ const total = ref(0)
 const loading = ref(false)
 const productDialogRef = ref<InstanceType<typeof MemberCardProductDialog>>()
 const money = (value: any) => Number(value || 0).toFixed(2)
+const bindingText = (item: any) => ({ imei: '绑定指定 IMEI', model: '限定产品型号', member: '按会员本人' }[item?.binding_mode || 'member'] || '按会员本人')
 
 const load = async () => {
     loading.value = true

@@ -77,29 +77,31 @@
                     </view>
                 </view>
 
-                <!-- 设备列表 -->
+                <!-- 采购明细 -->
                 <view class="section-title">
-                    设备明细（有效 {{ order?.effective_asset_count ?? items.length }} 台<text v-if="Number(order?.returned_count || 0)"> · 已退 {{ order.returned_count }} 台</text>）
+                    {{ isStandardOrder ? `标品明细（${items.length} 项）` : `设备明细（有效 ${order?.effective_asset_count ?? items.length} 台）` }}<text v-if="!isStandardOrder && Number(order?.returned_count || 0)"> · 已退 {{ order.returned_count }} 台</text>
                 </view>
-                <view v-if="items.some(item => item.status === 'in_stock')" class="return-guide">
+                <view v-if="!isStandardOrder && items.some(item => item.status === 'in_stock')" class="return-guide">
                     <view class="return-guide__title">采购退货怎么处理</view>
                     <view class="return-guide__steps">
                         <text>1. 选择设备</text><text>→</text><text>2. 确认退货</text><text>→</text><text>3. 已付款到应收款确认退款</text>
                     </view>
                 </view>
-                <view v-if="!items.length" class="empty-card">暂无设备明细</view>
+                <view v-if="!items.length" class="empty-card">暂无采购明细</view>
                 <view v-for="item in items" :key="item.id" class="erp-card device-card">
                     <view class="erp-card__head">
                         <text class="card-title">{{ item.model || '-' }}</text>
                         <u-tag :text="assetLabel(item.status)" :type="assetType(item.status)" plain plainFill size="mini" />
                     </view>
-                    <view class="return-tip" v-if="item.status === 'returned'">已完成采购退货，设备已移出可售库存。</view>
-                    <view v-else-if="item.status === 'in_stock'" class="return-flow-tip" :class="{ 'return-flow-tip--refund': item.return_flow?.requires_refund }">
+                    <view class="return-tip" v-if="item.item_type !== 'standard' && item.status === 'returned'">已完成采购退货，设备已移出可售库存。</view>
+                    <view v-else-if="item.item_type !== 'standard' && item.status === 'in_stock'" class="return-flow-tip" :class="{ 'return-flow-tip--refund': item.return_flow?.requires_refund }">
                         <text class="return-flow-title">{{ returnActionLabel(item) }}</text>
                         <text>{{ item.return_flow?.description || '-' }}</text>
                     </view>
                     <view class="card-meta">{{ erpSpecLine(item.spec) }}</view>
-                        <view class="card-meta">IMEI {{ item.imei || '-' }}</view>
+                    <view v-if="item.item_type === 'standard'" class="card-meta">商品编码 {{ item.product_code || '-' }}</view>
+                    <view v-else class="card-meta">IMEI {{ item.imei || '-' }}</view>
+                    <view v-if="item.item_type === 'standard'" class="card-meta">采购数量：{{ quantityText(item.quantity) }} {{ item.unit || '件' }} · 单价 ¥{{ money(item.unit_cost) }}</view>
                     <view class="card-meta" v-if="item.category_name">分类：{{ item.category_name }}</view>
                     <view class="card-meta" v-if="item.warehouse_name">
                         仓库：{{ item.warehouse_name }}{{ item.location_name ? ' / '+item.location_name : '' }}
@@ -132,7 +134,7 @@
                         </view>
                     </view>
                     <!-- 行内操作 -->
-                    <view class="device-actions" v-if="item.status === 'in_stock'">
+                    <view class="device-actions" v-if="item.item_type !== 'standard' && item.status === 'in_stock'">
                         <u-button
                             size="small"
                             plain
@@ -178,6 +180,7 @@ const returnButtonStyle = { minWidth: '190rpx', height: '56rpx', margin: '0' }
 let loadSeq = 0
 
 const pageTitle = computed(() => '采购单详情')
+const isStandardOrder = computed(() => items.value.some((item: any) => item.item_type === 'standard'))
 
 onLoad((query: any) => {
     purchaseOrderId.value = Number(query?.purchase_order_id || query?.id || 0)
@@ -257,6 +260,10 @@ const goReturn = (item: any) => {
 const returnActionLabel = (_item: any) => '采购退货'
 
 const money = (v: any) => Number(v || 0).toFixed(2)
+const quantityText = (v: any) => {
+    const number = Number(v || 0)
+    return Number.isInteger(number) ? String(number) : number.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
+}
 const financeLabel = (s: string) => dictLabel(dicts.value, 'purchase_finance_status', s)
 const financeType = (s: string) => dictType(dicts.value, 'purchase_finance_status', s)
 const assetLabel = (s: string) => dictLabel(dicts.value, 'asset_status', s)

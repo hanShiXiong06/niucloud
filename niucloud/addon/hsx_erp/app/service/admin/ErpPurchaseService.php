@@ -14,6 +14,7 @@ use addon\hsx_erp\app\model\ErpPurchaseItem;
 use addon\hsx_erp\app\model\ErpPurchaseOrder;
 use addon\hsx_erp\app\model\ErpPurchaseReturnItem;
 use addon\hsx_erp\app\model\ErpPurchaseReturnOrder;
+use addon\hsx_erp\app\model\ErpQuantityStock;
 use addon\hsx_erp\app\model\ErpWarehouse;
 use addon\hsx_erp\app\support\ErpIdempotency;
 use addon\hsx_erp\app\support\ErpPartyMemberNames;
@@ -22,6 +23,7 @@ use app\model\member\Member;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
+use think\facade\Log;
 
 class ErpPurchaseService extends BaseAdminService
 {
@@ -65,6 +67,9 @@ class ErpPurchaseService extends BaseAdminService
 
     public function getPage(array $where): array
     {
+        if ((string)($where['item_type'] ?? 'device') === 'standard') {
+            return $this->getStandardPage($where);
+        }
         $orderTable = (new ErpPurchaseOrder())->getTable();
         $partyTable = (new ErpParty())->getTable();
         $assetTable = (new ErpAsset())->getTable();
@@ -191,6 +196,124 @@ class ErpPurchaseService extends BaseAdminService
         ])->toArray();
         $this->appendPurchasePaymentSummary($page['data']);
         $this->appendPurchaseReturnSummary($page['data']);
+        ErpPartyMemberNames::append($this->site_id, $page['data']);
+        return $page;
+    }
+
+    /**
+     * 标品采购以采购明细为查询主体。
+     *
+     * 壳、膜和批量新机没有一物一码资产，不能强行混入 erp_asset；
+     * 采购记录、数量库存和应付仍通过采购明细保持完整追踪关系。
+     */
+    private function getStandardPage(array $where): array
+    {
+        $orderTable = (new ErpPurchaseOrder())->getTable();
+        $partyTable = (new ErpParty())->getTable();
+        $payableTable = (new ErpPayable())->getTable();
+        $stockTable = (new ErpQuantityStock())->getTable();
+        $query = ErpPurchaseItem::alias('i')
+            ->leftJoin($orderTable . ' o', 'o.id = i.purchase_order_id AND o.site_id = i.site_id')
+            ->leftJoin($partyTable . ' p', 'p.id = o.party_id AND p.site_id = o.site_id')
+            ->leftJoin($payableTable . " ap", "ap.source_type = 'purchase_standard_item' AND ap.source_id = i.id AND ap.site_id = i.site_id")
+            ->leftJoin($stockTable . ' qs', 'qs.product_id = i.quantity_product_id AND qs.warehouse_id = i.warehouse_id AND qs.location_id = i.location_id AND qs.site_id = i.site_id')
+            ->where([
+                ['i.site_id', '=', $this->site_id],
+                ['i.item_type', '=', 'standard'],
+            ]);
+        if (!empty($where['keyword'])) {
+            $kw = '%' . trim((string)$where['keyword']) . '%';
+            $query->where(function ($q) use ($kw) {
+                $q->whereLike('i.model|i.spec|i.product_code|i.warehouse_name|i.location_name|o.purchase_no|o.m_no|p.m_no|p.party_name', $kw);
+            });
+        }
+        if (!empty($where['finance_status'])) {
+            $query->where('ap.status', '=', (string)$where['finance_status']);
+        }
+        if (!empty($where['status'])) {
+            $query->where('o.status', '=', (string)$where['status']);
+        }
+        foreach ([
+            'model' => 'i.model',
+            'spec' => 'i.spec',
+            'party_name' => 'p.party_name',
+            'purchase_no' => 'o.purchase_no',
+            'warehouse_name' => 'i.warehouse_name',
+            'purchaser_name' => 'o.purchaser_name',
+        ] as $key => $column) {
+            if (!empty($where[$key])) {
+                $query->whereLike($column, '%' . trim((string)$where[$key]) . '%');
+            }
+        }
+        if (!empty($where['m_no'])) {
+            $mNo = '%' . trim((string)$where['m_no']) . '%';
+            $query->where(function ($q) use ($mNo) {
+                $q->whereLike('o.m_no', $mNo)->whereOr('p.m_no', 'like', $mNo);
+            });
+        }
+        if (!empty($where['warehouse_id'])) $query->where('i.warehouse_id', '=', (int)$where['warehouse_id']);
+        if (!empty($where['location_id'])) $query->where('i.location_id', '=', (int)$where['location_id']);
+        if (!empty($where['party_id'])) $query->where('o.party_id', '=', (int)$where['party_id']);
+        if (!empty($where['purchaser_uid'])) $query->where('o.purchaser_uid', '=', (int)$where['purchaser_uid']);
+        if (($where['min_amount'] ?? '') !== '') $query->where('i.unit_cost', '>=', (float)$where['min_amount']);
+        if (($where['max_amount'] ?? '') !== '') $query->where('i.unit_cost', '<=', (float)$where['max_amount']);
+        $purchaseTimeExpr = 'COALESCE(NULLIF(o.purchase_at, 0), NULLIF(o.create_at, 0), i.create_at)';
+        if (!empty($where['start_at'])) $query->whereRaw($purchaseTimeExpr . ' >= ' . (int)$where['start_at']);
+        if (!empty($where['end_at'])) $query->whereRaw($purchaseTimeExpr . ' <= ' . (int)$where['end_at']);
+        $page = $query->field([
+            'i.id',
+            'i.id as purchase_item_id',
+            'i.purchase_order_id',
+            'i.item_type',
+            'i.quantity_product_id',
+            'i.product_code',
+            'i.unit',
+            'i.quantity',
+            'i.unit_cost',
+            'i.model',
+            'i.spec',
+            'i.purchase_cost',
+            'i.total_cost',
+            'i.warehouse_id',
+            'i.warehouse_name',
+            'i.location_id',
+            'i.location_name',
+            'i.status',
+            'i.remark',
+            'i.create_at',
+            'COALESCE(qs.quantity, 0) as current_stock',
+            'o.status as order_status',
+            'o.purchase_no',
+            'o.party_id',
+            'p.party_name',
+            "COALESCE(NULLIF(o.m_no, ''), p.m_no, '') as m_no",
+            'o.origin_plugin',
+            'o.origin_plugin_name',
+            'o.origin_type',
+            'o.origin_name',
+            'o.origin_id',
+            'o.origin_no',
+            'o.purchaser_name',
+            'o.purchase_at',
+            'o.capital_account_name',
+            'ap.amount as item_payable_amount',
+            'ap.settled_amount as item_paid_amount',
+            'ap.status as item_finance_status',
+        ])->order('i.id desc')->paginate([
+            'list_rows' => (int)($where['limit'] ?? 15),
+            'page' => (int)($where['page'] ?? 1),
+        ])->toArray();
+        foreach ($page['data'] as &$row) {
+            $amount = round((float)($row['item_payable_amount'] ?? $row['purchase_cost'] ?? 0), 2);
+            $paid = round((float)($row['item_paid_amount'] ?? 0), 2);
+            $row['asset_payable_amount'] = $amount;
+            $row['asset_paid_amount'] = $paid;
+            $row['asset_unpaid_amount'] = max(0, round($amount - $paid, 2));
+            $row['finance_status'] = (string)($row['item_finance_status'] ?? '') ?: ErpDict::financeStatus($amount, $paid);
+            $row['order_business_status_label'] = (string)($row['order_status'] ?? '') === ErpDict::STATUS_VOID ? '采购单已撤销' : '标品已入库';
+            $row['return_flow'] = ['returnable' => false, 'block_reason' => '标品退货请从数量库存退货入口处理'];
+        }
+        unset($row);
         ErpPartyMemberNames::append($this->site_id, $page['data']);
         return $page;
     }
@@ -377,27 +500,35 @@ class ErpPurchaseService extends BaseAdminService
             ['site_id', '=', $this->site_id],
             ['purchase_order_id', '=', $id],
         ])->column('id');
+        $standardItemIds = array_values(array_filter(array_map(static fn(array $item): int =>
+            (string)($item['item_type'] ?? 'device') === 'standard' ? (int)($item['id'] ?? 0) : 0,
+        $order['items'])));
         $payableQuery = ErpPayable::where([['site_id', '=', $this->site_id]]);
-        if (!empty($assetIds)) {
-            $payableQuery->where(function ($query) use ($id, $assetIds) {
+        if (!empty($assetIds) || !empty($standardItemIds)) {
+            $payableQuery->where(function ($query) use ($id, $assetIds, $standardItemIds) {
                 $query->where([['source_type', '=', 'purchase'], ['source_id', '=', $id]])
                     ->whereOr(function ($q) use ($assetIds) {
-                        $q->where('source_type', '=', 'purchase_asset')->whereIn('source_id', $assetIds);
+                        if (!empty($assetIds)) $q->where('source_type', '=', 'purchase_asset')->whereIn('source_id', $assetIds);
+                        else $q->whereRaw('1 = 0');
+                    })
+                    ->whereOr(function ($q) use ($standardItemIds) {
+                        if (!empty($standardItemIds)) $q->where('source_type', '=', 'purchase_standard_item')->whereIn('source_id', $standardItemIds);
+                        else $q->whereRaw('1 = 0');
                     });
             });
         } else {
             $payableQuery->where([['source_type', '=', 'purchase'], ['source_id', '=', $id]]);
         }
         $order['payables'] = $payableQuery->order('id asc')->select()->toArray();
-        $hasAssetPayables = false;
+        $hasItemPayables = false;
         $effectivePayables = [];
         foreach ($order['payables'] as $payableRow) {
-            if ((string)($payableRow['source_type'] ?? '') === 'purchase_asset') {
-                $hasAssetPayables = true;
+            if (in_array((string)($payableRow['source_type'] ?? ''), ['purchase_asset', 'purchase_standard_item'], true)) {
+                $hasItemPayables = true;
                 if ((string)($payableRow['status'] ?? '') !== ErpDict::STATUS_VOID) $effectivePayables[] = $payableRow;
             }
         }
-        if (!$hasAssetPayables) {
+        if (!$hasItemPayables) {
             $effectivePayables = array_values(array_filter($order['payables'], static fn(array $row): bool =>
                 (string)($row['source_type'] ?? '') === 'purchase' && (string)($row['status'] ?? '') !== ErpDict::STATUS_VOID
             ));
@@ -424,18 +555,25 @@ class ErpPurchaseService extends BaseAdminService
         $payableMap = [];
         foreach ($order['payables'] as $payable) {
             if ((string)($payable['source_type'] ?? '') === 'purchase_asset') {
-                $payableMap[(int)($payable['source_id'] ?? 0)] = $payable;
+                $payableMap['asset:' . (int)($payable['source_id'] ?? 0)] = $payable;
+            } elseif ((string)($payable['source_type'] ?? '') === 'purchase_standard_item') {
+                $payableMap['item:' . (int)($payable['source_id'] ?? 0)] = $payable;
             }
         }
         foreach ($order['items'] as &$item) {
             $assetId = (int)($item['asset_id'] ?? 0);
-            $payable = $payableMap[$assetId] ?? [];
+            $payableKey = (string)($item['item_type'] ?? 'device') === 'standard'
+                ? 'item:' . (int)($item['id'] ?? 0)
+                : 'asset:' . $assetId;
+            $payable = $payableMap[$payableKey] ?? [];
             $amount = round((float)($payable['amount'] ?? $item['purchase_cost'] ?? 0), 2);
             $paid = round((float)($payable['settled_amount'] ?? 0), 2);
             $item['payable_amount'] = $amount;
             $item['paid_amount'] = $paid;
             $item['unpaid_amount'] = max(0, round($amount - $paid, 2));
-            $item['return_flow'] = ErpPurchaseReturnPolicy::assess($item, $amount, $paid);
+            $item['return_flow'] = (string)($item['item_type'] ?? 'device') === 'standard'
+                ? ['allowed' => false, 'reason' => '标品退货请从数量库存退货入口处理']
+                : ErpPurchaseReturnPolicy::assess($item, $amount, $paid);
         }
         unset($item);
         $partyRows = [$order];
@@ -454,7 +592,7 @@ class ErpPurchaseService extends BaseAdminService
         $data['request_id'] = $requestId !== '' ? $requestId : null;
         $items = $this->normalizePurchaseItems((array)($data['items'] ?? []));
         if (empty($items)) {
-            throw new CommonException('请至少录入一台机器');
+            throw new CommonException('请至少录入一项采购货品');
         }
         $partyName = trim((string)($data['party_name'] ?? ''));
         if ($partyName === '') {
@@ -527,11 +665,14 @@ class ErpPurchaseService extends BaseAdminService
             $warehouseService = new ErpWarehouseService();
             $resolvedItems = [];
             foreach ($items as $index => $item) {
-                $this->assertAssetIdentityAvailable($item);
+                $itemType = (string)($item['item_type'] ?? 'device');
+                if ($itemType === 'device') {
+                    $this->assertAssetIdentityAvailable($item);
+                }
                 $itemWarehouseId = (int)($item['warehouse_id'] ?? 0);
                 $itemLocationId = (int)($item['location_id'] ?? 0);
                 if ($itemWarehouseId <= 0 || $itemLocationId <= 0) {
-                    throw new CommonException('第' . ($index + 1) . '台设备请选择入库仓库和库位');
+                    throw new CommonException('第' . ($index + 1) . '项商品请选择入库仓库和库位');
                 }
                 [$itemWarehouse, $itemLocation] = $warehouseService->validateInboundLocation(
                     $itemWarehouseId,
@@ -539,6 +680,9 @@ class ErpPurchaseService extends BaseAdminService
                 );
                 if ((string)$itemWarehouse->warehouse_type === 'consignment') {
                     throw new CommonException('代卖仓不能走采购开单，请使用代卖登记流程');
+                }
+                if ($itemType === 'standard' && !in_array((string)$itemWarehouse->warehouse_type, ['accessory', 'new_device'], true)) {
+                    throw new CommonException('标品请入配件仓或新机仓，避免与一机一码库存混放');
                 }
                 $resolvedItems[] = [
                     'item' => $item,
@@ -627,7 +771,97 @@ class ErpPurchaseService extends BaseAdminService
                 $itemLocationName = (string)$location->location_name;
                 $cost = round((float)($item['purchase_cost'] ?? 0), 2);
                 if ($cost <= 0) {
-                    throw new CommonException('机器采购成本必须大于0');
+                    throw new CommonException('商品采购成本必须大于0');
+                }
+                if ((string)($item['item_type'] ?? 'device') === 'standard') {
+                    $quantity = round((float)($item['quantity'] ?? 0), 3);
+                    $unitCost = round((float)($item['unit_cost'] ?? 0), 2);
+                    $unit = mb_substr(trim((string)($item['unit'] ?? '件')) ?: '件', 0, 20);
+                    $modelName = trim((string)($item['model'] ?? ''));
+                    $spec = trim((string)($item['spec'] ?? ''));
+                    $productCode = trim((string)($item['product_code'] ?? ''));
+                    if ($productCode === '') {
+                        $productCode = 'SP' . strtoupper(substr(hash('sha256', $modelName . '|' . $spec), 0, 14));
+                    }
+                    $purchaseItem = ErpPurchaseItem::create([
+                        'site_id' => $this->site_id,
+                        'purchase_order_id' => $orderId,
+                        'item_type' => 'standard',
+                        'asset_id' => 0,
+                        'quantity_product_id' => 0,
+                        'product_code' => $productCode,
+                        'unit' => $unit,
+                        'quantity' => $quantity,
+                        'unit_cost' => $unitCost,
+                        'warehouse_id' => $itemWarehouseId,
+                        'warehouse_name' => $itemWarehouseName,
+                        'location_id' => $itemLocationId,
+                        'location_name' => $itemLocationName,
+                        'model' => $modelName,
+                        'spec' => $spec,
+                        'purchase_cost' => $cost,
+                        'adjust_cost' => 0,
+                        'total_cost' => $cost,
+                        'status' => ErpDict::ASSET_IN_STOCK,
+                        'remark' => trim((string)($item['remark'] ?? '')),
+                        'create_at' => $now,
+                        'update_at' => $now,
+                    ]);
+                    $inventoryResult = (new ErpQuantityInventoryService())->restore([
+                        'event_id' => 'purchase-standard:' . $this->site_id . ':' . $purchaseNo . ':' . (int)$purchaseItem->id,
+                        'source_plugin' => 'hsx_erp',
+                        'source_id' => $productCode,
+                        'product_code' => $productCode,
+                        'product_name' => $modelName . ($spec !== '' ? ' ' . $spec : ''),
+                        'unit' => $unit,
+                        'quantity' => $quantity,
+                        'warehouse_id' => $itemWarehouseId,
+                        'location_id' => $itemLocationId,
+                        'biz_type' => 'purchase_standard',
+                        'biz_id' => (int)$purchaseItem->id,
+                        'biz_no' => $purchaseNo,
+                        'operator_uid' => (int)$this->uid,
+                        'operator_name' => (string)$this->username,
+                        'remark' => '标品采购入库',
+                        'occurred_at' => $purchaseAt,
+                    ]);
+                    $purchaseItem->save([
+                        'quantity_product_id' => (int)($inventoryResult['product_id'] ?? 0),
+                        'update_at' => $now,
+                    ]);
+                    (new ErpLedgerService())->account([
+                        'biz_type' => 'purchase_standard',
+                        'direction' => 'increase',
+                        'amount' => $cost,
+                        'party_id' => (int)$party->id,
+                        'party_name' => $partyName,
+                        'asset_id' => 0,
+                        'source_type' => 'purchase_standard',
+                        'source_id' => (int)$purchaseItem->id,
+                        'source_no' => $purchaseNo,
+                        'remark' => '标品采购成本',
+                    ]);
+                    $payable = ErpPayable::create(array_merge([
+                        'site_id' => $this->site_id,
+                        'payable_no' => ErpLedgerService::makeNo('AP'),
+                        'party_id' => (int)$party->id,
+                        'party_name' => $partyName,
+                        'source_type' => 'purchase_standard_item',
+                        'source_id' => (int)$purchaseItem->id,
+                        'source_no' => $purchaseNo . '-' . (int)$purchaseItem->id,
+                        'amount' => $cost,
+                        'settled_amount' => 0,
+                        'status' => ErpDict::STATUS_PENDING,
+                        'occurred_at' => $purchaseAt,
+                        'remark' => '标品采购应付',
+                        'create_at' => $now,
+                        'update_at' => $now,
+                    ], $financeSourceService->persistable($purchaseSource)));
+                    $payableApplications[] = [
+                        'payable_id' => (int)$payable->id,
+                        'amount' => $cost,
+                    ];
+                    continue;
                 }
                 $inspectorUid = (int)($item['inspector_uid'] ?? 0);
                 $inspector = $inspectorUid > 0 ? (new ErpStaffService())->resolve($inspectorUid, '质检员') : ['uid' => 0, 'name' => ''];
@@ -663,6 +897,10 @@ class ErpPurchaseService extends BaseAdminService
                 $purchaseItem = ErpPurchaseItem::create([
                     'site_id' => $this->site_id,
                     'purchase_order_id' => $orderId,
+                    'item_type' => 'device',
+                    'unit' => '台',
+                    'quantity' => 1,
+                    'unit_cost' => $cost,
                     'warehouse_id' => $itemWarehouseId,
                     'warehouse_name' => $itemWarehouseName,
                     'location_id' => $itemLocationId,
@@ -682,6 +920,7 @@ class ErpPurchaseService extends BaseAdminService
                     'inspector_name' => (string)$inspector['name'],
                     'estimate_sale_price' => $estimateSalePrice,
                     'image_urls' => trim((string)($item['image_urls'] ?? '')),
+                    'video_url' => trim((string)($item['video_url'] ?? '')),
                     'quality_remark' => trim((string)($item['quality_remark'] ?? '')),
                     'qc_template_id' => max(0, (int)($item['qc_template_id'] ?? 0)),
                     'qc_report' => $this->normalizeJsonSnapshot($item['qc_report'] ?? []),
@@ -727,6 +966,7 @@ class ErpPurchaseService extends BaseAdminService
                     'estimate_sale_price' => $estimateSalePrice,
                     'retail_price' => round((float)($item['retail_price'] ?? 0), 2),
                     'image_urls' => trim((string)($item['image_urls'] ?? '')),
+                    'video_url' => trim((string)($item['video_url'] ?? '')),
                     'quality_remark' => trim((string)($item['quality_remark'] ?? '')),
                     'qc_template_id' => max(0, (int)($item['qc_template_id'] ?? 0)),
                     'qc_report' => $this->normalizeJsonSnapshot($item['qc_report'] ?? []),
@@ -837,6 +1077,18 @@ class ErpPurchaseService extends BaseAdminService
             $financeService->flushPendingSettlementDomainEvents();
         }
         foreach ($createdAssetIds as $assetId) {
+            try {
+                // 入库事实完成后立即计算下一责任岗位。是否拆分拍摄、定价及商城
+                // 运营由业务规则决定，采购开单本身不再要求人工点击“下一步”。
+                ErpListingTaskService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username)->sync($assetId);
+            } catch (\Throwable $e) {
+                // 待办分配属于入库后的增强能力，不得反向破坏已经成立的采购事实。
+                Log::warning('ERP采购入库自动生成销售资料待办失败', [
+                    'site_id' => (int)$this->site_id,
+                    'asset_id' => $assetId,
+                    'message' => $e->getMessage(),
+                ]);
+            }
             (new ErpPrintService())->triggerSafely('asset_inbound', 'asset', $assetId);
         }
         return $orderId;
@@ -856,11 +1108,15 @@ class ErpPurchaseService extends BaseAdminService
 
             $payables = ErpPayable::alias('p')
                 ->leftJoin((new ErpAsset())->getTable() . ' a', "p.source_type = 'purchase_asset' AND a.id = p.source_id AND a.site_id = p.site_id")
+                ->leftJoin((new ErpPurchaseItem())->getTable() . ' si', "p.source_type = 'purchase_standard_item' AND si.id = p.source_id AND si.site_id = p.site_id")
                 ->where([['p.site_id', '=', $this->site_id]])
                 ->where(function ($query) use ($id) {
                     $query->where([['p.source_type', '=', 'purchase'], ['p.source_id', '=', $id]])
                         ->whereOr(function ($q) use ($id) {
                             $q->where('p.source_type', '=', 'purchase_asset')->where('a.purchase_order_id', '=', $id);
+                        })
+                        ->whereOr(function ($q) use ($id) {
+                            $q->where('p.source_type', '=', 'purchase_standard_item')->where('si.purchase_order_id', '=', $id);
                         });
                 })
                 ->field('p.*')
@@ -878,6 +1134,43 @@ class ErpPurchaseService extends BaseAdminService
                 if ((string)$asset->status !== ErpDict::ASSET_IN_STOCK) {
                     throw new CommonException('采购单内已有设备不在库存中，不能直接撤销');
                 }
+            }
+            $standardItems = ErpPurchaseItem::where([
+                ['site_id', '=', $this->site_id],
+                ['purchase_order_id', '=', $id],
+                ['item_type', '=', 'standard'],
+            ])->lock(true)->select();
+            foreach ($standardItems as $standardItem) {
+                (new ErpQuantityInventoryService())->consume([
+                    'event_id' => 'purchase-standard-cancel:' . $this->site_id . ':' . (string)$order->purchase_no . ':' . (int)$standardItem->id,
+                    'source_plugin' => 'hsx_erp',
+                    'source_id' => (string)$standardItem->product_code,
+                    'product_name' => trim((string)$standardItem->model . ' ' . (string)$standardItem->spec),
+                    'unit' => (string)$standardItem->unit,
+                    'quantity' => (float)$standardItem->quantity,
+                    'warehouse_id' => (int)$standardItem->warehouse_id,
+                    'location_id' => (int)$standardItem->location_id,
+                    'mode' => 'strict',
+                    'biz_type' => 'purchase_standard_cancel',
+                    'biz_id' => (int)$standardItem->id,
+                    'biz_no' => (string)$order->purchase_no,
+                    'operator_uid' => (int)$this->uid,
+                    'operator_name' => (string)$this->username,
+                    'remark' => $remark !== '' ? $remark : '标品采购撤销出库',
+                    'occurred_at' => $now,
+                ]);
+                (new ErpLedgerService())->account([
+                    'biz_type' => 'purchase_standard_cancel',
+                    'direction' => 'decrease',
+                    'amount' => (float)$standardItem->total_cost,
+                    'party_id' => (int)$order->party_id,
+                    'party_name' => (string)$order->party_name,
+                    'asset_id' => 0,
+                    'source_type' => 'purchase_standard_cancel',
+                    'source_id' => (int)$standardItem->id,
+                    'source_no' => (string)$order->purchase_no,
+                    'remark' => $remark !== '' ? $remark : '撤销标品采购应付',
+                ]);
             }
 
             $order->save([
@@ -934,6 +1227,7 @@ class ErpPurchaseService extends BaseAdminService
             (new ErpOperationLogService())->record('purchase_cancel', 'purchase', $id, (string)$order->purchase_no, $remark, [
                 'party_name' => (string)$order->party_name,
                 'asset_count' => count($assets),
+                'standard_item_count' => count($standardItems),
                 'amount' => (float)$order->total_cost,
             ]);
         });
@@ -1217,13 +1511,32 @@ class ErpPurchaseService extends BaseAdminService
         $seen = [];
         foreach ($items as $index => &$item) {
             $item = (array)$item;
+            $itemType = (string)($item['item_type'] ?? 'device');
+            if (!in_array($itemType, ['device', 'standard'], true)) {
+                throw new CommonException('第' . ($index + 1) . '项商品类型不正确');
+            }
+            $item['item_type'] = $itemType;
             $item['imei'] = trim((string)($item['imei'] ?? ''));
             $item['sn'] = trim((string)($item['sn'] ?? ''));
             $model = trim((string)($item['model'] ?? ''));
             $item['model'] = $model;
             if ($model === '') {
-                throw new CommonException('第' . ($index + 1) . '台机器缺少型号');
+                throw new CommonException('第' . ($index + 1) . '项商品缺少名称或型号');
             }
+            if ($itemType === 'standard') {
+                $quantity = round((float)($item['quantity'] ?? 0), 3);
+                $unitCost = round((float)($item['unit_cost'] ?? $item['purchase_cost'] ?? 0), 2);
+                if ($quantity <= 0) throw new CommonException('第' . ($index + 1) . '项标品采购数量必须大于0');
+                if ($unitCost <= 0) throw new CommonException('第' . ($index + 1) . '项标品采购单价必须大于0');
+                $item['quantity'] = $quantity;
+                $item['unit_cost'] = $unitCost;
+                $item['unit'] = mb_substr(trim((string)($item['unit'] ?? '件')) ?: '件', 0, 20);
+                $item['purchase_cost'] = round($quantity * $unitCost, 2);
+                continue;
+            }
+            $item['quantity'] = 1;
+            $item['unit'] = '台';
+            $item['unit_cost'] = round((float)($item['purchase_cost'] ?? 0), 2);
             if ($item['imei'] === '' && $item['sn'] === '') {
                 throw new CommonException('第' . ($index + 1) . '台机器必须填写 IMEI 或 SN');
             }

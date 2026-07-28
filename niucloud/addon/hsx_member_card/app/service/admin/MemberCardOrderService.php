@@ -15,6 +15,7 @@ use addon\hsx_member_card\app\model\MemberCardRedemption;
 use addon\hsx_member_card\app\model\MemberCardStaffFact;
 use addon\hsx_member_card\app\service\core\MemberCardConfigService;
 use addon\hsx_member_card\app\support\MemberCardIdempotency;
+use addon\hsx_member_card\app\support\MemberCardBinding;
 use addon\hsx_member_card\app\support\MemberCardMoney;
 use addon\hsx_member_card\app\support\MemberCardNumber;
 use addon\hsx_member_card\app\support\MemberCardValidity;
@@ -85,18 +86,22 @@ final class MemberCardOrderService extends BaseAdminService
             ['site_id', '=', $this->site_id], ['product_id', '=', $productId], ['status', '=', 1],
         ])->order('sort desc,id asc')->findOrEmpty();
         if ($item->isEmpty()) throw new CommonException('卡种没有可用服务权益');
+        $binding = MemberCardBinding::issue($item->toArray(), $data);
 
         $mode = (string)($data['settlement_mode'] ?? 'receivable');
         if (!in_array($mode, ['immediate', 'receivable'], true)) throw new CommonException('结算方式不正确');
         $config = (new MemberCardConfigService())->get((int)$this->site_id);
-        if ($mode === 'receivable' && (int)$config['allow_receivable'] !== 1) throw new CommonException('当前配置不允许挂账开卡');
+        $financeGateway = new MemberCardFinanceGateway();
+        if ($mode === 'receivable' && (!$financeGateway->usesErp() || (int)$config['allow_receivable'] !== 1)) {
+            throw new CommonException($financeGateway->usesErp() ? '当前配置不允许挂账开卡' : '独立使用会员卡时仅支持现场收款');
+        }
         $account = ['id' => 0, 'name' => ''];
         if ($mode === 'immediate' && MemberCardMoney::compare($product->sale_price, '0') > 0) {
-            $account = (new MemberCardFinanceGateway())->requireCapitalAccount((int)($data['capital_account_id'] ?? 0));
+            $account = $financeGateway->requireCapitalAccount((int)($data['capital_account_id'] ?? 0));
         }
         $party = (new MemberCardMemberService())->resolveParty($memberData);
 
-        $orderId = $this->createLocalOrder($requestId, $memberData, $product->toArray(), $item->toArray(), $party, $mode, $account, $data);
+        $orderId = $this->createLocalOrder($requestId, $memberData, $product->toArray(), array_merge($item->toArray(), $binding), $party, $mode, $account, $data);
         return $this->runFinance($orderId, $data);
     }
 
@@ -161,7 +166,11 @@ final class MemberCardOrderService extends BaseAdminService
         try {
             Db::transaction(function () use ($requestId, $member, $product, $item, $party, $mode, $account, $data, &$orderId): void {
                 $now = time();
-                $snapshot = ['product' => $product, 'items' => [$item], 'snapshot_at' => $now];
+                $snapshot = ['product' => $product, 'items' => [$item], 'binding' => [
+                    'binding_mode' => (string)($item['binding_mode'] ?? MemberCardBinding::MEMBER),
+                    'bound_imei' => (string)($item['bound_imei'] ?? ''),
+                    'bound_model' => (string)($item['bound_model'] ?? ''),
+                ], 'snapshot_at' => $now];
                 $order = MemberCardOrder::create([
                     'site_id' => (int)$this->site_id,
                     'order_no' => MemberCardNumber::make('MC'),
@@ -219,6 +228,9 @@ final class MemberCardOrderService extends BaseAdminService
                     'product_item_id' => (int)$item['id'],
                     'item_code' => (string)$item['item_code'],
                     'item_name' => (string)$item['item_name'],
+                    'binding_mode' => (string)($item['binding_mode'] ?? MemberCardBinding::MEMBER),
+                    'bound_imei' => (string)($item['bound_imei'] ?? ''),
+                    'bound_model' => (string)($item['bound_model'] ?? ''),
                     'usage_mode' => (string)$item['usage_mode'],
                     'granted_times' => $times,
                     'used_times' => 0,
@@ -227,6 +239,10 @@ final class MemberCardOrderService extends BaseAdminService
                     'daily_limit' => (int)$item['daily_limit'],
                     'allocated_amount' => MemberCardMoney::normalize($product['sale_price']),
                     'recognized_amount' => 0,
+                    'consumable_code' => (string)($item['consumable_code'] ?? ''),
+                    'consumable_name' => (string)($item['consumable_name'] ?? ''),
+                    'consumable_unit' => (string)($item['consumable_unit'] ?? '张'),
+                    'standard_consumable_qty' => (float)($item['standard_consumable_qty'] ?? 0),
                     'status' => 1,
                     'create_at' => $now,
                     'update_at' => $now,
@@ -249,6 +265,15 @@ final class MemberCardOrderService extends BaseAdminService
                 $this->activate($orderId, 'settled', (string)$order->capital_account_name, '', 0);
                 return $this->response($orderId, '免费卡开卡成功');
             }
+            $gateway = new MemberCardFinanceGateway();
+            if (!$gateway->usesErp()) {
+                if ((string)$order->settlement_mode !== 'immediate') {
+                    throw new CommonException('独立使用会员卡时仅支持现场收款');
+                }
+                $account = $gateway->requireCapitalAccount((int)($data['capital_account_id'] ?? $order->capital_account_id));
+                $this->activate($orderId, 'settled', (string)$account['name'], '', (float)$order->order_amount);
+                return $this->response($orderId, '开卡成功，本地收款已登记');
+            }
             $link = $this->ensureFinanceFact($order->toArray());
             if ((string)$order->settlement_mode === 'receivable') {
                 $this->activate($orderId, 'pending', '', '', 0);
@@ -256,8 +281,8 @@ final class MemberCardOrderService extends BaseAdminService
             }
 
             $accountId = (int)($data['capital_account_id'] ?? $order->capital_account_id);
-            if ($accountId <= 0) throw new CommonException('现场收款必须选择ERP资金账户');
-            $settlement = (new MemberCardFinanceGateway())->settleReceivable($order->toArray(), $link->toArray(), [
+            if ($accountId <= 0) throw new CommonException('现场收款必须选择资金账户');
+            $settlement = $gateway->settleReceivable($order->toArray(), $link->toArray(), [
                 'capital_account_id' => $accountId,
                 'voucher_urls' => (array)($data['voucher_urls'] ?? []),
             ]);

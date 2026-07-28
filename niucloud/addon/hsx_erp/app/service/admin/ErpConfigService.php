@@ -14,6 +14,13 @@ class ErpConfigService extends BaseAdminService
     public const SALE_CHANNEL_OPTION_KEY = 'HSX_ERP_SALE_CHANNEL_OPTIONS';
     public const FINANCE_CATEGORY_KEY = 'HSX_ERP_FINANCE_CATEGORIES';
 
+    public static function forSite(int $siteId): self
+    {
+        $service = new self();
+        $service->site_id = $siteId;
+        return $service;
+    }
+
     public function getRules(): array
     {
         $value = (new CoreConfigService())->getConfigValue($this->site_id, self::CONFIG_KEY);
@@ -209,6 +216,11 @@ class ErpConfigService extends BaseAdminService
             ? (string)$rules['turnover']['reminder_dismiss_date']
             : '';
 
+        $purchase = (array)($rules['purchase'] ?? []);
+        $rules['purchase']['mobile_entry_mode'] = in_array((string)($purchase['mobile_entry_mode'] ?? 'quick'), ['quick', 'complete', 'collaborative'], true)
+            ? (string)$purchase['mobile_entry_mode']
+            : 'quick';
+
         $rules['category_sync']['enabled'] = $this->boolInt($rules['category_sync']['enabled'] ?? 0);
         $rules['category_sync']['initialized'] = $this->boolInt($rules['category_sync']['initialized'] ?? 0);
         $rules['category_sync']['provider'] = preg_replace('/[^a-zA-Z0-9_\-]/', '', (string)($rules['category_sync']['provider'] ?? 'phone_shop')) ?: 'phone_shop';
@@ -219,6 +231,16 @@ class ErpConfigService extends BaseAdminService
         $rules['category_sync']['last_action'] = in_array((string)($rules['category_sync']['last_action'] ?? ''), ['', 'pull', 'push', 'reconcile', 'bootstrap'], true)
             ? (string)$rules['category_sync']['last_action']
             : '';
+
+        $workspace = (array)($rules['listing_workspace'] ?? []);
+        $rules['listing_workspace']['mode'] = in_array((string)($workspace['mode'] ?? 'one_stop'), ['one_stop', 'split', 'photo_price'], true)
+            ? (string)$workspace['mode']
+            : 'one_stop';
+        $rules['listing_workspace']['media_provider'] = in_array((string)($workspace['media_provider'] ?? 'auto'), ['auto', 'erp', 'device_asset'], true)
+            ? (string)$workspace['media_provider']
+            : 'auto';
+        $rules['listing_workspace']['auto_publish'] = $this->boolInt($workspace['auto_publish'] ?? 0);
+        $rules['listing_workspace']['fallback_to_erp'] = 1;
 
         $owner = in_array((string)($rules['marketplace']['recycle_material_owner'] ?? 'erp'), ['erp', 'phone_shop'], true)
             ? (string)$rules['marketplace']['recycle_material_owner']
@@ -487,6 +509,9 @@ class ErpConfigService extends BaseAdminService
             'purchase' => [
                 'create_payable_on_inbound' => 1,
                 'allow_cancel_before_finance_fact' => 1,
+                // quick：只录采购事实；complete：同页完善销售资料；
+                // collaborative：采购事实入库后交由拍摄、定价等任务承接。
+                'mobile_entry_mode' => 'quick',
             ],
             'product_title' => [
                 'category_mode' => 'auto',
@@ -530,6 +555,16 @@ class ErpConfigService extends BaseAdminService
                 'provider' => 'phone_shop',
                 'mode' => 'disabled',
                 'last_action' => '',
+            ],
+            'listing_workspace' => [
+                // one_stop：一个人在同一表单完成；split：拍摄、销售定价分岗；
+                // photo_price：拍摄与销售定价由同一岗位连续完成。
+                'mode' => 'one_stop',
+                // auto：中台可用时使用中台，否则自动降级为 ERP 普通上传。
+                'media_provider' => 'auto',
+                // 关闭时资料齐全后保留人工确认，避免误上架。
+                'auto_publish' => 0,
+                'fallback_to_erp' => 1,
             ],
             'marketplace' => [
                 // 旧字段由 channels.phone_shop.publish_mode 派生，供旧调用方兼容。

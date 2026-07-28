@@ -28,7 +28,7 @@
                                 <view class="batch-title-line">
                                     <text class="batch-dot" :class="`batch-dot--${batch.tone}`"></text>
                                     <text class="batch-title">{{ erpPartyDisplayName(batch, '未设置供应商') }}</text>
-                                    <text class="batch-count">{{ batch.rows.length }} 台</text>
+                                    <text class="batch-count">{{ batch.item_type === 'standard' ? `${quantityText(batch.total_quantity)} 件` : `${batch.rows.length} 台` }}</text>
                                 </view>
                                 <text class="batch-machine">{{ batchMachineSummary(batch) }}</text>
                             </view>
@@ -65,20 +65,21 @@
                             </view>
                             <u-tag v-if="!(row.status === 'void' && row.order_status === 'void')" :text="assetLabel(row.status)" :type="assetType(row.status)" plain plainFill size="mini" />
                         </view>
-                        <text class="device-serial">{{ serialText(row) }}</text>
+                        <text class="device-serial">{{ row.item_type === 'standard' ? `商品编码 ${row.product_code || '-'}` : serialText(row) }}</text>
                         <view class="device-summary">
                             <view class="device-summary-item">
                                 <text class="device-summary-label">入库位置</text>
                                 <text class="device-summary-value">{{ row.warehouse_name || '-' }}{{ row.location_name ? ' / ' + row.location_name : '' }}</text>
                             </view>
                             <view class="device-summary-item device-summary-item--money">
-                                <text class="device-summary-label">采购成本</text>
+                                <text class="device-summary-label">{{ row.item_type === 'standard' ? '采购金额' : '采购成本' }}</text>
                                 <text class="device-cost">¥{{ money(row.purchase_cost) }}</text>
-                                <text v-if="Number(row.refurbish_cost || 0)" class="device-extra-cost">整备 +¥{{ money(row.refurbish_cost) }}（独立应付）</text>
+                                <text v-if="row.item_type === 'standard'" class="device-extra-cost">{{ quantityText(row.quantity) }}{{ row.unit || '件' }} × ¥{{ money(row.unit_cost) }}</text>
+                                <text v-else-if="Number(row.refurbish_cost || 0)" class="device-extra-cost">整备 +¥{{ money(row.refurbish_cost) }}（独立应付）</text>
                             </view>
                             <view class="device-summary-item">
-                                <text class="device-summary-label">{{ row.is_returned || row.status === 'returned' ? '退货时间' : '入库时间' }}</text>
-                                <text class="device-summary-value">{{ erpTimeLine(row, ['return_at', 'stock_in_at', 'purchase_at']) }}</text>
+                                <text class="device-summary-label">{{ row.item_type === 'standard' ? '当前库存' : (row.is_returned || row.status === 'returned' ? '退货时间' : '入库时间') }}</text>
+                                <text class="device-summary-value">{{ row.item_type === 'standard' ? `${quantityText(row.current_stock)} ${row.unit || '件'}` : erpTimeLine(row, ['return_at', 'stock_in_at', 'purchase_at']) }}</text>
                             </view>
                             <view class="device-summary-item device-summary-item--money">
                                 <text class="device-summary-label">{{ row.is_returned || row.status === 'returned' ? '退货金额' : '付款情况' }}</text>
@@ -87,12 +88,12 @@
                             </view>
                         </view>
                         <view class="device-foot">
-                            <text class="device-asset-no">查看设备详情</text>
-                            <view v-if="row.status === 'in_stock' && row.return_flow?.returnable !== false" class="return-action-link" @click.stop="goReturn(row)">
+                            <text class="device-asset-no">{{ row.item_type === 'standard' ? '查看采购单' : '查看设备详情' }}</text>
+                            <view v-if="row.item_type !== 'standard' && row.status === 'in_stock' && row.return_flow?.returnable !== false" class="return-action-link" @click.stop="goReturn(row)">
                                 <text>采购退货</text>
                                 <u-icon name="arrow-right" color="#ea580c" size="11" />
                             </view>
-                            <text v-else-if="row.status === 'in_stock'" class="return-blocked-hint">不可采购退货</text>
+                            <text v-else-if="row.item_type !== 'standard' && row.status === 'in_stock'" class="return-blocked-hint">不可采购退货</text>
                         </view>
                         <view v-if="row.is_returned || row.status === 'returned'" class="return-banner">
                             <u-icon name="info-circle" color="#ea580c" size="14" />
@@ -143,7 +144,18 @@ const returnMode = ref(false)
 const dicts = ref<ErpDictMap>(ERP_DICT_FALLBACK)
 const tabs = computed(() => dictTabs(dicts.value, 'purchase_finance_status'))
 const activeTab = ref('')
+const listMode = ref<'device' | 'standard'>('device')
 const quickFilters = computed(() => [
+    {
+        key: 'item_type',
+        label: listMode.value === 'standard' ? '标品采购' : '设备采购',
+        title: '采购类型',
+        value: listMode.value,
+        options: [
+            { label: '设备采购', value: 'device' },
+            { label: '标品采购', value: 'standard' },
+        ]
+    },
     { key: 'finance_status', label: '付款状态', title: '付款状态', value: activeTab.value, options: tabs.value },
     { key: 'status', label: '采购状态', title: '采购状态', value: filters.value.status || '', options: dictTabs(dicts.value, 'purchase_order_status', true) },
 ])
@@ -166,6 +178,11 @@ const reload = () => pagingRef.value?.reload()
 const handleSearch = () => reload()
 const onTab = (val: string) => { activeTab.value = val; reload() }
 const onQuickFilter = ({ key, value }: { key: string; value: string | number }) => {
+    if (key === 'item_type') {
+        listMode.value = String(value) === 'standard' ? 'standard' : 'device'
+        filters.value = {}
+        return reload()
+    }
     if (key === 'finance_status') return onTab(String(value))
     filters.value = { ...filters.value, [key]: value }
     reload()
@@ -185,7 +202,7 @@ onLoad((query: any) => {
 const queryList = async (pageNo: number, pageSize: number) => {
     try {
         const res: any = await getMobilePurchaseList({
-            keyword: keyword.value, finance_status: activeTab.value,
+            keyword: keyword.value, item_type: listMode.value, finance_status: activeTab.value,
             ...filterParams(),
             page: pageNo, limit: pageSize
         })
@@ -211,6 +228,10 @@ function dateToRange(params: Record<string, any>) {
 }
 
 const money = (v: any) => Number(v || 0).toFixed(2)
+const quantityText = (v: any) => {
+    const number = Number(v || 0)
+    return Number.isInteger(number) ? String(number) : number.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
+}
 
 const groupedBatches = computed(() => {
     const groups: any[] = []
@@ -231,6 +252,8 @@ const groupedBatches = computed(() => {
                 business_status_label: row.order_business_status_label || '',
                 origin_name: row.origin_name || '',
                 origin_plugin_name: row.origin_plugin_name || '',
+                item_type: row.item_type || 'device',
+                total_quantity: 0,
                 paid_amount: 0,
                 unpaid_amount: 0,
                 rows: [] as any[],
@@ -239,6 +262,7 @@ const groupedBatches = computed(() => {
             groups.push(group)
         }
         group.rows.push(row)
+        group.total_quantity += Number(row.quantity || 0)
         const inactive = row.order_status === 'void' || row.status === 'void' || row.status === 'returned' || Number(row.is_returned || 0) === 1
         if (!inactive) {
             group.paid_amount += Number(row.asset_paid_amount || 0)

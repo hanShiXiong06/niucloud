@@ -953,6 +953,13 @@ class DeviceAssetService extends BaseAdminService
             'url'   => (string)($m['url'] ?? ''),
             'scene' => (string)($m['scene'] ?? ''),
         ], array_values(array_filter($mediaRows, static fn($m) => (string)($m['url'] ?? '') !== '')));
+        $videos = (new DeviceAssetMedia())->where([
+            ['site_id', '=', $this->site_id],
+            ['asset_id', '=', $assetId],
+            ['media_type', '=', 'video'],
+            ['status', '<>', DeviceAssetDict::MEDIA_STATUS_REJECTED],
+        ])->order('sort asc, id asc')->column('url');
+        $videos = array_values(array_filter(array_map(static fn($url) => trim((string)$url), $videos)));
 
         return [
             'event_name' => 'device_asset.price.completed.v1',
@@ -974,6 +981,8 @@ class DeviceAssetService extends BaseAdminService
                 'hidden_check_keys' => $this->normalizeHiddenCheckKeys($asset->hidden_check_keys ?? null), // 定价员隐藏的质检字段名,商城据此过滤 qc_report
                 'images'          => $images,
                 'media'           => $media, // 带分类(scene=正面/反面/侧面/瑕疵)的图片,供商品详情分组展示
+                'videos'          => $videos,
+                'video_url'       => (string)($videos[0] ?? ''),
             ],
         ];
     }
@@ -1008,14 +1017,14 @@ class DeviceAssetService extends BaseAdminService
                 if (!empty($result['error'])) {
                     return ['ok' => false, 'message' => (string)($result['message'] ?? '商城同步失败'), 'results' => $results];
                 }
-                if ((string)($result['consumer'] ?? '') === 'phone_shop.device_asset_priced'
+                if (in_array((string)($result['consumer'] ?? ''), ['phone_shop.device_asset_priced', 'hsx_erp.device_asset_priced'], true)
                     && in_array((string)($result['status'] ?? ''), ['processed', 'duplicate'], true)) {
                     $delivered = true;
                 }
             }
             return [
                 'ok' => $delivered,
-                'message' => $delivered ? '已同步商城待上架货源' : '定价已保存，但商城未接收；请确认站点套餐后重试',
+                'message' => $delivered ? '已回写业务系统' : '定价已保存，但业务系统未接收；请确认站点套餐后重试',
                 'results' => $results,
             ];
         } catch (\Throwable $e) {

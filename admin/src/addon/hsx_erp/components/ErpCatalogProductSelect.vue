@@ -1,45 +1,64 @@
 <template>
-    <el-cascader
-        v-model="cascaderValue"
-        :options="cascaderOptions"
-        :props="cascaderProps"
-        :placeholder="resolvingSelected ? '正在读取商品型号…' : placeholder"
-        :disabled="disabled"
-        :clearable="clearable"
-        :show-all-levels="true"
-        filterable
-        :debounce="300"
-        :before-filter="beforeRemoteFilter"
-        :filter-method="remoteFilterMethod"
-        separator=" / "
-        popper-class="erp-catalog-cascader-popper"
-        class="w-full"
-        @change="handleChange"
-        @visible-change="handleVisibleChange"
-    >
-        <template #default="{ data }">
-            <span class="catalog-node" :title="data.label">
-                <span class="catalog-node__label">{{ data.label }}</span>
-                <span v-if="!data.leaf && data.raw?.product_count" class="catalog-node__count">{{ data.raw.product_count }}</span>
-            </span>
-        </template>
-        <template #empty>
-            <div class="catalog-empty">没有找到匹配的商品型号</div>
-        </template>
-    </el-cascader>
+    <div class="catalog-select-shell">
+        <el-cascader
+            v-model="cascaderValue"
+            :options="cascaderOptions"
+            :props="cascaderProps"
+            :placeholder="resolvingSelected ? '正在读取商品型号…' : placeholder"
+            :disabled="disabled"
+            :clearable="clearable"
+            :show-all-levels="true"
+            filterable
+            :debounce="300"
+            :before-filter="beforeRemoteFilter"
+            :filter-method="remoteFilterMethod"
+            separator=" / "
+            placement="bottom-start"
+            :fallback-placements="['top-start']"
+            :teleported="true"
+            :persistent="false"
+            :popper-options="catalogPopperOptions"
+            popper-class="erp-catalog-cascader-popper"
+            class="w-full"
+            @change="handleChange"
+            @visible-change="handleVisibleChange"
+        >
+            <template #default="{ data }">
+                <span class="catalog-node" :title="data.label">
+                    <span class="catalog-node__label">{{ data.label }}</span>
+                    <span v-if="!data.leaf && data.raw?.product_count" class="catalog-node__count">{{ data.raw.product_count }}</span>
+                </span>
+            </template>
+            <template #empty>
+                <div class="catalog-empty">
+                    <span v-if="rootLoading">正在加载商品目录…</span>
+                    <template v-else-if="loadError">
+                        <span>{{ loadError }}</span>
+                        <el-button type="primary" link @click.stop="ensureRootOptions(true)">重新加载</el-button>
+                    </template>
+                    <span v-else>没有找到匹配的商品型号</span>
+                </div>
+            </template>
+        </el-cascader>
+        <div v-if="!dropdownVisible && selectedDisplayText" class="catalog-select-display" :title="selectedDisplayText">
+            {{ selectedDisplayText }}
+        </div>
+    </div>
 </template>
 
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { getErpGoodsCatalogHierarchy } from '@/addon/hsx_erp/api/erp'
 
 const props = withDefaults(defineProps<{
     modelValue?: number | string
+    categoryPath?: string
     placeholder?: string
     clearable?: boolean
     disabled?: boolean
 }>(), {
     modelValue: '',
+    categoryPath: '',
     placeholder: '请选择商品目录型号',
     clearable: true,
     disabled: false
@@ -55,28 +74,85 @@ const cascaderValue = ref<string[]>([])
 const cascaderOptions = ref<any[]>([])
 const selectedNode = ref<any | null>(null)
 const resolvingSelected = ref(false)
+const rootLoading = ref(false)
+const loadError = ref('')
+const rootOptionsLoaded = ref(false)
+const dropdownVisible = ref(false)
 const nodeCache = new Map<string, any>()
 const branchCache = new Map<string, { at: number, rows: any[] }>()
 let selectedSequence = 0
 let searchSequence = 0
 let searchOptionsActive = false
 
+const selectedDisplayText = computed(() => {
+    const raw = selectedNode.value || {}
+    const parts = [
+        raw.category_path || props.categoryPath || '',
+        raw.node_type === 'brand' || raw.node_type === 'series' || raw.node_type === 'product' ? raw.brand_name : '',
+        raw.node_type === 'series' || raw.node_type === 'product' ? raw.series_name : '',
+        raw.node_type === 'product' ? (raw.product_name || raw.label) : ''
+    ]
+    return parts.map(item => String(item || '').trim()).filter(Boolean).join(' / ')
+})
+
+const catalogPopperOptions = {
+    strategy: 'fixed',
+    modifiers: [
+        {
+            name: 'computeStyles',
+            options: {
+                adaptive: false,
+                gpuAcceleration: false
+            }
+        },
+        {
+            name: 'offset',
+            options: {
+                offset: [0, 6]
+            }
+        },
+        {
+            name: 'flip',
+            options: {
+                fallbackPlacements: ['top-start'],
+                padding: 12
+            }
+        },
+        {
+            name: 'preventOverflow',
+            options: {
+                boundary: 'viewport',
+                padding: 12,
+                altAxis: true
+            }
+        }
+    ]
+}
+
 const cascaderProps = {
     lazy: true,
     emitPath: true,
-    checkStrictly: false,
+    // 分类本身也是有效选择：商家可先选分类，再手动填写商品名称；
+    // 继续展开到型号时，仍可自动带入标准目录型号。
+    // checkStrictly: true,
     value: 'value',
     label: 'label',
     leaf: 'leaf',
     lazyLoad: loadCascaderChildren,
+    // 多级目录使用 hover 时，指针经过下一列会连续触发加载并让 Popper 反复重算位置。
+    // 点击展开既稳定，也能避免误触发大量分支请求。
     expandTrigger: 'hover' as const,
 }
 
-watch(() => props.modelValue, value => {
+watch([() => props.modelValue, () => props.categoryPath], ([value, categoryPath]) => {
     if (!value) {
         selectedSequence++
-        selectedNode.value = null
-        cascaderValue.value = []
+        if (categoryPath) {
+            resolveCategorySelection(categoryPath)
+        } else {
+            selectedNode.value = null
+            cascaderValue.value = []
+        }
         return
     }
     if (Number(selectedNode.value?.site_product_id || 0) !== Number(value)) resolveSelected(value)
@@ -102,6 +178,29 @@ function productPathValues(row: any): string[] {
     values.push(seriesValue(categoryPath, String(row.brand_name || ''), String(row.series_name || '')))
     values.push(productValue(row.site_product_id))
     return values
+}
+
+function resolveCategorySelection(path: string) {
+    const categoryPath = String(path || '').trim()
+    const segments = categorySegments(categoryPath)
+    if (!categoryPath || (segments.length === 1 && segments[0] === '')) return
+    const roots: any[] = []
+    let children = roots
+    segments.forEach((label, index) => {
+        const currentPath = segments.slice(0, index + 1).join('/')
+        const raw = {
+            node_type: 'category',
+            category_path: currentPath,
+            label,
+            product_count: 0
+        }
+        children = getOrCreate(children, categoryValue(currentPath), label, raw).children
+        selectedNode.value = raw
+    })
+    cascaderOptions.value = roots
+    cascaderValue.value = segments.map((_label, index) => categoryValue(segments.slice(0, index + 1).join('/')))
+    rootOptionsLoaded.value = false
+    nextTick(() => ensureRootOptions())
 }
 
 function optionValue(raw: any): string {
@@ -142,9 +241,44 @@ async function loadCascaderChildren(node: any, resolve: (rows: any[]) => void) {
         const res: any = await getErpGoodsCatalogHierarchy(params)
         const rows = Array.isArray(res?.data?.list) ? res.data.list : []
         branchCache.set(key, { at: Date.now(), rows })
+        loadError.value = ''
         resolve(rows.map(toCascaderOption))
-    } catch {
+    } catch (error: any) {
+        loadError.value = String(error?.msg || error?.message || '商品目录加载失败')
         resolve([])
+    }
+}
+
+async function ensureRootOptions(force = false) {
+    if (rootLoading.value || searchOptionsActive) return
+    if (!force && rootOptionsLoaded.value) return
+    const params = { node_type: 'root', limit: 200 }
+    const key = branchKey(params)
+    rootLoading.value = true
+    loadError.value = ''
+    try {
+        const cached = !force ? branchCache.get(key) : null
+        let rows = cached && Date.now() - cached.at < CACHE_TTL ? cached.rows : []
+        if (!rows.length) {
+            const res: any = await getErpGoodsCatalogHierarchy(params)
+            rows = Array.isArray(res?.data?.list) ? res.data.list : []
+            branchCache.set(key, { at: Date.now(), rows })
+        }
+        const rootOptions = rows.map(toCascaderOption)
+        const selectedBranches = new Map(cascaderOptions.value.map((option: any) => [option.value, option]))
+        cascaderOptions.value = rootOptions.map((option: any) => {
+            const selectedBranch: any = selectedBranches.get(option.value)
+            return selectedBranch?.children?.length
+                ? { ...option, children: selectedBranch.children }
+                : option
+        })
+        rootOptionsLoaded.value = true
+        if (!rows.length) loadError.value = '当前站点还没有可用的商品目录'
+    } catch (error: any) {
+        loadError.value = String(error?.msg || error?.message || '商品目录加载失败，请重试')
+        cascaderOptions.value = []
+    } finally {
+        rootLoading.value = false
     }
 }
 
@@ -216,7 +350,12 @@ function handleChange(path: string[] | string | number | null) {
         return
     }
     const raw = nodeCache.get(String(values[values.length - 1]))
-    if (raw?.node_type !== 'product') return
+    if (!raw) return
+    if (raw.node_type !== 'product') {
+        selectedNode.value = raw
+        emit('change', raw)
+        return
+    }
     selectedNode.value = raw
     const id = Number(raw.site_product_id || 0)
     emit('update:modelValue', id)
@@ -224,10 +363,20 @@ function handleChange(path: string[] | string | number | null) {
 }
 
 function handleVisibleChange(visible: boolean) {
+    dropdownVisible.value = visible
+    if (visible && !searchOptionsActive) {
+        ensureRootOptions()
+        return
+    }
     if (!visible && searchOptionsActive) {
         searchOptionsActive = false
         searchSequence++
         cascaderOptions.value = []
+        rootOptionsLoaded.value = false
+        if (props.modelValue) {
+            resolveSelected(props.modelValue)
+            return
+        }
     }
 }
 
@@ -242,7 +391,13 @@ async function resolveSelected(value: number | string) {
         const raw = { ...row, node_type: 'product' }
         selectedNode.value = raw
         nodeCache.set(productValue(raw.site_product_id), raw)
+        // 懒加载 Cascader 仅设置 value 不足以回显文字，必须把当前产品的完整
+        // “品类 / 品牌 / 系列 / 型号”节点链补入 options。
+        cascaderOptions.value = buildSearchOptions([raw])
         cascaderValue.value = productPathValues(raw)
+        rootOptionsLoaded.value = false
+        await nextTick()
+        ensureRootOptions()
     } catch {
         if (sequence === selectedSequence) selectedNode.value = null
     } finally {
@@ -254,6 +409,9 @@ function refresh() {
     branchCache.clear()
     nodeCache.clear()
     cascaderOptions.value = []
+    rootOptionsLoaded.value = false
+    loadError.value = ''
+    ensureRootOptions(true)
     if (props.modelValue) resolveSelected(props.modelValue)
 }
 
@@ -262,13 +420,47 @@ onBeforeUnmount(() => { selectedSequence++; searchSequence++ })
 </script>
 
 <style scoped>
+.catalog-select-shell { position: relative; width: 100%; }
+.catalog-select-display {
+    position: absolute;
+    z-index: 1;
+    top: 1px;
+    right: 34px;
+    bottom: 1px;
+    left: 12px;
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    overflow: hidden;
+    background: var(--el-fill-color-blank);
+    color: var(--el-text-color-regular);
+    font-size: var(--el-font-size-base);
+    line-height: 1;
+    pointer-events: none;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 .catalog-node { width: 100%; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .catalog-node__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .catalog-node__count { flex-shrink: 0; color: var(--el-text-color-placeholder); font-size: 11px;  margin-right: 4px; }
-.catalog-empty { padding: 18px; color: var(--el-text-color-secondary); text-align: center; }
+.catalog-empty { display: flex; min-width: 220px; align-items: center; justify-content: center; flex-direction: column; gap: 4px; padding: 18px; color: var(--el-text-color-secondary); text-align: center; }
 </style>
 
 <style>
-.erp-catalog-cascader-popper .el-cascader-menu { width: 200px; min-width: 200px; }
+.erp-catalog-cascader-popper {
+    max-width: calc(100vw - 24px);
+}
+.erp-catalog-cascader-popper .el-cascader-panel {
+    max-width: calc(100vw - 24px);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+}
+.erp-catalog-cascader-popper .el-cascader-menu {
+    width: 176px;
+    min-width: 160px;
+}
+.erp-catalog-cascader-popper .el-cascader-menu:last-child {
+    width: 240px;
+}
 .erp-catalog-cascader-popper .el-cascader-node { padding: 0 10px; }
 </style>

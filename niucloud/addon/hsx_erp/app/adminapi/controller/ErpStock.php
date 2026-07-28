@@ -214,6 +214,7 @@ class ErpStock extends BaseAdminController
             ['estimate_sale_price', null],
             ['retail_price', null],
             ['image_urls', null],
+            ['video_url', null],
             ['catalog_product_id', null],
             ['category_name', null],
             ['category_path', null],
@@ -226,6 +227,7 @@ class ErpStock extends BaseAdminController
         ]);
         $this->service->updateFlow($id, $params);
         (new ErpListingTaskService())->sync($id, (int)$params['next_assignee_uid']);
+        $this->service->autoPublishListingIfReady($id);
         return success('SUCCESS');
     }
 
@@ -234,5 +236,10 @@ class ErpStock extends BaseAdminController
         $result = $this->service->syncListing($id);
         (new ErpListingTaskService())->sync($id);
         return success($result);
+    }
+
+    public function prepareListingMedia(int $id)
+    {
+        return success($this->service->prepareListingMedia($id));
     }
 }

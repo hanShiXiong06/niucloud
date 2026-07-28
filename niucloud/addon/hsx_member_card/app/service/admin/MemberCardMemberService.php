@@ -181,7 +181,7 @@ final class MemberCardMemberService extends BaseAdminService
         $mobile = trim((string)($member['mobile'] ?? ''));
         // 同一份客户资料可安全重试；姓名或手机号变更后使用新的资料版本同步 ERP。
         $profileVersion = substr(hash('sha256', implode('|', [$memberId, $memberName, $mobile, 'sale_customer'])), 0, 16);
-        return MemberCardHookResult::first(event('ErpPartyResolveRequested', [
+        $result = MemberCardHookResult::firstOrNull(event('ErpPartyResolveRequested', [
             'event_name' => 'erp.party.resolve_requested.v1',
             'event_version' => 1,
             'event_id' => 'hsx_member_card:member:' . $memberId . ':party:' . $profileVersion,
@@ -195,7 +195,14 @@ final class MemberCardMemberService extends BaseAdminService
             'role' => 'sale_customer',
             'occurred_at' => time(),
             'remark' => '会员服务卡客户',
-        ]), '会员往来主体解析');
+        ]));
+        if ($result !== null) return $result;
+        return [
+            'consumer' => 'hsx_member_card',
+            'status' => 'local',
+            'party_id' => $memberId,
+            'party_name' => $memberName,
+        ];
     }
 
     private function displayName(array $member): string

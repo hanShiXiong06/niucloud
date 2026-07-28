@@ -8,6 +8,7 @@ use addon\hsx_member_card\app\model\MemberCardOrder;
 use addon\hsx_member_card\app\model\MemberCardProduct;
 use addon\hsx_member_card\app\model\MemberCardProductItem;
 use addon\hsx_member_card\app\support\MemberCardMoney;
+use addon\hsx_member_card\app\support\MemberCardBinding;
 use addon\hsx_member_card\app\support\MemberCardNumber;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
@@ -156,6 +157,35 @@ final class MemberCardProductService extends BaseAdminService
         return true;
     }
 
+    public function adjustStock(int $id, array $data): array
+    {
+        $product = $this->info($id);
+        $item = (array)($product['item'] ?? []);
+        if ((string)($item['consumable_name'] ?? '') === '') {
+            throw new CommonException('请先为卡种设置默认耗材');
+        }
+        $config = (new \addon\hsx_member_card\app\service\core\MemberCardConfigService())->get((int)$this->site_id);
+        $warehouseId = max(0, (int)($data['warehouse_id'] ?? $config['inventory_warehouse_id'] ?? 0));
+        $locationId = max(0, (int)($data['location_id'] ?? $config['inventory_location_id'] ?? 0));
+        $result = (new MemberCardInventoryGateway())->adjust([
+            'event_id' => 'member-card-stock-adjust:' . (int)$this->site_id . ':' . (int)$item['id'] . ':' . bin2hex(random_bytes(8)),
+            'source_id' => 'consumable:' . ((string)($item['consumable_code'] ?? '') ?: ('product_item_' . (int)$item['id'])),
+            'product_name' => (string)$item['consumable_name'],
+            'unit' => (string)($item['consumable_unit'] ?? '张'),
+            'target_quantity' => max(0, (float)($data['target_quantity'] ?? 0)),
+            'warehouse_id' => $warehouseId,
+            'location_id' => $locationId,
+            'biz_type' => 'member_card_product',
+            'biz_id' => $id,
+            'biz_no' => (string)$product['product_no'],
+            'operator_uid' => (int)$this->uid,
+            'operator_name' => (string)$this->username,
+            'remark' => trim((string)($data['remark'] ?? '会员卡耗材库存初始化')),
+        ]);
+        (new MemberCardAuditService())->record('product', $id, (string)$product['product_no'], 'adjust_consumable_stock', [], $result);
+        return $result;
+    }
+
     /** @return array{0:array,1:array} */
     private function validateAndNormalize(array $data): array
     {
@@ -182,6 +212,7 @@ final class MemberCardProductService extends BaseAdminService
         $itemCode = $this->stableCode((string)($item['item_code'] ?? 'film_service'));
         $itemName = mb_substr(trim((string)($item['item_name'] ?? '贴膜服务')), 0, 100);
         $usageMode = (string)($item['usage_mode'] ?? 'limited');
+        $bindingMode = MemberCardBinding::normalizeMode($item['binding_mode'] ?? MemberCardBinding::MEMBER);
         $totalTimes = max(0, (int)($item['total_times'] ?? 0));
         if ($itemName === '') throw new CommonException('请填写服务权益名称');
         if (!in_array($usageMode, ['limited', 'unlimited'], true)) throw new CommonException('权益次数模式不正确');
@@ -191,6 +222,14 @@ final class MemberCardProductService extends BaseAdminService
         if (!in_array($recognitionMode, ['average', 'fixed', 'none'], true)) throw new CommonException('耗卡金额确认方式不正确');
         $recognitionAmount = MemberCardMoney::normalize($item['recognition_amount'] ?? 0);
         if ($recognitionMode === 'fixed' && MemberCardMoney::compare($recognitionAmount, '0') <= 0) throw new CommonException('固定耗卡金额必须大于0');
+        $consumableName = mb_substr(trim((string)($item['consumable_name'] ?? '')), 0, 100);
+        $consumableCodeInput = trim((string)($item['consumable_code'] ?? ''));
+        $consumableCode = $consumableCodeInput !== ''
+            ? $this->stableCode($consumableCodeInput)
+            : 'consumable_' . substr(hash('sha256', mb_strtolower($consumableName)), 0, 16);
+        $consumableUnit = mb_substr(trim((string)($item['consumable_unit'] ?? '张')), 0, 20);
+        $standardConsumableQty = round(max(0, (float)($item['standard_consumable_qty'] ?? 1)), 3);
+        if ($consumableName !== '' && $standardConsumableQty <= 0) throw new CommonException('标准耗材数量必须大于0');
 
         return [[
             'product_name' => $name,
@@ -208,12 +247,17 @@ final class MemberCardProductService extends BaseAdminService
         ], [
             'item_code' => $itemCode,
             'item_name' => $itemName,
+            'binding_mode' => $bindingMode,
             'usage_mode' => $usageMode,
             'total_times' => $totalTimes,
             'daily_limit' => max(0, (int)($item['daily_limit'] ?? 0)),
             'reference_price' => MemberCardMoney::normalize($item['reference_price'] ?? 0),
             'recognition_mode' => $recognitionMode,
             'recognition_amount' => $recognitionAmount,
+            'consumable_code' => $consumableName === '' ? '' : $consumableCode,
+            'consumable_name' => $consumableName,
+            'consumable_unit' => $consumableUnit !== '' ? $consumableUnit : '张',
+            'standard_consumable_qty' => $consumableName === '' ? 0 : $standardConsumableQty,
             'sort' => (int)($item['sort'] ?? 0),
         ]];
     }

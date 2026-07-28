@@ -10,17 +10,48 @@ use core\exception\CommonException;
 /** 会员卡插件访问 ERP 财务的唯一网关；禁止在其它服务中直接引用 ERP 类或表。 */
 final class MemberCardFinanceGateway extends BaseAdminService
 {
+    private ?array $erpAccountResponse = null;
+    private bool $erpAccountResponseLoaded = false;
+
+    public function usesErp(): bool
+    {
+        return $this->erpAccountResponse() !== null;
+    }
+
     public function capitalAccountOptions(): array
     {
-        $result = MemberCardHookResult::first(event('ErpCapitalAccountOptionsRequested', [
+        $result = $this->erpAccountResponse();
+        if ($result !== null) return array_values((array)($result['list'] ?? []));
+
+        $config = (new \addon\hsx_member_card\app\service\core\MemberCardConfigService())->get((int)$this->site_id);
+        $typeNames = ['wechat' => '微信', 'alipay' => '支付宝', 'bank' => '银行卡', 'cash' => '现金', 'other' => '其他'];
+        $list = array_values(array_filter((array)($config['local_capital_accounts'] ?? []), static fn(array $row): bool => (int)($row['status'] ?? 0) === 1));
+        return array_map(static function (array $row) use ($typeNames): array {
+            $type = (string)($row['type'] ?? 'other');
+            return [
+                'id' => (int)$row['id'],
+                'name' => (string)$row['name'],
+                'type' => $type,
+                'type_name' => $typeNames[$type] ?? '其他',
+                'is_default' => (int)($row['is_default'] ?? 0),
+                'provider' => 'local',
+            ];
+        }, $list);
+    }
+
+    private function erpAccountResponse(): ?array
+    {
+        if ($this->erpAccountResponseLoaded) return $this->erpAccountResponse;
+        $this->erpAccountResponseLoaded = true;
+        $this->erpAccountResponse = MemberCardHookResult::firstOrNull(event('ErpCapitalAccountOptionsRequested', [
             'event_name' => 'erp.capital_account.options_requested.v1',
             'event_version' => 1,
             'event_id' => 'hsx_member_card:account-options:' . $this->site_id . ':' . bin2hex(random_bytes(8)),
             'site_id' => (int)$this->site_id,
             'source_plugin' => 'hsx_member_card',
             'occurred_at' => time(),
-        ]), '资金账户选择');
-        return (array)($result['list'] ?? []);
+        ]));
+        return $this->erpAccountResponse;
     }
 
     public function requireCapitalAccount(int $accountId): array
@@ -28,7 +59,7 @@ final class MemberCardFinanceGateway extends BaseAdminService
         foreach ($this->capitalAccountOptions() as $row) {
             if ((int)($row['id'] ?? 0) === $accountId) return $row;
         }
-        throw new CommonException('所选ERP资金账户不存在或已停用');
+        throw new CommonException($this->usesErp() ? '所选ERP资金账户不存在或已停用' : '所选会员卡收款账户不存在或已停用');
     }
 
     public function createSaleFact(array $order): array

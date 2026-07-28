@@ -8,6 +8,7 @@ final class ErpListingWorkflow
 {
     public const TASK_PHOTO = 'erp_listing_photo';
     public const TASK_PRICE = 'erp_listing_price';
+    public const TASK_MEDIA_PRICE = 'erp_listing_media_price';
     public const TASK_PUBLISH = 'erp_listing_publish';
 
     public static function statusFromPolicy(array $policy): string
@@ -44,14 +45,21 @@ final class ErpListingWorkflow
             && (float)($asset['retail_price'] ?? 0) > 0;
     }
 
-    public static function taskStage(array $asset): string
+    public static function taskStage(array $asset, string $mode = 'split'): string
     {
         if ((string)($asset['status'] ?? '') !== 'in_stock'
             || (string)($asset['sale_target'] ?? '') !== 'mall'
             || in_array((string)($asset['refurbish_status'] ?? 'none'), ['pending', 'processing', 'failed'], true)) {
             return '';
         }
-        return match ((string)($asset['listing_status'] ?? 'none')) {
+        $status = (string)($asset['listing_status'] ?? 'none');
+        if ($mode === 'one_stop' && in_array($status, ['need_photo', 'need_price', 'need_material', 'ready', 'pending_shop'], true)) {
+            return self::TASK_PUBLISH;
+        }
+        if ($mode === 'photo_price' && in_array($status, ['need_photo', 'need_price'], true)) {
+            return self::TASK_MEDIA_PRICE;
+        }
+        return match ($status) {
             'need_photo' => self::TASK_PHOTO,
             'need_price' => self::TASK_PRICE,
             'need_material', 'ready', 'pending_shop' => self::TASK_PUBLISH,
@@ -64,6 +72,7 @@ final class ErpListingWorkflow
         return match ($stage) {
             self::TASK_PHOTO => '待商品拍摄',
             self::TASK_PRICE => '待销售定价',
+            self::TASK_MEDIA_PRICE => '待拍摄与销售定价',
             self::TASK_PUBLISH => '待商城资料整理',
             default => '待处理',
         };
@@ -74,6 +83,7 @@ final class ErpListingWorkflow
         return match ($stage) {
             self::TASK_PHOTO => 'need_photo',
             self::TASK_PRICE => 'need_price',
+            self::TASK_MEDIA_PRICE => 'incomplete',
             self::TASK_PUBLISH => 'publish',
             default => '',
         };

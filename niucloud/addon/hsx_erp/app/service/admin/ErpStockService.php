@@ -25,9 +25,19 @@ use addon\hsx_erp\app\support\ErpPurchaseReturnPolicy;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
+use think\facade\Log;
 
 class ErpStockService extends BaseAdminService
 {
+    public static function forSite(int $siteId, int $operatorUid = 0, string $operatorName = '系统自动'): self
+    {
+        $service = new self();
+        $service->site_id = $siteId;
+        $service->uid = $operatorUid;
+        $service->username = $operatorName;
+        return $service;
+    }
+
     /**
      * 批量送修：一筐设备只选择一次整备商并确认一次。
      * 不创建“整备仓”，设备库存归属保持不变，外部保管信息记录在整备快照中。
@@ -44,7 +54,7 @@ class ErpStockService extends BaseAdminService
             ])->findOrEmpty();
             if (!$existing->isEmpty()) return ['batch_no' => (string)$existing->source_no, 'count' => count($assetIds), 'idempotent' => true];
         }
-        $rules = (new ErpConfigService())->getRules();
+        $rules = ErpConfigService::forSite((int)$this->site_id)->getRules();
         if ((int)($rules['refurbish']['enabled'] ?? 1) !== 1) throw new CommonException('整备流程尚未启用');
         $trackingMode = in_array($trackingMode, ['simple', 'external'], true)
             ? $trackingMode
@@ -776,7 +786,8 @@ class ErpStockService extends BaseAdminService
                 'category_name' => (string)$asset->category_name, 'category_path' => (string)$asset->category_path,
                 'inspector_uid' => (int)$asset->inspector_uid, 'inspector_name' => (string)$asset->inspector_name,
                 'estimate_sale_price' => (float)$asset->estimate_sale_price, 'retail_price' => (float)$asset->retail_price,
-                'image_urls' => (string)$asset->image_urls, 'quality_remark' => (string)$asset->quality_remark,
+                'image_urls' => (string)$asset->image_urls, 'video_url' => (string)($asset->video_url ?? ''),
+                'quality_remark' => (string)$asset->quality_remark,
                 'purchase_cost' => $buyoutAmount, 'adjust_cost' => 0, 'total_cost' => $buyoutAmount,
                 'status' => ErpDict::ASSET_IN_STOCK,
                 'remark' => trim($reason) ?: '代卖转自有', 'create_at' => $now, 'update_at' => $now,
@@ -1295,6 +1306,8 @@ class ErpStockService extends BaseAdminService
     {
         $rules = (new ErpConfigService())->getRules();
         $materialOwner = (string)($rules['marketplace']['recycle_material_owner'] ?? 'erp');
+        $workspace = (new ErpListingWorkspaceService())->describe();
+        $workspaceMode = (string)($workspace['mode'] ?? 'one_stop');
         foreach ($rows as &$row) {
             $policy = (array)($row['warehouse_policy'] ?? []);
             $status = (string)($row['listing_status'] ?? 'none');
@@ -1305,6 +1318,7 @@ class ErpStockService extends BaseAdminService
                 $row['listing_status'] = $status;
             }
             $row['listing_material_owner'] = $materialOwner;
+            $row['listing_workspace'] = $workspace;
             $row['can_handoff_shop'] = (int)(
                 (string)($row['source_plugin'] ?? '') === 'hsx_recycle'
                 && $materialOwner === 'phone_shop'
@@ -1312,7 +1326,19 @@ class ErpStockService extends BaseAdminService
                 && !in_array($status, ['pending_shop', 'listed'], true)
             );
             if ((string)($row['status'] ?? '') === ErpDict::ASSET_IN_STOCK && (string)($row['sale_target'] ?? '') === 'mall') {
-                if ($status === 'need_photo') {
+                if (in_array($status, ['need_photo', 'need_price'], true) && (string)($workspace['media_provider'] ?? 'erp') === 'device_asset') {
+                    $row['turnover_action_key'] = 'prepare_listing_media';
+                    $row['turnover_action_label'] = $status === 'need_photo' ? '开始标准拍摄' : '继续销售定价';
+                    $row['turnover_action_reason'] = '已启用拍照中台，从当前 ERP 入口创建或继续任务，完成后自动回写';
+                } elseif ($workspaceMode === 'one_stop' && in_array($status, ['need_photo', 'need_price', 'need_material'], true)) {
+                    $row['turnover_action_key'] = 'complete_listing';
+                    $row['turnover_action_label'] = '一次完善并上架';
+                    $row['turnover_action_reason'] = '在一个表单完成型号、规格、图片和销售价格';
+                } elseif ($workspaceMode === 'photo_price' && in_array($status, ['need_photo', 'need_price'], true)) {
+                    $row['turnover_action_key'] = 'complete_listing_media_price';
+                    $row['turnover_action_label'] = '拍摄并销售定价';
+                    $row['turnover_action_reason'] = '当前岗位连续完成商品拍摄和销售定价';
+                } elseif ($status === 'need_photo') {
                     $row['turnover_action_key'] = 'complete_listing_photo';
                     $row['turnover_action_label'] = '上传商品图片';
                     $row['turnover_action_reason'] = '当前由商品拍摄人员完成标准图片';
@@ -1347,6 +1373,12 @@ class ErpStockService extends BaseAdminService
         }
         unset($row);
         return $rows;
+    }
+
+    /** 在 ERP 当前入口准备拍摄能力；中台异常时返回 ERP 上传降级方案。 */
+    public function prepareListingMedia(int $id): array
+    {
+        return (new ErpListingWorkspaceService())->prepareMedia($id);
     }
 
     private function enrichAssetAccountLedgers(array $rows, array $asset): array
@@ -1663,6 +1695,13 @@ class ErpStockService extends BaseAdminService
                 $changes[] = '图片';
             }
         }
+        if (array_key_exists('video_url', $data) && $data['video_url'] !== null) {
+            $videoUrl = trim((string)$data['video_url']);
+            if ($videoUrl !== (string)($asset->video_url ?? '')) {
+                $save['video_url'] = $videoUrl;
+                $changes[] = '视频';
+            }
+        }
         if (array_key_exists('catalog_product_id', $data) && $data['catalog_product_id'] !== null) {
             $catalogProductId = max(0, (int)$data['catalog_product_id']);
             if ($catalogProductId !== (int)($asset->catalog_product_id ?? 0)) {
@@ -1869,6 +1908,7 @@ class ErpStockService extends BaseAdminService
             'color' => $assetColor !== '' ? $assetColor : $specColor,
             'condition_grade' => $conditionGrade,
             'images' => $images,
+            'video_url' => trim((string)($asset->video_url ?? '')),
             'sale_price' => round((float)$asset->retail_price, 2),
             'peer_price' => round((float)$asset->estimate_sale_price, 2),
             'cost_price' => round((float)$asset->total_cost, 2),
@@ -1963,6 +2003,38 @@ class ErpStockService extends BaseAdminService
             'payload' => $payload,
         ]);
         return ['ok' => true, 'status' => (string)$success['status'], 'goods_id' => (int)$success['goods_id'], 'message' => '已直接上架商城'];
+    }
+
+    /**
+     * 资料保存后的非阻塞自动发布。
+     * 自动发布失败只保留待办并写日志，不能让图片、价格等 ERP 主数据保存失败。
+     */
+    public function autoPublishListingIfReady(int $id): array
+    {
+        $rules = ErpConfigService::forSite((int)$this->site_id)->getRules();
+        if ((int)($rules['listing_workspace']['auto_publish'] ?? 0) !== 1) {
+            return ['triggered' => false, 'reason' => 'manual_confirmation'];
+        }
+        $channel = (array)($rules['marketplace']['channels']['phone_shop'] ?? []);
+        if ((int)($channel['enabled'] ?? 0) !== 1 || (string)($channel['publish_mode'] ?? 'direct') !== 'direct') {
+            return ['triggered' => false, 'reason' => 'channel_not_direct'];
+        }
+        $asset = $this->findAsset($id);
+        if ((string)$asset->status !== ErpDict::ASSET_IN_STOCK
+            || (string)$asset->sale_target !== 'mall'
+            || (string)$asset->listing_status !== 'ready') {
+            return ['triggered' => false, 'reason' => 'not_ready'];
+        }
+        try {
+            return ['triggered' => true, 'result' => $this->syncListing($id)];
+        } catch (\Throwable $e) {
+            Log::warning('ERP销售资料自动发布失败，已保留人工待办', [
+                'site_id' => (int)$this->site_id,
+                'asset_id' => $id,
+                'message' => $e->getMessage(),
+            ]);
+            return ['triggered' => true, 'failed' => true, 'message' => $e->getMessage()];
+        }
     }
 
     /** 商城只消费 ERP 快照，不再要求运行时回查回收插件数据库。 */

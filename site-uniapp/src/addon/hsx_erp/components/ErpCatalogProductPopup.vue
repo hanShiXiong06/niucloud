@@ -133,6 +133,17 @@
                             </scroll-view>
                         </view>
                     </view>
+
+                    <view v-if="activeCategory" class="category-confirm">
+                        <view class="category-confirm__copy">
+                            <text class="category-confirm__label">当前品类</text>
+                            <text class="category-confirm__value">{{ activeCategory.category_path || activeCategory.label }}</text>
+                        </view>
+                        <view class="category-confirm__button" @click="chooseCategory">
+                            <u-icon name="checkmark-circle" color="#2563eb" size="17" />
+                            <text>使用此品类</text>
+                        </view>
+                    </view>
                 </template>
             </view>
         </u-popup>
@@ -146,6 +157,7 @@ import { getMobileErpGoodsCatalogHierarchy } from '@/addon/hsx_erp/api/erp'
 const props = defineProps({
     modelValue: { type: [Number, String], default: '' },
     selectedLabel: { type: String, default: '' },
+    categoryPath: { type: String, default: '' },
     label: { type: String, default: '商品型号' },
     placeholder: { type: String, default: '请选择商品型号' },
     required: { type: Boolean, default: true },
@@ -173,25 +185,58 @@ const activeCategory = ref<any | null>(null)
 const activeBrand = ref<any | null>(null)
 const activeSeries = ref<any | null>(null)
 const selectedName = ref('')
+const selectedNode = ref<any | null>(null)
 const branchCache = new Map<string, { at: number, rows: any[] }>()
 let navigationSequence = 0
 let selectedSequence = 0
 let searchSequence = 0
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
-const displayLabel = computed(() => selectedName.value || props.selectedLabel || '')
+const displayLabel = computed(() => {
+    const node = selectedNode.value || {}
+    if (props.modelValue && node.node_type !== 'product' && props.selectedLabel) {
+        return leafDisplayLabel(props.selectedLabel)
+    }
+    if (node.node_type === 'product') return node.product_name || node.label || ''
+    if (node.label) return node.label
+    return leafDisplayLabel(node.category_path || props.categoryPath || selectedName.value || props.selectedLabel || '')
+})
 
-watch(() => props.modelValue, value => {
+function leafDisplayLabel(value: any) {
+    const parts = String(value || '').split('/').map(item => item.trim()).filter(Boolean)
+    return parts[parts.length - 1] || ''
+}
+
+watch([() => props.modelValue, () => props.categoryPath], ([value, categoryPath]) => {
     if (!value) {
-        selectedName.value = ''
+        if (categoryPath) {
+            selectedNode.value = categoryNode(categoryPath)
+            selectedName.value = String(categoryPath)
+        } else {
+            selectedNode.value = null
+            selectedName.value = ''
+        }
         return
     }
     if (props.selectedLabel) selectedName.value = props.selectedLabel
     else resolveSelected(value)
 }, { immediate: true })
 watch(() => props.selectedLabel, value => {
-    if (value && props.modelValue) selectedName.value = value
+    if (value) selectedName.value = value
 })
+
+function categoryNode(path: string) {
+    const categoryPath = String(path || '').trim()
+    const segments = categoryPath.split('/').map(item => item.trim()).filter(Boolean)
+    return {
+        node_type: 'category',
+        node_key: `category:${categoryPath}`,
+        label: segments[segments.length - 1] || categoryPath,
+        category_name: segments[segments.length - 1] || categoryPath,
+        category_path: categoryPath,
+        site_product_id: 0,
+    }
+}
 
 function cacheKey(params: Record<string, any>) {
     if (params.keyword || params.site_product_id) return ''
@@ -439,13 +484,17 @@ async function resolveSelected(value: number | string) {
         const rows = await fetchRows({ site_product_id: value, limit: 20 })
         if (sequence !== selectedSequence || Number(props.modelValue || 0) !== Number(value)) return
         const row = rows[0]
-        if (row) selectedName.value = row.label || row.product_name || ''
+        if (row) {
+            selectedNode.value = row
+            selectedName.value = row.label || row.product_name || ''
+        }
     } catch {
         // 反显失败不阻断表单，继续使用外部 selectedLabel。
     }
 }
 
 function chooseProduct(node: any) {
+    selectedNode.value = node
     selectedName.value = node.label || ''
     const payload = {
         ...node,
@@ -458,8 +507,35 @@ function chooseProduct(node: any) {
     close()
 }
 
+function chooseCategory() {
+    const node = activeCategory.value || activeRoot.value
+    const categoryPath = String(node?.category_path || node?.label || '').trim()
+    if (!categoryPath) {
+        uni.showToast({ title: '请先选择品类', icon: 'none' })
+        return
+    }
+    const payload = {
+        ...categoryNode(categoryPath),
+        ...node,
+        node_type: 'category',
+        catalog_product_id: 0,
+        site_product_id: 0,
+        product_name: '',
+        category_name: categoryPath.split('/').filter(Boolean).pop() || '',
+        category_path: categoryPath,
+        brand_name: '',
+        series_name: '',
+    }
+    selectedNode.value = payload
+    selectedName.value = categoryPath
+    emit('update:modelValue', '')
+    emit('change', payload)
+    close()
+}
+
 function clear() {
     selectedSequence++
+    selectedNode.value = null
     selectedName.value = ''
     emit('update:modelValue', '')
     emit('change', { catalog_product_id: 0, site_product_id: 0, product_name: '', category_name: '', category_path: '', brand_name: '', series_name: '' })
@@ -565,4 +641,9 @@ onBeforeUnmount(() => {
 .product-path { margin-top: 7rpx; overflow: hidden; color: #94a3b8; font-size: 21rpx; text-overflow: ellipsis; white-space: nowrap; }
 .empty { height: 400rpx; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18rpx; color: #94a3b8; font-size: 24rpx; }
 .empty--workspace { height: 330rpx; }
+.category-confirm { flex-shrink: 0; min-height: 96rpx; padding: 14rpx 24rpx calc(14rpx + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 20rpx; background: #fff; border-top: 2rpx solid #eef2f7; box-sizing: border-box; }
+.category-confirm__copy { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.category-confirm__label { color: #94a3b8; font-size: 20rpx; }
+.category-confirm__value { margin-top: 4rpx; overflow: hidden; color: #334155; font-size: 24rpx; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.category-confirm__button { height: 62rpx; padding: 0 22rpx; display: flex; align-items: center; gap: 8rpx; color: #2563eb; font-size: 24rpx; font-weight: 600; background: #eff6ff; border: 2rpx solid #bfdbfe; border-radius: 12rpx; box-sizing: border-box; }
 </style>

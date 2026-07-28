@@ -358,6 +358,12 @@
                 <el-form-item v-if="flow.mode === 'all' || flow.mode === 'photo'" label="设备图片">
                     <upload-image v-model="flow.form.image_urls" :limit="9" width="72px" height="72px" image-text="上传/选择" />
                 </el-form-item>
+                <el-form-item v-if="flow.mode === 'all' || flow.mode === 'photo'" label="展示视频">
+                    <div class="w-full">
+                        <upload-video v-model="flow.form.video_url" :limit="1" />
+                        <div class="mt-2 text-xs text-slate-400">选填，最多 1 个视频；保存后随商品资料发布到商城。</div>
+                    </div>
+                </el-form-item>
                 <el-form-item v-if="flow.mode === 'all' || flow.mode === 'photo'" label="质检备注">
                     <el-input v-model.trim="flow.form.quality_remark" type="textarea" :rows="2" placeholder="质检、外观说明（内部使用）" />
                 </el-form-item>
@@ -371,6 +377,32 @@
             <template #footer>
                 <el-button @click="flow.visible = false">取消</el-button>
                 <el-button type="primary" :loading="flow.saving" @click="submitFlow">{{ flowSubmitLabel }}</el-button>
+            </template>
+        </el-dialog>
+
+        <el-dialog v-model="mediaTask.visible" title="标准化拍摄与销售定价" width="520px" destroy-on-close>
+            <div class="media-task">
+                <div class="media-task__device">
+                    <div class="media-task__icon">拍</div>
+                    <div class="min-w-0">
+                        <div class="truncate font-medium text-slate-800">{{ mediaTask.row?.model || '库存设备' }}</div>
+                        <div class="mt-1 truncate text-xs text-slate-500">IMEI {{ mediaTask.row?.imei || '-' }} · 任务 #{{ mediaTask.data?.middle_asset_id || '-' }}</div>
+                    </div>
+                </div>
+                <div v-if="mediaTask.qr" class="media-task__content">
+                    <img :src="mediaTask.qr" class="media-task__qr" alt="移动拍摄二维码" />
+                    <div class="media-task__copy">
+                        <div class="font-medium text-slate-800">使用手机扫码继续</div>
+                        <div class="mt-2 text-sm leading-6 text-slate-500">拍摄图片并填写销售价格后，结果会自动回写 ERP，设备随后进入资料整理或渠道发布环节。</div>
+                        <el-button class="mt-4" type="primary" plain @click="copyMediaTaskUrl">复制拍摄链接</el-button>
+                    </div>
+                </div>
+                <el-alert v-if="mediaTask.data?.degraded" class="mt-4" :title="mediaTask.data?.message" type="warning" :closable="false" show-icon />
+            </div>
+            <template #footer>
+                <el-button @click="mediaTask.visible = false">稍后处理</el-button>
+                <el-button v-if="mediaTask.data?.provider === 'erp'" type="primary" @click="continueWithErpUpload">使用 ERP 录入</el-button>
+                <el-button v-else type="primary" @click="refreshAfterMediaTask">我已完成，刷新状态</el-button>
             </template>
         </el-dialog>
 
@@ -671,7 +703,7 @@ import { computed, nextTick, onActivated, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
-import { adjustErpStockCost, adjustErpStockRetailPrice, buyoutErpConsignment, completeErpStockRefurbish, getErpSerialTraceDetail, getErpSerialTraceList, getErpStockInfo, getErpStockList, getErpStockListingWorkload, getErpStockTurnoverSummary, previewErpStockTransfer, printErpAssetLabel, sendErpStockRefurbish, syncErpStockListing, transferErpStock, updateErpStockFlow } from '@/addon/hsx_erp/api/erp'
+import { adjustErpStockCost, adjustErpStockRetailPrice, buyoutErpConsignment, completeErpStockRefurbish, getErpSerialTraceDetail, getErpSerialTraceList, getErpStockInfo, getErpStockList, getErpStockListingWorkload, getErpStockTurnoverSummary, prepareErpStockListingMedia, previewErpStockTransfer, printErpAssetLabel, sendErpStockRefurbish, syncErpStockListing, transferErpStock, updateErpStockFlow } from '@/addon/hsx_erp/api/erp'
 import { getErpFinanceCategories } from '@/addon/hsx_erp/api/config'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 import ErpDeviceIdentity from '@/addon/hsx_erp/components/ErpDeviceIdentity.vue'
@@ -681,6 +713,7 @@ import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/i
 import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVoucherUpload.vue'
 import ErpCatalogProductSelect from '@/addon/hsx_erp/components/ErpCatalogProductSelect.vue'
 import { firstPositiveErpAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
+import QRCode from 'qrcode'
 
 const search = reactive<any>({ keyword: '', status: '', refurbish_status: '', sale_target: '', listing_status: '', turnover_level: '', warehouse_id: '', location_id: '', catalog_product_id: '', dateRange: [], stock_age_min: undefined, stock_age_max: undefined, min_cost: undefined, max_cost: undefined, min_price: undefined, max_price: undefined })
 const route = useRoute()
@@ -704,6 +737,7 @@ const listingStageItems = computed(() => [
 const detail = reactive({ visible: false, loading: false, data: null as any })
 const detailActivePanels = ref<string[]>([])
 const flow = reactive({ visible: false, saving: false, mode: 'all' as 'all' | 'photo' | 'material', row: null as any, form: defaultFlowForm() })
+const mediaTask = reactive({ visible: false, loading: false, row: null as any, data: null as any, url: '', qr: '' })
 const flowDialogTitle = computed(() => ({ all: '设备流转设置', photo: '完成商品拍摄', material: '整理商城资料' }[flow.mode]))
 const flowDialogTip = computed(() => ({
     all: '待整备或整备中的设备不会出现在销售出库的待售库存中。',
@@ -798,6 +832,7 @@ function defaultFlowForm() {
         category_path: '',
         spec: '',
         image_urls: '',
+        video_url: '',
         quality_remark: '',
         remark_public: '',
         remark_internal: '',
@@ -1055,6 +1090,7 @@ function openFlow(row: any, mode: 'all' | 'photo' | 'material' = 'all') {
         catalog_product_id: Number(row.catalog_product_id || 0),
         spec: row.spec || '',
         image_urls: row.image_urls || '',
+        video_url: row.video_url || '',
         quality_remark: row.quality_remark || '',
         remark_public: row.remark_public || '',
         remark_internal: row.remark_internal || '',
@@ -1158,9 +1194,52 @@ function handleTurnoverAction(row: any) {
     if (action === 'publish_listing') return publishListing(row)
     if (action === 'complete_listing_photo') return openFlow(row, 'photo')
     if (action === 'complete_listing_material') return openFlow(row, 'material')
+    if (action === 'complete_listing_media_price') return openFlow(row)
     if (action === 'complete_listing') return openFlow(row)
+    if (action === 'prepare_listing_media') return prepareListingMedia(row)
     if (action === 'resolve_warehouse') return openTransfer(row)
     return openDetail(row)
+}
+
+async function prepareListingMedia(row: any) {
+    mediaTask.loading = true
+    mediaTask.row = row
+    try {
+        const response: any = await prepareErpStockListingMedia(Number(row.id))
+        const data = response?.data || {}
+        mediaTask.data = data
+        if (data.provider === 'erp') {
+            ElMessage.info(data.message || '已切换为 ERP 普通上传')
+            return openFlow(row)
+        }
+        mediaTask.url = `${window.location.origin}/wap/#${data.mobile_path || ''}`
+        mediaTask.qr = mediaTask.url
+            ? await QRCode.toDataURL(mediaTask.url, { errorCorrectionLevel: 'L', margin: 1, width: 220 })
+            : ''
+        mediaTask.visible = true
+    } finally {
+        mediaTask.loading = false
+    }
+}
+
+async function copyMediaTaskUrl() {
+    if (!mediaTask.url) return
+    try {
+        await navigator.clipboard.writeText(mediaTask.url)
+        ElMessage.success('拍摄链接已复制')
+    } catch {
+        ElMessage.warning(mediaTask.url)
+    }
+}
+
+function continueWithErpUpload() {
+    mediaTask.visible = false
+    if (mediaTask.row) openFlow(mediaTask.row)
+}
+
+async function refreshAfterMediaTask() {
+    mediaTask.visible = false
+    await loadList()
 }
 
 function handleRowCommand(command: string, row: any) {
@@ -1489,6 +1568,50 @@ function formatTime(value: any) {
 </script>
 
 <style scoped>
+.media-task {
+    padding: 4px 2px;
+}
+.media-task__device {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid #e6ebf3;
+    border-radius: 12px;
+    background: #f8fafc;
+}
+.media-task__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 42px;
+    height: 42px;
+    border-radius: 12px;
+    color: #fff;
+    background: linear-gradient(145deg, #2563eb, #4f46e5);
+    box-shadow: 0 7px 18px rgba(37, 99, 235, .18);
+}
+.media-task__content {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    margin-top: 18px;
+    padding: 18px;
+    border: 1px solid #dbe7f7;
+    border-radius: 14px;
+    background: linear-gradient(145deg, #f6faff, #fff);
+}
+.media-task__qr {
+    width: 154px;
+    height: 154px;
+    padding: 6px;
+    border-radius: 10px;
+    background: #fff;
+}
+.media-task__copy {
+    min-width: 0;
+    flex: 1;
+}
 .summary-tile {
     border-radius: 8px;
     background: #f8fafc;

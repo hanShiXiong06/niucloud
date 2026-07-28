@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace addon\hsx_member_card;
 
+use addon\hsx_member_card\app\support\MemberCardSchema;
 use app\service\core\schedule\CoreScheduleInstallService;
 use think\facade\Db;
 
@@ -11,6 +12,7 @@ final class Addon
     public function install(): bool
     {
         $this->executeSql(__DIR__ . '/sql/install.sql');
+        MemberCardSchema::migrate();
         (new CoreScheduleInstallService())->installAddonSchedule('hsx_member_card');
         return true;
     }
@@ -25,6 +27,7 @@ final class Addon
     public function upgrade(): bool
     {
         $this->executeSql(__DIR__ . '/sql/install.sql');
+        MemberCardSchema::migrate();
         (new CoreScheduleInstallService())->installAddonSchedule('hsx_member_card');
         return true;
     }

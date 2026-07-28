@@ -369,7 +369,7 @@ class ErpOpeningService extends BaseAdminService
                 'model' => $model,
                 'spec' => $this->text($this->pick($row, ['规格', 'spec']), 255),
                 'category_path' => $this->text($this->pick($row, ['分类路径', '品类']), 255),
-                'catalog_product_name' => $this->text($this->pick($row, ['商品目录型号', '目录型号']), 150),
+                'catalog_product_name' => $this->text($this->pick($row, ['分类', '目录型号']), 150),
                 'warehouse_name' => $this->text($this->pick($row, ['仓库', '仓库名称']), 100),
                 'location_name' => $this->text($this->pick($row, ['库位', '库位名称']), 100),
                 'ownership_type' => $ownership,

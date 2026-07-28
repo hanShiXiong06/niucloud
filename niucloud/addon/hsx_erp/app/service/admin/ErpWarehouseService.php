@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace addon\hsx_erp\app\service\admin;
 
+use addon\hsx_erp\app\dict\ErpDict;
 use addon\hsx_erp\app\model\ErpAsset;
 use addon\hsx_erp\app\model\ErpWarehouse;
 use addon\hsx_erp\app\model\ErpWarehouseLocation;
@@ -27,6 +28,9 @@ class ErpWarehouseService extends BaseAdminService
             $locationMap[(int)$location['warehouse_id']][] = $location;
         }
         foreach ($warehouses as &$warehouse) {
+            $warehouseTypeMeta = $this->warehouseTypeMeta((string)($warehouse['warehouse_type'] ?? ''));
+            $warehouse['warehouse_type_label'] = (string)($warehouseTypeMeta['label'] ?? $warehouse['warehouse_type']);
+            $warehouse['warehouse_type_meta'] = $warehouseTypeMeta;
             $warehouseManagerUid = (int)($warehouse['manager_uid'] ?? 0);
             $warehouseManagerName = (string)($warehouse['manager_name'] ?? '');
             $warehouse['manager_effective_uid'] = $warehouseManagerUid;
@@ -239,7 +243,16 @@ class ErpWarehouseService extends BaseAdminService
 
     private function normalizeWarehouseType(string $type): string
     {
-        return in_array($type, ['owned', 'peer', 'consignment', 'exception'], true) ? $type : 'owned';
+        $values = array_column(ErpDict::getWarehouseTypeOptions(), 'value');
+        return in_array($type, $values, true) ? $type : ErpDict::WAREHOUSE_OWNED;
+    }
+
+    private function warehouseTypeMeta(string $type): array
+    {
+        foreach (ErpDict::getWarehouseTypeOptions() as $option) {
+            if ((string)$option['value'] === $type) return $option;
+        }
+        return ErpDict::getWarehouseTypeOptions()[0];
     }
 
     private function normalizeDefaultSaleTarget(string $target): string

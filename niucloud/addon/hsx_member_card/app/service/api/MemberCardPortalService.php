@@ -30,7 +30,7 @@ final class MemberCardPortalService extends BaseApiService
             ['site_id', '=', (int)$this->site_id],
             ['status', '=', 1],
         ])->whereIn('card_id', $cardIds)
-            ->field('card_id,usage_mode,granted_times,used_times,remaining_times')
+            ->field('card_id,binding_mode,bound_imei,bound_model,usage_mode,granted_times,used_times,remaining_times')
             ->select()
             ->toArray();
 
@@ -46,7 +46,7 @@ final class MemberCardPortalService extends BaseApiService
         }
 
         $latest = MemberCardRedemption::where($this->memberCondition())
-            ->field('id,redeem_no,card_id,item_name,after_remaining,status,operator_name,occurred_at,reversed_at')
+            ->field('id,redeem_no,card_id,item_name,binding_mode,service_imei,service_model,after_remaining,status,operator_name,occurred_at,reversed_at')
             ->order('id desc')
             ->findOrEmpty()
             ->toArray();
@@ -81,7 +81,7 @@ final class MemberCardPortalService extends BaseApiService
             ['site_id', '=', (int)$this->site_id],
             ['status', '=', 1],
         ])->whereIn('card_id', $cardIds)
-            ->field('id,card_id,item_code,item_name,usage_mode,granted_times,used_times,remaining_times,reversed_times,daily_limit')
+            ->field('id,card_id,item_code,item_name,binding_mode,bound_imei,bound_model,usage_mode,granted_times,used_times,remaining_times,reversed_times,daily_limit')
             ->order('id asc')
             ->select()
             ->toArray();
@@ -122,7 +122,7 @@ final class MemberCardPortalService extends BaseApiService
         $status = trim((string)($where['status'] ?? ''));
         if ($status !== '') $query->where('status', '=', $status);
         $page = $query
-            ->field('id,redeem_no,card_id,card_no,card_item_id,item_code,item_name,redeem_times,before_remaining,after_remaining,operator_name,status,reversed_at,reverse_name,reverse_reason,remark,occurred_at,create_at,update_at')
+            ->field('id,redeem_no,card_id,card_no,card_item_id,item_code,item_name,binding_mode,service_imei,service_model,redeem_times,before_remaining,after_remaining,operator_name,status,reversed_at,reverse_name,reverse_reason,remark,occurred_at,create_at,update_at')
             ->order('id desc')
             ->paginate($this->pageOptions($where))
             ->toArray();
@@ -145,7 +145,7 @@ final class MemberCardPortalService extends BaseApiService
                 ['site_id', '=', (int)$this->site_id],
                 ['card_id', '=', $cardId],
                 ['status', '=', 1],
-            ])->field('id,card_id,item_code,item_name,usage_mode,granted_times,used_times,remaining_times,reversed_times,daily_limit')
+            ])->field('id,card_id,item_code,item_name,binding_mode,bound_imei,bound_model,usage_mode,granted_times,used_times,remaining_times,reversed_times,daily_limit')
                 ->order('id asc')
                 ->select()
                 ->toArray()
@@ -163,7 +163,7 @@ final class MemberCardPortalService extends BaseApiService
         $data['redemptions'] = array_map(
             fn(array $row): array => $this->formatRedemption($row),
             MemberCardRedemption::where(array_merge($this->memberCondition(), [['card_id', '=', $cardId]]))
-                ->field('id,redeem_no,card_id,card_no,card_item_id,item_code,item_name,redeem_times,before_remaining,after_remaining,operator_name,status,reversed_at,reverse_name,reverse_reason,remark,occurred_at,create_at,update_at')
+                ->field('id,redeem_no,card_id,card_no,card_item_id,item_code,item_name,binding_mode,service_imei,service_model,redeem_times,before_remaining,after_remaining,operator_name,status,reversed_at,reverse_name,reverse_reason,remark,occurred_at,create_at,update_at')
                 ->order('id desc')
                 ->limit(100)
                 ->select()
@@ -199,6 +199,11 @@ final class MemberCardPortalService extends BaseApiService
     private function formatItem(array $row): array
     {
         $row['usage_mode_text'] = (string)$row['usage_mode'] === 'unlimited' ? '不限次数' : '按次使用';
+        $row['binding_mode_text'] = [
+            'imei' => '绑定设备',
+            'model' => '限定型号',
+            'member' => '按会员本人',
+        ][(string)($row['binding_mode'] ?? 'member')] ?? '按会员本人';
         return $row;
     }
 

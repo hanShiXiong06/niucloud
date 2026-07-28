@@ -17,7 +17,7 @@
                 :value="w.id"
             >
                 <span>{{ w.warehouse_name }}</span>
-                <span v-if="w.warehouse_type" class="ml-2 text-xs text-gray-400">{{ warehouseTypeLabel(w.warehouse_type) }}</span>
+                <span v-if="w.warehouse_type" class="ml-2 text-xs text-gray-400">{{ w.warehouse_type_label || w.warehouse_type }}</span>
             </el-option>
         </el-select>
 
@@ -55,6 +55,7 @@ interface Warehouse {
     id: number
     warehouse_name: string
     warehouse_type?: string
+    warehouse_type_label?: string
     locations?: Location[]
     status: number
 }
@@ -133,16 +134,6 @@ function fireChange() {
     const wh = allWarehouses.value.find(w => w.id === selectedWarehouseId.value) || null
     const loc = locationOptions.value.find(l => l.id === selectedLocationId.value) || null
     emit('change', wh, loc)
-}
-
-function warehouseTypeLabel(type: string) {
-    const map: Record<string, string> = {
-        second_hand: '二手仓',
-        peer: '同行仓',
-        consignment: '代卖仓',
-        abnormal: '异常仓',
-    }
-    return map[type] || type
 }
 
 // 同步外部 v-model 变化

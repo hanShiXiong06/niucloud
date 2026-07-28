@@ -8,8 +8,8 @@
                 <view class="flex h-[34rpx] w-[34rpx] items-center justify-center rounded-full" :class="form.product_id ? 'bg-[#2468f2] text-white' : 'bg-white text-[#7b8798]'">2</view>
                 <text :class="form.product_id ? 'text-[#2468f2]' : 'text-[#7b8798]'">卡种</text>
                 <view class="mx-[6rpx] h-[2rpx] flex-1 bg-[#d6e4ff]"></view>
-                <view class="flex h-[34rpx] w-[34rpx] items-center justify-center rounded-full bg-white text-[#7b8798]">3</view>
-                <text class="text-[#7b8798]">收款</text>
+                <view class="flex h-[34rpx] w-[34rpx] items-center justify-center rounded-full" :class="paymentReady ? 'bg-[#2468f2] text-white' : 'bg-white text-[#7b8798]'">3</view>
+                <text :class="paymentReady ? 'text-[#2468f2]' : 'text-[#7b8798]'">收款</text>
             </view>
         </view>
 
@@ -66,7 +66,7 @@
                         v-for="product in displayProducts"
                         :key="product.id"
                         class="product relative flex min-h-[88rpx] box-border items-center gap-[13rpx] border-b border-[#eef1f5] px-[16rpx] py-[15rpx]"
-                        :class="{ 'bg-[#f3f7ff]': form.product_id === product.id }"
+                        :class="{ 'product--selected': Number(form.product_id) === Number(product.id) }"
                         hover-class="bg-[#f7f9fc]"
                         @click="selectProduct(product)"
                     >
@@ -119,6 +119,25 @@
             </view>
         </view>
 
+        <view v-if="bindingMode !== 'member'" class="mb-[16rpx] overflow-hidden rounded-[22rpx] bg-white px-[20rpx] pb-[20rpx] pt-[22rpx]">
+            <view class="mb-[16rpx] flex items-start justify-between gap-[16rpx]">
+                <view>
+                    <text class="block text-[28rpx] font-semibold text-[#27364b]">{{ bindingMode === 'imei' ? '绑定服务设备' : '限定适用型号' }}</text>
+                    <text class="mt-[5rpx] block text-[21rpx] leading-[1.5] text-[#8a96a8]">{{ bindingMode === 'imei' ? '一机一卡，核销时需验证相同 IMEI' : '同型号设备可使用该会员卡权益' }}</text>
+                </view>
+                <text class="rounded-full bg-[#edf4ff] px-[12rpx] py-[5rpx] text-[20rpx] font-medium text-[#2468f2]">{{ bindingMode === 'imei' ? '一机一卡' : '型号专属' }}</text>
+            </view>
+            <view v-if="bindingMode === 'imei'" class="mb-[12rpx] flex min-h-[82rpx] items-center gap-[12rpx] rounded-[16rpx] bg-[#f5f7fa] px-[16rpx]">
+                <u-icon name="scan" color="#2468f2" size="19" @click="scanImei" />
+                <u-input v-model="form.bind_imei" border="none" placeholder="输入或扫描设备 IMEI" class="min-w-0 flex-1 text-[26rpx]" />
+                <text class="flex-none text-[23rpx] font-medium text-[#2468f2]" @click="scanImei">扫码</text>
+            </view>
+            <view class="flex min-h-[82rpx] items-center gap-[12rpx] rounded-[16rpx] bg-[#f5f7fa] px-[16rpx]">
+                <u-icon name="tags" color="#7b8798" size="19" />
+                <u-input v-model="form.bind_model" border="none" :placeholder="bindingMode === 'imei' ? '设备型号（选填）' : '输入适用产品型号'" class="min-w-0 flex-1 text-[26rpx]" />
+            </view>
+        </view>
+
         <view class="mb-[16rpx] overflow-hidden rounded-[22rpx] bg-white">
             <view class="px-[20rpx] pb-[20rpx] pt-[22rpx]">
                 <view class="mb-[16rpx] flex items-center justify-between">
@@ -127,8 +146,8 @@
                 </view>
                 <view class="grid grid-cols-2 gap-[12rpx] rounded-[16rpx] bg-[#f4f6f8] p-[6rpx]">
                     <view
-                        class="flex min-h-[72rpx] box-border items-center justify-center gap-[8rpx] rounded-[12rpx] px-[12rpx]"
-                        :class="form.settlement_mode === 'immediate' ? 'bg-white font-semibold text-[#2468f2]' : 'text-[#667085]'"
+                        class="settlement-option flex min-h-[72rpx] box-border items-center justify-center gap-[8rpx] rounded-[12rpx] px-[12rpx]"
+                        :class="{ 'settlement-option--selected': form.settlement_mode === 'immediate' }"
                         @click="form.settlement_mode = 'immediate'"
                     >
                         <u-icon name="rmb-circle" :color="form.settlement_mode === 'immediate' ? '#2468f2' : '#98a2b3'" size="18" />
@@ -136,8 +155,8 @@
                     </view>
                     <view
                         v-if="config.allow_receivable === 1"
-                        class="flex min-h-[72rpx] box-border items-center justify-center gap-[8rpx] rounded-[12rpx] px-[12rpx]"
-                        :class="form.settlement_mode === 'receivable' ? 'bg-white font-semibold text-[#2468f2]' : 'text-[#667085]'"
+                        class="settlement-option flex min-h-[72rpx] box-border items-center justify-center gap-[8rpx] rounded-[12rpx] px-[12rpx]"
+                        :class="{ 'settlement-option--selected': form.settlement_mode === 'receivable' }"
                         @click="form.settlement_mode = 'receivable'"
                     >
                         <u-icon name="clock" :color="form.settlement_mode === 'receivable' ? '#2468f2' : '#98a2b3'" size="18" />
@@ -147,14 +166,27 @@
 
                 <view
                     v-if="form.settlement_mode === 'immediate'"
-                    class="mt-[14rpx] flex min-h-[78rpx] box-border items-center justify-between gap-[14rpx] border-b border-[#eef1f5] px-[4rpx] py-[14rpx]"
-                    @click="accountVisible = true"
+                    class="account-entry mt-[14rpx] flex min-h-[88rpx] box-border items-center justify-between gap-[14rpx] rounded-[16rpx] border px-[16rpx] py-[14rpx]"
+                    :class="{ 'account-entry--selected': form.capital_account_id > 0 }"
+                    @click="openAccountPicker"
                 >
-                    <view class="flex flex-col gap-[4rpx]">
-                        <text class="text-[25rpx] font-medium text-[#344054]">到账账户</text>
-                        <text class="mt-[3rpx] text-[22rpx] text-[#8a96a8]">{{ accountName || '请选择实际到账账户' }}</text>
+                    <view class="flex min-w-0 items-center gap-[12rpx]">
+                        <view class="flex h-[52rpx] w-[52rpx] flex-none items-center justify-center rounded-[14rpx]" :class="form.capital_account_id > 0 ? 'bg-[#eaf2ff]' : 'bg-[#f2f4f7]'">
+                            <u-icon name="rmb-circle" :color="form.capital_account_id > 0 ? '#2468f2' : '#98a2b3'" size="19" />
+                        </view>
+                        <view class="flex min-w-0 flex-1 flex-col gap-[4rpx]">
+                            <view class="flex items-center gap-[8rpx]">
+                                <text class="text-[25rpx] font-medium text-[#344054]">到账账户</text>
+                                <text class="rounded-full bg-[#f2f4f7] px-[10rpx] py-[3rpx] text-[19rpx] text-[#7b8798]">{{ config.finance_provider === 'erp' ? 'ERP' : '本地' }}</text>
+                            </view>
+                            <text class="mt-[3rpx] truncate text-[22rpx]" :class="accountName ? 'text-[#2468f2]' : 'text-[#8a96a8]'">{{ accountName || '请选择实际到账账户' }}</text>
+                        </view>
                     </view>
                     <u-icon name="arrow-right" color="#94a3b8" size="17" />
+                </view>
+                <view v-if="form.settlement_mode === 'immediate' && !(config.capital_account_options || []).length" class="mt-[10rpx] flex items-center gap-[8rpx] rounded-[12rpx] bg-[#fff7ed] px-[14rpx] py-[12rpx] text-[21rpx] text-[#c65d13]">
+                    <u-icon name="info-circle" color="#d97706" size="15" />
+                    <text>暂无可用收款账户，请先打开“收款设置”添加</text>
                 </view>
 
                 <view v-if="form.settlement_mode === 'immediate'" class="mt-[4rpx] flex min-h-[68rpx] items-center justify-between px-[4rpx]" @click="voucherExpanded = !voucherExpanded">
@@ -199,8 +231,8 @@
                 <view
                     v-for="account in config.capital_account_options || []"
                     :key="account.id"
-                    class="flex min-h-[96rpx] items-center gap-[16rpx] rounded-[16rpx] border-t border-[#f1f5f9] px-[18rpx]"
-                    :class="{ 'bg-[#f0f7ff]': form.capital_account_id === account.id }"
+                    class="account-option flex min-h-[96rpx] items-center gap-[16rpx] rounded-[16rpx] border px-[18rpx]"
+                    :class="{ 'account-option--selected': Number(form.capital_account_id) === Number(account.id) }"
                     @click="selectAccount(account)"
                 >
                     <view class="flex h-[56rpx] w-[56rpx] items-center justify-center rounded-[16rpx] bg-[#eff6ff]">
@@ -234,10 +266,12 @@ const productPreviewCount = 5
 const config = ref<any>({ allow_receivable: 1, capital_account_options: [] })
 const member = ref<any>({})
 const voucherUrls = ref('')
-const form = reactive<any>({ product_id: 0, settlement_mode: 'immediate', capital_account_id: 0, remark: '' })
+const form = reactive<any>({ product_id: 0, bind_imei: '', bind_model: '', settlement_mode: 'immediate', capital_account_id: 0, remark: '' })
 const money = (value: any) => Number(value || 0).toFixed(2)
 const accountName = computed(() => config.value.capital_account_options?.find((item: any) => Number(item.id) === Number(form.capital_account_id))?.name || '')
 const selectedProduct = computed(() => products.value.find((item: any) => Number(item.id) === Number(form.product_id)))
+const bindingMode = computed(() => selectedProduct.value?.item?.binding_mode || 'member')
+const paymentReady = computed(() => form.settlement_mode === 'receivable' || Number(selectedProduct.value?.sale_price || 0) <= 0 || form.capital_account_id > 0)
 const visibleProducts = computed(() => {
     const keyword = productKeyword.value.trim().toLowerCase()
     if (!keyword) return products.value
@@ -255,16 +289,28 @@ const onMemberSelected = (value: any) => {
 }
 const selectProduct = (product: any) => {
     form.product_id = Number(product.id)
+    form.bind_imei = ''
+    form.bind_model = ''
 }
+const scanImei = () => uni.scanCode({ success: result => { form.bind_imei = String(result.result || '').trim() } })
 const selectAccount = (account: any) => {
     form.capital_account_id = Number(account.id)
     accountVisible.value = false
+}
+const openAccountPicker = () => {
+    if (!(config.value.capital_account_options || []).length) {
+        uni.showToast({ title: '请先在收款设置中添加账户', icon: 'none' })
+        return
+    }
+    accountVisible.value = true
 }
 const goProductSettings = () => uni.navigateTo({ url: '/addon/hsx_member_card/pages/product/list' })
 const submit = async () => {
     if (!member.value.member_id) return uni.showToast({ title: '请选择购卡客户', icon: 'none' })
     if (!form.product_id) return uni.showToast({ title: '请选择卡种', icon: 'none' })
-    if (form.settlement_mode === 'immediate' && !form.capital_account_id) return uni.showToast({ title: '请选择到账账户', icon: 'none' })
+    if (bindingMode.value === 'imei' && !String(form.bind_imei || '').trim()) return uni.showToast({ title: '请填写或扫描设备 IMEI', icon: 'none' })
+    if (bindingMode.value === 'model' && !String(form.bind_model || '').trim()) return uni.showToast({ title: '请填写适用产品型号', icon: 'none' })
+    if (form.settlement_mode === 'immediate' && Number(selectedProduct.value?.sale_price || 0) > 0 && !form.capital_account_id) return uni.showToast({ title: '请选择到账账户', icon: 'none' })
     submitting.value = true
     try {
         const result: any = (await createCardOrder({
@@ -284,7 +330,7 @@ onLoad(async (options: any) => {
     const [productResult, configResult]: any = await Promise.all([getCardProductOptions(), getMemberCardConfig()])
     products.value = productResult?.data || []
     config.value = configResult?.data || config.value
-    form.capital_account_id = Number(config.value.default_capital_account_id || 0)
+    form.capital_account_id = Number(config.value.default_capital_account_id || config.value.capital_account_options?.[0]?.id || 0)
     const memberId = Number(options?.member_id || 0)
     if (memberId > 0) {
         const memberResult: any = await getCardMember(memberId)
@@ -295,8 +341,14 @@ onLoad(async (options: any) => {
 
 <style scoped lang="scss">
 .product:last-child { border-bottom: 0; }
-.product.active { background: #f2f7ff; }
-.product.active::before { position: absolute; top: 15rpx; bottom: 15rpx; left: 0; width: 5rpx; border-radius: 0 5rpx 5rpx 0; background: #2563eb; content: ''; }
+.product--selected { background: #f2f7ff; box-shadow: inset 0 0 0 2rpx #a9c8ff; }
+.product--selected::before { position: absolute; top: 15rpx; bottom: 15rpx; left: 0; width: 5rpx; border-radius: 0 5rpx 5rpx 0; background: #2563eb; content: ''; }
+.settlement-option { color: #667085; transition: background-color .18s ease, color .18s ease, box-shadow .18s ease; }
+.settlement-option--selected { background: #fff; color: #2468f2; font-weight: 600; box-shadow: 0 3rpx 10rpx rgba(36, 104, 242, .1), inset 0 0 0 2rpx rgba(36, 104, 242, .16); }
+.account-entry { border-color: #e4e9f0; background: #fafbfc; }
+.account-entry--selected { border-color: #a9c8ff; background: #f5f8ff; }
+.account-option { margin-bottom: 12rpx; border-color: #e9edf3; background: #fff; }
+.account-option--selected { border-color: #8bb6ff; background: #f0f6ff; box-shadow: inset 0 0 0 1rpx rgba(36, 104, 242, .12); }
 .customer-icon--selected { background: linear-gradient(145deg, #2563eb, #4f46e5); }
 .remark-section :deep(.u-textarea) { background: #f8fafc !important; }
 </style>

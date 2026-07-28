@@ -1,10 +1,10 @@
 <template>
     <div class="main-container">
         <el-card class="!border-none" shadow="never">
-            <div class="flex items-start justify-between gap-4">
+            <div class="config-page-header">
                 <div>
                     <div class="text-page-title">业务规则</div>
-                    <div class="mt-1 text-sm text-gray-500">控制 ERP 的主流程分支，默认路径保持稳定，差异业务通过配置开关承接。</div>
+                    <div class="mt-1 text-sm text-gray-500">按业务场景管理 ERP 运行方式。未开启的能力不会影响日常开单与库存操作。</div>
                 </div>
                 <div class="flex gap-2">
                     <el-button :loading="loading" @click="loadConfig">刷新</el-button>
@@ -12,10 +12,39 @@
                 </div>
             </div>
 
-            <div class="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
-                <section class="rule-section">
+            <div class="config-workspace">
+                <nav class="config-nav" aria-label="业务规则分类">
+                    <button
+                        v-for="item in navItems"
+                        :key="item.key"
+                        type="button"
+                        class="config-nav-item"
+                        :class="{ 'is-active': activeNav === item.key }"
+                        @click="activeNav = item.key"
+                    >
+                        <span class="config-nav-icon">{{ item.index }}</span>
+                        <span class="config-nav-copy">
+                            <strong>{{ item.title }}</strong>
+                            <small>{{ item.description }}</small>
+                        </span>
+                        <span class="config-nav-arrow">›</span>
+                    </button>
+                </nav>
+
+                <div class="config-panel" v-loading="loading">
+                    <div class="config-panel-header">
+                        <div>
+                            <div class="config-panel-title">{{ activeNavItem.title }}</div>
+                            <div class="config-panel-description">{{ activeNavItem.detail }}</div>
+                        </div>
+                        <el-tag effect="plain" round>{{ activeNavItem.tag }}</el-tag>
+                    </div>
+
+                    <div class="rule-grid">
+                <section v-show="activeNav === 'trade'" class="rule-section">
                     <div class="section-title">财务规则</div>
-                    <el-form label-width="180px">
+                    <div class="section-description">控制收付款形成事实后的锁定方式和账户要求。</div>
+                    <el-form class="rule-form" label-width="160px">
                         <el-form-item label="启用折账">
                             <el-switch v-model="form.finance.enable_offset" :active-value="1" :inactive-value="0" />
                             <span class="ml-3 text-sm text-gray-500">开启后仅财务可发起，系统不自动折账。</span>
@@ -30,10 +59,55 @@
                     </el-form>
                 </section>
 
-                <section class="rule-section">
+                <section v-show="activeNav === 'channel'" class="rule-section section-wide">
                     <div class="section-title">自有商城渠道</div>
                     <el-alert class="mb-4" type="info" :closable="false" show-icon title="ERP 始终是主数据；商城只能消费 ERP 数据或维护自己的数据映射，不能反向修改 ERP 分类和规格。" />
-                    <el-form label-width="180px">
+                    <div class="workspace-setting">
+                        <div class="workspace-setting__head">
+                            <div>
+                                <div class="workspace-setting__title">销售资料工作模式</div>
+                                <div class="workspace-setting__desc">所有人仍从 ERP 库存中心进入；系统只改变任务如何分配，不增加新的操作入口。</div>
+                            </div>
+                            <el-tag type="success" effect="plain">推荐先选一站式</el-tag>
+                        </div>
+                        <div class="workspace-mode-grid">
+                            <button
+                                v-for="item in workspaceModes"
+                                :key="item.value"
+                                type="button"
+                                class="workspace-mode-card"
+                                :class="{ 'is-active': form.listing_workspace.mode === item.value }"
+                                @click="form.listing_workspace.mode = item.value"
+                            >
+                                <span class="workspace-mode-card__mark">{{ item.index }}</span>
+                                <span class="workspace-mode-card__body">
+                                    <strong>{{ item.title }}</strong>
+                                    <small>{{ item.description }}</small>
+                                    <em>{{ item.flow }}</em>
+                                </span>
+                                <span class="workspace-mode-card__check">✓</span>
+                            </button>
+                        </div>
+                        <div class="workspace-provider-row">
+                            <div>
+                                <div class="workspace-provider-row__label">图片与视频处理</div>
+                                <div class="workspace-provider-row__tip">选择“自动判断”时，中台安装且可用就调用中台；不可用会无感降级为 ERP 普通上传。</div>
+                            </div>
+                            <el-radio-group v-model="form.listing_workspace.media_provider">
+                                <el-radio-button label="auto">自动判断</el-radio-button>
+                                <el-radio-button label="erp">ERP 普通上传</el-radio-button>
+                                <el-radio-button label="device_asset">标准化拍照中台</el-radio-button>
+                            </el-radio-group>
+                        </div>
+                        <div class="workspace-provider-row">
+                            <div>
+                                <div class="workspace-provider-row__label">资料完成后</div>
+                                <div class="workspace-provider-row__tip">默认保留一次人工确认；开启自动发布后，仍会受仓库规则和商城渠道配置约束。</div>
+                            </div>
+                            <el-switch v-model="form.listing_workspace.auto_publish" :active-value="1" :inactive-value="0" active-text="自动发布" inactive-text="人工确认" />
+                        </div>
+                    </div>
+                    <el-form class="rule-form" label-width="160px">
                         <el-form-item label="启用商城联动">
                             <el-switch v-model="form.marketplace.channels.phone_shop.enabled" :active-value="1" :inactive-value="0" />
                         </el-form-item>
@@ -69,10 +143,10 @@
                     </el-form>
                 </section>
 
-                <section class="rule-section">
+                <section v-show="activeNav === 'team'" class="rule-section section-wide">
                     <div class="section-title">自动任务默认负责人</div>
                     <el-alert class="mb-4" type="info" :closable="false" show-icon title="只需设置一次。应收应付或设备进入拍照、商城定价、资料上架环节时，系统自动写入责任人并通知本人。" />
-                    <el-form label-width="180px">
+                    <el-form class="rule-form" label-width="160px">
                         <el-form-item v-for="stage in taskStages" :key="stage.stage_key" :label="stage.name">
                             <div class="flex items-center gap-3">
                                 <el-select v-model="stage.default_uid" class="!w-[240px]" clearable placeholder="自动选择首位岗位员工">
@@ -87,9 +161,37 @@
                     </el-form>
                 </section>
 
-                <section class="rule-section">
+                <section v-show="activeNav === 'trade'" class="rule-section section-wide">
                     <div class="section-title">采购规则</div>
-                    <el-form label-width="180px">
+                    <div class="section-description">设置移动端采购录入方式、应付生成与业务撤销边界。</div>
+                    <div class="purchase-entry-setting">
+                        <div class="workspace-setting__head">
+                            <div>
+                                <div class="workspace-setting__title">移动端采购录入方式</div>
+                                <div class="workspace-setting__desc">所有模式都写入同一份采购和库存数据，仅改变当次需要填写的内容与后续分工。</div>
+                            </div>
+                            <el-tag type="success" effect="plain">可随团队调整</el-tag>
+                        </div>
+                        <div class="workspace-mode-grid">
+                            <button
+                                v-for="item in purchaseEntryModes"
+                                :key="item.value"
+                                type="button"
+                                class="workspace-mode-card"
+                                :class="{ 'is-active': form.purchase.mobile_entry_mode === item.value }"
+                                @click="form.purchase.mobile_entry_mode = item.value"
+                            >
+                                <span class="workspace-mode-card__mark">{{ item.index }}</span>
+                                <span class="workspace-mode-card__body">
+                                    <strong>{{ item.title }}</strong>
+                                    <small>{{ item.description }}</small>
+                                    <em>{{ item.flow }}</em>
+                                </span>
+                                <span class="workspace-mode-card__check">✓</span>
+                            </button>
+                        </div>
+                    </div>
+                    <el-form class="rule-form" label-width="160px">
                         <el-form-item label="入库立即生成应付">
                             <el-switch v-model="form.purchase.create_payable_on_inbound" :active-value="1" :inactive-value="0" disabled />
                         </el-form-item>
@@ -99,7 +201,7 @@
                     </el-form>
                 </section>
 
-                <section class="rule-section">
+                <section v-show="activeNav === 'goods'" class="rule-section">
                     <div class="section-title">设备命名规则</div>
                     <el-alert
                         class="mb-4"
@@ -108,7 +210,7 @@
                         show-icon
                         title="采购开单选择分类和规格时，会按这里的规则自动生成设备名称。"
                     />
-                    <el-form label-width="180px">
+                    <el-form class="rule-form" label-width="160px">
                         <el-form-item label="分类写入名称">
                             <el-radio-group v-model="form.product_title.category_mode">
                                 <el-radio-button label="auto">自动</el-radio-button>
@@ -132,9 +234,10 @@
                     </el-form>
                 </section>
 
-                <section class="rule-section">
+                <section v-show="activeNav === 'trade'" class="rule-section section-wide">
                     <div class="section-title">销售规则</div>
-                    <el-form label-width="180px">
+                    <div class="section-description">统一销售出库、应收确认、取消回库和客户信用控制。</div>
+                    <el-form class="rule-form" label-width="160px">
                         <el-form-item label="出库立即生成应收">
                             <el-switch v-model="form.sale.create_receivable_on_outbound" :active-value="1" :inactive-value="0" disabled />
                         </el-form-item>
@@ -179,9 +282,10 @@
                     </el-form>
                 </section>
 
-                <section class="rule-section">
+                <section v-show="activeNav === 'special'" class="rule-section section-wide">
                     <div class="section-title">整备与代卖</div>
-                    <el-form label-width="180px">
+                    <div class="section-description">只有门店实际开展整备或寄售业务时才需要开启。</div>
+                    <el-form class="rule-form" label-width="160px">
                         <el-form-item label="启用整备流程">
                             <el-switch v-model="form.refurbish.enabled" :active-value="1" :inactive-value="0" />
                         </el-form-item>
@@ -218,10 +322,10 @@
                     </el-form>
                 </section>
 
-                <section class="rule-section">
+                <section v-show="activeNav === 'goods'" class="rule-section">
                     <div class="section-title">库存周转预警</div>
                     <el-alert class="mb-4" type="info" :closable="false" show-icon title="库龄按设备实际入库时间计算；阈值供库存中心、移动端和经营工作台统一使用。" />
-                    <el-form label-width="180px">
+                    <el-form class="rule-form" label-width="160px">
                         <el-form-item label="关注起始天数">
                             <el-input-number v-model="form.turnover.attention_days" :min="1" :max="365" :precision="0" />
                         </el-form-item>
@@ -242,13 +346,15 @@
                         </el-form-item>
                     </el-form>
                 </section>
+                    </div>
+                </div>
             </div>
         </el-card>
     </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getErpConfig, saveErpConfig, getErpTaskAssignmentSettings, saveErpTaskAssignmentSettings } from '@/addon/hsx_erp/api/config'
 
@@ -256,14 +362,34 @@ const loading = ref(false)
 const saving = ref(false)
 const form = reactive(defaultRules())
 const taskStages = ref<any[]>([])
+const activeNav = ref('trade')
+const navItems = [
+    { key: 'trade', index: '01', title: '交易与财务', description: '采购、销售、收付款', detail: '管理从采购入库到销售结算的核心规则，建议只在业务口径发生变化时调整。', tag: '核心流程' },
+    { key: 'goods', index: '02', title: '商品与库存', description: '名称规则、周转预警', detail: '统一商品展示名称与库存周转阈值，后续配件数量库存也在此处开启和管理。', tag: '库存管理' },
+    { key: 'channel', index: '03', title: '商城渠道', description: '分类、规格、发布方式', detail: '决定商城消费 ERP 数据还是独立维护映射，并控制资料齐全后的发布方式。', tag: '渠道协同' },
+    { key: 'team', index: '04', title: '任务分工', description: '自动负责人、岗位承接', detail: '为财务、拍摄、销售定价和商城运营设置默认负责人，减少人工派单。', tag: '团队协作' },
+    { key: 'special', index: '05', title: '整备与代卖', description: '按需开启的扩展流程', detail: '整备、外送追踪和寄售业务均为可选能力，未开展时无需配置。', tag: '扩展业务' }
+]
+const workspaceModes = [
+    { value: 'one_stop', index: '01', title: '一站式录入', description: '适合 1～5 人团队，一人在一个表单全部完成', flow: '资料 · 图片 · 销售价 · 发布' },
+    { value: 'split', index: '02', title: '专业分工', description: '拍摄、销售定价、渠道运营分别承接待办', flow: '拍摄 → 销售定价 → 渠道运营' },
+    { value: 'photo_price', index: '03', title: '拍摄定价合并', description: '同一人连续拍图和定价，运营只处理渠道资料', flow: '拍摄与定价 → 渠道运营' }
+]
+const purchaseEntryModes = [
+    { value: 'quick', index: '01', title: '快速入库', description: '只录采购事实和入库位置，商品资料后续按需完善', flow: '供应商 · 设备 · 成本 · 入库' },
+    { value: 'complete', index: '02', title: '一次完成', description: '采购时同时填写规格、图片和销售价格', flow: '采购事实 + 销售资料' },
+    { value: 'collaborative', index: '03', title: '分工协作', description: '采购先入库，再由拍摄、定价岗位自动承接', flow: '采购 → 拍摄 → 销售定价' }
+]
+const activeNavItem = computed(() => navItems.find((item) => item.key === activeNav.value) || navItems[0])
 
 function defaultRules() {
     return {
         finance: { enable_offset: 1, finance_fact_lock: 1, settlement_requires_account: 1 },
-        purchase: { create_payable_on_inbound: 1, allow_cancel_before_finance_fact: 1 },
+        purchase: { create_payable_on_inbound: 1, allow_cancel_before_finance_fact: 1, mobile_entry_mode: 'quick' },
         product_title: { category_mode: 'auto', spec_in_title: 1, grade_in_title: 0, separator: ' ' },
         sale: { create_receivable_on_outbound: 1, allow_cancel_before_finance_fact: 1, return_to_original_location_on_cancel: 1, enable_peer_pending: 1, enable_trial_sale: 0, profit_confirm_mode: 'settlement', credit_control: { enabled: 1, default_policy: 'remind', min_outstanding_amount: 0, min_outstanding_days: 0 } },
         refurbish: { enabled: 1, default_required: 0, tracking_mode: 'simple', daily_reminder_enabled: 1, daily_reminder_threshold: 25, reminder_dismiss_date: '' },
+        listing_workspace: { mode: 'one_stop', media_provider: 'auto', auto_publish: 0, fallback_to_erp: 1 },
         marketplace: {
             recycle_material_owner: 'erp',
             channels: { phone_shop: { enabled: 1, category_mode: 'erp', spec_mode: 'erp', publish_mode: 'direct' } }
@@ -282,6 +408,7 @@ async function loadConfig() {
         Object.assign(form.product_title, res?.data?.product_title || {})
         Object.assign(form.sale, res?.data?.sale || {})
         Object.assign(form.refurbish, res?.data?.refurbish || {})
+        Object.assign(form.listing_workspace, res?.data?.listing_workspace || {})
         Object.assign(form.marketplace, res?.data?.marketplace || {})
         Object.assign(form.turnover, res?.data?.turnover || {})
         Object.assign(form.consignment, res?.data?.consignment || {})
@@ -304,6 +431,7 @@ async function submit() {
         Object.assign(form.product_title, res?.data?.product_title || {})
         Object.assign(form.sale, res?.data?.sale || {})
         Object.assign(form.refurbish, res?.data?.refurbish || {})
+        Object.assign(form.listing_workspace, res?.data?.listing_workspace || {})
         Object.assign(form.marketplace, res?.data?.marketplace || {})
         Object.assign(form.turnover, res?.data?.turnover || {})
         Object.assign(form.consignment, res?.data?.consignment || {})
@@ -317,17 +445,350 @@ onMounted(loadConfig)
 </script>
 
 <style scoped>
-.rule-section {
-    border: 1px solid #eef2f7;
-    border-radius: 8px;
-    padding: 16px;
+.config-page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid #edf1f7;
 }
-.section-title {
-    margin-bottom: 14px;
-    border-left: 3px solid var(--el-color-primary);
-    padding-left: 10px;
-    color: #111827;
+.config-workspace {
+    display: grid;
+    grid-template-columns: 230px minmax(0, 1fr);
+    gap: 20px;
+    margin-top: 20px;
+    align-items: start;
+}
+.config-nav {
+    position: sticky;
+    top: 16px;
+    padding: 8px;
+    border: 1px solid #e8edf5;
+    border-radius: 12px;
+    background: #f8fafc;
+}
+.config-nav-item {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-height: 66px;
+    padding: 11px 10px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: #64748b;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color .18s ease, color .18s ease, box-shadow .18s ease;
+}
+.config-nav-item + .config-nav-item {
+    margin-top: 4px;
+}
+.config-nav-item:hover {
+    color: #334155;
+    background: #fff;
+}
+.config-nav-item.is-active {
+    color: var(--el-color-primary);
+    background: #fff;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, .07);
+}
+.workspace-setting {
+    margin-bottom: 22px;
+    padding: 20px;
+    border: 1px solid #dfe7f3;
+    border-radius: 14px;
+    background: linear-gradient(145deg, #f8fbff 0%, #fff 55%);
+}
+.purchase-entry-setting {
+    margin: 14px 0 22px;
+    padding: 18px;
+    border: 1px solid #dfe7f3;
+    border-radius: 14px;
+    background: linear-gradient(145deg, #f8fbff 0%, #fff 62%);
+}
+.workspace-setting__head,
+.workspace-provider-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+}
+.workspace-setting__title,
+.workspace-provider-row__label {
+    color: #172033;
     font-size: 15px;
     font-weight: 650;
+}
+.workspace-setting__desc,
+.workspace-provider-row__tip {
+    margin-top: 5px;
+    color: #8491a7;
+    font-size: 12px;
+    line-height: 1.65;
+}
+.workspace-mode-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 18px;
+}
+.workspace-mode-card {
+    position: relative;
+    display: flex;
+    min-height: 116px;
+    gap: 12px;
+    padding: 16px;
+    overflow: hidden;
+    border: 1px solid #e3e9f2;
+    border-radius: 12px;
+    background: #fff;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+.workspace-mode-card:hover {
+    border-color: #a8c7ff;
+    transform: translateY(-1px);
+}
+.workspace-mode-card.is-active {
+    border-color: var(--el-color-primary);
+    box-shadow: 0 8px 22px rgba(37, 99, 235, .12);
+}
+.workspace-mode-card__mark {
+    flex: 0 0 auto;
+    color: #a2aec1;
+    font-size: 12px;
+    font-weight: 700;
+}
+.workspace-mode-card.is-active .workspace-mode-card__mark {
+    color: var(--el-color-primary);
+}
+.workspace-mode-card__body {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+}
+.workspace-mode-card__body strong {
+    color: #172033;
+    font-size: 15px;
+}
+.workspace-mode-card__body small {
+    margin-top: 7px;
+    color: #7d899c;
+    line-height: 1.55;
+}
+.workspace-mode-card__body em {
+    margin-top: auto;
+    padding-top: 10px;
+    color: #4b68a0;
+    font-size: 12px;
+    font-style: normal;
+}
+.workspace-mode-card__check {
+    position: absolute;
+    right: 12px;
+    top: 10px;
+    color: var(--el-color-primary);
+    font-size: 16px;
+    opacity: 0;
+}
+.workspace-mode-card.is-active .workspace-mode-card__check {
+    opacity: 1;
+}
+.workspace-provider-row {
+    margin-top: 14px;
+    padding-top: 15px;
+    border-top: 1px solid #e9eef6;
+}
+@media (max-width: 1100px) {
+    .workspace-mode-grid {
+        grid-template-columns: 1fr;
+    }
+    .workspace-provider-row {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}
+.config-nav-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 34px;
+    height: 34px;
+    margin-right: 10px;
+    border-radius: 9px;
+    background: #eef2f7;
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: 700;
+}
+.config-nav-item.is-active .config-nav-icon {
+    background: var(--el-color-primary-light-9);
+    color: var(--el-color-primary);
+}
+.config-nav-copy {
+    min-width: 0;
+    flex: 1;
+}
+.config-nav-copy strong,
+.config-nav-copy small {
+    display: block;
+}
+.config-nav-copy strong {
+    color: inherit;
+    font-size: 14px;
+    font-weight: 650;
+}
+.config-nav-copy small {
+    overflow: hidden;
+    margin-top: 3px;
+    color: #94a3b8;
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.config-nav-arrow {
+    margin-left: 6px;
+    color: #cbd5e1;
+    font-size: 20px;
+}
+.config-nav-item.is-active .config-nav-arrow {
+    color: var(--el-color-primary);
+}
+.config-panel {
+    min-width: 0;
+}
+.config-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 76px;
+    margin-bottom: 14px;
+    padding: 15px 18px;
+    border: 1px solid #e8edf5;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #f8fbff 0%, #fff 68%);
+}
+.config-panel-title {
+    color: #1e293b;
+    font-size: 18px;
+    font-weight: 700;
+}
+.config-panel-description {
+    margin-top: 5px;
+    color: #8492a6;
+    font-size: 13px;
+    line-height: 1.6;
+}
+.rule-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+.rule-section {
+    min-width: 0;
+    padding: 20px 20px 8px;
+    border: 1px solid #e8edf5;
+    border-radius: 12px;
+    background: #fff;
+}
+.section-wide {
+    grid-column: 1 / -1;
+}
+.section-title {
+    position: relative;
+    margin-bottom: 4px;
+    padding-left: 12px;
+    color: #1e293b;
+    font-size: 16px;
+    font-weight: 700;
+}
+.section-title::before {
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    left: 0;
+    width: 3px;
+    border-radius: 2px;
+    background: var(--el-color-primary);
+    content: '';
+}
+.section-description {
+    margin: 0 0 16px 12px;
+    color: #94a3b8;
+    font-size: 13px;
+}
+.rule-form {
+    margin-top: 16px;
+}
+.rule-form :deep(.el-form-item) {
+    margin-bottom: 20px;
+}
+.rule-form :deep(.el-form-item__label) {
+    color: #475569;
+    font-weight: 500;
+}
+.rule-form :deep(.el-form-item__content) {
+    min-width: 0;
+}
+.rule-form :deep(.el-radio-group) {
+    max-width: 100%;
+    flex-wrap: wrap;
+}
+.rule-form :deep(.el-alert) {
+    line-height: 1.6;
+}
+
+@media (max-width: 1280px) {
+    .config-workspace {
+        grid-template-columns: 1fr;
+    }
+    .config-nav {
+        position: static;
+        display: flex;
+        overflow-x: auto;
+        gap: 6px;
+    }
+    .config-nav-item {
+        flex: 0 0 190px;
+        margin-top: 0 !important;
+    }
+    .config-nav-arrow {
+        display: none;
+    }
+}
+
+@media (max-width: 900px) {
+    .config-page-header,
+    .config-panel-header {
+        align-items: stretch;
+        flex-direction: column;
+    }
+    .rule-grid {
+        grid-template-columns: 1fr;
+    }
+    .section-wide {
+        grid-column: auto;
+    }
+    .rule-section {
+        padding-right: 14px;
+        padding-left: 14px;
+    }
+    .rule-form :deep(.el-form-item) {
+        display: block;
+    }
+    .rule-form :deep(.el-form-item__label) {
+        display: block;
+        width: auto !important;
+        margin-bottom: 8px;
+        text-align: left;
+    }
+    .rule-form :deep(.el-form-item__content) {
+        margin-left: 0 !important;
+    }
 }
 </style>
