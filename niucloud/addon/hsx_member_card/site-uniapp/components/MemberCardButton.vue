@@ -1,5 +1,5 @@
 <template>
-    <view class="mc-button" :class="{ 'mc-button--compact': compact }">
+    <view class="block w-full min-w-0">
         <u-button
             :type="type"
             :plain="plain"
@@ -9,7 +9,7 @@
             :custom-style="buttonStyle"
             @click="emit('click')"
         >
-            <view class="mc-button__content">
+            <view class="flex items-center justify-center gap-[10rpx] leading-none">
                 <u-icon v-if="icon" :name="icon" :size="compact ? 15 : 17" :color="iconColor" />
                 <text>{{ text }}</text>
             </view>
@@ -49,36 +49,13 @@ const iconColor = computed(() => {
     if (props.type === 'error') return '#dc2626'
     return '#475569'
 })
-const buttonStyle = computed(() => ({ width: '100%', margin: '0' }))
+const buttonStyle = computed(() => ({
+    width: '100%',
+    height: props.compact ? '68rpx' : '84rpx',
+    margin: '0',
+    borderRadius: props.compact ? '12rpx' : '15rpx',
+    fontSize: props.compact ? '25rpx' : '28rpx',
+    fontWeight: '600',
+    letterSpacing: '0',
+}))
 </script>
-
-<style scoped lang="scss">
-.mc-button {
-    display: block;
-    width: 100%;
-    min-width: 0;
-}
-
-.mc-button :deep(.u-button) {
-    height: 82rpx;
-    margin: 0 !important;
-    border-radius: 14rpx;
-    font-size: 27rpx;
-    font-weight: 650;
-    letter-spacing: 0;
-}
-
-.mc-button--compact :deep(.u-button) {
-    height: 66rpx;
-    border-radius: 12rpx;
-    font-size: 24rpx;
-}
-
-.mc-button__content {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 9rpx;
-    line-height: 1;
-}
-</style>

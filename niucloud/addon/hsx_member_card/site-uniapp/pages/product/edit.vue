@@ -1,50 +1,152 @@
 <template>
-    <view class="mc-page product-edit-page">
-        <view class="edit-summary mc-surface">
-            <view class="edit-summary__icon"><u-icon name="order" color="#2563eb" size="24" /></view>
-            <view><strong>{{ id ? '编辑服务卡' : '新增服务卡' }}</strong><text>设置售价、权益次数和有效期</text></view>
-        </view>
-
-        <view class="form-card mc-surface">
-            <view class="mc-form-title">基础信息</view>
-            <view class="form-row"><text class="required">卡种名称</text><u-input v-model="form.product_name" border="none" inputAlign="right" placeholder="例如：9.9 元贴膜 10 次卡" /></view>
-            <view class="form-row"><text class="required">销售价</text><u-input v-model="form.sale_price" type="digit" border="none" inputAlign="right" placeholder="0.00"><template #suffix><text class="suffix">元</text></template></u-input></view>
-            <view class="form-row"><text>划线价</text><u-input v-model="form.market_price" type="digit" border="none" inputAlign="right" placeholder="选填"><template #suffix><text class="suffix">元</text></template></u-input></view>
-        </view>
-
-        <view class="form-card mc-surface">
-            <view class="mc-form-title">服务权益</view>
-            <view class="form-row"><text class="required">权益名称</text><u-input v-model="form.item.item_name" border="none" inputAlign="right" placeholder="例如：贴膜服务" /></view>
-            <view class="choice-block">
-                <text class="choice-label">次数模式</text>
-                <view class="choice-list"><view v-for="option in usageOptions" :key="option.value" class="choice-chip" :class="{ active: form.item.usage_mode === option.value }" @click="form.item.usage_mode = option.value">{{ option.label }}</view></view>
+    <view class="min-h-screen bg-[#f0f3f9] px-[24rpx] pt-[24rpx] pb-[180rpx] text-[#334155]">
+        <!-- 页面标题 -->
+        <view class="mb-[20rpx] flex items-center gap-[16rpx] rounded-[28rpx] bg-white p-[24rpx] shadow-[0_8rpx_30rpx_rgba(15,23,42,0.04)]">
+            <view class="flex h-[64rpx] w-[64rpx] items-center justify-center rounded-[18rpx] bg-[#eff6ff]">
+                <u-icon name="order" color="#2563eb" size="24" />
             </view>
-            <view v-if="form.item.usage_mode === 'limited'" class="form-row"><text class="required">可用次数</text><u-number-box v-model="form.item.total_times" :min="1" :max="9999" /></view>
-            <view class="form-row"><text>每日上限</text><view class="number-with-tip"><u-number-box v-model="form.item.daily_limit" :min="0" :max="99" /><small>0 表示不限</small></view></view>
-        </view>
-
-        <view class="form-card mc-surface">
-            <view class="mc-form-title">生效与有效期</view>
-            <view class="choice-block">
-                <text class="choice-label">生效方式</text>
-                <view class="choice-list"><view v-for="option in effectiveOptions" :key="option.value" class="choice-chip" :class="{ active: form.effective_mode === option.value }" @click="form.effective_mode = option.value">{{ option.label }}</view></view>
-            </view>
-            <view class="choice-block choice-block--border">
-                <text class="choice-label">有效期</text>
-                <view class="choice-list"><view v-for="option in validityOptions" :key="option.value" class="choice-chip" :class="{ active: form.validity_mode === option.value }" @click="form.validity_mode = option.value">{{ option.label }}</view></view>
-            </view>
-            <view v-if="form.validity_mode === 'duration'" class="form-row">
-                <text class="required">固定时长</text>
-                <view class="duration-field"><u-number-box v-model="form.duration_value" :min="1" :max="3650" /><view class="unit-toggle" @click="form.duration_unit = form.duration_unit === 'day' ? 'month' : 'day'">{{ form.duration_unit === 'day' ? '天' : '个月' }}</view></view>
+            <view class="flex min-w-0 flex-1 flex-col gap-[4rpx]">
+                <text class="text-[31rpx] font-bold text-[#1e293b]">{{ id ? '编辑服务卡' : '新增服务卡' }}</text>
+                <text class="text-[23rpx] text-[#64748b]">设置售价、权益次数和有效期</text>
             </view>
         </view>
 
-        <view class="form-card mc-surface">
-            <view class="mc-form-title">使用说明</view>
-            <u-textarea v-model="form.usage_notice" height="130rpx" maxlength="1000" placeholder="填写适用范围、注意事项等（选填）" />
+        <!-- 基础信息卡片 -->
+        <view class="mb-[18rpx] overflow-hidden rounded-[28rpx] bg-white shadow-[0_8rpx_30rpx_rgba(15,23,42,0.04)]">
+            <view class="px-[24rpx] pb-[4rpx] pt-[24rpx]">
+                <text class="text-[29rpx] font-bold text-[#1e293b]">基础信息</text>
+            </view>
+            <view class="min-h-[100rpx] flex items-center justify-between gap-[24rpx] border-t border-[#f1f5f9] px-[24rpx]">
+                <text class="required flex-none text-[26rpx] font-medium text-[#475569]">卡种名称</text>
+                <u-input v-model="form.product_name" border="none" inputAlign="right" placeholder="例如：9.9 元贴膜 10 次卡" class="flex-1 text-[26rpx]" />
+            </view>
+            <view class="min-h-[100rpx] flex items-center justify-between gap-[24rpx] border-t border-[#f1f5f9] px-[24rpx]">
+                <text class="required flex-none text-[26rpx] font-medium text-[#475569]">销售价</text>
+                <u-input v-model="form.sale_price" type="digit" border="none" inputAlign="right" placeholder="0.00" class="flex-1 text-[26rpx]">
+                    <template #suffix><text class="text-[25rpx] text-[#475569]">元</text></template>
+                </u-input>
+            </view>
+            <view class="min-h-[100rpx] flex items-center justify-between gap-[24rpx] border-t border-[#f1f5f9] px-[24rpx]">
+                <text class="flex-none text-[26rpx] font-medium text-[#475569]">划线价</text>
+                <u-input v-model="form.market_price" type="digit" border="none" inputAlign="right" placeholder="选填" class="flex-1 text-[26rpx]">
+                    <template #suffix><text class="text-[25rpx] text-[#475569]">元</text></template>
+                </u-input>
+            </view>
         </view>
 
-        <view class="mc-bottom-action"><MemberCardButton type="primary" icon="checkmark" :text="id ? '保存修改' : '保存并启用'" :loading="submitting" @click="submit" /></view>
+        <!-- 服务权益卡片 -->
+        <view class="mb-[18rpx] overflow-hidden rounded-[28rpx] bg-white shadow-[0_8rpx_30rpx_rgba(15,23,42,0.04)]">
+            <view class="px-[24rpx] pb-[4rpx] pt-[24rpx]">
+                <text class="text-[29rpx] font-bold text-[#1e293b]">服务权益</text>
+            </view>
+            <view class="min-h-[100rpx] flex items-center justify-between gap-[24rpx] border-t border-[#f1f5f9] px-[24rpx]">
+                <text class="required flex-none text-[26rpx] font-medium text-[#475569]">权益名称</text>
+                <u-input v-model="form.item.item_name" border="none" inputAlign="right" placeholder="例如：贴膜服务" class="flex-1 text-[26rpx]" />
+            </view>
+            <view class="border-t border-[#f1f5f9] px-[24rpx] py-[22rpx]">
+                <text class="mb-[16rpx] block text-[26rpx] font-medium text-[#475569]">次数模式</text>
+                <view class="flex flex-wrap gap-[12rpx]">
+                    <view
+                        v-for="option in usageOptions"
+                        :key="option.value"
+                        class="rounded-[14rpx] border px-[22rpx] py-[14rpx] text-[24rpx] font-medium transition-all"
+                        :class="form.item.usage_mode === option.value ? 'border-[#93c5fd] bg-[#eff6ff] text-[#2563eb]' : 'border-[#e8ecf1] bg-[#f8fafc] text-[#475569]'"
+                        @click="form.item.usage_mode = option.value"
+                    >
+                        {{ option.label }}
+                    </view>
+                </view>
+            </view>
+            <view v-if="form.item.usage_mode === 'limited'" class="min-h-[100rpx] flex items-center justify-between gap-[24rpx] border-t border-[#f1f5f9] px-[24rpx]">
+                <text class="required text-[26rpx] font-medium text-[#475569]">可用次数</text>
+                <u-number-box v-model="form.item.total_times" :min="1" :max="9999" />
+            </view>
+            <view class="min-h-[100rpx] flex items-center justify-between gap-[24rpx] border-t border-[#f1f5f9] px-[24rpx]">
+                <text class="text-[26rpx] font-medium text-[#475569]">每日上限</text>
+                <view class="flex items-center gap-[12rpx]">
+                    <u-number-box v-model="form.item.daily_limit" :min="0" :max="99" />
+                    <text class="text-[21rpx] text-[#94a3b8]">0 表示不限</text>
+                </view>
+            </view>
+        </view>
+
+        <!-- 生效与有效期卡片 -->
+        <view class="mb-[18rpx] overflow-hidden rounded-[28rpx] bg-white shadow-[0_8rpx_30rpx_rgba(15,23,42,0.04)]">
+            <view class="px-[24rpx] pb-[4rpx] pt-[24rpx]">
+                <text class="text-[29rpx] font-bold text-[#1e293b]">生效与有效期</text>
+            </view>
+            <view class="border-t border-[#f1f5f9] px-[24rpx] py-[22rpx]">
+                <text class="mb-[16rpx] block text-[26rpx] font-medium text-[#475569]">生效方式</text>
+                <view class="flex flex-wrap gap-[12rpx]">
+                    <view
+                        v-for="option in effectiveOptions"
+                        :key="option.value"
+                        class="rounded-[14rpx] border px-[22rpx] py-[14rpx] text-[24rpx] font-medium transition-all"
+                        :class="form.effective_mode === option.value ? 'border-[#93c5fd] bg-[#eff6ff] text-[#2563eb]' : 'border-[#e8ecf1] bg-[#f8fafc] text-[#475569]'"
+                        @click="form.effective_mode = option.value"
+                    >
+                        {{ option.label }}
+                    </view>
+                </view>
+            </view>
+            <view class="border-t border-[#f1f5f9] px-[24rpx] py-[22rpx]">
+                <text class="mb-[16rpx] block text-[26rpx] font-medium text-[#475569]">有效期</text>
+                <view class="flex flex-wrap gap-[12rpx]">
+                    <view
+                        v-for="option in validityOptions"
+                        :key="option.value"
+                        class="rounded-[14rpx] border px-[22rpx] py-[14rpx] text-[24rpx] font-medium transition-all"
+                        :class="form.validity_mode === option.value ? 'border-[#93c5fd] bg-[#eff6ff] text-[#2563eb]' : 'border-[#e8ecf1] bg-[#f8fafc] text-[#475569]'"
+                        @click="form.validity_mode = option.value"
+                    >
+                        {{ option.label }}
+                    </view>
+                </view>
+            </view>
+            <view v-if="form.validity_mode === 'duration'" class="min-h-[100rpx] flex items-center justify-between gap-[24rpx] border-t border-[#f1f5f9] px-[24rpx]">
+                <text class="required text-[26rpx] font-medium text-[#475569]">固定时长</text>
+                <view class="flex items-center gap-[12rpx]">
+                    <u-number-box v-model="form.duration_value" :min="1" :max="3650" />
+                    <view
+                        class="min-w-[80rpx] rounded-[12rpx] bg-[#eff6ff] px-[16rpx] py-[12rpx] text-center text-[24rpx] font-medium text-[#2563eb]"
+                        @click="form.duration_unit = form.duration_unit === 'day' ? 'month' : 'day'"
+                    >
+                        {{ form.duration_unit === 'day' ? '天' : '个月' }}
+                    </view>
+                </view>
+            </view>
+        </view>
+
+        <!-- 使用说明卡片 -->
+        <view class="mb-[18rpx] overflow-hidden rounded-[28rpx] bg-white shadow-[0_8rpx_30rpx_rgba(15,23,42,0.04)]">
+            <view class="px-[24rpx] pb-[16rpx] pt-[24rpx]">
+                <text class="text-[29rpx] font-bold text-[#1e293b]">使用说明</text>
+            </view>
+            <view class="px-[24rpx] pb-[24rpx]">
+                <u-textarea
+                    v-model="form.usage_notice"
+                    height="130rpx"
+                    maxlength="1000"
+                    placeholder="填写适用范围、注意事项等（选填）"
+                    class="!rounded-[16rpx] !bg-[#f8fafc]"
+                />
+            </view>
+        </view>
+
+        <!-- 底部保存按钮 毛玻璃统一风格 -->
+        <view
+            class="fixed bottom-0 left-0 right-0 z-20 border-t border-[#e8ecf1] bg-white/80 px-[24rpx] pt-[16rpx] backdrop-blur-[20rpx]"
+            :style="{ paddingBottom: 'calc(16rpx + env(safe-area-inset-bottom))' }"
+        >
+            <MemberCardButton
+                type="primary"
+                icon="checkmark"
+                :text="id ? '保存修改' : '保存并启用'"
+                :loading="submitting"
+                @click="submit"
+                class="!h-[88rpx] !rounded-[20rpx] !text-[29rpx] !font-bold shadow-[0_8rpx_20rpx_rgba(37,99,235,0.25)]"
+            />
+        </view>
     </view>
 </template>
 
@@ -88,20 +190,6 @@ onLoad(async (options: any) => {
 </script>
 
 <style scoped lang="scss">
-@import '../../styles/member-card-mobile.scss';
-.product-edit-page { padding-bottom: 150rpx; }
-.edit-summary { display: flex; margin-bottom: 18rpx; padding: 24rpx; align-items: center; gap: 16rpx; }
-.edit-summary__icon { display: flex; width: 64rpx; height: 64rpx; align-items: center; justify-content: center; border-radius: 16rpx; background: #eff6ff; }
-.edit-summary > view:last-child { display: flex; flex-direction: column; gap: 5rpx; }.edit-summary strong { font-size: 31rpx; }.edit-summary text { color: #64748b; font-size: 21rpx; }
-.form-card { margin-bottom: 18rpx; padding: 0 24rpx; overflow: hidden; }
-.mc-form-title { padding: 22rpx 0 12rpx; color: #0f172a; font-size: 25rpx; font-weight: 700; }
-.form-row { display: flex; min-height: 94rpx; align-items: center; justify-content: space-between; gap: 24rpx; border-top: 1rpx solid #edf1f6; }
-.form-row > text { flex: 0 0 auto; font-size: 25rpx; }.form-row :deep(.u-input) { min-width: 0; flex: 1; }
 .required::after { margin-left: 5rpx; color: #dc2626; content: '*'; }.suffix { color: #475569; font-size: 24rpx; }
-.choice-block { padding: 20rpx 0; border-top: 1rpx solid #edf1f6; }.choice-block--border { border-top: 1rpx solid #edf1f6; }
-.choice-label { display: block; margin-bottom: 15rpx; font-size: 25rpx; }
-.choice-list { display: flex; flex-wrap: wrap; gap: 12rpx; }.choice-chip { padding: 15rpx 22rpx; border: 1rpx solid #e2e8f0; border-radius: 12rpx; background: #f8fafc; color: #475569; font-size: 23rpx; }.choice-chip.active { border-color: #93c5fd; background: #eff6ff; color: #2563eb; font-weight: 650; }
-.number-with-tip { display: flex; align-items: center; gap: 12rpx; }.number-with-tip small { color: #94a3b8; font-size: 19rpx; }
-.duration-field { display: flex; align-items: center; gap: 12rpx; }.unit-toggle { min-width: 78rpx; padding: 12rpx 15rpx; border-radius: 10rpx; background: #eff6ff; color: #2563eb; text-align: center; font-size: 22rpx; }
-.form-card :deep(.u-textarea) { margin: 8rpx 0 24rpx; background: #f8fafc; }
+:deep(.u-textarea) { margin: 8rpx 0 24rpx; background: #f8fafc; }
 </style>

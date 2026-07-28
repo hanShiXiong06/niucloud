@@ -27,5 +27,9 @@ $assert(
     str_contains($source, 'throw $e;'),
     '业务异常必须交给调度器记录失败状态'
 );
+$assert(
+    str_contains($source, 'retryFailedExternalRequests'),
+    '商城退款已成功但ERP消费失败时，调度任务必须补偿入站退款事实'
+);
 
 echo "[PASS] ERP domain event retry schedule contract smoke test\n";

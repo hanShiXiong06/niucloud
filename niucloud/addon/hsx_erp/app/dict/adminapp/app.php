@@ -88,7 +88,7 @@ return [
         'name' => '成本调整',
         'key' => 'hsx_erp_cost_adjust',
         'group' => 'hsx_erp',
-        'menu_key' => '',
+        'menu_key' => 'hsx_erp_cost_adjust',
         'sort' => 17,
         'page' => '/addon/hsx_erp/pages/cost_adjust/list',
         'icon' => '/addon/hsx_erp/site-app/icon_08.png'
@@ -98,7 +98,7 @@ return [
         'name' => '串号追踪',
         'key' => 'hsx_erp_serial_trace',
         'group' => 'hsx_erp',
-        'menu_key' => '',
+        'menu_key' => 'hsx_erp_serial_trace',
         'sort' => 18,
         'page' => '/addon/hsx_erp/pages/serial_trace/list',
         'icon' => '/addon/hsx_erp/site-app/icon_09.png'

@@ -12,6 +12,8 @@ use think\facade\Db;
 
 class ErpCapitalAccountService extends BaseAdminService
 {
+    public const WECHAT_CLEARING_ACCOUNT_NO = 'system:phone_shop:wechat_clearing';
+
     public const TYPE_MAP = [
         'cash' => '现金',
         'wechat' => '微信',
@@ -168,6 +170,39 @@ class ErpCapitalAccountService extends BaseAdminService
     public function typeMap(): array
     {
         return self::TYPE_MAP;
+    }
+
+    /**
+     * 获取商城线上支付清算账户。
+     *
+     * 该账户表达“支付渠道已收、尚未提现到银行卡”的真实资金位置，商城普通
+     * 商品与 ERP 一物一码设备必须共用，不能因来源不同生成两套资金口径。
+     */
+    public static function ensureWechatClearingAccount(int $siteId): ErpCapitalAccount
+    {
+        if ($siteId <= 0) throw new CommonException('线上支付缺少有效站点');
+        $account = ErpCapitalAccount::where([
+            ['site_id', '=', $siteId],
+            ['account_no', '=', self::WECHAT_CLEARING_ACCOUNT_NO],
+        ])->findOrEmpty();
+        if (!$account->isEmpty()) return $account;
+
+        $now = time();
+        return ErpCapitalAccount::create([
+            'site_id' => $siteId,
+            'account_name' => '微信支付待结算',
+            'account_type' => 'wechat',
+            'bank_name' => '微信支付',
+            'account_no' => self::WECHAT_CLEARING_ACCOUNT_NO,
+            'holder' => '',
+            'balance' => 0,
+            'is_default' => 0,
+            'status' => 1,
+            'sort' => 900,
+            'remark' => '系统清算账户：商城线上支付、渠道手续费及退款自动留痕',
+            'create_at' => $now,
+            'update_at' => $now,
+        ]);
     }
 
     /** 兼容既有调用；实际字典由 FinanceDict 统一维护。 */

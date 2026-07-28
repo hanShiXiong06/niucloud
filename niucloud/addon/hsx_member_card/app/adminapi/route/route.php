@@ -47,4 +47,9 @@ Route::group('member_card', function () {
     Route::get('refund/lists', 'addon\hsx_member_card\app\adminapi\controller\Refund@lists');
     Route::get('refund/:id', 'addon\hsx_member_card\app\adminapi\controller\Refund@info');
     Route::post('refund/:id/retry_finance', 'addon\hsx_member_card\app\adminapi\controller\Refund@retryFinance');
+
+    Route::post('migration/start', 'addon\hsx_member_card\app\adminapi\controller\Migration@start');
+    Route::get('migration/lists', 'addon\hsx_member_card\app\adminapi\controller\Migration@lists');
+    Route::get('migration/:id/items', 'addon\hsx_member_card\app\adminapi\controller\Migration@items');
+    Route::get('migration/:id', 'addon\hsx_member_card\app\adminapi\controller\Migration@info');
 })->middleware([AdminCheckToken::class, AdminCheckRole::class, AdminLog::class]);

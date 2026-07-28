@@ -12,21 +12,31 @@ final class DomainEventRetry extends BaseJob
     public function doJob(array $params = []): string
     {
         try {
-            $result = (new ErpIntegrationService())->retryPendingDomainEvents(
+            $service = new ErpIntegrationService();
+            $outbox = $service->retryPendingDomainEvents(
                 (int)($params['site_id'] ?? 0),
                 (int)($params['limit'] ?? 100)
             );
-            if ((int)$result['failed'] > 0 || (int)$result['dead'] > 0) {
-                Log::warning('ERP跨插件事件补偿仍有失败', $result);
+            $inbox = $service->retryFailedExternalRequests(
+                (int)($params['site_id'] ?? 0),
+                (int)($params['limit'] ?? 100)
+            );
+            if ((int)$outbox['failed'] > 0 || (int)$outbox['dead'] > 0
+                || (int)$inbox['failed'] > 0 || (int)$inbox['dead'] > 0) {
+                Log::warning('ERP跨插件事件补偿仍有失败', ['outbox' => $outbox, 'inbox' => $inbox]);
             }
             // 调度器会把 Job 返回值写入 sys_schedule_log.execute_result 文本字段，
             // 不能返回关联数组，否则 ThinkORM 会将其误认为字段更新表达式。
             return sprintf(
-                '扫描 %d 条，成功 %d 条，失败 %d 条，待人工处理 %d 条',
-                (int)($result['scanned'] ?? 0),
-                (int)($result['done'] ?? 0),
-                (int)($result['failed'] ?? 0),
-                (int)($result['dead'] ?? 0)
+                '发件箱：扫描 %d/成功 %d/失败 %d/人工 %d；退款收件箱：扫描 %d/成功 %d/失败 %d/人工 %d',
+                (int)($outbox['scanned'] ?? 0),
+                (int)($outbox['done'] ?? 0),
+                (int)($outbox['failed'] ?? 0),
+                (int)($outbox['dead'] ?? 0),
+                (int)($inbox['scanned'] ?? 0),
+                (int)($inbox['done'] ?? 0),
+                (int)($inbox['failed'] ?? 0),
+                (int)($inbox['dead'] ?? 0)
             );
         } catch (\Throwable $e) {
             Log::error('ERP跨插件事件补偿失败：' . $e->getMessage());

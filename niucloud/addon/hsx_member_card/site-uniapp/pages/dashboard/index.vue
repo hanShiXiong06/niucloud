@@ -1,55 +1,96 @@
 <template>
-    <view class="mc-page dashboard-page">
-        <view class="dashboard-hero mc-surface">
-            <view class="hero-main">
-                <view class="hero-icon"><u-icon name="account" color="#ffffff" size="23" /></view>
-                <view class="hero-copy"><strong>会员服务</strong><text>开卡、收款、核销一站完成</text></view>
-                <view class="hero-count"><strong>{{ overview.active_card_count || 0 }}</strong><text>有效卡</text></view>
+    <view class="min-h-screen bg-[#f5f6f8] px-[24rpx] pb-[60rpx] pt-[24rpx] text-[#1f2937]">
+        <view class="overflow-hidden rounded-[28rpx] bg-[#2468f2] px-[28rpx] pb-[26rpx] pt-[28rpx] text-white">
+            <view class="flex items-center justify-between">
+                <view>
+                    <text class="block text-[34rpx] font-bold">会员卡</text>
+                    <text class="mt-[6rpx] block text-[23rpx] text-[rgba(255,255,255,0.75)]">门店开卡与核销</text>
+                </view>
+                <view class="rounded-[18rpx] bg-[rgba(255,255,255,0.14)] px-[22rpx] py-[14rpx] text-right">
+                    <text class="block text-[36rpx] font-bold leading-none">{{ overview.active_card_count || 0 }}</text>
+                    <text class="mt-[6rpx] block text-[20rpx] text-[rgba(255,255,255,0.72)]">有效卡</text>
+                </view>
             </view>
-            <view class="hero-actions">
-                <view @click="go('/addon/hsx_member_card/pages/order/create')"><u-icon name="plus" color="#2563eb" size="19" /><text>快速开卡</text></view>
-                <view @click="go('/addon/hsx_member_card/pages/card/search')"><u-icon name="checkmark-circle" color="#16a34a" size="19" /><text>手机号核销</text></view>
-            </view>
-        </view>
-
-        <view class="stat-switch mc-surface">
-            <view :class="{ active: statMode === 'sale' }" @click="statMode = 'sale'">开卡统计</view>
-            <view :class="{ active: statMode === 'redeem' }" @click="statMode = 'redeem'">核销统计</view>
-        </view>
-
-        <view class="period-panel mc-surface">
-            <view class="period-list">
-                <view v-for="item in periods" :key="item.value" class="period-chip" :class="{ active: period === item.value }" @click="switchPeriod(item.value)">{{ item.label }}</view>
-            </view>
-            <view v-if="period === 'custom'" class="custom-period" @click="calendarShow = true"><u-icon name="calendar" color="#2563eb" size="16" /><text>{{ customRangeText || '请选择统计日期' }}</text><u-icon name="arrow-right" color="#94a3b8" size="14" /></view>
-        </view>
-
-        <view class="metric-grid">
-            <view v-for="item in metrics" :key="item.label" class="metric-card mc-surface">
-                <view class="metric-card__head"><view :class="['metric-icon', item.tone]"><u-icon :name="item.icon" :color="item.color" size="17" /></view><text>{{ item.label }}</text></view>
-                <strong :style="{ color: item.valueColor || '#0f172a' }">{{ item.value }}</strong>
-                <small>{{ item.help }}</small>
+            <view class="mt-[28rpx] grid grid-cols-2 gap-[14rpx]">
+                <view class="flex h-[78rpx] items-center justify-center gap-[10rpx] rounded-[18rpx] bg-white text-[27rpx] font-semibold text-[#2468f2]" hover-class="opacity-90" @click="go('/addon/hsx_member_card/pages/order/create')">
+                    <u-icon name="plus" color="#2468f2" size="19" />
+                    <text>快速开卡</text>
+                </view>
+                <view class="flex h-[78rpx] items-center justify-center gap-[10rpx] rounded-[18rpx] bg-[rgba(255,255,255,0.14)] text-[27rpx] font-semibold text-white" hover-class="opacity-80" @click="go('/addon/hsx_member_card/pages/card/search')">
+                    <u-icon name="scan" color="#ffffff" size="19" />
+                    <text>立即核销</text>
+                </view>
             </view>
         </view>
 
-        <view class="mc-section-head"><view class="mc-section-head__main"><text class="mc-section-head__title">常用管理</text><text class="mc-section-head__sub">高频操作</text></view><view class="refresh" @click="load"><u-icon name="reload" color="#2563eb" size="14" /><text>刷新</text></view></view>
-        <view class="manage-grid mc-surface">
-            <view v-for="item in manageActions" :key="item.path" @click="go(item.path)">
-                <view :class="['manage-icon', item.tone]"><u-icon :name="item.icon" :color="item.color" size="21" /></view>
-                <text>{{ item.label }}</text>
-                <small>{{ item.help }}</small>
+        <view class="mt-[20rpx] overflow-hidden rounded-[24rpx] bg-white">
+            <view class="flex items-center border-b border-[#eef1f5] px-[20rpx] py-[18rpx]">
+                <view class="grid flex-1 grid-cols-2 rounded-[14rpx] bg-[#f2f4f7] p-[5rpx]">
+                    <view class="rounded-[10rpx] py-[12rpx] text-center text-[25rpx]" :class="statMode === 'sale' ? 'bg-white font-semibold text-[#2468f2]' : 'text-[#7b8798]'" @click="statMode = 'sale'">开卡数据</view>
+                    <view class="rounded-[10rpx] py-[12rpx] text-center text-[25rpx]" :class="statMode === 'redeem' ? 'bg-white font-semibold text-[#2468f2]' : 'text-[#7b8798]'" @click="statMode = 'redeem'">核销数据</view>
+                </view>
+                <view class="ml-[14rpx] flex h-[54rpx] w-[54rpx] items-center justify-center rounded-full bg-[#f5f7fa]" hover-class="bg-[#edf1f5]" @click="load">
+                    <u-icon name="reload" color="#778397" size="16" />
+                </view>
+            </view>
+            <scroll-view scroll-x class="w-full whitespace-nowrap" :show-scrollbar="false">
+                <view class="inline-flex items-center gap-[8rpx] px-[20rpx] py-[16rpx]">
+                    <view v-for="item in periods" :key="item.value" class="rounded-full px-[20rpx] py-[10rpx] text-[23rpx]" :class="period === item.value ? 'bg-[#edf4ff] font-semibold text-[#2468f2]' : 'text-[#667085]'" @click="switchPeriod(item.value)">{{ item.label }}</view>
+                </view>
+            </scroll-view>
+            <view v-if="period === 'custom'" class="mx-[20rpx] mb-[12rpx] flex items-center gap-[10rpx] rounded-[14rpx] bg-[#f7f8fa] px-[16rpx] py-[14rpx] text-[23rpx] text-[#667085]" @click="calendarShow = true">
+                <u-icon name="calendar" color="#2468f2" size="16" />
+                <text class="flex-1">{{ customRangeText || '选择统计日期' }}</text>
+                <u-icon name="arrow-right" color="#a3acba" size="14" />
+            </view>
+            <view class="grid grid-cols-2 border-t border-[#eef1f5]">
+                <view v-for="item in metrics" :key="item.label" class="metric-item min-h-[118rpx] px-[22rpx] py-[20rpx]">
+                    <view class="flex items-center gap-[8rpx]">
+                        <view class="h-[8rpx] w-[8rpx] rounded-full" :style="{ backgroundColor: item.color }"></view>
+                        <text class="text-[22rpx] text-[#7b8798]">{{ item.label }}</text>
+                    </view>
+                    <text class="mt-[10rpx] block truncate text-[32rpx] font-semibold" :style="{ color: item.valueColor || '#253247' }">{{ item.value }}</text>
+                </view>
             </view>
         </view>
 
-        <view class="mc-section-head"><view class="mc-section-head__main"><text class="mc-section-head__title">业务记录</text></view></view>
-        <view class="entry-list mc-surface">
+        <view class="mb-[14rpx] mt-[30rpx] flex items-end justify-between">
+            <text class="text-[29rpx] font-bold text-[#263449]">常用功能</text>
+            <text class="text-[21rpx] text-[#98a2b3]">高频操作</text>
+        </view>
+        <view class="grid grid-cols-4 rounded-[24rpx] bg-white px-[8rpx] py-[22rpx]">
+            <view v-for="item in manageActions" :key="item.path" class="flex flex-col items-center gap-[11rpx]" hover-class="opacity-70" @click="go(item.path)">
+                <view class="flex h-[64rpx] w-[64rpx] items-center justify-center rounded-[18rpx]" :style="{ backgroundColor: item.background }">
+                    <u-icon :name="item.icon" :color="item.color" size="20" />
+                </view>
+                <text class="max-w-full truncate text-[22rpx] font-medium text-[#4b586c]">{{ item.label }}</text>
+            </view>
+        </view>
+
+        <view class="mb-[14rpx] mt-[30rpx] flex items-end justify-between">
+            <text class="text-[29rpx] font-bold text-[#263449]">业务记录</text>
+            <text class="text-[21rpx] text-[#98a2b3]">订单与核销留痕</text>
+        </view>
+        <view class="entry-list overflow-hidden rounded-[24rpx] bg-white">
             <u-cell-group :border="false">
-                <u-cell title="开卡订单" label="查看收款状态与异常订单" isLink @click="go('/addon/hsx_member_card/pages/order/list')"><template #icon><view class="mc-icon-box"><u-icon name="order" color="#2563eb" size="19" /></view></template></u-cell>
-                <u-cell title="核销记录" label="查看操作人、核销和冲正" isLink @click="go('/addon/hsx_member_card/pages/redemption/list')"><template #icon><view class="mc-icon-box mc-icon-box--green"><u-icon name="checkmark-circle" color="#16a34a" size="19" /></view></template></u-cell>
+                <u-cell title="开卡订单" label="订单、收款与退款" isLink @click="go('/addon/hsx_member_card/pages/order/list')">
+                    <template #icon><view class="mr-[16rpx] flex h-[56rpx] w-[56rpx] items-center justify-center rounded-[16rpx] bg-[#edf4ff]"><u-icon name="order" color="#2468f2" size="19" /></view></template>
+                </u-cell>
+                <u-cell title="核销记录" label="核销明细与冲正" isLink @click="go('/addon/hsx_member_card/pages/redemption/list')">
+                    <template #icon><view class="mr-[16rpx] flex h-[56rpx] w-[56rpx] items-center justify-center rounded-[16rpx] bg-[#eaf9f0]"><u-icon name="checkmark-circle" color="#16a34a" size="19" /></view></template>
+                </u-cell>
             </u-cell-group>
         </view>
 
-        <u-calendar :show="calendarShow" mode="range" title="选择统计日期" :defaultDate="customDates" :monthNum="12" @confirm="onCalendarConfirm" @close="calendarShow = false" />
+        <u-calendar
+            :show="calendarShow"
+            mode="range"
+            title="选择统计日期"
+            :defaultDate="customDates"
+            :monthNum="12"
+            @confirm="onCalendarConfirm"
+            @close="calendarShow = false"
+        />
     </view>
 </template>
 
@@ -66,10 +107,10 @@ const calendarShow = ref(false)
 const customDates = ref<string[]>([])
 const periods = [{ label: '今日', value: 'today' }, { label: '昨日', value: 'yesterday' }, { label: '本月', value: 'month' }, { label: '上月', value: 'last_month' }, { label: '自定义', value: 'custom' }]
 const manageActions = [
-    { label: '会员管理', help: '按姓名手机号找客户', icon: 'account', color: '#2563eb', tone: 'blue', path: '/addon/hsx_member_card/pages/member/list' },
-    { label: '卡种设置', help: '售价次数与有效期', icon: 'order', color: '#7c3aed', tone: 'violet', path: '/addon/hsx_member_card/pages/product/list' },
-    { label: '快速开卡', help: '选择客户完成收款', icon: 'plus', color: '#16a34a', tone: 'green', path: '/addon/hsx_member_card/pages/order/create' },
-    { label: '立即核销', help: '手机号与姓名核验', icon: 'checkmark-circle', color: '#d97706', tone: 'orange', path: '/addon/hsx_member_card/pages/card/search' },
+    { label: '会员管理', icon: 'account', color: '#2563eb', background: '#eff6ff', path: '/addon/hsx_member_card/pages/member/list' },
+    { label: '卡种设置', icon: 'order', color: '#7c3aed', background: '#f5f3ff', path: '/addon/hsx_member_card/pages/product/list' },
+    { label: '快速开卡', icon: 'plus', color: '#16a34a', background: '#ecfdf3', path: '/addon/hsx_member_card/pages/order/create' },
+    { label: '立即核销', icon: 'checkmark-circle', color: '#d97706', background: '#fff7ed', path: '/addon/hsx_member_card/pages/card/search' },
 ]
 const money = (value: any) => Number(value || 0).toFixed(2)
 const metrics = computed(() => statMode.value === 'sale' ? [
@@ -108,14 +149,9 @@ onShow(load)
 </script>
 
 <style scoped lang="scss">
-@import '../../styles/member-card-mobile.scss';
-.dashboard-page { padding-bottom: 42rpx; }
-.dashboard-hero { padding: 24rpx; overflow: hidden; }.hero-main { display: flex; align-items: center; gap: 15rpx; }.hero-icon { display: flex; width: 66rpx; height: 66rpx; flex: 0 0 66rpx; align-items: center; justify-content: center; border-radius: 17rpx; background: linear-gradient(145deg,#2563eb,#3b82f6); }.hero-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 5rpx; }.hero-copy strong { font-size: 31rpx; }.hero-copy text { color: #64748b; font-size: 21rpx; }.hero-count { display: flex; padding-left: 17rpx; border-left: 1rpx solid #e6ebf2; flex-direction: column; align-items: center; }.hero-count strong { color: #2563eb; font-size: 30rpx; }.hero-count text { color: #94a3b8; font-size: 18rpx; }
-.hero-actions { display: grid; grid-template-columns: repeat(2,1fr); margin-top: 21rpx; overflow: hidden; border: 1rpx solid #e6ebf2; border-radius: 13rpx; background: #f8fafc; }.hero-actions view { display: flex; padding: 17rpx; align-items: center; justify-content: center; gap: 8rpx; font-size: 23rpx; font-weight: 650; }.hero-actions view + view { border-left: 1rpx solid #e6ebf2; }
-.stat-switch { display: grid; grid-template-columns: repeat(2,1fr); margin-top: 18rpx; padding: 8rpx; }.stat-switch view { padding: 17rpx; border-radius: 12rpx; color: #64748b; text-align: center; font-size: 25rpx; }.stat-switch view.active { background: #eff6ff; color: #2563eb; font-weight: 700; }
-.period-panel { margin-top: 14rpx; padding: 14rpx; }.period-list { display: flex; align-items: center; justify-content: space-between; gap: 5rpx; }.period-chip { padding: 12rpx 18rpx; border-radius: 25rpx; color: #475569; font-size: 22rpx; }.period-chip.active { background: #2563eb; color: #fff; }.custom-period { display: flex; margin-top: 13rpx; padding: 14rpx 16rpx; align-items: center; gap: 9rpx; border-radius: 11rpx; background: #f8fafc; color: #475569; font-size: 21rpx; }.custom-period text { flex: 1; }
-.metric-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 14rpx; margin-top: 16rpx; }.metric-card { display: flex; min-height: 150rpx; padding: 20rpx; box-sizing: border-box; flex-direction: column; justify-content: space-between; }.metric-card__head { display: flex; align-items: center; gap: 9rpx; color: #64748b; font-size: 20rpx; }.metric-icon { display: flex; width: 36rpx; height: 36rpx; align-items: center; justify-content: center; border-radius: 9rpx; background: #eff6ff; }.metric-icon.green { background:#ecfdf3 }.metric-icon.orange { background:#fff7ed }.metric-icon.violet { background:#f5f3ff }.metric-icon.red { background:#fef2f2 }.metric-card > strong { margin-top: 13rpx; font-size: 29rpx; }.metric-card > small { margin-top: 4rpx; color: #94a3b8; font-size: 18rpx; }
-.refresh { display: flex; align-items: center; gap: 6rpx; color: #2563eb; font-size: 21rpx; }
-.manage-grid { display: grid; grid-template-columns: repeat(2,1fr); overflow: hidden; }.manage-grid > view { display: grid; min-height: 128rpx; padding: 21rpx; box-sizing: border-box; grid-template-columns: 48rpx 1fr; grid-template-rows: auto auto; column-gap: 12rpx; align-content: center; }.manage-grid > view:nth-child(odd) { border-right:1rpx solid #edf1f6 }.manage-grid > view:nth-child(-n+2) { border-bottom:1rpx solid #edf1f6 }.manage-icon { display:flex; width:48rpx; height:48rpx; grid-row:1/3; align-items:center; justify-content:center; border-radius:13rpx; background:#eff6ff }.manage-icon.green{background:#ecfdf3}.manage-icon.orange{background:#fff7ed}.manage-icon.violet{background:#f5f3ff}.manage-grid text { font-size:24rpx; font-weight:700 }.manage-grid small { margin-top:4rpx; color:#94a3b8; font-size:18rpx }
-.entry-list { overflow:hidden }.entry-list :deep(.u-cell__body) { padding:23rpx }.entry-list .mc-icon-box { width:54rpx; height:54rpx; flex-basis:54rpx; border-radius:14rpx }
+.metric-item:nth-child(odd) { border-right: 1rpx solid #eef1f5; }
+.metric-item:nth-child(-n+2) { border-bottom: 1rpx solid #eef1f5; }
+.entry-list :deep(.u-cell__body) { padding: 25rpx 22rpx; }
+.entry-list :deep(.u-cell__title-text) { color: #344054; font-size: 27rpx; font-weight: 600; }
+.entry-list :deep(.u-cell__label) { color: #98a2b3; font-size: 22rpx; }
 </style>

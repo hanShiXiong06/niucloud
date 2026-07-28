@@ -38,4 +38,9 @@ export const getCardRefunds = (params: Record<string, any> = {}) => request.get(
 export const getCardRefund = (id: number) => request.get(`member_card/refund/${id}`)
 export const retryCardRefundFinance = (id: number, data: Record<string, any> = {}) => request.post(`member_card/refund/${id}/retry_finance`, data)
 
+export const startMemberCardMigration = (data: { phone: string; password: string }) => request.post('member_card/migration/start', data)
+export const getMemberCardMigrationTasks = (params: Record<string, any> = {}) => request.get('member_card/migration/lists', { params })
+export const getMemberCardMigrationTask = (id: number) => request.get(`member_card/migration/${id}`)
+export const getMemberCardMigrationItems = (id: number, params: Record<string, any> = {}) => request.get(`member_card/migration/${id}/items`, { params })
+
 export const memberCardRequestId = (prefix: string) => `${prefix}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 12)}`

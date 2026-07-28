@@ -1,3 +1,6 @@
+DROP TABLE IF EXISTS `{{prefix}}member_card_external_binding`;
+DROP TABLE IF EXISTS `{{prefix}}member_card_migration_item`;
+DROP TABLE IF EXISTS `{{prefix}}member_card_migration_task`;
 DROP TABLE IF EXISTS `{{prefix}}member_card_outbox_event`;
 DROP TABLE IF EXISTS `{{prefix}}member_card_inbox_event`;
 DROP TABLE IF EXISTS `{{prefix}}member_card_operation_log`;

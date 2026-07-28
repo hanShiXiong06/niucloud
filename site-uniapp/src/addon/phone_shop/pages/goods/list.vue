@@ -1,13 +1,40 @@
 <template>
     <view class="min-h-[100vh] bg-[var(--page-bg-color)]" :style="themeColor()">
-        <!-- 顶部 -->
-        <view class="top-bar">
+        <!-- 顶部：小程序将搜索、扫码、筛选收进自定义导航区，给商品列表留出更多空间 -->
+        <view class="top-bar" :class="{ 'top-bar--mp': isMp }">
+            <!-- #ifdef MP -->
+            <view class="custom-nav" :style="customNavStyle">
+                <view class="custom-nav__back" @tap="handleNavAction">
+                    <u-icon :name="canGoBack ? 'arrow-left' : 'home'" color="#172033" size="21"></u-icon>
+                </view>
+                <view class="search-input search-input--compact">
+                    <u-icon name="search" color="#9098A3" size="17"></u-icon>
+                    <input class="flex-1 text-[24rpx] ml-[10rpx]" v-model="keyword" placeholder="商品名称 / IMEI" placeholder-class="ph" confirm-type="search" @confirm="reload" />
+                    <u-icon v-if="keyword" name="close-circle-fill" color="#c4c4c4" size="17" @click="keyword=''; reload()"></u-icon>
+                    <view class="nav-icon-btn nav-icon-btn--scan" @click="scanKeyword">
+                        <u-icon name="scan" color="var(--primary-color)" size="19"></u-icon>
+                    </view>
+                    <view class="nav-icon-btn" :class="{ 'nav-icon-btn--on': filterCount }" @click="openFilter">
+                        <u-icon name="list" :color="filterCount ? 'var(--primary-color)' : '#64748b'" size="19"></u-icon>
+                        <text v-if="filterCount" class="filter-badge">{{ filterCount > 9 ? '9+' : filterCount }}</text>
+                    </view>
+                </view>
+            </view>
+            <!-- #endif -->
+
+            <!-- #ifndef MP -->
             <view class="search-input">
                 <u-icon name="search" color="#9098A3" size="18"></u-icon>
                 <input class="flex-1 text-[28rpx] ml-[12rpx]" v-model="keyword" placeholder="搜索商品名称 / IMEI" placeholder-class="ph" confirm-type="search" @confirm="reload" />
                 <u-icon v-if="keyword" name="close-circle-fill" color="#c4c4c4" size="18" @click="keyword=''; reload()"></u-icon>
                 <u-icon class="ml-[16rpx]" name="scan" color="var(--primary-color)" size="20" @click="scanKeyword"></u-icon>
+                <view class="nav-icon-btn ml-[12rpx]" :class="{ 'nav-icon-btn--on': filterCount }" @click="openFilter">
+                    <u-icon name="list" :color="filterCount ? 'var(--primary-color)' : '#64748b'" size="19"></u-icon>
+                    <text v-if="filterCount" class="filter-badge">{{ filterCount > 9 ? '9+' : filterCount }}</text>
+                </view>
             </view>
+            <!-- #endif -->
+
             <view class="bar-row">
                 <view class="tabs">
                     <view v-for="tab in statusTabs" :key="tab.value" class="tab" :class="{ 'tab--on': statusFilter === tab.value }" @click="changeStatus(tab.value)">{{ tab.label }}</view>
@@ -17,15 +44,11 @@
                         <text :class="{ 'op--on': sortIdx > 0 }">排序</text>
                         <u-icon name="arrow-down" :color="sortIdx > 0 ? 'var(--primary-color)' : '#9098A3'" size="13"></u-icon>
                     </view>
-                    <view class="op" @click="openFilter">
-                        <u-icon name="list" :color="filterCount ? 'var(--primary-color)' : '#666'" size="16"></u-icon>
-                        <text :class="{ 'op--on': filterCount }">筛选<text v-if="filterCount">({{ filterCount }})</text></text>
-                    </view>
                 </view>
             </view>
         </view>
 
-        <mescroll-body ref="mescrollRef" @init="mescrollInit" :down="{ use: true }" @down="downCallback" @up="getListFn" :up="{ noMoreSize: 4, empty: { tip: '没有符合条件的商品' } }" top="220">
+        <mescroll-body ref="mescrollRef" @init="mescrollInit" :down="{ use: true }" @down="downCallback" @up="getListFn" :up="{ noMoreSize: 4, empty: { tip: '没有符合条件的商品' } }" :top="listTop">
             <view class="px-[24rpx] pt-[20rpx]">
                 <view class="goods-card" v-for="item in list" :key="item.goods_id">
                     <view class="flex">
@@ -117,7 +140,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue';
 import { onLoad, onShow, onPageScroll, onReachBottom } from '@dcloudio/uni-app';
-import { img, redirect } from '@/utils/common';
+import { img, pxToRpx, redirect } from '@/utils/common';
 import MescrollBody from '@/components/mescroll/mescroll-body/mescroll-body.vue';
 import useMescroll from '@/components/mescroll/hooks/useMescroll.js';
 import CategoryPopup from '@/addon/phone_shop/components/category-popup.vue';
@@ -132,6 +155,48 @@ const statusFilter = ref<any>('');
 const isMasterSite = ref(true);
 const firstLoaded = ref(false);
 const pageSource = ref('');
+const isMp = ref(false);
+
+// #ifdef MP
+isMp.value = true;
+// #endif
+
+const navbarMetrics = (() => {
+    const systemInfo = uni.getSystemInfoSync();
+    let menuButtonInfo: any = null;
+    try {
+        // #ifdef MP-WEIXIN || MP-BAIDU || MP-TOUTIAO || MP-QQ
+        menuButtonInfo = uni.getMenuButtonBoundingClientRect();
+        // #endif
+    } catch (error) {}
+
+    const statusTopPx = Number(menuButtonInfo?.top ?? systemInfo.statusBarHeight ?? 0);
+    const contentHeightPx = Number(menuButtonInfo?.height || 32);
+    const bottomGapPx = 8;
+    const windowWidth = Number(systemInfo.windowWidth || 375);
+    const rightInsetPx = menuButtonInfo?.left
+        ? Math.max(12, windowWidth - Number(menuButtonInfo.left) + 8)
+        : 12;
+
+    return {
+        statusTopPx,
+        contentHeightPx,
+        bottomGapPx,
+        rightInsetPx,
+        navbarHeightPx: statusTopPx + contentHeightPx + bottomGapPx
+    };
+})();
+const customNavStyle = [
+    `height:${ navbarMetrics.navbarHeightPx }px`,
+    `padding-top:${ navbarMetrics.statusTopPx }px`,
+    `padding-bottom:${ navbarMetrics.bottomGapPx }px`,
+    `padding-right:${ navbarMetrics.rightInsetPx }px`
+].join(';') + ';';
+const listTop = computed(() => isMp.value
+    ? `${ pxToRpx(navbarMetrics.navbarHeightPx) + 88 }rpx`
+    : '220rpx'
+);
+const canGoBack = computed(() => getCurrentPages().length > 1);
 
 const SELF_SOURCE = '100024';
 const AGENT_SOURCE = '100005';
@@ -236,6 +301,17 @@ const resetFilter = () => {
     reload();
 };
 
+const handleNavAction = () => {
+    if (canGoBack.value) {
+        uni.navigateBack({
+            delta: 1,
+            fail: () => uni.reLaunch({ url: '/app/pages/index/index' })
+        });
+        return;
+    }
+    uni.reLaunch({ url: '/app/pages/index/index' });
+};
+
 const loadOptions = () => {
     getSpecGroup({ category_id: 0 }).then((res: any) => {
         const groups = res.data || [];
@@ -268,10 +344,20 @@ onShow(() => { if (firstLoaded.value && getMescroll()) getMescroll().resetUpScro
 </script>
 
 <style lang="scss" scoped>
-.top-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 10; background: var(--page-bg-color); padding: 20rpx 24rpx 14rpx; }
+.top-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: var(--page-bg-color); padding: 20rpx 24rpx 14rpx; box-sizing: border-box; }
+.top-bar--mp { padding: 0 18rpx 12rpx; background: #fff; border-bottom: 1rpx solid #eef2f7; box-shadow: 0 4rpx 14rpx rgba(15, 23, 42, 0.04); }
+.custom-nav { width: 100%; display: flex; align-items: center; gap: 8rpx; box-sizing: border-box; }
+.custom-nav__back { width: 56rpx; height: 56rpx; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border-radius: 50%; }
+.custom-nav__back:active { background: #f2f4f7; }
 .search-input { height: 72rpx; background: #fff; border-radius: 36rpx; display: flex; align-items: center; padding: 0 28rpx; }
+.search-input--compact { height: 60rpx; min-width: 0; flex: 1; padding: 0 14rpx; background: #f5f7fa; border-radius: 30rpx; }
+.nav-icon-btn { position: relative; width: 42rpx; height: 42rpx; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: #f8fafc; }
+.nav-icon-btn--scan { margin-left: 6rpx; background: #eff3ff; }
+.nav-icon-btn--on { background: var(--primary-color-light, #e6fff5); }
+.filter-badge { position: absolute; top: -8rpx; right: -8rpx; min-width: 28rpx; height: 28rpx; padding: 0 6rpx; border-radius: 14rpx; background: #ef4444; color: #fff; font-size: 18rpx; line-height: 28rpx; text-align: center; box-sizing: border-box; }
 .ph { color: #c4c8cf; }
 .bar-row { display: flex; align-items: center; justify-content: space-between; margin-top: 16rpx; }
+.top-bar--mp .bar-row { margin-top: 8rpx; padding: 0 6rpx; }
 .tabs { display: flex; gap: 14rpx; }
 .tab { padding: 8rpx 26rpx; font-size: 26rpx; color: #666; background: #fff; border-radius: 28rpx; border: 2rpx solid transparent; }
 .tab--on { color: var(--primary-color); background: var(--primary-color-light, #E6FFF5); border-color: var(--primary-color); font-weight: 600; }

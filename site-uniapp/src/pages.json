@@ -194,6 +194,9 @@
 				{
 					"path": "pages/goods/list",
 					"style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 						"navigationBarTitleText": "商品管理"
 					},
 					"needLogin": true
@@ -613,7 +616,11 @@
 				},
 				{
 					"path": "pages/sale_return/list",
-					"style": { "navigationBarTitleText": "销售退货" },
+					"style": {// #ifdef MP
+						"navigationStyle": "custom",
+						// #endif
+						"navigationBarTitleText": "销售退货"
+					},	
 					"needLogin": true
 				},
 				{

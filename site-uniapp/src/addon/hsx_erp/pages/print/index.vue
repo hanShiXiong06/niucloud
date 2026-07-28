@@ -1,7 +1,9 @@
 <template>
     <view class="erp-page print-page">
         <view class="hero-card">
-            <view class="hero-icon"><u-icon name="printer" color="#2563eb" size="25" /></view>
+            <view class="hero-icon">
+                 <text class="recycle recycle-printer"></text>
+            </view>
             <view class="hero-main">
                 <text class="hero-title">移动打印台</text>
                 <text class="hero-sub">云打印自动发送；蓝牙任务由当前手机连接设备后完成</text>
@@ -38,7 +40,9 @@
 
         <view v-else-if="tabIndex === 1" class="content-wrap device-list">
             <view v-for="printer in printers" :key="printer.id" class="printer-card">
-                <view class="printer-icon" :class="printer.connection_mode"><u-icon name="printer" :color="printer.connection_mode === 'bluetooth' ? '#7c3aed' : '#2563eb'" size="23" /></view>
+                <view class="printer-icon" :class="printer.connection_mode">
+                    <text class="recycle recycle-printer"></text>
+                </view>
                 <view class="printer-main"><text class="printer-name">{{ printer.printer_name }}</text><text class="printer-meta">{{ providerName(printer.driver) }} · {{ printer.print_type === 'label' ? '标签' : '小票' }} · {{ printer.paper_width }}mm</text></view>
                 <u-tag :text="printer.status ? '启用' : '停用'" :type="printer.status ? 'success' : 'info'" plain size="mini" />
                 <view class="printer-test" @click="testPrinter(printer)"><u-icon name="play-right" color="#2563eb" size="16" /><text>试打</text></view>

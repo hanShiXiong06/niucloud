@@ -3219,6 +3219,7 @@ class ErpFinanceService extends BaseAdminService
 
             $assets = $this->settlementTargetAssets($target, $side, (int)($link['asset_id'] ?? 0));
             $sourceMeta = (new ErpFinanceSourceService())->sourceMeta($target->toArray(), $side);
+            $origin = $this->settlementTargetOrigin($target, $side);
             $targets[] = [
                 'target_type' => $side,
                 'target_id' => $targetId,
@@ -3232,12 +3233,12 @@ class ErpFinanceService extends BaseAdminService
                 'source_id' => (int)$target->source_id,
                 'source_no' => (string)$target->source_no,
                 'source_meta' => $sourceMeta,
-                'origin' => [
-                    'plugin' => (string)($target->origin_plugin ?? ''),
-                    'type' => (string)($target->origin_type ?? ''),
-                    'id' => (string)($target->origin_id ?? ''),
-                    'no' => (string)($target->origin_no ?? ''),
-                ],
+                'origin' => $origin,
+                // 同一商城订单可能同时含ERP设备和商城普通商品，状态回写必须按
+                // 原订单聚合，而不是用当前一张应收的局部结算额覆盖商城状态。
+                'origin_finance' => $side === ErpDict::TARGET_RECEIVABLE
+                    ? $this->settlementOriginReceivableSummary($origin, $target)
+                    : null,
                 'asset' => $assets[0] ?? null,
                 'assets' => $assets,
             ];
@@ -3247,9 +3248,12 @@ class ErpFinanceService extends BaseAdminService
         foreach ($targets as $target) {
             if ((string)($target['origin']['plugin'] ?? '') === 'hsx_recycle') {
                 $requiredConsumers[] = 'hsx_recycle';
-                break;
+            }
+            if ((string)($target['origin']['plugin'] ?? '') === 'phone_shop') {
+                $requiredConsumers[] = 'phone_shop.erp_credit_state';
             }
         }
+        $requiredConsumers = array_values(array_unique($requiredConsumers));
         $queued = (new ErpIntegrationService())->enqueueDomainEvent(
             'erp.settlement.completed.v1',
             'settlement',
@@ -3272,6 +3276,91 @@ class ErpFinanceService extends BaseAdminService
             $requiredConsumers
         );
         $this->settlementOutboxIds[] = (int)$queued['id'];
+    }
+
+    /** 历史应收可能未固化origin字段，使用其销售单快照补齐跨插件身份。 */
+    private function settlementTargetOrigin($target, string $side): array
+    {
+        $origin = [
+            'plugin' => (string)($target->origin_plugin ?? ''),
+            'type' => (string)($target->origin_type ?? ''),
+            'id' => (string)($target->origin_id ?? ''),
+            'no' => (string)($target->origin_no ?? ''),
+        ];
+        if ($side === ErpDict::TARGET_RECEIVABLE
+            && ((string)($target->source_type ?? '') === 'sale'
+                || str_starts_with((string)($target->source_type ?? ''), 'phone_shop.'))) {
+            $sale = ErpSaleOrder::where([
+                ['site_id', '=', $this->site_id],
+                ['id', '=', (int)($target->source_id ?? 0)],
+            ])->findOrEmpty();
+            if (!$sale->isEmpty()) {
+                $salePlugin = (string)($sale->origin_plugin ?? '');
+                if ($salePlugin !== '' && ($origin['plugin'] === '' || $origin['plugin'] === 'hsx_erp' || $salePlugin === 'phone_shop')) {
+                    $origin['plugin'] = $salePlugin;
+                    $origin['type'] = (string)($sale->origin_type ?? $origin['type']);
+                    $origin['id'] = (string)($sale->origin_id ?? $origin['id']);
+                    $origin['no'] = (string)($sale->origin_no ?? $origin['no']);
+                }
+            }
+        }
+        if (($origin['plugin'] === '' || $origin['plugin'] === 'hsx_erp')
+            && str_starts_with((string)($target->source_type ?? ''), 'phone_shop.')) {
+            $origin['plugin'] = 'phone_shop';
+        }
+        return $origin;
+    }
+
+    /** @return array{target_amount:float,settled_amount:float,remaining_amount:float,finance_status:string} */
+    private function settlementOriginReceivableSummary(array $origin, $target): array
+    {
+        $ids = [];
+        $plugin = (string)($origin['plugin'] ?? '');
+        $originId = (string)($origin['id'] ?? '');
+        if ($plugin !== '' && $originId !== '') {
+            $ids = array_map('intval', ErpReceivable::where([
+                ['site_id', '=', $this->site_id],
+                ['origin_plugin', '=', $plugin],
+                ['origin_id', '=', $originId],
+            ])->column('id'));
+            $saleIds = array_map('intval', ErpSaleOrder::where([
+                ['site_id', '=', $this->site_id],
+                ['origin_plugin', '=', $plugin],
+                ['origin_id', '=', $originId],
+            ])->column('id'));
+            if ($saleIds !== []) {
+                $legacyRows = ErpReceivable::where([
+                    ['site_id', '=', $this->site_id],
+                ])->whereIn('source_id', $saleIds)->field('id,source_type,origin_plugin')->select()->toArray();
+                foreach ($legacyRows as $legacyRow) {
+                    $sourceType = (string)($legacyRow['source_type'] ?? '');
+                    if ($sourceType === 'sale'
+                        || str_starts_with($sourceType, 'phone_shop.')
+                        || (string)($legacyRow['origin_plugin'] ?? '') === $plugin) {
+                        $ids[] = (int)$legacyRow['id'];
+                    }
+                }
+            }
+        }
+        $ids[] = (int)($target->id ?? 0);
+        $ids = array_values(array_unique(array_filter($ids)));
+        $rows = $ids === [] ? [] : ErpReceivable::where([
+            ['site_id', '=', $this->site_id],
+        ])->whereIn('id', $ids)->select()->toArray();
+        $amount = 0.0;
+        $settled = 0.0;
+        foreach ($rows as $row) {
+            if ((string)($row['status'] ?? '') === ErpDict::STATUS_VOID) continue;
+            $amount = round($amount + (float)($row['amount'] ?? 0), 2);
+            $settled = round($settled + min((float)($row['settled_amount'] ?? 0), (float)($row['amount'] ?? 0)), 2);
+        }
+        $remaining = max(0, round($amount - $settled, 2));
+        return [
+            'target_amount' => $amount,
+            'settled_amount' => $settled,
+            'remaining_amount' => $remaining,
+            'finance_status' => ErpDict::financeStatus($amount, $settled),
+        ];
     }
 
     /** @return array<int,array{id:int,asset_no:string,imei:string,sn:string,model:string,spec:string}> */

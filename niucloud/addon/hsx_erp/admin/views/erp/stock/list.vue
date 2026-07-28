@@ -93,6 +93,9 @@
             </el-tabs>
 
             <el-form :inline="true" class="mt-2" @submit.prevent>
+                 <el-form-item label="商品型号">
+                    <ErpCatalogProductSelect v-model="search.catalog_product_id" class="!w-[280px]" placeholder="搜索品牌、系列或型号" />
+                </el-form-item>
                 <el-form-item label="关键词">
                     <el-input v-model.trim="search.keyword" clearable class="!w-[300px]" placeholder="型号 / IMEI / 资产号 / 来源 / 仓库" @keyup.enter="handleSearch" />
                 </el-form-item>
@@ -106,9 +109,7 @@
                         <el-option v-for="item in searchLocations" :key="item.id" :label="item.location_name" :value="item.id" />
                     </el-select>
                 </el-form-item>
-                <el-form-item label="商品型号">
-                    <ErpCatalogProductSelect v-model="search.catalog_product_id" class="!w-[280px]" placeholder="搜索品牌、系列或型号" />
-                </el-form-item>
+               
                 <el-form-item label="整备">
                     <el-select v-model="search.refurbish_status" clearable class="!w-[140px]" placeholder="全部">
                         <el-option label="无需整备" value="none" />

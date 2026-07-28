@@ -11,6 +11,7 @@ use addon\hsx_member_card\app\model\MemberCardOperationLog;
 use addon\hsx_member_card\app\model\MemberCardOrder;
 use addon\hsx_member_card\app\model\MemberCardRedemption;
 use addon\hsx_member_card\app\service\core\MemberCardConfigService;
+use addon\hsx_member_card\app\service\core\MemberCardNoticeService;
 use addon\hsx_member_card\app\support\MemberCardIdempotency;
 use addon\hsx_member_card\app\support\MemberCardMoney;
 use addon\hsx_member_card\app\support\MemberCardNumber;
@@ -179,6 +180,7 @@ final class MemberCardRedemptionService extends BaseAdminService
             (new MemberCardAuditService())->record('redemption', (int)$row->id, (string)$row->redeem_no, 'redeem', [], $redemption);
         });
         $this->recordStaffFact($redemption, false);
+        (new MemberCardNoticeService())->sendRedeemSuccess($redemption);
         return $this->redeemResponse($redemption, (string)$redemption['item_name'] . '核销成功');
     }
 
@@ -188,7 +190,8 @@ final class MemberCardRedemptionService extends BaseAdminService
         $reason = mb_substr(trim((string)($data['reason'] ?? '')), 0, 255);
         if ($reason === '') throw new CommonException('核销冲正必须填写原因');
         $result = [];
-        Db::transaction(function () use ($id, $reason, &$result): void {
+        $reversedNow = false;
+        Db::transaction(function () use ($id, $reason, &$result, &$reversedNow): void {
             $redemption = MemberCardRedemption::where([['site_id', '=', $this->site_id], ['id', '=', $id]])->lock(true)->findOrEmpty();
             if ($redemption->isEmpty()) throw new CommonException('核销记录不存在');
             if ((string)$redemption->status === 'reversed') { $result = $redemption->toArray(); return; }
@@ -219,9 +222,13 @@ final class MemberCardRedemptionService extends BaseAdminService
                 'update_at' => $now,
             ]);
             $result = $redemption->toArray();
+            $reversedNow = true;
             (new MemberCardAuditService())->record('redemption', (int)$redemption->id, (string)$redemption->redeem_no, 'reverse', $before, $result);
         });
-        $this->recordStaffFact($result, true);
+        if ($reversedNow) {
+            $this->recordStaffFact($result, true);
+            (new MemberCardNoticeService())->sendRedeemReversed($result);
+        }
         return $this->redeemResponse($result, '核销已冲正，次数已恢复');
     }
 

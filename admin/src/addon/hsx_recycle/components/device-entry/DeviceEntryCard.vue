@@ -172,7 +172,7 @@ const markDirty = () => {
 }
 
 .device-card__sn {
-    flex: 0 0 150px;
+    flex: 0 0 200px;
 }
 
 .device-card__price {

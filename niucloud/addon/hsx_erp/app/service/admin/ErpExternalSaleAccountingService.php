@@ -15,31 +15,9 @@ use addon\hsx_erp\app\support\ErpIdempotency;
  */
 abstract class ErpExternalSaleAccountingService extends ErpExternalContractService
 {
-    protected const CLEARING_ACCOUNT_NO = 'system:phone_shop:wechat_clearing';
-
     protected function clearingAccount(int $siteId, int $now): ErpCapitalAccount
     {
-        $account = ErpCapitalAccount::where([
-            ['site_id', '=', $siteId],
-            ['account_no', '=', self::CLEARING_ACCOUNT_NO],
-        ])->lock(true)->findOrEmpty();
-        if (!$account->isEmpty()) return $account;
-
-        return ErpCapitalAccount::create([
-            'site_id' => $siteId,
-            'account_name' => '微信支付待结算',
-            'account_type' => 'wechat',
-            'bank_name' => '微信支付',
-            'account_no' => self::CLEARING_ACCOUNT_NO,
-            'holder' => '',
-            'balance' => 0,
-            'is_default' => 0,
-            'status' => 1,
-            'sort' => 900,
-            'remark' => '系统清算账户：商城线上支付、渠道手续费及退款自动留痕',
-            'create_at' => $now,
-            'update_at' => $now,
-        ]);
+        return ErpCapitalAccountService::ensureWechatClearingAccount($siteId);
     }
 
     protected function settlement(

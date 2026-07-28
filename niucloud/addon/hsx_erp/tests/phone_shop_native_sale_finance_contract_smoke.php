@@ -14,9 +14,11 @@ $phoneEvent = require $root . '/addon/phone_shop/app/event.php';
 $erpEvent = require $root . '/addon/hsx_erp/app/event.php';
 $payListeners = (array)($phoneEvent['listen']['PhoneShopOrderPay'] ?? []);
 $refundListeners = (array)($phoneEvent['listen']['AfterPhoneShopOrderRefundFinish'] ?? []);
+$erpDomainListeners = (array)($phoneEvent['listen']['ErpDomainEvent'] ?? []);
 
 $assert(in_array('addon\\phone_shop\\app\\listener\\erp\\PhoneShopNativeOrderPaidToErp', $payListeners, true), '商城付款必须注册原生商品财务桥');
 $assert(in_array('addon\\phone_shop\\app\\listener\\erp\\PhoneShopNativeOrderRefundedToErp', $refundListeners, true), '商城退款必须注册原生商品冲销桥');
+$assert(in_array('addon\\phone_shop\\app\\listener\\erp\\ErpSettlementCompletedListener', $erpDomainListeners, true), '商城必须消费ERP结算完成事件');
 $assert(isset($erpEvent['listen']['ErpExternalSaleRecordedRequested']), 'ERP必须注册外部商品销售契约');
 $assert(isset($erpEvent['listen']['ErpExternalSaleRefundedRequested']), 'ERP必须注册外部商品退款契约');
 $externalContract = $read('addon/hsx_erp/app/service/admin/ErpExternalContractService.php');
@@ -63,6 +65,17 @@ $assert(str_contains($offlineService, "'confirm_credit'"), '订单详情必须�
 $assert(str_contains($offlineService, '$canRetryCash'), '收款回调失败后必须允许安全重试');
 $assert(str_contains($offlineService, 'applyDealTotal'), '线下订单必须支持单台议价和多台打包总价');
 $assert(str_contains($offlineService, "'deal_amount'"), '多台打包价必须分摊到订单明细，作为单台退款上限');
+$assert(!str_contains($offlineService, "'update_time'"), '商城订单表没有update_time，确认挂账不能写入不存在的字段');
+$assert(substr_count($offlineService, '$order->save(') === 1, '确认挂账订单状态必须一次写入，避免ORM二次保存注入update_time');
+$assert(substr_count($offlineService, "'is_enable_refund' => 0") >= 2, '线下挂账订单和明细必须关闭客户退款权限');
+$orderModel = $read('addon/phone_shop/app/model/order/Order.php');
+$assert(str_contains($orderModel, 'protected $updateTime = false'), '商城订单模型必须按真实表结构关闭update_time');
+$apiRefund = $read('addon/phone_shop/app/service/api/refund/RefundActionService.php');
+$assert(str_contains($apiRefund, "!== 'online'"), '客户退款接口必须二次拦截线下订单');
+$settlementConsumer = $read('addon/phone_shop/app/listener/erp/ErpSettlementCompletedListener.php');
+foreach (['origin_finance', "'credit_status' => \$creditStatus", "'settle_status' => \$isSettled ? 1 : 0", "'is_enable_refund' => 0"] as $needle) {
+    $assert(str_contains($settlementConsumer, $needle), 'ERP结算回写商城缺少聚合进度或退款权限保护：' . $needle);
+}
 $shopRoutes = $read('addon/phone_shop/app/adminapi/route/route.php');
 $assert(str_contains($shopRoutes, 'order/offline/capital_accounts'), '商城后台缺少ERP资金账户接口');
 $assert(str_contains($shopRoutes, 'order/offline/process'), '商城后台缺少线下订单处理接口');
@@ -80,8 +93,20 @@ $assert(str_contains($refund, "'category_key' => 'sale_refund'"), '退款必须�
 $assert(str_contains($refund, "'status' => \$fullyReturned ? 'returned' : 'completed'"), '全额退款必须更新销售状态');
 $assert(str_contains($refund, "\$cashRefundAmount"), '退款资金支出必须采用实际退款总额');
 $assert(str_contains($refund, "\$payload['refund_goods_amount']"), '商品收入与成本冲销必须剔除退还运费');
+$assert(str_contains($refund, 'closeReceivableRemainder'), '线上退款必须关闭ERP剩余应收和财务待办');
+$assert(str_contains($refund, 'restoreAsset'), 'ERP一物一码商品退款必须恢复库存');
+$assert(str_contains($refund, 'erp.asset.returned.v1'), '退款恢复库存后必须通知商城商品状态');
+$integration = $read('addon/hsx_erp/app/service/admin/ErpIntegrationService.php');
+$assert(str_contains($integration, 'retryFailedExternalRequests'), '商城退款同步ERP失败后必须进入定时补偿');
+$assert(str_contains($integration, 'ErpExternalSaleRefundedService::EVENT_NAME'), '入站补偿只能处理明确支持幂等重放的退款契约');
+$assert(str_contains($externalContract, "'_retry'"), 'ERP外部请求失败必须记录补偿次数，避免无限重试');
 
 $saleService = $read('addon/hsx_erp/app/service/admin/ErpSaleService.php');
+$assetSaleListener = $read('addon/hsx_erp/app/listener/ErpSaleCreatedRequested.php');
+$assert(str_contains($saleService, "'external_line_id' => (string)\$resolvedItem['external_line_id']"), 'ERP设备销售明细必须保存商城订单行ID');
+$assert(str_contains($saleService, 'recordOnlinePaymentAdjustments'), 'ERP设备线上销售必须单独记录客户手续费补款和渠道手续费');
+$assert(str_contains($saleService, "'payment_mode' => trim"), 'ERP设备销售单必须保存线上支付方式和金额快照');
+$assert(str_contains($assetSaleListener, 'ensureWechatClearingAccount'), 'ERP设备线上支付必须进入微信支付清算账户并直接结清');
 foreach (['i.external_goods_id', 'i.external_sku_id', 'i.external_line_id', 'i.quantity', 'i.refunded_amount', 'i.refunded_cost'] as $field) {
     $assert(str_contains($saleService, "'{$field}'"), "ERP销售列表必须返回{$field}");
 }
@@ -97,5 +122,9 @@ foreach ([$pcSale, $mobileSale, $mobileDetail] as $index => $source) {
 }
 $assert(str_contains($pcSale, 'Number(row.asset_id || 0) > 0'), 'PC销售退货必须只允许真实ERP设备');
 $assert(str_contains($mobileSale, 'Number(row.asset_id || 0) <= 0'), '移动销售退货必须拦截非设备商品');
+
+$finance = $read('addon/hsx_erp/app/service/admin/ErpFinanceService.php');
+$assert(str_contains($finance, 'settlementOriginReceivableSummary'), 'ERP结算事件必须按商城原订单聚合多张应收');
+$assert(str_contains($finance, 'phone_shop.erp_credit_state'), '商城结算回写必须纳入Outbox必需消费者');
 
 echo "[PASS] phone_shop native sale -> ERP finance contract\n";

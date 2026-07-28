@@ -11,6 +11,7 @@
 
 namespace app\service\admin\site;
 
+use app\model\addon\Addon;
 use app\model\site\Site;
 use app\model\site\SiteGroup;
 use app\service\admin\diy\DiyService;
@@ -50,9 +51,58 @@ class SiteGroupService extends BaseAdminService
     public function getPage(array $where = [])
     {
         $field = 'group_id, group_name, group_desc, app, addon, create_time, update_time';
-        $search_model = $this->model->withSearch([ 'keywords' ], $where)->field($field)->append([ 'app_name','app_list', 'addon_name','addon_list' ])->order('create_time desc');
+        $search_model = $this->model->withSearch([ 'keywords' ], $where)->field($field)->order('create_time desc');
         $list = $this->pageQuery($search_model);
+        $rows = $list['data'] ?? [];
+        if (empty($rows)) return $list;
+
+        // 原模型 append 会为每条套餐分别查询应用、插件，再逐项读取同一图标。
+        // 这里收集当前页全部 key，一次查询并复用图标结果，消除 N+1。
+        $keys = [];
+        foreach ($rows as $row) {
+            $keys = array_merge($keys, (array) ($row['app'] ?? []), (array) ($row['addon'] ?? []));
+        }
+        $keys = array_values(array_unique(array_filter($keys)));
+        $addon_map = [];
+        if (!empty($keys)) {
+            $addons = (new Addon())->where([['key', 'in', $keys]])->field('key,title,icon')->select()->toArray();
+            foreach ($addons as $addon) {
+                $icon = (string) ($addon['icon'] ?? '');
+                $addon_map[$addon['key']] = [
+                    'title' => $addon['title'],
+                    // 浏览器直接读取已安装插件的静态图标，避免大图 Base64 膨胀列表响应。
+                    'icon' => $icon === '' ? '' : '/' . ltrim($icon, '/'),
+                ];
+            }
+        }
+
+        foreach ($rows as &$row) {
+            $row['app_name'] = $this->getAddonTitles((array) ($row['app'] ?? []), $addon_map);
+            $row['app_list'] = $this->getAddonItems((array) ($row['app'] ?? []), $addon_map);
+            $row['addon_name'] = $this->getAddonTitles((array) ($row['addon'] ?? []), $addon_map);
+            $row['addon_list'] = $this->getAddonItems((array) ($row['addon'] ?? []), $addon_map);
+        }
+        unset($row);
+        $list['data'] = $rows;
         return $list;
+    }
+
+    private function getAddonTitles(array $keys, array $addon_map): array
+    {
+        $titles = [];
+        foreach ($keys as $key) {
+            if (isset($addon_map[$key])) $titles[] = $addon_map[$key]['title'];
+        }
+        return $titles;
+    }
+
+    private function getAddonItems(array $keys, array $addon_map): array
+    {
+        $items = [];
+        foreach ($keys as $key) {
+            if (isset($addon_map[$key])) $items[] = $addon_map[$key];
+        }
+        return $items;
     }
 
     /**

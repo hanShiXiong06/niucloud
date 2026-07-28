@@ -15,5 +15,8 @@ return [
         'ErpDomainEvent' => [
             'addon\hsx_member_card\app\listener\ErpDomainEventListener',
         ],
+        'NoticeData' => [
+            'addon\hsx_member_card\app\listener\notice\MemberCardRedeemNotice',
+        ],
     ],
 ];

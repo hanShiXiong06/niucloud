@@ -141,15 +141,16 @@ class BaseNiucloudClient
                     // Retry on server errors
                     $response = json_decode($body, true);
                     if (isset($response['code'])) {
-                        if ($response['code'] != 1) {
-                            if (in_array(abs($response['code']), [401], true)) {
-                                $this->clearAccessToken();
-                                $this->refreshAccessToken();
-                            } else {
-                                throw new NiucloudException($response['msg']);
-                            }
+                        // 成功响应不能重试，否则每个牛云开放平台请求都会被重复发送。
+                        if ($response['code'] == 1) {
+                            return false;
                         }
-                        return true;
+                        if (in_array(abs($response['code']), [401], true)) {
+                            $this->clearAccessToken();
+                            $this->refreshAccessToken();
+                            return true;
+                        }
+                        throw new NiucloudException($response['msg']);
                     }
                 }
                 return false;

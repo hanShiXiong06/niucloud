@@ -43,7 +43,10 @@ class Addon extends BaseAdminController
      */
     public function getLocalAddonList()
     {
-        return success((new CoreAddonService())->getLocalAddonList());
+        $data = $this->request->params([
+            ['with_assets', 0],
+        ]);
+        return success((new CoreAddonService())->getLocalAddonList((bool) $data['with_assets']));
     }
 
     /**

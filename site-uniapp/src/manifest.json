@@ -83,6 +83,10 @@
         "setting" : {
             "urlCheck" : false
         },
+        "optimization" : {
+            "subPackages" : true
+        },
+        "lazyCodeLoading" : "requiredComponents",
         "usingComponents" : true,
         "permission" : {
             "scope.userLocation" : {

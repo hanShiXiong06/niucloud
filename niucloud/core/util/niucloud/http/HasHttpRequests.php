@@ -93,7 +93,12 @@ trait HasHttpRequests
         if (property_exists($this, 'baseUri') && !is_null($this->baseUri)) {
             $options['base_uri'] = $this->baseUri;
         }
-        $options['connect_timeout'] = config('niucloud.http.connect_timeout', 3);
+        // connect_timeout 只能限制建连阶段。远端已经建立连接但迟迟不返回时，
+        // 如果没有 timeout/read_timeout，请求会一直占用当前 PHP 进程。
+        // 保留调用方显式传入的超时配置，其余请求统一使用框架配置兜底。
+        $options['connect_timeout'] = $options['connect_timeout'] ?? config('niucloud.http.connect_timeout', 3);
+        $options['timeout'] = $options['timeout'] ?? config('niucloud.http.timeout', 5.0);
+        $options['read_timeout'] = $options['read_timeout'] ?? config('niucloud.http.read_timeout', $options['timeout']);
         $response = $this->getHttpClient()->request($method, $url, $options);
         $response->getBody()->rewind();
         return json_decode($response->getBody()->getContents(), true);

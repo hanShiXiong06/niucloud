@@ -36,9 +36,6 @@
             <template #title>
                 <span>请优先从型号库选择，输入时可忽略空格和大小写，例如“17P”可以检索 iPhone 17 Pro 系列。</span>
             </template>
-            <div class="model-entry-tip__desc">
-                老机型通常已收录；新款若暂时查不到，可使用手动录入。型号库约每月更新一次，建议更新后重新关联标准型号。
-            </div>
         </el-alert>
 
         <div class="device-list">

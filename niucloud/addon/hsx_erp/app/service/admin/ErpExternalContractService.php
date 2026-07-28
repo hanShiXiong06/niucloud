@@ -159,10 +159,18 @@ abstract class ErpExternalContractService extends BaseAdminService
         try {
             $existing = $this->findInbox((int)$payload['site_id'], (string)$payload['event_id']);
             if ($existing !== null && $this->isProcessed($existing)) return;
+            $stored = $existing !== null
+                ? json_decode((string)($existing['payload_json'] ?? ''), true)
+                : [];
+            $attempts = max(0, (int)($stored['_retry']['attempts'] ?? 0)) + 1;
             $values = [
                 'payload_json' => $this->encode([
                     'request' => $payload,
                     'error' => mb_substr(trim($message), 0, 500),
+                    '_retry' => [
+                        'attempts' => $attempts,
+                        'last_failed_at' => time(),
+                    ],
                 ]),
                 'status' => 'failed',
                 'update_at' => time(),

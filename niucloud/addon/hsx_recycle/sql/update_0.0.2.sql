@@ -414,14 +414,7 @@ ALTER TABLE `{{prefix}}recycle_device`
   ADD COLUMN `refurbishment_reason` varchar(500) NOT NULL DEFAULT '' COMMENT '整备原因' AFTER `refurbishment_assignee_name`,
   ADD COLUMN `refurbishment_items` text COMMENT '建议整备项目JSON' AFTER `refurbishment_reason`,
   ADD COLUMN `refurbishment_estimated_cost` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '预估整备成本' AFTER `refurbishment_items`,
-  ADD COLUMN  `sale_destination` varchar(20) NOT NULL DEFAULT 'mall' COMMENT '销售去向：mall-商城销售，peer-同行出货，hold-暂存';
-
-
--- hsx_recycle 0.0.3
--- 下游流转回流：在回收设备上镜像 ERP/中台 的生命周期阶段，使回收侧能看全程（已入库/转中台/已定价/已售）。
--- 纯加法列，不改动现有状态机；由回收侧监听器幂等写入，缺失插件时列保持默认值，无副作用。
-
-ALTER TABLE `{{prefix}}recycle_device`
+  ADD COLUMN  `sale_destination` varchar(20) NOT NULL DEFAULT 'mall' COMMENT '销售去向：mall-商城销售，peer-同行出货，hold-暂存',
   ADD COLUMN `downstream_stage` tinyint NOT NULL DEFAULT 0 COMMENT '下游流转阶段镜像：0-未流转,10-已入库,20-转中台待拍照,30-已定价可售,40-已售下架' AFTER `last_cost_adjust_time`,
   ADD COLUMN `downstream_stage_at` int NOT NULL DEFAULT 0 COMMENT '下游流转阶段更新时间' AFTER `downstream_stage`,
   ADD COLUMN `downstream_erp_asset_id` int NOT NULL DEFAULT 0 COMMENT '关联ERP资产ID(下游回流)' AFTER `downstream_stage_at`,
@@ -430,7 +423,10 @@ ALTER TABLE `{{prefix}}recycle_device`
   ADD COLUMN `target_warehouse_id` int NOT NULL DEFAULT 0 COMMENT '目标仓库ID(ERP安装时定价选择,0为未指定)' AFTER `downstream_event_id`,
   ADD COLUMN `target_warehouse_name` varchar(100) NOT NULL DEFAULT '' COMMENT '目标仓库名称快照' AFTER `target_warehouse_id`,
   ADD COLUMN `target_location_id` int NOT NULL DEFAULT 0 COMMENT '目标库位ID(定价手动选择,0为未指定)' AFTER `target_warehouse_name`,
-  ADD COLUMN `target_location_name` varchar(100) NOT NULL DEFAULT '' COMMENT '目标库位名称快照' AFTER `target_location_id`;
+  ADD COLUMN `target_location_name` varchar(100) NOT NULL DEFAULT '' COMMENT '目标库位名称快照' AFTER `target_location_id`,
+  ADD COLUMN `battery` varchar(50) NOT NULL DEFAULT '' COMMENT '电池效率/健康（如85%）' AFTER `color`,
+  ADD COLUMN `package_type` varchar(50) NOT NULL DEFAULT '' COMMENT '单机/全套等套装情况' AFTER `battery`,
+  ADD COLUMN `condition_grade` varchar(20) NOT NULL DEFAULT '' COMMENT '成色等级（10新/99新…）' AFTER `package_type`;
 
 -- 修复历史安装中"报价单每日快照"任务的非法 cron：
 -- 旧 time JSON 误用 minute 且缺 day，type=day 拼出 `0 * 23 */* * *`，被 workerman/crontab 判为非法字符串导致调度进程崩溃。
@@ -494,16 +490,6 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_check_import_batch` (
 -- recycle_check_option 加 severity(级别)列（仅 0.0.1/0.0.2 升级时执行；全新安装已在 install.sql 含此列）
 ALTER TABLE `{{prefix}}recycle_check_option`
   ADD COLUMN `severity` varchar(16) NOT NULL DEFAULT 'normal' COMMENT '级别 normal/general/abnormal' AFTER `is_default`;
-
--- 设备表加 电池效率/单机全套 列(供质检勾选回写 + 打印单独显示；全新安装已在 install.sql 含)
-ALTER TABLE `{{prefix}}recycle_device`
-  ADD COLUMN `battery` varchar(50) NOT NULL DEFAULT '' COMMENT '电池效率/健康（如85%）' AFTER `color`,
-  ADD COLUMN `package_type` varchar(50) NOT NULL DEFAULT '' COMMENT '单机/全套等套装情况' AFTER `battery`;
-
--- 设备加 成色等级 列(质检「成色等级」单选回写 + 打印 {condition_grade}；全新安装已在 install.sql 含)
-ALTER TABLE `{{prefix}}recycle_device`
-  ADD COLUMN `condition_grade` varchar(20) NOT NULL DEFAULT '' COMMENT '成色等级（10新/99新…）' AFTER `package_type`;
-
 
 -- hsx_recycle 0.0.4（线上 0.0.3 → 0.0.4 一次性升级）
 -- 任务驱动工单系统数据地基 + 性能优化，全部合并在此一个升级文件：
@@ -599,11 +585,6 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_delivery_company` (
   `logo` varchar(255) NOT NULL DEFAULT '' COMMENT 'LOGO',
   `url` varchar(255) NOT NULL DEFAULT '' COMMENT '官网链接',
   `express_code` varchar(50) NOT NULL DEFAULT '' COMMENT '通用/物流跟踪编码',
-  `kuaidi100_com` varchar(50) NOT NULL DEFAULT '' COMMENT '快递100编码(kuaidicom)',
-  `yisu_product_code` varchar(50) NOT NULL DEFAULT '' COMMENT '易速产品编码(productCode)',
-  `electronic_sheet_switch` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否支持电子面单 0否1是',
-  `exp_type` text COMMENT '业务类型列表JSON [{text,value}]',
-  `print_style` text COMMENT '打印样式列表JSON [{template_name,template_size}]',
   `sort` int NOT NULL DEFAULT '0' COMMENT '排序',
   `status` tinyint(1) NOT NULL DEFAULT '1' COMMENT '状态 0停用1启用',
   `create_at` int NOT NULL DEFAULT '0',
@@ -665,12 +646,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_delivery_company_provider` (
   KEY `idx_site_provider` (`site_id`,`provider`,`electronic_sheet_switch`,`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='回收-快递公司服务商绑定';
 
--- 快递公司表精简：移除按服务商的编码与面单字段（已迁到绑定表）
-ALTER TABLE `{{prefix}}recycle_delivery_company` DROP COLUMN `kuaidi100_com`;
-ALTER TABLE `{{prefix}}recycle_delivery_company` DROP COLUMN `yisu_product_code`;
-ALTER TABLE `{{prefix}}recycle_delivery_company` DROP COLUMN `electronic_sheet_switch`;
-ALTER TABLE `{{prefix}}recycle_delivery_company` DROP COLUMN `exp_type`;
-ALTER TABLE `{{prefix}}recycle_delivery_company` DROP COLUMN `print_style`;
+
 
 
 -- hsx_recycle 0.0.10

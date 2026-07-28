@@ -207,7 +207,7 @@
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { dismissMobileErpRefurbishReminder, dismissMobileErpTurnoverReminder, getMobileErpDashboard, getMobileErpKpiDashboard } from '@/addon/hsx_erp/api/erp'
-import qiunDataCharts from '@/components/qiun-data-charts/components/qiun-data-charts/qiun-data-charts.vue'
+import qiunDataCharts from '@/addon/hsx_erp/components/qiun-data-charts/components/qiun-data-charts/qiun-data-charts.vue'
 import { erpPartyDisplayName } from '@/addon/hsx_erp/hooks/useErpPartyText'
 
 const loading = ref(false)

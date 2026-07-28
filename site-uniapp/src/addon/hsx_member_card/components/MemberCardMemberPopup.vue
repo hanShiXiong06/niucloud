@@ -1,43 +1,62 @@
 <template>
-    <u-popup :show="show" mode="bottom" :safe-area-inset-bottom="true" round="20" @close="close">
-        <view class="member-sheet">
-            <view class="sheet-head">
-                <view><text class="sheet-title">选择购卡客户</text><text class="sheet-sub">支持姓名、手机号和会员号检索</text></view>
-                <u-icon name="close" size="20" color="#94a3b8" @click="close" />
-            </view>
-            <view class="search-row">
-                <u-search v-model="keyword" placeholder="搜索客户" :showAction="false" bgColor="#f1f5f9" @search="load" @clear="load" />
-                <view class="create-link" @click="createVisible = true"><u-icon name="plus" color="#2563eb" size="15" /><text>新建</text></view>
-            </view>
-            <scroll-view scroll-y class="member-list">
-                <view v-if="loading" class="loading"><u-loading-icon text="客户加载中" /></view>
-                <view v-for="row in rows" :key="row.member_id" class="member-row" @click="choose(row)">
-                    <view class="avatar">{{ String(row.display_name || '客').slice(0, 1) }}</view>
-                    <view class="member-main"><strong>{{ row.display_name }}</strong><text>{{ row.mobile_masked }}</text></view>
-                    <view class="card-count"><text>{{ row.card_count || 0 }}</text><small>张卡</small></view>
-                    <u-icon name="arrow-right" color="#cbd5e1" size="16" />
+    <view class="relative z-[12000]">
+        <u-popup :show="props.show" mode="bottom" :safe-area-inset-bottom="true" round="20" :zIndex="12000" @close="close">
+            <view class="box-border h-[78vh] max-h-[900rpx] bg-white px-[24rpx] pt-[28rpx]" :style="{ paddingBottom: 'calc(20rpx + env(safe-area-inset-bottom))' }">
+                <view class="flex items-start justify-between gap-[16rpx]">
+                    <view class="flex min-w-0 flex-1 flex-col">
+                        <text class="text-[32rpx] font-bold leading-[1.35] text-[#334155]">选择购卡客户</text>
+                        <text class="mt-[7rpx] text-[23rpx] leading-[1.45] text-[#8290a5]">姓名、手机号或会员号均可检索</text>
+                    </view>
+                    <view class="-mt-[8rpx] flex h-[56rpx] w-[56rpx] items-center justify-center rounded-full bg-[#f8fafc]" @click="close"><u-icon name="close" size="20" color="#94a3b8" /></view>
                 </view>
-                <view v-if="!loading && !rows.length" class="empty"><u-empty text="没有找到客户" mode="search" /></view>
-            </scroll-view>
-        </view>
-    </u-popup>
+                <view class="my-[24rpx] mb-[10rpx] flex items-center justify-between gap-[16rpx]">
+                    <view class="min-w-0 flex-1">
+                        <u-search v-model="keyword" placeholder="搜索姓名 / 手机号 / 会员号" :showAction="false" bgColor="#f4f7fb" @search="load" @clear="load" />
+                    </view>
+                    <view class="flex h-[64rpx] items-center gap-[7rpx] whitespace-nowrap rounded-[32rpx] border border-[#bfdbfe] bg-[#eff6ff] px-[19rpx] text-[24rpx] font-medium text-[#2563eb]" @click="openCreate"><u-icon name="plus" color="#2563eb" size="15" /><text>新建</text></view>
+                </view>
+                <scroll-view scroll-y :style="{ height: 'calc(100% - 142rpx)' }">
+                    <view v-if="loading" class="py-[80rpx]"><u-loading-icon text="客户加载中" /></view>
+                    <view
+                        v-for="row in rows"
+                        :key="row.member_id"
+                        class="flex min-h-[100rpx] items-center justify-between gap-[16rpx] border-b border-[#eef2f7] px-[6rpx] py-[13rpx]"
+                        hover-class="bg-[#f8fbff]"
+                        @click="choose(row)"
+                    >
+                        <view class="flex h-[64rpx] w-[64rpx] flex-none items-center justify-center rounded-full bg-[#dbeafe] text-[27rpx] font-bold text-[#2563eb]">{{ String(row.display_name || '客').slice(0, 1) }}</view>
+                        <view class="flex min-w-0 flex-1 flex-col gap-[6rpx]">
+                            <text class="truncate text-[28rpx] font-semibold text-[#3f4d63]">{{ row.display_name || '未命名客户' }}</text>
+                            <text class="text-[23rpx] text-[#748399]">{{ row.mobile_masked || '暂无手机号' }}</text>
+                        </view>
+                        <view class="flex min-w-[58rpx] flex-col items-center"><text class="text-[28rpx] font-bold text-[#2563eb]">{{ row.card_count || 0 }}</text><text class="text-[21rpx] text-[#8290a5]">张卡</text></view>
+                        <u-icon name="arrow-right" color="#cbd5e1" size="16" />
+                    </view>
+                    <view v-if="!loading && !rows.length" class="py-[80rpx]"><u-empty text="没有找到客户" mode="search" /></view>
+                </scroll-view>
+            </view>
+        </u-popup>
 
-    <u-popup :show="createVisible" mode="center" round="16" @close="createVisible = false">
-        <view class="create-box">
-            <view class="create-head">
-                <view class="create-icon"><u-icon name="account" color="#2563eb" size="20" /></view>
-                <view><text>快速创建客户</text><small>填写资料后立即选中</small></view>
+        <u-popup :show="createVisible" mode="center" round="18" :zIndex="12100" @close="createVisible = false">
+            <view class="box-border w-[620rpx] bg-white px-[28rpx] pb-[28rpx] pt-[30rpx]">
+                <view class="mb-[20rpx] flex items-center gap-[14rpx]">
+                    <view class="flex h-[56rpx] w-[56rpx] items-center justify-center rounded-[15rpx] bg-[#eff6ff]"><u-icon name="account" color="#2563eb" size="20" /></view>
+                    <view class="flex flex-col gap-[5rpx]">
+                        <text class="text-[30rpx] font-bold text-[#334155]">快速创建客户</text>
+                        <text class="text-[22rpx] text-[#8290a5]">填写姓名和手机号后立即选中</text>
+                    </view>
+                </view>
+                <view class="mt-[13rpx] rounded-[14rpx] border border-[#dfe6ef] bg-[#f8fafc] px-[15rpx] py-[21rpx]"><u-input v-model="create.name" border="none" placeholder="客户姓名" prefixIcon="account" /></view>
+                <view class="mt-[13rpx] rounded-[14rpx] border border-[#dfe6ef] bg-[#f8fafc] px-[15rpx] py-[21rpx]"><u-input v-model="create.mobile" border="none" type="number" maxlength="11" placeholder="11 位手机号" prefixIcon="phone" /></view>
+                <view class="mt-[13rpx] rounded-[14rpx] border border-[#dfe6ef] bg-[#f8fafc] px-[15rpx] py-[21rpx]"><u-input v-model="create.password" border="none" type="password" maxlength="32" placeholder="初始登录密码" prefixIcon="lock-fill" @input="passwordCustomized = true" /></view>
+                <view class="mt-[11rpx] flex items-center gap-[7rpx] text-[21rpx] text-[#64748b]"><u-icon name="info-circle" color="#64748b" size="13" /><text>默认取手机号后六位，可在创建前修改</text></view>
+                <view class="mt-[22rpx] flex gap-[14rpx]">
+                    <view class="w-[42%]"><MemberCardButton compact text="取消" @click="createVisible = false" /></view>
+                    <view class="min-w-0 flex-1"><MemberCardButton compact type="primary" icon="checkmark" text="创建并选中" :loading="creating" @click="submitCreate" /></view>
+                </view>
             </view>
-            <view class="field"><u-input v-model="create.name" border="none" placeholder="客户姓名" prefixIcon="account" /></view>
-            <view class="field"><u-input v-model="create.mobile" border="none" type="number" maxlength="11" placeholder="11 位手机号" prefixIcon="phone" /></view>
-            <view class="field"><u-input v-model="create.password" border="none" type="password" maxlength="32" placeholder="初始登录密码" prefixIcon="lock-fill" @input="passwordCustomized = true" /></view>
-            <view class="password-tip"><u-icon name="info-circle" color="#64748b" size="13" /><text>默认取手机号后六位，可在创建前修改</text></view>
-            <view class="actions">
-                <MemberCardButton compact text="取消" @click="createVisible = false" />
-                <MemberCardButton compact type="primary" icon="checkmark" text="创建并选中" :loading="creating" @click="submitCreate" />
-            </view>
-        </view>
-    </u-popup>
+        </u-popup>
+    </view>
 </template>
 
 <script setup lang="ts">
@@ -45,7 +64,7 @@ import { ref, watch } from 'vue'
 import { getCardMemberOptions, memberCardRequestId, quickCreateCardMember } from '../api'
 import MemberCardButton from './MemberCardButton.vue'
 
-const props = defineProps<{ show: boolean }>()
+const props = withDefaults(defineProps<{ show?: boolean }>(), { show: false })
 const emit = defineEmits(['update:show', 'select'])
 const keyword = ref('')
 const rows = ref<any[]>([])
@@ -55,11 +74,23 @@ const creating = ref(false)
 const create = ref({ name: '', mobile: '', password: '' })
 const passwordCustomized = ref(false)
 
-const close = () => emit('update:show', false)
+const close = () => {
+    createVisible.value = false
+    emit('update:show', false)
+}
+const openCreate = () => { createVisible.value = true }
 const load = async () => {
     loading.value = true
-    try { rows.value = ((await getCardMemberOptions({ keyword: keyword.value, limit: 40 })) as any)?.data || [] }
-    finally { loading.value = false }
+    try {
+        const result: any = await getCardMemberOptions({ keyword: keyword.value.trim(), limit: 40 })
+        const data = result?.data
+        rows.value = Array.isArray(data) ? data : (Array.isArray(data?.list) ? data.list : [])
+    } catch (error) {
+        rows.value = []
+        uni.showToast({ title: '客户加载失败，请稍后重试', icon: 'none' })
+    } finally {
+        loading.value = false
+    }
 }
 const choose = (row: any) => { emit('select', row); close() }
 const submitCreate = async () => {
@@ -75,7 +106,14 @@ const submitCreate = async () => {
         passwordCustomized.value = false
     } finally { creating.value = false }
 }
-watch(() => props.show, visible => { if (visible) { keyword.value = ''; load() } })
+watch(() => props.show, visible => {
+    if (visible) {
+        keyword.value = ''
+        load()
+    } else {
+        createVisible.value = false
+    }
+}, { immediate: true })
 watch(() => create.value.mobile, mobile => {
     if (!passwordCustomized.value) create.value.password = /^1\d{5,10}$/.test(mobile) ? mobile.slice(-6) : ''
 })
@@ -85,34 +123,3 @@ watch(createVisible, visible => {
     passwordCustomized.value = false
 })
 </script>
-
-<style scoped lang="scss">
-.member-sheet { height: min(900rpx, 78vh); padding: 30rpx 26rpx calc(20rpx + env(safe-area-inset-bottom)); box-sizing: border-box; background: #fff; }
-.sheet-head, .search-row, .member-row, .actions { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; }
-.sheet-head { align-items: flex-start; }
-.sheet-title, .sheet-sub { display: block; }
-.sheet-title { color: #0f172a; font-size: 32rpx; font-weight: 750; }
-.sheet-sub { margin-top: 6rpx; color: #94a3b8; font-size: 22rpx; }
-.search-row { margin: 24rpx 0 10rpx; }
-.search-row :deep(.u-search) { min-width: 0; flex: 1; }
-.create-link { display: flex; height: 62rpx; padding: 0 17rpx; align-items: center; gap: 6rpx; border: 1rpx solid #bfdbfe; border-radius: 31rpx; background: #eff6ff; color: #2563eb; font-size: 23rpx; white-space: nowrap; }
-.member-list { height: calc(100% - 142rpx); }
-.member-row { min-height: 92rpx; padding: 12rpx 4rpx; border-bottom: 1rpx solid #eef2f7; }
-.avatar { display: flex; width: 62rpx; height: 62rpx; flex: 0 0 62rpx; align-items: center; justify-content: center; border-radius: 50%; background: #dbeafe; color: #2563eb; font-size: 25rpx; font-weight: 700; }
-.member-main { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 6rpx; }
-.member-main strong { font-size: 27rpx; }
-.member-main text { color: #64748b; font-size: 22rpx; }
-.card-count { display: flex; min-width: 56rpx; flex-direction: column; align-items: center; }
-.card-count text { color: #2563eb; font-size: 26rpx; font-weight: 700; }
-.card-count small { color: #94a3b8; font-size: 18rpx; }
-.loading, .empty { padding: 80rpx 0; }
-.create-box { width: 620rpx; padding: 26rpx; box-sizing: border-box; }
-.create-head { display: flex; margin-bottom: 18rpx; align-items: center; gap: 13rpx; }
-.create-icon { display: flex; width: 54rpx; height: 54rpx; align-items: center; justify-content: center; border-radius: 14rpx; background: #eff6ff; }
-.create-head > view:last-child { display: flex; flex-direction: column; gap: 5rpx; }
-.create-head text { font-size: 30rpx; font-weight: 750; }
-.create-head small { color: #94a3b8; font-size: 20rpx; }
-.field { margin-top: 12rpx; padding: 20rpx 14rpx; border: 1rpx solid #dfe6ef; border-radius: 13rpx; background: #f8fafc; }
-.password-tip { display: flex; margin-top: 10rpx; align-items: center; gap: 7rpx; color: #64748b; font-size: 20rpx; }
-.actions { display: grid; grid-template-columns: 1fr 1.35fr; margin-top: 20rpx; }
-</style>

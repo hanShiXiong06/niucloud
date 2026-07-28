@@ -1,45 +1,223 @@
 <template>
-    <view class="mc-page member-detail-page">
-        <view class="profile-card mc-surface">
-            <view class="profile-avatar">{{ String(member.display_name || '客').slice(0, 1) }}</view>
-            <view class="profile-copy"><strong>{{ member.display_name || '会员' }}</strong><text>{{ member.mobile_masked || '—' }}</text><small>{{ member.member_no || '暂无会员号' }}</small></view>
-            <view class="profile-action" @click="call"><u-icon name="phone" color="#2563eb" size="20" /></view>
-        </view>
-        <view class="profile-metrics mc-surface">
-            <view><strong>{{ member.card_count || 0 }}</strong><text>全部卡</text></view>
-            <view><strong class="green">{{ member.available_card_count || 0 }}</strong><text>可用卡</text></view>
-            <view><strong>{{ redemptions.length }}</strong><text>核销记录</text></view>
-        </view>
-
-        <view class="detail-tabs mc-surface">
-            <view :class="{ active: tab === 'cards' }" @click="tab = 'cards'">会员卡</view>
-            <view :class="{ active: tab === 'records' }" @click="tab = 'records'">消费记录</view>
-        </view>
-
-        <view v-if="tab === 'cards'">
-            <view v-for="card in cards" :key="card.id" class="owned-card mc-surface">
-                <view class="owned-card__head"><view><strong>{{ card.product_name }}</strong><text>{{ card.card_no }}</text></view><u-tag :text="card.status_text" :type="cardType(card.status)" plain plainFill size="mini" /></view>
-                <view v-for="item in card.items || []" :key="item.id" class="benefit-row">
-                    <view><strong>{{ item.item_name }}</strong><text>{{ card.validity_text }}</text></view>
-                    <view class="remaining"><strong>{{ item.usage_mode === 'unlimited' ? '不限次' : item.remaining_times }}</strong><text>{{ item.usage_mode === 'unlimited' ? '使用次数' : `共 ${item.granted_times} 次` }}</text></view>
+    <view class="min-h-screen bg-[#f0f3f9] px-[24rpx] pt-[24rpx] pb-[160rpx]">
+        <!-- 会员信息卡片 -->
+        <view
+            class="rounded-[28rpx] bg-white p-[26rpx] shadow-[0_8rpx_30rpx_rgba(15,23,42,0.04)]"
+        >
+            <view class="flex items-center gap-[18rpx]">
+                <!-- 头像：渐变背景 + 首字 -->
+                <view
+                    class="h-[80rpx] w-[80rpx] flex flex-none items-center justify-center rounded-full bg-gradient-to-br from-[#dbeafe] to-[#eff6ff] text-[32rpx] text-[#2563eb] font-bold shadow-sm"
+                >
+                    {{ String(member.display_name || '客').slice(0, 1) }}
                 </view>
-                <view class="owned-card__meta"><text>开卡人 {{ card.issuer_name || '—' }}</text><text>{{ time(card.create_at) }}</text></view>
+                <view class="min-w-0 flex flex-1 flex-col gap-[4rpx]">
+                    <text class="text-[33rpx] text-[#1e293b] font-bold">
+                        {{ member.display_name || '会员' }}
+                    </text>
+                    <text class="text-[25rpx] text-[#64748b]">
+                        {{ member.mobile_masked || '—' }}
+                    </text>
+                    <text class="text-[22rpx] text-[#94a3b8]">
+                        {{ member.member_no || '暂无会员号' }}
+                    </text>
+                </view>
+                <view
+                    class="h-[68rpx] w-[68rpx] flex items-center justify-center rounded-[18rpx] bg-[#eff6ff] active:scale-95 transition-all"
+                    @click="call"
+                >
+                    <u-icon name="phone" color="#2563eb" size="22" />
+                </view>
             </view>
-            <view v-if="!cards.length" class="mc-empty"><u-empty text="该会员暂未购卡" mode="list" /></view>
         </view>
 
+        <!-- 数据统计 -->
+        <view
+            class="mt-[20rpx] grid grid-cols-3 overflow-hidden rounded-[28rpx] bg-white shadow-[0_8rpx_30rpx_rgba(15,23,42,0.04)]"
+        >
+            <view class="flex flex-col items-center gap-[6rpx] py-[24rpx]">
+                <text class="text-[32rpx] font-bold text-[#1e293b]">
+                    {{ member.card_count || 0 }}
+                </text>
+                <text class="text-[22rpx] text-[#94a3b8]">全部卡</text>
+            </view>
+            <view
+                class="flex flex-col items-center gap-[6rpx] border-x border-[#f1f5f9] py-[24rpx]"
+            >
+                <text class="text-[32rpx] font-bold text-[#16a34a]">
+                    {{ member.available_card_count || 0 }}
+                </text>
+                <text class="text-[22rpx] text-[#94a3b8]">可用卡</text>
+            </view>
+            <view class="flex flex-col items-center gap-[6rpx] py-[24rpx]">
+                <text class="text-[32rpx] font-bold text-[#1e293b]">
+                    {{ redemptions.length }}
+                </text>
+                <text class="text-[22rpx] text-[#94a3b8]">核销记录</text>
+            </view>
+        </view>
+
+        <!-- Tab 切换 -->
+        <view
+            class="my-[22rpx] grid grid-cols-2 overflow-hidden rounded-[20rpx] bg-[#f1f5f9] p-[6rpx]"
+        >
+            <view
+                class="rounded-[16rpx] py-[16rpx] text-center text-[27rpx] font-medium transition-all"
+                :class="
+                    tab === 'cards'
+                        ? 'bg-white text-[#2563eb] font-bold shadow-[0_4rpx_12rpx_rgba(15,23,42,0.06)]'
+                        : 'text-[#64748b]'
+                "
+                @click="tab = 'cards'"
+            >
+                会员卡
+            </view>
+            <view
+                class="rounded-[16rpx] py-[16rpx] text-center text-[27rpx] font-medium transition-all"
+                :class="
+                    tab === 'records'
+                        ? 'bg-white text-[#2563eb] font-bold shadow-[0_4rpx_12rpx_rgba(15,23,42,0.06)]'
+                        : 'text-[#64748b]'
+                "
+                @click="tab = 'records'"
+            >
+                消费记录
+            </view>
+        </view>
+
+        <!-- 会员卡列表 -->
+        <view v-if="tab === 'cards'">
+            <view
+                v-for="card in cards"
+                :key="card.id"
+                class="mb-[18rpx] overflow-hidden rounded-[26rpx] bg-white shadow-[0_6rpx_20rpx_rgba(15,23,42,0.04)]"
+            >
+                <view class="p-[22rpx]">
+                    <!-- 卡片头部 -->
+                    <view class="flex items-start justify-between gap-[14rpx]">
+                        <view class="min-w-0 flex flex-1 flex-col gap-[6rpx]">
+                            <text class="text-[30rpx] font-bold text-[#1e293b]">
+                                {{ card.product_name }}
+                            </text>
+                            <text class="text-[22rpx] text-[#94a3b8]">
+                                {{ card.card_no }}
+                            </text>
+                        </view>
+                        <u-tag
+                            :text="card.status_text"
+                            :type="cardType(card.status)"
+                            plain
+                            plainFill
+                            size="mini"
+                        />
+                    </view>
+
+                    <!-- 卡内项目 -->
+                    <view
+                        v-for="item in card.items || []"
+                        :key="item.id"
+                        class="mt-[16rpx] flex items-center justify-between gap-[16rpx] rounded-[16rpx] bg-[#f8fafc] p-[18rpx]"
+                    >
+                        <view class="min-w-0 flex flex-1 flex-col gap-[6rpx]">
+                            <text class="text-[26rpx] font-semibold text-[#334155]">
+                                {{ item.item_name }}
+                            </text>
+                            <text class="text-[22rpx] text-[#64748b]">
+                                {{ card.validity_text }}
+                            </text>
+                        </view>
+                        <view class="flex flex-none flex-col items-end gap-[4rpx]">
+                            <text class="text-[34rpx] font-bold text-[#2563eb]">
+                                {{ item.usage_mode === 'unlimited' ? '不限次' : item.remaining_times }}
+                            </text>
+                            <text class="text-[21rpx] text-[#64748b]">
+                                {{ item.usage_mode === 'unlimited' ? '使用次数' : `共 ${item.granted_times} 次` }}
+                            </text>
+                        </view>
+                    </view>
+
+                    <!-- 底部信息 -->
+                    <view
+                        class="mt-[16rpx] flex justify-between gap-[14rpx] border-t border-[#f1f5f9] pt-[14rpx] text-[22rpx] text-[#94a3b8]"
+                    >
+                        <text>开卡人 {{ card.issuer_name || '—' }}</text>
+                        <text>{{ time(card.create_at) }}</text>
+                    </view>
+                </view>
+            </view>
+            <view v-if="!cards.length" class="py-[120rpx]">
+                <u-empty text="该会员暂未购卡" mode="list" />
+            </view>
+        </view>
+
+        <!-- 消费记录列表 -->
         <view v-else>
-            <view v-for="row in redemptions" :key="row.id" class="record-card mc-surface">
-                <view class="record-icon" :class="{ muted: row.status !== 'success' }"><u-icon :name="row.status === 'success' ? 'checkmark-circle' : 'reload'" :color="row.status === 'success' ? '#16a34a' : '#64748b'" size="19" /></view>
-                <view class="record-copy"><strong>{{ row.item_name }}</strong><text>{{ row.status === 'success' ? `核销 1 次 · 剩余 ${row.after_remaining} 次` : '本次核销已冲正' }}</text><small>{{ row.operator_name || '—' }} · {{ time(row.occurred_at) }}</small></view>
-                <text class="record-amount">¥{{ money(row.recognized_amount) }}</text>
+            <view
+                v-for="row in redemptions"
+                :key="row.id"
+                class="mb-[16rpx] flex items-center gap-[16rpx] rounded-[26rpx] bg-white p-[22rpx] shadow-[0_6rpx_20rpx_rgba(15,23,42,0.04)]"
+            >
+                <!-- 状态图标 -->
+                <view
+                    class="h-[58rpx] w-[58rpx] flex flex-none items-center justify-center rounded-[16rpx]"
+                    :class="
+                        row.status === 'success'
+                            ? 'bg-[#dcfce7]'
+                            : 'bg-[#f1f5f9]'
+                    "
+                >
+                    <u-icon
+                        :name="row.status === 'success' ? 'checkmark-circle' : 'reload'"
+                        :color="row.status === 'success' ? '#16a34a' : '#64748b'"
+                        size="20"
+                    />
+                </view>
+
+                <view class="min-w-0 flex flex-1 flex-col gap-[4rpx]">
+                    <text class="text-[28rpx] font-semibold text-[#1e293b]">
+                        {{ row.item_name }}
+                    </text>
+                    <text class="text-[23rpx] text-[#475569]">
+                        {{ row.status === 'success' ? `核销 1 次 · 剩余 ${row.after_remaining} 次` : '本次核销已冲正' }}
+                    </text>
+                    <text class="text-[21rpx] text-[#94a3b8]">
+                        {{ row.operator_name || '—' }} · {{ time(row.occurred_at) }}
+                    </text>
+                </view>
+
+                <text class="text-[26rpx] font-bold text-[#16a34a]">
+                    ¥{{ money(row.recognized_amount) }}
+                </text>
             </view>
-            <view v-if="!redemptions.length" class="mc-empty"><u-empty text="暂无消费记录" mode="list" /></view>
+            <view v-if="!redemptions.length" class="py-[120rpx]">
+                <u-empty text="暂无消费记录" mode="list" />
+            </view>
         </view>
 
-        <view class="detail-bottom">
-            <view><MemberCardButton plain type="primary" icon="order" text="购买次卡" @click="buy" /></view>
-            <view><MemberCardButton type="primary" icon="checkmark" text="次卡核销" @click="redeem" /></view>
+        <!-- 底部操作栏 毛玻璃按钮组 -->
+        <view
+            class="fixed bottom-0 left-0 right-0 z-20 grid grid-cols-2 gap-[16rpx] border-t border-[#e8ecf1] bg-white/80 px-[24rpx] pt-[16rpx] backdrop-blur-[20rpx]"
+            :style="{ paddingBottom: 'calc(16rpx + env(safe-area-inset-bottom))' }"
+        >
+            <view>
+                <MemberCardButton
+                    plain
+                    type="primary"
+                    icon="order"
+                    text="购买次卡"
+                    @click="buy"
+                    class="!h-[84rpx] !rounded-[18rpx] !text-[28rpx] !font-semibold"
+                />
+            </view>
+            <view>
+                <MemberCardButton
+                    type="primary"
+                    icon="checkmark"
+                    text="次卡核销"
+                    @click="redeem"
+                    class="!h-[84rpx] !rounded-[18rpx] !text-[28rpx] !font-semibold shadow-[0_8rpx_20rpx_rgba(37,99,235,0.25)]"
+                />
+            </view>
         </view>
     </view>
 </template>
@@ -66,19 +244,3 @@ const redeem = () => uni.navigateTo({ url: `/addon/hsx_member_card/pages/card/se
 onLoad((options: any) => { id.value = Number(options?.id || 0) })
 onShow(load)
 </script>
-
-<style scoped lang="scss">
-@import '../../styles/member-card-mobile.scss';
-.member-detail-page { padding-bottom: 150rpx; }
-.profile-card { display: flex; padding: 24rpx; align-items: center; gap: 15rpx; }
-.profile-avatar { display: flex; width: 72rpx; height: 72rpx; flex: 0 0 72rpx; align-items: center; justify-content: center; border-radius: 50%; background: #dbeafe; color: #2563eb; font-size: 29rpx; font-weight: 700; }
-.profile-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 5rpx; }.profile-copy strong { font-size: 30rpx; }.profile-copy text { color: #475569; font-size: 23rpx; }.profile-copy small { color: #94a3b8; font-size: 19rpx; }
-.profile-action { display: flex; width: 62rpx; height: 62rpx; align-items: center; justify-content: center; border-radius: 16rpx; background: #eff6ff; }
-.profile-metrics { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 16rpx; }.profile-metrics view { display: flex; padding: 19rpx 10rpx; flex-direction: column; align-items: center; gap: 5rpx; }.profile-metrics view + view { border-left: 1rpx solid #edf1f6; }.profile-metrics strong { font-size: 29rpx; }.profile-metrics strong.green { color: #16a34a; }.profile-metrics text { color: #94a3b8; font-size: 19rpx; }
-.detail-tabs { display: grid; grid-template-columns: repeat(2, 1fr); margin: 20rpx 0 16rpx; overflow: hidden; }.detail-tabs view { position: relative; padding: 23rpx; color: #64748b; text-align: center; font-size: 25rpx; }.detail-tabs view.active { color: #2563eb; font-weight: 700; }.detail-tabs view.active::after { position: absolute; right: 36%; bottom: 0; left: 36%; height: 5rpx; border-radius: 3rpx; background: #2563eb; content: ''; }
-.owned-card { margin-bottom: 16rpx; padding: 22rpx; }.owned-card__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 15rpx; }.owned-card__head > view { display: flex; min-width: 0; flex-direction: column; gap: 5rpx; }.owned-card__head strong { font-size: 28rpx; }.owned-card__head text { color: #94a3b8; font-size: 19rpx; }
-.benefit-row { display: flex; margin-top: 18rpx; padding: 18rpx; align-items: center; justify-content: space-between; gap: 18rpx; border-radius: 14rpx; background: #f8fafc; }.benefit-row > view:first-child { display: flex; min-width: 0; flex-direction: column; gap: 6rpx; }.benefit-row text { color: #64748b; font-size: 20rpx; }.remaining { display: flex; flex: 0 0 auto; flex-direction: column; align-items: flex-end; gap: 3rpx; }.remaining strong { color: #2563eb; font-size: 30rpx; }
-.owned-card__meta { display: flex; margin-top: 16rpx; justify-content: space-between; gap: 15rpx; color: #94a3b8; font-size: 19rpx; }
-.record-card { display: flex; margin-bottom: 14rpx; padding: 21rpx; align-items: center; gap: 13rpx; }.record-icon { display: flex; width: 52rpx; height: 52rpx; flex: 0 0 52rpx; align-items: center; justify-content: center; border-radius: 13rpx; background: #ecfdf3; }.record-icon.muted { background: #f1f5f9; }.record-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 5rpx; }.record-copy strong { font-size: 26rpx; }.record-copy text { color: #475569; font-size: 21rpx; }.record-copy small { color: #94a3b8; font-size: 18rpx; }.record-amount { color: #16a34a; font-size: 24rpx; font-weight: 700; }
-.detail-bottom { position: fixed; z-index: 20; right: 0; bottom: 0; left: 0; display: grid; grid-template-columns: 1fr 1.25fr; gap: 14rpx; padding: 16rpx 24rpx calc(16rpx + env(safe-area-inset-bottom)); border-top: 1rpx solid #e6ebf2; background: rgba(255,255,255,.97); }
-</style>

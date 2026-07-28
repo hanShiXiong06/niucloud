@@ -266,7 +266,7 @@ import { onLoad, onPullDownRefresh } from '@dcloudio/uni-app'
 import { getDashboardOverview, getDashboardTrend } from '@/addon/hsx_recycle/api/stats'
 import { getStatBoard } from '@/addon/hsx_recycle/api/task'
 import { redirect } from '@/utils/common'
-import qiunDataCharts from '@/components/qiun-data-charts/components/qiun-data-charts/qiun-data-charts.vue'
+import qiunDataCharts from '@/addon/hsx_recycle/components/qiun-data-charts/components/qiun-data-charts/qiun-data-charts.vue'
 import RecycleTagGroup from '@/addon/hsx_recycle/components/RecycleTagGroup.vue'
 
 type DrilldownTarget = {

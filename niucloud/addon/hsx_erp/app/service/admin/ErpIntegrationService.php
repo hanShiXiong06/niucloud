@@ -205,4 +205,44 @@ class ErpIntegrationService extends BaseAdminService
         }
         return $result;
     }
+
+    /**
+     * 补偿“外部系统已完成、ERP消费失败”的高价值入站事实。
+     *
+     * 商城退款属于不可逆外部动作：支付渠道退款成功后，即使 ERP 短暂不可用，
+     * 也必须继续重试冲账和库存恢复。消费服务使用原 event_id 幂等，重放不会
+     * 重复生成退款流水。连续失败十次后保留 failed，交由人工排障。
+     */
+    public function retryFailedExternalRequests(int $siteId = 0, int $limit = 100): array
+    {
+        $query = ErpInboxEvent::where([
+            ['status', '=', 'failed'],
+            ['event_name', '=', ErpExternalSaleRefundedService::EVENT_NAME],
+            ['update_at', '<=', time() - 60],
+        ]);
+        if ($siteId > 0) $query->where('site_id', '=', $siteId);
+        $rows = $query->order('id asc')->limit(max(1, min(500, $limit)))->select()->toArray();
+        $result = ['scanned' => count($rows), 'done' => 0, 'failed' => 0, 'dead' => 0];
+
+        foreach ($rows as $row) {
+            $stored = json_decode((string)($row['payload_json'] ?? ''), true);
+            $request = is_array($stored) && is_array($stored['request'] ?? null)
+                ? $stored['request']
+                : [];
+            $attempts = (int)($stored['_retry']['attempts'] ?? 0);
+            if ($attempts >= 10 || $request === []) {
+                $result['dead']++;
+                continue;
+            }
+
+            try {
+                ErpExternalSaleRefundedService::forSite((int)$row['site_id'])->consume($request);
+                $result['done']++;
+            } catch (\Throwable) {
+                // consume() 已刷新失败次数和错误原因；调度摘要只统计结果。
+                $result['failed']++;
+            }
+        }
+        return $result;
+    }
 }

@@ -15,6 +15,7 @@ use app\dict\addon\AddonDict;
 use app\model\addon\Addon;
 use app\service\core\niucloud\CoreModuleService;
 use think\db\exception\DbException;
+use think\facade\Cache;
 use Throwable;
 
 /**
@@ -24,6 +25,14 @@ use Throwable;
  */
 class CoreAddonService extends CoreAddonBaseService
 {
+    /**
+     * 牛云应用市场数据只用于补充授权、版本和到期信息，不应阻塞本地插件列表。
+     * 缓存中同时保留过期数据，远端短暂不可用时仍可返回本地可用结果。
+     */
+    private const ONLINE_MODULE_CACHE = 'niucloud_online_module_list';
+    private const ONLINE_MODULE_FRESH_SECONDS = 600;
+    private const ONLINE_MODULE_RETRY_SECONDS = 60;
+    private const ONLINE_MODULE_STALE_SECONDS = 86400;
 
     public function __construct()
     {
@@ -42,13 +51,14 @@ class CoreAddonService extends CoreAddonBaseService
      * 获取已下载的插件
      * @return array
      */
-    public function getLocalAddonList()
+    public function getLocalAddonList(bool $with_assets = false)
     {
         $list = [];
         $online_app_list = $online_apps = [];
         $install_addon_list = $this->model->append(['status_name'])->column('title, icon, key, desc, status, author, version, install_time, update_time, cover', 'key');
-        try {
-            $niucloud_module_list = (new CoreModuleService())->getModuleList()['data'] ?? [];
+        $error = '';
+        $niucloud_module_list = $this->getOnlineModuleList($error);
+        if (!empty($niucloud_module_list)) {
             foreach ($niucloud_module_list as $v) {
                 $data = array(
                     'app_id' => $v['app']['app_id'],
@@ -76,17 +86,24 @@ class CoreAddonService extends CoreAddonBaseService
             }
             $online_app_list = array_column($list, 'key');
             $online_apps = array_column($list, 'app_id', 'key');
-        } catch (Throwable $e) {
-            $error = $e->getMessage();
         }
         $files = get_files_by_dir($this->addon_path);
         if (!empty($files)) {
             foreach ($files as $path) {
                 $data = $this->getAddonConfig($path);
                 if (isset($data['key'])) {
-                    $data['icon'] = is_file($data['icon']) ? image_to_base64($data['icon']) : '';
-                    $data['cover'] = is_file($data['cover']) ? image_to_base64($data['cover']) : '';
                     $key = $data['key'];
+                    $is_installed = isset($install_addon_list[$key]);
+                    $public_icon = public_path() . 'addon' . DIRECTORY_SEPARATOR . $key . DIRECTORY_SEPARATOR . 'icon.png';
+                    $public_cover = public_path() . 'addon' . DIRECTORY_SEPARATOR . $key . DIRECTORY_SEPARATOR . 'cover.png';
+                    // 已安装插件直接返回静态资源地址；仅应用市场需要为未安装插件携带 Base64 预览图。
+                    // 后台侧栏默认请求不再重复读取并传输几十 MB 的图片数据。
+                    $data['icon'] = $is_installed && is_file($public_icon)
+                        ? '/addon/' . $key . '/icon.png'
+                        : ($with_assets && is_file($data['icon']) ? image_to_base64($data['icon']) : '');
+                    $data['cover'] = $is_installed && is_file($public_cover)
+                        ? '/addon/' . $key . '/cover.png'
+                        : ($with_assets && is_file($data['cover']) ? image_to_base64($data['cover']) : '');
                     $data['install_info'] = $install_addon_list[$key] ?? [];
                     $data['is_download'] = true;
                     $data['is_local'] = !in_array($data['key'], $online_app_list);
@@ -98,7 +115,40 @@ class CoreAddonService extends CoreAddonBaseService
                 }
             }
         }
-        return ['list' => $list, 'error' => $error ?? ''];
+        return ['list' => $list, 'error' => $error];
+    }
+
+    /**
+     * 获取牛云应用市场模块。十分钟内直接命中缓存；刷新失败时使用一天内的旧数据。
+     */
+    private function getOnlineModuleList(string &$error = ''): array
+    {
+        $cached = Cache::get(self::ONLINE_MODULE_CACHE, []);
+        if (is_array($cached)
+            && isset($cached['data'], $cached['refresh_after'])
+            && is_array($cached['data'])
+            && (int) $cached['refresh_after'] > time()) {
+            return $cached['data'];
+        }
+
+        try {
+            $list = (new CoreModuleService())->getModuleList()['data'] ?? [];
+            if (!is_array($list)) $list = [];
+            Cache::set(self::ONLINE_MODULE_CACHE, [
+                'data' => $list,
+                'refresh_after' => time() + self::ONLINE_MODULE_FRESH_SECONDS,
+            ], self::ONLINE_MODULE_STALE_SECONDS);
+            return $list;
+        } catch (Throwable $e) {
+            $error = $e->getMessage();
+            $fallback = is_array($cached['data'] ?? null) ? $cached['data'] : [];
+            // 远端不可用时短暂负缓存，避免每次打开后台都再次等待超时。
+            Cache::set(self::ONLINE_MODULE_CACHE, [
+                'data' => $fallback,
+                'refresh_after' => time() + self::ONLINE_MODULE_RETRY_SECONDS,
+            ], self::ONLINE_MODULE_STALE_SECONDS);
+            return $fallback;
+        }
     }
 
     /**
@@ -230,8 +280,11 @@ class CoreAddonService extends CoreAddonBaseService
         $addon_list = $this->model->where([['status', '=', AddonDict::ON]])->append(['status_name'])->column('title, icon, key, desc, status, type, support_app', 'key');
         if (!empty($addon_list)) {
             foreach ($addon_list as &$data) {
-                $data['icon'] = is_file($data['icon']) ? image_to_base64($data['icon']) : '';
+                // 已安装插件的资源已经发布到 public/addon，直接返回静态地址。
+                // 避免每次请求读取大图并转换为 Base64，显著减少 CPU、内存和响应体积。
+                $data['icon'] = '/addon/' . $data['key'] . '/icon.png';
             }
+            unset($data);
         }
         return $addon_list;
     }

@@ -1144,7 +1144,7 @@ const localList = ref({
 
 const localListFn = () => {
 	loading.value = true
-	getAddonLocal({})
+	getAddonLocal({ with_assets: 1 })
 		.then((res) => {
 			const data = res.data.list
 			localList.value.error = res.data.error

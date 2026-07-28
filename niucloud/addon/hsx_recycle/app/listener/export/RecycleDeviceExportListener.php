@@ -26,7 +26,7 @@ class RecycleDeviceExportListener
         $data = [];
         if (isset($param['type']) && $param['type'] == 'recycle_device') {
             $model = new RecycleDevice();
-            $field = 'id, imei,imei2,sn,member_id, model, check_result, category_id, color,capacity,warranty_info,system_version,check_template_id, status, final_price, sell_price, update_at, order_id, price_uid, dispose_type, dispose_status, settlement_mode, consignment_order_id';
+            $field = 'id, imei,imei2,sn,member_id, model, check_result, category_id, color,package_type,capacity,warranty_info,system_version,check_template_id, status, final_price, sell_price, update_at, order_id, price_uid, dispose_type, dispose_status, settlement_mode, consignment_order_id';
 
             $where = $param['where'] ?? [];
 
@@ -75,7 +75,7 @@ class RecycleDeviceExportListener
             }
 
             // 质检模板保留列(颜色/内存等)存的是选项值(数字 id),按各设备所属模板回译成文案,避免导出偏差
-            $reservedKeys = ['color', 'capacity', 'system_version', 'warranty_info'];
+            $reservedKeys = ['color', 'package_type', 'capacity', 'system_version', 'warranty_info'];
             $templateIds = array_column($data, 'check_template_id');
             $optionLabelMap = DeviceSummaryHelper::buildOptionLabelMap($templateIds, $reservedKeys, (int)($param['site_id'] ?? 0));
 

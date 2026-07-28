@@ -5,6 +5,7 @@ namespace addon\hsx_erp\app\listener;
 
 use addon\hsx_erp\app\model\ErpInboxEvent;
 use addon\hsx_erp\app\model\ErpSaleOrder;
+use addon\hsx_erp\app\service\admin\ErpCapitalAccountService;
 use addon\hsx_erp\app\service\admin\ErpConfigService;
 use addon\hsx_erp\app\service\admin\ErpSaleService;
 use addon\hsx_erp\app\support\ErpIdempotency;
@@ -135,8 +136,8 @@ class ErpSaleCreatedRequested
             'operator_name' => mb_substr(trim((string)($operator['name'] ?? '')), 0, 60),
             'occurred_at' => $occurredAt,
             'remark' => mb_substr(trim((string)($event['remark'] ?? '')), 0, 255),
-            // 来源平台已收款只代表线上支付事实；没有明确ERP资金账户时不伪造到账流水。
-            // 该快照会保存在inbox中，供财务对账及后续自动结算扩展使用。
+            // 来源平台已收款时保留支付快照；线上支付统一进入系统清算账户，
+            // 线下现结仍必须由业务员明确选择实际收款账户。
             'payment' => [
                 'status' => in_array((string)($payment['status'] ?? ''), ['unpaid', 'paid', 'refunded'], true)
                     ? (string)$payment['status']
@@ -165,6 +166,17 @@ class ErpSaleCreatedRequested
         $isOfflineCash = (string)($payment['status'] ?? '') === 'paid'
             && (string)($payment['mode'] ?? '') === 'offline_cash'
             && (int)($payment['capital_account_id'] ?? 0) > 0;
+        $isOnlinePaid = (string)($payment['status'] ?? '') === 'paid'
+            && (string)($payment['mode'] ?? '') === 'wechat_online';
+        $capitalAccountId = $isOfflineCash ? (int)($payment['capital_account_id'] ?? 0) : 0;
+        if ($isOnlinePaid) {
+            $capitalAccountId = (int)ErpCapitalAccountService::ensureWechatClearingAccount((int)$payload['site_id'])->id;
+        }
+        $isCash = $isOfflineCash || $isOnlinePaid;
+        $saleAmount = round(array_sum(array_map(
+            static fn(array $item): float => (float)($item['sale_price'] ?? 0),
+            (array)($payload['items'] ?? [])
+        )), 2);
         return [
             'request_id' => (string)$payload['event_id'],
             'event_id' => (string)$payload['event_id'],
@@ -173,10 +185,16 @@ class ErpSaleCreatedRequested
             'sale_channel_key' => (string)$payload['channel_code'],
             'sale_channel' => (string)$payload['channel_name'],
             'salesman_uid' => (int)$payload['salesman_uid'],
-            'settle_mode' => $isOfflineCash ? 'cash' : 'credit',
-            'settle_method' => $isOfflineCash ? '现结' : '挂账',
-            'received_amount' => $isOfflineCash ? (float)($payment['gross_amount'] ?? 0) : 0,
-            'capital_account_id' => $isOfflineCash ? (int)($payment['capital_account_id'] ?? 0) : 0,
+            'settle_mode' => $isCash ? 'cash' : 'credit',
+            'settle_method' => $isCash ? ($isOnlinePaid ? '线上现结' : '现结') : '挂账',
+            'received_amount' => $isCash ? $saleAmount : 0,
+            'capital_account_id' => $capitalAccountId,
+            'payment_mode' => (string)($payment['mode'] ?? ''),
+            'payment_trade_no' => (string)($payment['out_trade_no'] ?? ''),
+            'payment_gross_amount' => (float)($payment['gross_amount'] ?? 0),
+            'payment_fee_amount' => (float)($payment['fee_amount'] ?? 0),
+            'payment_fee_bearer' => (string)($payment['fee_bearer'] ?? ''),
+            'merchant_net_amount' => (float)($payment['merchant_net_amount'] ?? 0),
             'sale_at' => (int)$payload['occurred_at'],
             'origin_plugin' => (string)$payload['source_plugin'],
             'origin_plugin_name' => (string)$payload['source_plugin_name'],
@@ -189,6 +207,7 @@ class ErpSaleCreatedRequested
             'items' => array_map(static fn(array $item): array => [
                 'asset_id' => (int)$item['asset_id'],
                 'sale_price' => (float)$item['sale_price'],
+                'external_line_id' => (string)$item['source_line_id'],
                 'remark' => trim(((string)$item['source_line_id'] !== '' ? '来源明细 ' . (string)$item['source_line_id'] . '；' : '') . (string)$item['remark']),
             ], (array)$payload['items']),
         ];

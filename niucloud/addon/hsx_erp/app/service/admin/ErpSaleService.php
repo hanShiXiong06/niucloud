@@ -5,6 +5,7 @@ namespace addon\hsx_erp\app\service\admin;
 
 use addon\hsx_erp\app\dict\ErpDict;
 use addon\hsx_erp\app\model\ErpAsset;
+use addon\hsx_erp\app\model\ErpCapitalAccount;
 use addon\hsx_erp\app\model\ErpParty;
 use addon\hsx_erp\app\model\ErpPayable;
 use addon\hsx_erp\app\model\ErpReceivable;
@@ -371,6 +372,7 @@ class ErpSaleService extends BaseAdminService
                     'asset' => $asset,
                     'price' => $price,
                     'cost' => $cost,
+                    'external_line_id' => mb_substr(trim((string)($item['external_line_id'] ?? $item['source_line_id'] ?? '')), 0, 80),
                     'remark' => trim((string)($item['remark'] ?? '')),
                     'ownership_type' => $ownershipType,
                     'owner_party_id' => $ownerPartyId,
@@ -410,6 +412,12 @@ class ErpSaleService extends BaseAdminService
                 'origin_id' => (string)$saleSource['origin_id'],
                 'origin_no' => (string)$saleSource['origin_no'],
                 'origin_event_id' => trim((string)($data['origin_event_id'] ?? $data['event_id'] ?? '')),
+                'payment_mode' => trim((string)($data['payment_mode'] ?? '')),
+                'payment_trade_no' => trim((string)($data['payment_trade_no'] ?? '')),
+                'payment_gross_amount' => round((float)($data['payment_gross_amount'] ?? 0), 2),
+                'payment_fee_amount' => round((float)($data['payment_fee_amount'] ?? 0), 2),
+                'payment_fee_bearer' => trim((string)($data['payment_fee_bearer'] ?? '')),
+                'merchant_net_amount' => round((float)($data['merchant_net_amount'] ?? 0), 2),
                 'settle_method' => $settleMode === 'cash' ? '现结' : '挂账',
                 'salesman_uid' => (int)$salesman['uid'],
                 'salesman_name' => (string)$salesman['name'],
@@ -440,6 +448,7 @@ class ErpSaleService extends BaseAdminService
                     'asset_id' => (int)$asset->id,
                     'imei' => (string)$asset->imei,
                     'model' => (string)$asset->model,
+                    'external_line_id' => (string)$resolvedItem['external_line_id'],
                     'ownership_type' => (string)$resolvedItem['ownership_type'],
                     'owner_party_id' => (int)$resolvedItem['owner_party_id'],
                     'owner_party_name' => (string)$resolvedItem['owner_party_name'],
@@ -585,7 +594,7 @@ class ErpSaleService extends BaseAdminService
             ], $financeSourceService->persistable($saleSource)));
             if ($settleMode === 'cash') {
                 $financeService = new ErpFinanceService();
-                $financeService->confirmReceivableItemsInTransaction((int)$party->id, [[
+                $settlementId = $financeService->confirmReceivableItemsInTransaction((int)$party->id, [[
                     'receivable_id' => (int)$receivable->id,
                     'amount' => round((float)$data['received_amount'], 2),
                 ]], [
@@ -594,6 +603,7 @@ class ErpSaleService extends BaseAdminService
                     'voucher_urls' => $data['voucher_urls'] ?? '',
                     'remark' => trim((string)($data['remark'] ?? '')) ?: '销售现结收款',
                 ]);
+                $this->recordOnlinePaymentAdjustments($data, $order, $party, $settlementId, $now);
             }
         });
         } catch (\Throwable $e) {
@@ -608,6 +618,97 @@ class ErpSaleService extends BaseAdminService
         if ($financeService instanceof ErpFinanceService) $financeService->flushPendingSettlementDomainEvents();
         (new ErpPrintService())->triggerSafely('sale_created', 'sale', $orderId);
         return $orderId;
+    }
+
+    /**
+     * 线上收款的商品销售额由应收结清；客户额外承担的手续费补款和支付渠道
+     * 实扣手续费单独走资金流水，避免把手续费混进设备售价及销售毛利。
+     */
+    private function recordOnlinePaymentAdjustments(array $data, ErpSaleOrder $order, ErpParty $party, int $settlementId, int $now): void
+    {
+        if ((string)($data['payment_mode'] ?? '') !== 'wechat_online') return;
+        $accountId = (int)($data['capital_account_id'] ?? 0);
+        $account = ErpCapitalAccount::where([
+            ['site_id', '=', $this->site_id],
+            ['id', '=', $accountId],
+            ['status', '=', 1],
+        ])->lock(true)->findOrEmpty();
+        if ($account->isEmpty()) throw new CommonException('微信支付清算账户不存在或已停用');
+
+        $gross = round((float)($data['payment_gross_amount'] ?? 0), 2);
+        $fee = round((float)($data['payment_fee_amount'] ?? 0), 2);
+        $saleAmount = round((float)$order->total_amount, 2);
+        if ($gross <= 0) $gross = $saleAmount;
+        if ($fee < 0 || $fee > $gross + 0.0001) throw new CommonException('线上支付手续费金额不正确');
+        $extra = max(0, round($gross - $saleAmount, 2));
+        $customerFeeRecovery = (string)($data['payment_fee_bearer'] ?? '') === 'customer'
+            ? min($fee, $extra)
+            : 0.0;
+        $otherSurcharge = max(0, round($extra - $customerFeeRecovery, 2));
+        $ledger = ErpLedgerService::forSite($this->site_id, (int)$this->uid, (string)$this->username);
+
+        if ($otherSurcharge > 0) {
+            $balance = round((float)$account->balance + $otherSurcharge, 2);
+            $account->save(['balance' => $balance, 'update_at' => $now]);
+            $ledger->money([
+                'settlement_id' => $settlementId,
+                'capital_account_id' => (int)$account->id,
+                'capital_account_name' => (string)$account->account_name,
+                'direction' => 'in',
+                'category_key' => 'mall_order_surcharge',
+                'category_name' => '商城配送及附加收款',
+                'category_statement_group' => 'sales_revenue',
+                'category_source_plugin' => 'phone_shop',
+                'category_source_key' => 'order_surcharge',
+                'amount' => $otherSurcharge,
+                'balance_after' => $balance,
+                'party_id' => (int)$party->id,
+                'party_name' => (string)$party->party_name,
+                'occurred_at' => (int)$order->sale_at,
+                'remark' => '商城订单 ' . (string)$order->origin_no . ' 配送及附加收款',
+            ]);
+        }
+        if ($customerFeeRecovery > 0) {
+            $balance = round((float)$account->balance + $customerFeeRecovery, 2);
+            $account->save(['balance' => $balance, 'update_at' => $now]);
+            $ledger->money([
+                'settlement_id' => $settlementId,
+                'capital_account_id' => (int)$account->id,
+                'capital_account_name' => (string)$account->account_name,
+                'direction' => 'in',
+                'category_key' => 'channel_payment_fee_reimbursement',
+                'category_name' => '客户承担支付手续费',
+                'category_statement_group' => 'selling_expense_offset',
+                'category_source_plugin' => 'phone_shop',
+                'category_source_key' => 'wechat_payment_fee_reimbursement',
+                'amount' => $customerFeeRecovery,
+                'balance_after' => $balance,
+                'party_id' => (int)$party->id,
+                'party_name' => (string)$party->party_name,
+                'occurred_at' => (int)$order->sale_at,
+                'remark' => '商城订单 ' . (string)$order->origin_no . ' 客户承担支付手续费',
+            ]);
+        }
+        if ($fee > 0) {
+            $balance = round((float)$account->balance - $fee, 2);
+            $account->save(['balance' => $balance, 'update_at' => $now]);
+            $ledger->money([
+                'settlement_id' => $settlementId,
+                'capital_account_id' => (int)$account->id,
+                'capital_account_name' => (string)$account->account_name,
+                'direction' => 'out',
+                'category_key' => 'channel_payment_fee',
+                'category_name' => '线上支付手续费',
+                'category_statement_group' => 'selling_expense',
+                'category_source_plugin' => 'phone_shop',
+                'category_source_key' => 'wechat_payment_fee',
+                'amount' => $fee,
+                'balance_after' => $balance,
+                'party_name' => '微信支付',
+                'occurred_at' => (int)$order->sale_at,
+                'remark' => '商城订单 ' . (string)$order->origin_no . ' 微信支付手续费',
+            ]);
+        }
     }
 
     public function cancel(int $id, string $remark = ''): bool

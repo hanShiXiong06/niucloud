@@ -62,11 +62,12 @@
                         v-for="field in group.fields || []"
                         :key="field.id || field.field_key"
                         class="field-row"
-                        :class="{ 'field-row--block': !isTextField(field) && field.component !== 'switch' }"
+                        :class="{ 'field-row--choice': isChoiceField(field) }"
                     >
                         <view class="field-row__label">
-                            {{ field.field_name }}
+                            <text class="field-row__label-text">{{ field.field_name }}</text>
                             <text v-if="Number(field.is_required || 0) === 1" class="field-required">*</text>
+                            <text class="field-row__colon">：</text>
                         </view>
 
                         <view class="field-row__control">
@@ -93,14 +94,30 @@
                                 ></u-switch>
                             </view>
 
-                            <!-- 选项：换行铺开（跨端最稳；横滑在小程序纵向scroll-view弹窗内拿不到手势，已实测放弃） -->
-                            <RecycleTagGroup
+                            <!--
+                                原生横向 scroll-view：
+                                1. 左侧标题不进入滚动容器，始终固定；
+                                2. 不监听 scroll、不测量节点、不使用 u-scroll-list，避免长质检表单频繁更新；
+                                3. 明确的滚动高度与单行内容宽度，解决纵向弹窗内横向手势命中不稳定。
+                            -->
+                            <scroll-view
                                 v-else
-                                v-model="fieldValues[field.field_key]"
-                                :options="field.options || []"
-                                :multiple="field.component === 'checkbox'"
-                                @change="handleTemplateValueChange"
-                            />
+                                class="option-scroll"
+                                scroll-x
+                                :show-scrollbar="false"
+                                :bounces="false"
+                            >
+                                <view class="option-scroll__track">
+                                    <view
+                                        v-for="option in field.options || []"
+                                        :key="`${ field.field_key }-${ option.value }`"
+                                        :class="getOptionClass(field, option.value)"
+                                        @tap="toggleFieldOption(field, option.value)"
+                                    >
+                                        {{ option.label || option.name || option.value }}
+                                    </view>
+                                </view>
+                            </scroll-view>
                         </view>
                     </view>
                 </view>
@@ -175,7 +192,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { getCheckTemplateAll, getCheckTemplateSchema } from '@/addon/hsx_recycle/api/check-template'
-import RecycleTagGroup from '@/addon/hsx_recycle/components/RecycleTagGroup.vue'
 import { batchReturnDevices, getDevice, updateDevice } from '@/addon/hsx_recycle/api/order'
 import NextAssigneePicker from '@/addon/hsx_recycle/components/NextAssigneePicker.vue'
 import RecycleImageUploader from '@/addon/hsx_recycle/components/RecycleImageUploader.vue'
@@ -481,26 +497,26 @@ const isTextField = (field: TemplateField) => {
     return ['input', 'number', '', undefined].includes(field.component as any)
 }
 
-const isInlineField = (field: TemplateField) => {
-    return isTextField(field) || field.component === 'switch'
-}
+const isChoiceField = (field: TemplateField) => !isTextField(field) && field.component !== 'switch'
 
-const toggleFieldOption = (field: TemplateField, optionValue: string) => {
+const toggleFieldOption = (field: TemplateField, optionValue: any) => {
     if (field.component === 'checkbox') {
         const current = Array.isArray(fieldValues.value[field.field_key]) ? [...fieldValues.value[field.field_key]] : []
-        const exists = current.includes(optionValue)
-        fieldValues.value[field.field_key] = exists
-            ? current.filter(item => item !== optionValue)
-            : [...current, optionValue]
+        const currentIndex = current.findIndex(item => String(item) === String(optionValue))
+        if (currentIndex >= 0) current.splice(currentIndex, 1)
+        else current.push(optionValue)
+        fieldValues.value[field.field_key] = current
     } else {
         fieldValues.value[field.field_key] = optionValue
     }
     handleTemplateValueChange()
 }
 
-const getOptionClass = (field: TemplateField, optionValue: string) => {
+const getOptionClass = (field: TemplateField, optionValue: any) => {
     const value = fieldValues.value[field.field_key]
-    const active = Array.isArray(value) ? value.includes(optionValue) : String(value) === String(optionValue)
+    const active = Array.isArray(value)
+        ? value.some(item => String(item) === String(optionValue))
+        : String(value) === String(optionValue)
     return active ? 'option-chip option-chip--active' : 'option-chip'
 }
 
@@ -1270,7 +1286,7 @@ const resolveGoodsCategory = () => {
 .field-row {
     display: flex;
     align-items: center;
-    gap: 16rpx;
+    gap: 12rpx;
     padding: 12rpx 0;
 }
 
@@ -1279,11 +1295,21 @@ const resolveGoodsCategory = () => {
 }
 
 .field-row__label {
-    flex: 0 0 auto;
+    flex: 0 0 150rpx;
     width: 150rpx;
     font-size: 26rpx;
     color: #303133;
     line-height: 1.4;
+    word-break: break-all;
+    overflow-wrap: anywhere;
+}
+
+.field-row__label-text {
+    white-space: normal;
+}
+
+.field-row__colon {
+    color: #94a3b8;
 }
 
 .field-row__control {
@@ -1294,36 +1320,47 @@ const resolveGoodsCategory = () => {
     justify-content: flex-start;
 }
 
-/* 选项类字段：标签在上，选项整行换行铺开（不滑动，最稳） */
-.field-row--block {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12rpx;
+/* 选项行把标题压缩为约 4 个汉字宽；长标题自然换行，右侧留给选项。 */
+.field-row--choice {
+    align-items: center;
 }
-.field-row--block .field-row__label {
-    width: auto;
-}
-.field-row--block .field-row__control {
-    width: 100%;
-    flex: none;
+
+.field-row--choice .field-row__label {
+    flex-basis: 118rpx;
+    width: 118rpx;
 }
 
 .option-scroll {
+    flex: 1 1 0;
+    min-width: 0;
     width: 100%;
+    height: 68rpx;
     white-space: nowrap;
+    overflow: hidden;
 }
 
-.option-scroll-row {
-    display: inline-flex;
-    flex-wrap: nowrap;
-    gap: 16rpx;
-    padding: 2rpx 0;
+.option-scroll__track {
+    display: inline-block;
+    min-width: 100%;
+    height: 68rpx;
+    padding: 2rpx 12rpx 2rpx 0;
+    box-sizing: border-box;
+    white-space: nowrap;
 }
 
 .option-scroll .option-chip {
-    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    margin-right: 12rpx;
     white-space: nowrap;
-    font-size: 26rpx;
-    padding: 14rpx 28rpx;
+    font-size: 24rpx;
+    padding: 12rpx 22rpx;
+    vertical-align: top;
+}
+
+.option-scroll .option-chip:last-child {
+    margin-right: 0;
 }
 </style>

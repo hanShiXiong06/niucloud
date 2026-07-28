@@ -44,6 +44,10 @@ class RecycleDeviceExportDataListener
                     'color'=>[
                          'name' => '颜色'
                     ],
+                    'package_type'=>[
+                        'name' => '包装'
+                    ],
+                    
                     'capacity'=>[
                          'name' => '内存'
                     ],

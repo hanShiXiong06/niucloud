@@ -5,7 +5,7 @@
             <div class="flex justify-between items-center">
                 <span class="text-page-title">{{ pageName }}</span>
                 <div class="flex items-center gap-[10px]">
-                    <el-button v-if="!isMasterSite" :loading="syncLoading" @click="syncMasterGoodsFn">一键同步主站商品</el-button>
+                    <!-- <el-button v-if="!isMasterSite" :loading="syncLoading" @click="syncMasterGoodsFn">一键同步主站商品</el-button> -->
                     <el-button type="primary" @click="addEvent">{{ t('addGoods') }}</el-button>
                 </div>
             </div>
@@ -228,9 +228,6 @@
 
                     <el-table-column :label="t('operation')" fixed="right" align="right" min-width="120">
                         <template #default="{ row }">
-
-                            <el-tag v-if="row.sale_status === 'sold'" type="info" size="small" effect="plain">已售</el-tag>
-                            <el-tag v-else-if="row.sale_status === 'locked'" type="warning" size="small" effect="plain">锁定</el-tag>
                             <el-button type="primary" link @click="editEvent(row)">{{ t('edit') }}</el-button>
                             <el-button type="primary" link @click="spreadEvent(row)">{{ t('spreadGoods') }}</el-button>
                             <el-button type="primary" link @click="memberPriceEvent(row)">{{ t('memberPrice') }}</el-button>

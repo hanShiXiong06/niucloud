@@ -68,7 +68,8 @@ const cascaderProps = {
     value: 'value',
     label: 'label',
     leaf: 'leaf',
-    lazyLoad: loadCascaderChildren
+    lazyLoad: loadCascaderChildren,
+    expandTrigger: 'hover' as const,
 }
 
 watch(() => props.modelValue, value => {
@@ -268,6 +269,6 @@ onBeforeUnmount(() => { selectedSequence++; searchSequence++ })
 </style>
 
 <style>
-.erp-catalog-cascader-popper .el-cascader-menu { width: 150px; min-width: 150px; }
+.erp-catalog-cascader-popper .el-cascader-menu { width: 200px; min-width: 200px; }
 .erp-catalog-cascader-popper .el-cascader-node { padding: 0 10px; }
 </style>

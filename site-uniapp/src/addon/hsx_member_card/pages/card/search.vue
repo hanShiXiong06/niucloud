@@ -1,58 +1,184 @@
 <template>
-    <view class="mc-page redeem-page">
-        <view class="search-panel mc-surface">
-            <view class="search-panel__head">
-                <view class="mc-icon-box"><u-icon name="phone" color="#2563eb" size="21" /></view>
-                <view><text class="search-title">手机号快速核销</text><text class="search-sub">后四位查询，当面核对姓名</text></view>
-            </view>
-            <view class="input-wrap"><u-input v-model="mobile" type="number" maxlength="11" border="none" placeholder="完整手机号或后四位" prefixIcon="phone" /></view>
-            <view class="input-wrap"><u-input v-model="name" border="none" placeholder="多人命中时填写姓名（可选）" prefixIcon="account" /></view>
-            <MemberCardButton type="primary" icon="search" text="查询可用会员卡" :loading="loading" @click="search" />
-            <view class="safe-tip"><u-icon name="info-circle" color="#64748b" size="14" /><text>核销前请让客户说出购卡姓名，避免误用他人权益</text></view>
-        </view>
-
-        <view v-if="searched && !candidates.length" class="mc-empty"><u-empty text="没有找到可核销会员卡" mode="search" /></view>
-        <view v-if="candidates.length" class="mc-section-head">
-            <view class="mc-section-head__main"><text class="mc-section-head__title">查询结果</text><text class="mc-section-head__sub">{{ candidates.length }} 位客户</text></view>
-        </view>
-
-        <view v-for="candidate in candidates" :key="candidate.member_id" class="candidate mc-surface">
-            <view class="candidate-head">
-                <view class="candidate-avatar">{{ String(candidate.holder_name || '客').slice(0, 1) }}</view>
-                <view class="candidate-copy"><text>请口头核对姓名</text><strong>{{ candidate.holder_name }}</strong><small>{{ candidate.mobile_masked }}</small></view>
-                <u-tag :text="`可用 ${candidate.available_card_count} 张`" :type="candidate.available_card_count ? 'success' : 'info'" plain plainFill size="mini" />
-            </view>
-            <view v-for="card in candidate.cards" :key="card.card_id" class="card" :class="{ disabled: !card.available }">
-                <view class="card-icon"><u-icon name="order" :color="card.available ? '#2563eb' : '#94a3b8'" size="20" /></view>
-                <view class="card-main">
-                    <strong>{{ card.product_name }}</strong>
-                    <text>{{ card.item_name }} · {{ card.validity_text }}</text>
-                    <view class="remaining"><u-icon name="checkmark-circle" color="#16a34a" size="14" /><text>{{ card.usage_mode === 'unlimited' ? '不限次' : `剩余 ${card.remaining_times} 次` }}</text></view>
+    <view class="min-h-screen bg-[#f5f6f8] px-[24rpx] pb-[48rpx] pt-[20rpx] text-[#1f2937]">
+        <view class="rounded-[24rpx] bg-white px-[22rpx] pb-[22rpx] pt-[24rpx]">
+            <view class="mb-[18rpx] flex items-center justify-between">
+                <view>
+                    <text class="block text-[30rpx] font-semibold text-[#27364b]">查找会员卡</text>
+                    <text class="mt-[4rpx] block text-[22rpx] text-[#8a96a8]">输入手机号后四位即可查询</text>
                 </view>
-                <view class="card-action">
-                    <MemberCardButton type="primary" compact :disabled="!card.available" :text="card.recommended ? '核销 1 次' : '核销'" @click="openConfirm(candidate, card)" />
+                <view class="flex h-[58rpx] w-[58rpx] items-center justify-center rounded-[17rpx] bg-[#edf4ff]">
+                    <u-icon name="phone" color="#2468f2" size="20" />
                 </view>
             </view>
+
+            <view class="flex h-[82rpx] items-center rounded-[16rpx] bg-[#f5f7fa] px-[18rpx]">
+                    <u-icon name="phone" color="#7b8798" size="18" class="mr-[10rpx]" />
+                    <u-input
+                        v-model="mobile"
+                        type="number"
+                        maxlength="11"
+                        border="none"
+                        placeholder="完整手机号或后四位"
+                        class="flex-1 text-[28rpx] font-medium"
+                        confirm-type="search"
+                        @confirm="search"
+                    />
+                    <u-icon v-if="mobile" name="close-circle-fill" color="#c7d0dc" size="17" @click="mobile = ''" />
+            </view>
+
+            <view class="mt-[12rpx] flex min-h-[56rpx] items-center justify-between px-[4rpx]" @click="advancedVisible = !advancedVisible">
+                <view class="flex items-center gap-[8rpx]"><u-icon name="account" color="#7b8798" size="16" /><text class="text-[23rpx] text-[#667085]">精确筛选姓名</text><text class="text-[20rpx] text-[#a3acba]">选填</text></view>
+                <u-icon :name="advancedVisible ? 'arrow-up' : 'arrow-down'" color="#a3acba" size="14" />
+            </view>
+            <view v-if="advancedVisible" class="mb-[12rpx] flex h-[72rpx] items-center rounded-[14rpx] bg-[#f5f7fa] px-[16rpx]">
+                    <u-icon name="account" color="#7b8798" size="17" class="mr-[10rpx]" />
+                    <u-input
+                        v-model="name"
+                        border="none"
+                        placeholder="多人命中时输入购卡姓名"
+                        class="flex-1 text-[26rpx]"
+                    />
+            </view>
+
+            <MemberCardButton
+                type="primary"
+                icon="search"
+                text="查询会员卡"
+                :loading="loading"
+                @click="search"
+                class="!h-[82rpx] !rounded-[16rpx] !text-[28rpx] !font-semibold"
+            />
         </view>
 
-        <u-popup :show="confirmVisible" mode="bottom" :safe-area-inset-bottom="true" round="20" @close="confirmVisible = false">
-            <view v-if="selected" class="mc-sheet confirm-sheet">
-                <view class="mc-sheet-head">
-                    <view><text class="mc-sheet-title">确认核销 1 次</text><text class="mc-sheet-sub">核销后系统将扣减服务次数</text></view>
-                    <u-icon name="close" color="#94a3b8" size="20" @click="confirmVisible = false" />
+        <view class="mt-[14rpx] flex items-center gap-[7rpx] px-[6rpx] text-[21rpx] text-[#8a96a8]">
+            <u-icon name="info-circle" color="#98a2b3" size="14" />
+            <text>核销前请当面核对购卡姓名</text>
+        </view>
+
+        <view v-if="searched && !candidates.length" class="py-[110rpx]">
+            <u-empty text="没有找到可核销会员卡" mode="search" />
+        </view>
+
+        <view v-if="candidates.length" class="flex items-center justify-between px-[4rpx] pb-[14rpx] pt-[28rpx]">
+            <text class="text-[28rpx] font-semibold text-[#27364b]">可用会员卡</text>
+            <text class="text-[21rpx] text-[#98a2b3]">{{ candidates.length }} 位客户</text>
+        </view>
+
+        <view
+            v-for="candidate in candidates"
+            :key="candidate.member_id"
+            class="mb-[16rpx] overflow-hidden rounded-[22rpx] bg-white"
+        >
+            <view class="flex items-center gap-[14rpx] border-b border-[#eef1f5] px-[20rpx] py-[18rpx]">
+                <view class="flex h-[58rpx] w-[58rpx] items-center justify-center rounded-full bg-[#edf4ff] text-[26rpx] font-semibold text-[#2468f2]">
+                    {{ String(candidate.holder_name || '客').slice(0, 1) }}
                 </view>
-                <view class="verify-card">
-                    <view class="verify-card__icon"><u-icon name="account" color="#2563eb" size="22" /></view>
-                    <view><text>请让客户说出购卡姓名</text><strong>{{ selected.candidate.holder_name }}</strong><small>{{ selected.candidate.mobile_masked }} · {{ selected.card.product_name }}</small></view>
+                <view class="min-w-0 flex-1">
+                    <text class="block truncate text-[27rpx] font-semibold text-[#344054]">{{ candidate.holder_name }}</text>
+                    <text class="mt-[3rpx] block text-[21rpx] text-[#8a96a8]">{{ candidate.mobile_masked }}</text>
                 </view>
-                <view class="check-row" @click="confirmed = !confirmed">
+                <text class="rounded-full bg-[#eaf9f0] px-[12rpx] py-[5rpx] text-[20rpx] font-medium text-[#16a34a]">{{ candidate.available_card_count }} 张可用</text>
+            </view>
+
+            <view
+                v-for="card in candidate.cards"
+                :key="card.card_id"
+                class="flex items-center gap-[14rpx] border-b border-[#f0f2f5] px-[20rpx] py-[18rpx]"
+                :class="card.available ? 'bg-white' : 'bg-[#f7f8fa] opacity-60'"
+            >
+                <view
+                    class="flex h-[54rpx] w-[54rpx] flex-none items-center justify-center rounded-[15rpx]"
+                    :class="card.available ? 'bg-[#f1efff]' : 'bg-[#eef1f5]'"
+                >
+                    <u-icon name="order" :color="card.available ? '#6d4aff' : '#98a2b3'" size="19" />
+                </view>
+                <view class="min-w-0 flex-1">
+                    <text class="block truncate text-[25rpx] font-medium text-[#344054]">{{ card.product_name }}</text>
+                    <text class="mt-[5rpx] block truncate text-[21rpx] text-[#8a96a8]">{{ card.item_name }} · {{ card.validity_text }}</text>
+                    <text class="mt-[5rpx] block text-[21rpx] font-medium text-[#16a34a]">{{ card.usage_mode === 'unlimited' ? '不限次' : `剩余 ${card.remaining_times} 次` }}</text>
+                </view>
+                <view class="w-[138rpx] flex-none">
+                    <MemberCardButton
+                        type="primary"
+                        compact
+                        :disabled="!card.available"
+                        text="核销"
+                        @click="openConfirm(candidate, card)"
+                        class="!rounded-[14rpx] !text-[24rpx] !font-medium"
+                    />
+                </view>
+            </view>
+        </view>
+
+        <u-popup
+            :show="confirmVisible"
+            mode="bottom"
+            :safe-area-inset-bottom="true"
+            round="24"
+            @close="confirmVisible = false"
+        >
+            <view v-if="selected" class="px-[28rpx] pb-[40rpx] pt-[30rpx]">
+                <view class="mb-[24rpx] flex items-start justify-between">
+                    <view>
+                        <text class="block text-[32rpx] font-semibold text-[#27364b]">确认核销</text>
+                        <text class="mt-[4rpx] block text-[22rpx] text-[#8a96a8]">本次将扣减 1 次服务</text>
+                    </view>
+                    <view class="h-[56rpx] w-[56rpx] flex items-center justify-center rounded-full bg-[#f1f5f9]" @click="confirmVisible = false">
+                        <u-icon name="close" color="#64748b" size="20" />
+                    </view>
+                </view>
+
+                <view class="mb-[22rpx] rounded-[18rpx] bg-[#f5f8ff] p-[20rpx]">
+                    <view class="flex items-center gap-[16rpx]">
+                        <view class="h-[68rpx] w-[68rpx] flex items-center justify-center rounded-full bg-[#dbeafe]">
+                            <u-icon name="account" color="#2563eb" size="24" />
+                        </view>
+                        <view>
+                            <text class="text-[21rpx] text-[#8a96a8]">购卡人</text>
+                            <text class="block text-[32rpx] font-semibold text-[#27364b]">{{ selected.candidate.holder_name }}</text>
+                            <text class="text-[21rpx] text-[#667085]">
+                                {{ selected.candidate.mobile_masked }} · {{ selected.card.product_name }}
+                            </text>
+                        </view>
+                    </view>
+                </view>
+
+                <view
+                    class="mb-[20rpx] flex items-center gap-[10rpx] rounded-[15rpx] bg-[#f5f7fa] p-[17rpx]"
+                    @click="confirmed = !confirmed"
+                >
                     <u-checkbox :checked="confirmed" @change="confirmed = $event" />
-                    <text>我已当面核对手机号与姓名，信息一致</text>
+                    <text class="text-[23rpx] font-medium text-[#475467]">已当面核对手机号与姓名</text>
                 </view>
-                <u-textarea v-model="remark" height="100rpx" placeholder="本次服务说明（选填）" />
-                <view class="mc-actions">
-                    <MemberCardButton text="取消" @click="confirmVisible = false" />
-                    <MemberCardButton type="primary" icon="checkmark" text="确认核销" :disabled="!confirmed" :loading="redeeming" @click="redeem" />
+
+                <!-- 备注 -->
+                <u-textarea
+                    v-model="remark"
+                    height="100rpx"
+                    placeholder="本次服务说明（选填）"
+                    class="!rounded-[16rpx] !bg-[#f8fafc]"
+                />
+
+                <!-- 底部按钮 -->
+                <view class="mt-[28rpx] flex gap-[16rpx]">
+                    <view class="flex-1">
+                        <MemberCardButton
+                            text="取消"
+                            @click="confirmVisible = false"
+                            class="!h-[88rpx] !rounded-[18rpx] !bg-[#f1f5f9] !text-[#475569]"
+                        />
+                    </view>
+                    <view class="flex-1">
+                        <MemberCardButton
+                            type="primary"
+                            icon="checkmark"
+                            text="确认核销"
+                            :disabled="!confirmed"
+                            :loading="redeeming"
+                            @click="redeem"
+                            class="!h-[88rpx] !rounded-[18rpx] !font-semibold"
+                        />
+                    </view>
                 </view>
             </view>
         </u-popup>
@@ -67,6 +193,7 @@ import MemberCardButton from '../../components/MemberCardButton.vue'
 
 const mobile = ref('')
 const name = ref('')
+const advancedVisible = ref(false)
 const loading = ref(false)
 const searched = ref(false)
 const candidates = ref<any[]>([])
@@ -116,34 +243,3 @@ onLoad(async (options: any) => {
     }
 })
 </script>
-
-<style scoped lang="scss">
-@import '../../styles/member-card-mobile.scss';
-
-.search-panel { padding: 26rpx; }
-.search-panel__head { display: flex; margin-bottom: 20rpx; align-items: center; gap: 15rpx; }
-.search-panel__head > view:last-child { display: flex; flex-direction: column; gap: 5rpx; }
-.search-title { font-size: 31rpx; font-weight: 750; }
-.search-sub { color: #64748b; font-size: 21rpx; }
-.input-wrap { margin-bottom: 14rpx; padding: 14rpx; border: 1rpx solid #dfe6ef; border-radius: 14rpx; background: #f8fafc; }
-.safe-tip { display: flex; margin-top: 15rpx; align-items: center; gap: 8rpx; color: #64748b; font-size: 20rpx; }
-.candidate { margin-bottom: 18rpx; overflow: hidden; }
-.candidate-head { display: flex; padding: 22rpx; align-items: center; gap: 14rpx; background: #f8fafc; }
-.candidate-avatar { display: flex; width: 62rpx; height: 62rpx; flex: 0 0 62rpx; align-items: center; justify-content: center; border-radius: 50%; background: #dbeafe; color: #2563eb; font-size: 26rpx; font-weight: 700; }
-.candidate-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 4rpx; }
-.candidate-copy text, .candidate-copy small, .card-main > text { color: #64748b; font-size: 20rpx; }
-.candidate-copy strong { font-size: 28rpx; }
-.card { display: flex; padding: 22rpx; align-items: center; gap: 14rpx; border-top: 1rpx solid #edf1f6; }
-.card.disabled { background: #f8fafc; opacity: .55; }
-.card-icon { display: flex; width: 52rpx; height: 52rpx; flex: 0 0 52rpx; align-items: center; justify-content: center; border-radius: 13rpx; background: #eff6ff; }
-.card-main { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 6rpx; }
-.remaining { display: flex; align-items: center; gap: 6rpx; color: #16a34a; }
-.remaining text { font-size: 21rpx; }
-.card-action { width: 150rpx; flex: 0 0 150rpx; }
-.verify-card { display: flex; padding: 22rpx; align-items: center; gap: 16rpx; border: 1rpx solid #bfdbfe; border-radius: 16rpx; background: #eff6ff; }
-.verify-card__icon { display: flex; width: 60rpx; height: 60rpx; align-items: center; justify-content: center; border-radius: 15rpx; background: #dbeafe; }
-.verify-card > view:last-child { display: flex; min-width: 0; flex-direction: column; gap: 6rpx; }
-.verify-card text, .verify-card small { color: #64748b; font-size: 21rpx; }
-.verify-card strong { font-size: 34rpx; }
-.check-row { display: flex; margin: 22rpx 0; align-items: center; gap: 10rpx; color: #334155; font-size: 23rpx; }
-</style>
