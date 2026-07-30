@@ -99,12 +99,13 @@
                     <view class="device-card__head">
                         <view class="device-title">
                             <text class="device-name">{{ item.model || '-' }}</text>
-                            <text class="device-spec">{{ isExternalGoods(item) ? `商城商品 · ${itemQuantity(item)} 件` : deviceIdentityLine(item) }}</text>
+                            <text class="device-spec">{{ isStandardGoods(item) ? `${item.product_code || '未设置商品编码'} · ${quantityText(itemQuantity(item))} ${item.unit || '件'}` : (isExternalGoods(item) ? `商城商品 · ${itemQuantity(item)} 件` : deviceIdentityLine(item)) }}</text>
                         </view>
                         <u-tag :text="assetLabel(item.status)" :type="assetType(item.status)" plain plainFill size="mini" />
                     </view>
                     <view class="sale-chips">
-                        <view v-if="isExternalGoods(item)" class="sale-chip">商城订单商品</view>
+                        <view v-if="isStandardGoods(item)" class="sale-chip">标品销售</view>
+                        <view v-else-if="isExternalGoods(item)" class="sale-chip">商城订单商品</view>
                         <view v-if="item.warehouse_name" class="sale-chip">{{ item.warehouse_name }}{{ item.location_name ? ' / ' + item.location_name : '' }}</view>
                         <view v-if="item.category_name" class="sale-chip muted">{{ item.category_name }}</view>
                     </view>
@@ -133,7 +134,7 @@
                         <view v-if="canCancelSale" class="action-button mini">
                             <u-button size="mini" plain type="warning" :text="items.length > 1 ? '撤回此台' : '撤销此台'" @click.stop="cancelSaleItem(item)" />
                         </view>
-                        <view v-else-if="!canCancelSale" class="action-button mini">
+                        <view v-else-if="!canCancelSale && !isStandardGoods(item)" class="action-button mini">
                             <u-button size="mini" plain type="warning" text="销售退货" @click.stop="goReturn(item)" />
                         </view>
                     </view>
@@ -293,11 +294,18 @@ const compensationAmount = (row: any) => erpSaleCompensationAmount(row)
 const externalRefundAmount = (row: any) => Math.max(0, Number(row?.external_refunded_amount || row?.refunded_amount || 0))
 const deviceIdentityLine = (row: any) => erpDeviceIdentityLine(row)
 function isExternalGoods(row: any) {
+    if (isStandardGoods(row)) return false
     return Number(row?.external_goods_id || 0) > 0
         || (Number(row?.asset_id || 0) <= 0 && String(row?.inventory_source || '') !== 'erp_asset')
 }
+function isStandardGoods(row: any) {
+    return String(row?.item_type || '') === 'standard' || String(row?.inventory_source || '') === 'erp_quantity'
+}
 function itemQuantity(row: any) {
     return Math.max(1, Number(row?.quantity || 1))
+}
+function quantityText(value: any) {
+    return Number(value || 0).toFixed(3).replace(/0+$/, '').replace(/\.$/, '') || '0'
 }
 const financeLabel = (s: string) => ({ pending: '待收款', partial: '部分收款', settled: '已结清', void: '已作废' }[s] || s)
 const financeType = (s: string) => ({ pending: 'warning', partial: 'primary', settled: 'success', void: 'info' }[s] || 'info')

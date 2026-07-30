@@ -134,14 +134,14 @@ const cascaderProps = {
     emitPath: true,
     // 分类本身也是有效选择：商家可先选分类，再手动填写商品名称；
     // 继续展开到型号时，仍可自动带入标准目录型号。
-    checkStrictly: true,
+    // checkStrictly: true,
     value: 'value',
     label: 'label',
     leaf: 'leaf',
     lazyLoad: loadCascaderChildren,
     // 多级目录使用 hover 时，指针经过下一列会连续触发加载并让 Popper 反复重算位置。
     // 点击展开既稳定，也能避免误触发大量分支请求。
-    expandTrigger: 'click' as const,
+    expandTrigger: 'hover' as const,
 }
 
 watch([() => props.modelValue, () => props.categoryPath], ([value, categoryPath]) => {

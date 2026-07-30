@@ -6,5 +6,8 @@ return [
         'HsxPerformanceFactRecorded' => [
             'addon\hsx_performance\app\listener\PerformanceFactRecorded',
         ],
+        'ErpDomainEvent' => [
+            'addon\hsx_performance\app\listener\ErpDomainPerformance',
+        ],
     ],
 ];

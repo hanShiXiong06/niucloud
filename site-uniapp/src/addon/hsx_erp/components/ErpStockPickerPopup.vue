@@ -13,21 +13,21 @@
     <u-popup :show="show" mode="bottom" :safe-area-inset-bottom="true" border-radius="32rpx" @close="close">
         <view class="popup-wrap">
             <view class="popup-header">
-                <text class="popup-title">选择库存设备</text>
+                <text class="popup-title">{{ itemType === 'standard' ? '选择标品库存' : '选择库存设备' }}</text>
                 <u-icon name="close" size="20" color="#94a3b8" @click="close" />
             </view>
 
             <view class="popup-search">
                 <u-search
                     v-model="keyword"
-                    placeholder="型号 / IMEI / 资产号 / 来源"
+                    :placeholder="itemType === 'standard' ? '商品名称 / 编码 / 仓库' : '型号 / IMEI / 资产号 / 来源'"
                     :showAction="false"
                     bgColor="#f1f5f9"
                     height="34"
                     @search="search"
                     @clear="search"
                 />
-                <view class="popup-scan" @click="scanAndSearch">
+                <view v-if="itemType === 'device'" class="popup-scan" @click="scanAndSearch">
                     <u-icon name="scan" color="#3b6ef5" size="21" />
                 </view>
             </view>
@@ -37,7 +37,7 @@
                     <u-icon name="home" size="14" :color="filterWarehouseName ? '#3b6ef5' : '#64748b'" />
                     <text>{{ warehouseFilterText || '仓库' }}</text>
                 </view>
-                <view class="filter-chip filter-chip--catalog" :class="{ active: catalogProductId }">
+                <view v-if="itemType === 'device'" class="filter-chip filter-chip--catalog" :class="{ active: catalogProductId }">
                     <ErpCatalogProductPopup
                         v-model="catalogProductId"
                         :selected-label="catalogProductName"
@@ -56,7 +56,7 @@
             </view>
 
             <!-- 扫码提示 -->
-            <view class="scan-hint" v-if="!keyword">
+            <view class="scan-hint" v-if="itemType === 'device' && !keyword">
                 <text class="scan-hint__text">支持扫描 IMEI 快速定位设备</text>
             </view>
 
@@ -74,19 +74,23 @@
                         <view class="stock-item__head">
                             <view class="stock-title">
                                 <text class="stock-item__model">{{ row.model || '-' }}</text>
-                                <text class="stock-item__spec">{{ row.spec || '无规格' }}</text>
+                                <text class="stock-item__spec">
+                                    {{ itemType === 'standard'
+                                        ? `${row.product_code || '无商品编码'} · 可售 ${quantityText(row.available_quantity)}${row.unit || '件'}`
+                                        : (row.spec || '无规格') }}
+                                </text>
                             </view>
                             <view class="stock-pick">
                                 <text>选择</text>
                                 <u-icon name="arrow-right" color="#3b6ef5" size="15" />
                             </view>
                         </view>
-                        <view class="stock-ident">
+                        <view v-if="itemType === 'device'" class="stock-ident">
                             <text class="ident-label">IMEI</text>
                             <text class="ident-value">{{ row.imei || '-' }}</text>
                         </view>
                         <view class="stock-tags">
-                            <view v-if="isConsigned(row)" class="stock-tag consigned">
+                            <view v-if="itemType === 'device' && isConsigned(row)" class="stock-tag consigned">
                                 <u-icon name="account" color="#d97706" size="12" />
                                 <text>客户代卖 · 货主 {{ row.owner_party_name || '-' }}</text>
                             </view>
@@ -104,7 +108,7 @@
                         </view>
                         <view class="stock-money">
                             <view class="money-box">
-                                <text class="money-label">{{ isConsigned(row) ? '货主结算' : '成本' }}</text>
+                                <text class="money-label">{{ itemType === 'standard' ? '平均成本' : (isConsigned(row) ? '货主结算' : '成本') }}</text>
                                 <text class="money-value">¥{{ money(saleCostBasis(row)) }}</text>
                             </view>
                             <view class="money-box">
@@ -118,7 +122,7 @@
                         </view>
                     </view>
                     <view v-if="!list.length && !loading" class="popup-empty">
-                        <u-empty mode="search" text="暂无待售设备" :image-size="60" />
+                        <u-empty mode="search" :text="itemType === 'standard' ? '暂无可售标品库存' : '暂无待售设备'" :image-size="60" />
                     </view>
                     <view v-if="loading && list.length" class="popup-loading-more">
                         <u-loading-icon size="20" />
@@ -149,10 +153,12 @@ const props = withDefaults(defineProps<{
     show: boolean
     excludeIds?: number[]
     scanTrigger?: number
+    itemType?: 'device' | 'standard'
 }>(), {
     show: false,
     excludeIds: () => [],
     scanTrigger: 0,
+    itemType: 'device',
 })
 
 const emit = defineEmits<{
@@ -172,6 +178,7 @@ const filterLocationId = ref(0)
 const filterLocationName = ref('')
 const catalogProductId = ref<any>('')
 const catalogProductName = ref('')
+const itemType = computed(() => props.itemType)
 const hasFilter = computed(() => Number(filterWarehouseId.value || 0) > 0 || Number(catalogProductId.value || 0) > 0)
 const warehouseFilterText = computed(() => {
     if (!filterWarehouseName.value) return ''
@@ -183,6 +190,16 @@ watch(() => props.show, (v) => {
 })
 watch(() => props.scanTrigger, async () => {
     if (props.show) await scanAndSearch()
+})
+watch(() => props.itemType, () => {
+    keyword.value = ''
+    filterWarehouseId.value = 0
+    filterWarehouseName.value = ''
+    filterLocationId.value = 0
+    filterLocationName.value = ''
+    catalogProductId.value = ''
+    catalogProductName.value = ''
+    if (props.show) search()
 })
 
 async function search() {
@@ -207,6 +224,7 @@ async function loadPage() {
             warehouse_id: filterWarehouseId.value || 0,
             location_id: filterLocationId.value || 0,
             catalog_product_id: catalogProductId.value || 0,
+            item_type: props.itemType,
             page: page.value,
             limit: 15,
         })
@@ -242,6 +260,7 @@ function clearFilters() {
 }
 
 async function scanAndSearch() {
+    if (props.itemType !== 'device') return
     try {
         keyword.value = await scanErpCode()
         await search()
@@ -281,8 +300,10 @@ function isConsigned(row: any) {
     return String(row?.ownership_type || '') === 'consigned'
 }
 function saleCostBasis(row: any) {
+    if (props.itemType === 'standard') return Number(row?.average_cost || row?.sale_cost_basis || 0)
     return Number(row?.sale_cost_basis ?? (isConsigned(row) ? row?.consignment_settlement_amount : row?.total_cost) ?? 0)
 }
+const quantityText = (v: any) => Number(v || 0).toFixed(3).replace(/0+$/, '').replace(/\.$/, '') || '0'
 </script>
 
 <style scoped lang="scss">

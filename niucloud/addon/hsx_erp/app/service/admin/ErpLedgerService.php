@@ -9,6 +9,7 @@ use addon\hsx_erp\app\model\ErpAssetLedger;
 use addon\hsx_erp\app\model\ErpMoneyLedger;
 use addon\hsx_erp\app\support\ErpMoney;
 use core\base\BaseAdminService;
+use think\facade\Log;
 
 class ErpLedgerService extends BaseAdminService
 {
@@ -132,7 +133,70 @@ class ErpLedgerService extends BaseAdminService
             'occurred_at' => (int)($data['occurred_at'] ?? $now),
             'create_at' => $now,
         ]);
+        $this->emitAssetPerformanceFact($row, $asset);
         return (int)$row->id;
+    }
+
+    /** 资产流水已经在业务事务内落库，可作为跨插件员工产出的稳定事实来源。 */
+    private function emitAssetPerformanceFact(ErpAssetLedger $ledger, ?ErpAsset $asset): void
+    {
+        $metric = [
+            'inbound' => ['key' => 'erp.purchase.inbound', 'name' => '采购入库', 'scope' => 'outcome', 'role' => 'purchaser'],
+            'listing_photo_complete' => ['key' => 'erp.asset.photo.completed', 'name' => '设备拍照完成', 'scope' => 'action', 'role' => 'photographer'],
+            'listing_price_complete' => ['key' => 'erp.asset.price.completed', 'name' => '商城销售定价', 'scope' => 'action', 'role' => 'listing_pricer'],
+            'listing_material_complete' => ['key' => 'erp.asset.material.completed', 'name' => '商城资料完善', 'scope' => 'action', 'role' => 'listing_operator'],
+            'listing_publish' => ['key' => 'erp.asset.listed', 'name' => '设备成功上架', 'scope' => 'outcome', 'role' => 'listing_operator'],
+            'transfer' => ['key' => 'erp.asset.transferred', 'name' => '库存调拨', 'scope' => 'action', 'role' => 'warehouse'],
+        ][(string)$ledger->action] ?? null;
+        if (!$metric || (int)$ledger->operator_uid <= 0 || (int)$ledger->asset_id <= 0) return;
+
+        try {
+            event('HsxPerformanceFactRecorded', [
+                'event_name' => 'performance.fact.recorded.v1',
+                'event_version' => 1,
+                'site_id' => (int)$ledger->site_id,
+                'event_id' => 'hsx_erp:asset_ledger:' . (int)$ledger->id,
+                'source_plugin' => 'hsx_erp',
+                'business_chain' => 'stock',
+                'metric_key' => $metric['key'],
+                'metric_name' => $metric['name'],
+                'fact_scope' => $metric['scope'],
+                'fact_type' => 'original',
+                'direction' => 1,
+                'employee_uid' => (int)$ledger->operator_uid,
+                'employee_name' => (string)$ledger->operator_name,
+                'role_key' => $metric['role'],
+                'business_type' => 'erp_asset',
+                'business_id' => (string)$ledger->asset_id,
+                'business_no' => (string)$ledger->asset_no,
+                'asset_id' => (int)$ledger->asset_id,
+                'imei' => (string)$ledger->imei,
+                'quantity' => '1.00',
+                'amount' => (string)((string)$ledger->action === 'inbound'
+                    ? $ledger->after_total_cost
+                    : ((string)$ledger->action === 'listing_price_complete' && $asset ? $asset->retail_price : '0.00')),
+                'profit' => '0.00',
+                'unit' => 'device',
+                'occurred_at' => (int)$ledger->occurred_at,
+                'dimensions' => [
+                    'model' => (string)$ledger->model,
+                    'action' => (string)$ledger->action,
+                    'warehouse_name' => (string)$ledger->after_warehouse_name,
+                    'location_name' => (string)$ledger->after_location_name,
+                ],
+                'source_route' => [
+                    'app' => 'adminapp',
+                    'path' => 'addon/hsx_erp/pages/stock/detail',
+                    'query' => ['id' => (int)$ledger->asset_id],
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('ERP资产产出事实派发失败', [
+                'site_id' => (int)$ledger->site_id,
+                'asset_ledger_id' => (int)$ledger->id,
+                'message' => $e->getMessage(),
+            ]);
+        }
     }
 
 }

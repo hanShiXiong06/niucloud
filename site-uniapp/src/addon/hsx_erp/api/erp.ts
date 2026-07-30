@@ -55,6 +55,15 @@ export function createMobileErpPurchase(data: Record<string, any>) {
 export function confirmMobilePurchasePayment(partyId: number, data: Record<string, any>) {
     return request.post(`erp/finance/payable/party/${partyId}/confirm_payment`, withErpRequestId(data, 'party-payment'))
 }
+export function getMobileErpQuantityProducts(params: Record<string, any> = {}) {
+    return request.get('erp/stock/quantity_products', params)
+}
+export function createMobileErpQuantityProduct(data: Record<string, any>) {
+    return request.post('erp/stock/quantity_product', data)
+}
+export function updateMobileErpQuantityProductCategory(id: number, data: Record<string, any>) {
+    return request.post(`erp/stock/quantity_product/${id}/category`, data)
+}
 
 // ─── 销售 ────────────────────────────────────────────────────────────────────
 export function getMobileSaleList(params: Record<string, any>) {

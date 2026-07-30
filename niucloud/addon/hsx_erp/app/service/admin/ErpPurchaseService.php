@@ -775,20 +775,27 @@ class ErpPurchaseService extends BaseAdminService
                 }
                 if ((string)($item['item_type'] ?? 'device') === 'standard') {
                     $quantity = round((float)($item['quantity'] ?? 0), 3);
-                    $unitCost = round((float)($item['unit_cost'] ?? 0), 2);
+                    $unitCost = round((float)($item['unit_cost'] ?? 0), 6);
                     $unit = mb_substr(trim((string)($item['unit'] ?? '件')) ?: '件', 0, 20);
                     $modelName = trim((string)($item['model'] ?? ''));
                     $spec = trim((string)($item['spec'] ?? ''));
                     $productCode = trim((string)($item['product_code'] ?? ''));
-                    if ($productCode === '') {
-                        $productCode = 'SP' . strtoupper(substr(hash('sha256', $modelName . '|' . $spec), 0, 14));
-                    }
+                    $quantityProductId = max(0, (int)($item['quantity_product_id'] ?? 0));
+                    if ($quantityProductId <= 0) throw new CommonException('请选择已有标品或创建新品');
+                    $quantityProduct = (new ErpQuantityInventoryService())->productInfo($quantityProductId);
+                    $modelName = trim((string)$quantityProduct->product_name);
+                    $spec = trim((string)($quantityProduct->spec ?? ''));
+                    $productCode = trim((string)$quantityProduct->product_code);
+                    $unit = trim((string)$quantityProduct->unit) ?: '件';
+                    $categoryName = trim((string)($quantityProduct->category_name ?? ''));
+                    $categoryPath = trim((string)($quantityProduct->category_path ?? ''));
+                    if ($categoryPath === '') throw new CommonException('标品“' . $modelName . '”尚未绑定分类，请先完善分类');
                     $purchaseItem = ErpPurchaseItem::create([
                         'site_id' => $this->site_id,
                         'purchase_order_id' => $orderId,
                         'item_type' => 'standard',
                         'asset_id' => 0,
-                        'quantity_product_id' => 0,
+                        'quantity_product_id' => $quantityProductId,
                         'product_code' => $productCode,
                         'unit' => $unit,
                         'quantity' => $quantity,
@@ -799,6 +806,8 @@ class ErpPurchaseService extends BaseAdminService
                         'location_name' => $itemLocationName,
                         'model' => $modelName,
                         'spec' => $spec,
+                        'category_name' => $categoryName,
+                        'category_path' => $categoryPath,
                         'purchase_cost' => $cost,
                         'adjust_cost' => 0,
                         'total_cost' => $cost,
@@ -812,9 +821,12 @@ class ErpPurchaseService extends BaseAdminService
                         'source_plugin' => 'hsx_erp',
                         'source_id' => $productCode,
                         'product_code' => $productCode,
-                        'product_name' => $modelName . ($spec !== '' ? ' ' . $spec : ''),
+                        'quantity_product_id' => $quantityProductId,
+                        'product_name' => $modelName,
+                        'spec' => $spec,
                         'unit' => $unit,
                         'quantity' => $quantity,
+                        'cost_amount' => $cost,
                         'warehouse_id' => $itemWarehouseId,
                         'location_id' => $itemLocationId,
                         'biz_type' => 'purchase_standard',
@@ -1148,6 +1160,7 @@ class ErpPurchaseService extends BaseAdminService
                     'product_name' => trim((string)$standardItem->model . ' ' . (string)$standardItem->spec),
                     'unit' => (string)$standardItem->unit,
                     'quantity' => (float)$standardItem->quantity,
+                    'cost_amount' => (float)$standardItem->total_cost,
                     'warehouse_id' => (int)$standardItem->warehouse_id,
                     'location_id' => (int)$standardItem->location_id,
                     'mode' => 'strict',
@@ -1525,13 +1538,17 @@ class ErpPurchaseService extends BaseAdminService
             }
             if ($itemType === 'standard') {
                 $quantity = round((float)($item['quantity'] ?? 0), 3);
-                $unitCost = round((float)($item['unit_cost'] ?? $item['purchase_cost'] ?? 0), 2);
+                $lineTotal = round((float)($item['purchase_cost'] ?? 0), 2);
+                if ($lineTotal <= 0) {
+                    $lineTotal = round($quantity * (float)($item['unit_cost'] ?? 0), 2);
+                }
                 if ($quantity <= 0) throw new CommonException('第' . ($index + 1) . '项标品采购数量必须大于0');
-                if ($unitCost <= 0) throw new CommonException('第' . ($index + 1) . '项标品采购单价必须大于0');
+                if ($lineTotal <= 0) throw new CommonException('第' . ($index + 1) . '项标品采购总价必须大于0');
+                $unitCost = round($lineTotal / $quantity, 6);
                 $item['quantity'] = $quantity;
                 $item['unit_cost'] = $unitCost;
                 $item['unit'] = mb_substr(trim((string)($item['unit'] ?? '件')) ?: '件', 0, 20);
-                $item['purchase_cost'] = round($quantity * $unitCost, 2);
+                $item['purchase_cost'] = $lineTotal;
                 continue;
             }
             $item['quantity'] = 1;

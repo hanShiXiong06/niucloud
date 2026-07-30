@@ -403,40 +403,38 @@
                             empty-text="请添加采购商品"
                         >
                             <el-table-column type="index" label="序号" width="58" align="center" fixed="left" />
-                            <el-table-column min-width="220" fixed="left">
-                                <template #header><span class="standard-required">商品名称</span></template>
+                            <el-table-column min-width="300" fixed="left">
+                                <template #header><span class="standard-required">已有商品 / 新品</span></template>
                                 <template #default="{ row }">
-                                    <el-input v-model.trim="row.model" placeholder="如 iPhone 15 钢化膜" />
+                                    <ErpQuantityProductSelect
+                                        v-model="row.quantity_product_id"
+                                        :selected="row.quantity_product_snapshot"
+                                        @change="product => onStandardProductChange(row, product)"
+                                    />
                                 </template>
                             </el-table-column>
-                            <el-table-column label="规格" min-width="170">
+                            <el-table-column label="商品信息" min-width="220">
                                 <template #default="{ row }">
-                                    <el-input v-model.trim="row.spec" placeholder="如 透明 / 高清" />
+                                    <div class="font-medium text-slate-800">{{ row.model || '待选择' }}</div>
+                                    <div class="mt-1 text-xs text-slate-400">{{ [row.spec, row.product_code].filter(Boolean).join(' · ') || '选择已有商品，找不到可创建新品' }}</div>
                                 </template>
                             </el-table-column>
-                            <el-table-column label="商品编码" min-width="170">
-                                <template #default="{ row }">
-                                    <el-input v-model.trim="row.product_code" placeholder="自动生成" />
-                                </template>
-                            </el-table-column>
-                            <el-table-column min-width="105">
-                                <template #header><span class="standard-required">单位</span></template>
-                                <template #default="{ row }">
-                                    <el-select v-model="row.unit" allow-create filterable>
-                                        <el-option v-for="unit in ['件', '张', '个', '盒', '台']" :key="unit" :label="unit" :value="unit" />
-                                    </el-select>
-                                </template>
-                            </el-table-column>
+                            <el-table-column prop="unit" label="单位" min-width="82" align="center" />
                             <el-table-column min-width="125" align="right">
                                 <template #header><span class="standard-required">采购数量</span></template>
                                 <template #default="{ row }">
                                     <el-input-number v-model="row.quantity" :min="0" :precision="3" :controls="false" />
                                 </template>
                             </el-table-column>
-                            <el-table-column min-width="135" align="right">
-                                <template #header><span class="standard-required">采购单价</span></template>
+                            <el-table-column min-width="145" align="right">
+                                <template #header><span class="standard-required">采购总价</span></template>
                                 <template #default="{ row }">
-                                    <el-input-number v-model="row.unit_cost" :min="0" :precision="2" :controls="false" />
+                                    <el-input-number v-model="row.line_total" :min="0" :precision="2" :controls="false" />
+                                </template>
+                            </el-table-column>
+                            <el-table-column label="折算单价" min-width="130" align="right">
+                                <template #default="{ row }">
+                                    <span class="standard-entry__unit-price">¥{{ standardUnitCostText(row) }}</span>
                                 </template>
                             </el-table-column>
                             <el-table-column min-width="230">
@@ -455,11 +453,6 @@
                             <el-table-column label="备注" min-width="180">
                                 <template #default="{ row }">
                                     <el-input v-model.trim="row.remark" placeholder="选填" />
-                                </template>
-                            </el-table-column>
-                            <el-table-column label="小计" width="130" align="right" fixed="right">
-                                <template #default="{ row }">
-                                    <strong class="standard-entry__subtotal">{{ money(standardLineTotal(row)) }}</strong>
                                 </template>
                             </el-table-column>
                             <el-table-column label="操作" width="72" align="center" fixed="right">
@@ -852,6 +845,7 @@ import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/i
 import ErpPartySelect from '@/addon/hsx_erp/components/ErpPartySelect.vue'
 import ErpDeviceIdentity from '@/addon/hsx_erp/components/ErpDeviceIdentity.vue'
 import ErpCatalogProductSelect from '@/addon/hsx_erp/components/ErpCatalogProductSelect.vue'
+import ErpQuantityProductSelect from '@/addon/hsx_erp/components/ErpQuantityProductSelect.vue'
 import ErpOverflowText from '@/addon/hsx_erp/components/ErpOverflowText.vue'
 import ErpRoleFocus from '@/addon/hsx_erp/components/ErpRoleFocus.vue'
 import ErpWarehouseLocationCascader from '@/addon/hsx_erp/components/ErpWarehouseLocationCascader.vue'
@@ -970,12 +964,15 @@ function blankItem(type = 'device') {
         const location = warehouse?.locations?.[0]
         return {
             item_type: 'standard',
+            quantity_product_id: 0,
+            quantity_product_snapshot: null,
             model: '',
             spec: '',
             product_code: '',
             unit: '件',
             quantity: 1,
             unit_cost: 0,
+            line_total: 0,
             purchase_cost: 0,
             warehouse_id: Number(warehouse?.id || 0),
             warehouse_name: warehouse?.warehouse_name || '',
@@ -1015,6 +1012,15 @@ function blankItem(type = 'device') {
         _auto_model: '',
         _model_manual: false
     }
+}
+
+function onStandardProductChange(row: any, product: any | null) {
+    row.quantity_product_id = Number(product?.id || 0)
+    row.quantity_product_snapshot = product || null
+    row.model = String(product?.product_name || '')
+    row.spec = String(product?.spec || '')
+    row.product_code = String(product?.product_code || '')
+    row.unit = String(product?.unit || '件')
 }
 
 async function loadList() {
@@ -1213,7 +1219,19 @@ function onPurchaseItemModeChange(type: string | number | boolean | undefined) {
 }
 
 function standardLineTotal(row: any) {
+    if (row?.line_total !== undefined && row?.line_total !== null && row?.line_total !== '') {
+        return Math.round(Number(row.line_total || 0) * 100) / 100
+    }
     return Math.round(Number(row?.quantity || 0) * Number(row?.unit_cost || 0) * 100) / 100
+}
+
+function standardUnitCost(row: any) {
+    const quantity = Number(row?.quantity || 0)
+    return quantity > 0 ? Math.round((standardLineTotal(row) / quantity) * 1000000) / 1000000 : 0
+}
+
+function standardUnitCostText(row: any) {
+    return standardUnitCost(row).toFixed(6).replace(/0+$/, '').replace(/\.$/, '') || '0'
 }
 
 function openItemExtra(row: any, index: number) {
@@ -1506,9 +1524,9 @@ async function submitCreate() {
     if (!create.form.party_id && !create.form.party_name) return ElMessage.warning('请选择采购渠道')
     const isStandard = create.form.item_type_mode === 'standard'
     if (!create.form.items.length || create.form.items.some((row: any) => isStandard
-        ? (!row.model || Number(row.quantity || 0) <= 0 || Number(row.unit_cost || 0) <= 0)
+        ? (!row.model || Number(row.quantity || 0) <= 0 || standardLineTotal(row) <= 0)
         : (!row.category_path || !row.model || (!row.imei && !row.sn) || Number(row.purchase_cost || 0) <= 0))) {
-        return ElMessage.warning(isStandard ? '请补全商品名称、采购数量和采购单价' : '请补全商品分类、设备名称、IMEI/SN 和采购成本')
+        return ElMessage.warning(isStandard ? '请补全商品名称、采购数量和采购总价' : '请补全商品分类、设备名称、IMEI/SN 和采购成本')
     }
     const missingLocationIndex = create.form.items.findIndex((row: any) => !row.warehouse_id || !row.location_id)
     if (missingLocationIndex >= 0) return ElMessage.warning(`请为第 ${missingLocationIndex + 1} ${isStandard ? '项商品' : '台设备'}选择入库仓库和库位`)
@@ -1529,7 +1547,7 @@ async function submitCreate() {
         await createErpPurchase({
             ...create.form,
             items: create.form.items.map((row: any) => row.item_type === 'standard'
-                ? { ...row, purchase_cost: standardLineTotal(row) }
+                ? { ...row, unit_cost: standardUnitCost(row), purchase_cost: standardLineTotal(row) }
                 : row),
             warehouse_name: currentWarehouse.value?.warehouse_name || create.form.warehouse_name,
             location_name: currentLocations.value.find((row: any) => Number(row.id) === Number(create.form.location_id))?.location_name || create.form.location_name,
@@ -1838,6 +1856,10 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
 .standard-entry__subtotal {
     color: #0f172a;
     font-size: 14px;
+    font-variant-numeric: tabular-nums;
+}
+.standard-entry__unit-price {
+    color: #64748b;
     font-variant-numeric: tabular-nums;
 }
 .standard-entry__footer {

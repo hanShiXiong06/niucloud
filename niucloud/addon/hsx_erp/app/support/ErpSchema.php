@@ -19,6 +19,8 @@ final class ErpSchema
         Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_quantity_product` (
             `id` int unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
             `product_code` varchar(60) NOT NULL DEFAULT '', `product_name` varchar(120) NOT NULL DEFAULT '',
+            `spec` varchar(120) NOT NULL DEFAULT '', `catalog_product_id` int NOT NULL DEFAULT 0,
+            `category_name` varchar(100) NOT NULL DEFAULT '', `category_path` varchar(255) NOT NULL DEFAULT '',
             `unit` varchar(20) NOT NULL DEFAULT '件', `source_plugin` varchar(40) NOT NULL DEFAULT '',
             `source_id` varchar(80) NOT NULL DEFAULT '', `status` tinyint(1) NOT NULL DEFAULT 1,
             `remark` varchar(255) NOT NULL DEFAULT '', `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
@@ -29,7 +31,8 @@ final class ErpSchema
         Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_quantity_stock` (
             `id` bigint unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
             `product_id` int NOT NULL DEFAULT 0, `warehouse_id` int NOT NULL DEFAULT 0, `location_id` int NOT NULL DEFAULT 0,
-            `quantity` decimal(14,3) NOT NULL DEFAULT 0.000, `update_at` int NOT NULL DEFAULT 0, `create_at` int NOT NULL DEFAULT 0,
+            `quantity` decimal(14,3) NOT NULL DEFAULT 0.000, `inventory_amount` decimal(14,2) NOT NULL DEFAULT 0.00,
+            `update_at` int NOT NULL DEFAULT 0, `create_at` int NOT NULL DEFAULT 0,
             PRIMARY KEY (`id`), UNIQUE KEY `uk_site_product_position` (`site_id`,`product_id`,`warehouse_id`,`location_id`),
             KEY `idx_site_warehouse` (`site_id`,`warehouse_id`,`location_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-数量库存余额'");
@@ -40,6 +43,7 @@ final class ErpSchema
             `warehouse_id` int NOT NULL DEFAULT 0, `warehouse_name` varchar(100) NOT NULL DEFAULT '',
             `location_id` int NOT NULL DEFAULT 0, `location_name` varchar(100) NOT NULL DEFAULT '',
             `direction` varchar(20) NOT NULL DEFAULT 'out', `quantity` decimal(14,3) NOT NULL DEFAULT 0.000,
+            `unit_cost` decimal(14,6) NOT NULL DEFAULT 0.000000, `amount` decimal(14,2) NOT NULL DEFAULT 0.00,
             `before_quantity` decimal(14,3) NOT NULL DEFAULT 0.000, `after_quantity` decimal(14,3) NOT NULL DEFAULT 0.000,
             `biz_type` varchar(60) NOT NULL DEFAULT '', `biz_id` int NOT NULL DEFAULT 0, `biz_no` varchar(80) NOT NULL DEFAULT '',
             `source_plugin` varchar(40) NOT NULL DEFAULT '', `operator_uid` int NOT NULL DEFAULT 0,
@@ -273,6 +277,19 @@ final class ErpSchema
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-打印任务与日志'");
 
         $columns = [
+            'erp_quantity_product' => [
+                'spec' => "`spec` varchar(120) NOT NULL DEFAULT '' COMMENT 'SKU规格' AFTER `product_name`",
+                'catalog_product_id' => "`catalog_product_id` int NOT NULL DEFAULT 0 COMMENT 'ERP商品目录型号ID，0为自建标品' AFTER `spec`",
+                'category_name' => "`category_name` varchar(100) NOT NULL DEFAULT '' COMMENT 'ERP末级分类名称快照' AFTER `catalog_product_id`",
+                'category_path' => "`category_path` varchar(255) NOT NULL DEFAULT '' COMMENT 'ERP分类路径快照' AFTER `category_name`",
+            ],
+            'erp_quantity_stock' => [
+                'inventory_amount' => "`inventory_amount` decimal(14,2) NOT NULL DEFAULT 0.00 COMMENT '当前库存成本金额' AFTER `quantity`",
+            ],
+            'erp_quantity_stock_flow' => [
+                'unit_cost' => "`unit_cost` decimal(14,6) NOT NULL DEFAULT 0.000000 COMMENT '本次移动成本单价' AFTER `quantity`",
+                'amount' => "`amount` decimal(14,2) NOT NULL DEFAULT 0.00 COMMENT '本次移动成本金额' AFTER `unit_cost`",
+            ],
             'erp_catalog_product_master' => [
                 'created_site_id' => "`created_site_id` int NOT NULL DEFAULT 0 COMMENT '首次写入站点，仅用于审计' AFTER `master_product_id`",
             ],
@@ -321,7 +338,7 @@ final class ErpSchema
                 'product_code' => "`product_code` varchar(60) NOT NULL DEFAULT '' COMMENT '标品编码快照' AFTER `quantity_product_id`",
                 'unit' => "`unit` varchar(20) NOT NULL DEFAULT '台' COMMENT '计量单位' AFTER `product_code`",
                 'quantity' => "`quantity` decimal(14,3) NOT NULL DEFAULT 1.000 COMMENT '采购数量' AFTER `unit`",
-                'unit_cost' => "`unit_cost` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '采购单价' AFTER `quantity`",
+                'unit_cost' => "`unit_cost` decimal(14,6) NOT NULL DEFAULT 0.000000 COMMENT '折算采购单价' AFTER `quantity`",
                 'warehouse_id' => "`warehouse_id` int NOT NULL DEFAULT 0 COMMENT '明细入库仓库ID' AFTER `asset_id`",
                 'warehouse_name' => "`warehouse_name` varchar(100) NOT NULL DEFAULT '' COMMENT '明细入库仓库名称快照' AFTER `warehouse_id`",
                 'location_id' => "`location_id` int NOT NULL DEFAULT 0 COMMENT '明细入库库位ID' AFTER `warehouse_name`",
@@ -417,12 +434,20 @@ final class ErpSchema
                 'refunded_cost' => "`refunded_cost` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '累计退款成本转回' AFTER `refunded_amount`",
             ],
             'erp_sale_item' => [
+                'item_type' => "`item_type` varchar(20) NOT NULL DEFAULT 'device' COMMENT 'device一机一码/standard数量标品' AFTER `sale_order_id`",
+                'quantity_product_id' => "`quantity_product_id` int NOT NULL DEFAULT 0 COMMENT '数量商品档案ID' AFTER `asset_id`",
+                'product_code' => "`product_code` varchar(60) NOT NULL DEFAULT '' COMMENT '标品编码快照' AFTER `quantity_product_id`",
+                'unit' => "`unit` varchar(20) NOT NULL DEFAULT '台' COMMENT '计量单位' AFTER `product_code`",
+                'warehouse_id' => "`warehouse_id` int NOT NULL DEFAULT 0 COMMENT '出库仓库ID快照' AFTER `unit`",
+                'warehouse_name' => "`warehouse_name` varchar(100) NOT NULL DEFAULT '' COMMENT '出库仓库名称快照' AFTER `warehouse_id`",
+                'location_id' => "`location_id` int NOT NULL DEFAULT 0 COMMENT '出库库位ID快照' AFTER `warehouse_name`",
+                'location_name' => "`location_name` varchar(100) NOT NULL DEFAULT '' COMMENT '出库库位名称快照' AFTER `location_id`",
                 'external_goods_id' => "`external_goods_id` int NOT NULL DEFAULT 0 COMMENT '外部商城商品ID' AFTER `model`",
                 'external_sku_id' => "`external_sku_id` int NOT NULL DEFAULT 0 COMMENT '外部商城SKU ID' AFTER `external_goods_id`",
                 'external_line_id' => "`external_line_id` varchar(80) NOT NULL DEFAULT '' COMMENT '外部订单明细ID' AFTER `external_sku_id`",
                 'supplier_id' => "`supplier_id` int NOT NULL DEFAULT 0 COMMENT '来源商品供应商ID快照，0为自有/期初' AFTER `external_line_id`",
                 'inventory_source' => "`inventory_source` varchar(30) NOT NULL DEFAULT 'erp_asset' COMMENT 'erp_asset/supplier/self_owned/opening' AFTER `supplier_id`",
-                'quantity' => "`quantity` int NOT NULL DEFAULT 1 COMMENT '标品数量' AFTER `inventory_source`",
+                'quantity' => "`quantity` decimal(14,3) NOT NULL DEFAULT 1.000 COMMENT '销售数量' AFTER `inventory_source`",
                 'ownership_type' => "`ownership_type` varchar(20) NOT NULL DEFAULT 'owned' COMMENT 'owned自有/consigned代卖' AFTER `model`",
                 'owner_party_id' => "`owner_party_id` int NOT NULL DEFAULT 0 COMMENT '代卖货主主体ID' AFTER `ownership_type`",
                 'owner_party_name' => "`owner_party_name` varchar(100) NOT NULL DEFAULT '' COMMENT '代卖货主名称快照' AFTER `owner_party_id`",
@@ -561,6 +586,20 @@ final class ErpSchema
                 self::ensureColumn($prefix . $table, $column, $definition);
             }
         }
+        // 总价折算会产生循环小数；历史库的两位单价列会造成库存成本累计误差。
+        // 这里只在插件安装/升级生命周期执行，不进入普通业务请求。
+        self::ensureColumnType(
+            $prefix . 'erp_purchase_item',
+            'unit_cost',
+            'decimal(14,6)',
+            "`unit_cost` decimal(14,6) NOT NULL DEFAULT 0.000000 COMMENT '折算采购单价'"
+        );
+        self::ensureColumnType(
+            $prefix . 'erp_sale_item',
+            'quantity',
+            'decimal(14,3)',
+            "`quantity` decimal(14,3) NOT NULL DEFAULT 1.000 COMMENT '销售数量'"
+        );
 
         // 早期业务入口曾把缺省幂等键保存成空字符串，导致同站点第二次结算撞唯一索引。
         // 空请求号不代表同一个请求，统一迁移成 NULL 后仍由真实 request_id 保证幂等。
@@ -572,6 +611,7 @@ final class ErpSchema
         self::ensureIndex($prefix . 'erp_asset', 'idx_site_catalog_product', 'KEY `idx_site_catalog_product` (`site_id`,`catalog_product_id`,`status`)');
         self::ensureIndex($prefix . 'erp_purchase_item', 'idx_site_catalog_product', 'KEY `idx_site_catalog_product` (`site_id`,`catalog_product_id`)');
         self::ensureIndex($prefix . 'erp_purchase_item', 'idx_quantity_product', 'KEY `idx_quantity_product` (`site_id`,`quantity_product_id`)');
+        self::ensureIndex($prefix . 'erp_quantity_product', 'idx_site_category', 'KEY `idx_site_category` (`site_id`,`category_path`(100),`status`)');
         self::ensureIndex($prefix . 'erp_sale_item', 'idx_owner', 'KEY `idx_owner` (`site_id`,`owner_party_id`,`status`)');
         self::ensureIndex($prefix . 'erp_sale_item', 'idx_consignment_payable', 'KEY `idx_consignment_payable` (`site_id`,`consignment_payable_id`)');
         self::ensureIndex($prefix . 'erp_warehouse', 'idx_site_manager', 'KEY `idx_site_manager` (`site_id`,`manager_uid`,`status`)');
@@ -816,6 +856,19 @@ final class ErpSchema
             return;
         }
         Db::execute("ALTER TABLE `{$table}` ADD COLUMN {$definition}");
+    }
+
+    private static function ensureColumnType(
+        string $table,
+        string $column,
+        string $expectedType,
+        string $definition
+    ): void {
+        $rows = Db::query("SHOW COLUMNS FROM `{$table}` LIKE '{$column}'");
+        if ($rows === []) return;
+        $actual = strtolower((string)($rows[0]['Type'] ?? $rows[0]['type'] ?? ''));
+        if ($actual === strtolower($expectedType)) return;
+        Db::execute("ALTER TABLE `{$table}` MODIFY COLUMN {$definition}");
     }
 
     private static function ensureIndex(string $table, string $index, string $definition): void

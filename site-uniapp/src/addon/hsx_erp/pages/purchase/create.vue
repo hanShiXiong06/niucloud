@@ -233,15 +233,14 @@
                     >
                     <view class="device-form-card standard-form-card">
                         <view class="device-form__head">
-                            <text class="device-form__index">标品 {{ idx + 1 }}</text>
+                            <text class="device-form__index">{{ item.quantity_product_id ? '补货' : '标品' }} {{ idx + 1 }}</text>
                         </view>
-                        <view class="form-row">
-                            <text class="form-label required">商品名称</text>
-                            <u-input v-model="item.model" placeholder="如：iPhone 15 钢化膜" :customStyle="inputStyle" />
-                        </view>
-                        <view class="form-row">
-                            <text class="form-label">商品规格</text>
-                            <u-input v-model="item.spec" placeholder="如：透明 / 高清" :customStyle="inputStyle" />
+                        <view class="standard-product-picker">
+                            <ErpQuantityProductPopup
+                                v-model="item.quantity_product_id"
+                                :selected="item.quantity_product_snapshot"
+                                @change="product => onStandardProductChange(item, product)"
+                            />
                         </view>
                         <view class="form-row">
                             <text class="form-label required">采购数量</text>
@@ -252,8 +251,8 @@
                             </view>
                         </view>
                         <view class="form-row">
-                            <text class="form-label required">采购单价</text>
-                            <u-input v-model="item.unit_cost" type="number" placeholder="0.00" :customStyle="inputStyle" />
+                            <text class="form-label required">采购总价</text>
+                            <u-input v-model="item.line_total" type="number" placeholder="0.00" :customStyle="inputStyle" />
                         </view>
                         <view class="form-row" @click="openItemWarehouse(idx)">
                             <text class="form-label required">入库位置</text>
@@ -263,8 +262,8 @@
                             </view>
                         </view>
                         <view class="standard-total">
-                            <text>本项采购小计</text>
-                            <text class="standard-total__money">¥{{ money(standardLineTotal(item)) }}</text>
+                            <text>折算单价</text>
+                            <text class="standard-total__money">¥{{ standardUnitCostText(item) }} / {{ item.unit || '件' }}</text>
                         </view>
                     </view>
                     </ErpSwipeActionItem>
@@ -361,6 +360,7 @@ import { confirmErpSensitiveAction } from '@/addon/hsx_erp/hooks/useErpSensitive
 import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
 import ErpSwipeActionItem from '@/addon/hsx_erp/components/ErpSwipeActionItem.vue'
 import ErpVoucherUploader from '@/addon/hsx_erp/components/ErpVoucherUploader.vue'
+import ErpQuantityProductPopup from '@/addon/hsx_erp/components/ErpQuantityProductPopup.vue'
 import { erpPartyDisplayName } from '@/addon/hsx_erp/hooks/useErpPartyText'
 
 
@@ -440,7 +440,7 @@ const canSubmit = computed(() =>
     form.value.party_id > 0 &&
     form.value.items.length > 0 &&
     form.value.items.every(i => i.item_type === 'standard'
-        ? (i.model && i.warehouse_id && i.location_id && Number(i.quantity) > 0 && Number(i.unit_cost) > 0)
+        ? (i.model && i.warehouse_id && i.location_id && Number(i.quantity) > 0 && standardLineTotal(i) > 0)
         : (i.imei && i.model && i.category_path && i.warehouse_id && i.location_id && Number(i.purchase_cost) > 0)) &&
     (
         form.value.settle_mode !== 'cash' ||
@@ -533,12 +533,15 @@ function addStandardItem() {
 function newStandardItem() {
     return {
         item_type: 'standard',
+        quantity_product_id: 0,
+        quantity_product_snapshot: null,
         model: '',
         spec: '',
         product_code: '',
         unit: '件',
         quantity: 1,
         unit_cost: 0,
+        line_total: 0,
         purchase_cost: 0,
         warehouse_id: 0,
         warehouse_name: '',
@@ -548,8 +551,29 @@ function newStandardItem() {
     }
 }
 
+function onStandardProductChange(item: any, product: any | null) {
+    item.quantity_product_id = Number(product?.id || 0)
+    item.quantity_product_snapshot = product || null
+    item.model = String(product?.product_name || '')
+    item.spec = String(product?.spec || '')
+    item.product_code = String(product?.product_code || '')
+    item.unit = String(product?.unit || '件')
+}
+
 function standardLineTotal(item: any) {
+    if (item?.line_total !== undefined && item?.line_total !== null && item?.line_total !== '') {
+        return Math.round(Number(item.line_total || 0) * 100) / 100
+    }
     return Math.round(Number(item?.quantity || 0) * Number(item?.unit_cost || 0) * 100) / 100
+}
+
+function standardUnitCost(item: any) {
+    const quantity = Number(item?.quantity || 0)
+    return quantity > 0 ? Math.round((standardLineTotal(item) / quantity) * 1000000) / 1000000 : 0
+}
+
+function standardUnitCostText(item: any) {
+    return standardUnitCost(item).toFixed(6).replace(/0+$/, '').replace(/\.$/, '') || '0'
 }
 
 function openUnitPicker(index: number) {
@@ -986,12 +1010,13 @@ async function submit() {
             remark: form.value.remark,
             items: form.value.items.map(i => i.item_type === 'standard' ? {
                 item_type: 'standard',
+                quantity_product_id: Number(i.quantity_product_id || 0),
                 model: i.model,
                 spec: i.spec || '',
                 product_code: i.product_code || '',
                 unit: i.unit || '件',
                 quantity: Number(i.quantity || 0),
-                unit_cost: Number(i.unit_cost || 0),
+                unit_cost: standardUnitCost(i),
                 purchase_cost: standardLineTotal(i),
                 warehouse_id: Number(i.warehouse_id || 0),
                 warehouse_name: i.warehouse_name || '',

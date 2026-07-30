@@ -63,6 +63,18 @@ export function adjustErpPurchaseCost(itemId: number, data: Record<string, any>)
     return request.post(`erp/purchase/item/${itemId}/adjust_cost`, withErpRequestId(data, 'cost-adjust'))
 }
 
+export function getErpQuantityProducts(params: Record<string, any> = {}) {
+    return request.get('erp/stock/quantity_products', { params })
+}
+
+export function createErpQuantityProduct(data: Record<string, any>) {
+    return request.post('erp/stock/quantity_product', data)
+}
+
+export function updateErpQuantityProductCategory(id: number, data: Record<string, any>) {
+    return request.post(`erp/stock/quantity_product/${id}/category`, data)
+}
+
 export function getErpStaffOptions(params: Record<string, any> = {}) {
     return request.get('erp/staff/options', { params })
 }

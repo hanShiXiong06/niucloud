@@ -39,11 +39,15 @@
 
                 <!-- 选择库存设备 -->
                 <view class="form-section">
+                    <view class="goods-mode">
+                        <view class="goods-mode__item" :class="{ active: itemType === 'device' }" @click="changeItemType('device')">二手机</view>
+                        <view class="goods-mode__item" :class="{ active: itemType === 'standard' }" @click="changeItemType('standard')">标品</view>
+                    </view>
                     <view class="form-section__head">
-                        <text class="form-section__title">已选设备（{{ selectedAssets.length }} 台）</text>
+                        <text class="form-section__title">已选货品（{{ selectedQuantityText }}）</text>
                         <view class="form-section__actions">
-                            <u-button size="small" plain type="primary" @click="openScanStockPicker">扫码选设备</u-button>
-                            <u-button size="small" type="primary" @click="showStockPicker = true">+ 选设备</u-button>
+                            <u-button v-if="itemType === 'device'" size="small" plain type="primary" @click="openScanStockPicker">扫码</u-button>
+                            <u-button size="small" type="primary" @click="showStockPicker = true">+ 选货品</u-button>
                         </view>
                     </view>
 
@@ -55,11 +59,16 @@
                             </view>
                             <u-icon name="close-circle" color="#94a3b8" size="20" @click="removeAsset(idx)" />
                         </view>
-                        <text class="card-meta">{{ asset.spec || '-' }} · IMEI {{ asset.imei }}</text>
+                        <text class="card-meta">{{ itemType === 'standard' ? `${asset.product_code || '-'} · 可售 ${quantityText(asset.available_quantity)}${asset.unit || '件'}` : `${asset.spec || '-'} · IMEI ${asset.imei || '-'}` }}</text>
                         <text v-if="isConsigned(asset)" class="card-meta consigned-meta">货主 {{ asset.owner_party_name || '-' }} · 结算 ¥{{ money(saleCostBasis(asset)) }}</text>
                         <text v-else class="card-meta">成本 ¥{{ money(saleCostBasis(asset)) }}</text>
+                        <view v-if="itemType === 'standard'" class="form-row" style="margin-top:12rpx">
+                            <text class="form-label required">销售数量</text>
+                            <u-input v-model="asset._quantity" type="number" :placeholder="`最多 ${quantityText(asset.available_quantity)}`" :customStyle="inputStyle" />
+                            <text class="row-unit">{{ asset.unit || '件' }}</text>
+                        </view>
                         <view class="form-row" style="margin-top:12rpx">
-                            <text class="form-label required">销售价</text>
+                            <text class="form-label required">{{ itemType === 'standard' ? '销售总价' : '销售价' }}</text>
                             <u-input
                                 v-model="asset._sale_price"
                                 type="number"
@@ -68,11 +77,11 @@
                             />
                         </view>
                         <view class="profit-hint" v-if="Number(asset._sale_price) > 0">
-                            预估毛利：<text :class="profitClass(asset)">¥{{ money(Number(asset._sale_price) - saleCostBasis(asset)) }}</text>
+                            预估毛利：<text :class="profitClass(asset)">¥{{ money(Number(asset._sale_price) - selectedCost(asset)) }}</text>
                         </view>
                     </view>
 
-                    <view class="add-hint" v-if="!selectedAssets.length">点击「选设备」从待售库存中选择</view>
+                    <view class="add-hint" v-if="!selectedAssets.length">点击「选货品」从可售库存中选择</view>
 
                     <!-- 合计 -->
                     <view v-if="selectedAssets.length" class="total-row">
@@ -120,6 +129,7 @@
             v-model:show="showStockPicker"
             :excludeIds="selectedAssets.map(a => a.id)"
             :scanTrigger="stockPickerScanTrigger"
+            :item-type="itemType"
             @select="onAssetSelected"
         />
         <ErpSaleChannelPopup
@@ -151,6 +161,7 @@ const goBack = () => uni.navigateBack()
 const accounts = ref<any[]>([])
 const creditProfile = ref<any>(null)
 const selectedAssets = ref<any[]>([])
+const itemType = ref<'device' | 'standard'>('device')
 const showPartyPicker = ref(false)
 const showStockPicker = ref(false)
 const stockPickerScanTrigger = ref(0)
@@ -166,8 +177,11 @@ const form = ref({
 
 const inputStyle = { background: '#f8fafc', borderRadius: '8rpx', padding: '8rpx 16rpx' }
 const totalSale = computed(() => selectedAssets.value.reduce((s, a) => s + Number(a._sale_price || 0), 0))
-const totalCost = computed(() => selectedAssets.value.reduce((s, a) => s + saleCostBasis(a), 0))
+const totalCost = computed(() => selectedAssets.value.reduce((s, a) => s + selectedCost(a), 0))
 const totalProfit = computed(() => totalSale.value - totalCost.value)
+const selectedQuantityText = computed(() => itemType.value === 'standard'
+    ? `${quantityText(selectedAssets.value.reduce((sum, item) => sum + Number(item._quantity || 0), 0))} 件`
+    : `${selectedAssets.value.length} 台`)
 const creditAllowedForOrder = computed(() => {
     const profile = creditProfile.value
     if (!profile || profile.can_credit === false) return !profile
@@ -189,6 +203,8 @@ const canSubmit = computed(() =>
     Boolean(form.value.sale_channel_key) &&
     selectedAssets.value.length > 0 &&
     selectedAssets.value.every(a => Number(a._sale_price) > 0) &&
+    (itemType.value !== 'standard' || selectedAssets.value.every(a =>
+        Number(a._quantity || 0) > 0 && Number(a._quantity || 0) <= Number(a.available_quantity || 0))) &&
     (
         form.value.settle_mode !== 'cash' ||
         (
@@ -240,8 +256,15 @@ async function loadDefaultSaleChannel() {
 function onAssetSelected(asset: any) {
     selectedAssets.value.push({
         ...asset,
+        _quantity: 1,
         _sale_price: suggestedSalePrice(asset),
     })
+}
+
+function changeItemType(type: 'device' | 'standard') {
+    if (itemType.value === type) return
+    itemType.value = type
+    selectedAssets.value = []
 }
 
 function onSaleChannelChange(channel: any) {
@@ -270,7 +293,10 @@ function openScanStockPicker() {
 
 const isConsigned = (asset: any) => String(asset?.ownership_type || '') === 'consigned'
 const saleCostBasis = (asset: any) => Number(asset?.sale_cost_basis ?? (isConsigned(asset) ? asset?.consignment_settlement_amount : asset?.total_cost) ?? 0)
-const profitClass = (a: any) => Number(a._sale_price) - saleCostBasis(a) >= 0 ? 'green' : 'red'
+const selectedCost = (asset: any) => itemType.value === 'standard'
+    ? Number(asset?.average_cost || 0) * Number(asset?._quantity || 0)
+    : saleCostBasis(asset)
+const profitClass = (a: any) => Number(a._sale_price) - selectedCost(a) >= 0 ? 'green' : 'red'
 const suggestedSalePrice = (asset: any) => firstPositiveErpAmount(asset?.retail_price, asset?.estimate_sale_price, saleCostBasis(asset))
 
 async function submit() {
@@ -289,7 +315,7 @@ async function submit() {
         : ''
     const confirmed = await confirmErpSensitiveAction({
         title: '确认销售出库',
-        content: `客户：${erpPartyDisplayName(form.value)}\n渠道：${form.value.sale_channel || '-'}\n设备：${selectedAssets.value.length} 台\n销售总额：¥${money(saleTotal)}${consignmentNotice}\n提交后设备立即退出库存并生成应收，不能普通撤销。`,
+        content: `客户：${erpPartyDisplayName(form.value)}\n渠道：${form.value.sale_channel || '-'}\n货品：${selectedQuantityText.value}\n销售总额：¥${money(saleTotal)}${consignmentNotice}\n提交后货品立即扣减库存并生成应收，不能普通撤销。`,
         confirmText: '确认出库',
     })
     if (!confirmed) {
@@ -310,7 +336,16 @@ async function submit() {
             capital_account_id: form.value.capital_account_id,
             voucher_urls: form.value.voucher_urls,
             remark: form.value.remark,
-            items: selectedAssets.value.map(a => ({
+            items: selectedAssets.value.map(a => itemType.value === 'standard' ? ({
+                item_type: 'standard',
+                stock_id: Number(a.stock_id || a.id),
+                quantity_product_id: Number(a.product_id || 0),
+                warehouse_id: Number(a.warehouse_id || 0),
+                location_id: Number(a.location_id || 0),
+                quantity: Number(a._quantity || 0),
+                sale_price: Number(a._sale_price),
+            }) : ({
+                item_type: 'device',
                 asset_id: a.id,
                 sale_price: Number(a._sale_price),
             }))
@@ -323,6 +358,7 @@ async function submit() {
 }
 
 const money = (v: any) => Number(v || 0).toFixed(2)
+const quantityText = (v: any) => Number(v || 0).toFixed(3).replace(/0+$/, '').replace(/\.$/, '') || '0'
 </script>
 
 <style scoped lang="scss">
@@ -332,6 +368,10 @@ const money = (v: any) => Number(v || 0).toFixed(2)
 .form-section__head { display:flex; align-items:center; justify-content:space-between; margin-bottom:16rpx; }
 .form-section__actions { display:flex; align-items:center; gap:12rpx; }
 .form-section__title { font-size:28rpx; font-weight:600; color:#374151; }
+.goods-mode { display:flex; padding:6rpx; margin-bottom:20rpx; border-radius:14rpx; background:#f1f5f9; }
+.goods-mode__item { flex:1; padding:14rpx 12rpx; border-radius:10rpx; color:#64748b; font-size:25rpx; text-align:center; }
+.goods-mode__item.active { background:#fff; color:#2563eb; font-weight:600; box-shadow:0 2rpx 8rpx rgba(15,23,42,.08); }
+.row-unit { flex-shrink:0; color:#64748b; font-size:24rpx; }
 .device-title-wrap { min-width:0; display:flex; align-items:center; gap:10rpx; }
 .consigned-badge { flex-shrink:0; padding:4rpx 10rpx; border-radius:12rpx; background:#fff7ed; color:#d97706; font-size:20rpx; }
 .consigned-meta { color:#d97706; }

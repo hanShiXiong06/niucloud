@@ -20,6 +20,7 @@ class ErpSale extends BaseAdminController
     public function lists()
     {
         $params = $this->request->params([
+            ['item_type', ''],
             ['keyword', ''],
             ['finance_status', ''],
             ['status', ''],
@@ -66,6 +67,7 @@ class ErpSale extends BaseAdminController
     public function stock()
     {
         $params = $this->request->params([
+            ['item_type', 'device'],
             ['keyword', ''],
             ['warehouse_id', 0],
             ['location_id', 0],
@@ -79,6 +81,7 @@ class ErpSale extends BaseAdminController
             ['warehouse_name', ''],
             ['location_name', ''],
             ['asset_ids', []],
+            ['stock_ids', []],
             ['page', 1],
             ['limit', 15],
         ]);

@@ -218,6 +218,7 @@ class ErpGoodsCatalogService extends BaseAdminService
         $seriesName = trim((string)($where['series_name'] ?? ''));
         $keyword = trim((string)($where['keyword'] ?? ''));
         $siteProductId = max(0, (int)($where['site_product_id'] ?? 0));
+        $categoryOnly = (int)($where['category_only'] ?? 0) === 1;
         $limit = min(500, max(20, (int)($where['limit'] ?? 200)));
         $query = Db::name('erp_site_catalog_product')->alias('sp')
             ->leftJoin('erp_catalog_product_master mp', 'mp.master_product_id = sp.master_product_id')
@@ -228,7 +229,23 @@ class ErpGoodsCatalogService extends BaseAdminService
         if ($seriesName !== '' || $nodeType === 'series') $query->where('sp.series_name', '=', $seriesName);
 
         $nodes = [];
-        if ($siteProductId > 0 || $keyword !== '') {
+        if ($categoryOnly && $keyword !== '') {
+            $rows = $query->whereLike('sp.category_path', '%' . $keyword . '%')
+                ->field('sp.category_path,count(*) as product_count,min(sp.sort) as sort,min(sp.site_product_id) as first_id')
+                ->group('sp.category_path')->order('sort asc,first_id asc')->limit($limit)->select()->toArray();
+            foreach ($rows as $row) {
+                $path = trim((string)$row['category_path'], " /\t\n\r\0\x0B");
+                if ($path === '') continue;
+                $parts = $this->catalogPathSegments($path);
+                $nodes[] = [
+                    'node_key' => 'category:' . md5($path), 'node_type' => 'category',
+                    'label' => (string)end($parts), 'category_path' => $path,
+                    'catalog_level' => max(1, count($parts)), 'product_count' => (int)$row['product_count'],
+                    'sort' => (int)$row['sort'], 'is_leaf' => 1, 'has_children' => 0,
+                    'path_text' => str_replace('/', ' / ', $path),
+                ];
+            }
+        } elseif ($siteProductId > 0 || $keyword !== '') {
             if ($siteProductId > 0) $query->where('sp.site_product_id', '=', $siteProductId);
             else $query->whereLike('sp.product_name|sp.brand_name|sp.series_name|sp.category_path|mp.source_product_id', '%' . $keyword . '%');
             $rows = $query
@@ -264,6 +281,8 @@ class ErpGoodsCatalogService extends BaseAdminService
                     'count' => (int)($children[$childPath]['count'] ?? 0) + (int)$row['product_count'],
                     'sort' => min((int)($children[$childPath]['sort'] ?? PHP_INT_MAX), (int)$row['sort']),
                     'first_id' => min((int)($children[$childPath]['first_id'] ?? PHP_INT_MAX), (int)$row['first_id']),
+                    'has_deeper' => (bool)($children[$childPath]['has_deeper'] ?? false)
+                        || count($segments) > $depth + 1,
                 ];
             }
             uksort($children, static function (string $left, string $right) use ($children): int {
@@ -279,11 +298,12 @@ class ErpGoodsCatalogService extends BaseAdminService
                     'label' => $path === '' ? '未分类' : (string)end($parts),
                     'category_path' => $path, 'catalog_level' => max(1, count($parts)),
                     'product_count' => (int)$aggregate['count'], 'sort' => (int)$aggregate['sort'],
-                    'is_leaf' => 0, 'has_children' => 1,
+                    'is_leaf' => $categoryOnly && empty($aggregate['has_deeper']) ? 1 : 0,
+                    'has_children' => $categoryOnly && empty($aggregate['has_deeper']) ? 0 : 1,
                 ];
             }
             // 当前品类没有更深的子品类，下一层直接进入品牌。
-            if ($nodeType === 'category' && !$nodes) {
+            if (!$categoryOnly && $nodeType === 'category' && !$nodes) {
                 $brandQuery = (clone $query)->where('sp.category_path', '=', $categoryPath);
                 $rows = $brandQuery->field('sp.brand_name,count(*) as product_count,min(sp.sort) as sort,min(sp.site_product_id) as first_id')->group('sp.brand_name')->order('sort asc,first_id asc')->limit($limit)->select()->toArray();
                 foreach ($rows as $row) {

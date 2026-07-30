@@ -75,6 +75,9 @@ Route::group('erp', function () {
     Route::post('purchase/item/:item_id/adjust_cost', 'addon\hsx_erp\app\adminapi\controller\ErpPurchase@adjustCost');
 
     Route::get('stock/lists', 'addon\hsx_erp\app\adminapi\controller\ErpStock@lists');
+    Route::get('stock/quantity_products', 'addon\hsx_erp\app\adminapi\controller\ErpStock@quantityProducts');
+    Route::post('stock/quantity_product', 'addon\hsx_erp\app\adminapi\controller\ErpStock@createQuantityProduct');
+    Route::post('stock/quantity_product/:id/category', 'addon\hsx_erp\app\adminapi\controller\ErpStock@updateQuantityProductCategory');
     Route::get('stock/turnover_summary', 'addon\hsx_erp\app\adminapi\controller\ErpStock@turnoverSummary');
     Route::get('stock/listing_workload', 'addon\hsx_erp\app\adminapi\controller\ErpStock@listingWorkload');
     Route::post('stock/transfer/preview', 'addon\hsx_erp\app\adminapi\controller\ErpStock@transferPreview');

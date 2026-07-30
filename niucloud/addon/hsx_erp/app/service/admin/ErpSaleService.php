@@ -9,6 +9,8 @@ use addon\hsx_erp\app\model\ErpCapitalAccount;
 use addon\hsx_erp\app\model\ErpParty;
 use addon\hsx_erp\app\model\ErpPayable;
 use addon\hsx_erp\app\model\ErpReceivable;
+use addon\hsx_erp\app\model\ErpQuantityStockFlow;
+use addon\hsx_erp\app\model\ErpQuantityStock;
 use addon\hsx_erp\app\model\ErpSaleItem;
 use addon\hsx_erp\app\model\ErpSaleOrder;
 use addon\hsx_erp\app\model\ErpSaleReturnItem;
@@ -28,6 +30,9 @@ class ErpSaleService extends BaseAdminService
 
     public function stockPage(array $where): array
     {
+        if ((string)($where['item_type'] ?? 'device') === 'standard') {
+            return (new ErpQuantityInventoryService())->saleStockPage($where);
+        }
         $warehouseTable = (new ErpWarehouse())->getTable();
         $catalogTable = (new ErpSiteCatalogProduct())->getTable();
         $query = ErpAsset::alias('a')
@@ -101,9 +106,12 @@ class ErpSaleService extends BaseAdminService
             ->leftJoin($orderTable . ' o', 'o.id = i.sale_order_id AND o.site_id = i.site_id')
             ->leftJoin($assetTable . ' a', 'a.id = i.asset_id AND a.site_id = i.site_id')
             ->where([['i.site_id', '=', $this->site_id]]);
+        if (in_array((string)($where['item_type'] ?? ''), ['device', 'standard'], true)) {
+            $query->where('i.item_type', '=', (string)$where['item_type']);
+        }
         if (!empty($where['keyword'])) {
             $kw = trim((string)$where['keyword']);
-            $query->whereLike('o.sale_no|o.party_name|o.sale_channel|o.salesman_name|o.operator_name|i.model|i.imei|a.asset_no|a.sn|a.spec', '%' . $kw . '%');
+            $query->whereLike('o.sale_no|o.party_name|o.sale_channel|o.salesman_name|o.operator_name|i.model|i.product_code|i.imei|a.asset_no|a.sn|a.spec', '%' . $kw . '%');
         }
         if (!empty($where['finance_status'])) {
             $query->where('o.finance_status', '=', (string)$where['finance_status']);
@@ -124,7 +132,6 @@ class ErpSaleService extends BaseAdminService
             'party_name' => 'o.party_name',
             'sale_no' => 'o.sale_no',
             'sale_channel' => 'o.sale_channel',
-            'warehouse_name' => 'a.warehouse_name',
             'salesman_name' => 'o.salesman_name',
             'operator_name' => 'o.operator_name',
         ] as $key => $column) {
@@ -132,11 +139,24 @@ class ErpSaleService extends BaseAdminService
                 $query->whereLike($column, '%' . trim((string)$where[$key]) . '%');
             }
         }
+        if (!empty($where['warehouse_name'])) {
+            $keyword = trim((string)$where['warehouse_name']);
+            $query->whereRaw(
+                "IF(i.item_type = 'standard', i.warehouse_name, a.warehouse_name) LIKE ?",
+                ['%' . $keyword . '%']
+            );
+        }
         if (!empty($where['warehouse_id'])) {
-            $query->where('a.warehouse_id', '=', (int)$where['warehouse_id']);
+            $query->whereRaw(
+                "IF(i.item_type = 'standard', i.warehouse_id, a.warehouse_id) = ?",
+                [(int)$where['warehouse_id']]
+            );
         }
         if (!empty($where['location_id'])) {
-            $query->where('a.location_id', '=', (int)$where['location_id']);
+            $query->whereRaw(
+                "IF(i.item_type = 'standard', i.location_id, a.location_id) = ?",
+                [(int)$where['location_id']]
+            );
         }
         if (!empty($where['catalog_product_id'])) $query->where('a.catalog_product_id', '=', (int)$where['catalog_product_id']);
         if (!empty($where['salesman_uid'])) {
@@ -166,7 +186,11 @@ class ErpSaleService extends BaseAdminService
         $page = $query->field([
             'i.id',
             'i.sale_order_id',
+            'i.item_type',
             'i.asset_id',
+            'i.quantity_product_id',
+            'i.product_code',
+            'i.unit',
             'i.external_goods_id',
             'i.external_sku_id',
             'i.external_line_id',
@@ -195,10 +219,10 @@ class ErpSaleService extends BaseAdminService
             'a.catalog_product_id',
             'a.category_name',
             'a.category_path',
-            'a.warehouse_id',
-            'a.warehouse_name',
-            'a.location_id',
-            'a.location_name',
+            "IF(i.item_type = 'standard', i.warehouse_id, a.warehouse_id) as warehouse_id",
+            "IF(i.item_type = 'standard', i.warehouse_name, a.warehouse_name) as warehouse_name",
+            "IF(i.item_type = 'standard', i.location_id, a.location_id) as location_id",
+            "IF(i.item_type = 'standard', i.location_name, a.location_name) as location_name",
             'o.sale_no',
             'o.status as order_status',
             'o.party_id',
@@ -246,10 +270,16 @@ class ErpSaleService extends BaseAdminService
             ])->field([
                 'i.*',
                 'a.asset_no', 'a.sn', 'a.spec',
-                'a.warehouse_id', 'a.warehouse_name',
-                'a.location_id', 'a.location_name',
+                "IF(i.item_type = 'standard', i.warehouse_id, a.warehouse_id) as display_warehouse_id",
+                "IF(i.item_type = 'standard', i.warehouse_name, a.warehouse_name) as display_warehouse_name",
+                "IF(i.item_type = 'standard', i.location_id, a.location_id) as display_location_id",
+                "IF(i.item_type = 'standard', i.location_name, a.location_name) as display_location_name",
             ])->order('i.id asc')->select()->toArray();
         foreach ($order['items'] as &$item) {
+            $item['warehouse_id'] = (int)($item['display_warehouse_id'] ?? $item['warehouse_id'] ?? 0);
+            $item['warehouse_name'] = (string)($item['display_warehouse_name'] ?? $item['warehouse_name'] ?? '');
+            $item['location_id'] = (int)($item['display_location_id'] ?? $item['location_id'] ?? 0);
+            $item['location_name'] = (string)($item['display_location_name'] ?? $item['location_name'] ?? '');
             $item['sale_no'] = (string)($order['sale_no'] ?? '');
             $item['party_id'] = (int)($order['party_id'] ?? 0);
             $item['party_name'] = (string)($order['party_name'] ?? '');
@@ -322,7 +352,45 @@ class ErpSaleService extends BaseAdminService
             $totalCost = 0.0;
             $resolved = [];
             $seenAssetIds = [];
-            foreach ($items as $item) {
+            $seenStandardStocks = [];
+            foreach ($items as $itemIndex => $item) {
+                $itemType = (string)($item['item_type'] ?? 'device');
+                if ($itemType === 'standard') {
+                    $stockId = (int)($item['stock_id'] ?? $item['quantity_stock_id'] ?? 0);
+                    if ($stockId <= 0) throw new CommonException('请选择有效的标品库存');
+                    if (isset($seenStandardStocks[$stockId])) throw new CommonException('同一标品库存位置不能重复加入销售单');
+                    $seenStandardStocks[$stockId] = true;
+                    $quantity = round((float)($item['quantity'] ?? 0), 3);
+                    $price = round((float)($item['sale_price'] ?? 0), 2);
+                    if ($quantity <= 0) throw new CommonException('标品销售数量必须大于0');
+                    if ($price <= 0) throw new CommonException('标品销售总价必须大于0');
+                    $inventory = (new ErpQuantityInventoryService())->saleOutbound([
+                        'event_id' => 'sale-standard:' . $this->site_id . ':' . $saleNo . ':' . $itemIndex,
+                        'stock_id' => $stockId,
+                        'quantity' => $quantity,
+                        'biz_no' => $saleNo,
+                        'operator_uid' => (int)$this->uid,
+                        'operator_name' => (string)$this->username,
+                        'occurred_at' => $saleAt,
+                    ]);
+                    $cost = round((float)($inventory['cost_amount'] ?? 0), 2);
+                    $totalAmount += $price;
+                    $totalCost += $cost;
+                    $resolved[] = [
+                        'item_type' => 'standard',
+                        'inventory' => $inventory,
+                        'price' => $price,
+                        'cost' => $cost,
+                        'external_line_id' => mb_substr(trim((string)($item['external_line_id'] ?? $item['source_line_id'] ?? '')), 0, 80),
+                        'remark' => trim((string)($item['remark'] ?? '')),
+                        'ownership_type' => 'owned',
+                        'owner_party_id' => 0,
+                        'owner_party_name' => '',
+                        'consignment_settlement_amount' => 0,
+                        'consignment_service_fee' => 0,
+                    ];
+                    continue;
+                }
                 $assetId = (int)($item['asset_id'] ?? 0);
                 if ($assetId <= 0) {
                     throw new CommonException('请选择有效的库存机器');
@@ -369,6 +437,7 @@ class ErpSaleService extends BaseAdminService
                 $totalAmount += $price;
                 $totalCost += $cost;
                 $resolved[] = [
+                    'item_type' => 'device',
                     'asset' => $asset,
                     'price' => $price,
                     'cost' => $cost,
@@ -437,6 +506,53 @@ class ErpSaleService extends BaseAdminService
             ]);
             $orderId = (int)$order->id;
             foreach ($resolved as $resolvedItem) {
+                if ((string)($resolvedItem['item_type'] ?? 'device') === 'standard') {
+                    $inventory = (array)$resolvedItem['inventory'];
+                    $price = (float)$resolvedItem['price'];
+                    $cost = (float)$resolvedItem['cost'];
+                    $item = ErpSaleItem::create([
+                        'site_id' => $this->site_id,
+                        'sale_order_id' => $orderId,
+                        'item_type' => 'standard',
+                        'asset_id' => 0,
+                        'quantity_product_id' => (int)$inventory['product_id'],
+                        'product_code' => (string)$inventory['product_code'],
+                        'unit' => (string)$inventory['unit'],
+                        'warehouse_id' => (int)$inventory['warehouse_id'],
+                        'warehouse_name' => (string)$inventory['warehouse_name'],
+                        'location_id' => (int)$inventory['location_id'],
+                        'location_name' => (string)$inventory['location_name'],
+                        'imei' => '',
+                        'model' => (string)$inventory['product_name'],
+                        'external_line_id' => (string)$resolvedItem['external_line_id'],
+                        'inventory_source' => 'erp_quantity',
+                        'quantity' => (float)$inventory['quantity'],
+                        'ownership_type' => 'owned',
+                        'cost' => $cost,
+                        'sale_price' => $price,
+                        'profit' => round($price - $cost, 2),
+                        'status' => ErpDict::ASSET_SOLD,
+                        'remark' => (string)$resolvedItem['remark'],
+                        'create_at' => $now,
+                        'update_at' => $now,
+                    ]);
+                    ErpQuantityStockFlow::where([
+                        ['site_id', '=', $this->site_id], ['id', '=', (int)$inventory['flow_id']],
+                    ])->update(['biz_id' => (int)$item->id]);
+                    (new ErpLedgerService())->account([
+                        'biz_type' => 'sale',
+                        'direction' => 'increase',
+                        'amount' => $price,
+                        'party_id' => (int)$party->id,
+                        'party_name' => $partyName,
+                        'asset_id' => 0,
+                        'source_type' => 'sale',
+                        'source_id' => $orderId,
+                        'source_no' => $saleNo,
+                        'remark' => '标品销售应收',
+                    ]);
+                    continue;
+                }
                 /** @var ErpAsset $asset */
                 $asset = $resolvedItem['asset'];
                 $price = (float)$resolvedItem['price'];
@@ -740,9 +856,10 @@ class ErpSaleService extends BaseAdminService
                 ['status', '=', ErpDict::ASSET_SOLD],
             ])->lock(true)->select();
             if ($items->isEmpty()) {
-                throw new CommonException('销售单内没有可取消的在售设备');
+                throw new CommonException('销售单内没有可取消的在售商品');
             }
             foreach ($items as $item) {
+                if ((string)($item->item_type ?? 'device') === 'standard') continue;
                 $this->voidConsignmentPayable($item, $remark !== '' ? $remark : '销售单撤销');
                 $asset = ErpAsset::where([['site_id', '=', $this->site_id], ['id', '=', (int)$item->asset_id]])->lock(true)->findOrEmpty();
                 if ($asset->isEmpty() || (int)$asset->sale_order_id !== $id || (string)$asset->status !== ErpDict::ASSET_SOLD) {
@@ -770,6 +887,34 @@ class ErpSaleService extends BaseAdminService
             ]);
 
             foreach ($items as $item) {
+                if ((string)($item->item_type ?? 'device') === 'standard') {
+                    (new ErpQuantityInventoryService())->saleRestore([
+                        'event_id' => 'sale-standard-cancel:' . $this->site_id . ':' . (int)$item->id,
+                        'product_id' => (int)$item->quantity_product_id,
+                        'warehouse_id' => (int)$item->warehouse_id,
+                        'location_id' => (int)$item->location_id,
+                        'quantity' => (float)$item->quantity,
+                        'cost_amount' => (float)$item->cost,
+                        'biz_id' => (int)$item->id,
+                        'biz_no' => (string)$order->sale_no,
+                        'operator_uid' => (int)$this->uid,
+                        'operator_name' => (string)$this->username,
+                        'remark' => $remark !== '' ? $remark : '销售单撤销，标品返库',
+                    ]);
+                    (new ErpLedgerService())->account([
+                        'biz_type' => 'sale_cancel',
+                        'direction' => 'decrease',
+                        'amount' => (float)$item->sale_price,
+                        'party_id' => (int)$order->party_id,
+                        'party_name' => (string)$order->party_name,
+                        'asset_id' => 0,
+                        'source_type' => 'sale_cancel',
+                        'source_id' => $id,
+                        'source_no' => (string)$order->sale_no,
+                        'remark' => $remark !== '' ? $remark : '撤销标品销售应收',
+                    ]);
+                    continue;
+                }
                 $asset = ErpAsset::where([['site_id', '=', $this->site_id], ['id', '=', (int)$item->asset_id]])->findOrEmpty();
                 if ($asset->isEmpty()) {
                     continue;
@@ -870,8 +1015,72 @@ class ErpSaleService extends BaseAdminService
                 ['status', '=', ErpDict::ASSET_SOLD],
             ])->count();
             if ($activeCount <= 1) {
-                $this->cancel((int)$order->id, $remark !== '' ? $remark : '销售单最后一台设备撤销');
+                $this->cancel((int)$order->id, $remark !== '' ? $remark : '销售单最后一项商品撤销');
                 $result = ['order_cancelled' => true];
+                return;
+            }
+
+            if ((string)($item->item_type ?? 'device') === 'standard') {
+                (new ErpQuantityInventoryService())->saleRestore([
+                    'event_id' => 'sale-standard-item-cancel:' . $this->site_id . ':' . (int)$item->id,
+                    'product_id' => (int)$item->quantity_product_id,
+                    'warehouse_id' => (int)$item->warehouse_id,
+                    'location_id' => (int)$item->location_id,
+                    'quantity' => (float)$item->quantity,
+                    'cost_amount' => (float)$item->cost,
+                    'biz_id' => (int)$item->id,
+                    'biz_no' => (string)$order->sale_no,
+                    'operator_uid' => (int)$this->uid,
+                    'operator_name' => (string)$this->username,
+                    'remark' => $remark !== '' ? $remark : '单项撤销销售，标品返库',
+                ]);
+                $item->save([
+                    'status' => ErpDict::STATUS_VOID,
+                    'remark' => $remark !== '' ? $remark : '单项撤销销售',
+                    'update_at' => $now,
+                ]);
+                $summary = ErpSaleItem::where([
+                    ['site_id', '=', $this->site_id],
+                    ['sale_order_id', '=', (int)$order->id],
+                    ['status', '=', ErpDict::ASSET_SOLD],
+                ])->field('SUM(sale_price) as total_amount,SUM(cost) as total_cost,SUM(profit) as profit')->find();
+                $totalAmount = round((float)($summary['total_amount'] ?? 0), 2);
+                $order->save([
+                    'total_amount' => $totalAmount,
+                    'total_cost' => round((float)($summary['total_cost'] ?? 0), 2),
+                    'profit' => round((float)($summary['profit'] ?? 0), 2),
+                    'receivable_amount' => $totalAmount,
+                    'finance_status' => ErpDict::STATUS_PENDING,
+                    'update_at' => $now,
+                ]);
+                ErpReceivable::where([
+                    ['site_id', '=', $this->site_id],
+                    ['source_type', '=', 'sale'],
+                    ['source_id', '=', (int)$order->id],
+                ])->update([
+                    'amount' => $totalAmount,
+                    'status' => $totalAmount > 0 ? ErpDict::STATUS_PENDING : ErpDict::STATUS_VOID,
+                    'update_at' => $now,
+                ]);
+                (new ErpLedgerService())->account([
+                    'biz_type' => 'sale_item_cancel',
+                    'direction' => 'decrease',
+                    'amount' => (float)$item->sale_price,
+                    'party_id' => (int)$order->party_id,
+                    'party_name' => (string)$order->party_name,
+                    'asset_id' => 0,
+                    'source_type' => 'sale_item_cancel',
+                    'source_id' => (int)$item->id,
+                    'source_no' => (string)$order->sale_no,
+                    'remark' => $remark !== '' ? $remark : '撤销标品销售应收',
+                ]);
+                (new ErpOperationLogService())->record('sale_item_cancel', 'sale_item', (int)$item->id, (string)$order->sale_no, $remark, [
+                    'party_name' => (string)$order->party_name,
+                    'product_id' => (int)$item->quantity_product_id,
+                    'quantity' => (float)$item->quantity,
+                    'amount' => (float)$item->sale_price,
+                    'order_total_amount' => $totalAmount,
+                ]);
                 return;
             }
 
@@ -1088,17 +1297,36 @@ class ErpSaleService extends BaseAdminService
     {
         $expectedItems = [];
         foreach ($items as $item) {
+            if ((string)($item['item_type'] ?? 'device') === 'standard') {
+                $stock = ErpQuantityStock::where([
+                    ['site_id', '=', $this->site_id],
+                    ['id', '=', (int)($item['stock_id'] ?? $item['quantity_stock_id'] ?? 0)],
+                ])->findOrEmpty();
+                $productId = (int)($item['quantity_product_id'] ?? ($stock->product_id ?? 0));
+                $warehouseId = (int)($item['warehouse_id'] ?? ($stock->warehouse_id ?? 0));
+                $locationId = (int)($item['location_id'] ?? ($stock->location_id ?? 0));
+                $key = 'standard:' . $productId . ':' . $warehouseId . ':' . $locationId;
+                $expectedItems[$key] = number_format(round((float)($item['sale_price'] ?? 0), 2), 2, '.', '')
+                    . '@' . number_format(round((float)($item['quantity'] ?? 0), 3), 3, '.', '');
+                continue;
+            }
             $assetId = (int)($item['asset_id'] ?? 0);
             if ($assetId <= 0) continue;
-            $expectedItems[$assetId] = number_format(round((float)($item['sale_price'] ?? 0), 2), 2, '.', '');
+            $expectedItems['device:' . $assetId] = number_format(round((float)($item['sale_price'] ?? 0), 2), 2, '.', '');
         }
         ksort($expectedItems);
         $storedItems = [];
         foreach (ErpSaleItem::where([
             ['site_id', '=', $this->site_id],
             ['sale_order_id', '=', (int)$order->id],
-        ])->field('asset_id,sale_price')->select()->toArray() as $item) {
-            $storedItems[(int)$item['asset_id']] = number_format(round((float)$item['sale_price'], 2), 2, '.', '');
+        ])->field('item_type,asset_id,quantity_product_id,warehouse_id,location_id,quantity,sale_price')->select()->toArray() as $item) {
+            if ((string)($item['item_type'] ?? 'device') === 'standard') {
+                $key = 'standard:' . (int)$item['quantity_product_id'] . ':' . (int)$item['warehouse_id'] . ':' . (int)$item['location_id'];
+                $storedItems[$key] = number_format(round((float)$item['sale_price'], 2), 2, '.', '')
+                    . '@' . number_format(round((float)$item['quantity'], 3), 3, '.', '');
+                continue;
+            }
+            $storedItems['device:' . (int)$item['asset_id']] = number_format(round((float)$item['sale_price'], 2), 2, '.', '');
         }
         ksort($storedItems);
 

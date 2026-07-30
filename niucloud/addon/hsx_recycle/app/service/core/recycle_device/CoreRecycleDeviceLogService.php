@@ -4,8 +4,11 @@ declare(strict_types=1);
 namespace addon\hsx_recycle\app\service\core\recycle_device;
 
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
+use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\model\order\RecycleDeviceLog;
+use addon\hsx_recycle\app\model\order\RecycleOrder;
 use core\base\BaseAdminService;
+use think\facade\Log;
 
 /**
  * 设备日志核心服务类
@@ -55,7 +58,76 @@ class CoreRecycleDeviceLogService extends BaseAdminService
             // 统计为旁路，忽略其异常，绝不阻断业务
         }
 
+        $this->emitPerformanceFact((int)$logId, $logData);
         return $logId;
+    }
+
+    /** 设备日志是回收员工产出的审计依据；绩效插件未安装或暂时异常时不阻断回收主流程。 */
+    private function emitPerformanceFact(int $logId, array $logData): void
+    {
+        $operationType = (string)($logData['operation_type'] ?? '');
+        $metric = [
+            'sign' => ['key' => 'recycle.device.signed', 'name' => '设备签收', 'scope' => 'action', 'role' => 'receiver'],
+            'check_complete' => ['key' => 'recycle.check.completed', 'name' => '完成质检', 'scope' => 'action', 'role' => 'checker'],
+            'price' => ['key' => 'recycle.price.completed', 'name' => '完成定价', 'scope' => 'action', 'role' => 'pricer'],
+            'recycle' => ['key' => 'recycle.inbound.completed', 'name' => '回收入库成功', 'scope' => 'outcome', 'role' => 'inbound'],
+            'return' => ['key' => 'recycle.device.returned', 'name' => '回收设备退回', 'scope' => 'quality', 'role' => 'return_handler'],
+        ][$operationType] ?? null;
+        if (!$metric || (int)$this->uid <= 0 || $logId <= 0) return;
+
+        try {
+            $device = RecycleDevice::where([
+                ['site_id', '=', $this->site_id],
+                ['id', '=', (int)($logData['device_id'] ?? 0)],
+            ])->field('id,order_id,category_id,imei,sn,model,final_price')->findOrEmpty();
+            if ($device->isEmpty()) return;
+            $orderNo = (string)(RecycleOrder::where([
+                ['site_id', '=', $this->site_id],
+                ['id', '=', (int)$device->order_id],
+            ])->value('order_no') ?: '');
+            event('HsxPerformanceFactRecorded', [
+                'event_name' => 'performance.fact.recorded.v1',
+                'event_version' => 1,
+                'site_id' => (int)$this->site_id,
+                'event_id' => 'hsx_recycle:device_log:' . $logId,
+                'source_plugin' => 'hsx_recycle',
+                'business_chain' => 'recycle',
+                'metric_key' => $metric['key'],
+                'metric_name' => $metric['name'],
+                'fact_scope' => $metric['scope'],
+                'fact_type' => 'original',
+                'direction' => 1,
+                'employee_uid' => (int)$this->uid,
+                'employee_name' => (string)$this->username,
+                'role_key' => $metric['role'],
+                'business_type' => 'recycle_device',
+                'business_id' => (string)$device->id,
+                'business_no' => $orderNo,
+                'asset_id' => (int)$device->id,
+                'imei' => (string)$device->imei,
+                'quantity' => '1.00',
+                'amount' => $operationType === 'recycle' ? (string)$device->final_price : '0.00',
+                'profit' => '0.00',
+                'unit' => 'device',
+                'occurred_at' => (int)$logData['create_at'],
+                'dimensions' => [
+                    'category_id' => (int)$device->category_id,
+                    'model' => (string)$device->model,
+                    'operation_type' => $operationType,
+                ],
+                'source_route' => [
+                    'app' => 'adminapp',
+                    'path' => 'addon/hsx_recycle/pages/order/detail',
+                    'query' => ['id' => (int)$device->order_id],
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('回收员工产出事实派发失败', [
+                'site_id' => (int)$this->site_id,
+                'device_log_id' => $logId,
+                'message' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**

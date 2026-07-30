@@ -9,6 +9,6 @@ final class PerformanceFact extends BaseModel
 {
     protected $name = 'performance_fact';
     protected $pk = 'id';
-    protected $json = ['payload_json'];
+    protected $json = ['payload_json', 'dimensions_json', 'source_route_json'];
     protected $jsonAssoc = true;
 }

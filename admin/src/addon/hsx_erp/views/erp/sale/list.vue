@@ -89,7 +89,14 @@
             <el-table :data="table.data" v-loading="table.loading" size="large" :row-class-name="saleRowClassName">
                 <el-table-column label="销售商品" min-width="240">
                     <template #default="{ row }">
-                        <ErpDeviceIdentity :model="row.model" :spec="row.spec" :imei="row.imei" :sn="row.sn" :asset-no="row.asset_no" />
+                        <div v-if="isStandardGoods(row)">
+                            <div class="font-medium text-gray-800">{{ row.model || '-' }}</div>
+                            <div class="mt-1 text-xs text-gray-500">{{ row.product_code || '未设置商品编码' }} · {{ quantityText(itemQuantity(row)) }} {{ row.unit || '件' }}</div>
+                        </div>
+                        <ErpDeviceIdentity v-else :model="row.model" :spec="row.spec" :imei="row.imei" :sn="row.sn" :asset-no="row.asset_no" />
+                        <div v-if="isStandardGoods(row)" class="mt-2">
+                            <el-tag type="primary" effect="plain" size="small">标品销售</el-tag>
+                        </div>
                         <div v-if="isExternalGoods(row)" class="mt-2 flex items-center gap-2">
                             <el-tag type="success" effect="plain" size="small">商城商品</el-tag>
                             <span class="text-xs text-gray-500">{{ itemQuantity(row) }} 件 · 商城退款自动同步</span>
@@ -180,23 +187,26 @@
 
                 <div class="section-title">2. 货品</div>
                 <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-                    <div class="font-medium">待售库存</div>
+                    <el-radio-group v-model="stock.item_type" @change="onSaleItemTypeChange">
+                        <el-radio-button label="device">二手机 / 一机一码</el-radio-button>
+                        <el-radio-button label="standard">标品 / 数量库存</el-radio-button>
+                    </el-radio-group>
                     <div class="flex flex-wrap gap-2">
-                        <el-input v-model.trim="stock.keyword" clearable class="!w-[220px]" placeholder="型号 / IMEI / 采购来源" @keyup.enter="reloadStock" />
+                        <el-input v-model.trim="stock.keyword" clearable class="!w-[220px]" :placeholder="stock.item_type === 'standard' ? '商品名称 / 编码' : '型号 / IMEI / 采购来源'" @keyup.enter="reloadStock" />
                         <el-select v-model="stock.warehouse_id" clearable class="!w-[130px]" placeholder="仓库" @change="onStockWarehouseChange">
                             <el-option v-for="item in warehouses" :key="item.id" :label="item.warehouse_name" :value="item.id" />
                         </el-select>
                         <el-select v-model="stock.location_id" clearable class="!w-[130px]" placeholder="库位" :disabled="!stock.warehouse_id" @change="reloadStock">
                             <el-option v-for="item in stockLocations" :key="item.id" :label="item.location_name" :value="item.id" />
                         </el-select>
-                        <ErpCatalogProductSelect v-model="stock.catalog_product_id" class="!w-[230px]" placeholder="商品型号" @change="reloadStock" />
+                        <ErpCatalogProductSelect v-if="stock.item_type === 'device'" v-model="stock.catalog_product_id" class="!w-[230px]" placeholder="商品型号" @change="reloadStock" />
                         <el-button :icon="Search" @click="loadStock">查询</el-button>
                     </div>
                 </div>
                 <div class="mb-3 grid grid-cols-1 gap-3 md:grid-cols-3">
                     <div class="sale-pick-metric">
-                        <div class="metric-label">已选设备</div>
-                        <div class="metric-value">{{ selectedAssets.length }} 台</div>
+                        <div class="metric-label">已选货品</div>
+                        <div class="metric-value">{{ selectedQuantityText }}</div>
                     </div>
                     <div class="sale-pick-metric">
                         <div class="metric-label">预计销售</div>
@@ -209,12 +219,12 @@
                 </div>
                 <el-table ref="stockTableRef" class="sale-select-table" :data="stock.data" v-loading="stock.loading" size="small" max-height="360" @row-click="onStockRowClick" @selection-change="onStockSelection">
                     <el-table-column type="selection" width="48" />
-                    <el-table-column label="设备" min-width="280">
+                    <el-table-column :label="stock.item_type === 'standard' ? '标品' : '设备'" min-width="280">
                         <template #default="{ row }">
                             <div class="font-medium text-gray-900">{{ row.model || '-' }}</div>
-                            <div class="mt-0.5 text-xs text-gray-500">{{ compactDeviceInfo(row) }}</div>
+                            <div class="mt-0.5 text-xs text-gray-500">{{ stock.item_type === 'standard' ? `${row.product_code || '-'} · 可售 ${quantityText(row.available_quantity)}${row.unit || '件'}` : compactDeviceInfo(row) }}</div>
                             <div class="mt-1 flex flex-wrap gap-1">
-                                <el-tag v-if="row.catalog_product_name || row.category_name" size="small" effect="plain" type="info">{{ row.catalog_product_name || row.category_name }}</el-tag>
+                                <el-tag v-if="stock.item_type === 'device' && (row.catalog_product_name || row.category_name)" size="small" effect="plain" type="info">{{ row.catalog_product_name || row.category_name }}</el-tag>
                                 <el-tag v-if="isConsigned(row)" size="small" effect="plain" type="warning">客户代卖</el-tag>
                                 <el-tooltip v-if="row.asset_no" :content="`资产号：${row.asset_no}`" placement="top">
                                     <el-tag size="small" effect="plain">资产</el-tag>
@@ -224,22 +234,25 @@
                     </el-table-column>
                     <el-table-column label="来源 / 位置" min-width="170">
                         <template #default="{ row }">
-                            <div>{{ isConsigned(row) ? `货主：${row.owner_party_name || '-'}` : (row.party_name || '-') }}</div>
+                            <div>{{ stock.item_type === 'standard' ? (row.warehouse_name || '-') : (isConsigned(row) ? `货主：${row.owner_party_name || '-'}` : (row.party_name || '-')) }}</div>
                             <div class="mt-0.5 text-xs text-gray-500">{{ [row.warehouse_name, row.location_name].filter(Boolean).join(' / ') || '-' }}</div>
                         </template>
                     </el-table-column>
                     <el-table-column label="成本 / 结算" width="130" align="right">
                         <template #default="{ row }">
-                            <div>{{ money(saleCostBasis(row)) }}</div>
+                            <div>{{ money(rowSelectedCost(row)) }}</div>
                             <div v-if="isConsigned(row)" class="mt-0.5 text-xs text-orange-500">应付货主</div>
                         </template>
                     </el-table-column>
-                    <el-table-column label="销售价" width="150" align="right">
+                    <el-table-column v-if="stock.item_type === 'standard'" label="销售数量" width="130" align="right">
+                        <template #default="{ row }"><el-input-number v-model="saleQuantities[row.id]" :min="0.001" :max="Number(row.available_quantity || 0)" :precision="3" :controls="false" class="!w-[105px]" /></template>
+                    </el-table-column>
+                    <el-table-column :label="stock.item_type === 'standard' ? '销售总价' : '销售价'" width="150" align="right">
                         <template #default="{ row }"><el-input-number v-model="salePrices[row.id]" :min="0" :precision="2" :controls="false" class="!w-[120px]" /></template>
                     </el-table-column>
                 </el-table>
                 <div class="mt-3 flex items-center justify-between">
-                    <div class="text-sm text-gray-500">成本/代卖结算 {{ money(selectedCost) }} · 当前筛选仅展示可直接销售库存</div>
+                    <div class="text-sm text-gray-500">成本/代卖结算 {{ money(selectedCost) }} · 订单总价由所选货品销售价自动汇总</div>
                     <el-pagination v-model:current-page="stock.page" v-model:page-size="stock.limit" layout="total, prev, pager, next" :total="stock.total" @current-change="loadStock" />
                 </div>
 
@@ -292,11 +305,15 @@
                     <el-descriptions-item label="剩余应收">{{ money(detail.data.receivable_amount) }}</el-descriptions-item>
                     <el-descriptions-item label="备注" :span="4">{{ detail.data.remark || '-' }}</el-descriptions-item>
                 </el-descriptions>
+                <div v-if="canCancelSaleOrder" class="mt-4 flex items-center justify-between rounded-lg bg-orange-50 px-4 py-3">
+                    <span class="text-sm text-orange-700">本单尚未收款，撤销后商品会按原数量和原成本退回库存。</span>
+                    <el-button type="warning" plain @click="cancelSaleOrder">整单撤销</el-button>
+                </div>
                 <div class="mt-5 font-medium">商品明细</div>
                 <el-table class="mt-3" :data="detail.data?.items || []" size="large">
                     <el-table-column prop="model" label="型号" min-width="180" />
-                    <el-table-column label="商品类型" width="130"><template #default="{ row }"><el-tag v-if="isExternalGoods(row)" type="success" effect="plain">商城商品</el-tag><span v-else>设备</span></template></el-table-column>
-                    <el-table-column label="IMEI / 数量" min-width="170"><template #default="{ row }"><span v-if="!isExternalGoods(row)">{{ row.imei || '-' }}</span><span v-else>{{ itemQuantity(row) }} 件</span></template></el-table-column>
+                    <el-table-column label="商品类型" width="130"><template #default="{ row }"><el-tag v-if="isStandardGoods(row)" type="primary" effect="plain">标品</el-tag><el-tag v-else-if="isExternalGoods(row)" type="success" effect="plain">商城商品</el-tag><span v-else>设备</span></template></el-table-column>
+                    <el-table-column label="IMEI / 数量" min-width="170"><template #default="{ row }"><span v-if="isStandardGoods(row)">{{ quantityText(itemQuantity(row)) }} {{ row.unit || '件' }}</span><span v-else-if="!isExternalGoods(row)">{{ row.imei || '-' }}</span><span v-else>{{ itemQuantity(row) }} 件</span></template></el-table-column>
                     <el-table-column label="归属" min-width="150"><template #default="{ row }"><el-tag v-if="isConsigned(row)" type="warning" effect="plain">客户代卖</el-tag><span v-else>自有</span><div v-if="isConsigned(row)" class="mt-1 text-xs text-gray-500">{{ row.owner_party_name || '-' }}</div></template></el-table-column>
                     <el-table-column label="成本 / 结算" width="140" align="right"><template #default="{ row }">{{ money(row.cost) }}<div v-if="isConsigned(row)" class="text-xs text-orange-500">应付货主</div></template></el-table-column>
                     <el-table-column label="销售收入" width="190" align="right"><template #default="{ row }"><div>{{ money(row.net_sale_amount) }}</div><div v-if="Number(row.sale_compensation_amount || 0)" class="text-xs text-orange-500">原价 {{ money(row.sale_price) }} · 补差 -{{ money(row.sale_compensation_amount) }}</div><div v-if="Number(row.external_refunded_amount || 0)" class="text-xs text-orange-500">退款 -{{ money(row.external_refunded_amount) }}</div></template></el-table-column>
@@ -327,7 +344,7 @@ import { Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import { getErpSaleChannelOptions } from '@/addon/hsx_erp/api/config'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
-import { cancelErpSaleItem, createErpSale, getErpSaleInfo, getErpSaleList, getErpSaleStock, getErpStaffOptions, printErpSaleReceipt } from '@/addon/hsx_erp/api/erp'
+import { cancelErpSale, cancelErpSaleItem, createErpSale, getErpSaleInfo, getErpSaleList, getErpSaleStock, getErpStaffOptions, printErpSaleReceipt } from '@/addon/hsx_erp/api/erp'
 import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/index.vue'
 import ErpDeviceIdentity from '@/addon/hsx_erp/components/ErpDeviceIdentity.vue'
 import ErpRoleFocus from '@/addon/hsx_erp/components/ErpRoleFocus.vue'
@@ -358,7 +375,7 @@ function onTabChange(tab: string) {
     loadList()
 }
 const table = reactive({ loading: false, data: [] as any[], page: 1, limit: 15, total: 0 })
-const stock = reactive({ loading: false, data: [] as any[], keyword: '', warehouse_id: '', location_id: '', catalog_product_id: '', page: 1, limit: 8, total: 0 })
+const stock = reactive({ loading: false, data: [] as any[], item_type: 'device', keyword: '', warehouse_id: '', location_id: '', catalog_product_id: '', page: 1, limit: 8, total: 0 })
 const accounts = ref<any[]>([])
 const staffOptions = ref<any[]>([])
 const warehouses = ref<any[]>([])
@@ -369,6 +386,7 @@ const selectedAssets = ref<any[]>([])
 const pendingAssetIds = ref<number[]>([])
 const stockTableRef = ref<any>()
 const salePrices = reactive<Record<number, number>>({})
+const saleQuantities = reactive<Record<number, number>>({})
 const create = reactive({ visible: false, saving: false, form: defaultForm() })
 const detail = reactive({ visible: false, loading: false, data: null as any })
 
@@ -380,9 +398,12 @@ const summary = computed(() => table.data.reduce((acc, row: any) => {
     acc.profit += Number(row.profit || 0)
     return acc
 }, { count: 0, amount: 0, cost: 0, profit: 0 }))
-const selectedCost = computed(() => selectedAssets.value.reduce((sum, row) => sum + saleCostBasis(row), 0))
+const selectedCost = computed(() => selectedAssets.value.reduce((sum, row) => sum + rowSelectedCost(row), 0))
 const selectedAmount = computed(() => selectedAssets.value.reduce((sum, row) => sum + Number(salePrices[row.id] || 0), 0))
 const selectedProfit = computed(() => selectedAmount.value - selectedCost.value)
+const selectedQuantityText = computed(() => stock.item_type === 'standard'
+    ? `${quantityText(selectedAssets.value.reduce((sum, row) => sum + Number(saleQuantities[row.id] || 0), 0))} 件`
+    : `${selectedAssets.value.length} 台`)
 const creditAllowedForOrder = computed(() => {
     const profile = creditProfile.value
     if (!profile) return true
@@ -458,11 +479,13 @@ async function loadStock() {
     stock.loading = true
     try {
         const res: any = await getErpSaleStock({
+            item_type: stock.item_type,
             keyword: stock.keyword,
             warehouse_id: stock.warehouse_id,
             location_id: stock.location_id,
             catalog_product_id: stock.catalog_product_id,
             asset_ids: pendingAssetIds.value,
+            stock_ids: [],
             page: stock.page,
             limit: stock.limit
         })
@@ -470,6 +493,7 @@ async function loadStock() {
         stock.total = res?.data?.total || 0
         stock.data.forEach((row: any) => {
             salePrices[row.id] = firstPositiveErpAmount(row.retail_price, row.estimate_sale_price, saleCostBasis(row))
+            saleQuantities[row.id] = saleQuantities[row.id] || 1
         })
         if (pendingAssetIds.value.length) {
             selectedAssets.value = stock.data.filter((row: any) => pendingAssetIds.value.includes(Number(row.id)))
@@ -524,6 +548,7 @@ function openCreate(assetIds: number[] = []) {
     selectedAssets.value = []
     pendingAssetIds.value = assetIds
     stock.keyword = ''
+    stock.item_type = 'device'
     stock.warehouse_id = ''
     stock.location_id = ''
     stock.catalog_product_id = ''
@@ -539,6 +564,15 @@ function onStockSelection(rows: any[]) {
     selectedAssets.value = rows
 }
 
+function onSaleItemTypeChange() {
+    selectedAssets.value = []
+    pendingAssetIds.value = []
+    stock.catalog_product_id = ''
+    stock.warehouse_id = ''
+    stock.location_id = ''
+    reloadStock()
+}
+
 function onStockRowClick(row: any, _column: any, event: MouseEvent) {
     const target = event?.target as HTMLElement | null
     if (target?.closest('input,button,a,.el-input-number,.el-checkbox')) return
@@ -551,8 +585,11 @@ async function submitCreate() {
     if (create.form.settle_mode === 'credit' && !creditAllowedForOrder.value) return ElMessage.warning(creditNotice.value || '该客户不允许挂账，请改为现结')
     if (!create.form.sale_channel_key) return ElMessage.warning('请选择销售渠道')
     if (!create.form.salesman_uid) return ElMessage.warning('请选择制单员')
-    if (!selectedAssets.value.length) return ElMessage.warning('请选择要销售的库存机器')
-    if (selectedAssets.value.some(row => Number(salePrices[row.id] || 0) <= 0)) return ElMessage.warning('请填写每台机器销售价')
+    if (!selectedAssets.value.length) return ElMessage.warning('请选择要销售的库存货品')
+    if (selectedAssets.value.some(row => Number(salePrices[row.id] || 0) <= 0)) return ElMessage.warning(stock.item_type === 'standard' ? '请填写每项标品销售总价' : '请填写每台机器销售价')
+    if (stock.item_type === 'standard' && selectedAssets.value.some(row => Number(saleQuantities[row.id] || 0) <= 0 || Number(saleQuantities[row.id] || 0) > Number(row.available_quantity || 0))) {
+        return ElMessage.warning('标品销售数量必须大于0且不能超过可售库存')
+    }
     if (create.form.settle_mode === 'cash') {
         if (Number(create.form.received_amount || 0) <= 0) return ElMessage.warning('请填写本次收款')
         if (!create.form.capital_account_id) return ElMessage.warning('请选择收款账户')
@@ -563,7 +600,7 @@ async function submitCreate() {
         ? `其中客户代卖 ${consignedRows.length} 台，售出后将生成货主应付 ${money(consignedRows.reduce((sum, row) => sum + saleCostBasis(row), 0))}。`
         : ''
     const confirmed = await ElMessageBox.confirm(
-        `确认向「${create.form.party_name || '所选客户'}」销售出库 ${selectedAssets.value.length} 台，销售总额 ${money(selectedAmount.value)}。${consignmentNotice}提交后设备立即退出库存并生成应收；${create.form.settle_mode === 'cash' ? `同时确认现结收款 ${money(create.form.received_amount)}。` : '本次按挂账处理。'}普通操作不能直接撤销。`,
+        `确认向「${create.form.party_name || '所选客户'}」销售出库 ${selectedQuantityText.value}，销售总额 ${money(selectedAmount.value)}。${consignmentNotice}提交后货品立即扣减库存并生成应收；${create.form.settle_mode === 'cash' ? `同时确认现结收款 ${money(create.form.received_amount)}。` : '本次按挂账处理。'}普通操作不能直接撤销。`,
         '确认销售出库',
         { type: 'warning', confirmButtonText: '确认出库', cancelButtonText: '返回检查' }
     ).then(() => true).catch(() => false)
@@ -577,7 +614,15 @@ async function submitCreate() {
             received_amount: create.form.received_amount,
             capital_account_id: create.form.capital_account_id,
             voucher_urls: create.form.voucher_urls,
-            items: selectedAssets.value.map(row => ({ asset_id: row.id, sale_price: Number(salePrices[row.id] || 0) }))
+            items: selectedAssets.value.map(row => stock.item_type === 'standard' ? ({
+                item_type: 'standard',
+                stock_id: Number(row.stock_id || row.id),
+                quantity_product_id: Number(row.product_id || 0),
+                warehouse_id: Number(row.warehouse_id || 0),
+                location_id: Number(row.location_id || 0),
+                quantity: Number(saleQuantities[row.id] || 0),
+                sale_price: Number(salePrices[row.id] || 0),
+            }) : ({ item_type: 'device', asset_id: row.id, sale_price: Number(salePrices[row.id] || 0) }))
         })
         ElMessage.success('销售出库已完成')
         create.visible = false
@@ -639,6 +684,7 @@ function onStockWarehouseChange() {
 /** 已形成收款事实的在售设备走销售退货；未收款设备直接取消销售。 */
 function canReturnSale(row: any) {
     return !isExternalGoods(row)
+        && !isStandardGoods(row)
         && Number(row.asset_id || 0) > 0
         && row.status === 'sold'
         && row.order_status !== 'void'
@@ -655,7 +701,7 @@ function goSaleReturn(row: any) {
 
 function canCancelSaleItemFromList(row: any) {
     return !isExternalGoods(row)
-        && Number(row.asset_id || 0) > 0
+        && (isStandardGoods(row) || Number(row.asset_id || 0) > 0)
         && row.status === 'sold'
         && row.order_status === 'completed'
         && row.finance_status === 'pending'
@@ -664,11 +710,38 @@ function canCancelSaleItemFromList(row: any) {
 
 function canCancelSaleItem(row: any) {
     return !isExternalGoods(row)
-        && Number(row.asset_id || 0) > 0
+        && (isStandardGoods(row) || Number(row.asset_id || 0) > 0)
         && detail.data?.status === 'completed'
         && detail.data?.finance_status === 'pending'
         && row.status === 'sold'
         && row.return_status !== 'pending'
+}
+
+const canCancelSaleOrder = computed(() => {
+    const order = detail.data
+    if (!order || order.status !== 'completed' || order.finance_status !== 'pending' || Number(order.received_amount || 0) > 0) return false
+    return !(order.items || []).some((item: any) => isExternalGoods(item))
+})
+
+async function cancelSaleOrder() {
+    if (!canCancelSaleOrder.value || !detail.data?.id) return
+    try {
+        const result: any = await ElMessageBox.prompt(
+            '撤销后本单全部设备或标品会按原位置返库，应收同步作废。',
+            '确认整单撤销',
+            {
+                confirmButtonText: '确认撤销',
+                cancelButtonText: '返回检查',
+                inputPlaceholder: '填写撤销原因，便于后续追溯',
+            }
+        )
+        await cancelErpSale(Number(detail.data.id), { remark: result?.value || '' })
+        ElMessage.success('销售单已撤销，库存已恢复')
+        detail.visible = false
+        await loadList()
+    } catch (e: any) {
+        if (e !== 'cancel' && e !== 'close') throw e
+    }
 }
 
 async function cancelSaleItem(row: any) {
@@ -752,6 +825,16 @@ function saleCostBasis(row: any) {
     return Number(row?.sale_cost_basis ?? (isConsigned(row) ? row?.consignment_settlement_amount : row?.total_cost) ?? 0)
 }
 
+function rowSelectedCost(row: any) {
+    return stock.item_type === 'standard'
+        ? Number(row?.average_cost || 0) * Number(saleQuantities[row.id] || 0)
+        : saleCostBasis(row)
+}
+
+function quantityText(value: any) {
+    return Number(value || 0).toFixed(3).replace(/0+$/, '').replace(/\.$/, '') || '0'
+}
+
 function formatTime(value: any) {
     const time = Number(value || 0)
     if (!time) return '-'
@@ -783,8 +866,13 @@ function batchPageSize(row: any) {
 }
 
 function isExternalGoods(row: any) {
+    if (isStandardGoods(row)) return false
     return Number(row?.external_goods_id || 0) > 0
         || (Number(row?.asset_id || 0) <= 0 && String(row?.inventory_source || '') !== 'erp_asset')
+}
+
+function isStandardGoods(row: any) {
+    return String(row?.item_type || '') === 'standard' || String(row?.inventory_source || '') === 'erp_quantity'
 }
 
 function itemQuantity(row: any) {

@@ -116,23 +116,63 @@ final class MemberCardStaffFactService extends BaseAdminService
 
     private function performancePayload(array $fact): array
     {
+        $reversalOfEventId = trim((string)($fact['reversal_of_event_id'] ?? ''));
+        $isReversal = $reversalOfEventId !== '';
+        $direction = $isReversal ? -1 : 1;
+        $metricKey = (string)$fact['metric_key'];
+        if ($isReversal) {
+            $metricKey = [
+                'member_card_issue_cancelled' => 'member_card_issued',
+                'member_card_redeem_reversed' => 'member_card_redeemed',
+            ][$metricKey] ?? $metricKey;
+        }
+        $metricMeta = [
+            'member_card_issued' => ['name' => '会员卡开卡', 'scope' => 'outcome', 'unit' => 'card'],
+            'member_card_redeemed' => ['name' => '会员卡核销服务', 'scope' => 'action', 'unit' => 'service'],
+            'member_card_received' => ['name' => '会员卡确认收款', 'scope' => 'action', 'unit' => 'settlement'],
+            'member_card_refund_applied' => ['name' => '会员卡退款申请', 'scope' => 'action', 'unit' => 'refund'],
+            'member_card_refunded' => ['name' => '会员卡退款完成', 'scope' => 'outcome', 'unit' => 'refund'],
+            'member_card_refund_paid' => ['name' => '会员卡退款付款', 'scope' => 'action', 'unit' => 'settlement'],
+        ][$metricKey] ?? ['name' => $metricKey, 'scope' => 'action', 'unit' => 'item'];
+        // 冲红撤销的是原员工的产出，不归到执行撤销动作的员工名下。
+        // 退款申请、退款付款等独立动作虽然资金方向为负，仍是正向工作事实。
+        $sourceFact = $fact;
+        if ($isReversal) {
+            $original = MemberCardStaffFact::where([
+                ['site_id', '=', (int)$fact['site_id']],
+                ['event_id', '=', $reversalOfEventId],
+            ])->findOrEmpty();
+            if (!$original->isEmpty()) $sourceFact = $original->toArray();
+        }
         return [
+            'event_name' => 'performance.fact.recorded.v1',
+            'event_version' => 1,
             'site_id' => (int)$fact['site_id'],
             'event_id' => (string)$fact['event_id'],
             'source_plugin' => 'hsx_member_card',
             'business_chain' => 'member_card',
-            'action_key' => (string)$fact['metric_key'],
-            'employee_uid' => (int)$fact['staff_uid'],
-            'employee_name' => (string)$fact['staff_name'],
-            'role_key' => (string)$fact['staff_role'],
-            'business_type' => (string)$fact['biz_type'],
-            'business_id' => (string)$fact['biz_id'],
-            'business_no' => (string)$fact['biz_no'],
-            'quantity' => (float)$fact['quantity'] * (int)$fact['direction'],
-            'amount' => (float)$fact['amount'] * (int)$fact['direction'],
-            'profit' => 0,
+            'metric_key' => $metricKey,
+            'metric_name' => $metricMeta['name'],
+            'fact_scope' => $metricMeta['scope'],
+            'fact_type' => $isReversal ? 'reversal' : 'original',
+            'direction' => $direction,
+            'employee_uid' => (int)$sourceFact['staff_uid'],
+            'employee_name' => (string)$sourceFact['staff_name'],
+            'role_key' => (string)$sourceFact['staff_role'],
+            'business_type' => (string)$sourceFact['biz_type'],
+            'business_id' => (string)$sourceFact['biz_id'],
+            'business_no' => (string)$sourceFact['biz_no'],
+            'quantity' => (string)$sourceFact['quantity'],
+            'amount' => (string)$sourceFact['amount'],
+            'profit' => '0.00',
+            'unit' => $metricMeta['unit'],
             'occurred_at' => (int)$fact['occurred_at'],
-            'reversal_of_event_id' => (string)$fact['reversal_of_event_id'],
+            'reversal_of_event_id' => $reversalOfEventId,
+            'source_route' => [
+                'app' => 'adminapp',
+                'path' => 'addon/hsx_member_card/pages/order/list',
+                'query' => ['keyword' => (string)$sourceFact['biz_no']],
+            ],
         ];
     }
 }

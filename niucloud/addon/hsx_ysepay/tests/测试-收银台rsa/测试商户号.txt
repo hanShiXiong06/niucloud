@@ -1,0 +1,8 @@
+certId=826121648160110
+mercId=826121658120499
+busiCode=00510102
+证书密码
+a111111
+
+接口网址：
+https://gateway-doc.ysepay.com/gatewayDocs/summary/N0000384/N0000483/N0000488/I0000326.html

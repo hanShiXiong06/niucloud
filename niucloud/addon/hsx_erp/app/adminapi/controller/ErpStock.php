@@ -5,6 +5,7 @@ namespace addon\hsx_erp\app\adminapi\controller;
 
 use addon\hsx_erp\app\service\admin\ErpStockService;
 use addon\hsx_erp\app\service\admin\ErpListingTaskService;
+use addon\hsx_erp\app\service\admin\ErpQuantityInventoryService;
 use core\base\BaseAdminController;
 use think\App;
 
@@ -57,6 +58,33 @@ class ErpStock extends BaseAdminController
     public function turnoverSummary()
     {
         return success($this->service->turnoverSummary());
+    }
+
+    /** 补货、盘点及耗材绑定共用的标品 SKU 档案。 */
+    public function quantityProducts()
+    {
+        $params = $this->request->params([
+            ['keyword', ''], ['category_path', ''], ['status', 1], ['page', 1], ['limit', 20],
+        ]);
+        return success((new ErpQuantityInventoryService())->productPage($params));
+    }
+
+    public function createQuantityProduct()
+    {
+        $params = $this->request->params([
+            ['product_name', ''], ['spec', ''], ['product_code', ''], ['unit', '件'],
+            ['catalog_product_id', 0], ['category_name', ''], ['category_path', ''], ['remark', ''],
+        ]);
+        return success((new ErpQuantityInventoryService())->createProduct($params));
+    }
+
+    /** 给历史标品补齐或修正 ERP 分类。 */
+    public function updateQuantityProductCategory(int $id)
+    {
+        $params = $this->request->params([
+            ['category_name', ''], ['category_path', ''],
+        ]);
+        return success((new ErpQuantityInventoryService())->updateProductCategory($id, $params));
     }
 
     /** 今日商品上架协作工作量，供库存中心 PC / 移动端统一展示。 */
