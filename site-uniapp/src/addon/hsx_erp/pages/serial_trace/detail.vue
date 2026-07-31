@@ -24,7 +24,7 @@
                     <view class="cycle-list">
                         <view v-for="cycle in detail.cycles || []" :key="cycle.id" class="cycle-card" :class="{'cycle-card--current':cycle.is_current}" @click="goAsset(cycle.id)">
                             <text class="cycle-no">第 {{ cycle.cycle_no }} 次</text>
-                            <text class="cycle-party">{{ cycle.party_name || '未记录供应商' }}</text>
+                            <text v-if="canViewSupplier" class="cycle-party">{{ cycle.party_name || '未记录供应商' }}</text>
                             <text class="cycle-time">{{ formatErpTime(cycle.stock_in_at || cycle.create_at) }}</text>
                             <text class="cycle-link">{{ cycle.is_current ? '当前周期' : '查看档案' }} ›</text>
                         </view>
@@ -40,13 +40,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { getMobileSerialTraceDetail } from '@/addon/hsx_erp/api/erp'
 import { formatErpTime } from '@/addon/hsx_erp/hooks/useErpTime'
 import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
 import ErpAssetLifecycleTimeline from '@/addon/hsx_erp/components/ErpAssetLifecycleTimeline.vue'
 const id=ref(0),loading=ref(true),error=ref(''),detail=ref<any>({})
+const canViewSupplier=computed(()=>Number(detail.value?.capabilities?.view_supplier||0)===1)
 onLoad((query:any)=>{id.value=Number(query?.id||0);load()})
 async function load(){if(!id.value){error.value='缺少设备参数';loading.value=false;return}loading.value=true;error.value='';try{const res:any=await getMobileSerialTraceDetail(id.value);detail.value=res?.data||{}}catch(e:any){error.value=e?.message||'串号生命周期加载失败'}finally{loading.value=false}}
 function goAsset(assetId:number){uni.navigateTo({url:`/addon/hsx_erp/pages/stock/detail?id=${Number(assetId||0)}`})}

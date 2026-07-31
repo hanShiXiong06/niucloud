@@ -6,6 +6,7 @@
         clearable
         filterable
         :disabled="disabled"
+        :show-all-levels="showAllLevels"
         class="w-full"
         :placeholder="placeholder"
         @change="handleChange"
@@ -14,17 +15,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { getErpGoodsCatalogHierarchy } from '@/addon/hsx_erp/api/erp'
 
 const props = withDefaults(defineProps<{
     modelValue?: string
     placeholder?: string
     disabled?: boolean
+    leafOnly?: boolean
+    showAllLevels?: boolean
+    expandTrigger?: 'click' | 'hover'
 }>(), {
     modelValue: '',
     placeholder: '选择 ERP 末级分类',
     disabled: false,
+    leafOnly: true,
+    showAllLevels: true,
+    expandTrigger: 'click',
 })
 const emit = defineEmits<{
     (event: 'update:modelValue', value: string): void
@@ -35,15 +42,17 @@ const options = ref<any[]>([])
 const selectedPath = ref<string[]>([])
 const rootOptions = ref<any[]>([])
 let rootLoading: Promise<void> | null = null
-const cascaderProps = {
+const cascaderProps = computed(() => ({
     lazy: true,
     emitPath: true,
-    checkStrictly: false,
+    // 录入场景必须落到末级分类；筛选场景允许选择任意父级并覆盖其全部子类。
+    checkStrictly: !props.leafOnly,
+    expandTrigger: props.expandTrigger,
     value: 'value',
     label: 'label',
     leaf: 'leaf',
     lazyLoad: loadChildren,
-}
+}))
 
 watch(() => props.modelValue, value => {
     const path = String(value || '').trim()
@@ -92,10 +101,14 @@ async function loadChildren(node: any, resolve: (rows: any[]) => void) {
 }
 
 function toOption(row: any) {
+    const hasChildren = Number(row.has_children || 0) === 1
+    const leaf = row.is_leaf === undefined || row.is_leaf === null
+        ? !hasChildren
+        : Number(row.is_leaf || 0) === 1
     return {
         value: String(row.category_path || ''),
         label: String(row.label || '未命名分类'),
-        leaf: Number(row.is_leaf || 0) === 1,
+        leaf,
         raw: row,
     }
 }

@@ -27,6 +27,8 @@ class ErpStock extends BaseAdminController
             ['refurbish_status', ''],
             ['sale_target', ''],
             ['listing_status', ''],
+            ['task_stage_key', ''],
+            ['my_task', 0],
             ['warehouse_id', 0],
             ['warehouse_name', ''],
             ['location_id', 0],
@@ -104,7 +106,12 @@ class ErpStock extends BaseAdminController
             (string)$params['reason'],
             (string)$params['request_id']
         );
-        (new ErpListingTaskService())->sync($id);
+        $publish = $this->service->autoPublishListingIfReady($id);
+        $taskAssigned = (new ErpListingTaskService())->sync($id);
+        $result['_workflow'] = [
+            'task_assigned' => $taskAssigned ? 1 : 0,
+            'publish' => $publish,
+        ];
         return success($result);
     }
 
@@ -229,7 +236,12 @@ class ErpStock extends BaseAdminController
             ['warehouse_id', 0], ['location_id', 0], ['voucher_urls', []], ['remark', ''], ['request_id', ''],
         ]);
         $result = $this->service->completeRefurbish($id, $params);
-        (new ErpListingTaskService())->sync($id);
+        $publish = $this->service->autoPublishListingIfReady($id);
+        $taskAssigned = (new ErpListingTaskService())->sync($id);
+        $result['_workflow'] = [
+            'task_assigned' => $taskAssigned ? 1 : 0,
+            'publish' => $publish,
+        ];
         return success($result);
     }
 
@@ -252,11 +264,17 @@ class ErpStock extends BaseAdminController
             ['remark_internal', null],
             ['remark', ''],
             ['next_assignee_uid', 0],
+            ['workflow_action', ''],
         ]);
         $this->service->updateFlow($id, $params);
-        (new ErpListingTaskService())->sync($id, (int)$params['next_assignee_uid']);
-        $this->service->autoPublishListingIfReady($id);
-        return success('SUCCESS');
+        $publish = $this->service->autoPublishListingIfReady($id);
+        $taskAssigned = (new ErpListingTaskService())->sync($id, (int)$params['next_assignee_uid']);
+        return success([
+            'saved' => 1,
+            'task_assigned' => $taskAssigned ? 1 : 0,
+            'publish' => $publish,
+            'asset' => $this->service->info($id),
+        ]);
     }
 
     public function syncListing(int $id)

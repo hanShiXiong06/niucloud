@@ -59,9 +59,9 @@
                     </el-form>
                 </section>
 
-                <section v-show="activeNav === 'channel'" class="rule-section section-wide">
-                    <div class="section-title">自有商城渠道</div>
-                    <el-alert class="mb-4" type="info" :closable="false" show-icon title="ERP 始终是主数据；商城只能消费 ERP 数据或维护自己的数据映射，不能反向修改 ERP 分类和规格。" />
+                <section v-show="activeNav === 'workspace'" class="rule-section section-wide">
+                    <div class="section-title">运营模式与销售资料</div>
+                    <div class="section-description">统一控制一人完成或多人分工时的操作步骤、字段展示与资料交付方式。</div>
                     <div class="workspace-setting">
                         <div class="workspace-setting__head">
                             <div>
@@ -106,7 +106,45 @@
                             </div>
                             <el-switch v-model="form.listing_workspace.auto_publish" :active-value="1" :inactive-value="0" active-text="自动发布" inactive-text="人工确认" />
                         </div>
+                        <div class="workspace-fields">
+                            <div class="workspace-setting__head">
+                                <div>
+                                    <div class="workspace-setting__title">一站式表单字段</div>
+                                    <div class="workspace-setting__desc">控制一人模式当次展示和校验的销售资料。分岗模式的核心交付物由岗位步骤强制保留。</div>
+                                </div>
+                                <el-tag effect="plain">必填项必须先显示</el-tag>
+                            </div>
+                            <div class="workspace-field-list">
+                                <div v-for="item in listingFieldOptions" :key="item.key" class="workspace-field-row">
+                                    <div class="workspace-field-row__copy">
+                                        <strong>{{ item.label }}</strong>
+                                        <small>{{ item.description }}</small>
+                                    </div>
+                                    <div class="workspace-field-row__controls">
+                                        <span>显示</span>
+                                        <el-switch
+                                            v-model="form.listing_workspace.field_rules[item.key].enabled"
+                                            :active-value="1"
+                                            :inactive-value="0"
+                                            @change="onListingFieldEnabledChange(item.key)"
+                                        />
+                                        <span>必填</span>
+                                        <el-switch
+                                            v-model="form.listing_workspace.field_rules[item.key].required"
+                                            :active-value="1"
+                                            :inactive-value="0"
+                                            :disabled="form.listing_workspace.field_rules[item.key].enabled !== 1"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
+                </section>
+
+                <section v-show="activeNav === 'channel'" class="rule-section section-wide">
+                    <div class="section-title">自有商城渠道</div>
+                    <el-alert class="mb-4" type="info" :closable="false" show-icon title="ERP 始终是主数据；商城只能消费 ERP 数据或维护自己的数据映射，不能反向修改 ERP 分类和规格。" />
                     <el-form class="rule-form" label-width="160px">
                         <el-form-item label="启用商城联动">
                             <el-switch v-model="form.marketplace.channels.phone_shop.enabled" :active-value="1" :inactive-value="0" />
@@ -163,32 +201,14 @@
 
                 <section v-show="activeNav === 'trade'" class="rule-section section-wide">
                     <div class="section-title">采购规则</div>
-                    <div class="section-description">设置移动端采购录入方式、应付生成与业务撤销边界。</div>
-                    <div class="purchase-entry-setting">
+                    <div class="section-description">采购页面自动跟随销售资料工作模式，不再维护第二套容易冲突的录入开关。</div>
+                    <div class="purchase-entry-setting purchase-entry-setting--derived">
                         <div class="workspace-setting__head">
                             <div>
-                                <div class="workspace-setting__title">移动端采购录入方式</div>
-                                <div class="workspace-setting__desc">所有模式都写入同一份采购和库存数据，仅改变当次需要填写的内容与后续分工。</div>
+                                <div class="workspace-setting__title">{{ purchaseModeDerived.title }}</div>
+                                <div class="workspace-setting__desc">{{ purchaseModeDerived.description }}</div>
                             </div>
-                            <el-tag type="success" effect="plain">可随团队调整</el-tag>
-                        </div>
-                        <div class="workspace-mode-grid">
-                            <button
-                                v-for="item in purchaseEntryModes"
-                                :key="item.value"
-                                type="button"
-                                class="workspace-mode-card"
-                                :class="{ 'is-active': form.purchase.mobile_entry_mode === item.value }"
-                                @click="form.purchase.mobile_entry_mode = item.value"
-                            >
-                                <span class="workspace-mode-card__mark">{{ item.index }}</span>
-                                <span class="workspace-mode-card__body">
-                                    <strong>{{ item.title }}</strong>
-                                    <small>{{ item.description }}</small>
-                                    <em>{{ item.flow }}</em>
-                                </span>
-                                <span class="workspace-mode-card__check">✓</span>
-                            </button>
+                            <el-tag type="success" effect="plain">由工作模式自动确定</el-tag>
                         </div>
                     </div>
                     <el-form class="rule-form" label-width="160px">
@@ -362,25 +382,47 @@ const loading = ref(false)
 const saving = ref(false)
 const form = reactive(defaultRules())
 const taskStages = ref<any[]>([])
-const activeNav = ref('trade')
+const activeNav = ref('workspace')
 const navItems = [
-    { key: 'trade', index: '01', title: '交易与财务', description: '采购、销售、收付款', detail: '管理从采购入库到销售结算的核心规则，建议只在业务口径发生变化时调整。', tag: '核心流程' },
-    { key: 'goods', index: '02', title: '商品与库存', description: '名称规则、周转预警', detail: '统一商品展示名称与库存周转阈值，后续配件数量库存也在此处开启和管理。', tag: '库存管理' },
-    { key: 'channel', index: '03', title: '商城渠道', description: '分类、规格、发布方式', detail: '决定商城消费 ERP 数据还是独立维护映射，并控制资料齐全后的发布方式。', tag: '渠道协同' },
-    { key: 'team', index: '04', title: '任务分工', description: '自动负责人、岗位承接', detail: '为财务、拍摄、销售定价和商城运营设置默认负责人，减少人工派单。', tag: '团队协作' },
-    { key: 'special', index: '05', title: '整备与代卖', description: '按需开启的扩展流程', detail: '整备、外送追踪和寄售业务均为可选能力，未开展时无需配置。', tag: '扩展业务' }
+    { key: 'workspace', index: '01', title: '运营模式', description: '一人完成、多人分工', detail: '决定销售资料由一人一次完成，还是拆分给拍摄、销售定价与渠道运营岗位处理。', tag: '使用入口' },
+    { key: 'trade', index: '02', title: '交易与财务', description: '采购、销售、收付款', detail: '管理从采购入库到销售结算的核心规则，建议只在业务口径发生变化时调整。', tag: '核心流程' },
+    { key: 'goods', index: '03', title: '商品与库存', description: '名称规则、周转预警', detail: '统一商品展示名称与库存周转阈值，后续配件数量库存也在此处开启和管理。', tag: '库存管理' },
+    { key: 'channel', index: '04', title: '商城渠道', description: '分类、规格、发布方式', detail: '决定商城消费 ERP 数据还是独立维护映射，并控制资料齐全后的发布方式。', tag: '渠道协同' },
+    { key: 'team', index: '05', title: '任务分工', description: '自动负责人、岗位承接', detail: '为财务、拍摄、销售定价和商城运营设置默认负责人，减少人工派单。', tag: '团队协作' },
+    { key: 'special', index: '06', title: '整备与代卖', description: '按需开启的扩展流程', detail: '整备、外送追踪和寄售业务均为可选能力，未开展时无需配置。', tag: '扩展业务' }
 ]
 const workspaceModes = [
     { value: 'one_stop', index: '01', title: '一站式录入', description: '适合 1～5 人团队，一人在一个表单全部完成', flow: '资料 · 图片 · 销售价 · 发布' },
     { value: 'split', index: '02', title: '专业分工', description: '拍摄、销售定价、渠道运营分别承接待办', flow: '拍摄 → 销售定价 → 渠道运营' },
     { value: 'photo_price', index: '03', title: '拍摄定价合并', description: '同一人连续拍图和定价，运营只处理渠道资料', flow: '拍摄与定价 → 渠道运营' }
 ]
-const purchaseEntryModes = [
-    { value: 'quick', index: '01', title: '快速入库', description: '只录采购事实和入库位置，商品资料后续按需完善', flow: '供应商 · 设备 · 成本 · 入库' },
-    { value: 'complete', index: '02', title: '一次完成', description: '采购时同时填写规格、图片和销售价格', flow: '采购事实 + 销售资料' },
-    { value: 'collaborative', index: '03', title: '分工协作', description: '采购先入库，再由拍摄、定价岗位自动承接', flow: '采购 → 拍摄 → 销售定价' }
+const listingFieldOptions = [
+    { key: 'catalog_product_id', label: '商品目录型号', description: '品类、品牌、系列与标准型号' },
+    { key: 'spec', label: '设备规格', description: '容量、颜色、成色、电池等本机信息' },
+    { key: 'image_urls', label: '商品图片', description: '商城展示所需的正反面、边框和瑕疵图' },
+    { key: 'video_url', label: '展示视频', description: '可选的商品展示视频' },
+    { key: 'retail_price', label: '销售价格', description: '对外销售价格，不影响采购成本' },
+    { key: 'quality_remark', label: '质检备注', description: '拍摄或资料整理人员补充的质检说明' },
+    { key: 'remark_public', label: '对外说明', description: '商城客户可见的商品描述' },
+    { key: 'remark_internal', label: '对内备注', description: '仅员工可见的协作信息' },
 ]
 const activeNavItem = computed(() => navItems.find((item) => item.key === activeNav.value) || navItems[0])
+const purchaseModeDerived = computed(() => form.listing_workspace.mode === 'one_stop'
+    ? { title: '采购时一次完善', description: '采购人员在同一页面完成采购事实与已启用的销售资料；必填项未完成不能提交。' }
+    : { title: '采购事实先入库', description: '采购人员只负责供应商、设备、成本和入库位置；保存后系统按工作模式自动生成拍摄、定价和资料任务。' })
+
+function defaultListingFieldRules() {
+    return {
+        catalog_product_id: { enabled: 1, required: 1 },
+        spec: { enabled: 1, required: 1 },
+        image_urls: { enabled: 1, required: 1 },
+        video_url: { enabled: 1, required: 0 },
+        retail_price: { enabled: 1, required: 1 },
+        quality_remark: { enabled: 1, required: 0 },
+        remark_public: { enabled: 1, required: 0 },
+        remark_internal: { enabled: 1, required: 0 },
+    }
+}
 
 function defaultRules() {
     return {
@@ -389,7 +431,7 @@ function defaultRules() {
         product_title: { category_mode: 'auto', spec_in_title: 1, grade_in_title: 0, separator: ' ' },
         sale: { create_receivable_on_outbound: 1, allow_cancel_before_finance_fact: 1, return_to_original_location_on_cancel: 1, enable_peer_pending: 1, enable_trial_sale: 0, profit_confirm_mode: 'settlement', credit_control: { enabled: 1, default_policy: 'remind', min_outstanding_amount: 0, min_outstanding_days: 0 } },
         refurbish: { enabled: 1, default_required: 0, tracking_mode: 'simple', daily_reminder_enabled: 1, daily_reminder_threshold: 25, reminder_dismiss_date: '' },
-        listing_workspace: { mode: 'one_stop', media_provider: 'auto', auto_publish: 0, fallback_to_erp: 1 },
+        listing_workspace: { mode: 'one_stop', media_provider: 'auto', auto_publish: 0, fallback_to_erp: 1, field_rules: defaultListingFieldRules() },
         marketplace: {
             recycle_material_owner: 'erp',
             channels: { phone_shop: { enabled: 1, category_mode: 'erp', spec_mode: 'erp', publish_mode: 'direct' } }
@@ -397,6 +439,29 @@ function defaultRules() {
         turnover: { attention_days: 7, warning_days: 15, critical_days: 30, reminder_enabled: 1, reminder_count_threshold: 1, reminder_dismiss_date: '' },
         consignment: { enabled: 0, settle_payable_after_receipt: 1, transfer_to_owned_requires_repurchase: 1 }
     }
+}
+
+function onListingFieldEnabledChange(key: string) {
+    const rule = form.listing_workspace.field_rules[key]
+    if (rule && rule.enabled !== 1) rule.required = 0
+}
+
+function applyListingWorkspace(payload: any = {}) {
+    const incomingRules = payload?.field_rules && typeof payload.field_rules === 'object'
+        ? payload.field_rules
+        : {}
+    const fieldRules = defaultListingFieldRules()
+    listingFieldOptions.forEach((item) => {
+        const incoming = incomingRules[item.key]
+        if (incoming && typeof incoming === 'object') {
+            fieldRules[item.key] = {
+                enabled: Number(incoming.enabled ?? fieldRules[item.key].enabled) === 1 ? 1 : 0,
+                required: Number(incoming.required ?? fieldRules[item.key].required) === 1 ? 1 : 0,
+            }
+        }
+        if (fieldRules[item.key].enabled !== 1) fieldRules[item.key].required = 0
+    })
+    Object.assign(form.listing_workspace, payload || {}, { field_rules: fieldRules })
 }
 
 async function loadConfig() {
@@ -408,7 +473,7 @@ async function loadConfig() {
         Object.assign(form.product_title, res?.data?.product_title || {})
         Object.assign(form.sale, res?.data?.sale || {})
         Object.assign(form.refurbish, res?.data?.refurbish || {})
-        Object.assign(form.listing_workspace, res?.data?.listing_workspace || {})
+        applyListingWorkspace(res?.data?.listing_workspace)
         Object.assign(form.marketplace, res?.data?.marketplace || {})
         Object.assign(form.turnover, res?.data?.turnover || {})
         Object.assign(form.consignment, res?.data?.consignment || {})
@@ -431,7 +496,7 @@ async function submit() {
         Object.assign(form.product_title, res?.data?.product_title || {})
         Object.assign(form.sale, res?.data?.sale || {})
         Object.assign(form.refurbish, res?.data?.refurbish || {})
-        Object.assign(form.listing_workspace, res?.data?.listing_workspace || {})
+        applyListingWorkspace(res?.data?.listing_workspace)
         Object.assign(form.marketplace, res?.data?.marketplace || {})
         Object.assign(form.turnover, res?.data?.turnover || {})
         Object.assign(form.consignment, res?.data?.consignment || {})
@@ -603,6 +668,58 @@ onMounted(loadConfig)
     padding-top: 15px;
     border-top: 1px solid #e9eef6;
 }
+.workspace-fields {
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid #e9eef6;
+}
+.workspace-field-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 14px;
+}
+.workspace-field-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+    gap: 16px;
+    padding: 12px 14px;
+    border: 1px solid #e8edf5;
+    border-radius: 10px;
+    background: #fff;
+}
+.workspace-field-row__copy {
+    min-width: 0;
+}
+.workspace-field-row__copy strong,
+.workspace-field-row__copy small {
+    display: block;
+}
+.workspace-field-row__copy strong {
+    color: #334155;
+    font-size: 14px;
+}
+.workspace-field-row__copy small {
+    overflow: hidden;
+    margin-top: 4px;
+    color: #94a3b8;
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.workspace-field-row__controls {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    gap: 8px;
+    color: #7c8799;
+    font-size: 12px;
+}
+.purchase-entry-setting--derived {
+    margin-bottom: 12px;
+}
 @media (max-width: 1100px) {
     .workspace-mode-grid {
         grid-template-columns: 1fr;
@@ -610,6 +727,9 @@ onMounted(loadConfig)
     .workspace-provider-row {
         align-items: flex-start;
         flex-direction: column;
+    }
+    .workspace-field-list {
+        grid-template-columns: 1fr;
     }
 }
 .config-nav-icon {

@@ -20,6 +20,7 @@ use addon\hsx_erp\app\model\ErpSettlementLink;
 use addon\hsx_erp\app\model\ErpWarehouse;
 use addon\hsx_erp\app\model\ErpWarehouseLocation;
 use addon\hsx_erp\app\support\ErpIdempotency;
+use addon\hsx_erp\app\support\ErpListingFormContract;
 use addon\hsx_erp\app\support\ErpListingWorkflow;
 use addon\hsx_erp\app\support\ErpPurchaseReturnPolicy;
 use core\base\BaseAdminService;
@@ -141,8 +142,8 @@ class ErpStockService extends BaseAdminService
         } else {
             $this->completeRefurbishWithoutCost($id, $result, $reason, $requestId, $destination, $data['voucher_urls'] ?? '');
         }
-        // 整备完工只完成库存事实；资料完整后由用户明确点击“上架商城”。
-        // 不自动派发拍照中台工单，也不让外部插件故障影响整备闭环。
+        // 整备完工先形成库存事实；资料满足条件后按业务规则自动发布，
+        // 否则保留明确的人工待办，外部渠道故障不能回滚整备事实。
         return $this->info($id);
     }
 
@@ -272,7 +273,7 @@ class ErpStockService extends BaseAdminService
             $row['inbound_count'] = $serialCounts[$serial] ?? 1;
         }
         unset($row);
-        return $page;
+        return (new ErpDataVisibilityService())->sanitizeSerialTracePage($page);
     }
 
     /**
@@ -338,7 +339,7 @@ class ErpStockService extends BaseAdminService
         });
 
         $current = $assets === [] ? [] : $assets[count($assets) - 1];
-        return [
+        return (new ErpDataVisibilityService())->sanitizeSerialTraceDetail([
             'serial_no' => $serial,
             'model' => (string)($current['model'] ?? $selected->model),
             'spec' => (string)($current['spec'] ?? $selected->spec),
@@ -350,18 +351,21 @@ class ErpStockService extends BaseAdminService
             'purchase_return_count' => count(array_filter($timeline, static fn(array $row): bool => (string)($row['action'] ?? '') === 'purchase_return')),
             'cycles' => $assets,
             'timeline' => $timeline,
-        ];
+        ]);
     }
 
     public function getPage(array $where): array
     {
+        $visibility = new ErpDataVisibilityService();
         $saleTable = (new ErpSaleOrder())->getTable();
         $query = ErpAsset::alias('a')
             ->leftJoin($saleTable . ' s', 's.id = a.sale_order_id AND s.site_id = a.site_id')
             ->where([['a.site_id', '=', $this->site_id]]);
         if (!empty($where['keyword'])) {
             $kw = trim((string)$where['keyword']);
-            $query->whereLike('a.asset_no|a.imei|a.sn|a.model|a.spec|a.category_name|a.party_name|a.warehouse_name|a.location_name|s.sale_no|s.party_name', '%' . $kw . '%');
+            $keywordFields = 'a.asset_no|a.imei|a.sn|a.model|a.spec|a.category_name|a.warehouse_name|a.location_name|s.sale_no|s.party_name';
+            if ($visibility->can('view_supplier')) $keywordFields .= '|a.party_name';
+            $query->whereLike($keywordFields, '%' . $kw . '%');
         }
         if (!empty($where['status'])) {
             $query->where('a.status', '=', (string)$where['status']);
@@ -382,13 +386,20 @@ class ErpStockService extends BaseAdminService
                 $query->where('a.listing_status', '=', $listingStatus);
             }
         }
+        if (!empty($where['task_stage_key'])) {
+            $query->where('a.task_stage_key', '=', trim((string)$where['task_stage_key']));
+        }
+        if ((int)($where['my_task'] ?? 0) === 1) {
+            $query->where('a.task_assignee_uid', '=', (int)$this->uid)
+                ->where('a.task_stage_key', '<>', '');
+        }
         if (!empty($where['warehouse_id'])) {
             $query->where('a.warehouse_id', '=', (int)$where['warehouse_id']);
         }
         if (!empty($where['location_id'])) {
             $query->where('a.location_id', '=', (int)$where['location_id']);
         }
-        if (!empty($where['party_id'])) {
+        if ($visibility->can('view_supplier') && !empty($where['party_id'])) {
             $query->where('a.party_id', '=', (int)$where['party_id']);
         }
         if (!empty($where['catalog_product_id'])) $query->where('a.catalog_product_id', '=', (int)$where['catalog_product_id']);
@@ -403,14 +414,15 @@ class ErpStockService extends BaseAdminService
             'location_name' => 'a.location_name',
             'category_name' => 'a.category_name',
         ] as $key => $column) {
+            if ($key === 'party_name' && !$visibility->can('view_supplier')) continue;
             if (!empty($where[$key])) {
                 $query->whereLike($column, '%' . trim((string)$where[$key]) . '%');
             }
         }
-        if (($where['min_cost'] ?? '') !== '') {
+        if ($visibility->can('view_cost') && ($where['min_cost'] ?? '') !== '') {
             $query->where('a.total_cost', '>=', (float)$where['min_cost']);
         }
-        if (($where['max_cost'] ?? '') !== '') {
+        if ($visibility->can('view_cost') && ($where['max_cost'] ?? '') !== '') {
             $query->where('a.total_cost', '<=', (float)$where['max_cost']);
         }
         if (($where['min_price'] ?? '') !== '') {
@@ -479,12 +491,14 @@ class ErpStockService extends BaseAdminService
         $page['data'] = $this->appendLifecycleContext((array)($page['data'] ?? []));
         $page['data'] = (new ErpTurnoverService())->decorate((array)$page['data']);
         $page['data'] = $this->appendListingSyncState((array)$page['data']);
+        $page['data'] = $visibility->sanitizeStockRows((array)$page['data']);
+        $page['capabilities'] = $visibility->stockCapabilities();
         return $page;
     }
 
     public function turnoverSummary(): array
     {
-        return (new ErpTurnoverService())->summary();
+        return (new ErpDataVisibilityService())->sanitizeTurnoverSummary((new ErpTurnoverService())->summary());
     }
 
     /** 今日商城上架协作量：按设备、环节、经办人去重，避免重复保存虚增工作量。 */
@@ -499,10 +513,13 @@ class ErpStockService extends BaseAdminService
             'listing_material_complete' => 'material',
             'listing_publish' => 'publish',
         ];
-        $rows = ErpAssetLedger::where('site_id', '=', $this->site_id)
+        $visibility = new ErpDataVisibilityService();
+        $rowsQuery = ErpAssetLedger::where('site_id', '=', $this->site_id)
             ->whereIn('action', array_keys($actionStage))
             ->where('occurred_at', '>=', $startAt)
-            ->where('occurred_at', '<', $endAt)
+            ->where('occurred_at', '<', $endAt);
+        if (!$visibility->can('view_team_workload')) $rowsQuery->where('operator_uid', '=', (int)$this->uid);
+        $rows = $rowsQuery
             ->field('id,asset_id,action,operator_uid,operator_name,occurred_at')
             ->order('occurred_at asc,id asc')->select()->toArray();
 
@@ -546,6 +563,8 @@ class ErpStockService extends BaseAdminService
             'totals' => $totals,
             'staff' => $staff,
             'stage_labels' => ['photo' => '商品拍摄', 'price' => '销售定价', 'material' => '资料整理', 'publish' => '成功上架'],
+            'scope' => $visibility->can('view_team_workload') ? 'team' : 'self',
+            'capabilities' => $visibility->stockCapabilities(),
         ];
     }
 
@@ -573,7 +592,8 @@ class ErpStockService extends BaseAdminService
             if ($beforePrice > 0 && $normalizedReason === '') throw new CommonException('调整已有零售价时请填写原因');
 
             $save = ['retail_price' => $retailPrice, 'update_at' => time()];
-            if ((string)$asset->sale_target === 'mall') {
+            if ((string)$asset->sale_target === 'mall'
+                && !in_array((string)$asset->listing_status, ['pending_shop', 'listed'], true)) {
                 $projected = array_merge($asset->toArray(), $save);
                 $warehouse = ErpWarehouse::where([
                     ['site_id', '=', $this->site_id], ['id', '=', (int)$asset->warehouse_id], ['status', '=', 1],
@@ -1298,7 +1318,7 @@ class ErpStockService extends BaseAdminService
         $asset['return_flow'] = ErpPurchaseReturnPolicy::assess($asset, $supplierAmount, $paidAmount);
         $asset = (new ErpTurnoverService())->decorate([$asset])[0] ?? $asset;
         $asset = $this->appendListingSyncState([$asset])[0] ?? $asset;
-        return $asset;
+        return (new ErpDataVisibilityService())->sanitizeStockDetail($asset);
     }
 
     /** 返回用户能直接理解的商城上架状态，不暴露拍照中台或 Outbox 等内部实现。 */
@@ -1308,9 +1328,15 @@ class ErpStockService extends BaseAdminService
         $materialOwner = (string)($rules['marketplace']['recycle_material_owner'] ?? 'erp');
         $workspace = (new ErpListingWorkspaceService())->describe();
         $workspaceMode = (string)($workspace['mode'] ?? 'one_stop');
+        $channelStateMap = (new ErpChannelMappingService())->listingStateMap(
+            (int)$this->site_id,
+            array_column($rows, 'id'),
+            'phone_shop'
+        );
         foreach ($rows as &$row) {
             $policy = (array)($row['warehouse_policy'] ?? []);
             $status = (string)($row['listing_status'] ?? 'none');
+            $channelState = (array)($channelStateMap[(int)($row['id'] ?? 0)] ?? []);
             if (!in_array($status, ['pending_shop', 'listed'], true)
                 && (string)($row['status'] ?? '') === ErpDict::ASSET_IN_STOCK
                 && (string)($row['sale_target'] ?? '') === 'mall') {
@@ -1320,8 +1346,7 @@ class ErpStockService extends BaseAdminService
             $row['listing_material_owner'] = $materialOwner;
             $row['listing_workspace'] = $workspace;
             $row['can_handoff_shop'] = (int)(
-                (string)($row['source_plugin'] ?? '') === 'hsx_recycle'
-                && $materialOwner === 'phone_shop'
+                $materialOwner === 'phone_shop'
                 && ErpListingWorkflow::canHandoffToShop($row, $policy)
                 && !in_array($status, ['pending_shop', 'listed'], true)
             );
@@ -1332,8 +1357,10 @@ class ErpStockService extends BaseAdminService
                     $row['turnover_action_reason'] = '已启用拍照中台，从当前 ERP 入口创建或继续任务，完成后自动回写';
                 } elseif ($workspaceMode === 'one_stop' && in_array($status, ['need_photo', 'need_price', 'need_material'], true)) {
                     $row['turnover_action_key'] = 'complete_listing';
-                    $row['turnover_action_label'] = '一次完善并上架';
-                    $row['turnover_action_reason'] = '在一个表单完成型号、规格、图片和销售价格';
+                    $row['turnover_action_label'] = (int)($workspace['auto_publish'] ?? 0) === 1 ? '一次完善并上架' : '一次完善商品资料';
+                    $row['turnover_action_reason'] = (int)($workspace['auto_publish'] ?? 0) === 1
+                        ? '在一个表单完成型号、规格、图片和销售价格，保存后按规则自动发布'
+                        : '在一个表单完成型号、规格、图片和销售价格，保存后人工确认发布';
                 } elseif ($workspaceMode === 'photo_price' && in_array($status, ['need_photo', 'need_price'], true)) {
                     $row['turnover_action_key'] = 'complete_listing_media_price';
                     $row['turnover_action_label'] = '拍摄并销售定价';
@@ -1367,8 +1394,19 @@ class ErpStockService extends BaseAdminService
                     'need_material' => '待商城资料整理',
                     default => (string)($row['sale_target'] ?? '') === 'mall' ? '待完善商品资料' : '无需上架',
                 },
-                'last_error' => '',
-                'goods_id' => 0,
+                'channel_status' => (string)($channelState['status'] ?? ''),
+                'channel_status_label' => match ((string)($channelState['status'] ?? '')) {
+                    'pending' => '商城处理中',
+                    'published' => '商城已发布',
+                    'offline' => '商城已下架',
+                    'sold' => '商城已售',
+                    'error' => '商城处理失败',
+                    default => '尚未发起',
+                },
+                'last_error' => trim((string)($channelState['last_error'] ?? '')),
+                'goods_id' => (int)($channelState['channel_item_id'] ?? 0),
+                'intake_id' => (int)($channelState['channel_intake_id'] ?? 0),
+                'updated_at' => (int)($channelState['update_at'] ?? 0),
             ];
         }
         unset($row);
@@ -1623,20 +1661,64 @@ class ErpStockService extends BaseAdminService
         if ((string)$asset->status !== ErpDict::ASSET_IN_STOCK) {
             throw new CommonException('只有库存中的设备才能调整流转状态');
         }
+        $workflowAction = trim((string)($data['workflow_action'] ?? ''));
+        $workspaceRules = (array)(ErpConfigService::forSite((int)$this->site_id)->getRules()['listing_workspace'] ?? []);
+        $workflowActions = [
+            ErpListingFormContract::ACTION_ONE_STOP,
+            ErpListingFormContract::ACTION_PHOTO,
+            ErpListingFormContract::ACTION_PRICE,
+            ErpListingFormContract::ACTION_MEDIA_PRICE,
+            ErpListingFormContract::ACTION_MATERIAL,
+        ];
+        if ($workflowAction !== '') {
+            if (!in_array($workflowAction, $workflowActions, true)) {
+                throw new CommonException('销售资料处理步骤不正确，请刷新页面后重试');
+            }
+            $editableFields = ErpListingFormContract::editableFields($workflowAction, $workspaceRules);
+            foreach ([
+                'estimate_sale_price', 'retail_price', 'image_urls', 'video_url',
+                'catalog_product_id', 'spec', 'quality_remark', 'remark_public', 'remark_internal',
+            ] as $field) {
+                if (!in_array($field, $editableFields, true)) $data[$field] = null;
+            }
+            $projectedAsset = $asset->toArray();
+            foreach ($editableFields as $field) {
+                if (array_key_exists($field, $data) && $data[$field] !== null) {
+                    $projectedAsset[$field] = $data[$field];
+                }
+            }
+            $missingLabels = [];
+            foreach (ErpListingFormContract::requiredFields($workflowAction, $workspaceRules) as $field) {
+                if (!ErpListingFormContract::hasValue($field, $projectedAsset[$field] ?? null)) {
+                    $missingLabels[] = ErpListingFormContract::fieldLabel($field);
+                }
+            }
+            if ($missingLabels !== []) {
+                throw new CommonException('请先完善' . implode('、', $missingLabels));
+            }
+        }
         $refurbishStatus = (string)($data['refurbish_status'] ?? '');
         $saleTarget = (string)($data['sale_target'] ?? '');
         $listingStatus = (string)($data['listing_status'] ?? '');
         $allowedRefurbish = ['none', 'pending'];
         $allowedTarget = ['unset', 'peer', 'mall'];
-        $allowedListing = ['none', 'need_photo', 'need_price', 'need_material', 'ready', 'pending_shop', 'listed'];
+        $currentListingStatus = (string)$asset->listing_status;
+        $terminalListingStatuses = ['pending_shop', 'listed'];
         $warehouse = ErpWarehouse::where([
             ['site_id', '=', $this->site_id], ['id', '=', (int)$asset->warehouse_id], ['status', '=', 1],
         ])->findOrEmpty();
         $save = ['update_at' => time()];
         $changes = [];
+        // 兼容旧版前端继续回传当前值，但禁止任何客户端直接推进上架终态。
+        if ($listingStatus !== '' && $listingStatus !== $currentListingStatus) {
+            throw new CommonException('商城交接和上架状态由系统及渠道回执自动更新，不能手工设置');
+        }
         if ($refurbishStatus !== '') {
             if (!in_array($refurbishStatus, $allowedRefurbish, true)) {
                 throw new CommonException('整备中、完工和异常状态必须通过整备流程操作，不能手工改状态');
+            }
+            if ($refurbishStatus === 'pending' && in_array($currentListingStatus, $terminalListingStatuses, true)) {
+                throw new CommonException('设备已交接或上架商城，请先在商城完成撤回/下架，再进入整备');
             }
             if ($refurbishStatus !== (string)$asset->refurbish_status) {
                 $save['refurbish_status'] = $refurbishStatus;
@@ -1656,18 +1738,12 @@ class ErpStockService extends BaseAdminService
             if ($saleTarget === 'mall' && ($warehouse->isEmpty() || (string)$warehouse->default_sale_target !== 'mall')) {
                 throw new CommonException('当前仓库未配置为商城销售仓，不能设置为上商城');
             }
+            if ($saleTarget !== 'mall' && in_array($currentListingStatus, $terminalListingStatuses, true)) {
+                throw new CommonException('设备已交接或上架商城，请先在商城完成撤回/下架，再修改销售去向');
+            }
             if ($saleTarget !== (string)$asset->sale_target) {
                 $save['sale_target'] = $saleTarget;
                 $changes[] = '销售去向';
-            }
-        }
-        if ($listingStatus !== '') {
-            if (!in_array($listingStatus, $allowedListing, true)) {
-                throw new CommonException('上架状态不正确');
-            }
-            if ($listingStatus !== (string)$asset->listing_status) {
-                $save['listing_status'] = $listingStatus;
-                $changes[] = '上架状态';
             }
         }
         if (array_key_exists('estimate_sale_price', $data) && $data['estimate_sale_price'] !== null) {
@@ -1736,23 +1812,25 @@ class ErpStockService extends BaseAdminService
                 }
             }
         }
-        // 使用“本次请求应用后的值”推导上架状态，避免同一次上传图片/填写价格时仍被判成待拍照。
-        if ($listingStatus === '') {
-            $projectedTarget = (string)($save['sale_target'] ?? $asset->sale_target);
-            $autoListingStatus = '';
+        // 上架状态只有一个真相来源：仓库规则 + 本次保存后的资料。
+        // pending_shop / listed 只能由渠道回执推进，普通资料保存不得覆盖终态。
+        $projectedTarget = (string)($save['sale_target'] ?? $asset->sale_target);
+        $autoListingStatus = $currentListingStatus;
+        if (!in_array($currentListingStatus, $terminalListingStatuses, true)) {
             if ($projectedTarget === 'mall') {
                 $projected = array_merge($asset->toArray(), $save, ['sale_target' => $projectedTarget]);
                 $policy = (new ErpWarehousePolicyService())->evaluate($projected, $warehouse->isEmpty() ? null : $warehouse->toArray());
                 $autoListingStatus = ErpListingWorkflow::statusFromAsset($projected, $policy);
-            } elseif ($saleTarget !== '' && in_array($projectedTarget, ['peer', 'unset'], true)) {
+            } else {
                 $autoListingStatus = 'none';
             }
-            if ($autoListingStatus !== '' && $autoListingStatus !== (string)$asset->listing_status) {
-                $save['listing_status'] = $autoListingStatus;
-                $changes[] = '上架状态';
-            }
+        }
+        if ($autoListingStatus !== $currentListingStatus) {
+            $save['listing_status'] = $autoListingStatus;
+            $changes[] = '上架状态';
         }
         if (count($save) <= 1) {
+            if ($workflowAction !== '') return;
             throw new CommonException('没有需要保存的内容');
         }
         // ThinkORM save() 会同步修改当前模型对象；必须先固定快照，后续岗位工作量才能准确比较前后值。
@@ -2006,8 +2084,13 @@ class ErpStockService extends BaseAdminService
     }
 
     /**
-     * 资料保存后的非阻塞自动发布。
-     * 自动发布失败只保留待办并写日志，不能让图片、价格等 ERP 主数据保存失败。
+     * 资料保存后的非阻塞自动流转。
+     *
+     * - ERP 直发模式：资料齐全后直接发布；
+     * - 商城运营模式：图片和销售价格完成后自动交接商城待办；
+     * - 独立分类/规格首次无映射：即使渠道配置为直发，也自动降级为运营交接。
+     *
+     * 渠道失败只保留待办和错误留痕，不能让图片、价格等 ERP 主数据保存失败。
      */
     public function autoPublishListingIfReady(int $id): array
     {
@@ -2016,13 +2099,31 @@ class ErpStockService extends BaseAdminService
             return ['triggered' => false, 'reason' => 'manual_confirmation'];
         }
         $channel = (array)($rules['marketplace']['channels']['phone_shop'] ?? []);
-        if ((int)($channel['enabled'] ?? 0) !== 1 || (string)($channel['publish_mode'] ?? 'direct') !== 'direct') {
-            return ['triggered' => false, 'reason' => 'channel_not_direct'];
+        if ((int)($channel['enabled'] ?? 0) !== 1) {
+            return ['triggered' => false, 'reason' => 'channel_disabled'];
         }
         $asset = $this->findAsset($id);
         if ((string)$asset->status !== ErpDict::ASSET_IN_STOCK
             || (string)$asset->sale_target !== 'mall'
-            || (string)$asset->listing_status !== 'ready') {
+            || in_array((string)$asset->listing_status, ['pending_shop', 'listed'], true)) {
+            return ['triggered' => false, 'reason' => 'not_ready'];
+        }
+        $warehouse = ErpWarehouse::where([
+            ['site_id', '=', $this->site_id],
+            ['id', '=', (int)$asset->warehouse_id],
+            ['status', '=', 1],
+        ])->findOrEmpty();
+        $policy = ErpWarehousePolicyService::forSite((int)$this->site_id)
+            ->evaluate($asset->toArray(), $warehouse->isEmpty() ? null : $warehouse->toArray());
+        if ((int)($policy['marketplace_available'] ?? 0) !== 1) {
+            return ['triggered' => false, 'reason' => 'marketplace_unavailable'];
+        }
+        $canFallbackToShop = (string)($channel['publish_mode'] ?? 'direct') === 'manual'
+            || (string)($channel['category_mode'] ?? 'erp') === 'independent'
+            || (string)($channel['spec_mode'] ?? 'erp') === 'independent';
+        $ready = (string)$asset->listing_status === 'ready'
+            || ($canFallbackToShop && ErpListingWorkflow::canHandoffToShop($asset->toArray(), $policy));
+        if (!$ready) {
             return ['triggered' => false, 'reason' => 'not_ready'];
         }
         try {

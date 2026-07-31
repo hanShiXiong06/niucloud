@@ -52,8 +52,14 @@ class DeviceAssetPriceCompleted
             $warehouse = ErpWarehouse::where([['site_id', '=', $siteId], ['id', '=', (int)$asset->warehouse_id], ['status', '=', 1]])->findOrEmpty();
             $policyService = ErpWarehousePolicyService::forSite($siteId);
             $policy = $policyService->evaluate($asset->toArray(), $warehouse->isEmpty() ? null : $warehouse->toArray());
-            $status = ErpListingWorkflow::statusFromAsset($asset->toArray(), $policy);
-            $asset->save(['listing_status' => $status, 'update_at' => time()]);
+            $currentListingStatus = (string)$asset->listing_status;
+            // 中台结果可能因消息补偿重复到达；绝不能把商城交接中/已上架终态退回待处理。
+            $status = in_array($currentListingStatus, ['pending_shop', 'listed'], true)
+                ? $currentListingStatus
+                : ErpListingWorkflow::statusFromAsset($asset->toArray(), $policy);
+            if ($status !== $currentListingStatus) {
+                $asset->save(['listing_status' => $status, 'update_at' => time()]);
+            }
 
             $ledger = ErpLedgerService::forSite($siteId, (int)($event['operator']['id'] ?? 0), (string)($event['operator']['name'] ?? '拍照中台'));
             $ledger->asset([
@@ -66,12 +72,13 @@ class DeviceAssetPriceCompleted
                 'remark' => '拍照中台已回写商品图片、视频和销售定价',
                 'extra' => ['image_count' => count($images), 'has_video' => $videoUrl !== '', 'retail_price' => $salePrice],
             ]);
-            ErpListingTaskService::forSite($siteId)->sync($assetId);
             $autoPublish = ErpStockService::forSite(
                 $siteId,
                 (int)($event['operator']['id'] ?? 0),
                 (string)($event['operator']['name'] ?? '拍照中台')
             )->autoPublishListingIfReady($assetId);
+            // 发布完成后再投影待办：成功/交接会清空 ERP 待办，失败则保留可重试任务。
+            ErpListingTaskService::forSite($siteId)->sync($assetId);
             return [
                 'consumer' => $consumer,
                 'status' => 'processed',

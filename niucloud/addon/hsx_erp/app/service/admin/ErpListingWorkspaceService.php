@@ -5,6 +5,7 @@ namespace addon\hsx_erp\app\service\admin;
 
 use addon\hsx_erp\app\dict\ErpDict;
 use addon\hsx_erp\app\model\ErpAsset;
+use addon\hsx_erp\app\support\ErpListingFormContract;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 
@@ -43,6 +44,8 @@ class ErpListingWorkspaceService extends BaseAdminService
         };
         $degraded = $requested === 'device_asset' && !$deviceAssetReady;
 
+        $contract = ErpListingFormContract::describe($config);
+
         return [
             'mode' => (string)($config['mode'] ?? 'one_stop'),
             'mode_name' => match ((string)($config['mode'] ?? 'one_stop')) {
@@ -57,6 +60,10 @@ class ErpListingWorkspaceService extends BaseAdminService
             'degraded_message' => $degraded ? '拍照中台当前不可用，已自动切换为 ERP 普通上传' : '',
             'auto_publish' => (int)($config['auto_publish'] ?? 0),
             'fallback_to_erp' => 1,
+            'entry_mode' => (string)$contract['entry_mode'],
+            'field_rules' => (array)$contract['field_rules'],
+            'steps' => (array)$contract['steps'],
+            'forms' => (array)$contract['forms'],
             'providers' => array_values(array_merge([[
                 'provider' => 'erp',
                 'name' => 'ERP 普通上传',

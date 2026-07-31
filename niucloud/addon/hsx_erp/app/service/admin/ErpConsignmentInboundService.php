@@ -5,6 +5,7 @@ namespace addon\hsx_erp\app\service\admin;
 
 use addon\hsx_erp\app\dict\ErpDict;
 use addon\hsx_erp\app\model\ErpAsset;
+use addon\hsx_erp\app\support\ErpListingWorkflow;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 
@@ -60,7 +61,22 @@ class ErpConsignmentInboundService extends BaseAdminService
         if (!in_array($saleTarget, ['unset', 'peer', 'mall'], true)) $saleTarget = 'unset';
         $images = trim((string)($item['image_urls'] ?? ''));
         $retailPrice = max(0, round((float)($item['retail_price'] ?? $item['estimate_sale_price'] ?? 0), 2));
-        $listingStatus = $this->listingStatus($warehouse, $saleTarget, $images, $retailPrice);
+        $listingStatus = 'none';
+        if ($refurbishStatus !== 'pending') {
+            $projectedAsset = [
+                'status' => ErpDict::ASSET_IN_STOCK,
+                'warehouse_id' => (int)$warehouse->id,
+                'sale_target' => $saleTarget,
+                'refurbish_status' => $refurbishStatus,
+                'catalog_product_id' => max(0, (int)($item['catalog_product_id'] ?? 0)),
+                'spec' => trim((string)($item['spec'] ?? '')),
+                'image_urls' => $images,
+                'retail_price' => $retailPrice,
+            ];
+            $policy = ErpWarehousePolicyService::forSite((int)$this->site_id)
+                ->evaluate($projectedAsset, $warehouse->toArray());
+            $listingStatus = ErpListingWorkflow::statusFromAsset($projectedAsset, $policy);
+        }
         $specJson = $item['spec_json'] ?? [];
         if (is_array($specJson)) {
             $specJson = json_encode($specJson, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '';
@@ -174,14 +190,6 @@ class ErpConsignmentInboundService extends BaseAdminService
                 throw new CommonException($label . '【' . $value . '】已有在库设备，不能重复登记');
             }
         }
-    }
-
-    private function listingStatus($warehouse, string $saleTarget, string $images, float $retailPrice): string
-    {
-        if ($saleTarget !== 'mall') return 'none';
-        if ((int)$warehouse->need_photo === 1 && $images === '') return 'need_photo';
-        if ((int)$warehouse->need_pricing === 1 && $retailPrice <= 0) return 'need_price';
-        return 'ready';
     }
 
     private function categoryPath(mixed $path): string

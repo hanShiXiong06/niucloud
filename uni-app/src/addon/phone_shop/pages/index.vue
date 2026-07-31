@@ -20,10 +20,15 @@
         <!-- 小程序隐私协议 -->
         <wx-privacy-popup ref="wxPrivacyPopupRef"></wx-privacy-popup>
         <!-- #endif -->
-        
+
         <template v-if="diyStore && diyStore.mode == '' && diyStore.global && diyStore.global.bottomTabBar && diyStore.global.bottomTabBar.isShow">
-            <tabbar :addon="diyStore.global.bottomTabBar.designNav?.key" />  
+            <tabbar :addon="diyStore.global.bottomTabBar.designNav?.key" />
         </template>
+
+        <view v-if="aiAvailable && diyStore.mode == ''" class="ai-assistant-entry" @click="openAiAssistant">
+            <text class="ai-assistant-entry__mark">AI</text>
+            <text class="ai-assistant-entry__text">帮我选</text>
+        </view>
     </view>
 </template>
 
@@ -33,6 +38,8 @@ import { useDiy } from '@/hooks/useDiy'
 import { useShare } from '@/hooks/useShare'
 import diyGroup from '@/addon/components/diy/group/index.vue'
 import useDiyStore from '@/app/stores/diy'
+import request from '@/utils/request'
+import { redirect } from '@/utils/common'
 
 const { setShare } = useShare()
 const diy = useDiy({
@@ -40,6 +47,20 @@ const diy = useDiy({
 })
 const diyStore = useDiyStore()
 const diyGroupRef = ref(null)
+const aiAvailable = ref(false)
+let aiCapabilityChecked = false
+
+const detectAiAssistant = async () => {
+    if (aiCapabilityChecked) return
+    aiCapabilityChecked = true
+    try {
+        const response: any = await request.get('ai/assistant/capability', {}, { showErrorMessage: false })
+        aiAvailable.value = Boolean(response?.data?.available)
+    } catch (_) {
+        aiAvailable.value = false
+    }
+}
+const openAiAssistant = () => redirect({ url: '/addon/hsx_ai/pages/chat/index' })
 
 const wxPrivacyPopupRef: any = ref(null)
 const collectTipRef: any = ref(null)
@@ -51,6 +72,7 @@ diy.onShow((data: any) => {
     let share = data.share ? JSON.parse(data.share) : null;
     setShare(share);
     diyGroupRef.value?.refresh();
+    detectAiAssistant()
 
     // #ifdef MP
     nextTick(() => {
@@ -85,4 +107,25 @@ diy.onPageScroll()
 
     /* #endif */
 }
+
+.ai-assistant-entry {
+    position: fixed;
+    right: 24rpx;
+    bottom: calc(132rpx + env(safe-area-inset-bottom));
+    z-index: 80;
+    box-sizing: border-box;
+    width: 108rpx;
+    height: 108rpx;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border: 2rpx solid rgba(255, 255, 255, .86);
+    border-radius: 50%;
+    background: #172033;
+    color: #fff;
+    box-shadow: 0 10rpx 28rpx rgba(23, 32, 51, .22);
+}
+.ai-assistant-entry__mark { font-size: 27rpx; font-weight: 700; line-height: 32rpx; }
+.ai-assistant-entry__text { margin-top: 2rpx; font-size: 20rpx; line-height: 26rpx; }
 </style>

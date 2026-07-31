@@ -31,10 +31,7 @@ final class ErpListingWorkflow
     public static function statusFromAsset(array $asset, array $policy): string
     {
         if ((int)($policy['can_prepare_mall'] ?? 0) !== 1) return 'none';
-        if (!self::hasImages($asset['image_urls'] ?? '')) return 'need_photo';
-        if ((float)($asset['retail_price'] ?? 0) <= 0) return 'need_price';
-        if ((int)($policy['can_list_mall'] ?? 0) === 1) return 'ready';
-        return 'need_material';
+        return self::statusFromPolicy($policy);
     }
 
     /** 商城运营接单前置条件：拍图和定价已经分别闭环。 */
@@ -53,7 +50,7 @@ final class ErpListingWorkflow
             return '';
         }
         $status = (string)($asset['listing_status'] ?? 'none');
-        if ($mode === 'one_stop' && in_array($status, ['need_photo', 'need_price', 'need_material', 'ready', 'pending_shop'], true)) {
+        if ($mode === 'one_stop' && in_array($status, ['need_photo', 'need_price', 'need_material', 'ready'], true)) {
             return self::TASK_PUBLISH;
         }
         if ($mode === 'photo_price' && in_array($status, ['need_photo', 'need_price'], true)) {
@@ -62,18 +59,18 @@ final class ErpListingWorkflow
         return match ($status) {
             'need_photo' => self::TASK_PHOTO,
             'need_price' => self::TASK_PRICE,
-            'need_material', 'ready', 'pending_shop' => self::TASK_PUBLISH,
+            'need_material', 'ready' => self::TASK_PUBLISH,
             default => '',
         };
     }
 
-    public static function taskName(string $stage): string
+    public static function taskName(string $stage, string $workspaceMode = ''): string
     {
         return match ($stage) {
             self::TASK_PHOTO => '待商品拍摄',
             self::TASK_PRICE => '待销售定价',
             self::TASK_MEDIA_PRICE => '待拍摄与销售定价',
-            self::TASK_PUBLISH => '待商城资料整理',
+            self::TASK_PUBLISH => $workspaceMode === 'one_stop' ? '待一次完善商品资料' : '待商城资料整理',
             default => '待处理',
         };
     }

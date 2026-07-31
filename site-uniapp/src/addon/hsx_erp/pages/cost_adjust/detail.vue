@@ -217,6 +217,7 @@ import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { getErpAssetInfo, adjustErpAssetCost, completeErpAssetRefurbish, getErpFinanceCategories } from '@/addon/hsx_erp/api/asset'
 import { INVENTORY_STATUS_MAP, INVENTORY_OUTBOUND, isCostAdjustAllowed } from '@/addon/hsx_erp/api/dict'
+import { presentErpListingFeedback } from '@/addon/hsx_erp/hooks/useErpListingFeedback'
 import { confirmErpSensitiveAction } from '@/addon/hsx_erp/hooks/useErpSensitiveConfirm'
 import ErpPartyPopup from '@/addon/hsx_erp/components/ErpPartyPopup.vue'
 import ErpVoucherUploader from '@/addon/hsx_erp/components/ErpVoucherUploader.vue'
@@ -393,11 +394,12 @@ const submit = async () => {
     submitting.value = true
     try {
         if (costType.value === 'refurbish') {
-            await completeErpAssetRefurbish(assetId.value, { result: refurbishResult.value, refurbish_items: normalizedRefurbishItems.value.filter(item => item.name || item.amount > 0 || item.party_id > 0), voucher_urls: refurbishVoucherUrls.value, remark: reason.value.trim() })
+            const res: any = await completeErpAssetRefurbish(assetId.value, { result: refurbishResult.value, refurbish_items: normalizedRefurbishItems.value.filter(item => item.name || item.amount > 0 || item.party_id > 0), voucher_urls: refurbishVoucherUrls.value, remark: reason.value.trim() })
+            await presentErpListingFeedback(res?.data?._workflow?.publish, '整备结果、成本与应付已同步')
         } else {
             await adjustErpAssetCost(assetId.value, submittedCost, submittedReason, !isOutbound.value && costType.value === 'purchase_adjust', costType.value)
+            uni.showToast({ title: '成本已调整', icon: 'none' })
         }
-        uni.showToast({ title: costType.value === 'refurbish' ? '整备结果、成本与应付已同步' : '成本已调整', icon: 'none' })
         setTimeout(() => uni.navigateBack(), 800)
     } catch (e) {
         // 拦截器已提示具体错误

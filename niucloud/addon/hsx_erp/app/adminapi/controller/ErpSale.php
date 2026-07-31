@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace addon\hsx_erp\app\adminapi\controller;
 
 use addon\hsx_erp\app\service\admin\ErpSaleService;
+use addon\hsx_erp\app\service\admin\ErpSaleProfitReportService;
 use core\base\BaseAdminController;
 use think\App;
 
@@ -88,6 +89,29 @@ class ErpSale extends BaseAdminController
         return success($this->service->stockPage($params));
     }
 
+    public function profitReport()
+    {
+        return success((new ErpSaleProfitReportService())->getPage($this->profitReportParams()));
+    }
+
+    public function profitReportExport()
+    {
+        return success((new ErpSaleProfitReportService())->exportRows($this->profitReportParams()));
+    }
+
+    public function profitReportMeta()
+    {
+        return success((new ErpSaleProfitReportService())->meta());
+    }
+
+    public function saveProfitReportView()
+    {
+        $params = $this->request->params([
+            ['preset', 'sales_profit'], ['columns', []],
+        ]);
+        return success((new ErpSaleProfitReportService())->saveView($params));
+    }
+
     public function info(int $id)
     {
         return success($this->service->info($id));
@@ -138,5 +162,36 @@ class ErpSale extends BaseAdminController
             ['remark', ''],
         ]);
         return success($this->service->cancelItem($item_id, (string)$params['remark']));
+    }
+
+    private function profitReportParams(): array
+    {
+        return $this->request->params([
+            ['item_type', 'device'],
+            ['trade_scope', 'effective'],
+            ['profit_state', ''],
+            ['keyword', ''],
+            ['party_id', 0],
+            ['salesman_uid', 0],
+            ['sale_channel_key', ''],
+            ['warehouse_id', 0],
+            ['location_id', 0],
+            ['min_profit', ''],
+            ['max_profit', ''],
+            ['preset', 'sales_profit'],
+            ['dataset_scope', ''],
+            ['asset_state', ''],
+            ['time_dimension', ''],
+            ['ignore_time', ''],
+            ['category_path', ''],
+            ['catalog_product_id', 0],
+            ['columns', ''],
+            ['start_date', ''],
+            ['end_date', ''],
+            ['start_at', 0],
+            ['end_at', 0],
+            ['page', 1],
+            ['limit', 20],
+        ]);
     }
 }

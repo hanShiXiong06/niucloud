@@ -163,21 +163,56 @@ final class ErpChannelMappingService
         $now = time();
         $snapshot = (array)($data['mapping_snapshot'] ?? []);
         $payload = (array)($data['payload'] ?? []);
-        $this->upsert('erp_channel_listing', [
+        $where = [
             'site_id' => $siteId,
             'channel_key' => $channelKey,
             'erp_asset_id' => $assetId,
-        ], [
-            'channel_item_id' => trim((string)($data['channel_item_id'] ?? '')),
-            'channel_intake_id' => trim((string)($data['channel_intake_id'] ?? '')),
+        ];
+        $existing = Db::name('erp_channel_listing')->where($where)
+            ->field('channel_item_id,channel_intake_id,published_at')
+            ->find() ?: [];
+        $channelItemId = trim((string)($data['channel_item_id'] ?? ''));
+        $channelIntakeId = trim((string)($data['channel_intake_id'] ?? ''));
+        $requestedPublishedAt = (int)($data['published_at'] ?? 0);
+        $existingPublishedAt = (int)($existing['published_at'] ?? 0);
+        $publishedAt = $status === 'published'
+            ? ($requestedPublishedAt > 0 ? $requestedPublishedAt : ($existingPublishedAt > 0 ? $existingPublishedAt : $now))
+            : 0;
+        $this->upsert('erp_channel_listing', $where, [
+            // 发布重试失败时通常不会再次返回渠道 ID，不能因此抹掉已建立的桥接关系。
+            'channel_item_id' => $channelItemId !== '' ? $channelItemId : (string)($existing['channel_item_id'] ?? ''),
+            'channel_intake_id' => $channelIntakeId !== '' ? $channelIntakeId : (string)($existing['channel_intake_id'] ?? ''),
             'status' => $status,
             'publish_mode' => (string)($data['publish_mode'] ?? 'direct') === 'manual' ? 'manual' : 'direct',
             'mapping_snapshot' => $this->encode($snapshot),
             'payload_hash' => hash('sha256', $this->encode($payload)),
             'last_error' => trim((string)($data['last_error'] ?? '')),
-            'published_at' => $status === 'published' ? (int)($data['published_at'] ?? $now) : 0,
+            'published_at' => $publishedAt,
             'update_at' => $now,
         ], $now);
+    }
+
+    /**
+     * 批量读取渠道发布事实，库存列表和详情统一消费，避免逐台查询及“状态看不见”。
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function listingStateMap(int $siteId, array $assetIds, string $channelKey = 'phone_shop'): array
+    {
+        $assetIds = array_values(array_unique(array_filter(array_map('intval', $assetIds))));
+        if ($siteId <= 0 || $assetIds === []) return [];
+        $rows = Db::name('erp_channel_listing')
+            ->where('site_id', '=', $siteId)
+            ->where('channel_key', '=', $this->channelKey($channelKey))
+            ->whereIn('erp_asset_id', $assetIds)
+            ->field('erp_asset_id,channel_item_id,channel_intake_id,status,publish_mode,last_error,published_at,update_at')
+            ->select()
+            ->toArray();
+        $map = [];
+        foreach ($rows as $row) {
+            $map[(int)$row['erp_asset_id']] = $row;
+        }
+        return $map;
     }
 
     /** 商城运营完成时只学习映射并记录渠道商品关联，不覆盖 ERP 主资料。 */

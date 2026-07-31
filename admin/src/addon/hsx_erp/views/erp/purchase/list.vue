@@ -140,7 +140,7 @@
                             <span>采购 {{ row.purchaser_name || '-' }}</span>
                             <span v-if="row.inspector_name">质检 {{ row.inspector_name }}</span>
                         </div>
-                        <div v-if="Number(row.estimate_sale_price)" class="mt-1 text-xs text-gray-400">预计卖价：{{ money(row.estimate_sale_price) }}</div>
+                        <div v-if="Number(row.retail_price || row.estimate_sale_price)" class="mt-1 text-xs text-gray-400">销售价格：{{ money(row.retail_price || row.estimate_sale_price) }}</div>
                     </template>
                 </el-table-column>
                 <el-table-column label="当前状态" min-width="175">
@@ -363,11 +363,15 @@
                             </el-table-column>
                             <el-table-column label="资料进度" min-width="190">
                                 <template #default="{ row }">
-                                    <div class="device-entry__progress">
+                                    <div v-if="purchaseOneStop" class="device-entry__progress">
                                         <span :class="{ 'is-done': row.catalog_product_id || row.model }">型号</span>
                                         <span :class="{ 'is-done': row.spec }">规格</span>
                                         <span :class="{ 'is-done': hasDeviceImage(row) }">影像</span>
-                                        <span :class="{ 'is-done': hasDeviceQuality(row) }">质检</span>
+                                        <span :class="{ 'is-done': Number(row.retail_price || 0) > 0 }">售价</span>
+                                    </div>
+                                    <div v-else class="device-entry__progress">
+                                        <span :class="{ 'is-done': deviceCoreReady(row) }">采购事实</span>
+                                        <span>后续分岗</span>
                                     </div>
                                 </template>
                             </el-table-column>
@@ -380,7 +384,7 @@
                             </el-table-column>
                             <el-table-column label="操作" width="142" align="center" fixed="right">
                                 <template #default="{ row, $index }">
-                                    <el-button type="primary" link @click="openItemExtra(row, $index)">完善资料</el-button>
+                                    <el-button type="primary" link @click="openItemExtra(row, $index)">{{ purchaseOneStop ? '一次完善' : '采购事实' }}</el-button>
                                     <el-button type="danger" link @click="removeItem($index)">删除</el-button>
                                 </template>
                             </el-table-column>
@@ -507,10 +511,10 @@
                 <div class="item-extra-drawer-title">
                     <div>
                         <div class="item-extra-title">编辑设备 {{ itemExtra.index + 1 }}</div>
-                        <div class="item-extra-sub">采购事实与销售资料在一个入口完成</div>
+                        <div class="item-extra-sub">{{ purchaseOneStop ? '采购事实与销售资料在一个入口完成' : '当前岗位只录采购事实，销售资料将按团队分工自动流转' }}</div>
                     </div>
                     <el-tag v-if="itemExtra.item" :type="deviceCoreReady(itemExtra.item) ? 'success' : 'warning'" effect="light">
-                        {{ deviceCoreReady(itemExtra.item) ? '入库资料已完整' : `待补 ${deviceCoreMissingCount(itemExtra.item)} 项` }}
+                        {{ deviceCoreReady(itemExtra.item) ? (purchaseOneStop ? '本次资料已完整' : '采购事实已完整') : `待补 ${deviceCoreMissingCount(itemExtra.item)} 项` }}
                     </el-tag>
                 </div>
             </template>
@@ -544,7 +548,25 @@
                                 <el-tag type="warning" effect="plain">必填</el-tag>
                             </div>
                             <el-form label-position="top" class="drawer-mobile-form">
+                                <el-form-item label="商品分类 / 目录型号">
+                                    <ErpCatalogProductSelect
+                                        v-model="itemExtra.item.catalog_product_id"
+                                        :category-path="itemExtra.item.category_path"
+                                        placeholder="先选分类，可继续选择品牌、系列和型号"
+                                        @change="node => onItemCatalogChange(itemExtra.item, node)"
+                                    />
+                                    <div class="item-extra-section__desc">
+                                        分类用于缩小型号范围；选中标准型号会自动带入设备名称，团队模式也会保留这份归档信息。
+                                    </div>
+                                </el-form-item>
                                 <div class="spec-grid">
+                                    <el-form-item label="设备名称 / 型号" required>
+                                        <el-input
+                                            v-model.trim="itemExtra.item.model"
+                                            placeholder="如：苹果 iPhone 15 Pro"
+                                            @input="markManualModel(itemExtra.item)"
+                                        />
+                                    </el-form-item>
                                     <el-form-item label="IMEI">
                                         <el-input v-model.trim="itemExtra.item.imei" placeholder="与 SN 至少填一项" />
                                     </el-form-item>
@@ -571,38 +593,9 @@
                     </div>
                 </el-tab-pane>
 
-                <el-tab-pane label="② 商品资料" name="goods">
+                <el-tab-pane v-if="purchaseOneStop" label="② 商品资料" name="goods">
                     <div class="item-extra-layout">
-                        <section class="item-extra-section item-extra-section--primary">
-                            <div class="item-extra-section__head">
-                                <div>
-                                    <div class="item-extra-section__title">分类</div>
-                                    <div class="item-extra-section__desc">先选品类并直接回显；可继续选择标准型号自动带入名称，也可自行填写名称。</div>
-                                </div>
-                                <el-button link type="primary" @click="openGoodsMeta">管理目录</el-button>
-                            </div>
-                            <ErpCatalogProductSelect
-                                v-model="itemExtra.item.catalog_product_id"
-                                :category-path="itemExtra.item.category_path"
-                                placeholder="先选品类，再选择品牌、系列和型号"
-                                @change="node => onItemCatalogChange(itemExtra.item, node)"
-                            />
-                            <el-form label-position="top" class="drawer-mobile-form mt-4">
-                                <el-form-item label="设备名称" required>
-                                    <el-input
-                                        v-model.trim="itemExtra.item.model"
-                                        :disabled="!itemExtra.item.category_path"
-                                        placeholder="选择分类后填写；选择标准型号时会自动带入"
-                                        @input="markManualModel(itemExtra.item)"
-                                    />
-                                    <div class="item-extra-section__desc">
-                                        名称基于所选分类和型号生成；手动修改后系统会保留你的名称。
-                                    </div>
-                                </el-form-item>
-                            </el-form>
-                        </section>
-
-                        <section class="item-extra-section">
+                        <section v-if="listingFieldEnabled('spec')" class="item-extra-section">
                             <div class="item-extra-section__head">
                                 <div>
                                     <div class="item-extra-section__title">规格与成色</div>
@@ -656,10 +649,17 @@
                                 </div>
                             </div>
                         </section>
+                        <section v-if="listingFieldEnabled('remark_public')" class="item-extra-section">
+                            <el-form label-position="top" class="drawer-mobile-form">
+                                <el-form-item label="对外说明" :required="listingFieldRequired('remark_public')">
+                                    <el-input v-model.trim="itemExtra.item.remark_public" type="textarea" :rows="2" placeholder="展示给商城客户的商品说明" />
+                                </el-form-item>
+                            </el-form>
+                        </section>
                     </div>
                 </el-tab-pane>
 
-                <el-tab-pane label="③ 销售资料" name="sales">
+                <el-tab-pane v-if="purchaseOneStop && hasPurchaseSalesFields" label="③ 销售资料" name="sales">
                     <div class="item-extra-layout">
                         <section class="item-extra-section">
                             <div class="item-extra-section__head">
@@ -667,7 +667,7 @@
                                     <div class="item-extra-section__title">质检、媒体与销售定价</div>
                                     <div class="item-extra-section__desc">用于后续销售和商城展示，不影响采购事实。</div>
                                 </div>
-                                <el-tag type="info" effect="plain">可后补</el-tag>
+                                <el-tag :type="purchaseSalesRequired ? 'warning' : 'info'" effect="plain">{{ purchaseSalesRequired ? '按规则必填' : '选填' }}</el-tag>
                             </div>
                             <el-form label-position="top" class="drawer-mobile-form">
                                 <div class="spec-grid">
@@ -676,24 +676,27 @@
                                             <el-option v-for="item in staffOptions" :key="item.uid" :label="staffName(item)" :value="item.uid" />
                                         </el-select>
                                     </el-form-item>
-                                    <el-form-item label="销售定价">
-                                        <el-input-number v-model="itemExtra.item.estimate_sale_price" :min="0" :precision="2" :controls="false" placeholder="选填" class="!w-full" />
+                                    <el-form-item v-if="listingFieldEnabled('retail_price')" label="销售定价" :required="listingFieldRequired('retail_price')">
+                                        <el-input-number v-model="itemExtra.item.retail_price" :min="0" :precision="2" :controls="false" placeholder="选填" class="!w-full" />
                                     </el-form-item>
                                 </div>
-                                <el-form-item label="设备图片">
+                                <el-form-item v-if="listingFieldEnabled('image_urls')" label="设备图片" :required="listingFieldRequired('image_urls')">
                                     <div class="erp-image-upload">
                                         <upload-image v-model="itemExtra.item.image_urls" :limit="9" width="72px" height="72px" image-text="上传/选择" />
                                         <div class="erp-image-upload__tips">支持素材库与本地上传，多图可拖动排序。</div>
                                     </div>
                                 </el-form-item>
-                                <el-form-item label="展示视频">
+                                <el-form-item v-if="listingFieldEnabled('video_url')" label="展示视频" :required="listingFieldRequired('video_url')">
                                     <div class="erp-image-upload">
                                         <upload-video v-model="itemExtra.item.video_url" :limit="1" />
                                         <div class="erp-image-upload__tips">选填，最多 1 个，用于商城商品视频。</div>
                                     </div>
                                 </el-form-item>
-                                <el-form-item label="质检备注">
+                                <el-form-item v-if="listingFieldEnabled('quality_remark')" label="质检备注" :required="listingFieldRequired('quality_remark')">
                                     <el-input v-model.trim="itemExtra.item.quality_remark" type="textarea" :rows="3" placeholder="如：屏幕划痕、电池效率等" />
+                                </el-form-item>
+                                <el-form-item v-if="listingFieldEnabled('remark_internal')" label="对内备注" :required="listingFieldRequired('remark_internal')">
+                                    <el-input v-model.trim="itemExtra.item.remark_internal" type="textarea" :rows="2" placeholder="仅员工可见，不同步到商城" />
                                 </el-form-item>
                             </el-form>
                         </section>
@@ -753,8 +756,8 @@
                         <template #default="{ row }">{{ [row.warehouse_name, row.location_name].filter(Boolean).join(' / ') || '-' }}</template>
                     </el-table-column>
                     <el-table-column v-if="!detailIsStandard" prop="inspector_name" label="质检员" min-width="120" />
-                    <el-table-column v-if="!detailIsStandard" label="预计卖价" width="130" align="right">
-                        <template #default="{ row }">{{ Number(row.estimate_sale_price || 0) ? money(row.estimate_sale_price) : '-' }}</template>
+                    <el-table-column v-if="!detailIsStandard" label="销售价格" width="130" align="right">
+                        <template #default="{ row }">{{ Number(row.retail_price || row.estimate_sale_price || 0) ? money(row.retail_price || row.estimate_sale_price) : '-' }}</template>
                     </el-table-column>
                     <el-table-column label="成本" width="160" align="right">
                         <template #default="{ row }">
@@ -877,6 +880,19 @@ const staffOptions = ref<any[]>([])
 const currentUid = ref(0)
 const deviceImeiInputs = ref<any[]>([])
 const titleRules = reactive({ category_mode: 'auto', spec_in_title: 1, grade_in_title: 0, separator: ' ' })
+const listingWorkspace = ref<any>({
+    mode: 'one_stop',
+    field_rules: {
+        catalog_product_id: { enabled: 1, required: 1 },
+        spec: { enabled: 1, required: 1 },
+        image_urls: { enabled: 1, required: 1 },
+        video_url: { enabled: 1, required: 0 },
+        retail_price: { enabled: 1, required: 1 },
+        quality_remark: { enabled: 1, required: 0 },
+        remark_public: { enabled: 1, required: 0 },
+        remark_internal: { enabled: 1, required: 0 },
+    }
+})
 const create = reactive({ visible: false, saving: false, form: defaultForm() })
 const itemExtra = reactive({ visible: false, index: -1, item: null as any, activeTab: 'base' })
 const detail = reactive({ visible: false, loading: false, data: null as any })
@@ -908,6 +924,9 @@ const specGroups = computed(() => normalizeSpecGroups(specMeta.value?.groups || 
 const gradeOptions = computed(() => normalizeOptions(specMeta.value?.grades || []))
 const currentWarehouse = computed(() => warehouses.value.find(row => Number(row.id) === Number(create.form.warehouse_id)) || null)
 const currentLocations = computed(() => currentWarehouse.value?.locations || [])
+const purchaseOneStop = computed(() => String(listingWorkspace.value?.mode || 'one_stop') === 'one_stop')
+const hasPurchaseSalesFields = computed(() => ['image_urls', 'video_url', 'retail_price', 'quality_remark', 'remark_internal'].some(listingFieldEnabled))
+const purchaseSalesRequired = computed(() => ['image_urls', 'video_url', 'retail_price', 'quality_remark', 'remark_internal'].some(listingFieldRequired))
 const standardWarehouses = computed(() => warehouses.value.filter((row: any) => ['accessory', 'new_device'].includes(String(row.warehouse_type || ''))))
 const searchWarehouse = computed(() => warehouses.value.find(row => Number(row.id) === Number(search.warehouse_id)) || null)
 const searchLocations = computed(() => searchWarehouse.value?.locations || [])
@@ -1001,9 +1020,12 @@ function blankItem(type = 'device') {
         purchase_cost: 0,
         inspector_uid: null,
         estimate_sale_price: undefined,
+        retail_price: undefined,
         image_urls: '',
         video_url: '',
         quality_remark: '',
+        remark_public: '',
+        remark_internal: '',
         remark: '',
         warehouse_id: 0,
         warehouse_name: '',
@@ -1066,6 +1088,14 @@ async function loadSpecMeta() {
 async function loadRules() {
     const res: any = await getErpConfig()
     Object.assign(titleRules, res?.data?.product_title || {})
+    listingWorkspace.value = {
+        ...listingWorkspace.value,
+        ...(res?.data?.listing_workspace || {}),
+        field_rules: {
+            ...listingWorkspace.value.field_rules,
+            ...(res?.data?.listing_workspace?.field_rules || {})
+        }
+    }
 }
 
 async function loadDicts() {
@@ -1238,7 +1268,7 @@ function openItemExtra(row: any, index: number) {
     hydrateItemSpecState(row)
     itemExtra.item = row
     itemExtra.index = index
-    itemExtra.activeTab = itemExtraIncompleteTab(row) || 'sales'
+    itemExtra.activeTab = itemExtraIncompleteTab(row) || (purchaseOneStop.value && hasPurchaseSalesFields.value ? 'sales' : 'base')
     itemExtra.visible = true
     if (!specMeta.value?.groups?.length && !specMeta.value?.grades?.length) loadSpecMeta()
 }
@@ -1457,14 +1487,29 @@ function itemCoreSummary(item: any) {
 }
 
 function deviceCoreMissingCount(item: any) {
-    return [
-        String(item?.imei || '').trim(),
-        Boolean(String(item?.category_path || '').trim()),
+    const values = [
+        String(item?.imei || item?.sn || '').trim(),
         String(item?.model || '').trim(),
         Number(item?.purchase_cost || 0) > 0,
         Number(item?.warehouse_id || 0) > 0,
         Number(item?.location_id || 0) > 0
-    ].filter((value: any) => !value).length
+    ]
+    if (purchaseOneStop.value) {
+        const listingValues: Record<string, any> = {
+            catalog_product_id: Number(item?.catalog_product_id || 0) > 0,
+            spec: String(item?.spec || '').trim(),
+            image_urls: hasDeviceImage(item),
+            video_url: String(item?.video_url || '').trim(),
+            retail_price: Number(item?.retail_price || 0) > 0,
+            quality_remark: String(item?.quality_remark || '').trim(),
+            remark_public: String(item?.remark_public || '').trim(),
+            remark_internal: String(item?.remark_internal || '').trim(),
+        }
+        Object.entries(listingValues).forEach(([field, value]) => {
+            if (listingFieldRequired(field)) values.push(value)
+        })
+    }
+    return values.filter((value: any) => !value).length
 }
 
 function deviceCoreReady(item: any) {
@@ -1473,20 +1518,22 @@ function deviceCoreReady(item: any) {
 
 function itemExtraIncompleteTab(item: any): string {
     const baseReady = Boolean(String(item?.imei || item?.sn || '').trim())
+        && Boolean(String(item?.model || '').trim())
         && Number(item?.purchase_cost || 0) > 0
         && Number(item?.warehouse_id || 0) > 0
         && Number(item?.location_id || 0) > 0
     if (!baseReady) return 'base'
-    if (!String(item?.category_path || '').trim() || !String(item?.model || '').trim()) return 'goods'
+    if (!purchaseOneStop.value) return ''
+    if (!String(item?.model || '').trim()) return 'goods'
+    if (listingFieldRequired('catalog_product_id') && Number(item?.catalog_product_id || 0) <= 0) return 'base'
+    if (listingFieldRequired('spec') && !String(item?.spec || '').trim()) return 'goods'
+    if (['image_urls', 'video_url', 'retail_price', 'quality_remark', 'remark_internal'].some(field => listingFieldRequired(field) && !listingFieldHasValue(item, field))) return 'sales'
+    if (listingFieldRequired('remark_public') && !String(item?.remark_public || '').trim()) return 'goods'
     return ''
 }
 
 function hasDeviceImage(item: any) {
     return Boolean(String(item?.image_urls || '').trim())
-}
-
-function hasDeviceQuality(item: any) {
-    return Boolean(item?.selected_grade?.value || String(item?.quality_remark || '').trim())
 }
 
 function deviceMaterialCompletion(item: any) {
@@ -1498,9 +1545,45 @@ function deviceMaterialCompletion(item: any) {
         Boolean(String(item?.model || '').trim()),
         Boolean(String(item?.spec || '').trim()),
         hasDeviceImage(item),
-        Number(item?.estimate_sale_price || 0) > 0
+        Number(item?.retail_price || 0) > 0
     ]
-    return Math.round(checks.filter(Boolean).length / checks.length * 100)
+    const relevantChecks = purchaseOneStop.value ? checks : checks.slice(0, 3)
+    return Math.round(relevantChecks.filter(Boolean).length / relevantChecks.length * 100)
+}
+
+function listingFieldEnabled(field: string) {
+    return Number(listingWorkspace.value?.field_rules?.[field]?.enabled ?? 1) === 1
+}
+
+function listingFieldRequired(field: string) {
+    return listingFieldEnabled(field) && Number(listingWorkspace.value?.field_rules?.[field]?.required ?? 0) === 1
+}
+
+function listingFieldHasValue(item: any, field: string) {
+    if (field === 'catalog_product_id') return Number(item?.catalog_product_id || 0) > 0
+    if (field === 'retail_price') return Number(item?.retail_price || 0) > 0
+    if (field === 'image_urls') return hasDeviceImage(item)
+    return Boolean(String(item?.[field] || '').trim())
+}
+
+function purchaseItemPayload(item: any) {
+    const payload = { ...item }
+    const listingFields = ['spec', 'image_urls', 'video_url', 'retail_price', 'quality_remark', 'remark_public', 'remark_internal']
+    listingFields.forEach(field => {
+        if (!purchaseOneStop.value || !listingFieldEnabled(field)) {
+            payload[field] = field === 'retail_price' ? 0 : ''
+        }
+    })
+    payload.estimate_sale_price = Number(payload.retail_price || 0)
+    if (!purchaseOneStop.value) {
+        payload.spec_json = {}
+        payload.selected_specs = {}
+        payload.selected_grade = null
+        payload.color = ''
+        payload.battery = undefined
+        payload.warranty = undefined
+    }
+    return payload
 }
 
 function compactItemSubTitle(item: any) {
@@ -1525,8 +1608,8 @@ async function submitCreate() {
     const isStandard = create.form.item_type_mode === 'standard'
     if (!create.form.items.length || create.form.items.some((row: any) => isStandard
         ? (!row.model || Number(row.quantity || 0) <= 0 || standardLineTotal(row) <= 0)
-        : (!row.category_path || !row.model || (!row.imei && !row.sn) || Number(row.purchase_cost || 0) <= 0))) {
-        return ElMessage.warning(isStandard ? '请补全商品名称、采购数量和采购总价' : '请补全商品分类、设备名称、IMEI/SN 和采购成本')
+        : (!row.model || (!row.imei && !row.sn) || Number(row.purchase_cost || 0) <= 0 || deviceCoreMissingCount(row) > 0))) {
+        return ElMessage.warning(isStandard ? '请补全商品名称、采购数量和采购总价' : (purchaseOneStop.value ? '请补全当前规则要求的采购及销售资料' : '请补全设备名称、IMEI/SN 和采购成本'))
     }
     const missingLocationIndex = create.form.items.findIndex((row: any) => !row.warehouse_id || !row.location_id)
     if (missingLocationIndex >= 0) return ElMessage.warning(`请为第 ${missingLocationIndex + 1} ${isStandard ? '项商品' : '台设备'}选择入库仓库和库位`)
@@ -1548,7 +1631,7 @@ async function submitCreate() {
             ...create.form,
             items: create.form.items.map((row: any) => row.item_type === 'standard'
                 ? { ...row, unit_cost: standardUnitCost(row), purchase_cost: standardLineTotal(row) }
-                : row),
+                : purchaseItemPayload(row)),
             warehouse_name: currentWarehouse.value?.warehouse_name || create.form.warehouse_name,
             location_name: currentLocations.value.find((row: any) => Number(row.id) === Number(create.form.location_id))?.location_name || create.form.location_name,
             settle_method: create.form.settle_mode === 'cash' ? '现结' : '挂账'

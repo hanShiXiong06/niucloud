@@ -30,7 +30,12 @@
                         <u-icon name="info-circle" color="#64748b" size="14" />
                         <text>该设备已作废</text>
                     </view>
-                    <view v-else-if="asset.status === 'in_stock'" class="turnover-action-card" :class="`is-${asset.turnover_level || 'healthy'}`">
+                    <view v-if="asset.listing_sync?.last_error" class="asset-banner listing-error" @click="showListingError">
+                        <u-icon name="error-circle" color="#dc2626" size="14" />
+                        <text>商城处理失败：{{ asset.listing_sync.last_error }}</text>
+                        <u-icon name="arrow-right" color="#dc2626" size="12" />
+                    </view>
+                    <view v-if="asset.status === 'in_stock' && !asset.listing_sync?.last_error" class="turnover-action-card" :class="`is-${asset.turnover_level || 'healthy'}`">
                         <view class="turnover-action-card__main">
                             <text class="turnover-action-card__title">{{ asset.turnover_label || '库存周转' }} · 在库 {{ asset.stock_age_days || 0 }} 天</text>
                             <text class="turnover-action-card__desc">{{ asset.turnover_action || asset.warehouse_policy?.primary_action_reason || '根据仓库规则处理当前设备' }}</text>
@@ -41,7 +46,7 @@
                     </view>
 
                     <view class="erp-card__foot asset-finance-foot">
-                        <view class="amount-box">
+                        <view v-if="canViewCost" class="amount-box">
                             <text class="amt-label">总成本</text>
                             <text class="amt-value">¥{{ money(asset.total_cost) }}</text>
                         </view>
@@ -49,7 +54,7 @@
                             <text class="amt-label">{{ asset.status === 'sold' ? '实际收入' : '预估价' }}</text>
                             <text class="amt-value blue">{{ asset.status === 'sold' ? ('¥' + money(netSaleAmount(asset))) : displayEstimate(asset) }}</text>
                         </view>
-                        <view class="amount-box">
+                        <view v-if="asset.status !== 'sold' || canViewProfit" class="amount-box">
                             <text class="amt-label">{{ asset.status === 'sold' ? '毛利' : '库龄' }}</text>
                             <text class="amt-value" :class="asset.status === 'sold' ? (Number(asset.profit)>=0?'green':'red') : ''">
                                 {{ asset.status === 'sold' ? ('¥' + money(asset.profit)) : ageText(asset) }}
@@ -60,10 +65,6 @@
                         原成交 ¥{{ money(originalSaleAmount(asset)) }} · 售后补差 -¥{{ money(compensationAmount(asset)) }} · 实际收入 ¥{{ money(netSaleAmount(asset)) }}
                     </view>
 
-                    <view class="field">
-                        <text class="label">资产号</text>
-                        <text class="value">{{ asset.asset_no || '-' }}</text>
-                    </view>
                     <view class="field">
                         <text class="label">IMEI</text>
                         <text class="value identity-value">{{ asset.imei || '-' }}</text>
@@ -84,13 +85,13 @@
                         <text class="label">分类</text>
                         <text class="value">{{ asset.category_name }}</text>
                     </view>
-                    <view v-if="asset.party_name" class="field field--last">
+                    <view v-if="canViewSupplier && asset.party_name" class="field field--last">
                         <text class="label">来源</text>
                         <text class="value">{{ asset.party_name }}</text>
                     </view>
                 </view>
 
-                <view class="form-card">
+                <view v-if="canViewCost" class="form-card">
                     <view class="form-card-title">成本拆解</view>
                     <view class="field"><text class="label">采购成本</text><text class="value">¥{{ money(asset.purchase_cost) }}</text></view>
                     <view class="field" v-if="Number(asset.adjust_cost)">
@@ -107,12 +108,12 @@
                     </view>
                 </view>
 
-                <view class="form-card" v-if="asset.purchase_order">
+                <view class="form-card" v-if="asset.purchase_order && (canViewSupplier || canViewFinance)">
                     <view class="form-card-title">采购信息</view>
-                    <view class="field"><text class="label">供应商</text><text class="value">{{ asset.party_name }}</text></view>
+                    <view v-if="canViewSupplier" class="field"><text class="label">供应商</text><text class="value">{{ asset.party_name }}</text></view>
                     <view class="field"><text class="label">采购单号</text><text class="value">{{ asset.purchase_order.purchase_no }}</text></view>
                     <view v-if="asset.purchase_order.m_no || asset.m_no" class="field"><text class="label">M号</text><text class="value">{{ asset.purchase_order.m_no || asset.m_no }}</text></view>
-                    <view class="field field--last"><text class="label">付款状态</text>
+                    <view v-if="canViewFinance" class="field field--last"><text class="label">付款状态</text>
                         <u-tag :text="financeLabel(asset.purchase_order.finance_status)" :type="financeType(asset.purchase_order.finance_status)" plain plainFill size="mini" />
                     </view>
                 </view>
@@ -126,7 +127,7 @@
                         <text class="label">原成交 / 售后补差</text>
                         <text class="value orange">¥{{ money(originalSaleAmount(asset)) }} / -¥{{ money(compensationAmount(asset)) }}</text>
                     </view>
-                    <view class="field field--last"><text class="label">毛利</text>
+                    <view v-if="canViewProfit" class="field field--last"><text class="label">毛利</text>
                         <text class="value" :class="Number(asset.profit || asset.last_sale_item?.profit)>=0?'green':'red'">¥{{ money(asset.profit || asset.last_sale_item?.profit) }}</text>
                     </view>
                 </view>
@@ -141,32 +142,34 @@
                     <view class="card-meta" v-if="flow.before_status && flow.after_status">
                         {{ flow.before_status_text || statusLabel(flow.before_status) }} → {{ flow.after_status_text || statusLabel(flow.after_status) }}
                     </view>
-                    <view class="card-meta" v-if="flow.cost_delta && Number(flow.cost_delta)">
+                    <view class="card-meta" v-if="canViewCost && flow.cost_delta && Number(flow.cost_delta)">
                         成本变化：{{ Number(flow.cost_delta)>0?'+':'' }}¥{{ money(flow.cost_delta) }}
                     </view>
                     <view class="card-meta" v-if="flow.remark">{{ flow.remark }}</view>
                 </view>
                 <view class="empty-tip" v-if="!ledger.length">暂无设备履历</view>
 
-                <view class="section-title account-section-title">设备账务轨迹</view>
-                <view class="account-tip">按设备展示采购应付、销售应收、实际收付款、折账与冲销结果；售后补差的应付和实际付款会合并，避免重复理解金额。</view>
-                <view class="account-card" v-for="row in visibleAccountTimeline" :key="row.id || row.ledger_no">
-                    <view class="account-card__head">
-                        <text class="account-card__title">{{ accountBizLabel(row) }}</text>
-                        <text class="account-card__state" :class="accountStateClass(row)">{{ accountSettlementText(row) }}</text>
+                <view v-if="canViewFinance">
+                    <view class="section-title account-section-title">设备账务轨迹</view>
+                    <view class="account-tip">按设备展示采购应付、销售应收、实际收付款、折账与冲销结果；售后补差的应付和实际付款会合并，避免重复理解金额。</view>
+                    <view class="account-card" v-for="row in visibleAccountTimeline" :key="row.id || row.ledger_no">
+                        <view class="account-card__head">
+                            <text class="account-card__title">{{ accountBizLabel(row) }}</text>
+                            <text class="account-card__state" :class="accountStateClass(row)">{{ accountSettlementText(row) }}</text>
+                        </view>
+                        <view class="account-card__result">
+                            <text>{{ accountImpactText(row) }}</text>
+                            <text class="account-card__amount" :class="accountAmountClass(row)">¥{{ money(row.amount) }}</text>
+                        </view>
+                        <view class="account-card__meta" v-if="row._display_source_no || row.source_no">来源：{{ row._display_source_no || row.source_no }}</view>
+                        <view class="account-card__meta">{{ accountRemark(row) }}</view>
+                        <view class="account-card__time">{{ formatTime(row.occurred_at || row.create_at) }}</view>
                     </view>
-                    <view class="account-card__result">
-                        <text>{{ accountImpactText(row) }}</text>
-                        <text class="account-card__amount" :class="accountAmountClass(row)">¥{{ money(row.amount) }}</text>
+                    <view class="empty-tip account-empty" v-if="!accountTimeline.length">暂无设备账务记录</view>
+                    <view v-if="accountTimeline.length > accountPreviewLimit" class="account-more" @click="showAllAccountLedger = !showAllAccountLedger">
+                        <text>{{ showAllAccountLedger ? '收起账务轨迹' : `展开全部 ${accountTimeline.length} 条` }}</text>
+                        <u-icon :name="showAllAccountLedger ? 'arrow-up' : 'arrow-down'" color="#2563eb" size="13" />
                     </view>
-                    <view class="account-card__meta" v-if="row._display_source_no || row.source_no">来源：{{ row._display_source_no || row.source_no }}</view>
-                    <view class="account-card__meta">{{ accountRemark(row) }}</view>
-                    <view class="account-card__time">{{ formatTime(row.occurred_at || row.create_at) }}</view>
-                </view>
-                <view class="empty-tip account-empty" v-if="!accountTimeline.length">暂无设备账务记录</view>
-                <view v-if="accountTimeline.length > accountPreviewLimit" class="account-more" @click="showAllAccountLedger = !showAllAccountLedger">
-                    <text>{{ showAllAccountLedger ? '收起账务轨迹' : `展开全部 ${accountTimeline.length} 条` }}</text>
-                    <u-icon :name="showAllAccountLedger ? 'arrow-up' : 'arrow-down'" color="#2563eb" size="13" />
                 </view>
 
                 <!-- 底部操作 -->
@@ -178,7 +181,7 @@
                         <view class="bottom-action-btn full"><u-button type="primary" :text="asset.turnover_action_label || '处理库存'" @click="handlePrimaryAction" /></view>
                     </view>
                     <view v-if="asset.status === 'in_stock'" class="bottom-action-row">
-                        <view class="bottom-action-btn"><u-button type="primary" text="调整成本" @click="goAdjust" /></view>
+                        <view v-if="canAdjustCost" class="bottom-action-btn"><u-button type="primary" text="调整成本" @click="goAdjust" /></view>
                         <view class="bottom-action-btn">
                             <u-button type="primary" plain :text="asset.ownership_type === 'consigned' || asset.warehouse_policy?.warehouse_type === 'consignment' ? '转为自有' : '库存调拨'" :loading="transferring" :disabled="!canOpenTransfer" @click="openTransfer" />
                         </view>
@@ -208,32 +211,12 @@
             <view class="action-popup">
                 <view class="action-popup__head"><view><text class="action-popup__title">{{ productPopupTitle }}</text><text class="action-popup__sub">{{ productPopupSubtitle }}</text></view><u-icon name="close" color="#94a3b8" size="20" @click="productVisible=false" /></view>
                 <scroll-view scroll-y class="action-popup__body">
-                    <template v-if="productMode === 'all' || productMode === 'material'">
-                        <ErpCatalogProductPopup
-                            v-model="productForm.catalog_product_id"
-                            :selected-label="productCatalogDisplayLabel"
-                            :category-path="productForm.category_path"
-                            label="分类"
-                            placeholder="先选品类，再选择品牌、系列和型号"
-                            :embedded="true"
-                            :clearable="true"
-                            @change="onProductCatalogChange"
-                        />
-                        <view class="popup-form-row"><text>设备规格</text><u-input v-model="productForm.spec" placeholder="容量、颜色、成色、电池等" border="none" inputAlign="right" /></view>
-                        <view class="popup-form-row popup-form-row--textarea"><text>对外说明</text><u-textarea v-model="productForm.remark_public" placeholder="展示给商城客户的商品说明" :maxlength="500" /></view>
-                    </template>
-                    <view v-if="productMode === 'all'" class="popup-form-row"><text>零售价</text><u-input v-model="productForm.retail_price" type="number" placeholder="0.00" border="none" inputAlign="right" /></view>
-                    <ErpVoucherUploader v-if="productMode === 'all' || productMode === 'photo'" v-model="productForm.image_urls" title="商品图片" hint="上传正面、背面、边框和瑕疵图，支持点击预览" add-text="上传图片" :max-count="9" />
-                    <view v-if="productMode === 'all' || productMode === 'photo'" class="video-upload-card">
-                        <view class="video-upload-card__head">
-                            <view>
-                                <text class="video-upload-card__title">展示视频</text>
-                                <text class="video-upload-card__hint">选填，随商品资料同步商城</text>
-                            </view>
-                            <text class="video-upload-card__badge">最多 1 个</text>
-                        </view>
-                        <upload-video v-model="productForm.video_url" :max-count="1" />
-                    </view>
+                    <ErpListingWorkspaceForm
+                        v-model="productForm"
+                        :contract="asset?.listing_workspace"
+                        :action="productAction"
+                        @catalog-change="onProductCatalogChange"
+                    />
                 </scroll-view>
                 <view class="action-popup__foot"><u-button type="primary" :loading="productSaving" :text="productSubmitText" @click="submitProduct" /></view>
             </view>
@@ -269,13 +252,20 @@ import { adjustMobileStockRetailPrice, buyoutMobileConsignment, getMobileStockIn
 import { confirmErpSensitiveAction } from '@/addon/hsx_erp/hooks/useErpSensitiveConfirm'
 import { erpNetSaleAmount, erpOriginalSaleAmount, erpSaleCompensationAmount, firstPositiveErpAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
 import { erpDeviceIdentityLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
+import { presentErpListingFeedback } from '@/addon/hsx_erp/hooks/useErpListingFeedback'
 import { formatErpDate, formatErpTime } from '@/addon/hsx_erp/hooks/useErpTime'
 import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
-import ErpCatalogProductPopup from '@/addon/hsx_erp/components/ErpCatalogProductPopup.vue'
+import ErpListingWorkspaceForm from '@/addon/hsx_erp/components/ErpListingWorkspaceForm.vue'
 import ErpWarehousePopup from '@/addon/hsx_erp/components/ErpWarehousePopup.vue'
-import ErpVoucherUploader from '@/addon/hsx_erp/components/ErpVoucherUploader.vue'
+import { erpListingFormDefinition, erpListingFormPayload, validateErpListingForm, type ErpListingAction } from '@/addon/hsx_erp/hooks/useErpListingForm'
 
 const asset = ref<any>(null)
+const stockCapabilities = ref<any>({ is_admin: 0, view_cost: 0, adjust_cost: 0, view_profit: 0, view_supplier: 0, view_finance: 0, view_team_workload: 0 })
+const canViewCost = computed(() => Number(stockCapabilities.value?.view_cost || 0) === 1)
+const canAdjustCost = computed(() => Number(stockCapabilities.value?.adjust_cost || 0) === 1)
+const canViewProfit = computed(() => Number(stockCapabilities.value?.view_profit || 0) === 1)
+const canViewSupplier = computed(() => Number(stockCapabilities.value?.view_supplier || 0) === 1)
+const canViewFinance = computed(() => Number(stockCapabilities.value?.view_finance || 0) === 1)
 const ledger = ref<any[]>([])
 const showAllAccountLedger = ref(false)
 const accountPreviewLimit = 4
@@ -286,21 +276,13 @@ const assetId = ref(0)
 const detailLoaded = ref(false)
 const productVisible = ref(false)
 const productSaving = ref(false)
-const productMode = ref<'all' | 'photo' | 'material'>('all')
-const productForm = ref<any>({ catalog_product_id: 0, catalog_product_name: '', category_name: '', category_path: '', brand_name: '', series_name: '', spec: '', retail_price: '', image_urls: '', video_url: '', remark_public: '' })
-const productCatalogDisplayLabel = computed(() => [
-    productForm.value.category_path,
-    productForm.value.brand_name,
-    productForm.value.series_name,
-    productForm.value.catalog_product_name,
-].map(value => String(value || '').trim()).filter(Boolean).join(' / '))
-const productPopupTitle = computed(() => ({ all: '完善商品资料', photo: '完成商品拍摄', material: '整理商城资料' }[productMode.value]))
-const productPopupSubtitle = computed(() => ({
-    all: '小团队可一次完成图片、售价和商城资料',
-    photo: '上传标准商品图，完成后自动流转到销售定价',
-    material: '核对型号、规格和对外说明，便于商城筛选展示',
-}[productMode.value]))
-const productSubmitText = computed(() => ({ all: '保存商品资料', photo: '完成拍摄', material: '完成资料整理' }[productMode.value]))
+const productMode = ref<ErpListingAction>('one_stop')
+const productForm = ref<any>({ catalog_product_id: 0, catalog_product_name: '', category_name: '', category_path: '', brand_name: '', series_name: '', spec: '', retail_price: '', image_urls: '', video_url: '', quality_remark: '', remark_public: '', remark_internal: '' })
+const productAction = computed<ErpListingAction>(() => productMode.value)
+const productFormDefinition = computed(() => erpListingFormDefinition(asset.value?.listing_workspace, productAction.value))
+const productPopupTitle = computed(() => productFormDefinition.value.title)
+const productPopupSubtitle = computed(() => productFormDefinition.value.description)
+const productSubmitText = computed(() => productFormDefinition.value.submit_label)
 const retailVisible = ref(false)
 const retailSaving = ref(false)
 const retailForm = ref({ retail_price: '', reason: '' })
@@ -339,6 +321,7 @@ async function loadDetail(options: { silent?: boolean } = {}) {
             throw new Error('设备不存在或无权查看')
         }
         asset.value = data
+        stockCapabilities.value = data.capabilities || stockCapabilities.value
         ledger.value = data.asset_ledgers || data.ledger || data.asset_ledger || []
         showAllAccountLedger.value = false
     } catch (e: any) {
@@ -385,11 +368,12 @@ const canOpenTransfer = computed(() => Number(asset.value?.can_warehouse_action 
 function handlePrimaryAction() {
     if (!asset.value) return
     const action = String(asset.value.turnover_action_key || asset.value.warehouse_policy?.primary_action || 'view')
-    if (['set_retail_price', 'adjust_retail_price', 'complete_listing_price'].includes(action)) return openRetail()
+    if (action === 'complete_listing_price') return openProduct('price')
+    if (['set_retail_price', 'adjust_retail_price'].includes(action)) return openRetail()
     if (action === 'complete_listing_photo') return openProduct('photo')
     if (action === 'complete_listing_material') return openProduct('material')
-    if (action === 'complete_listing_media_price') return openProduct()
-    if (action === 'complete_listing') return openProduct()
+    if (action === 'complete_listing_media_price') return openProduct('media_price')
+    if (action === 'complete_listing') return openProduct('one_stop')
     if (action === 'prepare_listing_media') return prepareListingMedia()
     if (action === 'publish_listing') return publishListing()
     if (['transfer', 'resolve_warehouse'].includes(action)) return openTransfer()
@@ -417,13 +401,14 @@ async function prepareListingMedia() {
     }
 }
 
-function openProduct(mode: 'all' | 'photo' | 'material' = 'all') {
+function openProduct(mode: ErpListingAction = 'one_stop') {
     if (!asset.value) return
     productMode.value = mode
     productForm.value = {
         catalog_product_id: Number(asset.value.catalog_product_id || 0), catalog_product_name: asset.value.model || '', category_name: asset.value.category_name || '', category_path: asset.value.category_path || '',
         brand_name: asset.value.brand_name || '', series_name: asset.value.series_name || '',
-        spec: asset.value.spec || '', retail_price: Number(asset.value.retail_price || 0) || '', image_urls: asset.value.image_urls || '', video_url: asset.value.video_url || '', remark_public: asset.value.remark_public || '',
+        spec: asset.value.spec || '', retail_price: Number(asset.value.retail_price || 0) || '', image_urls: asset.value.image_urls || '', video_url: asset.value.video_url || '',
+        quality_remark: asset.value.quality_remark || '', remark_public: asset.value.remark_public || '', remark_internal: asset.value.remark_internal || '',
     }
     productVisible.value = true
 }
@@ -441,16 +426,16 @@ function onProductCatalogChange(payload: any) {
 
 async function submitProduct() {
     if (!asset.value?.id) return
-    if (productMode.value !== 'photo' && !String(productForm.value.category_path || '').trim()) return uni.showToast({ title: '请选择商品品类', icon: 'none' })
-    if (productMode.value !== 'photo' && !String(productForm.value.spec || '').trim()) return uni.showToast({ title: '请填写设备规格', icon: 'none' })
-    if (productMode.value !== 'material' && asset.value.warehouse_policy?.need_photo && !String(productForm.value.image_urls || '').trim()) return uni.showToast({ title: '当前仓库要求上传商品图片', icon: 'none' })
-    if (productMode.value === 'all' && asset.value.warehouse_policy?.need_pricing && Number(productForm.value.retail_price || 0) <= 0) return uni.showToast({ title: '当前仓库要求填写零售价', icon: 'none' })
+    const validationMessage = validateErpListingForm(productForm.value, asset.value?.listing_workspace, productAction.value)
+    if (validationMessage) return uni.showToast({ title: validationMessage, icon: 'none' })
     productSaving.value = true
     try {
-        const actionRemark = { all: '移动端完善商城商品资料', photo: '移动端完成商品拍摄', material: '移动端完成商城资料整理' }[productMode.value]
-        await updateMobileStockFlow(asset.value.id, { ...productForm.value, retail_price: Number(productForm.value.retail_price || 0), remark: actionRemark })
+        const actionRemark = `移动端${productFormDefinition.value.title}`
+        const payload = erpListingFormPayload(productForm.value, asset.value?.listing_workspace, productAction.value)
+        if (Object.prototype.hasOwnProperty.call(payload, 'retail_price')) payload.retail_price = Number(payload.retail_price || 0)
+        const res: any = await updateMobileStockFlow(asset.value.id, { ...payload, remark: actionRemark })
         productVisible.value = false
-        uni.showToast({ title: '商品资料已保存', icon: 'success' })
+        await showMobileListingFeedback(res?.data?.publish, '商品资料已保存')
         await reload()
     } catch (e: any) { uni.showToast({ title: e?.message || '保存失败', icon: 'none' }) }
     finally { productSaving.value = false }
@@ -469,12 +454,25 @@ async function submitRetail() {
     if (!confirmed) return
     retailSaving.value = true
     try {
-        await adjustMobileStockRetailPrice(asset.value.id, { retail_price: price, reason: retailForm.value.reason })
+        const res: any = await adjustMobileStockRetailPrice(asset.value.id, { retail_price: price, reason: retailForm.value.reason })
         retailVisible.value = false
-        uni.showToast({ title: '零售价已保存', icon: 'success' })
+        await showMobileListingFeedback(res?.data?._workflow?.publish, '零售价已保存')
         await reload()
     } catch (e: any) { uni.showToast({ title: e?.message || '保存失败', icon: 'none' }) }
     finally { retailSaving.value = false }
+}
+
+async function showMobileListingFeedback(publish: any, savedMessage: string) {
+    await presentErpListingFeedback(publish, savedMessage)
+}
+
+function showListingError() {
+    uni.showModal({
+        title: '商城处理失败',
+        content: String(asset.value?.listing_sync?.last_error || '请稍后重新发布'),
+        showCancel: false,
+        confirmText: '我知道了',
+    })
 }
 
 function openTransfer() {
@@ -544,7 +542,7 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
 const goAdjust = () => {
     if (!asset.value) return
     const a = asset.value
-    const q = `id=${a.id}&model=${encodeURIComponent(a.model || '')}&asset_no=${encodeURIComponent(a.asset_no || '')}&imei=${encodeURIComponent(a.imei || '')}&status=${encodeURIComponent(a.status || '')}&cost=${a.total_cost || 0}&wh=${encodeURIComponent(a.warehouse_name || '')}&loc=${encodeURIComponent(a.location_name || '')}`
+    const q = `id=${a.id}&model=${encodeURIComponent(a.model || '')}&imei=${encodeURIComponent(a.imei || '')}&status=${encodeURIComponent(a.status || '')}&wh=${encodeURIComponent(a.warehouse_name || '')}&loc=${encodeURIComponent(a.location_name || '')}`
     uni.navigateTo({ url: `/addon/hsx_erp/pages/cost_adjust/detail?${q}` })
 }
 
@@ -731,6 +729,7 @@ function accountRemark(row: any) {
 .asset-banner { display:flex; align-items:center; gap:8rpx; margin:16rpx 0 0; padding:12rpx 16rpx; border-radius:12rpx; font-size:22rpx; line-height:1.45; }
 .asset-banner.sold { background:#eff6ff; color:#2563eb; }
 .asset-banner.void { background:#f1f5f9; color:#64748b; }
+.asset-banner.listing-error { background:#fef2f2; color:#dc2626; }
 .asset-banner text { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .turnover-action-card { display:flex; align-items:center; justify-content:space-between; gap:16rpx; margin:16rpx 0 0; padding:18rpx; border:2rpx solid #dbeafe; border-radius:16rpx; background:#eff6ff; }
 .turnover-action-card.is-warning { border-color:#fed7aa; background:#fff7ed; }.turnover-action-card.is-critical { border-color:#fecaca; background:#fef2f2; }

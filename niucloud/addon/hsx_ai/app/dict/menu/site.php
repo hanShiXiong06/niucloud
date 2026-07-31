@@ -1,0 +1,107 @@
+<?php
+return [
+    [
+        'menu_name' => 'AI 能力中心',
+        'menu_key' => 'hsx_ai',
+        'menu_short_name' => 'AI',
+        'parent_select_key' => '',
+        'parent_key' => '',
+        'menu_type' => '0',
+        'icon' => 'iconfont iconyingyong',
+        'api_url' => '',
+        'router_path' => '',
+        'view_path' => '',
+        'methods' => '',
+        'sort' => '175',
+        'status' => '1',
+        'is_show' => '1',
+        'children' => [
+            [
+                'menu_name' => '模型与场景', 'menu_key' => 'hsx_ai_model', 'menu_short_name' => '模型与场景',
+                'parent_select_key' => '', 'menu_type' => '1', 'icon' => '',
+                'api_url' => 'ai/config/model', 'router_path' => 'hsx_ai/model', 'view_path' => 'model/index',
+                'methods' => 'get', 'sort' => '100', 'status' => '1', 'is_show' => '1',
+                'children' => [
+                    [
+                        'menu_name' => '保存模型与场景', 'menu_key' => 'hsx_ai_model_save', 'menu_short_name' => '保存模型与场景',
+                        'parent_select_key' => '', 'menu_type' => '2', 'icon' => '', 'api_url' => 'ai/config/model',
+                        'router_path' => '', 'view_path' => '', 'methods' => 'post', 'sort' => '100', 'status' => '1', 'is_show' => '0',
+                    ],
+                    [
+                        'menu_name' => '测试模型通道', 'menu_key' => 'hsx_ai_provider_test', 'menu_short_name' => '测试通道',
+                        'parent_select_key' => '', 'menu_type' => '2', 'icon' => '', 'api_url' => 'ai/provider/test',
+                        'router_path' => '', 'view_path' => '', 'methods' => 'post', 'sort' => '90', 'status' => '1', 'is_show' => '0',
+                    ],
+                    [
+                        'menu_name' => '同步模型', 'menu_key' => 'hsx_ai_provider_models', 'menu_short_name' => '同步模型',
+                        'parent_select_key' => '', 'menu_type' => '2', 'icon' => '', 'api_url' => 'ai/provider/models',
+                        'router_path' => '', 'view_path' => '', 'methods' => 'post', 'sort' => '80', 'status' => '1', 'is_show' => '0',
+                    ],
+                ],
+            ],
+            [
+                'menu_name' => '业务接入', 'menu_key' => 'hsx_ai_integration', 'menu_short_name' => '业务接入',
+                'parent_select_key' => '', 'menu_type' => '1', 'icon' => '',
+                'api_url' => 'ai/config/integration', 'router_path' => 'hsx_ai/integration', 'view_path' => 'integration/index',
+                'methods' => 'get', 'sort' => '90', 'status' => '1', 'is_show' => '1',
+                'children' => [[
+                    'menu_name' => '保存业务接入', 'menu_key' => 'hsx_ai_integration_save', 'menu_short_name' => '保存业务接入',
+                    'parent_select_key' => '', 'menu_type' => '2', 'icon' => '', 'api_url' => 'ai/config/integration',
+                    'router_path' => '', 'view_path' => '', 'methods' => 'post', 'sort' => '100', 'status' => '1', 'is_show' => '0',
+                ]],
+            ],
+            [
+                'menu_name' => '语音服务', 'menu_key' => 'hsx_ai_speech', 'menu_short_name' => '语音服务',
+                'parent_select_key' => '', 'menu_type' => '1', 'icon' => '',
+                'api_url' => 'ai/config/speech', 'router_path' => 'hsx_ai/speech', 'view_path' => 'speech/index',
+                'methods' => 'get', 'sort' => '80', 'status' => '1', 'is_show' => '1',
+                'children' => [
+                    [
+                        'menu_name' => '保存语音服务', 'menu_key' => 'hsx_ai_speech_save', 'menu_short_name' => '保存语音服务',
+                        'parent_select_key' => '', 'menu_type' => '2', 'icon' => '', 'api_url' => 'ai/config/speech',
+                        'router_path' => '', 'view_path' => '', 'methods' => 'post', 'sort' => '100', 'status' => '1', 'is_show' => '0',
+                    ],
+                    [
+                        'menu_name' => '测试语音服务', 'menu_key' => 'hsx_ai_speech_test', 'menu_short_name' => '测试语音服务',
+                        'parent_select_key' => '', 'menu_type' => '2', 'icon' => '', 'api_url' => 'ai/speech/test',
+                        'router_path' => '', 'view_path' => '', 'methods' => 'post', 'sort' => '90', 'status' => '1', 'is_show' => '0',
+                    ],
+                ],
+            ],
+            [
+                'menu_name' => '在线测试', 'menu_key' => 'hsx_ai_playground', 'menu_short_name' => '在线测试',
+                'parent_select_key' => '', 'menu_type' => '1', 'icon' => '',
+                'api_url' => 'ai/playground/config', 'router_path' => 'hsx_ai/playground', 'view_path' => 'playground/index',
+                'methods' => 'get', 'sort' => '70', 'status' => '1', 'is_show' => '1',
+                'children' => [
+                    [
+                        'menu_name' => 'AI完整响应测试', 'menu_key' => 'hsx_ai_execute', 'menu_short_name' => '完整响应测试',
+                        'parent_select_key' => '', 'menu_type' => '2', 'icon' => '', 'api_url' => 'ai/execute',
+                        'router_path' => '', 'view_path' => '', 'methods' => 'post', 'sort' => '100', 'status' => '1', 'is_show' => '0',
+                    ],
+                    [
+                        'menu_name' => 'AI流式测试', 'menu_key' => 'hsx_ai_stream', 'menu_short_name' => '流式测试',
+                        'parent_select_key' => '', 'menu_type' => '2', 'icon' => '', 'api_url' => 'ai/stream',
+                        'router_path' => '', 'view_path' => '', 'methods' => 'post', 'sort' => '90', 'status' => '1', 'is_show' => '0',
+                    ],
+                    [
+                        'menu_name' => '测试语音识别', 'menu_key' => 'hsx_ai_playground_stt', 'menu_short_name' => '测试语音识别',
+                        'parent_select_key' => '', 'menu_type' => '2', 'icon' => '', 'api_url' => 'ai/playground/speech/stt',
+                        'router_path' => '', 'view_path' => '', 'methods' => 'post', 'sort' => '80', 'status' => '1', 'is_show' => '0',
+                    ],
+                    [
+                        'menu_name' => '测试语音合成', 'menu_key' => 'hsx_ai_playground_tts', 'menu_short_name' => '测试语音合成',
+                        'parent_select_key' => '', 'menu_type' => '2', 'icon' => '', 'api_url' => 'ai/playground/speech/tts',
+                        'router_path' => '', 'view_path' => '', 'methods' => 'post', 'sort' => '70', 'status' => '1', 'is_show' => '0',
+                    ],
+                ],
+            ],
+            [
+                'menu_name' => '调用日志', 'menu_key' => 'hsx_ai_logs', 'menu_short_name' => '调用日志',
+                'parent_select_key' => '', 'menu_type' => '1', 'icon' => '',
+                'api_url' => 'ai/logs', 'router_path' => 'hsx_ai/log', 'view_path' => 'log/index',
+                'methods' => 'get', 'sort' => '60', 'status' => '1', 'is_show' => '1', 'children' => [],
+            ],
+        ],
+    ],
+];

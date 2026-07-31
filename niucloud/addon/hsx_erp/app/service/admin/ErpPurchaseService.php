@@ -17,6 +17,8 @@ use addon\hsx_erp\app\model\ErpPurchaseReturnOrder;
 use addon\hsx_erp\app\model\ErpQuantityStock;
 use addon\hsx_erp\app\model\ErpWarehouse;
 use addon\hsx_erp\app\support\ErpIdempotency;
+use addon\hsx_erp\app\support\ErpListingFormContract;
+use addon\hsx_erp\app\support\ErpListingWorkflow;
 use addon\hsx_erp\app\support\ErpPartyMemberNames;
 use addon\hsx_erp\app\support\ErpPurchaseReturnPolicy;
 use app\model\member\Member;
@@ -590,7 +592,9 @@ class ErpPurchaseService extends BaseAdminService
             return $existingId;
         }
         $data['request_id'] = $requestId !== '' ? $requestId : null;
+        $erpRules = (new ErpConfigService())->getRules();
         $items = $this->normalizePurchaseItems((array)($data['items'] ?? []));
+        $items = $this->normalizeManualListingItems($items, $data, (array)($erpRules['listing_workspace'] ?? []));
         if (empty($items)) {
             throw new CommonException('请至少录入一项采购货品');
         }
@@ -599,7 +603,6 @@ class ErpPurchaseService extends BaseAdminService
             throw new CommonException('请填写采购渠道/客户');
         }
         $now = time();
-        $erpRules = (new ErpConfigService())->getRules();
         $orderId = 0;
         $createdAssetIds = [];
         $cashSettlementCreated = false;
@@ -906,6 +909,10 @@ class ErpPurchaseService extends BaseAdminService
                 }
                 $categoryName = $catalogProductId > 0 ? (string)$catalog['category_name'] : trim((string)($item['category_name'] ?? ''));
                 $categoryPath = $catalogProductId > 0 ? (string)$catalog['category_path'] : $this->normalizeCategoryPath($item['category_path'] ?? []);
+                $retailPrice = round((float)($item['retail_price'] ?? 0), 2);
+                $imageUrls = trim((string)($item['image_urls'] ?? ''));
+                $videoUrl = trim((string)($item['video_url'] ?? ''));
+                $spec = trim((string)($item['spec'] ?? ''));
                 $purchaseItem = ErpPurchaseItem::create([
                     'site_id' => $this->site_id,
                     'purchase_order_id' => $orderId,
@@ -920,7 +927,7 @@ class ErpPurchaseService extends BaseAdminService
                     'imei' => trim((string)($item['imei'] ?? '')),
                     'sn' => trim((string)($item['sn'] ?? '')),
                     'model' => $modelName,
-                    'spec' => trim((string)($item['spec'] ?? '')),
+                    'spec' => $spec,
                     'spec_json' => $specJson,
                     'color' => $color,
                     'battery' => $battery,
@@ -931,8 +938,8 @@ class ErpPurchaseService extends BaseAdminService
                     'inspector_uid' => (int)$inspector['uid'],
                     'inspector_name' => (string)$inspector['name'],
                     'estimate_sale_price' => $estimateSalePrice,
-                    'image_urls' => trim((string)($item['image_urls'] ?? '')),
-                    'video_url' => trim((string)($item['video_url'] ?? '')),
+                    'image_urls' => $imageUrls,
+                    'video_url' => $videoUrl,
                     'quality_remark' => trim((string)($item['quality_remark'] ?? '')),
                     'qc_template_id' => max(0, (int)($item['qc_template_id'] ?? 0)),
                     'qc_report' => $this->normalizeJsonSnapshot($item['qc_report'] ?? []),
@@ -944,6 +951,22 @@ class ErpPurchaseService extends BaseAdminService
                     'create_at' => $now,
                     'update_at' => $now,
                 ]);
+                $listingStatus = 'none';
+                if ($assetFlow['refurbish_status'] !== 'pending') {
+                    $projectedAsset = [
+                        'status' => ErpDict::ASSET_IN_STOCK,
+                        'warehouse_id' => $itemWarehouseId,
+                        'sale_target' => $assetFlow['sale_target'],
+                        'refurbish_status' => $assetFlow['refurbish_status'],
+                        'catalog_product_id' => $catalogProductId,
+                        'spec' => $spec,
+                        'image_urls' => $imageUrls,
+                        'retail_price' => $retailPrice,
+                    ];
+                    $policy = ErpWarehousePolicyService::forSite((int)$this->site_id)
+                        ->evaluate($projectedAsset, $warehouse->toArray());
+                    $listingStatus = ErpListingWorkflow::statusFromAsset($projectedAsset, $policy);
+                }
                 $asset = ErpAsset::create([
                     'site_id' => $this->site_id,
                     'asset_no' => ErpLedgerService::makeNo('AS'),
@@ -965,7 +988,7 @@ class ErpPurchaseService extends BaseAdminService
                     'imei' => trim((string)($item['imei'] ?? '')),
                     'sn' => trim((string)($item['sn'] ?? '')),
                     'model' => $modelName,
-                    'spec' => trim((string)($item['spec'] ?? '')),
+                    'spec' => $spec,
                     'spec_json' => $specJson,
                     'color' => $color,
                     'battery' => $battery,
@@ -976,9 +999,9 @@ class ErpPurchaseService extends BaseAdminService
                     'inspector_uid' => (int)$inspector['uid'],
                     'inspector_name' => (string)$inspector['name'],
                     'estimate_sale_price' => $estimateSalePrice,
-                    'retail_price' => round((float)($item['retail_price'] ?? 0), 2),
-                    'image_urls' => trim((string)($item['image_urls'] ?? '')),
-                    'video_url' => trim((string)($item['video_url'] ?? '')),
+                    'retail_price' => $retailPrice,
+                    'image_urls' => $imageUrls,
+                    'video_url' => $videoUrl,
                     'quality_remark' => trim((string)($item['quality_remark'] ?? '')),
                     'qc_template_id' => max(0, (int)($item['qc_template_id'] ?? 0)),
                     'qc_report' => $this->normalizeJsonSnapshot($item['qc_report'] ?? []),
@@ -990,9 +1013,7 @@ class ErpPurchaseService extends BaseAdminService
                     'refurbish_pending_at' => $assetFlow['refurbish_status'] === 'pending' ? $now : 0,
                     'refurbish_remark' => $assetFlow['refurbish_status'] === 'pending' ? mb_substr(trim((string)($item['refurbish_reason'] ?? '')), 0, 500) : '',
                     'sale_target' => $assetFlow['sale_target'],
-                    'listing_status' => $assetFlow['refurbish_status'] === 'pending'
-                        ? 'none'
-                        : $this->listingStatusByWarehouse($warehouse, $assetFlow['sale_target'], trim((string)($item['image_urls'] ?? '')), $estimateSalePrice),
+                    'listing_status' => $listingStatus,
                     'status' => ErpDict::ASSET_IN_STOCK,
                     'source_plugin' => (string)($data['source_plugin'] ?? 'erp'),
                     'source_type' => (string)($data['source_type'] ?? 'manual'),
@@ -1092,10 +1113,15 @@ class ErpPurchaseService extends BaseAdminService
             try {
                 // 入库事实完成后立即计算下一责任岗位。是否拆分拍摄、定价及商城
                 // 运营由业务规则决定，采购开单本身不再要求人工点击“下一步”。
+                ErpStockService::forSite(
+                    (int)$this->site_id,
+                    (int)$this->uid,
+                    (string)$this->username
+                )->autoPublishListingIfReady($assetId);
                 ErpListingTaskService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username)->sync($assetId);
             } catch (\Throwable $e) {
-                // 待办分配属于入库后的增强能力，不得反向破坏已经成立的采购事实。
-                Log::warning('ERP采购入库自动生成销售资料待办失败', [
+                // 渠道发布与待办投影属于入库后的增强能力，不得反向破坏已经成立的采购事实。
+                Log::warning('ERP采购入库后自动发布或生成销售资料待办失败', [
                     'site_id' => (int)$this->site_id,
                     'asset_id' => $assetId,
                     'message' => $e->getMessage(),
@@ -1573,6 +1599,63 @@ class ErpPurchaseService extends BaseAdminService
         return $items;
     }
 
+    /**
+     * ERP 手工采购才消费运营模式；插件入库只形成采购事实，不能因为销售资料尚未
+     * 完成而阻断。团队模式保留采购阶段已确认的分类与目录型号，仅清除尚未由对应岗位
+     * 完成的规格、图片和销售价格，避免旧客户端把隐藏字段中的脏资料带入资产。
+     */
+    private function normalizeManualListingItems(array $items, array $data, array $workspace): array
+    {
+        $sourcePlugin = trim((string)($data['source_plugin'] ?? 'erp')) ?: 'erp';
+        $sourceType = trim((string)($data['source_type'] ?? 'manual')) ?: 'manual';
+        if ($sourcePlugin !== 'erp' || $sourceType !== 'manual') {
+            return $items;
+        }
+        $contract = ErpListingFormContract::describe($workspace);
+        $oneStop = (string)($contract['mode'] ?? 'one_stop') === 'one_stop';
+        $fieldRules = (array)($contract['field_rules'] ?? []);
+        $listingFields = [
+            'spec',
+            'image_urls',
+            'video_url',
+            'retail_price',
+            'quality_remark',
+            'remark_public',
+            'remark_internal',
+        ];
+        foreach ($items as $index => &$item) {
+            if ((string)($item['item_type'] ?? 'device') !== 'device') continue;
+            foreach ($listingFields as $field) {
+                $enabled = $oneStop && (int)($fieldRules[$field]['enabled'] ?? 1) === 1;
+                if ($enabled) continue;
+                $item[$field] = $field === 'retail_price' ? 0 : '';
+            }
+            if (!$oneStop || (int)($fieldRules['spec']['enabled'] ?? 1) !== 1) {
+                $item['spec'] = '';
+                $item['spec_json'] = [];
+                $item['color'] = '';
+                $item['battery'] = 0;
+                $item['warranty'] = 0;
+            }
+            if (!$oneStop) {
+                $item['inspector_uid'] = 0;
+                $item['estimate_sale_price'] = 0;
+            } else {
+                $item['estimate_sale_price'] = round((float)($item['retail_price'] ?? 0), 2);
+                foreach ($listingFields as $field) {
+                    if ((int)($fieldRules[$field]['required'] ?? 0) !== 1) continue;
+                    if (!ErpListingFormContract::hasValue($field, $item[$field] ?? null)) {
+                        throw new CommonException(
+                            '第' . ($index + 1) . '台设备请完善' . ErpListingFormContract::fieldLabel($field)
+                        );
+                    }
+                }
+            }
+        }
+        unset($item);
+        return $items;
+    }
+
     private function assertAssetIdentityAvailable(array $item): void
     {
         $imei = (string)($item['imei'] ?? '');
@@ -1677,20 +1760,6 @@ class ErpPurchaseService extends BaseAdminService
             'refurbish_status' => $refurbishStatus,
             'sale_target' => $saleTarget,
         ];
-    }
-
-    private function listingStatusByWarehouse(ErpWarehouse $warehouse, string $saleTarget, string $imageUrls, float $estimateSalePrice): string
-    {
-        if ($saleTarget !== 'mall') {
-            return 'none';
-        }
-        if ((int)$warehouse->need_photo === 1 && $imageUrls === '') {
-            return 'need_photo';
-        }
-        if ((int)$warehouse->need_pricing === 1 && $estimateSalePrice <= 0) {
-            return 'need_price';
-        }
-        return 'ready';
     }
 
 }

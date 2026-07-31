@@ -114,6 +114,10 @@ Route::group('erp', function () {
 
     Route::get('sale/lists', 'addon\hsx_erp\app\adminapi\controller\ErpSale@lists');
     Route::get('sale/stock', 'addon\hsx_erp\app\adminapi\controller\ErpSale@stock');
+    Route::get('sale/profit_report', 'addon\hsx_erp\app\adminapi\controller\ErpSale@profitReport');
+    Route::get('sale/profit_report/export', 'addon\hsx_erp\app\adminapi\controller\ErpSale@profitReportExport');
+    Route::get('sale/profit_report/meta', 'addon\hsx_erp\app\adminapi\controller\ErpSale@profitReportMeta');
+    Route::post('sale/profit_report/view', 'addon\hsx_erp\app\adminapi\controller\ErpSale@saveProfitReportView');
     Route::post('sale/create', 'addon\hsx_erp\app\adminapi\controller\ErpSale@create');
     Route::post('sale/item/:item_id/cancel', 'addon\hsx_erp\app\adminapi\controller\ErpSale@cancelItem');
     Route::post('sale/:id/cancel', 'addon\hsx_erp\app\adminapi\controller\ErpSale@cancel');

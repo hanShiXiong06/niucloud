@@ -8,6 +8,7 @@
                 </div>
                 <div class="flex gap-2">
                     <el-button :icon="Refresh" :loading="table.loading" @click="loadList">刷新</el-button>
+                    <el-button :icon="TrendCharts" @click="profitReportVisible = true">经营台账</el-button>
                     <el-button type="primary" :icon="Plus" @click="openCreate()">销售出库</el-button>
                 </div>
             </div>
@@ -333,6 +334,7 @@
                 </el-table>
             </div>
         </el-drawer>
+        <ErpSaleProfitReport v-model="profitReportVisible" />
     </div>
 </template>
 
@@ -340,7 +342,7 @@
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh, Search } from '@element-plus/icons-vue'
+import { Plus, Refresh, Search, TrendCharts } from '@element-plus/icons-vue'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import { getErpSaleChannelOptions } from '@/addon/hsx_erp/api/config'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
@@ -350,11 +352,13 @@ import ErpDeviceIdentity from '@/addon/hsx_erp/components/ErpDeviceIdentity.vue'
 import ErpRoleFocus from '@/addon/hsx_erp/components/ErpRoleFocus.vue'
 import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVoucherUpload.vue'
 import ErpCatalogProductSelect from '@/addon/hsx_erp/components/ErpCatalogProductSelect.vue'
+import ErpSaleProfitReport from '@/addon/hsx_erp/components/ErpSaleProfitReport.vue'
 import { useErpPageRefresh } from '@/addon/hsx_erp/hooks/useErpPageRefresh'
 import { firstPositiveErpAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
 
 const search = reactive<any>({ keyword: '', finance_status: '', status: '', warehouse_id: '', location_id: '', catalog_product_id: '', salesman_uid: '', dateRange: [], min_amount: undefined, max_amount: undefined, min_profit: undefined, max_profit: undefined })
 const activeTab = ref('')
+const profitReportVisible = ref(false)
 const router = useRouter()
 const route = useRoute()
 const saleRoleFocus = [

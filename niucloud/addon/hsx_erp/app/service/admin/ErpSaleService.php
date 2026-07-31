@@ -1408,7 +1408,7 @@ class ErpSaleService extends BaseAdminService
     /**
      * 给销售明细补充退货上下文。列表以设备状态为主，避免把批次收款状态误展示到已退/已取消设备。
      */
-    private function appendReturnContext(array $rows): array
+    public function appendReturnContext(array $rows): array
     {
         if ($rows === []) {
             return [];

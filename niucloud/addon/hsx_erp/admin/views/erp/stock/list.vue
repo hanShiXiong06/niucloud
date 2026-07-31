@@ -11,20 +11,19 @@
                     <el-button v-if="selectedSaleableIds.length" type="primary" @click="goSale(selectedSaleableIds)">批量销售（{{ selectedSaleableIds.length }}）</el-button>
                     <el-button v-if="selectedTransferableIds.length" @click="openTransfer()">批量调拨（{{ selectedTransferableIds.length }}）</el-button>
                     <el-button type="primary" plain @click="router.push('/site/hsx_erp/stocktake')">库存盘点</el-button>
+                    <el-button v-if="canViewProfit || canViewFinance" type="primary" plain @click="ledgerVisible = true">经营台账</el-button>
                     <el-button type="primary" plain @click="openSerialTrace">串号追踪</el-button>
                     <el-button :icon="Refresh" :loading="table.loading" @click="loadList">刷新</el-button>
                 </div>
             </div>
 
-            <ErpRoleFocus :items="stockRoleFocus" />
-
-            <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-6">
+            <div class="mt-5 grid grid-cols-1 gap-3" :class="canViewCost ? 'md:grid-cols-6' : 'md:grid-cols-5'">
                 <div class="summary-tile summary-tile--clickable" @click="applyTurnoverFilter('')">
                     <div class="summary-label">有效库存</div>
                     <div class="summary-value">{{ turnoverSummary.total_count || 0 }}</div>
                     <div class="mt-1 text-xs text-gray-400">平均库龄 {{ turnoverSummary.average_age_days || 0 }} 天</div>
                 </div>
-                <div class="summary-tile">
+                <div v-if="canViewCost" class="summary-tile">
                     <div class="summary-label">库存成本</div>
                     <div class="summary-value">{{ money(turnoverSummary.total_cost) }}</div>
                 </div>
@@ -41,12 +40,12 @@
                 <div class="summary-tile summary-tile--clickable" @click="applyTurnoverFilter('warning')">
                     <div class="summary-label">周转预警</div>
                     <div class="summary-value text-orange-600">{{ turnoverSummary.warning_count || 0 }}</div>
-                    <div class="mt-1 text-xs text-gray-400">占用 {{ money(turnoverSummary.warning_cost) }}</div>
+                    <div class="mt-1 text-xs text-gray-400">{{ canViewCost ? `占用 ${money(turnoverSummary.warning_cost)}` : '建议尽快处理' }}</div>
                 </div>
                 <div class="summary-tile summary-tile--clickable" @click="applyTurnoverFilter('critical')">
                     <div class="summary-label">严重滞销</div>
                     <div class="summary-value text-red-600">{{ turnoverSummary.critical_count || 0 }}</div>
-                    <div class="mt-1 text-xs text-gray-400">占用 {{ money(turnoverSummary.critical_cost) }}</div>
+                    <div class="mt-1 text-xs text-gray-400">{{ canViewCost ? `占用 ${money(turnoverSummary.critical_cost)}` : '需要优先处理' }}</div>
                 </div>
             </div>
 
@@ -54,32 +53,8 @@
                 <div><div class="font-medium text-slate-800">当前优先处理</div><div class="mt-1 text-xs text-slate-400">从预警直接进入对应库存，减少重复查找</div></div>
                 <div class="flex flex-1 flex-col items-end gap-2">
                     <div class="flex flex-wrap justify-end gap-2"><el-button v-for="item in turnoverSummary.actions" :key="item.key" size="small" plain @click="applySummaryAction(item)">{{ item.label }}（{{ item.count }}）</el-button></div>
-                    <div v-if="(turnoverSummary.warehouse_risks || []).length" class="flex flex-wrap justify-end gap-2 text-xs text-slate-500"><span>重点仓库：</span><button v-for="item in turnoverSummary.warehouse_risks" :key="item.warehouse_id" type="button" class="warehouse-risk-chip" @click="applyWarehouseRisk(item)">{{ item.warehouse_name }} {{ item.warning_count }} 台 / {{ money(item.warning_cost) }}</button></div>
+                    <div v-if="(turnoverSummary.warehouse_risks || []).length" class="flex flex-wrap justify-end gap-2 text-xs text-slate-500"><span>重点仓库：</span><button v-for="item in turnoverSummary.warehouse_risks" :key="item.warehouse_id" type="button" class="warehouse-risk-chip" @click="applyWarehouseRisk(item)">{{ item.warehouse_name }} {{ item.warning_count }} 台<span v-if="canViewCost"> / {{ money(item.warning_cost) }}</span></button></div>
                 </div>
-            </div>
-
-            <div class="listing-collab-panel">
-                <div class="listing-collab-panel__intro">
-                    <div class="font-medium text-slate-800">今日商城上架协作</div>
-                    <div class="mt-1 text-xs text-slate-400">拍摄、定价、资料运营各自闭环，小团队也可由同一人连续完成</div>
-                </div>
-                <div class="listing-collab-panel__stages">
-                    <div v-for="item in listingStageItems" :key="item.key" class="listing-stage">
-                        <span class="listing-stage__value">{{ item.count }}</span><span class="listing-stage__label">{{ item.label }}</span>
-                    </div>
-                </div>
-                <el-popover placement="bottom-end" :width="600" trigger="click">
-                    <template #reference><el-button link type="primary">查看员工完成量</el-button></template>
-                    <div class="mb-3 font-medium text-slate-800">{{ listingWorkload.date || '今日' }} 岗位完成量</div>
-                    <el-table :data="listingWorkload.staff || []" size="small" max-height="320" empty-text="今天还没有完成记录">
-                        <el-table-column prop="name" label="员工" min-width="120" />
-                        <el-table-column prop="photo_count" label="商品拍摄" width="90" align="center" />
-                        <el-table-column prop="price_count" label="销售定价" width="90" align="center" />
-                        <el-table-column prop="material_count" label="资料整理" width="90" align="center" />
-                        <el-table-column prop="publish_count" label="成功上架" width="90" align="center" />
-                        <el-table-column prop="total_count" label="合计" width="70" align="center" />
-                    </el-table>
-                </el-popover>
             </div>
 
             <!-- 状态快筛 Tab -->
@@ -97,7 +72,7 @@
                     <ErpCatalogProductSelect v-model="search.catalog_product_id" class="!w-[280px]" placeholder="搜索品牌、系列或型号" />
                 </el-form-item>
                 <el-form-item label="关键词">
-                    <el-input v-model.trim="search.keyword" clearable class="!w-[300px]" placeholder="型号 / IMEI / 资产号 / 来源 / 仓库" @keyup.enter="handleSearch" />
+                    <el-input v-model.trim="search.keyword" clearable class="!w-[300px]" placeholder="型号 / IMEI / SN / 规格 / 仓库" @keyup.enter="handleSearch" />
                 </el-form-item>
                 <el-form-item label="仓库">
                     <el-select v-model="search.warehouse_id" clearable class="!w-[160px]" placeholder="全部仓库" @change="onSearchWarehouseChange">
@@ -137,6 +112,11 @@
                         <el-option label="商城已上架" value="listed" />
                     </el-select>
                 </el-form-item>
+                <el-form-item>
+                    <el-checkbox v-model="search.my_task" :true-value="1" :false-value="0" @change="handleSearch">
+                        只看我的待办
+                    </el-checkbox>
+                </el-form-item>
                 <el-form-item label="入库时间">
                     <el-date-picker v-model="search.dateRange" type="daterange" value-format="X" start-placeholder="开始" end-placeholder="结束" class="!w-[260px]" />
                 </el-form-item>
@@ -154,7 +134,7 @@
                         <el-option label="严重滞销" value="critical" />
                     </el-select>
                 </el-form-item>
-                <el-form-item label="成本">
+                <el-form-item v-if="canViewCost" label="成本">
                     <el-input-number v-model="search.min_cost" :min="0" :precision="2" :controls="false" placeholder="最低" class="!w-[110px]" />
                     <span class="mx-1 text-gray-400">-</span>
                     <el-input-number v-model="search.max_cost" :min="0" :precision="2" :controls="false" placeholder="最高" class="!w-[110px]" />
@@ -174,13 +154,13 @@
                 <el-table-column type="selection" width="48" :selectable="row => row.status === 'in_stock'" />
                 <el-table-column label="设备" min-width="260">
                     <template #default="{ row }">
-                        <ErpDeviceIdentity :model="row.model" :spec="row.spec" :imei="row.imei" :sn="row.sn" :asset-no="row.asset_no" />
+                        <ErpDeviceIdentity :model="row.model" :spec="row.spec" :imei="row.imei" :sn="row.sn" />
                     </template>
                 </el-table-column>
                 <el-table-column label="入库" min-width="230">
                     <template #default="{ row }">
                         <div class="lifecycle-cell lifecycle-cell--inbound">
-                            <div class="lifecycle-cell__title">{{ row.inbound_party_name || row.party_name || '来源未记录' }}</div>
+                            <div class="lifecycle-cell__title">{{ canViewSupplier ? (row.inbound_party_name || row.party_name || '来源未记录') : (row.inbound_origin_name || '采购入库') }}</div>
                             <div class="lifecycle-cell__line">{{ row.inbound_purchase_no || '手工入库' }}</div>
                             <div class="lifecycle-cell__line">来源 {{ row.inbound_origin_name || 'ERP采购' }}<span v-if="row.inbound_origin_plugin_name">· {{ row.inbound_origin_plugin_name }}</span></div>
                             <div class="lifecycle-cell__line">{{ [row.inbound_warehouse_name, row.inbound_location_name].filter(Boolean).join(' / ') || '位置未记录' }}</div>
@@ -200,12 +180,13 @@
                         <div v-if="row.status === 'in_stock' && row.turnover_level !== 'healthy'" class="mt-1 text-xs text-gray-400">{{ row.turnover_action }}</div>
                     </template>
                 </el-table-column>
-                <el-table-column label="成本 / 价值" min-width="175" align="right">
+                <el-table-column label="价格信息" min-width="175" align="right">
                     <template #default="{ row }">
-                        <div class="font-medium text-gray-900">{{ money(row.total_cost) }}</div>
-                        <div v-if="row.status === 'in_stock'" class="mt-1 text-xs text-gray-500">{{ Number(row.retail_price || 0) > 0 ? '零售价' : '内部预估' }} {{ firstPositiveErpAmount(row.retail_price, row.estimate_sale_price) ? money(firstPositiveErpAmount(row.retail_price, row.estimate_sale_price)) : '-' }}</div>
-                        <div v-else-if="hasEffectiveOutbound(row)" class="mt-1 text-xs" :class="Number(row.outbound_profit || 0) >= 0 ? 'text-green-600' : 'text-red-600'">实际毛利 {{ money(row.outbound_profit) }}</div>
-                        <div v-else class="mt-1 text-xs text-gray-400">历史成本</div>
+                        <div v-if="row.status === 'in_stock'" class="font-medium text-gray-900">{{ Number(row.retail_price || 0) > 0 ? money(row.retail_price) : (Number(row.estimate_sale_price || 0) > 0 ? money(row.estimate_sale_price) : '-') }}</div>
+                        <div v-else-if="hasEffectiveOutbound(row)" class="font-medium text-gray-900">成交 {{ money(row.outbound_net_sale_amount) }}</div>
+                        <div v-else class="font-medium text-gray-400">-</div>
+                        <div v-if="canViewCost" class="mt-1 text-xs text-gray-500">成本 {{ money(row.total_cost) }}</div>
+                        <div v-if="canViewProfit && hasEffectiveOutbound(row)" class="mt-1 text-xs" :class="Number(row.outbound_profit || 0) >= 0 ? 'text-green-600' : 'text-red-600'">毛利 {{ money(row.outbound_profit) }}</div>
                     </template>
                 </el-table-column>
                 <el-table-column label="出库" min-width="240">
@@ -217,7 +198,7 @@
                             </div>
                             <div class="lifecycle-cell__line">{{ row.outbound_sale_no || '销售单未记录' }}</div>
                             <div class="lifecycle-cell__line">来源 {{ row.outbound_origin_name || 'ERP销售' }}· 渠道 {{ row.outbound_channel || '-' }}</div>
-                            <div class="lifecycle-cell__line">实际收入 {{ money(row.outbound_net_sale_amount) }} · 毛利 {{ money(row.outbound_profit) }}</div>
+                            <div class="lifecycle-cell__line">实际收入 {{ money(row.outbound_net_sale_amount) }}<span v-if="canViewProfit"> · 毛利 {{ money(row.outbound_profit) }}</span></div>
                             <div v-if="Number(row.outbound_compensation_amount || 0)" class="lifecycle-cell__time">原成交 {{ money(row.outbound_sale_price) }} · 售后补差 -{{ money(row.outbound_compensation_amount) }}</div>
                             <div class="lifecycle-cell__time">{{ formatTime(row.outbound_at) }}</div>
                         </div>
@@ -243,6 +224,11 @@
                                 <el-tag v-if="row.sale_target === 'mall'" :type="listingMeta(row.listing_status).type" effect="plain">{{ listingMeta(row.listing_status).label }}</el-tag>
                                 <span v-if="row.task_assignee_name" class="text-xs text-gray-400">负责人 {{ row.task_assignee_name }}</span>
                             </div>
+                            <el-tooltip v-if="row.listing_sync?.last_error" :content="row.listing_sync.last_error" placement="top">
+                                <div class="mt-2 max-w-full cursor-help truncate text-xs text-red-500">
+                                    商城处理失败：{{ row.listing_sync.last_error }}
+                                </div>
+                            </el-tooltip>
                             <div v-if="row.quality_remark" class="mt-2 text-xs text-gray-500 line-clamp-1">{{ row.quality_remark }}</div>
                         </template>
                         <div v-else class="stock-exit-state" :class="stockExitToneClass(row.status)">
@@ -254,7 +240,7 @@
                         </div>
                     </template>
                 </el-table-column>
-                <el-table-column label="订单结算" min-width="210">
+                <el-table-column v-if="canViewFinance" label="订单结算" min-width="210">
                     <template #default="{ row }">
                         <div class="settlement-line">
                             <span class="settlement-line__label">采购款</span>
@@ -284,7 +270,7 @@
                                 <el-dropdown-item command="flow">完善资料</el-dropdown-item>
                                 <el-dropdown-item command="retail">设置/调整零售价</el-dropdown-item>
                                 <el-dropdown-item command="transfer" :disabled="!row.can_warehouse_action">{{ row.ownership_type === 'consigned' || row.warehouse_policy?.warehouse_type === 'consignment' ? '转为自有' : '调拨' }}</el-dropdown-item>
-                                <el-dropdown-item command="expense">成本调整</el-dropdown-item>
+                                <el-dropdown-item v-if="canAdjustCost" command="expense">成本调整</el-dropdown-item>
                                 <el-dropdown-item command="print_label">打印设备标签</el-dropdown-item>
                                 <el-dropdown-item v-if="row.refurbish_status === 'pending'" command="start_refurbish">开始整备</el-dropdown-item>
                                 <el-dropdown-item v-if="['pending','processing','failed'].includes(row.refurbish_status)" command="complete_refurbish">登记整备结果</el-dropdown-item>
@@ -306,10 +292,10 @@
                 />
             </div>
         </el-card>
+        <ErpSaleProfitReport v-model="ledgerVisible" initial-preset="inventory" />
 
-        <el-dialog v-model="flow.visible" :title="flowDialogTitle" width="620px" destroy-on-close>
+        <el-dialog v-model="flow.visible" :title="flowDialogTitle" width="680px" destroy-on-close>
             <el-form label-width="96px">
-                <el-alert :title="flowDialogTip" :type="flow.mode === 'all' ? 'warning' : 'info'" :closable="false" show-icon />
                 <div class="mt-4 rounded border border-gray-100 bg-gray-50 px-4 py-3">
                     <div class="font-medium">{{ flow.row?.model || '-' }}</div>
                     <div class="mt-1 text-xs text-gray-500">{{ flow.row?.spec || '未填写规格' }} · IMEI {{ flow.row?.imei || '-' }}</div>
@@ -328,51 +314,22 @@
                             <el-option label="上商城" value="mall" />
                         </el-select>
                     </el-form-item>
-                    <el-form-item label="商品型号">
-                        <ErpCatalogProductSelect v-model="flow.form.catalog_product_id" placeholder="搜索并选择目录型号" @change="onFlowCatalogChange" />
-                    </el-form-item>
-                    <el-form-item label="设备规格"><el-input v-model.trim="flow.form.spec" placeholder="容量、颜色、成色、电池等" /></el-form-item>
                     <el-form-item label="上架状态">
-                        <el-select v-model="flow.form.listing_status" class="w-full" :disabled="flow.form.sale_target !== 'mall'">
-                            <el-option label="不需要" value="none" />
-                            <el-option label="待拍照" value="need_photo" />
-                            <el-option label="待销售定价" value="need_price" />
-                            <el-option label="待商城资料整理" value="need_material" />
-                            <el-option label="待上架" value="ready" />
-                            <el-option label="商城已上架" value="listed" />
-                        </el-select>
+                        <div class="flex min-h-8 flex-col items-start justify-center gap-1">
+                            <el-tag :type="listingMeta(flow.form.listing_status).type" effect="plain">{{ listingMeta(flow.form.listing_status).label }}</el-tag>
+                            <span class="text-xs leading-5 text-gray-400">保存后由仓库规则和资料完整度自动判断；商城交接及上架结果由渠道回执更新。</span>
+                        </div>
                     </el-form-item>
                     <el-form-item label="内部预估价">
                         <el-input-number v-model="flow.form.estimate_sale_price" :min="0" :precision="2" :controls="false" class="!w-full" />
                     </el-form-item>
-                    <el-form-item label="销售零售价">
-                        <el-input-number v-model="flow.form.retail_price" :min="0" :precision="2" :controls="false" class="!w-full" placeholder="上架商城定价" />
-                    </el-form-item>
                 </div>
-                <div v-else-if="flow.mode === 'material'" class="mt-4 grid grid-cols-1 gap-x-4 md:grid-cols-2">
-                    <el-form-item label="商品型号">
-                        <ErpCatalogProductSelect v-model="flow.form.catalog_product_id" placeholder="搜索并选择目录型号" @change="onFlowCatalogChange" />
-                    </el-form-item>
-                    <el-form-item label="设备规格"><el-input v-model.trim="flow.form.spec" placeholder="容量、颜色、成色、电池等" /></el-form-item>
-                </div>
-                <el-form-item v-if="flow.mode === 'all' || flow.mode === 'photo'" label="设备图片">
-                    <upload-image v-model="flow.form.image_urls" :limit="9" width="72px" height="72px" image-text="上传/选择" />
-                </el-form-item>
-                <el-form-item v-if="flow.mode === 'all' || flow.mode === 'photo'" label="展示视频">
-                    <div class="w-full">
-                        <upload-video v-model="flow.form.video_url" :limit="1" />
-                        <div class="mt-2 text-xs text-slate-400">选填，最多 1 个视频；保存后随商品资料发布到商城。</div>
-                    </div>
-                </el-form-item>
-                <el-form-item v-if="flow.mode === 'all' || flow.mode === 'photo'" label="质检备注">
-                    <el-input v-model.trim="flow.form.quality_remark" type="textarea" :rows="2" placeholder="质检、外观说明（内部使用）" />
-                </el-form-item>
-                <el-form-item v-if="flow.mode === 'all' || flow.mode === 'material'" label="对外说明">
-                    <el-input v-model.trim="flow.form.remark_public" type="textarea" :rows="2" placeholder="展示给客户/商城的描述" />
-                </el-form-item>
-                <el-form-item v-if="flow.mode === 'all'" label="对内备注">
-                    <el-input v-model.trim="flow.form.remark_internal" placeholder="员工内部备注，不对外展示" />
-                </el-form-item>
+                <ErpListingWorkspaceForm
+                    v-model="flow.form"
+                    :contract="flow.row?.listing_workspace"
+                    :action="flowContractAction"
+                    @catalog-change="onFlowCatalogChange"
+                />
             </el-form>
             <template #footer>
                 <el-button @click="flow.visible = false">取消</el-button>
@@ -407,7 +364,7 @@
         </el-dialog>
 
         <el-dialog v-model="retail.visible" :title="Number(retail.row?.retail_price || 0) > 0 ? '调整零售价' : '设置零售价'" width="480px" destroy-on-close>
-            <div class="rounded-lg bg-slate-50 px-4 py-3"><div class="font-medium text-slate-800">{{ retail.row?.model || '-' }}</div><div class="mt-1 text-xs text-slate-500">IMEI {{ retail.row?.imei || '-' }} · 成本 {{ money(retail.row?.total_cost) }}</div></div>
+            <div class="rounded-lg bg-slate-50 px-4 py-3"><div class="font-medium text-slate-800">{{ retail.row?.model || '-' }}</div><div class="mt-1 text-xs text-slate-500">IMEI {{ retail.row?.imei || '-' }}<span v-if="canViewCost"> · 成本 {{ money(retail.row?.total_cost) }}</span></div></div>
             <el-form class="mt-4" label-width="92px">
                 <el-form-item label="当前零售价"><span>{{ Number(retail.row?.retail_price || 0) > 0 ? money(retail.row?.retail_price) : '未设置' }}</span></el-form-item>
                 <el-form-item label="新零售价" required><el-input-number v-model="retail.form.retail_price" :min="0.01" :precision="2" :controls="false" class="!w-full" /></el-form-item>
@@ -437,16 +394,16 @@
         </el-dialog>
 
         <el-dialog v-model="serialTrace.visible" title="串号追踪" width="920px" destroy-on-close>
-            <div class="mb-4 flex gap-2"><el-input v-model.trim="serialTrace.keyword" clearable placeholder="输入 IMEI / SN / 型号 / 供货商" @keyup.enter="loadSerialTrace" /><el-button type="primary" @click="loadSerialTrace">查询</el-button></div>
+            <div class="mb-4 flex gap-2"><el-input v-model.trim="serialTrace.keyword" clearable :placeholder="canViewSupplier ? '输入 IMEI / SN / 型号 / 供货商' : '输入 IMEI / SN / 型号'" @keyup.enter="loadSerialTrace" /><el-button type="primary" @click="loadSerialTrace">查询</el-button></div>
             <el-alert class="mb-4" title="同一串号允许多次入库；每次作为独立记录，最新入库排在最上面。" type="info" :closable="false" show-icon />
             <div v-loading="serialTrace.loading" class="min-h-[120px]">
                 <div v-if="serialTrace.data.length" class="overflow-hidden rounded-lg border border-slate-200">
-                    <div class="grid grid-cols-[minmax(220px,2fr)_minmax(140px,1fr)_170px_90px_100px_90px] gap-3 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-500">
-                        <span>设备</span><span>供货商</span><span>入库时间</span><span>次数</span><span>状态</span><span>操作</span>
+                    <div class="grid gap-3 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-500" :class="canViewSupplier ? 'grid-cols-[minmax(220px,2fr)_minmax(140px,1fr)_170px_90px_100px_90px]' : 'grid-cols-[minmax(260px,2fr)_170px_90px_100px_90px]'">
+                        <span>设备</span><span v-if="canViewSupplier">供货商</span><span>入库时间</span><span>次数</span><span>状态</span><span>操作</span>
                     </div>
-                    <div v-for="row in serialTrace.data" :key="row.id" class="grid grid-cols-[minmax(220px,2fr)_minmax(140px,1fr)_170px_90px_100px_90px] items-center gap-3 border-t border-slate-100 px-4 py-3 text-sm">
+                    <div v-for="row in serialTrace.data" :key="row.id" class="grid items-center gap-3 border-t border-slate-100 px-4 py-3 text-sm" :class="canViewSupplier ? 'grid-cols-[minmax(220px,2fr)_minmax(140px,1fr)_170px_90px_100px_90px]' : 'grid-cols-[minmax(260px,2fr)_170px_90px_100px_90px]'">
                         <div class="min-w-0"><div class="truncate font-medium" :title="row.model">{{ row.model || '-' }}</div><div class="mt-1 text-xs text-blue-600">{{ row.serial_no || '-' }}</div><div class="mt-1 truncate text-xs text-gray-400" :title="row.spec">{{ row.spec || '-' }}</div></div>
-                        <div class="truncate" :title="row.party_name || '未记录'">{{ row.party_name || '未记录' }}</div>
+                        <div v-if="canViewSupplier" class="truncate" :title="row.party_name || '未记录'">{{ row.party_name || '未记录' }}</div>
                         <div>{{ formatTime(row.stock_in_at || row.create_at) }}</div>
                         <div><el-tag v-if="row.inbound_count > 1" type="warning">{{ row.inbound_count }} 次</el-tag><span v-else>首次</span></div>
                         <div><el-tag :type="assetStatusMeta(row.status).type">{{ assetStatusMeta(row.status).label }}</el-tag></div>
@@ -487,7 +444,7 @@
                     <div class="mt-3 grid grid-cols-2 gap-3">
                         <button v-for="cycle in serialTraceDetail.data.cycles || []" :key="cycle.id" type="button" class="rounded-lg border p-4 text-left transition hover:border-blue-400 hover:bg-blue-50" :class="cycle.is_current ? 'border-blue-400 bg-blue-50' : 'border-slate-200 bg-white'" @click="openTraceCycle(cycle)">
                             <div class="flex items-center justify-between gap-2"><span class="font-semibold text-blue-700">第 {{ cycle.cycle_no }} 次入库</span><el-tag v-if="cycle.is_current" size="small" type="primary">当前周期</el-tag></div>
-                            <div class="mt-2 truncate text-sm text-slate-700" :title="cycle.party_name || '未记录供应商'">{{ cycle.party_name || '未记录供应商' }}</div>
+                            <div v-if="canViewSupplier" class="mt-2 truncate text-sm text-slate-700" :title="cycle.party_name || '未记录供应商'">{{ cycle.party_name || '未记录供应商' }}</div>
                             <div class="mt-1 text-xs text-slate-400">{{ formatTime(cycle.stock_in_at || cycle.create_at) }}</div>
                             <div class="mt-2 truncate text-xs text-slate-500" :title="`${cycle.warehouse_name || '未记录仓库'} / ${cycle.location_name || '未记录库位'}`">{{ cycle.warehouse_name || '未记录仓库' }} / {{ cycle.location_name || '未记录库位' }}</div>
                         </button>
@@ -505,7 +462,7 @@
                                 <div v-if="node.before_status || node.after_status" class="mt-3 flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-500">
                                     <span>{{ node.before_status_text || assetStatusMeta(node.before_status).label }}</span><span class="text-slate-300">→</span><strong class="text-slate-700">{{ node.after_status_text || assetStatusMeta(node.after_status).label }}</strong>
                                 </div>
-                                <div v-if="isTraceCostAdjust(node)" class="mt-3 rounded-md border border-amber-100 bg-amber-50 px-3 py-3">
+                                <div v-if="canViewCost && isTraceCostAdjust(node)" class="mt-3 rounded-md border border-amber-100 bg-amber-50 px-3 py-3">
                                     <div class="flex items-center justify-between gap-3"><span class="text-sm font-medium text-amber-800">{{ node.cost_type_text || '成本调整' }}</span><strong :class="Number(node.cost_delta || 0) >= 0 ? 'text-red-600' : 'text-green-600'">{{ signedMoney(node.cost_delta) }}</strong></div>
                                     <div class="mt-1 text-xs text-amber-700/80">设备成本：{{ money(node.before_total_cost) }} → {{ money(node.after_total_cost) }}</div>
                                 </div>
@@ -556,7 +513,7 @@
         </el-dialog>
 
         <el-dialog v-model="completeRefurbish.visible" title="登记整备结果" width="820px" destroy-on-close>
-            <div class="rounded-lg bg-slate-50 p-4"><div class="font-medium">{{ completeRefurbish.row?.model || '-' }}</div><div class="mt-1 text-xs text-gray-500">IMEI {{ completeRefurbish.row?.imei || '-' }} · 当前成本 {{ money(completeRefurbish.row?.total_cost) }}</div></div>
+            <div class="rounded-lg bg-slate-50 p-4"><div class="font-medium">{{ completeRefurbish.row?.model || '-' }}</div><div class="mt-1 text-xs text-gray-500">IMEI {{ completeRefurbish.row?.imei || '-' }}<span v-if="canViewCost"> · 当前成本 {{ money(completeRefurbish.row?.total_cost) }}</span></div></div>
             <el-form class="mt-4" label-width="100px">
                 <el-form-item label="整备结果" required><el-radio-group v-model="completeRefurbish.form.result"><el-radio-button label="success">修复成功</el-radio-button><el-radio-button label="partial">部分修复</el-radio-button><el-radio-button label="failed">修复失败</el-radio-button></el-radio-group></el-form-item>
                 <el-form-item label="实际项目"><div class="w-full space-y-2"><div v-for="(item,index) in completeRefurbish.form.refurbish_items" :key="index" class="grid grid-cols-12 gap-2"><el-input v-model.trim="item.name" class="col-span-4" placeholder="例如换屏、换电池、人工" /><el-input-number v-model="item.amount" class="!w-full col-span-3" :min="0" :precision="2" :controls="false" placeholder="金额" /><div class="col-span-4"><counterparty-select v-model="item.party_id" role-type="supplier" placeholder="服务商" /></div><el-button class="col-span-1" text type="danger" @click="removeRefurbishItem(index)">删除</el-button></div><el-button plain type="primary" @click="addRefurbishItem">+ 添加实际整备项目</el-button><div class="text-xs text-gray-400">没有产生费用可以不添加；每项可选择不同整备商，系统按设备、按服务商分别生成应付。</div></div></el-form-item>
@@ -594,17 +551,20 @@
                     </div>
 
                     <el-descriptions class="mt-5" :column="3" border>
-                        <el-descriptions-item label="采购来源">{{ detail.data.party_name || '-' }}</el-descriptions-item>
+                        <el-descriptions-item v-if="canViewSupplier" label="采购来源">{{ detail.data.party_name || '-' }}</el-descriptions-item>
                         <el-descriptions-item label="物权归属">{{ detail.data.ownership_type === 'consigned' ? (detail.data.owner_party_name || detail.data.party_name || '客户') : '本公司' }}</el-descriptions-item>
                         <el-descriptions-item :label="detail.data.status === 'in_stock' ? '当前仓库' : '出库仓库'">{{ [detail.data.warehouse_name, detail.data.location_name].filter(Boolean).join(' / ') || '-' }}</el-descriptions-item>
                         <el-descriptions-item label="质检员">{{ detail.data.inspector_name || '-' }}</el-descriptions-item>
                         <el-descriptions-item v-if="detail.data.status === 'in_stock'" label="销售零售价">{{ Number(detail.data.retail_price || 0) ? money(detail.data.retail_price) : '未设置' }}</el-descriptions-item>
                         <el-descriptions-item v-if="detail.data.status === 'in_stock'" label="入库库龄">{{ detail.data.stock_in_at ? `${stockAgeDays(detail.data.stock_in_at)} 天` : '-' }}</el-descriptions-item>
                         <el-descriptions-item v-if="detail.data.status === 'in_stock'" label="上架状态">{{ listingMeta(detail.data.listing_status).label }}</el-descriptions-item>
+                        <el-descriptions-item v-if="detail.data.listing_sync?.last_error" label="商城异常" :span="2">
+                            <span class="text-red-500">{{ detail.data.listing_sync.last_error }}</span>
+                        </el-descriptions-item>
                         <el-descriptions-item v-if="detail.data.status !== 'in_stock'" label="原成交价">{{ Number(detail.data.sale_price || detail.data.last_sale_item?.sale_price || 0) ? money(detail.data.sale_price || detail.data.last_sale_item?.sale_price) : '-' }}</el-descriptions-item>
                         <el-descriptions-item v-if="detail.data.status !== 'in_stock'" label="售后补差">{{ Number(detail.data.sale_compensation_amount || 0) ? `-${money(detail.data.sale_compensation_amount)}` : money(0) }}</el-descriptions-item>
                         <el-descriptions-item v-if="detail.data.status !== 'in_stock'" label="实际销售收入">{{ money(detail.data.net_sale_amount) }}</el-descriptions-item>
-                        <el-descriptions-item v-if="detail.data.status !== 'in_stock'" label="最近毛利">{{ Number(detail.data.profit || detail.data.last_sale_item?.profit || 0) ? money(detail.data.profit || detail.data.last_sale_item?.profit) : '-' }}</el-descriptions-item>
+                        <el-descriptions-item v-if="detail.data.status !== 'in_stock' && canViewProfit" label="最近毛利">{{ Number(detail.data.profit || detail.data.last_sale_item?.profit || 0) ? money(detail.data.profit || detail.data.last_sale_item?.profit) : '-' }}</el-descriptions-item>
                         <el-descriptions-item v-if="detail.data.status !== 'in_stock'" label="销售单">{{ detail.data.sale_order?.sale_no || '-' }}</el-descriptions-item>
                         <el-descriptions-item label="入库图片" :span="3"><ErpImageGallery :value="detail.data.image_urls" :size="72" :limit="9" /></el-descriptions-item>
                         <el-descriptions-item label="备注" :span="3" width="100">
@@ -613,12 +573,12 @@
                     </el-descriptions>
 
                     <el-collapse v-model="detailActivePanels" class="mt-6">
-                        <el-collapse-item name="purchase" title="采购批次">
+                        <el-collapse-item v-if="canViewSupplier || canViewFinance" name="purchase" title="采购批次">
                             <div class="section-title">采购批次</div>
                             <el-descriptions :column="1" border>
                                 <el-descriptions-item label="采购单">{{ detail.data.purchase_order?.purchase_no || '-' }}</el-descriptions-item>
-                                <el-descriptions-item label="采购用户">{{ detail.data.purchase_order?.party_name || detail.data.party_name || '-' }}</el-descriptions-item>
-                                <el-descriptions-item label="付款状态">{{ financeStatusLabel(detail.data.purchase_order?.finance_status) }}</el-descriptions-item>
+                                <el-descriptions-item v-if="canViewSupplier" label="采购用户">{{ detail.data.purchase_order?.party_name || detail.data.party_name || '-' }}</el-descriptions-item>
+                                <el-descriptions-item v-if="canViewFinance" label="付款状态">{{ financeStatusLabel(detail.data.purchase_order?.finance_status) }}</el-descriptions-item>
                             </el-descriptions>
                         </el-collapse-item>
                         <el-collapse-item name="sale" title="销售批次">
@@ -626,7 +586,7 @@
                             <el-descriptions :column="1" border>
                                 <el-descriptions-item label="销售单">{{ detail.data.sale_order?.sale_no || '-' }}</el-descriptions-item>
                                 <el-descriptions-item label="销售客户">{{ detail.data.sale_order?.party_name || '-' }}</el-descriptions-item>
-                                <el-descriptions-item label="收款状态">{{ financeStatusLabel(detail.data.sale_order?.finance_status) }}</el-descriptions-item>
+                                <el-descriptions-item v-if="canViewFinance" label="收款状态">{{ financeStatusLabel(detail.data.sale_order?.finance_status) }}</el-descriptions-item>
                             </el-descriptions>
                         </el-collapse-item>
                     </el-collapse>
@@ -655,7 +615,7 @@
                                     </div>
                                 </template>
                             </el-table-column>
-                            <el-table-column label="成本变化" width="190" align="right">
+                            <el-table-column v-if="canViewCost" label="成本变化" width="190" align="right">
                                 <template #default="{ row }">
                                     <div>{{ money(row.before_total_cost) }} → {{ money(row.after_total_cost) }}</div>
                                     <div v-if="Number(row.cost_delta || 0)" class="text-xs" :class="Number(row.cost_delta || 0) > 0 ? 'text-red-500' : 'text-green-600'">
@@ -674,7 +634,7 @@
                         </el-table>
                     </div>
 
-                    <div class="mt-6">
+                    <div v-if="canViewFinance" class="mt-6">
                         <div class="section-title">设备账务轨迹</div>
                         <el-alert class="mb-3" title="展示这台设备从采购应付、销售应收到付款、收款、折账及冲销的完整轨迹；已撤销销售会明确标记‘已冲销’，同一笔售后补差的应付与付款会合并展示。" type="info" :closable="false" show-icon />
                         <el-empty v-if="!accountTimelineRows(detail.data.account_ledgers).length" description="暂无设备账务记录" />
@@ -703,19 +663,24 @@ import { computed, nextTick, onActivated, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
-import { adjustErpStockCost, adjustErpStockRetailPrice, buyoutErpConsignment, completeErpStockRefurbish, getErpSerialTraceDetail, getErpSerialTraceList, getErpStockInfo, getErpStockList, getErpStockListingWorkload, getErpStockTurnoverSummary, prepareErpStockListingMedia, previewErpStockTransfer, printErpAssetLabel, sendErpStockRefurbish, syncErpStockListing, transferErpStock, updateErpStockFlow } from '@/addon/hsx_erp/api/erp'
+import { adjustErpStockCost, adjustErpStockRetailPrice, buyoutErpConsignment, completeErpStockRefurbish, getErpSerialTraceDetail, getErpSerialTraceList, getErpStockInfo, getErpStockList, getErpStockTurnoverSummary, prepareErpStockListingMedia, previewErpStockTransfer, printErpAssetLabel, sendErpStockRefurbish, syncErpStockListing, transferErpStock, updateErpStockFlow } from '@/addon/hsx_erp/api/erp'
 import { getErpFinanceCategories } from '@/addon/hsx_erp/api/config'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 import ErpDeviceIdentity from '@/addon/hsx_erp/components/ErpDeviceIdentity.vue'
-import ErpRoleFocus from '@/addon/hsx_erp/components/ErpRoleFocus.vue'
 import ErpImageGallery from '@/addon/hsx_erp/components/ErpImageGallery.vue'
 import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/index.vue'
 import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVoucherUpload.vue'
 import ErpCatalogProductSelect from '@/addon/hsx_erp/components/ErpCatalogProductSelect.vue'
+import ErpListingWorkspaceForm from '@/addon/hsx_erp/components/ErpListingWorkspaceForm.vue'
+import ErpSaleProfitReport from '@/addon/hsx_erp/components/ErpSaleProfitReport.vue'
 import { firstPositiveErpAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
+import { erpListingFeedback } from '@/addon/hsx_erp/hooks/useErpListingFeedback'
+import { erpListingFormDefinition, erpListingFormPayload, validateErpListingForm, type ErpListingAction } from '@/addon/hsx_erp/hooks/useErpListingForm'
 import QRCode from 'qrcode'
 
-const search = reactive<any>({ keyword: '', status: '', refurbish_status: '', sale_target: '', listing_status: '', turnover_level: '', warehouse_id: '', location_id: '', catalog_product_id: '', dateRange: [], stock_age_min: undefined, stock_age_max: undefined, min_cost: undefined, max_cost: undefined, min_price: undefined, max_price: undefined })
+const ledgerVisible = ref(false)
+
+const search = reactive<any>({ keyword: '', status: '', refurbish_status: '', sale_target: '', listing_status: '', my_task: 0, turnover_level: '', warehouse_id: '', location_id: '', catalog_product_id: '', dateRange: [], stock_age_min: undefined, stock_age_max: undefined, min_cost: undefined, max_cost: undefined, min_price: undefined, max_price: undefined })
 const route = useRoute()
 const router = useRouter()
 const activeTab = ref('')
@@ -727,24 +692,21 @@ function onTabChange(tab: string) {
 }
 const table = reactive({ loading: false, data: [] as any[], page: 1, limit: 15, total: 0 })
 const turnoverSummary = ref<any>({ thresholds: {} })
-const listingWorkload = ref<any>({ totals: {}, staff: [] })
-const listingStageItems = computed(() => [
-    { key: 'photo', label: '商品拍摄', count: Number(listingWorkload.value?.totals?.photo || 0) },
-    { key: 'price', label: '销售定价', count: Number(listingWorkload.value?.totals?.price || 0) },
-    { key: 'material', label: '资料整理', count: Number(listingWorkload.value?.totals?.material || 0) },
-    { key: 'publish', label: '成功上架', count: Number(listingWorkload.value?.totals?.publish || 0) },
-])
+const stockCapabilities = ref<any>({ is_admin: 0, view_cost: 0, adjust_cost: 0, view_profit: 0, view_supplier: 0, view_finance: 0, view_team_workload: 0 })
+const canViewCost = computed(() => Number(stockCapabilities.value?.view_cost || 0) === 1)
+const canAdjustCost = computed(() => Number(stockCapabilities.value?.adjust_cost || 0) === 1)
+const canViewProfit = computed(() => Number(stockCapabilities.value?.view_profit || 0) === 1)
+const canViewSupplier = computed(() => Number(stockCapabilities.value?.view_supplier || 0) === 1)
+const canViewFinance = computed(() => Number(stockCapabilities.value?.view_finance || 0) === 1)
 const detail = reactive({ visible: false, loading: false, data: null as any })
 const detailActivePanels = ref<string[]>([])
-const flow = reactive({ visible: false, saving: false, mode: 'all' as 'all' | 'photo' | 'material', row: null as any, form: defaultFlowForm() })
+type FlowMode = 'all' | ErpListingAction
+const flow = reactive({ visible: false, saving: false, mode: 'all' as FlowMode, row: null as any, form: defaultFlowForm() })
 const mediaTask = reactive({ visible: false, loading: false, row: null as any, data: null as any, url: '', qr: '' })
-const flowDialogTitle = computed(() => ({ all: '设备流转设置', photo: '完成商品拍摄', material: '整理商城资料' }[flow.mode]))
-const flowDialogTip = computed(() => ({
-    all: '待整备或整备中的设备不会出现在销售出库的待售库存中。',
-    photo: '本岗位只需上传标准商品图并记录必要的质检备注；保存后设备会自动进入销售定价。',
-    material: '请核对商品型号、规格和对外说明；保存后系统会重新判断是否满足上架条件。',
-}[flow.mode]))
-const flowSubmitLabel = computed(() => ({ all: '保存设置', photo: '完成拍摄', material: '完成资料整理' }[flow.mode]))
+const flowContractAction = computed<ErpListingAction>(() => flow.mode === 'all' ? 'one_stop' : flow.mode)
+const flowFormDefinition = computed(() => erpListingFormDefinition(flow.row?.listing_workspace, flowContractAction.value))
+const flowDialogTitle = computed(() => flow.mode === 'all' ? '设备流转设置' : flowFormDefinition.value.title)
+const flowSubmitLabel = computed(() => flow.mode === 'all' ? '保存设置' : flowFormDefinition.value.submit_label)
 const retail = reactive({ visible: false, saving: false, row: null as any, form: { retail_price: 0, reason: '' } })
 const transfer = reactive({ visible: false, saving: false, previewLoading: false, preview: null as any, assetIds: [] as number[], form: { warehouse_id: 0, location_id: 0, buyout_amount: 0, reason: '' } })
 const expense = reactive({ visible: false, saving: false, row: null as any, form: { cost_type: 'refurbish', expense_type_key: '', party_id: 0, party_name: '', amount: 0, after_cost: 0, reason: '' } })
@@ -770,22 +732,6 @@ const costTypeTip = computed(() => ({
     purchase_adjust: '供应商调价会同步采购本金和供应商应付；已形成付款事实时后端会阻止直接修改。',
     internal_adjust: '内部修正只订正账面成本，不改变供应商往来。',
 }[expense.form.cost_type] || '请核对成本调整类型和金额'))
-const stockRoleFocus = [
-    { role: '仓管', focus: '入库位置、当前库存、库龄与出库结果' },
-    { role: '销售', focus: '可售状态、销售零售价、客户与最近成交' },
-    { role: '财务', focus: '采购成本、销售毛利与完整资产追溯' },
-]
-
-const summary = computed(() => table.data.reduce((acc, row: any) => {
-    acc.count += 1
-    if (row.status === 'in_stock') acc.cost += Number(row.total_cost || 0)
-    if (row.status === 'in_stock') acc.inStockCount += 1
-    if (['pending', 'processing', 'failed'].includes(row.refurbish_status || '')) acc.needRefurbish += 1
-    if (row.status === 'in_stock' && !['pending', 'processing', 'failed'].includes(row.refurbish_status || '')) acc.saleable += 1
-    if (row.status === 'sold') acc.sold += 1
-    return acc
-}, { count: 0, cost: 0, inStockCount: 0, needRefurbish: 0, saleable: 0, sold: 0 }))
-
 onMounted(() => {
     if (route.query.refurbish_status) search.refurbish_status = String(route.query.refurbish_status)
     if (route.query.turnover_level) search.turnover_level = String(route.query.turnover_level)
@@ -846,16 +792,14 @@ function onFlowCatalogChange(node: any) {
 async function loadList() {
     table.loading = true
     try {
-        const [res, turnoverRes, workloadRes]: any[] = await Promise.all([
+        const [res, turnoverRes]: any[] = await Promise.all([
             getErpStockList({ ...buildSearchParams(), page: table.page, limit: table.limit }),
-            getErpStockTurnoverSummary(),
-            // 协作量是增强投影，旧站点尚未刷新权限/路由时不能连带阻断库存主列表。
-            getErpStockListingWorkload().catch(() => null)
+            getErpStockTurnoverSummary()
         ])
         table.data = res?.data?.data || []
         table.total = res?.data?.total || 0
         turnoverSummary.value = turnoverRes?.data || { thresholds: {} }
-        if (workloadRes) listingWorkload.value = workloadRes?.data || { totals: {}, staff: [] }
+        stockCapabilities.value = res?.data?.capabilities || turnoverRes?.data?.capabilities || stockCapabilities.value
     } finally {
         table.loading = false
     }
@@ -876,6 +820,7 @@ async function loadSerialTrace() {
         // 保留同一响应式数组引用，兼容 destroy-on-close 弹窗的重新挂载。
         serialTrace.data.splice(0, serialTrace.data.length, ...rows)
         serialTrace.total = Number(res?.data?.total || 0)
+        stockCapabilities.value = res?.data?.capabilities || stockCapabilities.value
     } finally { serialTrace.loading = false }
 }
 async function openTraceDetail(row: any) {
@@ -886,6 +831,7 @@ async function openTraceDetail(row: any) {
     try {
         const res: any = await getErpSerialTraceDetail(Number(row.id))
         serialTraceDetail.data = res?.data || null
+        stockCapabilities.value = serialTraceDetail.data?.capabilities || stockCapabilities.value
     } catch (error: any) {
         serialTraceDetail.visible = false
         ElMessage.error(error?.message || '串号生命周期加载失败')
@@ -1008,8 +954,8 @@ async function submitCompleteRefurbish() {
     if (!confirmed) return
     completeRefurbish.saving = true
     try {
-        await completeErpStockRefurbish(completeRefurbish.row.id, completeRefurbish.form)
-        ElMessage.success('整备结果已登记，成本与应付已同步')
+        const res: any = await completeErpStockRefurbish(completeRefurbish.row.id, completeRefurbish.form)
+        await showListingFeedback(res?.data?._workflow?.publish, '整备结果已登记，成本与应付已同步')
         completeRefurbish.visible = false
         await loadList()
     } finally { completeRefurbish.saving = false }
@@ -1057,7 +1003,7 @@ function applyWarehouseRisk(item: any) {
 }
 
 function handleReset() {
-    Object.assign(search, { keyword: '', status: '', refurbish_status: '', sale_target: '', listing_status: '', turnover_level: '', warehouse_id: '', location_id: '', catalog_product_id: '', dateRange: [], stock_age_min: undefined, stock_age_max: undefined, min_cost: undefined, max_cost: undefined, min_price: undefined, max_price: undefined })
+    Object.assign(search, { keyword: '', status: '', refurbish_status: '', sale_target: '', listing_status: '', my_task: 0, turnover_level: '', warehouse_id: '', location_id: '', catalog_product_id: '', dateRange: [], stock_age_min: undefined, stock_age_max: undefined, min_cost: undefined, max_cost: undefined, min_price: undefined, max_price: undefined })
     activeTab.value = ''
     handleSearch()
 }
@@ -1072,13 +1018,14 @@ async function openDetail(row: any) {
     try {
         const res: any = await getErpStockInfo(row.id)
         detail.data = res?.data || null
+        stockCapabilities.value = detail.data?.capabilities || stockCapabilities.value
         detailActivePanels.value = detail.data?.status === 'in_stock' ? ['purchase'] : ['sale']
     } finally {
         detail.loading = false
     }
 }
 
-function openFlow(row: any, mode: 'all' | 'photo' | 'material' = 'all') {
+function openFlow(row: any, mode: FlowMode = 'all') {
     flow.row = row
     flow.mode = mode
     flow.form = {
@@ -1115,8 +1062,8 @@ async function submitRetailPrice() {
     if (!confirmed) return
     retail.saving = true
     try {
-        await adjustErpStockRetailPrice(retail.row.id, { ...retail.form })
-        ElMessage.success('零售价已保存')
+        const res: any = await adjustErpStockRetailPrice(retail.row.id, { ...retail.form })
+        await showListingFeedback(res?.data?._workflow?.publish, '零售价已保存')
         retail.visible = false
         await loadList()
     } finally { retail.saving = false }
@@ -1186,7 +1133,8 @@ function goSale(assetIds: number[]) {
 
 function handleTurnoverAction(row: any) {
     const action = String(row?.turnover_action_key || row?.warehouse_policy?.primary_action || 'view')
-    if (['set_retail_price', 'adjust_retail_price', 'complete_listing_price'].includes(action)) return openRetailPrice(row)
+    if (action === 'complete_listing_price') return openFlow(row, 'price')
+    if (['set_retail_price', 'adjust_retail_price'].includes(action)) return openRetailPrice(row)
     if (action === 'direct_sale') return goSale([Number(row.id)])
     if (action === 'transfer') return openTransfer(row)
     if (action === 'start_refurbish') return openSendRefurbish(row)
@@ -1194,8 +1142,8 @@ function handleTurnoverAction(row: any) {
     if (action === 'publish_listing') return publishListing(row)
     if (action === 'complete_listing_photo') return openFlow(row, 'photo')
     if (action === 'complete_listing_material') return openFlow(row, 'material')
-    if (action === 'complete_listing_media_price') return openFlow(row)
-    if (action === 'complete_listing') return openFlow(row)
+    if (action === 'complete_listing_media_price') return openFlow(row, 'media_price')
+    if (action === 'complete_listing') return openFlow(row, 'one_stop')
     if (action === 'prepare_listing_media') return prepareListingMedia(row)
     if (action === 'resolve_warehouse') return openTransfer(row)
     return openDetail(row)
@@ -1266,19 +1214,31 @@ function onTargetChange(value: string) {
 
 async function submitFlow() {
     if (!flow.row?.id) return
-    if (flow.mode === 'photo' && !String(flow.form.image_urls || '').trim()) return ElMessage.warning('请至少上传一张商品图片')
-    if (flow.mode === 'material' && !Number(flow.form.catalog_product_id || 0)) return ElMessage.warning('请选择商品型号')
-    if (flow.mode === 'material' && !String(flow.form.spec || '').trim()) return ElMessage.warning('请填写设备规格')
+    const validationMessage = validateErpListingForm(flow.form, flow.row?.listing_workspace, flowContractAction.value)
+    if (validationMessage) return ElMessage.warning(validationMessage)
     const confirmed = await ElMessageBox.confirm(
-        `确认更新设备「${flow.row.model || flow.row.imei || flow.row.asset_no || '-'}」的业务流转：${refurbishMeta(flow.form.refurbish_status).label}、${targetMeta(flow.form.sale_target).label}、${listingMeta(flow.form.listing_status).label}。该变更会影响仓管和销售后续操作，并保留设备流水。`,
-        '确认更新设备流转',
+        flow.mode === 'all'
+            ? `确认更新设备「${flow.row.model || flow.row.imei || flow.row.asset_no || '-'}」的业务流转：${refurbishMeta(flow.form.refurbish_status).label}、${targetMeta(flow.form.sale_target).label}。上架状态将由系统按仓库规则和当前资料自动判断，并保留设备流水。`
+            : `确认完成设备「${flow.row.model || flow.row.imei || flow.row.asset_no || '-'}」的“${flowFormDefinition.value.title}”步骤？保存后系统会自动判断并流转到下一岗位。`,
+        flow.mode === 'all' ? '确认更新设备流转' : `确认${flowFormDefinition.value.title}`,
         { type: 'warning', confirmButtonText: '确认更新', cancelButtonText: '返回检查' }
     ).then(() => true).catch(() => false)
     if (!confirmed) return
     flow.saving = true
     try {
-        await updateErpStockFlow(flow.row.id, { ...flow.form, refurbish_status: ['none', 'pending'].includes(flow.row?.refurbish_status) ? flow.form.refurbish_status : '' })
-        ElMessage.success('设备流转已更新')
+        const editableForm = erpListingFormPayload(flow.form, flow.row?.listing_workspace, flowContractAction.value)
+        const operationalForm = flow.mode === 'all'
+            ? {
+                refurbish_status: ['none', 'pending'].includes(flow.row?.refurbish_status) ? flow.form.refurbish_status : '',
+                sale_target: flow.form.sale_target,
+                estimate_sale_price: flow.form.estimate_sale_price,
+            }
+            : {}
+        // 普通“设备流转设置”仍兼容旧接口；岗位步骤必须携带 action，
+        // 后端据此过滤隐藏字段并执行对应必填校验。
+        if (flow.mode === 'all') delete editableForm.workflow_action
+        const res: any = await updateErpStockFlow(flow.row.id, { ...editableForm, ...operationalForm })
+        await showListingFeedback(res?.data?.publish, '设备流转已更新')
         flow.visible = false
         await loadList()
         if (detail.visible && detail.data?.id === flow.row.id) await openDetail(flow.row)
@@ -1288,10 +1248,13 @@ async function submitFlow() {
 }
 
 async function publishListing(row: any) {
+    const handoff = Number(row.can_handoff_shop || 0) === 1
     const confirmed = await ElMessageBox.confirm(
-        `确认将设备「${row.model || row.imei || row.asset_no || '-'}」直接上架商城？系统将使用当前分类、规格、图片和零售价创建一机一品商品。`,
-        '上架商城',
-        { type: 'warning', confirmButtonText: '确认上架', cancelButtonText: '取消' }
+        handoff
+            ? `确认把设备「${row.model || row.imei || row.asset_no || '-'}」交接给商城运营？运营将在商城完成分类、规格和标签对应，上架结果会自动回写 ERP。`
+            : `确认将设备「${row.model || row.imei || row.asset_no || '-'}」直接上架商城？系统将使用当前分类、规格、图片和零售价创建一机一品商品。`,
+        handoff ? '交接商城运营' : '上架商城',
+        { type: 'warning', confirmButtonText: handoff ? '确认交接' : '确认上架', cancelButtonText: '取消' }
     ).then(() => true).catch(() => false)
     if (!confirmed) return
     const res: any = await syncErpStockListing(row.id)
@@ -1299,6 +1262,18 @@ async function publishListing(row: any) {
     if (syncResult.ok === false) return ElMessage.error(syncResult.message || '上架失败，请稍后重试')
     ElMessage.success(syncResult.message || '已直接上架商城')
     await loadList()
+}
+
+async function showListingFeedback(publish: any, savedMessage: string) {
+    const feedback = erpListingFeedback(publish, savedMessage)
+    if (feedback.level === 'warning') {
+        await ElMessageBox.alert(feedback.detail || '请在库存中心查看失败原因并重试', feedback.message, {
+            type: 'warning',
+            confirmButtonText: '我知道了',
+        })
+        return
+    }
+    ElMessage.success(feedback.detail ? `${feedback.message}；${feedback.detail}` : feedback.message)
 }
 
 function assetStatusMeta(status: string) {
@@ -1351,35 +1326,36 @@ function assetSubTitle(row: any) {
     return [
         row.spec || '',
         row.imei ? `IMEI ${row.imei}` : '',
-        row.sn ? `SN ${row.sn}` : '',
-        row.asset_no ? `资产号 ${row.asset_no}` : ''
+        row.sn ? `SN ${row.sn}` : ''
     ].filter(Boolean).join(' · ') || '-'
 }
 
 function detailMetrics(row: any) {
     if ((row?.status || '') === 'sold') {
-        return [
+        const items: any[] = [
             { label: '原成交价', value: Number(row.sale_price || 0) ? money(row.sale_price) : '-' },
             { label: '售后补差', value: Number(row.sale_compensation_amount || 0) ? `-${money(row.sale_compensation_amount)}` : money(0), className: Number(row.sale_compensation_amount || 0) ? 'text-orange-500' : '' },
-            { label: '实际销售收入', value: money(row.net_sale_amount), className: 'text-blue-600' },
-            { label: '总成本', value: money(row.total_cost) },
-            { label: '实际毛利', value: money(row.profit), className: Number(row.profit || 0) >= 0 ? 'text-green-600' : 'text-red-600' }
+            { label: '实际销售收入', value: money(row.net_sale_amount), className: 'text-blue-600' }
         ]
+        if (canViewCost.value) items.push({ label: '总成本', value: money(row.total_cost) })
+        if (canViewProfit.value) items.push({ label: '实际毛利', value: money(row.profit), className: Number(row.profit || 0) >= 0 ? 'text-green-600' : 'text-red-600' })
+        return items
     }
     if ((row?.status || '') === 'in_stock') {
-        return [
-            { label: '当前总成本', value: money(row.total_cost) },
+        const items: any[] = [
             { label: '销售零售价', value: Number(row.retail_price || 0) ? money(row.retail_price) : '未设置' },
             { label: '库龄', value: row.stock_in_at ? `${stockAgeDays(row.stock_in_at)} 天` : '-' },
             { label: '销售去向', value: targetMeta(row.sale_target).label }
         ]
+        if (canViewCost.value) items.unshift({ label: '当前总成本', value: money(row.total_cost) })
+        return items
     }
-    return [
+    return canViewCost.value ? [
         { label: '采购成本', value: money(row.purchase_cost) },
         { label: '调整成本', value: money(row.adjust_cost) },
         { label: '整备成本', value: money(row.refurbish_cost) },
         { label: '当前总成本', value: money(row.total_cost) }
-    ]
+    ] : []
 }
 
 function refurbishMeta(status: string) {
@@ -1620,12 +1596,6 @@ function formatTime(value: any) {
 .summary-tile--clickable { cursor: pointer; transition: transform .18s ease, box-shadow .18s ease, background .18s ease; }
 .summary-tile--clickable:hover { transform: translateY(-2px); background: #fff; box-shadow: 0 8px 24px rgba(15, 23, 42, .08); }
 .turnover-actions-panel { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-top: 14px; border: 1px solid #dbeafe; border-radius: 10px; background: linear-gradient(90deg, #eff6ff 0%, #f8fafc 100%); padding: 13px 16px; }
-.listing-collab-panel { display:flex; align-items:center; gap:22px; margin-top:12px; padding:12px 16px; border:1px solid #e2e8f0; border-radius:10px; background:#fff; }
-.listing-collab-panel__intro { min-width:260px; }
-.listing-collab-panel__stages { display:grid; grid-template-columns:repeat(4,minmax(84px,1fr)); flex:1; gap:8px; }
-.listing-stage { display:flex; align-items:baseline; justify-content:center; gap:7px; padding:7px 10px; border-radius:8px; background:#f8fafc; }
-.listing-stage__value { color:#2563eb; font-size:20px; font-weight:700; line-height:1; }
-.listing-stage__label { color:#64748b; font-size:12px; white-space:nowrap; }
 .warehouse-risk-chip { border: 1px solid #fed7aa; border-radius: 999px; background: #fff7ed; padding: 4px 9px; color: #c2410c; }
 .summary-label {
     color: #64748b;

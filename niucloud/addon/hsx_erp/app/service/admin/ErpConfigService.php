@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace addon\hsx_erp\app\service\admin;
 
+use addon\hsx_erp\app\support\ErpListingFormContract;
 use app\service\core\sys\CoreConfigService;
 use core\base\BaseAdminService;
 use think\facade\Log;
@@ -241,6 +242,14 @@ class ErpConfigService extends BaseAdminService
             : 'auto';
         $rules['listing_workspace']['auto_publish'] = $this->boolInt($workspace['auto_publish'] ?? 0);
         $rules['listing_workspace']['fallback_to_erp'] = 1;
+        $rules['listing_workspace']['field_rules'] = ErpListingFormContract::normalizeRules(
+            (array)($workspace['field_rules'] ?? [])
+        );
+        // 采购录入不再维护第二套互相冲突的模式。保留旧字段供已部署前端读取，
+        // 但值始终由销售资料工作模式派生。
+        $rules['purchase']['mobile_entry_mode'] = $rules['listing_workspace']['mode'] === 'one_stop'
+            ? 'complete'
+            : 'collaborative';
 
         $owner = in_array((string)($rules['marketplace']['recycle_material_owner'] ?? 'erp'), ['erp', 'phone_shop'], true)
             ? (string)$rules['marketplace']['recycle_material_owner']
@@ -565,6 +574,7 @@ class ErpConfigService extends BaseAdminService
                 // 关闭时资料齐全后保留人工确认，避免误上架。
                 'auto_publish' => 0,
                 'fallback_to_erp' => 1,
+                'field_rules' => ErpListingFormContract::defaults(),
             ],
             'marketplace' => [
                 // 旧字段由 channels.phone_shop.publish_mode 派生，供旧调用方兼容。

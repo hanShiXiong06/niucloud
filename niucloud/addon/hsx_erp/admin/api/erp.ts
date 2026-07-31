@@ -311,6 +311,22 @@ export function getErpSaleList(params: Record<string, any>) {
     return request.get('erp/sale/lists', { params })
 }
 
+export function getErpSaleProfitReport(params: Record<string, any>) {
+    return request.get('erp/sale/profit_report', { params })
+}
+
+export function exportErpSaleProfitReport(params: Record<string, any>) {
+    return request.get('erp/sale/profit_report/export', { params })
+}
+
+export function getErpSaleProfitReportMeta() {
+    return request.get('erp/sale/profit_report/meta')
+}
+
+export function saveErpSaleProfitReportView(data: Record<string, any>) {
+    return request.post('erp/sale/profit_report/view', data)
+}
+
 export function getErpSaleInfo(id: number) {
     return request.get(`erp/sale/${id}`)
 }

@@ -5,6 +5,7 @@ namespace addon\hsx_erp\app\service\admin;
 
 use addon\hsx_erp\app\dict\ErpDict;
 use addon\hsx_erp\app\model\ErpWarehouse;
+use addon\hsx_erp\app\support\ErpListingWorkflow;
 use core\base\BaseAdminService;
 
 /**
@@ -43,9 +44,10 @@ class ErpWarehousePolicyService extends BaseAdminService
         }
         foreach ($rows as &$row) {
             $policy = $this->evaluate($row, $warehouseMap[(int)($row['warehouse_id'] ?? 0)] ?? null);
-            // 兼容旧数据：历史状态可能仍是 need_photo/need_price，展示与操作必须以当前真实资料为准。
-            if ((int)($policy['can_list_mall'] ?? 0) === 1 && (string)($row['listing_status'] ?? 'none') !== 'listed') {
-                $row['listing_status'] = 'ready';
+            // 只有外部渠道事件才能写入交接中/已上架终态；其他状态统一按当前仓库规则和资料重算。
+            $currentStatus = (string)($row['listing_status'] ?? 'none');
+            if (!in_array($currentStatus, ['pending_shop', 'listed'], true)) {
+                $row['listing_status'] = ErpListingWorkflow::statusFromAsset($row, $policy);
             }
             $row['warehouse_policy'] = $policy;
             $row['can_direct_sale'] = $policy['can_direct_sale'];

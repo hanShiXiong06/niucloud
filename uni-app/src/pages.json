@@ -745,6 +745,50 @@
             ]
         },
         // HSX_MEMBER_CARD_PAGE_END
+        // HSX_AI_PAGE_BEGIN
+        {
+            "root": "addon/hsx_ai",
+            "pages": [
+                {
+                    "path": "pages/chat/index",
+                    "style": {
+                        "navigationBarTitleText": "AI 选机助手",
+                        // #ifndef H5
+                        "navigationStyle": "custom"
+                        // #endif
+                    }
+                }
+            ]
+        },
+        // HSX_AI_PAGE_END
+        // HSX_PHONE_QUERY_PAGE_BEGIN
+        {
+            "root": "addon/hsx_phone_query", 
+            "pages": [
+				{
+					"path": "pages/index",
+					"style": {
+						"navigationBarTitleText": "查询界面"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/history",
+					"style": {
+						"navigationBarTitleText": "查询历史"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/detail",
+					"style": {
+						"navigationBarTitleText": "查询详情"
+					},
+					"needLogin": true,
+				}
+			]
+        },
+// HSX_PHONE_QUERY_PAGE_END
 // {{ PAGE_END }}
         {
             "root": "app/components",

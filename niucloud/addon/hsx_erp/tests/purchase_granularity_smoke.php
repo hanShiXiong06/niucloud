@@ -15,7 +15,7 @@ $assert = static function (bool $condition, string $message): void {
 $service = (string)file_get_contents($root . '/app/service/admin/ErpPurchaseService.php');
 $assert(str_contains($service, "\$item['warehouse_id']"), '采购服务必须读取单台设备warehouse_id');
 $assert(str_contains($service, "\$item['location_id']"), '采购服务必须读取单台设备location_id');
-$assert(str_contains($service, '台设备请选择入库仓库和库位'), '采购服务必须逐台校验入库位置');
+$assert(str_contains($service, '项商品请选择入库仓库和库位'), '采购服务必须逐项校验入库位置');
 $assert(!str_contains($service, "\$itemWarehouseId = (int)(\$data['warehouse_id']"), '后端不得用采购单仓库静默替代设备仓库');
 $assert(str_contains($service, 'appendPurchasePaymentSummary'), '采购列表必须返回单台设备付款摘要');
 $assert(str_contains($service, "['return_flow']"), '采购详情必须返回后端退货流程决策');
@@ -25,6 +25,9 @@ foreach (['order_effective_amount', 'asset_payable_amount', 'asset_paid_amount',
 $assert(str_contains($service, "ep.status <> 'void'"), '采购付款状态必须排除已退设备的作废应付');
 $assert(str_contains($service, 'EXISTS(SELECT 1') && str_contains($service, 'hasAssetPayableExpr'), '全部退货时必须识别设备级应付事实，不能回退旧整单金额');
 $assert(str_contains($service, 'effective_purchase_amount') && str_contains($service, 'original_total_cost'), '采购详情必须同时返回原订单金额和退货后的有效采购本金');
+$assert(str_contains($service, 'ErpListingWorkflow::statusFromAsset'), '采购入库必须复用统一商城状态机');
+$assert(str_contains($service, "'retail_price' => \$retailPrice"), '采购入库商城就绪判断必须使用真实零售价');
+$assert(!str_contains($service, "'retail_price' => \$estimateSalePrice"), '采购估售价不能冒充商城零售价');
 
 $direct = \addon\hsx_erp\app\dict\ErpDict::purchaseReturnFlow(3000, 0);
 $refund = \addon\hsx_erp\app\dict\ErpDict::purchaseReturnFlow(3000, 3000);
@@ -60,7 +63,7 @@ $assert($refurbishedPolicy['returnable'] === false && str_contains($refurbishedP
 $assert($unclassifiedPolicy['returnable'] === false && $unclassifiedPolicy['unclassified_cost'] === 100.0, '未分类成本必须先归类再决定业务路径');
 
 $purchaseView = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/views/erp/purchase/list.vue');
-foreach (['入库位置（设备级）', 'applyDefaultLocationToAll', 'purchaseRowClassName', '本页同批', 'ErpDeviceIdentity', 'ErpRoleFocus'] as $needle) {
+foreach (['入库位置', 'applyDefaultLocationToAll', 'purchaseRowClassName', '本页同批', 'ErpDeviceIdentity', 'ErpRoleFocus'] as $needle) {
     $assert(str_contains($purchaseView, $needle), '采购页缺少产品优化：' . $needle);
 }
 foreach (['search.imei', 'search.party_id', 'search.purchase_no', 'ErpPartySelect', 'label="当前状态"', 'assetStatusMeta'] as $needle) {
@@ -359,7 +362,7 @@ $purchaseList = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin
 foreach (['canAdjustSupplierPrice', 'supplierAdjustBlockedReason', '设备已完成采购退货，不能再调整供应商采购价'] as $needle) {
     $assert(str_contains($purchaseList, $needle), 'PC采购列表必须禁止已退货设备供应商调价：' . $needle);
 }
-foreach (['本页有效采购汇总', '已退货、已作废设备不计入', "assetStatus === 'returned'", 'Number(row.is_returned || 0) === 1'] as $needle) {
+foreach (['本页有效采购汇总', '已退货、已作废货品不计入', "assetStatus === 'returned'", 'Number(row.is_returned || 0) === 1'] as $needle) {
     $assert(str_contains($purchaseList, $needle), 'PC采购汇总必须排除已退货和已作废设备：' . $needle);
 }
 $assert(str_contains($service, "status === ErpDict::ASSET_RETURNED") || str_contains($service, "status) === ErpDict::ASSET_RETURNED"), '后端必须拒绝已退货设备成本调整');

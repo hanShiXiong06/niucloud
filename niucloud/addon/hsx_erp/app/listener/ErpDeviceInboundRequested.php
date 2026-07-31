@@ -9,6 +9,7 @@ use addon\hsx_erp\app\service\admin\ErpConfigService;
 use addon\hsx_erp\app\service\admin\ErpConsignmentInboundService;
 use addon\hsx_erp\app\service\admin\ErpListingTaskService;
 use addon\hsx_erp\app\service\admin\ErpPurchaseService;
+use addon\hsx_erp\app\service\admin\ErpStockService;
 use addon\hsx_erp\app\support\ErpIdempotency;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -127,9 +128,32 @@ class ErpDeviceInboundRequested
                     (int)($operator['id'] ?? 0),
                     trim((string)($operator['name'] ?? '')) ?: '回收入库'
                 );
-                foreach ($assetIds as $assetId) $taskService->sync($assetId);
+                $stockService = ErpStockService::forSite(
+                    $currentSiteId,
+                    (int)($operator['id'] ?? 0),
+                    trim((string)($operator['name'] ?? '')) ?: '回收入库'
+                );
+                $publishFailures = [];
+                foreach ($assetIds as $assetId) {
+                    $publish = $stockService->autoPublishListingIfReady($assetId);
+                    if (!empty($publish['failed'])) {
+                        $publishFailures[] = [
+                            'asset_id' => $assetId,
+                            'message' => (string)($publish['message'] ?? '商城发布失败'),
+                        ];
+                    }
+                    $taskService->sync($assetId);
+                }
+                if ($publishFailures !== []) {
+                    $this->recordProjectionWarning('ERP入库成功，部分设备自动发布商城失败', [
+                        'site_id' => $currentSiteId,
+                        'event_id' => $eventId,
+                        'failures' => $publishFailures,
+                    ]);
+                    $result['warnings'][] = '库存已入库，部分商城发布失败，可在库存中心查看原因并重试';
+                }
             } catch (\Throwable $e) {
-                $this->recordProjectionWarning('ERP入库成功，但生成上架待办失败', [
+                $this->recordProjectionWarning('ERP入库成功，但自动发布或生成上架待办失败', [
                     'site_id' => $currentSiteId,
                     'event_id' => $eventId,
                     'asset_ids' => $assetIds,

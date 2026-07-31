@@ -1,0 +1,11 @@
+{
+  "title": "AI 能力中心",
+  "desc": "多模型接入、业务场景编排、事件调用与审计基础能力",
+  "key": "hsx_ai",
+    "version": "0.3.1",
+  "author": "hsx",
+  "type": "app",
+  "support_app": "",
+  "compile": [],
+  "support_version": "1.2.4"
+}

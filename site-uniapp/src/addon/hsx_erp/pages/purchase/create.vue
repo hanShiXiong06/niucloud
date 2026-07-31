@@ -120,7 +120,7 @@
                                 v-model="item.catalog_product_id"
                                 :selected-label="catalogDisplayLabel(item)"
                                 :category-path="item.category_path"
-                                label="分类"
+                                label="分类 / 型号"
                                 placeholder="先选品类，再选择品牌、系列和型号"
                                 layout="horizontal"
                                 :embedded="true"
@@ -132,8 +132,8 @@
                                 <text class="form-label required">设备名称</text>
                                 <u-input
                                     v-model="item.model"
-                                    :disabled="!item.category_path"
-                                    :placeholder="item.category_path ? '输入设备名称' : '请先选择商品品类'"
+                                    :disabled="purchaseEntryMode === 'complete' && listingFieldEnabled('catalog_product_id') && !item.category_path"
+                                    :placeholder="item.category_path ? '输入设备名称' : (purchaseEntryMode === 'complete' && listingFieldEnabled('catalog_product_id') ? '请先选择商品品类' : '输入设备名称')"
                                     :customStyle="inputStyle"
                                     @input="item._model_manual = item.model !== item._auto_model"
                                 />
@@ -155,7 +155,7 @@
                                 <u-input v-model="item.purchase_cost" type="number" placeholder="0.00" :customStyle="inputStyle" />
                             </view>
 
-                            <view v-if="purchaseEntryMode !== 'collaborative'" class="device-material">
+                            <view v-if="purchaseEntryMode !== 'collaborative' && hasEnabledListingFields" class="device-material">
                                 <view class="device-material__head" @click="item._material_open = !item._material_open">
                                     <view>
                                         <view class="device-material__title-row">
@@ -167,7 +167,7 @@
                                     <u-icon :name="item._material_open ? 'arrow-up' : 'arrow-down'" color="#94a3b8" size="15" />
                                 </view>
                                 <view v-show="item._material_open" class="device-material__body">
-                                    <view class="form-row" @click="openSpecPicker(idx)">
+                                    <view v-if="listingFieldEnabled('spec')" class="form-row" @click="openSpecPicker(idx)">
                                         <text class="form-label">商品规格</text>
                                         <view class="form-input" :class="{ 'form-input--on': specSummary(item) }">
                                             <text :class="specSummary(item) ? 'input-text' : 'input-placeholder'">
@@ -176,18 +176,30 @@
                                             <u-icon name="arrow-right" color="#cbd5e1" size="16" />
                                         </view>
                                     </view>
-                                    <view class="form-row">
+                                    <view v-if="listingFieldEnabled('retail_price')" class="form-row">
                                         <text class="form-label">销售价格</text>
                                         <u-input v-model="item.retail_price" type="number" placeholder="0.00（选填）" :customStyle="inputStyle" />
                                     </view>
                                     <template v-if="purchaseEntryMode === 'complete'">
-                                        <ErpVoucherUploader v-model="item.image_urls" title="商品图片" hint="可直接作为库存和商城销售资料" add-text="上传图片" :max-count="9" />
-                                        <view class="purchase-video">
+                                        <ErpVoucherUploader v-if="listingFieldEnabled('image_urls')" v-model="item.image_urls" title="商品图片" hint="可直接作为库存和商城销售资料" add-text="上传图片" :max-count="9" />
+                                        <view v-if="listingFieldEnabled('video_url')" class="purchase-video">
                                             <view>
                                                 <text class="purchase-video__title">展示视频</text>
                                                 <text class="purchase-video__hint">选填，最多上传 1 个</text>
                                             </view>
                                             <upload-video v-model="item.video_url" :max-count="1" />
+                                        </view>
+                                        <view v-if="listingFieldEnabled('quality_remark')" class="form-row">
+                                            <text class="form-label">质检备注</text>
+                                            <u-input v-model="item.quality_remark" placeholder="内部质检或外观说明" :customStyle="inputStyle" />
+                                        </view>
+                                        <view v-if="listingFieldEnabled('remark_public')" class="form-row">
+                                            <text class="form-label">对外说明</text>
+                                            <u-input v-model="item.remark_public" placeholder="展示给商城客户" :customStyle="inputStyle" />
+                                        </view>
+                                        <view v-if="listingFieldEnabled('remark_internal')" class="form-row">
+                                            <text class="form-label">对内备注</text>
+                                            <u-input v-model="item.remark_internal" placeholder="仅员工可见" :customStyle="inputStyle" />
                                         </view>
                                     </template>
                                 </view>
@@ -370,6 +382,7 @@ const goBack = () => uni.navigateBack()
 const accounts = ref<any[]>([])
 const goodsMeta = ref<any>({})
 const purchaseEntryMode = ref<'quick' | 'complete' | 'collaborative'>('quick')
+const listingWorkspace = ref<any>({ mode: 'one_stop', field_rules: {} })
 const expandedDeviceIndex = ref(0)
 const swipeOpenIndex = ref(-1)
 const deviceSwipeActions = [
@@ -428,6 +441,11 @@ const purchaseModeMeta = computed(() => ({
         icon: 'account',
     },
 }[purchaseEntryMode.value]))
+const listingFieldEnabled = (field: string) => Number(listingWorkspace.value?.field_rules?.[field]?.enabled ?? 1) === 1
+const listingFieldRequired = (field: string) => listingFieldEnabled(field) && Number(listingWorkspace.value?.field_rules?.[field]?.required ?? 0) === 1
+const hasEnabledListingFields = computed(() => [
+    'spec', 'retail_price', 'image_urls', 'video_url', 'quality_remark', 'remark_public', 'remark_internal',
+].some(listingFieldEnabled))
 const activeSpecItem = computed(() => form.value.items[activeSpecItemIndex.value] || {})
 const activeSpecMeta = computed(() => metaFor(activeSpecItem.value))
 const goodsMetaTip = computed(() => {
@@ -441,7 +459,7 @@ const canSubmit = computed(() =>
     form.value.items.length > 0 &&
     form.value.items.every(i => i.item_type === 'standard'
         ? (i.model && i.warehouse_id && i.location_id && Number(i.quantity) > 0 && standardLineTotal(i) > 0)
-        : (i.imei && i.model && i.category_path && i.warehouse_id && i.location_id && Number(i.purchase_cost) > 0)) &&
+        : (i.imei && i.model && i.warehouse_id && i.location_id && Number(i.purchase_cost) > 0)) &&
     (
         form.value.settle_mode !== 'cash' ||
         (
@@ -457,7 +475,8 @@ onMounted(async () => {
     await Promise.all([
         getMobileCapitalAccounts().then((res: any) => { accounts.value = res?.data?.list || [] }).catch(() => {}),
         getMobileErpConfig().then((res: any) => {
-            const mode = String(res?.data?.purchase?.mobile_entry_mode || 'quick')
+            listingWorkspace.value = res?.data?.listing_workspace || listingWorkspace.value
+            const mode = String(res?.data?.listing_workspace?.entry_mode || res?.data?.purchase?.mobile_entry_mode || 'quick')
             purchaseEntryMode.value = ['quick', 'complete', 'collaborative'].includes(mode)
                 ? mode as 'quick' | 'complete' | 'collaborative'
                 : 'quick'
@@ -621,7 +640,9 @@ function newDeviceItem(imei = '') {
         retail_price: 0,
         image_urls: '',
         video_url: '',
+        quality_remark: '',
         remark_public: '',
+        remark_internal: '',
         _material_open: purchaseEntryMode.value === 'complete',
     }
 }
@@ -630,7 +651,6 @@ function deviceCoreComplete(item: any) {
     return !!(
         String(item?.imei || '').trim() &&
         String(item?.model || '').trim() &&
-        String(item?.category_path || '').trim() &&
         Number(item?.warehouse_id || 0) > 0 &&
         Number(item?.location_id || 0) > 0 &&
         Number(item?.purchase_cost || 0) > 0
@@ -984,6 +1004,31 @@ async function submit() {
         uni.showToast({ title: `请完善供应商、${form.value.item_type_mode === 'standard' ? '标品' : '设备'}和付款信息`, icon: 'none' })
         return
     }
+    if (form.value.item_type_mode !== 'standard' && purchaseEntryMode.value === 'complete') {
+        const incompleteIndex = form.value.items.findIndex((item: any) => {
+            const values: Record<string, any> = {
+                catalog_product_id: Number(item.catalog_product_id || 0),
+                spec: item.spec,
+                image_urls: item.image_urls,
+                video_url: item.video_url,
+                retail_price: Number(item.retail_price || 0),
+                quality_remark: item.quality_remark,
+                remark_public: item.remark_public,
+                remark_internal: item.remark_internal,
+            }
+            return Object.entries(values).some(([field, value]) => {
+                if (!listingFieldRequired(field)) return false
+                if (field === 'catalog_product_id' || field === 'retail_price') return Number(value || 0) <= 0
+                if (field === 'image_urls') return !String(value || '').split(',').map(part => part.trim()).filter(Boolean).length
+                return !String(value || '').trim()
+            })
+        })
+        if (incompleteIndex >= 0) {
+            expandedDeviceIndex.value = incompleteIndex
+            uni.showToast({ title: `第 ${incompleteIndex + 1} 台还有必填销售资料未完成`, icon: 'none' })
+            return
+        }
+    }
     submitting.value = true
     const confirmed = await confirmErpSensitiveAction({
         title: '确认采购开单',
@@ -1045,11 +1090,13 @@ async function submit() {
                 location_id: Number(i.location_id || 0),
                 location_name: i.location_name || '',
                 purchase_cost: Number(i.purchase_cost),
-                estimate_sale_price: Number(i.retail_price || i.estimate_sale_price || 0),
-                retail_price: Number(i.retail_price || i.estimate_sale_price || 0),
+                estimate_sale_price: Number(i.estimate_sale_price || 0),
+                retail_price: Number(i.retail_price || 0),
                 image_urls: i.image_urls || '',
                 video_url: i.video_url || '',
+                quality_remark: i.quality_remark || '',
                 remark_public: i.remark_public || '',
+                remark_internal: i.remark_internal || '',
             }))
         })
         const remaining = Math.max(0, totalCost.value - Number(form.value.paid_amount || 0))

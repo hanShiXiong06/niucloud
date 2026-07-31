@@ -1,6 +1,6 @@
 <template>
     <view class="erp-page">
-        <ErpListHeader v-model="keyword" placeholder="输入 IMEI / SN / 型号 / 供货商" :show-scan="true" :compact-mp="true" @search="reload" @scan="scan">
+        <ErpListHeader v-model="keyword" :placeholder="canViewSupplier ? '输入 IMEI / SN / 型号 / 供货商' : '输入 IMEI / SN / 型号'" :show-scan="true" :compact-mp="true" @search="reload" @scan="scan">
             <template #below>
                 <ErpQuickFilterBar :items="quickFilters" @change="onQuickFilter" />
             </template>
@@ -16,7 +16,7 @@
                         <u-tag :text="statusLabel(row.status)" :type="statusType(row.status)" plain plainFill size="mini" />
                     </view>
                     <view class="trace-main">
-                        <view><text>供货商</text><strong>{{ row.party_name || '未记录' }}</strong></view>
+                        <view v-if="canViewSupplier"><text>供货商</text><strong>{{ row.party_name || '未记录' }}</strong></view>
                         <view><text>入库时间</text><strong>{{ formatErpTime(row.stock_in_at || row.create_at) }}</strong></view>
                     </view>
                     <view class="trace-meta">{{ row.spec || '未填写规格' }} · {{ row.warehouse_name || '-' }}{{ row.location_name ? ' / ' + row.location_name : '' }}</view>
@@ -37,6 +37,8 @@ import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
 import ErpQuickFilterBar from '@/addon/hsx_erp/components/ErpQuickFilterBar.vue'
 const { pagingStyle } = useListHeader({ tabs: true, compactMp: true, h5TopRpx: 178 })
 const keyword=ref(''),list=ref<any[]>([]),pagingRef=ref<any>(null)
+const capabilities=ref<any>({view_supplier:0})
+const canViewSupplier=computed(()=>Number(capabilities.value?.view_supplier||0)===1)
 const status=ref(''),datePreset=ref('')
 const quickFilters=computed(()=>[
     {key:'status',label:'设备状态',title:'设备状态',value:status.value,options:[
@@ -48,7 +50,7 @@ const quickFilters=computed(()=>[
 ])
 const reload=()=>pagingRef.value?.reload()
 const onQuickFilter=({key,value}:{key:string,value:string|number})=>{if(key==='status')status.value=String(value);if(key==='date')datePreset.value=String(value);reload()}
-async function queryList(page:number,limit:number){try{const range=dateRange(datePreset.value);const res:any=await getMobileSerialTraceList({keyword:keyword.value,status:status.value,...range,page,limit});pagingRef.value?.complete(res?.data?.data||[])}catch(_){pagingRef.value?.complete(false)}}
+async function queryList(page:number,limit:number){try{const range=dateRange(datePreset.value);const res:any=await getMobileSerialTraceList({keyword:keyword.value,status:status.value,...range,page,limit});capabilities.value=res?.data?.capabilities||capabilities.value;pagingRef.value?.complete(res?.data?.data||[])}catch(_){pagingRef.value?.complete(false)}}
 async function scan(){try{keyword.value=await scanErpCode();reload()}catch(e:any){if(!String(e?.errMsg||'').includes('cancel'))uni.showToast({title:e?.message||'扫码失败',icon:'none'})}}
 function goDetail(row:any){uni.navigateTo({url:`/addon/hsx_erp/pages/serial_trace/detail?id=${Number(row.id||0)}`})}
 const statusLabel=(s:string)=>({in_stock:'在库',sold:'已售',returned:'已退货',void:'已作废'}[s]||s||'-')

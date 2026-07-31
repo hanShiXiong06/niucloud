@@ -16,15 +16,21 @@ $basePolicy = ['can_prepare_mall' => 1, 'can_list_mall' => 0];
 
 assertSameValue('need_photo', ErpListingWorkflow::statusFromAsset([
     'image_urls' => '', 'retail_price' => 0,
-], $basePolicy), '商城设备首先进入商品拍摄');
+], $basePolicy + [
+    'missing_fields' => ['catalog_product', 'spec', 'image', 'retail_price'],
+]), '仓库要求图片时，商城设备首先进入商品拍摄');
 
 assertSameValue('need_price', ErpListingWorkflow::statusFromAsset([
     'image_urls' => '["/a.jpg"]', 'retail_price' => 0,
-], $basePolicy), '图片完成后进入销售定价');
+], $basePolicy + [
+    'missing_fields' => ['catalog_product', 'spec', 'retail_price'],
+]), '图片完成后进入销售定价');
 
 assertSameValue('need_material', ErpListingWorkflow::statusFromAsset([
     'image_urls' => ['/a.jpg'], 'retail_price' => 1999,
-], $basePolicy), '图片和价格完成后进入资料整理');
+], $basePolicy + [
+    'missing_fields' => ['catalog_product', 'spec'],
+]), '图片和价格完成后进入资料整理');
 
 assertSameValue('ready', ErpListingWorkflow::statusFromAsset([
     'image_urls' => '/a.jpg,/b.jpg', 'retail_price' => 1999,
@@ -41,5 +47,14 @@ assertSameValue(true, ErpListingWorkflow::canHandoffToShop([
 assertSameValue('none', ErpListingWorkflow::statusFromAsset([
     'image_urls' => '["/a.jpg"]', 'retail_price' => 1999,
 ], ['can_prepare_mall' => 0, 'can_list_mall' => 0]), '非商城仓不产生上架待办');
+
+foreach (['one_stop', 'photo_price', 'split'] as $mode) {
+    assertSameValue('', ErpListingWorkflow::taskStage([
+        'status' => 'in_stock',
+        'sale_target' => 'mall',
+        'refurbish_status' => 'none',
+        'listing_status' => 'pending_shop',
+    ], $mode), '交接商城运营后 ERP 不得继续生成重复待办：' . $mode);
+}
 
 fwrite(STDOUT, "PASS listing workflow smoke\n");

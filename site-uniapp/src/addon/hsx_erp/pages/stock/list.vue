@@ -10,20 +10,26 @@
             @filter="filterVisible = true"
         >
             <template #below>
-                <view class="quick-filters">
-                    <view class="quick-filter" :class="{ active: activeTab }" @click="openQuickFilter('status')">
-                        <text>{{ statusFilterLabel }}</text><u-icon name="arrow-down-fill" size="9" :color="activeTab ? '#2563eb' : '#64748b'" />
+                <scroll-view scroll-x class="quick-filter-scroll" :show-scrollbar="false">
+                    <view class="quick-filters">
+                        <view class="quick-filter" :class="{ active: activeTab }" @click="openQuickFilter('status')">
+                            <text>{{ statusFilterLabel }}</text><u-icon name="arrow-down-fill" size="9" :color="activeTab ? '#2563eb' : '#64748b'" />
+                        </view>
+                        <view class="quick-filter" :class="{ active: filters.warehouse_id }" @click="openWarehouseFilter">
+                            <text>{{ warehouseFilterLabel }}</text><u-icon name="arrow-down-fill" size="9" :color="filters.warehouse_id ? '#2563eb' : '#64748b'" />
+                        </view>
+                        <view class="quick-filter" :class="{ active: filters.turnover_level }" @click="openQuickFilter('turnover')">
+                            <text>{{ turnoverFilterLabel }}</text><u-icon name="arrow-down-fill" size="9" :color="filters.turnover_level ? '#2563eb' : '#64748b'" />
+                        </view>
+                        <view class="quick-filter" :class="{ active: filters.listing_status }" @click="openQuickFilter('listing')">
+                            <text>{{ listingFilterLabel }}</text><u-icon name="arrow-down-fill" size="9" :color="filters.listing_status ? '#2563eb' : '#64748b'" />
+                        </view>
+                        <view class="quick-filter quick-filter--task" :class="{ active: Number(filters.my_task || 0) === 1 }" @click="toggleMyTask">
+                            <u-icon name="account-fill" size="13" :color="Number(filters.my_task || 0) === 1 ? '#2563eb' : '#64748b'" />
+                            <text>我的待办</text>
+                        </view>
                     </view>
-                    <view class="quick-filter" :class="{ active: filters.warehouse_id }" @click="openWarehouseFilter">
-                        <text>{{ warehouseFilterLabel }}</text><u-icon name="arrow-down-fill" size="9" :color="filters.warehouse_id ? '#2563eb' : '#64748b'" />
-                    </view>
-                    <view class="quick-filter" :class="{ active: filters.turnover_level }" @click="openQuickFilter('turnover')">
-                        <text>{{ turnoverFilterLabel }}</text><u-icon name="arrow-down-fill" size="9" :color="filters.turnover_level ? '#2563eb' : '#64748b'" />
-                    </view>
-                    <view class="quick-filter" :class="{ active: filters.listing_status }" @click="openQuickFilter('listing')">
-                        <text>{{ listingFilterLabel }}</text><u-icon name="arrow-down-fill" size="9" :color="filters.listing_status ? '#2563eb' : '#64748b'" />
-                    </view>
-                </view>
+                </scroll-view>
             </template>
         </ErpListHeader>
 
@@ -34,27 +40,6 @@
                 <view class="stock-overview__item"><text class="stock-overview__value">{{ inventoryTotal }}</text><text class="stock-overview__label">当前在库</text></view>
                 <view class="stock-overview__item"><text class="stock-overview__value">{{ turnoverSummary.average_age_days || 0 }}天</text><text class="stock-overview__label">平均库龄</text></view>
                 <view class="stock-overview__item warning" @click="filterTurnover('risk')"><text class="stock-overview__value">{{ turnoverSummary.warning_total_count || 0 }}</text><text class="stock-overview__label">周转预警</text></view>
-            </view>
-            <view class="listing-workload" @click="workloadExpanded = !workloadExpanded">
-                <view class="listing-workload__head">
-                    <view>
-                        <text class="listing-workload__title">今日商城上架协作</text>
-                        <text class="listing-workload__desc">拍摄、定价、资料整理各自留痕</text>
-                    </view>
-                    <u-icon :name="workloadExpanded ? 'arrow-up' : 'arrow-down'" color="#94a3b8" size="14" />
-                </view>
-                <view class="listing-workload__grid">
-                    <view v-for="item in listingStageItems" :key="item.key" class="listing-workload__metric">
-                        <text class="listing-workload__value">{{ item.count }}</text><text class="listing-workload__label">{{ item.label }}</text>
-                    </view>
-                </view>
-                <view v-if="workloadExpanded" class="listing-workload__staff" @click.stop>
-                    <view v-for="item in listingWorkload.staff || []" :key="`${item.uid}-${item.name}`" class="listing-workload__staff-row">
-                        <text class="listing-workload__staff-name">{{ item.name }}</text>
-                        <text>拍摄 {{ item.photo_count }} · 定价 {{ item.price_count }} · 资料 {{ item.material_count }} · 上架 {{ item.publish_count }}</text>
-                    </view>
-                    <u-empty v-if="!(listingWorkload.staff || []).length" mode="data" text="今天还没有完成记录" icon-size="44" />
-                </view>
             </view>
             <view class="stock-tools">
                 <view class="stock-tool" @click="goSerialTrace">
@@ -90,6 +75,10 @@
                         <u-icon name="info-circle" color="#64748b" size="14" />
                         <text>该设备已作废</text>
                     </view>
+                    <view v-else-if="row.listing_sync?.last_error" class="stock-banner listing-error">
+                        <u-icon name="error-circle" color="#dc2626" size="14" />
+                        <text>商城处理失败：{{ row.listing_sync.last_error }}</text>
+                    </view>
                     <view v-else-if="row.is_turnover_warning" class="stock-banner risk">
                         <u-icon name="warning" :color="row.turnover_level === 'critical' ? '#dc2626' : '#d97706'" size="14" />
                         <text>{{ row.turnover_label }} · {{ row.turnover_action }}</text>
@@ -108,7 +97,7 @@
                     </view>
 
                     <view class="erp-card__foot stock-card__foot">
-                        <view class="amount-box">
+                        <view v-if="canViewCost" class="amount-box">
                             <text class="amt-label">{{ isSold(row) ? '成本' : '总成本' }}</text>
                             <text class="amt-value">¥{{ money(row.total_cost) }}</text>
                         </view>
@@ -116,7 +105,7 @@
                             <text class="amt-label">{{ priceLabel(row) }}</text>
                             <text class="amt-value blue">{{ displayPrice(row) }}</text>
                         </view>
-                        <view class="amount-box">
+                        <view v-if="!isSold(row) || canViewProfit" class="amount-box">
                             <text class="amt-label">{{ isSold(row) ? '毛利' : '库龄' }}</text>
                             <text class="amt-value" :class="isSold(row) ? profitClass(row.profit) : ageClass(row)">
                                 {{ isSold(row) ? profitText(row.profit) : `${row.stock_age_days || 0}天` }}
@@ -202,7 +191,7 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 
-import { buyoutMobileConsignment, getMobileErpConfig, getMobileStockList, getMobileStockListingWorkload, getMobileStockTurnoverSummary, previewMobileStockTransfer, syncMobileStockListing, transferMobileStock } from '@/addon/hsx_erp/api/erp'
+import { buyoutMobileConsignment, getMobileErpConfig, getMobileStockList, getMobileStockTurnoverSummary, previewMobileStockTransfer, syncMobileStockListing, transferMobileStock } from '@/addon/hsx_erp/api/erp'
 import { dictLabel, dictTabs, dictType, ERP_DICT_FALLBACK, loadErpDicts, type ErpDictMap } from '@/addon/hsx_erp/api/dict'
 import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
 import ErpFilterPopup from '@/addon/hsx_erp/components/ErpFilterPopup.vue'
@@ -238,14 +227,10 @@ const buyoutVisible = ref(false)
 const buyoutPreview = ref<any>(null)
 const buyoutForm = ref({ amount: '', reason: '' })
 const turnoverSummary = ref<any>({ thresholds: {} })
-const listingWorkload = ref<any>({ totals: {}, staff: [] })
-const workloadExpanded = ref(false)
-const listingStageItems = computed(() => [
-    { key: 'photo', label: '拍摄', count: Number(listingWorkload.value?.totals?.photo || 0) },
-    { key: 'price', label: '定价', count: Number(listingWorkload.value?.totals?.price || 0) },
-    { key: 'material', label: '资料', count: Number(listingWorkload.value?.totals?.material || 0) },
-    { key: 'publish', label: '上架', count: Number(listingWorkload.value?.totals?.publish || 0) },
-])
+const stockCapabilities = ref<any>({ is_admin: 0, view_cost: 0, adjust_cost: 0, view_profit: 0, view_supplier: 0, view_finance: 0, view_team_workload: 0 })
+const canViewCost = computed(() => Number(stockCapabilities.value?.view_cost || 0) === 1)
+const canViewProfit = computed(() => Number(stockCapabilities.value?.view_profit || 0) === 1)
+const canViewSupplier = computed(() => Number(stockCapabilities.value?.view_supplier || 0) === 1)
 const quickFilterVisible = ref(false)
 const quickFilterKey = ref<'status' | 'turnover' | 'listing'>('status')
 const warehouseFilterVisible = ref(false)
@@ -263,16 +248,15 @@ const turnoverOptions = [
     { label: '严重滞销', value: 'critical' },
 ]
 const filterFields = computed(() => [
-    { key: 'asset_no', label: '资产号', type: 'text', placeholder: '输入资产编号' },
     { key: 'imei', label: 'IMEI / 串号', type: 'text', placeholder: '输入 IMEI 或串号' },
     { key: 'model', label: '型号', type: 'text', placeholder: '输入机型型号' },
-    { key: 'party_id', label: '来源/供应商', type: 'party', roleType: 'supplier', labelKey: 'party_name', placeholder: '请选择来源/供应商' },
+    ...(canViewSupplier.value ? [{ key: 'party_id', label: '来源/供应商', type: 'party', roleType: 'supplier', labelKey: 'party_name', placeholder: '请选择来源/供应商' }] : []),
     { key: 'catalog_product_id', label: '商品型号', type: 'category', labelKey: 'catalog_product_name', placeholder: '请选择型号' },
     { key: 'warehouse_id', label: '仓库', type: 'warehouse', labelKey: 'warehouse_name', locationKey: 'location_id', locationLabelKey: 'location_name', placeholder: '请选择仓库/库位' },
     { key: 'refurbish_status', label: '整备状态', type: 'select', options: dictTabs(erpDicts.value, 'refurbish_status', true) },
     { key: 'sale_target', label: '销售去向', type: 'select', options: dictTabs(erpDicts.value, 'sale_target', true) },
     { key: 'listing_status', label: '上架状态', type: 'select', options: dictTabs(erpDicts.value, 'listing_status', true) },
-    { key: 'cost', label: '总成本', type: 'range', minKey: 'min_cost', maxKey: 'max_cost' },
+    ...(canViewCost.value ? [{ key: 'cost', label: '总成本', type: 'range', minKey: 'min_cost', maxKey: 'max_cost' }] : []),
     { key: 'price', label: '标价/预估价', type: 'range', minKey: 'min_price', maxKey: 'max_price' },
     { key: 'age', label: '库龄天数', type: 'range', minKey: 'stock_age_min', maxKey: 'stock_age_max' },
     { key: 'turnover_level', label: '周转等级', type: 'select', options: [
@@ -330,6 +314,10 @@ function selectQuickFilter(value: string) {
 }
 function openWarehouseFilter() { warehouseFilterVisible.value = true }
 function applyWarehouseFilter() { reload() }
+function toggleMyTask() {
+    filters.value = { ...filters.value, my_task: Number(filters.value.my_task || 0) === 1 ? 0 : 1 }
+    reload()
+}
 
 onShow(async () => {
     erpDicts.value = await loadErpDicts()
@@ -345,18 +333,17 @@ onLoad((options: any) => {
     if (options?.keyword) keyword.value = decodeURIComponent(String(options.keyword))
     if (options?.refurbish_status) filters.value.refurbish_status = String(options.refurbish_status)
     if (options?.turnover_level) filters.value.turnover_level = String(options.turnover_level)
+    if (Number(options?.my_task || 0) === 1) filters.value.my_task = 1
 })
 
 const queryList = async (pageNo: number, pageSize: number) => {
     try {
         const summaryRequest = pageNo === 1 ? getMobileStockTurnoverSummary() : Promise.resolve(null)
-        // 协作量是增强投影，接口暂不可用时库存列表仍应正常工作。
-        const workloadRequest = pageNo === 1 ? getMobileStockListingWorkload().catch(() => null) : Promise.resolve(null)
-        const [res, turnoverRes, workloadRes]: any[] = await Promise.all([
-            getMobileStockList({ keyword: keyword.value, status: activeTab.value, ...filterParams(), page: pageNo, limit: pageSize }), summaryRequest, workloadRequest
+        const [res, turnoverRes]: any[] = await Promise.all([
+            getMobileStockList({ keyword: keyword.value, status: activeTab.value, ...filterParams(), page: pageNo, limit: pageSize }), summaryRequest
         ])
         if (turnoverRes) turnoverSummary.value = turnoverRes?.data || { thresholds: {} }
-        if (workloadRes) listingWorkload.value = workloadRes?.data || { totals: {}, staff: [] }
+        stockCapabilities.value = res?.data?.capabilities || turnoverRes?.data?.capabilities || stockCapabilities.value
         pagingRef.value?.complete(res?.data?.data || [])
     } catch { pagingRef.value?.complete(false) }
 }
@@ -550,8 +537,10 @@ const listingLabel = (s: string) => dictLabel(erpDicts.value, 'listing_status', 
 <style scoped lang="scss">
 @import '@/addon/hsx_erp/styles/erp-mobile.scss';
 
-.quick-filters { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10rpx; }
-.quick-filter { height:52rpx; min-width:0; padding:0 12rpx; border-radius:10rpx; background:#fff; color:#64748b; display:flex; align-items:center; justify-content:center; gap:6rpx; box-sizing:border-box; font-size:23rpx; }
+.quick-filter-scroll { width:100%; white-space:nowrap; }
+.quick-filters { display:inline-flex; min-width:100%; gap:10rpx; }
+.quick-filter { width:154rpx; height:52rpx; flex:0 0 154rpx; min-width:0; padding:0 12rpx; border-radius:10rpx; background:#fff; color:#64748b; display:flex; align-items:center; justify-content:center; gap:6rpx; box-sizing:border-box; font-size:23rpx; }
+.quick-filter--task { width:174rpx; flex-basis:174rpx; }
 .quick-filter text { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .quick-filter.active { color:#2563eb; background:#eff6ff; font-weight:600; }
 
@@ -562,20 +551,6 @@ const listingLabel = (s: string) => dictLabel(erpDicts.value, 'listing_status', 
 .stock-overview__item .stock-overview__value { color:#0f172a; font-size:27rpx; font-weight:700; line-height:1.2; }
 .stock-overview__item .stock-overview__label { margin-top:6rpx; color:#94a3b8; font-size:20rpx; }
 .stock-overview__item.warning .stock-overview__value { color:#d97706; }
-.listing-workload { margin:12rpx 22rpx 0; padding:18rpx 20rpx; border-radius:14rpx; background:#fff; box-shadow:0 4rpx 16rpx rgba(15,23,42,.03); }
-.listing-workload__head { display:flex; align-items:center; justify-content:space-between; gap:16rpx; }
-.listing-workload__title,.listing-workload__desc { display:block; }
-.listing-workload__title { color:#0f172a; font-size:25rpx; font-weight:700; }
-.listing-workload__desc { margin-top:4rpx; color:#94a3b8; font-size:19rpx; }
-.listing-workload__grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); margin-top:16rpx; }
-.listing-workload__metric { text-align:center; border-right:1rpx solid #eef2f7; }
-.listing-workload__metric:last-child { border-right:0; }
-.listing-workload__value,.listing-workload__label { display:block; }
-.listing-workload__value { color:#2563eb; font-size:28rpx; font-weight:750; }
-.listing-workload__label { margin-top:4rpx; color:#64748b; font-size:19rpx; }
-.listing-workload__staff { margin-top:16rpx; padding-top:10rpx; border-top:1rpx solid #eef2f7; }
-.listing-workload__staff-row { display:flex; align-items:center; justify-content:space-between; gap:12rpx; padding:12rpx 2rpx; color:#64748b; font-size:20rpx; }
-.listing-workload__staff-name { max-width:150rpx; color:#334155; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .stock-tools { margin:12rpx 22rpx 0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12rpx; }
 .stock-tool { min-width:0; padding:16rpx 18rpx; border-radius:14rpx; background:#fff; display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:12rpx; box-shadow:0 4rpx 16rpx rgba(15,23,42,.03); }
 .stock-tool__icon { width:52rpx; height:52rpx; border-radius:14rpx; display:flex; align-items:center; justify-content:center; }
@@ -599,6 +574,7 @@ const listingLabel = (s: string) => dictLabel(erpDicts.value, 'listing_status', 
 .stock-banner text { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .stock-banner.sold { color:#2563eb; background:#eff6ff; }
 .stock-banner.void { color:#64748b; background:#f1f5f9; }
+.stock-banner.listing-error { color:#dc2626; background:#fef2f2; }
 .stock-banner.risk { color:#c2410c; background:#fff7ed; }
 
 .stock-meta { display:flex; align-items:center; justify-content:space-between; gap:20rpx; margin-top:16rpx; color:#64748b; font-size:22rpx; }

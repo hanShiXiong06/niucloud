@@ -167,7 +167,7 @@ class ErpListingTaskService extends BaseAdminService
     {
         $assetIds = ErpAsset::where([
             ['site_id', '=', $this->site_id], ['status', '=', 'in_stock'], ['sale_target', '=', 'mall'],
-        ])->whereIn('listing_status', ['need_photo', 'need_price', 'need_material', 'ready', 'pending_shop'])
+        ])->whereIn('listing_status', ['need_photo', 'need_price', 'need_material', 'ready'])
             ->where('task_assignee_uid', '=', 0)->column('id');
         foreach (array_map('intval', $assetIds) as $assetId) $this->sync($assetId);
     }
@@ -212,7 +212,7 @@ class ErpListingTaskService extends BaseAdminService
                 'stage_key' => $stage, 'assignee_uid' => $uid, 'assignee_name' => $name,
                 'assigner_uid' => (int)$this->uid, 'assigner_name' => (string)$this->username,
                 'assignment_mode' => $mode,
-                'title' => trim((string)$asset['model'] . ' ' . ErpListingWorkflow::taskName($stage)),
+                'title' => trim((string)$asset['model'] . ' ' . ErpListingWorkflow::taskName($stage, $mode)),
                 'business_no' => (string)($asset['asset_no'] ?? ''), 'imei' => (string)($asset['imei'] ?: $asset['sn']),
                 'pending_count' => (int)ErpAsset::where([['site_id', '=', $this->site_id], ['task_stage_key', '=', $stage], ['task_assignee_uid', '=', $uid]])->count(),
                 'target' => [
