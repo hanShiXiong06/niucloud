@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hsx-device-bridge"
+version = "0.1.1"
+description = "Lightweight local iPhone reader for hsx_recycle"
+requires-python = ">=3.9"
+dependencies = [
+    "pymobiledevice3==9.5.1",
+]
+
+[project.scripts]
+hsx-device-bridge = "hsx_device_bridge.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

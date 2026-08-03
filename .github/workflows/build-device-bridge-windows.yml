@@ -1,0 +1,88 @@
+name: Build Device Bridge for Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Installer version
+        required: true
+        default: "0.1.1"
+      allowed_origins:
+        description: Comma-separated production origins
+        required: false
+        default: ""
+  push:
+    branches:
+      - "**"
+    tags:
+      - "device-bridge-v*"
+    paths:
+      - ".github/workflows/build-device-bridge-windows.yml"
+      - "niucloud/addon/hsx_recycle/device_bridge/**"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: niucloud/addon/hsx_recycle/device_bridge
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: niucloud/addon/hsx_recycle/device_bridge/pyproject.toml
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install . pyinstaller
+
+      - name: Run tests
+        shell: pwsh
+        run: python -m unittest discover -s tests -v
+
+      - name: Resolve build options
+        id: options
+        shell: pwsh
+        run: |
+          $version = "${{ inputs.version }}"
+          if (-not $version) {
+            $version = "0.1.1"
+          }
+          $origins = "${{ inputs.allowed_origins }}"
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "origins=$origins" >> $env:GITHUB_OUTPUT
+
+      - name: Build installer
+        shell: pwsh
+        run: ./scripts/build_windows.ps1 -Version "${{ steps.options.outputs.version }}" -AllowedOrigins "${{ steps.options.outputs.origins }}"
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hsx-device-bridge-windows-${{ steps.options.outputs.version }}
+          path: niucloud/addon/hsx_recycle/device_bridge/dist/installer/*.exe
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish tagged release
+        if: startsWith(github.ref, 'refs/tags/device-bridge-v')
+        shell: pwsh
+        working-directory: ${{ github.workspace }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" `
+            niucloud/addon/hsx_recycle/device_bridge/dist/installer/*.exe `
+            --title "HSX Device Bridge ${{ steps.options.outputs.version }}" `
+            --generate-notes

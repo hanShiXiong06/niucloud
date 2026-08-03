@@ -1,0 +1,14 @@
+#!/bin/bash
+
+set -e
+
+PLIST="/Library/LaunchAgents/com.hsx.device-bridge.plist"
+CONSOLE_USER="$(stat -f '%Su' /dev/console)"
+
+if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ]; then
+    USER_ID="$(id -u "$CONSOLE_USER")"
+    launchctl bootout "gui/$USER_ID" "$PLIST" >/dev/null 2>&1 || true
+    launchctl bootstrap "gui/$USER_ID" "$PLIST" >/dev/null 2>&1 || true
+fi
+
+exit 0
