@@ -16,6 +16,8 @@ final class AiBusinessContextService
                 'contexts' => [],
                 'suggestions' => [],
                 'resources' => [],
+                'blocks' => [],
+                'consumers' => [],
             ];
         }
         $responses = event('HsxAiBusinessContextRequested', $request);
@@ -31,6 +33,10 @@ final class AiBusinessContextService
 
         $handled = array_values(array_filter($items, static fn(array $item): bool => !empty($item['handled'])));
         $allowed = array_values(array_filter($handled, static fn(array $item): bool => !empty($item['allowed'])));
+        $blocks = array_values(array_merge(...array_map(
+            static fn(array $item): array => array_values(array_filter((array)($item['blocks'] ?? []), 'is_array')),
+            $allowed ?: [[]]
+        )));
         return [
             'handled' => $handled !== [],
             'allowed' => $allowed !== [],
@@ -46,6 +52,11 @@ final class AiBusinessContextService
                 static fn(array $item): array => array_values(array_filter((array)($item['resources'] ?? []), 'is_array')),
                 $allowed ?: [[]]
             ))),
+            'blocks' => (new AiBlockService())->sanitize($blocks),
+            'consumers' => array_values(array_unique(array_filter(array_map(
+                static fn(array $item): string => trim((string)($item['consumer'] ?? '')),
+                $allowed
+            )))),
         ];
     }
 }

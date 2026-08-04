@@ -24,6 +24,18 @@ export function importChunkCheckCatalog(params: { batch_id: number; token: strin
 export function getCheckSeverityList(params: Record<string, any>) {
     return request.get('recycle/check_catalog/severity', { params })
 }
+// 下载人工级别标注协作表
+export function exportCheckSeverityExcel() {
+    return request.get('recycle/check_catalog/severity_export', { responseType: 'blob' })
+}
+// 上传标注表并预检（不会直接更新）
+export function previewCheckSeverityImport(data: FormData) {
+    return request.post('recycle/check_catalog/severity_import_preview', data, { headers: { 'Content-Type': 'multipart/form-data' } })
+}
+// 确认预检结果并更新
+export function confirmCheckSeverityImport(token: string) {
+    return request.post('recycle/check_catalog/severity_import_confirm', { token })
+}
 // 设置单个选项级别
 export function setCheckSeverity(id: number, severity: string) {
     return request.post(`recycle/check_catalog/severity/${id}`, { severity })

@@ -1,6 +1,6 @@
 <template>
     <view :style="warpCss" class="overflow-hidden">
-        <view class="qc-card card-template" v-if="hasQc">
+        <view class="qc-card card-template" :class="'qc-layout-' + layoutStyle" v-if="hasQc">
             <!-- 头部:盾形徽标 + 标题/副标题 + 检测通过徽标 -->
             <view class="qc-head" :style="headBgStyle">
                 <view class="qc-head-left">
@@ -46,7 +46,7 @@
             <!-- 完整报告(折叠) -->
             <view v-if="items.length" class="qc-all">
                 <view v-if="qcOpen" class="qc-all-list">
-                    <view v-for="(it, i) in items" :key="'a' + i" class="qc-row">
+                    <view v-for="(it, i) in displayItems" :key="'a' + i" class="qc-row">
                         <text class="qc-dot" :style="dotStyle(it.severity)"></text>
                         <text class="qc-row-name">{{ it.field_name }}</text>
                         <text class="qc-row-val" :style="it.severity !== 'normal' ? { color: sevColor(it.severity) } : {}">{{ valOf(it) }}</text>
@@ -115,7 +115,7 @@ const flagged = computed(() => {
     return items.value.filter((r: any) => r.severity === 'abnormal' || r.severity === 'general');
 });
 const hasQc = computed(() => items.value.length > 0 || summaryFields.value.length > 0);
-const qcOpen = ref(false);
+const qcOpen = ref(diyComponent.value.defaultExpand === 'all');
 
 // 可配置项(带默认值)
 const themeColor = computed(() => diyComponent.value.themeColor || '#1A6DFF');
@@ -124,6 +124,9 @@ const title = computed(() => diyComponent.value.title || '官方质检报告');
 const subTitle = computed(() => diyComponent.value.subTitle || '');
 const showBadge = computed(() => diyComponent.value.showBadge !== false);
 const showSummaryBar = computed(() => diyComponent.value.showSummaryBar !== false);
+const showNormalItems = computed(() => diyComponent.value.showNormalItems !== false);
+const layoutStyle = computed(() => diyComponent.value.layoutStyle || 'professional');
+const displayItems = computed(() => showNormalItems.value ? items.value : flagged.value);
 const headBgStyle = computed(() => `background:linear-gradient(135deg, ${ themeColor.value }14, ${ themeColor.value }02);`);
 const badgeStyle = computed(() => `color:${ themeColor.value };background:${ themeColor.value }14;`);
 
@@ -152,6 +155,10 @@ const warpCss = computed(() => {
     if (diyComponent.value.bottomRounded) style += 'border-bottom-right-radius:' + diyComponent.value.bottomRounded * 2 + 'rpx;';
     return style;
 })
+
+watch(() => diyComponent.value.defaultExpand, (value) => {
+    qcOpen.value = value === 'all';
+}, { immediate: true });
 
 onMounted(() => {
     if (diyStore.mode != 'decorate') {
@@ -320,5 +327,20 @@ onMounted(() => {
     justify-content: center;
     margin-top: 18rpx;
     font-weight: 500;
+}
+.qc-layout-simple {
+    .qc-head { padding: 8rpx 0 18rpx; margin-bottom: 12rpx; background: transparent !important; border-radius: 0; }
+    .qc-shield { width: 52rpx; height: 52rpx; border-radius: 50%; box-shadow: none; }
+    .qc-summary { gap: 10rpx; margin-bottom: 14rpx; }
+    .qc-chip { padding: 7rpx 14rpx; font-size: 22rpx; }
+}
+.qc-layout-card {
+    padding: 22rpx;
+    border: 1rpx solid rgba(26, 109, 255, .12);
+    border-radius: 22rpx !important;
+    background: linear-gradient(145deg, #fff, #f7faff) !important;
+    box-shadow: 0 10rpx 30rpx rgba(35, 65, 110, .07);
+    .qc-head { margin-bottom: 16rpx; }
+    .qc-summary { margin-bottom: 16rpx; }
 }
 </style>

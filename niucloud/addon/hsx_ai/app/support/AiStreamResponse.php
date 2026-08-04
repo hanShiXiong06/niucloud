@@ -33,6 +33,7 @@ final class AiStreamResponse extends Response
         @ini_set('zlib.output_compression', '0');
         @ini_set('output_buffering', '0');
         while (ob_get_level() > 0) @ob_end_flush();
+        ob_implicit_flush(true);
         ($this->callback)();
     }
 }

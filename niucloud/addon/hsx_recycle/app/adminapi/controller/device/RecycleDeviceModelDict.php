@@ -75,6 +75,15 @@ class RecycleDeviceModelDict extends BaseAdminController
         return success($this->service->add($data));
     }
 
+    public function ensureChild()
+    {
+        $data = $this->request->params([
+            ['parent_id', 0],
+            ['node_name', ''],
+        ]);
+        return success($this->service->ensureChild((int)$data['parent_id'], (string)$data['node_name']));
+    }
+
     public function edit(int $id)
     {
         $data = $this->request->params([

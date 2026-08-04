@@ -29,12 +29,15 @@ final class PerformanceConfigService
     private function normalize(array $data): array
     {
         $receiverUids = array_values(array_unique(array_filter(array_map('intval', (array)($data['receiver_uids'] ?? [])))));
+        $dailyScope = (string)($data['daily_scope'] ?? 'auto');
+        if (!in_array($dailyScope, ['auto', 'current_day', 'previous_day'], true)) $dailyScope = 'auto';
         return [
             'enabled' => (int)!empty($data['enabled']),
             'daily_enabled' => (int)($data['daily_enabled'] ?? 1) === 1 ? 1 : 0,
             'weekly_enabled' => (int)($data['weekly_enabled'] ?? 1) === 1 ? 1 : 0,
             'monthly_enabled' => (int)($data['monthly_enabled'] ?? 1) === 1 ? 1 : 0,
             'send_time' => trim((string)($data['send_time'] ?? '09:10')) ?: '09:10',
+            'daily_scope' => $dailyScope,
             'show_finance' => (int)($data['show_finance'] ?? 1) === 1 ? 1 : 0,
             'show_profit' => (int)($data['show_profit'] ?? 1) === 1 ? 1 : 0,
             'receiver_uids' => $receiverUids,

@@ -1,9 +1,8 @@
 <template>
     <view v-if="subtitle || serial" class="phone-goods-meta" :class="{ 'phone-goods-meta--compact': compact }">
         <text v-if="subtitle" class="phone-goods-meta__subtitle">{{ subtitle }}</text>
-        <text v-if="subtitle && serial" class="phone-goods-meta__divider">·</text>
-        <text v-if="serial" class="phone-goods-meta__imei">IMEI {{ serial }}</text>
     </view>
+    <view class="phone-goods-meta"> <text v-if="serial" class="phone-goods-meta__imei">IMEI {{ serial }}</text></view>
 </template>
 
 <script setup lang="ts">
@@ -42,6 +41,7 @@ const serial = computed(() => String(props.imei || '').trim())
     overflow: hidden;
     flex: 1;
     text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .phone-goods-meta__divider {

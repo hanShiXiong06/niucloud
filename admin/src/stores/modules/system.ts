@@ -6,6 +6,8 @@ import {getWebConfig, getWebsiteLayout} from '@/app/api/sys'
 interface System {
     menuIsCollapse: boolean,
     menuDrawer: boolean,
+    workspaceSidebarPreference: 'auto' | 'expanded' | 'collapsed',
+    workspaceSidebarRequests: Record<string, 'expanded' | 'collapsed'>,
     dark: boolean,
     theme: string,
     lang: string,
@@ -24,6 +26,8 @@ const useSystemStore = defineStore('system', {
         return {
             menuIsCollapse: false,
             menuDrawer: false,
+            workspaceSidebarPreference: storage.get('workspace_sidebar_preference') ?? 'auto',
+            workspaceSidebarRequests: {},
             dark: theme.dark ?? false,
             theme: theme.theme ?? '#273de3',
             sidebar: theme.sidebar ?? 'oneType',
@@ -48,6 +52,23 @@ const useSystemStore = defineStore('system', {
             this.menuIsCollapse = value
             storage.set({ key: 'menuiscollapse', data: value })
             useCssVar('--aside-width').value = value ? 'calc(var(--el-menu-icon-width) + var(--el-menu-base-level-padding) * 2)' : '210px'
+        },
+        setWorkspaceSidebarPreference(value: 'auto' | 'expanded' | 'collapsed') {
+            this.workspaceSidebarPreference = value
+            storage.set({ key: 'workspace_sidebar_preference', data: value })
+        },
+        requestWorkspaceSidebar(source: string, mode: 'expanded' | 'collapsed') {
+            if (!source) return
+            this.workspaceSidebarRequests = {
+                ...this.workspaceSidebarRequests,
+                [source]: mode
+            }
+        },
+        releaseWorkspaceSidebar(source: string) {
+            if (!source || !(source in this.workspaceSidebarRequests)) return
+            const requests = { ...this.workspaceSidebarRequests }
+            delete requests[source]
+            this.workspaceSidebarRequests = requests
         },
         async getWebsiteInfo() {
             await getWebConfig().then(({ data }) => {

@@ -22,4 +22,7 @@ Route::group('ai', function () {
     Route::post('execute', 'addon\hsx_ai\app\adminapi\controller\Config@execute');
     Route::post('stream', 'addon\hsx_ai\app\adminapi\controller\Config@stream');
     Route::get('logs', 'addon\hsx_ai\app\adminapi\controller\Log@lists');
+    Route::get('conversations', 'addon\hsx_ai\app\adminapi\controller\Conversation@lists');
+    Route::get('conversations/:id', 'addon\hsx_ai\app\adminapi\controller\Conversation@detail');
+    Route::get('risks', 'addon\hsx_ai\app\adminapi\controller\Risk@lists');
 })->middleware([AdminCheckToken::class, AdminCheckRole::class, AdminLog::class]);

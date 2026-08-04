@@ -1,5 +1,5 @@
 <template>
-    <view :style="warpCss" class="overflow-hidden relative" v-if="diyComponent && diyComponent.goods && Object.keys(diyComponent.goods).length">
+    <view :style="warpCss" class="overflow-hidden relative goods-detail-basic" :class="'layout-' + (diyComponent.layoutStyle || 'standard')" v-if="diyComponent && diyComponent.goods && Object.keys(diyComponent.goods).length">
         <!-- 自定义头部 -->
         <view class="flex items-center left-0 right-0 z-10 bg-transparent detail-head" :class="{'!bg-[#fff]' :detailHeadBgChange, 'fixed': diyStore.mode != 'decorate', 'absolute': diyStore.mode == 'decorate'}" :style="navbarInnerStyle">
             <view class="flex-center h-[60rpx] rounded-[30rpx] box-border arrow-left px-[40rpx] leading-[1]" :style="navbarInnerArrowStyle">
@@ -117,24 +117,27 @@
                         <text class="price-font text-[32rpx] mr-[10rpx]">.{{ parseFloat(goodsPrice).toFixed(2).split('.')[1] }}</text>
                     </view>
                 </view>
-                <view class="font-medium text-[30rpx] multi-hidden leading-[40rpx]" :style="{'color': diyComponent.goodsInfo.titleColor}">
-                    <view class="brand-tag middle" v-if="diyComponent.goods.goods_brand" :style="diyGoods.baseTagStyle(diyComponent?.goods?.goods_brand)">{{ diyComponent?.goods?.goods_brand?.brand_name }}</view>
+                <view class="goods-main-title font-medium text-[30rpx] leading-[40rpx]" :class="(diyComponent.titleLines || 2) == 1 ? 'single-hidden' : 'multi-hidden'" :style="{'color': diyComponent.goodsInfo.titleColor}">
+                    <view class="brand-tag middle" v-if="diyComponent.showBrand !== false && diyComponent.goods.goods_brand" :style="diyGoods.baseTagStyle(diyComponent?.goods?.goods_brand)">{{ diyComponent?.goods?.goods_brand?.brand_name }}</view>
                     {{ diyComponent.goods.goods_name }}
                 </view>
-                <view v-if="diyComponent.goods.sub_title" class="text-[26rpx] my-[16rpx] leading-[33rpx]" :style="{'color': diyComponent.goodsInfo.subTitleColor}">
+                <view v-if="diyComponent.showSubtitle !== false && diyComponent.goods.sub_title" class="goods-sub-title text-[26rpx] my-[16rpx] leading-[33rpx]" :style="{'color': diyComponent.goodsInfo.subTitleColor}">
                     {{diyComponent.goods.sub_title}}
                 </view>
                 
-                <view class="flex flex-wrap mt-[16rpx]" v-if="diyComponent.label_info && diyComponent.label_info.length">
+                <view class="goods-labels flex flex-wrap mt-[16rpx]" v-if="diyComponent.showLabels !== false && diyComponent.label_info && diyComponent.label_info.length">
                     <template v-for="item in diyComponent.label_info" :key="item.label_id">
                         <image class="img-tag middle" v-if="item.style_type == 'icon' && item.icon" :src="img(item.icon)" mode="heightFix"  @error="diyGoods.error(item,'icon')" />
                         <view class="base-tag middle" v-else-if="item.style_type == 'diy' || !item.icon" :style="diyGoods.baseTagStyle(item)">{{ item.label_name }}</view>
                     </template>
                 </view>
                 <!-- 二手机:内存 / 成色等级 / IMEI(参考标签样式;IMEI 可在装修中勾选显隐) -->
-                <view class="flex flex-wrap items-center mt-[12rpx]" v-if="diyComponent.goods.memory_group || diyComponent.goods.condition_grade || (diyComponent.imeiShow !== false && imeiVal)">
-                    <view class="device-tag" v-if="diyComponent.goods.memory_group">{{ diyComponent.goods.memory_group }}</view>
-                    <view class="device-tag" v-if="diyComponent.goods.condition_grade">{{ diyComponent.goods.condition_grade }}</view>
+                <view class="device-meta flex flex-wrap items-center mt-[12rpx]" v-if="(diyComponent.showDeviceMeta !== false && (diyComponent.goods.memory_group || diyComponent.goods.condition_grade)) || (diyComponent.imeiShow !== false && imeiVal)">
+                    <view class="device-tag" v-if="diyComponent.showDeviceMeta !== false && diyComponent.goods.memory_group">{{ diyComponent.goods.memory_group }}</view>
+                    <view class="device-tag grade-tag" v-if="diyComponent.showDeviceMeta !== false && diyComponent.goods.condition_grade" @click.stop="openGradeInfo">
+                        <text>{{ diyComponent.goods.condition_grade }}</text>
+                        <u-icon name="info-circle" size="13" color="#64748b"></u-icon>
+                    </view>
                     <view class="device-tag device-imei" v-if="diyComponent.imeiShow !== false && imeiVal">IMEI: {{ imeiVal }}</view>
                 </view>
                 <view class="flex justify-between items-start mt-[24rpx]">
@@ -155,6 +158,40 @@
                 </view>
             </view>
         </view>
+        <u-popup :show="gradeInfoVisible" mode="bottom" :round="20" :safeAreaInsetBottom="true" @close="gradeInfoVisible = false">
+            <view class="grade-info-popup">
+                <view class="grade-popup-head">
+                    <view>
+                        <view class="grade-popup-kicker">成色等级说明</view>
+                        <view class="grade-popup-title">{{ gradeInfo.grade_name || diyComponent.goods.condition_grade }}</view>
+                    </view>
+                    <view class="grade-popup-close" @click="gradeInfoVisible = false">
+                        <u-icon name="close" size="20" color="#64748b"></u-icon>
+                    </view>
+                </view>
+
+                <view v-if="gradeInfo.grade_image" class="grade-popup-image-wrap" @click="previewGradeImage">
+                    <image class="grade-popup-image" :src="img(gradeInfo.grade_image)" mode="aspectFill"></image>
+                    <view class="grade-popup-image-tip">
+                        <u-icon name="photo" size="14" color="#ffffff"></u-icon>
+                        <text>点击查看大图</text>
+                    </view>
+                </view>
+                <view v-else class="grade-popup-image-empty">
+                    <u-icon name="photo" size="28" color="#94a3b8"></u-icon>
+                    <text>商家暂未上传等级示意图</text>
+                </view>
+
+                <view class="grade-popup-desc-title">等级描述</view>
+                <view class="grade-popup-desc" :class="{ 'grade-popup-desc-empty': !gradeInfo.grade_desc }">
+                    {{ gradeInfo.grade_desc || '商家暂未填写该等级的详细说明，请以本机图片和质检报告为准。' }}
+                </view>
+
+                <view class="grade-popup-action">
+                    <view class="grade-popup-button" @click="gradeInfoVisible = false">我知道了</view>
+                </view>
+            </view>
+        </u-popup>
         <!-- 装修时，防止点击 -->
         <view v-if="diyStore.mode == 'decorate'" class="absolute z-10 top-0 right-0 bottom-0 left-0"></view>
     </view>
@@ -176,6 +213,7 @@ const topNav = ref(false);
 const switchMedia: any = ref('img');
 const swiperCurrentIndex = ref(1); // 轮播图当前索引
 const videoContext: any = ref(null)
+const gradeInfoVisible = ref(false)
 const currentVideoSrc = ref('')
 const currentVideoPoster = ref('')
 const discountTime = ref(0)
@@ -210,6 +248,28 @@ const imeiVal = computed(() => {
     const sku: any = g.goodsSku || g.sku || (Array.isArray(g.sku_list) ? g.sku_list[0] : null);
     return c.sku_no || g.sku_no || (sku && sku.sku_no) || '';
 })
+const gradeInfo = computed(() => {
+    const goods: any = diyComponent.value?.goods || {};
+    return goods.condition_grade_info || {
+        grade_id: 0,
+        grade_name: goods.condition_grade || '',
+        grade_desc: '',
+        grade_image: ''
+    };
+})
+
+const openGradeInfo = () => {
+    if (diyStore.mode == 'decorate') return;
+    gradeInfoVisible.value = true;
+}
+
+const previewGradeImage = () => {
+    if (!gradeInfo.value.grade_image) return;
+    uni.previewImage({
+        current: img(gradeInfo.value.grade_image),
+        urls: [img(gradeInfo.value.grade_image)]
+    });
+}
 const saleInfo = ref([])
 const diyGlobal = computed(() => {
     return props.global;
@@ -763,5 +823,135 @@ onMounted(() => {
 } 
 :deep(.u-swiper-indicator__wrapper--line__bar){
     height: 4rpx !important;
+}
+.grade-tag {
+    display: flex;
+    align-items: center;
+    gap: 6rpx;
+}
+.grade-info-popup {
+    padding: 34rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
+    background: #fff;
+    box-sizing: border-box;
+}
+.grade-popup-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 28rpx;
+}
+.grade-popup-kicker {
+    color: #94a3b8;
+    font-size: 22rpx;
+    line-height: 32rpx;
+    margin-bottom: 6rpx;
+}
+.grade-popup-title {
+    color: #172033;
+    font-size: 36rpx;
+    line-height: 48rpx;
+    font-weight: 600;
+}
+.grade-popup-close {
+    width: 64rpx;
+    height: 64rpx;
+    border-radius: 32rpx;
+    background: #f4f6f8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.grade-popup-image-wrap,
+.grade-popup-image-empty {
+    width: 100%;
+    height: 320rpx;
+    border-radius: 20rpx;
+    overflow: hidden;
+    position: relative;
+    background: #f4f6f8;
+    margin-bottom: 28rpx;
+}
+.grade-popup-image {
+    width: 100%;
+    height: 100%;
+}
+.grade-popup-image-tip {
+    position: absolute;
+    right: 18rpx;
+    bottom: 18rpx;
+    display: flex;
+    align-items: center;
+    gap: 6rpx;
+    height: 48rpx;
+    padding: 0 16rpx;
+    border-radius: 24rpx;
+    color: #fff;
+    font-size: 22rpx;
+    background: rgba(15, 23, 42, .68);
+}
+.grade-popup-image-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12rpx;
+    color: #94a3b8;
+    font-size: 24rpx;
+}
+.grade-popup-desc-title {
+    color: #172033;
+    font-size: 28rpx;
+    line-height: 40rpx;
+    font-weight: 600;
+    margin-bottom: 12rpx;
+}
+.grade-popup-desc {
+    color: #475569;
+    font-size: 26rpx;
+    line-height: 42rpx;
+    white-space: pre-wrap;
+    padding: 22rpx 24rpx;
+    border-radius: 16rpx;
+    background: #f7f8fa;
+}
+.grade-popup-desc-empty {
+    color: #94a3b8;
+}
+.grade-popup-action {
+    margin-top: 32rpx;
+}
+.grade-popup-button {
+    height: 88rpx;
+    border-radius: 44rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 28rpx;
+    font-weight: 600;
+    background: var(--primary-color);
+}
+
+/* DIY 排版预设：只改变信息层级，不改变业务数据和购买逻辑 */
+.goods-detail-basic.layout-modern {
+    .detail-title {
+        margin: 0 20rpx 20rpx;
+        padding-left: 26rpx !important;
+        padding-right: 26rpx !important;
+        padding-bottom: 24rpx;
+        border-radius: 24rpx;
+        background: rgba(255, 255, 255, .98);
+        box-shadow: 0 10rpx 32rpx rgba(31, 41, 55, .08);
+    }
+    .goods-main-title { font-size: 34rpx !important; line-height: 46rpx !important; font-weight: 700; }
+    .device-tag { background: #eef4ff; color: #3b67a8; }
+}
+.goods-detail-basic.layout-compact {
+    .detail-title { padding-left: 24rpx !important; padding-right: 24rpx !important; }
+    .goods-main-title { font-size: 28rpx !important; line-height: 38rpx !important; }
+    .goods-sub-title { margin-top: 8rpx !important; margin-bottom: 8rpx !important; font-size: 23rpx !important; }
+    .goods-labels { margin-top: 8rpx !important; }
+    .device-meta { margin-top: 6rpx !important; }
+    .device-tag { padding: 2rpx 10rpx; margin-right: 8rpx; font-size: 20rpx; }
 }
 </style>

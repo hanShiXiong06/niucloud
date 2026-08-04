@@ -16,11 +16,12 @@
 						<view class="first-list">
 							<view v-for="(item, index) in tabsData" :key="item.category_id" class="first-item" :class="{ active: index == firstActive, 'no-icon': !firstCategoryConfig.show_icon }" @click="firstLevelClick(index)">
 								<view class="first-img" v-if="firstCategoryConfig.show_icon">
-									<u--image width="76rpx" height="76rpx" radius="50%" :src="img(item.image || '')" model="aspectFill">
+									<u--image v-if="item.image" width="52rpx" height="52rpx" radius="14rpx" :src="img(item.image)" model="aspectFill">
 										<template #error>
-											<image class="first-img-fallback" :src="img('static/resource/images/diy/shop_default.jpg')" mode="aspectFill"></image>
+											<view class="first-img-letter">{{ categoryInitial(item.category_name) }}</view>
 										</template>
 									</u--image>
+									<view v-else class="first-img-letter">{{ categoryInitial(item.category_name) }}</view>
 								</view>
 								<text class="first-text truncate">{{ item.category_name }}</text>
 							</view>
@@ -28,7 +29,7 @@
 					</scroll-view>
 					<view class="more-category-btn" @click="showCategoryPopup = true">
 						<text class="nc-iconfont nc-icon-fenleiV6mm more-category-icon"></text>
-						<text class="more-category-text">更多</text>
+						<text class="more-category-text">全部</text>
 					</view>
 				</view>
 			</view>
@@ -88,6 +89,12 @@
 						<view v-else class="goods-list">
 							<view v-for="(item, index) in list" :key="item.goods_id" class="goods-item" @click.stop="toGoodsDetail(item.goods_id)">
 								<view class="goods-img">
+									<view v-if="config.show_quality && item.condition_grade" class="quality-badge quality-badge--grade">
+										<text>{{ item.condition_grade }}</text>
+									</view>
+									<view v-if="config.show_quality && qcAbnormal(item)" class="quality-badge quality-badge--warning">
+										<text>异常 {{ qcAbnormal(item) }}</text>
+									</view>
 									<u--image width="180rpx" height="180rpx" radius="10rpx" :src="img(item.goods_cover_thumb_mid || '')" model="aspectFill">
 										<template #error>
 											<image class="w-[180rpx] h-[180rpx] rounded-[10rpx]" :src="img('static/resource/images/diy/shop_default.jpg')" mode="aspectFill"></image>
@@ -117,6 +124,7 @@
 												<text class="iconfont iconjiahao2fill step-icon add" :id="'itemCart' + index" @click.stop="addCartBtn(item, cartList['goods_' + item.goods_id]['sku_' + item.goodsSku.sku_id], 'itemCart' + index)"></text>
 											</view>
 											<view v-else-if="config.cart.event === 'download'" class="download-action" @click.stop="itemCart(item, 'itemCart' + index)">{{ config.cart.text || '转发' }}</view>
+											<view v-else-if="config.cart.event === 'detail' && config.cart.style === 'style-1'" class="detail-action" @click.stop="itemCart(item, 'itemCart' + index)">{{ config.cart.text || '查看' }}</view>
 											<text v-else :id="'itemCart' + index" class="nc-iconfont nc-icon-tianjiaV6xx add-cart" @click.stop="itemCart(item, 'itemCart' + index)"></text>
 										</view>
 									</view>
@@ -314,6 +322,7 @@ const dims = computed(() => [
 	{ key: 'sort', label: '排序' }
 ]);
 const thirdOptions = computed(() => thirdLevelList.value || []);
+const categoryInitial = (name: string) => String(name || '类').trim().slice(0, 1);
 // 内存按"苹果(纯容量)/安卓(含+组合)"分组,贴参考图
 const memoryGroups = computed(() => {
 	const apple: string[] = [], android: string[] = [];
@@ -445,7 +454,7 @@ const headerSearchStyle = computed(() => {
 	return style;
 });
 const contentStyle = computed(() => {
-	const firstCategoryHeight = firstCategoryConfig.value.show_icon ? (config.search.control ? 148 : 128) : (config.search.control ? 88 : 76);
+	const firstCategoryHeight = firstCategoryConfig.value.show_icon ? (config.search.control ? 118 : 98) : (config.search.control ? 92 : 72);
 	return `top: calc(${customNavbarTop.value}px + ${headerSearchHeight.value} + ${firstCategoryHeight}rpx);`;
 });
 // const deliveryDate = computed(() => {
@@ -918,20 +927,23 @@ const qcAbnormal = (data: any) => {
 }
 
 .category-header {
-	padding: 18rpx 24rpx 12rpx;
+	padding: 10rpx 20rpx;
 	box-sizing: border-box;
+	background: rgba(255, 255, 255, 0.98) !important;
+	border-bottom: 2rpx solid #eef1f5;
+	box-shadow: 0 6rpx 18rpx rgba(32, 41, 57, 0.035);
 }
 
 .header-search {
 	display: flex;
 	align-items: center;
 	height: 72rpx;
-	gap: 22rpx;
+	gap: 18rpx;
 }
 
 .page-title {
 	flex-shrink: 0;
-	font-size: 34rpx;
+	font-size: 32rpx;
 	line-height: 46rpx;
 	font-weight: 600;
 	color: #2f3238;
@@ -941,9 +953,9 @@ const qcAbnormal = (data: any) => {
 	min-width: 0;
 	height: 64rpx;
 	flex: 1;
-	border: 2rpx solid var(--primary-color);
+	border: 2rpx solid #e2e7ef;
 	border-radius: 34rpx;
-	background-color: #fff;
+	background-color: #f6f8fb;
 	display: flex;
 	align-items: center;
 	padding: 0 22rpx;
@@ -973,80 +985,100 @@ const qcAbnormal = (data: any) => {
 .first-scroll {
 	flex: 1;
 	min-width: 0;
-	height: 128rpx;
-	margin-top: 14rpx;
+	height: 82rpx;
+	margin-top: 10rpx;
 	white-space: nowrap;
 }
 
 .first-scroll.is-text {
 	height: 70rpx;
-	margin-top: 10rpx;
+	margin-top: 8rpx;
 }
 
 .first-list {
 	display: inline-flex;
 	align-items: center;
-	gap: 22rpx;
+	gap: 12rpx;
 	min-width: 100%;
 }
 
 .first-category-row {
 	display: flex;
-	align-items: flex-start;
-	gap: 14rpx;
+	align-items: center;
+	gap: 10rpx;
 }
 
 .first-item {
-	width: 112rpx;
-	height: 124rpx;
+	width: auto;
+	min-width: 106rpx;
+	height: 68rpx;
+	padding: 0 18rpx 0 8rpx;
 	display: flex;
-	flex-direction: column;
+	flex-direction: row;
 	align-items: center;
 	justify-content: center;
+	gap: 10rpx;
+	border: 2rpx solid transparent;
+	border-radius: 34rpx;
+	background: #f5f7fa;
+	box-sizing: border-box;
 }
 
 .first-item.no-icon {
-	height: 64rpx;
+	height: 58rpx;
+	padding: 0 22rpx;
 	justify-content: center;
 }
 
 .first-item.no-icon .first-text {
-	max-width: 140rpx;
-	height: 48rpx;
-	line-height: 48rpx;
+	max-width: 160rpx;
+	height: auto;
+	line-height: 36rpx;
 	margin-top: 0;
-	padding: 0 22rpx;
-	border-radius: 24rpx;
-	background-color: var(--first-item-bg-color);
+	padding: 0;
+	border-radius: 0;
+	background-color: transparent;
 }
 
 .first-img {
-	width: 88rpx;
-	height: 88rpx;
-	padding: 6rpx;
-	border-radius: 50%;
-	border: 2rpx solid transparent;
+	width: 52rpx;
+	height: 52rpx;
+	padding: 0;
+	border-radius: 14rpx;
 	box-sizing: border-box;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	background-color: #fff;
+	background: linear-gradient(145deg, #eef4ff, #e6edff);
 	overflow: hidden;
 }
 
 .first-img-fallback {
-	width: 76rpx;
-	height: 76rpx;
-	border-radius: 50%;
+	width: 52rpx;
+	height: 52rpx;
+	border-radius: 14rpx;
+}
+
+.first-img-letter {
+	width: 52rpx;
+	height: 52rpx;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 14rpx;
+	color: var(--primary-color);
+	background: linear-gradient(145deg, #eef4ff, #e5edff);
+	font-size: 24rpx;
+	font-weight: 700;
 }
 
 .first-text {
-	max-width: 124rpx;
+	max-width: 150rpx;
 	height: 38rpx;
 	line-height: 38rpx;
-	margin-top: 8rpx;
-	padding: 0 10rpx;
-	border-radius: 20rpx;
+	margin-top: 0;
+	padding: 0;
+	border-radius: 0;
 	font-size: var(--first-font-size);
 	color: var(--first-text-color);
 	text-align: center;
@@ -1054,29 +1086,35 @@ const qcAbnormal = (data: any) => {
 }
 
 .first-item.active .first-img {
+	box-shadow: 0 0 0 2rpx rgba(18, 85, 231, 0.12);
+}
+
+.first-item.active {
 	border-color: var(--primary-color);
+	background: #fff;
+	box-shadow: 0 6rpx 16rpx rgba(18, 85, 231, 0.09);
 }
 
 .first-item.active .first-text {
-	color: var(--first-active-text-color);
-	background-color: var(--first-active-bg-color);
+	color: var(--primary-color);
+	background-color: transparent;
 	font-weight: 600;
 }
 
 .more-category-btn {
 	flex-shrink: 0;
-	width: 64rpx;
-	height: 98rpx;
-	padding: 8rpx 0;
-	margin-top: 22rpx;
+	width: 76rpx;
+	height: 64rpx;
+	padding: 0;
+	margin-top: 10rpx;
 	display: flex;
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	gap: 6rpx;
-	border-radius: 18rpx;
-	background: rgba(255, 255, 255, 0.92);
-	box-shadow: 0 6rpx 18rpx rgba(31, 41, 55, 0.08);
+	gap: 2rpx;
+	border-radius: 20rpx;
+	background: #f2f5fa;
+	box-shadow: none;
 	color: var(--primary-color);
 	font-weight: 600;
 }
@@ -1090,19 +1128,19 @@ const qcAbnormal = (data: any) => {
 }
 
 .more-category-icon {
-	font-size: 28rpx;
+	font-size: 26rpx;
 	line-height: 1;
 }
 
 .more-category-text {
-	font-size: 20rpx;
+	font-size: 19rpx;
 	line-height: 24rpx;
 }
 
 .content {
 	top: 244rpx;
 	display: flex;
-	background-color: #fff;
+	background-color: #f5f7fa;
 }
 
 .content.has-cart {
@@ -1112,7 +1150,8 @@ const qcAbnormal = (data: any) => {
 .second-panel {
 	width: var(--second-width);
 	height: 100%;
-	background-color: var(--second-bg-color);
+	background-color: #f4f6f9;
+	border-right: 2rpx solid #edf0f4;
 	flex-shrink: 0;
 }
 .second-panel scroll-view {
@@ -1121,7 +1160,7 @@ const qcAbnormal = (data: any) => {
 }
 
 .second-item {
-	min-height: 104rpx;
+	min-height: 96rpx;
 	padding: 0 18rpx;
 	display: flex;
 	align-items: center;
@@ -1136,7 +1175,7 @@ const qcAbnormal = (data: any) => {
 .second-item.active {
 	background-color: var(--second-active-bg-color);
 	color: var(--second-active-text-color);
-	font-weight: 600;
+	font-weight: 700;
 	position: relative;
 }
 
@@ -1144,9 +1183,9 @@ const qcAbnormal = (data: any) => {
 	content: '';
 	position: absolute;
 	left: 0;
-	top: 30rpx;
-	width: 6rpx;
-	height: 44rpx;
+	top: 28rpx;
+	width: 7rpx;
+	height: 40rpx;
 	border-radius: 0 6rpx 6rpx 0;
 	background-color: var(--primary-color);
 }
@@ -1202,8 +1241,8 @@ const qcAbnormal = (data: any) => {
 	z-index: 6;
 	display: flex;
 	align-items: center;
-	height: 88rpx;
-	margin-top: 12rpx;
+	height: 78rpx;
+	margin-top: 0;
 	border-bottom: 2rpx solid #f0f0f0;
 	background-color: #fff;
 }
@@ -1211,7 +1250,7 @@ const qcAbnormal = (data: any) => {
 .third-scroll {
 	flex: 1;
 	min-width: 0;
-	height: 88rpx;
+	height: 78rpx;
 	white-space: nowrap;
 }
 
@@ -1224,7 +1263,7 @@ const qcAbnormal = (data: any) => {
 	display: flex;
 	align-items: center;
 	gap: 6rpx;
-	height: 88rpx;
+	height: 78rpx;
 	padding: 0 24rpx 0 22rpx;
 	color: #4e5969;
 	font-size: 24rpx;
@@ -1256,17 +1295,17 @@ const qcAbnormal = (data: any) => {
 	display: inline-flex;
 	align-items: center;
 	min-width: 100%;
-	height: 88rpx;
-	padding: 0 24rpx;
+	height: 78rpx;
+	padding: 0 18rpx;
 	box-sizing: border-box;
 	gap: 16rpx;
 }
 
 .third-item {
-	height: 54rpx;
-	line-height: 54rpx;
-	padding: 0 28rpx;
-	border-radius: 10rpx;
+	height: 48rpx;
+	line-height: 48rpx;
+	padding: 0 20rpx;
+	border-radius: 24rpx;
 	background-color: var(--third-bg-color);
 	color: var(--third-text-color);
 	font-size: var(--third-font-size);
@@ -1472,24 +1511,63 @@ const qcAbnormal = (data: any) => {
 }
 
 .goods-list {
-	padding: 10rpx 0 24rpx;
+	padding: 12rpx 12rpx 24rpx;
 	box-sizing: border-box;
 }
 
 .goods-item {
 	display: flex;
-	padding: 20rpx ;
+	padding: 18rpx;
+	margin-bottom: 12rpx;
 	box-sizing: border-box;
 	background-color: #fff;
+	border: 2rpx solid #eef1f5;
+	border-radius: 16rpx;
+	box-shadow: 0 4rpx 14rpx rgba(31, 41, 55, 0.035);
 }
 
 .goods-img {
+	position: relative;
 	width: 180rpx;
 	height: 180rpx;
 	flex-shrink: 0;
-	border-radius: 10rpx;
+	border-radius: 14rpx;
 	overflow: hidden;
 	background-color: #fafafa;
+}
+
+.quality-badge {
+	position: absolute;
+	z-index: 2;
+	top: 10rpx;
+	max-width: 126rpx;
+	height: 34rpx;
+	padding: 0 10rpx;
+	border: 2rpx solid rgba(255, 255, 255, 0.9);
+	border-radius: 8rpx;
+	box-sizing: border-box;
+	color: #fff;
+	font-size: 20rpx;
+	font-weight: 600;
+	line-height: 30rpx;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	box-shadow: 0 3rpx 10rpx rgba(15, 23, 42, 0.18);
+}
+
+.quality-badge--grade {
+	left: 10rpx;
+	max-width: 96rpx;
+	background: rgba(30, 41, 59, 0.86);
+}
+
+.quality-badge--warning {
+	right: 10rpx;
+	max-width: 76rpx;
+	padding: 0 8rpx;
+	color: #b42318;
+	background: rgba(255, 242, 240, 0.96);
 }
 
 .goods-info {
@@ -1606,6 +1684,19 @@ const qcAbnormal = (data: any) => {
 	border-radius: 24rpx;
 	background-color: var(--primary-color);
 	color: #fff;
+	font-size: 23rpx;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.detail-action {
+	height: 44rpx;
+	line-height: 42rpx;
+	padding: 0 18rpx;
+	border: 1rpx solid var(--primary-color);
+	border-radius: 24rpx;
+	color: var(--primary-color);
+	background: #fff;
 	font-size: 23rpx;
 	font-weight: 600;
 	white-space: nowrap;

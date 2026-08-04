@@ -117,6 +117,44 @@ class RecycleDeviceModelDictService extends BaseAdminService
     }
 
     /**
+     * 签收等业务只能消费已启用的叶子型号，并由服务端返回可信的完整 ID 路径。
+     *
+     * @return array<string,mixed>
+     */
+    public function selectableLeaf(int $id): array
+    {
+        $node = $this->getNode($id);
+        if ((int)($node['status'] ?? 0) !== 1) {
+            throw new CommonException('所选设备型号已停用，请重新选择');
+        }
+        if ($this->hasChildren($id)) {
+            throw new CommonException('请选择到具体型号，不能直接选择上级分类');
+        }
+
+        $path = [];
+        $current = $node;
+        $visited = [];
+        while (!empty($current)) {
+            $currentId = (int)($current['id'] ?? 0);
+            if ($currentId <= 0 || isset($visited[$currentId])) {
+                break;
+            }
+            $visited[$currentId] = true;
+            array_unshift($path, $currentId);
+            $pid = (int)($current['pid'] ?? 0);
+            if ($pid <= 0) {
+                break;
+            }
+            $current = $this->model->where([
+                ['site_id', '=', $this->site_id],
+                ['id', '=', $pid],
+            ])->findOrEmpty()->toArray();
+        }
+        $node['category_path'] = $path;
+        return $node;
+    }
+
+    /**
      * 清空本站点型号字典缓存(tree/未来可能的子级缓存)。
      * 只在型号库发生变更(增删改/导入/排序)时调用 —— 这样读取才"除非数据变了否则不查库"。
      */
@@ -131,6 +169,48 @@ class RecycleDeviceModelDictService extends BaseAdminService
         $id = $this->createPath($path, (int)($data['status'] ?? 1), (int)($data['sort'] ?? 0), false);
         $this->clearTreeCache();
         return $id;
+    }
+
+    /**
+     * 在签收页选择的上级节点下确保末级型号存在，并返回可直接绑定的叶子节点。
+     * 重复提交返回已有节点，避免扫码重试或多人并发产生重复型号。
+     */
+    public function ensureChild(int $parentId, string $nodeName): array
+    {
+        $nodeName = trim($nodeName);
+        if ($parentId <= 0) {
+            throw new CommonException('请选择型号所属的上级分类或系列');
+        }
+        if ($nodeName === '') {
+            throw new CommonException('请输入型号名称');
+        }
+        if (str_contains($nodeName, '/')) {
+            throw new CommonException('型号名称不能包含斜杠');
+        }
+
+        $parent = $this->getNode($parentId);
+        if ((int)($parent['status'] ?? 0) !== 1) {
+            throw new CommonException('所选上级分类已停用，请重新选择');
+        }
+        $parentPath = $this->splitPathText((string)($parent['model_full_name'] ?? $parent['node_name'] ?? ''));
+        if ($parentPath === [] || count($parentPath) >= 8) {
+            throw new CommonException('当前分类层级不能继续新增型号');
+        }
+
+        $existing = $this->findNode($parentId, $nodeName);
+        $created = empty($existing);
+        $id = $this->createPath(array_merge($parentPath, [$nodeName]), 1, 0, true);
+        if ($created) {
+            $this->clearTreeCache();
+        }
+        $node = $this->selectableLeaf($id);
+        return [
+            'id' => (int)$node['id'],
+            'node_name' => (string)$node['node_name'],
+            'model_full_name' => (string)$node['model_full_name'],
+            'category_path' => array_map('intval', (array)($node['category_path'] ?? [$id])),
+            'created' => $created,
+        ];
     }
 
     public function edit(int $id, array $data): bool

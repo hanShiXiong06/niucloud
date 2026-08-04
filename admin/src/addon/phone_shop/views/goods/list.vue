@@ -6,19 +6,21 @@
                 <span class="text-page-title">{{ pageName }}</span>
                 <div class="flex items-center gap-[10px]">
                     <!-- <el-button v-if="!isMasterSite" :loading="syncLoading" @click="syncMasterGoodsFn">一键同步主站商品</el-button> -->
+                    <el-button @click="goodsTransferDialogRef?.show('import')">导入 / 导出</el-button>
                     <el-button type="primary" @click="addEvent">{{ t('addGoods') }}</el-button>
                 </div>
             </div>
 
             <el-card class="box-card !border-none my-[10px] table-search-wrap" shadow="never">
-                <el-form :inline="true" :model="goodsTable.searchParam" ref="searchFormRef">
+                <el-form :inline="true" :model="goodsTable.searchParam" ref="searchFormRef">\
+                    <el-form-item label="imei" prop="device_keywords">
+                        <el-input v-model="goodsTable.searchParam.device_keywords" type="textarea" :autosize="{ minRows: 1, maxRows: 3 }"
+                            placeholder="IMEI 空格或换行分隔" clearable class="!w-[220px]" @keyup.enter="loadGoodsList()" />
+                    </el-form-item>
                     <el-form-item :label="t('goodsName')" prop="goods_name">
                         <el-input v-model.trim="goodsTable.searchParam.goods_name" :placeholder="t('goodsNamePlaceholder')" maxlength="60" />
                     </el-form-item>
-                    <el-form-item label="多设备" prop="device_keywords">
-                        <el-input v-model.trim="goodsTable.searchParam.device_keywords" type="textarea" :autosize="{ minRows: 1, maxRows: 3 }"
-                            placeholder="IMEI/资产ID，空格或换行分隔" clearable class="!w-[220px]" @keyup.enter="loadGoodsList()" />
-                    </el-form-item>
+                    
                     <el-form-item :label="t('goodsCategory')" prop="goods_category">
                         <!-- <el-cascader v-model="goodsTable.searchParam.goods_category" :options="goodsCategoryOptions" :placeholder="t('goodsCategoryPlaceholder')" clearable :props="{ value: 'value', label: 'label', emitPath:false }"/> -->
                         <el-cascader v-model="goodsTable.searchParam.goods_category" ref="cascader" :options="goodsCategoryOptions"  :placeholder="t('goodsCategoryPlaceholder')" clearable :props="goodsCategoryProps"/>
@@ -52,13 +54,6 @@
                             <el-option v-for="g in gradeOptions" :key="g" :label="g" :value="g" />
                         </el-select>
                     </el-form-item>
-                    <el-form-item label="售卖状态" prop="sale_status">
-                        <el-select v-model="goodsTable.searchParam.sale_status" placeholder="全部" clearable class="!w-[140px]">
-                            <el-option label="在售" value="available" />
-                            <el-option label="锁定" value="locked" />
-                            <el-option label="已售" value="sold" />
-                        </el-select>
-                    </el-form-item>
                     <el-form-item label="库龄(天)" prop="stock_age">
                         <el-select v-model="stockAgeRange" placeholder="全部库龄" clearable class="!w-[140px]" @change="onStockAgeChange">
                             <el-option v-for="r in stockAgeOptions" :key="r.value" :label="r.label" :value="r.value" />
@@ -81,10 +76,12 @@
 
             <div class="mt-[10px]">
 
-                <el-tabs v-model="goodsTable.searchParam.status" class="goods-tabs" @tab-click="tabHandleClick">
-                    <el-tab-pane :label="t('statusOn')" name="1"></el-tab-pane>
-                    <el-tab-pane :label="t('statusOff')" name="0"></el-tab-pane>
-                    <el-tab-pane :label="t('statusAll')" name=""></el-tab-pane>
+                <el-tabs v-model="goodsTable.searchParam.sale_state" class="goods-tabs" @tab-click="tabHandleClick">
+                    <el-tab-pane label="可售" name="sellable" />
+                    <el-tab-pane label="已锁定" name="locked" />
+                    <el-tab-pane label="已售" name="sold" />
+                    <el-tab-pane label="暂不可售" name="unavailable" />
+                    <el-tab-pane :label="t('statusAll')" name="" />
                 </el-tabs>
 
                 <div class="mb-[10px] flex items-center">
@@ -109,8 +106,8 @@
 
                     <!-- <el-checkbox v-model="toggleCheckbox" size="large" class="px-[14px]" @change="toggleChange" :indeterminate="isIndeterminate" /> -->
 
-                    <el-button @click="batchGoodsStatus(1)" size="small" v-if="goodsTable.searchParam.status != '1'">{{ t('batchOnGoods') }}</el-button>
-                    <el-button @click="batchGoodsStatus(0)" size="small" v-if="goodsTable.searchParam.status != '0'">{{ t('batchOffGoods') }}</el-button>
+                    <el-button @click="batchGoodsStatus(1)" size="small" v-if="['unavailable', ''].includes(goodsTable.searchParam.sale_state)">{{ t('batchOnGoods') }}</el-button>
+                    <el-button @click="batchGoodsStatus(0)" size="small" v-if="['sellable', ''].includes(goodsTable.searchParam.sale_state)">{{ t('batchOffGoods') }}</el-button>
                     <el-button @click="batchDeleteGoods" size="small">{{ t('batchDeleteGoods') }}</el-button>
                     <el-button @click="batchSetGoods" size="small">{{ t('batchSetting') }}</el-button>
                 </div>
@@ -143,9 +140,7 @@
                                     <div class="flex items-center flex-wrap gap-[4px] mt-[2px]">
                                         <span v-if="row.memory_group" class="text-[11px] text-[#64748b] bg-[#f1f5f9] rounded px-[4px]">{{ row.memory_group }}</span>
                                         <span v-if="row.condition_grade" class="text-[11px] text-[#64748b] bg-[#f1f5f9] rounded px-[4px]">{{ row.condition_grade }}</span>
-                                        <el-tag v-if="row.sale_status === 'sold'" type="info" size="small" effect="plain">已售</el-tag>
-                                        <el-tag v-else-if="row.sale_status === 'locked'" type="warning" size="small" effect="plain">锁定</el-tag>
-                                        <el-tag v-else-if="Number((row.goodsSku || row.goods_sku || {}).erp_asset_id) > 0" type="success" size="small" effect="plain">在售</el-tag>
+                                        <el-tag v-if="Number((row.goodsSku || row.goods_sku || {}).erp_asset_id) > 0" type="info" size="small" effect="plain">一机一码</el-tag>
                                     </div>
                                     <span class="px-[4px]  text-[12px] text-[#fff] rounded-[4px] bg-primary leading-[18px]" v-if="row.is_gift == 1">赠品</span>
                                     <div class="flex flex-wrap mt-[4px] gap-[4px]">
@@ -190,10 +185,18 @@
                         </template>
                     </el-table-column>
                     <el-table-column prop="sale_num" :label="t('saleNum')" min-width="100" sortable="custom" />
-                    <el-table-column prop="status" :label="t('status')" min-width="100">
+                    <el-table-column prop="sale_state" label="销售状态" min-width="120">
                         <template #default="{ row }">
-                            <div v-if="row.status == 1">{{ t('statusOn') }}</div>
-                            <div v-if="row.status == 0">{{ t('statusOff') }}</div>
+                            <el-tooltip :disabled="!row.sale_state?.reason" :content="row.sale_state?.reason" placement="top">
+                                <div class="inline-flex flex-col items-start">
+                                    <el-tag :type="saleStateTagType(row.sale_state?.code)" size="small" effect="plain">
+                                        {{ row.sale_state?.name || '暂不可售' }}
+                                    </el-tag>
+                                    <span v-if="row.sale_state?.reason" class="mt-[3px] text-[11px] text-[#94a3b8]">
+                                        {{ row.sale_state.reason }}
+                                    </span>
+                                </div>
+                            </el-tooltip>
                         </template>
                     </el-table-column>
                     <el-table-column prop="sort" :label="t('sort')" min-width="120" sortable="custom">
@@ -271,6 +274,8 @@
         <!-- 批量设置弹出框 -->
         <goods-batch-settings-popup ref="goodsBatchSettingPopupRef" @load="loadGoodsListReset" />
 
+        <goods-transfer-dialog ref="goodsTransferDialogRef" :batch-payload="transferPayload" @completed="loadGoodsList()" />
+
     </div>
 </template>
 
@@ -286,6 +291,7 @@ import goodsMemberPricePopup from '@/addon/phone_shop/views/goods/components/goo
 import goodsStockEditPopup from '@/addon/phone_shop/views/goods/components/goods-stock-edit-popup.vue'
 import goodsPriceEditPopup from '@/addon/phone_shop/views/goods/components/goods-price-edit-popup.vue'
 import goodsBatchSettingsPopup from '@/addon/phone_shop/views/goods/components/goods-batch-settings-popup.vue'
+import goodsTransferDialog from '@/addon/phone_shop/views/goods/components/goods-transfer-dialog.vue'
 import sellDialog from '@/addon/phone_shop/views/goods/components/sell-dialog.vue'
 import { getGoodsPageList, getCategoryTree, getGoodsType, getBrandList, getLabelList, editGoodsSort, editGoodsStatus, copyGoods, deleteGoods,editGoodssingleStatus, getMemberLevelNoList } from '@/addon/phone_shop/api/goods'
 import { syncAgentGoods } from '@/addon/phone_shop/api/agent'
@@ -297,12 +303,19 @@ const router = useRouter()
 const route = useRoute()
 const pageName = route.meta.title
 const repeat = ref(false)
+const goodsTransferDialogRef = ref()
 const SELF_SOURCE = '100024'
 const AGENT_SOURCE = '100005'
 const routeSource = Array.isArray(route.query.source) ? route.query.source[0] : route.query.source
 const currentSiteSource = computed(() => String(storage.get('siteId') || routeSource || ''))
 const showSourceFilter = computed(() => currentSiteSource.value === SELF_SOURCE)
 const defaultSourceFilter = () => showSourceFilter.value ? SELF_SOURCE : ''
+const initialSaleState = () => {
+    const queryState = Array.isArray(route.query.sale_state) ? route.query.sale_state[0] : route.query.sale_state
+    if (queryState !== undefined) return String(queryState)
+    const legacyStatus = Array.isArray(route.query.status) ? route.query.status[0] : route.query.status
+    return legacyStatus === '0' ? 'unavailable' : 'sellable'
+}
 
 // 库龄区间(天)下拉:value = "min-max"(max 空表示无上限),选中后联动 start/end_stock_age
 const stockAgeRange = ref('')
@@ -355,11 +368,10 @@ const goodsTable = reactive({
         end_sale_num: '',
         start_price: '',
         end_price: '',
-        status: route.query.status || '1',
+        sale_state: initialSaleState(),
         source: defaultSourceFilter(),
         memory_group: '',
         condition_grade: '',
-        sale_status: '',
         device_keywords: '',
         start_stock_age: '',
         end_stock_age: '',
@@ -481,9 +493,16 @@ const getBrandListFn = (query = '') => {
 
 // 当前选中tab页面
 const tabHandleClick = (tab: any, event: Event) => {
-    goodsTable.searchParam.status = tab.props.name
+    goodsTable.searchParam.sale_state = tab.props.name
     isReset.value = true
     loadGoodsList()
+}
+
+const saleStateTagType = (code: string): 'success' | 'warning' | 'info' | 'danger' => {
+    if (code === 'sellable') return 'success'
+    if (code === 'locked') return 'warning'
+    if (code === 'sold') return 'info'
+    return 'danger'
 }
 
 // 当前站是否主站(主站隐藏 自营/代理 筛选与一键同步，全部正常展示)
@@ -625,6 +644,8 @@ const getBatchPayload = () => {
         }
     }
 }
+
+const transferPayload = computed(() => ({ ...getBatchPayload(), total: goodsTable.total }))
 
 // 商品预览
 const previewEvent = (data: any) => {

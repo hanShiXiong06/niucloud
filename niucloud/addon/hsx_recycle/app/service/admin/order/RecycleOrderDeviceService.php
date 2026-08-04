@@ -69,17 +69,19 @@ class RecycleOrderDeviceService extends BaseAdminService
 
             // 4. 组装设备数据（统一摘要契约：summary = { field_key: value }，与签收/Handler 同口径）
             $categoryId = (int)($deviceData['category_id'] ?? 0);
-            $categoryPath = DeviceSummaryHelper::normalizeCategoryPath($deviceData['category_path'] ?? null, $categoryId);
+            $category = (new RecycleDeviceModelDictService())->selectableLeaf($categoryId);
+            $categoryPath = DeviceSummaryHelper::normalizeCategoryPath($category['category_path'] ?? [], $categoryId);
             $summary = DeviceSummaryHelper::normalizeSummary($deviceData['summary'] ?? []);
             $cols = DeviceSummaryHelper::reservedColumns($summary, $deviceData);
 
             $data = [
                 'order_id' => $orderId,
                 'imei' => $deviceData['imei'] ?? '',
-                'model' => $deviceData['model'] ?? '',
+                'model' => (string)($category['node_name'] ?? ''),
                 'initial_price' => $deviceData['initial_price'] ?? 0,
                 'category_id' => $categoryId,
                 'check_template_id' => (int)($deviceData['check_template_id'] ?? 0),
+                'check_images_buyer' => trim((string)($deviceData['check_images_buyer'] ?? '')),
                 'color' => $cols['color'],
                 'capacity' => $cols['capacity'],
                 'system_version' => $cols['system_version'],

@@ -16,7 +16,8 @@ final class PerformanceReportService
     public function generate(int $siteId, string $type, int $startAt = 0, int $endAt = 0, bool $dispatch = true): array
     {
         if ($siteId <= 0) throw new CommonException('经营报告缺少有效站点');
-        [$startAt, $endAt, $periodKey, $title] = $this->period($type, $startAt, $endAt);
+        $config = (new PerformanceConfigService())->get($siteId);
+        [$startAt, $endAt, $periodKey, $title, $periodScope] = $this->period($type, $startAt, $endAt, $config);
         $existing = PerformanceReport::where([
             ['site_id', '=', $siteId], ['report_type', '=', $type], ['period_key', '=', $periodKey],
         ])->findOrEmpty();
@@ -37,6 +38,7 @@ final class PerformanceReportService
             'start_at' => $startAt,
             'end_at' => $endAt,
             'snapshot_at' => time(),
+            'period_scope' => $periodScope,
         ];
         try {
             $responses = (array)event(self::METRICS_EVENT, $request);
@@ -45,7 +47,14 @@ final class PerformanceReportService
         }
         $providers = $this->normalizeProviders($responses);
         $snapshot = $this->aggregate($providers);
-        $config = (new PerformanceConfigService())->get($siteId);
+        $snapshot['meta'] = [
+            'metric_version' => 2,
+            'period_scope' => $periodScope,
+            'period_start_at' => $startAt,
+            'period_end_at' => $endAt,
+            'snapshot_at' => (int)$request['snapshot_at'],
+            'realtime_metrics' => ['stock_count', 'stock_cost', 'todo_count'],
+        ];
         if (empty($config['show_finance'])) {
             foreach (['sale_amount', 'stock_cost'] as $key) unset($snapshot['summary'][$key]);
             foreach ($snapshot['staff'] as &$staffRow) $staffRow['amount'] = 0;
@@ -159,24 +168,34 @@ final class PerformanceReportService
         return $result;
     }
 
-    private function period(string $type, int $startAt, int $endAt): array
+    private function period(string $type, int $startAt, int $endAt, array $config = []): array
     {
         if ($startAt > 0 && $endAt >= $startAt) {
-            return [$startAt, $endAt, date('Ymd', $startAt) . '-' . date('Ymd', $endAt), '经营报告 ' . date('Y-m-d', $startAt) . ' 至 ' . date('Y-m-d', $endAt)];
+            return [$startAt, $endAt, date('Ymd', $startAt) . '-' . date('Ymd', $endAt), '经营报告 ' . date('Y-m-d', $startAt) . ' 至 ' . date('Y-m-d', $endAt), 'custom'];
         }
         if ($type === 'weekly') {
             $start = strtotime('monday last week 00:00:00');
             $end = strtotime('sunday last week 23:59:59');
-            return [$start, $end, date('o-\WW', $start), date('Y年m月d日', $start) . '至' . date('m月d日', $end) . '经营周报'];
+            return [$start, $end, date('o-\WW', $start), date('Y年m月d日', $start) . '至' . date('m月d日', $end) . '经营周报', 'previous_week'];
         }
         if ($type === 'monthly') {
             $start = strtotime('first day of last month 00:00:00');
             $end = strtotime('last day of last month 23:59:59');
-            return [$start, $end, date('Y-m', $start), date('Y年m月', $start) . '经营月报'];
+            return [$start, $end, date('Y-m', $start), date('Y年m月', $start) . '经营月报', 'previous_month'];
+        }
+        $dailyScope = (string)($config['daily_scope'] ?? 'auto');
+        if ($dailyScope === 'auto') {
+            // 晚间经营日报复盘当天，早间日报复盘已经完整结束的昨天。
+            $dailyScope = (string)($config['send_time'] ?? '09:10') >= '17:00' ? 'current_day' : 'previous_day';
+        }
+        if ($dailyScope === 'current_day') {
+            $start = strtotime('today 00:00:00');
+            $end = time();
+            return [$start, $end, date('Y-m-d', $start), date('Y年m月d日', $start) . '经营日报（截至' . date('H:i', $end) . '）', 'current_day'];
         }
         $start = strtotime('yesterday 00:00:00');
         $end = strtotime('yesterday 23:59:59');
-        return [$start, $end, date('Y-m-d', $start), date('Y年m月d日', $start) . '经营日报'];
+        return [$start, $end, date('Y-m-d', $start), date('Y年m月d日', $start) . '经营日报', 'previous_day'];
     }
 
     private function normalizeProviders(array $responses): array
@@ -238,6 +257,14 @@ final class PerformanceReportService
         usort($categoryRows, static fn(array $a, array $b): int => (($b['in_count'] + $b['sale_count']) <=> ($a['in_count'] + $a['sale_count'])) ?: strcmp($a['name'], $b['name']));
         $staffRows = array_values($staff);
         usort($staffRows, static fn(array $a, array $b): int => ($b['count'] <=> $a['count']) ?: strcmp($a['name'], $b['name']));
+        $summary['todo_count'] = array_sum($todos);
+        $summary['provider_count'] = count($providers);
+        $summary['provider_error_count'] = count(array_filter($providers, static fn(array $provider): bool => empty($provider['available'])));
+        if (array_key_exists('sale_amount', $summary) && array_key_exists('sale_profit', $summary)) {
+            $summary['gross_margin_rate'] = (float)$summary['sale_amount'] > 0
+                ? round((float)$summary['sale_profit'] / (float)$summary['sale_amount'] * 100, 2)
+                : 0.0;
+        }
         return ['summary' => $summary, 'categories' => $categoryRows, 'staff' => $staffRows, 'todos' => $todos, 'providers' => $providers];
     }
 }

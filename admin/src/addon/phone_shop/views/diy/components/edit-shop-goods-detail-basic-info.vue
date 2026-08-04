@@ -2,6 +2,33 @@
     <!-- 内容 -->
     <div class="content-wrap goods-detail-basic-info" v-show="diyStore.editTab == 'content'">
         <div class="edit-attr-item-wrap">
+            <h3 class="mb-[10px]">{{ t('信息排版') }}</h3>
+            <el-form label-width="100px" class="px-[10px]">
+                <el-form-item :label="t('排版风格')">
+                    <el-radio-group v-model="diyStore.editComponent.layoutStyle">
+                        <el-radio-button label="standard">标准</el-radio-button>
+                        <el-radio-button label="modern">商务卡片</el-radio-button>
+                        <el-radio-button label="compact">紧凑</el-radio-button>
+                    </el-radio-group>
+                </el-form-item>
+                <el-form-item :label="t('标题行数')">
+                    <el-radio-group v-model="diyStore.editComponent.titleLines">
+                        <el-radio-button :label="1">单行</el-radio-button>
+                        <el-radio-button :label="2">两行</el-radio-button>
+                    </el-radio-group>
+                </el-form-item>
+                <el-form-item :label="t('内容显示')">
+                    <div class="grid grid-cols-2 gap-x-[12px]">
+                        <el-checkbox v-model="diyStore.editComponent.showBrand">品牌</el-checkbox>
+                        <el-checkbox v-model="diyStore.editComponent.showSubtitle">副标题</el-checkbox>
+                        <el-checkbox v-model="diyStore.editComponent.showLabels">商品标签</el-checkbox>
+                        <el-checkbox v-model="diyStore.editComponent.showDeviceMeta">内存与成色</el-checkbox>
+                    </div>
+                </el-form-item>
+                <div class="text-sm text-gray-400 leading-[1.6]">标准风格兼容旧装修；商务卡片更突出价格和机况；紧凑风格适合信息较多的二手机。</div>
+            </el-form>
+        </div>
+        <div class="edit-attr-item-wrap">
             <h3 class="mb-[10px]">{{ t('顶部导航') }}</h3>
             <el-form label-width="100px" class="px-[10px]">
                 <el-form-item :label="t('菜单内容')">
@@ -217,6 +244,13 @@ diyStore.editComponent.verify = (index: number) => {
 }
 
 const initFn = () => {
+    const defaults: Record<string, any> = {
+        layoutStyle: 'standard', titleLines: 2, showBrand: true,
+        showSubtitle: true, showLabels: true, showDeviceMeta: true
+    }
+    Object.keys(defaults).forEach((key) => {
+        if (diyStore.editComponent[key] === undefined) diyStore.editComponent[key] = defaults[key]
+    })
     if (diyStore.editComponent.menuContent) {
         menuContent.value = (typeof diyStore.editComponent.menuContent == 'object') ? diyStore.editComponent.menuContent : diyStore.editComponent.menuContent.split(',')
     }

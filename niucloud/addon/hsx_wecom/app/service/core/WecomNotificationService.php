@@ -250,15 +250,19 @@ final class WecomNotificationService
     private function reportDescription(array $event): string
     {
         $summary = (array)($event['summary'] ?? []);
-        $rows = ['<div class="gray">经营数据已自动汇总</div>'];
+        $rows = ['<div class="gray">经营周期数据已自动汇总</div>'];
         $metrics = [
-            'recycle_in_count' => '回收入库', 'sale_count' => '销售出库', 'recycle_return_count' => '回收退回',
-            'stock_count' => '当前库存', 'turnover_rate' => '动销率',
+            'sale_amount' => ['销售额', 'money'], 'sale_profit' => ['销售毛利', 'money'],
+            'sale_count' => ['销售件数', 'count'], 'recycle_in_count' => ['回收入库', 'count'],
+            'gross_margin_rate' => ['毛利率', 'rate'], 'turnover_rate' => ['设备动销率', 'rate'],
+            'todo_count' => ['当前待处理', 'item'], 'provider_error_count' => ['异常数据源', 'item'],
         ];
-        foreach ($metrics as $key => $label) {
+        foreach ($metrics as $key => [$label, $format]) {
             if (!array_key_exists($key, $summary)) continue;
-            $suffix = $key === 'turnover_rate' ? '%' : ' 台';
-            $rows[] = '<div class="normal">' . $label . '：' . htmlspecialchars((string)$summary[$key]) . $suffix . '</div>';
+            $value = (float)$summary[$key];
+            $display = $format === 'money' ? ('¥' . number_format($value, 2, '.', '')) : (string)$summary[$key];
+            $suffix = ['rate' => '%', 'count' => ' 件', 'item' => ' 项'][$format] ?? '';
+            $rows[] = '<div class="normal">' . $label . '：' . htmlspecialchars($display) . $suffix . '</div>';
         }
         $staff = array_slice((array)($event['top_staff'] ?? []), 0, 5);
         if ($staff !== []) {
@@ -440,10 +444,13 @@ final class WecomNotificationService
     {
         $summary = (array)($event['summary'] ?? []);
         $rows = [];
+        if (isset($summary['sale_amount'])) $rows[] = '销售额：¥' . number_format((float)$summary['sale_amount'], 2, '.', '');
+        if (isset($summary['sale_profit'])) $rows[] = '销售毛利：¥' . number_format((float)$summary['sale_profit'], 2, '.', '');
         if (isset($summary['recycle_in_count'])) $rows[] = '回收入库：' . (int)$summary['recycle_in_count'] . ' 台';
-        if (isset($summary['sale_count'])) $rows[] = '销售出库：' . (int)$summary['sale_count'] . ' 台';
-        if (isset($summary['stock_count'])) $rows[] = '当前库存：' . (int)$summary['stock_count'] . ' 台';
-        if (isset($summary['turnover_rate'])) $rows[] = '动销率：' . (float)$summary['turnover_rate'] . '%';
+        if (isset($summary['sale_count'])) $rows[] = '销售件数：' . (float)$summary['sale_count'] . ' 件';
+        if (isset($summary['gross_margin_rate'])) $rows[] = '毛利率：' . (float)$summary['gross_margin_rate'] . '%';
+        if (isset($summary['turnover_rate'])) $rows[] = '设备动销率：' . (float)$summary['turnover_rate'] . '%';
+        if (isset($summary['todo_count'])) $rows[] = '当前待处理：' . (int)$summary['todo_count'] . ' 项';
         foreach (array_slice((array)($event['top_staff'] ?? []), 0, 5) as $item) {
             if (!is_array($item)) continue;
             $rows[] = (string)($item['name'] ?? '员工') . ' · ' . (string)($item['role_name'] ?? '工作') . '：' . (int)($item['count'] ?? 0) . ' 项';

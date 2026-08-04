@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace addon\hsx_ai\app\api\controller;
 
 use addon\hsx_ai\app\service\api\AiMallAssistantService;
+use addon\hsx_ai\app\service\api\AiConversationService;
 use addon\hsx_ai\app\service\core\AiSpeechService;
 use addon\hsx_ai\app\support\AiStreamResponse;
 use core\base\BaseApiController;
@@ -23,6 +24,30 @@ final class Assistant extends BaseApiController
         return success((new AiMallAssistantService())->chat($this->chatData()));
     }
 
+    public function conversations(): Response
+    {
+        $where = $this->request->params([
+            ['keyword', ''],
+            ['status', 'active'],
+            ['scene_key', AiMallAssistantService::SCENE],
+            ['page', 1],
+            ['limit', 20],
+        ]);
+        return success((new AiConversationService())->getPage($where));
+    }
+
+    public function messages(int $id): Response
+    {
+        $where = $this->request->params([['page', 1], ['limit', 60]]);
+        return success((new AiConversationService())->messages($id, $where));
+    }
+
+    public function archive(int $id): Response
+    {
+        (new AiConversationService())->archive($id);
+        return success('会话已归档');
+    }
+
     public function stream(): Response
     {
         $data = $this->chatData();
@@ -34,7 +59,9 @@ final class Assistant extends BaseApiController
                 @ob_flush();
                 flush();
             };
-            echo ": connected\n\n";
+            echo ": connected\n";
+            echo ':' . str_repeat(' ', 2048) . "\n\n";
+            @ob_flush();
             flush();
             try {
                 $result = (new AiMallAssistantService())->stream($data, $emit);
@@ -69,6 +96,7 @@ final class Assistant extends BaseApiController
     {
         return $this->request->params([
             ['request_id', ''],
+            ['conversation_id', 0],
             ['prompt', ''],
             ['messages', []],
         ]);

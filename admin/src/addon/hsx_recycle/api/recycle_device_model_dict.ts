@@ -23,6 +23,12 @@ export function addRecycleDeviceModelDict(data: Record<string, any>) {
   });
 }
 
+export function ensureRecycleDeviceModelDictChild(data: { parent_id: number | string; node_name: string }) {
+  return request.post("/recycle/recycle_device_model_dict/ensure_child", data, {
+    showErrorMessage: true,
+  });
+}
+
 export function editRecycleDeviceModelDict(id: number | string, data: Record<string, any>) {
   return request.put(`/recycle/recycle_device_model_dict/${id}`, data, {
     showErrorMessage: true,

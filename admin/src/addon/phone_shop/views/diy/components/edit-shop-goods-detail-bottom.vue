@@ -3,6 +3,13 @@
     <div class="content-wrap goods-detail-bottom" v-show="diyStore.editTab == 'content'">
         <div class="edit-attr-item-wrap">
             <el-form label-width="80px" class="px-[10px]">
+                <el-form-item label="导航风格">
+                    <el-radio-group v-model="diyStore.editComponent.layoutStyle">
+                        <el-radio-button label="standard">标准</el-radio-button>
+                        <el-radio-button label="floating">悬浮</el-radio-button>
+                        <el-radio-button label="compact">紧凑</el-radio-button>
+                    </el-radio-group>
+                </el-form-item>
                 <el-form-item :label="t('是否显示')">
                     <el-checkbox-group v-model="menuContent" @change="menuContentChange" :min="1" :max="3">
                         <el-checkbox label="首页" value="index" />
@@ -112,6 +119,7 @@ diyStore.editComponent.verify = (index: number) => {
 }
 
 const initFn = () => {
+    if (diyStore.editComponent.layoutStyle === undefined) diyStore.editComponent.layoutStyle = 'standard'
     if (diyStore.editComponent.menuContent) {
         menuContent.value = (typeof diyStore.editComponent.menuContent == 'object') ? diyStore.editComponent.menuContent : diyStore.editComponent.menuContent.split(',')
     }

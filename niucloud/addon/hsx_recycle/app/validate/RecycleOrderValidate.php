@@ -36,6 +36,7 @@ class RecycleOrderValidate extends BaseValidate
         'imei' => 'min:2|max:15',
         'model' => 'min:2|max:100',
         'initial_price' => 'float|egt:0',
+        'category_id' => 'require|integer|gt:0',
         'device_id' => 'integer|gt:0',
         'order_id' => 'integer|gt:0',
         'reason' => 'max:500'
@@ -75,6 +76,9 @@ class RecycleOrderValidate extends BaseValidate
         'model.min' => '设备型号必须至少2个字符',
         'initial_price.float' => '初始价格必须为数字',
         'initial_price.egt' => '初始价格必须大于等于0',
+        'category_id.require' => '请选择标准设备型号',
+        'category_id.integer' => '设备型号参数不正确',
+        'category_id.gt' => '请选择标准设备型号',
         'device_id.integer' => '设备ID必须为整数',
         'device_id.gt' => '设备ID必须大于0',
         'order_id.integer' => '订单ID必须为整数',
@@ -96,7 +100,7 @@ class RecycleOrderValidate extends BaseValidate
         'cancel' => ['id', 'cancel_reason', 'remark'],
         'delete' => ['id'],
         'update' => ['id', 'action', 'devices', 'remark', 'cancel_reason', 'close_reason', 'device_ids'],
-        'addDevice' => ['id', 'imei', 'model', 'initial_price', 'remark'],
+        'addDevice' => ['id', 'imei', 'model', 'initial_price', 'category_id', 'remark'],
         'removeDevice' => ['order_id', 'device_id', 'reason']
     ];
 } 

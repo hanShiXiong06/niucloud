@@ -14,6 +14,39 @@ export function getGoodsPageList(params: Record<string, any>) {
     return request.get(`phone_shop/goods`, { params })
 }
 
+/** 商品批量导入模板 */
+export function downloadGoodsImportTemplate() {
+    return request.get(`phone_shop/goods/transfer/template`, { responseType: 'blob' })
+}
+
+/** 创建商品异步导入任务 */
+export function createGoodsImportTask(file: File, imageMode: 'direct' | 'store' = 'direct') {
+    const data = new FormData()
+    data.append('file', file)
+    data.append('image_mode', imageMode)
+    return request.post(`phone_shop/goods/transfer/import`, data, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+    })
+}
+
+/** 创建商品异步导出任务 */
+export function createGoodsExportTask(params: Record<string, any>) {
+    return request.post(`phone_shop/goods/transfer/export`, params)
+}
+
+/** 商品导入导出任务 */
+export function getGoodsTransferTasks(params: Record<string, any>) {
+    return request.get(`phone_shop/goods/transfer/tasks`, { params })
+}
+
+export function retryGoodsTransferTask(id: number) {
+    return request.post(`phone_shop/goods/transfer/tasks/${id}/retry`)
+}
+
+export function downloadGoodsTransferResult(id: number) {
+    return request.get(`phone_shop/goods/transfer/tasks/${id}/download`, { responseType: 'blob' })
+}
+
 /**
  * 获取商品详情
  * @param goods_id 商品goods_id

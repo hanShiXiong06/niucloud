@@ -9,6 +9,9 @@ export const testAiProvider = (provider: Record<string, any>) => request.post('a
 export const syncAiModels = (provider: Record<string, any>) => request.post('ai/provider/models', { provider })
 export const executeAi = (data: Record<string, any>) => request.post('ai/execute', data)
 export const getAiLogs = (params: Record<string, any>) => request.get('ai/logs', { params })
+export const getAiConversations = (params: Record<string, any>) => request.get('ai/conversations', { params })
+export const getAiConversation = (id: number) => request.get(`ai/conversations/${id}`)
+export const getAiRisks = (params: Record<string, any>) => request.get('ai/risks', { params })
 export const recognizePlaygroundSpeech = (audio: Blob) => {
     const formData = new FormData()
     formData.append('audio', audio, 'hsx_ai_recording.wav')
@@ -55,7 +58,12 @@ export const streamAi = async (
     const decoder = new TextDecoder('utf-8')
     let buffer = ''
     let streamError = ''
-    const consume = (block: string) => {
+    let reasoningPaintCount = 0
+    const nextPaint = () => new Promise<void>((resolve) => {
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => resolve())
+        else setTimeout(resolve, 0)
+    })
+    const consume = async (block: string) => {
         const dataLines = block.split('\n')
             .filter((line) => line.startsWith('data:'))
             .map((line) => line.slice(5).trimStart())
@@ -63,6 +71,9 @@ export const streamAi = async (
         const event = JSON.parse(dataLines.join('\n')) as AiStreamEvent
         onEvent(event)
         if (event.type === 'error') streamError = event.message || '模型流式调用失败'
+        // 同一次网络读取可能包含多个 SSE 事件，给 Vue 一帧绘制机会，避免最后一次性呈现。
+        if (event.type === 'content' && event.delta) await nextPaint()
+        if (event.type === 'reasoning' && event.delta && ++reasoningPaintCount % 12 === 0) await nextPaint()
     }
     while (true) {
         const { done, value } = await reader.read()
@@ -71,11 +82,11 @@ export const streamAi = async (
         while (separator >= 0) {
             const block = buffer.slice(0, separator)
             buffer = buffer.slice(separator + 2)
-            if (block.trim()) consume(block)
+            if (block.trim()) await consume(block)
             separator = buffer.indexOf('\n\n')
         }
         if (done) break
     }
-    if (buffer.trim()) consume(buffer)
+    if (buffer.trim()) await consume(buffer)
     if (streamError) throw new Error(streamError)
 }

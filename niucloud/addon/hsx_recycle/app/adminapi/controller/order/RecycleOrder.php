@@ -544,9 +544,10 @@ class RecycleOrder extends BaseAdminController
             ['imei', ''],
             ['model', ''],
             ['initial_price', 0],
-            ['category_id', 1],
+            ['category_id', 0],
             ['category_path', []],
             ['check_template_id', 0],
+            ['check_images_buyer', ''],
             ['summary', []],
             ['remark', '']
         ]);

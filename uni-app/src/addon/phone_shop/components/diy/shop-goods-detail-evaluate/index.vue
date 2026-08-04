@@ -1,22 +1,21 @@
 <template>
     <view :style="warpCss" class="overflow-hidden" v-if="diyComponent && diyComponent.goods && Object.keys(diyComponent.goods).length">
-        <view v-if="diyComponent.evaluate_is_show" class="card-template">
-            <view class="flex items-center justify-between min-h-[40rpx]" :class="{'mb-[30rpx]': evaluate && evaluate.list && evaluate.list.length}">
-                <text class="title !mb-[0]">{{ evaluate.subject?.type === 'category' ? '同型号真实评价' : '宝贝评价' }}({{ evaluate.count }})</text>
-                <view v-if="evaluate.count" class="h-[40rpx] flex items-center" @click="toLink(diyComponent.goods_id)">
+        <view v-if="diyComponent.evaluate_is_show" class="card-template evaluate-card" :class="'evaluate-layout-' + layoutStyle">
+            <view class="evaluate-head" :class="{'mb-[24rpx]': evaluate && evaluate.list && evaluate.list.length}">
+                <view class="flex items-baseline min-w-0">
+                    <text class="evaluate-title">{{ evaluateTitle }}</text>
+                    <text class="evaluate-count">{{ evaluate.count || 0 }} 条</text>
+                </view>
+                <view v-if="evaluate.count" class="evaluate-more" @click="toLink(diyComponent.goods_id)">
                     <text class="text-[24rpx] text-[var(--text-color-light9)]">查看全部</text>
                     <text class="nc-iconfont nc-icon-youV6xx text-[26rpx] text-[var(--text-color-light9)]"></text>
                 </view>
-                <text v-if="!evaluate.count" class="text-[24rpx] text-[var(--text-color-light6)]">暂无评价</text>
             </view>
-            <view v-if="evaluate.subject?.type === 'category' && evaluate.subject?.category_path"
-                  class="flex items-center mb-[24rpx] px-[18rpx] py-[14rpx] rounded-[var(--rounded-small)] bg-[var(--temp-bg)]">
+            <view v-if="evaluate.count && showSource && sourceText" class="evaluate-source">
                 <u-icon name="checkmark-circle-fill" color="var(--primary-color)" size="16"></u-icon>
-                <text class="ml-[8rpx] text-[24rpx] text-[var(--text-color-light6)] truncate">
-                    以下评价来自 {{ evaluate.subject.category_path }} 的真实成交
-                </text>
+                <text class="evaluate-source-text">{{ sourceText }}</text>
             </view>
-            <view>
+            <view v-if="evaluate.count">
                 <view :class="{'pb-[34rpx]': index != (evaluate.list.length-1)}" v-for="(item, index) in evaluate.list" :key="index">
                     <view class="flex items-center w-full">
                         <u-avatar :default-url="img('static/resource/images/default_headimg.png')" :src="img(item.member_head)" :size="'50rpx'" leftIcon="none" />
@@ -42,6 +41,15 @@
                             </up-image>
                         </view>
                     </view>
+                </view>
+            </view>
+            <view v-else class="evaluate-empty">
+                <view class="evaluate-empty-icon">
+                    <u-icon name="chat" color="var(--text-color-light9)" size="20"></u-icon>
+                </view>
+                <view class="min-w-0 flex-1">
+                    <text class="evaluate-empty-title">{{ diyComponent.emptyText || '暂无真实成交评价' }}</text>
+                    <text v-if="showSource && sourceText" class="evaluate-empty-desc">{{ sourceText }}</text>
                 </view>
             </view>
         </view>
@@ -94,6 +102,13 @@ const evaluate = ref({
     count: 0,
     list: [],
     subject: {}
+})
+const layoutStyle = computed(() => diyComponent.value.layoutStyle || 'standard')
+const showSource = computed(() => diyComponent.value.showSource !== false)
+const evaluateTitle = computed(() => diyComponent.value.title || (evaluate.value.subject?.type === 'category' ? '同型号真实评价' : '宝贝评价'))
+const sourceText = computed(() => {
+    if (evaluate.value.subject?.type !== 'category' || !evaluate.value.subject?.category_path) return ''
+    return `评价来自 ${ evaluate.value.subject.category_path } 的真实成交`
 })
 
 const getEvaluateListFn = () => {
@@ -171,8 +186,81 @@ onMounted(() => {
 });
 </script>
 <style lang="scss" scoped>
-.card-template{
+.card-template {
     background-color: transparent !important;
     border-radius: 0 !important;
+}
+.evaluate-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 44rpx;
+}
+.evaluate-title {
+    overflow: hidden;
+    color: #303133;
+    font-size: 30rpx;
+    font-weight: 600;
+    line-height: 42rpx;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.evaluate-count {
+    flex-shrink: 0;
+    margin-left: 10rpx;
+    color: var(--text-color-light9);
+    font-size: 22rpx;
+}
+.evaluate-more { display: flex; align-items: center; flex-shrink: 0; }
+.evaluate-source {
+    display: flex;
+    align-items: center;
+    margin-bottom: 24rpx;
+    padding: 12rpx 16rpx;
+    border-radius: 12rpx;
+    background: var(--temp-bg);
+}
+.evaluate-source-text {
+    overflow: hidden;
+    margin-left: 8rpx;
+    color: var(--text-color-light6);
+    font-size: 22rpx;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.evaluate-empty {
+    display: flex;
+    align-items: center;
+    margin-top: 18rpx;
+    padding: 20rpx;
+    border-radius: 16rpx;
+    background: #f7f8fa;
+}
+.evaluate-empty-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 60rpx;
+    height: 60rpx;
+    margin-right: 16rpx;
+    border-radius: 50%;
+    background: #fff;
+}
+.evaluate-empty-title,
+.evaluate-empty-desc { display: block; }
+.evaluate-empty-title { color: #606266; font-size: 25rpx; line-height: 34rpx; }
+.evaluate-empty-desc {
+    overflow: hidden;
+    margin-top: 4rpx;
+    color: var(--text-color-light9);
+    font-size: 21rpx;
+    line-height: 30rpx;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.evaluate-layout-compact {
+    .evaluate-source { padding: 8rpx 12rpx; margin-bottom: 18rpx; }
+    .evaluate-empty { margin-top: 12rpx; padding: 14rpx 16rpx; }
+    .evaluate-empty-icon { width: 50rpx; height: 50rpx; }
 }
 </style>

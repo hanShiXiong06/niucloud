@@ -5,6 +5,7 @@ namespace addon\hsx_recycle\app\adminapi\controller\order;
 
 use addon\hsx_recycle\app\dict\order\RecycleRefurbishmentDict;
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
+use addon\hsx_recycle\app\service\admin\device\RecycleDeviceModelDictService;
 use addon\hsx_recycle\app\service\admin\order\RecycleDeviceService;
 use addon\hsx_recycle\app\service\admin\order\RecycleDeviceCostAdjustmentService;
 use addon\hsx_recycle\app\service\admin\printer\RecyclePrinterTemplateService;
@@ -245,6 +246,15 @@ class RecycleDevice extends BaseAdminController
         $this->validate->scene('update')->check(array_merge(['id' => $id], $payload));
         if (!empty($payload['imei'])) {
             $this->validate->scene('imei')->failException()->check(['imei' => $payload['imei']]);
+        }
+        if (array_key_exists('category_id', $payload)) {
+            $categoryId = (int)$payload['category_id'];
+            $category = (new RecycleDeviceModelDictService())->selectableLeaf($categoryId);
+            $info = is_array($payload['info'] ?? null) ? $payload['info'] : [];
+            $info['goods_category'] = $category['category_path'] ?? [$categoryId];
+            $payload['category_id'] = $categoryId;
+            $payload['model'] = (string)($category['node_name'] ?? '');
+            $payload['info'] = $info;
         }
 
         // 检查是否是质检操作（包括完成质检和暂存质检）

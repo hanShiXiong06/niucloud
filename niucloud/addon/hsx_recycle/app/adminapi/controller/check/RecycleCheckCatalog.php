@@ -62,9 +62,28 @@ class RecycleCheckCatalog extends BaseAdminController
         return success([
             'summary' => $s->summary(),
             'page' => $s->getPage($this->request->params([
-                ['severity', ''], ['keyword', ''], ['page', 1], ['limit', 50],
+                ['severity', ''], ['confirm_status', ''], ['keyword', ''], ['page', 1], ['limit', 50],
             ])),
         ]);
+    }
+
+    /** 下载质检选项级别协作表 */
+    public function severityExport()
+    {
+        $filePath = (new RecycleCheckSeverityService())->exportFile();
+        return download($filePath, '质检选项级别_' . date('Y-m-d_His') . '.xlsx');
+    }
+
+    /** 上传人工标注结果，仅预检，不修改业务数据 */
+    public function severityImportPreview()
+    {
+        return success((new RecycleCheckSeverityService())->previewImport($this->request->file('file')));
+    }
+
+    /** 确认预检结果并原子更新 */
+    public function severityImportConfirm()
+    {
+        return success((new RecycleCheckSeverityService())->confirmImport((string)$this->request->param('token', '')));
     }
 
     public function severitySet(int $id)

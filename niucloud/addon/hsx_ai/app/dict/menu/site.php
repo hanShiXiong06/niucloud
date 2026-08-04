@@ -97,6 +97,23 @@ return [
                 ],
             ],
             [
+                'menu_name' => '用户会话', 'menu_key' => 'hsx_ai_conversation', 'menu_short_name' => '用户会话',
+                'parent_select_key' => '', 'menu_type' => '1', 'icon' => '',
+                'api_url' => 'ai/conversations', 'router_path' => 'hsx_ai/conversation', 'view_path' => 'conversation/index',
+                'methods' => 'get', 'sort' => '65', 'status' => '1', 'is_show' => '1',
+                'children' => [[
+                    'menu_name' => '查看会话详情', 'menu_key' => 'hsx_ai_conversation_detail', 'menu_short_name' => '查看会话详情',
+                    'parent_select_key' => '', 'menu_type' => '2', 'icon' => '', 'api_url' => 'ai/conversations/<id>',
+                    'router_path' => '', 'view_path' => '', 'methods' => 'get', 'sort' => '100', 'status' => '1', 'is_show' => '0',
+                ]],
+            ],
+            [
+                'menu_name' => '风险事件', 'menu_key' => 'hsx_ai_risk', 'menu_short_name' => '风险事件',
+                'parent_select_key' => '', 'menu_type' => '1', 'icon' => '',
+                'api_url' => 'ai/risks', 'router_path' => 'hsx_ai/risk', 'view_path' => 'risk/index',
+                'methods' => 'get', 'sort' => '62', 'status' => '1', 'is_show' => '1', 'children' => [],
+            ],
+            [
                 'menu_name' => '调用日志', 'menu_key' => 'hsx_ai_logs', 'menu_short_name' => '调用日志',
                 'parent_select_key' => '', 'menu_type' => '1', 'icon' => '',
                 'api_url' => 'ai/logs', 'router_path' => 'hsx_ai/log', 'view_path' => 'log/index',

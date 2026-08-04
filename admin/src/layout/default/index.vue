@@ -4,7 +4,7 @@
         <layout-aside></layout-aside>
         <!-- 左侧边栏 end -->
 
-        <el-container>
+        <el-container class="min-w-0">
             <!-- 顶部 -->
             <el-header>
                 <layout-header></layout-header>

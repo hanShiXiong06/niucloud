@@ -32,7 +32,6 @@ export interface DeviceEntryRow {
     saving?: boolean
     dirty?: boolean
     model_path?: Array<string | number>
-    model_input_mode?: boolean
     /** 型号库搜索反馈，仅用于前端交互 */
     model_search_keyword?: string
     model_search_empty?: boolean
@@ -47,8 +46,15 @@ export interface DeviceEntryRow {
     summary_values?: Record<string, any>
     // 联网查询/本地读取补充字段
     color?: string
+    /** 设备桥返回的颜色下标，用于按质检模板选项顺序预选颜色。 */
+    color_index?: number
     capacity?: string
     system_version?: string
     warranty_info?: string
     battery_health?: string
+    battery_cycle_count?: string | number
+    /** 由本地设备读取自动预填、仍需签收员核对的摘要字段。 */
+    local_prefilled_keys?: string[]
+    /** 签收现场上传、后续买家可见的设备图片，逗号分隔素材地址 */
+    check_images_buyer?: string
 }

@@ -30,6 +30,7 @@ $assert(($default['providers'][0]['id'] ?? '') === 'yunwu', '默认通道必须�
 $assert(($default['scenes'][0]['key'] ?? '') === 'general', '必须生成 general 场景');
 $assert((int)($default['enabled'] ?? 1) === 0, 'AI 默认必须停用');
 $assert(($default['integrations'] ?? null) === [], '业务插件通信锁默认必须为空且关闭');
+$assert((int)($default['speech']['auto_read_default'] ?? 1) === 0, '前台自动朗读必须默认关闭以控制语音合成费用');
 
 $withIntegrations = $normalize->invoke($service, [
     'integrations' => [
@@ -65,10 +66,12 @@ $tencentSpeech = $normalizeSpeech->invoke($service, [
     'region' => '',
     'tencent_voice' => 1002,
     'tencent_speed' => 99,
+    'auto_read_default' => 1,
 ]);
 $assert(($tencentSpeech['provider'] ?? '') === 'tencent', '语音配置必须支持腾讯云');
 $assert(($tencentSpeech['region'] ?? '') === 'ap-shanghai', '腾讯云地域必须提供稳定默认值');
 $assert((float)($tencentSpeech['tencent_speed'] ?? 0) === 6.0, '腾讯云语速必须限制在接口允许范围');
+$assert((int)($tencentSpeech['auto_read_default'] ?? 0) === 1, '语音配置必须保存前台自动朗读默认值');
 $switchedSpeech = $preserveSpeech->invoke($service, [
     'provider' => 'tencent', 'secret_id' => '', 'secret_key' => '',
 ], [

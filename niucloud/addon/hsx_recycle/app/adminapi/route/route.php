@@ -155,6 +155,7 @@ Route::group('recycle', function () {
     Route::get('recycle_device_model_dict/tree', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@tree');
     Route::get('recycle_device_model_dict', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@lists');
     Route::post('recycle_device_model_dict/quick_add', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@quickAdd');
+    Route::post('recycle_device_model_dict/ensure_child', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@ensureChild');
     Route::post('recycle_device_model_dict/external_import', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@externalImport');
     Route::post('recycle_device_model_dict/import_upload', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@importUpload');
     Route::get('recycle_device_model_dict/import_tasks', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@importTasks');
@@ -371,6 +372,9 @@ Route::group('recycle', function () {
     Route::get('check_catalog/lists', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@lists');
     Route::get('check_catalog/batches', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@batches');
     Route::get('check_catalog/severity', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@severityLists');
+    Route::get('check_catalog/severity_export', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@severityExport');
+    Route::post('check_catalog/severity_import_preview', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@severityImportPreview');
+    Route::post('check_catalog/severity_import_confirm', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@severityImportConfirm');
     Route::post('check_catalog/severity/:id', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@severitySet');
     Route::post('check_catalog/severity_batch', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@severityBatchSet');
     Route::post('check_catalog/severity_keyword', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@severityByKeyword');

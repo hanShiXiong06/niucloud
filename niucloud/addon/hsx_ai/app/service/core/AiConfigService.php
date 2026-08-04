@@ -181,6 +181,7 @@ final class AiConfigService
                 : 'baidu',
             'stt_enabled' => (int)($speech['stt_enabled'] ?? 1) === 1 ? 1 : 0,
             'tts_enabled' => (int)($speech['tts_enabled'] ?? 1) === 1 ? 1 : 0,
+            'auto_read_default' => (int)($speech['auto_read_default'] ?? 0) === 1 ? 1 : 0,
             'api_key' => $this->normalizeSecret((string)($speech['api_key'] ?? '')),
             'baidu_auth_mode' => self::isBaiduDirectApiKey((string)($speech['api_key'] ?? '')) ? 'api_key' : 'access_token',
             'secret_id' => $this->normalizeSecret((string)($speech['secret_id'] ?? '')),

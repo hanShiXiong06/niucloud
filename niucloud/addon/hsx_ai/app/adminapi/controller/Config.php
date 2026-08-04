@@ -115,7 +115,10 @@ final class Config extends BaseAdminController
                 @ob_flush();
                 flush();
             };
-            echo ": connected\n\n";
+            // 先越过反向代理和浏览器的小响应缓冲区，后续 token 才能及时到达前端。
+            echo ": connected\n";
+            echo ':' . str_repeat(' ', 2048) . "\n\n";
+            @ob_flush();
             flush();
             try {
                 $result = (new AiConfigAdminService())->stream($data, $emit);

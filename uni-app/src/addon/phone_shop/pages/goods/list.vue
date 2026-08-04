@@ -76,33 +76,20 @@
             <view v-if="goodsList.length" :class="['sidebar-margin', !listType ? 'biserial-goods-list' : '']">
                 <template v-if="listType">
                     <view v-for="(item, index) in goodsList" :key="index"
-                          class="bg-white flex px-[20rpx] py-[24rpx] rounded-[var(--rounded-small)] overflow-hidden top-mar"
+                          class="goods-row-card bg-white flex px-[20rpx] py-[20rpx] rounded-[var(--rounded-small)] overflow-hidden top-mar"
                           :class="{ 'mb-[20rpx]': (index+1) == goodsList.length}" @click="toDetail(item.goods_id)">
+                        <PhoneGoodsCover :src="item.goods_cover_thumb_mid" :grade="item.condition_grade" />
 
-<!--                        <easy-image class="w-[190rpx] h-[190rpx]" image-class="rounded-[var(&#45;&#45;rounded-mid)]"-->
-<!--                            :image-src="item.goods_cover_thumb_small" />-->
-
-                        <image v-if="item.goods_cover_thumb_mid" class="w-[190rpx] h-[190rpx] rounded-[var(--rounded-mid)]"
-                               :src="img(item.goods_cover_thumb_mid)" :mode="'aspectFill'"
-                               @error="item.goods_cover_thumb_mid='static/resource/images/diy/shop_default.jpg'"/>
-                        <image v-else class="w-[190rpx] h-[190rpx] rounded-[var(--rounded-mid)]" :src="img('static/resource/images/diy/shop_default.jpg')" :mode="'aspectFill'"/>
-
-                        <view class="flex-1 flex flex-col ml-[20rpx] py-[6rpx]">
-                            <view class="text-[28rpx] text-[#333] leading-[40rpx] multi-hidden mb-[10rpx]">
+                        <view class="goods-row-content flex-1 flex flex-col ml-[20rpx]">
+                            <view class="goods-row-title text-[28rpx] text-[#333] leading-[40rpx] multi-hidden">
                                 <view class="brand-tag" v-if="item.goods_brand" :style="diyGoods.baseTagStyle(item.goods_brand)">{{ item.goods_brand.brand_name }}</view>
                                 {{ item.goods_name }}
                             </view>
                             <PhoneGoodsMeta :subtitle="item.sub_title" :imei="item.goodsSku?.sku_no" />
-                            <view v-if="item.goods_label_name && item.goods_label_name.length" class="flex flex-wrap">
-                                <template v-for="(tagItem, tagIndex) in item.goods_label_name">
-                                    <image class="img-tag" v-if="tagItem.style_type == 'icon' && tagItem.icon" :src="img(tagItem.icon)" mode="heightFix" @error="diyGoods.error(tagItem,'icon')"/>
-                                    <view class="base-tag" v-else-if="tagItem.style_type == 'diy' || !tagItem.icon" :style="diyGoods.baseTagStyle(tagItem)">
-                                        {{ tagItem.label_name }}
-                                    </view>
-                                </template>
-                            </view>
-                            <view class="mt-auto flex items-baseline">
-                                <view class="flex items-baseline mt-[20rpx]">
+                            <PhoneGoodsSaleState :state="item.sale_state" />
+
+                            <view class="goods-row-price mt-auto flex items-baseline">
+                                <view class="flex items-baseline">
                                     <view class="text-[var(--price-text-color)] price-font flex items-baseline">
                                         <text class="text-[24rpx] font-500 mr-[4rpx]">￥</text>
                                         <text class="text-[40rpx] font-500">{{ diyGoods.goodsPrice(item).toFixed(2).split('.')[0] }}</text>
@@ -130,14 +117,7 @@
 
 <!--                                <easy-image class="w-[100%] h-[344rpx]" image-class="rounded-tl-[var(&#45;&#45;rounded-mid)] rounded-tr-[var(&#45;&#45;rounded-mid)]"-->
 <!--                                                :image-src="item.goods_cover_thumb_small" />-->
-                                <image v-if="item.goods_cover_thumb_mid"
-                                       class="w-[100%] h-[344rpx] rounded-tl-[var(--rounded-mid)] rounded-tr-[var(--rounded-mid)]"
-                                       :src="img(item.goods_cover_thumb_mid)" :mode="'aspectFill'"
-                                       @error="item.goods_cover_thumb_mid='static/resource/images/diy/shop_default.jpg'"/>
-                                <image v-else
-                                       class="w-[100%] h-[344rpx] rounded-tl-[var(--rounded-mid)] rounded-tr-[var(--rounded-mid)]"
-                                       :src="img('static/resource/images/diy/shop_default.jpg')"
-                                       :mode="'aspectFill'"/>
+                                <PhoneGoodsCover :src="item.goods_cover_thumb_mid" :grade="item.condition_grade" variant="grid" />
 
                                 <view class="px-[20rpx] flex-1 pt-[16rpx] pb-[24rpx] flex flex-col justify-between">
                                     <view class="text-[#303133] leading-[40rpx] text-[28rpx] multi-hidden">
@@ -145,6 +125,7 @@
                                         {{ item.goods_name }}
                                     </view>
                                     <PhoneGoodsMeta :subtitle="item.sub_title" :imei="item.goodsSku?.sku_no" compact />
+                                    <PhoneGoodsSaleState :state="item.sale_state" />
                                     <view v-if="item.goods_label_name && item.goods_label_name.length" class="flex flex-wrap">
                                         <template v-for="(tagItem, tagIndex) in item.goods_label_name">
                                             <image class="img-tag" v-if="tagItem.style_type == 'icon' && tagItem.icon" :src="img(tagItem.icon)" mode="heightFix" @error="diyGoods.error(tagItem,'icon')"/>
@@ -172,13 +153,7 @@
                             <view v-if="(index%2) == 1" class="flex flex-col bg-[#fff] box-border rounded-[var(--rounded-mid)] overflow-hidden mt-[var(--top-m)]" @click="toDetail(item.goods_id)">
 <!--                                <easy-image class="w-[100%] h-[344rpx]" image-class="rounded-tl-[var(&#45;&#45;rounded-mid)] rounded-tr-[var(&#45;&#45;rounded-mid)]"-->
 <!--                                                :image-src="item.goods_cover_thumb_small" />-->
-                                <image v-if="item.goods_cover_thumb_mid"
-                                       class="w-[100%] h-[344rpx] rounded-tl-[var(--rounded-mid)] rounded-tr-[var(--rounded-mid)]"
-                                       :src="img(item.goods_cover_thumb_mid)" :mode="'aspectFill'"
-                                       @error="item.goods_cover_thumb_mid='static/resource/images/diy/shop_default.jpg'" />
-                                <image v-else class="w-[100%] h-[344rpx] rounded-tl-[var(--rounded-mid)] rounded-tr-[var(--rounded-mid)]"
-                                       :src="img('static/resource/images/diy/shop_default.jpg')"
-                                       :mode="'aspectFill'" />
+                                <PhoneGoodsCover :src="item.goods_cover_thumb_mid" :grade="item.condition_grade" variant="grid" />
                                 <view class="px-[20rpx] flex-1 pt-[16rpx] pb-[24rpx] flex flex-col justify-between">
                                     <view class="text-[#303133] leading-[40rpx] text-[28rpx] multi-hidden">
                                         <view class="brand-tag" v-if="item.goods_brand" :style="diyGoods.baseTagStyle(item.goods_brand)">
@@ -187,6 +162,7 @@
                                         {{ item.goods_name }}
                                     </view>
                                     <PhoneGoodsMeta :subtitle="item.sub_title" :imei="item.goodsSku?.sku_no" compact />
+                                    <PhoneGoodsSaleState :state="item.sale_state" />
                                     <view v-if="item.goods_label_name && item.goods_label_name.length" class="flex flex-wrap">
                                         <template v-for="(tagItem, tagIndex) in item.goods_label_name">
                                             <image class="img-tag" v-if="tagItem.style_type == 'icon' && tagItem.icon" :src="img(tagItem.icon)" mode="heightFix" @error="diyGoods.error(tagItem,'icon')" />
@@ -241,6 +217,8 @@ import GoodsCategoryFilterPopup from '@/addon/phone_shop/components/goods-filter
 import GoodsOptionFilterPopup from '@/addon/phone_shop/components/goods-filter/GoodsOptionFilterPopup.vue'
 import GoodsMoreFilterPopup from '@/addon/phone_shop/components/goods-filter/GoodsMoreFilterPopup.vue'
 import PhoneGoodsMeta from '@/addon/phone_shop/components/PhoneGoodsMeta.vue'
+import PhoneGoodsSaleState from '@/addon/phone_shop/components/PhoneGoodsSaleState.vue'
+import PhoneGoodsCover from '@/addon/phone_shop/components/PhoneGoodsCover.vue'
 import useMemberStore from '@/stores/member'
 import { useLogin } from '@/hooks/useLogin'
 
@@ -705,5 +683,38 @@ onMounted(() => {
     display: grid;
     grid-template-columns: 1fr 1fr;
     grid-gap: 10px;
+}
+
+.goods-row-card {
+    min-height: 270rpx;
+    align-items: stretch;
+}
+
+.goods-row-content {
+    min-width: 0;
+    height: 230rpx;
+    padding: 2rpx 0;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.goods-row-title {
+    flex-shrink: 0;
+    max-height: 80rpx;
+    margin-bottom: 2rpx;
+}
+
+.goods-row-labels {
+    flex-shrink: 0;
+    max-height: 34rpx;
+    overflow: hidden;
+}
+
+.goods-row-price {
+    min-height: 46rpx;
+    padding-top: 6rpx;
+    overflow: hidden;
+    box-sizing: border-box;
+    flex-shrink: 0;
 }
 </style>

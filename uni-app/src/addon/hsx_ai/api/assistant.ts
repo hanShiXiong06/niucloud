@@ -4,6 +4,9 @@ import { getAppChannel, getSiteId, getToken } from '@/utils/common'
 export type AiAssistantEvent = { type: string; delta?: string; message?: string; items?: any[]; [key: string]: any }
 
 export const getAiAssistantCapability = () => request.get('ai/assistant/capability', {}, { showErrorMessage: false })
+export const getAiConversations = (params: Record<string, any> = {}) => request.get('ai/assistant/conversations', params, { showErrorMessage: false })
+export const getAiConversationMessages = (conversationId: number, params: Record<string, any> = {}) => request.get(`ai/assistant/conversations/${conversationId}/messages`, params, { showErrorMessage: false })
+export const archiveAiConversation = (conversationId: number) => request.post(`ai/assistant/conversations/${conversationId}/archive`, {}, { showErrorMessage: false })
 export const chatWithAiAssistant = (data: Record<string, any>) => request.post('ai/assistant/chat', data, { showErrorMessage: false })
 export const speechToText = (filePath: string) => request.upload('ai/assistant/speech/stt', { filePath, name: 'audio' }, { showErrorMessage: false })
 export const textToSpeech = (text: string) => request.post('ai/assistant/speech/tts', { text }, { showErrorMessage: false })
@@ -22,6 +25,20 @@ const headers = () => {
     value[import.meta.env.VITE_REQUEST_HEADER_SITEID_KEY] = String(getSiteId(import.meta.env.VITE_SITE_ID || uni.getStorageSync('wap_site_id')))
     value[import.meta.env.VITE_REQUEST_HEADER_CHANNEL_KEY] = getAppChannel()
     return value
+}
+
+export const speechBlobToText = async (audio: Blob) => {
+    const body = new FormData()
+    body.append('audio', audio, 'voice.wav')
+    const uploadHeaders = headers()
+    delete uploadHeaders['Content-Type']
+    uploadHeaders.Accept = 'application/json'
+    const response = await fetch(apiUrl('ai/assistant/speech/stt'), {
+        method: 'POST', headers: uploadHeaders, body, credentials: 'same-origin'
+    })
+    const result = await response.json()
+    if (!response.ok || Number(result?.code) !== 1) throw new Error(result?.msg || `语音识别失败（HTTP ${response.status}）`)
+    return result
 }
 
 const createParser = (onEvent: (event: AiAssistantEvent) => void) => {
@@ -49,10 +66,10 @@ const createParser = (onEvent: (event: AiAssistantEvent) => void) => {
     }
 }
 
-export const streamAiAssistant = async (data: Record<string, any>, onEvent: (event: AiAssistantEvent) => void) => {
+export const streamAiAssistant = async (data: Record<string, any>, onEvent: (event: AiAssistantEvent) => void, signal?: AbortSignal) => {
     // #ifdef H5
     const parser = createParser(onEvent)
-    const response = await fetch(apiUrl('ai/assistant/stream'), { method: 'POST', headers: headers(), body: JSON.stringify(data) })
+    const response = await fetch(apiUrl('ai/assistant/stream'), { method: 'POST', headers: headers(), body: JSON.stringify(data), signal })
     if (!response.ok || !response.body) throw new Error(`AI 流式请求失败（HTTP ${response.status}）`)
     const reader = response.body.getReader()
     const decoder = new TextDecoder('utf-8')
@@ -74,6 +91,7 @@ export const streamAiAssistant = async (data: Record<string, any>, onEvent: (eve
             success: () => { try { parser.finish(); resolve() } catch (error) { reject(error) } },
             fail: reject
         } as any)
+        if (signal) signal.addEventListener('abort', () => task.abort(), { once: true })
         task.onChunkReceived((chunk: any) => {
             const bytes = new Uint8Array(chunk.data)
             parser.push(decoder ? decoder.decode(bytes, { stream: true }) : decodeURIComponent(Array.from(bytes).map((value) => `%${value.toString(16).padStart(2, '0')}`).join('')))
@@ -83,9 +101,11 @@ export const streamAiAssistant = async (data: Record<string, any>, onEvent: (eve
     // #endif
 
     // #ifdef APP-PLUS
+    if (signal?.aborted) { const error = new Error('Aborted'); error.name = 'AbortError'; throw error }
     const response: any = await chatWithAiAssistant(data)
     const result = response?.data || {}
     if (result.resources?.length) onEvent({ type: 'resources', items: result.resources })
+    if (result.blocks?.length) onEvent({ type: 'blocks', items: result.blocks })
     onEvent({ type: 'content', delta: result.content || '' })
     onEvent({ type: 'done', ...result })
     // #endif

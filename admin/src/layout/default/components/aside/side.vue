@@ -1,7 +1,7 @@
 <template>
-    <el-container class="w-[200px] h-screen layout-aside flex flex-col">
+    <el-container class="workspace-side h-screen flex flex-col">
         <el-header class="logo-wrap flex items-center justify-center h-[64px]">
-            <div class="logo flex items-center m-auto h-[64px]" v-if="!systemStore.menuIsCollapse">
+            <div class="logo flex items-center m-auto h-[64px]" v-if="!isCollapsed">
                 <el-image style="width: 40px; height: 40px" :src="img(logoUrl)" fit="contain">
                     <template #error>
                         <div class="flex justify-center items-center w-full h-[40px]"><img class="max-w-[40px]" src="@/app/assets/images/icon-addon-one.png" alt=""  object-fit="contain"></div>
@@ -14,7 +14,7 @@
         </el-header>
         <el-main class="menu-wrap">
             <el-scrollbar>
-                <el-menu :default-active="route.name" :router="true" class="aside-menu h-full" :unique-opened="true" :collapse="systemStore.menuIsCollapse" >
+                <el-menu :default-active="route.name" :router="true" class="aside-menu h-full" :unique-opened="true" :collapse="isCollapsed" >
                     <menu-item v-for="(route, index) in menuData" :routes="route" :key="index" />
                 </el-menu>
                 <div class="h-[48px]"></div>
@@ -36,6 +36,10 @@ import { getShowApp, getShowSpecialMenu } from '@/app/api/site'
 import storage from '@/utils/storage'
 
 const systemStore = useSystemStore()
+const props = defineProps<{
+    collapsed?: boolean
+}>()
+const isCollapsed = computed(() => props.collapsed ?? systemStore.menuIsCollapse)
 const userStore = useUserStore()
 const route = useRoute()
 const siteInfo = userStore.siteInfo
@@ -136,6 +140,11 @@ if (siteInfo?.apps.length > 1) {
 </script>
 
 <style lang="scss">
+.workspace-side {
+    width: 100%;
+    min-width: 0;
+}
+
 .menu-wrap {
     padding: 0!important;
 

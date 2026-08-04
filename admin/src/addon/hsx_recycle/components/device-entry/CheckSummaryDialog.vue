@@ -10,6 +10,7 @@
         <div class="csd-head">
             <span class="csd-head__model">{{ deviceTitle || '未填写型号' }}</span>
             <el-tag v-if="templateName" size="small" type="success" effect="plain">{{ templateName }}</el-tag>
+            <el-tag v-if="prefilledKeys.length" size="small" type="info" effect="plain">设备信息已预填，请核对</el-tag>
         </div>
 
         <div v-if="loading" class="csd-loading">
@@ -41,13 +42,15 @@ const props = withDefaults(defineProps<{
     deviceTitle?: string
     imei?: string
     loading?: boolean
+    prefilledKeys?: string[]
 }>(), {
     fields: () => [],
     values: () => ({}),
     templateName: '',
     deviceTitle: '',
     imei: '',
-    loading: false
+    loading: false,
+    prefilledKeys: () => []
 })
 
 const emit = defineEmits<{

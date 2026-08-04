@@ -1,15 +1,18 @@
 <template>
     <view :style="warpCss" class="overflow-hidden">
-        <view class="goods-sku card-template" v-if="diyComponent.goods && diyComponent.goods.attr_format && Object.keys(diyComponent.goods.attr_format).length || diyComponent.goods.goods_brand || diyComponent.weight >0 || diyComponent.volume>0">
-            <view class="title mb-[30rpx]">商品属性</view>
-            <view>
+        <view class="goods-sku card-template" :class="'attr-layout-' + layoutStyle" v-if="hasAttrs">
+            <view class="attr-head">
+                <view class="title">{{ diyComponent.title || '本机参数' }}</view>
+                <text class="attr-count">{{ filteredAttrFormat.length }} 项</text>
+            </view>
+            <view class="attr-content">
                 <template v-for="(item,index) in filteredAttrFormat" :key="index">
-                    <view v-if="index < 4 || isAttrFormatShow" class="card-template-item">
-                        <text class="text-[26rpx] leading-[30rpx] w-[160rpx] font-400 shrink-0 text-[var(--text-color-light9)]">{{ item.attr_value_name }}</text>
-                        <view class="text-[#333] box-border value-wid text-[26rpx] leading-[30rpx] font-400 pl-[20rpx]">{{ Array.isArray(item.attr_child_value_name) ? item.attr_child_value_name.join(',') : item.attr_child_value_name }}</view>
+                    <view v-if="index < previewCount || isAttrFormatShow" class="card-template-item attr-item">
+                        <text class="attr-name">{{ item.attr_value_name }}</text>
+                        <view class="attr-value">{{ Array.isArray(item.attr_child_value_name) ? item.attr_child_value_name.join('、') : item.attr_child_value_name }}</view>
                     </view>
                 </template>
-                <view v-if="filteredAttrFormat.length > 4" class="flex-center" @click="isAttrFormatShow = !isAttrFormatShow">
+                <view v-if="filteredAttrFormat.length > previewCount" class="attr-toggle flex-center" @click="isAttrFormatShow = !isAttrFormatShow">
                     <text class="text-[24rpx] mr-[10rpx]">{{ !isAttrFormatShow ? '展开' : '收起' }}</text>
                     <text class="nc-iconfont !text-[22rpx]" :class="{'nc-icon-xiaV6xx': !isAttrFormatShow, 'nc-icon-shangV6xx-1': isAttrFormatShow}"></text>
                 </view>
@@ -85,6 +88,9 @@ const filteredAttrFormat = computed(() => {
     // 第三步：合并原始过滤后的属性 + 重量/体积属性
     return [...extraAttrs, ...filteredOriginalAttrs];
 });
+const hasAttrs = computed(() => filteredAttrFormat.value.length > 0);
+const layoutStyle = computed(() => diyComponent.value.layoutStyle || 'list');
+const previewCount = computed(() => Math.max(2, Number(diyComponent.value.previewCount || 4)));
 
 const warpCss = computed(() => {
     let style = '';
@@ -104,7 +110,11 @@ const warpCss = computed(() => {
     return style;
 })
 
-const isAttrFormatShow = ref(false); //控制属性是否展开
+const isAttrFormatShow = ref(diyComponent.value.defaultExpand === true); //控制属性是否展开
+
+watch(() => diyComponent.value.defaultExpand, (value) => {
+    isAttrFormatShow.value = value === true;
+}, { immediate: true });
 
 onMounted(() => {
     // 装修模式下刷新
@@ -141,7 +151,52 @@ onMounted(() => {
     background-color: transparent !important;
     border-radius: 0 !important;
 }
-.goods-sku .value-wid {
-    width: calc(100% - 160rpx);
+.attr-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24rpx;
 }
+.attr-head .title { margin: 0; }
+.attr-count { font-size: 22rpx; color: var(--text-color-light9); }
+.attr-item { align-items: flex-start; }
+.attr-name {
+    width: 160rpx;
+    flex-shrink: 0;
+    font-size: 26rpx;
+    line-height: 36rpx;
+    color: var(--text-color-light9);
+}
+.attr-value {
+    width: calc(100% - 160rpx);
+    padding-left: 20rpx;
+    box-sizing: border-box;
+    font-size: 26rpx;
+    line-height: 36rpx;
+    color: #303133;
+    text-align: right;
+}
+.attr-toggle { padding-top: 18rpx; color: var(--primary-color); }
+.attr-layout-grid .attr-content {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12rpx;
+}
+.attr-layout-grid .attr-item {
+    display: flex;
+    flex-direction: column;
+    padding: 18rpx;
+    border: 0;
+    border-radius: 14rpx;
+    background: #f7f8fa;
+}
+.attr-layout-grid .attr-name,
+.attr-layout-grid .attr-value {
+    width: 100%;
+    padding-left: 0;
+    text-align: left;
+}
+.attr-layout-grid .attr-name { font-size: 22rpx; margin-bottom: 8rpx; }
+.attr-layout-grid .attr-value { font-weight: 600; }
+.attr-layout-grid .attr-toggle { grid-column: 1 / -1; }
 </style>

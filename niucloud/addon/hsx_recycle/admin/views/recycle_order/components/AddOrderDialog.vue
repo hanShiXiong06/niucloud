@@ -10,73 +10,34 @@
     >
         <template #header>
             <div class="dialog-heading">
-                <div class="dialog-heading__icon">
-                    <el-icon><DocumentAdd /></el-icon>
-                </div>
-                <div>
-                    <div class="dialog-heading__title">代客户下单</div>
-                    <div class="dialog-heading__desc">登记客户与到货信息，保存设备后完成签收</div>
-                </div>
+                <span class="dialog-heading__title">代客户下单</span>
+                <el-tag v-if="draftOrder.id" type="info" effect="plain">{{ draftOrder.order_no }}</el-tag>
             </div>
         </template>
 
-        <el-form ref="formRef" :model="form" label-position="top" class="order-workbench">
+        <el-form :model="form" label-position="top" class="order-workbench">
             <section class="order-section order-section--base">
-                <div class="section-heading">
-                    <div>
-                        <div class="section-heading__title">客户与收货信息</div>
-                        <div class="section-heading__desc">创建首台设备时会同步生成草稿订单</div>
-                    </div>
-                    <el-tag v-if="draftOrder.id" type="info" effect="plain" round>
-                        草稿 {{ draftOrder.order_no }}
-                    </el-tag>
-                </div>
-
                 <div class="base-grid">
                     <div class="base-field base-field--member">
                         <div class="field-label"><span class="is-required">*</span>客户</div>
                         <MemberSelect
                             v-model="form.member_id"
                             :disabled="!!draftOrder.id"
-                            placeholder="输入手机号、昵称或会员编号搜索"
+                            placeholder="搜索手机号、昵称或会员编号"
                             @change="handleMemberChange"
                         />
-
-                        <!-- <div v-if="selectedMember" class="selected-member">
-                            <el-avatar :size="38" :src="selectedMember.headimg ? img(selectedMember.headimg) : ''">
-                                {{ memberInitial }}
-                            </el-avatar>
-                            <div class="selected-member__main">
-                                <div class="selected-member__name">
-                                    {{ selectedMember.nickname || selectedMember.username || '未设置昵称' }}
-                                    <el-tag v-if="selectedMember.member_level_name" size="small" type="info" effect="plain">
-                                        {{ selectedMember.member_level_name }}
-                                    </el-tag>
-                                </div>
-                                <div class="selected-member__meta">
-                                    <span>{{ selectedMember.mobile || '未绑定手机' }}</span>
-                                    <span v-if="selectedMember.member_no">编号 {{ selectedMember.member_no }}</span>
-                                </div>
-                            </div>
-                            <el-button
-                                v-if="!draftOrder.id"
-                                link
-                                type="primary"
-                                @click="clearSelectedMember"
-                            >更换客户</el-button>
-                        </div> -->
                     </div>
 
                     <div class="base-field">
-                        <div class="field-label">到货方式</div>
+                        <div class="field-label">到货</div>
                         <el-radio-group v-model="form.delivery_type" :disabled="!!draftOrder.id" class="delivery-switch">
                             <el-radio-button label="1">
                                 <el-icon><Van /></el-icon>
-                                快递到店
+                                快递
                             </el-radio-button>
                             <el-radio-button label="2">
                                 <el-icon><Shop /></el-icon>
-                                客户到店
+                                到店
                             </el-radio-button>
                         </el-radio-group>
                     </div>
@@ -86,7 +47,7 @@
                         <el-input
                             ref="expressInput"
                             v-model.trim="form.express_no"
-                            placeholder="输入或使用扫码枪扫描快递单号"
+                            placeholder="扫描或输入快递单号"
                             clearable
                             :disabled="!!draftOrder.id"
                             @keydown.enter.prevent="handleScannerInput"
@@ -101,9 +62,9 @@
                                 </el-button>
                             </template>
                         </el-input>
-                        <div class="field-help" :class="{ 'is-active': isScanMode }">
-                            <el-icon v-if="isScanMode"><Loading class="is-loading" /></el-icon>
-                            {{ isScanMode ? '等待扫码，扫描完成后按回车确认' : '支持扫码枪直接录入' }}
+                        <div v-if="isScanMode" class="field-help is-active">
+                            <el-icon><Loading class="is-loading" /></el-icon>
+                            等待扫码，完成后回车
                         </div>
                     </div>
                 </div>
@@ -121,13 +82,8 @@
         <template #footer>
             <div class="dialog-footer" :class="{ 'is-mobile': isMobile }">
                 <div class="dialog-footer__left">
-                    <div class="dialog-footer__status">
-                        <el-icon :class="{ 'is-warning': pendingDeviceCount, 'is-success': !pendingDeviceCount && savedDeviceCount }">
-                            <component :is="savedDeviceCount && !pendingDeviceCount ? CircleCheck : InfoFilled" />
-                        </el-icon>
-                        <span v-if="pendingDeviceCount">还有 {{ pendingDeviceCount }} 台已录入设备尚未保存</span>
-                        <span v-else-if="savedDeviceCount">已保存 {{ savedDeviceCount }} 台设备，可以完成签收</span>
-                        <span v-else>请先选择客户并保存至少一台设备</span>
+                    <div v-if="pendingDeviceCount || savedDeviceCount" class="dialog-footer__status" :class="pendingDeviceCount ? 'is-warning' : 'is-success'">
+                        {{ pendingDeviceCount ? `${pendingDeviceCount} 台待保存` : `${savedDeviceCount} 台已保存` }}
                     </div>
                     <NextAssigneeSelect v-model="nextAssigneeUid" stage-key="check" label="下一步 · 质检负责人" compact />
                 </div>
@@ -154,9 +110,6 @@ import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
     Aim,
-    CircleCheck,
-    DocumentAdd,
-    InfoFilled,
     Loading,
     Shop,
     Tickets,
@@ -168,17 +121,6 @@ import NextAssigneeSelect from '@/addon/hsx_recycle/components/task/NextAssignee
 import MemberSelect from '@/addon/hsx_recycle/components/member-select/index.vue'
 import { normalizeDevice } from '@/addon/hsx_recycle/components/device-entry/deviceUtil'
 import type { DeviceEntryRow } from '@/addon/hsx_recycle/components/device-entry/types'
-import { img } from '@/utils/common'
-
-interface Member {
-    member_id: string | number
-    member_no?: string
-    nickname?: string
-    username?: string
-    mobile?: string
-    headimg?: string
-    member_level_name?: string
-}
 
 const props = defineProps({
     visible: { type: Boolean, default: false }
@@ -191,17 +133,15 @@ const dialogVisible = computed({
     set: (value: boolean) => emit('update:visible', value)
 })
 const loading = ref(false)
-const formRef = ref()
 const form = ref({
     member_id: '' as string | number,
     delivery_type: '1',
     express_no: '',
     devices: [
-        { imei: '', model: '', initial_price: 0, summary_fields: [], summary_values: {} }
+        { imei: '', model: '', initial_price: 0, check_images_buyer: '', summary_fields: [], summary_values: {} }
     ] as DeviceEntryRow[]
 })
 const draftOrder = ref<{ id: number | string; order_no: string }>({ id: '', order_no: '' })
-const selectedMember = ref<Member | null>(null)
 const isMobile = ref(false)
 
 const expressInput = ref<any>(null)
@@ -212,25 +152,14 @@ const savedDeviceCount = computed(() => form.value.devices.filter(device => devi
 const pendingDeviceCount = computed(() => form.value.devices.filter(device => {
     return !device.saved && Boolean(String(device.imei || '').trim() || String(device.model || '').trim())
 }).length)
-const memberInitial = computed(() => {
-    const name = selectedMember.value?.nickname || selectedMember.value?.username || '客户'
-    return String(name).slice(0, 1)
-})
-
 const updateResponsiveState = () => { isMobile.value = window.innerWidth <= 768 }
 
 const closeDialog = () => {
     emit('update:visible', false)
 }
 
-const handleMemberChange = (memberId: string | number | null, member: Member | null) => {
+const handleMemberChange = (memberId: string | number | null) => {
     form.value.member_id = memberId || ''
-    selectedMember.value = member
-}
-
-const clearSelectedMember = () => {
-    form.value.member_id = ''
-    selectedMember.value = null
 }
 
 const activateScanMode = () => {
@@ -335,10 +264,9 @@ const resetForm = () => {
         member_id: '',
         delivery_type: '1',
         express_no: '',
-        devices: [{ imei: '', model: '', initial_price: 0, summary_fields: [], summary_values: {} }]
+        devices: [{ imei: '', model: '', initial_price: 0, check_images_buyer: '', summary_fields: [], summary_values: {} }]
     }
     draftOrder.value = { id: '', order_no: '' }
-    selectedMember.value = null
     isScanMode.value = false
     nextAssigneeUid.value = 0
 }
@@ -353,19 +281,7 @@ const handleClosed = () => {
 .dialog-heading {
     display: flex;
     align-items: center;
-    gap: 12px;
-}
-
-.dialog-heading__icon {
-    width: 38px;
-    height: 38px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--el-color-primary);
-    background-color: var(--el-color-primary-light-9);
-    font-size: 20px;
+    gap: 10px;
 }
 
 .dialog-heading__title {
@@ -373,13 +289,6 @@ const handleClosed = () => {
     font-size: 17px;
     font-weight: 600;
     line-height: 24px;
-}
-
-.dialog-heading__desc,
-.section-heading__desc {
-    color: var(--el-text-color-secondary);
-    font-size: 12px;
-    line-height: 18px;
 }
 
 .order-workbench {
@@ -390,33 +299,17 @@ const handleClosed = () => {
 }
 
 .order-section {
-    border: 1px solid var(--el-border-color-lighter);
-    border-radius: 8px;
     background-color: var(--el-bg-color);
 }
 
 .order-section--base {
-    padding: 16px 18px;
+    padding: 2px 0 16px;
+    border-bottom: 1px solid var(--el-border-color-lighter);
 }
 
 .order-section--devices {
     min-height: 220px;
-    padding: 14px 16px 12px;
-}
-
-.section-heading {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 14px;
-}
-
-.section-heading__title {
-    color: var(--el-text-color-primary);
-    font-size: 14px;
-    font-weight: 600;
-    line-height: 22px;
+    padding: 0;
 }
 
 .base-grid {
@@ -455,41 +348,6 @@ const handleClosed = () => {
 
 .field-help.is-active {
     color: var(--el-color-primary);
-}
-
-.selected-member {
-    min-height: 54px;
-    margin-top: 8px;
-    padding: 8px 10px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    border: 1px solid var(--el-border-color-lighter);
-    border-radius: 7px;
-    background-color: var(--el-fill-color-lighter);
-}
-
-.selected-member__main {
-    flex: 1;
-    min-width: 0;
-}
-
-.selected-member__name {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    color: var(--el-text-color-primary);
-    font-size: 13px;
-    font-weight: 600;
-}
-
-.selected-member__meta {
-    margin-top: 2px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    color: var(--el-text-color-secondary);
-    font-size: 12px;
 }
 
 .delivery-switch {
@@ -535,13 +393,8 @@ const handleClosed = () => {
     font-size: 13px;
 }
 
-.dialog-footer__status .is-success {
-    color: var(--el-color-success);
-}
-
-.dialog-footer__status .is-warning {
-    color: var(--el-color-warning);
-}
+.dialog-footer__status.is-success { color: var(--el-color-success); }
+.dialog-footer__status.is-warning { color: var(--el-color-warning); }
 
 .dialog-footer__actions {
     flex: 0 0 auto;
@@ -567,7 +420,8 @@ const handleClosed = () => {
 @media (max-width: 768px) {
     .order-section--base,
     .order-section--devices {
-        padding: 14px;
+        padding-left: 0;
+        padding-right: 0;
     }
 
     .base-grid {

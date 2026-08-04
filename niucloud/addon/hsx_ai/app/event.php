@@ -12,5 +12,8 @@ return [
         'HsxAiIntegrationAccessRequested' => [
             'addon\hsx_ai\app\listener\AiIntegrationAccessRequested',
         ],
+        'DiyComponent' => [
+            'addon\hsx_ai\app\listener\diy\DiyComponentListener',
+        ],
     ],
 ];

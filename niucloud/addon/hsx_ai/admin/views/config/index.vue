@@ -207,6 +207,12 @@
                                 <el-checkbox v-model="config.speech.stt_enabled" :true-value="1" :false-value="0">语音转文字</el-checkbox>
                                 <el-checkbox v-model="config.speech.tts_enabled" :true-value="1" :false-value="0">回复朗读</el-checkbox>
                             </el-form-item>
+                            <el-form-item label="前台自动朗读">
+                                <div class="speech-default-setting">
+                                    <el-switch v-model="config.speech.auto_read_default" :active-value="1" :inactive-value="0" :disabled="!config.speech.tts_enabled" />
+                                    <span class="secondary-text">仅作为商城聊天页默认值，用户本次会话仍可关闭；开启会产生语音合成费用。</span>
+                                </div>
+                            </el-form-item>
                             <el-form-item v-if="config.speech.provider === 'baidu'" label="API Key" class="grid-span-2">
                                 <div class="secret-field">
                                     <el-input v-model.trim="config.speech.api_key" type="password" show-password autocomplete="new-password" placeholder="支持 bce-v3 API Key 或旧语音应用 API Key" />
@@ -265,7 +271,16 @@
 
             <template v-if="section === 'playground'">
                 <div v-loading="loading" class="playground-workspace">
-                    <div class="playground-toolbar">
+                    <div class="playground-conversation-bar">
+                        <div>
+                            <strong>直接对话</strong>
+                            <span>{{ activeConversationLabel }}</span>
+                        </div>
+                        <el-button text :icon="Setting" @click="showAdvanced = !showAdvanced">
+                            {{ showAdvanced ? '收起设置' : '对话设置' }}
+                        </el-button>
+                    </div>
+                    <div v-show="showAdvanced" class="playground-toolbar">
                         <label class="playground-field">
                             <span>业务场景</span>
                             <el-select v-model="testForm.scene_key" @change="applyScene">
@@ -286,7 +301,7 @@
                         </label>
                         <label class="playground-field mode-field">
                             <span>输出</span>
-                            <el-segmented v-model="testForm.response_mode" :options="[{ label: '文本', value: 'text' }, { label: 'JSON', value: 'json' }]" />
+                            <el-segmented v-model="testForm.response_mode" :options="[{ label: '对话', value: 'text' }, { label: 'JSON', value: 'json' }]" />
                         </label>
                         <label class="playground-field mode-field">
                             <span>响应</span>
@@ -314,7 +329,7 @@
                                 type="textarea"
                                 :maxlength="2000"
                                 resize="none"
-                                placeholder="输入测试消息，或点击麦克风说话"
+                                placeholder="输入消息，或点击麦克风说话"
                                 @keydown.meta.enter.prevent="runTest"
                                 @keydown.ctrl.enter.prevent="runTest"
                             />
@@ -334,7 +349,7 @@
                                     <span :class="{ recording: recording }">{{ speechInputStatus }}</span>
                                 </div>
                                 <el-button type="primary" :icon="VideoPlay" :loading="executing" :disabled="recording || recognizing" @click="runTest">
-                                    发送测试
+                                    发送
                                 </el-button>
                             </footer>
                         </section>
@@ -348,7 +363,8 @@
                                     </span>
                                 </div>
                                 <div class="response-voice-actions">
-                                    <el-checkbox v-if="speechCapability.tts" v-model="autoRead">自动朗读</el-checkbox>
+                                    <el-checkbox v-if="testResult.reasoning_content" v-model="showReasoning">调试推理</el-checkbox>
+                                    <el-checkbox v-if="speechCapability.tts" v-model="autoRead" @change="handleAutoReadChange">自动朗读</el-checkbox>
                                     <el-tooltip :content="speaking ? '停止播放' : '朗读回复'" placement="top">
                                         <el-button
                                             :icon="speaking ? VideoPause : Headset"
@@ -361,15 +377,16 @@
                                 </div>
                             </header>
                             <div class="response-content">
-                                <details v-if="testResult.reasoning_content" class="reasoning-result">
-                                    <summary>查看推理过程</summary>
+                                <details v-if="showReasoning && testResult.reasoning_content" class="reasoning-result" open>
+                                    <summary>模型推理内容</summary>
                                     <pre>{{ testResult.reasoning_content }}</pre>
                                 </details>
+                                <el-alert v-if="validationWarning" class="result-error" type="warning" :closable="false" :title="validationWarning" />
                                 <el-alert v-if="testResult.error" class="result-error" type="error" :closable="false" :title="testResult.error" />
                                 <pre v-if="testResult.content">{{ testResult.content }}</pre>
                                 <div v-else class="response-empty">
                                     <el-icon><ChatDotRound /></el-icon>
-                                    <span>{{ executing ? 'AI 正在响应' : '等待发送消息' }}</span>
+                                    <span>{{ responseEmptyText }}</span>
                                 </div>
                             </div>
                             <footer class="response-footer">
@@ -476,7 +493,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ChatDotRound, Connection, Delete, Headset, Microphone, Plus, Refresh, Search, VideoPause, VideoPlay } from '@element-plus/icons-vue'
+import { ChatDotRound, Connection, Delete, Headset, Microphone, Plus, Refresh, Search, Setting, VideoPause, VideoPlay } from '@element-plus/icons-vue'
 import { executeAi, getAiLogs, getAiSection, recognizePlaygroundSpeech, saveAiSection, streamAi, syncAiModels, synthesizePlaygroundSpeech, testAiProvider, testAiSpeech } from '../../api'
 
 type AiModel = { id: string; name: string; owned_by: string; enabled: number }
@@ -492,7 +509,7 @@ type AiScene = {
     system_prompt: string; temperature: number; max_tokens: number; response_mode: string
 }
 type AiSpeech = {
-    enabled: number; provider: string; stt_enabled: number; tts_enabled: number;
+    enabled: number; provider: string; stt_enabled: number; tts_enabled: number; auto_read_default: number;
     api_key: string; secret_id: string; secret_key: string; region: string; stt_engine: string;
     voice: number; speed: number; pitch: number; volume: number; tencent_voice: number; tencent_speed: number; tencent_volume: number;
     baidu_auth_mode?: string;
@@ -531,7 +548,7 @@ const emptyScene = (): AiScene => ({
 })
 const config = reactive<{ enabled: number; default_provider_id: string; default_model: string; redact_sensitive: number; log_content: number; speech: AiSpeech; speech_capability: AiSpeechCapability; providers: AiProvider[]; scenes: AiScene[]; integrations: AiIntegration[] }>({
     enabled: 0, default_provider_id: '', default_model: '', redact_sensitive: 1, log_content: 0,
-    speech: { enabled: 0, provider: 'baidu', stt_enabled: 1, tts_enabled: 1, api_key: '', secret_id: '', secret_key: '', region: 'ap-shanghai', stt_engine: '16k_zh', voice: 0, speed: 5, pitch: 5, volume: 5, tencent_voice: 1001, tencent_speed: 0, tencent_volume: 0 },
+    speech: { enabled: 0, provider: 'baidu', stt_enabled: 1, tts_enabled: 1, auto_read_default: 0, api_key: '', secret_id: '', secret_key: '', region: 'ap-shanghai', stt_engine: '16k_zh', voice: 0, speed: 5, pitch: 5, volume: 5, tencent_voice: 1001, tencent_speed: 0, tencent_volume: 0 },
     speech_capability: { enabled: false, provider: 'baidu', provider_name: '百度智能云', stt: false, tts: false },
     providers: [], scenes: [], integrations: []
 })
@@ -551,7 +568,7 @@ const speechCapability = computed(() => config.speech_capability)
 
 const normalizeClientConfig = (data: any) => {
     Object.assign(config, data || {})
-    config.speech = Object.assign({ enabled: 0, provider: 'baidu', stt_enabled: 1, tts_enabled: 1, api_key: '', secret_id: '', secret_key: '', region: 'ap-shanghai', stt_engine: '16k_zh', voice: 0, speed: 5, pitch: 5, volume: 5, tencent_voice: 1001, tencent_speed: 0, tencent_volume: 0 }, data?.speech || {})
+    config.speech = Object.assign({ enabled: 0, provider: 'baidu', stt_enabled: 1, tts_enabled: 1, auto_read_default: 0, api_key: '', secret_id: '', secret_key: '', region: 'ap-shanghai', stt_engine: '16k_zh', voice: 0, speed: 5, pitch: 5, volume: 5, tencent_voice: 1001, tencent_speed: 0, tencent_volume: 0 }, data?.speech || {})
     config.speech_capability = Object.assign({ enabled: false, provider: 'baidu', provider_name: '百度智能云', stt: false, tts: false }, data?.speech_capability || {})
     config.providers = (config.providers || []).map((item: any) => ({ ...item, local_key: uid(), persisted_id: item.id, models: item.models || [], testing: false, syncing: false }))
     config.scenes = (config.scenes || []).map((item: any) => ({ ...item, local_key: uid() }))
@@ -647,7 +664,20 @@ const recordingSeconds = ref(0)
 const synthesizing = ref(false)
 const speaking = ref(false)
 const autoRead = ref(false)
+const showReasoning = ref(false)
+const showAdvanced = ref(false)
+const validationWarning = ref('')
 const promptCount = computed(() => testForm.prompt.length)
+const responseEmptyText = computed(() => {
+    if (!executing.value) return '等待发送消息'
+    const reasoningLength = String(testResult.reasoning_content || '').length
+    return reasoningLength > 0 ? `AI 正在思考，已持续收到 ${reasoningLength} 个字符` : 'AI 正在连接模型'
+})
+const activeConversationLabel = computed(() => {
+    const scene = config.scenes.find((item) => item.key === testForm.scene_key)?.name || '通用对话'
+    const provider = config.providers.find((item) => item.id === testForm.provider_id)?.name || '默认通道'
+    return `${scene} · ${provider} · ${testForm.model || '默认模型'}`
+})
 const speechInputStatus = computed(() => {
     if (recognizing.value) return '正在识别语音'
     if (recording.value) return `录音中 ${String(Math.floor(recordingSeconds.value / 60)).padStart(2, '0')}:${String(recordingSeconds.value % 60).padStart(2, '0')}`
@@ -665,16 +695,18 @@ const applyScene = () => {
     testForm.provider_id = scene.provider_id || config.default_provider_id
     const provider = config.providers.find((item) => item.id === testForm.provider_id)
     testForm.model = scene.model || provider?.default_model || config.default_model || ''
-    testForm.response_mode = scene.response_mode
 }
 const runTest = async () => {
     if (!testForm.prompt.trim()) { ElMessage.warning('请输入测试消息'); return }
-    if (!testForm.model) { ElMessage.warning('请选择模型'); return }
+    if (!testForm.model) { ElMessage.warning('请先在对话设置中选择模型'); return }
+    if (autoRead.value) void unlockAnswerAudio()
     executing.value = true
     stopAnswerAudio()
     let completed = false
     try {
         Object.keys(testResult).forEach((key) => delete testResult[key])
+        validationWarning.value = ''
+        showReasoning.value = false
         if (testForm.stream) {
             await streamAi(testForm, (event) => {
                 if (event.type === 'meta') Object.assign(testResult, event)
@@ -687,10 +719,17 @@ const runTest = async () => {
             Object.assign(testResult, (await executeAi(testForm)).data || {})
         }
         completed = Boolean(testResult.content)
-        ElMessage.success('模型已响应')
     } catch (error: any) {
-        testResult.error = error?.message || error?.msg || '模型调用失败'
-        ElMessage.error(testResult.error)
+        const message = error?.message || error?.msg || '模型调用失败'
+        if (testForm.response_mode === 'json' && testResult.content && message.includes('模型未按要求返回有效JSON')) {
+            delete testResult.error
+            validationWarning.value = '模型已返回文本，但未满足 JSON 格式要求；回答内容已为你保留。'
+            completed = true
+            ElMessage.warning('回答不是有效 JSON，已按文本保留')
+        } else {
+            testResult.error = message
+            ElMessage.error(testResult.error)
+        }
     } finally { executing.value = false }
     if (completed && autoRead.value && speechCapability.value.tts) void speakAnswer(true)
 }
@@ -766,6 +805,8 @@ const startRecording = async () => {
         ElMessage.warning('当前浏览器不支持麦克风录音')
         return
     }
+    // 麦克风按钮属于用户手势，顺便提前解锁稍后异步返回的自动朗读。
+    void unlockAnswerAudio()
     try {
         recorderStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } })
         recorderContext = new AudioContext()
@@ -799,24 +840,45 @@ const stopRecording = async () => {
         return
     }
     recognizing.value = true
+    let shouldSend = false
     try {
         const wav = encodeWav(resampleAudio(mergeAudioChunks(chunks), sampleRate))
         const data: any = (await recognizePlaygroundSpeech(wav)).data || {}
         testForm.prompt = String(data.text || '').trim()
         if (!testForm.prompt) throw new Error('没有识别到有效内容')
-        ElMessage.success('语音已转换为文字')
+        shouldSend = true
     } catch (error: any) {
         ElMessage.error(error?.msg || error?.message || '语音识别失败')
     } finally { recognizing.value = false }
+    if (shouldSend) await runTest()
 }
 const toggleRecording = () => recording.value ? stopRecording() : startRecording()
 
-let answerAudio: HTMLAudioElement | null = null
+let playbackContext: AudioContext | null = null
+let answerAudioBuffer: AudioBuffer | null = null
+let answerAudioSource: AudioBufferSourceNode | null = null
 let answerAudioText = ''
 const stopAnswerAudio = () => {
-    answerAudio?.pause()
-    if (answerAudio) answerAudio.currentTime = 0
+    if (answerAudioSource) {
+        try { answerAudioSource.stop() } catch (_) {}
+        answerAudioSource.disconnect()
+        answerAudioSource = null
+    }
     speaking.value = false
+}
+const unlockAnswerAudio = async () => {
+    if (!playbackContext || playbackContext.state === 'closed') playbackContext = new AudioContext()
+    if (playbackContext.state === 'suspended') await playbackContext.resume()
+    return playbackContext
+}
+const handleAutoReadChange = (enabled: boolean | string | number) => {
+    if (Boolean(enabled)) void unlockAnswerAudio()
+}
+const base64AudioBuffer = (base64: string) => {
+    const binary = window.atob(base64)
+    const bytes = new Uint8Array(binary.length)
+    for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index)
+    return bytes.buffer
 }
 const readableAnswer = () => String(testResult.content || '')
     .replace(/```[\s\S]*?```/g, ' ')
@@ -824,32 +886,40 @@ const readableAnswer = () => String(testResult.content || '')
     .replace(/\s+/g, ' ')
     .trim()
 const playAnswerAudio = async () => {
-    if (!answerAudio) return
+    if (!answerAudioBuffer) return
     try {
-        await answerAudio.play()
+        const context = await unlockAnswerAudio()
+        stopAnswerAudio()
+        const source = context.createBufferSource()
+        source.buffer = answerAudioBuffer
+        source.connect(context.destination)
+        answerAudioSource = source
+        source.onended = () => {
+            if (answerAudioSource === source) answerAudioSource = null
+            speaking.value = false
+        }
+        source.start(0)
         speaking.value = true
-    } catch (_) {
+    } catch (error: any) {
         speaking.value = false
-        ElMessage.info('语音已生成，请点击朗读按钮播放')
+        throw error
     }
 }
 const speakAnswer = async (automatic = false) => {
     const text = readableAnswer()
     if (!text || !speechCapability.value.tts) return
     if (speaking.value) { stopAnswerAudio(); return }
-    if (answerAudio && answerAudioText === text) { await playAnswerAudio(); return }
+    if (answerAudioBuffer && answerAudioText === text) { await playAnswerAudio(); return }
     synthesizing.value = true
     try {
         const data: any = (await synthesizePlaygroundSpeech(text)).data || {}
         if (!data.audio_base64) throw new Error('语音服务未返回音频')
-        answerAudio?.pause()
-        answerAudio = new Audio(`data:${data.mime_type || 'audio/mpeg'};base64,${data.audio_base64}`)
+        const context = await unlockAnswerAudio()
+        answerAudioBuffer = await context.decodeAudioData(base64AudioBuffer(String(data.audio_base64)))
         answerAudioText = text
-        answerAudio.onended = () => { speaking.value = false }
-        answerAudio.onerror = () => { speaking.value = false; ElMessage.error('语音播放失败') }
         await playAnswerAudio()
     } catch (error: any) {
-        if (!automatic || error?.message !== 'play() failed') ElMessage.error(error?.msg || error?.message || '语音合成失败')
+        ElMessage.error(error?.msg || error?.message || (automatic ? '自动朗读失败，可点击耳机按钮重试' : '语音合成失败'))
     } finally { synthesizing.value = false }
 }
 
@@ -902,8 +972,10 @@ onMounted(async () => {
 onBeforeUnmount(() => {
     recording.value = false
     void releaseRecorder()
-    answerAudio?.pause()
-    answerAudio = null
+    stopAnswerAudio()
+    if (playbackContext && playbackContext.state !== 'closed') void playbackContext.close()
+    playbackContext = null
+    answerAudioBuffer = null
 })
 </script>
 
@@ -927,6 +999,7 @@ onBeforeUnmount(() => {
 .speech-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }.speech-actions { display: flex; align-items: center; gap: 10px; }
 .speech-header p { margin: 6px 0 0; color: var(--el-text-color-secondary); font-size: 13px; }
 .speech-form { margin-top: 22px; }.speech-form :deep(.el-select), .speech-form :deep(.el-slider) { width: 100%; }
+.speech-default-setting { display: flex; min-width: 0; align-items: center; gap: 10px; }
 .speech-test-result { display: flex; align-items: center; gap: 16px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--el-border-color-lighter); color: var(--el-color-success); font-size: 13px; }.speech-test-result audio { width: 320px; height: 36px; }
 .provider-panel { border: 1px solid var(--el-border-color-light); border-radius: 6px; background: var(--el-bg-color); }
 .provider-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 54px; padding: 0 16px; border-bottom: 1px solid var(--el-border-color-lighter); }
@@ -937,6 +1010,8 @@ onBeforeUnmount(() => {
 .secret-field { width: 100%; }.secret-warning { display: block; margin-top: 5px; color: var(--el-color-warning); font-size: 12px; }
 .primary-text { color: var(--el-text-color-primary); font-weight: 500; }.secondary-text { margin-top: 3px; color: var(--el-text-color-secondary); font-size: 12px; }
 .playground-workspace { border: 1px solid var(--el-border-color-light); border-radius: 6px; overflow: hidden; background: var(--el-bg-color); }
+.playground-conversation-bar { display: flex; min-height: 58px; box-sizing: border-box; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--el-border-color-lighter); background: var(--el-fill-color-extra-light); }
+.playground-conversation-bar > div { display: flex; min-width: 0; flex-direction: column; gap: 4px; }.playground-conversation-bar strong { font-size: 14px; }.playground-conversation-bar span { overflow: hidden; color: var(--el-text-color-secondary); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .playground-toolbar { display: grid; grid-template-columns: minmax(150px, .8fr) minmax(150px, .8fr) minmax(210px, 1.2fr) 180px 180px; gap: 14px; padding: 14px 16px; border-bottom: 1px solid var(--el-border-color-lighter); background: var(--el-fill-color-extra-light); }
 .playground-field { display: flex; min-width: 0; flex-direction: column; gap: 6px; }.playground-field > span { color: var(--el-text-color-secondary); font-size: 12px; }.playground-field :deep(.el-select), .playground-field :deep(.el-segmented) { width: 100%; }
 .test-warning { margin: 14px 16px 0; width: auto; }.result-error { margin-bottom: 14px; }

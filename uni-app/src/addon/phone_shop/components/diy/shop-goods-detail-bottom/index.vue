@@ -1,7 +1,7 @@
 <template>
     <view class="overflow-hidden relative" v-if="diyComponent && diyComponent.goods && Object.keys(diyComponent.goods).length">
         <view v-if="diyStore.mode != 'decorate'" class="tab-bar-placeholder"></view>
-        <view :style="warpCss" class="border-[0] border-t-[2rpx] border-solid border-[#f5f5f5] w-[100%] flex justify-between pl-[32rpx] pr-[4rpx] box-border tab-bar z-10 items-center" :class="{'fixed left-0 bottom-0': diyStore.mode != 'decorate'}">
+        <view :style="warpCss" class="border-[0] border-t-[2rpx] border-solid border-[#f5f5f5] w-[100%] flex justify-between pl-[32rpx] pr-[4rpx] box-border tab-bar z-10 items-center" :class="[{ 'fixed left-0 bottom-0': diyStore.mode != 'decorate' }, 'bottom-layout-' + layoutStyle]">
             <view class="flex items-center">
                 <view v-if="menuContent.includes('index')" class="flex flex-col justify-center items-center mr-[38rpx]" @click="redirect({ url: '/addon/phone_shop/pages/index', mode: 'reLaunch' })">
                     <view class="nc-iconfont nc-icon-shouyeV6xx11 text-[36rpx]"></view>
@@ -43,7 +43,7 @@
                     <text class="text-[18rpx] mt-[6rpx]">分享</text>
                 </view>
             </view>
-            <view class="flex flex-1" v-if="diyComponent.goods.status == 1">
+            <view class="flex flex-1" v-if="isGoodsSellable">
                 <button v-if="diyComponent.goods.is_gift"
                         class="!w-[420rpx] flex-1 !h-[70rpx] font-500 text-[26rpx] !text-[#fff] !bg-[#ccc] !m-0 leading-[70rpx] rounded-full remove-border"
                 >商品为赠品不可购买</button>
@@ -85,7 +85,7 @@
                     class="flex-1 !h-[70rpx] font-500 text-[26rpx] !m-0 !mr-[16rpx] leading-[70rpx] rounded-full remove-border" :style="buyBtnStyle">{{ diyComponent.forwardName || '一键转发' }}</button>
             </template>
             <view class="flex flex-1" v-else>
-                <button class="w-[100%] !h-[70rpx] font-500 text-[26rpx] !text-[#fff] !bg-[#ccc] !m-0 leading-[70rpx] rounded-full remove-border">该商品已下架</button>
+                <button class="w-[100%] !h-[70rpx] font-500 text-[26rpx] !text-[#fff] !bg-[#b8bec8] !m-0 leading-[70rpx] rounded-full remove-border">{{ unavailableText }}</button>
             </view>
         </view>
         <!-- 装修时，防止点击 -->
@@ -290,6 +290,13 @@ const canDirectBuy = computed(() => {
         && !data.goods?.form_id
         && Number(data.goods?.is_limit ? data.goods?.max_buy || 1 : 1) >= 1
 })
+const layoutStyle = computed(() => diyComponent.value.layoutStyle || 'standard')
+const saleState = computed(() => diyComponent.value.goods?.sale_state || {})
+const isGoodsSellable = computed(() => {
+    if (diyStore.mode == 'decorate') return true
+    return Number(diyComponent.value.goods?.status) === 1 && Number(saleState.value.can_sell ?? 1) === 1
+})
+const unavailableText = computed(() => saleState.value.name || (Number(diyComponent.value.goods?.status) === 1 ? '暂不可购买' : '该商品已下架'))
 
 const directBuy = () => {
     const data: any = diyComponent.value || {}
@@ -396,5 +403,19 @@ const refresh = () => {
     padding-top: 16rpx;
     padding-bottom: calc(constant(safe-area-inset-bottom) + 16rpx);
     padding-bottom: calc(env(safe-area-inset-bottom) + 16rpx);
+}
+.bottom-layout-floating {
+    left: 20rpx !important;
+    right: 20rpx !important;
+    bottom: 18rpx !important;
+    width: calc(100% - 40rpx) !important;
+    border: 0 !important;
+    border-radius: 28rpx;
+    box-shadow: 0 10rpx 38rpx rgba(31, 41, 55, .16);
+}
+.bottom-layout-compact {
+    padding-top: 10rpx;
+    padding-bottom: calc(env(safe-area-inset-bottom) + 10rpx);
+    :deep(button) { height: 62rpx !important; line-height: 62rpx !important; }
 }
 </style>

@@ -87,13 +87,12 @@ const mapDeviceToRow = (d: any): DeviceEntryRow => {
         model: d?.model || '',
         user_sn: d?.user_sn || '',
         initial_price: Number(d?.initial_price || 0),
+        check_images_buyer: String(d?.check_images_buyer || ''),
         category_id: categoryId,
         category_path: categoryPath,
         // 完整 id 路径直接给级联做 id 反显
         model_path: categoryPath,
         check_template_id: Number(d?.check_template_id || 0),
-        // 有完整路径→级联按 id 反显选中；否则先手动展示型号文本，由 DeviceEntryList 按型号名解析出完整路径再切级联
-        model_input_mode: !(categoryPath.length > 1),
         saved: !!d?.id,
         dirty: false,
         summary_fields: [],
@@ -104,7 +103,7 @@ const mapDeviceToRow = (d: any): DeviceEntryRow => {
 const buildRows = () => {
     const list = (props.deviceList || []).map(mapDeviceToRow)
     if (!list.length) {
-        list.push({ _k: rowKeySeed++, imei: '', model: '', initial_price: 0, summary_fields: [], summary_values: {} } as DeviceEntryRow)
+        list.push({ _k: rowKeySeed++, imei: '', model: '', initial_price: 0, check_images_buyer: '', summary_fields: [], summary_values: {} } as DeviceEntryRow)
     }
     rows.value = list
 }

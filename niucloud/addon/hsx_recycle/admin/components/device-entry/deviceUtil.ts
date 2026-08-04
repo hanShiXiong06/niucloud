@@ -12,6 +12,7 @@ export function normalizeDevice(device: DeviceEntryRow) {
         category_id: device.category_id || 0,
         category_path: Array.isArray(device.category_path) ? device.category_path : [],
         check_template_id: Number(device.check_template_id || 0),
+        check_images_buyer: String(device.check_images_buyer || ''),
         summary: collectSummaryValues(device.summary_fields || [], device.summary_values || {})
     }
 }
@@ -32,6 +33,7 @@ export function buildUpdatePayload(device: DeviceEntryRow) {
         initial_price: Number(device.initial_price || 0),
         category_id: device.category_id || 0,
         check_template_id: Number(device.check_template_id || 0),
+        check_images_buyer: String(device.check_images_buyer || ''),
         info
     }
 }

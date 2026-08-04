@@ -7,7 +7,6 @@
                 <slot name="head-tip" />
             </div>
             <div class="device-entry__actions">
-                <!-- 本地读取暂时关闭（保留代码，置 enableLocalRead=true 即可恢复） -->
                 <template v-if="enableLocalRead">
                     <el-tooltip content="开启后插入手机会自动读取并补全当前空行" placement="top">
                         <span class="device-entry__auto">
@@ -34,12 +33,19 @@
             @close="dismissModelEntryTip"
         >
             <template #title>
-                <span>请优先从型号库选择，输入时可忽略空格和大小写，例如“17P”可以检索 iPhone 17 Pro 系列。</span>
+                <span>型号必须选择到最后一级，首次了解后可关闭此提示。</span>
             </template>
-            <div class="model-entry-tip__desc">
-                老机型通常已收录；新款若暂时查不到，可使用手动录入。型号库约每月更新一次，建议更新后重新关联标准型号。
-            </div>
         </el-alert>
+
+        <div class="device-table-head">
+            <span></span>
+            <span>SN / IMEI</span>
+            <span>标准型号</span>
+            <span>预估价</span>
+            <span>买家图</span>
+            <span>状态</span>
+            <span class="is-right">操作</span>
+        </div>
 
         <div class="device-list">
             <div
@@ -55,19 +61,19 @@
                     @update="updateDeviceRow(row)"
                     @remove="removeDeviceRow(index)"
                     @edit-summary="openSummaryDialog(row)"
+                    @configure-template="openTemplateConfig(row)"
                 >
                     <template #model>
                         <div class="model-picker-wrap">
                             <div class="model-picker">
                                 <el-cascader
-                                    v-if="!row.model_input_mode"
                                     v-model="row.model_path"
                                     :options="modelTreeOptions"
                                     :props="modelCascaderProps"
                                     :before-filter="keyword => handleModelBeforeFilter(row, keyword)"
                                     :filter-method="modelSearchFilterMethod"
                                     :show-all-levels="false"
-                                    placeholder="从型号库搜索，如 17P"
+                                    placeholder="搜索或逐级选择型号"
                                     filterable
                                     clearable
                                     size="small"
@@ -76,51 +82,19 @@
                                     @visible-change="visible => onModelVisibleChange(row, visible)"
                                     @change="value => handleModelPathChange(row, value)"
                                 />
-                                <el-input
-                                    v-else
-                                    v-model="row.model"
-                                    placeholder="输入完整型号，如 iPhone 17 Pro Max"
-                                    clearable
-                                    size="small"
-                                    @input="handleManualModelInput(row)"
-                                />
-                                <el-button
-                                    link
-                                    type="primary"
-                                    size="small"
-                                    class="model-mode-button"
-                                    :icon="row.model_input_mode ? List : EditPen"
-                                    @click="toggleModelInputMode(row)"
-                                >
-                                    {{ row.model_input_mode ? '返回型号库' : '手动录入' }}
-                                </el-button>
                             </div>
-                            <div v-if="row.model_search_empty && !row.model_input_mode" class="model-picker-feedback is-warning">
-                                型号库暂未找到“{{ row.model_search_keyword }}”。可缩短关键词重试；确认是未收录新款后再
-                                <el-button link type="primary" size="small" @click="enableManualModelInput(row)">手动录入</el-button>
+                            <div v-if="row.model_search_empty" class="model-picker-feedback is-warning">
+                                未找到“{{ row.model_search_keyword }}”，可选择已有型号或
+                                <el-button link type="primary" size="small" @click="openQuickAddModel(row)">新增并关联</el-button>
                             </div>
-                            <div v-else-if="row.model_input_mode" class="model-picker-feedback">
-                                手动型号不会自动关联标准分类和质检模板，建议仅用于暂未收录的新款机型。
+                            <div v-else-if="row.model && !row.category_id" class="model-picker-feedback is-warning">
+                                已识别“{{ row.model }}”，请选择标准型号；型号库没有时可
+                                <el-button link type="primary" size="small" @click="openQuickAddModel(row)">新增并关联</el-button>
                             </div>
                         </div>
                     </template>
                 </DeviceEntryCard>
 
-                <div
-                    v-if="row.category_id && !row.model_input_mode && !row.summary_loading"
-                    class="template-assist"
-                    :class="templateAssistState(row).className"
-                >
-                    <div class="template-assist__main">
-                        <el-icon><component :is="templateAssistState(row).icon" /></el-icon>
-                        <span>{{ templateAssistState(row).text }}</span>
-                    </div>
-                    <div class="template-assist__actions">
-                        <el-button link type="primary" size="small" :icon="Setting" @click="openTemplateConfig(row)">
-                            {{ row.check_template_bound && row.check_template_summary_count ? '调整设备模板' : '配置设备模板' }}
-                        </el-button>
-                    </div>
-                </div>
             </div>
         </div>
 
@@ -132,6 +106,7 @@
             :device-title="activeRow?.model || ''"
             :imei="activeRow?.imei || ''"
             :loading="!!activeRow?.summary_loading"
+            :prefilled-keys="activeRow?.local_prefilled_keys || []"
             @confirm="handleSummaryConfirm"
         />
         <CheckTemplateConfigDrawer
@@ -140,19 +115,25 @@
             :model-name="templateConfigRow?.model || ''"
             @saved="handleTemplateConfigSaved"
         />
+        <QuickAddModelDialog
+            v-model:visible="quickAddModelVisible"
+            :suggested-name="quickAddModelName"
+            @created="handleQuickModelCreated"
+        />
     </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, EditPen, List, Connection, CircleCheck, Warning, Setting } from '@element-plus/icons-vue'
+import { Plus, Connection } from '@element-plus/icons-vue'
 import { addOrderDevice, updateOrderDevice, deleteOrderDevice } from '@/addon/hsx_recycle/api/recycle_order'
 import { getRecycleDeviceModelDictChildren, getRecycleDeviceModelDictOptions, getRecycleDeviceModelDictTree } from '@/addon/hsx_recycle/api/recycle_device_model_dict'
 import { getCheckTemplateSchema } from '@/addon/hsx_recycle/api/check_template'
 import DeviceEntryCard from './DeviceEntryCard.vue'
 import CheckSummaryDialog from './CheckSummaryDialog.vue'
 import CheckTemplateConfigDrawer from './CheckTemplateConfigDrawer.vue'
+import QuickAddModelDialog from './QuickAddModelDialog.vue'
 import { useLocalDevice } from './useLocalDevice'
 import { validateSummaryRequired } from './summaryUtil'
 import { normalizeDevice, buildUpdatePayload } from './deviceUtil'
@@ -302,7 +283,7 @@ const filterModelNode = (node: any, keyword: string) => {
         .some(item => normalizeModelSearchText(item).includes(value))
 }
 
-const handleModelPathChange = (row: DeviceEntryRow, value: Array<string | number> | string | number) => {
+const handleModelPathChange = async (row: DeviceEntryRow, value: Array<string | number> | string | number) => {
     const path = Array.isArray(value) ? value : [value]
     const leafId = path[path.length - 1]
     const leaf = modelNodeMap.value[String(leafId)] || null
@@ -317,32 +298,10 @@ const handleModelPathChange = (row: DeviceEntryRow, value: Array<string | number
     row.model_search_keyword = ''
     row.model_search_empty = false
     if (row.saved) row.dirty = true
-    if (row.category_id) loadCheckTemplate(row)
-    else clearCheckTemplate(row)
-}
-
-const enableManualModelInput = (row: DeviceEntryRow) => {
-    row.model_input_mode = true
-    row.model_path = []
-    row.category_id = 0
-    row.category_path = []
-    row.model_search_empty = false
-    clearCheckTemplate(row)
-    if (row.saved) row.dirty = true
-}
-
-const toggleModelInputMode = (row: DeviceEntryRow) => {
-    if (!row.model_input_mode) {
-        enableManualModelInput(row)
-        return
-    }
-    row.model_input_mode = false
-    row.model_search_keyword = ''
-    row.model_search_empty = false
-}
-
-const handleManualModelInput = (row: DeviceEntryRow) => {
-    if (row.saved) row.dirty = true
+    if (row.category_id) {
+        await loadCheckTemplate(row)
+        prefillSummaryFromLocal(row, row)
+    } else clearCheckTemplate(row)
 }
 
 // ============ 质检模板 / 摘要 ============
@@ -437,29 +396,8 @@ const openSummaryDialog = (row: DeviceEntryRow) => {
 const handleSummaryConfirm = (values: Record<string, any>) => {
     if (!activeRow.value) return
     activeRow.value.summary_values = { ...values }
+    activeRow.value.local_prefilled_keys = []
     if (activeRow.value.saved) activeRow.value.dirty = true
-}
-
-const templateAssistState = (row: DeviceEntryRow) => {
-    if (!row.check_template_bound) {
-        return {
-            className: 'is-warning',
-            icon: Warning,
-            text: `当前使用默认模板“${row.check_template_name || '默认质检模板'}”，尚未为该型号建立明确绑定。`
-        }
-    }
-    if (!Number(row.check_template_summary_count || 0)) {
-        return {
-            className: 'is-warning',
-            icon: Warning,
-            text: `“${row.check_template_name || '质检模板'}”已生效，但还没有设置设备摘要字段。来源：${row.check_template_source_name || '型号规则'}。`
-        }
-    }
-    return {
-        className: 'is-ready',
-        icon: CircleCheck,
-        text: `“${row.check_template_name}”已生效，设备摘要 ${row.check_template_summary_count} 项。来源：${row.check_template_source_name || '型号规则'}。`
-    }
 }
 
 const templateConfigVisible = ref(false)
@@ -478,6 +416,38 @@ const handleTemplateConfigSaved = async () => {
     const row = templateConfigRow.value
     if (!row) return
     await loadCheckTemplate(row)
+    prefillSummaryFromLocal(row, row)
+}
+
+const quickAddModelVisible = ref(false)
+const quickAddModelRow = ref<DeviceEntryRow | null>(null)
+const quickAddModelName = ref('')
+
+const openQuickAddModel = (row: DeviceEntryRow) => {
+    quickAddModelRow.value = row
+    quickAddModelName.value = String(row.model || row.model_search_keyword || '').trim()
+    quickAddModelVisible.value = true
+}
+
+const handleQuickModelCreated = async (node: Record<string, any>) => {
+    const row = quickAddModelRow.value
+    const id = Number(node.id || 0)
+    if (!row || !id) return
+    const path = Array.isArray(node.category_path) && node.category_path.length
+        ? node.category_path.map((value: any) => Number(value))
+        : [id]
+    row.category_id = id
+    row.category_path = path
+    row.model_path = path
+    row.model = String(node.node_name || quickAddModelName.value)
+    row.model_search_keyword = ''
+    row.model_search_empty = false
+    if (row.saved) row.dirty = true
+    modelSearching.value = false
+    modelTreeOptions.value = []
+    await loadCheckTemplate(row)
+    prefillSummaryFromLocal(row, row)
+    ElMessage.success(Number(node.created || 0) === 1 ? '型号已新增并关联' : '已关联型号库中的已有型号')
 }
 
 // ============ 行的增删 ============
@@ -516,10 +486,30 @@ const resolveOrderId = async (): Promise<number | string> => {
     throw new Error('缺少订单信息')
 }
 
+const normalizeSerial = (value: any): string => String(value || '').trim().toUpperCase().replace(/[\s-]+/g, '')
+
+const deviceSerialKeys = (device: any): string[] => Array.from(new Set([
+    device?.imei,
+    device?.imei2,
+    device?.serial_number,
+    device?.sn,
+    device?.user_sn,
+].map(normalizeSerial).filter(Boolean)))
+
+const findDuplicateDevice = (device: any, exclude?: DeviceEntryRow): DeviceEntryRow | undefined => {
+    const keys = new Set(deviceSerialKeys(device))
+    if (!keys.size) return undefined
+    return props.devices.find(row => row !== exclude && deviceSerialKeys(row).some(key => keys.has(key)))
+}
+
 const saveDeviceRow = async (row: DeviceEntryRow, index: number) => {
     const payload = normalizeDevice(row)
-    if (!payload.imei && !payload.model) {
-        ElMessage.warning('请填写 IMEI/SN 或设备型号')
+    if (findDuplicateDevice(row, row)) {
+        ElMessage.warning('相同 IMEI/SN 已在设备清单中，本行不再保存')
+        return
+    }
+    if (!payload.category_id) {
+        ElMessage.warning('请选择到具体设备型号')
         return
     }
     const summaryError = validateSummaryRequired(row.summary_fields || [], row.summary_values || {})
@@ -547,6 +537,14 @@ const saveDeviceRow = async (row: DeviceEntryRow, index: number) => {
 
 const updateDeviceRow = async (row: DeviceEntryRow) => {
     if (!row.id) return
+    if (findDuplicateDevice(row, row)) {
+        ElMessage.warning('相同 IMEI/SN 已在设备清单中，本次修改不再保存')
+        return
+    }
+    if (!row.category_id) {
+        ElMessage.warning('请选择到具体设备型号')
+        return
+    }
     const summaryError = validateSummaryRequired(row.summary_fields || [], row.summary_values || {})
     if (summaryError) {
         ElMessage.warning(summaryError)
@@ -566,8 +564,8 @@ const updateDeviceRow = async (row: DeviceEntryRow) => {
     }
 }
 
-// ============ 本地取机（暂时关闭）============
-const enableLocalRead = false
+// ============ 本地取机 ============
+const enableLocalRead = true
 const { fetching: localFetching, fetchConnected, mapToRow, describeError, startAuto, stopAuto } = useLocalDevice()
 const autoLocal = ref(false)
 
@@ -578,8 +576,21 @@ const readLocalDevices = async () => {
             ElMessage.warning('未检测到本地连接的设备')
             return
         }
-        for (const d of list) await applyLocalDevice(mapToRow(d))
-        ElMessage.success(`已读取 ${list.length} 台设备`)
+        let applied = 0
+        let skipped = 0
+        let unresolved = 0
+        for (const d of list) {
+            const result = await applyLocalDevice(mapToRow(d))
+            if (result.status === 'duplicate') {
+                skipped += 1
+                continue
+            }
+            applied += 1
+            if (!result.matched) unresolved += 1
+        }
+        if (applied > 0) ElMessage.success(`已录入 ${applied} 台设备${skipped > 0 ? `，跳过 ${skipped} 台重复设备` : ''}`)
+        else if (skipped > 0) ElMessage.info(`检测到的 ${skipped} 台设备均已在清单中`)
+        if (unresolved > 0) ElMessage.warning(`${unresolved} 台设备未唯一匹配型号，请确认叶子分类`)
     } catch (error: any) {
         ElMessage.error(describeError(error))
     }
@@ -587,9 +598,13 @@ const readLocalDevices = async () => {
 
 const toggleAutoLocal = (val: any) => {
     if (val) {
-        startAuto((list: any[]) => {
-            list.forEach(async (d) => { await applyLocalDevice(mapToRow(d)) })
-            ElMessage.success('检测到设备，已自动录入')
+        startAuto(async (list: any[]) => {
+            let applied = 0
+            for (const d of list) {
+                const result = await applyLocalDevice(mapToRow(d))
+                if (result.status === 'applied') applied += 1
+            }
+            if (applied > 0) ElMessage.success(`检测到设备，已自动录入 ${applied} 台`)
         })
     } else {
         stopAuto()
@@ -597,68 +612,134 @@ const toggleAutoLocal = (val: any) => {
 }
 
 const applyLocalDevice = async (m: any) => {
+    if (findDuplicateDevice(m)) {
+        return { status: 'duplicate' as const, matched: true }
+    }
     let row = props.devices.find(r => !r.saved && !r.model && !r.imei)
     if (!row) {
         addDeviceRow()
         row = props.devices[props.devices.length - 1]
     }
-    if (!row) return
-    row.imei = m.imei || row.imei
+    if (!row) return { status: 'duplicate' as const, matched: true }
+    row.imei = m.imei || m.serial_number || row.imei
     row.model = m.model || row.model
     row.color = m.color
+    row.color_index = m.color_index
     row.capacity = m.capacity
     row.system_version = m.system_version
     row.warranty_info = m.warranty_info
     row.battery_health = m.battery_health
-    row.model_input_mode = true
-    await matchModelToCategory(row, m.model)
+    row.battery_cycle_count = m.battery_cycle_count
+    const matched = await matchModelToCategory(row, m.model_candidates || [m.model])
     prefillSummaryFromLocal(row, m)
     if (row.saved) row.dirty = true
+    return { status: 'applied' as const, matched }
 }
 
-const matchModelToCategory = async (row: DeviceEntryRow, modelName: string, allowFallback = true) => {
-    if (!modelName) return
+const matchModelToCategory = async (row: DeviceEntryRow, modelNames: string | string[]) => {
+    const candidates = Array.from(new Set((Array.isArray(modelNames) ? modelNames : [modelNames])
+        .map(item => String(item || '').trim()).filter(Boolean)))
+    if (!candidates.length) return false
     try {
-        const res = await getRecycleDeviceModelDictOptions({ keyword: modelName })
-        const nodes = res.data || []
-        if (!nodes.length) return
         const norm = (s: any) => String(s || '').toLowerCase().replace(/[\s\-_\/\\.　]+/g, '')
-        const target = norm(modelName)
-        const best =
-            nodes.find((n: any) => norm(n.node_name) === target) ||
-            nodes.find((n: any) => norm(n.model_full_name) === target) ||
-            nodes.find((n: any) => norm(n.node_name).includes(target) || target.includes(norm(n.node_name))) ||
-            (allowFallback ? nodes[0] : null)
-        if (best) {
+        for (const candidate of candidates) {
+            const res = await getRecycleDeviceModelDictOptions({ keyword: candidate })
+            const target = norm(candidate)
+            const exact = (res.data || []).filter((node: any) => [
+                node.node_name,
+                node.model_full_name,
+                node.source_node_id,
+            ].some(value => norm(value) === target))
+            const unique = Array.from(new Map(exact.map((node: any) => [Number(node.id), node])).values()) as any[]
+            if (unique.length !== 1) continue
+            const best = unique[0]
             row.category_id = Number(best.id)
-            // 字典搜索接口(searchLeafOptions/formatNode)返回 category_path = 完整 id 路径，用它做 id 反显
             const full = (Array.isArray(best.category_path) && best.category_path.length)
-                ? best.category_path.map((v: any) => Number(v))
+                ? best.category_path.map((value: any) => Number(value))
                 : [Number(best.id)]
             row.category_path = full
             row.model_path = full
-            // 不再用字典标准名覆盖型号:数据已规范,保留查询/录入的原始型号名(仅用它来匹配分类)。
-            // if (best.node_name) row.model = best.node_name
-            // 解析到完整路径后切到级联，真正"选中"该分类
-            row.model_input_mode = false
+            row.model = String(best.node_name || row.model || '')
             await loadCheckTemplate(row)
+            return true
         }
     } catch (error) {
         console.error('型号匹配分类失败:', error)
     }
+    return false
+}
+
+const hasSummaryValue = (value: any): boolean => Array.isArray(value)
+    ? value.length > 0
+    : value !== undefined && value !== null && value !== ''
+
+const normalizeOptionText = (value: any): string => String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/gb$/i, 'g')
+    .replace(/tb$/i, 't')
+
+const resolveLocalFieldValue = (field: CheckSummaryField, rawValue: any): any => {
+    if (!hasSummaryValue(rawValue)) return undefined
+    const options = field.options || []
+    if (options.length) {
+        const rawText = String(rawValue).trim()
+        const direct = options.find(option => String(option.value) === rawText)
+        if (direct) return direct.value
+        const normalized = normalizeOptionText(rawValue)
+        const matched = options.find(option => [option.label, option.name]
+            .some(label => normalizeOptionText(label) === normalized))
+        return matched?.value
+    }
+    if (field.component === 'number') {
+        const numeric = Number(String(rawValue).replace(/[^0-9.-]/g, ''))
+        return Number.isFinite(numeric) ? numeric : undefined
+    }
+    return rawValue
+}
+
+const resolveIndexedOptionValue = (field: CheckSummaryField, rawIndex: any): any => {
+    const options = field.options || []
+    if (!options.length) return undefined
+    const parsed = Number(rawIndex)
+    const index = Number.isInteger(parsed) && parsed >= 0 && parsed < options.length ? parsed : 0
+    return options[index]?.value
+}
+
+const fieldMatches = (field: CheckSummaryField, keys: string[], names: string[]): boolean => {
+    if (keys.includes(String(field.field_key || ''))) return true
+    const fieldName = String(field.field_name || '')
+    return names.some(name => fieldName.includes(name))
 }
 
 const prefillSummaryFromLocal = (row: DeviceEntryRow, m: any) => {
     const fields = row.summary_fields || []
     if (!fields.length) return
     const values = row.summary_values || {}
-    const setIf = (key: string, val: any) => {
-        if (val && fields.some(f => f.field_key === key)) values[key] = val
+    const prefilled = new Set(row.local_prefilled_keys || [])
+    const mappings = [
+        { keys: ['capacity'], names: ['存储容量', '内存', '容量'], value: m.capacity },
+        { keys: ['color'], names: ['机身颜色', '颜色'], value: m.color, optionIndex: m.color_index },
+        { keys: ['system_version'], names: ['系统版本'], value: m.system_version },
+        { keys: ['warranty_info'], names: ['保修'], value: m.warranty_info },
+        { keys: ['battery'], names: ['电池健康度', '电池健康'], value: m.battery_health },
+        { keys: ['battery_num', 'battery_cycle', 'cycle_count'], names: ['循环次数', '电池循环'], value: m.battery_cycle_count },
+    ]
+    fields.forEach((field) => {
+        if (hasSummaryValue(values[field.field_key])) return
+        const mapping = mappings.find(item => fieldMatches(field, item.keys, item.names))
+        if (!mapping) return
+        const resolved = Object.prototype.hasOwnProperty.call(mapping, 'optionIndex')
+            ? resolveIndexedOptionValue(field, mapping.optionIndex)
+            : resolveLocalFieldValue(field, mapping.value)
+        if (resolved === undefined || resolved === '') return
+        values[field.field_key] = resolved
+        prefilled.add(field.field_key)
+    })
+    if (prefilled.size) {
+        row.local_prefilled_keys = Array.from(prefilled)
     }
-    setIf('capacity', m.capacity)
-    setIf('color', m.color)
-    setIf('system_version', m.system_version)
-    setIf('warranty_info', m.warranty_info)
     row.summary_values = { ...values }
 }
 
@@ -671,11 +752,10 @@ const initExistingRows = () => {
         if (path.length > 1) {
             // 已有完整 id 路径：级联可直接按 id 反显选中；同步 model_path，加载质检模板
             row.model_path = path.map((v: any) => Number(v))
-            row.model_input_mode = false
             if (!(row.summary_fields && row.summary_fields.length)) loadCheckTemplate(row)
         } else if (row.model) {
             // 无完整路径(后端只给了 category_id 或叶子)：按型号名解析出完整 id 路径并反显选中（严格匹配，避免误判）
-            matchModelToCategory(row, row.model, false)
+            matchModelToCategory(row, row.model)
         } else if (row.category_id) {
             loadCheckTemplate(row)
         }
@@ -745,68 +825,30 @@ defineExpose({ savedDeviceCount, addDeviceRow, stopAuto })
     margin-bottom: 10px;
 }
 
-.model-entry-tip__desc {
-    margin-top: 3px;
-    color: var(--el-text-color-secondary);
-    font-size: 12px;
-    line-height: 18px;
-}
-
 .device-list {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 0;
 }
 
 .device-entry-item {
     min-width: 0;
 }
 
-.template-assist {
-    margin: -1px 10px 0;
-    min-height: 34px;
-    padding: 6px 10px;
-    display: flex;
+.device-table-head {
+    display: grid;
+    grid-template-columns: 30px minmax(150px, 0.8fr) minmax(200px, 1.5fr) 100px 82px 64px 100px;
     align-items: center;
-    justify-content: space-between;
     gap: 10px;
+    min-height: 36px;
+    padding: 0 10px;
     border: 1px solid var(--el-border-color-lighter);
-    border-top: 0;
-    border-radius: 0 0 7px 7px;
-    background-color: var(--el-fill-color-lighter);
+    background-color: var(--el-fill-color-light);
+    color: var(--el-text-color-secondary);
     font-size: 12px;
 }
 
-.template-assist.is-warning {
-    color: var(--el-color-warning-dark-2);
-    background-color: var(--el-color-warning-light-9);
-    border-color: var(--el-color-warning-light-7);
-}
-
-.template-assist.is-ready {
-    color: var(--el-color-success-dark-2);
-    background-color: var(--el-color-success-light-9);
-    border-color: var(--el-color-success-light-7);
-}
-
-.template-assist__main,
-.template-assist__actions {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-
-.template-assist__main {
-    min-width: 0;
-}
-
-.template-assist__actions {
-    flex: 0 0 auto;
-}
-
-:deep(.template-assist__actions .el-button + .el-button) {
-    margin-left: 2px;
-}
+.device-table-head .is-right { text-align: right; }
 
 .model-picker {
     display: flex;
@@ -837,11 +879,6 @@ defineExpose({ savedDeviceCount, addDeviceRow, stopAuto })
     vertical-align: baseline;
 }
 
-.model-mode-button {
-    flex: 0 0 auto;
-    white-space: nowrap;
-}
-
 :deep(.el-cascader) {
     width: 100%;
 }
@@ -856,9 +893,8 @@ defineExpose({ savedDeviceCount, addDeviceRow, stopAuto })
     min-width: 0;
 }
 
-.model-picker .model-mode-button {
-    flex: 0 0 auto;
-    width: 68px;
-    padding: 0;
+@media (max-width: 768px) {
+    .device-table-head { display: none; }
+    .device-list { gap: 8px; }
 }
 </style>
