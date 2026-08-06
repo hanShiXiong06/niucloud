@@ -298,7 +298,8 @@ class ErpFinanceService extends BaseAdminService
                 'settlements' => $settlements,
             ];
         }
-        if ((string)$receivable->source_type !== 'sale' || (int)$receivable->source_id <= 0) {
+        $saleOrderId = $this->saleOrderIdFromReceivable($receivable);
+        if ($saleOrderId <= 0) {
             $assetId = (int)($receivable->asset_id ?? 0);
             if ($assetId <= 0) {
                 return ['source_type' => (string)$receivable->source_type, 'items' => [], 'settlements' => $settlements];
@@ -327,7 +328,7 @@ class ErpFinanceService extends BaseAdminService
             ->leftJoin($assetTable . ' a', 'a.id = i.asset_id AND a.site_id = i.site_id')
             ->where([
                 ['i.site_id', '=', $this->site_id],
-                ['i.sale_order_id', '=', (int)$receivable->source_id],
+                ['i.sale_order_id', '=', $saleOrderId],
             ])
             ->field([
                 'i.id',
@@ -355,13 +356,17 @@ class ErpFinanceService extends BaseAdminService
         $itemSettledTotal = round(array_sum($itemSettledMap), 2);
         $fallbackSettled = max(0, round($settledAmount - $itemSettledTotal, 2));
         foreach ($items as &$item) {
-            $allocated = round((float)($itemSettledMap[(int)$item['asset_id']] ?? 0) + $this->allocatedAmount((float)$item['sale_price'], $totalAmount, $fallbackSettled), 2);
+            $allocated = round(
+                $this->receivableItemSettledAmount($itemSettledMap, (int)$item['asset_id'], (int)$item['id'])
+                + $this->allocatedAmount((float)$item['sale_price'], $totalAmount, $fallbackSettled),
+                2
+            );
             $item['allocated_settled'] = $allocated;
             $item['allocated_remain'] = max(0, round((float)$item['sale_price'] - $allocated, 2));
         }
         unset($item);
 
-        return ['source_type' => 'sale', 'items' => $items, 'settlements' => $settlements];
+        return ['source_type' => (string)$receivable->source_type, 'items' => $items, 'settlements' => $settlements];
     }
 
     public function receivableInfo(int $receivableId): array
@@ -381,11 +386,12 @@ class ErpFinanceService extends BaseAdminService
         $row['settle_summary_items'] = $summary['items'] ?? [];
         $row['source_order'] = null;
 
-        if ((string)$receivable->source_type === 'sale' && (int)$receivable->source_id > 0) {
+        $saleOrderId = $this->saleOrderIdFromReceivable($receivable);
+        if ($saleOrderId > 0) {
             $order = ErpSaleOrder::where([
                 ['site_id', '=', $this->site_id],
-                ['id', '=', (int)$receivable->source_id],
-            ])->field('id,sale_no,sale_channel,sale_channel_key,channel_source_plugin,channel_source_key,origin_plugin,origin_plugin_name,origin_type,origin_name,origin_id,origin_no,settle_method,salesman_name,total_amount,received_amount,receivable_amount,status,finance_status,remark,sale_at,create_at,update_at')->find();
+                ['id', '=', $saleOrderId],
+            ])->field('id,sale_no,party_id,party_name,sale_channel,sale_channel_key,channel_source_plugin,channel_source_key,origin_plugin,origin_plugin_name,origin_type,origin_name,origin_id,origin_no,settle_method,salesman_uid,salesman_name,total_amount,total_cost,profit,received_amount,receivable_amount,status,finance_status,remark,sale_at,create_at,update_at')->find();
             if ($order) {
                 $row['source_order'] = $order->toArray();
                 $row['batch_no'] = (string)($row['source_order']['sale_no'] ?? $receivable->source_no);
@@ -419,12 +425,283 @@ class ErpFinanceService extends BaseAdminService
         $row['source_meta'] = (new ErpFinanceSourceService())->sourceMeta($sourceContext, 'receivable');
         $row['source_label'] = (string)$row['source_meta']['finance_type_name'];
         $row['business_reason'] = (string)($row['source_meta']['business_reason'] ?? $row['business_reason'] ?? '');
+        $row['is_mall_source'] = $this->isMallReceivable($receivable);
+        $row['sale_order_id'] = $saleOrderId;
+        $row['detail_status'] = $this->receivableDetailStatus((array)$row['items']);
+        $row['detail_status_name'] = match ($row['detail_status']) {
+            'complete' => '资料完整',
+            'partial' => '资料待补全',
+            default => '缺少成交明细',
+        };
+        $sourceOrderStatus = (string)($row['source_order']['status'] ?? '');
+        $hasErpAsset = count(array_filter((array)$row['items'], static fn(array $item): bool => (int)($item['asset_id'] ?? 0) > 0)) > 0;
+        $row['can_supplement_sale_detail'] = $row['is_mall_source']
+            && $saleOrderId > 0
+            && !$hasErpAsset
+            && !in_array((string)$receivable->status, [ErpDict::STATUS_VOID], true)
+            && !in_array($sourceOrderStatus, ['void', 'returned'], true);
+        $row['supplement_badge'] = $this->hasMallSupplementMarker((array)$row['items']) ? '商城补录资产' : '';
 
         $partyRows = [$row];
         ErpPartyMemberNames::append($this->site_id, $partyRows);
         $row = $partyRows[0];
 
         return $row;
+    }
+
+    /**
+     * 补全商城成交的设备事实。
+     * 只允许 phone_shop 来源的销售应收；ERP 原生销售必须继续从库存出库，不能走此兜底入口。
+     */
+    public function supplementMallReceivableDetails(int $receivableId, array $data): array
+    {
+        $items = array_values(array_filter((array)($data['items'] ?? []), 'is_array'));
+        if ($items === []) throw new CommonException('请至少填写一台成交设备');
+        if (count($items) > 100) throw new CommonException('单次最多补录100台设备');
+
+        $normalized = [];
+        $imeiMap = [];
+        $saleTotal = 0.0;
+        foreach ($items as $index => $item) {
+            $imei = mb_substr(trim((string)($item['imei'] ?? '')), 0, 64);
+            $model = mb_substr(trim((string)($item['model'] ?? '')), 0, 255);
+            $cost = round((float)($item['cost'] ?? 0), 2);
+            $salePrice = round((float)($item['sale_price'] ?? 0), 2);
+            if ($imei === '') throw new CommonException('第' . ($index + 1) . '台设备请填写 IMEI/序列号');
+            if ($model === '') throw new CommonException('第' . ($index + 1) . '台设备请填写型号');
+            if ($cost < 0) throw new CommonException('第' . ($index + 1) . '台设备成本不能小于0');
+            if ($salePrice <= 0) throw new CommonException('第' . ($index + 1) . '台设备成交价必须大于0');
+            $imeiKey = mb_strtolower($imei);
+            if (isset($imeiMap[$imeiKey])) throw new CommonException('第' . ($index + 1) . '台设备的 IMEI/序列号重复');
+            $imeiMap[$imeiKey] = true;
+            $saleTotal = round($saleTotal + $salePrice, 2);
+            $normalized[] = [
+                'id' => max(0, (int)($item['id'] ?? $item['sale_item_id'] ?? 0)),
+                'imei' => $imei,
+                'model' => $model,
+                'cost' => $cost,
+                'sale_price' => $salePrice,
+                'remark' => mb_substr(trim((string)($item['remark'] ?? '')), 0, 180),
+            ];
+        }
+
+        $audit = [];
+        Db::transaction(function () use ($receivableId, $normalized, $saleTotal, $data, &$audit): void {
+            $receivable = $this->findReceivable($receivableId, true);
+            if (!$this->isMallReceivable($receivable)) {
+                throw new CommonException('只有商城来源且缺少资料的应收款允许补录，ERP销售请从库存出库');
+            }
+            if ((string)$receivable->status === ErpDict::STATUS_VOID) throw new CommonException('已作废应收不能补录成交资料');
+            $saleOrderId = $this->saleOrderIdFromReceivable($receivable);
+            if ($saleOrderId <= 0) throw new CommonException('商城应收未关联ERP销售事实，请先检查来源订单');
+            $sale = ErpSaleOrder::where([['site_id', '=', $this->site_id], ['id', '=', $saleOrderId]])->lock(true)->findOrEmpty();
+            if ($sale->isEmpty()) throw new CommonException('关联销售单不存在');
+            if (in_array((string)$sale->status, ['void', 'returned'], true)) throw new CommonException('关联销售单已失效，不能补录');
+            if (abs($saleTotal - round((float)$receivable->amount, 2)) > 0.01) {
+                throw new CommonException('各设备成交价合计必须等于应收金额 ' . number_format((float)$receivable->amount, 2, '.', ''));
+            }
+
+            $existing = ErpSaleItem::where([['site_id', '=', $this->site_id], ['sale_order_id', '=', $saleOrderId]])
+                ->order('id asc')->lock(true)->select();
+            $existingMap = [];
+            foreach ($existing as $row) {
+                if ((int)$row->asset_id > 0) {
+                    throw new CommonException('该商城订单已关联ERP库存设备，请回到库存或销售单修正，不能走商城补录');
+                }
+                $existingMap[(int)$row->id] = $row;
+            }
+            $itemSettledMap = $this->receivableItemSettledMap($receivableId);
+            $now = time();
+            $saleAt = (int)$sale->sale_at > 0
+                ? (int)$sale->sale_at
+                : ((int)$receivable->occurred_at > 0 ? (int)$receivable->occurred_at : $now);
+            $totalCost = 0.0;
+            $savedIds = [];
+            $assetIds = [];
+            $assetLedger = ErpLedgerService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username);
+            foreach ($normalized as $index => $item) {
+                $remark = mb_substr('商城补录资产' . ($item['remark'] !== '' ? '；' . $item['remark'] : ''), 0, 255);
+                $payload = [
+                    'imei' => $item['imei'],
+                    'model' => $item['model'],
+                    'item_type' => 'device',
+                    'quantity' => 1,
+                    'unit' => '台',
+                    'inventory_source' => 'self_owned',
+                    'ownership_type' => 'owned',
+                    'cost' => $item['cost'],
+                    'sale_price' => $item['sale_price'],
+                    'profit' => round($item['sale_price'] - $item['cost'], 2),
+                    'status' => ErpDict::ASSET_SOLD,
+                    'remark' => $remark,
+                    'update_at' => $now,
+                ];
+                if ($item['id'] > 0) {
+                    if (!isset($existingMap[$item['id']])) throw new CommonException('第' . ($index + 1) . '台设备明细已变化，请刷新后重试');
+                    $settledAmount = $this->receivableItemSettledAmount($itemSettledMap, 0, $item['id']);
+                    if ($settledAmount > $item['sale_price'] + 0.0001) {
+                        throw new CommonException('第' . ($index + 1) . '台设备已有收款，成交价不能低于已收金额 ' . number_format($settledAmount, 2, '.', ''));
+                    }
+                    $existingMap[$item['id']]->save($payload);
+                    $savedIds[] = $item['id'];
+                } else {
+                    $created = ErpSaleItem::create(array_merge($payload, [
+                        'site_id' => $this->site_id,
+                        'sale_order_id' => $saleOrderId,
+                        'asset_id' => 0,
+                        'external_line_id' => 'manual:' . $receivableId . ':' . ($index + 1) . ':' . $now,
+                        'create_at' => $now,
+                    ]));
+                    $item['id'] = (int)$created->id;
+                    $savedIds[] = $item['id'];
+                }
+                $saleItemId = (int)$item['id'];
+                $asset = ErpAsset::create([
+                    'site_id' => $this->site_id,
+                    'asset_no' => ErpLedgerService::makeNo('AS'),
+                    'sale_order_id' => $saleOrderId,
+                    'sale_item_id' => $saleItemId,
+                    'party_id' => 0,
+                    'party_name' => '自有资产（商城补录）',
+                    'ownership_type' => 'owned',
+                    'owner_party_id' => 0,
+                    'owner_party_name' => '本公司',
+                    'ownership_source_type' => 'mall_sale_detail_supplement',
+                    'ownership_source_id' => $saleOrderId,
+                    'ownership_source_no' => (string)$sale->sale_no,
+                    'ownership_changed_at' => $saleAt,
+                    'imei' => $item['imei'],
+                    // 当前补录表单只有一个“IMEI/序列号”入口，统一存入 imei 作为检索串号；
+                    // 不再同时伪造 sn，避免详情和导出台账重复展示同一个号码。
+                    'sn' => '',
+                    'model' => $item['model'],
+                    'spec_json' => '{}',
+                    'estimate_sale_price' => $item['sale_price'],
+                    'retail_price' => $item['sale_price'],
+                    'purchase_cost' => $item['cost'],
+                    'total_cost' => $item['cost'],
+                    'sale_target' => 'mall',
+                    'listing_status' => 'listed',
+                    'sale_price' => $item['sale_price'],
+                    'profit' => round($item['sale_price'] - $item['cost'], 2),
+                    'status' => ErpDict::ASSET_SOLD,
+                    'source_plugin' => 'phone_shop',
+                    'source_type' => 'mall_sale_detail_supplement',
+                    'source_id' => (string)($sale->origin_id ?: $saleOrderId),
+                    'remark' => $remark,
+                    'stock_in_at' => $saleAt,
+                    'create_at' => $now,
+                    'update_at' => $now,
+                ]);
+                ErpSaleItem::where([
+                    ['site_id', '=', $this->site_id],
+                    ['id', '=', $saleItemId],
+                ])->update(['asset_id' => (int)$asset->id, 'update_at' => $now]);
+                $assetIds[] = (int)$asset->id;
+                $assetLedger->asset([
+                    'request_id' => 'mall-supplement:' . $receivableId . ':asset:' . (int)$asset->id . ':inbound',
+                    'asset_id' => (int)$asset->id,
+                    'action' => 'inbound',
+                    'before_status' => '',
+                    'after_status' => ErpDict::ASSET_IN_STOCK,
+                    'before_total_cost' => 0,
+                    'after_total_cost' => $item['cost'],
+                    'cost_delta' => $item['cost'],
+                    'source_type' => 'mall_sale_detail_supplement',
+                    'source_id' => $saleOrderId,
+                    'source_no' => (string)$sale->sale_no,
+                    'occurred_at' => $saleAt,
+                    'remark' => '商城成交后财务补录历史入库事实（不生成采购应付）',
+                    'skip_performance' => true,
+                    'extra' => ['receivable_id' => $receivableId, 'sale_item_id' => $saleItemId],
+                ]);
+                $assetLedger->asset([
+                    'request_id' => 'mall-supplement:' . $receivableId . ':asset:' . (int)$asset->id . ':sold',
+                    'asset_id' => (int)$asset->id,
+                    'action' => 'sold',
+                    'before_status' => ErpDict::ASSET_IN_STOCK,
+                    'after_status' => ErpDict::ASSET_SOLD,
+                    'before_total_cost' => $item['cost'],
+                    'after_total_cost' => $item['cost'],
+                    'party_id' => (int)$receivable->party_id,
+                    'party_name' => (string)$receivable->party_name,
+                    'source_type' => 'sale',
+                    'source_id' => $saleOrderId,
+                    'source_no' => (string)$sale->sale_no,
+                    'occurred_at' => $saleAt,
+                    'remark' => '商城成交设备补录销售出库',
+                    'extra' => ['receivable_id' => $receivableId, 'sale_item_id' => $saleItemId],
+                ]);
+                $totalCost = round($totalCost + (float)$item['cost'], 2);
+            }
+            // 已存在的商城行必须全部带回，避免静默删掉已经发生过的成交事实。
+            $missingIds = array_values(array_diff(array_keys($existingMap), $savedIds));
+            if ($missingIds !== []) throw new CommonException('商城已有成交明细不能直接删除，请保留并修正其资料');
+
+            $partyId = max(0, (int)($data['party_id'] ?? $receivable->party_id));
+            $partyName = mb_substr(trim((string)($data['party_name'] ?? $receivable->party_name)), 0, 100);
+            if ($partyName === '') $partyName = '商城客户';
+            $salesmanUid = max(0, (int)($data['salesman_uid'] ?? $sale->salesman_uid));
+            $salesmanName = mb_substr(trim((string)($data['salesman_name'] ?? $sale->salesman_name)), 0, 60);
+            $remarkInput = mb_substr(trim((string)($data['remark'] ?? '')), 0, 180);
+            $orderRemark = mb_substr('商城补录资产；' . ($remarkInput !== '' ? $remarkInput : '财务补全成交设备资料'), 0, 255);
+            $financeBefore = [
+                'received_amount' => round((float)$sale->received_amount, 2),
+                'receivable_amount' => round((float)$sale->receivable_amount, 2),
+                'finance_status' => (string)$sale->finance_status,
+            ];
+            $sale->save([
+                'party_id' => $partyId,
+                'party_name' => $partyName,
+                'salesman_uid' => $salesmanUid,
+                'salesman_name' => $salesmanName,
+                'total_amount' => $saleTotal,
+                'total_cost' => $totalCost,
+                'profit' => round($saleTotal - $totalCost, 2),
+                'remark' => $orderRemark,
+                'update_at' => $now,
+            ]);
+            $receivable->save([
+                'party_id' => $partyId,
+                'party_name' => $partyName,
+                'business_operator_uid' => $salesmanUid,
+                'business_operator_name' => $salesmanName,
+                'remark' => $orderRemark,
+                'update_at' => $now,
+            ]);
+            // 商城挂账的 source_type 使用插件业务键，不是 ERP 原生的 sale。
+            // 补录发生时应收可能早已结清，必须同步刷新销售单，避免台账仍显示“待收款”。
+            $this->refreshSaleFinance($saleOrderId);
+            $sale->refresh();
+            $audit = [
+                'sale_order_id' => $saleOrderId,
+                'sale_no' => (string)$sale->sale_no,
+                'item_ids' => $savedIds,
+                'asset_ids' => $assetIds,
+                'item_count' => count($savedIds),
+                'total_amount' => $saleTotal,
+                'total_cost' => $totalCost,
+                'profit' => round($saleTotal - $totalCost, 2),
+                'finance_sync' => [
+                    'before' => $financeBefore,
+                    'after' => [
+                        'received_amount' => round((float)$sale->received_amount, 2),
+                        'receivable_amount' => round((float)$sale->receivable_amount, 2),
+                        'finance_status' => (string)$sale->finance_status,
+                    ],
+                ],
+            ];
+        });
+
+        (new ErpOperationLogService())->record(
+            'mall_sale_detail_supplement',
+            'receivable',
+            $receivableId,
+            (string)($audit['sale_no'] ?? ''),
+            '补录商城成交设备资料',
+            $audit
+        );
+        return $this->receivableInfo($receivableId);
     }
 
     private function purchaseReturnReceivableItems(ErpReceivable $receivable): array
@@ -446,7 +723,11 @@ class ErpFinanceService extends BaseAdminService
             $returnCost = round((float)($item['return_cost'] ?? 0), 2);
             $refundAmount = $this->purchaseReturnItemRefundAmount($item);
             $offsetAmount = round((float)($item['unpaid_offset_amount'] ?? 0), 2);
-            $allocated = round((float)($itemSettledMap[(int)$item['asset_id']] ?? 0) + $this->allocatedAmount($refundAmount, $totalAmount, $fallbackSettled), 2);
+            $allocated = round(
+                $this->receivableItemSettledAmount($itemSettledMap, (int)$item['asset_id'])
+                + $this->allocatedAmount($refundAmount, $totalAmount, $fallbackSettled),
+                2
+            );
             $item['id'] = (int)$item['asset_id'];
             $item['sale_price'] = $refundAmount;
             $item['return_cost'] = $returnCost;
@@ -491,17 +772,33 @@ class ErpFinanceService extends BaseAdminService
             ['source_type', '=', 'receivable'],
             ['source_id', '=', $receivableId],
         ])
-            ->where('asset_id', '>', 0)
-            ->field('asset_id,SUM(amount) as amount')
-            ->group('asset_id')
+            ->where(function ($query) {
+                $query->where('sale_item_id', '>', 0)->whereOr('asset_id', '>', 0);
+            })
+            ->field('sale_item_id,asset_id,SUM(amount) as amount')
+            ->group('sale_item_id,asset_id')
             ->select()
             ->toArray();
 
         $map = [];
         foreach ($rows as $row) {
-            $map[(int)$row['asset_id']] = round((float)$row['amount'], 2);
+            $saleItemId = (int)($row['sale_item_id'] ?? 0);
+            $assetId = (int)($row['asset_id'] ?? 0);
+            $key = $saleItemId > 0 ? 'sale_item:' . $saleItemId : 'asset:' . $assetId;
+            $map[$key] = round((float)($map[$key] ?? 0) + (float)$row['amount'], 2);
         }
         return $map;
+    }
+
+    private function receivableItemSettledAmount(array $map, int $assetId, int $saleItemId = 0): float
+    {
+        if ($saleItemId > 0 && array_key_exists('sale_item:' . $saleItemId, $map)) {
+            return round((float)$map['sale_item:' . $saleItemId], 2);
+        }
+        if ($assetId > 0) {
+            return round((float)($map['asset:' . $assetId] ?? 0), 2);
+        }
+        return 0.0;
     }
 
     public function accountLedgerPage(array $where): array
@@ -921,6 +1218,7 @@ class ErpFinanceService extends BaseAdminService
             if ($firstPayable === null) {
                 $firstPayable = $payable;
             }
+            $this->bindLegacyPayableParty($payable, $partyId);
             if ((int)$payable->party_id !== $partyId) {
                 throw new CommonException('只能处理同一个往来主体的应付款');
             }
@@ -1074,9 +1372,8 @@ class ErpFinanceService extends BaseAdminService
                 'remark' => (string)($requestData['remark'] ?? '确认收款'),
             ], $this->targetCategoryMeta($receivable)));
             $this->writeReceiptAccountLedgers($receivable, $amount, $receiptItems, (string)($requestData['remark'] ?? '财务确认收款'));
-            if ((string)$receivable->source_type === 'sale') {
-                $this->refreshSaleFinance((int)$receivable->source_id);
-            }
+            $saleOrderId = $this->saleOrderIdFromReceivable($receivable);
+            if ($saleOrderId > 0) $this->refreshSaleFinance($saleOrderId);
             $this->queueSettlementCompletedEvent($settlementId);
             });
             return $settlementId;
@@ -1094,7 +1391,7 @@ class ErpFinanceService extends BaseAdminService
         if ((string)$receivable->source_type === 'purchase_return') {
             return $this->applyReceiptPurchaseReturnItems($receivable, $items, $amount);
         }
-        if ((string)$receivable->source_type !== 'sale') {
+        if ($this->saleOrderIdFromReceivable($receivable) <= 0) {
             $assetId = (int)($receivable->asset_id ?? 0);
             if ($assetId <= 0) return ['amount' => $amount, 'items' => []];
             $itemAmount = $amount;
@@ -1111,7 +1408,8 @@ class ErpFinanceService extends BaseAdminService
 
     private function applyReceiptSaleItems(ErpReceivable $receivable, array $items, float $amount): array
     {
-        if (empty($items) || (string)$receivable->source_type !== 'sale' || (int)$receivable->source_id <= 0) {
+        $saleId = $this->saleOrderIdFromReceivable($receivable);
+        if (empty($items) || $saleId <= 0) {
             return ['amount' => $amount, 'items' => []];
         }
 
@@ -1140,7 +1438,6 @@ class ErpFinanceService extends BaseAdminService
             throw new CommonException('请选择要收款的设备');
         }
 
-        $saleId = (int)$receivable->source_id;
         $saleItems = ErpSaleItem::where([['site_id', '=', $this->site_id], ['sale_order_id', '=', $saleId]])
             ->order('id asc')
             ->select();
@@ -1160,7 +1457,11 @@ class ErpFinanceService extends BaseAdminService
             $totalCost = round($totalCost + $cost, 2);
             if (isset($itemMap[(int)$saleItem->id])) {
                 $receiptAmount = (float)$itemMap[(int)$saleItem->id]['amount'];
-                $itemSettled = (float)($itemSettledMap[(int)$saleItem->asset_id] ?? 0);
+                $itemSettled = $this->receivableItemSettledAmount(
+                    $itemSettledMap,
+                    (int)$saleItem->asset_id,
+                    (int)$saleItem->id
+                );
                 if ($receiptAmount > 0 && round($itemSettled + $receiptAmount, 2) > $newPrice + 0.0001) {
                     throw new CommonException('设备本次收款不能大于该设备剩余应收');
                 }
@@ -1239,7 +1540,7 @@ class ErpFinanceService extends BaseAdminService
         foreach ($returnItems as $returnItem) {
             $assetId = (int)$returnItem->asset_id;
             $receiptAmount = (float)$applyMap[$assetId];
-            $settled = (float)($itemSettledMap[$assetId] ?? 0);
+            $settled = $this->receivableItemSettledAmount($itemSettledMap, $assetId);
             $refundAmount = $this->purchaseReturnItemRefundAmount($returnItem->toArray());
             if (round($settled + $receiptAmount, 2) > $refundAmount + 0.0001) {
                 throw new CommonException('设备本次收款不能大于该设备剩余应收');
@@ -1269,6 +1570,7 @@ class ErpFinanceService extends BaseAdminService
                     'party_id' => (int)$receivable->party_id,
                     'party_name' => (string)$receivable->party_name,
                     'asset_id' => (int)($item['asset_id'] ?? 0),
+                    'sale_item_id' => (int)($item['sale_item_id'] ?? 0),
                     'source_type' => 'receivable',
                     'source_id' => (int)$receivable->id,
                     'source_no' => (string)$receivable->receivable_no,
@@ -1294,7 +1596,7 @@ class ErpFinanceService extends BaseAdminService
     public function payablePartyItems(int $partyId, array $where): array
     {
         if ($partyId <= 0) {
-            throw new CommonException('请选择供应商');
+            throw new CommonException('请选择付款对象');
         }
         // 未指定业务类型时用于折账：必须返回该主体全部应付事实，不能只返回采购本金。
         if (trim((string)($where['source_type'] ?? '')) === '') {
@@ -1395,6 +1697,9 @@ class ErpFinanceService extends BaseAdminService
     public function payableInfo(int $id): array
     {
         $payable = $this->findPayable($id)->toArray();
+        if ((int)($payable['party_id'] ?? 0) <= 0) {
+            $payable['party_id'] = $this->resolveLegacyPartyId((string)($payable['party_name'] ?? ''));
+        }
         $sourceType = (string)($payable['source_type'] ?? '');
         $purchaseOrderId = 0;
         if ($sourceType === 'purchase_asset') {
@@ -1533,9 +1838,9 @@ class ErpFinanceService extends BaseAdminService
             ->leftJoin($assetTable . ' a', 'a.id = p.asset_id AND a.site_id = p.site_id')
             ->where([
                 ['p.site_id', '=', $this->site_id],
-                ['p.party_id', '=', $partyId],
                 ['p.source_type', '=', 'sale_return'],
             ]);
+        $this->applyPayablePartyFilter($query, $partyId, 'p.party_id', 'p.party_name');
         if (!empty($where['purchase_order_id'])) {
             $query->where('p.source_id', '=', (int)$where['purchase_order_id']);
         }
@@ -2287,6 +2592,22 @@ class ErpFinanceService extends BaseAdminService
         }
 
         foreach ($page['data'] as &$row) {
+            if ((int)($row['party_id'] ?? 0) <= 0) {
+                $resolvedPartyId = $this->resolveLegacyPartyId((string)($row['party_name'] ?? ''));
+                if ($resolvedPartyId > 0) {
+                    $row['party_id'] = $resolvedPartyId;
+                    $row['legacy_party_snapshot'] = 1;
+                    $party = ErpParty::where([
+                        ['site_id', '=', $this->site_id],
+                        ['id', '=', $resolvedPartyId],
+                    ])->field('contact_name,contact_mobile,m_no')->findOrEmpty();
+                    if (!$party->isEmpty()) {
+                        $row['contact_name'] = (string)$party->contact_name;
+                        $row['contact_mobile'] = (string)$party->contact_mobile;
+                        $row['m_no'] = (string)$party->m_no;
+                    }
+                }
+            }
             $row['payable_ids'] = array_values(array_unique(array_filter(array_map(
                 'intval',
                 explode(',', (string)($row['open_payable_ids'] ?? ''))
@@ -2333,6 +2654,66 @@ class ErpFinanceService extends BaseAdminService
         $this->fillOffsetState($page['data'], 'payable');
         ErpPartyMemberNames::append($this->site_id, $page['data']);
         return $page;
+    }
+
+    /** 仅对 party_id=0 的历史快照按精确名称兼容，绝不跨主体模糊匹配。 */
+    private function applyPayablePartyFilter($query, int $partyId, string $idColumn, string $nameColumn): void
+    {
+        $partyName = trim((string)ErpParty::where([
+            ['site_id', '=', $this->site_id],
+            ['id', '=', $partyId],
+        ])->value('party_name'));
+        $query->where(function ($sub) use ($idColumn, $nameColumn, $partyId, $partyName) {
+            $sub->where($idColumn, '=', $partyId);
+            if ($partyName !== '') {
+                $sub->whereOr(function ($legacy) use ($idColumn, $nameColumn, $partyName) {
+                    $legacy->where($idColumn, '=', 0)->where($nameColumn, '=', $partyName);
+                });
+            }
+        });
+    }
+
+    /** 同名主体存在多条时不自动猜测，必须由业务人员先整理主体。 */
+    private function resolveLegacyPartyId(string $partyName): int
+    {
+        $partyName = trim($partyName);
+        if ($partyName === '') return 0;
+        $ids = ErpParty::where([
+            ['site_id', '=', $this->site_id],
+            ['party_name', '=', $partyName],
+            ['status', '=', 1],
+        ])->limit(2)->column('id');
+        return count($ids) === 1 ? (int)$ids[0] : 0;
+    }
+
+    /**
+     * 财务明确选择付款对象后，将可唯一识别的历史应付绑定到稳定主体 ID。
+     * 同步修复销退单与原商城销售单，后续查询、退款和审计不再依赖名称。
+     */
+    private function bindLegacyPayableParty(ErpPayable $payable, int $partyId): void
+    {
+        if ((int)$payable->party_id > 0) return;
+        $resolvedPartyId = $this->resolveLegacyPartyId((string)$payable->party_name);
+        if ($resolvedPartyId <= 0 || $resolvedPartyId !== $partyId) {
+            throw new CommonException('历史应付缺少付款对象，请先核对并整理同名往来主体');
+        }
+        $now = time();
+        $payable->save(['party_id' => $partyId, 'update_at' => $now]);
+        if ((string)$payable->source_type !== 'sale_return') return;
+        $return = ErpSaleReturnOrder::where([
+            ['site_id', '=', $this->site_id],
+            ['id', '=', (int)$payable->source_id],
+            ['party_id', '=', 0],
+            ['party_name', '=', (string)$payable->party_name],
+        ])->lock(true)->findOrEmpty();
+        if ($return->isEmpty()) return;
+        $return->save(['party_id' => $partyId, 'update_at' => $now]);
+        ErpSaleOrder::where([
+            ['site_id', '=', $this->site_id],
+            ['id', '=', (int)$return->sale_order_id],
+            ['party_id', '=', 0],
+            ['party_name', '=', (string)$payable->party_name],
+        ])->update(['party_id' => $partyId, 'update_at' => $now]);
     }
 
     private function fillPayableBatchSettleSummary(array &$rows): void
@@ -3686,9 +4067,8 @@ class ErpFinanceService extends BaseAdminService
                 'source_no' => (string)$receivable->receivable_no,
                 'remark' => (string)($data['remark'] ?? '财务确认收款'),
             ]);
-            if ((string)$receivable->source_type === 'sale') {
-                $this->refreshSaleFinance((int)$receivable->source_id);
-            }
+            $saleOrderId = $this->saleOrderIdFromReceivable($receivable);
+            if ($saleOrderId > 0) $this->refreshSaleFinance($saleOrderId);
         }
         $balanceAfter = $this->adjustCapitalAccount((int)($account['id'] ?? 0), 'in', $totalAmount);
         (new ErpLedgerService())->money(array_merge([
@@ -3726,9 +4106,8 @@ class ErpFinanceService extends BaseAdminService
             } else {
                 $target = $this->findReceivable((int)$row['id'], true);
                 $this->applyReceivable($target, $apply, $settlementId);
-                if ((string)$target->source_type === 'sale') {
-                    $this->refreshSaleFinance((int)$target->source_id);
-                }
+                $saleOrderId = $this->saleOrderIdFromReceivable($target);
+                if ($saleOrderId > 0) $this->refreshSaleFinance($saleOrderId);
             }
             ErpOffsetLink::create([
                 'site_id' => $this->site_id,
@@ -3766,6 +4145,59 @@ class ErpFinanceService extends BaseAdminService
             throw new CommonException('应收款不存在');
         }
         return $row;
+    }
+
+    /** 商城来源只认稳定的插件标识；source_type 仅作为旧数据兼容，避免放宽 ERP 原生应收边界。 */
+    private function isMallReceivable(ErpReceivable $receivable): bool
+    {
+        $originPlugin = trim((string)($receivable->origin_plugin ?? ''));
+        if ($originPlugin === 'phone_shop') return true;
+        $sourceType = trim((string)($receivable->source_type ?? ''));
+        return $originPlugin === '' && (
+            str_starts_with($sourceType, 'phone_shop.')
+            || in_array($sourceType, ['external.native_goods_sale', 'external.mall_sale'], true)
+        );
+    }
+
+    /**
+     * 返回应收对应的 ERP 销售单。
+     * ERP 原生销售仍使用 source_type=sale；商城挂账使用外部 source_type，但 source_id 同样保存 ERP 销售单ID。
+     */
+    private function saleOrderIdFromReceivable(ErpReceivable $receivable): int
+    {
+        $sourceId = (int)($receivable->source_id ?? 0);
+        if ($sourceId <= 0) return 0;
+        if ((string)$receivable->source_type !== 'sale' && !$this->isMallReceivable($receivable)) return 0;
+        $exists = ErpSaleOrder::where([
+            ['site_id', '=', $this->site_id],
+            ['id', '=', $sourceId],
+        ])->value('id');
+        return $exists ? $sourceId : 0;
+    }
+
+    private function receivableDetailStatus(array $items): string
+    {
+        if ($items === []) return 'missing';
+        foreach ($items as $item) {
+            $isConfirmedSupplement = str_contains((string)($item['remark'] ?? ''), '商城补录资产')
+                || str_starts_with((string)($item['external_line_id'] ?? ''), 'manual:');
+            if (trim((string)($item['model'] ?? '')) === ''
+                || trim((string)($item['imei'] ?? '')) === ''
+                || (float)($item['sale_price'] ?? 0) <= 0
+                || ((float)($item['cost'] ?? 0) <= 0 && !$isConfirmedSupplement)) {
+                return 'partial';
+            }
+        }
+        return 'complete';
+    }
+
+    private function hasMallSupplementMarker(array $items): bool
+    {
+        foreach ($items as $item) {
+            if (str_contains((string)($item['remark'] ?? ''), '商城补录资产')) return true;
+            if (str_starts_with((string)($item['external_line_id'] ?? ''), 'manual:')) return true;
+        }
+        return false;
     }
 
     private function openPayables(array $ids, bool $strict = true): array
@@ -3929,12 +4361,21 @@ class ErpFinanceService extends BaseAdminService
         if ($order->isEmpty()) {
             return;
         }
-        $received = (float)ErpReceivable::where([
+        // ERP 原生销售的应收类型为 sale；商城挂账保留插件业务类型，但 source_id
+        // 同样指向 ERP 销售单。按统一关联规则汇总，不能漏掉商城后续收款。
+        $received = 0.0;
+        $receivables = ErpReceivable::where([
             ['site_id', '=', $this->site_id],
-            ['source_type', '=', 'sale'],
             ['source_id', '=', $saleId],
-        ])->sum('settled_amount');
+        ])->where('status', '<>', ErpDict::STATUS_VOID)
+            ->field('id,source_type,source_id,origin_plugin,settled_amount')->select();
+        foreach ($receivables as $receivable) {
+            if ((string)$receivable->source_type === 'sale' || $this->isMallReceivable($receivable)) {
+                $received = round($received + (float)$receivable->settled_amount, 2);
+            }
+        }
         $total = (float)$order->total_amount;
+        $received = min($total, $received);
         $order->save([
             'received_amount' => round($received, 2),
             'receivable_amount' => max(0, round($total - $received, 2)),

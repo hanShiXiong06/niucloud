@@ -76,9 +76,46 @@
                                 <el-switch v-model="form.delivery_modes.self" :active-value="1" :inactive-value="0" @click.stop />
                             </div>
                         </div>
+                        <div class="mode-card" :class="{ active: form.delivery_modes.logistics_vehicle }" @click="toggleMode('logistics_vehicle')">
+                            <div class="mode-head">
+                                <div>
+                                    <div class="mode-title">物流车配送</div>
+                                    <div class="mode-desc">客户把设备交给城际物流车，到站后由指定员工前往取货。</div>
+                                </div>
+                                <el-switch v-model="form.delivery_modes.logistics_vehicle" :active-value="1" :inactive-value="0" @click.stop />
+                            </div>
+                        </div>
+                    </div>
+                    <div v-if="form.delivery_modes.logistics_vehicle" class="profile-panel">
+                        <div class="setting-row">
+                            <div>
+                                <div class="setting-title">预计到达规则</div>
+                                <div class="setting-desc">系统据此计算取货时间，并在到时后向取货责任人推送企业微信任务。</div>
+                            </div>
+                            <el-segmented v-model="form.logistics_vehicle.arrival_mode" :options="[{ label: '半天到达', value: 'half_day' }, { label: '次日到达', value: 'next_day' }]" />
+                        </div>
+                        <div v-if="form.logistics_vehicle.arrival_mode === 'half_day'" class="setting-row">
+                            <div>
+                                <div class="setting-title">上午单到达时间</div>
+                                <div class="setting-desc">在截止时间前提交的订单，按当天可取货处理。</div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <el-time-select v-model="form.logistics_vehicle.morning_cutoff" start="06:00" step="00:30" end="18:00" style="width: 120px" />
+                                <span class="text-xs text-gray-400">前提交，当天</span>
+                                <el-time-select v-model="form.logistics_vehicle.same_day_time" start="08:00" step="00:30" end="23:30" style="width: 120px" />
+                                <span class="text-xs text-gray-400">可取</span>
+                            </div>
+                        </div>
+                        <div class="setting-row">
+                            <div>
+                                <div class="setting-title">次日可取货时间</div>
+                                <div class="setting-desc">下午单或“次日到达”模式统一使用这个时间。</div>
+                            </div>
+                            <el-time-select v-model="form.logistics_vehicle.next_day_time" start="06:00" step="00:30" end="18:00" style="width: 140px" />
+                        </div>
                     </div>
                     <el-alert class="mt-[14px]" type="warning" :closable="false" show-icon>
-                        <template #title>至少需要开启一种提交方式。若两种都关闭，保存时会自动恢复为全部开启。</template>
+                        <template #title>至少需要开启一种提交方式。物流车订单会保存车辆和取货地点，并自动进入“待取货”任务。</template>
                     </el-alert>
                 </section>
 
@@ -500,7 +537,14 @@ const form = reactive<OrderSubmitConfig>({
     default_count: 1,
     delivery_modes: {
         mail: 1,
-        self: 1
+        self: 1,
+        logistics_vehicle: 0
+    },
+    logistics_vehicle: {
+        arrival_mode: 'half_day',
+        morning_cutoff: '12:00',
+        same_day_time: '16:00',
+        next_day_time: '09:00'
     },
     profile: {
         enabled: 1,
@@ -591,6 +635,11 @@ const normalize = (data: Partial<OrderSubmitConfig> = {}) => {
     form.default_count = Math.max(1, Math.min(99, Number(data.default_count || 1)))
     form.delivery_modes.mail = data.delivery_modes?.mail ? 1 : 0
     form.delivery_modes.self = data.delivery_modes?.self ? 1 : 0
+    form.delivery_modes.logistics_vehicle = data.delivery_modes?.logistics_vehicle ? 1 : 0
+    form.logistics_vehicle.arrival_mode = data.logistics_vehicle?.arrival_mode === 'next_day' ? 'next_day' : 'half_day'
+    form.logistics_vehicle.morning_cutoff = data.logistics_vehicle?.morning_cutoff || '12:00'
+    form.logistics_vehicle.same_day_time = data.logistics_vehicle?.same_day_time || '16:00'
+    form.logistics_vehicle.next_day_time = data.logistics_vehicle?.next_day_time || '09:00'
     form.profile.enabled = data.profile?.enabled === 0 ? 0 : 1
     form.profile.payment_required = data.profile?.payment_required === 0 ? 0 : 1
     form.profile.payment_min_count = Math.max(1, Math.min(5, Number(data.profile?.payment_min_count || 1)))
@@ -634,7 +683,7 @@ const normalize = (data: Partial<OrderSubmitConfig> = {}) => {
     form.consignment.user_desc = data.consignment?.user_desc || '查看代卖进度、成交与结算结果'
     normalizeWorkWechat(data.work_wechat)
     normalizeTheme(data.price_detail_theme)
-    if (!form.delivery_modes.mail && !form.delivery_modes.self) {
+    if (!form.delivery_modes.mail && !form.delivery_modes.self && !form.delivery_modes.logistics_vehicle) {
         form.delivery_modes.mail = 1
         form.delivery_modes.self = 1
     }
@@ -796,12 +845,12 @@ const load = async () => {
     }
 }
 
-const toggleMode = (key: 'mail' | 'self') => {
+const toggleMode = (key: 'mail' | 'self' | 'logistics_vehicle') => {
     form.delivery_modes[key] = form.delivery_modes[key] ? 0 : 1
 }
 
 const save = async () => {
-    if (!form.delivery_modes.mail && !form.delivery_modes.self) {
+    if (!form.delivery_modes.mail && !form.delivery_modes.self && !form.delivery_modes.logistics_vehicle) {
         ElMessage.warning('至少需要开启一种提交方式')
         return
     }

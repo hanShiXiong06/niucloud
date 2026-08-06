@@ -43,6 +43,21 @@
                             <u-icon name="car" color="#b4b8bf" size="14"></u-icon>
                             <text class="info-text truncate">{{ item.express_company }} {{ item.express_no }}</text>
                         </view>
+                        <template v-if="item.stage_key === 'pickup'">
+                            <view class="info-row">
+                                <u-icon name="map" color="#b4b8bf" size="14"></u-icon>
+                                <text class="info-text">{{ item.logistics_pickup_address || '未填写取货地点' }}</text>
+                            </view>
+                            <view class="info-row">
+                                <u-icon name="car" color="#b4b8bf" size="14"></u-icon>
+                                <text class="info-text">{{ [item.logistics_name, item.logistics_vehicle_no].filter(Boolean).join(' · ') }}</text>
+                            </view>
+                            <view class="info-row">
+                                <u-icon name="phone" color="#b4b8bf" size="14"></u-icon>
+                                <text class="info-text">{{ [item.logistics_contact_name, item.logistics_contact_mobile].filter(Boolean).join(' · ') }}</text>
+                            </view>
+                            <view v-if="item.logistics_eta_at" class="pickup-time">预计 {{ formatDateTime(item.logistics_eta_at) }} 可取</view>
+                        </template>
                     </view>
 
                     <!-- 设备级 -->
@@ -62,7 +77,7 @@
                         <view class="btns">
                             <u-button v-if="item.assignee_uid" text="转交" size="mini" :plain="true" shape="circle" @click="openAssign(item)"></u-button>
                             <u-button v-if="item.assignee_uid == 0" text="我来处理" size="mini" :plain="true" shape="circle" @click="doClaim(item)"></u-button>
-                            <u-button text="处理" size="mini" type="primary" shape="circle" @click="toProcess(item)"></u-button>
+                            <u-button :text="item.stage_key === 'pickup' ? '查看订单' : '处理'" size="mini" type="primary" shape="circle" @click="toProcess(item)"></u-button>
                         </view>
                     </view>
                 </view>
@@ -103,9 +118,10 @@ import { getMyStages, getTaskList, getAssignableUsers, assignTask, claimTask } f
 const { mescrollInit, downCallback, getMescroll } = useMescroll(onPageScroll, onReachBottom);
 
 const stageName: Record<string, string> = {
-    sign: '待签收', check: '质检', price: '定价', confirm: '报价确认', pay: '打款', abnormal: '异常'
+    pickup: '待取货', sign: '待签收', check: '质检', price: '定价', confirm: '报价确认', pay: '打款', abnormal: '异常'
 };
 const stageColors: Record<string, any> = {
+    pickup: { bg: '#FFF7E8', fg: '#d97706' },
     sign: { bg: '#EEF1F5', fg: '#5b6b7a' },
     check: { bg: '#E8F3FF', fg: '#3c9cff' },
     price: { bg: '#E6FFF5', fg: '#10b981' },
@@ -133,7 +149,17 @@ const tabList = computed(() => {
     return arr;
 });
 const tabIndex = computed(() => Math.max(0, tabList.value.findIndex(t => t.key === activeStage.value)));
-const searchPlaceholder = computed(() => activeStage.value === 'sign' ? '搜索 订单号 / 客户 / 快递' : '搜索 IMEI / SN / 型号');
+const searchPlaceholder = computed(() => activeStage.value === 'pickup'
+    ? '搜索订单号 / 客户 / 车牌号'
+    : (activeStage.value === 'sign' ? '搜索订单号 / 客户 / 快递' : '搜索 IMEI / SN / 型号'));
+
+const formatDateTime = (value: any) => {
+    const timestamp = Number(value || 0);
+    if (!timestamp) return '--';
+    const date = new Date(timestamp * 1000);
+    const pad = (number: number) => String(number).padStart(2, '0');
+    return `${date.getMonth() + 1}月${date.getDate()}日 ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
 
 const price = (item: any) => {
     const p = Number(item.final_price) > 0 ? item.final_price : (Number(item.initial_price) > 0 ? item.initial_price : 0);
@@ -243,6 +269,7 @@ onShow(async () => {
 .info-badge { font-size: 22rpx; color: #3c9cff; background: #E8F3FF; border-radius: 8rpx; padding: 2rpx 12rpx; margin-left: 14rpx; }
 .price { font-size: 32rpx; font-weight: 700; color: var(--primary-color); }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 520rpx; }
+.pickup-time { margin-top: 14rpx; padding: 12rpx 16rpx; border-radius: 10rpx; background: #fff7e8; color: #b45309; font-size: 23rpx; }
 
 .card-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 22rpx; padding-top: 22rpx; border-top: 2rpx solid #f1f3f6; }
 .claim-state { font-size: 24rpx; }

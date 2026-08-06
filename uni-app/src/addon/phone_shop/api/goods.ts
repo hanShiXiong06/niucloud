@@ -31,8 +31,8 @@ export function getGoodsPages(params: Record<string, any>) {
 /**
  * 获取商品列表筛选项
  */
-export function getGoodsFilterOptions() {
-    return request.get(`phone_shop/goods/filter/options`)
+export function getGoodsFilterOptions(params: Record<string, any> = {}) {
+    return request.get(`phone_shop/goods/filter/options`, params)
 }
 
 /**

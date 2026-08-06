@@ -95,6 +95,17 @@
                                 <el-select v-model="form.capital_account_id" class="w-full" placeholder="选择实际退款账户"><el-option v-for="account in accounts" :key="account.id" :label="`${account.account_name}（余额 ¥${Number(account.balance || 0).toFixed(2)}）`" :value="account.id" /></el-select>
                             </el-form-item>
                             <el-form-item v-else :label="createType === 'compensation' ? '设备处理' : '回库规则'"><div class="original-location-rule">{{ createType === 'compensation' ? '客户继续持有设备，不改变库存；补差直接减少该设备毛利' : '自动退回每台设备的原仓库 / 原库位' }}</div></el-form-item>
+                            <el-form-item v-if="createType === 'return' && requiresReturnDestination" label="商城补录设备回库位置" required>
+                                <ErpWarehouseLocationCascader
+                                    :warehouses="warehouses"
+                                    :warehouse-id="form.return_to_warehouse_id"
+                                    :location-id="form.return_to_location_id"
+                                    :filter-types="['owned', 'accessory', 'new_device', 'exception']"
+                                    placeholder="选择实际收到退货的仓库 / 库位"
+                                    @change="onReturnLocationChange"
+                                />
+                                <div class="mt-2 text-xs text-orange-600">该设备由商城销售后补录到 ERP，没有原入库仓位；请明确本次实际收货位置。</div>
+                            </el-form-item>
                         </div>
                         <el-alert :title="saleRefundModeTip(form.refund_mode)" type="info" :closable="false" show-icon />
                         <div v-if="form.refund_mode === 'cash'" class="mt-3"><div class="mb-2 text-sm text-gray-600">退款凭证（选填）</div><ErpFinanceVoucherUpload v-model="form.voucher_urls" /></div>
@@ -172,6 +183,8 @@ import SaleReturnDetail from './detail.vue'
 import { useErpPageRefresh } from '@/addon/hsx_erp/hooks/useErpPageRefresh'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVoucherUpload.vue'
+import ErpWarehouseLocationCascader from '@/addon/hsx_erp/components/ErpWarehouseLocationCascader.vue'
+import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 
 const statusTabs = [
     { label: '全部', value: '' },
@@ -196,6 +209,8 @@ const form = reactive({
     refund_mode: 'cash',
     capital_account_id: 0,
     voucher_urls: '',
+    return_to_warehouse_id: 0,
+    return_to_location_id: 0,
     remark: '',
     items: [] as any[],
 })
@@ -207,10 +222,14 @@ const assetsLoading = ref(false)
 const selectedAssets = ref<any[]>([])
 const detail = reactive({ visible: false, id: 0, businessType: '' })
 const accounts = ref<any[]>([])
+const warehouses = ref<any[]>([])
 
 const totalReturnAmount = computed(() =>
     form.items.reduce((s: number, i: any) => s + (Number(i.return_price) || 0), 0).toFixed(2)
 )
+const requiresReturnDestination = computed(() => selectedAssets.value.some((item: any) =>
+    Number(item.warehouse_id || 0) <= 0 || Number(item.location_id || 0) <= 0
+))
 
 async function loadList() {
     listLoading.value = true
@@ -276,9 +295,12 @@ function openCreate() {
     form.refund_mode = 'cash'
     form.capital_account_id = Number(accounts.value[0]?.id || 0)
     form.voucher_urls = ''
+    form.return_to_warehouse_id = 0
+    form.return_to_location_id = 0
     form.remark = ''
     form.items = []
     availableAssets.value = []
+    selectedAssets.value = []
 }
 function openCompensation() { openCreate(); createType.value='compensation'; form.refund_mode='payable' }
 
@@ -320,13 +342,18 @@ async function onSourcePartyChange(party: any) {
     if (!form.party_id) return
     assetsLoading.value = true
     try {
-        const res = await getErpSaleList({ party_id: form.party_id, limit: 100 })
+        const res = await getErpSaleList({ party_id: form.party_id, party_name: sourcePartyName.value, origin_plugin: '', limit: 100 })
         availableAssets.value = (res.data?.data || [])
             .filter((item: any) => item.status === 'sold' && item.order_status !== 'void' && !item.return_id)
             .map((item: any) => ({ ...item, _return_price: createType.value === 'compensation' ? 0 : Number(item.sale_price || 0), _reason: '' }))
     } finally {
         assetsLoading.value = false
     }
+}
+
+function onReturnLocationChange(location: any) {
+    form.return_to_warehouse_id = Number(location?.warehouse_id || 0)
+    form.return_to_location_id = Number(location?.location_id || 0)
 }
 
 async function onSaleOrderChange(orderId: number) {
@@ -398,6 +425,11 @@ async function submitCreate() {
         ElMessage.warning('现场退款必须选择实际出款账户')
         return
     }
+    if (createType.value === 'return' && requiresReturnDestination.value
+        && (!form.return_to_warehouse_id || !form.return_to_location_id)) {
+        ElMessage.warning('商城补录设备没有 ERP 原仓位，请选择本次实际退回的仓库和库位')
+        return
+    }
     const actionName = createType.value === 'compensation' ? '售后补差' : '销售退货'
     const confirmed = await ElMessageBox.confirm(
         createType.value === 'compensation'
@@ -415,6 +447,8 @@ async function submitCreate() {
             refund_mode: form.refund_mode,
             capital_account_id: form.capital_account_id,
             voucher_urls: form.voucher_urls,
+            return_to_warehouse_id: form.return_to_warehouse_id,
+            return_to_location_id: form.return_to_location_id,
             remark: form.remark,
             items: form.items,
         }
@@ -459,7 +493,11 @@ function saleRefundModeTip(mode: string) {
 
 const route = useRoute()
 async function loadPage() {
-    await Promise.all([loadList(), getCapitalAccounts().then((res: any) => { accounts.value = Array.isArray(res?.data) ? res.data : (res?.data?.list || []) })])
+    await Promise.all([
+        loadList(),
+        getCapitalAccounts().then((res: any) => { accounts.value = Array.isArray(res?.data) ? res.data : (res?.data?.list || []) }),
+        getErpWarehouseOptions().then((res: any) => { warehouses.value = Array.isArray(res?.data) ? res.data : [] }),
+    ])
 }
 useErpPageRefresh(loadPage)
 // 如果从销售页带着 sale_order_id 过来，自动打开新建并预选销售单

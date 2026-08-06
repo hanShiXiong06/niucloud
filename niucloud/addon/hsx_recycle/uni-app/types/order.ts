@@ -20,7 +20,12 @@ export interface OrderForm {
   customer_phone: string
   telphone: string
   comment: string
-  delivery_type: number  // 1-邮寄 2-自送
+  delivery_type: number  // 1-邮寄 2-自送 3-物流车
+  logistics_name?: string
+  logistics_vehicle_no?: string
+  logistics_contact_name?: string
+  logistics_contact_mobile?: string
+  logistics_pickup_address?: string
   devices?: Device[]
 }
 
@@ -124,10 +129,16 @@ export interface OrderListItem {
   order_no: string
   status: number
   status_name: string
-  delivery_type: string  // "1"-邮寄 "2"-自送 (API返回字符串)
+  delivery_type: string  // "1"-邮寄 "2"-自送 "3"-物流车 (API返回字符串)
   delivery_type_name: string
   express_no: string
   express_company?: string
+  logistics_name?: string
+  logistics_vehicle_no?: string
+  logistics_contact_name?: string
+  logistics_contact_mobile?: string
+  logistics_pickup_address?: string
+  logistics_eta_at?: number
   create_at: string  // API 返回的是 create_at
   update_at: string  // API 返回的是 update_at
   count: number  // API 返回的是 count (设备数量)
@@ -152,7 +163,7 @@ export interface OrderListItem {
 // 订单筛选条件
 export interface OrderFilters {
   status: string  // 订单状态: 'all'-全部, '1'-待签收, '2'-已签收, '3'-质检中, '4'-已质检, '5'-待确认, '6'-待打款, '7'-已完成, '8'-已关闭, '9'-已取消
-  delivery_type: number  // 0-全部 1-邮寄 2-自送
+  delivery_type: number  // 0-全部 1-邮寄 2-自送 3-物流车
   search_keyword: string
 }
 
@@ -222,10 +233,16 @@ export interface OrderDetailInfo {
   order_no: string
   status: number
   status_name: string
-  delivery_type: string  // "1"-邮寄 "2"-自送
+  delivery_type: string  // "1"-邮寄 "2"-自送 "3"-物流车
   delivery_type_name: string
   express_no?: string
   express_company?: string
+  logistics_name?: string
+  logistics_vehicle_no?: string
+  logistics_contact_name?: string
+  logistics_contact_mobile?: string
+  logistics_pickup_address?: string
+  logistics_eta_at?: number
   create_at: string
   update_at?: string
   devices: OrderDetailDevice[]

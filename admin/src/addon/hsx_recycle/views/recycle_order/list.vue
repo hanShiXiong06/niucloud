@@ -428,6 +428,12 @@ interface OrderItem {
   status_name: string;
   delivery_type: string;
   delivery_type_name: string;
+  logistics_name?: string;
+  logistics_vehicle_no?: string;
+  logistics_contact_name?: string;
+  logistics_contact_mobile?: string;
+  logistics_pickup_address?: string;
+  logistics_eta_at?: number;
   express_no: string;
   create_at: string;
   update_at: string;
@@ -450,8 +456,15 @@ interface OrderDetail {
   pay_type?: string;
   total_amount?: number | string;
   delivery_type_name?: string;
+  delivery_type?: string | number;
   express_company?: string;
   express_no?: string;
+  logistics_name?: string;
+  logistics_vehicle_no?: string;
+  logistics_contact_name?: string;
+  logistics_contact_mobile?: string;
+  logistics_pickup_address?: string;
+  logistics_eta_at?: number;
   device_count?: number;
   create_at?: string;
   update_at?: string;

@@ -1,6 +1,6 @@
 <template>
   <view class="nav-header">
-    <view class="flex gap-3 relative z-10">
+    <view class="tab-list">
       <view
         v-for="(tab, index) in tabs"
         :key="tab.value"
@@ -9,10 +9,6 @@
       >
         {{ tab.label }}
       </view>
-    </view>
-    <view class="order-link" @tap="handleToOrderList">
-      <up-icon color="#fff" name="list" size="18"></up-icon>
-      <text class="ml-1">我的订单</text>
     </view>
   </view>
 </template>
@@ -37,7 +33,6 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   'update:modelValue': [value: number]
-  'to-order-list': []
 }>()
 
 const handleSwitch = (index: number) => {
@@ -46,9 +41,6 @@ const handleSwitch = (index: number) => {
   emit('update:modelValue', index)
 }
 
-const handleToOrderList = () => {
-  emit('to-order-list')
-}
 </script>
 
 <style scoped lang="scss">
@@ -57,7 +49,7 @@ const handleToOrderList = () => {
   border-radius: 12px;
   padding: 16px;
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
   color: #fff;
   box-shadow: 0 10rpx 24rpx rgba(31, 41, 55, 0.12);
@@ -80,7 +72,10 @@ const handleToOrderList = () => {
 }
 
 .tab-item {
-  padding: 6px 16px;
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  text-align: center;
   border-radius: 20px;
   font-size: 14px;
   background: rgba(255, 255, 255, 0.12);
@@ -103,28 +98,5 @@ const handleToOrderList = () => {
     opacity: 0.8;
   }
 }
-
-.order-link {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 14px;
-  padding: 6px 12px;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(4px);
-  transition: all 0.3s ease;
-  position: relative;
-  z-index: 1;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-
-  &:active {
-    transform: translateY(1px);
-    background: rgba(255, 255, 255, 0.18);
-  }
-
-  text {
-    font-weight: 500;
-  }
-}
+.tab-list { position: relative; z-index: 1; display: flex; width: 100%; gap: 10px; }
 </style>

@@ -453,6 +453,9 @@
                 {
                     "path": "pages/goods/list",
                     "style": {
+                        // #ifndef H5
+                        "navigationStyle": "custom",
+                        // #endif
                         "navigationBarTitleText": "%shop.pages.goods.list%"
                     }
                 },

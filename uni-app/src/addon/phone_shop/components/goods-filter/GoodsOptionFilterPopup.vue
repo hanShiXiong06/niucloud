@@ -2,13 +2,16 @@
     <u-popup :show="show" mode="bottom" :round="18" :close-on-click-overlay="true" @close="close">
         <view class="filter-popup" :style="themeColor()">
             <view class="filter-popup__head">
-                <view class="filter-popup__title">{{ title }}</view>
+                <view>
+                    <view class="filter-popup__title">{{ title }}</view>
+                    <view v-if="tip" class="filter-popup__tip">{{ tip }}</view>
+                </view>
                 <view class="filter-popup__close" @click="close">
                     <u-icon name="close" size="20" color="#64748b" />
                 </view>
             </view>
-            <scroll-view scroll-y class="filter-popup__body">
-                <view v-for="group in groups" :key="group.key || group.title" class="option-group">
+            <scroll-view :scroll-y="true" :show-scrollbar="false" class="filter-popup__body">
+                <view v-for="group in visibleGroups" :key="group.key || group.title" class="option-group">
                     <view v-if="group.title" class="option-group__title">{{ group.title }}</view>
                     <view class="option-grid">
                         <view
@@ -26,7 +29,13 @@
                         </view>
                     </view>
                 </view>
-                <u-empty v-if="!groups.length" text="暂无可选项" mode="list" />
+                <view v-if="!visibleGroups.length" class="filter-popup__empty">
+                    <view class="filter-popup__empty-icon">
+                        <u-icon name="search" size="24" color="#94a3b8" />
+                    </view>
+                    <text class="filter-popup__empty-title">当前范围暂无可选项</text>
+                    <text class="filter-popup__empty-tip">可以返回调整分类或其他筛选条件</text>
+                </view>
             </scroll-view>
             <view class="filter-popup__footer">
                 <view class="filter-button filter-button--plain" @click="reset">重置</view>
@@ -39,7 +48,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 interface OptionItem {
     label: string
@@ -56,6 +65,7 @@ interface OptionGroup {
 const props = withDefaults(defineProps<{
     show: boolean
     title: string
+    tip?: string
     modelValue: Array<string | number>
     groups: OptionGroup[]
     multiple?: boolean
@@ -65,6 +75,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits(['update:show', 'confirm'])
 const selected = ref<string[]>([])
+const visibleGroups = computed(() => (props.groups || []).filter(group => Array.isArray(group.items) && group.items.length))
 
 watch(() => props.show, (value) => {
     if (value) selected.value = (props.modelValue || []).map(String)
@@ -95,9 +106,11 @@ const confirm = () => {
 
 <style lang="scss" scoped>
 .filter-popup {
-    height: min(72vh, 960rpx);
+    height: 72vh;
+    max-height: 960rpx;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
     background: #fff;
 }
 
@@ -116,6 +129,12 @@ const confirm = () => {
     font-weight: 600;
 }
 
+.filter-popup__tip {
+    margin-top: 5rpx;
+    color: #94a3b8;
+    font-size: 21rpx;
+}
+
 .filter-popup__close {
     width: 60rpx;
     height: 60rpx;
@@ -127,10 +146,42 @@ const confirm = () => {
 }
 
 .filter-popup__body {
+    height: 0;
     flex: 1;
     min-height: 0;
     box-sizing: border-box;
     padding: 8rpx 30rpx 30rpx;
+}
+
+.filter-popup__empty {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #94a3b8;
+}
+
+.filter-popup__empty-icon {
+    width: 82rpx;
+    height: 82rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 24rpx;
+    background: #f5f7fa;
+}
+
+.filter-popup__empty-title {
+    margin-top: 20rpx;
+    color: #475569;
+    font-size: 27rpx;
+    font-weight: 600;
+}
+
+.filter-popup__empty-tip {
+    margin-top: 8rpx;
+    font-size: 22rpx;
 }
 
 .option-group {
@@ -169,7 +220,7 @@ const confirm = () => {
 .option-chip--active {
     color: var(--primary-color);
     border-color: var(--primary-color);
-    background: var(--primary-color-light);
+    background: rgba(var(--primary-color-rgb, 18, 85, 231), 0.08);
 }
 
 .option-chip__label {

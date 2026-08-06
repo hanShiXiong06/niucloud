@@ -69,9 +69,10 @@
 									</view>
 								</scroll-view>
 								<view v-else class="third-scroll-fill"></view>
-								<view class="third-filter-btn" :class="{ active: selectedMemory.length || selectedGrade.length || sortField }" @click="openFilter">
+								<view class="third-filter-btn" :class="{ active: activeFilterCount }" @click="openFilter">
 									<text class="nc-iconfont nc-icon-shaixuanV6xx third-filter-icon"></text>
 									<text>筛选</text>
+									<text v-if="activeFilterCount" class="third-filter-count">{{ activeFilterCount }}</text>
 								</view>
 							</view>
 
@@ -176,11 +177,15 @@
 				</view>
 			</view>
 
-			<!-- 内存 / 成色 筛选弹窗 -->
-			<u-popup :show="showFilter" mode="bottom" :round="28" :safeAreaInsetBottom="true" :closeable="true" @close="showFilter = false">
+			<!-- 分类上下文筛选弹窗 -->
+			<u-popup :show="showFilter" mode="bottom" :round="28" :safeAreaInsetBottom="true" :closeable="true" @close="closeFilter">
 				<view class="ftr">
 					<view class="ftr-head">
-						<text class="ftr-title">筛选</text>
+						<view>
+							<text class="ftr-title">筛选商品</text>
+							<text class="ftr-subtitle">{{ filterContextText }}</text>
+						</view>
+						<view v-if="activeFilterCount" class="ftr-selected-count">已选 {{ activeFilterCount }} 项</view>
 					</view>
 					<view class="ftr-body">
 						<scroll-view :scroll-y="true" class="ftr-dims">
@@ -192,8 +197,8 @@
 						<scroll-view :scroll-y="true" class="ftr-panel">
 							<template v-if="activeDim === 'category'">
 								<view class="ftr-chips" v-if="thirdOptions.length">
-									<view class="ftr-chip" :class="{ on: tmpThird === -1 }" @click="tmpThird = -1"><text>全部</text></view>
-									<view v-for="c in thirdOptions" :key="c.category_id" class="ftr-chip" :class="{ on: tmpThird === c.category_id }" @click="tmpThird = c.category_id"><text>{{ c.category_name }}</text></view>
+									<view class="ftr-chip" :class="{ on: tmpThird === -1 }" @click="chooseTmpThird(-1)"><text>全部</text></view>
+									<view v-for="c in thirdOptions" :key="c.category_id" class="ftr-chip" :class="{ on: tmpThird === c.category_id }" @click="chooseTmpThird(c.category_id)"><text>{{ c.category_name }}</text></view>
 								</view>
 								<view v-else class="ftr-empty">该分类下暂无三级分类</view>
 							</template>
@@ -213,7 +218,44 @@
 								</view>
 								<view v-else class="ftr-empty">暂无成色可筛选</view>
 							</template>
-							<template v-else>
+							<template v-else-if="activeDim === 'color'">
+								<view class="ftr-section-head">
+									<text class="ftr-section-title">机身颜色</text>
+									<text class="ftr-section-tip">只显示当前分类有货商品的颜色</text>
+								</view>
+								<view class="ftr-chips" v-if="colorOptions.length">
+									<view v-for="c in colorOptions" :key="c" class="ftr-chip" :class="{ on: tmpColor.includes(c) }" @click="toggleChip(tmpColor, c)"><text>{{ c }}</text></view>
+								</view>
+								<view v-else class="ftr-empty">当前分类暂无结构化颜色</view>
+							</template>
+							<template v-else-if="activeDim === 'device'">
+								<view class="ftr-group" v-if="batteryOptions.length">
+									<view class="ftr-section-head">
+										<text class="ftr-section-title">电池健康</text>
+										<text class="ftr-section-tip">按录入的电池健康度筛选</text>
+									</view>
+									<view class="ftr-chips">
+										<view v-for="item in batteryOptions" :key="item.value" class="ftr-chip" :class="{ on: tmpBattery.includes(String(item.value)) }" @click="toggleChip(tmpBattery, String(item.value))"><text>{{ item.label }}</text></view>
+									</view>
+								</view>
+								<view class="ftr-group" v-if="warrantyOptions.length">
+									<view class="ftr-section-head">
+										<text class="ftr-section-title">保修状态</text>
+										<text class="ftr-section-tip">每天按保修截止日实时计算</text>
+									</view>
+									<view class="ftr-chips">
+										<view v-for="item in warrantyOptions" :key="item.value" class="ftr-chip" :class="{ on: tmpWarranty.includes(String(item.value)) }" @click="toggleChip(tmpWarranty, String(item.value))"><text>{{ item.label }}</text></view>
+									</view>
+								</view>
+							</template>
+							<template v-else-if="activeDim === 'price'">
+								<view class="ftr-section-head">
+									<text class="ftr-section-title">价格区间</text>
+									<text class="ftr-section-tip">可选常用区间，也可以自定义</text>
+								</view>
+								<GoodsPriceRangePicker v-model:start-value="tmpStartPrice" v-model:end-value="tmpEndPrice" :ranges="priceRangeOptions" />
+							</template>
+							<template v-else-if="activeDim === 'sort'">
 								<view class="ftr-chips">
 									<view v-for="opt in enabledSortOptions" :key="opt.key" class="ftr-chip" :class="{ on: opt.field ? tmpSortField === opt.field : !tmpSortField }" @click="pickSort(opt)">
 										<text>{{ opt.label }}</text>
@@ -224,8 +266,8 @@
 						</scroll-view>
 					</view>
 					<view class="ftr-foot">
-						<u-button shape="circle" :customStyle="{ flex: '0 0 200rpx', height: '84rpx', background: '#f2f3f5', color: '#4e5969', border: 'none', fontWeight: '600' }" text="重置" @click="resetFilter"></u-button>
-						<u-button shape="circle" type="primary" :customStyle="{ flex: '1', height: '84rpx', background: 'var(--primary-color)', border: 'none', fontWeight: '600' }" text="查看商品" @click="applyFilter"></u-button>
+						<view class="ftr-foot-action ftr-foot-action--reset"><u-button shape="circle" :customStyle="{ height: '84rpx', background: '#f2f3f5', color: '#4e5969', border: 'none', fontWeight: '600' }" text="重置" @click="resetFilter"></u-button></view>
+						<view class="ftr-foot-action ftr-foot-action--confirm"><u-button shape="circle" type="primary" :customStyle="{ height: '84rpx', background: 'var(--primary-color)', border: 'none', fontWeight: '600' }" text="查看商品" @click="applyFilter"></u-button></view>
 					</view>
 				</view>
 			</u-popup>
@@ -258,7 +300,7 @@
 import { computed, getCurrentInstance, onMounted, ref } from 'vue';
 import { cloneDeep } from 'lodash-es';
 import { img, redirect, getToken } from '@/utils/common';
-import { getGoodsCategoryTree, getGoodsPages, getGoodsDetail, getGoodsWarehouses } from '@/addon/phone_shop/api/goods';
+import { getGoodsCategoryTree, getGoodsPages, getGoodsDetail, getGoodsWarehouses, getGoodsFilterOptions } from '@/addon/phone_shop/api/goods';
 import MescrollEmpty from '@/components/mescroll/mescroll-empty/mescroll-empty.vue';
 import addCartPopup from './add-cart-popup.vue';
 import bindMobile from '@/components/bind-mobile/bind-mobile.vue';
@@ -269,6 +311,7 @@ import { useGoodsDownload } from '@/addon/phone_shop/hooks/useGoodsDownload';
 import { useGoodsForwardAccess } from '@/addon/phone_shop/hooks/useGoodsForwardAccess';
 import DownloadConfigDialog from '@/addon/phone_shop/components/download-config-dialog/download-config-dialog.vue';
 import PhoneGoodsMeta from '@/addon/phone_shop/components/PhoneGoodsMeta.vue'
+import GoodsPriceRangePicker from '@/addon/phone_shop/components/goods-filter/GoodsPriceRangePicker.vue'
 
 const prop = defineProps({
 	config: {
@@ -308,8 +351,18 @@ const showWarehouseSwitch = ref(false);
 const showFilter = ref(false);
 const selectedMemory = ref<string[]>([]);
 const selectedGrade = ref<string[]>([]);
+const selectedColor = ref<string[]>([]);
+const selectedBattery = ref<string[]>([]);
+const selectedWarranty = ref<string[]>([]);
+const selectedStartPrice = ref<string | number>('');
+const selectedEndPrice = ref<string | number>('');
 const tmpMemory = ref<string[]>([]);
 const tmpGrade = ref<string[]>([]);
+const tmpColor = ref<string[]>([]);
+const tmpBattery = ref<string[]>([]);
+const tmpWarranty = ref<string[]>([]);
+const tmpStartPrice = ref<string | number>('');
+const tmpEndPrice = ref<string | number>('');
 const tmpSortField = ref('');
 const tmpSortType = ref<'asc' | 'desc'>('desc');
 // 左侧维度 + 三级选择 + 分组展开
@@ -320,17 +373,23 @@ const dims = computed(() => [
 	{ key: 'category', label: '分类' },
 	{ key: 'memory', label: '内存' },
 	{ key: 'grade', label: '成色' },
+	{ key: 'color', label: '颜色' },
+	{ key: 'device', label: '设备' },
+	{ key: 'price', label: '价格' },
 	{ key: 'sort', label: '排序' }
 ]);
 const thirdOptions = computed(() => thirdLevelList.value || []);
 const categoryInitial = (name: string) => String(name || '类').trim().slice(0, 1);
-// 内存按"苹果(纯容量)/安卓(含+组合)"分组,贴参考图
+// 不按苹果/安卓写死：直接消费在售商品的真实值，仅按数据形态分组。
 const memoryGroups = computed(() => {
-	const apple: string[] = [], android: string[] = [];
-	(filterOptions.value.memory || []).forEach((m: string) => (String(m).includes('+') ? android : apple).push(m));
+	const storage: string[] = [], combination: string[] = [];
+	(filterOptions.value.memories || []).forEach((item: any) => {
+		const m = String(item?.value ?? item ?? '').trim();
+		if (m) (m.includes('+') ? combination : storage).push(m);
+	});
 	const g: any[] = [];
-	if (apple.length) g.push({ name: '苹果', items: apple });
-	if (android.length) g.push({ name: '安卓', items: android });
+	if (storage.length) g.push({ name: '存储容量', items: storage });
+	if (combination.length) g.push({ name: '运行内存 + 存储', items: combination });
 	return g;
 });
 const toggleExpand = (k: string) => { expand.value = { ...expand.value, [k]: !expand.value[k] }; }
@@ -338,10 +397,35 @@ const dimHasSelected = (key: string) => {
 	if (key === 'category') return tmpThird.value !== -1;
 	if (key === 'memory') return tmpMemory.value.length > 0;
 	if (key === 'grade') return tmpGrade.value.length > 0;
+	if (key === 'color') return tmpColor.value.length > 0;
+	if (key === 'device') return tmpBattery.value.length > 0 || tmpWarranty.value.length > 0;
+	if (key === 'price') return tmpStartPrice.value !== '' || tmpEndPrice.value !== '';
 	if (key === 'sort') return !!tmpSortField.value;
 	return false;
 }
-const filterOptions = ref<{ memory: string[]; grade: string[] }>({ memory: [], grade: [] });
+const filterOptions = ref<any>({
+	memories: [],
+	grades: [],
+	colors: [],
+	battery_ranges: [],
+	warranty_ranges: [],
+	price_ranges: []
+});
+const colorOptions = computed(() => (filterOptions.value.colors || []).map((item: any) => String(item?.value ?? item ?? '')).filter(Boolean));
+const batteryOptions = computed(() => filterOptions.value.battery_ranges || []);
+const warrantyOptions = computed(() => filterOptions.value.warranty_ranges || []);
+const priceRangeOptions = computed(() => filterOptions.value.price_ranges || []);
+const activeFilterCount = computed(() => {
+	let count = selectedMemory.value.length + selectedGrade.value.length + selectedColor.value.length;
+	if (selectedBattery.value.length) count++;
+	if (selectedWarranty.value.length) count++;
+	if (selectedStartPrice.value !== '' || selectedEndPrice.value !== '') count++;
+	if (sortField.value) count++;
+	return count;
+});
+const filterContextText = computed(() => selectedCategoryId.value
+	? `已按“${thirdActive.value >= 0 ? thirdLevelList.value[thirdActive.value]?.category_name : selectedSecond.value?.category_name || selectedFirst.value?.category_name || '当前分类'}”收敛可选项`
+	: '展示当前在售商品的全部可选项');
 const instance = getCurrentInstance();
 const menuButtonInfo = ref<any>({});
 const systemInfo = ref<any>({});
@@ -503,6 +587,7 @@ const getCategoryData = () => {
 		if (tabsData.value.length) {
 			if (categoryId) setActiveByCategoryId(categoryId);
 			resetSelectedCategory();
+			loadFilterOptions();
 			loadGoods(true);
 		}
 		loading.value = false;
@@ -548,7 +633,17 @@ const resetSelectedCategory = () => {
 
 const resetGoods = () => {
 	resetSelectedCategory();
+	resetCategoryFacets();
+	loadFilterOptions();
 	loadGoods(true);
+}
+
+const resetCategoryFacets = () => {
+	selectedMemory.value = [];
+	selectedGrade.value = [];
+	selectedColor.value = [];
+	selectedBattery.value = [];
+	selectedWarranty.value = [];
 }
 
 const firstLevelClick = (index: number) => {
@@ -570,6 +665,8 @@ const thirdLevelClick = (index: number, data: any) => {
 	thirdActive.value = index;
 	selectedCategoryId.value = data?.category_id || selectedSecond.value?.category_id || '';
 	categoryId = selectedCategoryId.value;
+	resetCategoryFacets();
+	loadFilterOptions();
 	loadGoods(true);
 }
 
@@ -593,10 +690,14 @@ const loadGoods = (reset = false) => {
 		sort: sortType.value,
 		memory_group: selectedMemory.value.join(','),
 		condition_grade: selectedGrade.value.join(','),
+		device_color: selectedColor.value.join(','),
+		battery_range: selectedBattery.value.join(','),
+		warranty_range: selectedWarranty.value.join(','),
+		start_price: selectedStartPrice.value,
+		end_price: selectedEndPrice.value,
 		warehouse: warehouse.value
 	}).then((res: any) => {
 		const newArr = res.data.data || [];
-		mergeFilterOptions(newArr);
 		list.value = reset ? newArr : list.value.concat(newArr);
 		finished.value = newArr.length < pageSize.value;
 		if (!finished.value) page.value += 1;
@@ -660,26 +761,53 @@ const initDefaultSort = () => {
 	sortType.value = sort.type;
 }
 
-// 筛选选项:从已加载商品里去重派生(二手机一机一价,够用)
-const memoryOptions = computed(() => filterOptions.value.memory);
-const gradeOptions = computed(() => filterOptions.value.grade);
-const mergeFilterOptions = (arr: any[]) => {
-	const mem = new Set(filterOptions.value.memory);
-	const grade = new Set(filterOptions.value.grade);
-	arr.forEach((it: any) => {
-		const m = String(it.memory_group || '').trim(); if (m) mem.add(m);
-		const g = String(it.condition_grade || '').trim(); if (g) grade.add(g);
-	});
-	filterOptions.value = { memory: Array.from(mem), grade: Array.from(grade) };
+// 筛选项由后端按当前分类的真实在售商品动态返回，避免从首屏商品推断造成缺项。
+const gradeOptions = computed(() => (filterOptions.value.grades || []).map((item: any) => String(item?.grade_name ?? item ?? '')).filter(Boolean));
+let filterOptionRequestId = 0;
+const loadFilterOptions = async(categoryValue: any = selectedCategoryId.value) => {
+	const requestId = ++filterOptionRequestId;
+	try {
+		const res: any = await getGoodsFilterOptions({ goods_category: categoryValue || '' });
+		if (requestId !== filterOptionRequestId) return;
+		filterOptions.value = Object.assign({
+			memories: [], grades: [], colors: [], battery_ranges: [], warranty_ranges: [], price_ranges: []
+		}, res.data || {});
+	} catch (e) {
+		if (requestId !== filterOptionRequestId) return;
+		filterOptions.value = { memories: [], grades: [], colors: [], battery_ranges: [], warranty_ranges: [], price_ranges: [] };
+	}
 }
 const openFilter = () => {
+	loadFilterOptions();
 	tmpMemory.value = [...selectedMemory.value];
 	tmpGrade.value = [...selectedGrade.value];
+	tmpColor.value = [...selectedColor.value];
+	tmpBattery.value = [...selectedBattery.value];
+	tmpWarranty.value = [...selectedWarranty.value];
+	tmpStartPrice.value = selectedStartPrice.value;
+	tmpEndPrice.value = selectedEndPrice.value;
 	tmpSortField.value = sortField.value;
 	tmpSortType.value = sortType.value;
 	tmpThird.value = (thirdActive.value >= 0 && thirdLevelList.value[thirdActive.value]) ? thirdLevelList.value[thirdActive.value].category_id : -1;
 	activeDim.value = thirdOptions.value.length ? 'category' : 'memory';
 	showFilter.value = true;
+}
+const closeFilter = () => {
+	showFilter.value = false;
+	loadFilterOptions();
+}
+const chooseTmpThird = (categoryValue: any) => {
+	if (tmpThird.value === categoryValue) return;
+	tmpThird.value = categoryValue;
+	tmpMemory.value = [];
+	tmpGrade.value = [];
+	tmpColor.value = [];
+	tmpBattery.value = [];
+	tmpWarranty.value = [];
+	const effectiveCategory = categoryValue === -1
+		? (selectedSecond.value?.category_id || selectedFirst.value?.category_id || '')
+		: categoryValue;
+	loadFilterOptions(effectiveCategory);
 }
 // 弹窗内选排序:综合(无field)清空;同字段再点切换升降
 const pickSort = (opt: any) => {
@@ -692,6 +820,7 @@ const toggleChip = (arr: string[], val: string) => {
 	if (i >= 0) arr.splice(i, 1); else arr.push(val);
 }
 const applyFilter = () => {
+	const previousCategory = selectedCategoryId.value;
 	// 三级分类
 	if (tmpThird.value === -1) {
 		thirdActive.value = -1;
@@ -704,15 +833,26 @@ const applyFilter = () => {
 	categoryId = selectedCategoryId.value;
 	selectedMemory.value = [...tmpMemory.value];
 	selectedGrade.value = [...tmpGrade.value];
+	selectedColor.value = [...tmpColor.value];
+	selectedBattery.value = [...tmpBattery.value];
+	selectedWarranty.value = [...tmpWarranty.value];
+	selectedStartPrice.value = tmpStartPrice.value;
+	selectedEndPrice.value = tmpEndPrice.value;
 	sortField.value = tmpSortField.value;
 	sortType.value = tmpSortType.value;
 	showFilter.value = false;
+	if (previousCategory !== selectedCategoryId.value) loadFilterOptions();
 	loadGoods(true);
 }
 const resetFilter = () => {
 	tmpThird.value = -1;
 	tmpMemory.value = [];
 	tmpGrade.value = [];
+	tmpColor.value = [];
+	tmpBattery.value = [];
+	tmpWarranty.value = [];
+	tmpStartPrice.value = '';
+	tmpEndPrice.value = '';
 	tmpSortField.value = '';
 	tmpSortType.value = 'desc';
 }
@@ -1288,6 +1428,20 @@ const qcAbnormal = (data: any) => {
 .third-filter-btn.active {
 	color: var(--primary-color);
 	font-weight: 600;
+}
+
+.third-filter-count {
+	min-width: 28rpx;
+	height: 28rpx;
+	padding: 0 7rpx;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	border-radius: 14rpx;
+	background: var(--primary-color);
+	color: #fff;
+	font-size: 18rpx;
 }
 
 .third-filter-icon {
@@ -2052,16 +2206,37 @@ const qcAbnormal = (data: any) => {
 }
 .ftr-head {
 	flex: 0 0 auto;
-	height: 96rpx;
+	height: 112rpx;
+	padding: 0 86rpx 0 30rpx;
+	box-sizing: border-box;
 	display: flex;
 	align-items: center;
-	justify-content: center;
+	justify-content: space-between;
 	border-bottom: 1rpx solid #f2f3f5;
 }
 .ftr-title {
+	display: block;
 	font-size: 32rpx;
 	font-weight: 600;
 	color: #1d2129;
+}
+.ftr-subtitle {
+	display: block;
+	max-width: 430rpx;
+	margin-top: 6rpx;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	font-size: 21rpx;
+	color: #94a3b8;
+}
+.ftr-selected-count {
+	padding: 8rpx 15rpx;
+	border-radius: 18rpx;
+	background: rgba(var(--primary-color-rgb, 18, 85, 231), 0.08);
+	color: var(--primary-color);
+	font-size: 20rpx;
+	font-weight: 600;
 }
 .ftr-body {
 	flex: 1;
@@ -2069,7 +2244,7 @@ const qcAbnormal = (data: any) => {
 	min-height: 0;
 }
 .ftr-dims {
-	flex: 0 0 200rpx;
+	flex: 0 0 176rpx;
 	height: 100%;
 	background: #f6f7f8;
 }
@@ -2078,8 +2253,8 @@ const qcAbnormal = (data: any) => {
 	height: 100rpx;
 	display: flex;
 	align-items: center;
-	padding-left: 32rpx;
-	font-size: 28rpx;
+	padding-left: 28rpx;
+	font-size: 26rpx;
 	color: #4e5969;
 }
 .ftr-dim.on {
@@ -2118,6 +2293,21 @@ const qcAbnormal = (data: any) => {
 	font-size: 24rpx;
 	color: #86909c;
 	margin-bottom: 18rpx;
+}
+.ftr-section-head {
+	margin-bottom: 20rpx;
+}
+.ftr-section-title {
+	display: block;
+	color: #334155;
+	font-size: 27rpx;
+	font-weight: 600;
+}
+.ftr-section-tip {
+	display: block;
+	margin-top: 7rpx;
+	color: #94a3b8;
+	font-size: 21rpx;
 }
 .ftr-chips {
 	display: flex;
@@ -2175,5 +2365,12 @@ const qcAbnormal = (data: any) => {
 	padding-bottom: calc(16rpx + constant(safe-area-inset-bottom));
 	padding-bottom: calc(16rpx + env(safe-area-inset-bottom));
 	border-top: 1rpx solid #f2f3f5;
+}
+.ftr-foot-action--reset {
+	flex: 0 0 200rpx;
+}
+.ftr-foot-action--confirm {
+	flex: 1;
+	min-width: 0;
 }
 </style>

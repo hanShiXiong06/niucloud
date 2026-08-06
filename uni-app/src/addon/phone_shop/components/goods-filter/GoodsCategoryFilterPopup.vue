@@ -11,7 +11,7 @@
                 </view>
             </view>
             <view class="category-popup__content">
-                <scroll-view scroll-y class="category-roots">
+                <scroll-view :scroll-y="true" :show-scrollbar="false" class="category-roots">
                     <view
                         v-for="root in categories"
                         :key="root.category_id"
@@ -28,7 +28,7 @@
                         />
                     </view>
                 </scroll-view>
-                <scroll-view scroll-y class="category-children">
+                <scroll-view :scroll-y="true" :show-scrollbar="false" class="category-children">
                     <view v-if="activeRoot" class="category-section">
                         <view class="category-all" :class="{ 'category-all--active': selected.includes(String(activeRoot.category_id)) }">
                             <view class="category-all__main" @click="toggle(activeRoot.category_id)">
@@ -181,9 +181,11 @@ const confirm = () => {
 
 <style lang="scss" scoped>
 .category-popup {
-    height: min(76vh, 1040rpx);
+    height: 76vh;
+    max-height: 1040rpx;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
     background: #fff;
 }
 
@@ -219,14 +221,17 @@ const confirm = () => {
 }
 
 .category-popup__content {
+    height: 0;
     flex: 1;
     min-height: 0;
-    display: grid;
-    grid-template-columns: 188rpx minmax(0, 1fr);
+    display: flex;
+    overflow: hidden;
 }
 
 .category-roots {
+    width: 188rpx;
     height: 100%;
+    flex-shrink: 0;
     background: #f6f8fb;
 }
 
@@ -266,7 +271,9 @@ const confirm = () => {
 }
 
 .category-children {
+    min-width: 0;
     height: 100%;
+    flex: 1;
     box-sizing: border-box;
     padding: 24rpx;
 }

@@ -459,6 +459,7 @@ final class ErpSchema
             ],
             'erp_account_ledger' => [
                 'balance_after' => "`balance_after` decimal(14,2) NOT NULL DEFAULT 0.00 COMMENT '记账后余额' AFTER `amount`",
+                'sale_item_id' => "`sale_item_id` int NOT NULL DEFAULT 0 COMMENT '销售明细ID，商城缺失ERP资产时用于分台核销' AFTER `asset_id`",
             ],
             'erp_asset_ledger' => [
                 'request_id' => "`request_id` varchar(80) DEFAULT NULL COMMENT '客户端幂等请求ID' AFTER `site_id`",
@@ -628,6 +629,7 @@ final class ErpSchema
         self::ensureIndex($prefix . 'erp_settlement', 'uk_site_request', 'UNIQUE KEY `uk_site_request` (`site_id`,`request_id`)');
         self::ensureIndex($prefix . 'erp_payable', 'idx_asset', 'KEY `idx_asset` (`site_id`,`asset_id`)');
         self::ensureIndex($prefix . 'erp_receivable', 'idx_asset', 'KEY `idx_asset` (`site_id`,`asset_id`)');
+        self::ensureIndex($prefix . 'erp_account_ledger', 'idx_sale_item', 'KEY `idx_sale_item` (`site_id`,`sale_item_id`)');
         self::ensureIndex($prefix . 'erp_purchase_return', 'uk_site_request', 'UNIQUE KEY `uk_site_request` (`site_id`,`request_id`)');
         self::ensureIndex($prefix . 'erp_sale_return', 'uk_site_request', 'UNIQUE KEY `uk_site_request` (`site_id`,`request_id`)');
         Db::execute("UPDATE `{$prefix}erp_party` SET role_flags = CASE party_type WHEN 'supplier' THEN 'purchase_supplier' WHEN 'customer' THEN 'sale_customer' WHEN 'channel' THEN 'sale_customer' ELSE 'other' END WHERE role_flags = ''");

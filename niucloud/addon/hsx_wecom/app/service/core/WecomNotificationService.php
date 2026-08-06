@@ -111,6 +111,7 @@ final class WecomNotificationService
             ['site_id', '=', $siteId], ['uid', '=', $assigneeUid], ['status', '=', 1],
         ])->findOrEmpty();
         $config = (new WecomConfigService())->get($siteId);
+        $notifyAt = max(time(), (int)($event['notify_at'] ?? 0));
         $status = 'pending';
         $error = '';
         $targetError = $this->targetContractError($event);
@@ -143,12 +144,12 @@ final class WecomNotificationService
             'payload_json' => json_encode($event, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}',
             'status' => $status,
             'retry_count' => 0,
-            'next_retry_at' => $status === 'pending' ? time() : 0,
+            'next_retry_at' => $status === 'pending' ? $notifyAt : 0,
             'error_message' => $error,
             'create_at' => time(),
             'update_at' => time(),
         ]);
-        if ($status === 'pending') $this->dispatchQueuedMessages([(int)$log->id]);
+        if ($status === 'pending' && $notifyAt <= time()) $this->dispatchQueuedMessages([(int)$log->id]);
         return ['queued' => true, 'id' => (int)$log->id, 'status' => $status];
     }
 
@@ -241,6 +242,16 @@ final class WecomNotificationService
             '<div class="normal">任务：' . htmlspecialchars((string)($event['title'] ?? '待办任务')) . '</div>',
         ];
         if (!empty($event['business_no'])) $rows[] = '<div class="normal">业务单号：' . htmlspecialchars((string)$event['business_no']) . '</div>';
+        if (!empty($event['customer_name'])) $rows[] = '<div class="normal">客户：' . htmlspecialchars((string)$event['customer_name']) . '</div>';
+        if (!empty($event['logistics_pickup_address'])) $rows[] = '<div class="normal">取货地点：' . htmlspecialchars((string)$event['logistics_pickup_address']) . '</div>';
+        if (!empty($event['logistics_vehicle_no'])) {
+            $vehicle = trim((string)($event['logistics_name'] ?? '') . ' ' . (string)$event['logistics_vehicle_no']);
+            $rows[] = '<div class="normal">物流车辆：' . htmlspecialchars($vehicle) . '</div>';
+        }
+        if (!empty($event['logistics_contact_mobile'])) {
+            $contact = trim((string)($event['logistics_contact_name'] ?? '') . ' ' . (string)$event['logistics_contact_mobile']);
+            $rows[] = '<div class="normal">现场联系：' . htmlspecialchars($contact) . '</div>';
+        }
         if (!empty($event['imei'])) $rows[] = '<div class="normal">IMEI：' . htmlspecialchars((string)$event['imei']) . '</div>';
         if (!empty($event['assigner_name'])) $rows[] = '<div class="normal">分配人：' . htmlspecialchars((string)$event['assigner_name']) . '</div>';
         $rows[] = '<div class="highlight">今日待处理 ' . max(0, (int)($event['pending_count'] ?? 0)) . ' 项</div>';
@@ -434,6 +445,10 @@ final class WecomNotificationService
     {
         $rows = [];
         if (!empty($event['business_no'])) $rows[] = '业务单号：' . (string)$event['business_no'];
+        if (!empty($event['customer_name'])) $rows[] = '客户：' . (string)$event['customer_name'];
+        if (!empty($event['logistics_pickup_address'])) $rows[] = '取货地点：' . (string)$event['logistics_pickup_address'];
+        if (!empty($event['logistics_vehicle_no'])) $rows[] = '物流车辆：' . trim((string)($event['logistics_name'] ?? '') . ' ' . (string)$event['logistics_vehicle_no']);
+        if (!empty($event['logistics_contact_mobile'])) $rows[] = '现场联系：' . trim((string)($event['logistics_contact_name'] ?? '') . ' ' . (string)$event['logistics_contact_mobile']);
         if (!empty($event['imei'])) $rows[] = 'IMEI：' . (string)$event['imei'];
         if (!empty($event['assigner_name'])) $rows[] = '分配人：' . (string)$event['assigner_name'];
         $rows[] = '今日待处理 ' . max(0, (int)($event['pending_count'] ?? 0)) . ' 项';

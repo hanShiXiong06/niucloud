@@ -38,7 +38,7 @@ CREATE TABLE `{{prefix}}recycle_order` (
   `pay_remark` varchar(500) NOT NULL DEFAULT '' COMMENT '打款备注',
   `pay_url` varchar(500) NOT NULL DEFAULT '' COMMENT '打款凭证',
   `payment_images` text COMMENT '打款凭证图片',
-  `delivery_type` varchar(20)   NOT NULL DEFAULT 'express' COMMENT '发货方式：express-快递，self-自送',
+  `delivery_type` varchar(20)   NOT NULL DEFAULT '1' COMMENT '交付方式：1-快递，2-自送，3-物流车',
   `express_company` varchar(50)   DEFAULT '' COMMENT '快递公司',
   `express_no` varchar(50)   DEFAULT '' COMMENT '快递单号',
   `delivery_platform` varchar(50) NOT NULL DEFAULT '' COMMENT '快递平台',
@@ -47,6 +47,12 @@ CREATE TABLE `{{prefix}}recycle_order` (
   `delivery_order_id` varchar(100) NOT NULL DEFAULT '' COMMENT '第三方快递订单号',
   `pickup_time` varchar(50) NOT NULL DEFAULT '' COMMENT '预约揽收时间',
   `delivery_data` text COMMENT '快递扩展数据',
+  `logistics_name` varchar(100) NOT NULL DEFAULT '' COMMENT '物流车线路或物流名称',
+  `logistics_vehicle_no` varchar(50) NOT NULL DEFAULT '' COMMENT '物流车车牌号',
+  `logistics_contact_name` varchar(50) NOT NULL DEFAULT '' COMMENT '物流车联系人',
+  `logistics_contact_mobile` varchar(30) NOT NULL DEFAULT '' COMMENT '物流车联系电话',
+  `logistics_pickup_address` varchar(255) NOT NULL DEFAULT '' COMMENT '物流车到达后的取货地点',
+  `logistics_eta_at` int NOT NULL DEFAULT 0 COMMENT '预计可取货时间',
   `status` tinyint(1) NOT NULL DEFAULT '1' COMMENT '订单状态：1-待签收，2-已签收，3-质检中，4-已质检，5-已支付，6-已完成，7-已取消',
   `total_amount` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '订单总金额',
   `device_count` int NOT NULL DEFAULT 0 COMMENT '设备数量',
@@ -71,7 +77,9 @@ CREATE TABLE `{{prefix}}recycle_order` (
   `pay_time` int NOT NULL DEFAULT 0 COMMENT '打款时间',
   `pay_uid` int NOT NULL DEFAULT 0 COMMENT '打款人ID',
   `delete_at` int NOT NULL DEFAULT 0 COMMENT '删除时间',
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  KEY `idx_delivery_eta` (`site_id`,`delivery_type`,`logistics_eta_at`),
+  KEY `idx_logistics_vehicle` (`site_id`,`logistics_vehicle_no`)
 )  COMMENT='回收订单主表';
 
 

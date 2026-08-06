@@ -355,6 +355,10 @@ export function getErpReceivableItems(id: number) {
     return request.get(`erp/finance/receivable/${id}/items`)
 }
 
+export function supplementErpReceivableSaleDetails(id: number, data: Record<string, any>) {
+    return request.post(`erp/finance/receivable/${id}/supplement_sale_details`, data)
+}
+
 export function confirmErpReceipt(id: number, data: Record<string, any>) {
     return request.post(`erp/finance/receivable/${id}/confirm_receipt`, withErpRequestId(data, 'receipt'))
 }

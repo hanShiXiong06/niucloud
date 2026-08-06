@@ -41,6 +41,9 @@ export function useGoodsEdit(params: any = {}) {
         goods_category: '',
         memory_group: '',      // 内存(二手机)
         condition_grade: '',   // 成色等级(二手机)
+        device_color: '',      // 设备颜色(结构化筛选)
+        battery_health: '',    // 电池健康度 0-100
+        warranty_expire_time: '', // 保修到期绝对日期 YYYY-MM-DD
         brand_id: '',
         poster_id: '',
         diy_detail_id: '',
@@ -430,6 +433,9 @@ export function useGoodsEdit(params: any = {}) {
             formData.goods_category = data.goods_info.goods_category
             formData.memory_group = data.goods_info.memory_group || ''
             formData.condition_grade = data.goods_info.condition_grade || ''
+            formData.device_color = data.goods_info.device_color || ''
+            formData.battery_health = Number(data.goods_info.battery_health) >= 0 ? Number(data.goods_info.battery_health) : ''
+            formData.warranty_expire_time = formatWarrantyDate(data.goods_info.warranty_expire_time)
             loadQcItems(data.goods_info.qc_report) // 质检报告 → 可编辑项
             formData.brand_id = data.goods_info.brand_id
             formData.poster_id = data.goods_info.poster_id
@@ -529,6 +535,19 @@ export function useGoodsEdit(params: any = {}) {
             // 商品详情
             formData.goods_desc = data.goods_info.goods_desc
         }
+    }
+
+    const formatWarrantyDate = (value: any) => {
+        if (!value) return ''
+        if (typeof value === 'string' && /^\d{4}-\d{1,2}-\d{1,2}$/.test(value)) return value
+        let timestamp = Number(value)
+        if (!Number.isFinite(timestamp) || timestamp <= 0) return ''
+        if (timestamp < 10000000000) timestamp *= 1000
+        const date = new Date(timestamp)
+        if (Number.isNaN(date.getTime())) return ''
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        return `${ date.getFullYear() }-${ month }-${ day }`
     }
 
     // 绑定拖拽规格值事件

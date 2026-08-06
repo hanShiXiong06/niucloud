@@ -14,6 +14,7 @@ use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 class RecycleStageDict
 {
     const STAGE_SIGN     = 'sign';      // 待签收（订单级：到件包裹签收）
+    const STAGE_PICKUP   = 'pickup';    // 待取货（订单级：物流车到点后取回门店）
     const STAGE_CHECK    = 'check';     // 质检（待质检/质检中，且订单已签收）
     const STAGE_PRICE    = 'price';     // 定价（已质检待定价/已定价）
     const STAGE_CONFIRM  = 'confirm';   // 报价确认（待确认）
@@ -23,7 +24,7 @@ class RecycleStageDict
     /** 订单级环节（工单单位是订单而非设备）。其余环节均为设备级。 */
     public static function isOrderStage(string $stageKey): bool
     {
-        return $stageKey === self::STAGE_SIGN;
+        return in_array($stageKey, [self::STAGE_PICKUP, self::STAGE_SIGN], true);
     }
 
     /**
@@ -33,12 +34,13 @@ class RecycleStageDict
     public static function getStages(): array
     {
         return [
-            ['stage_key' => self::STAGE_SIGN,     'name' => '待签收',   'sort' => 1],
-            ['stage_key' => self::STAGE_CHECK,    'name' => '质检',     'sort' => 2],
-            ['stage_key' => self::STAGE_PRICE,    'name' => '定价',     'sort' => 3],
-            ['stage_key' => self::STAGE_CONFIRM,  'name' => '报价确认', 'sort' => 4],
-            ['stage_key' => self::STAGE_PAY,      'name' => '打款',     'sort' => 5],
-            ['stage_key' => self::STAGE_ABNORMAL, 'name' => '异常处理', 'sort' => 6],
+            ['stage_key' => self::STAGE_PICKUP,   'name' => '待取货',   'sort' => 1],
+            ['stage_key' => self::STAGE_SIGN,     'name' => '待签收',   'sort' => 2],
+            ['stage_key' => self::STAGE_CHECK,    'name' => '质检',     'sort' => 3],
+            ['stage_key' => self::STAGE_PRICE,    'name' => '定价',     'sort' => 4],
+            ['stage_key' => self::STAGE_CONFIRM,  'name' => '报价确认', 'sort' => 5],
+            ['stage_key' => self::STAGE_PAY,      'name' => '打款',     'sort' => 6],
+            ['stage_key' => self::STAGE_ABNORMAL, 'name' => '异常处理', 'sort' => 7],
         ];
     }
 
@@ -49,6 +51,7 @@ class RecycleStageDict
     public static function getStagePermissions(): array
     {
         return [
+            self::STAGE_PICKUP   => ['recycle_order_pickup'],
             // 待签收 = 实际的两个动作权限：代下单(recycle_order_add) / 签收订单(recycle_order_edit，PUT action=order_sign)
             self::STAGE_SIGN     => ['recycle_order_add', 'recycle_order_edit'],
             self::STAGE_CHECK    => ['recycle_device_check'],

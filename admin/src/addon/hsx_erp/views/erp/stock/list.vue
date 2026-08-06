@@ -11,7 +11,7 @@
                     <el-button v-if="selectedSaleableIds.length" type="primary" @click="goSale(selectedSaleableIds)">批量销售（{{ selectedSaleableIds.length }}）</el-button>
                     <el-button v-if="selectedTransferableIds.length" @click="openTransfer()">批量调拨（{{ selectedTransferableIds.length }}）</el-button>
                     <el-button type="primary" plain @click="router.push('/site/hsx_erp/stocktake')">库存盘点</el-button>
-                    <el-button v-if="canViewProfit || canViewFinance" type="primary" plain @click="ledgerVisible = true">经营台账</el-button>
+                    <el-button v-if="canViewProfit || canViewFinance" type="primary" plain @click="ledgerVisible = true">查询 / 导出设备</el-button>
                     <el-button type="primary" plain @click="openSerialTrace">串号追踪</el-button>
                     <el-button :icon="Refresh" :loading="table.loading" @click="loadList">刷新</el-button>
                 </div>
@@ -117,7 +117,33 @@
                         只看我的待办
                     </el-checkbox>
                 </el-form-item>
-                <el-form-item label="入库时间">
+                <el-form-item label="业务方向">
+                    <el-select v-model="search.party_scope" class="!w-[170px]" @change="onPartyScopeChange">
+                        <el-option v-if="canViewSupplier" label="采购 / 回收来源" value="supplier" />
+                        <el-option label="销售客户" value="customer" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item :label="search.party_scope === 'customer' ? '购买客户' : '供货来源'">
+                    <ErpPartySelect
+                        v-model="search.party_id"
+                        v-model:party-name="search.party_name"
+                        :party-type="search.party_scope === 'customer' ? 'customer' : 'supplier'"
+                        :allow-create="false"
+                        :placeholder="search.party_scope === 'customer' ? '选择买走设备的客户' : '选择提供设备的客户/供货商'"
+                        class="!w-[230px]"
+                    />
+                </el-form-item>
+                <el-form-item label="业务来源">
+                    <el-select v-model="search.origin_plugin" clearable class="!w-[150px]" placeholder="全部来源">
+                        <el-option v-for="item in businessSourceOptions" :key="item.value" :label="item.label" :value="item.value" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item v-if="search.party_scope === 'customer'" label="销售渠道">
+                    <el-select v-model="search.sale_channel_key" clearable filterable class="!w-[170px]" placeholder="全部渠道">
+                        <el-option v-for="item in saleChannelOptions" :key="item.key" :label="item.name" :value="item.key" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item :label="search.party_scope === 'customer' ? '销售时间' : '入库时间'">
                     <el-date-picker v-model="search.dateRange" type="daterange" value-format="X" start-placeholder="开始" end-placeholder="结束" class="!w-[260px]" />
                 </el-form-item>
                 <el-form-item label="库龄">
@@ -664,13 +690,14 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
 import { adjustErpStockCost, adjustErpStockRetailPrice, buyoutErpConsignment, completeErpStockRefurbish, getErpSerialTraceDetail, getErpSerialTraceList, getErpStockInfo, getErpStockList, getErpStockTurnoverSummary, prepareErpStockListingMedia, previewErpStockTransfer, printErpAssetLabel, sendErpStockRefurbish, syncErpStockListing, transferErpStock, updateErpStockFlow } from '@/addon/hsx_erp/api/erp'
-import { getErpFinanceCategories } from '@/addon/hsx_erp/api/config'
+import { getErpFinanceCategories, getErpSaleChannelOptions } from '@/addon/hsx_erp/api/config'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 import ErpDeviceIdentity from '@/addon/hsx_erp/components/ErpDeviceIdentity.vue'
 import ErpImageGallery from '@/addon/hsx_erp/components/ErpImageGallery.vue'
 import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/index.vue'
 import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVoucherUpload.vue'
 import ErpCatalogProductSelect from '@/addon/hsx_erp/components/ErpCatalogProductSelect.vue'
+import ErpPartySelect from '@/addon/hsx_erp/components/ErpPartySelect.vue'
 import ErpListingWorkspaceForm from '@/addon/hsx_erp/components/ErpListingWorkspaceForm.vue'
 import ErpSaleProfitReport from '@/addon/hsx_erp/components/ErpSaleProfitReport.vue'
 import { firstPositiveErpAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
@@ -680,7 +707,7 @@ import QRCode from 'qrcode'
 
 const ledgerVisible = ref(false)
 
-const search = reactive<any>({ keyword: '', status: '', refurbish_status: '', sale_target: '', listing_status: '', my_task: 0, turnover_level: '', warehouse_id: '', location_id: '', catalog_product_id: '', dateRange: [], stock_age_min: undefined, stock_age_max: undefined, min_cost: undefined, max_cost: undefined, min_price: undefined, max_price: undefined })
+const search = reactive<any>({ keyword: '', status: '', refurbish_status: '', sale_target: '', listing_status: '', my_task: 0, turnover_level: '', warehouse_id: '', location_id: '', catalog_product_id: '', party_scope: 'supplier', party_id: null, party_name: '', origin_plugin: '', sale_channel_key: '', dateRange: [], stock_age_min: undefined, stock_age_max: undefined, min_cost: undefined, max_cost: undefined, min_price: undefined, max_price: undefined })
 const route = useRoute()
 const router = useRouter()
 const activeTab = ref('')
@@ -698,6 +725,9 @@ const canAdjustCost = computed(() => Number(stockCapabilities.value?.adjust_cost
 const canViewProfit = computed(() => Number(stockCapabilities.value?.view_profit || 0) === 1)
 const canViewSupplier = computed(() => Number(stockCapabilities.value?.view_supplier || 0) === 1)
 const canViewFinance = computed(() => Number(stockCapabilities.value?.view_finance || 0) === 1)
+const businessSourceOptions = computed(() => search.party_scope === 'customer'
+    ? [{ label: 'ERP 销售', value: 'erp' }, { label: '商城订单', value: 'phone_shop' }]
+    : [{ label: 'ERP 采购 / 期初', value: 'erp' }, { label: '回收插件', value: 'hsx_recycle' }, { label: '商城补录', value: 'phone_shop' }])
 const detail = reactive({ visible: false, loading: false, data: null as any })
 const detailActivePanels = ref<string[]>([])
 type FlowMode = 'all' | ErpListingAction
@@ -716,6 +746,7 @@ const selectedRows = ref<any[]>([])
 const sendRefurbish = reactive({ visible: false, saving: false, assetIds: [] as number[], form: { tracking_mode: 'simple', provider_party_id: 0, remark: '' } })
 const completeRefurbish = reactive({ visible: false, saving: false, row: null as any, form: { result: 'success', refurbish_items: [] as any[], warehouse_id: 0, location_id: 0, voucher_urls: '', remark: '' } })
 const financeCategories = ref<any[]>([])
+const saleChannelOptions = ref<any[]>([])
 const warehouses = ref<any[]>([])
 const activatedOnce = ref(false)
 const searchWarehouse = computed(() => warehouses.value.find(row => Number(row.id) === Number(search.warehouse_id)) || null)
@@ -744,6 +775,7 @@ onMounted(() => {
     loadList()
     loadWarehouses()
     loadFinanceCategories()
+    loadSaleChannels()
 })
 
 onActivated(() => {
@@ -800,6 +832,12 @@ async function loadList() {
         table.total = res?.data?.total || 0
         turnoverSummary.value = turnoverRes?.data || { thresholds: {} }
         stockCapabilities.value = res?.data?.capabilities || turnoverRes?.data?.capabilities || stockCapabilities.value
+        if (!canViewSupplier.value && search.party_scope === 'supplier') {
+            search.party_scope = 'customer'
+            search.party_id = null
+            search.party_name = ''
+            search.origin_plugin = ''
+        }
     } finally {
         table.loading = false
     }
@@ -874,6 +912,11 @@ async function loadWarehouses() {
 async function loadFinanceCategories() {
     const res: any = await getErpFinanceCategories()
     financeCategories.value = Array.isArray(res?.data) ? res.data : []
+}
+
+async function loadSaleChannels() {
+    const res: any = await getErpSaleChannelOptions()
+    saleChannelOptions.value = (Array.isArray(res?.data) ? res.data : []).filter((item: any) => Number(item.enabled ?? 1) === 1)
 }
 
 function openExpense(row: any) {
@@ -966,7 +1009,8 @@ function buildSearchParams() {
     return {
         ...search,
         start_at: start_at || '',
-        end_at: end_at || '',
+        // daterange 返回的是所选结束日 00:00:00，查询时补到当天 23:59:59。
+        end_at: end_at ? Number(end_at) + 86399 : '',
         dateRange: undefined
     }
 }
@@ -1003,9 +1047,16 @@ function applyWarehouseRisk(item: any) {
 }
 
 function handleReset() {
-    Object.assign(search, { keyword: '', status: '', refurbish_status: '', sale_target: '', listing_status: '', my_task: 0, turnover_level: '', warehouse_id: '', location_id: '', catalog_product_id: '', dateRange: [], stock_age_min: undefined, stock_age_max: undefined, min_cost: undefined, max_cost: undefined, min_price: undefined, max_price: undefined })
+    Object.assign(search, { keyword: '', status: '', refurbish_status: '', sale_target: '', listing_status: '', my_task: 0, turnover_level: '', warehouse_id: '', location_id: '', catalog_product_id: '', party_scope: canViewSupplier.value ? 'supplier' : 'customer', party_id: null, party_name: '', origin_plugin: '', sale_channel_key: '', dateRange: [], stock_age_min: undefined, stock_age_max: undefined, min_cost: undefined, max_cost: undefined, min_price: undefined, max_price: undefined })
     activeTab.value = ''
     handleSearch()
+}
+
+function onPartyScopeChange() {
+    search.party_id = null
+    search.party_name = ''
+    search.origin_plugin = ''
+    search.sale_channel_key = ''
 }
 
 function onSearchWarehouseChange() {

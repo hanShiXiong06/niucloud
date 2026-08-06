@@ -7,6 +7,7 @@ use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
 use addon\hsx_recycle\app\service\core\order\OrderSubmitConfigService;
+use addon\hsx_recycle\app\service\core\order\LogisticsVehicleService;
 use core\base\BaseCoreService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -47,6 +48,7 @@ class CoreRecycleOrderService extends BaseCoreService
 
             // 创建订单
             $submitConfig = (new OrderSubmitConfigService())->getConfig((int)$data['site_id']);
+            $data = (new LogisticsVehicleService())->prepareOrderData((int)$data['site_id'], $data);
             $flowMode = (string)($submitConfig['flow']['mode'] ?? $submitConfig['payment']['mode'] ?? RecycleOrderDict::FLOW_MODE_ORDER);
             if (!in_array($flowMode, [RecycleOrderDict::FLOW_MODE_ORDER, RecycleOrderDict::FLOW_MODE_DEVICE], true)) {
                 $flowMode = RecycleOrderDict::FLOW_MODE_ORDER;
@@ -65,6 +67,12 @@ class CoreRecycleOrderService extends BaseCoreService
                 'delivery_type' => $data['delivery_type'] ?? RecycleOrderDict::DELIVERY_TYPE_EXPRESS,
                 'express_company' => $data['express_company'] ?? '',
                 'express_no' => $data['express_no'] ?? '',
+                'logistics_name' => $data['logistics_name'] ?? '',
+                'logistics_vehicle_no' => $data['logistics_vehicle_no'] ?? '',
+                'logistics_contact_name' => $data['logistics_contact_name'] ?? '',
+                'logistics_contact_mobile' => $data['logistics_contact_mobile'] ?? '',
+                'logistics_pickup_address' => $data['logistics_pickup_address'] ?? '',
+                'logistics_eta_at' => (int)($data['logistics_eta_at'] ?? 0),
                 'status' => RecycleOrderDict::ORDER_STATUS_PENDING_SIGN,
                 'device_count' => $isDraftDeviceEntry ? 0 : count($devicesPayload),
                 'count' => $isDraftDeviceEntry ? 0 : (int)($data['count'] ?? count($devicesPayload)),

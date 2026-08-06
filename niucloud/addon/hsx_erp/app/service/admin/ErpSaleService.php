@@ -121,7 +121,7 @@ class ErpSaleService extends BaseAdminService
             $query->where('o.status', '=', (string)$where['status']);
         }
         if (!empty($where['party_id'])) {
-            $query->where('o.party_id', '=', (int)$where['party_id']);
+            $this->applyOrderPartyFilter($query, (int)$where['party_id']);
         }
         foreach ([
             'asset_no' => 'a.asset_no',
@@ -164,6 +164,24 @@ class ErpSaleService extends BaseAdminService
         }
         if (!empty($where['operator_uid'])) {
             $query->where('o.operator_uid', '=', (int)$where['operator_uid']);
+        }
+        foreach ([
+            'sale_channel_key' => 'o.sale_channel_key',
+            'channel_source_plugin' => 'o.channel_source_plugin',
+            'channel_source_key' => 'o.channel_source_key',
+            'origin_type' => 'o.origin_type',
+            'origin_id' => 'o.origin_id',
+            'origin_no' => 'o.origin_no',
+            'origin_event_id' => 'o.origin_event_id',
+        ] as $key => $column) {
+            $value = trim((string)($where[$key] ?? ''));
+            if ($value !== '') $query->where($column, '=', $value);
+        }
+        $originPlugin = trim((string)($where['origin_plugin'] ?? ''));
+        if ($originPlugin === 'erp') {
+            $query->whereIn('o.origin_plugin', ['erp', 'hsx_erp']);
+        } elseif ($originPlugin !== '') {
+            $query->where('o.origin_plugin', '=', $originPlugin);
         }
         if (($where['min_amount'] ?? '') !== '') {
             $query->where('i.sale_price', '>=', (float)$where['min_amount']);
@@ -256,6 +274,26 @@ class ErpSaleService extends BaseAdminService
         $page['data'] = $this->appendReturnContext((array)($page['data'] ?? []));
         ErpPartyMemberNames::append($this->site_id, $page['data']);
         return $page;
+    }
+
+    /**
+     * 新数据按稳定主体 ID 查询；早期商城补录销售只有名称快照，
+     * 名称兜底仅允许命中 party_id=0，避免同名主体之间串单。
+     */
+    private function applyOrderPartyFilter($query, int $partyId): void
+    {
+        $partyName = trim((string)ErpParty::where([
+            ['site_id', '=', $this->site_id],
+            ['id', '=', $partyId],
+        ])->value('party_name'));
+        $query->where(function ($sub) use ($partyId, $partyName) {
+            $sub->where('o.party_id', '=', $partyId);
+            if ($partyName !== '') {
+                $sub->whereOr(function ($legacy) use ($partyName) {
+                    $legacy->where('o.party_id', '=', 0)->where('o.party_name', '=', $partyName);
+                });
+            }
+        });
     }
 
     public function info(int $id): array

@@ -129,6 +129,7 @@ Route::group('erp', function () {
     Route::get('finance/receivable/lists', 'addon\hsx_erp\app\adminapi\controller\ErpFinance@receivableLists');
     Route::get('finance/receivable/:id', 'addon\hsx_erp\app\adminapi\controller\ErpFinance@receivableInfo');
     Route::get('finance/receivable/:id/items', 'addon\hsx_erp\app\adminapi\controller\ErpFinance@receivableItems');
+    Route::post('finance/receivable/:id/supplement_sale_details', 'addon\hsx_erp\app\adminapi\controller\ErpFinance@supplementReceivableSaleDetails');
     Route::post('finance/payable/:id/confirm_payment', 'addon\hsx_erp\app\adminapi\controller\ErpFinance@confirmPayment');
     Route::post('finance/payable/party/:party_id/confirm_payment', 'addon\hsx_erp\app\adminapi\controller\ErpFinance@confirmPartyPayment');
     Route::post('finance/payable/party/:party_id/confirm_items_payment', 'addon\hsx_erp\app\adminapi\controller\ErpFinance@confirmPayableItemsPayment');

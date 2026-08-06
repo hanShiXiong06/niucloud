@@ -167,6 +167,17 @@
                     {{ sourceOrderSummary(detail.row) }}
                 </div>
             </div>
+            <div v-if="detail.row?.is_mall_source" class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded border border-amber-200 bg-amber-50 px-4 py-3">
+                <div>
+                    <div class="flex items-center gap-2 text-sm font-medium text-amber-900">
+                        <span>商城来源成交</span>
+                        <el-tag size="small" :type="detail.row.detail_status === 'complete' ? 'success' : 'warning'">{{ detail.row.detail_status_name }}</el-tag>
+                        <el-tag v-if="detail.row.supplement_badge" size="small" type="primary">{{ detail.row.supplement_badge }}</el-tag>
+                    </div>
+                    <div class="mt-1 text-xs text-amber-700">这笔账来自商城；补录会建立 ERP 已售资产、成本和出入库台账，不会重复生成应收或采购应付。</div>
+                </div>
+                <el-button v-if="detail.row.can_supplement_sale_detail" type="primary" @click="openSupplement">补录成交资料</el-button>
+            </div>
             <div class="mb-2 font-medium text-gray-900">设备明细</div>
             <el-table :data="detail.items" v-loading="detail.loading" size="small" empty-text="暂无设备明细">
                 <el-table-column label="设备" min-width="230">
@@ -193,6 +204,14 @@
             <div class="mb-2 mt-6 font-medium text-gray-900">结算记录</div>
             <ErpSettlementCards :rows="detail.settlements" :loading="detail.loading" />
         </el-drawer>
+
+        <ErpMallReceivableSupplementDialog
+            v-model="supplement.visible"
+            :receivable="detail.row"
+            :items="detail.items"
+            :staff-options="staffOptions"
+            @saved="onSupplementSaved"
+        />
 
         <el-dialog v-model="offset.visible" title="应收应付折账" width="920px">
             <div v-if="offset.row" class="mb-4 rounded bg-amber-50 px-4 py-3 text-sm text-gray-600">
@@ -372,6 +391,7 @@ import ErpSettlementCards from '@/addon/hsx_erp/components/ErpSettlementCards.vu
 import ErpFinanceSourceMeta from '@/addon/hsx_erp/components/ErpFinanceSourceMeta.vue'
 import ErpCopyText from '@/addon/hsx_erp/components/ErpCopyText.vue'
 import ErpOverflowText from '@/addon/hsx_erp/components/ErpOverflowText.vue'
+import ErpMallReceivableSupplementDialog from '@/addon/hsx_erp/components/ErpMallReceivableSupplementDialog.vue'
 
 const receivableRoleFocus = [
     { role: '财务', focus: '收入类型、业务来源、往来余额、到账账户与核销事实' },
@@ -404,6 +424,7 @@ const registeredFinanceCategories = ref<any[]>([])
 const registeredBusinessSources = ref<any[]>([])
 const registeredChannels = ref<any[]>([])
 const detail = reactive({ visible: false, loading: false, row: null as any, items: [] as any[], settlements: [] as any[] })
+const supplement = reactive({ visible: false })
 const offset = reactive({ visible: false, saving: false, loading: false, row: null as any, payables: [] as any[], receivables: [] as any[], form: { amount: 0, settle_diff: false, capital_account_id: 0, remark: '', voucher_urls: '' } })
 const receipt = reactive({ visible: false, saving: false, loading: false, row: null as any, items: [] as any[], form: { amount: 0, capital_account_id: 0, remark: '', voucher_urls: '' } })
 const summary = computed(() => table.data.filter((row: any) => !isVoid(row)).reduce((acc, row: any) => {
@@ -535,6 +556,17 @@ async function openDetail(row: any) {
     } finally {
         detail.loading = false
     }
+}
+
+function openSupplement() {
+    if (!detail.row?.can_supplement_sale_detail) return
+    supplement.visible = true
+}
+
+async function onSupplementSaved() {
+    if (!detail.row?.id) return
+    await openDetail(detail.row)
+    await loadList()
 }
 
 async function openReceipt(row: any) {

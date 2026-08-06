@@ -148,12 +148,12 @@ class TaskService extends BaseAdminService
             return ['count' => 0, 'list' => []];
         }
 
-        // 待签收是订单级环节，单独查询（显式选中 sign 时）
-        if (count($stages) === 1 && $stages[0] === RecycleStageDict::STAGE_SIGN) {
-            return $this->getSignTaskList($params, $page, $limit);
+        // 待取货、待签收是订单级环节，单独查询。
+        if (count($stages) === 1 && RecycleStageDict::isOrderStage($stages[0])) {
+            return $this->getOrderTaskList($stages[0], $params, $page, $limit);
         }
-        // 设备级环节：排除订单级的 sign（"全部"页签只汇总设备任务，待签收走它自己的页签）
-        $stages = array_values(array_diff($stages, [RecycleStageDict::STAGE_SIGN]));
+        // 设备级环节：排除订单级任务（"全部"页签保持设备任务的稳定分页）。
+        $stages = array_values(array_filter($stages, static fn(string $stage): bool => !RecycleStageDict::isOrderStage($stage)));
         if (empty($stages)) {
             return ['count' => 0, 'list' => []];
         }
@@ -246,15 +246,20 @@ class TaskService extends BaseAdminService
      * 待签收工单列表（订单级：到件待签收的包裹）
      * 工单单位是订单，item 里 device_id=0、is_order=true，前端按订单卡片渲染。
      */
-    protected function getSignTaskList(array $params, int $page, int $limit): array
+    protected function getOrderTaskList(string $stageKey, array $params, int $page, int $limit): array
     {
         $query = (new RecycleOrder())->where([
             ['site_id', '=', $this->site_id],
             ['status', '=', RecycleOrderDict::ORDER_STATUS_PENDING_SIGN],
         ]);
+        if ($stageKey === RecycleStageDict::STAGE_PICKUP) {
+            $query->where('delivery_type', '=', RecycleOrderDict::DELIVERY_TYPE_LOGISTICS_VEHICLE);
+        } else {
+            $query->where('delivery_type', '<>', RecycleOrderDict::DELIVERY_TYPE_LOGISTICS_VEHICLE);
+        }
         $assignedOrderIds = RecycleTaskClaim::where([
             ['site_id', '=', $this->site_id],
-            ['stage_key', '=', RecycleStageDict::STAGE_SIGN],
+            ['stage_key', '=', $stageKey],
             ['assignee_uid', '=', (int)$this->uid],
         ])->column('device_id');
         $query->whereIn('id', $assignedOrderIds !== [] ? array_map('intval', $assignedOrderIds) : [0]);
@@ -263,6 +268,8 @@ class TaskService extends BaseAdminService
             $query->where(function ($q) use ($keyword) {
                 $q->whereLike('order_no', '%' . $keyword . '%')
                     ->whereOr('express_no', 'like', '%' . $keyword . '%')
+                    ->whereOr('logistics_vehicle_no', 'like', '%' . $keyword . '%')
+                    ->whereOr('logistics_name', 'like', '%' . $keyword . '%')
                     ->whereOr('customer_name', 'like', '%' . $keyword . '%')
                     ->whereOr('customer_phone', 'like', '%' . $keyword . '%');
             });
@@ -270,7 +277,11 @@ class TaskService extends BaseAdminService
 
         $count = $query->count();
         $orderTableFields = (new RecycleOrder())->getTableFields();
-        $wantFields = ['id', 'order_no', 'customer_name', 'customer_phone', 'express_company', 'express_no', 'status', 'create_at', 'sign_at'];
+        $wantFields = [
+            'id', 'order_no', 'customer_name', 'customer_phone', 'delivery_type', 'express_company', 'express_no',
+            'logistics_name', 'logistics_vehicle_no', 'logistics_contact_name', 'logistics_contact_mobile',
+            'logistics_pickup_address', 'logistics_eta_at', 'status', 'create_at', 'sign_at',
+        ];
         $fields = array_values(array_intersect($wantFields, $orderTableFields));
         $orderField = in_array('create_at', $orderTableFields) ? 'create_at' : 'id';
         $rows = $query->field($fields)
@@ -289,11 +300,11 @@ class TaskService extends BaseAdminService
                 $countMap[(int)$c['order_id']] = (int)$c['cnt'];
             }
         }
-        // 认领信息（sign 环节用 order_id 占 device_id 位）
+        // 认领信息（订单级环节用 order_id 占 device_id 位）
         $claims = [];
         if (!empty($orderIds)) {
             $claimRows = (new RecycleTaskClaim())
-                ->where([['site_id', '=', $this->site_id], ['stage_key', '=', RecycleStageDict::STAGE_SIGN], ['device_id', 'in', $orderIds]])
+                ->where([['site_id', '=', $this->site_id], ['stage_key', '=', $stageKey], ['device_id', 'in', $orderIds]])
                 ->select()->toArray();
             foreach ($claimRows as $c) {
                 $claims[(int)$c['device_id']] = $c;
@@ -305,7 +316,7 @@ class TaskService extends BaseAdminService
             $o['order_id']     = $oid;
             $o['device_id']    = $oid;   // sign 环节认领以 order_id 为键
             $o['is_order']     = true;
-            $o['stage_key']    = RecycleStageDict::STAGE_SIGN;
+            $o['stage_key']    = $stageKey;
             $o['device_count'] = $countMap[$oid] ?? 0;
             // 给前端通用字段兜底（设备卡片复用）
             $o['model'] = '订单 ' . ($o['order_no'] ?? $oid);
@@ -325,15 +336,16 @@ class TaskService extends BaseAdminService
      */
     public function claim(int $deviceId, string $stageKey): bool
     {
-        // 待签收：订单级，按订单校验
-        if ($stageKey === RecycleStageDict::STAGE_SIGN) {
+        if (RecycleStageDict::isOrderStage($stageKey)) {
             $order = (new RecycleOrder())->where([['site_id', '=', $this->site_id], ['id', '=', $deviceId]])->findOrEmpty();
             if ($order->isEmpty()) {
                 throw new AdminException('订单不存在');
             }
             if ((int)$order['status'] !== RecycleOrderDict::ORDER_STATUS_PENDING_SIGN) {
-                throw new AdminException('该订单已不在待签收环节');
+                throw new AdminException('该订单已不在当前环节');
             }
+            $isLogistics = (int)$order['delivery_type'] === (int)RecycleOrderDict::DELIVERY_TYPE_LOGISTICS_VEHICLE;
+            if (($stageKey === RecycleStageDict::STAGE_PICKUP) !== $isLogistics) throw new AdminException('订单交付方式与当前环节不匹配');
             return $this->upsertAssignment($deviceId, $stageKey, (int)$this->uid, (string)$this->username, 'claim', false);
         }
         $device = (new RecycleDevice())->where([['site_id', '=', $this->site_id], ['id', '=', $deviceId]])->findOrEmpty();
@@ -430,12 +442,15 @@ class TaskService extends BaseAdminService
     /** 保存默认负责人后补齐当前在途且尚未分配的任务，不覆盖已有责任人。 */
     private function assignOpenTasksWithoutOwner(): void
     {
-        $signOrderIds = RecycleOrder::where([
+        $openOrders = RecycleOrder::where([
             ['site_id', '=', $this->site_id],
             ['status', '=', RecycleOrderDict::ORDER_STATUS_PENDING_SIGN],
-        ])->column('id');
-        foreach (array_map('intval', $signOrderIds) as $orderId) {
-            $this->ensureAssigned($orderId, RecycleStageDict::STAGE_SIGN);
+        ])->field('id,delivery_type')->select()->toArray();
+        foreach ($openOrders as $order) {
+            $stage = (int)$order['delivery_type'] === (int)RecycleOrderDict::DELIVERY_TYPE_LOGISTICS_VEHICLE
+                ? RecycleStageDict::STAGE_PICKUP
+                : RecycleStageDict::STAGE_SIGN;
+            $this->ensureAssigned((int)$order['id'], $stage);
         }
 
         $deviceRows = RecycleDevice::where([['site_id', '=', $this->site_id]])
@@ -514,10 +529,12 @@ class TaskService extends BaseAdminService
 
     private function assertTaskInStage(int $deviceId, string $stageKey): void
     {
-        if ($stageKey === RecycleStageDict::STAGE_SIGN) {
+        if (RecycleStageDict::isOrderStage($stageKey)) {
             $order = RecycleOrder::where([['site_id', '=', $this->site_id], ['id', '=', $deviceId]])->findOrEmpty();
             if ($order->isEmpty()) throw new AdminException('订单不存在');
-            if ((int)$order->status !== RecycleOrderDict::ORDER_STATUS_PENDING_SIGN) throw new AdminException('该订单已不在待签收环节');
+            if ((int)$order->status !== RecycleOrderDict::ORDER_STATUS_PENDING_SIGN) throw new AdminException('该订单已不在当前环节');
+            $isLogistics = (int)$order->delivery_type === (int)RecycleOrderDict::DELIVERY_TYPE_LOGISTICS_VEHICLE;
+            if (($stageKey === RecycleStageDict::STAGE_PICKUP) !== $isLogistics) throw new AdminException('订单交付方式与当前环节不匹配');
             return;
         }
         $device = RecycleDevice::where([['site_id', '=', $this->site_id], ['id', '=', $deviceId]])->findOrEmpty();
@@ -535,9 +552,11 @@ class TaskService extends BaseAdminService
             $businessNo = '';
             $imei = '';
             $model = '';
+            $orderContext = [];
             if ($isOrder) {
                 $order = RecycleOrder::where([['site_id', '=', $this->site_id], ['id', '=', $deviceId]])->findOrEmpty();
                 $businessNo = $order->isEmpty() ? '' : (string)$order->order_no;
+                if (!$order->isEmpty()) $orderContext = $order->toArray();
             } else {
                 $device = RecycleDevice::where([['site_id', '=', $this->site_id], ['id', '=', $deviceId]])->findOrEmpty();
                 if (!$device->isEmpty()) {
@@ -551,7 +570,7 @@ class TaskService extends BaseAdminService
             $stageName = (string)($stageNames[$stageKey] ?? '待办');
             $taskActionName = str_starts_with($stageName, '待') ? $stageName : ('待' . $stageName);
             $target = $this->taskTarget($stageKey, $orderId, $deviceId, $businessNo, $imei);
-            event('HsxBusinessTaskAssigned', [
+            $event = [
                 'event_id' => $eventId,
                 'event_name' => 'task.assigned.v1',
                 'site_id' => $this->site_id,
@@ -571,7 +590,21 @@ class TaskService extends BaseAdminService
                 // 兼容仅识别单一移动管理端路径的通知消费者。
                 'target_path' => (string)$target['miniapp_path'],
                 'occurred_at' => time(),
-            ]);
+            ];
+            if ($stageKey === RecycleStageDict::STAGE_PICKUP) {
+                $event = array_merge($event, [
+                    'notify_at' => max(time(), (int)($orderContext['logistics_eta_at'] ?? 0)),
+                    'customer_name' => (string)($orderContext['customer_name'] ?? ''),
+                    'customer_phone' => (string)($orderContext['customer_phone'] ?? ''),
+                    'logistics_name' => (string)($orderContext['logistics_name'] ?? ''),
+                    'logistics_vehicle_no' => (string)($orderContext['logistics_vehicle_no'] ?? ''),
+                    'logistics_contact_name' => (string)($orderContext['logistics_contact_name'] ?? ''),
+                    'logistics_contact_mobile' => (string)($orderContext['logistics_contact_mobile'] ?? ''),
+                    'logistics_pickup_address' => (string)($orderContext['logistics_pickup_address'] ?? ''),
+                    'logistics_eta_at' => (int)($orderContext['logistics_eta_at'] ?? 0),
+                ]);
+            }
+            event('HsxBusinessTaskAssigned', $event);
         } catch (\Throwable $e) {
             Log::warning('回收任务分配事件发布失败', ['event_id' => $eventId, 'message' => $e->getMessage()]);
         }
@@ -583,6 +616,17 @@ class TaskService extends BaseAdminService
      */
     private function taskTarget(string $stageKey, int $orderId, int $deviceId, string $businessNo, string $imei): array
     {
+        if ($stageKey === RecycleStageDict::STAGE_PICKUP) {
+            $params = ['stage' => RecycleStageDict::STAGE_PICKUP];
+            return [
+                'plugin' => 'hsx_recycle',
+                'route_key' => 'hsx_recycle.task.list',
+                'params' => $params,
+                'web_path' => 'site/stat/task?' . http_build_query($params),
+                'miniapp_path' => 'addon/hsx_recycle/pages/task/index?' . http_build_query($params),
+            ];
+        }
+
         if ($stageKey === RecycleStageDict::STAGE_PAY
             && (new RecycleErpCapabilityService())->isPaymentManaged($this->site_id)) {
             $params = array_filter([
@@ -604,11 +648,11 @@ class TaskService extends BaseAdminService
         // “我的任务”列表只用于主动查看全部待办，不作为单条通知的落点。
         $params = array_filter([
             'id' => $orderId,
-            'device_id' => $deviceId > 0 && $stageKey !== RecycleStageDict::STAGE_SIGN ? $deviceId : null,
+            'device_id' => $deviceId > 0 && !RecycleStageDict::isOrderStage($stageKey) ? $deviceId : null,
             'stage' => $stageKey,
         ], static fn($value): bool => $value !== '' && $value !== null && $value !== 0);
         $miniappParams = ['id' => $orderId];
-        if ($deviceId > 0 && $stageKey !== RecycleStageDict::STAGE_SIGN) $miniappParams['device_id'] = $deviceId;
+        if ($deviceId > 0 && !RecycleStageDict::isOrderStage($stageKey)) $miniappParams['device_id'] = $deviceId;
         $miniappParams['stage'] = $stageKey;
         return [
             'plugin' => 'hsx_recycle',
@@ -627,9 +671,11 @@ class TaskService extends BaseAdminService
     private function countAssignedPending(int $uid, string $stageKey): int
     {
         $claimTable = (new RecycleTaskClaim())->getTable();
-        if ($stageKey === RecycleStageDict::STAGE_SIGN) {
-            return (int)RecycleOrder::alias('o')->join($claimTable . ' c', 'c.device_id = o.id AND c.site_id = o.site_id')
-                ->where([['o.site_id', '=', $this->site_id], ['o.status', '=', RecycleOrderDict::ORDER_STATUS_PENDING_SIGN], ['c.stage_key', '=', $stageKey], ['c.assignee_uid', '=', $uid]])->count();
+        if (RecycleStageDict::isOrderStage($stageKey)) {
+            $query = RecycleOrder::alias('o')->join($claimTable . ' c', 'c.device_id = o.id AND c.site_id = o.site_id')
+                ->where([['o.site_id', '=', $this->site_id], ['o.status', '=', RecycleOrderDict::ORDER_STATUS_PENDING_SIGN], ['c.stage_key', '=', $stageKey], ['c.assignee_uid', '=', $uid]]);
+            if ($stageKey === RecycleStageDict::STAGE_PICKUP) $query->where('o.delivery_type', '=', RecycleOrderDict::DELIVERY_TYPE_LOGISTICS_VEHICLE);
+            return (int)$query->count();
         }
         $statuses = $stageKey === RecycleStageDict::STAGE_PAY
             ? [RecycleStageDict::statusRecycled()]

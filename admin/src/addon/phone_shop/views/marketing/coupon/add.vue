@@ -146,6 +146,15 @@
                     </el-radio-group>
                 </el-form-item>
 
+                <el-form-item label="适用用户">
+                    <div>
+                        <el-checkbox v-model="formData.is_non_vip_only" :true-value="1" :false-value="0">
+                            仅普通用户可领取和使用
+                        </el-checkbox>
+                        <div class="form-tip">默认开启。拥有任意会员等级的用户不可领取或使用；普通用户领券后升级为会员，该券也会立即失效。</div>
+                    </div>
+                </el-form-item>
+
                 <el-form-item prop="receive_time"
                     v-show="formData.receive_type_time == 1 && formData.receive_type == 1">
                     <div class="w-[520px] max-w-full">
@@ -244,6 +253,7 @@ interface FormDataType {
     receive_type: number
     remain_count: number
     threshold: number
+    is_non_vip_only: number
     limit_count: number
     min_condition_money: number
     length: number
@@ -264,6 +274,7 @@ const formData = ref<FormDataType>({
     receive_type: 1, // 领取方式
     remain_count: 1000, // 剩余数量
     threshold: 2, // 门槛
+    is_non_vip_only: 1, // 仅普通用户可领取和使用
     limit_count: 1, // 单个用户领取数量
     // status: 1,  //状态 1 正常 2 未开启 3 已无效
     min_condition_money: 1, // 商品最低多少金额可用优惠券

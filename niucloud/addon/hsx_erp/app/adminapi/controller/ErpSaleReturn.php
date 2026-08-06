@@ -62,6 +62,8 @@ class ErpSaleReturn extends BaseAdminController
             ['sale_order_id', 0],
             ['refund_mode', 'payable'],
             ['capital_account_id', 0],
+            ['return_to_warehouse_id', 0],
+            ['return_to_location_id', 0],
             ['voucher_urls', ''],
             ['remark', ''],
             ['items', []],

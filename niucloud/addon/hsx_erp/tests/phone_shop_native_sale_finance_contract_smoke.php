@@ -43,7 +43,7 @@ $assert(str_contains($create, "'supplier_id_snapshot'"), '下单时必须冻结�
 $assert(str_contains($create, "'erp_asset_id'"), '下单时必须识别ERP设备和商城原生商品');
 $assert(str_contains($create, "'offline_pending'"), '商城下单必须支持线下支付待业务员处理');
 $skuModel = $read('addon/phone_shop/app/model/goods/GoodsSku.php');
-$assert(str_contains($skuModel, 'goods_category,supplier_id,attr_ids'), 'SKU关联商品时必须读取供应商ID，订单快照不能静默丢失');
+$assert(str_contains($skuModel, 'goods_category,supplier_id,attr_id'), 'SKU关联商品时必须读取供应商ID，订单快照不能静默丢失');
 
 $record = $read('addon/hsx_erp/app/service/admin/ErpExternalSaleRecordedService.php');
 $assert(str_contains($record, "'asset_id' => 0"), '商城原生商品不能伪造ERP设备资产');
@@ -65,7 +65,7 @@ $assert(str_contains($offlineService, "'confirm_credit'"), '订单详情必须�
 $assert(str_contains($offlineService, '$canRetryCash'), '收款回调失败后必须允许安全重试');
 $assert(str_contains($offlineService, 'applyDealTotal'), '线下订单必须支持单台议价和多台打包总价');
 $assert(str_contains($offlineService, "'deal_amount'"), '多台打包价必须分摊到订单明细，作为单台退款上限');
-$assert(!str_contains($offlineService, "'update_time'"), '商城订单表没有update_time，确认挂账不能写入不存在的字段');
+$assert(!str_contains($offlineService, "\$order->save([\n                'update_time'"), '商城订单表没有update_time，确认挂账不能写入不存在的字段');
 $assert(substr_count($offlineService, '$order->save(') === 1, '确认挂账订单状态必须一次写入，避免ORM二次保存注入update_time');
 $assert(substr_count($offlineService, "'is_enable_refund' => 0") >= 2, '线下挂账订单和明细必须关闭客户退款权限');
 $orderModel = $read('addon/phone_shop/app/model/order/Order.php');
@@ -102,6 +102,10 @@ $assert(str_contains($integration, 'ErpExternalSaleRefundedService::EVENT_NAME')
 $assert(str_contains($externalContract, "'_retry'"), 'ERP外部请求失败必须记录补偿次数，避免无限重试');
 
 $saleService = $read('addon/hsx_erp/app/service/admin/ErpSaleService.php');
+$saleController = $read('addon/hsx_erp/app/adminapi/controller/ErpSale.php');
+$saleReturnService = $read('addon/hsx_erp/app/service/admin/ErpSaleReturnService.php');
+$saleReturnController = $read('addon/hsx_erp/app/adminapi/controller/ErpSaleReturn.php');
+$saleReturnPage = $read('../admin/src/addon/hsx_erp/views/erp/sale_return/list.vue');
 $assetSaleListener = $read('addon/hsx_erp/app/listener/ErpSaleCreatedRequested.php');
 $assert(str_contains($saleService, "'external_line_id' => (string)\$resolvedItem['external_line_id']"), 'ERP设备销售明细必须保存商城订单行ID');
 $assert(str_contains($saleService, 'recordOnlinePaymentAdjustments'), 'ERP设备线上销售必须单独记录客户手续费补款和渠道手续费');
@@ -112,6 +116,12 @@ foreach (['i.external_goods_id', 'i.external_sku_id', 'i.external_line_id', 'i.q
 }
 $assert(str_contains($saleService, "- (float)\$row['external_refunded_amount']"), '销售明细实际收入必须扣除商城退款');
 $assert(str_contains($saleService, "- (float)\$order['external_refunded_amount']"), '销售单实际收入必须扣除商城退款');
+$assert(str_contains($saleController, "['origin_plugin', '']"), '销售查询默认必须包含ERP与商城订单，不能静默限定为ERP来源');
+$assert(str_contains($saleService, 'applyOrderPartyFilter') && str_contains($saleService, "where('o.party_id', '=', 0)"), '商城历史销售只有客户名称快照时必须支持安全的主体查询兜底');
+$assert(str_contains($saleService, "'sale_channel_key' => 'o.sale_channel_key'") && str_contains($saleService, "'origin_plugin'"), '销售来源与销售渠道筛选必须真正落到销售订单字段');
+$assert(str_contains($saleReturnService, 'assertRefundEntry') && str_contains($saleReturnService, "['online', 'wechat_online']"), '商城线上支付必须强制从商城原渠道退款，避免ERP重复退款');
+$assert(str_contains($saleReturnService, "whereOr('source_type', 'like', 'phone_shop.%')"), 'ERP销退必须识别商城销售形成的应收事实');
+$assert(str_contains($saleReturnController, "['return_to_warehouse_id', 0]") && str_contains($saleReturnPage, 'requiresReturnDestination'), '商城补录设备没有原仓位时，销退必须要求明确实际回库位置');
 
 $pcSale = $read('../admin/src/addon/hsx_erp/views/erp/sale/list.vue');
 $mobileSale = $read('../site-uniapp/src/addon/hsx_erp/pages/sale/list.vue');

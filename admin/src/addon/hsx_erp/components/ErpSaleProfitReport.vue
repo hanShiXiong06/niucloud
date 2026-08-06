@@ -28,13 +28,13 @@
                         <el-radio-button v-for="item in meta.presets" :key="item.key" :label="item.key">{{ item.name }}</el-radio-button>
                     </el-radio-group>
                 </div>
-                <div v-if="!ignoreTime" class="period-row">
+                <div class="period-row">
                     <el-radio-group v-model="quickPeriod" @change="applyQuickPeriod">
                         <el-radio-button v-for="item in periodOptions" :key="item.value" :label="item.value">
                             {{ item.label }}
                         </el-radio-button>
                     </el-radio-group>
-                    <div class="period-row__picker-wrap">
+                    <div v-if="!allTime" class="period-row__picker-wrap">
                         <el-date-picker
                             v-model="filters.dateRange"
                             type="daterange"
@@ -47,6 +47,20 @@
                     </div>
                 </div>
                 <el-form :inline="true" class="mt-4 !mb-0" @submit.prevent>
+                    <el-form-item v-if="datasetScope === 'assets'" label="业务方向">
+                        <el-radio-group v-model="filters.party_scope" @change="onPartyScopeChange">
+                            <el-radio-button label="supplier">采购 / 回收来源</el-radio-button>
+                            <el-radio-button label="customer">销售客户</el-radio-button>
+                        </el-radio-group>
+                    </el-form-item>
+                    <el-form-item v-if="datasetScope === 'assets' && !allTime" label="时间口径">
+                        <el-select v-model="filters.time_dimension" class="!w-[140px]">
+                            <el-option label="入库时间" value="stock_in" />
+                            <el-option label="采购时间" value="purchase" />
+                            <el-option label="销售时间" value="sale" />
+                            <el-option label="最后变动" value="update" />
+                        </el-select>
+                    </el-form-item>
                     <el-form-item v-if="datasetScope === 'sales'" label="交易口径">
                         <el-radio-group v-model="filters.trade_scope" @change="handleSearch">
                             <el-radio-button label="effective">真实成交</el-radio-button>
@@ -77,8 +91,28 @@
                             class="!w-[260px]"
                         />
                     </el-form-item>
-                    <el-form-item label="制单员">
-                        <el-select v-model="filters.salesman_uid" clearable filterable class="!w-[150px]" placeholder="全部人员">
+                    <el-form-item :label="activePartyScope === 'customer' ? '购买客户' : '供货来源'">
+                        <ErpPartySelect
+                            v-model="filters.party_id"
+                            v-model:party-name="filters.party_name"
+                            :party-type="activePartyScope === 'customer' ? 'customer' : 'supplier'"
+                            :allow-create="false"
+                            :placeholder="activePartyScope === 'customer' ? '选择购买客户' : '选择回收客户/供货商'"
+                            class="!w-[220px]"
+                        />
+                    </el-form-item>
+                    <el-form-item label="业务来源">
+                        <el-select v-model="filters.source_plugin" clearable class="!w-[150px]" placeholder="全部来源">
+                            <el-option v-for="item in sourceOptions" :key="item.value" :label="item.label" :value="item.value" />
+                        </el-select>
+                    </el-form-item>
+                    <el-form-item v-if="activePartyScope === 'customer'" label="销售渠道">
+                        <el-select v-model="filters.sale_channel_key" clearable filterable class="!w-[170px]" placeholder="全部渠道">
+                            <el-option v-for="item in saleChannelOptions" :key="item.key" :label="item.name" :value="item.key" />
+                        </el-select>
+                    </el-form-item>
+                    <el-form-item :label="activePartyScope === 'customer' ? '销售人员' : '采购人员'">
+                        <el-select v-model="filters.staff_uid" clearable filterable class="!w-[150px]" placeholder="全部人员">
                             <el-option v-for="item in staffOptions" :key="item.uid" :label="staffName(item)" :value="item.uid" />
                         </el-select>
                     </el-form-item>
@@ -171,20 +205,24 @@ import { computed, reactive, ref } from 'vue'
 import { ArrowDown, ArrowUp, Download, Refresh, Search, Setting } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { exportErpSaleProfitReport, getErpSaleProfitReport, getErpSaleProfitReportMeta, getErpStaffOptions, saveErpSaleProfitReportView } from '@/addon/hsx_erp/api/erp'
+import { getErpSaleChannelOptions } from '@/addon/hsx_erp/api/config'
 import ErpCatalogProductSelect from '@/addon/hsx_erp/components/ErpCatalogProductSelect.vue'
+import ErpPartySelect from '@/addon/hsx_erp/components/ErpPartySelect.vue'
 import { exportErpConfiguredTable } from '@/addon/hsx_erp/hooks/useErpTableExport'
 
 const props = withDefaults(defineProps<{ modelValue: boolean; initialPreset?: string }>(), { initialPreset: 'sales_profit' })
 const emit = defineEmits<{ (event: 'update:modelValue', value: boolean): void }>()
 
 const periodOptions = [
+    { label: '全部时间', value: 'all' },
     { label: '本月', value: 'month' },
     { label: '上月', value: 'last_month' },
     { label: '近30天', value: '30_days' },
     { label: '自定义', value: 'custom' }
 ]
-const quickPeriod = ref('month')
+const quickPeriod = ref(props.initialPreset === 'inventory' ? 'all' : 'month')
 const staffOptions = ref<any[]>([])
+const saleChannelOptions = ref<any[]>([])
 const exporting = ref(false)
 const savingView = ref(false)
 const columnDialog = ref(false)
@@ -197,14 +235,24 @@ const filters = reactive<any>({
     profit_state: '',
     keyword: '',
     catalog_product_id: '',
-    salesman_uid: '',
+    party_scope: 'supplier',
+    party_id: null,
+    party_name: '',
+    source_plugin: '',
+    sale_channel_key: '',
+    staff_uid: '',
+    time_dimension: 'stock_in',
     dateRange: monthRange()
 })
 const table = reactive({ loading: false, data: [] as any[], page: 1, limit: 20, total: 0 })
 const summary = reactive<any>(emptySummary())
 const activePreset = computed(() => meta.presets.find((item: any) => item.key === activePresetKey.value))
 const datasetScope = computed(() => activePreset.value?.filters?.dataset_scope || 'sales')
-const ignoreTime = computed(() => Number(activePreset.value?.filters?.ignore_time || 0) === 1)
+const allTime = computed(() => quickPeriod.value === 'all')
+const activePartyScope = computed(() => datasetScope.value === 'sales' ? 'customer' : filters.party_scope)
+const sourceOptions = computed(() => activePartyScope.value === 'customer'
+    ? [{ label: 'ERP 销售', value: 'erp' }, { label: '商城订单', value: 'phone_shop' }]
+    : [{ label: 'ERP 采购 / 期初', value: 'erp' }, { label: '回收插件', value: 'hsx_recycle' }, { label: '商城补录', value: 'phone_shop' }])
 const visibleColumns = computed(() => viewColumns.value
     .filter((item: any) => Number(item.visible) === 1)
     .map((item: any) => ({ ...(columnMeta(item.key) || {}), ...item })))
@@ -231,10 +279,12 @@ function emptySummary() {
 
 async function handleOpen() {
     await loadMeta()
-    if (!staffOptions.value.length) {
-        const res: any = await getErpStaffOptions()
-        staffOptions.value = res?.data?.users || []
-    }
+    const tasks: Promise<any>[] = []
+    if (!staffOptions.value.length) tasks.push(getErpStaffOptions().then((res: any) => { staffOptions.value = res?.data?.users || [] }))
+    if (!saleChannelOptions.value.length) tasks.push(getErpSaleChannelOptions().then((res: any) => {
+        saleChannelOptions.value = (Array.isArray(res?.data) ? res.data : []).filter((item: any) => Number(item.enabled ?? 1) === 1)
+    }))
+    if (tasks.length) await Promise.all(tasks)
     await loadList()
 }
 
@@ -243,6 +293,7 @@ async function loadMeta() {
     Object.assign(meta, res?.data || {})
     const requested = meta.presets.some((item: any) => item.key === props.initialPreset) ? props.initialPreset : meta.view?.preset
     activePresetKey.value = requested || 'sales_profit'
+    syncPresetFilters()
     applyViewColumns(true)
 }
 
@@ -256,11 +307,24 @@ function applyViewColumns(useSaved = true) {
 }
 
 function changePreset() {
+    syncPresetFilters()
+    applyViewColumns(true)
+    handleSearch()
+}
+
+function syncPresetFilters() {
     const defaults = activePreset.value?.filters || {}
     filters.trade_scope = defaults.trade_scope || 'effective'
     filters.profit_state = defaults.profit_state || ''
-    applyViewColumns(true)
-    handleSearch()
+    filters.time_dimension = defaults.time_dimension || (datasetScope.value === 'sales' ? 'sale' : 'stock_in')
+    filters.party_scope = datasetScope.value === 'sales' ? 'customer' : 'supplier'
+    filters.party_id = null
+    filters.party_name = ''
+    filters.source_plugin = ''
+    filters.sale_channel_key = ''
+    filters.staff_uid = ''
+    quickPeriod.value = Number(defaults.ignore_time || 0) === 1 ? 'all' : 'month'
+    if (quickPeriod.value !== 'all') filters.dateRange = monthRange()
 }
 
 function close() {
@@ -269,6 +333,10 @@ function close() {
 
 function applyQuickPeriod(value: string | number | boolean) {
     const period = String(value)
+    if (period === 'all') {
+        handleSearch()
+        return
+    }
     if (period === 'month') filters.dateRange = monthRange()
     if (period === 'last_month') filters.dateRange = lastMonthRange()
     if (period === '30_days') filters.dateRange = recentDaysRange(30)
@@ -286,14 +354,29 @@ function handleSearch() {
 }
 
 function resetFilters() {
-    quickPeriod.value = 'month'
+    quickPeriod.value = Number(activePreset.value?.filters?.ignore_time || 0) === 1 ? 'all' : 'month'
     filters.trade_scope = 'effective'
     filters.profit_state = ''
     filters.keyword = ''
     filters.catalog_product_id = ''
-    filters.salesman_uid = ''
+    filters.party_scope = datasetScope.value === 'sales' ? 'customer' : 'supplier'
+    filters.party_id = null
+    filters.party_name = ''
+    filters.source_plugin = ''
+    filters.sale_channel_key = ''
+    filters.staff_uid = ''
+    filters.time_dimension = activePreset.value?.filters?.time_dimension || (datasetScope.value === 'sales' ? 'sale' : 'stock_in')
     filters.dateRange = monthRange()
     handleSearch()
+}
+
+function onPartyScopeChange() {
+    filters.party_id = null
+    filters.party_name = ''
+    filters.source_plugin = ''
+    filters.sale_channel_key = ''
+    filters.staff_uid = ''
+    filters.time_dimension = filters.party_scope === 'customer' ? 'sale' : 'stock_in'
 }
 
 function columnMeta(key: string) {
@@ -349,13 +432,15 @@ async function exportExcel() {
         const rows = Array.isArray(payload.rows) ? payload.rows : []
         const total = payload.summary || emptySummary()
         const [start, end] = normalizedRange()
+        const rangeLabel = allTime.value ? '全部时间' : `${start} 至 ${end}`
+        const fileRange = allTime.value ? '全部时间' : `${start}_${end}`
         const columns = Array.isArray(payload.columns) && payload.columns.length ? payload.columns : visibleColumns.value
         exportErpConfiguredTable({
             title: activePreset.value?.name || '设备经营台账',
             sheetName: '设备经营台账',
-            fileName: `ERP设备经营台账_${start}_${end}.xlsx`,
+            fileName: `ERP设备经营台账_${fileRange}.xlsx`,
             columns,
-            metaRows: [['制表日期', formatDateTime(payload.generated_at || Math.floor(Date.now() / 1000)), '', '查询日期', `${start} 至 ${end}`]],
+            metaRows: [['制表日期', formatDateTime(payload.generated_at || Math.floor(Date.now() / 1000)), '', '查询日期', rangeLabel]],
             rows: rows.map((row: any) => columns.map((column: any) => exportValue(row, column))),
             summaryRows: [[
                 '总计', `${quantityText(total.quantity)} 台`, `销售/估值 ${money(total.amount)}`,
@@ -379,7 +464,13 @@ function requestParams() {
         profit_state: filters.profit_state,
         keyword: filters.keyword,
         catalog_product_id: filters.catalog_product_id,
-        salesman_uid: filters.salesman_uid,
+        party_scope: activePartyScope.value,
+        party_id: filters.party_id,
+        source_plugin: filters.source_plugin,
+        sale_channel_key: activePartyScope.value === 'customer' ? filters.sale_channel_key : '',
+        staff_uid: filters.staff_uid,
+        time_dimension: datasetScope.value === 'sales' ? 'sale' : filters.time_dimension,
+        ignore_time: allTime.value ? 1 : 0,
         start_date,
         end_date,
         columns: viewColumns.value.filter((item: any) => Number(item.export) === 1).map((item: any) => item.key).join(',')

@@ -15,7 +15,8 @@ export const ORDER_STATUS_TEXT: Record<OrderStatus, string> = {
 
 export const DELIVERY_TYPE_TEXT: Record<DeliveryType, string> = {
     [DeliveryType.MAIL]: '邮寄',
-    [DeliveryType.SELF]: '自送'
+    [DeliveryType.SELF]: '自送',
+    [DeliveryType.LOGISTICS_VEHICLE]: '物流车配送'
 }
 
 export const ORDER_ACTION: Record<string, OrderAction> = {

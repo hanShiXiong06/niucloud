@@ -90,6 +90,7 @@ class RecycleOrder extends BaseModel
         'customer_name' => '%like%',
         'customer_phone' => '%like%',
         'remark' => '%like%',
+        'logistics_vehicle_no' => '%like%',
         'create_at' => 'between',
          'member_id' => '='
     ];
@@ -114,10 +115,12 @@ class RecycleOrder extends BaseModel
      */
     public function getDeliveryTypeNameAttr($value, $data)
     {
-        if (!isset($data['delivery_type'])) {
-            return '快递';
-        }
-        return $data['delivery_type'] == 1 ? '快递':'自送';
+        $type = (string)($data['delivery_type'] ?? '1');
+        return match ($type) {
+            RecycleOrderDict::DELIVERY_TYPE_SELF, 'self' => '自送到店',
+            RecycleOrderDict::DELIVERY_TYPE_LOGISTICS_VEHICLE => '物流车配送',
+            default => '邮寄到店',
+        };
     }
 
     /**
@@ -178,6 +181,13 @@ class RecycleOrder extends BaseModel
     {
         if (!empty($value)) {
             $query->where('express_no', 'like', "%{$value}%");
+        }
+    }
+
+    public function searchLogisticsVehicleNoAttr($query, $value, $data)
+    {
+        if (!empty($value)) {
+            $query->where('logistics_vehicle_no', 'like', "%{$value}%");
         }
     }
     

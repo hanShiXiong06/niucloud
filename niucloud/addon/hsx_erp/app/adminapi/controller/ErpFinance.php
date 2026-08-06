@@ -52,6 +52,19 @@ class ErpFinance extends BaseAdminController
         return success($this->service->receivableItems($id));
     }
 
+    public function supplementReceivableSaleDetails(int $id)
+    {
+        $params = $this->request->params([
+            ['items', []],
+            ['party_id', 0],
+            ['party_name', ''],
+            ['salesman_uid', 0],
+            ['salesman_name', ''],
+            ['remark', ''],
+        ]);
+        return success($this->service->supplementMallReceivableDetails($id, $params));
+    }
+
     public function confirmPayment(int $id)
     {
         $params = $this->request->params([

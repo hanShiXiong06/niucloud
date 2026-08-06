@@ -79,6 +79,21 @@ return [
                 'is_show' => '1',
                 'children' => [
                     [
+                        'menu_name' => '物流车取货',
+                        'menu_key' => 'recycle_order_pickup',
+                        'menu_short_name' => '物流车取货',
+                        'parent_select_key' => '',
+                        'menu_type' => '2',
+                        'icon' => '',
+                        'api_url' => 'recycle/stat/task/list',
+                        'router_path' => '',
+                        'view_path' => '',
+                        'methods' => 'get',
+                        'sort' => '101',
+                        'status' => '1',
+                        'is_show' => '0',
+                    ],
+                    [
                         'menu_name' => '查看任务分配规则',
                         'menu_key' => 'recycle_task_assignment_settings',
                         'menu_short_name' => '分配规则',

@@ -67,6 +67,13 @@ class OrderSubmitConfigService
             'delivery_modes' => [
                 'mail' => 1,
                 'self' => 1,
+                'logistics_vehicle' => 0,
+            ],
+            'logistics_vehicle' => [
+                'arrival_mode' => 'half_day',
+                'morning_cutoff' => '12:00',
+                'same_day_time' => '16:00',
+                'next_day_time' => '09:00',
             ],
             'profile' => [
                 'enabled' => 1,
@@ -167,6 +174,7 @@ class OrderSubmitConfigService
     {
         $default = $this->defaultConfig();
         $deliveryModes = is_array($data['delivery_modes'] ?? null) ? $data['delivery_modes'] : [];
+        $logisticsVehicle = is_array($data['logistics_vehicle'] ?? null) ? $data['logistics_vehicle'] : [];
         $notice = is_array($data['notice'] ?? null) ? $data['notice'] : [];
         $profile = is_array($data['profile'] ?? null) ? $data['profile'] : [];
         $payment = is_array($data['payment'] ?? null) ? $data['payment'] : [];
@@ -236,6 +244,15 @@ class OrderSubmitConfigService
             'delivery_modes' => [
                 'mail' => !empty($deliveryModes['mail']) ? 1 : 0,
                 'self' => !empty($deliveryModes['self']) ? 1 : 0,
+                'logistics_vehicle' => !empty($deliveryModes['logistics_vehicle']) ? 1 : 0,
+            ],
+            'logistics_vehicle' => [
+                'arrival_mode' => in_array((string)($logisticsVehicle['arrival_mode'] ?? ''), ['half_day', 'next_day'], true)
+                    ? (string)$logisticsVehicle['arrival_mode']
+                    : $default['logistics_vehicle']['arrival_mode'],
+                'morning_cutoff' => $this->sanitizeClock((string)($logisticsVehicle['morning_cutoff'] ?? ''), $default['logistics_vehicle']['morning_cutoff']),
+                'same_day_time' => $this->sanitizeClock((string)($logisticsVehicle['same_day_time'] ?? ''), $default['logistics_vehicle']['same_day_time']),
+                'next_day_time' => $this->sanitizeClock((string)($logisticsVehicle['next_day_time'] ?? ''), $default['logistics_vehicle']['next_day_time']),
             ],
             'profile' => [
                 'enabled' => !empty($profile['enabled']) ? 1 : 0,
@@ -331,7 +348,9 @@ class OrderSubmitConfigService
             $config['customer_service']['enabled'] = 0;
         }
 
-        if (empty($config['delivery_modes']['mail']) && empty($config['delivery_modes']['self'])) {
+        if (empty($config['delivery_modes']['mail'])
+            && empty($config['delivery_modes']['self'])
+            && empty($config['delivery_modes']['logistics_vehicle'])) {
             $config['delivery_modes'] = $default['delivery_modes'];
         }
 
@@ -733,8 +752,18 @@ class OrderSubmitConfigService
     public function isDeliveryModeEnabled(int $siteId, int $deliveryType): bool
     {
         $config = $this->getConfig($siteId);
-        $key = $deliveryType === 2 ? 'self' : 'mail';
+        $key = match ($deliveryType) {
+            (int)RecycleOrderDict::DELIVERY_TYPE_SELF => 'self',
+            (int)RecycleOrderDict::DELIVERY_TYPE_LOGISTICS_VEHICLE => 'logistics_vehicle',
+            default => 'mail',
+        };
         return !empty($config['delivery_modes'][$key]);
+    }
+
+    private function sanitizeClock(string $value, string $fallback): string
+    {
+        $value = trim($value);
+        return preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $value) ? $value : $fallback;
     }
 
     public function canUsePlatformDelivery(int $siteId, int $count): bool

@@ -14,7 +14,7 @@
                 v-if="!loading && stages.length === 0"
                 icon="folder"
                 title="你当前没有负责的环节"
-                description="任务按角色权限自动分发。请联系管理员在「角色管理」为你的角色勾选对应的动作权限（执行质检 / 设备定价 / 确认 / 打款 / 转代卖）。"
+                description="任务按角色权限自动分发。请联系管理员在「角色管理」为你的角色勾选对应动作权限（物流车取货 / 签收 / 质检 / 定价 / 确认 / 打款）。"
             />
 
             <template v-else>
@@ -33,7 +33,7 @@
                 <div class="flex items-center mb-[12px]">
                     <el-input
                         v-model="keyword"
-                        :placeholder="t('IMEI / SN / 型号')"
+                        :placeholder="searchPlaceholder"
                         clearable
                         style="width: 260px"
                         @keyup.enter="reload"
@@ -59,6 +59,12 @@
                                 <div class="text-gray-400 text-xs">
                                     {{ row.customer_name || '—' }}
                                     <span v-if="row.express_no"> · {{ row.express_company }} {{ row.express_no }}</span>
+                                </div>
+                                <div v-if="row.stage_key === 'pickup'" class="pickup-summary">
+                                    <span>{{ row.logistics_pickup_address || '未填写取货地点' }}</span>
+                                    <span>{{ [row.logistics_name, row.logistics_vehicle_no].filter(Boolean).join(' · ') }}</span>
+                                    <span>{{ [row.logistics_contact_name, row.logistics_contact_mobile].filter(Boolean).join(' · ') }}</span>
+                                    <span v-if="row.logistics_eta_at">预计 {{ formatDateTime(row.logistics_eta_at) }} 可取</span>
                                 </div>
                             </template>
                             <template v-else>
@@ -95,7 +101,7 @@
                             <el-button v-if="row.assignee_uid" link @click="openAssign(row)">{{ t('转交') }}</el-button>
                             <el-button v-else type="warning" link @click="openAssignmentSettings">{{ t('检查分配规则') }}</el-button>
                             <el-button v-if="!row.assignee_uid" link @click="onClaim(row)">{{ t('我来处理') }}</el-button>
-                            <el-button type="primary" link @click="onProcess(row)">{{ t('去处理') }}</el-button>
+                            <el-button type="primary" link @click="onProcess(row)">{{ row.stage_key === 'pickup' ? t('查看订单') : t('去处理') }}</el-button>
                         </template>
                     </el-table-column>
                 </el-table>
@@ -163,7 +169,7 @@
 import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import EmptyState from '@/addon/hsx_recycle/components/empty-state/index.vue'
 import { t } from '@/lang'
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Search, Refresh, Setting } from '@element-plus/icons-vue'
@@ -182,15 +188,25 @@ const assignDialog = reactive<any>({ visible: false, loading: false, saving: fal
 const settingsDialog = reactive<any>({ visible: false, loading: false, saving: false, stages: [] })
 
 const STAGE_NAME: Record<string, string> = {
-    sign: '待签收', check: '质检', price: '定价', confirm: '报价确认', pay: '打款', abnormal: '异常处理'
+    pickup: '待取货', sign: '待签收', check: '质检', price: '定价', confirm: '报价确认', pay: '打款', abnormal: '异常处理'
 }
 const STAGE_TAG: Record<string, string> = {
-    sign: 'info', check: 'primary', price: 'success', confirm: 'warning', pay: '', abnormal: 'danger'
+    pickup: 'warning', sign: 'info', check: 'primary', price: 'success', confirm: 'warning', pay: '', abnormal: 'danger'
 }
-const STAGE_ORDER = ['sign', 'check', 'price', 'confirm', 'pay', 'abnormal']
+const STAGE_ORDER = ['pickup', 'sign', 'check', 'price', 'confirm', 'pay', 'abnormal']
 const stageName = (k: string) => STAGE_NAME[k] || k
 const stageTagType = (k: string) => STAGE_TAG[k] ?? ''
 const money = (v: any) => Number(v || 0).toFixed(2)
+const searchPlaceholder = computed(() => activeStage.value === 'pickup'
+    ? t('订单号 / 客户 / 车牌号 / 物流名称')
+    : (activeStage.value === 'sign' ? t('订单号 / 客户 / 快递单号') : t('IMEI / SN / 型号')))
+const formatDateTime = (value: any) => {
+    const timestamp = Number(value || 0)
+    if (!timestamp) return '—'
+    const date = new Date(timestamp * 1000)
+    const pad = (number: number) => String(number).padStart(2, '0')
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
 
 const loadMyStages = async () => {
     try {
@@ -325,4 +341,5 @@ onMounted(() => {
 .default-assignee-list { min-height: 180px; margin-top: 16px; }
 .default-assignee-row { min-height: 68px; display: flex; align-items: center; gap: 16px; border-bottom: 1px solid var(--el-border-color-lighter); }
 .default-assignee-stage { width: 170px; flex: none; }
+.pickup-summary { display: grid; gap: 3px; margin-top: 8px; color: var(--el-text-color-secondary); line-height: 1.45; }
 </style>

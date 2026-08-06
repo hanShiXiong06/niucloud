@@ -71,17 +71,17 @@
                                 <el-button type="primary" @click="newWindow()" link class="ml-[10px]">{{ t('toSetting') }}</el-button>
                             </div>
                         </div>
-                        <div class="relative flex-1 overflow-hidden">
+                        <div v-if="deliveryStoreList.length" class="relative flex-1 overflow-hidden">
                             <map-selector
                                 ref="mapSelectorRef"
                                 id="container-radius"
                                  :container-id="'container-radius'"
-                                :longitude="curDelivery.longitude"
-                                :latitude="curDelivery.latitude"
+                                :longitude="curDelivery?.longitude || DEFAULT_LONGITUDE"
+                                :latitude="curDelivery?.latitude || DEFAULT_LATITUDE"
                                 :zoom="14"
                                 :disabled-click-marker="true"
                                 :container-style="'w-full h-[520px]'"
-                                :selected-key="curDelivery?.area[currArea]?.area_json?.key || ''"
+                                :selected-key="curDelivery?.area?.[currArea]?.area_json?.key || ''"
                                 @areaChange="handleAreaChange"
                                 @selectChange="handleSelectChange"
                             />
@@ -122,6 +122,10 @@
                             </el-scrollbar>
                             </div>
                         </div>
+                        <div v-else class="flex-1 h-[520px] flex flex-col items-center justify-center bg-[#fafafa] text-[#999]">
+                            <span class="text-[14px] mb-[10px]">暂无可配置的配送点</span>
+                            <span class="text-[12px]">新增配送点并设置地址后，即可划定同城配送区域</span>
+                        </div>
                     </div>
                 </el-form-item>
             </el-form>
@@ -136,7 +140,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, computed, onMounted, onBeforeUnmount, toRaw, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, toRaw, watch, nextTick } from 'vue'
 import { t } from '@/lang'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -153,25 +157,57 @@ const pageName = route.meta.title
 const formRef = ref<FormInstance>()
 const mapSelectorRef = ref()
 
-const deliveryStoreList = ref<any>([])
-const curDelivery = ref<any>({
-    area: [
-        {
-            area_name: '',
-            area_type: 'radius',
-            start_price: 0,
-            delivery_price: 0,
+const DEFAULT_LONGITUDE = 116.397463
+const DEFAULT_LATITUDE = 39.909187
+
+const createDefaultArea = () => ({
+    area_name: '',
+    area_type: 'radius',
+    start_price: 0,
+    delivery_price: 0,
+    area_json: {
+        key: guid(),
+        center: { lat: DEFAULT_LATITUDE, lng: DEFAULT_LONGITUDE },
+        radius: 1000
+    }
+})
+
+const createEmptyDelivery = () => ({
+    store_id: 0,
+    store_name: '',
+    longitude: DEFAULT_LONGITUDE,
+    latitude: DEFAULT_LATITUDE,
+    area: [createDefaultArea()]
+})
+
+const normalizeDeliveryStore = (store: any) => {
+    const source = store && typeof store === 'object' ? store : {}
+    const sourceAreas = Array.isArray(source.area) && source.area.length ? source.area : [createDefaultArea()]
+    const area = sourceAreas.map((item: any) => {
+        const defaults = createDefaultArea()
+        const areaJson = item?.area_json && typeof item.area_json === 'object' ? item.area_json : {}
+        return {
+            ...defaults,
+            ...(item || {}),
             area_json: {
-                key: guid()
+                ...defaults.area_json,
+                ...areaJson,
+                key: areaJson.key || defaults.area_json.key,
+                center: areaJson.center || defaults.area_json.center
             }
         }
-    ]
-})
-const getDeliveryStoreListAllFn = async () => {
-    deliveryStoreList.value = await (await getDeliveryStoreListAll({ pick_up_type: 'local_delivery' })).data
-    curDelivery.value = deliveryStoreList.value[0]
+    })
+
+    return {
+        ...source,
+        longitude: source.longitude || DEFAULT_LONGITUDE,
+        latitude: source.latitude || DEFAULT_LATITUDE,
+        area
+    }
 }
-getDeliveryStoreListAllFn()
+
+const deliveryStoreList = ref<any>([])
+const curDelivery = ref<any>(createEmptyDelivery())
 
 const formData = ref({
     center: {
@@ -244,14 +280,6 @@ const formRules = computed(() => {
     }
 })
 
-getLocal().then(({ data }) => {
-    loading.value = false
-    if (data) Object.assign(formData.value, data)
-    initMapAreas()
-}).catch(() => {
-    loading.value = false
-})
-
 onMounted(() => {
     // 地图组件会自动初始化
 })
@@ -261,7 +289,7 @@ const currArea = ref<number>(0)
  * 初始化地图区域
  */
 const initMapAreas = async () => {
-    if (!mapSelectorRef.value) return
+    if (!mapSelectorRef.value || !deliveryStoreList.value.length) return
     // 等待地图初始化完成
     const checkMapReady = async () => {
         let attempts = 0
@@ -307,6 +335,36 @@ const initMapAreas = async () => {
         mapSelectorRef.value.selectGeometry(curDelivery.value.area[0].area_json.key)
     }
 }
+
+/**
+ * 页面初始化：基础配置和配送点并行加载，避免地图先于配送点数据初始化。
+ */
+const loadPageData = async () => {
+    loading.value = true
+    try {
+        const [localResult, storeResult] = await Promise.allSettled([
+            getLocal(),
+            getDeliveryStoreListAll({ pick_up_type: 'local_delivery' })
+        ])
+
+        if (localResult.status === 'fulfilled' && localResult.value.data) {
+            Object.assign(formData.value, localResult.value.data)
+        }
+
+        const stores = storeResult.status === 'fulfilled' && Array.isArray(storeResult.value.data)
+            ? storeResult.value.data
+            : []
+        deliveryStoreList.value = stores.map(normalizeDeliveryStore)
+        curDelivery.value = deliveryStoreList.value[0] || createEmptyDelivery()
+
+        await nextTick()
+        await initMapAreas()
+    } finally {
+        loading.value = false
+    }
+}
+
+loadPageData()
 /**
  * 添加配送区域
  */

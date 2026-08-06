@@ -213,8 +213,21 @@
 			"root": "addon/phone_shop",
 			"pages": [
 				{
+					"path": "pages/order/list",
+					"style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
+						"navigationBarTitleText": "线下订单工作台"
+					},
+					"needLogin": true
+				},
+				{
 					"path": "pages/intake/list",
 					"style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 						"navigationBarTitleText": "商城资料运营"
 					},
 					"needLogin": true

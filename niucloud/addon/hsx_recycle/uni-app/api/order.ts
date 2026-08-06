@@ -85,7 +85,7 @@ export function updateOrderStatus(data: {
     | "delete"
     | "update_delivery"
     | "update_express";
-  delivery_type?: "mail" | "self";
+  delivery_type?: "1" | "2" | "3" | "mail" | "self";
   express_id?: string;
 }) {
   return request.put(

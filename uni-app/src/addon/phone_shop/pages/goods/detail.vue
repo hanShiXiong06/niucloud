@@ -31,7 +31,7 @@ const posterParam = ref({});
 const copyUrlParam = ref('');
 const nsGoodsSkuData = ref()
 const diy = useDiyGoodsDetail({
-    name: 'DIY_SHOP_GOODS_DETAIL'
+    name: 'DIY_PHONE_SHOP_GOODS_DETAIL'
 })
 const memberStore = useMemberStore()
 const userInfo = computed(() => memberStore.info)

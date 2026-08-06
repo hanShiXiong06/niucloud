@@ -43,6 +43,7 @@ class ErpLedgerService extends BaseAdminService
             'party_id' => (int)($data['party_id'] ?? 0),
             'party_name' => (string)($data['party_name'] ?? ''),
             'asset_id' => (int)($data['asset_id'] ?? 0),
+            'sale_item_id' => (int)($data['sale_item_id'] ?? 0),
             'source_type' => (string)($data['source_type'] ?? ''),
             'source_id' => (int)($data['source_id'] ?? 0),
             'source_no' => (string)($data['source_no'] ?? ''),
@@ -133,7 +134,7 @@ class ErpLedgerService extends BaseAdminService
             'occurred_at' => (int)($data['occurred_at'] ?? $now),
             'create_at' => $now,
         ]);
-        $this->emitAssetPerformanceFact($row, $asset);
+        if (empty($data['skip_performance'])) $this->emitAssetPerformanceFact($row, $asset);
         return (int)$row->id;
     }
 

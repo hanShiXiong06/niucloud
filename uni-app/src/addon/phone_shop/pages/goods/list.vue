@@ -1,7 +1,12 @@
 <template>
     <view class="bg-gray-100 min-h-[100vh]" :style="themeColor()">
-        <view class="fixed left-0 right-0 top-0 product-warp bg-[#fff]">
-            <view class="search-row">
+        <view class="fixed left-0 right-0 top-0 product-warp bg-[#fff]" :style="headerStyle">
+            <view class="search-row" :style="searchRowStyle">
+                <!-- #ifndef H5 -->
+                <view v-if="showBack" class="header-back" @click="back">
+                    <text class="nc-iconfont nc-icon-zuoV6xx"></text>
+                </view>
+                <!-- #endif -->
                 <view class="flex-1 search-input bg-[#f5f7fa]">
                     <text @click.stop="submitSearch" class="nc-iconfont nc-icon-sousuo-duanV6xx1 btn"></text>
                     <input class="input" maxlength="50" type="text" v-model="goods_name"
@@ -33,6 +38,9 @@
                     <view class="filter-entry" :class="{ 'filter-entry--active': filters.condition_grade.length }" @click="popup.grade = true">
                         成色<text v-if="filters.condition_grade.length" class="filter-entry__count">{{ filters.condition_grade.length }}</text><u-icon name="arrow-down-fill" size="10" :color="filters.condition_grade.length ? 'var(--primary-color)' : '#94a3b8'" />
                     </view>
+                    <view v-if="filterOptions.colors?.length" class="filter-entry" :class="{ 'filter-entry--active': filters.device_color.length }" @click="popup.color = true">
+                        颜色<text v-if="filters.device_color.length" class="filter-entry__count">{{ filters.device_color.length }}</text><u-icon name="arrow-down-fill" size="10" :color="filters.device_color.length ? 'var(--primary-color)' : '#94a3b8'" />
+                    </view>
                     <view class="filter-entry" :class="{ 'filter-entry--active': filters.label_ids.length }" @click="popup.label = true">
                         标签<text v-if="filters.label_ids.length" class="filter-entry__count">{{ filters.label_ids.length }}</text><u-icon name="arrow-down-fill" size="10" :color="filters.label_ids.length ? 'var(--primary-color)' : '#94a3b8'" />
                     </view>
@@ -56,8 +64,9 @@
             @subscribe-node="subscribeCategoryNode"
             @cancel-node="cancelCategoryNode"
         />
-        <GoodsOptionFilterPopup v-model:show="popup.memory" title="选择内存" :model-value="filters.memory_group" :groups="memoryGroups" @confirm="applyFilter('memory_group', $event)" />
-        <GoodsOptionFilterPopup v-model:show="popup.grade" title="选择成色" :model-value="filters.condition_grade" :groups="gradeGroups" @confirm="applyFilter('condition_grade', $event)" />
+        <GoodsOptionFilterPopup v-model:show="popup.memory" title="选择内存" :tip="filterContextTip" :model-value="filters.memory_group" :groups="memoryGroups" @confirm="applyFilter('memory_group', $event)" />
+        <GoodsOptionFilterPopup v-model:show="popup.grade" title="选择成色" :tip="filterContextTip" :model-value="filters.condition_grade" :groups="gradeGroups" @confirm="applyFilter('condition_grade', $event)" />
+        <GoodsOptionFilterPopup v-model:show="popup.color" title="选择颜色" :tip="filterContextTip" :model-value="filters.device_color" :groups="colorGroups" @confirm="applyFilter('device_color', $event)" />
         <GoodsOptionFilterPopup v-model:show="popup.label" title="选择标签" :model-value="filters.label_ids" :groups="labelGroups" @confirm="applyFilter('label_ids', $event)" />
         <GoodsOptionFilterPopup v-model:show="popup.service" title="选择服务" :model-value="filters.service_ids" :groups="serviceGroups" @confirm="applyFilter('service_ids', $event)" />
         <GoodsMoreFilterPopup
@@ -72,7 +81,7 @@
             @cancel-subscription="cancelCurrentSubscription"
         />
 
-        <mescroll-body ref="mescrollRef" top="168rpx" bottom="60px" @init="mescrollInit" :down="{ use: false }" @up="getAllAppListFn">
+        <mescroll-body ref="mescrollRef" :top="mescrollTop" bottom="60px" @init="mescrollInit" :down="{ use: false }" @up="getAllAppListFn">
             <view v-if="goodsList.length" class="sidebar-margin">
                 <template v-if="listType">
                     <view v-for="(item, index) in goodsList" :key="index"
@@ -164,11 +173,51 @@ const sale_num = ref("");
 const searchType = ref('all');
 const listType = ref(true)
 const memberStore = useMemberStore()
+const systemInfo = ref<any>(uni.getSystemInfoSync())
+const menuButtonInfo = ref<any>({})
+const showBack = ref(false)
+
+// #ifdef MP-WEIXIN || MP-BAIDU || MP-TOUTIAO || MP-QQ
+try {
+    menuButtonInfo.value = uni.getMenuButtonBoundingClientRect() || {}
+} catch (e) {
+    menuButtonInfo.value = {}
+}
+// #endif
+
+const capsuleReady = computed(() => Number(menuButtonInfo.value?.height || 0) > 0)
+const statusTopPx = computed(() => {
+    if (capsuleReady.value) return Number(menuButtonInfo.value.top || 0)
+    return Number(systemInfo.value?.statusBarHeight || 0)
+})
+const capsuleRightInsetPx = computed(() => {
+    if (!capsuleReady.value) return 0
+    const windowWidth = Number(systemInfo.value?.windowWidth || systemInfo.value?.screenWidth || 0)
+    const capsuleLeft = Number(menuButtonInfo.value?.left || 0)
+    return windowWidth > capsuleLeft ? windowWidth - capsuleLeft + 8 : 0
+})
+const headerStyle = computed(() => statusTopPx.value > 0
+    ? `padding-top:${ statusTopPx.value }px;`
+    : '')
+const searchRowStyle = computed(() => {
+    if (!capsuleReady.value) return ''
+    return `height:calc(${ Number(menuButtonInfo.value.height) }px + 20rpx);padding-right:${ capsuleRightInsetPx.value }px;`
+})
+const mescrollTop = computed(() => {
+    if (capsuleReady.value) {
+        return `${ statusTopPx.value + Number(menuButtonInfo.value.height) + uni.upx2px(100) }px`
+    }
+    // App 自定义导航需要额外避让系统状态栏；H5 仍使用原生导航。
+    return `${ statusTopPx.value + uni.upx2px(168) }px`
+})
 
 const filters = reactive({
     category_ids: [] as string[],
     memory_group: [] as string[],
     condition_grade: [] as string[],
+    device_color: [] as string[],
+    battery_range: [] as string[],
+    warranty_range: [] as string[],
     label_ids: [] as string[],
     service_ids: [] as string[],
     brand_ids: [] as string[],
@@ -182,6 +231,7 @@ const popup = reactive({
     category: false,
     memory: false,
     grade: false,
+    color: false,
     label: false,
     service: false,
     more: false
@@ -200,6 +250,9 @@ const filterOptions = reactive<any>({
     categories: [],
     memories: [],
     grades: [],
+    colors: [],
+    battery_ranges: [],
+    warranty_ranges: [],
     label_groups: [],
     services: [],
     brands: [],
@@ -225,6 +278,19 @@ const gradeGroups = computed(() => [{
     }))
 }])
 
+const colorGroups = computed(() => [{
+    key: 'color',
+    title: '机身颜色',
+    items: (filterOptions.colors || []).map((item: any) => ({
+        value: item.value,
+        label: item.label
+    }))
+}])
+
+const filterContextTip = computed(() => filters.category_ids.length
+    ? '已按当前分类收敛可选项'
+    : '当前展示全部在售商品的可选项')
+
 const labelGroups = computed(() => (filterOptions.label_groups || []).map((group: any) => ({
     key: group.group_id,
     title: group.group_name,
@@ -248,6 +314,8 @@ const moreFilterValue = computed(() => ({
     start_price: filters.start_price,
     end_price: filters.end_price,
     brand_ids: filters.brand_ids,
+    battery_range: filters.battery_range,
+    warranty_range: filters.warranty_range,
     warehouse: filters.warehouse,
     in_stock: filters.in_stock,
     order: searchType.value,
@@ -256,6 +324,8 @@ const moreFilterValue = computed(() => ({
 
 const moreFilterCount = computed(() => {
     let count = filters.brand_ids.length
+    if (filters.battery_range.length) count++
+    if (filters.warranty_range.length) count++
     if (filters.start_price !== '' || filters.end_price !== '') count++
     if (filters.warehouse) count++
     if (filters.in_stock) count++
@@ -270,6 +340,9 @@ const currentSubscriptionRule = computed(() => {
     if (filters.category_ids.length) rule.category_ids = [...filters.category_ids]
     if (filters.memory_group.length) rule.memory_group = [...filters.memory_group]
     if (filters.condition_grade.length) rule.condition_grade = [...filters.condition_grade]
+    if (filters.device_color.length) rule.device_color = [...filters.device_color]
+    if (filters.battery_range.length) rule.battery_range = [...filters.battery_range]
+    if (filters.warranty_range.length) rule.warranty_range = [...filters.warranty_range]
     if (filters.label_ids.length) rule.label_ids = [...filters.label_ids]
     if (filters.service_ids.length) rule.service_ids = [...filters.service_ids]
     if (filters.brand_ids.length) rule.brand_ids = [...filters.brand_ids]
@@ -283,6 +356,7 @@ const currentSubscriptionRule = computed(() => {
 const hasSubscriptionRule = computed(() => Object.keys(currentSubscriptionRule.value).length > 0)
 
 onLoad(async(option: any) => {
+    showBack.value = getCurrentPages().length > 1
     // #ifdef MP-WEIXIN
     // 处理小程序场景值参数
     option = handleOnloadParams(option);
@@ -290,9 +364,7 @@ onLoad(async(option: any) => {
     if (option.curr_goods_category) filters.category_ids = [String(option.curr_goods_category)]
     goods_name.value = option.goods_name ? decodeURIComponent(option.goods_name) : ''
     coupon_id.value = option.coupon_id || ''
-    await getGoodsFilterOptions().then((res: any) => {
-        Object.assign(filterOptions, res.data || {})
-    }).catch(() => {})
+    await loadFilterOptions()
     if (memberStore.token) {
         await loadCategorySubscriptions().catch(() => {})
     }
@@ -317,6 +389,9 @@ const getAllAppListFn = (mescroll: mescrollStructure) => {
         sort: searchType.value == 'price' ? price.value : (searchType.value === 'sale_num' ? sale_num.value : 'desc'),
         memory_group: filters.memory_group.join(','),
         condition_grade: filters.condition_grade.join(','),
+        device_color: filters.device_color.join(','),
+        battery_range: filters.battery_range.join(','),
+        warranty_range: filters.warranty_range.join(','),
         label_ids: filters.label_ids.join(','),
         service_ids: filters.service_ids.join(','),
         brand_id: filters.brand_ids.join(','),
@@ -462,21 +537,56 @@ const cancelCurrentSubscription = async() => {
     }
 }
 
-const applyFilter = (key: 'category_ids' | 'memory_group' | 'condition_grade' | 'label_ids' | 'service_ids', value: string[]) => {
+let filterOptionRequestId = 0
+const loadFilterOptions = async() => {
+    const requestId = ++filterOptionRequestId
+    try {
+        const res: any = await getGoodsFilterOptions({
+            goods_category: filters.category_ids.join(','),
+            brand_id: filters.brand_ids.join(','),
+            memory_group: filters.memory_group.join(','),
+            condition_grade: filters.condition_grade.join(','),
+            device_color: filters.device_color.join(',')
+        })
+        if (requestId !== filterOptionRequestId) return
+        Object.assign(filterOptions, res.data || {})
+    } catch (e) {}
+}
+
+const applyFilter = async(key: 'category_ids' | 'memory_group' | 'condition_grade' | 'device_color' | 'label_ids' | 'service_ids', value: string[]) => {
     filters[key] = value
+    if (key === 'category_ids') {
+        filters.memory_group = []
+        filters.condition_grade = []
+        filters.device_color = []
+        filters.battery_range = []
+        filters.warranty_range = []
+    }
+    if (key === 'category_ids' || key === 'memory_group' || key === 'condition_grade' || key === 'device_color') {
+        await loadFilterOptions()
+    }
     resetSubscriptionState()
     refreshList()
 }
 
 const applyMoreFilters = (value: any) => {
+    const previousBrands = filters.brand_ids.join(',')
     filters.start_price = value.start_price
     filters.end_price = value.end_price
     filters.brand_ids = value.brand_ids || []
+    filters.battery_range = value.battery_range || []
+    filters.warranty_range = value.warranty_range || []
     filters.warehouse = value.warehouse || ''
     filters.in_stock = Boolean(value.in_stock)
     searchType.value = value.order || 'all'
     price.value = searchType.value === 'price' ? (value.sort || 'asc') : ''
     sale_num.value = searchType.value === 'sale_num' ? (value.sort || 'desc') : ''
+    if (previousBrands !== filters.brand_ids.join(',')) {
+        filters.memory_group = []
+        filters.condition_grade = []
+        filters.device_color = []
+    }
+    loadFilterOptions()
     resetSubscriptionState()
     refreshList()
 }
@@ -484,6 +594,14 @@ const applyMoreFilters = (value: any) => {
 //列表样式切换
 const listIconBtn = () => {
     listType.value = !listType.value
+}
+
+const back = () => {
+    if (getCurrentPages().length > 1) {
+        uni.navigateBack()
+        return
+    }
+    redirect({ url: '/addon/phone_shop/pages/index', mode: 'reLaunch' })
 }
 
 const visualTextLength = (value: unknown) => String(value || '').split('').reduce((total, char) => {
@@ -520,6 +638,7 @@ onMounted(() => {
 
 .product-warp {
     z-index: 100;
+    box-sizing: border-box;
     box-shadow: 0 8rpx 22rpx rgba(15, 23, 42, 0.04);
 }
 
@@ -529,6 +648,23 @@ onMounted(() => {
     display: flex;
     align-items: center;
     box-sizing: border-box;
+}
+
+.header-back {
+    width: 64rpx;
+    height: 64rpx;
+    margin-right: 10rpx;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    flex-shrink: 0;
+    color: #1f2937;
+    font-size: 42rpx;
+}
+
+.header-back .nc-iconfont {
+    font-size: 42rpx;
+    line-height: 1;
 }
 
 .search-input {
@@ -552,6 +688,8 @@ onMounted(() => {
     height: 80rpx;
     white-space: nowrap;
     border-top: 1rpx solid #f4f6f8;
+    border-bottom: 1rpx solid #eef2f6;
+    background: linear-gradient(180deg, #fff 0%, #fbfcfe 100%);
 }
 
 .filter-toolbar__inner {
@@ -562,17 +700,18 @@ onMounted(() => {
     display: inline-flex;
     align-items: center;
     box-sizing: border-box;
+    gap: 10rpx;
 }
 
 .filter-entry {
     position: relative;
     height: 54rpx;
-    margin-right: 8rpx;
     padding: 0 18rpx;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     box-sizing: border-box;
+    border: 1rpx solid #eef2f6;
     border-radius: 28rpx;
     color: #475569;
     background: #f5f7fa;
@@ -582,7 +721,9 @@ onMounted(() => {
 
 .filter-entry--active {
     color: var(--primary-color);
-    background: var(--primary-color-light);
+    border-color: rgba(var(--primary-color-rgb, 18, 85, 231), 0.16);
+    background: rgba(var(--primary-color-rgb, 18, 85, 231), 0.08);
+    box-shadow: 0 5rpx 14rpx rgba(var(--primary-color-rgb, 18, 85, 231), 0.07);
     font-weight: 600;
 }
 

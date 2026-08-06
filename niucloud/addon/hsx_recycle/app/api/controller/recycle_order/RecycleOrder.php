@@ -112,10 +112,15 @@ class RecycleOrder extends BaseApiController
             ["devices", []],               // 设备列表
             ["use_express", 0],            // 是否使用平台快递（亿速）
             ["express_config", []],        // 快递配置(use_express=1时必填)
+            ["logistics_name", ""],
+            ["logistics_vehicle_no", ""],
+            ["logistics_contact_name", ""],
+            ["logistics_contact_mobile", ""],
+            ["logistics_pickup_address", ""],
         ]);
 
         $this->validate($data, [
-            'delivery_type' => 'require|in:1,2',
+            'delivery_type' => 'require|in:1,2,3',
 
             // 'devices' => 'require|array|min:1',
             // 'devices.*.user_sn' => 'max:100',
@@ -159,7 +164,7 @@ class RecycleOrder extends BaseApiController
             if (empty($expressConfig['sender_address'])) {
                 return fail('请输入寄件人详细地址');
             }
-        } elseif ($data['delivery_type'] == 1 && empty($data['express_no'])) {
+        } elseif ((int)$data['delivery_type'] === 1 && empty($data['express_no'])) {
             // 如果不使用平台快递，且配送方式是快递，则需要快递单号
             return fail('请输入快递单号');
         }

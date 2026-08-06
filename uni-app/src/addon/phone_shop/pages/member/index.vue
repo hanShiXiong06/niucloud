@@ -39,7 +39,7 @@ const diyStore = useDiyStore()
 const userInfo = computed(() => memberStore.info)
 
 const diy = useDiy({
-    name: 'DIY_SHOP_MEMBER_INDEX'
+    name: 'DIY_PHONE_SHOP_MEMBER_INDEX'
 })
 
 const diyGroupRef = ref(null)

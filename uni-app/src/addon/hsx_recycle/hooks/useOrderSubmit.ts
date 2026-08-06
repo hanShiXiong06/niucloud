@@ -25,12 +25,26 @@ export function useOrderSubmit() {
     currentTab: number
     usePlatformDelivery: boolean
     platformDeliveryForm: PlatformDeliveryForm
+    logisticsVehicleForm: Record<string, string>
   }): { valid: boolean; message?: string } => {
     // 检查协议勾选
     if (!params.isAgreeRecycle) {
       return {
         valid: false,
         message: '请阅读并同意回收服务协议'
+      }
+    }
+
+    if (params.currentTab === 2) {
+      const required: Array<[string, string]> = [
+        ['logistics_name', '请填写物流名称'],
+        ['logistics_vehicle_no', '请填写车牌号'],
+        ['logistics_contact_name', '请填写联系人'],
+        ['logistics_contact_mobile', '请填写联系电话'],
+        ['logistics_pickup_address', '请填写取货地点']
+      ]
+      for (const [key, message] of required) {
+        if (!String(params.logisticsVehicleForm[key] || '').trim()) return { valid: false, message }
       }
     }
 
@@ -86,6 +100,7 @@ export function useOrderSubmit() {
     currentTab: number
     usePlatformDelivery: boolean
     platformDeliveryForm: PlatformDeliveryForm
+    logisticsVehicleForm: Record<string, string>
     isAgreeRecycle: boolean
     formRef: any
     onSuccess?: () => void
@@ -95,7 +110,8 @@ export function useOrderSubmit() {
       isAgreeRecycle: params.isAgreeRecycle,
       currentTab: params.currentTab,
       usePlatformDelivery: params.usePlatformDelivery,
-      platformDeliveryForm: params.platformDeliveryForm
+      platformDeliveryForm: params.platformDeliveryForm,
+      logisticsVehicleForm: params.logisticsVehicleForm
     })
 
     if (!validation.valid) {
@@ -132,6 +148,7 @@ export function useOrderSubmit() {
         product_name: params.platformDeliveryForm.product_name || ''
       }
     }
+    if (params.currentTab === 2) Object.assign(orderData, params.logisticsVehicleForm)
 
     // 表单验证
     const valid = await params.formRef.validate()

@@ -21,6 +21,7 @@ export interface AdvancedSearchFormModel {
   member_id: string | number
   user_mobile: string
   delivery_type: Array<string | number>
+  logistics_vehicle_no: string
   order_source: string
   device_imei: string
   device_model: string
@@ -56,6 +57,7 @@ const createAdvancedSearchForm = (): AdvancedSearchFormModel => ({
   member_id: '',
   user_mobile: '',
   delivery_type: [],
+  logistics_vehicle_no: '',
   order_source: '',
   device_imei: '',
   device_model: '',
@@ -97,6 +99,7 @@ export const buildOrderQueryParams = (params: {
   if (advancedSearchForm.delivery_type && advancedSearchForm.delivery_type.length > 0) {
     queryParams.delivery_type = advancedSearchForm.delivery_type.join(',')
   }
+  if (advancedSearchForm.logistics_vehicle_no) queryParams.logistics_vehicle_no = advancedSearchForm.logistics_vehicle_no
   if (advancedSearchForm.order_source) queryParams.order_source = advancedSearchForm.order_source
   if (advancedSearchForm.device_imei) queryParams.device_imei = advancedSearchForm.device_imei
   if (advancedSearchForm.device_model) queryParams.device_model = advancedSearchForm.device_model

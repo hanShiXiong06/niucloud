@@ -965,6 +965,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_account_ledger` (
   `party_id` int NOT NULL DEFAULT 0,
   `party_name` varchar(100) NOT NULL DEFAULT '',
   `asset_id` int NOT NULL DEFAULT 0,
+  `sale_item_id` int NOT NULL DEFAULT 0 COMMENT '销售明细ID，商城缺失ERP资产时用于分台核销',
   `source_type` varchar(40) NOT NULL DEFAULT '',
   `source_id` int NOT NULL DEFAULT 0,
   `source_no` varchar(40) NOT NULL DEFAULT '',
@@ -977,6 +978,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_account_ledger` (
   UNIQUE KEY `uk_site_no` (`site_id`,`ledger_no`),
   KEY `idx_party` (`site_id`,`party_id`,`occurred_at`),
   KEY `idx_asset` (`site_id`,`asset_id`),
+  KEY `idx_sale_item` (`site_id`,`sale_item_id`),
   KEY `idx_source` (`site_id`,`source_type`,`source_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-业务账目流水';
 

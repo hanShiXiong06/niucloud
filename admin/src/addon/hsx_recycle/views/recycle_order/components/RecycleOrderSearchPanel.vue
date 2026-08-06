@@ -98,7 +98,12 @@
             >
               <el-option label="快递配送" value="1" />
               <el-option label="自送到店" value="2" />
+              <el-option label="物流车配送" value="3" />
             </el-select>
+          </el-form-item>
+
+          <el-form-item v-if="filterMode === 'advanced'" label="物流车牌" class="search-item search-item--code">
+            <el-input v-model="props.advancedSearchForm.logistics_vehicle_no" placeholder="输入车牌号" clearable class="w-full" />
           </el-form-item>
 
           <el-form-item v-if="filterMode === 'advanced'" label="下单来源" class="search-item search-item--select">

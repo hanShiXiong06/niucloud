@@ -5,6 +5,7 @@ namespace addon\hsx_erp\app\service\admin;
 
 use addon\hsx_erp\app\dict\ErpDict;
 use addon\hsx_erp\app\model\ErpAsset;
+use addon\hsx_erp\app\model\ErpParty;
 use addon\hsx_erp\app\model\ErpSaleItem;
 use addon\hsx_erp\app\model\ErpSaleOrder;
 use addon\hsx_erp\app\support\ErpPartyMemberNames;
@@ -180,7 +181,13 @@ class ErpSaleProfitReportService extends BaseAdminService
             );
         }
         if (!empty($where['party_id'])) {
-            $query->where('o.party_id', '=', (int)$where['party_id']);
+            $this->applySnapshotPartyFilter($query, 'o.party_id', 'o.party_name', (int)$where['party_id']);
+        }
+        if (!empty($where['source_plugin'])) {
+            $this->applyBusinessSourceFilter($query, 'o.origin_plugin', (string)$where['source_plugin']);
+        }
+        if (!empty($where['staff_uid'])) {
+            $query->where('o.salesman_uid', '=', (int)$where['staff_uid']);
         }
         if (!empty($where['salesman_uid'])) {
             $query->where('o.salesman_uid', '=', (int)$where['salesman_uid']);
@@ -236,6 +243,25 @@ class ErpSaleProfitReportService extends BaseAdminService
         if (!empty($where['location_id'])) $query->where('a.location_id', '=', (int)$where['location_id']);
         if (!empty($where['category_path'])) $query->whereLike('a.category_path', trim((string)$where['category_path']) . '%');
         if (!empty($where['catalog_product_id'])) $query->where('a.catalog_product_id', '=', (int)$where['catalog_product_id']);
+        $partyScope = (string)($where['party_scope'] ?? 'supplier') === 'customer' ? 'customer' : 'supplier';
+        if (!empty($where['party_id'])) {
+            $this->applySnapshotPartyFilter(
+                $query,
+                $partyScope === 'customer' ? 'o.party_id' : 'a.party_id',
+                $partyScope === 'customer' ? 'o.party_name' : 'a.party_name',
+                (int)$where['party_id']
+            );
+        }
+        if (!empty($where['source_plugin'])) {
+            $this->applyBusinessSourceFilter(
+                $query,
+                $partyScope === 'customer' ? 'o.origin_plugin' : 'a.source_plugin',
+                (string)$where['source_plugin']
+            );
+        }
+        if (!empty($where['staff_uid'])) {
+            $query->where($partyScope === 'customer' ? 'o.salesman_uid' : 'p.purchaser_uid', '=', (int)$where['staff_uid']);
+        }
         if (!empty($where['salesman_uid'])) $query->where('o.salesman_uid', '=', (int)$where['salesman_uid']);
         $dimension = (string)($where['time_dimension'] ?? 'stock_in');
         $field = match ($dimension) {
@@ -248,6 +274,34 @@ class ErpSaleProfitReportService extends BaseAdminService
             $query->whereRaw("{$field} >= ? AND {$field} < ?", [(int)$where['start_at'], (int)$where['end_exclusive']]);
         }
         return $query;
+    }
+
+    /** 兼容历史手工来源 erp/hsx_erp，其他插件按稳定命名空间精确筛选。 */
+    private function applyBusinessSourceFilter($query, string $column, string $source): void
+    {
+        $source = trim($source);
+        if ($source === 'erp') {
+            $query->whereIn($column, ['erp', 'hsx_erp']);
+            return;
+        }
+        if ($source !== '') $query->where($column, '=', $source);
+    }
+
+    /** 已选主体优先按 ID；只对 party_id=0 的历史快照按精确名称兜底。 */
+    private function applySnapshotPartyFilter($query, string $idColumn, string $nameColumn, int $partyId): void
+    {
+        $partyName = trim((string)ErpParty::where([
+            ['site_id', '=', $this->site_id],
+            ['id', '=', $partyId],
+        ])->value('party_name'));
+        $query->where(function ($sub) use ($idColumn, $nameColumn, $partyId, $partyName) {
+            $sub->where($idColumn, '=', $partyId);
+            if ($partyName !== '') {
+                $sub->whereOr(function ($legacy) use ($idColumn, $nameColumn, $partyName) {
+                    $legacy->where($idColumn, '=', 0)->where($nameColumn, '=', $partyName);
+                });
+            }
+        });
     }
 
     private function fields(): array

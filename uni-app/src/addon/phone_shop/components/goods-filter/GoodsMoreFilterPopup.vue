@@ -10,7 +10,7 @@
                     <u-icon name="close" size="20" color="#64748b" />
                 </view>
             </view>
-            <scroll-view scroll-y class="more-popup__body">
+            <scroll-view :scroll-y="true" :show-scrollbar="false" class="more-popup__body">
                 <view class="more-section">
                     <view class="more-section__title">排序方式</view>
                     <view class="sort-grid">
@@ -36,21 +36,56 @@
                     </view>
                 </view>
                 <view class="more-section">
-                    <view class="more-section__title">价格区间</view>
-                    <view class="price-inputs">
-                        <input v-model="draft.start_price" type="digit" placeholder="最低价" />
-                        <view class="price-inputs__line"></view>
-                        <input v-model="draft.end_price" type="digit" placeholder="最高价" />
+                    <view class="more-section__head">
+                        <view>
+                            <view class="more-section__title">价格区间</view>
+                            <view class="more-section__desc">可选常用价格，也可以自己填写</view>
+                        </view>
+                        <u-icon name="rmb-circle" size="19" color="#94a3b8" />
+                    </view>
+                    <GoodsPriceRangePicker
+                        v-model:start-value="draft.start_price"
+                        v-model:end-value="draft.end_price"
+                        :ranges="options.price_ranges || []"
+                    />
+                </view>
+                <view v-if="options.battery_ranges?.length" class="more-section">
+                    <view class="more-section__head">
+                        <view>
+                            <view class="more-section__title">电池健康</view>
+                            <view class="more-section__desc">仅展示商品录入时记录的电池数据</view>
+                        </view>
+                        <u-icon name="info-circle" size="18" color="#94a3b8" />
                     </view>
                     <view class="chip-grid chip-grid--three">
                         <view
-                            v-for="range in options.price_ranges || []"
-                            :key="range.label"
+                            v-for="item in options.battery_ranges"
+                            :key="item.value"
                             class="filter-chip"
-                            :class="{ 'filter-chip--active': isPriceRangeActive(range) }"
-                            @click="selectPriceRange(range)"
+                            :class="{ 'filter-chip--active': draft.battery_range.includes(String(item.value)) }"
+                            @click="toggleArrayValue('battery_range', item.value)"
                         >
-                            {{ range.label }}
+                            {{ item.label }}
+                        </view>
+                    </view>
+                </view>
+                <view v-if="options.warranty_ranges?.length" class="more-section">
+                    <view class="more-section__head">
+                        <view>
+                            <view class="more-section__title">保修状态</view>
+                            <view class="more-section__desc">按今天实时计算剩余保修时间</view>
+                        </view>
+                        <u-icon name="calendar" size="18" color="#94a3b8" />
+                    </view>
+                    <view class="chip-grid chip-grid--three">
+                        <view
+                            v-for="item in options.warranty_ranges"
+                            :key="item.value"
+                            class="filter-chip"
+                            :class="{ 'filter-chip--active': draft.warranty_range.includes(String(item.value)) }"
+                            @click="toggleArrayValue('warranty_range', item.value)"
+                        >
+                            {{ item.label }}
                         </view>
                     </view>
                 </view>
@@ -115,11 +150,14 @@
 
 <script setup lang="ts">
 import { reactive, watch } from 'vue'
+import GoodsPriceRangePicker from '@/addon/phone_shop/components/goods-filter/GoodsPriceRangePicker.vue'
 
 interface MoreFilterValue {
     start_price: string | number
     end_price: string | number
     brand_ids: string[]
+    battery_range: string[]
+    warranty_range: string[]
     warehouse: string
     in_stock: boolean
     order: string
@@ -140,6 +178,8 @@ const emptyValue = (): MoreFilterValue => ({
     start_price: '',
     end_price: '',
     brand_ids: [],
+    battery_range: [],
+    warranty_range: [],
     warehouse: '',
     in_stock: false,
     order: 'all',
@@ -172,17 +212,12 @@ const toggleBrand = (value: string | number) => {
         : [...draft.brand_ids, normalized]
 }
 
-const selectPriceRange = (range: any) => {
-    if (isPriceRangeActive(range)) {
-        draft.start_price = ''
-        draft.end_price = ''
-    } else {
-        draft.start_price = range.min
-        draft.end_price = range.max
-    }
+const toggleArrayValue = (key: 'battery_range' | 'warranty_range', value: string | number) => {
+    const normalized = String(value)
+    draft[key] = draft[key].includes(normalized)
+        ? draft[key].filter(item => item !== normalized)
+        : [...draft[key], normalized]
 }
-
-const isPriceRangeActive = (range: any) => String(draft.start_price) === String(range.min) && String(draft.end_price) === String(range.max)
 
 const confirm = () => {
     emit('confirm', JSON.parse(JSON.stringify(draft)))
@@ -201,6 +236,7 @@ const toggleSubscription = () => {
     max-height: 1080rpx;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
     background: #fff;
 }
 
@@ -236,6 +272,7 @@ const toggleSubscription = () => {
 }
 
 .more-popup__body {
+    height: 0;
     flex: 1;
     min-height: 0;
     box-sizing: border-box;
@@ -258,6 +295,17 @@ const toggleSubscription = () => {
     color: #334155;
     font-size: 27rpx;
     font-weight: 600;
+}
+
+.more-section__head {
+    margin-bottom: 20rpx;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.more-section__head .more-section__title {
+    margin-bottom: 0;
 }
 
 .more-section__title.mb-0 {

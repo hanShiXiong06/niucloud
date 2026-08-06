@@ -32,7 +32,7 @@ export function useOrderFilters() {
   // 当前选中的状态 ('all', '1', '2', '3', '4', '5', '6', '7', '8', '9')
   const currentStatus = ref('all')
 
-  // 配送方式 0-全部 1-邮寄 2-自送
+  // 配送方式 0-全部 1-邮寄 2-自送 3-物流车
   const deliveryType = ref(0)
 
   // 搜索关键词
@@ -61,7 +61,8 @@ export function useOrderFilters() {
   const deliveryOptions = [
     { label: '全部', value: 0 },
     { label: '邮寄', value: 1 },
-    { label: '自送', value: 2 }
+    { label: '自送', value: 2 },
+    { label: '物流车', value: 3 }
   ]
 
   // 计算当前筛选条件

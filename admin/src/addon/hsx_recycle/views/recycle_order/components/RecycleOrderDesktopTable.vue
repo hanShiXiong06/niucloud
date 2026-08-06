@@ -132,8 +132,8 @@
           </div>
           <div class="flex items-center text-sm">
             <span class="text-gray-400 min-w-[60px]">配送：</span>
-            <el-tag size="small" :type="row.delivery_type === '1' ? 'warning' : 'success'">
-              {{ row.delivery_type === "1" ? "快递" : "自送" }}
+            <el-tag size="small" :type="deliveryTagType(row.delivery_type)">
+              {{ deliveryLabel(row) }}
             </el-tag>
           </div>
           <div class="flex items-center text-sm">
@@ -163,6 +163,20 @@
               </el-icon>
             </span>
           </div>
+          <template v-if="String(row.delivery_type) === '3'">
+            <div class="flex items-start text-sm">
+              <span class="text-gray-400 min-w-[60px]">物流车辆：</span>
+              <span class="text-gray-800">{{ [row.logistics_name, row.logistics_vehicle_no].filter(Boolean).join(' · ') || '暂无' }}</span>
+            </div>
+            <div class="flex items-start text-sm">
+              <span class="text-gray-400 min-w-[60px]">取货地点：</span>
+              <span class="text-gray-800 line-clamp-2">{{ row.logistics_pickup_address || '暂无' }}</span>
+            </div>
+            <div v-if="row.logistics_eta_at" class="flex items-start text-sm">
+              <span class="text-gray-400 min-w-[60px]">预计到达：</span>
+              <span class="text-amber-700">{{ props.formatDateTime(row.logistics_eta_at) }}</span>
+            </div>
+          </template>
         </div>
       </template>
     </el-table-column>
@@ -386,6 +400,8 @@ const getSubmittedDeviceCount = (row: any) => normalizeDeviceCount(row.count)
 const getSignedDeviceCount = (row: any) => props.getDeviceCount(row.devices)
 
 const isDeviceCountMatched = (row: any) => getSubmittedDeviceCount(row) === getSignedDeviceCount(row)
+const deliveryLabel = (row: any) => row.delivery_type_name || ({ '1': '快递到店', '2': '客户自送', '3': '物流车配送' }[String(row.delivery_type)] || '未知')
+const deliveryTagType = (value: any) => String(value) === '3' ? 'primary' : (String(value) === '1' ? 'warning' : 'success')
 
 const getRowActions = (row: any) => {
   const statusActions = props.orderStatusMap[row.status]?.action || []

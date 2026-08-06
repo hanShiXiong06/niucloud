@@ -14,6 +14,7 @@ use addon\hsx_recycle\app\dict\stat\RecycleStageDict;
 use addon\hsx_recycle\app\service\admin\stat\TaskService;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderFlowService;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreWorkWechatNotifyService;
+use addon\hsx_recycle\app\service\core\order\LogisticsVehicleService;
 use app\model\member\Member;
 use core\base\BaseApiService;
 use core\exception\ApiException;
@@ -134,7 +135,7 @@ class RecycleOrderService extends BaseApiService
      */
     public function getPage(array $where = [])
     {
-        $field = 'id,order_no,site_id,member_id,delivery_type,express_company,express_no,delivery_platform,delivery_status,delivery_fee,delivery_order_id,pickup_time,count,customer_name,customer_phone,remark,status,create_at,update_at';
+        $field = 'id,order_no,site_id,member_id,delivery_type,express_company,express_no,delivery_platform,delivery_status,delivery_fee,delivery_order_id,pickup_time,logistics_name,logistics_vehicle_no,logistics_contact_name,logistics_contact_mobile,logistics_pickup_address,logistics_eta_at,count,customer_name,customer_phone,remark,status,create_at,update_at';
         $order = 'create_at desc';
 
         // 如果 state = all
@@ -188,7 +189,7 @@ class RecycleOrderService extends BaseApiService
      */
     public function getInfo(int $id)
     {
-        $field = 'id,order_no,site_id,member_id,delivery_type,express_company,express_no,delivery_platform,delivery_status,delivery_fee,delivery_order_id,pickup_time,count,customer_name,customer_phone,remark,status,create_at,update_at';
+        $field = 'id,order_no,site_id,member_id,delivery_type,express_company,express_no,delivery_platform,delivery_status,delivery_fee,delivery_order_id,pickup_time,logistics_name,logistics_vehicle_no,logistics_contact_name,logistics_contact_mobile,logistics_pickup_address,logistics_eta_at,count,customer_name,customer_phone,remark,status,create_at,update_at';
 
         $info = $this->model
             ->where([
@@ -512,6 +513,7 @@ class RecycleOrderService extends BaseApiService
             $data['member_id'] = $this->member_id;
             $data['status'] = RecycleOrderDict::ORDER_STATUS_PENDING_SIGN;
             $data['order_no'] = $this->generateOrderNo();
+            $data = (new LogisticsVehicleService())->prepareOrderData((int)$this->site_id, $data);
 
             // 读取站点配置的流转模式（整单/按设备）
             $orderSubmitConfig = (new \addon\hsx_recycle\app\service\api\order\OrderSubmitConfigService())->getConfig($this->site_id);
@@ -594,8 +596,11 @@ class RecycleOrderService extends BaseApiService
             }
 
             try {
+                $stage = (int)$order->delivery_type === (int)RecycleOrderDict::DELIVERY_TYPE_LOGISTICS_VEHICLE
+                    ? RecycleStageDict::STAGE_PICKUP
+                    : RecycleStageDict::STAGE_SIGN;
                 TaskService::forSite((int)$this->site_id, 0, '客户下单')
-                    ->assignPreferredOrDefault((int)$order->id, RecycleStageDict::STAGE_SIGN);
+                    ->assignPreferredOrDefault((int)$order->id, $stage);
             } catch (\Throwable $e) {
                 // 工单分配和企业微信通知属于增强能力，不得阻断客户下单。
             }

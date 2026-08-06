@@ -35,8 +35,8 @@
         <div class="mb-2 grid grid-cols-2 gap-2">
           <div class="rounded-md border border-gray-200 bg-slate-50 p-2">
             <div class="mb-1 text-xs text-gray-500">配送方式</div>
-            <el-tag size="small" :type="row.delivery_type === '1' ? 'warning' : 'success'">
-              {{ row.delivery_type === "1" ? "📦 快递" : " 自送" }}
+            <el-tag size="small" :type="deliveryTagType(row.delivery_type)">
+              {{ deliveryLabel(row) }}
             </el-tag>
           </div>
 
@@ -67,6 +67,12 @@
                 <Loading />
               </el-icon>
             </div>
+          </div>
+          <div v-if="String(row.delivery_type) === '3'" class="col-span-2 rounded-md border border-blue-100 bg-blue-50 p-2 text-xs leading-6 text-gray-700">
+            <div class="font-medium text-gray-900">{{ [row.logistics_name, row.logistics_vehicle_no].filter(Boolean).join(' · ') || '物流车辆待补充' }}</div>
+            <div>{{ row.logistics_pickup_address || '取货地点待补充' }}</div>
+            <div>{{ [row.logistics_contact_name, row.logistics_contact_mobile].filter(Boolean).join(' · ') }}</div>
+            <div v-if="row.logistics_eta_at" class="text-amber-700">预计 {{ props.formatDateTime(row.logistics_eta_at) }} 可取</div>
           </div>
         </div>
 
@@ -289,6 +295,8 @@ const hasActionPerm = (key: string) => {
   const perm = ACTION_PERM[key];
   return !perm || (userStore.rules || []).includes(perm);
 };
+const deliveryLabel = (row: any) => row.delivery_type_name || ({ '1': '快递到店', '2': '客户自送', '3': '物流车配送' }[String(row.delivery_type)] || '未知');
+const deliveryTagType = (value: any) => String(value) === '3' ? 'primary' : (String(value) === '1' ? 'warning' : 'success');
 
 interface Props {
   loading: boolean;

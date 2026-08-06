@@ -10,8 +10,9 @@ export enum OrderStatus {
 }
 
 export enum DeliveryType {
-    MAIL = 'mail',
-    SELF = 'self'
+    MAIL = '1',
+    SELF = '2',
+    LOGISTICS_VEHICLE = '3'
 }
 
 export interface ApiResponse<T> {

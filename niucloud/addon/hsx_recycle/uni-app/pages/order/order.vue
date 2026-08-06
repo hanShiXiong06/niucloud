@@ -6,7 +6,6 @@
         <DeliveryModeToggle
           v-model="currentTab"
           :tabs="deliveryTabs"
-          @to-order-list="toOrderList"
         />
       </view>
 
@@ -79,6 +78,8 @@
         @scan-express="scanCode"
       />
 
+      <LogisticsVehicleSection v-if="currentTab === 2" v-model="logisticsVehicleForm" :arrival-hint="logisticsArrivalHint" />
+
       <!-- 商家信息 -->
       <ShopInfoCard
         :shop-info="shopInfo"
@@ -140,6 +141,7 @@ import DeliveryModeToggle from './components/DeliveryModeToggle.vue'
 import DeviceListManager from './components/DeviceListManager.vue'
 import DeviceInputModal from './components/DeviceInputModal.vue'
 import ExpressInfoSection from './components/ExpressInfoSection.vue'
+import LogisticsVehicleSection from './components/LogisticsVehicleSection.vue'
 import ShopInfoCard from './components/ShopInfoCard.vue'
 import AgreementCheckbox from './components/AgreementCheckbox.vue'
 import FollowOfficialAccountPopup from './components/FollowOfficialAccountPopup.vue'
@@ -167,7 +169,14 @@ const orderSubmitConfig = ref({
   default_count: 1,
   delivery_modes: {
     mail: 1,
-    self: 1
+    self: 1,
+    logistics_vehicle: 0
+  },
+  logistics_vehicle: {
+    arrival_mode: 'half_day',
+    morning_cutoff: '12:00',
+    same_day_time: '16:00',
+    next_day_time: '09:00'
   },
   profile: {
     enabled: 1,
@@ -209,7 +218,13 @@ const deliveryTabs = computed(() => {
   const tabs: Array<{ label: string; value: number }> = []
   if (orderSubmitConfig.value.delivery_modes.mail) tabs.push({ label: '邮寄到店', value: 0 })
   if (orderSubmitConfig.value.delivery_modes.self) tabs.push({ label: '自送到店', value: 1 })
+  if (orderSubmitConfig.value.delivery_modes.logistics_vehicle) tabs.push({ label: '物流车', value: 2 })
   return tabs
+})
+const logisticsArrivalHint = computed(() => {
+  const config = orderSubmitConfig.value.logistics_vehicle
+  if (config.arrival_mode === 'next_day') return `预计次日 ${config.next_day_time} 可取货`
+  return `${config.morning_cutoff} 前提交，预计当天 ${config.same_day_time} 可取；之后为次日 ${config.next_day_time}`
 })
 
 const normalizePositiveNumber = (value: any, fallback = 1) => {
@@ -219,6 +234,20 @@ const normalizePositiveNumber = (value: any, fallback = 1) => {
 
 // 表单管理
 const { form, rules, formRef, resetForm } = useOrderForm(currentTab)
+const LOGISTICS_CACHE_KEY = 'hsx_recycle_logistics_vehicle_form'
+const emptyLogisticsVehicleForm = () => ({
+  logistics_name: '',
+  logistics_vehicle_no: '',
+  logistics_contact_name: '',
+  logistics_contact_mobile: '',
+  logistics_pickup_address: ''
+})
+const logisticsVehicleForm = ref<Record<string, string>>(emptyLogisticsVehicleForm())
+const restoreLogisticsVehicleForm = () => {
+  if (Object.values(logisticsVehicleForm.value).some(value => String(value || '').trim())) return
+  const cached = uni.getStorageSync(LOGISTICS_CACHE_KEY)
+  if (cached && typeof cached === 'object') logisticsVehicleForm.value = { ...emptyLogisticsVehicleForm(), ...cached }
+}
 
 // 计算属性确保 count 是数字类型
 const deviceCount = computed({
@@ -260,11 +289,11 @@ const deviceListManagerRef = ref<InstanceType<typeof DeviceListManager> | null>(
 
 // 监听 Tab 切换
 watch(currentTab, (newVal) => {
-  form.value.delivery_type = newVal === 0 ? 1 : 2
+  form.value.delivery_type = Number(newVal) + 1
   switchTab(newVal)
 
   // 切换到自送时清空快递单号
-  if (newVal === 1) {
+  if (newVal !== 0) {
     form.value.express_no = ''
   }
 })
@@ -272,6 +301,7 @@ watch(currentTab, (newVal) => {
 const normalizeOrderSubmitConfig = (data: any = {}) => {
   const mail = data.delivery_modes?.mail ? 1 : 0
   const self = data.delivery_modes?.self ? 1 : 0
+  const logisticsVehicle = data.delivery_modes?.logistics_vehicle ? 1 : 0
   orderSubmitConfig.value = {
     device_add_enabled: data.device_add_enabled ? 1 : 0,
     notice: {
@@ -281,8 +311,15 @@ const normalizeOrderSubmitConfig = (data: any = {}) => {
     },
     default_count: normalizePositiveNumber(data.default_count, 1),
     delivery_modes: {
-      mail: mail || self ? mail : 1,
-      self: mail || self ? self : 1
+      mail: mail || self || logisticsVehicle ? mail : 1,
+      self: mail || self || logisticsVehicle ? self : 1,
+      logistics_vehicle: logisticsVehicle
+    },
+    logistics_vehicle: {
+      arrival_mode: data.logistics_vehicle?.arrival_mode === 'next_day' ? 'next_day' : 'half_day',
+      morning_cutoff: data.logistics_vehicle?.morning_cutoff || '12:00',
+      same_day_time: data.logistics_vehicle?.same_day_time || '16:00',
+      next_day_time: data.logistics_vehicle?.next_day_time || '09:00'
     },
     profile: {
       enabled: data.profile?.enabled === 0 ? 0 : 1,
@@ -306,13 +343,12 @@ const normalizeOrderSubmitConfig = (data: any = {}) => {
 
 const applyAvailableDeliveryMode = () => {
   const modes = orderSubmitConfig.value.delivery_modes
-  if (!modes.mail && currentTab.value === 0) {
-    currentTab.value = 1
-    return
-  }
-  if (!modes.self && currentTab.value === 1) {
-    currentTab.value = 0
-  }
+  const enabledTabs = [
+    modes.mail ? 0 : -1,
+    modes.self ? 1 : -1,
+    modes.logistics_vehicle ? 2 : -1
+  ].filter(value => value >= 0)
+  if (!enabledTabs.includes(currentTab.value)) currentTab.value = enabledTabs[0] ?? 0
 }
 
 const loadOrderSubmitConfig = async () => {
@@ -331,13 +367,6 @@ const applyDefaultCount = () => {
   if (phoneList.value.length > 0) return
 
   form.value.count = normalizePositiveNumber(orderSubmitConfig.value.default_count, 1)
-}
-
-// 跳转到订单列表
-const toOrderList = () => {
-  uni.navigateTo({
-    url: '/addon/hsx_recycle/pages/order/list'
-  })
 }
 
 // 打开单台设备添加弹窗
@@ -476,7 +505,7 @@ watch(canUsePlatformDelivery, (canUse) => {
 
 // 提交订单
 const handleSubmitOrder = async () => {
-  const modeKey = currentTab.value === 0 ? 'mail' : 'self'
+  const modeKey = currentTab.value === 0 ? 'mail' : (currentTab.value === 1 ? 'self' : 'logistics_vehicle')
   if (!orderSubmitConfig.value.delivery_modes[modeKey]) {
     uni.showToast({
       title: '当前下单方式未开启',
@@ -498,9 +527,11 @@ const handleSubmitOrder = async () => {
     currentTab: currentTab.value,
     usePlatformDelivery: enablePlatformDelivery.value,
     platformDeliveryForm: platformDeliveryForm.value,
+    logisticsVehicleForm: logisticsVehicleForm.value,
     isAgreeRecycle: isAgreeRecycle.value,
     formRef: formRef.value,
     onSuccess: () => {
+      if (currentTab.value === 2) uni.setStorageSync(LOGISTICS_CACHE_KEY, logisticsVehicleForm.value)
       // 清空表单
       resetForm()
       phoneList.value = []
@@ -577,6 +608,7 @@ const handleFollowPopupClose = () => {
 
 // 页面显示时的处理
 onShow(async () => {
+  restoreLogisticsVehicleForm()
   await loadOrderSubmitConfig()
 
   // 请求订阅相关消息通知

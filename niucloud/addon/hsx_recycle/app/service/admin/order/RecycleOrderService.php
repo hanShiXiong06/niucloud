@@ -263,10 +263,13 @@ class RecycleOrderService extends BaseAdminService
         $order = $coreService->create($data);
 
         try {
+            $stage = (int)$order->delivery_type === (int)RecycleOrderDict::DELIVERY_TYPE_LOGISTICS_VEHICLE
+                ? RecycleStageDict::STAGE_PICKUP
+                : RecycleStageDict::STAGE_SIGN;
             TaskService::forSite($this->site_id, (int)$this->uid, $this->getOperatorName())
-                ->assignPreferredOrDefault((int)$order->id, RecycleStageDict::STAGE_SIGN, (int)($data['next_assignee_uid'] ?? 0));
+                ->assignPreferredOrDefault((int)$order->id, $stage, (int)($data['next_assignee_uid'] ?? 0));
         } catch (\Throwable $e) {
-            Log::warning('创建订单后分配签收任务失败', ['order_id' => (int)$order->id, 'message' => $e->getMessage()]);
+            Log::warning('创建订单后分配首环节任务失败', ['order_id' => (int)$order->id, 'message' => $e->getMessage()]);
         }
 
         $signed = false;

@@ -92,6 +92,24 @@
                 <el-button link type="primary" size="small" @click="queryOrderExpress">查物流</el-button>
               </span>
             </div>
+            <template v-if="String(orderData.delivery_type || '') === '3'">
+              <div class="odd-desc-item">
+                <span class="odd-desc-label">物流车辆</span>
+                <span class="odd-desc-value">{{ [orderData.logistics_name, orderData.logistics_vehicle_no].filter(Boolean).join(' · ') || '暂无' }}</span>
+              </div>
+              <div class="odd-desc-item">
+                <span class="odd-desc-label">现场联系人</span>
+                <span class="odd-desc-value">{{ [orderData.logistics_contact_name, orderData.logistics_contact_mobile].filter(Boolean).join(' · ') || '暂无' }}</span>
+              </div>
+              <div class="odd-desc-item odd-desc-item--wide">
+                <span class="odd-desc-label">取货地点</span>
+                <span class="odd-desc-value">{{ orderData.logistics_pickup_address || '暂无' }}</span>
+              </div>
+              <div class="odd-desc-item odd-desc-item--wide" v-if="orderData.logistics_eta_at">
+                <span class="odd-desc-label">预计可取时间</span>
+                <span class="odd-desc-value">{{ formatTime(orderData.logistics_eta_at) }}</span>
+              </div>
+            </template>
             <div class="odd-desc-item" v-if="orderData.pay_type">
               <span class="odd-desc-label">打款方式</span>
               <span class="odd-desc-value">{{ orderData.pay_type }}</span>
@@ -359,8 +377,15 @@ interface OrderDetail {
     total_amount?: number | string;
     payment_images?: string;
     delivery_type_name?: string;
+    delivery_type?: string | number;
     express_company?: string;
     express_no?: string;
+    logistics_name?: string;
+    logistics_vehicle_no?: string;
+    logistics_contact_name?: string;
+    logistics_contact_mobile?: string;
+    logistics_pickup_address?: string;
+    logistics_eta_at?: number;
     pay_time?: number;
     create_at?: string;
     remark?: string;

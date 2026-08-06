@@ -186,8 +186,9 @@ class RecycleOrderDict
     ];
 
     // 发货方式
-    const DELIVERY_TYPE_EXPRESS = 'express';    // 快递
-    const DELIVERY_TYPE_SELF = 'self';         // 自送
+    const DELIVERY_TYPE_EXPRESS = '1';          // 快递
+    const DELIVERY_TYPE_SELF = '2';             // 自送
+    const DELIVERY_TYPE_LOGISTICS_VEHICLE = '3'; // 物流车配送
 
     // 订单操作类型
     const ORDER_CREATE = 'order_create';                    // 订单创建
@@ -440,9 +441,12 @@ class RecycleOrderDict
      */
     public static function getDeliveryType($type = '')
     {
-        $data = [self::DELIVERY_TYPE_SELF => '自送',
-            self::DELIVERY_TYPE_EXPRESS => '快递'
-            
+        $data = [
+            self::DELIVERY_TYPE_EXPRESS => '快递',
+            self::DELIVERY_TYPE_SELF => '自送',
+            self::DELIVERY_TYPE_LOGISTICS_VEHICLE => '物流车配送',
+            'express' => '快递',
+            'self' => '自送',
         ];
 
         return empty($type) ? $data : ($data[$type] ?? '');

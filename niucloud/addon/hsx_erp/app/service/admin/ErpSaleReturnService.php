@@ -6,6 +6,7 @@ namespace addon\hsx_erp\app\service\admin;
 use addon\hsx_erp\app\dict\ErpDict;
 use addon\hsx_erp\app\model\ErpAccountLedger;
 use addon\hsx_erp\app\model\ErpAsset;
+use addon\hsx_erp\app\model\ErpParty;
 use addon\hsx_erp\app\model\ErpPayable;
 use addon\hsx_erp\app\model\ErpReceivable;
 use addon\hsx_erp\app\model\ErpSaleItem;
@@ -60,8 +61,7 @@ class ErpSaleReturnService extends BaseAdminService
                 if ($asset->isEmpty() || (string)$asset->status !== ErpDict::ASSET_SOLD) throw new CommonException('只有已售设备可以售后补差');
                 $saleItem = $this->findSaleItem($assetId, (int)$asset->sale_order_id);
                 $order = $this->findSaleOrder((int)$asset->sale_order_id);
-                if ($partyId <= 0) $partyId = (int)$order->party_id;
-                if ((int)$order->party_id !== $partyId) throw new CommonException('只能处理同一个客户的设备');
+                [$partyId, $partyName] = $this->resolveReturnParty($order, $partyId);
                 $amount = round((float)($itemData['amount'] ?? $itemData['return_price'] ?? 0), 2);
                 $alreadyCompensated = $this->confirmedCompensationAmount((int)$saleItem->id);
                 $compensableRemain = max(0, round((float)$saleItem->sale_price - $alreadyCompensated, 2));
@@ -73,8 +73,10 @@ class ErpSaleReturnService extends BaseAdminService
                 }
                 $total = round($total + $amount, 2); $rows[] = [$asset,$saleItem,$order,$amount,trim((string)($itemData['reason'] ?? ''))];
             }
-            $firstOrder = $rows[0][2]; $no = ErpLedgerService::makeNo('SC');
-            $record = ErpSaleReturnOrder::create(['site_id'=>$this->site_id,'request_id'=>$requestId !== '' ? $requestId : null,'business_type'=>'after_sale_compensation','return_no'=>$no,'sale_order_id'=>(int)$firstOrder->id,'sale_no'=>(string)$firstOrder->sale_no,'party_id'=>$partyId,'party_name'=>(string)$firstOrder->party_name,'operator_id'=>(int)$this->uid,'operator_name'=>(string)$this->username,'total_amount'=>$total,'settled_amount'=>0,'status'=>'confirmed','refund_mode'=>(string)($data['refund_mode'] ?? 'payable'),'capital_account_id'=>(int)($data['capital_account_id'] ?? 0),'remark'=>trim((string)($data['remark'] ?? '')),'occurred_at'=>$now,'create_at'=>$now,'update_at'=>$now]);
+            $firstOrder = $rows[0][2];
+            [, $partyName] = $this->resolveReturnParty($firstOrder, $partyId);
+            $no = ErpLedgerService::makeNo('SC');
+            $record = ErpSaleReturnOrder::create(['site_id'=>$this->site_id,'request_id'=>$requestId !== '' ? $requestId : null,'business_type'=>'after_sale_compensation','return_no'=>$no,'sale_order_id'=>(int)$firstOrder->id,'sale_no'=>(string)$firstOrder->sale_no,'party_id'=>$partyId,'party_name'=>$partyName,'operator_id'=>(int)$this->uid,'operator_name'=>(string)$this->username,'total_amount'=>$total,'settled_amount'=>0,'status'=>'confirmed','refund_mode'=>(string)($data['refund_mode'] ?? 'payable'),'capital_account_id'=>(int)($data['capital_account_id'] ?? 0),'remark'=>trim((string)($data['remark'] ?? '')),'occurred_at'=>$now,'create_at'=>$now,'update_at'=>$now]);
             $id = (int)$record->id; $payItems=[];
             foreach ($rows as [$asset,$saleItem,$order,$amount,$reason]) {
                 $ri=ErpSaleReturnItem::create(['site_id'=>$this->site_id,'return_id'=>$id,'asset_id'=>(int)$asset->id,'asset_no'=>(string)$asset->asset_no,'imei'=>(string)$asset->imei,'model'=>(string)$asset->model,'sale_item_id'=>(int)$saleItem->id,'sale_price'=>(float)$saleItem->sale_price,'return_price'=>$amount,'received_amount'=>$amount,'reason'=>$reason,'create_at'=>$now]);
@@ -127,11 +129,19 @@ class ErpSaleReturnService extends BaseAdminService
             $asset = $this->findAssetInSaleOrder($assetId, $orderId);
             $warehouseId = (int)$asset->warehouse_id;
             $locationId = (int)$asset->location_id;
+            // 商城自有商品补录进 ERP 时，历史资产可能从未经过 ERP 入库，因而没有原仓位。
+            // 这种情况必须由操作人明确选择实际退回位置，不允许系统静默塞入任意仓库。
             if ($warehouseId <= 0 || $locationId <= 0) {
-                throw new CommonException('设备【' . (string)($asset->imei ?: $asset->asset_no) . '】缺少原仓库或库位，无法自动回库');
+                $warehouseId = (int)($data['return_to_warehouse_id'] ?? 0);
+                $locationId = (int)($data['return_to_location_id'] ?? 0);
+            }
+            if ($warehouseId <= 0 || $locationId <= 0) {
+                throw new CommonException('设备【' . (string)($asset->imei ?: $asset->asset_no) . '】没有 ERP 原仓位，请选择本次实际退回的仓库和库位');
             }
             // 一张退货单只记录一个回库位置；同一销售单跨仓设备自动拆成多张退货单。
             $item['sale_order_id'] = $orderId;
+            $item['_return_warehouse_id'] = $warehouseId;
+            $item['_return_location_id'] = $locationId;
             $groups[$orderId . '-' . $warehouseId . '-' . $locationId][] = $item;
         }
         $baseRequestId = ErpIdempotency::normalize($data['request_id'] ?? '');
@@ -142,6 +152,8 @@ class ErpSaleReturnService extends BaseAdminService
                 $groupData = $data;
                 $groupData['sale_order_id'] = (int)$orderId;
                 $groupData['items'] = $groupItems;
+                $groupData['return_to_warehouse_id'] = (int)($groupItems[0]['_return_warehouse_id'] ?? 0);
+                $groupData['return_to_location_id'] = (int)($groupItems[0]['_return_location_id'] ?? 0);
                 $groupData['request_id'] = ErpIdempotency::child($baseRequestId, 'return-' . $groupKey);
                 $ids[] = $this->create($groupData);
             }
@@ -176,15 +188,15 @@ class ErpSaleReturnService extends BaseAdminService
             Db::transaction(function () use ($data, $saleOrderId, $items, &$returnId) {
             $now   = time();
             $order = $this->findSaleOrder($saleOrderId);
+            $this->assertRefundEntry($order);
+            [$returnPartyId, $returnPartyName] = $this->resolveReturnParty(
+                $order,
+                (int)($data['party_id'] ?? 0)
+            );
 
             // 获取该销售单的应收，用于计算各设备已收金额
-            $receivable = ErpReceivable::where([
-                ['site_id',     '=', $this->site_id],
-                ['source_type', '=', 'sale'],
-                ['source_id',   '=', $saleOrderId],
-            ])->findOrEmpty();
-
-            $itemSettledMap = $receivable->isEmpty()
+            $receivable = $this->findSaleReceivable($saleOrderId);
+            $itemSettledMap = $receivable === null
                 ? []
                 : $this->saleItemSettledMap($receivable, $saleOrderId);
 
@@ -209,7 +221,11 @@ class ErpSaleReturnService extends BaseAdminService
                 $assetWarehouseId = (int)$asset->warehouse_id;
                 $assetLocationId = (int)$asset->location_id;
                 if ($assetWarehouseId <= 0 || $assetLocationId <= 0) {
-                    throw new CommonException('设备【' . (string)($asset->imei ?: $asset->asset_no) . '】缺少原仓库或库位，无法自动回库');
+                    $assetWarehouseId = (int)($data['return_to_warehouse_id'] ?? 0);
+                    $assetLocationId = (int)($data['return_to_location_id'] ?? 0);
+                }
+                if ($assetWarehouseId <= 0 || $assetLocationId <= 0) {
+                    throw new CommonException('设备【' . (string)($asset->imei ?: $asset->asset_no) . '】没有 ERP 原仓位，请选择本次实际退回的仓库和库位');
                 }
                 if ($originalWarehouseId === 0) {
                     $originalWarehouseId = $assetWarehouseId;
@@ -244,8 +260,8 @@ class ErpSaleReturnService extends BaseAdminService
                 'return_no'              => $returnNo,
                 'sale_order_id'          => $saleOrderId,
                 'sale_no'                => (string)$order->sale_no,
-                'party_id'               => (int)$order->party_id,
-                'party_name'             => (string)$order->party_name,
+                'party_id'               => $returnPartyId,
+                'party_name'             => $returnPartyName,
                 'operator_id'            => (int)$this->uid,
                 'operator_name'          => (string)$this->username,
                 'total_amount'           => $totalAmount,
@@ -292,6 +308,38 @@ class ErpSaleReturnService extends BaseAdminService
         }
 
         return $returnId;
+    }
+
+    /**
+     * 商城早期销售只有客户名称快照、party_id 为 0。
+     * 销退时前端已经要求重新选择客户，这里必须接住该稳定 ID，不能再被历史空值覆盖。
+     */
+    private function resolveReturnParty(ErpSaleOrder $order, int $selectedPartyId): array
+    {
+        $orderPartyId = (int)$order->party_id;
+        if ($orderPartyId > 0) {
+            if ($selectedPartyId > 0 && $selectedPartyId !== $orderPartyId) {
+                throw new CommonException('所选客户与原销售单客户不一致');
+            }
+            return [$orderPartyId, (string)$order->party_name];
+        }
+        if ($selectedPartyId <= 0) {
+            throw new CommonException('原商城销售缺少 ERP 客户主体，请重新选择退货客户');
+        }
+        $party = ErpParty::where([
+            ['site_id', '=', $this->site_id],
+            ['id', '=', $selectedPartyId],
+            ['status', '=', 1],
+        ])->field('id,party_name')->findOrEmpty();
+        if ($party->isEmpty()) {
+            throw new CommonException('所选退货客户不存在或已停用');
+        }
+        $snapshotName = trim((string)$order->party_name);
+        $partyName = trim((string)$party->party_name);
+        if ($snapshotName !== '' && $partyName !== $snapshotName) {
+            throw new CommonException('所选客户与商城订单客户名称不一致，请核对后重试');
+        }
+        return [(int)$party->id, $partyName !== '' ? $partyName : $snapshotName];
     }
 
     /**
@@ -728,12 +776,8 @@ class ErpSaleReturnService extends BaseAdminService
             ['site_id',   '=', $this->site_id],
             ['return_id', '=', $returnId],
         ])->order('id asc')->select()->toArray();
-        $receivable = ErpReceivable::where([
-            ['site_id', '=', $this->site_id],
-            ['source_type', '=', 'sale'],
-            ['source_id', '=', (int)$return['sale_order_id']],
-        ])->findOrEmpty();
-        $settledMap = $receivable->isEmpty()
+        $receivable = $this->findSaleReceivable((int)$return['sale_order_id'], false);
+        $settledMap = $receivable === null
             ? []
             : $this->saleItemSettledMap($receivable, (int)$return['sale_order_id']);
         $payableMap = [];
@@ -850,14 +894,27 @@ class ErpSaleReturnService extends BaseAdminService
         return $item;
     }
 
-    private function findSaleReceivable(int $saleOrderId): ?ErpReceivable
+    private function findSaleReceivable(int $saleOrderId, bool $lock = true): ?ErpReceivable
     {
-        $row = ErpReceivable::where([
-            ['site_id',     '=', $this->site_id],
-            ['source_type', '=', 'sale'],
-            ['source_id',   '=', $saleOrderId],
-        ])->lock(true)->findOrEmpty();
+        $query = ErpReceivable::where([
+            ['site_id', '=', $this->site_id],
+            ['source_id', '=', $saleOrderId],
+        ])->where(function ($sub) {
+            $sub->where('source_type', '=', 'sale')
+                ->whereOr('source_type', 'like', 'phone_shop.%');
+        })->orderRaw("CASE WHEN source_type = 'sale' THEN 0 ELSE 1 END, id ASC");
+        if ($lock) $query->lock(true);
+        $row = $query->findOrEmpty();
         return $row->isEmpty() ? null : $row;
+    }
+
+    /** 商城线上支付必须从原支付渠道退款；ERP 只直接处理线下现结、挂账及 ERP 自有销售。 */
+    private function assertRefundEntry(ErpSaleOrder $order): void
+    {
+        $paymentMode = trim((string)($order->payment_mode ?? ''));
+        if ((string)$order->origin_plugin === 'phone_shop' && in_array($paymentMode, ['online', 'wechat_online'], true)) {
+            throw new CommonException('该订单为商城线上支付，请在商城订单发起退款；原渠道退款成功后会自动同步 ERP，禁止在 ERP 重复退款');
+        }
     }
 
     private function assertNoPendingSaleReturn(int $assetId): void
@@ -1044,11 +1101,8 @@ class ErpSaleReturnService extends BaseAdminService
         if ($order->isEmpty()) {
             return;
         }
-        $received = (float)ErpReceivable::where([
-            ['site_id',     '=', $this->site_id],
-            ['source_type', '=', 'sale'],
-            ['source_id',   '=', $saleId],
-        ])->sum('settled_amount');
+        $receivable = $this->findSaleReceivable($saleId, false);
+        $received = $receivable === null ? 0.0 : (float)$receivable->settled_amount;
         $total = (float)$order->total_amount;
         $order->save([
             'received_amount'  => round($received, 2),

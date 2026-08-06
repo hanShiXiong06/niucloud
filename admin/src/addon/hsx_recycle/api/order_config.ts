@@ -11,6 +11,13 @@ export interface OrderSubmitConfig {
     delivery_modes: {
         mail: number
         self: number
+        logistics_vehicle: number
+    }
+    logistics_vehicle: {
+        arrival_mode: 'half_day' | 'next_day'
+        morning_cutoff: string
+        same_day_time: string
+        next_day_time: string
     }
     profile: {
         enabled: number

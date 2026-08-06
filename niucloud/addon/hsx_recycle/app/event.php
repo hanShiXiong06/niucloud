@@ -45,6 +45,7 @@ return [
         'HsxErpBusinessSourceOptions' => [ 'addon\hsx_recycle\app\listener\erp\ErpBusinessSourceOptionsListener' ],
         'GetRecyclePaymentMethods' => [ 'addon\hsx_recycle\app\listener\erp\RecyclePaymentMethodsProvider' ],
         'HsxBusinessReportMetricsRequested' => [ 'addon\hsx_recycle\app\listener\report\RecycleBusinessReportMetricsProvider' ],
+        'HsxBusinessTaskValidate' => [ 'addon\hsx_recycle\app\listener\BusinessTaskValidate' ],
 
         // 下游流转回流：订阅 ERP/数据中台事件，把设备下游生命周期(已入库/转中台/已定价)镜像回回收设备
         'ErpDomainEvent' => [

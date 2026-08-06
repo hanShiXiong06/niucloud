@@ -64,6 +64,17 @@
         :mobile="orderInfo.member?.mobile || orderInfo.customer_phone || ''"
       />
 
+      <view v-if="String(orderInfo.delivery_type) === '3'" class="logistics-detail-card">
+        <view class="logistics-detail-card__title">
+          <up-icon name="car" size="17" color="var(--recycle-brand)" />
+          <text>物流车配送</text>
+        </view>
+        <view class="logistics-detail-card__row"><text>车辆</text><text>{{ [orderInfo.logistics_name, orderInfo.logistics_vehicle_no].filter(Boolean).join(' · ') || '待补充' }}</text></view>
+        <view class="logistics-detail-card__row"><text>取货地点</text><text>{{ orderInfo.logistics_pickup_address || '待补充' }}</text></view>
+        <view class="logistics-detail-card__row"><text>现场联系</text><text>{{ [orderInfo.logistics_contact_name, orderInfo.logistics_contact_mobile].filter(Boolean).join(' · ') || '待补充' }}</text></view>
+        <view v-if="orderInfo.logistics_eta_at" class="logistics-detail-card__row logistics-detail-card__row--time"><text>预计可取</text><text>{{ formatEta(orderInfo.logistics_eta_at) }}</text></view>
+      </view>
+
       <view class="order-detail-links">
       <!-- 客服入口 -->
       <view v-if="customerServiceEnabled">
@@ -235,6 +246,11 @@ const {
 const { returnOrderList, hasReturnOrder, loadReturnOrders, goToReturnOrder } = useReturnOrder()
 
 const devicesRef = computed(() => orderInfo.value.devices)
+const formatEta = (value: number) => {
+  const date = new Date(Number(value || 0) * 1000)
+  const pad = (number: number) => String(number).padStart(2, '0')
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
 const themeVars = computed(() => buildRecycleThemeVars(submitConfig.value?.price_detail_theme?.colors || {}))
 const showCustomerServicePopup = ref(false)
 const showInspectionReport = ref(false)
@@ -531,6 +547,12 @@ onShow(async () => {
   align-items: center;
   text-align: center;
 }
+
+.logistics-detail-card { margin: 0 24rpx 20rpx; padding: 24rpx; border: 1rpx solid #e5ebf3; border-radius: 20rpx; background: #fff; }
+.logistics-detail-card__title { display: flex; align-items: center; gap: 12rpx; margin-bottom: 14rpx; color: #344054; font-size: 27rpx; font-weight: 650; }
+.logistics-detail-card__row { display: grid; grid-template-columns: 130rpx minmax(0, 1fr); gap: 12rpx; padding: 9rpx 0; color: #667085; font-size: 23rpx; line-height: 34rpx; }
+.logistics-detail-card__row > text:first-child { color: #98a2b3; }
+.logistics-detail-card__row--time > text:last-child { color: #b45309; font-weight: 600; }
 
 .order-empty-card__icon {
   width: 80rpx;

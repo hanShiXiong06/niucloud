@@ -55,6 +55,14 @@
           <up-icon name="arrow-right" size="14" color="#aab2bf" />
         </view>
       </view>
+      <view v-if="isLogisticsVehicle" class="vehicle-summary">
+        <view class="vehicle-summary__main">
+          <up-icon name="car" size="15" color="var(--recycle-brand)" />
+          <text>{{ [order.logistics_name, order.logistics_vehicle_no].filter(Boolean).join(' · ') || '物流车辆待补充' }}</text>
+        </view>
+        <text class="vehicle-summary__address">{{ order.logistics_pickup_address || '取货地点待补充' }}</text>
+        <text v-if="order.logistics_eta_at" class="vehicle-summary__time">预计 {{ formatEta(order.logistics_eta_at) }} 可取</text>
+      </view>
     </view>
 
     <view class="order-content">
@@ -131,6 +139,12 @@ const latestExpressMessage = ref('')
 const statusInfo = computed(() => getStatusInfo(props.order.status))
 const deliveryColor = computed(() => getDeliveryTypeColor(props.order.delivery_type))
 const isMailOrder = computed(() => String(props.order.delivery_type) === '1')
+const isLogisticsVehicle = computed(() => String(props.order.delivery_type) === '3')
+const formatEta = (value: number) => {
+  const date = new Date(Number(value || 0) * 1000)
+  const pad = (number: number) => String(number).padStart(2, '0')
+  return `${date.getMonth() + 1}月${date.getDate()}日 ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
 // 快递查询手机号：优先用客户登录手机号（member.mobile），兜底下单填写的 customer_phone
 const expressMobile = computed(() => props.order.member?.mobile || props.order.customer_phone || '')
 
@@ -409,6 +423,18 @@ const handleDelete = async () => {
   align-items: center;
   gap: 12rpx;
 }
+
+.vehicle-summary {
+  margin-top: 16rpx;
+  padding: 16rpx 18rpx;
+  border: 1rpx solid #e4ebf5;
+  border-radius: 14rpx;
+  background: #f8fbff;
+}
+
+.vehicle-summary__main { display: flex; align-items: center; gap: 10rpx; color: #3f4d61; font-size: 23rpx; font-weight: 600; }
+.vehicle-summary__address, .vehicle-summary__time { display: block; margin-top: 7rpx; padding-left: 40rpx; color: #7c8798; font-size: 21rpx; line-height: 30rpx; }
+.vehicle-summary__time { color: #b45309; }
 
 .meta-row {
   margin-top: 14rpx;

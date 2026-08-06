@@ -67,6 +67,17 @@
                                 <el-option v-for="g in gradeOptions" :key="g" :label="g" :value="g" />
                             </el-select>
                         </el-form-item>
+                        <el-form-item label="颜色" prop="device_color">
+                            <el-input v-model.trim="goodsEdit.formData.device_color" clearable placeholder="请输入设备颜色，如原色、黑色" class="input-width" maxlength="50" />
+                        </el-form-item>
+                        <el-form-item label="电池健康度" prop="battery_health">
+                            <el-input-number v-model="goodsEdit.formData.battery_health" :min="0" :max="100" :precision="0" controls-position="right" class="input-width" placeholder="请输入 0-100" />
+                            <span class="ml-[8px] text-[14px] text-[#606266]">%</span>
+                        </el-form-item>
+                        <el-form-item label="保修到期日" prop="warranty_expire_time">
+                            <el-date-picker v-model="goodsEdit.formData.warranty_expire_time" type="date" value-format="YYYY-MM-DD" format="YYYY-MM-DD" clearable placeholder="请选择保修到期日" class="input-width" />
+                            <span class="ml-[10px] text-[12px] text-[#999]">填写绝对日期，剩余保修天数由系统动态计算</span>
+                        </el-form-item>
                         <el-form-item :label="t('goodsCategory')" prop="goods_category">
                             <el-cascader v-model="goodsEdit.formData.goods_category" :options="goodsEdit.goodsCategoryOptions" :props="goodsEdit.goodsCategoryProps" clearable filterable @change="goodsEdit.categoryHandleChange" popper-class="choice" />
                             <div class="ml-[10px]">

@@ -399,8 +399,27 @@ class ErpStockService extends BaseAdminService
         if (!empty($where['location_id'])) {
             $query->where('a.location_id', '=', (int)$where['location_id']);
         }
-        if ($visibility->can('view_supplier') && !empty($where['party_id'])) {
-            $query->where('a.party_id', '=', (int)$where['party_id']);
+        $partyScope = (string)($where['party_scope'] ?? 'supplier') === 'customer' ? 'customer' : 'supplier';
+        if (!empty($where['party_id'])) {
+            if ($partyScope === 'customer') {
+                $this->applySnapshotPartyFilter($query, 's.party_id', 's.party_name', (int)$where['party_id']);
+            } elseif ($visibility->can('view_supplier')) {
+                $this->applySnapshotPartyFilter($query, 'a.party_id', 'a.party_name', (int)$where['party_id']);
+            }
+        }
+        // 已选择主体ID时只按稳定ID查询，避免主体改名后被历史名称快照二次过滤掉。
+        if (empty($where['party_id']) && !empty($where['party_name'])) {
+            $partyNameColumn = $partyScope === 'customer' ? 's.party_name' : 'a.party_name';
+            if ($partyScope === 'customer' || $visibility->can('view_supplier')) {
+                $query->whereLike($partyNameColumn, '%' . trim((string)$where['party_name']) . '%');
+            }
+        }
+        if (!empty($where['origin_plugin'])) {
+            $sourceColumn = $partyScope === 'customer' ? 's.origin_plugin' : 'a.source_plugin';
+            $this->applyBusinessSourceFilter($query, $sourceColumn, (string)$where['origin_plugin']);
+        }
+        if ($partyScope === 'customer' && !empty($where['sale_channel_key'])) {
+            $query->where('s.sale_channel_key', '=', trim((string)$where['sale_channel_key']));
         }
         if (!empty($where['catalog_product_id'])) $query->where('a.catalog_product_id', '=', (int)$where['catalog_product_id']);
         foreach ([
@@ -409,12 +428,10 @@ class ErpStockService extends BaseAdminService
             'sn' => 'a.sn',
             'model' => 'a.model',
             'spec' => 'a.spec',
-            'party_name' => 'a.party_name',
             'warehouse_name' => 'a.warehouse_name',
             'location_name' => 'a.location_name',
             'category_name' => 'a.category_name',
         ] as $key => $column) {
-            if ($key === 'party_name' && !$visibility->can('view_supplier')) continue;
             if (!empty($where[$key])) {
                 $query->whereLike($column, '%' . trim((string)$where[$key]) . '%');
             }
@@ -468,11 +485,14 @@ class ErpStockService extends BaseAdminService
                 $query->whereRaw($ageColumn . ' <= ' . $criticalCutoff);
             }
         }
+        $businessTimeField = $partyScope === 'customer'
+            ? 's.sale_at'
+            : 'IF(a.stock_in_at > 0, a.stock_in_at, a.create_at)';
         if (!empty($where['start_at'])) {
-            $query->where('a.stock_in_at', '>=', (int)$where['start_at']);
+            $query->whereRaw($businessTimeField . ' >= ?', [(int)$where['start_at']]);
         }
         if (!empty($where['end_at'])) {
-            $query->where('a.stock_in_at', '<=', (int)$where['end_at']);
+            $query->whereRaw($businessTimeField . ' <= ?', [(int)$where['end_at']]);
         }
         $order = !empty($where['turnover_level'])
             ? 'IF(a.stock_in_at > 0, a.stock_in_at, a.create_at) asc,a.id asc'
@@ -494,6 +514,34 @@ class ErpStockService extends BaseAdminService
         $page['data'] = $visibility->sanitizeStockRows((array)$page['data']);
         $page['capabilities'] = $visibility->stockCapabilities();
         return $page;
+    }
+
+    /** ERP 历史数据中手工业务曾使用 erp/hsx_erp 两种命名，查询层统一成一个入口。 */
+    private function applyBusinessSourceFilter($query, string $column, string $source): void
+    {
+        $source = trim($source);
+        if ($source === 'erp') {
+            $query->whereIn($column, ['erp', 'hsx_erp']);
+            return;
+        }
+        if ($source !== '') $query->where($column, '=', $source);
+    }
+
+    /** 已选主体优先按 ID；只为未绑定 ID 的历史业务快照提供精确名称兜底。 */
+    private function applySnapshotPartyFilter($query, string $idColumn, string $nameColumn, int $partyId): void
+    {
+        $partyName = trim((string)ErpParty::where([
+            ['site_id', '=', $this->site_id],
+            ['id', '=', $partyId],
+        ])->value('party_name'));
+        $query->where(function ($sub) use ($idColumn, $nameColumn, $partyId, $partyName) {
+            $sub->where($idColumn, '=', $partyId);
+            if ($partyName !== '') {
+                $sub->whereOr(function ($legacy) use ($idColumn, $nameColumn, $partyName) {
+                    $legacy->where($idColumn, '=', 0)->where($nameColumn, '=', $partyName);
+                });
+            }
+        });
     }
 
     public function turnoverSummary(): array
@@ -1108,7 +1156,7 @@ class ErpStockService extends BaseAdminService
         if ($saleOrderIds !== []) {
             $saleOrders = ErpSaleOrder::where('site_id', '=', $this->site_id)
                 ->whereIn('id', $saleOrderIds)
-                ->field('id,sale_no,party_name,sale_channel,salesman_name,finance_status,status,sale_at,create_at,origin_plugin,origin_plugin_name,origin_type,origin_name,origin_no')
+                ->field('id,sale_no,party_name,sale_channel,salesman_name,total_amount,received_amount,receivable_amount,finance_status,status,sale_at,create_at,origin_plugin,origin_plugin_name,origin_type,origin_name,origin_no')
                 ->select()->toArray();
             foreach ($saleOrders as $order) {
                 $saleOrderMap[(int)$order['id']] = $order;
@@ -1146,14 +1194,16 @@ class ErpStockService extends BaseAdminService
         $receiptAssetMap = [];
         $receiptExplicitTotalMap = [];
         if ($saleOrderIds !== []) {
-            $receivables = ErpReceivable::where([
-                ['site_id', '=', $this->site_id],
-                ['source_type', '=', 'sale'],
-            ])->whereIn('source_id', $saleOrderIds)
-                ->field('id,source_id,amount,settled_amount,status')
+            $receivables = ErpReceivable::where('site_id', '=', $this->site_id)
+                ->whereIn('source_id', $saleOrderIds)
+                ->where('status', '<>', ErpDict::STATUS_VOID)
+                ->field('id,source_type,source_id,origin_plugin,amount,settled_amount,status')
                 ->select()->toArray();
             $receivableIds = [];
             foreach ($receivables as $receivable) {
+                if (!$this->isSaleReceivableRow($receivable)) {
+                    continue;
+                }
                 $receivableMap[(int)$receivable['source_id']] = $receivable;
                 $receivableIds[] = (int)$receivable['id'];
             }
@@ -1231,20 +1281,46 @@ class ErpStockService extends BaseAdminService
             $row['outbound_remark'] = (string)($saleItem['remark'] ?? '');
             $salePrice = round((float)($saleItem['sale_price'] ?? 0), 2);
             $receivableId = (int)($receivable['id'] ?? 0);
-            $explicitSettled = round((float)($receiptAssetMap[$receivableId][(int)($row['id'] ?? 0)] ?? 0), 2);
-            $fallbackSettled = max(0, round((float)($receivable['settled_amount'] ?? 0) - (float)($receiptExplicitTotalMap[$receivableId] ?? 0), 2));
-            $receivableAmount = round((float)($receivable['amount'] ?? 0), 2);
-            $fallbackAllocated = $receivableAmount > 0.0001
-                ? round($salePrice / $receivableAmount * $fallbackSettled, 2)
-                : 0.0;
+            if ($receivableId > 0) {
+                $explicitSettled = round((float)($receiptAssetMap[$receivableId][(int)($row['id'] ?? 0)] ?? 0), 2);
+                $fallbackSettled = max(0, round((float)($receivable['settled_amount'] ?? 0) - (float)($receiptExplicitTotalMap[$receivableId] ?? 0), 2));
+                $receivableAmount = round((float)($receivable['amount'] ?? 0), 2);
+                $fallbackAllocated = $receivableAmount > 0.0001
+                    ? round($salePrice / $receivableAmount * $fallbackSettled, 2)
+                    : 0.0;
+                $settledAmount = round($explicitSettled + $fallbackAllocated, 2);
+            } else {
+                // 线上现结可能不产生应收明细，按销售单已收金额比例分摊到设备。
+                $orderTotal = round((float)($saleOrder['total_amount'] ?? 0), 2);
+                $orderReceived = min($orderTotal, round((float)($saleOrder['received_amount'] ?? 0), 2));
+                $settledAmount = $orderTotal > 0.0001
+                    ? round($salePrice / $orderTotal * $orderReceived, 2)
+                    : 0.0;
+            }
             $row['outbound_settlement_amount'] = $salePrice;
-            $row['outbound_settled_amount'] = min($salePrice, round($explicitSettled + $fallbackAllocated, 2));
+            $row['outbound_settled_amount'] = min($salePrice, $settledAmount);
             $row['outbound_finance_status'] = (string)($saleItem['status'] ?? '') === ErpDict::ASSET_SOLD && $salePrice > 0
                 ? ErpDict::financeStatus($salePrice, (float)$row['outbound_settled_amount'])
                 : '';
         }
         unset($row);
         return $rows;
+    }
+
+    /** ERP 原生销售与商城销售都属于销售应收，其他同 source_id 的业务应收不能混入。 */
+    private function isSaleReceivableRow(array $row): bool
+    {
+        if ((string)($row['source_type'] ?? '') === 'sale') {
+            return true;
+        }
+        if ((string)($row['origin_plugin'] ?? '') === 'phone_shop') {
+            return true;
+        }
+        $sourceType = (string)($row['source_type'] ?? '');
+        return (string)($row['origin_plugin'] ?? '') === '' && (
+            str_starts_with($sourceType, 'phone_shop.')
+            || in_array($sourceType, ['external.native_goods_sale', 'external.mall_sale'], true)
+        );
     }
 
     public function info(int $id): array
@@ -1984,6 +2060,8 @@ class ErpStockService extends BaseAdminService
             'brand_name' => $this->specValueText($specMeta['brand'] ?? ''),
             'memory' => $memory,
             'color' => $assetColor !== '' ? $assetColor : $specColor,
+            'battery_health' => (int)$asset->battery,
+            'warranty_expire_time' => (int)$asset->warranty,
             'condition_grade' => $conditionGrade,
             'images' => $images,
             'video_url' => trim((string)($asset->video_url ?? '')),

@@ -43,7 +43,7 @@ import { redirect } from '@/utils/common'
 
 const { setShare } = useShare()
 const diy = useDiy({
-    name: 'DIY_SHOP_INDEX'
+    name: 'DIY_PHONE_SHOP_INDEX'
 })
 const diyStore = useDiyStore()
 const diyGroupRef = ref(null)
