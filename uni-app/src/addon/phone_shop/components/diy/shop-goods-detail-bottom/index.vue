@@ -103,6 +103,7 @@ import useMemberStore from '@/stores/member'
 import { collect, cancelCollect } from '@/addon/phone_shop/api/goods';
 import useGoodsDetailStore from '@/addon/phone_shop/stores/goodsDetail'
 import { useGoodsDownload } from '@/addon/phone_shop/hooks/useGoodsDownload'
+import { useGoodsForwardAccess } from '@/addon/phone_shop/hooks/useGoodsForwardAccess'
 import DownloadConfigDialog from '@/addon/phone_shop/components/download-config-dialog/download-config-dialog.vue'
 import { useLogin } from '@/hooks/useLogin'
 
@@ -174,6 +175,8 @@ const showConfigDialog = ref(false)
 const pendingDownload: any = ref(null)
 const forwardFn = async () => {
     try {
+        const allowed = await useGoodsForwardAccess().ensureGoodsForwardAccess('/addon/phone_shop/pages/goods/detail')
+        if (!allowed) return
         const item: any = diyComponent.value || {}
         const gi = item.goods && item.goods.goods_image
         let images: string[] = []

@@ -378,8 +378,26 @@
                         <view class="flex-1">
                             <view class="text-[29rpx] font-600 text-[#172033]">订单已提交，设备已为您锁定</view>
                             <view class="mt-[10rpx] text-[24rpx] leading-[36rpx] text-[#718096]">
-                                业务员将联系您确认线下收款或挂账，并安排后续交付。您无需重复支付或上传凭证。
+                                {{ detail.offline_contact?.contact_tip || '业务员将主动联系您确认到店时间，请到店后再完成付款。' }}
                             </view>
+                        </view>
+                    </view>
+                    <view class="mt-[24rpx] rounded-[18rpx] bg-[#f7f9fc] px-[24rpx] py-[18rpx]">
+                        <view class="flex items-center justify-between text-[26rpx]">
+                            <text class="text-[#718096]">到店联系人</text>
+                            <text class="font-600 text-[#172033]">{{ detail.offline_contact?.handler_name || '门店业务员' }}</text>
+                        </view>
+                        <view v-if="detail.store?.store_name" class="mt-[16rpx] flex items-start justify-between text-[26rpx]">
+                            <text class="shrink-0 text-[#718096]">自提门店</text>
+                            <text class="ml-[30rpx] text-right text-[#172033]">{{ detail.store.store_name }} · {{ detail.store.full_address }}</text>
+                        </view>
+                        <view
+                            v-if="detail.offline_contact?.handler_mobile"
+                            class="mt-[18rpx] flex h-[64rpx] items-center justify-center rounded-full bg-[var(--primary-color-light)] text-[26rpx] font-600 text-[var(--primary-color)]"
+                            @click="callOfflineHandler"
+                        >
+                            <u-icon name="phone-fill" color="var(--primary-color)" size="18" />
+                            <text class="ml-[8rpx]">联系 {{ detail.offline_contact.handler_name || '负责人' }} {{ detail.offline_contact.handler_mobile }}</text>
                         </view>
                     </view>
                 </view>
@@ -652,6 +670,12 @@ const close = (item: any) => {
             }
         }
     })
+}
+
+const callOfflineHandler = () => {
+    const phoneNumber = String(detail.value?.offline_contact?.handler_mobile || '').trim()
+    if (!phoneNumber) return
+    uni.makePhoneCall({ phoneNumber })
 }
 
 // 删除订单

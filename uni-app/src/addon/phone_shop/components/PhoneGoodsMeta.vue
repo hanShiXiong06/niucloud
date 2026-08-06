@@ -1,8 +1,12 @@
 <template>
     <view v-if="subtitle || serial" class="phone-goods-meta" :class="{ 'phone-goods-meta--compact': compact }">
-        <text v-if="subtitle" class="phone-goods-meta__subtitle">{{ subtitle }}</text>
+        <view v-if="subtitle" class="phone-goods-meta__line">
+            <text class="phone-goods-meta__subtitle">{{ subtitle }}</text>
+        </view>
+        <view v-if="serial" class="phone-goods-meta__line">
+            <text class="phone-goods-meta__imei">IMEI {{ serial }}</text>
+        </view>
     </view>
-    <view class="phone-goods-meta"> <text v-if="serial" class="phone-goods-meta__imei">IMEI {{ serial }}</text></view>
 </template>
 
 <script setup lang="ts">
@@ -25,14 +29,19 @@ const serial = computed(() => String(props.imei || '').trim())
 <style lang="scss" scoped>
 .phone-goods-meta {
     min-width: 0;
+    overflow: hidden;
+    color: #94a3b8;
+    font-size: 22rpx;
+    line-height: 34rpx;
+}
+
+.phone-goods-meta__line {
+    min-width: 0;
     height: 34rpx;
     margin-top: 6rpx;
     display: flex;
     align-items: center;
     overflow: hidden;
-    color: #94a3b8;
-    font-size: 22rpx;
-    line-height: 34rpx;
     white-space: nowrap;
 }
 
@@ -58,10 +67,13 @@ const serial = computed(() => String(props.imei || '').trim())
 }
 
 .phone-goods-meta--compact {
-    height: 30rpx;
-    margin-top: 3rpx;
     font-size: 20rpx;
     line-height: 30rpx;
+}
+
+.phone-goods-meta--compact .phone-goods-meta__line {
+    height: 30rpx;
+    margin-top: 3rpx;
 }
 
 .phone-goods-meta--compact .phone-goods-meta__imei {

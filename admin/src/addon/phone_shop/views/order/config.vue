@@ -135,6 +135,33 @@
                             class="!w-[620px]"
                         />
                     </el-form-item>
+                    <template v-if="formData.offline_order_enabled == 1">
+                        <el-divider content-position="left">订单负责人</el-divider>
+                        <el-alert
+                            title="选中的人员都会收到企业微信待办；默认负责人同时展示给客户，负责主动联系、找机、收款和交付。"
+                            type="success"
+                            :closable="false"
+                            show-icon
+                            class="mb-[18px]"
+                        />
+                        <el-form-item label="接单管理员" required>
+                            <el-select v-model="selectedHandlerUids" multiple filterable collapse-tags collapse-tags-tooltip class="!w-[620px]" placeholder="选择一个或多个接单人员">
+                                <el-option v-for="user in allUserList" :key="user.uid" :label="user.real_name || user.username || user.mobile" :value="Number(user.uid)" />
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="默认负责人" required>
+                            <el-select v-model="formData.offline_default_handler_uid" class="!w-[320px]" placeholder="客户到店默认寻找的负责人" @change="syncDefaultHandlerContact">
+                                <el-option v-for="user in selectedHandlers" :key="user.uid" :label="user.name" :value="Number(user.uid)" />
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="客户看到的联系人">
+                            <div class="flex gap-[10px]">
+                                <el-input v-model.trim="formData.offline_contact_name" class="!w-[240px]" maxlength="100" placeholder="联系人姓名" />
+                                <el-input v-model.trim="formData.offline_contact_mobile" class="!w-[240px]" maxlength="30" placeholder="联系电话" />
+                            </div>
+                            <div class="w-full mt-[5px] text-[12px] text-[#999]">用于下单成功通知和订单详情，可与账号姓名、手机号不同。</div>
+                        </el-form-item>
+                    </template>
                     <el-form-item label="线上下单">
                         <el-switch v-model="formData.online_order_enabled" :active-value="1" :inactive-value="0" />
                         <span class="ml-[12px] text-[12px] text-[#999]">实际可用方式与牛云支付中心保持同步</span>
@@ -252,6 +279,7 @@ import { useRoute,useRouter } from 'vue-router'
 import { filterNumber } from '@/utils/common'
 import { getDiyFormList } from '@/app/api/diy_form'
 import { getPayConfigList } from '@/app/api/sys'
+import { getAllUserList } from '@/app/api/user'
 import { ElMessage } from 'element-plus'
 
 const route = useRoute()
@@ -280,8 +308,40 @@ const formData = ref({
     offline_order_default: 1,
     offline_peer_enabled: 1,
     offline_timeout_minutes: 120,
-    offline_contact_tip: '提交后将锁定设备，业务员会尽快联系您确认收款与交付方式。'
+    offline_contact_tip: '提交后将锁定设备，业务员会尽快联系您确认收款与交付方式。',
+    offline_handlers: [] as any[],
+    offline_default_handler_uid: 0,
+    offline_contact_name: '',
+    offline_contact_mobile: ''
 })
+
+const allUserList = ref<any[]>([])
+const selectedHandlers = computed(() => formData.value.offline_handlers || [])
+const selectedHandlerUids = computed<number[]>({
+    get: () => selectedHandlers.value.map((item: any) => Number(item.uid)),
+    set: (uids: number[]) => {
+        formData.value.offline_handlers = uids.map(uid => {
+            const user: any = allUserList.value.find(item => Number(item.uid) === Number(uid)) || {}
+            return { uid: Number(uid), name: user.real_name || user.username || user.mobile || `用户#${uid}`, mobile: user.mobile || '' }
+        })
+        if (!uids.includes(Number(formData.value.offline_default_handler_uid))) {
+            formData.value.offline_default_handler_uid = Number(uids[0] || 0)
+            syncDefaultHandlerContact()
+        }
+    }
+})
+
+const syncDefaultHandlerContact = () => {
+    const handler: any = selectedHandlers.value.find((item: any) => Number(item.uid) === Number(formData.value.offline_default_handler_uid))
+    if (!handler) return
+    formData.value.offline_contact_name = handler.name || ''
+    formData.value.offline_contact_mobile = handler.mobile || ''
+}
+
+const loadAllUsers = async() => {
+    const res: any = await getAllUserList({})
+    allUserList.value = Array.isArray(res.data) ? res.data : []
+}
 
 const peerFeePercent = computed({
     get: () => Number(formData.value.peer_fee_rate || 0) * 100,
@@ -444,11 +504,16 @@ const clearInvoiceContent = (index:number) => {
 }
 getConfigFn()
 loadPayChannels()
+loadAllUsers()
 const formRef = ref()
 
 const onSave = async (formEl: any) => {
     await formEl.validate(async (valid:any) => {
         if (valid) {
+            if (formData.value.offline_order_enabled == 1 && !formData.value.offline_handlers.length) {
+                ElMessage.warning('请至少选择一位线下订单接单管理员')
+                return
+            }
             loading.value = true
             setConfig(formData.value).then(res => {
                 getConfigFn()

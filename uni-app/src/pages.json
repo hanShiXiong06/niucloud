@@ -428,6 +428,11 @@
                     "style": {
                         "navigationBarTitleText": "%shop.pages.member.my_coupon%"
                     },
+					"needLogin": true
+                },
+                {
+                    "path": "pages/member/forward-application",
+                    "style": { "navigationBarTitleText": "同行身份申请" },
                     "needLogin": true
                 },
                 {

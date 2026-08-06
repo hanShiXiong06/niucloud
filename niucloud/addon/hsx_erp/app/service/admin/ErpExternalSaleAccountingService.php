@@ -43,7 +43,7 @@ abstract class ErpExternalSaleAccountingService extends ErpExternalContractServi
             'operator_uid' => (int)($payload['operator_id'] ?? 0),
             'operator_name' => trim((string)($payload['operator_name'] ?? '')) ?: '商城自动入账',
             'confirmed_at' => (int)$payload['occurred_at'],
-            'voucher_urls' => '',
+            'voucher_urls' => json_encode(array_values((array)($payload['payment']['voucher_urls'] ?? [])), JSON_UNESCAPED_UNICODE),
             'remark' => mb_substr($remark, 0, 255),
             'create_at' => time(),
         ]);

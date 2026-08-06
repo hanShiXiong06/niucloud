@@ -73,10 +73,10 @@
         />
 
         <mescroll-body ref="mescrollRef" top="168rpx" bottom="60px" @init="mescrollInit" :down="{ use: false }" @up="getAllAppListFn">
-            <view v-if="goodsList.length" :class="['sidebar-margin', !listType ? 'biserial-goods-list' : '']">
+            <view v-if="goodsList.length" class="sidebar-margin">
                 <template v-if="listType">
                     <view v-for="(item, index) in goodsList" :key="index"
-                          class="goods-row-card bg-white flex px-[20rpx] py-[20rpx] rounded-[var(--rounded-small)] overflow-hidden top-mar"
+                          class="goods-row-card bg-white flex p-[12rpx]  rounded-[var(--rounded-small)] overflow-hidden top-mar"
                           :class="{ 'mb-[20rpx]': (index+1) == goodsList.length}" @click="toDetail(item.goods_id)">
                         <PhoneGoodsCover :src="item.goods_cover_thumb_mid" :grade="item.condition_grade" />
 
@@ -88,7 +88,7 @@
                             <PhoneGoodsMeta :subtitle="item.sub_title" :imei="item.goodsSku?.sku_no" />
                             <PhoneGoodsSaleState :state="item.sale_state" />
 
-                            <view class="goods-row-price mt-auto flex items-baseline">
+                            <view class="goods-row-price flex items-baseline">
                                 <view class="flex items-baseline">
                                     <view class="text-[var(--price-text-color)] price-font flex items-baseline">
                                         <text class="text-[24rpx] font-500 mr-[4rpx]">￥</text>
@@ -110,83 +110,11 @@
                     </view>
                 </template>
                 <template v-else>
-                    <view>
-                        <template v-for="(item, index) in goodsList">
-                            <view v-if="(index%2) == 0" class="flex flex-col bg-[#fff] box-border rounded-[var(--rounded-mid)] overflow-hidden mt-[var(--top-m)]"
-                                  @click="toDetail(item.goods_id)">
-
-<!--                                <easy-image class="w-[100%] h-[344rpx]" image-class="rounded-tl-[var(&#45;&#45;rounded-mid)] rounded-tr-[var(&#45;&#45;rounded-mid)]"-->
-<!--                                                :image-src="item.goods_cover_thumb_small" />-->
-                                <PhoneGoodsCover :src="item.goods_cover_thumb_mid" :grade="item.condition_grade" variant="grid" />
-
-                                <view class="px-[20rpx] flex-1 pt-[16rpx] pb-[24rpx] flex flex-col justify-between">
-                                    <view class="text-[#303133] leading-[40rpx] text-[28rpx] multi-hidden">
-                                        <view class="brand-tag" v-if="item.goods_brand" :style="diyGoods.baseTagStyle(item.goods_brand)">{{ item.goods_brand.brand_name }}</view>
-                                        {{ item.goods_name }}
-                                    </view>
-                                    <PhoneGoodsMeta :subtitle="item.sub_title" :imei="item.goodsSku?.sku_no" compact />
-                                    <PhoneGoodsSaleState :state="item.sale_state" />
-                                    <view v-if="item.goods_label_name && item.goods_label_name.length" class="flex flex-wrap">
-                                        <template v-for="(tagItem, tagIndex) in item.goods_label_name">
-                                            <image class="img-tag" v-if="tagItem.style_type == 'icon' && tagItem.icon" :src="img(tagItem.icon)" mode="heightFix" @error="diyGoods.error(tagItem,'icon')"/>
-                                            <view class="base-tag" v-else-if="tagItem.style_type == 'diy' || !tagItem.icon" :style="diyGoods.baseTagStyle(tagItem)">{{ tagItem.label_name }}</view>
-                                        </template>
-                                    </view>
-                                    <view class="flex flex-wrap items-end">
-                                        <view class="flex items-baseline mt-[20rpx]">
-                                            <view class="text-[var(--price-text-color)] price-font flex items-baseline">
-                                                <text class="text-[24rpx] font-500">￥</text>
-                                                <text class="text-[40rpx] font-500">{{ diyGoods.goodsPrice(item).toFixed(2).split('.')[0] }}</text>
-                                                <text class="text-[24rpx] font-500">.{{ diyGoods.goodsPrice(item).toFixed(2).split('.')[1] }}</text>
-                                            </view>
-                                            <image v-if="diyGoods.priceType(item) == 'member_price'" class="max-w-[50rpx] h-[28rpx] ml-[6rpx]" :src="img('addon/phone_shop/VIP.png')" mode="heightFix" />
-											<image v-else-if="diyGoods.priceType(item) == 'newcomer_price'" class="max-w-[60rpx] h-[28rpx] ml-[6rpx]" :src="img('addon/phone_shop/newcomer.png')" mode="heightFix" />
-											<image v-else-if="diyGoods.priceType(item) == 'discount_price'" class="max-w-[80rpx] h-[28rpx] ml-[6rpx]" :src="img('addon/phone_shop/discount.png')" mode="heightFix" />
-                                        </view>
-                                    </view>
-                                </view>
-                            </view>
+                    <PhoneGoodsWaterfall :items="goodsList" :estimate-height="estimateGoodsCardHeight">
+                        <template #default="{ item }">
+                            <PhoneGoodsWaterfallCard :item="item" @click="toDetail(item.goods_id)" />
                         </template>
-                    </view>
-                    <view>
-                        <template v-for="(item, index) in goodsList">
-                            <view v-if="(index%2) == 1" class="flex flex-col bg-[#fff] box-border rounded-[var(--rounded-mid)] overflow-hidden mt-[var(--top-m)]" @click="toDetail(item.goods_id)">
-<!--                                <easy-image class="w-[100%] h-[344rpx]" image-class="rounded-tl-[var(&#45;&#45;rounded-mid)] rounded-tr-[var(&#45;&#45;rounded-mid)]"-->
-<!--                                                :image-src="item.goods_cover_thumb_small" />-->
-                                <PhoneGoodsCover :src="item.goods_cover_thumb_mid" :grade="item.condition_grade" variant="grid" />
-                                <view class="px-[20rpx] flex-1 pt-[16rpx] pb-[24rpx] flex flex-col justify-between">
-                                    <view class="text-[#303133] leading-[40rpx] text-[28rpx] multi-hidden">
-                                        <view class="brand-tag" v-if="item.goods_brand" :style="diyGoods.baseTagStyle(item.goods_brand)">
-                                            {{ item.goods_brand.brand_name }}
-                                        </view>
-                                        {{ item.goods_name }}
-                                    </view>
-                                    <PhoneGoodsMeta :subtitle="item.sub_title" :imei="item.goodsSku?.sku_no" compact />
-                                    <PhoneGoodsSaleState :state="item.sale_state" />
-                                    <view v-if="item.goods_label_name && item.goods_label_name.length" class="flex flex-wrap">
-                                        <template v-for="(tagItem, tagIndex) in item.goods_label_name">
-                                            <image class="img-tag" v-if="tagItem.style_type == 'icon' && tagItem.icon" :src="img(tagItem.icon)" mode="heightFix" @error="diyGoods.error(tagItem,'icon')" />
-                                            <view class="base-tag" v-else-if="tagItem.style_type == 'diy' || !tagItem.icon" :style="diyGoods.baseTagStyle(tagItem)">
-                                                {{ tagItem.label_name }}
-                                            </view>
-                                        </template>
-                                    </view>
-                                    <view class="flex flex-wrap items-baseline">
-                                        <view class="flex items-baseline mt-[20rpx]">
-                                            <view class="text-[var(--price-text-color)] price-font flex items-baseline">
-                                                <text class="text-[24rpx] font-500">￥</text>
-                                                <text class="text-[40rpx] font-500">{{ diyGoods.goodsPrice(item).toFixed(2).split('.')[0] }}</text>
-                                                <text class="text-[24rpx] font-500">.{{ diyGoods.goodsPrice(item).toFixed(2).split('.')[1] }}</text>
-                                            </view>
-                                            <image v-if="diyGoods.priceType(item) == 'member_price'" class="max-w-[50rpx] h-[28rpx] ml-[6rpx]" :src="img('addon/phone_shop/VIP.png')" mode="heightFix" />
-											<image v-else-if="diyGoods.priceType(item) == 'newcomer_price'"  class="max-w-[60rpx] h-[28rpx] ml-[6rpx]" :src="img('addon/phone_shop/newcomer.png')" mode="heightFix" />
-											<image v-else-if="diyGoods.priceType(item) == 'discount_price'" class="max-w-[80rpx] h-[28rpx] ml-[6rpx]" :src="img('addon/phone_shop/discount.png')" mode="heightFix" />
-                                        </view>
-                                    </view>
-                                </view>
-                            </view>
-                        </template>
-                    </view>
+                    </PhoneGoodsWaterfall>
                 </template>
             </view>
             <mescroll-empty v-if="!goodsList.length && loading" :option="{tip : '暂无商品', btnText:'去逛逛'}" @emptyclick="redirect({ url: '/addon/phone_shop/pages/index', mode: 'reLaunch' })"></mescroll-empty>
@@ -219,6 +147,8 @@ import GoodsMoreFilterPopup from '@/addon/phone_shop/components/goods-filter/Goo
 import PhoneGoodsMeta from '@/addon/phone_shop/components/PhoneGoodsMeta.vue'
 import PhoneGoodsSaleState from '@/addon/phone_shop/components/PhoneGoodsSaleState.vue'
 import PhoneGoodsCover from '@/addon/phone_shop/components/PhoneGoodsCover.vue'
+import PhoneGoodsWaterfall from '@/addon/phone_shop/components/PhoneGoodsWaterfall.vue'
+import PhoneGoodsWaterfallCard from '@/addon/phone_shop/components/PhoneGoodsWaterfallCard.vue'
 import useMemberStore from '@/stores/member'
 import { useLogin } from '@/hooks/useLogin'
 
@@ -555,6 +485,26 @@ const applyMoreFilters = (value: any) => {
 const listIconBtn = () => {
     listType.value = !listType.value
 }
+
+const visualTextLength = (value: unknown) => String(value || '').split('').reduce((total, char) => {
+    return total + (/^[\u0000-\u00ff]$/.test(char) ? 0.55 : 1)
+}, 0)
+
+/**
+ * 使用固定封面和已知信息区估算卡片高度，不依赖节点测量。
+ * 这样小程序滚动时不会反复重排，追加分页数据时已有商品也不会跳列。
+ */
+const estimateGoodsCardHeight = (item: Record<string, any>) => {
+    const titleLines = visualTextLength(item?.goods_name) > 12 ? 2 : 1
+    let height = 344 + 16 + titleLines * 40 + 22
+
+    if (String(item?.sub_title || '').trim()) height += 33
+    if (String(item?.goodsSku?.sku_no || '').trim()) height += 37
+    if (item?.sale_state?.code && item.sale_state.code !== 'sellable') height += 42
+
+    return height + 72
+}
+
 const toDetail = (id: string | number) => {
     redirect({ url: '/addon/phone_shop/pages/goods/detail', param: { goods_id: id }, mode: 'navigateTo' })
 }
@@ -679,20 +629,14 @@ onMounted(() => {
     background-color: var(--text-color-light9);
 }
 
-.biserial-goods-list {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    grid-gap: 10px;
-}
-
 .goods-row-card {
-    min-height: 270rpx;
+    // min-height: 270rpx;
     align-items: stretch;
+
 }
 
 .goods-row-content {
     min-width: 0;
-    height: 230rpx;
     padding: 2rpx 0;
     overflow: hidden;
     box-sizing: border-box;
@@ -704,17 +648,10 @@ onMounted(() => {
     margin-bottom: 2rpx;
 }
 
-.goods-row-labels {
-    flex-shrink: 0;
-    max-height: 34rpx;
-    overflow: hidden;
-}
-
 .goods-row-price {
-    min-height: 46rpx;
-    padding-top: 6rpx;
     overflow: hidden;
     box-sizing: border-box;
     flex-shrink: 0;
 }
+
 </style>

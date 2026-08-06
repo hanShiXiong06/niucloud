@@ -133,14 +133,42 @@
                                 <el-tag type="warning" effect="plain">设备已锁定</el-tag>
                             </div>
                             <p class="mt-[8px] text-[13px] leading-[22px] text-[#718096]">
-                                业务员确认实际收款或挂账后，订单自动进入待交付；ERP 同步生成销售、收款或应收事实。
+                                负责人先联系客户确认到店安排；到店收款后上传凭证，订单自动进入待交付，ERP 同步生成销售和资金事实。
                             </p>
+                            <div v-if="formData.offline_record" class="mt-[10px] flex flex-wrap items-center gap-x-[18px] gap-y-[6px] text-[13px] text-[#516179]">
+                                <span>当前负责人：<strong>{{ formData.offline_record.handler_name || '待认领' }}</strong></span>
+                                <span>联系电话：{{ formData.offline_record.handler_mobile || '未配置' }}</span>
+                                <el-tag :type="offlineRecordTag(formData.offline_record.status).type" size="small">
+                                    {{ offlineRecordTag(formData.offline_record.status).label }}
+                                </el-tag>
+                            </div>
                         </div>
-                        <div class="flex shrink-0 gap-[10px]">
+                        <div class="flex shrink-0 flex-wrap justify-end gap-[10px]">
+                            <el-button v-if="formData.offline_record?.status !== 'contacted'" @click="markOfflineContacted">确认已联系</el-button>
                             <el-button type="primary" @click="openOfflineProcess('confirm_paid')">确认已收款</el-button>
                             <el-button @click="openOfflineProcess('confirm_credit')">挂账并出库</el-button>
+                            <el-button type="danger" plain @click="closeOfflineUnreachable">无法联系并关闭</el-button>
                         </div>
                     </div>
+                </div>
+                <div v-if="formData.offline_record?.voucher_urls?.length" class="mx-[30px] mb-[20px]">
+                    <div class="mb-[8px] text-[14px] font-medium text-[#303133]">线下收款凭证</div>
+                    <el-image
+                        v-for="url in formData.offline_record.voucher_urls"
+                        :key="url"
+                        class="mr-[10px] h-[72px] w-[72px] rounded-[6px] border border-[#ebeef5]"
+                        :src="img(url)"
+                        :preview-src-list="formData.offline_record.voucher_urls.map((item: string) => img(item))"
+                        fit="cover"
+                        preview-teleported
+                    />
+                </div>
+                <div v-if="isOfflineStoreReady" class="mx-[30px] mb-[20px] flex items-center justify-between rounded-[8px] border border-[#c6eed7] bg-[#f3fbf6] px-[20px] py-[16px]">
+                    <div>
+                        <div class="text-[15px] font-medium text-[#1f7a46]">收款或挂账已确认，等待客户到店取机</div>
+                        <p class="mt-[5px] text-[13px] text-[#668475]">负责人核对客户、订单和设备后，在此确认交付；系统会完成出库、订单和 ERP 同步。</p>
+                    </div>
+                    <el-button type="success" @click="confirmOfflineDelivery">确认已交付</el-button>
                 </div>
                 <div class="mb-[20px]">
                     <p>
@@ -149,8 +177,8 @@
                     </p>
                     <div class="flex mt-[10px]">
                         <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#ff7f5b] bg-[#fff0e5] cursor-pointer" @click="setNotes">{{ t('notes') }}</span>
-                        <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer" @click="delivery" v-if="formData.status == 2">{{ t('delivery') }}</span>
-                        <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer" @click="close" v-if="formData.status == 1">{{ t('close') }}</span>
+                        <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer" @click="delivery" v-if="formData.status == 2 && formData.delivery_type !== 'store'">{{ t('delivery') }}</span>
+                        <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer" @click="close" v-if="formData.status == 1 && !isOfflinePending">{{ t('close') }}</span>
                         <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer" @click="orderAdjustMoney" v-if="formData.status == 1">{{ t('editPrice') }}</span>
                         <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer" @click="finish" v-if="formData.status == 3">{{ t('finish') }}</span>
                         <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer" @click="openElectronicSheetPrintDialog" v-if="formData.delivery_type == 'express' && formData.status == 3">{{ t('electronicSheetPrintTitle') }}</span>
@@ -330,6 +358,10 @@
                             暂无可用账户，请先在 ERP 资金账户中启用账户。
                         </div>
                     </el-form-item>
+                    <el-form-item v-if="offlineDialog.action === 'confirm_paid'" label="收款凭证" required>
+                        <upload-image v-model="offlineDialog.voucher_urls" :limit="6" width="80px" height="80px" image-text="上传凭证" />
+                        <div class="mt-[6px] text-[12px] text-[#909399]">支持现场拍照或上传转账截图，确认后永久保留在订单责任记录中。</div>
+                    </el-form-item>
                     <el-form-item label="处理备注">
                         <el-input v-model="offlineDialog.remark" type="textarea" :rows="3" maxlength="255" show-word-limit placeholder="可填写收款方式、沟通结果等" />
                     </el-form-item>
@@ -384,6 +416,9 @@ const loading = ref(true)
 
 const formData: Record<string, any> | null = ref(null)
 const isOfflinePending = computed(() => Number(formData.value?.status) === 1 && formData.value?.payment_mode === 'offline_pending')
+const isOfflineStoreReady = computed(() => Number(formData.value?.status) === 2
+    && formData.value?.delivery_type === 'store'
+    && ['offline_cash', 'offline_credit'].includes(formData.value?.payment_mode))
 const capitalAccounts = ref<any[]>([])
 const offlineSubmitting = ref(false)
 const offlineDialog = reactive({
@@ -391,7 +426,8 @@ const offlineDialog = reactive({
     action: 'confirm_paid',
     capital_account_id: 0,
     deal_total: 0,
-    remark: ''
+    remark: '',
+    voucher_urls: [] as string[]
 })
 const offlineOrderGoodsCount = computed(() => (formData.value?.order_goods || [])
     .filter((item: any) => Number(item.is_gift || 0) !== 1)
@@ -456,6 +492,7 @@ const openOfflineProcess = async(action: 'confirm_paid' | 'confirm_credit') => {
     offlineDialog.capital_account_id = 0
     offlineDialog.deal_total = Number(formData.value?.order_money || 0)
     offlineDialog.remark = ''
+    offlineDialog.voucher_urls = []
     if (action === 'confirm_paid') {
         const { data } = await getOfflineCapitalAccounts()
         capitalAccounts.value = Array.isArray(data) ? data : []
@@ -474,6 +511,10 @@ const submitOfflineProcess = async() => {
         ElMessageBox.alert('请选择实际到账的 ERP 资金账户', '缺少收款账户', { type: 'warning' })
         return
     }
+    if (offlineDialog.action === 'confirm_paid' && !offlineDialog.voucher_urls.length) {
+        ElMessageBox.alert('请上传至少一张收款凭证', '缺少收款凭证', { type: 'warning' })
+        return
+    }
     offlineSubmitting.value = true
     try {
         await processOfflineOrder({
@@ -481,13 +522,70 @@ const submitOfflineProcess = async() => {
             action: offlineDialog.action,
             capital_account_id: offlineDialog.capital_account_id,
             deal_total: offlineDialog.deal_total,
-            remark: offlineDialog.remark
+            remark: offlineDialog.remark,
+            voucher_urls: offlineDialog.voucher_urls
         })
         offlineDialog.visible = false
         await setFormData(orderId)
     } finally {
         offlineSubmitting.value = false
     }
+}
+
+const offlineRecordTag = (status: string) => {
+    const map: Record<string, { label: string, type: '' | 'success' | 'warning' | 'info' | 'danger' }> = {
+        pending: { label: '待联系', type: 'warning' },
+        contacted: { label: '已联系待到店', type: 'info' },
+        paid: { label: '已收款', type: 'success' },
+        credit: { label: '已挂账', type: 'warning' },
+        delivered: { label: '已交付', type: 'success' },
+        closed: { label: '已关闭', type: 'info' }
+    }
+    return map[status] || { label: '待处理', type: 'warning' as const }
+}
+
+const markOfflineContacted = async() => {
+    const confirmed = await ElMessageBox.confirm(
+        `确认已联系 ${formData.value?.taker_name || formData.value?.member?.nickname || '该客户'}（${formData.value?.taker_mobile || '未留手机号'}）？`,
+        '确认联系结果',
+        { type: 'info', confirmButtonText: '已联系', cancelButtonText: '取消' }
+    ).then(() => true).catch(() => false)
+    if (!confirmed) return
+    await processOfflineOrder({ order_id: orderId, action: 'contacted', remark: '已主动联系客户并确认到店安排' })
+    await setFormData(orderId)
+}
+
+const closeOfflineUnreachable = async() => {
+    const result = await ElMessageBox.prompt(
+        '请填写无法联系、客户取消或其他关闭原因。关闭后设备会解除锁定。',
+        '关闭线下订单',
+        {
+            type: 'warning',
+            inputType: 'textarea',
+            inputPlaceholder: '例如：连续联系三次无人接听',
+            inputValidator: (text: string) => text.trim().length > 0 || '请填写关闭原因',
+            confirmButtonText: '确认关闭',
+            cancelButtonText: '取消'
+        }
+    ).catch(() => null)
+    if (!result) return
+    await processOfflineOrder({ order_id: orderId, action: 'close_unreachable', close_reason: result.value })
+    await setFormData(orderId)
+}
+
+const confirmOfflineDelivery = async() => {
+    const confirmed = await ElMessageBox.confirm(
+        `确认已核对客户，并将订单「${formData.value?.order_no || ''}」中的设备当面交付？确认后订单将完成。`,
+        '确认到店交付',
+        { type: 'warning', confirmButtonText: '确认已交付', cancelButtonText: '取消' }
+    ).then(() => true).catch(() => false)
+    if (!confirmed) return
+    await processOfflineOrder({
+        order_id: orderId,
+        action: 'confirm_delivery',
+        remark: '已当面核对客户并完成设备交付'
+    })
+    await setFormData(orderId)
 }
 
 const close = () => {

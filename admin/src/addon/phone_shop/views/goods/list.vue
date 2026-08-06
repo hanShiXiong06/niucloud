@@ -12,7 +12,7 @@
             </div>
 
             <el-card class="box-card !border-none my-[10px] table-search-wrap" shadow="never">
-                <el-form :inline="true" :model="goodsTable.searchParam" ref="searchFormRef">\
+                <el-form :inline="true" :model="goodsTable.searchParam" ref="searchFormRef">
                     <el-form-item label="imei" prop="device_keywords">
                         <el-input v-model="goodsTable.searchParam.device_keywords" type="textarea" :autosize="{ minRows: 1, maxRows: 3 }"
                             placeholder="IMEI 空格或换行分隔" clearable class="!w-[220px]" @keyup.enter="loadGoodsList()" />

@@ -1,6 +1,6 @@
 <template>
     <view class="phone-goods-cover" :class="`phone-goods-cover--${variant}`">
-        <image class="phone-goods-cover__image" :src="coverSrc" mode="aspectFit" @error="useFallback" />
+        <image class="phone-goods-cover__image" :src="coverSrc" mode="aspectFill" @error="useFallback" />
         <view v-if="gradeText" class="phone-goods-cover__grade">{{ gradeText }}</view>
     </view>
 </template>
@@ -38,7 +38,7 @@ const useFallback = () => { failed.value = true }
 
 .phone-goods-cover--row {
     width: 190rpx;
-    height: 230rpx;
+    height: 190rpx;
     border-radius: var(--rounded-mid);
 }
 

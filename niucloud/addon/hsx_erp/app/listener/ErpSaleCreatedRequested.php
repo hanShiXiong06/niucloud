@@ -155,6 +155,10 @@ class ErpSaleCreatedRequested
                 'merchant_net_amount' => number_format(max(0, round((float)($payment['merchant_net_amount'] ?? 0), 2)), 2, '.', ''),
                 'out_trade_no' => mb_substr(trim((string)($payment['out_trade_no'] ?? '')), 0, 100),
                 'capital_account_id' => max(0, (int)($payment['capital_account_id'] ?? 0)),
+                'voucher_urls' => array_slice(array_values(array_unique(array_filter(array_map(
+                    static fn($url): string => mb_substr(trim((string)$url), 0, 500),
+                    (array)($payment['voucher_urls'] ?? [])
+                )))), 0, 6),
             ],
             'items' => $items,
         ];
@@ -189,6 +193,7 @@ class ErpSaleCreatedRequested
             'settle_method' => $isCash ? ($isOnlinePaid ? '线上现结' : '现结') : '挂账',
             'received_amount' => $isCash ? $saleAmount : 0,
             'capital_account_id' => $capitalAccountId,
+            'voucher_urls' => (array)($payment['voucher_urls'] ?? []),
             'payment_mode' => (string)($payment['mode'] ?? ''),
             'payment_trade_no' => (string)($payment['out_trade_no'] ?? ''),
             'payment_gross_amount' => (float)($payment['gross_amount'] ?? 0),

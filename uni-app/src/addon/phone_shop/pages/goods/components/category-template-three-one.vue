@@ -266,6 +266,7 @@ import { useLogin } from '@/hooks/useLogin';
 import useMemberStore from '@/stores/member';
 import useCartStore from '@/addon/phone_shop/stores/cart';
 import { useGoodsDownload } from '@/addon/phone_shop/hooks/useGoodsDownload';
+import { useGoodsForwardAccess } from '@/addon/phone_shop/hooks/useGoodsForwardAccess';
 import DownloadConfigDialog from '@/addon/phone_shop/components/download-config-dialog/download-config-dialog.vue';
 import PhoneGoodsMeta from '@/addon/phone_shop/components/PhoneGoodsMeta.vue'
 
@@ -746,6 +747,8 @@ const itemCart = (row: any, id: any) => {
 
 const downloadCategoryGoods = async (row: any) => {
 	try {
+		const allowed = await useGoodsForwardAccess().ensureGoodsForwardAccess('/addon/phone_shop/pages/goods/category');
+		if (!allowed) return false;
 		const res: any = await getGoodsDetail({ goods_id: row.goods_id });
 		if (!res.data?.goods) {
 			uni.showToast({ title: '商品信息获取失败', icon: 'none' });

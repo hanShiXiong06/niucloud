@@ -82,6 +82,10 @@ class ErpExternalSaleRecordedService extends ErpExternalSaleAccountingService
                     ? (string)$payment['fee_bearer'] : 'merchant',
                 'net' => $net,
                 'capital_account_id' => max(0, (int)($payment['capital_account_id'] ?? 0)),
+                'voucher_urls' => array_slice(array_values(array_unique(array_filter(array_map(
+                    static fn($url): string => mb_substr(trim((string)$url), 0, 500),
+                    (array)($payment['voucher_urls'] ?? [])
+                )))), 0, 6),
             ],
             'operator_id' => max(0, (int)($event['operator_id'] ?? 0)),
             'operator_name' => mb_substr(trim((string)($event['operator_name'] ?? '')), 0, 60),
@@ -258,6 +262,7 @@ class ErpExternalSaleRecordedService extends ErpExternalSaleAccountingService
                 'operator_name' => $operatorName,
                 'occurred_at' => (int)$payload['occurred_at'],
                 'remark' => '商城订单 ' . (string)$payload['source_order_no'] . ($isOfflineCash ? ' 线下收款' : ' 线上收款'),
+                'voucher_urls' => (array)($payment['voucher_urls'] ?? []),
             ]);
             if ((float)$payment['fee'] > 0) {
                 $balance = round($balance - (float)$payment['fee'], 2);
