@@ -393,10 +393,26 @@ class RecycleDevicePaymentService extends BaseAdminService
                 if ($deviceNeedsSettlement) $orderIds[(int)$device->order_id] = true;
                 $marked++;
             }
+            $completedOrderIds = [];
             foreach (array_keys($orderIds) as $oid) {
-                $this->syncOrderPayStatus($oid, ['pay_type' => $payTypeText, 'pay_remark' => $payRemark, 'pay_time' => $now], $siteId);
+                $summary = $this->syncOrderPayStatus($oid, ['pay_type' => $payTypeText, 'pay_remark' => $payRemark, 'pay_time' => $now], $siteId);
+                if (!empty($summary['all_paid'])) {
+                    $completedOrderIds[] = (int)$oid;
+                }
             }
             Db::commit();
+
+            // ERP 结算是跨插件回写路径，过去只更新了付款状态，没有发布营销事实。
+            // 必须在事务提交后发布；稳定 event_id 会拦截 ERP 重试造成的重复累计。
+            foreach ($completedOrderIds as $completedOrderId) {
+                CoreRecycleOrderEventService::marketingDeliveryFactAfter([
+                    'order_id' => $completedOrderId,
+                    'site_id' => $siteId,
+                    'action' => 'erp_settlement_completed',
+                    'source_plugin' => 'hsx_erp',
+                    'settlement_no' => $settlementNo,
+                ]);
+            }
             return $marked;
         } catch (\Throwable $e) {
             Db::rollback();

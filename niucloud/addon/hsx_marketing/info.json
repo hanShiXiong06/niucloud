@@ -1,0 +1,11 @@
+{
+  "title": "营销任务与奖励中心",
+  "desc": "跨业务任务、会员参与、奖励编排、发放台账与通知中心",
+  "key": "hsx_marketing",
+  "version": "0.1.0",
+  "author": "hsx",
+  "type": "app",
+  "support_app": "",
+  "compile": [],
+  "support_version": "1.2.4"
+}

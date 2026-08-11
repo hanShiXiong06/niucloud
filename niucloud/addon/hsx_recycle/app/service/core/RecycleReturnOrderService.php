@@ -274,6 +274,19 @@ class RecycleReturnOrderService extends BaseCoreService
             $this->syncLinkedDevicesForReturnOrder((int)$order['order_id'], $id, $status, $data);
             $this->syncParentOrderStatus((int)$order['order_id']);
             Db::commit();
+
+            // 只有退货真正完成才冲减营销台数；待退回/运输中不提前扣减。
+            if ($status === RecycleReturnOrderDict::ORDER_STATUS_COMPLETED) {
+                $deviceIds = (new RecycleReturnDevice())->where('return_order_id', '=', $id)->column('device_id');
+                foreach ($deviceIds as $deviceId) {
+                    \addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderEventService::deviceReturnAfter([
+                        'site_id' => $site_id,
+                        'order_id' => (int)$order['order_id'],
+                        'return_order_id' => $id,
+                        'device_id' => (int)$deviceId,
+                    ]);
+                }
+            }
             
             return [
                 'code' => 0, 

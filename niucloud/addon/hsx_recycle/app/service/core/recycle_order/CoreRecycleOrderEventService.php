@@ -217,6 +217,20 @@ class CoreRecycleOrderEventService extends BaseCoreService
         try {
             Log::info('回收订单完成后事件', $data);
 
+            // 事实来源二选一：ERP 安装时必须等 ERP 实际结清事件；
+            // 未安装 ERP 时，才由回收插件本地打款完成事件发布事实。
+            // 这样既不会提前累计，也不会因两边都回调而重复计算。
+            $siteId = self::resolveEventSiteId($data);
+            if ($siteId > 0 && (new RecycleErpCapabilityService())->isPaymentManaged($siteId)) {
+                Log::info('回收订单营销事实等待 ERP 结清事件', [
+                    'order_id' => (int)($data['order_id'] ?? 0),
+                    'site_id' => $siteId,
+                ]);
+            } else {
+                $data['source_plugin'] = 'hsx_recycle';
+                self::emitMarketingFact($data, false);
+            }
+
             // 订单完成奖励积分
             $rewardPoint = self::giveOrderRewardPoint($data);
 
@@ -231,6 +245,25 @@ class CoreRecycleOrderEventService extends BaseCoreService
             }
         } catch (\Exception $e) {
             Log::error('订单完成后事件处理失败：' . $e->getMessage(), $data);
+        }
+    }
+
+    /**
+     * 仅补发“设备完成回收”营销事实。
+     *
+     * ERP 财务结算属于跨插件异步回写：订单和设备已经在事务内结清，
+     * 这里不能再次触发打款通知或旧积分奖励，只向营销中心发布幂等事实。
+     * 未安装营销插件时事件无人消费，不影响回收和 ERP 的结算主流程。
+     */
+    public static function marketingDeliveryFactAfter(array $data): void
+    {
+        try {
+            Log::info('回收订单营销事实补发', $data);
+            $data['source_plugin'] = (string)($data['source_plugin'] ?? 'hsx_erp');
+            self::emitMarketingFact($data, false);
+        } catch (\Throwable $e) {
+            // 营销是旁路能力，失败由日志和事实补偿处理，不能反向破坏已完成的财务结算。
+            Log::error('回收订单营销事实补发失败：' . $e->getMessage(), $data);
         }
     }
 
@@ -326,6 +359,8 @@ class CoreRecycleOrderEventService extends BaseCoreService
     {
         try {
             Log::info('回收订单关闭后事件', $data);
+            // 如果该订单曾形成营销事实，关闭时用原 event_id 冲红；未形成事实则营销中心安全忽略。
+            self::emitMarketingFact($data, true);
         } catch (\Exception $e) {
             Log::error('订单关闭后事件处理失败：' . $e->getMessage(), $data);
         }
@@ -382,8 +417,90 @@ class CoreRecycleOrderEventService extends BaseCoreService
     {
         try {
             Log::info('回收设备退回后事件', $data);
+            $deviceId = (int)($data['device_id'] ?? $data['id'] ?? 0);
+            if ($deviceId > 0) self::emitMarketingDeviceFact($deviceId, true);
         } catch (\Exception $e) {
             Log::error('设备退回后事件处理失败：' . $e->getMessage(), $data);
         }
+    }
+
+    /**
+     * 回收插件 -> 营销中心 v1 契约。
+     * 完成与冲红均使用稳定 event_id，保证定时任务、重复回调不会重复累计或重复扣减。
+     */
+    private static function emitMarketingFact(array $data, bool $reversal): void
+    {
+        $orderId = (int)($data['order_id'] ?? 0);
+        if ($orderId <= 0) return;
+        $order = (new \addon\hsx_recycle\app\model\order\RecycleOrder())
+            ->where('id', '=', $orderId)
+            ->field('id,site_id,member_id,order_no,complete_at,create_at')
+            ->findOrEmpty();
+        if ($order->isEmpty() || (int)$order['site_id'] <= 0 || (int)$order['member_id'] <= 0) return;
+        $devices = $order->devices()->select()->toArray();
+        foreach ($devices as $device) {
+            // 正向事实只统计最终由商家收购的设备，已退回设备不进入任务。
+            if (!$reversal && (int)($device['status'] ?? 0) === \addon\hsx_recycle\app\dict\order\RecycleOrderDict::DEVICE_STATUS_RETURNED) continue;
+            self::emitMarketingDeviceFact(
+                (int)$device['id'],
+                $reversal,
+                $order->toArray(),
+                $device,
+                (string)($data['source_plugin'] ?? 'hsx_recycle')
+            );
+        }
+    }
+
+    /** 每台设备独立成事实，才能准确处理部分退货与成交价区间。 */
+    private static function emitMarketingDeviceFact(
+        int $deviceId,
+        bool $reversal,
+        array $order = [],
+        array $device = [],
+        string $sourcePlugin = 'hsx_recycle'
+    ): void
+    {
+        if ($deviceId <= 0) return;
+        if ($device === []) {
+            $device = (new \addon\hsx_recycle\app\model\order\RecycleDevice())->where('id', '=', $deviceId)->findOrEmpty()->toArray();
+        }
+        if (!$device) return;
+        if ($order === []) {
+            $order = (new \addon\hsx_recycle\app\model\order\RecycleOrder())
+                ->where('id', '=', (int)($device['order_id'] ?? 0))->findOrEmpty()->toArray();
+        }
+        if (!$order || (int)($order['site_id'] ?? 0) <= 0 || (int)($order['member_id'] ?? 0) <= 0) return;
+        $siteId = (int)$order['site_id'];
+        $originalEventId = 'hsx_recycle:device_delivered:' . $siteId . ':' . $deviceId;
+        $amount = (float)($device['pay_amount'] ?? 0);
+        if ($amount <= 0) $amount = (float)($device['final_price'] ?? 0);
+        if ($amount <= 0) $amount = (float)($device['initial_price'] ?? 0);
+        event('HsxMarketingFactRecorded', [
+            'contract_version' => 'v1',
+            'event_id' => $reversal ? $originalEventId . ':reversed' : $originalEventId,
+            'event_name' => $reversal ? 'hsx.recycle.device.delivered.reversed.v1' : 'hsx.recycle.device.delivered.v1',
+            'source_plugin' => $sourcePlugin, 'fact_key' => 'recycle_device_delivered',
+            'fact_type' => $reversal ? 'reversal' : 'original', 'direction' => $reversal ? -1 : 1,
+            'reversal_of_event_id' => $reversal ? $originalEventId : '',
+            'site_id' => $siteId, 'member_id' => (int)$order['member_id'],
+            'business_type' => 'recycle_device', 'business_id' => (string)$deviceId,
+            'business_no' => (string)($order['order_no'] ?? ''), 'quantity' => 1,
+            'device_id' => $deviceId, 'imei' => (string)($device['imei'] ?? ''),
+            'amount' => $amount, 'final_price' => (float)($device['final_price'] ?? 0),
+            'pay_amount' => (float)($device['pay_amount'] ?? 0),
+            'occurred_at' => (int)($order['complete_at'] ?? 0) ?: time(),
+        ]);
+    }
+
+    /** 兼容部分旧调用未携带 site_id 的情况。 */
+    private static function resolveEventSiteId(array $data): int
+    {
+        $siteId = (int)($data['site_id'] ?? 0);
+        if ($siteId > 0) return $siteId;
+        $orderId = (int)($data['order_id'] ?? 0);
+        if ($orderId <= 0) return 0;
+        return (int)(new \addon\hsx_recycle\app\model\order\RecycleOrder())
+            ->where('id', '=', $orderId)
+            ->value('site_id');
     }
 }
