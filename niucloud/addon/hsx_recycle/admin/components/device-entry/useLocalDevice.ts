@@ -128,7 +128,7 @@ export function useLocalDevice() {
             return '读取设备超时，请确认手机已解锁并信任此电脑'
         }
         if (error?.code === 'ERR_NETWORK' || error?.message?.includes('Network Error')) {
-            return '未检测到设备桥接服务，请先安装或启动 hsx_device_bridge'
+            return '无法连接设备桥接服务：请确认服务已启动、当前正式域名已加入桥接白名单，并允许浏览器访问本地网络'
         }
         return error?.message || '读取本地设备失败'
     }

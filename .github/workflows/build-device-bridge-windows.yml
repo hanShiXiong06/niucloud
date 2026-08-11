@@ -6,11 +6,11 @@ on:
       version:
         description: Installer version
         required: true
-        default: "0.1.1"
+        default: "0.1.2"
       allowed_origins:
         description: Comma-separated production origins
         required: false
-        default: ""
+        default: "https://gl.hsxbk.top"
   push:
     branches:
       - "**"
@@ -57,9 +57,12 @@ jobs:
         run: |
           $version = "${{ inputs.version }}"
           if (-not $version) {
-            $version = "0.1.1"
+            $version = "0.1.2"
           }
           $origins = "${{ inputs.allowed_origins }}"
+          if (-not $origins) {
+            $origins = "https://gl.hsxbk.top"
+          }
           "version=$version" >> $env:GITHUB_OUTPUT
           "origins=$origins" >> $env:GITHUB_OUTPUT
 

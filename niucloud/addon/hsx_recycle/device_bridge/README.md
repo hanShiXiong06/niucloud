@@ -23,20 +23,26 @@ PYTHONPATH=src python3 -m hsx_device_bridge serve --port 17890
 HSX_DEVICE_BRIDGE_ORIGINS=https://erp.example.com
 ```
 
+这里填写的是打开管理后台时浏览器地址栏中的来源（协议、域名及非默认端口），
+不是部署桥接服务的云服务器地址。例如正式后台为 `https://gl.hsxbk.top/site/...`，
+白名单必须包含 `https://gl.hsxbk.top`。桥接服务始终安装在连接手机的操作员电脑上，
+网页访问的 `127.0.0.1` 也是这台操作员电脑，而不是云服务器。
+
 ## 安装与首次使用
 
 当前提供 macOS Apple 芯片版和 Windows x64 版：
 
 ```text
 dist/hsx_device_bridge-0.1.0-macos-arm64.pkg
-dist/installer/hsx_device_bridge-0.1.1-windows-x64-setup.exe
+dist/installer/hsx_device_bridge-0.1.2-windows-x64-setup.exe
 ```
 
 1. 双击安装包完成安装。当前测试包尚未使用 Apple Developer ID 签名；若系统拦截，请到“系统设置 → 隐私与安全性”中确认仍要打开。
 2. 使用数据线连接 iPhone，解锁手机并选择“信任此电脑”。
 3. 安装器会注册 `LaunchAgent`，桥接服务会自动启动，不需要再打开桌面应用。
 4. 浏览器访问 `http://127.0.0.1:17890/v1/health`，返回 `code: 0` 表示服务正常。
-5. 回到回收签收页面，点击“读取本地设备”；需要持续识别时可开启“自动检测”。
+5. 正式 HTTPS 站点首次读取时，浏览器可能询问是否允许访问本地网络，请选择允许。
+6. 回到回收签收页面，点击“读取本地设备”；需要持续识别时可开启“自动检测”。
 
 Windows 安装包默认安装到当前用户目录，不需要管理员权限。安装结束后会立即启动，并注册为登录自动启动。Windows 读取 iPhone 依赖苹果设备驱动；客户电脑已有爱思助手时通常可以直接复用，若健康检查提示驱动不可用，请先在爱思助手中执行驱动修复。
 
@@ -52,7 +58,7 @@ Windows: %LOCALAPPDATA%\HSX Device Bridge\logs\bridge.log
 
 ```bash
 bash scripts/package_macos.sh 0.1.0 "https://你的后台域名"
-./scripts/build_windows.ps1 -Version 0.1.1 -AllowedOrigins "https://你的后台域名"
+./scripts/build_windows.ps1 -Version 0.1.2 -AllowedOrigins "https://你的后台域名"
 ```
 
 ## 数据边界

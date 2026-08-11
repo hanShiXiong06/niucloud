@@ -45,6 +45,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if origin and _origin_allowed(origin):
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Vary", "Origin")
+            # Chromium 会对公网 HTTPS 页面访问 127.0.0.1 发起本地网络预检。
+            # 仅对已进入白名单的来源授权，避免任意网站读取本机设备信息。
+            self.send_header("Access-Control-Allow-Private-Network", "true")
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
@@ -60,6 +63,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if origin:
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Vary", "Origin")
+            self.send_header("Access-Control-Allow-Private-Network", "true")
         self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.send_header("Access-Control-Max-Age", "600")
