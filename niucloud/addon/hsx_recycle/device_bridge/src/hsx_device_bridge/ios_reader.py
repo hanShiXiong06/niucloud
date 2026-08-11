@@ -115,6 +115,12 @@ def scan_device_ids() -> list[str]:
             if current is None or (connection.upper() == "USB" and current_connection.upper() != "USB"):
                 by_serial[serial] = device
         return list(by_serial.keys())
+    except ModuleNotFoundError as exc:
+        missing_module = exc.name or str(exc)
+        raise BridgeReadError(
+            "DEPENDENCY_MISSING",
+            f"扫描 iPhone 失败：设备桥安装包缺少运行组件 {missing_module}，请覆盖安装最新版",
+        ) from exc
     except Exception as exc:
         raise BridgeReadError("USB_SCAN_FAILED", f"扫描 iPhone 失败：{exc}") from exc
 

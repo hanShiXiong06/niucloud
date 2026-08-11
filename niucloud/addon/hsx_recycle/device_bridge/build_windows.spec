@@ -8,8 +8,11 @@ a = Analysis(
     hiddenimports=[
         "pymobiledevice3",
         "pymobiledevice3.lockdown",
+        "pymobiledevice3.osu.win_util",
         "pymobiledevice3.usbmux",
         "pymobiledevice3.services.diagnostics",
+        "pywintypes",
+        "win32security",
     ],
     hookspath=[],
     hooksconfig={},

@@ -34,7 +34,7 @@ HSX_DEVICE_BRIDGE_ORIGINS=https://erp.example.com
 
 ```text
 dist/hsx_device_bridge-0.1.0-macos-arm64.pkg
-dist/installer/hsx_device_bridge-0.1.2-windows-x64-setup.exe
+dist/installer/hsx_device_bridge-0.1.3-windows-x64-setup.exe
 ```
 
 1. 双击安装包完成安装。当前测试包尚未使用 Apple Developer ID 签名；若系统拦截，请到“系统设置 → 隐私与安全性”中确认仍要打开。
@@ -58,7 +58,7 @@ Windows: %LOCALAPPDATA%\HSX Device Bridge\logs\bridge.log
 
 ```bash
 bash scripts/package_macos.sh 0.1.0 "https://你的后台域名"
-./scripts/build_windows.ps1 -Version 0.1.2 -AllowedOrigins "https://你的后台域名"
+./scripts/build_windows.ps1 -Version 0.1.3 -AllowedOrigins "https://你的后台域名"
 ```
 
 ## 数据边界

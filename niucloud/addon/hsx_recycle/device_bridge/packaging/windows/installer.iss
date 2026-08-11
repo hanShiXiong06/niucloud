@@ -1,5 +1,5 @@
 #ifndef MyAppVersion
-  #define MyAppVersion "0.1.1"
+  #define MyAppVersion "0.1.3"
 #endif
 
 #define MyAppName "HSX Device Bridge"
@@ -22,7 +22,7 @@ OutputBaseFilename=hsx_device_bridge-{#MyAppVersion}-windows-x64-setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
-CloseApplications=yes
+CloseApplications=no
 RestartApplications=no
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
@@ -41,4 +41,21 @@ Name: "{group}\卸载设备桥"; Filename: "{uninstallexe}"
 Filename: "{app}\{#MyAppExeName}"; Parameters: "serve"; Description: "启动设备桥"; Flags: nowait postinstall skipifsilent runhidden
 
 [UninstallRun]
-Filename: "{cmd}"; Parameters: "/C taskkill /F /IM {#MyAppExeName}"; Flags: runhidden skipifdoesntexist
+Filename: "{cmd}"; Parameters: "/C taskkill /F /T /IM {#MyAppExeName}"; Flags: runhidden skipifdoesntexist
+
+[Code]
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  { Stop the previous bridge before replacing its executable files. }
+  Exec(
+    ExpandConstant('{cmd}'),
+    '/C taskkill /F /T /IM {#MyAppExeName} >NUL 2>&1',
+    '',
+    SW_HIDE,
+    ewWaitUntilTerminated,
+    ResultCode
+  );
+  Result := '';
+end;

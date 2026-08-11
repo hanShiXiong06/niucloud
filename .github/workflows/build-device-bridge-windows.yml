@@ -6,7 +6,7 @@ on:
       version:
         description: Installer version
         required: true
-        default: "0.1.2"
+        default: "0.1.3"
       allowed_origins:
         description: Comma-separated production origins
         required: false
@@ -57,7 +57,7 @@ jobs:
         run: |
           $version = "${{ inputs.version }}"
           if (-not $version) {
-            $version = "0.1.2"
+            $version = "0.1.3"
           }
           $origins = "${{ inputs.allowed_origins }}"
           if (-not $origins) {

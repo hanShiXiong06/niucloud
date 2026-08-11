@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "0.1.2",
+    [string]$Version = "0.1.3",
     [string]$AllowedOrigins = ""
 )
 
@@ -8,6 +8,15 @@ $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $Root
 
 python -m PyInstaller build_windows.spec --clean --noconfirm
+
+$BridgeExe = "dist\hsx_device_bridge\hsx_device_bridge.exe"
+if (-not (Test-Path $BridgeExe)) {
+    throw "Windows bridge executable was not generated: $BridgeExe"
+}
+$SelfCheck = Start-Process -FilePath $BridgeExe -ArgumentList "self-check" -Wait -PassThru
+if ($SelfCheck.ExitCode -ne 0) {
+    throw "Windows bridge dependency self-check failed with exit code $($SelfCheck.ExitCode)"
+}
 
 $Config = @{
     allowed_origins = $AllowedOrigins

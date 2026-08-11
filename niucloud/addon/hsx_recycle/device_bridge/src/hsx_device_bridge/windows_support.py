@@ -1,9 +1,37 @@
 from __future__ import annotations
 
+import importlib
 import socket
 import subprocess
 import sys
 from typing import Any
+
+
+def runtime_dependency_diagnostics() -> dict[str, Any]:
+    """Verify dependencies that pymobiledevice3 imports dynamically on Windows."""
+    if sys.platform != "win32":
+        return {
+            "platform": sys.platform,
+            "ready": True,
+            "missing_modules": [],
+        }
+
+    required_modules = (
+        "win32security",
+        "pywintypes",
+        "pymobiledevice3.osu.win_util",
+    )
+    missing_modules: list[str] = []
+    for module_name in required_modules:
+        try:
+            importlib.import_module(module_name)
+        except (ImportError, OSError):
+            missing_modules.append(module_name)
+    return {
+        "platform": "windows",
+        "ready": not missing_modules,
+        "missing_modules": missing_modules,
+    }
 
 
 def _apple_service_state() -> str:
