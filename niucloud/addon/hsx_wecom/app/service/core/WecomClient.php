@@ -102,6 +102,124 @@ final class WecomClient
         ], $payload);
     }
 
+    /** 构造企业微信自建应用的静默网页授权地址。 */
+    public function oauthAuthorizeUrl(array $config, string $redirectUri, string $state): string
+    {
+        $corpId = trim((string)($config['corp_id'] ?? ''));
+        $redirectUri = trim($redirectUri);
+        if ($corpId === '' || $redirectUri === '' || !filter_var($redirectUri, FILTER_VALIDATE_URL)) {
+            throw new CommonException('企业微信身份绑定地址配置不正确');
+        }
+        $configuredHost = strtolower((string)parse_url((string)($config['web_base_url'] ?? ''), PHP_URL_HOST));
+        $redirectHost = strtolower((string)parse_url($redirectUri, PHP_URL_HOST));
+        if ($configuredHost !== '' && $configuredHost !== $redirectHost) {
+            throw new CommonException('身份绑定回调域名与企业微信配置的管理端域名不一致');
+        }
+        $query = http_build_query([
+            'appid' => $corpId,
+            'redirect_uri' => $redirectUri,
+            'response_type' => 'code',
+            'scope' => 'snsapi_base',
+            'state' => $state,
+        ]);
+        return 'https://open.weixin.qq.com/connect/oauth2/authorize?' . $query . '#wechat_redirect';
+    }
+
+    /** 使用 OAuth code 获取当前企业微信成员 UserID。 */
+    public function userIdByOauthCode(array $config, string $code): string
+    {
+        $code = trim($code);
+        if ($code === '') throw new CommonException('企业微信身份授权码不能为空');
+        $result = $this->request('GET', '/user/getuserinfo', [
+            'access_token' => $this->accessToken($config),
+            'code' => $code,
+        ]);
+        $userId = trim((string)($result['UserId'] ?? $result['userid'] ?? ''));
+        if ($userId === '') {
+            throw new CommonException('当前访问者不是企业内部成员，无法绑定员工账号');
+        }
+        return $userId;
+    }
+
+    /**
+     * 生成企业微信网页 JS-SDK 与应用级 agentConfig 签名。
+     * openEnterpriseChat 必须使用 agentConfig 注入权限，才能在建群成功后返回 chatId。
+     */
+    public function jsSdkConfig(array $config, string $url): array
+    {
+        $corpId = trim((string)($config['corp_id'] ?? ''));
+        if ($corpId === '') {
+            throw new CommonException('企业微信 CorpID 未配置');
+        }
+        $url = trim($url);
+        if ($url === '' || !filter_var($url, FILTER_VALIDATE_URL)) {
+            throw new CommonException('企业微信建群页面地址不正确');
+        }
+        $scheme = strtolower((string)parse_url($url, PHP_URL_SCHEME));
+        if (!in_array($scheme, ['http', 'https'], true)) {
+            throw new CommonException('企业微信建群页面必须使用 http 或 https 地址');
+        }
+        $configuredHost = strtolower((string)parse_url((string)($config['web_base_url'] ?? ''), PHP_URL_HOST));
+        $requestHost = strtolower((string)parse_url($url, PHP_URL_HOST));
+        if ($configuredHost !== '' && $requestHost !== $configuredHost) {
+            throw new CommonException('当前页面域名与企业微信配置的管理端域名不一致');
+        }
+
+        // 企业微信签名只包含 # 前面的完整 URL。
+        $url = explode('#', $url, 2)[0];
+        $timestamp = time();
+        $nonce = bin2hex(random_bytes(12));
+        $normalTicket = $this->jsApiTicket($config, false);
+        $agentTicket = $this->jsApiTicket($config, true);
+        $sign = static fn(string $ticket): string => sha1(
+            'jsapi_ticket=' . $ticket . '&noncestr=' . $nonce . '&timestamp=' . $timestamp . '&url=' . $url
+        );
+
+        $configJsApiList = ['checkJsApi'];
+        $agentJsApiList = ['selectExternalContact', 'openEnterpriseChat'];
+
+        return [
+            'corp_id' => $corpId,
+            'agent_id' => (int)$config['agent_id'],
+            'timestamp' => $timestamp,
+            'nonce_str' => $nonce,
+            'signature' => $sign($normalTicket),
+            'agent_signature' => $sign($agentTicket),
+            // 企业身份 wx.config 与应用身份 agentConfig 的能力清单必须分开。
+            'config_js_api_list' => $configJsApiList,
+            'agent_js_api_list' => $agentJsApiList,
+            // 兼容已发布但尚未更新的管理端，它仍会读取 js_api_list。
+            'js_api_list' => $agentJsApiList,
+            // 仅返回实际参与签名的页面地址，便于前端区分 URL 不一致与权限问题。
+            // ticket、Secret 等敏感信息不会暴露。
+            'sign_url' => $url,
+        ];
+    }
+
+    private function jsApiTicket(array $config, bool $agent): string
+    {
+        $token = $this->accessToken($config);
+        // v2 用于隔离旧版本曾从错误端点取得并缓存的 agent ticket。
+        $cacheKey = 'hsx_wecom_jsapi_ticket_v2_' . ($agent ? 'agent_' : 'normal_') . md5($token);
+        $cached = (string)Cache::get($cacheKey, '');
+        if ($cached !== '') return $cached;
+
+        $query = ['access_token' => $token];
+        // 企业身份 wx.config 与应用身份 agentConfig 使用两套 ticket 接口，不能混用。
+        // 普通 ticket: /get_jsapi_ticket
+        // 应用 ticket: /ticket/get?type=agent_config
+        $path = '/get_jsapi_ticket';
+        if ($agent) {
+            $path = '/ticket/get';
+            $query['type'] = 'agent_config';
+        }
+        $response = $this->request('GET', $path, $query);
+        $ticket = trim((string)($response['ticket'] ?? ''));
+        if ($ticket === '') throw new CommonException('企业微信未返回 JS-SDK ticket');
+        Cache::set($cacheKey, $ticket, max(60, (int)($response['expires_in'] ?? 7200) - 300));
+        return $ticket;
+    }
+
     private function accessToken(array $config, bool $refresh = false): string
     {
         $corpId = trim((string)($config['corp_id'] ?? ''));

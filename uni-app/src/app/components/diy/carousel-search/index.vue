@@ -155,6 +155,7 @@ import diyGroup from '@/addon/components/diy/group/index.vue';
 import { getDiyInfo } from '@/app/api/diy';
 import { useLocation } from '@/hooks/useLocation'
 import useSystemStore from '@/stores/system';
+import { parseJsonValue } from '@/addon/phone_shop/utils/json';
 
 const systemStore = useSystemStore();
 const instance = getCurrentInstance();
@@ -479,11 +480,11 @@ const getDiyInfoFn = (id: any) => {
             diyPageData.pageMode = data.mode;
             diyPageData.title = data.title;
 
-            let sources = JSON.parse(data.value);
-            diyPageData.global = sources.global;
-            diyPageData.global.topStatusBar.isShow = false; // 子页面不需要展示顶部导航栏
-            diyPageData.global.bottomTabBar.isShow = false; // 子页面不需要展示底部导航
-            diyPageData.value = sources.value;
+            const sources = parseJsonValue<any>(data.value, { global: {}, value: [] });
+            diyPageData.global = sources.global || {};
+            if (diyPageData.global.topStatusBar) diyPageData.global.topStatusBar.isShow = false; // 子页面不需要展示顶部导航栏
+            if (diyPageData.global.bottomTabBar) diyPageData.global.bottomTabBar.isShow = false; // 子页面不需要展示底部导航
+            diyPageData.value = Array.isArray(sources.value) ? sources.value : [];
 
             diyPageData.value.forEach((item: any, index) => {
                 item.componentIsShow = true // 是否显示

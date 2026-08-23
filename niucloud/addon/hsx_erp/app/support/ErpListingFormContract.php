@@ -61,11 +61,11 @@ final class ErpListingFormContract
             'split' => [
                 self::step(self::ACTION_PHOTO, '商品拍摄', '拍摄人员', '上传图片、视频并记录必要质检说明'),
                 self::step(self::ACTION_PRICE, '销售定价', '库位负责人', '填写对外销售价格'),
-                self::step(self::ACTION_MATERIAL, '资料整理', '商城运营或库存人员', '核对目录型号、规格和对外说明'),
+                self::step(self::ACTION_MATERIAL, 'ERP 资料完善', '库存人员', '核对 ERP 目录型号、规格和对外说明'),
             ],
             'photo_price' => [
                 self::step(self::ACTION_MEDIA_PRICE, '拍摄并定价', '拍摄定价人员', '在一个表单完成图片、视频和销售价格'),
-                self::step(self::ACTION_MATERIAL, '资料整理', '商城运营或库存人员', '核对目录型号、规格和对外说明'),
+                self::step(self::ACTION_MATERIAL, 'ERP 资料完善', '库存人员', '核对 ERP 目录型号、规格和对外说明'),
             ],
             default => [
                 self::step(self::ACTION_ONE_STOP, '一次完善', '库存人员', '在一个表单完成全部销售资料'),
@@ -166,7 +166,7 @@ final class ErpListingFormContract
             self::ACTION_PHOTO => ['title' => '完成商品拍摄', 'description' => '只处理图片、视频与必要的质检说明', 'submit_label' => '完成拍摄'],
             self::ACTION_PRICE => ['title' => '完成销售定价', 'description' => '只填写销售价格，不修改采购成本', 'submit_label' => '完成销售定价'],
             self::ACTION_MEDIA_PRICE => ['title' => '拍摄并销售定价', 'description' => '连续完成商品拍摄和销售价格', 'submit_label' => '完成拍摄与定价'],
-            self::ACTION_MATERIAL => ['title' => '整理商城资料', 'description' => '核对目录型号、规格和对外展示资料', 'submit_label' => '完成资料整理'],
+            self::ACTION_MATERIAL => ['title' => '完善 ERP 商品资料', 'description' => '只维护 ERP 目录型号、规格和对外说明；商城独立资料由商城运营处理', 'submit_label' => '保存 ERP 资料'],
             default => ['title' => '一次完善商品资料', 'description' => '在当前表单完成销售所需资料', 'submit_label' => '保存商品资料'],
         };
 

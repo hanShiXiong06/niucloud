@@ -72,6 +72,14 @@ class CoreRecycleOrderFlowService extends BaseCoreService
             // 1. 获取订单信息
             $order = $this->getOrderInfo($orderId);
 
+            // 财务安全边界必须放在核心流程层。这样即使旧版移动端仍调用历史打款
+            // 接口，或其他服务绕过控制器直接执行 payment，也无法在 ERP 接管后
+            // 继续写入回收插件的本地付款事实。
+            if ($action === 'payment') {
+                $siteId = (int)($order['site_id'] ?? $context['site_id'] ?? 0);
+                (new RecycleErpCapabilityService())->assertLocalPaymentAllowed($siteId);
+            }
+
             // 2. 获取流程配置
             $flowConfig = $this->getFlowConfig($order['status'], $flowType);
 

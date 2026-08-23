@@ -5,6 +5,7 @@ namespace addon\hsx_ai\app\provider;
 
 use addon\hsx_ai\app\contract\AiProviderInterface;
 use addon\hsx_ai\app\contract\AiStreamingProviderInterface;
+use addon\hsx_ai\app\service\core\AiToolCallProtocolService;
 use core\exception\CommonException;
 
 final class OpenAiCompatibleProvider implements AiProviderInterface, AiStreamingProviderInterface
@@ -52,7 +53,13 @@ final class OpenAiCompatibleProvider implements AiProviderInterface, AiStreaming
             ))));
         }
         $content = trim((string)$content);
-        if ($content === '') {
+        $toolCalls = $this->normalizeToolCalls((array)($message['tool_calls'] ?? []));
+        if ($toolCalls === [] && !empty($request['tools'])) {
+            $parsed = (new AiToolCallProtocolService())->parse($content);
+            $content = (string)$parsed['content'];
+            $toolCalls = $this->normalizeToolCalls((array)$parsed['tool_calls']);
+        }
+        if ($content === '' && $toolCalls === []) {
             throw new CommonException('模型没有返回可用内容');
         }
         $usage = is_array($result['usage'] ?? null) ? $result['usage'] : [];
@@ -60,6 +67,7 @@ final class OpenAiCompatibleProvider implements AiProviderInterface, AiStreaming
             'provider_request_id' => trim((string)($result['id'] ?? '')),
             'model' => trim((string)($result['model'] ?? $request['model'])),
             'content' => $content,
+            'tool_calls' => $toolCalls,
             'reasoning_content' => trim((string)($message['reasoning_content'] ?? '')),
             'finish_reason' => trim((string)($choice['finish_reason'] ?? '')),
             'first_token_ms' => 0,
@@ -86,8 +94,12 @@ final class OpenAiCompatibleProvider implements AiProviderInterface, AiStreaming
         $model = (string)$request['model'];
         $usage = ['prompt_tokens' => 0, 'completion_tokens' => 0, 'total_tokens' => 0];
         $streamError = '';
+        $toolCalls = [];
+        $filterTextToolCalls = !empty($request['tools']);
+        $protocol = new AiToolCallProtocolService();
+        $protocolState = $protocol->streamState();
 
-        $consumeEvent = function () use (&$eventData, &$content, &$reasoning, &$finishReason, &$providerRequestId, &$model, &$usage, &$firstTokenMs, &$streamError, $started, $emit): void {
+        $consumeEvent = function () use (&$eventData, &$content, &$reasoning, &$finishReason, &$providerRequestId, &$model, &$usage, &$firstTokenMs, &$streamError, &$toolCalls, &$protocolState, $filterTextToolCalls, $protocol, $started, $emit): void {
             if ($eventData === []) return;
             $raw = trim(implode("\n", $eventData));
             $eventData = [];
@@ -106,6 +118,21 @@ final class OpenAiCompatibleProvider implements AiProviderInterface, AiStreaming
             $delta = is_array($choice['delta'] ?? null) ? $choice['delta'] : [];
             $reasoningDelta = $this->contentText($delta['reasoning_content'] ?? '');
             $contentDelta = $this->contentText($delta['content'] ?? '');
+            foreach ((array)($delta['tool_calls'] ?? []) as $toolCallDelta) {
+                if (!is_array($toolCallDelta)) continue;
+                $index = max(0, (int)($toolCallDelta['index'] ?? 0));
+                if (!isset($toolCalls[$index])) {
+                    $toolCalls[$index] = [
+                        'id' => '',
+                        'type' => 'function',
+                        'function' => ['name' => '', 'arguments' => ''],
+                    ];
+                }
+                if (isset($toolCallDelta['id'])) $toolCalls[$index]['id'] .= (string)$toolCallDelta['id'];
+                $function = is_array($toolCallDelta['function'] ?? null) ? $toolCallDelta['function'] : [];
+                if (isset($function['name'])) $toolCalls[$index]['function']['name'] .= (string)$function['name'];
+                if (isset($function['arguments'])) $toolCalls[$index]['function']['arguments'] .= (string)$function['arguments'];
+            }
             if (($reasoningDelta !== '' || $contentDelta !== '') && $firstTokenMs <= 0) {
                 $firstTokenMs = max(1, (int)round((microtime(true) - $started) * 1000));
             }
@@ -115,7 +142,8 @@ final class OpenAiCompatibleProvider implements AiProviderInterface, AiStreaming
             }
             if ($contentDelta !== '') {
                 $content .= $contentDelta;
-                $emit(['type' => 'content', 'delta' => $contentDelta]);
+                $safeDelta = $filterTextToolCalls ? $protocol->push($protocolState, $contentDelta) : $contentDelta;
+                if ($safeDelta !== '') $emit(['type' => 'content', 'delta' => $safeDelta]);
             }
             if (!empty($choice['finish_reason'])) $finishReason = trim((string)$choice['finish_reason']);
             if (is_array($chunk['usage'] ?? null)) $usage = $this->normalizeUsage($chunk['usage']);
@@ -145,9 +173,30 @@ final class OpenAiCompatibleProvider implements AiProviderInterface, AiStreaming
             $fallback = json_decode((string)$transport['body'], true);
             $message = is_array($fallback['choices'][0]['message'] ?? null) ? $fallback['choices'][0]['message'] : [];
             $content = $this->contentText($message['content'] ?? '');
-            $reasoning = $this->contentText($message['reasoning_content'] ?? $reasoning);
+            $fallbackReasoning = $this->contentText($message['reasoning_content'] ?? '');
+            if ($reasoning === '' && $fallbackReasoning !== '') {
+                $reasoning = $fallbackReasoning;
+                $emit(['type' => 'reasoning', 'delta' => $fallbackReasoning]);
+            }
+            if ($content !== '') {
+                $safeDelta = $filterTextToolCalls ? $protocol->push($protocolState, $content) : $content;
+                if ($safeDelta !== '') $emit(['type' => 'content', 'delta' => $safeDelta]);
+            }
+            if ($toolCalls === []) $toolCalls = $this->normalizeToolCalls((array)($message['tool_calls'] ?? []));
         }
-        if (trim($content) === '') throw new CommonException('模型没有返回可用内容');
+        if ($filterTextToolCalls) {
+            $parsed = $protocol->parse($content);
+            if ($toolCalls === [] && $parsed['tool_calls'] !== []) {
+                $toolCalls = $this->normalizeToolCalls((array)$parsed['tool_calls']);
+            }
+            $content = (string)$parsed['content'];
+            if ($parsed['tool_calls'] === []) {
+                $remaining = $protocol->finish($protocolState);
+                if ($remaining !== '') $emit(['type' => 'content', 'delta' => $remaining]);
+            }
+        }
+        $toolCalls = $this->normalizeToolCalls(array_values($toolCalls));
+        if (trim($content) === '' && $toolCalls === []) throw new CommonException('模型没有返回可用内容');
         if ((int)$usage['total_tokens'] <= 0) {
             $usage['total_tokens'] = (int)$usage['prompt_tokens'] + (int)$usage['completion_tokens'];
         }
@@ -155,6 +204,7 @@ final class OpenAiCompatibleProvider implements AiProviderInterface, AiStreaming
             'provider_request_id' => $providerRequestId,
             'model' => $model,
             'content' => $content,
+            'tool_calls' => $toolCalls,
             'reasoning_content' => $reasoning,
             'finish_reason' => $finishReason,
             'first_token_ms' => $firstTokenMs,
@@ -173,6 +223,13 @@ final class OpenAiCompatibleProvider implements AiProviderInterface, AiStreaming
         $maxTokens = (int)($request['max_tokens'] ?? 0);
         if ($maxTokens > 0) $payload['max_tokens'] = $maxTokens;
         if (($request['response_mode'] ?? 'text') === 'json') $payload['response_format'] = ['type' => 'json_object'];
+        if (!empty($request['tools']) && is_array($request['tools'])) {
+            $payload['tools'] = array_values($request['tools']);
+            $payload['tool_choice'] = $request['tool_choice'] ?? 'auto';
+            if (array_key_exists('parallel_tool_calls', $request)) {
+                $payload['parallel_tool_calls'] = (bool)$request['parallel_tool_calls'];
+            }
+        }
         foreach (['top_p', 'presence_penalty', 'frequency_penalty', 'seed'] as $field) {
             if (array_key_exists($field, $request)) $payload[$field] = $request[$field];
         }
@@ -195,6 +252,30 @@ final class OpenAiCompatibleProvider implements AiProviderInterface, AiStreaming
             'completion_tokens' => max(0, (int)($usage['completion_tokens'] ?? $usage['output_tokens'] ?? 0)),
             'total_tokens' => max(0, (int)($usage['total_tokens'] ?? 0)),
         ];
+    }
+
+    private function normalizeToolCalls(array $rows): array
+    {
+        $result = [];
+        foreach ($rows as $index => $row) {
+            if (!is_array($row)) continue;
+            $function = is_array($row['function'] ?? null) ? $row['function'] : [];
+            $name = trim((string)($function['name'] ?? ''));
+            if ($name === '') continue;
+            $arguments = $function['arguments'] ?? '{}';
+            if (is_array($arguments)) {
+                $arguments = json_encode($arguments, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            }
+            $result[] = [
+                'id' => trim((string)($row['id'] ?? '')) ?: ('call_' . $index),
+                'type' => 'function',
+                'function' => [
+                    'name' => $name,
+                    'arguments' => (string)$arguments,
+                ],
+            ];
+        }
+        return $result;
     }
 
     private function request(array $provider, string $method, string $path, array $json = []): array
@@ -307,7 +388,11 @@ final class OpenAiCompatibleProvider implements AiProviderInterface, AiStreaming
                 $fallback['http_version'] = (string)($provider['http_version'] ?? '1.1') === '1.1' ? 'auto' : '1.1';
                 return $this->transport($fallback, $method, $path, $json, $onBytes, $attempt + 1, $diagnostics);
             }
-            $hint = $errno === 28 ? '；请检查服务器443出口、防火墙和代理，或调整连接超时/IP协议' : '';
+            if ($errno === 28 && (float)($info['size_download'] ?? 0) > 0) {
+                $hint = sprintf('；模型通道已经连接并返回数据，但未在 %d 秒内完成生成，请缩短问题或改用响应更快的模型', $timeout);
+            } else {
+                $hint = $errno === 28 ? '；请检查服务器443出口、防火墙和代理，或调整连接超时/IP协议' : '';
+            }
             throw new CommonException('请求模型通道失败：' . ($error ?: '网络异常') . ' [' . implode(' | ', $diagnostics) . ']' . $hint);
         }
         $bodyText = $onBytes === null ? (string)$body : $rawBody;

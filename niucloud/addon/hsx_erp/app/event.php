@@ -81,5 +81,23 @@ return [
         'HsxBusinessReportMetricsRequested' => [
             'addon\hsx_erp\app\listener\BusinessReportMetricsProvider',
         ],
+        'HsxAiIntegrationRegistryRequested' => [
+            'addon\hsx_erp\app\listener\ai\AiIntegrationRegistryRequested',
+        ],
+        'HsxAiAdminAgentRegistryRequested' => [
+            'addon\hsx_erp\app\listener\ai\AiAdminAgentRegistryRequested',
+        ],
+        'HsxAiToolRegistryRequested' => [
+            'addon\hsx_erp\app\listener\ai\AiToolRegistryRequested',
+        ],
+        'HsxAiToolExecuteRequested' => [
+            'addon\hsx_erp\app\listener\ai\AiToolExecuteRequested',
+        ],
+        'HsxAiDefaultToolArgumentsRequested' => [
+            'addon\hsx_erp\app\listener\ai\AiDefaultToolArgumentsRequested',
+        ],
+        'HsxAiToolIntentRequested' => [
+            'addon\hsx_erp\app\listener\ai\AiToolIntentRequested',
+        ],
     ],
 ];

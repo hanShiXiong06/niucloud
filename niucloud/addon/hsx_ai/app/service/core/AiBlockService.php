@@ -8,7 +8,7 @@ namespace addon\hsx_ai\app\service\core;
  */
 final class AiBlockService
 {
-    private const TYPES = ['table', 'chart', 'quote_card', 'quote_aggregate', 'price_trend'];
+    private const TYPES = ['stat_grid', 'table', 'chart', 'notice', 'action_group', 'quote_card', 'quote_aggregate', 'price_trend'];
 
     public function sanitize(array $blocks): array
     {

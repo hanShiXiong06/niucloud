@@ -55,7 +55,7 @@ const meta = computed(() => props.routes.meta)
 
 const addons = computed(() => {
     const addons:Record<string, any> = {}
-    userStore.siteInfo?.apps.forEach((item: any) => { addons[item.key] = item })
+    userStore.siteInfo?.apps?.forEach((item: any) => { addons[item.key] = item })
     userStore.siteInfo?.site_addons.forEach((item: any) => { addons[item.key] = item })
     return addons
 })

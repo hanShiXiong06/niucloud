@@ -91,7 +91,7 @@ routers.forEach(item => {
             }
             oneMenuData.value.push(item)
         }
-    } else if (item.meta.addon != '' && siteInfo?.apps.length <= 1 && siteInfo?.apps[0].key == item.meta.addon && item.meta.show) {
+    } else if (item.meta.addon != '' && siteInfo?.apps?.length === 1 && siteInfo.apps[0]?.key == item.meta.addon && item.meta.show) {
         if (item.children) {
             item.children.forEach((citem: Record<string, any>) => {
                 citem.original_name = citem.name
@@ -120,9 +120,9 @@ routers.forEach(item => {
     })
 })
 // 多应用时将应用插入菜单
-if (siteInfo?.apps.length > 1) {
+if ((siteInfo?.apps?.length ?? 0) > 1) {
     const routers:Record<string, any>[] = []
-    siteInfo?.apps.forEach((item: Record<string, any>) => {
+    siteInfo?.apps?.forEach((item: Record<string, any>) => {
         if (addonRouters[item.key]) {
             addonRouters[item.key].name = addonIndexRoute[item.key]
             routers.push(addonRouters[item.key])
@@ -326,7 +326,7 @@ watch(route, () => {
         twoMenuData.value = route.matched[1].children ?? []
     } else {
         // 多应用
-        if (siteInfo?.apps.length > 1) {
+        if ((siteInfo?.apps?.length ?? 0) > 1) {
             twoMenuData.value = route.matched[2].children
             oneMenuActive.value = route.matched[2].name
         } else {
@@ -336,7 +336,7 @@ watch(route, () => {
                 oneMenuActive.value = route.matched[2].name
                 twoMenuData.value = route.matched[2].children ?? []
             } else {
-                if (oneMenu.meta.addon == siteInfo?.apps[0].key) {
+                if (oneMenu.meta.addon == siteInfo?.apps?.[0]?.key) {
                     oneMenuActive.value = route.matched[3].name
                     twoMenuData.value = route.matched[3].children ?? []
                 } else {

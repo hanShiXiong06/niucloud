@@ -303,6 +303,9 @@ export function updateErpStockFlow(id: number, data: Record<string, any>) {
 export function syncErpStockListing(id: number) {
     return request.post(`erp/stock/${id}/sync_listing`)
 }
+export function handoffErpStockListing(id: number) {
+    return request.post(`erp/stock/${id}/handoff_listing`)
+}
 export function prepareErpStockListingMedia(id: number) {
     return request.post(`erp/stock/${id}/listing_media/prepare`)
 }

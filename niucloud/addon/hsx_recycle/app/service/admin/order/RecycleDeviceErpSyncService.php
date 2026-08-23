@@ -9,6 +9,7 @@ use addon\hsx_recycle\app\model\address\PhoneShopPaymentInfo;
 use addon\hsx_recycle\app\service\core\recycle_order\DeviceSummaryHelper;
 use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpCapabilityService;
 use app\model\member\Member;
+use app\model\sys\SysUser;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 
@@ -62,6 +63,11 @@ class RecycleDeviceErpSyncService extends BaseAdminService
             $snapshots[] = $this->buildSnapshot($device->toArray());
         }
 
+        // 客户确认出售发生在 API 端，此时后台操作人 uid 固定为 0，不能把
+        // “点击确认的客户”误当作 ERP 采购员。回收业务中采购事实由最终
+        // 定价动作产生，因此谁完成最终定价，谁就是 ERP 采购员。
+        $pricingOperator = $this->resolvePricingOperator($snapshots);
+
         $event = [
             'event_id' => $this->makeEventId(),
             'event_name' => 'recycle.device.inbound_requested',
@@ -69,11 +75,7 @@ class RecycleDeviceErpSyncService extends BaseAdminService
             'site_id' => $this->site_id,
             'occurred_at' => time(),
             'targets' => $targets,
-            'operator' => [
-                'type' => 'staff',
-                'id' => $this->uid,
-                'name' => $this->username ?: '',
-            ],
+            'operator' => $pricingOperator,
             'source' => [
                 'plugin' => 'hsx_recycle',
                 'type' => 'recycle_device',
@@ -92,6 +94,44 @@ class RecycleDeviceErpSyncService extends BaseAdminService
             'device_count' => count($snapshots),
             'targets' => $targets,
             'results' => $results,
+        ];
+    }
+
+    /**
+     * 从设备定价快照确定采购经办人。
+     *
+     * 顶层 operator 主要兼容现有 ERP 事件消费者；每台设备仍保留自己的
+     * pricing_snapshot.price_uid，ERP 会再次按设备快照确认采购员。
+     */
+    private function resolvePricingOperator(array $snapshots): array
+    {
+        $pricingUids = [];
+        foreach ($snapshots as $snapshot) {
+            $pricing = (array)($snapshot['pricing_snapshot'] ?? $snapshot['recycle_pricing_snapshot'] ?? []);
+            $uid = (int)($pricing['price_uid'] ?? 0);
+            if ($uid > 0) {
+                $pricingUids[] = $uid;
+            }
+        }
+        $pricingUids = array_values(array_unique($pricingUids));
+        $uid = (int)($pricingUids[0] ?? 0);
+        if ($uid <= 0) {
+            throw new CommonException('设备缺少最终定价员，不能同步 ERP 采购入库');
+        }
+
+        $user = SysUser::where([
+            ['uid', '=', $uid],
+            ['delete_time', '=', 0],
+        ])->field('uid,username,real_name')->findOrEmpty();
+        if ($user->isEmpty()) {
+            throw new CommonException('设备最终定价员不存在或已停用，不能同步 ERP 采购入库');
+        }
+
+        return [
+            'type' => 'staff',
+            'id' => (int)$user->uid,
+            'name' => (string)($user->real_name ?: $user->username ?: ('员工#' . $user->uid)),
+            'source' => 'recycle_pricing',
         ];
     }
 

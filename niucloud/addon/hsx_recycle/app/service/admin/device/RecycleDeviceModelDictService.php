@@ -3,8 +3,10 @@ declare(strict_types=1);
 
 namespace addon\hsx_recycle\app\service\admin\device;
 
+use addon\hsx_recycle\app\dict\config\RecycleConfigKeyDict;
 use addon\hsx_recycle\app\model\device\RecycleDeviceModelDict;
 use addon\hsx_recycle\app\service\core\device\CoreRecycleDeviceModelDictService;
+use app\service\core\sys\CoreConfigService;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Cache;
@@ -25,6 +27,9 @@ class RecycleDeviceModelDictService extends BaseAdminService
 
     /** 缓存有效期(秒)。型号字典极少改,设长一点;改动时按 tag 主动失效 */
     const CACHE_TTL = 86400;
+
+    /** 小体量别名映射使用站点配置保存，限制数量避免配置无限膨胀 */
+    const ALIAS_MAPPING_LIMIT = 1000;
 
     public function __construct()
     {
@@ -152,6 +157,137 @@ class RecycleDeviceModelDictService extends BaseAdminService
         }
         $node['category_path'] = $path;
         return $node;
+    }
+
+    /**
+     * 按设备工具返回的候选型号依次查找人工学习映射。
+     * 命中后仍重新校验目标节点，防止型号被停用、删除或后来增加下级节点。
+     */
+    public function resolveAliases(array $aliases): array
+    {
+        $aliases = $this->sanitizeAliases($aliases);
+        if (empty($aliases)) {
+            return ['matched' => false];
+        }
+
+        $config = (new CoreConfigService())->getConfigValue(
+            (int)$this->site_id,
+            RecycleConfigKeyDict::DEVICE_MODEL_ALIAS
+        );
+        $mappings = is_array($config['mappings'] ?? null) ? $config['mappings'] : [];
+
+        foreach ($aliases as $alias) {
+            $key = $this->normalizeAlias($alias);
+            $mapping = is_array($mappings[$key] ?? null) ? $mappings[$key] : [];
+            $categoryId = (int)($mapping['category_id'] ?? 0);
+            if ($categoryId <= 0) {
+                continue;
+            }
+
+            try {
+                $node = $this->selectableLeaf($categoryId);
+            } catch (\Throwable $e) {
+                // 历史映射失效时回退到原有精确匹配/人工选择，不让扫码流程中断。
+                continue;
+            }
+
+            return [
+                'matched' => true,
+                'alias' => $alias,
+                'normalized_alias' => $key,
+                'node' => $this->formatAliasNode($node),
+            ];
+        }
+
+        return ['matched' => false];
+    }
+
+    /**
+     * 将本地设备工具的一个或多个型号标识绑定到本站具体叶子型号。
+     * 同名别名再次提交即覆盖，作为人工纠错入口。
+     */
+    public function bindAliases(array $aliases, int $categoryId): array
+    {
+        $aliases = $this->sanitizeAliases($aliases);
+        if (empty($aliases)) {
+            throw new CommonException('没有可记忆的设备型号');
+        }
+
+        $node = $this->selectableLeaf($categoryId);
+        $configService = new CoreConfigService();
+        $config = $configService->getConfigValue(
+            (int)$this->site_id,
+            RecycleConfigKeyDict::DEVICE_MODEL_ALIAS
+        );
+        $config = is_array($config) ? $config : [];
+        $mappings = is_array($config['mappings'] ?? null) ? $config['mappings'] : [];
+        $now = time();
+        $learned = 0;
+
+        foreach ($aliases as $alias) {
+            $key = $this->normalizeAlias($alias);
+            if ($key === '') {
+                continue;
+            }
+            // unset 后重写，让最近纠正的映射排到末尾，超限清理时优先保留。
+            unset($mappings[$key]);
+            $mappings[$key] = [
+                'alias' => $alias,
+                'category_id' => (int)$node['id'],
+                'category_path' => array_map('intval', (array)($node['category_path'] ?? [$node['id']])),
+                'node_name' => (string)($node['node_name'] ?? ''),
+                'model_full_name' => (string)($node['model_full_name'] ?? ''),
+                'update_time' => $now,
+            ];
+            $learned++;
+        }
+
+        if (count($mappings) > self::ALIAS_MAPPING_LIMIT) {
+            $mappings = array_slice($mappings, -self::ALIAS_MAPPING_LIMIT, null, true);
+        }
+
+        $configService->setConfig((int)$this->site_id, RecycleConfigKeyDict::DEVICE_MODEL_ALIAS, [
+            'version' => 1,
+            'mappings' => $mappings,
+            'update_time' => $now,
+        ]);
+
+        return [
+            'learned_count' => $learned,
+            'node' => $this->formatAliasNode($node),
+        ];
+    }
+
+    private function sanitizeAliases(array $aliases): array
+    {
+        $result = [];
+        foreach (array_slice($aliases, 0, 12) as $alias) {
+            $alias = trim((string)$alias);
+            $key = $this->normalizeAlias($alias);
+            if ($alias === '' || $key === '' || mb_strlen($alias, 'UTF-8') > 120) {
+                continue;
+            }
+            $result[$key] = $alias;
+        }
+        return array_values($result);
+    }
+
+    private function normalizeAlias(string $alias): string
+    {
+        $alias = mb_strtolower(trim($alias), 'UTF-8');
+        return (string)preg_replace('/[\s\-_\/\\\\.·，,。:：()（）\[\]【】]+/u', '', $alias);
+    }
+
+    private function formatAliasNode(array $node): array
+    {
+        return [
+            'id' => (int)($node['id'] ?? 0),
+            'node_name' => (string)($node['node_name'] ?? ''),
+            'model_full_name' => (string)($node['model_full_name'] ?? ''),
+            'category_path' => array_map('intval', (array)($node['category_path'] ?? [])),
+            'leaf' => true,
+            'has_children' => 0,
+        ];
     }
 
     /**

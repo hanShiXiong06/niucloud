@@ -4,6 +4,7 @@ declare(strict_types=1);
 require dirname(__DIR__, 3) . '/vendor/autoload.php';
 require_once dirname(__DIR__) . '/app/contract/AiProviderInterface.php';
 require_once dirname(__DIR__) . '/app/contract/AiStreamingProviderInterface.php';
+require_once dirname(__DIR__) . '/app/service/core/AiToolCallProtocolService.php';
 require_once dirname(__DIR__) . '/app/provider/OpenAiCompatibleProvider.php';
 
 use addon\hsx_ai\app\provider\OpenAiCompatibleProvider;
@@ -35,6 +36,23 @@ if (($result['content'] ?? '') !== '{"ok":true}') {
 if ((int)($result['usage']['total_tokens'] ?? 0) !== 12) {
     throw new RuntimeException('Token用量规范化失败');
 }
+$toolRequest = [
+    'model' => 'mock-model',
+    'messages' => [['role' => 'user', 'content' => 'use tool']],
+    'tools' => [[
+        'type' => 'function',
+        'function' => [
+            'name' => 'mock_search',
+            'description' => 'search',
+            'parameters' => ['type' => 'object', 'properties' => []],
+        ],
+    ]],
+    'tool_choice' => 'auto',
+];
+$toolResult = $provider->chat($providerConfig, $toolRequest);
+if (($toolResult['tool_calls'][0]['function']['name'] ?? '') !== 'mock_search') {
+    throw new RuntimeException('非流式工具调用解析失败');
+}
 $events = [];
 $streamResult = $provider->stream($providerConfig, [
     'model' => 'mock-model',
@@ -49,4 +67,25 @@ if (($streamResult['content'] ?? '') !== 'mock response') throw new RuntimeExcep
 if (($streamResult['reasoning_content'] ?? '') !== 'thinking') throw new RuntimeException('流式推理内容合并失败');
 if (array_column($events, 'type') !== ['reasoning', 'content', 'content']) throw new RuntimeException('流式事件顺序错误');
 if ((int)($streamResult['usage']['total_tokens'] ?? 0) !== 12) throw new RuntimeException('流式Token用量规范化失败');
+$toolEvents = [];
+$streamToolResult = $provider->stream($providerConfig, $toolRequest, static function (array $event) use (&$toolEvents): void {
+    $toolEvents[] = $event;
+});
+if (($streamToolResult['tool_calls'][0]['function']['name'] ?? '') !== 'mock_search') {
+    throw new RuntimeException('流式工具调用合并失败');
+}
+if (($streamToolResult['tool_calls'][0]['function']['arguments'] ?? '') !== '{"query":"phone"}') {
+    throw new RuntimeException('流式工具参数合并失败');
+}
+if ($toolEvents !== []) throw new RuntimeException('工具参数不应作为用户文本事件输出');
+$textToolRequest = $toolRequest;
+$textToolRequest['messages'][0]['content'] = 'use text tool';
+$textToolEvents = [];
+$textToolResult = $provider->stream($providerConfig, $textToolRequest, static function (array $event) use (&$textToolEvents): void {
+    $textToolEvents[] = $event;
+});
+if (($textToolResult['tool_calls'][0]['function']['name'] ?? '') !== 'mock_search') {
+    throw new RuntimeException('文本工具协议未转换为标准工具调用');
+}
+if ($textToolEvents !== []) throw new RuntimeException('文本工具协议不应泄漏到用户事件');
 echo "hsx_ai provider contract smoke passed\n";

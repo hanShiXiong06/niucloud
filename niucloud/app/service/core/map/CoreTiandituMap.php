@@ -6,6 +6,7 @@ use app\service\core\map\CurlRequest;
 use app\service\core\sys\CoreConfigService;
 use core\base\BaseService;
 use core\exception\CommonException;
+use think\facade\Log;
 
 class CoreTiandituMap extends BaseService
 {
@@ -106,13 +107,31 @@ class CoreTiandituMap extends BaseService
             'type' => 'geocode',
             'postStr' => json_encode(['lon' => $param['lon'], 'lat' => $param['lat'], 'ver' => 1]),
         ];
-        $res = $this->curlRequest->get($url, $query_data);
-
-         // 解析后的结果格式化以匹配腾讯地图
-        if (is_string($res)) {
-            $res = json_decode($res, true);
+        $raw = $this->curlRequest->get($url, $query_data);
+        if ($raw === false || trim((string)$raw) === '') {
+            throw new CommonException('天地图地址解析无响应，请检查服务器网络、天地图密钥、IP白名单或调用额度');
         }
-        if ($res['status'] == 400) throw new CommonException($res['msg']);
+
+        // 解析后的结果格式化以匹配腾讯地图。上游返回 HTML、空串或错误结构时必须明确报错，
+        // 不能继续读取 status/result 产生“Undefined array key”掩盖真实原因。
+        $res = is_string($raw) ? json_decode($raw, true) : $raw;
+        if (!is_array($res)) {
+            Log::warning('[map][tianditu] 地址解析响应不是有效JSON', [
+                'json_error' => json_last_error_msg(),
+                'response_preview' => mb_substr(strip_tags((string)$raw), 0, 300),
+            ]);
+            throw new CommonException('天地图地址解析响应格式异常，请检查密钥权限、IP白名单或服务状态');
+        }
+        $status = isset($res['status']) ? (int)$res['status'] : -1;
+        if ($status !== 0) {
+            $message = trim((string)($res['msg'] ?? $res['message'] ?? '未知错误'));
+            Log::warning('[map][tianditu] 地址解析失败', ['status' => $status, 'message' => $message]);
+            throw new CommonException('天地图地址解析失败：' . $message);
+        }
+        if (!isset($res['result']) || !is_array($res['result'])) {
+            Log::warning('[map][tianditu] 地址解析缺少result', ['keys' => array_keys($res)]);
+            throw new CommonException('天地图未返回地址结果，请检查密钥权限、IP白名单或调用额度');
+        }
 
         $t_result = $res['result'];
         $t_component = $t_result['addressComponent'] ?? [];

@@ -209,7 +209,7 @@ foreach ([
     '/niucloud/addon/hsx_erp/admin/views/erp/purchase/list.vue' => ['确认采购开单', '确认供应商调价'],
     '/niucloud/addon/hsx_erp/admin/views/erp/sale/list.vue' => ['确认销售出库'],
     '/niucloud/addon/hsx_erp/admin/views/erp/sale_return/list.vue' => ['确认发起销售退货'],
-    '/niucloud/addon/hsx_erp/admin/views/erp/payable/list.vue' => ['确认设备付款', '确认整体付款', '确认应付应收折账'],
+    '/niucloud/addon/hsx_erp/admin/views/erp/payable/list.vue' => ['确认设备付款', '确认应付应收折账'],
     '/niucloud/addon/hsx_erp/admin/views/erp/receivable/list.vue' => ['确认供货商退款到账', '确认应收应付折账'],
     '/niucloud/addon/hsx_erp/admin/views/erp/stock/list.vue' => ['确认更新设备流转'],
 ] as $relative => $needles) {
@@ -229,7 +229,6 @@ foreach ([
     '/site-uniapp/src/addon/hsx_erp/pages/purchase/create.vue',
     '/site-uniapp/src/addon/hsx_erp/pages/sale/create.vue',
     '/site-uniapp/src/addon/hsx_erp/pages/sale_return/create.vue',
-    '/site-uniapp/src/addon/hsx_erp/pages/payable/list.vue',
     '/site-uniapp/src/addon/hsx_erp/pages/receivable/list.vue',
     '/site-uniapp/src/addon/hsx_erp/pages/cost_adjust/detail.vue',
 ] as $relative) {
@@ -239,6 +238,12 @@ foreach ([
         '移动端敏感操作缺少统一二次确认：' . $relative
     );
 }
+$mobilePayableList = (string)file_get_contents($repo . '/site-uniapp/src/addon/hsx_erp/pages/payable/list.vue');
+$mobilePayableModal = (string)file_get_contents($repo . '/site-uniapp/src/addon/hsx_erp/components/ErpPayConfirmModal.vue');
+$assert(
+    str_contains($mobilePayableList, 'ErpPayConfirmModal') && str_contains($mobilePayableModal, 'confirmErpPopupAction'),
+    '移动端应付款列表必须复用设备级打款弹窗并执行统一二次确认'
+);
 $mobileOffset = (string)file_get_contents($repo . '/site-uniapp/src/addon/hsx_erp/components/ErpOffsetConfirmModal.vue');
 $assert(
     str_contains($mobileOffset, 'confirmErpSensitiveAction') || str_contains($mobileOffset, 'confirmErpPopupAction'),

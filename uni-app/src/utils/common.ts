@@ -287,7 +287,17 @@ export function urlDeconstruction(url: string) {
  * @returns
  */
 export function isUrl(str: string): boolean {
-    return str && (str.indexOf('http://') != -1 || str.indexOf('https://') != -1) || false
+    const value = normalizeResourcePath(str)
+    return /^(https?:)?\/\//i.test(value) || /^(data|blob):/i.test(value)
+}
+
+/**
+ * 统一清理接口、Excel 导入等来源中的资源地址。
+ * 避免完整 URL 前后的空白字符被浏览器当成相对路径的一部分。
+ */
+export function normalizeResourcePath(path: unknown): string {
+    if (typeof path != 'string') return ''
+    return path.trim().replace(/^(?:%20)+(?=https?:\/\/)/i, '')
 }
 
 /**
@@ -304,7 +314,8 @@ export function img(path: string): string {
     let imgDomain = import.meta.env.VITE_IMG_DOMAIN
     // #endif
 
-    if (typeof path == 'string' && path.startsWith('/')) path = path.replace(/^\//, '')
+    path = normalizeResourcePath(path)
+    if (path.startsWith('/')) path = path.replace(/^\//, '')
     if (typeof imgDomain == 'string' && imgDomain.endsWith('/')) imgDomain = imgDomain.slice(0, -1)
     return isUrl(path) ? path : `${ imgDomain }/${ path }`
 }
@@ -323,7 +334,8 @@ export function getUrl(path: string): string {
     let urlDomain = import.meta.env.VITE_IMG_DOMAIN
     // #endif
 
-    if (typeof path == 'string' && path.startsWith('/')) path = path.replace(/^\//, '')
+    path = normalizeResourcePath(path)
+    if (path.startsWith('/')) path = path.replace(/^\//, '')
     if (typeof urlDomain == 'string' && urlDomain.endsWith('/')) urlDomain = urlDomain.slice(0, -1)
 
     return isUrl(path) ? path : `${ urlDomain }/${ path }`

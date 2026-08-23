@@ -16,6 +16,16 @@ export function getRecycleDeviceModelDictChildren(params: Record<string, any> = 
   return request.get("/recycle/recycle_device_model_dict/children", { params });
 }
 
+export function resolveRecycleDeviceModelAlias(aliases: string[]) {
+  return request.post("/recycle/recycle_device_model_dict/alias/resolve", { aliases });
+}
+
+export function bindRecycleDeviceModelAlias(data: { aliases: string[]; category_id: number | string }) {
+  return request.post("/recycle/recycle_device_model_dict/alias/bind", data, {
+    showErrorMessage: true,
+  });
+}
+
 export function addRecycleDeviceModelDict(data: Record<string, any>) {
   return request.post("/recycle/recycle_device_model_dict", data, {
     showErrorMessage: true,

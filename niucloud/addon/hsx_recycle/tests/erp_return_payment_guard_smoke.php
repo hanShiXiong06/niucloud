@@ -62,8 +62,8 @@ foreach (['DEVICE_STATUS_RETURNED', 'DISPOSE_TYPE_RETURN', 'DISPOSE_STATUS_RETUR
 }
 $assert(!str_contains($purchaseReturnSource, "'pay_status' =>"), 'ERP采购退货不能抹掉已经发生的付款事实');
 $assert(str_contains($capability, 'getAddonKeysBySiteId') && str_contains($capability, "'hsx_erp'"), 'ERP接管必须按当前站点插件权限判断');
-$assert(str_contains($payment, 'assertLocalPaymentAllowed') && str_contains($payment, '财务已由 ERP 接管'), '回收打款服务必须提供后端硬拦截');
-$assert(str_contains($orderPayment, 'assertLocalPaymentAllowed') && str_contains($orderPayment, '财务已由 ERP 接管'), '整单打款流程服务必须阻止绕过控制器付款');
+$assert(str_contains($payment, 'assertLocalPaymentAllowed((int)$this->site_id)'), '回收打款服务必须调用统一后端硬拦截');
+$assert(str_contains($orderPayment, 'assertLocalPaymentAllowed((int)$this->site_id)'), '整单打款流程服务必须阻止绕过控制器付款');
 $assert(str_contains($controller, 'paymentCapability') && str_contains($controller, "array_merge(['accounts'"), '能力接口必须返回ERP财务接管状态');
 $assert(str_contains($actions, 'payment_managed_by_erp') && str_contains($actions, '前往 ERP 应付款'), 'PC打款入口必须提示并引导到ERP');
 

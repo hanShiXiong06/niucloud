@@ -58,17 +58,12 @@
       <aside class="cashier-cart">
         <!-- 头部:买家 + 结算方式 + 收款户头 -->
         <div class="cart-top">
-          <div class="cart-top__row">
-            <span class="cart-top__lbl">买家</span>
-            <el-select v-model="memberId" filterable remote clearable :remote-method="searchMember" :loading="memberLoading"
-              placeholder="搜索会员(昵称/手机)" class="flex-1" @change="onMemberChange">
-              <el-option v-for="m in memberOptions" :key="m.member_id" :label="memberLabel(m)" :value="m.member_id" />
-            </el-select>
-          </div>
-          <div v-if="memberId" class="cart-top__row">
-            <span class="cart-top__lbl">身份</span>
-            <el-tag :type="buyerIsMember ? 'success' : 'info'" size="small" effect="light" round>{{ buyerLevelName }}</el-tag>
-            <span class="cart-top__hint">{{ buyerIsMember ? '按会员价计算' : '按零售价计算' }}</span>
+          <div class="cart-buyer">
+            <div class="cart-buyer__head">
+              <span>买家</span>
+              <small>识别后请当面核对姓名和手机号</small>
+            </div>
+            <CashierMemberPicker v-model="memberId" @change="onMemberResolved" />
           </div>
           <div class="cart-top__row">
             <span class="cart-top__lbl">结算</span>
@@ -161,11 +156,11 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Delete, View } from '@element-plus/icons-vue'
 import { img } from '@/utils/common'
-import { getMemberList } from '@/app/api/member'
 import { cashierGoods, cashierCheckout, cashierCategoryTree } from '@/addon/phone_shop/api/cashier'
 import { getSpecGroups, getGrades } from '@/addon/phone_shop/api/spec'
 import { getErpCapitalAccounts, getErpSettleConfig } from '@/addon/phone_shop/api/erp_outbound'
 import CheckResultPanel from '@/addon/phone_shop/components/CheckResultPanel.vue'
+import CashierMemberPicker from '@/addon/phone_shop/components/CashierMemberPicker.vue'
 
 const categories = ref<any[]>([])
 const categoryId = ref(0)
@@ -205,8 +200,6 @@ const goodsPage = ref(1)
 const goodsLoading = ref(false)
 
 const memberId = ref<number | undefined>(undefined)
-const memberOptions = ref<any[]>([])
-const memberLoading = ref(false)
 const selectedMember = ref<any>(null)
 const paymentMode = ref('offline_cash')
 const allowCash = ref(true)   // 现结开关:后台「收款设置」关闭后,收银台只能挂账
@@ -233,8 +226,8 @@ const levelNameOf = (m: any) => { const n = m && m.member_level_name; return (n 
 const memberLabel = (m: any) => `${m.nickname || m.username || '会员'}${m.mobile ? ' · ' + m.mobile : ''}${levelNameOf(m) ? ' · ' + levelNameOf(m) : ' · 普通用户'}`
 const buyerIsMember = computed(() => !!levelNameOf(selectedMember.value))
 const buyerLevelName = computed(() => levelNameOf(selectedMember.value) || '普通用户')
-const onMemberChange = () => {
-  selectedMember.value = memberOptions.value.find((m: any) => m.member_id === memberId.value) || null
+const onMemberResolved = (member: any | null) => {
+  selectedMember.value = member
   reloadGoods()
 }
 const total = computed(() => cart.value.reduce((s, it) => s + Number(it.sale_price || 0), 0).toFixed(2))
@@ -302,12 +295,6 @@ const deriveOptions = (key: string): string[] => {
 }
 const onFilterChange = () => { reloadGoods() }
 
-const searchMember = async (kw: string) => {
-  memberLoading.value = true
-  try { const res: any = await getMemberList({ keyword: kw, page: 1, limit: 20 }); memberOptions.value = res.data?.data || res.data?.list || [] }
-  finally { memberLoading.value = false }
-}
-
 const addToCart = (g: any) => {
   if (!g || inCart(g.sku_id)) return
   if (Number(g.stock) <= 0) { ElMessage.warning('该商品无库存'); return }
@@ -337,7 +324,7 @@ const checkout = async () => {
 
   // 二次确认:把买家 / 结算方式 / 收款 / 台数 / 金额列清楚再开
   const isCredit = paymentMode.value === 'offline_credit'
-  const buyer = memberOptions.value.find((m: any) => m.member_id === memberId.value)
+  const buyer = selectedMember.value
   const buyerName = buyer ? memberLabel(buyer) : ('会员#' + memberId.value)
   let settleLine = ''
   if (isCredit) {
@@ -417,6 +404,10 @@ onMounted(() => { loadCategories(); loadFilters(); loadGoods(true); loadAccounts
 
 .cashier-cart { width: 340px; flex-shrink: 0; border-left: 1px solid var(--el-border-color-lighter); display: flex; flex-direction: column; }
 .cart-top { padding: 12px 14px 6px; border-bottom: 1px solid var(--el-border-color-lighter); display: flex; flex-direction: column; gap: 8px; }
+.cart-buyer { padding-bottom: 3px; }
+.cart-buyer__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.cart-buyer__head > span { color: var(--el-text-color-primary); font-size: 13px; font-weight: 600; }
+.cart-buyer__head small { color: var(--el-text-color-placeholder); font-size: 10px; font-weight: 400; }
 .cart-top__row { display: flex; align-items: center; gap: 8px; }
 .cart-top__lbl { font-size: 12px; color: var(--el-text-color-secondary); width: 28px; flex-shrink: 0; }
 .cart-top__hint { font-size: 11px; color: var(--el-text-color-placeholder); }

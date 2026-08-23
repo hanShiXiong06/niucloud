@@ -130,7 +130,7 @@ const updateBuyerImages = (value: string) => {
 
 .device-card__main {
     display: grid;
-    grid-template-columns: 30px minmax(150px, 0.8fr) minmax(200px, 1.5fr) 100px 82px 64px 100px;
+    grid-template-columns: 30px minmax(150px, 1.5fr) minmax(200px, 1.5fr) 100px 82px 64px 100px;
     align-items: center;
     gap: 10px;
     min-height: 32px;

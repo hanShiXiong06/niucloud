@@ -68,7 +68,7 @@ const specialMenuNames = ref<string[]>([])
 const specialMenuNamesLevel1 = ref<string[]>([])
 const addons = computed(() => {
     const addons:Record<string, any> = {}
-    userStore.siteInfo?.apps.forEach((item: any) => { addons[item.key] = item })
+    userStore.siteInfo?.apps?.forEach((item: any) => { addons[item.key] = item })
     userStore.siteInfo?.site_addons.forEach((item: any) => { addons[item.key] = item })
     return addons
 })

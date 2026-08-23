@@ -1,5 +1,5 @@
 <!--
-  ErpPayConfirmModal - 应付款逐台确认弹窗（对齐PC端 pay dialog）
+  ErpPayConfirmModal - 应付款设备级确认弹窗（对齐PC端 pay dialog）
 
   PC端逻辑：勾选设备 → 填本次付款金额 → 选账户 → 提交
   每台设备可单独设置本次付款金额，默认填满剩余应付
@@ -71,7 +71,12 @@
             <view v-if="loadingItems" class="items-loading"><u-loading-icon size="24" /></view>
             <view v-else class="items-list">
                 <u-checkbox-group v-model="selectedPayableIds" placement="column" @change="onSelectionChange">
-                    <view v-for="item in items" :key="item.id" class="device-row">
+                    <view
+                        v-for="item in items"
+                        :key="item.id"
+                        class="device-row"
+                        :class="{ 'device-row--paid': Number(item.allocated_remain || 0) <= 0 }"
+                    >
                         <view class="device-row__check">
                             <u-checkbox
                                 :name="payableIdentity(item)"
@@ -89,7 +94,9 @@
                             </view>
                         </view>
                         <view class="device-row__input">
+                            <text v-if="Number(item.allocated_remain || 0) <= 0" class="paid-label">已付清</text>
                             <u-input
+                                v-else
                                 v-model="item.pay_amount"
                                 type="number"
                                 :disabled="!item.checked"
@@ -391,6 +398,7 @@ const money = (v: any) => Number(v || 0).toFixed(2)
 .items-loading { display: flex; justify-content: center; padding: 32rpx; }
 .items-list { padding: 0 32rpx; box-sizing: border-box; }
 .device-row { display: flex; align-items: flex-start; gap: 12rpx; padding: 16rpx 0; border-bottom: 1rpx solid #f1f5f9; }
+.device-row--paid { background:#f8fafc; opacity:.72; }
 .device-row__check { padding-top: 4rpx; }
 .device-row__info { flex: 1; }
 .device-row__model { font-size: 26rpx; font-weight: 600; color: #0f172a; }
@@ -400,6 +408,7 @@ const money = (v: any) => Number(v || 0).toFixed(2)
 .amt-tiny { font-size: 22rpx; color: #94a3b8; }
 .amt-tiny.orange { color: #ea580c; }
 .device-row__input { flex-shrink: 0; }
+.paid-label { display:inline-flex; align-items:center; min-height:52rpx; padding:0 14rpx; border-radius:26rpx; background:#e2e8f0; color:#64748b; font-size:21rpx; }
 .remark-row { padding: 0 32rpx 12rpx; }
 .voucher-row { padding: 0 32rpx 14rpx; }
 .modal-actions { display: flex; gap: 16rpx; padding: 16rpx 32rpx; border-top: 1rpx solid #f1f5f9; }

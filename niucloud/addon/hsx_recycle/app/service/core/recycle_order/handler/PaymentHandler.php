@@ -13,6 +13,7 @@ namespace addon\hsx_recycle\app\service\core\recycle_order\handler;
 
 use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
+use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpCapabilityService;
 use core\exception\CommonException;
 
 /**
@@ -42,6 +43,10 @@ class PaymentHandler extends BaseFlowHandler
      */
     public function handle(array $order, array $data, array $context): array
     {
+        // 处理器自身再设一道防线，避免未来新增调用方绕过流程引擎后直接写付款状态。
+        $siteId = (int)($order['site_id'] ?? $this->getSiteId($context));
+        (new RecycleErpCapabilityService())->assertLocalPaymentAllowed($siteId);
+
         // 1. 计算订单总金额
         $totalAmount = $this->calculateTotalAmount($order['id']);
 

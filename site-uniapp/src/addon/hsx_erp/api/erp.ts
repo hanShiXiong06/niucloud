@@ -146,6 +146,9 @@ export function getMobileStockInfo(id: number) {
 export function syncMobileStockListing(id: number) {
     return request.post(`erp/stock/${id}/sync_listing`)
 }
+export function handoffMobileStockListing(id: number) {
+    return request.post(`erp/stock/${id}/handoff_listing`)
+}
 export function prepareMobileStockListingMedia(id: number) {
     return request.post(`erp/stock/${id}/listing_media/prepare`)
 }

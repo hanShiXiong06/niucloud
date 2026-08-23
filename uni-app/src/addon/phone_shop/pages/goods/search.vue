@@ -61,7 +61,7 @@ import { ref, nextTick } from 'vue';
 import { redirect } from '@/utils/common';
 import { getGoodsConfigSearch } from '@/addon/phone_shop/api/goods';
 import useConfigStore from "@/stores/config";
-import diyShopGoodsRanking from '@/addon/phone_shop/components/diy/shop-goods-ranking/index.vue';
+import diyShopGoodsRanking from '@/addon/phone_shop/components/diy/phone-shop-goods-ranking/index.vue';
 
 const inputValue = ref('') //搜索框的值
 const historyList = ref([]) //历史搜索记录
@@ -163,8 +163,8 @@ const rankingComponent = {
                 "text": "查看更多",
                 "textColor": "#FFFFFF",
                 "link": {
-                    "name": "SHOP_GOODS_RANK",
-                    "parent": "SHOP_LINK",
+                    "name": "PHONE_SHOP_GOODS_RANK",
+                    "parent": "PHONE_SHOP_LINK",
                     "title": "商品排行榜",
                     "url": "/addon/phone_shop/pages/goods/rank",
                     "action": ""

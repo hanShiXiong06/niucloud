@@ -8,6 +8,24 @@
             </div>
         </div>
 
+        <el-form-item v-if="visible('retail_price')" :required="required('retail_price')" class="listing-price-field">
+            <template #label>
+                <div class="listing-price-field__label">
+                    <span>销售定价</span>
+                    <small>对外销售价，不改变采购成本</small>
+                </div>
+            </template>
+            <el-input-number
+                :model-value="Number(modelValue.retail_price || 0)"
+                :min="0"
+                :precision="2"
+                :controls="false"
+                class="listing-price-field__input"
+                placeholder="请输入本机销售价格"
+                @update:model-value="value => updateField('retail_price', Number(value || 0))"
+            />
+        </el-form-item>
+
         <div class="listing-form__grid">
             <el-form-item v-if="visible('catalog_product_id')" label="商品型号" :required="required('catalog_product_id')">
                 <ErpCatalogProductSelect
@@ -22,17 +40,6 @@
                     :model-value="modelValue.spec || ''"
                     placeholder="容量、颜色、成色、电池等"
                     @update:model-value="value => updateField('spec', value)"
-                />
-            </el-form-item>
-            <el-form-item v-if="visible('retail_price')" label="销售价格" :required="required('retail_price')">
-                <el-input-number
-                    :model-value="Number(modelValue.retail_price || 0)"
-                    :min="0"
-                    :precision="2"
-                    :controls="false"
-                    class="!w-full"
-                    placeholder="不影响采购成本"
-                    @update:model-value="value => updateField('retail_price', Number(value || 0))"
                 />
             </el-form-item>
         </div>
@@ -154,6 +161,46 @@ function onCatalogChange(payload: any) {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0 16px;
+}
+.listing-price-field {
+    margin: 14px 0 20px;
+    padding: 16px 18px;
+    border: 1px solid #bfdbfe;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #eff6ff 0%, #f8fbff 100%);
+}
+.listing-price-field :deep(.el-form-item__label) {
+    height: auto;
+    align-items: center;
+}
+.listing-price-field__label span,
+.listing-price-field__label small {
+    display: block;
+}
+.listing-price-field__label span {
+    color: #0f172a;
+    font-size: 15px;
+    font-weight: 700;
+}
+.listing-price-field__label small {
+    margin-top: 3px;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 400;
+}
+.listing-price-field__input {
+    width: 100%;
+}
+.listing-price-field__input :deep(.el-input__wrapper) {
+    min-height: 44px;
+    background: #fff;
+    box-shadow: 0 0 0 1px #93c5fd inset;
+}
+.listing-price-field__input :deep(.el-input__inner) {
+    color: #2563eb;
+    font-size: 20px;
+    font-weight: 700;
+    text-align: right;
 }
 .listing-form__hint {
     margin-top: 7px;

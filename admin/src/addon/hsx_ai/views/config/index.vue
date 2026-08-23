@@ -269,19 +269,22 @@
                 </div>
             </template>
 
-            <template v-if="section === 'playground'">
+            <template v-if="section === 'playground' || section === 'assistant'">
                 <div v-loading="loading" class="playground-workspace">
                     <div class="playground-conversation-bar">
                         <div>
-                            <strong>直接对话</strong>
+                            <strong>{{ isAssistant ? '经营助手' : '直接对话' }}</strong>
                             <span>{{ activeConversationLabel }}</span>
                         </div>
-                        <el-button text :icon="Setting" @click="showAdvanced = !showAdvanced">
-                            {{ showAdvanced ? '收起设置' : '对话设置' }}
-                        </el-button>
+                        <div class="conversation-actions">
+                            <el-button v-if="isAssistant" text :icon="Refresh" :disabled="executing" @click="startNewAssistantConversation">新对话</el-button>
+                            <el-button text :icon="Setting" @click="showAdvanced = !showAdvanced">
+                                {{ showAdvanced ? '收起设置' : '对话设置' }}
+                            </el-button>
+                        </div>
                     </div>
-                    <div v-show="showAdvanced" class="playground-toolbar">
-                        <label class="playground-field">
+                    <div v-show="showAdvanced" class="playground-toolbar" :class="{ 'assistant-toolbar': isAssistant }">
+                        <label v-if="!isAssistant" class="playground-field">
                             <span>业务场景</span>
                             <el-select v-model="testForm.scene_key" @change="applyScene">
                                 <el-option v-for="scene in config.scenes" :key="scene.key" :label="scene.name" :value="scene.key" />
@@ -299,14 +302,21 @@
                                 <el-option v-for="model in providerModels(testForm.provider_id)" :key="model.id" :label="model.name" :value="model.id" />
                             </el-select>
                         </label>
-                        <label class="playground-field mode-field">
+                        <label v-if="!isAssistant" class="playground-field mode-field">
                             <span>输出</span>
                             <el-segmented v-model="testForm.response_mode" :options="[{ label: '对话', value: 'text' }, { label: 'JSON', value: 'json' }]" />
                         </label>
-                        <label class="playground-field mode-field">
+                        <label v-if="!isAssistant" class="playground-field mode-field">
                             <span>响应</span>
                             <el-segmented v-model="testForm.stream" :options="[{ label: '流式', value: true }, { label: '完整', value: false }]" />
                         </label>
+                    </div>
+
+                    <div v-if="isAssistant" class="assistant-shortcuts">
+                        <span>快捷提问</span>
+                        <el-button v-for="prompt in assistantPrompts" :key="prompt" size="small" :disabled="executing" @click="runQuickPrompt(prompt)">
+                            {{ prompt }}
+                        </el-button>
                     </div>
 
                     <el-alert v-if="jsonReasoningWarning" class="test-warning" type="warning" :closable="false" show-icon title="推理模型可能在 JSON 前后附加说明；业务场景仍会执行严格 JSON 校验。" />
@@ -315,7 +325,7 @@
                         <section class="playground-pane prompt-pane">
                             <header class="pane-header">
                                 <div>
-                                    <strong>输入</strong>
+                                    <strong>{{ isAssistant ? '向经营助手提问' : '输入' }}</strong>
                                     <span>{{ promptCount }}/2000</span>
                                 </div>
                                 <el-tag v-if="speechCapability.stt" type="success" effect="plain" size="small">
@@ -329,7 +339,7 @@
                                 type="textarea"
                                 :maxlength="2000"
                                 resize="none"
-                                placeholder="输入消息，或点击麦克风说话"
+                                :placeholder="isAssistant ? '例如：今天还有谁的款没有打？' : '输入消息，或点击麦克风说话'"
                                 @keydown.meta.enter.prevent="runTest"
                                 @keydown.ctrl.enter.prevent="runTest"
                             />
@@ -357,7 +367,7 @@
                         <section class="playground-pane response-pane">
                             <header class="pane-header response-header">
                                 <div>
-                                    <strong>AI 回复</strong>
+                                    <strong>{{ isAssistant ? '经营助手回复' : 'AI 回复' }}</strong>
                                     <span v-if="testResult.model">
                                         {{ testResult.model }} · 首字 {{ testResult.first_token_ms || '—' }}ms · {{ testResult.latency_ms || '—' }}ms · {{ testResult.usage?.total_tokens || 0 }} tokens
                                     </span>
@@ -376,18 +386,71 @@
                                     </el-tooltip>
                                 </div>
                             </header>
-                            <div class="response-content">
-                                <details v-if="showReasoning && testResult.reasoning_content" class="reasoning-result" open>
-                                    <summary>模型推理内容</summary>
-                                    <pre>{{ testResult.reasoning_content }}</pre>
-                                </details>
-                                <el-alert v-if="validationWarning" class="result-error" type="warning" :closable="false" :title="validationWarning" />
-                                <el-alert v-if="testResult.error" class="result-error" type="error" :closable="false" :title="testResult.error" />
-                                <pre v-if="testResult.content">{{ testResult.content }}</pre>
-                                <div v-else class="response-empty">
-                                    <el-icon><ChatDotRound /></el-icon>
-                                    <span>{{ responseEmptyText }}</span>
-                                </div>
+                            <div ref="assistantScroller" class="response-content" :class="{ 'assistant-timeline': isAssistant }">
+                                <template v-if="isAssistant">
+                                    <div v-if="assistantMessages.length === 0" class="assistant-welcome">
+                                        <el-icon><ChatDotRound /></el-icon>
+                                        <strong>可以连续追问经营数据</strong>
+                                        <span>例如先问“还有哪些应付款”，再问“把刚才的明细展开”。</span>
+                                    </div>
+                                    <article v-for="message in assistantMessages" :key="message.local_id" class="assistant-message" :class="message.role">
+                                        <div class="assistant-message-head">
+                                            <strong>{{ message.role === 'user' ? '我' : '经营助手' }}</strong>
+                                            <span v-if="message.create_at">{{ formatMessageTime(message.create_at) }}</span>
+                                        </div>
+                                        <div class="assistant-bubble">
+                                            <details v-if="showReasoning && message.reasoning" class="reasoning-result" open>
+                                                <summary>模型推理内容</summary>
+                                                <pre>{{ message.reasoning }}</pre>
+                                            </details>
+                                            <pre v-if="message.content">{{ message.content }}</pre>
+                                            <div v-else-if="message.status === 'streaming'" class="assistant-thinking">
+                                                <i /><i /><i /><span>{{ message.tool_status || '正在理解并查询业务数据' }}</span>
+                                            </div>
+                                            <el-alert v-if="message.error" type="error" :closable="false" :title="message.error" />
+                                        </div>
+                                        <div v-if="message.tool_results.length" class="assistant-tool-results">
+                                            <section v-for="(tool, toolIndex) in message.tool_results" :key="`${tool.tool_key}_${toolIndex}`" class="assistant-tool-result">
+                                                <header>
+                                                    <div>
+                                                        <strong>{{ tool.label || toolLabel(tool.tool_key) }}</strong>
+                                                        <span>{{ toolResultHint(tool) }}</span>
+                                                    </div>
+                                                    <el-tag :type="tool.ok ? 'success' : 'danger'" effect="plain" size="small">{{ tool.ok ? '查询成功' : '查询失败' }}</el-tag>
+                                                </header>
+                                                <el-alert v-if="tool.error" type="error" :closable="false" :title="tool.error" />
+                                                <div v-if="tool.ok && toolScalarEntries(tool).length" class="tool-summary-grid">
+                                                    <div v-for="item in toolScalarEntries(tool)" :key="item.key">
+                                                        <span>{{ fieldLabel(item.key) }}</span>
+                                                        <strong>{{ formatToolValue(item.key, item.value) }}</strong>
+                                                    </div>
+                                                </div>
+                                                <el-table v-if="toolRows(tool).length" :data="toolRows(tool)" size="small" max-height="320" class="tool-detail-table">
+                                                    <el-table-column v-for="column in toolColumns(tool)" :key="column" :label="fieldLabel(column)" :min-width="toolColumnWidth(column)">
+                                                        <template #default="{ row }">{{ formatToolValue(column, row[column]) }}</template>
+                                                    </el-table-column>
+                                                </el-table>
+                                                <details v-if="tool.ok" class="tool-raw-detail">
+                                                    <summary>查看原始查询结果</summary>
+                                                    <pre>{{ prettyToolData(tool) }}</pre>
+                                                </details>
+                                            </section>
+                                        </div>
+                                    </article>
+                                </template>
+                                <template v-else>
+                                    <details v-if="showReasoning && testResult.reasoning_content" class="reasoning-result" open>
+                                        <summary>模型推理内容</summary>
+                                        <pre>{{ testResult.reasoning_content }}</pre>
+                                    </details>
+                                    <el-alert v-if="validationWarning" class="result-error" type="warning" :closable="false" :title="validationWarning" />
+                                    <el-alert v-if="testResult.error" class="result-error" type="error" :closable="false" :title="testResult.error" />
+                                    <pre v-if="testResult.content">{{ testResult.content }}</pre>
+                                    <div v-else class="response-empty">
+                                        <el-icon><ChatDotRound /></el-icon>
+                                        <span>{{ responseEmptyText }}</span>
+                                    </div>
+                                </template>
                             </div>
                             <footer class="response-footer">
                                 <span v-if="speechCapability.tts">{{ speechOutputStatus }}</span>
@@ -491,10 +554,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ChatDotRound, Connection, Delete, Headset, Microphone, Plus, Refresh, Search, Setting, VideoPause, VideoPlay } from '@element-plus/icons-vue'
-import { executeAi, getAiLogs, getAiSection, recognizePlaygroundSpeech, saveAiSection, streamAi, syncAiModels, synthesizePlaygroundSpeech, testAiProvider, testAiSpeech } from '../../api'
+import { executeAi, getAiAssistantConversation, getAiLogs, getAiSection, recognizePlaygroundSpeech, saveAiSection, streamAi, syncAiModels, synthesizePlaygroundSpeech, testAiProvider, testAiSpeech } from '../../api'
 
 type AiModel = { id: string; name: string; owned_by: string; enabled: number }
 type AiProvider = {
@@ -520,18 +583,29 @@ type AiIntegration = {
     scenes: string[]; capabilities: string[]
 }
 type AiSpeechCapability = { enabled: boolean; provider: string; provider_name: string; stt: boolean; tts: boolean }
+type AssistantToolResult = {
+    tool_key: string; label?: string; arguments?: Record<string, any>; ok: boolean;
+    data?: Record<string, any>; error?: string; requires_confirmation?: boolean
+}
+type AssistantMessage = {
+    local_id: string; id?: number; request_id?: string; role: 'user' | 'assistant'; content: string;
+    reasoning: string; tool_results: AssistantToolResult[]; tool_status: string; status: string;
+    error: string; model?: string; latency_ms?: number; total_tokens?: number; create_at: number
+}
 
 const uid = () => `${Date.now()}_${Math.random().toString(36).slice(2)}`
-const props = withDefaults(defineProps<{ section?: 'model' | 'integration' | 'speech' | 'playground' | 'logs' }>(), { section: 'model' })
+const props = withDefaults(defineProps<{ section?: 'model' | 'integration' | 'speech' | 'playground' | 'assistant' | 'logs' }>(), { section: 'model' })
 const section = computed(() => props.section)
+const isAssistant = computed(() => section.value === 'assistant')
 const canSave = computed(() => ['model', 'integration', 'speech'].includes(section.value))
 const pageTitleMap: Record<string, string> = {
-    model: '模型与场景', integration: '业务接入', speech: '语音服务', playground: '在线测试', logs: '调用日志'
+    model: '模型与场景', integration: '业务接入', speech: '语音服务', playground: '在线测试', assistant: '经营助手', logs: '调用日志'
 }
 const pageDescriptionMap: Record<string, string> = {
     integration: '控制 AI 与业务插件之间的数据和工具通信',
     speech: '配置语音识别与回复朗读服务商',
     playground: '使用已保存的模型与场景进行调试',
+    assistant: '查询本人待办、回收进度、库存及应收应付，结果严格遵循当前账号权限',
     logs: '查看模型调用、耗时、Token 与错误记录'
 }
 const pageTitle = computed(() => pageTitleMap[section.value] || 'AI 能力中心')
@@ -576,7 +650,7 @@ const normalizeClientConfig = (data: any) => {
 }
 const loadConfig = async () => {
     loading.value = true
-    try { normalizeClientConfig((await getAiSection(section.value)).data || {}) } finally { loading.value = false }
+    try { normalizeClientConfig((await getAiSection(isAssistant.value ? 'playground' : section.value)).data || {}) } finally { loading.value = false }
 }
 const payload = () => ({
     enabled: config.enabled,
@@ -656,7 +730,13 @@ const removeScene = async (index: number) => {
 }
 
 const testForm = reactive({ scene_key: 'general', provider_id: '', model: '', prompt: '', response_mode: 'text', stream: true })
+const assistantPrompts = ['回收业务现在有哪些待处理工作？', '当前库存情况怎么样？', '还有哪些应付款没处理？', '还有哪些应收款没收回？']
 const testResult = reactive<any>({})
+const assistantMessages = ref<AssistantMessage[]>([])
+const assistantConversationId = ref(0)
+const assistantConversationTitle = ref('')
+const assistantScroller = ref<HTMLElement | null>(null)
+const assistantConversationStorageKey = 'hsx_ai_admin_assistant_conversation_id'
 const executing = ref(false)
 const recognizing = ref(false)
 const recording = ref(false)
@@ -674,10 +754,106 @@ const responseEmptyText = computed(() => {
     return reasoningLength > 0 ? `AI 正在思考，已持续收到 ${reasoningLength} 个字符` : 'AI 正在连接模型'
 })
 const activeConversationLabel = computed(() => {
+    if (isAssistant.value && assistantConversationTitle.value) return assistantConversationTitle.value
     const scene = config.scenes.find((item) => item.key === testForm.scene_key)?.name || '通用对话'
     const provider = config.providers.find((item) => item.id === testForm.provider_id)?.name || '默认通道'
     return `${scene} · ${provider} · ${testForm.model || '默认模型'}`
 })
+
+const normalizeToolResults = (rows: any): AssistantToolResult[] => Array.isArray(rows)
+    ? rows.filter((row) => row && typeof row === 'object').map((row) => ({
+        tool_key: String(row.tool_key || ''), label: String(row.label || ''), arguments: row.arguments || {},
+        ok: Boolean(row.ok), data: row.data || {}, error: String(row.error || ''),
+        requires_confirmation: Boolean(row.requires_confirmation)
+    }))
+    : []
+const toAssistantMessage = (row: any): AssistantMessage => ({
+    local_id: String(row.id || row.local_id || uid()), id: Number(row.id || 0), request_id: String(row.request_id || ''),
+    role: row.role === 'user' ? 'user' : 'assistant', content: String(row.content || ''),
+    reasoning: String(row.reasoning || row.reasoning_content || ''), tool_results: normalizeToolResults(row.tool_results),
+    tool_status: '', status: String(row.status || 'success'), error: String(row.error || ''), model: String(row.model || ''),
+    latency_ms: Number(row.latency_ms || 0), total_tokens: Number(row.total_tokens || 0), create_at: Number(row.create_at || Math.floor(Date.now() / 1000))
+})
+const scrollAssistantToBottom = async () => {
+    await nextTick()
+    if (assistantScroller.value) assistantScroller.value.scrollTop = assistantScroller.value.scrollHeight
+}
+const rememberAssistantConversation = (id: number) => {
+    assistantConversationId.value = Math.max(0, Number(id || 0))
+    try {
+        if (assistantConversationId.value) sessionStorage.setItem(assistantConversationStorageKey, String(assistantConversationId.value))
+        else sessionStorage.removeItem(assistantConversationStorageKey)
+    } catch (_) {}
+}
+const startNewAssistantConversation = () => {
+    if (executing.value) return
+    rememberAssistantConversation(0)
+    assistantConversationTitle.value = ''
+    assistantMessages.value = []
+    Object.keys(testResult).forEach((key) => delete testResult[key])
+}
+const loadAssistantConversation = async () => {
+    let conversationId = 0
+    try { conversationId = Number(sessionStorage.getItem(assistantConversationStorageKey) || 0) } catch (_) {}
+    if (!conversationId) return
+    try {
+        const data: any = (await getAiAssistantConversation(conversationId)).data || {}
+        rememberAssistantConversation(Number(data.conversation?.id || 0))
+        assistantConversationTitle.value = String(data.conversation?.title || '')
+        assistantMessages.value = (data.messages || []).map(toAssistantMessage)
+        const latest = [...assistantMessages.value].reverse().find((message) => message.role === 'assistant' && message.content)
+        if (latest) Object.assign(testResult, { content: latest.content, model: latest.model, latency_ms: latest.latency_ms })
+        await scrollAssistantToBottom()
+    } catch (_) {
+        startNewAssistantConversation()
+    }
+}
+
+const toolLabel = (key: string) => ({
+    'hsx_erp.stock.summary': '库存总览', 'hsx_erp.payable.summary': '应付总览',
+    'hsx_erp.payable.search': '应付款明细', 'hsx_erp.receivable.summary': '应收总览',
+    'hsx_erp.receivable.search': '应收款明细'
+}[key] || key || '业务查询')
+const toolData = (tool: AssistantToolResult) => tool.data && typeof tool.data === 'object' ? tool.data : {}
+const toolRows = (tool: AssistantToolResult): Record<string, any>[] => {
+    const data: any = toolData(tool)
+    for (const key of ['items', 'warehouses', 'rows', 'data']) {
+        if (Array.isArray(data[key])) return data[key].filter((row: any) => row && typeof row === 'object').slice(0, 20)
+    }
+    return []
+}
+const preferredToolColumns = ['party_name', 'payable_no', 'receivable_no', 'source_no', 'amount', 'settled_amount', 'remain_amount', 'finance_status_name', 'task_assignee_name', 'occurred_at_text', 'warehouse_name', 'stock_count', 'stock_cost']
+const toolColumns = (tool: AssistantToolResult) => {
+    const rows = toolRows(tool)
+    if (!rows.length) return []
+    const keys = Array.from(new Set(rows.flatMap((row) => Object.keys(row))))
+    const preferred = preferredToolColumns.filter((key) => keys.includes(key))
+    return (preferred.length ? preferred : keys.filter((key) => !['id', 'party_id', 'source_id', 'web_path', 'miniapp_path'].includes(key))).slice(0, 8)
+}
+const toolScalarEntries = (tool: AssistantToolResult) => Object.entries(toolData(tool))
+    .filter(([key, value]) => !['items', 'warehouses', 'rows', 'data', 'entry', 'generated_at', 'number_field', 'side', 'scope'].includes(key) && !Array.isArray(value) && (value === null || typeof value !== 'object'))
+    .slice(0, 8).map(([key, value]) => ({ key, value }))
+const fieldLabel = (key: string) => ({
+    open_count: '待处理笔数', original_amount: '账款原额', settled_amount: '已结算', remaining_amount: '剩余金额',
+    total_returned: '返回明细', stock_count: '库存数量', stock_cost: '库存成本', warehouse_name: '仓库',
+    party_name: '往来单位', payable_no: '应付单号', receivable_no: '应收单号', source_no: '来源单号',
+    amount: '账款金额', remain_amount: '剩余金额', finance_status_name: '状态', task_assignee_name: '负责人',
+    occurred_at_text: '发生时间', category_name: '业务类型', business_reason: '业务原因'
+}[key] || key)
+const moneyFields = new Set(['original_amount', 'settled_amount', 'remaining_amount', 'stock_cost', 'amount', 'remain_amount'])
+const formatToolValue = (key: string, value: any) => {
+    if (value === null || value === undefined || value === '') return '—'
+    if (moneyFields.has(key)) return `¥${Number(value || 0).toFixed(2)}`
+    if (typeof value === 'object') return JSON.stringify(value)
+    return String(value)
+}
+const toolColumnWidth = (key: string) => ['party_name', 'business_reason'].includes(key) ? 150 : (['payable_no', 'receivable_no', 'source_no', 'occurred_at_text'].includes(key) ? 140 : 110)
+const toolResultHint = (tool: AssistantToolResult) => {
+    const rows = toolRows(tool)
+    return rows.length ? `已返回 ${rows.length} 条业务明细` : '本次查询的结构化业务结果'
+}
+const prettyToolData = (tool: AssistantToolResult) => JSON.stringify(toolData(tool), null, 2)
+const formatMessageTime = (value: number) => value ? new Date(value * 1000).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : ''
 const speechInputStatus = computed(() => {
     if (recognizing.value) return '正在识别语音'
     if (recording.value) return `录音中 ${String(Math.floor(recordingSeconds.value / 60)).padStart(2, '0')}:${String(recordingSeconds.value % 60).padStart(2, '0')}`
@@ -691,14 +867,94 @@ const speechOutputStatus = computed(() => {
 const jsonReasoningWarning = computed(() => testForm.response_mode === 'json' && /(?:^|[-_])r1(?:$|[-_])/i.test(testForm.model))
 const applyScene = () => {
     const scene = config.scenes.find((item) => item.key === testForm.scene_key)
-    if (!scene) return
-    testForm.provider_id = scene.provider_id || config.default_provider_id
+    testForm.provider_id = scene?.provider_id || config.default_provider_id
     const provider = config.providers.find((item) => item.id === testForm.provider_id)
-    testForm.model = scene.model || provider?.default_model || config.default_model || ''
+    testForm.model = scene?.model || provider?.default_model || config.default_model || ''
+}
+const runAssistantTest = async () => {
+    const prompt = testForm.prompt.trim()
+    const userMessage = toAssistantMessage({ role: 'user', content: prompt, status: 'success' })
+    const assistantMessage = toAssistantMessage({ role: 'assistant', content: '', status: 'streaming' })
+    assistantMessages.value.push(userMessage, assistantMessage)
+    testForm.prompt = ''
+    await scrollAssistantToBottom()
+    Object.keys(testResult).forEach((key) => delete testResult[key])
+    validationWarning.value = ''
+    showReasoning.value = false
+    stopAnswerAudio()
+    if (autoRead.value) void unlockAnswerAudio()
+    executing.value = true
+    let completed = false
+    const appendToolResult = (tool: any) => {
+        const normalized = normalizeToolResults([tool])[0]
+        if (!normalized) return
+        const signature = `${normalized.tool_key}:${JSON.stringify(normalized.arguments || {})}:${JSON.stringify(normalized.data || {})}`
+        const exists = assistantMessage.tool_results.some((item) => `${item.tool_key}:${JSON.stringify(item.arguments || {})}:${JSON.stringify(item.data || {})}` === signature)
+        if (!exists) assistantMessage.tool_results.push(normalized)
+    }
+    try {
+        await streamAi({
+            ...testForm,
+            prompt,
+            conversation_id: assistantConversationId.value
+        }, (event) => {
+            if (event.type === 'conversation') {
+                rememberAssistantConversation(Number(event.conversation_id || 0))
+                assistantConversationTitle.value = String(event.conversation_title || assistantConversationTitle.value)
+            }
+            if (event.type === 'meta') {
+                assistantMessage.model = String(event.model || '')
+                Object.assign(testResult, event)
+            }
+            if (event.type === 'tool') {
+                const label = toolLabel(String(event.tool_key || ''))
+                assistantMessage.tool_status = event.status === 'running' ? `正在${label}` : `${label}${event.status === 'success' ? '完成' : '失败'}`
+            }
+            if (event.type === 'tool_result') appendToolResult(event.item)
+            if (event.type === 'reasoning') {
+                assistantMessage.reasoning += String(event.delta || '')
+                testResult.reasoning_content = assistantMessage.reasoning
+            }
+            if (event.type === 'content') {
+                assistantMessage.content += String(event.delta || '')
+                testResult.content = assistantMessage.content
+                void scrollAssistantToBottom()
+            }
+            if (event.type === 'done') {
+                rememberAssistantConversation(Number(event.conversation_id || assistantConversationId.value))
+                assistantConversationTitle.value = String(event.conversation_title || assistantConversationTitle.value)
+                normalizeToolResults(event.tool_results).forEach(appendToolResult)
+                assistantMessage.id = Number(event.message_id || 0)
+                assistantMessage.model = String(event.model || assistantMessage.model || '')
+                assistantMessage.latency_ms = Number(event.latency_ms || 0)
+                assistantMessage.total_tokens = Number(event.usage?.total_tokens || 0)
+                assistantMessage.status = 'success'
+                assistantMessage.tool_status = ''
+                Object.assign(testResult, event, { content: assistantMessage.content, reasoning_content: assistantMessage.reasoning })
+            }
+            if (event.type === 'error') {
+                assistantMessage.error = String(event.message || '经营助手调用失败')
+                assistantMessage.status = 'failed'
+                testResult.error = assistantMessage.error
+            }
+        })
+        completed = Boolean(assistantMessage.content)
+    } catch (error: any) {
+        assistantMessage.error = error?.message || error?.msg || '经营助手调用失败'
+        assistantMessage.status = 'failed'
+        testResult.error = assistantMessage.error
+        ElMessage.error(assistantMessage.error)
+    } finally {
+        if (assistantMessage.status === 'streaming') assistantMessage.status = completed ? 'success' : 'failed'
+        executing.value = false
+        await scrollAssistantToBottom()
+    }
+    if (completed && autoRead.value && speechCapability.value.tts) void speakAnswer(true)
 }
 const runTest = async () => {
     if (!testForm.prompt.trim()) { ElMessage.warning('请输入测试消息'); return }
     if (!testForm.model) { ElMessage.warning('请先在对话设置中选择模型'); return }
+    if (isAssistant.value) { await runAssistantTest(); return }
     if (autoRead.value) void unlockAnswerAudio()
     executing.value = true
     stopAnswerAudio()
@@ -732,6 +988,11 @@ const runTest = async () => {
         }
     } finally { executing.value = false }
     if (completed && autoRead.value && speechCapability.value.tts) void speakAnswer(true)
+}
+const runQuickPrompt = async (prompt: string) => {
+    if (executing.value) return
+    testForm.prompt = prompt
+    await runTest()
 }
 
 let recorderContext: AudioContext | null = null
@@ -967,7 +1228,13 @@ const onSpeechProviderChange = () => {
 onMounted(async () => {
     if (section.value === 'logs') { await loadLogs(); return }
     await loadConfig()
-    if (section.value === 'playground') applyScene()
+    if (isAssistant.value) {
+        testForm.scene_key = 'business.admin_assistant'
+        testForm.response_mode = 'text'
+        testForm.stream = true
+    }
+    if (section.value === 'playground' || isAssistant.value) applyScene()
+    if (isAssistant.value) await loadAssistantConversation()
 })
 onBeforeUnmount(() => {
     recording.value = false
@@ -984,7 +1251,7 @@ onBeforeUnmount(() => {
 .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
 .section-title { margin: 0 0 14px; font-size: 16px; font-weight: 600; }.section-gap { margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--el-border-color-lighter); }
 .header-status { display: flex; align-items: center; gap: 10px; margin-top: 8px; color: var(--el-text-color-secondary); font-size: 13px; }
-.header-actions, .provider-title, .toolbar, .toolbar-fields { display: flex; align-items: center; gap: 10px; }
+.header-actions, .provider-title, .toolbar, .toolbar-fields, .conversation-actions { display: flex; align-items: center; gap: 10px; }
 .toolbar { justify-content: space-between; min-height: 48px; margin-bottom: 14px; padding: 10px 12px; background: var(--el-fill-color-lighter); border-radius: 6px; }
 .toolbar-fields .el-input { width: 300px; }.toolbar-fields .el-select { width: 220px; }.toolbar-fields.compact { color: var(--el-text-color-regular); font-size: 13px; }
 .provider-list { display: grid; gap: 14px; }
@@ -1013,6 +1280,9 @@ onBeforeUnmount(() => {
 .playground-conversation-bar { display: flex; min-height: 58px; box-sizing: border-box; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--el-border-color-lighter); background: var(--el-fill-color-extra-light); }
 .playground-conversation-bar > div { display: flex; min-width: 0; flex-direction: column; gap: 4px; }.playground-conversation-bar strong { font-size: 14px; }.playground-conversation-bar span { overflow: hidden; color: var(--el-text-color-secondary); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .playground-toolbar { display: grid; grid-template-columns: minmax(150px, .8fr) minmax(150px, .8fr) minmax(210px, 1.2fr) 180px 180px; gap: 14px; padding: 14px 16px; border-bottom: 1px solid var(--el-border-color-lighter); background: var(--el-fill-color-extra-light); }
+.playground-toolbar.assistant-toolbar { grid-template-columns: minmax(180px, 240px) minmax(240px, 360px); }
+.assistant-shortcuts { display: flex; min-height: 52px; box-sizing: border-box; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--el-border-color-lighter); }
+.assistant-shortcuts > span { margin-right: 4px; color: var(--el-text-color-secondary); font-size: 12px; }
 .playground-field { display: flex; min-width: 0; flex-direction: column; gap: 6px; }.playground-field > span { color: var(--el-text-color-secondary); font-size: 12px; }.playground-field :deep(.el-select), .playground-field :deep(.el-segmented) { width: 100%; }
 .test-warning { margin: 14px 16px 0; width: auto; }.result-error { margin-bottom: 14px; }
 .playground-stage { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); min-height: 540px; }
@@ -1024,12 +1294,21 @@ onBeforeUnmount(() => {
 .speech-input-status, .response-voice-actions { display: flex; align-items: center; gap: 10px; min-width: 0; }.speech-input-status span, .response-footer { color: var(--el-text-color-secondary); font-size: 12px; }.speech-input-status span.recording { color: var(--el-color-danger); }
 .voice-button.is-recording { border-color: var(--el-color-danger); color: #fff; background: var(--el-color-danger); }
 .response-content { flex: 1; min-height: 0; padding: 18px; overflow: auto; }.response-content > pre, .reasoning-result pre { margin: 0; overflow: auto; white-space: pre-wrap; word-break: break-word; font-family: inherit; font-size: 14px; line-height: 1.8; }
+.assistant-timeline { display: flex; flex-direction: column; gap: 18px; background: var(--el-fill-color-extra-light); scroll-behavior: smooth; }
+.assistant-welcome { display: flex; min-height: 360px; align-items: center; justify-content: center; flex-direction: column; gap: 10px; color: var(--el-text-color-secondary); text-align: center; }.assistant-welcome .el-icon { font-size: 34px; color: var(--el-color-primary); }.assistant-welcome strong { color: var(--el-text-color-primary); font-size: 15px; }.assistant-welcome span { max-width: 360px; font-size: 13px; line-height: 1.7; }
+.assistant-message { display: flex; max-width: 94%; flex-direction: column; gap: 7px; align-self: flex-start; }.assistant-message.user { max-width: 78%; align-self: flex-end; }.assistant-message-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 2px; }.assistant-message-head strong { font-size: 12px; }.assistant-message-head span { color: var(--el-text-color-placeholder); font-size: 11px; }
+.assistant-bubble { min-width: 80px; padding: 12px 14px; border: 1px solid var(--el-border-color-lighter); border-radius: 6px; color: var(--el-text-color-primary); background: var(--el-bg-color); }.assistant-message.user .assistant-bubble { border-color: var(--el-color-primary-light-7); background: var(--el-color-primary-light-9); }.assistant-bubble > pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: inherit; font-size: 14px; line-height: 1.75; }
+.assistant-thinking { display: flex; min-height: 24px; align-items: center; gap: 5px; color: var(--el-text-color-secondary); font-size: 12px; }.assistant-thinking i { width: 5px; height: 5px; border-radius: 50%; background: var(--el-color-primary); animation: assistant-pulse 1.2s infinite ease-in-out; }.assistant-thinking i:nth-child(2) { animation-delay: .15s; }.assistant-thinking i:nth-child(3) { animation-delay: .3s; }.assistant-thinking span { margin-left: 5px; }
+.assistant-tool-results { display: grid; gap: 8px; }.assistant-tool-result { overflow: hidden; border: 1px solid var(--el-border-color-light); border-radius: 6px; background: var(--el-bg-color); }.assistant-tool-result > header { display: flex; min-height: 50px; box-sizing: border-box; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 12px; border-bottom: 1px solid var(--el-border-color-lighter); }.assistant-tool-result > header > div { display: flex; min-width: 0; flex-direction: column; gap: 3px; }.assistant-tool-result > header strong { font-size: 13px; }.assistant-tool-result > header span { overflow: hidden; color: var(--el-text-color-secondary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.tool-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--el-border-color-lighter); }.tool-summary-grid > div { display: flex; min-height: 60px; box-sizing: border-box; justify-content: center; flex-direction: column; gap: 4px; padding: 10px 12px; background: var(--el-bg-color); }.tool-summary-grid span { color: var(--el-text-color-secondary); font-size: 11px; }.tool-summary-grid strong { overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }.tool-detail-table { width: 100%; }.tool-raw-detail { padding: 9px 12px; border-top: 1px solid var(--el-border-color-lighter); color: var(--el-text-color-secondary); font-size: 11px; }.tool-raw-detail summary { cursor: pointer; }.tool-raw-detail pre { max-height: 240px; margin: 10px 0 0; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 11px; line-height: 1.6; }
+@keyframes assistant-pulse { 0%, 70%, 100% { opacity: .28; transform: translateY(0); } 35% { opacity: 1; transform: translateY(-2px); } }
 .reasoning-result { margin-bottom: 16px; padding: 12px 14px; border: 1px solid var(--el-border-color-lighter); border-radius: 4px; color: var(--el-text-color-secondary); background: var(--el-fill-color-extra-light); }.reasoning-result summary { cursor: pointer; font-size: 13px; }.reasoning-result pre { max-height: 220px; margin-top: 12px; color: var(--el-text-color-secondary); font-size: 12px; }
 .response-empty { display: flex; height: 100%; min-height: 360px; align-items: center; justify-content: center; flex-direction: column; gap: 12px; color: var(--el-text-color-placeholder); }.response-empty .el-icon { font-size: 34px; }.response-empty span { font-size: 13px; }
 .response-footer { justify-content: flex-start; }.response-header > div:first-child { flex: 1; }.response-voice-actions { flex: 0 0 auto; }
 .pagination-row { display: flex; justify-content: flex-end; margin-top: 16px; }
 @media (max-width: 1100px) {
     .playground-toolbar { grid-template-columns: repeat(3, minmax(0, 1fr)); }.playground-stage { grid-template-columns: 1fr; }.response-pane { border-top: 1px solid var(--el-border-color-lighter); border-left: 0; }
+    .tool-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 720px) {
     .page-header, .provider-header, .toolbar, .integration-panel { align-items: stretch; flex-direction: column; }.form-grid, .dialog-grid, .test-grid { grid-template-columns: 1fr; }

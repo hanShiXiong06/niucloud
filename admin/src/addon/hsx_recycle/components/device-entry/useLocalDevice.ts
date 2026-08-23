@@ -78,7 +78,7 @@ export function useLocalDevice() {
         const system = d?.system || {}
         const batteryData = d?.battery || {}
         let battery = ''
-        const batteryValue = batteryData?.health_percent ?? d?.battery_health
+        const batteryValue = batteryData?.calculated_health_percent ?? d?.battery_health
         if (batteryValue !== undefined && batteryValue !== null && batteryValue !== '') {
             const s = String(batteryValue)
             if (s.includes('%') || /^\d+(\.\d+)?$/.test(s)) {

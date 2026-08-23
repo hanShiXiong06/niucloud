@@ -1451,12 +1451,12 @@ class ErpStockService extends BaseAdminService
                     $row['turnover_action_reason'] = '图片已完成，等待库位负责人确定销售价格';
                 } elseif ((int)$row['can_handoff_shop'] === 1) {
                     $row['turnover_action_key'] = 'publish_listing';
-                    $row['turnover_action_label'] = '交接商城资料运营';
+                    $row['turnover_action_label'] = '交接商城';
                     $row['turnover_action_reason'] = '图片和售价已完成，由商城资料运营对应分类、规格、标签并发布';
                 } elseif ($status === 'need_material') {
                     $row['turnover_action_key'] = 'complete_listing_material';
-                    $row['turnover_action_label'] = '整理商城资料';
-                    $row['turnover_action_reason'] = '补齐商品型号、规格和对外展示资料后即可上架';
+                    $row['turnover_action_label'] = '完善 ERP 商品资料';
+                    $row['turnover_action_reason'] = '补齐 ERP 商品型号、规格和对外说明后即可按渠道规则发布';
                 }
             }
             $row['listing_sync'] = [
@@ -1973,7 +1973,7 @@ class ErpStockService extends BaseAdminService
      * 由 ERP 直接把资料完整的设备发布到已安装商城。
      * 旧方法名保留给已部署前端兼容，语义已经从“同步中台”改为“直接上架”。
      */
-    public function syncListing(int $id): array
+    public function syncListing(int $id, bool $forceShopCompletion = false): array
     {
         $asset = $this->findAsset($id);
         if ((string)$asset->status !== ErpDict::ASSET_IN_STOCK) {
@@ -1990,7 +1990,10 @@ class ErpStockService extends BaseAdminService
         if ((int)($channelPolicy['enabled'] ?? 0) !== 1) {
             throw new CommonException('自有商城渠道已关闭；设备资料仍保留在 ERP');
         }
-        $shopCompletion = (string)($channelPolicy['publish_mode'] ?? 'direct') === 'manual';
+        // “交接商城运营”是独立业务动作：即使站点默认允许 ERP 直发，也只能
+        // 创建商城待整理货源，不能绕过下一岗位直接生成前台商品。
+        $shopCompletion = $forceShopCompletion
+            || (string)($channelPolicy['publish_mode'] ?? 'direct') === 'manual';
         if ((int)$policy['allow_mall'] !== 1) {
             throw new CommonException('当前仓库未配置为商城销售仓，请先调拨到允许上商城的仓库');
         }
@@ -2014,9 +2017,9 @@ class ErpStockService extends BaseAdminService
         }
         if ($shopCompletion && !ErpListingWorkflow::canHandoffToShop($asset->toArray(), $policy)) {
             $status = ErpListingWorkflow::statusFromAsset($asset->toArray(), $policy);
-            if ($status === 'need_photo') throw new CommonException('请先完成商品拍摄并上传可售图片，再交接商城资料运营');
-            if ($status === 'need_price') throw new CommonException('请先由库位负责人完成销售定价，再交接商城资料运营');
-            throw new CommonException('图片和销售价格尚未完成，暂不能交接商城资料运营');
+            if ($status === 'need_photo') throw new CommonException('请先完成商品拍摄并上传可售图片，再交接商城');
+            if ($status === 'need_price') throw new CommonException('请先完成销售定价，再交接商城');
+            throw new CommonException('图片和销售价格尚未完成，暂不能交接商城');
         }
         if (!$shopCompletion && (int)($policy['can_list_mall'] ?? 0) !== 1) {
             $missing = implode('、', (array)($policy['missing_labels'] ?? []));
@@ -2033,7 +2036,19 @@ class ErpStockService extends BaseAdminService
         // - 消费 ERP 目录：无论直发还是运营确认，都先完成目录投影并自动预填；
         // - 商城独立分类：已有映射时复用，首次没有映射时交给商城运营选择。
         if ((string)$channelPolicy['category_mode'] === 'erp') {
-            $categoryPath = $this->marketplaceCategoryPath($asset);
+            // 商城运营接手时，ERP 分类只用于“有则预填”，不能反过来成为交接前置条件。
+            // 直发模式仍保持严格投影，避免创建没有分类的商城商品。
+            try {
+                $categoryPath = (int)($asset->catalog_product_id ?? 0) > 0
+                    ? $this->marketplaceCategoryPath($asset)
+                    : [];
+            } catch (\Throwable $throwable) {
+                if (!$shopCompletion) throw $throwable;
+                $categoryPath = [];
+            }
+            if (!$shopCompletion && $categoryPath === []) {
+                throw new CommonException('商品目录信息不完整，请先选择 ERP 商品型号');
+            }
         } elseif (!$shopCompletion) {
             $categoryPath = array_values(array_filter(array_map('intval', (array)($channelMapping['category_ids'] ?? []))));
         } else {
@@ -2120,7 +2135,7 @@ class ErpStockService extends BaseAdminService
                 'mapping_snapshot' => $channelMapping,
                 'payload' => $payload,
             ]);
-            return ['ok' => true, 'status' => 'pending', 'intake_id' => (int)$pending['intake_id'], 'message' => '已交接商城运营完善资料'];
+            return ['ok' => true, 'status' => 'pending', 'intake_id' => (int)$pending['intake_id'], 'message' => '已交接商城，等待运营完善资料并上架'];
         }
         if ($success === null) {
             (new ErpChannelMappingService())->recordListing([

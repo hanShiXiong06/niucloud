@@ -118,7 +118,7 @@ watch(route, () => {
         twoMenuData.value = route.matched[1].children ?? []
     } else {
         // 多应用
-        if (siteInfo?.apps.length > 1) {
+        if ((siteInfo?.apps?.length ?? 0) > 1) {
             twoMenuData.value = route.matched[2].children
             oneMenuActive.value = route.matched[2].name
         } else {
@@ -128,7 +128,7 @@ watch(route, () => {
                 oneMenuActive.value = route.matched[2].name
                 twoMenuData.value = route.matched[2].children ?? []
             } else {
-                if (oneMenu.meta.addon == siteInfo?.apps[0].key) {
+                if (oneMenu.meta.addon == siteInfo?.apps?.[0]?.key) {
                     oneMenuActive.value = route.matched[3].name
                     twoMenuData.value = route.matched[3].children ?? []
                 } else {

@@ -20,10 +20,12 @@ export function downloadGoodsImportTemplate() {
 }
 
 /** 创建商品异步导入任务 */
-export function createGoodsImportTask(file: File, imageMode: 'direct' | 'store' = 'direct') {
+export function createGoodsImportTask(file: File, imageMode: 'direct' | 'store' = 'direct', defaultStatus = 0, imagesToDesc = true) {
     const data = new FormData()
     data.append('file', file)
     data.append('image_mode', imageMode)
+    data.append('default_status', String(defaultStatus))
+    data.append('images_to_desc', imagesToDesc ? '1' : '0')
     return request.post(`phone_shop/goods/transfer/import`, data, {
         headers: { 'Content-Type': 'multipart/form-data' }
     })

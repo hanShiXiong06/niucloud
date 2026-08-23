@@ -17,7 +17,7 @@ use addon\hsx_recycle\app\service\admin\order\RecycleOrderPriceService;
 use addon\hsx_recycle\app\service\admin\order\RecycleOrderPaymentService;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderCancelReturnService;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderService;
-use addon\hsx_recycle\app\service\admin\recycle_order\RecycleDeviceService;
+use addon\hsx_recycle\app\service\admin\order\RecycleDeviceService as WorkflowRecycleDeviceService;
 
 use think\facade\Db;
 use think\facade\Log;
@@ -581,7 +581,9 @@ class RecycleOrderService extends BaseAdminService
         // 如果有设备列表，更新设备状态和基本信息
         if (!empty($devices)) {
             // 创建设备服务对象，用于记录日志
-            $deviceService = new RecycleDeviceService();
+            // 订单级批量确认必须复用当前设备工作流服务。旧版同名服务只更新
+            // 回收状态，不会发布 ERP 入库与应付事件，会造成“回收成功但 ERP 无单”。
+            $deviceService = new WorkflowRecycleDeviceService();
             
             // 如果devices是关联数组（非索引数组），将其转换为索引数组
             if (isset($devices['id'])) {

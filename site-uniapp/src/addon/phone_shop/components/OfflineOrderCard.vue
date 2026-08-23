@@ -44,6 +44,12 @@
             <view class="detail-row"><text>订单编号</text><text class="detail-value" selectable>{{ order.order_no || '-' }}</text></view>
             <view v-if="order.offline_record?.handler_name" class="detail-row"><text>当前负责人</text><text class="detail-value">{{ order.offline_record.handler_name }}</text></view>
             <view v-if="order.member_remark" class="detail-row detail-row--remark"><text>客户留言</text><text class="detail-value">{{ order.member_remark }}</text></view>
+            <view v-if="voucherUrls.length" class="voucher-block">
+                <text class="voucher-title">客户付款凭证（点击查看）</text>
+                <view class="voucher-list">
+                    <image v-for="(url, index) in voucherUrls" :key="url" :src="imageUrl(url)" mode="aspectFill" class="voucher-image" @click.stop="previewVoucher(index)" />
+                </view>
+            </view>
         </view>
 
         <view class="card-foot">
@@ -52,7 +58,7 @@
                 <text v-if="order.offline_record?.handler_name" class="handler">负责人 {{ order.offline_record.handler_name }}</text>
             </view>
             <view v-if="isPending" class="action-group">
-                <view v-if="order.offline_record?.status !== 'contacted'" class="minor-button" @click.stop="emit('contact', order)">已联系</view>
+                <view v-if="['pending', 'voucher_rejected'].includes(order.offline_record?.status || 'pending')" class="minor-button" @click.stop="emit('contact', order)">已联系</view>
                 <view class="primary-button" @click.stop="emit('operate', order)">处理订单</view>
             </view>
             <view v-else-if="isReadyForDelivery" class="primary-button primary-button--deliver" @click.stop="emit('deliver', order)">确认交付</view>
@@ -73,11 +79,12 @@ const firstGoods = computed(() => goodsList.value[0] || null)
 const goodsCount = computed(() => goodsList.value.reduce((total, item) => total + Number(item.num || 1), 0))
 const mobile = computed(() => String(props.order.taker_mobile || props.order.member?.mobile || ''))
 const customerName = computed(() => props.order.member?.nickname || props.order.taker_name || '到店客户')
+const voucherUrls = computed<string[]>(() => Array.isArray(props.order.offline_record?.voucher_urls) ? props.order.offline_record.voucher_urls : [])
 const isPending = computed(() => Number(props.order.status) === 1 && props.order.payment_mode === 'offline_pending')
 const isReadyForDelivery = computed(() => Number(props.order.status) === 2 && props.order.delivery_type === 'store' && ['offline_cash', 'offline_credit'].includes(props.order.payment_mode))
 const statusLabel = computed(() => {
     const workflow = String(props.order.offline_record?.status || '')
-    const map: Record<string, string> = { pending: '待联系', contacted: '已联系待到店', paid: '已收款待交付', credit: '已挂账待交付', delivered: '已交付', closed: '已关闭' }
+    const map: Record<string, string> = { pending: '待联系', contacted: '已联系待到店', voucher_submitted: '凭证待审核', voucher_rejected: '凭证已驳回', paid: '已收款待交付', credit: '已挂账待交付', delivered: '已交付', closed: '已关闭' }
     if (map[workflow]) return map[workflow]
     if (isPending.value) return '待处理'
     if (isReadyForDelivery.value) return props.order.payment_mode === 'offline_credit' ? '已挂账待交付' : '已收款待交付'
@@ -90,7 +97,11 @@ const statusTone = computed(() => {
     return 'primary'
 })
 const workflowHint = computed(() => {
-    if (isPending.value) return props.order.offline_record?.status === 'contacted' ? '等待客户到店付款' : '请先联系客户确认到店安排'
+    if (isPending.value) {
+        if (props.order.offline_record?.status === 'voucher_submitted') return '客户已提交凭证，请核对实际到账'
+        if (props.order.offline_record?.status === 'voucher_rejected') return '凭证已驳回，等待客户重新提交'
+        return props.order.offline_record?.status === 'contacted' ? '等待客户到店付款' : '请先联系客户确认到店安排'
+    }
     if (isReadyForDelivery.value) return props.order.payment_mode === 'offline_credit' ? '挂账已入 ERP，请核对客户后交付' : '收款已留痕，请核对客户后交付'
     if (Number(props.order.status) === -1) return props.order.close_remark || '订单已关闭并解除锁定'
     return '订单处理已完成'
@@ -108,11 +119,16 @@ function formatTime(value: any) {
     return `${ pad(date.getMonth() + 1) }-${ pad(date.getDate()) } ${ pad(date.getHours()) }:${ pad(date.getMinutes()) }`
 }
 function callCustomer() { if (mobile.value) uni.makePhoneCall({ phoneNumber: mobile.value }) }
+function previewVoucher(index: number) { uni.previewImage({ current: imageUrl(voucherUrls.value[index]), urls: voucherUrls.value.map(imageUrl) }) }
 </script>
 
 <style scoped lang="scss">
 .order-card { margin-bottom: 20rpx; overflow: hidden; border-radius: 24rpx; background: #fff; }
 .card-head { min-height: 66rpx; padding: 0 24rpx; border-bottom: 2rpx solid #f3f4f6; display: flex; align-items: center; justify-content: space-between; gap: 14rpx; }
+.voucher-block { padding: 18rpx 0 4rpx; }
+.voucher-title { display: block; margin-bottom: 12rpx; color: #64748b; font-size: 23rpx; }
+.voucher-list { display: flex; flex-wrap: wrap; gap: 12rpx; }
+.voucher-image { width: 112rpx; height: 112rpx; border-radius: 12rpx; background: #f1f5f9; }
 .status-wrap { min-width: 0; display: flex; align-items: center; gap: 9rpx; }
 .status-dot { width: 13rpx; height: 13rpx; flex-shrink: 0; border-radius: 50%; background: #2563eb; }
 .status-dot--success { background: #16a34a; }

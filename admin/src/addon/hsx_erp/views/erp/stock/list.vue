@@ -300,7 +300,7 @@
                                 <el-dropdown-item command="print_label">打印设备标签</el-dropdown-item>
                                 <el-dropdown-item v-if="row.refurbish_status === 'pending'" command="start_refurbish">开始整备</el-dropdown-item>
                                 <el-dropdown-item v-if="['pending','processing','failed'].includes(row.refurbish_status)" command="complete_refurbish">登记整备结果</el-dropdown-item>
-                                <el-dropdown-item v-if="(row.listing_status === 'ready' || row.can_handoff_shop === 1) && row.warehouse_policy?.marketplace_available" command="publish_listing">{{ row.can_handoff_shop === 1 ? '交接商城运营' : '上架商城' }}</el-dropdown-item>
+                                <el-dropdown-item v-if="(row.listing_status === 'ready' || row.can_handoff_shop === 1) && row.warehouse_policy?.marketplace_available" command="publish_listing">{{ row.can_handoff_shop === 1 ? '交接商城' : '上架商城' }}</el-dropdown-item>
                             </el-dropdown-menu></template>
                         </el-dropdown>
                     </template>
@@ -689,7 +689,7 @@ import { computed, nextTick, onActivated, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
-import { adjustErpStockCost, adjustErpStockRetailPrice, buyoutErpConsignment, completeErpStockRefurbish, getErpSerialTraceDetail, getErpSerialTraceList, getErpStockInfo, getErpStockList, getErpStockTurnoverSummary, prepareErpStockListingMedia, previewErpStockTransfer, printErpAssetLabel, sendErpStockRefurbish, syncErpStockListing, transferErpStock, updateErpStockFlow } from '@/addon/hsx_erp/api/erp'
+import { adjustErpStockCost, adjustErpStockRetailPrice, buyoutErpConsignment, completeErpStockRefurbish, getErpSerialTraceDetail, getErpSerialTraceList, getErpStockInfo, getErpStockList, getErpStockTurnoverSummary, handoffErpStockListing, prepareErpStockListingMedia, previewErpStockTransfer, printErpAssetLabel, sendErpStockRefurbish, syncErpStockListing, transferErpStock, updateErpStockFlow } from '@/addon/hsx_erp/api/erp'
 import { getErpFinanceCategories, getErpSaleChannelOptions } from '@/addon/hsx_erp/api/config'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 import ErpDeviceIdentity from '@/addon/hsx_erp/components/ErpDeviceIdentity.vue'
@@ -1276,6 +1276,7 @@ async function submitFlow() {
     ).then(() => true).catch(() => false)
     if (!confirmed) return
     flow.saving = true
+    let res: any
     try {
         const editableForm = erpListingFormPayload(flow.form, flow.row?.listing_workspace, flowContractAction.value)
         const operationalForm = flow.mode === 'all'
@@ -1288,13 +1289,26 @@ async function submitFlow() {
         // 普通“设备流转设置”仍兼容旧接口；岗位步骤必须携带 action，
         // 后端据此过滤隐藏字段并执行对应必填校验。
         if (flow.mode === 'all') delete editableForm.workflow_action
-        const res: any = await updateErpStockFlow(flow.row.id, { ...editableForm, ...operationalForm })
-        await showListingFeedback(res?.data?.publish, '设备流转已更新')
-        flow.visible = false
-        await loadList()
-        if (detail.visible && detail.data?.id === flow.row.id) await openDetail(flow.row)
+        res = await updateErpStockFlow(flow.row.id, { ...editableForm, ...operationalForm })
+    } catch (error: any) {
+        ElMessage.error(error?.message || error?.msg || '保存失败')
+        return
     } finally {
         flow.saving = false
+    }
+
+    // 数据保存成功后立即关闭表单；反馈弹窗和列表刷新不能反向误报保存失败。
+    flow.visible = false
+    try {
+        await showListingFeedback(res?.data?.publish, '设备流转已更新')
+    } catch {
+        ElMessage.success('设备流转已更新')
+    }
+    try {
+        await loadList()
+        if (detail.visible && detail.data?.id === flow.row.id) await openDetail(flow.row)
+    } catch {
+        ElMessage.warning('资料已保存，列表刷新失败，请手动刷新')
     }
 }
 
@@ -1304,11 +1318,13 @@ async function publishListing(row: any) {
         handoff
             ? `确认把设备「${row.model || row.imei || row.asset_no || '-'}」交接给商城运营？运营将在商城完成分类、规格和标签对应，上架结果会自动回写 ERP。`
             : `确认将设备「${row.model || row.imei || row.asset_no || '-'}」直接上架商城？系统将使用当前分类、规格、图片和零售价创建一机一品商品。`,
-        handoff ? '交接商城运营' : '上架商城',
-        { type: 'warning', confirmButtonText: handoff ? '确认交接' : '确认上架', cancelButtonText: '取消' }
+        handoff ? '交接商城' : '上架商城',
+        { type: 'warning', confirmButtonText: handoff ? '交接商城' : '确认上架', cancelButtonText: '取消' }
     ).then(() => true).catch(() => false)
     if (!confirmed) return
-    const res: any = await syncErpStockListing(row.id)
+    const res: any = handoff
+        ? await handoffErpStockListing(row.id)
+        : await syncErpStockListing(row.id)
     const syncResult = res?.data || {}
     if (syncResult.ok === false) return ElMessage.error(syncResult.message || '上架失败，请稍后重试')
     ElMessage.success(syncResult.message || '已直接上架商城')

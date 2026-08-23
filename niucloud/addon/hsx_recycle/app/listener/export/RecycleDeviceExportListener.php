@@ -26,7 +26,7 @@ class RecycleDeviceExportListener
         $data = [];
         if (isset($param['type']) && $param['type'] == 'recycle_device') {
             $model = new RecycleDevice();
-            $field = 'id, imei,imei2,sn,member_id, model, check_result, category_id, color,package_type,capacity,warranty_info,system_version,check_template_id, status, final_price, sell_price, update_at, order_id, price_uid, dispose_type, dispose_status, settlement_mode, consignment_order_id';
+            $field = 'id, imei,imei2,sn,member_id, model, check_result, info, category_id, color,package_type,capacity,warranty_info,system_version,check_template_id, status, final_price, sell_price, update_at, order_id, price_uid, dispose_type, dispose_status, settlement_mode, consignment_order_id';
 
             $where = $param['where'] ?? [];
 
@@ -80,6 +80,15 @@ class RecycleDeviceExportListener
             $optionLabelMap = DeviceSummaryHelper::buildOptionLabelMap($templateIds, $reservedKeys, (int)($param['site_id'] ?? 0));
 
             foreach ($data as $key => $value) {
+                // “包装”是导出展示字段：不要求额外建表或补历史列。
+                // 新数据优先使用设备列，历史数据为空时从 info JSON / 质检结果中派生。
+                if (trim((string)($data[$key]['package_type'] ?? '')) === '') {
+                    $data[$key]['package_type'] = $this->extractPackageType(
+                        $value['info'] ?? [],
+                        (string)($value['check_result'] ?? '')
+                    );
+                }
+
                 // 选项值 → 文案回译(input/number 等自由输入字段不命中映射,原样保留)
                 $templateId = (int)($value['check_template_id'] ?? 0);
                 if ($templateId > 0 && !empty($optionLabelMap[$templateId])) {
@@ -137,9 +146,98 @@ class RecycleDeviceExportListener
                     $data[$key]['code'] = "\t" . $value['code'];
                 }
 
-                unset($data[$key]['order'], $data[$key]['price_user'], $data[$key]['priceUser'], $data[$key]['consignment_order'], $data[$key]['consignmentOrder'], $data[$key]['id'], $data[$key]['category_id'], $data[$key]['status'], $data[$key]['order_id'], $data[$key]['update_at'], $data[$key]['price_uid'], $data[$key]['dispose_type'], $data[$key]['dispose_status'], $data[$key]['settlement_mode'], $data[$key]['consignment_order_id'], $data[$key]['check_template_id'], $data[$key]['system_version']);
+                unset($data[$key]['order'], $data[$key]['price_user'], $data[$key]['priceUser'], $data[$key]['consignment_order'], $data[$key]['consignmentOrder'], $data[$key]['id'], $data[$key]['info'], $data[$key]['category_id'], $data[$key]['status'], $data[$key]['order_id'], $data[$key]['update_at'], $data[$key]['price_uid'], $data[$key]['dispose_type'], $data[$key]['dispose_status'], $data[$key]['settlement_mode'], $data[$key]['consignment_order_id'], $data[$key]['check_template_id'], $data[$key]['system_version']);
             }
         }
         return $data;
+    }
+
+    /**
+     * 从设备 info JSON 中提取包装展示值，兼容签收摘要、质检结果项和历史文本。
+     * 这里只生成导出值，不回写设备表。
+     *
+     * @param mixed $info
+     */
+    private function extractPackageType($info, string $checkResult = ''): string
+    {
+        $info = $this->normalizeArray($info);
+        $checkMeta = $this->normalizeArray($info['check_meta'] ?? []);
+        $signSummary = $this->normalizeArray($info['sign_summary'] ?? []);
+
+        $directCandidates = [
+            $info['package_type'] ?? null,
+            $info['packageType'] ?? null,
+            $info['package'] ?? null,
+            $info['packing'] ?? null,
+            $signSummary['package_type'] ?? null,
+            $signSummary['package'] ?? null,
+            $checkMeta['package_type'] ?? null,
+            $checkMeta['package'] ?? null,
+        ];
+        foreach ($directCandidates as $candidate) {
+            $display = $this->displayValue($candidate);
+            if ($display !== '') {
+                return $display;
+            }
+        }
+
+        foreach ((array)($checkMeta['result_items'] ?? []) as $item) {
+            $item = $this->normalizeArray($item);
+            if (empty($item)) {
+                continue;
+            }
+            $fieldKey = trim((string)($item['field_key'] ?? $item['key'] ?? ''));
+            $fieldName = trim((string)($item['field_name'] ?? $item['name'] ?? ''));
+            if (!in_array($fieldKey, ['package_type', 'packageType', 'package', 'packing'], true)
+                && mb_strpos($fieldName, '包装') === false) {
+                continue;
+            }
+            foreach (['labels', 'label', 'values', 'value', 'text'] as $valueKey) {
+                $display = $this->displayValue($item[$valueKey] ?? null);
+                if ($display !== '') {
+                    return $display;
+                }
+            }
+        }
+
+        // 兼容历史记录：质检 JSON 已被整理成“包装：全套;”文本。
+        if ($checkResult !== '' && preg_match('/(?:^|[;；\r\n])\s*包装\s*[:：]\s*([^;；\r\n]+)/u', $checkResult, $matches)) {
+            return trim((string)($matches[1] ?? ''));
+        }
+        return '';
+    }
+
+    /** @param mixed $value */
+    private function normalizeArray($value): array
+    {
+        if (is_array($value)) {
+            return $value;
+        }
+        if (is_object($value)) {
+            $value = json_encode($value, JSON_UNESCAPED_UNICODE);
+        }
+        if (is_string($value) && trim($value) !== '') {
+            $decoded = json_decode($value, true);
+            return is_array($decoded) ? $decoded : [];
+        }
+        return [];
+    }
+
+    /** @param mixed $value */
+    private function displayValue($value): string
+    {
+        if (is_array($value)) {
+            if (isset($value['label']) || isset($value['name'])) {
+                return trim((string)($value['label'] ?? $value['name'] ?? ''));
+            }
+            $parts = array_values(array_filter(array_map(static function ($item): string {
+                if (is_array($item)) {
+                    return trim((string)($item['label'] ?? $item['name'] ?? $item['value'] ?? ''));
+                }
+                return is_scalar($item) ? trim((string)$item) : '';
+            }, $value), static fn(string $item): bool => $item !== ''));
+            return implode('、', $parts);
+        }
+        return is_scalar($value) ? trim((string)$value) : '';
     }
 }

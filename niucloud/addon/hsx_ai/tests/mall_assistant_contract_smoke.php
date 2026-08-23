@@ -50,6 +50,15 @@ $toolRegistry = $read($phoneRoot . '/app/listener/ai/AiToolRegistryRequested.php
 $toolExecutor = $read($phoneRoot . '/app/listener/ai/AiToolExecuteRequested.php');
 $assert(str_contains($toolRegistry, 'phone_shop.category.list'), '商城必须向AI注册分类查询工具');
 $assert(str_contains($toolExecutor, 'phone_shop.category.list') && str_contains($toolExecutor, 'AiMallCategoryQuery'), '商城AI分类工具必须有独立执行器');
+$assert(str_contains($toolRegistry, 'phone_shop.listing.summary') && str_contains($toolRegistry, 'business.admin_assistant'), '商城必须注册管理端货盘统计工具');
+$assert(str_contains($toolExecutor, 'AiPhoneShopReadService'), '商城货盘统计必须由商城自身执行');
+$assert(str_contains($read($phoneRoot . '/app/listener/ai/AiAdminAgentRegistryRequested.php'), "'default_tool_key' => 'phone_shop.listing.summary'"), '商城货盘智能体必须强制先查询实时事实');
+$assert(str_contains($read($phoneRoot . '/app/listener/ai/AiDefaultToolArgumentsRequested.php'), "'period' => \$period"), '商城插件必须自行解析默认货盘查询周期');
+$assert(str_contains($toolExecutor, "'source_plugin' => 'phone_shop'"), '商城AI工具执行结果必须回传来源插件');
+$listingService = $read($phoneRoot . '/app/service/core/ai/AiPhoneShopReadService.php');
+foreach (["'status', '=', 0", "'sale_status', '=', 'sold'", "'create_time', '>='", "'update_time', '>='", "'assistant_summary'", "'_presentation'"] as $needle) {
+    $assert(str_contains($listingService, $needle), '商城货盘经营口径缺少：' . $needle);
+}
 
 require_once $phoneRoot . '/app/listener/ai/AiMallBusinessContextRequested.php';
 $intentListener = (new ReflectionClass(\addon\phone_shop\app\listener\ai\AiMallBusinessContextRequested::class))->newInstanceWithoutConstructor();
@@ -68,7 +77,7 @@ $clarification = $clarificationMethod->invoke($intentListener, '你好');
 $clarificationContext = json_decode((string)($clarification['context'] ?? ''), true);
 $assert(!empty($clarification['allowed']) && ($clarificationContext['intent_state'] ?? '') === 'needs_clarification', '模糊表达应进入澄清而不是拒答');
 $event = $read($phoneRoot . '/app/event.php');
-foreach (['HsxAiIntegrationRegistryRequested', 'HsxAiSkillRegistryRequested', 'HsxAiBusinessContextRequested', 'HsxAiToolRegistryRequested', 'HsxAiToolExecuteRequested'] as $needle) {
+foreach (['HsxAiIntegrationRegistryRequested', 'HsxAiAdminAgentRegistryRequested', 'HsxAiSkillRegistryRequested', 'HsxAiBusinessContextRequested', 'HsxAiToolRegistryRequested', 'HsxAiToolExecuteRequested'] as $needle) {
     $assert(str_contains($event, $needle), '商城插件缺少AI事件接入：' . $needle);
 }
 $guard = $read($phoneRoot . '/app/listener/ai/AiIntegrationGuard.php');

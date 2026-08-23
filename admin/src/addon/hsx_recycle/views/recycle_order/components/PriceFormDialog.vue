@@ -98,23 +98,41 @@
               <div class="pfd-section__head">
                 <div>
                   <h4>销售去向</h4>
-                  <p class="text-[12px]">定价员在回收定价阶段确定后续销售链路。</p>
+                  <p class="text-[12px]">选择实际入库位置，系统按仓库规则自动安排后续销售链路。</p>
                 </div>
-                <el-tag v-if="saleDestinationText" type="info" effect="plain">{{ saleDestinationText }}</el-tag>
+                <el-tag v-if="saleDestinationText" type="success" effect="light">{{ saleDestinationText }}</el-tag>
               </div>
               <!-- 仓库模式：ERP 已连接且有仓库 → 仓库/库位级联,选仓即决定流向 -->
               <template v-if="warehouseMode">
-                <el-cascader
-                  v-model="warehousePath"
-                  :options="warehouseCascaderOptions"
-                  :props="{ checkStrictly: false, expandTrigger: 'hover', emitPath: true }"
-                  placeholder="请选择入库仓库和具体库位"
-                  class="w-full"
-                  @change="onCascaderChange"
-                />
-                <div class="pfd-hint">
-                  ERP 入库必须指定到具体库位；流向按仓库业务类型自动确定：<b>{{ saleDestinationText || '—' }}</b><template v-if="saleDestinationDescription">（{{ saleDestinationDescription }}）</template>
+                <div :class="['pfd-destination-picker', warehousePath.length === 2 ? 'is-complete' : '']">
+                  <div class="pfd-destination-picker__label">
+                    <div>
+                      <strong>入库仓库 / 库位</strong>
+                      <span>必选</span>
+                    </div>
+                    <small v-if="isUsingDefaultPlacement">已带入 ERP 默认位置，可直接提交</small>
+                    <small v-else>点击下方区域选择实际入库位置</small>
+                  </div>
+                  <el-cascader
+                    v-model="warehousePath"
+                    :options="warehouseCascaderOptions"
+                    :props="{ checkStrictly: false, expandTrigger: 'hover', emitPath: true }"
+                    placeholder="请选择入库仓库和具体库位"
+                    class="pfd-destination-picker__control"
+                    @change="onCascaderChange"
+                  />
+                  <div v-if="selectedWarehouse" class="pfd-destination-summary">
+                    <div class="pfd-destination-summary__location">
+                      <span>当前入库位置</span>
+                      <strong>{{ selectedWarehouse.warehouse_name }}<template v-if="selectedLocation"> / {{ selectedLocation.location_name }}</template></strong>
+                    </div>
+                    <div class="pfd-destination-summary__route">
+                      <span>自动流向</span>
+                      <strong>{{ saleDestinationText || '待确定' }}</strong>
+                    </div>
+                  </div>
                 </div>
+                <div class="pfd-hint">销售流向由仓库业务类型自动确定，无需重复选择。<template v-if="saleDestinationDescription">{{ saleDestinationDescription }}</template></div>
               </template>
 
               <!-- 渠道模式：ERP 未连接 → 固定渠道单选 -->
@@ -301,7 +319,7 @@ interface ErpWarehouse {
     warehouse_name: string
     sale_target: string
     is_default?: number
-    locations: Array<{ id: number; location_name: string }>
+    locations: Array<{ id: number; location_name: string; is_default?: number }>
 }
 const erpWarehouses = ref<ErpWarehouse[]>([])
 const erpConnected = ref(false)
@@ -324,7 +342,8 @@ const normalizeWarehouse = (row: any): ErpWarehouse => {
         is_default: Number(row?.is_default || 0),
         locations: (Array.isArray(row?.locations) ? row.locations : []).map((location: any) => ({
             id: Number(location?.id || 0),
-            location_name: String(location?.location_name || location?.name || '').trim() || '未命名库位'
+            location_name: String(location?.location_name || location?.name || '').trim() || '未命名库位',
+            is_default: Number(location?.is_default || 0)
         }))
     }
 }
@@ -396,6 +415,14 @@ const saleDestinationText = computed(() =>
 const saleDestinationDescription = computed(() =>
     saleDestinationOptions.value.find(item => item.value === deviceForm.sale_destination)?.description || ''
 )
+const selectedWarehouse = computed(() => erpWarehouses.value.find(item => item.id === Number(deviceForm.target_warehouse_id || 0)))
+const selectedLocation = computed(() => selectedWarehouse.value?.locations.find(item => item.id === Number(deviceForm.target_location_id || 0)))
+const isUsingDefaultPlacement = computed(() => {
+    if (Number(selectedWarehouse.value?.is_default || 0) !== 1 || !selectedLocation.value) return false
+    const defaultLocation = selectedWarehouse.value.locations.find(item => Number(item.is_default || 0) === 1)
+        || selectedWarehouse.value.locations[0]
+    return Number(defaultLocation?.id || 0) === Number(selectedLocation.value.id || 0)
+})
 
 const updateResponsiveState = () => { isMobile.value = window.innerWidth <= 768 }
 const userName = (user: any) => user.real_name || user.username || `员工#${user.uid}`
@@ -457,6 +484,10 @@ const applyDeviceToForm = (device: DeviceInfo) => {
     deviceForm.sell_price = typeof device.sell_price === 'number' ? device.sell_price
         : typeof device.sell_price === 'string' ? parseFloat(device.sell_price) || undefined : undefined
     deviceForm.sale_destination = device.sale_destination || saleDestinationOptions.value[0]?.value || ''
+    deviceForm.target_warehouse_id = Number(device.target_warehouse_id || 0)
+    deviceForm.target_warehouse_name = device.target_warehouse_name || ''
+    deviceForm.target_location_id = Number(device.target_location_id || 0)
+    deviceForm.target_location_name = device.target_location_name || ''
     deviceForm.remark = device.remark || ''
     applyRefurbishmentFromDevice(device)
     deviceData.value.status = 4
@@ -509,10 +540,27 @@ const loadRefurbishmentOptions = async () => {
     }
 }
 
+// Element Plus 在回显、清空和不同版本下可能返回 number[] / string[] / 嵌套数组。
+// 统一归一化，避免界面已显示选中但实际提交字段仍为 0。
+const normalizeWarehousePath = (path: any): number[] => {
+    let values = Array.isArray(path) ? path : (path === null || path === undefined || path === '' ? [] : [path])
+    if (values.length === 1 && Array.isArray(values[0])) values = values[0]
+    const normalized = values.slice(0, 2).map((value: any) => Number(value || 0)).filter((value: number) => value > 0)
+    if (normalized.length !== 1) return normalized
+
+    // 少数 Element Plus 版本在级联末级只回传库位 ID，按库位反查仓库补齐完整路径。
+    const onlyValue = normalized[0]
+    const owner = erpWarehouses.value.find(warehouse =>
+        (warehouse.locations || []).some(location => location.id === onlyValue)
+    )
+    return owner ? [owner.id, onlyValue] : normalized
+}
+
 // 由级联路径([仓库] 或 [仓库,库位])推导出表单字段 + 销售流向
-const applyPath = (path: number[]) => {
-    const wid = Number(path?.[0] || 0)
-    const lid = Number(path?.[1] || 0)
+const applyPath = (path: any) => {
+    const normalizedPath = normalizeWarehousePath(path)
+    const wid = Number(normalizedPath[0] || 0)
+    const lid = Number(normalizedPath[1] || 0)
     const w = erpWarehouses.value.find(item => item.id === wid)
     deviceForm.target_warehouse_id = wid
     deviceForm.target_warehouse_name = w?.warehouse_name || ''
@@ -522,9 +570,16 @@ const applyPath = (path: number[]) => {
     deviceForm.target_location_name = loc?.location_name || ''
 }
 
-const onCascaderChange = (path: number[] | null) => {
-    applyPath(path || [])
+const onCascaderChange = (path: any) => {
+    const normalizedPath = normalizeWarehousePath(path)
+    warehousePath.value = normalizedPath
+    applyPath(normalizedPath)
 }
+
+// 不只依赖 change 事件：回显、键盘选择和异步选项加载时同样把路径写回提交字段。
+watch(warehousePath, (path) => {
+    applyPath(path)
+}, { deep: true })
 
 // 同步级联选中项：兼容"仓库列表/设备详情"两路异步到达；未选或无效时回退默认入库仓。
 watch([erpWarehouses, () => deviceForm.target_warehouse_id, () => deviceForm.target_location_id], () => {
@@ -536,8 +591,11 @@ watch([erpWarehouses, () => deviceForm.target_warehouse_id, () => deviceForm.tar
     }
     const w = erpWarehouses.value.find(item => item.id === wid)
     let lid = Number(deviceForm.target_location_id || 0)
-    if (!(w?.locations || []).some(loc => loc.id === lid)) lid = 0
-    const desired = lid ? [wid, lid] : (wid ? [wid] : [])
+    if (!(w?.locations || []).some(loc => loc.id === lid)) {
+        const defaultLocation = (w?.locations || []).find(loc => Number(loc.is_default || 0) === 1) || (w?.locations || [])[0]
+        lid = Number(defaultLocation?.id || 0)
+    }
+    const desired = wid && lid ? [wid, lid] : (wid ? [wid] : [])
     if (JSON.stringify(desired) !== JSON.stringify(warehousePath.value)) {
         warehousePath.value = desired
         applyPath(desired)
@@ -602,6 +660,9 @@ const handleConfirm = () => {
         ElMessage.warning('ERP 尚无可用仓库和库位，请先完成仓库配置')
         return
     }
+    // 提交前以级联控件当前值为准再同步一次，杜绝“看起来已选中、实际字段为空”。
+    const selectedPath = normalizeWarehousePath(warehousePath.value)
+    if (warehouseMode.value && selectedPath.length > 0) applyPath(selectedPath)
     if (erpConnected.value && (!deviceForm.target_warehouse_id || !deviceForm.target_location_id)) {
         ElMessage.warning('ERP 入库必须选择仓库和具体库位')
         return
@@ -886,6 +947,69 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
 .pfd-hint--warn {
   color: var(--el-color-warning);
 }
+.pfd-destination-picker {
+  padding: 14px;
+  border: 1px solid var(--el-color-primary-light-5);
+  border-radius: 10px;
+  background: var(--el-color-primary-light-9);
+  transition: border-color .2s ease, box-shadow .2s ease;
+
+  &:hover,
+  &:focus-within {
+    border-color: var(--el-color-primary);
+    box-shadow: 0 0 0 3px var(--el-color-primary-light-9);
+  }
+
+  &.is-complete {
+    border-color: var(--el-color-success-light-5);
+    background: var(--el-color-success-light-9);
+  }
+
+  &__label {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+
+    div { display: flex; align-items: center; gap: 8px; }
+    strong { font-size: 13px; color: var(--el-text-color-primary); }
+    span {
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: var(--el-color-danger);
+      background: var(--el-color-danger-light-9);
+      font-size: 11px;
+    }
+    small { color: var(--el-text-color-secondary); font-size: 11px; line-height: 1.5; }
+  }
+
+  &__control {
+    width: 100%;
+
+    :deep(.el-input__wrapper) {
+      min-height: 42px;
+      background: var(--el-bg-color);
+      box-shadow: 0 0 0 1px var(--el-color-primary-light-5) inset;
+    }
+  }
+}
+.pfd-destination-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px;
+  gap: 10px;
+  margin-top: 10px;
+
+  > div {
+    min-width: 0;
+    padding: 9px 10px;
+    border-radius: 7px;
+    background: rgba(255, 255, 255, .72);
+  }
+  span { display: block; margin-bottom: 3px; color: var(--el-text-color-secondary); font-size: 11px; }
+  strong { display: block; overflow: hidden; color: var(--el-text-color-primary); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+  &__route strong { color: var(--el-color-success); }
+}
 .pfd-warehouse {
   margin-top: 12px;
 }
@@ -909,10 +1033,21 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
   &--success { background: var(--el-color-success-light-9); border: 1px solid var(--el-color-success-light-7); color: var(--el-color-success); }
 }
 
-@media (max-width: 768px) {
+/* 覆盖 1920×1080 + 150% 系统缩放（约 1280 CSS 像素）的常见门店设备。 */
+@media (max-width: 1366px) {
   .pfd-layout {
     grid-template-columns: 1fr;
   }
+
+  .pfd-sidebar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(220px, .55fr);
+    align-items: start;
+  }
+}
+
+@media (max-width: 768px) {
+  .pfd-sidebar { display: flex; }
 
   .pfd-price-grid {
     grid-template-columns: 1fr;
@@ -921,5 +1056,8 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
   .pfd-section__head {
     flex-direction: column;
   }
+
+  .pfd-destination-picker__label { flex-direction: column; }
+  .pfd-destination-summary { grid-template-columns: 1fr; }
 }
 </style>

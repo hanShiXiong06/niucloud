@@ -1,0 +1,11 @@
+{
+  "title": "HSX 框架组件库",
+  "desc": "面向平台管理端与用户移动端的框架级组件库，统一提供 Schema 组件、Hooks、指令、工具和可交互开发文档",
+  "key": "hsx_components",
+  "version": "0.1.0",
+  "author": "hsx",
+  "type": "app",
+  "support_app": "",
+  "support_version": "1.3.0",
+  "compile": []
+}

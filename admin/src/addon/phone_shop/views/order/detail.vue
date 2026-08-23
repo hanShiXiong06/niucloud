@@ -144,8 +144,9 @@
                             </div>
                         </div>
                         <div class="flex shrink-0 flex-wrap justify-end gap-[10px]">
-                            <el-button v-if="formData.offline_record?.status !== 'contacted'" @click="markOfflineContacted">确认已联系</el-button>
+                            <el-button v-if="['pending', 'voucher_rejected'].includes(formData.offline_record?.status || 'pending')" @click="markOfflineContacted">确认已联系</el-button>
                             <el-button type="primary" @click="openOfflineProcess('confirm_paid')">确认已收款</el-button>
+                            <el-button v-if="formData.offline_record?.status === 'voucher_submitted'" type="warning" plain @click="rejectOfflineVoucher">驳回凭证</el-button>
                             <el-button @click="openOfflineProcess('confirm_credit')">挂账并出库</el-button>
                             <el-button type="danger" plain @click="closeOfflineUnreachable">无法联系并关闭</el-button>
                         </div>
@@ -358,9 +359,9 @@
                             暂无可用账户，请先在 ERP 资金账户中启用账户。
                         </div>
                     </el-form-item>
-                    <el-form-item v-if="offlineDialog.action === 'confirm_paid'" label="收款凭证" required>
+                    <el-form-item v-if="offlineDialog.action === 'confirm_paid'" label="收款凭证（选填）">
                         <upload-image v-model="offlineDialog.voucher_urls" :limit="6" width="80px" height="80px" image-text="上传凭证" />
-                        <div class="mt-[6px] text-[12px] text-[#909399]">支持现场拍照或上传转账截图，确认后永久保留在订单责任记录中。</div>
+                        <div class="mt-[6px] text-[12px] text-[#909399]">客户已上传的凭证会自动带入；客户未上传时，管理员仍可核实到账后直接确认。</div>
                     </el-form-item>
                     <el-form-item label="处理备注">
                         <el-input v-model="offlineDialog.remark" type="textarea" :rows="3" maxlength="255" show-word-limit placeholder="可填写收款方式、沟通结果等" />
@@ -492,7 +493,9 @@ const openOfflineProcess = async(action: 'confirm_paid' | 'confirm_credit') => {
     offlineDialog.capital_account_id = 0
     offlineDialog.deal_total = Number(formData.value?.order_money || 0)
     offlineDialog.remark = ''
-    offlineDialog.voucher_urls = []
+    offlineDialog.voucher_urls = action === 'confirm_paid' && Array.isArray(formData.value?.offline_record?.voucher_urls)
+        ? [...formData.value.offline_record.voucher_urls]
+        : []
     if (action === 'confirm_paid') {
         const { data } = await getOfflineCapitalAccounts()
         capitalAccounts.value = Array.isArray(data) ? data : []
@@ -509,10 +512,6 @@ const submitOfflineProcess = async() => {
     }
     if (offlineDialog.action === 'confirm_paid' && !offlineDialog.capital_account_id) {
         ElMessageBox.alert('请选择实际到账的 ERP 资金账户', '缺少收款账户', { type: 'warning' })
-        return
-    }
-    if (offlineDialog.action === 'confirm_paid' && !offlineDialog.voucher_urls.length) {
-        ElMessageBox.alert('请上传至少一张收款凭证', '缺少收款凭证', { type: 'warning' })
         return
     }
     offlineSubmitting.value = true
@@ -536,6 +535,8 @@ const offlineRecordTag = (status: string) => {
     const map: Record<string, { label: string, type: '' | 'success' | 'warning' | 'info' | 'danger' }> = {
         pending: { label: '待联系', type: 'warning' },
         contacted: { label: '已联系待到店', type: 'info' },
+        voucher_submitted: { label: '凭证待审核', type: 'warning' },
+        voucher_rejected: { label: '凭证已驳回', type: 'danger' },
         paid: { label: '已收款', type: 'success' },
         credit: { label: '已挂账', type: 'warning' },
         delivered: { label: '已交付', type: 'success' },
@@ -552,6 +553,17 @@ const markOfflineContacted = async() => {
     ).then(() => true).catch(() => false)
     if (!confirmed) return
     await processOfflineOrder({ order_id: orderId, action: 'contacted', remark: '已主动联系客户并确认到店安排' })
+    await setFormData(orderId)
+}
+
+const rejectOfflineVoucher = async() => {
+    const result = await ElMessageBox.prompt('请填写凭证未通过的原因，客户会收到通知并可重新提交。', '驳回付款凭证', {
+        type: 'warning', inputType: 'textarea', inputPlaceholder: '例如：金额不符或截图无法辨认',
+        inputValidator: (text: string) => text.trim().length > 0 || '请填写驳回原因',
+        confirmButtonText: '确认驳回', cancelButtonText: '取消'
+    }).catch(() => null)
+    if (!result) return
+    await processOfflineOrder({ order_id: orderId, action: 'reject_voucher', close_reason: result.value.trim() })
     await setFormData(orderId)
 }
 

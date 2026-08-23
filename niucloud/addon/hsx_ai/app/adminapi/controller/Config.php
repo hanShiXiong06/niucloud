@@ -53,6 +53,11 @@ final class Config extends BaseAdminController
         return success((new AiConfigAdminService())->section('playground'));
     }
 
+    public function assistantInfo(): Response
+    {
+        return success((new AiConfigAdminService())->assistantInfo());
+    }
+
     public function testSpeech(): Response
     {
         return success((new AiConfigAdminService())->testSpeech((array)$this->request->param('speech', [])));
@@ -88,6 +93,11 @@ final class Config extends BaseAdminController
             ['provider_id', ''],
             ['model', ''],
             ['prompt', ''],
+            ['conversation_id', 0],
+            ['agent_key', ''],
+            ['default_tool_key', ''],
+            ['approved_tool_calls', []],
+            ['messages', []],
             ['response_mode', 'text'],
             ['temperature', 0.2],
             ['max_tokens', 0],
@@ -103,6 +113,11 @@ final class Config extends BaseAdminController
             ['provider_id', ''],
             ['model', ''],
             ['prompt', ''],
+            ['conversation_id', 0],
+            ['agent_key', ''],
+            ['default_tool_key', ''],
+            ['approved_tool_calls', []],
+            ['messages', []],
             ['response_mode', 'text'],
             ['temperature', 0.2],
             ['max_tokens', 0],
@@ -128,5 +143,22 @@ final class Config extends BaseAdminController
                 $emit(['type' => 'error', 'message' => $e->getMessage()]);
             }
         });
+    }
+
+    public function assistantConversation(int $id): Response
+    {
+        return success((new AiConfigAdminService())->assistantConversation($id));
+    }
+
+    public function deleteAssistantConversation(int $id): Response
+    {
+        return success((new AiConfigAdminService())->deleteAssistantConversation($id));
+    }
+
+    public function assistantConversations(): Response
+    {
+        return success((new AiConfigAdminService())->assistantConversations($this->request->params([
+            ['agent_key', ''], ['limit', 20],
+        ])));
     }
 }

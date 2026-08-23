@@ -64,6 +64,27 @@
                             <span class="cursor-pointer text-primary" @click="toGoodsBrandEvent">{{ t('addGoodsBrand') }}</span>
                         </div>
                     </el-form-item>
+                    <el-form-item v-if="activeMenu === 'memory_group'" label="内存规格">
+                        <el-select v-model="formData.memory_group" filterable allow-create default-first-option clearable placeholder="选择已有规格，或直接输入">
+                            <el-option v-for="item in memoryOptions" :key="item" :label="item" :value="item" />
+                        </el-select>
+                        <div class="field-tip">会同时更新列表筛选使用的结构化内存字段。</div>
+                    </el-form-item>
+                    <el-form-item v-if="activeMenu === 'condition_grade'" label="商品等级">
+                        <el-select v-model="formData.condition_grade" filterable clearable placeholder="请选择已配置的商品等级">
+                            <el-option v-for="item in gradeOptions" :key="item" :label="item" :value="item" />
+                        </el-select>
+                    </el-form-item>
+                    <el-form-item v-if="activeMenu === 'device_color'" label="设备颜色">
+                        <el-input v-model.trim="formData.device_color" clearable placeholder="如 原色、黑色" class="input-width" />
+                    </el-form-item>
+                    <el-form-item v-if="activeMenu === 'battery_health'" label="电池健康度">
+                        <el-input-number v-model="formData.battery_health" :min="0" :max="100" />
+                        <span class="ml-[8px]">%</span>
+                    </el-form-item>
+                    <el-form-item v-if="activeMenu === 'warranty_expire_time'" label="保修到期日">
+                        <el-date-picker v-model="formData.warranty_expire_time" type="date" value-format="YYYY-MM-DD" placeholder="选择绝对日期" clearable />
+                    </el-form-item>
                     <!-- 商品海报 -->
                     <el-form-item v-if="activeMenu === 'poster'" :label="t('goodsPoster')">
                         <el-select v-model="formData.poster_id" :placeholder="t('posterPlaceholder')" clearable>
@@ -197,6 +218,7 @@ import {
 import { getPosterList } from '@/app/api/poster'
 import { getDiyFormList } from '@/app/api/diy_form'
 import { getShopDeliveryList, getShippingTemplateList } from '@/addon/phone_shop/api/delivery'
+import { getGrades, getSpecGroups } from '@/addon/phone_shop/api/spec'
 
 const emit = defineEmits(['load'])
 const showDialog = ref(false)
@@ -224,7 +246,12 @@ const initialFormData = {
     member_discount: '',
     is_free_shipping: 1,
     is_gift: 0,
-    stock: ''
+    stock: '',
+    memory_group: '',
+    condition_grade: '',
+    device_color: '',
+    battery_health: 100,
+    warranty_expire_time: ''
 }
 
 const formData: Record<string, any> = reactive({ ...initialFormData })
@@ -337,37 +364,20 @@ const confirm = async (formEl: FormInstance | undefined) => {
                 }
             })
 
-            formData.goods_category = goodsCategory
             const data = {
                 is_all: is_all.value,
                 where: where.value,
                 goods_ids: goods_ids.value,
                 set_type: activeMenu.value,
-                set_value: formData
+                set_value: { ...formData, goods_category: goodsCategory }
             }
             goodsBatchSet(data).then((res) => {
-                if (['stock'].indexOf(activeMenu.value) != -1) {
-                    activeMenu.value = 'label'
-                    showDialog.value = false
-                    goods_ids.value.splice(0, goods_ids.value.length)
-                    Object.assign(formData, {
-                        label_ids: [],
-                        service_ids: [],
-                        poster_id: '',
-                        form_id: '',
-                        diy_detail_id: '',
-                        brand_id: '',
-                        goods_category: [],
-                        virtual_sale_num: '',
-                        delivery_template_id: '',
-                        delivery_money: '',
-                        fee_type: 'template',
-                        delivery_type: [],
-                        is_free_shipping: 1,
-                        is_gift: 0
-                    })
-                   
-                }
+                activeMenu.value = 'label'
+                showDialog.value = false
+                goods_ids.value.splice(0, goods_ids.value.length)
+                Object.assign(formData, initialFormData, {
+                    label_ids: [], service_ids: [], goods_category: [], delivery_type: []
+                })
                 emit('load')
                 loading.value = false
             }).catch(err => {
@@ -381,7 +391,7 @@ const handleMenuSelect = (index: string) => {
     activeMenu.value = index
 }
 
-const setTypeList = reactive([])
+const setTypeList = reactive<Record<string, string>>({})
 const getGoodsTypeList = () => {
     getGoodsBatchSetDict().then((res) => {
         Object.assign(setTypeList, res.data)
@@ -471,23 +481,15 @@ const refreshGoodsCategory = (bool = false) => {
     getCategoryTree().then((res) => {
         const data = res.data
         if (data) {
-            const goodsCategoryTree: any = []
-            data.forEach((item: any) => {
-                const children: any = []
-                if (item.child_list) {
-                    item.child_list.forEach((childItem: any) => {
-                        children.push({
-                            value: childItem.category_id,
-                            label: childItem.category_name
-                        })
-                    })
-                }
-                goodsCategoryTree.push({
+            const normalizeTree = (items: any[]): any[] => (items || []).map((item: any) => {
+                const children = normalizeTree(item.child_list || item.children || [])
+                return {
                     value: item.category_id,
                     label: item.category_name,
-                    children
-                })
+                    ...(children.length ? { children } : {})
+                }
             })
+            const goodsCategoryTree: any = normalizeTree(data)
             goodsCategoryOptions.splice(0, goodsCategoryOptions.length, ...goodsCategoryTree)
             if (bool) {
                 ElMessage({
@@ -501,6 +503,28 @@ const refreshGoodsCategory = (bool = false) => {
 
 refreshGoodsCategory()
 /** *****************商品分类-end *************************/
+
+const memoryOptions = ref<string[]>([])
+const gradeOptions = ref<string[]>([])
+const refreshStructuredOptions = async () => {
+    try {
+        const res: any = await getSpecGroups({ category_id: 0 })
+        const values = new Set<string>()
+        ;(res.data || []).forEach((group: any) => {
+            if (!String(group.label || '').includes('内存')) return
+            ;(group.items || []).forEach((item: any) => {
+                const value = String(item.item_value || '').trim()
+                if (value) values.add(value)
+            })
+        })
+        memoryOptions.value = Array.from(values)
+    } catch (e) { memoryOptions.value = [] }
+    try {
+        const res: any = await getGrades()
+        gradeOptions.value = (res.data || []).map((item: any) => String(item.grade_name || '').trim()).filter(Boolean)
+    } catch (e) { gradeOptions.value = [] }
+}
+refreshStructuredOptions()
 
 /** ***************** 商品品牌-start *************************/
 // 品牌列表下拉框
@@ -656,7 +680,7 @@ const toDetailTemplateEvent = () => {
 // 刷新微页面
 const refreshDetailTemplate = (bool = false) => {
     getGoodsInfoTemplate({
-        type: 'DIY_SHOP_GOODS_DETAIL'
+        type: 'DIY_PHONE_SHOP_GOODS_DETAIL'
     }).then((res) => {
         const data = res.data
         if (data) {
@@ -687,4 +711,5 @@ defineExpose({
 .input-width-short{
     width: 200px;
 }
+.field-tip { width: 100%; margin-top: 8px; color: #909399; font-size: 12px; line-height: 1.5; }
 </style>

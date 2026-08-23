@@ -1,0 +1,92 @@
+# Changelog
+
+## Unreleased
+
+- 新增管理端 `HsxPage`，统一页面标题、说明、工具栏、内容宽度、加载态与响应式留白。
+- 升级 `HsxDialog` 为标准商业弹窗，补齐尺寸档位、说明文案、正文加载、底部对齐和移动端全屏适配，同时兼容原有 `width` API。
+- 新增 `HsxVoucherUpload`，统一收付款凭证、退款凭证和业务附件的标题、数量、提示及上传交互。
+- 增加 `core/forms/data/visual` 分层入口，业务插件可按能力域引入，降低整库入口的依赖扩散。
+- 扩充后台语义设计令牌，统一排版、控件高度、页面留白、内容宽度、表面阴影和响应式密度。
+- `HsxActionBar` 的危险操作确认统一接入 `useFeedback`，不再绕过组件库反馈规范。
+- 修复 `copy`、`debounce` 指令更新后仍使用旧绑定值及卸载时未完整清理的问题。
+- 修复 `HsxDrawer`、`HsxSelect`、`HsxTable`、`HsxDatePicker`、`HsxCascader`、`HsxMarkdownRenderer` 与 `HsxBlockRenderer` 的类型契约问题；组件库目录通过定向 Vue TypeScript 检查。
+
+## 0.1.0
+
+- 修复移动端 `HsxEntityPicker` Footer 按钮在微信小程序默认插槽中不响应的问题，“清空/确定”统一改为 Action Schema 内部渲染；`HsxButton` 增加原生 hover、按压、震动与异步 Loading 反馈。
+- 新增移动端 `HsxComponentCatalog`，集中展示全部组件，支持分类、搜索、精确选择和页面跳转。
+- 移动端分页组件的附加请求参数统一由 `query` 更名为 `requestParams`，避免与小程序运行时保留数据名冲突。
+- 建立 NiuCloud → 框架组件库 → 业务插件三层依赖结构。
+- 以 `app` 类型提供可版本化、可升级的框架公共能力。
+- 在平台后台“开发”菜单提供可交互组件文档和移动端预览。
+- 提供平台端 Schema CRUD 核心组件、Hooks、指令和工具。
+- 提供 UniApp/uview-plus 用户移动端公共组件和 Hooks。
+- 增加平台端和移动端 `HsxCascader`，支持多级、异步加载、搜索与回显。
+- 增加搜索框、分页、自定义列、导入和导出通用组件，并组合进 `ProTable`。
+- 修复 `ProDialogForm` 双向深度监听互相回写导致的无限更新和页面崩溃。
+- 修复移动端 `HsxForm` 同类双向回传风险，并支持嵌套字段路径。
+- 增强双端 Schema：动态必填、动态 Props/Options、字段权限、依赖驱动异步选项。
+- 平台动态校验规则默认不在联动切换时立即报错，提交和真实字段交互仍正常校验。
+- 平台 `ProForm` 支持通过 `components + componentKey` 注册业务字段组件。
+- 增加 Vitest 组件测试准入，覆盖 Schema 工具和双端 v-model 防循环回归。
+- 增加双端 API 入参、出参、事件、插槽和调用示例。
+- 移动端 `HsxButton` 增加外层 `view`，默认保持内容宽度，并提供显式 `block` 模式。
+- `HsxPageList` 正式接入并固定 `z-paging@2.8.7`，通过 H5 与微信小程序构建。
+- 增加平台 `HsxDateRange`、`HsxUpload`、`QueryForm` 和移动端 `HsxUpload`。
+- 组件测试扩展至 10 个文件 31 个用例，覆盖树转换、循环保护、缓存 TTL/版本/并发合并、抽屉插槽、异步开关、移动端图表、自适应窗口与响应式表单控件。
+- 组件开发中心由页内 Tab 改为 `admin.php/site.php` 注册的真实菜单路由，并支持查看、复制使用代码。
+- 新增 `HsxDatePicker`，统一单时间/区间时间，区间默认输出 `00:00:00` 至 `23:59:59`。
+- `HsxUpload` 增加预览宽高、尺寸、圆角和圆形头像配置，修复演示卡片溢出。
+- 新增双端 `HsxIcon`，收敛 Element/uview-plus/框架字体/图片/业务图标的使用方式。
+- 建立双端明暗主题语义变量，组件中心和移动端演示加入原创商业科技感视觉素材。
+- 建立可执行 UI/UX 设计令牌，覆盖排版、间距、圆角、层级、动效、焦点和减少动画设置。
+- 新增双端 `HsxText/HsxTitle/HsxGrid/HsxStack/HsxList/HsxOverflow/HsxProgress/HsxMotion`。
+- 后台与 UniApp 启用 Vue TSX 编译链，`HsxStack` 使用 TSX 实现并可在 Template 中直接调用。
+- 移动端新增 `HsxBlockRenderer` 白名单低代码组合与 `useHaptics/useActionSheet` 交互反馈。
+- `HsxDatePicker` 增加默认受控宽度、`width` 与 `fullWidth`，防止普通场景占满整行。
+- 新增平台 `HsxDrawer`，完整透传 Drawer 属性、生命周期事件与头部/内容/底部插槽。
+- 新增双端 `HsxCheckbox/HsxSwitch`，并接入平台和移动端 Schema 表单。
+- 新增基础 `HsxTable`，支持扁平数据组树、四种父子选择策略、展开子表、插槽、渲染函数与行内编辑；`ProTable` 统一复用该内核。
+- 新增双端 `createHsxCache`，支持命名空间、TTL、版本失效和 `remember` 并发请求合并。
+- 新增双端语义 `HsxTag/HsxTimeline`，用于状态与业务流水的稳定视觉骨架。
+- 增加 `TABLE_GUIDE.md`，明确树表、订单—设备主从表与业务组件的封装边界。
+- 新增 `HsxChart/useChart` ECharts 适配层，统一暗黑模式、响应式缩放、Loading、空态和销毁。
+- 新增折线、柱状、环形、迷你图配置助手，以及 `HsxChartCard/HsxStatCard` 驾驶舱展示组件。
+- 新增双端 `useFeedback` 语义层，平台统一轻提示、重通知、风险确认，移动端映射 Toast 与 Modal。
+- 新增 `HsxBadge/HsxNoticeBubble`，并在组件开发中心加入“图表与反馈”真实菜单和交互演示。
+- 新增移动端 `HsxChart/HsxChartCard`，基于 Apache 2.0 的 uCharts 统一 H5、App 与小程序图表渲染。
+- 新增移动端折线、柱状、环形图配置助手，统一固定高度、空态、Loading、错误态、触摸事件与暗黑配色。
+- 明确 VXE 双内核策略：普通 CRUD 保留 `HsxTable`，复杂表格后续仅接入 MIT 开源能力，不引入企业区域插件。
+- 新增移动端 `useAdaptiveLayout/HsxAdaptivePage/HsxResponsiveGrid/HsxSplitPane`，统一普通手机、横屏、折叠屏展开与系统分屏布局。
+- `HsxPopup` 新增宽屏 `dialog/side` 自适应模式，业务无需自行监听窗口变化。
+- 移动端主题新增响应式字号、控件高度、卡片内边距和区块间距令牌；基础排版不再随 `rpx` 在 iPad 上失控放大。
+- `HsxCheckbox` 新增响应式标签/图标尺寸、间距、最小宽度和分栏；`HsxPageList` 新增响应式列表列数。
+- 移动端表单改为手机标签上置、宽屏标签左置，字段内容与提示统一纵向布局，修复上传说明挤在图片右侧。
+- 新增 `HsxSelect` 并对选择弹层进行 H5 根节点挂载，修复弹窗内成色选择被父弹层遮挡和无法点击。
+- `HsxCascader` 改为全宽逐级钻取，支持长文本、当前路径、搜索、异步加载与编辑回显，默认只回显末级型号。
+- 新增 `HsxMediaCard/HsxSwipeActions/HsxActionBar`，统一图文卡片、左滑操作与底部安全区操作。
+- 新增 `HsxSchemaForm` TSX 门面与 `defineMobileFormSchema` 类型助手，Template、JSON Schema、TSX 共用同一表单内核。
+- `HsxIcon` 新增 add/back/next/close/image/edit/delete/success 等语义图标映射和统一点击热区。
+- `HsxPopup` 宽屏模式默认按内容收紧高度，消除 iPad 居中表单下方的大块空白。
+- `HsxMediaCard` 增加图片加载/失败事件和失败占位插槽，演示页补齐图文与左滑操作组合。
+- 移动演示表单改用 `HsxSchemaForm` TSX 门面，直接验证 JSON Schema、Template 和 TSX 共用同一实现。
+- 修复 uview-plus 表单标签在暗黑弹窗中仍使用浅色默认值的问题，标签与分隔线统一接入主题语义变量。
+- 新增根级弹层主题上下文桥接，Select/Cascader 通过 H5 Teleport 提升层级后仍保持当前明暗主题。
+- 移动演示页在 360px 以下改用分行头部操作区，避免折叠屏分屏时标题被按钮挤压断行。
+- 新增移动端 `HsxPageHeader/HsxSearchBar`，统一状态栏安全区、小程序胶囊避让、自定义头部插槽、回车/按钮/防抖搜索与筛选角标。
+- 新增 `HsxFilterToolbar/HsxFilterDrawer`，覆盖用户端快捷筛选和商家管理端抽屉筛选；宽屏自动切换右侧面板，筛选表单继续复用 JSON Schema/TSX 内核。
+- 新增 `countActiveMobileFilters/compactMobileFilters`，统一筛选数量统计和请求参数空值清理。
+- 修复新版微信开发者工具误过滤 `common/vendor.js` 及旧版 UniApp 热重载上下文失效导致的开发环境白屏。
+- 移动演示页改为显式注册 Vue SFC 组件，修复微信小程序 `usingComponents` 为空导致的主体不渲染。
+- `HsxSchemaForm` 增加微信小程序可识别的 SFC 门面，保留同一 Schema 表单内核与 TSX 调用能力。
+- 科技背景图改为跨端 `image` 图层，消除微信小程序 WXSS 本地图片错误。
+- 修复微信开发者工具把触感反馈模拟为整屏抖动的问题：开发工具环境自动跳过震动，真机仍保留显式触感能力。
+- `HsxPopup` 默认关闭触感反馈，避免与触发按钮叠加震动；风险确认等关键场景可按需显式开启。
+- 平台 `HsxGrid` 升级为 1–5 列响应式布局容器，支持任意多行、自动填充、独立行列间距、密集排列及等高卡片。
+- 新增平台 `HsxGridItem`，支持响应式跨列、整行、行跨度、顺序、纯色、渐变、背景图、遮罩、圆角、边框和阴影。
+- 移动端 `HsxChart` 新增数据降级视图；小程序模拟器或 Canvas 初始化异常时仍展示可读数据，不再整块空白。
+- 新增移动端 `HsxDiyRenderer` 与 `normalizeHsxDiyPageData`，通过稳定协议复用 NiuCloud 现有 DIY 组件，同时保持组件库跨项目可移植。
+- 修复微信小程序多层组件中响应式网格的作用域插槽内容丢失；指标卡、图表、表单与时间线现可稳定显示。
+- 新增平台 `HsxTreeTablePicker`，统一“左树 + Schema 查询 + 远程表格 + 跨页单/多选 + 分页 + 确认”弹窗，并提供组织、责任人演示。
+- 修复小程序 `HsxFilterDrawer` 引用 TSX 入口造成 `hsx-schema-form` 未注册、筛选内容空白的问题。
+- 平台 `HsxSearchInput` 新增 `showButton`，支持图标式紧凑搜索框。

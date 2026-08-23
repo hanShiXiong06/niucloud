@@ -5,7 +5,8 @@ return [
         'menu_key' => 'hsx_marketing',
         'menu_short_name' => '营销中心',
         'parent_select_key' => '',
-        'parent_key' => '',
+        // 使用牛云原生的“应用管理”真实父级，避免在后台侧边栏占用一级菜单。
+        'parent_key' => 'addon',
         'menu_type' => '0',
         'icon' => 'nc-iconfont nc-icon-yingxiao',
         'api_url' => '',

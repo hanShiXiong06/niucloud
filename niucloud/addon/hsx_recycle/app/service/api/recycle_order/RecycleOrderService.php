@@ -12,6 +12,7 @@ use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
 use addon\hsx_recycle\app\dict\stat\RecycleStageDict;
 use addon\hsx_recycle\app\service\admin\stat\TaskService;
+use addon\hsx_recycle\app\service\admin\order\RecycleDeviceService as AdminRecycleDeviceService;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderFlowService;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreWorkWechatNotifyService;
 use addon\hsx_recycle\app\service\core\order\LogisticsVehicleService;
@@ -668,15 +669,9 @@ class RecycleOrderService extends BaseApiService
         // 提交事务
         $this->model->commit();
 
-        try {
-            $taskService = TaskService::forSite((int)$this->site_id, 0, '客户确认出售');
-            $deviceIds = RecycleDevice::where([['order_id', '=', $id], ['site_id', '=', $this->site_id]])->column('id');
-            foreach ($deviceIds as $deviceId) {
-                $taskService->assignPreferredOrDefault((int)$deviceId, RecycleStageDict::STAGE_PAY);
-            }
-        } catch (\Throwable $e) {
-            // 任务通知失败不回滚客户已确认的业务事实。
-        }
+        $deviceIds = RecycleDevice::where([['order_id', '=', $id], ['site_id', '=', $this->site_id]])
+            ->column('id');
+        (new AdminRecycleDeviceService())->dispatchAfterRecycle(array_map('intval', $deviceIds));
 
         return true;
     }

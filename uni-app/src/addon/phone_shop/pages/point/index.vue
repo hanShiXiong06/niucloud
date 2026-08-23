@@ -35,7 +35,7 @@ import useDiyStore from '@/app/stores/diy'
 const { setShare } = useShare()
 const diyStore = useDiyStore()
 const diy = useDiy({
-    name: 'DIY_SHOP_POINT_INDEX'
+    name: 'DIY_PHONE_SHOP_POINT_INDEX'
 })
 
 const diyGroupRef = ref(null)

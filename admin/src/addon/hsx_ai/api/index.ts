@@ -8,6 +8,10 @@ export const testAiSpeech = (speech: Record<string, any>) => request.post('ai/sp
 export const testAiProvider = (provider: Record<string, any>) => request.post('ai/provider/test', { provider })
 export const syncAiModels = (provider: Record<string, any>) => request.post('ai/provider/models', { provider })
 export const executeAi = (data: Record<string, any>) => request.post('ai/execute', data)
+export const getAiAssistantConfig = () => request.get('ai/assistant/config')
+export const getAiAssistantConversations = (params: Record<string, any>) => request.get('ai/assistant/conversations', { params })
+export const getAiAssistantConversation = (id: number) => request.get(`ai/assistant/conversation/${id}`)
+export const deleteAiAssistantConversation = (id: number) => request.delete(`ai/assistant/conversation/${id}`)
 export const getAiLogs = (params: Record<string, any>) => request.get('ai/logs', { params })
 export const getAiConversations = (params: Record<string, any>) => request.get('ai/conversations', { params })
 export const getAiConversation = (id: number) => request.get(`ai/conversations/${id}`)
@@ -22,7 +26,7 @@ export const recognizePlaygroundSpeech = (audio: Blob) => {
 export const synthesizePlaygroundSpeech = (text: string) => request.post('ai/playground/speech/tts', { text })
 
 export type AiStreamEvent = {
-    type: 'meta' | 'reasoning' | 'content' | 'done' | 'error'
+    type: 'meta' | 'conversation' | 'agent' | 'tool' | 'tool_result' | 'block' | 'reasoning' | 'content' | 'done' | 'error'
     delta?: string
     message?: string
     [key: string]: any

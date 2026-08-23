@@ -15,7 +15,7 @@
 <script setup lang="ts">
 import { img } from '@/utils/common';
 import { ref } from 'vue'
-import diyRecommendGoodsList from '@/addon/phone_shop/components/diy/goods-list/index.vue';
+import diyRecommendGoodsList from '@/addon/phone_shop/components/diy/phone-goods-list/index.vue';
 
 // 获取商品数据
 const goodsList = ref()

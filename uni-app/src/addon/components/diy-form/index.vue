@@ -1,7 +1,7 @@
 <template>
     <view :style="themeColor()">
         <!-- 自定义组件渲染 -->
-        <view v-show="requestData.status == 1 && requestData.error && requestData.error.length === 0 && !diy.getLoading()" class="diy-template-wrap">
+        <view v-if="formReady && requestData.status == 1 && requestData.error && requestData.error.length === 0 && !diy.getLoading()" class="diy-template-wrap">
             <diy-group ref="diyGroupRef" :data="diyFormData"/>
         </view>
         <!-- 目前只有自定义表单才展示错误信息，其他类型暂时不控制 -->
@@ -20,7 +20,7 @@
     </view>
 </template>
 <script lang="ts" setup>
-import { ref, reactive, computed, onMounted, watch } from 'vue';
+import { ref, reactive, computed, nextTick, onMounted, watch } from 'vue';
 import { useDiyForm } from '@/hooks/useDiyForm'
 import { deepClone, getValidTime } from '@/utils/common'
 import diyGroup from '@/addon/components/diy/group/index.vue'
@@ -33,6 +33,7 @@ const diy = useDiyForm({
 })
 
 const diyGroupRef = ref(null)
+const formReady = ref(false)
 
 const requestData = computed(() => {
     return diy.requestData;
@@ -41,6 +42,7 @@ const requestData = computed(() => {
 const diyFormData: any = reactive({})
 
 onMounted(() => {
+    formReady.value = false
     diy.getData(() => {
         diyFormData.status = diy.data.status;
         if (diyFormData.status && requestData.value.error.length == 0) {
@@ -55,14 +57,15 @@ onMounted(() => {
                 diyFormData.global.borderControl = false;
             }
             // 需要过滤 组件类型，筛选出来表单，排除表单提交组件
-            diy.data.value.forEach((item: any) => {
+            ;(Array.isArray(diy.data.value) ? diy.data.value : []).forEach((item: any) => {
                 if (item.componentType == 'diy_form' && item.componentName != 'FormSubmit') {
                     value.push(item);
                 }
             })
-            diyFormData.value = deepClone(value);
+            diyFormData.value = deepClone(value).filter((item: any) => item && typeof item === 'object' && item.field);
             diyFormData.componentRefs = null;
-            diyGroupRef.value?.refresh();
+            formReady.value = true
+            nextTick(() => diyGroupRef.value?.refresh())
             watchFormData();
         }
     })

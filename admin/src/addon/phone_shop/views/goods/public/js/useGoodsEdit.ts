@@ -279,7 +279,7 @@ export function useGoodsEdit(params: any = {}) {
     // 刷新微页面
     const refreshDetailTemplate = (bool = false) => {
         getGoodsInfoTemplate({
-            type: 'DIY_SHOP_GOODS_DETAIL'
+            type: 'DIY_PHONE_SHOP_GOODS_DETAIL'
         }).then((res) => {
             const data = res.data
             if (data) {

@@ -41,6 +41,7 @@
                 <view class="stock-overview__item"><text class="stock-overview__value">{{ turnoverSummary.average_age_days || 0 }}天</text><text class="stock-overview__label">平均库龄</text></view>
                 <view class="stock-overview__item warning" @click="filterTurnover('risk')"><text class="stock-overview__value">{{ turnoverSummary.warning_total_count || 0 }}</text><text class="stock-overview__label">周转预警</text></view>
             </view>
+            <ErpListingTaskScanner :loading="scanningTask" @resolve="resolveListingTask" />
             <view class="stock-tools">
                 <view class="stock-tool" @click="goSerialTrace">
                     <view class="stock-tool__icon blue"><u-icon name="scan" color="#2563eb" size="18" /></view>
@@ -191,9 +192,10 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 
-import { buyoutMobileConsignment, getMobileErpConfig, getMobileStockList, getMobileStockTurnoverSummary, previewMobileStockTransfer, syncMobileStockListing, transferMobileStock } from '@/addon/hsx_erp/api/erp'
+import { buyoutMobileConsignment, getMobileErpConfig, getMobileStockList, getMobileStockTurnoverSummary, handoffMobileStockListing, previewMobileStockTransfer, syncMobileStockListing, transferMobileStock } from '@/addon/hsx_erp/api/erp'
 import { dictLabel, dictTabs, dictType, ERP_DICT_FALLBACK, loadErpDicts, type ErpDictMap } from '@/addon/hsx_erp/api/dict'
 import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
+import ErpListingTaskScanner from '@/addon/hsx_erp/components/ErpListingTaskScanner.vue'
 import ErpFilterPopup from '@/addon/hsx_erp/components/ErpFilterPopup.vue'
 import ErpPartyPopup from '@/addon/hsx_erp/components/ErpPartyPopup.vue'
 import ErpWarehousePopup from '@/addon/hsx_erp/components/ErpWarehousePopup.vue'
@@ -219,6 +221,7 @@ const providerPartyId = ref(0)
 const providerPartyName = ref('')
 const pendingRefurbishRow = ref<any>(null)
 const publishingId = ref(0)
+const scanningTask = ref(false)
 const transferringId = ref(0)
 const transferVisible = ref(false)
 const transferRow = ref<any>(null)
@@ -377,9 +380,42 @@ const operationStatusText = (row: any) => [
     row.task_assignee_name ? `负责人 ${row.task_assignee_name}` : '',
 ].filter(Boolean).join(' · ')
 
-const goDetail = (row: any) => uni.navigateTo({
-    url: `/addon/hsx_erp/pages/stock/detail?id=${row.id}`
+const goDetail = (row: any, openTask = false) => uni.navigateTo({
+    url: `/addon/hsx_erp/pages/stock/detail?id=${row.id}${openTask ? '&open_task=1' : ''}`
 })
+
+async function resolveListingTask(code: string) {
+    if (!code || scanningTask.value) return
+    scanningTask.value = true
+    try {
+        const response: any = await getMobileStockList({
+            keyword: code,
+            status: 'in_stock',
+            my_task: 1,
+            page: 1,
+            limit: 10,
+        })
+        const rows = Array.isArray(response?.data?.data) ? response.data.data : []
+        if (!rows.length) {
+            return uni.showModal({
+                title: '未找到我的待办',
+                content: `没有找到串号「${code}」对应且分配给你的任务，请核对串号或联系管理员检查任务负责人。`,
+                showCancel: false,
+                confirmText: '我知道了',
+            })
+        }
+        if (rows.length === 1) return goDetail(rows[0], true)
+        keyword.value = code
+        activeTab.value = 'in_stock'
+        filters.value = { ...filters.value, my_task: 1 }
+        reload()
+        uni.showToast({ title: `找到 ${rows.length} 条匹配任务`, icon: 'none' })
+    } catch (error: any) {
+        uni.showToast({ title: error?.message || error?.msg || '任务查询失败', icon: 'none' })
+    } finally {
+        scanningTask.value = false
+    }
+}
 async function startRefurbish(row: any) {
     if (refurbishTrackingMode.value === 'external') {
         pendingRefurbishRow.value = row
@@ -419,7 +455,7 @@ function handleTurnoverAction(row: any) {
     if (['complete_refurbish', 'resolve_refurbish'].includes(action)) return goCompleteRefurbish(row)
     if (action === 'direct_sale') return uni.navigateTo({ url: `/addon/hsx_erp/pages/sale/create?asset_ids=${row.id}` })
     if (action === 'publish_listing') return publishListing(row)
-    if (['complete_listing_photo', 'complete_listing_price', 'complete_listing_material'].includes(action)) return goDetail(row)
+    if (['complete_listing_photo', 'complete_listing_price', 'complete_listing_material', 'complete_listing_media_price', 'complete_listing'].includes(action)) return goDetail(row, true)
     if (['transfer', 'resolve_warehouse'].includes(action)) return openTransfer(row)
     return goDetail(row)
 }
@@ -499,16 +535,19 @@ async function confirmBuyout() {
 async function publishListing(row: any) {
     if (!row?.id || publishingId.value) return
     const confirmed = await confirmErpSensitiveAction({
-        title: Number(row.can_handoff_shop || 0) === 1 ? '交接商城运营' : '上架商城',
+        title: Number(row.can_handoff_shop || 0) === 1 ? '交接商城' : '上架商城',
         content: Number(row.can_handoff_shop || 0) === 1
             ? `确认把「${row.model || row.imei || '-'}」交给商城运营完善分类、规格并上架？完成后资料会自动回写 ERP。`
             : `确认将「${row.model || row.imei || '-'}」直接上架商城？系统将使用当前分类、规格、图片和零售价创建一机一品商品。`,
-        confirmText: Number(row.can_handoff_shop || 0) === 1 ? '确认交接' : '确认上架',
+        confirmText: Number(row.can_handoff_shop || 0) === 1 ? '交接商城' : '确认上架',
     })
     if (!confirmed) return
     publishingId.value = Number(row.id)
     try {
-        const res: any = await syncMobileStockListing(Number(row.id))
+        const handoffToShop = Number(row.can_handoff_shop || 0) === 1
+        const res: any = handoffToShop
+            ? await handoffMobileStockListing(Number(row.id))
+            : await syncMobileStockListing(Number(row.id))
         if (res?.data?.ok === false) throw new Error(res?.data?.message || '上架失败')
         uni.showToast({ title: res?.data?.message || '已上架商城', icon: 'success' })
         reload()

@@ -5,6 +5,7 @@ import useDiyStore from '@/app/stores/diy';
 import { getDiyInfo } from '@/app/api/diy';
 import { getGoodsDetail, browse } from '@/addon/phone_shop/api/goods';
 import useGoodsDetailStore from '@/addon/phone_shop/stores/goodsDetail'
+import { parseJsonValue } from '@/addon/phone_shop/utils/json';
 
 export function useDiyGoodsDetail(params: any = {}) {
 
@@ -48,16 +49,16 @@ export function useDiyGoodsDetail(params: any = {}) {
 
     /**
      * 兼容旧的商品详情装修数据：
-     * 质检组件上线前保存的模板里没有 ShopGoodsDetailQc，运行时自动插入到商品详情正文之前。
+     * 质检组件上线前保存的模板里没有 PhoneShopGoodsDetailQc，运行时自动插入到商品详情正文之前。
      * 组件自身会在商品没有 qc_report 时隐藏，不影响普通商品。
      */
     const ensureQcComponent = (components: any[]) => {
-        if (!Array.isArray(components) || components.some((item: any) => item && item.componentName === 'ShopGoodsDetailQc')) return;
+        if (!Array.isArray(components) || components.some((item: any) => item && item.componentName === 'PhoneShopGoodsDetailQc')) return;
         const qcComponent = {
-            path: 'edit-shop-goods-detail-qc',
+            path: 'edit-phone-shop-goods-detail-qc',
             uses: 1,
             id: 'auto_shop_goods_detail_qc',
-            componentName: 'ShopGoodsDetailQc',
+            componentName: 'PhoneShopGoodsDetailQc',
             componentTitle: '质检报告',
             ignore: [],
             isShow: true,
@@ -84,7 +85,7 @@ export function useDiyGoodsDetail(params: any = {}) {
             margin: { top: 12, bottom: 0, both: 10 },
             isHidden: false
         };
-        const descriptionIndex = components.findIndex((item: any) => item && item.componentName === 'ShopGoodsDetailDesc');
+        const descriptionIndex = components.findIndex((item: any) => item && item.componentName === 'PhoneShopGoodsDetailDesc');
         components.splice(descriptionIndex >= 0 ? descriptionIndex : components.length, 0, qcComponent);
     }
 
@@ -217,20 +218,20 @@ export function useDiyGoodsDetail(params: any = {}) {
             diyData.pageMode = requestData.mode;
             diyData.title = requestData.title;
 
-            let sources = JSON.parse(requestData.value); // todo diy的结构应该后台处理好，前端就不需要再转换了
+            const sources = parseJsonValue<any>(requestData.value, { global: {}, value: [] });
 
-            diyData.global = sources.global;
+            diyData.global = sources.global || {};
             // 用于区分微页面之间弹窗的id
             if (diyData.global.popWindow && diyData.global.popWindow.show) {
                 diyData.global.popWindow.id = requestData.id;
             }
 
-            diyData.value = sources.value;
+            diyData.value = Array.isArray(sources.value) ? sources.value : [];
             if (diyStore.mode != 'decorate') ensureQcComponent(diyData.value);
             diyData.value.forEach((item: any, index) => {
                 let detailComponent:any = []
                 if(diyStore.mode != 'decorate'){
-                    detailComponent = ['ShopGoodsDetailBottom','ShopGoodsDetailDesc','ShopGoodsDetailAttr','ShopGoodsDetailQc','ShopGoodsDetailEvaluate','ShopGoodsDetailSow','ShopGoodsDetailPurchaseService','ShopGoodsDetailBasicInfo']
+                    detailComponent = ['PhoneShopGoodsDetailBottom','PhoneShopGoodsDetailDesc','PhoneShopGoodsDetailAttr','PhoneShopGoodsDetailQc','PhoneShopGoodsDetailEvaluate','PhoneShopGoodsDetailSow','PhoneShopGoodsDetailPurchaseService','PhoneShopGoodsDetailBasicInfo']
                 }
                 if(detailComponent.indexOf(item.componentName) > -1){
                     item.componentIsShow = false // 是否显示

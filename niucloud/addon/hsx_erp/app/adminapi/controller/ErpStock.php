@@ -268,9 +268,12 @@ class ErpStock extends BaseAdminController
             ['remark', ''],
             ['next_assignee_uid', 0],
             ['workflow_action', ''],
+            ['defer_publish', 0],
         ]);
         $this->service->updateFlow($id, $params);
-        $publish = $this->service->autoPublishListingIfReady($id);
+        $publish = (int)$params['defer_publish'] === 1
+            ? ['triggered' => false, 'reason' => 'manual_confirmation']
+            : $this->service->autoPublishListingIfReady($id);
         $taskAssigned = (new ErpListingTaskService())->sync($id, (int)$params['next_assignee_uid']);
         return success([
             'saved' => 1,
@@ -283,6 +286,17 @@ class ErpStock extends BaseAdminController
     public function syncListing(int $id)
     {
         $result = $this->service->syncListing($id);
+        (new ErpListingTaskService())->sync($id);
+        return success($result);
+    }
+
+    /**
+     * 只交接商城资料运营，不受站点“直接发布”设置影响。
+     * 图片与销售价格由当前岗位完成，分类、规格、颜色、保修等由商城岗位接手。
+     */
+    public function handoffListing(int $id)
+    {
+        $result = $this->service->syncListing($id, true);
         (new ErpListingTaskService())->sync($id);
         return success($result);
     }

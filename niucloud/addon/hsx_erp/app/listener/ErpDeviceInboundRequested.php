@@ -192,14 +192,40 @@ class ErpDeviceInboundRequested
         $createdCount = 0;
         $existingCount = 0;
         foreach ($groups as $groupKey => $group) {
-            $requestId = ErpIdempotency::child($eventId, 'purchase-' . substr(hash('sha256', (string)$groupKey), 0, 12));
-            $existingOrderId = $this->existingOrderId($currentSiteId, $requestId);
-            $purchaseData = $this->buildPurchaseData($event, $group, $requestId);
-            $orderId = $existingOrderId > 0 ? $existingOrderId : $this->createPurchase($purchaseData);
+            $source = (array)($event['_erp_source'] ?? []);
+            $sourcePlugin = trim((string)($source['plugin'] ?? ''));
+            $sourceType = trim((string)($source['type'] ?? ''));
+            $sourceOrderNo = trim((string)($group['source_order_no'] ?? ''));
+            $requestId = $this->sourcePurchaseRequestId($currentSiteId, $sourcePlugin, $sourceType, $sourceOrderNo, (string)$groupKey);
+            $orderId = $this->existingSourceOrderId($currentSiteId, $sourcePlugin, $sourceType, $sourceOrderNo);
+            $pendingDevices = $orderId > 0
+                ? $this->filterMissingSourceDevices($currentSiteId, $orderId, (array)$group['devices'])
+                : (array)$group['devices'];
+            $existingCount += max(0, count((array)$group['devices']) - count($pendingDevices));
+
+            if ($orderId <= 0) {
+                $beforeCreateCount = count($pendingDevices);
+                $createGroup = $group;
+                $createGroup['devices'] = $pendingDevices;
+                $purchaseData = $this->buildPurchaseData($event, $createGroup, $requestId);
+                $orderId = $this->createPurchase($purchaseData);
+                // 并发事件可能同时没有查到采购单；稳定 request_id 会让其中一个复用
+                // 已创建采购单，此时继续补齐本事件尚未落库的设备，不能静默漏单。
+                $pendingDevices = $this->filterMissingSourceDevices($currentSiteId, $orderId, $pendingDevices);
+                $createdCount += max(0, $beforeCreateCount - count($pendingDevices));
+            }
+            if ($pendingDevices !== []) {
+                $beforeAppendCount = count($pendingDevices);
+                $appendGroup = $group;
+                $appendGroup['devices'] = $pendingDevices;
+                $appendData = $this->buildPurchaseData($event, $appendGroup, '');
+                $appendData['append_order_id'] = $orderId;
+                $this->createPurchase($appendData);
+                $remainingDevices = $this->filterMissingSourceDevices($currentSiteId, $orderId, $pendingDevices);
+                $createdCount += max(0, $beforeAppendCount - count($remainingDevices));
+                $existingCount += count($remainingDevices);
+            }
             $orderIds[] = $orderId;
-            $deviceCount = count($group['devices']);
-            if ($existingOrderId > 0) $existingCount += $deviceCount;
-            else $createdCount += $deviceCount;
         }
 
         $source = (array)($event['_erp_source'] ?? []);
@@ -334,6 +360,9 @@ class ErpDeviceInboundRequested
         }
         $eventId = trim((string)($event['event_id'] ?? ''));
         $operator = (array)($event['operator'] ?? []);
+        // 采购员属于采购事实，应取最终回收定价员，而不是客户确认请求的
+        // 当前登录人。事件顶层 operator 仅作兼容兜底，设备定价快照优先。
+        $purchaserUid = $this->resolvePricingPurchaserUid((array)($group['devices'] ?? []), $operator);
         $remark = $sourceName . '入库';
         if ($sourceOrderNo !== '') {
             $remark .= '；原业务单 ' . $sourceOrderNo;
@@ -351,7 +380,7 @@ class ErpDeviceInboundRequested
             'm_no' => trim((string)($counterparty['m_no'] ?? $counterparty['mobile'] ?? '')),
             'purchase_channel' => $channelName,
             'purchase_channel_key' => $channelCode,
-            'purchaser_uid' => (int)($operator['id'] ?? 0),
+            'purchaser_uid' => $purchaserUid,
             'settle_method' => '挂账',
             // 标准事件没有 ERP 付款账户，不能伪造已付款资金事实。
             'paid_amount' => 0,
@@ -372,6 +401,23 @@ class ErpDeviceInboundRequested
             'request_id' => $requestId,
             'items' => $items,
         ];
+    }
+
+    protected function resolvePricingPurchaserUid(array $devices, array $operator): int
+    {
+        foreach ($devices as $device) {
+            $pricing = (array)($device['pricing_snapshot'] ?? $device['recycle_pricing_snapshot'] ?? []);
+            $uid = (int)($pricing['price_uid'] ?? 0);
+            if ($uid > 0) {
+                return $uid;
+            }
+        }
+
+        $uid = (int)($operator['id'] ?? 0);
+        if ($uid <= 0) {
+            throw new CommonException('回收入库设备缺少最终定价员，不能确定 ERP 采购员');
+        }
+        return $uid;
     }
 
     protected function mapDeviceItem(array $device, int $warehouseId, int $locationId, float $cost, string $sourcePlugin, string $sourcePluginName): array
@@ -419,6 +465,12 @@ class ErpDeviceInboundRequested
                 'source_order_no' => trim((string)($device['source_order_no'] ?? '')),
                 'settlement_status' => trim((string)($device['settlement_status'] ?? '')),
                 'source_paid_amount' => round((float)($device['paid_amount'] ?? 0), 2),
+                // 设备级保留真实定价人，避免同一回收订单分批确认、多人定价时
+                // 只剩采购单头的单一负责人快照。
+                'pricing_operator' => [
+                    'uid' => (int)(($device['pricing_snapshot']['price_uid'] ?? $device['recycle_pricing_snapshot']['price_uid'] ?? 0)),
+                    'priced_at' => (int)(($device['pricing_snapshot']['price_at'] ?? $device['recycle_pricing_snapshot']['price_at'] ?? 0)),
+                ],
                 'payee_methods' => array_values(array_filter((array)($device['payment_methods'] ?? []), 'is_array')),
                 'consignment' => is_array($device['consignment'] ?? null) ? (array)$device['consignment'] : null,
                 'refurbishment_suggestion' => [
@@ -513,6 +565,43 @@ class ErpDeviceInboundRequested
             ['request_id', '=', $requestId],
         ])->findOrEmpty();
         return $order->isEmpty() ? 0 : (int)$order->id;
+    }
+
+    protected function existingSourceOrderId(int $siteId, string $sourcePlugin, string $sourceType, string $sourceOrderNo): int
+    {
+        if ($siteId <= 0 || $sourcePlugin === '' || $sourceType === '' || $sourceOrderNo === '') return 0;
+        $order = ErpPurchaseOrder::where([
+            ['site_id', '=', $siteId],
+            ['origin_plugin', '=', $sourcePlugin],
+            ['origin_type', '=', $sourceType],
+            ['origin_no', '=', $sourceOrderNo],
+        ])->where('status', '<>', 'void')->order('id asc')->findOrEmpty();
+        return $order->isEmpty() ? 0 : (int)$order->id;
+    }
+
+    protected function sourcePurchaseRequestId(int $siteId, string $sourcePlugin, string $sourceType, string $sourceOrderNo, string $fallback): string
+    {
+        $businessKey = implode('|', [$siteId, $sourcePlugin, $sourceType, $sourceOrderNo !== '' ? $sourceOrderNo : $fallback]);
+        return 'source-purchase:' . substr(hash('sha256', $businessKey), 0, 48);
+    }
+
+    protected function filterMissingSourceDevices(int $siteId, int $orderId, array $devices): array
+    {
+        if ($siteId <= 0 || $orderId <= 0 || $devices === []) return $devices;
+        $existing = [];
+        $rows = \addon\hsx_erp\app\model\ErpAsset::where([
+            ['site_id', '=', $siteId],
+            ['purchase_order_id', '=', $orderId],
+        ])->field('spec_json')->select()->toArray();
+        foreach ($rows as $row) {
+            $snapshot = $this->decodeSnapshotArray($row['spec_json'] ?? '');
+            $sourceDeviceId = trim((string)($snapshot['source_device_id'] ?? ''));
+            if ($sourceDeviceId !== '' && $sourceDeviceId !== '0') $existing[$sourceDeviceId] = true;
+        }
+        return array_values(array_filter($devices, static function (array $device) use ($existing): bool {
+            $sourceDeviceId = trim((string)($device['source_device_id'] ?? ''));
+            return $sourceDeviceId === '' || $sourceDeviceId === '0' || !isset($existing[$sourceDeviceId]);
+        }));
     }
 
     protected function createPurchase(array $data): int

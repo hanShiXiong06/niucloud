@@ -171,9 +171,7 @@ class RecycleOrderPaymentService extends BaseAdminService
 
     private function assertLocalPaymentAllowed(): void
     {
-        if ((new RecycleErpCapabilityService())->isPaymentManaged($this->site_id)) {
-            throw new CommonException('当前站点财务已由 ERP 接管，请到“二手机 ERP - 应付款”完成付款');
-        }
+        (new RecycleErpCapabilityService())->assertLocalPaymentAllowed((int)$this->site_id);
     }
 
     /**

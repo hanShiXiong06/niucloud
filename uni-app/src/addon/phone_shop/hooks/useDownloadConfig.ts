@@ -81,14 +81,29 @@ export function useDownloadConfig() {
         // 2. detail.vue: item 直接包含 price, member_price 等字段
         const sku = item.goodsSku || item
 
+        // 详情接口把当前会员真正看到的价格放在顶层 show_price，列表接口则放在
+        // goodsSku.show_price。历史数据里 show_price 可能为 0，不能让这个占位值
+        // 截断后续回退，否则“不加价转发”会生成 ￥0.00。
+        const visiblePrice = [
+            item?.show_price,
+            item?.goodsSku?.show_price,
+            sku?.show_price,
+            sku?.price,
+            item?.price,
+            item?.goodsSku?.price,
+            item?.goods?.price
+        ].map(value => parseFloat(String(value ?? '')))
+            .find(value => Number.isFinite(value) && value > 0) || 0
+
         // 批发价:直接转发同行价(会员价),不加价
         if (config.priceType === 'wholesale') {
-            const mp = (sku && sku.member_price) || (sku && sku.price) || item.price || 0
-            return (parseFloat(String(mp)) || 0).toFixed(2)
+            // member_price 在新版中是 JSON，不能再直接 parseFloat；同行身份访问时，
+            // 后端已经把对应等级价解析到 show_price，直接消费当前可见价最准确。
+            return visiblePrice.toFixed(2)
         }
 
         // 零售价:基准 = 分享者"实际看到的价"(随会员等级而定,优先 show_price),再 + 加价
-        let base = parseFloat(String(item.show_price ?? (sku && sku.price) ?? item.price ?? 0)) || 0
+        let base = visiblePrice
         const markup = parseFloat(String(config.markupAmount || 0)) || 0
         if (config.markupEnabled && markup > 0) {
             base = base + markup

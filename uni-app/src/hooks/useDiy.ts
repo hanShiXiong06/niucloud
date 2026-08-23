@@ -3,6 +3,7 @@ import { onLoad, onShow, onHide, onPageScroll, onUnload } from '@dcloudio/uni-ap
 import { img, handleOnloadParams } from '@/utils/common';
 import { getDiyInfo } from '@/app/api/diy';
 import useDiyStore from '@/app/stores/diy';
+import { parseJsonValue } from '@/addon/phone_shop/utils/json';
 
 export function useDiy(params: any = {}) {
 
@@ -112,9 +113,9 @@ export function useDiy(params: any = {}) {
                         diyData.pageMode = requestData.mode;
                         diyData.title = requestData.title;
 
-                        let sources = JSON.parse(requestData.value); // todo diy的结构应该后台处理好，前端就不需要再转换了
+                        const sources = parseJsonValue<any>(requestData.value, { global: {}, value: [] });
 
-                        diyData.global = sources.global;
+                        diyData.global = sources.global || {};
 
                         diyData.global.id = requestData.id;
                         diyData.global.site_id = requestData.site_id;
@@ -125,7 +126,7 @@ export function useDiy(params: any = {}) {
                             diyData.global.popWindow.id = requestData.id;
                         }
                         
-                        diyData.value = sources.value;
+                        diyData.value = Array.isArray(sources.value) ? sources.value : [];
                         diyData.value.forEach((item: any, index) => {
                             item.pageStyle = '';
                             item.componentIsShow = true // 是否显示

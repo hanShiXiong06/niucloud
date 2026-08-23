@@ -367,40 +367,12 @@
                     </view>
                 </template>
 
-                <view
+                <OfflinePaymentPanel
                     v-if="detail.status == 1 && detail.payment_mode === 'offline_pending'"
-                    class="sidebar-margin mt-[var(--top-m)] card-template"
-                >
-                    <view class="flex items-center">
-                        <view class="w-[72rpx] h-[72rpx] rounded-[20rpx] bg-[var(--primary-color-light)] flex-center mr-[20rpx]">
-                            <u-icon name="account-fill" color="var(--primary-color)" size="25" />
-                        </view>
-                        <view class="flex-1">
-                            <view class="text-[29rpx] font-600 text-[#172033]">订单已提交，设备已为您锁定</view>
-                            <view class="mt-[10rpx] text-[24rpx] leading-[36rpx] text-[#718096]">
-                                {{ detail.offline_contact?.contact_tip || '业务员将主动联系您确认到店时间，请到店后再完成付款。' }}
-                            </view>
-                        </view>
-                    </view>
-                    <view class="mt-[24rpx] rounded-[18rpx] bg-[#f7f9fc] px-[24rpx] py-[18rpx]">
-                        <view class="flex items-center justify-between text-[26rpx]">
-                            <text class="text-[#718096]">到店联系人</text>
-                            <text class="font-600 text-[#172033]">{{ detail.offline_contact?.handler_name || '门店业务员' }}</text>
-                        </view>
-                        <view v-if="detail.store?.store_name" class="mt-[16rpx] flex items-start justify-between text-[26rpx]">
-                            <text class="shrink-0 text-[#718096]">自提门店</text>
-                            <text class="ml-[30rpx] text-right text-[#172033]">{{ detail.store.store_name }} · {{ detail.store.full_address }}</text>
-                        </view>
-                        <view
-                            v-if="detail.offline_contact?.handler_mobile"
-                            class="mt-[18rpx] flex h-[64rpx] items-center justify-center rounded-full bg-[var(--primary-color-light)] text-[26rpx] font-600 text-[var(--primary-color)]"
-                            @click="callOfflineHandler"
-                        >
-                            <u-icon name="phone-fill" color="var(--primary-color)" size="18" />
-                            <text class="ml-[8rpx]">联系 {{ detail.offline_contact.handler_name || '负责人' }} {{ detail.offline_contact.handler_mobile }}</text>
-                        </view>
-                    </view>
-                </view>
+                    :order-id="detail.order_id"
+                    :contact="detail.offline_contact || {}"
+                    @submitted="orderDetailFn(detail.order_id)"
+                />
 
                 <!-- 待付款订单的万能表单信息 -->
                 <view :class="{'sidebar-margin mt-[var(--top-m)] card-template' : orderDiyFormData.length }"
@@ -495,7 +467,7 @@
                         <view class="order-grey-hollow-btn ml-[20rpx]"
                             @click="orderBtnFn('logistics')" v-if="showLogistics(detail)">{{ t('logisticsTracking') }}</view>
                         <view class="order-grey-hollow-btn ml-[20rpx]" v-if="detail.status == 1" @click="orderBtnFn('close')">{{ t('orderClose') }}</view>
-                        <view class="px-[24rpx] min-w-[144rpx] box-border text-[24rpx] h-[56rpx] flex-center text-center text-[#fff] primary-btn-bg rounded-full ml-[20rpx]" v-if="detail.status == 1 && detail.payment_mode !== 'offline_pending'" @click="orderBtnFn('pay')">{{ t('topay') }}</view>
+                        <view class="px-[24rpx] min-w-[144rpx] box-border text-[24rpx] h-[56rpx] flex-center text-center text-[#fff] primary-btn-bg rounded-full ml-[20rpx]" v-if="detail.status == 1 && Number(detail.can_online_pay) === 1" @click="orderBtnFn('pay')">{{ t('topay') }}</view>
                         <view class="px-[24rpx] min-w-[176rpx] box-border text-[24rpx] h-[56rpx] flex-center text-center text-[var(--primary-color)] bg-[var(--primary-color-light)] rounded-full ml-[20rpx]" v-if="detail.status == 1 && detail.payment_mode === 'offline_pending'">等待业务员联系</view>
                         <view v-if="detail.status == 3" class="px-[24rpx] min-w-[144rpx] box-border  text-[24rpx] h-[56rpx] flex-center text-center  text-[#fff]  primary-btn-bg rounded-full ml-[20rpx]" @click="orderBtnFn('finish')">{{ t('orderFinish') }}</view>
                         <template v-if="detail.status == 5 && isShowEvaluate">
@@ -542,6 +514,7 @@ import diyFormDetail from '@/addon/components/diy-form-detail/index.vue'
 import mapShow from '@/addon/phone_shop/pages/order/components/map-show/map-show.vue'
 import useSystemStore from "@/stores/system";
 import PhoneGoodsMeta from '@/addon/phone_shop/components/PhoneGoodsMeta.vue'
+import OfflinePaymentPanel from '@/addon/phone_shop/components/OfflinePaymentPanel.vue'
 
 const systemStore = useSystemStore()
 
@@ -672,12 +645,6 @@ const close = (item: any) => {
     })
 }
 
-const callOfflineHandler = () => {
-    const phoneNumber = String(detail.value?.offline_contact?.handler_mobile || '').trim()
-    if (!phoneNumber) return
-    uni.makePhoneCall({ phoneNumber })
-}
-
 // 删除订单
 const deleteFn = (item: any) => {
     uni.showModal({
@@ -776,9 +743,16 @@ const goodsEvent = (id: number) => {
 const payRef = ref(null)
 const materialRef: any = ref(null)
 const orderBtnFn = (type = '') => {
-    if (type == 'pay')
+    if (type == 'pay') {
+        if (Number(detail.value.can_online_pay) !== 1) {
+            uni.showToast({
+                title: detail.value.online_pay_disabled_reason || '当前订单不支持在线支付',
+                icon: 'none'
+            })
+            return
+        }
         payRef.value?.open(detail.value.order_type, detail.value.order_id, `/addon/phone_shop/pages/order/detail?order_id=${ detail.value.order_id }`);
-    else if (type == 'close') {
+    } else if (type == 'close') {
         close(detail.value);
     } else if (type == 'finish') {
         finish(detail.value);

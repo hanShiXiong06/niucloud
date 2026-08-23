@@ -73,7 +73,10 @@ final class AiGatewayService
                 'provider_id' => $providerId,
                 'model' => (string)$result['model'],
                 'content' => (string)$result['content'],
-                'data' => $responseMode === 'json' ? $this->jsonContent((string)$result['content']) : null,
+                'tool_calls' => array_values((array)($result['tool_calls'] ?? [])),
+                'data' => $responseMode === 'json' && empty($result['tool_calls'])
+                    ? $this->jsonContent((string)$result['content'])
+                    : null,
                 'finish_reason' => (string)$result['finish_reason'],
                 'usage' => $usage,
                 'latency_ms' => max(0, (int)round((microtime(true) - $started) * 1000)),
@@ -193,7 +196,8 @@ final class AiGatewayService
                 'model' => (string)($result['model'] ?? $context['model']),
                 'content' => (string)($result['content'] ?? ''),
                 'reasoning_content' => (string)($result['reasoning_content'] ?? ''),
-                'data' => $context['response_mode'] === 'json'
+                'tool_calls' => array_values((array)($result['tool_calls'] ?? [])),
+                'data' => $context['response_mode'] === 'json' && empty($result['tool_calls'])
                     ? $this->jsonContent((string)($result['content'] ?? ''))
                     : null,
                 'finish_reason' => (string)($result['finish_reason'] ?? ''),
@@ -242,6 +246,9 @@ final class AiGatewayService
         if ($allowModelOverride && trim((string)($request['provider_id'] ?? '')) !== '') $providerId = trim((string)$request['provider_id']);
         $provider = $this->provider($config, $providerId);
         if (empty($provider['enabled'])) throw new CommonException('当前AI场景使用的模型通道已停用');
+        if ($allowModelOverride && isset($request['timeout'])) {
+            $provider['timeout'] = max(5, min(180, (int)$request['timeout']));
+        }
         $model = (string)($scene['model'] ?: $provider['default_model'] ?: $config['default_model']);
         if ($allowModelOverride && trim((string)($request['model'] ?? '')) !== '') $model = trim((string)$request['model']);
         if ($model === '') throw new CommonException('当前AI场景尚未选择模型');
@@ -264,6 +271,10 @@ final class AiGatewayService
                 : (int)$scene['max_tokens'],
             'response_mode' => $responseMode,
         ];
+        if (!empty($request['_agent_internal']) && !empty($request['tools']) && is_array($request['tools'])) {
+            $providerRequest['tools'] = array_values($request['tools']);
+            $providerRequest['tool_choice'] = $request['tool_choice'] ?? 'auto';
+        }
         $requestId = trim((string)($request['request_id'] ?? '')) ?: $this->requestId();
         if (strlen($requestId) > 100) throw new CommonException('AI请求ID不能超过100个字符');
         $promptHash = hash('sha256', json_encode([
@@ -316,6 +327,7 @@ final class AiGatewayService
             'content' => '',
             'data' => null,
             'finish_reason' => '',
+            'tool_calls' => [],
             'usage' => [
                 'prompt_tokens' => (int)$log->prompt_tokens,
                 'completion_tokens' => (int)$log->completion_tokens,
@@ -358,11 +370,32 @@ final class AiGatewayService
     private function messages(array $request, string $systemPrompt): array
     {
         $messages = [];
+        $allowToolMessages = !empty($request['_agent_internal']);
         if ($systemPrompt !== '') $messages[] = ['role' => 'system', 'content' => $systemPrompt];
         foreach (array_values(array_filter((array)($request['messages'] ?? []), 'is_array')) as $message) {
             $role = trim((string)($message['role'] ?? 'user'));
-            if (!in_array($role, ['system', 'user', 'assistant'], true)) continue;
+            $allowedRoles = $allowToolMessages
+                ? ['system', 'user', 'assistant', 'tool']
+                : ['system', 'user', 'assistant'];
+            if (!in_array($role, $allowedRoles, true)) continue;
             $content = trim((string)($message['content'] ?? ''));
+            if ($role === 'assistant' && $allowToolMessages && !empty($message['tool_calls'])) {
+                $messages[] = [
+                    'role' => 'assistant',
+                    'content' => $content,
+                    'tool_calls' => array_values((array)$message['tool_calls']),
+                ];
+                continue;
+            }
+            if ($role === 'tool' && $allowToolMessages && $content !== '') {
+                $messages[] = [
+                    'role' => 'tool',
+                    'tool_call_id' => mb_substr(trim((string)($message['tool_call_id'] ?? '')), 0, 120),
+                    'name' => mb_substr(trim((string)($message['name'] ?? '')), 0, 64),
+                    'content' => $content,
+                ];
+                continue;
+            }
             if ($content !== '') $messages[] = ['role' => $role, 'content' => $content];
         }
         $prompt = trim((string)($request['prompt'] ?? ''));
@@ -371,7 +404,7 @@ final class AiGatewayService
             throw new CommonException('AI请求缺少用户消息');
         }
         if (count($messages) > 100) throw new CommonException('单次AI请求最多允许100条消息');
-        $length = array_sum(array_map(static fn(array $message): int => mb_strlen((string)$message['content']), $messages));
+        $length = array_sum(array_map(static fn(array $message): int => mb_strlen((string)($message['content'] ?? '')), $messages));
         if ($length > 200000) throw new CommonException('AI请求内容过长');
         return $messages;
     }

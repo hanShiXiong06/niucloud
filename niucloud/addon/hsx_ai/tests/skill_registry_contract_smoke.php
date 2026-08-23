@@ -71,9 +71,10 @@ foreach (['isTableSeparator', 'splitTableRow', "block.type === 'table'", 'markdo
     $assert(str_contains($markdown, $needle), 'Markdown 表格渲染缺少：' . $needle);
 }
 $blockRenderer = $read($repo . '/uni-app/src/addon/hsx_ai/components/AiBlockRenderer.vue');
-foreach (['AiTableBlock', 'AiChartBlock', 'const renderers'] as $needle) {
+foreach (['AiTableBlock', 'AiChartBlock', "block.type === 'table'", "block.type === 'chart'"] as $needle) {
     $assert(str_contains($blockRenderer, $needle), '通用 Block 渲染器缺少：' . $needle);
 }
+$assert(!str_contains($blockRenderer, '<component :is='), 'uni-app Block 渲染器不能使用小程序不支持的动态组件');
 $trend = $read($repo . '/uni-app/src/addon/hsx_ai/components/AiPriceTrend.vue');
 foreach (['@qiun/ucharts', "type: 'line'", '固定7天', 'selected_grade'] as $needle) {
     $assert(str_contains($trend, $needle), '七天行情图缺少：' . $needle);

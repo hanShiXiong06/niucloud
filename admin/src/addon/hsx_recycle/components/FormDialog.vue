@@ -7,7 +7,7 @@
     :top="top"
     align-center
     class="rc-form-dialog hsx-premium-overlay"
-    @update:model-value="(v: boolean) => emit('update:visible', v)"
+    @update:model-value="v => emit('update:visible', v)"
     @closed="emit('closed')"
   >
     <template #header>
@@ -87,7 +87,12 @@ const emit = defineEmits<{
   closed: []
 }>()
 
-const WIDTHS: Record<string, string> = { sm: '480px', md: '720px', lg: '1040px', xl: '1160px' }
+const WIDTHS: Record<string, string> = {
+  sm: 'min(480px, calc(100vw - 32px))',
+  md: 'min(720px, calc(100vw - 32px))',
+  lg: 'min(1040px, calc(100vw - 32px))',
+  xl: 'min(1160px, calc(100vw - 32px))'
+}
 const resolvedWidth = computed(() => WIDTHS[props.width] || props.width)
 
 const onCancel = () => {
@@ -99,6 +104,7 @@ const onCancel = () => {
 <style lang="scss">
 /* 非 scoped：统一覆盖 el-dialog 内部结构。用 .rc-form-dialog 作用域，避免影响其它弹窗 */
 .rc-form-dialog {
+  max-width: calc(100vw - 32px);
   border-radius: 14px !important;
   overflow: hidden;
 
@@ -134,6 +140,15 @@ const onCancel = () => {
     padding: 14px 22px;
     border-top: 1px solid var(--el-border-color-lighter);
     background: var(--el-fill-color-blank);
+  }
+}
+
+/* 1920×1080 在系统 150% 缩放下约等于 1280 CSS 像素，按紧凑屏处理。 */
+@media (max-width: 1366px) {
+  .rc-form-dialog {
+    .el-dialog__header { padding: 15px 18px; }
+    &__body { padding: 16px 18px; max-height: 72vh; }
+    &__footer { padding: 12px 18px; }
   }
 }
 </style>

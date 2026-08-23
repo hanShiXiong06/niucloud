@@ -317,6 +317,7 @@ final class ErpSchema
             'erp_warehouse_location' => [
                 'manager_uid' => "`manager_uid` int NOT NULL DEFAULT 0 COMMENT '库位负责人UID，0表示继承仓库负责人' AFTER `location_code`",
                 'manager_name' => "`manager_name` varchar(60) NOT NULL DEFAULT '' COMMENT '库位负责人名称快照' AFTER `manager_uid`",
+                'is_default' => "`is_default` tinyint(1) NOT NULL DEFAULT 0 COMMENT '所属仓库默认入库库位' AFTER `status`",
             ],
             'erp_purchase_order' => [
                 'request_id' => "`request_id` varchar(80) DEFAULT NULL COMMENT '客户端幂等请求ID' AFTER `site_id`",
@@ -600,6 +601,21 @@ final class ErpSchema
             'quantity',
             'decimal(14,3)',
             "`quantity` decimal(14,3) NOT NULL DEFAULT 1.000 COMMENT '销售数量'"
+        );
+        // 商城交接会记录诸如 in_stock/pending_shop 的库存/渠道组合状态。
+        // 旧版 varchar(20) 无法容纳完整值，会在交接或完成上架时分别触发
+        // after_status / before_status 数据过长，必须保留完整审计状态而非截断。
+        self::ensureColumnType(
+            $prefix . 'erp_asset_ledger',
+            'before_status',
+            'varchar(64)',
+            "`before_status` varchar(64) NOT NULL DEFAULT '' COMMENT '变更前完整业务状态，允许库存/渠道组合状态'"
+        );
+        self::ensureColumnType(
+            $prefix . 'erp_asset_ledger',
+            'after_status',
+            'varchar(64)',
+            "`after_status` varchar(64) NOT NULL DEFAULT '' COMMENT '变更后完整业务状态，允许库存/渠道组合状态'"
         );
 
         // 早期业务入口曾把缺省幂等键保存成空字符串，导致同站点第二次结算撞唯一索引。

@@ -14,8 +14,10 @@ use addon\hsx_recycle\app\model\order\RecycleReturnOrder;
 use addon\hsx_recycle\app\service\core\order\OrderSubmitConfigService;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleDeviceService;
 use addon\hsx_recycle\app\service\admin\stat\TaskService;
+use addon\hsx_recycle\app\service\admin\order\RecycleDeviceService as AdminRecycleDeviceService;
 use core\base\BaseApiService;
 use core\exception\ApiException;
+use core\exception\CommonException;
 use think\facade\Log;
 
 /**
@@ -151,96 +153,15 @@ class RecycleDeviceService extends BaseApiService
      */
     public function confirmPrice(int $id, bool $accept)
     {
-       
-		Log::write(sprintf('[RecycleDeviceService][confirmPrice] Start. Device ID: %d, Accept: %s, Member ID: %s, Site ID: %s', $id, $accept ? 'true' : 'false', $this->member_id, $this->site_id));
-        // 开启事务
-        $this->model->startTrans();
         try {
-            // 先检查设备是否属于当前用户
-            $device = $this->model->where([
-                ['id', '=', $id],
-                ['site_id', '=', $this->site_id]
-            ])->with(['order' => function($query) {
-                $query->where('member_id', $this->member_id);
-            }])->findOrEmpty(); // Use findOrEmpty to allow checking before throwing exception
-
-            if ($device->isEmpty() || empty($device['order'])) {
-                Log::write(sprintf('[RecycleDeviceService][confirmPrice] Device not found or order not associated for current member. Device ID: %d', $id));
-                $this->model->rollback(); // Rollback if device not found
-                throw new ApiException('设备不存在或不属于当前用户订单');
-            }
-			
-			$device_data_for_log = $device->toArray();
-            $order_id = $device_data_for_log['order_id']; // Get order_id after ensuring device is found
-            $old_status = $device_data_for_log['status']; // Get old status before update
-            Log::write(sprintf('[RecycleDeviceService][confirmPrice] Device found. Device ID: %d, Order ID: %d, Old Status: %d', $device_data_for_log['id'], $order_id, $old_status));
-
-            if (!$this->isDevicePriced($device_data_for_log)) {
-                throw new ApiException('商家尚未完成定价，请等待最终报价后再操作');
-            }
-
-            // 确认价格，更新设备状态 (core_service handles the actual status update)
-            $this->core_service->confirmPrice($id, $accept);
-            Log::write(sprintf('[RecycleDeviceService][confirmPrice] core_service->confirmPrice called for Device ID: %d, Accept: %s', $id, $accept ? 'true' : 'false'));
-
-            // --- Add Device Log Record --- 
-            $new_status = 0; // Initialize
-            $action_text = '';
-            $remark_text = '';
-
-            if ($accept) {
-                $new_status = RecycleOrderDict::DEVICE_STATUS_RECYCLED; // Assuming status 5 for accepted price
-                $action_text = '用户接受报价';
-                $remark_text = '用户接受回收报价';
-            } else {
-                // IMPORTANT: Assuming status 4 (Pending Confirm) if price is rejected.
-                // Adjust if CoreRecycleDeviceService sets a different status on rejection.
-                $new_status = RecycleOrderDict::DEVICE_STATUS_PENDING_CONFIRM; 
-                $action_text = '用户拒绝报价';
-                $remark_text = '用户拒绝回收报价，等待最终处理方式确认';
-            }
-
-            if ($new_status != 0) { // Only log if a valid new status is determined
-                $log_data = [
-                    'site_id' => $this->site_id,
-                    'device_id' => $id,
-                    'order_id' => $order_id,
-                    'operator_id' => 0, // 用户端操作
-                    'operator_name' => '用户',
-                    'action' => $action_text,
-                    'old_status' => $old_status,
-                    'new_status' => $new_status,
-                    'remark' => $remark_text,
-                    'create_at' => time()
-                ];
-                $log_model = new RecycleDeviceLog();
-                $log_model->save($log_data);
-                Log::write(sprintf('[RecycleDeviceService][confirmPrice] Device log inserted for Device ID: %d. Action: %s, Old Status: %d, New Status: %d', $id, $action_text, $old_status, $new_status));
-            } else {
-                Log::write(sprintf('[RecycleDeviceService][confirmPrice] Device log skipped for Device ID: %d. Could not determine new status reliably after core_service call.', $id));
-            }
-            // --- End Add Device Log Record --- 
-
-            // 检查设备是否全部确认
-            $is_all_confirmed = $this->checkDeviceAllConfirm($order_id);
-            // var_dump(!$is_all_confirmed);
-            if ($is_all_confirmed) {
-                // 更新订单状态
-                $this->updateOrderStatus($order_id);
-            }
-
-            
-            // 提交事务
-            $this->model->commit();
-            Log::write(sprintf('[RecycleDeviceService][confirmPrice] Transaction committed for Device ID: %d, Order ID: %d', $id, $order_id));
-        } catch (ApiException $e) {
-            $this->model->rollback();
-            Log::write(sprintf('[RecycleDeviceService][confirmPrice] ApiException Caught. Transaction rolled back. Device ID: %d, Order ID: %s. Message: %s', $id, isset($order_id) ? $order_id : 'N/A', $e->getMessage()));
-            throw $e; // Re-throw the ApiException
-        } catch (\Exception $e) {
-            // 回滚事务
-            $this->model->rollback();
-            Log::write(sprintf('[RecycleDeviceService][confirmPrice] General Exception Caught. Transaction rolled back. Device ID: %d, Order ID: %s. Message: %s\nTrace: %s', $id, isset($order_id) ? $order_id : 'N/A', $e->getMessage(), $e->getTraceAsString()));
+            $this->core_service->confirmMemberPrice(
+                $id,
+                (int)$this->site_id,
+                (int)$this->member_id,
+                $accept
+            );
+            return true;
+        } catch (CommonException $e) {
             throw new ApiException($e->getMessage());
         }
     }
@@ -314,6 +235,9 @@ class RecycleDeviceService extends BaseApiService
             $this->updateOrderStatus($device['order_id']);
 
             $this->model->commit();
+            if ($is_sell) {
+                (new AdminRecycleDeviceService())->dispatchAfterRecycle([(int)$device->id]);
+            }
             try {
                 $stageKey = RecycleStageDict::stageOf($new_status);
                 if ($stageKey !== '') {
@@ -599,6 +523,7 @@ class RecycleDeviceService extends BaseApiService
 
             $this->model->commit();
             Log::write(sprintf('[RecycleDeviceService][deviceAllConfirm] Transaction committed for Device IDs: %s', implode(',', $actual_device_ids_to_update)));
+            (new AdminRecycleDeviceService())->dispatchAfterRecycle(array_map('intval', $actual_device_ids_to_update));
             return true;
         } catch (ApiException $e) {
             $this->model->rollback();

@@ -13,7 +13,7 @@
         </div>
 
         <el-alert type="info" :closable="false" show-icon class="mb-[16px]">
-            <template #title>需要企业微信自建应用，并将接收通知的员工加入应用可见范围。</template>
+            <template #title>需要企业微信自建应用；自动建客户群还需配置网页可信域名、JS-SDK 权限和客户联系使用范围。</template>
         </el-alert>
 
         <el-tabs v-model="activeTab" @tab-change="onTabChange">
@@ -41,7 +41,7 @@
                     <el-form-item v-if="config.jump_mode !== 'miniapp'" label="网页管理端地址" prop="web_base_url">
                         <div class="field-stack">
                             <el-input v-model.trim="config.web_base_url" placeholder="https://example.com" clearable />
-                            <span class="field-help">填写 PC 管理后台域名，不要追加 /site 或 /adminapp。</span>
+                            <span class="field-help">填写 PC 管理后台域名，不要追加 /site 或 /adminapp；同一域名需加入企业微信应用可信域名，供 JS-SDK 自动建群使用。</span>
                         </div>
                     </el-form-item>
                     <el-form-item v-if="config.jump_mode !== 'web'" label="管理小程序 AppID" prop="miniapp_appid">

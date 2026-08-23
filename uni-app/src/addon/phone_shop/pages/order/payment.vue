@@ -673,10 +673,6 @@ if (selectAddress) {
 // 切换配送方式
 const switchDeliveryType = async (type: string, index: number) => {
     await nextTick() // 等待 DOM 更新
-    if (!storeRef.value) {
-        // console.warn("storeRef is still undefined!");
-        return;
-    }
     // 切换配送方式时，清空顺买商品,预约自提时间
     if (createData.value.delivery.delivery_type != type && createData.value) {
         delete createData.value.impulse_buy_goods
@@ -752,6 +748,7 @@ const calculate = (params: any = {}) => {
         }
 
         createData.value.order_key = data.order_key
+        delivery_type_list.value = []
         if (orderData.value.delivery.delivery_type_list) {
             // 订单中只有一个商品时，该商品不支持的配送方式将不展示
             if(orderData.value.goods.length == 1){
@@ -764,21 +761,26 @@ const calculate = (params: any = {}) => {
                     }
                 })
                 delivery_type_list.value = Object.values(deliveryTypeListObj)
-                if(deliveryTypeArr.indexOf('express') == -1 && !calculateData.delivery.delivery_type){
-                    createData.value.delivery.delivery_type = delivery_type_list.value[0].key
-                    calculate()
-                    return false
-                }
             }else{
                 delivery_type_list.value = cloneDeep(Object.values(orderData.value.delivery.delivery_type_list))
             }
-            if (!deliveryPreferenceApplied.value && !selectAddress && delivery_type_list.value.length) {
+
+            if (delivery_type_list.value.length) {
+                const availableKeys = delivery_type_list.value.map((item: any) => String(item.key))
+                const currentType = String(createData.value.delivery.delivery_type || '')
+                const cachedType = String(uni.getStorageSync(DELIVERY_PREFERENCE_KEY) || '')
+                const calculatedType = String(data.delivery?.delivery_type || '')
+                const selectedType = [currentType, cachedType, calculatedType]
+                    .find(type => type && availableKeys.includes(type)) || availableKeys[0]
+                const selectedIndex = availableKeys.indexOf(selectedType)
+
+                activeIndex.value = selectedIndex >= 0 ? selectedIndex : 0
                 deliveryPreferenceApplied.value = true
-                const preferredType = String(uni.getStorageSync(DELIVERY_PREFERENCE_KEY) || '')
-                const preferredIndex = delivery_type_list.value.findIndex((item: any) => item.key === preferredType)
-                if (preferredIndex >= 0 && createData.value.delivery.delivery_type !== preferredType) {
-                    activeIndex.value = preferredIndex
-                    createData.value.delivery.delivery_type = preferredType
+
+                // 没有默认地址也必须先选中一种可用的配送方式，
+                // 这样页面才能展示“添加收货地址”或“门店自提”入口。
+                if (currentType !== selectedType) {
+                    createData.value.delivery.delivery_type = selectedType
                     createData.value.delivery.take_address_id = 0
                     createData.value.order_key = ''
                     calculate()
@@ -797,8 +799,10 @@ const calculate = (params: any = {}) => {
             };
         }
 
-        if (selectAddress) activeIndex.value = delivery_type_list.value.findIndex(el => el.key === orderData.value.delivery.delivery_type)
-        !createData.value.delivery.delivery_type && data.delivery.delivery_type && (createData.value.delivery.delivery_type = data.delivery.delivery_type)
+        if (selectAddress) {
+            const selectedIndex = delivery_type_list.value.findIndex((el: any) => el.key === orderData.value.delivery.delivery_type)
+            activeIndex.value = selectedIndex >= 0 ? selectedIndex : 0
+        }
 
         // 自提模式自动恢复上次门店；无历史记录时选择第一家门店。
         nextTick(() => ensurePreferredStore())
@@ -874,7 +878,9 @@ const create = () => {
     if (diyFormRef.value && !diyFormRef.value.verify()) return;
     createLoading.value = true
 
-    useSubscribeMessage().request('shop_order_pay,shop_order_delivery')
+    useSubscribeMessage().request(createData.value.payment_mode === 'offline_pending'
+        ? 'phone_shop_offline_order_status,phone_shop_order_delivery'
+        : 'shop_order_pay,shop_order_delivery')
 
     createData.value.form_data.order = {};
     createData.value.form_data.goods = {};
@@ -931,7 +937,12 @@ const verify = () => {
     let verify = true
 
     if (orderData.value.basic.has_goods_types.includes('real')) {
-        if (['express', 'local_delivery'].includes(data.delivery.delivery_type) && !orderData.value.delivery.take_address) {
+        const takeAddress = orderData.value.delivery?.take_address
+        const hasTakeAddress = Boolean(takeAddress)
+            && !Array.isArray(takeAddress)
+            && typeof takeAddress === 'object'
+            && Object.keys(takeAddress).length > 0
+        if (['express', 'local_delivery'].includes(data.delivery.delivery_type) && !hasTakeAddress) {
             uni.showToast({ title: '请选择收货地址', icon: 'none' })
             return false
         }
@@ -982,8 +993,8 @@ const toSelectAddress = () => {
     let data: any = {};
     data.delivery = createData.value.delivery.delivery_type;
     data.type = createData.value.delivery.delivery_type == 'local_delivery' ? 'location_address' : 'address';
-    data.id = orderData.value.delivery.take_address.id;
-    addressRef.value.open(data);
+    data.id = orderData.value?.delivery?.take_address?.id || 0;
+    addressRef.value?.open(data);
 }
 
 const couponList = computed(() => {

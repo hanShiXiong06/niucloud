@@ -5,9 +5,11 @@ namespace addon\hsx_recycle\app\service\core\recycle_order;
 
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
+use addon\hsx_recycle\app\model\order\RecycleDeviceLog;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
 use core\base\BaseCoreService;
 use core\exception\AdminException;
+use core\exception\CommonException;
 use think\facade\Db;
 use think\facade\Log;
 
@@ -213,54 +215,179 @@ class CoreRecycleDeviceService extends BaseCoreService
     }
 
     /**
-     * 确认价格
-     * @param int $id
-     * @param bool $accept
-     * @return void
+     * 用户确认最终回收报价。
+     *
+     * API 层只传递当前用户身份；设备归属校验、状态机、日志和订单汇总
+     * 均在 Core 的同一事务中完成。事务提交后才发布扩展事件，ERP 或其他
+     * 插件通过监听器消费，不能反向污染用户确认事实。
      */
-    public function confirmPrice(int $id, bool $accept)
+    public function confirmMemberPrice(int $id, int $siteId, int $memberId, bool $accept): array
     {
+        if ($id <= 0 || $siteId <= 0 || $memberId <= 0) {
+            throw new CommonException('确认报价参数不完整');
+        }
+
+        $result = [];
         try {
-            $device = $this->model->findOrFail($id);
-            
-            // 如果设备已经是终态（已回收或已退回），直接返回成功
-            if ($device['status'] == RecycleOrderDict::DEVICE_STATUS_RECYCLED || 
-                $device['status'] == RecycleOrderDict::DEVICE_STATUS_RETURNED) {
-                
-                // 如果当前状态与用户要求的状态一致，直接返回成功
-                $expectedStatus = $accept ? RecycleOrderDict::DEVICE_STATUS_RECYCLED : RecycleOrderDict::DEVICE_STATUS_RETURNED;
-                if ($device['status'] == $expectedStatus) {
-                    Log::info('设备已经处于目标状态，无需更新：ID=' . $id . ', 当前状态=' . $device['status']);
-                    return;
-                }
-                
-                // 如果状态不一致，但已经是终态，记录日志并继续执行（允许状态转换）
-                Log::warning('设备已处于终态但状态不一致，将进行状态转换：ID=' . $id . 
-                    ', 当前状态=' . $device['status'] . ', 目标状态=' . $expectedStatus);
-            }
-            
-            // 检查设备状态，只允许从待确认状态转换到终态
-            if ($device['status'] != RecycleOrderDict::DEVICE_STATUS_PENDING_CONFIRM &&
-                $device['status'] != RecycleOrderDict::DEVICE_STATUS_RECYCLED &&
-                $device['status'] != RecycleOrderDict::DEVICE_STATUS_RETURNED) {
-                throw new AdminException('设备状态不正确，只有待确认的设备才能进行确认操作');
+            Db::startTrans();
+
+            $device = RecycleDevice::where([
+                ['id', '=', $id],
+                ['site_id', '=', $siteId],
+            ])->lock(true)->findOrEmpty();
+            if ($device->isEmpty()) {
+                throw new CommonException('设备不存在或不属于当前站点');
             }
 
-            // 更新设备状态
+            $order = RecycleOrder::where([
+                ['id', '=', (int)$device->order_id],
+                ['site_id', '=', $siteId],
+                ['member_id', '=', $memberId],
+            ])->lock(true)->findOrEmpty();
+            if ($order->isEmpty()) {
+                throw new CommonException('设备不存在或不属于当前用户订单');
+            }
+            if ((float)($device->final_price ?? 0) <= 0) {
+                throw new CommonException('商家尚未完成定价，请等待最终报价后再操作');
+            }
+
+            $oldStatus = (int)$device->status;
+            $targetStatus = $accept
+                ? RecycleOrderDict::DEVICE_STATUS_RECYCLED
+                : RecycleOrderDict::DEVICE_STATUS_RETURNED;
+
+            // 同一请求重复提交只返回既有结果，不重复写日志、不重复发布下游事实。
+            if ($oldStatus === $targetStatus) {
+                Db::commit();
+                return [
+                    'success' => true,
+                    'changed' => false,
+                    'device_id' => $id,
+                    'order_id' => (int)$order->id,
+                    'status' => $targetStatus,
+                    'accepted' => $accept,
+                ];
+            }
+            if (in_array($oldStatus, [
+                RecycleOrderDict::DEVICE_STATUS_RECYCLED,
+                RecycleOrderDict::DEVICE_STATUS_RETURNED,
+                RecycleOrderDict::DEVICE_STATUS_CONSIGNED,
+            ], true)) {
+                throw new CommonException('设备已完成处置，不能重复更改确认结果');
+            }
+            if ($oldStatus !== RecycleOrderDict::DEVICE_STATUS_PENDING_CONFIRM) {
+                throw new CommonException('设备当前不是待确认状态，不能确认报价');
+            }
+
+            $now = time();
+            $action = $accept ? '用户接受报价' : '用户拒绝报价';
+            $remark = $accept ? '用户接受回收报价' : '用户拒绝回收报价';
             $device->save([
-                'status' => $accept ? 
-                    RecycleOrderDict::DEVICE_STATUS_RECYCLED : 
-                    RecycleOrderDict::DEVICE_STATUS_RETURNED,
-                'update_at' => time()
+                'status' => $targetStatus,
+                'confirm_status' => $accept
+                    ? RecycleOrderDict::CONFIRM_STATUS_CONFIRMED
+                    : RecycleOrderDict::CONFIRM_STATUS_REJECTED,
+                'confirm_time' => $now,
+                'confirm_member_id' => $memberId,
+                'confirm_remark' => $remark,
+                'update_at' => $now,
             ]);
-            
-            Log::info('设备状态更新成功：ID=' . $id . ', 新状态=' . ($accept ? 
-                RecycleOrderDict::DEVICE_STATUS_RECYCLED : 
-                RecycleOrderDict::DEVICE_STATUS_RETURNED));
-                
-        } catch (\Exception $e) {
-            Log::error('确认价格失败：' . $e->getMessage());
-            throw new AdminException($e->getMessage());
+            RecycleDeviceLog::create([
+                'site_id' => $siteId,
+                'device_id' => $id,
+                'order_id' => (int)$order->id,
+                'operator_id' => 0,
+                'operator_name' => '用户',
+                'action' => $action,
+                'old_status' => $oldStatus,
+                'new_status' => $targetStatus,
+                'remark' => $remark,
+                'create_at' => $now,
+            ]);
+
+            $this->syncConfirmedOrderStatus((int)$order->id, $siteId, $now);
+            Db::commit();
+
+            $result = [
+                'success' => true,
+                'changed' => true,
+                'device_id' => $id,
+                'order_id' => (int)$order->id,
+                'status' => $targetStatus,
+                'accepted' => $accept,
+            ];
+        } catch (CommonException $e) {
+            Db::rollback();
+            throw $e;
+        } catch (\Throwable $e) {
+            Db::rollback();
+            Log::error('用户确认回收报价失败', [
+                'site_id' => $siteId,
+                'member_id' => $memberId,
+                'device_id' => $id,
+                'message' => $e->getMessage(),
+            ]);
+            throw new CommonException($e->getMessage(), 0, $e);
         }
+
+        if ($accept && !empty($result['changed'])) {
+            try {
+                event('RecycleDeviceConfirmed', [
+                    'event_name' => 'recycle.device.confirmed.v1',
+                    'site_id' => $siteId,
+                    'member_id' => $memberId,
+                    'order_id' => (int)$result['order_id'],
+                    'device_ids' => [$id],
+                    'accepted' => true,
+                    'occurred_at' => time(),
+                ]);
+            } catch (\Throwable $e) {
+                // 下游属于可独立重试的扩展能力，不能把已提交的客户确认伪装成失败。
+                Log::error('用户确认报价后的扩展事件处理失败', [
+                    'site_id' => $siteId,
+                    'device_id' => $id,
+                    'message' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return $result;
+    }
+
+    /** 全部设备进入终态后，统一汇总回收订单状态。 */
+    private function syncConfirmedOrderStatus(int $orderId, int $siteId, int $now): void
+    {
+        $statuses = array_map('intval', RecycleDevice::where([
+            ['order_id', '=', $orderId],
+            ['site_id', '=', $siteId],
+        ])->column('status'));
+        if ($statuses === []) {
+            RecycleOrder::where([['id', '=', $orderId], ['site_id', '=', $siteId]])->update([
+                'status' => RecycleOrderDict::ORDER_STATUS_CLOSED,
+                'update_at' => $now,
+            ]);
+            return;
+        }
+
+        $terminalStatuses = [
+            RecycleOrderDict::DEVICE_STATUS_RECYCLED,
+            RecycleOrderDict::DEVICE_STATUS_RETURNED,
+            RecycleOrderDict::DEVICE_STATUS_CONSIGNED,
+        ];
+        foreach ($statuses as $status) {
+            if (!in_array($status, $terminalStatuses, true)) {
+                return;
+            }
+        }
+
+        $allReturned = count(array_filter($statuses, static fn (int $status): bool =>
+            $status === RecycleOrderDict::DEVICE_STATUS_RETURNED
+        )) === count($statuses);
+        RecycleOrder::where([['id', '=', $orderId], ['site_id', '=', $siteId]])->update([
+            'status' => $allReturned
+                ? RecycleOrderDict::ORDER_STATUS_CLOSED
+                : RecycleOrderDict::ORDER_STATUS_PENDING_PAYMENT,
+            'update_at' => $now,
+        ]);
     }
 }

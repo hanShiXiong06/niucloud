@@ -20,7 +20,7 @@ class ErpWarehouseService extends BaseAdminService
             ->select()
             ->toArray();
         $locations = ErpWarehouseLocation::where([['site_id', '=', $this->site_id]])
-            ->order('sort asc,id asc')
+            ->order('is_default desc,sort asc,id asc')
             ->select()
             ->toArray();
         $locationMap = [];
@@ -79,7 +79,8 @@ class ErpWarehouseService extends BaseAdminService
         }
 
         $now = time();
-        $isDefault = (int)($data['is_default'] ?? 0) === 1 ? 1 : 0;
+        $status = (int)($data['status'] ?? 1) === 1 ? 1 : 0;
+        $isDefault = $status === 1 && (int)($data['is_default'] ?? 0) === 1 ? 1 : 0;
         $managerUid = (int)($data['manager_uid'] ?? 0);
         if ($managerUid <= 0) {
             throw new CommonException('请选择仓库负责人');
@@ -149,6 +150,8 @@ class ErpWarehouseService extends BaseAdminService
             throw new CommonException('该仓库下库位名称已存在');
         }
         $now = time();
+        $status = (int)($data['status'] ?? 1) === 1 ? 1 : 0;
+        $isDefault = $status === 1 && (int)($data['is_default'] ?? 0) === 1 ? 1 : 0;
         $managerUid = (int)($data['manager_uid'] ?? 0);
         if ($managerUid > 0) {
             $manager = (new ErpStaffService())->resolve($managerUid, '库位负责人');
@@ -164,24 +167,33 @@ class ErpWarehouseService extends BaseAdminService
             'location_code' => trim((string)($data['location_code'] ?? '')),
             'manager_uid' => (int)$manager['uid'],
             'manager_name' => (string)$manager['name'],
-            'status' => (int)($data['status'] ?? 1) === 1 ? 1 : 0,
+            'status' => $status,
+            'is_default' => $isDefault,
             'sort' => (int)($data['sort'] ?? 0),
             'remark' => trim((string)($data['remark'] ?? '')),
             'update_at' => $now,
         ];
-        if ($id > 0) {
-            $location = $this->findLocation($id);
-            if ((int)$location->warehouse_id !== $warehouseId) {
-                throw new CommonException('库位不属于当前仓库');
+        return (int)Db::transaction(function () use ($id, $warehouseId, $values, $isDefault, $now) {
+            if ($isDefault === 1) {
+                ErpWarehouseLocation::where([
+                    ['site_id', '=', $this->site_id],
+                    ['warehouse_id', '=', $warehouseId],
+                ])->update(['is_default' => 0, 'update_at' => $now]);
             }
-            $location->save($values);
-            return $id;
-        }
-        $location = ErpWarehouseLocation::create(array_merge($values, [
-            'site_id' => $this->site_id,
-            'create_at' => $now,
-        ]));
-        return (int)$location->id;
+            if ($id > 0) {
+                $location = $this->findLocation($id);
+                if ((int)$location->warehouse_id !== $warehouseId) {
+                    throw new CommonException('库位不属于当前仓库');
+                }
+                $location->save($values);
+                return $id;
+            }
+            $location = ErpWarehouseLocation::create(array_merge($values, [
+                'site_id' => $this->site_id,
+                'create_at' => $now,
+            ]));
+            return (int)$location->id;
+        });
     }
 
     public function deleteWarehouse(int $id): bool

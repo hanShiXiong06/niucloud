@@ -42,7 +42,7 @@
             :show="actionSheetVisible"
             title="处理线下订单"
             description="客户到店后选择真实成交方式"
-            :actions="orderActions"
+            :actions="availableOrderActions"
             cancelText="取消"
             @close="actionSheetVisible = false"
             @select="selectAction"
@@ -90,10 +90,17 @@ const tabs = [
 ]
 
 const orderActions = [
-    { name: '确认线下收款', action: 'confirm_paid', color: '#16a34a', subname: '上传凭证并记录真实到账' },
+    { name: '确认线下收款', action: 'confirm_paid', color: '#16a34a', subname: '核对到账；凭证可由客户或员工上传' },
     { name: '确认客户挂账', action: 'confirm_credit', color: '#d97706', subname: '生成 ERP 应收，后续由财务跟进' },
     { name: '联系不上并关闭', action: 'close_unreachable', color: '#ef4444', subname: '填写原因并解除设备锁定' },
 ]
+const availableOrderActions = computed(() => {
+    const actions: any[] = [...orderActions]
+    if (currentOrder.value?.offline_record?.status === 'voucher_submitted') {
+        actions.push({ name: '驳回付款凭证', action: 'reject_voucher', color: '#d97706', subname: '填写原因并通知客户重新提交' })
+    }
+    return actions
+})
 
 const emptyText = computed(() => activeTab.value === 'pending' ? '暂无待处理线下订单' : activeTab.value === 'delivery' ? '暂无待交付订单' : '暂无相关订单')
 
@@ -154,8 +161,27 @@ function scanOrder() {
 function openActions(order: any) { currentOrder.value = order; actionSheetVisible.value = true }
 function selectAction(item: any) {
     actionSheetVisible.value = false
+    if (item.action === 'reject_voucher') {
+        rejectVoucher()
+        return
+    }
     processAction.value = item.action
     processVisible.value = true
+}
+
+function rejectVoucher() {
+    if (!currentOrder.value) return
+    uni.showModal({
+        title: '驳回付款凭证', content: '', editable: true,
+        placeholderText: '请输入金额不符、截图不清晰等原因', confirmText: '确认驳回',
+        success: async result => {
+            if (!result.confirm) return
+            const reason = String(result.content || '').trim()
+            if (!reason) return uni.showToast({ title: '请填写驳回原因', icon: 'none' })
+            await processOfflineOrder({ order_id: Number(currentOrder.value.order_id), action: 'reject_voucher', close_reason: reason })
+            reload()
+        }
+    })
 }
 
 function markContacted(order: any) {

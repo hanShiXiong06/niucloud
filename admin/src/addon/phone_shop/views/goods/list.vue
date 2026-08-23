@@ -59,14 +59,6 @@
                             <el-option v-for="r in stockAgeOptions" :key="r.value" :label="r.label" :value="r.value" />
                         </el-select>
                     </el-form-item>
-                    <el-form-item v-if="showSourceFilter" label="归属" prop="source">
-                        <el-select v-model="goodsTable.searchParam.source" placeholder="全部" clearable class="!w-[140px]" @change="loadGoodsList()">
-                            <el-option label="全部" value="" />
-                            <el-option label="自营" :value="SELF_SOURCE" />
-                            <el-option label="代理" :value="AGENT_SOURCE" />
-                        </el-select>
-                    </el-form-item>
-
                     <el-form-item>
                         <el-button type="primary" @click="loadGoodsList()">{{ t('search') }}</el-button>
                         <el-button @click="resetForm(searchFormRef)">{{ t('reset') }}</el-button>
@@ -75,6 +67,16 @@
             </el-card>
 
             <div class="mt-[10px]">
+
+                <div v-if="showSourceFilter" class="mb-[10px] flex flex-wrap items-center gap-[10px] rounded-[10px] border border-[#e5e7eb] bg-[#f8fafc] px-[14px] py-[11px]">
+                    <span class="text-[13px] font-medium text-[#334155]">商品归属</span>
+                    <el-radio-group v-model="goodsTable.searchParam.proxy_type" @change="loadGoodsList()">
+                        <el-radio-button label="">全部商品</el-radio-button>
+                        <el-radio-button label="self">我的自营</el-radio-button>
+                        <el-radio-button label="proxy">主站代理</el-radio-button>
+                    </el-radio-group>
+                    <span class="text-[12px] text-[#94a3b8]">自营与代理数据独立，切换只影响当前列表</span>
+                </div>
 
                 <el-tabs v-model="goodsTable.searchParam.sale_state" class="goods-tabs" @tab-click="tabHandleClick">
                     <el-tab-pane label="可售" name="sellable" />
@@ -283,7 +285,6 @@
 import { reactive, ref, nextTick, computed } from 'vue'
 import { t } from '@/lang'
 import { debounce, img, filterDigit, setTablePageStorage, getTablePageStorage } from '@/utils/common'
-import storage from '@/utils/storage'
 import { ElMessage, ElMessageBox, FormInstance } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { cloneDeep } from 'lodash-es'
@@ -304,12 +305,7 @@ const route = useRoute()
 const pageName = route.meta.title
 const repeat = ref(false)
 const goodsTransferDialogRef = ref()
-const SELF_SOURCE = '100024'
-const AGENT_SOURCE = '100005'
-const routeSource = Array.isArray(route.query.source) ? route.query.source[0] : route.query.source
-const currentSiteSource = computed(() => String(storage.get('siteId') || routeSource || ''))
-const showSourceFilter = computed(() => currentSiteSource.value === SELF_SOURCE)
-const defaultSourceFilter = () => showSourceFilter.value ? SELF_SOURCE : ''
+const showSourceFilter = computed(() => !isMasterSite.value)
 const initialSaleState = () => {
     const queryState = Array.isArray(route.query.sale_state) ? route.query.sale_state[0] : route.query.sale_state
     if (queryState !== undefined) return String(queryState)
@@ -369,7 +365,7 @@ const goodsTable = reactive({
         start_price: '',
         end_price: '',
         sale_state: initialSaleState(),
-        source: defaultSourceFilter(),
+        proxy_type: '',
         memory_group: '',
         condition_grade: '',
         device_keywords: '',
@@ -856,7 +852,7 @@ const loadGoodsList = (page: number = 1) => {
     goodsTable.page = page
 
     const searchData: any = cloneDeep(goodsTable.searchParam)
-    if (!showSourceFilter.value || !searchData.source) delete searchData.source
+    if (!showSourceFilter.value || !searchData.proxy_type) delete searchData.proxy_type
 
     getGoodsPageList({
         page: goodsTable.page,
@@ -1041,7 +1037,7 @@ const resetForm = (formEl: FormInstance | undefined) => {
     stockAgeRange.value = ''
     goodsTable.searchParam.start_stock_age = ''
     goodsTable.searchParam.end_stock_age = ''
-    goodsTable.searchParam.source = defaultSourceFilter()
+    goodsTable.searchParam.proxy_type = ''
     isReset.value = true
     loadGoodsList()
 }

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace addon\hsx_ai\app\service\admin;
 
+use addon\hsx_ai\app\service\core\AiAgentService;
 use addon\hsx_ai\app\model\AiCallLog;
 use addon\hsx_ai\app\service\core\AiConfigService;
 use addon\hsx_ai\app\service\core\AiGatewayService;
@@ -42,6 +43,11 @@ final class AiConfigAdminService extends BaseAdminService
         return $this->section($section);
     }
 
+    public function assistantInfo(): array
+    {
+        return array_merge($this->section('playground'), (new AiAdminAgentService())->info());
+    }
+
     public function testSpeech(array $input): array
     {
         return (new AiSpeechService())->test($this->site_id, $input);
@@ -79,29 +85,85 @@ final class AiConfigAdminService extends BaseAdminService
 
     public function execute(array $data): array
     {
+        $adminAssistant = (string)($data['scene_key'] ?? '') === 'business.admin_assistant';
         $data['operator'] = [
             'id' => (int)$this->uid,
             'name' => (string)$this->username,
         ];
         $data['source'] = [
             'plugin' => 'hsx_ai',
-            'type' => 'admin_test',
+            'type' => $adminAssistant ? 'admin_assistant' : 'admin_test',
             'id' => '',
         ];
+        if ($adminAssistant) {
+            $agentService = new AiAdminAgentService();
+            $agent = $agentService->resolve(trim((string)($data['agent_key'] ?? '')));
+            $data['agent_key'] = (string)$agent['key'];
+            $memory = new AiAdminAssistantConversationService();
+            $prepared = $memory->prepare($data);
+            try {
+                $result = (new AiAgentService())->execute(
+                    $this->site_id,
+                    $prepared['request'],
+                    $agentService->context(
+                        $agent,
+                        (int)$prepared['conversation']->id,
+                        (int)$prepared['message_id'],
+                        (array)($data['approved_tool_calls'] ?? []),
+                        trim((string)($data['default_tool_key'] ?? '')),
+                        (string)$prepared['prompt']
+                    )
+                );
+                $message = $memory->saveAssistant($prepared, $result);
+                return array_merge($result, $memory->resultMeta($prepared, (int)$message->id));
+            } catch (\Throwable $e) {
+                $memory->saveFailure($prepared, $e->getMessage());
+                throw $e;
+            }
+        }
         return (new AiGatewayService())->execute($this->site_id, $data, true, true);
     }
 
     public function stream(array $data, callable $emit): array
     {
+        $adminAssistant = (string)($data['scene_key'] ?? '') === 'business.admin_assistant';
         $data['operator'] = [
             'id' => (int)$this->uid,
             'name' => (string)$this->username,
         ];
         $data['source'] = [
             'plugin' => 'hsx_ai',
-            'type' => 'admin_test',
+            'type' => $adminAssistant ? 'admin_assistant' : 'admin_test',
             'id' => '',
         ];
+        if ($adminAssistant) {
+            $agentService = new AiAdminAgentService();
+            $agent = $agentService->resolve(trim((string)($data['agent_key'] ?? '')));
+            $data['agent_key'] = (string)$agent['key'];
+            $memory = new AiAdminAssistantConversationService();
+            $prepared = $memory->prepare($data);
+            $emit(array_merge(['type' => 'conversation'], $memory->resultMeta($prepared)));
+            try {
+                $result = (new AiAgentService())->stream(
+                    $this->site_id,
+                    $prepared['request'],
+                    $agentService->context(
+                        $agent,
+                        (int)$prepared['conversation']->id,
+                        (int)$prepared['message_id'],
+                        (array)($data['approved_tool_calls'] ?? []),
+                        trim((string)($data['default_tool_key'] ?? '')),
+                        (string)$prepared['prompt']
+                    ),
+                    $emit
+                );
+                $message = $memory->saveAssistant($prepared, $result);
+                return array_merge($result, $memory->resultMeta($prepared, (int)$message->id));
+            } catch (\Throwable $e) {
+                $memory->saveFailure($prepared, $e->getMessage());
+                throw $e;
+            }
+        }
         return (new AiGatewayService())->stream($this->site_id, $data, $emit, true, true);
     }
 
@@ -146,4 +208,24 @@ final class AiConfigAdminService extends BaseAdminService
             'tts' => $enabled && !empty($speech['tts_enabled']),
         ];
     }
+
+    public function assistantConversation(int $conversationId): array
+    {
+        return (new AiAdminAssistantConversationService())->detail($conversationId);
+    }
+
+    public function assistantConversations(array $where): array
+    {
+        $agent = (new AiAdminAgentService())->resolve(trim((string)($where['agent_key'] ?? '')));
+        return (new AiAdminAssistantConversationService())->recent(
+            (string)$agent['key'],
+            (int)($where['limit'] ?? 20)
+        );
+    }
+
+    public function deleteAssistantConversation(int $conversationId): bool
+    {
+        return (new AiAdminAssistantConversationService())->delete($conversationId);
+    }
+
 }

@@ -267,8 +267,22 @@ const receiver = reactive({ name: '', mobile: '' })
 const hasRealGoods = computed(() => props.orderData.basic?.has_goods_types?.includes('real'))
 const deliveryType = computed(() => props.createData.delivery?.delivery_type || '')
 const isAddressDelivery = computed(() => ['express', 'local_delivery'].includes(deliveryType.value))
-const takeAddress = computed(() => props.orderData.delivery?.take_address || null)
-const takeStore = computed(() => props.orderData.delivery?.take_store || null)
+const isValidRecord = (value: any) => {
+    return Boolean(value)
+        && !Array.isArray(value)
+        && typeof value === 'object'
+        && Object.keys(value).length > 0
+}
+// 接口在会员尚未维护地址时返回 []。空数组在 JavaScript 中为真值，
+// 若不先归一化，页面会误判为“已有地址”并渲染一块空白区域。
+const takeAddress = computed(() => {
+    const address = props.orderData.delivery?.take_address
+    return isValidRecord(address) ? address : null
+})
+const takeStore = computed(() => {
+    const store = props.orderData.delivery?.take_store
+    return isValidRecord(store) ? store : null
+})
 const addressArea = computed(() => {
     const fullAddress = String(takeAddress.value?.full_address || '')
     const detailAddress = String(takeAddress.value?.address || '')

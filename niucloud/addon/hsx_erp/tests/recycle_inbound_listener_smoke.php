@@ -19,6 +19,8 @@ class FakeRecycleInboundListener extends ErpDeviceInboundRequested
     public array $created = [];
     public array $registeredConsignments = [];
     public array $existing = [];
+    public array $sourceOrders = [];
+    public array $sourceDevices = [];
     public array $inboxes = [];
     private int $nextId = 900;
     private int $nextInboxId = 10;
@@ -36,7 +38,39 @@ class FakeRecycleInboundListener extends ErpDeviceInboundRequested
     protected function createPurchase(array $data): int
     {
         $this->created[] = $data;
-        return ++$this->nextId;
+        $orderId = (int)($data['append_order_id'] ?? 0);
+        if ($orderId <= 0) {
+            $orderId = ++$this->nextId;
+            $key = $this->sourceKey(
+                (string)($data['origin_plugin'] ?? ''),
+                (string)($data['origin_type'] ?? ''),
+                (string)($data['origin_no'] ?? '')
+            );
+            $this->sourceOrders[$key] = $orderId;
+        }
+        foreach ((array)($data['items'] ?? []) as $item) {
+            $sourceDeviceId = (string)($item['spec_json']['source_device_id'] ?? '');
+            if ($sourceDeviceId !== '' && $sourceDeviceId !== '0') $this->sourceDevices[$orderId][$sourceDeviceId] = true;
+        }
+        return $orderId;
+    }
+
+    protected function existingSourceOrderId(int $siteId, string $sourcePlugin, string $sourceType, string $sourceOrderNo): int
+    {
+        return (int)($this->sourceOrders[$this->sourceKey($sourcePlugin, $sourceType, $sourceOrderNo)] ?? 0);
+    }
+
+    protected function filterMissingSourceDevices(int $siteId, int $orderId, array $devices): array
+    {
+        return array_values(array_filter($devices, function (array $device) use ($orderId): bool {
+            $sourceDeviceId = (string)($device['source_device_id'] ?? '');
+            return $sourceDeviceId === '' || $sourceDeviceId === '0' || !isset($this->sourceDevices[$orderId][$sourceDeviceId]);
+        }));
+    }
+
+    private function sourceKey(string $plugin, string $type, string $orderNo): string
+    {
+        return $plugin . '|' . $type . '|' . $orderNo;
     }
 
     protected function registerConsignment(array $event, array $device, array $item): array
@@ -141,6 +175,10 @@ $device = static function (int $id, int $orderId, string $orderNo, array $counte
         'target_location_id' => $locationId,
         'suggested_sale_price' => 1200,
         'acquired_at' => 1783700000 + $id,
+        'pricing_snapshot' => [
+            'price_uid' => 27,
+            'price_at' => 1783690000 + $id,
+        ],
         'check_snapshot' => ['check_result' => '检测正常', 'check_remark' => '屏幕轻微划痕'],
     ];
 };
@@ -179,11 +217,13 @@ $assert(($first['party_name'] ?? '') === '回收客户甲', '采购单必须按�
 $assert(($first['member_id'] ?? 0) === 88, '回收会员ID必须传给ERP并绑定既有会员主体');
 $assert(($first['contact_mobile'] ?? '') === '13800000001', '回收会员手机号必须写入ERP主体联系方式');
 $assert(($first['paid_amount'] ?? -1) === 0, '缺少ERP账户时不得伪造已付款事实');
+$assert(($first['purchaser_uid'] ?? 0) === 27, 'ERP采购员必须取设备最终定价员，不得取确认请求的当前操作人');
 $assert(count($first['items'] ?? []) === 2, '同来源订单和往来主体的设备必须合并建单');
 $assert(($first['items'][0]['warehouse_id'] ?? 0) === 1 && ($first['items'][0]['location_id'] ?? 0) === 11, '第一台设备必须保留自己的仓库库位');
 $assert(($first['items'][1]['warehouse_id'] ?? 0) === 2 && ($first['items'][1]['location_id'] ?? 0) === 22, '第二台设备必须保留自己的仓库库位');
 $assert(($first['items'][0]['spec_json']['source_device_id'] ?? 0) === 11, '设备快照必须保留原回收设备行ID');
-$assert(strlen((string)$first['request_id']) <= 80 && str_starts_with((string)$first['request_id'], $event['event_id']), '分组request_id必须由事件ID派生且符合长度约束');
+$assert(($first['items'][0]['spec_json']['pricing_operator']['uid'] ?? 0) === 27, '设备快照必须保留该设备的最终定价员');
+$assert(strlen((string)$first['request_id']) <= 80 && str_starts_with((string)$first['request_id'], 'source-purchase:'), '采购request_id必须由来源订单稳定派生且符合长度约束');
 $assert($listener->created[0]['request_id'] !== $listener->created[1]['request_id'], '不同分组必须使用不同request_id');
 $assert(($listener->inboxes['100005:' . $event['event_id']]['status'] ?? '') === 'processed', '完整入库事件必须写入processed收件箱');
 
@@ -203,14 +243,29 @@ try {
 $assert($collisionRejected, '同event_id增加新分组必须拒绝，不能追加采购单');
 
 $duplicate = new FakeRecycleInboundListener();
-$duplicate->existing = array_combine(
-    array_column($listener->created, 'request_id'),
-    $result['order_ids']
-);
+$duplicate->sourceOrders = $listener->sourceOrders;
+$duplicate->sourceDevices = $listener->sourceDevices;
 $duplicateResult = $duplicate->handle($event);
 $assert(($duplicateResult['status'] ?? '') === 'duplicate', '相同事件重放必须返回duplicate');
 $assert(($duplicateResult['existing_count'] ?? 0) === 3, '相同事件重放必须报告三台已存在设备');
 $assert($duplicate->created === [], '相同事件重放不得再次调用采购创建');
+
+$laterDeviceEvent = $event;
+$laterDeviceEvent['event_id'] = 'recycle-inbound-100005-test-002';
+$laterDeviceEvent['occurred_at'] += 600;
+$laterDeviceEvent['devices'] = [$device(14, 101, 'RC20260711001', $counterpartyA, 1, 11)];
+$laterResult = $listener->handle($laterDeviceEvent);
+$assert(($laterResult['order_ids'][0] ?? 0) === ($result['order_ids'][0] ?? 0), '同一回收订单后续设备必须追加到原ERP采购单');
+$assert(($laterResult['created_count'] ?? 0) === 1, '后续完成的设备必须报告一台新增');
+$laterCreate = $listener->created[array_key_last($listener->created)];
+$assert((int)($laterCreate['append_order_id'] ?? 0) === (int)$result['order_ids'][0], '后续设备必须使用append_order_id追加，不得再建采购单');
+
+$laterReplay = $laterDeviceEvent;
+$laterReplay['event_id'] = 'recycle-inbound-100005-test-003';
+$createdBeforeLaterReplay = count($listener->created);
+$laterReplayResult = $listener->handle($laterReplay);
+$assert(($laterReplayResult['existing_count'] ?? 0) === 1, '同一来源设备换事event_id重放也必须被识别为已入库');
+$assert(count($listener->created) === $createdBeforeLaterReplay, '同一来源设备换事event_id重放不得重复追加');
 
 $otherTarget = $event;
 $otherTarget['targets'] = ['third_party_erp'];

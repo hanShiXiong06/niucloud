@@ -108,7 +108,7 @@
                     />
                     <el-form-item label="线下支付">
                         <el-switch v-model="formData.offline_order_enabled" :active-value="1" :inactive-value="0" />
-                        <span class="ml-[12px] text-[12px] text-[#999]">客户无需上传转账截图，提交订单后由业务员接手</span>
+                        <span class="ml-[12px] text-[12px] text-[#999]">提交订单后锁定设备，由负责人接手；付款凭证可按下方配置开放</span>
                     </el-form-item>
                     <el-form-item label="设为首选" v-if="formData.offline_order_enabled == 1">
                         <el-switch v-model="formData.offline_order_default" :active-value="1" :inactive-value="0" />
@@ -134,6 +134,23 @@
                             show-word-limit
                             class="!w-[620px]"
                         />
+                    </el-form-item>
+                    <el-form-item label="付款二维码" v-if="formData.offline_order_enabled == 1">
+                        <div>
+                            <upload-image v-model="formData.offline_payment_qrcode" :limit="1" width="120px" height="120px" image-text="上传收款码" />
+                            <div class="mt-[6px] text-[12px] text-[#999]">客户提交线下订单后可在订单详情查看并上传付款凭证；不配置时仅展示联系门店。</div>
+                        </div>
+                    </el-form-item>
+                    <el-form-item label="付款说明" v-if="formData.offline_order_enabled == 1">
+                        <el-input v-model.trim="formData.offline_payment_tip" type="textarea" :rows="2" maxlength="200" show-word-limit class="!w-[620px]" />
+                    </el-form-item>
+                    <el-form-item label="客户上传凭证" v-if="formData.offline_order_enabled == 1">
+                        <el-switch v-model="formData.offline_voucher_enabled" :active-value="1" :inactive-value="0" />
+                        <span class="ml-[12px] text-[12px] text-[#999]">开启后，客户可在订单详情上传付款记录，负责人审核后确认收款</span>
+                    </el-form-item>
+                    <el-form-item label="处理后继续锁单" v-if="formData.offline_order_enabled == 1">
+                        <el-switch v-model="formData.offline_hold_on_progress" :active-value="1" :inactive-value="0" />
+                        <span class="ml-[12px] text-[12px] text-[#999]">客户提交凭证或员工确认已联系后暂停自动关闭；建议开启</span>
                     </el-form-item>
                     <template v-if="formData.offline_order_enabled == 1">
                         <el-divider content-position="left">订单负责人</el-divider>
@@ -307,8 +324,12 @@ const formData = ref({
     offline_order_enabled: 1,
     offline_order_default: 1,
     offline_peer_enabled: 1,
-    offline_timeout_minutes: 120,
+    offline_timeout_minutes: 20,
     offline_contact_tip: '提交后将锁定设备，业务员会尽快联系您确认收款与交付方式。',
+    offline_payment_qrcode: '',
+    offline_payment_tip: '请在锁单有效期内完成转账并上传付款凭证；如已与门店人员确认，可由工作人员直接处理。',
+    offline_voucher_enabled: 1,
+    offline_hold_on_progress: 1,
     offline_handlers: [] as any[],
     offline_default_handler_uid: 0,
     offline_contact_name: '',

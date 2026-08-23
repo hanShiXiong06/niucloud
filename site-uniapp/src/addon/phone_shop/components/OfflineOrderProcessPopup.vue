@@ -53,10 +53,10 @@
                         <view class="voucher-wrap">
                             <view class="field-head">
                                 <text class="field-title">收款凭证</text>
-                                <text class="required-tag">必填</text>
+                                <text class="optional-tag">选填</text>
                             </view>
                             <upload-img v-model="form.voucher_urls" :max-count="6" :multiple="true" />
-                            <text class="field-hint">可直接拍照或上传转账截图，作为真实收款留痕。</text>
+                            <text class="field-hint">客户凭证会自动带入；未上传时工作人员也可核实到账后直接确认。</text>
                         </view>
                     </view>
                 </template>
@@ -125,7 +125,9 @@ watch(() => props.show, async visible => {
     if (!visible || !props.order) return
     form.deal_total = Number(props.order.order_money || 0).toFixed(2)
     form.capital_account_id = 0
-    form.voucher_urls = ''
+    form.voucher_urls = props.action === 'confirm_paid' && Array.isArray(props.order.offline_record?.voucher_urls)
+        ? props.order.offline_record.voucher_urls.join(',')
+        : ''
     form.remark = ''
     if (props.action !== 'confirm_paid') return
     try {
@@ -147,7 +149,6 @@ async function submit() {
     if (isSettlement.value && Number(form.deal_total) <= 0) return uni.showToast({ title: '请输入有效成交价', icon: 'none' })
     if (props.action === 'confirm_paid' && !form.capital_account_id) return uni.showToast({ title: '请选择实际到账账户', icon: 'none' })
     const vouchers = String(form.voucher_urls || '').split(',').map(item => item.trim()).filter(Boolean)
-    if (props.action === 'confirm_paid' && !vouchers.length) return uni.showToast({ title: '请上传至少一张收款凭证', icon: 'none' })
     if (props.action === 'close_unreachable' && !form.remark.trim()) return uni.showToast({ title: '请填写关闭原因', icon: 'none' })
 
     submitting.value = true

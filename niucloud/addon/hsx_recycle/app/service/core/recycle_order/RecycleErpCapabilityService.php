@@ -5,12 +5,14 @@ namespace addon\hsx_recycle\app\service\core\recycle_order;
 
 use app\service\core\site\CoreSiteService;
 use core\exception\CommonException;
+use think\facade\Log;
 
 /** 统一判断当前站点是否由 ERP 接管回收财务。 */
 class RecycleErpCapabilityService
 {
     public const ERP_ADDON = 'hsx_erp';
     public const ERP_PAYABLE_PATH = '/site/hsx_erp/payable';
+    public const ERP_PAYMENT_MANAGED_MESSAGE = '当前站点财务已由 ERP 接管，回收插件禁止本地打款，请到“二手机 ERP - 应付款”完成付款';
 
     public function isEnabled(int $siteId): bool
     {
@@ -27,6 +29,38 @@ class RecycleErpCapabilityService
     public function isPaymentManaged(int $siteId): bool
     {
         return $this->isEnabled($siteId);
+    }
+
+    /**
+     * 本地打款的后端最终闸门。
+     *
+     * 页面按钮和控制器分流只用于改善交互，不能作为财务安全边界。旧版移动端、
+     * 历史接口或内部服务直接调用最终都会经过此处。接管状态无法确认时采用
+     * fail-closed，宁可暂停本次操作，也不能冒险在回收插件和 ERP 重复记账、付款。
+     */
+    public function assertLocalPaymentAllowed(int $siteId): void
+    {
+        if ($siteId <= 0) {
+            throw new CommonException('无法确认当前站点，已为避免重复打款暂停本次操作');
+        }
+
+        try {
+            $addons = (new CoreSiteService())->getAddonKeysBySiteId($siteId);
+        } catch (\Throwable $e) {
+            Log::error('回收插件无法确认ERP财务接管状态，本地打款已安全拦截', [
+                'site_id' => $siteId,
+                'error' => $e->getMessage(),
+            ]);
+            throw new CommonException('无法确认 ERP 财务接管状态，已为避免重复打款暂停本次操作，请稍后重试');
+        }
+
+        if (in_array(self::ERP_ADDON, $addons, true)) {
+            Log::warning('回收插件本地打款已被ERP财务接管闸门拦截', [
+                'site_id' => $siteId,
+                'target' => self::ERP_PAYABLE_PATH,
+            ]);
+            throw new CommonException(self::ERP_PAYMENT_MANAGED_MESSAGE);
+        }
     }
 
     /**
@@ -121,7 +155,7 @@ class RecycleErpCapabilityService
             'payment_managed_by_erp' => $managed,
             'payment_path' => $managed ? self::ERP_PAYABLE_PATH : '',
             'message' => $managed
-                ? '当前站点财务已由 ERP 接管，请到“二手机 ERP - 应付款”完成付款。'
+                ? self::ERP_PAYMENT_MANAGED_MESSAGE
                 : '',
         ];
     }

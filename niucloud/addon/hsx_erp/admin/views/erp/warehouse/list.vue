@@ -32,6 +32,12 @@
                                         <el-tag :type="location.status === 1 ? 'success' : 'info'">{{ location.status === 1 ? '启用' : '停用' }}</el-tag>
                                     </template>
                                 </el-table-column>
+                                <el-table-column label="默认入库库位" width="125">
+                                    <template #default="{ row: location }">
+                                        <el-tag v-if="location.is_default === 1" type="success" effect="plain">默认</el-tag>
+                                        <span v-else class="text-gray-400">-</span>
+                                    </template>
+                                </el-table-column>
                                 <el-table-column prop="remark" label="备注" min-width="180" show-overflow-tooltip />
                                 <el-table-column label="操作" width="150" align="center">
                                     <template #default="{ row: location }">
@@ -138,6 +144,10 @@
                     <div class="mt-1 text-xs text-gray-400">可指定具体库管；留空时自动由所属仓库负责人承担。</div>
                 </el-form-item>
                 <el-form-item label="状态"><el-switch v-model="locationDialog.form.status" :active-value="1" :inactive-value="0" /></el-form-item>
+                <el-form-item label="默认入库库位">
+                    <el-switch v-model="locationDialog.form.is_default" :active-value="1" :inactive-value="0" />
+                    <div class="mt-1 text-xs text-gray-400">回收定价、采购入库等场景选择该仓库时，将自动带入此库位。</div>
+                </el-form-item>
                 <el-form-item label="排序"><el-input-number v-model="locationDialog.form.sort" :min="0" :controls="false" class="!w-[160px]" /></el-form-item>
                 <el-form-item label="备注"><el-input v-model.trim="locationDialog.form.remark" type="textarea" :rows="2" /></el-form-item>
             </el-form>
@@ -170,7 +180,7 @@ const locationDialog = reactive<any>({
     loading: false,
     warehouseId: 0,
     warehouseName: '',
-    form: { id: 0, location_name: '', location_code: '', manager_uid: null, status: 1, sort: 0, remark: '' }
+    form: { id: 0, location_name: '', location_code: '', manager_uid: null, status: 1, is_default: 0, sort: 0, remark: '' }
 })
 
 async function loadData() {
@@ -229,6 +239,7 @@ function openLocation(warehouse: any, row: any = {}) {
         location_code: row.location_code || '',
         manager_uid: Number(row.manager_uid || 0) || null,
         status: row.status ?? 1,
+        is_default: row.is_default ?? 0,
         sort: row.sort ?? 0,
         remark: row.remark || ''
     })

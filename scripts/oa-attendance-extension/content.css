@@ -1,0 +1,230 @@
+#hwa-oa-attendance-launcher {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 2147483000;
+  padding: 12px 18px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #16a34a, #15803d);
+  color: #fff;
+  font: 600 15px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  box-shadow: 0 10px 24px rgb(21 128 61 / 28%);
+  cursor: pointer;
+}
+
+#hwa-oa-attendance-launcher:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px rgb(21 128 61 / 34%);
+}
+
+#hwa-oa-attendance-root,
+#hwa-oa-attendance-root * {
+  box-sizing: border-box;
+}
+
+#hwa-oa-attendance-root {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  color: #1f2937;
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.hwa-oa-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgb(15 23 42 / 48%);
+  backdrop-filter: blur(2px);
+}
+
+.hwa-oa-dialog {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(620px, calc(100vw - 32px));
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  transform: translate(-50%, -50%);
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgb(15 23 42 / 28%);
+}
+
+.hwa-oa-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.hwa-oa-header p {
+  margin: 0 0 2px;
+  color: #16a34a;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.hwa-oa-header h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 22px;
+  line-height: 1.25;
+}
+
+.hwa-oa-close {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 50%;
+  background: #f3f4f6;
+  color: #4b5563;
+  font-size: 24px;
+  line-height: 30px;
+  cursor: pointer;
+}
+
+.hwa-oa-body {
+  padding: 20px 24px;
+}
+
+.hwa-oa-summary {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 9px 14px;
+  margin: 0 0 20px;
+  padding: 16px;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.hwa-oa-summary dt {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.hwa-oa-summary dd {
+  margin: 0;
+  color: #1e293b;
+  font-weight: 600;
+}
+
+.hwa-oa-field {
+  display: block;
+  margin-top: 16px;
+}
+
+.hwa-oa-field > span {
+  display: block;
+  margin-bottom: 7px;
+  color: #374151;
+  font-weight: 600;
+}
+
+.hwa-oa-control-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.hwa-oa-select {
+  display: block;
+  width: 100%;
+  height: 42px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0 10px;
+  background: #fff;
+  color: #111827;
+  font: inherit;
+  outline: none;
+}
+
+.hwa-oa-select:focus {
+  border-color: #16a34a;
+  box-shadow: 0 0 0 3px rgb(22 163 74 / 13%);
+}
+
+.hwa-oa-textarea {
+  display: block;
+  width: 100%;
+  resize: vertical;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fff;
+  color: #111827;
+  font: inherit;
+  outline: none;
+}
+
+.hwa-oa-textarea:focus {
+  border-color: #16a34a;
+  box-shadow: 0 0 0 3px rgb(22 163 74 / 13%);
+}
+
+.hwa-oa-error {
+  margin: 12px 0 0;
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.hwa-oa-hint {
+  margin: 16px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.hwa-oa-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px 20px;
+  border-top: 1px solid #eef2f7;
+}
+
+.hwa-oa-footer button {
+  min-width: 96px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font: 600 14px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  cursor: pointer;
+}
+
+.hwa-oa-cancel {
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: #374151;
+}
+
+.hwa-oa-submit {
+  border: 1px solid #16a34a;
+  background: #16a34a;
+  color: #fff;
+}
+
+.hwa-oa-submit:hover {
+  background: #15803d;
+}
+
+@media (max-width: 520px) {
+  .hwa-oa-control-row {
+    grid-template-columns: 1fr;
+  }
+
+  .hwa-oa-summary {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+
+  .hwa-oa-summary dd {
+    margin-bottom: 8px;
+  }
+}

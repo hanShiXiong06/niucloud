@@ -46,6 +46,14 @@ return [
         'GetRecyclePaymentMethods' => [ 'addon\hsx_recycle\app\listener\erp\RecyclePaymentMethodsProvider' ],
         'HsxBusinessReportMetricsRequested' => [ 'addon\hsx_recycle\app\listener\report\RecycleBusinessReportMetricsProvider' ],
         'HsxBusinessTaskValidate' => [ 'addon\hsx_recycle\app\listener\BusinessTaskValidate' ],
+        // 用户确认回收报价后的扩展点。核心确认事务已提交，ERP/财务等下游按契约消费。
+        'RecycleDeviceConfirmed' => [ 'addon\hsx_recycle\app\listener\order\RecycleDeviceConfirmedListener' ],
+        'HsxAiIntegrationRegistryRequested' => [ 'addon\hsx_recycle\app\listener\ai\AiIntegrationRegistryRequested' ],
+        'HsxAiAdminAgentRegistryRequested' => [ 'addon\hsx_recycle\app\listener\ai\AiAdminAgentRegistryRequested' ],
+        'HsxAiToolRegistryRequested' => [ 'addon\hsx_recycle\app\listener\ai\AiToolRegistryRequested' ],
+        'HsxAiToolExecuteRequested' => [ 'addon\hsx_recycle\app\listener\ai\AiToolExecuteRequested' ],
+        'HsxAiDefaultToolArgumentsRequested' => [ 'addon\hsx_recycle\app\listener\ai\AiDefaultToolArgumentsRequested' ],
+        'HsxAiToolIntentRequested' => [ 'addon\hsx_recycle\app\listener\ai\AiToolIntentRequested' ],
 
         // 下游流转回流：订阅 ERP/数据中台事件，把设备下游生命周期(已入库/转中台/已定价)镜像回回收设备
         'ErpDomainEvent' => [

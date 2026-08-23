@@ -153,6 +153,8 @@ Route::group('recycle', function () {
     Route::get('recycle_device_model_dict/options', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@options');
     Route::get('recycle_device_model_dict/children', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@children');
     Route::get('recycle_device_model_dict/tree', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@tree');
+    Route::post('recycle_device_model_dict/alias/resolve', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@resolveAlias');
+    Route::post('recycle_device_model_dict/alias/bind', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@bindAlias');
     Route::get('recycle_device_model_dict', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@lists');
     Route::post('recycle_device_model_dict/quick_add', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@quickAdd');
     Route::post('recycle_device_model_dict/ensure_child', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@ensureChild');

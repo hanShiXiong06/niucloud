@@ -218,7 +218,17 @@
                         @catalog-change="onProductCatalogChange"
                     />
                 </scroll-view>
-                <view class="action-popup__foot"><u-button type="primary" :loading="productSaving" :text="productSubmitText" @click="submitProduct" /></view>
+                <view class="action-popup__foot">
+                    <view class="action-popup__foot-button">
+                        <u-button
+                            type="primary"
+                            :loading="productBusy"
+                            :disabled="productBusy"
+                            :text="showProductHandoff ? '完成并交接' : productSubmitText"
+                            @click="submitProduct(showProductHandoff)"
+                        />
+                    </view>
+                </view>
             </view>
         </u-popup>
 
@@ -248,7 +258,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { adjustMobileStockRetailPrice, buyoutMobileConsignment, getMobileStockInfo, prepareMobileStockListingMedia, previewMobileStockTransfer, printMobileErpAssetLabel, syncMobileStockListing, transferMobileStock, updateMobileStockFlow } from '@/addon/hsx_erp/api/erp'
+import { adjustMobileStockRetailPrice, buyoutMobileConsignment, getMobileStockInfo, handoffMobileStockListing, prepareMobileStockListingMedia, previewMobileStockTransfer, printMobileErpAssetLabel, syncMobileStockListing, transferMobileStock, updateMobileStockFlow } from '@/addon/hsx_erp/api/erp'
 import { confirmErpSensitiveAction } from '@/addon/hsx_erp/hooks/useErpSensitiveConfirm'
 import { erpNetSaleAmount, erpOriginalSaleAmount, erpSaleCompensationAmount, firstPositiveErpAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
 import { erpDeviceIdentityLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
@@ -276,6 +286,7 @@ const assetId = ref(0)
 const detailLoaded = ref(false)
 const productVisible = ref(false)
 const productSaving = ref(false)
+const productHandoffSaving = ref(false)
 const productMode = ref<ErpListingAction>('one_stop')
 const productForm = ref<any>({ catalog_product_id: 0, catalog_product_name: '', category_name: '', category_path: '', brand_name: '', series_name: '', spec: '', retail_price: '', image_urls: '', video_url: '', quality_remark: '', remark_public: '', remark_internal: '' })
 const productAction = computed<ErpListingAction>(() => productMode.value)
@@ -283,6 +294,10 @@ const productFormDefinition = computed(() => erpListingFormDefinition(asset.valu
 const productPopupTitle = computed(() => productFormDefinition.value.title)
 const productPopupSubtitle = computed(() => productFormDefinition.value.description)
 const productSubmitText = computed(() => productFormDefinition.value.submit_label)
+const showProductHandoff = computed(() => productAction.value === 'media_price'
+    && asset.value?.status === 'in_stock'
+    && asset.value?.sale_target === 'mall')
+const productBusy = computed(() => productSaving.value || productHandoffSaving.value)
 const retailVisible = ref(false)
 const retailSaving = ref(false)
 const retailForm = ref({ retail_price: '', reason: '' })
@@ -292,10 +307,13 @@ const transferForm = ref({ warehouse_id: 0, warehouse_name: '', location_id: 0, 
 const buyoutVisible = ref(false)
 const buyoutPreview = ref<any>(null)
 const buyoutForm = ref({ amount: '', reason: '' })
+const autoOpenTask = ref(false)
+const taskAutoOpened = ref(false)
 let loadSeq = 0
 
 onLoad((query: any) => {
     assetId.value = Number(query?.id || 0)
+    autoOpenTask.value = Number(query?.open_task || 0) === 1
     loadDetail()
 })
 
@@ -324,6 +342,10 @@ async function loadDetail(options: { silent?: boolean } = {}) {
         stockCapabilities.value = data.capabilities || stockCapabilities.value
         ledger.value = data.asset_ledgers || data.ledger || data.asset_ledger || []
         showAllAccountLedger.value = false
+        if (autoOpenTask.value && !taskAutoOpened.value) {
+            taskAutoOpened.value = true
+            setTimeout(() => handlePrimaryAction(), 0)
+        }
     } catch (e: any) {
         if (seq !== loadSeq) return
         const message = e?.message || e?.msg || '设备档案加载失败'
@@ -424,21 +446,74 @@ function onProductCatalogChange(payload: any) {
     productForm.value.series_name = payload?.series_name || ''
 }
 
-async function submitProduct() {
+async function submitProduct(handoffToShop = false) {
     if (!asset.value?.id) return
     const validationMessage = validateErpListingForm(productForm.value, asset.value?.listing_workspace, productAction.value)
     if (validationMessage) return uni.showToast({ title: validationMessage, icon: 'none' })
-    productSaving.value = true
+    if (productBusy.value) return
+    if (handoffToShop) productHandoffSaving.value = true
+    else productSaving.value = true
+    let res: any
     try {
         const actionRemark = `移动端${productFormDefinition.value.title}`
         const payload = erpListingFormPayload(productForm.value, asset.value?.listing_workspace, productAction.value)
         if (Object.prototype.hasOwnProperty.call(payload, 'retail_price')) payload.retail_price = Number(payload.retail_price || 0)
-        const res: any = await updateMobileStockFlow(asset.value.id, { ...payload, remark: actionRemark })
-        productVisible.value = false
+        // 对用户是“一次完成并交接”；底层仍先可靠保存，再交接商城待办，
+        // 避免交接接口异常时丢失已经录入的图片和销售价格。
+        res = await updateMobileStockFlow(asset.value.id, {
+            ...payload,
+            defer_publish: productAction.value === 'media_price' ? 1 : 0,
+            remark: actionRemark,
+        })
+    } catch (e: any) {
+        productHandoffSaving.value = false
+        uni.showToast({ title: e?.message || '保存失败', icon: 'none' })
+        return
+    } finally {
+        productSaving.value = false
+    }
+
+    if (handoffToShop) {
+        try {
+            const handoff: any = await handoffMobileStockListing(Number(asset.value.id))
+            if (handoff?.data?.ok === false) throw new Error(handoff?.data?.message || '商城交接失败')
+            productVisible.value = false
+            await new Promise<void>((resolve) => {
+                uni.showModal({
+                    title: '已交接商城资料运营',
+                    content: '当前设备尚未在商城前台上架。图片和销售价格已经交接，内存、颜色、保修及商城分类等资料由下一岗位继续完善。',
+                    showCancel: false,
+                    confirmText: '我知道了',
+                    complete: () => resolve(),
+                })
+            })
+            await reload()
+        } catch (e: any) {
+            uni.showModal({
+                title: '拍摄与定价已保存',
+                content: `商城交接未完成：${e?.message || e?.msg || '请稍后重试'}。已保存的图片和销售价格不会丢失，可在设备档案中点击“交接商城”重试。`,
+                showCancel: false,
+                confirmText: '我知道了',
+            })
+            await reload()
+        } finally {
+            productHandoffSaving.value = false
+        }
+        return
+    }
+
+    // 保存、反馈与刷新相互隔离：后两步失败不能把已落库的数据误报成“保存失败”。
+    productVisible.value = false
+    try {
         await showMobileListingFeedback(res?.data?.publish, '商品资料已保存')
+    } catch (_) {
+        uni.showToast({ title: '商品资料已保存', icon: 'success' })
+    }
+    try {
         await reload()
-    } catch (e: any) { uni.showToast({ title: e?.message || '保存失败', icon: 'none' }) }
-    finally { productSaving.value = false }
+    } catch (_) {
+        uni.showToast({ title: '保存成功，页面刷新失败，请下拉刷新', icon: 'none' })
+    }
 }
 
 function openRetail() {
@@ -549,16 +624,19 @@ const goAdjust = () => {
 const publishListing = async () => {
     if (!asset.value || syncingListing.value || (Number(asset.value.warehouse_policy?.can_list_mall || 0) !== 1 && Number(asset.value.can_handoff_shop || 0) !== 1)) return
     const confirmed = await confirmErpSensitiveAction({
-        title: Number(asset.value.can_handoff_shop || 0) === 1 ? '交接商城运营' : '上架商城',
+        title: Number(asset.value.can_handoff_shop || 0) === 1 ? '交接商城' : '上架商城',
         content: Number(asset.value.can_handoff_shop || 0) === 1
             ? `确认把「${asset.value.model || asset.value.imei || '-'}」交给商城运营完善分类、规格并上架？完成后资料会自动回写 ERP。`
             : `确认将「${asset.value.model || asset.value.imei || '-'}」直接上架商城？系统将使用当前分类、规格、图片和零售价创建一机一品商品。`,
-        confirmText: Number(asset.value.can_handoff_shop || 0) === 1 ? '确认交接' : '确认上架',
+        confirmText: Number(asset.value.can_handoff_shop || 0) === 1 ? '交接商城' : '确认上架',
     })
     if (!confirmed) return
     syncingListing.value = true
     try {
-        const res: any = await syncMobileStockListing(asset.value.id)
+        const handoffToShop = Number(asset.value.can_handoff_shop || 0) === 1
+        const res: any = handoffToShop
+            ? await handoffMobileStockListing(Number(asset.value.id))
+            : await syncMobileStockListing(Number(asset.value.id))
         if (res?.data?.ok === false) {
             uni.showToast({ title: res?.data?.message || '上架失败', icon: 'none' })
             return
@@ -776,7 +854,7 @@ function accountRemark(row: any) {
 .error-wrap { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:520rpx; padding:40rpx; box-sizing:border-box; }
 .retry-btn { margin-top:24rpx; width:180rpx; }
 .loading-wrap { display:flex; justify-content:center; align-items:center; height:400rpx; }
-.action-popup { height:78vh; display:flex; flex-direction:column; background:#fff; }.action-popup--compact { height:auto; min-height:520rpx; }.action-popup__head { display:flex; align-items:flex-start; justify-content:space-between; gap:20rpx; padding:28rpx 30rpx 20rpx; border-bottom:1rpx solid #f1f5f9; }.action-popup__title,.action-popup__sub { display:block; }.action-popup__title { color:#0f172a; font-size:32rpx; font-weight:750; }.action-popup__sub { margin-top:5rpx; color:#94a3b8; font-size:21rpx; }.action-popup__body { flex:1; min-height:0; padding:12rpx 30rpx; box-sizing:border-box; }.action-popup__foot { padding:20rpx 30rpx calc(20rpx + env(safe-area-inset-bottom)); border-top:1rpx solid #f1f5f9; }.popup-form-row { display:flex; align-items:center; gap:20rpx; min-height:96rpx; padding:0 30rpx; border-bottom:1rpx solid #f1f5f9; color:#334155; font-size:25rpx; }.action-popup__body .popup-form-row { padding:0; }
+.action-popup { height:78vh; display:flex; flex-direction:column; background:#fff; }.action-popup--compact { height:auto; min-height:520rpx; }.action-popup__head { display:flex; align-items:flex-start; justify-content:space-between; gap:20rpx; padding:28rpx 30rpx 20rpx; border-bottom:1rpx solid #f1f5f9; }.action-popup__title,.action-popup__sub { display:block; }.action-popup__title { color:#0f172a; font-size:32rpx; font-weight:750; }.action-popup__sub { margin-top:5rpx; color:#94a3b8; font-size:21rpx; }.action-popup__body { flex:1; min-height:0; padding:12rpx 30rpx; box-sizing:border-box; }.action-popup__foot { padding:20rpx 30rpx calc(20rpx + env(safe-area-inset-bottom)); border-top:1rpx solid #f1f5f9; }.action-popup__foot-button { min-width:0; width:100%; }.popup-form-row { display:flex; align-items:center; gap:20rpx; min-height:96rpx; padding:0 30rpx; border-bottom:1rpx solid #f1f5f9; color:#334155; font-size:25rpx; }.action-popup__body .popup-form-row { padding:0; }
 .popup-form-row--textarea { align-items:stretch; flex-direction:column; gap:12rpx; padding:24rpx 0 !important; }
 .video-upload-card { margin:18rpx 0; padding:22rpx; border:2rpx solid #e2e8f0; border-radius:18rpx; background:#f8fafc; }
 .video-upload-card__head { display:flex; align-items:flex-start; justify-content:space-between; gap:16rpx; margin-bottom:18rpx; }

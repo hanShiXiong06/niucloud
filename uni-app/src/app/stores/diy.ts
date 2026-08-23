@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { toRaw } from 'vue'
 import { diyRedirect, currRoute, getToken } from '@/utils/common';
 import { useLogin } from '@/hooks/useLogin';
+import { parseJsonValue } from '@/addon/phone_shop/utils/json';
 
 interface Diy {
     mode: string, // 模式：decorate 装修，为空表示正常
@@ -74,13 +75,17 @@ const useDiyStore = defineStore('diy', {
             // 监听父页面发来的消息
             window.addEventListener('message', event => {
                 try {
-                    let data = JSON.parse(event.data);
-                    this.currentIndex = data.currentIndex;
-                    this.pageMode = data.pageMode;
+                    const data = parseJsonValue<any>(event.data, null);
+                    // iframe 还会收到加载握手等其他消息，只消费装修数据。
+                    if (!data || (!Object.prototype.hasOwnProperty.call(data, 'global')
+                        && !Object.prototype.hasOwnProperty.call(data, 'value')
+                        && !Object.prototype.hasOwnProperty.call(data, 'currentIndex'))) return;
+                    if (Object.prototype.hasOwnProperty.call(data, 'currentIndex')) this.currentIndex = data.currentIndex;
+                    if (data.pageMode) this.pageMode = data.pageMode;
                     if (data.global) this.global = data.global;
-                    if (data.value) this.value = data.value;
+                    if (Array.isArray(data.value)) this.value = data.value;
 
-                    if (this.value) {
+                    if (Array.isArray(this.value)) {
                         this.value.forEach((item, index) => {
                             item.pageStyle = '';
                             item.componentIsShow = true // 是否显示

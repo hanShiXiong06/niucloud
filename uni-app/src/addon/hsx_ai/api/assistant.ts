@@ -10,6 +10,9 @@ export const archiveAiConversation = (conversationId: number) => request.post(`a
 export const chatWithAiAssistant = (data: Record<string, any>) => request.post('ai/assistant/chat', data, { showErrorMessage: false })
 export const speechToText = (filePath: string) => request.upload('ai/assistant/speech/stt', { filePath, name: 'audio' }, { showErrorMessage: false })
 export const textToSpeech = (text: string) => request.post('ai/assistant/speech/tts', { text }, { showErrorMessage: false })
+export const getProjectAiCapability = (projectId: number, groupNo = '') => request.get(`ai/project-assistant/${projectId}/capability`, { group_no: groupNo }, { showErrorMessage: false })
+export const chatWithProjectAiAssistant = (projectId: number, data: Record<string, any>) => request.post(`ai/project-assistant/${projectId}/chat`, data, { showErrorMessage: false })
+export const projectAiTextToSpeech = (projectId: number, text: string, groupNo = '') => request.post(`ai/project-assistant/${projectId}/speech/tts`, { text, group_no: groupNo }, { showErrorMessage: false })
 
 const apiUrl = (path: string) => {
     let base = String(import.meta.env.VITE_APP_BASE_URL || '').replace(/\/$/, '')
@@ -66,10 +69,10 @@ const createParser = (onEvent: (event: AiAssistantEvent) => void) => {
     }
 }
 
-export const streamAiAssistant = async (data: Record<string, any>, onEvent: (event: AiAssistantEvent) => void, signal?: AbortSignal) => {
+const streamAssistantAt = async (path: string, data: Record<string, any>, onEvent: (event: AiAssistantEvent) => void, signal?: AbortSignal) => {
     // #ifdef H5
     const parser = createParser(onEvent)
-    const response = await fetch(apiUrl('ai/assistant/stream'), { method: 'POST', headers: headers(), body: JSON.stringify(data), signal })
+    const response = await fetch(apiUrl(path), { method: 'POST', headers: headers(), body: JSON.stringify(data), signal })
     if (!response.ok || !response.body) throw new Error(`AI 流式请求失败（HTTP ${response.status}）`)
     const reader = response.body.getReader()
     const decoder = new TextDecoder('utf-8')
@@ -87,7 +90,7 @@ export const streamAiAssistant = async (data: Record<string, any>, onEvent: (eve
         const parser = createParser(onEvent)
         const decoder = typeof TextDecoder !== 'undefined' ? new TextDecoder('utf-8') : null
         const task = wx.request({
-            url: apiUrl('ai/assistant/stream'), method: 'POST', header: headers(), data, enableChunked: true,
+            url: apiUrl(path), method: 'POST', header: headers(), data, enableChunked: true,
             success: () => { try { parser.finish(); resolve() } catch (error) { reject(error) } },
             fail: reject
         } as any)
@@ -102,7 +105,7 @@ export const streamAiAssistant = async (data: Record<string, any>, onEvent: (eve
 
     // #ifdef APP-PLUS
     if (signal?.aborted) { const error = new Error('Aborted'); error.name = 'AbortError'; throw error }
-    const response: any = await chatWithAiAssistant(data)
+    const response: any = await request.post(path.replace(/\/stream$/, '/chat'), data, { showErrorMessage: false })
     const result = response?.data || {}
     if (result.resources?.length) onEvent({ type: 'resources', items: result.resources })
     if (result.blocks?.length) onEvent({ type: 'blocks', items: result.blocks })
@@ -110,3 +113,6 @@ export const streamAiAssistant = async (data: Record<string, any>, onEvent: (eve
     onEvent({ type: 'done', ...result })
     // #endif
 }
+
+export const streamAiAssistant = (data: Record<string, any>, onEvent: (event: AiAssistantEvent) => void, signal?: AbortSignal) => streamAssistantAt('ai/assistant/stream', data, onEvent, signal)
+export const streamProjectAiAssistant = (projectId: number, data: Record<string, any>, onEvent: (event: AiAssistantEvent) => void, signal?: AbortSignal) => streamAssistantAt(`ai/project-assistant/${projectId}/stream`, data, onEvent, signal)

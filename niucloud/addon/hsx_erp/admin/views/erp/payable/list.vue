@@ -119,11 +119,10 @@
                         <el-tag :type="partyStatusMeta(row).type">{{ partyStatusMeta(row).label }}</el-tag>
                     </template>
                 </el-table-column>
-                <el-table-column label="操作" fixed="right" width="220" align="center">
+                <el-table-column label="操作" fixed="right" width="180" align="center">
                     <template #default="{ row }">
                         <el-button type="primary" link @click="openItems(row)">查看明细</el-button>
-                        <el-button v-if="canConfirmPay(row)" type="primary" link @click="openPay(row)">确认付款</el-button>
-                        <el-button v-if="canConfirmPay(row)" type="success" link @click="openPartyPay(row)">整体付款</el-button>
+                        <el-button v-if="canConfirmPay(row)" type="primary" link @click="openPay(row)">打款</el-button>
                         <el-button v-if="canOffset(row)" type="warning" link @click="openOffset(row)">折账</el-button>
                     </template>
                 </el-table-column>
@@ -213,7 +212,9 @@
                         </el-table-column>
                         <el-table-column label="本次付款" width="160">
                             <template #default="{ row }">
+                                <el-tag v-if="Number(row.allocated_remain || 0) <= 0" type="info" effect="plain">已付清</el-tag>
                                 <el-input-number
+                                    v-else
                                     v-model="row.pay_amount"
                                     :disabled="!row.checked"
                                     :min="0"
@@ -237,46 +238,6 @@
             <template #footer>
                 <el-button @click="pay.visible = false">取消</el-button>
                 <el-button type="primary" :loading="pay.saving" :disabled="!canSubmitPay" @click="submitPay">确认付款并记账</el-button>
-            </template>
-        </el-dialog>
-
-        <!-- 整体付款对话框（一次性结清当前往来主体的剩余应付） -->
-        <el-dialog v-model="partyPay.visible" title="整体付款" width="480px">
-            <div v-if="partyPay.row" class="mb-4 rounded bg-gray-50 px-4 py-3 text-sm text-gray-600">
-                <div>{{ partyRoleLabel(partyPay.row, '付款对象') }}：<span class="font-medium text-gray-900">{{ partyPay.row.party_name }}</span></div>
-                <ErpFinanceSourceMeta :row="partyPay.row" class="mt-3" default-direction="expense" />
-                <div class="mt-1">剩余应付总额：<span class="font-medium text-red-600">{{ money(partyPay.row.remain_amount) }}</span></div>
-            </div>
-            <el-form label-width="100px">
-                <el-form-item label="付款金额" required>
-                    <el-input-number
-                        v-model="partyPay.form.amount"
-                        :min="0.01"
-                        :max="Number(partyPay.row?.remain_amount || 0)"
-                        :precision="2"
-                        :controls="false"
-                        class="!w-full"
-                    />
-                    <div class="mt-1 text-xs text-gray-400">默认填入全部剩余应付，可修改为部分付款</div>
-                </el-form-item>
-                <el-form-item label="付款账户" required>
-                    <el-select v-model="partyPay.form.capital_account_id" clearable class="w-full" placeholder="选择银行卡/微信/支付宝">
-                        <el-option v-for="item in accounts" :key="item.id" :label="`${item.account_name}（${money(item.balance)}）`" :value="item.id" />
-                    </el-select>
-                </el-form-item>
-                <el-form-item label="备注">
-                    <el-input v-model.trim="partyPay.form.remark" placeholder="如：整体结清本批欠款" />
-                </el-form-item>
-                <el-form-item label="付款凭证"><ErpFinanceVoucherUpload v-model="partyPay.form.voucher_urls" /></el-form-item>
-            </el-form>
-            <template #footer>
-                <el-button @click="partyPay.visible = false">取消</el-button>
-                <el-button
-                    type="primary"
-                    :loading="partyPay.saving"
-                    :disabled="!partyPay.form.amount || !partyPay.form.capital_account_id"
-                    @click="submitPartyPay"
-                >确认付款并记账</el-button>
             </template>
         </el-dialog>
 
@@ -562,7 +523,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Filter, Refresh, Search, Tickets } from '@element-plus/icons-vue'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import { getErpFinanceCategories, getErpSaleChannelOptions } from '@/addon/hsx_erp/api/config'
-import { confirmErpOffset, confirmErpPartyPayment, confirmErpPayableItemsPayment, getErpAccountLedger, getErpPayableList, getErpPayablePartyItems, getErpReceivableItems, getErpReceivableList, getErpSettlementList } from '@/addon/hsx_erp/api/erp'
+import { confirmErpOffset, confirmErpPayableItemsPayment, getErpAccountLedger, getErpPayableList, getErpPayablePartyItems, getErpReceivableItems, getErpReceivableList, getErpSettlementList } from '@/addon/hsx_erp/api/erp'
 import ErpRoleFocus from '@/addon/hsx_erp/components/ErpRoleFocus.vue'
 import { useErpPageRefresh } from '@/addon/hsx_erp/hooks/useErpPageRefresh'
 import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVoucherUpload.vue'
@@ -596,7 +557,6 @@ const items = reactive({ visible: false, loading: false, row: null as any, data:
 const ledger = reactive({ visible: false, loading: false, keyword: '', data: [] as any[], expanded: [] as Array<number | string>, page: 1, limit: 15, total: 0 })
 const offset = reactive({ visible: false, saving: false, loading: false, row: null as any, payables: [] as any[], receivables: [] as any[], form: { amount: 0, settle_diff: false, capital_account_id: 0, remark: '', voucher_urls: '' } })
 const settle = reactive({ visible: false, loading: false, keyword: '', type: '', assetId: 0, assetLabel: '', data: [] as any[], page: 1, limit: 15, total: 0 })
-const partyPay = reactive({ visible: false, saving: false, row: null as any, form: { amount: 0, capital_account_id: 0, remark: '', voucher_urls: '' } })
 
 const summary = computed(() => table.data.reduce((acc, row: any) => {
     acc.count += 1
@@ -747,8 +707,11 @@ async function openPay(row: any) {
             limit: 200
         })
         pay.items = (res?.data?.data || [])
-            .filter((item: any) => Number(item.allocated_remain || 0) > 0 && Number(item.asset_payable_id || 0) > 0)
-            .map((item: any) => ({ ...item, checked: true, pay_amount: Number(item.allocated_remain || 0) }))
+            .filter((item: any) => isNonDevicePay.value ? Number(item.payable_id || 0) > 0 : Number(item.asset_payable_id || 0) > 0)
+            .map((item: any) => {
+                const payableRemain = Number(item.allocated_remain || 0)
+                return { ...item, checked: payableRemain > 0, pay_amount: payableRemain > 0 ? payableRemain : 0 }
+            })
         if (!pay.items.length && remain(row) > 0) {
             ElMessage.warning(isNonDevicePay.value ? '当前经营应付明细已变化，请刷新后重试' : '当前应付缺少设备级账目，请用新采购开单数据验证')
         }
@@ -799,46 +762,6 @@ function syncPayAmount(row: any) {
     const remainAmount = Number(row.allocated_remain || 0)
     if (Number(row.pay_amount || 0) <= 0 || Number(row.pay_amount || 0) > remainAmount) {
         row.pay_amount = Number(remainAmount.toFixed(2))
-    }
-}
-
-function openPartyPay(row: any) {
-    partyPay.row = row
-    partyPay.form = {
-        amount: Number((row.remain_amount || 0).toFixed(2)),
-        capital_account_id: 0,
-        remark: '',
-        voucher_urls: '',
-    }
-    partyPay.visible = true
-}
-
-async function submitPartyPay() {
-    if (!partyPay.row) return
-    if (!partyPay.form.amount || partyPay.form.amount <= 0) return ElMessage.warning('请填写付款金额')
-    if (!partyPay.form.capital_account_id) return ElMessage.warning('请选择付款账户')
-    const partyAccount = accounts.value.find((item: any) => Number(item.id) === Number(partyPay.form.capital_account_id))
-    const partyPayConfirmed = await ElMessageBox.confirm(
-        `确认向「${partyPay.row.party_name || '该付款对象'}」支付当前业务批次 ${money(partyPay.form.amount)}，付款账户「${partyAccount?.account_name || '所选账户'}」。系统只核销本卡片明确列出的应付，不会跨批次猜账，确认后不能直接删除。`,
-        '确认整体付款',
-        { type: 'warning', confirmButtonText: '确认付款并记账', cancelButtonText: '返回检查' }
-    ).then(() => true).catch(() => false)
-    if (!partyPayConfirmed) return
-    partyPay.saving = true
-    try {
-        await confirmErpPartyPayment(partyPay.row.party_id, {
-            ...partyPay.form,
-            payable_ids: (partyPay.row.payable_ids || []).map(Number).filter((id: number) => id > 0),
-            source_type: partyPay.row.source_type || '',
-            purchase_order_id: Number(partyPay.row.purchase_order_id || partyPay.row.source_id || 0),
-            batch_no: partyPay.row.batch_no || partyPay.row.source_no || '',
-        })
-        ElMessage.success('整体付款已确认')
-        partyPay.visible = false
-        await loadList()
-        await loadAccounts()
-    } finally {
-        partyPay.saving = false
     }
 }
 

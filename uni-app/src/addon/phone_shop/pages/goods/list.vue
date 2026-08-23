@@ -80,6 +80,13 @@
             @subscribe="subscribeCurrentRule"
             @cancel-subscription="cancelCurrentSubscription"
         />
+        <ShareDownload
+            ref="shareDownloadRef"
+            :goods-item="forwardItem"
+            :user-id="memberStore.info?.member_id"
+            :show-trigger="false"
+            back-url="/addon/phone_shop/pages/goods/list"
+        />
 
         <mescroll-body ref="mescrollRef" :top="mescrollTop" bottom="60px" @init="mescrollInit" :down="{ use: false }" @up="getAllAppListFn">
             <view v-if="goodsList.length" class="sidebar-margin">
@@ -97,8 +104,9 @@
                             <PhoneGoodsMeta :subtitle="item.sub_title" :imei="item.goodsSku?.sku_no" />
                             <PhoneGoodsSaleState :state="item.sale_state" />
 
-                            <view class="goods-row-price flex items-baseline">
-                                <view class="flex items-baseline">
+                            <view class="goods-row-footer">
+                                <view class="goods-row-price flex items-baseline">
+                                  <view class="flex items-baseline">
                                     <view class="text-[var(--price-text-color)] price-font flex items-baseline">
                                         <text class="text-[24rpx] font-500 mr-[4rpx]">￥</text>
                                         <text class="text-[40rpx] font-500">{{ diyGoods.goodsPrice(item).toFixed(2).split('.')[0] }}</text>
@@ -113,7 +121,9 @@
 									<image v-else-if="diyGoods.priceType(item) == 'discount_price'"
 									       class="max-w-[80rpx] h-[28rpx] ml-[6rpx]" :src="img('addon/phone_shop/discount.png')"
 									       mode="heightFix" />
+                                  </view>
                                 </view>
+                                <view class="goods-row-forward" @click.stop="forwardGoods(item)">转发</view>
                             </view>
                         </view>
                     </view>
@@ -121,7 +131,7 @@
                 <template v-else>
                     <PhoneGoodsWaterfall :items="goodsList" :estimate-height="estimateGoodsCardHeight">
                         <template #default="{ item }">
-                            <PhoneGoodsWaterfallCard :item="item" @click="toDetail(item.goods_id)" />
+                            <PhoneGoodsWaterfallCard :item="item" @click="toDetail(item.goods_id)" @forward="forwardGoods(item)" />
                         </template>
                     </PhoneGoodsWaterfall>
                 </template>
@@ -134,7 +144,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, onMounted } from 'vue'
+import { computed, reactive, ref, onMounted, nextTick } from 'vue'
 import { t } from '@/locale'
 import { redirect, img, handleOnloadParams } from '@/utils/common';
 import {
@@ -158,8 +168,10 @@ import PhoneGoodsSaleState from '@/addon/phone_shop/components/PhoneGoodsSaleSta
 import PhoneGoodsCover from '@/addon/phone_shop/components/PhoneGoodsCover.vue'
 import PhoneGoodsWaterfall from '@/addon/phone_shop/components/PhoneGoodsWaterfall.vue'
 import PhoneGoodsWaterfallCard from '@/addon/phone_shop/components/PhoneGoodsWaterfallCard.vue'
+import ShareDownload from '@/addon/phone_shop/components/share-download/share-download.vue'
 import useMemberStore from '@/stores/member'
 import { useLogin } from '@/hooks/useLogin'
+import { useGoodsSubscriptionNotice } from '@/addon/phone_shop/hooks/useGoodsSubscriptionNotice'
 
 const { mescrollInit, downCallback, getMescroll } = useMescroll(onPageScroll, onReachBottom);
 const diyGoods = useGoods();
@@ -176,6 +188,9 @@ const memberStore = useMemberStore()
 const systemInfo = ref<any>(uni.getSystemInfoSync())
 const menuButtonInfo = ref<any>({})
 const showBack = ref(false)
+const shareDownloadRef = ref<any>(null)
+const forwardItem = ref<any>({})
+const { requestAuthorization: requestSubscriptionAuthorization, explainAuthorization } = useGoodsSubscriptionNotice()
 
 // #ifdef MP-WEIXIN || MP-BAIDU || MP-TOUTIAO || MP-QQ
 try {
@@ -469,11 +484,13 @@ const subscribeCategoryNode = async(node: any) => {
     const id = String(node.category_id)
     categorySubscriptionLoadingId.value = id
     try {
+        const authorization = await requestSubscriptionAuthorization()
         const res: any = await addGoodsSubscription({
             name: `分类上新 · ${node.category_name || '商品'}`,
             rule: { category_ids: [id] }
         })
         categorySubscriptionMap[id] = Number(res.data?.subscription_id || res.data || 0)
+        explainAuthorization(authorization)
     } finally {
         categorySubscriptionLoadingId.value = ''
     }
@@ -516,9 +533,11 @@ const subscribeCurrentRule = async() => {
     if (!ensureLogin() || !hasSubscriptionRule.value || subscription.loading) return
     subscription.loading = true
     try {
+        const authorization = await requestSubscriptionAuthorization()
         const res: any = await addGoodsSubscription({ rule: currentSubscriptionRule.value })
         subscription.subscribed = true
-        subscription.subscription_id = Number(res.data || 0)
+        subscription.subscription_id = Number(res.data?.subscription_id || res.data || 0)
+        explainAuthorization(authorization)
     } finally {
         subscription.loading = false
     }
@@ -625,6 +644,12 @@ const estimateGoodsCardHeight = (item: Record<string, any>) => {
 
 const toDetail = (id: string | number) => {
     redirect({ url: '/addon/phone_shop/pages/goods/detail', param: { goods_id: id }, mode: 'navigateTo' })
+}
+
+const forwardGoods = async(item: any) => {
+    forwardItem.value = item || {}
+    await nextTick()
+    await shareDownloadRef.value?.handleDownload?.()
 }
 onMounted(() => {
     setTimeout(() => {
@@ -790,8 +815,36 @@ onMounted(() => {
 }
 
 .goods-row-price {
+    min-width: 0;
     overflow: hidden;
     box-sizing: border-box;
+    flex: 1;
+}
+
+.goods-row-footer {
+    min-width: 0;
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12rpx;
+}
+
+.goods-row-forward {
+    min-width: 88rpx;
+    height: 44rpx;
+    padding: 0 18rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    border-radius: 24rpx;
+    color: #fff;
+    background: var(--primary-color);
+    font-size: 23rpx;
+    font-weight: 600;
+    line-height: 44rpx;
+    white-space: nowrap;
     flex-shrink: 0;
 }
 

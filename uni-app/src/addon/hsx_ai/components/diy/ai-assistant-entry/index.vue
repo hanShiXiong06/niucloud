@@ -13,13 +13,15 @@
             <u-icon name="arrow-right" size="13" :color="buttonTextColor" />
         </view>
     </view>
+    <AiProjectAssistantPopup v-if="assistantType === 'project_center' && projectId > 0" v-model:show="projectPopupVisible" :project-id="projectId" :group-no="groupNo" />
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { redirect } from '@/utils/common'
 import useDiyStore from '@/app/stores/diy'
-import { getAiAssistantCapability } from '@/addon/hsx_ai/api/assistant'
+import AiProjectAssistantPopup from '@/addon/hsx_ai/components/AiProjectAssistantPopup.vue'
+import { getAiAssistantCapability, getProjectAiCapability } from '@/addon/hsx_ai/api/assistant'
 
 const props = defineProps({
     component: { type: Object, default: () => ({}) },
@@ -29,6 +31,7 @@ const emit = defineEmits(['update:componentIsShow'])
 const diyStore = useDiyStore()
 const visible = ref(true)
 const voiceAvailable = ref(true)
+const projectPopupVisible = ref(false)
 
 const diyComponent = computed(() => {
     if (diyStore.mode === 'decorate') return diyStore.value[props.index] || props.component
@@ -46,6 +49,9 @@ const accentColor = computed(() => diyComponent.value.accentColor || '#2563EB')
 const titleColor = computed(() => diyComponent.value.titleColor || '#172033')
 const subtitleColor = computed(() => diyComponent.value.subtitleColor || '#667085')
 const buttonTextColor = computed(() => diyComponent.value.buttonTextColor || '#FFFFFF')
+const assistantType = computed(() => String(diyComponent.value.assistantType || 'phone_shop'))
+const projectId = computed(() => Number(diyComponent.value.projectId || 0))
+const groupNo = computed(() => String(diyComponent.value.groupNo || ''))
 
 const panelStyle = computed(() => ({ backgroundColor: panelColor.value }))
 const markStyle = computed(() => ({ backgroundColor: accentColor.value }))
@@ -56,13 +62,19 @@ const actionStyle = computed(() => ({ color: buttonTextColor.value, backgroundCo
 
 const openAssistant = () => {
     if (diyStore.mode === 'decorate') return
+    if (assistantType.value === 'project_center' && projectId.value > 0) {
+        projectPopupVisible.value = true
+        return
+    }
     redirect({ url: '/addon/hsx_ai/pages/chat/index' })
 }
 
 onMounted(async () => {
     if (diyStore.mode === 'decorate') return
     try {
-        const response: any = await getAiAssistantCapability()
+        const response: any = assistantType.value === 'project_center' && projectId.value > 0
+            ? await getProjectAiCapability(projectId.value, groupNo.value)
+            : await getAiAssistantCapability()
         const capability = response?.data || {}
         visible.value = Boolean(capability.available)
         voiceAvailable.value = Boolean(capability.voice?.stt || capability.voice?.tts)

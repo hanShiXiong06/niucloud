@@ -36,6 +36,7 @@ class ErpWarehouseOptionService extends ErpExternalContractService
                     'locations' => array_map(static fn(array $location): array => [
                         'id' => (int)$location['id'],
                         'name' => (string)$location['location_name'],
+                        'is_default' => (int)($location['is_default'] ?? 0),
                     ], array_values((array)$warehouse['locations'])),
                 ];
             }, $list),

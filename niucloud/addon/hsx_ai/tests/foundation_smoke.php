@@ -15,6 +15,7 @@ $assert(($info['version'] ?? '') === '0.3.3', '当前版本必须为0.3.3');
 
 $event = require $root . '/app/event.php';
 $assert(isset($event['listen']['HsxAiExecuteRequested']), '必须注册AI同步执行契约');
+$assert(isset($event['listen']['HsxAiAgentExecuteRequested']), '必须注册AI智能体执行契约');
 $assert(isset($event['listen']['HsxAiCapabilityRequested']), '必须注册AI能力发现契约');
 $assert(isset($event['listen']['HsxAiIntegrationAccessRequested']), '必须注册业务接入授权契约');
 $assert(isset($event['listen']['DiyComponent']), '必须注册AI装修组件');
@@ -56,12 +57,12 @@ $assert(!str_contains($gateway, 'ErpAsset::') && !str_contains($gateway, 'Recycl
 
 $routes = $read($root . '/app/adminapi/route/route.php');
 $assert(str_contains($routes, "Route::group('ai'"), 'AI后台路由必须使用ai前缀');
-foreach (["'config/model'", "'config/integration'", "'config/speech'", "'playground/config'", "'playground/speech/stt'", "'playground/speech/tts'", "'speech/test'", "'provider/test'", "'provider/models'", "'execute'", "'stream'", "'logs'"] as $needle) {
+foreach (["'config/model'", "'config/integration'", "'config/speech'", "'playground/config'", "'playground/speech/stt'", "'playground/speech/tts'", "'speech/test'", "'provider/test'", "'provider/models'", "'execute'", "'stream'", "'assistant/conversations'", "'assistant/conversation/:id'", "'logs'"] as $needle) {
     $assert(str_contains($routes, $needle), 'AI后台路由缺少：' . $needle);
 }
 $assert(!str_contains($routes, "Route::get('config',") && !str_contains($routes, "Route::post('config',"), '分菜单后不能保留可绕过权限的整页配置接口');
 $menu = $read($root . '/app/dict/menu/site.php');
-foreach (['模型与场景', '业务接入', '语音服务', '在线测试', '调用日志', 'ai/config/model', 'ai/config/integration', 'ai/config/speech', 'ai/speech/test', 'ai/playground/config', 'ai/playground/speech/stt', 'ai/playground/speech/tts', 'ai/stream'] as $needle) {
+foreach (['经营助手', 'hsx_ai_admin_assistant', 'hsx_ai/assistant', 'playground/index', '模型与场景', '业务接入', '语音服务', '在线测试', '调用日志', 'ai/config/model', 'ai/config/integration', 'ai/config/speech', 'ai/speech/test', 'ai/playground/config', 'ai/playground/speech/stt', 'ai/playground/speech/tts', 'ai/stream'] as $needle) {
     $assert(str_contains($menu, $needle), 'AI后台分菜单或权限缺少：' . $needle);
 }
 
@@ -93,6 +94,11 @@ $frontendSource = is_file($frontend) ? $read($frontend) : '';
 foreach (['模型通道', '业务场景', '业务接入', '已锁定', '语音服务', '在线测试', '流式', '首字', '调用日志'] as $needle) {
     $assert(str_contains($frontendSource, $needle), 'AI配置页面缺少：' . $needle);
 }
+$assert(str_contains($frontendSource, "section === 'assistant'") && str_contains($frontendSource, 'business.admin_assistant'), '经营助手页面必须锁定后台业务场景');
+$assert(str_contains($frontendSource, 'assistantPrompts') && str_contains($frontendSource, '当前库存情况怎么样'), '经营助手缺少快捷提问入口');
+$assert(str_contains($frontendSource, 'assistantMessages') && str_contains($frontendSource, 'assistantConversationId'), '经营助手必须提供连续对话时间线');
+$assert(str_contains($frontendSource, 'tool_results') && str_contains($frontendSource, 'tool-detail-table'), '经营助手必须展示结构化业务查询明细');
+$assert(str_contains($frontendSource, 'getAiAssistantConversation') && str_contains($frontendSource, 'sessionStorage'), '经营助手必须恢复当前管理员的持久会话');
 $assert(str_contains($frontendSource, 'recognizePlaygroundSpeech') && str_contains($frontendSource, 'synthesizePlaygroundSpeech'), '在线测试必须闭环接入语音识别和回复朗读');
 $assert(str_contains($frontendSource, 'encodeWav') && str_contains($frontendSource, '16000'), '浏览器录音必须转换为16k WAV后再识别');
 $assert(!str_contains($frontendSource, 'testForm.response_mode = scene.response_mode'), '在线测试不能把场景JSON模式强制带入普通对话');
@@ -114,7 +120,7 @@ $diyDict = $root . '/app/dict/diy/components.php';
 $diyListener = $root . '/app/listener/diy/DiyComponentListener.php';
 $assert(is_file($diyDict) && is_file($diyListener), 'AI插件缺少DIY组件字典或监听器');
 $diyDictSource = is_file($diyDict) ? $read($diyDict) : '';
-foreach (['HSX_AI_COMPONENT', 'AiAssistantEntry', 'edit-ai-assistant-entry', 'AI 选机助手'] as $needle) {
+foreach (['HSX_AI_COMPONENT', 'AiAssistantEntry', 'edit-ai-assistant-entry', 'AI 智能助手'] as $needle) {
     $assert(str_contains($diyDictSource, $needle), 'AI装修组件定义缺少：' . $needle);
 }
 $diyAdmin = $repo . '/admin/src/addon/hsx_ai/views/diy/components/edit-ai-assistant-entry.vue';
@@ -137,6 +143,9 @@ foreach (['model', 'integration', 'speech', 'playground', 'log'] as $section) {
     $assert(is_file($packagePage), '插件包缺少独立菜单页面：' . $section);
     $assert(!is_file($projectPage) || !is_file($packagePage) || hash_file('sha256', $projectPage) === hash_file('sha256', $packagePage), '独立菜单页面与插件包不一致：' . $section);
 }
+$playgroundPage = $repo . '/admin/src/addon/hsx_ai/views/playground/index.vue';
+$playgroundSource = is_file($playgroundPage) ? $read($playgroundPage) : '';
+$assert(str_contains($playgroundSource, "route.path.endsWith('/assistant')") && str_contains($playgroundSource, "'assistant' : 'playground'"), '经营助手路由必须复用在线测试页面并自动切换业务模式');
 $conversationPage = $repo . '/admin/src/addon/hsx_ai/views/conversation/index.vue';
 $packagedConversationPage = $root . '/admin/views/conversation/index.vue';
 $assert(is_file($conversationPage) && is_file($packagedConversationPage), '缺少AI用户会话管理页面');

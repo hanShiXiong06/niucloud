@@ -82,7 +82,7 @@ routers.forEach(item => {
             }
             menuData.value.push(item)
         }
-    } else if (item.meta.addon != '' && siteInfo?.apps.length == 1 && siteInfo?.apps[0].key == item.meta.addon && item.meta.show) {
+    } else if (item.meta.addon != '' && siteInfo?.apps?.length === 1 && siteInfo.apps[0]?.key == item.meta.addon && item.meta.show) {
         if (item.children) {
             item.children.forEach((citem: Record<string, any>) => {
                 citem.original_name = citem.name
@@ -114,9 +114,9 @@ routers.forEach(item => {
 })
 
 // 多应用时将应用插入菜单
-if (siteInfo?.apps.length > 1) {
+if ((siteInfo?.apps?.length ?? 0) > 1) {
     const routers:Record<string, any>[] = []
-    siteInfo?.apps.forEach((item: Record<string, any>) => {
+    siteInfo?.apps?.forEach((item: Record<string, any>) => {
         if (addonRouters[item.key]) {
             addonRouters[item.key].name = addonIndexRoute[item.key]
             routers.push(addonRouters[item.key])

@@ -4,8 +4,8 @@ declare(strict_types=1);
 namespace addon\hsx_ai\app\service\api;
 
 use addon\hsx_ai\app\service\core\AiBusinessContextService;
+use addon\hsx_ai\app\service\core\AiAgentService;
 use addon\hsx_ai\app\service\core\AiConfigService;
-use addon\hsx_ai\app\service\core\AiGatewayService;
 use addon\hsx_ai\app\service\core\AiIntegrationService;
 use addon\hsx_ai\app\service\core\AiSkillService;
 use core\base\BaseApiService;
@@ -65,7 +65,11 @@ final class AiMallAssistantService extends BaseApiService
         }
         try {
             $result = array_merge(
-                (new AiGatewayService())->execute((int)$this->site_id, $prepared['request']),
+                (new AiAgentService())->execute(
+                    (int)$this->site_id,
+                    $prepared['request'],
+                    $prepared['agent_context']
+                ),
                 ['resources' => $prepared['resources'], 'blocks' => $prepared['blocks']]
             );
             $message = $conversationService->saveAssistant(
@@ -95,7 +99,12 @@ final class AiMallAssistantService extends BaseApiService
         if ($prepared['resources'] !== []) $emit(['type' => 'resources', 'items' => $prepared['resources']]);
         if ($prepared['blocks'] !== []) $emit(['type' => 'blocks', 'items' => $prepared['blocks']]);
         try {
-            $result = (new AiGatewayService())->stream((int)$this->site_id, $prepared['request'], $emit);
+            $result = (new AiAgentService())->stream(
+                (int)$this->site_id,
+                $prepared['request'],
+                $prepared['agent_context'],
+                $emit
+            );
             $result['blocks'] = $prepared['blocks'];
             $message = $conversationService->saveAssistant(
                 $prepared['conversation'],
@@ -193,6 +202,18 @@ final class AiMallAssistantService extends BaseApiService
             'blocks' => array_slice((array)$business['blocks'], 0, 8),
             'conversation' => $conversation,
             'request_id' => $requestId,
+            'agent_context' => [
+                'scene' => self::SCENE,
+                // 身份值只从已鉴权的 BaseApiService 取得，由智能体内核统一规范化。
+                'actor' => [
+                    'type' => (int)$this->member_id > 0 ? 'member' : 'guest',
+                    'id' => (int)$this->member_id,
+                    'channel' => (string)$this->channel,
+                    'data_scope' => (int)$this->member_id > 0 ? 'self' : 'public',
+                ],
+                'conversation_id' => $conversation ? (int)$conversation->id : 0,
+                'message_id' => $userMessage ? (int)$userMessage->id : 0,
+            ],
             'request' => [
                 'request_id' => $requestId,
                 'scene_key' => self::SCENE,

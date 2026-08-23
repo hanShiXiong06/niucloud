@@ -54,6 +54,7 @@ class ErpWarehouse extends BaseAdminController
             ['location_code', ''],
             ['manager_uid', 0],
             ['status', 1],
+            ['is_default', 0],
             ['sort', 0],
             ['remark', ''],
         ]), $id));

@@ -75,7 +75,7 @@ routers.forEach(item => {
             item.name = findFirstValidRoute(item.children)
         }
         oneMenuData.value.push(item)
-    } else if (item.meta.addon != '' && siteInfo?.apps.length <= 1 && siteInfo?.apps[0].key == item.meta.addon) {
+    } else if (item.meta.addon != '' && siteInfo?.apps?.length === 1 && siteInfo.apps[0]?.key == item.meta.addon) {
         if (item.children) {
             item.children.forEach((citem: Record<string, any>) => {
                 citem.original_name = citem.name
@@ -93,9 +93,9 @@ routers.forEach(item => {
 })
 
 // 多应用时将应用插入菜单
-if (siteInfo?.apps.length > 1) {
+if ((siteInfo?.apps?.length ?? 0) > 1) {
     const routers:Record<string, any>[] = []
-    siteInfo?.apps.forEach((item: Record<string, any>) => {
+    siteInfo?.apps?.forEach((item: Record<string, any>) => {
         routers.push({
             path: addonRouters[item.key] ? addonRouters[item.key].path : '',
             meta: {
@@ -116,7 +116,7 @@ const oneMenuActive = ref(route.matched[1].name)
 
 watch(route, () => {
     // 多应用
-    if (siteInfo?.apps.length > 1) {
+    if ((siteInfo?.apps?.length ?? 0) > 1) {
         twoMenuData.value = route.matched[1].children
         oneMenuActive.value = route.matched[1].name
     } else {
@@ -124,7 +124,7 @@ watch(route, () => {
         if (route.meta.addon == '') {
             oneMenuActive.value = route.matched[1].name
             twoMenuData.value = route.matched[1].children ?? []
-        } else if (route.meta.addon && route.meta.addon != siteInfo?.apps[0].key) {
+        } else if (route.meta.addon && route.meta.addon != siteInfo?.apps?.[0]?.key) {
             oneMenuActive.value = '/site/app'
             twoMenuData.value = route.matched[1].children ?? []
         } else {

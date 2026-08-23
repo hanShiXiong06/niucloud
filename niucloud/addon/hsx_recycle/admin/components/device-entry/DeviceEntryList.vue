@@ -128,7 +128,13 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Connection } from '@element-plus/icons-vue'
 import { addOrderDevice, updateOrderDevice, deleteOrderDevice } from '@/addon/hsx_recycle/api/recycle_order'
-import { getRecycleDeviceModelDictChildren, getRecycleDeviceModelDictOptions, getRecycleDeviceModelDictTree } from '@/addon/hsx_recycle/api/recycle_device_model_dict'
+import {
+    bindRecycleDeviceModelAlias,
+    getRecycleDeviceModelDictChildren,
+    getRecycleDeviceModelDictOptions,
+    getRecycleDeviceModelDictTree,
+    resolveRecycleDeviceModelAlias
+} from '@/addon/hsx_recycle/api/recycle_device_model_dict'
 import { getCheckTemplateSchema } from '@/addon/hsx_recycle/api/check_template'
 import DeviceEntryCard from './DeviceEntryCard.vue'
 import CheckSummaryDialog from './CheckSummaryDialog.vue'
@@ -284,6 +290,7 @@ const filterModelNode = (node: any, keyword: string) => {
 }
 
 const handleModelPathChange = async (row: DeviceEntryRow, value: Array<string | number> | string | number) => {
+    const autoResolvedCategoryId = Number(row.local_model_resolved_category_id || 0)
     const path = Array.isArray(value) ? value : [value]
     const leafId = path[path.length - 1]
     const leaf = modelNodeMap.value[String(leafId)] || null
@@ -301,6 +308,9 @@ const handleModelPathChange = async (row: DeviceEntryRow, value: Array<string | 
     if (row.category_id) {
         await loadCheckTemplate(row)
         prefillSummaryFromLocal(row, row)
+        if ((row.local_model_aliases || []).length && autoResolvedCategoryId !== Number(row.category_id)) {
+            await learnLocalModelAliases(row)
+        }
     } else clearCheckTemplate(row)
 }
 
@@ -447,6 +457,7 @@ const handleQuickModelCreated = async (node: Record<string, any>) => {
     modelTreeOptions.value = []
     await loadCheckTemplate(row)
     prefillSummaryFromLocal(row, row)
+    await learnLocalModelAliases(row)
     ElMessage.success(Number(node.created || 0) === 1 ? '型号已新增并关联' : '已关联型号库中的已有型号')
 }
 
@@ -630,7 +641,11 @@ const applyLocalDevice = async (m: any) => {
     row.warranty_info = m.warranty_info
     row.battery_health = m.battery_health
     row.battery_cycle_count = m.battery_cycle_count
-    const matched = await matchModelToCategory(row, m.model_candidates || [m.model])
+    row.local_model_aliases = Array.from(new Set((m.model_candidates || [m.model])
+        .map((item: any) => String(item || '').trim())
+        .filter(Boolean)))
+    row.local_model_resolved_category_id = 0
+    const matched = await matchModelToCategory(row, row.local_model_aliases)
     prefillSummaryFromLocal(row, m)
     if (row.saved) row.dirty = true
     return { status: 'applied' as const, matched }
@@ -641,6 +656,22 @@ const matchModelToCategory = async (row: DeviceEntryRow, modelNames: string | st
         .map(item => String(item || '').trim()).filter(Boolean)))
     if (!candidates.length) return false
     try {
+        // 人工学习映射优先于字面匹配。员工纠正一次后，相同工具型号可直接回显。
+        if ((row.local_model_aliases || []).length) {
+            try {
+                const aliasRes = await resolveRecycleDeviceModelAlias(candidates)
+                const mapped = aliasRes?.data || {}
+                if (mapped.matched && mapped.node?.id) {
+                    await applyResolvedModelNode(row, mapped.node)
+                    row.local_model_resolved_category_id = Number(mapped.node.id)
+                    return true
+                }
+            } catch (error) {
+                // 映射服务异常不阻断原有精确匹配，确保录入仍可继续。
+                console.warn('读取设备型号映射失败，已回退精确匹配:', error)
+            }
+        }
+
         const norm = (s: any) => String(s || '').toLowerCase().replace(/[\s\-_\/\\.　]+/g, '')
         for (const candidate of candidates) {
             const res = await getRecycleDeviceModelDictOptions({ keyword: candidate })
@@ -653,20 +684,48 @@ const matchModelToCategory = async (row: DeviceEntryRow, modelNames: string | st
             const unique = Array.from(new Map(exact.map((node: any) => [Number(node.id), node])).values()) as any[]
             if (unique.length !== 1) continue
             const best = unique[0]
-            row.category_id = Number(best.id)
-            const full = (Array.isArray(best.category_path) && best.category_path.length)
-                ? best.category_path.map((value: any) => Number(value))
-                : [Number(best.id)]
-            row.category_path = full
-            row.model_path = full
-            row.model = String(best.node_name || row.model || '')
-            await loadCheckTemplate(row)
+            await applyResolvedModelNode(row, best)
+            row.local_model_resolved_category_id = Number(best.id)
             return true
         }
     } catch (error) {
         console.error('型号匹配分类失败:', error)
     }
     return false
+}
+
+const applyResolvedModelNode = async (row: DeviceEntryRow, node: Record<string, any>) => {
+    const categoryId = Number(node.id || 0)
+    if (!categoryId) return
+    const fullPath = (Array.isArray(node.category_path) && node.category_path.length)
+        ? node.category_path.map((value: any) => Number(value))
+        : [categoryId]
+    row.category_id = categoryId
+    row.category_path = fullPath
+    row.model_path = fullPath
+    row.model = String(node.node_name || row.model || '')
+    row.model_search_keyword = ''
+    row.model_search_empty = false
+    await loadCheckTemplate(row)
+}
+
+const learnLocalModelAliases = async (row: DeviceEntryRow) => {
+    const aliases = Array.from(new Set((row.local_model_aliases || [])
+        .map(item => String(item || '').trim())
+        .filter(Boolean)))
+    const categoryId = Number(row.category_id || 0)
+    if (!aliases.length || !categoryId || row.model_alias_learning) return
+
+    row.model_alias_learning = true
+    try {
+        await bindRecycleDeviceModelAlias({ aliases, category_id: categoryId })
+        row.local_model_resolved_category_id = categoryId
+        ElMessage.success(`已记住“${aliases[0]}”对应的标准型号，下次将自动匹配`)
+    } catch (error) {
+        console.error('保存设备型号映射失败:', error)
+    } finally {
+        row.model_alias_learning = false
+    }
 }
 
 const hasSummaryValue = (value: any): boolean => Array.isArray(value)

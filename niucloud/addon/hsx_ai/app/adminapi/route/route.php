@@ -14,6 +14,7 @@ Route::group('ai', function () {
     Route::get('config/speech', 'addon\hsx_ai\app\adminapi\controller\Config@speechInfo');
     Route::post('config/speech', 'addon\hsx_ai\app\adminapi\controller\Config@saveSpeech');
     Route::get('playground/config', 'addon\hsx_ai\app\adminapi\controller\Config@playgroundInfo');
+    Route::get('assistant/config', 'addon\hsx_ai\app\adminapi\controller\Config@assistantInfo');
     Route::post('playground/speech/stt', 'addon\hsx_ai\app\adminapi\controller\Config@playgroundSpeechToText');
     Route::post('playground/speech/tts', 'addon\hsx_ai\app\adminapi\controller\Config@playgroundTextToSpeech');
     Route::post('speech/test', 'addon\hsx_ai\app\adminapi\controller\Config@testSpeech');
@@ -21,6 +22,9 @@ Route::group('ai', function () {
     Route::post('provider/models', 'addon\hsx_ai\app\adminapi\controller\Config@syncModels');
     Route::post('execute', 'addon\hsx_ai\app\adminapi\controller\Config@execute');
     Route::post('stream', 'addon\hsx_ai\app\adminapi\controller\Config@stream');
+    Route::get('assistant/conversations', 'addon\hsx_ai\app\adminapi\controller\Config@assistantConversations');
+    Route::get('assistant/conversation/:id', 'addon\hsx_ai\app\adminapi\controller\Config@assistantConversation');
+    Route::delete('assistant/conversation/:id', 'addon\hsx_ai\app\adminapi\controller\Config@deleteAssistantConversation');
     Route::get('logs', 'addon\hsx_ai\app\adminapi\controller\Log@lists');
     Route::get('conversations', 'addon\hsx_ai\app\adminapi\controller\Conversation@lists');
     Route::get('conversations/:id', 'addon\hsx_ai\app\adminapi\controller\Conversation@detail');

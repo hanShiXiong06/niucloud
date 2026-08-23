@@ -7,6 +7,8 @@ $formContract = file_get_contents($root . '/app/support/ErpListingFormContract.p
 $configService = file_get_contents($root . '/app/service/admin/ErpConfigService.php');
 $stock = file_get_contents($root . '/app/service/admin/ErpStockService.php');
 $stockController = file_get_contents($root . '/app/adminapi/controller/ErpStock.php');
+$stockRoutes = file_get_contents($root . '/app/adminapi/route/route.php');
+$siteMenu = file_get_contents($root . '/app/dict/menu/site.php');
 $workspaceRoot = dirname(dirname(dirname($root)));
 $pcStock = file_get_contents($workspaceRoot . '/admin/src/addon/hsx_erp/views/erp/stock/list.vue');
 $packagedPcStock = file_get_contents($root . '/admin/views/erp/stock/list.vue');
@@ -22,6 +24,7 @@ $mobileStock = file_get_contents($workspaceRoot . '/site-uniapp/src/addon/hsx_er
 $mobileDetail = file_get_contents($workspaceRoot . '/site-uniapp/src/addon/hsx_erp/pages/stock/detail.vue');
 $mobilePurchase = file_get_contents($workspaceRoot . '/site-uniapp/src/addon/hsx_erp/pages/purchase/create.vue');
 $mobileForm = file_get_contents($workspaceRoot . '/site-uniapp/src/addon/hsx_erp/components/ErpListingWorkspaceForm.vue');
+$mobileScanner = file_get_contents($workspaceRoot . '/site-uniapp/src/addon/hsx_erp/components/ErpListingTaskScanner.vue');
 $listener = file_get_contents($root . '/app/listener/DeviceAssetPriceCompleted.php');
 $inboundListener = file_get_contents($root . '/app/listener/ErpDeviceInboundRequested.php');
 $purchaseService = file_get_contents($root . '/app/service/admin/ErpPurchaseService.php');
@@ -57,10 +60,17 @@ $assert(str_contains($stock, "'video_url'") && str_contains($shopPublisher, "'go
 $assert(str_contains($phoneShop, 'erp_owned_workflow'), 'phone shop must not bypass ERP-owned listing workflow');
 $assert(str_contains($stockController, "['my_task', 0]"), 'stock API must accept the current assignee filter');
 $assert(str_contains($stockController, "['workflow_action', '']"), 'stock API must accept scoped workflow actions');
+$assert(str_contains($stockController, "['defer_publish', 0]") && str_contains($stockController, 'handoffListing'), 'media-price save and shop handoff must use the guarded handoff operation');
+$assert(str_contains($stock, 'bool $forceShopCompletion = false') && str_contains($stock, '$forceShopCompletion'), 'shop handoff must be able to force a pending operations task instead of direct listing');
+$assert(str_contains($stockRoutes, 'stock/:id/handoff_listing') && str_contains($siteMenu, 'hsx_erp_stock_handoff_listing'), 'shop handoff route must be registered and permission-controlled');
 $assert(str_contains($stock, 'ErpListingFormContract::editableFields') && str_contains($stock, 'ErpListingFormContract::requiredFields'), 'stock save must filter hidden fields and validate the shared contract');
 $assert(str_contains($stock, "'a.task_assignee_uid'") && str_contains($stock, "'a.task_stage_key'"), 'stock list must query real assigned tasks');
 $assert(str_contains($pcStock, '只看我的待办') && str_contains($mobileStock, '我的待办'), 'PC and mobile inventory must expose assigned tasks');
 $assert(str_contains($pcStock, '<ErpListingWorkspaceForm') && str_contains($mobileDetail, '<ErpListingWorkspaceForm'), 'PC and mobile stock actions must reuse the shared listing form');
+$assert(str_contains($mobileStock, '<ErpListingTaskScanner') && str_contains($mobileScanner, "uni.scanCode"), 'mobile inventory must provide a reusable scanner for assigned listing tasks');
+$assert(str_contains($mobileDetail, "open_task") && str_contains($mobileDetail, 'handlePrimaryAction()'), 'scanned listing tasks must directly open the assigned operation form');
+$assert(str_contains($mobileDetail, 'handoffMobileStockListing') && str_contains($mobileDetail, '完成并交接') && str_contains($mobileDetail, 'submitProduct(showProductHandoff)') && str_contains($mobileDetail, '尚未在商城前台上架'), 'mobile media-price form must save and hand off in one action with clear non-published feedback');
+$assert(str_contains($mobileDetail, '后两步失败不能把已落库的数据误报成') && str_contains($pcStock, '反馈弹窗和列表刷新不能反向误报'), 'save success must be isolated from feedback and refresh failures');
 $assert(str_contains($pcStock, "openFlow(row, 'price')") && str_contains($mobileDetail, "openProduct('price')"), 'sales pricing role must use the scoped role form on both clients');
 $assert(str_contains($mobilePurchase, "purchaseEntryMode !== 'collaborative'") && str_contains($mobilePurchase, 'listingFieldRequired'), 'mobile purchase must hide team-only material fields and validate one-person rules');
 $assert(str_contains($pcPurchase, 'purchaseOneStop') && str_contains($pcPurchase, 'purchaseItemPayload'), 'PC purchase must switch one-person/team forms and strip hidden listing fields');

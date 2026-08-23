@@ -10,6 +10,25 @@
             </view>
         </view>
 
+        <view v-if="visible('retail_price')" class="listing-price-card">
+            <view class="listing-price-card__copy">
+                <text class="listing-price-card__title">{{ fieldLabel('销售定价', 'retail_price') }}</text>
+                <text class="listing-price-card__desc">本机对外销售价，不改变采购成本</text>
+            </view>
+            <view class="listing-price-card__editor">
+                <text class="listing-price-card__currency">¥</text>
+                <u-input
+                    :model-value="modelValue.retail_price"
+                    type="digit"
+                    placeholder="0.00"
+                    border="none"
+                    inputAlign="right"
+                    :custom-style="priceInputStyle"
+                    @update:model-value="value => updateField('retail_price', value)"
+                />
+            </view>
+        </view>
+
         <ErpCatalogProductPopup
             v-if="visible('catalog_product_id')"
             :model-value="Number(modelValue.catalog_product_id || 0)"
@@ -30,17 +49,6 @@
                 border="none"
                 inputAlign="right"
                 @update:model-value="value => updateField('spec', value)"
-            />
-        </view>
-        <view v-if="visible('retail_price')" class="listing-form-row">
-            <text class="listing-form-row__label">{{ fieldLabel('销售价格', 'retail_price') }}</text>
-            <u-input
-                :model-value="modelValue.retail_price"
-                type="number"
-                placeholder="0.00"
-                border="none"
-                inputAlign="right"
-                @update:model-value="value => updateField('retail_price', value)"
             />
         </view>
         <ErpVoucherUploader
@@ -117,6 +125,7 @@ const props = defineProps<{
 const emit = defineEmits(['update:modelValue', 'catalog-change'])
 
 const definition = computed(() => erpListingFormDefinition(props.contract, props.action))
+const priceInputStyle = { fontSize: '40rpx', fontWeight: '700', color: '#2563eb' }
 const catalogDisplayLabel = computed(() => [
     props.modelValue.category_path,
     props.modelValue.brand_name,
@@ -192,6 +201,53 @@ function onCatalogChange(payload: any) {
     color: #334155;
     font-size: 27rpx;
     font-weight: 500;
+}
+.listing-price-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24rpx;
+    margin: 20rpx 0;
+    padding: 24rpx;
+    border: 2rpx solid #bfdbfe;
+    border-radius: 20rpx;
+    background: linear-gradient(135deg, #eff6ff 0%, #f8fbff 100%);
+    box-shadow: 0 8rpx 24rpx rgba(37, 99, 235, .06);
+}
+.listing-price-card__copy {
+    min-width: 0;
+    flex: 1;
+}
+.listing-price-card__title,
+.listing-price-card__desc {
+    display: block;
+}
+.listing-price-card__title {
+    color: #0f172a;
+    font-size: 30rpx;
+    font-weight: 700;
+}
+.listing-price-card__desc {
+    margin-top: 8rpx;
+    color: #64748b;
+    font-size: 22rpx;
+    line-height: 1.45;
+}
+.listing-price-card__editor {
+    display: flex;
+    align-items: center;
+    width: 250rpx;
+    min-height: 82rpx;
+    padding: 0 20rpx;
+    border: 2rpx solid #93c5fd;
+    border-radius: 16rpx;
+    background: #fff;
+    box-sizing: border-box;
+}
+.listing-price-card__currency {
+    color: #2563eb;
+    font-size: 30rpx;
+    font-weight: 700;
 }
 .listing-video,
 .listing-textarea {

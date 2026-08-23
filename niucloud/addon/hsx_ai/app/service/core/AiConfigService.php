@@ -138,6 +138,28 @@ final class AiConfigService
                 'temperature' => 0.2,
             ], count($scenes));
         }
+        $hasProjectAssistant = count(array_filter($scenes, static fn(array $scene): bool => $scene['key'] === 'hsx_project_center.customer_assistant')) > 0;
+        if (!$hasProjectAssistant) {
+            $scenes[] = $this->normalizeScene([
+                'key' => 'hsx_project_center.customer_assistant',
+                'name' => '项目咨询助手',
+                'enabled' => 1,
+                'provider_id' => (string)$providers[0]['id'],
+                'system_prompt' => '你是当前项目的客户咨询助手。只能依据系统提供的当前项目知识回答，不能使用其他项目、商城或常识猜测业务规则。资料不足、付款到账、退款结果、审核结论等无法确认的问题，必须明确提示联系客户群内工作人员。回答使用简洁、自然的中文，先给结论，再说明依据和下一步。',
+                'temperature' => 0.1,
+            ], count($scenes));
+        }
+        $hasAdminAssistant = count(array_filter($scenes, static fn(array $scene): bool => $scene['key'] === 'business.admin_assistant')) > 0;
+        if (!$hasAdminAssistant) {
+            $scenes[] = $this->normalizeScene([
+                'key' => 'business.admin_assistant',
+                'name' => '经营管理助手',
+                'enabled' => 1,
+                'provider_id' => (string)$providers[0]['id'],
+                'system_prompt' => '你是当前站点的经营管理助手。涉及订单、设备、库存、应收应付和待办的问题，必须调用已授权工具查询实时数据。先给结论，再列关键明细；金额注明口径，时间注明范围。不得猜测数据，不得泄露当前管理员权限外的信息。工具返回了页面路径时，可在答案末尾给出可执行入口。',
+                'temperature' => 0.1,
+            ], count($scenes));
+        }
 
         $defaultProviderId = trim((string)($data['default_provider_id'] ?? ''));
         $providerIds = array_column($providers, 'id');

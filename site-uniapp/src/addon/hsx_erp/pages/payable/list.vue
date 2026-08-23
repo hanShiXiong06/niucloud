@@ -55,10 +55,7 @@
                     <view class="detail-entry" @click="openDetail(row)">查看关联设备与结算明细 <text>›</text></view>
                     <view v-if="row.finance_status !== 'settled' && Number(row.remain_amount) > 0" class="card-actions" @click.stop @tap.stop>
                         <view class="card-action-btn main">
-                            <u-button type="primary" size="small" text="逐台付款" @click.stop="openDetailPay(row)" />
-                        </view>
-                        <view class="card-action-btn">
-                            <u-button type="success" size="small" plain text="整体付款" @click.stop="openPay(row)" />
+                            <u-button type="primary" size="small" text="打款" @click.stop="openDetailPay(row)" />
                         </view>
                         <view v-if="row.can_offset" class="card-action-btn">
                             <u-button type="warning" size="small" plain text="折账" @click.stop="openOffset(row)" />
@@ -72,98 +69,7 @@
             </view>
         </z-paging>
 
-        <!-- 付款弹窗 -->
-        <u-popup :show="payVisible" mode="bottom" :safe-area-inset-bottom="true" border-radius="24" @close="payVisible = false">
-            <view v-if="payRow" class="pay-popup">
-                <view class="popup-head">
-                    <view>
-                        <text class="popup-title">确认付款</text>
-                        <text class="popup-subtitle">{{ erpPartyDisplayName(payRow) }}</text>
-                    </view>
-                    <view class="popup-close" @click="payVisible = false">
-                        <u-icon name="close" color="#64748b" size="20" />
-                    </view>
-                </view>
-
-                <scroll-view scroll-y class="popup-scroll" :show-scrollbar="true">
-
-                <view class="pay-summary">
-                    <view class="summary-main">
-                        <text class="summary-label">剩余应付</text>
-                        <text class="summary-amount">¥{{ money(payRow.remain_amount) }}</text>
-                    </view>
-                    <u-tag :text="statusLabel(payRow.finance_status)" :type="statusType(payRow.finance_status)" plain plainFill size="mini" />
-                </view>
-                <view class="popup-source-wrap"><ErpFinanceSourceSummary :row="payRow" direction="payable" /></view>
-
-                <view class="pay-form">
-                    <view class="pay-form__item">
-                        <view class="form-label-row">
-                            <text class="pay-label required">本次付款金额</text>
-                            <text class="fill-max" @click="fillPayMax">全额</text>
-                        </view>
-                        <u-input
-                            v-model="payForm.amount"
-                            type="number"
-                            :placeholder="'最多 ¥'+money(payRow.remain_amount)"
-                            :customStyle="inputStyle"
-                            @blur="capPayAmount"
-                        />
-                    </view>
-                    <view class="pay-form__item" @click="payAccountPickerVisible = true">
-                        <text class="pay-label required">付款账户</text>
-                        <view class="account-select" :class="{ 'account-select--on': payForm.capital_account_id }">
-                            <text :class="payForm.capital_account_id ? 'account-text' : 'account-placeholder'">
-                                {{ selectedPayAccountLabel || '点击选择账户' }}
-                            </text>
-                            <u-icon name="arrow-right" color="#cbd5e1" size="16" />
-                        </view>
-                    </view>
-                    <view class="pay-form__item">
-                        <text class="pay-label">备注</text>
-                        <u-input v-model="payForm.remark" placeholder="如：转账/现金/核对单号" :customStyle="inputStyle" />
-                    </view>
-                    <ErpVoucherUploader v-model="payForm.voucher_urls" @uploading="voucherUploading = $event" />
-                </view>
-                </scroll-view>
-                <view class="action-bar">
-                    <view class="action-btn action-btn--minor">
-                        <u-button @click="payVisible = false">取消</u-button>
-                    </view>
-                    <view class="action-btn action-btn--major">
-                        <u-button type="primary" :loading="paying" :disabled="!canPay" @click="submitPay">确认付款并记账</u-button>
-                    </view>
-                </view>
-            </view>
-        </u-popup>
-
-        <u-popup :show="payAccountPickerVisible" mode="bottom" :safe-area-inset-bottom="true" border-radius="24" @close="payAccountPickerVisible = false">
-            <view class="account-popup">
-                <view class="popup-head compact">
-                    <text class="popup-title">选择付款账户</text>
-                    <view class="popup-close" @click="payAccountPickerVisible = false">
-                        <u-icon name="close" color="#64748b" size="20" />
-                    </view>
-                </view>
-                <scroll-view scroll-y class="account-popup__body">
-                <u-cell-group v-if="accounts.length" :border="false">
-                    <u-cell v-for="a in accounts" :key="a.id" :title="a.account_name" :label="'余额 ¥' + money(a.balance)" @click="selectPayAccount(a)">
-                        <template #value>
-                            <u-icon
-                                v-if="Number(a.id) === Number(payForm.capital_account_id)"
-                                name="checkmark-circle-fill"
-                                color="#3b6ef5"
-                                size="20"
-                            />
-                        </template>
-                    </u-cell>
-                </u-cell-group>
-                <u-empty v-else mode="data" text="暂无可用资金账户" />
-                </scroll-view>
-            </view>
-        </u-popup>
-
-        <!-- 逐台付款弹窗（对齐PC端） -->
+        <!-- 统一打款弹窗：已付设备只读，未付设备可选 -->
         <ErpPayConfirmModal
             v-if="detailPayRow"
             v-model:show="detailPayVisible"
@@ -200,18 +106,16 @@
 import { ref, computed, onMounted } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 
-import { getMobilePayableList, confirmMobilePurchasePayment, getMobileCapitalAccounts } from '@/addon/hsx_erp/api/erp'
+import { getMobilePayableList, getMobileCapitalAccounts } from '@/addon/hsx_erp/api/erp'
 import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
 import ErpPayConfirmModal from '@/addon/hsx_erp/components/ErpPayConfirmModal.vue'
 import ErpOffsetConfirmModal from '@/addon/hsx_erp/components/ErpOffsetConfirmModal.vue'
 import ErpFilterPopup from '@/addon/hsx_erp/components/ErpFilterPopup.vue'
 import ErpFinanceSourceSummary from '@/addon/hsx_erp/components/ErpFinanceSourceSummary.vue'
-import ErpVoucherUploader from '@/addon/hsx_erp/components/ErpVoucherUploader.vue'
 import ErpQuickFilterBar from '@/addon/hsx_erp/components/ErpQuickFilterBar.vue'
 import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
 import { erpTimeLine } from '@/addon/hsx_erp/hooks/useErpTime'
-import { cloneErpSubmitSnapshot, confirmErpPopupAction } from '@/addon/hsx_erp/hooks/useErpPopupConfirm'
-import { erpFinanceSourceFilterOptions, erpFinanceSourceMeta } from '@/addon/hsx_erp/hooks/useErpFinanceSource'
+import { erpFinanceSourceFilterOptions } from '@/addon/hsx_erp/hooks/useErpFinanceSource'
 import { useErpFinanceOptions } from '@/addon/hsx_erp/hooks/useErpFinanceOptions'
 import { useErpSaleChannels } from '@/addon/hsx_erp/hooks/useErpSaleChannels'
 import { erpPartyDisplayName } from '@/addon/hsx_erp/hooks/useErpPartyText'
@@ -263,27 +167,11 @@ const onQuickFilter = ({ key, value }: { key: string; value: string | number }) 
 
 const accounts = ref<any[]>([])
 
-const payVisible = ref(false)
-const payAccountPickerVisible = ref(false)
-const paying = ref(false)
-const voucherUploading = ref(false)
-const payRow = ref<any>(null)
-const payForm = ref({ amount: 0, capital_account_id: 0, remark: '', voucher_urls: '' })
-// 逐台付款modal
+// 同一入库单只保留一个设备级打款入口。
 const detailPayVisible = ref(false)
 const detailPayRow = ref<any>(null)
 const offsetVisible = ref(false)
 const offsetRow = ref<any>(null)
-const canPay = computed(() =>
-    Number(payForm.value.amount) > 0 &&
-    Number(payForm.value.amount) <= Number(payRow.value?.remain_amount || 0) + 0.001 &&
-    payForm.value.capital_account_id > 0 && !voucherUploading.value
-)
-const selectedPayAccountLabel = computed(() => {
-    const a = accounts.value.find(a => Number(a.id) === Number(payForm.value.capital_account_id))
-    return a ? `${a.account_name}（余额 ¥${money(a.balance)}）` : ''
-})
-const inputStyle = { background: '#f8fafc', borderRadius: '8rpx', padding: '12rpx 16rpx' }
 
 onMounted(async () => {
     loadFinanceOptions().catch(() => undefined)
@@ -343,18 +231,6 @@ function dateToRange(params: Record<string, any>) {
     if (typeof params.end_at === 'string' && params.end_at) params.end_at = Math.floor(new Date(params.end_at + ' 23:59:59').getTime() / 1000)
 }
 
-function openPay(row: any) {
-    const source = erpFinanceSourceMeta(row, 'payable')
-    payRow.value = row
-    payForm.value = {
-        amount: Number(Number(row.remain_amount || 0).toFixed(2)),
-        capital_account_id: accounts.value[0]?.id || 0,
-        remark: source.business_reason,
-        voucher_urls: '',
-    }
-    payVisible.value = true
-}
-
 function openDetailPay(row: any) {
     detailPayRow.value = row
     detailPayVisible.value = true
@@ -378,79 +254,6 @@ function openOffset(row: any) {
     }
     offsetRow.value = row
     offsetVisible.value = true
-}
-
-function selectPayAccount(account: any) {
-    payForm.value.capital_account_id = Number(account.id || 0)
-    payAccountPickerVisible.value = false
-}
-
-function fillPayMax() {
-    payForm.value.amount = Number(Number(payRow.value?.remain_amount || 0).toFixed(2))
-}
-
-function capPayAmount() {
-    const max = Number(payRow.value?.remain_amount || 0)
-    const amount = Number(payForm.value.amount || 0)
-    if (amount > max) payForm.value.amount = Number(max.toFixed(2))
-    if (amount < 0) payForm.value.amount = 0
-}
-
-async function submitPay() {
-    if (!canPay.value || !payRow.value || paying.value) return
-    const account = accounts.value.find((item: any) => Number(item.id) === Number(payForm.value.capital_account_id))
-    const source = erpFinanceSourceMeta(payRow.value, 'payable')
-    const snapshot = cloneErpSubmitSnapshot({
-        partyId: Number(payRow.value.party_id || 0),
-        partyName: payRow.value.party_name || '-',
-        partyRoleLabel: source.party_role_label || '付款对象',
-        financeTypeName: source.finance_type_name,
-        sourceNo: source.source_no || '-',
-        source_type: String(payRow.value.source_type || source.biz_scene || ''),
-        purchase_order_id: Number(payRow.value.purchase_order_id || 0),
-        batch_no: String(payRow.value.batch_no || source.source_no || ''),
-        payable_ids: Array.isArray(payRow.value.payable_ids)
-            ? payRow.value.payable_ids.map(Number).filter((id: number) => id > 0)
-            : [],
-        amount: Number(payForm.value.amount),
-        capital_account_id: Number(payForm.value.capital_account_id),
-        accountName: account?.account_name || '所选账户',
-        remark: payForm.value.remark || '手机端确认付款',
-        voucher_urls: payForm.value.voucher_urls,
-    })
-    paying.value = true
-    const confirmed = await confirmErpPopupAction({
-        title: '确认付款并记账',
-        content: `${snapshot.partyRoleLabel}：${snapshot.partyName}\n业务类型：${snapshot.financeTypeName}\n来源单：${snapshot.sourceNo}\n付款金额：¥${money(snapshot.amount)}\n付款账户：${snapshot.accountName}\n确认后写入资金流水，不能直接删除。`,
-        confirmText: '确认付款',
-        closePopup: () => {
-            payAccountPickerVisible.value = false
-            payVisible.value = false
-        },
-        reopenPopup: () => { payVisible.value = true },
-    })
-    if (!confirmed) {
-        paying.value = false
-        return
-    }
-    try {
-        // 调用"整体付款"接口，自动分配到该供应商各批次欠款
-        await confirmMobilePurchasePayment(snapshot.partyId, {
-            amount: snapshot.amount,
-            capital_account_id: snapshot.capital_account_id,
-            remark: snapshot.remark,
-            payable_ids: snapshot.payable_ids,
-            source_type: snapshot.source_type,
-            purchase_order_id: snapshot.purchase_order_id,
-            batch_no: snapshot.batch_no,
-            voucher_urls: snapshot.voucher_urls,
-        })
-        uni.showToast({ title: '付款已确认', icon: 'success' })
-        await refreshAfterSettlement()
-    } catch (e: any) {
-        uni.showToast({ title: e?.message || '付款失败，请重试', icon: 'none' })
-        payVisible.value = true
-    } finally { paying.value = false }
 }
 
 async function refreshAfterSettlement() {

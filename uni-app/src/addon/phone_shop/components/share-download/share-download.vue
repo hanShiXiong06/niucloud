@@ -1,5 +1,6 @@
 <template>
     <view
+        v-if="showTrigger"
         class="share-download-btn"
         :class="btnClass"
         :style="buttonStyle"
@@ -20,28 +21,34 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { img } from '@/utils/common'
 import { getGoodsDetail } from '@/addon/phone_shop/api/goods'
 import { useGoodsDownload } from '@/addon/phone_shop/hooks/useGoodsDownload'
+import { useGoodsForwardAccess } from '@/addon/phone_shop/hooks/useGoodsForwardAccess'
 import { type DownloadConfig } from '@/addon/phone_shop/hooks/useDownloadConfig'
 import DownloadConfigDialog from '@/addon/phone_shop/components/download-config-dialog/download-config-dialog.vue'
 
 interface Props {
     // 商品数据
     goodsItem: any
-    // 按钮类型: 'circle' | 'grid'
-    type?: 'circle' | 'grid'
+    // 按钮类型: 'circle' | 'grid' | 'pill'
+    type?: 'circle' | 'grid' | 'pill'
     // 自定义样式
     customStyle?: string
     // 是否显示提示
     showToast?: boolean
     // 用户ID（用于生成分享链接）
     userId?: string | number
+    // 未获得同行权限时，申请完成后返回的页面
+    backUrl?: string
+    // 允许页面复用一个弹窗实例，由外部按钮主动触发，避免长列表重复创建弹窗。
+    showTrigger?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
     type: 'circle',
-    showToast: true
+    showToast: true,
+    backUrl: '/addon/phone_shop/pages/goods/list',
+    showTrigger: true
 })
 
 const {
@@ -66,7 +73,9 @@ const buttonStyle = computed(() => {
 
 // 按钮类名
 const btnClass = computed(() => {
-    return props.type === 'grid' ? 'grid-style' : 'circle-style'
+    if (props.type === 'grid') return 'grid-style'
+    if (props.type === 'pill') return 'pill-style'
+    return 'circle-style'
 })
 
 // 执行下载
@@ -102,32 +111,42 @@ const handleConfigConfirm = async (config: DownloadConfig) => {
 // 处理下载
 const handleDownload = async () => {
     try {
-        let images: string[] = []
+        const allowed = await useGoodsForwardAccess().ensureGoodsForwardAccess(props.backUrl)
+        if (!allowed) return
 
-        // 如果商品数据中已有图片数组
-        if (props.goodsItem.goods.goods_image) {
-            images = Array.isArray(props.goodsItem.goods.goods_image)
-                ? props.goodsItem.goods.goods_image
-                : props.goodsItem.goods.goods_image.split(',').map((url: string) => img(url.trim()))
-        } else {
-            // 需要获取详情
-            const res = await getGoodsDetail({ goods_id: props.goodsItem.goods.goods_id })
-            if (!res.data.goods) {
-                uni.showToast({ title: '商品信息获取失败', icon: 'none' })
-                return
-            }
-            images = res.data.goods.goods_image.split(',').map((url: string) => img(url.trim()))
+        const source = props.goodsItem?.goods || props.goodsItem || {}
+        const goodsId = source.goods_id || props.goodsItem?.goods_id
+        if (!goodsId) {
+            uni.showToast({ title: '商品信息获取失败', icon: 'none' })
+            return
         }
+
+        // 列表数据只保留缩略信息。统一重新读取详情，保证图片、SKU 和当前会员
+        // 可见价格与分类页、详情页完全一致。
+        const res: any = await getGoodsDetail({ goods_id: goodsId })
+        if (!res.data?.goods) {
+            uni.showToast({ title: '商品信息获取失败', icon: 'none' })
+            return
+        }
+        const goods = res.data.goods
+        const rawImages = Array.isArray(goods.goods_image)
+            ? goods.goods_image
+            : String(goods.goods_image || '').split(',')
+        const images = rawImages.map((url: string) => String(url || '').trim()).filter(Boolean)
+        const cover = source.goods_cover_thumb_mid || goods.goods_cover_thumb_mid || goods.goods_cover
+        if (cover) images.push(String(cover))
+        const uniqImages = [...new Set(images)]
+        const detailItem = res.data
 
         // 检查是否需要显示配置弹窗
         if (needShowConfigDialog()) {
             // 保存待下载数据
-            pendingDownload.value = { images, item: props.goodsItem }
+            pendingDownload.value = { images: uniqImages, item: detailItem }
             // 显示配置弹窗
             showConfigDialog.value = true
         } else {
             // 直接下载
-            await performDownload(images, props.goodsItem)
+            await performDownload(uniqImages, detailItem)
         }
     } catch (error) {
         console.error('下载失败:', error)
@@ -136,6 +155,8 @@ const handleDownload = async () => {
         }
     }
 }
+
+defineExpose({ handleDownload })
 </script>
 
 <style lang="scss" scoped>
@@ -178,5 +199,18 @@ const handleDownload = async () => {
     .default-icon {
         font-size: 28rpx;
     }
+}
+
+.pill-style {
+    min-width: 88rpx;
+    height: 44rpx;
+    padding: 0 18rpx;
+    box-sizing: border-box;
+    border-radius: 24rpx;
+    font-size: 23rpx;
+    font-weight: 600;
+    line-height: 44rpx;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 </style>

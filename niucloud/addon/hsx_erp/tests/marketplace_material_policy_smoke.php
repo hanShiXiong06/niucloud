@@ -24,6 +24,8 @@ $assert(str_contains($policy, "can_phone_shop_operate") && str_contains($policy,
 $assert(str_contains($intakeController, "isset(\$result['can_phone_shop_operate'])") && !str_contains($intakeController, "(string)\$result['owner'] !== 'phone_shop'"), '首次独立映射待办必须按可操作策略放行，不能继续使用旧负责人判断');
 $assert(str_contains($stock, "'listing_status' => 'pending_shop'") && str_contains($stock, 'ErpChannelMappingService'), '商城运营模式必须交接待办并记录渠道关联');
 $assert(str_contains($stock, "(string)\$channelPolicy['category_mode'] === 'erp'"), 'ERP分类模式必须走ERP目录投影');
+$assert(str_contains($stock, 'if (!$shopCompletion) throw $throwable;') && str_contains($stock, '$categoryPath = [];'), '商城运营交接不得被缺失的ERP分类投影阻塞');
+$assert(str_contains($stock, "if (!\$shopCompletion && \$categoryPath === [])"), 'ERP直发模式仍须严格校验ERP商品目录');
 $assert(str_contains($completion, 'recordManualCompletion') && !str_contains($completion, "'retail_price'"), '商城完成事件只能记录映射，不得覆盖ERP售价');
 $assert(!str_contains($completion, "'spec_json' =>") && !str_contains($completion, "'image_urls' =>") && !str_contains($completion, "'qc_report' =>"), '商城完成事件不得覆盖ERP规格、图片和质检');
 $assert(str_contains($mapping, 'erp_channel_category_mapping') && str_contains($mapping, 'erp_channel_attribute_value_mapping'), '映射桥必须同时承接分类和规格值');

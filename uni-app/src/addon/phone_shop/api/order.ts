@@ -105,3 +105,8 @@ export function getLocal() {
 export function getTrackOfLocal(params: Record<string, any>) {
     return request.get('phone_shop/delivery/track_of_local', params)
 }
+
+/** 客户提交线下付款凭证。 */
+export function submitOfflinePaymentVoucher(order_id: number | string, data: Record<string, any>) {
+    return request.post(`phone_shop/order/offline/voucher/${ order_id }`, data)
+}

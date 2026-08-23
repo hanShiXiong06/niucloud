@@ -35,6 +35,11 @@ export interface DeviceEntryRow {
     /** 型号库搜索反馈，仅用于前端交互 */
     model_search_keyword?: string
     model_search_empty?: boolean
+    /** 本地设备桥返回的型号候选，仅用于自动匹配与人工学习，不提交订单。 */
+    local_model_aliases?: string[]
+    /** 最近一次自动识别/映射到的叶子型号；人工改选时据此判断是否要纠正映射。 */
+    local_model_resolved_category_id?: number
+    model_alias_learning?: boolean
     // 质检模板（按型号触发）
     check_template_id?: number
     check_template_name?: string

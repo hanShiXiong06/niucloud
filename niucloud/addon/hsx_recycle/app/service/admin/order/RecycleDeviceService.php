@@ -1754,21 +1754,46 @@ class RecycleDeviceService extends BaseAdminService
             // 确认回收即自动同步到 ERP(装了 ERP 时):设备带着定价选定的仓位进入 ERP，
             // 由 ERP 侧 A1 自动确认入库 → 进中台拍照定价。批量回收时由 batchRecycle 统一同步。
             if ($autoErpSync) {
-                $this->autoSyncErpInbound([(int)$device->id]);
-                // 确认回收即生成"应付"(我欠客户回收价)。批量模式由 batchRecycle 统一发。
-                $this->autoEmitPayable([(int)$device->id]);
-                try {
-                    // 先让 ERP 落采购与应付，再通知财务，避免用户打开时目标账目尚不存在。
-                    (new TaskService())->assignPreferredOrDefault((int)$device->id, RecycleStageDict::STAGE_PAY);
-                } catch (\Throwable $e) {
-                    Log::warning('确认回收后分配待打款任务失败', ['device_id' => (int)$device->id, 'message' => $e->getMessage()]);
-                }
+                $this->dispatchAfterRecycle([(int)$device->id]);
             }
 
             return true;
         } catch (\Exception $e) {
             Db::rollback();
             throw $e;
+        }
+    }
+
+    /**
+     * 已确认回收后的统一下游编排入口。
+     *
+     * 管理员确认、客户确认、批量确认都必须调用这里，避免只更新回收状态、
+     * 却漏发 ERP 入库与财务应付事实。下游采用幂等键，可安全重复调用补偿。
+     */
+    public function dispatchAfterRecycle(array $deviceIds): void
+    {
+        $deviceIds = array_values(array_unique(array_filter(array_map('intval', $deviceIds))));
+        if (empty($deviceIds)) {
+            return;
+        }
+
+        $this->autoSyncErpInbound($deviceIds);
+        $this->autoEmitPayable($deviceIds);
+
+        foreach ($deviceIds as $deviceId) {
+            try {
+                // 先让 ERP 落采购与应付，再通知财务，避免用户打开时目标账目尚不存在。
+                (new TaskService())->assignPreferredOrDefault($deviceId, RecycleStageDict::STAGE_PAY);
+            } catch (\Throwable $e) {
+                Log::warning('确认回收后分配待打款任务失败', [
+                    'site_id' => $this->site_id,
+                    'device_id' => $deviceId,
+                    'exception' => get_class($e),
+                    'message' => $e->getMessage(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                ]);
+            }
         }
     }
 
@@ -1784,11 +1809,25 @@ class RecycleDeviceService extends BaseAdminService
             return;
         }
         try {
-            (new RecycleDeviceErpSyncService())->dispatch($deviceIds, ['self_erp']);
-        } catch (\Throwable $e) {
-            Log::warning('确认回收后自动同步ERP失败：' . $e->getMessage(), [
+            Log::info('确认回收开始同步ERP', [
                 'site_id' => $this->site_id,
                 'device_ids' => $deviceIds,
+            ]);
+            $result = (new RecycleDeviceErpSyncService())->dispatch($deviceIds, ['self_erp']);
+            Log::info('确认回收同步ERP成功', [
+                'site_id' => $this->site_id,
+                'device_ids' => $deviceIds,
+                'event_id' => (string)($result['event_id'] ?? ''),
+                'device_count' => (int)($result['device_count'] ?? 0),
+                'receiver_count' => count((array)($result['results'] ?? [])),
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('确认回收后自动同步ERP失败：' . $e->getMessage(), [
+                'site_id' => $this->site_id,
+                'device_ids' => $deviceIds,
+                'exception' => get_class($e),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
             ]);
         }
     }
@@ -1843,9 +1882,12 @@ class RecycleDeviceService extends BaseAdminService
                 ]);
             }
         } catch (\Throwable $e) {
-            Log::warning('确认回收生成应付失败：' . $e->getMessage(), [
+            Log::error('确认回收生成应付失败：' . $e->getMessage(), [
                 'site_id' => $this->site_id,
                 'device_ids' => $deviceIds,
+                'exception' => get_class($e),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
             ]);
         }
     }
@@ -2030,15 +2072,7 @@ class RecycleDeviceService extends BaseAdminService
 
             Db::commit();
             // 整批提交成功后再统一同步到 ERP + 生成应付
-            $this->autoSyncErpInbound(array_map('intval', $ids));
-            $this->autoEmitPayable(array_map('intval', $ids));
-            foreach ($ids as $id) {
-                try {
-                    (new TaskService())->assignPreferredOrDefault((int)$id, RecycleStageDict::STAGE_PAY);
-                } catch (\Throwable $e) {
-                    Log::warning('批量回收后分配待打款任务失败', ['device_id' => (int)$id, 'message' => $e->getMessage()]);
-                }
-            }
+            $this->dispatchAfterRecycle(array_map('intval', $ids));
             return true;
         } catch (\Exception $e) {
             Db::rollback();

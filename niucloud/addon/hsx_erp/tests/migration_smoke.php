@@ -64,6 +64,11 @@ foreach (['retail_price', 'remark_public', 'remark_internal'] as $field) {
     $assert(str_contains($schema, "'{$field}'"), '集中迁移必须补齐设备流转字段：' . $field);
 }
 $assert(substr_count($schema, "'manager_uid'") >= 2, '集中迁移必须补齐仓库和库位负责人字段');
+$assert(
+    str_contains($schema, "'erp_warehouse_location' => [")
+    && str_contains($schema, "'is_default' => \"`is_default` tinyint(1)"),
+    '集中迁移必须补齐仓库默认入库库位字段'
+);
 $assert(substr_count($schema, "'idx_site_manager'") >= 2, '集中迁移必须补齐仓库和库位负责人索引');
 $assetBlockStart = strpos($schema, "'erp_asset' => [");
 $assetBlockEnd = strpos($schema, "'erp_sale_order' => [", $assetBlockStart ?: 0);
@@ -86,6 +91,12 @@ $assert(
     '历史零余额应收应付必须结清且保留作废审计状态'
 );
 $assert(str_contains($schema, "'idx_action_source_no'"), '集中迁移必须为整备来源号回填建立索引');
+$assert(
+    substr_count($schema, "'varchar(64)'") >= 2
+    && str_contains($schema, "'before_status'")
+    && str_contains($schema, "'after_status'"),
+    '设备流水前后状态必须支持库存/渠道组合状态，避免商城交接上架时字段溢出'
+);
 $assert(str_contains($schema, 'p.party_id = l.party_id') && str_contains($schema, 'ABS(p.amount - ABS(l.cost_delta)) < 0.01'), '流水ID回填必须校验往来主体与整备金额，避免ID碰撞误绑');
 $assert(substr_count($schema, "'uk_site_request'") === 6, '集中迁移必须创建六个幂等唯一索引');
 
@@ -104,6 +115,7 @@ foreach (['retail_price', 'remark_public', 'remark_internal'] as $field) {
     $assert(str_contains($sql, '`' . $field . '`'), '全新安装结构必须包含设备流转字段：' . $field);
 }
 $assert(substr_count($sql, '`manager_uid` int NOT NULL DEFAULT 0') >= 2, '全新安装结构必须包含仓库和库位负责人');
+$assert(str_contains($sql, '`is_default` tinyint(1) NOT NULL DEFAULT 0 COMMENT \'所属仓库默认入库库位\''), '全新安装结构必须包含默认入库库位');
 $installAssetStart = strpos($sql, 'CREATE TABLE IF NOT EXISTS `{{prefix}}erp_asset`');
 $installAssetEnd = strpos($sql, 'CREATE TABLE IF NOT EXISTS `{{prefix}}erp_asset_ledger`', $installAssetStart ?: 0);
 $installAssetBlock = $installAssetStart !== false && $installAssetEnd !== false

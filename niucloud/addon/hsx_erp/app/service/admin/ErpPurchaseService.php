@@ -586,12 +586,15 @@ class ErpPurchaseService extends BaseAdminService
 
     public function create(array $data): int
     {
+        $appendOrderId = max(0, (int)($data['append_order_id'] ?? 0));
         $requestId = ErpIdempotency::normalize($data['request_id'] ?? '');
-        $existingId = $this->existingPurchaseRequest($requestId);
+        $existingId = $appendOrderId > 0 ? 0 : $this->existingPurchaseRequest($requestId);
         if ($existingId > 0) {
             return $existingId;
         }
-        $data['request_id'] = $requestId !== '' ? $requestId : null;
+        // 追加设备复用已有采购单，事件级幂等由外部事件 inbox 和来源设备 ID 保证；
+        // 采购单 request_id 必须继续保留首次创建时的稳定业务键，不能被后续事件覆盖。
+        $data['request_id'] = $appendOrderId > 0 ? null : ($requestId !== '' ? $requestId : null);
         $erpRules = (new ErpConfigService())->getRules();
         $items = $this->normalizePurchaseItems((array)($data['items'] ?? []));
         $items = $this->normalizeManualListingItems($items, $data, (array)($erpRules['listing_workspace'] ?? []));
@@ -608,19 +611,50 @@ class ErpPurchaseService extends BaseAdminService
         $cashSettlementCreated = false;
         $financeService = new ErpFinanceService();
         try {
-            Db::transaction(function () use ($data, $items, $partyName, $now, $erpRules, $financeService, &$orderId, &$createdAssetIds, &$cashSettlementCreated) {
-            $party = $this->ensureParty(
-                (int)($data['party_id'] ?? 0),
-                $partyName,
-                (string)($data['m_no'] ?? ''),
-                'supplier',
-                (int)($data['member_id'] ?? 0),
-                (string)($data['contact_name'] ?? ''),
-                (string)($data['contact_mobile'] ?? ''),
-                (string)($data['source_plugin'] ?? $data['origin_plugin'] ?? '')
-            );
-            $partyName = (string)$party->party_name;
-            $purchaseNo = ErpLedgerService::makeNo('PO');
+            Db::transaction(function () use ($data, $items, $partyName, $now, $erpRules, $financeService, $appendOrderId, &$orderId, &$createdAssetIds, &$cashSettlementCreated) {
+            $order = null;
+            if ($appendOrderId > 0) {
+                $order = $this->findOrder($appendOrderId, true);
+                if ((string)$order->status !== ErpDict::STATUS_COMPLETED) {
+                    throw new CommonException('当前采购单状态不允许追加设备');
+                }
+                $originPlugin = trim((string)($data['origin_plugin'] ?? $data['source_plugin'] ?? ''));
+                $originType = trim((string)($data['origin_type'] ?? $data['source_type'] ?? ''));
+                $originNo = trim((string)($data['origin_no'] ?? $data['source_order_no'] ?? ''));
+                if ($originPlugin === '' || $originType === '' || $originNo === ''
+                    || (string)$order->origin_plugin !== $originPlugin
+                    || (string)$order->origin_type !== $originType
+                    || (string)$order->origin_no !== $originNo) {
+                    throw new CommonException('追加设备与原采购单业务来源不一致');
+                }
+                $items = $this->filterNewExternalDeviceItems((int)$order->id, $items);
+                if ($items === []) {
+                    $orderId = (int)$order->id;
+                    return;
+                }
+                $party = ErpParty::where([
+                    ['site_id', '=', $this->site_id],
+                    ['id', '=', (int)$order->party_id],
+                ])->lock(true)->findOrEmpty();
+                if ($party->isEmpty()) {
+                    throw new CommonException('原采购单付款对象不存在');
+                }
+                $partyName = (string)$party->party_name;
+                $purchaseNo = (string)$order->purchase_no;
+            } else {
+                $party = $this->ensureParty(
+                    (int)($data['party_id'] ?? 0),
+                    $partyName,
+                    (string)($data['m_no'] ?? ''),
+                    'supplier',
+                    (int)($data['member_id'] ?? 0),
+                    (string)($data['contact_name'] ?? ''),
+                    (string)($data['contact_mobile'] ?? ''),
+                    (string)($data['source_plugin'] ?? $data['origin_plugin'] ?? '')
+                );
+                $partyName = (string)$party->party_name;
+                $purchaseNo = ErpLedgerService::makeNo('PO');
+            }
             $financeSourceService = new ErpFinanceSourceService();
             $purchaseSource = $financeSourceService->purchase([
                 'origin_plugin' => (string)($data['origin_plugin'] ?? $data['source_plugin'] ?? 'hsx_erp'),
@@ -717,7 +751,8 @@ class ErpPurchaseService extends BaseAdminService
             if ($purchaseAt <= 0) {
                 $purchaseAt = $now;
             }
-            $order = ErpPurchaseOrder::create([
+            if ($appendOrderId <= 0) {
+                $order = ErpPurchaseOrder::create([
                 'site_id' => $this->site_id,
                 'request_id' => $data['request_id'],
                 'purchase_no' => $purchaseNo,
@@ -757,7 +792,28 @@ class ErpPurchaseService extends BaseAdminService
                 'remark' => trim((string)($data['remark'] ?? '')),
                 'create_at' => $now,
                 'update_at' => $now,
-            ]);
+                ]);
+            } else {
+                $originalWarehouseId = (int)$order->warehouse_id;
+                $originalLocationId = (int)$order->location_id;
+                $warehouseId = $originalWarehouseId > 0 && $originalWarehouseId === $warehouseId ? $warehouseId : 0;
+                $warehouseName = $warehouseId > 0 ? $warehouseName : '多仓库';
+                $locationId = $warehouseId > 0 && $originalLocationId > 0 && $originalLocationId === $locationId ? $locationId : 0;
+                $locationName = $locationId > 0 ? $locationName : ($warehouseId > 0 ? '多库位' : '');
+                $newTotalCost = round((float)$order->total_cost + $totalCost, 2);
+                $paidTotal = round((float)$order->paid_amount, 2);
+                $order->save([
+                    'warehouse_id' => $warehouseId,
+                    'warehouse_name' => $warehouseName,
+                    'location_id' => $locationId,
+                    'location_name' => $locationName,
+                    'total_cost' => $newTotalCost,
+                    'payable_amount' => max(0, round($newTotalCost - $paidTotal, 2)),
+                    'finance_status' => ErpDict::financeStatus($newTotalCost, $paidTotal),
+                    'purchase_at' => min((int)$order->purchase_at ?: $purchaseAt, $purchaseAt),
+                    'update_at' => $now,
+                ]);
+            }
             $orderId = (int)$order->id;
             $payableApplications = [];
             foreach ($resolvedItems as $resolved) {
@@ -1100,7 +1156,7 @@ class ErpPurchaseService extends BaseAdminService
             }
             });
         } catch (\Throwable $e) {
-            $existingId = $this->existingPurchaseRequest($requestId);
+            $existingId = $appendOrderId > 0 ? 0 : $this->existingPurchaseRequest($requestId);
             if ($existingId > 0) {
                 return $existingId;
             }
@@ -1675,6 +1731,39 @@ class ErpPurchaseService extends BaseAdminService
             $identity = $imei !== '' ? 'IMEI【' . $imei . '】' : 'SN【' . $sn . '】';
             throw new CommonException($identity . '已存在于资产【' . (string)$conflict->asset_no . '】，不能重复入库');
         }
+    }
+
+    /**
+     * 同一来源设备可能因网络重试或并发事件再次到达。IMEI/SN 不是可靠业务键
+     * （可能为空，也可能历史重复入库），外部设备 ID 才是追加采购明细的幂等键。
+     */
+    private function filterNewExternalDeviceItems(int $orderId, array $items): array
+    {
+        if ($orderId <= 0 || $items === []) return $items;
+        $existing = [];
+        $rows = ErpAsset::where([
+            ['site_id', '=', $this->site_id],
+            ['purchase_order_id', '=', $orderId],
+        ])->field('spec_json')->select()->toArray();
+        foreach ($rows as $row) {
+            $snapshot = $this->decodeSpecJsonArray($row['spec_json'] ?? '');
+            $sourceDeviceId = trim((string)($snapshot['source_device_id'] ?? ''));
+            if ($sourceDeviceId !== '' && $sourceDeviceId !== '0') $existing[$sourceDeviceId] = true;
+        }
+        return array_values(array_filter($items, function (array $item) use ($existing): bool {
+            if ((string)($item['item_type'] ?? 'device') !== 'device') return true;
+            $snapshot = $this->decodeSpecJsonArray($item['spec_json'] ?? []);
+            $sourceDeviceId = trim((string)($snapshot['source_device_id'] ?? ''));
+            return $sourceDeviceId === '' || $sourceDeviceId === '0' || !isset($existing[$sourceDeviceId]);
+        }));
+    }
+
+    private function decodeSpecJsonArray(mixed $value): array
+    {
+        if (is_array($value)) return $value;
+        if (!is_string($value) || trim($value) === '') return [];
+        $decoded = json_decode($value, true);
+        return is_array($decoded) ? $decoded : [];
     }
 
     private function findOrder(int $id, bool $forUpdate = false): ErpPurchaseOrder

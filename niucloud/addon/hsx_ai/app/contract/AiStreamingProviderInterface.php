@@ -13,6 +13,7 @@ interface AiStreamingProviderInterface
      *   provider_request_id:string,
      *   model:string,
      *   content:string,
+     *   tool_calls?:array,
      *   reasoning_content:string,
      *   finish_reason:string,
      *   first_token_ms:int,

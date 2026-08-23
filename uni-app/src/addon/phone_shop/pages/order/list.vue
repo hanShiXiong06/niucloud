@@ -121,7 +121,7 @@
                             </view>
                             <view class="flex justify-end text-[28rpx] mt-[20rpx] items-center"  v-if="((item.status == 1) || (item.status == 3) || (item.status == 5 && evaluateConfig.evaluate_is_show && evaluateConfig.is_evaluate == 1) || item.is_can_invoice) && !isEdit">
                                 <view class="text-[24rpx] font-500 leading-[52rpx] h-[56rpx] min-w-[150rpx] text-center border-[2rpx] border-solid border-[#ccc] rounded-full text-[var(--text-color-light3)] box-border" v-if="item.status == 1" @click.stop="orderBtnFn(item, 'close')">{{ t('orderClose') }}</view>
-                                <view class="text-[24rpx] font-500 flex-center h-[56rpx] min-w-[150rpx] text-center border-[0] text-[#fff] primary-btn-bg rounded-full ml-[20rpx] box-border" v-if="item.status == 1" @click.stop="orderBtnFn(item, 'pay')">{{ t('topay') }}</view>
+                                <view class="text-[24rpx] font-500 flex-center h-[56rpx] min-w-[150rpx] text-center border-[0] text-[#fff] primary-btn-bg rounded-full ml-[20rpx] box-border" v-if="item.status == 1 && Number(item.can_online_pay) === 1" @click.stop="orderBtnFn(item, 'pay')">{{ t('topay') }}</view>
                                 <view class="text-[24rpx] font-500 flex-center h-[56rpx] min-w-[150rpx] text-center border-[0] text-[#fff] primary-btn-bg rounded-full ml-[20rpx] box-border" v-if="item.status == 3" @click.stop="orderBtnFn(item, 'finish')">{{ t('orderFinish') }}</view>
                                 <view class="text-[24rpx] font-500 leading-[52rpx] h-[56rpx] min-w-[150rpx] text-center border-[2rpx] border-solid border-[#ccc] rounded-full ml-[20rpx]  text-[var(--text-color-light3)] box-border"
                                     v-if="item.status == 5 && evaluateConfig.evaluate_is_show && evaluateConfig.is_evaluate == 1"
@@ -391,9 +391,16 @@ const back = () => {
 // 支付
 const payRef = ref(null)
 const orderBtnFn = (data: any, type = '') => {
-    if (type == 'pay')
+    if (type == 'pay') {
+        if (Number(data.can_online_pay) !== 1) {
+            uni.showToast({
+                title: data.online_pay_disabled_reason || '当前订单不支持在线支付',
+                icon: 'none'
+            })
+            return
+        }
         payRef.value?.open(data.order_type, data.order_id, `/addon/phone_shop/pages/order/detail?order_id=${ data.order_id }`);
-    else if (type == 'close') {
+    } else if (type == 'close') {
         close(data);
     } else if (type == 'finish') {
         finish(data);

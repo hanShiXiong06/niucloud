@@ -26,7 +26,7 @@
                 </el-form-item>
             </el-form>
         </div>
-        <el-alert type="info" :closable="false" show-icon title="线上仅在 AI 已启用、商城业务接入已开启时展示；点击后进入 AI 对话页。" />
+        <el-alert type="info" :closable="false" show-icon title="线上仅在 AI 总开关、对应业务接入和业务对象开关均启用时展示；项目中心会打开项目问答弹窗，商城保持原对话页。" />
     </div>
 
     <div v-show="diyStore.editTab === 'style'" class="style-wrap">
@@ -62,8 +62,8 @@ const diyStore = useDiyStore()
 
 const defaults: Record<string, any> = {
     layout: 'card',
-    title: 'AI 选机助手',
-    subtitle: '说预算、品牌和成色，帮你从本站在售商品里挑选',
+    title: 'AI 智能助手',
+    subtitle: '结合当前业务知识，为客户快速解答核心问题',
     buttonText: '开始咨询',
     showVoiceHint: 1,
     voiceHint: '支持语音咨询',
@@ -74,9 +74,11 @@ const defaults: Record<string, any> = {
     buttonTextColor: '#FFFFFF'
 }
 
-diyStore.editComponent.verify = () => {
-    if (!String(diyStore.editComponent.title || '').trim()) return { code: false, message: '请填写 AI 入口标题' }
-    if (!String(diyStore.editComponent.buttonText || '').trim()) return { code: false, message: '请填写按钮文字' }
+diyStore.editComponent.verify = (index:number) => {
+    const component = diyStore.value[index]
+    if (!component || component.componentName !== 'AiAssistantEntry') return { code: true, message: '' }
+    if (!String(component.title || '').trim()) return { code: false, message: '请填写 AI 入口标题' }
+    if (!String(component.buttonText || '').trim()) return { code: false, message: '请填写按钮文字' }
     return { code: true, message: '' }
 }
 

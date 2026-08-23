@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "华网 OA 考勤快捷申报",
+  "version": "1.1.0",
+  "description": "只填写地区、工作概要和住宿地点，一键调用华网 OA 原有保存功能。",
+  "permissions": [
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "*://oa.huawangsoft.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "快捷报考勤"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://oa.huawangsoft.com/*"
+      ],
+      "css": [
+        "content.css"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "all_frames": true,
+      "run_at": "document_idle"
+    }
+  ]
+}

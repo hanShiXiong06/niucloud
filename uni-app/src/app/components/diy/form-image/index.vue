@@ -42,7 +42,7 @@
                 </view>
                 <view class="flex items-center flex-1" v-if="diyComponent.uploadMode.length > 1 && diyComponent.field.value.length <= 0">
                     <view class="layout-one-content !p-[0] flex-1 !items-stretch !h-[100rpx]">
-                        <u-upload accept="image" @afterRead="afterRead" multiple :maxCount="9" capture="camera">
+                        <u-upload accept="image" @afterRead="afterRead" multiple :maxCount="remainingUploadCount" capture="camera" :disabled="uploadDisabled">
                             <view class="flex items-center h-[100%] w-[100%] pl-[30rpx] box-border">
                                 <text class="nc-iconfont nc-icon-xiangjiV6xx"></text>
                                 <text class="text-[28rpx] ml-[10rpx]">拍照上传</text>
@@ -50,7 +50,7 @@
                         </u-upload>
                     </view>
                     <view class="layout-one-content !p-[0] ml-[20rpx] !items-stretch flex-1 !h-[100rpx]">
-                        <u-upload accept="image" @afterRead="afterRead" multiple :maxCount="9" capture="album">
+                        <u-upload accept="image" @afterRead="afterRead" multiple :maxCount="remainingUploadCount" capture="album" :disabled="uploadDisabled">
                             <view class="flex items-center h-[100%] w-[100%] pl-[30rpx] box-border">
                                 <text class="nc-iconfont nc-icon-tupiandaohangpc"></text>
                                 <text class="text-[28rpx] ml-[10rpx]">从相册中选择</text>
@@ -59,13 +59,13 @@
                     </view>
                 </view>
                 <view v-else-if="diyComponent.field.value.length < Number(diyComponent.limit)" class="layout-one-content h-[180rpx] w-[180rpx] !px-[0]">
-                    <u-upload accept="image" v-if="diyComponent.uploadMode.length == 1" @afterRead="afterRead" multiple :capture="uploadType" :maxCount="Number(diyComponent.limit)">
+                    <u-upload accept="image" v-if="diyComponent.uploadMode.length == 1" @afterRead="afterRead" multiple :capture="uploadType" :maxCount="remainingUploadCount" :disabled="uploadDisabled">
                         <view class="flex flex-col items-center justify-center w-[180rpx] h-[180rpx] ">
                             <text class="nc-iconfont !text-[36rpx] mb-[16rpx]" :class="{'nc-icon-xiangjiV6xx':diyComponent.uploadMode.indexOf('take_pictures') > -1, 'nc-icon-tupiandaohangpc':diyComponent.uploadMode.indexOf('take_pictures') == -1}"></text>
                             <text class="text-[28rpx] ml-[10rpx] text-[24rpx]">{{ diyComponent.uploadMode.indexOf('take_pictures') > -1 ? '拍照上传' : '从相册选择' }}</text>
                         </view>
                     </u-upload>
-                    <u-upload accept="image" v-else @afterRead="afterRead" multiple :capture="uploadType" :maxCount="Number(diyComponent.limit)">
+                    <u-upload accept="image" v-else @afterRead="afterRead" multiple :capture="uploadType" :maxCount="remainingUploadCount" :disabled="uploadDisabled">
                         <view class="flex flex-col items-center justify-center w-[180rpx] h-[180rpx] ">
                             <text class="nc-iconfont !text-[40rpx] mb-[16rpx] nc-icon-jiahaoV6xx"></text>
                             <text class="text-[28rpx] ml-[10rpx] text-[24rpx]"> {{ t('diyForm.uploadTips') }}</text>
@@ -95,7 +95,7 @@
                     <view class="items-start border-box border-[2rpx] ml-[16rpx] mb-[16rpx] border-solid border-[#e6e6e6] rounded-[10rpx]">
                         <u-upload accept="image" v-if="diyComponent.field.value.length < Number(diyComponent.limit)"
                                   @afterRead="afterRead" multiple :capture="uploadType"
-                                  :maxCount="Number(diyComponent.limit)">
+                                  :maxCount="remainingUploadCount" :disabled="uploadDisabled">
                             <view class="flex flex-col items-center justify-center min-w-[180rpx] min-h-[180rpx]">
                                 <text class="nc-iconfont !text-[40rpx] mb-[16rpx] nc-icon-jiahaoV6xx"></text>
                                 <text class="text-[28rpx] ml-[10rpx] text-[24rpx]"> {{ t('diyForm.uploadTips') }}</text>
@@ -108,6 +108,13 @@
             <view v-if="diyComponent.field.remark.text" class="layout-two-remark" :style="{ color: diyComponent.field.remark.color, fontSize: (diyComponent.field.remark.fontSize * 2 ) + 'rpx' }">{{ diyComponent.field.remark.text }}</view>
             <view class="layout-two-attribute-wrap" v-if="inputAttribute().length">
                 <view v-for="(item,index) in inputAttribute()" :key="index" @click="eventFn(item.type)" class="layout-two-attribute-item">{{ item.title }}</view>
+            </view>
+        </view>
+        <view v-if="isUploading" class="image-upload-loading-mask">
+            <view class="image-upload-loading-card">
+                <u-loading-icon mode="circle" size="28" color="#315cf5" />
+                <text class="image-upload-loading-title">正在上传 {{ uploadBatchCompleted }}/{{ uploadBatchTotal }}</text>
+                <text class="image-upload-loading-tip">请保持当前页面，上传完成后即可提交</text>
             </view>
         </view>
         <view v-if="diyStore.mode == 'decorate'" class="form-item-mask"></view>
@@ -245,38 +252,85 @@ const isDisabled = computed(() => {
     return diyStore.mode === 'decorate';
 });
 
+const uploadingCount = ref(0);
+const uploadBatchTotal = ref(0);
+const uploadBatchCompleted = ref(0);
+const isUploading = computed(() => uploadingCount.value > 0);
+const imageLimit = computed(() => {
+    const value = Number(diyComponent.value?.limit);
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : 9;
+});
+const remainingUploadCount = computed(() => Math.max(0,
+    imageLimit.value - Number(diyComponent.value?.field?.value?.length || 0) - uploadingCount.value
+));
+const uploadDisabled = computed(() => isDisabled.value || isUploading.value || remainingUploadCount.value <= 0);
+
 const imgListPreview = computed(() => {
     return diyComponent.value.field.value.map(item => {
         return { url: img(item) }
     })
 })
 
-const afterRead = (event) => {
+const afterRead = async (event: any) => {
     uni.setStorageSync('sku_form_refresh', true);
-    event.file.forEach(item => {
-        upload(item);
-    })
-}
-
-const upload = (data: any) => {
-    if (diyComponent.value.field.value.length > Number(diyComponent.value.limit)) {
-        uni.showToast({ title: `最多允许上传${ diyComponent.value.limit }张图片`, icon: 'none' })
-        return false
+    if (isUploading.value) {
+        uni.showToast({ title: '图片正在上传，请稍候', icon: 'none' });
+        return;
     }
 
-    uploadImage({
-        filePath: data.url,
-        name: 'file'
-    }).then(res => {
-        if (diyComponent.value.field.value.length < Number(diyComponent.value.limit)) {
-            diyComponent.value.field.value.push(res.data.url)
+    const rawFiles = Array.isArray(event?.file) ? event.file : (event?.file ? [event.file] : []);
+    const remaining = remainingUploadCount.value;
+    if (!rawFiles.length || remaining <= 0) {
+        if (remaining <= 0) uni.showToast({ title: `最多允许上传${ imageLimit.value }张图片`, icon: 'none' });
+        return;
+    }
+
+    const files = rawFiles.slice(0, remaining);
+    if (rawFiles.length > remaining) {
+        uni.showToast({ title: `本次最多还能上传${ remaining }张图片`, icon: 'none' });
+    }
+
+    uploadBatchTotal.value = files.length;
+    uploadBatchCompleted.value = 0;
+    uploadingCount.value = files.length;
+    errorInfo.value = null;
+
+    if (!Array.isArray(diyComponent.value.field.value)) diyComponent.value.field.value = [];
+    const results = await Promise.all(files.map(async (item: any) => {
+        try {
+            await upload(item);
+            return true;
+        } catch (_) {
+            return false;
         }
-    }).catch(() => {
-    })
+    }));
+    const failedCount = results.filter((success: boolean) => !success).length;
+    if (failedCount > 0) {
+        uni.showToast({ title: `${ failedCount }张图片上传失败，请重新选择`, icon: 'none' });
+    }
 }
 
-const deleteImage = (event) => {
-    diyComponent.value.field.value.splice(event.index, 1)
+const upload = async (data: any) => {
+    try {
+        const res: any = await uploadImage({
+            filePath: data.url || data.path,
+            name: 'file'
+        });
+        const url = res?.data?.url;
+        if (!url) throw new Error('上传结果缺少图片地址');
+        if (diyComponent.value.field.value.length < imageLimit.value) {
+            diyComponent.value.field.value.push(url);
+        }
+        return url;
+    } finally {
+        uploadBatchCompleted.value += 1;
+        uploadingCount.value = Math.max(0, uploadingCount.value - 1);
+    }
+}
+
+const deleteImage = (index: number) => {
+    if (isUploading.value) return;
+    diyComponent.value.field.value.splice(Number(index), 1)
 }
 
 const refresh = () => {
@@ -286,7 +340,10 @@ const refresh = () => {
 const verify = () => {
     const res = { code: true, message: '' }
     // todo 验证组件，diyComponent.value.field.value
-    if (diyComponent.value.field.required && (!diyComponent.value.field.value || diyComponent.value.field.value && !diyComponent.value.field.value.length)) {
+    if (isUploading.value) {
+        res.code = false
+        res.message = `图片正在上传，请稍候`;
+    } else if (diyComponent.value.field.required && (!diyComponent.value.field.value || diyComponent.value.field.value && !diyComponent.value.field.value.length)) {
         res.code = false
         res.message = `请上传图片`;
     } else if (diyComponent.value.field.value && diyComponent.value.field.value.length > Number(diyComponent.value.limit)) {
@@ -305,7 +362,8 @@ const reset = () => {
 
 defineExpose({
     verify,
-    reset
+    reset,
+    isUploading: () => isUploading.value
 })
 </script>
 
@@ -316,4 +374,45 @@ defineExpose({
 </style>
 <style lang="scss" scoped>
 @import '@/styles/diy_form.scss';
+
+.image-upload-loading-mask {
+    position: absolute;
+    z-index: 20;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 180rpx;
+    border-radius: inherit;
+    background: rgba(248, 250, 252, .88);
+    backdrop-filter: blur(4rpx);
+}
+
+.image-upload-loading-card {
+    display: flex;
+    min-width: 280rpx;
+    flex-direction: column;
+    align-items: center;
+    padding: 22rpx 28rpx;
+    border: 1rpx solid rgba(49, 92, 245, .14);
+    border-radius: 18rpx;
+    background: rgba(255, 255, 255, .96);
+    box-shadow: 0 10rpx 30rpx rgba(31, 53, 109, .12);
+}
+
+.image-upload-loading-title {
+    margin-top: 12rpx;
+    color: #344054;
+    font-size: 25rpx;
+    font-weight: 650;
+}
+
+.image-upload-loading-tip {
+    margin-top: 6rpx;
+    color: #98a2b3;
+    font-size: 20rpx;
+}
 </style>

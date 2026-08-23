@@ -29,24 +29,67 @@ if ($path === '/v1/chat/completions') {
         return;
     }
     $jsonMode = ($payload['response_format']['type'] ?? '') === 'json_object';
+    $lastMessage = (array)end($payload['messages']);
+    $toolMode = !empty($payload['tools'])
+        && ($lastMessage['role'] ?? '') === 'user'
+        && str_contains((string)($lastMessage['content'] ?? ''), 'use tool');
+    $textToolMode = !empty($payload['tools'])
+        && ($lastMessage['role'] ?? '') === 'user'
+        && str_contains((string)($lastMessage['content'] ?? ''), 'use text tool');
+    $toolResultMode = ($lastMessage['role'] ?? '') === 'tool';
     if (!empty($payload['stream'])) {
         header('Content-Type: text/event-stream; charset=utf-8');
-        $chunks = [
-            ['id' => 'chatcmpl-stream', 'model' => (string)$payload['model'], 'choices' => [['delta' => ['reasoning_content' => 'thinking'], 'finish_reason' => null]]],
-            ['id' => 'chatcmpl-stream', 'model' => (string)$payload['model'], 'choices' => [['delta' => ['content' => 'mock '], 'finish_reason' => null]]],
-            ['id' => 'chatcmpl-stream', 'model' => (string)$payload['model'], 'choices' => [['delta' => ['content' => 'response'], 'finish_reason' => 'stop']]],
-            ['id' => 'chatcmpl-stream', 'model' => (string)$payload['model'], 'choices' => [], 'usage' => ['prompt_tokens' => 8, 'completion_tokens' => 4, 'total_tokens' => 12]],
-        ];
+        if ($textToolMode) {
+            $chunks = [
+                ['id' => 'chatcmpl-stream-text-tool', 'model' => (string)$payload['model'], 'choices' => [['delta' => ['content' => '<｜tool▁calls▁begin｜>function<｜tool'], 'finish_reason' => null]]],
+                ['id' => 'chatcmpl-stream-text-tool', 'model' => (string)$payload['model'], 'choices' => [['delta' => ['content' => '▁sep｜>mock_search\n```json\n{"query":"phone"}'], 'finish_reason' => null]]],
+                ['id' => 'chatcmpl-stream-text-tool', 'model' => (string)$payload['model'], 'choices' => [['delta' => ['content' => '\n```<｜tool▁call▁end｜><｜tool▁calls▁end｜>'], 'finish_reason' => 'stop']]],
+                ['id' => 'chatcmpl-stream-text-tool', 'model' => (string)$payload['model'], 'choices' => [], 'usage' => ['prompt_tokens' => 8, 'completion_tokens' => 4, 'total_tokens' => 12]],
+            ];
+        } elseif ($toolMode) {
+            $chunks = [
+                ['id' => 'chatcmpl-stream-tool', 'model' => (string)$payload['model'], 'choices' => [['delta' => ['tool_calls' => [['index' => 0, 'id' => 'call_mock', 'type' => 'function', 'function' => ['name' => 'mock_', 'arguments' => '{"query":"']]]], 'finish_reason' => null]]],
+                ['id' => 'chatcmpl-stream-tool', 'model' => (string)$payload['model'], 'choices' => [['delta' => ['tool_calls' => [['index' => 0, 'function' => ['name' => 'search', 'arguments' => 'phone"}']]]], 'finish_reason' => 'tool_calls']]],
+                ['id' => 'chatcmpl-stream-tool', 'model' => (string)$payload['model'], 'choices' => [], 'usage' => ['prompt_tokens' => 8, 'completion_tokens' => 4, 'total_tokens' => 12]],
+            ];
+        } else {
+            $chunks = [
+                ['id' => 'chatcmpl-stream', 'model' => (string)$payload['model'], 'choices' => [['delta' => ['reasoning_content' => 'thinking'], 'finish_reason' => null]]],
+                ['id' => 'chatcmpl-stream', 'model' => (string)$payload['model'], 'choices' => [['delta' => ['content' => $toolResultMode ? 'tool result ' : 'mock '], 'finish_reason' => null]]],
+                ['id' => 'chatcmpl-stream', 'model' => (string)$payload['model'], 'choices' => [['delta' => ['content' => $toolResultMode ? 'accepted' : 'response'], 'finish_reason' => 'stop']]],
+                ['id' => 'chatcmpl-stream', 'model' => (string)$payload['model'], 'choices' => [], 'usage' => ['prompt_tokens' => 8, 'completion_tokens' => 4, 'total_tokens' => 12]],
+            ];
+        }
         foreach ($chunks as $chunk) echo 'data: ' . json_encode($chunk) . "\n\n";
         echo "data: [DONE]\n\n";
         return;
+    }
+    $message = ['role' => 'assistant', 'content' => $jsonMode ? '{"ok":true}' : ($toolResultMode ? 'tool result accepted' : 'mock response')];
+    $finishReason = 'stop';
+    if ($textToolMode) {
+        $message = [
+            'role' => 'assistant',
+            'content' => '<｜tool▁calls▁begin｜>function<｜tool▁sep｜>mock_search\n```json\n{"query":"phone"}\n```<｜tool▁call▁end｜><｜tool▁calls▁end｜>',
+        ];
+        $finishReason = 'stop';
+    } elseif ($toolMode) {
+        $message = [
+            'role' => 'assistant',
+            'content' => '',
+            'tool_calls' => [[
+                'id' => 'call_mock',
+                'type' => 'function',
+                'function' => ['name' => 'mock_search', 'arguments' => '{"query":"phone"}'],
+            ]],
+        ];
+        $finishReason = 'tool_calls';
     }
     echo json_encode([
         'id' => 'chatcmpl-mock',
         'model' => (string)$payload['model'],
         'choices' => [[
-            'message' => ['role' => 'assistant', 'content' => $jsonMode ? '{"ok":true}' : 'mock response'],
-            'finish_reason' => 'stop',
+            'message' => $message,
+            'finish_reason' => $finishReason,
         ]],
         'usage' => [
             'prompt_tokens' => 8,

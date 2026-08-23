@@ -211,7 +211,7 @@ const getData = () => {
     }
 
     return {
-        name: 'SHOP_GOODS_CATEGORY',
+        name: 'PHONE_SHOP_GOODS_CATEGORY',
         title: currCategoryData.category_name,
         url: `/addon/phone_shop/pages/goods/list?curr_goods_category=${currCategoryData.category_id}`,
         action: '',

@@ -10,13 +10,18 @@
             </view>
             <PhoneGoodsMeta :subtitle="item.sub_title" :imei="item.goodsSku?.sku_no" compact />
             <PhoneGoodsSaleState :state="item.sale_state" />
-            <view class="waterfall-card__price">
-                <view class="waterfall-card__amount">
-                    <text class="waterfall-card__currency">￥</text>
-                    <text class="waterfall-card__integer">{{ priceParts[0] }}</text>
-                    <text class="waterfall-card__decimal">.{{ priceParts[1] }}</text>
+            <view class="waterfall-card__footer">
+                <view class="waterfall-card__price">
+                    <view class="waterfall-card__amount">
+                        <text class="waterfall-card__currency">￥</text>
+                        <text class="waterfall-card__integer">{{ priceParts[0] }}</text>
+                        <text class="waterfall-card__decimal">.{{ priceParts[1] }}</text>
+                    </view>
+                    <image v-if="priceBadge" class="waterfall-card__price-badge" :src="priceBadge" mode="heightFix" />
                 </view>
-                <image v-if="priceBadge" class="waterfall-card__price-badge" :src="priceBadge" mode="heightFix" />
+                <view class="waterfall-card__forward" @click.stop="emit('forward')">
+                    <text class="nc-iconfont nc-icon-fenxiangV6xx"></text>
+                </view>
             </view>
         </view>
     </view>
@@ -38,6 +43,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
     (event: 'click'): void
+    (event: 'forward'): void
 }>()
 
 const diyGoods = useGoods()
@@ -77,12 +83,21 @@ const priceBadge = computed(() => {
     line-height: 40rpx;
 }
 
-.waterfall-card__price {
+.waterfall-card__footer {
     min-width: 0;
     margin-top: 18rpx;
     display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10rpx;
+}
+
+.waterfall-card__price {
+    min-width: 0;
+    display: flex;
     align-items: baseline;
     overflow: hidden;
+    flex: 1;
 }
 
 .waterfall-card__amount {
@@ -111,5 +126,22 @@ const priceBadge = computed(() => {
     height: 28rpx;
     margin-left: 6rpx;
     flex-shrink: 0;
+}
+
+.waterfall-card__forward {
+    width: 48rpx;
+    height: 48rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: #fff;
+    background: var(--primary-color);
+    box-shadow: 0 5rpx 14rpx rgba(var(--primary-color-rgb, 18, 85, 231), .18);
+    flex-shrink: 0;
+}
+
+.waterfall-card__forward .nc-iconfont {
+    font-size: 25rpx;
 }
 </style>

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>华网 OA 考勤快捷申报安装</title>
+  <style>
+    body {
+      box-sizing: border-box;
+      max-width: 760px;
+      margin: 48px auto;
+      padding: 0 24px;
+      color: #1f2937;
+      font: 16px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    h1 { font-size: 28px; }
+    .bookmark, .copy-button {
+      display: inline-block;
+      margin: 12px 0 24px;
+      padding: 12px 18px;
+      border-radius: 8px;
+      background: #16a34a;
+      color: white;
+      font-weight: 700;
+      text-decoration: none;
+      border: 0;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgb(22 163 74 / 25%);
+    }
+    .copy-button {
+      margin-left: 10px;
+      background: #2563eb;
+      box-shadow: 0 4px 12px rgb(37 99 235 / 25%);
+    }
+    .note {
+      padding: 14px 18px;
+      border-left: 4px solid #f59e0b;
+      background: #fffbeb;
+    }
+    code { padding: 2px 5px; background: #f3f4f6; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>华网 OA 考勤快捷申报</h1>
+  <p><strong>不要直接点击绿色按钮。</strong>请在 Chrome 中打开本页，再把绿色按钮拖到 Chrome 书签栏。</p>
+  <a class="bookmark" id="bookmark" href="#">一键报考勤</a>
+  <button class="copy-button" id="copy" type="button">复制书签代码</button>
+  <ol>
+    <li>按 <code>⌘⇧B</code> 显示 Chrome 书签栏。</li>
+    <li>把上面的绿色“一键报考勤”拖到书签栏；不要在本页直接点击。</li>
+    <li>关闭代理，通过 Trust 打开并登录 OA。</li>
+    <li>进入“个人办公 → 考勤申报 → 考勤录入”。</li>
+    <li>先在页面选择日期、项目、地区和住宿信息。</li>
+    <li>点击书签栏中的“一键报考勤”，填写工作概要并确认。</li>
+  </ol>
+  <p class="note">如果拖动安装不成功：点击“复制书签代码”，在 Chrome 新建一个书签，把复制的内容粘贴到书签的“网址”中。</p>
+  <p>脚本不会保存或导出登录 Cookie；真正提交前会展示完整摘要，并要求你再次确认。</p>
+
+  <script>
+    // BOOKMARKLET_SOURCE_START
+    const source = `/**\n * 华网 OA 考勤快捷申报（书签脚本源码）\n *\n * 用法：\n * 1. 在浏览器中打开 OA，并进入“考勤录入”页面。\n * 2. 通过 scripts/oa-attendance-bookmarklet.html 安装书签按钮。\n * 3. 点击书签，填写工作概要，核对信息后确认保存。\n *\n * 设计说明：\n * - 不读取、保存或传出 Cookie。\n * - 不重新实现服务器协议，而是调用 OA 页面已有的“保存”按钮，继续使用\n *   网站原有的表单校验和 POST /Attendance/Create/ 提交逻辑。\n * - 脚本不会自动切换日期、项目、地区或住宿信息，避免误报。\n */\n(function quickSubmitAttendance() {\n  'use strict';\n\n  function isVisible(element) {\n    return Boolean(\n      element &&\n      (element.offsetWidth || element.offsetHeight || element.getClientRects().length)\n    );\n  }\n\n  function findAttendanceWindow(currentWindow, visited) {\n    if (!currentWindow || visited.has(currentWindow)) return null;\n    visited.add(currentWindow);\n\n    try {\n      const currentDocument = currentWindow.document;\n      if (\n        currentDocument.querySelector('#btnSave') &&\n        currentDocument.querySelector('#ddlDate') &&\n        currentDocument.querySelector('#txtWork')\n      ) {\n        return currentWindow;\n      }\n\n      const frames = Array.from(currentDocument.querySelectorAll('iframe'))\n        .filter(isVisible)\n        .concat(Array.from(currentDocument.querySelectorAll('iframe')).filter((frame) => !isVisible(frame)));\n\n      for (const frame of frames) {\n        try {\n          const found = findAttendanceWindow(frame.contentWindow, visited);\n          if (found) return found;\n        } catch (_) {\n          // 跨域 iframe 无法读取时直接跳过。\n        }\n      }\n    } catch (_) {\n      // 当前窗口不可读时直接跳过。\n    }\n\n    return null;\n  }\n\n  function selectedText(select) {\n    return select && select.selectedIndex >= 0\n      ? select.options[select.selectedIndex].text.trim()\n      : '';\n  }\n\n  function readProjects(document) {\n    return Array.from(document.querySelectorAll('.proinfo select'))\n      .map((select, index) => {\n        const suffix = select.id.split('_dropProName_')[1] || String(index + 1);\n        const percent = document.querySelector(\`#percent_\${suffix}\`);\n        return {\n          name: selectedText(select),\n          percent: percent ? percent.value : ''\n        };\n      })\n      .filter((project) => project.name);\n  }\n\n  function fail(message) {\n    window.alert(\`考勤快捷申报：\${message}\`);\n  }\n\n  const attendanceWindow = findAttendanceWindow(window, new Set());\n  if (!attendanceWindow) {\n    fail('没有找到“考勤录入”表单。请先在 OA 中打开考勤申报，再点击此书签。');\n    return;\n  }\n\n  const document = attendanceWindow.document;\n  const dateSelect = document.querySelector('#ddlDate');\n  const workInput = document.querySelector('#txtWork');\n  const memoInput = document.querySelector('#txtmemo');\n  const provinceSelect = document.querySelector('#tbUserProvince');\n  const citySelect = document.querySelector('#tbUserCity');\n  const lodgingSelect = document.querySelector('#ddlZhushu');\n  const dormSelect = document.querySelector('#ddlsushe');\n  const statusInput = document.querySelector('input[name=\"status\"]:checked');\n  const saveButton = document.querySelector('#btnSave');\n\n  const dateLabel = selectedText(dateSelect);\n  if (!dateSelect || !dateSelect.value) {\n    fail('请先选择申报日期。');\n    return;\n  }\n  if (dateLabel.includes('已申报')) {\n    fail(\`“\${dateLabel}”已经申报，脚本已停止。\`);\n    return;\n  }\n  if (!statusInput) {\n    fail('页面没有选中工作状态。');\n    return;\n  }\n\n  const projects = readProjects(document);\n  const totalPercent = projects.reduce(\n    (sum, project) => sum + Number(project.percent || 0),\n    0\n  );\n  if (!projects.length || totalPercent !== 100) {\n    fail(\`项目时间占比合计为 \${totalPercent}%，请先在页面中调整为 100%。\`);\n    return;\n  }\n\n  const savedWork = window.localStorage.getItem('oa-attendance-last-work') || '';\n  const initialWork = workInput.value.trim() || savedWork;\n  const work = window.prompt('请输入本次考勤的工作概要：', initialWork);\n  if (work === null) return;\n  if (!work.trim()) {\n    fail('工作概要不能为空。');\n    return;\n  }\n\n  const memo = window.prompt('备注（可留空）：', memoInput ? memoInput.value : '');\n  if (memo === null) return;\n\n  const projectSummary = projects\n    .map((project) => \`\${project.name} \${project.percent}%\`)\n    .join('、');\n  const place = [selectedText(provinceSelect), selectedText(citySelect)]\n    .filter(Boolean)\n    .join(' / ');\n  const lodging = [selectedText(lodgingSelect), selectedText(dormSelect)]\n    .filter(Boolean)\n    .join(' / ');\n  const statusLabel = document.querySelector(\`label[for=\"\${statusInput.id}\"]\`);\n  const status = statusLabel ? statusLabel.textContent.trim() : statusInput.value;\n\n  const confirmation = [\n    '即将写入一条考勤记录：',\n    '',\n    \`日期：\${dateLabel}\`,\n    \`工作状态：\${status}\`,\n    \`工作概要：\${work.trim()}\`,\n    \`项目：\${projectSummary}\`,\n    \`地区：\${place || '未读取到'}\`,\n    \`住宿：\${lodging || '未读取到'}\`,\n    \`备注：\${memo.trim() || '无'}\`,\n    '',\n    '确认后将调用 OA 原有“保存”功能。'\n  ].join('\\n');\n\n  if (!window.confirm(confirmation)) return;\n\n  workInput.value = work.trim();\n  workInput.dispatchEvent(new Event('input', { bubbles: true }));\n  workInput.dispatchEvent(new Event('change', { bubbles: true }));\n  if (memoInput) {\n    memoInput.value = memo.trim();\n    memoInput.dispatchEvent(new Event('input', { bubbles: true }));\n    memoInput.dispatchEvent(new Event('change', { bubbles: true }));\n  }\n\n  window.localStorage.setItem('oa-attendance-last-work', work.trim());\n  saveButton.click();\n})();\n`;
+    // BOOKMARKLET_SOURCE_END
+    const bookmarklet = `javascript:${encodeURIComponent(source)}`;
+    const bookmark = document.querySelector('#bookmark');
+    bookmark.href = bookmarklet;
+    bookmark.addEventListener('click', (event) => {
+      event.preventDefault();
+      window.alert('不要在安装页面直接点击。请把绿色按钮拖到 Chrome 书签栏，然后到 OA 考勤录入页面点击书签。');
+    });
+
+    document.querySelector('#copy').addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(bookmarklet);
+        window.alert('书签代码已复制。请在 Chrome 新建书签，并把它粘贴到“网址”中。');
+      } catch (_) {
+        window.prompt('请复制下面的书签代码：', bookmarklet);
+      }
+    });
+  </script>
+</body>
+</html>

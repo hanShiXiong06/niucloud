@@ -6,6 +6,9 @@ return [
         'HsxAiExecuteRequested' => [
             'addon\hsx_ai\app\listener\AiExecuteRequested',
         ],
+        'HsxAiAgentExecuteRequested' => [
+            'addon\hsx_ai\app\listener\AiAgentExecuteRequested',
+        ],
         'HsxAiCapabilityRequested' => [
             'addon\hsx_ai\app\listener\AiCapabilityRequested',
         ],

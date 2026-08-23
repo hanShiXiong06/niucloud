@@ -24,6 +24,21 @@
                     </el-radio-group>
                     <div class="image-mode-tip">直接使用 URL 时不会采集或重复上传；只有 Excel 内嵌图片仍会上传到当前存储。</div>
                 </div>
+                <div class="import-defaults">
+                    <div>
+                        <div class="image-mode-title">导入后的默认状态</div>
+                        <el-radio-group v-model="defaultStatus">
+                            <el-radio-button :label="0">默认下架</el-radio-button>
+                            <el-radio-button :label="1">默认上架</el-radio-button>
+                        </el-radio-group>
+                        <p>模板不再读取上架状态，整批商品使用这里的选择。</p>
+                    </div>
+                    <div>
+                        <div class="image-mode-title">轮播图同步到详情</div>
+                        <el-switch v-model="imagesToDesc" inline-prompt active-text="开" inactive-text="关" />
+                        <p>开启后自动生成图片详情；关闭后只保留轮播图。</p>
+                    </div>
+                </div>
                 <div class="flex items-center gap-[12px] mb-[16px]">
                     <el-button @click="downloadTemplate" :loading="templateLoading">下载导入模板</el-button>
                     <span class="text-[13px] text-[#94a3b8]">请保留“商品数据”工作表及表头</span>
@@ -108,6 +123,8 @@ const visible = ref(false)
 const activeTab = ref('import')
 const selectedFile = ref<File | null>(null)
 const imageMode = ref<'direct' | 'store'>('direct')
+const defaultStatus = ref(0)
+const imagesToDesc = ref(true)
 const uploadRef = ref<UploadInstance>()
 const templateLoading = ref(false)
 const importLoading = ref(false)
@@ -155,7 +172,7 @@ const submitImport = async () => {
     if (!selectedFile.value) return
     importLoading.value = true
     try {
-        const res: any = await createGoodsImportTask(selectedFile.value, imageMode.value)
+        const res: any = await createGoodsImportTask(selectedFile.value, imageMode.value, defaultStatus.value, imagesToDesc.value)
         ElMessage.success(res.data?.message || '导入任务已创建')
         if (res.data?.task_id) watchedTaskIds.add(Number(res.data.task_id))
         selectedFile.value = null
@@ -225,6 +242,9 @@ onBeforeUnmount(stopPolling)
 .image-mode-options :deep(.el-radio__label) { display: flex; min-width: 0; flex-direction: column; white-space: normal; line-height: 1.5; }
 .image-mode-desc { margin-top: 2px; color: #94a3b8; font-size: 12px; }
 .image-mode-tip { margin-top: 9px; color: #64748b; font-size: 12px; }
+.import-defaults { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.import-defaults > div { padding: 14px 16px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; }
+.import-defaults p { margin: 8px 0 0; color: #94a3b8; font-size: 12px; line-height: 1.5; }
 .export-card { padding: 18px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; }
 .error-preview-title { margin-bottom: 8px; color: #334155; font-size: 13px; font-weight: 600; }
 .error-preview-row { display: flex; flex-direction: column; gap: 2px; padding: 7px 0; border-top: 1px solid #f1f5f9; }

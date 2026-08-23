@@ -59,6 +59,26 @@ class RecycleDeviceModelDict extends BaseAdminController
         return success($this->service->tree());
     }
 
+    public function resolveAlias()
+    {
+        $data = $this->request->params([
+            ['aliases', []],
+        ]);
+        return success($this->service->resolveAliases(is_array($data['aliases']) ? $data['aliases'] : []));
+    }
+
+    public function bindAlias()
+    {
+        $data = $this->request->params([
+            ['aliases', []],
+            ['category_id', 0],
+        ]);
+        return success($this->service->bindAliases(
+            is_array($data['aliases']) ? $data['aliases'] : [],
+            (int)$data['category_id']
+        ));
+    }
+
     public function add()
     {
         $data = $this->request->params([
