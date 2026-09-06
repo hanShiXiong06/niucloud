@@ -15,6 +15,12 @@ final class Message extends BaseAdminController
         return success((new WecomMessageAdminService())->page($data));
     }
 
+    public function test(): Response
+    {
+        $receiverUid = (int)$this->request->param('receiver_uid', 0);
+        return success((new WecomMessageAdminService())->test($receiverUid));
+    }
+
     public function retry(int $id): Response
     {
         $success = (new WecomMessageAdminService())->retry($id);

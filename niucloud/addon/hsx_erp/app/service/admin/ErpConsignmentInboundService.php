@@ -17,6 +17,15 @@ use core\exception\CommonException;
  */
 class ErpConsignmentInboundService extends BaseAdminService
 {
+    public static function forSite(int $siteId, int $operatorUid = 0, string $operatorName = '系统补偿'): self
+    {
+        $service = new self();
+        $service->site_id = $siteId;
+        $service->uid = $operatorUid;
+        $service->username = $operatorName;
+        return $service;
+    }
+
     public function register(array $event, array $device, array $item): array
     {
         $source = (array)($event['_erp_source'] ?? []);
@@ -40,7 +49,11 @@ class ErpConsignmentInboundService extends BaseAdminService
 
         $warehouseId = (int)($item['warehouse_id'] ?? 0);
         $locationId = (int)($item['location_id'] ?? 0);
-        [$warehouse, $location] = (new ErpWarehouseService())->validateInboundLocation($warehouseId, $locationId);
+        [$warehouse, $location] = ErpWarehouseService::forSite(
+            (int)$this->site_id,
+            (int)$this->uid,
+            (string)$this->username
+        )->validateInboundLocation($warehouseId, $locationId);
         if ((string)$warehouse->warehouse_type !== 'consignment' && (string)$warehouse->ownership_type !== 'consigned') {
             throw new CommonException('客户代卖设备必须登记到代卖仓，不能混入公司自有库存');
         }
@@ -49,7 +62,11 @@ class ErpConsignmentInboundService extends BaseAdminService
         $counterparty = (array)($device['counterparty'] ?? []);
         // 不传 hsx_recycle 给 ensureParty，避免代卖登记提前获得“采购供货商”身份；
         // 真正买断时才产生采购关系。会员绑定与姓名手机号同步仍然会执行。
-        $party = (new ErpPurchaseService())->resolveExternalParty($counterparty, '', ['recycle_customer']);
+        $party = ErpPurchaseService::forSite(
+            (int)$this->site_id,
+            (int)$this->uid,
+            (string)$this->username
+        )->resolveExternalParty($counterparty, '', ['recycle_customer']);
         $partyName = (string)$party->party_name;
         $now = time();
         $occurredAt = max(1, (int)($device['acquired_at'] ?? $event['occurred_at'] ?? $now));
@@ -142,7 +159,7 @@ class ErpConsignmentInboundService extends BaseAdminService
             'update_at' => $now,
         ]);
 
-        (new ErpLedgerService())->asset([
+        ErpLedgerService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username)->asset([
             'asset_id' => (int)$asset->id,
             'action' => 'consignment_inbound',
             'after_status' => ErpDict::ASSET_IN_STOCK,
@@ -165,7 +182,7 @@ class ErpConsignmentInboundService extends BaseAdminService
                 'source_order_no' => $sourceOrderNo,
             ],
         ]);
-        (new ErpOperationLogService())->record(
+        ErpOperationLogService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username)->record(
             'consignment_inbound',
             'asset',
             (int)$asset->id,

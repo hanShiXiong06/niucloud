@@ -10,6 +10,15 @@ use core\exception\CommonException;
 
 class ErpStaffService extends BaseAdminService
 {
+    public static function forSite(int $siteId, int $operatorUid = 0, string $operatorName = '系统补偿'): self
+    {
+        $service = new self();
+        $service->site_id = $siteId;
+        $service->uid = $operatorUid;
+        $service->username = $operatorName;
+        return $service;
+    }
+
     public function options(array $where = []): array
     {
         $keyword = trim((string)($where['keyword'] ?? ''));

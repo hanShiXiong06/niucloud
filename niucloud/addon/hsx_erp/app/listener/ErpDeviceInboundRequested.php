@@ -6,6 +6,7 @@ namespace addon\hsx_erp\app\listener;
 use addon\hsx_erp\app\model\ErpInboxEvent;
 use addon\hsx_erp\app\model\ErpPurchaseOrder;
 use addon\hsx_erp\app\service\admin\ErpConfigService;
+use addon\hsx_erp\app\service\admin\ErpCapitalAccountService;
 use addon\hsx_erp\app\service\admin\ErpConsignmentInboundService;
 use addon\hsx_erp\app\service\admin\ErpListingTaskService;
 use addon\hsx_erp\app\service\admin\ErpPurchaseService;
@@ -18,11 +19,27 @@ use think\facade\Log;
 /**
  * 消费回收插件的标准设备入库请求，并统一落为 ERP 采购、库存和设备级应付事实。
  *
- * 事件在后台请求内同步派发。BaseAdminService 没有安全的站点切换能力，因此本监听器
- * 只允许消费与当前请求站点一致的事件，绝不通过 request()->siteId($id) 篡改上下文。
+ * HTTP 请求内默认使用当前站点；队列和定时补偿则必须通过 forSite()
+ * 显式锁定事件站点。两种路径都不修改全局 request 上下文，避免 SaaS 站点串数据。
  */
 class ErpDeviceInboundRequested
 {
+    private int $forcedSiteId = 0;
+    private int $operatorUid = 0;
+    private string $operatorName = '系统补偿';
+
+    public static function forSite(int $siteId, int $operatorUid = 0, string $operatorName = '系统补偿'): self
+    {
+        if ($siteId <= 0) {
+            throw new CommonException('ERP入库补偿缺少有效站点');
+        }
+        $listener = new self();
+        $listener->forcedSiteId = $siteId;
+        $listener->operatorUid = $operatorUid;
+        $listener->operatorName = trim($operatorName) ?: '系统补偿';
+        return $listener;
+    }
+
     public function handle($event): ?array
     {
         if (!is_array($event)) {
@@ -218,7 +235,11 @@ class ErpDeviceInboundRequested
                 $beforeAppendCount = count($pendingDevices);
                 $appendGroup = $group;
                 $appendGroup['devices'] = $pendingDevices;
-                $appendData = $this->buildPurchaseData($event, $appendGroup, '');
+                $appendRequestId = $requestId . ':append:' . substr(hash('sha256', $eventId . '|' . implode(',', array_map(
+                    static fn(array $device): string => (string)($device['source_device_id'] ?? ''),
+                    $pendingDevices
+                ))), 0, 24);
+                $appendData = $this->buildPurchaseData($event, $appendGroup, $appendRequestId);
                 $appendData['append_order_id'] = $orderId;
                 $this->createPurchase($appendData);
                 $remainingDevices = $this->filterMissingSourceDevices($currentSiteId, $orderId, $pendingDevices);
@@ -275,7 +296,11 @@ class ErpDeviceInboundRequested
      */
     protected function registerConsignment(array $event, array $device, array $item): array
     {
-        return (new ErpConsignmentInboundService())->register($event, $device, $item);
+        return ErpConsignmentInboundService::forSite(
+            $this->currentSiteId(),
+            $this->operatorUid,
+            $this->operatorName
+        )->register($event, $device, $item);
     }
 
     /** @return array<string,array{source_id:string,source_order_no:string,counterparty:array,devices:array}> */
@@ -345,12 +370,15 @@ class ErpDeviceInboundRequested
             if ($cost <= 0) {
                 throw new CommonException($deviceLabel . '缺少有效回收成本，不能生成采购入库');
             }
-            $sourcePaidAmount = round($sourcePaidAmount + max(0, (float)($device['paid_amount'] ?? 0)), 2);
+            $devicePaidAmount = min($cost, round(max(0, (float)($device['paid_amount'] ?? 0)), 2));
+            $sourcePaidAmount = round($sourcePaidAmount + $devicePaidAmount, 2);
             $time = (int)($device['acquired_at'] ?? 0);
             if ($time > 0) {
                 $acquiredAt[] = $time;
             }
-            $items[] = $this->mapDeviceItem($device, $warehouseId, $locationId, $cost, $sourcePlugin, $sourcePluginName);
+            $item = $this->mapDeviceItem($device, $warehouseId, $locationId, $cost, $sourcePlugin, $sourcePluginName);
+            $item['source_paid_amount'] = $devicePaidAmount;
+            $items[] = $item;
         }
 
         $sourceOrderNo = trim((string)($group['source_order_no'] ?? ''));
@@ -362,14 +390,18 @@ class ErpDeviceInboundRequested
         $operator = (array)($event['operator'] ?? []);
         // 采购员属于采购事实，应取最终回收定价员，而不是客户确认请求的
         // 当前登录人。事件顶层 operator 仅作兼容兜底，设备定价快照优先。
-        $purchaserUid = $this->resolvePricingPurchaserUid((array)($group['devices'] ?? []), $operator);
+        $purchaser = $this->resolvePricingPurchaser((array)($group['devices'] ?? []), $operator);
         $remark = $sourceName . '入库';
         if ($sourceOrderNo !== '') {
             $remark .= '；原业务单 ' . $sourceOrderNo;
         }
         if ($sourcePaidAmount > 0) {
-            $remark .= '；来源系统记录已付 ¥' . number_format($sourcePaidAmount, 2, '.', '') . '，ERP未收到付款账户，本次仅生成应付，须由财务核对结算';
+            $remark .= '；来源系统已付 ¥' . number_format($sourcePaidAmount, 2, '.', '') . '，ERP已核销对应设备应付并记入“来源系统已付待核对”账户，禁止重复付款';
         }
+
+        $sourcePaidAccount = $sourcePaidAmount > 0
+            ? $this->resolveSourcePaidAccount($this->currentSiteId())
+            : null;
 
         return [
             'party_id' => 0,
@@ -380,10 +412,14 @@ class ErpDeviceInboundRequested
             'm_no' => trim((string)($counterparty['m_no'] ?? $counterparty['mobile'] ?? '')),
             'purchase_channel' => $channelName,
             'purchase_channel_key' => $channelCode,
-            'purchaser_uid' => $purchaserUid,
-            'settle_method' => '挂账',
-            // 标准事件没有 ERP 付款账户，不能伪造已付款资金事实。
-            'paid_amount' => 0,
+            'purchaser_uid' => $purchaser['uid'],
+            'purchaser_snapshot_name' => $purchaser['name'],
+            'allow_historical_purchaser' => 1,
+            'settle_mode' => $sourcePaidAmount > 0 ? 'cash' : 'credit',
+            'settle_method' => $sourcePaidAmount > 0 ? '来源系统已付' : '挂账',
+            'paid_amount' => $sourcePaidAmount,
+            'capital_account_id' => $sourcePaidAccount ? (int)$sourcePaidAccount->id : 0,
+            'source_paid_allocation' => $sourcePaidAmount > 0 ? 1 : 0,
             'purchase_at' => $acquiredAt === [] ? (int)($event['occurred_at'] ?? time()) : min($acquiredAt),
             'remark' => $remark,
             'source_plugin' => $sourcePlugin,
@@ -399,17 +435,27 @@ class ErpDeviceInboundRequested
             'origin_event_id' => $eventId,
             'event_id' => $eventId,
             'request_id' => $requestId,
+            'settlement_request_id' => 'source-paid:' . ($requestId !== '' ? $requestId : $eventId),
             'items' => $items,
         ];
     }
 
-    protected function resolvePricingPurchaserUid(array $devices, array $operator): int
+    /** @return array{uid:int,name:string,historical:bool} */
+    protected function resolvePricingPurchaser(array $devices, array $operator): array
     {
         foreach ($devices as $device) {
             $pricing = (array)($device['pricing_snapshot'] ?? $device['recycle_pricing_snapshot'] ?? []);
             $uid = (int)($pricing['price_uid'] ?? 0);
             if ($uid > 0) {
-                return $uid;
+                $name = trim((string)($pricing['price_name'] ?? ''));
+                if ($name === '' && (int)($operator['id'] ?? 0) === $uid) {
+                    $name = trim((string)($operator['name'] ?? ''));
+                }
+                return [
+                    'uid' => $uid,
+                    'name' => $name !== '' ? $name : ('历史定价员#' . $uid),
+                    'historical' => !empty($pricing['historical_operator']) || !empty($operator['historical']),
+                ];
             }
         }
 
@@ -417,7 +463,16 @@ class ErpDeviceInboundRequested
         if ($uid <= 0) {
             throw new CommonException('回收入库设备缺少最终定价员，不能确定 ERP 采购员');
         }
-        return $uid;
+        return [
+            'uid' => $uid,
+            'name' => trim((string)($operator['name'] ?? '')) ?: ('历史定价员#' . $uid),
+            'historical' => !empty($operator['historical']),
+        ];
+    }
+
+    protected function resolveSourcePaidAccount(int $siteId): object
+    {
+        return ErpCapitalAccountService::ensureSourcePaidClearingAccount($siteId);
     }
 
     protected function mapDeviceItem(array $device, int $warehouseId, int $locationId, float $cost, string $sourcePlugin, string $sourcePluginName): array
@@ -432,10 +487,8 @@ class ErpDeviceInboundRequested
         $capacity = trim((string)($device['capacity'] ?? ''));
         $color = trim((string)($device['color'] ?? ''));
         $spec = implode(' ', array_values(array_filter([$capacity, $color])));
-        $qualityParts = array_values(array_filter([
-            $this->snapshotText($check['check_result'] ?? ''),
-            trim((string)($check['check_remark'] ?? '')),
-        ]));
+        // 结构化质检只写qc_report。备注仅承接来源人员手填内容，避免长摘要挤占备注。
+        $humanRemark = trim((string)($check['human_remark'] ?? $check['check_remark'] ?? ''));
         $images = '';
         foreach (['check_images_buyer', 'check_images_seller', 'check_images'] as $imageField) {
             $candidate = $check[$imageField] ?? '';
@@ -486,16 +539,14 @@ class ErpDeviceInboundRequested
             'estimate_sale_price' => round((float)($device['suggested_sale_price'] ?? 0), 2),
             'retail_price' => round((float)($device['suggested_sale_price'] ?? 0), 2),
             'image_urls' => trim((string)$images),
-            'quality_remark' => mb_substr(implode('；', $qualityParts), 0, 500),
+            'quality_remark' => mb_substr($humanRemark, 0, 500),
             'qc_template_id' => (int)($check['check_template_id'] ?? 0),
             'qc_report' => json_encode($qcSnapshot, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '',
             'purchase_cost' => $cost,
             'refurbish_required' => (bool)($refurbishment['required'] ?? false),
             'refurbish_reason' => $refurbishmentReason,
-            'remark' => $sourceDeviceId !== '' ? '来源设备#' . $sourceDeviceId : '外部来源设备',
-            'remark_internal' => $sourceDeviceId !== ''
-                ? '来源插件 ' . ($sourcePluginName ?: $sourcePlugin) . '；来源设备ID ' . $sourceDeviceId
-                : '来源插件 ' . ($sourcePluginName ?: $sourcePlugin),
+            'remark' => '',
+            'remark_internal' => '',
         ];
     }
 
@@ -555,7 +606,7 @@ class ErpDeviceInboundRequested
 
     protected function currentSiteId(): int
     {
-        return (int)request()->siteId();
+        return $this->forcedSiteId > 0 ? $this->forcedSiteId : (int)request()->siteId();
     }
 
     protected function existingOrderId(int $siteId, string $requestId): int
@@ -606,12 +657,16 @@ class ErpDeviceInboundRequested
 
     protected function createPurchase(array $data): int
     {
-        return (new ErpPurchaseService())->create($data);
+        return ErpPurchaseService::forSite(
+            $this->currentSiteId(),
+            $this->operatorUid,
+            $this->operatorName
+        )->create($data);
     }
 
     protected function resolveBusinessSource(string $sourceType): ?array
     {
-        return (new ErpConfigService())->findBusinessSource($sourceType);
+        return ErpConfigService::forSite($this->currentSiteId())->findBusinessSource($sourceType);
     }
 
     protected function findInbox(int $siteId, string $eventId, bool $lock = false): ?array
@@ -642,8 +697,15 @@ class ErpDeviceInboundRequested
 
     protected function markInboxProcessing(int $inboxId, array $requestPayload): void
     {
+        $stored = json_decode((string)ErpInboxEvent::where('id', '=', $inboxId)->value('payload_json'), true);
+        $payload = ['request' => $requestPayload];
+        if (is_array($stored) && is_array($stored['_retry'] ?? null)) {
+            // 保留历史重试次数；否则每次进入 processing 都会将计数清零，
+            // 永远无法进入人工排障状态。
+            $payload['_retry'] = $stored['_retry'];
+        }
         ErpInboxEvent::where('id', '=', $inboxId)->update([
-            'payload_json' => json_encode(['request' => $requestPayload], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'payload_json' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             'status' => 'processing',
             'update_at' => time(),
         ]);
@@ -662,9 +724,18 @@ class ErpDeviceInboundRequested
     {
         $existing = $this->findInbox($siteId, $eventId);
         if ($existing !== null && $this->isProcessedInbox($existing)) return;
+        $existingPayload = $existing !== null
+            ? json_decode((string)($existing['payload_json'] ?? ''), true)
+            : [];
+        $attempts = (int)($existingPayload['_retry']['attempts'] ?? 0) + 1;
         $payload = json_encode([
             'request' => $requestPayload,
             'error' => mb_substr(trim($message), 0, 500),
+            '_retry' => [
+                'attempts' => $attempts,
+                'last_at' => time(),
+                'last_error' => mb_substr(trim($message), 0, 500),
+            ],
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $values = ['payload_json' => $payload, 'status' => 'failed', 'update_at' => time()];
         try {
@@ -711,6 +782,10 @@ class ErpDeviceInboundRequested
         $stored = json_decode((string)($inbox['payload_json'] ?? ''), true);
         $request = is_array($stored) && is_array($stored['request'] ?? null) ? $stored['request'] : null;
         if ($request === null) return;
+        // _erp_source 是消费端临时解析的展示快照，配置改名不应被误判为业务事实冲突。
+        unset($request['_erp_source'], $requestPayload['_erp_source']);
+        $request = $this->canonicalize($request);
+        $requestPayload = $this->canonicalize($requestPayload);
         $storedHash = hash('sha256', json_encode($request, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '');
         $currentHash = hash('sha256', json_encode($requestPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '');
         if (!hash_equals($storedHash, $currentHash)) {
@@ -726,7 +801,7 @@ class ErpDeviceInboundRequested
     /** 固化用于幂等碰撞校验的规范请求，排除 ERP 内部临时元数据。 */
     protected function canonicalRequest(array $event): array
     {
-        unset($event['_delivery']);
+        unset($event['_delivery'], $event['_erp_source']);
         return $this->canonicalize($event);
     }
 
@@ -740,11 +815,4 @@ class ErpDeviceInboundRequested
         return $value;
     }
 
-    private function snapshotText($value): string
-    {
-        if (is_array($value)) {
-            return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '';
-        }
-        return trim((string)$value);
-    }
 }

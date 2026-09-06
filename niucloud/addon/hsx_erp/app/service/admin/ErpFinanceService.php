@@ -27,6 +27,7 @@ use addon\hsx_erp\app\model\ErpCapitalAccount;
 use addon\hsx_erp\app\support\ErpIdempotency;
 use addon\hsx_erp\app\support\ErpMoney;
 use addon\hsx_erp\app\support\ErpPartyMemberNames;
+use addon\hsx_erp\app\support\ErpRecycleDeviceIdentity;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -35,6 +36,15 @@ class ErpFinanceService extends BaseAdminService
 {
     /** @var int[] 当前请求在事务内写入、待事务提交后派发的结算领域事件。 */
     private array $settlementOutboxIds = [];
+
+    public static function forSite(int $siteId, int $operatorUid = 0, string $operatorName = '系统补偿'): self
+    {
+        $service = new self();
+        $service->site_id = $siteId;
+        $service->uid = $operatorUid;
+        $service->username = $operatorName;
+        return $service;
+    }
 
     public function dashboard(array $where = []): array
     {
@@ -422,7 +432,7 @@ class ErpFinanceService extends BaseAdminService
         if (empty($sourceContext['channel_name'])) {
             $sourceContext['channel_name'] = (string)($sourceContext['sale_channel'] ?? '');
         }
-        $row['source_meta'] = (new ErpFinanceSourceService())->sourceMeta($sourceContext, 'receivable');
+        $row['source_meta'] = ErpFinanceSourceService::forSite((int)$this->site_id)->sourceMeta($sourceContext, 'receivable');
         $row['source_label'] = (string)$row['source_meta']['finance_type_name'];
         $row['business_reason'] = (string)($row['source_meta']['business_reason'] ?? $row['business_reason'] ?? '');
         $row['is_mall_source'] = $this->isMallReceivable($receivable);
@@ -1188,6 +1198,17 @@ class ErpFinanceService extends BaseAdminService
 
     public function confirmPayableItemsInTransaction(int $partyId, array $items, array $data): int
     {
+        return $this->settlePayableItemsInTransaction($partyId, $items, $data, false);
+    }
+
+    /** 仅供来源入库补记已发生付款事实；请求data中的任何标记均不能启用此分支。 */
+    public function reconcileHistoricalSourcePaidInTransaction(int $partyId, array $items, array $data): int
+    {
+        return $this->settlePayableItemsInTransaction($partyId, $items, $data, true);
+    }
+
+    private function settlePayableItemsInTransaction(int $partyId, array $items, array $data, bool $historicalSourcePaid): int
+    {
         if ($partyId <= 0) {
             throw new CommonException('请选择付款对象');
         }
@@ -1237,6 +1258,11 @@ class ErpFinanceService extends BaseAdminService
         }
 
         $account = $this->resolveAccount((int)($data['capital_account_id'] ?? 0));
+        if ($historicalSourcePaid) {
+            $this->assertHistoricalSourcePaidReconciliationAllowed($payables, $applyMap);
+        } else {
+            $this->assertSourcePaymentAllowed($payables);
+        }
         $settlement = $this->createSettlement($firstPayable, ErpDict::SETTLEMENT_PAYMENT, $totalAmount, 'out', $account, $data);
         $settlementId = (int)$settlement->id;
         $purchaseIds = [];
@@ -1244,7 +1270,7 @@ class ErpFinanceService extends BaseAdminService
         foreach ($payables as $payable) {
             $amount = (float)$applyMap[(int)$payable->id];
             $this->applyPayable($payable, $amount, $settlementId);
-            (new ErpLedgerService())->account([
+            ErpLedgerService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username)->account([
                 'biz_type' => 'payment',
                 'direction' => 'decrease',
                 'amount' => $amount,
@@ -1264,7 +1290,7 @@ class ErpFinanceService extends BaseAdminService
 
         $balanceAfter = $this->adjustCapitalAccount((int)($account['id'] ?? 0), 'out', $totalAmount);
         $categoryMeta = $this->combinedCategoryMeta($payables);
-        (new ErpLedgerService())->money(array_merge([
+        ErpLedgerService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username)->money(array_merge([
             'settlement_id' => $settlementId,
             'capital_account_id' => (int)($account['id'] ?? 0),
             'capital_account_name' => (string)($account['name'] ?? ''),
@@ -1297,6 +1323,7 @@ class ErpFinanceService extends BaseAdminService
             throw new CommonException('付款金额不能大于剩余应付');
         }
         $account = $this->resolveAccount((int)($data['capital_account_id'] ?? 0));
+        $this->assertSourcePaymentAllowed([$payable]);
         $settlement = $this->createSettlement($payable, ErpDict::SETTLEMENT_PAYMENT, $amount, 'out', $account, $data);
         $settlementId = (int)$settlement->id;
         $this->applyPayable($payable, $amount, $settlementId);
@@ -1598,6 +1625,12 @@ class ErpFinanceService extends BaseAdminService
         if ($partyId <= 0) {
             throw new CommonException('请选择付款对象');
         }
+
+        // 主列表的综合关键词同时支持“往来主体”和“业务明细”。
+        // 进入已确定 party_id 的明细页后，如果关键词命中的是当前付款对象，
+        // 就不能再拿人名去过滤 IMEI/型号，否则主列表有批次、明细却会变成空数组。
+        $where = $this->normalizePayableItemKeywordForParty($partyId, $where);
+
         // 未指定业务类型时用于折账：必须返回该主体全部应付事实，不能只返回采购本金。
         if (trim((string)($where['source_type'] ?? '')) === '') {
             return $this->allPayableItems($partyId, $where);
@@ -1682,13 +1715,28 @@ class ErpFinanceService extends BaseAdminService
             if (empty($row['payee_methods'])) $row['payee_methods'] = $fallbackPayeeMethods;
             unset($row['spec_json']);
             if (empty($row['channel_name'])) $row['channel_name'] = (string)($row['purchase_channel'] ?? '');
-            $row['source_meta'] = (new ErpFinanceSourceService())->sourceMeta($row, 'payable');
+            $row['source_meta'] = ErpFinanceSourceService::forSite((int)$this->site_id)->sourceMeta($row, 'payable');
         }
         unset($row);
         $payableIds = array_values(array_unique(array_filter(array_map(static fn($row) => (int)($row['payable_id'] ?? 0), $page['data']))));
         $settlementMap = $this->payableSettlementDetails($payableIds);
+        $priceAdjustments = [];
+        $assetIds = array_values(array_unique(array_map('intval', array_column($page['data'], 'id'))));
+        if ($assetIds !== []) {
+            $adjustmentRows = ErpAssetLedger::where([['site_id', '=', $this->site_id], ['action', '=', 'cost_adjust'], ['source_type', '=', 'purchase_adjust']])
+                ->whereIn('asset_id', $assetIds)->field('id,asset_id,cost_delta,remark,operator_name,occurred_at,extra_json')
+                ->order('id desc')->select()->toArray();
+            foreach ($adjustmentRows as $adjustmentRow) {
+                $assetId = (int)$adjustmentRow['asset_id'];
+                if (isset($priceAdjustments[$assetId])) continue;
+                $extra = json_decode((string)($adjustmentRow['extra_json'] ?? ''), true) ?: [];
+                $priceAdjustments[$assetId] = array_merge($adjustmentRow, ['finance' => $extra['payable_adjustment'] ?? null]);
+                unset($priceAdjustments[$assetId]['extra_json']);
+            }
+        }
         foreach ($page['data'] as &$row) {
             $row['settlements'] = $settlementMap[(int)($row['payable_id'] ?? 0)] ?? [];
+            $row['latest_purchase_adjustment'] = $priceAdjustments[(int)$row['id']] ?? null;
         }
         unset($row);
         return $page;
@@ -1775,7 +1823,7 @@ class ErpFinanceService extends BaseAdminService
         foreach ($page['data'] as &$row) {
             $row['allocated_paid'] = round((float)$row['settled_amount'], 2);
             $row['allocated_remain'] = max(0, round((float)$row['payable_amount'] - (float)$row['allocated_paid'], 2));
-            $row['source_meta'] = (new ErpFinanceSourceService())->sourceMeta($row, 'payable');
+            $row['source_meta'] = ErpFinanceSourceService::forSite((int)$this->site_id)->sourceMeta($row, 'payable');
             $row['payee_methods'] = $this->payeeMethodsFromSpec($row['spec_json'] ?? '');
             if (empty($row['payee_methods'])) $row['payee_methods'] = $fallbackPayeeMethods;
             unset($row['spec_json']);
@@ -1884,7 +1932,7 @@ class ErpFinanceService extends BaseAdminService
         foreach ($page['data'] as &$row) {
             $row['allocated_paid'] = round((float)$row['settled_amount'], 2);
             $row['allocated_remain'] = max(0, round((float)$row['payable_amount'] - (float)$row['allocated_paid'], 2));
-            $row['source_meta'] = (new ErpFinanceSourceService())->sourceMeta($row, 'payable');
+            $row['source_meta'] = ErpFinanceSourceService::forSite((int)$this->site_id)->sourceMeta($row, 'payable');
         }
         unset($row);
         $payableIds = array_values(array_filter(array_map(static fn($row) => (int)($row['payable_id'] ?? 0), $page['data'])));
@@ -1936,7 +1984,7 @@ class ErpFinanceService extends BaseAdminService
         foreach ($page['data'] as &$row) {
             $row['allocated_paid'] = round((float)$row['settled_amount'], 2);
             $row['allocated_remain'] = max(0, round((float)$row['payable_amount'] - (float)$row['allocated_paid'], 2));
-            $row['source_meta'] = (new ErpFinanceSourceService())->sourceMeta($row, 'payable');
+            $row['source_meta'] = ErpFinanceSourceService::forSite((int)$this->site_id)->sourceMeta($row, 'payable');
         }
         unset($row);
         $payableIds = array_values(array_filter(array_map(static fn($row) => (int)($row['payable_id'] ?? 0), $page['data'])));
@@ -1983,7 +2031,7 @@ class ErpFinanceService extends BaseAdminService
         foreach ($page['data'] as &$row) {
             $row['allocated_paid'] = round((float)$row['settled_amount'], 2);
             $row['allocated_remain'] = max(0, round((float)$row['payable_amount'] - (float)$row['allocated_paid'], 2));
-            $row['source_meta'] = (new ErpFinanceSourceService())->sourceMeta($row, 'payable');
+            $row['source_meta'] = ErpFinanceSourceService::forSite((int)$this->site_id)->sourceMeta($row, 'payable');
         }
         unset($row);
         $payableIds = array_values(array_filter(array_map(static fn($row) => (int)($row['payable_id'] ?? 0), $page['data'])));
@@ -2030,6 +2078,7 @@ class ErpFinanceService extends BaseAdminService
                     }
                 }
                 $partyName = (string)$payables[0]['party_name'];
+                $this->assertSourcePaymentAllowed($payables);
                 $settlement = ErpSettlement::create([
                     'site_id' => $this->site_id,
                     'request_id' => $data['request_id'],
@@ -2394,7 +2443,7 @@ class ErpFinanceService extends BaseAdminService
                     $row['business_operator_name'] = $this->extractBusinessOperatorName((string)($row['business_reason'] ?? ''));
                 }
             }
-            $row['source_meta'] = (new ErpFinanceSourceService())->sourceMeta($row, 'receivable');
+            $row['source_meta'] = ErpFinanceSourceService::forSite((int)$this->site_id)->sourceMeta($row, 'receivable');
             $row['source_label'] = (string)$row['source_meta']['finance_type_name'];
             $row['business_reason'] = (string)($row['source_meta']['business_reason'] ?? $row['business_reason'] ?? '');
             $row['remain_amount'] = max(0, round((float)$row['amount'] - (float)$row['settled_amount'], 2));
@@ -2643,7 +2692,7 @@ class ErpFinanceService extends BaseAdminService
                 $row['opening_settle_method'] = (string)($row['business_reason'] ?: '插件业务形成应付，由财务确认实际付款。');
             }
             $row['source_no'] = (string)$row['batch_no'];
-            $row['source_meta'] = (new ErpFinanceSourceService())->sourceMeta($row, 'payable');
+            $row['source_meta'] = ErpFinanceSourceService::forSite((int)$this->site_id)->sourceMeta($row, 'payable');
             $row['source_label'] = (string)$row['source_meta']['finance_type_name'];
             $row['business_reason'] = (string)($row['source_meta']['business_reason'] ?? $row['business_reason'] ?? '');
             $row['remain_amount'] = max(0, round((float)$row['amount'] - (float)$row['settled_amount'], 2));
@@ -3255,7 +3304,7 @@ class ErpFinanceService extends BaseAdminService
             $targetType = (string)$link['target_type'];
             $targetId = (int)$link['target_id'];
             $target = $targetType === ErpDict::TARGET_PAYABLE ? ($payableMap[$targetId] ?? []) : ($receivableMap[$targetId] ?? []);
-            $sourceMeta = (new ErpFinanceSourceService())->sourceMeta($target, $targetType === ErpDict::TARGET_PAYABLE ? 'payable' : 'receivable');
+            $sourceMeta = ErpFinanceSourceService::forSite((int)$this->site_id)->sourceMeta($target, $targetType === ErpDict::TARGET_PAYABLE ? 'payable' : 'receivable');
             $map[(int)$link['settlement_id']][] = [
                 'target_type' => $targetType,
                 'target_type_text' => $targetType === ErpDict::TARGET_PAYABLE ? '应付' : '应收',
@@ -3442,8 +3491,57 @@ class ErpFinanceService extends BaseAdminService
         }
         if (!empty($where['keyword'])) {
             $kw = trim((string)$where['keyword']);
-            $query->whereLike($assetAlias . '.asset_no|' . $assetAlias . '.imei|' . $assetAlias . '.sn|' . $assetAlias . '.model|' . $assetAlias . '.spec|' . $orderAlias . '.purchase_no', '%' . $kw . '%');
+            $query->whereLike(
+                $assetAlias . '.asset_no|'
+                . $assetAlias . '.imei|'
+                . $assetAlias . '.sn|'
+                . $assetAlias . '.model|'
+                . $assetAlias . '.spec|'
+                . $orderAlias . '.purchase_no|'
+                . $orderAlias . '.purchase_channel|'
+                . $orderAlias . '.purchaser_name|'
+                . $financeAlias . '.payable_no|'
+                . $financeAlias . '.source_no|'
+                . $financeAlias . '.remark',
+                '%' . $kw . '%'
+            );
         }
+    }
+
+    /**
+     * 将主列表的综合关键词转换为明细查询语义。
+     *
+     * party_id 已经是权威范围条件：关键词若命中该主体名称、联系人、
+     * 手机号或会员号，应返回当前范围内的全部明细；只有未命中主体时，
+     * 才继续用关键词筛选设备、采购单和应付编号。
+     */
+    private function normalizePayableItemKeywordForParty(int $partyId, array $where): array
+    {
+        $keyword = trim((string)($where['keyword'] ?? ''));
+        if ($keyword === '') {
+            return $where;
+        }
+
+        $partyMatched = (int)ErpParty::where([
+            ['site_id', '=', $this->site_id],
+            ['id', '=', $partyId],
+        ])->whereLike(
+            'party_no|party_name|contact_name|contact_mobile|m_no|remark',
+            '%' . $keyword . '%'
+        )->value('id') > 0;
+
+        // 兼容早期只在应付快照保存了主体名称的历史数据。
+        if (!$partyMatched) {
+            $partyMatched = (int)ErpPayable::where([
+                ['site_id', '=', $this->site_id],
+                ['party_id', '=', $partyId],
+            ])->whereLike('party_name', '%' . $keyword . '%')->value('id') > 0;
+        }
+
+        if ($partyMatched) {
+            $where['keyword'] = '';
+        }
+        return $where;
     }
 
     private function allocatedAmount(float $itemCost, float $orderCost, float $paid): float
@@ -3452,6 +3550,121 @@ class ErpFinanceService extends BaseAdminService
             return 0.0;
         }
         return round(min($itemCost, $itemCost * min($paid / $orderCost, 1)), 2);
+    }
+
+    /**
+     * 只检查回收采购/代卖结算，不改变整备、销售退款或其他来源付款。
+     * 调用方已在事务内锁定应付；必须整批收集、排序来源设备后一次请求来源锁，
+     * 不可逐应付混序加锁，也不可把此同步核对挪到付款事实写入之后。
+     */
+    protected function assertSourcePaymentAllowed(iterable $payables): void
+    {
+        $this->assertSourcePaymentGuard($payables, [], false);
+    }
+
+    protected function assertHistoricalSourcePaidReconciliationAllowed(iterable $payables, array $applyMap): void
+    {
+        $this->assertSourcePaymentGuard($payables, $applyMap, true);
+    }
+
+    private function assertSourcePaymentGuard(iterable $payables, array $applyMap, bool $historicalSourcePaid): void
+    {
+        $deviceIds = [];
+        $deviceAmounts = [];
+        $priorErpPaidAmounts = [];
+        $seenPayables = [];
+        foreach ($payables as $payable) {
+            $row = is_array($payable) ? $payable : $payable->toArray();
+            $originPlugin = trim((string)($row['origin_plugin'] ?? ''));
+            if (!in_array($originPlugin, ['', 'hsx_recycle'], true)
+                || !in_array((string)($row['source_type'] ?? ''), ['purchase', 'purchase_asset', 'consignment_sale'], true)) continue;
+            $payableId = (int)($row['id'] ?? 0);
+            if ($payableId <= 0) throw new CommonException('付款应付关联待核对，未执行付款');
+            if (isset($seenPayables[$payableId])) continue;
+            $seenPayables[$payableId] = true;
+
+            $matched = false;
+            foreach ($this->sourcePaymentGuardAssets($row) as $asset) {
+                if ((string)($asset['source_plugin'] ?? '') !== 'hsx_recycle') {
+                    if ($originPlugin === 'hsx_recycle') throw new CommonException('付款来源与设备关联不一致，未执行付款，请先核对回收来源');
+                    continue;
+                }
+                if (ErpRecycleDeviceIdentityService::payableAssetMatch($row, $asset) !== 'exact') {
+                    throw new CommonException('来源设备应付关联待核对，未执行付款，不能按整单金额猜测设备结算');
+                }
+                $deviceId = $this->recycleDeviceIdentityService()->assetDeviceId($asset, '付款');
+                if (ErpRecycleDeviceIdentity::positiveId($deviceId) <= 0) throw new CommonException('来源设备关联待核对，未执行付款');
+                $deviceIds[$deviceId] = $deviceId;
+                // 来自调用方已持有行锁的当前应付事实；不使用请求data，也不额外反向锁ERP表。
+                $priorPaid = round((float)($row['settled_amount'] ?? 0), 2);
+                if (!is_finite($priorPaid) || $priorPaid < 0) throw new CommonException('ERP已核销金额待核对，未执行付款');
+                $priorErpPaidAmounts[$deviceId] = round(($priorErpPaidAmounts[$deviceId] ?? 0) + $priorPaid, 2);
+                if ($historicalSourcePaid) {
+                    $amount = round((float)($applyMap[(int)($row['id'] ?? 0)] ?? 0), 2);
+                    if (!is_finite($amount) || $amount <= 0) throw new CommonException('来源已付核销缺少对应设备金额，未执行核销');
+                    $deviceAmounts[$deviceId] = round(($deviceAmounts[$deviceId] ?? 0) + $amount, 2);
+                }
+                $matched = true;
+            }
+            if ($originPlugin === 'hsx_recycle' && !$matched) {
+                throw new CommonException('回收来源缺少明确设备关联，未执行付款，请先核对来源设备');
+            }
+        }
+        if ($deviceIds === []) return;
+        sort($deviceIds, SORT_NUMERIC);
+        $payload = [
+            'event_name' => 'erp.source_payment.guard_requested.v1',
+            'event_version' => 1,
+            'site_id' => (int)$this->site_id,
+            'source_plugin' => 'hsx_recycle',
+            'source_device_ids' => array_values($deviceIds),
+            'purpose' => $historicalSourcePaid ? 'historical_paid_reconciliation' : 'payment',
+            'prior_erp_paid_amounts' => array_map(static fn(int $id): array => [
+                'device_id' => $id, 'amount' => number_format($priorErpPaidAmounts[$id], 2, '.', ''),
+            ], array_values($deviceIds)),
+        ];
+        if ($historicalSourcePaid) {
+            $payload['device_amounts'] = array_map(static fn(int $id): array => [
+                'device_id' => $id, 'amount' => number_format($deviceAmounts[$id], 2, '.', ''),
+            ], array_values($deviceIds));
+        }
+        $responses = $this->requestSourcePaymentGuard($payload);
+        $acknowledged = false;
+        foreach ($responses as $response) {
+            if (!is_array($response) || ($response['consumer'] ?? '') !== 'hsx_recycle') continue;
+            if ($acknowledged || ($response['status'] ?? '') !== 'processed' || !empty($response['error'])
+                || ($historicalSourcePaid && ($response['purpose'] ?? '') !== 'historical_paid_reconciliation')) {
+                throw new CommonException('回收来源付款核对未明确通过，未执行付款，请先核对既有付款记录');
+            }
+            $acknowledged = true;
+        }
+        if (!$acknowledged) throw new CommonException('回收来源付款核对服务未响应，未执行付款，请勿两边重复付款');
+    }
+
+    /** 仅以应付明确关联的资产查来源；单设备采购不得展开同订单其他已付设备。 */
+    protected function sourcePaymentGuardAssets(array $payable): array
+    {
+        $assetIds = [];
+        if ((int)($payable['asset_id'] ?? 0) > 0) $assetIds[] = (int)$payable['asset_id'];
+        $sourceType = (string)($payable['source_type'] ?? '');
+        $sourceId = (int)($payable['source_id'] ?? 0);
+        if ($sourceType === 'purchase_asset' && $sourceId > 0) $assetIds[] = $sourceId;
+        $query = ErpAsset::where([['site_id', '=', $this->site_id]]);
+        if ($assetIds !== []) {
+            $query->whereIn('id', array_values(array_unique($assetIds)));
+        } elseif ($sourceType === 'purchase' && $sourceId > 0) {
+            // 仅用于识别历史整单回收应付并安全阻断；不会分摊或据此猜设备ID。
+            $query->where('purchase_order_id', '=', $sourceId);
+        } else {
+            return [];
+        }
+        return $query->field('id,site_id,source_plugin,source_type,source_id,purchase_order_id,purchase_item_id,spec_json')
+            ->order('id asc')->select()->toArray();
+    }
+
+    protected function requestSourcePaymentGuard(array $payload): array
+    {
+        return (array)event('ErpSourcePaymentGuardRequested', $payload);
     }
 
     private function createSettlement($target, string $type, float $amount, string $cashDirection, array $account, array $data): ErpSettlement
@@ -3530,7 +3743,7 @@ class ErpFinanceService extends BaseAdminService
     {
         $row = is_array($target) ? $target : $target->toArray();
         $side = $target instanceof ErpReceivable || (($row['receivable_no'] ?? '') !== '') ? 'receivable' : 'payable';
-        $sourceMeta = (new ErpFinanceSourceService())->sourceMeta($row, $side);
+        $sourceMeta = ErpFinanceSourceService::forSite((int)$this->site_id)->sourceMeta($row, $side);
         $categoryKey = trim((string)($row['category_key'] ?? '')) ?: (string)($sourceMeta['finance_type_key'] ?? '');
         return [
             'category_key' => $categoryKey,
@@ -3564,7 +3777,7 @@ class ErpFinanceService extends BaseAdminService
     {
         $row = is_array($target) ? $target : $target->toArray();
         $category = $this->targetCategoryMeta($target);
-        $sourceMeta = (new ErpFinanceSourceService())->sourceMeta($row, $side);
+        $sourceMeta = ErpFinanceSourceService::forSite((int)$this->site_id)->sourceMeta($row, $side);
         return array_merge($category, [
             'asset_id' => (int)($row['asset_id'] ?? 0),
             'biz_scene' => (string)($row['biz_scene'] ?? $sourceMeta['biz_scene'] ?? ''),
@@ -3599,7 +3812,7 @@ class ErpFinanceService extends BaseAdminService
             if ($target->isEmpty()) continue;
 
             $assets = $this->settlementTargetAssets($target, $side, (int)($link['asset_id'] ?? 0));
-            $sourceMeta = (new ErpFinanceSourceService())->sourceMeta($target->toArray(), $side);
+            $sourceMeta = ErpFinanceSourceService::forSite((int)$this->site_id)->sourceMeta($target->toArray(), $side);
             $origin = $this->settlementTargetOrigin($target, $side);
             $targets[] = [
                 'target_type' => $side,
@@ -3635,7 +3848,7 @@ class ErpFinanceService extends BaseAdminService
             }
         }
         $requiredConsumers = array_values(array_unique($requiredConsumers));
-        $queued = (new ErpIntegrationService())->enqueueDomainEvent(
+        $queued = ErpIntegrationService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username)->enqueueDomainEvent(
             'erp.settlement.completed.v1',
             'settlement',
             $settlementId,
@@ -3777,29 +3990,43 @@ class ErpFinanceService extends BaseAdminService
         if ($assetIds === []) return [];
         $rows = ErpAsset::where([['site_id', '=', $this->site_id]])
             ->whereIn('id', $assetIds)
-            ->field('id,asset_no,imei,sn,model,spec,spec_json')
+            ->field('id,site_id,asset_no,imei,sn,model,spec,spec_json,source_plugin,source_type,source_id,purchase_item_id,purchase_order_id')
             ->select()->toArray();
         $map = [];
         foreach ($rows as $row) $map[(int)$row['id']] = $row;
         $result = [];
         foreach ($assetIds as $assetId) {
             if (!isset($map[$assetId])) continue;
-            $row = $map[$assetId];
-            $sourceSnapshot = json_decode((string)($row['spec_json'] ?? ''), true);
-            if (!is_array($sourceSnapshot)) $sourceSnapshot = [];
-            $result[] = [
-                'id' => (int)$row['id'],
-                'asset_no' => (string)$row['asset_no'],
-                'imei' => (string)$row['imei'],
-                'sn' => (string)$row['sn'],
-                'model' => (string)$row['model'],
-                'spec' => (string)$row['spec'],
-                'source_plugin' => (string)($sourceSnapshot['source_plugin'] ?? ''),
-                'source_device_id' => $sourceSnapshot['source_device_id'] ?? '',
-                'source_order_no' => (string)($sourceSnapshot['source_order_no'] ?? ''),
-            ];
+            $result[] = $this->settlementAssetSnapshot($map[$assetId]);
         }
         return $result;
+    }
+
+    /** 在结算和 outbox 的同一事务内确证回写身份，不能付款后才猜来源设备ID。 */
+    protected function settlementAssetSnapshot(array $row): array
+    {
+        $sourceSnapshot = json_decode((string)($row['spec_json'] ?? ''), true);
+        if (!is_array($sourceSnapshot)) $sourceSnapshot = [];
+        $isRecycle = (string)($row['source_plugin'] ?? '') === 'hsx_recycle';
+        $sourceDeviceId = $isRecycle
+            ? $this->recycleDeviceIdentityService()->assetDeviceId($row, '结算')
+            : ($sourceSnapshot['source_device_id'] ?? '');
+        return [
+            'id' => (int)$row['id'],
+            'asset_no' => (string)$row['asset_no'],
+            'imei' => (string)$row['imei'],
+            'sn' => (string)$row['sn'],
+            'model' => (string)$row['model'],
+            'spec' => (string)$row['spec'],
+            'source_plugin' => $isRecycle ? 'hsx_recycle' : (string)($sourceSnapshot['source_plugin'] ?? ''),
+            'source_device_id' => $sourceDeviceId,
+            'source_order_no' => (string)($sourceSnapshot['source_order_no'] ?? ''),
+        ];
+    }
+
+    protected function recycleDeviceIdentityService(): ErpRecycleDeviceIdentityService
+    {
+        return new ErpRecycleDeviceIdentityService();
     }
 
     /** 只在外层事务提交后派发；失败由 outbox 重试任务补偿。 */
@@ -3812,7 +4039,7 @@ class ErpFinanceService extends BaseAdminService
         }
         $ids = array_values(array_unique(array_filter($this->settlementOutboxIds)));
         $this->settlementOutboxIds = [];
-        $integration = new ErpIntegrationService();
+        $integration = ErpIntegrationService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username);
         foreach ($ids as $id) {
             $integration->dispatchDomainEvent((int)$id);
         }
@@ -4255,6 +4482,12 @@ class ErpFinanceService extends BaseAdminService
             'update_at' => time(),
         ]);
         return $balanceAfter;
+    }
+
+    /** 采购调价只重算当前余额，绝不修改历史结算或资金流水。沿用调用方事务。 */
+    public function refreshPurchaseFinanceAfterAdjustment(int $purchaseId): void
+    {
+        $this->refreshPurchaseFinance($purchaseId);
     }
 
     private function refreshPurchaseFinance(int $purchaseId): void

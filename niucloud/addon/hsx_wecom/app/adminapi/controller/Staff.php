@@ -20,4 +20,12 @@ final class Staff extends BaseAdminController
         (new WecomStaffService())->save($uid, $data);
         return success('保存成功');
     }
+
+    public function bindUrl(int $uid): Response
+    {
+        return success((new WecomStaffService())->bindUrl(
+            $uid,
+            trim((string)$this->request->param('return_url', ''))
+        ));
+    }
 }

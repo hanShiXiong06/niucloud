@@ -6,4 +6,6 @@ final class ProjectCenterApplication extends BaseModel
 {
     protected $name = 'project_center_application';
     protected $pk = 'id';
+    protected $json = ['eligibility_snapshot'];
+    protected $jsonAssoc = true;
 }

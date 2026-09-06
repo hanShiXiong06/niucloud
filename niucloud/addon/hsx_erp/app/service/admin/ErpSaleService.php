@@ -28,6 +28,15 @@ class ErpSaleService extends BaseAdminService
     /** @var int[] 当前服务实例在业务事务内排队的跨插件事件 */
     private array $domainOutboxIds = [];
 
+    public static function forSite(int $siteId, int $operatorUid = 0, string $operatorName = '系统补偿'): self
+    {
+        $service = new self();
+        $service->site_id = $siteId;
+        $service->uid = $operatorUid;
+        $service->username = $operatorName;
+        return $service;
+    }
+
     public function stockPage(array $where): array
     {
         if ((string)($where['item_type'] ?? 'device') === 'standard') {
@@ -374,7 +383,7 @@ class ErpSaleService extends BaseAdminService
             $party = $this->ensureParty((int)($data['party_id'] ?? 0), $partyName);
             $partyName = (string)$party->party_name;
             $saleNo = ErpLedgerService::makeNo('SO');
-            $financeSourceService = new ErpFinanceSourceService();
+            $financeSourceService = ErpFinanceSourceService::forSite((int)$this->site_id);
             $saleSource = $financeSourceService->sale([
                 'origin_plugin' => (string)($data['origin_plugin'] ?? 'hsx_erp'),
                 'origin_plugin_name' => (string)($data['origin_plugin_name'] ?? ''),
@@ -385,7 +394,7 @@ class ErpSaleService extends BaseAdminService
                 'sale_channel_key' => (string)$channel['key'],
                 'sale_channel' => (string)$channel['name'],
             ]);
-            $salesman = (new ErpStaffService())->resolve((int)($data['salesman_uid'] ?? 0), '制单员');
+            $salesman = $this->resolveSalesman($data);
             $totalAmount = 0.0;
             $totalCost = 0.0;
             $resolved = [];
@@ -402,7 +411,7 @@ class ErpSaleService extends BaseAdminService
                     $price = round((float)($item['sale_price'] ?? 0), 2);
                     if ($quantity <= 0) throw new CommonException('标品销售数量必须大于0');
                     if ($price <= 0) throw new CommonException('标品销售总价必须大于0');
-                    $inventory = (new ErpQuantityInventoryService())->saleOutbound([
+                    $inventory = ErpQuantityInventoryService::forSite((int)$this->site_id)->saleOutbound([
                         'event_id' => 'sale-standard:' . $this->site_id . ':' . $saleNo . ':' . $itemIndex,
                         'stock_id' => $stockId,
                         'quantity' => $quantity,
@@ -500,7 +509,11 @@ class ErpSaleService extends BaseAdminService
                     throw new CommonException('现结销售必须选择收款账户');
                 }
             }
-            (new ErpCustomerCreditService())->assertSaleAllowed($party, array_merge($data, ['settle_mode' => $settleMode]), round($totalAmount, 2));
+            ErpCustomerCreditService::forSite(
+                (int)$this->site_id,
+                (int)$this->uid,
+                (string)$this->username
+            )->assertSaleAllowed($party, array_merge($data, ['settle_mode' => $settleMode]), round($totalAmount, 2));
             $profit = round($totalAmount - $totalCost, 2);
             $order = ErpSaleOrder::create([
                 'site_id' => $this->site_id,
@@ -577,7 +590,7 @@ class ErpSaleService extends BaseAdminService
                     ErpQuantityStockFlow::where([
                         ['site_id', '=', $this->site_id], ['id', '=', (int)$inventory['flow_id']],
                     ])->update(['biz_id' => (int)$item->id]);
-                    (new ErpLedgerService())->account([
+                    ErpLedgerService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username)->account([
                         'biz_type' => 'sale',
                         'direction' => 'increase',
                         'amount' => $price,
@@ -659,7 +672,7 @@ class ErpSaleService extends BaseAdminService
                         'update_at' => $now,
                     ], $financeSourceService->persistable($meta)));
                     $item->save(['consignment_payable_id' => (int)$consignmentPayable->id, 'update_at' => $now]);
-                    (new ErpLedgerService())->account([
+                    ErpLedgerService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username)->account([
                         'biz_type' => 'consignment_sale',
                         'direction' => 'increase',
                         'amount' => (float)$resolvedItem['consignment_settlement_amount'],
@@ -680,7 +693,7 @@ class ErpSaleService extends BaseAdminService
                     'status' => ErpDict::ASSET_SOLD,
                     'update_at' => $now,
                 ]);
-                (new ErpLedgerService())->asset([
+                ErpLedgerService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username)->asset([
                     'asset_id' => (int)$asset->id,
                     'action' => 'sold',
                     'before_status' => ErpDict::ASSET_IN_STOCK,
@@ -695,7 +708,7 @@ class ErpSaleService extends BaseAdminService
                     'occurred_at' => $saleAt,
                     'remark' => '销售出库',
                 ]);
-                (new ErpLedgerService())->account([
+                ErpLedgerService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username)->account([
                     'biz_type' => 'sale',
                     'direction' => 'increase',
                     'amount' => $price,
@@ -747,7 +760,7 @@ class ErpSaleService extends BaseAdminService
                 'update_at' => $now,
             ], $financeSourceService->persistable($saleSource)));
             if ($settleMode === 'cash') {
-                $financeService = new ErpFinanceService();
+                $financeService = ErpFinanceService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username);
                 $settlementId = $financeService->confirmReceivableItemsInTransaction((int)$party->id, [[
                     'receivable_id' => (int)$receivable->id,
                     'amount' => round((float)$data['received_amount'], 2),
@@ -770,7 +783,7 @@ class ErpSaleService extends BaseAdminService
         }
         $this->flushDomainEvents();
         if ($financeService instanceof ErpFinanceService) $financeService->flushPendingSettlementDomainEvents();
-        (new ErpPrintService())->triggerSafely('sale_created', 'sale', $orderId);
+        ErpPrintService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username)->triggerSafely('sale_created', 'sale', $orderId);
         return $orderId;
     }
 
@@ -1231,10 +1244,12 @@ class ErpSaleService extends BaseAdminService
             && (string)($context['ownership_type'] ?? '') === 'consigned') {
             $required[] = 'hsx_recycle';
         }
-        $sourceDeviceId = (string)$asset->source_plugin === 'hsx_recycle' && is_numeric((string)$asset->source_id)
-            ? (int)$asset->source_id
-            : 0;
-        $queued = (new ErpIntegrationService())->enqueueDomainEvent(
+        $sourceDeviceId = (new ErpRecycleDeviceIdentityService())->assetDeviceId($asset->toArray());
+        $queued = ErpIntegrationService::forSite(
+            (int)$this->site_id,
+            (int)$this->uid,
+            (string)$this->username
+        )->enqueueDomainEvent(
             $eventName,
             'asset',
             (int)$asset->id,
@@ -1314,7 +1329,7 @@ class ErpSaleService extends BaseAdminService
         }
         $ids = array_values(array_unique(array_filter($this->domainOutboxIds)));
         $this->domainOutboxIds = [];
-        $integration = new ErpIntegrationService();
+        $integration = ErpIntegrationService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username);
         foreach ($ids as $id) {
             $integration->dispatchDomainEvent((int)$id);
         }
@@ -1423,9 +1438,43 @@ class ErpSaleService extends BaseAdminService
         ]);
     }
 
+    /**
+     * 后台手工销售始终要求当前站点的真实员工。只有外部商城已付款、
+     * 带稳定 event_id 和经办人快照的事实，才可用“商城自动销售”身份补记。
+     * 这样不会因无后台登录态卡住已付订单，也不会放松人工出库权限。
+     *
+     * @return array{uid:int,name:string}
+     */
+    private function resolveSalesman(array $data): array
+    {
+        $uid = (int)($data['salesman_uid'] ?? 0);
+        try {
+            return ErpStaffService::forSite(
+                (int)$this->site_id,
+                (int)$this->uid,
+                (string)$this->username
+            )->resolve($uid, '制单员');
+        } catch (\Throwable $e) {
+            $sourcePlugin = trim((string)($data['origin_plugin'] ?? ''));
+            $eventId = trim((string)($data['origin_event_id'] ?? $data['event_id'] ?? $data['request_id'] ?? ''));
+            $snapshotName = trim((string)($data['salesman_snapshot_name'] ?? ''));
+            $trustedSystemSnapshot = (int)($data['allow_system_salesman'] ?? 0) === 1
+                && $sourcePlugin !== ''
+                && !in_array($sourcePlugin, ['erp', 'hsx_erp'], true)
+                && $eventId !== ''
+                && $snapshotName !== '';
+            if (!$trustedSystemSnapshot) throw $e;
+
+            return [
+                'uid' => max(0, $uid),
+                'name' => mb_substr($snapshotName, 0, 100),
+            ];
+        }
+    }
+
     private function resolveSaleChannel(array $data): array
     {
-        $options = (new ErpConfigService())->getSaleChannelOptions();
+        $options = ErpConfigService::forSite((int)$this->site_id)->getSaleChannelOptions();
         $key = trim((string)($data['sale_channel_key'] ?? ''));
         $name = trim((string)($data['sale_channel'] ?? ''));
         foreach ($options as $option) {

@@ -6,7 +6,7 @@
                 <text v-if="!compact" class="stocktake-summary__no">{{ data.stocktake_no || '库存盘点' }}</text>
             </view>
             <u-tag
-                :text="data.status_meta?.label || data.status || '-'"
+                :text="statusLabel"
                 :type="data.status_meta?.type || 'info'"
                 plain
                 plainFill
@@ -50,6 +50,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { formatErpTime } from '@/addon/hsx_erp/hooks/useErpTime'
+import { erpEnumLabel } from '@/addon/hsx_erp/utils/display'
 
 const props = withDefaults(defineProps<{
     data: Record<string, any>
@@ -63,6 +64,8 @@ const props = withDefaults(defineProps<{
 })
 
 const emit = defineEmits<{ (e: 'click'): void }>()
+const statusLabels: Record<string, string> = { counting: '盘点中', pending_review: '待复核', completed: '已完成', cancelled: '已取消' }
+const statusLabel = computed(() => erpEnumLabel(props.data.status_meta?.label, statusLabels, erpEnumLabel(props.data.status, statusLabels)))
 
 const metrics = [
     { key: 'normal_count', label: '正常', tone: 'success' },

@@ -8,6 +8,7 @@ use addon\hsx_erp\app\model\ErpAsset;
 use addon\hsx_erp\app\model\ErpPayable;
 use addon\hsx_erp\app\model\ErpSettlement;
 use addon\hsx_erp\app\support\ErpIdempotency;
+use addon\hsx_erp\app\support\ErpRecycleDeviceIdentity;
 use core\exception\CommonException;
 
 /** 外部插件按自身设备ID发起付款，ERP负责定位并结清设备级应付。 */
@@ -25,7 +26,12 @@ class ErpSourcePayableSettlementService extends ErpExternalContractService
 
     private function normalizePayload(array $event): array
     {
-        $deviceIds = array_values(array_unique(array_filter(array_map('intval', (array)($event['source_device_ids'] ?? [])))));
+        $rawDeviceIds = $event['source_device_ids'] ?? [];
+        if (!is_array($rawDeviceIds)) throw new CommonException('付款来源设备列表格式不正确');
+        foreach ($rawDeviceIds as $deviceId) {
+            if (ErpRecycleDeviceIdentity::positiveId($deviceId) <= 0) throw new CommonException('来源设备ID无效，已拒绝整批付款');
+        }
+        $deviceIds = array_values(array_unique(array_map([ErpRecycleDeviceIdentity::class, 'positiveId'], $rawDeviceIds)));
         if ($deviceIds === []) throw new CommonException('付款请求没有选择来源设备');
         $accountId = max(0, (int)($event['capital_account_id'] ?? 0));
         if ($accountId <= 0) throw new CommonException('付款必须选择ERP资金账户');
@@ -45,23 +51,41 @@ class ErpSourcePayableSettlementService extends ErpExternalContractService
         $siteId = (int)$payload['site_id'];
         $sourcePlugin = (string)$payload['source_plugin'];
         $sourceDeviceIds = array_map('strval', (array)$payload['source_device_ids']);
-        $assets = ErpAsset::where([
-            ['site_id', '=', $siteId],
-            ['source_plugin', '=', $sourcePlugin],
-        ])->whereIn('source_id', $sourceDeviceIds)->field('id,source_id')->select()->toArray();
+        $assets = $sourcePlugin === 'hsx_recycle'
+            ? (new ErpRecycleDeviceIdentityService())->uniqueAssets($siteId, $sourceDeviceIds)
+            : ErpAsset::where([
+                ['site_id', '=', $siteId],
+                ['source_plugin', '=', $sourcePlugin],
+            ])->whereIn('source_id', $sourceDeviceIds)->field('id,source_id')->select()->toArray();
         if ($assets === []) throw new CommonException('所选设备尚未同步到ERP，不能付款');
 
-        $resolvedSourceIds = array_values(array_unique(array_map('strval', array_column($assets, 'source_id'))));
+        // 回收普通采购的 source_id 是来源订单ID，已由统一解析器逐设备确证，不能再拿它比设备ID。
+        $resolvedSourceIds = $sourcePlugin === 'hsx_recycle' ? $sourceDeviceIds
+            : array_values(array_unique(array_map('strval', array_column($assets, 'source_id'))));
         $missingSourceIds = array_values(array_diff($sourceDeviceIds, $resolvedSourceIds));
         if ($missingSourceIds !== []) {
             throw new CommonException('部分设备尚未同步到ERP，已拒绝整批付款：' . implode('、', $missingSourceIds));
         }
 
         $assetIds = array_values(array_unique(array_map('intval', array_column($assets, 'id'))));
-        $allPayables = ErpPayable::where([
-            ['site_id', '=', $siteId],
-            ['origin_plugin', '=', $sourcePlugin],
-        ])->whereIn('asset_id', $assetIds)->order('party_id asc,id asc')->select()->toArray();
+        $payableQuery = ErpPayable::where([['site_id', '=', $siteId]]);
+        if ($sourcePlugin === 'hsx_recycle') {
+            $ownership = (new ErpRecycleDeviceIdentityService())->paymentOwnership($siteId, $sourceDeviceIds);
+            foreach ($ownership as $entry) {
+                if (!empty($entry['ambiguous'])) throw new CommonException('回收设备应付关联存在歧义，已拒绝整批付款，请先核对应付明细');
+                if (empty($entry['has_payable'])) throw new CommonException('部分设备尚未形成有效ERP应付，已拒绝整批付款');
+            }
+            $payableQuery->whereIn('origin_plugin', ['', 'hsx_recycle'])
+                ->whereIn('source_type', ['purchase', 'purchase_asset', 'consignment_sale']);
+            $payableQuery->where(function ($query) use ($assetIds) {
+                $query->whereIn('asset_id', $assetIds)->whereOr(function ($legacy) use ($assetIds) {
+                    $legacy->where('source_type', '=', 'purchase_asset')->whereIn('source_id', $assetIds);
+                });
+            });
+        } else {
+            $payableQuery->where('origin_plugin', '=', $sourcePlugin)->whereIn('asset_id', $assetIds);
+        }
+        $allPayables = $payableQuery->order('party_id asc,id asc')->select()->toArray();
         if ($allPayables === []) throw new CommonException('所选设备尚未形成ERP应付，请先完成入库或代卖成交');
 
         $open = array_values(array_filter($allPayables, static fn(array $row): bool =>

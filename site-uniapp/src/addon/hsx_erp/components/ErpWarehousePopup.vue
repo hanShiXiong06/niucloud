@@ -97,6 +97,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import request from '@/utils/request'
+import { erpEnumLabel } from '@/addon/hsx_erp/utils/display'
 
 const props = withDefaults(defineProps<{
     show: boolean
@@ -194,7 +195,7 @@ function clearSelection() {
 
 function close() { emit('update:show', false) }
 
-const typeLabel = (t: string) => ({
+const typeLabel = (t: string) => erpEnumLabel(t, {
     owned: '二手机仓',
     new_device: '新机仓',
     accessory: '配件仓',
@@ -203,7 +204,7 @@ const typeLabel = (t: string) => ({
     consignment: '代卖仓',
     exception: '异常仓',
     abnormal: '异常仓'
-}[t] || t || '')
+}, '仓库')
 </script>
 
 <style scoped lang="scss">

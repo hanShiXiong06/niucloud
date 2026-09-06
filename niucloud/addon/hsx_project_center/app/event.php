@@ -12,5 +12,11 @@ return [
         'NoticeData' => [
             'addon\hsx_project_center\app\listener\notice_template\ApplicationResult',
         ],
+        'GetPosterType' => [
+            'addon\hsx_project_center\app\listener\poster\ProjectCenterDistributionPosterType',
+        ],
+        'GetPosterData' => [
+            'addon\hsx_project_center\app\listener\poster\ProjectCenterDistributionPoster',
+        ],
     ],
 ];

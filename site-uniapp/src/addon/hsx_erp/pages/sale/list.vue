@@ -47,7 +47,7 @@
                     </view>
                     <view class="sale-line">
                         <text class="sale-line__label">来源 / 渠道</text>
-                        <text class="sale-line__value">{{ row.origin_name || 'ERP销售' }} / {{ row.sale_channel || '-' }}</text>
+                        <text class="sale-line__value">{{ erpSourceLabel(row.origin_name, 'ERP销售') }} / {{ erpOptionLabel(row.sale_channel, row.sale_channel_key, '未设置渠道') }}</text>
                     </view>
 
                     <view class="sale-chips">
@@ -55,7 +55,7 @@
                         <view v-if="row.salesman_name" class="sale-chip">开单人 {{ row.salesman_name }}</view>
                         <view v-if="row.operator_name && row.operator_name !== row.salesman_name" class="sale-chip muted">操作人 {{ row.operator_name }}</view>
                         <view class="sale-chip status" :class="{ void: isVoidSale(row) }">{{ assetLabel(row.status) }}</view>
-                        <view v-if="row.sale_channel" class="sale-chip primary">{{ row.sale_channel }}</view>
+                        <view v-if="row.sale_channel" class="sale-chip primary">{{ erpOptionLabel(row.sale_channel, row.sale_channel_key, '未设置渠道') }}</view>
                     </view>
 
                     <view class="sale-time">{{ erpTimeLine(row, ['sale_at', 'sold_at', 'received_at']) }}</view>
@@ -129,7 +129,9 @@ import { erpTimeLine } from '@/addon/hsx_erp/hooks/useErpTime'
 import { erpNetSaleAmount, erpSaleCompensationAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
 import { erpDeviceIdentityLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
 import { erpPartyDisplayName } from '@/addon/hsx_erp/hooks/useErpPartyText'
+import { erpOptionLabel, erpSourceLabel } from '@/addon/hsx_erp/utils/display'
 import { useErpSaleChannels } from '@/addon/hsx_erp/hooks/useErpSaleChannels'
+import { showErpError } from '@/addon/hsx_erp/utils/error'
 
 const { pagingStyle } = useListHeader({ tabs: true, compactMp: true })
 
@@ -201,7 +203,10 @@ const queryList = async (pageNo: number, pageSize: number) => {
             page: pageNo, limit: pageSize
         })
         pagingRef.value?.complete(res?.data?.data || [])
-    } catch { pagingRef.value?.complete(false) }
+    } catch (error) {
+        pagingRef.value?.complete(false)
+        showErpError(error, '销售记录加载失败，请检查网络后重试')
+    }
 }
 
 function applyFilter() { reload() }
@@ -253,9 +258,9 @@ function startAfterSale(row: any, mode: 'return' | 'compensation') {
     })
 }
 const goCreate = () => uni.navigateTo({ url: '/addon/hsx_erp/pages/sale/create' })
-const financeLabel = (s: string) => ({ pending: '待收款', partial: '部分收款', settled: '已结清', void: '已作废' }[s] || s || '-')
+const financeLabel = (s: string) => ({ pending: '待收款', partial: '部分收款', settled: '已结清', void: '已作废' }[s] || '状态待确认')
 const financeType = (s: string) => ({ pending: 'warning', partial: 'primary', settled: 'success', void: 'info' }[s] || 'info')
-const assetLabel = (s: string) => ({ in_stock: '在库', sold: '已售', returned: '已退', void: '已作废' }[s] || s || '-')
+const assetLabel = (s: string) => ({ in_stock: '在库', sold: '已售', returned: '已退', void: '已作废' }[s] || '状态待确认')
 const assetType = (s: string) => ({ in_stock: 'success', sold: 'primary', returned: 'warning', void: 'info' }[s] || 'info')
 const isVoidSale = (row: any) => row?.finance_status === 'void' || row?.order_status === 'void' || row?.status === 'void'
 const isExternalGoods = (row: any) => Number(row?.external_goods_id || 0) > 0

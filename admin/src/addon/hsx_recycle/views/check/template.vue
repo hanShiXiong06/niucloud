@@ -104,7 +104,7 @@
         </div>
         </el-card>
 
-        <el-drawer
+        <HsxDrawer
             v-model="editorDrawerVisible"
             size="82%"
             destroy-on-close
@@ -253,9 +253,9 @@
                 </el-table>
             </section>
             </div>
-        </el-drawer>
+        </HsxDrawer>
 
-        <el-dialog v-model="templateDialog.visible" :title="templateDialog.form.id ? '编辑模板' : '新增模板'" width="520px">
+        <HsxDialog v-model="templateDialog.visible" :title="templateDialog.form.id ? '编辑模板' : '新增模板'" width="520px" :destroy-on-close="false">
             <el-form label-width="92px" :model="templateDialog.form">
                 <el-form-item label="模板名称"><el-input v-model="templateDialog.form.template_name" /></el-form-item>
                 <el-form-item label="模板标识"><el-input v-model="templateDialog.form.template_key" placeholder="default_phone" /></el-form-item>
@@ -268,9 +268,9 @@
                 <el-button @click="templateDialog.visible = false">取消</el-button>
                 <el-button type="primary" @click="submitTemplate">保存</el-button>
             </template>
-        </el-dialog>
+        </HsxDialog>
 
-        <el-dialog v-model="groupDialog.visible" :title="groupDialog.form.id ? '编辑分组' : '新增分组'" width="520px">
+        <HsxDialog v-model="groupDialog.visible" :title="groupDialog.form.id ? '编辑分组' : '新增分组'" width="520px" :destroy-on-close="false">
             <el-form label-width="92px" :model="groupDialog.form">
                 <el-form-item label="分组名称"><el-input v-model="groupDialog.form.group_name" /></el-form-item>
                 <el-form-item label="分组标识"><el-input v-model="groupDialog.form.group_key" placeholder="appearance" /></el-form-item>
@@ -282,11 +282,11 @@
                 <el-button @click="groupDialog.visible = false">取消</el-button>
                 <el-button type="primary" @click="submitGroup">保存</el-button>
             </template>
-        </el-dialog>
+        </HsxDialog>
 
-        <el-dialog v-model="fieldDialog.visible" :title="fieldDialog.form.id ? '编辑字段' : '新增字段'" width="720px">
+        <HsxDialog v-model="fieldDialog.visible" :title="fieldDialog.form.id ? '编辑字段' : '新增字段'" width="720px" :destroy-on-close="false">
             <el-form label-width="108px" :model="fieldDialog.form" class="field-form">
-                <el-alert
+                <HsxNotice default-expanded
                     v-if="isImportedTemplate"
                     class="mb-3"
                     type="info"
@@ -386,9 +386,9 @@
                 <el-button @click="fieldDialog.visible = false">取消</el-button>
                 <el-button type="primary" @click="submitField">保存</el-button>
             </template>
-        </el-dialog>
+        </HsxDialog>
 
-        <el-dialog v-model="optionDialog.visible" :title="optionDialog.form.id ? '编辑选项' : '新增选项'" width="480px">
+        <HsxDialog v-model="optionDialog.visible" :title="optionDialog.form.id ? '编辑选项' : '新增选项'" width="480px" :destroy-on-close="false">
             <el-form label-width="92px" :model="optionDialog.form">
                 <el-form-item label="选项名称"><el-input v-model="optionDialog.form.option_label" /></el-form-item>
                 <el-form-item label="选项值"><el-input v-model="optionDialog.form.option_value" /></el-form-item>
@@ -425,16 +425,17 @@
                 <el-button @click="optionDialog.visible = false">取消</el-button>
                 <el-button type="primary" @click="submitOption">保存</el-button>
             </template>
-        </el-dialog>
+        </HsxDialog>
     </PremiumTheme>
 </template>
 
 <script setup lang="ts">
+import { HsxDialog, HsxDrawer, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
 import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import PageHeader from '@/addon/hsx_recycle/components/PageHeader.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import { Filter } from '@element-plus/icons-vue'
 import {
     addCheckTemplate,
@@ -455,6 +456,8 @@ import {
     setDefaultCheckTemplate
 } from '@/addon/hsx_recycle/api/check_template'
 import { getRecycleDeviceModelDictChildren } from '@/addon/hsx_recycle/api/recycle_device_model_dict'
+const hsxFeedback = useFeedback()
+
 
 const templateLoading = ref(false)
 const route = useRoute()
@@ -755,7 +758,7 @@ const handleTemplateCommand = async (cmd: string, row: any) => {
 const openGroupDialog = (row: any = null) => {
     if (!currentTemplate.value) return
     if (isImportedTemplate.value) {
-        ElMessage.warning('导入模板使用紧凑结构存储，仅支持查看；如需修改请新建手工模板')
+        hsxFeedback.warning('导入模板使用紧凑结构存储，仅支持查看；如需修改请新建手工模板')
         return
     }
     groupDialog.form = row ? { ...row } : { template_id: currentTemplate.value.id, group_name: '', group_key: '', description: '', sort: 0, status: 1 }
@@ -810,7 +813,7 @@ const handleSummaryVisibleChange = (value: any) => {
     if (Number(value) !== 1) return
     if (selectedSummaryFieldCount.value < 10) return
     fieldDialog.form.extra_config.summary_visible = 0
-    ElMessage.warning('设备摘要最多展示 10 个字段')
+    hsxFeedback.warning('设备摘要最多展示 10 个字段')
 }
 
 const submitField = async () => {
@@ -840,7 +843,7 @@ const fieldNeedsOptions = (field: any) => ['radio', 'checkbox', 'select'].includ
 const openOptionDialog = (row: any = null) => {
     if (!currentField.value) return
     if (isImportedTemplate.value) {
-        ElMessage.warning('导入模板使用紧凑结构存储，仅支持查看；如需修改请新建手工模板')
+        hsxFeedback.warning('导入模板使用紧凑结构存储，仅支持查看；如需修改请新建手工模板')
         return
     }
     optionDialog.form = row
@@ -908,12 +911,12 @@ const openTemplateFromRoute = async () => {
         const res: any = await getCheckTemplateSchema({ template_id: templateId })
         const template = res.data?.template || null
         if (!template) {
-            ElMessage.warning('指定的质检模板不存在或已停用')
+            hsxFeedback.warning('指定的质检模板不存在或已停用')
             return
         }
         await openTemplateEditor(template)
     } catch (error) {
-        ElMessage.error('加载指定质检模板失败')
+        hsxFeedback.error('加载指定质检模板失败')
     }
 }
 

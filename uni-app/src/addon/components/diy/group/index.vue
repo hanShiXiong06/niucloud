@@ -207,6 +207,9 @@
                 <template v-if="component.componentName == 'AiAssistantEntry'">
                    <diy-ai-assistant-entry ref="diyAiAssistantEntryRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.AiAssistantEntry" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
+                <template v-if="component.componentName == 'ProjectCenterAreaEligibility'">
+                   <diy-project-center-area-eligibility ref="diyProjectCenterAreaEligibilityRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.ProjectCenterAreaEligibility" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
                 <template v-if="component.componentName == 'ProjectCenterCollapse'">
                    <diy-project-center-collapse ref="diyProjectCenterCollapseRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.ProjectCenterCollapse" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
@@ -261,6 +264,7 @@
    import diyRecycleQuotationList from '@/addon/recycle_daheng_quote/components/diy/recycle-quotation-list/index.vue';
    import diyRecycleSpiderQuotationList from '@/addon/recycle_quote_spider/components/diy/recycle-spider-quotation-list/index.vue';
    import diyAiAssistantEntry from '@/addon/hsx_ai/components/diy/ai-assistant-entry/index.vue';
+   import diyProjectCenterAreaEligibility from '@/addon/hsx_project_center/components/diy/project-center-area-eligibility/index.vue';
    import diyProjectCenterCollapse from '@/addon/hsx_project_center/components/diy/project-center-collapse/index.vue';
    import diyProjectCenterIncomeBoard from '@/addon/hsx_project_center/components/diy/project-center-income-board/index.vue';
    import diyProjectCenterReferenceGallery from '@/addon/hsx_project_center/components/diy/project-center-reference-gallery/index.vue';

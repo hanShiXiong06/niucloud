@@ -6,32 +6,34 @@
             </template>
 
             <!-- 搜索区域 -->
-            <el-form :model="searchParams" ref="searchForm" label-width="100px" inline>
-                <el-form-item label="订单号" prop="order_id">
-                    <el-input v-model="searchParams.order_no" placeholder="请输入订单号" clearable />
-                </el-form-item>
-                <el-form-item label="快递单号" prop="express_no">
-                    <el-input v-model="searchParams.express_no" placeholder="请输入快递单号" clearable />
-                </el-form-item>
+            <HsxSearchPanel>
+                <el-form :model="searchParams" ref="searchForm" label-width="100px" inline>
+                    <el-form-item label="订单号" prop="order_id">
+                        <el-input v-model="searchParams.order_no" placeholder="请输入订单号" clearable />
+                    </el-form-item>
+                    <el-form-item label="快递单号" prop="express_no">
+                        <el-input v-model="searchParams.express_no" placeholder="请输入快递单号" clearable />
+                    </el-form-item>
                 
 
-                <el-form-item label="创建时间" prop="create_at">
-                    <el-date-picker v-model="searchParams.create_at" type="daterange" range-separator="至"
-                        start-placeholder="开始日期" end-placeholder="结束日期" value-format="yyyy-MM-dd" />
-                </el-form-item>
-                <el-form-item>
-                    <el-button type="primary" @click="handleSearch">
-                        <el-icon>
-                            <Search />
-                        </el-icon> 搜索
-                    </el-button>
-                    <el-button @click="resetSearch">
-                        <el-icon>
-                            <Refresh />
-                        </el-icon> 重置
-                    </el-button>
-                </el-form-item>
-            </el-form>
+                    <el-form-item label="创建时间" prop="create_at">
+                        <el-date-picker v-model="searchParams.create_at" type="daterange" range-separator="至"
+                            start-placeholder="开始日期" end-placeholder="结束日期" value-format="yyyy-MM-dd" />
+                    </el-form-item>
+                    <el-form-item>
+                        <el-button type="primary" @click="handleSearch">
+                            <el-icon>
+                                <Search />
+                            </el-icon> 搜索
+                        </el-button>
+                        <el-button @click="resetSearch">
+                            <el-icon>
+                                <Refresh />
+                            </el-icon> 重置
+                        </el-button>
+                    </el-form-item>
+                </el-form>
+            </HsxSearchPanel>
 
             <!-- 状态统计卡片 -->
             <div class="status-cards">
@@ -155,7 +157,7 @@
         </el-card>
 
         <!-- 取消订单对话框 -->
-        <el-dialog v-model="cancelDialogVisible" title="取消退回订单" width="500px" :close-on-click-modal="false">
+        <HsxDialog :confirm-loading="operationLoading" v-model="cancelDialogVisible" title="取消退回订单" width="500px" :close-on-click-modal="false" :destroy-on-close="false">
             <el-form :model="cancelForm" label-width="100px" ref="cancelFormRef">
                 <el-form-item label="取消原因" prop="comment"
                     :rules="[{ required: true, message: '请输入取消原因', trigger: 'blur' }]">
@@ -164,14 +166,14 @@
             </el-form>
             <template #footer>
                 <span class="dialog-footer">
-                    <el-button @click="cancelDialogVisible = false">取消</el-button>
-                    <el-button type="primary" :loading="operationLoading" @click="confirmCancel">确认</el-button>
+                    <el-button :disabled="operationLoading" @click="cancelDialogVisible = false">取消</el-button>
+                    <el-button :disabled="operationLoading" type="primary" :loading="operationLoading" @click="confirmCancel">确认</el-button>
                 </span>
             </template>
-        </el-dialog>
+        </HsxDialog>
 
         <!-- 完成订单对话框 -->
-        <el-dialog v-model="completeDialogVisible" title="完成退回订单" width="500px" :close-on-click-modal="false">
+        <HsxDialog :confirm-loading="operationLoading" v-model="completeDialogVisible" title="完成退回订单" width="500px" :close-on-click-modal="false" :destroy-on-close="false">
             <el-form :model="completeForm" label-width="100px" ref="completeFormRef">
                 <el-form-item label="备注">
                     <el-input v-model="completeForm.comment" type="textarea" :rows="3" placeholder="请输入备注信息" />
@@ -179,14 +181,14 @@
             </el-form>
             <template #footer>
                 <span class="dialog-footer">
-                    <el-button @click="completeDialogVisible = false">取消</el-button>
-                    <el-button type="primary" :loading="operationLoading" @click="confirmComplete">确认</el-button>
+                    <el-button :disabled="operationLoading" @click="completeDialogVisible = false">取消</el-button>
+                    <el-button :disabled="operationLoading" type="primary" :loading="operationLoading" @click="confirmComplete">确认</el-button>
                 </span>
             </template>
-        </el-dialog>
+        </HsxDialog>
 
         <!-- 确认退货工作台 -->
-        <el-dialog v-model="confirmDialogVisible" title="退货发货工作台" width="min(1180px, calc(100vw - 32px))" class="return-shipment-dialog" :close-on-click-modal="false">
+        <HsxDialog :confirm-loading="operationLoading" v-model="confirmDialogVisible" title="退货发货工作台" width="min(1180px, calc(100vw - 32px))" class="return-shipment-dialog" :close-on-click-modal="false" :destroy-on-close="false">
             <div class="return-workbench">
                 <section class="return-panel">
                     <div class="return-panel-head">
@@ -265,7 +267,7 @@
                                 <b>¥{{ getReturnQuotePrice(item) }}</b>
                             </div>
                         </div>
-                        <el-alert v-else title="填写寄件和退货地址后获取报价，系统会返回已启用快递公司的报价。" type="info" :closable="false" show-icon />
+                        <HsxNotice default-expanded v-else title="填写寄件和退货地址后获取报价，系统会返回已启用快递公司的报价。" type="info" :closable="false" show-icon />
                         <div v-if="confirmForm.express_no" class="generated-waybill">
                             <span>已生成运单</span>
                             <strong>{{ confirmForm.express_company }} {{ confirmForm.express_no }}</strong>
@@ -277,7 +279,7 @@
                             <el-option v-for="item in expressCompanyOptions" :key="item.value" :label="item.label" :value="item.value" />
                         </el-select>
                         <el-input v-model="confirmForm.express_no" placeholder="请输入或扫描快递单号" clearable ref="expressNoInput" @focus="focusInput" />
-                        <el-alert title="手动录入时快递单号必填。系统快递下单成功后会自动反显单号。" type="info" :closable="false" show-icon />
+                        <HsxNotice default-expanded title="手动录入时快递单号必填。系统快递下单成功后会自动反显单号。" type="info" :closable="false" show-icon />
                     </div>
 
                     <el-input v-model="confirmForm.remark" type="textarea" :rows="3" placeholder="退货备注" />
@@ -285,14 +287,14 @@
             </div>
             <template #footer>
                 <span class="dialog-footer">
-                    <el-button @click="confirmDialogVisible = false">取消</el-button>
-                    <el-button type="primary" :loading="operationLoading" @click="submitConfirm">确认退货</el-button>
+                    <el-button :disabled="operationLoading" @click="confirmDialogVisible = false">取消</el-button>
+                    <el-button :disabled="operationLoading" type="primary" :loading="operationLoading" @click="submitConfirm">确认退货</el-button>
                 </span>
             </template>
-        </el-dialog>
+        </HsxDialog>
 
         <!-- 修改退货地址对话框 -->
-        <el-dialog v-model="editAddressDialogVisible" title="修改本次退货地址" width="500px" :close-on-click-modal="false">
+        <HsxDialog v-model="editAddressDialogVisible" title="修改本次退货地址" width="500px" :close-on-click-modal="false" :destroy-on-close="false">
             <el-form ref="editAddressFormRef" :model="editAddressForm" :rules="editAddressRules" label-width="80px">
                 <el-form-item label="联系人" prop="name">
                     <el-input v-model="editAddressForm.name" placeholder="请输入联系人姓名" />
@@ -310,10 +312,10 @@
                     <el-button type="primary" @click="confirmEditAddress">确认修改</el-button>
                 </span>
             </template>
-        </el-dialog>
+        </HsxDialog>
 
         <!-- 订单详情对话框 -->
-        <el-dialog v-model="detailDialogVisible" title="退回订单详情" width="800px" :close-on-click-modal="false"
+        <HsxDialog v-model="detailDialogVisible" title="退回订单详情" width="800px" :close-on-click-modal="false"
             destroy-on-close>
             <el-descriptions :column="2" border>
                 <el-descriptions-item label="订单编号" >{{ currentDetail.order_id }}</el-descriptions-item>
@@ -374,10 +376,10 @@
                     <el-button type="primary" @click="printOrderDetail">打印订单</el-button>
                 </span>
             </template>
-        </el-dialog>
+        </HsxDialog>
 
         <!-- 快递物流信息 -->
-        <el-dialog v-model="expressTrackDialogVisible" title="快递物流信息" width="600px" :close-on-click-modal="false" destroy-on-close>
+        <HsxDialog v-model="expressTrackDialogVisible" title="快递物流信息" width="600px" :close-on-click-modal="false" destroy-on-close>
             <div v-if="expressInfo" class="express-info-container">
                 <div class="express-header">
                     <div class="express-header-main">
@@ -418,14 +420,15 @@
                 <el-button @click="expressTrackDialogVisible = false">关闭</el-button>
                 <el-button type="primary" :loading="expressTrackLoading" @click="refreshCurrentExpressTrack">刷新状态</el-button>
             </template>
-        </el-dialog>
+        </HsxDialog>
     </PremiumTheme>
 </template>
 
 <script setup lang="ts">
+import { HsxSearchPanel, HsxDialog, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
 import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { ref, reactive, onMounted, computed, watch } from 'vue'
-import { ElMessage, ElMessageBox, FormInstance } from 'element-plus'
+import { ElMessageBox, FormInstance } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { Download, Search, Refresh, View, ArrowDown, MoreFilled } from '@element-plus/icons-vue'
 import EmptyState from '@/addon/hsx_recycle/components/empty-state/index.vue'
@@ -453,6 +456,8 @@ import {
     STATUS_ACTION_PERMISSIONS
 } from '../../constants/recycle_return_order'
 import { getExpress } from '../../api/device_query_api'
+const hsxFeedback = useFeedback()
+
 
 
 const router = useRouter()
@@ -692,11 +697,11 @@ const focusInput = () => {
 const handleApiResponse = (res: any, successMsg?: string, errorMsg = '操作失败') => {
     // 统一检查响应结构
     if (res && ((res.code === 1) || (res.data && res.data.code === 1))) {
-        successMsg && ElMessage.success(successMsg)
+        successMsg && hsxFeedback.success(successMsg)
         return true
     } else {
         const msg = res?.data?.msg || res?.msg || errorMsg
-        ElMessage.error(msg)
+        hsxFeedback.error(msg)
         return false
     }
 }
@@ -720,7 +725,7 @@ const performOperation = async (
         }
     } catch (error) {
         console.error(`${errorMsg}:`, error)
-        ElMessage.error(errorMsg)
+        hsxFeedback.error(errorMsg)
     } finally {
         operationLoading.value = false
         activeOperationId.value = null
@@ -790,17 +795,17 @@ const fillReturnAddress = (type: 'sender' | 'receiver', parsed: Record<string, a
 const parseReturnAddress = async (type: 'sender' | 'receiver') => {
     const raw = type === 'sender' ? senderRawAddress.value : receiverRawAddress.value
     if (!raw.trim()) {
-        ElMessage.warning(type === 'sender' ? '请先填写寄件地址' : '请先填写退货地址')
+        hsxFeedback.warning(type === 'sender' ? '请先填写寄件地址' : '请先填写退货地址')
         return
     }
     addressParseLoading[type] = true
     try {
         const res = await parseThirdPartyAddress({ address: raw })
         fillReturnAddress(type, res.data || {})
-        ElMessage.success('地址解析成功')
+        hsxFeedback.success('地址解析成功')
     } catch (error) {
         fillReturnAddress(type, parseAddressText(raw))
-        ElMessage.warning('地址解析接口不可用，已使用本地基础解析')
+        hsxFeedback.warning('地址解析接口不可用，已使用本地基础解析')
     } finally {
         addressParseLoading[type] = false
     }
@@ -866,7 +871,7 @@ const validateReturnShipmentAddress = () => {
     ]
     for (const [field, message] of fields) {
         if (!returnShipmentForm[field]) {
-            ElMessage.warning(message)
+            hsxFeedback.warning(message)
             return false
         }
     }
@@ -882,7 +887,7 @@ const runReturnQuote = async () => {
         returnQuoteList.value = (res.data || []).sort((left: any, right: any) => Number(getReturnQuotePrice(left)) - Number(getReturnQuotePrice(right)))
         lastReturnQuoteSignature.value = returnQuoteSignature()
         if (returnQuoteList.value[0]) selectReturnQuote(returnQuoteList.value[0])
-        ElMessage.success(`已获取 ${returnQuoteList.value.length} 个报价`)
+        hsxFeedback.success(`已获取 ${returnQuoteList.value.length} 个报价`)
     } finally {
         quoteLoading.value = false
     }
@@ -890,13 +895,13 @@ const runReturnQuote = async () => {
 
 const queryReturnExpressTrack = async (row: any) => {
     if (!row?.express_no) {
-        ElMessage.warning('当前退回订单没有快递单号')
+        hsxFeedback.warning('当前退回订单没有快递单号')
         return
     }
     const mobile = row.member?.mobile || row.member_mobile || row.memberInfo?.mobile || ''
     const mobileLast4 = String(mobile).slice(-4)
     if (!mobileLast4) {
-        ElMessage.warning('无法获取用户手机号后四位，无法查询快递信息')
+        hsxFeedback.warning('无法获取用户手机号后四位，无法查询快递信息')
         return
     }
     expressTrackLoading.value = true
@@ -906,13 +911,13 @@ const queryReturnExpressTrack = async (row: any) => {
         const data = res.data?.data || res.data || null
         if (!data?.logisticsTraceDetailList?.length) {
             expressInfo.value = null
-            ElMessage.info('暂无物流信息')
+            hsxFeedback.info('暂无物流信息')
             return
         }
         expressInfo.value = data
     } catch (error: any) {
         expressInfo.value = null
-        ElMessage.error(error.message || '查询运单状态失败')
+        hsxFeedback.error(error.message || '查询运单状态失败')
     } finally {
         expressTrackLoading.value = false
         activeTrackId.value = null
@@ -984,9 +989,9 @@ const getStatusTextByValue = (status: number) => {
 // 复制到剪贴板
 const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
-        ElMessage.success('已复制到剪贴板')
+        hsxFeedback.success('已复制到剪贴板')
     }).catch(() => {
-        ElMessage.error('复制失败')
+        hsxFeedback.error('复制失败')
     })
 }
 
@@ -1027,7 +1032,7 @@ const getList = async () => {
         }
     } catch (error) {
         console.error('获取列表失败:', error)
-        ElMessage.error('获取列表失败')
+        hsxFeedback.error('获取列表失败')
     } finally {
         tableLoading.value = false
     }
@@ -1053,7 +1058,7 @@ const getStatusCount = async () => {
         }
     } catch (error) {
         console.error('获取状态统计失败:', error)
-        ElMessage.error('获取状态统计失败')
+        hsxFeedback.error('获取状态统计失败')
     }
 }
 
@@ -1125,7 +1130,7 @@ const handleDetail = async (row: IReturnOrder) => {
 
     } catch (error) {
         console.error('获取订单详情失败:', error)
-        ElMessage.error('获取订单详情失败')
+        hsxFeedback.error('获取订单详情失败')
     } finally {
         tableLoading.value = false
     }
@@ -1182,7 +1187,7 @@ const confirmEditAddress = async () => {
 
     await editAddressFormRef.value.validate(async (valid) => {
         if (!valid) {
-            ElMessage.warning('请填写完整的地址信息')
+            hsxFeedback.warning('请填写完整的地址信息')
             return
         }
 
@@ -1195,7 +1200,7 @@ const confirmEditAddress = async () => {
         }
         
         editAddressDialogVisible.value = false
-        ElMessage.success('地址修改成功')
+        hsxFeedback.success('地址修改成功')
     })
 }
 // 确认退货
@@ -1269,7 +1274,7 @@ const handleConfirm = async (id: number) => {
                     confirmForm.shipment_mode = existingReturnOrder.express_no ? 'manual' : 'system'
 
                     // 如果已有退货单，显示追加提示
-                    ElMessage({
+                    hsxFeedback.light({
                         type: 'info',
                         message: `检测到订单 ${deviceInfo.order_no || deviceInfo.order_id} 已有退货单，设备将追加到现有退货单中`
                     })
@@ -1280,7 +1285,7 @@ const handleConfirm = async (id: number) => {
         }
     } catch (error) {
         console.error('获取设备信息失败:', error)
-        ElMessage.error('获取设备信息失败')
+        hsxFeedback.error('获取设备信息失败')
     } finally {
         tableLoading.value = false
     }
@@ -1313,7 +1318,7 @@ const submitConfirm = async () => {
         if (confirmForm.shipment_mode === 'system') {
             if (!validateReturnShipmentAddress()) return
             if (!returnShipmentForm.deliveryType || !confirmForm.selected_quote_key) {
-                ElMessage.warning('请先获取报价并选择快递公司')
+                hsxFeedback.warning('请先获取报价并选择快递公司')
                 return
             }
             try {
@@ -1327,18 +1332,18 @@ const submitConfirm = async () => {
                 if (expressOrderNo) {
                     confirmForm.express_no = expressOrderNo
                     expressCompany = confirmForm.express_company || '系统快递'
-                    ElMessage.success('系统快递下单成功')
+                    hsxFeedback.success('系统快递下单成功')
                 } else {
                     throw new Error('系统快递下单成功但未返回运单号')
                 }
             } catch (error) {
                 console.error('系统快递下单失败:', error)
-                ElMessage.error('系统快递下单失败，请重试')
+                hsxFeedback.error('系统快递下单失败，请重试')
                 return
             }
         } else if (confirmForm.shipment_mode === 'manual') {
             if (!confirmForm.express_company || !confirmForm.express_no) {
-                ElMessage.warning('请填写快递公司和快递单号')
+                hsxFeedback.warning('请填写快递公司和快递单号')
                 return
             }
         } else {
@@ -1377,7 +1382,7 @@ const submitConfirm = async () => {
         }
     } catch (error) {
         console.error('确认退货失败:', error)
-        ElMessage.error('确认退货失败')
+        hsxFeedback.error('确认退货失败')
     } finally {
         operationLoading.value = false
         activeOperationId.value = null
@@ -1432,7 +1437,7 @@ const confirmComplete = async () => {
         }
     } catch (error) {
         console.error('完成退货失败:', error)
-        ElMessage.error('完成退货失败')
+        hsxFeedback.error('完成退货失败')
     } finally {
         operationLoading.value = false
     }
@@ -1470,7 +1475,7 @@ const confirmCancel = async () => {
 
     await cancelFormRef.value.validate(async (valid) => {
         if (!valid) {
-            ElMessage.warning('请填写取消原因')
+            hsxFeedback.warning('请填写取消原因')
             return
         }
 
@@ -1484,7 +1489,7 @@ const confirmCancel = async () => {
             }
         } catch (error) {
             console.error('取消失败:', error)
-            ElMessage.error('取消失败')
+            hsxFeedback.error('取消失败')
         } finally {
             operationLoading.value = false
         }
@@ -1498,7 +1503,7 @@ const handleSelectionChange = (rows: IReturnOrder[]) => {
 
 // 批量导出
 const batchExport = () => {
-    ElMessage.success(`已导出选中的 ${selectedRows.value.length} 条记录`)
+    hsxFeedback.success(`已导出选中的 ${selectedRows.value.length} 条记录`)
     // 实现批量导出逻辑
 }
 
@@ -1510,7 +1515,7 @@ const batchDelete = () => {
         cancelButtonText: '取消',
         type: 'warning'
     }).then(() => {
-        ElMessage.success('批量删除成功')
+        hsxFeedback.success('批量删除成功')
         getList()
         getStatusCount()
     }).catch(() => { })
@@ -1520,14 +1525,14 @@ const batchDelete = () => {
 const exportReturnOrders = () => {
     exportLoading.value = true
     setTimeout(() => {
-        ElMessage.success('数据导出成功')
+        hsxFeedback.success('数据导出成功')
         exportLoading.value = false
     }, 1500)
 }
 
 // 打印订单
 const printOrderDetail = () => {
-    ElMessage.success('订单打印功能已触发')
+    hsxFeedback.success('订单打印功能已触发')
     // 实现打印功能
 }
 
@@ -1599,7 +1604,7 @@ const printReturnByScene = async (row: any, action: any) => {
         }
     } catch (error: any) {
         if (error === 'cancel' || error === 'close') return
-        ElMessage.error(error?.message || '打印失败')
+        hsxFeedback.error(error?.message || '打印失败')
     }
 }
 

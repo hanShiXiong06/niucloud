@@ -125,6 +125,7 @@
 </template>
 
 <script setup lang="ts">
+import { erpEnumLabel } from '@/addon/hsx_erp/utils/display'
 import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -155,7 +156,7 @@ const confirmActionLabel = computed(() => expectedRefundPayable.value > 0.001 ? 
 
 function statusLabel(status: string) {
     if (isCompensation.value) return status === 'cancelled' ? '补差已取消' : '补差已确认'
-    return ({ pending: '待确认收货', confirmed: '已完成退货', cancelled: '已取消' } as Record<string, string>)[status] || status || '-'
+    return erpEnumLabel(status, { pending: '待确认收货', confirmed: '已完成退货', cancelled: '已取消' })
 }
 
 function statusTagType(status: string) {
@@ -163,7 +164,7 @@ function statusTagType(status: string) {
 }
 
 function refundModeLabel(mode: string) {
-    return ({ cash: '现场退款', payable: '转财务退款', offset: '往来折抵', balance: '余额退回' } as Record<string, string>)[mode] || mode || '-'
+    return erpEnumLabel(mode, { cash: '现场退款', payable: '转财务退款', offset: '往来折抵', balance: '余额退回' }, '退款方式待确认')
 }
 
 const processSummary = computed(() => {

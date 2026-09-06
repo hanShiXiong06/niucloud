@@ -134,7 +134,7 @@
                             <span class="font-medium">{{ row.purchase_no || '-' }}</span>
                         </div>
                         <div v-if="isBatchFirst($index)" class="mt-1 text-xs font-medium text-blue-600">本页同批 {{ batchPageSize(row) }} 台</div>
-                        <div class="mt-1 text-xs text-slate-500">来源：{{ row.origin_name || 'ERP采购' }}<span v-if="row.origin_plugin_name">· {{ row.origin_plugin_name }}</span></div>
+                        <div class="mt-1 text-xs text-slate-500">来源：{{ erpSourceLabel(row.origin_name, 'ERP采购') }}</div>
                         <div class="mt-1 text-xs text-gray-500">{{ formatTime(row.purchase_at) }}</div>
                         <div class="batch-staff-line">
                             <span>采购 {{ row.purchaser_name || '-' }}</span>
@@ -723,7 +723,7 @@
                     <el-descriptions-item label="采购单号">{{ detail.data.purchase_no }}</el-descriptions-item>
                     <el-descriptions-item label="采购用户">{{ detail.data.party_name }}</el-descriptions-item>
                     <el-descriptions-item label="M号">{{ detail.data.m_no || '-' }}</el-descriptions-item>
-                    <el-descriptions-item label="业务来源">{{ detail.data.origin_name || 'ERP采购' }}<span v-if="detail.data.origin_plugin_name">· {{ detail.data.origin_plugin_name }}</span></el-descriptions-item>
+                    <el-descriptions-item label="业务来源">{{ erpSourceLabel(detail.data.origin_name, 'ERP采购') }}</el-descriptions-item>
                     <el-descriptions-item label="原业务单号">{{ detail.data.origin_no || detail.data.purchase_no || '-' }}</el-descriptions-item>
                     <el-descriptions-item label="业务状态">{{ detail.data.business_status_label || orderStatusMeta(detail.data.status).label }}</el-descriptions-item>
                     <el-descriptions-item label="付款状态">
@@ -835,6 +835,7 @@
 </template>
 
 <script setup lang="ts">
+import { erpEnumLabel, erpSourceLabel } from '@/addon/hsx_erp/utils/display'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -1759,7 +1760,7 @@ function orderStatusMeta(status: string) {
 
 function dictMeta(group: string, value: string, fallback: Record<string, any>) {
     const option = (erpDicts.value[group] || []).find((item: any) => item.value === value)
-    return option ? { label: option.label, type: option.type || 'info' } : (fallback[value] || { label: value || '-', type: 'info' })
+    return option ? { label: erpEnumLabel(option.label, {}, fallback[value]?.label || '状态待确认'), type: option.type || 'info' } : (fallback[value] || { label: '状态待确认', type: 'info' })
 }
 
 function money(value: any) {
@@ -1783,7 +1784,7 @@ function formatTime(value: any) {
 }
 
 function staffName(user: any) {
-    return user?.name || user?.real_name || user?.username || `员工#${user?.uid || '-'}`
+    return user?.name || user?.real_name || user?.username || '姓名未登记'
 }
 
 function batchKey(row: any) {

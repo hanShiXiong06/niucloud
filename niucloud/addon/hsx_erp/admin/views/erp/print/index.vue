@@ -83,7 +83,7 @@
                         <el-table-column prop="scene_name" label="场景" min-width="120" />
                         <el-table-column prop="biz_no" label="业务单号" min-width="170" show-overflow-tooltip />
                         <el-table-column prop="printer_name" label="打印机" min-width="130" show-overflow-tooltip />
-                        <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="statusType(row.status)" size="small">{{ meta.status_map?.[row.status] || row.status }}</el-tag></template></el-table-column>
+                        <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="statusType(row.status)" size="small">{{ erpEnumLabel(row.status, meta.status_map) }}</el-tag></template></el-table-column>
                         <el-table-column prop="error_message" label="结果说明" min-width="220" show-overflow-tooltip><template #default="{ row }">{{ row.error_message || (row.status === 'success' ? '打印成功' : '-') }}</template></el-table-column>
                         <el-table-column label="时间" width="170"><template #default="{ row }">{{ formatTime(row.create_at) }}</template></el-table-column>
                         <el-table-column label="操作" width="90" fixed="right"><template #default="{ row }"><el-button v-if="['failed','waiting_client'].includes(row.status)" text type="primary" @click="onRetry(row)">重试</el-button></template></el-table-column>
@@ -111,7 +111,7 @@
             <el-form label-width="90px">
                 <div class="grid grid-cols-2 gap-x-4"><el-form-item label="模板名称" required><el-input v-model.trim="templateForm.template_name" /></el-form-item><el-form-item label="模板类型"><el-select v-model="templateForm.print_type" class="w-full"><el-option label="小票" value="receipt" /><el-option label="标签" value="label" /></el-select></el-form-item></div>
                 <div class="grid grid-cols-2 gap-x-4"><el-form-item label="纸宽"><el-input-number v-model="templateForm.paper_width" :min="20" :max="110" /></el-form-item><el-form-item label="排版"><el-radio-group v-model="templateForm.layout_mode"><el-radio label="native">设备原生</el-radio><el-radio label="raster" disabled>精确图像（后续）</el-radio></el-radio-group></el-form-item></div>
-                <el-form-item label="可用变量"><div class="variable-box"><el-tag v-for="item in meta.variables" :key="item.key" class="cursor-pointer" size="small" effect="plain" @click="insertVariable(item.key)">{{ item.name }} · {{ item.key }}</el-tag></div></el-form-item>
+                <el-form-item label="可用变量"><div class="variable-box"><el-tag v-for="item in meta.variables" :key="item.key" class="cursor-pointer" size="small" effect="plain" @click="insertVariable(item.key)">{{ item.name }}</el-tag></div></el-form-item>
                 <el-form-item label="模板内容" required><el-input ref="contentInput" v-model="templateForm.content" type="textarea" :rows="18" resize="vertical" placeholder="点击变量可插入 {{变量}}" /></el-form-item>
                 <el-form-item label="启用"><el-switch v-model="templateForm.status" :active-value="1" :inactive-value="0" /></el-form-item>
             </el-form>
@@ -121,6 +121,7 @@
 </template>
 
 <script lang="ts" setup>
+import { erpEnumLabel, erpNamedLabel } from '@/addon/hsx_erp/utils/display'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Connection, Plus, Postcard, Printer, Refresh, Tickets, Warning } from '@element-plus/icons-vue'
@@ -131,9 +132,9 @@ const meta = reactive<any>({ providers: [], variables: [], status_map: {} })
 const printers = ref<any[]>([]), templates = ref<any[]>([]), scenes = ref<any[]>([]), jobs = ref<any[]>([])
 const jobTotal = ref(0), failedJobs = ref(0), jobQuery = reactive({ keyword: '', status: '', page: 1, limit: 15 })
 const enabledScenes = computed(() => scenes.value.filter((x:any) => Number(x.enabled) === 1).length)
-const providerName = (key:string) => meta.providers.find((x:any) => x.key === key)?.name || key
+const providerName = (key:string) => erpNamedLabel(meta.providers.find((x:any) => x.key === key)?.name, key, '其他打印设备')
 const currentProvider = computed(() => meta.providers.find((x:any) => x.key === printerForm.driver))
-const granularityText = (v:string) => ({ order: '按订单', device: '按设备', settlement: '按结算' } as any)[v] || v
+const granularityText = (v:string) => erpEnumLabel(v, { order: '按订单', device: '按设备', settlement: '按结算' }, '按业务打印')
 const granularityOptions = (scene:any) => scene.biz_type === 'sale'
     ? [{ label: '按订单打印', value: 'order' }, { label: '按设备打印', value: 'device' }]
     : scene.biz_type === 'asset'

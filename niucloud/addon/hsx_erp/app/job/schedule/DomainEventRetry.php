@@ -28,7 +28,7 @@ final class DomainEventRetry extends BaseJob
             // 调度器会把 Job 返回值写入 sys_schedule_log.execute_result 文本字段，
             // 不能返回关联数组，否则 ThinkORM 会将其误认为字段更新表达式。
             return sprintf(
-                '发件箱：扫描 %d/成功 %d/失败 %d/人工 %d；退款收件箱：扫描 %d/成功 %d/失败 %d/人工 %d',
+                '发件箱：扫描 %d/成功 %d/失败 %d/人工 %d；入库/支付/退款收件箱：扫描 %d/成功 %d/失败 %d/人工 %d',
                 (int)($outbox['scanned'] ?? 0),
                 (int)($outbox['done'] ?? 0),
                 (int)($outbox['failed'] ?? 0),

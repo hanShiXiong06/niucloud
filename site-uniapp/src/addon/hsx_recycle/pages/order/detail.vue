@@ -288,6 +288,7 @@ import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import {
     batchRecycleDevices,
+    getCapitalAccountOptions,
     getOrderBusinessStageOptions,
     getDevicePaymentLogs,
     getOrderDetail,
@@ -313,6 +314,7 @@ import DeviceDetailPopup from './components/DeviceDetailPopup.vue'
 import DeviceFlowCard from './components/DeviceFlowCard.vue'
 import OrderLogPopup from './components/OrderLogPopup.vue'
 import { isConsignedDevice, shouldShowConfirmStatus } from '@/addon/hsx_recycle/utils/device'
+import { canOpenLocalPayment } from '@/addon/hsx_recycle/utils/payment-scope'
 import { useRecyclePrintActions } from '@/addon/hsx_recycle/hooks/useRecyclePrintActions'
 
 const loading = ref(true)
@@ -322,6 +324,7 @@ const checkPopupVisible = ref(false)
 const pricePopupVisible = ref(false)
 const signPopupVisible = ref(false)
 const paymentPopupVisible = ref(false)
+const paymentScopeChecking = ref(false)
 const consignmentPopupVisible = ref(false)
 const returnPopupVisible = ref(false)
 const deviceDetailVisible = ref(false)
@@ -705,7 +708,43 @@ const handleAction = async (type: string) => {
     }
 
     if (type === 'payment') {
-        paymentPopupVisible.value = true
+        if (paymentScopeChecking.value) return
+        paymentScopeChecking.value = true
+        try {
+            const res: any = await getCapitalAccountOptions(order.value?.id || orderId)
+            const scope = res?.data || {}
+            if (scope.payment_owner === 'self_erp') {
+                uni.showModal({
+                    title: '本订单由 ERP 结算',
+                    content: scope.message || '请到 ERP 应付款处理。切换联动方式后，实际已入 ERP 的设备仍由 ERP 处理。',
+                    confirmText: '前往应付',
+                    cancelText: '知道了',
+                    success: (result) => {
+                        if (!result.confirm) return
+                        const path = String(scope.payment_path || '')
+                        uni.navigateTo({ url: path.startsWith('/addon/hsx_erp/') ? path : '/addon/hsx_erp/pages/payable/list' })
+                    }
+                })
+            } else if (canOpenLocalPayment(scope, order.value?.flow_mode || order.value?.payment_mode || 'order')) {
+                paymentPopupVisible.value = true
+            } else {
+                uni.showModal({
+                    title: scope.payment_owner === 'mixed' ? '请按设备核对归属' : '付款归属待核对',
+                    content: `${scope.message || '暂时无法确认统一的付款归属。'} 请在当前订单的设备明细中逐台核对；整单模式不能直接付款，也不会被自动改为按设备模式。本次未执行付款。`,
+                    showCancel: false,
+                    confirmText: '知道了'
+                })
+            }
+        } catch (error) {
+            uni.showModal({
+                title: '付款归属查询失败',
+                content: '本次未执行付款。请刷新后重试，系统不会自动改为回收端付款。',
+                showCancel: false,
+                confirmText: '知道了'
+            })
+        } finally {
+            paymentScopeChecking.value = false
+        }
         return
     }
 

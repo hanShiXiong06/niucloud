@@ -72,7 +72,7 @@
                             <text class="card-meta">IMEI {{ row.imei || '-' }}</text>
                         </view>
                         <u-tag
-                            :text="row.result_meta?.label || row.result"
+                            :text="resultLabel(row)"
                             :type="row.result_meta?.type || 'info'"
                             plain
                             plainFill
@@ -80,9 +80,9 @@
                         />
                     </view>
 
-                    <view class="identity-row">
-                        <text class="identity-row__label">资产号</text>
-                        <text class="identity-row__value">{{ row.asset_no || row.sn || '-' }}</text>
+                    <view v-if="row.sn" class="identity-row">
+                        <text class="identity-row__label">SN</text>
+                        <text class="identity-row__value">{{ row.sn }}</text>
                     </view>
 
                     <view class="position-list">
@@ -148,7 +148,7 @@
                 <view class="sheet-head">
                     <view>
                         <text class="sheet-title">处理盘点差异</text>
-                        <text class="sheet-sub">{{ resolveRow?.model || '-' }} · {{ resolveRow?.imei || resolveRow?.asset_no || '-' }}</text>
+                        <text class="sheet-sub">{{ resolveRow?.model || '-' }} · {{ resolveRow?.imei || resolveRow?.sn || '未填写串号' }}</text>
                     </view>
                     <u-icon name="close" size="20" color="#94a3b8" @click="resolveVisible = false" />
                 </view>
@@ -248,6 +248,7 @@ import {
 import { scanErpCode } from '@/addon/hsx_erp/hooks/useErpScan'
 import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
 import ErpStocktakeSummary from '@/addon/hsx_erp/components/ErpStocktakeSummary.vue'
+import { erpEnumLabel } from '@/addon/hsx_erp/utils/display'
 
 const id = ref(0)
 const task = ref<any>({})
@@ -273,6 +274,8 @@ const filters = [
     { label: '盘盈', value: 'surplus' },
     { label: '异常', value: 'abnormal' },
 ]
+const resultLabels: Record<string, string> = { pending: '待盘', normal: '正常', missing: '盘亏', surplus: '盘盈', location_mismatch: '库位不符', status_abnormal: '状态异常' }
+const resultLabel = (row: any) => erpEnumLabel(row.result_meta?.label, resultLabels, erpEnumLabel(row.result, resultLabels, '盘点结果待确认'))
 const filterTabs = filters.map(item => ({ name: item.label, value: item.value }))
 const filterIndex = computed(() => Math.max(0, filters.findIndex(item => item.value === result.value)))
 const tabActiveStyle = { color: '#2563eb', fontWeight: '650', fontSize: '25rpx' }

@@ -1,5 +1,5 @@
 <template>
-    <el-dialog class="hsx-premium-overlay" v-model="dialogVisible" title="修改订单状态" width="400px" :destroy-on-close="true" @closed="handleClosed">
+    <HsxDialog :confirm-loading="submitLoading" class="" v-model="dialogVisible" title="修改订单状态" width="400px" :destroy-on-close="true" @closed="handleClosed">
         <el-form :model="form" label-width="100px" v-loading="loading">
             <el-form-item label="当前状态">
                 <el-tag :type="getStatusTagType(form.currentStatus)">
@@ -21,19 +21,22 @@
 
         <template #footer>
             <span class="dialog-footer">
-                <el-button @click="dialogVisible = false">取消</el-button>
-                <el-button type="primary" @click="submitForm" :disabled="!form.status" :loading="submitLoading">
+                <el-button :disabled="submitLoading" @click="dialogVisible = false">取消</el-button>
+                <el-button type="primary" @click="submitForm" :disabled="(!form.status) || (submitLoading)" :loading="submitLoading">
                     确定
                 </el-button>
             </span>
         </template>
-    </el-dialog>
+    </HsxDialog>
 </template>
 
 <script setup lang="ts">
+import { HsxDialog, useFeedback } from '@/addon/hsx_components/core'
 import { ref, reactive, watch, computed } from 'vue';
-import { ElMessage } from 'element-plus';
+
 import { updateRecycleOrder } from '@/addon/hsx_recycle/api/recycle_order';
+const hsxFeedback = useFeedback()
+
 
 // 订单状态定义
 const ORDER_STATUS = {
@@ -170,14 +173,14 @@ const getOrderStatusText = (status: number): string => {
 // 提交表单
 const submitForm = async () => {
     if (!form.status) {
-        ElMessage.warning('请选择目标状态');
+        hsxFeedback.warning('请选择目标状态');
         return;
     }
 
     // 验证状态变更合法性
     const availableStatus = getAvailableNextStatus(form.currentStatus);
     if (!availableStatus.includes(form.status)) {
-        ElMessage.error('不允许的状态变更');
+        hsxFeedback.error('不允许的状态变更');
         return;
     }
 
@@ -191,15 +194,15 @@ const submitForm = async () => {
         });
 
         if (response.code === 1) {
-            ElMessage.success('状态更新成功');
+            hsxFeedback.success('状态更新成功');
             dialogVisible.value = false;
             emit('success');
         } else {
-            ElMessage.error(response.message || '状态更新失败');
+            hsxFeedback.error(response.message || '状态更新失败');
         }
     } catch (error: any) {
         console.error('更新状态失败:', error);
-        ElMessage.error(error.message || '状态更新失败');
+        hsxFeedback.error(error.message || '状态更新失败');
     } finally {
         submitLoading.value = false;
     }

@@ -13,6 +13,9 @@ import HsxDateRange from './components/HsxDateRange/index.vue'
 import HsxDialog from './components/HsxDialog/index.vue'
 import HsxDetail from './components/HsxDetail/index.vue'
 import HsxDrawer from './components/HsxDrawer/index.vue'
+import HsxNotice from './components/HsxNotice/index.vue'
+import HsxFold from './components/HsxFold/index.vue'
+import HsxSearchPanel from './components/HsxSearchPanel/index.vue'
 import HsxExport from './components/HsxExport/index.vue'
 import HsxEntityPicker from './components/HsxEntityPicker/index.vue'
 import HsxIcon from './components/HsxIcon/index.vue'
@@ -71,6 +74,9 @@ const components = [
     HsxDialog,
     HsxDetail,
     HsxDrawer,
+    HsxNotice,
+    HsxFold,
+    HsxSearchPanel,
     HsxExport,
     HsxEntityPicker,
     HsxIcon,
@@ -133,6 +139,9 @@ export {
     HsxDialog,
     HsxDetail,
     HsxDrawer,
+    HsxNotice,
+    HsxFold,
+    HsxSearchPanel,
     HsxExport,
     HsxEntityPicker,
     HsxIcon,

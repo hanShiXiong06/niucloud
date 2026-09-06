@@ -13,6 +13,13 @@ use core\base\BaseAdminService;
  */
 class ErpFinanceSourceService extends BaseAdminService
 {
+    public static function forSite(int $siteId): self
+    {
+        $service = new self();
+        $service->site_id = $siteId;
+        return $service;
+    }
+
     public function persistable(array $meta): array
     {
         return array_intersect_key($meta, array_flip([
@@ -229,7 +236,7 @@ class ErpFinanceSourceService extends BaseAdminService
         string $reason
     ): array {
         $option = null;
-        $config = new ErpConfigService();
+        $config = ErpConfigService::forSite((int)$this->site_id);
         if (method_exists($config, 'findBusinessSource')) {
             $option = $config->findBusinessSource($sourceKey);
         }
@@ -273,7 +280,7 @@ class ErpFinanceSourceService extends BaseAdminService
     ): array {
         // 标准场景也从动态分类 Hook 取快照：插件可扩展维修、回收、平台服务等收支类型，
         // 但单据落库后只读快照，不因插件卸载或改名而改变历史账目。
-        $configured = (new ErpConfigService())->findFinanceCategory($key);
+        $configured = ErpConfigService::forSite((int)$this->site_id)->findFinanceCategory($key);
         if (is_array($configured)) {
             $name = trim((string)($configured['name'] ?? $name)) ?: $name;
             $direction = (string)($configured['direction'] ?? $direction);

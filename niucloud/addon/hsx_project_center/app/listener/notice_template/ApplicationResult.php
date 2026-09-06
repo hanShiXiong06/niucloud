@@ -7,6 +7,7 @@ use addon\hsx_project_center\app\model\ProjectCenterApplication;
 use addon\hsx_project_center\app\model\ProjectCenterGroup;
 use addon\hsx_project_center\app\model\ProjectCenterProject;
 use addon\hsx_project_center\app\model\ProjectCenterRefund;
+use addon\hsx_project_center\app\model\ProjectCenterDistributionDetail;
 use app\listener\notice_template\BaseNoticeTemplate;
 
 final class ApplicationResult extends BaseNoticeTemplate
@@ -14,6 +15,9 @@ final class ApplicationResult extends BaseNoticeTemplate
     public function handle(array $params)
     {
         $key = (string)($params['key'] ?? '');
+        if (in_array($key, ['project_center_distribution_pending', 'project_center_distribution_settled', 'project_center_distribution_reversed'], true)) {
+            return $this->distributionChanged($params, $key);
+        }
         if ($key === 'project_center_refund_completed') return $this->refundCompleted($params);
         if (!in_array($key, ['project_center_application_approved', 'project_center_application_rejected'], true)) return;
         $id = (int)($params['data']['application_id'] ?? 0);
@@ -60,5 +64,38 @@ final class ApplicationResult extends BaseNoticeTemplate
             'refund_reason' => (string)($refund['remark'] ?: $refund['reason'] ?: '款项已按约定退回'),
             'url' => $url,
         ], ['member_id' => (int)$refund['member_id']]);
+    }
+
+    private function distributionChanged(array $params, string $key)
+    {
+        $id = (int)($params['data']['detail_id'] ?? 0);
+        $detail = ProjectCenterDistributionDetail::where('id', '=', $id)->findOrEmpty()->toArray();
+        if ($detail === []) return;
+        $siteId = (int)$detail['site_id'];
+        $project = ProjectCenterProject::where([['site_id', '=', $siteId], ['id', '=', (int)$detail['project_id']]])
+            ->field('title')->findOrEmpty()->toArray();
+        $page = 'addon/hsx_project_center/pages/distribution/index?project_id=' . (int)$detail['project_id'];
+        $url = get_wap_domain($siteId) . '/' . $page;
+        $pending = $key === 'project_center_distribution_pending';
+        $settled = $key === 'project_center_distribution_settled';
+        $changeAmount = max(0, (float)($params['data']['change_amount'] ?? 0));
+        $amount = $pending ? (float)$detail['commission_amount'] : ($settled
+            ? (float)$detail['settled_amount']
+            : ($changeAmount > 0 ? $changeAmount : (float)$detail['reversed_amount']));
+        $statusText = $pending ? '已生成，保护期后自动结算' : ($settled
+            ? '已计入可用佣金账户'
+            : ((float)$detail['debt_amount'] > 0
+                ? '已冲红，余额不足部分待抵扣'
+                : '客户退款，原佣金已冲红'));
+        return $this->toReturn([
+            '__wechat_page' => $url, '__weapp_page' => $page,
+            // 小程序订阅消息 thing 字段有长度上限，在数据源统一收口，
+            // 避免真实项目名过长时整条通知发送失败。
+            'project_name' => mb_substr((string)($project['title'] ?? '合作项目'), 0, 15),
+            'relation_level' => (int)$detail['relation_level'] === 1 ? '一级佣金' : '二级佣金',
+            'commission_amount' => number_format($amount, 2, '.', ''),
+            'status_text' => mb_substr($statusText, 0, 15),
+            'change_time' => date('Y-m-d H:i:s'), 'url' => $url,
+        ], ['member_id' => (int)$detail['beneficiary_member_id']]);
     }
 }

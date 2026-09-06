@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { getErpBusinessSourceOptions, getErpFinanceCategories } from '@/addon/hsx_erp/api/erp'
+import { erpOptionLabel, erpSourceLabel } from '@/addon/hsx_erp/utils/display'
 
 export type ErpMoneyDirection = 'income' | 'expense'
 
@@ -31,12 +32,12 @@ export function useErpFinanceOptions() {
 
     const categoryOptions = (direction: ErpMoneyDirection) => categories.value
         .filter(item => Number(item?.enabled ?? 1) === 1 && String(item?.direction) === direction)
-        .map(item => ({ label: String(item?.name || item?.key), value: String(item?.key || '') }))
+        .map(item => ({ label: erpOptionLabel(item?.name, item?.key, '未命名分类'), value: String(item?.key || '') }))
         .filter(item => item.value)
 
     const sourceOptions = (direction: ErpMoneyDirection) => businessSources.value
         .filter(item => Number(item?.enabled ?? 1) === 1 && String(item?.direction) === direction)
-        .map(item => ({ label: String(item?.name || item?.key), value: String(item?.key || '') }))
+        .map(item => ({ label: erpSourceLabel(item?.name, '其他来源'), value: String(item?.key || '') }))
         .filter(item => item.value)
 
     return { categories, businessSources, loading, load, categoryOptions, sourceOptions }

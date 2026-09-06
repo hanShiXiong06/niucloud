@@ -3,60 +3,44 @@
     <!-- 页面标题和快速筛选 -->
     <div class="bg-white shadow-sm border-b border-gray-100 sticky top-0 z-10">
       <div class="mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        <div
-          class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4"
-        >
-          <!-- 页面标题 -->
-          <div class="flex items-center space-x-3">
-            <div
-              class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center"
-            >
-              <el-icon :size="18" color="white">
-                <DataAnalysis />
-              </el-icon>
-            </div>
-            <div>
-              <h1 class="text-xl font-semibold text-gray-900">数据概览</h1>
-              <p class="text-sm text-gray-500">
+        <HsxTitle size="page" collapsible-subtitle>
+            <template #default>数据概览</template>
+            <template #subtitle>
                 {{ userRole === "admin" ? "管理员控制台" : "工作台数据" }}
-              </p>
-            </div>
-          </div>
-
-          <!-- 快速筛选按钮组 -->
-          <div class="flex flex-wrap items-center gap-3">
-            <el-dropdown
-              v-if="canShowWidget('quick_express_ship') || canShowWidget('quick_express_track')"
-              trigger="click"
-              @command="handleExpressQuickCommand"
+            </template>
+            <template #extra>
+                <el-dropdown
+                    v-if="canShowWidget('quick_express_ship') || canShowWidget('quick_express_track')"
+                    trigger="click"
+                    @command="handleExpressQuickCommand"
             >
-              <el-button type="primary">
+                    <el-button type="primary">
                 快递
-                <el-icon class="el-icon--right">
-                  <ArrowDown />
-                </el-icon>
-              </el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item v-if="canShowWidget('quick_express_ship')" command="ship">
-                    <el-icon><Box /></el-icon>
+                        <el-icon class="el-icon--right">
+                            <ArrowDown />
+                        </el-icon>
+                    </el-button>
+                    <template #dropdown>
+                        <el-dropdown-menu>
+                            <el-dropdown-item v-if="canShowWidget('quick_express_ship')" command="ship">
+                                <el-icon><Box /></el-icon>
                     快速寄件
-                  </el-dropdown-item>
-                  <el-dropdown-item v-if="canShowWidget('quick_express_track')" command="track">
-                    <el-icon><Search /></el-icon>
+                            </el-dropdown-item>
+                            <el-dropdown-item v-if="canShowWidget('quick_express_track')" command="track">
+                                <el-icon><Search /></el-icon>
                     快速查件
-                  </el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
+                            </el-dropdown-item>
+                        </el-dropdown-menu>
+                    </template>
+                </el-dropdown>
 
             <!-- 快速时间筛选 -->
-            <div class="flex bg-gray-100 rounded-lg p-1">
-              <button
-                v-for="period in quickPeriods"
-                :key="period.key"
-                @click="handleQuickPeriod(period.key)"
-                :class="[
+                <div class="flex bg-gray-100 rounded-lg p-1">
+                    <button
+                        v-for="period in quickPeriods"
+                        :key="period.key"
+                        @click="handleQuickPeriod(period.key)"
+                        :class="[
                   'px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200',
                   activePeriod === period.key
                     ? 'bg-white text-blue-600 shadow-sm'
@@ -64,35 +48,35 @@
                 ]"
               >
                 {{ period.label }}
-              </button>
-            </div>
+                    </button>
+                </div>
 
             <!-- 自定义日期范围 -->
-            <div class="flex items-center gap-2">
-              <el-date-picker
-                v-model="dateRange"
-                type="daterange"
-                range-separator="至"
-                start-placeholder="开始日期"
-                end-placeholder="结束日期"
-                format="YYYY-MM-DD"
-                value-format="YYYY-MM-DD"
-                @change="handleDateChange"
-                size="default"
-                class="custom-date-picker"
+                <div class="flex items-center gap-2">
+                    <el-date-picker
+                        v-model="dateRange"
+                        type="daterange"
+                        range-separator="至"
+                        start-placeholder="开始日期"
+                        end-placeholder="结束日期"
+                        format="YYYY-MM-DD"
+                        value-format="YYYY-MM-DD"
+                        @change="handleDateChange"
+                        size="default"
+                        class="custom-date-picker"
               />
-              <button
-                @click="handleRefresh"
-                class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors duration-200 shadow-sm"
+                    <button
+                        @click="handleRefresh"
+                        class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors duration-200 shadow-sm"
               >
-                <el-icon :size="14" color="white" class="mr-1">
-                  <Search />
-                </el-icon>
+                        <el-icon :size="14" color="white" class="mr-1">
+                            <Search />
+                        </el-icon>
                 查询
-              </button>
-            </div>
-          </div>
-        </div>
+                    </button>
+                </div>
+            </template>
+        </HsxTitle>
       </div>
     </div>
 
@@ -471,6 +455,7 @@
 </template>
 
 <script setup lang="ts">
+import { HsxTitle } from '@/addon/hsx_components/core'
 import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { computed, ref, onMounted, onUnmounted, nextTick, watch } from "vue";
 import { useRouter } from "vue-router";

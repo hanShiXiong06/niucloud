@@ -139,8 +139,10 @@ $assert(str_contains($assetApi, 'row.before_total_cost'), '成本流水必须把
 $assert(str_contains($assetApi, 'row.after_total_cost'), '成本流水必须把后端after_total_cost映射到页面');
 $stockService = (string)file_get_contents($root . '/app/service/admin/ErpStockService.php');
 $assert(str_contains($stockService, 'orderPayableMap') && str_contains($stockService, "['source_type', '=', 'purchase']"), '库存中心必须兼容整单应付折账的设备分摊');
-foreach (['cost_summary', 'supplier_adjust_cost', 'internal_adjust_cost'] as $field) {
-    $assert(str_contains($stockService, "'{$field}'"), '库存详情缺少成本拆分字段：' . $field);
+$costPresentation = (string)file_get_contents($root . '/app/support/ErpStockCostPresentation.php');
+$assert(substr_count($stockService, 'ErpStockCostPresentation::summarize(') === 2 && str_contains($stockService, "'cost_summary'"), '库存列表和详情必须复用同一成本拆分');
+foreach (['supplier_adjust_cost', 'internal_adjust_cost'] as $field) {
+    $assert(str_contains($costPresentation, "'{$field}'"), '库存详情缺少成本拆分字段：' . $field);
 }
 $assert(str_contains($stockService, "['return_flow'] = ErpPurchaseReturnPolicy::assess"), '库存详情必须返回统一退货决策');
 $stockDetail = (string)file_get_contents($repo . '/site-uniapp/src/addon/hsx_erp/pages/stock/detail.vue');
@@ -176,7 +178,7 @@ foreach (["where['source_type']", "where['imei']", "where['operator_uid']"] as $
     $assert(str_contains($financeService, $needle), '应收款服务缺少结构化筛选逻辑：' . $needle);
 }
 $financeMetaComponent = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/components/ErpFinanceSourceMeta.vue');
-foreach (['finance_type_name', 'business_source_name', 'source_plugin_name', 'channel_name', '应收原因', '应付原因'] as $needle) {
+foreach (['finance_type_name', 'business_source_name', 'channel_name', '应收原因', '应付原因'] as $needle) {
     $assert(str_contains($financeMetaComponent, $needle), 'PC财务来源通用组件缺少关键信息：' . $needle);
 }
 $partySelectComponent = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/components/ErpPartySelect.vue');
@@ -193,8 +195,14 @@ foreach (['finance_type_key', 'business_source_key', 'channel_code', 'ErpFinance
     $assert(str_contains($payableView, $needle), 'PC应付款缺少动态类型、来源或渠道筛选：' . $needle);
 }
 $mobileFinanceSource = (string)file_get_contents($repo . '/site-uniapp/src/addon/hsx_erp/components/ErpFinanceSourceSummary.vue');
-foreach (['finance_type_name', 'business_source_name', 'source_plugin_name', 'channel_name', 'business_reason'] as $needle) {
+foreach (['finance_type_name', 'business_source_name', 'channel_name', 'business_reason'] as $needle) {
     $assert(str_contains($mobileFinanceSource, $needle), '移动财务来源组件缺少关键信息：' . $needle);
+}
+// 展示降噪：插件元数据仍由接口返回，但不再属于客户核账页面的展示契约。
+$assert(str_contains($financeSourceService, "'source_plugin_name'"), '接口必须保留来源插件元数据，不能因界面隐藏而删除');
+foreach (['PC' => $financeMetaComponent, '移动端' => $mobileFinanceSource] as $platform => $component) {
+    $template = strstr($component, '<script', true) ?: $component;
+    $assert(!preg_match('/source_plugin|pluginName|来源插件/', $template), $platform . '财务页面不得展示内部插件信息');
 }
 $configService = (string)file_get_contents($root . '/app/service/admin/ErpConfigService.php');
 foreach (['HsxErpSaleChannelOptions', 'HsxErpFinanceCategories', 'HsxErpBusinessSourceOptions', 'getBusinessSourceOptions', 'findBusinessSource', 'statement_group'] as $needle) {
@@ -373,7 +381,10 @@ foreach (['本页有效采购汇总', '已退货、已作废货品不计入', "a
 $assert(str_contains($service, "status === ErpDict::ASSET_RETURNED") || str_contains($service, "status) === ErpDict::ASSET_RETURNED"), '后端必须拒绝已退货设备成本调整');
 
 $identity = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/components/ErpDeviceIdentity.vue');
-$assert(str_contains($identity, '系统资产号'), '资产号应以弱化的系统标识展示');
+$identityTemplate = strstr($identity, '<script', true) ?: $identity;
+$assert(!preg_match('/系统资产号|assetNo|asset_no/', $identityTemplate), '内部资产号不应在设备身份组件中展示');
+$assert(str_contains($identityTemplate, 'IMEI') && str_contains($identityTemplate, 'SN'), '设备身份组件必须保留 IMEI / SN 展示');
+$assert(str_contains($identity, 'assetNo?:'), '内部资产号组件参数应保留，避免破坏调用契约');
 
 $roleDoc = (string)file_get_contents($root . '/docs/menu-role-information-priority.md');
 foreach (['工作台', '采购管理', '销售出库', '库存中心', '应付款', '应收款', '基础配置'] as $menu) {

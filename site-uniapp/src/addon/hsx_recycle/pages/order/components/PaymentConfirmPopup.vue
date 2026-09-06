@@ -3,7 +3,7 @@
         <view class="payment-popup">
             <view class="payment-header">
                 <view>
-                    <view class="payment-title">确认打款</view>
+                    <view class="payment-title">确认付款</view>
                     <view class="payment-subtitle">{{ isDeviceMode ? '按设备打款' : '整单打款' }}</view>
                 </view>
                 <text class="nc-iconfont nc-icon-guanbiV6xx1 text-[32rpx]" @click="handleClose"></text>
@@ -30,6 +30,16 @@
 
             <view v-if="isDeviceMode" class="tip-card">
                 <text>按设备流转模式下，可只选择本次需要结算的设备；未选择设备会继续保留在待打款状态。</text>
+            </view>
+            <view class="tip-card">
+                <text>{{ paymentScopeLoading ? '正在核对本订单付款归属，核对完成前不能提交。' : (paymentScopeError || '请确认实际付款结果，并核对本次付款账户、金额与设备范围，勿重复操作。') }}</text>
+                <view v-if="paymentScopeError" @click="loadPaymentScope()">重新核对付款归属</view>
+            </view>
+            <view v-if="paymentScope.payment_owner === 'mixed'" class="tip-card">
+                <text>本订单包含不同付款归属。仅可选择由回收端处理且当前可付款的设备；ERP 设备及归属待核对设备不可在此付款。</text>
+            </view>
+            <view v-if="hasErpDevices" class="tip-card">
+                <u-button size="small" @click="goToErpPayment">前往 ERP 处理其余设备</u-button>
             </view>
 
             <scroll-view scroll-y class="payment-content">
@@ -134,7 +144,7 @@
                             <view class="device-card__meta">
                                 <text>{{ device.imei || device.user_sn || '-' }}</text>
                             </view>
-                            <view class="device-card__reason">{{ device.pay_disabled_reason || device.disabled_reason || '当前不可打款' }}</view>
+                            <view class="device-card__reason">{{ devicePaymentReason(device) }}</view>
                         </view>
                     </view>
                 </view>
@@ -168,8 +178,8 @@
 
             <view class="payment-footer">
                 <u-button @click="handleClose" :customStyle="{ flex: 1, marginRight: '20rpx' }">取消</u-button>
-                <u-button type="primary" :loading="submitting" :customStyle="{ flex: 2 }" @click="handleSubmit">
-                    确认打款 ¥{{ currentPayAmount }}
+                <u-button type="primary" :loading="submitting || paymentScopeLoading" :disabled="!localPaymentAllowed" :customStyle="{ flex: 2 }" @click="handleSubmit">
+                    确认付款 ¥{{ currentPayAmount }}
                 </u-button>
             </view>
         </view>
@@ -178,13 +188,14 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { devicePaymentConfirm, getMerchantPayInfo, paymentConfirm } from '@/addon/hsx_recycle/api/order'
+import { devicePaymentConfirm, getCapitalAccountOptions, getMerchantPayInfo, paymentConfirm } from '@/addon/hsx_recycle/api/order'
 import { img } from '@/utils/common'
 import { previewImages as openPreview } from '@/addon/hsx_recycle/utils/preview'
 import RecycleImageUploader from '@/addon/hsx_recycle/components/RecycleImageUploader.vue'
 import RecycleTagGroup from '@/addon/hsx_recycle/components/RecycleTagGroup.vue'
 import { formatMoney } from '@/addon/hsx_recycle/utils/helper'
 import { getDeviceSettlementAmount, isConsignedDevice } from '@/addon/hsx_recycle/utils/device'
+import { canOpenLocalPayment, getDevicePaymentOwner, type PaymentScope } from '@/addon/hsx_recycle/utils/payment-scope'
 
 interface Props {
     visible: boolean
@@ -211,6 +222,37 @@ const customAccount = ref('')
 const selectedDeviceIds = ref<Array<number | string>>([])
 const paymentImages = ref('')
 const imageUploading = ref(false)
+const paymentScopeLoading = ref(false)
+const paymentScopeError = ref('')
+const paymentScope = ref<PaymentScope>({})
+const localPaymentAllowed = computed(() => !paymentScopeError.value && canOpenLocalPayment(paymentScope.value, isDeviceMode.value ? 'device' : 'order'))
+const hasErpDevices = computed(() => paymentScope.value.payment_owner === 'self_erp' || paymentScope.value.devices?.some(item => item.owner === 'self_erp'))
+const goToErpPayment = () => {
+    handleClose()
+    const path = String(paymentScope.value.payment_path || '')
+    uni.navigateTo({ url: path.startsWith('/addon/hsx_erp/') ? path : '/addon/hsx_erp/pages/payable/list' })
+}
+
+const loadPaymentScope = async () => {
+    paymentScopeLoading.value = true
+    paymentScopeError.value = ''
+    paymentScope.value = {}
+    try {
+        if (!props.orderData?.id) throw new Error('订单信息不完整')
+        const res: any = await getCapitalAccountOptions(props.orderData.id)
+        const scope = res?.data || {}
+        paymentScope.value = scope
+        if (!localPaymentAllowed.value) {
+            paymentScopeError.value = `${scope.message || '本订单不能在此直接付款。'} 请关闭弹窗，到设备明细核对归属。`
+        }
+    } catch (error) {
+        paymentScopeError.value = '付款归属查询失败，本次未执行付款。请重新核对，不能自动改为回收端付款。'
+    } finally {
+        paymentScopeLoading.value = false
+        selectedDeviceIds.value = selectedDeviceIds.value.filter(id => payableDevices.value.some((device: any) => String(device.id) === String(id)))
+    }
+    return localPaymentAllowed.value
+}
 
 const devices = computed(() => Array.isArray(props.devices) ? props.devices : [])
 const isDeviceMode = computed(() => (props.orderData?.flow_mode || props.orderData?.payment_mode) === 'device')
@@ -226,12 +268,19 @@ const needCustomFields = computed(() => {
 })
 
 const payableDevices = computed(() => {
-    return devices.value.filter((device: any) => Boolean(device.can_pay))
+    return devices.value.filter((device: any) => Boolean(device.can_pay) && getDevicePaymentOwner(paymentScope.value, device.id) === 'local')
 })
 
 const blockedDevices = computed(() => {
-    return devices.value.filter((device: any) => !device.can_pay && Number(device.pay_status || 0) !== 1)
+    return devices.value.filter((device: any) => getDevicePaymentOwner(paymentScope.value, device.id) !== 'local' || (!device.can_pay && Number(device.pay_status || 0) !== 1))
 })
+
+const devicePaymentReason = (device: any) => {
+    const owner = getDevicePaymentOwner(paymentScope.value, device.id)
+    if (owner === 'self_erp') return '由 ERP 处理'
+    if (owner !== 'local') return paymentScopeLoading.value ? '正在核对归属' : '归属待核对'
+    return device.pay_disabled_reason || device.disabled_reason || '当前不可打款'
+}
 
 const currentPayAmount = computed(() => {
     const targetDevices = isDeviceMode.value
@@ -262,8 +311,9 @@ const initPopup = async () => {
     paymentImages.value = ''
     imageUploading.value = false
     selectedMethodIndex.value = 0
+    selectedDeviceIds.value = []
+    await Promise.all([loadPaymentScope(), loadPaymentMethods()])
     selectedDeviceIds.value = payableDevices.value.map((device: any) => device.id)
-    await loadPaymentMethods()
 }
 
 const loadPaymentMethods = async () => {
@@ -307,6 +357,11 @@ const getPaymentPayload = () => {
 }
 
 const handleSubmit = () => {
+    if (submitting.value || paymentScopeLoading.value) return
+    if (!localPaymentAllowed.value) {
+        uni.showToast({ title: '请先完成付款归属核对', icon: 'none' })
+        return
+    }
     const { payType } = getPaymentPayload()
     if (!payType) {
         uni.showToast({ title: '请填写支付方式', icon: 'none' })
@@ -322,10 +377,14 @@ const handleSubmit = () => {
         uni.showToast({ title: '请选择需要打款的设备', icon: 'none' })
         return
     }
+    if (isDeviceMode.value && selectedDeviceIds.value.some(id => !payableDevices.value.some((device: any) => String(device.id) === String(id)))) {
+        uni.showToast({ title: '请重新核对并选择回收端设备', icon: 'none' })
+        return
+    }
 
     uni.showModal({
-        title: '确认打款',
-        content: `确认本次已打款 ¥${ currentPayAmount.value } 吗？`,
+        title: '确认付款',
+        content: `确认本次付款 ¥${ currentPayAmount.value } 吗？请确认实际付款结果，勿重复操作。`,
         success: async (res) => {
             if (!res.confirm) return
             await submitPayment()
@@ -334,6 +393,7 @@ const handleSubmit = () => {
 }
 
 const submitPayment = async () => {
+    if (submitting.value) return
     if (!props.orderData?.id) {
         uni.showToast({ title: '订单数据异常，请刷新后重试', icon: 'none' })
         return
@@ -341,17 +401,31 @@ const submitPayment = async () => {
 
     submitting.value = true
     try {
+        const deviceIds = isDeviceMode.value ? [...selectedDeviceIds.value] : undefined
+        if (deviceIds && !deviceIds.length) throw new Error('请先选择本次付款的设备')
+        let capability: any
+        try {
+            capability = await getCapitalAccountOptions(props.orderData.id, deviceIds)
+        } catch (error) {
+            paymentScopeError.value = '选中设备的付款归属重新核对失败，本次未执行付款。请重新核对后再操作。'
+            return
+        }
+        const scope = capability?.data || {}
+        if (scope.payment_owner !== 'local' || scope.local_allowed !== true || deviceIds?.some(id => getDevicePaymentOwner(scope, id) !== 'local')) {
+            paymentScopeError.value = `${scope.message || '本次选中设备不能统一由回收端付款。'} 请重新核对设备归属，本次未执行付款。`
+            return
+        }
         const { payload } = getPaymentPayload()
         if (isDeviceMode.value) {
             await devicePaymentConfirm(props.orderData.id, {
                 ...payload,
-                device_ids: selectedDeviceIds.value
+                device_ids: deviceIds || []
             })
         } else {
             await paymentConfirm(props.orderData.id, payload)
         }
 
-        uni.showToast({ title: '打款确认成功', icon: 'success' })
+        uni.showToast({ title: '付款确认成功', icon: 'success' })
         emit('success')
         handleClose()
     } catch (error: any) {
@@ -364,7 +438,7 @@ const submitPayment = async () => {
 const isDeviceSelected = (deviceId: number | string) => selectedDeviceIds.value.includes(deviceId)
 
 const toggleDevice = (deviceId: number | string) => {
-    if (!isDeviceMode.value) return
+    if (!isDeviceMode.value || submitting.value || !payableDevices.value.some((device: any) => String(device.id) === String(deviceId))) return
     if (isDeviceSelected(deviceId)) {
         selectedDeviceIds.value = selectedDeviceIds.value.filter(id => id !== deviceId)
     } else {

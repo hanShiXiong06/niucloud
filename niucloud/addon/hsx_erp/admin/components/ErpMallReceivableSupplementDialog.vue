@@ -153,7 +153,7 @@ function syncSalesmanName(uid: number | string) {
 }
 
 function staffName(user: any) {
-    return user?.name || user?.real_name || user?.username || `员工#${user?.uid || '-'}`
+    return user?.name || user?.real_name || user?.username || '姓名未登记'
 }
 
 async function submit() {

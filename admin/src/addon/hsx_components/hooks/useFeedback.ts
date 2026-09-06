@@ -21,9 +21,11 @@ export type HsxLightMessage = string | Partial<MessageOptions>
 export type HsxHeavyNotice = string | Partial<NotificationOptions>
 
 function messageOptions(input: HsxLightMessage, type: HsxFeedbackType): MessageOptions {
+    const resolvedType = typeof input === 'string' ? type : input.type || type
+    const defaults = { duration: resolvedType === 'success' ? 2400 : 5200, showClose: true, grouping: true }
     return typeof input === 'string'
-        ? { message: input, type, duration: 2400, showClose: false }
-        : { duration: 2400, showClose: false, ...input, type: input.type || type } as MessageOptions
+        ? { ...defaults, message: input, type }
+        : { ...defaults, ...input, type: resolvedType } as MessageOptions
 }
 
 function noticeOptions(input: HsxHeavyNotice, type: HsxFeedbackType): NotificationOptions {
@@ -53,7 +55,12 @@ export function useFeedback() {
         }
     }
     const alert = async (message: string, title = '提示', type: HsxFeedbackType = 'info') => {
-        await ElMessageBox.alert(message, title, { type, confirmButtonText: '知道了', draggable: true })
+        try {
+            await ElMessageBox.alert(message, title, { type, confirmButtonText: '知道了', closeOnClickModal: false, draggable: true })
+        } catch (action) {
+            // 关闭说明是正常阅读行为，不把取消传播成“保存失败”。
+            if (action !== 'cancel' && action !== 'close') throw action
+        }
     }
 
     return {

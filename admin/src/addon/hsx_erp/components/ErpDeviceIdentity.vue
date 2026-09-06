@@ -7,7 +7,6 @@
             <span v-if="sn">SN {{ sn }}</span>
             <span v-if="!imei && !sn">未录入 IMEI / SN</span>
         </div>
-        <div v-if="assetNo" class="erp-device-identity__asset">系统资产号 {{ assetNo }}</div>
     </div>
 </template>
 
@@ -42,11 +41,5 @@ defineProps<{
     color: #334155;
     font-size: 12px;
     line-height: 18px;
-}
-.erp-device-identity__asset {
-    margin-top: 3px;
-    color: #94a3b8;
-    font-size: 11px;
-    line-height: 16px;
 }
 </style>

@@ -229,7 +229,7 @@ import { useRecycleListHeader } from '@/addon/hsx_recycle/hooks/useRecycleListHe
 import { useRecyclePaging } from '@/addon/hsx_recycle/hooks/useRecyclePaging'
 import { getRecycleMemberAvatar, getRecycleMemberInitial, getRecycleMemberMobile, getRecycleMemberName } from '@/addon/hsx_recycle/hooks/useRecycleMember'
 
-const { pagingRef, list, reload, complete } = useRecyclePaging()
+const { pagingRef, list, reload, refresh, complete } = useRecyclePaging()
 const keyword = ref('')
 const currentStatus = ref('')
 const filterVisible = ref(false)
@@ -365,10 +365,13 @@ onLoad((option: any) => {
 onShow(async () => {
     await loadStatusTabs()
     await loadBusinessStageOptions()
-    if (initialized.value || needRefresh.value) {
-        reload()
-    } else {
+    if (!initialized.value) {
         initialized.value = true
+    } else if (needRefresh.value) {
+        // refresh 会重新获取当前已经加载的全部分页，但不会像 reload 一样
+        // 清空分页并滚回顶部。这样详情中的状态变化能及时回显，同时保留
+        // 用户进入详情前的列表位置、筛选条件和已加载页数。
+        refresh()
     }
     needRefresh.value = false
 })
@@ -475,7 +478,8 @@ const buildRouteFilters = (option: Record<string, any>) => {
 }
 
 const toDetail = (item: any, filter = '') => {
-    needRefresh.value = true // 从详情页返回时需要刷新
+    // 返回列表后做原位刷新；不得使用 reload，否则长列表会回到顶部。
+    needRefresh.value = true
     const deviceKeyword = String(filterParams.value.device_imei || keyword.value || '').trim()
     redirect({
         url: '/addon/hsx_recycle/pages/order/detail',

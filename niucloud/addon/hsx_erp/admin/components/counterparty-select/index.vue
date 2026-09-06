@@ -102,7 +102,7 @@ const creditTag = (item: any) => {
     return null
 }
 
-const nameOf = (item: any) => item.nickname || item.username || item.member_name || `会员#${item.member_id}`
+const nameOf = (item: any) => item.nickname || item.username || item.member_name || '姓名未登记'
 const labelOf = (item: any) => {
     const partyName = item.party_name || item.counterparty_name
     return [nameOf(item), item.mobile, partyName].filter(Boolean).join(' / ')

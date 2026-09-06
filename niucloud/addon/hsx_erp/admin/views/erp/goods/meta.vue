@@ -14,7 +14,7 @@
                     <div class="catalog-intro">
                         <div>
                             <div class="font-medium text-gray-900">标准产品模板 + 本站独立目录</div>
-                            <div class="mt-1 text-sm text-gray-500">相同来源产品ID跨站复用标准模板；名称、分类、显示状态仍由当前站点独立管理。</div>
+                            <div class="mt-1 text-sm text-gray-500">同款产品可复用标准模板；名称、分类、显示状态仍由当前站点独立管理。</div>
                         </div>
                         <div class="flex gap-2">
                             <input ref="catalogFileInput" class="hidden" type="file" accept=".xlsx,.xls" @change="handleCatalogFile" />
@@ -49,7 +49,7 @@
                     </div>
 
                     <div class="catalog-filter-bar">
-                        <el-input v-model.trim="catalogQuery.keyword" :prefix-icon="Search" clearable placeholder="搜索型号、品牌、系列或产品ID" class="!w-[300px]" @keyup.enter="loadCatalog(true)" />
+                        <el-input v-model.trim="catalogQuery.keyword" :prefix-icon="Search" clearable placeholder="搜索型号、品牌或系列" class="!w-[300px]" @keyup.enter="loadCatalog(true)" />
                         <el-select v-model="catalogQuery.brand_name" clearable filterable placeholder="全部品牌" class="!w-[160px]">
                             <el-option v-for="name in catalogFilters.brands" :key="name" :label="name" :value="name" />
                         </el-select>
@@ -88,7 +88,6 @@
                                             <div class="catalog-tree-node__title">{{ data.label || '未命名' }}</div>
                                             <div v-if="data.node_type === 'product'" class="catalog-tree-node__meta">
                                                 <span v-if="data.path_text">{{ data.path_text }}</span>
-                                                <span>产品ID {{ data.source_product_id || '-' }}</span>
                                                 <span>排序 {{ Number(data.sort || 0) }}</span>
                                             </div>
                                             <div v-else class="catalog-tree-node__meta">

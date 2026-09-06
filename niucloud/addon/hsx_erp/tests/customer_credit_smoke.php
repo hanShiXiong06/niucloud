@@ -31,7 +31,8 @@ $assert(str_contains($credit, "'cash_only'") && str_contains($credit, "'blocked'
 $assert(str_contains($credit, '本次收款必须等于销售总额'), '仅现结客户必须强制全额收款');
 
 $sale = (string)file_get_contents($root . '/app/service/admin/ErpSaleService.php');
-$assert(str_contains($sale, 'ErpCustomerCreditService())->assertSaleAllowed'), '销售事务未调用客户信用校验');
+$assert(str_contains($sale, 'ErpCustomerCreditService::forSite('), '销售事务必须显式绑定站点执行客户信用校验');
+$assert(str_contains($sale, ')->assertSaleAllowed('), '销售事务未调用客户信用校验');
 $assert(str_contains($sale, 'confirmReceivableItemsInTransaction'), '销售现结必须在销售事务中同时确认收款');
 $assert(str_contains($sale, 'lock(true)->findOrEmpty()'), '同一客户销售信用额度校验必须串行化');
 

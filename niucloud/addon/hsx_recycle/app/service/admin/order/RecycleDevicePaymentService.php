@@ -13,6 +13,7 @@ use addon\hsx_recycle\app\model\order\RecycleDevicePayment;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderEventService;
 use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpCapabilityService;
+use addon\hsx_recycle\app\support\RecyclePurchaseSettlementPolicy;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -29,7 +30,7 @@ class RecycleDevicePaymentService extends BaseAdminService
 
     public function assertOrderPaymentAllowed(?int $orderId = null): void
     {
-        $this->assertLocalPaymentAllowed();
+        // 这里只做控制器的模式预检；会锁定/记录归属的最终闸门必须由付款事务调用。
         $mode = $this->getPaymentMode();
         if ($orderId) {
             $order = RecycleOrder::where([
@@ -48,8 +49,8 @@ class RecycleDevicePaymentService extends BaseAdminService
 
     public function payDevices(int $orderId, array $data): array
     {
-        $this->assertLocalPaymentAllowed();
-        $deviceIds = array_values(array_unique(array_filter(array_map('intval', $data['device_ids'] ?? []))));
+        if ($orderId <= 0) throw new CommonException('订单标识无效');
+        $deviceIds = self::normalizePaymentDeviceIds($data['device_ids'] ?? []);
         if (empty($deviceIds)) {
             throw new CommonException('请选择需要打款的设备');
         }
@@ -61,10 +62,11 @@ class RecycleDevicePaymentService extends BaseAdminService
                 ['id', '=', $orderId],
                 ['site_id', '=', $this->site_id],
                 ['delete_at', '=', 0],
-            ])->findOrEmpty();
+            ])->lock(true)->findOrEmpty();
             if ($order->isEmpty()) {
                 throw new CommonException('订单不存在');
             }
+            $this->assertDevicePaymentOrderState($order->toArray());
             if ($flowModeService->getOrderFlowMode($order->toArray()) !== RecycleOrderDict::FLOW_MODE_DEVICE) {
                 throw new CommonException('当前订单为整单流转，请使用订单确认打款');
             }
@@ -73,7 +75,7 @@ class RecycleDevicePaymentService extends BaseAdminService
             $devices = RecycleDevice::where([
                 ['site_id', '=', $this->site_id],
                 ['order_id', '=', $orderId],
-            ])->whereIn('id', $deviceIds)->select();
+            ])->whereIn('id', $deviceIds)->order('id asc')->lock(true)->select();
             if ($devices->count() !== count($deviceIds)) {
                 throw new CommonException('选择的设备不属于当前订单');
             }
@@ -92,21 +94,28 @@ class RecycleDevicePaymentService extends BaseAdminService
             $payNo = $this->buildPayNo($orderId);
             $paidAmount = 0.0;
             $paidCount = 0;
-
+            $payments = [];
             foreach ($devices as $device) {
                 $payState = $flowModeService->getDevicePayState($device->toArray(), RecycleOrderDict::FLOW_MODE_DEVICE);
                 if (!$payState['allowed']) {
                     throw new CommonException(($device->imei ?: $device->model ?: ('设备#' . $device->id)) . '：' . $payState['reason']);
                 }
-                if ((int)($device->pay_status ?? 0) === RecycleOrderDict::PAY_STATUS_PAID) {
+                if ((int)($device->pay_status ?? 0) !== RecycleOrderDict::PAY_STATUS_UNPAID
+                    || (float)($device->pay_amount ?? 0) > 0 || (int)($device->pay_time ?? 0) > 0) {
                     throw new CommonException('设备已打款，请勿重复操作：' . ($device->imei ?: $device->model ?: ('设备#' . $device->id)));
                 }
 
                 $amount = round((float)($device->final_price ?: $device->initial_price ?: 0), 2);
-                if ($amount <= 0) {
+                if (!is_finite($amount) || $amount <= 0) {
                     throw new CommonException('设备金额为0，无法打款：' . ($device->imei ?: $device->model ?: ('设备#' . $device->id)));
                 }
-
+                $payments[] = ['device' => $device, 'amount' => $amount];
+            }
+            // 全批校验完成后，在持有订单/设备锁的事务内确认真实付款归属，再写任何付款事实。
+            $this->assertLocalPaymentAllowed($orderId, $deviceIds);
+            foreach ($payments as $payment) {
+                $device = $payment['device'];
+                $amount = $payment['amount'];
                 $device->save([
                     'pay_status' => RecycleOrderDict::PAY_STATUS_PAID,
                     'pay_amount' => $amount,
@@ -191,9 +200,40 @@ class RecycleDevicePaymentService extends BaseAdminService
         }
     }
 
-    public function assertLocalPaymentAllowed(): void
+    public function assertLocalPaymentAllowed(int $orderId = 0, array $deviceIds = []): void
     {
-        (new RecycleErpCapabilityService())->assertLocalPaymentAllowed((int)$this->site_id);
+        (new RecycleErpCapabilityService())->assertLocalPaymentAllowed((int)$this->site_id, $orderId, $deviceIds);
+    }
+
+    protected function assertDevicePaymentOrderState(array $order): void
+    {
+        $payStatus = (int)($order['pay_status'] ?? 0);
+        if (!in_array($payStatus, [RecycleOrderDict::PAY_STATUS_UNPAID, RecycleOrderDict::PAY_STATUS_PARTIAL], true)
+            || ($payStatus === RecycleOrderDict::PAY_STATUS_UNPAID && (int)($order['pay_time'] ?? 0) > 0)
+            || in_array((int)($order['status'] ?? 0), [RecycleOrderDict::ORDER_STATUS_COMPLETED, RecycleOrderDict::ORDER_STATUS_CLOSED, RecycleOrderDict::ORDER_STATUS_CANCELLED], true)) {
+            throw new CommonException('订单已付款、付款记录待核对或已结束，请勿重复打款');
+        }
+    }
+
+    /** 付款批次任何一个ID无效都拒绝，不能截断或删掉后继续付款。 */
+    public static function normalizePaymentDeviceIds($values): array
+    {
+        if (!is_array($values)) throw new CommonException('付款设备列表格式不正确');
+        $ids = [];
+        foreach ($values as $value) {
+            $text = is_int($value) ? (string)$value : (is_string($value) ? $value : '');
+            if (!preg_match('/^[0-9]+$/', $text)) throw new CommonException('付款设备ID无效，已拒绝整批付款');
+            $text = ltrim($text, '0');
+            $max = (string)PHP_INT_MAX;
+            if ($text === '' || strlen($text) > strlen($max)
+                || (strlen($text) === strlen($max) && strcmp($text, $max) > 0)) {
+                throw new CommonException('付款设备ID无效，已拒绝整批付款');
+            }
+            $ids[(int)$text] = (int)$text;
+        }
+        $ids = array_values($ids);
+        sort($ids, SORT_NUMERIC);
+        return $ids;
     }
 
     public function getPaymentLogs(int $orderId): array
@@ -230,12 +270,15 @@ class RecycleDevicePaymentService extends BaseAdminService
         foreach ($devices as $device) {
             $payState = $flowModeService->getDevicePayState($device, $mode);
             $amount = round((float)($device['final_price'] ?: $device['initial_price'] ?: 0), 2);
-            if ($payState['allowed'] || (int)($device['pay_status'] ?? 0) === RecycleOrderDict::PAY_STATUS_PAID) {
+            if ($payState['allowed'] || in_array((int)($device['pay_status'] ?? 0), [RecycleOrderDict::PAY_STATUS_PAID, RecycleOrderDict::PAY_STATUS_PARTIAL], true)) {
                 $totalAmount += $amount;
             }
+            $recordedPaid = max(0, round((float)($device['pay_amount'] ?? 0), 2));
             if ((int)($device['pay_status'] ?? 0) === RecycleOrderDict::PAY_STATUS_PAID) {
                 $paidCount++;
-                $paidAmount += (float)($device['pay_amount'] ?: $amount);
+                $paidAmount += $recordedPaid > 0 ? $recordedPaid : $amount;
+            } else {
+                $paidAmount += $recordedPaid;
             }
         }
 
@@ -253,6 +296,76 @@ class RecycleDevicePaymentService extends BaseAdminService
             'unpaid_amount' => round(max(0, $totalAmount - $paidAmount), 2),
             'all_paid' => !empty($flowSummary['all_closed']),
         ];
+    }
+
+    /** 只刷新付款汇总，不重走回收完成流程，不改历史付款时间或业务完成时间。 */
+    public function refreshErpPaymentSummary(int $orderId, int $siteId): void
+    {
+        $summary = $this->getPaymentSummary($orderId, $siteId);
+        RecycleOrder::where([['site_id', '=', $siteId], ['id', '=', $orderId]])->update([
+            'total_amount' => $summary['total_amount'],
+            'pay_status' => $summary['unpaid_amount'] <= 0 && $summary['all_paid'] ? RecycleOrderDict::PAY_STATUS_PAID
+                : ($summary['paid_amount'] > 0 ? RecycleOrderDict::PAY_STATUS_PARTIAL : RecycleOrderDict::PAY_STATUS_UNPAID),
+            'update_at' => time(),
+        ]);
+    }
+
+    /** 精确设备采购结算；每张结算单只记本次金额，累计状态使用单调快照。 */
+    public function applyErpPurchaseSettlement(int $siteId, int $deviceId, string $settlementNo, array $snapshot, array $info): int
+    {
+        if ($siteId <= 0 || $deviceId <= 0 || $settlementNo === '') throw new CommonException('ERP 采购结算缺少来源标识');
+        $completedOrderId = 0;
+        $result = Db::transaction(function () use ($siteId, $deviceId, $settlementNo, $snapshot, $info, &$completedOrderId): int {
+            $preview = RecycleDevice::where([['site_id', '=', $siteId], ['id', '=', $deviceId]])->findOrEmpty();
+            if ($preview->isEmpty()) throw new CommonException('ERP 结算来源设备不存在');
+            $order = RecycleOrder::where([['site_id', '=', $siteId], ['id', '=', (int)$preview->order_id]])->lock(true)->findOrEmpty();
+            if ($order->isEmpty()) throw new CommonException('ERP 结算来源订单不存在');
+            $device = RecycleDevice::where([['site_id', '=', $siteId], ['id', '=', $deviceId]])->lock(true)->findOrEmpty();
+            $existing = RecycleDevicePayment::where([['site_id', '=', $siteId], ['device_id', '=', $deviceId], ['pay_no', '=', $settlementNo]])->findOrEmpty();
+            if (!$existing->isEmpty()) return 0;
+            $state = RecyclePurchaseSettlementPolicy::settlement($device->toArray(), $snapshot);
+            $occurredAt = (int)($info['confirmed_at'] ?? 0) ?: time();
+            $payType = ($info['method'] ?? '') === 'offset' ? 'ERP折账' : 'ERP实际付款';
+            $remark = sprintf('%s本次 %.2f，累计已结算 %.2f，剩余待付 %.2f；单号 %s', $payType,
+                $state['payment_amount'], $state['pay_amount'], max(0, (float)$device->final_price - $state['pay_amount']), $settlementNo);
+            $update = ['pay_amount' => $state['pay_amount'], 'pay_status' => $state['pay_status'], 'update_at' => time()];
+            if ($occurredAt >= (int)$device->pay_time) {
+                $update += ['pay_time' => $occurredAt, 'pay_no' => $settlementNo];
+            }
+            $device->save($update);
+            RecycleDevicePayment::create([
+                'site_id' => $siteId, 'device_id' => $deviceId, 'order_id' => (int)$device->order_id,
+                'member_id' => (int)$order->member_id, 'order_no' => (string)$order->order_no,
+                'device_imei' => (string)$device->imei, 'device_model' => (string)$device->model,
+                'pay_no' => $settlementNo, 'amount' => $state['payment_amount'], 'pay_type' => $payType,
+                'pay_account' => (string)($info['account'] ?? ''), 'pay_name' => (string)($info['operator'] ?? 'ERP财务'),
+                'pay_uid' => 0, 'pay_time' => $occurredAt, 'create_at' => time(), 'pay_remark' => $remark,
+            ]);
+            RecycleDeviceLog::create([
+                'site_id' => $siteId, 'device_id' => $deviceId, 'order_id' => (int)$device->order_id,
+                'operator_id' => 0, 'operator_name' => (string)($info['operator'] ?? 'ERP财务'),
+                'operation_type' => 'device_payment', 'action' => 'device_offset_settle',
+                'old_status' => (int)$device->status, 'new_status' => (int)$device->status,
+                'remark' => $remark, 'create_at' => time(),
+            ]);
+            $this->refreshErpPaymentSummary((int)$device->order_id, $siteId);
+            if ($state['pay_status'] === RecycleOrderDict::PAY_STATUS_PAID) {
+                // 首次结清保持原回收完结链路；补付不重写原业务完成时间。
+                if ((int)$order->status !== RecycleOrderDict::ORDER_STATUS_COMPLETED) {
+                    $summary = $this->syncOrderPayStatus((int)$device->order_id,
+                        ['pay_type' => $payType, 'pay_remark' => $remark, 'pay_time' => $occurredAt], $siteId);
+                    if ($summary['all_paid']) $completedOrderId = (int)$device->order_id;
+                }
+            }
+            return 1;
+        });
+        if ($completedOrderId > 0) {
+            CoreRecycleOrderEventService::marketingDeliveryFactAfter([
+                'order_id' => $completedOrderId, 'site_id' => $siteId, 'action' => 'erp_settlement_completed',
+                'source_plugin' => 'hsx_erp', 'settlement_no' => $settlementNo,
+            ]);
+        }
+        return $result;
     }
 
     /**

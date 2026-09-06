@@ -194,6 +194,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import request from '@/utils/request'
+import { erpSourceLabel } from '@/addon/hsx_erp/utils/display'
 
 const props = defineProps({
     show: { type: Boolean, default: false },
@@ -243,7 +244,7 @@ watch(() => props.meta, () => {
 }, { deep: true })
 
 const sourceText = computed(() => {
-    const label = (props.meta as any)?.source_label || '商品资料'
+    const label = erpSourceLabel((props.meta as any)?.source_label, '商品资料')
     return (props.meta as any)?.source === 'phone_shop' ? `${label} · 优先商城` : label
 })
 

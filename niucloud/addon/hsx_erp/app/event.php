@@ -6,6 +6,9 @@ return [
         'ErpDeviceInboundRequested' => [
             'addon\hsx_erp\app\listener\ErpDeviceInboundRequested',
         ],
+        'RecycleErpPaymentOwnershipRequested' => [
+            'addon\hsx_erp\app\listener\RecycleErpPaymentOwnershipRequested',
+        ],
         'GetErpDeviceSyncStatus' => [
             'addon\hsx_erp\app\listener\ErpDeviceSyncStatus',
         ],

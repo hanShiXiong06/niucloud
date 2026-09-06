@@ -20,6 +20,8 @@ use addon\hsx_erp\app\model\ErpSettlementLink;
 use addon\hsx_erp\app\model\ErpWarehouse;
 use addon\hsx_erp\app\model\ErpWarehouseLocation;
 use addon\hsx_erp\app\support\ErpIdempotency;
+use addon\hsx_erp\app\support\ErpInspectionPresentation;
+use addon\hsx_erp\app\support\ErpStockCostPresentation;
 use addon\hsx_erp\app\support\ErpListingFormContract;
 use addon\hsx_erp\app\support\ErpListingWorkflow;
 use addon\hsx_erp\app\support\ErpPurchaseReturnPolicy;
@@ -126,8 +128,9 @@ class ErpStockService extends BaseAdminService
             throw new CommonException('只有待整备或整备中的在库设备可以登记完工');
         }
         $destination = $this->resolveRefurbishDestination($asset, (int)($data['warehouse_id'] ?? 0), (int)($data['location_id'] ?? 0));
-        $items = array_values(array_filter((array)($data['refurbish_items'] ?? []), 'is_array'));
-        $total = round(array_sum(array_map(static fn(array $item): float => (float)($item['amount'] ?? 0), $items)), 2);
+        // 先校验明细，再判断是否免费完工；错误金额不能被当作“没有费用”跳过财务。
+        $items = $this->normalizeRefurbishItems($data['refurbish_items'] ?? []);
+        $total = round(array_sum(array_column($items, 'amount')), 2);
         $context = [
             'workflow_complete' => 1,
             'result' => $result,
@@ -145,6 +148,29 @@ class ErpStockService extends BaseAdminService
         // 整备完工先形成库存事实；资料满足条件后按业务规则自动发布，
         // 否则保留明确的人工待办，外部渠道故障不能回滚整备事实。
         return $this->info($id);
+    }
+
+    private function normalizeRefurbishItems(mixed $rawItems): array
+    {
+        if (!is_array($rawItems)) throw new CommonException('整备项目格式不正确，请重新填写');
+        $items = [];
+        foreach ($rawItems as $rawItem) {
+            if (!is_array($rawItem)) throw new CommonException('整备项目格式不正确，请重新填写');
+            $rawName = $rawItem['name'] ?? '';
+            $name = is_string($rawName) ? mb_substr(trim($rawName), 0, 40) : '';
+            $rawAmount = $rawItem['amount'] ?? null;
+            if ($name === '' || !is_numeric($rawAmount)) {
+                throw new CommonException('请完整填写每一项整备项目和金额');
+            }
+            $amount = round((float)$rawAmount, 2);
+            if (!is_finite($amount) || $amount <= 0 || $amount > 999999999.99) {
+                throw new CommonException('整备金额必须大于0且不超过999999999.99元；无费用请删除该费用项目');
+            }
+            $partyId = filter_var($rawItem['party_id'] ?? 0, FILTER_VALIDATE_INT);
+            if ($partyId === false || $partyId <= 0) throw new CommonException('请为每一项整备项目选择服务商');
+            $items[] = ['name' => $name, 'amount' => $amount, 'party_id' => $partyId];
+        }
+        return $items;
     }
 
     private function resolveRefurbishDestination(ErpAsset $asset, int $warehouseId, int $locationId): array
@@ -442,17 +468,24 @@ class ErpStockService extends BaseAdminService
         if ($visibility->can('view_cost') && ($where['max_cost'] ?? '') !== '') {
             $query->where('a.total_cost', '<=', (float)$where['max_cost']);
         }
-        if (($where['min_price'] ?? '') !== '') {
-            $minPrice = (float)$where['min_price'];
-            $query->where(function ($q) use ($minPrice) {
-                $q->where('a.retail_price', '>=', $minPrice)->whereOr('a.estimate_sale_price', '>=', $minPrice);
-            });
+        $hasMinPrice = ($where['min_price'] ?? '') !== '';
+        $hasMaxPrice = ($where['max_price'] ?? '') !== '';
+        $minPrice = $hasMinPrice ? (float)$where['min_price'] : 0.0;
+        $maxPrice = $hasMaxPrice ? (float)$where['max_price'] : 0.0;
+        if (($hasMinPrice && $minPrice < 0) || ($hasMaxPrice && $maxPrice < 0)) {
+            throw new CommonException('销售价区间不能小于0');
         }
-        if (($where['max_price'] ?? '') !== '') {
-            $maxPrice = (float)$where['max_price'];
-            $query->where(function ($q) use ($maxPrice) {
-                $q->where('a.retail_price', '<=', $maxPrice)->whereOr('a.estimate_sale_price', '<=', $maxPrice);
-            });
+        if ($hasMinPrice && $hasMaxPrice && $minPrice > $maxPrice) {
+            throw new CommonException('最低销售价不能大于最高销售价');
+        }
+        // 与移动端展示口径保持一致：优先零售价，零售价未设置时才回退预计卖价。
+        // 原来的 OR 条件会把“零售价超出区间、预计价落在区间”的设备错误筛进来。
+        $effectivePriceSql = '(CASE WHEN a.retail_price > 0 THEN a.retail_price WHEN a.estimate_sale_price > 0 THEN a.estimate_sale_price ELSE 0 END)';
+        if ($hasMinPrice) {
+            $query->whereRaw($effectivePriceSql . ' >= ?', [$minPrice]);
+        }
+        if ($hasMaxPrice) {
+            $query->whereRaw($effectivePriceSql . ' <= ?', [$maxPrice]);
         }
         if (($where['stock_age_min'] ?? '') !== '') {
             $query->whereRaw('IF(a.stock_in_at > 0, a.stock_in_at, a.create_at) <= ' . (time() - max(0, (int)$where['stock_age_min']) * 86400));
@@ -1246,6 +1279,10 @@ class ErpStockService extends BaseAdminService
             $row['inbound_warehouse_name'] = (string)($purchaseItem['warehouse_name'] ?? $row['warehouse_name'] ?? '');
             $row['inbound_location_name'] = (string)($purchaseItem['location_name'] ?? $row['location_name'] ?? '');
             $row['inbound_settlement_amount'] = round((float)($payable['amount'] ?? $row['purchase_cost'] ?? 0), 2);
+            $row['cost_summary'] = ErpStockCostPresentation::summarize($row, $row['inbound_settlement_amount']);
+            $row['inspection'] = ErpInspectionPresentation::fromAsset($row);
+            // 列表仅展示摘要，完整项目在设备档案按需读取。
+            unset($row['inspection']['items'], $row['inspection']['legacy_text']);
             if ($payable !== []) {
                 $row['inbound_settled_amount'] = min((float)$row['inbound_settlement_amount'], round((float)$payable['settled_amount'], 2));
             } elseif ($orderPayable !== []) {
@@ -1380,17 +1417,8 @@ class ErpStockService extends BaseAdminService
             $supplierAmount = round((float)$payable->amount, 2);
             $paidAmount = round((float)$payable->settled_amount, 2);
         }
-        $purchaseCost = round((float)($asset['purchase_cost'] ?? 0), 2);
-        $refurbishCost = round((float)($asset['refurbish_cost'] ?? 0), 2);
-        $totalCost = round((float)($asset['total_cost'] ?? 0), 2);
-        $asset['cost_summary'] = [
-            'purchase_cost' => $purchaseCost,
-            'supplier_adjust_cost' => round($supplierAmount - $purchaseCost, 2),
-            'supplier_amount' => $supplierAmount,
-            'refurbish_cost' => $refurbishCost,
-            'internal_adjust_cost' => round($totalCost - $supplierAmount - $refurbishCost, 2),
-            'total_cost' => $totalCost,
-        ];
+        $asset['cost_summary'] = ErpStockCostPresentation::summarize($asset, $supplierAmount);
+        $asset['inspection'] = ErpInspectionPresentation::fromAsset($asset);
         $asset['return_flow'] = ErpPurchaseReturnPolicy::assess($asset, $supplierAmount, $paidAmount);
         $asset = (new ErpTurnoverService())->decorate([$asset])[0] ?? $asset;
         $asset = $this->appendListingSyncState([$asset])[0] ?? $asset;
@@ -1572,6 +1600,16 @@ class ErpStockService extends BaseAdminService
             $row['signed_amount'] = $direction === 'decrease'
                 ? -round((float)($row['amount'] ?? 0), 2)
                 : round((float)($row['amount'] ?? 0), 2);
+            if (in_array($type, ['cost_adjust', 'adjust', 'internal_adjust', 'supplier_adjust', 'purchase_adjust'], true)) {
+                // 调价不是付款，尤其不能继承原采购款已经结清的状态。
+                $row['settlement_methods'] = [];
+                $row['biz_type_text'] = $sourceType === 'internal_adjust' ? '内部账面修正'
+                    : ($sourceType === 'purchase_adjust' ? '回收／采购调价' : '成本调整');
+                $row['source_type_text'] = $row['biz_type_text'];
+                $row['business_state_text'] = $sourceType === 'internal_adjust' ? '仅修正成本，不产生付款'
+                    : ($sourceType === 'purchase_adjust' ? '采购应付已调整，付款另有流水' : '成本已调整，非付款凭证');
+                continue;
+            }
             if ($type === 'sale_compensation' && (int)($row['source_id'] ?? 0) > 0) {
                 $row['lifecycle_key'] = 'sale_return_' . (int)$row['source_id'];
             } elseif ($type === 'payment' && (string)($row['source_type'] ?? '') === 'payable') {
@@ -1607,8 +1645,11 @@ class ErpStockService extends BaseAdminService
                 $contextKey = 'sale_' . (int)($row['source_id'] ?? 0);
             } elseif ($type === 'refurbish') {
                 $contextKey = 'refurbish_' . (int)($row['source_id'] ?? 0);
-            } else {
+            } elseif (in_array($type, ['purchase', 'consignment_buyout'], true)) {
                 $contextKey = 'purchase';
+            } else {
+                // 未识别的业务不能借用采购结算而被展示为已付款。
+                $contextKey = '';
             }
             $row['settlement_methods'] = array_values($methodMap[$contextKey] ?? []);
         }
@@ -2344,8 +2385,21 @@ class ErpStockService extends BaseAdminService
 
     public function adjustCost(int $id, float $afterCost, string $reason = '', bool $syncPayable = true, string $requestId = '', string $costType = 'internal_adjust', array $context = []): bool
     {
-        if ($afterCost <= 0) {
+        if (!is_finite($afterCost) || $afterCost <= 0 || $afterCost > 999999999.99) {
             throw new CommonException('调整后成本必须大于0');
+        }
+        $requestId = ErpIdempotency::normalize($requestId);
+        // 客户端提交的是目标成本。同一次请求重试时，不能用已调后的成本再算一次差额。
+        if ($requestId !== '' && in_array($costType, ['purchase_adjust', 'internal_adjust'], true)) {
+            $previous = ErpAssetLedger::where([['site_id', '=', $this->site_id], ['request_id', '=', $requestId]])->findOrEmpty();
+            if (!$previous->isEmpty()) {
+                if ((int)$previous->asset_id !== $id || (string)$previous->action !== 'cost_adjust'
+                    || (string)$previous->source_type !== $costType
+                    || abs(round((float)$previous->after_total_cost, 2) - round($afterCost, 2)) > 0.0001) {
+                    throw new CommonException('该请求已用于其他调价，请刷新后重试');
+                }
+                return true;
+            }
         }
         $asset = $this->findAsset($id);
         $allowedStatuses = [ErpDict::ASSET_IN_STOCK, 'available_for_sale'];
@@ -2357,18 +2411,8 @@ class ErpStockService extends BaseAdminService
         }
         $beforeCost = round((float)$asset->total_cost, 2);
         if ($costType === 'refurbish' && !empty($context['refurbish_items'])) {
-            $items = [];
-            $itemTotal = 0.0;
-            foreach ((array)$context['refurbish_items'] as $rawItem) {
-                if (!is_array($rawItem)) continue;
-                $name = mb_substr(trim((string)($rawItem['name'] ?? '')), 0, 40);
-                $amount = round((float)($rawItem['amount'] ?? 0), 2);
-                if ($name === '' || $amount <= 0) throw new CommonException('请完整填写每一项整备项目和金额');
-                $partyId = (int)($rawItem['party_id'] ?? 0);
-                if ($partyId <= 0) throw new CommonException('请为每一项整备项目选择服务商');
-                $items[] = ['name' => $name, 'amount' => $amount, 'party_id' => $partyId];
-                $itemTotal = round($itemTotal + $amount, 2);
-            }
+            $items = $this->normalizeRefurbishItems($context['refurbish_items']);
+            $itemTotal = round(array_sum(array_column($items, 'amount')), 2);
             if ($items === [] || $itemTotal <= 0) throw new CommonException('请至少填写一项整备项目');
             $context['refurbish_items'] = $items;
             $context['expense_type_key'] = count($items) > 1 ? 'refurbish_mixed' : (trim((string)($context['expense_type_key'] ?? '')) ?: 'refurbish_mixed');
@@ -2396,13 +2440,14 @@ class ErpStockService extends BaseAdminService
             $purchaseItemId = (int)$item->id;
         }
 
-        return (new ErpPurchaseService())->adjustCost(
+        return ErpPurchaseService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username)->adjustCost(
             $purchaseItemId,
             $delta,
             $reason !== '' ? $reason : '移动端成本调整',
             $costType === 'purchase_adjust',
             $requestId,
-            $costType
+            $costType,
+            $beforeCost
         );
     }
 
@@ -2417,9 +2462,13 @@ class ErpStockService extends BaseAdminService
             return true;
         }
         $categoryKey = trim((string)($context['expense_type_key'] ?? '')) ?: 'refurbish_labor';
-        $category = (new ErpConfigService())->findFinanceCategory($categoryKey);
+        $category = ErpConfigService::forSite((int)$this->site_id)->findFinanceCategory($categoryKey);
         if (!$category || (string)$category['direction'] !== 'expense' || (string)$category['scope'] !== 'refurbish' || (int)$category['affects_asset_cost'] !== 1) {
             throw new CommonException('请选择有效的整备支出类型');
+        }
+        // 外部服务费必须同时形成应付，配置不满足时整笔拒绝，不能只加成本却漏账。
+        if ((int)($category['creates_finance'] ?? 0) !== 1) {
+            throw new CommonException('整备费用类型“' . (string)$category['name'] . '”未开启生成应付，本次未保存。请联系管理员检查该费用类型的财务配置，开启生成应付后重试');
         }
         $refurbishItems = (array)($context['refurbish_items'] ?? []);
         if ($refurbishItems === []) {
@@ -2461,6 +2510,9 @@ class ErpStockService extends BaseAdminService
             $delta = $refurbishTotal > 0 ? $refurbishTotal : round($afterCost - $beforeCost, 2);
             if ($delta <= 0.0001) {
                 throw new CommonException('整备费用只能增加成本；冲销整备费请走红字调整');
+            }
+            if (!is_finite($delta) || !is_finite($beforeCost + $delta) || round($beforeCost + $delta, 2) > 999999999.99) {
+                throw new CommonException('整备后设备总成本超出允许范围，请核对费用金额');
             }
             $completedAt = time();
             $asset->save(array_merge([
@@ -2533,7 +2585,6 @@ class ErpStockService extends BaseAdminService
                     'source_no' => $itemExpenseNo,
                     'remark' => $itemName . '：' . ($reason !== '' ? $reason : '设备整备成本增加'),
                 ]);
-                if ((int)$category['creates_finance'] !== 1) continue;
                 ErpPayable::create(array_merge([
                     'site_id' => $this->site_id,
                     'payable_no' => ErpLedgerService::makeNo('AP'),

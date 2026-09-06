@@ -10,7 +10,10 @@ use addon\hsx_project_center\app\model\ProjectCenterIncomeBoard;
 use addon\hsx_project_center\app\model\ProjectCenterProject;
 use addon\hsx_project_center\app\model\ProjectCenterReviewLog;
 use addon\hsx_project_center\app\service\core\ProjectCenterApplicationService;
+use addon\hsx_project_center\app\service\core\ProjectCenterAreaEligibilityService;
+use addon\hsx_project_center\app\service\core\ProjectCenterContactGuideService;
 use addon\hsx_project_center\app\service\core\ProjectCenterGroupService;
+use addon\hsx_project_center\app\service\core\ProjectCenterDistributionRuleService;
 use app\model\diy\Diy;
 use app\model\diy_form\DiyFormRecords;
 use app\service\core\diy_form\CoreDiyFormRecordsService;
@@ -26,6 +29,7 @@ final class ProjectCenterPortalService extends BaseApiService
      */
     private const INTRO_DIY_COMPONENT_ALLOWLIST = [
         'ProjectCenterCollapse', 'ProjectCenterReferenceGallery', 'ProjectCenterIncomeBoard',
+        'ProjectCenterAreaEligibility',
         'Text', 'ImageAds', 'GraphicNav', 'RubikCube', 'HotArea', 'Notice', 'RichText',
         'ActiveCube', 'HorzBlank', 'HorzLine', 'PictureShow', 'AiAssistantEntry',
     ];
@@ -41,13 +45,22 @@ final class ProjectCenterPortalService extends BaseApiService
         ])->findOrEmpty()->toArray();
         if ($row === []) throw new ApiException('项目不存在或暂未开放');
         $aiEnabled = !empty($row['ai_enabled']);
-        // 客户进入项目页即可查看付款码；审核人和 AI 场景等管理配置仍不得对外下发。
+        // 先基于完整项目配置计算公开摘要，再剥离白名单、分佣规则等私有数据。
+        // 如果先清理 config_json，地区限制会被误判为“未开启”。
+        $distributionSummary = (new ProjectCenterDistributionRuleService())->publicSummary($row);
+        $areaEligibilitySummary = (new ProjectCenterAreaEligibilityService())->publicSummary($row);
+        $contactGuide = (new ProjectCenterContactGuideService())->publicGuide($row);
+        // 付款码由项目页流程展示（开启地区限制时需先查询通过）；
+        // 审核人和 AI 场景等管理配置仍不得对外下发。
         unset($row['reviewer_uids'], $row['reviewer_role_ids'], $row['ai_scene']);
         $config = is_array($row['config_json'] ?? null) ? $row['config_json'] : [];
         // 对外只下发页面展示内容；AI 私有知识、审核原因等配置始终留在服务端。
         $row['config_json'] = array_intersect_key($config, array_flip([
             'intro', 'steps', 'faqs', 'ai_title', 'ai_welcome', 'ai_suggestions', 'ai_voice_enabled', 'ai_auto_read',
         ]));
+        $row['distribution'] = $distributionSummary;
+        $row['area_eligibility'] = $areaEligibilitySummary;
+        $row['contact_guide'] = $contactGuide;
         $row['intro_diy'] = $this->loadIntroDiy((int)($row['intro_page_id'] ?? 0), $aiEnabled, $id);
         $latestDate = (int)ProjectCenterIncomeBoard::where([
             ['site_id', '=', $this->site_id], ['project_id', '=', $id], ['status', '=', 1],
@@ -57,6 +70,17 @@ final class ProjectCenterPortalService extends BaseApiService
             ['site_id', '=', $this->site_id], ['project_id', '=', $id], ['stat_date', '=', $latestDate], ['status', '=', 1],
         ])->field('rank_no,store_name,income_amount')->order('rank_no asc')->select()->toArray() : [];
         return $row;
+    }
+
+    /** 付款前的公开地区资格查询；返回结果不暴露项目完整地区白名单。 */
+    public function areaEligibility(int $projectId, array $selection): array
+    {
+        $project = ProjectCenterProject::where([
+            ['site_id', '=', $this->site_id], ['id', '=', $projectId],
+            ['status', '=', ProjectCenterDict::PROJECT_ENABLED],
+        ])->findOrEmpty();
+        if ($project->isEmpty()) throw new ApiException('项目不存在或暂未开放');
+        return (new ProjectCenterAreaEligibilityService())->query($project, $selection);
     }
 
     /**
@@ -162,10 +186,11 @@ final class ProjectCenterPortalService extends BaseApiService
         ];
     }
 
-    public function submit(int $projectId, string $groupNo, int $formRecordId, bool $paymentDeclared): int
+    public function submit(int $projectId, string $groupNo, int $formRecordId, bool $paymentDeclared, array $eligibilityRegion = []): int
     {
         return (new ProjectCenterApplicationService())->submit(
-            (int)$this->site_id, (int)$this->member_id, $projectId, $groupNo, $formRecordId, $paymentDeclared
+            (int)$this->site_id, (int)$this->member_id, $projectId, $groupNo, $formRecordId, $paymentDeclared,
+            $eligibilityRegion
         );
     }
 
@@ -175,7 +200,7 @@ final class ProjectCenterPortalService extends BaseApiService
      * 只允许客户修改自己当前被驳回的原记录，不新建表单记录，
      * 因此不受“每人可填写次数”限制，也不会产生多张互相覆盖的工单。
      */
-    public function revise(int $projectId, string $groupNo, array $value, bool $paymentDeclared): int
+    public function revise(int $projectId, string $groupNo, array $value, bool $paymentDeclared, array $eligibilityRegion = []): int
     {
         $group = (new ProjectCenterGroupService())->requireAvailableByNo(
             (int)$this->site_id,
@@ -216,7 +241,8 @@ final class ProjectCenterPortalService extends BaseApiService
             $projectId,
             $groupNo,
             (int)$application['form_record_id'],
-            $paymentDeclared
+            $paymentDeclared,
+            $eligibilityRegion
         );
     }
 
@@ -248,6 +274,7 @@ final class ProjectCenterPortalService extends BaseApiService
             'status_name' => ProjectCenterDict::applicationStatuses()[(string)$row['status']] ?? (string)$row['status'],
             'submit_version' => (int)$row['submit_version'],
             'payment_declared_at' => (int)$row['payment_declared_at'],
+            'eligibility_snapshot' => is_array($row['eligibility_snapshot'] ?? null) ? $row['eligibility_snapshot'] : [],
             'last_reject_summary' => (string)$row['last_reject_summary'],
             'submitted_at' => (int)$row['submitted_at'],
             'reviewed_at' => (int)$row['reviewed_at'],

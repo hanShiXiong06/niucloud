@@ -6,6 +6,7 @@ namespace addon\hsx_project_center\app\service\core;
 use addon\hsx_project_center\app\dict\ProjectCenterDict;
 use addon\hsx_project_center\app\model\ProjectCenterApplication;
 use addon\hsx_project_center\app\model\ProjectCenterGroup;
+use addon\hsx_project_center\app\model\ProjectCenterProject;
 use addon\hsx_project_center\app\model\ProjectCenterReviewLog;
 use app\service\core\notice\NoticeService;
 use core\exception\CommonException;
@@ -15,7 +16,7 @@ use think\facade\Log;
 /** 资料逐字段审核。审核事务与通知解耦，通知失败不回滚结果。 */
 final class ProjectCenterReviewService
 {
-    public function review(int $siteId, int $applicationId, string $action, array $fieldIssues, string $remark, int $operatorId, string $operatorName): void
+    public function review(int $siteId, int $applicationId, string $action, array $fieldIssues, string $remark, int $operatorId, string $operatorName, bool $paymentChecked = false): void
     {
         if (!in_array($action, ['approve', 'reject'], true)) throw new CommonException('审核动作不正确');
         $issues = $this->normalizeIssues($fieldIssues);
@@ -27,7 +28,7 @@ final class ProjectCenterReviewService
         if ($preview->isEmpty()) throw new CommonException('资料工单不存在');
         $expectedGroupId = (int)$preview->group_id;
 
-        $application = Db::transaction(function () use ($siteId, $applicationId, $expectedGroupId, $action, $issues, $remark, $operatorId, $operatorName) {
+        $application = Db::transaction(function () use ($siteId, $applicationId, $expectedGroupId, $action, $issues, $remark, $operatorId, $operatorName, $paymentChecked) {
             // 所有同时修改“客户群 + 工单”的事务统一按 group -> application 加锁，
             // 避免审核与结束客户群并发时形成反向锁序。
             $group = null;
@@ -52,18 +53,37 @@ final class ProjectCenterReviewService
             if ($group !== null && in_array((string)$group->status, ['completed', 'refund_pending', 'refunded', 'abandoned', 'dissolved'], true)) {
                 throw new CommonException('该客户群流程已经结束，不能继续审核');
             }
+            if ($action === 'approve') {
+                $project = ProjectCenterProject::where([
+                    ['site_id', '=', $siteId], ['id', '=', (int)$row->project_id],
+                ])->field('distribution_enabled,config_json')->findOrEmpty()->toArray();
+                $config = is_array($project['config_json'] ?? null) ? $project['config_json'] : [];
+                $rule = (new ProjectCenterDistributionRuleService())->normalizeProjectRule((array)($config['distribution'] ?? []));
+                if (!empty($project['distribution_enabled']) && !empty($rule['approval_requires_payment_check']) && !$paymentChecked) {
+                    throw new CommonException('该项目会生成推广佣金，请先核对群内付款流水并勾选确认');
+                }
+            }
             $from = (string)$row->status;
             $to = $action === 'approve' ? ProjectCenterDict::APPLICATION_APPROVED : ProjectCenterDict::APPLICATION_REJECTED;
             $now = time();
             $summary = $action === 'reject' ? $this->issueSummary($issues, $remark) : '';
-            $row->save([
+            $paymentData = $action === 'approve' && $paymentChecked ? [
+                'payment_confirmed_at' => $now,
+                'payment_confirmed_uid' => $operatorId,
+                'payment_confirmed_name' => mb_substr($operatorName, 0, 100),
+            ] : [];
+            $row->save(array_merge([
                 'status' => $to, 'last_reject_summary' => $summary, 'reviewed_at' => $now,
                 'approved_at' => $action === 'approve' ? $now : 0, 'update_at' => $now,
-            ]);
+            ], $paymentData));
+            $auditRemark = trim($remark);
+            if ($action === 'approve' && $paymentChecked) {
+                $auditRemark = '【已核对群内付款流水】' . ($auditRemark !== '' ? ' ' . $auditRemark : '');
+            }
             ProjectCenterReviewLog::create([
                 'site_id' => $siteId, 'application_id' => $applicationId, 'submit_version' => (int)$row->submit_version,
                 'action' => $action, 'from_status' => $from, 'to_status' => $to,
-                'field_issues_json' => $issues, 'form_snapshot_json' => [], 'remark' => mb_substr(trim($remark), 0, 1000),
+                'field_issues_json' => $issues, 'form_snapshot_json' => [], 'remark' => mb_substr($auditRemark, 0, 1000),
                 'operator_type' => 'admin', 'operator_id' => $operatorId,
                 'operator_name' => mb_substr($operatorName, 0, 100), 'create_at' => $now,
             ]);
@@ -72,6 +92,17 @@ final class ProjectCenterReviewService
             }
             return $row->toArray();
         });
+
+        if ($action === 'approve') {
+            try {
+                (new ProjectCenterDistributionService())->createForApprovedApplication($siteId, (int)$application['id']);
+            } catch (\Throwable $e) {
+                // 审核事实已经提交，定时补偿任务会按 application_id 幂等补建佣金单。
+                Log::error('[hsx_project_center] 审核通过后创建分销佣金单失败，等待补偿', [
+                    'application_id' => (int)$application['id'], 'message' => $e->getMessage(),
+                ]);
+            }
+        }
 
         $this->sendResultNotice($siteId, (int)$application['id'], $action);
     }

@@ -463,7 +463,7 @@ async function submit() {
 }
 
 function confirmSubmit(): Promise<boolean> {
-    const devices = selectedItems.value.map(item => item.imei || item.asset_no || item.model || '-').join('、')
+    const devices = selectedItems.value.map(item => item.imei || item.sn || item.model || '未填写设备信息').join('、')
     const content = selectedRequiresRefund.value
         ? (form.value.refund_mode === 'cash'
             ? `设备：${devices}\n确认后立即退出库存。退款 ¥${money(selectedRefundTotal.value)} 已当场到账，将记入“${selectedAccountName.value || '-'}”。`

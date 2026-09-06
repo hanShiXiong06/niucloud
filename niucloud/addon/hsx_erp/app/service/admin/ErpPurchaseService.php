@@ -21,6 +21,7 @@ use addon\hsx_erp\app\support\ErpListingFormContract;
 use addon\hsx_erp\app\support\ErpListingWorkflow;
 use addon\hsx_erp\app\support\ErpPartyMemberNames;
 use addon\hsx_erp\app\support\ErpPurchaseReturnPolicy;
+use addon\hsx_erp\app\support\ErpPurchasePriceAdjustment;
 use app\model\member\Member;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
@@ -29,6 +30,15 @@ use think\facade\Log;
 
 class ErpPurchaseService extends BaseAdminService
 {
+    public static function forSite(int $siteId, int $operatorUid = 0, string $operatorName = '系统补偿'): self
+    {
+        $service = new self();
+        $service->site_id = $siteId;
+        $service->uid = $operatorUid;
+        $service->username = $operatorName;
+        return $service;
+    }
+
     /**
      * 为外部插件解析或创建 ERP 往来主体。
      *
@@ -595,7 +605,7 @@ class ErpPurchaseService extends BaseAdminService
         // 追加设备复用已有采购单，事件级幂等由外部事件 inbox 和来源设备 ID 保证；
         // 采购单 request_id 必须继续保留首次创建时的稳定业务键，不能被后续事件覆盖。
         $data['request_id'] = $appendOrderId > 0 ? null : ($requestId !== '' ? $requestId : null);
-        $erpRules = (new ErpConfigService())->getRules();
+        $erpRules = ErpConfigService::forSite((int)$this->site_id)->getRules();
         $items = $this->normalizePurchaseItems((array)($data['items'] ?? []));
         $items = $this->normalizeManualListingItems($items, $data, (array)($erpRules['listing_workspace'] ?? []));
         if (empty($items)) {
@@ -609,7 +619,7 @@ class ErpPurchaseService extends BaseAdminService
         $orderId = 0;
         $createdAssetIds = [];
         $cashSettlementCreated = false;
-        $financeService = new ErpFinanceService();
+        $financeService = ErpFinanceService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username);
         try {
             Db::transaction(function () use ($data, $items, $partyName, $now, $erpRules, $financeService, $appendOrderId, &$orderId, &$createdAssetIds, &$cashSettlementCreated) {
             $order = null;
@@ -655,7 +665,7 @@ class ErpPurchaseService extends BaseAdminService
                 $partyName = (string)$party->party_name;
                 $purchaseNo = ErpLedgerService::makeNo('PO');
             }
-            $financeSourceService = new ErpFinanceSourceService();
+            $financeSourceService = ErpFinanceSourceService::forSite((int)$this->site_id);
             $purchaseSource = $financeSourceService->purchase([
                 'origin_plugin' => (string)($data['origin_plugin'] ?? $data['source_plugin'] ?? 'hsx_erp'),
                 'origin_plugin_name' => (string)($data['origin_plugin_name'] ?? ''),
@@ -673,7 +683,17 @@ class ErpPurchaseService extends BaseAdminService
             if ($totalCost <= 0) {
                 throw new CommonException('采购成本必须大于0');
             }
+            $useSourcePaidAllocation = (int)($data['source_paid_allocation'] ?? 0) === 1;
             $paidAmount = round((float)($data['paid_amount'] ?? 0), 2);
+            if ($useSourcePaidAllocation) {
+                // 并发补偿可能已过滤掉部分重复设备，必须依据本次真正创建的明细
+                // 重新汇总，不能拿原事件总额去核销另一台设备。
+                $paidAmount = 0.0;
+                foreach ($items as $item) {
+                    $itemCost = round(max(0, (float)($item['purchase_cost'] ?? 0)), 2);
+                    $paidAmount = round($paidAmount + min($itemCost, round(max(0, (float)($item['source_paid_amount'] ?? 0)), 2)), 2);
+                }
+            }
             $settleMode = (string)($data['settle_mode'] ?? 'credit');
             if (!in_array($settleMode, ['credit', 'cash'], true)) {
                 throw new CommonException('采购结算方式不正确');
@@ -697,9 +717,11 @@ class ErpPurchaseService extends BaseAdminService
                 $account = $this->resolveCapitalAccount($capitalAccountId);
                 $capitalAccountId = (int)$account->id;
                 $capitalAccountName = (string)$account->account_name;
-                $settleMethod = $this->accountTypeLabel((string)$account->account_type);
+                $settleMethod = $useSourcePaidAllocation
+                    ? '来源系统已付'
+                    : $this->accountTypeLabel((string)$account->account_type);
             }
-            $warehouseService = new ErpWarehouseService();
+            $warehouseService = ErpWarehouseService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username);
             $resolvedItems = [];
             foreach ($items as $index => $item) {
                 $itemType = (string)($item['item_type'] ?? 'device');
@@ -742,7 +764,7 @@ class ErpPurchaseService extends BaseAdminService
                     $sameLocation = false;
                 }
             }
-            $purchaser = (new ErpStaffService())->resolve((int)($data['purchaser_uid'] ?? 0), '采购员');
+            $purchaser = $this->resolvePurchaser($data);
             $warehouseId = $sameWarehouse ? (int)$firstWarehouse->id : 0;
             $warehouseName = $sameWarehouse ? (string)$firstWarehouse->warehouse_name : '多仓库';
             $locationId = ($sameWarehouse && $sameLocation) ? (int)$firstLocation->id : 0;
@@ -900,7 +922,7 @@ class ErpPurchaseService extends BaseAdminService
                         'quantity_product_id' => (int)($inventoryResult['product_id'] ?? 0),
                         'update_at' => $now,
                     ]);
-                    (new ErpLedgerService())->account([
+                    ErpLedgerService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username)->account([
                         'biz_type' => 'purchase_standard',
                         'direction' => 'increase',
                         'amount' => $cost,
@@ -931,11 +953,14 @@ class ErpPurchaseService extends BaseAdminService
                     $payableApplications[] = [
                         'payable_id' => (int)$payable->id,
                         'amount' => $cost,
+                        'explicit_paid_amount' => $useSourcePaidAllocation
+                            ? min($cost, round(max(0, (float)($item['source_paid_amount'] ?? 0)), 2))
+                            : null,
                     ];
                     continue;
                 }
                 $inspectorUid = (int)($item['inspector_uid'] ?? 0);
-                $inspector = $inspectorUid > 0 ? (new ErpStaffService())->resolve($inspectorUid, '质检员') : ['uid' => 0, 'name' => ''];
+                $inspector = $inspectorUid > 0 ? ErpStaffService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username)->resolve($inspectorUid, '质检员') : ['uid' => 0, 'name' => ''];
                 $estimateSalePrice = round((float)($item['estimate_sale_price'] ?? 0), 2);
                 if ($estimateSalePrice < 0) {
                     throw new CommonException('预计卖价不能小于0');
@@ -1081,7 +1106,7 @@ class ErpPurchaseService extends BaseAdminService
                 ]);
                 $createdAssetIds[] = (int)$asset->id;
                 $purchaseItem->save(['asset_id' => (int)$asset->id, 'update_at' => $now]);
-                (new ErpLedgerService())->asset([
+                ErpLedgerService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username)->asset([
                     'asset_id' => (int)$asset->id,
                     'action' => 'inbound',
                     'after_status' => ErpDict::ASSET_IN_STOCK,
@@ -1098,7 +1123,7 @@ class ErpPurchaseService extends BaseAdminService
                     'occurred_at' => $purchaseAt,
                     'remark' => '采购入库',
                 ]);
-                (new ErpLedgerService())->account([
+                ErpLedgerService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username)->account([
                     'biz_type' => 'purchase',
                     'direction' => 'increase',
                     'amount' => $cost,
@@ -1129,29 +1154,55 @@ class ErpPurchaseService extends BaseAdminService
                 $payableApplications[] = [
                     'payable_id' => (int)$payable->id,
                     'amount' => $cost,
+                    'explicit_paid_amount' => $useSourcePaidAllocation
+                        ? min($cost, round(max(0, (float)($item['source_paid_amount'] ?? 0)), 2))
+                        : null,
                 ];
             }
             if ($paidAmount > 0) {
-                $remainingPayment = $paidAmount;
                 $itemsToPay = [];
-                foreach ($payableApplications as $application) {
-                    if ($remainingPayment <= 0.0001) break;
-                    $applyAmount = min($remainingPayment, (float)$application['amount']);
-                    $itemsToPay[] = ['payable_id' => (int)$application['payable_id'], 'amount' => round($applyAmount, 2)];
-                    $remainingPayment = round($remainingPayment - $applyAmount, 2);
+                if ($useSourcePaidAllocation) {
+                    $allocatedPayment = 0.0;
+                    foreach ($payableApplications as $application) {
+                        $applyAmount = round(max(0, (float)($application['explicit_paid_amount'] ?? 0)), 2);
+                        if ($applyAmount <= 0) continue;
+                        $itemsToPay[] = ['payable_id' => (int)$application['payable_id'], 'amount' => $applyAmount];
+                        $allocatedPayment = round($allocatedPayment + $applyAmount, 2);
+                    }
+                    if (abs($allocatedPayment - $paidAmount) > 0.0001) {
+                        throw new CommonException('来源系统已付金额与设备明细不一致，已停止核销，请检查来源付款记录');
+                    }
+                } else {
+                    $remainingPayment = $paidAmount;
+                    foreach ($payableApplications as $application) {
+                        if ($remainingPayment <= 0.0001) break;
+                        $applyAmount = min($remainingPayment, (float)$application['amount']);
+                        $itemsToPay[] = ['payable_id' => (int)$application['payable_id'], 'amount' => round($applyAmount, 2)];
+                        $remainingPayment = round($remainingPayment - $applyAmount, 2);
+                    }
+                    if ($remainingPayment > 0.0001) throw new CommonException('现结金额分配失败，请重新提交');
                 }
-                if ($remainingPayment > 0.0001) throw new CommonException('现结金额分配失败，请重新提交');
-                $financeService->confirmPayableItemsInTransaction((int)$party->id, $itemsToPay, [
+                $settlementData = [
                     'capital_account_id' => $capitalAccountId,
                     'voucher_urls' => (string)($data['voucher_urls'] ?? ''),
-                    'request_id' => 'purchase-cash:' . ((string)($data['request_id'] ?? '') ?: $purchaseNo),
-                    'remark' => '采购开单现结付款',
-                ]);
+                    'request_id' => trim((string)($data['settlement_request_id'] ?? ''))
+                        ?: ('purchase-cash:' . ((string)($data['request_id'] ?? '') ?: $purchaseNo)),
+                    'remark' => $useSourcePaidAllocation
+                        ? '来源系统已付款事实核销（禁止重复打款，待财务核对真实流水）'
+                        : '采购开单现结付款',
+                ];
+                if ($useSourcePaidAllocation) {
+                    // 专用内部入口仍逐设备向来源核实真实已付余额，不能用入库payload绕过付款闸门。
+                    $financeService->reconcileHistoricalSourcePaidInTransaction((int)$party->id, $itemsToPay, $settlementData);
+                } else {
+                    $financeService->confirmPayableItemsInTransaction((int)$party->id, $itemsToPay, $settlementData);
+                }
                 $cashSettlementCreated = true;
-                (new ErpOperationLogService())->record('purchase_cash_settled', 'purchase', $orderId, $purchaseNo, '采购开单已完成现结付款', [
+                ErpOperationLogService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username)->record('purchase_cash_settled', 'purchase', $orderId, $purchaseNo, $useSourcePaidAllocation ? '来源系统已付款事实已核销' : '采购开单已完成现结付款', [
                     'paid_amount' => $paidAmount,
                     'capital_account_id' => $capitalAccountId,
                     'capital_account_name' => $capitalAccountName,
+                    'source_paid_reconciliation' => $useSourcePaidAllocation ? 1 : 0,
                 ]);
             }
             });
@@ -1183,7 +1234,7 @@ class ErpPurchaseService extends BaseAdminService
                     'message' => $e->getMessage(),
                 ]);
             }
-            (new ErpPrintService())->triggerSafely('asset_inbound', 'asset', $assetId);
+            ErpPrintService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username)->triggerSafely('asset_inbound', 'asset', $assetId);
         }
         return $orderId;
     }
@@ -1329,10 +1380,10 @@ class ErpPurchaseService extends BaseAdminService
         return true;
     }
 
-    public function adjustCost(int $itemId, float $amount, string $remark = '', bool $syncPayable = true, string $requestId = '', string $costType = 'purchase_adjust'): bool
+    public function adjustCost(int $itemId, float $amount, string $remark = '', bool $syncPayable = true, string $requestId = '', string $costType = 'purchase_adjust', ?float $expectedTotalCost = null): bool
     {
         $requestId = ErpIdempotency::normalize($requestId);
-        if ($this->existingCostAdjustmentRequest($requestId, $itemId)) {
+        if ($this->existingCostAdjustmentRequest($requestId, $itemId, $amount, $costType)) {
             return true;
         }
         $amount = round($amount, 2);
@@ -1348,7 +1399,7 @@ class ErpPurchaseService extends BaseAdminService
         }
         $syncPayable = $costType === 'purchase_adjust';
         try {
-            Db::transaction(function () use ($itemId, $amount, $remark, $syncPayable, $requestId, $costType) {
+            Db::transaction(function () use ($itemId, $amount, $remark, $syncPayable, $requestId, $costType, $expectedTotalCost) {
             $now = time();
             $item = ErpPurchaseItem::where([['site_id', '=', $this->site_id], ['id', '=', $itemId]])->lock(true)->findOrEmpty();
             if ($item->isEmpty()) {
@@ -1362,6 +1413,10 @@ class ErpPurchaseService extends BaseAdminService
             if ($asset->isEmpty()) {
                 throw new CommonException('采购设备不存在');
             }
+            if ($this->existingCostAdjustmentRequest($requestId, $itemId, $amount, $costType)) return;
+            if ($expectedTotalCost !== null && abs(round((float)$asset->total_cost, 2) - round($expectedTotalCost, 2)) > 0.0001) {
+                throw new CommonException('设备成本已被其他操作更新，请刷新后重新确认，本次未调价');
+            }
             if ((string)$asset->status === ErpDict::ASSET_RETURNED) {
                 throw new CommonException('设备已完成采购退货，不能再调整供应商采购价');
             }
@@ -1370,6 +1425,7 @@ class ErpPurchaseService extends BaseAdminService
             }
 
             $payable = null;
+            $adjustment = null;
             if ($syncPayable) {
                 $payable = ErpPayable::where([
                     ['site_id', '=', $this->site_id],
@@ -1383,9 +1439,15 @@ class ErpPurchaseService extends BaseAdminService
                         ['source_id', '=', (int)$order->id],
                     ])->lock(true)->findOrEmpty();
                 }
-                if (!$payable->isEmpty() && (float)$payable->settled_amount > 0) {
-                    throw new CommonException('该采购已形成付款或折账，供应商调价不能回写原应付；如该金额是维修、配件或人工费用，请改选“整备费用”');
+                if ($payable->isEmpty() || (string)$payable->status === ErpDict::STATUS_VOID) {
+                    throw new CommonException('有效采购应付不存在，请先核对应付，不能只改成本留下漏付款');
                 }
+                if ((string)$payable->source_type === 'purchase' && (float)$payable->settled_amount > 0) {
+                    throw new CommonException('此历史采购为整单结算，无法确认该设备已付金额；请先核对设备级应付后再补差，不会重复支付原货款');
+                }
+                $adjustment = ErpPurchasePriceAdjustment::calculate((float)$payable->amount, (float)$payable->settled_amount, $amount);
+                // 与回收在同一业务事务内确认调价。失败整笔回滚，不留“一边已改价”的半成品。
+                $this->mirrorPurchasePriceAdjustment($asset, $payable, $adjustment, $amount, $remark, $requestId);
             }
 
             $newAdjust = round((float)$item->adjust_cost + $amount, 2);
@@ -1394,13 +1456,14 @@ class ErpPurchaseService extends BaseAdminService
                 throw new CommonException('调整后成本必须大于0');
             }
             $item->save(['adjust_cost' => $newAdjust, 'total_cost' => $newTotal, 'update_at' => $now]);
+            $ledgerService = ErpLedgerService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username);
             $beforeTotalCost = round((float)$asset->total_cost, 2);
             $asset->save([
                 'adjust_cost' => round((float)$asset->adjust_cost + $amount, 2),
                 'total_cost' => round((float)$asset->total_cost + $amount, 2),
                 'update_at' => $now,
             ]);
-            (new ErpLedgerService())->asset([
+            $ledgerService->asset([
                 'asset_id' => (int)$asset->id,
                 'request_id' => $requestId !== '' ? $requestId : null,
                 'action' => 'cost_adjust',
@@ -1415,27 +1478,29 @@ class ErpPurchaseService extends BaseAdminService
                 'source_id' => $itemId,
                 'source_no' => (string)$order->purchase_no,
                 'remark' => $remark,
-                'extra' => ['cost_type' => $costType],
+                'extra' => ['cost_type' => $costType, 'payable_adjustment' => $adjustment === null ? null : [
+                    'payable_id' => (int)$payable->id, 'before_amount' => (float)$payable->amount,
+                    'after_amount' => $adjustment['amount'], 'settled_amount' => $adjustment['settled_amount'],
+                    'remaining_amount' => $adjustment['remaining_amount'], 'delta' => $amount,
+                ]],
             ]);
             if ($syncPayable) {
                 $newOrderCost = round((float)$order->total_cost + $amount, 2);
-                $newPayableAmount = round($newOrderCost - (float)$order->paid_amount, 2);
                 $order->save([
                     'total_cost' => $newOrderCost,
-                    'payable_amount' => max(0, $newPayableAmount),
-                    'finance_status' => ErpDict::financeStatus($newOrderCost, (float)$order->paid_amount),
                     'update_at' => $now,
                 ]);
                 if ($payable !== null && !$payable->isEmpty()) {
-                    $newAmount = round((float)$payable->amount + $amount, 2);
                     $payable->save([
-                        'amount' => $newAmount,
-                        'status' => ErpDict::financeStatus($newAmount, 0),
+                        'amount' => $adjustment['amount'],
+                        'status' => $adjustment['status'],
                         'update_at' => $now,
                     ]);
                 }
+                ErpFinanceService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username)
+                    ->refreshPurchaseFinanceAfterAdjustment((int)$order->id);
             }
-            (new ErpLedgerService())->account([
+            $ledgerService->account([
                 'biz_type' => $costType === 'purchase_adjust' ? 'supplier_adjust' : 'internal_adjust',
                 'direction' => $amount > 0 ? 'increase' : 'decrease',
                 'amount' => abs(round($amount, 2)),
@@ -1449,7 +1514,7 @@ class ErpPurchaseService extends BaseAdminService
             ]);
             });
         } catch (\Throwable $e) {
-            if ($this->existingCostAdjustmentRequest($requestId, $itemId)) {
+            if ($this->existingCostAdjustmentRequest($requestId, $itemId, $amount, $costType)) {
                 return true;
             }
             throw $e;
@@ -1469,7 +1534,7 @@ class ErpPurchaseService extends BaseAdminService
         return $order->isEmpty() ? 0 : (int)$order->id;
     }
 
-    private function existingCostAdjustmentRequest(string $requestId, int $itemId): bool
+    private function existingCostAdjustmentRequest(string $requestId, int $itemId, float $amount, string $costType): bool
     {
         if ($requestId === '') {
             return false;
@@ -1484,7 +1549,35 @@ class ErpPurchaseService extends BaseAdminService
         if ((string)$ledger->action !== 'cost_adjust' || (int)$ledger->source_id !== $itemId) {
             throw new CommonException('request_id已用于其他资产业务');
         }
+        if ((string)$ledger->source_type !== $costType || abs(round((float)$ledger->cost_delta, 2) - round($amount, 2)) > 0.0001) {
+            throw new CommonException('该调价请求已用于其他金额或类型，请刷新后重试');
+        }
         return true;
+    }
+
+    private function mirrorPurchasePriceAdjustment(ErpAsset $asset, ErpPayable $payable, array $adjustment, float $delta, string $reason, string $requestId): void
+    {
+        if ((string)$asset->source_plugin !== 'hsx_recycle') return;
+        $deviceId = (new ErpRecycleDeviceIdentityService())->assetDeviceId($asset->toArray(), '采购调价');
+        if ((string)$payable->source_type !== 'purchase_asset' || (int)$payable->source_id !== (int)$asset->id) {
+            throw new CommonException('回收采购调价需要明确的设备级应付，请先核对原付款');
+        }
+        $responses = (array)event('ErpPurchasePriceAdjustmentRequested', [
+            'event_name' => 'erp.purchase.price_adjustment.requested.v1', 'event_version' => 1,
+            'site_id' => (int)$this->site_id, 'source_device_id' => $deviceId, 'asset_id' => (int)$asset->id,
+            'before_amount' => (float)$payable->amount, 'after_amount' => $adjustment['amount'],
+            'settled_amount' => $adjustment['settled_amount'], 'delta' => $delta,
+            'reason' => $reason, 'request_id' => $requestId,
+            'operator_uid' => (int)$this->uid, 'operator_name' => (string)$this->username,
+        ]);
+        $ack = false;
+        foreach ($responses as $response) {
+            if (!is_array($response) || ($response['consumer'] ?? '') !== 'hsx_recycle') continue;
+            if ($ack || ($response['status'] ?? '') !== 'processed' || !empty($response['error'])
+                || (int)($response['source_device_id'] ?? 0) !== $deviceId) throw new CommonException('回收调价回执不完整，本次调整未保存');
+            $ack = true;
+        }
+        if (!$ack) throw new CommonException('回收调价服务未响应，本次调整未保存，请检查插件文件和事件缓存');
     }
 
     private function ensureParty(
@@ -1779,6 +1872,37 @@ class ErpPurchaseService extends BaseAdminService
         return $order;
     }
 
+    /**
+     * 手工采购始终校验当前有效员工；只有带稳定事件号的外部插件事实，才允许
+     * 使用来源系统固化的历史定价人快照。这样既不放松后台权限，也不会因为
+     * 员工离职而让已发生的回收业务永久卡死。
+     *
+     * @return array{uid:int,name:string}
+     */
+    private function resolvePurchaser(array $data): array
+    {
+        $uid = (int)($data['purchaser_uid'] ?? 0);
+        try {
+            return ErpStaffService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username)->resolve($uid, '采购员');
+        } catch (\Throwable $e) {
+            $sourcePlugin = trim((string)($data['origin_plugin'] ?? $data['source_plugin'] ?? ''));
+            $eventId = trim((string)($data['origin_event_id'] ?? $data['event_id'] ?? ''));
+            $snapshotName = trim((string)($data['purchaser_snapshot_name'] ?? ''));
+            $trustedHistoricalSnapshot = (int)($data['allow_historical_purchaser'] ?? 0) === 1
+                && $sourcePlugin !== ''
+                && !in_array($sourcePlugin, ['erp', 'hsx_erp'], true)
+                && $eventId !== ''
+                && $uid > 0
+                && $snapshotName !== '';
+            if (!$trustedHistoricalSnapshot) throw $e;
+
+            return [
+                'uid' => $uid,
+                'name' => mb_substr($snapshotName, 0, 100),
+            ];
+        }
+    }
+
     private function resolveCapitalAccount(int $id): ErpCapitalAccount
     {
         if ($id <= 0) {
@@ -1839,7 +1963,7 @@ class ErpPurchaseService extends BaseAdminService
 
     private function warehouseAssetFlow(ErpWarehouse $warehouse): array
     {
-        $rules = (new ErpConfigService())->getRules();
+        $rules = ErpConfigService::forSite((int)$this->site_id)->getRules();
         $refurbishStatus = ((int)($rules['refurbish']['enabled'] ?? 0) === 1 && (int)($rules['refurbish']['default_required'] ?? 0) === 1) ? 'pending' : 'none';
         $saleTarget = (string)($warehouse->default_sale_target ?: 'unset');
         if (!in_array($saleTarget, ['unset', 'peer', 'mall'], true)) {

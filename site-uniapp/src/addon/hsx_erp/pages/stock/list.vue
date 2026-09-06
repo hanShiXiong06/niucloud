@@ -93,7 +93,7 @@
                     </template>
 
                     <view v-else-if="row.sale_channel || Number(row.outbound_compensation_amount || 0)" class="stock-chips">
-                        <view v-if="row.sale_channel" class="stock-chip primary">{{ row.sale_channel }}</view>
+                        <view v-if="row.sale_channel" class="stock-chip primary">{{ erpOptionLabel(row.sale_channel, row.sale_channel_key, '未设置渠道') }}</view>
                         <view v-if="Number(row.outbound_compensation_amount || 0)" class="stock-chip warning">售后补差 -¥{{ money(row.outbound_compensation_amount) }}</view>
                     </view>
 
@@ -202,8 +202,10 @@ import ErpWarehousePopup from '@/addon/hsx_erp/components/ErpWarehousePopup.vue'
 import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
 import { firstPositiveErpAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
 import { erpDeviceIdentityLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
+import { erpOptionLabel } from '@/addon/hsx_erp/utils/display'
 import { sendErpAssetRefurbish } from '@/addon/hsx_erp/api/asset'
 import { confirmErpSensitiveAction } from '@/addon/hsx_erp/hooks/useErpSensitiveConfirm'
+import { showErpError } from '@/addon/hsx_erp/utils/error'
 
 
 
@@ -348,7 +350,10 @@ const queryList = async (pageNo: number, pageSize: number) => {
         if (turnoverRes) turnoverSummary.value = turnoverRes?.data || { thresholds: {} }
         stockCapabilities.value = res?.data?.capabilities || turnoverRes?.data?.capabilities || stockCapabilities.value
         pagingRef.value?.complete(res?.data?.data || [])
-    } catch { pagingRef.value?.complete(false) }
+    } catch (error) {
+        pagingRef.value?.complete(false)
+        showErpError(error, '库存数据加载失败，请检查网络后重试')
+    }
 }
 
 function applyFilter() { reload() }

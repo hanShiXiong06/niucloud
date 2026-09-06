@@ -8,6 +8,7 @@ use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderStatusServi
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderEventService;
 use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpCapabilityService;
 use addon\hsx_recycle\app\model\RecycleOrder;
+use addon\hsx_recycle\app\model\order\RecycleDevice;
 use app\service\core\pay\CoreTransferService;
 use app\service\core\site\CoreSiteAccountService;
 use core\base\BaseAdminService;
@@ -31,7 +32,6 @@ class RecycleOrderPaymentService extends BaseAdminService
      */
     public function payment(int $orderId, array $data): bool
     {
-        $this->assertLocalPaymentAllowed();
         Log::info('【回收打款】开始执行payment方法', [
             'order_id' => $orderId,
             'data' => $data,
@@ -45,7 +45,9 @@ class RecycleOrderPaymentService extends BaseAdminService
             $this->validatePaymentData($orderId, $data);
 
             // 2. 获取订单信息
-            $order = RecycleOrder::findOrEmpty($orderId);
+            $order = RecycleOrder::where([
+                ['site_id', '=', $this->site_id], ['id', '=', $orderId], ['delete_at', '=', 0],
+            ])->lock(true)->findOrEmpty();
             if ($order->isEmpty()) {
                 throw new CommonException('ORDER_NOT_FOUND');
             }
@@ -58,18 +60,23 @@ class RecycleOrderPaymentService extends BaseAdminService
                 throw new CommonException('ORDER_STATUS_ERROR');
             }
 
-            // 4. 更新订单支付信息
+            $plan = $this->lockPaymentPlan($order, $data);
+            // 全批校验后、首次付款写入前，在当前事务内确认真实付款归属。
+            $this->assertLocalPaymentAllowed($orderId, $plan['device_ids']);
+            // 4. 更新订单及实际付款设备的信息
             $this->updateOrderPaymentInfo($order, $data);
+            $this->updateDevicePaymentInfo($order, $plan);
 
             // 5. 调用核心状态服务进行状态流转
             $statusService = new CoreRecycleOrderStatusService();
             $statusService->transition($orderId, RecycleOrderDict::ORDER_STATUS_COMPLETED, [
                 'remark' => $data['remark'] ?? '订单支付完成',
-                'operator_id' => $this->uid
+                'operator_id' => $this->uid,
+                'devices' => array_map(static fn(int $id): array => ['id' => $id], $plan['device_ids']),
             ]);
 
             // 6. 创建财务转账记录
-            $this->createTransferRecord($order, $data, '订单支付');
+            $this->createTransferRecord($order, $data, '订单支付', $plan);
 
             // 7. 触发支付后事件
             CoreRecycleOrderEventService::orderPayAfter([
@@ -82,7 +89,7 @@ class RecycleOrderPaymentService extends BaseAdminService
             Db::commit();
             Log::info('【回收打款】payment方法执行成功', ['order_id' => $orderId]);
             return true;
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Db::rollback();
             Log::error('【回收打款】payment方法执行失败', [
                 'order_id' => $orderId,
@@ -102,7 +109,6 @@ class RecycleOrderPaymentService extends BaseAdminService
      */
     public function confirmPayment(int $orderId, array $data): bool
     {
-        $this->assertLocalPaymentAllowed();
         Log::info('【回收打款】开始执行confirmPayment方法', [
             'order_id' => $orderId,
             'data' => $data,
@@ -116,7 +122,9 @@ class RecycleOrderPaymentService extends BaseAdminService
             $this->validatePaymentData($orderId, $data);
 
             // 2. 获取订单信息
-            $order = RecycleOrder::findOrEmpty($orderId);
+            $order = RecycleOrder::where([
+                ['site_id', '=', $this->site_id], ['id', '=', $orderId], ['delete_at', '=', 0],
+            ])->lock(true)->findOrEmpty();
             if ($order->isEmpty()) {
                 throw new CommonException('ORDER_NOT_FOUND');
             }
@@ -133,18 +141,23 @@ class RecycleOrderPaymentService extends BaseAdminService
                 throw new CommonException('ORDER_STATUS_ERROR');
             }
 
-            // 4. 更新订单支付信息
+            $plan = $this->lockPaymentPlan($order, $data);
+            // 与直接付款共用最后闸门，确认接口不能绕过设备归属与重复付款检查。
+            $this->assertLocalPaymentAllowed($orderId, $plan['device_ids']);
+            // 4. 更新订单及实际付款设备的信息
             $this->updateOrderPaymentInfo($order, $data);
+            $this->updateDevicePaymentInfo($order, $plan);
 
             // 5. 调用核心状态服务进行状态流转
             $statusService = new CoreRecycleOrderStatusService();
             $statusService->transition($orderId, RecycleOrderDict::ORDER_STATUS_COMPLETED, [
                 'remark' => $data['remark'] ?? '确认打款完成',
-                'operator_id' => $this->uid
+                'operator_id' => $this->uid,
+                'devices' => array_map(static fn(int $id): array => ['id' => $id], $plan['device_ids']),
             ]);
 
             // 6. 创建财务转账记录
-            $this->createTransferRecord($order, $data, '确认打款');
+            $this->createTransferRecord($order, $data, '确认打款', $plan);
 
             // 7. 触发支付后事件
             CoreRecycleOrderEventService::orderPayAfter([
@@ -158,7 +171,7 @@ class RecycleOrderPaymentService extends BaseAdminService
             Db::commit();
             Log::info('【回收打款】confirmPayment方法执行成功', ['order_id' => $orderId]);
             return true;
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Db::rollback();
             Log::error('【回收打款】confirmPayment方法执行失败', [
                 'order_id' => $orderId,
@@ -169,9 +182,75 @@ class RecycleOrderPaymentService extends BaseAdminService
         }
     }
 
-    private function assertLocalPaymentAllowed(): void
+    private function assertLocalPaymentAllowed(int $orderId, array $deviceIds): void
     {
-        (new RecycleErpCapabilityService())->assertLocalPaymentAllowed((int)$this->site_id);
+        (new RecycleErpCapabilityService())->assertLocalPaymentAllowed((int)$this->site_id, $orderId, $deviceIds);
+    }
+
+    private function lockPaymentPlan(RecycleOrder $order, array $data): array
+    {
+        $devices = RecycleDevice::where([
+            ['site_id', '=', $this->site_id], ['order_id', '=', $order->id],
+        ])->order('id asc')->lock(true)->select()->toArray();
+        return $this->preparePayment($order->toArray(), $devices, $data);
+    }
+
+    /** 全单校验不扣除已付设备继续付款；退回和代卖不进入本次付款集合。 */
+    protected function preparePayment(array $order, array $devices, array $data): array
+    {
+        if ((int)($order['pay_status'] ?? 0) !== RecycleOrderDict::PAY_STATUS_UNPAID
+            || (int)($order['pay_time'] ?? 0) > 0) {
+            throw new CommonException('订单已有付款事实，请勿重复整单打款');
+        }
+        if (!in_array((int)($order['status'] ?? 0), [RecycleOrderDict::ORDER_STATUS_PENDING_CONFIRM, RecycleOrderDict::ORDER_STATUS_PENDING_PAYMENT], true)) {
+            throw new CommonException('订单状态不允许付款，请勿重复确认已完成订单');
+        }
+        $amounts = [];
+        $paymentDevices = [];
+        foreach ($devices as $device) {
+            if ((int)($device['site_id'] ?? 0) !== (int)$order['site_id']
+                || (int)($device['order_id'] ?? 0) !== (int)$order['id']) {
+                throw new CommonException('付款设备不属于当前站点订单');
+            }
+            if ((int)($device['pay_status'] ?? 0) !== RecycleOrderDict::PAY_STATUS_UNPAID
+                || (float)($device['pay_amount'] ?? 0) > 0 || (int)($device['pay_time'] ?? 0) > 0) {
+                throw new CommonException('订单内已有设备付款事实，禁止重复整单打款，请按设备核对');
+            }
+            if (in_array((int)($device['status'] ?? 0), [RecycleOrderDict::DEVICE_STATUS_RETURNED, RecycleOrderDict::DEVICE_STATUS_CONSIGNED], true)
+                || (int)($device['confirm_status'] ?? 0) === RecycleOrderDict::CONFIRM_STATUS_REJECTED
+                || in_array((string)($device['dispose_type'] ?? ''), [RecycleOrderDict::DISPOSE_TYPE_RETURN, RecycleOrderDict::DISPOSE_TYPE_CONSIGN], true)) continue;
+            $deviceId = RecycleDevicePaymentService::normalizePaymentDeviceIds([$device['id'] ?? 0])[0];
+            if (isset($amounts[$deviceId])) throw new CommonException('付款设备关联不正确');
+            // 保留此入口原来按最终价生成真实转账记录的金额口径。
+            $amount = round((float)($device['final_price'] ?? 0), 2);
+            if (!is_finite($amount) || $amount <= 0) throw new CommonException('设备最终金额必须大于0，无法确认整单打款');
+            $amounts[$deviceId] = $amount;
+            $paymentDevices[$deviceId] = $device;
+        }
+        if ($amounts === []) throw new CommonException('订单没有可打款设备');
+        ksort($amounts, SORT_NUMERIC);
+        $deviceIds = array_keys($amounts);
+        if (array_key_exists('device_ids', $data)
+            && RecycleDevicePaymentService::normalizePaymentDeviceIds($data['device_ids']) !== $deviceIds) {
+            throw new CommonException('整单打款必须包含全部可付款设备，请使用按设备打款处理子集');
+        }
+        return ['device_ids' => $deviceIds, 'amounts' => $amounts,
+            'devices' => array_values($paymentDevices), 'total_amount' => round(array_sum($amounts), 2)];
+    }
+
+    private function updateDevicePaymentInfo(RecycleOrder $order, array $plan): void
+    {
+        foreach ($plan['amounts'] as $deviceId => $amount) {
+            RecycleDevice::where([
+                ['site_id', '=', $this->site_id], ['order_id', '=', $order->id], ['id', '=', $deviceId],
+            ])->update([
+                'pay_status' => RecycleOrderDict::PAY_STATUS_PAID,
+                'pay_amount' => $amount,
+                'pay_time' => $order->pay_time,
+                'pay_uid' => $this->uid,
+                'update_at' => time(),
+            ]);
+        }
     }
 
     /**
@@ -179,9 +258,10 @@ class RecycleOrderPaymentService extends BaseAdminService
      * @param RecycleOrder $order 订单信息
      * @param array $data 打款数据
      * @param string $action 操作类型
+     * @param array $plan 已锁定并确认的实际付款设备和金额
      * @return void
      */
-    private function createTransferRecord(RecycleOrder $order, array $data, string $action): void
+    private function createTransferRecord(RecycleOrder $order, array $data, string $action, array $plan): void
     {
         Log::info('【转账记录】开始创建转账记录', [
             'order_id' => $order->id,
@@ -196,13 +276,12 @@ class RecycleOrderPaymentService extends BaseAdminService
             // 步骤1: 计算总金额
             Log::info('【转账记录】步骤1：计算设备总金额');
             
-            $devices = $order->devices;
             Log::info('【转账记录】订单设备信息', [
-                'devices_count' => $devices ? $devices->count() : 0,
-                'devices_data' => $devices ? $devices->toArray() : []
+                'devices_count' => count($plan['devices']),
+                'devices_data' => $plan['devices']
             ]);
             
-            $totalAmount = $order->devices()->sum('final_price');
+            $totalAmount = $plan['total_amount'];
             Log::info('【转账记录】金额计算结果', [
                 'total_amount' => $totalAmount,
                 'amount_type' => gettype($totalAmount)

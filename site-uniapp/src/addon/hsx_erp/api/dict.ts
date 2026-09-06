@@ -2,6 +2,7 @@
  * ERP 前端字典（与后端 addon/hsx_erp/app/dict/ErpDict.php 保持一致）
  */
 import request from '@/utils/request'
+import { erpEnumLabel } from '@/addon/hsx_erp/utils/display'
 
 export type ErpDictOption = {
     value: string
@@ -117,7 +118,8 @@ export async function loadErpDicts(): Promise<ErpDictMap> {
 }
 
 export function dictLabel(dicts: ErpDictMap | null | undefined, group: string, value: string): string {
-    return (dicts?.[group] || ERP_DICT_FALLBACK[group] || []).find(item => item.value === value)?.label || value || '-'
+    const rows = [...(ERP_DICT_FALLBACK[group] || []), ...(dicts?.[group] || [])]
+    return erpEnumLabel(value, Object.fromEntries(rows.map(item => [item.value, item.label])))
 }
 
 export function dictType(dicts: ErpDictMap | null | undefined, group: string, value: string): string {
@@ -126,7 +128,10 @@ export function dictType(dicts: ErpDictMap | null | undefined, group: string, va
 
 export function dictTabs(dicts: ErpDictMap | null | undefined, group: string, withAll = true) {
     const rows = (dicts?.[group] || ERP_DICT_FALLBACK[group] || []).filter(item => item.filterable !== false)
-    const tabs = rows.map(item => ({ label: item.label, name: item.label, value: item.value }))
+    const tabs = rows.map(item => {
+        const label = dictLabel(dicts, group, item.value)
+        return { label, name: label, value: item.value }
+    })
     return withAll ? [{ label: '全部', name: '全部', value: '' }, ...tabs] : tabs
 }
 

@@ -45,11 +45,11 @@
                     </view>
                     <view class="field">
                         <text class="label">销售渠道</text>
-                        <text class="value">{{ order.sale_channel || '-' }}</text>
+                        <text class="value">{{ erpOptionLabel(order.sale_channel, order.sale_channel_key, '未设置渠道') }}</text>
                     </view>
                     <view class="field">
                         <text class="label">业务来源</text>
-                        <text class="value">{{ order.origin_name || 'ERP销售' }}{{ order.origin_plugin_name ? ' · ' + order.origin_plugin_name : '' }}</text>
+                        <text class="value">{{ erpSourceLabel(order.origin_name, 'ERP销售') }}</text>
                     </view>
                     <view class="field">
                         <text class="label">原业务单号</text>
@@ -156,6 +156,7 @@ import { erpTimeLine, formatErpTime } from '@/addon/hsx_erp/hooks/useErpTime'
 import { erpNetSaleAmount, erpSaleCompensationAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
 import { erpDeviceIdentityLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
 import { erpPartyDisplayName } from '@/addon/hsx_erp/hooks/useErpPartyText'
+import { erpOptionLabel, erpSourceLabel } from '@/addon/hsx_erp/utils/display'
 import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
 
 const order = ref<any>(null)
@@ -307,9 +308,9 @@ function itemQuantity(row: any) {
 function quantityText(value: any) {
     return Number(value || 0).toFixed(3).replace(/0+$/, '').replace(/\.$/, '') || '0'
 }
-const financeLabel = (s: string) => ({ pending: '待收款', partial: '部分收款', settled: '已结清', void: '已作废' }[s] || s)
+const financeLabel = (s: string) => ({ pending: '待收款', partial: '部分收款', settled: '已结清', void: '已作废' }[s] || '状态待确认')
 const financeType = (s: string) => ({ pending: 'warning', partial: 'primary', settled: 'success', void: 'info' }[s] || 'info')
-const assetLabel = (s: string) => ({ in_stock: '在库', sold: '已售', returned: '已退', void: '已作废' }[s] || s || '-')
+const assetLabel = (s: string) => ({ in_stock: '在库', sold: '已售', returned: '已退', void: '已作废' }[s] || '状态待确认')
 const assetType = (s: string) => ({ in_stock: 'success', sold: 'primary', returned: 'warning', void: 'info' }[s] || 'info')
 </script>
 

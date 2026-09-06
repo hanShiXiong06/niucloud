@@ -14,7 +14,7 @@
                 <view class="section-title">设备与账务明细</view>
                 <view v-for="item in items" :key="item.id" class="erp-card device-card">
                     <view class="erp-card__head"><view><text class="card-title">{{ item.model || '-' }}</text><text class="card-meta">{{ item.spec || '未填写规格' }}</text></view><u-tag :text="assetStatus(item.asset_status)" :type="item.asset_status === 'in_stock' ? 'success' : 'primary'" plain size="mini" /></view>
-                    <view class="device-id">IMEI {{ item.imei || '-' }} · {{ item.asset_no || '-' }}</view>
+                    <view class="device-id">IMEI {{ item.imei || '-' }}<text v-if="item.sn"> · SN {{ item.sn }}</text></view>
                     <view class="money-grid"><view><text>原售价</text><strong>¥{{ money(item.sale_price) }}</strong></view><view><text>{{ isCompensation ? '补差' : '本次退货' }}</text><strong class="orange">¥{{ money(item.return_price) }}</strong></view><view><text>已收货款</text><strong>¥{{ money(item.received_amount) }}</strong></view><view><text>退款应付</text><strong>¥{{ money(item.refund_payable_amount) }}</strong></view></view>
                     <view v-if="item.refund_payable_no" class="payable-box" @click="goPayable"><view><text>客户退款应付</text><ErpCopyText :value="item.refund_payable_no" title="应付单号" /></view><view><strong>已付 ¥{{ money(item.refund_settled_amount) }}</strong><text>剩余 ¥{{ money(item.refund_remain_amount) }} ›</text></view></view>
                     <view v-if="item.reason" class="reason">原因：{{ item.reason }}</view>
@@ -49,7 +49,7 @@ onLoad((q:any)=>id.value=Number(q?.id||0));onShow(load)
 async function load(){if(!id.value)return;loading.value=true;try{const res:any=await getMobileSaleReturnInfo(id.value);detail.value=res?.data||null}finally{loading.value=false}}
 function goPayable(){if(!detail.value)return;uni.navigateTo({url:`/addon/hsx_erp/pages/payable/detail?party_id=${Number(detail.value.party_id||0)}&source_type=sale_return&purchase_order_id=${Number(detail.value.id||0)}&party_name=${encodeURIComponent(detail.value.party_name||'')}`})}
 async function cancelReturn(){if(cancelling.value)return;const yes=await confirmErpSensitiveAction({title:'确认撤销销售退货',content:'仅限退款应付尚未付款或折账。撤销后设备恢复原销售关系，退款应付作废。',confirmText:'确认撤销',cancelText:'返回'});if(!yes)return;cancelling.value=true;try{await cancelMobileSaleReturn(id.value,{remark:'移动端详情撤销退货'});uni.showToast({title:'退货已撤销',icon:'success'});await load()}catch(e:any){uni.showToast({title:e?.message||'撤销失败',icon:'none'})}finally{cancelling.value=false}}
-const money=(v:any)=>Number(v||0).toFixed(2),refundModeLabel=(v:string)=>v==='cash'?'现场退款':'转财务处理',assetStatus=(v:string)=>({in_stock:'已回库',sold:'客户持有',returned:'已退'}[v]||v||'-'),statusLabel=(v:string)=>({pending:'待确认',confirmed:'已完成',cancelled:'已撤销'}[v]||v||'-'),statusType=(v:string)=>({pending:'warning',confirmed:'success',cancelled:'info'}[v]||'info')
+const money=(v:any)=>Number(v||0).toFixed(2),refundModeLabel=(v:string)=>v==='cash'?'现场退款':'转财务处理',assetStatus=(v:string)=>({in_stock:'已回库',sold:'客户持有',returned:'已退'}[v] || '状态待确认'),statusLabel=(v:string)=>({pending:'待确认',confirmed:'已完成',cancelled:'已撤销'}[v] || '状态待确认'),statusType=(v:string)=>({pending:'warning',confirmed:'success',cancelled:'info'}[v]||'info')
 </script>
 <style scoped lang="scss">
 @import '@/addon/hsx_erp/styles/erp-mobile.scss';

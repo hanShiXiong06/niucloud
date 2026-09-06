@@ -67,7 +67,7 @@
                             :class="{ 'option-chip--on': String(localValue[field.key] || '') === String(option.value) }"
                             @click="localValue[field.key] = option.value"
                         >
-                            <text>{{ option.label }}</text>
+                            <text>{{ erpOptionLabel(option.label, option.value) }}</text>
                             <u-icon
                                 v-if="String(localValue[field.key] || '') === String(option.value)"
                                 name="checkmark-circle-fill"
@@ -89,7 +89,7 @@
 
                     <view v-else-if="field.type === 'staff'" class="select-box" :class="{ 'select-box--on': hasFieldValue(field) }" @click="openStaffPicker(field)">
                         <text :class="localValue[field.labelKey || field.key + '_name'] ? 'select-text' : 'select-placeholder'">
-                            {{ localValue[field.labelKey || field.key + '_name'] || field.placeholder || '请选择' + field.label }}
+                            {{ localValue[field.labelKey || field.key + '_name'] ? staffName({ name: localValue[field.labelKey || field.key + '_name'] }) : (field.placeholder || '请选择' + field.label) }}
                         </text>
                         <view v-if="hasFieldValue(field)" class="inline-clear" @click.stop="clearField(field)">
                             <u-icon name="close-circle-fill" color="#94a3b8" size="17" />
@@ -205,8 +205,8 @@
                 </view>
                 <view v-for="item in staffPicker.options" :key="item.uid" class="picker-item" @click="selectStaff(item)">
                     <view class="picker-main">
-                        <text class="picker-name">{{ item.name || item.real_name || item.username || '-' }}</text>
-                        <text class="picker-sub">{{ [item.real_name, item.username, item.mobile].filter(Boolean).join(' / ') || ('UID ' + item.uid) }}</text>
+                        <text class="picker-name">{{ staffName(item) }}</text>
+                        <text class="picker-sub">{{ [item.real_name, item.username, item.mobile].map(staffText).filter(Boolean).join(' / ') || '姓名与联系方式待完善' }}</text>
                     </view>
                     <u-icon v-if="Number(localValue[staffPicker.currentKey]) === Number(item.uid)" name="checkbox-mark" color="#3b6ef5" size="20" />
                 </view>
@@ -242,6 +242,13 @@ import { reactive, ref, watch } from 'vue'
 import { getMobileCounterpartyOptions, getMobileStaffOptions } from '@/addon/hsx_erp/api/erp'
 import CategoryPicker from '@/addon/hsx_erp/components/ErpCatalogProductPopup.vue'
 import ErpWarehousePopup from '@/addon/hsx_erp/components/ErpWarehousePopup.vue'
+import { erpOptionLabel } from '@/addon/hsx_erp/utils/display'
+
+const staffText = (value: any) => {
+    const text = String(value || '').trim()
+    return /^(?:UID\s*[:：#＃]?\s*\d+|(?:员工|管理员|用户|操作人)\s*[#＃]\s*\d+)$/i.test(text) ? '' : text
+}
+const staffName = (item: any) => [item.name, item.real_name, item.username].map(staffText).find(Boolean) || '姓名未维护'
 
 type Option = { label: string; value: string | number }
 type Field = {

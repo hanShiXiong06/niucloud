@@ -5,6 +5,8 @@ namespace addon\hsx_erp\app\listener;
 
 use addon\hsx_erp\app\model\ErpAsset;
 use addon\hsx_erp\app\model\ErpPurchaseItem;
+use addon\hsx_erp\app\service\admin\ErpRecycleDeviceIdentityService;
+use core\exception\CommonException;
 
 /** 回收设备与 ERP 资产的状态回查，关联键存放在资产 spec_json.source_device_id。 */
 class ErpDeviceSyncStatus
@@ -12,26 +14,27 @@ class ErpDeviceSyncStatus
     public function handle(array $event): array
     {
         $siteId = (int)($event['site_id'] ?? 0);
-        $deviceIds = $event['device_ids'] ?? $event['source_device_ids'] ?? [];
-        if (isset($event['source_device_id'])) $deviceIds[] = (int)$event['source_device_id'];
-        $deviceIds = array_values(array_unique(array_filter(array_map('intval', (array)$deviceIds))));
+        $deviceIds = (array)($event['device_ids'] ?? $event['source_device_ids'] ?? []);
+        if (isset($event['source_device_id'])) $deviceIds[] = $event['source_device_id'];
         if ($siteId <= 0 || empty($deviceIds)) return [];
 
-        $wanted = array_fill_keys($deviceIds, true);
-        $rows = ErpAsset::where([
-            ['site_id', '=', $siteId],
-            ['source_plugin', '=', 'hsx_recycle'],
-        ])->field('id,asset_no,status,warehouse_id,warehouse_name,location_id,location_name,spec_json,update_at')
-            ->order('id desc')
-            ->select()
-            ->toArray();
-
+        $identities = $this->identityService()->deviceAssets($siteId, $deviceIds);
+        $deviceIds = array_keys($identities);
         $map = [];
-        foreach ($rows as $row) {
-            $snapshot = json_decode((string)($row['spec_json'] ?? ''), true);
-            $sourceDeviceId = (int)($snapshot['source_device_id'] ?? 0);
-            if ($sourceDeviceId <= 0 || !isset($wanted[$sourceDeviceId]) || isset($map[$sourceDeviceId])) continue;
+        foreach ($identities as $sourceDeviceId => $identity) {
+            if (!$identity['has_asset']) continue;
+            if ($identity['ambiguous']) {
+                $map[$sourceDeviceId] = ['has_asset' => true, 'ambiguous' => true,
+                    'asset_id' => 0, 'asset_ids' => $identity['asset_ids'], 'inventory_status' => '',
+                    'reason' => '来源设备关联待核对，存在多个或冲突的ERP资产关联'];
+                continue;
+            }
+            $row = $identity['assets'][0];
             $map[$sourceDeviceId] = [
+                'has_asset' => true,
+                'ambiguous' => false,
+                'asset_ids' => $identity['asset_ids'],
+                'source_device_id' => $sourceDeviceId,
                 'asset_id' => (int)$row['id'],
                 'asset_no' => (string)$row['asset_no'],
                 'inventory_status' => (string)$row['status'],
@@ -45,6 +48,9 @@ class ErpDeviceSyncStatus
         if (isset($event['source_device_id'])) {
             $item = $map[(int)$event['source_device_id']] ?? null;
             $refreshed = false;
+            if (!empty($item['ambiguous'])) {
+                throw new CommonException('来源设备关联待核对，未执行重新同步或快照更新');
+            }
             if ($item !== null && !empty($event['device']) && is_array($event['device'])) {
                 $refreshed = $this->refreshDeviceSnapshot($siteId, $item, $event['device']);
             }
@@ -61,16 +67,23 @@ class ErpDeviceSyncStatus
             foreach ($deviceIds as $deviceId) {
                 $item = $map[$deviceId] ?? null;
                 $health[$deviceId] = [
-                    'stuck' => $item === null,
+                    'stuck' => $item === null || !empty($item['ambiguous']),
                     'has_asset' => $item !== null,
+                    'ambiguous' => !empty($item['ambiguous']),
+                    'asset_ids' => $item['asset_ids'] ?? [],
                     'pending' => 0,
                     'failed' => 0,
-                    'reason' => $item === null ? 'ERP 尚未建立对应资产' : '',
+                    'reason' => $item === null ? 'ERP 尚未建立对应资产' : (string)($item['reason'] ?? ''),
                 ];
             }
             return $health;
         }
         return $map;
+    }
+
+    protected function identityService(): ErpRecycleDeviceIdentityService
+    {
+        return new ErpRecycleDeviceIdentityService();
     }
 
     /** 仅刷新来源描述，不触碰成本、应付、库存状态和仓库位置。 */
@@ -92,6 +105,11 @@ class ErpDeviceSyncStatus
         $spec = implode(' ', array_values(array_filter([$capacity, $color])));
         $specJson = json_decode((string)($asset->spec_json ?? ''), true);
         if (!is_array($specJson)) $specJson = [];
+        // 关联可能刚由采购明细快照补证；刷新规格时必须保留这份唯一身份，不能反向抹掉明细关联。
+        $sourceDeviceId = (int)($item['source_device_id'] ?? 0);
+        if ($sourceDeviceId <= 0) throw new CommonException('来源设备关联待核对，未更新设备快照');
+        $specJson['source_plugin'] = 'hsx_recycle';
+        $specJson['source_device_id'] = $sourceDeviceId;
         $specJson['capacity'] = $capacity;
         $specJson['capacity_value'] = $device['capacity_value'] ?? $capacity;
         $specJson['color'] = $color;

@@ -1,13 +1,11 @@
 <template>
-    <div class="main-container">
+    <HsxPage padding="none" class="main-container">
         <el-card class="!border-none" shadow="never">
-            <div class="flex items-start justify-between gap-4">
-                <div>
-                    <div class="text-page-title">仓库库位</div>
-                    <div class="mt-1 text-sm text-gray-500">采购入库必须落到仓库和库位，后续销售、盘点、调拨都以这里为准。</div>
-                </div>
-                <el-button type="primary" :icon="Plus" @click="openWarehouse()">新增仓库</el-button>
-            </div>
+            <HsxTitle size="page" collapsible-subtitle class="mb-4">
+                <template #default>仓库库位</template>
+                <template #subtitle>采购入库必须落到仓库和库位，后续销售、盘点、调拨都以这里为准。</template>
+                <template #extra><el-button type="primary" :icon="Plus" @click="openWarehouse()">新增仓库</el-button></template>
+            </HsxTitle>
 
             <el-table class="mt-5" :data="warehouses" v-loading="loading" row-key="id" size="large">
                 <el-table-column type="expand">
@@ -90,7 +88,7 @@
             </el-table>
         </el-card>
 
-        <el-dialog v-model="warehouseDialog.visible" :title="warehouseDialog.form.id ? '编辑仓库' : '新增仓库'" width="520px">
+        <HsxDialog :confirm-loading="warehouseDialog.loading" v-model="warehouseDialog.visible" :title="warehouseDialog.form.id ? '编辑仓库' : '新增仓库'" width="520px" :destroy-on-close="false">
             <el-form label-width="96px">
                 <el-form-item label="仓库名称" required><el-input v-model.trim="warehouseDialog.form.warehouse_name" /></el-form-item>
                 <el-form-item label="仓库编码"><el-input v-model.trim="warehouseDialog.form.warehouse_code" /></el-form-item>
@@ -127,12 +125,12 @@
                 <el-form-item label="备注"><el-input v-model.trim="warehouseDialog.form.remark" type="textarea" :rows="2" /></el-form-item>
             </el-form>
             <template #footer>
-                <el-button @click="warehouseDialog.visible = false">取消</el-button>
-                <el-button type="primary" :loading="warehouseDialog.loading" @click="submitWarehouse">保存</el-button>
+                <el-button :disabled="warehouseDialog.loading" @click="warehouseDialog.visible = false">取消</el-button>
+                <el-button :disabled="warehouseDialog.loading" type="primary" :loading="warehouseDialog.loading" @click="submitWarehouse">保存</el-button>
             </template>
-        </el-dialog>
+        </HsxDialog>
 
-        <el-dialog v-model="locationDialog.visible" :title="locationDialog.form.id ? '编辑库位' : '新增库位'" width="520px">
+        <HsxDialog :confirm-loading="locationDialog.loading" v-model="locationDialog.visible" :title="locationDialog.form.id ? '编辑库位' : '新增库位'" width="520px" :destroy-on-close="false">
             <el-form label-width="96px">
                 <el-form-item label="所属仓库">{{ locationDialog.warehouseName }}</el-form-item>
                 <el-form-item label="库位名称" required><el-input v-model.trim="locationDialog.form.location_name" /></el-form-item>
@@ -152,19 +150,22 @@
                 <el-form-item label="备注"><el-input v-model.trim="locationDialog.form.remark" type="textarea" :rows="2" /></el-form-item>
             </el-form>
             <template #footer>
-                <el-button @click="locationDialog.visible = false">取消</el-button>
-                <el-button type="primary" :loading="locationDialog.loading" @click="submitLocation">保存</el-button>
+                <el-button :disabled="locationDialog.loading" @click="locationDialog.visible = false">取消</el-button>
+                <el-button :disabled="locationDialog.loading" type="primary" :loading="locationDialog.loading" @click="submitLocation">保存</el-button>
             </template>
-        </el-dialog>
-    </div>
+        </HsxDialog>
+    </HsxPage>
 </template>
 
 <script setup lang="ts">
+import { HsxTitle, HsxPage, HsxDialog, useFeedback } from '@/addon/hsx_components/core'
 import { onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getErpDicts, getErpStaffOptions } from '@/addon/hsx_erp/api/erp'
 import { deleteErpWarehouse, deleteErpWarehouseLocation, getErpWarehouseList, saveErpWarehouse, saveErpWarehouseLocation } from '@/addon/hsx_erp/api/warehouse'
+const hsxFeedback = useFeedback()
+
 
 const loading = ref(false)
 const warehouses = ref<any[]>([])
@@ -217,12 +218,12 @@ function openWarehouse(row: any = {}) {
 }
 
 async function submitWarehouse() {
-    if (!warehouseDialog.form.warehouse_name) return ElMessage.warning('请填写仓库名称')
-    if (!warehouseDialog.form.manager_uid) return ElMessage.warning('请选择仓库负责人')
+    if (!warehouseDialog.form.warehouse_name) return hsxFeedback.warning('请填写仓库名称')
+    if (!warehouseDialog.form.manager_uid) return hsxFeedback.warning('请选择仓库负责人')
     warehouseDialog.loading = true
     try {
         await saveErpWarehouse(warehouseDialog.form.id, { ...warehouseDialog.form })
-        ElMessage.success('仓库已保存')
+        hsxFeedback.success('仓库已保存')
         warehouseDialog.visible = false
         await loadData()
     } finally {
@@ -247,11 +248,11 @@ function openLocation(warehouse: any, row: any = {}) {
 }
 
 async function submitLocation() {
-    if (!locationDialog.form.location_name) return ElMessage.warning('请填写库位名称')
+    if (!locationDialog.form.location_name) return hsxFeedback.warning('请填写库位名称')
     locationDialog.loading = true
     try {
         await saveErpWarehouseLocation(locationDialog.warehouseId, locationDialog.form.id, { ...locationDialog.form })
-        ElMessage.success('库位已保存')
+        hsxFeedback.success('库位已保存')
         locationDialog.visible = false
         await loadData()
     } finally {
@@ -262,14 +263,14 @@ async function submitLocation() {
 async function removeWarehouse(row: any) {
     await ElMessageBox.confirm('确定删除该仓库吗？已有库存或库位时不能删除，可改为停用。', '删除仓库', { type: 'warning' })
     await deleteErpWarehouse(Number(row.id))
-    ElMessage.success('仓库已删除')
+    hsxFeedback.success('仓库已删除')
     await loadData()
 }
 
 async function removeLocation(row: any) {
     await ElMessageBox.confirm('确定删除该库位吗？已有库存时不能删除，可改为停用。', '删除库位', { type: 'warning' })
     await deleteErpWarehouseLocation(Number(row.id))
-    ElMessage.success('库位已删除')
+    hsxFeedback.success('库位已删除')
     await loadData()
 }
 
@@ -282,11 +283,11 @@ function onWarehouseTypeChange(value: string, applyPreset = true) {
 function warehouseTypeMeta(type: string) {
     return warehouseTypeOptions.value.find(item => item.value === type)
         || warehouses.value.find(item => item.warehouse_type === type)?.warehouse_type_meta
-        || { value: type, label: type || '未设置', type: 'info', description: '', preset: {}, constraints: {} }
+        || { value: type, label: '仓库类型待确认', type: 'info', description: '', preset: {}, constraints: {} }
 }
 
 function staffName(item: any) {
-    return item?.name || item?.real_name || item?.username || `员工#${item?.uid || ''}`
+    return item?.name || item?.real_name || item?.username || '姓名未登记'
 }
 
 onMounted(loadData)

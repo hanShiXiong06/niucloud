@@ -26,7 +26,15 @@ final class ProjectCenterApplicationService
         $this->normalizeAndValidateSnapshot($siteId, $formId, ['value' => $value]);
     }
 
-    public function submit(int $siteId, int $memberId, int $projectId, string $groupNo, int $formRecordId, bool $paymentDeclared): int
+    public function submit(
+        int $siteId,
+        int $memberId,
+        int $projectId,
+        string $groupNo,
+        int $formRecordId,
+        bool $paymentDeclared,
+        array $eligibilityRegion = []
+    ): int
     {
         if ($memberId <= 0) throw new CommonException('请先登录');
         if (!$paymentDeclared) throw new CommonException('请先确认已按项目说明完成付款，再填写资料');
@@ -41,6 +49,22 @@ final class ProjectCenterApplicationService
         $group = $groupService->requireAvailableByNo($siteId, $projectId, $groupNo, $memberId);
         $groupNo = (string)$group->group_no;
         $groupId = (int)$group->id;
+        $idempotencyKey = $this->idempotencyKey((int)$project->id, $groupId, $memberId);
+
+        // 地区查询必须在付款前完成；提交工单时再次按服务端白名单校验，不能信任前端“已通过”状态。
+        // 已进入办理流程的历史工单继续沿用原查询快照，避免项目后来修改地区规则卡住客户修订。
+        $areaService = new ProjectCenterAreaEligibilityService();
+        $existingApplication = ProjectCenterApplication::where([
+            ['site_id', '=', $siteId], ['idempotency_key', '=', $idempotencyKey],
+        ])->findOrEmpty();
+        $existingEligibility = $existingApplication->isEmpty() ? [] : (array)$existingApplication->eligibility_snapshot;
+        if ($existingEligibility !== [] && !empty($existingEligibility['eligible'])) {
+            $eligibilitySnapshot = $existingEligibility;
+        } elseif (!$existingApplication->isEmpty() && (int)$existingApplication->payment_declared_at > 0) {
+            $eligibilitySnapshot = $areaService->historicalSnapshot();
+        } else {
+            $eligibilitySnapshot = $areaService->assertEligible($project, $eligibilityRegion);
+        }
 
         $record = DiyFormRecords::where([
             ['record_id', '=', $formRecordId], ['site_id', '=', $siteId],
@@ -52,9 +76,8 @@ final class ProjectCenterApplicationService
         $snapshot = $this->normalizeAndValidateSnapshot($siteId, $formId, is_array($snapshot) ? $snapshot : []);
         $reviewerUids = $this->activeReviewerUids($siteId, (array)$project->reviewer_uids);
         if ($reviewerUids === []) throw new CommonException('项目暂无在职资料审核员，请联系工作人员处理');
-        $idempotencyKey = $this->idempotencyKey((int)$project->id, $groupId, $memberId);
         try {
-            $result = Db::transaction(function () use ($siteId, $memberId, $project, $groupService, $groupNo, $groupId, $formId, $formRecordId, $paymentDeclared, $snapshot, $idempotencyKey, $reviewerUids) {
+            $result = Db::transaction(function () use ($siteId, $memberId, $project, $groupService, $groupNo, $groupId, $formId, $formRecordId, $paymentDeclared, $snapshot, $eligibilitySnapshot, $idempotencyKey, $reviewerUids) {
                 // 客户提交与管理员结束群可能同时发生。事务内重新锁定并核验群，
                 // 防止使用事务外的旧模型把 completed/abandoned/dissolved 覆盖回 active。
                 $lockedGroup = $groupService->requireAvailableByNo(
@@ -100,6 +123,7 @@ final class ProjectCenterApplicationService
                 'status' => ProjectCenterDict::APPLICATION_SUBMITTED,
                 'assignee_uid' => $assigneeUid,
                 'payment_declared_at' => $paymentDeclared ? $now : 0,
+                'eligibility_snapshot' => $eligibilitySnapshot,
                 'last_reject_summary' => '',
                 'submitted_at' => $now,
                 'reviewed_at' => 0,
@@ -249,7 +273,7 @@ final class ProjectCenterApplicationService
                     ? '项目资料待审核：群编号 ' . $groupNo
                     : '项目资料待审核：' . ($applicationNo !== '' ? $applicationNo : ('#' . $applicationId)) . '（直达项目申请）',
                 'target' => [
-                    'plugin' => 'hsx_project_center', 'route_key' => 'project_center.application',
+                    'plugin' => 'hsx_project_center', 'route_key' => 'hsx_project_center.application',
                     'params' => ['application_id' => $applicationId],
                     'web_path' => 'site/hsx_project_center/application?application_id=' . $applicationId,
                 ],

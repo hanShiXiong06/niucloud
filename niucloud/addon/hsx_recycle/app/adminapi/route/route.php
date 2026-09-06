@@ -120,6 +120,9 @@ Route::group('recycle', function () {
     // 下单配置
     Route::get('order_submit_config', 'addon\hsx_recycle\app\adminapi\controller\order\OrderSubmitConfig@info');
     Route::post('order_submit_config', 'addon\hsx_recycle\app\adminapi\controller\order\OrderSubmitConfig@save');
+    // 静态配置路径必须先于 recycle_order/:id 注册，避免被订单更新路由误匹配。
+    Route::get('recycle_order/erp-integration', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleOrder@erpIntegration');
+    Route::put('recycle_order/erp-integration', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleOrder@saveErpIntegration');
 
     // 订单基础操作
     // 获取审核员绩效

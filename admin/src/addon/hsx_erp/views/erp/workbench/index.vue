@@ -1,53 +1,43 @@
 <template>
-    <div class="main-container">
+    <HsxPage padding="none" class="main-container">
         <el-card class="!border-none" shadow="never">
-            <div class="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                    <div class="text-page-title">ERP 经营工作台</div>
-                    <div class="mt-1 text-sm text-gray-500">统一查看采购、销售、库存、利润与财务待办，统计来自完整业务数据。</div>
-                </div>
-                <div class="flex items-center gap-3">
-                    <el-button @click="openKpiConfig">绩效配置</el-button>
-                    <el-radio-group v-model="period" @change="loadDashboard">
-                        <el-radio-button label="today">今日</el-radio-button>
-                        <el-radio-button label="yesterday">昨天</el-radio-button>
-                        <el-radio-button label="last7">近7天</el-radio-button>
-                        <el-radio-button label="month">本月</el-radio-button>
-                        <el-radio-button label="last_month">上月</el-radio-button>
-                        <el-radio-button label="all">全部</el-radio-button>
-                    </el-radio-group>
-                    <el-date-picker v-model="customRange" type="daterange" range-separator="至" start-placeholder="自定义开始" end-placeholder="自定义结束" :clearable="true" @change="onCustomRangeChange" />
-                    <el-button :icon="Refresh" :loading="loading" @click="loadDashboard">刷新</el-button>
-                </div>
-            </div>
+            <HsxTitle size="page" collapsible-subtitle class="mb-4">
+                <template #default>ERP 经营工作台</template>
+                <template #subtitle>统一查看采购、销售、库存、利润与财务待办，统计来自完整业务数据。</template>
+                <template #extra><div class="flex items-center gap-3 flex-wrap">
+                        <el-button @click="openKpiConfig">绩效配置</el-button>
+                        <el-radio-group v-model="period" @change="loadDashboard">
+                            <el-radio-button label="today">今日</el-radio-button>
+                            <el-radio-button label="yesterday">昨天</el-radio-button>
+                            <el-radio-button label="last7">近7天</el-radio-button>
+                            <el-radio-button label="month">本月</el-radio-button>
+                            <el-radio-button label="last_month">上月</el-radio-button>
+                            <el-radio-button label="all">全部</el-radio-button>
+                        </el-radio-group>
+                        <el-date-picker v-model="customRange" type="daterange" range-separator="至" start-placeholder="自定义开始" end-placeholder="自定义结束" :clearable="true" @change="onCustomRangeChange" />
+                        <el-button :icon="Refresh" :loading="loading" @click="loadDashboard">刷新</el-button>
+                    </div></template>
+            </HsxTitle>
 
-            <el-alert v-if="refurbishReminder.visible" class="mt-4" type="warning" show-icon :closable="false">
-                <template #title>今日新增 {{ refurbishReminder.today_count }} 台待整备设备，已达到提醒阈值</template>
-                <div class="flex flex-wrap items-center justify-between gap-3">
-                    <span>当前待整备 {{ refurbishReminder.pending_count }} 台、整备中 {{ refurbishReminder.processing_count }} 台。请及时完成分配，避免设备积压影响动销。</span>
-                    <div class="flex gap-2">
-                        <el-button size="small" type="warning" @click="goRefurbishQueue">查看整备设备</el-button>
-                        <el-dropdown @command="dismissRefurbish">
-                            <el-button size="small">关闭提醒</el-button>
-                            <template #dropdown><el-dropdown-menu><el-dropdown-item command="today">今天不再提醒</el-dropdown-item><el-dropdown-item command="forever" divided>永久关闭此提醒</el-dropdown-item></el-dropdown-menu></template>
-                        </el-dropdown>
-                    </div>
-                </div>
-            </el-alert>
+            <HsxNotice v-if="refurbishReminder.visible" class="mt-4" type="warning" :closable="false" :title="'今日新增 ' + refurbishReminder.today_count + ' 台待整备设备'" :description="'当前待整备 ' + refurbishReminder.pending_count + ' 台、整备中 ' + refurbishReminder.processing_count + ' 台。及时分配可减少设备积压。'">
+                <template #actions>
+                    <el-button size="small" type="primary" plain @click="goRefurbishQueue">处理整备</el-button>
+                    <el-dropdown :disabled="reminderClosing.refurbish" @command="dismissRefurbish">
+                        <el-button size="small" :loading="reminderClosing.refurbish">关闭提醒</el-button>
+                        <template #dropdown><el-dropdown-menu><el-dropdown-item command="today">今天不再提醒</el-dropdown-item><el-dropdown-item command="forever" divided>永久关闭此提醒</el-dropdown-item></el-dropdown-menu></template>
+                    </el-dropdown>
+                </template>
+            </HsxNotice>
 
-            <el-alert v-if="turnoverReminder.visible" class="mt-4" type="error" show-icon :closable="false">
-                <template #title>库存周转预警：{{ turnoverReminder.warning_total_count }} 台设备已超过预警库龄</template>
-                <div class="flex flex-wrap items-center justify-between gap-3">
-                    <span>其中严重滞销 {{ turnoverReminder.critical_count }} 台，占用库存成本 {{ money(turnoverReminder.warning_total_cost) }}；当前平均库龄 {{ turnoverReminder.average_age_days }} 天。</span>
-                    <div class="flex gap-2">
-                        <el-button size="small" type="danger" @click="goTurnoverQueue">查看预警库存</el-button>
-                        <el-dropdown @command="dismissTurnover">
-                            <el-button size="small">关闭提醒</el-button>
-                            <template #dropdown><el-dropdown-menu><el-dropdown-item command="today">今天不再提醒</el-dropdown-item><el-dropdown-item command="forever" divided>永久关闭此提醒</el-dropdown-item></el-dropdown-menu></template>
-                        </el-dropdown>
-                    </div>
-                </div>
-            </el-alert>
+            <HsxNotice v-if="turnoverReminder.visible" class="mt-4" type="warning" :closable="false" :title="'库存周转预警：' + turnoverReminder.warning_total_count + ' 台设备超期'" :description="'其中严重滞销 ' + turnoverReminder.critical_count + ' 台，占用库存成本 ' + money(turnoverReminder.warning_total_cost) + '；平均库龄 ' + turnoverReminder.average_age_days + ' 天。'">
+                <template #actions>
+                    <el-button size="small" type="primary" plain @click="goTurnoverQueue">处理预警</el-button>
+                    <el-dropdown :disabled="reminderClosing.turnover" @command="dismissTurnover">
+                        <el-button size="small" :loading="reminderClosing.turnover">关闭提醒</el-button>
+                        <template #dropdown><el-dropdown-menu><el-dropdown-item command="today">今天不再提醒</el-dropdown-item><el-dropdown-item command="forever" divided>永久关闭此提醒</el-dropdown-item></el-dropdown-menu></template>
+                    </el-dropdown>
+                </template>
+            </HsxNotice>
 
             <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <div v-for="item in summaryCards" :key="item.label" class="summary-tile">
@@ -111,16 +101,16 @@
                 </div>
             </div>
 
-            <el-dialog v-model="kpiConfigVisible" title="员工绩效配置" width="680px" append-to-body>
-                <el-alert title="目标按当前看板统计周期计算；权重决定综合得分占比，超额完成最高计到该项 120%。" type="info" :closable="false" class="mb-4" />
+            <HsxDialog :confirm-loading="kpiSaving" v-model="kpiConfigVisible" title="员工绩效配置" width="680px" append-to-body>
+                <HsxNotice default-expanded title="目标按当前看板统计周期计算；权重决定综合得分占比，超额完成最高计到该项 120%。" type="info" :closable="false" class="mb-4" />
                 <el-table :data="kpiRules">
                     <el-table-column prop="metric_name" label="指标" min-width="140" />
                     <el-table-column label="周期目标" width="180"><template #default="{ row }"><el-input-number v-model="row.target_value" :min="0.01" :precision="2" /><span class="ml-1 text-xs text-gray-400">{{ row.unit }}</span></template></el-table-column>
                     <el-table-column label="权重" width="160"><template #default="{ row }"><el-input-number v-model="row.weight" :min="0.01" :max="100" :precision="1" /><span class="ml-1 text-xs text-gray-400">%</span></template></el-table-column>
                     <el-table-column label="启用" width="80"><template #default="{ row }"><el-switch v-model="row.enabled" :active-value="1" :inactive-value="0" /></template></el-table-column>
                 </el-table>
-                <template #footer><el-button @click="kpiConfigVisible=false">取消</el-button><el-button type="primary" :loading="kpiSaving" @click="saveKpiConfig">保存配置</el-button></template>
-            </el-dialog>
+                <template #footer><el-button :disabled="kpiSaving" @click="kpiConfigVisible=false">取消</el-button><el-button :disabled="kpiSaving" type="primary" :loading="kpiSaving" @click="saveKpiConfig">保存配置</el-button></template>
+            </HsxDialog>
 
             <div class="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
                 <div class="panel">
@@ -144,15 +134,18 @@
                 </div>
             </div>
         </el-card>
-    </div>
+    </HsxPage>
 </template>
 
 <script setup lang="ts">
+import { erpEnumLabel } from '@/addon/hsx_erp/utils/display'
 import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import { Refresh } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { HsxDialog, HsxNotice, useFeedback, HsxTitle, HsxPage } from '@/addon/hsx_components/core'
+const feedback = useFeedback()
+const reminderClosing = ref({ refurbish: false, turnover: false })
 import { getErpDashboard, getErpKpiDashboard, getErpKpiRules, saveErpKpiRules } from '@/addon/hsx_erp/api/erp'
 import { useErpPageRefresh } from '@/addon/hsx_erp/hooks/useErpPageRefresh'
 import { dismissErpRefurbishReminder, dismissErpTurnoverReminder } from '@/addon/hsx_erp/api/config'
@@ -218,7 +211,7 @@ async function loadDashboard() {
         if (sequence !== dashboardLoadSequence) return
         data.value = {}
         kpi.value = {}
-        ElMessage.error(error?.message || error?.msg || '经营数据加载失败，请稍后重试')
+        feedback.error(error?.message || error?.msg || '经营数据加载失败，请稍后重试')
     } finally {
         if (sequence === dashboardLoadSequence) loading.value = false
     }
@@ -233,15 +226,25 @@ function goTurnoverQueue() {
 }
 
 async function dismissRefurbish(mode: 'today' | 'forever') {
-    await dismissErpRefurbishReminder(mode)
-    ElMessage.success(mode === 'forever' ? '已永久关闭整备积压提醒，可在业务规则中重新开启' : '今天不再提醒')
-    await loadDashboard()
+    if (reminderClosing.value.refurbish) return
+    if (mode === 'forever' && !await feedback.confirm({ title: '关闭整备积压提醒？', message: '只关闭提醒，不影响设备数据和待办。以后可在ERP业务规则中重新开启。', confirmText: '关闭此提醒' })) return
+    reminderClosing.value.refurbish = true
+    try {
+        await dismissErpRefurbishReminder(mode)
+        feedback.success(mode === 'forever' ? '已关闭整备积压提醒，可在业务规则中重新开启' : '今天不再提醒')
+        await loadDashboard()
+    } finally { reminderClosing.value.refurbish = false }
 }
 
 async function dismissTurnover(mode: 'today' | 'forever') {
-    await dismissErpTurnoverReminder(mode)
-    ElMessage.success(mode === 'forever' ? '已永久关闭库存周转提醒，可在业务规则中重新开启' : '今天不再提醒')
-    await loadDashboard()
+    if (reminderClosing.value.turnover) return
+    if (mode === 'forever' && !await feedback.confirm({ title: '关闭库存周转提醒？', message: '只关闭提醒，不影响设备数据和待办。以后可在ERP业务规则中重新开启。', confirmText: '关闭此提醒' })) return
+    reminderClosing.value.turnover = true
+    try {
+        await dismissErpTurnoverReminder(mode)
+        feedback.success(mode === 'forever' ? '已关闭库存周转提醒，可在业务规则中重新开启' : '今天不再提醒')
+        await loadDashboard()
+    } finally { reminderClosing.value.turnover = false }
 }
 
 async function openKpiConfig() {
@@ -252,7 +255,7 @@ async function openKpiConfig() {
 
 async function saveKpiConfig() {
     kpiSaving.value = true
-    try { await saveErpKpiRules(kpiRules.value); ElMessage.success('绩效配置已保存'); kpiConfigVisible.value = false; await loadDashboard() }
+    try { await saveErpKpiRules(kpiRules.value); feedback.success('绩效配置已保存'); kpiConfigVisible.value = false; await loadDashboard() }
     finally { kpiSaving.value = false }
 }
 
@@ -311,7 +314,7 @@ function money(value: any) {
 }
 
 function settlementLabel(type: string) {
-    return ({ receipt: '收款', payment: '付款', offset: '折账' } as Record<string, string>)[type] || type || '-'
+    return erpEnumLabel(type, { receipt: '收款', payment: '付款', offset: '折账' }, '其他结算')
 }
 
 function settlementType(type: string) {
@@ -319,7 +322,7 @@ function settlementType(type: string) {
 }
 
 function financeStatus(status: string, action: string) {
-    return ({ settled: '已结清', partial: `部分${action}`, pending: `待${action}`, void: '已作废' } as Record<string, string>)[status] || status || '-'
+    return erpEnumLabel(status, { settled: '已结清', partial: `部分${action}`, pending: `待${action}`, void: '已作废' })
 }
 
 function formatTime(value: any) {

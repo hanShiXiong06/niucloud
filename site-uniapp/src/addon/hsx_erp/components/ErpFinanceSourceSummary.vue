@@ -22,7 +22,6 @@
             <text v-if="openingSettleMethod">结算约定：{{ openingSettleMethod }}</text>
             <text v-if="settleSummary">结算进度：{{ settleSummary }}</text>
         </view>
-        <view v-if="meta.source_plugin_name" class="finance-source__plugin">来源插件：{{ meta.source_plugin_name }}</view>
         <view v-if="meta.business_reason" class="finance-source__reason">
             <text class="finance-source__reason-label">业务说明：</text>{{ meta.business_reason }}
         </view>
@@ -31,6 +30,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { erpOptionLabel } from '@/addon/hsx_erp/utils/display'
 import {
     erpFinanceSourceMeta,
     erpFinanceSourceTagType,
@@ -54,16 +54,16 @@ const showInternalSourceNo = computed(() => Boolean(
     meta.value.internal_source_no
     && meta.value.internal_source_no !== meta.value.source_no
 ))
-const bizSceneName = computed(() => sceneNames[meta.value.biz_scene] || '插件业务')
+const bizSceneName = computed(() => sceneNames[meta.value.biz_scene] || '其他业务')
 const directionName = computed(() => {
     const value = String(meta.value.direction || '').toLowerCase()
     return ['expense', 'out', 'payable', 'decrease'].includes(value) || props.direction === 'payable' ? '支出' : '收入'
 })
-const openingSettleMethod = computed(() => plainText(
-    props.row?.opening_settle_method
-    || props.row?.settle_method
-    || props.row?.source_order?.settle_method
-))
+const openingSettleMethod = computed(() => {
+    const value = plainText(props.row?.opening_settle_method || props.row?.settle_method || props.row?.source_order?.settle_method)
+    const labels: Record<string, string> = { cash: '现结', credit: '挂账', offset: '往来折抵', online: '线上支付', offline: '线下支付' }
+    return labels[value] || erpOptionLabel(value, value, '')
+})
 const settleSummary = computed(() => plainText(props.row?.settle_summary))
 
 const sceneNames: Record<string, string> = {

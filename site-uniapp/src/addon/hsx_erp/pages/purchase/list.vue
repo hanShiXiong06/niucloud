@@ -47,7 +47,7 @@
                             <text class="batch-payment-text">采购款：已付 ¥{{ money(batch.paid_amount) }} · 未付 ¥{{ money(batch.unpaid_amount) }}</text>
                         </view>
                         <view class="batch-meta">
-                            <text class="batch-time">{{ formatErpTime(batch.rows[0]?.purchase_at) }} · {{ batch.origin_name || 'ERP采购' }}{{ batch.origin_plugin_name ? ' · ' + batch.origin_plugin_name : '' }}</text>
+                            <text class="batch-time">{{ formatErpTime(batch.rows[0]?.purchase_at) }} · {{ erpSourceLabel(batch.origin_name, 'ERP采购') }}</text>
                         </view>
                     </view>
                     <view
@@ -133,7 +133,9 @@ import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
 import { erpTimeLine, formatErpTime } from '@/addon/hsx_erp/hooks/useErpTime'
 import { erpSpecLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
 import { erpPartyDisplayName } from '@/addon/hsx_erp/hooks/useErpPartyText'
+import { erpSourceLabel } from '@/addon/hsx_erp/utils/display'
 import { ERP_DICT_FALLBACK, dictLabel, dictTabs, dictType, loadErpDicts, type ErpDictMap } from '@/addon/hsx_erp/api/dict'
+import { showErpError } from '@/addon/hsx_erp/utils/error'
 
 const keyword = ref('')
 const list = ref<any[]>([])
@@ -211,7 +213,10 @@ const queryList = async (pageNo: number, pageSize: number) => {
             expandedBatchKeys.value = new Set(rows.map((row: any) => String(row.purchase_order_id || row.purchase_no || row.id)))
         }
         pagingRef.value?.complete(rows)
-    } catch { pagingRef.value?.complete(false) }
+    } catch (error) {
+        pagingRef.value?.complete(false)
+        showErpError(error, '采购记录加载失败，请检查网络后重试')
+    }
 }
 
 function applyFilter() { reload() }

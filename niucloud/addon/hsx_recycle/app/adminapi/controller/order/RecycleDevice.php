@@ -485,7 +485,11 @@ class RecycleDevice extends BaseAdminController
         // 仓库数据只通过统一事件契约读取，回收插件不依赖 ERP 的表或具体服务类。
         $capability = new RecycleErpCapabilityService();
         $siteId = (int)$this->request->siteId();
-        $erpConnected = $capability->isEnabled($siteId);
+        $params = $this->request->params([['device_id', 0]]);
+        $deviceId = (int)$params['device_id'];
+        $erpConnected = $deviceId > 0
+            ? $capability->isPaymentManaged($siteId, 0, [$deviceId])
+            : $capability->isEnabled($siteId);
         if (!$erpConnected) {
             return success([
                 'items' => RecycleOrderDict::getSaleDestinationOptions(),

@@ -10,6 +10,9 @@ use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\validate\RecycleOrderValidate;
 use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpCapabilityService;
 use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpFinanceBridgeService;
+use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpIntegrationService;
+use addon\hsx_recycle\app\service\core\recycle_order\RecyclePaymentOwnershipService;
+use app\service\admin\auth\AuthService;
 use core\base\BaseAdminController;
 use core\exception\CommonException;
 use think\App;
@@ -253,7 +256,7 @@ class RecycleOrder extends BaseAdminController
         // 参数验证
         $this->validate->scene('payment')->check(array_merge(['id' => $id], $data));
 
-        if ((new RecycleErpCapabilityService())->isPaymentManaged($this->request->siteId())) {
+        if ((new RecycleErpCapabilityService())->isPaymentManaged($this->request->siteId(), $id)) {
             return success($this->settleByErp($id, $this->orderDeviceIds($id), $data));
         }
         (new RecycleDevicePaymentService())->assertOrderPaymentAllowed($id);
@@ -287,7 +290,7 @@ class RecycleOrder extends BaseAdminController
         // 参数验证
         $this->validate->scene('payment')->check(array_merge(['id' => $id], $data));
 
-        if ((new RecycleErpCapabilityService())->isPaymentManaged($this->request->siteId())) {
+        if ((new RecycleErpCapabilityService())->isPaymentManaged($this->request->siteId(), $id)) {
             return success($this->settleByErp($id, $this->orderDeviceIds($id), $data));
         }
         (new RecycleDevicePaymentService())->assertOrderPaymentAllowed($id);
@@ -319,12 +322,13 @@ class RecycleOrder extends BaseAdminController
         ]);
         $data = $this->fillPaymentInfo($data);
 
-        $deviceIds = array_values(array_unique(array_filter(array_map('intval', (array)($data['device_ids'] ?? [])))));
-        if ((new RecycleErpCapabilityService())->isPaymentManaged($this->request->siteId())) {
+        if (!is_array($data['device_ids']) || $data['device_ids'] === []) throw new CommonException('请选择需要付款的设备');
+        $deviceIds = RecyclePaymentOwnershipService::deviceIds($data['device_ids']);
+        if ((new RecycleErpCapabilityService())->isPaymentManaged($this->request->siteId(), $id, $deviceIds)) {
             return success($this->settleByErp($id, $deviceIds, $data));
         }
 
-        // 未安装ERP时继续使用回收插件原有本地打款事实。
+        // 该批设备确由回收负责时，保留本地付款入口；不是仅凭插件安装状态分流。
         return success((new RecycleDevicePaymentService())->payDevices($id, $data));
     }
 
@@ -335,14 +339,40 @@ class RecycleOrder extends BaseAdminController
      */
     public function capitalAccountOptions()
     {
-        $capability = (new RecycleErpCapabilityService())->paymentCapability($this->request->siteId());
+        $params = $this->request->params([['order_id', 0], ['device_ids', []]]);
+        $capability = (new RecycleErpCapabilityService())->paymentCapability(
+            $this->request->siteId(), (int)$params['order_id'], (array)$params['device_ids']
+        );
         $accounts = [];
-        $erpConnected = (bool)$capability['erp_connected'];
-        if ($erpConnected) {
+        if ($capability['payment_managed_by_erp'] && $capability['erp_connected']) {
             $accounts = (new RecycleErpFinanceBridgeService())->capitalAccountOptions($this->request->siteId());
         }
 
         return success(array_merge(['accounts' => $accounts], $capability));
+    }
+
+    public function erpIntegration()
+    {
+        $this->assertIntegrationPermission(false);
+        return success((new RecycleErpIntegrationService())->get($this->request->siteId()));
+    }
+
+    public function saveErpIntegration()
+    {
+        $this->assertIntegrationPermission(true);
+        $data = $this->request->params([['mode', ''], ['confirm', false]]);
+        return success((new RecycleErpIntegrationService())->save(
+            $this->request->siteId(), (string)$data['mode'], in_array($data['confirm'], [true, 1, '1'], true)
+        ));
+    }
+
+    /** 复用已有下单设置权限，手工升级无需重置菜单；未注册的新接口也不能越权。 */
+    private function assertIntegrationPermission(bool $write): void
+    {
+        if (AuthService::isSuperAdmin()) return;
+        $keys = array_column((new AuthService())->getAuthMenuList(), 'menu_key');
+        $key = $write ? 'recycle_order_submit_config_save' : 'recycle_order_submit_config';
+        if (!in_array($key, $keys, true)) throw new CommonException('没有修改或查看回收联动设置的权限');
     }
 
     /**
@@ -350,14 +380,10 @@ class RecycleOrder extends BaseAdminController
      */
     private function orderDeviceIds(int $orderId): array
     {
-        try {
-            return array_map('intval', RecycleDevice::where([
+        return array_map('intval', RecycleDevice::where([
                 ['order_id', '=', $orderId],
                 ['site_id', '=', $this->request->siteId()],
-            ])->column('id'));
-        } catch (\Throwable $e) {
-            return [];
-        }
+        ])->column('id'));
     }
 
     private function settleByErp(int $orderId, array $deviceIds, array $data): array

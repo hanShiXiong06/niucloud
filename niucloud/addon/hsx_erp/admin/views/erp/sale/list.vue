@@ -129,7 +129,7 @@
                             <span class="font-medium">{{ row.sale_no || '-' }}</span>
                         </div>
                         <div v-if="isBatchFirst($index)" class="mt-1 text-xs font-medium text-blue-600">本页同批 {{ batchPageSize(row) }} 件</div>
-                        <div class="mt-1 text-xs text-slate-500">来源：{{ row.origin_name || 'ERP销售' }}<span v-if="row.origin_plugin_name">· {{ row.origin_plugin_name }}</span></div>
+                        <div class="mt-1 text-xs text-slate-500">来源：{{ erpSourceLabel(row.origin_name, 'ERP销售') }}</div>
                         <div class="mt-1 text-xs text-gray-500">渠道：{{ row.sale_channel || '-' }}</div>
                         <div class="mt-1 text-xs text-gray-500">{{ formatTime(row.sale_at || row.create_at) }}</div>
                         <div class="mt-1 text-xs text-gray-400">业务员：{{ row.salesman_name || '-' }}</div>
@@ -227,9 +227,6 @@
                             <div class="mt-1 flex flex-wrap gap-1">
                                 <el-tag v-if="stock.item_type === 'device' && (row.catalog_product_name || row.category_name)" size="small" effect="plain" type="info">{{ row.catalog_product_name || row.category_name }}</el-tag>
                                 <el-tag v-if="isConsigned(row)" size="small" effect="plain" type="warning">客户代卖</el-tag>
-                                <el-tooltip v-if="row.asset_no" :content="`资产号：${row.asset_no}`" placement="top">
-                                    <el-tag size="small" effect="plain">资产</el-tag>
-                                </el-tooltip>
                             </div>
                         </template>
                     </el-table-column>
@@ -291,7 +288,7 @@
                 <el-descriptions v-if="detail.data" :column="4" border>
                     <el-descriptions-item label="销售单号">{{ detail.data.sale_no }}</el-descriptions-item>
                     <el-descriptions-item label="客户">{{ detail.data.party_name }}</el-descriptions-item>
-                    <el-descriptions-item label="业务来源">{{ detail.data.origin_name || 'ERP销售' }}<span v-if="detail.data.origin_plugin_name">· {{ detail.data.origin_plugin_name }}</span></el-descriptions-item>
+                    <el-descriptions-item label="业务来源">{{ erpSourceLabel(detail.data.origin_name, 'ERP销售') }}</el-descriptions-item>
                     <el-descriptions-item label="销售渠道">{{ detail.data.sale_channel || '-' }}</el-descriptions-item>
                     <el-descriptions-item label="原业务单号">{{ detail.data.origin_no || detail.data.sale_no || '-' }}</el-descriptions-item>
                     <el-descriptions-item label="制单员">{{ detail.data.salesman_name || '-' }}</el-descriptions-item>
@@ -339,6 +336,7 @@
 </template>
 
 <script setup lang="ts">
+import { erpEnumLabel, erpSourceLabel } from '@/addon/hsx_erp/utils/display'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -775,7 +773,7 @@ function statusMeta(status: string) {
         settled: { label: '已结清', type: 'success' },
         void: { label: '已取消', type: 'info' }
     }
-    return map[status] || { label: status || '-', type: 'info' }
+    return map[status] || { label: '状态待确认', type: 'info' }
 }
 
 function orderStatusMeta(status: string) {
@@ -784,7 +782,7 @@ function orderStatusMeta(status: string) {
         returned: { label: '已退货', type: 'warning' },
         void: { label: '已取消', type: 'info' }
     }
-    return map[status] || { label: status || '-', type: 'info' }
+    return map[status] || { label: '状态待确认', type: 'info' }
 }
 
 function saleStateMeta(row: any) {
@@ -806,7 +804,7 @@ function saleStateHint(row: any) {
 
 function saleItemStatusLabel(status: string) {
     const map: any = { sold: '已出库', returned: '已销售退货', void: '已取消销售' }
-    return map[status] || status || '-'
+    return erpEnumLabel(status, map)
 }
 
 function compactDeviceInfo(row: any) {
@@ -846,7 +844,7 @@ function formatTime(value: any) {
 }
 
 function staffName(user: any) {
-    return user?.name || user?.real_name || user?.username || `员工#${user?.uid || '-'}`
+    return user?.name || user?.real_name || user?.username || '姓名未登记'
 }
 
 function batchKey(row: any) {

@@ -167,6 +167,7 @@
 </template>
 
 <script setup lang="ts">
+import { erpEnumLabel } from '@/addon/hsx_erp/utils/display'
 import { ref, computed, reactive } from 'vue'
 import { useRoute } from 'vue-router'
 import { Plus, Refresh, Search } from '@element-plus/icons-vue'
@@ -467,7 +468,7 @@ function statusLabel(status: string, businessType = '') {
     const map: Record<string, string> = {
         pending: '待确认收货', confirmed: '已完成退货', cancelled: '已取消',
     }
-    return map[status] || status
+    return erpEnumLabel(status, map)
 }
 function statusTagType(status: string) {
     const map: Record<string, string> = {
@@ -477,7 +478,7 @@ function statusTagType(status: string) {
 }
 function refundModeLabel(mode: string) {
     const map: Record<string, string> = { cash: '现场退款', payable: '转财务退款', offset: '往来折抵' }
-    return map[mode] || mode
+    return erpEnumLabel(mode, map, '退款方式待确认')
 }
 function businessTypeLabel(type: string) {
     return type === 'after_sale_compensation' ? '售后补差' : '退货退款'

@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace addon\hsx_wecom\app\service\core;
 
+use addon\hsx_wecom\app\model\WecomCorpAuthorization;
+use addon\hsx_wecom\app\model\WecomProviderSuite;
 use core\exception\CommonException;
 use think\facade\Cache;
 
@@ -40,9 +42,7 @@ final class WecomClient
             'enable_duplicate_check' => 1,
             'duplicate_check_interval' => 1800,
         ];
-        return $this->request('POST', '/message/send', [
-            'access_token' => $this->accessToken($config),
-        ], $payload);
+        return $this->sendMessage($config, $userId, $payload);
     }
 
     public function sendTaskCard(array $config, string $userId, array $card): array
@@ -97,9 +97,39 @@ final class WecomClient
             'enable_duplicate_check' => 1,
             'duplicate_check_interval' => 1800,
         ];
-        return $this->request('POST', '/message/send', [
-            'access_token' => $this->accessToken($config),
-        ], $payload);
+        return $this->sendMessage($config, $userId, $payload);
+    }
+
+    /**
+     * 为具有客户联系权限的成员生成“联系我”二维码。
+     * 调用方必须准备备用二维码；客户联系权限不足时本方法会明确抛错，由业务插件降级。
+     */
+    public function addContactWay(array $config, array $userIds, string $state, string $remark = ''): array
+    {
+        $userIds = array_values(array_unique(array_filter(array_map(
+            static fn($item): string => trim((string)$item),
+            $userIds
+        ))));
+        if ($userIds === []) throw new CommonException('企业微信联系我缺少使用成员');
+        $payload = [
+            'type' => count($userIds) > 1 ? 2 : 1,
+            'scene' => 2,
+            'style' => 1,
+            'remark' => mb_substr(trim($remark), 0, 30),
+            'skip_verify' => true,
+            'state' => mb_substr(preg_replace('/[^a-zA-Z0-9_-]/', '', $state) ?: '', 0, 30),
+            'user' => $userIds,
+        ];
+        try {
+            return $this->request('POST', '/externalcontact/add_contact_way', [
+                'access_token' => $this->accessToken($config),
+            ], $payload);
+        } catch (CommonException $e) {
+            if (!$this->isAccessTokenError($e->getMessage())) throw $e;
+            return $this->request('POST', '/externalcontact/add_contact_way', [
+                'access_token' => $this->accessToken($config, true),
+            ], $payload);
+        }
     }
 
     /** 构造企业微信自建应用的静默网页授权地址。 */
@@ -222,6 +252,21 @@ final class WecomClient
 
     private function accessToken(array $config, bool $refresh = false): string
     {
+        if (($config['credential_mode'] ?? $config['connection_mode'] ?? '') === 'provider') {
+            $suiteId = (int)($config['provider_suite_id'] ?? 0);
+            $authorizationId = (int)($config['corp_authorization_id'] ?? 0);
+            $suite = WecomProviderSuite::where('id', '=', $suiteId)->findOrEmpty();
+            $authorization = WecomCorpAuthorization::where('id', '=', $authorizationId)->findOrEmpty();
+            if ($suite->isEmpty() || $authorization->isEmpty()) {
+                throw new CommonException('企业微信服务商授权上下文不存在，请重新授权');
+            }
+            if ((int)$authorization->site_id !== (int)($config['site_id'] ?? 0)
+                || (int)$authorization->provider_suite_id !== (int)$suite->id
+                || trim((string)$authorization->auth_corpid) !== trim((string)($config['auth_corpid'] ?? $config['corp_id'] ?? ''))) {
+                throw new CommonException('企业微信站点、授权企业与服务商通道不一致，已停止发送');
+            }
+            return (new WecomProviderCredentialService())->corpAccessToken($suite, $authorization, $refresh);
+        }
         $corpId = trim((string)($config['corp_id'] ?? ''));
         $secret = trim((string)($config['secret'] ?? ''));
         if ($corpId === '' || $secret === '' || (int)($config['agent_id'] ?? 0) <= 0) {
@@ -237,6 +282,57 @@ final class WecomClient
         if ($token === '') throw new CommonException('企业微信未返回 access_token');
         Cache::set($cacheKey, $token, max(60, (int)($response['expires_in'] ?? 7200) - 300));
         return $token;
+    }
+
+    /**
+     * 企业微信可能在 errcode=0 时通过 invaliduser/unlicenseduser 告知部分接收人未送达。
+     * 当前插件每次只给一个员工发送，因此只要出现这些字段就必须按失败处理，不能写成“已送达”。
+     */
+    private function sendMessage(array $config, string $userId, array $payload): array
+    {
+        try {
+            $response = $this->request('POST', '/message/send', [
+                'access_token' => $this->accessToken($config),
+            ], $payload);
+        } catch (CommonException $e) {
+            if (!$this->isAccessTokenError($e->getMessage())) throw $e;
+            $response = $this->request('POST', '/message/send', [
+                'access_token' => $this->accessToken($config, true),
+            ], $payload);
+        }
+
+        $this->assertRecipientAccepted($response, $userId);
+        return $response;
+    }
+
+    private function isAccessTokenError(string $message): bool
+    {
+        foreach (['40014', '42001', '40001', '42007', '42009'] as $code) {
+            if (str_contains($message, $code)) return true;
+        }
+        return false;
+    }
+
+    private function assertRecipientAccepted(array $response, string $userId): void
+    {
+        $invalid = $this->recipientList($response['invaliduser'] ?? '');
+        if ($invalid !== []) {
+            throw new CommonException('企业微信未接收该员工消息：成员不在应用可见范围或身份绑定已失效（' . $userId . '）');
+        }
+        $unlicensed = $this->recipientList($response['unlicenseduser'] ?? '');
+        if ($unlicensed !== []) {
+            throw new CommonException('企业微信未接收该员工消息：该成员尚未分配接口调用许可（' . $userId . '）');
+        }
+    }
+
+    private function recipientList(mixed $value): array
+    {
+        if (is_array($value)) {
+            return array_values(array_filter(array_map(static fn($item): string => trim((string)$item), $value)));
+        }
+        $value = trim((string)$value);
+        if ($value === '') return [];
+        return array_values(array_filter(preg_split('/[|,;]+/', $value) ?: []));
     }
 
     private function request(string $method, string $path, array $query = [], array $json = []): array
@@ -263,7 +359,9 @@ final class WecomClient
         $result = json_decode((string)$body, true);
         if (!is_array($result)) throw new CommonException('企业微信接口返回格式异常');
         if ((int)($result['errcode'] ?? 0) !== 0) {
-            throw new CommonException('企业微信接口错误：' . (string)($result['errmsg'] ?? $result['errcode']));
+            $code = (int)$result['errcode'];
+            $message = trim((string)($result['errmsg'] ?? ''));
+            throw new CommonException('企业微信接口错误 ' . $code . '：' . ($message !== '' ? $message : '未知错误'));
         }
         return $result;
     }

@@ -5,13 +5,16 @@
     subtitle="基于质检结果确定回收报价和整备安排"
     width="lg"
     :loading="submitting"
-    :confirm-disabled="!isFormValid"
+    :confirm-disabled="!isFormValid || saleDestinationLoading || !!saleDestinationError"
     confirm-text="确认回收定价"
     @update:visible="dialogVisible = $event"
     @confirm="handleConfirm"
     @cancel="handleCancel"
   >
     <div class="pfd-body">
+      <HsxNotice v-if="saleDestinationLoading || saleDestinationError" class="mb-4" :type="saleDestinationError ? 'error' : 'info'" :closable="false" :title="saleDestinationLoading ? '正在核对联动配置，核对完成前不能提交定价。' : saleDestinationError">
+        <template #actions><el-button v-if="saleDestinationError" link type="primary" @click="loadSaleDestinationOptions">重新加载联动配置</el-button></template>
+      </HsxNotice>
 
       <!-- ===== 设备信息卡片 ===== -->
       <DeviceInfoCard :device="deviceData" mode="full" :show-status="false" />
@@ -30,10 +33,7 @@
           </div>
 
 
-          <div class="pfd-process-note">
-            <strong>流程边界</strong>
-            <span>质检只描述设备事实；回收定价负责报价、整备决策和负责人安排。</span>
-          </div>
+          <HsxNotice class="mt-3" title="定价时要做什么？" description="质检只描述设备事实；回收定价负责报价、整备决策和负责人安排。" :reset-key="deviceData.id" />
         </aside>
 
         <div class="pfd-main">
@@ -132,7 +132,7 @@
                     </div>
                   </div>
                 </div>
-                <div class="pfd-hint">销售流向由仓库业务类型自动确定，无需重复选择。<template v-if="saleDestinationDescription">{{ saleDestinationDescription }}</template></div>
+                <HsxNotice class="mt-3" title="仓库决定后续销售流程" :description="saleDestinationDescription || '销售流向由仓库业务类型自动确定，无需重复选择。'" :reset-key="deviceData.id" />
               </template>
 
               <!-- 渠道模式：ERP 未连接 → 固定渠道单选 -->
@@ -261,7 +261,8 @@
 
 <script setup lang="ts">
 import { ref, watch, computed, reactive, onMounted, onBeforeUnmount } from 'vue'
-import { ElMessage } from 'element-plus'
+import { HsxNotice, useFeedback } from '@/addon/hsx_components/core'
+const feedback = useFeedback()
 import DeviceInfoCard from './DeviceInfoCard.vue'
 import FormDialog from '@/addon/hsx_recycle/components/FormDialog.vue'
 import { getDevice, getRefurbishmentOptions, getSaleDestinationOptions, getRefurbishmentAssigneeOptions } from '@/addon/hsx_recycle/api/recycle_order'
@@ -323,6 +324,8 @@ interface ErpWarehouse {
 }
 const erpWarehouses = ref<ErpWarehouse[]>([])
 const erpConnected = ref(false)
+const saleDestinationLoading = ref(false)
+const saleDestinationError = ref('')
 // 级联选择：仓库 → 库位，一个控件搞定（可只选到仓库，也可选到库位）
 const warehousePath = ref<number[]>([])
 
@@ -602,9 +605,20 @@ watch([erpWarehouses, () => deviceForm.target_warehouse_id, () => deviceForm.tar
     }
 }, { deep: true })
 
+let saleDestinationRequestId = 0
 const loadSaleDestinationOptions = async () => {
+    const requestId = ++saleDestinationRequestId
+    const deviceId = Number(props.device?.id)
+    if (!Number.isInteger(deviceId) || deviceId <= 0) {
+        saleDestinationLoading.value = false
+        saleDestinationError.value = '设备信息尚未就绪，请加载设备后重新核对联动配置。'
+        return
+    }
+    saleDestinationLoading.value = true
+    saleDestinationError.value = ''
     try {
-        const res: any = await getSaleDestinationOptions()
+        const res: any = await getSaleDestinationOptions(deviceId)
+        if (requestId !== saleDestinationRequestId || Number(props.device?.id) !== deviceId) return
         saleDestinationOptions.value = res.data?.items || []
         erpWarehouses.value = (Array.isArray(res.data?.warehouses) ? res.data.warehouses : []).map(normalizeWarehouse)
         erpConnected.value = !!res.data?.erp_connected
@@ -612,9 +626,9 @@ const loadSaleDestinationOptions = async () => {
             deviceForm.sale_destination = saleDestinationOptions.value[0]?.value || ''
         }
     } catch (e) {
-        saleDestinationOptions.value = []
-        erpWarehouses.value = []
-        erpConnected.value = false
+        if (requestId === saleDestinationRequestId) saleDestinationError.value = '联动配置查询失败，未提交定价。请重新加载，不会自动切换为未联动模式。'
+    } finally {
+        if (requestId === saleDestinationRequestId) saleDestinationLoading.value = false
     }
 }
 
@@ -655,20 +669,24 @@ watch(dialogVisible, (v) => { emit('update:visible', v) })
 
 const handleCancel = () => { dialogVisible.value = false; emit('cancel') }
 const handleConfirm = () => {
-    if (!isFormValid.value) { ElMessage.warning('请输入有效的价格'); return }
+    if (saleDestinationLoading.value || saleDestinationError.value) {
+        feedback.warning(saleDestinationError.value || '请先完成联动配置核对')
+        return
+    }
+    if (!isFormValid.value) { feedback.warning('请输入有效的价格'); return }
     if (erpConnected.value && !erpWarehouses.value.length) {
-        ElMessage.warning('ERP 尚无可用仓库和库位，请先完成仓库配置')
+        feedback.warning('ERP 尚无可用仓库和库位，请先完成仓库配置')
         return
     }
     // 提交前以级联控件当前值为准再同步一次，杜绝“看起来已选中、实际字段为空”。
     const selectedPath = normalizeWarehousePath(warehousePath.value)
     if (warehouseMode.value && selectedPath.length > 0) applyPath(selectedPath)
     if (erpConnected.value && (!deviceForm.target_warehouse_id || !deviceForm.target_location_id)) {
-        ElMessage.warning('ERP 入库必须选择仓库和具体库位')
+        feedback.warning('ERP 入库必须选择仓库和具体库位')
         return
     }
     if (deviceForm.refurbishment_required === 1 && !deviceForm.refurbishment_assignee_uid) {
-        ElMessage.warning('请选择整备负责人')
+        feedback.warning('请选择整备负责人')
         return
     }
     emit('confirm', {
@@ -694,11 +712,11 @@ const handleConfirm = () => {
 // 选项数据改为"首次打开时"加载，避免组件常驻挂载时在进入列表页就发起无效请求
 let optionsLoaded = false
 const ensureOptionsLoaded = () => {
+    loadSaleDestinationOptions()
     if (optionsLoaded) return
     optionsLoaded = true
     loadUsers()
     loadRefurbishmentOptions()
-    loadSaleDestinationOptions()
 }
 
 onMounted(() => {

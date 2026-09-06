@@ -19,6 +19,12 @@
 			"needLogin": true
 		},
 		{
+			"path": "app/pages/wecom/entry",
+			"style": {
+				"navigationBarTitleText": "正在打开任务"
+			}
+		},
+		{
 			"path": "app/pages/site/index",
 			"style": {
 				"navigationBarTitleText": "%pages.site.index%"

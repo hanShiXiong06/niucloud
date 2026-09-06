@@ -8,6 +8,7 @@ use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\model\address\PhoneShopPaymentInfo;
 use addon\hsx_recycle\app\service\core\recycle_order\DeviceSummaryHelper;
 use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpCapabilityService;
+use addon\hsx_recycle\app\service\core\recycle_order\RecyclePaymentOwnershipService;
 use app\model\member\Member;
 use app\model\sys\SysUser;
 use core\base\BaseAdminService;
@@ -26,16 +27,23 @@ class RecycleDeviceErpSyncService extends BaseAdminService
     private array $paymentMethodCache = [];
     /** @var array<int,array<string,array<string,string>>> 质检模板规格选项缓存。 */
     private array $specOptionLabelCache = [];
+    /** @var array<int,array{id:int,name:string,historical:bool}> 最终定价人事实快照。 */
+    private array $pricingOperatorCache = [];
 
     public function dispatch(array $deviceIds, array $targets = ['self_erp'], array $placement = []): array
     {
-        $deviceIds = array_values(array_unique(array_filter(array_map('intval', $deviceIds))));
+        $deviceIds = RecyclePaymentOwnershipService::deviceIds($deviceIds);
         $targets = array_values(array_unique(array_filter(array_map('strval', $targets))));
         if (empty($deviceIds)) {
             throw new CommonException('请选择需要同步的设备');
         }
         if (empty($targets)) {
             throw new CommonException('请选择同步目标');
+        }
+
+        if (in_array('self_erp', $targets, true)) {
+            // 先持久化责任再派发。入库失败仍由 ERP 补齐，不释放本地付款入口。
+            (new RecyclePaymentOwnershipService())->claim($this->site_id, 0, $deviceIds, 'self_erp');
         }
 
         $devices = RecycleDevice::where([
@@ -88,6 +96,17 @@ class RecycleDeviceErpSyncService extends BaseAdminService
         if (empty($results)) {
             throw new CommonException('没有可用的 ERP 接收器，请先安装并启用 ERP 插件');
         }
+        $selfErpConfirmed = false;
+        foreach ($results as $result) {
+            if (!is_array($result) || !empty($result['error']) || !in_array($result['status'] ?? '', ['processed', 'duplicate'], true)) {
+                throw new CommonException((string)($result['message'] ?? 'ERP 未确认入库成功，请检查同步状态后重试'));
+            }
+            if (($result['consumer'] ?? '') === 'hsx_erp' && ($result['target'] ?? '') === 'self_erp') {
+                if ($selfErpConfirmed) throw new CommonException('ERP 返回重复接收器，请检查事件配置后核对同步结果');
+                $selfErpConfirmed = true;
+            }
+        }
+        if (in_array('self_erp', $targets, true) && !$selfErpConfirmed) throw new CommonException('ERP 尚未确认入库成功，请核对同步结果');
 
         return [
             'event_id' => $event['event_id'],
@@ -119,25 +138,53 @@ class RecycleDeviceErpSyncService extends BaseAdminService
             throw new CommonException('设备缺少最终定价员，不能同步 ERP 采购入库');
         }
 
-        $user = SysUser::where([
-            ['uid', '=', $uid],
-            ['delete_time', '=', 0],
-        ])->field('uid,username,real_name')->findOrEmpty();
-        if ($user->isEmpty()) {
-            throw new CommonException('设备最终定价员不存在或已停用，不能同步 ERP 采购入库');
-        }
+        $operator = $this->pricingOperatorSnapshot($uid);
 
         return [
             'type' => 'staff',
+            'id' => $operator['id'],
+            'name' => $operator['name'],
+            'source' => 'recycle_pricing',
+            'historical' => $operator['historical'],
+        ];
+    }
+
+    /**
+     * 定价人是已发生的业务事实。员工后来离职、停用或删除，不能反向阻断
+     * 历史设备入库；当前手工采购的人员权限仍由 ERP 自己严格校验。
+     *
+     * @return array{id:int,name:string,historical:bool}
+     */
+    private function pricingOperatorSnapshot(int $uid): array
+    {
+        if ($uid <= 0) {
+            return ['id' => 0, 'name' => '', 'historical' => true];
+        }
+        if (isset($this->pricingOperatorCache[$uid])) {
+            return $this->pricingOperatorCache[$uid];
+        }
+
+        $user = SysUser::withTrashed()->where('uid', '=', $uid)
+            ->field('uid,username,real_name,status,delete_time')
+            ->findOrEmpty();
+        if ($user->isEmpty()) {
+            return $this->pricingOperatorCache[$uid] = [
+                'id' => $uid,
+                'name' => '历史定价员#' . $uid,
+                'historical' => true,
+            ];
+        }
+
+        return $this->pricingOperatorCache[$uid] = [
             'id' => (int)$user->uid,
             'name' => (string)($user->real_name ?: $user->username ?: ('员工#' . $user->uid)),
-            'source' => 'recycle_pricing',
+            'historical' => (int)($user->status ?? 1) !== 1 || (int)($user->delete_time ?? 0) > 0,
         ];
     }
 
     /**
      * 批量查询设备的下游同步健康度（仅"卡住"的需要显示「重新同步」）。
-     * 解耦：发 GetErpDeviceSyncHealth 事件向 ERP 问；ERP 未装则无人应答 → 全部视为健康(stuck=false)，前端不显示按钮。
+     * 独立回收显示不适用，ERP 未响应显示未知，绝不把查询失败包装为已入库。
      * @param array $deviceIds
      * @return array device_id => ['stuck'=>bool, ...]
      */
@@ -149,23 +196,18 @@ class RecycleDeviceErpSyncService extends BaseAdminService
         }
 
         $merged = [];
-        $missingPlacement = [];
-        if ((new RecycleErpCapabilityService())->isEnabled($this->site_id)) {
-            $rows = RecycleDevice::where([['site_id', '=', $this->site_id]])
-                ->whereIn('id', $deviceIds)
-                ->field('id,target_warehouse_id,target_location_id')
-                ->select()
-                ->toArray();
-            foreach ($rows as $row) {
-                if ((int)$row['target_warehouse_id'] <= 0 || (int)$row['target_location_id'] <= 0) {
-                    $missingPlacement[(int)$row['id']] = true;
-                }
-            }
+        $ownership = (new RecyclePaymentOwnershipService())->inspect($this->site_id, 0, $deviceIds);
+        $rows = RecycleDevice::where([['site_id', '=', $this->site_id]])->whereIn('id', $deviceIds)
+            ->field('id,target_warehouse_id,target_location_id')->select()->toArray();
+        $placements = array_column($rows, null, 'id');
+        $erpIds = [];
+        foreach ($ownership['devices'] as $id => $device) {
+            if ($device['owner'] === 'self_erp') $erpIds[] = (int)$id;
         }
         try {
-            $results = (array)event('GetErpDeviceSyncHealth', [
+            $results = $erpIds === [] || !$ownership['installed'] ? [] : (array)event('GetErpDeviceSyncHealth', [
                 'site_id' => $this->site_id,
-                'source_device_ids' => $deviceIds,
+                'source_device_ids' => $erpIds,
             ]);
             foreach ($results as $resp) {
                 if (is_array($resp)) {
@@ -180,10 +222,21 @@ class RecycleDeviceErpSyncService extends BaseAdminService
             $merged = [];
         }
 
-        // 没有应答(ERP 未装)的设备 → 视为健康，不显示按钮
         $out = [];
         foreach ($deviceIds as $id) {
-            if (isset($missingPlacement[$id]) && empty($merged[$id]['has_asset'])) {
+            $owner = $ownership['devices'][$id]['owner'];
+            if ($owner === 'local') {
+                $out[$id] = ['stuck' => false, 'has_asset' => false, 'applicable' => false,
+                    'payment_owner' => 'local', 'reason' => '由回收独立处理，无需 ERP 入库'];
+                continue;
+            }
+            if ($owner === 'unknown' || !isset($merged[$id])) {
+                $out[$id] = ['stuck' => true, 'has_asset' => null, 'unknown' => true, 'payment_owner' => $owner,
+                    'reason' => '未能确认 ERP 状态，请检查插件服务及设备关联；不可在回收中重复付款'];
+                continue;
+            }
+            if (((int)($placements[$id]['target_warehouse_id'] ?? 0) <= 0 || (int)($placements[$id]['target_location_id'] ?? 0) <= 0)
+                && empty($merged[$id]['has_asset'])) {
                 $out[$id] = [
                     'stuck' => true,
                     'has_asset' => false,
@@ -192,7 +245,7 @@ class RecycleDeviceErpSyncService extends BaseAdminService
                 ];
                 continue;
             }
-            $out[$id] = $merged[$id] ?? ['stuck' => false, 'has_asset' => true, 'reason' => ''];
+            $out[$id] = $merged[$id] + ['payment_owner' => $owner];
         }
         return $out;
     }
@@ -208,19 +261,21 @@ class RecycleDeviceErpSyncService extends BaseAdminService
         if ($deviceId <= 0) {
             throw new CommonException('设备不存在');
         }
+        (new RecyclePaymentOwnershipService())->claim($this->site_id, 0, [$deviceId], 'self_erp');
 
         $flush = function () use ($deviceId): array {
-            $merged = ['has_asset' => false, 'asset_id' => 0, 'flushed' => 0, 'still_failed' => 0];
+            $merged = null;
             $results = (array)event('ResyncErpDevice', [
                 'site_id' => $this->site_id,
                 'source_device_id' => $deviceId,
             ]);
             foreach ($results as $resp) {
                 if (is_array($resp) && array_key_exists('has_asset', $resp)) {
-                    $merged = array_merge($merged, $resp);
+                    $merged = $resp;
                     break;
                 }
             }
+            if ($merged === null) throw new CommonException('ERP 未响应同步核对，请重试；不会重复创建入库');
             return $merged;
         };
 
@@ -266,7 +321,6 @@ class RecycleDeviceErpSyncService extends BaseAdminService
     private function ensureInboundPlacement($devices, array $placement): void
     {
         $capability = new RecycleErpCapabilityService();
-        if (!$capability->isEnabled($this->site_id)) return;
 
         $repair = [];
         if (!empty($placement)) {
@@ -275,7 +329,8 @@ class RecycleDeviceErpSyncService extends BaseAdminService
                 $this->site_id,
                 (int)($placement['target_warehouse_id'] ?? 0),
                 (int)($placement['target_location_id'] ?? 0),
-                $repairType
+                $repairType,
+                true
             );
         }
 
@@ -303,7 +358,7 @@ class RecycleDeviceErpSyncService extends BaseAdminService
             $expectedType = $isConsign ? 'consignment' : '';
             $key .= ':' . $expectedType;
             if (!isset($validated[$key])) {
-                $validated[$key] = $capability->validateInboundPlacement($this->site_id, $warehouseId, $locationId, $expectedType);
+                $validated[$key] = $capability->validateInboundPlacement($this->site_id, $warehouseId, $locationId, $expectedType, true);
             }
         }
     }
@@ -322,6 +377,15 @@ class RecycleDeviceErpSyncService extends BaseAdminService
         $memberMobile = trim((string)($member['mobile'] ?? ''));
         if ($memberMobile === '') $memberMobile = trim((string)($device['order']['customer_phone'] ?? ''));
         $spec = $this->resolveDeviceSpec($device);
+        $pricingOperator = $this->pricingOperatorSnapshot((int)($device['price_uid'] ?? 0));
+        $purchaseCost = $isConsign ? 0.0 : round(max(0, (float)($device['final_price'] ?? 0)), 2);
+        $sourcePaidAmount = $isConsign ? 0.0 : round(max(0, (float)($device['pay_amount'] ?? 0)), 2);
+        // 老订单可能只有“已付款”状态而没有回填 pay_amount。已付款状态是更强的
+        // 历史事实，此时按最终成交价核销，避免 ERP 接入后再次出现在待付款列表。
+        if (!$isConsign && (int)($device['pay_status'] ?? 0) === 1 && $sourcePaidAmount <= 0) {
+            $sourcePaidAmount = $purchaseCost;
+        }
+        $sourcePaidAmount = min($purchaseCost, $sourcePaidAmount);
 
         return [
             'source_id' => (int)($device['order_id'] ?? 0),
@@ -339,7 +403,7 @@ class RecycleDeviceErpSyncService extends BaseAdminService
             'color_value' => $spec['color_value'],
             'payment_methods' => $this->paymentMethods($memberId),
             'ownership_type' => $isConsign ? 'consign' : 'owned',
-            'purchase_cost' => $isConsign ? 0 : round((float)($device['final_price'] ?? 0), 2),
+            'purchase_cost' => $purchaseCost,
             'counterparty' => [
                 'source_plugin' => $memberId > 0 ? 'niucloud' : 'hsx_recycle',
                 'source_type' => $memberId > 0 ? 'member' : 'order_customer',
@@ -351,7 +415,7 @@ class RecycleDeviceErpSyncService extends BaseAdminService
                 'mobile' => $memberMobile,
                 'contact_name' => $memberName,
             ],
-            'paid_amount' => $isConsign ? 0 : round((float)($device['pay_amount'] ?? 0), 2),
+            'paid_amount' => $sourcePaidAmount,
             'settlement_status' => $isConsign
                 ? 'consignment'
                 : ((int)($device['pay_status'] ?? 0) === 1 ? 'paid' : 'unpaid'),
@@ -363,6 +427,9 @@ class RecycleDeviceErpSyncService extends BaseAdminService
             'suggested_sale_price' => round((float)($device['sell_price'] ?? 0), 2),
             'acquired_at' => (int)($device['pay_time'] ?? $device['update_at'] ?? time()),
             'check_snapshot' => [
+                'version' => 2,
+                // 独立契约字段：只传人工说明；质检选项继续放check_result_*，不可拼进备注。
+                'human_remark' => (string)($device['remark'] ?? ''),
                 'check_template_id' => (int)($device['check_template_id'] ?? 0),
                 'check_result' => (string)($device['check_result'] ?? ''),
                 'check_result_seller' => (string)($device['check_result_seller'] ?? ''),
@@ -380,6 +447,8 @@ class RecycleDeviceErpSyncService extends BaseAdminService
                 'suggested_sale_price' => round((float)($device['sell_price'] ?? 0), 2),
                 'sale_destination' => (string)($device['sale_destination'] ?? RecycleOrderDict::SALE_DESTINATION_MALL),
                 'price_uid' => (int)($device['price_uid'] ?? 0),
+                'price_name' => $pricingOperator['name'],
+                'historical_operator' => $pricingOperator['historical'],
                 'price_at' => (int)($device['price_at'] ?? 0),
             ],
             'pricing_snapshot' => [
@@ -388,6 +457,8 @@ class RecycleDeviceErpSyncService extends BaseAdminService
                 'suggested_sale_price' => round((float)($device['sell_price'] ?? 0), 2),
                 'sale_destination' => (string)($device['sale_destination'] ?? RecycleOrderDict::SALE_DESTINATION_MALL),
                 'price_uid' => (int)($device['price_uid'] ?? 0),
+                'price_name' => $pricingOperator['name'],
+                'historical_operator' => $pricingOperator['historical'],
                 'price_at' => (int)($device['price_at'] ?? 0),
             ],
             'refurbishment' => [

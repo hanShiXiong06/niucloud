@@ -203,7 +203,7 @@
                                 <template #default="{ row }">{{ row.sheet_name }} 第{{ row.row_no }}行</template>
                             </el-table-column>
                             <el-table-column label="类型" width="110">
-                                <template #default="{ row }">{{ typeNames[row.item_type] || row.item_type }}</template>
+                                <template #default="{ row }">{{ typeNames[row.item_type] || '其他资料' }}</template>
                             </el-table-column>
                             <el-table-column label="名称 / 手机号" min-width="190">
                                 <template #default="{ row }">
@@ -274,9 +274,6 @@
                                     </el-tag>
                                 </template>
                             </el-table-column>
-                            <el-table-column label="会员 / 主体ID" width="160">
-                                <template #default="{ row }">{{ row.member_id || '-' }} / {{ row.party_id || '-' }}</template>
-                            </el-table-column>
                             <el-table-column label="涉及资料" min-width="320" show-overflow-tooltip>
                                 <template #default="{ row }">{{ (row.source_rows || []).join('、') || '-' }}</template>
                             </el-table-column>
@@ -314,8 +311,6 @@
                                 <el-table-column prop="mobile" label="登录用户名" min-width="140" />
                                 <el-table-column prop="name" label="姓名" min-width="120" />
                                 <el-table-column prop="member_no" label="会员号" min-width="120" />
-                                <el-table-column prop="member_id" label="会员ID" width="100" />
-                                <el-table-column prop="party_id" label="主体ID" width="100" />
                                 <el-table-column prop="initial_password" label="初始密码" width="110" />
                             </el-table>
                         </div>
@@ -326,8 +321,6 @@
                                 <el-table-column prop="name" label="本次姓名" min-width="120" />
                                 <el-table-column prop="account_name" label="账号现有昵称" min-width="130" />
                                 <el-table-column prop="member_no" label="会员号" min-width="120" />
-                                <el-table-column prop="member_id" label="会员ID" width="100" />
-                                <el-table-column prop="party_id" label="主体ID" width="100" />
                                 <el-table-column label="涉及资料" min-width="250" show-overflow-tooltip>
                                     <template #default="{ row }">{{ (row.source_rows || []).join('、') }}</template>
                                 </el-table-column>

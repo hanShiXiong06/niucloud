@@ -33,7 +33,7 @@
                 <view class="payee-title">客户收款资料 <text>来自回收订单，仅供核对</text></view>
                 <view v-for="(method,index) in payeeMethods" :key="`${method.pay_type}-${method.account}-${index}`" class="payee-item">
                     <view class="payee-info">
-                        <text class="payee-type">{{ method.pay_type || '其他收款方式' }}<text v-if="method.is_default" class="payee-default">默认</text></text>
+                        <text class="payee-type">{{ erpEnumLabel(method.pay_type, { alipay: '支付宝', wechat: '微信', wechat_pay: '微信支付', wxpay: '微信支付', bank: '银行卡', bank_card: '银行卡', bank_transfer: '银行转账', cash: '现金' }, '其他收款方式') }}<text v-if="method.is_default" class="payee-default">默认</text></text>
                         <text class="payee-account">{{ method.account || '未填写账号' }}</text>
                     </view>
                     <u-image v-if="method.qrcode_image" :src="img(method.qrcode_image)" width="84rpx" height="84rpx" radius="8rpx" />
@@ -42,19 +42,15 @@
 
             <!-- 汇总行 -->
             <view class="summary-row">
+                <view class="summary-item"><text class="summary-label">应付总额（含调价）</text><text class="summary-value">¥{{ money(paymentSummary.amount) }}</text></view>
+                <view class="summary-item"><text class="summary-label">累计已付／折账</text><text class="summary-value">¥{{ money(paymentSummary.paid) }}</text></view>
+                <view class="summary-item"><text class="summary-label">剩余待付</text><text class="summary-value orange">¥{{ money(paymentSummary.remaining) }}</text></view>
                 <view class="summary-item">
                     <text class="summary-label">本次付款</text>
                     <text class="summary-value red">¥{{ money(totalPaying) }}</text>
                 </view>
-                <view class="summary-item">
-                    <text class="summary-label">付后仍欠</text>
-                    <text class="summary-value orange">¥{{ money(totalAfter) }}</text>
-                </view>
-                <view class="summary-item">
-                    <text class="summary-label">{{ isNonDevicePay ? '费用明细' : '已选设备' }}</text>
-                    <text class="summary-value">{{ checkedCount }} {{ isNonDevicePay ? '笔' : '台' }}</text>
-                </view>
             </view>
+            <view class="payment-note">已选 {{ checkedCount }} {{ isNonDevicePay ? '笔' : '台' }}，付后仍欠 ¥{{ money(totalAfter) }}。本次只付剩余差额，历史付款不重复支付。</view>
 
             <!-- 账户选择 -->
             <view class="account-row" @click="showAccountPicker = true">
@@ -89,8 +85,19 @@
                             <text v-if="item.business_reason || item.remark" class="device-row__reason">{{ item.business_reason || item.remark }}</text>
                             <view class="device-row__amounts">
                                 <text class="amt-tiny">应付 ¥{{ money(item.payable_amount) }}</text>
-                                <text class="amt-tiny">已付 ¥{{ money(item.allocated_paid) }}</text>
+                                <text class="amt-tiny">已付／折账 ¥{{ money(item.allocated_paid) }}</text>
                                 <text class="amt-tiny orange">余 ¥{{ money(item.allocated_remain) }}</text>
+                            </view>
+                            <text v-if="item.latest_purchase_adjustment" class="device-row__reason">最近调价 ¥{{ money(item.latest_purchase_adjustment.cost_delta) }}：{{ item.latest_purchase_adjustment.remark }}</text>
+                            <view v-if="item.settlements?.length" class="payment-history">
+                                <view @click="item.show_payment_history = !item.show_payment_history">{{ item.show_payment_history ? '收起' : '查看' }}历史付款（{{ item.settlements.length }}笔）</view>
+                                <view v-if="item.show_payment_history">
+                                    <view v-for="record in item.settlements" :key="record.settlement_id" class="payment-history__row">
+                                        <text>{{ record.settlement_type_text || '结算' }} ¥{{ money(record.applied_amount) }} · {{ record.pay_method_text || record.capital_account_name || '未填写账户' }}</text>
+                                        <text>{{ record.operator_name || '' }} · {{ paymentTime(record.confirmed_at) }}</text>
+                                        <ErpVoucherUploader v-for="entry in record.money_ledgers || []" :key="entry.ledger_no" :model-value="entry.voucher_urls" title="历史付款凭证" readonly />
+                                    </view>
+                                </view>
                             </view>
                         </view>
                         <view class="device-row__input">
@@ -168,6 +175,7 @@ import ErpVoucherUploader from '@/addon/hsx_erp/components/ErpVoucherUploader.vu
 import { erpFinanceSourceMeta } from '@/addon/hsx_erp/hooks/useErpFinanceSource'
 import { cloneErpSubmitSnapshot, confirmErpPopupAction } from '@/addon/hsx_erp/hooks/useErpPopupConfirm'
 import { erpDeviceIdentityLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
+import { erpEnumLabel } from '@/addon/hsx_erp/utils/display'
 import { img } from '@/utils/common'
 
 const props = withDefaults(defineProps<{
@@ -205,6 +213,11 @@ const form = ref({ capital_account_id: 0, remark: '', voucher_urls: '' })
 const remarkStyle = { background: '#f8fafc', borderRadius: '8rpx', padding: '8rpx 16rpx', marginTop: '12rpx' }
 
 const totalPaying = computed(() => items.value.reduce((s, i) => s + (i.checked ? Number(i.pay_amount || 0) : 0), 0))
+const paymentSummary = computed(() => items.value.reduce((sum, row) => ({
+    amount: sum.amount + Number(row.payable_amount || 0), paid: sum.paid + Number(row.allocated_paid || 0),
+    remaining: sum.remaining + Number(row.allocated_remain || 0)
+}), { amount: 0, paid: 0, remaining: 0 }))
+const paymentTime = (value: any) => Number(value) > 0 ? new Date(Number(value) * 1000).toLocaleString() : '时间未记录'
 const totalAfter = computed(() => items.value.reduce((s, i) => {
     const remain = Number(i.allocated_remain || 0)
     const paying = i.checked ? Number(i.pay_amount || 0) : 0
@@ -382,7 +395,9 @@ const money = (v: any) => Number(v || 0).toFixed(2)
 .payee-wrap { margin:0 32rpx 16rpx; padding:16rpx; border:1rpx solid #fde68a; border-radius:12rpx; background:#fffbeb; }
 .payee-title { color:#78350f; font-size:24rpx; font-weight:650; }.payee-title text { margin-left:8rpx; color:#a16207; font-size:20rpx; font-weight:400; }
 .payee-item { display:flex; align-items:center; justify-content:space-between; gap:14rpx; margin-top:12rpx; padding:12rpx; border-radius:10rpx; background:#fff; }.payee-info { min-width:0; flex:1; }.payee-type,.payee-account { display:block; }.payee-type { color:#0f172a; font-size:24rpx; font-weight:600; }.payee-account { margin-top:5rpx; color:#475569; font-size:22rpx; word-break:break-all; }.payee-default { margin-left:8rpx; color:#d97706; font-size:18rpx; font-weight:500; }
-.summary-row { display: flex; gap: 0; margin: 0 32rpx 16rpx; background: #f8fafc; border-radius: 12rpx; overflow: hidden; }
+.summary-row { display: grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap: 0; margin: 0 32rpx 16rpx; background: #f8fafc; border-radius: 12rpx; overflow: hidden; }
+.payment-note { margin:0 32rpx 20rpx;color:#64748b;font-size:22rpx;line-height:1.6; }
+.payment-history { margin-top:12rpx;color:#2563eb;font-size:22rpx;line-height:1.6; }.payment-history__row { margin-top:8rpx;padding:10rpx;background:#f8fafc;color:#475569;border-radius:8rpx; }.payment-history__row text { display:block; }
 .summary-item { flex: 1; padding: 14rpx 0; text-align: center; border-right: 1rpx solid #e2e8f0; &:last-child { border-right: none; } }
 .summary-label { font-size: 22rpx; color: #94a3b8; display: block; }
 .summary-value { font-size: 26rpx; font-weight: 600; color: #0f172a; display: block; margin-top: 4rpx; }

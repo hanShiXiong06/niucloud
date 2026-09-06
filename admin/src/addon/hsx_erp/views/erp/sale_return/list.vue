@@ -1,38 +1,38 @@
 <template>
-    <div class="main-container">
+    <HsxPage padding="none" class="main-container">
         <!-- 退货单列表：只在列表模式展示，不再固定占用左栏 -->
         <div class="erp-list-panel">
-            <div class="panel-header">
-                <div>
-                    <div class="text-page-title">销售退货</div>
-                    <div class="panel-subtitle">客户退回已售设备；系统按单台已收款情况自动冲销应收或生成退款应付。</div>
-                </div>
-                <div class="flex gap-2">
-                    <el-button :icon="Refresh" :loading="listLoading" @click="loadList">刷新</el-button>
-                    <el-button type="primary" :icon="Plus" @click="openCreate">新建退货</el-button>
-                    <el-button type="warning" plain @click="openCompensation">售后补差</el-button>
-                </div>
-            </div>
+            <HsxTitle size="page" collapsible-subtitle class="mb-4">
+                <template #default>销售退货</template>
+                <template #subtitle>客户退回已售设备；系统按单台已收款情况自动冲销应收或生成退款应付。</template>
+                <template #extra><div class="flex gap-2 flex-wrap">
+                        <el-button :icon="Refresh" :loading="listLoading" @click="loadList">刷新</el-button>
+                        <el-button type="primary" :icon="Plus" @click="openCreate">新建退货</el-button>
+                        <el-button type="warning" plain @click="openCompensation">售后补差</el-button>
+                    </div></template>
+            </HsxTitle>
 
             <el-tabs v-model="listWhere.status" class="mt-4 erp-status-tabs" @tab-change="switchStatus">
                 <el-tab-pane v-for="tab in statusTabs" :key="tab.value" :label="tab.label" :name="tab.value" />
             </el-tabs>
 
-            <el-form :inline="true" class="mt-2" @submit.prevent>
-                <el-form-item label="关键词">
-                    <el-input v-model.trim="listWhere.keyword" clearable class="!w-[260px]" placeholder="退货单号 / 销售单号" @keyup.enter="searchList" />
-                </el-form-item>
-                <el-form-item label="客户">
-                    <ErpPartySelect v-model="listWhere.party_id" v-model:party-name="listPartyName" party-type="customer" :allow-create="false" class="!w-[220px]" placeholder="全部客户" />
-                </el-form-item>
-                <el-form-item label="退货时间">
-                    <el-date-picker v-model="listWhere.dateRange" type="daterange" value-format="X" start-placeholder="开始" end-placeholder="结束" class="!w-[260px]" />
-                </el-form-item>
-                <el-form-item>
-                    <el-button type="primary" :icon="Search" @click="searchList">查询</el-button>
-                    <el-button @click="resetListWhere">重置</el-button>
-                </el-form-item>
-            </el-form>
+            <HsxSearchPanel>
+                <el-form :inline="true" class="mt-2" @submit.prevent>
+                    <el-form-item label="关键词">
+                        <el-input v-model.trim="listWhere.keyword" clearable class="!w-[260px]" placeholder="退货单号 / 销售单号" @keyup.enter="searchList" />
+                    </el-form-item>
+                    <el-form-item label="客户">
+                        <ErpPartySelect v-model="listWhere.party_id" v-model:party-name="listPartyName" party-type="customer" :allow-create="false" class="!w-[220px]" placeholder="全部客户" />
+                    </el-form-item>
+                    <el-form-item label="退货时间">
+                        <el-date-picker v-model="listWhere.dateRange" type="daterange" value-format="X" start-placeholder="开始" end-placeholder="结束" class="!w-[260px]" />
+                    </el-form-item>
+                    <el-form-item>
+                        <el-button type="primary" :icon="Search" @click="searchList">查询</el-button>
+                        <el-button @click="resetListWhere">重置</el-button>
+                    </el-form-item>
+                </el-form>
+            </HsxSearchPanel>
 
             <el-table :data="listData" v-loading="listLoading" size="large" @row-click="selectItem">
                 <el-table-column label="业务单据" min-width="220">
@@ -107,7 +107,7 @@
                                 <div class="mt-2 text-xs text-orange-600">该设备由商城销售后补录到 ERP，没有原入库仓位；请明确本次实际收货位置。</div>
                             </el-form-item>
                         </div>
-                        <el-alert :title="saleRefundModeTip(form.refund_mode)" type="info" :closable="false" show-icon />
+                        <HsxNotice default-expanded :title="saleRefundModeTip(form.refund_mode)" type="info" :closable="false" show-icon />
                         <div v-if="form.refund_mode === 'cash'" class="mt-3"><div class="mb-2 text-sm text-gray-600">退款凭证（选填）</div><ErpFinanceVoucherUpload v-model="form.voucher_urls" /></div>
                     </section>
 
@@ -147,7 +147,7 @@
                 </el-form>
         </ErpReturnDialog>
 
-        <el-drawer
+        <HsxDrawer
             v-model="detail.visible"
             :title="detail.businessType === 'after_sale_compensation' ? '售后补差详情' : '销售退货详情'"
             size="76%"
@@ -161,16 +161,18 @@
                 @updated="onDetailUpdated"
                 @close="detail.visible = false"
             />
-        </el-drawer>
+        </HsxDrawer>
 
-    </div>
+    </HsxPage>
 </template>
 
 <script setup lang="ts">
+import { HsxTitle, HsxPage, HsxSearchPanel, HsxDrawer, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
+import { erpEnumLabel } from '@/addon/hsx_erp/utils/display'
 import { ref, computed, reactive } from 'vue'
 import { useRoute } from 'vue-router'
 import { Plus, Refresh, Search } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import {
     getErpSaleReturnList,
     createAndConfirmErpSaleReturn,
@@ -185,6 +187,8 @@ import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVoucherUpload.vue'
 import ErpWarehouseLocationCascader from '@/addon/hsx_erp/components/ErpWarehouseLocationCascader.vue'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
+const hsxFeedback = useFeedback()
+
 
 const statusTabs = [
     { label: '全部', value: '' },
@@ -414,20 +418,20 @@ async function submitCreate() {
     syncReturnItems()
     await formRef.value?.validate()
     if (!form.items.length) {
-        ElMessage.warning(createType.value === 'compensation' ? '请选择至少一台补差设备' : '请选择至少一台退货设备')
+        hsxFeedback.warning(createType.value === 'compensation' ? '请选择至少一台补差设备' : '请选择至少一台退货设备')
         return
     }
     if (form.items.some((item: any) => Number(item.return_price || 0) <= 0)) {
-        ElMessage.warning(createType.value === 'compensation' ? '请填写每台设备的补差金额' : '退货金额必须大于 0')
+        hsxFeedback.warning(createType.value === 'compensation' ? '请填写每台设备的补差金额' : '退货金额必须大于 0')
         return
     }
     if (form.refund_mode === 'cash' && !form.capital_account_id) {
-        ElMessage.warning('现场退款必须选择实际出款账户')
+        hsxFeedback.warning('现场退款必须选择实际出款账户')
         return
     }
     if (createType.value === 'return' && requiresReturnDestination.value
         && (!form.return_to_warehouse_id || !form.return_to_location_id)) {
-        ElMessage.warning('商城补录设备没有 ERP 原仓位，请选择本次实际退回的仓库和库位')
+        hsxFeedback.warning('商城补录设备没有 ERP 原仓位，请选择本次实际退回的仓库和库位')
         return
     }
     const actionName = createType.value === 'compensation' ? '售后补差' : '销售退货'
@@ -454,7 +458,7 @@ async function submitCreate() {
         }
         if (createType.value === 'compensation') await createErpSaleCompensation(payload)
         else await createAndConfirmErpSaleReturn(payload)
-        ElMessage.success(createType.value === 'compensation' ? '售后补差已生成设备级客户应付' : '销售退货已完成，库存和账务已同步处理')
+        hsxFeedback.success(createType.value === 'compensation' ? '售后补差已生成设备级客户应付' : '销售退货已完成，库存和账务已同步处理')
         mode.value = 'idle'
         loadList()
     } finally {
@@ -467,7 +471,7 @@ function statusLabel(status: string, businessType = '') {
     const map: Record<string, string> = {
         pending: '待确认收货', confirmed: '已完成退货', cancelled: '已取消',
     }
-    return map[status] || status
+    return erpEnumLabel(status, map)
 }
 function statusTagType(status: string) {
     const map: Record<string, string> = {
@@ -477,7 +481,7 @@ function statusTagType(status: string) {
 }
 function refundModeLabel(mode: string) {
     const map: Record<string, string> = { cash: '现场退款', payable: '转财务退款', offset: '往来折抵' }
-    return map[mode] || mode
+    return erpEnumLabel(mode, map, '退款方式待确认')
 }
 function businessTypeLabel(type: string) {
     return type === 'after_sale_compensation' ? '售后补差' : '退货退款'

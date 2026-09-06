@@ -43,7 +43,7 @@ class RecycleOrderDict
     // 打款状态
     const PAY_STATUS_UNPAID = 0;                // 未打款
     const PAY_STATUS_PAID = 1;                  // 已打款
-    const PAY_STATUS_PARTIAL = 2;               // 部分打款（订单维度）
+    const PAY_STATUS_PARTIAL = 2;               // 部分打款（含设备采购补差尚未结清）
     // 设备处置类型
     const DISPOSE_TYPE_PENDING = 'pending';      // 未处置
     const DISPOSE_TYPE_RECYCLE = 'recycle';      // 普通回收
@@ -405,6 +405,9 @@ class RecycleOrderDict
             'remove' => '设备移除',
             'device_confirm' => '设备确认',
             'device_payment' => '设备打款',
+            'recycle_payment_owner' => '付款归属：回收处理',
+            'erp_payment_owner' => '付款归属：ERP 处理',
+            'erp_purchase_price_adjust' => '回收／采购调价',
             'device_consignment' => '转入代卖',
             'consignment_payment' => '代卖结算',
             'cost_adjust' => '成本调整',

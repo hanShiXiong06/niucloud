@@ -4,7 +4,7 @@
             <view class="channel-header">
                 <view>
                     <text class="channel-title">选择销售渠道</text>
-                    <text class="channel-subtitle">渠道由 ERP 配置与已安装插件共同提供</text>
+                    <text class="channel-subtitle">选择本次交易的销售渠道</text>
                 </view>
                 <u-icon name="close" size="20" color="#94a3b8" @click="close" />
             </view>
@@ -22,7 +22,7 @@
                             <text class="channel-name">{{ item.name }}</text>
                             <u-tag v-if="item.channel_type" :text="item.channel_type_name" type="primary" plain plainFill size="mini" />
                         </view>
-                        <text class="channel-source">{{ sourceLabel(item) }}</text>
+                        <text v-if="item.is_default" class="channel-source">默认渠道</text>
                     </view>
                     <u-icon v-if="item.key === modelValue" name="checkmark-circle-fill" color="#3b6ef5" size="21" />
                     <view v-else class="channel-choice-circle" />
@@ -76,10 +76,6 @@ function close() {
     emit('update:show', false)
 }
 
-function sourceLabel(item: any) {
-    if (item.source_plugin && item.source_plugin !== 'hsx_erp') return item.source_plugin_name || '插件渠道'
-    return item.is_default ? 'ERP 默认渠道' : 'ERP 渠道配置'
-}
 </script>
 
 <style scoped lang="scss">

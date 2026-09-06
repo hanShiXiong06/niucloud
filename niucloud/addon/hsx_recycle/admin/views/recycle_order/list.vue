@@ -363,9 +363,11 @@ import {
   updateRecycleOrder,
   getDevice,
   getDeviceDetailView,
+  getCapitalAccountOptions,
   paymentConfirm,
   devicePaymentConfirm,
 } from "@/addon/hsx_recycle/api/recycle_order";
+import { getDevicePaymentOwner } from "@/addon/hsx_recycle/utils/payment-scope";
 import { transferDeviceToConsignment } from "@/addon/hsx_recycle/api/consignment_order";
 import { getExpress } from "@/addon/hsx_recycle/api/device_query_api";
 import { generateOrderShortLink } from "@/addon/hsx_recycle/api/shortlink";
@@ -998,11 +1000,11 @@ const handlePaymentConfirm = async (paymentData) => {
       : "";
   const scopeText =
     paymentData.paymentMode === "device"
-      ? `为已选 <b>${paymentData.deviceCount ?? paymentData.selectedDeviceIds?.length ?? 0}</b> 台设备打款`
-      : "确认本单打款";
+      ? `确认已选 <b>${paymentData.deviceCount ?? paymentData.selectedDeviceIds?.length ?? 0}</b> 台设备付款`
+      : "确认本单付款";
   const confirmed = await confirmDanger(
-    `${scopeText}${amountText ? "，" + amountText : ""}，此操作不可撤销。`,
-    { title: "确认打款", confirmText: "确认打款", html: true }
+    `${scopeText}${amountText ? "，" + amountText : ""}。请确认实际付款结果，勿重复操作；此操作不可撤销。`,
+    { title: "确认付款", confirmText: "确认付款", html: true }
   );
   if (!confirmed) return;
 
@@ -1015,10 +1017,17 @@ const handlePaymentConfirm = async (paymentData) => {
 
   await paySubmit.run(
     async () => {
+      const deviceIds = paymentData.paymentMode === "device" ? [...(paymentData.selectedDeviceIds || [])] : undefined;
+      if (deviceIds && !deviceIds.length) throw new Error("请先选择本次付款的设备");
+      const capability: any = await getCapitalAccountOptions(orderId, deviceIds);
+      const scope = capability?.data || {};
+      if (scope.payment_owner !== "local" || scope.local_allowed !== true || deviceIds?.some(id => getDevicePaymentOwner(scope, id) !== "local")) {
+        throw new Error(`${scope.message || "本次选中设备不能统一由回收端付款。"} 本次未执行付款，请重新核对设备归属。`);
+      }
       if (paymentData.paymentMode === "device") {
         await devicePaymentConfirm(Number(orderId), {
           ...paymentInfo,
-          device_ids: paymentData.selectedDeviceIds || [],
+          device_ids: deviceIds || [],
           payment_info: paymentInfo,
           capital_account_id: paymentData.capitalAccountId || 0,
         });
@@ -1032,7 +1041,7 @@ const handlePaymentConfirm = async (paymentData) => {
       paymentDialogVisible.value = false;
       await getList();
     },
-    { success: paymentData.paymentMode === "device" ? "设备打款成功" : "确认打款成功" }
+    { success: paymentData.paymentMode === "device" ? "设备付款确认成功" : "付款确认成功" }
   );
 };
 

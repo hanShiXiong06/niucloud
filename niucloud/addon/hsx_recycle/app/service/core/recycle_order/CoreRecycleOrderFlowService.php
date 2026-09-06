@@ -70,15 +70,12 @@ class CoreRecycleOrderFlowService extends BaseCoreService
         Db::startTrans();
         try {
             // 1. 获取订单信息
-            $order = $this->getOrderInfo($orderId);
-
-            // 财务安全边界必须放在核心流程层。这样即使旧版移动端仍调用历史打款
-            // 接口，或其他服务绕过控制器直接执行 payment，也无法在 ERP 接管后
-            // 继续写入回收插件的本地付款事实。
+            $paymentSiteId = 0;
             if ($action === 'payment') {
-                $siteId = (int)($order['site_id'] ?? $context['site_id'] ?? 0);
-                (new RecycleErpCapabilityService())->assertLocalPaymentAllowed($siteId);
+                $paymentSiteId = (int)($context['site_id'] ?? $this->request->siteId());
+                if ($paymentSiteId <= 0) throw new CommonException('无法确认付款站点，已停止打款');
             }
+            $order = $this->getOrderInfo($orderId, $paymentSiteId, $action === 'payment');
 
             // 2. 获取流程配置
             $flowConfig = $this->getFlowConfig($order['status'], $flowType);
@@ -95,8 +92,21 @@ class CoreRecycleOrderFlowService extends BaseCoreService
             // 6. 执行验证规则
             $this->executeValidations($order, $data, $transitionConfig);
 
+            if ($action === 'payment') $context['site_id'] = $paymentSiteId;
+
             // 7. 调用业务处理器
             $handlerResult = $this->executeHandler($order, $action, $data, $transitionConfig, $context);
+
+            if ($action === 'payment') {
+                // 最终付款闸门已由处理器在首次付款写入前执行。这里仅沿用已
+                // 核实集合进行状态转换，不在已付款之后重复认领本地归属。
+                $paidDeviceIds = $handlerResult['data']['device_ids'] ?? [];
+                if (!is_array($paidDeviceIds) || $paidDeviceIds === []) {
+                    throw new CommonException('付款设备范围未确认，已停止订单完成');
+                }
+                $data['devices'] = array_map(static fn(int $id): array => ['id' => $id], $paidDeviceIds);
+                $context['devices'] = $data['devices'];
+            }
 
             // 8. 执行状态转换（如果目标状态与当前状态不同）
             if ($transitionConfig['to_status'] != $order['status']) {
@@ -129,7 +139,7 @@ class CoreRecycleOrderFlowService extends BaseCoreService
                 'data' => $handlerResult
             ];
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             // 回滚事务
             Db::rollback();
 
@@ -153,9 +163,12 @@ class CoreRecycleOrderFlowService extends BaseCoreService
      * @return array 订单信息
      * @throws CommonException
      */
-    private function getOrderInfo(int $orderId): array
+    private function getOrderInfo(int $orderId, int $siteId = 0, bool $lock = false): array
     {
-        $order = RecycleOrder::where('id', $orderId)->findOrEmpty();
+        $query = RecycleOrder::where('id', $orderId);
+        if ($siteId > 0) $query->where('site_id', $siteId)->where('delete_at', 0);
+        if ($lock) $query->lock(true);
+        $order = $query->findOrEmpty();
         if ($order->isEmpty()) {
             throw new CommonException('订单不存在');
         }

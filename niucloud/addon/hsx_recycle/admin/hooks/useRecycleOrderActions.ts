@@ -1,6 +1,7 @@
 import { ElLoading, ElMessage, ElMessageBox } from 'element-plus'
 import type { Ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { canOpenLocalPayment } from '@/addon/hsx_recycle/utils/payment-scope'
 import {
   deleteRecycleOrder,
   getCapitalAccountOptions,
@@ -217,12 +218,19 @@ export function useRecycleOrderActions(options: UseRecycleOrderActionsOptions) {
       openOrderDeviceDialog(row, priceDeviceLogVisible)
     },
     order_payment: async (row: any) => {
-      const capability = await getCapitalAccountOptions()
-      if (capability.data?.payment_managed_by_erp) {
+      let capability: any
+      try {
+        capability = await getCapitalAccountOptions(row.id)
+      } catch (error) {
+        ElMessage.error('付款归属查询失败，尚未执行付款。请刷新后重试，不能自动改为回收端付款。')
+        return
+      }
+      const paymentOwner = capability.data?.payment_owner || 'unknown'
+      if (paymentOwner === 'self_erp') {
         try {
           await ElMessageBox.confirm(
-            capability.data?.message || '当前站点财务已由 ERP 接管，请到 ERP 应付款完成付款。',
-            '回收端打款已关闭',
+            capability.data?.message || '本订单由 ERP 结算，请到 ERP 应付款处理。切换联动方式后，实际已入 ERP 的设备仍由 ERP 处理。',
+            '本订单由 ERP 结算',
             {
               confirmButtonText: '前往 ERP 应付款',
               cancelButtonText: '知道了',
@@ -236,7 +244,19 @@ export function useRecycleOrderActions(options: UseRecycleOrderActionsOptions) {
         await router.push(capability.data?.payment_path || '/site/hsx_erp/payable')
         return
       }
+      // 混合订单必须明确记录为按设备模式，不能用站点默认值替换历史订单模式。
+      const orderPaymentMode = row.flow_mode || row.payment_mode || 'order'
+      if (!canOpenLocalPayment(capability.data || {}, orderPaymentMode)) {
+        await ElMessageBox.alert(
+          `${capability.data?.message || (paymentOwner === 'mixed' ? '本订单包含不同结算归属的设备。' : '暂时无法确认本订单的付款归属。')} 请先到设备明细逐台核对归属；整单模式不能直接付款，也不会被自动改为按设备模式。本次未执行付款。`,
+          paymentOwner === 'mixed' ? '请按设备核对结算归属' : '付款归属待核对',
+          { confirmButtonText: '查看设备明细', type: 'warning' }
+        )
+        openOrderDeviceDialog(row, orderDialogVisible)
+        return
+      }
       currentOrderId.value = row.id
+      paymentInfo.value = []
       paymentDialogVisible.value = true
 
       const res = await getMerchantPayInfo(row.member_id)

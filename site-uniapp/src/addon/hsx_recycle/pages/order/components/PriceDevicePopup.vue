@@ -26,6 +26,10 @@
             <!-- 表单内容 -->
             <scroll-view scroll-y class="price-content">
                 <view class="price-content__inner">
+                    <view v-if="saleDestinationLoading || saleDestinationError" class="form-section">
+                        <view class="dest-hint">{{ saleDestinationLoading ? '正在核对联动配置，核对完成前不能提交定价。' : saleDestinationError }}</view>
+                        <u-button v-if="saleDestinationError" size="small" @click="loadSaleDestinationOptions">重新加载联动配置</u-button>
+                    </view>
                     <!-- 检测概要：统一用 RecycleCheckSummary(与设备详情/设备卡同一组件、同一样式) -->
                     <view v-if="deviceCheckMeta" class="form-section">
                         <view class="section-title"><text>检测概要</text></view>
@@ -235,7 +239,7 @@
                 <u-button @click="handleClose" :customStyle="{flex: 1, marginRight: '20rpx'}">
                     取消
                 </u-button>
-                <u-button type="primary" @click="handleSubmit" :customStyle="{flex: 2}" :loading="submitting">
+                <u-button type="primary" @click="handleSubmit" :customStyle="{flex: 2}" :loading="submitting || saleDestinationLoading" :disabled="!!saleDestinationError">
                     确认定价
                 </u-button>
             </view>
@@ -301,6 +305,8 @@ interface ErpWarehouse {
 const saleDestinationOptions = ref<Array<{ value: string; label: string; description?: string }>>([])
 const erpWarehouses = ref<ErpWarehouse[]>([])
 const erpConnected = ref(false)
+const saleDestinationLoading = ref(false)
+const saleDestinationError = ref('')
 // ERP 仓库默认销售去向 → 回收定价销售流向 / 中文标签。
 const SALE_TARGET_DEST: Record<string, string> = { mall: 'mall', peer: 'peer', scrap: 'scrap', hold: 'hold' }
 const SALE_TARGET_LABEL: Record<string, string> = { mall: '商城', peer: '同行', scrap: '报废', hold: '暂存' }
@@ -342,9 +348,20 @@ const buildSaleDestForm = (device: Record<string, any> = {}) => ({
     target_location_name: device.target_location_name || ''
 })
 
+let saleDestinationRequestId = 0
 const loadSaleDestinationOptions = async () => {
+    const requestId = ++saleDestinationRequestId
+    const deviceId = Number(props.deviceData?.id)
+    if (!Number.isInteger(deviceId) || deviceId <= 0) {
+        saleDestinationLoading.value = false
+        saleDestinationError.value = '设备信息尚未就绪，请加载设备后重新核对联动配置。'
+        return
+    }
+    saleDestinationLoading.value = true
+    saleDestinationError.value = ''
     try {
-        const res: any = await getSaleDestinationOptions()
+        const res: any = await getSaleDestinationOptions(deviceId)
+        if (requestId !== saleDestinationRequestId || Number(props.deviceData?.id) !== deviceId) return
         saleDestinationOptions.value = res?.data?.items || []
         erpWarehouses.value = (Array.isArray(res?.data?.warehouses) ? res.data.warehouses : []).map(normalizeWarehouse)
         erpConnected.value = !!res?.data?.erp_connected
@@ -359,9 +376,9 @@ const loadSaleDestinationOptions = async () => {
             formData.value.sale_destination = saleDestinationOptions.value[0]?.value || ''
         }
     } catch (error) {
-        saleDestinationOptions.value = []
-        erpWarehouses.value = []
-        erpConnected.value = false
+        if (requestId === saleDestinationRequestId) saleDestinationError.value = '联动配置查询失败，未提交定价。请重新加载，不会自动切换为未联动模式。'
+    } finally {
+        if (requestId === saleDestinationRequestId) saleDestinationLoading.value = false
     }
 }
 
@@ -602,6 +619,10 @@ const previewImages = (items: ImageItem[], index: number) => {
 }
 
 const handleSubmit = async () => {
+    if (saleDestinationLoading.value || saleDestinationError.value) {
+        uni.showToast({ title: '请先完成联动配置核对', icon: 'none' })
+        return
+    }
     if (!device.value?.id) {
         uni.showToast({ title: '请选择设备', icon: 'none' })
         return

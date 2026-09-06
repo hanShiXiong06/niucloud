@@ -33,13 +33,13 @@
                             <div v-if="targets(row).length" class="target-list">
                                 <article v-for="target in targets(row)" :key="`${target.target_type}_${target.target_id}`" class="target-card">
                                     <div class="target-head">
-                                        <div><span>{{ target.target_type_text || target.target_type || '账款' }}</span><b>{{ target.target_no || target.source_no || `#${target.target_id}` }}</b></div>
+                                        <div><span>{{ erpNamedLabel(target.target_type_text, target.target_type, '账款') }}</span><b>{{ target.target_no || target.source_no || '未登记业务单号' }}</b></div>
                                         <strong>核销 {{ money(target.applied_amount) }}</strong>
                                     </div>
                                     <div v-if="target.devices?.length" class="device-grid">
                                         <div v-for="device in target.devices" :key="`${target.target_id}_${device.asset_id}_${device.imei}`" class="device-item">
                                             <b>{{ device.model || '未填写设备名称' }}</b>
-                                            <span>IMEI {{ device.imei || device.asset_no || '-' }}</span>
+                                            <span>{{ erpSerialText(device) }}</span>
                                             <small>{{ deviceSummary(device) }}</small>
                                         </div>
                                     </div>
@@ -77,6 +77,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { erpNamedLabel, erpSerialText } from '@/addon/hsx_erp/utils/display'
 import ErpImageGallery from '@/addon/hsx_erp/components/ErpImageGallery.vue'
 
 withDefaults(defineProps<{ rows?: any[]; loading?: boolean; emptyText?: string }>(), { rows: () => [], loading: false, emptyText: '暂无结算记录' })

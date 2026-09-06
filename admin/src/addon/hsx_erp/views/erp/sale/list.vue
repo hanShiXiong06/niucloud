@@ -1,17 +1,15 @@
 <template>
-    <div class="main-container">
+    <HsxPage padding="none" class="main-container">
         <el-card class="!border-none" shadow="never">
-            <div class="flex items-start justify-between gap-4">
-                <div>
-                    <div class="text-page-title">销售出库</div>
-                    <div class="mt-1 text-sm text-gray-500">统一查看设备与商城商品的成交金额、成本、毛利、客户和收款状态；销售单作为批次凭证保留。</div>
-                </div>
-                <div class="flex gap-2">
-                    <el-button :icon="Refresh" :loading="table.loading" @click="loadList">刷新</el-button>
-                    <el-button :icon="TrendCharts" @click="profitReportVisible = true">经营台账</el-button>
-                    <el-button type="primary" :icon="Plus" @click="openCreate()">销售出库</el-button>
-                </div>
-            </div>
+            <HsxTitle size="page" collapsible-subtitle class="mb-4">
+                <template #default>销售出库</template>
+                <template #subtitle>统一查看设备与商城商品的成交金额、成本、毛利、客户和收款状态；销售单作为批次凭证保留。</template>
+                <template #extra><div class="flex gap-2 flex-wrap">
+                        <el-button :icon="Refresh" :loading="table.loading" @click="loadList">刷新</el-button>
+                        <el-button :icon="TrendCharts" @click="profitReportVisible = true">经营台账</el-button>
+                        <el-button type="primary" :icon="Plus" @click="openCreate()">销售出库</el-button>
+                    </div></template>
+            </HsxTitle>
 
             <ErpRoleFocus :items="saleRoleFocus" />
 
@@ -19,7 +17,7 @@
                 <div class="text-sm font-medium text-gray-700">本页有效销售汇总</div>
                 <div class="text-xs text-gray-400">已取消、已全部退款的明细不计入；毛利为实际销售收入减有效成本</div>
             </div>
-            <div class="mt-2 grid grid-cols-1 gap-3 md:grid-cols-4">
+            <div class="mt-2 grid grid-cols-2 gap-3 md:grid-cols-4">
                 <div class="summary-tile">
                     <div class="summary-label">有效销售件数</div>
                     <div class="summary-value">{{ summary.count }}</div>
@@ -46,46 +44,48 @@
                 <el-tab-pane label="已结清" name="settled" />
             </el-tabs>
 
-            <el-form :inline="true" class="mt-2" @submit.prevent>
-                <el-form-item label="关键词">
-                    <el-input v-model.trim="search.keyword" clearable class="!w-[300px]" placeholder="型号 / IMEI / 资产号 / 销售单 / 客户" @keyup.enter="handleSearch" />
-                </el-form-item>
-                <el-form-item label="仓库">
-                    <el-select v-model="search.warehouse_id" clearable class="!w-[160px]" placeholder="全部仓库" @change="onSearchWarehouseChange">
-                        <el-option v-for="item in warehouses" :key="item.id" :label="item.warehouse_name" :value="item.id" />
-                    </el-select>
-                </el-form-item>
-                <el-form-item label="库位">
-                    <el-select v-model="search.location_id" clearable class="!w-[160px]" placeholder="全部库位" :disabled="!search.warehouse_id">
-                        <el-option v-for="item in searchLocations" :key="item.id" :label="item.location_name" :value="item.id" />
-                    </el-select>
-                </el-form-item>
-                <el-form-item label="商品型号">
-                    <ErpCatalogProductSelect v-model="search.catalog_product_id" class="!w-[280px]" placeholder="搜索品牌、系列或型号" />
-                </el-form-item>
-                <el-form-item label="开单人">
-                    <el-select v-model="search.salesman_uid" clearable filterable class="!w-[150px]" placeholder="全部">
-                        <el-option v-for="item in staffOptions" :key="item.uid" :label="staffName(item)" :value="item.uid" />
-                    </el-select>
-                </el-form-item>
-                <el-form-item label="销售时间">
-                    <el-date-picker v-model="search.dateRange" type="daterange" value-format="X" start-placeholder="开始" end-placeholder="结束" class="!w-[260px]" />
-                </el-form-item>
-                <el-form-item label="售价">
-                    <el-input-number v-model="search.min_amount" :min="0" :precision="2" :controls="false" placeholder="最低" class="!w-[110px]" />
-                    <span class="mx-1 text-gray-400">-</span>
-                    <el-input-number v-model="search.max_amount" :min="0" :precision="2" :controls="false" placeholder="最高" class="!w-[110px]" />
-                </el-form-item>
-                <el-form-item label="毛利">
-                    <el-input-number v-model="search.min_profit" :precision="2" :controls="false" placeholder="最低" class="!w-[110px]" />
-                    <span class="mx-1 text-gray-400">-</span>
-                    <el-input-number v-model="search.max_profit" :precision="2" :controls="false" placeholder="最高" class="!w-[110px]" />
-                </el-form-item>
-                <el-form-item>
-                    <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
-                    <el-button @click="handleReset">重置</el-button>
-                </el-form-item>
-            </el-form>
+            <HsxSearchPanel>
+                <el-form :inline="true" class="mt-2" @submit.prevent>
+                    <el-form-item label="关键词">
+                        <el-input v-model.trim="search.keyword" clearable class="!w-[300px]" placeholder="型号 / IMEI / 资产号 / 销售单 / 客户" @keyup.enter="handleSearch" />
+                    </el-form-item>
+                    <el-form-item label="仓库">
+                        <el-select v-model="search.warehouse_id" clearable class="!w-[160px]" placeholder="全部仓库" @change="onSearchWarehouseChange">
+                            <el-option v-for="item in warehouses" :key="item.id" :label="item.warehouse_name" :value="item.id" />
+                        </el-select>
+                    </el-form-item>
+                    <el-form-item label="库位">
+                        <el-select v-model="search.location_id" clearable class="!w-[160px]" placeholder="全部库位" :disabled="!search.warehouse_id">
+                            <el-option v-for="item in searchLocations" :key="item.id" :label="item.location_name" :value="item.id" />
+                        </el-select>
+                    </el-form-item>
+                    <el-form-item label="商品型号">
+                        <ErpCatalogProductSelect v-model="search.catalog_product_id" class="!w-[280px]" placeholder="搜索品牌、系列或型号" />
+                    </el-form-item>
+                    <el-form-item label="开单人">
+                        <el-select v-model="search.salesman_uid" clearable filterable class="!w-[150px]" placeholder="全部">
+                            <el-option v-for="item in staffOptions" :key="item.uid" :label="staffName(item)" :value="item.uid" />
+                        </el-select>
+                    </el-form-item>
+                    <el-form-item label="销售时间">
+                        <el-date-picker v-model="search.dateRange" type="daterange" value-format="X" start-placeholder="开始" end-placeholder="结束" class="!w-[260px]" />
+                    </el-form-item>
+                    <el-form-item label="售价">
+                        <el-input-number v-model="search.min_amount" :min="0" :precision="2" :controls="false" placeholder="最低" class="!w-[110px]" />
+                        <span class="mx-1 text-gray-400">-</span>
+                        <el-input-number v-model="search.max_amount" :min="0" :precision="2" :controls="false" placeholder="最高" class="!w-[110px]" />
+                    </el-form-item>
+                    <el-form-item label="毛利">
+                        <el-input-number v-model="search.min_profit" :precision="2" :controls="false" placeholder="最低" class="!w-[110px]" />
+                        <span class="mx-1 text-gray-400">-</span>
+                        <el-input-number v-model="search.max_profit" :precision="2" :controls="false" placeholder="最高" class="!w-[110px]" />
+                    </el-form-item>
+                    <el-form-item>
+                        <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
+                        <el-button @click="handleReset">重置</el-button>
+                    </el-form-item>
+                </el-form>
+            </HsxSearchPanel>
 
             <el-table :data="table.data" v-loading="table.loading" size="large" :row-class-name="saleRowClassName">
                 <el-table-column label="销售商品" min-width="240">
@@ -129,7 +129,7 @@
                             <span class="font-medium">{{ row.sale_no || '-' }}</span>
                         </div>
                         <div v-if="isBatchFirst($index)" class="mt-1 text-xs font-medium text-blue-600">本页同批 {{ batchPageSize(row) }} 件</div>
-                        <div class="mt-1 text-xs text-slate-500">来源：{{ row.origin_name || 'ERP销售' }}<span v-if="row.origin_plugin_name">· {{ row.origin_plugin_name }}</span></div>
+                        <div class="mt-1 text-xs text-slate-500">来源：{{ erpSourceLabel(row.origin_name, 'ERP销售') }}</div>
                         <div class="mt-1 text-xs text-gray-500">渠道：{{ row.sale_channel || '-' }}</div>
                         <div class="mt-1 text-xs text-gray-500">{{ formatTime(row.sale_at || row.create_at) }}</div>
                         <div class="mt-1 text-xs text-gray-400">业务员：{{ row.salesman_name || '-' }}</div>
@@ -166,7 +166,7 @@
             </div>
         </el-card>
 
-        <el-dialog v-model="create.visible" title="销售出库" width="980px" top="5vh" destroy-on-close>
+        <HsxDialog :confirm-loading="create.saving" v-model="create.visible" title="销售出库" width="980px" top="5vh" destroy-on-close>
             <el-form label-width="96px">
                 <div class="section-title">1. 客户</div>
                 <div class="grid grid-cols-1 gap-x-4 md:grid-cols-3">
@@ -184,7 +184,7 @@
                         </el-select>
                     </el-form-item>
                 </div>
-                <el-alert v-if="creditNotice" class="mb-4" :type="creditProfile?.severity || 'warning'" :closable="false" show-icon :title="creditNotice" />
+                <HsxNotice default-expanded v-if="creditNotice" class="mb-4" :type="creditProfile?.severity || 'warning'" :closable="false" show-icon :title="creditNotice" />
 
                 <div class="section-title">2. 货品</div>
                 <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -227,9 +227,6 @@
                             <div class="mt-1 flex flex-wrap gap-1">
                                 <el-tag v-if="stock.item_type === 'device' && (row.catalog_product_name || row.category_name)" size="small" effect="plain" type="info">{{ row.catalog_product_name || row.category_name }}</el-tag>
                                 <el-tag v-if="isConsigned(row)" size="small" effect="plain" type="warning">客户代卖</el-tag>
-                                <el-tooltip v-if="row.asset_no" :content="`资产号：${row.asset_no}`" placement="top">
-                                    <el-tag size="small" effect="plain">资产</el-tag>
-                                </el-tooltip>
                             </div>
                         </template>
                     </el-table-column>
@@ -281,17 +278,17 @@
             </el-form>
 
             <template #footer>
-                <el-button @click="create.visible = false">取消</el-button>
-                <el-button type="primary" :loading="create.saving" :disabled="creditProfile?.can_sale === false" @click="submitCreate">确认出库</el-button>
+                <el-button :disabled="create.saving" @click="create.visible = false">取消</el-button>
+                <el-button type="primary" :loading="create.saving" :disabled="(creditProfile?.can_sale === false) || (create.saving)" @click="submitCreate">确认出库</el-button>
             </template>
-        </el-dialog>
+        </HsxDialog>
 
-        <el-drawer v-model="detail.visible" title="销售单详情" size="72%" destroy-on-close>
+        <HsxDrawer v-model="detail.visible" title="销售单详情" size="72%" destroy-on-close>
             <div v-loading="detail.loading">
                 <el-descriptions v-if="detail.data" :column="4" border>
                     <el-descriptions-item label="销售单号">{{ detail.data.sale_no }}</el-descriptions-item>
                     <el-descriptions-item label="客户">{{ detail.data.party_name }}</el-descriptions-item>
-                    <el-descriptions-item label="业务来源">{{ detail.data.origin_name || 'ERP销售' }}<span v-if="detail.data.origin_plugin_name">· {{ detail.data.origin_plugin_name }}</span></el-descriptions-item>
+                    <el-descriptions-item label="业务来源">{{ erpSourceLabel(detail.data.origin_name, 'ERP销售') }}</el-descriptions-item>
                     <el-descriptions-item label="销售渠道">{{ detail.data.sale_channel || '-' }}</el-descriptions-item>
                     <el-descriptions-item label="原业务单号">{{ detail.data.origin_no || detail.data.sale_no || '-' }}</el-descriptions-item>
                     <el-descriptions-item label="制单员">{{ detail.data.salesman_name || '-' }}</el-descriptions-item>
@@ -333,15 +330,17 @@
                     </el-table-column>
                 </el-table>
             </div>
-        </el-drawer>
+        </HsxDrawer>
         <ErpSaleProfitReport v-model="profitReportVisible" />
-    </div>
+    </HsxPage>
 </template>
 
 <script setup lang="ts">
+import { HsxTitle, HsxPage, HsxSearchPanel, HsxDialog, HsxDrawer, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
+import { erpEnumLabel, erpSourceLabel } from '@/addon/hsx_erp/utils/display'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Search, TrendCharts } from '@element-plus/icons-vue'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import { getErpSaleChannelOptions } from '@/addon/hsx_erp/api/config'
@@ -355,6 +354,8 @@ import ErpCatalogProductSelect from '@/addon/hsx_erp/components/ErpCatalogProduc
 import ErpSaleProfitReport from '@/addon/hsx_erp/components/ErpSaleProfitReport.vue'
 import { useErpPageRefresh } from '@/addon/hsx_erp/hooks/useErpPageRefresh'
 import { firstPositiveErpAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
+const hsxFeedback = useFeedback()
+
 
 const search = reactive<any>({ keyword: '', finance_status: '', status: '', warehouse_id: '', location_id: '', catalog_product_id: '', salesman_uid: '', dateRange: [], min_amount: undefined, max_amount: undefined, min_profit: undefined, max_profit: undefined })
 const activeTab = ref('')
@@ -584,20 +585,20 @@ function onStockRowClick(row: any, _column: any, event: MouseEvent) {
 }
 
 async function submitCreate() {
-    if (!create.form.party_id && !create.form.party_name) return ElMessage.warning('请选择销售客户')
-    if (creditProfile.value?.can_sale === false) return ElMessage.error(creditProfile.value.message || '该客户已暂停交易')
-    if (create.form.settle_mode === 'credit' && !creditAllowedForOrder.value) return ElMessage.warning(creditNotice.value || '该客户不允许挂账，请改为现结')
-    if (!create.form.sale_channel_key) return ElMessage.warning('请选择销售渠道')
-    if (!create.form.salesman_uid) return ElMessage.warning('请选择制单员')
-    if (!selectedAssets.value.length) return ElMessage.warning('请选择要销售的库存货品')
-    if (selectedAssets.value.some(row => Number(salePrices[row.id] || 0) <= 0)) return ElMessage.warning(stock.item_type === 'standard' ? '请填写每项标品销售总价' : '请填写每台机器销售价')
+    if (!create.form.party_id && !create.form.party_name) return hsxFeedback.warning('请选择销售客户')
+    if (creditProfile.value?.can_sale === false) return hsxFeedback.error(creditProfile.value.message || '该客户已暂停交易')
+    if (create.form.settle_mode === 'credit' && !creditAllowedForOrder.value) return hsxFeedback.warning(creditNotice.value || '该客户不允许挂账，请改为现结')
+    if (!create.form.sale_channel_key) return hsxFeedback.warning('请选择销售渠道')
+    if (!create.form.salesman_uid) return hsxFeedback.warning('请选择制单员')
+    if (!selectedAssets.value.length) return hsxFeedback.warning('请选择要销售的库存货品')
+    if (selectedAssets.value.some(row => Number(salePrices[row.id] || 0) <= 0)) return hsxFeedback.warning(stock.item_type === 'standard' ? '请填写每项标品销售总价' : '请填写每台机器销售价')
     if (stock.item_type === 'standard' && selectedAssets.value.some(row => Number(saleQuantities[row.id] || 0) <= 0 || Number(saleQuantities[row.id] || 0) > Number(row.available_quantity || 0))) {
-        return ElMessage.warning('标品销售数量必须大于0且不能超过可售库存')
+        return hsxFeedback.warning('标品销售数量必须大于0且不能超过可售库存')
     }
     if (create.form.settle_mode === 'cash') {
-        if (Number(create.form.received_amount || 0) <= 0) return ElMessage.warning('请填写本次收款')
-        if (!create.form.capital_account_id) return ElMessage.warning('请选择收款账户')
-        if (Number(create.form.received_amount) > selectedAmount.value) return ElMessage.warning('收款不能大于销售金额')
+        if (Number(create.form.received_amount || 0) <= 0) return hsxFeedback.warning('请填写本次收款')
+        if (!create.form.capital_account_id) return hsxFeedback.warning('请选择收款账户')
+        if (Number(create.form.received_amount) > selectedAmount.value) return hsxFeedback.warning('收款不能大于销售金额')
     }
     const consignedRows = selectedAssets.value.filter(isConsigned)
     const consignmentNotice = consignedRows.length
@@ -628,7 +629,7 @@ async function submitCreate() {
                 sale_price: Number(salePrices[row.id] || 0),
             }) : ({ item_type: 'device', asset_id: row.id, sale_price: Number(salePrices[row.id] || 0) }))
         })
-        ElMessage.success('销售出库已完成')
+        hsxFeedback.success('销售出库已完成')
         create.visible = false
         await loadList()
     } finally {
@@ -641,7 +642,7 @@ function onPartyResolved(row: any) {
     creditProfile.value = row?.credit_profile || null
     if (creditProfile.value?.can_sale !== false && !creditAllowedForOrder.value) {
         create.form.settle_mode = 'cash'
-        ElMessage.warning(creditProfile.value.message || '该客户当前仅允许现结')
+        hsxFeedback.warning(creditProfile.value.message || '该客户当前仅允许现结')
     }
 }
 
@@ -659,10 +660,10 @@ async function openDetail(row: any) {
 async function printSaleReceipt(row: any) {
     const result: any = await printErpSaleReceipt(Number(row.sale_order_id || row.id || 0))
     if (result?.data?.skipped) {
-        ElMessage.warning(result.data.message || '请先在打印中心启用销售开单场景')
+        hsxFeedback.warning(result.data.message || '请先在打印中心启用销售开单场景')
         return
     }
-    ElMessage.success(result?.data?.status === 'waiting_client' ? '任务已生成，请在移动打印台连接蓝牙设备' : '销售小票已发送')
+    hsxFeedback.success(result?.data?.status === 'waiting_client' ? '任务已生成，请在移动打印台连接蓝牙设备' : '销售小票已发送')
 }
 
 function handleSearch() {
@@ -740,7 +741,7 @@ async function cancelSaleOrder() {
             }
         )
         await cancelErpSale(Number(detail.data.id), { remark: result?.value || '' })
-        ElMessage.success('销售单已撤销，库存已恢复')
+        hsxFeedback.success('销售单已撤销，库存已恢复')
         detail.visible = false
         await loadList()
     } catch (e: any) {
@@ -760,7 +761,7 @@ async function cancelSaleItem(row: any) {
             }
         )
         await cancelErpSaleItem(Number(row.id), { remark: result?.value || '' })
-        ElMessage.success('设备销售已取消')
+        hsxFeedback.success('设备销售已取消')
         if (detail.data?.id) await openDetail(detail.data)
         await loadList()
     } catch (e: any) {
@@ -775,7 +776,7 @@ function statusMeta(status: string) {
         settled: { label: '已结清', type: 'success' },
         void: { label: '已取消', type: 'info' }
     }
-    return map[status] || { label: status || '-', type: 'info' }
+    return map[status] || { label: '状态待确认', type: 'info' }
 }
 
 function orderStatusMeta(status: string) {
@@ -784,7 +785,7 @@ function orderStatusMeta(status: string) {
         returned: { label: '已退货', type: 'warning' },
         void: { label: '已取消', type: 'info' }
     }
-    return map[status] || { label: status || '-', type: 'info' }
+    return map[status] || { label: '状态待确认', type: 'info' }
 }
 
 function saleStateMeta(row: any) {
@@ -806,7 +807,7 @@ function saleStateHint(row: any) {
 
 function saleItemStatusLabel(status: string) {
     const map: any = { sold: '已出库', returned: '已销售退货', void: '已取消销售' }
-    return map[status] || status || '-'
+    return erpEnumLabel(status, map)
 }
 
 function compactDeviceInfo(row: any) {
@@ -846,7 +847,7 @@ function formatTime(value: any) {
 }
 
 function staffName(user: any) {
-    return user?.name || user?.real_name || user?.username || `员工#${user?.uid || '-'}`
+    return user?.name || user?.real_name || user?.username || '姓名未登记'
 }
 
 function batchKey(row: any) {

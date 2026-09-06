@@ -29,7 +29,11 @@ $assert(
 );
 $assert(
     str_contains($source, 'retryFailedExternalRequests'),
-    '商城退款已成功但ERP消费失败时，调度任务必须补偿入站退款事实'
+    '商城付款或退款已成功但ERP消费失败时，调度任务必须补偿入站事实'
+);
+$assert(
+    str_contains($source, '入库/支付/退款收件箱'),
+    '调度日志必须明确说明正在补偿入库、付款和退款，不能只写模糊的收件箱'
 );
 
 echo "[PASS] ERP domain event retry schedule contract smoke test\n";

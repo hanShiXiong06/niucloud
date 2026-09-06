@@ -31,6 +31,9 @@ const props = withDefaults(defineProps<{
     cancelText?: string
     confirmLoading?: boolean
     confirmDisabled?: boolean
+    beforeClose?: (done: () => void) => void
+    closeOnPressEscape?: boolean
+    showClose?: boolean
 }>(), {
     title: '',
     subtitle: '',
@@ -51,7 +54,9 @@ const props = withDefaults(defineProps<{
     confirmText: '确定',
     cancelText: '取消',
     confirmLoading: false,
-    confirmDisabled: false
+    confirmDisabled: false,
+    closeOnPressEscape: true,
+    showClose: true
 })
 
 const emit = defineEmits<{
@@ -91,14 +96,15 @@ function toggleFullscreen() {
     emit('update:fullscreen', innerFullscreen.value)
 }
 
-function close() {
-    visible.value = false
+function requestClose(afterClose?: () => void) {
+    if (props.confirmLoading) return
+    const done = () => { afterClose?.(); visible.value = false }
+    if (props.beforeClose) props.beforeClose(done)
+    else done()
 }
-
-function cancel() {
-    emit('cancel')
-    close()
-}
+function close() { requestClose() }
+function cancel() { requestClose(() => emit('cancel')) }
+function confirm() { if (!props.confirmLoading && !props.confirmDisabled) emit('confirm') }
 
 defineExpose({ close, toggleFullscreen, fullscreen: innerFullscreen })
 </script>
@@ -108,24 +114,28 @@ defineExpose({ close, toggleFullscreen, fullscreen: innerFullscreen })
         v-model="visible"
         v-bind="$attrs"
         class="hsx-dialog"
+        :title="title"
         :class="{ 'hsx-dialog--fullscreen': innerFullscreen }"
         :width="resolvedWidth"
         :fullscreen="innerFullscreen"
         :draggable="draggable && !innerFullscreen"
         :align-center="alignCenter"
         :top="alignCenter ? undefined : top"
-        :close-on-click-modal="closeOnClickModal"
+        :close-on-click-modal="closeOnClickModal && !confirmLoading"
+        :close-on-press-escape="closeOnPressEscape && !confirmLoading"
+        :show-close="showClose && !confirmLoading"
+        :before-close="beforeClose"
         :destroy-on-close="destroyOnClose"
         :append-to-body="appendToBody"
         @open="emit('open')"
         @close="emit('close')"
         @closed="emit('closed')"
     >
-        <template #header>
+        <template #header="scope">
             <div class="hsx-dialog__header">
-                <slot name="header" :title="title" :subtitle="subtitle" :fullscreen="innerFullscreen">
+                <slot name="header" v-bind="scope" :close="close" :title="title" :subtitle="subtitle" :fullscreen="innerFullscreen">
                     <div class="hsx-dialog__heading">
-                        <div class="hsx-dialog__title">{{ title }}</div>
+                        <div :id="scope.titleId" class="hsx-dialog__title">{{ title }}</div>
                         <div v-if="subtitle" class="hsx-dialog__subtitle">{{ subtitle }}</div>
                     </div>
                 </slot>
@@ -149,13 +159,13 @@ defineExpose({ close, toggleFullscreen, fullscreen: innerFullscreen })
 
         <template v-if="showFooter || $slots.footer" #footer>
             <div class="hsx-dialog__footer" :class="`hsx-dialog__footer--${footerAlign}`">
-                <slot name="footer" :close="close" :confirm="() => emit('confirm')">
-                    <el-button @click="cancel">{{ cancelText }}</el-button>
+                <slot name="footer" :close="close" :confirm="confirm">
+                    <el-button :disabled="confirmLoading" @click="cancel">{{ cancelText }}</el-button>
                     <el-button
                         type="primary"
                         :loading="confirmLoading"
                         :disabled="confirmDisabled"
-                        @click="emit('confirm')"
+                        @click="confirm"
                     >
                         {{ confirmText }}
                     </el-button>

@@ -382,7 +382,7 @@ function unique(list: number[]) {
 }
 
 const money = (v: any) => Number(v || 0).toFixed(2)
-const sourceLabel = (s: string) => ({ sale: '销售应收', purchase_return: '采购退货应收' }[s] || '插件应收')
+const sourceLabel = (s: string) => ({ sale: '销售应收', purchase_return: '采购退货应收' }[s] || '其他应收')
 function payableTitle(item: any) {
     const meta = erpFinanceSourceMeta(item, 'payable')
     return [meta.finance_type_name, item.model].filter(Boolean).join(' · ') || '应付款'
@@ -392,7 +392,7 @@ function payableIdentityLine(item: any) {
     return [meta.source_no, item.imei ? `IMEI ${item.imei}` : '', item.payable_no || ''].filter(Boolean).join(' · ') || '-'
 }
 function receivableIdentityLine(item: any) {
-    return [item.source_label || sourceLabel(item.source_type), item.receivable_no || ''].filter(Boolean).join(' · ') || '应收款'
+    return [erpFinanceSourceMeta(item, 'receivable').finance_type_name || sourceLabel(item.source_type), item.receivable_no || ''].filter(Boolean).join(' · ') || '应收款'
 }
 function financeDevices(item: any) {
     if (Array.isArray(item?.devices) && item.devices.length) return item.devices

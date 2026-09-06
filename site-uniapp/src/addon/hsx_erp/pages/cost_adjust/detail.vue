@@ -7,9 +7,9 @@
                 <u-tag :text="statusLabel(asset.inventory_status)" :type="statusType(asset.inventory_status)" plain plainFill size="mini"></u-tag>
             </view>
             <view class="info-grid">
-                <view class="info-item">
-                    <text class="info-label">资产号</text>
-                    <text class="info-value">{{ asset.asset_no || '-' }}</text>
+                <view v-if="asset.sn" class="info-item">
+                    <text class="info-label">SN</text>
+                    <text class="info-value">{{ asset.sn }}</text>
                 </view>
                 <view class="info-item">
                     <text class="info-label">IMEI</text>
@@ -119,6 +119,7 @@
                 </template>
                 <template v-else>
                 <view class="field-label">调整后成本</view>
+                <text v-if="costType === 'purchase_adjust'" class="section-desc">填写设备总成本，保留原有整备费用。例：总成本4800、另补采购价100，应填4900。</text>
                 <view class="cost-input-row">
                     <text class="cost-prefix">¥</text>
                     <u-input
@@ -163,7 +164,7 @@
                 <view class="switch-row">
                     <view class="switch-text">
                         <text class="switch-title">差额自动计入供应商应付</text>
-                        <text class="switch-sub">供应商调价必须同步采购本金和应付；已付款设备请走退款或补款流程。</text>
+                        <text class="switch-sub">原付款记录保留，加价差额回到原应付入口待财务补付。例如已付4600、调至4700，只需再付100；这里不会转账。</text>
                     </view>
                     <u-icon name="checkmark-circle-fill" color="#16a34a" size="22" />
                 </view>
@@ -192,7 +193,7 @@
             <!-- 回填说明 -->
             <view class="backfill-note">
                 <u-icon name="reload" color="#3b6ef5" size="16"></u-icon>
-                <text class="bf-text">在 ERP 调整后，系统会自动把新成本回填到回收 / 财务，无需到各业务端重复操作。</text>
+                <text class="bf-text">采购调价同步回收价格与应付，财务另行补付；整备及内部修正只改变对应成本，不作为客户补款。</text>
             </view>
         </template>
 
@@ -228,7 +229,7 @@ const supplierName = ref<string>('')
 const adjustHistory = ref<any[]>([])
 const newCost = ref<string>('')
 const reason = ref<string>('')
-const costType = ref<'purchase_adjust' | 'refurbish' | 'internal_adjust'>('internal_adjust')
+const costType = ref<'purchase_adjust' | 'refurbish' | 'internal_adjust'>('purchase_adjust')
 const refurbishMode = ref(false)
 const refurbishResult = ref<'success' | 'partial' | 'failed'>('success')
 const refurbishVoucherUrls = ref('')
@@ -244,14 +245,14 @@ const refurbishItems = ref<Array<{ name: string, amount: string, party_id: numbe
 const refurbishExpenseTypes = computed(() => financeCategories.value.filter((row: any) => row.direction === 'expense' && row.scope === 'refurbish' && Number(row.enabled ?? 1) === 1))
 
 const costTypes = [
-    { value: 'purchase_adjust', label: '供应商调价', description: '退补差价、议价调整；可同步改变应付和采购退货本金。' },
+    { value: 'purchase_adjust', label: '回收／采购调价', description: '协商采购价变化；已付保留，差额仍在原应付入口办理。' },
     { value: 'internal_adjust', label: '内部成本修正', description: '修正账面成本但不改供应商往来；提交后标准采购退货会被锁定，直到完成分类。' },
 ] as const
 const reasonPresets = computed(() => costType.value === 'refurbish'
     ? ['维修费', '配件费', '人工费', '检测费']
     : (costType.value === 'purchase_adjust' ? ['退补差价', '议价调整', '供应商补款', '供应商扣款'] : ['录入有误', '复检改判', '盘点修正']))
 
-const statusLabel = (s: string) => INVENTORY_STATUS_MAP[s] || s || '-'
+const statusLabel = (s: string) => INVENTORY_STATUS_MAP[s] || '状态待确认'
 const statusType = (s: string) => {
     if (s === 'in_stock' || s === 'available_for_sale') return 'success'
     if (s === 'sold' || s === 'outbound' || s === 'locked') return 'primary'
@@ -386,8 +387,8 @@ const submit = async () => {
     const confirmed = await confirmErpSensitiveAction({
         title: costType.value === 'refurbish' ? '确认整备完工' : '确认成本调整',
         content: costType.value === 'refurbish'
-            ? `设备：${asset.value.model || asset.value.imei || asset.value.asset_no || '-'}\n项目：${refurbishReason.value}\n整备合计：¥${formatMoney(refurbishTotal.value)}\n成本：¥${formatMoney(asset.value.current_cost)} → ¥${formatMoney(submittedCost)}\n将生成整备服务商应付并保留流水。`
-            : `设备：${asset.value.model || asset.value.imei || asset.value.asset_no || '-'}\n成本：¥${formatMoney(asset.value.current_cost)} → ¥${formatMoney(submittedCost)}\n类型：${costTypes.find(item => item.value === costType.value)?.label || costType.value}\n提交后保留成本和账务流水。`,
+            ? `设备：${asset.value.model || asset.value.imei || asset.value.sn || '未填写设备信息'}\n项目：${refurbishReason.value}\n整备合计：¥${formatMoney(refurbishTotal.value)}\n成本：¥${formatMoney(asset.value.current_cost)} → ¥${formatMoney(submittedCost)}\n将生成整备服务商应付并保留流水。`
+            : `设备：${asset.value.model || asset.value.imei || asset.value.sn || '未填写设备信息'}\n成本：¥${formatMoney(asset.value.current_cost)} → ¥${formatMoney(submittedCost)}\n类型：${costTypes.find(item => item.value === costType.value)?.label || '成本调整'}\n${costType.value === 'purchase_adjust' ? '请确认已协商一致。原已付保留，差额进入应付款，需财务另行补付；此处不转账。' : '仅修正账面成本，不产生客户补款。'}`,
         confirmText: costType.value === 'refurbish' ? '确认完工' : '确认调整',
     })
     if (!confirmed) return
@@ -417,7 +418,7 @@ onLoad((options: any) => {
         uni.setNavigationBarTitle({ title: '整备完工' })
     }
     if (!assetId.value) {
-        uni.showToast({ title: '缺少资产ID', icon: 'none' })
+        uni.showToast({ title: '未找到设备，请返回列表重新选择', icon: 'none' })
         return
     }
     // 优先用列表带过来的数据：秒开

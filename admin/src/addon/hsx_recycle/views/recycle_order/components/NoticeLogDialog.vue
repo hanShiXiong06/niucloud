@@ -1,14 +1,14 @@
 <template>
-  <el-dialog
+  <HsxDialog
     v-model="dialogVisible"
     title="通知记录"
     :width="isMobile ? '94vw' : '860px'"
     top="6vh"
     :destroy-on-close="true"
-    class="notice-log-dialog hsx-premium-overlay"
+    class="notice-log-dialog "
   >
     <div class="notice-log-dialog__body">
-      <el-alert
+      <HsxNotice default-expanded
         title="这里记录每一次通知的发送参数、关联设备、跳转页面和成功失败结果，方便复盘微信模板、用户触达和业务操作链路。"
         type="info"
         :closable="false"
@@ -44,10 +44,11 @@
     <template #footer>
       <el-button @click="dialogVisible = false">关闭</el-button>
     </template>
-  </el-dialog>
+  </HsxDialog>
 </template>
 
 <script setup lang="ts">
+import { HsxDialog, HsxNotice } from '@/addon/hsx_components/core'
 import { computed, ref, watch } from "vue";
 import { ElMessageBox } from "element-plus";
 import { getOrderNoticeLogs } from "@/addon/hsx_recycle/api/recycle_order";

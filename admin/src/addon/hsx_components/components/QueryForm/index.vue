@@ -4,6 +4,7 @@ export default { name: 'QueryForm', inheritAttrs: false }
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
+import { ArrowDown } from '@element-plus/icons-vue'
 import HsxButton from '../HsxButton/index.vue'
 import ProForm from '../ProForm/index.vue'
 import type { AnyRecord, ProFormField } from '../../types'

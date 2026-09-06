@@ -1,10 +1,10 @@
 <template>
-    <el-dialog
+    <HsxDialog :confirm-loading="submitting"
         v-model="dialogVisible"
         :width="isMobile ? '95vw' : '1120px'"
         top="4vh"
         center
-        class="device-confirm-dialog hsx-premium-overlay"
+        class="device-confirm-dialog "
         :destroy-on-close="true"
         @closed="handleClosed"
     >
@@ -18,27 +18,30 @@
             <div class="handoff-footer" :class="{ 'is-mobile': isMobile }">
                 <NextAssigneeSelect v-model="nextAssigneeUid" stage-key="check" label="下一步 · 质检负责人" compact />
                 <div :class="isMobile ? 'flex w-full flex-col gap-2' : 'dialog-footer'">
-                    <el-button :class="isMobile ? '!ml-0 w-full' : ''" @click="handleCancel">取消</el-button>
+                    <el-button :disabled="submitting" :class="isMobile ? '!ml-0 w-full' : ''" @click="handleCancel">取消</el-button>
                     <el-button
                         type="primary"
                         :class="isMobile ? '!ml-0 w-full' : ''"
                         :loading="submitting"
-                        :disabled="savedCount === 0"
+                        :disabled="(savedCount === 0) || (submitting)"
                         @click="handleConfirm"
                     >确认并签收</el-button>
                 </div>
             </div>
         </template>
-    </el-dialog>
+    </HsxDialog>
 </template>
 
 <script setup lang="ts">
+import { HsxDialog, useFeedback } from '@/addon/hsx_components/core'
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import { ElMessage } from 'element-plus'
+
 import DeviceEntryList from '@/addon/hsx_recycle/components/device-entry/DeviceEntryList.vue'
 import NextAssigneeSelect from '@/addon/hsx_recycle/components/task/NextAssigneeSelect.vue'
 import { normalizeDevice } from '@/addon/hsx_recycle/components/device-entry/deviceUtil'
 import type { DeviceEntryRow } from '@/addon/hsx_recycle/components/device-entry/types'
+const hsxFeedback = useFeedback()
+
 
 const props = defineProps({
     visible: { type: Boolean, default: false },
@@ -115,12 +118,12 @@ watch(() => props.visible, (v) => {
 const handleConfirm = async () => {
     const pending = rows.value.find(r => (r.imei || r.model) && !r.saved)
     if (pending) {
-        ElMessage.warning('有未保存的设备，请先逐台保存后再签收')
+        hsxFeedback.warning('有未保存的设备，请先逐台保存后再签收')
         return
     }
     const savedDevices = rows.value.filter(r => r.saved && r.id)
     if (!savedDevices.length) {
-        ElMessage.warning('请先保存至少一台设备')
+        hsxFeedback.warning('请先保存至少一台设备')
         return
     }
     submitting.value = true

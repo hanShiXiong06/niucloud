@@ -10,7 +10,7 @@ class RecycleErpFinanceBridgeService
 {
     public function capitalAccountOptions(int $siteId): array
     {
-        if (!(new RecycleErpCapabilityService())->isEnabled($siteId)) return [];
+        if (!(new RecycleErpIntegrationService())->isInstalled($siteId)) return [];
         $eventId = $this->eventId('capital-options');
         $responses = (array)event('ErpCapitalAccountOptionsRequested', [
             'event_id' => $eventId,
@@ -26,8 +26,9 @@ class RecycleErpFinanceBridgeService
 
     public function settleSourceDevices(int $siteId, array $deviceIds, array $data): array
     {
-        $deviceIds = array_values(array_unique(array_filter(array_map('intval', $deviceIds))));
+        $deviceIds = RecyclePaymentOwnershipService::deviceIds($deviceIds);
         if ($deviceIds === []) throw new CommonException('请选择需要付款的设备');
+        (new RecyclePaymentOwnershipService())->claim($siteId, 0, $deviceIds, 'self_erp');
         if ((int)($data['capital_account_id'] ?? 0) <= 0) throw new CommonException('请选择ERP付款账户');
         $requestId = trim((string)($data['request_id'] ?? '')) ?: $this->eventId('device-payment');
         $responses = (array)event('ErpSourcePayableSettlementRequested', [
@@ -47,14 +48,16 @@ class RecycleErpFinanceBridgeService
 
     private function erpResponse(array $responses, string $message): array
     {
+        $matched = null;
         foreach ($responses as $response) {
             if (!is_array($response) || (string)($response['consumer'] ?? '') !== 'hsx_erp') continue;
-            if (!empty($response['error']) || (string)($response['status'] ?? '') === 'failed') {
+            if ($matched !== null || !empty($response['error']) || !in_array($response['status'] ?? '', ['processed', 'duplicate'], true)) {
                 throw new CommonException((string)($response['message'] ?? $message));
             }
-            return $response;
+            $matched = $response;
         }
-        throw new CommonException($message);
+        if ($matched === null) throw new CommonException($message);
+        return $matched;
     }
 
     private function eventId(string $scene): string

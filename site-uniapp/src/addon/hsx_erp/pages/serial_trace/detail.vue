@@ -51,7 +51,7 @@ const canViewSupplier=computed(()=>Number(detail.value?.capabilities?.view_suppl
 onLoad((query:any)=>{id.value=Number(query?.id||0);load()})
 async function load(){if(!id.value){error.value='缺少设备参数';loading.value=false;return}loading.value=true;error.value='';try{const res:any=await getMobileSerialTraceDetail(id.value);detail.value=res?.data||{}}catch(e:any){error.value=e?.message||'串号生命周期加载失败'}finally{loading.value=false}}
 function goAsset(assetId:number){uni.navigateTo({url:`/addon/hsx_erp/pages/stock/detail?id=${Number(assetId||0)}`})}
-const statusLabel=(s:string)=>({in_stock:'在库',sold:'已售',returned:'已采退',void:'已作废'}[s]||s||'-')
+const statusLabel=(s:string)=>({in_stock:'在库',sold:'已售',returned:'已采退',void:'已作废'}[s] || '状态待确认')
 const statusType=(s:string)=>({in_stock:'success',sold:'primary',returned:'error',void:'info'}[s]||'info')
 </script>
 

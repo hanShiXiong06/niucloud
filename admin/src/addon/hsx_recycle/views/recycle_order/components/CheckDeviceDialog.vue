@@ -1,11 +1,11 @@
 <template>
-  <el-dialog
+  <HsxDialog :confirm-loading="savingDraft || submitting"
     v-model="dialogVisible"
     title="设备质检"
     :width="dialogWidth"
     :top="isMobile ? '2vh' : '3vh'"
     :destroy-on-close="true"
-    class="check-device-dialog cdd-workbench-dialog hsx-premium-overlay"
+    class="check-device-dialog cdd-workbench-dialog "
   >
     <div class="cdd-workbench">
       <header class="cdd-topbar">
@@ -205,19 +205,20 @@
           <NextAssigneeSelect v-model="nextAssigneeUid" stage-key="price" label="下一步 · 定价负责人" compact />
         </div>
         <div class="cdd-footer__btns">
-          <el-button class="cdd-footer__cancel" size="large" @click="handleCancel">取消</el-button>
+          <el-button :disabled="savingDraft || submitting" class="cdd-footer__cancel" size="large" @click="handleCancel">取消</el-button>
           <el-button v-permission="'recycle_device_batch_return'" class="cdd-return-btn" type="danger" plain size="large" :disabled="savingDraft || submitting" @click="handleReturnDevice">退回设备</el-button>
-          <el-button type="warning" size="large" :loading="savingDraft" @click="handleSaveDraft">{{ savingDraft ? '暂存中...' : '暂存草稿' }}</el-button>
-          <el-button type="primary" size="large" :loading="submitting" @click="handleConfirm"><el-icon v-if="!submitting"><Check /></el-icon>{{ submitting ? '提交中...' : '完成质检' }}</el-button>
+          <el-button :disabled="savingDraft || submitting" type="warning" size="large" :loading="savingDraft" @click="handleSaveDraft">{{ savingDraft ? '暂存中...' : '暂存草稿' }}</el-button>
+          <el-button :disabled="savingDraft || submitting" type="primary" size="large" :loading="submitting" @click="handleConfirm"><el-icon v-if="!submitting"><Check /></el-icon>{{ submitting ? '提交中...' : '完成质检' }}</el-button>
         </div>
       </div>
     </template>
-  </el-dialog>
+  </HsxDialog>
 </template>
 
 <script setup lang="ts">
+import { HsxDialog, useFeedback } from '@/addon/hsx_components/core'
 import { ref, reactive, watch, computed, nextTick, onMounted, onBeforeUnmount, toRef } from 'vue'
-import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
   Cellphone, Edit, Postcard, Aim, Monitor, Check, Close, Headset, Lock, CopyDocument
 } from '@element-plus/icons-vue'
@@ -238,6 +239,8 @@ import CheckTemplateMobilePanel from './CheckTemplateMobilePanel.vue'
 import CheckTemplateSelector from './CheckTemplateSelector.vue'
 import NextAssigneeSelect from '@/addon/hsx_recycle/components/task/NextAssigneeSelect.vue'
 import { resolveCheckFieldValue } from '@/addon/hsx_recycle/utils/checkValue'
+const hsxFeedback = useFeedback()
+
 
 interface DeviceInfo {
   id?: string | number
@@ -607,7 +610,7 @@ const handleCheckTemplateChange = async (templateId: number) => {
       }
     )
     await loadCheckTemplateSchema(templateId, false)
-    ElMessage.success('质检模板已切换')
+    hsxFeedback.success('质检模板已切换')
   } catch (error: any) {
     selectedCheckTemplateId.value = previousTemplateId
   }
@@ -636,7 +639,7 @@ const getQueryActionIcon = (handler: string) => {
 
 const runDeviceQueryAction = async (action: any) => {
   if (!deviceForm.imei) {
-    ElMessage.warning('请先输入IMEI号码')
+    hsxFeedback.warning('请先输入IMEI号码')
     return
   }
   const serviceCode = action.code
@@ -649,7 +652,7 @@ const runDeviceQueryAction = async (action: any) => {
     })
     applyDeviceQueryResult(action, res.data?.data || res.data || {})
   } catch (error: any) {
-    ElMessage.error(error?.message || `${action.name || '设备查询'}失败，请检查设备查询配置`)
+    hsxFeedback.error(error?.message || `${action.name || '设备查询'}失败，请检查设备查询配置`)
   } finally {
     deviceQueryLoadingMap.value = { ...deviceQueryLoadingMap.value, [serviceCode]: false }
   }
@@ -664,7 +667,7 @@ const unwrapDeviceQueryData = (payload: any) => {
 const applyDeviceQueryResult = (action: any, payload: any) => {
   const data = unwrapDeviceQueryData(payload)
   if (!data || Object.keys(data).length === 0) {
-    ElMessage.warning(`${action.name || '设备查询'}未查询到有效数据`)
+    hsxFeedback.warning(`${action.name || '设备查询'}未查询到有效数据`)
     return
   }
 
@@ -681,7 +684,7 @@ const applyDeviceQueryResult = (action: any, payload: any) => {
 
   if (action.result_handler === 'coverage') {
     applyCoverageData(data)
-    ElMessage.success(`${action.name}已自动填入`)
+    hsxFeedback.success(`${action.name}已自动填入`)
     return
   }
 
@@ -689,7 +692,7 @@ const applyDeviceQueryResult = (action: any, payload: any) => {
     activationLockInfo.value = data
     templateSelections.activationLock = data.locked === true || data.fmi === 'On' || data.activation_lock === 'On' || data.activation_lock === '有锁'
     updateCheckResult()
-    ElMessage.success(`${action.name}：${templateSelections.activationLock ? '已开启' : '未开启'}，已自动填入`)
+    hsxFeedback.success(`${action.name}：${templateSelections.activationLock ? '已开启' : '未开启'}，已自动填入`)
     return
   }
 
@@ -697,11 +700,11 @@ const applyDeviceQueryResult = (action: any, payload: any) => {
     mdmInfo.value = data
     templateSelections.mdmLock = data.locked === true || data.mdm === 'On' || data.mdm === true
     updateCheckResult()
-    ElMessage.success(`${action.name}：${templateSelections.mdmLock ? '已开启' : '未开启'}，已自动填入`)
+    hsxFeedback.success(`${action.name}：${templateSelections.mdmLock ? '已开启' : '未开启'}，已自动填入`)
     return
   }
 
-  ElMessage.success(`${action.name || '设备查询'}查询成功`)
+  hsxFeedback.success(`${action.name || '设备查询'}查询成功`)
 }
 
 const applyCoverageData = (data: any) => {
@@ -748,20 +751,20 @@ const startEditDeviceInfo = () => {
 // 保存设备信息
 const saveDeviceInfo = () => {
   if (!deviceForm.model?.trim()) {
-    ElMessage.warning('请输入设备型号')
+    hsxFeedback.warning('请输入设备型号')
     return
   }
   if (!deviceForm.imei?.trim()) {
-    ElMessage.warning('请输入IMEI号')
+    hsxFeedback.warning('请输入IMEI号')
     return
   }
   if (deviceForm.imei.length !== 15) {
-    ElMessage.warning('IMEI号必须是15位')
+    hsxFeedback.warning('IMEI号必须是15位')
     return
   }
 
   isEditingDeviceInfo.value = false
-  ElMessage.success('设备信息已更新')
+  hsxFeedback.success('设备信息已更新')
 }
 
 // 取消编辑设备信息
@@ -805,15 +808,15 @@ const parseCoverageStatus = (coverage: any): string => {
 }
 
 const syncSellerResultToBuyer = () => {
-  if (!deviceForm.check_result_seller) { ElMessage.warning('卖家质检结果为空，无法同步'); return }
+  if (!deviceForm.check_result_seller) { hsxFeedback.warning('卖家质检结果为空，无法同步'); return }
   deviceForm.check_result_buyer = deviceForm.check_result_seller
-  ElMessage.success('已同步，可继续单独编辑买家内容')
+  hsxFeedback.success('已同步，可继续单独编辑买家内容')
 }
 
 const syncSellerImagesToBuyer = () => {
-  if (!deviceForm.check_images) { ElMessage.warning('卖家质检图片为空，无法同步'); return }
+  if (!deviceForm.check_images) { hsxFeedback.warning('卖家质检图片为空，无法同步'); return }
   deviceForm.check_images_buyer = deviceForm.check_images
-  ElMessage.success('已同步卖家图片到买家')
+  hsxFeedback.success('已同步卖家图片到买家')
 }
 
 const handleCancel = () => { dialogVisible.value = false; emit('cancel') }
@@ -821,7 +824,7 @@ const handleCancel = () => { dialogVisible.value = false; emit('cancel') }
 const handleReturnDevice = () => {
   if (savingDraft.value || props.submitting) return
   if (!deviceData.value?.id) {
-    ElMessage.warning('设备信息异常，无法退回')
+    hsxFeedback.warning('设备信息异常，无法退回')
     return
   }
   emit('return-device', deviceData.value.id)

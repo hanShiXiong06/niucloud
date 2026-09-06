@@ -30,3 +30,8 @@ export const correctProjectCenterApplicationGroupNo = (id: number, data: any) =>
 export const downloadProjectCenterApplicationArchive = (id: number) => request.get(`/project-center/applications/${id}/archive`, { responseType: 'blob' })
 export const getProjectCenterIncomeBoard = (params: any) => request.get('/project-center/income-board', { params })
 export const replaceProjectCenterIncomeBoard = (data: any) => request.post('/project-center/income-board/replace', data)
+export const getProjectCenterDistributionOverview = () => request.get('/project-center/distribution/overview')
+export const getProjectCenterDistributionProjects = () => request.get('/project-center/distribution/projects')
+export const getProjectCenterDistributionOrders = (params: any) => request.get('/project-center/distribution/orders', { params })
+export const getProjectCenterDistributionOrder = (id: number) => request.get(`/project-center/distribution/orders/${id}`)
+export const settleProjectCenterDistributionOrder = (id: number) => request.post(`/project-center/distribution/orders/${id}/settle`)

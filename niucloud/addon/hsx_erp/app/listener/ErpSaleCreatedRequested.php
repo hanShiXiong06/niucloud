@@ -19,6 +19,20 @@ use core\exception\CommonException;
  */
 class ErpSaleCreatedRequested
 {
+    private int $forcedSiteId = 0;
+    private int $operatorUid = 0;
+    private string $operatorName = '系统补偿';
+
+    public static function forSite(int $siteId, int $operatorUid = 0, string $operatorName = '系统补偿'): self
+    {
+        if ($siteId <= 0) throw new CommonException('ERP销售补偿缺少有效站点');
+        $listener = new self();
+        $listener->forcedSiteId = $siteId;
+        $listener->operatorUid = $operatorUid;
+        $listener->operatorName = trim($operatorName) ?: '系统补偿';
+        return $listener;
+    }
+
     public function handle($event): ?array
     {
         if (!is_array($event)) throw new CommonException('ERP销售事件格式不正确');
@@ -123,17 +137,17 @@ class ErpSaleCreatedRequested
             'event_name' => 'erp.sale.created_requested',
             'event_version' => 1,
             'source_plugin' => $plugin,
-            'source_plugin_name' => mb_substr(trim((string)($source['plugin_name'] ?? $sourceOption['plugin_name'] ?? $plugin)), 0, 60),
+            'source_plugin_name' => mb_substr(trim((string)($source['plugin_name'] ?? $event['source_plugin_name'] ?? $sourceOption['plugin_name'] ?? $plugin)), 0, 60),
             'source_type' => $sourceType,
-            'source_name' => mb_substr(trim((string)($source['name'] ?? $sourceOption['name'] ?? '外部销售')), 0, 80),
+            'source_name' => mb_substr(trim((string)($source['name'] ?? $event['source_name'] ?? $sourceOption['name'] ?? '外部销售')), 0, 80),
             'source_id' => mb_substr(trim((string)($source['id'] ?? $event['source_id'] ?? '')), 0, 80),
             'source_order_no' => $orderNo,
             'party_id' => $partyId,
             'party_name' => $partyName,
             'channel_code' => (string)$channel['key'],
             'channel_name' => (string)$channel['name'],
-            'salesman_uid' => max(0, (int)($operator['id'] ?? 0)),
-            'operator_name' => mb_substr(trim((string)($operator['name'] ?? '')), 0, 60),
+            'salesman_uid' => max(0, (int)($operator['id'] ?? $event['salesman_uid'] ?? 0)),
+            'operator_name' => mb_substr(trim((string)($operator['name'] ?? $event['operator_name'] ?? '')), 0, 60),
             'occurred_at' => $occurredAt,
             'remark' => mb_substr(trim((string)($event['remark'] ?? '')), 0, 255),
             // 来源平台已收款时保留支付快照；线上支付统一进入系统清算账户，
@@ -189,6 +203,10 @@ class ErpSaleCreatedRequested
             'sale_channel_key' => (string)$payload['channel_code'],
             'sale_channel' => (string)$payload['channel_name'],
             'salesman_uid' => (int)$payload['salesman_uid'],
+            'salesman_snapshot_name' => trim((string)($payload['operator_name'] ?? '')) ?: '商城自动销售',
+            // 仅渠道已付款的稳定外部事件允许使用系统经办人；
+            // 线下现结与挂账仍必须有当前站点的真实员工。
+            'allow_system_salesman' => $isOnlinePaid ? 1 : 0,
             'settle_mode' => $isCash ? 'cash' : 'credit',
             'settle_method' => $isCash ? ($isOnlinePaid ? '线上现结' : '现结') : '挂账',
             'received_amount' => $isCash ? $saleAmount : 0,
@@ -218,19 +236,33 @@ class ErpSaleCreatedRequested
         ];
     }
 
-    protected function currentSiteId(): int { return (int)request()->siteId(); }
-    protected function resolveBusinessSource(string $key): ?array { return (new ErpConfigService())->findBusinessSource($key); }
+    protected function currentSiteId(): int
+    {
+        return $this->forcedSiteId > 0 ? $this->forcedSiteId : (int)request()->siteId();
+    }
+
+    protected function resolveBusinessSource(string $key): ?array
+    {
+        return ErpConfigService::forSite($this->currentSiteId())->findBusinessSource($key);
+    }
 
     protected function resolveSaleChannel(string $code, string $name): ?array
     {
-        foreach ((new ErpConfigService())->getSaleChannelOptions() as $row) {
+        foreach (ErpConfigService::forSite($this->currentSiteId())->getSaleChannelOptions() as $row) {
             if ((int)($row['enabled'] ?? 1) !== 1) continue;
             if ((string)$row['key'] === $code || ($code === '' && (string)$row['name'] === $name)) return $row;
         }
         return null;
     }
 
-    protected function createSale(array $data): int { return (new ErpSaleService())->create($data); }
+    protected function createSale(array $data): int
+    {
+        return ErpSaleService::forSite(
+            $this->currentSiteId(),
+            $this->operatorUid,
+            $this->operatorName
+        )->create($data);
+    }
 
     protected function saleResult(int $saleId): array
     {
@@ -274,8 +306,13 @@ class ErpSaleCreatedRequested
 
     protected function retryInbox(int $id, array $payload): int
     {
+        $stored = json_decode((string)ErpInboxEvent::where('id', '=', $id)->value('payload_json'), true);
+        $nextPayload = ['request' => $payload];
+        if (is_array($stored) && is_array($stored['_retry'] ?? null)) {
+            $nextPayload['_retry'] = $stored['_retry'];
+        }
         ErpInboxEvent::where('id', '=', $id)->update([
-            'payload_json' => json_encode(['request' => $payload], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'payload_json' => json_encode($nextPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             'status' => 'processing', 'update_at' => time(),
         ]);
         return $id;
@@ -293,8 +330,20 @@ class ErpSaleCreatedRequested
     {
         $existing = $this->findInbox((int)$payload['site_id'], (string)$payload['event_id']);
         if ($existing !== null && $this->isProcessed($existing)) return;
+        $stored = $existing !== null
+            ? json_decode((string)($existing['payload_json'] ?? ''), true)
+            : [];
+        $attempts = max(0, (int)($stored['_retry']['attempts'] ?? 0)) + 1;
         $values = [
-            'payload_json' => json_encode(['request' => $payload, 'error' => mb_substr($message, 0, 500)], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'payload_json' => json_encode([
+                'request' => $payload,
+                'error' => mb_substr($message, 0, 500),
+                '_retry' => [
+                    'attempts' => $attempts,
+                    'last_at' => time(),
+                    'last_error' => mb_substr($message, 0, 500),
+                ],
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             'status' => 'failed', 'update_at' => time(),
         ];
         try {

@@ -13,6 +13,15 @@ use think\facade\Db;
 
 class ErpWarehouseService extends BaseAdminService
 {
+    public static function forSite(int $siteId, int $operatorUid = 0, string $operatorName = '系统补偿'): self
+    {
+        $service = new self();
+        $service->site_id = $siteId;
+        $service->uid = $operatorUid;
+        $service->username = $operatorName;
+        return $service;
+    }
+
     public function getAll(): array
     {
         $warehouses = ErpWarehouse::where([['site_id', '=', $this->site_id]])

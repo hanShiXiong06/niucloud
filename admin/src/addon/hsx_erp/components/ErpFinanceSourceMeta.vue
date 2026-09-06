@@ -9,7 +9,6 @@
         </div>
         <div class="finance-source__meta">
             <span>业务场景：{{ bizSceneName }}</span>
-            <span v-if="pluginName">来源插件：{{ pluginName }}</span>
             <span v-if="partyRoleLabel">对象：{{ partyRoleLabel }}</span>
             <span>方向：{{ directionMeta.label }}</span>
         </div>
@@ -31,6 +30,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { erpNamedLabel } from '@/addon/hsx_erp/utils/display'
 
 const props = withDefaults(defineProps<{
     row?: Record<string, any>
@@ -59,9 +59,8 @@ const businessSourceName = computed(() => readable(
     businessSourceMap
 ))
 const showBusinessSource = computed(() => businessSourceName.value !== financeTypeName.value)
-const bizSceneName = computed(() => bizSceneMap[text(meta.value.biz_scene || props.row?.biz_scene || props.row?.source_type)] || '插件业务')
-const pluginName = computed(() => text(meta.value.source_plugin_name || meta.value.source_plugin))
-const channelName = computed(() => text(meta.value.channel_name || meta.value.channel_code || props.row?.sale_channel || props.row?.purchase_channel))
+const bizSceneName = computed(() => bizSceneMap[text(meta.value.biz_scene || props.row?.biz_scene || props.row?.source_type)] || '其他业务')
+const channelName = computed(() => erpNamedLabel(meta.value.channel_name || props.row?.sale_channel || props.row?.purchase_channel, meta.value.channel_code, ''))
 const sourceNo = computed(() => text(meta.value.source_no || props.row?.source_no || props.row?.batch_no || props.row?.purchase_no || props.row?.sale_no || props.row?.receivable_no || props.row?.payable_no) || '-')
 const internalSourceNo = computed(() => text(meta.value.internal_source_no || props.row?.internal_source_no))
 const showInternalSourceNo = computed(() => Boolean(internalSourceNo.value && internalSourceNo.value !== sourceNo.value))
@@ -99,11 +98,7 @@ function text(value: any) {
 }
 
 function readable(name: any, key: any, fallback: string, map: Record<string, string>) {
-    const named = text(name)
-    // 历史数据有把字典 key 误写进名称快照的情况，展示层统一翻译，绝不把 purchase_return 等技术值暴露给用户。
-    if (named) return map[named] || named
-    const keyed = text(key)
-    return map[keyed] || keyed || fallback
+    return erpNamedLabel(name, key, erpNamedLabel(fallback, '', '其他业务', map), map)
 }
 </script>
 

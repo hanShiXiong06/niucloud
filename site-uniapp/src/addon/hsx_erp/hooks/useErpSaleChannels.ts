@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { getErpSaleChannelOptions } from '@/addon/hsx_erp/api/erp'
+import { erpOptionLabel } from '@/addon/hsx_erp/utils/display'
 
 export type ErpSaleChannelOption = {
     key: string
@@ -60,7 +61,7 @@ function normalizeChannels(rows: any[]): ErpSaleChannelOption[] {
         .map(row => ({
             ...row,
             key: String(row?.key || row?.value || ''),
-            name: String(row?.name || row?.label || row?.key || ''),
+            name: erpOptionLabel(row?.name || row?.label, row?.key || row?.value, '未命名渠道'),
             channel_type: String(row?.channel_type || ''),
             channel_type_name: erpSaleChannelTypeLabel(String(row?.channel_type || '')),
             source_plugin: String(row?.source_plugin || ''),
@@ -75,6 +76,6 @@ function normalizeChannels(rows: any[]): ErpSaleChannelOption[] {
 export function erpSaleChannelTypeLabel(type: string) {
     return ({
         peer: '同行', retail: '零售', store: '门店', miniapp: '小程序',
-        platform: '平台', ecommerce: '电商', plugin: '插件',
+        platform: '平台', ecommerce: '电商', plugin: '业务渠道',
     } as Record<string, string>)[String(type || '')] || '其他渠道'
 }

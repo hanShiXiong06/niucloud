@@ -56,7 +56,7 @@
                 <div class="mt-5 flex items-center justify-between"><el-tabs v-model="itemSearch.result" class="flex-1" @tab-change="loadItems"><el-tab-pane label="全部" name=""/><el-tab-pane label="待盘" name="pending"/><el-tab-pane label="正常" name="normal"/><el-tab-pane label="盘亏" name="missing"/><el-tab-pane label="盘盈" name="surplus"/><el-tab-pane label="位置/状态异常" name="abnormal"/></el-tabs><el-input v-model.trim="itemSearch.keyword" clearable class="ml-4 !w-[250px]" placeholder="设备名 / IMEI / 资产号" @keyup.enter="loadItems"/></div>
                 <el-table :data="items" v-loading="itemsLoading" size="large">
                     <el-table-column label="设备" min-width="220"><template #default="{row}"><div class="font-medium">{{row.model||'未填写设备名称'}}</div><div class="mt-1 text-xs text-gray-400">{{row.spec||'-'}}</div></template></el-table-column>
-                    <el-table-column label="识别信息" min-width="190"><template #default="{row}"><div>IMEI {{row.imei||'-'}}</div><div class="mt-1 text-xs text-gray-400">{{row.asset_no||row.sn||'-'}}</div></template></el-table-column>
+                    <el-table-column label="识别信息" min-width="190"><template #default="{row}"><div>{{ erpSerialText(row) }}</div></template></el-table-column>
                     <el-table-column label="账面位置" min-width="160"><template #default="{row}">{{row.expected_warehouse_name||'-'}}<span v-if="row.expected_location_name"> / {{row.expected_location_name}}</span></template></el-table-column>
                     <el-table-column label="实际位置" min-width="160"><template #default="{row}">{{row.actual_warehouse_name||'-'}}<span v-if="row.actual_location_name"> / {{row.actual_location_name}}</span></template></el-table-column>
                     <el-table-column label="结果" width="110"><template #default="{row}"><el-tag :type="row.result_meta?.type||'info'">{{row.result_meta?.label||row.result}}</el-tag></template></el-table-column>
@@ -69,13 +69,14 @@
         </el-drawer>
 
         <el-dialog v-model="resolveDialog.visible" title="处理盘点差异" width="520px">
-            <el-form label-width="92px"><el-form-item label="设备">{{resolveDialog.row?.model||'-'}} · {{resolveDialog.row?.imei||resolveDialog.row?.asset_no||'-'}}</el-form-item><el-form-item label="处理方式" required><el-radio-group v-model="resolveDialog.form.action" class="flex flex-col items-start gap-2"><el-radio v-for="item in resolveActions" :key="item.value" :label="item.value">{{item.label}}</el-radio></el-radio-group></el-form-item><el-form-item v-if="resolveDialog.form.action==='correct_location'" label="实际库位" required><el-select v-model="resolveDialog.form.actual_location_id" class="w-full"><el-option v-for="item in detail.row?.locations||[]" :key="item.id" :label="item.location_name" :value="item.id"/></el-select></el-form-item><el-form-item label="处理说明" required><el-input v-model.trim="resolveDialog.form.remark" type="textarea" :rows="3" placeholder="请记录复核事实与处理原因"/></el-form-item></el-form>
+            <el-form label-width="92px"><el-form-item label="设备">{{resolveDialog.row?.model||'-'}} · {{ erpSerialText(resolveDialog.row) }}</el-form-item><el-form-item label="处理方式" required><el-radio-group v-model="resolveDialog.form.action" class="flex flex-col items-start gap-2"><el-radio v-for="item in resolveActions" :key="item.value" :label="item.value">{{item.label}}</el-radio></el-radio-group></el-form-item><el-form-item v-if="resolveDialog.form.action==='correct_location'" label="实际库位" required><el-select v-model="resolveDialog.form.actual_location_id" class="w-full"><el-option v-for="item in detail.row?.locations||[]" :key="item.id" :label="item.location_name" :value="item.id"/></el-select></el-form-item><el-form-item label="处理说明" required><el-input v-model.trim="resolveDialog.form.remark" type="textarea" :rows="3" placeholder="请记录复核事实与处理原因"/></el-form-item></el-form>
             <template #footer><el-button @click="resolveDialog.visible=false">取消</el-button><el-button type="primary" :loading="resolveDialog.loading" @click="resolveItem">确认处理</el-button></template>
         </el-dialog>
     </div>
 </template>
 
 <script setup lang="ts">
+import { erpSerialText } from '@/addon/hsx_erp/utils/display'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh } from '@element-plus/icons-vue'

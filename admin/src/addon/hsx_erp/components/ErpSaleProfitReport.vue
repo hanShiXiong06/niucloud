@@ -1,5 +1,5 @@
 <template>
-    <el-drawer
+    <HsxDrawer
         :model-value="modelValue"
         title="设备经营台账"
         size="92%"
@@ -162,7 +162,7 @@
                         <template #default="{ row }">
                             <span v-if="column.format === 'money'" class="profit-value" :class="column.key === 'profit' ? `profit-value--${row.profit_state}` : ''">{{ money(columnValue(row, column.key)) }}</span>
                             <span v-else-if="column.format === 'quantity'">{{ quantityText(columnValue(row, column.key)) }}</span>
-                            <el-tag v-else-if="column.format === 'state'" :type="row.effective_trade ? profitTagType(row.profit_state) : 'info'" :effect="row.effective_trade ? 'light' : 'plain'">{{ columnValue(row, column.key) }}</el-tag>
+                            <el-tag v-else-if="column.format === 'state'" :type="row.effective_trade ? profitTagType(row.profit_state) : 'info'" :effect="row.effective_trade ? 'light' : 'plain'">{{ displayValue(row, column) }}</el-tag>
                             <span v-else>{{ displayValue(row, column) }}</span>
                         </template>
                     </el-table-column>
@@ -181,13 +181,13 @@
             </div>
         </div>
 
-        <el-dialog v-model="columnDialog" title="台账字段设置" width="720px" append-to-body destroy-on-close>
-            <el-alert title="型号、串号和业务状态属于设备台账核心字段，始终保留；其他字段可自由控制显示、导出和顺序。" type="info" :closable="false" show-icon />
+        <HsxDialog :confirm-loading="savingView" v-model="columnDialog" title="台账字段设置" width="720px" append-to-body destroy-on-close>
+            <HsxNotice title="型号、串号和业务状态属于设备台账核心字段，始终保留；其他字段可自由控制显示、导出和顺序。" type="info" :closable="false" />
             <div class="column-config-list">
-                <div v-for="(item, index) in viewColumns" :key="item.key" class="column-config-row">
+                <div v-for="(item, index) in publicViewColumns" :key="item.key" class="column-config-row">
                     <div class="column-config-row__sort">
                         <el-button text :icon="ArrowUp" :disabled="index === 0" @click="moveColumn(index, -1)" />
-                        <el-button text :icon="ArrowDown" :disabled="index === viewColumns.length - 1" @click="moveColumn(index, 1)" />
+                        <el-button text :icon="ArrowDown" :disabled="index === publicViewColumns.length - 1" @click="moveColumn(index, 1)" />
                     </div>
                     <div class="column-config-row__name"><span>{{ columnMeta(item.key)?.label }}</span><small>{{ columnMeta(item.key)?.group }}</small></div>
                     <el-checkbox v-model="item.visible" :true-label="1" :false-label="0" :disabled="columnMeta(item.key)?.required === 1">列表显示</el-checkbox>
@@ -195,15 +195,17 @@
                     <el-input-number v-model="item.width" :min="70" :max="500" :step="10" controls-position="right" class="!w-[120px]" />
                 </div>
             </div>
-            <template #footer><el-button @click="resetPresetColumns">恢复当前视图默认</el-button><el-button @click="columnDialog = false">取消</el-button><el-button type="primary" :loading="savingView" @click="saveView">保存字段方案</el-button></template>
-        </el-dialog>
-    </el-drawer>
+            <template #footer><el-button :disabled="savingView" @click="resetPresetColumns">恢复当前视图默认</el-button><el-button :disabled="savingView" @click="columnDialog = false">取消</el-button><el-button :disabled="savingView" type="primary" :loading="savingView" @click="saveView">保存字段方案</el-button></template>
+        </HsxDialog>
+    </HsxDrawer>
 </template>
 
 <script setup lang="ts">
+import { erpEnumLabel, erpNamedLabel, isInternalErpColumn } from '@/addon/hsx_erp/utils/display'
 import { computed, reactive, ref } from 'vue'
 import { ArrowDown, ArrowUp, Download, Refresh, Search, Setting } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { HsxDrawer, HsxDialog, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
+const feedback = useFeedback()
 import { exportErpSaleProfitReport, getErpSaleProfitReport, getErpSaleProfitReportMeta, getErpStaffOptions, saveErpSaleProfitReportView } from '@/addon/hsx_erp/api/erp'
 import { getErpSaleChannelOptions } from '@/addon/hsx_erp/api/config'
 import ErpCatalogProductSelect from '@/addon/hsx_erp/components/ErpCatalogProductSelect.vue'
@@ -252,8 +254,9 @@ const allTime = computed(() => quickPeriod.value === 'all')
 const activePartyScope = computed(() => datasetScope.value === 'sales' ? 'customer' : filters.party_scope)
 const sourceOptions = computed(() => activePartyScope.value === 'customer'
     ? [{ label: 'ERP 销售', value: 'erp' }, { label: '商城订单', value: 'phone_shop' }]
-    : [{ label: 'ERP 采购 / 期初', value: 'erp' }, { label: '回收插件', value: 'hsx_recycle' }, { label: '商城补录', value: 'phone_shop' }])
-const visibleColumns = computed(() => viewColumns.value
+    : [{ label: 'ERP 采购 / 期初', value: 'erp' }, { label: '回收业务', value: 'hsx_recycle' }, { label: '商城补录', value: 'phone_shop' }])
+const publicViewColumns = computed(() => viewColumns.value.filter((item: any) => !isInternalErpColumn(item.key)))
+const visibleColumns = computed(() => publicViewColumns.value
     .filter((item: any) => Number(item.visible) === 1)
     .map((item: any) => ({ ...(columnMeta(item.key) || {}), ...item })))
 
@@ -384,10 +387,13 @@ function columnMeta(key: string) {
 }
 
 function moveColumn(index: number, offset: number) {
-    const target = index + offset
-    if (target < 0 || target >= viewColumns.value.length) return
+    const source = publicViewColumns.value[index]
+    const target = publicViewColumns.value[index + offset]
+    if (!source || !target) return
     const rows = [...viewColumns.value]
-    ;[rows[index], rows[target]] = [rows[target], rows[index]]
+    const sourceIndex = rows.indexOf(source)
+    const targetIndex = rows.indexOf(target)
+    ;[rows[sourceIndex], rows[targetIndex]] = [rows[targetIndex], rows[sourceIndex]]
     viewColumns.value = rows
 }
 
@@ -401,7 +407,7 @@ async function saveView() {
         const res: any = await saveErpSaleProfitReportView({ preset: activePresetKey.value, columns: viewColumns.value })
         meta.view = res?.data || { preset: activePresetKey.value, columns: viewColumns.value }
         columnDialog.value = false
-        ElMessage.success('字段方案已保存，仅影响当前站点')
+        feedback.success('字段方案已保存，仅影响当前站点')
         await loadList()
     } finally {
         savingView.value = false
@@ -448,7 +454,7 @@ async function exportExcel() {
                 `盈利 ${quantityText(total.profit_quantity)} 台 / 亏损 ${quantityText(total.loss_quantity)} 台`
             ]]
         })
-        ElMessage.success(`已导出 ${rows.length} 条设备台账`)
+        feedback.success(`已导出 ${rows.length} 条设备台账`)
     } finally {
         exporting.value = false
     }
@@ -526,10 +532,13 @@ function columnValue(row: any, key: string) {
 }
 
 function displayValue(row: any, column: any) {
+    if (column.key === 'serial_no') return row.imei || row.sn || (row.serial_no !== row.asset_no ? row.serial_no : '') || '-'
     const value = columnValue(row, column.key)
     if (column.format === 'date') return dateText(value)
     if (column.format === 'integer') return Number(value || 0)
     if (column.format === 'listing_status') return listingStatusName(String(value || ''))
+    if (column.format === 'state') return erpEnumLabel(value, {})
+    if (column.key === 'sale_channel') return erpNamedLabel(row.sale_channel, row.sale_channel_key, erpNamedLabel(row.origin_name, '', '-'))
     return value === '' || value === null || value === undefined ? '-' : String(value)
 }
 
@@ -546,7 +555,7 @@ function listingStatusName(value: string) {
         none: '无需上架', need_photo: '待拍照', need_price: '待销售定价', need_material: '待完善资料',
         ready: '待上架', pending_shop: '待商城完善', listed: '已上架'
     }
-    return names[value] || value || '-'
+    return erpEnumLabel(value, names)
 }
 
 function formatDateTime(value: number | string) {
@@ -570,7 +579,7 @@ function quantityText(value: any) {
 }
 
 function staffName(item: any) {
-    return item?.real_name || item?.username || item?.nickname || `员工${item?.uid || ''}`
+    return item?.real_name || item?.username || item?.nickname || '姓名未登记'
 }
 
 function profitTagType(state: string) {

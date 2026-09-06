@@ -38,6 +38,22 @@ $target = $resolve->invoke($service, $payableEvent, [
 $assert($target['web_url'] === 'https://example.com/site/hsx_erp/payable?status=pending&source_no=RO20260716001', 'ERP网页目标解析错误');
 $assert($target['miniapp_path'] === 'addon/hsx_erp/pages/payable/list?status=pending&source_no=RO20260716001', 'ERP小程序目标解析错误');
 
+$webOnlyEvent = [
+    'target' => [
+        'plugin' => 'hsx_project_center',
+        'route_key' => 'hsx_project_center.application',
+        'web_path' => 'site/hsx_project_center/application?application_id=9',
+    ],
+];
+$assert($contract->invoke($service, $webOnlyEvent) === '', '仅有网页详情的业务目标也必须通过契约校验');
+$webOnlyTarget = $resolve->invoke($service, $webOnlyEvent, [
+    'jump_mode' => 'miniapp',
+    'web_base_url' => 'https://example.com',
+    'miniapp_appid' => 'wx123',
+]);
+$assert($webOnlyTarget['miniapp_path'] === 'app/pages/index/index', '没有移动详情页时必须回退到管理端小程序首页');
+$assert($webOnlyTarget['web_url'] === 'https://example.com/site/hsx_project_center/application?application_id=9', '小程序回退时必须保留精确网页入口');
+
 $legacyRecycleEvent = [
     'source_plugin' => 'hsx_recycle',
     'source_type' => 'recycle_device',

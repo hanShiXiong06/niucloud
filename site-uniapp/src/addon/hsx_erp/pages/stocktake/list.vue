@@ -123,6 +123,7 @@ import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
 import ErpStocktakeSummary from '@/addon/hsx_erp/components/ErpStocktakeSummary.vue'
 import ErpWarehousePopup from '@/addon/hsx_erp/components/ErpWarehousePopup.vue'
 import ErpQuickFilterBar from '@/addon/hsx_erp/components/ErpQuickFilterBar.vue'
+import { showErpError } from '@/addon/hsx_erp/utils/error'
 
 const { pagingStyle } = useListHeader({ tabs: true, compactMp: true, h5TopRpx: 178 })
 const keyword = ref('')
@@ -200,8 +201,9 @@ async function queryList(page: number, limit: number) {
             limit,
         })
         pagingRef.value?.complete(response?.data?.data || [])
-    } catch (_) {
+    } catch (error) {
         pagingRef.value?.complete(false)
+        showErpError(error, '盘点任务加载失败，请检查网络后重试')
     }
 }
 

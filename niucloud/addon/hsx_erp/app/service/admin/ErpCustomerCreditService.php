@@ -14,6 +14,15 @@ class ErpCustomerCreditService extends BaseAdminService
 {
     public const POLICIES = ['inherit', 'normal', 'remind', 'cash_only', 'blocked'];
 
+    public static function forSite(int $siteId, int $operatorUid = 0, string $operatorName = '系统补偿'): self
+    {
+        $service = new self();
+        $service->site_id = $siteId;
+        $service->uid = $operatorUid;
+        $service->username = $operatorName;
+        return $service;
+    }
+
     public function profile(int $partyId): array
     {
         return $this->profiles([$partyId])[$partyId] ?? $this->emptyProfile($partyId);
@@ -36,7 +45,7 @@ class ErpCustomerCreditService extends BaseAdminService
             ->field('party_id,COUNT(id) as outstanding_count,SUM(amount - settled_amount) as outstanding_amount,MIN(occurred_at) as oldest_at')
             ->group('party_id')->select()->toArray();
         $summaryMap = array_column($summaryRows, null, 'party_id');
-        $rules = (array)((new ErpConfigService())->getRules()['sale']['credit_control'] ?? []);
+        $rules = (array)(ErpConfigService::forSite((int)$this->site_id)->getRules()['sale']['credit_control'] ?? []);
 
         $result = [];
         foreach ($parties as $party) {

@@ -97,9 +97,19 @@ $assert(str_contains($refund, 'closeReceivableRemainder'), '线上退款必须�
 $assert(str_contains($refund, 'restoreAsset'), 'ERP一物一码商品退款必须恢复库存');
 $assert(str_contains($refund, 'erp.asset.returned.v1'), '退款恢复库存后必须通知商城商品状态');
 $integration = $read('addon/hsx_erp/app/service/admin/ErpIntegrationService.php');
-$assert(str_contains($integration, 'retryFailedExternalRequests'), '商城退款同步ERP失败后必须进入定时补偿');
-$assert(str_contains($integration, 'ErpExternalSaleRefundedService::EVENT_NAME'), '入站补偿只能处理明确支持幂等重放的退款契约');
+$assert(str_contains($integration, 'retryFailedExternalRequests'), '商城付款/退款同步ERP失败后必须进入定时补偿');
+$assert(str_contains($integration, "'recycle.device.inbound_requested'"), '回收设备入库失败必须纳入同一套幂等补偿');
+$assert(str_contains($integration, 'ErpDeviceInboundRequested::forSite'), '回收入库补偿必须显式锁定事件站点，不能依赖定时任务请求上下文');
+$assert(str_contains($integration, "'erp.sale.created_requested'"), '一物一码设备已付销售失败必须纳入定时补偿');
+$assert(str_contains($integration, 'ErpSaleCreatedRequested::forSite'), '一物一码销售补偿不能依赖后台登录上下文');
+$assert(str_contains($integration, 'ErpExternalSaleRecordedService::EVENT_NAME'), '商城已付款入账失败必须支持幂等补偿');
+$assert(str_contains($integration, 'ErpExternalSaleRefundedService::EVENT_NAME'), '商城已退款冲账失败必须支持幂等补偿');
 $assert(str_contains($externalContract, "'_retry'"), 'ERP外部请求失败必须记录补偿次数，避免无限重试');
+
+foreach ([$assetBridge, $nativeBridge] as $index => $bridge) {
+    $assert(str_contains($bridge, '$allLineAmount') && str_contains($bridge, '$ratio'), '第' . ($index + 1) . '个商城财务桥必须按自身商品金额分摊整单支付');
+    $assert(str_contains($bridge, '* $ratio'), '第' . ($index + 1) . '个商城财务桥不得把混合订单整笔金额重复入账');
+}
 
 $saleService = $read('addon/hsx_erp/app/service/admin/ErpSaleService.php');
 $saleController = $read('addon/hsx_erp/app/adminapi/controller/ErpSale.php');
@@ -107,10 +117,16 @@ $saleReturnService = $read('addon/hsx_erp/app/service/admin/ErpSaleReturnService
 $saleReturnController = $read('addon/hsx_erp/app/adminapi/controller/ErpSaleReturn.php');
 $saleReturnPage = $read('../admin/src/addon/hsx_erp/views/erp/sale_return/list.vue');
 $assetSaleListener = $read('addon/hsx_erp/app/listener/ErpSaleCreatedRequested.php');
+$customerCredit = $read('addon/hsx_erp/app/service/admin/ErpCustomerCreditService.php');
 $assert(str_contains($saleService, "'external_line_id' => (string)\$resolvedItem['external_line_id']"), 'ERP设备销售明细必须保存商城订单行ID');
 $assert(str_contains($saleService, 'recordOnlinePaymentAdjustments'), 'ERP设备线上销售必须单独记录客户手续费补款和渠道手续费');
 $assert(str_contains($saleService, "'payment_mode' => trim"), 'ERP设备销售单必须保存线上支付方式和金额快照');
 $assert(str_contains($assetSaleListener, 'ensureWechatClearingAccount'), 'ERP设备线上支付必须进入微信支付清算账户并直接结清');
+$assert(str_contains($assetSaleListener, 'public static function forSite'), 'ERP设备销售失败重放必须显式锁定事件站点');
+$assert(str_contains($assetSaleListener, "'_retry'"), 'ERP设备销售失败必须记录累计补偿次数');
+$assert(str_contains($saleService, 'resolveSalesman($data)'), '商城已付设备销售必须支持可审计的系统经办人快照');
+$assert(str_contains($saleService, "!in_array(\$sourcePlugin, ['erp', 'hsx_erp'], true)"), '系统经办人只能用于外部稳定事件，不得放宽ERP手工出库');
+$assert(str_contains($customerCredit, 'public static function forSite'), '定时补偿销售信用校验不能依赖HTTP请求站点');
 foreach (['i.external_goods_id', 'i.external_sku_id', 'i.external_line_id', 'i.quantity', 'i.refunded_amount', 'i.refunded_cost'] as $field) {
     $assert(str_contains($saleService, "'{$field}'"), "ERP销售列表必须返回{$field}");
 }

@@ -11,15 +11,82 @@ use think\facade\Log;
 
 final class WecomNotificationService
 {
+    public function sendTest(int $siteId, int $receiverUid): array
+    {
+        if ($siteId <= 0 || $receiverUid <= 0) throw new \InvalidArgumentException('站点或接收员工无效');
+        $config = (new WecomDeliveryContextService())->resolve($siteId, true);
+        $binding = WecomStaffBinding::where([
+            ['site_id', '=', $siteId], ['uid', '=', $receiverUid], ['status', '=', 1],
+        ])->findOrEmpty();
+        if ($binding->isEmpty() || trim((string)$binding->wecom_userid) === '') {
+            throw new \RuntimeException('请先让接收员工绑定企业微信身份');
+        }
+        if (($config['connection_mode'] ?? '') === 'provider'
+            && (int)$binding->corp_authorization_id !== (int)($config['corp_authorization_id'] ?? 0)) {
+            throw new \RuntimeException('接收员工的企业微信身份不属于当前授权企业，请重新绑定');
+        }
+        $user = SysUser::where('uid', '=', $receiverUid)->field('uid,username,real_name')->findOrEmpty();
+        $receiverName = $user->isEmpty() ? ('员工' . $receiverUid)
+            : (trim((string)$user->real_name) ?: trim((string)$user->username) ?: ('员工' . $receiverUid));
+        $eventId = 'wecom:test:' . $siteId . ':' . $receiverUid . ':' . bin2hex(random_bytes(8));
+        $event = [
+            'site_id' => $siteId,
+            'event_id' => $eventId,
+            'title' => '企业微信通知已接通',
+            'wecom_target' => [
+                'plugin' => 'hsx_wecom',
+                'route_key' => 'hsx_wecom.home',
+                'web_url' => $this->targetUrl($config, 'site/hsx_wecom/config'),
+                'miniapp_appid' => trim((string)($config['miniapp_appid'] ?? '')),
+                'miniapp_path' => 'app/pages/index/index',
+            ],
+        ];
+        $target = $this->target($event, $config);
+        $now = time();
+        $log = WecomMessageLog::create([
+            'site_id' => $siteId,
+            'corp_authorization_id' => (int)($config['corp_authorization_id'] ?? 0),
+            'channel_code' => (string)($config['channel_code'] ?? ''),
+            'auth_corpid' => (string)($config['auth_corpid'] ?? ''),
+            'agent_id' => (int)($config['agent_id'] ?? 0),
+            'event_id' => $eventId,
+            'scene' => 'connection_test',
+            'source_plugin' => 'hsx_wecom',
+            'source_type' => 'connection_test',
+            'source_id' => 0,
+            'receiver_uid' => $receiverUid,
+            'receiver_name' => $receiverName,
+            'wecom_userid' => trim((string)$binding->wecom_userid),
+            'title' => (string)$event['title'],
+            'content' => '<div class="gray">当前站点与企业微信已连通</div><div class="normal">点击卡片即可进入后台管理端小程序</div>',
+            'target_url' => $target['web_url'],
+            'payload_json' => json_encode($event, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}',
+            'status' => 'pending', 'retry_count' => 0, 'next_retry_at' => $now,
+            'error_message' => '', 'create_at' => $now, 'update_at' => $now,
+        ]);
+        $sent = $this->dispatch((int)$log->id);
+        $fresh = WecomMessageLog::where('id', '=', (int)$log->id)->findOrEmpty();
+        return [
+            'sent' => $sent ? 1 : 0,
+            'message_id' => (int)$log->id,
+            'status' => $fresh->isEmpty() ? ($sent ? 'success' : 'failed') : (string)$fresh->status,
+            'receiver_name' => $receiverName,
+            'error_message' => $fresh->isEmpty() ? '' : (string)$fresh->error_message,
+        ];
+    }
+
     public function enqueueBusinessReport(array $event): array
     {
         $siteId = (int)($event['site_id'] ?? 0);
         $eventId = trim((string)($event['event_id'] ?? ''));
         $receiverUids = array_values(array_unique(array_filter(array_map('intval', (array)($event['receiver_uids'] ?? [])))));
         if ($siteId <= 0 || $eventId === '') return ['accepted' => false, 'reason' => 'invalid_event'];
-        $config = (new WecomConfigService())->get($siteId);
+        $config = (new WecomDeliveryContextService())->resolve($siteId);
         if (empty($config['enabled']) || empty($config['report_notice_enabled'])) {
             return ['accepted' => false, 'queued' => 0, 'reason' => 'report_notice_disabled'];
+        }
+        if (($config['connection_mode'] ?? '') === 'provider' && ($config['provider_status'] ?? '') !== 'authorized') {
+            return ['accepted' => false, 'queued' => 0, 'reason' => 'provider_not_authorized'];
         }
         if ($receiverUids === []) return ['accepted' => false, 'queued' => 0, 'reason' => 'no_receivers'];
 
@@ -45,6 +112,10 @@ final class WecomNotificationService
             if ($binding->isEmpty() || trim((string)$binding->wecom_userid) === '') {
                 $status = 'skipped';
                 $error = '报告接收人尚未绑定企业微信账号';
+            } elseif (($config['connection_mode'] ?? '') === 'provider'
+                && (int)$binding->corp_authorization_id !== (int)($config['corp_authorization_id'] ?? 0)) {
+                $status = 'skipped';
+                $error = '报告接收人的企业微信身份不属于当前授权企业，请重新绑定';
             } elseif ($targetError !== '') {
                 $status = 'skipped';
                 $error = $targetError;
@@ -78,6 +149,10 @@ final class WecomNotificationService
             }
             $log = WecomMessageLog::create([
                 'site_id' => $siteId, 'event_id' => $messageEventId, 'scene' => 'business_report',
+                'corp_authorization_id' => (int)($config['corp_authorization_id'] ?? 0),
+                'channel_code' => (string)($config['channel_code'] ?? ''),
+                'auth_corpid' => (string)($config['auth_corpid'] ?? ''),
+                'agent_id' => (int)($config['agent_id'] ?? 0),
                 'source_plugin' => 'hsx_performance', 'source_type' => (string)($event['report_type'] ?? 'report'),
                 'source_id' => (int)($event['report_id'] ?? 0), 'receiver_uid' => $receiverUid,
                 'receiver_name' => $messageData['receiver_name'], 'wecom_userid' => $messageData['wecom_userid'],
@@ -110,7 +185,7 @@ final class WecomNotificationService
         $binding = WecomStaffBinding::where([
             ['site_id', '=', $siteId], ['uid', '=', $assigneeUid], ['status', '=', 1],
         ])->findOrEmpty();
-        $config = (new WecomConfigService())->get($siteId);
+        $config = (new WecomDeliveryContextService())->resolve($siteId);
         $notifyAt = max(time(), (int)($event['notify_at'] ?? 0));
         $status = 'pending';
         $error = '';
@@ -118,9 +193,16 @@ final class WecomNotificationService
         if (empty($config['enabled']) || empty($config['task_notice_enabled'])) {
             $status = 'skipped';
             $error = '企业微信任务通知未启用';
+        } elseif (($config['connection_mode'] ?? '') === 'provider' && ($config['provider_status'] ?? '') !== 'authorized') {
+            $status = 'skipped';
+            $error = '客户企业微信尚未授权，请先完成一键授权';
         } elseif ($binding->isEmpty() || trim((string)$binding->wecom_userid) === '') {
             $status = 'skipped';
             $error = '责任人尚未绑定企业微信账号';
+        } elseif (($config['connection_mode'] ?? '') === 'provider'
+            && (int)$binding->corp_authorization_id !== (int)($config['corp_authorization_id'] ?? 0)) {
+            $status = 'skipped';
+            $error = '责任人的企业微信身份不属于当前授权企业，请重新绑定';
         } elseif ($targetError !== '') {
             $status = 'skipped';
             $error = $targetError;
@@ -130,6 +212,10 @@ final class WecomNotificationService
         $event['wecom_target'] = $target;
         $log = WecomMessageLog::create([
             'site_id' => $siteId,
+            'corp_authorization_id' => (int)($config['corp_authorization_id'] ?? 0),
+            'channel_code' => (string)($config['channel_code'] ?? ''),
+            'auth_corpid' => (string)($config['auth_corpid'] ?? ''),
+            'agent_id' => (int)($config['agent_id'] ?? 0),
             'event_id' => $eventId,
             'scene' => 'task_assigned',
             'source_plugin' => trim((string)($event['source_plugin'] ?? '')),
@@ -157,12 +243,26 @@ final class WecomNotificationService
     {
         $log = WecomMessageLog::where('id', '=', $id)->findOrEmpty();
         if ($log->isEmpty() || !in_array((string)$log->status, ['pending', 'failed'], true)) return false;
-        $config = (new WecomConfigService())->get((int)$log->site_id);
         try {
+            $config = (new WecomDeliveryContextService())->resolve((int)$log->site_id, true);
+            $binding = WecomStaffBinding::where([
+                ['site_id', '=', (int)$log->site_id],
+                ['uid', '=', (int)$log->receiver_uid],
+                ['status', '=', 1],
+            ])->findOrEmpty();
+            if ($binding->isEmpty() || trim((string)$binding->wecom_userid) === '') {
+                throw new \RuntimeException('接收员工尚未绑定企业微信账号');
+            }
+            if (($config['connection_mode'] ?? '') === 'provider'
+                && (int)$binding->corp_authorization_id !== (int)($config['corp_authorization_id'] ?? 0)) {
+                throw new \RuntimeException('接收员工绑定的企业微信身份与当前授权企业不一致');
+            }
+            $log->wecom_userid = trim((string)$binding->wecom_userid);
             $event = json_decode((string)$log->payload_json, true);
             if (!is_array($event)) $event = [];
             $isReport = (string)$log->scene === 'business_report';
-            $invalidReason = $isReport ? '' : $this->taskInvalidReason($event);
+            $isTest = (string)$log->scene === 'connection_test';
+            $invalidReason = ($isReport || $isTest) ? '' : $this->taskInvalidReason($event);
             if ($invalidReason !== '') {
                 $log->save([
                     'status' => 'skipped',
@@ -179,21 +279,39 @@ final class WecomNotificationService
             if (!$hasStructuredTarget && trim((string)$log->target_url) !== '' && (string)($config['jump_mode'] ?? 'web') !== 'miniapp') {
                 $target['web_url'] = trim((string)$log->target_url);
             }
+            if (($config['credential_mode'] ?? $config['connection_mode'] ?? '') === 'provider'
+                && trim((string)($target['miniapp_appid'] ?? '')) !== ''
+                && trim((string)($target['miniapp_path'] ?? '')) !== '') {
+                // 统一先进入带签名的站点入口，校验员工权限并切换 siteId 后再打开业务页。
+                // 否则同一员工管理多个站点时，会沿用小程序本地缓存中的上一个站点。
+                $target['miniapp_path'] = (new WecomEntryService())->issuePagePath(
+                    (int)$log->site_id,
+                    (string)$target['miniapp_path'],
+                    (string)($target['route_key'] ?? '')
+                );
+            }
             $response = (new WecomClient())->sendTaskCard($config, (string)$log->wecom_userid, [
                 'title' => (string)$log->title,
                 'description' => (string)$log->content,
-                'plain_content' => $isReport ? $this->reportPlainDescription($event) : $this->plainDescription($event),
-                'summary' => $isReport ? '经营数据已汇总，点击查看完整明细' : '任务已分配给你，请及时处理',
+                'plain_content' => $isTest ? '测试成功：当前站点、企业微信身份和后台管理端入口已建立准确关联。'
+                    : ($isReport ? $this->reportPlainDescription($event) : $this->plainDescription($event)),
+                'summary' => $isTest ? '连通成功，点击进入后台管理端'
+                    : ($isReport ? '经营数据已汇总，点击查看完整明细' : '任务已分配给你，请及时处理'),
                 'url' => $target['web_url'],
                 'web_url' => $target['web_url'],
                 'miniapp_appid' => $target['miniapp_appid'],
                 'miniapp_path' => $target['miniapp_path'],
-                'button_text' => $isReport ? '查看报告' : '查看任务',
-                'source_desc' => $isReport ? '经营报告' : '业务待办',
+                'button_text' => $isTest ? '进入管理端' : ($isReport ? '查看报告' : '查看任务'),
+                'source_desc' => $isTest ? '连通测试' : ($isReport ? '经营报告' : '业务待办'),
             ]);
             $log->save([
                 'status' => 'success',
+                'corp_authorization_id' => (int)($config['corp_authorization_id'] ?? 0),
+                'channel_code' => (string)($config['channel_code'] ?? ''),
+                'auth_corpid' => (string)($config['auth_corpid'] ?? ''),
+                'agent_id' => (int)($config['agent_id'] ?? 0),
                 'response_json' => json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}',
+                'provider_msgid' => trim((string)($response['msgid'] ?? $response['response_code'] ?? '')),
                 'sent_at' => time(),
                 'next_retry_at' => 0,
                 'error_message' => '',
@@ -308,11 +426,16 @@ final class WecomNotificationService
         $snapshot = is_array($event['wecom_target'] ?? null) ? $event['wecom_target'] : [];
         $dynamicRecycleTarget = (string)($businessTarget['plugin'] ?? '') === 'hsx_recycle';
         if (!$dynamicRecycleTarget && (array_key_exists('web_url', $snapshot) || array_key_exists('miniapp_path', $snapshot))) {
+            $snapshotMiniappAppid = trim((string)($snapshot['miniapp_appid'] ?? ''));
+            // 服务商模式下 AppID 属于当前 SaaS 通道，不能使用入队时的旧快照。
+            if (($config['credential_mode'] ?? $config['connection_mode'] ?? '') === 'provider') {
+                $snapshotMiniappAppid = trim((string)($config['miniapp_appid'] ?? ''));
+            }
             return [
                 'plugin' => trim((string)($snapshot['plugin'] ?? '')),
                 'route_key' => trim((string)($snapshot['route_key'] ?? '')),
                 'web_url' => trim((string)($snapshot['web_url'] ?? '')),
-                'miniapp_appid' => trim((string)($snapshot['miniapp_appid'] ?? '')),
+                'miniapp_appid' => $snapshotMiniappAppid,
                 'miniapp_path' => ltrim(trim((string)($snapshot['miniapp_path'] ?? '')), '/'),
             ];
         }
@@ -328,7 +451,13 @@ final class WecomNotificationService
             $miniappAppid = '';
             $miniappPath = '';
         } elseif ($mode === 'miniapp') {
-            $webUrl = '';
+            if ($miniappPath !== '') {
+                $webUrl = '';
+            } elseif ($miniappAppid !== '') {
+                // 个别 PC 业务尚无移动管理端详情页。此时主入口仍进入管理端小程序，
+                // 同时保留精确网页地址作为卡片的第二入口，不能发送一张无法点击的卡片。
+                $miniappPath = 'app/pages/index/index';
+            }
         }
         return [
             'plugin' => trim((string)($target['plugin'] ?? '')),

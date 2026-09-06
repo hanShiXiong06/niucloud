@@ -18,6 +18,7 @@ use addon\hsx_recycle\app\service\core\recycle_device\CoreRecycleDeviceLogServic
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderNotifyService;
 use addon\hsx_recycle\app\service\core\recycle_order\DeviceSummaryHelper;
 use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpCapabilityService;
+use addon\hsx_recycle\app\service\core\recycle_order\RecyclePaymentOwnershipService;
 use addon\hsx_recycle\app\service\admin\printer\RecyclePrintSceneService;
 use addon\hsx_recycle\app\service\admin\stat\TaskService;
 use app\model\sys\SysUser;
@@ -1469,11 +1470,15 @@ class RecycleDeviceService extends BaseAdminService
      */
     public function confirmPrice(int $id, float $price, string $remark = '', ?float $sellPrice = null, array $refurbishment = []): bool
     {
-        $placement = (new RecycleErpCapabilityService())->validateInboundPlacement(
+        $capability = new RecycleErpCapabilityService();
+        $erpManaged = $capability->isPaymentManaged($this->site_id, 0, [$id]);
+        $placement = $erpManaged ? $capability->validateInboundPlacement(
             $this->site_id,
             (int)($refurbishment['target_warehouse_id'] ?? 0),
-            (int)($refurbishment['target_location_id'] ?? 0)
-        );
+            (int)($refurbishment['target_location_id'] ?? 0),
+            '',
+            true
+        ) : [];
         if (!empty($placement)) {
             $refurbishment['target_warehouse_id'] = $placement['warehouse_id'];
             $refurbishment['target_warehouse_name'] = $placement['warehouse_name'];
@@ -1484,7 +1489,7 @@ class RecycleDeviceService extends BaseAdminService
         // 开启事务
         Db::startTrans();
         try {
-            $device = $this->model->find($id);
+            $device = $this->model->where('site_id', $this->site_id)->where('id', $id)->lock(true)->find();
             if (empty($device)) {
                 throw new CommonException('设备不存在');
             }
@@ -1809,18 +1814,26 @@ class RecycleDeviceService extends BaseAdminService
             return;
         }
         try {
-            Log::info('确认回收开始同步ERP', [
-                'site_id' => $this->site_id,
-                'device_ids' => $deviceIds,
-            ]);
-            $result = (new RecycleDeviceErpSyncService())->dispatch($deviceIds, ['self_erp']);
-            Log::info('确认回收同步ERP成功', [
-                'site_id' => $this->site_id,
-                'device_ids' => $deviceIds,
-                'event_id' => (string)($result['event_id'] ?? ''),
-                'device_count' => (int)($result['device_count'] ?? 0),
-                'receiver_count' => count((array)($result['results'] ?? [])),
-            ]);
+            $ownershipService = new RecyclePaymentOwnershipService();
+            $ownership = $ownershipService->inspect($this->site_id, 0, $deviceIds);
+            foreach ($ownership['devices'] as $deviceId => $device) {
+                try {
+                    if ($device['owner'] === 'local') {
+                        $ownershipService->claim($this->site_id, 0, [(int)$deviceId], 'local');
+                        continue;
+                    }
+                    if ($device['owner'] !== 'self_erp') throw new CommonException(RecyclePaymentOwnershipService::message('unknown'));
+                    Log::info('确认回收开始同步ERP', ['site_id' => $this->site_id, 'device_id' => $deviceId]);
+                    $result = (new RecycleDeviceErpSyncService())->dispatch([(int)$deviceId], ['self_erp']);
+                    Log::info('确认回收同步ERP成功', ['site_id' => $this->site_id, 'device_id' => $deviceId,
+                        'event_id' => (string)($result['event_id'] ?? ''), 'device_count' => (int)($result['device_count'] ?? 0)]);
+                } catch (\Throwable $deviceError) {
+                    // 一台异常不能阻断同一订单内其他已确认设备；失败原因同时由健康查询展示。
+                    Log::error('确认回收后自动同步ERP失败：' . $deviceError->getMessage(), [
+                        'site_id' => $this->site_id, 'device_id' => $deviceId,
+                    ]);
+                }
+            }
         } catch (\Throwable $e) {
             Log::error('确认回收后自动同步ERP失败：' . $e->getMessage(), [
                 'site_id' => $this->site_id,
@@ -1848,8 +1861,10 @@ class RecycleDeviceService extends BaseAdminService
             return;
         }
         try {
-            $devices = $this->model->where('id', 'in', $deviceIds)->select();
+            $ownership = (new RecyclePaymentOwnershipService())->inspect($this->site_id, 0, $deviceIds);
+            $devices = $this->model->where('site_id', $this->site_id)->where('id', 'in', $deviceIds)->select();
             foreach ($devices as $device) {
+                if (($ownership['devices'][(int)$device->id]['owner'] ?? 'unknown') !== 'self_erp') continue;
                 $amount = round((float)($device->final_price ?? 0), 2);
                 $memberId = (int)($device->member_id ?? 0);
                 if ($amount <= 0 || $memberId <= 0) {

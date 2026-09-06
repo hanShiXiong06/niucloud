@@ -217,19 +217,9 @@ class CoreRecycleOrderEventService extends BaseCoreService
         try {
             Log::info('回收订单完成后事件', $data);
 
-            // 事实来源二选一：ERP 安装时必须等 ERP 实际结清事件；
-            // 未安装 ERP 时，才由回收插件本地打款完成事件发布事实。
-            // 这样既不会提前累计，也不会因两边都回调而重复计算。
-            $siteId = self::resolveEventSiteId($data);
-            if ($siteId > 0 && (new RecycleErpCapabilityService())->isPaymentManaged($siteId)) {
-                Log::info('回收订单营销事实等待 ERP 结清事件', [
-                    'order_id' => (int)($data['order_id'] ?? 0),
-                    'site_id' => $siteId,
-                ]);
-            } else {
-                $data['source_plugin'] = 'hsx_recycle';
-                self::emitMarketingFact($data, false);
-            }
+            // 同一订单可包含不同付款责任的设备；只发布实际已付、责任明确的逐台事实。
+            $data['source_plugin'] = 'hsx_recycle';
+            self::emitMarketingFact($data, false);
 
             // 订单完成奖励积分
             $rewardPoint = self::giveOrderRewardPoint($data);
@@ -438,15 +428,45 @@ class CoreRecycleOrderEventService extends BaseCoreService
             ->findOrEmpty();
         if ($order->isEmpty() || (int)$order['site_id'] <= 0 || (int)$order['member_id'] <= 0) return;
         $devices = $order->devices()->select()->toArray();
+        $selectedIds = array_values(array_unique(array_filter(array_map('intval', (array)($data['device_ids'] ?? [])))));
+        if ($selectedIds !== []) {
+            $devices = array_values(array_filter($devices, static fn(array $device): bool => in_array((int)$device['id'], $selectedIds, true)));
+        }
+        $ownership = [];
+        if (!$reversal && $devices !== []) {
+            $capability = (new RecycleErpCapabilityService())->paymentCapability(
+                (int)$order['site_id'],
+                $orderId,
+                array_map(static fn(array $device): int => (int)$device['id'], $devices)
+            );
+            foreach ((array)($capability['devices'] ?? []) as $item) {
+                if (is_array($item)) $ownership[(int)($item['device_id'] ?? 0)] = $item;
+            }
+        }
         foreach ($devices as $device) {
             // 正向事实只统计最终由商家收购的设备，已退回设备不进入任务。
             if (!$reversal && (int)($device['status'] ?? 0) === \addon\hsx_recycle\app\dict\order\RecycleOrderDict::DEVICE_STATUS_RETURNED) continue;
+            $sourcePlugin = (string)($data['source_plugin'] ?? 'hsx_recycle');
+            if (!$reversal) {
+                $responsibility = $ownership[(int)$device['id']] ?? [];
+                $owner = (string)($responsibility['owner'] ?? 'unknown');
+                if (!in_array($owner, ['local', 'self_erp'], true)) {
+                    Log::warning('回收设备营销事实等待付款责任确认', ['site_id' => (int)$order['site_id'], 'order_id' => $orderId, 'device_id' => (int)$device['id']]);
+                    continue;
+                }
+                if ((int)($responsibility['pay_status'] ?? 0) !== \addon\hsx_recycle\app\dict\order\RecycleOrderDict::PAY_STATUS_PAID) {
+                    if ($owner === 'self_erp') Log::info('回收设备营销事实等待 ERP 结清事件', ['site_id' => (int)$order['site_id'], 'order_id' => $orderId, 'device_id' => (int)$device['id']]);
+                    continue;
+                }
+                // ERP 回写最后结清时也补齐混合订单内更早已付的本地设备；稳定事件ID保证不重复累计。
+                $sourcePlugin = $owner === 'self_erp' ? 'hsx_erp' : 'hsx_recycle';
+            }
             self::emitMarketingDeviceFact(
                 (int)$device['id'],
                 $reversal,
                 $order->toArray(),
                 $device,
-                (string)($data['source_plugin'] ?? 'hsx_recycle')
+                $sourcePlugin
             );
         }
     }

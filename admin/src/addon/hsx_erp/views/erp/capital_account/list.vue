@@ -1,17 +1,15 @@
 <template>
-    <div class="main-container">
+    <HsxPage padding="none" class="main-container">
         <el-card class="!border-none" shadow="never">
-            <div class="flex items-start justify-between gap-4">
-                <div>
-                    <div class="text-page-title">付款账户</div>
-                    <div class="mt-1 text-sm text-gray-500">维护现金、微信、支付宝、银行卡等账户。付款和收款都要先选账户，流水自动留痕。</div>
-                </div>
-                <div class="flex gap-2">
-                    <el-button type="success" :icon="Money" @click="operatingVisible = true">经营收支</el-button>
-                    <el-button :icon="Refresh" :loading="loading" @click="loadAll">刷新</el-button>
-                    <el-button type="primary" :icon="Plus" @click="openEdit()">新建账户</el-button>
-                </div>
-            </div>
+            <HsxTitle size="page" collapsible-subtitle class="mb-4">
+                <template #default>付款账户</template>
+                <template #subtitle>维护现金、微信、支付宝、银行卡等账户。付款和收款都要先选账户，流水自动留痕。</template>
+                <template #extra><div class="flex gap-2 flex-wrap">
+                        <el-button type="success" :icon="Money" @click="operatingVisible = true">经营收支</el-button>
+                        <el-button :icon="Refresh" :loading="loading" @click="loadAll">刷新</el-button>
+                        <el-button type="primary" :icon="Plus" @click="openEdit()">新建账户</el-button>
+                    </div></template>
+            </HsxTitle>
 
             <div class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div class="summary-box">
@@ -80,11 +78,11 @@
             <el-empty v-if="!loading && !accounts.length" description="还没有付款账户" :image-size="80" />
         </el-card>
 
-        <el-drawer v-model="operatingVisible" title="经营收支" size="96%" destroy-on-close append-to-body>
+        <HsxDrawer v-model="operatingVisible" title="经营收支" size="96%" destroy-on-close append-to-body>
             <OperatingFinanceList />
-        </el-drawer>
+        </HsxDrawer>
 
-        <el-dialog v-model="editVisible" :title="form.id ? '编辑账户' : '新建账户'" width="520px">
+        <HsxDialog :confirm-loading="saving" v-model="editVisible" :title="form.id ? '编辑账户' : '新建账户'" width="520px" :destroy-on-close="false">
             <el-form :model="form" label-width="90px">
                 <el-form-item label="账户名称" required>
                     <el-input v-model.trim="form.account_name" placeholder="如：老板微信 / 招商银行尾号1234" />
@@ -117,12 +115,12 @@
                 </el-form-item>
             </el-form>
             <template #footer>
-                <el-button @click="editVisible = false">取消</el-button>
-                <el-button type="primary" :loading="saving" @click="onSave">保存</el-button>
+                <el-button :disabled="saving" @click="editVisible = false">取消</el-button>
+                <el-button :disabled="saving" type="primary" :loading="saving" @click="onSave">保存</el-button>
             </template>
-        </el-dialog>
+        </HsxDialog>
 
-        <el-dialog v-model="entryVisible" title="记一笔收/付" width="480px">
+        <HsxDialog :confirm-loading="saving" v-model="entryVisible" title="记一笔收/付" width="480px" :destroy-on-close="false">
             <div class="mb-3 text-sm text-gray-500">账户：{{ entryForm.account_name }}（当前余额 {{ money(entryForm.balance) }}）</div>
             <el-form :model="entryForm" label-width="80px">
                 <el-form-item label="方向">
@@ -148,12 +146,12 @@
                 <el-form-item label="资金凭证"><ErpFinanceVoucherUpload v-model="entryForm.voucher_urls" /></el-form-item>
             </el-form>
             <template #footer>
-                <el-button @click="entryVisible = false">取消</el-button>
-                <el-button type="primary" :loading="saving" @click="onEntry">确认记账</el-button>
+                <el-button :disabled="saving" @click="entryVisible = false">取消</el-button>
+                <el-button :disabled="saving" type="primary" :loading="saving" @click="onEntry">确认记账</el-button>
             </template>
-        </el-dialog>
+        </HsxDialog>
 
-        <el-drawer v-model="ledgerVisible" :title="`账户流水 · ${ledger.accountName}`" size="62%">
+        <HsxDrawer v-model="ledgerVisible" :title="`账户流水 · ${ledger.accountName}`" size="62%" :destroy-on-close="false">
             <div class="mb-3 flex flex-wrap items-center gap-2">
                 <el-select v-model="ledger.direction" placeholder="方向" clearable class="!w-[110px]">
                     <el-option label="收入" value="in" />
@@ -195,13 +193,14 @@
             <div class="mt-4 flex justify-end">
                 <el-pagination layout="total, prev, pager, next" :total="ledger.total" :page-size="ledger.limit" :current-page="ledger.page" @current-change="onLedgerPage" />
             </div>
-        </el-drawer>
-    </div>
+        </HsxDrawer>
+    </HsxPage>
 </template>
 
 <script lang="ts" setup>
+import { HsxTitle, HsxPage, HsxDialog, HsxDrawer, useFeedback } from '@/addon/hsx_components/core'
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import { Delete, Edit, Money, Plus, Refresh, Tickets } from '@element-plus/icons-vue'
 import { deleteCapitalAccount, getCapitalAccounts, getCapitalLedger, recordCapitalEntry, saveCapitalAccount } from '@/addon/hsx_erp/api/capital_account'
 import { getErpFinanceCategories } from '@/addon/hsx_erp/api/config'
@@ -209,6 +208,8 @@ import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/i
 import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVoucherUpload.vue'
 import ErpImageGallery from '@/addon/hsx_erp/components/ErpImageGallery.vue'
 import OperatingFinanceList from '@/addon/hsx_erp/views/erp/operating_finance/list.vue'
+const hsxFeedback = useFeedback()
+
 
 const money = (value: any) => `¥${Number(value || 0).toFixed(2)}`
 const formatTime = (value: number) => value ? new Date(value * 1000).toLocaleString() : '-'
@@ -279,11 +280,11 @@ function openEdit(row?: any) {
 }
 
 async function onSave() {
-    if (!form.account_name) return ElMessage.warning('请填写账户名称')
+    if (!form.account_name) return hsxFeedback.warning('请填写账户名称')
     saving.value = true
     try {
         await saveCapitalAccount(form.id, { ...form })
-        ElMessage.success('已保存')
+        hsxFeedback.success('已保存')
         editVisible.value = false
         await loadAll()
     } finally {
@@ -298,7 +299,7 @@ async function onDelete(row: any) {
         return
     }
     await deleteCapitalAccount(row.id)
-    ElMessage.success('已删除')
+    hsxFeedback.success('已删除')
     await loadAll()
 }
 
@@ -333,14 +334,14 @@ function onEntryPartyResolved(row: any) {
 }
 
 async function onEntry() {
-    if (Number(entryForm.amount || 0) <= 0) return ElMessage.warning('金额必须大于0')
-    if (!entryForm.category_key) return ElMessage.warning(`请选择${entryForm.direction === 'in' ? '收入' : '支出'}类型`)
+    if (Number(entryForm.amount || 0) <= 0) return hsxFeedback.warning('金额必须大于0')
+    if (!entryForm.category_key) return hsxFeedback.warning(`请选择${entryForm.direction === 'in' ? '收入' : '支出'}类型`)
     const category = entryCategoryOptions.value.find((item: any) => item.key === entryForm.category_key)
-    if (Number(category?.party_required || 0) === 1 && !Number(entryForm.party_id || 0)) return ElMessage.warning('该收支类型必须选择往来主体')
+    if (Number(category?.party_required || 0) === 1 && !Number(entryForm.party_id || 0)) return hsxFeedback.warning('该收支类型必须选择往来主体')
     saving.value = true
     try {
         await recordCapitalEntry({ ...entryForm })
-        ElMessage.success('已记账')
+        hsxFeedback.success('已记账')
         entryVisible.value = false
         await loadAll()
         if (ledgerVisible.value && ledger.accountId === entryForm.account_id) await loadLedger()

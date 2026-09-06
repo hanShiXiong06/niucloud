@@ -59,4 +59,11 @@ final class WecomMessageAdminService extends BaseAdminService
         $log->save(['status' => 'pending', 'retry_count' => 0, 'next_retry_at' => time(), 'update_at' => time()]);
         return (new WecomNotificationService())->dispatch($id);
     }
+
+    public function test(int $receiverUid = 0): array
+    {
+        $receiverUid = $receiverUid > 0 ? $receiverUid : (int)$this->uid;
+        if ($receiverUid <= 0) throw new CommonException('请选择接收测试通知的员工');
+        return (new WecomNotificationService())->sendTest((int)$this->site_id, $receiverUid);
+    }
 }

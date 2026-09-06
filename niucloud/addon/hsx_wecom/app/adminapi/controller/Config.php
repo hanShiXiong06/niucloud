@@ -17,7 +17,7 @@ final class Config extends BaseAdminController
     public function save(): Response
     {
         $data = $this->request->params([
-            ['enabled', 0], ['corp_id', ''], ['agent_id', 0], ['secret', ''],
+            ['enabled', 0], ['connection_mode', 'provider'], ['corp_id', ''], ['agent_id', 0], ['secret', ''],
             ['web_base_url', ''], ['miniapp_appid', ''], ['jump_mode', 'web'],
             ['admin_base_url', ''], ['task_notice_enabled', 1], ['report_notice_enabled', 1], ['recycle_task_target', 'detail'],
         ]);

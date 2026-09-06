@@ -1,4 +1,5 @@
 import request from '@/utils/request'
+import { erpEnumLabel } from '@/addon/hsx_erp/utils/display'
 
 function withAssetRequestId(data: Record<string, any>, prefix: string) {
     if (String(data?.request_id ?? '').trim()) return data
@@ -46,7 +47,7 @@ export async function getErpAssetInfo(id: number | string) {
             before_cost: row.before_cost ?? row.before_total_cost ?? 0,
             after_cost: row.after_cost ?? row.after_total_cost ?? 0,
             cost_type: costType,
-            cost_type_text: row.cost_type_text || costTypeText[costType] || '成本调整',
+            cost_type_text: erpEnumLabel(costType, { ...costTypeText, ...(row.cost_type_text ? { [costType]: row.cost_type_text } : {}) }, '成本调整'),
         }
     })
     return {

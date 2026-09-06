@@ -93,19 +93,37 @@
 
                 <view v-if="canViewCost" class="form-card">
                     <view class="form-card-title">成本拆解</view>
-                    <view class="field"><text class="label">采购成本</text><text class="value">¥{{ money(asset.purchase_cost) }}</text></view>
-                    <view class="field" v-if="Number(asset.adjust_cost)">
+                    <view class="field"><text class="label">原始采购成本</text><text class="value">¥{{ money(asset.purchase_cost) }}</text></view>
+                    <template v-if="asset.cost_summary">
+                        <view class="field"><text class="label">回收／采购调价</text><text class="value">¥{{ money(asset.cost_summary.supplier_adjust_cost) }}</text></view>
+                        <view class="field"><text class="label">内部账面修正</text><text class="value">¥{{ money(asset.cost_summary.internal_adjust_cost) }}</text></view>
+                    </template>
+                    <view class="field" v-else-if="Number(asset.adjust_cost)">
                         <text class="label">成本调整</text>
                         <text class="value orange">{{ Number(asset.adjust_cost)>0?'+':'' }}¥{{ money(asset.adjust_cost) }}</text>
                     </view>
                     <view class="field" v-if="Number(asset.refurbish_cost)">
-                        <text class="label">整备成本</text>
+                        <text class="label">整备维修成本</text>
                         <text class="value">¥{{ money(asset.refurbish_cost) }}</text>
                     </view>
                     <view class="field field--last">
                         <text class="label">当前总成本</text>
                         <text class="value strong">¥{{ money(asset.total_cost) }}</text>
                     </view>
+                    <view v-if="asset.cost_summary" class="cost-explain">采购款 ¥{{ money(asset.cost_summary.supplier_amount) }} 不包含整备费和内部修正；内部修正不生成应付、不代表付款。</view>
+                </view>
+
+                <view v-if="asset.inspection" class="form-card">
+                    <view class="form-card-title">质检报告 · {{ asset.inspection.count }} 项</view>
+                    <view class="inspection-summary">正常 {{ asset.inspection.counts?.normal || 0 }} · 需关注 {{ asset.inspection.counts?.general || 0 }} · 异常 {{ asset.inspection.counts?.abnormal || 0 }}<text v-if="asset.inspection.counts?.unknown"> · 未分级 {{ asset.inspection.counts.unknown }}</text></view>
+                    <view v-for="item in (inspectionExpanded ? asset.inspection.items : (asset.inspection.items || []).slice(0, 6))" :key="item.key" class="field inspection-item" :class="`inspection-item--${item.severity}`">
+                        <text class="label">{{ item.name }}</text><text class="value">{{ item.value }}</text>
+                    </view>
+                    <view v-if="asset.inspection.count > 6" class="inspection-expand" @tap="inspectionExpanded = !inspectionExpanded">{{ inspectionExpanded ? '收起质检项目' : `查看全部 ${asset.inspection.count} 项` }}</view>
+                    <view v-if="asset.inspection.legacy_text" class="cost-explain">历史质检：{{ asset.inspection.legacy_text }}</view>
+                    <view class="form-card-title inspection-notes-title">人工备注</view>
+                    <view v-if="!asset.inspection.manual_notes?.length" class="inspection-summary">暂无人工备注</view>
+                    <view v-for="(note, index) in asset.inspection.manual_notes || []" :key="index" class="inspection-note"><text>{{ note.label }}</text><view>{{ note.text }}</view></view>
                 </view>
 
                 <view class="form-card" v-if="asset.purchase_order && (canViewSupplier || canViewFinance)">
@@ -135,12 +153,12 @@
                 <view class="section-title">设备履历</view>
                 <view class="flow-card" v-for="(flow, idx) in ledger" :key="idx">
                     <view class="flow-head">
-                        <text class="flow-action">{{ flow.action_text || actionLabel(flow.action) }}</text>
+                        <text class="flow-action">{{ erpEnumLabel(flow.action, { [flow.action]: flow.action_text }, actionLabel(flow.action)) }}</text>
                         <text class="flow-time">{{ formatDate(flow.occurred_at || flow.create_at) }}</text>
                     </view>
                     <view class="card-meta" v-if="flow.source_no">单据：{{ flow.source_no }}</view>
                     <view class="card-meta" v-if="flow.before_status && flow.after_status">
-                        {{ flow.before_status_text || statusLabel(flow.before_status) }} → {{ flow.after_status_text || statusLabel(flow.after_status) }}
+                        {{ erpEnumLabel(flow.before_status, { [flow.before_status]: flow.before_status_text }, statusLabel(flow.before_status)) }} → {{ erpEnumLabel(flow.after_status, { [flow.after_status]: flow.after_status_text }, statusLabel(flow.after_status)) }}
                     </view>
                     <view class="card-meta" v-if="canViewCost && flow.cost_delta && Number(flow.cost_delta)">
                         成本变化：{{ Number(flow.cost_delta)>0?'+':'' }}¥{{ money(flow.cost_delta) }}
@@ -262,6 +280,7 @@ import { adjustMobileStockRetailPrice, buyoutMobileConsignment, getMobileStockIn
 import { confirmErpSensitiveAction } from '@/addon/hsx_erp/hooks/useErpSensitiveConfirm'
 import { erpNetSaleAmount, erpOriginalSaleAmount, erpSaleCompensationAmount, firstPositiveErpAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
 import { erpDeviceIdentityLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
+import { erpEnumLabel } from '@/addon/hsx_erp/utils/display'
 import { presentErpListingFeedback } from '@/addon/hsx_erp/hooks/useErpListingFeedback'
 import { formatErpDate, formatErpTime } from '@/addon/hsx_erp/hooks/useErpTime'
 import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
@@ -270,6 +289,7 @@ import ErpWarehousePopup from '@/addon/hsx_erp/components/ErpWarehousePopup.vue'
 import { erpListingFormDefinition, erpListingFormPayload, validateErpListingForm, type ErpListingAction } from '@/addon/hsx_erp/hooks/useErpListingForm'
 
 const asset = ref<any>(null)
+const inspectionExpanded = ref(false)
 const stockCapabilities = ref<any>({ is_admin: 0, view_cost: 0, adjust_cost: 0, view_profit: 0, view_supplier: 0, view_finance: 0, view_team_workload: 0 })
 const canViewCost = computed(() => Number(stockCapabilities.value?.view_cost || 0) === 1)
 const canAdjustCost = computed(() => Number(stockCapabilities.value?.adjust_cost || 0) === 1)
@@ -325,7 +345,7 @@ async function loadDetail(options: { silent?: boolean } = {}) {
     const seq = ++loadSeq
     if (!assetId.value) {
         loading.value = false
-        loadError.value = '缺少设备ID'
+        loadError.value = '未找到设备，请返回库存列表重新打开'
         return
     }
     const silent = !!options.silent || !!asset.value
@@ -689,9 +709,9 @@ const netSaleAmount = (row: any) => erpNetSaleAmount({ ...row, ...(row?.last_sal
 const originalSaleAmount = (row: any) => erpOriginalSaleAmount({ ...row, ...(row?.last_sale_item || {}) })
 const compensationAmount = (row: any) => erpSaleCompensationAmount({ ...row, ...(row?.last_sale_item || {}) })
 const deviceIdentityLine = (row: any) => erpDeviceIdentityLine(row)
-const statusLabel = (s: string) => ({ in_stock: '在库', sold: '已售', returned: '已退', void: '已作废' }[s] || s || '-')
+const statusLabel = (s: string) => ({ in_stock: '在库', sold: '已售', returned: '已退', void: '已作废' }[s] || '状态待确认')
 const statusType = (s: string) => ({ in_stock: 'success', sold: 'primary', returned: 'warning', void: 'info' }[s] || 'info')
-const financeLabel = (s: string) => ({ pending: '待付款', partial: '部分付款', settled: '已结清', void: '已作废' }[s] || s || '-')
+const financeLabel = (s: string) => ({ pending: '待付款', partial: '部分付款', settled: '已结清', void: '已作废' }[s] || '状态待确认')
 const financeType = (s: string) => ({ pending: 'warning', partial: 'primary', settled: 'success', void: 'info' }[s] || 'info')
 const actionLabel = (a: string) => ({
     inbound: '采购入库', sold: '销售出库', purchase_return: '采购退货',
@@ -737,7 +757,7 @@ function accountBizLabel(row: any) {
         payment: '实际付款', receipt: '实际收款', offset: '往来折账'
     }
     if (type === 'sale_compensation' && (row?.settlement_methods || []).includes('折账结清')) return '售后补差折账'
-    return row?.biz_type_text || map[type] || '账务调整'
+    return erpEnumLabel(type, { ...map, ...(row?.biz_type_text ? { [type]: row.biz_type_text } : {}) }, '账务调整')
 }
 
 function accountImpactText(row: any) {
@@ -755,6 +775,7 @@ function accountImpactText(row: any) {
     if (type === 'receipt') return '公司已经确认实际收款'
     if (type === 'offset') return '应收与应付完成折账核销'
     if (type === 'refurbish') return '设备整备成本增加'
+    if (['adjust', 'cost_adjust', 'internal_adjust', 'supplier_adjust', 'purchase_adjust'].includes(type)) return row.source_type === 'internal_adjust' ? '内部账面修正，不生成应付' : '成本调整不代表实际付款'
     return '设备账务发生调整'
 }
 
@@ -795,6 +816,8 @@ function accountRemark(row: any) {
 </script>
 
 <style scoped lang="scss">
+.cost-explain{margin-top:16rpx;padding:18rpx;background:#f8fafc;border-radius:12rpx;color:#64748b;font-size:24rpx;line-height:1.7;overflow-wrap:anywhere}
+.inspection-summary{color:#64748b;font-size:24rpx;line-height:1.7;margin-bottom:12rpx}.inspection-item .value{white-space:normal;overflow-wrap:anywhere}.inspection-item--general .value{color:#b45309}.inspection-item--abnormal .value{color:#dc2626}.inspection-expand{padding:20rpx 0;text-align:center;color:#2563eb;font-size:26rpx}.inspection-notes-title{margin-top:24rpx}.inspection-note{padding:12rpx 0;font-size:26rpx;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere}.inspection-note>text{font-size:24rpx;color:#94a3b8}
 @import '@/addon/hsx_erp/styles/erp-mobile.scss';
 
 .detail-wrap { padding: 16rpx 0 120rpx; }

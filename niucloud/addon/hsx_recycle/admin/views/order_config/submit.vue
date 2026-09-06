@@ -159,6 +159,8 @@
                     <em>控制后台处理订单、转代卖、通知和打印时的业务规则。</em>
                 </div>
 
+                <ErpIntegrationSettings />
+
                 <section class="config-section">
                     <div class="section-title">订单流转模式</div>
                     <div class="mode-grid">
@@ -494,6 +496,7 @@
 
 <script setup lang="ts">
 import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
+import ErpIntegrationSettings from './components/ErpIntegrationSettings.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'

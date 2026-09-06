@@ -1,5 +1,5 @@
 <template>
-    <el-dialog class="hsx-premium-overlay" v-model="dialogVisible" title="收款信息" width="500px" :destroy-on-close="true" @closed="handleClosed">
+    <HsxDialog class="" v-model="dialogVisible" title="收款信息" width="500px" :destroy-on-close="true" @closed="handleClosed">
         <el-form :model="form" label-width="100px">
             <el-form-item label="收款账号">
                 <el-input v-model="form.account" disabled />
@@ -33,10 +33,11 @@
                 <el-button @click="dialogVisible = false">关闭</el-button>
             </span>
         </template>
-    </el-dialog>
+    </HsxDialog>
 </template>
 
 <script setup lang="ts">
+import { HsxDialog } from '@/addon/hsx_components/core'
 import { ref, reactive, watch } from 'vue';
 
 // 定义支付信息类型

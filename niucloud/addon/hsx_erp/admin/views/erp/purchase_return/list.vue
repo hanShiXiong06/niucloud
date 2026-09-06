@@ -306,6 +306,7 @@
 </template>
 
 <script setup lang="ts">
+import { erpEnumLabel } from '@/addon/hsx_erp/utils/display'
 import { ref, computed, reactive } from 'vue'
 import { Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -663,7 +664,7 @@ async function submitCreate() {
         ElMessage.warning('请先确认设备已经交还供货方')
         return
     }
-    const imeis = selectedAssets.value.map((item: any) => item.imei || item.asset_no || item.model || '-').join('、')
+    const imeis = selectedAssets.value.map((item: any) => item.imei || item.sn || item.model || '未命名设备').join('、')
     const settlementText = !selectedRequiresRefund.value
         ? '本次仅冲销未付款应付，不产生退款应收。'
         : (form.refund_mode === 'cash'
@@ -746,7 +747,7 @@ function statusLabel(status: string) {
     const map: Record<string, string> = {
         pending: '待确认', confirmed: '已完成退货', cancelled: '已取消',
     }
-    return map[status] || status
+    return erpEnumLabel(status, map)
 }
 function statusTagType(status: string) {
     const map: Record<string, string> = {
@@ -756,7 +757,7 @@ function statusTagType(status: string) {
 }
 function refundModeLabel(mode: string) {
     const map: Record<string, string> = { none: '未付款，已冲销应付', cash: '当场收款', receivable: '记账待收', offset: '记账待收（历史）' }
-    return map[mode] || mode
+    return erpEnumLabel(mode, map, '退款方式待确认')
 }
 function purchaseRefundModeTip(mode: string) {
     const map: Record<string, string> = {

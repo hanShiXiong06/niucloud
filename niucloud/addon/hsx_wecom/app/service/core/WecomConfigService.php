@@ -14,7 +14,15 @@ final class WecomConfigService
     public function get(int $siteId, bool $maskSecret = false): array
     {
         $value = (new CoreConfigService())->getConfigValue($siteId, self::CONFIG_KEY);
-        $config = $this->normalize(is_array($value) ? $value : []);
+        $raw = is_array($value) ? $value : [];
+        $config = $this->normalize($raw);
+        // 老客户已保存自建应用凭据时继续使用旧模式；新站点在平台已开通服务商
+        // 通道后默认展示一键授权，避免再次向客户索要 Secret。
+        if (!array_key_exists('connection_mode', $raw)) {
+            $hasSelfBuilt = $config['corp_id'] !== '' || $config['secret'] !== '' || $config['agent_id'] > 0;
+            $config['connection_mode'] = !$hasSelfBuilt && !(new WecomProviderConfigService())->active()->isEmpty()
+                ? 'provider' : 'self_built';
+        }
         if ($maskSecret && $config['secret'] !== '') {
             $config['secret'] = self::SECRET_MASK;
             $config['secret_configured'] = 1;
@@ -38,17 +46,24 @@ final class WecomConfigService
             }
         }
         if (!empty($config['enabled'])) {
-            if ($config['corp_id'] === '' || (int)$config['agent_id'] <= 0 || $config['secret'] === '') {
+            if ($config['connection_mode'] === 'provider') {
+                if ((new WecomProviderConfigService())->active()->isEmpty()) {
+                    throw new CommonException('平台尚未配置企业微信服务商应用');
+                }
+            } elseif ($config['corp_id'] === '' || (int)$config['agent_id'] <= 0 || $config['secret'] === '') {
                 throw new CommonException('启用企业微信前，请完整填写企业 ID、AgentId 和 Secret');
             }
             if (!empty($config['task_notice_enabled']) || !empty($config['report_notice_enabled'])) {
                 if ($config['jump_mode'] === 'web' && $config['web_base_url'] === '') {
                     throw new CommonException('网页打开模式必须填写网页管理端地址');
                 }
-                if ($config['jump_mode'] === 'miniapp' && $config['miniapp_appid'] === '') {
+                $providerMiniappConfigured = $config['connection_mode'] === 'provider'
+                    && trim((string)((new WecomProviderConfigService())->info(true)['admin_miniapp_appid'] ?? '')) !== '';
+                if ($config['jump_mode'] === 'miniapp' && $config['miniapp_appid'] === '' && !$providerMiniappConfigured) {
                     throw new CommonException('小程序打开模式必须填写后台管理小程序 AppID');
                 }
-                if ($config['jump_mode'] === 'dual' && ($config['web_base_url'] === '' || $config['miniapp_appid'] === '')) {
+                if ($config['jump_mode'] === 'dual'
+                    && ($config['web_base_url'] === '' || ($config['miniapp_appid'] === '' && !$providerMiniappConfigured))) {
                     throw new CommonException('双入口模式必须同时填写网页管理端地址和后台管理小程序 AppID');
                 }
             }
@@ -72,6 +87,8 @@ final class WecomConfigService
         if (!in_array($recycleTaskTarget, ['detail', 'list'], true)) $recycleTaskTarget = 'detail';
         return [
             'enabled' => (int)!empty($data['enabled']),
+            'connection_mode' => in_array((string)($data['connection_mode'] ?? 'self_built'), ['provider', 'self_built'], true)
+                ? (string)($data['connection_mode'] ?? 'self_built') : 'self_built',
             'corp_id' => trim((string)($data['corp_id'] ?? '')),
             'agent_id' => max(0, (int)($data['agent_id'] ?? 0)),
             'secret' => trim((string)($data['secret'] ?? '')),

@@ -282,11 +282,11 @@ function onWarehouseTypeChange(value: string, applyPreset = true) {
 function warehouseTypeMeta(type: string) {
     return warehouseTypeOptions.value.find(item => item.value === type)
         || warehouses.value.find(item => item.warehouse_type === type)?.warehouse_type_meta
-        || { value: type, label: type || '未设置', type: 'info', description: '', preset: {}, constraints: {} }
+        || { value: type, label: '仓库类型待确认', type: 'info', description: '', preset: {}, constraints: {} }
 }
 
 function staffName(item: any) {
-    return item?.name || item?.real_name || item?.username || `员工#${item?.uid || ''}`
+    return item?.name || item?.real_name || item?.username || '姓名未登记'
 }
 
 onMounted(loadData)

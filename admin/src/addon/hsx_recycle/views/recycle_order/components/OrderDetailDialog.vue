@@ -1,10 +1,10 @@
 <template>
-  <el-dialog
+  <HsxDrawer
     v-model="dialogVisible"
     title="订单详情"
-    :width="isMobile ? '96vw' : 'min(1180px, calc(100vw - 48px))'"
-    :top="isMobile ? '2vh' : '3vh'"
-    class="diy-dialog-wrap order-detail-dialog hsx-premium-overlay"
+    size="lg"
+    subtitle="核对客户、设备与订单进度"
+    class="order-detail-dialog"
     :destroy-on-close="true"
   >
     <div v-if="orderData" class="odd-wrap">
@@ -35,17 +35,15 @@
         </div>
       </div>
 
+      <HsxNotice v-if="isPaid" type="success" :closable="false" :title="paidSummary" />
+
       <div class="odd-info-layout">
         <div class="odd-section" v-if="orderData.member">
           <div class="odd-section-header">
-            <span>会员信息</span>
+            <span>客户信息</span>
           </div>
           <div class="odd-desc-grid">
-            <div class="odd-desc-item">
-              <span class="odd-desc-label">会员ID</span>
-              <span class="odd-desc-value">{{ orderData.member.member_id }}</span>
-            </div>
-            <div class="odd-desc-item">
+            <div v-if="orderData.member.username && orderData.member.username !== orderData.member.mobile && orderData.member.username !== orderData.member.nickname" class="odd-desc-item">
               <span class="odd-desc-label">用户名</span>
               <span class="odd-desc-value">{{ orderData.member.username || '暂无' }}</span>
             </div>
@@ -58,18 +56,6 @@
               <span class="odd-desc-value odd-desc-value--mono">{{ orderData.member.mobile || '暂无' }}</span>
             </div>
           </div>
-        </div>
-
-        <div class="odd-section" v-if="isPaid">
-          <el-alert type="success" :closable="false" show-icon>
-            <template #title>
-              <span style="font-weight:600">已转账给客户</span>
-              <span v-if="orderData.total_amount"> · 金额 ¥{{ orderData.total_amount }}</span>
-              <span v-if="orderData.pay_type"> · {{ orderData.pay_type }}</span>
-              <span v-if="orderData.pay_name"> · 收款人 {{ orderData.pay_name }}</span>
-              <span v-if="orderData.pay_time"> · {{ formatTime(orderData.pay_time) }}</span>
-            </template>
-          </el-alert>
         </div>
 
         <div class="odd-section">
@@ -180,7 +166,6 @@
                 >
                   {{ scope.row.model || '未知型号' }}
                 </el-button>
-                <div class="odd-device-sub">ID {{ scope.row.id }} · {{ scope.row.status_name || '未知状态' }}</div>
               </div>
             </template>
           </el-table-column>
@@ -358,11 +343,12 @@
         <el-button :class="isMobile ? '!ml-0 w-full' : ''" @click="dialogVisible = false">关闭</el-button>
       </div>
     </template>
-  </el-dialog>
+  </HsxDrawer>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue'
+import { HsxDrawer, HsxNotice } from '@/addon/hsx_components/core'
 import { getReturnOrderList } from '@/addon/hsx_recycle/api/recycle_return_order'
 
 interface OrderDetail {
@@ -438,6 +424,11 @@ const paymentImageList = computed(() => {
 })
 
 // 是否已打款给客户（已转账）：pay_status=1 或有打款时间
+const paidSummary = computed(() => {
+  const order = orderData.value || {}
+  return ['已转账给客户', order.total_amount ? '金额 ¥' + order.total_amount : '', order.pay_type, order.pay_name ? '收款人 ' + order.pay_name : '', order.pay_time ? formatTime(order.pay_time) : ''].filter(Boolean).join(' · ')
+})
+
 const isPaid = computed(() =>
     Number(orderData.value?.pay_status) === 1 || Number(orderData.value?.pay_time) > 0
 )
@@ -501,44 +492,29 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
 </script>
 
 <style lang="scss" scoped>
-.order-detail-dialog {
-  :deep(.el-dialog) {
-    border-radius: 10px;
-    overflow: hidden;
-  }
-
-  :deep(.el-dialog__body) {
-    padding: 0;
-    background: #f4f6f8;
-    overflow: hidden;
-  }
-}
-
 .odd-wrap {
-  padding: 12px;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-height: calc(100vh - 150px);
-  overflow-y: auto;
 
   &::-webkit-scrollbar { width: 6px; }
-  &::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  &::-webkit-scrollbar-thumb { background: var(--hsx-border-strong); border-radius: 4px; }
 }
 
 .odd-summary {
   display: grid;
   grid-template-columns: minmax(260px, 1.2fr) 2fr;
   gap: 10px;
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: var(--hsx-bg-surface);
+  border: 1px solid var(--hsx-border-color);
   border-radius: 8px;
   padding: 12px 14px;
 }
 
 .odd-summary__label {
   font-size: 12px;
-  color: #64748b;
+  color: var(--hsx-text-secondary);
   margin-bottom: 4px;
 }
 
@@ -558,7 +534,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
 .odd-metric {
   min-width: 0;
   padding: 8px 10px;
-  background: #f8fafc;
+  background: var(--hsx-bg-muted);
   border: 1px solid #eef2f7;
   border-radius: 6px;
 
@@ -566,7 +542,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
     display: block;
     margin-bottom: 4px;
     font-size: 11px;
-    color: #64748b;
+    color: var(--hsx-text-secondary);
   }
 
   strong {
@@ -587,8 +563,8 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
 }
 
 .odd-section {
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: var(--hsx-bg-surface);
+  border: 1px solid var(--hsx-border-color);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -603,8 +579,8 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: #f8fafc;
-  border-bottom: 1px solid #e5e7eb;
+  background: var(--hsx-bg-muted);
+  border-bottom: 1px solid var(--hsx-border-color);
   font-size: 13px;
   font-weight: 600;
   color: #334155;
@@ -625,8 +601,8 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
   flex-direction: column;
   gap: 4px;
   padding: 9px 12px;
-  border-right: 1px solid #f1f5f9;
-  border-bottom: 1px solid #f1f5f9;
+  border-right: 1px solid var(--hsx-bg-muted);
+  border-bottom: 1px solid var(--hsx-bg-muted);
 
   &:nth-child(2n) { border-right: none; }
 
@@ -637,7 +613,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
 }
 
 .odd-desc-grid--return .odd-desc-item:nth-child(2n) {
-  border-right: 1px solid #f1f5f9;
+  border-right: 1px solid var(--hsx-bg-muted);
 }
 
 .odd-desc-label {
@@ -676,7 +652,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
   width: 88px;
   height: 88px;
   border-radius: 6px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--hsx-border-color);
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
 
@@ -742,10 +718,10 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
 }
 
 .odd-device-card {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--hsx-border-color);
   border-radius: 8px;
   padding: 10px 12px;
-  background: #f8fafc;
+  background: var(--hsx-bg-muted);
   cursor: pointer;
 
   &__top,
@@ -758,19 +734,19 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
 
   &__top { margin-bottom: 6px; }
   &__model { font-size: 13px; font-weight: 600; color: #1e293b; }
-  &__imei { font-size: 11px; color: #64748b; font-family: monospace; margin-bottom: 5px; word-break: break-all; }
+  &__imei { font-size: 11px; color: var(--hsx-text-secondary); font-family: monospace; margin-bottom: 5px; word-break: break-all; }
   &__specs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
   &__id { font-size: 11px; color: #94a3b8; }
 }
 
 .odd-return-devices {
   padding: 10px 12px;
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid var(--hsx-bg-muted);
 
   &__title {
     font-size: 12px;
     font-weight: 600;
-    color: #64748b;
+    color: var(--hsx-text-secondary);
     margin-bottom: 8px;
   }
 }
@@ -783,7 +759,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
 }
 
 :deep(.el-table) {
-  --el-table-header-bg-color: #f8fafc;
+  --el-table-header-bg-color: var(--hsx-bg-muted);
 }
 
 :deep(.el-table .cell) {
@@ -805,14 +781,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
   }
 }
 
-@media (max-width: 768px) {
-  .odd-wrap {
-    max-height: calc(100vh - 128px);
-  }
-}
-
 @media (max-width: 520px) {
-  .odd-summary__metrics,
   .odd-desc-grid,
   .odd-desc-grid--return {
     grid-template-columns: 1fr;

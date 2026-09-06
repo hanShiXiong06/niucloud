@@ -67,13 +67,14 @@ final class ProjectCenterApplicationAdminService extends BaseAdminService
         return $row;
     }
 
-    public function review(int $id, string $action, array $issues, string $remark): void
+    public function review(int $id, string $action, array $issues, string $remark, bool $paymentChecked = false): void
     {
         $row = ProjectCenterApplication::where([['site_id', '=', $this->site_id], ['id', '=', $id]])->findOrEmpty();
         if ($row->isEmpty()) throw new CommonException('资料工单不存在');
         $this->assertCanAccess($row->toArray());
         (new ProjectCenterReviewService())->review(
-            (int)$this->site_id, $id, $action, $issues, $remark, (int)$this->uid, (string)$this->username
+            (int)$this->site_id, $id, $action, $issues, $remark,
+            (int)$this->uid, (string)$this->username, $paymentChecked
         );
     }
 
@@ -182,7 +183,10 @@ final class ProjectCenterApplicationAdminService extends BaseAdminService
         $projectIds = array_values(array_unique(array_map('intval', array_column($rows, 'project_id'))));
         $groupIds = array_values(array_unique(array_map('intval', array_column($rows, 'group_id'))));
         $memberIds = array_values(array_unique(array_map('intval', array_column($rows, 'member_id'))));
-        $projects = ProjectCenterProject::where([['site_id', '=', $this->site_id], ['id', 'in', $projectIds]])->column('title', 'id');
+        $projects = ProjectCenterProject::where([['site_id', '=', $this->site_id], ['id', 'in', $projectIds]])
+            ->field('id,title,distribution_enabled,config_json')->select()->toArray();
+        $projectMap = [];
+        foreach ($projects as $project) $projectMap[(int)$project['id']] = $project;
         $groups = ProjectCenterGroup::where([['site_id', '=', $this->site_id], ['id', 'in', $groupIds]])->select()->toArray();
         $groupMap = [];
         foreach ($groups as $group) $groupMap[(int)$group['id']] = $group;
@@ -192,7 +196,14 @@ final class ProjectCenterApplicationAdminService extends BaseAdminService
         foreach ($rows as &$row) {
             $group = $groupMap[(int)$row['group_id']] ?? [];
             $member = $memberMap[(int)$row['member_id']] ?? [];
-            $row['project_title'] = $projects[(int)$row['project_id']] ?? '';
+            $project = $projectMap[(int)$row['project_id']] ?? [];
+            $row['project_title'] = (string)($project['title'] ?? '');
+            $row['distribution_enabled'] = (int)($project['distribution_enabled'] ?? 0);
+            $config = is_array($project['config_json'] ?? null) ? $project['config_json'] : [];
+            $rule = (new \addon\hsx_project_center\app\service\core\ProjectCenterDistributionRuleService())
+                ->normalizeProjectRule((array)($config['distribution'] ?? []));
+            $row['distribution_rule'] = $rule;
+            $row['payment_check_required'] = (int)($row['distribution_enabled'] && !empty($rule['approval_requires_payment_check']));
             $row['group_no'] = (string)($group['group_no'] ?? '');
             $row['group_no_full'] = (string)($group['group_no_full'] ?? '');
             $row['store_name'] = (string)($group['store_name'] ?? '');

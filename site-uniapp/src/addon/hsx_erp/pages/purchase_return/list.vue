@@ -61,6 +61,7 @@ import ErpQuickFilterBar from '@/addon/hsx_erp/components/ErpQuickFilterBar.vue'
 import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
 import { erpTimeLine } from '@/addon/hsx_erp/hooks/useErpTime'
 import { confirmErpSensitiveAction } from '@/addon/hsx_erp/hooks/useErpSensitiveConfirm'
+import { showErpError } from '@/addon/hsx_erp/utils/error'
 
 const { pagingStyle } = useListHeader({ tabs: true, compactMp: true })
 
@@ -100,7 +101,10 @@ const queryList = async (pageNo: number, pageSize: number) => {
     try {
         const res: any = await getMobilePurchaseReturnList({ keyword: keyword.value, status: activeTab.value, refund_mode: refundMode.value, page: pageNo, limit: pageSize })
         pagingRef.value?.complete(res?.data?.data || [])
-    } catch { pagingRef.value?.complete(false) }
+    } catch (error) {
+        pagingRef.value?.complete(false)
+        showErpError(error, '采购退货记录加载失败，请检查网络后重试')
+    }
 }
 
 async function doConfirm(row: any) {
@@ -156,7 +160,7 @@ function goRefundReceivable(row: any) {
 }
 
 const money = (v: any) => Number(v || 0).toFixed(2)
-const statusLabel = (s: string) => ({ pending: '待确认', confirmed: '已完成退货', cancelled: '已取消' }[s] || s || '-')
+const statusLabel = (s: string) => ({ pending: '待确认', confirmed: '已完成退货', cancelled: '已取消' }[s] || '状态待确认')
 const statusType = (s: string) => ({ pending: 'warning', confirmed: 'success', cancelled: 'info' }[s] || 'info')
 function accountingLabel(row: any) {
     if (row.status === 'cancelled') return '已取消，未执行库存与账务处理'

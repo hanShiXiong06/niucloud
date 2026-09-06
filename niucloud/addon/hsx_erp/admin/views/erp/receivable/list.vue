@@ -4,7 +4,7 @@
             <div class="flex items-start justify-between gap-4">
                 <div>
                     <div class="text-page-title">应收款</div>
-                    <div class="mt-1 text-sm text-gray-500">统一管理销售收入、采购退货款及维修等插件扩展收入；财务按收入类型、业务来源和到账账户核对。</div>
+                    <div class="mt-1 text-sm text-gray-500">统一管理销售收入、采购退货款及维修等业务收入；财务按收入类型、业务来源和到账账户核对。</div>
                 </div>
                 <el-button :icon="Refresh" :loading="table.loading" @click="loadList">刷新</el-button>
             </div>
@@ -183,7 +183,7 @@
                 <el-table-column label="设备" min-width="230">
                     <template #default="{ row }">
                         <div class="font-medium">{{ row.model || '-' }}</div>
-                        <div class="mt-1 text-xs text-gray-500">{{ row.imei ? `IMEI ${row.imei}` : row.asset_no || '-' }}</div>
+                        <div class="mt-1 text-xs text-gray-500">{{ erpSerialText(row) }}</div>
                         <div class="mt-1 text-xs text-gray-500">{{ row.spec || '-' }}</div>
                     </template>
                 </el-table-column>
@@ -327,7 +327,7 @@
                 <el-table-column label="设备" min-width="220">
                     <template #default="{ row }">
                         <div class="font-medium text-gray-900">{{ row.model || '-' }}</div>
-                        <div class="mt-1 text-xs text-gray-500">{{ row.imei ? `IMEI ${row.imei}` : row.asset_no || '-' }}</div>
+                        <div class="mt-1 text-xs text-gray-500">{{ erpSerialText(row) }}</div>
                         <div class="mt-1 text-xs text-gray-500">{{ row.spec || '-' }}</div>
                         <div v-if="isPurchaseReturnReceipt" class="mt-2 text-xs leading-5" :class="Number(row.refund_amount || 0) > 0 ? 'text-orange-600' : 'text-green-600'">
                             {{ row.settlement_explanation || returnReceiptItemReason(row) }}
@@ -376,6 +376,7 @@
 </template>
 
 <script setup lang="ts">
+import { erpEnumLabel, erpNamedLabel, erpSerialText } from '@/addon/hsx_erp/utils/display'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Filter, Refresh, Search } from '@element-plus/icons-vue'
@@ -777,12 +778,12 @@ function canConfirmReceipt(row: any) { return !isVoid(row) && remain(row) > 0 &&
 function canOffset(row: any) { return !isVoid(row) && Boolean(row.can_offset) && remain(row) > 0 }
 function receivableRowClass({ row }: any) { return isVoid(row) ? 'receivable-row--void' : '' }
 function contactText(row: any) { return [row.contact_name, row.contact_mobile || row.m_no].filter(Boolean).join(' / ') || '-' }
-function partyRoleLabel(row: any, fallback: string) { return row?.source_meta?.party_role_label || fallback }
+function partyRoleLabel(row: any, fallback: string) { return erpNamedLabel(row?.source_meta?.party_role_label, '', fallback) }
 function sourceOptions(valueKey: string, labelKey: string, defaults: Array<{ value: string, label: string }>) {
-    const map = new Map(defaults.map(item => [item.value, item.label]))
+    const map = new Map(defaults.map(item => [item.value, erpNamedLabel(item.label, item.value)]))
     table.data.forEach((row: any) => {
         const value = String(row?.source_meta?.[valueKey] || '').trim()
-        if (value) map.set(value, String(row?.source_meta?.[labelKey] || value))
+        if (value) map.set(value, erpNamedLabel(row?.source_meta?.[labelKey], value))
     })
     return Array.from(map, ([value, label]) => ({ value, label }))
 }
@@ -802,7 +803,7 @@ function deviceSummary(device: any) {
 }
 function sourceTypeText(type: string) {
     const map: any = { sale: '销售应收', purchase_return: '采购退货应收' }
-    return map[type] || type || '应收'
+    return erpEnumLabel(type, map, '应收款')
 }
 function purchaseRefundModeLabel(mode: string) {
     const map: Record<string, string> = {
@@ -838,11 +839,11 @@ function returnReceiptItemReason(row: any) {
 }
 function statusMeta(status: string) {
     const map: any = { pending: { label: '待结算', type: 'warning' }, partial: { label: '部分结算', type: 'primary' }, settled: { label: '已结清', type: 'success' }, void: { label: '已作废', type: 'info' } }
-    return map[status] || { label: status || '-', type: 'info' }
+    return map[status] || { label: '状态待确认', type: 'info' }
 }
 function money(value: any) { return `¥${Number(value || 0).toFixed(2)}` }
 function formatTime(value: any) { return Number(value || 0) ? new Date(Number(value) * 1000).toLocaleString() : '-' }
-function staffName(user: any) { return user?.name || user?.real_name || user?.username || `员工#${user?.uid || '-'}` }
+function staffName(user: any) { return user?.name || user?.real_name || user?.username || '姓名未登记' }
 </script>
 
 <style scoped>

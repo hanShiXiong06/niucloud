@@ -12,6 +12,14 @@ return [
                         "enablePullDownRefresh": false
                     },
                     "needLogin": false
+                },
+                {
+                    "path": "pages/distribution/index",
+                    "style": {
+                        "navigationBarTitleText": "我的项目推广",
+                        "enablePullDownRefresh": false
+                    },
+                    "needLogin": true
                 }
             ]
         },

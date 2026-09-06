@@ -79,6 +79,11 @@ class FakeRecycleInboundListener extends ErpDeviceInboundRequested
         return ['asset_id' => ++$this->nextId, 'created' => true];
     }
 
+    protected function resolveSourcePaidAccount(int $siteId): object
+    {
+        return (object)['id' => 990, 'account_name' => '来源系统已付待核对'];
+    }
+
     protected function assetIdsForPurchaseOrders(int $siteId, array $orderIds): array
     {
         return [];
@@ -177,6 +182,8 @@ $device = static function (int $id, int $orderId, string $orderNo, array $counte
         'acquired_at' => 1783700000 + $id,
         'pricing_snapshot' => [
             'price_uid' => 27,
+            'price_name' => '历史定价员张三',
+            'historical_operator' => true,
             'price_at' => 1783690000 + $id,
         ],
         'check_snapshot' => ['check_result' => '检测正常', 'check_remark' => '屏幕轻微划痕'],
@@ -209,6 +216,10 @@ $assert(($result['created_count'] ?? 0) === 3, '首次消费必须报告三台�
 $assert(count($listener->created) === 2, '监听器必须分组调用两次采购服务');
 
 $first = $listener->created[0];
+$assert($first['items'][0]['quality_remark'] === '屏幕轻微划痕', '质检摘要不能拼接到人工备注中');
+$inspectionSnapshot = json_decode($first['items'][0]['qc_report'], true);
+$assert(($inspectionSnapshot['raw']['check_result'] ?? '') === '检测正常', '原始质检数据必须完整保留在独立快照中');
+$assert($first['items'][0]['remark'] === '' && $first['items'][0]['remark_internal'] === '', '来源内部编号不得生成客户看见的备注');
 $assert(($first['origin_plugin'] ?? '') === 'hsx_recycle', '采购单必须保存回收来源插件');
 $assert(($first['origin_type'] ?? '') === 'hsx_recycle.recycle_purchase', '采购单必须保存回收采购来源类型');
 $assert(($first['origin_no'] ?? '') === 'RC20260711001' && ($first['source_order_no'] ?? '') === 'RC20260711001', '采购单必须保存原回收单号');
@@ -216,13 +227,18 @@ $assert(($first['origin_event_id'] ?? '') === $event['event_id'], '采购单必�
 $assert(($first['party_name'] ?? '') === '回收客户甲', '采购单必须按来源往来主体建单');
 $assert(($first['member_id'] ?? 0) === 88, '回收会员ID必须传给ERP并绑定既有会员主体');
 $assert(($first['contact_mobile'] ?? '') === '13800000001', '回收会员手机号必须写入ERP主体联系方式');
-$assert(($first['paid_amount'] ?? -1) === 0, '缺少ERP账户时不得伪造已付款事实');
+$assert(($first['paid_amount'] ?? -1) === 2000.0, '来源系统已付款必须按设备明细进入ERP核销，避免重复打款');
+$assert(($first['settle_mode'] ?? '') === 'cash' && ($first['source_paid_allocation'] ?? 0) === 1, '来源已付必须进入精确核销模式');
+$assert(($first['capital_account_id'] ?? 0) === 990, '来源已付必须进入明确的待核对账户');
 $assert(($first['purchaser_uid'] ?? 0) === 27, 'ERP采购员必须取设备最终定价员，不得取确认请求的当前操作人');
+$assert(($first['purchaser_snapshot_name'] ?? '') === '历史定价员张三' && ($first['allow_historical_purchaser'] ?? 0) === 1, '历史定价员快照必须随事件保留，离职后仍可完成历史入库');
 $assert(count($first['items'] ?? []) === 2, '同来源订单和往来主体的设备必须合并建单');
 $assert(($first['items'][0]['warehouse_id'] ?? 0) === 1 && ($first['items'][0]['location_id'] ?? 0) === 11, '第一台设备必须保留自己的仓库库位');
 $assert(($first['items'][1]['warehouse_id'] ?? 0) === 2 && ($first['items'][1]['location_id'] ?? 0) === 22, '第二台设备必须保留自己的仓库库位');
 $assert(($first['items'][0]['spec_json']['source_device_id'] ?? 0) === 11, '设备快照必须保留原回收设备行ID');
 $assert(($first['items'][0]['spec_json']['pricing_operator']['uid'] ?? 0) === 27, '设备快照必须保留该设备的最终定价员');
+$assert(($first['items'][0]['source_paid_amount'] ?? 0) === 1000.0, '每台设备必须保留自己的已付金额，不能按订单顺序误核销');
+$assert(str_starts_with((string)($first['settlement_request_id'] ?? ''), 'source-paid:'), '来源已付核销必须有稳定幂等键');
 $assert(strlen((string)$first['request_id']) <= 80 && str_starts_with((string)$first['request_id'], 'source-purchase:'), '采购request_id必须由来源订单稳定派生且符合长度约束');
 $assert($listener->created[0]['request_id'] !== $listener->created[1]['request_id'], '不同分组必须使用不同request_id');
 $assert(($listener->inboxes['100005:' . $event['event_id']]['status'] ?? '') === 'processed', '完整入库事件必须写入processed收件箱');

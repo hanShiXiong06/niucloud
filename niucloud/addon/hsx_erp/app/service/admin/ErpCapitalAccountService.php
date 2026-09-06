@@ -13,6 +13,7 @@ use think\facade\Db;
 class ErpCapitalAccountService extends BaseAdminService
 {
     public const WECHAT_CLEARING_ACCOUNT_NO = 'system:phone_shop:wechat_clearing';
+    public const SOURCE_PAID_CLEARING_ACCOUNT_NO = 'system:external_source:paid_reconciliation';
 
     public const TYPE_MAP = [
         'cash' => '现金',
@@ -200,6 +201,40 @@ class ErpCapitalAccountService extends BaseAdminService
             'status' => 1,
             'sort' => 900,
             'remark' => '系统清算账户：商城线上支付、渠道手续费及退款自动留痕',
+            'create_at' => $now,
+            'update_at' => $now,
+        ]);
+    }
+
+    /**
+     * 获取“来源系统已付”核对账户。
+     *
+     * 适用于 ERP 安装前已由回收等来源系统完成付款的历史事实。把对应应付
+     * 当场核销，能够阻止财务重复付款；账户余额保留为负数，明确提示财务
+     * 后续把真实银行/微信流水调拨到该核对账户，而不是伪造一笔新付款。
+     */
+    public static function ensureSourcePaidClearingAccount(int $siteId): ErpCapitalAccount
+    {
+        if ($siteId <= 0) throw new CommonException('来源已付核对缺少有效站点');
+        $account = ErpCapitalAccount::where([
+            ['site_id', '=', $siteId],
+            ['account_no', '=', self::SOURCE_PAID_CLEARING_ACCOUNT_NO],
+        ])->findOrEmpty();
+        if (!$account->isEmpty()) return $account;
+
+        $now = time();
+        return ErpCapitalAccount::create([
+            'site_id' => $siteId,
+            'account_name' => '来源系统已付待核对',
+            'account_type' => 'other',
+            'bank_name' => '来源业务系统',
+            'account_no' => self::SOURCE_PAID_CLEARING_ACCOUNT_NO,
+            'holder' => '',
+            'balance' => 0,
+            'is_default' => 0,
+            'status' => 1,
+            'sort' => 910,
+            'remark' => '系统核对账户：记录ERP接入前或来源系统已完成的付款，防止重复打款；请按真实流水完成账户调拨核对',
             'create_at' => $now,
             'update_at' => $now,
         ]);

@@ -1,10 +1,11 @@
 <template>
-    <div class="main-container">
+    <HsxPage padding="none" class="main-container">
         <el-card class="!border-none" shadow="never">
-            <div class="flex items-start justify-between gap-4">
-                <div><div class="text-page-title">经营收支</div><div class="mt-1 text-sm text-gray-500">记录房租、水电、办公、工资及服务收入；待结算进入应收应付，现结进入资金流水。</div></div>
-                <div class="flex gap-2"><el-button :icon="Refresh" :loading="loading" @click="loadData">刷新</el-button><el-button type="primary" :icon="Plus" @click="openCreate">记一笔经营收支</el-button></div>
-            </div>
+            <HsxTitle size="page" collapsible-subtitle class="mb-4">
+                <template #default>经营收支</template>
+                <template #subtitle>记录房租、水电、办公、工资及服务收入；待结算进入应收应付，现结进入资金流水。</template>
+                <template #extra><div class="flex gap-2 flex-wrap"><el-button :icon="Refresh" :loading="loading" @click="loadData">刷新</el-button><el-button type="primary" :icon="Plus" @click="openCreate">记一笔经营收支</el-button></div></template>
+            </HsxTitle>
             <div class="summary-grid mt-5">
                 <div class="summary-card income"><span>经营收入</span><strong>¥{{ money(summary.income) }}</strong></div>
                 <div class="summary-card expense"><span>经营支出</span><strong>¥{{ money(summary.expense) }}</strong></div>
@@ -34,8 +35,8 @@
             <div class="mt-4 flex justify-end"><el-pagination v-model:current-page="query.page" :page-size="query.limit" :total="total" layout="total, prev, pager, next" @current-change="loadData" /></div>
         </el-card>
 
-        <el-dialog v-model="visible" title="记一笔经营收支" width="620px" destroy-on-close>
-            <el-alert title="经营收支不计入具体设备成本；整备、维修某台设备请从库存中心登记。" type="info" :closable="false" class="mb-4" />
+        <HsxDialog :confirm-loading="saving" v-model="visible" title="记一笔经营收支" width="620px" destroy-on-close>
+            <HsxNotice default-expanded title="经营收支不计入具体设备成本；整备、维修某台设备请从库存中心登记。" type="info" :closable="false" class="mb-4" />
             <el-form :model="form" label-width="100px">
                 <el-form-item label="收支方向" required><el-radio-group v-model="form.direction" @change="onDirectionChange"><el-radio-button value="expense">经营支出</el-radio-button><el-radio-button value="income">经营收入</el-radio-button></el-radio-group></el-form-item>
                 <el-form-item label="收支类型" required><el-select v-model="form.category_key" class="w-full" placeholder="请选择"><el-option v-for="item in formCategories" :key="item.key" :label="item.name" :value="item.key" /></el-select></el-form-item>
@@ -47,21 +48,24 @@
                 <el-form-item label="说明" required><el-input v-model.trim="form.remark" type="textarea" :rows="3" placeholder="例如：7月份门店房租，合同号……" /></el-form-item>
                 <el-form-item label="资金凭证"><ErpFinanceVoucherUpload v-model="form.voucher_urls" /></el-form-item>
             </el-form>
-            <template #footer><el-button @click="visible=false">取消</el-button><el-button type="primary" :loading="saving" @click="submit">{{ form.settlement_mode==='pending'?'确认并生成应收应付':'确认现结并记账' }}</el-button></template>
-        </el-dialog>
-    </div>
+            <template #footer><el-button :disabled="saving" @click="visible=false">取消</el-button><el-button :disabled="saving" type="primary" :loading="saving" @click="submit">{{ form.settlement_mode==='pending'?'确认并生成应收应付':'确认现结并记账' }}</el-button></template>
+        </HsxDialog>
+    </HsxPage>
 </template>
 
 <script setup lang="ts">
+import { HsxTitle, HsxPage, HsxDialog, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import { Plus, Refresh } from '@element-plus/icons-vue'
 import { createErpOperatingFinance, getErpOperatingFinanceList } from '@/addon/hsx_erp/api/erp'
 import { getErpFinanceCategories } from '@/addon/hsx_erp/api/config'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import ErpPartySelect from '@/addon/hsx_erp/components/ErpPartySelect.vue'
 import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVoucherUpload.vue'
+const hsxFeedback = useFeedback()
+
 const router=useRouter(),loading=ref(false),saving=ref(false),visible=ref(false),list=ref<any[]>([]),total=ref(0),categories=ref<any[]>([]),accounts=ref<any[]>([]),summary=reactive({income:0,expense:0,unsettled:0})
 const query=reactive({direction:'',status:'',category_key:'',party_id:null as number|null,party_name:'',keyword:'',page:1,limit:15})
 const form=reactive<any>({direction:'expense',category_key:'',party_id:null,party_name:'',amount:0,settlement_mode:'pending',capital_account_id:null,occurred_at:'',remark:'',voucher_urls:''})
@@ -72,7 +76,7 @@ function resetLoad(){query.page=1;loadData()} function resetFilter(){Object.assi
 async function loadOptions(){const [c,a]:any[]=await Promise.all([getErpFinanceCategories(),getCapitalAccounts()]);categories.value=c?.data||[];accounts.value=a?.data?.list||a?.data||[]}
 function openCreate(){Object.assign(form,{direction:'expense',category_key:'',party_id:null,party_name:'',amount:0,settlement_mode:'pending',capital_account_id:enabledAccounts.value[0]?.id||null,occurred_at:String(Math.floor(Date.now()/1000)),remark:'',voucher_urls:''});onDirectionChange();visible.value=true}
 function onDirectionChange(){if(!formCategories.value.some(row=>row.key===form.category_key))form.category_key=formCategories.value[0]?.key||''}
-async function submit(){if(!form.category_key)return ElMessage.warning('请选择收支类型');if(!form.party_id)return ElMessage.warning('请选择往来主体');if(Number(form.amount)<=0)return ElMessage.warning('请输入金额');if(!form.remark)return ElMessage.warning('请填写经营事项说明');if(form.settlement_mode==='immediate'&&!form.capital_account_id)return ElMessage.warning('请选择资金账户');const category=formCategories.value.find(row=>row.key===form.category_key);await ElMessageBox.confirm(`确认记录「${category?.name||'经营收支'}」¥${money(form.amount)}？${form.settlement_mode==='pending'?'将生成待结算应收/应付。':'将立即改变所选账户余额。'}`,'敏感操作确认',{type:'warning',confirmButtonText:'确认记账'});saving.value=true;try{await createErpOperatingFinance({...form,occurred_at:Number(form.occurred_at||0),request_id:`operating:${Date.now()}:${Math.random().toString(36).slice(2)}`});ElMessage.success(form.settlement_mode==='pending'?'已生成应收应付':'经营收支已现结');visible.value=false;await loadData()}finally{saving.value=false}}
+async function submit(){if(!form.category_key)return hsxFeedback.warning('请选择收支类型');if(!form.party_id)return hsxFeedback.warning('请选择往来主体');if(Number(form.amount)<=0)return hsxFeedback.warning('请输入金额');if(!form.remark)return hsxFeedback.warning('请填写经营事项说明');if(form.settlement_mode==='immediate'&&!form.capital_account_id)return hsxFeedback.warning('请选择资金账户');const category=formCategories.value.find(row=>row.key===form.category_key);await ElMessageBox.confirm(`确认记录「${category?.name||'经营收支'}」¥${money(form.amount)}？${form.settlement_mode==='pending'?'将生成待结算应收/应付。':'将立即改变所选账户余额。'}`,'敏感操作确认',{type:'warning',confirmButtonText:'确认记账'});saving.value=true;try{await createErpOperatingFinance({...form,occurred_at:Number(form.occurred_at||0),request_id:`operating:${Date.now()}:${Math.random().toString(36).slice(2)}`});hsxFeedback.success(form.settlement_mode==='pending'?'已生成应收应付':'经营收支已现结');visible.value=false;await loadData()}finally{saving.value=false}}
 function goFinance(row:any){router.push({path:row.direction==='income'?'/hsx_erp/receivable':'/hsx_erp/payable',query:{source_no:row.source_no}})}
 onMounted(async()=>{await loadOptions();await loadData()})
 </script>

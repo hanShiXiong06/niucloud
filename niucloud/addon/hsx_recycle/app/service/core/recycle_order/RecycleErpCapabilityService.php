@@ -3,11 +3,10 @@ declare(strict_types=1);
 
 namespace addon\hsx_recycle\app\service\core\recycle_order;
 
-use app\service\core\site\CoreSiteService;
 use core\exception\CommonException;
 use think\facade\Log;
 
-/** 统一判断当前站点是否由 ERP 接管回收财务。 */
+/** 站点配置用于新业务提示；付款安全边界必须使用订单/设备实际责任。 */
 class RecycleErpCapabilityService
 {
     public const ERP_ADDON = 'hsx_erp';
@@ -17,18 +16,16 @@ class RecycleErpCapabilityService
     public function isEnabled(int $siteId): bool
     {
         if ($siteId <= 0) return false;
-
-        try {
-            $addons = (new CoreSiteService())->getAddonKeysBySiteId($siteId);
-            return in_array(self::ERP_ADDON, $addons, true);
-        } catch (\Throwable $e) {
-            return false;
-        }
+        $config = (new RecycleErpIntegrationService())->get($siteId);
+        return $config['mode'] === 'self_erp' && $config['installed'];
     }
 
-    public function isPaymentManaged(int $siteId): bool
+    public function isPaymentManaged(int $siteId, int $orderId = 0, array $deviceIds = []): bool
     {
-        return $this->isEnabled($siteId);
+        if ($orderId <= 0 && $deviceIds === []) return $this->isEnabled($siteId);
+        $result = (new RecyclePaymentOwnershipService())->inspect($siteId, $orderId, $deviceIds);
+        if (in_array($result['owner'], ['unknown', 'mixed'], true)) throw new CommonException($result['message']);
+        return $result['owner'] === 'self_erp';
     }
 
     /**
@@ -38,28 +35,21 @@ class RecycleErpCapabilityService
      * 历史接口或内部服务直接调用最终都会经过此处。接管状态无法确认时采用
      * fail-closed，宁可暂停本次操作，也不能冒险在回收插件和 ERP 重复记账、付款。
      */
-    public function assertLocalPaymentAllowed(int $siteId): void
+    public function assertLocalPaymentAllowed(int $siteId, int $orderId = 0, array $deviceIds = []): void
     {
         if ($siteId <= 0) {
             throw new CommonException('无法确认当前站点，已为避免重复打款暂停本次操作');
         }
 
         try {
-            $addons = (new CoreSiteService())->getAddonKeysBySiteId($siteId);
+            (new RecyclePaymentOwnershipService())->claim($siteId, $orderId, $deviceIds, 'local');
         } catch (\Throwable $e) {
             Log::error('回收插件无法确认ERP财务接管状态，本地打款已安全拦截', [
                 'site_id' => $siteId,
                 'error' => $e->getMessage(),
             ]);
+            if ($e instanceof CommonException) throw $e;
             throw new CommonException('无法确认 ERP 财务接管状态，已为避免重复打款暂停本次操作，请稍后重试');
-        }
-
-        if (in_array(self::ERP_ADDON, $addons, true)) {
-            Log::warning('回收插件本地打款已被ERP财务接管闸门拦截', [
-                'site_id' => $siteId,
-                'target' => self::ERP_PAYABLE_PATH,
-            ]);
-            throw new CommonException(self::ERP_PAYMENT_MANAGED_MESSAGE);
         }
     }
 
@@ -67,9 +57,9 @@ class RecycleErpCapabilityService
      * 校验 ERP 入库位置，并以 ERP 主数据中的名称为准。
      * 通过事件契约保持回收插件可独立安装。
      */
-    public function validateInboundPlacement(int $siteId, int $warehouseId, int $locationId, string $expectedWarehouseType = ''): array
+    public function validateInboundPlacement(int $siteId, int $warehouseId, int $locationId, string $expectedWarehouseType = '', bool $existingErpResponsibility = false): array
     {
-        if (!$this->isEnabled($siteId)) return [];
+        if (!$existingErpResponsibility && !$this->isEnabled($siteId)) return [];
         if ($warehouseId <= 0 || $locationId <= 0) {
             throw new CommonException('ERP 联动已开启，请选择入库仓库和具体库位');
         }
@@ -96,7 +86,7 @@ class RecycleErpCapabilityService
     /** 历史异常数据手动重同步时，回退到默认仓库的首个可用库位。 */
     public function defaultInboundPlacement(int $siteId, string $warehouseType = ''): array
     {
-        if (!$this->isEnabled($siteId)) return [];
+        if (!(new RecycleErpIntegrationService())->isInstalled($siteId)) return [];
         $warehouses = $this->warehouseOptions($siteId, $warehouseType);
         if (empty($warehouses)) return [];
         $warehouse = null;
@@ -126,7 +116,7 @@ class RecycleErpCapabilityService
 
     public function warehouseOptions(int $siteId, string $warehouseType = ''): array
     {
-        if (!$this->isEnabled($siteId)) return [];
+        if (!(new RecycleErpIntegrationService())->isInstalled($siteId)) return [];
         $eventId = 'recycle-warehouse-options-' . date('YmdHis') . '-' . bin2hex(random_bytes(4));
         $responses = (array)event('ErpWarehouseOptionsRequested', [
             'event_id' => $eventId,
@@ -146,17 +136,23 @@ class RecycleErpCapabilityService
         throw new CommonException('ERP仓库服务未响应，请检查插件安装和事件缓存');
     }
 
-    public function paymentCapability(int $siteId): array
+    public function paymentCapability(int $siteId, int $orderId = 0, array $deviceIds = []): array
     {
-        $managed = $this->isPaymentManaged($siteId);
-
+        $config = (new RecycleErpIntegrationService())->get($siteId);
+        $result = $orderId > 0 || $deviceIds !== []
+            ? (new RecyclePaymentOwnershipService())->inspect($siteId, $orderId, $deviceIds)
+            : ['owner' => $config['mode'], 'message' => $config['message'], 'devices' => []];
+        $owner = $result['owner'];
+        $managed = $owner === 'self_erp';
         return [
-            'erp_connected' => $managed,
+            'erp_connected' => (bool)$config['installed'],
             'payment_managed_by_erp' => $managed,
+            'payment_owner' => $owner,
+            // 无具体业务的能力查询只作展示，不授予付款许可。
+            'local_allowed' => $owner === 'local' && ($orderId > 0 || $deviceIds !== []),
             'payment_path' => $managed ? self::ERP_PAYABLE_PATH : '',
-            'message' => $managed
-                ? self::ERP_PAYMENT_MANAGED_MESSAGE
-                : '',
+            'message' => $result['message'],
+            'devices' => array_values($result['devices']),
         ];
     }
 }

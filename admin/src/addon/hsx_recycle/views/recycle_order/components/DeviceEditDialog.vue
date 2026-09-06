@@ -1,11 +1,11 @@
 <template>
-    <el-dialog
+    <HsxDialog :confirm-loading="submitLoading"
         v-model="dialogVisible"
         title="设备验机结果和定价"
         width="640px"
         :destroy-on-close="true"
         @closed="handleClosed"
-        class="device-edit-dialog hsx-premium-overlay"
+        class="device-edit-dialog "
     >
         <!-- 设备信息只读卡片 -->
         <DeviceInfoCard
@@ -87,8 +87,8 @@
         
         <template #footer>
             <span class="dialog-footer">
-                <el-button @click="dialogVisible = false">取消</el-button>
-                <el-button 
+                <el-button :disabled="submitLoading" @click="dialogVisible = false">取消</el-button>
+                <el-button :disabled="submitLoading" 
                     type="success" 
                     @click="submitForm('CHECK_PRICE')" 
                     :loading="submitLoading"
@@ -97,15 +97,18 @@
                 </el-button>
             </span>
         </template>
-    </el-dialog>
+    </HsxDialog>
 </template>
 
 <script setup lang="ts">
+import { HsxDialog, useFeedback } from '@/addon/hsx_components/core'
 import { ref, reactive, watch, computed } from 'vue';
 import DeviceInfoCard from './DeviceInfoCard.vue';
 import type { FormInstance, FormRules } from 'element-plus';
-import { ElMessage } from 'element-plus';
+
 import { updateDeviceStatus } from '@/addon/hsx_recycle/api/recycle_order';
+const hsxFeedback = useFeedback()
+
 
 // 设备状态定义
 const DEVICE_STATUS = {
@@ -307,15 +310,15 @@ const submitForm = async (action: 'CHECK' | 'CHECK_PRICE') => {
         // 提交请求
         const response = await updateDeviceStatus(String(form.id), params);
         if (response.code === 1) {
-            ElMessage.success('更新设备信息成功');
+            hsxFeedback.success('更新设备信息成功');
             dialogVisible.value = false;
             emit('success');
         } else {
-            ElMessage.error(response.message || '更新设备信息失败');
+            hsxFeedback.error(response.message || '更新设备信息失败');
         }
     } catch (error: any) {
         console.error('更新设备信息失败:', error);
-        ElMessage.error(error.message || '更新设备信息失败');
+        hsxFeedback.error(error.message || '更新设备信息失败');
     } finally {
         submitLoading.value = false;
     }

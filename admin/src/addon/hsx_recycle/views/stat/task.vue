@@ -1,13 +1,13 @@
 <template>
     <PremiumTheme class="recycle-my-task">
         <el-card shadow="never">
-            <div class="flex justify-between items-center mb-[12px]">
-                <span class="text-page-title">{{ t('我的任务') }}</span>
-                <div class="flex gap-2">
+            <HsxTitle size="page" class="mb-4">
+                <template #default>{{ t('我的任务') }}</template>
+                <template #extra>
                     <el-button :icon="Setting" @click="openAssignmentSettings">{{ t('默认负责人') }}</el-button>
                     <el-button :icon="Refresh" @click="loadAll">{{ t('刷新') }}</el-button>
-                </div>
-            </div>
+                </template>
+            </HsxTitle>
 
             <!-- 无负责环节 -->
             <EmptyState
@@ -120,7 +120,7 @@
             </template>
         </el-card>
 
-        <el-dialog v-model="assignDialog.visible" :title="assignDialog.row?.assignee_uid ? '转交任务' : '分配任务'" width="480px" destroy-on-close>
+        <HsxDialog :confirm-loading="assignDialog.saving" v-model="assignDialog.visible" :title="assignDialog.row?.assignee_uid ? '转交任务' : '分配任务'" width="480px" destroy-on-close>
             <div class="assign-summary">
                 <div class="font-medium">{{ assignDialog.row?.is_order ? `订单 ${assignDialog.row?.order_no || ''}` : (assignDialog.row?.model || '待处理设备') }}</div>
                 <div class="text-gray-400 text-xs mt-1">{{ stageName(assignDialog.row?.stage_key || '') }}<span v-if="assignDialog.row?.imei"> · {{ assignDialog.row.imei }}</span></div>
@@ -136,13 +136,13 @@
                 <EmptyState v-if="!assignDialog.loading && !assignDialog.users.length" icon="user" title="没有可分配员工" description="请先为员工角色开通当前环节的处理权限。" />
             </div>
             <template #footer>
-                <el-button @click="assignDialog.visible = false">取消</el-button>
-                <el-button type="primary" :disabled="!assignDialog.assigneeUid" :loading="assignDialog.saving" @click="confirmAssign">确认分配</el-button>
+                <el-button :disabled="assignDialog.saving" @click="assignDialog.visible = false">取消</el-button>
+                <el-button type="primary" :disabled="(!assignDialog.assigneeUid) || (assignDialog.saving)" :loading="assignDialog.saving" @click="confirmAssign">确认分配</el-button>
             </template>
-        </el-dialog>
+        </HsxDialog>
 
-        <el-dialog v-model="settingsDialog.visible" title="默认负责人" width="620px" destroy-on-close>
-            <el-alert type="info" :closable="false" show-icon title="只需设置一次。订单进入新环节后，系统会自动落库责任人并通知本人；转交只用于请假、调岗等特殊情况。" />
+        <HsxDialog :confirm-loading="settingsDialog.saving" v-model="settingsDialog.visible" title="默认负责人" width="620px" destroy-on-close>
+            <HsxNotice default-expanded type="info" :closable="false" show-icon title="只需设置一次。订单进入新环节后，系统会自动落库责任人并通知本人；转交只用于请假、调岗等特殊情况。" />
             <div v-loading="settingsDialog.loading" class="default-assignee-list">
                 <div v-for="stage in settingsDialog.stages" :key="stage.stage_key" class="default-assignee-row">
                     <div class="default-assignee-stage">
@@ -158,22 +158,25 @@
                 </div>
             </div>
             <template #footer>
-                <el-button @click="settingsDialog.visible = false">取消</el-button>
-                <el-button type="primary" :loading="settingsDialog.saving" @click="saveAssignmentDefaults">保存</el-button>
+                <el-button :disabled="settingsDialog.saving" @click="settingsDialog.visible = false">取消</el-button>
+                <el-button :disabled="settingsDialog.saving" type="primary" :loading="settingsDialog.saving" @click="saveAssignmentDefaults">保存</el-button>
             </template>
-        </el-dialog>
+        </HsxDialog>
     </PremiumTheme>
 </template>
 
 <script setup lang="ts">
+import { HsxDialog, HsxNotice, useFeedback, HsxTitle } from '@/addon/hsx_components/core'
 import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import EmptyState from '@/addon/hsx_recycle/components/empty-state/index.vue'
 import { t } from '@/lang'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+
 import { Search, Refresh, Setting } from '@element-plus/icons-vue'
 import { getMyStages, getTaskList, getAssignableUsers, assignTask, claimTask, getTaskAssignmentSettings, saveTaskAssignmentSettings } from '../../api/task'
+const hsxFeedback = useFeedback()
+
 
 const route = useRoute()
 const router = useRouter()
@@ -310,7 +313,7 @@ const saveAssignmentDefaults = async () => {
         const defaults = Object.fromEntries(settingsDialog.stages.map((item: any) => [item.stage_key, Number(item.default_uid || 0)]))
         await saveTaskAssignmentSettings(defaults)
         settingsDialog.visible = false
-        ElMessage.success('默认负责人已保存，后续任务将自动分配')
+        hsxFeedback.success('默认负责人已保存，后续任务将自动分配')
     } finally {
         settingsDialog.saving = false
     }

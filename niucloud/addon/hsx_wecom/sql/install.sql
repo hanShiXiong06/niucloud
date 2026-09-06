@@ -1,20 +1,116 @@
+CREATE TABLE IF NOT EXISTS `{{prefix}}wecom_provider_suite` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `channel_code` varchar(60) NOT NULL DEFAULT '' COMMENT 'SaaS部署渠道唯一编码',
+  `provider_corp_id` varchar(100) NOT NULL DEFAULT '' COMMENT '服务商企业CorpID',
+  `suite_id` varchar(100) NOT NULL DEFAULT '' COMMENT '第三方应用SuiteID',
+  `suite_secret_cipher` longtext NULL COMMENT '加密保存的SuiteSecret',
+  `callback_token` varchar(255) NOT NULL DEFAULT '' COMMENT '回调Token',
+  `encoding_aes_key_cipher` longtext NULL COMMENT '加密保存的EncodingAESKey',
+  `admin_miniapp_appid` varchar(100) NOT NULL DEFAULT '' COMMENT '管理端小程序AppID',
+  `admin_miniapp_name` varchar(100) NOT NULL DEFAULT '' COMMENT '管理端小程序名称',
+  `web_base_url` varchar(1000) NOT NULL DEFAULT '' COMMENT '当前SaaS网页根地址',
+  `event_callback_url` varchar(1000) NOT NULL DEFAULT '' COMMENT '服务商事件回调地址',
+  `auth_callback_url` varchar(1000) NOT NULL DEFAULT '' COMMENT '企业授权完成回调地址',
+  `suite_ticket` varchar(1000) NOT NULL DEFAULT '' COMMENT '企业微信推送的SuiteTicket',
+  `suite_ticket_at` int NOT NULL DEFAULT 0 COMMENT 'SuiteTicket最近接收时间',
+  `status` varchar(20) NOT NULL DEFAULT 'disabled' COMMENT 'enabled/disabled',
+  `last_error` varchar(1000) NOT NULL DEFAULT '' COMMENT '最近错误',
+  `create_at` int NOT NULL DEFAULT 0,
+  `update_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_channel_code` (`channel_code`),
+  UNIQUE KEY `uk_suite_id` (`suite_id`),
+  KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='企业微信服务商应用渠道';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}wecom_corp_authorization` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `provider_suite_id` bigint unsigned NOT NULL DEFAULT 0 COMMENT '服务商应用渠道ID',
+  `auth_corpid` varchar(100) NOT NULL DEFAULT '' COMMENT '授权企业CorpID（服务商域）',
+  `permanent_code_cipher` longtext NULL COMMENT '加密保存的永久授权码',
+  `agent_id` int NOT NULL DEFAULT 0 COMMENT '授权企业应用AgentID',
+  `corp_name` varchar(200) NOT NULL DEFAULT '' COMMENT '授权企业名称快照',
+  `auth_info_json` longtext NULL COMMENT '授权详情快照',
+  `status` varchar(20) NOT NULL DEFAULT 'pending' COMMENT 'pending/authorized/changed/cancelled/error',
+  `last_error` varchar(1000) NOT NULL DEFAULT '' COMMENT '最近错误',
+  `authorized_at` int NOT NULL DEFAULT 0 COMMENT '首次授权时间',
+  `changed_at` int NOT NULL DEFAULT 0 COMMENT '授权变更时间',
+  `cancelled_at` int NOT NULL DEFAULT 0 COMMENT '取消授权时间',
+  `create_at` int NOT NULL DEFAULT 0,
+  `update_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_suite` (`site_id`,`provider_suite_id`),
+  UNIQUE KEY `uk_suite_corp` (`provider_suite_id`,`auth_corpid`),
+  KEY `idx_site_status` (`site_id`,`status`),
+  KEY `idx_auth_corpid` (`auth_corpid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='企业微信客户企业授权';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}wecom_authorization_intent` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `state` varchar(160) NOT NULL DEFAULT '' COMMENT '一次性授权状态码',
+  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `uid` int NOT NULL DEFAULT 0 COMMENT '发起员工UID',
+  `provider_suite_id` bigint unsigned NOT NULL DEFAULT 0 COMMENT '服务商应用渠道ID',
+  `purpose` varchar(30) NOT NULL DEFAULT 'install' COMMENT 'install/member_bind',
+  `pre_auth_code` varchar(255) NOT NULL DEFAULT '' COMMENT '预授权码',
+  `return_url` varchar(1000) NOT NULL DEFAULT '' COMMENT '授权完成后的安全回跳地址',
+  `meta_json` longtext NULL COMMENT '授权上下文',
+  `expires_at` int NOT NULL DEFAULT 0 COMMENT '状态码过期时间',
+  `used_at` int NOT NULL DEFAULT 0 COMMENT '消费时间',
+  `create_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_state` (`state`),
+  KEY `idx_site_purpose` (`site_id`,`purpose`,`create_at`),
+  KEY `idx_expire_used` (`expires_at`,`used_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='企业微信授权与绑定意图';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}wecom_callback_event` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `event_key` varchar(160) NOT NULL DEFAULT '' COMMENT '回调事件幂等键',
+  `provider_suite_id` bigint unsigned NOT NULL DEFAULT 0 COMMENT '服务商应用渠道ID',
+  `auth_corpid` varchar(100) NOT NULL DEFAULT '' COMMENT '授权企业CorpID',
+  `info_type` varchar(60) NOT NULL DEFAULT '' COMMENT '企业微信回调类型',
+  `event_time` int NOT NULL DEFAULT 0 COMMENT '企业微信事件时间',
+  `payload_json` longtext NULL COMMENT '解密后的事件快照',
+  `payload_hash` char(64) NOT NULL DEFAULT '' COMMENT '事件内容SHA-256',
+  `status` varchar(20) NOT NULL DEFAULT 'pending' COMMENT 'pending/processing/processed/failed',
+  `error_message` varchar(1000) NOT NULL DEFAULT '' COMMENT '处理错误',
+  `processed_at` int NOT NULL DEFAULT 0 COMMENT '处理完成时间',
+  `create_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_event_key` (`event_key`),
+  KEY `idx_suite_status` (`provider_suite_id`,`status`,`create_at`),
+  KEY `idx_corp_type_time` (`auth_corpid`,`info_type`,`event_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='企业微信服务商回调收件箱';
+
 CREATE TABLE IF NOT EXISTS `{{prefix}}wecom_staff_binding` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
   `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `corp_authorization_id` bigint unsigned NOT NULL DEFAULT 0 COMMENT '服务商授权企业记录ID',
   `uid` int NOT NULL DEFAULT 0 COMMENT '系统员工UID',
   `wecom_userid` varchar(100) NOT NULL DEFAULT '' COMMENT '企业微信成员UserID',
+  `open_userid` varchar(160) NOT NULL DEFAULT '' COMMENT '服务商域成员OpenUserID',
+  `id_scope` varchar(30) NOT NULL DEFAULT 'legacy' COMMENT 'legacy/userid/open_userid',
+  `bind_source` varchar(30) NOT NULL DEFAULT 'manual' COMMENT 'manual/oauth/miniapp/admin',
+  `verified_at` int NOT NULL DEFAULT 0 COMMENT '最近验证时间',
   `status` tinyint(1) NOT NULL DEFAULT 1 COMMENT '1启用0停用',
   `create_at` int NOT NULL DEFAULT 0,
   `update_at` int NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_site_uid` (`site_id`,`uid`),
   KEY `idx_site_wecom_userid` (`site_id`,`wecom_userid`),
-  KEY `idx_site_status` (`site_id`,`status`)
+  KEY `idx_site_status` (`site_id`,`status`),
+  KEY `idx_auth_open_userid` (`corp_authorization_id`,`open_userid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='企业微信员工绑定';
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}wecom_message_log` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `corp_authorization_id` bigint unsigned NOT NULL DEFAULT 0 COMMENT '服务商授权企业记录ID',
+  `channel_code` varchar(60) NOT NULL DEFAULT '' COMMENT 'SaaS部署渠道编码快照',
+  `auth_corpid` varchar(100) NOT NULL DEFAULT '' COMMENT '授权企业CorpID快照',
+  `agent_id` int NOT NULL DEFAULT 0 COMMENT '授权企业应用AgentID快照',
   `event_id` varchar(100) NOT NULL DEFAULT '' COMMENT '业务事件唯一标识',
   `scene` varchar(50) NOT NULL DEFAULT '' COMMENT '通知场景',
   `source_plugin` varchar(50) NOT NULL DEFAULT '' COMMENT '来源插件',
@@ -28,6 +124,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}wecom_message_log` (
   `target_url` varchar(1000) NOT NULL DEFAULT '' COMMENT '任务跳转地址',
   `payload_json` longtext NULL COMMENT '业务事件快照',
   `response_json` longtext NULL COMMENT '企业微信响应',
+  `provider_msgid` varchar(160) NOT NULL DEFAULT '' COMMENT '企业微信消息ID',
   `status` varchar(20) NOT NULL DEFAULT 'pending' COMMENT 'pending/success/failed/skipped',
   `retry_count` tinyint unsigned NOT NULL DEFAULT 0,
   `next_retry_at` int NOT NULL DEFAULT 0,
@@ -38,5 +135,8 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}wecom_message_log` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_site_event` (`site_id`,`event_id`),
   KEY `idx_retry` (`status`,`next_retry_at`,`retry_count`),
-  KEY `idx_site_receiver` (`site_id`,`receiver_uid`,`create_at`)
+  KEY `idx_site_receiver` (`site_id`,`receiver_uid`,`create_at`),
+  KEY `idx_auth_status` (`corp_authorization_id`,`status`,`create_at`),
+  KEY `idx_channel_time` (`channel_code`,`create_at`),
+  KEY `idx_provider_msgid` (`provider_msgid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='企业微信消息发件箱与发送日志';

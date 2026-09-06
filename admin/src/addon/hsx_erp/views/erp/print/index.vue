@@ -1,13 +1,11 @@
 <template>
-    <div class="main-container print-center">
+    <HsxPage padding="none" class="main-container print-center">
         <el-card class="!border-none" shadow="never">
-            <div class="page-head">
-                <div>
-                    <div class="text-page-title">打印中心</div>
-                    <div class="page-subtitle">统一管理销售小票、财务凭证和设备标签。业务失败不会被打印机故障阻断，失败任务可单独重试。</div>
-                </div>
-                <el-button :icon="Refresh" :loading="loading" @click="loadAll">刷新</el-button>
-            </div>
+            <HsxTitle size="page" collapsible-subtitle class="mb-4">
+                <template #default>打印中心</template>
+                <template #subtitle>统一管理销售小票、财务凭证和设备标签。业务失败不会被打印机故障阻断，失败任务可单独重试。</template>
+                <template #extra><el-button :icon="Refresh" :loading="loading" @click="loadAll">刷新</el-button></template>
+            </HsxTitle>
 
             <div class="overview-grid">
                 <div class="overview-card blue"><el-icon><Printer /></el-icon><div><b>{{ printers.length }}</b><span>打印设备</span></div></div>
@@ -15,9 +13,9 @@
                 <div class="overview-card orange"><el-icon><Warning /></el-icon><div><b>{{ failedJobs }}</b><span>待处理失败</span></div></div>
             </div>
 
-            <el-alert class="mt-5" type="info" :closable="false" show-icon>
+            <HsxNotice default-expanded class="mt-5" type="info" :closable="false" show-icon>
                 <template #title>云打印机适合无人值守，但字号通常只能按倍数调整；蓝牙打印机排版更灵活，需要在手机端连接后发送。模板会按设备能力自动降级。</template>
-            </el-alert>
+            </HsxNotice>
 
             <el-tabs v-model="activeTab" class="mt-4" @tab-change="onTabChange">
                 <el-tab-pane label="打印设备" name="printers">
@@ -83,7 +81,7 @@
                         <el-table-column prop="scene_name" label="场景" min-width="120" />
                         <el-table-column prop="biz_no" label="业务单号" min-width="170" show-overflow-tooltip />
                         <el-table-column prop="printer_name" label="打印机" min-width="130" show-overflow-tooltip />
-                        <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="statusType(row.status)" size="small">{{ meta.status_map?.[row.status] || row.status }}</el-tag></template></el-table-column>
+                        <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="statusType(row.status)" size="small">{{ erpEnumLabel(row.status, meta.status_map) }}</el-tag></template></el-table-column>
                         <el-table-column prop="error_message" label="结果说明" min-width="220" show-overflow-tooltip><template #default="{ row }">{{ row.error_message || (row.status === 'success' ? '打印成功' : '-') }}</template></el-table-column>
                         <el-table-column label="时间" width="170"><template #default="{ row }">{{ formatTime(row.create_at) }}</template></el-table-column>
                         <el-table-column label="操作" width="90" fixed="right"><template #default="{ row }"><el-button v-if="['failed','waiting_client'].includes(row.status)" text type="primary" @click="onRetry(row)">重试</el-button></template></el-table-column>
@@ -93,7 +91,7 @@
             </el-tabs>
         </el-card>
 
-        <el-dialog v-model="printerVisible" :title="printerForm.id ? '编辑打印机' : '添加打印机'" width="620px" destroy-on-close>
+        <HsxDialog :confirm-loading="saving" v-model="printerVisible" :title="printerForm.id ? '编辑打印机' : '添加打印机'" width="620px" destroy-on-close>
             <el-form label-width="108px">
                 <el-form-item label="打印机名称" required><el-input v-model.trim="printerForm.printer_name" placeholder="如：前台小票机 / 仓库标签机" /></el-form-item>
                 <el-form-item label="连接方式" required><el-select v-model="printerForm.driver" class="w-full" placeholder="选择厂商或蓝牙协议" @change="onDriverChange"><el-option v-for="p in meta.providers" :key="p.key" :label="p.name" :value="p.key"><span>{{ p.name }}</span><span class="float-right text-xs text-gray-400">{{ p.modes?.[0] === 'cloud' ? '云打印' : '手机蓝牙' }}</span></el-option></el-select><div class="form-help">{{ currentProvider?.description }}</div></el-form-item>
@@ -104,36 +102,40 @@
                 <el-form-item label="启用"><el-switch v-model="printerForm.status" :active-value="1" :inactive-value="0" /></el-form-item>
                 <el-form-item label="备注"><el-input v-model.trim="printerForm.remark" type="textarea" :rows="2" /></el-form-item>
             </el-form>
-            <template #footer><el-button @click="printerVisible=false">取消</el-button><el-button type="primary" :loading="saving" @click="onSavePrinter">保存</el-button></template>
-        </el-dialog>
+            <template #footer><el-button :disabled="saving" @click="printerVisible=false">取消</el-button><el-button :disabled="saving" type="primary" :loading="saving" @click="onSavePrinter">保存</el-button></template>
+        </HsxDialog>
 
-        <el-drawer v-model="templateVisible" :title="templateForm.id ? '编辑打印模板' : '新建打印模板'" size="720px" destroy-on-close>
+        <HsxDrawer :confirm-loading="saving" v-model="templateVisible" :title="templateForm.id ? '编辑打印模板' : '新建打印模板'" size="720px" destroy-on-close>
             <el-form label-width="90px">
                 <div class="grid grid-cols-2 gap-x-4"><el-form-item label="模板名称" required><el-input v-model.trim="templateForm.template_name" /></el-form-item><el-form-item label="模板类型"><el-select v-model="templateForm.print_type" class="w-full"><el-option label="小票" value="receipt" /><el-option label="标签" value="label" /></el-select></el-form-item></div>
                 <div class="grid grid-cols-2 gap-x-4"><el-form-item label="纸宽"><el-input-number v-model="templateForm.paper_width" :min="20" :max="110" /></el-form-item><el-form-item label="排版"><el-radio-group v-model="templateForm.layout_mode"><el-radio label="native">设备原生</el-radio><el-radio label="raster" disabled>精确图像（后续）</el-radio></el-radio-group></el-form-item></div>
-                <el-form-item label="可用变量"><div class="variable-box"><el-tag v-for="item in meta.variables" :key="item.key" class="cursor-pointer" size="small" effect="plain" @click="insertVariable(item.key)">{{ item.name }} · {{ item.key }}</el-tag></div></el-form-item>
+                <el-form-item label="可用变量"><div class="variable-box"><el-tag v-for="item in meta.variables" :key="item.key" class="cursor-pointer" size="small" effect="plain" @click="insertVariable(item.key)">{{ item.name }}</el-tag></div></el-form-item>
                 <el-form-item label="模板内容" required><el-input ref="contentInput" v-model="templateForm.content" type="textarea" :rows="18" resize="vertical" placeholder="点击变量可插入 {{变量}}" /></el-form-item>
                 <el-form-item label="启用"><el-switch v-model="templateForm.status" :active-value="1" :inactive-value="0" /></el-form-item>
             </el-form>
-            <template #footer><el-button @click="templateVisible=false">取消</el-button><el-button type="primary" :loading="saving" @click="onSaveTemplate">保存模板</el-button></template>
-        </el-drawer>
-    </div>
+            <template #footer><el-button :disabled="saving" @click="templateVisible=false">取消</el-button><el-button :disabled="saving" type="primary" :loading="saving" @click="onSaveTemplate">保存模板</el-button></template>
+        </HsxDrawer>
+    </HsxPage>
 </template>
 
 <script lang="ts" setup>
+import { HsxTitle, HsxPage, HsxDialog, HsxDrawer, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
+import { erpEnumLabel, erpNamedLabel } from '@/addon/hsx_erp/utils/display'
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import { Connection, Plus, Postcard, Printer, Refresh, Tickets, Warning } from '@element-plus/icons-vue'
 import { deleteErpPrinter, getErpPrinters, getErpPrintJobs, getErpPrintMeta, getErpPrintScenes, getErpPrintTemplates, retryErpPrintJob, saveErpPrinter, saveErpPrintScene, saveErpPrintTemplate, testErpPrinter } from '@/addon/hsx_erp/api/erp'
+const hsxFeedback = useFeedback()
+
 
 const activeTab = ref('printers'), loading = ref(false), saving = ref(false), jobsLoading = ref(false)
 const meta = reactive<any>({ providers: [], variables: [], status_map: {} })
 const printers = ref<any[]>([]), templates = ref<any[]>([]), scenes = ref<any[]>([]), jobs = ref<any[]>([])
 const jobTotal = ref(0), failedJobs = ref(0), jobQuery = reactive({ keyword: '', status: '', page: 1, limit: 15 })
 const enabledScenes = computed(() => scenes.value.filter((x:any) => Number(x.enabled) === 1).length)
-const providerName = (key:string) => meta.providers.find((x:any) => x.key === key)?.name || key
+const providerName = (key:string) => erpNamedLabel(meta.providers.find((x:any) => x.key === key)?.name, key, '其他打印设备')
 const currentProvider = computed(() => meta.providers.find((x:any) => x.key === printerForm.driver))
-const granularityText = (v:string) => ({ order: '按订单', device: '按设备', settlement: '按结算' } as any)[v] || v
+const granularityText = (v:string) => erpEnumLabel(v, { order: '按订单', device: '按设备', settlement: '按结算' }, '按业务打印')
 const granularityOptions = (scene:any) => scene.biz_type === 'sale'
     ? [{ label: '按订单打印', value: 'order' }, { label: '按设备打印', value: 'device' }]
     : scene.biz_type === 'asset'
@@ -162,17 +164,17 @@ function onTabChange(name:any) { if (name === 'jobs') loadJobs() }
 const printerVisible = ref(false), printerForm = reactive<any>({})
 function openPrinter(row?:any) { Object.assign(printerForm, row ? { ...row, config: { ...(row.config || {}) } } : { id:0, printer_name:'', driver:'xpyun', print_type:'receipt', paper_width:58, config:{}, copies:1, is_default:0, status:1, sort:0, remark:'' }); printerVisible.value = true }
 function onDriverChange() { const p:any=currentProvider.value; printerForm.print_type=p?.types?.[0] || 'receipt'; printerForm.paper_width=printerForm.print_type==='label'?50:58; printerForm.config={} }
-async function onSavePrinter() { if (!printerForm.printer_name) return ElMessage.warning('请填写打印机名称'); saving.value=true; try { await saveErpPrinter(printerForm.id,{...printerForm,config:{...printerForm.config}}); printerVisible.value=false; await loadAll() } finally { saving.value=false } }
+async function onSavePrinter() { if (!printerForm.printer_name) return hsxFeedback.warning('请填写打印机名称'); saving.value=true; try { await saveErpPrinter(printerForm.id,{...printerForm,config:{...printerForm.config}}); printerVisible.value=false; await loadAll() } finally { saving.value=false } }
 async function onDeletePrinter(row:any) { try { await ElMessageBox.confirm(`确认删除「${row.printer_name}」？`,'提示',{type:'warning'}) } catch { return }; await deleteErpPrinter(row.id); await loadAll() }
-async function onTest(row:any) { const res:any=await testErpPrinter(row.id); const status=res?.data?.status; ElMessage.success(status==='waiting_client'?'任务已生成，请在手机端连接蓝牙打印':'测试任务已发送'); await loadJobs(true) }
+async function onTest(row:any) { const res:any=await testErpPrinter(row.id); const status=res?.data?.status; hsxFeedback.success(status==='waiting_client'?'任务已生成，请在手机端连接蓝牙打印':'测试任务已发送'); await loadJobs(true) }
 
-async function onSaveScene(scene:any) { scene.saving=true; try { await saveErpPrintScene(scene.id,{ printer_id:scene.printer_id||0,template_id:scene.template_id||0,auto_print:scene.auto_print,enabled:scene.enabled,copies:scene.copies||1,granularity:scene.granularity }); ElMessage.success('场景已保存'); await loadAll() } finally { scene.saving=false } }
+async function onSaveScene(scene:any) { scene.saving=true; try { await saveErpPrintScene(scene.id,{ printer_id:scene.printer_id||0,template_id:scene.template_id||0,auto_print:scene.auto_print,enabled:scene.enabled,copies:scene.copies||1,granularity:scene.granularity }); hsxFeedback.success('场景已保存'); await loadAll() } finally { scene.saving=false } }
 
 const templateVisible=ref(false), templateForm=reactive<any>({}), contentInput=ref()
 function openTemplate(row?:any) { Object.assign(templateForm,row?{...row}:{id:0,template_name:'',print_type:'receipt',layout_mode:'native',paper_width:58,content:'',status:1,is_default:0,sort:0}); templateVisible.value=true }
-function insertVariable(key:string) { templateForm.content = `${templateForm.content || ''}{{${key}}}`; ElMessage.info(`已插入 {{${key}}}`) }
-async function onSaveTemplate() { if (!templateForm.template_name || !templateForm.content) return ElMessage.warning('请填写模板名称和内容'); saving.value=true; try { await saveErpPrintTemplate(templateForm.id,{...templateForm}); templateVisible.value=false; await loadAll() } finally { saving.value=false } }
-async function onRetry(row:any) { const res:any = await retryErpPrintJob(row.id); ElMessage.success(res?.data?.status === 'waiting_client' ? '任务已恢复，请在移动打印台连接蓝牙设备' : '重试任务已发送'); await Promise.all([loadJobs(), loadFailedCount()]) }
+function insertVariable(key:string) { templateForm.content = `${templateForm.content || ''}{{${key}}}`; hsxFeedback.info(`已插入 {{${key}}}`) }
+async function onSaveTemplate() { if (!templateForm.template_name || !templateForm.content) return hsxFeedback.warning('请填写模板名称和内容'); saving.value=true; try { await saveErpPrintTemplate(templateForm.id,{...templateForm}); templateVisible.value=false; await loadAll() } finally { saving.value=false } }
+async function onRetry(row:any) { const res:any = await retryErpPrintJob(row.id); hsxFeedback.success(res?.data?.status === 'waiting_client' ? '任务已恢复，请在移动打印台连接蓝牙设备' : '重试任务已发送'); await Promise.all([loadJobs(), loadFailedCount()]) }
 onMounted(loadAll)
 </script>
 

@@ -197,6 +197,7 @@ import { erpFinanceSourceFilterOptions, erpFinanceSourceMeta } from '@/addon/hsx
 import { useErpSaleChannels } from '@/addon/hsx_erp/hooks/useErpSaleChannels'
 import { useErpFinanceOptions } from '@/addon/hsx_erp/hooks/useErpFinanceOptions'
 import { erpPartyDisplayName } from '@/addon/hsx_erp/hooks/useErpPartyText'
+import { showErpError } from '@/addon/hsx_erp/utils/error'
 
 const { pagingStyle } = useListHeader({ tabs: true, compactMp: true })
 
@@ -307,7 +308,10 @@ const queryList = async (pageNo: number, pageSize: number) => {
             page: pageNo, limit: pageSize
         })
         pagingRef.value?.complete(res?.data?.data || [])
-    } catch { pagingRef.value?.complete(false) }
+    } catch (error) {
+        pagingRef.value?.complete(false)
+        showErpError(error, '待收款数据加载失败，请检查网络后重试')
+    }
 }
 
 function applyFilter() { reload() }
@@ -433,7 +437,7 @@ async function refreshAfterSettlement() {
 }
 
 const money = (v: any) => Number(v || 0).toFixed(2)
-const statusLabel = (s: string) => ({ pending: '待收款', partial: '部分收款', settled: '已结清', void: '已作废' }[s] || s || '-')
+const statusLabel = (s: string) => ({ pending: '待收款', partial: '部分收款', settled: '已结清', void: '已作废' }[s] || '状态待确认')
 const statusType = (s: string) => ({ pending: 'warning', partial: 'primary', settled: 'success', void: 'info' }[s] || 'info')
 </script>
 

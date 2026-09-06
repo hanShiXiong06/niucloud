@@ -1,5 +1,5 @@
 <template>
-    <el-dialog
+    <HsxDialog :confirm-loading="saving"
         :model-value="modelValue"
         title="补录商城成交资料"
         width="980px"
@@ -7,7 +7,7 @@
         destroy-on-close
         @close="close"
     >
-        <el-alert
+        <HsxNotice default-expanded
             type="warning"
             :closable="false"
             show-icon
@@ -79,17 +79,20 @@
         </div>
 
         <template #footer>
-            <el-button @click="close">取消</el-button>
-            <el-button type="primary" :loading="saving" @click="submit">确认补录并留痕</el-button>
+            <el-button :disabled="saving" @click="close">取消</el-button>
+            <el-button :disabled="saving" type="primary" :loading="saving" @click="submit">确认补录并留痕</el-button>
         </template>
-    </el-dialog>
+    </HsxDialog>
 </template>
 
 <script setup lang="ts">
+import { HsxDialog, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
 import { computed, reactive, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+
 import ErpPartySelect from '@/addon/hsx_erp/components/ErpPartySelect.vue'
 import { supplementErpReceivableSaleDetails } from '@/addon/hsx_erp/api/erp'
+const hsxFeedback = useFeedback()
+
 
 const props = withDefaults(defineProps<{
     modelValue: boolean
@@ -153,15 +156,15 @@ function syncSalesmanName(uid: number | string) {
 }
 
 function staffName(user: any) {
-    return user?.name || user?.real_name || user?.username || `员工#${user?.uid || '-'}`
+    return user?.name || user?.real_name || user?.username || '姓名未登记'
 }
 
 async function submit() {
-    if (!props.receivable?.id) return ElMessage.warning('应收记录不存在，请刷新后重试')
-    if (!form.items.length) return ElMessage.warning('请至少填写一台成交设备')
+    if (!props.receivable?.id) return hsxFeedback.warning('应收记录不存在，请刷新后重试')
+    if (!form.items.length) return hsxFeedback.warning('请至少填写一台成交设备')
     const invalidIndex = form.items.findIndex((item: any) => !String(item.imei || '').trim() || !String(item.model || '').trim() || Number(item.cost) < 0 || Number(item.sale_price) <= 0)
-    if (invalidIndex >= 0) return ElMessage.warning(`请完整填写第 ${invalidIndex + 1} 台设备的 IMEI、型号、成本和成交价`)
-    if (!amountDiffOk.value) return ElMessage.warning(`成交价合计必须等于应收金额，当前相差 ${money(Math.abs(amountDiff.value))}`)
+    if (invalidIndex >= 0) return hsxFeedback.warning(`请完整填写第 ${invalidIndex + 1} 台设备的 IMEI、型号、成本和成交价`)
+    if (!amountDiffOk.value) return hsxFeedback.warning(`成交价合计必须等于应收金额，当前相差 ${money(Math.abs(amountDiff.value))}`)
     saving.value = true
     try {
         const res: any = await supplementErpReceivableSaleDetails(Number(props.receivable.id), {
@@ -172,7 +175,7 @@ async function submit() {
             remark: form.remark,
             items: form.items,
         })
-        ElMessage.success('商城成交资料、ERP 已售资产和台账已补全')
+        hsxFeedback.success('商城成交资料、ERP 已售资产和台账已补全')
         emit('saved', res?.data || {})
         close()
     } finally {

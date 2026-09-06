@@ -388,9 +388,9 @@ function goSale(row: any) {
 
 const money = (v: any) => Number(v || 0).toFixed(2)
 const signedMoney = (v: any) => `${Number(v || 0) > 0 ? '+' : ''}¥${money(v)}`
-const settlementLabel = (s: string) => ({ receipt: '收款', payment: '付款', offset: '折账' }[s] || s || '-')
+const settlementLabel = (s: string) => ({ receipt: '收款', payment: '付款', offset: '折账' }[s] || '状态待确认')
 const settlementType = (s: string) => ({ receipt: 'success', payment: 'warning', offset: 'error' }[s] || 'info')
-const financeStatus = (status: string, action: string) => ({ settled: '已结清', partial: `部分${action}`, pending: `待${action}`, void: '已作废' }[status] || status || '-')
+const financeStatus = (status: string, action: string) => ({ settled: '已结清', partial: `部分${action}`, pending: `待${action}`, void: '已作废' }[status] || '状态待确认')
 const financeStatusType = (status: string) => ({ settled: 'success', partial: 'warning', pending: 'warning', void: 'info' }[status] || 'info')
 const time = (v: any) => {
     const ts = Number(v || 0)

@@ -75,6 +75,7 @@ import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
 import { erpTimeLine } from '@/addon/hsx_erp/hooks/useErpTime'
 import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
 import ErpQuickFilterBar from '@/addon/hsx_erp/components/ErpQuickFilterBar.vue'
+import { showErpError } from '@/addon/hsx_erp/utils/error'
 
 
 const keyword = ref('')
@@ -129,6 +130,7 @@ const queryList = async (pageNo: number, pageSize: number) => {
         pagingRef.value?.complete(data.list || data.data || [])
     } catch (e) {
         pagingRef.value?.complete(false)
+        showErpError(e, '成本调整列表加载失败，请检查网络后重试')
     }
 }
 

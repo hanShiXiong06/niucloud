@@ -28,9 +28,6 @@
                             <text class="input-arrow">›</text>
                         </view>
                     </view>
-                    <view v-if="form.channel_source_plugin" class="channel-source-tip">
-                        渠道来源：{{ form.channel_source_plugin === 'hsx_erp' ? 'ERP' : '已安装插件' }}
-                    </view>
                     <view class="form-row">
                         <text class="form-label">备注</text>
                         <u-input v-model="form.remark" placeholder="可选" :customStyle="inputStyle" />

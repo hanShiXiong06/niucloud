@@ -1,5 +1,5 @@
 <template>
-    <el-dialog class="hsx-premium-overlay" v-model="dialogVisible" title="设备信息确认" width="800" center :destroy-on-close="true"
+    <HsxDialog :confirm-loading="loading" class="" v-model="dialogVisible" title="设备信息确认" width="800" center :destroy-on-close="true"
         @closed="handleClosed">
         <template #header>
             <div class="flex justify-between items-center">
@@ -49,20 +49,23 @@
 
         <template #footer>
             <div class="dialog-footer">
-                <el-button @click="dialogVisible = false">取消</el-button>
-                <el-button type="primary" @click="confirmDevices" :loading="loading">
+                <el-button :disabled="loading" @click="dialogVisible = false">取消</el-button>
+                <el-button :disabled="loading" type="primary" @click="confirmDevices" :loading="loading">
                     确认并签收
                 </el-button>
             </div>
         </template>
-    </el-dialog>
+    </HsxDialog>
 </template>
 
 <script setup lang="ts">
+import { HsxDialog, useFeedback } from '@/addon/hsx_components/core'
 import { ref, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import { Edit, Delete } from '@element-plus/icons-vue'
 import { updateDeviceStatus } from '@/addon/hsx_recycle/api/recycle_order'
+const hsxFeedback = useFeedback()
+
 
 // 定义设备接口
 interface Device {
@@ -150,13 +153,13 @@ const removeDevice = async (row: Device) => {
         } else {
             // 如果是新设备，直接从本地列表中移除
             devices.value = devices.value.filter(item => item !== row)
-            ElMessage.success('已移除')
+            hsxFeedback.success('已移除')
         }
     } catch (error: any) {
         // 用户取消操作或删除失败
         if (error !== 'cancel') {
             console.error('删除设备失败：', error)
-            ElMessage.error('删除失败')
+            hsxFeedback.error('删除失败')
         }
     }
 }
@@ -166,7 +169,7 @@ const confirmDevices = async () => {
     // 验证必填项
     for (const device of devices.value) {
         if (!device.imei || !device.model) {
-            ElMessage.warning('请完善设备信息')
+            hsxFeedback.warning('请完善设备信息')
             return
         }
     }
@@ -192,12 +195,12 @@ const confirmDevices = async () => {
             throw new Error(result.message || '操作失败')
         }
 
-        ElMessage.success('订单签收成功')
+        hsxFeedback.success('订单签收成功')
         dialogVisible.value = false
         emit('success')
     } catch (error: any) {
         console.error('保存设备信息失败：', error)
-        ElMessage.error(error.message || '保存失败')
+        hsxFeedback.error(error.message || '保存失败')
     } finally {
         loading.value = false
     }

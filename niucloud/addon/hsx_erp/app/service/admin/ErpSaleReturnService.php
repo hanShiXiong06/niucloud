@@ -495,9 +495,7 @@ class ErpSaleReturnService extends BaseAdminService
                 $requiredConsumers = (string)$asset->sale_target === 'mall'
                     ? ['phone_shop.erp_asset_state']
                     : [];
-                $sourceDeviceId = (string)$asset->source_plugin === 'hsx_recycle' && is_numeric((string)$asset->source_id)
-                    ? (int)$asset->source_id
-                    : 0;
+                $sourceDeviceId = (new ErpRecycleDeviceIdentityService())->assetDeviceId($asset->toArray(), '销售退货');
                 $queued = $integration->enqueueDomainEvent(
                     'erp.asset.returned.v1',
                     'asset',

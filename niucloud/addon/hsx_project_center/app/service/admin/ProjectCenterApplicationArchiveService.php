@@ -126,6 +126,8 @@ final class ProjectCenterApplicationArchiveService
                     'name' => (string)($groupData['member_name'] ?? $memberData['nickname'] ?? $memberData['username'] ?? ''),
                     'mobile' => (string)($groupData['member_mobile'] ?? $memberData['mobile'] ?? ''),
                 ],
+                'eligibility' => is_array($applicationData['eligibility_snapshot'] ?? null)
+                    ? $applicationData['eligibility_snapshot'] : [],
                 'fields' => array_values($fields),
                 'assets' => $assetManifest,
             ];
@@ -299,6 +301,8 @@ final class ProjectCenterApplicationArchiveService
             '门店：' . ($manifest['group']['store_name'] ?: '-'),
             '客户：' . ($manifest['member']['name'] ?: '-'),
             '手机号：' . ($manifest['member']['mobile'] ?: '-'),
+            '参与地区：' . ((string)($manifest['eligibility']['full_name'] ?? '') ?: '未限制或历史工单'),
+            '地区资格：' . (!empty($manifest['eligibility']['eligible']) ? '符合' : '未记录'),
             '提交时间：' . $this->dateText((int)$manifest['application']['submitted_at']),
             '审核通过：' . $this->dateText((int)$manifest['application']['approved_at']),
             '', '客户提交资料', str_repeat('-', 32),

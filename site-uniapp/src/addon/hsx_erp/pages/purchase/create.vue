@@ -6,7 +6,7 @@
                 <view class="meta-source-card" :class="goodsMeta.source === 'phone_shop' ? 'shop' : 'erp'">
                     <view class="meta-source__head">
                         <u-icon :name="goodsMeta.source === 'phone_shop' ? 'shopping-cart' : 'file-text'" :color="goodsMeta.source === 'phone_shop' ? '#3b6ef5' : '#64748b'" size="18" />
-                        <text class="meta-source__title">{{ goodsMeta.source_label || '商品资料' }}</text>
+                        <text class="meta-source__title">{{ erpSourceLabel(goodsMeta.source_label, '商品资料') }}</text>
                     </view>
                     <text class="meta-source__desc">{{ goodsMetaTip }}</text>
                 </view>
@@ -374,6 +374,7 @@ import ErpSwipeActionItem from '@/addon/hsx_erp/components/ErpSwipeActionItem.vu
 import ErpVoucherUploader from '@/addon/hsx_erp/components/ErpVoucherUploader.vue'
 import ErpQuantityProductPopup from '@/addon/hsx_erp/components/ErpQuantityProductPopup.vue'
 import { erpPartyDisplayName } from '@/addon/hsx_erp/hooks/useErpPartyText'
+import { erpSourceLabel } from '@/addon/hsx_erp/utils/display'
 
 
 

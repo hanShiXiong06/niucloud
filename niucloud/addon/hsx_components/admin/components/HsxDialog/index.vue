@@ -108,6 +108,7 @@ defineExpose({ close, toggleFullscreen, fullscreen: innerFullscreen })
         v-model="visible"
         v-bind="$attrs"
         class="hsx-dialog"
+        :title="title"
         :class="{ 'hsx-dialog--fullscreen': innerFullscreen }"
         :width="resolvedWidth"
         :fullscreen="innerFullscreen"

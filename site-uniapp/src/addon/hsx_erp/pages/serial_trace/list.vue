@@ -35,6 +35,7 @@ import { scanErpCode } from '@/addon/hsx_erp/hooks/useErpScan'
 import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
 import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
 import ErpQuickFilterBar from '@/addon/hsx_erp/components/ErpQuickFilterBar.vue'
+import { showErpError } from '@/addon/hsx_erp/utils/error'
 const { pagingStyle } = useListHeader({ tabs: true, compactMp: true, h5TopRpx: 178 })
 const keyword=ref(''),list=ref<any[]>([]),pagingRef=ref<any>(null)
 const capabilities=ref<any>({view_supplier:0})
@@ -50,10 +51,10 @@ const quickFilters=computed(()=>[
 ])
 const reload=()=>pagingRef.value?.reload()
 const onQuickFilter=({key,value}:{key:string,value:string|number})=>{if(key==='status')status.value=String(value);if(key==='date')datePreset.value=String(value);reload()}
-async function queryList(page:number,limit:number){try{const range=dateRange(datePreset.value);const res:any=await getMobileSerialTraceList({keyword:keyword.value,status:status.value,...range,page,limit});capabilities.value=res?.data?.capabilities||capabilities.value;pagingRef.value?.complete(res?.data?.data||[])}catch(_){pagingRef.value?.complete(false)}}
+async function queryList(page:number,limit:number){try{const range=dateRange(datePreset.value);const res:any=await getMobileSerialTraceList({keyword:keyword.value,status:status.value,...range,page,limit});capabilities.value=res?.data?.capabilities||capabilities.value;pagingRef.value?.complete(res?.data?.data||[])}catch(error){pagingRef.value?.complete(false);showErpError(error,'串号轨迹加载失败，请检查网络后重试')}}
 async function scan(){try{keyword.value=await scanErpCode();reload()}catch(e:any){if(!String(e?.errMsg||'').includes('cancel'))uni.showToast({title:e?.message||'扫码失败',icon:'none'})}}
 function goDetail(row:any){uni.navigateTo({url:`/addon/hsx_erp/pages/serial_trace/detail?id=${Number(row.id||0)}`})}
-const statusLabel=(s:string)=>({in_stock:'在库',sold:'已售',returned:'已退货',void:'已作废'}[s]||s||'-')
+const statusLabel=(s:string)=>({in_stock:'在库',sold:'已售',returned:'已退货',void:'已作废'}[s] || '状态待确认')
 const statusType=(s:string)=>({in_stock:'success',sold:'primary',returned:'warning',void:'info'}[s]||'info')
 function dateRange(value:string){
     if(!value)return {}

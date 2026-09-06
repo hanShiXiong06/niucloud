@@ -111,8 +111,10 @@ export function getRefurbishmentOptions() {
 }
 
 // 获取销售去向选项
-export function getSaleDestinationOptions() {
-  return request.get("/recycle/recycle_device/sale_destination_options");
+export function getSaleDestinationOptions(deviceId?: number) {
+  return request.get("/recycle/recycle_device/sale_destination_options", {
+    params: deviceId ? { device_id: deviceId } : {},
+  });
 }
 
 // 整备负责人候选（按被选次数倒序，常用优先）
@@ -128,9 +130,11 @@ export function getMerchantPayInfo(memberId: number) {
   );
 }
 
-// 出账户头候选（打款选从哪个ERP资金账户出钱；ERP未装则accounts为空）
-export function getCapitalAccountOptions() {
-  return request.get("/recycle/recycle_order/capital_accounts");
+// 按订单查询付款归属；不传订单时供资金账户候选等既有页面使用。
+export function getCapitalAccountOptions(orderId?: number | string, deviceIds?: Array<number | string>) {
+  return request.get("/recycle/recycle_order/capital_accounts", {
+    params: { ...(orderId ? { order_id: orderId } : {}), ...(deviceIds ? { device_ids: deviceIds } : {}) },
+  });
 }
 
 // 确认打款

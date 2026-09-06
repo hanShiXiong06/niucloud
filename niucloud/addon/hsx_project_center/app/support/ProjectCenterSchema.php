@@ -21,6 +21,8 @@ final class ProjectCenterSchema
         $applicationTable = $prefix . 'project_center_application';
         $refundTable = $prefix . 'project_center_refund';
 
+        self::createDistributionTables($prefix);
+
         if (self::hasTable($projectTable) && !self::hasColumn($projectTable, 'intro_page_id')) {
             Db::execute("ALTER TABLE `{$projectTable}` ADD COLUMN `intro_page_id` int NOT NULL DEFAULT 0 COMMENT '项目介绍DIY页面' AFTER `sort`");
         }
@@ -104,6 +106,16 @@ final class ProjectCenterSchema
         }
 
         if (!self::hasTable($applicationTable)) return;
+        foreach ([
+            'payment_confirmed_at' => "int NOT NULL DEFAULT 0 COMMENT '审核员核对群内流水时间' AFTER `payment_declared_at`",
+            'payment_confirmed_uid' => "int NOT NULL DEFAULT 0 COMMENT '核对流水的管理员' AFTER `payment_confirmed_at`",
+            'payment_confirmed_name' => "varchar(100) NOT NULL DEFAULT '' COMMENT '核对流水的管理员名称' AFTER `payment_confirmed_uid`",
+            'eligibility_snapshot' => "longtext NULL COMMENT '付款前地区参与资格查询快照' AFTER `payment_confirmed_name`",
+        ] as $column => $definition) {
+            if (!self::hasColumn($applicationTable, $column)) {
+                Db::execute("ALTER TABLE `{$applicationTable}` ADD COLUMN `{$column}` {$definition}");
+            }
+        }
         if (!self::hasColumn($applicationTable, 'idempotency_key')) {
             // 允许 NULL，使加列与历史数据回填之间不会因默认空字符串产生冲突。
             Db::execute("ALTER TABLE `{$applicationTable}` ADD COLUMN `idempotency_key` varchar(160) NULL DEFAULT NULL COMMENT '工单业务幂等键' AFTER `member_id`");
@@ -112,6 +124,73 @@ final class ProjectCenterSchema
         self::backfillIdempotencyKeys($applicationTable);
         if (!self::hasIndex($applicationTable, 'uk_site_idempotency')) {
             Db::execute("ALTER TABLE `{$applicationTable}` ADD UNIQUE KEY `uk_site_idempotency` (`site_id`,`idempotency_key`)");
+        }
+    }
+
+    private static function createDistributionTables(string $prefix): void
+    {
+        $tables = [
+            $prefix . 'project_center_invite' => "CREATE TABLE `%s` (
+              `id` bigint unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+              `project_id` bigint unsigned NOT NULL DEFAULT 0, `inviter_member_id` int NOT NULL DEFAULT 0,
+              `token` varchar(64) NOT NULL DEFAULT '', `status` tinyint unsigned NOT NULL DEFAULT 1,
+              `use_count` int unsigned NOT NULL DEFAULT 0, `last_used_at` int NOT NULL DEFAULT 0,
+              `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+              PRIMARY KEY (`id`), UNIQUE KEY `uk_site_project_inviter` (`site_id`,`project_id`,`inviter_member_id`),
+              UNIQUE KEY `uk_site_token` (`site_id`,`token`), KEY `idx_project_status` (`site_id`,`project_id`,`status`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='项目合作中心-分销邀请凭证'",
+            $prefix . 'project_center_relation_log' => "CREATE TABLE `%s` (
+              `id` bigint unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+              `project_id` bigint unsigned NOT NULL DEFAULT 0, `member_id` int NOT NULL DEFAULT 0,
+              `inviter_member_id` int NOT NULL DEFAULT 0, `invite_id` bigint unsigned NOT NULL DEFAULT 0,
+              `action` varchar(24) NOT NULL DEFAULT 'bind', `source` varchar(24) NOT NULL DEFAULT 'project_share',
+              `remark` varchar(500) NOT NULL DEFAULT '', `operator_type` varchar(20) NOT NULL DEFAULT 'member',
+              `operator_id` int NOT NULL DEFAULT 0, `operator_name` varchar(100) NOT NULL DEFAULT '', `create_at` int NOT NULL DEFAULT 0,
+              PRIMARY KEY (`id`), KEY `idx_member_time` (`site_id`,`member_id`,`id`),
+              KEY `idx_inviter_time` (`site_id`,`inviter_member_id`,`id`), KEY `idx_project` (`site_id`,`project_id`,`id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='项目合作中心-推荐关系审计日志'",
+            $prefix . 'project_center_distribution_order' => "CREATE TABLE `%s` (
+              `id` bigint unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+              `order_no` varchar(40) NOT NULL DEFAULT '', `project_id` bigint unsigned NOT NULL DEFAULT 0,
+              `application_id` bigint unsigned NOT NULL DEFAULT 0, `buyer_member_id` int NOT NULL DEFAULT 0,
+              `base_amount` decimal(12,2) NOT NULL DEFAULT 0.00, `rule_snapshot` longtext NULL,
+              `status` varchar(24) NOT NULL DEFAULT 'pending', `settle_at` int NOT NULL DEFAULT 0,
+              `settled_at` int NOT NULL DEFAULT 0, `frozen_at` int NOT NULL DEFAULT 0,
+              `cancelled_at` int NOT NULL DEFAULT 0, `refund_amount` decimal(12,2) NOT NULL DEFAULT 0.00,
+              `error_message` varchar(1000) NOT NULL DEFAULT '', `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+              PRIMARY KEY (`id`), UNIQUE KEY `uk_site_application` (`site_id`,`application_id`),
+              UNIQUE KEY `uk_site_order_no` (`site_id`,`order_no`), KEY `idx_settle` (`site_id`,`status`,`settle_at`),
+              KEY `idx_project` (`site_id`,`project_id`,`id`), KEY `idx_buyer` (`site_id`,`buyer_member_id`,`id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='项目合作中心-分销业务佣金单'",
+            $prefix . 'project_center_distribution_detail' => "CREATE TABLE `%s` (
+              `id` bigint unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+              `order_id` bigint unsigned NOT NULL DEFAULT 0, `application_id` bigint unsigned NOT NULL DEFAULT 0,
+              `project_id` bigint unsigned NOT NULL DEFAULT 0, `beneficiary_member_id` int NOT NULL DEFAULT 0,
+              `relation_level` tinyint unsigned NOT NULL DEFAULT 1, `beneficiary_level_id` int NOT NULL DEFAULT 0,
+              `beneficiary_level_name` varchar(100) NOT NULL DEFAULT '', `level_snapshot` longtext NULL,
+              `base_commission` decimal(12,2) NOT NULL DEFAULT 0.00, `coefficient` decimal(8,2) NOT NULL DEFAULT 100.00,
+              `commission_amount` decimal(12,2) NOT NULL DEFAULT 0.00, `debt_offset_amount` decimal(12,2) NOT NULL DEFAULT 0.00,
+              `settled_amount` decimal(12,2) NOT NULL DEFAULT 0.00, `reversed_amount` decimal(12,2) NOT NULL DEFAULT 0.00,
+              `debt_amount` decimal(12,2) NOT NULL DEFAULT 0.00, `status` varchar(24) NOT NULL DEFAULT 'pending',
+              `account_log_id` bigint unsigned NOT NULL DEFAULT 0, `reverse_log_id` bigint unsigned NOT NULL DEFAULT 0,
+              `settle_at` int NOT NULL DEFAULT 0, `settled_at` int NOT NULL DEFAULT 0,
+              `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+              PRIMARY KEY (`id`), UNIQUE KEY `uk_order_relation_level` (`order_id`,`relation_level`),
+              KEY `idx_member_status` (`site_id`,`beneficiary_member_id`,`status`,`settle_at`),
+              KEY `idx_application` (`site_id`,`application_id`,`id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='项目合作中心-一级二级佣金明细'",
+            $prefix . 'project_center_distribution_debt' => "CREATE TABLE `%s` (
+              `id` bigint unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+              `member_id` int NOT NULL DEFAULT 0, `detail_id` bigint unsigned NOT NULL DEFAULT 0,
+              `amount` decimal(12,2) NOT NULL DEFAULT 0.00, `offset_amount` decimal(12,2) NOT NULL DEFAULT 0.00,
+              `status` varchar(20) NOT NULL DEFAULT 'pending', `reason` varchar(500) NOT NULL DEFAULT '',
+              `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+              PRIMARY KEY (`id`), UNIQUE KEY `uk_detail` (`detail_id`),
+              KEY `idx_member_status` (`site_id`,`member_id`,`status`,`id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='项目合作中心-退款佣金欠款'",
+        ];
+        foreach ($tables as $table => $sql) {
+            if (!self::hasTable($table)) Db::execute(sprintf($sql, $table));
         }
     }
 

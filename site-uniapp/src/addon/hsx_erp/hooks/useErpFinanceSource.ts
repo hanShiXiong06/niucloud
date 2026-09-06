@@ -1,3 +1,5 @@
+import { erpOptionLabel, erpSourceLabel } from '@/addon/hsx_erp/utils/display'
+
 export type ErpFinanceDirection = 'payable' | 'receivable'
 
 export type ErpFinanceSourceMeta = {
@@ -57,7 +59,7 @@ export function erpFinanceSourceMeta(row: any, direction: ErpFinanceDirection): 
         source_plugin: String(raw.source_plugin || ''),
         source_plugin_name: String(raw.source_plugin_name || raw.source_plugin || ''),
         channel_code: String(raw.channel_code || row?.sale_channel_key || ''),
-        channel_name: String(raw.channel_name || (isSale ? row?.sale_channel : '') || (isPurchase ? row?.purchase_channel : '') || ''),
+        channel_name: erpOptionLabel(raw.channel_name || (isSale ? row?.sale_channel : '') || (isPurchase ? row?.purchase_channel : ''), raw.channel_code || row?.sale_channel_key, ''),
         source_no: String(raw.source_no || row?.source_no || row?.batch_no || row?.sale_no || row?.purchase_no || row?.payable_source_no || row?.receivable_no || '').trim(),
         internal_source_no: String(raw.internal_source_no || row?.internal_source_no || '').trim(),
         party_role_label: String(raw.party_role_label || fallback.party_role_label),
@@ -76,7 +78,7 @@ const SOURCE_NAME_MAP: Record<string, string> = {
 
 function readableName(value: any, fallback: string) {
     const name = String(value || '').trim()
-    return SOURCE_NAME_MAP[name] || name || fallback
+    return SOURCE_NAME_MAP[name] || erpSourceLabel(name, fallback)
 }
 
 export function erpFinanceSourceTagType(meta: ErpFinanceSourceMeta) {

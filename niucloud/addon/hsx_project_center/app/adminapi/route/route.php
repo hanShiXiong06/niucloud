@@ -36,4 +36,9 @@ Route::group('project-center', function () {
     Route::get('applications/:id/archive', 'addon\hsx_project_center\app\adminapi\controller\Application@archive');
     Route::get('income-board', 'addon\hsx_project_center\app\adminapi\controller\Income@lists');
     Route::post('income-board/replace', 'addon\hsx_project_center\app\adminapi\controller\Income@replace');
+    Route::get('distribution/overview', 'addon\hsx_project_center\app\adminapi\controller\Distribution@overview');
+    Route::get('distribution/projects', 'addon\hsx_project_center\app\adminapi\controller\Distribution@projects');
+    Route::get('distribution/orders', 'addon\hsx_project_center\app\adminapi\controller\Distribution@lists');
+    Route::get('distribution/orders/:id', 'addon\hsx_project_center\app\adminapi\controller\Distribution@info');
+    Route::post('distribution/orders/:id/settle', 'addon\hsx_project_center\app\adminapi\controller\Distribution@settle');
 })->middleware([AdminCheckToken::class, AdminCheckRole::class, AdminLog::class]);

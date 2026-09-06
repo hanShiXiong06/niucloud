@@ -146,7 +146,7 @@ class ErpDataVisibilityService extends BaseAdminService
     {
         if (!$this->can('view_cost')) {
             $this->forget($row, [
-                'purchase_cost', 'refurbish_cost', 'adjust_cost', 'total_cost',
+                'purchase_cost', 'refurbish_cost', 'adjust_cost', 'total_cost', 'cost_summary',
                 'inbound_settlement_amount', 'inbound_settled_amount',
             ]);
         }

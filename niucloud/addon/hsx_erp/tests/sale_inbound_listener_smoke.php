@@ -98,6 +98,18 @@ $assert(($sale['sale_channel_key'] ?? '') === 'phone_shop.mini_program', '业务
 $assert(($sale['settle_method'] ?? '') === '挂账', '外部支付信息没有ERP账户时只能生成应收，不能伪造收款');
 $assert(count($sale['items'] ?? []) === 2, '所有外部设备必须交给统一销售核心一次处理');
 
+// 定时补偿从 inbox 取出的是规范化平铺快照，不是首次投递的嵌套事件。
+// 平铺快照必须能重新消费，并保留原经办人和来源文案。
+$stored = json_decode((string)$listener->inboxes['100005:' . $event['event_id']]['payload_json'], true);
+$normalizedReplay = (array)($stored['request'] ?? []);
+$normalizedReplay['event_id'] = 'phone_shop:order:8899:normalized-replay:v1';
+$replayListener = new FakeSaleInboundListener();
+$replayResult = $replayListener->handle($normalizedReplay);
+$assert(($replayResult['status'] ?? '') === 'processed', '收件箱规范化销售快照必须可被定时任务重放');
+$replayedSale = $replayListener->created[0] ?? [];
+$assert(($replayedSale['salesman_uid'] ?? 0) === 7, '定时重放不得丢失原销售经办人');
+$assert(($replayedSale['origin_plugin_name'] ?? '') === '手机商城', '定时重放不得丢失原来源名称');
+
 $duplicate = $listener->handle($event);
 $assert(($duplicate['status'] ?? '') === 'duplicate', '相同销售event_id重放必须返回duplicate');
 $assert(count($listener->created) === 1, '重复销售事件不得再次扣库存或生成应收');

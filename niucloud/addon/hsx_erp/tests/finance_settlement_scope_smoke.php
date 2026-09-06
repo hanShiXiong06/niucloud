@@ -33,6 +33,18 @@ $assert(str_contains($finance, "return \$this->allPayableItems(\$partyId, \$wher
 $assert(str_contains($finance, "'p.id as payable_id'"), '折账与付款候选必须返回真实 payable_id');
 $assert(str_contains($finance, "['payable_ids']"), '应付批次列表必须返回当前卡片可核销的显式 payable_ids');
 
+// 主列表的 keyword 可以命中往来主体；点进已确定 party_id 的明细后，
+// 不得再把人名强制用于过滤 IMEI/型号，否则会出现“批次存在但明细为空”。
+foreach ([
+    'normalizePayableItemKeywordForParty',
+    'party_no|party_name|contact_name|contact_mobile|m_no|remark',
+    "\$where['keyword'] = ''",
+    "\$orderAlias . '.purchaser_name|'",
+    "\$financeAlias . '.payable_no|'",
+] as $needle) {
+    $assert(str_contains($finance, $needle), '应付明细缺少主体关键词语义转换或业务明细检索：' . $needle);
+}
+
 foreach ([
     'appendFinanceDevices',
     'settlementTargetDeviceMap',

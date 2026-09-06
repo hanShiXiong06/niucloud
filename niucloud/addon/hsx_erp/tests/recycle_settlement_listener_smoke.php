@@ -13,10 +13,17 @@ class FakeRecycleSettlementListener extends ErpSettlementCompletedListener
 {
     public array $calls = [];
     public int $marked = 1;
+    public array $mirrorCalls = [];
+    public array $mirrorResult = ['updated' => true];
     protected function settleDevices(array $deviceIds, string $settlementNo, array $info): int
     {
         $this->calls[] = compact('deviceIds', 'settlementNo', 'info');
         return $this->marked;
+    }
+    protected function mirrorPurchaseReturnSettlement(int $deviceId, int $stage, array $extra, string $eventId): array
+    {
+        $this->mirrorCalls[] = compact('deviceId', 'stage', 'extra', 'eventId');
+        return $this->mirrorResult;
     }
 }
 
@@ -58,7 +65,36 @@ $partial['event_id'] = 'EV-SETTLEMENT-2';
 $partial['payload']['targets'][0]['remaining_amount'] = 1;
 $partialListener = new FakeRecycleSettlementListener();
 $partialResult = $partialListener->handle($partial);
-$assert(($partialResult['status'] ?? '') === 'skipped' && $partialListener->calls === [], '部分核销不能提前把来源设备标成已结清');
+$assert(($partialResult['status'] ?? '') === 'processed' && $partialListener->calls === [], '本插件部分核销必须确认接收，但不能提前把来源设备标成已结清');
+$assert(($partialResult['partial_device_ids'] ?? []) === [101, 102], '部分核销只确认本插件来源设备');
+
+$foreign = $partial;
+$foreign['payload']['targets'] = [$partial['payload']['targets'][1]];
+$foreign['payload']['targets'][0]['remaining_amount'] = 1;
+$assert((new FakeRecycleSettlementListener())->handle($foreign)['status'] === 'skipped', '无关插件部分结算不能冒认已接收');
+$unrelated = $event;
+$unrelated['event_name'] = 'erp.asset.stocked.v1';
+$assert((new FakeRecycleSettlementListener())->handle($unrelated)['status'] === 'skipped', '非结算事件仍跳过');
+$duplicate = new FakeRecycleSettlementListener();
+$duplicate->marked = 0;
+$assert($duplicate->handle($event)['status'] === 'duplicate', '已经结清的设备重复通知保持幂等');
+
+$returned = $event;
+$returned['site_id'] = 100000;
+$returned['payload']['targets'] = [[
+    'target_type' => 'receivable', 'source_type' => 'purchase_return', 'remaining_amount' => 0,
+    'assets' => [['source_plugin' => 'hsx_recycle', 'source_device_id' => 103]],
+]];
+$returnListener = new FakeRecycleSettlementListener();
+$returnListener->mirrorResult = ['error' => true, 'message' => '镜像暂时不可用'];
+$failure = $returnListener->handle($returned);
+$assert(($failure['status'] ?? '') === 'failed' && !empty($failure['error']), '镜像服务吞异常后返回error必须升级为失败，供outbox重试');
+$assert(($failure['message'] ?? '') === '镜像暂时不可用', '保留可排障的镜像失败原因');
+$returnListener->mirrorResult = ['skipped' => true, 'reason' => 'duplicate_event'];
+$assert($returnListener->handle($returned)['status'] === 'duplicate', '真正的镜像幂等跳过仍确认duplicate');
+$returned['payload']['targets'][0]['remaining_amount'] = 10;
+$partialReturn = new FakeRecycleSettlementListener();
+$assert($partialReturn->handle($returned)['status'] === 'processed' && $partialReturn->mirrorCalls === [], '采退部分到账确认接收，但不能推进已到账镜像');
 
 $config = require dirname(__DIR__, 2) . '/hsx_recycle/app/event.php';
 $domainListeners = (array)($config['listen']['ErpDomainEvent'] ?? []);

@@ -8,6 +8,15 @@ use core\base\BaseAdminService;
 
 class ErpOperationLogService extends BaseAdminService
 {
+    public static function forSite(int $siteId, int $operatorUid = 0, string $operatorName = '系统补偿'): self
+    {
+        $service = new self();
+        $service->site_id = $siteId;
+        $service->uid = $operatorUid;
+        $service->username = $operatorName;
+        return $service;
+    }
+
     public function record(string $action, string $sourceType, int $sourceId, string $sourceNo = '', string $remark = '', array $extra = []): int
     {
         $now = time();

@@ -4,6 +4,9 @@
         <el-card class="box-card !border-none" shadow="never">
 
             <PageHeader :title="pageName" description="按 IMEI / 型号 / 分类 / 时间等条件筛选，导出设备明细或同步到 ERP。" />
+            <el-alert v-if="syncHealthError" class="mt-4" type="warning" :closable="false" show-icon :title="syncHealthError">
+                <el-button link type="primary" :loading="syncHealthLoading || deviceTableData.loading" @click="loadDeviceList">刷新并重试</el-button>
+            </el-alert>
 
             <el-card class="box-card !border-none my-[20px] table-search-wrap" shadow="never">
                 <el-form :inline="true" :model="deviceTableData.searchParam" ref="searchFormRef">
@@ -61,7 +64,7 @@
                         <el-button
                             type="success"
                             :loading="erpSyncLoading"
-                            :disabled="selectedDevices.length === 0"
+                            :disabled="selectedDevices.length === 0 || !canSyncRows(selectedDevices)"
                             @click="syncErpEvent"
                         >
                             同步 ERP{{ selectedDevices.length > 0 ? ` (${selectedDevices.length})` : '' }}
@@ -141,7 +144,8 @@
                                 <el-tag size="small" effect="plain" :type="row.dispose_type === 'consign' || row.status === 9 ? 'warning' : 'info'">
                                     {{ row.dispose_type === 'consign' || row.status === 9 ? '代卖入库' : '回收入库' }}
                                 </el-tag>
-                                <el-tooltip v-if="row.erp_sync" :content="row.erp_sync.asset_no || ''" placement="top">
+                                <el-tag v-if="isSyncStatusUncertain(row)" size="small" type="warning" effect="plain">{{ syncHealthLoading ? '同步状态查询中' : '同步状态待确认' }}</el-tag>
+                                <el-tooltip v-else-if="row.erp_sync" :content="row.erp_sync.asset_no || ''" placement="top">
                                     <el-tag size="small" effect="plain" :type="erpStatusMeta(row).type">{{ erpStatusMeta(row).label }}</el-tag>
                                 </el-tooltip>
                                 <el-tag v-else size="small" type="info" effect="plain">未同步</el-tag>
@@ -180,6 +184,7 @@
                                     link
                                     :icon="RefreshRight"
                                     :loading="resyncLoadingId === row.id"
+                                    :disabled="!canSyncRows([row])"
                                     @click="handleResync(row)"
                                     aria-label="重新同步"
                                 >重新同步</el-button>
@@ -367,7 +372,7 @@
             </el-form>
             <template #footer>
                 <el-button @click="placementDialogVisible = false">取消</el-button>
-                <el-button type="primary" :loading="placementSubmitting" @click="submitPlacementRepair">补全并同步</el-button>
+                <el-button type="primary" :loading="placementSubmitting" :disabled="!canSyncRows(placementMode === 'single' ? placementPendingRows : placementSyncRows)" @click="submitPlacementRepair">补全并同步</el-button>
             </template>
         </el-dialog>
 
@@ -496,6 +501,10 @@ const formatTimeRange = (dateRange: string[]) => {
  */
 const loadDeviceList = () => {
     deviceTableData.loading = true
+    syncHealthRequestId++
+    syncHealthConfirmed.value = false
+    syncHealthLoading.value = false
+    syncHealthError.value = ''
     const searchParam = {
         ...deviceTableData.searchParam,
         update_at: formatTimeRange(deviceTableData.searchParam.update_at),
@@ -510,12 +519,26 @@ const loadDeviceList = () => {
         loadSyncHealth()
     }).catch(() => {
         deviceTableData.loading = false
+        syncHealthError.value = '设备列表加载失败，同步状态暂无法确认，请稍后重试或检查服务。'
     })
 }
 
 // 下游同步健康度：仅"卡住"(stuck)的设备才显示「重新同步」。装了 ERP 才有数据；未装则全为健康、按钮不显示。
 const syncHealthMap = ref<Record<number, any>>({})
+const syncHealthLoading = ref(false)
+const syncHealthError = ref('')
+const syncHealthConfirmed = ref(false)
+let syncHealthRequestId = 0
+const syncHealthUnavailable = computed(() => deviceTableData.loading || syncHealthLoading.value || !!syncHealthError.value || !syncHealthConfirmed.value)
 const resyncLoadingId = ref<number | null>(null)
+
+const isSyncStatusUncertain = (row: any) => syncHealthUnavailable.value || !syncHealthMap.value[row.id] || Boolean(syncHealthMap.value[row.id]?.unknown)
+const canSyncRows = (rows: any[]) => rows.length > 0 && !syncHealthUnavailable.value && rows.every(row => !isSyncStatusUncertain(row))
+const ensureSyncStatusConfirmed = (rows: any[]) => {
+    if (canSyncRows(rows)) return true
+    ElMessage.warning(syncHealthError.value || '同步状态暂无法确认，请先刷新查询或检查服务；本次未执行同步。')
+    return false
+}
 
 const isStuck = (row: any) => Boolean(syncHealthMap.value[row.id]?.stuck)
 const stuckReason = (row: any) => syncHealthMap.value[row.id]?.reason || '该设备下游同步未完成'
@@ -559,21 +582,34 @@ const openPlacementRepair = (rows: any[], mode: 'single' | 'bulk', syncRows: any
 }
 
 const loadSyncHealth = async () => {
+    const requestId = ++syncHealthRequestId
+    syncHealthLoading.value = true
+    syncHealthConfirmed.value = false
+    syncHealthError.value = ''
     const ids = (deviceTableData.data || []).map((r: any) => r.id).filter(Boolean)
     if (!ids.length) {
         syncHealthMap.value = {}
+        syncHealthConfirmed.value = true
+        syncHealthLoading.value = false
         return
     }
     try {
         const res: any = await getDeviceSyncHealth(ids)
+        if (requestId !== syncHealthRequestId) return
+        if (!ids.every(id => res?.data?.[id] && typeof res.data[id] === 'object')) throw new Error('同步健康数据不完整')
         syncHealthMap.value = res?.data || {}
+        syncHealthConfirmed.value = true
     } catch (e) {
-        // 取不到健康度(如ERP未装/接口异常) → 不显示按钮，不打扰用户
+        if (requestId !== syncHealthRequestId) return
         syncHealthMap.value = {}
+        syncHealthError.value = '同步状态暂无法确认，请稍后重试或检查服务。状态确认前已暂停同步操作。'
+    } finally {
+        if (requestId === syncHealthRequestId) syncHealthLoading.value = false
     }
 }
 
 const handleResync = async (row: any) => {
+    if (!ensureSyncStatusConfirmed([row])) return
     if (erpPlacementMissing(row) && !defaultRepairPlacement.value) {
         openPlacementRepair([row], 'single')
         return
@@ -669,6 +705,7 @@ const handleSelectionChange = (selection: any[]) => {
 }
 
 const erpStatusMeta = (row: any) => {
+    if (isSyncStatusUncertain(row)) return { label: '同步状态待确认', type: 'warning' as const }
     if (row.erp_sync?.inventory_status === 'in_stock') {
         return { label: '已入库', type: 'success' as const }
     }
@@ -686,6 +723,7 @@ const syncErpEvent = async () => {
         ElMessage.warning('请先勾选需要同步的设备')
         return
     }
+    if (!ensureSyncStatusConfirmed(selectedDevices.value)) return
 
     const syncCandidates = selectedDevices.value.filter((row: any) => !row.erp_sync)
     if (!syncCandidates.length) {
@@ -708,6 +746,7 @@ const syncErpEvent = async () => {
             cancelButtonText: '取消',
             type: 'warning'
         })
+        if (!ensureSyncStatusConfirmed(syncCandidates)) return
         erpSyncLoading.value = true
         const placement = missingRows.length ? (defaultRepairPlacement.value || {}) : {}
         const res: any = await syncRecycleDevicesToErp(syncCandidates.map((row: any) => row.id), ['self_erp'], placement)
@@ -727,6 +766,7 @@ const syncErpEvent = async () => {
 }
 
 const submitPlacementRepair = async () => {
+    if (!ensureSyncStatusConfirmed(placementMode.value === 'single' ? placementPendingRows.value : placementSyncRows.value)) return
     if (!placementForm.target_warehouse_id || !placementForm.target_location_id) {
         ElMessage.warning('请选择入库仓库和具体库位')
         return

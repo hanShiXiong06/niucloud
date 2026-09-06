@@ -1,19 +1,17 @@
 <template>
-    <div class="main-container opening-page">
+    <HsxPage padding="none" class="main-container opening-page">
         <el-card class="!border-none" shadow="never">
-            <div class="page-head">
-                <div>
-                    <div class="text-page-title">期初建账</div>
-                    <div class="mt-1 text-sm text-gray-500">
+            <HsxTitle size="page" collapsible-subtitle class="mb-4">
+                <template #default>期初建账</template>
+                <template #subtitle>
                         把启用 ERP 前已有的设备库存、应收应付、资金余额和客户资料一次迁入；上传只校验，确认后才正式入账。
-                    </div>
-                </div>
-                <div class="head-actions">
-                    <el-button :icon="Download" @click="downloadTemplate">下载完整模板</el-button>
-                    <el-button :icon="Refresh" :loading="loading" @click="loadBatches">刷新</el-button>
-                    <el-button type="primary" :icon="Upload" @click="openUpload">上传并校验</el-button>
-                </div>
-            </div>
+                </template>
+                <template #extra><div class="head-actions">
+                        <el-button :icon="Download" @click="downloadTemplate">下载完整模板</el-button>
+                        <el-button :icon="Refresh" :loading="loading" @click="loadBatches">刷新</el-button>
+                        <el-button type="primary" :icon="Upload" @click="openUpload">上传并校验</el-button>
+                    </div></template>
+            </HsxTitle>
 
             <div class="guide-grid mt-5">
                 <div class="guide-card">
@@ -39,11 +37,11 @@
                 </div>
             </div>
 
-            <el-alert class="mt-4" type="warning" :closable="false" show-icon>
+            <HsxNotice default-expanded class="mt-4" type="warning" :closable="false" show-icon>
                 <template #title>
                     新账号用户名为手机号，初始密码统一为 123456。用户以后用相同手机号微信授权登录时，可由现有登录流程绑定 openid。
                 </template>
-            </el-alert>
+            </HsxNotice>
 
             <div class="filter-row mt-5">
                 <el-select v-model="query.status" clearable placeholder="全部状态" class="!w-[160px]" @change="loadBatches">
@@ -128,7 +126,7 @@
             </div>
         </el-card>
 
-        <el-dialog v-model="uploadVisible" title="上传期初建账表" width="560px" append-to-body destroy-on-close>
+        <HsxDialog :confirm-loading="uploading" v-model="uploadVisible" title="上传期初建账表" width="560px" append-to-body destroy-on-close>
             <el-form label-position="top">
                 <el-form-item label="统一期初日期">
                     <el-date-picker
@@ -150,12 +148,12 @@
                 </el-form-item>
             </el-form>
             <template #footer>
-                <el-button @click="uploadVisible = false">取消</el-button>
-                <el-button type="primary" :loading="uploading" @click="submitUpload">上传并开始校验</el-button>
+                <el-button :disabled="uploading" @click="uploadVisible = false">取消</el-button>
+                <el-button :disabled="uploading" type="primary" :loading="uploading" @click="submitUpload">上传并开始校验</el-button>
             </template>
-        </el-dialog>
+        </HsxDialog>
 
-        <el-drawer v-model="detailVisible" title="期初建账结果" size="78%" append-to-body>
+        <HsxDrawer v-model="detailVisible" title="期初建账结果" size="78%" append-to-body :destroy-on-close="false">
             <template v-if="detail">
                 <div class="detail-hero">
                     <div>
@@ -172,7 +170,7 @@
                     <div class="summary-item primary"><span>已入账</span><strong>{{ detail.posted_rows || 0 }}</strong></div>
                 </div>
 
-                <el-alert
+                <HsxNotice default-expanded
                     v-if="detail.error_message"
                     class="mt-4"
                     type="error"
@@ -203,7 +201,7 @@
                                 <template #default="{ row }">{{ row.sheet_name }} 第{{ row.row_no }}行</template>
                             </el-table-column>
                             <el-table-column label="类型" width="110">
-                                <template #default="{ row }">{{ typeNames[row.item_type] || row.item_type }}</template>
+                                <template #default="{ row }">{{ typeNames[row.item_type] || '其他资料' }}</template>
                             </el-table-column>
                             <el-table-column label="名称 / 手机号" min-width="190">
                                 <template #default="{ row }">
@@ -244,12 +242,12 @@
                     </el-tab-pane>
 
                     <el-tab-pane label="账号归并预览" name="accounts">
-                        <el-alert type="info" :closable="false" show-icon>
+                        <HsxNotice default-expanded type="info" :closable="false" show-icon>
                             <template #title>
                                 “复用”是按手机号把本次多行资料归到已有账号，不会擅自合并两个既有账号；发现一号多账号时会阻止入账。
                             </template>
-                        </el-alert>
-                        <el-alert
+                        </HsxNotice>
+                        <HsxNotice default-expanded
                             v-if="nameWarnings.length"
                             class="mt-3"
                             type="warning"
@@ -273,9 +271,6 @@
                                         {{ row.action === 'create' ? '新建账号' : row.action === 'reuse' ? '复用账号' : '冲突' }}
                                     </el-tag>
                                 </template>
-                            </el-table-column>
-                            <el-table-column label="会员 / 主体ID" width="160">
-                                <template #default="{ row }">{{ row.member_id || '-' }} / {{ row.party_id || '-' }}</template>
                             </el-table-column>
                             <el-table-column label="涉及资料" min-width="320" show-overflow-tooltip>
                                 <template #default="{ row }">{{ (row.source_rows || []).join('、') || '-' }}</template>
@@ -314,8 +309,6 @@
                                 <el-table-column prop="mobile" label="登录用户名" min-width="140" />
                                 <el-table-column prop="name" label="姓名" min-width="120" />
                                 <el-table-column prop="member_no" label="会员号" min-width="120" />
-                                <el-table-column prop="member_id" label="会员ID" width="100" />
-                                <el-table-column prop="party_id" label="主体ID" width="100" />
                                 <el-table-column prop="initial_password" label="初始密码" width="110" />
                             </el-table>
                         </div>
@@ -326,8 +319,6 @@
                                 <el-table-column prop="name" label="本次姓名" min-width="120" />
                                 <el-table-column prop="account_name" label="账号现有昵称" min-width="130" />
                                 <el-table-column prop="member_no" label="会员号" min-width="120" />
-                                <el-table-column prop="member_id" label="会员ID" width="100" />
-                                <el-table-column prop="party_id" label="主体ID" width="100" />
                                 <el-table-column label="涉及资料" min-width="250" show-overflow-tooltip>
                                     <template #default="{ row }">{{ (row.source_rows || []).join('、') }}</template>
                                 </el-table-column>
@@ -336,13 +327,14 @@
                     </el-tab-pane>
                 </el-tabs>
             </template>
-        </el-drawer>
-    </div>
+        </HsxDrawer>
+    </HsxPage>
 </template>
 
 <script setup lang="ts">
+import { HsxTitle, HsxPage, HsxDialog, HsxDrawer, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import { Download, Refresh, Search, Upload, UploadFilled } from '@element-plus/icons-vue'
 import * as XLSX from 'xlsx'
 import {
@@ -354,6 +346,8 @@ import {
     retryErpOpeningBatch,
     uploadErpOpening
 } from '@/addon/hsx_erp/api/erp'
+const hsxFeedback = useFeedback()
+
 
 const loading = ref(false)
 const uploading = ref(false)
@@ -429,14 +423,14 @@ function onFileChange(event: Event) {
 }
 
 async function submitUpload() {
-    if (!uploadForm.file) return ElMessage.warning('请选择期初建账 Excel 文件')
+    if (!uploadForm.file) return hsxFeedback.warning('请选择期初建账 Excel 文件')
     const data = new FormData()
     data.append('file', uploadForm.file)
     data.append('opening_date', uploadForm.openingDate)
     uploading.value = true
     try {
         const res: any = await uploadErpOpening(data)
-        ElMessage.success(res?.data?.message || '文件已上传，正在校验')
+        hsxFeedback.success(res?.data?.message || '文件已上传，正在校验')
         uploadVisible.value = false
         query.page = 1
         await loadBatches()
@@ -478,13 +472,13 @@ async function confirmBatch(row: any) {
         { type: 'warning', confirmButtonText: '确认正式入账' }
     )
     await confirmErpOpeningBatch(row.id)
-    ElMessage.success('已提交期初入账任务')
+    hsxFeedback.success('已提交期初入账任务')
     await loadBatches()
 }
 
 async function retryBatch(row: any) {
     await retryErpOpeningBatch(row.id)
-    ElMessage.success('已重新开始校验')
+    hsxFeedback.success('已重新开始校验')
     await loadBatches()
 }
 

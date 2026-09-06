@@ -62,8 +62,8 @@ onShow(()=>{load();loadAccounts()})
 async function loadAccounts(){try{const res:any=await getMobileCapitalAccounts();accounts.value=res?.data?.list||[]}catch(_){accounts.value=[]}}
 async function load(){loading.value=true;error.value='';try{if(payableId.value){const infoRes:any=await getMobilePayableInfo(payableId.value);const info=infoRes?.data||{};partyId.value=Number(info.party_id||partyId.value||0);partyName.value=String(info.party_name||partyName.value||'');memberName.value=String(info.member_name||memberName.value||'');sourceType.value=String(info.source_type||sourceType.value||'');purchaseOrderId.value=Number(info.purchase_order_id||purchaseOrderId.value||0)}if(!partyId.value)throw new Error('未找到该应付对应的付款对象');const params:any={page:1,limit:200,source_type:sourceType.value};if(payableId.value)params.payable_id=payableId.value;if(purchaseOrderId.value)params.purchase_order_id=purchaseOrderId.value;const res:any=await getMobilePayablePartyItems(partyId.value,params);items.value=res?.data?.data||[]}catch(e:any){error.value=e?.message||'应付详情加载失败'}finally{loading.value=false}}
 const money=(v:any)=>Number(v||0).toFixed(2)
-const identity=(row:any)=>[row.imei?`IMEI ${row.imei}`:'',row.asset_no?`资产号 ${row.asset_no}`:''].filter(Boolean).join(' · ')||'未关联设备'
-const statusLabel=(s:string)=>({pending:'待付款',partial:'部分付款',settled:'已结清',void:'已作废'}[s]||s||'-')
+const identity=(row:any)=>[row.imei?`IMEI ${row.imei}`:'',row.sn?`SN ${row.sn}`:''].filter(Boolean).join(' · ')||'未填写设备串号'
+const statusLabel=(s:string)=>({pending:'待付款',partial:'部分付款',settled:'已结清',void:'已作废'}[s] || '状态待确认')
 const statusType=(s:string)=>({pending:'warning',partial:'primary',settled:'success',void:'info'}[s]||'info')
 </script>
 <style scoped lang="scss">

@@ -60,6 +60,11 @@ export function getMerchantPayInfo(memberId: number | string) {
     return request.get(`recycle/recycle_order/merchant_pay_info/${memberId}`)
 }
 
+// 查询当前订单的付款归属，不能用站点是否安装 ERP 推断历史订单的归属。
+export function getCapitalAccountOptions(orderId: number | string, deviceIds?: Array<number | string>) {
+    return request.get('recycle/recycle_order/capital_accounts', { order_id: orderId, ...(deviceIds ? { device_ids: deviceIds } : {}) }, { showErrorMessage: false })
+}
+
 export function pushOrderNotify(id: number | string) {
     return request.post(`recycle/recycle_order/${id}/push_notify`)
 }
@@ -110,8 +115,8 @@ export function getRefurbishmentOptions() {
 }
 
 // 销售去向选项（含 ERP 仓库/库位、是否连接 ERP），与 PC 端 PriceFormDialog 一致
-export function getSaleDestinationOptions() {
-    return request.get('recycle/recycle_device/sale_destination_options')
+export function getSaleDestinationOptions(deviceId?: number) {
+    return request.get('recycle/recycle_device/sale_destination_options', deviceId ? { device_id: deviceId } : {})
 }
 
 // IMEI 信息查询（质检/签收时校验有效性、带出机型信息）

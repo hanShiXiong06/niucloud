@@ -27,7 +27,7 @@
                     </view>
                     <view class="field">
                         <text class="label">业务来源</text>
-                        <text class="value">{{ order.origin_name || 'ERP采购' }}{{ order.origin_plugin_name ? ' · ' + order.origin_plugin_name : '' }}</text>
+                        <text class="value">{{ erpSourceLabel(order.origin_name, 'ERP采购') }}</text>
                     </view>
                     <view class="field">
                         <text class="label">原业务单号</text>
@@ -164,6 +164,7 @@ import { getMobilePurchaseInfo } from '@/addon/hsx_erp/api/erp'
 import { erpTimeLine, formatErpTime } from '@/addon/hsx_erp/hooks/useErpTime'
 import { erpSpecLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
 import { erpPartyDisplayName } from '@/addon/hsx_erp/hooks/useErpPartyText'
+import { erpSourceLabel } from '@/addon/hsx_erp/utils/display'
 import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
 import { ERP_DICT_FALLBACK, dictLabel, dictType, loadErpDicts, type ErpDictMap } from '@/addon/hsx_erp/api/dict'
 
@@ -197,7 +198,7 @@ async function loadDetail(options: { silent?: boolean } = {}) {
     const seq = ++loadSeq
     if (!purchaseOrderId.value) {
         loading.value = false
-        loadError.value = '缺少采购单ID'
+        loadError.value = '未找到采购单，请返回列表重新打开'
         return
     }
     const silent = !!options.silent || !!order.value

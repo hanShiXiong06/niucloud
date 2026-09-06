@@ -1,13 +1,11 @@
 <template>
-  <el-dialog
+  <HsxDrawer
     v-model="dialogVisible"
-    title=""
-    :width="isMobile ? '95vw' : 'min(1060px, calc(100vw - 48px))'"
-    :top="isMobile ? '0' : '3vh'"
-    :fullscreen="isMobile"
-    center
+    title="设备档案"
+    subtitle="核对报价、质检与流转记录"
+    size="lg"
     :destroy-on-close="true"
-    class="device-detail-dialog hsx-premium-overlay"
+    class="device-detail-dialog"
   >
 
     <div v-if="deviceData" class="ddd-wrap">
@@ -259,16 +257,15 @@
       @close="imageViewer.show = false"
     />
 
-    <el-dialog
+    <HsxDialog
       v-model="costAdjustDialog.visible"
       title="设备成本调整"
       width="620px"
       append-to-body
       destroy-on-close
     >
-      <el-alert
+      <HsxNotice
         type="warning"
-        show-icon
         :closable="false"
         title="该操作会修改设备当前成本，不会修改历史打款记录。提交后请同步修改进销存软件里的库存成本，并保留与客户沟通记录。"
       />
@@ -336,15 +333,16 @@
           确认调整成本
         </el-button>
       </template>
-    </el-dialog>
-  </el-dialog>
+    </HsxDialog>
+  </HsxDrawer>
 
 </template>
 
 
 <script setup lang="ts">
 import { ref, watch, computed, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { ElMessage } from 'element-plus'
+import { HsxDrawer, HsxDialog, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
+const feedback = useFeedback()
 import { img } from '@/utils/common'
 import { adjustDeviceCost, getDeviceCostAdjustLogs } from '@/addon/hsx_recycle/api/recycle_order'
 import useUserStore from '@/stores/modules/user'
@@ -541,11 +539,11 @@ const loadCostAdjustLogs = async () => {
 const submitCostAdjust = async () => {
     if (!deviceData.value?.id) return
     if (!costAdjustForm.adjust_amount || Number(costAdjustForm.adjust_amount) <= 0) {
-        ElMessage.warning('请输入大于 0 的调整金额')
+        feedback.warning('请输入大于 0 的调整金额')
         return
     }
     if (!String(costAdjustForm.reason || '').trim()) {
-        ElMessage.warning('请填写成本调整原因')
+        feedback.warning('请填写成本调整原因')
         return
     }
     costAdjustDialog.submitting = true
@@ -559,10 +557,10 @@ const submitCostAdjust = async () => {
         deviceData.value.last_cost_adjust_no = data.adjust_no
         await loadCostAdjustLogs()
         costAdjustDialog.visible = false
-        ElMessage.success(Number(costAdjustForm.auto_sync_erp) === 1 ? '成本已调整，并已自动同步至 ERP（进销存）' : '成本已调整，请记得手动同步进销存软件成本')
+        feedback.success(Number(costAdjustForm.auto_sync_erp) === 1 ? '成本已调整，并已自动同步至 ERP（进销存）' : '成本已调整，请记得手动同步进销存软件成本')
         emit('updated', deviceData.value)
     } catch (error: any) {
-        ElMessage.error(error?.msg || error?.message || '成本调整失败')
+        feedback.error(error?.msg || error?.message || '成本调整失败')
     } finally {
         costAdjustDialog.submitting = false
     }
@@ -603,46 +601,28 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
 /* =====================
    Dialog 容器
    ===================== */
-.device-detail-dialog {
-  :deep(.el-dialog) {
-    border-radius: 12px;
-    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.18);
-    overflow: hidden;
-  }
-  :deep(.el-dialog__header) { padding: 0; border: none; }
-  :deep(.el-dialog__body) {
-    padding: 0;
-    background: #f1f5f9;
-    overflow: hidden;
-  }
-  :deep(.el-dialog__headerbtn) {
-    top: 12px; right: 12px; z-index: 10;
-  }
-}
 
 /* =====================
    整体包裹
    ===================== */
 .ddd-wrap {
-  padding: 12px;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-height: calc(100vh - 110px);
-  overflow-y: auto;
 
   &::-webkit-scrollbar { width: 5px; }
-  &::-webkit-scrollbar-track { background: #f1f5f9; }
-  &::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+  &::-webkit-scrollbar-track { background: var(--hsx-bg-muted); }
+  &::-webkit-scrollbar-thumb { background: var(--hsx-border-strong); border-radius: 3px; }
 }
 
 /* =====================
    通用 section 卡片
    ===================== */
 .ddd-section {
-  background: #fff;
+  background: var(--hsx-bg-surface);
   border-radius: 10px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--hsx-border-color);
 
 }
 
@@ -680,7 +660,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
   gap: 6px;
   padding: 10px 14px;
   background: linear-gradient(to right, #f9fafb, #f3f4f6);
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--hsx-border-color);
 }
 
 .ddd-section-icon {
@@ -692,7 +672,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
 .ddd-section-title {
   font-size: 13px;
   font-weight: 600;
-  color: #374151;
+  color: var(--hsx-text-regular);
 }
 
 /* =====================
@@ -782,20 +762,20 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
 .ddd-form-help {
   margin-left: 12px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--hsx-text-secondary);
 }
 
 .ddd-cost-log {
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid var(--hsx-border-color);
 }
 
 .ddd-cost-log__title {
   margin-bottom: 8px;
   font-size: 13px;
   font-weight: 600;
-  color: #374151;
+  color: var(--hsx-text-regular);
 }
 
 .ddd-remark {
@@ -854,7 +834,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
 }
 .ddd-check-meta-item {
   font-size: 11px;
-  color: #6b7280;
+  color: var(--hsx-text-secondary);
 }
 
 .ddd-check-items-head {
@@ -965,7 +945,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
   .ddd-image-group-title {
     font-size: 11px;
     font-weight: 600;
-    color: #6b7280;
+    color: var(--hsx-text-secondary);
     margin-bottom: 6px;
   }
 }
@@ -980,7 +960,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
   border-radius: 6px;
   overflow: hidden;
   cursor: pointer;
-  border: 2px solid #e5e7eb;
+  border: 2px solid var(--hsx-border-color);
   transition: border-color 0.2s;
 
   &:hover { border-color: #60a5fa; }
@@ -1011,7 +991,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
   overscroll-behavior: contain;
 
   &::-webkit-scrollbar { width: 5px; }
-  &::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+  &::-webkit-scrollbar-thumb { background: var(--hsx-border-strong); border-radius: 3px; }
   &::-webkit-scrollbar-track { background: transparent; }
 }
 
@@ -1061,7 +1041,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
 .ddd-log-operator {
   font-size: 12px;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--hsx-text-primary);
 }
 
 .ddd-log-time {
@@ -1072,7 +1052,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
 
 .ddd-log-remark {
   font-size: 11px;
-  color: #6b7280;
+  color: var(--hsx-text-secondary);
   line-height: 1.5;
 }
 

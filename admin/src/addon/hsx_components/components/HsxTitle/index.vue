@@ -3,7 +3,7 @@ export default { name: 'HsxTitle' }
 </script>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 type TitleSize = 'page' | 'section' | 'card' | 'subsection'
 const props = withDefaults(defineProps<{
@@ -14,6 +14,7 @@ const props = withDefaults(defineProps<{
     size?: TitleSize
     divider?: boolean
     dense?: boolean
+    collapsibleSubtitle?: boolean
 }>(), {
     title: '',
     subtitle: '',
@@ -21,9 +22,11 @@ const props = withDefaults(defineProps<{
     level: 2,
     size: 'section',
     divider: false,
-    dense: false
+    dense: false,
+    collapsibleSubtitle: false
 })
 const headingTag = computed(() => `h${props.level}`)
+const subtitleExpanded = ref(false)
 </script>
 
 <template>
@@ -32,7 +35,8 @@ const headingTag = computed(() => `h${props.level}`)
         <div class="hsx-title__content">
             <span v-if="eyebrow" class="hsx-title__eyebrow">{{ eyebrow }}</span>
             <component :is="headingTag" class="hsx-title__heading"><slot>{{ title }}</slot></component>
-            <p v-if="subtitle || $slots.subtitle" class="hsx-title__subtitle"><slot name="subtitle">{{ subtitle }}</slot></p>
+            <button v-if="collapsibleSubtitle && (subtitle || $slots.subtitle)" class="hsx-title__help" type="button" :aria-expanded="subtitleExpanded" @click="subtitleExpanded = !subtitleExpanded">{{ subtitleExpanded ? '收起说明' : '查看说明' }}</button>
+            <p v-if="subtitle || $slots.subtitle" v-show="!collapsibleSubtitle || subtitleExpanded" class="hsx-title__subtitle"><slot name="subtitle">{{ subtitle }}</slot></p>
         </div>
         <div v-if="$slots.extra" class="hsx-title__extra"><slot name="extra" /></div>
     </header>
@@ -46,12 +50,16 @@ const headingTag = computed(() => `h${props.level}`)
 .hsx-title__heading { margin: 0; color: var(--hsx-text-primary); font-size: var(--hsx-title-size); font-weight: 650; line-height: var(--hsx-title-line-height); letter-spacing: -.015em; }
 .hsx-title__subtitle { margin: var(--hsx-space-1) 0 0; color: var(--hsx-text-secondary); font-size: 13px; line-height: 20px; }
 .hsx-title__eyebrow { display: block; margin-bottom: var(--hsx-space-1); color: var(--hsx-color-primary); font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
-.hsx-title__extra { display: flex; flex: none; align-items: center; gap: var(--hsx-space-2); }
-.hsx-title--page { --hsx-title-size: 28px; --hsx-title-line-height: 38px; }
+.hsx-title__extra { display: flex; flex-wrap: wrap; flex: 0 1 auto; max-width: 100%; align-items: center; justify-content: flex-end; gap: var(--hsx-space-2); }
+.hsx-title__extra :deep(.el-button + .el-button) { margin-left: 0; }
+.hsx-title__help { padding: 0; margin-top: 3px; background: none; border: 0; font-size: 12px; line-height: 20px; color: var(--hsx-text-secondary); cursor: pointer; }
+.hsx-title__help:hover { color: var(--hsx-color-primary); }
+.hsx-title__help:focus-visible { outline: 2px solid var(--hsx-color-primary); outline-offset: 2px; }
+.hsx-title--page { --hsx-title-size: 22px; --hsx-title-line-height: 30px; }
 .hsx-title--section { --hsx-title-size: 20px; --hsx-title-line-height: 28px; }
 .hsx-title--card { --hsx-title-size: 16px; --hsx-title-line-height: 24px; }
 .hsx-title--subsection { --hsx-title-size: 14px; --hsx-title-line-height: 22px; }
 .hsx-title--dense .hsx-title__subtitle { margin-top: 0; }
-@media (max-width: 640px) { .hsx-title--page { --hsx-title-size: 24px; --hsx-title-line-height: 34px; } .hsx-title { flex-wrap: wrap; } .hsx-title__extra { width: 100%; } }
+@media (max-width: 1366px) { .hsx-title--page { --hsx-title-size: 20px; --hsx-title-line-height: 28px; } }
+@media (max-width: 768px) { .hsx-title { flex-wrap: wrap; } .hsx-title__extra { width: 100%; justify-content: flex-start; } }
 </style>
-

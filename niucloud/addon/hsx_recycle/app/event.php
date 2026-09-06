@@ -40,10 +40,12 @@ return [
         'AfterDeviceCheckComplete' => [ 'addon\hsx_recycle\app\listener\device\DeviceCheckCompleteListener' ],
         // 承接 ERP 设备成本调整事件，在回收设备上留痕(未打款时提醒是否同步回收价)
         'ErpAssetCostAdjusted' => [ 'addon\hsx_recycle\app\listener\ErpCostAdjustedListener' ],
+        'ErpPurchasePriceAdjustmentRequested' => [ 'addon\hsx_recycle\app\listener\erp\ErpPurchasePriceAdjustmentRequested' ],
 
         // ERP 动态业务来源：只有当前站点套餐包含回收插件时才贡献“回收插件采购”。
         'HsxErpBusinessSourceOptions' => [ 'addon\hsx_recycle\app\listener\erp\ErpBusinessSourceOptionsListener' ],
         'GetRecyclePaymentMethods' => [ 'addon\hsx_recycle\app\listener\erp\RecyclePaymentMethodsProvider' ],
+        'ErpSourcePaymentGuardRequested' => [ 'addon\hsx_recycle\app\listener\erp\ErpSourcePaymentGuardRequested' ],
         'HsxBusinessReportMetricsRequested' => [ 'addon\hsx_recycle\app\listener\report\RecycleBusinessReportMetricsProvider' ],
         'HsxBusinessTaskValidate' => [ 'addon\hsx_recycle\app\listener\BusinessTaskValidate' ],
         // 用户确认回收报价后的扩展点。核心确认事务已提交，ERP/财务等下游按契约消费。

@@ -67,7 +67,7 @@
                 <scroll-view scroll-y class="device-scroll">
                     <view v-for="device in devices" :key="device.deviceId" class="ble-device" @click="printWithDevice(device)">
                         <view class="ble-symbol"><u-icon name="wifi" color="#7c3aed" size="20" /></view>
-                        <view class="ble-main"><text class="ble-name">{{ device.name }}</text><text class="ble-id">{{ device.deviceId }}</text></view>
+                        <view class="ble-main"><text class="ble-name">{{ device.name }}</text></view>
                         <text class="ble-rssi">{{ device.RSSI || '' }}</text><u-icon name="arrow-right" color="#cbd5e1" size="17" />
                     </view>
                     <u-empty v-if="!discovering && !devices.length" mode="search" text="未发现打印机，请重试" />
@@ -83,6 +83,7 @@ import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { completeMobileErpPrintJob, getMobileErpPrinters, getMobileErpPrintJobs, getMobileErpPrintMeta, retryMobileErpPrintJob, testMobileErpPrinter } from '@/addon/hsx_erp/api/erp'
 import { useErpBluetoothPrinter, type ErpBluetoothDevice } from '@/addon/hsx_erp/hooks/useErpBluetoothPrinter'
+import { erpEnumLabel, erpOptionLabel } from '@/addon/hsx_erp/utils/display'
 
 const loading = ref(false)
 const tabIndex = ref(0)
@@ -97,8 +98,9 @@ const tabActiveStyle = { color: '#2563eb', fontWeight: '650', fontSize: '28rpx' 
 const tabInactiveStyle = { color: '#64748b', fontSize: '28rpx' }
 const waitingJobs = computed(() => jobs.value.filter((job) => job.status === 'waiting_client'))
 const failedCount = computed(() => jobs.value.filter((job) => job.status === 'failed').length)
-const providerName = (key: string) => meta.value.providers?.find((item: any) => item.key === key)?.name || key
-const statusName = (status: string) => meta.value.status_map?.[status] || status
+const providerName = (key: string) => erpOptionLabel(meta.value.providers?.find((item: any) => item.key === key)?.name, key, '打印服务')
+const printStatusLabels: Record<string, string> = { success: '打印成功', failed: '打印失败', waiting_client: '待手机打印', sending: '发送中', pending: '待发送' }
+const statusName = (status: string) => erpEnumLabel(meta.value.status_map?.[status], printStatusLabels, erpEnumLabel(status, printStatusLabels))
 const statusType = (status: string) => ({ success: 'success', failed: 'error', waiting_client: 'warning', sending: 'primary' } as any)[status] || 'info'
 const formatTime = (value: number) => value ? new Date(value * 1000).toLocaleString() : '-'
 

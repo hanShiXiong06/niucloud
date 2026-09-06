@@ -111,9 +111,6 @@ class TaskService extends BaseAdminService
         $stagePerms = RecycleStageDict::getStagePermissions();
         $stages = [];
         foreach ($stagePerms as $stage => $perms) {
-            if ($stage === RecycleStageDict::STAGE_PAY && (new RecycleErpCapabilityService())->isPaymentManaged($this->site_id)) {
-                continue;
-            }
             if (!empty($perms) && !empty(array_intersect($perms, $myMenuKeys))) {
                 $stages[] = $stage;
             }
@@ -384,9 +381,14 @@ class TaskService extends BaseAdminService
     /** 流程流转后的默认分配：优先使用表单指定人员，否则使用权限候选中的第一人。 */
     public function assignPreferredOrDefault(int $deviceId, string $stageKey, int $preferredUid = 0): bool
     {
-        // ERP 接管财务时，应付事实和责任人统一落在 ERP，避免回收与 ERP 重复派单、重复通知。
-        if ($stageKey === RecycleStageDict::STAGE_PAY && (new RecycleErpCapabilityService())->isPaymentManaged($this->site_id)) {
-            return true;
+        // 只看当前设备责任；同站点仍可能同时存在本地付款和 ERP 付款设备。
+        if ($stageKey === RecycleStageDict::STAGE_PAY) {
+            try {
+                if ($this->isErpPaymentTask($deviceId)) return true;
+            } catch (\Throwable $e) {
+                Log::warning('付款任务归属未确认，已暂停自动分配', ['site_id' => $this->site_id, 'device_id' => $deviceId, 'message' => $e->getMessage()]);
+                return false;
+            }
         }
         $candidates = $this->getAssignableUsers($stageKey);
         if ($candidates === []) return false;
@@ -430,9 +432,6 @@ class TaskService extends BaseAdminService
     {
         $defaults = $this->defaultAssignees();
         $stages = RecycleStageDict::getStages();
-        if ((new RecycleErpCapabilityService())->isPaymentManaged($this->site_id)) {
-            $stages = array_values(array_filter($stages, static fn(array $stage): bool => (string)$stage['stage_key'] !== RecycleStageDict::STAGE_PAY));
-        }
         return array_map(function (array $stage) use ($defaults): array {
             $key = (string)$stage['stage_key'];
             return $stage + ['default_uid' => (int)($defaults[$key] ?? 0), 'users' => $this->getAssignableUsers($key)];
@@ -466,7 +465,6 @@ class TaskService extends BaseAdminService
 
     private function ensureAssigned(int $deviceId, string $stageKey): void
     {
-        if ($stageKey === RecycleStageDict::STAGE_PAY && (new RecycleErpCapabilityService())->isPaymentManaged($this->site_id)) return;
         $claim = RecycleTaskClaim::where([
             ['site_id', '=', $this->site_id], ['device_id', '=', $deviceId], ['stage_key', '=', $stageKey],
         ])->findOrEmpty();
@@ -479,6 +477,8 @@ class TaskService extends BaseAdminService
      */
     protected function upsertAssignment(int $deviceId, string $stageKey, int $assigneeUid, string $assigneeName, string $mode, bool $allowTransfer): bool
     {
+        // 手工认领/分配也必须先确认责任，未知时不落付款任务或发送通知。
+        if ($stageKey === RecycleStageDict::STAGE_PAY) $this->isErpPaymentTask($deviceId);
         $model = new RecycleTaskClaim();
         $where = [['site_id', '=', $this->site_id], ['device_id', '=', $deviceId], ['stage_key', '=', $stageKey]];
         $exists = $model->where($where)->findOrEmpty();
@@ -628,7 +628,7 @@ class TaskService extends BaseAdminService
         }
 
         if ($stageKey === RecycleStageDict::STAGE_PAY
-            && (new RecycleErpCapabilityService())->isPaymentManaged($this->site_id)) {
+            && $this->isErpPaymentTask($deviceId)) {
             $params = array_filter([
                 'status' => 'pending',
                 'source_no' => $businessNo,
@@ -666,6 +666,13 @@ class TaskService extends BaseAdminService
             ]),
             'miniapp_path' => 'addon/hsx_recycle/pages/order/detail?' . http_build_query($miniappParams),
         ];
+    }
+
+    /** 不允许站点开关代替具体设备责任；unknown 会由能力服务抛出明确错误。 */
+    private function isErpPaymentTask(int $deviceId): bool
+    {
+        if ($deviceId <= 0) throw new AdminException('缺少具体设备，无法确认付款任务归属');
+        return (new RecycleErpCapabilityService())->isPaymentManaged((int)$this->site_id, 0, [$deviceId]);
     }
 
     private function countAssignedPending(int $uid, string $stageKey): int

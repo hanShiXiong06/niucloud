@@ -9,6 +9,7 @@ use addon\hsx_project_center\app\model\ProjectCenterGroup;
 use addon\hsx_project_center\app\model\ProjectCenterProject;
 use addon\hsx_project_center\app\model\ProjectCenterRefund;
 use addon\hsx_project_center\app\model\ProjectCenterReviewLog;
+use addon\hsx_project_center\app\service\core\ProjectCenterDistributionService;
 use app\service\core\notice\NoticeService;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
@@ -105,7 +106,15 @@ final class ProjectCenterRefundAdminService extends BaseAdminService
             return (int)$refund->id;
         });
 
-        return $this->infoById($refundId);
+        $result = $this->infoById($refundId);
+        try {
+            (new ProjectCenterDistributionService())->freezeByApplication(
+                (int)$this->site_id, (int)($result['application_id'] ?? 0)
+            );
+        } catch (\Throwable $e) {
+            Log::error('[hsx_project_center] 退款申请冻结佣金失败，等待补偿', ['refund_id' => $refundId, 'message' => $e->getMessage()]);
+        }
+        return $result;
     }
 
     public function complete(int $groupId, array $data): array
@@ -149,7 +158,15 @@ final class ProjectCenterRefundAdminService extends BaseAdminService
         });
 
         $this->sendRefundNotice($refundId);
-        return $this->infoById($refundId);
+        $result = $this->infoById($refundId);
+        try {
+            (new ProjectCenterDistributionService())->refundByApplication(
+                (int)$this->site_id, (int)($result['application_id'] ?? 0), (float)($result['amount'] ?? 0)
+            );
+        } catch (\Throwable $e) {
+            Log::error('[hsx_project_center] 退款完成冲红佣金失败，等待补偿', ['refund_id' => $refundId, 'message' => $e->getMessage()]);
+        }
+        return $result;
     }
 
     public function cancel(int $groupId, string $reason): array
@@ -185,7 +202,15 @@ final class ProjectCenterRefundAdminService extends BaseAdminService
             }
             return (int)$refund->id;
         });
-        return $this->infoById($refundId);
+        $result = $this->infoById($refundId);
+        try {
+            (new ProjectCenterDistributionService())->resumeByApplication(
+                (int)$this->site_id, (int)($result['application_id'] ?? 0)
+            );
+        } catch (\Throwable $e) {
+            Log::error('[hsx_project_center] 取消退款恢复佣金失败，等待补偿', ['refund_id' => $refundId, 'message' => $e->getMessage()]);
+        }
+        return $result;
     }
 
     private function group(int $groupId): ProjectCenterGroup

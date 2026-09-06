@@ -128,7 +128,7 @@ class RecycleConsignmentOrderService extends BaseAdminService
         }
 
         $erpCapability = new RecycleErpCapabilityService();
-        $erpEnabled = $erpCapability->isEnabled((int)$this->site_id);
+        $erpEnabled = $erpCapability->isPaymentManaged((int)$this->site_id, 0, [$deviceId]);
         $erpPlacement = $erpEnabled ? $erpCapability->defaultInboundPlacement((int)$this->site_id, 'consignment') : [];
         if ($erpEnabled && $erpPlacement === []) {
             throw new CommonException('ERP已接管库存，请先在ERP创建启用中的代卖仓和库位');
@@ -285,10 +285,10 @@ class RecycleConsignmentOrderService extends BaseAdminService
 
     public function markSold(int $id, array $data): bool
     {
-        if ((new RecycleErpCapabilityService())->isEnabled((int)$this->site_id)) {
+        $order = $this->getModel($id);
+        if ((new RecycleErpCapabilityService())->isPaymentManaged((int)$this->site_id, 0, [(int)$order->source_device_id])) {
             throw new CommonException('ERP已接管库存和销售，请在ERP完成销售出库；成交结果会自动回写代卖单');
         }
-        $order = $this->getModel($id);
         $before = $order->toArray();
         $soldPrice = round((float)($data['sold_price'] ?? 0), 2);
         $settlementAmount = round((float)($data['settlement_amount'] ?? 0), 2);
@@ -326,8 +326,8 @@ class RecycleConsignmentOrderService extends BaseAdminService
 
     public function settle(int $id, array $data): bool
     {
-        if ((new RecycleErpCapabilityService())->isPaymentManaged((int)$this->site_id)) {
-            $order = $this->getModel($id);
+        $order = $this->getModel($id);
+        if ((new RecycleErpCapabilityService())->isPaymentManaged((int)$this->site_id, 0, [(int)$order->source_device_id])) {
             if ((int)$order->pay_status === RecycleConsignmentDict::PAY_STATUS_PAID || (int)$order->status === RecycleConsignmentDict::STATUS_SETTLED) {
                 throw new CommonException('该代卖订单已结算，请勿重复操作');
             }
@@ -344,10 +344,13 @@ class RecycleConsignmentOrderService extends BaseAdminService
         }
         Db::startTrans();
         try {
-            $order = $this->getModel($id);
+            $order = $this->getModel($id, true);
             if ((int)$order->pay_status === RecycleConsignmentDict::PAY_STATUS_PAID || (int)$order->status === RecycleConsignmentDict::STATUS_SETTLED) {
                 throw new CommonException('该代卖订单已结算，请勿重复操作');
             }
+            (new RecycleErpCapabilityService())->assertLocalPaymentAllowed(
+                (int)$this->site_id, (int)$order->source_order_id, [(int)$order->source_device_id]
+            );
 
             $before = $order->toArray();
             $amount = round((float)($data['settlement_amount'] ?? $order->settlement_amount ?? 0), 2);
@@ -487,12 +490,12 @@ class RecycleConsignmentOrderService extends BaseAdminService
         return $result;
     }
 
-    private function getModel(int $id): RecycleConsignmentOrder
+    private function getModel(int $id, bool $lock = false): RecycleConsignmentOrder
     {
         $order = RecycleConsignmentOrder::where([
             ['site_id', '=', $this->site_id],
             ['id', '=', $id],
-        ])->findOrEmpty();
+        ])->lock($lock)->findOrEmpty();
         if ($order->isEmpty()) {
             throw new CommonException('代卖订单不存在');
         }

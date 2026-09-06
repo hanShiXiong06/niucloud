@@ -65,11 +65,9 @@ class ErpAssetDownstreamListener
             }
             $deviceId = (int)($payload['source_device_id'] ?? 0);
             if ($deviceId <= 0) {
-                // 兜底：stocked 事件的 source.id 即回收设备ID（ready_for_photo 的 source 是入库单，不取）
-                $src = (array)($event['source'] ?? []);
-                if ((string)($src['type'] ?? '') !== 'stock_in') {
-                    $deviceId = (int)($src['id'] ?? 0);
-                }
+                // source.id / aggregate_id 可能是 ERP 资产或单据ID，绝不能猜作回收设备ID。
+                return ['consumer' => 'hsx_recycle', 'status' => 'skipped', 'skipped' => true,
+                    'reason' => 'missing_source_device_id'];
             }
 
             $eventId = (string)($event['event_id'] ?? '');

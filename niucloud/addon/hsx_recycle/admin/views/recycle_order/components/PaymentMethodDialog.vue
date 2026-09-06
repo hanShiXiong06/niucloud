@@ -1,8 +1,8 @@
 <template>
   <FormDialog
     :visible="dialogVisible"
-    title="收款方式"
-    subtitle="选择收款方式与账号，确认后打款（不可撤销）"
+    title="确认回收付款"
+    subtitle="请核对本次付款账户、金额与实际付款结果，勿重复操作"
     width="md"
     :loading="submitting"
     :confirm-disabled="!canConfirm"
@@ -11,27 +11,27 @@
     @confirm="handleConfirmPayment"
     @cancel="dialogVisible = false"
   >
+    <HsxNotice v-if="paymentScopeLoading || paymentScopeError" class="mb-4" :type="paymentScopeError ? 'error' : 'info'" :closable="false" :title="paymentScopeLoading ? '正在核对本订单付款归属，核对完成前不能提交。' : paymentScopeError">
+      <template #actions><el-button v-if="paymentScopeError" link type="primary" @click="loadCapitalAccounts">重新核对</el-button></template>
+    </HsxNotice>
+    <HsxNotice v-if="paymentScope.payment_owner === 'mixed'" class="mb-4" type="warning" :closable="false" title="本次只能处理回收端负责的设备；ERP设备及归属待核对设备不可在此付款。" description="本订单包含不同付款归属。按设备模式只可选择由回收端处理且当前可付款的设备；请勿在两个入口重复付款。" />
+    <el-button v-if="hasErpDevices" class="mb-4" type="primary" plain @click="goToErpPayment">前往 ERP 处理其余设备</el-button>
     <div v-if="paymentInfoData && paymentInfoData.length > 0">
       <!-- 订单摘要信息卡片 -->
       <el-card v-if="currentPaymentInfo && currentPaymentInfo.order_summary" shadow="never" class="mb-4">
         <template #header>
           <div class="card-header">
-            <span>订单 #{{ currentPaymentInfo.order_summary.order_id }}</span>
+            <span>本次付款范围</span>
             <el-tag :type="currentPaymentInfo.order_summary.status === 7 ? 'success' : 'warning'" size="small">
               ¥{{ currentPaymentInfo.order_summary.total_amount }}
             </el-tag>
           </div>
         </template>
 
-        <el-alert v-if="isDevicePaymentMode" class="mb-4" type="warning" :closable="false" show-icon>
-          <template #title>
-            当前为按设备打款模式，请选择本次要打款的设备。未选择的设备会继续保持未打款状态。
-          </template>
-        </el-alert>
+        <HsxNotice v-if="isDevicePaymentMode" class="mb-4" type="info" :closable="false" title="请选择本次付款设备，未选设备不会付款。" />
 
         <!-- 设备详情 -->
-        <el-collapse>
-          <el-collapse-item title="设备详情列表" name="devices">
+        <HsxFold title="设备详情列表" :default-open="isDevicePaymentMode" :reset-key="`${orderId}-${isDevicePaymentMode}-${visible}`">
             <el-table
               v-if="!isMobile"
               :data="currentPaymentInfo.order_summary.devices"
@@ -64,7 +64,7 @@
               <el-table-column v-if="isDevicePaymentMode" label="说明" min-width="120">
                 <template #default="scope">
                   <span class="text-xs" :class="isDeviceSelectable(scope.row) ? 'text-green-600' : 'text-gray-400'">
-                    {{ isDeviceSelectable(scope.row) ? '可打款' : (scope.row.pay_disabled_reason || scope.row.disabled_reason || '暂不可打款') }}
+                    {{ devicePaymentReason(scope.row) }}
                   </span>
                 </template>
               </el-table-column>
@@ -97,12 +97,11 @@
                   </el-tag>
                 </div>
                 <div v-if="isDevicePaymentMode" class="mt-1 text-xs" :class="isDeviceSelectable(device) ? 'text-green-600' : 'text-gray-400'">
-                  {{ isDeviceSelectable(device) ? '可打款' : (device.pay_disabled_reason || device.disabled_reason || '暂不可打款') }}
+                  {{ devicePaymentReason(device) }}
                 </div>
               </div>
             </div>
-          </el-collapse-item>
-        </el-collapse>
+        </HsxFold>
         <div v-if="isDevicePaymentMode" class="device-payment-summary">
           <span>已选 {{ selectedDevices.length }} 台</span>
           <strong>本次打款 ¥{{ selectedDeviceAmount.toFixed(2) }}</strong>
@@ -249,10 +248,13 @@
 
 <script setup lang="ts">
 import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue'
-import { ElMessage } from 'element-plus'
+import { HsxNotice, HsxFold, useFeedback } from '@/addon/hsx_components/core'
+const feedback = useFeedback()
+import { useRouter } from 'vue-router'
 import FormDialog from '@/addon/hsx_recycle/components/FormDialog.vue'
 import { Picture, InfoFilled } from '@element-plus/icons-vue'
 import { getCapitalAccountOptions } from '@/addon/hsx_recycle/api/recycle_order'
+import { canOpenLocalPayment, getDevicePaymentOwner, type PaymentScope } from '@/addon/hsx_recycle/utils/payment-scope'
 
 // 定义支付信息接口
 interface PaymentInfoItem {
@@ -333,6 +335,16 @@ const paymentImages = ref('')
 const capitalAccounts = ref<any[]>([])
 const erpConnected = ref(false)
 const selectedCapitalAccountId = ref<number | undefined>(undefined)
+const paymentScopeLoading = ref(false)
+const paymentScopeError = ref('')
+const paymentScope = ref<PaymentScope>({})
+const router = useRouter()
+const localPaymentAllowed = computed(() => !paymentScopeError.value && canOpenLocalPayment(paymentScope.value, isDevicePaymentMode.value ? 'device' : 'order'))
+const hasErpDevices = computed(() => paymentScope.value.payment_owner === 'self_erp' || paymentScope.value.devices?.some(item => item.owner === 'self_erp'))
+const goToErpPayment = () => {
+  dialogVisible.value = false
+  router.push(paymentScope.value.payment_path || '/site/hsx_erp/payable')
+}
 
 // 仅当装了ERP且有启用账户时才显示户头选择
 const showCapitalAccount = computed(() => erpConnected.value && capitalAccounts.value.length > 0)
@@ -346,13 +358,23 @@ const capitalAccountLabel = (acc: any) => {
 }
 
 const loadCapitalAccounts = async () => {
+  paymentScopeLoading.value = true
+  paymentScope.value = {}
+  paymentScopeError.value = ''
+  const orderId = props.orderId || currentPaymentInfo.value?.order_summary?.order_id
   try {
-    const res: any = await getCapitalAccountOptions()
+    if (!orderId) throw new Error('订单信息不完整')
+    const res: any = await getCapitalAccountOptions(orderId)
+    paymentScope.value = res.data || {}
     capitalAccounts.value = Array.isArray(res.data?.accounts) ? res.data.accounts : []
-    erpConnected.value = !!res.data?.erp_connected
+    erpConnected.value = res.data?.payment_owner === 'self_erp'
+    if (!localPaymentAllowed.value && paymentScope.value.payment_owner !== 'mixed') {
+      paymentScopeError.value = `${res.data?.message || '本订单不支持在此直接付款。'} 请关闭弹窗，到设备明细核对结算归属。`
+    }
   } catch (e) {
-    capitalAccounts.value = []
-    erpConnected.value = false
+    paymentScopeError.value = '付款归属查询失败，尚未执行付款。请重新核对，不能自动改为回收端付款。'
+  } finally {
+    paymentScopeLoading.value = false
   }
 }
 
@@ -378,16 +400,24 @@ const selectedDeviceAmount = computed(() => {
 
 const confirmButtonText = computed(() => {
   if (isDevicePaymentMode.value) {
-    return selectedDevices.value.length > 0 ? `确认给 ${selectedDevices.value.length} 台设备打款` : '请选择设备'
+    return selectedDevices.value.length > 0 ? `确认 ${selectedDevices.value.length} 台设备付款` : '请选择设备'
   }
-  return '确认已打款'
+  return '确认付款'
 })
 
 const isDeviceSelectable = (device: any) => {
+  if (paymentScopeLoading.value || paymentScopeError.value || getDevicePaymentOwner(paymentScope.value, device.id) !== 'local') return false
   if (typeof device.can_pay !== 'undefined') {
     return Boolean(device.can_pay)
   }
   return Number(device.status) === 5 && Number(device.pay_status || 0) !== 1 && Number(device.final_price || 0) > 0
+}
+
+const devicePaymentReason = (device: any) => {
+  const owner = getDevicePaymentOwner(paymentScope.value, device.id)
+  if (owner === 'self_erp') return '由 ERP 处理'
+  if (owner !== 'local') return paymentScopeLoading.value ? '正在核对归属' : '归属待核对'
+  return isDeviceSelectable(device) ? '回收端可付款' : (device.pay_disabled_reason || device.disabled_reason || '暂不可打款')
 }
 
 const handleDeviceSelectionChange = (rows: any[]) => {
@@ -415,6 +445,8 @@ const needsCustomPayType = computed(() => {
 
 // 判断是否可以确认打款
 const canConfirm = computed(() => {
+  if (paymentScopeLoading.value || !localPaymentAllowed.value) return false
+  if (isDevicePaymentMode.value && (!selectedDevices.value.length || selectedDevices.value.some(device => !isDeviceSelectable(device)))) return false
   // 有支付方式数据时
   if (paymentInfoData.value && paymentInfoData.value.length > 0) {
     // 必须有订单信息
@@ -455,6 +487,10 @@ watch(() => props.paymentInfo, (newVal) => {
 
 // 确认打款
 const handleConfirmPayment = () => {
+  if (paymentScopeLoading.value || !localPaymentAllowed.value) {
+    feedback.warning(paymentScopeError.value || '请先完成本订单付款归属核对')
+    return
+  }
   // 确定最终的支付方式和账号
   let finalPayType = ''
   let finalAccount = ''
@@ -478,17 +514,21 @@ const handleConfirmPayment = () => {
   }
 
   if (!finalPayType) {
-    ElMessage.warning('请选择或输入支付方式')
+    feedback.warning('请选择或输入支付方式')
     return
   }
 
   if (isDevicePaymentMode.value && selectedDevices.value.length === 0) {
-    ElMessage.warning('请选择本次需要打款的设备')
+    feedback.warning('请选择本次需要打款的设备')
+    return
+  }
+  if (isDevicePaymentMode.value && selectedDevices.value.some(device => !isDeviceSelectable(device))) {
+    feedback.warning('选中设备的付款归属已变化，请重新核对并选择回收端设备')
     return
   }
 
   if (erpConnected.value && !selectedCapitalAccountId.value) {
-    ElMessage.warning(capitalAccounts.value.length ? '请选择ERP实际出款账户' : 'ERP未配置可用资金账户，请先在ERP资金账户中启用账户')
+    feedback.warning(capitalAccounts.value.length ? '请选择ERP实际出款账户' : 'ERP未配置可用资金账户，请先在ERP资金账户中启用账户')
     return
   }
 
@@ -501,7 +541,7 @@ const handleConfirmPayment = () => {
     paymentImages: paymentImages.value,
     paymentMode: isDevicePaymentMode.value ? 'device' : 'order',
     selectedDeviceIds: selectedDeviceIds.value,
-    amount: currentPaymentInfo.value?.order_summary?.total_amount,
+    amount: isDevicePaymentMode.value ? selectedDeviceAmount.value : currentPaymentInfo.value?.order_summary?.total_amount,
     deviceCount: isDevicePaymentMode.value ? selectedDevices.value.length : undefined,
     capitalAccountId: selectedCapitalAccountId.value
   })

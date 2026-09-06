@@ -16,6 +16,7 @@ $stock = $read('addon/hsx_erp/app/service/admin/ErpStockService.php');
 $sql = $read('addon/hsx_erp/sql/install.sql');
 $schema = $read('addon/hsx_erp/app/support/ErpSchema.php');
 $routes = $read('addon/hsx_erp/app/adminapi/route/route.php');
+$menu = $read('addon/hsx_erp/app/dict/menu/site.php');
 $controller = $read('addon/hsx_erp/app/adminapi/controller/ErpFinance.php');
 $receivablePage = $read('../admin/src/addon/hsx_erp/views/erp/receivable/list.vue');
 $supplementDialog = $read('../admin/src/addon/hsx_erp/components/ErpMallReceivableSupplementDialog.vue');
@@ -35,6 +36,7 @@ $assert(str_contains($ledger, "'sale_item_id' => (int)(\$data['sale_item_id'] ??
 $assert(str_contains($sql, '`sale_item_id` int NOT NULL DEFAULT 0 COMMENT \'销售明细ID，商城缺失ERP资产时用于分台核销\''), '全新安装账目流水必须包含销售明细ID');
 $assert(str_contains($schema, "'sale_item_id' => \"`sale_item_id` int NOT NULL DEFAULT 0"), '升级迁移必须补齐账目流水销售明细ID');
 $assert(str_contains($routes, 'supplement_sale_details') && str_contains($controller, 'supplementReceivableSaleDetails'), 'ERP应收接口必须暴露商城成交资料补录动作');
+$assert(str_contains($menu, 'hsx_erp_receivable_supplement_sale_details') && str_contains($menu, 'erp/finance/receivable/<id>/supplement_sale_details'), '商城成交资料补录接口必须登记菜单权限，避免线上403');
 $assert(str_contains($receivablePage, 'can_supplement_sale_detail') && str_contains($receivablePage, '商城来源成交'), 'ERP应收详情必须明确展示商城补录入口与资料状态');
 $assert(str_contains($supplementDialog, '成交价合计必须等于应收金额') && str_contains($supplementDialog, '不会重复生成应收'), '补录表单必须解释边界并强制金额对平');
 

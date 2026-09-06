@@ -1,6 +1,14 @@
+DROP TABLE IF EXISTS `{{prefix}}project_center_distribution_debt`;
+DROP TABLE IF EXISTS `{{prefix}}project_center_distribution_detail`;
+DROP TABLE IF EXISTS `{{prefix}}project_center_distribution_order`;
+DROP TABLE IF EXISTS `{{prefix}}project_center_relation_log`;
+DROP TABLE IF EXISTS `{{prefix}}project_center_invite`;
 DROP TABLE IF EXISTS `{{prefix}}project_center_income_board`;
 DROP TABLE IF EXISTS `{{prefix}}project_center_review_log`;
+DROP TABLE IF EXISTS `{{prefix}}project_center_refund`;
 DROP TABLE IF EXISTS `{{prefix}}project_center_application`;
+DROP TABLE IF EXISTS `{{prefix}}project_center_group_no_change_log`;
+DROP TABLE IF EXISTS `{{prefix}}project_center_group_no_alias`;
 DROP TABLE IF EXISTS `{{prefix}}project_center_group`;
 DROP TABLE IF EXISTS `{{prefix}}project_center_daily_sequence`;
 DROP TABLE IF EXISTS `{{prefix}}project_center_project`;

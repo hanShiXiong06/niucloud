@@ -1,19 +1,14 @@
 <template>
     <div class="return-detail-page" :class="{ 'is-embedded': embedded }" v-loading="loading">
-        <div v-if="!embedded" class="page-head">
-            <div>
-                <el-button link type="primary" class="back-button" @click="backToList">← 返回销售退货</el-button>
-                <div class="title-row">
-                    <h1>{{ isCompensation ? '售后补差详情' : '销售退货详情' }}</h1>
-                    <el-tag v-if="detail.id" :type="statusTagType(detail.status)" effect="plain">{{ statusLabel(detail.status) }}</el-tag>
-                </div>
-                <p>{{ isCompensation ? '核对按设备记录的售后补差、毛利变化和付款结果。' : '核对客户退回的设备、退款事实和财务处理结果。' }}</p>
-            </div>
-            <div v-if="detail.id && detail.status === 'pending'" class="head-actions">
-                <el-button type="danger" plain @click="cancelReturn">取消退货单</el-button>
-                <el-button type="primary" :loading="confirming" @click="openConfirm">确认收货</el-button>
-            </div>
-        </div>
+        <HsxTitle v-if="!embedded" size="page" collapsible-subtitle class="mb-4">
+            <template #prefix><el-button link type="primary" class="back-button" @click="backToList">← 返回销售退货</el-button></template>
+            <template #default>{{ isCompensation ? '售后补差详情' : '销售退货详情' }}</template>
+            <template #subtitle>{{ isCompensation ? '核对按设备记录的售后补差、毛利变化和付款结果。' : '核对客户退回的设备、退款事实和财务处理结果。' }}</template>
+            <template #extra><el-tag v-if="detail.id" :type="statusTagType(detail.status)" effect="plain">{{ statusLabel(detail.status) }}</el-tag><div v-if="detail.id && detail.status === 'pending'" class="head-actions">
+                    <el-button type="danger" plain @click="cancelReturn">取消退货单</el-button>
+                    <el-button type="primary" :loading="confirming" @click="openConfirm">确认收货</el-button>
+                </div></template>
+        </HsxTitle>
 
         <div v-else-if="detail.id" class="drawer-action-bar">
             <div class="drawer-status">
@@ -108,7 +103,7 @@
         <el-empty v-else-if="!loading" description="未找到销售退货单">
             <el-button type="primary" @click="backToList">返回列表</el-button>
         </el-empty>
-        <el-dialog v-model="confirmVisible" title="确认收到退货设备" width="520px">
+        <HsxDialog :confirm-loading="confirming" v-model="confirmVisible" title="确认收到退货设备" width="520px" :destroy-on-close="false">
             <div class="confirm-summary">确认 {{ detail.items?.length || 0 }} 台设备已实际交回，退款合计 ¥{{ money(detail.total_amount) }}</div>
             <el-form label-width="90px">
                 <el-form-item v-if="requiresCashRefund" label="退款账户" required>
@@ -119,19 +114,23 @@
                 </el-form-item>
                 <el-form-item v-if="requiresCashRefund" label="付款凭证"><ErpFinanceVoucherUpload v-model="confirmVoucherUrls" /></el-form-item>
             </el-form>
-            <template #footer><el-button @click="confirmVisible=false">返回检查</el-button><el-button type="primary" :loading="confirming" @click="confirmReturn">{{ confirmActionLabel }}</el-button></template>
-        </el-dialog>
+            <template #footer><el-button :disabled="confirming" @click="confirmVisible=false">返回检查</el-button><el-button :disabled="confirming" type="primary" :loading="confirming" @click="confirmReturn">{{ confirmActionLabel }}</el-button></template>
+        </HsxDialog>
     </div>
 </template>
 
 <script setup lang="ts">
+import { HsxDialog, useFeedback, HsxTitle } from '@/addon/hsx_components/core'
+import { erpEnumLabel } from '@/addon/hsx_erp/utils/display'
 import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import { cancelErpSaleReturn, confirmErpSaleReturn, getErpSaleReturnInfo } from '@/addon/hsx_erp/api/erp'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import { useErpPageRefresh } from '@/addon/hsx_erp/hooks/useErpPageRefresh'
 import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVoucherUpload.vue'
+const hsxFeedback = useFeedback()
+
 
 const route = useRoute()
 const router = useRouter()
@@ -155,7 +154,7 @@ const confirmActionLabel = computed(() => expectedRefundPayable.value > 0.001 ? 
 
 function statusLabel(status: string) {
     if (isCompensation.value) return status === 'cancelled' ? '补差已取消' : '补差已确认'
-    return ({ pending: '待确认收货', confirmed: '已完成退货', cancelled: '已取消' } as Record<string, string>)[status] || status || '-'
+    return erpEnumLabel(status, { pending: '待确认收货', confirmed: '已完成退货', cancelled: '已取消' })
 }
 
 function statusTagType(status: string) {
@@ -163,7 +162,7 @@ function statusTagType(status: string) {
 }
 
 function refundModeLabel(mode: string) {
-    return ({ cash: '现场退款', payable: '转财务退款', offset: '往来折抵', balance: '余额退回' } as Record<string, string>)[mode] || mode || '-'
+    return erpEnumLabel(mode, { cash: '现场退款', payable: '转财务退款', offset: '往来折抵', balance: '余额退回' }, '退款方式待确认')
 }
 
 const processSummary = computed(() => {
@@ -251,7 +250,7 @@ function openConfirm() {
 }
 
 async function confirmReturn() {
-    if (requiresCashRefund.value && !confirmAccountId.value) return ElMessage.warning('请选择实际退款账户')
+    if (requiresCashRefund.value && !confirmAccountId.value) return hsxFeedback.warning('请选择实际退款账户')
     const confirmed = await ElMessageBox.confirm(
         `确认销售退货 ${detail.items?.length || 0} 台，金额 ¥${money(detail.total_amount)}？确认后设备回到原仓位，并同步处理客户账款。`,
         '确认收到退货设备',
@@ -261,7 +260,7 @@ async function confirmReturn() {
     confirming.value = true
     try {
         await confirmErpSaleReturn(returnId.value, { capital_account_id: confirmAccountId.value, voucher_urls: confirmVoucherUrls.value })
-        ElMessage.success('销售退货已确认')
+        hsxFeedback.success('销售退货已确认')
         confirmVisible.value = false
         await loadDetail()
         emit('updated')
@@ -278,7 +277,7 @@ async function cancelReturn() {
     ).then(() => true).catch(() => false)
     if (!confirmed) return
     await cancelErpSaleReturn(returnId.value)
-    ElMessage.success('销售退货单已取消')
+    hsxFeedback.success('销售退货单已取消')
     await loadDetail()
     emit('updated')
 }

@@ -59,5 +59,5 @@ export function validateErpListingForm(form: Record<string, any>, contract: any,
         }
         return !String(form[field] || '').trim()
     })
-    return missing.length ? `请先完善${missing.map((field: string) => labels[field] || field).join('、')}` : ''
+    return missing.length ? `请先完善${Array.from(new Set(missing.map((field: string) => labels[field] || '必填资料'))).join('、')}` : ''
 }

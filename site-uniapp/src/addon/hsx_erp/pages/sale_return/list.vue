@@ -122,6 +122,7 @@ import { erpTimeLine } from '@/addon/hsx_erp/hooks/useErpTime'
 import { confirmErpSensitiveAction } from '@/addon/hsx_erp/hooks/useErpSensitiveConfirm'
 import { cloneErpSubmitSnapshot, confirmErpPopupAction } from '@/addon/hsx_erp/hooks/useErpPopupConfirm'
 import { erpPartyDisplayName } from '@/addon/hsx_erp/hooks/useErpPartyText'
+import { showErpError } from '@/addon/hsx_erp/utils/error'
 
 const { pagingStyle } = useListHeader({ tabs: true, compactMp: true })
 
@@ -212,7 +213,10 @@ const queryList = async (pageNo: number, pageSize: number) => {
             limit: pageSize,
         })
         pagingRef.value?.complete(res?.data?.data || [])
-    } catch { pagingRef.value?.complete(false) }
+    } catch (error) {
+        pagingRef.value?.complete(false)
+        showErpError(error, '销售退货记录加载失败，请检查网络后重试')
+    }
 }
 
 function resetFilter() { filters.value = {}; reload() }
@@ -331,7 +335,7 @@ const money = (v: any) => Number(v || 0).toFixed(2)
 const isCompensation = (row: any) => row?.business_type === 'after_sale_compensation'
 const statusLabel = (s: string, businessType = '') => businessType === 'after_sale_compensation'
     ? (s === 'cancelled' ? '补差已取消' : '补差已确认')
-    : ({ pending: '待确认收货', confirmed: '已完成退货', cancelled: '已取消' }[s] || s || '-')
+    : ({ pending: '待确认收货', confirmed: '已完成退货', cancelled: '已取消' }[s] || '状态待确认')
 const statusType = (s: string) => ({ pending: 'warning', confirmed: 'success', cancelled: 'info' }[s] || 'info')
 const businessTypeLabel = (s: string) => s === 'after_sale_compensation' ? '售后补差' : '退货退款'
 const confirmActionLabel = (row: any) => row?.refund_mode === 'cash' ? '确认收货并退款' : '确认收货并变应付'

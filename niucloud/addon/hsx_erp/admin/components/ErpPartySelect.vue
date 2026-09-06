@@ -167,7 +167,7 @@ const dialogTitle = computed(() => {
 })
 
 const displayName = computed(() =>
-    props.partyName || (props.modelValue ? `ID:${props.modelValue}` : '')
+    props.partyName || (props.modelValue ? '已选择往来单位' : '')
 )
 
 function open() {

@@ -63,7 +63,7 @@
                         </view>
                         <u-tag v-if="item.status" :text="assetLabel(item.status)" :type="assetType(item.status)" plain plainFill size="mini" />
                     </view>
-                    <view class="card-meta" v-if="item.asset_no">资产编号：{{ item.asset_no }}</view>
+                    <view class="card-meta" v-if="item.sn">SN：{{ item.sn }}</view>
                     <view class="card-meta" v-if="item.warehouse_name || item.location_name">
                         仓库：{{ item.warehouse_name || '-' }}{{ item.location_name ? ' / ' + item.location_name : '' }}
                     </view>
@@ -174,7 +174,7 @@ onShow(() => {
 
 async function loadDetail() {
     if (id.value <= 0) {
-        loadError.value = '缺少应收记录 ID'
+        loadError.value = '未找到应收记录，请返回列表重新打开'
         return
     }
     loading.value = true
@@ -209,9 +209,9 @@ async function onReceiptSuccess() {
 }
 
 const money = (v: any) => Number(v || 0).toFixed(2)
-const statusLabel = (s: string) => ({ pending: '待收款', partial: '部分收款', settled: '已结清', void: '已作废' }[s] || s || '-')
+const statusLabel = (s: string) => ({ pending: '待收款', partial: '部分收款', settled: '已结清', void: '已作废' }[s] || '状态待确认')
 const statusType = (s: string) => ({ pending: 'warning', partial: 'primary', settled: 'success', void: 'info' }[s] || 'info')
-const assetLabel = (s: string) => ({ in_stock: '在库', sold: '已售', returned: '已退', void: '已作废', completed: '已完成' }[s] || s || '-')
+const assetLabel = (s: string) => ({ in_stock: '在库', sold: '已售', returned: '已退', void: '已作废', completed: '已完成' }[s] || '状态待确认')
 const assetType = (s: string) => ({ in_stock: 'success', sold: 'primary', returned: 'warning', void: 'info', completed: 'success' }[s] || 'info')
 const refundLabel = (s: string) => ({
     none: '无需退款（仅冲销原应付）',
@@ -219,8 +219,8 @@ const refundLabel = (s: string) => ({
     payable: '转财务应付',
     offset: '往来折抵',
     cash: '退款待财务确认',
-}[s] || s || '-')
-const settlementLabel = (s: string) => ({ receipt: '收款', offset: '折账', payment: '付款' }[s] || s || '-')
+}[s] || '状态待确认')
+const settlementLabel = (s: string) => ({ receipt: '收款', offset: '折账', payment: '付款' }[s] || '状态待确认')
 </script>
 
 <style scoped lang="scss">

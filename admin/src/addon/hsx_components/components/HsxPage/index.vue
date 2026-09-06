@@ -122,6 +122,11 @@ const pageStyle = computed(() => ({
     min-height: 80px;
 }
 
+/* 管理业务页面的基础表面统一；复杂表格、表单结构仍由业务组件负责。 */
+.hsx-page :deep(.el-card) { border-radius: var(--hsx-radius-md) !important; }
+.hsx-page :deep(.el-table) { --el-table-header-bg-color: var(--hsx-bg-muted); --el-table-header-text-color: var(--hsx-text-secondary); --el-table-border-color: var(--hsx-border-color); }
+.hsx-page :deep(.el-input__wrapper), .hsx-page :deep(.el-select__wrapper), .hsx-page :deep(.el-textarea__inner), .hsx-page :deep(.el-button:not(.is-round):not(.is-circle)) { border-radius: var(--hsx-radius-sm) !important; }
+
 .hsx-page--surface .hsx-page__body {
     padding: var(--hsx-surface-padding);
 }

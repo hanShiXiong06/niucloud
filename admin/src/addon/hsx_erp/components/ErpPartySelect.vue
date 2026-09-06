@@ -15,7 +15,7 @@
     </div>
 
     <!-- 选择弹窗 -->
-    <el-dialog
+    <HsxDialog
         v-model="visible"
         :title="dialogTitle"
         width="640px"
@@ -83,11 +83,11 @@
                 <el-button type="success" size="small" @click="quickCreate">新增主体</el-button>
             </div>
         </div>
-    </el-dialog>
-    <el-dialog v-model="manageVisible" title="往来主体身份管理" width="520px" append-to-body>
+    </HsxDialog>
+    <HsxDialog :confirm-loading="manageSaving" v-model="manageVisible" title="往来主体身份管理" width="520px" append-to-body :destroy-on-close="false">
         <el-form label-width="86px"><el-form-item label="主体名称"><el-input v-model="manageForm.party_name" /></el-form-item><el-form-item label="联系电话"><el-input v-model="manageForm.contact_mobile" /></el-form-item><el-form-item label="多重身份"><el-checkbox-group v-model="manageForm.role_flags"><el-checkbox v-for="item in roleOptions" :key="item.value" :label="item.value">{{ item.label }}</el-checkbox></el-checkbox-group></el-form-item><el-form-item label="业务分组"><el-select v-model="manageForm.group_keys" multiple allow-create filterable default-first-option placeholder="选择或输入分组"><el-option label="重点客户" value="key_customer" /><el-option label="长期合作" value="long_term" /><el-option label="整备服务" value="refurbish" /></el-select></el-form-item></el-form>
-        <template #footer><el-button @click="manageVisible=false">取消</el-button><el-button type="primary" :loading="manageSaving" @click="saveManage">保存</el-button></template>
-    </el-dialog>
+        <template #footer><el-button :disabled="manageSaving" @click="manageVisible=false">取消</el-button><el-button :disabled="manageSaving" type="primary" :loading="manageSaving" @click="saveManage">保存</el-button></template>
+    </HsxDialog>
     <ErpPartyCreditDialog v-model="creditVisible" :party="creditParty" @saved="onCreditSaved" />
 </template>
 
@@ -98,11 +98,14 @@ export default {
 </script>
 
 <script setup lang="ts">
+import { HsxDialog, useFeedback } from '@/addon/hsx_components/core'
 import { ref, computed, useAttrs } from 'vue'
 import { Search } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+
 import request from '@/utils/request'
 import ErpPartyCreditDialog from '@/addon/hsx_erp/components/ErpPartyCreditDialog.vue'
+const hsxFeedback = useFeedback()
+
 
 interface Party {
     id: number
@@ -167,7 +170,7 @@ const dialogTitle = computed(() => {
 })
 
 const displayName = computed(() =>
-    props.partyName || (props.modelValue ? `ID:${props.modelValue}` : '')
+    props.partyName || (props.modelValue ? '已选择往来单位' : '')
 )
 
 function open() {
@@ -222,16 +225,16 @@ function openManage(row: Party) { manageForm.value = { ...row, role_flags: [...(
 function openCredit(row: Party) { creditParty.value = row; creditVisible.value = true }
 function onCreditSaved(profile: any) { if (creditParty.value) creditParty.value.credit_profile = profile }
 async function saveManage() {
-    if (!manageForm.value.party_name || !manageForm.value.role_flags.length) return ElMessage.warning('请填写名称并至少选择一个身份')
+    if (!manageForm.value.party_name || !manageForm.value.role_flags.length) return hsxFeedback.warning('请填写名称并至少选择一个身份')
     manageSaving.value = true
-    try { await request.post(`erp/counterparty/update/${manageForm.value.id}`, manageForm.value); ElMessage.success('主体身份已更新'); manageVisible.value = false; await loadData() }
+    try { await request.post(`erp/counterparty/update/${manageForm.value.id}`, manageForm.value); hsxFeedback.success('主体身份已更新'); manageVisible.value = false; await loadData() }
     finally { manageSaving.value = false }
 }
 
 async function quickCreate() {
     const name = quickName.value.trim()
     if (!name) {
-        ElMessage.warning('请输入名称')
+        hsxFeedback.warning('请输入名称')
         return
     }
     try {
@@ -243,7 +246,7 @@ async function quickCreate() {
         selectRow(party)
         quickName.value = ''
     } catch {
-        ElMessage.error('新建失败')
+        hsxFeedback.error('新建失败')
     }
 }
 </script>

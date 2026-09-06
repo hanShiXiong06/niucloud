@@ -19,8 +19,11 @@ final class Application extends BaseAdminController
         return success('常用问题已保存', (new ProjectCenterProjectAdminService())->saveReviewReasons((int)$params['project_id'], (array)$params['reasons']));
     }
     public function review(int $id) {
-        $params = $this->request->params([['action', ''], ['field_issues', []], ['remark', '']]);
-        (new ProjectCenterApplicationAdminService())->review($id, (string)$params['action'], (array)$params['field_issues'], (string)$params['remark']);
+        $params = $this->request->params([['action', ''], ['field_issues', []], ['remark', ''], ['payment_checked', 0]]);
+        (new ProjectCenterApplicationAdminService())->review(
+            $id, (string)$params['action'], (array)$params['field_issues'],
+            (string)$params['remark'], !empty($params['payment_checked'])
+        );
         return success('审核结果已保存');
     }
     public function correctGroupNo(int $id) {

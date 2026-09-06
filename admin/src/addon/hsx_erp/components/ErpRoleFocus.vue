@@ -1,16 +1,16 @@
 <template>
-    <div class="erp-role-focus">
-        <div class="erp-role-focus__title">本页协作重点</div>
+    <HsxNotice class="mt-4" title="本页协作说明" :reset-key="items.map(item => item.role + item.focus).join('|')">
         <div class="erp-role-focus__items">
             <div v-for="item in items" :key="item.role" class="erp-role-focus__item">
                 <span class="erp-role-focus__role">{{ item.role }}</span>
                 <span class="erp-role-focus__text">{{ item.focus }}</span>
             </div>
         </div>
-    </div>
+    </HsxNotice>
 </template>
 
 <script setup lang="ts">
+import { HsxNotice } from '@/addon/hsx_components/core'
 defineProps<{
     items: Array<{ role: string; focus: string }>
 }>()

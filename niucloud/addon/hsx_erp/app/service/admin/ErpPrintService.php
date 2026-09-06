@@ -14,6 +14,15 @@ use think\facade\Log;
 /** ERP 内置打印中心。回收插件仍使用自己的打印系统，两者不形成运行时依赖。 */
 final class ErpPrintService extends BaseAdminService
 {
+    public static function forSite(int $siteId, int $operatorUid = 0, string $operatorName = '系统补偿'): self
+    {
+        $service = new self();
+        $service->site_id = $siteId;
+        $service->uid = $operatorUid;
+        $service->username = $operatorName;
+        return $service;
+    }
+
     public function meta(): array
     {
         $this->ensureDefaults();

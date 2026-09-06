@@ -18,15 +18,14 @@
                     <text class="timeline-time">{{ formatErpTime(node.occurred_at || node.create_at) }}</text>
                 </view>
                 <view v-if="node.before_status || node.after_status" class="status-flow">
-                    <text>{{ node.before_status_text || statusLabel(node.before_status) }}</text>
+                    <text>{{ statusLabel(node.before_status_text || node.before_status) }}</text>
                     <text class="status-arrow">→</text>
-                    <text class="status-after">{{ node.after_status_text || statusLabel(node.after_status) }}</text>
+                    <text class="status-after">{{ statusLabel(node.after_status_text || node.after_status) }}</text>
                 </view>
                 <view class="timeline-meta">
                     <text v-if="node.party_name">{{ partyPrefix(node.action) }}：{{ node.party_name }}</text>
                     <text>操作人：{{ operatorLabel(node) }}</text>
                     <text v-if="node.source_no">单据：{{ node.source_no }}</text>
-                    <text v-if="node.asset_no">资产：{{ node.asset_no }}</text>
                 </view>
                 <text v-if="node.remark" class="timeline-remark">{{ node.remark }}</text>
             </view>
@@ -42,6 +41,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { formatErpTime } from '@/addon/hsx_erp/hooks/useErpTime'
+import { erpEnumLabel } from '@/addon/hsx_erp/utils/display'
 
 const props = withDefaults(defineProps<{ flows?: any[]; currentStatus?: string }>(), { flows: () => [], currentStatus: '' })
 const legends = [
@@ -57,12 +57,12 @@ const meta:Record<string,{tone:string;mark:string;title:string}> = {
     flow:{tone:'other',mark:'流',title:'流转设置'}, flow_set:{tone:'other',mark:'流',title:'流转设置'},
 }
 const nodes = computed(() => (props.flows || []).map((flow:any,index:number) => {
-    const current = meta[String(flow.action || '')] || {tone:'other',mark:'记',title:flow.action_text || '设备记录'}
-    return {...flow,...current,title:flow.action_text || current.title,key:`${flow.id || index}-${flow.cycle_no || 1}`}
+    const current = meta[String(flow.action || '')] || {tone:'other',mark:'记',title:'设备记录'}
+    return {...flow,...current,title:erpEnumLabel(flow.action_text, {}, current.title),key:`${flow.id || index}-${flow.cycle_no || 1}`}
 }))
-const statusLabel=(s:string)=>({in_stock:'在我的库存',sold:'已销售给客户',returned:'已退还供应商',void:'已作废',available_for_sale:'可销售'}[s]||s||'未知状态')
+const statusLabel=(s:string)=>erpEnumLabel(s,{in_stock:'在我的库存',sold:'已销售给客户',returned:'已退还供应商',void:'已作废',available_for_sale:'可销售'})
 const partyPrefix=(action:string)=>['inbound','purchase_return','purchase_cancel'].includes(action)?'供应商':['sold','sale_return','sale_return_cancel','sale_cancel','sale_item_cancel'].includes(action)?'客户':'往来方'
-const operatorLabel=(node:any)=>String(node?.operator_display || node?.operator_name || (Number(node?.operator_id || node?.operator_uid || 0) > 0 ? `员工 #${Number(node?.operator_id || node?.operator_uid)}` : '系统自动'))
+const operatorLabel=(node:any)=>[node?.operator_display,node?.operator_name].map(value=>String(value||'').trim()).find(value=>value&&!/^(?:UID\s*[:：#＃]?\s*\d+|(?:员工|管理员|用户|操作人)\s*[#＃]\s*\d+)$/i.test(value))||(Number(node?.operator_id||node?.operator_uid||0)>0?'姓名未维护':'系统自动')
 const currentTone=computed(()=>({in_stock:'purchase',sold:'sale',returned:'purchase-return',void:'other'} as any)[props.currentStatus]||'other')
 </script>
 
