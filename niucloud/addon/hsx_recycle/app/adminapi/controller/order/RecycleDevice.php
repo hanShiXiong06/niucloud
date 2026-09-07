@@ -303,6 +303,9 @@ class RecycleDevice extends BaseAdminController
             if (isset($payload['info'])) {
                 $checkData['info'] = $payload['info'];
             }
+            if (isset($payload['device_readings'])) {
+                $checkData['device_readings'] = $payload['device_readings'];
+            }
             // model
             if (isset($payload['model'])) {
                 $checkData['model'] = $payload['model'];

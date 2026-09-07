@@ -196,6 +196,8 @@
           </aside>
         </div>
       </el-form>
+      <HsxDataArchive :data="deviceForm.info?.device_readings || {}" :reset-key="deviceData.id"
+        :labels="{ local: '本地读取原文与提取值', model_match: '型号匹配记录', external_queries: '外部查询记录（如保修）' }" />
     </div>
 
     <template #footer>
@@ -216,7 +218,8 @@
 </template>
 
 <script setup lang="ts">
-import { HsxDialog, useFeedback } from '@/addon/hsx_components/core'
+import { HsxDialog, HsxDataArchive, useFeedback } from '@/addon/hsx_components/core'
+import { parseCoverageStatus } from '@/addon/hsx_recycle/components/device-entry/deviceReadings'
 import { ref, reactive, watch, computed, nextTick, onMounted, onBeforeUnmount, toRef } from 'vue'
 import { ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
@@ -643,13 +646,29 @@ const runDeviceQueryAction = async (action: any) => {
     return
   }
   const serviceCode = action.code
+  const queryCode = String(deviceForm.imei).trim()
+  const queriedDeviceId = deviceData.value.id
   deviceQueryLoadingMap.value = { ...deviceQueryLoadingMap.value, [serviceCode]: true }
   try {
     const res = await queryDeviceByService({
       service_code: serviceCode,
-      query_code: deviceForm.imei,
+      query_code: queryCode,
       query_type: action.query_type || 'imei'
     })
+    if (queriedDeviceId !== deviceData.value.id || queryCode !== String(deviceForm.imei).trim()) {
+      hsxFeedback.warning('当前设备已变化，本次查询结果未回填，请重新核对设备')
+      return
+    }
+    if (res.data?.query_record_id) {
+      const info = normalizeInfo(deviceForm.info)
+      const archive = info.device_readings || { version: 1 }
+      const records = archive.external_queries || []
+      if (!records.some((item: any) => item.query_record_id === res.data.query_record_id)) {
+        deviceForm.info = { ...info, device_readings: { ...archive, external_queries: [...records, res.data] } }
+      }
+    } else {
+      hsxFeedback.warning('查询已返回，但原始查询记录未保存成功，请联系管理员检查查询记录')
+    }
     applyDeviceQueryResult(action, res.data?.data || res.data || {})
   } catch (error: any) {
     hsxFeedback.error(error?.message || `${action.name || '设备查询'}失败，请检查设备查询配置`)
@@ -719,14 +738,8 @@ const applyCoverageData = (data: any) => {
   if (capacity) deviceForm.capacity = capacity
   if (color) deviceForm.color = color
   if (data.osVersion) deviceForm.system_version = data.osVersion
-  if (data.coverage) {
-    deviceForm.warranty_info = parseCoverageStatus(data.coverage)
-  } else if (data.coverage_status || data.coverage_date) {
-    deviceForm.warranty_info = parseCoverageStatus({
-      status: data.coverage_status,
-      date: data.coverage_date
-    })
-  }
+  const warranty = parseCoverageStatus(data.coverage || { status: data.coverage_status, date: data.coverage_date })
+  if (warranty) deviceForm.warranty_info = warranty
   updateCheckResult()
 }
 
@@ -793,20 +806,6 @@ const parseCoverageFields = (d: any) => {
   return { capacity, color, modelDisplay }
 }
 
-// 兼容多品牌的保修状态解析
-const parseCoverageStatus = (coverage: any): string => {
-  if (!coverage) return ''
-  const status = (coverage.status || '').trim()
-  const date   = (coverage.date   || '').trim()
-  if (status === 'Out Of Warranty') return '过保'
-  if (status === 'Not Activated' || (!date && !status)) return '未激活'
-  if (status === 'In Warranty' || status === 'Active') {
-    return date ? `保 ${date}` : '在保'
-  }
-  // 其他情况：有日期就显示日期，否则显示原始 status
-  return date || status || '在保'
-}
-
 const syncSellerResultToBuyer = () => {
   if (!deviceForm.check_result_seller) { hsxFeedback.warning('卖家质检结果为空，无法同步'); return }
   deviceForm.check_result_buyer = deviceForm.check_result_seller
@@ -863,6 +862,7 @@ function buildSubmitPayload(action: 'check' | 'save_draft') {
     model: deviceForm.model,
     check_template_id: selectedCheckTemplateId.value || checkTemplateInfo.value?.id || 0,
     info: getSubmitInfo(),
+    device_readings: normalizeInfo(deviceForm.info).device_readings,
     system_version: deviceForm.system_version,
     warranty_info: deviceForm.warranty_info,
     capacity: deviceForm.capacity,

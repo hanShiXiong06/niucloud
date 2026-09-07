@@ -100,10 +100,16 @@ try {
     $assert(DeviceReadingArchive::decode(RecycleDevice::findOrEmpty($deviceId)->info)['device_readings']['local']['raw'] == $raw, '普通 info 编辑不能删除原文');
     // 测真实质检暂存，隔离对外事件；空站点没有打印和通知配置。
     \think\facade\Event::remove('AfterDeviceCheckComplete');
-    (new RecycleDeviceService())->completeCheck($deviceId, ['info'=>['check_meta'=>['template_id'=>0], 'coverage'=>['status'=>'', 'date'=>'']]], '客户自带包装', 'save_draft');
+    $extraPayload = $queryPayload;
+    $extraPayload['service'] = ['name'=>'采集测试型号查询'];
+    $extraPayload['service_code'] = 'apple_model';
+    $extraRecord = (new DeviceQueryResultRecorder())->record($extraPayload);
+    (new RecycleDeviceService())->completeCheck($deviceId, ['info'=>['check_meta'=>['template_id'=>0], 'coverage'=>['status'=>'', 'date'=>'']],
+        'device_readings'=>['external_queries'=>[['query_record_id'=>$extraRecord]]]], '客户自带包装', 'save_draft');
     $checked = RecycleDevice::findOrEmpty($deviceId)->toArray();
     $checkedInfo = DeviceReadingArchive::decode($checked['info']);
     $assert($checkedInfo['device_readings']['local']['raw'] == $raw, '质检暂存不能覆盖原文');
+    $assert(count($checkedInfo['device_readings']['external_queries']) === 2, '质检中的外部查询也追加归档');
     $assert((int)$checkedInfo['check_meta']['battery'] === 95 && (int)$checkedInfo['check_meta']['battery_num'] === 0, '质检未提供电池时保留已确认值');
     $assert($checked['warranty_info'] === '保 2027-09-01', '质检空保修结果不能把已知保修改成未激活');
 
@@ -128,14 +134,12 @@ try {
     $assert((int)$secondCache['queried_at'] === (int)DeviceQueryResult::findOrEmpty($recordId)->create_at, '缓存保留真实查询时间');
 
     // 验证回收快照 -> ERP 入库映射 -> 库存详情回显。无需真的付款/触发远程同步。
-    $edited['info']['check_meta']['battery'] = 100;
-    $edited['info']['check_meta']['battery_num'] = 212;
-    $snapshot = $invoke(new RecycleDeviceErpSyncService(), 'buildSnapshot', [$edited]);
-    $assert((int)$snapshot['battery_health'] === 100 && (int)$snapshot['battery_cycle_count'] === 212, '回收入库事件携带独立健康度/循环次数');
+    $snapshot = $invoke(new RecycleDeviceErpSyncService(), 'buildSnapshot', [$checked]);
+    $assert((int)$snapshot['battery_health'] === 95 && (int)$snapshot['battery_cycle_count'] === 0, '回收入库事件携带最终人工确认的健康度/循环次数');
     $item = $invoke(new ErpDeviceInboundRequested(), 'mapDeviceItem', [$snapshot, 0, 0, 4500.0, 'hsx_recycle', '回收']);
-    $assert($item['battery'] === 100, 'ERP battery 列使用健康度');
+    $assert($item['battery'] === 95, 'ERP battery 列使用已确认健康度');
     $assert(date('Y-m-d', $item['warranty']) === '2027-09-01', '明确保修日期映射为 ERP 日期');
-    $assert($item['spec_json']['battery_cycle_count'] === 212 && $item['spec_json']['system_version'] === '26.6', 'ERP 扩展规格保留循环次数/系统版本');
+    $assert($item['spec_json']['battery_cycle_count'] === 0 && $item['spec_json']['system_version'] === '26.6', 'ERP 扩展规格保留零循环次数/系统版本');
     $qc = DeviceReadingArchive::decode($item['qc_report']);
     $assert($qc['device_readings']['local']['raw'] == $raw, 'ERP 质检档案保留原文');
     $assert($item['quality_remark'] === '客户自带包装' && $item['remark'] === '', 'ERP 质检备注仅是人工表达，未混入原文');
@@ -144,7 +148,7 @@ try {
         'qc_report'=>$item['qc_report'], 'spec_json'=>json_encode($item['spec_json']), 'purchase_cost'=>4500, 'total_cost'=>4500, 'create_at'=>time()]);
     $stock = ErpStockService::forSite($site, 1, '设备采集回滚测试');
     $detail = $stock->info($assetId);
-    $assert($detail['device_readings']['local']['raw'] == $raw && (int)$detail['battery'] === 100, '库存详情回显正确业务值和内部档案');
+    $assert($detail['device_readings']['local']['raw'] == $raw && (int)$detail['battery'] === 95, '库存详情回显正确业务值和内部档案');
     $public = $invoke($stock, 'marketplaceQcSnapshot', [ErpAsset::findOrEmpty($assetId), '']);
     $assert(!str_contains(json_encode($public), 'TEST-UDID') && !isset($public['device_readings']), '商城发布不能携带内部采集档案');
 } finally {

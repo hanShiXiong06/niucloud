@@ -1,5 +1,6 @@
 import { computed, reactive, type ComputedRef } from 'vue'
 import { resolveCheckValueLabels } from '@/addon/hsx_recycle/utils/checkValue'
+import { parseCoverageStatus } from '@/addon/hsx_recycle/components/device-entry/deviceReadings'
 
 export interface DictOptionItem {
   id?: string | number
@@ -545,14 +546,8 @@ export function useCheckMeta({ dictOptions, deviceForm, fieldConfigByKey, templa
     const info = normalizeInfo(deviceForm.info)
     const coverage = info.coverage
     if (coverage) {
-      const status = coverage.status || ''
-      if (status === 'Out Of Warranty') {
-        pushResult('保修: 过保')
-      } else if (status === 'Not Activated' || !coverage.date) {
-        pushResult('保修: 未激活')
-      } else {
-        pushResult(`保修: 在保 到期${coverage.date}`)
-      }
+      const warranty = parseCoverageStatus(coverage)
+      if (warranty) pushResult(`保修: ${warranty}`)
     }
 
     deviceForm.check_result_seller = Array.from(new Set(results)).join(';\n')

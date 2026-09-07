@@ -4,7 +4,6 @@ const fs = require('node:fs')
 const path = require('node:path')
 const vm = require('node:vm')
 const { createRequire } = require('node:module')
-const { execFileSync } = require('node:child_process')
 const root = path.resolve(__dirname, '../../../..')
 const req = createRequire(path.join(root, 'admin/package.json'))
 const ts = req('typescript'), compiler = req('@vue/compiler-sfc'), vue = req('vue')
@@ -131,10 +130,16 @@ async function main() {
     equal(collect(container, 'pre').length, 0, '切换设备重新折叠')
     app.unmount()
 
-    const changed = execFileSync('git', ['diff', '--name-only', '--', 'admin/src/addon'], { cwd: root, encoding: 'utf8' }).trim().split('\n')
-    const added = execFileSync('git', ['ls-files', '--others', '--exclude-standard', 'admin/src/addon'], { cwd: root, encoding: 'utf8' }).trim().split('\n')
-    for (const file of [...new Set([...changed, ...added])].filter(f => /\.(vue|ts)$/.test(f))) {
+    const sourceFiles = [
+        ...['deviceReadings.ts', 'types.ts', 'useLocalDevice.ts', 'deviceUtil.ts', 'DeviceEntryList.vue', 'WarrantyQueryInput.vue', 'CheckSummaryFields.vue', 'CheckSummaryDialog.vue'].map(file => `${base}${file}`),
+        ...['CheckDeviceDialog.vue', 'DeviceConfirmDialog.vue', 'DeviceDetailDialog.vue', 'composables/useCheckMeta.ts'].map(file => `admin/src/addon/hsx_recycle/views/recycle_order/components/${file}`),
+        'admin/src/addon/hsx_components/components/HsxDataArchive/index.vue', 'admin/src/addon/hsx_components/core.ts', 'admin/src/addon/hsx_components/index.ts',
+        'admin/src/addon/hsx_erp/views/erp/stock/list.vue'
+    ]
+    for (const file of sourceFiles) {
         let source = fs.readFileSync(path.join(root, file), 'utf8')
+        const mirror = file.replace(/^admin\/src\/addon\/([^/]+)\//, 'niucloud/addon/$1/admin/')
+        equal(source, fs.readFileSync(path.join(root, mirror), 'utf8'), `插件源码同步 ${file}`)
         if (file.endsWith('.vue')) {
             const parsed = compiler.parse(source, { filename: file }); equal(parsed.errors, [], `SFC 解析 ${file}`)
             const compiled = compiler.compileScript(parsed.descriptor, { id: file })

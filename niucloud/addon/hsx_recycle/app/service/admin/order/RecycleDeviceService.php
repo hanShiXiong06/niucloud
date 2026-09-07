@@ -1318,10 +1318,10 @@ class RecycleDeviceService extends BaseAdminService
             if (!empty($checkData)) {
                 $updateData = array_merge($updateData, $checkData);
             }
-            if (isset($checkData['info'])) {
+            if (isset($checkData['info']) || isset($checkData['device_readings']) || isset($checkData['imei'])) {
                 // Model 已声明 $json=['info']，save() 时会自动 json_encode，无需手动编码
                 $oldInfo = DeviceReadingArchive::decode($device->info);
-                $newInfo = DeviceReadingArchive::decode($checkData['info']);
+                $newInfo = DeviceReadingArchive::decode($checkData['info'] ?? []);
                 unset($newInfo['device_readings']);
                 foreach (['battery', 'battery_num'] as $key) {
                     if (!array_key_exists($key, (array)($newInfo['check_meta'] ?? [])) && array_key_exists($key, (array)($oldInfo['check_meta'] ?? []))) {
@@ -1329,7 +1329,14 @@ class RecycleDeviceService extends BaseAdminService
                     }
                 }
                 $updateData['info'] = array_replace($oldInfo, $newInfo);
+                $archive = DeviceReadingArchive::merge(
+                    DeviceReadingArchive::decode($oldInfo['device_readings'] ?? []),
+                    DeviceReadingArchive::decode($checkData['device_readings'] ?? []),
+                    array_replace($device->toArray(), $checkData), (int)$this->site_id
+                );
+                if ($archive !== []) $updateData['info']['device_readings'] = $archive;
             }
+            unset($updateData['device_readings']);
 
             $checkMeta = $this->extractCheckMeta($checkData);
             $templateId = (int)($checkData['check_template_id'] ?? ($checkMeta['template_id'] ?? 0));
