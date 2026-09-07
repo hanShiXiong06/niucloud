@@ -189,11 +189,13 @@ import addCartPopup from './add-cart-popup.vue'
 import bindMobile from '@/components/bind-mobile/bind-mobile.vue';
 import { onPageScroll, onReachBottom } from '@dcloudio/uni-app';
 import { useLogin } from '@/hooks/useLogin'
+import { useGoodsDetailNavigation } from '@/addon/phone_shop/hooks/useGoodsDetailNavigation'
 import useMemberStore from '@/stores/member'
 import useCartStore from '@/addon/phone_shop/stores/cart'
 import { cloneDeep } from 'lodash-es'
 import useSystemStore from '@/stores/system';
 const systemStore = useSystemStore()
+const { openGoodsDetail } = useGoodsDetailNavigation()
 
 
 const navbarInnerStyle = ref('')
@@ -340,7 +342,7 @@ const goodsMaxBuy = () => {
 }
 
 const toLink = (goods_id: string) => {
-    redirect({ url: '/addon/phone_shop/pages/goods/detail', param: { goods_id } })
+    return openGoodsDetail(goods_id, prop.config)
 }
 
 onMounted(() => {

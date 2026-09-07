@@ -88,7 +88,7 @@
                             </view>
                             <view class="flex flex-1 flex-wrap flex-col">
                                 <view class="max-h-[80rpx] text-[26rpx] leading-[40rpx] multi-hidden">{{ item.goods_name }}</view>
-                                <view class="flex  items-end justify-between flex-1">
+                                <view class="flex flex-wrap gap-y-[14rpx] items-end justify-between flex-1">
                                     <view class="text-[var(--price-text-color)] price-font -mb-[8rpx]">
                                         <text class="text-[24rpx] font-500">￥</text>
                                         <text class="text-[40rpx] font-500">{{ parseFloat(goodsPrice(item)).toFixed(2).split('.')[0] }}</text>
@@ -97,13 +97,20 @@
 										<image class="h-[24rpx] max-w-[60rpx] ml-[6rpx]" v-if="priceType(item) == 'newcomer_price'" :src="img('addon/phone_shop/newcomer.png')" mode="heightFix" />
 										<image class="h-[24rpx] max-w-[80rpx] ml-[6rpx]" v-if="priceType(item) == 'discount_price'" :src="img('addon/phone_shop/discount.png')" mode="heightFix" />
                                     </view>
-                                    <template v-if="!item.isMaxBuy">
+                                    <template v-if="!item.isMaxBuy || cartFor(item)">
                                         <view v-if="(item.goods_type == 'real' || (item.goods_type == 'virtual' && item.virtual_receive_type != 'verify')) && item.goodsSku.sku_spec_format === '' && cartList['goods_' + item.goods_id] && cartList['goods_' + item.goods_id]['sku_' + item.goodsSku.sku_id] && config.cart.control && config.cart.event === 'cart'" class="flex items-center">
                                             <view class="relative w-[44rpx] h-[44rpx]">
                                                 <text class="text-[44rpx] text-color nc-iconfont nc-icon-jianshaoV6xx absolute flex items-center justify-center -left-[12rpx] -bottom-[14rpx] -right-[14rpx] -top-[14rpx]"
                                                     @click.stop="reduceCart(item,cartList['goods_' + item.goods_id]['sku_' + item.goodsSku.sku_id])"></text>
                                             </view>
-                                            <text class="text-[#333] text-[24rpx] mx-[16rpx]">{{ cartList['goods_' + item.goods_id]['sku_' + item.goodsSku.sku_id].num }}</text>
+                                            <view class="mx-[8rpx]" @click.stop>
+                                                <input class="cart-quantity-input" type="number" inputmode="numeric" confirm-type="done" :maxlength="8"
+                                                    :value="quantityInputValue(item)"
+                                                    :disabled="quantitySaving || cartRepeatFlag || cartStore.isRepeat"
+                                                    @focus="startQuantityInput(item)"
+                                                    @input="quantityDraft[item.goodsSku.sku_id] = $event.detail.value"
+                                                    @blur="submitQuantityInput(item)" @confirm="submitQuantityInput(item)" />
+                                            </view>
                                             <view class="w-[44rpx] h-[44rpx] bg-primary flex items-center justify-center rounded-[50%]">
                                                 <text class="iconfont iconjia font-500 text-[32rpx] text-[#fff]"
                                                 :id="'itemCart' + index"
@@ -222,7 +229,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, getCurrentInstance } from 'vue';
+import { ref, reactive, onMounted, computed, getCurrentInstance } from 'vue';
 import { t } from '@/locale';
 import { img, redirect } from '@/utils/common';
 import { getGoodsCategoryTree, getGoodsPages } from '@/addon/phone_shop/api/goods';
@@ -233,9 +240,11 @@ import addCartPopup from './add-cart-popup.vue'
 import bindMobile from '@/components/bind-mobile/bind-mobile.vue';
 import { onPageScroll, onReachBottom } from '@dcloudio/uni-app';
 import { useLogin } from '@/hooks/useLogin'
+import { useGoodsDetailNavigation } from '@/addon/phone_shop/hooks/useGoodsDetailNavigation'
+import { goodsPriceBadgeType } from '@/addon/phone_shop/utils/goods-card'
+import { validateCartQuantity } from '@/addon/phone_shop/utils/cart-quantity'
 import useMemberStore from '@/stores/member'
 import useCartStore from '@/addon/phone_shop/stores/cart'
-import { cloneDeep } from 'lodash-es'
 import useSystemStore from '@/stores/system';
 const systemStore = useSystemStore()
 
@@ -434,8 +443,9 @@ const goodsMaxBuy = () => {
 }
 
 const toLink = (goods_id: string) => {
-    redirect({ url: '/addon/phone_shop/pages/goods/detail', param: { goods_id } })
+    return openGoodsDetail(goods_id, prop.config)
 }
+const { openGoodsDetail } = useGoodsDetailNavigation()
 
 onMounted(() => {
     getCategoryData()
@@ -625,73 +635,61 @@ const itemCart = (row: any, id: any) => {
 }
 
 //点击购物车加号 添加数量
-const addCartBtn = (item: any, row: any, id: string) => {
-    if (parseInt(row.num) >= parseInt(row.stock)) {
-        uni.showToast({ title: '商品库存不足', icon: 'none' })
-        return;
-    }
-
-    // 起购
-    let num = row.num;
-    if (item.min_buy > 0 && item.min_buy > row.num) {
-        num = item.min_buy;
-    }
-
-    /************** 限购-start *****************/
-    // let maxBuyNum = -1;
-    // 限购 - 是否开启限购
-    if (item.is_limit && item.max_buy) {
-        let max_buy = 0;
-        if (item.limit_type == 1) { //单次限购
-            max_buy = item.max_buy;
-        } else { // 单人限购
-            let buyVal = item.max_buy - (item.has_buy || 0);
-            max_buy = buyVal > 0 ? buyVal : 0;
-        }
-
-        // if(max_buy > item.goodsSku.stock){
-        // 	maxBuyNum = item.goodsSku.stock
-        // }else if(max_buy <= item.goodsSku.stock){
-        // 	maxBuyNum = max_buy;
-        // }
-    }
-    if (item.is_limit && num >= item.max_buy) {
-        let tips = `该商品单次限购${ item.max_buy }件`;
-        if (item.limit_type != 1) { //单次限购
-            tips = `该商品每人限购${ item.max_buy }件`;
-        }
-        uni.showToast({ title: tips, icon: 'none' })
-        return false;
-    }
-    /************** 限购-end *****************/
-
-    let obj = cloneDeep(item)
-    obj.num = num;
-    obj.id = row.id;
-    animationAddCart(obj, id)
+const addCartBtn = (item: any, row: any, _id: string) => {
+    return saveCartQuantity(item, row, Math.max(Number(row.num) + 1, Number(item.min_buy) || 1))
 }
 
-//点击购物车减号
+// 加减与手动输入共用数量校验和提交，避免三条路径各自修改购物车。
 const reduceCart = (data: any, row: any) => {
-    if (cartRepeatFlag.value) return false
-    cartRepeatFlag.value = true
+    const minimum = Math.max(1, Number(data.min_buy) || 1)
+    return saveCartQuantity(data, row, Number(row.num) <= minimum ? 0 : Number(row.num) - 1)
+}
 
-    let reduceNum = 1;
-    if (data.min_buy > 0 && data.min_buy == row.num) {
-        reduceNum = data.min_buy;
+const quantityDraft = reactive<Record<string, string>>({})
+const quantitySaving = ref(false)
+const editingSku = ref<string | null>(null)
+const cartFor = (item: any) => cartList.value['goods_' + item.goods_id]?.['sku_' + item.goodsSku?.sku_id]
+const quantityInputValue = (item: any) => editingSku.value === String(item.goodsSku.sku_id)
+    ? quantityDraft[item.goodsSku.sku_id]
+    : String(cartFor(item)?.num || 0)
+const startQuantityInput = (item: any) => {
+    editingSku.value = String(item.goodsSku.sku_id)
+    quantityDraft[item.goodsSku.sku_id] = String(cartFor(item)?.num || 0)
+}
+const saveCartQuantity = async(item: any, row: any, value: unknown) => {
+    const skuId = String(item.goodsSku.sku_id)
+    if (!row) { delete quantityDraft[skuId]; return }
+    if (quantitySaving.value || cartRepeatFlag.value || cartStore.isRepeat) {
+        quantityDraft[skuId] = String(row.num)
+        uni.showToast({ title: '数量正在更新，请稍候', icon: 'none' })
+        return
     }
-
-    cartStore.reduce({
-        id: row.id,
-        goods_id: row.goods_id,
-        sku_id: row.sku_id,
-        stock: row.stock,
-        sale_price: row.sale_price,
-        num: row.num
-    }, reduceNum, () => {
-        cartRepeatFlag.value = false
-    })
-
+    const result = validateCartQuantity(value, item)
+    if (result.error) {
+        quantityDraft[skuId] = String(row.num)
+        uni.showToast({ title: result.error, icon: 'none' })
+        return
+    }
+    if (result.quantity === Number(row.num)) {
+        quantityDraft[skuId] = String(row.num)
+        return
+    }
+    quantitySaving.value = true
+    try {
+        await cartStore.setQuantity(row, result.quantity)
+    } catch (error: any) {
+        uni.showToast({ title: error?.msg || error?.message || '数量修改失败，请重试', icon: 'none' })
+    } finally {
+        quantityDraft[skuId] = String(cartFor(item)?.num || 0)
+        quantitySaving.value = false
+    }
+}
+const submitQuantityInput = (item: any) => {
+    const skuId = String(item.goodsSku.sku_id)
+    // 键盘完成与失焦可能连续触发，同一次编辑只提交一次。
+    if (editingSku.value !== skuId) return
+    editingSku.value = null
+    return saveCartQuantity(item, cartFor(item), quantityDraft[skuId])
 }
 
 //进入购物车
@@ -740,7 +738,7 @@ const settlement = () => {
 
 // 价格类型
 const priceType = (data: any) => {
-	return data.goodsSku.show_type
+	return goodsPriceBadgeType(data, memberStore.token)
 }
 
 // 商品价格
@@ -750,6 +748,17 @@ const goodsPrice = (data: any) => {
 </script>
 
 <style lang="scss" scoped>
+.cart-quantity-input {
+    width: 64rpx;
+    height: 48rpx;
+    box-sizing: border-box;
+    border: 1rpx solid #dce0e5;
+    border-radius: 8rpx;
+    background: #f8fafc;
+    color: #333;
+    font-size: 24rpx;
+    text-align: center;
+}
 .remove-border {
     &::after {
         border: none;

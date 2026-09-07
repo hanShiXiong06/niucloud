@@ -18,6 +18,9 @@
                 <view class="list-mode-button" @click="listIconBtn">
                     <view :class="['iconfont text-[32rpx] text-[#475569]', listType ? 'icona-yingyongzhongxinV6xx-32' : 'icona-yingyongliebiaoV6xx-32']"></view>
                 </view>
+                <view v-if="goodsAction?.event === 'cart'" class="list-mode-button" @click="toCart">
+                    <text class="nc-iconfont nc-icon-gouwucheV6xx6 text-[34rpx]"></text>
+                </view>
             </view>
             <scroll-view scroll-x :enable-flex="true" :show-scrollbar="false" class="filter-toolbar">
                 <view class="filter-toolbar__inner">
@@ -89,6 +92,7 @@
         />
 
         <mescroll-body ref="mescrollRef" :top="mescrollTop" bottom="60px" @init="mescrollInit" :down="{ use: false }" @up="getAllAppListFn">
+            <view v-if="categoryConfigFailed" class="config-retry" @click="loadCategoryConfig">商品操作配置加载失败，点击重试</view>
             <view v-if="goodsList.length" class="sidebar-margin">
                 <template v-if="listType">
                     <view v-for="(item, index) in goodsList" :key="index"
@@ -123,7 +127,7 @@
 									       mode="heightFix" />
                                   </view>
                                 </view>
-                                <view class="goods-row-forward" @click.stop="forwardGoods(item)">转发</view>
+                                <PhoneGoodsActionButton :action="goodsAction" @action="handleGoodsAction(item)" />
                             </view>
                         </view>
                     </view>
@@ -131,7 +135,7 @@
                 <template v-else>
                     <PhoneGoodsWaterfall :items="goodsList" :estimate-height="estimateGoodsCardHeight">
                         <template #default="{ item }">
-                            <PhoneGoodsWaterfallCard :item="item" @click="toDetail(item.goods_id)" @forward="forwardGoods(item)" />
+                            <PhoneGoodsWaterfallCard :item="item" :action="goodsAction" @click="toDetail(item.goods_id)" @action="handleGoodsAction(item)" />
                         </template>
                     </PhoneGoodsWaterfall>
                 </template>
@@ -139,6 +143,7 @@
             <mescroll-empty v-if="!goodsList.length && loading" :option="{tip : '暂无商品', btnText:'去逛逛'}" @emptyclick="redirect({ url: '/addon/phone_shop/pages/index', mode: 'reLaunch' })"></mescroll-empty>
         </mescroll-body>
 
+        <add-cart-popup ref="cartRef" />
         <tabbar />
     </view>
 </template>
@@ -151,6 +156,7 @@ import {
     addGoodsSubscription,
     cancelGoodsSubscription,
     getGoodsFilterOptions,
+    getGoodsCategoryConfig,
     getGoodsPages,
     getGoodsSubscriptionList,
     getGoodsSubscriptionStatus
@@ -158,7 +164,7 @@ import {
 import MescrollBody from '@/components/mescroll/mescroll-body/mescroll-body.vue';
 import MescrollEmpty from '@/components/mescroll/mescroll-empty/mescroll-empty.vue';
 import useMescroll from '@/components/mescroll/hooks/useMescroll.js';
-import { onLoad, onPageScroll, onReachBottom } from '@dcloudio/uni-app';
+import { onLoad, onShow, onPageScroll, onReachBottom } from '@dcloudio/uni-app';
 import { useGoods } from '@/addon/phone_shop/hooks/useGoods'
 import GoodsCategoryFilterPopup from '@/addon/phone_shop/components/goods-filter/GoodsCategoryFilterPopup.vue'
 import GoodsOptionFilterPopup from '@/addon/phone_shop/components/goods-filter/GoodsOptionFilterPopup.vue'
@@ -168,6 +174,10 @@ import PhoneGoodsSaleState from '@/addon/phone_shop/components/PhoneGoodsSaleSta
 import PhoneGoodsCover from '@/addon/phone_shop/components/PhoneGoodsCover.vue'
 import PhoneGoodsWaterfall from '@/addon/phone_shop/components/PhoneGoodsWaterfall.vue'
 import PhoneGoodsWaterfallCard from '@/addon/phone_shop/components/PhoneGoodsWaterfallCard.vue'
+import PhoneGoodsActionButton from '@/addon/phone_shop/components/PhoneGoodsActionButton.vue'
+import addCartPopup from './components/add-cart-popup.vue'
+import { resolveGoodsCardAction } from '@/addon/phone_shop/utils/goods-card'
+import { useGoodsDetailNavigation } from '@/addon/phone_shop/hooks/useGoodsDetailNavigation'
 import ShareDownload from '@/addon/phone_shop/components/share-download/share-download.vue'
 import useMemberStore from '@/stores/member'
 import { useLogin } from '@/hooks/useLogin'
@@ -190,6 +200,27 @@ const menuButtonInfo = ref<any>({})
 const showBack = ref(false)
 const shareDownloadRef = ref<any>(null)
 const forwardItem = ref<any>({})
+const cartRef = ref<any>(null)
+const categoryConfig = ref<any>(null)
+const categoryConfigFailed = ref(false)
+const goodsAction = computed(() => resolveGoodsCardAction(categoryConfig.value))
+const { openGoodsDetail } = useGoodsDetailNavigation()
+let configRequest: Promise<boolean> | null = null
+const loadCategoryConfig = () => {
+    if (configRequest) return configRequest
+    configRequest = getGoodsCategoryConfig().then((res: any) => {
+        if (!res.data?.cart) throw new Error('商品操作配置不完整')
+        categoryConfig.value = res.data
+        categoryConfigFailed.value = false
+        return true
+    }).catch(() => {
+        categoryConfig.value = null
+        categoryConfigFailed.value = true
+        return false
+    }).finally(() => { configRequest = null })
+    return configRequest
+}
+onShow(() => { void loadCategoryConfig() })
 const { requestAuthorization: requestSubscriptionAuthorization, explainAuthorization } = useGoodsSubscriptionNotice()
 
 // #ifdef MP-WEIXIN || MP-BAIDU || MP-TOUTIAO || MP-QQ
@@ -642,8 +673,31 @@ const estimateGoodsCardHeight = (item: Record<string, any>) => {
     return height + 72
 }
 
-const toDetail = (id: string | number) => {
-    redirect({ url: '/addon/phone_shop/pages/goods/detail', param: { goods_id: id }, mode: 'navigateTo' })
+const toDetail = async(id: string | number) => {
+    // 配置未就绪时不绕过登录规则；失败后再次点击可以重试。
+    if ((configRequest || !categoryConfig.value) && !await loadCategoryConfig()) {
+        uni.showToast({ title: '商品配置加载失败，请重试', icon: 'none' })
+        return
+    }
+    openGoodsDetail(id, categoryConfig.value)
+}
+
+const handleGoodsAction = async(item: any) => {
+    if (configRequest && !await configRequest) return
+    const action = goodsAction.value
+    if (!action) return
+    if (action.event === 'download') return forwardGoods(item)
+    if (action.event === 'detail' || (item.goods_type === 'virtual' && item.virtual_receive_type === 'verify')) return toDetail(item.goods_id)
+    if (!ensureLogin()) return
+    if (!item.goodsSku?.sku_id || Number(item.goodsSku.stock) <= 0) {
+        uni.showToast({ title: '商品库存不足，暂时无法加入购物车', icon: 'none' })
+        return
+    }
+    cartRef.value?.open(item.goodsSku.sku_id)
+}
+
+const toCart = () => {
+    if (ensureLogin()) redirect({ url: '/addon/phone_shop/pages/goods/cart' })
 }
 
 const forwardGoods = async(item: any) => {
@@ -660,6 +714,16 @@ onMounted(() => {
 
 <style lang="scss" scoped>
 @import '@/addon/phone_shop/styles/common.scss';
+
+.config-retry {
+    padding: 20rpx;
+    margin: 16rpx 24rpx;
+    border-radius: 12rpx;
+    background: #fff7ed;
+    color: #9a3412;
+    font-size: 24rpx;
+    text-align: center;
+}
 
 .product-warp {
     z-index: 100;
@@ -818,34 +882,18 @@ onMounted(() => {
     min-width: 0;
     overflow: hidden;
     box-sizing: border-box;
-    flex: 1;
+    flex: 1 0 auto;
 }
 
 .goods-row-footer {
     min-width: 0;
     margin-top: auto;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: 12rpx;
 }
 
-.goods-row-forward {
-    min-width: 88rpx;
-    height: 44rpx;
-    padding: 0 18rpx;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-sizing: border-box;
-    border-radius: 24rpx;
-    color: #fff;
-    background: var(--primary-color);
-    font-size: 23rpx;
-    font-weight: 600;
-    line-height: 44rpx;
-    white-space: nowrap;
-    flex-shrink: 0;
-}
 
 </style>

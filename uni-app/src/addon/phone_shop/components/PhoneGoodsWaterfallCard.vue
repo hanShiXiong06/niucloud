@@ -19,9 +19,7 @@
                     </view>
                     <image v-if="priceBadge" class="waterfall-card__price-badge" :src="priceBadge" mode="heightFix" />
                 </view>
-                <view class="waterfall-card__forward" @click.stop="emit('forward')">
-                    <text class="nc-iconfont nc-icon-fenxiangV6xx"></text>
-                </view>
+                <PhoneGoodsActionButton :action="action" @action="emit('action')" />
             </view>
         </view>
     </view>
@@ -34,16 +32,20 @@ import { useGoods } from '@/addon/phone_shop/hooks/useGoods'
 import PhoneGoodsCover from '@/addon/phone_shop/components/PhoneGoodsCover.vue'
 import PhoneGoodsMeta from '@/addon/phone_shop/components/PhoneGoodsMeta.vue'
 import PhoneGoodsSaleState from '@/addon/phone_shop/components/PhoneGoodsSaleState.vue'
+import PhoneGoodsActionButton from '@/addon/phone_shop/components/PhoneGoodsActionButton.vue'
+import type { GoodsCardAction } from '@/addon/phone_shop/utils/goods-card'
 
 const props = withDefaults(defineProps<{
     item?: Record<string, any>
+    action?: GoodsCardAction | null
 }>(), {
-    item: () => ({})
+    item: () => ({}),
+    action: null
 })
 
 const emit = defineEmits<{
     (event: 'click'): void
-    (event: 'forward'): void
+    (event: 'action'): void
 }>()
 
 const diyGoods = useGoods()
@@ -87,6 +89,7 @@ const priceBadge = computed(() => {
     min-width: 0;
     margin-top: 18rpx;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: 10rpx;
@@ -97,7 +100,7 @@ const priceBadge = computed(() => {
     display: flex;
     align-items: baseline;
     overflow: hidden;
-    flex: 1;
+    flex: 1 0 auto;
 }
 
 .waterfall-card__amount {
@@ -128,20 +131,5 @@ const priceBadge = computed(() => {
     flex-shrink: 0;
 }
 
-.waterfall-card__forward {
-    width: 48rpx;
-    height: 48rpx;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    color: #fff;
-    background: var(--primary-color);
-    box-shadow: 0 5rpx 14rpx rgba(var(--primary-color-rgb, 18, 85, 231), .18);
-    flex-shrink: 0;
-}
 
-.waterfall-card__forward .nc-iconfont {
-    font-size: 25rpx;
-}
 </style>

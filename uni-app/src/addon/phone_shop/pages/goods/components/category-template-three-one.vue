@@ -115,8 +115,11 @@
 										<view class="price-font goods-price">
 											<text class="unit">￥</text>
 											<text>{{ parseFloat(goodsPrice(item)).toFixed(2) }}</text>
+											<image v-if="priceType(item) === 'member_price'" class="price-badge" :src="img('addon/phone_shop/VIP.png')" mode="heightFix" />
+											<image v-else-if="priceType(item) === 'newcomer_price'" class="price-badge" :src="img('addon/phone_shop/newcomer.png')" mode="heightFix" />
+											<image v-else-if="priceType(item) === 'discount_price'" class="price-badge" :src="img('addon/phone_shop/discount.png')" mode="heightFix" />
 										</view>
-										<view v-if="config.cart.control" class="cart-action">
+										<view v-if="goodsAction" class="cart-action">
 											<view
 												v-if="item.goodsSku && item.goodsSku.sku_spec_format === '' && cartList['goods_' + item.goods_id] && cartList['goods_' + item.goods_id]['sku_' + item.goodsSku.sku_id] && config.cart.event === 'cart'"
 												class="stepper">
@@ -124,9 +127,7 @@
 												<text class="step-num">{{ cartList['goods_' + item.goods_id]['sku_' + item.goodsSku.sku_id].num }}</text>
 												<text class="iconfont iconjiahao2fill step-icon add" :id="'itemCart' + index" @click.stop="addCartBtn(item, cartList['goods_' + item.goods_id]['sku_' + item.goodsSku.sku_id], 'itemCart' + index)"></text>
 											</view>
-											<view v-else-if="config.cart.event === 'download'" class="download-action" @click.stop="itemCart(item, 'itemCart' + index)">{{ config.cart.text || '转发' }}</view>
-											<view v-else-if="config.cart.event === 'detail' && config.cart.style === 'style-1'" class="detail-action" @click.stop="itemCart(item, 'itemCart' + index)">{{ config.cart.text || '查看' }}</view>
-											<text v-else :id="'itemCart' + index" class="nc-iconfont nc-icon-tianjiaV6xx add-cart" @click.stop="itemCart(item, 'itemCart' + index)"></text>
+											<PhoneGoodsActionButton v-else :id="'itemCart' + index" :action="goodsAction" @action="itemCart(item, 'itemCart' + index)" />
 										</view>
 									</view>
 								</view>
@@ -311,6 +312,9 @@ import { useGoodsDownload } from '@/addon/phone_shop/hooks/useGoodsDownload';
 import { useGoodsForwardAccess } from '@/addon/phone_shop/hooks/useGoodsForwardAccess';
 import DownloadConfigDialog from '@/addon/phone_shop/components/download-config-dialog/download-config-dialog.vue';
 import PhoneGoodsMeta from '@/addon/phone_shop/components/PhoneGoodsMeta.vue'
+import PhoneGoodsActionButton from '@/addon/phone_shop/components/PhoneGoodsActionButton.vue'
+import { resolveGoodsCardAction, goodsPriceBadgeType } from '@/addon/phone_shop/utils/goods-card'
+import { useGoodsDetailNavigation } from '@/addon/phone_shop/hooks/useGoodsDetailNavigation'
 import GoodsPriceRangePicker from '@/addon/phone_shop/components/goods-filter/GoodsPriceRangePicker.vue'
 
 const prop = defineProps({
@@ -325,6 +329,9 @@ const prop = defineProps({
 })
 
 const config = prop.config;
+const goodsAction = computed(() => resolveGoodsCardAction(prop.config));
+const { openGoodsDetail } = useGoodsDetailNavigation();
+const priceType = (item: any) => goodsPriceBadgeType(item, memberStore.token);
 let categoryId: any = prop.categoryId;
 const searchName = ref('');
 const loading = ref(true);
@@ -858,7 +865,7 @@ const resetFilter = () => {
 }
 
 const toGoodsDetail = (goods_id: string) => {
-	redirect({ url: '/addon/phone_shop/pages/goods/detail', param: { goods_id } });
+	return openGoodsDetail(goods_id, prop.config);
 }
 
 const cartRef = ref();
@@ -867,10 +874,11 @@ const animationAddRepeatFlag = ref(false);
 const cartRepeatFlag = ref(false);
 
 const itemCart = (row: any, id: any) => {
-	if (config.cart.event === 'download') return downloadCategoryGoods(row);
+	if (!goodsAction.value) return;
+	if (goodsAction.value.event === 'download') return downloadCategoryGoods(row);
 	if (row.goods_type == 'virtual' && row.virtual_receive_type == 'verify') return toGoodsDetail(row.goodsSku.goods_id);
-	if (config.cart.event !== 'cart') return toGoodsDetail(row.goodsSku.goods_id);
-	if (!userInfo.value) {
+	if (goodsAction.value.event !== 'cart') return toGoodsDetail(row.goods_id);
+	if (!memberStore.token) {
 		useLogin().setLoginBack({ url: '/addon/phone_shop/pages/goods/category' });
 		return false;
 	}
@@ -1803,12 +1811,17 @@ const qcAbnormal = (data: any) => {
 .goods-bottom {
 	margin-top: auto;
 	display: flex;
+	flex-wrap: wrap;
+	gap: 8rpx;
 	align-items: flex-end;
 	justify-content: space-between;
 	min-height: 46rpx;
 }
 
 .goods-price {
+	display: flex;
+	align-items: baseline;
+	white-space: nowrap;
 	color: var(--price-text-color);
 	font-size: 30rpx;
 	font-weight: 600;
@@ -1819,44 +1832,20 @@ const qcAbnormal = (data: any) => {
 	margin-right: 2rpx;
 }
 
+.price-badge {
+	height: 24rpx;
+	max-width: 68rpx;
+	margin-left: 6rpx;
+	flex-shrink: 0;
+}
+
 .cart-action {
-	margin-left: 12rpx;
+	margin-left: auto;
 	min-width: 44rpx;
 	height: 44rpx;
 	display: flex;
 	align-items: center;
 	justify-content: flex-end;
-}
-
-.add-cart {
-	color: var(--primary-color);
-	font-size: 44rpx;
-	line-height: 44rpx;
-}
-
-.download-action {
-	height: 44rpx;
-	line-height: 44rpx;
-	padding: 0 18rpx;
-	border-radius: 24rpx;
-	background-color: var(--primary-color);
-	color: #fff;
-	font-size: 23rpx;
-	font-weight: 600;
-	white-space: nowrap;
-}
-
-.detail-action {
-	height: 44rpx;
-	line-height: 42rpx;
-	padding: 0 18rpx;
-	border: 1rpx solid var(--primary-color);
-	border-radius: 24rpx;
-	color: var(--primary-color);
-	background: #fff;
-	font-size: 23rpx;
-	font-weight: 600;
-	white-space: nowrap;
 }
 
 .stepper {

@@ -58,6 +58,10 @@
                 <el-form-item v-if="formData.search.control" :label="t('searchTitle')" prop="search.title">
                     <el-input v-model.trim="formData.search.title" clearable :placeholder="t('searchTitlePlaceholder')" class="input-width" maxlength="12" show-word-limit />
                 </el-form-item>
+                <el-form-item label="查看商品需登录">
+                    <el-switch v-model="formData.detail_login_required" :active-value="1" :inactive-value="0" />
+                    <span class="text-[12px] text-[#999] ml-[10px]">默认关闭。开启后，分类页和商品列表点击商品先登录，登录后自动进入所选商品。加购、结算与转发仍执行原有登录及权限规则。</span>
+                </el-form-item>
                 <el-form-item v-if="Number(formData.level) === 3" label="成色/质检">
                     <el-switch v-model="formData.show_quality" :active-value="1" :inactive-value="0" />
                     <span class="text-[12px] text-[#999] ml-[10px]">开启后，商品图片左上角显示成色；存在质检异常时右上角同时提醒。</span>
@@ -73,7 +77,7 @@
                             <span class="section-index">03</span>
                             <div>
                                 <h3>商品操作</h3>
-                                <p>决定分类页商品卡片是否显示操作按钮，以及点击后的动作。</p>
+                                <p>分类页与商品列表（单列、双列）共用此配置，统一右侧按钮和点击动作。</p>
                             </div>
                         </div>
                         <div class="action-options">
@@ -177,6 +181,7 @@ interface formDataType {
     }
     show_quality: number
     warehouse_switch: number
+    detail_login_required: number
 }
 const formData = ref<formDataType|any>({})
 const levelOptions = [
@@ -258,7 +263,7 @@ const config = reactive<configType|any>({
 const getCategoryConfigFn = () => {
     loading.value = true
     getCategoryConfig().then(res => {
-        formData.value = res.data
+        formData.value = { ...res.data, detail_login_required: Number(res.data.detail_login_required) === 1 ? 1 : 0 }
         loading.value = false
     }).catch(() => {
         loading.value = false

@@ -33,7 +33,7 @@ const useCartStore = defineStore('cart', {
                 this.totalMoney = 0;
                 return;
             }
-            getCartList({}).then((res: any) => {
+            return getCartList({}).then((res: any) => {
                 let data = res.data;
 
                 // 每次查询清空
@@ -67,7 +67,33 @@ const useCartStore = defineStore('cart', {
                 }
                 this.calculateNum();
                 if (callback && typeof callback == 'function') callback();
-            })
+                return true;
+            }).catch(() => false)
+        },
+        /** 精确设置已有商品数量：服务端成功后才更新本地，失败保留原数量。 */
+        async setQuantity(data: any, quantity: number) {
+            if (!getToken()) throw new Error('请先登录后修改数量');
+            if (!data?.id || !data.goods_id || !data.sku_id || !Number.isSafeInteger(quantity) || quantity < 0) {
+                throw new Error('购物车信息异常，请刷新后重试');
+            }
+            if (this.isRepeat) throw new Error('数量正在更新，请稍候');
+            this.isRepeat = true;
+            try {
+                if (quantity === 0) await deleteCart({ ids: data.id });
+                else await editCart({ id: data.id, goods_id: data.goods_id, sku_id: data.sku_id, num: quantity });
+
+                const goodsKey = 'goods_' + data.goods_id;
+                const skuKey = 'sku_' + data.sku_id;
+                if (this.cartList[goodsKey]?.[skuKey]) {
+                    if (quantity === 0) delete this.cartList[goodsKey][skuKey];
+                    else this.cartList[goodsKey][skuKey].num = quantity;
+                }
+                this.calculateNum();
+                // 刷新价格、库存与总额；即使刷新失败，也不把已确认的数量回滚。
+                if (!await this.getList()) uni.showToast({ title: '数量已保存，购物车刷新失败，请刷新核对', icon: 'none' });
+            } finally {
+                this.isRepeat = false;
+            }
         },
         /**
          * 购物车数量增加
