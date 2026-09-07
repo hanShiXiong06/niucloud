@@ -1,4 +1,4 @@
-// 无网络、无数据库：使用实际 TypeScript 逻辑和 Vue 渲染器验证读取/回填/折叠。
+// 无网络、无数据库：使用实际 TypeScript 逻辑和 Vue 渲染器验证读取/回填/档案抽屉。
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -103,7 +103,7 @@ for (const payload of [payloads.normalizeDevice(row), payloads.buildUpdatePayloa
     equal(payload.summary.battery, 87, '业务使用人工确认值，原文仍是 100')
 }
 
-// 真实 Vue 渲染，确保默认无大段 JSON；展开后文本展示而非 HTML 执行。
+// 真实 Vue 组件配合 Element Plus 边界桩，验证统一抽屉契约及原文的惰性、安全展示。
 function node(type, text = '') { return { type, text, children: [], props: {}, style: {}, parent: null } }
 const renderer = vue.createRenderer({
     createElement: type => node(type), createText: text => node('#text', text), createComment: text => node('#comment', text),
@@ -114,24 +114,72 @@ const renderer = vue.createRenderer({
     remove(n) { if (n.parent) n.parent.children.splice(n.parent.children.indexOf(n), 1) }
 })
 const collect = (n, type) => [...(n.type === type ? [n] : []), ...n.children.flatMap(child => collect(child, type))]
+const textContent = n => n.text + n.children.map(textContent).join('')
 async function main() {
     const container = node('root'), resetKey = vue.ref('one')
     const Component = load('admin/src/addon/hsx_components/components/HsxDataArchive/index.vue').default
-    const app = renderer.createApp({ render: () => vue.h(Component, { data: { version: 1, local: { raw: '<script>unsafe</script>' } }, resetKey: resetKey.value, labels: { local: '设备原始读取' } }) })
-    app.component('el-icon', { render() { return vue.h('span', this.$slots.default?.()) } })
+    const archiveData = vue.ref({ version: 1, local: { raw: '<script>unsafe</script>' } })
+    const beforeView = plain(archiveData.value)
+    let drawerProps, stopped = 0
+    const app = renderer.createApp({ render: () => vue.h(Component, { data: archiveData.value, resetKey: resetKey.value, labels: { local: '设备原始读取' } }) })
+    app.directive('loading', {})
+    app.component('el-button', {
+        inheritAttrs: false,
+        props: ['nativeType'],
+        setup(props, { attrs, slots }) { return () => vue.h('button', { ...attrs, type: props.nativeType || 'button' }, slots.default?.()) }
+    })
+    app.component('el-drawer', {
+        inheritAttrs: false,
+        props: ['modelValue', 'size', 'appendToBody', 'closeOnClickModal', 'closeOnPressEscape', 'showClose', 'destroyOnClose'],
+        setup(props, { attrs, slots }) {
+            return () => {
+                drawerProps = { ...attrs, ...props }
+                return props.modelValue ? vue.h('section', { role: 'dialog' }, [slots.header?.({ titleId: 'archive-title' }), slots.default?.(), slots.footer?.()]) : null
+            }
+        }
+    })
     app.mount(container)
-    equal(collect(container, 'pre').length, 0, '默认折叠，不渲染原文')
-    collect(container, 'button')[0].props.onClick()
-    await vue.nextTick()
-    equal(collect(container, 'pre').length, 1, '展开才渲染原文')
+    equal(collect(container, 'pre').length, 0, '默认只显示按钮，不渲染原文')
+    equal(collect(container, 'section').length, 0, '默认不打开抽屉')
+    equal(collect(container, 'button').length, 1, '不额外显示折叠面板和说明文字')
+    equal(textContent(collect(container, 'button')[0]).trim(), '查看采集档案', '入口文案清晰')
+    equal(collect(container, 'button')[0].props.type, 'button', '嵌入表单时不触发提交')
+    const openArchive = async () => {
+        collect(container, 'button')[0].props.onClick({ stopPropagation() { stopped++ } })
+        await vue.nextTick()
+    }
+    await openArchive()
+    equal(stopped, 1, '查看按钮不触发设备卡片的其他点击动作')
+    equal(collect(container, 'section').length, 1, '点击后打开统一抽屉')
+    equal(collect(container, 'button')[0].props['aria-expanded'], true, '同步入口的展开状态')
+    equal(drawerProps.size, 'min(720px, 100vw)', '抽屉适配窄视口，不撑开页面')
+    equal(drawerProps.appendToBody, true, '嵌套详情/质检弹窗时挂到 body，避免被父级裁切')
+    equal([drawerProps.closeOnClickModal, drawerProps.closeOnPressEscape, drawerProps.showClose, drawerProps.destroyOnClose], [true, true, true, true], '只读抽屉支持遮罩、ESC 和关闭，关闭销毁内容')
+    equal(collect(container, 'pre').length, 1, '打开后才渲染原文')
+    equal(textContent(collect(container, 'summary')[0]), '设备原始读取', '保留分组查看')
     equal(collect(container, 'pre')[0].text.includes('<script>unsafe</script>'), true, '原文作为文字')
     equal(collect(container, 'script').length, 0, '原文不会生成脚本节点')
+    collect(container, 'button').find(button => textContent(button).trim() === '关闭').props.onClick()
+    await vue.nextTick()
+    equal(collect(container, 'section').length, 0, '关闭按钮关闭抽屉')
+    equal(collect(container, 'pre').length, 0, '关闭后不保留长原文节点')
+    await openArchive()
+    drawerProps['onUpdate:modelValue'](false); await vue.nextTick()
+    equal(collect(container, 'section').length, 0, '透传抽屉自身的关闭事件')
+    await openArchive()
     resetKey.value = 'two'; await vue.nextTick()
-    equal(collect(container, 'pre').length, 0, '切换设备重新折叠')
+    equal(collect(container, 'pre').length, 0, '切换设备自动关闭，避免看错档案')
+    equal(archiveData.value, beforeView, '查看与关闭不修改已填写的数据')
+    await openArchive()
+    archiveData.value = { version: 1 }; await vue.nextTick()
+    equal(collect(container, 'button').length, 0, '没有档案时不留无效入口或占位')
+    equal(collect(container, 'section').length, 0, '清空数据同时移除已打开的抽屉')
+    archiveData.value = beforeView; await vue.nextTick()
+    equal(collect(container, 'section').length, 0, '新档案出现后不会自动打开')
     app.unmount()
 
     const sourceFiles = [
-        ...['deviceReadings.ts', 'types.ts', 'useLocalDevice.ts', 'deviceUtil.ts', 'DeviceEntryList.vue', 'WarrantyQueryInput.vue', 'CheckSummaryFields.vue', 'CheckSummaryDialog.vue'].map(file => `${base}${file}`),
+        ...['deviceReadings.ts', 'types.ts', 'useLocalDevice.ts', 'deviceUtil.ts', 'DeviceEntryCard.vue', 'DeviceEntryList.vue', 'WarrantyQueryInput.vue', 'CheckSummaryFields.vue', 'CheckSummaryDialog.vue'].map(file => `${base}${file}`),
         ...['CheckDeviceDialog.vue', 'DeviceConfirmDialog.vue', 'DeviceDetailDialog.vue', 'composables/useCheckMeta.ts'].map(file => `admin/src/addon/hsx_recycle/views/recycle_order/components/${file}`),
         'admin/src/addon/hsx_components/components/HsxDataArchive/index.vue', 'admin/src/addon/hsx_components/core.ts', 'admin/src/addon/hsx_components/index.ts',
         'admin/src/addon/hsx_erp/views/erp/stock/list.vue'

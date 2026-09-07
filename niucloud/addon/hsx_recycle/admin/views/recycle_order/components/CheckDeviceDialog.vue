@@ -43,6 +43,8 @@
           />
           <el-tag v-if="templateResolveTag" size="small" :type="templateResolveTag.type" effect="plain">{{ templateResolveTag.text }}</el-tag>
           <el-tag size="small" :type="checkedCount > 0 ? 'primary' : 'info'" effect="plain">已填 {{ checkedCount }} 项</el-tag>
+          <HsxDataArchive :data="deviceForm.info?.device_readings || {}" :reset-key="deviceData.id"
+            :labels="{ local: '本地读取原文与提取值', model_match: '型号匹配记录', external_queries: '外部查询记录（如保修）' }" />
           <template v-if="!isEditingDeviceInfo">
             <el-button size="small" :icon="Edit" @click="startEditDeviceInfo">编辑设备</el-button>
           </template>
@@ -196,8 +198,6 @@
           </aside>
         </div>
       </el-form>
-      <HsxDataArchive :data="deviceForm.info?.device_readings || {}" :reset-key="deviceData.id"
-        :labels="{ local: '本地读取原文与提取值', model_match: '型号匹配记录', external_queries: '外部查询记录（如保修）' }" />
     </div>
 
     <template #footer>

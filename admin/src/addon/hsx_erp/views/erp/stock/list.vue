@@ -572,13 +572,15 @@
                             <div class="text-lg font-semibold">{{ detail.data.model || '-' }}</div>
                             <div class="mt-1 text-sm text-gray-500">{{ assetSubTitle(detail.data) }}</div>
                         </div>
-                        <div class="flex flex-wrap gap-1">
+                        <div class="flex flex-wrap items-center gap-1">
                             <el-tag :type="assetStatusMeta(detail.data.status).type">{{ assetStatusMeta(detail.data.status).label }}</el-tag>
                             <template v-if="detail.data.status === 'in_stock'">
                                 <el-tag :type="refurbishMeta(detail.data.refurbish_status).type" effect="plain">{{ refurbishMeta(detail.data.refurbish_status).label }}</el-tag>
                                 <el-tag :type="targetMeta(detail.data.sale_target).type" effect="plain">{{ targetMeta(detail.data.sale_target).label }}</el-tag>
                                 <el-tag v-if="detail.data.sale_target === 'mall'" :type="listingMeta(detail.data.listing_status).type" effect="plain">{{ listingMeta(detail.data.listing_status).label }}</el-tag>
                             </template>
+                            <HsxDataArchive :data="detail.data.device_readings || {}" :reset-key="detail.data.id"
+                                :labels="{ local: '本地读取原文与提取值', model_match: '型号匹配记录', external_queries: '外部查询记录（如保修）' }" />
                         </div>
                     </div>
 
@@ -609,8 +611,6 @@
                             <ErpStockCostBreakdown :summary="detail.data.cost_summary" />
                     </HsxFold>
                     <ErpInspectionReport :report="detail.data.inspection" />
-                    <HsxDataArchive :data="detail.data.device_readings || {}" :reset-key="detail.data.id"
-                        :labels="{ local: '本地读取原文与提取值', model_match: '型号匹配记录', external_queries: '外部查询记录（如保修）' }" />
 
                     <el-collapse v-model="detailActivePanels" class="mt-6">
                         <el-collapse-item v-if="canViewSupplier || canViewFinance" name="purchase" title="采购批次">

@@ -59,7 +59,7 @@
             </div>
         </div>
 
-        <div v-if="device.category_id || device.summary_loading || (device.summary_fields && device.summary_fields.length)" class="device-card__summary">
+        <div v-if="device.category_id || device.summary_loading || (device.summary_fields && device.summary_fields.length) || $slots['summary-actions']" class="device-card__summary">
             <div v-if="device.summary_loading" class="summary-muted">
                 <el-icon class="is-loading"><Loading /></el-icon>
                 <span>加载质检模板...</span>
@@ -73,6 +73,7 @@
                     <span v-if="!chips.length" class="summary-empty">质检摘要未录入</span>
                 </div>
                 <div class="summary-actions">
+                    <slot name="summary-actions" />
                     <el-tooltip content="切换该型号使用的质检模板" placement="top">
                         <el-button link type="primary" size="small" :icon="Setting" @click="emit('configure-template')">模板</el-button>
                     </el-tooltip>

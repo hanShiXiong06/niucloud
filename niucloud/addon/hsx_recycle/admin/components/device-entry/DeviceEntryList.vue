@@ -93,9 +93,11 @@
                             </div>
                         </div>
                     </template>
+                    <template v-if="row.device_readings" #summary-actions>
+                        <HsxDataArchive :data="row.device_readings" :reset-key="row.id || row._k"
+                            :labels="{ local: '本地读取原文与提取值', model_match: '型号匹配记录', external_queries: '外部查询记录（如保修）' }" />
+                    </template>
                 </DeviceEntryCard>
-                <HsxDataArchive v-if="row.device_readings" :data="row.device_readings" :reset-key="row.id || row._k"
-                    :labels="{ local: '本地读取原文与提取值', model_match: '型号匹配记录', external_queries: '外部查询记录（如保修）' }" />
             </div>
         </div>
 
