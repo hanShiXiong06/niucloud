@@ -1,21 +1,61 @@
 <template>
-    <div class="main-container">
+    <HsxPage padding="none" class="main-container">
         <el-card class="!border-none" shadow="never">
-            <div class="flex items-start justify-between gap-4">
-                <div>
-                    <div class="text-page-title">应付款</div>
-                    <div class="mt-1 text-sm text-gray-500">统一处理采购、整备、销售退货与售后补差等支出；按业务来源和设备逐笔核对。</div>
-                </div>
-                <div class="flex gap-2">
-                    <el-button :icon="Tickets" @click="openSettlement">结算明细</el-button>
-                    <el-button :icon="Tickets" @click="openLedger">账目流水</el-button>
-                    <el-button :icon="Refresh" :loading="table.loading" @click="loadList">刷新</el-button>
-                </div>
-            </div>
+            <HsxTitle size="page" collapsible-subtitle class="mb-4">
+                <template #default>应付款</template>
+                <template #subtitle>统一处理采购、整备、销售退货与售后补差等支出；按业务来源和设备逐笔核对。</template>
+                <template #extra><div class="flex gap-2 flex-wrap">
+                        <el-button :icon="Tickets" @click="openSettlement">结算明细</el-button>
+                        <el-button :icon="Tickets" @click="openLedger">账目流水</el-button>
+                        <el-button :icon="Refresh" :loading="table.loading" @click="loadList">刷新</el-button>
+                    </div></template>
+            </HsxTitle>
+
+            <HsxSearchPanel :summary="searchConditionCount ? '已填写 ' + searchConditionCount + ' 项条件，点击查询生效' : ''">
+                <template #extra>
+                    <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
+                    <el-button @click="handleReset">重置</el-button>
+                </template>
+                <el-form :inline="true" class="mt-1" @submit.prevent>
+                    <el-form-item label="关键词">
+                        <el-input v-model.trim="search.keyword" clearable class="!w-[300px]" placeholder="往来主体 / IMEI / 型号 / 来源单" @keyup.enter="handleSearch" />
+                    </el-form-item>
+                    <el-form-item label="时间">
+                        <el-date-picker v-model="dateRange" type="daterange" value-format="X" start-placeholder="开始日期" end-placeholder="结束日期" />
+                    </el-form-item>
+
+                </el-form>
+                <HsxFold v-model="advancedVisible" title="更多筛选" summary="往来主体、业务来源与结算条件；折叠不清空条件">
+                    <el-form :inline="true" class="" @submit.prevent>
+                        <el-form-item label="往来主体">
+                            <ErpPartySelect v-model="search.party_id" v-model:party-name="search.party_name" party-type="all" :allow-create="false" clearable class="!w-[220px]" placeholder="选择供货商、客户或服务商" />
+                        </el-form-item>
+                        <el-form-item label="来源单">
+                            <el-input v-model.trim="search.source_no" clearable class="!w-[190px]" placeholder="采购单 / 应付单" @keyup.enter="handleSearch" />
+                        </el-form-item>
+                        <el-form-item label="手机号">
+                            <el-input v-model.trim="search.contact_mobile" clearable class="!w-[170px]" placeholder="联系人手机号" @keyup.enter="handleSearch" />
+                        </el-form-item>
+                        <el-form-item label="支出类型">
+                            <el-select v-model="search.finance_type_key" clearable filterable class="!w-[170px]" placeholder="全部支出类型">
+                                <el-option v-for="item in financeTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="业务渠道">
+                            <el-select v-model="search.channel_code" clearable filterable class="!w-[170px]" placeholder="全部渠道">
+                                <el-option v-for="item in channelOptions" :key="item.value" :label="item.label" :value="item.value" />
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item>
+                            <el-checkbox v-model="search.can_offset" true-label="1" false-label="">只看可折账</el-checkbox>
+                        </el-form-item>
+                    </el-form>
+                </HsxFold>
+            </HsxSearchPanel>
 
             <ErpRoleFocus :items="payableRoleFocus" />
 
-            <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-4">
+            <div class="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
                 <div class="summary-tile">
                     <div class="summary-label">应付批次</div>
                     <div class="summary-value">{{ summary.count }}</div>
@@ -40,44 +80,6 @@
                 <el-tab-pane label="部分结算" name="partial" />
                 <el-tab-pane label="已结清" name="settled" />
             </el-tabs>
-
-            <el-form :inline="true" class="mt-1" @submit.prevent>
-                <el-form-item label="关键词">
-                    <el-input v-model.trim="search.keyword" clearable class="!w-[300px]" placeholder="往来主体 / IMEI / 型号 / 来源单" @keyup.enter="handleSearch" />
-                </el-form-item>
-                <el-form-item label="时间">
-                    <el-date-picker v-model="dateRange" type="daterange" value-format="X" start-placeholder="开始日期" end-placeholder="结束日期" />
-                </el-form-item>
-                <el-form-item>
-                    <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
-                    <el-button :icon="Filter" @click="advancedVisible = !advancedVisible">{{ advancedVisible ? '收起条件' : '更多条件' }}</el-button>
-                    <el-button @click="handleReset">重置</el-button>
-                </el-form-item>
-            </el-form>
-            <el-form v-show="advancedVisible" :inline="true" class="rounded bg-gray-50 px-3 pt-3" @submit.prevent>
-                <el-form-item label="往来主体">
-                    <ErpPartySelect v-model="search.party_id" v-model:party-name="search.party_name" party-type="all" :allow-create="false" clearable class="!w-[220px]" placeholder="选择供货商、客户或服务商" />
-                </el-form-item>
-                <el-form-item label="来源单">
-                    <el-input v-model.trim="search.source_no" clearable class="!w-[190px]" placeholder="采购单 / 应付单" @keyup.enter="handleSearch" />
-                </el-form-item>
-                <el-form-item label="手机号">
-                    <el-input v-model.trim="search.contact_mobile" clearable class="!w-[170px]" placeholder="联系人手机号" @keyup.enter="handleSearch" />
-                </el-form-item>
-                <el-form-item label="支出类型">
-                    <el-select v-model="search.finance_type_key" clearable filterable class="!w-[170px]" placeholder="全部支出类型">
-                        <el-option v-for="item in financeTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
-                    </el-select>
-                </el-form-item>
-                <el-form-item label="业务渠道">
-                    <el-select v-model="search.channel_code" clearable filterable class="!w-[170px]" placeholder="全部渠道">
-                        <el-option v-for="item in channelOptions" :key="item.value" :label="item.label" :value="item.value" />
-                    </el-select>
-                </el-form-item>
-                <el-form-item>
-                    <el-checkbox v-model="search.can_offset" true-label="1" false-label="">只看可折账</el-checkbox>
-                </el-form-item>
-            </el-form>
 
             <el-table :data="table.data" v-loading="table.loading" size="large">
                 <el-table-column label="往来主体" min-width="210">
@@ -140,7 +142,7 @@
             </div>
         </el-card>
 
-        <el-dialog v-model="pay.visible" :title="isNonDevicePay ? '财务确认经营付款' : '财务确认付款'" width="1080px">
+        <HsxDialog :confirm-loading="pay.saving" v-model="pay.visible" :title="isNonDevicePay ? '财务确认经营付款' : '财务确认付款'" width="1080px" :destroy-on-close="false">
             <div v-if="pay.row" class="mb-4 rounded bg-gray-50 px-4 py-3 text-sm text-gray-600">
                 <div>{{ partyRoleLabel(pay.row, '付款对象') }}：<span class="font-medium text-gray-900">{{ pay.row.party_name }}</span></div>
                 <ErpFinanceSourceMeta :row="pay.row" class="mt-3" default-direction="expense" />
@@ -245,17 +247,17 @@
                 <el-form-item label="付款凭证"><ErpFinanceVoucherUpload v-model="pay.form.voucher_urls" /></el-form-item>
             </el-form>
             <template #footer>
-                <el-button @click="pay.visible = false">取消</el-button>
-                <el-button type="primary" :loading="pay.saving" :disabled="!canSubmitPay" @click="submitPay">确认付款并记账</el-button>
+                <el-button :disabled="pay.saving" @click="pay.visible = false">取消</el-button>
+                <el-button type="primary" :loading="pay.saving" :disabled="(!canSubmitPay) || (pay.saving)" @click="submitPay">确认付款并记账</el-button>
             </template>
-        </el-dialog>
+        </HsxDialog>
 
-        <el-dialog v-model="offset.visible" title="应收应付折账" width="920px">
+        <HsxDialog :confirm-loading="offset.saving" v-model="offset.visible" title="应收应付折账" width="920px" :destroy-on-close="false">
             <div v-if="offset.row" class="mb-4 rounded bg-amber-50 px-4 py-3 text-sm text-gray-600">
                 <div>往来单位：<span class="font-medium text-gray-900">{{ offset.row.party_name }}</span></div>
                 <div class="mt-1 text-xs text-gray-500">折账就是把“我要付给他的钱”和“他要付给我的钱”互相抵扣，不产生真实收付款。</div>
             </div>
-            <div class="mb-4 grid grid-cols-1 gap-3 md:grid-cols-4">
+            <div class="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
                 <div class="rounded bg-gray-50 px-3 py-2">
                     <div class="text-xs text-gray-500">我要付给他</div>
                     <div class="mt-1 font-medium text-red-600">{{ money(offsetPayableChecked) }}</div>
@@ -339,12 +341,12 @@
                 <el-form-item v-if="offset.form.settle_diff" label="差额凭证"><ErpFinanceVoucherUpload v-model="offset.form.voucher_urls" /></el-form-item>
             </el-form>
             <template #footer>
-                <el-button @click="offset.visible = false">取消</el-button>
-                <el-button type="warning" :loading="offset.saving" :disabled="offsetMax <= 0" @click="submitOffset">确认抵扣折账</el-button>
+                <el-button :disabled="offset.saving" @click="offset.visible = false">取消</el-button>
+                <el-button type="warning" :loading="offset.saving" :disabled="(offsetMax <= 0) || (offset.saving)" @click="submitOffset">确认抵扣折账</el-button>
             </template>
-        </el-dialog>
+        </HsxDialog>
 
-        <el-drawer v-model="items.visible" :title="`${financeTypeLabel(items.row, '应付款')} · 设备明细`" size="86%">
+        <HsxDrawer v-model="items.visible" :title="`${financeTypeLabel(items.row, '应付款')} · 设备明细`" size="86%" :destroy-on-close="false">
             <div v-if="items.row" class="mb-4 rounded bg-gray-50 px-4 py-3 text-sm text-gray-600">
                 <div>{{ partyRoleLabel(items.row, '付款对象') }}：<span class="font-medium text-gray-900">{{ items.row.party_name || '-' }}</span></div>
                 <ErpFinanceSourceMeta :row="items.row" class="mt-3" default-direction="expense" />
@@ -434,9 +436,9 @@
                     </template>
                 </el-table-column>
             </el-table>
-        </el-drawer>
+        </HsxDrawer>
 
-        <el-drawer v-model="ledger.visible" title="账目流水" size="72%">
+        <HsxDrawer v-model="ledger.visible" title="账目流水" size="72%" :destroy-on-close="false">
             <div class="ledger-intro">
                 <div>
                     <b>每笔业务怎样影响账面</b>
@@ -490,9 +492,9 @@
                     @current-change="loadLedger"
                 />
             </div>
-        </el-drawer>
+        </HsxDrawer>
 
-        <el-drawer v-model="settle.visible" title="结算记录" size="72%">
+        <HsxDrawer v-model="settle.visible" title="结算记录" size="72%" :destroy-on-close="false">
             <div class="settlement-intro">
                 <div><b>每笔钱怎么结的</b><span>先看往来单位、金额和结算方式；设备、账款单号、资金流水和凭证按需展开。</span></div>
                 <span>共 {{ settle.total }} 笔</span>
@@ -520,16 +522,17 @@
                     @current-change="loadSettlement"
                 />
             </div>
-        </el-drawer>
-    </div>
+        </HsxDrawer>
+    </HsxPage>
 </template>
 
 <script setup lang="ts">
+import { HsxTitle, HsxPage, HsxSearchPanel, HsxDialog, HsxDrawer, useFeedback, HsxFold } from '@/addon/hsx_components/core'
 import { erpNamedLabel, erpSerialText } from '@/addon/hsx_erp/utils/display'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Filter, Refresh, Search, Tickets } from '@element-plus/icons-vue'
+import { ElMessageBox } from 'element-plus'
+import { Refresh, Search, Tickets } from '@element-plus/icons-vue'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import { getErpFinanceCategories, getErpSaleChannelOptions } from '@/addon/hsx_erp/api/config'
 import { confirmErpOffset, confirmErpPayableItemsPayment, getErpAccountLedger, getErpPayableList, getErpPayablePartyItems, getErpReceivableItems, getErpReceivableList, getErpSettlementList } from '@/addon/hsx_erp/api/erp'
@@ -543,6 +546,7 @@ import ErpCopyText from '@/addon/hsx_erp/components/ErpCopyText.vue'
 import ErpPartySelect from '@/addon/hsx_erp/components/ErpPartySelect.vue'
 import ErpOverflowText from '@/addon/hsx_erp/components/ErpOverflowText.vue'
 import { img } from '@/utils/common'
+const hsxFeedback = useFeedback()
 
 const route = useRoute()
 
@@ -557,6 +561,7 @@ const activeStatus = ref(['', 'pending', 'partial', 'settled'].includes(routeSta
 const search = reactive({ keyword: '', party_id: null as number | null, party_name: '', source_no: String(route.query.source_no || ''), contact_mobile: '', finance_type_key: '', business_source_key: '', channel_code: '', can_offset: '' })
 const advancedVisible = ref(false)
 const dateRange = ref<any[]>([])
+const searchConditionCount = computed(() => Object.entries(search).filter(([key, value]) => key !== 'party_name' && value !== '' && value !== null && value !== undefined).length + (dateRange.value?.length ? 1 : 0))
 const table = reactive({ loading: false, data: [] as any[], page: 1, limit: 15, total: 0 })
 const accounts = ref<any[]>([])
 const registeredFinanceCategories = ref<any[]>([])
@@ -726,7 +731,7 @@ async function openPay(row: any) {
                 return { ...item, checked: payableRemain > 0, pay_amount: payableRemain > 0 ? payableRemain : 0 }
             })
         if (!pay.items.length && remain(row) > 0) {
-            ElMessage.warning(isNonDevicePay.value ? '当前经营应付明细已变化，请刷新后重试' : '当前应付缺少设备级账目，请用新采购开单数据验证')
+            hsxFeedback.warning(isNonDevicePay.value ? '当前经营应付明细已变化，请刷新后重试' : '当前应付缺少设备级账目，请用新采购开单数据验证')
         }
     } finally {
         pay.loading = false
@@ -738,10 +743,10 @@ async function submitPay() {
     const selected = pay.items
         .filter((row: any) => row.checked && Number(row.pay_amount || 0) > 0)
         .map((row: any) => ({ payable_id: Number(row.payable_id || 0), amount: Number(row.pay_amount || 0) }))
-    if (!selected.length) return ElMessage.warning(isNonDevicePay.value ? '请选择要付款的费用明细' : '请选择要付款的设备')
-    if (paySelectedTotal.value <= 0) return ElMessage.warning('请填写付款金额')
-    if (!pay.form.capital_account_id) return ElMessage.warning('请选择付款账户')
-    if (pay.items.some((row: any) => row.checked && Number(row.pay_amount || 0) > Number(row.allocated_remain || 0))) return ElMessage.warning('本次付款不能大于设备剩余应付')
+    if (!selected.length) return hsxFeedback.warning(isNonDevicePay.value ? '请选择要付款的费用明细' : '请选择要付款的设备')
+    if (paySelectedTotal.value <= 0) return hsxFeedback.warning('请填写付款金额')
+    if (!pay.form.capital_account_id) return hsxFeedback.warning('请选择付款账户')
+    if (pay.items.some((row: any) => row.checked && Number(row.pay_amount || 0) > Number(row.allocated_remain || 0))) return hsxFeedback.warning('本次付款不能大于设备剩余应付')
     const payAccount = accounts.value.find((item: any) => Number(item.id) === Number(pay.form.capital_account_id))
     const payConfirmed = await ElMessageBox.confirm(
         `确认向「${pay.row.party_name || '该付款对象'}」付款 ${money(paySelectedTotal.value)}，付款账户「${payAccount?.account_name || '所选账户'}」，核销 ${selected.length} ${isNonDevicePay.value ? '笔经营支出' : '台设备应付'}。确认后将写入资金流水，不能直接删除。`,
@@ -752,7 +757,7 @@ async function submitPay() {
     pay.saving = true
     try {
         await confirmErpPayableItemsPayment(pay.row.party_id, { ...pay.form, items: selected })
-        ElMessage.success('付款已确认')
+        hsxFeedback.success('付款已确认')
         pay.visible = false
         await loadList()
         if (items.visible) await loadItems()
@@ -813,7 +818,7 @@ async function openOffset(row: any) {
             .filter((it: any) => it.id > 0 && it.remain > 0)
         await fillOffsetReceivableDevices(offset.receivables)
         if (!offset.payables.length || !offset.receivables.length) {
-            ElMessage.warning('该往来单位需同时存在剩余应付和剩余应收才能折账')
+            hsxFeedback.warning('该往来单位需同时存在剩余应付和剩余应收才能折账')
         }
         syncOffsetAmount()
     } finally {
@@ -851,15 +856,15 @@ async function submitOffset() {
     if (!offset.row) return
     const payableIds = offset.payables.filter((r: any) => r.checked).map((r: any) => r.payable_id)
     const receivableIds = offset.receivables.filter((r: any) => r.checked).map((r: any) => r.id)
-    if (!payableIds.length) return ElMessage.warning('请勾选要抵扣的应付')
-    if (!receivableIds.length) return ElMessage.warning('请勾选要抵扣的应收')
+    if (!payableIds.length) return hsxFeedback.warning('请勾选要抵扣的应付')
+    if (!receivableIds.length) return hsxFeedback.warning('请勾选要抵扣的应收')
     const amount = Number(offset.form.amount || 0)
-    if (amount <= 0) return ElMessage.warning('请填写折账金额')
-    if (amount > offsetMax.value + 0.001) return ElMessage.warning('折账金额不能大于可折金额')
+    if (amount <= 0) return hsxFeedback.warning('请填写折账金额')
+    if (amount > offsetMax.value + 0.001) return hsxFeedback.warning('折账金额不能大于可折金额')
     if (offset.form.settle_diff) {
-        if (amount < offsetMax.value - 0.001) return ElMessage.warning('部分抵扣后双方仍有余额，不能本次结清差额')
-        if (offsetDiffAmount.value <= 0) return ElMessage.warning('当前没有需要结清的差额')
-        if (!offset.form.capital_account_id) return ElMessage.warning('请选择差额收付款账户')
+        if (amount < offsetMax.value - 0.001) return hsxFeedback.warning('部分抵扣后双方仍有余额，不能本次结清差额')
+        if (offsetDiffAmount.value <= 0) return hsxFeedback.warning('当前没有需要结清的差额')
+        if (!offset.form.capital_account_id) return hsxFeedback.warning('请选择差额收付款账户')
     }
     const offsetConfirmed = await ElMessageBox.confirm(
         `确认对「${offset.row.party_name || '该往来主体'}」执行应付应收折账 ${money(amount)}。该操作会同时核销双方账目${offset.form.settle_diff ? `，并结清差额 ${money(offsetDiffAmount.value)}` : ''}；确认后不能直接删除流水。`,
@@ -879,7 +884,7 @@ async function submitOffset() {
         })
         const recRemainAfter = Math.max(0, offsetReceivableChecked.value - amount)
         const payRemainAfter = Math.max(0, offsetPayableChecked.value - amount)
-        ElMessage.success(`已折账 ¥${amount.toFixed(2)}；勾选应收剩余 ¥${recRemainAfter.toFixed(2)}、应付剩余 ¥${payRemainAfter.toFixed(2)}`)
+        hsxFeedback.success(`已折账 ¥${amount.toFixed(2)}；勾选应收剩余 ¥${recRemainAfter.toFixed(2)}、应付剩余 ¥${payRemainAfter.toFixed(2)}`)
         offset.visible = false
         await loadList()
         if (items.visible) await loadItems()

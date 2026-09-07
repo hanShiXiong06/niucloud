@@ -1,7 +1,7 @@
 <template>
-  <div class="hsx-premium" v-bind="$attrs">
+  <HsxPage padding="none" class="hsx-premium" v-bind="$attrs">
     <slot />
-  </div>
+  </HsxPage>
 </template>
 
 <script lang="ts">
@@ -21,7 +21,9 @@
 export default { inheritAttrs: false }
 </script>
 
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import { HsxPage } from '@/addon/hsx_components/core'
+</script>
 
 <style lang="scss">
 /* 仅此一处加载主题样式：Vue 会对组件样式去重，无论多少处使用都只注入一次 */

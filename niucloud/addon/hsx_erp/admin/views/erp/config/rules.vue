@@ -1,16 +1,14 @@
 <template>
-    <div class="main-container">
+    <HsxPage padding="none" class="main-container">
         <el-card class="!border-none" shadow="never">
-            <div class="config-page-header">
-                <div>
-                    <div class="text-page-title">业务规则</div>
-                    <div class="mt-1 text-sm text-gray-500">按业务场景管理 ERP 运行方式。未开启的能力不会影响日常开单与库存操作。</div>
-                </div>
-                <div class="flex gap-2">
-                    <el-button :loading="loading" @click="loadConfig">刷新</el-button>
-                    <el-button type="primary" :loading="saving" @click="submit">保存规则</el-button>
-                </div>
-            </div>
+            <HsxTitle size="page" collapsible-subtitle class="mb-4">
+                <template #default>业务规则</template>
+                <template #subtitle>按业务场景管理 ERP 运行方式。未开启的能力不会影响日常开单与库存操作。</template>
+                <template #extra><div class="flex gap-2 flex-wrap">
+                        <el-button :loading="loading" @click="loadConfig">刷新</el-button>
+                        <el-button type="primary" :loading="saving" @click="submit">保存规则</el-button>
+                    </div></template>
+            </HsxTitle>
 
             <div class="config-workspace">
                 <nav class="config-nav" aria-label="业务规则分类">
@@ -144,7 +142,7 @@
 
                 <section v-show="activeNav === 'channel'" class="rule-section section-wide">
                     <div class="section-title">自有商城渠道</div>
-                    <el-alert class="mb-4" type="info" :closable="false" show-icon title="ERP 始终是主数据；商城只能消费 ERP 数据或维护自己的数据映射，不能反向修改 ERP 分类和规格。" />
+                    <HsxNotice default-expanded class="mb-4" type="info" :closable="false" show-icon title="ERP 始终是主数据；商城只能消费 ERP 数据或维护自己的数据映射，不能反向修改 ERP 分类和规格。" />
                     <el-form class="rule-form" label-width="160px">
                         <el-form-item label="启用商城联动">
                             <el-switch v-model="form.marketplace.channels.phone_shop.enabled" :active-value="1" :inactive-value="0" />
@@ -183,7 +181,7 @@
 
                 <section v-show="activeNav === 'team'" class="rule-section section-wide">
                     <div class="section-title">自动任务默认负责人</div>
-                    <el-alert class="mb-4" type="info" :closable="false" show-icon title="只需设置一次。应收应付或设备进入拍照、商城定价、资料上架环节时，系统自动写入责任人并通知本人。" />
+                    <HsxNotice default-expanded class="mb-4" type="info" :closable="false" show-icon title="只需设置一次。应收应付或设备进入拍照、商城定价、资料上架环节时，系统自动写入责任人并通知本人。" />
                     <el-form class="rule-form" label-width="160px">
                         <el-form-item v-for="stage in taskStages" :key="stage.stage_key" :label="stage.name">
                             <div class="flex items-center gap-3">
@@ -223,7 +221,7 @@
 
                 <section v-show="activeNav === 'goods'" class="rule-section">
                     <div class="section-title">设备命名规则</div>
-                    <el-alert
+                    <HsxNotice default-expanded
                         class="mb-4"
                         type="info"
                         :closable="false"
@@ -344,7 +342,7 @@
 
                 <section v-show="activeNav === 'goods'" class="rule-section">
                     <div class="section-title">库存周转预警</div>
-                    <el-alert class="mb-4" type="info" :closable="false" show-icon title="库龄按设备实际入库时间计算；阈值供库存中心、移动端和经营工作台统一使用。" />
+                    <HsxNotice default-expanded class="mb-4" type="info" :closable="false" show-icon title="库龄按设备实际入库时间计算；阈值供库存中心、移动端和经营工作台统一使用。" />
                     <el-form class="rule-form" label-width="160px">
                         <el-form-item label="关注起始天数">
                             <el-input-number v-model="form.turnover.attention_days" :min="1" :max="365" :precision="0" />
@@ -370,13 +368,16 @@
                 </div>
             </div>
         </el-card>
-    </div>
+    </HsxPage>
 </template>
 
 <script setup lang="ts">
+import { HsxTitle, HsxPage, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+
 import { getErpConfig, saveErpConfig, getErpTaskAssignmentSettings, saveErpTaskAssignmentSettings } from '@/addon/hsx_erp/api/config'
+const hsxFeedback = useFeedback()
+
 
 const loading = ref(false)
 const saving = ref(false)
@@ -500,7 +501,7 @@ async function submit() {
         Object.assign(form.marketplace, res?.data?.marketplace || {})
         Object.assign(form.turnover, res?.data?.turnover || {})
         Object.assign(form.consignment, res?.data?.consignment || {})
-        ElMessage.success('业务规则已保存')
+        hsxFeedback.success('业务规则已保存')
     } finally {
         saving.value = false
     }

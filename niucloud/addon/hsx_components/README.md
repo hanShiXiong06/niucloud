@@ -25,9 +25,11 @@ import { HsxDialog, ProForm, ProTable, useCrudPage } from '@/addon/hsx_component
 - `HsxImport`、`HsxExport`，以及统一明暗主题变量
 - `HsxChart`、`HsxChartCard`、`HsxStatCard`、`HsxBadge`、`HsxNoticeBubble`、白名单 `HsxBlockRenderer`
 - `HsxText`、`HsxTitle`、`HsxGrid`、`HsxStack`、`HsxList`、`HsxOverflow`、`HsxProgress`、`HsxMotion`
+- `HsxPage`、`HsxSearchPanel`、`HsxNotice`、`HsxFold`：页面骨架、可记忆排列的搜索区、分级提示与保留状态的折叠区
 - `HsxEntityPicker`、`HsxProductCard`、`HsxProductList`、`HsxDetail`、`HsxActionBar` 通用业务组合层
 - `ProForm`、`ProTable`、`ProDialogForm`、`QueryForm`
 - `useCrudPage`、`useTablePage`、`useForm`、`useDialog`、`useLoading`、`useChart`、`useFeedback`
+- `useSearchLayout`：搜索表单左右/上下排列的浏览器持久偏好
 - `v-hsx-permission`、`v-hsx-copy`、`v-hsx-debounce`
 - `createHsxCache`：命名空间、TTL、版本失效与并发请求合并
 
@@ -53,6 +55,7 @@ import { HsxDialog, ProForm, ProTable, useCrudPage } from '@/addon/hsx_component
 - Template/TSX/低代码边界：`docs/TSX_GUIDE.md`
 - 表格父子级、主从表及业务边界：`docs/TABLE_GUIDE.md`
 - 第三方开源许可证：`THIRD_PARTY_NOTICES.md`
+- [回收与 ERP 交互统一及测试报告](docs/回收与ERP交互统一_2026-09-07.md)：适配范围、组件调用方式、数据库回归、部署边界与未覆盖项
 
 后台文档页面会读取已安装应用版本，因此 `info.json` 升级并同步到数据库后，页面版本会自动更新。
 演示数据均为本地模拟数据，不会修改业务数据。
@@ -60,7 +63,7 @@ import { HsxDialog, ProForm, ProTable, useCrudPage } from '@/addon/hsx_component
 ## 准入规则
 
 1. 公共组件不能反向依赖手机货盘、交易、质检等业务插件。
-2. 业务插件只从 `@/addon/hsx_components` 公开入口导入。
+2. 业务插件从 `@/addon/hsx_components` 或其公开的 `/core`、`/forms`、`/types` 等出口导入，避免绕过公共层复制组件实现。
 3. 平台端新增能力必须通过独立类型检查和生产构建。
 4. 移动端新增能力必须通过 H5 与微信小程序真实构建。
 5. 小程序端不使用无边界的整包属性透传，新增属性必须进入明确白名单。

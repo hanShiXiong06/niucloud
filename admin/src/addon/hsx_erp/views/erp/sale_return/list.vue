@@ -12,11 +12,11 @@
                     </div></template>
             </HsxTitle>
 
-            <el-tabs v-model="listWhere.status" class="mt-4 erp-status-tabs" @tab-change="switchStatus">
-                <el-tab-pane v-for="tab in statusTabs" :key="tab.value" :label="tab.label" :name="tab.value" />
-            </el-tabs>
-
             <HsxSearchPanel>
+                <template #extra>
+                    <el-button type="primary" :icon="Search" @click="searchList">查询</el-button>
+                    <el-button @click="resetListWhere">重置</el-button>
+                </template>
                 <el-form :inline="true" class="mt-2" @submit.prevent>
                     <el-form-item label="关键词">
                         <el-input v-model.trim="listWhere.keyword" clearable class="!w-[260px]" placeholder="退货单号 / 销售单号" @keyup.enter="searchList" />
@@ -27,12 +27,13 @@
                     <el-form-item label="退货时间">
                         <el-date-picker v-model="listWhere.dateRange" type="daterange" value-format="X" start-placeholder="开始" end-placeholder="结束" class="!w-[260px]" />
                     </el-form-item>
-                    <el-form-item>
-                        <el-button type="primary" :icon="Search" @click="searchList">查询</el-button>
-                        <el-button @click="resetListWhere">重置</el-button>
-                    </el-form-item>
+
                 </el-form>
             </HsxSearchPanel>
+
+            <el-tabs v-model="listWhere.status" class="mt-4 erp-status-tabs" @tab-change="switchStatus">
+                <el-tab-pane v-for="tab in statusTabs" :key="tab.value" :label="tab.label" :name="tab.value" />
+            </el-tabs>
 
             <el-table :data="listData" v-loading="listLoading" size="large" @row-click="selectItem">
                 <el-table-column label="业务单据" min-width="220">
@@ -188,7 +189,6 @@ import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVouche
 import ErpWarehouseLocationCascader from '@/addon/hsx_erp/components/ErpWarehouseLocationCascader.vue'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 const hsxFeedback = useFeedback()
-
 
 const statusTabs = [
     { label: '全部', value: '' },

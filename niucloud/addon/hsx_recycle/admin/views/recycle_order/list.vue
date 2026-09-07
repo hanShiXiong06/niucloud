@@ -2,12 +2,9 @@
   <PremiumTheme class="recycle-order-list h-full">
     <el-card class="box-card !border-none h-full relative" shadow="never">
       <div class="order-list-header">
-        <div :class="isMobile ? 'order-page-header order-page-header--mobile' : 'order-page-header'">
-          <span :class="isMobile ? 'text-lg font-semibold text-gray-800' : 'text-xl font-semibold text-gray-800'">回收订单管理</span>
-          <div :class="isMobile ? 'w-full' : 'btn-wrap'">
-            <el-button type="primary" :icon="Plus" :class="isMobile ? 'w-full' : ''" @click="showAddOrderDialog">代下单</el-button>
-          </div>
-        </div>
+        <HsxTitle title="回收订单管理" size="page" class="mb-4">
+            <template #extra><el-button type="primary" :icon="Plus" @click="showAddOrderDialog">代下单</el-button></template>
+        </HsxTitle>
 
         <RecycleOrderSearchPanel
           :is-mobile="isMobile"
@@ -235,7 +232,7 @@
       :is-mobile="isMobile"
     />
 
-    <el-dialog v-model="consignmentDialog.visible" title="设备转入代卖" width="460px" destroy-on-close>
+    <HsxDialog :confirm-loading="consignmentDialog.loading" v-model="consignmentDialog.visible" title="设备转入代卖" width="460px" destroy-on-close>
       <div v-if="consignmentDialog.device" class="mb-4 rounded border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-800">
         <div class="font-medium">{{ consignmentDialog.device.model || '未知型号' }}</div>
         <div>串号：{{ consignmentDialog.device.imei || consignmentDialog.device.user_sn || '-' }}</div>
@@ -259,10 +256,10 @@
         确认后，该设备会在原回收订单中变为“已转代卖”，同时生成独立代卖订单。后续售出和结算在代卖订单中处理。
       </div>
       <template #footer>
-        <el-button @click="consignmentDialog.visible = false">取消</el-button>
-        <el-button type="primary" :loading="consignmentDialog.loading" @click="submitTransferConsignment">确认转代卖</el-button>
+        <el-button :disabled="consignmentDialog.loading" @click="consignmentDialog.visible = false">取消</el-button>
+        <el-button :disabled="consignmentDialog.loading" type="primary" :loading="consignmentDialog.loading" @click="submitTransferConsignment">确认转代卖</el-button>
       </template>
-    </el-dialog>
+    </HsxDialog>
     <!-- 支付方式 -->
     <PaymentMethodDialog
       v-model:visible="paymentDialogVisible"
@@ -276,7 +273,7 @@
     <detail-member ref="memberDetailDialog" />
 
     <!-- 快递信息弹出框 -->
-    <el-dialog
+    <HsxDialog
       v-model="expressPopoverVisible"
       title="快递物流信息"
       :width="isMobile ? '95vw' : '760px'"
@@ -334,19 +331,15 @@
       </div>
 
       <div v-else class="text-center py-8 text-gray-500">暂无快递信息</div>
-    </el-dialog>
+    </HsxDialog>
   </PremiumTheme>
 </template>
 
 <script setup lang="ts">
+import { HsxDialog, useFeedback, HsxTitle } from '@/addon/hsx_components/core'
 import { ref, onMounted, onBeforeUnmount, computed,reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import {
-  ElMessage,
-  ElMessageBox,
-  ElLoading,
-  ElNotification,
-} from "element-plus";
+import { ElMessageBox, ElLoading, ElNotification } from 'element-plus'
 import {
   Plus,
   Document,
@@ -410,6 +403,8 @@ import NoticeLogDialog from "./components/NoticeLogDialog.vue";
 import { img } from "@/utils/common";
 // 提交守卫与危险操作确认通用件
 import { useSubmit, confirmDanger } from "@/addon/hsx_recycle/hooks/useSubmit";
+const hsxFeedback = useFeedback()
+
 
 // 状态定义
 interface OrderActionItem {
@@ -521,7 +516,7 @@ const {
     ...params,
     ...getDashboardDrilldownParams(),
   }),
-  onError: (message: string) => ElMessage.error(message),
+  onError: (message: string) => hsxFeedback.error(message),
 });
 
 const {
@@ -847,10 +842,10 @@ const submitTransferConsignment = async () => {
       remark: consignmentForm.remark,
     });
     if (res.code !== 1) {
-      ElMessage.error(res.msg || "转入代卖失败");
+      hsxFeedback.error(res.msg || "转入代卖失败");
       return;
     }
-    ElMessage.success("已转入代卖订单");
+    hsxFeedback.success("已转入代卖订单");
     consignmentDialog.visible = false;
     await getList();
   } finally {
@@ -861,7 +856,7 @@ const submitTransferConsignment = async () => {
 const viewConsignmentOrder = (device: any) => {
   const consignmentId = device.consignment_order_id || device.consignmentOrder?.id;
   if (!consignmentId) {
-    ElMessage.warning("该设备还没有关联代卖订单");
+    hsxFeedback.warning("该设备还没有关联代卖订单");
     return;
   }
   router.push({ path: "/site/consignment_order/list", query: { keyword: device.consignmentOrder?.consignment_no || "", source_order_id: device.order_id || "", t: Date.now() } });
@@ -873,14 +868,14 @@ const viewDetail = async (row) => {
   try {
     const data = await getDeviceDetailView(row.id);
     if (data.code !== 1) {
-      ElMessage.error(data.msg || "获取设备详情失败");
+      hsxFeedback.error(data.msg || "获取设备详情失败");
       return;
     }
     deviceDetailData.value = data.data;
     deviceLogVisible.value = true;
   } catch (error) {
     console.error("获取设备详情失败:", error);
-    ElMessage.error("获取设备详情失败");
+    hsxFeedback.error("获取设备详情失败");
   }
 };
 
@@ -914,7 +909,7 @@ const handleDeviceDeepLink = async () => {
   try {
     const res = await getDevice(Number(deviceId));
     if (res.code !== 1 || !res.data) {
-      ElMessage.error("设备不存在或已删除");
+      hsxFeedback.error("设备不存在或已删除");
       return;
     }
 
@@ -933,7 +928,7 @@ const handleDeviceDeepLink = async () => {
     }
   } catch (error) {
     console.error("设备深链接处理失败:", error);
-    ElMessage.error("获取设备信息失败");
+    hsxFeedback.error("获取设备信息失败");
   }
 };
 
@@ -977,7 +972,7 @@ const paySubmitting = paySubmit.loading;
 const memberDetailDialog = ref<any>(null);
 const openMemberDetail = (member: any) => {
   if (!member?.member_id) {
-    ElMessage.warning("该订单未关联会员");
+    hsxFeedback.warning("该订单未关联会员");
     return;
   }
   memberDetailDialog.value?.setFormData({ id: member.member_id });
@@ -989,7 +984,7 @@ const handlePaymentConfirm = async (paymentData) => {
   // 使用传入的 orderId，如果为空则使用 currentOrderId
   const orderId = paymentData.orderId || currentOrderId.value;
   if (!orderId) {
-    ElMessage.error("订单ID不能为空");
+    hsxFeedback.error("订单ID不能为空");
     return;
   }
 
@@ -1082,12 +1077,12 @@ const handleDeviceConfirm = async (data: {
       throw new Error(result.message || "操作失败");
     }
 
-    ElMessage.success("订单签收成功");
+    hsxFeedback.success("订单签收成功");
     orderDialogVisible.value = false;
     await getList(); // 刷新列表
   } catch (error: any) {
     console.error("保存设备信息失败：", error);
-    ElMessage.error(error.message || "保存失败");
+    hsxFeedback.error(error.message || "保存失败");
   } finally {
     loading?.close();
   }
@@ -1226,7 +1221,7 @@ const handleExpressHover = async (row: any, delay = 500) => {
       const mobileLast4 = mobile.slice(-4);
 
       if (!mobileLast4) {
-        ElMessage.warning("无法获取用户手机号，无法查询快递信息");
+        hsxFeedback.warning("无法获取用户手机号，无法查询快递信息");
         return;
       }
 
@@ -1240,7 +1235,7 @@ const handleExpressHover = async (row: any, delay = 500) => {
         !expressData.data.logisticsTraceDetailList ||
         expressData.data.logisticsTraceDetailList.length === 0
       ) {
-        ElMessage.info("暂无物流信息");
+        hsxFeedback.info("暂无物流信息");
         return;
       }
 
@@ -1249,7 +1244,7 @@ const handleExpressHover = async (row: any, delay = 500) => {
       expressPopoverVisible.value = true;
     } catch (error) {
       console.error("查询快递信息失败:", error);
-      ElMessage.error("查询快递信息失败");
+      hsxFeedback.error("查询快递信息失败");
     } finally {
       // 清除loading状态
       expressLoading.value[row.id] = false;
@@ -1289,13 +1284,13 @@ const shareOrder = async (row: any) => {
     loading.close();
 
     if (res.code !== 1) {
-      ElMessage.error(res.msg || "生成分享链接失败");
+      hsxFeedback.error(res.msg || "生成分享链接失败");
       return;
     }
 
     const shortLink = res.data?.short_link;
     if (!shortLink) {
-      ElMessage.error("生成分享链接失败，返回数据为空");
+      hsxFeedback.error("生成分享链接失败，返回数据为空");
       return;
     }
 
@@ -1305,7 +1300,7 @@ const shareOrder = async (row: any) => {
 
     if (clipboardSupported.value) {
       await copy(shareText);
-      ElMessage.success("分享链接已复制到剪贴板，可直接发送给客户");
+      hsxFeedback.success("分享链接已复制到剪贴板，可直接发送给客户");
     } else {
       ElMessageBox.alert(shareText, "分享链接（请手动复制）", {
         confirmButtonText: "关闭",
@@ -1314,7 +1309,7 @@ const shareOrder = async (row: any) => {
     }
   } catch (error: any) {
     loading.close();
-    ElMessage.error("生成分享链接失败：" + (error.message || "未知错误"));
+    hsxFeedback.error("生成分享链接失败：" + (error.message || "未知错误"));
   }
 };
 </script>
@@ -1361,13 +1356,13 @@ const shareOrder = async (row: any) => {
   }
 }
 .recycle-order-list {
-  height: calc(100vh - 90px);
+  height: auto;
   min-height: 0;
-  max-height: calc(100vh - 90px);
-  overflow: hidden;
+  // 高级条件展开时让页面自然滚动，不能把表格和分页挤出可用区域。
+  overflow: visible;
 
   .el-card {
-    height: 100%;
+    height: auto;
     min-height: 0;
     display: flex;
     flex-direction: column;
@@ -1378,7 +1373,7 @@ const shareOrder = async (row: any) => {
     min-height: 0;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow: visible;
     padding: 16px;
   }
 
@@ -1401,9 +1396,9 @@ const shareOrder = async (row: any) => {
   }
 
   .order-table-region {
-    flex: 1 1 auto;
-    min-height: 0;
-    height: 0;
+    flex: none;
+    min-height: 320px;
+    height: clamp(320px, 52vh, 680px);
     overflow: hidden;
     border: 1px solid #e5e7eb;
     border-radius: 8px;
@@ -1411,6 +1406,7 @@ const shareOrder = async (row: any) => {
   }
 
   .order-table-region--mobile {
+    min-height: 0;
     height: auto;
     overflow-y: auto;
     border: 0;

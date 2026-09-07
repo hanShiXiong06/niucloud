@@ -1,5 +1,9 @@
 <template>
   <HsxSearchPanel v-model="collapsed" title="筛选条件" collapsible :summary="activeCount ? '已设置 ' + activeCount + ' 项条件，折叠后仍生效' : '按订单、客户或设备查找'">
+      <template #extra>
+          <el-button type="primary" :icon="Search" @click="emit('advanced-search')">查询</el-button>
+          <el-button :icon="Refresh" @click="emit('reset-search')">重置</el-button>
+      </template>
       <el-form :inline="true" :model="props.advancedSearchForm" class="search-form" @submit.prevent>
           <el-form-item label="快递单号" class="search-item search-item--code">
               <el-input
@@ -7,7 +11,7 @@
                   placeholder="输入快递单号"
                   clearable
                   class="w-full"
-            />
+              />
           </el-form-item>
           <el-form-item label="用户搜索" class="search-item search-item--member">
               <member-select
@@ -15,7 +19,7 @@
                   placeholder="输入用户昵称、手机号或用户编号"
                   @change="handleMemberChange"
                   class="w-full"
-            />
+              />
           </el-form-item>
           <el-form-item label="用户手机号" class="search-item search-item--mobile">
               <el-input
@@ -23,7 +27,7 @@
                   placeholder="输入用户手机号"
                   clearable
                   class="w-full"
-            />
+              />
           </el-form-item>
           <el-form-item label="设备IMEI" class="search-item search-item--imei">
               <el-input
@@ -31,7 +35,7 @@
                   placeholder="输入设备IMEI号"
                   clearable
                   class="w-full"
-            />
+              />
           </el-form-item>
           <HsxFold class="w-full" title="更多筛选" :summary="advancedActiveCount ? '已设置 ' + advancedActiveCount + ' 项条件' : '订单状态、时间、数量与金额'">
               <div class="search-advanced-grid">
@@ -41,7 +45,7 @@
                           placeholder="输入精确订单号"
                           clearable
                           class="w-full"
-            />
+                      />
                   </el-form-item>
                   <el-form-item  label="订单状态" class="search-item search-item--select">
                       <el-select
@@ -51,13 +55,13 @@
                           multiple
                           collapse-tags
                           class="w-full"
-            >
+                      >
                           <el-option
                               v-for="(status, key) in props.orderStatusMap"
                               :key="key"
                               :label="status.name"
                               :value="status.status"
-              />
+                          />
                       </el-select>
                   </el-form-item>
                   <el-form-item  label="配送方式" class="search-item search-item--select">
@@ -67,7 +71,7 @@
                           clearable
                           multiple
                           class="w-full"
-            >
+                      >
                           <el-option label="快递配送" value="1" />
                           <el-option label="自送到店" value="2" />
                           <el-option label="物流车配送" value="3" />
@@ -82,7 +86,7 @@
                           placeholder="选择来源"
                           clearable
                           class="w-full"
-            >
+                      >
                           <el-option label="客户下单" value="customer" />
                           <el-option label="代下单" value="agent" />
                       </el-select>
@@ -93,7 +97,7 @@
                           placeholder="输入设备型号"
                           clearable
                           class="w-full"
-            />
+                      />
                   </el-form-item>
                   <el-form-item  label="提交数量" class="search-item search-item--range">
                       <div class="range-inline">
@@ -103,7 +107,7 @@
                               :controls="false"
                               placeholder="最少"
                               class="range-input"
-              />
+                          />
                           <span>至</span>
                           <el-input-number
                               v-model="props.advancedSearchForm.device_count_max"
@@ -111,7 +115,7 @@
                               :controls="false"
                               placeholder="最多"
                               class="range-input"
-              />
+                          />
                       </div>
                   </el-form-item>
                   <el-form-item  label="订单金额" class="search-item search-item--range">
@@ -123,7 +127,7 @@
                               :controls="false"
                               placeholder="最低"
                               class="range-input"
-              />
+                          />
                           <span>至</span>
                           <el-input-number
                               v-model="props.advancedSearchForm.amount_max"
@@ -132,7 +136,7 @@
                               :controls="false"
                               placeholder="最高"
                               class="range-input"
-              />
+                          />
                       </div>
                   </el-form-item>
                   <el-form-item  label="创建时间" class="search-item search-item--date">
@@ -145,7 +149,7 @@
                           format="YYYY-MM-DD"
                           value-format="YYYY-MM-DD"
                           class="w-full"
-            />
+                      />
                   </el-form-item>
                   <el-form-item  label="更新时间" class="search-item search-item--date">
                       <el-date-picker
@@ -157,7 +161,7 @@
                           format="YYYY-MM-DD"
                           value-format="YYYY-MM-DD"
                           class="w-full"
-            />
+                      />
                   </el-form-item>
                   <el-form-item  label="签收时间" class="search-item search-item--date">
                       <el-date-picker
@@ -169,7 +173,7 @@
                           format="YYYY-MM-DD"
                           value-format="YYYY-MM-DD"
                           class="w-full"
-            />
+                      />
                   </el-form-item>
                   <el-form-item  label="质检时间" class="search-item search-item--date">
                       <el-date-picker
@@ -181,7 +185,7 @@
                           format="YYYY-MM-DD"
                           value-format="YYYY-MM-DD"
                           class="w-full"
-            />
+                      />
                   </el-form-item>
                   <el-form-item  label="打款时间" class="search-item search-item--date">
                       <el-date-picker
@@ -193,14 +197,10 @@
                           format="YYYY-MM-DD"
                           value-format="YYYY-MM-DD"
                           class="w-full"
-            />
+                      />
                   </el-form-item>
               </div>
           </HsxFold>
-          <div class="search-actions">
-              <el-button type="primary" :icon="Search" @click="emit('advanced-search')">查询</el-button>
-              <el-button :icon="Refresh" @click="emit('reset-search')">重置</el-button>
-          </div>
       </el-form>
   </HsxSearchPanel>
 </template>
@@ -238,6 +238,4 @@ const handleMemberChange = (...args: any[]) => emit('member-change', ...args)
 .search-advanced-grid :deep(.el-form-item__label) { width: auto !important; justify-content: flex-start; padding-bottom: 4px; height: auto; line-height: 20px; font-size: 12px; color: var(--hsx-text-secondary); }
 .range-inline { display: flex; align-items: center; gap: 8px; width: 100%; }
 .range-input { min-width: 0; flex: 1; }
-.search-actions { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; justify-content: flex-end; }
-.search-actions :deep(.el-button + .el-button) { margin-left: 0; }
 </style>

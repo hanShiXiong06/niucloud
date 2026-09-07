@@ -31,8 +31,8 @@
         </el-button>
         <el-button type="primary" link class="!ml-2" @click="openCreate">新品</el-button>
 
-        <el-dialog v-model="createVisible" title="创建标品档案" width="520px" append-to-body destroy-on-close>
-            <el-alert title="同一商品以后直接检索补货，不需要重复创建。" type="info" :closable="false" show-icon class="mb-4" />
+        <HsxDialog :confirm-loading="saving" v-model="createVisible" title="创建标品档案" width="520px" append-to-body destroy-on-close>
+            <HsxNotice default-expanded title="同一商品以后直接检索补货，不需要重复创建。" type="info" :closable="false" show-icon class="mb-4" />
             <el-form label-width="86px">
                 <el-form-item label="商品分类" required>
                     <ErpCatalogCategorySelect v-model="form.category_path" />
@@ -47,13 +47,13 @@
                 </el-form-item>
             </el-form>
             <template #footer>
-                <el-button @click="createVisible = false">取消</el-button>
-                <el-button type="primary" :loading="saving" @click="save">创建并选中</el-button>
+                <el-button :disabled="saving" @click="createVisible = false">取消</el-button>
+                <el-button :disabled="saving" type="primary" :loading="saving" @click="save">创建并选中</el-button>
             </template>
-        </el-dialog>
+        </HsxDialog>
 
-        <el-dialog v-model="categoryVisible" title="完善标品分类" width="500px" append-to-body destroy-on-close>
-            <el-alert title="分类属于商品主数据，补货时会自动沿用；修改不会影响历史库存流水。" type="info" :closable="false" show-icon class="mb-4" />
+        <HsxDialog :confirm-loading="categorySaving" v-model="categoryVisible" title="完善标品分类" width="500px" append-to-body destroy-on-close>
+            <HsxNotice default-expanded title="分类属于商品主数据，补货时会自动沿用；修改不会影响历史库存流水。" type="info" :closable="false" show-icon class="mb-4" />
             <el-form label-width="86px">
                 <el-form-item label="商品"><span>{{ currentProduct?.display_name || currentProduct?.product_name }}</span></el-form-item>
                 <el-form-item label="商品分类" required>
@@ -61,18 +61,21 @@
                 </el-form-item>
             </el-form>
             <template #footer>
-                <el-button @click="categoryVisible = false">取消</el-button>
-                <el-button type="primary" :loading="categorySaving" @click="saveCategory">保存分类</el-button>
+                <el-button :disabled="categorySaving" @click="categoryVisible = false">取消</el-button>
+                <el-button :disabled="categorySaving" type="primary" :loading="categorySaving" @click="saveCategory">保存分类</el-button>
             </template>
-        </el-dialog>
+        </HsxDialog>
     </div>
 </template>
 
 <script setup lang="ts">
+import { HsxDialog, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
 import { computed, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+
 import { createErpQuantityProduct, getErpQuantityProducts, updateErpQuantityProductCategory } from '@/addon/hsx_erp/api/erp'
 import ErpCatalogCategorySelect from './ErpCatalogCategorySelect.vue'
+const hsxFeedback = useFeedback()
+
 
 const props = withDefaults(defineProps<{
     modelValue?: number
@@ -137,8 +140,8 @@ function openCreate() {
 }
 
 async function save() {
-    if (!form.value.category_path) return ElMessage.warning('请选择商品末级分类')
-    if (!form.value.product_name.trim()) return ElMessage.warning('请填写商品名称')
+    if (!form.value.category_path) return hsxFeedback.warning('请选择商品末级分类')
+    if (!form.value.product_name.trim()) return hsxFeedback.warning('请填写商品名称')
     saving.value = true
     try {
         const res: any = await createErpQuantityProduct(form.value)
@@ -148,7 +151,7 @@ async function save() {
         emit('update:modelValue', Number(row.id))
         emit('change', row)
         createVisible.value = false
-        ElMessage.success(row.created ? '新品已创建并选中' : '已找到相同商品并选中')
+        hsxFeedback.success(row.created ? '新品已创建并选中' : '已找到相同商品并选中')
     } finally {
         saving.value = false
     }
@@ -161,7 +164,7 @@ function openCategory() {
 }
 
 async function saveCategory() {
-    if (!currentProduct.value?.id || !categoryForm.value.category_path) return ElMessage.warning('请选择商品末级分类')
+    if (!currentProduct.value?.id || !categoryForm.value.category_path) return hsxFeedback.warning('请选择商品末级分类')
     categorySaving.value = true
     try {
         const res: any = await updateErpQuantityProductCategory(Number(currentProduct.value.id), categoryForm.value)
@@ -169,7 +172,7 @@ async function saveCategory() {
         options.value = options.value.map(item => Number(item.id) === Number(row.id) ? { ...item, ...row } : item)
         emit('change', { ...currentProduct.value, ...row })
         categoryVisible.value = false
-        ElMessage.success('商品分类已保存')
+        hsxFeedback.success('商品分类已保存')
     } finally {
         categorySaving.value = false
     }

@@ -4,7 +4,8 @@ const root = path.resolve(__dirname, '../../../..')
 const shared = [
     'components/HsxNotice/index.vue', 'components/HsxFold/index.vue', 'components/HsxSearchPanel/index.vue',
     'components/HsxTitle/index.vue', 'components/HsxPage/index.vue', 'components/HsxDrawer/index.vue',
-    'components/HsxDialog/index.vue', 'components/QueryForm/index.vue', 'core.ts', 'index.ts', 'hooks/useFeedback.ts'
+    'components/HsxDialog/index.vue', 'components/QueryForm/index.vue', 'core.ts', 'index.ts', 'hooks/useFeedback.ts',
+    'hooks/index.ts', 'hooks/useSearchLayout.ts'
 ]
 function walk(directory) {
     return fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry => {

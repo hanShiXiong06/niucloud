@@ -8,7 +8,7 @@
             <el-button :loading="loading" :disabled="saving" @click="loadIntegration">刷新状态</el-button>
         </div>
 
-        <el-alert v-if="loadError" type="error" :closable="false" show-icon :title="loadError" />
+        <HsxNotice default-expanded v-if="loadError" type="error" :closable="false" show-icon :title="loadError" />
         <template v-else-if="integration">
             <div class="integration-status">
                 <el-tag :type="integration.installed ? 'info' : 'warning'">{{ integration.installed ? '自有 ERP 已安装' : '自有 ERP 未安装' }}</el-tag>
@@ -18,7 +18,7 @@
                 <span v-if="changedAtText">上次确认：{{ changedAtText }}</span>
             </div>
 
-            <el-alert
+            <HsxNotice default-expanded
                 v-if="!integration.configured"
                 type="warning"
                 :closable="false"
@@ -38,7 +38,7 @@
                 </button>
             </div>
 
-            <el-alert class="integration-impact" type="info" :closable="false" show-icon title="切换后新创建的设备按新配置办理；已有设备按已记录归属或历史规则办理，实际已入 ERP 的设备仍由 ERP 处理。保存不会迁移或重新同步历史设备，也不会执行付款。" />
+            <HsxNotice default-expanded class="integration-impact" type="info" :closable="false" show-icon title="切换后新创建的设备按新配置办理；已有设备按已记录归属或历史规则办理，实际已入 ERP 的设备仍由 ERP 处理。保存不会迁移或重新同步历史设备，也不会执行付款。" />
             <div class="integration-footer">
                 <span>{{ !integration.configured || selectedMode !== integration.mode ? '当前选择尚未生效，需点击右侧按钮单独保存。' : '当前联动方式已保存；如需变更，请重新选择并单独保存。' }}</span>
                 <el-button type="primary" :loading="saving" :disabled="!canSave" @click="saveIntegration">
@@ -50,9 +50,12 @@
 </template>
 
 <script setup lang="ts">
+import { HsxNotice, useFeedback } from '@/addon/hsx_components/core'
 import { computed, onMounted, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import { getRecycleErpIntegration, saveRecycleErpIntegration, type RecycleErpIntegration, type RecycleErpMode } from '@/addon/hsx_recycle/api/erp_integration'
+const hsxFeedback = useFeedback()
+
 
 const integration = ref<RecycleErpIntegration | null>(null)
 const selectedMode = ref<RecycleErpMode>('local')
@@ -104,10 +107,10 @@ const saveIntegration = async () => {
     saving.value = true
     try {
         await saveRecycleErpIntegration(mode)
-        ElMessage.success('ERP 联动设置已保存，新创建设备按新配置办理；已有设备沿用已记录归属或历史规则')
+        hsxFeedback.success('ERP 联动设置已保存，新创建设备按新配置办理；已有设备沿用已记录归属或历史规则')
         await loadIntegration()
     } catch (error: any) {
-        ElMessage.error(error?.msg || error?.message || '联动设置保存失败，请刷新状态核对后重试')
+        hsxFeedback.error(error?.msg || error?.message || '联动设置保存失败，请刷新状态核对后重试')
     } finally {
         saving.value = false
     }

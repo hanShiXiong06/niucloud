@@ -11,6 +11,52 @@
                     </div></template>
             </HsxTitle>
 
+            <HsxSearchPanel :summary="searchConditionCount ? '已填写 ' + searchConditionCount + ' 项条件，点击查询生效' : ''">
+                <template #extra>
+                    <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
+                    <el-button @click="handleReset">重置</el-button>
+                </template>
+                <el-form :inline="true" class="mt-2" @submit.prevent>
+                    <el-form-item label="关键词">
+                        <el-input v-model.trim="search.keyword" clearable class="!w-[300px]" placeholder="型号 / IMEI / 资产号 / 销售单 / 客户" @keyup.enter="handleSearch" />
+                    </el-form-item>
+                    <el-form-item label="仓库">
+                        <el-select v-model="search.warehouse_id" clearable class="!w-[160px]" placeholder="全部仓库" @change="onSearchWarehouseChange">
+                            <el-option v-for="item in warehouses" :key="item.id" :label="item.warehouse_name" :value="item.id" />
+                        </el-select>
+                    </el-form-item>
+                    <el-form-item label="库位">
+                        <el-select v-model="search.location_id" clearable class="!w-[160px]" placeholder="全部库位" :disabled="!search.warehouse_id">
+                            <el-option v-for="item in searchLocations" :key="item.id" :label="item.location_name" :value="item.id" />
+                        </el-select>
+                    </el-form-item>
+                    <el-form-item label="商品型号">
+                        <ErpCatalogProductSelect v-model="search.catalog_product_id" class="!w-[280px]" placeholder="搜索品牌、系列或型号" />
+                    </el-form-item>
+                    <HsxFold title="更多筛选" summary="人员、时间与其他条件；收起不清空已填内容">
+                        <el-form-item label="开单人">
+                            <el-select v-model="search.salesman_uid" clearable filterable class="!w-[150px]" placeholder="全部">
+                                <el-option v-for="item in staffOptions" :key="item.uid" :label="staffName(item)" :value="item.uid" />
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="销售时间">
+                            <el-date-picker v-model="search.dateRange" type="daterange" value-format="X" start-placeholder="开始" end-placeholder="结束" class="!w-[260px]" />
+                        </el-form-item>
+                        <el-form-item label="售价">
+                            <el-input-number v-model="search.min_amount" :min="0" :precision="2" :controls="false" placeholder="最低" class="!w-[110px]" />
+                            <span class="mx-1 text-gray-400">-</span>
+                            <el-input-number v-model="search.max_amount" :min="0" :precision="2" :controls="false" placeholder="最高" class="!w-[110px]" />
+                        </el-form-item>
+                        <el-form-item label="毛利">
+                            <el-input-number v-model="search.min_profit" :precision="2" :controls="false" placeholder="最低" class="!w-[110px]" />
+                            <span class="mx-1 text-gray-400">-</span>
+                            <el-input-number v-model="search.max_profit" :precision="2" :controls="false" placeholder="最高" class="!w-[110px]" />
+                        </el-form-item>
+                    </HsxFold>
+
+                </el-form>
+            </HsxSearchPanel>
+
             <ErpRoleFocus :items="saleRoleFocus" />
 
             <div class="mt-5 flex flex-wrap items-center justify-between gap-2">
@@ -43,49 +89,6 @@
                 <el-tab-pane label="部分收款" name="partial" />
                 <el-tab-pane label="已结清" name="settled" />
             </el-tabs>
-
-            <HsxSearchPanel>
-                <el-form :inline="true" class="mt-2" @submit.prevent>
-                    <el-form-item label="关键词">
-                        <el-input v-model.trim="search.keyword" clearable class="!w-[300px]" placeholder="型号 / IMEI / 资产号 / 销售单 / 客户" @keyup.enter="handleSearch" />
-                    </el-form-item>
-                    <el-form-item label="仓库">
-                        <el-select v-model="search.warehouse_id" clearable class="!w-[160px]" placeholder="全部仓库" @change="onSearchWarehouseChange">
-                            <el-option v-for="item in warehouses" :key="item.id" :label="item.warehouse_name" :value="item.id" />
-                        </el-select>
-                    </el-form-item>
-                    <el-form-item label="库位">
-                        <el-select v-model="search.location_id" clearable class="!w-[160px]" placeholder="全部库位" :disabled="!search.warehouse_id">
-                            <el-option v-for="item in searchLocations" :key="item.id" :label="item.location_name" :value="item.id" />
-                        </el-select>
-                    </el-form-item>
-                    <el-form-item label="商品型号">
-                        <ErpCatalogProductSelect v-model="search.catalog_product_id" class="!w-[280px]" placeholder="搜索品牌、系列或型号" />
-                    </el-form-item>
-                    <el-form-item label="开单人">
-                        <el-select v-model="search.salesman_uid" clearable filterable class="!w-[150px]" placeholder="全部">
-                            <el-option v-for="item in staffOptions" :key="item.uid" :label="staffName(item)" :value="item.uid" />
-                        </el-select>
-                    </el-form-item>
-                    <el-form-item label="销售时间">
-                        <el-date-picker v-model="search.dateRange" type="daterange" value-format="X" start-placeholder="开始" end-placeholder="结束" class="!w-[260px]" />
-                    </el-form-item>
-                    <el-form-item label="售价">
-                        <el-input-number v-model="search.min_amount" :min="0" :precision="2" :controls="false" placeholder="最低" class="!w-[110px]" />
-                        <span class="mx-1 text-gray-400">-</span>
-                        <el-input-number v-model="search.max_amount" :min="0" :precision="2" :controls="false" placeholder="最高" class="!w-[110px]" />
-                    </el-form-item>
-                    <el-form-item label="毛利">
-                        <el-input-number v-model="search.min_profit" :precision="2" :controls="false" placeholder="最低" class="!w-[110px]" />
-                        <span class="mx-1 text-gray-400">-</span>
-                        <el-input-number v-model="search.max_profit" :precision="2" :controls="false" placeholder="最高" class="!w-[110px]" />
-                    </el-form-item>
-                    <el-form-item>
-                        <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
-                        <el-button @click="handleReset">重置</el-button>
-                    </el-form-item>
-                </el-form>
-            </HsxSearchPanel>
 
             <el-table :data="table.data" v-loading="table.loading" size="large" :row-class-name="saleRowClassName">
                 <el-table-column label="销售商品" min-width="240">
@@ -336,7 +339,7 @@
 </template>
 
 <script setup lang="ts">
-import { HsxTitle, HsxPage, HsxSearchPanel, HsxDialog, HsxDrawer, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
+import { HsxTitle, HsxPage, HsxSearchPanel, HsxDialog, HsxDrawer, HsxNotice, useFeedback , HsxFold } from '@/addon/hsx_components/core'
 import { erpEnumLabel, erpSourceLabel } from '@/addon/hsx_erp/utils/display'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -356,8 +359,8 @@ import { useErpPageRefresh } from '@/addon/hsx_erp/hooks/useErpPageRefresh'
 import { firstPositiveErpAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
 const hsxFeedback = useFeedback()
 
-
 const search = reactive<any>({ keyword: '', finance_status: '', status: '', warehouse_id: '', location_id: '', catalog_product_id: '', salesman_uid: '', dateRange: [], min_amount: undefined, max_amount: undefined, min_profit: undefined, max_profit: undefined })
+const searchConditionCount = computed(() => Object.values(search).filter(value => Array.isArray(value) ? value.length > 0 : value !== '' && value !== null && value !== undefined).length)
 const activeTab = ref('')
 const profitReportVisible = ref(false)
 const router = useRouter()

@@ -24,7 +24,7 @@
     <template #footer>
       <slot name="footer">
         <el-button :disabled="loading" @click="onCancel">{{ cancelText }}</el-button>
-        <el-button type="primary" :loading="loading" :disabled="confirmDisabled" @click="emit('confirm')">{{ confirmText }}</el-button>
+        <el-button type="primary" :loading="loading" :disabled="(confirmDisabled) || (loading)" @click="emit('confirm')">{{ confirmText }}</el-button>
       </slot>
     </template>
   </HsxDialog>

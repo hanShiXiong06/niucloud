@@ -39,7 +39,7 @@
         </el-select>
         <el-button @click="createVisible = true">新建</el-button>
 
-        <el-dialog v-model="createVisible" title="新增客户或往来主体" width="460px" append-to-body @closed="resetCreate">
+        <HsxDialog :confirm-loading="creating" v-model="createVisible" title="新增客户或往来主体" width="460px" append-to-body @closed="resetCreate" :destroy-on-close="false">
             <el-segmented v-model="createMode" :options="[{label:'客户账号',value:'member'},{label:'仅往来主体',value:'party'}]" class="mb-4" />
             <el-form label-width="84px">
                 <el-form-item label="姓名" required>
@@ -54,21 +54,24 @@
             </el-form>
             <div class="-mt-2 mb-2 text-xs text-gray-400">{{ createMode === 'member' ? '创建可登录客户账号并绑定 ERP 主体。' : '只建立业务往来主体，适合临时客户、供应商和整备服务商。' }}</div>
             <template #footer>
-                <el-button @click="createVisible = false">取消</el-button>
-                <el-button type="primary" :loading="creating" @click="doCreate">建并选用</el-button>
+                <el-button :disabled="creating" @click="createVisible = false">取消</el-button>
+                <el-button :disabled="creating" type="primary" :loading="creating" @click="doCreate">建并选用</el-button>
             </template>
-        </el-dialog>
+        </HsxDialog>
         <ErpPartyCreditDialog v-model="creditVisible" :party="creditParty" @saved="onCreditSaved" />
     </div>
 </template>
 
 <script setup lang="ts">
+import { HsxDialog, useFeedback } from '@/addon/hsx_components/core'
 import { ref, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import { EditPen, Lock } from '@element-plus/icons-vue'
 import { getErpMemberOptions, quickCreateErpParty, resolveErpContact } from '@/addon/hsx_erp/api/counterparty'
 import { editMemberDetail } from '@/app/api/member'
 import ErpPartyCreditDialog from '@/addon/hsx_erp/components/ErpPartyCreditDialog.vue'
+const hsxFeedback = useFeedback()
+
 
 const props = withDefaults(defineProps<{
     modelValue?: number | string
@@ -115,7 +118,7 @@ async function onSearch(keyword: string) {
         options.value = res?.data || []
     } catch (error: any) {
         options.value = []
-        ElMessage.error(error?.msg || error?.message || '对接人列表加载失败')
+        hsxFeedback.error(error?.msg || error?.message || '对接人列表加载失败')
     } finally {
         loading.value = false
     }
@@ -129,9 +132,9 @@ async function onPick(memberId: number) {
         const data = normalize(res?.data || {})
         emit('update:modelValue', data[props.valueField] || data.party_id || 0)
         emit('resolved', data)
-        if (data.auto_created) ElMessage.success(`已为「${data.member_name || ''}」自动创建往来主体`)
+        if (data.auto_created) hsxFeedback.success(`已为「${data.member_name || ''}」自动创建往来主体`)
     } catch (error: any) {
-        ElMessage.error(error?.msg || error?.message || '对接人解析失败')
+        hsxFeedback.error(error?.msg || error?.message || '对接人解析失败')
         onClear()
     } finally {
         resolving.value = false
@@ -140,7 +143,7 @@ async function onPick(memberId: number) {
 
 async function editMemberNickname(item: any) {
     const memberId = Number(item?.member_id || 0)
-    if (!memberId) return ElMessage.warning('该记录没有关联会员')
+    if (!memberId) return hsxFeedback.warning('该记录没有关联会员')
     try {
         const { value } = await ElMessageBox.prompt(
             '这里只修改会员昵称，不会修改 ERP 往来主体名称和历史单据。',
@@ -163,13 +166,13 @@ async function editMemberNickname(item: any) {
         item.nickname = nickname
     } catch (error: any) {
         if (error !== 'cancel' && error !== 'close') {
-            ElMessage.error(error?.msg || error?.message || '会员昵称修改失败')
+            hsxFeedback.error(error?.msg || error?.message || '会员昵称修改失败')
         }
     }
 }
 
 function openCredit(item: any) {
-    if (!Number(item?.party_id || 0)) return ElMessage.warning('请先选择该会员建立往来主体')
+    if (!Number(item?.party_id || 0)) return hsxFeedback.warning('请先选择该会员建立往来主体')
     creditParty.value = item
     creditVisible.value = true
 }
@@ -194,8 +197,8 @@ function resetCreate() {
 }
 
 async function doCreate() {
-    if (!createForm.value.name) return ElMessage.warning('请填写姓名')
-    if (createMode.value === 'member' && !createForm.value.mobile) return ElMessage.warning('请填写手机号')
+    if (!createForm.value.name) return hsxFeedback.warning('请填写姓名')
+    if (createMode.value === 'member' && !createForm.value.mobile) return hsxFeedback.warning('请填写手机号')
     creating.value = true
     try {
         const roleType = roleFilter.value !== 'all' ? roleFilter.value : props.roleType
@@ -208,9 +211,9 @@ async function doCreate() {
         emit('update:modelValue', data[props.valueField] || data.party_id || 0)
         emit('resolved', data)
         createVisible.value = false
-        ElMessage.success('对接人已创建并选用')
+        hsxFeedback.success('对接人已创建并选用')
     } catch (error: any) {
-        ElMessage.error(error?.msg || error?.message || '对接人创建失败')
+        hsxFeedback.error(error?.msg || error?.message || '对接人创建失败')
     } finally {
         creating.value = false
     }

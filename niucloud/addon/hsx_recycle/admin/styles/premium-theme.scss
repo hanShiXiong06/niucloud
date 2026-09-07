@@ -1,23 +1,17 @@
 /* =============================================================================
-   插件作用域内的「高级主题」——不碰 niucloud 核心框架
-   原理：CSS 变量是级联的。把 Element Plus 设计 token 设在 .hsx-premium 包裹类上，
-        包裹内的所有 el-* 组件会自动用新主题（主色、圆角、表格、卡片…）。
+   回收页面的作用域适配——主色和尺寸复用 hsx_components，不改核心框架。
+   原理：在 .hsx-premium 内将旧页面控件映射到公共设计 token，
+        与 ERP 共用圆角、边框、表格和卡片规则，不再单独覆盖主色。
    覆盖：核心用 !important 强制了直角，作用域内需同样 !important + 更高特异性来翻转。
    浮层：el-dialog / el-select 下拉等会 teleport 到 body（在包裹外），
         需在其 class / popper-class 上额外加 hsx-premium-overlay 才能套到主题。
    ============================================================================= */
 
 @mixin hsx-premium-tokens {
-  --el-color-primary: #4f46e5;
-  --el-color-primary-light-3: #847eed;
-  --el-color-primary-light-5: #a7a2f2;
-  --el-color-primary-light-7: #cac8f7;
-  --el-color-primary-light-8: #dcdafa;
-  --el-color-primary-light-9: #eeedfc;
-  --el-color-primary-dark-2: #3f38b7;
-  --el-border-radius-base: 8px;
+  // 主色跟随全局主题，回收与 ERP 不再分别指定。
+  --el-border-radius-base: var(--hsx-radius-sm);
   --el-border-radius-small: 6px;
-  --el-border-color-lighter: #eef0f4;
+  --el-border-color-lighter: var(--hsx-border-color);
   --el-box-shadow-light: 0 1px 2px rgba(17, 24, 39, 0.04), 0 1px 3px rgba(17, 24, 39, 0.06);
 }
 
@@ -26,7 +20,7 @@
   @include hsx-premium-tokens;
 
   /* 找回圆角（翻转核心强制的直角） */
-  .el-card { border-radius: 12px !important; border: 1px solid var(--el-border-color-lighter); }
+  .el-card { border-radius: var(--hsx-radius-md) !important; border: 1px solid var(--el-border-color-lighter); }
   .el-card.is-always-shadow,
   .el-card.is-hover-shadow:hover { box-shadow: var(--el-box-shadow-light); }
   .el-input__wrapper,
@@ -56,11 +50,11 @@
   @include hsx-premium-tokens;
 
   &.el-dialog,
-  .el-dialog { border-radius: 12px !important; overflow: hidden; }
+  .el-dialog { border-radius: var(--hsx-radius-md) !important; overflow: hidden; }
   .el-input__wrapper,
   .el-textarea__inner,
   .el-select__wrapper { border-radius: 8px !important; }
   .el-button:not(.is-round):not(.is-circle) { border-radius: 8px !important; }
-  .el-card { border-radius: 12px !important; }
+  .el-card { border-radius: var(--hsx-radius-md) !important; }
   .el-table thead th.el-table__cell { font-weight: 500 !important; }
 }

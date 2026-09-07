@@ -101,6 +101,93 @@ async function main() {
     f.props.resetKey = 2; await vue.nextTick()
     check(byClass(f.rootNode, 'hsx-fold__body').style.display === 'none', '切换设备重置阅读状态')
     f.unmount()
+    const Title = load('components/HsxTitle/index.vue').default
+    const heading = mount(Title, { title: '库存中心', subtitle: '操作说明', collapsibleSubtitle: true }, { extra: () => vue.h('button', { id: 'create' }, '创建') })
+    check(byClass(heading.rootNode, 'hsx-title__subtitle').style.display === 'none', '页头辅助说明默认收起')
+    check(all(heading.rootNode).some(x => x.props.id === 'create'), '页头核心操作不随说明收起')
+    byClass(heading.rootNode, 'hsx-title__help').props.onClick(); await vue.nextTick()
+    check(byClass(heading.rootNode, 'hsx-title__subtitle').style.display !== 'none', '页头说明可按需展开')
+    heading.unmount()
+    const Button = { setup(props, { attrs, slots }) { return () => vue.h('button', attrs, slots.default?.()) } }
+    const savedWindow = global.window
+    const storage = new Map()
+    global.window = { localStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) } }
+    const layoutHook = load('hooks/useSearchLayout.ts')
+    const preference = layoutHook.useSearchLayout()
+    check(preference.layout.value === 'horizontal' && preference.labelPosition.value === 'right', '搜索默认左右排列')
+    preference.layout.value = 'vertical'
+    check(layoutHook.useSearchLayout().labelPosition.value === 'top', '多个搜索面板共享排列偏好')
+    check(load('hooks/useSearchLayout.ts').useSearchLayout().layout.value === 'vertical', '重新加载仍记住一次选择')
+    preference.layout.value = 'invalid'
+    check(preference.layout.value === 'vertical', '非法布局值不能破坏偏好')
+    global.window.localStorage.setItem = () => { throw new Error('blocked') }
+    preference.layout.value = 'horizontal'
+    check(preference.layout.value === 'horizontal', '存储不可用不阻断当前页面切换')
+    global.window = savedWindow
+    const Panel = load('components/HsxSearchPanel/index.vue', { '../HsxTitle/index.vue': { default: Title }, '../../hooks/useSearchLayout': layoutHook }).default
+    const panel = mount(Panel, { title: '筛选条件', collapsible: true, modelValue: false, 'onUpdate:modelValue': value => { panel.props.modelValue = value } }, { default: () => vue.h('input', { value: '已填写的串号' }) }, { 'el-button': Button })
+    const searchInput = all(panel.rootNode).find(x => x.type === 'input')
+    all(panel.rootNode).find(x => x.type === 'button' && x.props['aria-expanded'] !== undefined).props.onClick(); await vue.nextTick()
+    check(panel.props.modelValue && byClass(panel.rootNode, 'hsx-search-panel__body').style.display === 'none', '搜索区域受控折叠')
+    check(all(panel.rootNode).includes(searchInput) && searchInput.props.value === '已填写的串号', '折叠保留搜索输入和实例')
+    panel.props.modelValue = false; await vue.nextTick()
+    check(byClass(panel.rootNode, 'hsx-search-panel__body').style.display !== 'none', '搜索区可以由父级重新展开')
+    panel.unmount()
+
+    const Container = { setup(props, { slots }) { return () => vue.h('section', {}, slots.default?.()) } }
+    const Input = { setup(props, { attrs }) { return () => vue.h('input', { value: attrs.modelValue }) } }
+    const RecycleSearch = load('../hsx_recycle/views/recycle_order/components/RecycleOrderSearchPanel.vue', {
+        '@/addon/hsx_components/core': { HsxSearchPanel: Panel, HsxFold: Fold },
+        '@/addon/hsx_recycle/components/member-select/index.vue': { default: Input }
+    }).default
+    const filters = vue.reactive({ express_no: 'SF123', member_id: '', user_mobile: '', device_imei: '', order_no: 'R123', status: ['4'], amount_min: 0, delivery_type: [], create_time_range: [] })
+    let mobileToggles = 0
+    const recycle = mount(RecycleSearch, { isMobile: false, mobileSearchVisible: true, advancedSearchForm: filters, orderStatusMap: {}, 'onToggle-mobile-search': () => { mobileToggles++ } }, {}, {
+        'el-form': Container, 'el-form-item': Container, 'el-input': Input, 'el-input-number': Input, 'el-select': Container, 'el-option': Container, 'el-date-picker': Input, 'el-button': Button
+    })
+    const beforeFilters = JSON.stringify(filters)
+    for (let i = 0; i < 2; i++) { byClass(recycle.rootNode, 'hsx-fold__trigger').props.onClick(); await vue.nextTick() }
+    check(JSON.stringify(filters) === beforeFilters, '回收高级筛选开合不清空订单、状态及零金额条件')
+    check(byClass(recycle.rootNode, 'hsx-search-panel__summary').text.includes('4 项'), '筛选摘要正确计入数字0，不计空字符串和空数组')
+    recycle.props.isMobile = true; recycle.props.mobileSearchVisible = false; await vue.nextTick()
+    check(byClass(recycle.rootNode, 'hsx-search-panel__body').style.display === 'none', '窄屏遵循父级搜索可见状态')
+    all(recycle.rootNode).find(x => x.type === 'button' && x.props['aria-expanded'] !== undefined).props.onClick(); await vue.nextTick()
+    check(mobileToggles === 1 && JSON.stringify(filters) === beforeFilters, '窄屏展开只发送可见性事件，不改查询条件')
+    recycle.unmount()
+
+    // 执行页面实际配置与搜索函数，验证 schema 接入没有改掉字段值、路由范围或分页规则。
+    function queryBindings(relative, names, bindings) {
+        const source = compiler.parse(fs.readFileSync(path.join(root, 'admin/src/addon', relative), 'utf8')).descriptor.scriptSetup.content
+        const ast = ts.createSourceFile(relative + '.ts', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+        const selected = ast.statements.filter(x => ts.isFunctionDeclaration(x) ? names.includes(x.name?.text) : ts.isVariableStatement(x) && x.declarationList.declarations.some(d => names.includes(d.name.getText(ast))))
+        const code = ts.transpileModule(selected.map(x => x.getText(ast)).join('\n'), { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText
+        return new Function(...Object.keys(bindings), code + '; return { ' + names.join(',') + ' };')(...Object.values(bindings))
+    }
+    const stockSearch = { keyword: '', warehouse_id: '', status: 'counting', page: 8, limit: 15 }
+    let stockQueries = 0
+    const sq = queryBindings('hsx_erp/views/erp/stocktake/list.vue', ['queryModel', 'querySchema', 'searchStocktakes'], { computed: vue.computed, search: stockSearch, warehouses: vue.ref([{ id: 17, warehouse_name: '一号仓' }]), loadList: () => { stockQueries++ } })
+    check(sq.querySchema.value[1].options[0].value === 17, '盘点 schema 使用真实仓库ID而不是显示名称')
+    sq.searchStocktakes({ keyword: ' PO123 ', warehouse_id: 17 })
+    check(stockSearch.keyword === 'PO123' && stockSearch.page === 1 && stockSearch.status === 'counting' && stockQueries === 1, '盘点搜索去首尾空格、重置页码并保留状态页签')
+    sq.searchStocktakes({})
+    check(stockSearch.keyword === '' && stockSearch.warehouse_id === '', '空 schema 查询清除旧输入，避免隐藏条件残留')
+    const consignmentSearch = { keyword: '', status: '', source_order_id: '88', create_time: ['2026-09-01', '2026-09-07'] }
+    let consignmentQueries = 0
+    const cq = queryBindings('hsx_recycle/views/consignment_order/list.vue', ['queryModel', 'querySchema', 'searchConsignments', 'clearQueryScope'], { computed: vue.computed, search: consignmentSearch, statusOptions: vue.ref([{ label: '待售', value: 0 }]), handleSearch: () => { consignmentQueries++ } })
+    cq.searchConsignments({ keyword: ' IMEI123 ', status: 0 })
+    check(consignmentSearch.keyword === 'IMEI123' && consignmentSearch.status === 0 && consignmentSearch.source_order_id === '88' && consignmentQueries === 1, '代卖搜索保留数字状态与原订单范围，仅查询一次')
+    cq.clearQueryScope(); cq.searchConsignments({})
+    check(consignmentSearch.source_order_id === '' && consignmentSearch.create_time.length === 0 && consignmentSearch.status === '', '代卖重置清除路由带入的范围及输入')
+    const countFilters = vue.reactive({ keyword: '', my_task: 0, party_scope: 'supplier', dateRange: [], min_cost: 0 })
+    const inventoryConditions = queryBindings('hsx_erp/views/erp/stock/list.vue', ['advancedFilterCount', 'searchConditionCount'], { computed: vue.computed, search: countFilters })
+    check(inventoryConditions.searchConditionCount.value === 1, '库存条件提示计入0元，不计默认责任范围与空日期')
+    countFilters.keyword = 'IMEI123'; countFilters.my_task = 1
+    check(inventoryConditions.searchConditionCount.value === 3, '库存收起后仍能看见基础及高级条件总数')
+    const payableConditions = queryBindings('hsx_erp/views/erp/payable/list.vue', ['searchConditionCount'], { computed: vue.computed, search: { keyword: '', party_id: 18, party_name: '测试服务商', source_no: '' }, dateRange: vue.ref([]) })
+    check(payableConditions.searchConditionCount.value === 1, '应付款不把同一主体的ID与姓名重复计数')
+    const dashboard = queryBindings('hsx_erp/views/erp/workbench/index.vue', ['summaryCards', 'primarySummaryCards', 'secondarySummaryCards'], { computed: vue.computed, summary: vue.ref({ operating_profit_amount: 100, receipt_amount: 5000, payment_amount: 4500 }), money: value => String(Number(value || 0)) })
+    check(dashboard.primarySummaryCards.value.length === 4 && dashboard.secondarySummaryCards.value.length === 8, '经营看板聚焦4项核心指标，其余8项保留在折叠内')
+    check(dashboard.primarySummaryCards.value.find(item => item.label === '经营净利润').value === '100' && dashboard.primarySummaryCards.value.find(item => item.label === '净现金流').value === '500', '看板折叠不改变利润与现金流各自口径')
     let message, confirmation, mode = 'confirm'
     const { useFeedback } = load('hooks/useFeedback.ts', { 'element-plus': {
         ElMessage: options => { message = options }, ElNotification: () => {},
@@ -140,6 +227,38 @@ async function main() {
     d.props.confirmDisabled = false; await vue.nextTick(); d.instance.value.confirm()
     check(confirmations === 1, '恢复可操作后正常确认')
     d.unmount()
+    const Dialog = load('components/HsxDialog/index.vue').default
+    let dialogProps, dialogDone, dialogCancels = 0, dialogConfirms = 0
+    const dialog = mount(Dialog, { modelValue: true, title: '采购开单', size: 'xl', showFooter: true,
+        beforeClose: done => { dialogDone = done },
+        onCancel: () => { dialogCancels++ }, onConfirm: () => { dialogConfirms++ },
+        'onUpdate:modelValue': value => { dialog.props.modelValue = value }
+    }, { default: () => vue.h('input', { value: '尚未提交的设备' }) }, {
+        'el-dialog': { setup(props, { attrs, slots }) { return () => { dialogProps = attrs; return vue.h('section', {}, [slots.header?.({ titleId: 'dialog-title' }), slots.default?.(), slots.footer?.()]) } } },
+        'el-button': Button
+    })
+    const dialogButton = text => all(dialog.rootNode).find(x => x.type === 'button' && x.children.some(c => c.text.trim() === text))
+    check(dialogProps.width === 'min(1160px, calc(100vw - 32px))', '大弹窗保留边距且不超出屏幕')
+    dialogButton('取消').props.onClick()
+    check(dialog.props.modelValue && dialogCancels === 0, '弹窗取消等待关闭确认')
+    dialogDone(); await vue.nextTick()
+    check(!dialog.props.modelValue && dialogCancels === 1, '关闭确认通过后才取消弹窗')
+    dialog.props.modelValue = true; dialog.props.confirmLoading = true; await vue.nextTick()
+    dialogDone = undefined
+    dialog.instance.value.close(); dialogButton('取消').props.onClick(); dialogButton('确定').props.onClick()
+    check(!dialogDone && dialog.props.modelValue && dialogConfirms === 0, '弹窗提交中阻止取消、关闭和重复提交')
+    check(!dialogProps.showClose && !dialogProps.closeOnPressEscape && !dialogProps.closeOnClickModal, '弹窗提交中关闭入口一致受保护')
+    dialog.props.confirmLoading = false; dialog.props.confirmDisabled = true; await vue.nextTick()
+    dialogButton('确定').props.onClick(); check(dialogConfirms === 0, '弹窗禁用确认不能提交')
+    dialog.props.confirmDisabled = false; await vue.nextTick()
+    dialogButton('确定').props.onClick(); check(dialogConfirms === 1, '弹窗恢复后正常提交')
+    const formNode = all(dialog.rootNode).find(x => x.type === 'input')
+    dialog.instance.value.toggleFullscreen(); await vue.nextTick()
+    check(dialogProps.fullscreen && !dialogProps.draggable && all(dialog.rootNode).includes(formNode), '全屏切换保留表单实例并暂停拖拽')
+    dialog.props.fullscreen = true; await vue.nextTick()
+    dialog.props.fullscreen = false; await vue.nextTick()
+    check(!dialogProps.fullscreen, '外部全屏状态可复位')
+    dialog.unmount()
     // 使用库存页实际函数校验提示适配，避免业务结果变量遮蔽公共反馈实例。
     const stockFile = path.join(root, 'admin/src/addon/hsx_erp/views/erp/stock/list.vue')
     const stockScript = compiler.parse(fs.readFileSync(stockFile, 'utf8')).descriptor.scriptSetup.content

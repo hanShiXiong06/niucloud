@@ -1,13 +1,11 @@
 <template>
-    <div class="main-container">
+    <HsxPage padding="none" class="main-container">
         <el-card class="!border-none" shadow="never">
-            <div class="flex items-start justify-between gap-4">
-                <div>
-                    <div class="text-page-title">商品目录</div>
-                    <div class="mt-1 text-sm text-gray-500">统一维护一级品类、可选子品类、品牌、系列和型号；采购、库存与商城共同消费这套目录。</div>
-                </div>
-                <el-button :icon="Refresh" :loading="loading" @click="loadAll">刷新</el-button>
-            </div>
+            <HsxTitle size="page" collapsible-subtitle class="mb-4">
+                <template #default>商品目录</template>
+                <template #subtitle>统一维护一级品类、可选子品类、品牌、系列和型号；采购、库存与商城共同消费这套目录。</template>
+                <template #extra><el-button :icon="Refresh" :loading="loading" @click="loadAll">刷新</el-button></template>
+            </HsxTitle>
 
             <el-tabs v-model="activeTab" class="mt-5">
                 <el-tab-pane label="产品目录" name="catalog">
@@ -179,46 +177,46 @@
             </el-tabs>
         </el-card>
 
-        <el-dialog v-model="groupDialog.visible" :title="groupDialog.form.id ? '编辑规格组' : '新增规格组'" width="520px">
+        <HsxDialog :confirm-loading="groupDialog.loading" v-model="groupDialog.visible" :title="groupDialog.form.id ? '编辑规格组' : '新增规格组'" width="520px" :destroy-on-close="false">
             <el-form label-width="100px">
                 <el-form-item label="规格名称" required><el-input v-model.trim="groupDialog.form.label" placeholder="如：苹果内存、安卓内存、颜色" /></el-form-item>
                 <el-form-item label="参与标题"><el-switch v-model="groupDialog.form.title_part" :active-value="1" :inactive-value="0" /></el-form-item>
                 <el-form-item label="排序"><el-input-number v-model="groupDialog.form.sort" :min="0" :controls="false" class="!w-[180px]" /></el-form-item>
             </el-form>
             <template #footer>
-                <el-button @click="groupDialog.visible = false">取消</el-button>
-                <el-button type="primary" :loading="groupDialog.loading" @click="submitGroup">保存</el-button>
+                <el-button :disabled="groupDialog.loading" @click="groupDialog.visible = false">取消</el-button>
+                <el-button :disabled="groupDialog.loading" type="primary" :loading="groupDialog.loading" @click="submitGroup">保存</el-button>
             </template>
-        </el-dialog>
+        </HsxDialog>
 
-        <el-dialog v-model="itemDialog.visible" :title="itemDialog.form.id ? '编辑规格值' : '新增规格值'" width="520px">
+        <HsxDialog :confirm-loading="itemDialog.loading" v-model="itemDialog.visible" :title="itemDialog.form.id ? '编辑规格值' : '新增规格值'" width="520px" :destroy-on-close="false">
             <el-form label-width="100px">
                 <el-form-item label="所属规格">{{ itemDialog.groupLabel }}</el-form-item>
                 <el-form-item label="规格值" required><el-input v-model.trim="itemDialog.form.item_value" placeholder="如：128G、8+256G" /></el-form-item>
                 <el-form-item label="排序"><el-input-number v-model="itemDialog.form.sort" :min="0" :controls="false" class="!w-[180px]" /></el-form-item>
             </el-form>
             <template #footer>
-                <el-button @click="itemDialog.visible = false">取消</el-button>
-                <el-button type="primary" :loading="itemDialog.loading" @click="submitItem">保存</el-button>
+                <el-button :disabled="itemDialog.loading" @click="itemDialog.visible = false">取消</el-button>
+                <el-button :disabled="itemDialog.loading" type="primary" :loading="itemDialog.loading" @click="submitItem">保存</el-button>
             </template>
-        </el-dialog>
+        </HsxDialog>
 
-        <el-dialog v-model="gradeDialog.visible" :title="gradeDialog.form.id ? '编辑成色' : '新增成色'" width="520px">
+        <HsxDialog :confirm-loading="gradeDialog.loading" v-model="gradeDialog.visible" :title="gradeDialog.form.id ? '编辑成色' : '新增成色'" width="520px" :destroy-on-close="false">
             <el-form label-width="100px">
                 <el-form-item label="成色名称" required><el-input v-model.trim="gradeDialog.form.grade_name" placeholder="如：99新、全新、小花" /></el-form-item>
                 <el-form-item label="状态"><el-switch v-model="gradeDialog.form.status" :active-value="1" :inactive-value="0" /></el-form-item>
                 <el-form-item label="排序"><el-input-number v-model="gradeDialog.form.sort" :min="0" :controls="false" class="!w-[180px]" /></el-form-item>
             </el-form>
             <template #footer>
-                <el-button @click="gradeDialog.visible = false">取消</el-button>
-                <el-button type="primary" :loading="gradeDialog.loading" @click="submitGrade">保存</el-button>
+                <el-button :disabled="gradeDialog.loading" @click="gradeDialog.visible = false">取消</el-button>
+                <el-button :disabled="gradeDialog.loading" type="primary" :loading="gradeDialog.loading" @click="submitGrade">保存</el-button>
             </template>
-        </el-dialog>
+        </HsxDialog>
 
-        <el-dialog v-model="catalogProductDialog.visible" :title="catalogProductDialog.form.site_product_id ? '编辑商品型号' : '新增商品型号'" width="620px" append-to-body destroy-on-close>
-            <el-alert type="info" :closable="false" show-icon class="mb-5">
+        <HsxDialog :confirm-loading="catalogProductDialog.loading" v-model="catalogProductDialog.visible" :title="catalogProductDialog.form.site_product_id ? '编辑商品型号' : '新增商品型号'" width="620px" append-to-body destroy-on-close>
+            <HsxNotice default-expanded type="info" :closable="false" show-icon class="mb-5">
                 <template #title>排序值越大越靠前；品类、品牌和系列节点按其子型号的最高排序值排列。</template>
-            </el-alert>
+            </HsxNotice>
             <el-form label-width="104px">
                 <el-form-item label="商品品类" required>
                     <el-input v-model.trim="catalogProductDialog.form.category_path" maxlength="255" placeholder="一级品类，或 一级品类/子品类" />
@@ -233,12 +231,12 @@
                 <el-form-item label="状态"><el-switch v-model="catalogProductDialog.form.is_enabled" :active-value="1" :inactive-value="0" active-text="启用" inactive-text="停用" /></el-form-item>
             </el-form>
             <template #footer>
-                <el-button @click="catalogProductDialog.visible = false">取消</el-button>
-                <el-button type="primary" :loading="catalogProductDialog.loading" @click="submitCatalogProduct">保存</el-button>
+                <el-button :disabled="catalogProductDialog.loading" @click="catalogProductDialog.visible = false">取消</el-button>
+                <el-button :disabled="catalogProductDialog.loading" type="primary" :loading="catalogProductDialog.loading" @click="submitCatalogProduct">保存</el-button>
             </template>
-        </el-dialog>
+        </HsxDialog>
 
-        <el-dialog v-model="catalogSortDialog.visible" title="调整目录排序" width="460px" append-to-body>
+        <HsxDialog :confirm-loading="catalogSortDialog.loading" v-model="catalogSortDialog.visible" title="调整目录排序" width="460px" append-to-body :destroy-on-close="false">
             <div class="mb-4 rounded-md bg-gray-50 px-4 py-3">
                 <div class="text-xs text-gray-400">当前节点</div>
                 <div class="mt-1 font-medium text-gray-900">{{ catalogSortDialog.node.label || '未命名' }}</div>
@@ -250,12 +248,12 @@
                 </el-form-item>
             </el-form>
             <template #footer>
-                <el-button @click="catalogSortDialog.visible = false">取消</el-button>
-                <el-button type="primary" :loading="catalogSortDialog.loading" @click="submitCatalogSort">保存排序</el-button>
+                <el-button :disabled="catalogSortDialog.loading" @click="catalogSortDialog.visible = false">取消</el-button>
+                <el-button :disabled="catalogSortDialog.loading" type="primary" :loading="catalogSortDialog.loading" @click="submitCatalogSort">保存排序</el-button>
             </template>
-        </el-dialog>
+        </HsxDialog>
 
-        <el-dialog v-model="catalogTaskDialogVisible" title="商品目录导入记录" width="960px" append-to-body>
+        <HsxDialog v-model="catalogTaskDialogVisible" title="商品目录导入记录" width="960px" append-to-body :destroy-on-close="false">
             <div class="mb-3 flex items-center justify-between">
                 <div class="text-sm text-gray-500">Excel 由后台每 500 行分批处理，关闭窗口不会中断。</div>
                 <el-button :loading="catalogTaskLoading" @click="loadCatalogTasks">刷新</el-button>
@@ -302,13 +300,14 @@
                 />
             </div>
             <template #footer><el-button @click="catalogTaskDialogVisible = false">关闭</el-button></template>
-        </el-dialog>
-    </div>
+        </HsxDialog>
+    </HsxPage>
 </template>
 
 <script setup lang="ts">
+import { HsxTitle, HsxPage, HsxDialog, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import { Download, Plus, Refresh, Search, Upload } from '@element-plus/icons-vue'
 import * as XLSX from 'xlsx'
 import {
@@ -330,6 +329,8 @@ import {
     sortErpGoodsCatalogNode,
     uploadErpGoodsCatalogImport
 } from '@/addon/hsx_erp/api/erp'
+const hsxFeedback = useFeedback()
+
 
 const activeTab = ref('catalog')
 const loading = ref(false)
@@ -427,8 +428,8 @@ async function submitCatalogFile(file: File) {
         formData.append('source_key', 'excel_product_catalog')
         const res: any = await uploadErpGoodsCatalogImport(formData)
         const result = res?.data || {}
-        if (result.async) ElMessage.success(result.message || '商品目录已进入后台导入队列')
-        else ElMessage.warning(result.message || '任务已创建，请检查后台队列配置')
+        if (result.async) hsxFeedback.success(result.message || '商品目录已进入后台导入队列')
+        else hsxFeedback.warning(result.message || '任务已创建，请检查后台队列配置')
         activeTab.value = 'catalog'
         catalogTaskDialogVisible.value = true
         catalogTaskPage.page = 1
@@ -465,8 +466,8 @@ async function loadCatalogTasks() {
 async function retryCatalogTask(row: any) {
     const res: any = await retryErpGoodsCatalogImportTask(row.id)
     const result = res?.data || {}
-    if (result.async) ElMessage.success(result.message || '任务已重新进入队列')
-    else ElMessage.warning(result.message || '任务暂未进入队列')
+    if (result.async) hsxFeedback.success(result.message || '任务已重新进入队列')
+    else hsxFeedback.warning(result.message || '任务暂未进入队列')
     await loadCatalogTasks()
 }
 
@@ -560,8 +561,8 @@ function openCatalogProduct(row: any = {}) {
 
 async function submitCatalogProduct() {
     const form = catalogProductDialog.form
-    if (!String(form.category_path || '').trim()) return ElMessage.warning('请输入商品品类')
-    if (!String(form.product_name || '').trim()) return ElMessage.warning('请输入商品型号')
+    if (!String(form.category_path || '').trim()) return hsxFeedback.warning('请输入商品品类')
+    if (!String(form.product_name || '').trim()) return hsxFeedback.warning('请输入商品型号')
     catalogProductDialog.loading = true
     try {
         await saveErpGoodsCatalogProduct(Number(form.site_product_id || 0), {
@@ -654,11 +655,11 @@ function openGroup(row: any = {}) {
 }
 
 async function submitGroup() {
-    if (!groupDialog.form.label) return ElMessage.warning('请填写规格名称')
+    if (!groupDialog.form.label) return hsxFeedback.warning('请填写规格名称')
     groupDialog.loading = true
     try {
         await saveErpGoodsSpecGroup(groupDialog.form.id, { ...groupDialog.form })
-        ElMessage.success('规格组已保存')
+        hsxFeedback.success('规格组已保存')
         groupDialog.visible = false
         await loadSpecs()
     } finally {
@@ -669,7 +670,7 @@ async function submitGroup() {
 async function removeGroup(row: any) {
     await ElMessageBox.confirm(`确认删除规格组「${row.label}」？组内规格值也会删除。`, '删除规格组', { type: 'warning' })
     await deleteErpGoodsSpecGroup(Number(row.id))
-    ElMessage.success('规格组已删除')
+    hsxFeedback.success('规格组已删除')
     await loadSpecs()
 }
 
@@ -685,11 +686,11 @@ function openItem(group: any, item: any = {}) {
 }
 
 async function submitItem() {
-    if (!itemDialog.form.item_value) return ElMessage.warning('请填写规格值')
+    if (!itemDialog.form.item_value) return hsxFeedback.warning('请填写规格值')
     itemDialog.loading = true
     try {
         await saveErpGoodsSpecItem(itemDialog.form.id, { ...itemDialog.form })
-        ElMessage.success('规格值已保存')
+        hsxFeedback.success('规格值已保存')
         itemDialog.visible = false
         await loadSpecs()
     } finally {
@@ -700,7 +701,7 @@ async function submitItem() {
 async function removeItem(row: any) {
     await ElMessageBox.confirm(`确认删除规格值「${row.label}」？`, '删除规格值', { type: 'warning' })
     await deleteErpGoodsSpecItem(Number(row.id))
-    ElMessage.success('规格值已删除')
+    hsxFeedback.success('规格值已删除')
     await loadSpecs()
 }
 
@@ -715,11 +716,11 @@ function openGrade(row: any = {}) {
 }
 
 async function submitGrade() {
-    if (!gradeDialog.form.grade_name) return ElMessage.warning('请填写成色名称')
+    if (!gradeDialog.form.grade_name) return hsxFeedback.warning('请填写成色名称')
     gradeDialog.loading = true
     try {
         await saveErpGoodsGrade(gradeDialog.form.id, { ...gradeDialog.form })
-        ElMessage.success('成色已保存')
+        hsxFeedback.success('成色已保存')
         gradeDialog.visible = false
         await loadSpecs()
     } finally {
@@ -730,7 +731,7 @@ async function submitGrade() {
 async function removeGrade(row: any) {
     await ElMessageBox.confirm(`确认删除成色「${row.label}」？`, '删除成色', { type: 'warning' })
     await deleteErpGoodsGrade(Number(row.id))
-    ElMessage.success('成色已删除')
+    hsxFeedback.success('成色已删除')
     await loadSpecs()
 }
 </script>

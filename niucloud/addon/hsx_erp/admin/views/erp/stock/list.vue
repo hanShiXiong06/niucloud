@@ -1,21 +1,133 @@
 <template>
-    <div class="main-container">
+    <HsxPage padding="none" class="main-container">
         <el-card class="!border-none" shadow="never">
-            <div class="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                    <div class="text-page-title">库存中心</div>
-                    <div class="mt-1 text-sm text-gray-500">查看设备、成本与待办，按当前状态处理下一步。</div>
-                </div>
-                <div class="flex flex-wrap gap-2">
-                    <el-button v-if="selectedPendingIds.length" type="warning" @click="openSendRefurbish()">批量开始整备（{{ selectedPendingIds.length }}）</el-button>
-                    <el-button v-if="selectedSaleableIds.length" type="primary" @click="goSale(selectedSaleableIds)">批量销售（{{ selectedSaleableIds.length }}）</el-button>
-                    <el-button v-if="selectedTransferableIds.length" @click="openTransfer()">批量调拨（{{ selectedTransferableIds.length }}）</el-button>
-                    <el-button type="primary" plain @click="router.push('/site/hsx_erp/stocktake')">库存盘点</el-button>
-                    <el-button v-if="canViewProfit || canViewFinance" type="primary" plain @click="ledgerVisible = true">查询 / 导出设备</el-button>
-                    <el-button type="primary" plain @click="openSerialTrace">串号追踪</el-button>
-                    <el-button :icon="Refresh" :loading="table.loading" @click="loadList">刷新</el-button>
-                </div>
-            </div>
+            <HsxTitle size="page" collapsible-subtitle class="mb-4">
+                <template #default>库存中心</template>
+                <template #subtitle>查看设备、成本与待办，按当前状态处理下一步。</template>
+                <template #extra><div class="flex flex-wrap gap-2 flex-wrap">
+                        <el-button v-if="selectedPendingIds.length" type="warning" @click="openSendRefurbish()">批量开始整备（{{ selectedPendingIds.length }}）</el-button>
+                        <el-button v-if="selectedSaleableIds.length" type="primary" @click="goSale(selectedSaleableIds)">批量销售（{{ selectedSaleableIds.length }}）</el-button>
+                        <el-button v-if="selectedTransferableIds.length" @click="openTransfer()">批量调拨（{{ selectedTransferableIds.length }}）</el-button>
+                        <el-button type="primary" plain @click="router.push('/site/hsx_erp/stocktake')">库存盘点</el-button>
+                        <el-button v-if="canViewProfit || canViewFinance" type="primary" plain @click="ledgerVisible = true">查询 / 导出设备</el-button>
+                        <el-button type="primary" plain @click="openSerialTrace">串号追踪</el-button>
+                        <el-button :icon="Refresh" :loading="table.loading" @click="loadList">刷新</el-button>
+                    </div></template>
+            </HsxTitle>
+
+            <HsxSearchPanel :summary="searchConditionCount ? '已填写 ' + searchConditionCount + ' 项条件，点击查询生效' : ''">
+                <template #extra>
+                    <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
+                    <el-button @click="handleReset">重置</el-button>
+                </template>
+                <el-form :inline="true" class="mt-2" @submit.prevent>
+                    <el-form-item label="商品型号">
+                        <ErpCatalogProductSelect v-model="search.catalog_product_id" class="!w-[280px]" placeholder="搜索品牌、系列或型号" />
+                    </el-form-item>
+                    <el-form-item label="关键词">
+                        <el-input v-model.trim="search.keyword" clearable class="!w-[300px]" placeholder="型号 / IMEI / SN / 规格 / 仓库" @keyup.enter="handleSearch" />
+                    </el-form-item>
+                    <el-form-item label="仓库">
+                        <el-select v-model="search.warehouse_id" clearable class="!w-[160px]" placeholder="全部仓库" @change="onSearchWarehouseChange">
+                            <el-option v-for="item in warehouses" :key="item.id" :label="item.warehouse_name" :value="item.id" />
+                        </el-select>
+                    </el-form-item>
+                    <el-form-item label="库位">
+                        <el-select v-model="search.location_id" clearable class="!w-[160px]" placeholder="全部库位" :disabled="!search.warehouse_id">
+                            <el-option v-for="item in searchLocations" :key="item.id" :label="item.location_name" :value="item.id" />
+                        </el-select>
+                    </el-form-item>
+
+                    <HsxFold title="更多筛选" :summary="advancedFilterCount ? '已设置 ' + advancedFilterCount + ' 项条件，折叠后仍生效' : '整备、来源、时间与金额'">
+                        <el-form-item label="整备">
+                            <el-select v-model="search.refurbish_status" clearable class="!w-[140px]" placeholder="全部">
+                                <el-option label="无需整备" value="none" />
+                                <el-option label="待整备" value="pending" />
+                                <el-option label="整备中" value="processing" />
+                                <el-option label="已完成" value="done" />
+                                <el-option label="整备异常" value="failed" />
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="去向">
+                            <el-select v-model="search.sale_target" clearable class="!w-[140px]" placeholder="全部">
+                                <el-option label="未定" value="unset" />
+                                <el-option label="卖同行" value="peer" />
+                                <el-option label="上商城" value="mall" />
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="上架">
+                            <el-select v-model="search.listing_status" clearable class="!w-[140px]" placeholder="全部">
+                                <el-option label="不需要" value="none" />
+                                <el-option label="待拍照" value="need_photo" />
+                                <el-option label="待销售定价" value="need_price" />
+                                <el-option label="待商城资料整理" value="need_material" />
+                                <el-option label="待上架" value="ready" />
+                                <el-option label="待商城运营完善" value="pending_shop" />
+                                <el-option label="商城已上架" value="listed" />
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item>
+                            <el-checkbox v-model="search.my_task" :true-value="1" :false-value="0" @change="handleSearch">
+                        只看我的待办
+                            </el-checkbox>
+                        </el-form-item>
+                        <el-form-item label="业务方向">
+                            <el-select v-model="search.party_scope" class="!w-[170px]" @change="onPartyScopeChange">
+                                <el-option v-if="canViewSupplier" label="采购 / 回收来源" value="supplier" />
+                                <el-option label="销售客户" value="customer" />
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item :label="search.party_scope === 'customer' ? '购买客户' : '供货来源'">
+                            <ErpPartySelect
+                                v-model="search.party_id"
+                                v-model:party-name="search.party_name"
+                                :party-type="search.party_scope === 'customer' ? 'customer' : 'supplier'"
+                                :allow-create="false"
+                                :placeholder="search.party_scope === 'customer' ? '选择买走设备的客户' : '选择提供设备的客户/供货商'"
+                                class="!w-[230px]"
+                            />
+                        </el-form-item>
+                        <el-form-item label="业务来源">
+                            <el-select v-model="search.origin_plugin" clearable class="!w-[150px]" placeholder="全部来源">
+                                <el-option v-for="item in businessSourceOptions" :key="item.value" :label="item.label" :value="item.value" />
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item v-if="search.party_scope === 'customer'" label="销售渠道">
+                            <el-select v-model="search.sale_channel_key" clearable filterable class="!w-[170px]" placeholder="全部渠道">
+                                <el-option v-for="item in saleChannelOptions" :key="item.key" :label="item.name" :value="item.key" />
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item :label="search.party_scope === 'customer' ? '销售时间' : '入库时间'">
+                            <el-date-picker v-model="search.dateRange" type="daterange" value-format="X" start-placeholder="开始" end-placeholder="结束" class="!w-[260px]" />
+                        </el-form-item>
+                        <el-form-item label="库龄">
+                            <el-input-number v-model="search.stock_age_min" :min="0" :precision="0" :controls="false" placeholder="最少天" class="!w-[100px]" />
+                            <span class="mx-1 text-gray-400">-</span>
+                            <el-input-number v-model="search.stock_age_max" :min="0" :precision="0" :controls="false" placeholder="最多天" class="!w-[100px]" />
+                        </el-form-item>
+                        <el-form-item label="周转">
+                            <el-select v-model="search.turnover_level" clearable class="!w-[140px]" placeholder="全部等级">
+                                <el-option label="全部预警" value="risk" />
+                                <el-option label="周转正常" value="healthy" />
+                                <el-option label="需要关注" value="attention" />
+                                <el-option label="周转预警" value="warning" />
+                                <el-option label="严重滞销" value="critical" />
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item v-if="canViewCost" label="成本">
+                            <el-input-number v-model="search.min_cost" :min="0" :precision="2" :controls="false" placeholder="最低" class="!w-[110px]" />
+                            <span class="mx-1 text-gray-400">-</span>
+                            <el-input-number v-model="search.max_cost" :min="0" :precision="2" :controls="false" placeholder="最高" class="!w-[110px]" />
+                        </el-form-item>
+                        <el-form-item label="零售价/预估">
+                            <el-input-number v-model="search.min_price" :min="0" :precision="2" :controls="false" placeholder="最低" class="!w-[110px]" />
+                            <span class="mx-1 text-gray-400">-</span>
+                            <el-input-number v-model="search.max_price" :min="0" :precision="2" :controls="false" placeholder="最高" class="!w-[110px]" />
+                        </el-form-item>
+                    </HsxFold>
+
+                </el-form>
+            </HsxSearchPanel>
 
             <div class="mt-4 grid grid-cols-2 gap-3" :class="canViewCost ? 'lg:grid-cols-6' : 'lg:grid-cols-5'">
                 <div class="summary-tile summary-tile--clickable" @click="applyTurnoverFilter('')">
@@ -49,13 +161,12 @@
                 </div>
             </div>
 
-            <div v-if="(turnoverSummary.actions || []).length || (turnoverSummary.warehouse_risks || []).length" class="turnover-actions-panel">
-                <div><div class="font-medium text-slate-800">当前优先处理</div><div class="mt-1 text-xs text-slate-400">从预警直接进入对应库存，减少重复查找</div></div>
+            <HsxFold v-if="(turnoverSummary.actions || []).length || (turnoverSummary.warehouse_risks || []).length" class="mt-3" title="待办建议" :summary="(turnoverSummary.actions || []).map(item => `${item.label} ${item.count} 台`).join(' · ')">
                 <div class="flex flex-1 flex-col items-end gap-2">
                     <div class="flex flex-wrap justify-end gap-2"><el-button v-for="item in turnoverSummary.actions" :key="item.key" size="small" plain @click="applySummaryAction(item)">{{ item.label }}（{{ item.count }}）</el-button></div>
                     <div v-if="(turnoverSummary.warehouse_risks || []).length" class="flex flex-wrap justify-end gap-2 text-xs text-slate-500"><span>重点仓库：</span><button v-for="item in turnoverSummary.warehouse_risks" :key="item.warehouse_id" type="button" class="warehouse-risk-chip" @click="applyWarehouseRisk(item)">{{ item.warehouse_name }} {{ item.warning_count }} 台<span v-if="canViewCost"> / {{ money(item.warning_cost) }}</span></button></div>
                 </div>
-            </div>
+            </HsxFold>
 
             <!-- 状态快筛 Tab -->
             <el-tabs v-model="activeTab" class="mt-4 erp-status-tabs" @tab-change="onTabChange">
@@ -66,117 +177,6 @@
                 <el-tab-pane label="作废" name="void" />
                 <el-tab-pane label="已盘亏" name="lost" />
             </el-tabs>
-
-            <el-form :inline="true" class="mt-2" @submit.prevent>
-                 <el-form-item label="商品型号">
-                    <ErpCatalogProductSelect v-model="search.catalog_product_id" class="!w-[280px]" placeholder="搜索品牌、系列或型号" />
-                </el-form-item>
-                <el-form-item label="关键词">
-                    <el-input v-model.trim="search.keyword" clearable class="!w-[300px]" placeholder="型号 / IMEI / SN / 规格 / 仓库" @keyup.enter="handleSearch" />
-                </el-form-item>
-                <el-form-item label="仓库">
-                    <el-select v-model="search.warehouse_id" clearable class="!w-[160px]" placeholder="全部仓库" @change="onSearchWarehouseChange">
-                        <el-option v-for="item in warehouses" :key="item.id" :label="item.warehouse_name" :value="item.id" />
-                    </el-select>
-                </el-form-item>
-                <el-form-item label="库位">
-                    <el-select v-model="search.location_id" clearable class="!w-[160px]" placeholder="全部库位" :disabled="!search.warehouse_id">
-                        <el-option v-for="item in searchLocations" :key="item.id" :label="item.location_name" :value="item.id" />
-                    </el-select>
-                </el-form-item>
-               
-                <HsxFold class="mb-4" title="更多筛选" :summary="advancedFilterCount ? '已设置 ' + advancedFilterCount + ' 项条件，折叠后仍生效' : '整备、来源、时间与金额'">
-                <el-form-item label="整备">
-                    <el-select v-model="search.refurbish_status" clearable class="!w-[140px]" placeholder="全部">
-                        <el-option label="无需整备" value="none" />
-                        <el-option label="待整备" value="pending" />
-                        <el-option label="整备中" value="processing" />
-                        <el-option label="已完成" value="done" />
-                        <el-option label="整备异常" value="failed" />
-                    </el-select>
-                </el-form-item>
-                <el-form-item label="去向">
-                    <el-select v-model="search.sale_target" clearable class="!w-[140px]" placeholder="全部">
-                        <el-option label="未定" value="unset" />
-                        <el-option label="卖同行" value="peer" />
-                        <el-option label="上商城" value="mall" />
-                    </el-select>
-                </el-form-item>
-                <el-form-item label="上架">
-                    <el-select v-model="search.listing_status" clearable class="!w-[140px]" placeholder="全部">
-                        <el-option label="不需要" value="none" />
-                        <el-option label="待拍照" value="need_photo" />
-                        <el-option label="待销售定价" value="need_price" />
-                        <el-option label="待商城资料整理" value="need_material" />
-                        <el-option label="待上架" value="ready" />
-                        <el-option label="待商城运营完善" value="pending_shop" />
-                        <el-option label="商城已上架" value="listed" />
-                    </el-select>
-                </el-form-item>
-                <el-form-item>
-                    <el-checkbox v-model="search.my_task" :true-value="1" :false-value="0" @change="handleSearch">
-                        只看我的待办
-                    </el-checkbox>
-                </el-form-item>
-                <el-form-item label="业务方向">
-                    <el-select v-model="search.party_scope" class="!w-[170px]" @change="onPartyScopeChange">
-                        <el-option v-if="canViewSupplier" label="采购 / 回收来源" value="supplier" />
-                        <el-option label="销售客户" value="customer" />
-                    </el-select>
-                </el-form-item>
-                <el-form-item :label="search.party_scope === 'customer' ? '购买客户' : '供货来源'">
-                    <ErpPartySelect
-                        v-model="search.party_id"
-                        v-model:party-name="search.party_name"
-                        :party-type="search.party_scope === 'customer' ? 'customer' : 'supplier'"
-                        :allow-create="false"
-                        :placeholder="search.party_scope === 'customer' ? '选择买走设备的客户' : '选择提供设备的客户/供货商'"
-                        class="!w-[230px]"
-                    />
-                </el-form-item>
-                <el-form-item label="业务来源">
-                    <el-select v-model="search.origin_plugin" clearable class="!w-[150px]" placeholder="全部来源">
-                        <el-option v-for="item in businessSourceOptions" :key="item.value" :label="item.label" :value="item.value" />
-                    </el-select>
-                </el-form-item>
-                <el-form-item v-if="search.party_scope === 'customer'" label="销售渠道">
-                    <el-select v-model="search.sale_channel_key" clearable filterable class="!w-[170px]" placeholder="全部渠道">
-                        <el-option v-for="item in saleChannelOptions" :key="item.key" :label="item.name" :value="item.key" />
-                    </el-select>
-                </el-form-item>
-                <el-form-item :label="search.party_scope === 'customer' ? '销售时间' : '入库时间'">
-                    <el-date-picker v-model="search.dateRange" type="daterange" value-format="X" start-placeholder="开始" end-placeholder="结束" class="!w-[260px]" />
-                </el-form-item>
-                <el-form-item label="库龄">
-                    <el-input-number v-model="search.stock_age_min" :min="0" :precision="0" :controls="false" placeholder="最少天" class="!w-[100px]" />
-                    <span class="mx-1 text-gray-400">-</span>
-                    <el-input-number v-model="search.stock_age_max" :min="0" :precision="0" :controls="false" placeholder="最多天" class="!w-[100px]" />
-                </el-form-item>
-                <el-form-item label="周转">
-                    <el-select v-model="search.turnover_level" clearable class="!w-[140px]" placeholder="全部等级">
-                        <el-option label="全部预警" value="risk" />
-                        <el-option label="周转正常" value="healthy" />
-                        <el-option label="需要关注" value="attention" />
-                        <el-option label="周转预警" value="warning" />
-                        <el-option label="严重滞销" value="critical" />
-                    </el-select>
-                </el-form-item>
-                <el-form-item v-if="canViewCost" label="成本">
-                    <el-input-number v-model="search.min_cost" :min="0" :precision="2" :controls="false" placeholder="最低" class="!w-[110px]" />
-                    <span class="mx-1 text-gray-400">-</span>
-                    <el-input-number v-model="search.max_cost" :min="0" :precision="2" :controls="false" placeholder="最高" class="!w-[110px]" />
-                </el-form-item>
-                <el-form-item label="零售价/预估">
-                    <el-input-number v-model="search.min_price" :min="0" :precision="2" :controls="false" placeholder="最低" class="!w-[110px]" />
-                    <span class="mx-1 text-gray-400">-</span>
-                    <el-input-number v-model="search.max_price" :min="0" :precision="2" :controls="false" placeholder="最高" class="!w-[110px]" />
-                </el-form-item>
-                </HsxFold>
-                <el-form-item>
-                    <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
-                    <el-button @click="handleReset">重置</el-button>
-                </el-form-item>
-            </el-form>
 
             <el-table :data="table.data" v-loading="table.loading" size="large" :row-class-name="stockRowClassName" @selection-change="onSelectionChange">
                 <el-table-column type="selection" width="48" :selectable="row => row.status === 'in_stock'" />
@@ -327,7 +327,7 @@
         </el-card>
         <ErpSaleProfitReport v-model="ledgerVisible" initial-preset="inventory" />
 
-        <HsxDialog v-model="flow.visible" :title="flowDialogTitle" width="680px" destroy-on-close>
+        <HsxDialog :confirm-loading="flow.saving" v-model="flow.visible" :title="flowDialogTitle" width="680px" destroy-on-close>
             <el-form label-width="96px">
                 <div class="mt-4 rounded border border-gray-100 bg-gray-50 px-4 py-3">
                     <div class="font-medium">{{ flow.row?.model || '-' }}</div>
@@ -365,8 +365,8 @@
                 />
             </el-form>
             <template #footer>
-                <el-button @click="flow.visible = false">取消</el-button>
-                <el-button type="primary" :loading="flow.saving" @click="submitFlow">{{ flowSubmitLabel }}</el-button>
+                <el-button :disabled="flow.saving" @click="flow.visible = false">取消</el-button>
+                <el-button :disabled="flow.saving" type="primary" :loading="flow.saving" @click="submitFlow">{{ flowSubmitLabel }}</el-button>
             </template>
         </HsxDialog>
 
@@ -396,17 +396,17 @@
             </template>
         </HsxDialog>
 
-        <HsxDialog v-model="retail.visible" :title="Number(retail.row?.retail_price || 0) > 0 ? '调整零售价' : '设置零售价'" width="480px" destroy-on-close>
+        <HsxDialog :confirm-loading="retail.saving" v-model="retail.visible" :title="Number(retail.row?.retail_price || 0) > 0 ? '调整零售价' : '设置零售价'" width="480px" destroy-on-close>
             <div class="rounded-lg bg-slate-50 px-4 py-3"><div class="font-medium text-slate-800">{{ retail.row?.model || '-' }}</div><div class="mt-1 text-xs text-slate-500">IMEI {{ retail.row?.imei || '-' }}<span v-if="canViewCost"> · 成本 {{ money(retail.row?.total_cost) }}</span></div></div>
             <el-form class="mt-4" label-width="92px">
                 <el-form-item label="当前零售价"><span>{{ Number(retail.row?.retail_price || 0) > 0 ? money(retail.row?.retail_price) : '未设置' }}</span></el-form-item>
                 <el-form-item label="新零售价" required><el-input-number v-model="retail.form.retail_price" :min="0.01" :precision="2" :controls="false" class="!w-full" /></el-form-item>
                 <el-form-item label="调整原因" :required="Number(retail.row?.retail_price || 0) > 0"><el-input v-model.trim="retail.form.reason" type="textarea" :rows="3" placeholder="首次定价可不填；已有价格调整请说明市场反馈或处理原因" /></el-form-item>
             </el-form>
-            <template #footer><el-button @click="retail.visible=false">取消</el-button><el-button type="primary" :loading="retail.saving" @click="submitRetailPrice">确认保存</el-button></template>
+            <template #footer><el-button :disabled="retail.saving" @click="retail.visible=false">取消</el-button><el-button :disabled="retail.saving" type="primary" :loading="retail.saving" @click="submitRetailPrice">确认保存</el-button></template>
         </HsxDialog>
 
-        <HsxDialog v-model="transfer.visible" :title="transfer.preview?.action === 'buyout' ? '代卖设备转为自有' : '库存调拨'" width="560px" destroy-on-close>
+        <HsxDialog :confirm-loading="transfer.saving" v-model="transfer.visible" :title="transfer.preview?.action === 'buyout' ? '代卖设备转为自有' : '库存调拨'" width="560px" destroy-on-close>
             <HsxNotice :title="`本次处理 ${transfer.assetIds.length} 台设备。系统会先核对物权和目标仓规则，不会通过普通调拨隐式改变物权。`" type="info" :closable="false" />
             <el-form class="mt-4" label-width="88px">
                 <el-form-item label="目标仓库" required><el-select v-model="transfer.form.warehouse_id" class="w-full" placeholder="选择目标仓库" @change="onTransferWarehouseChange"><el-option v-for="item in warehouses" :key="item.id" :label="item.warehouse_name" :value="item.id" /></el-select></el-form-item>
@@ -423,7 +423,7 @@
                 </template>
                 <el-form-item :label="transfer.preview?.action === 'buyout' ? '买断说明' : '调拨原因'"><el-input v-model.trim="transfer.form.reason" type="textarea" :rows="3" :placeholder="transfer.preview?.action === 'buyout' ? '例如：客户同意按该价格转为本店自有设备' : '例如：长库龄转同行仓、调整销售渠道'" /></el-form-item>
             </el-form>
-            <template #footer><el-button @click="transfer.visible=false">取消</el-button><el-button type="primary" :disabled="!transfer.preview?.allowed" :loading="transfer.saving" @click="submitTransfer">{{ transfer.preview?.action === 'buyout' ? '确认转为自有' : '确认调拨' }}</el-button></template>
+            <template #footer><el-button :disabled="transfer.saving" @click="transfer.visible=false">取消</el-button><el-button type="primary" :disabled="(!transfer.preview?.allowed) || (transfer.saving)" :loading="transfer.saving" @click="submitTransfer">{{ transfer.preview?.action === 'buyout' ? '确认转为自有' : '确认调拨' }}</el-button></template>
         </HsxDialog>
 
         <HsxDialog v-model="serialTrace.visible" title="串号追踪" width="920px" destroy-on-close>
@@ -512,7 +512,7 @@
             </div>
         </HsxDrawer>
 
-        <HsxDialog v-model="expense.visible" title="设备成本调整" width="680px" destroy-on-close>
+        <HsxDialog :confirm-loading="expense.saving" v-model="expense.visible" title="设备成本调整" width="680px" destroy-on-close>
             <HsxNotice :title="costTypeTip" type="warning" :closable="false" />
             <div class="mt-4 rounded border border-gray-100 bg-gray-50 px-4 py-3">
                 <div class="font-medium">{{ expense.row?.model || '-' }}</div>
@@ -535,12 +535,12 @@
                 <el-form-item label="调整原因" required><el-input v-model.trim="expense.form.reason" type="textarea" :rows="3" placeholder="说明供应商调价或账面修正原因；整备费用请走整备完工" /></el-form-item>
             </el-form>
             <template #footer>
-                <el-button @click="expense.visible = false">取消</el-button>
-                <el-button type="primary" :loading="expense.saving" @click="submitExpense">确认调整</el-button>
+                <el-button :disabled="expense.saving" @click="expense.visible = false">取消</el-button>
+                <el-button :disabled="expense.saving" type="primary" :loading="expense.saving" @click="submitExpense">确认调整</el-button>
             </template>
         </HsxDialog>
 
-        <HsxDialog v-model="sendRefurbish.visible" title="开始整备" width="600px" destroy-on-close>
+        <HsxDialog :confirm-loading="sendRefurbish.saving" v-model="sendRefurbish.visible" title="开始整备" width="600px" destroy-on-close>
             <HsxNotice :title="sendRefurbish.form.tracking_mode === 'external' ? '外送追踪会记录这些设备当前在哪家整备商手中。' : '简易登记不追踪在谁手中，完工时再填写每项服务商和费用。'" type="info" :closable="false" />
             <div class="my-4 rounded-lg bg-slate-50 p-4"><strong>本次 {{ sendRefurbish.assetIds.length }} 台设备</strong><div class="mt-1 text-xs text-gray-500">一次确认即可完成整筐设备交接，设备仍归属原库存位置。</div></div>
             <el-form label-width="100px">
@@ -548,10 +548,10 @@
                 <el-form-item v-if="sendRefurbish.form.tracking_mode === 'external'" label="整备商" required><counterparty-select v-model="sendRefurbish.form.provider_party_id" role-type="supplier" placeholder="选择当前接收设备的整备商" /></el-form-item>
                 <el-form-item label="交接说明"><el-input v-model.trim="sendRefurbish.form.remark" type="textarea" :rows="3" placeholder="选填，例如整筐送修、预计返回时间" /></el-form-item>
             </el-form>
-            <template #footer><el-button @click="sendRefurbish.visible=false">取消</el-button><el-button type="warning" :loading="sendRefurbish.saving" @click="submitSendRefurbish">确认开始</el-button></template>
+            <template #footer><el-button :disabled="sendRefurbish.saving" @click="sendRefurbish.visible=false">取消</el-button><el-button :disabled="sendRefurbish.saving" type="warning" :loading="sendRefurbish.saving" @click="submitSendRefurbish">确认开始</el-button></template>
         </HsxDialog>
 
-        <HsxDialog v-model="completeRefurbish.visible" title="登记整备结果" width="820px" destroy-on-close>
+        <HsxDialog :confirm-loading="completeRefurbish.saving" v-model="completeRefurbish.visible" title="登记整备结果" width="820px" destroy-on-close>
             <div class="rounded-lg bg-slate-50 p-4"><div class="font-medium">{{ completeRefurbish.row?.model || '-' }}</div><div class="mt-1 text-xs text-gray-500">IMEI {{ completeRefurbish.row?.imei || '-' }}<span v-if="canViewCost"> · 当前成本 {{ money(completeRefurbish.row?.total_cost) }}</span></div></div>
             <el-form class="mt-4" label-width="100px">
                 <el-form-item label="整备结果" required><el-radio-group v-model="completeRefurbish.form.result"><el-radio-button label="success">修复成功</el-radio-button><el-radio-button label="partial">部分修复</el-radio-button><el-radio-button label="failed">修复失败</el-radio-button></el-radio-group></el-form-item>
@@ -561,7 +561,7 @@
                 <el-form-item label="结果说明"><el-input v-model.trim="completeRefurbish.form.remark" type="textarea" :rows="3" placeholder="记录实际维修结果、未修好原因或异常去向" /></el-form-item>
                 <el-form-item label="整备凭证"><ErpFinanceVoucherUpload v-model="completeRefurbish.form.voucher_urls" /><div class="ml-3 text-xs text-gray-400">可上传维修清单、服务商账单或设备返回照片；实际付款凭证由财务付款时上传。</div></el-form-item>
             </el-form>
-            <template #footer><el-button @click="completeRefurbish.visible=false">取消</el-button><el-button type="primary" :loading="completeRefurbish.saving" @click="submitCompleteRefurbish">确认完工</el-button></template>
+            <template #footer><el-button :disabled="completeRefurbish.saving" @click="completeRefurbish.visible=false">取消</el-button><el-button :disabled="completeRefurbish.saving" type="primary" :loading="completeRefurbish.saving" @click="submitCompleteRefurbish">确认完工</el-button></template>
         </HsxDialog>
 
         <HsxDrawer v-model="detail.visible" title="设备档案" subtitle="核对报价、质检与流转记录" size="lg" destroy-on-close>
@@ -691,14 +691,14 @@
                 </template>
             </div>
         </HsxDrawer>
-    </div>
+    </HsxPage>
 </template>
 
 <script setup lang="ts">
 import { erpEnumLabel, erpNamedLabel, erpSerialText, erpSourceLabel } from '@/addon/hsx_erp/utils/display'
 import { computed, nextTick, onActivated, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { HsxDialog, HsxDrawer, HsxNotice, HsxFold, useFeedback } from '@/addon/hsx_components/core'
+import { HsxDialog, HsxDrawer, HsxNotice, HsxFold, useFeedback, HsxTitle, HsxPage, HsxSearchPanel } from '@/addon/hsx_components/core'
 const feedback = useFeedback()
 import { Refresh, Search } from '@element-plus/icons-vue'
 import { adjustErpStockCost, adjustErpStockRetailPrice, buyoutErpConsignment, completeErpStockRefurbish, getErpSerialTraceDetail, getErpSerialTraceList, getErpStockInfo, getErpStockList, getErpStockTurnoverSummary, handoffErpStockListing, prepareErpStockListingMedia, previewErpStockTransfer, printErpAssetLabel, sendErpStockRefurbish, syncErpStockListing, transferErpStock, updateErpStockFlow } from '@/addon/hsx_erp/api/erp'
@@ -726,6 +726,7 @@ const advancedFilterCount = computed(() => {
     const keys = ['refurbish_status', 'sale_target', 'listing_status', 'my_task', 'party_id', 'origin_plugin', 'sale_channel_key', 'turnover_level', 'stock_age_min', 'stock_age_max', 'min_cost', 'max_cost', 'min_price', 'max_price']
     return keys.filter(key => search[key] !== '' && search[key] !== undefined && search[key] !== null && (key !== 'my_task' || !!search[key])).length + (search.dateRange?.length ? 1 : 0) + (search.party_scope === 'customer' ? 1 : 0)
 })
+const searchConditionCount = computed(() => advancedFilterCount.value + ['keyword', 'status', 'warehouse_id', 'location_id', 'catalog_product_id'].filter(key => search[key] !== '' && search[key] !== null && search[key] !== undefined).length)
 
 const route = useRoute()
 const router = useRouter()
@@ -1333,12 +1334,12 @@ async function publishListing(row: any) {
 }
 
 async function showListingFeedback(publish: any, savedMessage: string) {
-    const feedback = erpListingFeedback(publish, savedMessage)
-    if (feedback.level === 'warning') {
-        await feedback.alert(feedback.detail || '请在库存中心查看失败原因并重试', feedback.message, 'warning')
+    const result = erpListingFeedback(publish, savedMessage)
+    if (result.level === 'warning') {
+        await feedback.alert(result.detail || '请在库存中心查看失败原因并重试', result.message, 'warning')
         return
     }
-    feedback.success(feedback.detail ? `${feedback.message}；${feedback.detail}` : feedback.message)
+    feedback.success(result.detail ? `${result.message}；${result.detail}` : result.message)
 }
 
 function assetStatusMeta(status: string) {

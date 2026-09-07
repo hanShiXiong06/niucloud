@@ -11,20 +11,11 @@
                 </PageHeader>
             </template>
 
-            <HsxNotice default-expanded class="source-alert" type="warning" :closable="false" show-icon>
-                <template #title>级别由人工确认，系统不会自动判断</template>
-                当前版本以选项字典作为实时数据源。确认导入后，历史订单、ERP 和商城重新读取质检报告时也会使用新级别，请先预检再确认。
-            </HsxNotice>
-
-            <el-row :gutter="12" class="summary-row">
-                <el-col :xs="12" :sm="8" :md="4"><div class="metric metric--pending"><span>待人工确认</span><strong>{{ summary.pending }}</strong></div></el-col>
-                <el-col :xs="12" :sm="8" :md="4"><div class="metric metric--confirmed"><span>已确认</span><strong>{{ summary.confirmed }}</strong></div></el-col>
-                <el-col :xs="12" :sm="8" :md="4"><div class="metric metric--normal"><span>正常</span><strong>{{ summary.normal }}</strong></div></el-col>
-                <el-col :xs="12" :sm="8" :md="4"><div class="metric metric--general"><span>一般</span><strong>{{ summary.general }}</strong></div></el-col>
-                <el-col :xs="12" :sm="8" :md="4"><div class="metric metric--abnormal"><span>异常</span><strong>{{ summary.abnormal }}</strong></div></el-col>
-            </el-row>
-
-            <HsxSearchPanel>
+            <HsxSearchPanel class="mb-4">
+                <template #extra>
+                    <el-button type="primary" @click="handleSearch">查询</el-button>
+                    <el-button @click="handleReset">重置</el-button>
+                </template>
                 <el-form :inline="true" class="filter-form" @submit.prevent>
                     <el-form-item label="确认状态">
                         <el-select v-model="query.confirm_status" clearable class="!w-[130px]" placeholder="全部" @change="handleSearch">
@@ -42,12 +33,24 @@
                     <el-form-item label="关键字">
                         <el-input v-model.trim="query.keyword" clearable class="!w-[220px]" placeholder="选项文本，如 碎屏" @keyup.enter="handleSearch" @clear="handleSearch" />
                     </el-form-item>
-                    <el-form-item>
-                        <el-button type="primary" @click="handleSearch">查询</el-button>
-                        <el-button @click="handleReset">重置</el-button>
-                    </el-form-item>
+
                 </el-form>
             </HsxSearchPanel>
+
+            <HsxNotice default-expanded class="source-alert" type="warning" :closable="false" show-icon>
+                <template #title>级别由人工确认，系统不会自动判断</template>
+                当前版本以选项字典作为实时数据源。确认导入后，历史订单、ERP 和商城重新读取质检报告时也会使用新级别，请先预检再确认。
+            </HsxNotice>
+
+            <el-row :gutter="12" class="summary-row">
+                <el-col :xs="12" :sm="8" :md="4"><div class="metric metric--pending"><span>待人工确认</span><strong>{{ summary.pending }}</strong></div></el-col>
+                <el-col :xs="12" :sm="8" :md="4"><div class="metric metric--confirmed"><span>已确认</span><strong>{{ summary.confirmed }}</strong></div></el-col>
+                <el-col :xs="12" :sm="8" :md="4"><div class="metric metric--normal"><span>正常</span><strong>{{ summary.normal }}</strong></div></el-col>
+                <el-col :xs="12" :sm="8" :md="4"><div class="metric metric--general"><span>一般</span><strong>{{ summary.general }}</strong></div></el-col>
+                <el-col :xs="12" :sm="8" :md="4"><div class="metric metric--abnormal"><span>异常</span><strong>{{ summary.abnormal }}</strong></div></el-col>
+            </el-row>
+
+
 
             <el-collapse class="quick-tools">
                 <el-collapse-item title="少量数据快速处理（单项、批量或关键字）" name="quick">
@@ -177,7 +180,6 @@ import {
     confirmCheckSeverityImport,
 } from '@/addon/hsx_recycle/api/check_catalog'
 const hsxFeedback = useFeedback()
-
 
 const loading = ref(false)
 const exportLoading = ref(false)

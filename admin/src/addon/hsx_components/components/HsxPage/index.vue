@@ -70,9 +70,9 @@ const pageStyle = computed(() => ({
                 <div v-if="$slots.toolbar" class="hsx-page__toolbar"><slot name="toolbar" /></div>
             </div>
 
-            <main v-loading="loading" class="hsx-page__body" :class="{ 'hsx-surface': surface }">
+            <div v-loading="loading" class="hsx-page__body" :class="{ 'hsx-surface': surface }">
                 <slot />
-            </main>
+            </div>
         </div>
     </section>
 </template>
@@ -133,6 +133,8 @@ const pageStyle = computed(() => ({
 
 @media (max-width: 1366px) {
     .hsx-page__header { margin-bottom: var(--hsx-space-4); }
+    .hsx-page :deep(.summary-tile) { padding: 10px 12px; }
+    .hsx-page :deep(.summary-value) { margin-top: 4px; font-size: 20px; line-height: 28px; }
 }
 
 @media (max-width: 768px) {

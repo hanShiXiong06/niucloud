@@ -10,6 +10,21 @@
 
             <el-card class="box-card !border-none my-[20px] table-search-wrap" shadow="never">
                 <HsxSearchPanel>
+                    <template #extra>
+                        <el-button type="primary" @click="handleSearch">{{ t('search') }}</el-button>
+                        <el-button @click="resetForm(searchFormRef)">{{ t('reset') }}</el-button>
+                        <el-button type="primary" @click="exportEvent" :disabled="deviceTableData.total === 0">
+                            {{ selectedDevices.length > 0 ? `导出选中 (${selectedDevices.length})` : t('export') }}
+                        </el-button>
+                        <el-button
+                            type="success"
+                            :loading="erpSyncLoading"
+                            :disabled="selectedDevices.length === 0 || !canSyncRows(selectedDevices)"
+                            @click="syncErpEvent"
+                        >
+                            同步 ERP{{ selectedDevices.length > 0 ? ` (${selectedDevices.length})` : '' }}
+                        </el-button>
+                    </template>
                     <el-form :inline="true" :model="deviceTableData.searchParam" ref="searchFormRef">
                         <el-form-item :label="t('imei')" prop="imei">
                             <el-input v-model.trim="deviceTableData.searchParam.imei" class="!w-[200px]" :placeholder="t('请输入IMEI')" />
@@ -53,24 +68,10 @@
                                 unlink-panels
                                 clearable
                                 :shortcuts="dateRangeShortcuts"
-                        />
+                            />
                         </el-form-item>
 
-                        <el-form-item>
-                            <el-button type="primary" @click="handleSearch">{{ t('search') }}</el-button>
-                            <el-button @click="resetForm(searchFormRef)">{{ t('reset') }}</el-button>
-                            <el-button type="primary" @click="exportEvent" :disabled="deviceTableData.total === 0">
-                            {{ selectedDevices.length > 0 ? `导出选中 (${selectedDevices.length})` : t('export') }}
-                            </el-button>
-                            <el-button
-                                type="success"
-                                :loading="erpSyncLoading"
-                                :disabled="selectedDevices.length === 0 || !canSyncRows(selectedDevices)"
-                                @click="syncErpEvent"
-                        >
-                            同步 ERP{{ selectedDevices.length > 0 ? ` (${selectedDevices.length})` : '' }}
-                            </el-button>
-                        </el-form-item>
+
                     </el-form>
                 </HsxSearchPanel>
             </el-card>
@@ -402,7 +403,6 @@ import PageHeader from '@/addon/hsx_recycle/components/PageHeader.vue'
 import EmptyState from '@/addon/hsx_recycle/components/empty-state/index.vue'
 import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 const hsxFeedback = useFeedback()
-
 
 const route = useRoute()
 const pageName = route.meta.title

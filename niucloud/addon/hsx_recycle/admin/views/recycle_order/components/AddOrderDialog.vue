@@ -1,9 +1,9 @@
 <template>
-    <el-dialog
+    <HsxDialog :confirm-loading="loading"
         v-model="dialogVisible"
         :width="isMobile ? 'calc(100vw - 24px)' : '1120px'"
         top="4vh"
-        class="add-order-dialog hsx-premium-overlay"
+        class="add-order-dialog "
         :destroy-on-close="true"
         :close-on-click-modal="false"
         @closed="handleClosed"
@@ -88,13 +88,13 @@
                     <NextAssigneeSelect v-model="nextAssigneeUid" stage-key="check" label="下一步 · 质检负责人" compact />
                 </div>
                 <div class="dialog-footer__actions">
-                    <el-button @click="closeDialog">
+                    <el-button :disabled="loading" @click="closeDialog">
                         {{ draftOrder.id ? '暂存并关闭' : '取消' }}
                     </el-button>
                     <el-button
                         type="primary"
                         :loading="loading"
-                        :disabled="savedDeviceCount === 0"
+                        :disabled="(savedDeviceCount === 0) || (loading)"
                         @click="handleConfirm"
                     >
                         确认签收{{ savedDeviceCount ? `（${savedDeviceCount} 台）` : '' }}
@@ -102,12 +102,13 @@
                 </div>
             </div>
         </template>
-    </el-dialog>
+    </HsxDialog>
 </template>
 
 <script setup lang="ts">
+import { HsxDialog, useFeedback } from '@/addon/hsx_components/core'
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import {
     Aim,
     Loading,
@@ -121,6 +122,8 @@ import NextAssigneeSelect from '@/addon/hsx_recycle/components/task/NextAssignee
 import MemberSelect from '@/addon/hsx_recycle/components/member-select/index.vue'
 import { normalizeDevice } from '@/addon/hsx_recycle/components/device-entry/deviceUtil'
 import type { DeviceEntryRow } from '@/addon/hsx_recycle/components/device-entry/types'
+const hsxFeedback = useFeedback()
+
 
 const props = defineProps({
     visible: { type: Boolean, default: false }
@@ -166,7 +169,7 @@ const activateScanMode = () => {
     const input = expressInput.value?.input || expressInput.value?.$el?.querySelector('input')
     input?.focus()
     isScanMode.value = true
-    ElMessage.info('请扫描快递面单条码')
+    hsxFeedback.info('请扫描快递面单条码')
 }
 
 const handleInputFocus = () => { isScanMode.value = true }
@@ -176,7 +179,7 @@ const handleInputBlur = () => {
 }
 const handleScannerInput = () => {
     if (!form.value.express_no) return
-    ElMessage.success('快递单号已录入')
+    hsxFeedback.success('快递单号已录入')
     isScanMode.value = false
 }
 
@@ -199,7 +202,7 @@ const ensureDraftOrder = async (): Promise<number | string> => {
     if (draftOrder.value.id) return draftOrder.value.id
     const errorMessage = validateBaseOrder()
     if (errorMessage) {
-        ElMessage.warning(errorMessage)
+        hsxFeedback.warning(errorMessage)
         throw new Error(errorMessage)
     }
     const res = await createRecycleOrder({
@@ -214,23 +217,23 @@ const ensureDraftOrder = async (): Promise<number | string> => {
     })
     if (res.code !== 1) throw new Error(res.message || '创建草稿订单失败')
     draftOrder.value = { id: res.data.id, order_no: res.data.order_no }
-    ElMessage.success('草稿订单已创建，客户与到货信息已锁定')
+    hsxFeedback.success('草稿订单已创建，客户与到货信息已锁定')
     return draftOrder.value.id
 }
 
 const handleConfirm = async () => {
     if (!draftOrder.value.id) {
-        ElMessage.warning('请先保存至少一台设备')
+        hsxFeedback.warning('请先保存至少一台设备')
         return
     }
     const savedDevices = form.value.devices.filter(device => device.saved && device.id)
     if (!savedDevices.length) {
-        ElMessage.warning('请先保存至少一台设备')
+        hsxFeedback.warning('请先保存至少一台设备')
         return
     }
     const pendingDevice = form.value.devices.find(device => (device.imei || device.model) && !device.saved)
     if (pendingDevice) {
-        ElMessage.warning('还有已录入但未保存的设备，请先保存或删除后再签收')
+        hsxFeedback.warning('还有已录入但未保存的设备，请先保存或删除后再签收')
         return
     }
 
@@ -247,13 +250,13 @@ const handleConfirm = async () => {
             devices: savedDevices.map(device => ({ id: device.id, ...normalizeDevice(device) }))
         })
         if (res.code !== 1) throw new Error(res.message || '签收失败')
-        ElMessage.success(`已签收 ${savedDevices.length} 台设备`)
+        hsxFeedback.success(`已签收 ${savedDevices.length} 台设备`)
         closeDialog()
         emit('success')
     } catch (error: any) {
         if (error === 'cancel' || error === 'close') return
         console.error('订单签收失败:', error)
-        ElMessage.error(error.message || '订单签收失败')
+        hsxFeedback.error(error.message || '订单签收失败')
     } finally {
         loading.value = false
     }

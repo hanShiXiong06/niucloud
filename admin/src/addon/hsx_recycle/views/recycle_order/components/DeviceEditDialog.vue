@@ -88,7 +88,7 @@
         <template #footer>
             <span class="dialog-footer">
                 <el-button :disabled="submitLoading" @click="dialogVisible = false">取消</el-button>
-                <el-button :disabled="submitLoading" 
+                <el-button :disabled="submitLoading"
                     type="success" 
                     @click="submitForm('CHECK_PRICE')" 
                     :loading="submitLoading"

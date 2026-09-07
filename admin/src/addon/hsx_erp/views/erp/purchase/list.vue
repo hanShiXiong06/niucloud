@@ -10,6 +10,60 @@
                     </div></template>
             </HsxTitle>
 
+            <HsxSearchPanel :summary="searchConditionCount ? '已填写 ' + searchConditionCount + ' 项条件，点击查询生效' : ''">
+                <template #extra>
+                    <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
+                    <el-button @click="handleReset">重置</el-button>
+                </template>
+                <el-form :inline="true" class="mt-2" @submit.prevent>
+                    <el-form-item v-if="listMode === 'device'" label="IMEI">
+                        <el-input v-model.trim="search.imei" clearable class="!w-[190px]" placeholder="输入 IMEI 查询" @keyup.enter="handleSearch" />
+                    </el-form-item>
+                    <el-form-item label="供货商">
+                        <ErpPartySelect
+                            v-model="search.party_id"
+                            v-model:party-name="searchPartyName"
+                            party-type="supplier"
+                            :allow-create="false"
+                            class="!w-[220px]"
+                            placeholder="查询供货商"
+                        />
+                    </el-form-item>
+                    <el-form-item label="采购单">
+                        <el-input v-model.trim="search.purchase_no" clearable class="!w-[230px]" placeholder="输入采购单号" @keyup.enter="handleSearch" />
+                    </el-form-item>
+                    <el-form-item label="仓库">
+                        <el-select v-model="search.warehouse_id" clearable class="!w-[160px]" placeholder="全部仓库" @change="onSearchWarehouseChange">
+                            <el-option v-for="item in warehouses" :key="item.id" :label="item.warehouse_name" :value="item.id" />
+                        </el-select>
+                    </el-form-item>
+                    <HsxFold title="更多筛选" summary="人员、时间与其他条件；收起不清空已填内容">
+                        <el-form-item label="库位">
+                            <el-select v-model="search.location_id" clearable class="!w-[160px]" placeholder="全部库位" :disabled="!search.warehouse_id">
+                                <el-option v-for="item in searchLocations" :key="item.id" :label="item.location_name" :value="item.id" />
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item v-if="listMode === 'device'" label="商品型号">
+                            <ErpCatalogProductSelect v-model="search.catalog_product_id" class="!w-[280px]" placeholder="搜索品牌、系列或型号" />
+                        </el-form-item>
+                        <el-form-item label="采购员">
+                            <el-select v-model="search.purchaser_uid" clearable filterable class="!w-[150px]" placeholder="全部">
+                                <el-option v-for="item in staffOptions" :key="item.uid" :label="staffName(item)" :value="item.uid" />
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="采购时间">
+                            <el-date-picker v-model="search.dateRange" type="daterange" value-format="X" start-placeholder="开始" end-placeholder="结束" class="!w-[260px]" />
+                        </el-form-item>
+                        <el-form-item label="成本">
+                            <el-input-number v-model="search.min_amount" :min="0" :precision="2" :controls="false" placeholder="最低" class="!w-[110px]" />
+                            <span class="mx-1 text-gray-400">-</span>
+                            <el-input-number v-model="search.max_amount" :min="0" :precision="2" :controls="false" placeholder="最高" class="!w-[110px]" />
+                        </el-form-item>
+                    </HsxFold>
+
+                </el-form>
+            </HsxSearchPanel>
+
             <ErpRoleFocus :items="purchaseRoleFocus" />
 
             <div class="mt-5 flex items-center justify-between rounded-lg bg-slate-50 p-2">
@@ -51,57 +105,6 @@
                 <el-tab-pane label="已结清" name="settled" />
                 <el-tab-pane label="已撤销" name="void" />
             </el-tabs>
-
-            <HsxSearchPanel>
-                <el-form :inline="true" class="mt-2" @submit.prevent>
-                    <el-form-item v-if="listMode === 'device'" label="IMEI">
-                        <el-input v-model.trim="search.imei" clearable class="!w-[190px]" placeholder="输入 IMEI 查询" @keyup.enter="handleSearch" />
-                    </el-form-item>
-                    <el-form-item label="供货商">
-                        <ErpPartySelect
-                            v-model="search.party_id"
-                            v-model:party-name="searchPartyName"
-                            party-type="supplier"
-                            :allow-create="false"
-                            class="!w-[220px]"
-                            placeholder="查询供货商"
-                    />
-                    </el-form-item>
-                    <el-form-item label="采购单">
-                        <el-input v-model.trim="search.purchase_no" clearable class="!w-[230px]" placeholder="输入采购单号" @keyup.enter="handleSearch" />
-                    </el-form-item>
-                    <el-form-item label="仓库">
-                        <el-select v-model="search.warehouse_id" clearable class="!w-[160px]" placeholder="全部仓库" @change="onSearchWarehouseChange">
-                            <el-option v-for="item in warehouses" :key="item.id" :label="item.warehouse_name" :value="item.id" />
-                        </el-select>
-                    </el-form-item>
-                    <el-form-item label="库位">
-                        <el-select v-model="search.location_id" clearable class="!w-[160px]" placeholder="全部库位" :disabled="!search.warehouse_id">
-                            <el-option v-for="item in searchLocations" :key="item.id" :label="item.location_name" :value="item.id" />
-                        </el-select>
-                    </el-form-item>
-                    <el-form-item v-if="listMode === 'device'" label="商品型号">
-                        <ErpCatalogProductSelect v-model="search.catalog_product_id" class="!w-[280px]" placeholder="搜索品牌、系列或型号" />
-                    </el-form-item>
-                    <el-form-item label="采购员">
-                        <el-select v-model="search.purchaser_uid" clearable filterable class="!w-[150px]" placeholder="全部">
-                            <el-option v-for="item in staffOptions" :key="item.uid" :label="staffName(item)" :value="item.uid" />
-                        </el-select>
-                    </el-form-item>
-                    <el-form-item label="采购时间">
-                        <el-date-picker v-model="search.dateRange" type="daterange" value-format="X" start-placeholder="开始" end-placeholder="结束" class="!w-[260px]" />
-                    </el-form-item>
-                    <el-form-item label="成本">
-                        <el-input-number v-model="search.min_amount" :min="0" :precision="2" :controls="false" placeholder="最低" class="!w-[110px]" />
-                        <span class="mx-1 text-gray-400">-</span>
-                        <el-input-number v-model="search.max_amount" :min="0" :precision="2" :controls="false" placeholder="最高" class="!w-[110px]" />
-                    </el-form-item>
-                    <el-form-item>
-                        <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
-                        <el-button @click="handleReset">重置</el-button>
-                    </el-form-item>
-                </el-form>
-            </HsxSearchPanel>
 
             <el-table v-if="listMode === 'device'" :data="table.data" v-loading="table.loading" size="large" :row-class-name="purchaseRowClassName">
                 <el-table-column label="设备" min-width="240">
@@ -319,7 +322,7 @@
                         <el-table
                             :data="create.form.items"
                             border
-                            height="390"
+                            max-height="390"
                             class="device-entry-table"
                             empty-text="请添加采购设备"
                         >
@@ -835,7 +838,7 @@
 </template>
 
 <script setup lang="ts">
-import { HsxTitle, HsxPage, HsxSearchPanel, HsxDialog, HsxDrawer, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
+import { HsxTitle, HsxPage, HsxSearchPanel, HsxDialog, HsxDrawer, HsxNotice, useFeedback , HsxFold } from '@/addon/hsx_components/core'
 import { erpEnumLabel, erpSourceLabel } from '@/addon/hsx_erp/utils/display'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
@@ -857,9 +860,9 @@ import ErpWarehouseLocationCascader from '@/addon/hsx_erp/components/ErpWarehous
 import { useErpPageRefresh } from '@/addon/hsx_erp/hooks/useErpPageRefresh'
 const hsxFeedback = useFeedback()
 
-
 const search = reactive<any>({ imei: '', party_id: null, purchase_no: '', finance_status: '', status: '', warehouse_id: '', location_id: '', catalog_product_id: '', purchaser_uid: '', dateRange: [], min_amount: undefined, max_amount: undefined })
 const searchPartyName = ref('')
+const searchConditionCount = computed(() => Object.values(search).filter(value => Array.isArray(value) ? value.length > 0 : value !== '' && value !== null && value !== undefined).length)
 const activeTab = ref('')
 const listMode = ref<'device' | 'standard'>('device')
 const router = useRouter()
@@ -1884,15 +1887,13 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
 .create-purchase-form {
     display: flex;
     flex-direction: column;
-    max-height: calc(100vh - 190px);
     min-height: 0;
 }
 .purchase-device-section {
     display: flex;
-    flex: 1;
     flex-direction: column;
-    min-height: 220px;
-    overflow: hidden;
+    flex: none;
+    min-height: 0;
 }
 .standard-entry {
     min-width: 0;

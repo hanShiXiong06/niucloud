@@ -9,6 +9,10 @@ use think\facade\Db;
 
 $app = new think\App();
 $app->initialize();
+if (!in_array(config('database.connections.mysql.hostname'), ['127.0.0.1', 'localhost'], true)) {
+    throw new RuntimeException('此回滚测试仅允许本地数据库');
+}
+set_exception_handler(static function (Throwable $e): void { fwrite(STDERR, $e->getMessage() . "\n"); exit(1); });
 
 $assert = static function (bool $condition, string $message): void {
     if (!$condition) throw new RuntimeException($message);

@@ -4,8 +4,15 @@
             <HsxTitle size="page" collapsible-subtitle class="mb-4">
                 <template #default>库存盘点</template>
                 <template #subtitle>PC 负责建单与差异复核，店员可在移动端扫码完成设备级盘点。</template>
-                <template #extra><div class="flex gap-2 flex-wrap"><el-button :icon="Refresh" :loading="loading" @click="loadList"/><el-button type="primary" :icon="Plus" @click="openCreate">新建盘点</el-button></div></template>
+                <template #extra>
+                    <el-button aria-label="刷新盘点列表" title="刷新" :icon="Refresh" :loading="loading" @click="loadList" />
+                    <el-button type="primary" :icon="Plus" @click="openCreate">新建盘点</el-button>
+                </template>
             </HsxTitle>
+
+            <HsxSearchPanel v-slot="{ labelPosition }">
+                <QueryForm v-model="queryModel" :schema="querySchema" :columns="2" :collapse-count="2" :label-position="labelPosition" label-width="auto" :loading="loading" @search="searchStocktakes" @reset="search.status = ''" />
+            </HsxSearchPanel>
 
             <div class="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
                 <div v-for="item in summaryCards" :key="item.label" class="summary-card"><div class="text-xs text-gray-400">{{ item.label }}</div><div class="mt-2 text-2xl font-semibold" :class="item.class">{{ item.value }}</div></div>
@@ -14,9 +21,6 @@
             <el-tabs v-model="search.status" class="mt-5" @tab-change="loadList">
                 <el-tab-pane label="全部" name=""/><el-tab-pane label="盘点中" name="counting"/><el-tab-pane label="待复核" name="pending_review"/><el-tab-pane label="已完成" name="completed"/><el-tab-pane label="已取消" name="cancelled"/>
             </el-tabs>
-            <HsxSearchPanel>
-                <QueryForm v-model="queryModel" :schema="querySchema" :columns="2" :collapse-count="2" label-position="top" label-width="auto" :loading="loading" @search="searchStocktakes" @reset="search.status = ''" />
-            </HsxSearchPanel>
 
             <el-table :data="rows" v-loading="loading" size="large" @row-dblclick="openDetail">
                 <el-table-column label="盘点任务" min-width="210"><template #default="{row}"><div class="font-medium text-gray-800">{{ row.stocktake_no }}</div><div class="mt-1 text-xs text-gray-400">{{ row.warehouse_name }}{{ row.location_name ? ' / '+row.location_name : ' / 全部库位' }}</div></template></el-table-column>
@@ -82,7 +86,6 @@ import { Plus, Refresh } from '@element-plus/icons-vue'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 import { cancelErpStocktake, completeErpStocktake, createErpStocktake, getErpStaffOptions, getErpStocktakeInfo, getErpStocktakeItems, getErpStocktakeList, resolveErpStocktakeItem, scanErpStocktake, submitErpStocktake } from '@/addon/hsx_erp/api/erp'
 const hsxFeedback = useFeedback()
-
 
 const loading=ref(false), rows=ref<any[]>([]), total=ref(0), warehouses=ref<any[]>([]), staff=ref<any[]>([])
 const search=reactive<any>({keyword:'',status:'',warehouse_id:'',page:1,limit:15})

@@ -11,10 +11,36 @@
                 </PageHeader>
             </template>
 
-            <el-alert class="source-alert" type="warning" :closable="false" show-icon>
+            <HsxSearchPanel class="mb-4">
+                <template #extra>
+                    <el-button type="primary" @click="handleSearch">查询</el-button>
+                    <el-button @click="handleReset">重置</el-button>
+                </template>
+                <el-form :inline="true" class="filter-form" @submit.prevent>
+                    <el-form-item label="确认状态">
+                        <el-select v-model="query.confirm_status" clearable class="!w-[130px]" placeholder="全部" @change="handleSearch">
+                            <el-option label="待确认" value="pending" />
+                            <el-option label="已确认" value="confirmed" />
+                        </el-select>
+                    </el-form-item>
+                    <el-form-item label="级别">
+                        <el-select v-model="query.severity" clearable class="!w-[120px]" placeholder="全部" @change="handleSearch">
+                            <el-option label="正常" value="normal" />
+                            <el-option label="一般" value="general" />
+                            <el-option label="异常" value="abnormal" />
+                        </el-select>
+                    </el-form-item>
+                    <el-form-item label="关键字">
+                        <el-input v-model.trim="query.keyword" clearable class="!w-[220px]" placeholder="选项文本，如 碎屏" @keyup.enter="handleSearch" @clear="handleSearch" />
+                    </el-form-item>
+
+                </el-form>
+            </HsxSearchPanel>
+
+            <HsxNotice default-expanded class="source-alert" type="warning" :closable="false" show-icon>
                 <template #title>级别由人工确认，系统不会自动判断</template>
                 当前版本以选项字典作为实时数据源。确认导入后，历史订单、ERP 和商城重新读取质检报告时也会使用新级别，请先预检再确认。
-            </el-alert>
+            </HsxNotice>
 
             <el-row :gutter="12" class="summary-row">
                 <el-col :xs="12" :sm="8" :md="4"><div class="metric metric--pending"><span>待人工确认</span><strong>{{ summary.pending }}</strong></div></el-col>
@@ -24,28 +50,7 @@
                 <el-col :xs="12" :sm="8" :md="4"><div class="metric metric--abnormal"><span>异常</span><strong>{{ summary.abnormal }}</strong></div></el-col>
             </el-row>
 
-            <el-form :inline="true" class="filter-form" @submit.prevent>
-                <el-form-item label="确认状态">
-                    <el-select v-model="query.confirm_status" clearable class="!w-[130px]" placeholder="全部" @change="handleSearch">
-                        <el-option label="待确认" value="pending" />
-                        <el-option label="已确认" value="confirmed" />
-                    </el-select>
-                </el-form-item>
-                <el-form-item label="级别">
-                    <el-select v-model="query.severity" clearable class="!w-[120px]" placeholder="全部" @change="handleSearch">
-                        <el-option label="正常" value="normal" />
-                        <el-option label="一般" value="general" />
-                        <el-option label="异常" value="abnormal" />
-                    </el-select>
-                </el-form-item>
-                <el-form-item label="关键字">
-                    <el-input v-model.trim="query.keyword" clearable class="!w-[220px]" placeholder="选项文本，如 碎屏" @keyup.enter="handleSearch" @clear="handleSearch" />
-                </el-form-item>
-                <el-form-item>
-                    <el-button type="primary" @click="handleSearch">查询</el-button>
-                    <el-button @click="handleReset">重置</el-button>
-                </el-form-item>
-            </el-form>
+
 
             <el-collapse class="quick-tools">
                 <el-collapse-item title="少量数据快速处理（单项、批量或关键字）" name="quick">
@@ -99,16 +104,16 @@
             </div>
         </el-card>
 
-        <el-dialog v-model="importState.visible" title="导入质检选项级别" width="min(920px, 92vw)" :close-on-click-modal="false">
+        <HsxDialog :confirm-loading="importState.confirmLoading" v-model="importState.visible" title="导入质检选项级别" width="min(920px, 92vw)" :close-on-click-modal="false" :destroy-on-close="false">
             <el-steps :active="importStep" align-center finish-status="success" class="import-steps">
                 <el-step title="选择文件" description="上传填写后的协作表" />
                 <el-step title="系统预检" description="核对 ID、文本和级别" />
                 <el-step title="确认更新" description="事务写入并记录日志" />
             </el-steps>
 
-            <el-alert type="info" :closable="false" show-icon class="dialog-alert">
+            <HsxNotice default-expanded type="info" :closable="false" show-icon class="dialog-alert">
                 只有“确认状态=已确认”且“建议级别”为正常、一般或异常的行才会更新；待确认行自动跳过。
-            </el-alert>
+            </HsxNotice>
 
             <div class="upload-panel">
                 <el-upload :auto-upload="false" :show-file-list="false" accept=".xls,.xlsx" :on-change="handleFileChange">
@@ -127,9 +132,9 @@
                     <div class="danger"><span>错误</span><strong>{{ importState.summary.errors }}</strong></div>
                 </div>
 
-                <el-alert v-if="importState.summary.errors" type="error" :closable="false" show-icon class="dialog-alert">
+                <HsxNotice default-expanded v-if="importState.summary.errors" type="error" :closable="false" show-icon class="dialog-alert">
                     文件存在错误，系统不会执行任何更新。请按下方错误修正 Excel 后重新上传。
-                </el-alert>
+                </HsxNotice>
 
                 <el-tabs v-model="importState.activeTab">
                     <el-tab-pane label="预检明细" name="rows">
@@ -152,18 +157,19 @@
             </template>
 
             <template #footer>
-                <el-button @click="importState.visible = false">取消</el-button>
-                <el-button type="primary" :disabled="!canConfirmImport" :loading="importState.confirmLoading" @click="handleConfirmImport">确认更新 {{ importState.summary.will_update }} 项</el-button>
+                <el-button :disabled="importState.confirmLoading" @click="importState.visible = false">取消</el-button>
+                <el-button type="primary" :disabled="(!canConfirmImport) || (importState.confirmLoading)" :loading="importState.confirmLoading" @click="handleConfirmImport">确认更新 {{ importState.summary.will_update }} 项</el-button>
             </template>
-        </el-dialog>
+        </HsxDialog>
     </PremiumTheme>
 </template>
 
 <script lang="ts" setup>
+import { HsxSearchPanel, HsxDialog, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
 import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import PageHeader from '@/addon/hsx_recycle/components/PageHeader.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import {
     getCheckSeverityList,
     setCheckSeverity,
@@ -173,6 +179,7 @@ import {
     previewCheckSeverityImport,
     confirmCheckSeverityImport,
 } from '@/addon/hsx_recycle/api/check_catalog'
+const hsxFeedback = useFeedback()
 
 const loading = ref(false)
 const exportLoading = ref(false)
@@ -231,9 +238,9 @@ async function handleExport() {
         link.click()
         link.remove()
         window.URL.revokeObjectURL(url)
-        ElMessage.success('协作表已导出')
+        hsxFeedback.success('协作表已导出')
     } catch (error) {
-        ElMessage.error('协作表导出失败，请检查权限或稍后重试')
+        hsxFeedback.error('协作表导出失败，请检查权限或稍后重试')
     } finally {
         exportLoading.value = false
     }
@@ -281,7 +288,7 @@ async function handleConfirmImport() {
     importState.confirmLoading = true
     try {
         const res: any = await confirmCheckSeverityImport(importState.token)
-        ElMessage.success(`已更新 ${Number(res.data?.updated || 0)} 项`)
+        hsxFeedback.success(`已更新 ${Number(res.data?.updated || 0)} 项`)
         importState.visible = false
         loadList()
     } finally {
@@ -291,14 +298,14 @@ async function handleConfirmImport() {
 
 async function setOne(row: any, severity: string) {
     await setCheckSeverity(row.id, severity)
-    ElMessage.success('已更新并确认')
+    hsxFeedback.success('已更新并确认')
     loadList()
 }
 
 async function batchSet(severity: string) {
     if (!selected.value.length) return
     await batchSetCheckSeverity(selected.value.map((row) => row.id), severity)
-    ElMessage.success(`已设置并确认 ${selected.value.length} 项`)
+    hsxFeedback.success(`已设置并确认 ${selected.value.length} 项`)
     loadList()
 }
 
@@ -307,7 +314,7 @@ async function applyKeyword() {
     kwLoading.value = true
     try {
         const res: any = await setCheckSeverityByKeyword(kw.keyword, kw.severity)
-        ElMessage.success(`已更新并确认 ${res.data || 0} 项`)
+        hsxFeedback.success(`已更新并确认 ${res.data || 0} 项`)
         kw.keyword = ''
         loadList()
     } finally {

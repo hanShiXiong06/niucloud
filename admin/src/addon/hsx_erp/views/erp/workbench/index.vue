@@ -6,18 +6,23 @@
                 <template #subtitle>统一查看采购、销售、库存、利润与财务待办，统计来自完整业务数据。</template>
                 <template #extra><div class="flex items-center gap-3 flex-wrap">
                         <el-button @click="openKpiConfig">绩效配置</el-button>
-                        <el-radio-group v-model="period" @change="loadDashboard">
-                            <el-radio-button label="today">今日</el-radio-button>
-                            <el-radio-button label="yesterday">昨天</el-radio-button>
-                            <el-radio-button label="last7">近7天</el-radio-button>
-                            <el-radio-button label="month">本月</el-radio-button>
-                            <el-radio-button label="last_month">上月</el-radio-button>
-                            <el-radio-button label="all">全部</el-radio-button>
-                        </el-radio-group>
-                        <el-date-picker v-model="customRange" type="daterange" range-separator="至" start-placeholder="自定义开始" end-placeholder="自定义结束" :clearable="true" @change="onCustomRangeChange" />
                         <el-button :icon="Refresh" :loading="loading" @click="loadDashboard">刷新</el-button>
                     </div></template>
             </HsxTitle>
+
+            <HsxSearchPanel title="统计时间" :summary="periodLabel" :show-layout-switch="false">
+                <div class="flex items-center gap-3 flex-wrap">
+                    <el-radio-group v-model="period" @change="loadDashboard">
+                        <el-radio-button label="today">今日</el-radio-button>
+                        <el-radio-button label="yesterday">昨天</el-radio-button>
+                        <el-radio-button label="last7">近7天</el-radio-button>
+                        <el-radio-button label="month">本月</el-radio-button>
+                        <el-radio-button label="last_month">上月</el-radio-button>
+                        <el-radio-button label="all">全部</el-radio-button>
+                    </el-radio-group>
+                    <el-date-picker v-model="customRange" class="!w-[340px] !flex-none" type="daterange" range-separator="至" start-placeholder="自定义开始" end-placeholder="自定义结束" :clearable="true" @change="onCustomRangeChange" />
+                </div>
+            </HsxSearchPanel>
 
             <HsxNotice v-if="refurbishReminder.visible" class="mt-4" type="warning" :closable="false" :title="'今日新增 ' + refurbishReminder.today_count + ' 台待整备设备'" :description="'当前待整备 ' + refurbishReminder.pending_count + ' 台、整备中 ' + refurbishReminder.processing_count + ' 台。及时分配可减少设备积压。'">
                 <template #actions>
@@ -40,12 +45,22 @@
             </HsxNotice>
 
             <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <div v-for="item in summaryCards" :key="item.label" class="summary-tile">
+                <div v-for="item in primarySummaryCards" :key="item.label" class="summary-tile">
                     <div class="summary-label">{{ item.label }}</div>
                     <div class="summary-value" :class="item.className">{{ item.value }}</div>
                     <div v-if="item.hint" class="mt-1 text-xs text-gray-400">{{ item.hint }}</div>
                 </div>
             </div>
+
+            <HsxFold class="mt-3" title="更多经营指标" summary="采购、销售、费用与期间收付；统计口径保持不变">
+                <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <div v-for="item in secondarySummaryCards" :key="item.label" class="summary-tile">
+                        <div class="summary-label">{{ item.label }}</div>
+                        <div class="summary-value" :class="item.className">{{ item.value }}</div>
+                        <div v-if="item.hint" class="mt-1 text-xs text-gray-400">{{ item.hint }}</div>
+                    </div>
+                </div>
+            </HsxFold>
 
             <div class="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-5">
                 <div class="panel xl:col-span-3">
@@ -143,7 +158,7 @@ import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import { Refresh } from '@element-plus/icons-vue'
-import { HsxDialog, HsxNotice, useFeedback, HsxTitle, HsxPage } from '@/addon/hsx_components/core'
+import { HsxDialog, HsxNotice, HsxFold, HsxSearchPanel, useFeedback, HsxTitle, HsxPage } from '@/addon/hsx_components/core'
 const feedback = useFeedback()
 const reminderClosing = ref({ refurbish: false, turnover: false })
 import { getErpDashboard, getErpKpiDashboard, getErpKpiRules, saveErpKpiRules } from '@/addon/hsx_erp/api/erp'
@@ -176,15 +191,17 @@ const summaryCards = computed(() => [
     { label: '销售单数', value: summary.value.sale_count || 0, hint: money(summary.value.sale_amount) },
     { label: '销售毛利', value: money(summary.value.profit_amount), className: Number(summary.value.profit_amount || 0) >= 0 ? 'text-green-600' : 'text-red-600' },
     { label: '经营费用', value: money(summary.value.operating_expense_amount), className: 'text-orange-600' },
-    { label: '经营净利润', value: money(summary.value.operating_profit_amount), hint: `其他经营收入 ${money(summary.value.operating_income_amount)}`, className: Number(summary.value.operating_profit_amount || 0) >= 0 ? 'text-green-600' : 'text-red-600' },
-    { label: '库存设备', value: summary.value.stock_count || 0, hint: `库存成本 ${money(summary.value.stock_cost)}` },
+    { label: '经营净利润', primary: true, value: money(summary.value.operating_profit_amount), hint: `其他经营收入 ${money(summary.value.operating_income_amount)}`, className: Number(summary.value.operating_profit_amount || 0) >= 0 ? 'text-green-600' : 'text-red-600' },
+    { label: '库存设备', primary: true, value: summary.value.stock_count || 0, hint: `库存成本 ${money(summary.value.stock_cost)}` },
     { label: '今日动销率', value: `${Number(summary.value.turnover_rate || 0).toFixed(2)}%`, hint: `今日售出 ${summary.value.today_sold_count || 0} 台 ÷ 零点库存 ${summary.value.opening_stock_count || 0} 台`, className: Number(summary.value.turnover_rate || 0) > 0 ? 'text-blue-600' : '' },
-    { label: '库存周转', value: `${Number(summary.value.average_stock_age_days || 0).toFixed(1)} 天`, hint: `预警 ${summary.value.turnover_warning_count || 0} 台 · 占用 ${money(summary.value.turnover_warning_cost)}`, className: Number(summary.value.turnover_warning_count || 0) > 0 ? 'text-orange-600' : 'text-green-600' },
+    { label: '库存周转', primary: true, value: `${Number(summary.value.average_stock_age_days || 0).toFixed(1)} 天`, hint: `预警 ${summary.value.turnover_warning_count || 0} 台 · 占用 ${money(summary.value.turnover_warning_cost)}`, className: Number(summary.value.turnover_warning_count || 0) > 0 ? 'text-orange-600' : 'text-green-600' },
     { label: '期间收款', value: money(summary.value.receipt_amount), className: 'text-green-600' },
     { label: '期间付款', value: money(summary.value.payment_amount), className: 'text-orange-600' },
     { label: '期间折账', value: money(summary.value.offset_amount), className: 'text-blue-600' },
-    { label: '净现金流', value: money(Number(summary.value.receipt_amount || 0) - Number(summary.value.payment_amount || 0)) },
+    { label: '净现金流', primary: true, value: money(Number(summary.value.receipt_amount || 0) - Number(summary.value.payment_amount || 0)), hint: '期间收款 − 期间付款；不等于利润' },
 ])
+const primarySummaryCards = computed(() => summaryCards.value.filter(item => item.primary))
+const secondarySummaryCards = computed(() => summaryCards.value.filter(item => !item.primary))
 
 useErpPageRefresh(loadDashboard)
 

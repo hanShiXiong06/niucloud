@@ -257,7 +257,7 @@
       @close="imageViewer.show = false"
     />
 
-    <HsxDialog
+    <HsxDialog :confirm-loading="costAdjustDialog.submitting"
       v-model="costAdjustDialog.visible"
       title="设备成本调整"
       width="620px"
@@ -328,8 +328,8 @@
       </div>
 
       <template #footer>
-        <el-button @click="costAdjustDialog.visible = false">取消</el-button>
-        <el-button type="warning" :loading="costAdjustDialog.submitting" @click="submitCostAdjust">
+        <el-button :disabled="costAdjustDialog.submitting" @click="costAdjustDialog.visible = false">取消</el-button>
+        <el-button :disabled="costAdjustDialog.submitting" type="warning" :loading="costAdjustDialog.submitting" @click="submitCostAdjust">
           确认调整成本
         </el-button>
       </template>

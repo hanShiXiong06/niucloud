@@ -181,7 +181,7 @@
             </div>
         </div>
 
-        <HsxDialog v-model="columnDialog" title="台账字段设置" width="720px" append-to-body destroy-on-close>
+        <HsxDialog :confirm-loading="savingView" v-model="columnDialog" title="台账字段设置" width="720px" append-to-body destroy-on-close>
             <HsxNotice title="型号、串号和业务状态属于设备台账核心字段，始终保留；其他字段可自由控制显示、导出和顺序。" type="info" :closable="false" />
             <div class="column-config-list">
                 <div v-for="(item, index) in publicViewColumns" :key="item.key" class="column-config-row">
@@ -195,7 +195,7 @@
                     <el-input-number v-model="item.width" :min="70" :max="500" :step="10" controls-position="right" class="!w-[120px]" />
                 </div>
             </div>
-            <template #footer><el-button @click="resetPresetColumns">恢复当前视图默认</el-button><el-button @click="columnDialog = false">取消</el-button><el-button type="primary" :loading="savingView" @click="saveView">保存字段方案</el-button></template>
+            <template #footer><el-button :disabled="savingView" @click="resetPresetColumns">恢复当前视图默认</el-button><el-button :disabled="savingView" @click="columnDialog = false">取消</el-button><el-button :disabled="savingView" type="primary" :loading="savingView" @click="saveView">保存字段方案</el-button></template>
         </HsxDialog>
     </HsxDrawer>
 </template>

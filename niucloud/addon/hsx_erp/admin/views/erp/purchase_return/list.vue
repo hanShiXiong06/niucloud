@@ -1,38 +1,39 @@
 <template>
-    <div class="main-container">
+    <HsxPage padding="none" class="main-container">
         <!-- 退货单列表：只在列表模式展示，不再固定占用左栏 -->
         <div v-show="mode !== 'detail'" class="erp-list-panel">
-            <div class="panel-header">
-                <div>
-                    <div class="text-page-title">采购退货</div>
-                    <div class="panel-subtitle">将仍在库且符合条件的设备退还供货方，系统自动判断冲销应付或退款应收。</div>
-                </div>
-                <div class="flex gap-2">
-                    <el-button :icon="Refresh" :loading="listLoading" @click="loadList">刷新</el-button>
-                    <el-button type="primary" :icon="Plus" @click="openCreate">新建退货</el-button>
-                </div>
-            </div>
+            <HsxTitle size="page" collapsible-subtitle class="mb-4">
+                <template #default>采购退货</template>
+                <template #subtitle>将仍在库且符合条件的设备退还供货方，系统自动判断冲销应付或退款应收。</template>
+                <template #extra><div class="flex gap-2 flex-wrap">
+                        <el-button :icon="Refresh" :loading="listLoading" @click="loadList">刷新</el-button>
+                        <el-button type="primary" :icon="Plus" @click="openCreate">新建退货</el-button>
+                    </div></template>
+            </HsxTitle>
+
+            <HsxSearchPanel>
+                <template #extra>
+                    <el-button type="primary" :icon="Search" @click="searchList">查询</el-button>
+                    <el-button @click="resetListWhere">重置</el-button>
+                </template>
+                <el-form :inline="true" class="mt-2" @submit.prevent>
+                    <el-form-item label="关键词">
+                        <el-input v-model.trim="listWhere.keyword" clearable class="!w-[260px]" placeholder="退货单号 / 采购单号" @keyup.enter="searchList" />
+                    </el-form-item>
+                    <el-form-item label="供货商">
+                        <ErpPartySelect v-model="listWhere.party_id" v-model:party-name="listPartyName" party-type="supplier" :allow-create="false" class="!w-[220px]" placeholder="全部供货商" />
+                    </el-form-item>
+                    <el-form-item label="退货时间">
+                        <el-date-picker v-model="listWhere.dateRange" type="daterange" value-format="X" start-placeholder="开始" end-placeholder="结束" class="!w-[260px]" />
+                    </el-form-item>
+
+                </el-form>
+            </HsxSearchPanel>
 
             <!-- 状态 Tab -->
             <el-tabs v-model="listWhere.status" class="mt-4 erp-status-tabs" @tab-change="switchStatus">
                 <el-tab-pane v-for="tab in statusTabs" :key="tab.value" :label="tab.label" :name="tab.value" />
             </el-tabs>
-
-            <el-form :inline="true" class="mt-2" @submit.prevent>
-                <el-form-item label="关键词">
-                    <el-input v-model.trim="listWhere.keyword" clearable class="!w-[260px]" placeholder="退货单号 / 采购单号" @keyup.enter="searchList" />
-                </el-form-item>
-                <el-form-item label="供货商">
-                    <ErpPartySelect v-model="listWhere.party_id" v-model:party-name="listPartyName" party-type="supplier" :allow-create="false" class="!w-[220px]" placeholder="全部供货商" />
-                </el-form-item>
-                <el-form-item label="退货时间">
-                    <el-date-picker v-model="listWhere.dateRange" type="daterange" value-format="X" start-placeholder="开始" end-placeholder="结束" class="!w-[260px]" />
-                </el-form-item>
-                <el-form-item>
-                    <el-button type="primary" :icon="Search" @click="searchList">查询</el-button>
-                    <el-button @click="resetListWhere">重置</el-button>
-                </el-form-item>
-            </el-form>
 
             <el-table :data="listData" v-loading="listLoading" size="large" @row-click="selectItem">
                 <el-table-column prop="return_no" label="退货单" min-width="220" />
@@ -250,7 +251,7 @@
                 </div>
 
                 <div class="detail-body">
-                    <div class="mb-4 grid grid-cols-1 gap-3 md:grid-cols-4">
+                    <div class="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
                         <div class="return-metric">
                             <div class="metric-label">退货金额</div>
                             <div class="metric-value text-orange-600">¥{{ selected.total_amount }}</div>
@@ -276,7 +277,7 @@
                         <el-descriptions-item label="操作员">{{ selected.operator_name }}</el-descriptions-item>
                         <el-descriptions-item label="备注">{{ selected.remark || '-' }}</el-descriptions-item>
                     </el-descriptions>
-                    <el-alert class="mb-4" :title="purchaseRefundModeTip(selected.refund_mode)" type="info" :closable="false" show-icon />
+                    <HsxNotice default-expanded class="mb-4" :title="purchaseRefundModeTip(selected.refund_mode)" type="info" :closable="false" show-icon />
 
                     <div class="mb-2 flex items-center justify-between">
                         <span class="text-sm font-medium">退货明细</span>
@@ -302,14 +303,15 @@
                     </el-table>
                 </div>
         </div>
-    </div>
+    </HsxPage>
 </template>
 
 <script setup lang="ts">
+import { HsxTitle, HsxPage, HsxSearchPanel, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
 import { erpEnumLabel } from '@/addon/hsx_erp/utils/display'
 import { ref, computed, reactive } from 'vue'
 import { Plus, Refresh, Search } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import {
     getErpPurchaseReturnList,
     getErpPurchaseReturnInfo,
@@ -325,6 +327,7 @@ import ErpReturnDialog from '@/addon/hsx_erp/components/ErpReturnDialog.vue'
 import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVoucherUpload.vue'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import { useErpPageRefresh } from '@/addon/hsx_erp/hooks/useErpPageRefresh'
+const hsxFeedback = useFeedback()
 
 // ── 状态 ──────────────────────────────────────────────────────────────────────
 const statusTabs = [
@@ -657,11 +660,11 @@ function syncReturnItems() {
 async function submitCreate() {
     await formRef.value?.validate()
     if (!form.items.length) {
-        ElMessage.warning('请选择至少一台退货设备')
+        hsxFeedback.warning('请选择至少一台退货设备')
         return
     }
     if (!handoverConfirmed.value) {
-        ElMessage.warning('请先确认设备已经交还供货方')
+        hsxFeedback.warning('请先确认设备已经交还供货方')
         return
     }
     const imeis = selectedAssets.value.map((item: any) => item.imei || item.sn || item.model || '未命名设备').join('、')
@@ -719,7 +722,7 @@ async function doConfirm(id: number) {
     confirming.value = true
     try {
         await confirmErpPurchaseReturn(id)
-        ElMessage.success('退货已确认')
+        hsxFeedback.success('退货已确认')
         loadList()
         const res = await getErpPurchaseReturnInfo(id)
         selected.value = listData.value.find((i) => i.id === id) || selected.value
@@ -732,7 +735,7 @@ async function doConfirm(id: number) {
 async function doCancel(id: number) {
     await ElMessageBox.confirm('确认取消该退货单？取消后不会执行设备出库和账务处理。', '取消退货单', { type: 'warning' })
     await cancelErpPurchaseReturn(id)
-    ElMessage.success('退货单已取消')
+    hsxFeedback.success('退货单已取消')
     loadList()
     mode.value = 'idle'
     selected.value = null

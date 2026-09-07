@@ -7,7 +7,7 @@
             </el-tooltip>
             <el-tag v-if="channelName" size="small" effect="plain" type="info">{{ channelName }}</el-tag>
         </div>
-        <div class="finance-source__meta">
+        <div v-if="!compact" class="finance-source__meta">
             <span>业务场景：{{ bizSceneName }}</span>
             <span v-if="partyRoleLabel">对象：{{ partyRoleLabel }}</span>
             <span>方向：{{ directionMeta.label }}</span>
@@ -15,16 +15,26 @@
         <el-tooltip :content="`来源单号：${sourceNo}`" placement="top" :show-after="250">
             <div class="finance-source__order">来源单号：<b>{{ sourceNo }}</b></div>
         </el-tooltip>
-        <el-tooltip v-if="showInternalSourceNo" :content="`ERP关联单号：${internalSourceNo}`" placement="top" :show-after="250">
+        <el-tooltip v-if="!compact && showInternalSourceNo" :content="`ERP关联单号：${internalSourceNo}`" placement="top" :show-after="250">
             <div class="finance-source__order finance-source__order--internal">ERP关联单号：<b>{{ internalSourceNo }}</b></div>
         </el-tooltip>
         <div v-if="!compact && (openingSettleMethod || settleSummary)" class="finance-source__settlement">
             <span v-if="openingSettleMethod">结算约定：{{ openingSettleMethod }}</span>
             <span v-if="settleSummary">结算进度：{{ settleSummary }}</span>
         </div>
-        <el-tooltip v-if="showReason && businessReason" :content="businessReason" placement="top" :show-after="250">
+        <el-tooltip v-if="!compact && showReason && businessReason" :content="businessReason" placement="top" :show-after="250">
             <div class="finance-source__reason"><span>{{ reasonLabel }}</span>{{ businessReason }}</div>
         </el-tooltip>
+        <el-popover v-if="compact" placement="top-start" :width="340" trigger="click">
+            <template #reference><el-button link type="primary" size="small" class="finance-source__explain">来源说明</el-button></template>
+            <div class="finance-source__explanation">
+                <div>{{ bizSceneName }} · {{ directionMeta.label }}<span v-if="partyRoleLabel"> · {{ partyRoleLabel }}</span></div>
+                <div>来源单号：{{ sourceNo }}</div>
+                <div v-if="showInternalSourceNo">ERP关联单号：{{ internalSourceNo }}</div>
+                <div v-if="channelName">渠道：{{ channelName }}</div>
+                <div v-if="showReason && businessReason">{{ reasonLabel }}：{{ businessReason }}</div>
+            </div>
+        </el-popover>
     </div>
 </template>
 
@@ -116,4 +126,6 @@ function readable(name: any, key: any, fallback: string, map: Record<string, str
 .finance-source__reason span { margin-right:6px; color:#b45309; font-weight:650; }
 .is-compact .finance-source__meta { margin-top:5px; }
 .is-compact .finance-source__reason { padding:4px 7px; -webkit-line-clamp:1; }
+.finance-source__explain { margin-top: 4px; }
+.finance-source__explanation { display: grid; gap: 8px; line-height: 1.6; overflow-wrap: anywhere; color: var(--hsx-text-secondary); }
 </style>

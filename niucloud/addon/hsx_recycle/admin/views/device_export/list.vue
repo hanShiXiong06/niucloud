@@ -4,58 +4,13 @@
         <el-card class="box-card !border-none" shadow="never">
 
             <PageHeader :title="pageName" description="按 IMEI / 型号 / 分类 / 时间等条件筛选，导出设备明细或同步到 ERP。" />
-            <el-alert v-if="syncHealthError" class="mt-4" type="warning" :closable="false" show-icon :title="syncHealthError">
+            <HsxNotice default-expanded v-if="syncHealthError" class="mt-4" type="warning" :closable="false" show-icon :title="syncHealthError">
                 <el-button link type="primary" :loading="syncHealthLoading || deviceTableData.loading" @click="loadDeviceList">刷新并重试</el-button>
-            </el-alert>
+            </HsxNotice>
 
             <el-card class="box-card !border-none my-[20px] table-search-wrap" shadow="never">
-                <el-form :inline="true" :model="deviceTableData.searchParam" ref="searchFormRef">
-                    <el-form-item :label="t('imei')" prop="imei">
-                        <el-input v-model.trim="deviceTableData.searchParam.imei" class="!w-[200px]" :placeholder="t('请输入IMEI')" />
-                    </el-form-item>
-
-                    <el-form-item :label="t('型号名称')" prop="model">
-                        <el-input v-model.trim="deviceTableData.searchParam.model" class="!w-[200px]" :placeholder="t('请输入型号名称')" />
-                    </el-form-item>
-
-                    <el-form-item :label="t('分类')" prop="category_id">
-                        <el-select v-model="deviceTableData.searchParam.category_id" clearable :placeholder="t('请选择分类')" class="input-width">
-                            <el-option :label="t('请选择分类')" value="" />
-                            <el-option :label="item.name" :value="item.id" v-for="item in categoryList" :key="item.id" />
-                        </el-select>
-                    </el-form-item>
-
-                    <el-form-item label="导出状态" prop="export_status">
-                        <el-select v-model="deviceTableData.searchParam.export_status" class="!w-[150px]">
-                            <el-option label="全部" value="" />
-                            <el-option label="未导出" value="unexported" />
-                        </el-select>
-                    </el-form-item>
-
-                    <el-form-item label="入库类型" prop="warehouse_type">
-                        <el-select v-model="deviceTableData.searchParam.warehouse_type" class="!w-[150px]">
-                            <el-option label="全部" value="" />
-                            <el-option label="回收入库" value="owned" />
-                            <el-option label="代卖入库" value="consign" />
-                        </el-select>
-                    </el-form-item>
-
-                    <el-form-item :label="t('回收时间')" prop="update_at">
-                        <el-date-picker
-                            v-model="deviceTableData.searchParam.update_at"
-                            type="daterange"
-                            range-separator="至"
-                            value-format="YYYY-MM-DD"
-                            :start-placeholder="t('startDate')"
-                            :end-placeholder="t('endDate')"
-                            format="YYYY-MM-DD"
-                            unlink-panels
-                            clearable
-                            :shortcuts="dateRangeShortcuts"
-                        />
-                    </el-form-item>
-
-                    <el-form-item>
+                <HsxSearchPanel>
+                    <template #extra>
                         <el-button type="primary" @click="handleSearch">{{ t('search') }}</el-button>
                         <el-button @click="resetForm(searchFormRef)">{{ t('reset') }}</el-button>
                         <el-button type="primary" @click="exportEvent" :disabled="deviceTableData.total === 0">
@@ -69,8 +24,56 @@
                         >
                             同步 ERP{{ selectedDevices.length > 0 ? ` (${selectedDevices.length})` : '' }}
                         </el-button>
-                    </el-form-item>
-                </el-form>
+                    </template>
+                    <el-form :inline="true" :model="deviceTableData.searchParam" ref="searchFormRef">
+                        <el-form-item :label="t('imei')" prop="imei">
+                            <el-input v-model.trim="deviceTableData.searchParam.imei" class="!w-[200px]" :placeholder="t('请输入IMEI')" />
+                        </el-form-item>
+
+                        <el-form-item :label="t('型号名称')" prop="model">
+                            <el-input v-model.trim="deviceTableData.searchParam.model" class="!w-[200px]" :placeholder="t('请输入型号名称')" />
+                        </el-form-item>
+
+                        <el-form-item :label="t('分类')" prop="category_id">
+                            <el-select v-model="deviceTableData.searchParam.category_id" clearable :placeholder="t('请选择分类')" class="input-width">
+                                <el-option :label="t('请选择分类')" value="" />
+                                <el-option :label="item.name" :value="item.id" v-for="item in categoryList" :key="item.id" />
+                            </el-select>
+                        </el-form-item>
+
+                        <el-form-item label="导出状态" prop="export_status">
+                            <el-select v-model="deviceTableData.searchParam.export_status" class="!w-[150px]">
+                                <el-option label="全部" value="" />
+                                <el-option label="未导出" value="unexported" />
+                            </el-select>
+                        </el-form-item>
+
+                        <el-form-item label="入库类型" prop="warehouse_type">
+                            <el-select v-model="deviceTableData.searchParam.warehouse_type" class="!w-[150px]">
+                                <el-option label="全部" value="" />
+                                <el-option label="回收入库" value="owned" />
+                                <el-option label="代卖入库" value="consign" />
+                            </el-select>
+                        </el-form-item>
+
+                        <el-form-item :label="t('回收时间')" prop="update_at">
+                            <el-date-picker
+                                v-model="deviceTableData.searchParam.update_at"
+                                type="daterange"
+                                range-separator="至"
+                                value-format="YYYY-MM-DD"
+                                :start-placeholder="t('startDate')"
+                                :end-placeholder="t('endDate')"
+                                format="YYYY-MM-DD"
+                                unlink-panels
+                                clearable
+                                :shortcuts="dateRangeShortcuts"
+                            />
+                        </el-form-item>
+
+
+                    </el-form>
+                </HsxSearchPanel>
             </el-card>
 
             <div class="mt-[10px]">
@@ -209,7 +212,7 @@
         </el-card>
 
         <!-- 设备详情对话框 -->
-        <el-dialog
+        <HsxDialog
             v-model="detailDialogVisible"
             title="设备详情"
             width="900px"
@@ -343,10 +346,10 @@
                     </div>
                 </div>
             </div>
-        </el-dialog>
+        </HsxDialog>
 
-        <el-dialog v-model="placementDialogVisible" title="补全 ERP 入库位置" width="520px" destroy-on-close>
-            <el-alert
+        <HsxDialog :confirm-loading="placementSubmitting" v-model="placementDialogVisible" title="补全 ERP 入库位置" width="520px" destroy-on-close>
+            <HsxNotice default-expanded
                 type="warning"
                 :closable="false"
                 show-icon
@@ -371,10 +374,10 @@
                 </el-form-item>
             </el-form>
             <template #footer>
-                <el-button @click="placementDialogVisible = false">取消</el-button>
-                <el-button type="primary" :loading="placementSubmitting" :disabled="!canSyncRows(placementMode === 'single' ? placementPendingRows : placementSyncRows)" @click="submitPlacementRepair">补全并同步</el-button>
+                <el-button :disabled="placementSubmitting" @click="placementDialogVisible = false">取消</el-button>
+                <el-button type="primary" :loading="placementSubmitting" :disabled="(!canSyncRows(placementMode === 'single' ? placementPendingRows : placementSyncRows)) || (placementSubmitting)" @click="submitPlacementRepair">补全并同步</el-button>
             </template>
-        </el-dialog>
+        </HsxDialog>
 
         <!-- 图片预览 -->
         <el-image-viewer
@@ -387,9 +390,10 @@
 </template>
 
 <script lang="ts" setup>
+import { HsxSearchPanel, HsxDialog, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
 import { reactive, ref, computed } from 'vue'
 import { t } from '@/lang'
-import { FormInstance, ElMessage, ElImageViewer, ElMessageBox } from 'element-plus'
+import { FormInstance, ElImageViewer, ElMessageBox } from 'element-plus'
 import { useRoute } from 'vue-router'
 import { getRecycleDeviceList, syncRecycleDevicesToErp, updateDevice, getDeviceSyncHealth, resyncRecycleDevice } from '@/addon/hsx_recycle/api/device_export'
 import { getSaleDestinationOptions } from '@/addon/hsx_recycle/api/recycle_order'
@@ -398,6 +402,7 @@ import { View, User, Picture, RefreshRight } from '@element-plus/icons-vue'
 import PageHeader from '@/addon/hsx_recycle/components/PageHeader.vue'
 import EmptyState from '@/addon/hsx_recycle/components/empty-state/index.vue'
 import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
+const hsxFeedback = useFeedback()
 
 const route = useRoute()
 const pageName = route.meta.title
@@ -536,7 +541,7 @@ const isSyncStatusUncertain = (row: any) => syncHealthUnavailable.value || !sync
 const canSyncRows = (rows: any[]) => rows.length > 0 && !syncHealthUnavailable.value && rows.every(row => !isSyncStatusUncertain(row))
 const ensureSyncStatusConfirmed = (rows: any[]) => {
     if (canSyncRows(rows)) return true
-    ElMessage.warning(syncHealthError.value || '同步状态暂无法确认，请先刷新查询或检查服务；本次未执行同步。')
+    hsxFeedback.warning(syncHealthError.value || '同步状态暂无法确认，请先刷新查询或检查服务；本次未执行同步。')
     return false
 }
 
@@ -620,17 +625,17 @@ const handleResync = async (row: any) => {
         const res: any = await resyncRecycleDevice(row.id, placement)
         const r = res?.data || {}
         if (r.has_asset === false) {
-            ElMessage.warning('该设备尚未在 ERP 建立资产，已尝试重新入库同步，请稍候刷新查看')
+            hsxFeedback.warning('该设备尚未在 ERP 建立资产，已尝试重新入库同步，请稍候刷新查看')
         } else if ((r.flushed || 0) > 0) {
-            ElMessage.success(`已重新投递 ${r.flushed} 条下游事件，中台拍照等步骤将补齐`)
+            hsxFeedback.success(`已重新投递 ${r.flushed} 条下游事件，中台拍照等步骤将补齐`)
         } else if ((r.still_failed || 0) > 0) {
-            ElMessage.error(`仍有 ${r.still_failed} 条事件失败，请检查下游插件日志`)
+            hsxFeedback.error(`仍有 ${r.still_failed} 条事件失败，请检查下游插件日志`)
         } else {
-            ElMessage.success('已触发重新同步')
+            hsxFeedback.success('已触发重新同步')
         }
         loadDeviceList()
     } catch (error: any) {
-        ElMessage.error(error?.message || '重新同步失败')
+        hsxFeedback.error(error?.message || '重新同步失败')
     } finally {
         resyncLoadingId.value = null
     }
@@ -643,7 +648,7 @@ const saveSellPrice = async (row: any) => {
     try {
         const newPrice = parseFloat(row.sell_price)
         if (isNaN(newPrice) || newPrice < 0) {
-            ElMessage.warning('请输入有效的价格')
+            hsxFeedback.warning('请输入有效的价格')
             return
         }
 
@@ -651,10 +656,10 @@ const saveSellPrice = async (row: any) => {
             sell_price: newPrice
         })
 
-        ElMessage.success('卖货价格更新成功')
+        hsxFeedback.success('卖货价格更新成功')
     } catch (error) {
         console.error('更新卖货价格失败:', error)
-        ElMessage.error('更新失败，请重试')
+        hsxFeedback.error('更新失败，请重试')
     }
 }
 
@@ -720,14 +725,14 @@ const erpStatusMeta = (row: any) => {
 
 const syncErpEvent = async () => {
     if (selectedDevices.value.length === 0) {
-        ElMessage.warning('请先勾选需要同步的设备')
+        hsxFeedback.warning('请先勾选需要同步的设备')
         return
     }
     if (!ensureSyncStatusConfirmed(selectedDevices.value)) return
 
     const syncCandidates = selectedDevices.value.filter((row: any) => !row.erp_sync)
     if (!syncCandidates.length) {
-        ElMessage.info('所选设备均已同步到 ERP，无需重复同步')
+        hsxFeedback.info('所选设备均已同步到 ERP，无需重复同步')
         return
     }
     const missingRows = syncCandidates.filter(erpPlacementMissing)
@@ -753,12 +758,12 @@ const syncErpEvent = async () => {
         const result = (res?.data?.results || []).find((item: any) => item?.target === 'self_erp')
         const created = Number(result?.created_count || 0)
         const existing = Number(result?.existing_count || 0)
-        ElMessage.success(`ERP 同步完成：新增 ${created} 台，已存在 ${existing} 台`)
+        hsxFeedback.success(`ERP 同步完成：新增 ${created} 台，已存在 ${existing} 台`)
         selectedDevices.value = []
         loadDeviceList()
     } catch (error: any) {
         if (error !== 'cancel' && error !== 'close') {
-            ElMessage.error(error?.msg || error?.message || 'ERP 同步失败')
+            hsxFeedback.error(error?.msg || error?.message || 'ERP 同步失败')
         }
     } finally {
         erpSyncLoading.value = false
@@ -768,7 +773,7 @@ const syncErpEvent = async () => {
 const submitPlacementRepair = async () => {
     if (!ensureSyncStatusConfirmed(placementMode.value === 'single' ? placementPendingRows.value : placementSyncRows.value)) return
     if (!placementForm.target_warehouse_id || !placementForm.target_location_id) {
-        ElMessage.warning('请选择入库仓库和具体库位')
+        hsxFeedback.warning('请选择入库仓库和具体库位')
         return
     }
     const placement = { ...placementForm }
@@ -781,11 +786,11 @@ const submitPlacementRepair = async () => {
             await syncRecycleDevicesToErp(selectedIds, ['self_erp'], placement)
             selectedDevices.value = []
         }
-        ElMessage.success('入库位置已补全，ERP 同步已重新执行')
+        hsxFeedback.success('入库位置已补全，ERP 同步已重新执行')
         placementDialogVisible.value = false
         loadDeviceList()
     } catch (error: any) {
-        ElMessage.error(error?.msg || error?.message || '补全并同步失败')
+        hsxFeedback.error(error?.msg || error?.message || '补全并同步失败')
     } finally {
         placementSubmitting.value = false
     }

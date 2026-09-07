@@ -1,7 +1,7 @@
 <template>
-    <el-dialog :model-value="modelValue" :title="`客户信用设置 · ${party?.party_name || party?.name || ''}`" width="560px" append-to-body destroy-on-close @close="close">
+    <HsxDialog :confirm-loading="saving" :model-value="modelValue" :title="`客户信用设置 · ${party?.party_name || party?.name || ''}`" width="560px" append-to-body destroy-on-close @close="close">
         <div v-loading="loading">
-            <el-alert
+            <HsxNotice default-expanded
                 v-if="profile.has_outstanding"
                 class="mb-4"
                 type="warning"
@@ -9,7 +9,7 @@
                 show-icon
                 :title="`${profile.outstanding_count} 笔未结应收，共 ¥${money(profile.outstanding_amount)}，最早 ${profile.oldest_days} 天`"
             />
-            <el-alert v-else class="mb-4" type="success" :closable="false" show-icon title="当前没有未结应收" />
+            <HsxNotice default-expanded v-else class="mb-4" type="success" :closable="false" show-icon title="当前没有未结应收" />
             <el-form label-width="92px">
                 <el-form-item label="交易策略">
                     <el-radio-group v-model="form.credit_policy" class="credit-policy-list">
@@ -33,16 +33,19 @@
             </div>
         </div>
         <template #footer>
-            <el-button @click="close">取消</el-button>
-            <el-button type="primary" :loading="saving" @click="save">保存信用策略</el-button>
+            <el-button :disabled="saving" @click="close">取消</el-button>
+            <el-button :disabled="saving" type="primary" :loading="saving" @click="save">保存信用策略</el-button>
         </template>
-    </el-dialog>
+    </HsxDialog>
 </template>
 
 <script setup lang="ts">
+import { HsxDialog, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
 import { reactive, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+
 import { getErpPartyCredit, updateErpPartyCredit } from '@/addon/hsx_erp/api/counterparty'
+const hsxFeedback = useFeedback()
+
 
 const props = defineProps<{ modelValue: boolean; party?: any }>()
 const emit = defineEmits<{ (e: 'update:modelValue', value: boolean): void; (e: 'saved', profile: any): void }>()
@@ -72,13 +75,13 @@ function applyProfile(data: any) {
 
 async function save() {
     const partyId = Number(props.party?.party_id || props.party?.id || 0)
-    if (!partyId) return ElMessage.warning('请先选择客户')
+    if (!partyId) return hsxFeedback.warning('请先选择客户')
     saving.value = true
     try {
         const res: any = await updateErpPartyCredit(partyId, { ...form })
         applyProfile(res?.data || {})
         emit('saved', profile.value)
-        ElMessage.success('客户信用策略已保存')
+        hsxFeedback.success('客户信用策略已保存')
         close()
     } finally { saving.value = false }
 }

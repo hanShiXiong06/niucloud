@@ -15,57 +15,11 @@
                     </div></template>
             </HsxTitle>
 
-            <div class="mt-4 grid grid-cols-2 gap-3" :class="canViewCost ? 'lg:grid-cols-6' : 'lg:grid-cols-5'">
-                <div class="summary-tile summary-tile--clickable" @click="applyTurnoverFilter('')">
-                    <div class="summary-label">有效库存</div>
-                    <div class="summary-value">{{ turnoverSummary.total_count || 0 }}</div>
-                    <div class="mt-1 text-xs text-gray-400">平均库龄 {{ turnoverSummary.average_age_days || 0 }} 天</div>
-                </div>
-                <div v-if="canViewCost" class="summary-tile">
-                    <div class="summary-label">库存成本</div>
-                    <div class="summary-value">{{ money(turnoverSummary.total_cost) }}</div>
-                </div>
-                <div class="summary-tile summary-tile--clickable" @click="applyTurnoverFilter('healthy')">
-                    <div class="summary-label">周转正常</div>
-                    <div class="summary-value text-green-600">{{ turnoverSummary.healthy_count || 0 }}</div>
-                    <div class="mt-1 text-xs text-gray-400">≤ {{ turnoverSummary.thresholds?.attention_days || 7 }} 天</div>
-                </div>
-                <div class="summary-tile summary-tile--clickable" @click="applyTurnoverFilter('attention')">
-                    <div class="summary-label">需要关注</div>
-                    <div class="summary-value text-blue-600">{{ turnoverSummary.attention_count || 0 }}</div>
-                    <div class="mt-1 text-xs text-gray-400">{{ (turnoverSummary.thresholds?.attention_days || 7) + 1 }}～{{ turnoverSummary.thresholds?.warning_days || 15 }} 天</div>
-                </div>
-                <div class="summary-tile summary-tile--clickable" @click="applyTurnoverFilter('warning')">
-                    <div class="summary-label">周转预警</div>
-                    <div class="summary-value text-orange-600">{{ turnoverSummary.warning_count || 0 }}</div>
-                    <div class="mt-1 text-xs text-gray-400">{{ canViewCost ? `占用 ${money(turnoverSummary.warning_cost)}` : '建议尽快处理' }}</div>
-                </div>
-                <div class="summary-tile summary-tile--clickable" @click="applyTurnoverFilter('critical')">
-                    <div class="summary-label">严重滞销</div>
-                    <div class="summary-value text-red-600">{{ turnoverSummary.critical_count || 0 }}</div>
-                    <div class="mt-1 text-xs text-gray-400">{{ canViewCost ? `占用 ${money(turnoverSummary.critical_cost)}` : '需要优先处理' }}</div>
-                </div>
-            </div>
-
-            <div v-if="(turnoverSummary.actions || []).length || (turnoverSummary.warehouse_risks || []).length" class="turnover-actions-panel">
-                <div><div class="font-medium text-slate-800">当前优先处理</div><div class="mt-1 text-xs text-slate-400">从预警直接进入对应库存，减少重复查找</div></div>
-                <div class="flex flex-1 flex-col items-end gap-2">
-                    <div class="flex flex-wrap justify-end gap-2"><el-button v-for="item in turnoverSummary.actions" :key="item.key" size="small" plain @click="applySummaryAction(item)">{{ item.label }}（{{ item.count }}）</el-button></div>
-                    <div v-if="(turnoverSummary.warehouse_risks || []).length" class="flex flex-wrap justify-end gap-2 text-xs text-slate-500"><span>重点仓库：</span><button v-for="item in turnoverSummary.warehouse_risks" :key="item.warehouse_id" type="button" class="warehouse-risk-chip" @click="applyWarehouseRisk(item)">{{ item.warehouse_name }} {{ item.warning_count }} 台<span v-if="canViewCost"> / {{ money(item.warning_cost) }}</span></button></div>
-                </div>
-            </div>
-
-            <!-- 状态快筛 Tab -->
-            <el-tabs v-model="activeTab" class="mt-4 erp-status-tabs" @tab-change="onTabChange">
-                <el-tab-pane label="全部" name="" />
-                <el-tab-pane label="库存中" name="in_stock" />
-                <el-tab-pane label="已售" name="sold" />
-                <el-tab-pane label="已退" name="returned" />
-                <el-tab-pane label="作废" name="void" />
-                <el-tab-pane label="已盘亏" name="lost" />
-            </el-tabs>
-
-            <HsxSearchPanel>
+            <HsxSearchPanel :summary="searchConditionCount ? '已填写 ' + searchConditionCount + ' 项条件，点击查询生效' : ''">
+                <template #extra>
+                    <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
+                    <el-button @click="handleReset">重置</el-button>
+                </template>
                 <el-form :inline="true" class="mt-2" @submit.prevent>
                     <el-form-item label="商品型号">
                         <ErpCatalogProductSelect v-model="search.catalog_product_id" class="!w-[280px]" placeholder="搜索品牌、系列或型号" />
@@ -83,8 +37,8 @@
                             <el-option v-for="item in searchLocations" :key="item.id" :label="item.location_name" :value="item.id" />
                         </el-select>
                     </el-form-item>
-               
-                    <HsxFold class="mb-4" title="更多筛选" :summary="advancedFilterCount ? '已设置 ' + advancedFilterCount + ' 项条件，折叠后仍生效' : '整备、来源、时间与金额'">
+
+                    <HsxFold title="更多筛选" :summary="advancedFilterCount ? '已设置 ' + advancedFilterCount + ' 项条件，折叠后仍生效' : '整备、来源、时间与金额'">
                         <el-form-item label="整备">
                             <el-select v-model="search.refurbish_status" clearable class="!w-[140px]" placeholder="全部">
                                 <el-option label="无需整备" value="none" />
@@ -131,7 +85,7 @@
                                 :allow-create="false"
                                 :placeholder="search.party_scope === 'customer' ? '选择买走设备的客户' : '选择提供设备的客户/供货商'"
                                 class="!w-[230px]"
-                    />
+                            />
                         </el-form-item>
                         <el-form-item label="业务来源">
                             <el-select v-model="search.origin_plugin" clearable class="!w-[150px]" placeholder="全部来源">
@@ -171,12 +125,58 @@
                             <el-input-number v-model="search.max_price" :min="0" :precision="2" :controls="false" placeholder="最高" class="!w-[110px]" />
                         </el-form-item>
                     </HsxFold>
-                    <el-form-item>
-                        <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
-                        <el-button @click="handleReset">重置</el-button>
-                    </el-form-item>
+
                 </el-form>
             </HsxSearchPanel>
+
+            <div class="mt-4 grid grid-cols-2 gap-3" :class="canViewCost ? 'lg:grid-cols-6' : 'lg:grid-cols-5'">
+                <div class="summary-tile summary-tile--clickable" @click="applyTurnoverFilter('')">
+                    <div class="summary-label">有效库存</div>
+                    <div class="summary-value">{{ turnoverSummary.total_count || 0 }}</div>
+                    <div class="mt-1 text-xs text-gray-400">平均库龄 {{ turnoverSummary.average_age_days || 0 }} 天</div>
+                </div>
+                <div v-if="canViewCost" class="summary-tile">
+                    <div class="summary-label">库存成本</div>
+                    <div class="summary-value">{{ money(turnoverSummary.total_cost) }}</div>
+                </div>
+                <div class="summary-tile summary-tile--clickable" @click="applyTurnoverFilter('healthy')">
+                    <div class="summary-label">周转正常</div>
+                    <div class="summary-value text-green-600">{{ turnoverSummary.healthy_count || 0 }}</div>
+                    <div class="mt-1 text-xs text-gray-400">≤ {{ turnoverSummary.thresholds?.attention_days || 7 }} 天</div>
+                </div>
+                <div class="summary-tile summary-tile--clickable" @click="applyTurnoverFilter('attention')">
+                    <div class="summary-label">需要关注</div>
+                    <div class="summary-value text-blue-600">{{ turnoverSummary.attention_count || 0 }}</div>
+                    <div class="mt-1 text-xs text-gray-400">{{ (turnoverSummary.thresholds?.attention_days || 7) + 1 }}～{{ turnoverSummary.thresholds?.warning_days || 15 }} 天</div>
+                </div>
+                <div class="summary-tile summary-tile--clickable" @click="applyTurnoverFilter('warning')">
+                    <div class="summary-label">周转预警</div>
+                    <div class="summary-value text-orange-600">{{ turnoverSummary.warning_count || 0 }}</div>
+                    <div class="mt-1 text-xs text-gray-400">{{ canViewCost ? `占用 ${money(turnoverSummary.warning_cost)}` : '建议尽快处理' }}</div>
+                </div>
+                <div class="summary-tile summary-tile--clickable" @click="applyTurnoverFilter('critical')">
+                    <div class="summary-label">严重滞销</div>
+                    <div class="summary-value text-red-600">{{ turnoverSummary.critical_count || 0 }}</div>
+                    <div class="mt-1 text-xs text-gray-400">{{ canViewCost ? `占用 ${money(turnoverSummary.critical_cost)}` : '需要优先处理' }}</div>
+                </div>
+            </div>
+
+            <HsxFold v-if="(turnoverSummary.actions || []).length || (turnoverSummary.warehouse_risks || []).length" class="mt-3" title="待办建议" :summary="(turnoverSummary.actions || []).map(item => `${item.label} ${item.count} 台`).join(' · ')">
+                <div class="flex flex-1 flex-col items-end gap-2">
+                    <div class="flex flex-wrap justify-end gap-2"><el-button v-for="item in turnoverSummary.actions" :key="item.key" size="small" plain @click="applySummaryAction(item)">{{ item.label }}（{{ item.count }}）</el-button></div>
+                    <div v-if="(turnoverSummary.warehouse_risks || []).length" class="flex flex-wrap justify-end gap-2 text-xs text-slate-500"><span>重点仓库：</span><button v-for="item in turnoverSummary.warehouse_risks" :key="item.warehouse_id" type="button" class="warehouse-risk-chip" @click="applyWarehouseRisk(item)">{{ item.warehouse_name }} {{ item.warning_count }} 台<span v-if="canViewCost"> / {{ money(item.warning_cost) }}</span></button></div>
+                </div>
+            </HsxFold>
+
+            <!-- 状态快筛 Tab -->
+            <el-tabs v-model="activeTab" class="mt-4 erp-status-tabs" @tab-change="onTabChange">
+                <el-tab-pane label="全部" name="" />
+                <el-tab-pane label="库存中" name="in_stock" />
+                <el-tab-pane label="已售" name="sold" />
+                <el-tab-pane label="已退" name="returned" />
+                <el-tab-pane label="作废" name="void" />
+                <el-tab-pane label="已盘亏" name="lost" />
+            </el-tabs>
 
             <el-table :data="table.data" v-loading="table.loading" size="large" :row-class-name="stockRowClassName" @selection-change="onSelectionChange">
                 <el-table-column type="selection" width="48" :selectable="row => row.status === 'in_stock'" />
@@ -726,6 +726,7 @@ const advancedFilterCount = computed(() => {
     const keys = ['refurbish_status', 'sale_target', 'listing_status', 'my_task', 'party_id', 'origin_plugin', 'sale_channel_key', 'turnover_level', 'stock_age_min', 'stock_age_max', 'min_cost', 'max_cost', 'min_price', 'max_price']
     return keys.filter(key => search[key] !== '' && search[key] !== undefined && search[key] !== null && (key !== 'my_task' || !!search[key])).length + (search.dateRange?.length ? 1 : 0) + (search.party_scope === 'customer' ? 1 : 0)
 })
+const searchConditionCount = computed(() => advancedFilterCount.value + ['keyword', 'status', 'warehouse_id', 'location_id', 'catalog_product_id'].filter(key => search[key] !== '' && search[key] !== null && search[key] !== undefined).length)
 
 const route = useRoute()
 const router = useRouter()

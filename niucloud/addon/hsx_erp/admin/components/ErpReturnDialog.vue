@@ -1,5 +1,5 @@
 <template>
-    <el-dialog
+    <HsxDialog :confirm-loading="loading"
         :model-value="modelValue"
         class="erp-return-dialog"
         width="92vw"
@@ -25,14 +25,15 @@
                 <span v-if="tip" class="return-dialog-tip">{{ tip }}</span>
                 <div class="return-dialog-actions">
                     <el-button :disabled="loading" @click="$emit('close')">{{ cancelText }}</el-button>
-                    <el-button type="primary" :loading="loading" :disabled="disabled" @click="$emit('confirm')">{{ confirmText }}</el-button>
+                    <el-button type="primary" :loading="loading" :disabled="(disabled) || (loading)" @click="$emit('confirm')">{{ confirmText }}</el-button>
                 </div>
             </div>
         </template>
-    </el-dialog>
+    </HsxDialog>
 </template>
 
 <script setup lang="ts">
+import { HsxDialog } from '@/addon/hsx_components/core'
 withDefaults(defineProps<{
     modelValue: boolean
     title: string

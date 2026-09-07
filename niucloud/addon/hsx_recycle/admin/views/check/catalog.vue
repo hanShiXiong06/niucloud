@@ -46,7 +46,7 @@
         </el-table>
         </el-card>
 
-        <el-dialog v-model="importDialog.visible" title="选择导入方式" width="520px" class="hsx-premium-overlay">
+        <HsxDialog v-model="importDialog.visible" title="选择导入方式" width="520px" class="" :destroy-on-close="false">
             <el-radio-group v-model="importDialog.mode" class="import-mode-group">
                 <el-radio value="append" border class="import-mode-item">
                     <div class="mode-title">追加导入</div>
@@ -61,9 +61,9 @@
                 <el-button @click="importDialog.visible = false">取消</el-button>
                 <el-button type="primary" @click="triggerUpload">选择文件</el-button>
             </template>
-        </el-dialog>
+        </HsxDialog>
 
-        <el-dialog v-model="imp.visible" title="导入检测表" width="460px" :close-on-click-modal="false" :show-close="!imp.running" class="hsx-premium-overlay">
+        <HsxDialog v-model="imp.visible" title="导入检测表" width="460px" :close-on-click-modal="false" :show-close="!imp.running" class="" :destroy-on-close="false">
             <div class="imp-file">{{ imp.fileName }}</div>
             <el-progress :percentage="impPercent" :status="imp.done ? 'success' : undefined" />
             <div class="imp-line">已处理 {{ imp.rows }} / {{ imp.total }} 行{{ imp.running ? '（后端慢慢跑，请勿关闭）' : '' }}</div>
@@ -73,16 +73,19 @@
             <template #footer>
                 <el-button :disabled="imp.running" type="primary" @click="finishImport">{{ imp.done ? '完成' : '关闭' }}</el-button>
             </template>
-        </el-dialog>
+        </HsxDialog>
     </PremiumTheme>
 </template>
 
 <script lang="ts" setup>
+import { HsxDialog, useFeedback } from '@/addon/hsx_components/core'
 import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import PageHeader from '@/addon/hsx_recycle/components/PageHeader.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+
 import { getCheckCatalogList, uploadCheckCatalog, importChunkCheckCatalog } from '@/addon/hsx_recycle/api/check_catalog'
+const hsxFeedback = useFeedback()
+
 
 const loading = ref(false)
 const summary = reactive({ templates: 0, bindings: 0, options: 0 })
@@ -155,9 +158,9 @@ async function onFileChange(e: Event) {
             if (d.done) break
         }
         imp.done = true
-        ElMessage.success('导入完成')
+        hsxFeedback.success('导入完成')
     } catch (err) {
-        ElMessage.error('导入中断，请重试')
+        hsxFeedback.error('导入中断，请重试')
     } finally {
         imp.running = false
     }

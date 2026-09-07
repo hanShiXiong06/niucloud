@@ -11,6 +11,48 @@
                     </div></template>
             </HsxTitle>
 
+            <HsxSearchPanel :summary="searchConditionCount ? '已填写 ' + searchConditionCount + ' 项条件，点击查询生效' : ''">
+                <template #extra>
+                    <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
+                    <el-button @click="handleReset">重置</el-button>
+                </template>
+                <el-form :inline="true" class="mt-1" @submit.prevent>
+                    <el-form-item label="关键词">
+                        <el-input v-model.trim="search.keyword" clearable class="!w-[300px]" placeholder="往来主体 / IMEI / 型号 / 来源单" @keyup.enter="handleSearch" />
+                    </el-form-item>
+                    <el-form-item label="时间">
+                        <el-date-picker v-model="dateRange" type="daterange" value-format="X" start-placeholder="开始日期" end-placeholder="结束日期" />
+                    </el-form-item>
+
+                </el-form>
+                <HsxFold v-model="advancedVisible" title="更多筛选" summary="往来主体、业务来源与结算条件；折叠不清空条件">
+                    <el-form :inline="true" class="" @submit.prevent>
+                        <el-form-item label="往来主体">
+                            <ErpPartySelect v-model="search.party_id" v-model:party-name="search.party_name" party-type="all" :allow-create="false" clearable class="!w-[220px]" placeholder="选择供货商、客户或服务商" />
+                        </el-form-item>
+                        <el-form-item label="来源单">
+                            <el-input v-model.trim="search.source_no" clearable class="!w-[190px]" placeholder="采购单 / 应付单" @keyup.enter="handleSearch" />
+                        </el-form-item>
+                        <el-form-item label="手机号">
+                            <el-input v-model.trim="search.contact_mobile" clearable class="!w-[170px]" placeholder="联系人手机号" @keyup.enter="handleSearch" />
+                        </el-form-item>
+                        <el-form-item label="支出类型">
+                            <el-select v-model="search.finance_type_key" clearable filterable class="!w-[170px]" placeholder="全部支出类型">
+                                <el-option v-for="item in financeTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="业务渠道">
+                            <el-select v-model="search.channel_code" clearable filterable class="!w-[170px]" placeholder="全部渠道">
+                                <el-option v-for="item in channelOptions" :key="item.value" :label="item.label" :value="item.value" />
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item>
+                            <el-checkbox v-model="search.can_offset" true-label="1" false-label="">只看可折账</el-checkbox>
+                        </el-form-item>
+                    </el-form>
+                </HsxFold>
+            </HsxSearchPanel>
+
             <ErpRoleFocus :items="payableRoleFocus" />
 
             <div class="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -38,48 +80,6 @@
                 <el-tab-pane label="部分结算" name="partial" />
                 <el-tab-pane label="已结清" name="settled" />
             </el-tabs>
-
-            <HsxSearchPanel>
-                <el-form :inline="true" class="mt-1" @submit.prevent>
-                    <el-form-item label="关键词">
-                        <el-input v-model.trim="search.keyword" clearable class="!w-[300px]" placeholder="往来主体 / IMEI / 型号 / 来源单" @keyup.enter="handleSearch" />
-                    </el-form-item>
-                    <el-form-item label="时间">
-                        <el-date-picker v-model="dateRange" type="daterange" value-format="X" start-placeholder="开始日期" end-placeholder="结束日期" />
-                    </el-form-item>
-                    <el-form-item>
-                        <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
-                        <el-button :icon="Filter" @click="advancedVisible = !advancedVisible">{{ advancedVisible ? '收起条件' : '更多条件' }}</el-button>
-                        <el-button @click="handleReset">重置</el-button>
-                    </el-form-item>
-                </el-form>
-            </HsxSearchPanel>
-            <HsxSearchPanel v-show="advancedVisible">
-                <el-form :inline="true" class="" @submit.prevent>
-                    <el-form-item label="往来主体">
-                        <ErpPartySelect v-model="search.party_id" v-model:party-name="search.party_name" party-type="all" :allow-create="false" clearable class="!w-[220px]" placeholder="选择供货商、客户或服务商" />
-                    </el-form-item>
-                    <el-form-item label="来源单">
-                        <el-input v-model.trim="search.source_no" clearable class="!w-[190px]" placeholder="采购单 / 应付单" @keyup.enter="handleSearch" />
-                    </el-form-item>
-                    <el-form-item label="手机号">
-                        <el-input v-model.trim="search.contact_mobile" clearable class="!w-[170px]" placeholder="联系人手机号" @keyup.enter="handleSearch" />
-                    </el-form-item>
-                    <el-form-item label="支出类型">
-                        <el-select v-model="search.finance_type_key" clearable filterable class="!w-[170px]" placeholder="全部支出类型">
-                            <el-option v-for="item in financeTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
-                        </el-select>
-                    </el-form-item>
-                    <el-form-item label="业务渠道">
-                        <el-select v-model="search.channel_code" clearable filterable class="!w-[170px]" placeholder="全部渠道">
-                            <el-option v-for="item in channelOptions" :key="item.value" :label="item.label" :value="item.value" />
-                        </el-select>
-                    </el-form-item>
-                    <el-form-item>
-                        <el-checkbox v-model="search.can_offset" true-label="1" false-label="">只看可折账</el-checkbox>
-                    </el-form-item>
-                </el-form>
-            </HsxSearchPanel>
 
             <el-table :data="table.data" v-loading="table.loading" size="large">
                 <el-table-column label="往来主体" min-width="210">
@@ -527,12 +527,12 @@
 </template>
 
 <script setup lang="ts">
-import { HsxTitle, HsxPage, HsxSearchPanel, HsxDialog, HsxDrawer, useFeedback } from '@/addon/hsx_components/core'
+import { HsxTitle, HsxPage, HsxSearchPanel, HsxDialog, HsxDrawer, useFeedback, HsxFold } from '@/addon/hsx_components/core'
 import { erpNamedLabel, erpSerialText } from '@/addon/hsx_erp/utils/display'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
-import { Filter, Refresh, Search, Tickets } from '@element-plus/icons-vue'
+import { Refresh, Search, Tickets } from '@element-plus/icons-vue'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import { getErpFinanceCategories, getErpSaleChannelOptions } from '@/addon/hsx_erp/api/config'
 import { confirmErpOffset, confirmErpPayableItemsPayment, getErpAccountLedger, getErpPayableList, getErpPayablePartyItems, getErpReceivableItems, getErpReceivableList, getErpSettlementList } from '@/addon/hsx_erp/api/erp'
@@ -548,7 +548,6 @@ import ErpOverflowText from '@/addon/hsx_erp/components/ErpOverflowText.vue'
 import { img } from '@/utils/common'
 const hsxFeedback = useFeedback()
 
-
 const route = useRoute()
 
 const payableRoleFocus = [
@@ -562,6 +561,7 @@ const activeStatus = ref(['', 'pending', 'partial', 'settled'].includes(routeSta
 const search = reactive({ keyword: '', party_id: null as number | null, party_name: '', source_no: String(route.query.source_no || ''), contact_mobile: '', finance_type_key: '', business_source_key: '', channel_code: '', can_offset: '' })
 const advancedVisible = ref(false)
 const dateRange = ref<any[]>([])
+const searchConditionCount = computed(() => Object.entries(search).filter(([key, value]) => key !== 'party_name' && value !== '' && value !== null && value !== undefined).length + (dateRange.value?.length ? 1 : 0))
 const table = reactive({ loading: false, data: [] as any[], page: 1, limit: 15, total: 0 })
 const accounts = ref<any[]>([])
 const registeredFinanceCategories = ref<any[]>([])

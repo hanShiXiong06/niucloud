@@ -1,13 +1,11 @@
 <template>
     <PremiumTheme class="main-container">
         <el-card class="!border-none" shadow="never" v-loading="loading">
-            <div class="page-head">
-                <div>
-                    <span class="text-page-title">下单设置</span>
-                    <div class="page-desc">控制用户端回收下单入口、设备登记按钮和可用提交方式。</div>
-                </div>
-                <el-button type="primary" :loading="saving" @click="save">保存设置</el-button>
-            </div>
+            <HsxTitle size="page" collapsible-subtitle class="mb-4">
+                <template #default>下单设置</template>
+                <template #subtitle>控制用户端回收下单入口、设备登记按钮和可用提交方式。</template>
+                <template #extra><el-button type="primary" :loading="saving" @click="save">保存设置</el-button></template>
+            </HsxTitle>
 
             <div class="config-layout">
                 <div class="config-group-title">
@@ -114,9 +112,9 @@
                             <el-time-select v-model="form.logistics_vehicle.next_day_time" start="06:00" step="00:30" end="18:00" style="width: 140px" />
                         </div>
                     </div>
-                    <el-alert class="mt-[14px]" type="warning" :closable="false" show-icon>
+                    <HsxNotice default-expanded class="mt-[14px]" type="warning" :closable="false" show-icon>
                         <template #title>至少需要开启一种提交方式。物流车订单会保存车辆和取货地点，并自动进入“待取货”任务。</template>
-                    </el-alert>
+                    </HsxNotice>
                 </section>
 
                 <section class="config-section">
@@ -177,9 +175,9 @@
                         <div class="setting-title">{{ flowModeMeta.title }}</div>
                         <div class="setting-desc">{{ flowModeMeta.desc }}</div>
                     </div>
-                    <el-alert class="mt-[14px]" type="warning" :closable="false" show-icon>
+                    <HsxNotice default-expanded class="mt-[14px]" type="warning" :closable="false" show-icon>
                         <template #title>切换后需要点击“保存设置”才会生效。保存后只影响新订单，历史订单仍按创建时的流转模式执行。</template>
-                    </el-alert>
+                    </HsxNotice>
                 </section>
 
                 <section class="config-section config-section--wide">
@@ -495,12 +493,15 @@
 </template>
 
 <script setup lang="ts">
+import { HsxTitle, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
 import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import ErpIntegrationSettings from './components/ErpIntegrationSettings.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import { getOrderSubmitConfig, saveOrderSubmitConfig, type OrderSubmitConfig } from '@/addon/hsx_recycle/api/order_config'
+const hsxFeedback = useFeedback()
+
 
 const loading = ref(false)
 const saving = ref(false)
@@ -818,7 +819,7 @@ const handleFlowModeChange = async (value: 'order' | 'device') => {
         })
         form.flow.mode = value
         form.payment.mode = value
-        ElMessage.info('已切换选项，点击保存设置后生效')
+        hsxFeedback.info('已切换选项，点击保存设置后生效')
     } catch (e) {
         form.flow.mode = oldValue
         form.payment.mode = oldValue
@@ -854,48 +855,48 @@ const toggleMode = (key: 'mail' | 'self' | 'logistics_vehicle') => {
 
 const save = async () => {
     if (!form.delivery_modes.mail && !form.delivery_modes.self && !form.delivery_modes.logistics_vehicle) {
-        ElMessage.warning('至少需要开启一种提交方式')
+        hsxFeedback.warning('至少需要开启一种提交方式')
         return
     }
     if (form.notice.enabled && !form.notice.content.trim()) {
-        ElMessage.warning('请填写通知内容')
+        hsxFeedback.warning('请填写通知内容')
         return
     }
     if (!form.platform_delivery.display_name.trim()) {
-        ElMessage.warning('请填写前台快递名称')
+        hsxFeedback.warning('请填写前台快递名称')
         return
     }
     ensureProviderSelection()
     if (!form.platform_delivery.provider) {
-        ElMessage.warning('请选择默认快递服务商')
+        hsxFeedback.warning('请选择默认快递服务商')
         return
     }
     ensureProductSelection()
     if (!form.platform_delivery.product_code) {
-        ElMessage.warning('请选择默认快递线路，请先在第三方快递配置中启用至少一条产品线路')
+        hsxFeedback.warning('请选择默认快递线路，请先在第三方快递配置中启用至少一条产品线路')
         return
     }
     if (form.profile.enabled && form.profile.payment_required && form.profile.payment_min_count < 1) {
-        ElMessage.warning('最低收款方式数量不能小于 1')
+        hsxFeedback.warning('最低收款方式数量不能小于 1')
         return
     }
     if (form.follow_official_account.enabled && !form.follow_official_account.qr_code) {
-        ElMessage.warning('开启公众号关注提醒前，请先上传公众号二维码')
+        hsxFeedback.warning('开启公众号关注提醒前，请先上传公众号二维码')
         return
     }
     if (form.customer_service.enabled && form.customer_service.type === 'qrcode' && !form.customer_service.qrcode) {
-        ElMessage.warning('选择客服二维码模式前，请先上传客服二维码')
+        hsxFeedback.warning('选择客服二维码模式前，请先上传客服二维码')
         return
     }
     if (form.consignment.enabled && !form.consignment.user_title.trim()) {
-        ElMessage.warning('请填写代卖用户端入口标题')
+        hsxFeedback.warning('请填写代卖用户端入口标题')
         return
     }
     if (form.work_wechat.enabled) {
         for (const meta of workWechatChannelMetas) {
             const channel = form.work_wechat.channels[meta.key]
             if (channel.enabled && !channel.webhook_url.trim()) {
-                ElMessage.warning(`请填写${channel.name || meta.title}的 Webhook 地址`)
+                hsxFeedback.warning(`请填写${channel.name || meta.title}的 Webhook 地址`)
                 return
             }
         }
@@ -905,7 +906,7 @@ const save = async () => {
     try {
         form.payment.mode = form.flow.mode
         await saveOrderSubmitConfig(form)
-        ElMessage.success(form.flow.mode === 'device' ? '已保存：新订单将按设备流转' : '已保存：新订单将整单流转')
+        hsxFeedback.success(form.flow.mode === 'device' ? '已保存：新订单将按设备流转' : '已保存：新订单将整单流转')
     } finally {
         saving.value = false
     }

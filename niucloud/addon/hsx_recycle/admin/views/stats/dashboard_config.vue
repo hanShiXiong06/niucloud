@@ -2,16 +2,14 @@
   <PremiumTheme class="main-container dashboard-config-page">
     <el-card class="box-card !border-none" shadow="never" v-loading="loading">
       <template #header>
-        <div class="page-header">
-          <div>
-            <div class="text-page-title">看板配置</div>
-            <div class="page-subtitle">配置每个指标的可见范围，管理员始终可见所有内容</div>
-          </div>
-          <div class="header-actions">
-            <el-button @click="fetchData">刷新</el-button>
-            <el-button type="primary" :loading="saving" @click="save">保存配置</el-button>
-          </div>
-        </div>
+        <HsxTitle size="page" collapsible-subtitle class="mb-4">
+            <template #default>看板配置</template>
+            <template #subtitle>配置每个指标的可见范围，管理员始终可见所有内容</template>
+            <template #extra><div class="header-actions">
+                    <el-button @click="fetchData">刷新</el-button>
+                    <el-button type="primary" :loading="saving" @click="save">保存配置</el-button>
+                </div></template>
+        </HsxTitle>
       </template>
 
       <div v-for="group in groupedWidgets" :key="group.label" class="widget-group">
@@ -89,11 +87,14 @@
 </template>
 
 <script lang="ts" setup>
+import { HsxTitle, useFeedback } from '@/addon/hsx_components/core'
 import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { onMounted, ref, computed } from 'vue'
-import { ElMessage } from 'element-plus'
+
 import { allRole } from '@/app/api/sys'
 import { getDashboardWidgets, saveDashboardWidgets, getUserList } from '@/addon/hsx_recycle/api/stats'
+const hsxFeedback = useFeedback()
+
 
 const loading = ref(false)
 const saving = ref(false)
@@ -203,7 +204,7 @@ const save = async () => {
       return rest
     })
     await saveDashboardWidgets({ widgets: payload })
-    ElMessage.success('配置已保存')
+    hsxFeedback.success('配置已保存')
     fetchData()
   } finally {
     saving.value = false

@@ -288,7 +288,7 @@ foreach (['sale-device-card', 'device-card-title', 'device-card-spec', 'device-i
     $assert(str_contains($pcSaleReturn, $needle), '销售退货必须使用以设备关键信息为核心的卡片工作台：' . $needle);
 }
 foreach ([$pcReturn, $pcSaleReturn] as $returnWorkbench) {
-    foreach (['<el-tabs', 'erp-status-tabs', '<el-form :inline="true"', '<el-table', 'text-page-title', "mode === 'create'", 'return-flow-guide', 'ErpPartySelect', 'ErpReturnDialog'] as $needle) {
+    foreach (['<el-tabs', 'erp-status-tabs', '<el-form :inline="true"', '<el-table', 'HsxTitle', "mode === 'create'", 'return-flow-guide', 'ErpPartySelect', 'ErpReturnDialog'] as $needle) {
         $assert(str_contains($returnWorkbench, $needle), '采购/销售退货必须使用统一的全宽工作台体验：' . $needle);
     }
     $assert(str_contains($returnWorkbench, 'ErpPartySelect'), '采购/销售退货筛选必须复用往来主体组件');
@@ -298,7 +298,7 @@ $menuDict = (string)file_get_contents($root . '/app/dict/menu/site.php');
 foreach (['销售退货详情', '退货设备', '处理结论', '确认收到退货设备', '预计退款应付', 'embedded'] as $needle) {
     $assert(str_contains($saleReturnDetail, $needle), '销售退货必须提供可嵌入抽屉的详情组件：' . $needle);
 }
-$assert(str_contains($pcSaleReturn, '<el-drawer') && str_contains($pcSaleReturn, '<SaleReturnDetail'), '销售退货列表查看必须使用详情抽屉');
+$assert(str_contains($pcSaleReturn, '<HsxDrawer') && str_contains($pcSaleReturn, '<SaleReturnDetail'), '销售退货列表查看必须使用统一详情抽屉');
 $assert(!str_contains($pcSaleReturn, '/site/hsx_erp/sale_return/detail'), '销售退货列表不能再跳转独立详情页');
 $assert(!str_contains($menuDict, "'router_path' => 'hsx_erp/sale_return/detail'"), '销售退货详情不应再注册独立页面路由');
 $assert(str_contains($pcSaleReturn, '售后补差') && str_contains($saleReturnService, 'createCompensation'), '销售退货工作台必须提供设备级售后补差入口');

@@ -5,13 +5,13 @@ import { CircleCheck, Close, InfoFilled, WarningFilled } from '@element-plus/ico
 
 const props = withDefaults(defineProps<{
     modelValue?: boolean
-    title: string
+    title?: string
     description?: string
     type?: 'info' | 'success' | 'warning' | 'error'
     closable?: boolean
     defaultExpanded?: boolean
     resetKey?: string | number
-}>(), { modelValue: undefined, description: '', type: 'info', closable: true, defaultExpanded: false, resetKey: '' })
+}>(), { modelValue: undefined, title: '', description: '', type: 'info', closable: true, defaultExpanded: false, resetKey: '' })
 const emit = defineEmits<{ (event: 'update:modelValue', value: boolean): void; (event: 'close'): void }>()
 const slots = useSlots()
 const dismissed = ref(false)
@@ -36,7 +36,7 @@ watch(() => [props.resetKey, props.title, props.description], () => {
     <section v-if="visible" class="hsx-notice" :class="`hsx-notice--${type}`" :role="type === 'error' ? 'alert' : 'status'">
         <div class="hsx-notice__row">
             <el-icon class="hsx-notice__icon" aria-hidden="true"><component :is="icon" /></el-icon>
-            <div class="hsx-notice__title">{{ title }}</div>
+            <div class="hsx-notice__title"><slot name="title">{{ title || '操作提示' }}</slot></div>
             <div class="hsx-notice__actions">
                 <slot name="actions" />
                 <button v-if="hasDetails" type="button" class="hsx-notice__toggle" :aria-expanded="expanded" :aria-controls="contentId" @click="expanded = !expanded">{{ expanded ? '收起说明' : '查看说明' }}</button>

@@ -55,21 +55,21 @@
                     </div>
                     <div class="account-actions">
                         <el-tooltip content="记一笔收/付" placement="top">
-                            <el-button text :icon="Money" @click="openEntry(row)" />
+                            <el-button text :icon="Money" aria-label="记一笔收付" @click="openEntry(row)">记收支</el-button>
                         </el-tooltip>
                         <el-tooltip content="账户流水" placement="top">
-                            <el-button text :icon="Tickets" @click="openLedger(row)" />
+                            <el-button text :icon="Tickets" aria-label="账户流水" @click="openLedger(row)">流水</el-button>
                         </el-tooltip>
                         <el-tooltip content="编辑账户" placement="top">
-                            <el-button text :icon="Edit" @click="openEdit(row)" />
+                            <el-button text :icon="Edit" aria-label="编辑账户" @click="openEdit(row)" />
                         </el-tooltip>
                         <el-tooltip content="删除账户" placement="top">
-                            <el-button text :icon="Delete" class="!text-red-500" @click="onDelete(row)" />
+                            <el-button text :icon="Delete" aria-label="删除账户" class="!text-red-500" @click="onDelete(row)" />
                         </el-tooltip>
                     </div>
                 </div>
 
-                <div class="account-card account-add" @click="openEdit()">
+                <div class="account-card account-add" role="button" tabindex="0" @click="openEdit()" @keydown.enter.prevent="openEdit()" @keydown.space.prevent="openEdit()">
                     <el-icon class="text-3xl text-gray-300"><Plus /></el-icon>
                     <div class="mt-2 text-sm text-gray-400">新建账户</div>
                 </div>

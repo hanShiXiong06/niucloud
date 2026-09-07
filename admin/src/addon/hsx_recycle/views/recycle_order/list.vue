@@ -1356,13 +1356,13 @@ const shareOrder = async (row: any) => {
   }
 }
 .recycle-order-list {
-  height: calc(100vh - 90px);
+  height: auto;
   min-height: 0;
-  max-height: calc(100vh - 90px);
-  overflow: hidden;
+  // 高级条件展开时让页面自然滚动，不能把表格和分页挤出可用区域。
+  overflow: visible;
 
   .el-card {
-    height: 100%;
+    height: auto;
     min-height: 0;
     display: flex;
     flex-direction: column;
@@ -1373,7 +1373,7 @@ const shareOrder = async (row: any) => {
     min-height: 0;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow: visible;
     padding: 16px;
   }
 
@@ -1396,9 +1396,9 @@ const shareOrder = async (row: any) => {
   }
 
   .order-table-region {
-    flex: 1 1 auto;
-    min-height: 0;
-    height: 0;
+    flex: none;
+    min-height: 320px;
+    height: clamp(320px, 52vh, 680px);
     overflow: hidden;
     border: 1px solid #e5e7eb;
     border-radius: 8px;
@@ -1406,6 +1406,7 @@ const shareOrder = async (row: any) => {
   }
 
   .order-table-region--mobile {
+    min-height: 0;
     height: auto;
     overflow-y: auto;
     border: 0;

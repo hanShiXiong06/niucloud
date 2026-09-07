@@ -7,6 +7,18 @@
 
             <!-- 搜索区域 -->
             <HsxSearchPanel>
+                <template #extra>
+                    <el-button type="primary" @click="handleSearch">
+                        <el-icon>
+                            <Search />
+                        </el-icon> 搜索
+                    </el-button>
+                    <el-button @click="resetSearch">
+                        <el-icon>
+                            <Refresh />
+                        </el-icon> 重置
+                    </el-button>
+                </template>
                 <el-form :model="searchParams" ref="searchForm" label-width="100px" inline>
                     <el-form-item label="订单号" prop="order_id">
                         <el-input v-model="searchParams.order_no" placeholder="请输入订单号" clearable />
@@ -14,30 +26,17 @@
                     <el-form-item label="快递单号" prop="express_no">
                         <el-input v-model="searchParams.express_no" placeholder="请输入快递单号" clearable />
                     </el-form-item>
-                
 
                     <el-form-item label="创建时间" prop="create_at">
                         <el-date-picker v-model="searchParams.create_at" type="daterange" range-separator="至"
                             start-placeholder="开始日期" end-placeholder="结束日期" value-format="yyyy-MM-dd" />
                     </el-form-item>
-                    <el-form-item>
-                        <el-button type="primary" @click="handleSearch">
-                            <el-icon>
-                                <Search />
-                            </el-icon> 搜索
-                        </el-button>
-                        <el-button @click="resetSearch">
-                            <el-icon>
-                                <Refresh />
-                            </el-icon> 重置
-                        </el-button>
-                    </el-form-item>
+
                 </el-form>
             </HsxSearchPanel>
 
             <!-- 状态统计卡片 -->
             <div class="status-cards">
-              
 
                 <el-tabs v-model="activeOrderStatus" @tab-click="filterByStatus">
 
@@ -45,7 +44,6 @@
                         :name="item.status"></el-tab-pane>
                 </el-tabs>
             </div>
-
 
             <!-- 表格区域 -->
             <el-table v-loading="tableLoading" :data="formattedTableData" style="width: 100%; margin-top: 20px" border
@@ -320,7 +318,7 @@
             <el-descriptions :column="2" border>
                 <el-descriptions-item label="订单编号" >{{ currentDetail.order_id }}</el-descriptions-item>
                 <el-descriptions-item label="创建时间">{{ currentDetail.create_at }}</el-descriptions-item>
-               
+
                 <el-descriptions-item label="订单状态">
                     <el-tag :type="getStatusType(currentDetail.status)">{{ currentDetail.status_name }}</el-tag>
                 </el-descriptions-item>
@@ -341,7 +339,7 @@
                         <p>地址:{{ currentDetail.return_address }}</p>
                     </div>
                 </el-descriptions-item>
-               
+
                 <el-descriptions-item v-if="currentDetail.remark" label="备注">{{ currentDetail.remark || '无' }}</el-descriptions-item>
             </el-descriptions>
 
@@ -458,8 +456,6 @@ import {
 import { getExpress } from '../../api/device_query_api'
 const hsxFeedback = useFeedback()
 
-
-
 const router = useRouter()
 const route = useRoute()
 
@@ -532,8 +528,6 @@ const statusCards = computed(() => [
     { status: String(RETURN_ORDER_STATUS.COMPLETED), label: RETURN_ORDER_STATUS_TEXT[RETURN_ORDER_STATUS.COMPLETED], count: statusCounts.value[RETURN_ORDER_STATUS.COMPLETED] },
     { status: String(RETURN_ORDER_STATUS.CANCELLED), label: RETURN_ORDER_STATUS_TEXT[RETURN_ORDER_STATUS.CANCELLED], count: statusCounts.value[RETURN_ORDER_STATUS.CANCELLED] }
 ])
-
-
 
 // 优化表格数据格式
 const formattedTableData = computed(() => {
@@ -682,7 +676,7 @@ const expressCompanyOptions = ref([
     { label: '顺丰速运', value: 'sf' },
     { label: '京东速递', value: 'jd' },
     { label: '物流车/自取', value: '物流车/自取' },
-   
+
 ])
 
 // 聚焦输入框，便于扫码枪使用
@@ -944,7 +938,6 @@ const getDeviceList = (row: any) => {
 
 console.log(row);
 
-
     return row.returnDevices.map((device: any, index: number) =>
         `${index + 1}. ${device.device?.model || '未知设备'} (${device.device?.imei || 'IMEI未知'})`
     ).join('\n')
@@ -1006,9 +999,6 @@ const getList = async () => {
         }
 
         const res = await getReturnOrderList(params)
-
-        
-        
 
         if (handleApiResponse(res, '', '获取列表失败')) {
             // 确保数据结构一致性
@@ -1082,7 +1072,6 @@ const resetSearch = () => {
 const activeOrderStatus = ref('all')
 const filterByStatus = (status: any) => {
 
-   
     if (status === 'all') {
         searchParams.status = undefined // 全部状态即为不筛选
     } else {
@@ -1177,7 +1166,7 @@ const edit_return_user_address = () => {
     editAddressForm.name = return_user_address.value.name || ''
     editAddressForm.mobile = return_user_address.value.mobile || ''
     editAddressForm.address = return_user_address.value.address || ''
-    
+
     editAddressDialogVisible.value = true
 }
 
@@ -1198,7 +1187,7 @@ const confirmEditAddress = async () => {
             mobile: editAddressForm.mobile,
             address: editAddressForm.address
         }
-        
+
         editAddressDialogVisible.value = false
         hsxFeedback.success('地址修改成功')
     })
@@ -1388,8 +1377,6 @@ const submitConfirm = async () => {
         activeOperationId.value = null
     }
 }
-
-
 
 // 获取现有退货单 - 假设这是一个API调用
 const getExistingReturnOrder = async (orderId: number) => {

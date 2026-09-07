@@ -13,7 +13,7 @@
                     v-if="canShowWidget('quick_express_ship') || canShowWidget('quick_express_track')"
                     trigger="click"
                     @command="handleExpressQuickCommand"
-            >
+                >
                     <el-button type="primary">
                 快递
                         <el-icon class="el-icon--right">
@@ -46,7 +46,7 @@
                     ? 'bg-white text-blue-600 shadow-sm'
                     : 'text-gray-600 hover:text-blue-600 hover:bg-white/50',
                 ]"
-              >
+                    >
                 {{ period.label }}
                     </button>
                 </div>
@@ -64,11 +64,11 @@
                         @change="handleDateChange"
                         size="default"
                         class="custom-date-picker"
-              />
+                    />
                     <button
                         @click="handleRefresh"
                         class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors duration-200 shadow-sm"
-              >
+                    >
                         <el-icon :size="14" color="white" class="mr-1">
                             <Search />
                         </el-icon>

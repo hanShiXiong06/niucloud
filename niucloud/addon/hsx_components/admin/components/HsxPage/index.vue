@@ -70,9 +70,9 @@ const pageStyle = computed(() => ({
                 <div v-if="$slots.toolbar" class="hsx-page__toolbar"><slot name="toolbar" /></div>
             </div>
 
-            <main v-loading="loading" class="hsx-page__body" :class="{ 'hsx-surface': surface }">
+            <div v-loading="loading" class="hsx-page__body" :class="{ 'hsx-surface': surface }">
                 <slot />
-            </main>
+            </div>
         </div>
     </section>
 </template>
@@ -122,12 +122,19 @@ const pageStyle = computed(() => ({
     min-height: 80px;
 }
 
+/* 管理业务页面的基础表面统一；复杂表格、表单结构仍由业务组件负责。 */
+.hsx-page :deep(.el-card) { border-radius: var(--hsx-radius-md) !important; }
+.hsx-page :deep(.el-table) { --el-table-header-bg-color: var(--hsx-bg-muted); --el-table-header-text-color: var(--hsx-text-secondary); --el-table-border-color: var(--hsx-border-color); }
+.hsx-page :deep(.el-input__wrapper), .hsx-page :deep(.el-select__wrapper), .hsx-page :deep(.el-textarea__inner), .hsx-page :deep(.el-button:not(.is-round):not(.is-circle)) { border-radius: var(--hsx-radius-sm) !important; }
+
 .hsx-page--surface .hsx-page__body {
     padding: var(--hsx-surface-padding);
 }
 
 @media (max-width: 1366px) {
     .hsx-page__header { margin-bottom: var(--hsx-space-4); }
+    .hsx-page :deep(.summary-tile) { padding: 10px 12px; }
+    .hsx-page :deep(.summary-value) { margin-top: 4px; font-size: 20px; line-height: 28px; }
 }
 
 @media (max-width: 768px) {

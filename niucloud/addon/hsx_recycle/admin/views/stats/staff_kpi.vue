@@ -3,40 +3,32 @@
     <!-- 头部：标题 + 时间/角色筛选 -->
     <div class="bg-white shadow-sm border-b border-gray-100 sticky top-0 z-10">
       <div class="mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div class="flex items-center space-x-3">
-            <div class="w-9 h-9 bg-indigo-600 rounded-lg flex items-center justify-center">
-              <el-icon :size="18" color="white"><Medal /></el-icon>
-            </div>
-            <div>
-              <h1 class="text-xl font-semibold text-gray-900">员工考核</h1>
-              <p class="text-sm text-gray-500">按关键动作衡量每个人的产出、效率与价值贡献</p>
-            </div>
-          </div>
-
-          <div class="flex flex-wrap items-center gap-3">
-            <el-radio-group v-model="quickRange" size="default" @change="onQuickRange">
-              <el-radio-button label="today">今日</el-radio-button>
-              <el-radio-button label="7d">近7天</el-radio-button>
-              <el-radio-button label="30d">近30天</el-radio-button>
-            </el-radio-group>
-            <el-date-picker
-              v-model="dateRange"
-              type="daterange"
-              range-separator="至"
-              start-placeholder="开始日期"
-              end-placeholder="结束日期"
-              value-format="YYYY-MM-DD"
-              :clearable="false"
-              style="width: 240px"
-              @change="onDateRange"
-            />
-            <el-select v-model="roleFilter" placeholder="全部角色" clearable style="width: 130px">
-              <el-option v-for="r in roleOptions" :key="r" :label="r" :value="r" />
-            </el-select>
-            <el-button :icon="Refresh" circle @click="loadData" />
-          </div>
-        </div>
+        <HsxTitle size="page" collapsible-subtitle>
+            <template #default>员工考核</template>
+            <template #subtitle>按关键动作衡量每个人的产出、效率与价值贡献</template>
+            <template #extra>
+                <el-radio-group v-model="quickRange" size="default" @change="onQuickRange">
+                    <el-radio-button label="today">今日</el-radio-button>
+                    <el-radio-button label="7d">近7天</el-radio-button>
+                    <el-radio-button label="30d">近30天</el-radio-button>
+                </el-radio-group>
+                <el-date-picker
+                    v-model="dateRange"
+                    type="daterange"
+                    range-separator="至"
+                    start-placeholder="开始日期"
+                    end-placeholder="结束日期"
+                    value-format="YYYY-MM-DD"
+                    :clearable="false"
+                    style="width: 240px"
+                    @change="onDateRange"
+                />
+                <el-select v-model="roleFilter" placeholder="全部角色" clearable style="width: 130px">
+                    <el-option v-for="r in roleOptions" :key="r" :label="r" :value="r" />
+                </el-select>
+                <el-button :icon="Refresh" circle @click="loadData" />
+            </template>
+        </HsxTitle>
       </div>
     </div>
 
@@ -171,6 +163,7 @@
 </template>
 
 <script setup lang="ts">
+import { HsxTitle } from '@/addon/hsx_components/core'
 import { ref, reactive, computed, onMounted } from 'vue'
 import {
   Medal, Refresh, Box, Search, PriceTag, Wallet, SetUp, QuestionFilled

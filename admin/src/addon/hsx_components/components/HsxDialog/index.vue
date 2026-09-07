@@ -114,6 +114,7 @@ defineExpose({ close, toggleFullscreen, fullscreen: innerFullscreen })
         v-model="visible"
         v-bind="$attrs"
         class="hsx-dialog"
+        :style="{ '--hsx-dialog-top': alignCenter || innerFullscreen ? '0px' : top }"
         :title="title"
         :class="{ 'hsx-dialog--fullscreen': innerFullscreen }"
         :width="resolvedWidth"
@@ -201,7 +202,7 @@ defineExpose({ close, toggleFullscreen, fullscreen: innerFullscreen })
     line-height: var(--hsx-line-height-caption);
 }
 .hsx-dialog__fullscreen { flex: none; margin: -4px 0 0 auto; color: var(--hsx-text-secondary); }
-.hsx-dialog__body { box-sizing: border-box; overflow: auto; }
+.hsx-dialog__body { box-sizing: border-box; min-height: 0; flex: 1 1 auto; overflow: auto; }
 .hsx-dialog__footer { display: flex; width: 100%; min-width: 0; align-items: center; gap: var(--hsx-space-2); }
 .hsx-dialog__footer--left { justify-content: flex-start; }
 .hsx-dialog__footer--center { justify-content: center; }
@@ -212,19 +213,25 @@ defineExpose({ close, toggleFullscreen, fullscreen: innerFullscreen })
 
 <style lang="scss">
 .hsx-dialog {
+    display: flex;
+    flex-direction: column;
     max-width: calc(100vw - 32px);
+    max-height: calc(100vh - var(--hsx-dialog-top, 6vh) - 16px);
+    max-height: calc(100dvh - var(--hsx-dialog-top, 6vh) - 16px);
     overflow: hidden;
     border-radius: var(--hsx-radius-lg, 14px);
     box-shadow: var(--hsx-shadow-floating);
 
     .el-dialog__header {
+        flex: none;
         margin: 0;
         padding: 18px 22px;
         border-bottom: 1px solid var(--hsx-border-color);
     }
     .el-dialog__headerbtn { top: 16px; right: 16px; }
-    .el-dialog__body { padding: 20px 22px; }
+    .el-dialog__body { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; padding: 20px 22px; }
     .el-dialog__footer {
+        flex: none;
         padding: 14px 22px;
         border-top: 1px solid var(--hsx-border-color);
         background: var(--hsx-bg-surface);
@@ -233,6 +240,8 @@ defineExpose({ close, toggleFullscreen, fullscreen: innerFullscreen })
 
 .hsx-dialog.hsx-dialog--fullscreen {
     max-width: 100vw;
+    max-height: 100vh;
+    max-height: 100dvh;
     border-radius: 0;
 }
 

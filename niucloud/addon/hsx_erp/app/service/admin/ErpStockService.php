@@ -530,6 +530,8 @@ class ErpStockService extends BaseAdminService
         $order = !empty($where['turnover_level'])
             ? 'IF(a.stock_in_at > 0, a.stock_in_at, a.create_at) asc,a.id asc'
             : 'a.id desc';
+        // 普通 order() 会按逗号拆分字段，导致 IF() 表达式被截断为 IF(a.stock_in_at。
+        // 排序表达式仅由上方固定分支生成，不拼接用户输入。
         $page = $query->field([
             'a.*',
             's.sale_no',
@@ -537,7 +539,7 @@ class ErpStockService extends BaseAdminService
             's.sale_channel',
             's.sale_at',
             's.finance_status as sale_finance_status',
-        ])->order($order)->paginate([
+        ])->orderRaw($order)->paginate([
             'list_rows' => (int)($where['limit'] ?? 15),
             'page' => (int)($where['page'] ?? 1),
         ])->toArray();

@@ -2,32 +2,19 @@
   <PremiumTheme class="consignment-page">
     <el-card class="!border-none" shadow="never">
       <template #header>
-        <div class="page-header">
-          <div>
-            <div class="page-title">代卖订单</div>
-            <div class="page-subtitle">跟踪从回收订单转入代卖的设备，支持查看原订单、登记售出、结算和日志追溯。</div>
-          </div>
-          <div class="page-actions">
-            <el-button type="primary" plain @click="goConsignmentExport">导出代卖入库</el-button>
-            <el-button @click="fetchList">刷新</el-button>
-          </div>
-        </div>
+        <HsxTitle size="page" collapsible-subtitle>
+            <template #default>代卖订单</template>
+            <template #subtitle>跟踪从回收订单转入代卖的设备，支持查看原订单、登记售出、结算和日志追溯。</template>
+            <template #extra>
+                <el-button type="primary" plain @click="goConsignmentExport">导出代卖入库</el-button>
+                <el-button @click="fetchList">刷新</el-button>
+            </template>
+        </HsxTitle>
       </template>
 
-      <el-form :model="search" inline class="search-form">
-        <el-form-item label="关键词">
-          <el-input v-model.trim="search.keyword" class="!w-[240px]" clearable placeholder="代卖单号/原订单/IMEI/客户手机" />
-        </el-form-item>
-        <el-form-item label="状态">
-          <el-select v-model="search.status" class="!w-[150px]" clearable placeholder="全部">
-            <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="handleSearch">查询</el-button>
-          <el-button @click="resetSearch">重置</el-button>
-        </el-form-item>
-      </el-form>
+      <HsxSearchPanel v-slot="{ labelPosition }">
+          <QueryForm v-model="queryModel" :schema="querySchema" :columns="2" :collapse-count="2" :label-position="labelPosition" label-width="auto" :loading="loading" @search="searchConsignments" @reset="clearQueryScope" />
+      </HsxSearchPanel>
 
       <el-table v-loading="loading" :data="tableData" size="large">
         <template #empty>
@@ -117,7 +104,7 @@
       </div>
     </el-card>
 
-    <el-drawer v-model="detailVisible" title="代卖订单详情" size="720px">
+    <HsxDrawer v-model="detailVisible" title="代卖订单详情" size="720px" :destroy-on-close="false">
       <div v-if="detail" class="detail-wrap">
         <section>
           <h3>基础信息</h3>
@@ -168,9 +155,9 @@
           </el-timeline>
         </section>
       </div>
-    </el-drawer>
+    </HsxDrawer>
 
-    <el-dialog v-model="actionDialog.visible" :title="actionDialog.title" width="420px" destroy-on-close>
+    <HsxDialog :confirm-loading="saving" v-model="actionDialog.visible" :title="actionDialog.title" width="420px" destroy-on-close>
       <el-form :model="actionForm" label-width="110px">
         <el-form-item v-if="actionDialog.type === 'listing'" label="挂牌价">
           <el-input-number v-model="actionForm.listing_price" :min="0" :precision="2" class="!w-full" />
@@ -195,24 +182,27 @@
           <el-form-item label="付款凭证">
             <upload-image v-model="actionForm.payment_images" :limit="9" />
           </el-form-item>
-          <el-alert type="info" :closable="false" title="ERP将统一生成应付结算与账户出账，成功后自动回写本代卖单。" />
+          <HsxNotice default-expanded type="info" :closable="false" title="ERP将统一生成应付结算与账户出账，成功后自动回写本代卖单。" />
         </template>
         <el-form-item label="备注">
           <el-input v-model="actionForm.remark" type="textarea" rows="3" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="actionDialog.visible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submitAction">确认</el-button>
+        <el-button :disabled="saving" @click="actionDialog.visible = false">取消</el-button>
+        <el-button :disabled="saving" type="primary" :loading="saving" @click="submitAction">确认</el-button>
       </template>
-    </el-dialog>
+    </HsxDialog>
   </PremiumTheme>
 </template>
 
 <script setup lang="ts">
+import { QueryForm } from '@/addon/hsx_components/forms'
+import type { ProFormField } from '@/addon/hsx_components/types'
+import { HsxSearchPanel, HsxDialog, HsxDrawer, HsxNotice, useFeedback, HsxTitle } from '@/addon/hsx_components/core'
 import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
-import { onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { ElMessageBox } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import {
   closeConsignment,
@@ -227,6 +217,7 @@ import {
 import { getPrintSceneManualActions, getPrintScenePlan, printByScene } from '@/addon/hsx_recycle/api/printer'
 import EmptyState from '@/addon/hsx_recycle/components/empty-state/index.vue'
 import { getCapitalAccountOptions } from '@/addon/hsx_recycle/api/recycle_order'
+const hsxFeedback = useFeedback()
 
 const route = useRoute()
 const router = useRouter()
@@ -248,6 +239,20 @@ const search = reactive({
     ? [String(route.query.start_time), String(route.query.end_time)]
     : []
 })
+const queryModel = computed({
+  get: () => ({ keyword: search.keyword, status: search.status }),
+  set: value => Object.assign(search, { keyword: '', status: '' }, value)
+})
+const querySchema = computed<ProFormField[]>(() => [
+  { prop: 'keyword', label: '关键词', component: 'input', placeholder: '代卖单号 / 原订单 / IMEI / 客户手机', props: { clearable: true } },
+  { prop: 'status', label: '状态', component: 'select', placeholder: '全部状态', props: { clearable: true }, options: statusOptions.value }
+])
+function searchConsignments(values: Record<string, any>) {
+  Object.assign(search, { keyword: '', status: '' }, values)
+  search.keyword = String(search.keyword || '').trim()
+  handleSearch()
+}
+function clearQueryScope() { search.source_order_id = ''; search.create_time = [] }
 const page = reactive({ page: 1, limit: 10, total: 0 })
 
 const actionDialog = reactive({ visible: false, title: '', type: '', row: null as any })
@@ -333,13 +338,6 @@ const handleSearch = () => {
   page.page = 1
   fetchList()
 }
-const resetSearch = () => {
-  search.keyword = ''
-  search.status = ''
-  search.source_order_id = ''
-  page.page = 1
-  fetchList()
-}
 const goSourceOrder = (row: any) => {
   router.push({ path: '/site/recycle_order/list', query: { order_id: row.source_order_id, order_no: row.source_order_no || '', t: Date.now() } })
 }
@@ -371,7 +369,7 @@ const handleCommand = async (command: string, row: any) => {
   if (command === 'cancel') {
     await ElMessageBox.confirm(`确定取消代卖订单 ${row.consignment_no} 吗？`, '取消代卖', { type: 'warning' })
     await closeConsignment(row.id, { status: 5, remark: '后台取消代卖' })
-    ElMessage.success('已取消')
+    hsxFeedback.success('已取消')
     fetchList()
     return
   }
@@ -421,7 +419,7 @@ const handlePrintScene = async (sceneKey: string, row: any) => {
     }
   } catch (error: any) {
     if (error === 'cancel' || error === 'close') return
-    ElMessage.error(error?.message || '打印失败')
+    hsxFeedback.error(error?.message || '打印失败')
   }
 }
 
@@ -435,7 +433,7 @@ const submitAction = async () => {
       await markConsignmentSold(id, { sold_price: actionForm.sold_price, settlement_amount: actionForm.settlement_amount, remark: actionForm.remark })
     } else if (actionDialog.type === 'settle') {
       if (erpManaged.value && !actionForm.capital_account_id) {
-        ElMessage.warning(capitalAccounts.value.length ? '请选择ERP实际出款账户' : 'ERP没有可用资金账户，请先完成资金账户配置')
+        hsxFeedback.warning(capitalAccounts.value.length ? '请选择ERP实际出款账户' : 'ERP没有可用资金账户，请先完成资金账户配置')
         return
       }
       await settleConsignment(id, {
@@ -446,7 +444,7 @@ const submitAction = async () => {
         remark: actionForm.remark
       })
     }
-    ElMessage.success('操作成功')
+    hsxFeedback.success('操作成功')
     actionDialog.visible = false
     fetchList()
   } finally {

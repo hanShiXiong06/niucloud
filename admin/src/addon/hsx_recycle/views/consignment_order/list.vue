@@ -12,8 +12,8 @@
         </HsxTitle>
       </template>
 
-      <HsxSearchPanel>
-          <QueryForm v-model="queryModel" :schema="querySchema" :columns="2" :collapse-count="2" label-position="top" label-width="auto" :loading="loading" @search="searchConsignments" @reset="clearQueryScope" />
+      <HsxSearchPanel v-slot="{ labelPosition }">
+          <QueryForm v-model="queryModel" :schema="querySchema" :columns="2" :collapse-count="2" :label-position="labelPosition" label-width="auto" :loading="loading" @search="searchConsignments" @reset="clearQueryScope" />
       </HsxSearchPanel>
 
       <el-table v-loading="loading" :data="tableData" size="large">
@@ -218,7 +218,6 @@ import { getPrintSceneManualActions, getPrintScenePlan, printByScene } from '@/a
 import EmptyState from '@/addon/hsx_recycle/components/empty-state/index.vue'
 import { getCapitalAccountOptions } from '@/addon/hsx_recycle/api/recycle_order'
 const hsxFeedback = useFeedback()
-
 
 const route = useRoute()
 const router = useRouter()

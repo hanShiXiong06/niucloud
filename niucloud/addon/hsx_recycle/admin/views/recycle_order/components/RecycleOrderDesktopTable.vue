@@ -302,7 +302,8 @@
 </template>
 
 <script setup lang="ts">
-import { ElMessageBox, ElMessage } from 'element-plus'
+import { useFeedback } from '@/addon/hsx_components/core'
+import { ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import useUserStore from '@/stores/modules/user'
 import DeviceStatusBadge from './DeviceStatusBadge.vue'
@@ -323,6 +324,8 @@ import {
   Bell,
   MoreFilled,
 } from "@element-plus/icons-vue";
+const hsxFeedback = useFeedback()
+
 
 interface Props {
   loading: boolean;
@@ -468,7 +471,7 @@ const getUserDisplayName = (row: any) => {
 // 编辑用户昵称
 const handleEditUsername = async (row: any) => {
   if (!row.member?.member_id) {
-    ElMessage.warning('该订单没有关联会员，无法编辑昵称')
+    hsxFeedback.warning('该订单没有关联会员，无法编辑昵称')
     return
   }
 

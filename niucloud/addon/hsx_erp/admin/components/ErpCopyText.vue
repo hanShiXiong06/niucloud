@@ -16,9 +16,12 @@
 </template>
 
 <script setup lang="ts">
+import { useFeedback } from '@/addon/hsx_components/core'
 import { computed } from 'vue'
-import { ElMessage } from 'element-plus'
+
 import { DocumentCopy } from '@element-plus/icons-vue'
+const hsxFeedback = useFeedback()
+
 const props = withDefaults(defineProps<{ value?: string | number; title?: string; emptyText?: string; maxWidth?: string; popoverWidth?: number }>(), {
     value: '', title: '完整内容', emptyText: '-', maxWidth: '220px', popoverWidth: 420,
 })
@@ -27,7 +30,7 @@ const hint = computed(() => text.value ? '点击查看完整内容并复制' : '
 async function copy() {
     try {
         await navigator.clipboard.writeText(text.value)
-        ElMessage.success('已复制')
+        hsxFeedback.success('已复制')
     } catch (_) {
         const input = document.createElement('textarea')
         input.value = text.value
@@ -35,7 +38,7 @@ async function copy() {
         input.select()
         document.execCommand('copy')
         input.remove()
-        ElMessage.success('已复制')
+        hsxFeedback.success('已复制')
     }
 }
 </script>

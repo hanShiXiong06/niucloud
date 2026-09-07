@@ -31,6 +31,9 @@ const props = withDefaults(defineProps<{
     cancelText?: string
     confirmLoading?: boolean
     confirmDisabled?: boolean
+    beforeClose?: (done: () => void) => void
+    closeOnPressEscape?: boolean
+    showClose?: boolean
 }>(), {
     title: '',
     subtitle: '',
@@ -51,7 +54,9 @@ const props = withDefaults(defineProps<{
     confirmText: '确定',
     cancelText: '取消',
     confirmLoading: false,
-    confirmDisabled: false
+    confirmDisabled: false,
+    closeOnPressEscape: true,
+    showClose: true
 })
 
 const emit = defineEmits<{
@@ -91,14 +96,15 @@ function toggleFullscreen() {
     emit('update:fullscreen', innerFullscreen.value)
 }
 
-function close() {
-    visible.value = false
+function requestClose(afterClose?: () => void) {
+    if (props.confirmLoading) return
+    const done = () => { afterClose?.(); visible.value = false }
+    if (props.beforeClose) props.beforeClose(done)
+    else done()
 }
-
-function cancel() {
-    emit('cancel')
-    close()
-}
+function close() { requestClose() }
+function cancel() { requestClose(() => emit('cancel')) }
+function confirm() { if (!props.confirmLoading && !props.confirmDisabled) emit('confirm') }
 
 defineExpose({ close, toggleFullscreen, fullscreen: innerFullscreen })
 </script>
@@ -108,6 +114,7 @@ defineExpose({ close, toggleFullscreen, fullscreen: innerFullscreen })
         v-model="visible"
         v-bind="$attrs"
         class="hsx-dialog"
+        :style="{ '--hsx-dialog-top': alignCenter || innerFullscreen ? '0px' : top }"
         :title="title"
         :class="{ 'hsx-dialog--fullscreen': innerFullscreen }"
         :width="resolvedWidth"
@@ -115,18 +122,21 @@ defineExpose({ close, toggleFullscreen, fullscreen: innerFullscreen })
         :draggable="draggable && !innerFullscreen"
         :align-center="alignCenter"
         :top="alignCenter ? undefined : top"
-        :close-on-click-modal="closeOnClickModal"
+        :close-on-click-modal="closeOnClickModal && !confirmLoading"
+        :close-on-press-escape="closeOnPressEscape && !confirmLoading"
+        :show-close="showClose && !confirmLoading"
+        :before-close="beforeClose"
         :destroy-on-close="destroyOnClose"
         :append-to-body="appendToBody"
         @open="emit('open')"
         @close="emit('close')"
         @closed="emit('closed')"
     >
-        <template #header>
+        <template #header="scope">
             <div class="hsx-dialog__header">
-                <slot name="header" :title="title" :subtitle="subtitle" :fullscreen="innerFullscreen">
+                <slot name="header" v-bind="scope" :close="close" :title="title" :subtitle="subtitle" :fullscreen="innerFullscreen">
                     <div class="hsx-dialog__heading">
-                        <div class="hsx-dialog__title">{{ title }}</div>
+                        <div :id="scope.titleId" class="hsx-dialog__title">{{ title }}</div>
                         <div v-if="subtitle" class="hsx-dialog__subtitle">{{ subtitle }}</div>
                     </div>
                 </slot>
@@ -150,13 +160,13 @@ defineExpose({ close, toggleFullscreen, fullscreen: innerFullscreen })
 
         <template v-if="showFooter || $slots.footer" #footer>
             <div class="hsx-dialog__footer" :class="`hsx-dialog__footer--${footerAlign}`">
-                <slot name="footer" :close="close" :confirm="() => emit('confirm')">
-                    <el-button @click="cancel">{{ cancelText }}</el-button>
+                <slot name="footer" :close="close" :confirm="confirm">
+                    <el-button :disabled="confirmLoading" @click="cancel">{{ cancelText }}</el-button>
                     <el-button
                         type="primary"
                         :loading="confirmLoading"
                         :disabled="confirmDisabled"
-                        @click="emit('confirm')"
+                        @click="confirm"
                     >
                         {{ confirmText }}
                     </el-button>
@@ -192,7 +202,7 @@ defineExpose({ close, toggleFullscreen, fullscreen: innerFullscreen })
     line-height: var(--hsx-line-height-caption);
 }
 .hsx-dialog__fullscreen { flex: none; margin: -4px 0 0 auto; color: var(--hsx-text-secondary); }
-.hsx-dialog__body { box-sizing: border-box; overflow: auto; }
+.hsx-dialog__body { box-sizing: border-box; min-height: 0; flex: 1 1 auto; overflow: auto; }
 .hsx-dialog__footer { display: flex; width: 100%; min-width: 0; align-items: center; gap: var(--hsx-space-2); }
 .hsx-dialog__footer--left { justify-content: flex-start; }
 .hsx-dialog__footer--center { justify-content: center; }
@@ -203,19 +213,25 @@ defineExpose({ close, toggleFullscreen, fullscreen: innerFullscreen })
 
 <style lang="scss">
 .hsx-dialog {
+    display: flex;
+    flex-direction: column;
     max-width: calc(100vw - 32px);
+    max-height: calc(100vh - var(--hsx-dialog-top, 6vh) - 16px);
+    max-height: calc(100dvh - var(--hsx-dialog-top, 6vh) - 16px);
     overflow: hidden;
     border-radius: var(--hsx-radius-lg, 14px);
     box-shadow: var(--hsx-shadow-floating);
 
     .el-dialog__header {
+        flex: none;
         margin: 0;
         padding: 18px 22px;
         border-bottom: 1px solid var(--hsx-border-color);
     }
     .el-dialog__headerbtn { top: 16px; right: 16px; }
-    .el-dialog__body { padding: 20px 22px; }
+    .el-dialog__body { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; padding: 20px 22px; }
     .el-dialog__footer {
+        flex: none;
         padding: 14px 22px;
         border-top: 1px solid var(--hsx-border-color);
         background: var(--hsx-bg-surface);
@@ -224,6 +240,8 @@ defineExpose({ close, toggleFullscreen, fullscreen: innerFullscreen })
 
 .hsx-dialog.hsx-dialog--fullscreen {
     max-width: 100vw;
+    max-height: 100vh;
+    max-height: 100dvh;
     border-radius: 0;
 }
 
