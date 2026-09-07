@@ -1,3 +1,5 @@
+import type { DeviceReadings } from './deviceReadings'
+
 /**
  * 设备录入相关共享类型
  */
@@ -22,6 +24,9 @@ export interface DeviceEntryRow {
     _k?: number
     id?: number | string
     imei: string
+    imei2?: string
+    serial_number?: string
+    device_readings?: DeviceReadings
     model: string
     initial_price: number
     /** 用户自助提交的串号（确认弹窗展示用，只读） */
@@ -49,9 +54,10 @@ export interface DeviceEntryRow {
     summary_loading?: boolean
     summary_fields?: CheckSummaryField[]
     summary_values?: Record<string, any>
+    summary_default_keys?: string[]
     // 联网查询/本地读取补充字段
     color?: string
-    /** 设备桥返回的颜色下标，用于按质检模板选项顺序预选颜色。 */
+    /** 设备桥颜色代码仅备查；不是质检模板选项下标。 */
     color_index?: number
     capacity?: string
     system_version?: string

@@ -1,28 +1,13 @@
 import { ref, onBeforeUnmount } from 'vue'
 import axios from 'axios'
+import { mapLocalDevice } from './deviceReadings'
 
 /**
  * 本地取机信息（优先使用 hsx_device_bridge，兼容旧版大腿手机助手）。
  * 浏览器无法直接读取插入手机的硬件信息，必须经由本地服务暴露的接口获取。
  * 提供：手动读取 fetchConnected、字段映射 mapToRow、可选自动检测轮询 startAuto/stopAuto。
  */
-export interface LocalMappedDevice {
-    model: string
-    imei: string
-    imei2?: string
-    serial_number?: string
-    capacity?: string
-    color?: string
-    color_index?: number
-    system_version?: string
-    warranty_info?: string
-    battery_health?: string
-    battery_cycle_count?: string | number
-    product_type?: string
-    model_number?: string
-    model_candidates: string[]
-    raw: any
-}
+export type { LocalMappedDevice } from './deviceReadings'
 
 export function useLocalDevice() {
     const fetching = ref(false)
@@ -61,7 +46,7 @@ export function useLocalDevice() {
         try {
             const res = await requestFirst(deviceUrls)
             available.value = true
-            return res.data.data || []
+            return Array.isArray(res.data.data) ? res.data.data : []
         } catch (e: any) {
             available.value = false
             throw e
@@ -70,57 +55,7 @@ export function useLocalDevice() {
         }
     }
 
-    /** 本地设备字段 → 行字段映射 */
-    function mapToRow(d: any): LocalMappedDevice {
-        const identity = d?.identity || {}
-        const hardware = d?.hardware || {}
-        const display = d?.display || {}
-        const system = d?.system || {}
-        const batteryData = d?.battery || {}
-        let battery = ''
-        const batteryValue = batteryData?.calculated_health_percent ?? d?.battery_health
-        if (batteryValue !== undefined && batteryValue !== null && batteryValue !== '') {
-            const s = String(batteryValue)
-            if (s.includes('%') || /^\d+(\.\d+)?$/.test(s)) {
-                const n = parseFloat(s.replace('%', '').trim())
-                if (!isNaN(n)) battery = String(n)
-            } else {
-                battery = s
-            }
-        }
-        const model = display?.device_name || d?.display_name || d?.model_name || d?.model || display?.model_hint || ''
-        const modelCandidates = Array.from(new Set([
-            model,
-            model ? `苹果 ${model}` : '',
-            display?.model_hint,
-            hardware?.product_type,
-            hardware?.model_number,
-            hardware?.model_number_full,
-        ].map(item => String(item || '').trim()).filter(Boolean)))
-        const rawColorIndex = display?.color_index
-            ?? hardware?.color_code
-            ?? d?.color_index
-            ?? d?.color_code
-            ?? (/^\d+$/.test(String(display?.color ?? d?.color ?? '').trim()) ? (display?.color ?? d?.color) : undefined)
-        const parsedColorIndex = Number(rawColorIndex)
-        return {
-            model,
-            imei: identity?.imei || d?.imei || '',
-            imei2: identity?.imei2 || d?.imei2 || '',
-            serial_number: identity?.serial_number || d?.serial_number || d?.sn || '',
-            capacity: display?.capacity || d?.storage || d?.total_storage || d?.capacity || '',
-            color: /^\d+$/.test(String(display?.color ?? d?.color ?? '').trim()) ? '' : (display?.color || d?.color || ''),
-            color_index: Number.isInteger(parsedColorIndex) && parsedColorIndex >= 0 ? parsedColorIndex : undefined,
-            system_version: system?.version || d?.ios_version || d?.os_version || d?.system_version || d?.android_version || '',
-            warranty_info: d?.warranty_info || '',
-            battery_health: battery,
-            battery_cycle_count: batteryData?.cycle_count ?? d?.battery_cycle_count ?? d?.battery_cycle ?? '',
-            product_type: hardware?.product_type || d?.product_type || '',
-            model_number: hardware?.model_number || d?.model_number || '',
-            model_candidates: modelCandidates,
-            raw: d
-        }
-    }
+    const mapToRow = mapLocalDevice
 
     /** 友好错误文案 */
     function describeError(error: any): string {
@@ -137,7 +72,7 @@ export function useLocalDevice() {
      * 开启自动检测：每隔 interval 轮询一次，发现"新"设备（按 imei/sn 去重）即回调。
      * 静默失败，不打扰用户（本地服务未开时不弹错）。
      */
-    function startAuto(onDetect: (devices: any[]) => void, interval = 3000) {
+    function startAuto(onDetect: (devices: any[]) => void | Promise<void>, interval = 3000) {
         autoDetect.value = true
         seen.clear()
         const tick = async () => {
@@ -146,8 +81,10 @@ export function useLocalDevice() {
                 const scan = await axios.get(`${bridgeUrl}/v1/scan`, { timeout: 5000 })
                 const ids = scan.data?.code === 0 ? (scan.data.data || []).map((id: any) => String(id)) : []
                 const hasFresh = ids.some((id: string) => !seen.has(id))
-                ids.forEach((id: string) => seen.add(id))
-                if (hasFresh) onDetect(await fetchConnected())
+                if (hasFresh) {
+                    await onDetect(await fetchConnected())
+                    ids.forEach((id: string) => seen.add(id))
+                }
             } catch {
                 // 自动模式静默忽略
             } finally {

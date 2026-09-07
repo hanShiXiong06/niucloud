@@ -609,6 +609,8 @@
                             <ErpStockCostBreakdown :summary="detail.data.cost_summary" />
                     </HsxFold>
                     <ErpInspectionReport :report="detail.data.inspection" />
+                    <HsxDataArchive :data="detail.data.device_readings || {}" :reset-key="detail.data.id"
+                        :labels="{ local: '本地读取原文与提取值', model_match: '型号匹配记录', external_queries: '外部查询记录（如保修）' }" />
 
                     <el-collapse v-model="detailActivePanels" class="mt-6">
                         <el-collapse-item v-if="canViewSupplier || canViewFinance" name="purchase" title="采购批次">
@@ -698,7 +700,7 @@
 import { erpEnumLabel, erpNamedLabel, erpSerialText, erpSourceLabel } from '@/addon/hsx_erp/utils/display'
 import { computed, nextTick, onActivated, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { HsxDialog, HsxDrawer, HsxNotice, HsxFold, useFeedback, HsxTitle, HsxPage, HsxSearchPanel } from '@/addon/hsx_components/core'
+import { HsxDialog, HsxDrawer, HsxNotice, HsxFold, HsxDataArchive, useFeedback, HsxTitle, HsxPage, HsxSearchPanel } from '@/addon/hsx_components/core'
 const feedback = useFeedback()
 import { Refresh, Search } from '@element-plus/icons-vue'
 import { adjustErpStockCost, adjustErpStockRetailPrice, buyoutErpConsignment, completeErpStockRefurbish, getErpSerialTraceDetail, getErpSerialTraceList, getErpStockInfo, getErpStockList, getErpStockTurnoverSummary, handoffErpStockListing, prepareErpStockListingMedia, previewErpStockTransfer, printErpAssetLabel, sendErpStockRefurbish, syncErpStockListing, transferErpStock, updateErpStockFlow } from '@/addon/hsx_erp/api/erp'

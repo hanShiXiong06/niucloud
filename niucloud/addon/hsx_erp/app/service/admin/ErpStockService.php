@@ -1421,6 +1421,7 @@ class ErpStockService extends BaseAdminService
         }
         $asset['cost_summary'] = ErpStockCostPresentation::summarize($asset, $supplierAmount);
         $asset['inspection'] = ErpInspectionPresentation::fromAsset($asset);
+        $asset['device_readings'] = $this->decodeJsonObject($asset['qc_report'] ?? '')['device_readings'] ?? [];
         $asset['return_flow'] = ErpPurchaseReturnPolicy::assess($asset, $supplierAmount, $paidAmount);
         $asset = (new ErpTurnoverService())->decorate([$asset])[0] ?? $asset;
         $asset = $this->appendListingSyncState([$asset])[0] ?? $asset;
@@ -2278,6 +2279,8 @@ class ErpStockService extends BaseAdminService
     private function marketplaceQcSnapshot(ErpAsset $asset, string $qualityRemark): array
     {
         $snapshot = $this->decodeJsonObject($asset->qc_report ?? '');
+        // 采集原文含 UDID、查询渠道等内部信息，只供后台备查，不向商城发布。
+        unset($snapshot['device_readings'], $snapshot['raw']['device_readings']);
         if ($snapshot === []) {
             $snapshot = ['version' => 1, 'report' => [], 'raw' => []];
         }

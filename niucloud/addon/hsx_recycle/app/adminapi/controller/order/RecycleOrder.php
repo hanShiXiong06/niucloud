@@ -574,6 +574,15 @@ class RecycleOrder extends BaseAdminController
     {
         $data = $this->request->params([
             ['imei', ''],
+            ['imei2', ''],
+            ['serial_number', ''],
+            ['capacity', ''],
+            ['color', ''],
+            ['system_version', ''],
+            ['warranty_info', ''],
+            ['battery_health', ''],
+            ['battery_cycle', ''],
+            ['device_readings', []],
             ['model', ''],
             ['initial_price', 0],
             ['category_id', 0],

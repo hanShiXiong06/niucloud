@@ -74,6 +74,7 @@ const mapDeviceToRow = (d: any): DeviceEntryRow => {
     delete summaryValues.goods_category
     delete summaryValues.check_meta
     delete summaryValues.sign_summary
+    delete summaryValues.device_readings
     if (info.sign_summary && typeof info.sign_summary === 'object') {
         Object.assign(summaryValues, info.sign_summary)
     }
@@ -87,6 +88,12 @@ const mapDeviceToRow = (d: any): DeviceEntryRow => {
         _k: rowKeySeed++,
         id: d?.id,
         imei: d?.imei || '',
+        imei2: d?.imei2 || '',
+        serial_number: d?.sn || '',
+        capacity: d?.capacity ?? '', color: d?.color ?? '',
+        system_version: d?.system_version ?? '', warranty_info: d?.warranty_info ?? '',
+        battery_health: info.check_meta?.battery ?? '', battery_cycle_count: info.check_meta?.battery_num ?? '',
+        device_readings: info.device_readings,
         model: d?.model || '',
         user_sn: d?.user_sn || '',
         initial_price: Number(d?.initial_price || 0),

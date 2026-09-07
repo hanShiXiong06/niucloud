@@ -487,6 +487,14 @@ class ErpDeviceInboundRequested
         $capacity = trim((string)($device['capacity'] ?? ''));
         $color = trim((string)($device['color'] ?? ''));
         $spec = implode(' ', array_values(array_filter([$capacity, $color])));
+        $health = $device['battery_health'] ?? '';
+        $battery = is_numeric($health) ? (int)max(0, min(100, round((float)$health))) : 0;
+        $warrantyText = trim((string)($device['warranty_info'] ?? ''));
+        $warranty = 0;
+        if (preg_match('~(\d{4})[-/](\d{1,2})[-/](\d{1,2})~', $warrantyText, $date)
+            && checkdate((int)$date[2], (int)$date[3], (int)$date[1])) {
+            $warranty = (int)strtotime(sprintf('%04d-%02d-%02d', $date[1], $date[2], $date[3]));
+        }
         // 结构化质检只写qc_report。备注仅承接来源人员手填内容，避免长摘要挤占备注。
         $humanRemark = trim((string)($check['human_remark'] ?? $check['check_remark'] ?? ''));
         $images = '';
@@ -513,6 +521,10 @@ class ErpDeviceInboundRequested
                 'color' => $color,
                 'color_value' => $device['color_value'] ?? $color,
                 'imei2' => trim((string)($device['imei2'] ?? '')),
+                'battery' => $battery,
+                'battery_cycle_count' => $device['battery_cycle_count'] ?? '',
+                'system_version' => (string)($device['system_version'] ?? ''),
+                'warranty_info' => $warrantyText,
                 'source_plugin' => $sourcePlugin,
                 'source_device_id' => $sourceDeviceValue,
                 'source_order_no' => trim((string)($device['source_order_no'] ?? '')),
@@ -535,6 +547,8 @@ class ErpDeviceInboundRequested
                 ],
             ],
             'color' => $color,
+            'battery' => $battery,
+            'warranty' => $warranty,
             'catalog_product_id' => (int)($device['catalog_product_id'] ?? 0),
             'estimate_sale_price' => round((float)($device['suggested_sale_price'] ?? 0), 2),
             'retail_price' => round((float)($device['suggested_sale_price'] ?? 0), 2),
@@ -581,8 +595,11 @@ class ErpDeviceInboundRequested
             }
         }
 
+        $readings = is_array($check['device_readings'] ?? null) ? $check['device_readings'] : [];
+        unset($check['device_readings']);
         return [
             'version' => 1,
+            'device_readings' => $readings,
             'source_plugin' => $sourcePlugin,
             'source_device_id' => $sourceDeviceId,
             'template' => ['id' => (int)($check['check_template_id'] ?? 0)],

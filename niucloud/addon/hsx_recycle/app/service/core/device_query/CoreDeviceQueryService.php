@@ -99,7 +99,7 @@ class CoreDeviceQueryService
 
                 $normalized = $this->normalizer->normalize($serviceCode, $providerResult['data']);
                 $price = $this->priceCalculator->calculate($providerResult, $service, $mapping, false, true);
-                $this->recorder->record([
+                $queryRecordId = $this->recorder->record([
                     'site_id' => $siteId,
                     'query_code' => $queryCode,
                     'query_type' => $queryType,
@@ -116,6 +116,8 @@ class CoreDeviceQueryService
 
                 return [
                     'success' => true,
+                    'query_record_id' => $queryRecordId,
+                    'queried_at' => time(),
                     'service_code' => $serviceCode,
                     'service_name' => (string)$service['name'],
                     'channel_key' => (string)$channel['key'],
@@ -219,6 +221,8 @@ class CoreDeviceQueryService
             ->where('query_code', $queryCode)
             ->where('status', 1)
             ->where('api_name', (string)$service['name'])
+            // 缓存命中日志不是一次新的外部采集，不能延长原结果有效期或层层嵌套原文。
+            ->whereRaw("COALESCE(JSON_UNQUOTE(JSON_EXTRACT(raw_response, '$.meta.from_cache')), '0') <> '1'")
             ->where('create_at', '>', time() - $cacheTtl)
             ->order('create_at', 'desc')
             ->find();
@@ -251,6 +255,9 @@ class CoreDeviceQueryService
 
         return [
             'success' => true,
+            // 缓存仍引用原始查询记录，保留真实采集时间，而非本次缓存命中时间。
+            'query_record_id' => (int)$data['id'],
+            'queried_at' => (int)$data['create_at'],
             'service_code' => $serviceCode,
             'service_name' => (string)$service['name'],
             'channel_key' => 'cache',

@@ -143,6 +143,9 @@ class RecycleDevice extends BaseAdminController
         if (isset($srcInfo['basic_labels'])) {
             $slimInfo['basic_labels'] = $srcInfo['basic_labels'];
         }
+        if (isset($srcInfo['device_readings'])) {
+            $slimInfo['device_readings'] = $srcInfo['device_readings'];
+        }
         $slim['info'] = $slimInfo;
         $slim['logs'] = $data['logs'] ?? [];
         $slim['view'] = $data['view'] ?? [];

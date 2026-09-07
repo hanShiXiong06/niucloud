@@ -46,7 +46,7 @@ class DeviceSummaryHelper
                 $fieldKey = (string)$key;
                 $value = $item;
             }
-            if ($fieldKey === '') {
+            if ($fieldKey === '' || in_array($fieldKey, ['device_readings', 'check_meta', 'goods_category', 'sign_summary'], true)) {
                 continue;
             }
             if (is_array($value)) {
@@ -90,15 +90,9 @@ class DeviceSummaryHelper
      * @param array $device 原始设备参数(取电池等)
      * @return array
      */
-    public static function buildInfo($existingInfo, array $categoryPath, array $summary, array $device = []): array
+    public static function buildInfo($existingInfo, array $categoryPath, array $summary, array $device = [], int $siteId = 0): array
     {
-        if (is_string($existingInfo) && $existingInfo !== '') {
-            $decoded = json_decode($existingInfo, true);
-            $existingInfo = is_array($decoded) ? $decoded : [];
-        }
-        if (!is_array($existingInfo)) {
-            $existingInfo = [];
-        }
+        $existingInfo = DeviceReadingArchive::decode($existingInfo);
 
         $existingInfo['goods_category'] = $categoryPath;
 
@@ -114,12 +108,20 @@ class DeviceSummaryHelper
         if (!isset($existingInfo['check_meta']) || !is_array($existingInfo['check_meta'])) {
             $existingInfo['check_meta'] = is_array($existingInfo['check_meta'] ?? null) ? $existingInfo['check_meta'] : [];
         }
-        if (!empty($device['battery_health'])) {
-            $existingInfo['check_meta']['battery'] = $device['battery_health'];
+        $battery = $summary['battery'] ?? $device['battery_health'] ?? null;
+        $cycles = $summary['battery_num'] ?? $summary['battery_cycle'] ?? $summary['cycle_count'] ?? $device['battery_cycle'] ?? null;
+        if ($battery !== null && $battery !== '') {
+            $existingInfo['check_meta']['battery'] = $battery;
         }
-        if (!empty($device['battery_cycle'])) {
-            $existingInfo['check_meta']['battery_num'] = $device['battery_cycle'];
+        if ($cycles !== null && $cycles !== '') {
+            $existingInfo['check_meta']['battery_num'] = $cycles;
         }
+
+        $archive = DeviceReadingArchive::merge(
+            DeviceReadingArchive::decode($existingInfo['device_readings'] ?? []),
+            DeviceReadingArchive::decode($device['device_readings'] ?? []), $device, $siteId
+        );
+        if ($archive !== []) $existingInfo['device_readings'] = $archive;
 
         return $existingInfo;
     }

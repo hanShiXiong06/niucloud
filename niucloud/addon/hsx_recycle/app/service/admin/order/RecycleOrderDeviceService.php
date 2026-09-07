@@ -38,7 +38,7 @@ class RecycleOrderDeviceService extends BaseAdminService
         Db::startTrans();
         try {
             // 1. 验证订单是否存在
-            $order = RecycleOrder::findOrEmpty($orderId);
+            $order = RecycleOrder::where([['id', '=', $orderId], ['site_id', '=', $this->site_id]])->findOrEmpty();
             if ($order->isEmpty()) {
                 throw new CommonException('ORDER_NOT_FOUND');
             }
@@ -77,6 +77,8 @@ class RecycleOrderDeviceService extends BaseAdminService
             $data = [
                 'order_id' => $orderId,
                 'imei' => $deviceData['imei'] ?? '',
+                'imei2' => $deviceData['imei2'] ?? '',
+                'sn' => $deviceData['serial_number'] ?? '',
                 'model' => (string)($category['node_name'] ?? ''),
                 'initial_price' => $deviceData['initial_price'] ?? 0,
                 'category_id' => $categoryId,
@@ -86,7 +88,7 @@ class RecycleOrderDeviceService extends BaseAdminService
                 'capacity' => $cols['capacity'],
                 'system_version' => $cols['system_version'],
                 'warranty_info' => $cols['warranty_info'],
-                'info' => DeviceSummaryHelper::buildInfo([], $categoryPath, $summary, $deviceData),
+                'info' => DeviceSummaryHelper::buildInfo([], $categoryPath, $summary, array_replace($deviceData, ['model' => (string)$category['node_name']]), (int)$this->site_id),
                 'status' => $this->getInitialDeviceStatus($order->status),
                 'member_id' => $order->member_id,
                 'site_id' => $this->site_id,

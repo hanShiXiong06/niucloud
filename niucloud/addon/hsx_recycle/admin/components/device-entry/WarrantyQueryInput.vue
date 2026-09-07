@@ -13,6 +13,7 @@
 </template>
 
 <script lang="ts" setup>
+import { parseCoverageStatus } from './deviceReadings'
 import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
@@ -33,7 +34,10 @@ const props = defineProps<{
     brand?: string
     placeholder?: string
 }>()
-const emit = defineEmits<{ (e: 'update:modelValue', v: string): void }>()
+const emit = defineEmits<{
+    (e: 'update:modelValue', v: string): void
+    (e: 'query-result', result: Record<string, any>): void
+}>()
 
 const inner = ref(props.modelValue || '')
 watch(() => props.modelValue, (v) => { inner.value = v || '' })
@@ -86,18 +90,6 @@ const pickCoverageService = (list: any[], prefix: string): any => {
         || null
 }
 
-// 兼容多品牌的保修状态解析(与回收质检弹窗口径一致)
-const parseCoverageStatus = (coverage: any): string => {
-    if (!coverage) return ''
-    const status = String(coverage.status || '').trim()
-    const date = String(coverage.date || '').trim()
-    if (status === 'Out Of Warranty') return '过保'
-    if (status === 'Not Activated' || (!date && !status)) return '未激活'
-    if (status === 'In Warranty' || status === 'Active') {
-        return date ? `保 ${date}` : '在保'
-    }
-    return date || status || '在保'
-}
 
 const query = async () => {
     const code = String(props.imei || '').trim()
@@ -124,6 +116,15 @@ const query = async () => {
             query_type: svc.query_type || 'imei',
         })
         const data = res?.data?.data || res?.data || {}
+        if (code !== String(props.imei || '').trim()) {
+            ElMessage.warning('设备串号已变化，本次查询结果未回填，请重新核对设备')
+            return
+        }
+        if (res?.data?.query_record_id) {
+            emit('query-result', { ...res.data })
+        } else {
+            ElMessage.warning('查询已返回，但原始查询记录未保存成功，请联系管理员检查查询记录')
+        }
         let warranty = ''
         if (data.coverage) {
             warranty = parseCoverageStatus(data.coverage)

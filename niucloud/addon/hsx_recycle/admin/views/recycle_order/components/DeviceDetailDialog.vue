@@ -240,6 +240,8 @@
         </div>
 
       </div>
+      <HsxDataArchive :data="deviceData.info?.device_readings || {}" :reset-key="deviceData.id"
+        :labels="{ local: '本地读取原文与提取值', model_match: '型号匹配记录', external_queries: '外部查询记录（如保修）' }" />
     </div>
 
     <!-- 空状态 -->
@@ -341,7 +343,7 @@
 
 <script setup lang="ts">
 import { ref, watch, computed, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { HsxDrawer, HsxDialog, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
+import { HsxDrawer, HsxDialog, HsxNotice, HsxDataArchive, useFeedback } from '@/addon/hsx_components/core'
 const feedback = useFeedback()
 import { img } from '@/utils/common'
 import { adjustDeviceCost, getDeviceCostAdjustLogs } from '@/addon/hsx_recycle/api/recycle_order'

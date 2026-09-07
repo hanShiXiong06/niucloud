@@ -8,7 +8,7 @@ use think\facade\Log;
 
 class DeviceQueryResultRecorder
 {
-    public function record(array $payload): void
+    public function record(array $payload): int
     {
         try {
             $service = $payload['service'] ?? [];
@@ -18,7 +18,7 @@ class DeviceQueryResultRecorder
             $price = $payload['price'] ?? [];
             $status = !empty($payload['success']) ? 1 : 0;
 
-            DeviceQueryResult::saveQueryResult([
+            return DeviceQueryResult::saveQueryResult([
                 'site_id' => (int)($payload['site_id'] ?? 0),
                 'query_code' => (string)($payload['query_code'] ?? ''),
                 'query_type' => (string)($payload['query_type'] ?? $service['query_type'] ?? 'other'),
@@ -52,6 +52,7 @@ class DeviceQueryResultRecorder
             ]);
         } catch (\Exception $e) {
             Log::warning('保存设备查询结果失败: ' . $e->getMessage());
+            return 0;
         }
     }
 

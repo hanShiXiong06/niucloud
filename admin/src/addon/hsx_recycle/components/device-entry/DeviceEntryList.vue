@@ -94,7 +94,8 @@
                         </div>
                     </template>
                 </DeviceEntryCard>
-
+                <HsxDataArchive v-if="row.device_readings" :data="row.device_readings" :reset-key="row.id || row._k"
+                    :labels="{ local: '本地读取原文与提取值', model_match: '型号匹配记录', external_queries: '外部查询记录（如保修）' }" />
             </div>
         </div>
 
@@ -107,6 +108,7 @@
             :imei="activeRow?.imei || ''"
             :loading="!!activeRow?.summary_loading"
             :prefilled-keys="activeRow?.local_prefilled_keys || []"
+            @query-result="handleQueryResult"
             @confirm="handleSummaryConfirm"
         />
         <CheckTemplateConfigDrawer
@@ -141,6 +143,8 @@ import CheckSummaryDialog from './CheckSummaryDialog.vue'
 import CheckTemplateConfigDrawer from './CheckTemplateConfigDrawer.vue'
 import QuickAddModelDialog from './QuickAddModelDialog.vue'
 import { useLocalDevice } from './useLocalDevice'
+import { HsxDataArchive } from '@/addon/hsx_components/core'
+import { localReadingArchive, prefillDeviceSummary as prefillSummaryFromLocal, recordModelMatch } from './deviceReadings'
 import { validateSummaryRequired } from './summaryUtil'
 import { normalizeDevice, buildUpdatePayload } from './deviceUtil'
 import type { CheckSummaryField, DeviceEntryRow } from './types'
@@ -304,6 +308,7 @@ const handleModelPathChange = async (row: DeviceEntryRow, value: Array<string | 
     row.model_path = fullPath
     row.model_search_keyword = ''
     row.model_search_empty = false
+    recordModelMatch(row, row.category_id ? 'manual' : 'unmatched')
     if (row.saved) row.dirty = true
     if (row.category_id) {
         await loadCheckTemplate(row)
@@ -320,6 +325,8 @@ const clearCheckTemplate = (row: DeviceEntryRow) => {
     row.check_template_name = ''
     row.summary_fields = []
     row.summary_values = {}
+    row.summary_default_keys = []
+    row.local_prefilled_keys = []
     row.check_template_bound = false
     row.check_template_source_name = ''
     row.check_template_summary_count = 0
@@ -371,6 +378,7 @@ const loadCheckTemplate = async (row: DeviceEntryRow) => {
         row.summary_fields = summaryFields
 
         const values: Record<string, any> = { ...(row.summary_values || {}) }
+        const defaults = new Set(row.summary_default_keys || [])
         summaryFields.forEach((field) => {
             if (values[field.field_key] === undefined || values[field.field_key] === '') {
                 const isMultiple = field.component === 'checkbox' || field.selection_mode === 'multiple'
@@ -378,12 +386,14 @@ const loadCheckTemplate = async (row: DeviceEntryRow) => {
                     values[field.field_key] = isMultiple
                         ? (Array.isArray(field.default_value) ? field.default_value : [field.default_value])
                         : field.default_value
+                    defaults.add(field.field_key)
                 } else {
                     values[field.field_key] = isMultiple ? [] : ''
                 }
             }
         })
         row.summary_values = values
+        row.summary_default_keys = [...defaults]
         return true
     } catch (error) {
         console.error('加载质检模板摘要字段失败:', error)
@@ -407,7 +417,19 @@ const handleSummaryConfirm = (values: Record<string, any>) => {
     if (!activeRow.value) return
     activeRow.value.summary_values = { ...values }
     activeRow.value.local_prefilled_keys = []
+    activeRow.value.summary_default_keys = []
     if (activeRow.value.saved) activeRow.value.dirty = true
+}
+
+const handleQueryResult = (result: Record<string, any>) => {
+    const row = activeRow.value
+    if (!row || !result.query_record_id) return
+    row.device_readings ||= { version: 1 }
+    const records = row.device_readings.external_queries || []
+    if (!records.some(item => item.query_record_id === result.query_record_id)) {
+        row.device_readings.external_queries = [...records, result]
+        if (row.saved) row.dirty = true
+    }
 }
 
 const templateConfigVisible = ref(false)
@@ -458,6 +480,7 @@ const handleQuickModelCreated = async (node: Record<string, any>) => {
     await loadCheckTemplate(row)
     prefillSummaryFromLocal(row, row)
     await learnLocalModelAliases(row)
+    recordModelMatch(row, 'manual')
     ElMessage.success(Number(node.created || 0) === 1 ? '型号已新增并关联' : '已关联型号库中的已有型号')
 }
 
@@ -633,6 +656,9 @@ const applyLocalDevice = async (m: any) => {
     }
     if (!row) return { status: 'duplicate' as const, matched: true }
     row.imei = m.imei || m.serial_number || row.imei
+    row.imei2 = m.imei2
+    row.serial_number = m.serial_number
+    row.device_readings = localReadingArchive(m)
     row.model = m.model || row.model
     row.color = m.color
     row.color_index = m.color_index
@@ -645,7 +671,9 @@ const applyLocalDevice = async (m: any) => {
         .map((item: any) => String(item || '').trim())
         .filter(Boolean)))
     row.local_model_resolved_category_id = 0
-    const matched = await matchModelToCategory(row, row.local_model_aliases)
+    recordModelMatch(row, 'unmatched')
+    // 硬件映射优先；名称只用于数据库唯一精确匹配，不学习成公共别名。
+    const matched = await matchModelToCategory(row, [...row.local_model_aliases, m.model, m.model ? `苹果 ${m.model}` : ''])
     prefillSummaryFromLocal(row, m)
     if (row.saved) row.dirty = true
     return { status: 'applied' as const, matched }
@@ -659,11 +687,12 @@ const matchModelToCategory = async (row: DeviceEntryRow, modelNames: string | st
         // 人工学习映射优先于字面匹配。员工纠正一次后，相同工具型号可直接回显。
         if ((row.local_model_aliases || []).length) {
             try {
-                const aliasRes = await resolveRecycleDeviceModelAlias(candidates)
+                const aliasRes = await resolveRecycleDeviceModelAlias(row.local_model_aliases || [])
                 const mapped = aliasRes?.data || {}
                 if (mapped.matched && mapped.node?.id) {
                     await applyResolvedModelNode(row, mapped.node)
                     row.local_model_resolved_category_id = Number(mapped.node.id)
+                    recordModelMatch(row, 'alias')
                     return true
                 }
             } catch (error) {
@@ -686,6 +715,7 @@ const matchModelToCategory = async (row: DeviceEntryRow, modelNames: string | st
             const best = unique[0]
             await applyResolvedModelNode(row, best)
             row.local_model_resolved_category_id = Number(best.id)
+            recordModelMatch(row, 'exact')
             return true
         }
     } catch (error) {
@@ -728,79 +758,6 @@ const learnLocalModelAliases = async (row: DeviceEntryRow) => {
     }
 }
 
-const hasSummaryValue = (value: any): boolean => Array.isArray(value)
-    ? value.length > 0
-    : value !== undefined && value !== null && value !== ''
-
-const normalizeOptionText = (value: any): string => String(value ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '')
-    .replace(/gb$/i, 'g')
-    .replace(/tb$/i, 't')
-
-const resolveLocalFieldValue = (field: CheckSummaryField, rawValue: any): any => {
-    if (!hasSummaryValue(rawValue)) return undefined
-    const options = field.options || []
-    if (options.length) {
-        const rawText = String(rawValue).trim()
-        const direct = options.find(option => String(option.value) === rawText)
-        if (direct) return direct.value
-        const normalized = normalizeOptionText(rawValue)
-        const matched = options.find(option => [option.label, option.name]
-            .some(label => normalizeOptionText(label) === normalized))
-        return matched?.value
-    }
-    if (field.component === 'number') {
-        const numeric = Number(String(rawValue).replace(/[^0-9.-]/g, ''))
-        return Number.isFinite(numeric) ? numeric : undefined
-    }
-    return rawValue
-}
-
-const resolveIndexedOptionValue = (field: CheckSummaryField, rawIndex: any): any => {
-    const options = field.options || []
-    if (!options.length) return undefined
-    const parsed = Number(rawIndex)
-    const index = Number.isInteger(parsed) && parsed >= 0 && parsed < options.length ? parsed : 0
-    return options[index]?.value
-}
-
-const fieldMatches = (field: CheckSummaryField, keys: string[], names: string[]): boolean => {
-    if (keys.includes(String(field.field_key || ''))) return true
-    const fieldName = String(field.field_name || '')
-    return names.some(name => fieldName.includes(name))
-}
-
-const prefillSummaryFromLocal = (row: DeviceEntryRow, m: any) => {
-    const fields = row.summary_fields || []
-    if (!fields.length) return
-    const values = row.summary_values || {}
-    const prefilled = new Set(row.local_prefilled_keys || [])
-    const mappings = [
-        { keys: ['capacity'], names: ['存储容量', '内存', '容量'], value: m.capacity },
-        { keys: ['color'], names: ['机身颜色', '颜色'], value: m.color, optionIndex: m.color_index },
-        { keys: ['system_version'], names: ['系统版本'], value: m.system_version },
-        { keys: ['warranty_info'], names: ['保修'], value: m.warranty_info },
-        { keys: ['battery'], names: ['电池健康度', '电池健康'], value: m.battery_health },
-        { keys: ['battery_num', 'battery_cycle', 'cycle_count'], names: ['循环次数', '电池循环'], value: m.battery_cycle_count },
-    ]
-    fields.forEach((field) => {
-        if (hasSummaryValue(values[field.field_key])) return
-        const mapping = mappings.find(item => fieldMatches(field, item.keys, item.names))
-        if (!mapping) return
-        const resolved = Object.prototype.hasOwnProperty.call(mapping, 'optionIndex')
-            ? resolveIndexedOptionValue(field, mapping.optionIndex)
-            : resolveLocalFieldValue(field, mapping.value)
-        if (resolved === undefined || resolved === '') return
-        values[field.field_key] = resolved
-        prefilled.add(field.field_key)
-    })
-    if (prefilled.size) {
-        row.local_prefilled_keys = Array.from(prefilled)
-    }
-    row.summary_values = { ...values }
-}
 
 // ============ 初始化 ============
 const initExistingRows = () => {
@@ -808,15 +765,13 @@ const initExistingRows = () => {
         if (!row.summary_values) row.summary_values = {}
         if (!row.summary_fields) row.summary_fields = []
         const path = Array.isArray(row.category_path) ? row.category_path : []
-        if (path.length > 1) {
+        if (row.category_id) {
             // 已有完整 id 路径：级联可直接按 id 反显选中；同步 model_path，加载质检模板
             row.model_path = path.map((v: any) => Number(v))
             if (!(row.summary_fields && row.summary_fields.length)) loadCheckTemplate(row)
         } else if (row.model) {
             // 无完整路径(后端只给了 category_id 或叶子)：按型号名解析出完整 id 路径并反显选中（严格匹配，避免误判）
             matchModelToCategory(row, row.model)
-        } else if (row.category_id) {
-            loadCheckTemplate(row)
         }
     })
 }

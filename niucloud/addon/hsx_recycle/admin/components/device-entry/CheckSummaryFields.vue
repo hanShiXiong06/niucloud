@@ -47,6 +47,7 @@
                 :brand="brand"
                 :placeholder="field.placeholder || '保修日期 / 过保 / 未激活'"
                 class="summary-control"
+                @query-result="emit('query-result', $event)"
             />
             <el-input
                 v-else
@@ -80,7 +81,10 @@ withDefaults(defineProps<{
     brand: ''
 })
 
-defineEmits<{ (e: 'update:modelValue', value: Record<string, any>): void }>()
+const emit = defineEmits<{
+    (e: 'update:modelValue', value: Record<string, any>): void
+    (e: 'query-result', result: Record<string, any>): void
+}>()
 </script>
 
 <style lang="scss" scoped>

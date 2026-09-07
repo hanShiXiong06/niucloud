@@ -117,7 +117,7 @@ class SignHandler extends BaseFlowHandler
                     'capacity' => $cols['capacity'],
                     'system_version' => $cols['system_version'],
                     'warranty_info' => $cols['warranty_info'],
-                    'info' => DeviceSummaryHelper::buildInfo($existingDevices[$device['id']]['info'] ?? [], $categoryPath, $summary, $device),
+                    'info' => DeviceSummaryHelper::buildInfo($existingDevices[$device['id']]['info'] ?? [], $categoryPath, $summary, $device, $siteId),
                     'update_at' => time()
                 ];
                 if ($checkTemplateId > 0) {
@@ -142,7 +142,7 @@ class SignHandler extends BaseFlowHandler
                     'initial_price' => $device['initial_price'] ?? 0,
                     'category_id' => $categoryId,
                     'check_template_id' => $checkTemplateId,
-                    'info' => DeviceSummaryHelper::buildInfo([], $categoryPath, $summary, $device),
+                    'info' => DeviceSummaryHelper::buildInfo([], $categoryPath, $summary, $device, $siteId),
                     'status' => RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK,
                     'create_at' => time(),
                     'update_at' => time(),

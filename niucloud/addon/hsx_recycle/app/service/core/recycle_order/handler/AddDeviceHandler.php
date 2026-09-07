@@ -49,6 +49,7 @@ class AddDeviceHandler extends BaseFlowHandler
 
         $deviceService = new RecycleDeviceService();
         $deviceIds = [];
+        $siteId = $this->getSiteId($context);
 
         foreach ($devices as $device) {
             $categoryId = (int)($device['category_id'] ?? 0);
@@ -62,6 +63,8 @@ class AddDeviceHandler extends BaseFlowHandler
                 'order_id' => $order['id'],
                 'imei' => $device['imei'] ?? '',
                 'user_sn' => $device['user_sn'] ?? ($device['imei'] ?? ''),
+                'imei2' => $device['imei2'] ?? '',
+                'sn' => $device['serial_number'] ?? '',
                 'model' => $device['model'] ?? '',
                 'initial_price' => $device['initial_price'] ?? 0,
                 'category_id' => $categoryId,
@@ -70,7 +73,7 @@ class AddDeviceHandler extends BaseFlowHandler
                 'capacity' => $cols['capacity'],
                 'system_version' => $cols['system_version'],
                 'warranty_info' => $cols['warranty_info'],
-                'info' => DeviceSummaryHelper::buildInfo([], $categoryPath, $summary, $device),
+                'info' => DeviceSummaryHelper::buildInfo([], $categoryPath, $summary, $device, $siteId),
                 'status' => RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK, // 1-待质检
                 'create_at' => time(),
                 'update_at' => time(),

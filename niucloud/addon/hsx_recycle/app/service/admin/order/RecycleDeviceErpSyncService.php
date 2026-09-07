@@ -377,6 +377,8 @@ class RecycleDeviceErpSyncService extends BaseAdminService
         $memberMobile = trim((string)($member['mobile'] ?? ''));
         if ($memberMobile === '') $memberMobile = trim((string)($device['order']['customer_phone'] ?? ''));
         $spec = $this->resolveDeviceSpec($device);
+        $deviceInfo = \addon\hsx_recycle\app\service\core\recycle_order\DeviceReadingArchive::decode($device['info'] ?? []);
+        $checkMeta = (array)($deviceInfo['check_meta'] ?? []);
         $pricingOperator = $this->pricingOperatorSnapshot((int)($device['price_uid'] ?? 0));
         $purchaseCost = $isConsign ? 0.0 : round(max(0, (float)($device['final_price'] ?? 0)), 2);
         $sourcePaidAmount = $isConsign ? 0.0 : round(max(0, (float)($device['pay_amount'] ?? 0)), 2);
@@ -401,6 +403,10 @@ class RecycleDeviceErpSyncService extends BaseAdminService
             'capacity_value' => $spec['capacity_value'],
             'color' => $spec['color_label'],
             'color_value' => $spec['color_value'],
+            'battery_health' => $checkMeta['battery'] ?? $deviceInfo['battery'] ?? '',
+            'battery_cycle_count' => $checkMeta['battery_num'] ?? $deviceInfo['battery_num'] ?? '',
+            'system_version' => (string)($device['system_version'] ?? ''),
+            'warranty_info' => (string)($device['warranty_info'] ?? ''),
             'payment_methods' => $this->paymentMethods($memberId),
             'ownership_type' => $isConsign ? 'consign' : 'owned',
             'purchase_cost' => $purchaseCost,
@@ -428,6 +434,7 @@ class RecycleDeviceErpSyncService extends BaseAdminService
             'acquired_at' => (int)($device['pay_time'] ?? $device['update_at'] ?? time()),
             'check_snapshot' => [
                 'version' => 2,
+                'device_readings' => (array)($deviceInfo['device_readings'] ?? []),
                 // 独立契约字段：只传人工说明；质检选项继续放check_result_*，不可拼进备注。
                 'human_remark' => (string)($device['remark'] ?? ''),
                 'check_template_id' => (int)($device['check_template_id'] ?? 0),

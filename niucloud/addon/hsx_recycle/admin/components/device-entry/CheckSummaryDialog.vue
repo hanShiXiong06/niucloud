@@ -17,7 +17,7 @@
             <el-icon class="is-loading"><Loading /></el-icon>
             <span>正在加载该型号的质检模板...</span>
         </div>
-        <CheckSummaryFields v-else :fields="fields" v-model="localValues" :imei="imei" :brand="deviceTitle" />
+        <CheckSummaryFields v-else :fields="fields" v-model="localValues" :imei="imei" :brand="deviceTitle" @query-result="emit('query-result', $event)" />
 
         <template #footer>
             <el-button @click="innerVisible = false">取消</el-button>
@@ -56,6 +56,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
     (e: 'update:visible', v: boolean): void
     (e: 'confirm', values: Record<string, any>): void
+    (e: 'query-result', result: Record<string, any>): void
 }>()
 
 const innerVisible = computed({

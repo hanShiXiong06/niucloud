@@ -17,6 +17,7 @@ use addon\hsx_recycle\app\service\admin\device\RecycleDeviceModelDictService;
 use addon\hsx_recycle\app\service\core\recycle_device\CoreRecycleDeviceLogService;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderNotifyService;
 use addon\hsx_recycle\app\service\core\recycle_order\DeviceSummaryHelper;
+use addon\hsx_recycle\app\service\core\recycle_order\DeviceReadingArchive;
 use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpCapabilityService;
 use addon\hsx_recycle\app\service\core\recycle_order\RecyclePaymentOwnershipService;
 use addon\hsx_recycle\app\service\admin\printer\RecyclePrintSceneService;
@@ -966,10 +967,25 @@ class RecycleDeviceService extends BaseAdminService
         // 开启事务
         Db::startTrans();
         try {
-            $device = RecycleDevice::findOrEmpty($id);
+            $device = RecycleDevice::where([['id', '=', $id], ['site_id', '=', $this->site_id]])->lock(true)->findOrEmpty();
             if ($device->isEmpty()) {
                 throw new CommonException('DEVICE_NOT_FOUND');
             }
+            if (isset($data['info']) || isset($data['summary']) || isset($data['device_readings'])
+                || isset($data['imei']) || isset($data['imei2']) || isset($data['sn']) || isset($data['serial_number'])) {
+                $oldInfo = DeviceReadingArchive::decode($device->info);
+                $inputInfo = DeviceReadingArchive::decode($data['info'] ?? []);
+                // 原始证据只经专用契约追加，普通 info 更新不可覆盖或删除原文。
+                unset($inputInfo['device_readings']);
+                $summary = DeviceSummaryHelper::normalizeSummary($data['summary'] ?? $inputInfo['sign_summary'] ?? []);
+                $identity = array_replace($device->toArray(), $data);
+                if (array_key_exists('serial_number', $data)) $data['sn'] = (string)$data['serial_number'];
+                $identity = array_replace($identity, $data);
+                $categoryPath = DeviceSummaryHelper::normalizeCategoryPath($inputInfo['goods_category'] ?? $oldInfo['goods_category'] ?? [], (int)$identity['category_id']);
+                $data['info'] = DeviceSummaryHelper::buildInfo(array_replace($oldInfo, $inputInfo), $categoryPath, $summary, $identity, (int)$this->site_id);
+                $data = array_replace($data, DeviceSummaryHelper::reservedColumns($summary, $identity));
+            }
+            unset($data['summary'], $data['device_readings'], $data['serial_number'], $data['battery_health'], $data['battery_cycle']);
             
             $currentStatus = $device->status;
             $targetStatus = $data['status'] ?? $currentStatus;
@@ -1274,10 +1290,12 @@ class RecycleDeviceService extends BaseAdminService
                     $coverageStatus = $coverage['status'] ?? '';
                     if ($coverageStatus === 'Out Of Warranty') {
                         $checkData['warranty_info'] = '过保';
-                    } elseif ($coverageStatus === 'Not Activated' || empty($coverage['date'])) {
+                    } elseif ($coverageStatus === 'Not Activated') {
                         $checkData['warranty_info'] = '未激活';
-                    } else {
-                        $checkData['warranty_info'] = $coverage['date'] ?? '在保';
+                    } elseif (!empty($coverage['date'])) {
+                        $checkData['warranty_info'] = $coverage['date'];
+                    } elseif (in_array($coverageStatus, ['In Warranty', 'Active'], true)) {
+                        $checkData['warranty_info'] = '在保';
                     }
                 }
                 // 内存
@@ -1302,7 +1320,15 @@ class RecycleDeviceService extends BaseAdminService
             }
             if (isset($checkData['info'])) {
                 // Model 已声明 $json=['info']，save() 时会自动 json_encode，无需手动编码
-                $updateData['info'] = $checkData['info'];
+                $oldInfo = DeviceReadingArchive::decode($device->info);
+                $newInfo = DeviceReadingArchive::decode($checkData['info']);
+                unset($newInfo['device_readings']);
+                foreach (['battery', 'battery_num'] as $key) {
+                    if (!array_key_exists($key, (array)($newInfo['check_meta'] ?? [])) && array_key_exists($key, (array)($oldInfo['check_meta'] ?? []))) {
+                        $newInfo['check_meta'][$key] = $oldInfo['check_meta'][$key];
+                    }
+                }
+                $updateData['info'] = array_replace($oldInfo, $newInfo);
             }
 
             $checkMeta = $this->extractCheckMeta($checkData);

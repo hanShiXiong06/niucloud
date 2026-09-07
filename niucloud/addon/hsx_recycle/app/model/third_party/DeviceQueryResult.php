@@ -216,14 +216,14 @@ class DeviceQueryResult extends BaseModel
     /**
      * 保存查询结果
      * @param array $data
-     * @return bool
+     * @return int 成功返回查询记录 ID，失败返回 0
      */
-    public static function saveQueryResult(array $data): bool
+    public static function saveQueryResult(array $data): int
     {
         $requiredFields = ['site_id', 'query_code', 'api_endpoint', 'query_result'];
         foreach ($requiredFields as $field) {
             if (!isset($data[$field])) {
-                return false;
+                return 0;
             }
         }
 
@@ -253,13 +253,13 @@ class DeviceQueryResult extends BaseModel
         unset($data['balance']);
         
         try {
-            return (bool) self::create($data);
+            return (int)self::create($data)->id;
         } catch (\Exception $e) {
             \think\facade\Log::error('保存设备查询结果失败', [
                 'error' => $e->getMessage(),
                 'data' => $data
             ]);
-            return false;
+            return 0;
         }
     }
 
