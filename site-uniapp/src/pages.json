@@ -723,9 +723,10 @@
 				{ "path": "pages/order/list", "style": { "navigationBarTitleText": "开卡订单" }, "needLogin": true },
 				{ "path": "pages/redemption/list", "style": { "navigationBarTitleText": "核销记录" }, "needLogin": true },
 				{ "path": "pages/member/list", "style": { "navigationBarTitleText": "会员列表" }, "needLogin": true },
+				{ "path": "pages/member/detail", "style": { "navigationBarTitleText": "会员详情" }, "needLogin": true },
 				{ "path": "pages/product/list", "style": { "navigationBarTitleText": "卡种列表" }, "needLogin": true },
 				{ "path": "pages/product/edit", "style": { "navigationBarTitleText": "新增卡种" }, "needLogin": true },
-				{ "path": "pages/config/payment", "style": { "navigationBarTitleText": "收款设置" }, "needLogin": true }
+				{ "path": "pages/config/payment", "style": { "navigationBarTitleText": "收款与耗材" }, "needLogin": true }
 			]
 		}
 		// MEMBER_CARD_PAGE_END

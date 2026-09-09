@@ -124,7 +124,7 @@
                     <view class="fblk"><chip-select label="成色" :items="gradeOptions" v-model="filter.condition_grade" emptyText="暂无成色" /></view>
                     <view class="fblk"><chip-select label="售卖状态" :items="saleStatusOptions" v-model="filter.sale_status" /></view>
                     <view class="fblk"><chip-select label="库龄" :items="stockAgeOptions" v-model="filter.stock_age" /></view>
-                    <view class="fblk" v-if="showSourceFilter"><chip-select label="归属" :items="sourceOptions" v-model="filter.source" /></view>
+                    <view class="fblk" v-if="showSourceFilter"><chip-select label="归属" :items="sourceOptions" v-model="filter.proxy_type" /></view>
                 </scroll-view>
                 <view class="drawer-foot">
                     <view class="d-btn d-btn--reset" @click="resetFilter">重置</view>
@@ -152,9 +152,8 @@ const { mescrollInit, downCallback, getMescroll } = useMescroll(onPageScroll, on
 const list = ref<any[]>([]);
 const keyword = ref('');
 const statusFilter = ref<any>('');
-const isMasterSite = ref(true);
+const isMasterSite = ref<boolean | null>(null);
 const firstLoaded = ref(false);
-const pageSource = ref('');
 const isMp = ref(false);
 
 // #ifdef MP
@@ -198,16 +197,13 @@ const listTop = computed(() => isMp.value
 );
 const canGoBack = computed(() => getCurrentPages().length > 1);
 
-const SELF_SOURCE = '100024';
-const AGENT_SOURCE = '100005';
-
 const statusTabs = [{ label: '全部', value: '' }, { label: '在售', value: 1 }, { label: '已下架', value: 0 }];
 const saleStatusOptions = [{ label: '在售', value: 'available' }, { label: '锁定', value: 'locked' }, { label: '已售', value: 'sold' }];
 const stockAgeOptions = [
     { label: '7天内', value: '0-7' }, { label: '8-15天', value: '8-15' }, { label: '16-30天', value: '16-30' },
     { label: '31-60天', value: '31-60' }, { label: '60天以上', value: '61-' }
 ];
-const sourceOptions = [{ label: '全部', value: '' }, { label: '自营', value: SELF_SOURCE }, { label: '代理', value: AGENT_SOURCE }];
+const sourceOptions = [{ label: '全部', value: '' }, { label: '自营', value: 'self' }, { label: '代理', value: 'proxy' }];
 const sortOptions = [
     { label: '综合排序', order: '', sort: '' },
     { label: '价格从低到高', order: 'price', sort: 'asc' },
@@ -217,11 +213,12 @@ const sortOptions = [
     { label: '最新发布', order: 'create_time', sort: 'desc' }
 ];
 
-const getCurrentSiteSource = () => String(pageSource.value || uni.getStorageSync('siteId') || '');
-const showSourceFilter = computed(() => getCurrentSiteSource() === SELF_SOURCE);
-const defaultSourceFilter = () => showSourceFilter.value ? SELF_SOURCE : '';
+// 与 PC 管理端共用归属筛选：source 是原始来源值，不能用本站 ID 代替“自营”。
+// 站点身份由接口返回；初次请求默认查自营，主站由后端忽略此条件。
+const showSourceFilter = computed(() => isMasterSite.value === false);
+const defaultProxyType = () => isMasterSite.value === true ? '' : 'self';
 
-const filter = reactive<any>({ goods_category: '', start_price: '', end_price: '', memory_group: '', condition_grade: '', sale_status: '', stock_age: '', source: defaultSourceFilter() });
+const filter = reactive<any>({ goods_category: '', start_price: '', end_price: '', memory_group: '', condition_grade: '', sale_status: '', stock_age: '', proxy_type: defaultProxyType() });
 const filterShow = ref(false);
 const sortShow = ref(false);
 const sortIdx = ref(0);
@@ -233,7 +230,8 @@ const gradeOptions = ref<string[]>([]);
 
 const filterCount = computed(() => {
     let n = 0;
-    ['goods_category', 'memory_group', 'condition_grade', 'sale_status', 'stock_age', 'source'].forEach(k => { if (filter[k] !== '' && filter[k] != null) n++; });
+    ['goods_category', 'memory_group', 'condition_grade', 'sale_status', 'stock_age'].forEach(k => { if (filter[k] !== '' && filter[k] != null) n++; });
+    if (showSourceFilter.value && filter.proxy_type) n++;
     if (filter.start_price || filter.end_price) n++;
     return n;
 });
@@ -255,7 +253,7 @@ const buildQuery = (mescroll: any) => {
     if (filter.memory_group) q.memory_group = filter.memory_group;
     if (filter.condition_grade) q.condition_grade = filter.condition_grade;
     if (filter.sale_status) q.sale_status = filter.sale_status;
-    if (showSourceFilter.value && filter.source) q.source = filter.source;
+    if (isMasterSite.value !== true && filter.proxy_type) q.proxy_type = filter.proxy_type;
     if (filter.stock_age) {
         const [min, max] = String(filter.stock_age).split('-');
         if (min !== '') q.start_stock_age = min;
@@ -269,7 +267,10 @@ const buildQuery = (mescroll: any) => {
 const getListFn = (mescroll: any) => {
     getGoodsList(buildQuery(mescroll)).then((res: any) => {
         const data = res.data?.data || res.data?.list || [];
-        if (res.data?.is_master_site != null) isMasterSite.value = Number(res.data.is_master_site) === 1;
+        if (res.data?.is_master_site != null) {
+            isMasterSite.value = Number(res.data.is_master_site) === 1;
+            if (isMasterSite.value) filter.proxy_type = '';
+        }
         if (mescroll.num == 1) list.value = [];
         list.value = list.value.concat(data);
         mescroll.endSuccess(data.length);
@@ -296,7 +297,7 @@ const openFilter = () => { filterShow.value = true; };
 const applyFilter = () => { filterShow.value = false; reload(); };
 const resetFilter = () => {
     Object.keys(filter).forEach(k => filter[k] = '');
-    filter.source = defaultSourceFilter();
+    filter.proxy_type = defaultProxyType();
     filterShow.value = false;
     reload();
 };
@@ -335,9 +336,7 @@ const toAdd = () => redirect({ url: '/addon/phone_shop/pages/goods/add' });
 const confirmDel = (item: any) => { delItem.value = item; delShow.value = true; };
 const doDel = () => { delShow.value = false; if (!delItem.value) return; deleteGoods(String(delItem.value.goods_id)).then(() => reload()); };
 
-onLoad((options: any) => {
-    pageSource.value = String(options?.source || uni.getStorageSync('siteId') || '');
-    filter.source = defaultSourceFilter();
+onLoad(() => {
     loadOptions();
 });
 onShow(() => { if (firstLoaded.value && getMescroll()) getMescroll().resetUpScroll(); });

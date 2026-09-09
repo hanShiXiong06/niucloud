@@ -1,207 +1,492 @@
 <template>
-    <view class="min-h-screen bg-[#f5f6f8] px-[24rpx] pb-[170rpx] pt-[20rpx] text-[#344054]">
-        <view class="rounded-[24rpx] bg-white p-[22rpx]">
-            <view class="flex items-center gap-[15rpx]">
-                <view class="flex h-[62rpx] w-[62rpx] items-center justify-center rounded-[18rpx] bg-[#f1efff]">
-                    <u-icon name="grid" color="#6d4aff" size="22" />
-                </view>
-                <view class="min-w-0 flex-1">
-                    <text class="block text-[29rpx] font-semibold">核销耗材库存</text>
-                    <text class="mt-[3rpx] block text-[21rpx] text-[#8a96a8]">会员卡次数与实际用料分别记录</text>
-                </view>
-                <text class="rounded-full px-[12rpx] py-[5rpx] text-[20rpx]" :class="inventoryAvailable ? 'bg-[#ecfdf3] text-[#16a34a]' : 'bg-[#f2f4f7] text-[#667085]'">
-                    {{ inventoryAvailable ? 'ERP 已接入' : '独立运行' }}
-                </text>
-            </view>
-
-            <view class="mt-[18rpx] flex flex-col gap-[12rpx]">
-                <view
-                    v-for="item in inventoryModes"
-                    :key="item.value"
-                    class="flex items-start gap-[14rpx] rounded-[18rpx] border px-[18rpx] py-[17rpx]"
-                    :class="[
-                        inventoryForm.mode === item.value ? 'border-[#93c5fd] bg-[#f5f9ff]' : 'border-[#e8ecf1] bg-[#fafbfc]',
-                        item.value !== 'none' && !inventoryAvailable ? 'opacity-50' : ''
+    <view class="mc-page mc-page--action">
+        <view class="mc-content">
+            <MemberCardState
+                v-if="loading || error"
+                :loading="loading"
+                :error="error"
+                action="重新加载"
+                @action="load"
+            />
+            <template v-else>
+                <MemberCardSegmented
+                    v-model="tab"
+                    :options="[
+                        { label: '收款账户', value: 'accounts' },
+                        { label: inventoryDirty ? '耗材规则 · 未保存' : '耗材规则', value: 'inventory' }
                     ]"
-                    @click="chooseInventoryMode(item.value)"
-                >
-                    <view class="mt-[3rpx] flex h-[32rpx] w-[32rpx] flex-none items-center justify-center rounded-full border" :class="inventoryForm.mode === item.value ? 'border-[#2468f2]' : 'border-[#cbd5e1]'">
-                        <view v-if="inventoryForm.mode === item.value" class="h-[18rpx] w-[18rpx] rounded-full bg-[#2468f2]" />
-                    </view>
-                    <view class="min-w-0 flex-1">
-                        <view class="flex items-center gap-[8rpx]">
-                            <text class="text-[26rpx] font-semibold text-[#344054]">{{ item.label }}</text>
-                            <text v-if="item.recommended" class="rounded-full bg-[#eaf2ff] px-[9rpx] py-[2rpx] text-[18rpx] text-[#2468f2]">推荐</text>
+                />
+                <MemberCardNotice v-if="actionError" tone="error" :text="actionError" />
+                <template v-if="tab === 'accounts'">
+                    <view class="mc-account-summary">
+                        <view class="mc-between">
+                            <text class="mc-title"
+                                >{{ accounts.filter((a) => Number(a.status) === 1).length }} 个可用账户</text
+                            >
+                            <u-tag :text="isErp ? 'ERP 托管' : '独立运行'" type="primary" size="mini" plain />
                         </view>
-                        <text class="mt-[4rpx] block text-[21rpx] leading-[1.55] text-[#7b8798]">{{ item.description }}</text>
+                        <view class="mc-sub">{{
+                            isErp ? '在 ERP 维护账户，这里选择默认收款账户。' : '由本店自行管理，不依赖 ERP。'
+                        }}</view>
+                    </view>
+                    <MemberCardState v-if="!accounts.length" text="暂无收款账户" />
+                    <view v-if="accounts.length" class="mc-card mc-card--flat">
+                        <u-cell-group :border="false">
+                            <u-cell
+                                v-for="(account, index) in accounts"
+                                :key="account.id"
+                                :title="account.name"
+                                :label="
+                                    (account.type_name || typeName(account.type)) +
+                                    ' · ' +
+                                    (Number(account.status) === 1 ? '已启用' : '已停用')
+                                "
+                                :border="index < accounts.length - 1"
+                                :isLink="!isErp"
+                                center
+                                :titleStyle="{ fontSize: '15px', fontWeight: '500' }"
+                                @click="!isErp && edit(account)"
+                            >
+                                <template #icon
+                                    ><view class="mc-cell-icon" :class="'mc-cell-icon--' + account.type"
+                                        ><u-icon
+                                            :name="
+                                                account.type === 'wechat'
+                                                    ? 'weixin-fill'
+                                                    : account.type === 'alipay'
+                                                      ? 'zhifubao'
+                                                      : 'rmb-circle'
+                                            "
+                                            size="23" /></view
+                                ></template>
+                                <template #value>
+                                    <u-tag
+                                        v-if="
+                                            Number(account.status) === 1 &&
+                                            Number(config.default_capital_account_id) === Number(account.id)
+                                        "
+                                        text="默认"
+                                        type="success"
+                                        plain
+                                        size="mini"
+                                    />
+                                    <view
+                                        v-else-if="Number(account.status) === 1"
+                                        class="mc-account-default"
+                                        @click.stop="setDefault(account)"
+                                        >{{ pendingAccountId === Number(account.id) ? '更新中…' : '设默认' }}</view
+                                    >
+                                </template>
+                            </u-cell>
+                        </u-cell-group>
+                    </view>
+                    <view class="mc-footnote"
+                        ><u-icon name="info-circle" color="#8893a3" size="14" /><text
+                            >仅记录款项收到哪里，不会自动向客户扣款。</text
+                        ></view
+                    >
+                    <view v-if="!isErp" class="mc-footnote">点击账户可修改名称、停用或删除。历史收款记录不变。</view>
+                </template>
+                <template v-else>
+                    <view class="mc-card">
+                        <view class="mc-title">核销时如何处理耗材</view>
+                        <view class="mc-sub">会员卡次数与实际用料分别记录</view>
+                        <MemberCardNotice
+                            v-if="config.inventory_warning"
+                            tone="warning"
+                            :text="config.inventory_warning"
+                        />
+                        <u-radio-group
+                            :modelValue="inventoryForm.mode"
+                            placement="column"
+                            @change="chooseInventoryMode"
+                        >
+                            <u-cell
+                                v-for="item in inventoryModes"
+                                :key="item.value"
+                                :title="item.label"
+                                :label="item.description"
+                                :disabled="item.value !== 'none' && !inventoryAvailable"
+                                :customStyle="{ margin: '0 -15px' }"
+                                @click="chooseInventoryMode(item.value)"
+                            >
+                                <template #icon
+                                    ><u-radio
+                                        :name="item.value"
+                                        :disabled="item.value !== 'none' && !inventoryAvailable"
+                                        activeColor="#2868ce"
+                                        :customStyle="{ marginRight: '8px' }"
+                                /></template>
+                            </u-cell>
+                        </u-radio-group>
+                    </view>
+                    <view v-if="inventoryForm.mode !== 'none'" class="mc-card">
+                        <view class="mc-section-title">耗材扣减位置</view>
+                        <view class="mc-field" @click="picker = 'warehouse'">
+                            <text class="mc-label mc-required">仓库</text>
+                            <text class="mc-grow">{{ warehouseName || '请选择仓库' }}</text>
+                            <u-icon name="arrow-right" size="16" color="#9ba7b7" />
+                        </view>
+                        <view class="mc-field" @click="openLocation">
+                            <text class="mc-label mc-required">具体库位</text>
+                            <text class="mc-grow">{{ locationName || '请选择库位' }}</text>
+                            <u-icon name="arrow-right" size="16" color="#9ba7b7" />
+                        </view>
+                        <view class="mc-sub">新核销按此位置扣减。修改设置不会重算已有服务记录。</view>
+                    </view>
+                    <MemberCardNotice
+                        v-if="inventoryDirty"
+                        title="规则尚未保存"
+                        text="确认仓库与库位后，点击底部保存才会生效。"
+                    />
+                </template>
+            </template>
+        </view>
+        <MemberCardActionBar v-if="!loading && !error && (tab === 'inventory' || !isErp)" fixed>
+            <view class="mc-actionbar__button">
+                <MemberCardButton
+                    type="primary"
+                    :text="tab === 'inventory' ? '保存耗材规则' : '新增收款账户'"
+                    :loading="busy"
+                    @click="mainAction"
+                />
+            </view>
+        </MemberCardActionBar>
+        <MemberCardSheet
+            v-model:show="editorVisible"
+            :title="editor.id ? '编辑收款账户' : '新增收款账户'"
+            subtitle="按实际使用的收款渠道设置"
+            :busy="busy"
+            height="70vh"
+        >
+            <u-form :model="editor" labelWidth="90" :labelStyle="{ color: '#53637a', fontSize: '14px' }">
+                <u-form-item label="账户名称" prop="name" required borderBottom>
+                    <u-input
+                        v-model="editor.name"
+                        border="none"
+                        maxlength="40"
+                        placeholder="例如：门店微信"
+                        :disabled="busy"
+                    />
+                </u-form-item>
+                <u-form-item label="账户类型" labelPosition="top">
+                    <MemberCardSegmented v-model="editor.type" :options="types" :disabled="busy" />
+                </u-form-item>
+                <u-form-item label="启用账户" borderBottom>
+                    <view class="mc-switch-value">
+                        <u-switch
+                            v-model="editor.status"
+                            :activeValue="1"
+                            :inactiveValue="0"
+                            size="22"
+                            :disabled="busy"
+                            @change="accountStatusChanged"
+                        />
+                    </view>
+                </u-form-item>
+                <u-form-item label="设为默认" borderBottom>
+                    <view class="mc-switch-value">
+                        <u-switch
+                            v-model="editor.is_default"
+                            :disabled="busy || Number(editor.status) !== 1"
+                            :activeValue="1"
+                            :inactiveValue="0"
+                            size="22"
+                        />
+                    </view>
+                </u-form-item>
+            </u-form>
+            <MemberCardCollapse title="更多设置" summary="显示排序">
+                <view class="mc-field">
+                    <text class="mc-label">排序</text>
+                    <view class="mc-field__value">
+                        <u-input v-model="editor.sort" type="number" border="none" placeholder="数字越小越靠前" />
                     </view>
                 </view>
+            </MemberCardCollapse>
+            <u-cell
+                v-if="editor.id"
+                title="删除此账户"
+                :border="false"
+                :disabled="busy"
+                :titleStyle="{ color: '#b95151', fontSize: '13px' }"
+                @click="removeEditingAccount"
+            />
+            <MemberCardNotice v-if="editorError" tone="error" :text="editorError" />
+            <template #footer>
+                <MemberCardButton type="primary" text="保存账户" :loading="busy" @click="save" />
+            </template>
+        </MemberCardSheet>
+        <MemberCardSheet
+            :show="!!picker"
+            :title="picker === 'warehouse' ? '选择耗材仓库' : '选择具体库位'"
+            height="65vh"
+            @update:show="picker = ''"
+        >
+            <view
+                v-for="item in picker === 'warehouse' ? inventoryWarehouses : inventoryLocations"
+                :key="item.id"
+                class="mc-select"
+                @click="chooseLocation(item)"
+            >
+                <text class="mc-grow">{{ item.name }}</text>
+                <u-icon
+                    v-if="
+                        Number(item.id) ===
+                        (picker === 'warehouse' ? inventoryForm.warehouseId : inventoryForm.locationId)
+                    "
+                    name="checkmark"
+                    size="20"
+                    color="#536e96"
+                />
             </view>
-
-            <view v-if="inventoryForm.mode !== 'none'" class="mt-[18rpx] rounded-[18rpx] bg-[#f8fafc] p-[16rpx]">
-                <text class="mb-[12rpx] block text-[23rpx] font-semibold">扣减仓库</text>
-                <scroll-view scroll-x class="whitespace-nowrap">
-                    <view class="inline-flex gap-[10rpx]">
-                        <text
-                            v-for="warehouse in inventoryWarehouses"
-                            :key="warehouse.id"
-                            class="rounded-[13rpx] px-[18rpx] py-[11rpx] text-[22rpx]"
-                            :class="Number(inventoryForm.warehouseId) === Number(warehouse.id) ? 'bg-[#2468f2] text-white' : 'bg-white text-[#64748b]'"
-                            @click="selectWarehouse(warehouse)"
-                        >{{ warehouse.name }}</text>
-                    </view>
-                </scroll-view>
-                <text class="mb-[12rpx] mt-[18rpx] block text-[23rpx] font-semibold">具体库位</text>
-                <view class="flex flex-wrap gap-[10rpx]">
-                    <text
-                        v-for="location in inventoryLocations"
-                        :key="location.id"
-                        class="rounded-[13rpx] px-[18rpx] py-[11rpx] text-[22rpx]"
-                        :class="Number(inventoryForm.locationId) === Number(location.id) ? 'bg-[#2468f2] text-white' : 'bg-white text-[#64748b]'"
-                        @click="inventoryForm.locationId = Number(location.id)"
-                    >{{ location.name }}</text>
-                </view>
-            </view>
-            <view class="mt-[18rpx]">
-                <MemberCardButton type="primary" text="保存耗材规则" :loading="inventorySaving" @click="saveInventory" class="!h-[76rpx] !rounded-[16rpx] !text-[25rpx] !font-semibold" />
-            </view>
-        </view>
-
-        <view class="mt-[18rpx] rounded-[24rpx] bg-white p-[22rpx]">
-            <view class="flex items-center gap-[15rpx]">
-                <view class="flex h-[62rpx] w-[62rpx] items-center justify-center rounded-[18rpx] bg-[#ecfeff]">
-                    <u-icon name="rmb-circle" color="#0891b2" size="23" />
-                </view>
-                <view class="min-w-0 flex-1">
-                    <text class="block text-[29rpx] font-semibold">收款账户</text>
-                    <text class="mt-[3rpx] block text-[21rpx] text-[#8a96a8]">{{ config.finance_provider_name || '会员卡独立收款' }}</text>
-                </view>
-                <text class="rounded-full px-[12rpx] py-[5rpx] text-[20rpx]" :class="isErp ? 'bg-[#ecfdf3] text-[#16a34a]' : 'bg-[#edf4ff] text-[#2468f2]'">{{ isErp ? 'ERP 托管' : '独立运行' }}</text>
-            </view>
-            <view class="mt-[18rpx] rounded-[16rpx] bg-[#f8fafc] px-[16rpx] py-[14rpx] text-[21rpx] leading-[1.6] text-[#667085]">
-                {{ isErp ? '资金账户由 ERP 统一维护，本页面用于查看和选择默认到账账户。' : '账户保存在当前站点配置中，店主可直接维护，无需 PC 管理员介入。' }}
-            </view>
-        </view>
-
-        <view class="mb-[12rpx] mt-[24rpx] flex items-center justify-between px-[4rpx]">
-            <text class="text-[28rpx] font-semibold">可用账户</text>
-            <text class="text-[21rpx] text-[#98a2b3]">{{ accounts.length }} 个</text>
-        </view>
-        <view v-if="!accounts.length" class="rounded-[22rpx] bg-white py-[80rpx]">
-            <u-empty text="暂无收款账户" mode="list" />
-        </view>
-        <view v-for="account in accounts" :key="account.id" class="mb-[14rpx] rounded-[22rpx] bg-white px-[20rpx] py-[18rpx]">
-            <view class="flex items-center gap-[14rpx]">
-                <view class="flex h-[58rpx] w-[58rpx] flex-none items-center justify-center rounded-[16rpx]" :class="Number(account.status) === 1 ? 'bg-[#edf4ff]' : 'bg-[#f2f4f7]'">
-                    <u-icon name="wallet" :color="Number(account.status) === 1 ? '#2468f2' : '#98a2b3'" size="20" />
-                </view>
-                <view class="min-w-0 flex-1">
-                    <view class="flex items-center gap-[8rpx]">
-                        <text class="truncate text-[27rpx] font-semibold">{{ account.name }}</text>
-                        <text v-if="Number(account.is_default) === 1 || Number(config.default_capital_account_id) === Number(account.id)" class="rounded-full bg-[#ecfdf3] px-[9rpx] py-[3rpx] text-[18rpx] text-[#16a34a]">默认</text>
-                    </view>
-                    <text class="mt-[4rpx] block text-[21rpx] text-[#8a96a8]">{{ account.type_name || typeName(account.type) }} · {{ Number(account.status) === 1 ? '已启用' : '已停用' }}</text>
-                </view>
-                <view v-if="!isErp" class="flex items-center gap-[20rpx] text-[23rpx]">
-                    <text class="text-[#475569]" @click="edit(account)">编辑</text>
-                    <text class="text-[#dc2626]" @click="remove(account)">删除</text>
-                </view>
-            </view>
-            <view v-if="Number(account.status) === 1 && Number(config.default_capital_account_id) !== Number(account.id)" class="mt-[14rpx] flex justify-end border-t border-[#f0f2f5] pt-[13rpx]">
-                <text class="text-[22rpx] font-medium text-[#2468f2]" @click="setDefault(account)">设为默认账户</text>
-            </view>
-        </view>
-
-        <view v-if="!isErp" class="fixed bottom-0 left-0 right-0 z-20 border-t border-[#e8ecf1] bg-white px-[24rpx] pt-[14rpx]" :style="{ paddingBottom: 'calc(14rpx + env(safe-area-inset-bottom))' }">
-            <MemberCardButton type="primary" icon="plus" text="新增收款账户" @click="openCreate" class="!h-[86rpx] !rounded-[18rpx] !text-[28rpx] !font-semibold" />
-        </view>
-
-        <u-popup :show="editorVisible" mode="bottom" round="24" :safe-area-inset-bottom="true" @close="editorVisible = false">
-            <view class="px-[28rpx] pb-[38rpx] pt-[28rpx]">
-                <view class="mb-[22rpx] flex items-center justify-between">
-                    <text class="text-[31rpx] font-semibold">{{ editor.id ? '编辑收款账户' : '新增收款账户' }}</text>
-                    <view class="flex h-[54rpx] w-[54rpx] items-center justify-center rounded-full bg-[#f2f4f7]" @click="editorVisible = false"><u-icon name="close" color="#64748b" size="18" /></view>
-                </view>
-                <view class="mb-[14rpx] rounded-[16rpx] bg-[#f5f7fa] px-[16rpx] py-[4rpx]">
-                    <view class="flex min-h-[88rpx] items-center border-b border-[#e8ecf1]"><text class="w-[150rpx] text-[25rpx]">账户名称</text><u-input v-model="editor.name" border="none" placeholder="例如：门店微信" class="flex-1 text-[25rpx]" /></view>
-                    <view class="flex min-h-[88rpx] items-center"><text class="w-[150rpx] text-[25rpx]">账户类型</text><view class="flex flex-1 flex-wrap gap-[10rpx]"><text v-for="type in types" :key="type.value" class="rounded-[12rpx] px-[15rpx] py-[9rpx] text-[22rpx]" :class="editor.type === type.value ? 'bg-[#2468f2] text-white' : 'bg-white text-[#64748b]'" @click="editor.type = type.value">{{ type.label }}</text></view></view>
-                </view>
-                <view class="mb-[22rpx] rounded-[16rpx] bg-[#f5f7fa] px-[16rpx]">
-                    <view class="flex min-h-[82rpx] items-center justify-between border-b border-[#e8ecf1]"><text class="text-[25rpx]">启用账户</text><u-switch v-model="editor.status" :activeValue="1" :inactiveValue="0" size="22" /></view>
-                    <view class="flex min-h-[82rpx] items-center justify-between"><text class="text-[25rpx]">设为默认</text><u-switch v-model="editor.is_default" :activeValue="1" :inactiveValue="0" size="22" /></view>
-                </view>
-                <MemberCardButton type="primary" text="保存账户" :loading="saving" @click="save" class="!h-[86rpx] !rounded-[18rpx] !text-[28rpx] !font-semibold" />
-            </view>
-        </u-popup>
+            <MemberCardState
+                v-if="!(picker === 'warehouse' ? inventoryWarehouses : inventoryLocations).length"
+                text="暂无可选位置，请先在 ERP 维护仓库与库位"
+            />
+        </MemberCardSheet>
     </view>
 </template>
-
 <script setup lang="ts">
+// H5 的页面样式会被自动隔离，公共组件样式通过脚本统一加载。
+// #ifdef H5
+import '../../styles/mobile.scss'
+// #endif
 import { computed, reactive, ref } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
-import { deleteMemberCardCapitalAccount, getMemberCardConfig, saveMemberCardCapitalAccount, saveMemberCardConfig } from '../../api'
+import { onLoad } from '@dcloudio/uni-app'
+import {
+    deleteMemberCardCapitalAccount,
+    getMemberCardConfig,
+    saveMemberCardCapitalAccount,
+    saveMemberCardConfig
+} from '../../api'
 import MemberCardButton from '../../components/MemberCardButton.vue'
-
+import MemberCardState from '../../components/MemberCardState.vue'
+import MemberCardNotice from '../../components/MemberCardNotice.vue'
+import MemberCardSheet from '../../components/MemberCardSheet.vue'
+import MemberCardCollapse from '../../components/MemberCardCollapse.vue'
+import MemberCardActionBar from '../../components/MemberCardActionBar.vue'
+import MemberCardSegmented from '../../components/MemberCardSegmented.vue'
+import { errorText, accountOptions, markMemberCardChanged } from '../../utils/presentation'
 const config = ref<any>({ capital_account_options: [] })
-const editorVisible = ref(false)
-const saving = ref(false)
-const inventorySaving = ref(false)
+const tab = ref('accounts'),
+    picker = ref(''),
+    error = ref(''),
+    actionError = ref(''),
+    editorError = ref('')
+const loading = ref(true),
+    busy = ref(false),
+    editorVisible = ref(false),
+    pendingAccountId = ref(0)
 const inventoryForm = reactive({ mode: 'none', warehouseId: 0, locationId: 0 })
+const savedInventory = ref('')
+const inventoryDirty = computed(() => savedInventory.value !== JSON.stringify(inventoryForm))
 const inventoryModes = [
-    { value: 'none', label: '不管理库存', description: '只完成会员卡核销，不记录耗材库存。' },
-    { value: 'auto', label: '自动管理', description: '自动扣库存；不足仍可核销并形成缺货提醒。', recommended: true },
-    { value: 'strict', label: '严格库存', description: '库存不足禁止核销，适合管理规范的团队。' },
+    { value: 'none', label: '不管理库存', description: '只记服务次数，不扣耗材库存。' },
+    { value: 'auto', label: '自动扣减', description: '库存不足仍可服务，产生缺货提醒。' },
+    { value: 'strict', label: '严格库存', description: '库存不足不能核销，不扣会员卡次数。' }
 ]
 const editor = reactive<any>({ id: 0, name: '', type: 'wechat', status: 1, is_default: 0, sort: 0 })
-const types = [{ label: '微信', value: 'wechat' }, { label: '支付宝', value: 'alipay' }, { label: '银行卡', value: 'bank' }, { label: '现金', value: 'cash' }, { label: '其他', value: 'other' }]
-const accounts = computed(() => config.value.capital_account_options || [])
+const types = [
+    { label: '微信', value: 'wechat' },
+    { label: '支付宝', value: 'alipay' },
+    { label: '银行卡', value: 'bank' },
+    { label: '现金', value: 'cash' },
+    { label: '其他', value: 'other' }
+]
+const accounts = computed(() => accountOptions(config.value, true))
 const isErp = computed(() => config.value.finance_provider === 'erp')
-const inventoryAvailable = computed(() => Number(config.value.inventory_available || 0) === 1)
+const inventoryAvailable = computed(() => Number(config.value.inventory_available) === 1)
 const inventoryWarehouses = computed(() => config.value.inventory_warehouses || [])
-const inventoryLocations = computed(() => inventoryWarehouses.value.find((item: any) => Number(item.id) === Number(inventoryForm.warehouseId))?.locations || [])
-const typeName = (value: string) => types.find(item => item.value === value)?.label || '其他'
-const applyConfig = (data: any) => {
+const selectedWarehouse = computed(() =>
+    inventoryWarehouses.value.find((item: any) => Number(item.id) === inventoryForm.warehouseId)
+)
+const inventoryLocations = computed(() => selectedWarehouse.value?.locations || [])
+const warehouseName = computed(() => selectedWarehouse.value?.name || '')
+const locationName = computed(
+    () => inventoryLocations.value.find((item: any) => Number(item.id) === inventoryForm.locationId)?.name || ''
+)
+const typeName = (value: string) => types.find((item) => item.value === value)?.label || '其他'
+const applyConfig = (data: any, applyInventory = false) => {
     config.value = data || config.value
-    inventoryForm.mode = ['none', 'auto', 'strict'].includes(data?.inventory_mode) ? data.inventory_mode : 'none'
-    inventoryForm.warehouseId = Number(data?.inventory_warehouse_id || 0)
-    inventoryForm.locationId = Number(data?.inventory_location_id || 0)
+    // 修改账户不覆盖尚未保存的耗材选择。
+    if (applyInventory) {
+        inventoryForm.mode = ['none', 'auto', 'strict'].includes(data?.inventory_mode) ? data.inventory_mode : 'none'
+        inventoryForm.warehouseId = Number(data?.inventory_warehouse_id || 0)
+        inventoryForm.locationId = Number(data?.inventory_location_id || 0)
+        savedInventory.value = JSON.stringify(inventoryForm)
+    }
 }
-const load = async () => { applyConfig(((await getMemberCardConfig()) as any)?.data || config.value) }
+const load = async () => {
+    loading.value = true
+    error.value = ''
+    try {
+        applyConfig(((await getMemberCardConfig()) as any)?.data, true)
+    } catch (e) {
+        error.value = errorText(e, '设置加载失败，请重试')
+    } finally {
+        loading.value = false
+    }
+}
 const chooseInventoryMode = (mode: string) => {
-    if (mode !== 'none' && !inventoryAvailable.value) return uni.showToast({ title: '请先安装并启用 ERP', icon: 'none' })
+    if (busy.value) return
+    if (mode !== 'none' && !inventoryAvailable.value) {
+        uni.showToast({ title: '需先安装并启用 ERP 库存', icon: 'none' })
+        return
+    }
     inventoryForm.mode = mode
-    if (mode !== 'none' && !inventoryForm.warehouseId && inventoryWarehouses.value.length) selectWarehouse(inventoryWarehouses.value[0])
 }
-const selectWarehouse = (warehouse: any) => {
-    inventoryForm.warehouseId = Number(warehouse.id || 0)
-    inventoryForm.locationId = Number(warehouse.locations?.[0]?.id || 0)
+const openLocation = () => {
+    if (!inventoryForm.warehouseId) {
+        uni.showToast({ title: '请先选择仓库', icon: 'none' })
+        return
+    }
+    picker.value = 'location'
+}
+const chooseLocation = (item: any) => {
+    if (picker.value === 'warehouse') {
+        if (inventoryForm.warehouseId !== Number(item.id)) inventoryForm.locationId = 0
+        inventoryForm.warehouseId = Number(item.id)
+    } else inventoryForm.locationId = Number(item.id)
+    picker.value = ''
 }
 const saveInventory = async () => {
-    if (inventoryForm.mode !== 'none' && (!inventoryForm.warehouseId || !inventoryForm.locationId)) return uni.showToast({ title: '请选择耗材仓库和库位', icon: 'none' })
-    inventorySaving.value = true
+    if (busy.value) return
+    if (inventoryForm.mode !== 'none' && (!warehouseName.value || !locationName.value)) {
+        actionError.value = '请选择有效的耗材仓库和具体库位'
+        return
+    }
+    busy.value = true
+    actionError.value = ''
     try {
-        applyConfig(((await saveMemberCardConfig({
-            inventory_mode: inventoryForm.mode,
-            inventory_warehouse_id: inventoryForm.warehouseId,
-            inventory_location_id: inventoryForm.locationId,
-        })) as any)?.data || config.value)
+        applyConfig(
+            (
+                (await saveMemberCardConfig({
+                    inventory_mode: inventoryForm.mode,
+                    inventory_warehouse_id: inventoryForm.warehouseId,
+                    inventory_location_id: inventoryForm.locationId
+                })) as any
+            )?.data,
+            true
+        )
+        markMemberCardChanged()
         uni.showToast({ title: '耗材规则已保存', icon: 'success' })
-    } finally { inventorySaving.value = false }
+    } catch (e) {
+        actionError.value = errorText(e, '保存失败，请重试')
+    } finally {
+        busy.value = false
+    }
 }
-const openCreate = () => { Object.assign(editor, { id: 0, name: '', type: 'wechat', status: 1, is_default: accounts.value.length ? 0 : 1, sort: 0 }); editorVisible.value = true }
-const edit = (account: any) => { Object.assign(editor, { id: Number(account.id), name: account.name, type: account.type || 'other', status: Number(account.status), is_default: Number(account.is_default), sort: Number(account.sort || 0) }); editorVisible.value = true }
+const openCreate = () => {
+    if (busy.value) return
+    Object.assign(editor, {
+        id: 0,
+        name: '',
+        type: 'wechat',
+        status: 1,
+        is_default: accounts.value.length ? 0 : 1,
+        sort: 0
+    })
+    editorError.value = ''
+    editorVisible.value = true
+}
+const mainAction = () => {
+    if (tab.value === 'inventory') void saveInventory()
+    else openCreate()
+}
+const edit = (account: any) => {
+    if (busy.value) return
+    Object.assign(editor, {
+        id: Number(account.id),
+        name: account.name,
+        type: account.type || 'other',
+        status: Number(account.status),
+        is_default:
+            Number(account.status) === 1 && Number(config.value.default_capital_account_id) === Number(account.id)
+                ? 1
+                : 0,
+        sort: Number(account.sort || 0)
+    })
+    editorError.value = ''
+    editorVisible.value = true
+}
+const accountStatusChanged = () => {
+    if (Number(editor.status) !== 1) editor.is_default = 0
+}
 const save = async () => {
-    if (!editor.name.trim()) return uni.showToast({ title: '请填写账户名称', icon: 'none' })
-    saving.value = true
-    try { applyConfig(((await saveMemberCardCapitalAccount({ ...editor })) as any)?.data || config.value); editorVisible.value = false; uni.showToast({ title: '账户已保存', icon: 'success' }) }
-    finally { saving.value = false }
+    if (busy.value) return
+    if (!editor.name.trim()) {
+        editorError.value = '请填写账户名称'
+        return
+    }
+    busy.value = true
+    editorError.value = ''
+    try {
+        applyConfig(
+            (
+                (await saveMemberCardCapitalAccount({
+                    ...editor,
+                    name: editor.name.trim(),
+                    is_default: Number(editor.status) === 1 ? editor.is_default : 0
+                })) as any
+            )?.data
+        )
+        markMemberCardChanged()
+        editorVisible.value = false
+        uni.showToast({ title: '账户已保存', icon: 'success' })
+    } catch (e) {
+        editorError.value = errorText(e, '账户保存失败，请刷新核对后再试')
+    } finally {
+        busy.value = false
+    }
 }
-const setDefault = async (account: any) => { applyConfig(((await saveMemberCardConfig({ default_capital_account_id: Number(account.id) })) as any)?.data || config.value); uni.showToast({ title: '默认账户已更新', icon: 'success' }) }
+const setDefault = async (account: any) => {
+    if (busy.value) return
+    busy.value = true
+    pendingAccountId.value = Number(account.id)
+    actionError.value = ''
+    try {
+        applyConfig(((await saveMemberCardConfig({ default_capital_account_id: Number(account.id) })) as any)?.data)
+        markMemberCardChanged()
+        uni.showToast({ title: '默认账户已更新', icon: 'success' })
+    } catch (e) {
+        actionError.value = errorText(e, '更新默认账户失败')
+    } finally {
+        busy.value = false
+        pendingAccountId.value = 0
+    }
+}
 const remove = async (account: any) => {
-    const modal = await uni.showModal({ title: '删除收款账户', content: `确认删除“${account.name}”？`, confirmColor: '#dc2626' })
-    if (!modal.confirm) return
-    applyConfig(((await deleteMemberCardCapitalAccount(Number(account.id))) as any)?.data || config.value)
-    uni.showToast({ title: '账户已删除', icon: 'success' })
+    if (busy.value) return
+    busy.value = true
+    try {
+        const modal = await uni.showModal({
+            title: '删除收款账户',
+            content: '删除“' + account.name + '”后，新开卡将不能再选择它；已有订单的收款记录保留。',
+            confirmText: '确认删除',
+            confirmColor: '#ac3939'
+        })
+        if (!modal.confirm) return
+        applyConfig(((await deleteMemberCardCapitalAccount(Number(account.id))) as any)?.data)
+        markMemberCardChanged()
+        if (editorVisible.value && Number(editor.id) === Number(account.id)) editorVisible.value = false
+        uni.showToast({ title: '账户已删除', icon: 'success' })
+    } catch (e) {
+        if (editorVisible.value) editorError.value = errorText(e, '删除失败，请重试')
+        else actionError.value = errorText(e, '删除失败，请重试')
+    } finally {
+        busy.value = false
+    }
 }
-onShow(load)
+const removeEditingAccount = () => {
+    const account = accounts.value.find((item) => Number(item.id) === Number(editor.id))
+    if (account) void remove(account)
+}
+onLoad(load)
 </script>
+<style lang="scss">
+// 小程序从页面样式入口加载，避免脚本样式被当前页面的样式块覆盖。
+// #ifndef H5
+@import '../../styles/mobile.scss';
+// #endif
+</style>

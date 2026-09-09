@@ -19,11 +19,21 @@ final class MemberCardConfigAdminService extends BaseAdminService
             : $this->localCapitalAccountOptions((array)($config['local_capital_accounts'] ?? []));
         $config['receivable_available'] = $gateway->usesErp() ? 1 : 0;
         if (!$gateway->usesErp()) $config['allow_receivable'] = 0;
-        $ids = array_map(static fn(array $row): int => (int)($row['id'] ?? 0), $config['capital_account_options']);
+        $enabledAccounts = array_values(array_filter(
+            $config['capital_account_options'],
+            static fn(array $row): bool => !array_key_exists('status', $row) || (int)$row['status'] === 1
+        ));
+        $ids = array_map(static fn(array $row): int => (int)($row['id'] ?? 0), $enabledAccounts);
         if (!in_array((int)$config['default_capital_account_id'], $ids, true)) {
-            $default = current(array_filter($config['capital_account_options'], static fn(array $row): bool => (int)($row['is_default'] ?? 0) === 1));
-            $config['default_capital_account_id'] = (int)(($default ?: ($config['capital_account_options'][0] ?? []))['id'] ?? 0);
+            $default = current(array_filter($enabledAccounts, static fn(array $row): bool => (int)($row['is_default'] ?? 0) === 1));
+            $config['default_capital_account_id'] = (int)(($default ?: ($enabledAccounts[0] ?? []))['id'] ?? 0);
         }
+        // 列表标记与实际默认账户保持一致，避免编辑旧默认账户时意外改回。
+        $defaultId = (int)$config['default_capital_account_id'];
+        foreach ($config['capital_account_options'] as &$account) {
+            $account['is_default'] = $defaultId > 0 && (int)$account['id'] === $defaultId ? 1 : 0;
+        }
+        unset($account);
         $inventory = (new MemberCardInventoryGateway())->capability();
         $config['inventory_available'] = (int)($inventory['available'] ?? 0);
         $config['inventory_provider_name'] = (string)($inventory['provider_name'] ?? '未接入 ERP 数量库存');
@@ -113,6 +123,7 @@ final class MemberCardConfigAdminService extends BaseAdminService
             'is_default' => (int)($data['is_default'] ?? 0) === 1 ? 1 : 0,
             'sort' => max(0, (int)($data['sort'] ?? 0)),
         ];
+        if ($row['status'] !== 1) $row['is_default'] = 0;
         $found = false;
         foreach ($accounts as $index => $account) {
             if ((int)($account['id'] ?? 0) !== $id) continue;
@@ -125,6 +136,8 @@ final class MemberCardConfigAdminService extends BaseAdminService
             foreach ($accounts as &$account) $account['is_default'] = (int)($account['id'] ?? 0) === $id ? 1 : 0;
             unset($account);
             $config['default_capital_account_id'] = $id;
+        } elseif ($row['status'] !== 1 && (int)$config['default_capital_account_id'] === $id) {
+            $config['default_capital_account_id'] = 0;
         }
         $config['local_capital_accounts'] = $accounts;
         $service->save((int)$this->site_id, $config);

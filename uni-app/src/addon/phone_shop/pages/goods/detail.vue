@@ -1,5 +1,7 @@
 <template>
     <view :style="themeColor()">
+        <PhoneGoodsAccessState v-if="!diy.canDisplay()" :status="diy.getAccessStatus()" :message="diy.getAccessMessage()" @retry="diy.retry()" />
+        <view v-if="diy.hasContent()" v-show="diy.canDisplay()">
         <!-- 自定义模板渲染 -->
         <view class="diy-template-wrap bg-index" :style="diy.pageStyle()">
             <diy-group ref="diyGroupRef" :data="diy.data" />
@@ -10,6 +12,7 @@
         <!-- 小程序隐私协议 -->
         <wx-privacy-popup ref="wxPrivacyPopupRef"></wx-privacy-popup>
         <!-- #endif -->
+        </view>
     </view>
 </template>
 
@@ -22,6 +25,7 @@ import useGoodsDetailStore from '@/addon/phone_shop/stores/goodsDetail'
 import nsGoodsSku from '@/addon/phone_shop/components/ns-goods-sku/ns-goods-sku.vue'
 import sharePoster from '@/components/share-poster/share-poster.vue'
 import useMemberStore from '@/stores/member'
+import PhoneGoodsAccessState from '@/addon/phone_shop/components/PhoneGoodsAccessState.vue'
 
 const { setShare } = useShare()
 

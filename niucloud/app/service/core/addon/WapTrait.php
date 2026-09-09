@@ -30,6 +30,8 @@ trait WapTrait
      */
     public function compileDiyComponentsCode($compile_path, $addon)
     {
+        // 先在内存中检查注册表，失败时不覆盖已有可用文件。
+        $registered_components = [];
         $content = "<template>\n";
         $content .= "    <view class=\"diy-group\" id=\"componentList\">\n";
         $content .= "        <top-tabbar :scrollBool=\"diyGroup.componentsScrollBool.TopTabbar\" v-if=\"data.global && Object.keys(data.global).length && data.global.topStatusBar && data.global.topStatusBar.isShow\" ref=\"topTabbarRef\" :data=\"data.global\" />\n";
@@ -47,7 +49,7 @@ trait WapTrait
 
         if (!empty($file_arr)) {
             foreach ($file_arr as $ck => $cv) {
-                if (str_contains($cv, 'index.vue')) {
+                if ($cv === 'index.vue' && is_file($ck)) {
 
                     $path = str_replace($root_path . '/', '', $ck);
                     $path = str_replace('/index.vue', '', $path);
@@ -62,6 +64,7 @@ trait WapTrait
                         $name_arr[ $k ] = strtoupper($v[ 0 ] ?? '') . substr($v, 1);
                     }
                     $name = implode('', $name_arr);
+                    $this->registerDiyComponentName($registered_components, $name, $ck);
                     $file_name = 'diy-' . $path;
 
                     $content .= "                <template v-if=\"component.componentName == '{$name}'\">\n";
@@ -94,13 +97,19 @@ trait WapTrait
 
         foreach ($addon_arr as $k => $v) {
             $addon_path = $compile_path . str_replace('/', DIRECTORY_SEPARATOR, 'addon/' . $v . '/components/diy'); // 插件自定义组件根目录
+            $replaced_directories = $this->getDiyReplacedDirectories($addon_path);
             $addon_file_arr = getFileMap($addon_path);
             if (!empty($addon_file_arr)) {
                 foreach ($addon_file_arr as $ck => $cv) {
-                    if (str_contains($cv, 'index.vue')) {
+                    if ($cv === 'index.vue' && is_file($ck)) {
 
                         $path = str_replace($addon_path . '/', '', $ck);
                         $path = str_replace('/index.vue', '', $path);
+
+                        // 插件复制升级不会删除旧目录；已声明替代组件的目录不再重复注册。
+                        if (isset($replaced_directories[$path])) {
+                            continue;
+                        }
 
                         // 获取自定义组件 key 关键词
                         $name_arr = explode('-', $path);
@@ -109,6 +118,7 @@ trait WapTrait
                             $name_arr[ $nk ] = strtoupper($nv[ 0 ] ?? '') . substr($nv, 1);
                         }
                         $name = implode('', $name_arr);
+                        $this->registerDiyComponentName($registered_components, $name, $ck);
                         $file_name = 'diy-' . $path;
 
                         $content .= "                <template v-if=\"component.componentName == '{$name}'\">\n";
@@ -182,6 +192,43 @@ trait WapTrait
         $content .= "</style>\n";
 
         return file_put_contents($compile_path . str_replace('/', DIRECTORY_SEPARATOR, 'addon/components/diy/group/index.vue'), $content);
+    }
+
+    /**
+     * 由插件声明已替换的目录，框架不猜测哪个业务组件应该获胜，也不删除旧文件。
+     */
+    private function getDiyReplacedDirectories(string $component_path): array
+    {
+        $manifest_path = $component_path . '/registration.json';
+        if (!is_file($manifest_path)) {
+            return [];
+        }
+        $manifest = json_decode(file_get_contents($manifest_path), true);
+        if (!is_array($manifest) || ($manifest['version'] ?? null) !== 1
+            || !isset($manifest['replaced_directories']) || !is_array($manifest['replaced_directories'])) {
+            throw new \core\exception\CommonException("DIY组件注册配置不正确：{$manifest_path}");
+        }
+        foreach ($manifest['replaced_directories'] as $old => $replacement) {
+            if (!is_string($old) || !is_string($replacement) || $old === $replacement
+                || !preg_match('/^[a-z][a-z0-9-]*$/D', $old)
+                || !preg_match('/^[a-z][a-z0-9-]*$/D', $replacement)) {
+                throw new \core\exception\CommonException("DIY组件替代目录配置不正确：{$manifest_path}");
+            }
+            if (is_file($component_path . '/' . $old . '/index.vue')
+                && !is_file($component_path . '/' . $replacement . '/index.vue')) {
+                throw new \core\exception\CommonException("DIY组件更新不完整：{$old} 的替代组件 {$replacement}/index.vue 缺失，请补齐插件手机端源码后重新编译");
+            }
+        }
+        return $manifest['replaced_directories'];
+    }
+
+    private function registerDiyComponentName(array &$registered, string $name, string $path): void
+    {
+        $key = strtolower($name);
+        if (isset($registered[$key])) {
+            throw new \core\exception\CommonException("DIY组件重名 {$name}：{$registered[$key]} 与 {$path}。请为插件组件使用独立名称，或通过 registration.json 声明已替换目录；未覆盖现有组件文件");
+        }
+        $registered[$key] = $path;
     }
 
     /**

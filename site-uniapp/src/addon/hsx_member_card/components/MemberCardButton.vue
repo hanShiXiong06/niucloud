@@ -1,61 +1,76 @@
 <template>
-    <view class="block w-full min-w-0">
-        <u-button
-            :type="type"
-            :plain="plain"
-            :disabled="disabled"
-            :loading="loading"
-            :size="size"
-            :custom-style="buttonStyle"
-            @click="emit('click')"
-        >
-            <view class="flex items-center justify-center gap-[10rpx] leading-none">
-                <u-icon v-if="icon" :name="icon" :size="compact ? 15 : 17" :color="iconColor" />
-                <text>{{ text }}</text>
-            </view>
-        </u-button>
-    </view>
+    <u-button
+        :type="type"
+        :plain="plain"
+        :disabled="disabled || loading"
+        :loading="loading"
+        :loadingText="loadingText || '处理中…'"
+        :size="size"
+        :custom-style="buttonStyle"
+        @click="click"
+    >
+        <view class="mc-button-label">
+            <u-icon v-if="icon && !loading" :name="icon" :size="compact ? 15 : 17" :color="iconColor" />
+            <text>{{ loading ? loadingText || '处理中…' : text }}</text>
+        </view>
+    </u-button>
 </template>
-
 <script setup lang="ts">
 import { computed } from 'vue'
-
-const props = withDefaults(defineProps<{
-    text: string
-    type?: string
-    size?: string
-    icon?: string
-    plain?: boolean
-    disabled?: boolean
-    loading?: boolean
-    compact?: boolean
-}>(), {
-    type: 'default',
-    size: 'normal',
-    icon: '',
-    plain: false,
-    disabled: false,
-    loading: false,
-    compact: false,
-})
-
+const props = withDefaults(
+    defineProps<{
+        text: string
+        type?: string
+        size?: string
+        icon?: string
+        plain?: boolean
+        disabled?: boolean
+        loading?: boolean
+        compact?: boolean
+        loadingText?: string
+    }>(),
+    {
+        type: 'default',
+        size: 'normal',
+        icon: '',
+        plain: false,
+        disabled: false,
+        loading: false,
+        compact: false,
+        loadingText: ''
+    }
+)
 const emit = defineEmits(['click'])
-const solidTypes = ['primary', 'success', 'warning', 'error']
-const iconColor = computed(() => {
-    if (!props.plain && solidTypes.includes(props.type)) return '#ffffff'
-    if (props.type === 'primary') return '#2563eb'
-    if (props.type === 'success') return '#16a34a'
-    if (props.type === 'warning') return '#d97706'
-    if (props.type === 'error') return '#dc2626'
-    return '#475569'
-})
+const colors: Record<string, string> = {
+    primary: 'var(--mc-primary, #2563eb)',
+    success: '#287951',
+    warning: '#94651d',
+    error: '#bb3e3e'
+}
+const color = computed(() => colors[props.type] || '#46566e')
+const solid = computed(() => props.type !== 'default' && !props.plain)
+const iconColor = computed(() => (solid.value ? '#fff' : color.value))
 const buttonStyle = computed(() => ({
     width: '100%',
-    height: props.compact ? '68rpx' : '84rpx',
+    height: props.compact ? '34px' : '44px',
     margin: '0',
-    borderRadius: props.compact ? '12rpx' : '15rpx',
-    fontSize: props.compact ? '25rpx' : '28rpx',
+    borderRadius: '8px',
+    fontSize: props.compact ? '13px' : '15px',
     fontWeight: '600',
-    letterSpacing: '0',
+    background: solid.value ? color.value : '#fff',
+    color: solid.value ? '#fff' : color.value,
+    border: '1rpx solid ' + (props.type === 'default' ? '#dce3ed' : color.value),
+    opacity: props.disabled ? '.5' : '1'
 }))
+const click = () => {
+    if (!props.loading && !props.disabled) emit('click')
+}
 </script>
+<style scoped>
+.mc-button-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10rpx;
+}
+</style>

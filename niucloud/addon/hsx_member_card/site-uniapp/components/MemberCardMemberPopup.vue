@@ -1,125 +1,210 @@
 <template>
-    <view class="relative z-[12000]">
-        <u-popup :show="props.show" mode="bottom" :safe-area-inset-bottom="true" round="20" :zIndex="12000" @close="close">
-            <view class="box-border h-[78vh] max-h-[900rpx] bg-white px-[24rpx] pt-[28rpx]" :style="{ paddingBottom: 'calc(20rpx + env(safe-area-inset-bottom))' }">
-                <view class="flex items-start justify-between gap-[16rpx]">
-                    <view class="flex min-w-0 flex-1 flex-col">
-                        <text class="text-[32rpx] font-bold leading-[1.35] text-[#334155]">选择购卡客户</text>
-                        <text class="mt-[7rpx] text-[23rpx] leading-[1.45] text-[#8290a5]">姓名、手机号或会员号均可检索</text>
-                    </view>
-                    <view class="-mt-[8rpx] flex h-[56rpx] w-[56rpx] items-center justify-center rounded-full bg-[#f8fafc]" @click="close"><u-icon name="close" size="20" color="#94a3b8" /></view>
-                </view>
-                <view class="my-[24rpx] mb-[10rpx] flex items-center justify-between gap-[16rpx]">
-                    <view class="min-w-0 flex-1">
-                        <u-search v-model="keyword" placeholder="搜索姓名 / 手机号 / 会员号" :showAction="false" bgColor="#f4f7fb" @search="load" @clear="load" />
-                    </view>
-                    <view class="flex h-[64rpx] items-center gap-[7rpx] whitespace-nowrap rounded-[32rpx] border border-[#bfdbfe] bg-[#eff6ff] px-[19rpx] text-[24rpx] font-medium text-[#2563eb]" @click="openCreate"><u-icon name="plus" color="#2563eb" size="15" /><text>新建</text></view>
-                </view>
-                <scroll-view scroll-y :style="{ height: 'calc(100% - 142rpx)' }">
-                    <view v-if="loading" class="py-[80rpx]"><u-loading-icon text="客户加载中" /></view>
-                    <view
+    <MemberCardSheet
+        :show="show"
+        :title="creatingMode ? '新增客户' : '选择购卡客户'"
+        :subtitle="creatingMode ? '已有手机号将关联原客户，不重复创建' : '姓名、手机号或会员号均可检索'"
+        :busy="creating"
+        :height="creatingMode ? '68vh' : '72vh'"
+        @update:show="emit('update:show', $event)"
+    >
+        <template v-if="creatingMode">
+            <u-form :model="form" labelWidth="88" :labelStyle="{ fontSize: '14px', color: '#53637a' }">
+                <u-form-item label="客户姓名" required borderBottom>
+                    <u-input v-model="form.name" border="none" maxlength="50" placeholder="填写姓名" />
+                </u-form-item>
+                <u-form-item label="手机号" required borderBottom>
+                    <u-input
+                        v-model="form.mobile"
+                        type="number"
+                        maxlength="11"
+                        border="none"
+                        placeholder="11 位手机号"
+                    />
+                </u-form-item>
+                <u-form-item label="初始密码" required borderBottom>
+                    <u-input
+                        v-model="form.password"
+                        type="password"
+                        maxlength="32"
+                        border="none"
+                        placeholder="6–32 位"
+                        @input="passwordCustomized = true"
+                    />
+                </u-form-item>
+            </u-form>
+            <view class="mc-sub">沿用现有开户规则：默认手机号后六位，可在创建前修改。请提醒客户登录后修改密码。</view>
+            <MemberCardNotice v-if="createError" tone="error" :text="createError" />
+        </template>
+        <template v-else>
+            <u-search
+                v-model="keyword"
+                placeholder="姓名 / 手机号 / 会员号"
+                shape="square"
+                bgColor="#f2f4f7"
+                :height="40"
+                :animation="false"
+                actionText="搜索"
+                @search="load"
+                @custom="load"
+                @clear="load"
+            />
+            <MemberCardState
+                v-if="loading || error || !rows.length"
+                :loading="loading"
+                :error="error"
+                text="未找到客户，可以直接新增"
+                :action="error ? '重新加载' : ''"
+                @action="load"
+            />
+            <template v-else>
+                <u-cell-group :border="false">
+                    <u-cell
                         v-for="row in rows"
                         :key="row.member_id"
-                        class="flex min-h-[100rpx] items-center justify-between gap-[16rpx] border-b border-[#eef2f7] px-[6rpx] py-[13rpx]"
-                        hover-class="bg-[#f8fbff]"
+                        :title="row.display_name || '未命名客户'"
+                        :label="row.mobile_masked || '未留手机号'"
+                        :value="(row.card_count || 0) + ' 张卡'"
+                        isLink
+                        center
+                        :customStyle="{ margin: '0 -15px' }"
                         @click="choose(row)"
                     >
-                        <view class="flex h-[64rpx] w-[64rpx] flex-none items-center justify-center rounded-full bg-[#dbeafe] text-[27rpx] font-bold text-[#2563eb]">{{ String(row.display_name || '客').slice(0, 1) }}</view>
-                        <view class="flex min-w-0 flex-1 flex-col gap-[6rpx]">
-                            <text class="truncate text-[28rpx] font-semibold text-[#3f4d63]">{{ row.display_name || '未命名客户' }}</text>
-                            <text class="text-[23rpx] text-[#748399]">{{ row.mobile_masked || '暂无手机号' }}</text>
-                        </view>
-                        <view class="flex min-w-[58rpx] flex-col items-center"><text class="text-[28rpx] font-bold text-[#2563eb]">{{ row.card_count || 0 }}</text><text class="text-[21rpx] text-[#8290a5]">张卡</text></view>
-                        <u-icon name="arrow-right" color="#cbd5e1" size="16" />
-                    </view>
-                    <view v-if="!loading && !rows.length" class="py-[80rpx]"><u-empty text="没有找到客户" mode="search" /></view>
-                </scroll-view>
-            </view>
-        </u-popup>
-
-        <u-popup :show="createVisible" mode="center" round="18" :zIndex="12100" @close="createVisible = false">
-            <view class="box-border w-[620rpx] bg-white px-[28rpx] pb-[28rpx] pt-[30rpx]">
-                <view class="mb-[20rpx] flex items-center gap-[14rpx]">
-                    <view class="flex h-[56rpx] w-[56rpx] items-center justify-center rounded-[15rpx] bg-[#eff6ff]"><u-icon name="account" color="#2563eb" size="20" /></view>
-                    <view class="flex flex-col gap-[5rpx]">
-                        <text class="text-[30rpx] font-bold text-[#334155]">快速创建客户</text>
-                        <text class="text-[22rpx] text-[#8290a5]">填写姓名和手机号后立即选中</text>
-                    </view>
+                        <template #icon
+                            ><view class="mc-avatar">{{ String(row.display_name || '客').slice(0, 1) }}</view></template
+                        >
+                    </u-cell>
+                </u-cell-group>
+                <view v-if="rows.length >= 40" class="mc-sub">显示前 40 位客户，请输入手机号缩小范围。</view>
+            </template>
+        </template>
+        <template #footer>
+            <view class="mc-sheet__actions">
+                <view>
+                    <MemberCardButton :text="creatingMode ? '返回选择' : '关闭'" :disabled="creating" @click="back" />
                 </view>
-                <view class="mt-[13rpx] rounded-[14rpx] border border-[#dfe6ef] bg-[#f8fafc] px-[15rpx] py-[21rpx]"><u-input v-model="create.name" border="none" placeholder="客户姓名" prefixIcon="account" /></view>
-                <view class="mt-[13rpx] rounded-[14rpx] border border-[#dfe6ef] bg-[#f8fafc] px-[15rpx] py-[21rpx]"><u-input v-model="create.mobile" border="none" type="number" maxlength="11" placeholder="11 位手机号" prefixIcon="phone" /></view>
-                <view class="mt-[13rpx] rounded-[14rpx] border border-[#dfe6ef] bg-[#f8fafc] px-[15rpx] py-[21rpx]"><u-input v-model="create.password" border="none" type="password" maxlength="32" placeholder="初始登录密码" prefixIcon="lock-fill" @input="passwordCustomized = true" /></view>
-                <view class="mt-[11rpx] flex items-center gap-[7rpx] text-[21rpx] text-[#64748b]"><u-icon name="info-circle" color="#64748b" size="13" /><text>默认取手机号后六位，可在创建前修改</text></view>
-                <view class="mt-[22rpx] flex gap-[14rpx]">
-                    <view class="w-[42%]"><MemberCardButton compact text="取消" @click="createVisible = false" /></view>
-                    <view class="min-w-0 flex-1"><MemberCardButton compact type="primary" icon="checkmark" text="创建并选中" :loading="creating" @click="submitCreate" /></view>
+                <view>
+                    <MemberCardButton
+                        type="primary"
+                        :text="creatingMode ? '创建并选中' : '新增客户'"
+                        :loading="creating"
+                        @click="primary"
+                    />
                 </view>
             </view>
-        </u-popup>
-    </view>
+        </template>
+    </MemberCardSheet>
 </template>
-
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onBeforeUnmount } from 'vue'
 import { getCardMemberOptions, memberCardRequestId, quickCreateCardMember } from '../api'
+import MemberCardSheet from './MemberCardSheet.vue'
 import MemberCardButton from './MemberCardButton.vue'
-
+import MemberCardState from './MemberCardState.vue'
+import MemberCardNotice from './MemberCardNotice.vue'
+import { errorText, markMemberCardChanged } from '../utils/presentation'
 const props = withDefaults(defineProps<{ show?: boolean }>(), { show: false })
 const emit = defineEmits(['update:show', 'select'])
-const keyword = ref('')
+const keyword = ref(''),
+    error = ref(''),
+    createError = ref('')
 const rows = ref<any[]>([])
-const loading = ref(false)
-const createVisible = ref(false)
-const creating = ref(false)
-const create = ref({ name: '', mobile: '', password: '' })
+const loading = ref(false),
+    creatingMode = ref(false),
+    creating = ref(false)
+const form = ref({ name: '', mobile: '', password: '' })
 const passwordCustomized = ref(false)
-
-const close = () => {
-    createVisible.value = false
-    emit('update:show', false)
-}
-const openCreate = () => { createVisible.value = true }
+let sequence = 0
+let attemptKey = '',
+    attemptId = ''
 const load = async () => {
+    const ticket = ++sequence
     loading.value = true
+    error.value = ''
     try {
         const result: any = await getCardMemberOptions({ keyword: keyword.value.trim(), limit: 40 })
-        const data = result?.data
-        rows.value = Array.isArray(data) ? data : (Array.isArray(data?.list) ? data.list : [])
-    } catch (error) {
-        rows.value = []
-        uni.showToast({ title: '客户加载失败，请稍后重试', icon: 'none' })
+        if (ticket !== sequence) return
+        rows.value = Array.isArray(result?.data) ? result.data : result?.data?.list || []
+    } catch (e) {
+        if (ticket === sequence) {
+            rows.value = []
+            error.value = errorText(e, '客户加载失败')
+        }
     } finally {
-        loading.value = false
+        if (ticket === sequence) loading.value = false
     }
 }
-const choose = (row: any) => { emit('select', row); close() }
+const choose = (row: any) => {
+    emit('select', row)
+    emit('update:show', false)
+}
+const back = () => {
+    if (creating.value) return
+    if (creatingMode.value) creatingMode.value = false
+    else emit('update:show', false)
+}
+const primary = () => {
+    if (creatingMode.value) void submitCreate()
+    else {
+        creatingMode.value = true
+        createError.value = ''
+    }
+}
 const submitCreate = async () => {
-    if (!create.value.name.trim() || !/^1\d{10}$/.test(create.value.mobile)) return uni.showToast({ title: '请填写姓名和正确手机号', icon: 'none' })
-    if (create.value.password.length < 6 || create.value.password.length > 32 || /\s/.test(create.value.password)) return uni.showToast({ title: '密码需为6至32位且不能含空格', icon: 'none' })
-    creating.value = true
-    try {
-        const data: any = (await quickCreateCardMember({ ...create.value, request_id: memberCardRequestId('member') }))?.data
-        uni.showToast({ title: data.created ? '客户已创建' : '已找到原客户', icon: 'none' })
-        choose({ member_id: data.member_id, display_name: data.member_name, mobile_masked: data.mobile_masked, card_count: 0 })
-        createVisible.value = false
-        create.value = { name: '', mobile: '', password: '' }
-        passwordCustomized.value = false
-    } finally { creating.value = false }
-}
-watch(() => props.show, visible => {
-    if (visible) {
-        keyword.value = ''
-        load()
-    } else {
-        createVisible.value = false
+    if (creating.value) return
+    if (!form.value.name.trim() || !/^1\d{10}$/.test(form.value.mobile)) {
+        createError.value = '请填写姓名和正确的 11 位手机号'
+        return
     }
-}, { immediate: true })
-watch(() => create.value.mobile, mobile => {
-    if (!passwordCustomized.value) create.value.password = /^1\d{5,10}$/.test(mobile) ? mobile.slice(-6) : ''
-})
-watch(createVisible, visible => {
-    if (!visible) return
-    create.value = { name: '', mobile: '', password: '' }
-    passwordCustomized.value = false
+    if (form.value.password.length < 6 || form.value.password.length > 32 || /\s/.test(form.value.password)) {
+        createError.value = '密码需为 6–32 位且不能含空格'
+        return
+    }
+    const key = JSON.stringify(form.value)
+    if (key !== attemptKey) {
+        attemptKey = key
+        attemptId = memberCardRequestId('member')
+    }
+    creating.value = true
+    createError.value = ''
+    try {
+        const data: any = (
+            await quickCreateCardMember({ ...form.value, name: form.value.name.trim(), request_id: attemptId })
+        )?.data
+        if (!data?.member_id) throw new Error('missing member')
+        markMemberCardChanged()
+        choose({
+            member_id: data.member_id,
+            display_name: data.member_name,
+            mobile_masked: data.mobile_masked,
+            card_count: 0
+        })
+        form.value = { name: '', mobile: '', password: '' }
+        passwordCustomized.value = false
+        attemptKey = ''
+    } catch (e) {
+        createError.value = errorText(e, '未能确认创建结果，请用手机号查询后再试')
+    } finally {
+        creating.value = false
+    }
+}
+watch(
+    () => props.show,
+    (visible) => {
+        if (visible) {
+            creatingMode.value = false
+            keyword.value = ''
+            void load()
+        } else sequence++
+    },
+    { immediate: true }
+)
+watch(
+    () => form.value.mobile,
+    (mobile) => {
+        if (!passwordCustomized.value) form.value.password = /^1\d{5,10}$/.test(mobile) ? mobile.slice(-6) : ''
+    }
+)
+onBeforeUnmount(() => {
+    sequence++
 })
 </script>

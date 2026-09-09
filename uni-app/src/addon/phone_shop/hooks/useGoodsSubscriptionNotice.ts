@@ -1,61 +1,70 @@
-import { getWeappTemplateId } from '@/app/api/system'
+import { ref } from 'vue'
+import { getGoodsSubscriptionCapability } from '@/addon/phone_shop/api/goods'
 
-export type GoodsSubscriptionAuthorization = 'accepted' | 'rejected' | 'not_configured' | 'automatic'
+export interface GoodsSubscriptionAuthorization {
+    status: 'accepted' | 'rejected' | 'not_configured' | 'unsupported' | 'not_ready'
+    template_id?: string
+}
 
 /**
  * 商品上新/调价订阅的渠道授权。
  *
- * 小程序需要在用户点击订阅时主动申请模板消息；公众号、短信和站内渠道没有
- * 对应的前端授权弹窗，仍由后端牛云 NoticeService 根据站点配置自动发送。
+ * 进入页面先预取模板；点击处理器内直接调起授权，不把网络请求插在用户手势之前。
  */
 export function useGoodsSubscriptionNotice() {
-    const requestAuthorization = async(): Promise<GoodsSubscriptionAuthorization> => {
-        // #ifdef MP-WEIXIN
-        try {
-            const response: any = await getWeappTemplateId('phone_shop_goods_match')
-            const templateIds = Array.isArray(response?.data)
-                ? response.data.map((id: unknown) => String(id || '').trim()).filter(Boolean)
-                : []
-            if (!templateIds.length) return 'not_configured'
+    const capability = ref<any>(null)
+    const preparing = ref(false)
+    let pending: Promise<void> | null = null
+    const prepare = (): Promise<void> => {
+        if (pending) return pending
+        preparing.value = true
+        pending = getGoodsSubscriptionCapability().then((res: any) => {
+            capability.value = res.data || null
+        }).catch(() => {
+            capability.value = null
+        }).finally(() => { preparing.value = false; pending = null })
+        return pending!
+    }
 
-            return await new Promise<GoodsSubscriptionAuthorization>((resolve) => {
+    const requestAuthorization = (): Promise<GoodsSubscriptionAuthorization> => {
+        // #ifdef MP-WEIXIN
+        if (!capability.value) return Promise.resolve({ status: 'not_ready' })
+        if (!capability.value.enabled || !capability.value.template_id) return Promise.resolve({ status: 'not_configured' })
+        const id = String(capability.value.template_id)
+        return new Promise<GoodsSubscriptionAuthorization>((resolve) => {
+            try {
                 uni.requestSubscribeMessage({
-                    tmplIds: templateIds,
+                    tmplIds: [id],
                     success: (result: Record<string, string>) => {
-                        const accepted = templateIds.some(id => result?.[id] === 'accept')
-                        resolve(accepted ? 'accepted' : 'rejected')
+                        resolve({ status: result?.[id] === 'accept' ? 'accepted' : 'rejected', template_id: id })
                     },
-                    fail: () => resolve('rejected')
+                    fail: () => resolve({ status: 'rejected', template_id: id })
                 })
-            })
-        } catch (error) {
-            console.warn('[phone_shop] 获取商品订阅消息模板失败', error)
-            return 'not_configured'
-        }
+            } catch { resolve({ status: 'rejected', template_id: id }) }
+        })
         // #endif
 
         // #ifndef MP-WEIXIN
-        return 'automatic'
+        return Promise.resolve({ status: 'unsupported' })
         // #endif
     }
 
-    const explainAuthorization = (status: GoodsSubscriptionAuthorization) => {
-        if (status === 'not_configured') {
+    const explainAuthorization = (authorization: GoodsSubscriptionAuthorization) => {
+        if (authorization.status !== 'accepted') {
+            const messages = {
+                rejected: '未允许微信提醒，不影响浏览商品。需要时可以再次订阅。',
+                not_configured: '商家尚未开通微信上新提醒，请联系商家。',
+                unsupported: '微信订阅提醒需要在本站销售小程序中开启，网页不能代替小程序授权。',
+                not_ready: '订阅信息尚未准备好，请稍后重试。'
+            }
             uni.showModal({
-                title: '订阅已保存',
-                content: '商家暂未配置小程序订阅消息模板；公众号、短信或站内通知仍按商家已开启的渠道发送。',
-                showCancel: false,
-                confirmText: '知道了'
-            })
-        } else if (status === 'rejected') {
-            uni.showModal({
-                title: '订阅已保存',
-                content: '你暂未授权小程序消息，后续仍可通过公众号、短信或站内通知接收提醒。',
+                title: '微信提醒未开启',
+                content: messages[authorization.status],
                 showCancel: false,
                 confirmText: '知道了'
             })
         }
     }
 
-    return { requestAuthorization, explainAuthorization }
+    return { capability, preparing, prepare, requestAuthorization, explainAuthorization }
 }

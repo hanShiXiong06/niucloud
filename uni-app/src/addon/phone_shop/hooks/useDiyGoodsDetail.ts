@@ -6,6 +6,7 @@ import { getDiyInfo } from '@/app/api/diy';
 import { getGoodsDetail, browse } from '@/addon/phone_shop/api/goods';
 import useGoodsDetailStore from '@/addon/phone_shop/stores/goodsDetail'
 import { parseJsonValue } from '@/addon/phone_shop/utils/json';
+import { useGoodsPageAccess } from '@/addon/phone_shop/hooks/useGoodsPageAccess';
 
 export function useDiyGoodsDetail(params: any = {}) {
 
@@ -17,6 +18,10 @@ export function useDiyGoodsDetail(params: any = {}) {
     const template = ref('')
     const currRoute = ref('') //当前路由
     const requestData: any = reactive({});
+    const entryParams = ref<Record<string, any>>({});
+    const access = useGoodsPageAccess(() => ({url: '/addon/phone_shop/pages/goods/detail', param: entryParams.value}));
+    const isPreview = () => diyStore.mode === 'decorate' || Boolean(id.value);
+    let reloadPage: () => Promise<void> = async() => {};
 
     // 自定义页面 数据
     const diyData = reactive({
@@ -117,6 +122,7 @@ export function useDiyGoodsDetail(params: any = {}) {
             // 处理小程序场景值参数
             option = handleOnloadParams(option);
             // #endif
+            entryParams.value = {...option};
 
             // #ifdef H5
             // 装修模式
@@ -138,7 +144,9 @@ export function useDiyGoodsDetail(params: any = {}) {
 
     // 监听页面显示
     const onShowLifeCycle = (callback: any = null) => {
-        onShow(() => {
+        reloadPage = async() => {
+            // 装修/模板预览不读取真实商品；正常详情必须先通过同一入口门禁。
+            if (!isPreview() && !await access.check()) return;
             /******** 解决跳转自定义页面空白问题-第二步-start **********/
             let curPage: any = getCurrentPages();
             currRoute.value = curPage[curPage.length - 1] ? curPage[curPage.length - 1].route : ''; //获取当前页面的路由
@@ -209,7 +217,8 @@ export function useDiyGoodsDetail(params: any = {}) {
 
                 });
             }
-        })
+        };
+        onShow(() => { void reloadPage() });
     }
     
     // 处理组件数据
@@ -348,6 +357,11 @@ export function useDiyGoodsDetail(params: any = {}) {
     }
 
     return {
+        canDisplay: () => isPreview() || access.ready.value,
+        hasContent: () => isPreview() || access.hasContent.value,
+        getAccessStatus: () => access.status.value,
+        getAccessMessage: () => access.message.value,
+        retry: () => reloadPage(),
         getLoading,
         data: data.value,
         isShowTopTabbar,

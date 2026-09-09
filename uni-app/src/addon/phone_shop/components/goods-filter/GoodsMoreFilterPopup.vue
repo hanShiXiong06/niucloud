@@ -136,8 +136,12 @@
                         :class="{ 'subscription-card__action--active': subscribed, 'subscription-card__action--disabled': !canSubscribe || subscriptionLoading }"
                         @click="toggleSubscription"
                     >
-                        {{ subscriptionLoading ? '处理中' : (subscribed ? '取消' : '订阅') }}
+                        {{ subscriptionLoading ? '处理中' : (subscribed ? '再授权' : '订阅') }}
                     </view>
+                </view>
+                <view v-if="subscribed" class="subscription-renew-tip">
+                    <text>已保存偏好；微信一次性额度用完后需再授权。</text>
+                    <text @click="!subscriptionLoading && emit('cancel-subscription')">取消订阅</text>
                 </view>
             </scroll-view>
             <view class="more-popup__footer">
@@ -226,11 +230,12 @@ const confirm = () => {
 
 const toggleSubscription = () => {
     if (!props.canSubscribe || props.subscriptionLoading) return
-    emit(props.subscribed ? 'cancel-subscription' : 'subscribe')
+    emit('subscribe')
 }
 </script>
 
 <style lang="scss" scoped>
+.subscription-renew-tip{display:flex;justify-content:space-between;gap:16rpx;font-size:22rpx;line-height:1.6;color:#64748b;padding:12rpx 0}.subscription-renew-tip>text:last-child{flex-shrink:0;color:var(--primary-color)}
 .more-popup {
     height: 78vh;
     max-height: 1080rpx;

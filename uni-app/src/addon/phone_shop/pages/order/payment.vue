@@ -63,6 +63,10 @@
                     :show-icon="true"
                 />
             </view>
+            <view v-if="calculationError" class="sidebar-margin mb-[20rpx] text-[26rpx] text-[#b45309]">
+                <text>{{ calculationError }}</text>
+                <text class="ml-[16rpx] text-primary" @click="calculate({ is_need_recalculate: 1 })">重新计算</text>
+            </view>
             <view v-if="false" class="pt-[30rpx] sidebar-margin payment-bottom">
                 <!-- 配送方式 -->
                 <view class="mb-[var(--top-m)] rounded-[var(--rounded-big)] bg-white" v-if="orderData.basic.has_goods_types.includes('real') && delivery_type_list.length"
@@ -398,12 +402,17 @@
                             <text class="text-[26rpx]  font-500  text-[var(--price-text-color)] price-font leading-[46rpx]">.{{ parseFloat(orderData.basic.order_money).toFixed(2).split('.')[1] }}</text>
                         </view>
                     </view>
-                    <button class="min-w-[216rpx] px-[28rpx] h-[70rpx] font-500 text-[26rpx] leading-[70rpx] !text-[#fff] m-0 rounded-full primary-btn-bg remove-border" hover-class="none" :disabled="calculateLoading || !tradeSubmitAllowed" :class="{'opacity-80': calculateLoading || !tradeSubmitAllowed}" @click="create">{{ submitButtonText }}</button>
+                    <button class="min-w-[216rpx] px-[28rpx] h-[70rpx] font-500 text-[26rpx] leading-[70rpx] !text-[#fff] m-0 rounded-full primary-btn-bg remove-border" hover-class="none" :disabled="calculateLoading || createLoading || !quoteReady || !tradeSubmitAllowed" :class="{'opacity-80': calculateLoading || createLoading || !quoteReady || !tradeSubmitAllowed}" @click="create">{{ submitButtonText }}</button>
                 </view>
             </u-tabbar>
 
             <!-- 选择优惠券 -->
             <select-coupon :order-key="createData.order_key" ref="couponRef" @confirm="confirmSelectCoupon"/>
+        </view>
+
+        <view v-if="!orderData && calculationError" class="p-[40rpx] text-center text-[28rpx]">
+            <view>{{ calculationError }}</view>
+            <view class="mt-[24rpx] text-primary" @click="calculate({ is_need_recalculate: 1 })">重新计算订单</view>
         </view>
 
         <!-- 选择自提点 -->
@@ -414,7 +423,7 @@
         <address-list ref="addressRef" @confirm="confirmAddress" back="/addon/phone_shop/pages/order/payment" />
         <!-- 满减 -->
         <ns-goods-manjian ref="manjianShowRef" />
-        <pay ref="payRef" @close="payClose"/>
+        <PhoneShopPay ref="payRef" @close="payClose"/>
 
         <ns-select-time ref="selectTime" :rules="service_time" v-if="Object.keys(service_time).length" :isQuantum="true" :isOpen="orderData.delivery.take_store.time_is_open" @change="getTime" @getStamp="getStamp" @getDate="getDate"></ns-select-time>
         <message-open ref="messageOpenRef" @submit="confirmMessage" :default-message="createData.member_remark" />
@@ -423,6 +432,7 @@
 </template>
 
 <script setup lang="ts">
+import PhoneShopPay from '@/addon/phone_shop/components/PhoneShopPay.vue'
 import { ref, computed, watch, nextTick } from 'vue'
 import { orderCreateCalculate, orderCreate ,getLocal} from '@/addon/phone_shop/api/order'
 import { redirect, img, mobileHide } from '@/utils/common'
@@ -487,6 +497,9 @@ const DELIVERY_PREFERENCE_KEY = 'phoneShopOrderDeliveryType'
 const STORE_PREFERENCE_KEY = 'phoneShopOrderTakeStoreId'
 const storeDefaultResolving = ref(false)
 const calculateLoading = ref(false)
+const quoteReady = ref(false)
+const calculationError = ref('')
+let calculationSequence = 0
 const tradeConfig = computed(() => orderData.value?.basic?.online_trade_config || {})
 const isPeerPricing = computed(() => orderData.value?.basic?.pricing_identity === 'peer')
 const offlineOrderAllowed = computed(() => {
@@ -529,6 +542,8 @@ const tradeDisabledReason = computed(() => {
         : '商城暂未开放可用的成交方式，请联系商家。'
 })
 const submitButtonText = computed(() => {
+    if (calculateLoading.value) return '正在计算金额…'
+    if (!quoteReady.value) return '请重新计算金额'
     if (!tradeSubmitAllowed.value) return '请联系商家'
     return createData.value.payment_mode === 'offline_pending' ? '提交线下订单' : '提交并支付'
 })
@@ -713,15 +728,20 @@ const formatTimeWeek = (timeType: number, weekStr: string): string[] => {
  * 订单计算
  */
 const calculate = (params: any = {}) => {
-    const calculateData = Object.assign({}, createData.value, params)
+    if (createLoading.value) return
+    const sequence = ++calculationSequence
+    const calculateData = cloneDeep(Object.assign({}, createData.value, params))
+    quoteReady.value = false
+    calculationError.value = ''
     calculateLoading.value = true
     orderCreateCalculate(calculateData).then(({ data }) => {
-        orderData.value = cloneDeep(data);
-        calculateLoading.value = false
-        if (!createData.value.payment_mode) {
-            createData.value.payment_mode = data.basic?.payment_mode
-                || (Number(data.basic?.online_trade_config?.offline_order_default) === 1 ? 'offline_pending' : 'online')
+        if (sequence !== calculationSequence) return
+        if (!data?.order_key || data.basic?.order_money == null || !Number.isFinite(Number(data.basic.order_money)) || Number(data.basic.order_money) < 0) {
+            throw new Error('订单金额计算结果不完整，请重新计算')
         }
+        orderData.value = cloneDeep(data);
+        createData.value.payment_mode = data.basic?.payment_mode
+            || (Number(data.basic?.online_trade_config?.offline_order_default) === 1 ? 'offline_pending' : 'online')
 
         orderData.value.goods = []; //购买商品
         if (orderData.value.goods_data && Object.values(orderData.value.goods_data).length) {
@@ -805,9 +825,14 @@ const calculate = (params: any = {}) => {
         }
 
         // 自提模式自动恢复上次门店；无历史记录时选择第一家门店。
+        quoteReady.value = true
         nextTick(() => ensurePreferredStore())
-    }).catch(() => {
-        calculateLoading.value = false
+    }).catch((error: any) => {
+        if (sequence !== calculationSequence) return
+        quoteReady.value = false
+        calculationError.value = error?.msg || error?.message || '金额计算失败，请重新计算后再提交'
+    }).finally(() => {
+        if (sequence === calculationSequence) calculateLoading.value = false
     })
 }
 
@@ -859,6 +884,7 @@ const impulseBuyConfirm = (params: any = {}) => {
  * 订单创建
  */
 const create = () => {
+    if (calculateLoading.value || !quoteReady.value || createLoading.value) return
     if (!tradeSubmitAllowed.value) {
         uni.showToast({ title: tradeDisabledReason.value || '请选择可用的支付方式', icon: 'none' })
         return
@@ -901,7 +927,9 @@ const create = () => {
         })
     }
 
-    orderCreate(createData.value).then(({ data }) => {
+    const submittedData = cloneDeep(createData.value)
+    submittedData.expected_order_money = Number(orderData.value.basic.order_money).toFixed(2)
+    orderCreate(submittedData).then(({ data }) => {
         orderId = data.order_id
         if (diyFormRef.value) diyFormRef.value.clearStorage();
         if (diyFormGoodsRef.value) {
@@ -911,7 +939,7 @@ const create = () => {
         }
         createData.value.form_data = {}
         createData.value.order_key = ''
-        if (createData.value.payment_mode === 'offline_pending' || orderData.value.basic.order_money == 0) {
+        if (data.payment_mode === 'offline_pending' || Number(data.order_money) === 0) {
             redirect({ url: '/addon/phone_shop/pages/order/detail', param: { order_id: orderId }, mode: 'redirectTo' })
         } else {
             payRef.value?.open(data.trade_type, data.order_id, `/addon/phone_shop/pages/order/detail?order_id=${ data.order_id }`)

@@ -1,10 +1,18 @@
 <template>
+    <view :style="themeColor()">
+    <PhoneGoodsAccessState v-if="!accessReady" :status="accessStatus" :message="accessMessage" @retry="loadListPage" />
+    <view v-if="hasContent" v-show="accessReady">
     <view class="bg-gray-100 min-h-[100vh]" :style="themeColor()">
         <view class="fixed left-0 right-0 top-0 product-warp bg-[#fff]" :style="headerStyle">
             <view class="search-row" :style="searchRowStyle">
                 <!-- #ifndef H5 -->
-                <view v-if="showBack" class="header-back" @click="back">
-                    <text class="nc-iconfont nc-icon-zuoV6xx"></text>
+                <view class="header-back" @click="back">
+                    <text class="nc-iconfont" :class="showBack ? 'nc-icon-zuoV6xx' : 'nc-icon-shouyeV6xx1'"></text>
+                </view>
+                <!-- #endif -->
+                <!-- #ifdef H5 -->
+                <view v-if="!showBack" class="header-back" @click="back" aria-label="返回商城首页">
+                    <text class="nc-iconfont nc-icon-shouyeV6xx1"></text>
                 </view>
                 <!-- #endif -->
                 <view class="flex-1 search-input bg-[#f5f7fa]">
@@ -91,14 +99,14 @@
             back-url="/addon/phone_shop/pages/goods/list"
         />
 
-        <mescroll-body ref="mescrollRef" :top="mescrollTop" bottom="60px" @init="mescrollInit" :down="{ use: false }" @up="getAllAppListFn">
+        <mescroll-body ref="mescrollRef" :top="mescrollTop" bottom="60px" @init="onMescrollInit" :down="{ use: false }" @up="getAllAppListFn">
             <view v-if="categoryConfigFailed" class="config-retry" @click="loadCategoryConfig">商品操作配置加载失败，点击重试</view>
             <view v-if="goodsList.length" class="sidebar-margin">
                 <template v-if="listType">
                     <view v-for="(item, index) in goodsList" :key="index"
                           class="goods-row-card bg-white flex p-[12rpx]  rounded-[var(--rounded-small)] overflow-hidden top-mar"
                           :class="{ 'mb-[20rpx]': (index+1) == goodsList.length}" @click="toDetail(item.goods_id)">
-                        <PhoneGoodsCover :src="item.goods_cover_thumb_mid" :grade="item.condition_grade" />
+                        <view class="goods-row-cover"><PhoneGoodsCover :src="item.goods_cover_thumb_mid" :grade="item.condition_grade" /></view>
 
                         <view class="goods-row-content flex-1 flex flex-col ml-[20rpx]">
                             <view class="goods-row-title text-[28rpx] text-[#333] leading-[40rpx] multi-hidden">
@@ -144,19 +152,21 @@
         </mescroll-body>
 
         <add-cart-popup ref="cartRef" />
+        <GoodsArrivalSubscription v-if="accessReady" back-url="/addon/phone_shop/pages/goods/list" :back-params="entryParams" />
         <tabbar />
+    </view>
+    </view>
     </view>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, onMounted, nextTick } from 'vue'
+import { computed, reactive, ref, nextTick } from 'vue'
 import { t } from '@/locale'
 import { redirect, img, handleOnloadParams } from '@/utils/common';
 import {
     addGoodsSubscription,
     cancelGoodsSubscription,
     getGoodsFilterOptions,
-    getGoodsCategoryConfig,
     getGoodsPages,
     getGoodsSubscriptionList,
     getGoodsSubscriptionStatus
@@ -182,6 +192,9 @@ import ShareDownload from '@/addon/phone_shop/components/share-download/share-do
 import useMemberStore from '@/stores/member'
 import { useLogin } from '@/hooks/useLogin'
 import { useGoodsSubscriptionNotice } from '@/addon/phone_shop/hooks/useGoodsSubscriptionNotice'
+import PhoneGoodsAccessState from '@/addon/phone_shop/components/PhoneGoodsAccessState.vue'
+import GoodsArrivalSubscription from '@/addon/phone_shop/components/GoodsArrivalSubscription.vue'
+import { useGoodsPageAccess } from '@/addon/phone_shop/hooks/useGoodsPageAccess'
 
 const { mescrollInit, downCallback, getMescroll } = useMescroll(onPageScroll, onReachBottom);
 const diyGoods = useGoods();
@@ -201,27 +214,28 @@ const showBack = ref(false)
 const shareDownloadRef = ref<any>(null)
 const forwardItem = ref<any>({})
 const cartRef = ref<any>(null)
-const categoryConfig = ref<any>(null)
-const categoryConfigFailed = ref(false)
+const entryParams = ref<Record<string, any>>({})
+const access = useGoodsPageAccess(() => ({url: '/addon/phone_shop/pages/goods/list', param: entryParams.value}))
+const {ready: accessReady, status: accessStatus, message: accessMessage, hasContent, config: categoryConfig} = access
+const categoryConfigFailed = computed(() => accessStatus.value === 'error')
 const goodsAction = computed(() => resolveGoodsCardAction(categoryConfig.value))
 const { openGoodsDetail } = useGoodsDetailNavigation()
 let configRequest: Promise<boolean> | null = null
 const loadCategoryConfig = () => {
-    if (configRequest) return configRequest
-    configRequest = getGoodsCategoryConfig().then((res: any) => {
-        if (!res.data?.cart) throw new Error('商品操作配置不完整')
-        categoryConfig.value = res.data
-        categoryConfigFailed.value = false
-        return true
-    }).catch(() => {
-        categoryConfig.value = null
-        categoryConfigFailed.value = true
-        return false
-    }).finally(() => { configRequest = null })
-    return configRequest
+    // 去重/离页取消由门禁统一负责，不能复用上一次离页前的失效请求。
+    const current = access.check()
+    configRequest = current
+    void current.finally(() => { if (configRequest === current) configRequest = null })
+    return current
 }
-onShow(() => { void loadCategoryConfig() })
-const { requestAuthorization: requestSubscriptionAuthorization, explainAuthorization } = useGoodsSubscriptionNotice()
+const loadListPage = async() => {
+    if (!await loadCategoryConfig()) return
+    void prepareSubscription()
+    await loadFilterOptions()
+    if (memberStore.token) await loadCategorySubscriptions().catch(() => {})
+}
+onShow(() => { void loadListPage() })
+const { prepare: prepareSubscription, requestAuthorization: requestSubscriptionAuthorization, explainAuthorization } = useGoodsSubscriptionNotice()
 
 // #ifdef MP-WEIXIN || MP-BAIDU || MP-TOUTIAO || MP-QQ
 try {
@@ -401,19 +415,16 @@ const currentSubscriptionRule = computed(() => {
 
 const hasSubscriptionRule = computed(() => Object.keys(currentSubscriptionRule.value).length > 0)
 
-onLoad(async(option: any) => {
+onLoad((option: any) => {
     showBack.value = getCurrentPages().length > 1
     // #ifdef MP-WEIXIN
     // 处理小程序场景值参数
     option = handleOnloadParams(option);
     // #endif
+    entryParams.value = {...option}
     if (option.curr_goods_category) filters.category_ids = [String(option.curr_goods_category)]
     goods_name.value = option.goods_name ? decodeURIComponent(option.goods_name) : ''
     coupon_id.value = option.coupon_id || ''
-    await loadFilterOptions()
-    if (memberStore.token) {
-        await loadCategorySubscriptions().catch(() => {})
-    }
 })
 
 interface mescrollStructure {
@@ -423,7 +434,11 @@ interface mescrollStructure {
     [propName: string]: any
 }
 
-const getAllAppListFn = (mescroll: mescrollStructure) => {
+const getAllAppListFn = async(mescroll: mescrollStructure) => {
+    if (!await access.ensure()) {
+        mescroll.endErr()
+        return
+    }
     loading.value = false;
     let data: object = {
         goods_category: filters.category_ids.join(','),
@@ -431,6 +446,7 @@ const getAllAppListFn = (mescroll: mescrollStructure) => {
         limit: mescroll.size,
         keyword: goods_name.value,
         coupon_id: coupon_id.value,
+        arrival_batch_id: Number(entryParams.value.arrival_batch_id || 0),
         order: searchType.value === 'all' ? '' : searchType.value,
         sort: searchType.value == 'price' ? price.value : (searchType.value === 'sale_num' ? sale_num.value : 'desc'),
         memory_group: filters.memory_group.join(','),
@@ -518,7 +534,7 @@ const subscribeCategoryNode = async(node: any) => {
         const authorization = await requestSubscriptionAuthorization()
         const res: any = await addGoodsSubscription({
             name: `分类上新 · ${node.category_name || '商品'}`,
-            rule: { category_ids: [id] }
+            rule: { category_ids: [id] }, authorization
         })
         categorySubscriptionMap[id] = Number(res.data?.subscription_id || res.data || 0)
         explainAuthorization(authorization)
@@ -565,7 +581,7 @@ const subscribeCurrentRule = async() => {
     subscription.loading = true
     try {
         const authorization = await requestSubscriptionAuthorization()
-        const res: any = await addGoodsSubscription({ rule: currentSubscriptionRule.value })
+        const res: any = await addGoodsSubscription({ rule: currentSubscriptionRule.value, authorization })
         subscription.subscribed = true
         subscription.subscription_id = Number(res.data?.subscription_id || res.data || 0)
         explainAuthorization(authorization)
@@ -705,11 +721,10 @@ const forwardGoods = async(item: any) => {
     await nextTick()
     await shareDownloadRef.value?.handleDownload?.()
 }
-onMounted(() => {
-    setTimeout(() => {
-        getMescroll().optUp.textNoMore = t("end");
-    }, 500)
-});
+const onMescrollInit = (mescroll: any) => {
+    mescrollInit(mescroll)
+    if (mescroll.optUp) mescroll.optUp.textNoMore = t('end')
+}
 </script>
 
 <style lang="scss" scoped>
@@ -860,12 +875,23 @@ onMounted(() => {
 }
 
 .goods-row-card {
-    // min-height: 270rpx;
+    display: flex;
+    width: 100%;
+    box-sizing: border-box;
     align-items: stretch;
+}
 
+.goods-row-cover {
+    width: 190rpx;
+    flex: 0 0 190rpx;
+    overflow: hidden;
 }
 
 .goods-row-content {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0%;
+    width: 0;
     min-width: 0;
     padding: 2rpx 0;
     overflow: hidden;

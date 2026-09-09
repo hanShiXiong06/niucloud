@@ -42,6 +42,10 @@ export function getGoodsSubscriptionList(params: Record<string, any> = {}) {
     return request.get(`phone_shop/goods/subscription`, params)
 }
 
+export function getGoodsSubscriptionCapability() {
+    return request.get('phone_shop/goods/subscription/capability', {}, { showErrorMessage: false })
+}
+
 /**
  * 查询指定筛选条件是否已订阅
  */

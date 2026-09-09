@@ -1,12 +1,8 @@
 <template>
     <view class="phone-goods-waterfall">
-        <view class="phone-goods-waterfall__column">
-            <view v-for="entry in columns.left" :key="entry.key" class="phone-goods-waterfall__item">
-                <slot :item="entry.item" :index="entry.index" />
-            </view>
-        </view>
-        <view class="phone-goods-waterfall__column phone-goods-waterfall__column--right">
-            <view v-for="entry in columns.right" :key="entry.key" class="phone-goods-waterfall__item">
+        <view v-for="(column, columnIndex) in [columns.left, columns.right]" :key="columnIndex"
+              class="phone-goods-waterfall__column" :class="{ 'phone-goods-waterfall__column--right': columnIndex === 1 }">
+            <view v-for="entry in column" :key="entry.key" class="phone-goods-waterfall__item">
                 <slot :item="entry.item" :index="entry.index" />
             </view>
         </view>
@@ -38,7 +34,8 @@ const columns = computed(() => {
     let rightHeight = 0
 
     props.items.forEach((item, index) => {
-        const estimated = Math.max(1, Number(props.estimateHeight?.(item, index) || 1))
+        const rawHeight = Number(props.estimateHeight?.(item, index) || 1)
+        const estimated = Number.isFinite(rawHeight) ? Math.max(1, rawHeight) : 1
         const entry: WaterfallEntry = {
             item,
             index,
@@ -67,9 +64,10 @@ const columns = computed(() => {
 }
 
 .phone-goods-waterfall__column {
-    width: 0;
+    width: calc((100% - 12rpx) / 2);
     min-width: 0;
-    flex: 1;
+    flex: 0 0 auto;
+    box-sizing: border-box;
 }
 
 .phone-goods-waterfall__column--right {

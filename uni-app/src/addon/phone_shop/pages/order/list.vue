@@ -157,7 +157,7 @@
                     >开票</button>
             </view>
         </view>
-        <pay ref="payRef" @close="payClose"></pay>
+        <PhoneShopPay ref="payRef" @close="payClose" />
         <!-- #ifdef MP-WEIXIN -->
         <!-- 小程序隐私协议 -->
         <wx-privacy-popup ref="wxPrivacyPopupRef"></wx-privacy-popup>
@@ -166,6 +166,7 @@
 </template>
 
 <script setup lang="ts">
+import PhoneShopPay from '@/addon/phone_shop/components/PhoneShopPay.vue'
 import { ref, nextTick,computed } from 'vue';
 import { t } from '@/locale'
 import { img, redirect, copy ,pxToRpx} from '@/utils/common'

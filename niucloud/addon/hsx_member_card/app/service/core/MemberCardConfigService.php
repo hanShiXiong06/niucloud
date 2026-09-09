@@ -30,11 +30,9 @@ final class MemberCardConfigService
             ? $this->normalizeAccounts((array)$data['local_capital_accounts'])
             : $this->defaultAccounts();
         $defaultAccountId = max(0, (int)($data['default_capital_account_id'] ?? 0));
-        $enabledIds = array_map(
-            static fn(array $account): int => (int)$account['id'],
-            array_values(array_filter($accounts, static fn(array $account): bool => (int)$account['status'] === 1))
-        );
-        if (!in_array($defaultAccountId, $enabledIds, true)) {
+        // 此 ID 也可能属于 ERP，不能拿独立账户列表覆盖它。
+        // 当前收款渠道的有效性由管理服务 / 财务网关校验。
+        if ($defaultAccountId === 0) {
             $default = current(array_filter(
                 $accounts,
                 static fn(array $account): bool => (int)$account['status'] === 1 && (int)$account['is_default'] === 1

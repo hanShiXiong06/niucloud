@@ -49,6 +49,22 @@ export function downloadGoodsTransferResult(id: number) {
     return request.get(`phone_shop/goods/transfer/tasks/${id}/download`, { responseType: 'blob' })
 }
 
+export function getGoodsArrivalPreview(id: number) {
+    return request.get(`phone_shop/goods/transfer/tasks/${id}/notice`)
+}
+
+export function sendGoodsArrivalNotice(id: number) {
+    return request.post(`phone_shop/goods/transfer/tasks/${id}/notice`)
+}
+
+export function retryGoodsArrivalNotice(id: number) {
+    return request.post(`phone_shop/goods/transfer/notices/${id}/retry`)
+}
+
+export function getGoodsArrivalResults(id: number, page = 1) {
+    return request.get(`phone_shop/goods/transfer/notices/${id}/results`, { params: { page, limit: 15 } })
+}
+
 /**
  * 获取商品详情
  * @param goods_id 商品goods_id

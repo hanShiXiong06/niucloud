@@ -60,7 +60,7 @@
                 </el-form-item>
                 <el-form-item label="查看商品需登录">
                     <el-switch v-model="formData.detail_login_required" :active-value="1" :inactive-value="0" />
-                    <span class="text-[12px] text-[#999] ml-[10px]">默认关闭。开启后，分类页和商品列表点击商品先登录，登录后自动进入所选商品。加购、结算与转发仍执行原有登录及权限规则。</span>
+                    <span class="text-[12px] text-[#999] ml-[10px]">默认关闭。开启后，进入商品分类、商品列表和商品详情前必须登录，登录后返回原分类或商品。商城首页仍可访问；加购、结算与转发继续执行各自权限规则。</span>
                 </el-form-item>
                 <el-form-item v-if="Number(formData.level) === 3" label="成色/质检">
                     <el-switch v-model="formData.show_quality" :active-value="1" :inactive-value="0" />

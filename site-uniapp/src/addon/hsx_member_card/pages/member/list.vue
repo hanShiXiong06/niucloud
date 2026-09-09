@@ -1,129 +1,87 @@
 <template>
-    <view class="min-h-screen bg-[#f0f3f9]">
-        <!-- 搜索栏 保持原组件不变 -->
-        <MemberCardListHeader v-model="keyword" placeholder="会员姓名 / 手机号 / 卡号" @search="reload" />
-
-        <!-- 列表区域 -->
-        <z-paging ref="paging" v-model="rows" :fixed="true" :paging-style="pagingStyle" @query="query">
-            <template #empty>
-                <view class="px-[24rpx] py-[120rpx]">
-                    <u-empty text="暂无持卡会员" mode="list" />
-                </view>
+    <view class="mc-page">
+        <z-paging ref="paging" v-model="rows" @query="query">
+            <template #top>
+                <MemberCardListHeader v-model="keyword" placeholder="姓名 / 手机号 / 卡号" @search="reload" />
             </template>
-
-            <view class="px-[24rpx] py-[20rpx] pb-[40rpx]">
+            <template #empty>
+                <MemberCardState
+                    text="暂无持卡会员"
+                    :error="listError"
+                    :action="listError ? '重新加载' : '新增会员'"
+                    @action="listError ? reload() : (popupVisible = true)"
+                />
+            </template>
+            <view class="mc-content">
                 <view
                     v-for="row in rows"
                     :key="row.member_id"
-                    class="mb-[20rpx] overflow-hidden rounded-[26rpx] bg-white shadow-[0_8rpx_30rpx_rgba(15,23,42,0.04)] transition-all active:scale-[0.98]"
+                    class="mc-card mc-card--flat"
                     hover-class="opacity-80"
-                    @click="detail(row)"
                 >
-                    <!-- 卡片主体 -->
-                    <view class="p-[24rpx]">
-                        <view class="flex items-center gap-[16rpx]">
-                            <!-- 头像：渐变背景 + 首字 -->
-                            <view
-                                class="h-[72rpx] w-[72rpx] flex flex-none items-center justify-center rounded-full bg-gradient-to-br from-[#dbeafe] to-[#eff6ff] text-[30rpx] text-[#2563eb] font-bold shadow-sm"
-                            >
-                                {{ String(row.display_name || '客').slice(0, 1) }}
-                            </view>
-
-                            <!-- 姓名 + 手机号 -->
-                            <view class="min-w-0 flex flex-1 flex-col gap-[4rpx]">
-                                <text class="truncate text-[29rpx] text-[#1e293b] font-bold">
-                                    {{ row.display_name || '未命名会员' }}
-                                </text>
-                                <text class="text-[23rpx] text-[#64748b]">
-                                    {{ row.mobile_masked || '暂无手机号' }}
-                                </text>
-                            </view>
-
-                            <!-- 卡数 + 箭头 -->
-                            <view class="flex items-center gap-[10rpx]">
-                                <view class="flex flex-col items-center min-w-[60rpx]">
-                                    <text class="text-[32rpx] font-bold text-[#2563eb]">
-                                        {{ row.card_count || 0 }}
-                                    </text>
-                                    <text class="text-[20rpx] text-[#94a3b8]">张卡</text>
-                                </view>
-                                <u-icon name="arrow-right" color="#cbd5e1" size="16" />
-                            </view>
-                        </view>
-
-                        <!-- 底部信息条 -->
-                        <view class="mt-[18rpx] flex items-center justify-between gap-[16rpx] border-t border-[#f1f5f9] pt-[16rpx]">
-                            <view class="flex items-center gap-[6rpx]">
-                                <view class="h-[16rpx] w-[16rpx] rounded-full bg-[#16a34a]"></view>
-                                <text class="text-[22rpx] font-medium text-[#475569]">
-                                    可用 {{ row.available_card_count || 0 }} 张
-                                </text>
-                            </view>
-                            <view class="flex items-center gap-[6rpx]">
-                                <u-icon name="clock" color="#94a3b8" size="15" />
-                                <text class="text-[22rpx] text-[#94a3b8]">
-                                    最近开卡 {{ time(row.latest_card_at) }}
-                                </text>
-                            </view>
-                        </view>
+                    <u-cell
+                        :title="row.display_name || '未命名会员'"
+                        :label="row.mobile_masked || '未留手机号'"
+                        isLink
+                        center
+                        :border="false"
+                        @click="detail(row)"
+                    >
+                        <template #icon
+                            ><view class="mc-avatar" style="margin-right: 8px">{{
+                                String(row.display_name || '客').slice(0, 1)
+                            }}</view></template
+                        >
+                    </u-cell>
+                    <view class="mc-member-row-foot">
+                        <text class="mc-small"
+                            >共 {{ row.card_count || 0 }} 张卡 · {{ row.available_card_count || 0 }} 张有效 /
+                            待激活</text
+                        >
+                        <text class="mc-small">{{ dateTime(row.latest_card_at).slice(0, 10) }}</text>
                     </view>
                 </view>
             </view>
+            <template #bottom>
+                <MemberCardActionBar>
+                    <view class="mc-actionbar__summary mc-small">共 {{ total }} 位持卡会员</view>
+                    <view class="mc-actionbar__button">
+                        <MemberCardButton text="新增会员" type="primary" icon="plus" @click="popupVisible = true" />
+                    </view>
+                </MemberCardActionBar>
+            </template>
         </z-paging>
-
-        <!-- 底部操作栏 玻璃质感 + 清晰按钮 -->
-        <view
-            class="fixed bottom-0 left-0 right-0 z-20 flex items-center gap-[24rpx] border-t border-[#e8ecf1] bg-white/80 px-[24rpx] pt-[16rpx] backdrop-blur-[20rpx]"
-            :style="{ paddingBottom: 'calc(16rpx + env(safe-area-inset-bottom))' }"
-        >
-            <text class="flex-1 text-[24rpx] font-medium text-[#64748b]">
-                共 {{ total }} 位持卡会员
-            </text>
-            <view class="w-[400rpx]">
-                <MemberCardButton
-                    type="primary"
-                    icon="plus"
-                    text="新增会员"
-                    @click="popupVisible = true"
-                    class="!h-[84rpx] !rounded-[18rpx] !text-[28rpx] !font-semibold shadow-[0_8rpx_20rpx_rgba(37,99,235,0.25)]"
-                />
-            </view>
-        </view>
-
-        <!-- 新增会员弹窗 保持原逻辑 -->
-        <MemberCardMemberPopup
-            v-if="popupVisible"
-            :show="popupVisible"
-            @update:show="popupVisible = Boolean($event)"
-            @select="created"
-        />
+        <MemberCardMemberPopup :show="popupVisible" @update:show="popupVisible = $event" @select="created" />
     </view>
 </template>
-
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+// H5 的页面样式会被自动隔离，公共组件样式通过脚本统一加载。
+// #ifdef H5
+import '../../styles/mobile.scss'
+// #endif
+import { ref } from 'vue'
 import { getCardMembers } from '../../api'
+import { useMemberCardList } from '../../hooks/useMemberCardList'
+import { dateTime } from '../../utils/presentation'
 import MemberCardButton from '../../components/MemberCardButton.vue'
-import MemberCardMemberPopup from '../../components/MemberCardMemberPopup.vue'
 import MemberCardListHeader from '../../components/MemberCardListHeader.vue'
-
-const keyword = ref('')
-const rows = ref<any[]>([])
-const total = ref(0)
-const paging = ref<any>()
-const popupVisible = ref(false)
-const pagingStyle = computed(() => ({ top: '94rpx', bottom: '120rpx' }))
-const reload = () => paging.value?.reload()
-const query = async (page: number, limit: number) => {
-    try {
-        const result: any = await getCardMembers({ keyword: keyword.value, page, limit })
-        total.value = Number(result?.data?.total || 0)
-        paging.value?.complete(result?.data?.data || [])
-    } catch { paging.value?.complete(false) }
+import MemberCardActionBar from '../../components/MemberCardActionBar.vue'
+import MemberCardState from '../../components/MemberCardState.vue'
+import MemberCardMemberPopup from '../../components/MemberCardMemberPopup.vue'
+const keyword = ref(''),
+    popupVisible = ref(false)
+const { paging, rows, total, listError, query, reload } = useMemberCardList(getCardMembers, () => ({
+    keyword: keyword.value.trim()
+}))
+const detail = (row: any) => uni.navigateTo({ url: '/addon/hsx_member_card/pages/member/detail?id=' + row.member_id })
+const created = (row: any) => {
+    popupVisible.value = false
+    detail(row)
 }
-const time = (value: any) => value ? new Date(Number(value) * 1000).toLocaleDateString('zh-CN') : '—'
-const detail = (row: any) => uni.navigateTo({ url: `/addon/hsx_member_card/pages/member/detail?id=${row.member_id}` })
-const created = (row: any) => { popupVisible.value = false; detail(row) }
-onShow(reload)
 </script>
+<style lang="scss">
+// 小程序从页面样式入口加载，避免脚本样式被当前页面的样式块覆盖。
+// #ifndef H5
+@import '../../styles/mobile.scss';
+// #endif
+</style>

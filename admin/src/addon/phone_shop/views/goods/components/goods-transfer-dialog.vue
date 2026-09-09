@@ -72,8 +72,8 @@
                     <el-button size="small" @click="loadTasks" :loading="taskLoading">刷新</el-button>
                 </div>
                 <el-table :data="tasks" v-loading="taskLoading" max-height="390" empty-text="暂无任务">
-                    <el-table-column label="类型" width="74">
-                        <template #default="{ row }"><el-tag size="small" :type="row.task_type === 'import' ? 'success' : 'primary'">{{ row.task_type === 'import' ? '导入' : '导出' }}</el-tag></template>
+                    <el-table-column label="类型" width="94">
+                        <template #default="{ row }"><el-tag size="small" :type="row.task_type === 'import' ? 'success' : 'info'">{{ row.task_type === 'import' ? '导入' : (row.task_type === 'arrival_notice' ? '上新通知' : '导出') }}</el-tag></template>
                     </el-table-column>
                     <el-table-column label="进度" min-width="170">
                         <template #default="{ row }">
@@ -83,8 +83,8 @@
                     </el-table-column>
                     <el-table-column label="结果" width="150">
                         <template #default="{ row }">
-                            <div class="text-[12px] text-[#64748b]">成功 {{ row.success_count || 0 }} · 跳过 {{ row.skipped_count || 0 }}</div>
-                            <el-popover v-if="row.error_count" placement="left" :width="420" trigger="hover">
+                            <div class="text-[12px] text-[#64748b]">{{ row.task_type === 'arrival_notice' ? '微信受理' : '成功' }} {{ row.success_count || 0 }} · 跳过 {{ row.skipped_count || 0 }}</div>
+                            <el-popover v-if="row.error_count && row.task_type !== 'arrival_notice'" placement="left" :width="420" trigger="hover">
                                 <template #reference><div class="text-[12px] text-danger cursor-help">失败 {{ row.error_count }} · 查看行号</div></template>
                                 <div class="error-preview-title">错误预览（完整内容请下载错误表）</div>
                                 <div v-for="item in (row.result_json?.error_samples || []).slice(0, 8)" :key="`${item.row}-${item.field}`" class="error-preview-row">
@@ -95,16 +95,19 @@
                         </template>
                     </el-table-column>
                     <el-table-column prop="create_time" label="创建时间" width="155" />
-                    <el-table-column label="操作" width="126" fixed="right">
+                    <el-table-column label="操作" width="170" fixed="right">
                         <template #default="{ row }">
                             <el-button v-if="row.can_download" link type="primary" @click="downloadResult(row)">下载</el-button>
                             <el-button v-if="row.can_retry" link type="primary" @click="retryTask(row)">重试</el-button>
+                            <el-button v-if="row.can_notify" link type="primary" @click="arrivalNoticeRef?.open(row.id)">上新通知</el-button>
+                            <el-button v-if="row.task_type === 'arrival_notice'" link type="primary" @click="arrivalNoticeRef?.open(row.request_json?.import_id)">通知结果</el-button>
                         </template>
                     </el-table-column>
                 </el-table>
                 <div class="mt-[12px] flex justify-end"><el-pagination small layout="prev, pager, next" :total="taskTotal" :page-size="8" v-model:current-page="taskPage" @current-change="loadTasks" /></div>
             </el-tab-pane>
         </el-tabs>
+        <GoodsArrivalNotice ref="arrivalNoticeRef" />
     </el-dialog>
 </template>
 
@@ -112,6 +115,7 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { UploadFile, UploadInstance } from 'element-plus'
+import GoodsArrivalNotice from './goods-arrival-notice.vue'
 import {
     createGoodsExportTask, createGoodsImportTask, downloadGoodsImportTemplate,
     downloadGoodsTransferResult, getGoodsTransferTasks, retryGoodsTransferTask
@@ -120,6 +124,7 @@ import {
 const props = defineProps<{ batchPayload?: Record<string, any> }>()
 const emit = defineEmits(['completed'])
 const visible = ref(false)
+const arrivalNoticeRef = ref<InstanceType<typeof GoodsArrivalNotice>>()
 const activeTab = ref('import')
 const selectedFile = ref<File | null>(null)
 const imageMode = ref<'direct' | 'store'>('direct')

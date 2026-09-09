@@ -49,7 +49,8 @@
                                     :color="isSubscribed(activeRoot.category_id) ? 'var(--primary-color)' : '#64748b'"
                                     size="16"
                                 />
-                                <text>{{ nodeLoading(activeRoot.category_id) ? '处理中' : (isSubscribed(activeRoot.category_id) ? '已订阅 · 取消' : '订阅该节点') }}</text>
+                                <text>{{ nodeLoading(activeRoot.category_id) ? '处理中' : (isSubscribed(activeRoot.category_id) ? '再次授权' : '订阅该节点') }}</text>
+                                <text v-if="isSubscribed(activeRoot.category_id)" @click.stop="!nodeLoading(activeRoot.category_id) && emit('cancel-node', activeRoot)">取消</text>
                             </view>
                         </view>
                         <view v-for="group in activeGroups" :key="group.category_id" class="category-child-group">
@@ -66,7 +67,8 @@
                                         :color="isSubscribed(group.node.category_id) ? 'var(--primary-color)' : '#64748b'"
                                         size="14"
                                     />
-                                    <text>{{ nodeLoading(group.node.category_id) ? '处理中' : (isSubscribed(group.node.category_id) ? '取消订阅' : '订阅系列') }}</text>
+                                    <text>{{ nodeLoading(group.node.category_id) ? '处理中' : (isSubscribed(group.node.category_id) ? '再次授权' : '订阅系列') }}</text>
+                                    <text v-if="isSubscribed(group.node.category_id)" @click.stop="!nodeLoading(group.node.category_id) && emit('cancel-node', group.node)">取消</text>
                                 </view>
                             </view>
                             <view class="category-chip-grid">
@@ -169,7 +171,7 @@ const isSubscribed = (value: string | number) => Number(props.subscriptionMap?.[
 const nodeLoading = (value: string | number) => props.subscriptionLoadingId === String(value)
 const toggleSubscription = (node: any) => {
     if (!node || nodeLoading(node.category_id)) return
-    emit(isSubscribed(node.category_id) ? 'cancel-node' : 'subscribe-node', node)
+    emit('subscribe-node', node)
 }
 
 const close = () => emit('update:show', false)

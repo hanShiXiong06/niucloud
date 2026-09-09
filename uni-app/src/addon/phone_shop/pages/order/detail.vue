@@ -480,7 +480,7 @@
                 </view>
             </view>
             <view class="tab-bar-placeholder"></view>
-            <pay ref="payRef" @close="payClose"></pay>
+            <PhoneShopPay ref="payRef" @close="payClose" />
             <logistics-tracking ref="materialRef"></logistics-tracking>
             <delivery-record ref="deliveryRecordRef"></delivery-record>
             <!-- 满减 -->
@@ -497,6 +497,7 @@
 </template>
 
 <script setup lang="ts">
+import PhoneShopPay from '@/addon/phone_shop/components/PhoneShopPay.vue'
 import { ref, reactive, computed, nextTick } from 'vue';
 import { onLoad } from '@dcloudio/uni-app'
 import { t } from '@/locale'

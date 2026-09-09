@@ -2,13 +2,15 @@ import { redirect, isWeixinBrowser, urlDeconstruction, currRoute } from '@/utils
 import { weappLogin, updateWeappOpenid, updateWechatOpenid,wechatUser, wechatUserLogin } from '@/app/api/auth'
 import { getWechatAuthCode } from '@/app/api/system'
 import useUserStore from '@/stores/user'
+import { getAppPages, getSubPackagesPages, getTabbarPages } from '@/utils/pages'
 
 export function useLogin() {
     /**
      * 设置登录返回页
      */
     const setLoginBack = (data: redirectOptions) => {
-        uni.setStorage({ key: 'loginBack', data })
+        // 先保存再离开，避免异步写入晚于登录页读取。
+        uni.setStorageSync('loginBack', data)
         setTimeout(() => {
             redirect({ url: '/app/pages/auth/login', mode: 'redirectTo' })
         })
@@ -17,21 +19,49 @@ export function useLogin() {
     /**
      * 执行登录后跳转
      */
-    const handleLoginBack = () => {
-        uni.getStorage({
-            key: 'loginBack',
-            success: (res: any) => {
-                res ? redirect(
-                    {
-                        ...res.data,
-                        mode: 'redirectTo'
-                    }
-                ) : redirect({ url: '/app/pages/index/index', mode: 'switchTab' })
-            },
-            fail: (res) => {
-                redirect({ url: '/app/pages/index/index', mode: 'switchTab' })
+    const handleLoginBack = async (): Promise<boolean> => {
+        const home = '/app/pages/index/index'
+        const cached = uni.getStorageSync('loginBack')
+        const rawUrl = typeof cached?.url === 'string' ? cached.url.trim() : ''
+        const path = rawUrl.split(/[?#]/)[0]
+        const knownPages = [...getAppPages(), ...getSubPackagesPages()]
+        const valid = path !== '/app/pages/auth/login' && knownPages.includes(path)
+        const tab = getTabbarPages().includes(path)
+        const params = cached?.param && typeof cached.param === 'object' && !Array.isArray(cached.param) ? cached.param : {}
+        const query = Object.keys(params).map(key => encodeURIComponent(key) + '=' + encodeURIComponent(String(params[key] ?? ''))).join('&')
+        const url = rawUrl.split('#')[0]
+        const target = valid ? {
+            url: tab ? path : url + (query ? (url.includes('?') ? '&' : '?') + query : ''),
+            mode: tab ? 'switchTab' : 'redirectTo'
+        } : { url: home, mode: 'switchTab' }
+
+        const navigate = (options: any, relaunch = false) => new Promise<boolean>((resolve) => {
+            let settled = false
+            const finish = (ok: boolean) => {
+                if (settled) return
+                settled = true
+                clearTimeout(timer)
+                resolve(ok)
             }
+            // 某些客户端拦截跳转后没有回调，也不能让登录按钮一直锁住。
+            const timer = setTimeout(() => finish(false), 8000)
+            const callbacks = { success: () => finish(true), fail: () => finish(false) }
+            try {
+                if (relaunch) uni.reLaunch({ url: home, ...callbacks })
+                else redirect({ ...options, ...callbacks })
+            } catch (_) { finish(false) }
         })
+
+        let opened = await navigate(target)
+        if (!opened && target.url !== home) opened = await navigate({ url: home, mode: 'switchTab' })
+        if (!opened) opened = await navigate({}, true)
+        if (opened) {
+            // 成功后消费返回地址；不要影响其他登录流程刚保存的新地址。
+            if (JSON.stringify(uni.getStorageSync('loginBack')) === JSON.stringify(cached)) uni.removeStorageSync('loginBack')
+        } else {
+            uni.showToast({ title: '已登录，但页面打开失败，请点击“进入工作台”重试', icon: 'none', duration: 3000 })
+        }
+        return opened
     }
 
     /**
