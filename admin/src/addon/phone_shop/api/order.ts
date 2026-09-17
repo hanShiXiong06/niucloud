@@ -32,6 +32,10 @@ export function getOrderDetail(order_id: number) {
     return request.get(`phone_shop/order/detail/${ order_id }`)
 }
 
+export function confirmOrderDeviceReceived(orderGoodsId: number) {
+    return request.post(`phone_shop/order/device_received/${orderGoodsId}`, { received: true }, { showSuccessMessage: true, showErrorMessage: false })
+}
+
 /**
  * 获取线下订单可选的 ERP 资金账户
  */

@@ -492,7 +492,8 @@ class ErpSaleReturnService extends BaseAdminService
                     'remark'      => $remark,
                 ]);
 
-                $requiredConsumers = (string)$asset->sale_target === 'mall'
+                $mallReference = \addon\hsx_erp\app\support\ErpMallOrderReference::fromSale((int)$this->site_id, $saleOrderId, (int)$item->sale_item_id);
+                $requiredConsumers = (string)$asset->sale_target === 'mall' || ($mallReference['origin_plugin'] ?? '') === 'phone_shop'
                     ? ['phone_shop.erp_asset_state']
                     : [];
                 $sourceDeviceId = (new ErpRecycleDeviceIdentityService())->assetDeviceId($asset->toArray(), '销售退货');
@@ -500,7 +501,7 @@ class ErpSaleReturnService extends BaseAdminService
                     'erp.asset.returned.v1',
                     'asset',
                     (int)$asset->id,
-                    [
+                    array_merge($mallReference, [
                         'asset_id' => (int)$asset->id,
                         'asset_no' => (string)$asset->asset_no,
                         'source_device_id' => $sourceDeviceId,
@@ -510,6 +511,8 @@ class ErpSaleReturnService extends BaseAdminService
                         'outbound_no' => (string)$return->sale_no,
                         'return_no' => (string)$return->return_no,
                         'return_type' => 'sale_return',
+                        'received' => 1,
+                        'receiver_name' => (string)$this->username,
                         'return_reason' => (string)($item->reason ?: $remark),
                         'party_id' => (int)$return->party_id,
                         'party_name' => (string)$return->party_name,
@@ -517,7 +520,7 @@ class ErpSaleReturnService extends BaseAdminService
                         'location_id' => (int)$retLocation->id,
                         'sale_target' => (string)$asset->sale_target,
                         'snapshot_at' => $now,
-                    ],
+                    ]),
                     [],
                     $requiredConsumers
                 );
@@ -566,6 +569,8 @@ class ErpSaleReturnService extends BaseAdminService
             ]);
         });
 
+        // 外层业务尚未提交时由持久化 Outbox 投递，避免回流读到未提交的库存。
+        if (Db::connect()->getPdo()->inTransaction()) return true;
         foreach (array_values(array_unique($outboxIds)) as $outboxId) {
             $integration->dispatchDomainEvent((int)$outboxId);
         }
@@ -672,6 +677,10 @@ class ErpSaleReturnService extends BaseAdminService
                     'source_no' => (string)$return->return_no,
                     'remark' => $remark !== '' ? $remark : '销售退货撤销，恢复原销售账务关系',
                 ]);
+                event('PhoneShopSaleReturnCancelled', array_merge(
+                    \addon\hsx_erp\app\support\ErpMallOrderReference::fromSale((int)$this->site_id, (int)$return->sale_order_id, (int)$saleItem->id),
+                    ['site_id' => (int)$this->site_id, 'asset_id' => (int)$asset->id, 'outbound_no' => (string)$return->sale_no, 'return_no' => (string)$return->return_no]
+                ));
             }
             if ($receivable && $restoreReceivable > 0.0001) {
                 $amount = round((float)$receivable->amount + $restoreReceivable, 2);

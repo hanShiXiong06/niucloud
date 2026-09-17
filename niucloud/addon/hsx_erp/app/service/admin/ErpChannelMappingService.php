@@ -183,7 +183,7 @@ final class ErpChannelMappingService
             'channel_item_id' => $channelItemId !== '' ? $channelItemId : (string)($existing['channel_item_id'] ?? ''),
             'channel_intake_id' => $channelIntakeId !== '' ? $channelIntakeId : (string)($existing['channel_intake_id'] ?? ''),
             'status' => $status,
-            'publish_mode' => (string)($data['publish_mode'] ?? 'direct') === 'manual' ? 'manual' : 'direct',
+            'publish_mode' => in_array((string)($data['publish_mode'] ?? 'direct'), ['manual', 'basic_first'], true) ? (string)$data['publish_mode'] : 'direct',
             'mapping_snapshot' => $this->encode($snapshot),
             'payload_hash' => hash('sha256', $this->encode($payload)),
             'last_error' => trim((string)($data['last_error'] ?? '')),
@@ -272,7 +272,7 @@ final class ErpChannelMappingService
             'channel_item_id' => (string)($event['goods_id'] ?? ''),
             'channel_intake_id' => (string)($event['intake_id'] ?? ''),
             'status' => 'published',
-            'publish_mode' => 'manual',
+            'publish_mode' => !empty($event['basic_first']) ? 'basic_first' : 'manual',
             'mapping_snapshot' => $mapping,
             'payload' => ['erp_context' => $erpContext, 'mapping' => $mapping],
         ]);

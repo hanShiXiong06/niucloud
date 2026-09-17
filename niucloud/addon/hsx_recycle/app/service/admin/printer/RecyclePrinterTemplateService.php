@@ -14,6 +14,7 @@ use addon\hsx_recycle\app\service\admin\printer\RecyclePrintSceneService;
 use addon\hsx_recycle\app\dict\order\RecycleConsignmentDict;
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\dict\order\RecycleReturnOrderDict;
+use addon\hsx_recycle\app\service\core\recycle_order\DeviceReadingArchive;
 use addon\hsx_recycle\app\service\core\recycle_order\DeviceSummaryHelper;
 use core\base\BaseAdminService;
 use core\exception\AdminException;
@@ -733,22 +734,13 @@ class RecyclePrinterTemplateService extends BaseAdminService
     }
 
     /**
-     * 解析设备 info JSON，兼容模型已转数组和数据库原始字符串两种状态。
+     * 解析设备 info。ORM 的 JSON 字段默认返回对象，不能因此丢掉签收摘要。
      * @param mixed $info
      * @return array
      */
     private function normalizeDeviceInfo($info): array
     {
-        if (is_array($info)) {
-            return $info;
-        }
-
-        if (is_string($info) && $info !== '') {
-            $decoded = json_decode($info, true);
-            return is_array($decoded) ? $decoded : [];
-        }
-
-        return [];
+        return DeviceReadingArchive::decode($info);
     }
 
     /**
@@ -759,13 +751,7 @@ class RecyclePrinterTemplateService extends BaseAdminService
      */
     private function getDeviceCheckMeta(array $device, array $info): array
     {
-        $checkMeta = $info['check_meta'] ?? $device['check_meta'] ?? [];
-        if (is_string($checkMeta) && $checkMeta !== '') {
-            $decoded = json_decode($checkMeta, true);
-            $checkMeta = is_array($decoded) ? $decoded : [];
-        }
-
-        return is_array($checkMeta) ? $checkMeta : [];
+        return DeviceReadingArchive::decode($info['check_meta'] ?? $device['check_meta'] ?? []);
     }
 
     /**

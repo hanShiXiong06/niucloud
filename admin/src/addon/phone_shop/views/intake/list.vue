@@ -5,27 +5,28 @@
             <div class="flex justify-between items-center gap-6">
                 <div>
                     <span class="text-page-title">商城资料运营</span>
-                    <div class="mt-1 text-sm text-gray-400">承接 ERP 已完成拍摄和定价的回收设备，核对分类、规格与标签后发布商城</div>
+                    <div class="mt-1 text-sm text-gray-400">承接 ERP 拍照定价交接，分别跟进商品上架与资料完善</div>
                 </div>
             </div>
 
-            <el-alert class="mt-3" :type="policy.can_phone_shop_operate === 1 ? 'success' : 'info'" :closable="false" show-icon
-                :title="policy.can_phone_shop_operate === 1 ? '当前由商城运营专员核对渠道分类、规格并上架，完成后记录映射和上架状态；不会覆盖 ERP 主资料。' : '当前由 ERP 库存人员一次完善并直接上架；本页仅保留历史货源查看。'" />
+            <el-alert class="mt-3" type="info" :closable="true" show-icon :title="policyText" />
 
             <el-card class="box-card !border-none my-[10px] table-search-wrap" shadow="never">
                 <el-form :inline="true" :model="table.searchParam">
-                    <el-form-item label="状态">
+                    <el-form-item label="建品状态">
                         <el-select v-model="table.searchParam.status" placeholder="全部" clearable class="w-[140px]">
                             <el-option label="待建品" :value="0" />
                             <el-option label="已建品" :value="1" />
                             <el-option label="已忽略" :value="2" />
                         </el-select>
                     </el-form-item>
-                    <el-form-item label="型号">
-                        <el-input v-model.trim="table.searchParam.model_name" placeholder="型号关键词" clearable />
+                    <el-form-item label="资料进度">
+                        <el-select v-model="table.searchParam.material_status" placeholder="全部" clearable class="w-[140px]">
+                            <el-option label="待完善" value="pending" /><el-option label="处理中" value="processing" /><el-option label="已完成" value="completed" />
+                        </el-select>
                     </el-form-item>
-                    <el-form-item label="资产ID">
-                        <el-input v-model.trim="table.searchParam.erp_asset_id" placeholder="ERP资产ID" clearable />
+                    <el-form-item label="设备搜索">
+                        <el-input v-model.trim="table.searchParam.keyword" placeholder="型号 / IMEI" clearable @keyup.enter="loadList()" />
                     </el-form-item>
                     <el-form-item>
                         <el-button type="primary" @click="loadList()">查询</el-button>
@@ -55,22 +56,35 @@
                         </template>
                     </el-table-column>
                     <el-table-column prop="imei" label="IMEI" min-width="130" :show-overflow-tooltip="true" />
-                    <el-table-column prop="erp_asset_id" label="资产ID" width="90" />
                     <el-table-column label="价格(销售/同行/成本)" min-width="170">
                         <template #default="{ row }">
                             <div class="text-danger font-medium">¥{{ row.sale_price }}</div>
                             <div class="text-xs text-gray-500">同行 ¥{{ row.peer_price }} · 成本 ¥{{ row.cost_price }}</div>
                         </template>
                     </el-table-column>
-                    <el-table-column label="状态" width="90">
+                    <el-table-column label="商城状态" min-width="150">
                         <template #default="{ row }">
-                            <el-tag :type="statusTag(row.status)" size="small">{{ row.status_name }}</el-tag>
+                            <el-tag :type="row.listing_state === 'saleable' ? 'success' : 'info'" size="small">{{ row.listing_state_name }}</el-tag>
+                            <div v-if="row.material_block_reason" class="text-xs text-orange-500 mt-1">{{ row.material_block_reason }}</div>
                         </template>
                     </el-table-column>
-                    <el-table-column label="操作" fixed="right" width="200" align="right">
+                    <el-table-column label="资料待办" min-width="175">
+                        <template #default="{ row }">
+                            <template v-if="row.material_task?.status !== 'none'">
+                                <el-tag :type="row.material_task?.status === 'completed' ? 'success' : 'warning'" size="small">{{ row.material_task?.status_name }}</el-tag>
+                                <el-tooltip v-if="row.material_unknown_fields?.length" :content="'未记录：' + row.material_unknown_fields.join('、')" placement="top">
+                                    <span class="ml-2 text-xs text-gray-400">{{ row.material_unknown_fields.length }} 项未记录</span>
+                                </el-tooltip>
+                                <div v-if="row.material_task?.operator_name" class="text-xs text-gray-500 mt-1">{{ row.material_task.operator_name }} · {{ row.material_task.status === 'completed' ? '已核对' : '已保存' }}</div>
+                            </template>
+                            <span v-else class="text-xs text-gray-400">未启用分岗待办</span>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="操作" fixed="right" width="210" align="right">
                         <template #default="{ row }">
                             <el-button type="primary" link @click="showDetail(row)">详情</el-button>
-                            <el-button v-if="row.status === 0 && policy.can_phone_shop_operate === 1" type="success" link @click="openBuild(row)">完善资料并上架</el-button>
+                            <el-button v-if="row.status === 0 && policy.can_phone_shop_operate === 1" type="success" link @click="openBuild(row)" v-permission="'phone_shop_intake_build'">{{ row.material_task?.status === 'none' ? '完善并上架' : '对应分类并上架' }}</el-button>
+                            <el-button v-if="row.status === 1 && row.goods_id && row.material_task?.status !== 'none'" type="primary" link @click="materialDrawer?.open(row.intake_id)" v-permission="'phone_shop_intake_material_edit'">{{ row.material_task?.status === 'completed' ? '查看完善记录' : '完善资料' }}</el-button>
                             <el-button v-if="row.status === 0" type="info" link @click="markStatus(row, 2)">忽略</el-button>
                             <el-button v-if="row.status === 1 && row.goods_id" type="primary" link @click="goGoods(row)">查看商品</el-button>
                             <el-button v-if="row.status === 2" type="primary" link @click="markStatus(row, 0)">恢复</el-button>
@@ -108,17 +122,17 @@
                               class="w-[72px] h-[72px] rounded" :preview-src-list="imageList(detail.data)" :initial-index="i" :preview-teleported="true" />
                 </div>
             </div>
-            <div v-if="detail.data && qcText(detail.data)" class="mt-3">
-                <div class="text-sm text-gray-500 mb-1">质检信息</div>
-                <pre class="text-xs bg-gray-50 p-2 rounded whitespace-pre-wrap">{{ qcText(detail.data) }}</pre>
-            </div>
+            <el-collapse v-if="detail.data && qcText(detail.data)" class="mt-3">
+                <el-collapse-item title="原始质检备查" name="raw-qc"><pre class="text-xs bg-gray-50 p-2 rounded whitespace-pre-wrap">{{ qcText(detail.data) }}</pre></el-collapse-item>
+            </el-collapse>
         </el-dialog>
+        <IntakeMaterialDrawer ref="materialDrawer" @saved="loadList(table.page)" />
 
         <!-- 建品上架 -->
         <el-dialog v-model="build.visible" title="整理商城资料并上架" width="720px" :close-on-click-modal="false">
             <el-form :model="build.form" label-width="100px" v-loading="build.submitting || build.prefilling">
                 <el-alert type="success" :closable="false" show-icon class="mb-3"
-                          title="图片、销售价格和质检报告已由 ERP 带入；请核对分类、规格与展示标签，发布后会自动回写 ERP。" />
+                          :title="build.basicFirst ? '图片、价格和质检已带入。确认分类后立即上架可购买，细节可在资料待办中继续补充。' : '图片、销售价格和质检报告已由 ERP 带入；请核对分类、规格与展示标签，发布后会回写上架关联，不覆盖 ERP 主资料。'" />
                 <el-form-item label="标题" required>
                     <el-input v-model="build.form.goods_name" placeholder="商品标题（自动：品牌 型号 内存 颜色）" />
                 </el-form-item>
@@ -134,23 +148,23 @@
                     <el-cascader v-model="build.form.goods_category" :options="categoryOptions" :props="categoryProps"
                                  clearable filterable class="w-full" placeholder="选择分类（支持三级）" @change="onBuildCategoryChange" />
                 </el-form-item>
-                <el-form-item label="服务标签">
+                <el-form-item v-if="!build.basicFirst" label="服务标签">
                     <el-select v-model="build.form.service_ids" placeholder="服务保障（自动按默认带入，可改）" multiple clearable filterable class="w-full">
                         <el-option v-for="s in serviceOptions" :key="s.service_id" :label="s.service_name" :value="s.service_id" />
                     </el-select>
                 </el-form-item>
-                <el-form-item label="标签">
+                <el-form-item v-if="!build.basicFirst" label="标签">
                     <el-select v-model="build.form.label_ids" placeholder="选择标签" multiple clearable filterable class="w-full">
                         <el-option v-for="l in labelOptions" :key="l.label_id" :label="l.label_name" :value="l.label_id" />
                     </el-select>
                 </el-form-item>
-                <el-form-item :label="specLabel">
+                <el-form-item v-if="!build.basicFirst" :label="specLabel">
                     <el-select v-model="build.form.memory" :placeholder="`选择${specLabel}（按分类配好的规格，也可手填）`" filterable allow-create default-first-option clearable class="w-full">
                         <el-option v-for="v in specItems" :key="v" :label="v" :value="v" />
                     </el-select>
                     <div v-if="build.form.goods_category.length && !specItems.length" class="text-xs text-gray-400">该分类未配规格，去「商品 → 规格管理」给它配，或直接手填。</div>
                 </el-form-item>
-                <el-form-item label="成色">
+                <el-form-item v-if="!build.basicFirst" label="成色">
                     <el-select v-model="build.form.condition_grade" placeholder="选择成色（可手填）" filterable allow-create default-first-option clearable class="w-full">
                         <el-option v-for="g in gradeOptions" :key="g.grade_id" :label="g.grade_name" :value="g.grade_name" />
                     </el-select>
@@ -164,17 +178,17 @@
                     <div class="price-grid">
                         <div class="price-cell">
                             <span class="price-lbl">销售价</span>
-                            <el-input-number v-model="build.form.price" :min="0" :precision="2" :controls="false" class="price-num" />
+                            <TierPriceInput v-model="build.form.price" v-model:base-price="build.form.pricing_base_price" :disabled="build.basicFirst" @policy="value => autoTierPricing = Number(value.enabled) === 1" />
                         </div>
                         <div class="price-cell">
                             <span class="price-lbl">划线价</span>
-                            <el-input-number v-model="build.form.market_price" :min="0" :precision="2" :controls="false" class="price-num" />
+                            <el-input-number v-model="build.form.market_price" :min="0" :precision="2" :controls="false" :disabled="build.basicFirst" class="price-num" />
                         </div>
                         <div class="price-cell">
                             <span class="price-lbl">成本价</span>
-                            <el-input-number v-model="build.form.cost_price" :min="0" :precision="2" :controls="false" class="price-num" />
+                            <el-input-number v-model="build.form.cost_price" :min="0" :precision="2" :controls="false" :disabled="build.basicFirst" class="price-num" />
                         </div>
-                        <div class="price-cell">
+                        <div v-if="!autoTierPricing" class="price-cell">
                             <span class="price-lbl">同行价</span>
                             <el-input-number v-model="build.form.peer_price" :min="0" :precision="2" :controls="false" class="price-num" disabled />
                             <span class="price-hint">来自货源 · 推送为同行会员价</span>
@@ -193,11 +207,11 @@
                         <el-text v-else type="info" size="small">该货源暂无可展示的结构化质检报告</el-text>
                     </div>
                 </el-form-item>
-                <el-form-item label="商品详情文案（可选）">
+                <el-form-item v-if="!build.basicFirst" label="商品详情文案（可选）">
                     <el-input v-model="build.form.goods_desc" type="textarea" :rows="3" placeholder="填写卖点、售后或购买说明；质检内容由上方质检报告独立展示" />
                 </el-form-item>
                 <el-form-item v-if="build.imageCount === 0">
-                    <el-alert type="warning" :closable="false" show-icon title="该货源暂无图片，建出的商品将没有主图，建议补图后再上架（测试数据无图可忽略）" />
+                    <el-alert type="warning" :closable="false" show-icon title="该货源暂无图片，请回 ERP 上传图片并重新交接后再上架。" />
                 </el-form-item>
             </el-form>
             <template #footer>
@@ -209,7 +223,7 @@
 </template>
 
 <script lang="ts" setup>
-import { reactive, computed } from 'vue'
+import { reactive, computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { img } from '@/utils/common'
 import { ElMessage } from 'element-plus'
@@ -217,11 +231,18 @@ import { getDeviceIntakePages, getDeviceIntakeInfo, setDeviceIntakeStatus, build
 import { getBrandList, getCategoryTree, getLabelList } from '@/addon/phone_shop/api/goods'
 import { getSpecOptionsByCategory, getGrades } from '@/addon/phone_shop/api/spec'
 import CheckResultPanel from '@/addon/phone_shop/components/CheckResultPanel.vue'
+import IntakeMaterialDrawer from './components/IntakeMaterialDrawer.vue'
+import TierPriceInput from '@/addon/phone_shop/views/goods/components/TierPriceInput.vue'
+const autoTierPricing = ref(false)
 
 const router = useRouter()
 // 未加载到 ERP 策略前默认禁用商城侧操作，避免接口返回前短暂出现越权按钮。
-const policy = reactive({ owner: 'erp', owner_label: 'ERP 库存人员', can_phone_shop_operate: 0 })
-getDeviceIntakeMaterialPolicy().then((res: any) => Object.assign(policy, res?.data || {}))
+const policy = reactive({ owner: 'erp', owner_label: 'ERP 库存人员', can_phone_shop_operate: 0, basic_first: 0, enabled: 1 })
+const policyText = computed(() => policy.enabled === 0 ? '商城渠道已关闭，不能新建并上架。已有资料待办仍可处理，不改变商品的上下架状态。' : policy.basic_first === 1
+    ? '先上架，运营后补：分类已对应的设备拍照定价交接后即可购买。资料待办独立处理，不会改变商品价格、库存和交易状态。'
+    : policy.can_phone_shop_operate === 1 ? '当前由商城运营核对分类、规格并上架，不会覆盖 ERP 主资料。' : '当前由 ERP 完善并直接上架。已有资料待办仍可继续处理。')
+getDeviceIntakeMaterialPolicy().then((res: any) => Object.assign(policy, res?.data || {})).catch(() => {})
+const materialDrawer = ref<InstanceType<typeof IntakeMaterialDrawer>>()
 
 const table = reactive({
     page: 1,
@@ -231,8 +252,8 @@ const table = reactive({
     data: [] as any[],
     searchParam: {
         status: '' as number | string,
-        model_name: '',
-        erp_asset_id: ''
+        material_status: '',
+        keyword: ''
     }
 })
 
@@ -254,7 +275,7 @@ const loadList = (page: number = 1) => {
 loadList()
 
 const resetSearch = () => {
-    table.searchParam = { status: '', model_name: '', erp_asset_id: '' }
+    table.searchParam = { status: '', material_status: '', keyword: '' }
     loadList()
 }
 
@@ -273,7 +294,6 @@ const qcText = (row: any): string => {
     try { return JSON.stringify(q, null, 2) } catch { return String(q) }
 }
 
-const statusTag = (s: number) => (s === 1 ? 'success' : s === 2 ? 'info' : 'warning')
 
 const detail = reactive({ visible: false, data: null as any })
 const showDetail = (row: any) => {
@@ -331,6 +351,7 @@ const build = reactive({
     submitting: false,
     prefilling: false,
     imageCount: 0,
+    basicFirst: false,
     qcReport: { title: '', items: [] as any[], text: '', enabled: true },
     check: {} as any, // 结构化质检(异常优先/折叠),由预览接口的 check 字段提供
     form: {
@@ -348,6 +369,7 @@ const build = reactive({
         market_price: 0,
         cost_price: 0,
         peer_price: 0,
+        pricing_base_price: 0,
         goods_desc: ''
     }
 })
@@ -356,6 +378,7 @@ const openBuild = (row: any) => {
     // 先用本地信息即时铺底，避免空窗
     const name = [row.model_name, row.memory, row.condition_grade].filter(Boolean).join(' ')
     build.imageCount = imageList(row).length
+    build.basicFirst = !!row.material_task && row.material_task.status !== 'none'
     build.qcReport = { title: '', items: [], text: '', enabled: true }
     build.check = {}
     build.form = {
@@ -373,6 +396,7 @@ const openBuild = (row: any) => {
         market_price: 0,
         cost_price: Number(row.cost_price) || 0,
         peer_price: Number(row.peer_price) || 0,
+        pricing_base_price: Number(row.peer_price) || 0,
         goods_desc: ''
     }
     specGroups.splice(0) // 清空上一台的规格选项，按本台分类重新取
@@ -406,6 +430,8 @@ const submitBuild = () => {
     if (!build.form.goods_name) return ElMessage.warning('请填写商品名称')
     if (!build.form.goods_category || build.form.goods_category.length === 0) return ElMessage.warning('请选择商品分类')
     if (!build.form.delivery_type || build.form.delivery_type.length === 0) return ElMessage.warning('请选择发货方式')
+    if (Number(build.form.price) <= 0) return ElMessage.warning('销售价必须大于 0')
+    if (!build.imageCount) return ElMessage.warning('请先回 ERP 补充商品图片并重新交接')
     build.submitting = true
     const cat = Array.isArray(build.form.goods_category) ? build.form.goods_category : [build.form.goods_category]
     buildDeviceIntake({ ...build.form, goods_category: cat }).then(() => {

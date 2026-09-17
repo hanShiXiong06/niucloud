@@ -153,6 +153,7 @@ type SceneKey = 'front' | 'back' | 'side' | 'flaw'
 
 const assetId = ref('')
 const asset = ref<any>({})
+const photoTaskId = ref(0)
 interface PendingShot { key: string; scene: SceneKey; status: 'uploading' | 'done' | 'failed'; localUrl: string; path: string }
 const pendingImages = ref<PendingShot[]>([])
 const loading = ref(false)
@@ -178,7 +179,6 @@ onLoad((options: any) => {
         return
     }
     loadInfo()
-    handleCreateTask()
 })
 
 const uploadedImages = computed(() => {
@@ -248,14 +248,15 @@ const handleFinishPhoto = async () => {
     }
     reviewLoading.value = true
     try {
-        await confirmAssetPhotos(assetId.value)
-        uni.showToast({ title: '拍照完成，进入待定价', icon: 'none' })
+        const response: any = await confirmAssetPhotos(assetId.value, { media_ids: uploadedImages.value.map(item => item.id), task_id: photoTaskId.value })
+        const handedToErp = !!response.data?.photo_handoff?.erp_asset_id
+        uni.showToast({ title: handedToErp ? 'ERP 已收到图片，请在 ERP 继续定价' : '拍照完成，进入待定价', icon: 'none', duration: 2500 })
         const pages = getCurrentPages()
         setTimeout(() => {
             if (pages.length > 1) {
                 uni.navigateBack()
             } else {
-                uni.redirectTo({ url: '/addon/hsx_device_asset/pages/task/list?tab=price' })
+                uni.redirectTo({ url: `/addon/hsx_device_asset/pages/task/list?tab=${handedToErp ? 'completed' : 'price'}` })
             }
         }, 600)
     } finally {
@@ -290,6 +291,11 @@ const loadInfo = async () => {
     try {
         const res: any = await getAssetInfo(assetId.value)
         asset.value = res.data || {}
+        if (!photoTaskId.value) {
+            const tasks = asset.value.photo_tasks || asset.value.photoTasks || []
+            const activeTask = tasks.find((task: any) => ['pending', 'processing', 'review'].includes(task.status))
+            photoTaskId.value = Number(activeTask?.id || 0)
+        }
     } finally {
         loading.value = false
     }
@@ -298,13 +304,16 @@ const loadInfo = async () => {
 const handleCreateTask = async () => {
     if (!assetId.value) return
     try {
-        await createPhotoTask(assetId.value, {
+        const response: any = await createPhotoTask(assetId.value, {
             source: 'mobile',
             station_id: '',
             remark: '移动端扫码拍摄商品图'
         })
-    } catch {
-        // 已有任务或网络异常不阻断拍照，保存媒体时仍可回传。
+        photoTaskId.value = Number(response.data?.id || 0)
+        if (!photoTaskId.value) throw new Error('拍摄任务未创建')
+    } catch (error: any) {
+        uni.showToast({ title: error.message || '拍摄任务创建失败，保存时将重试', icon: 'none' })
+        throw error
     }
 }
 
@@ -410,12 +419,15 @@ const handleSave = async () => {
     }
     saveLoading.value = true
     try {
+        if (!photoTaskId.value) await handleCreateTask()
         await saveAssetMedia(assetId.value, {
+            task_id: photoTaskId.value,
             media: ready.map((item, index) => ({
                 url: item.path,
                 media_type: 'image',
                 scene: item.scene,
                 source: 'mobile',
+                client_key: `mobile:${item.key}`,
                 sort: uploadedImages.value.length + index + 1
             }))
         })

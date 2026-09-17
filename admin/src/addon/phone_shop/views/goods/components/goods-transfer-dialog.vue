@@ -8,7 +8,7 @@
                     <div class="guide-step"><b>3</b><div><strong>后台校验并导入</strong><span>失败结果会明确标记行号、字段和原因</span></div></div>
                 </div>
                 <el-alert class="mb-[16px]" type="info" :closable="false" show-icon>
-                    <template #title>默认库存 1 件、全配送、包邮；同行价会生成 fixed_price 指定会员价。内嵌图片会自动上传。</template>
+                    <template #title>默认库存 1 件、全配送、包邮。开启会员自动加价时，“同行价”为最低基准价；同行价留空时取“售价”，各身份价格自动计算。不要把已经加价的普通售价当成基准再次导入。未开启时保持手动定价。内嵌图片会自动上传。</template>
                 </el-alert>
                 <div class="image-mode-card">
                     <div class="image-mode-title">外链图片处理方式</div>

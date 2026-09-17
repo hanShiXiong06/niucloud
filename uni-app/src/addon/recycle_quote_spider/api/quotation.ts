@@ -35,6 +35,20 @@ export function getQuoteSpiderItems(params: any = {}) {
   return request.get("recycle_quote_spider/item", params);
 }
 
+export function searchQuoteSpiderModels(params: { keyword: string; source_id?: number; page?: number; limit?: number }) {
+  return request.get("recycle_quote_spider/search", params, { showErrorMessage: false }) as Promise<{
+    data: { data: QuoteSearchRow[]; total: number; last_page: number; current_page: number; per_page: number; keyword: string }
+  }>;
+}
+
+export interface QuoteSearchRow extends QuoteSpiderRow {
+  item_name: string;
+  source_name: string;
+  category_path: string;
+  capacity: string;
+  notice_text: string;
+}
+
 /**
  * 生成报价单权限（会员权益 quote_report）
  */

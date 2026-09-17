@@ -11,6 +11,7 @@ use addon\hsx_recycle\app\model\stat\RecycleTaskClaim;
 use addon\hsx_recycle\app\model\stat\RecycleTaskAssignmentLog;
 use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpCapabilityService;
 use addon\hsx_recycle\app\service\core\stat\CoreRecycleStatService;
+use addon\hsx_recycle\app\service\core\stat\CoreRecycleWorkloadService;
 use app\model\sys\SysRole;
 use app\model\sys\SysUser;
 use app\model\sys\SysUserRole;
@@ -156,45 +157,21 @@ class TaskService extends BaseAdminService
         }
 
         $tableFields = (new RecycleDevice())->getTableFields();
-        $hasPayStatus = in_array('pay_status', $tableFields);
-        $recycled = RecycleStageDict::statusRecycled();
-        // 打款落在 status=5 且未打款；其余环节按状态集合
-        $payWanted     = in_array('pay', $stages);
-        $plainStatuses = RecycleStageDict::statusesOfStages(array_values(array_diff($stages, ['pay'])));
-
-        $query = (new RecycleDevice())->where('site_id', '=', $this->site_id);
-        $assignedDeviceIds = RecycleTaskClaim::where([
-            ['site_id', '=', $this->site_id], ['assignee_uid', '=', (int)$this->uid],
-        ])->whereIn('stage_key', $stages)->column('device_id');
-        $query->whereIn('id', $assignedDeviceIds !== [] ? array_map('intval', $assignedDeviceIds) : [0]);
-        $query->where(function ($q) use ($plainStatuses, $payWanted, $recycled, $hasPayStatus) {
-            $matched = false;
-            if (!empty($plainStatuses)) {
-                $q->whereOr('status', 'in', $plainStatuses);
-                $matched = true;
-            }
-            if ($payWanted) {
-                // 待打款：已回收且(未打款)；无 pay_status 列的老库退化为全部已回收
-                $q->whereOr(function ($q2) use ($recycled, $hasPayStatus) {
-                    $q2->where('status', '=', $recycled);
-                    if ($hasPayStatus) $q2->where('pay_status', '=', 0);
+        // 与经营看板共用业务状态口径，再叠加“分配给我”的权限范围。
+        $query = (new CoreRecycleWorkloadService())->applyDeviceStages(new RecycleDevice(), $this->site_id, $stages);
+        // “全部”也必须匹配设备当前环节的归属，不能因曾负责上一个环节而看到别人的当前任务。
+        $query->where(function ($assigned) use ($stages) {
+            foreach ($stages as $stage) {
+                $assigned->whereOr(function ($part) use ($stage) {
+                    $part->whereIn('status', RecycleStageDict::getStageStatuses()[$stage] ?? [])
+                        ->whereIn('id', function ($sub) use ($stage) {
+                            $sub->name('recycle_task_claim')->where('site_id', '=', $this->site_id)
+                                ->where('stage_key', '=', $stage)->where('assignee_uid', '=', (int)$this->uid)
+                                ->field('device_id');
+                        });
                 });
-                $matched = true;
-            }
-            if (!$matched) {
-                $q->whereOr('id', '=', 0); // 无可查环节：恒为空
             }
         });
-        // 质检队列只看「订单已签收」的设备：未签收订单的待质检设备不算任务
-        if (in_array('check', $stages) && in_array('order_id', $tableFields)) {
-            $siteId = $this->site_id;
-            $query->where('order_id', 'not in', function ($sub) use ($siteId) {
-                $sub->name('recycle_order')
-                    ->where('site_id', '=', $siteId)
-                    ->where('status', '=', RecycleOrderDict::ORDER_STATUS_PENDING_SIGN)
-                    ->field('id');
-            });
-        }
         $keyword = trim((string)($params['keyword'] ?? ''));
         if ($keyword !== '') {
             $query->where(function ($q) use ($keyword) {
@@ -245,7 +222,7 @@ class TaskService extends BaseAdminService
      */
     protected function getOrderTaskList(string $stageKey, array $params, int $page, int $limit): array
     {
-        $query = (new RecycleOrder())->where([
+        $query = (new CoreRecycleWorkloadService())->applyValidOrderFilter(new RecycleOrder(), $this->site_id)->where([
             ['site_id', '=', $this->site_id],
             ['status', '=', RecycleOrderDict::ORDER_STATUS_PENDING_SIGN],
         ]);
@@ -677,22 +654,15 @@ class TaskService extends BaseAdminService
 
     private function countAssignedPending(int $uid, string $stageKey): int
     {
-        $claimTable = (new RecycleTaskClaim())->getTable();
-        if (RecycleStageDict::isOrderStage($stageKey)) {
-            $query = RecycleOrder::alias('o')->join($claimTable . ' c', 'c.device_id = o.id AND c.site_id = o.site_id')
-                ->where([['o.site_id', '=', $this->site_id], ['o.status', '=', RecycleOrderDict::ORDER_STATUS_PENDING_SIGN], ['c.stage_key', '=', $stageKey], ['c.assignee_uid', '=', $uid]]);
-            if ($stageKey === RecycleStageDict::STAGE_PICKUP) $query->where('o.delivery_type', '=', RecycleOrderDict::DELIVERY_TYPE_LOGISTICS_VEHICLE);
-            return (int)$query->count();
-        }
-        $statuses = $stageKey === RecycleStageDict::STAGE_PAY
-            ? [RecycleStageDict::statusRecycled()]
-            : (RecycleStageDict::getStageStatuses()[$stageKey] ?? []);
-        if ($statuses === []) return 0;
-        $query = RecycleDevice::alias('d')->join($claimTable . ' c', 'c.device_id = d.id AND c.site_id = d.site_id')
-            ->where([['d.site_id', '=', $this->site_id], ['c.stage_key', '=', $stageKey], ['c.assignee_uid', '=', $uid]])
-            ->whereIn('d.status', $statuses);
-        if ($stageKey === RecycleStageDict::STAGE_PAY && in_array('pay_status', (new RecycleDevice())->getTableFields(), true)) $query->where('d.pay_status', '=', 0);
-        return (int)$query->count();
+        $workload = new CoreRecycleWorkloadService();
+        $query = RecycleStageDict::isOrderStage($stageKey)
+            ? $workload->orderQuery($this->site_id, $stageKey)
+            : $workload->deviceQuery($this->site_id, [$stageKey]);
+        return (int)$query->whereIn('id', function ($sub) use ($uid, $stageKey) {
+            $sub->name('recycle_task_claim')
+                ->where('site_id', '=', $this->site_id)->where('stage_key', '=', $stageKey)
+                ->where('assignee_uid', '=', $uid)->field('device_id');
+        })->count();
     }
 
     /**

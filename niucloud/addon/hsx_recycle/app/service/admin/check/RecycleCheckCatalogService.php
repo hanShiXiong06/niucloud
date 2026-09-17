@@ -35,6 +35,7 @@ class RecycleCheckCatalogService extends BaseAdminService
         if (!is_file($absPath)) {
             throw new CommonException('上传文件不存在');
         }
+        $this->validateImportFile($absPath);
         $rows = $this->countDataRows($absPath);
         $now = time();
         $batch = RecycleCheckImportBatch::create([
@@ -59,12 +60,7 @@ class RecycleCheckCatalogService extends BaseAdminService
             throw new CommonException('导入批次不存在');
         }
         $mode = $mode !== '' ? $this->normalizeImportMode($mode) : $this->resolveImportModeFromBatch((string)$batch->file_name);
-        if ($offset === 0) {
-            if ($mode === 'overwrite') {
-                $this->clearImported();
-            }
-            $this->seedGrades();
-        }
+        $limit = max(1, min($limit, 1000));
         $now = time();
         $optCache = []; $nodeCache = [];
         $newTpl = (int)$batch->inserted;   // 复用字段：新建模板数
@@ -72,15 +68,41 @@ class RecycleCheckCatalogService extends BaseAdminService
         $rowsDone = (int)$batch->skipped_same; // 复用字段：已处理行数(进度)
         $skippedExists = (int)$batch->skipped_user; // 复用字段：追加模式下已有模板的型号数
         $totalRows = (int)$batch->total_rows;
-        $result = $this->isSpreadsheetFile($path)
-            ? $this->processSpreadsheetChunk($path, $offset, $limit, $totalRows, $now, $optCache, $nodeCache, $newTpl, $bound, $rowsDone, $skippedExists, $mode)
-            : $this->processCsvChunk($path, $offset, $limit, $now, $optCache, $nodeCache, $newTpl, $bound, $rowsDone, $skippedExists, $mode);
+        try {
+            // 也校验升级前已经上传的批次；必须在覆盖清理之前，空文件不能清掉现有模板。
+            if ($offset === 0) {
+                $this->validateImportFile($path);
+            }
+            Db::transaction(function () use ($path, $offset, $limit, $totalRows, $now, $mode, $batch,
+                &$optCache, &$nodeCache, &$newTpl, &$bound, &$rowsDone, &$skippedExists, &$result) {
+                if ($offset === 0) {
+                    if ($mode === 'overwrite') {
+                        $this->clearImported();
+                    }
+                    $this->seedGrades();
+                }
+                $result = $this->isSpreadsheetFile($path)
+                    ? $this->processSpreadsheetChunk($path, $offset, $limit, $totalRows, $now, $optCache, $nodeCache, $newTpl, $bound, $rowsDone, $skippedExists, $mode)
+                    : $this->processCsvChunk($path, $offset, $limit, $now, $optCache, $nodeCache, $newTpl, $bound, $rowsDone, $skippedExists, $mode);
+                if ($result['done'] && $rowsDone === 0) {
+                    throw new CommonException('未读取到可导入的检测项，本次未完成导入。请检查首个工作表的表头和内容后重新上传。');
+                }
+                if (!$result['done'] && $result['next_offset'] <= $offset) {
+                    throw new CommonException('导入进度未推进，已停止处理。请检查文件是否完整后重新上传。');
+                }
+                $batch->save(['inserted' => $newTpl, 'updated' => $bound, 'skipped_same' => $rowsDone,
+                    'skipped_user' => $skippedExists, 'update_at' => time(), 'error_message' => '',
+                    'status' => $result['done'] ? 'completed' : 'processing']);
+            });
+        } catch (\Throwable $e) {
+            $batch->save(['status' => 'failed', 'error_message' => mb_substr($e->getMessage(), 0, 1000), 'update_at' => time()]);
+            throw $e;
+        }
         $done = $result['done'];
         $nextOffset = $result['next_offset'];
-
-        $save = ['inserted' => $newTpl, 'updated' => $bound, 'skipped_same' => $rowsDone, 'skipped_user' => $skippedExists, 'update_at' => time()];
-        if ($done) { $save['status'] = 'completed'; @unlink($path); }
-        $batch->save($save);
+        if ($done) {
+            @unlink($path);
+        }
         return ['batch_id' => $batchId, 'next_offset' => $nextOffset, 'done' => $done,
                 'templates' => $newTpl, 'bindings' => $bound, 'rows_done' => $rowsDone,
                 'skipped_exists' => $skippedExists, 'mode' => $mode];
@@ -105,26 +127,23 @@ class RecycleCheckCatalogService extends BaseAdminService
         }
 
         $startRow = $offset > 1 ? $offset : 2;
-        $endRow = $startRow + self::EXCEL_CHUNK_ROWS - 1;
 
         $reader = IOFactory::createReaderForFile($path);
         if (method_exists($reader, 'setReadDataOnly')) {
             $reader->setReadDataOnly(true);
         }
         if (method_exists($reader, 'setReadFilter')) {
-            $reader->setReadFilter(new class($startRow, $endRow) implements IReadFilter {
+            $reader->setReadFilter(new class($startRow) implements IReadFilter {
                 private int $startRow;
-                private int $endRow;
 
-                public function __construct(int $startRow, int $endRow)
+                public function __construct(int $startRow)
                 {
                     $this->startRow = $startRow;
-                    $this->endRow = $endRow;
                 }
 
                 public function readCell($columnAddress, $row, $worksheetName = ''): bool
                 {
-                    return $row >= $this->startRow && $row <= $this->endRow && in_array($columnAddress, ['A', 'B', 'C', 'D', 'E', 'F'], true);
+                    return $row >= $this->startRow && in_array($columnAddress, ['A', 'B', 'C', 'D', 'E', 'F'], true);
                 }
             });
         }
@@ -140,7 +159,8 @@ class RecycleCheckCatalogService extends BaseAdminService
         $done = false;
         $nextOffset = $startRow;
 
-        for ($rowNo = $startRow; $rowNo <= min($endRow, $sourceHighestRow); $rowNo++) {
+        // 按型号切片，不能在同一型号中间截断，否则追加模式会跳过剩余检测项。
+        for ($rowNo = $startRow; $rowNo <= $sourceHighestRow; $rowNo++) {
             $row = [];
             for ($col = 1; $col <= 6; $col++) {
                 $row[] = trim((string)$sheet->getCell([$col, $rowNo])->getFormattedValue());
@@ -195,9 +215,8 @@ class RecycleCheckCatalogService extends BaseAdminService
     ): array {
         $startRow = $offset > 1 ? $offset : 2;
         $endRow = $startRow + self::EXCEL_CHUNK_ROWS - 1;
-        $sourceHighestRow = max(1, $totalRows + 1);
         $sharedStrings = $this->readXlsxSharedStrings($path);
-        $reader = $this->openXlsxXmlReader($path, 'xl/worksheets/sheet1.xml');
+        $reader = $this->openXlsxXmlReader($path, $this->firstXlsxWorksheetPath($path));
 
         $buffer = [];
         $curModel = null;
@@ -215,10 +234,6 @@ class RecycleCheckCatalogService extends BaseAdminService
             if ($rowNo < $startRow) {
                 continue;
             }
-            if ($rowNo > min($endRow, $sourceHighestRow)) {
-                break;
-            }
-
             $row = $this->parseXlsxRow($reader->readOuterXml(), $sharedStrings);
             $lastReadRow = $rowNo;
             if (implode('', $row) === '' || $this->isHeaderRow($row)) {
@@ -232,7 +247,7 @@ class RecycleCheckCatalogService extends BaseAdminService
                 $rowsDone += $this->processModel($buffer, $now, $optCache, $nodeCache, $newTpl, $bound, $skippedExists, $mode);
                 $buffer = [];
                 $modelsThis++;
-                if ($modelsThis >= $limit) {
+                if ($modelsThis >= $limit || $rowNo > $endRow) {
                     $reader->close();
                     return ['next_offset' => $rowNo, 'done' => false];
                 }
@@ -245,8 +260,8 @@ class RecycleCheckCatalogService extends BaseAdminService
             $rowsDone += $this->processModel($buffer, $now, $optCache, $nodeCache, $newTpl, $bound, $skippedExists, $mode);
         }
         $reader->close();
-        $done = $lastReadRow >= $sourceHighestRow;
-        return ['next_offset' => $done ? $sourceHighestRow + 1 : $lastReadRow + 1, 'done' => $done];
+        // 以实际文件结束为准；稀疏行号不能被误当成总行数而提前结束。
+        return ['next_offset' => $lastReadRow + 1, 'done' => true];
     }
 
     private function processCsvChunk(
@@ -316,6 +331,7 @@ class RecycleCheckCatalogService extends BaseAdminService
         string $mode
     ): int
     {
+        $rows = array_values(array_filter($rows, static fn(array $row) => trim((string)($row[2] ?? '')) !== ''));
         if (empty($rows)) { return 0; }
         $model = trim((string)($rows[0][0] ?? '')); $pid = (int)($rows[0][1] ?? 0);
         $count = count($rows);
@@ -631,11 +647,11 @@ class RecycleCheckCatalogService extends BaseAdminService
     private function countDataRows(string $path): int
     {
         if ($this->isXlsxFile($path)) {
-            $reader = $this->openXlsxXmlReader($path, 'xl/worksheets/sheet1.xml');
+            $reader = $this->openXlsxXmlReader($path, $this->firstXlsxWorksheetPath($path));
             $rows = 0;
             while ($reader->read()) {
                 if ($reader->nodeType === XMLReader::ELEMENT && $reader->localName === 'row') {
-                    $rows++;
+                    $rows = max($rows + 1, (int)$reader->getAttribute('r'));
                 }
             }
             $reader->close();
@@ -658,7 +674,7 @@ class RecycleCheckCatalogService extends BaseAdminService
         if (!$fh) {
             return 0;
         }
-        while (fgets($fh) !== false) {
+        while (fgetcsv($fh) !== false) {
             $rows++;
         }
         fclose($fh);
@@ -677,8 +693,110 @@ class RecycleCheckCatalogService extends BaseAdminService
 
     private function isHeaderRow(array $row): bool
     {
-        $joined = implode('', array_map('strval', $row));
-        return mb_strpos($joined, '型号') !== false && mb_strpos($joined, '检测项') !== false;
+        return $this->normalizeHeader((string)($row[0] ?? '')) === '型号'
+            && $this->normalizeHeader((string)($row[2] ?? '')) === '检测项';
+    }
+
+    private function normalizeHeader(string $value): string
+    {
+        return trim(str_replace(["\xEF\xBB\xBF", "\r", "\n", ' '], '', $value));
+    }
+
+    /** 只预读到首条有效检测项；不写业务数据，也不把级别标注表当检测模板导入。 */
+    private function validateImportFile(string $path): void
+    {
+        $headerSeen = false;
+        $checkRow = function (array $row) use (&$headerSeen): bool {
+            if (trim(implode('', array_map('strval', $row))) === '') {
+                return false;
+            }
+            if (!$headerSeen) {
+                $header = array_map(fn($value) => $this->normalizeHeader((string)$value), $row);
+                if (in_array('系统选项ID', $header, true) || in_array('建议级别', $header, true)) {
+                    throw new CommonException('这是“质检选项级别”表，请到“选项级别”页面导入标注结果；检测目录需要“型号、产品ID、检测项、分类、默认选项、全部选项”六列表。');
+                }
+                if (array_slice($header, 0, 6) !== ['型号', '产品ID', '检测项', '分类', '默认选项', '全部选项']) {
+                    throw new CommonException('检测表格式不匹配：请将数据放在首个工作表，前六列表头依次为“型号、产品ID、检测项、分类、默认选项、全部选项”。');
+                }
+                $headerSeen = true;
+                return false;
+            }
+            return !$this->isHeaderRow($row) && trim((string)($row[0] ?? '')) !== '' && trim((string)($row[2] ?? '')) !== '';
+        };
+        if ($this->isXlsxFile($path)) {
+            $strings = $this->readXlsxSharedStrings($path);
+            $reader = $this->openXlsxXmlReader($path, $this->firstXlsxWorksheetPath($path));
+            try {
+                while ($reader->read()) {
+                    if ($reader->nodeType === XMLReader::ELEMENT && $reader->localName === 'row'
+                        && $checkRow($this->parseXlsxRow($reader->readOuterXml(), $strings))) {
+                        return;
+                    }
+                }
+            } finally {
+                $reader->close();
+            }
+        } elseif ($this->isSpreadsheetFile($path)) {
+            $reader = IOFactory::createReaderForFile($path);
+            $reader->setReadDataOnly(true);
+            $spreadsheet = $reader->load($path);
+            try {
+                $sheet = $spreadsheet->getSheet(0);
+                for ($line = 1; $line <= $sheet->getHighestDataRow(); $line++) {
+                    $row = [];
+                    for ($col = 1; $col <= 6; $col++) {
+                        $row[] = (string)$sheet->getCell([$col, $line])->getFormattedValue();
+                    }
+                    if ($checkRow($row)) {
+                        return;
+                    }
+                }
+            } finally {
+                $spreadsheet->disconnectWorksheets();
+            }
+        } else {
+            $fh = fopen($path, 'r');
+            if (!$fh) {
+                throw new CommonException('无法读取导入文件');
+            }
+            try {
+                while (($row = fgetcsv($fh)) !== false) {
+                    if ($checkRow($row)) {
+                        return;
+                    }
+                }
+            } finally {
+                fclose($fh);
+            }
+        }
+        throw new CommonException('首个工作表中没有可导入的检测项：需要表头和至少一行同时填写“型号”“检测项”的数据；空表、说明页不能导入。');
+    }
+
+    /** 按工作簿关系找到首个工作表，不假定它一定叫 sheet1.xml。 */
+    private function firstXlsxWorksheetPath(string $path): string
+    {
+        $zip = new \ZipArchive();
+        if ($zip->open($path) !== true) {
+            throw new CommonException('无法打开 Excel 文件，请确认文件未损坏');
+        }
+        try {
+            $workbook = @simplexml_load_string((string)$zip->getFromName('xl/workbook.xml'), \SimpleXMLElement::class, LIBXML_NONET);
+            $relations = @simplexml_load_string((string)$zip->getFromName('xl/_rels/workbook.xml.rels'), \SimpleXMLElement::class, LIBXML_NONET);
+            $sheetIds = $workbook !== false ? ($workbook->xpath('//*[local-name()="sheets"]/*[local-name()="sheet"][1]/@*[local-name()="id"]') ?: []) : [];
+            foreach ($relations !== false ? ($relations->xpath('/*/*[local-name()="Relationship"]') ?: []) : [] as $relation) {
+                if ((string)$relation['Id'] !== (string)($sheetIds[0] ?? '') || (string)$relation['TargetMode'] === 'External') {
+                    continue;
+                }
+                $target = (string)$relation['Target'];
+                $innerPath = str_starts_with($target, '/') ? ltrim($target, '/') : 'xl/' . $target;
+                if ($zip->locateName($innerPath) !== false) {
+                    return $innerPath;
+                }
+            }
+        } finally {
+            $zip->close();
+        }
+        throw new CommonException('无法定位 Excel 的首个工作表，请重新另存为 xlsx 后上传');
     }
 
     private function openXlsxXmlReader(string $path, string $innerPath): XMLReader
@@ -694,6 +812,16 @@ class RecycleCheckCatalogService extends BaseAdminService
     private function readXlsxSharedStrings(string $path): array
     {
         $strings = [];
+        // inlineStr 文件可以合法地没有共享字符串表，不能把缺失可选文件当解析异常。
+        $zip = new \ZipArchive();
+        if ($zip->open($path) !== true) {
+            throw new CommonException('无法打开 Excel 文件，请确认文件未损坏');
+        }
+        $hasStrings = $zip->locateName('xl/sharedStrings.xml') !== false;
+        $zip->close();
+        if (!$hasStrings) {
+            return $strings;
+        }
         $reader = new XMLReader();
         $uri = 'zip://' . $path . '#xl/sharedStrings.xml';
         if (!$reader->open($uri, null, LIBXML_COMPACT | LIBXML_NONET)) {
@@ -704,8 +832,8 @@ class RecycleCheckCatalogService extends BaseAdminService
                 continue;
             }
             $xml = $reader->readOuterXml();
-            $node = simplexml_load_string($xml);
-            if (!$node) {
+            $node = simplexml_load_string($xml, \SimpleXMLElement::class, LIBXML_NONET);
+            if ($node === false) {
                 $strings[] = '';
                 continue;
             }
@@ -723,23 +851,22 @@ class RecycleCheckCatalogService extends BaseAdminService
     private function parseXlsxRow(string $rowXml, array $sharedStrings): array
     {
         $row = array_fill(0, 6, '');
-        $xml = simplexml_load_string($rowXml);
-        if (!$xml) {
+        $xml = simplexml_load_string($rowXml, \SimpleXMLElement::class, LIBXML_NONET);
+        if ($xml === false) {
             return $row;
         }
-        foreach ($xml->children() as $cell) {
-            if ($cell->getName() !== 'c') {
-                continue;
-            }
+        // WPS/第三方导出可能使用 x:row/x:c 命名空间，children() 会读不到任何单元格。
+        foreach ($xml->xpath('./*[local-name()="c"]') ?: [] as $cell) {
             $ref = (string)($cell['r'] ?? '');
             $col = $this->xlsxColumnIndex($ref);
             if ($col < 1 || $col > 6) {
                 continue;
             }
             $type = (string)($cell['t'] ?? '');
+            $values = $cell->xpath('./*[local-name()="v"]') ?: [];
             $value = '';
             if ($type === 's') {
-                $idx = (int)($cell->v ?? -1);
+                $idx = (int)($values[0] ?? -1);
                 $value = (string)($sharedStrings[$idx] ?? '');
             } elseif ($type === 'inlineStr') {
                 $texts = $cell->xpath('.//*[local-name()="t"]') ?: [];
@@ -747,7 +874,7 @@ class RecycleCheckCatalogService extends BaseAdminService
                     $value .= (string)$text;
                 }
             } else {
-                $value = (string)($cell->v ?? '');
+                $value = (string)($values[0] ?? '');
             }
             $row[$col - 1] = trim($value);
         }

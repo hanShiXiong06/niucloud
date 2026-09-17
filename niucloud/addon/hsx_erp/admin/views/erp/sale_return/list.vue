@@ -507,6 +507,8 @@ useErpPageRefresh(loadPage)
 // 如果从销售页带着 sale_order_id 过来，自动打开新建并预选销售单
 if (route.query.sale_order_id) {
     openCreate()
+    // 商城退回默认交由财务核对退款，不能预选现场付款。
+    if (route.query.refund_mode === 'payable') form.refund_mode = 'payable'
     form.sale_order_id = Number(route.query.sale_order_id)
     onSaleOrderChange(Number(route.query.sale_order_id))
 }

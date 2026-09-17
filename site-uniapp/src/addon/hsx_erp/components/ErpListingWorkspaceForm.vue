@@ -12,8 +12,8 @@
 
         <view v-if="visible('retail_price')" class="listing-price-card">
             <view class="listing-price-card__copy">
-                <text class="listing-price-card__title">{{ fieldLabel('销售定价', 'retail_price') }}</text>
-                <text class="listing-price-card__desc">本机对外销售价，不改变采购成本</text>
+                <text class="listing-price-card__title">{{ fieldLabel(Number(pricing?.enabled) === 1 ? '基准售价（最高等级会员价）' : '销售定价', 'retail_price') }}</text>
+                <text class="listing-price-card__desc">{{ salesPricePreview(pricing, modelValue.retail_price) }}</text>
             </view>
             <view class="listing-price-card__editor">
                 <text class="listing-price-card__currency">¥</text>
@@ -113,6 +113,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { salesPricePreview } from '@/addon/hsx_erp/hooks/useSalesPricing'
 import ErpCatalogProductPopup from '@/addon/hsx_erp/components/ErpCatalogProductPopup.vue'
 import ErpVoucherUploader from '@/addon/hsx_erp/components/ErpVoucherUploader.vue'
 import { erpListingFieldVisible, erpListingFormDefinition, type ErpListingAction } from '@/addon/hsx_erp/hooks/useErpListingForm'
@@ -120,6 +121,7 @@ import { erpListingFieldVisible, erpListingFormDefinition, type ErpListingAction
 const props = defineProps<{
     modelValue: Record<string, any>
     contract?: Record<string, any>
+    pricing?: Record<string, any>
     action: ErpListingAction
 }>()
 const emit = defineEmits(['update:modelValue', 'catalog-change'])

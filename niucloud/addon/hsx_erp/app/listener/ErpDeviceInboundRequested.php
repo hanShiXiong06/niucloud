@@ -235,10 +235,12 @@ class ErpDeviceInboundRequested
                 $beforeAppendCount = count($pendingDevices);
                 $appendGroup = $group;
                 $appendGroup['devices'] = $pendingDevices;
-                $appendRequestId = $requestId . ':append:' . substr(hash('sha256', $eventId . '|' . implode(',', array_map(
+                // 追加键固定 62 字符；来源已付核销再加 source-paid: 前缀后为 74 字符。
+                // 不直接在原采购键后叠加后缀，避免多台分次入库超过 80 字符；原采购键保持不变。
+                $appendRequestId = 'source-append:' . substr(hash('sha256', $requestId . '|' . $eventId . '|' . implode(',', array_map(
                     static fn(array $device): string => (string)($device['source_device_id'] ?? ''),
                     $pendingDevices
-                ))), 0, 24);
+                ))), 0, 48);
                 $appendData = $this->buildPurchaseData($event, $appendGroup, $appendRequestId);
                 $appendData['append_order_id'] = $orderId;
                 $this->createPurchase($appendData);

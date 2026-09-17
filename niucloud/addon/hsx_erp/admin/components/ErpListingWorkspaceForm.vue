@@ -11,8 +11,8 @@
         <el-form-item v-if="visible('retail_price')" :required="required('retail_price')" class="listing-price-field">
             <template #label>
                 <div class="listing-price-field__label">
-                    <span>销售定价</span>
-                    <small>对外销售价，不改变采购成本</small>
+                    <span>{{ Number(pricing?.enabled) === 1 ? '基准售价（最高等级会员价）' : '销售定价' }}</span>
+                    <small>{{ salesPricePreview(pricing, modelValue.retail_price) }}</small>
                 </div>
             </template>
             <el-input-number
@@ -97,12 +97,14 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { salesPricePreview } from '@/addon/hsx_erp/hooks/useSalesPricing'
 import ErpCatalogProductSelect from '@/addon/hsx_erp/components/ErpCatalogProductSelect.vue'
 import { erpListingFieldVisible, erpListingFormDefinition, type ErpListingAction } from '@/addon/hsx_erp/hooks/useErpListingForm'
 
 const props = defineProps<{
     modelValue: Record<string, any>
     contract?: Record<string, any>
+    pricing?: Record<string, any>
     action: ErpListingAction
 }>()
 const emit = defineEmits(['update:modelValue', 'catalog-change'])

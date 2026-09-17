@@ -86,6 +86,7 @@ import { t } from '@/lang'
 import { ref, reactive } from 'vue'
 import { img, deepClone, filterDigit } from '@/utils/common'
 import { ElMessage } from 'element-plus'
+import { getTierPricing } from '@/addon/phone_shop/api/tier_pricing'
 
 import {
     getGoodsSkuList,
@@ -144,7 +145,12 @@ const loadGoodsList = () => {
 
 // 用于会员折扣展示
 const memberDiscountLevel:any = ref([])
-const show = (data: any, levelData: any) => {
+const show = async (data: any, levelData: any) => {
+    const policy = await getTierPricing()
+    if (Number(policy.data.enabled) === 1) {
+        ElMessage.info('自动加价已开启，请通过“修改价格”调整基准售价，各会员价会同时更新')
+        return
+    }
     Object.assign(goods, data)
     tableData.member_level = []
     Object.assign(tableData.member_level, levelData)

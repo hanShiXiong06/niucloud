@@ -454,6 +454,12 @@ class ErpSaleService extends BaseAdminService
                 if ($asset->isEmpty()) {
                     throw new CommonException('库存机器不存在或不可销售');
                 }
+                // 跨插件扩展点：原商城订单未结束/退款未收货时拒绝再售；占库与本次销售一起提交。
+                event('HsxErpMallInventory', [
+                    'action' => 'sale_guard', 'site_id' => (int)$this->site_id, 'asset_id' => $assetId,
+                    'source_order_id' => (string)($data['origin_plugin'] ?? '') === 'phone_shop' ? (int)($data['origin_id'] ?? 0) : 0,
+                    'reserve' => true,
+                ]);
                 $warehouse = ErpWarehouse::where([['site_id', '=', $this->site_id], ['id', '=', (int)$asset->warehouse_id]])->findOrEmpty();
                 if ($warehouse->isEmpty() || (int)$warehouse->allow_direct_sale !== 1) {
                     throw new CommonException('该设备所在仓库不允许直接销售');
@@ -1233,6 +1239,13 @@ class ErpSaleService extends BaseAdminService
     /** 在销售事务内记录设备状态事件；插件消费失败不回滚已确认的 ERP 业务事实。 */
     private function queueAssetDomainEvent(string $eventName, ErpAsset $asset, array $context): void
     {
+        $context = array_merge(\addon\hsx_erp\app\support\ErpMallOrderReference::fromSale(
+            (int)$this->site_id, (int)($context['sale_order_id'] ?? 0), (int)($context['sale_item_id'] ?? 0)
+        ), $context);
+        if ($eventName === 'erp.asset.returned.v1') {
+            $context['received'] = 1;
+            $context['receiver_name'] = (string)$this->username;
+        }
         $required = (string)$asset->sale_target === 'mall'
             || (string)($context['origin_plugin'] ?? '') === 'phone_shop'
             ? ['phone_shop.erp_asset_state']

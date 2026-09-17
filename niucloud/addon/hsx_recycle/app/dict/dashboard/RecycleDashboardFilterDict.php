@@ -107,9 +107,9 @@ class RecycleDashboardFilterDict
                 'description' => '进入待打款超过阈值仍未完成打款的订单',
             ],
             self::PAID_TODAY => [
-                'name' => '今日已打款',
+                'name' => '所选时间已结算',
                 'target' => 'order_list',
-                'description' => '今日已经打款的订单',
+                'description' => '所选时间有实际付款或折账流水的订单；明细保留现有订单可见范围，不含已删除订单',
             ],
             self::COMPLETED_TODAY => [
                 'name' => '今日已完成',
@@ -117,15 +117,15 @@ class RecycleDashboardFilterDict
                 'description' => '今日完成的订单',
             ],
             self::RETURNED_ORDERS => [
-                'name' => '有退回设备的订单',
+                'name' => '已退回客户的订单',
                 'target' => 'order_list',
-                'description' => '包含已退回设备的订单',
+                'description' => '所选时间内完成退回客户的设备所属订单，以有效退回单的完成状态和完成时间为准',
             ],
             self::PENDING_RETURN => [
-                'name' => '待退回设备',
+                'name' => '退回未完成',
                 'target' => 'order_list',
                 'view_mode' => 'device_expand',
-                'description' => '处置方式为退回且尚未完成退回的设备',
+                'description' => '当前有效退回单中待处理、退回中的设备，按台去重；不受顶部日期影响，不含已完成、已取消及已删除的退回单',
             ],
             self::INVENTORY_DEVICES => [
                 'name' => '库存设备',
@@ -150,10 +150,10 @@ class RecycleDashboardFilterDict
                 'description' => '用户已确认并进入待打款或已完成的订单',
             ],
             self::RETURNED_DEVICES => [
-                'name' => '已退回设备',
+                'name' => '已退回客户',
                 'target' => 'order_list',
                 'view_mode' => 'device_expand',
-                'description' => '状态为已退回的设备',
+                'description' => '当前有效退回单及设备明细均已完成，且退回完成时间在所选范围内的设备；按台去重，不按设备更新时间统计',
             ],
         ];
     }

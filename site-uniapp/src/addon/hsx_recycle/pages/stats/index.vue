@@ -14,22 +14,22 @@
                 </view>
             </view>
             <view class="hero-main">
-                <text class="hero-num">{{ heroRecycled }}</text>
+                <text class="hero-num">{{ loading || loadError ? '—' : heroRecycled }}</text>
                 <text class="hero-num__unit">台</text>
                 <text class="hero-num__label">收货设备</text>
             </view>
             <view class="hero-stats">
                 <view class="hero-stat">
-                    <text class="hero-stat__v">{{ heroOrders }}</text>
+                    <text class="hero-stat__v">{{ loading || loadError ? '—' : heroOrders }}</text>
                     <text class="hero-stat__k">订单</text>
                 </view>
                 <view class="hero-stat">
-                    <text class="hero-stat__v">{{ heroNew }}</text>
+                    <text class="hero-stat__v">{{ loading || loadError ? '—' : heroNew }}</text>
                     <text class="hero-stat__k">新增设备</text>
                 </view>
                 <view class="hero-stat">
-                    <text class="hero-stat__v">¥{{ heroPaid }}</text>
-                    <text class="hero-stat__k">已打款</text>
+                    <text class="hero-stat__v">{{ loading || loadError ? '—' : `¥${heroPaid}` }}</text>
+                    <text class="hero-stat__k">已结算</text>
                 </view>
             </view>
         </view>
@@ -48,6 +48,12 @@
             <text>正在整理经营数据...</text>
         </view>
 
+        <view v-else-if="loadError" class="section section--card">
+            <u-empty text="统计数据暂未加载成功" mode="data"></u-empty>
+            <view class="footer-note">{{ loadError }}</view>
+            <u-button text="重新加载" type="primary" plain @click="loadStats" />
+        </view>
+
         <template v-else>
             <view class="section" v-if="stageBoard.stages && stageBoard.stages.length">
                 <view class="section-head">
@@ -55,8 +61,9 @@
                         <u-icon name="list" color="#7c3aed" size="15"></u-icon>
                         <text class="section-title">各环节在途</text>
                     </view>
-                    <text class="section-desc">实时 · 点击查看任务</text>
+                    <text class="section-desc" @click="showStageExplain">统计说明 ⓘ</text>
                 </view>
+                <view class="section-desc stage-scope">全站当前在途 · 不随日期切换；点击查看我的任务</view>
                 <view class="metric-grid">
                     <view
                         v-for="s in stageBoard.stages"
@@ -66,7 +73,7 @@
                     >
                         <view class="metric-main">
                             <text class="metric-value" :style="{ color: stageColor(s.stage_key) }">{{ s.count }}</text>
-                            <text class="metric-unit">{{ s.stage_key === 'sign' ? '单' : '台' }}</text>
+                            <text class="metric-unit">{{ s.unit || (['sign', 'pickup'].includes(s.stage_key) ? '单' : '台') }}</text>
                         </view>
                         <text class="metric-label">{{ s.name }}</text>
                     </view>
@@ -146,6 +153,7 @@
             <view class="chart-card">
                 <view class="section-head">
                     <text class="section-title">经营趋势</text>
+                    <text class="section-desc">约每分钟更新</text>
                 </view>
                 <view class="uchart-box uchart-box--trend">
                     <view class="chart-render chart-render--trend">
@@ -242,7 +250,7 @@
             <view class="section">
                 <view class="section-head">
                     <text class="section-title">资金概览</text>
-                    <text class="section-desc">成本、待打款与已打款</text>
+                    <text class="section-desc" @click="showFinanceExplain">结算口径 ⓘ</text>
                 </view>
                 <view class="finance-list">
                     <view v-for="item in financeMetrics" :key="item.key" class="finance-row">
@@ -262,7 +270,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { onLoad, onPullDownRefresh } from '@dcloudio/uni-app'
+import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
 import { getDashboardOverview, getDashboardTrend } from '@/addon/hsx_recycle/api/stats'
 import { getStatBoard } from '@/addon/hsx_recycle/api/task'
 import { redirect } from '@/utils/common'
@@ -301,17 +309,30 @@ type DashboardCard = {
 }
 
 const loading = ref(true)
+const loadError = ref('')
 const refreshing = ref(false)
 const currentDate = ref('week')
 const statsData = ref<Record<string, any>>({})
 const trendData = ref<Record<string, any>>({})
-// 各环节在途（任务流转埋点，实时；与时间筛选无关）
+// 各环节在途（后端读取当前有效业务状态；与时间筛选无关）
 const stageBoard = ref<any>({ stages: [] })
 const stageColors: Record<string, string> = {
     sign: '#5b6b7a', check: '#3c9cff', price: '#10b981', confirm: '#f97316', pay: '#7c3aed', abnormal: '#dc2626'
 }
 const stageColor = (k: string) => stageColors[k] || '#334155'
 const toStageTask = (stage: string) => redirect({ url: `/addon/hsx_recycle/pages/task/index?stage=${ stage }` })
+const showStageExplain = () => uni.showModal({
+    title: '各环节在途统计口径',
+    content: stageBoard.value.explain || '统计本站当前有效任务，不随日期变化。这里只展示在途数量，点击进入的“我的任务”只显示分配给您的任务。',
+    showCancel: false,
+    confirmText: '知道了'
+})
+const showFinanceExplain = () => uni.showModal({
+    title: '资金统计口径',
+    content: financeSummary.value.caliber || '已结算包含付款及折账流水，不等于纯现金支出。待打款只统计尚未结清的差额。',
+    showCancel: false,
+    confirmText: '知道了'
+})
 const dateOptions = [
     { label: '今日', value: 'today' },
     { label: '昨日', value: 'yesterday' },
@@ -356,10 +377,10 @@ const overviewText = computed(() => {
     const deviceCount = valueOf(ledger.value, 'device_count', statsData.value.today_device_count)
     const paidAmount = formatMoney(valueOf(financeSummary.value, 'selected_paid_amount', statsData.value.selected_payment_amount))
     const pending = valueOf(ledger.value, 'pending_check_device_count') + valueOf(ledger.value, 'checking_device_count') + valueOf(ledger.value, 'pending_confirm_count')
-    return `${currentDateLabel.value}新增 ${orderCount} 单、${deviceCount} 台，已打款 ¥${paidAmount}，当前待处理 ${pending} 台。`
+    return `${currentDateLabel.value}新增 ${orderCount} 单、${deviceCount} 台，已结算 ¥${paidAmount}，当前待处理 ${pending} 台。`
 })
 
-// hero 主视觉：收了多少台 + 单数/新增/打款
+// hero 主视觉：收了多少台 + 单数/新增/结算
 const heroRecycled = computed(() => valueOf(ledger.value, 'signed_device_count'))
 const heroOrders = computed(() => valueOf(ledger.value, 'order_count', statsData.value.today_order_count))
 const heroNew = computed(() => valueOf(ledger.value, 'device_count', statsData.value.today_device_count))
@@ -391,7 +412,7 @@ const primaryMetrics = computed<MetricItem[]>(() => [
     cardMetric('today_order_count', { label: '新增订单', value: valueOf(ledger.value, 'order_count'), unit: '单', color: 'text-blue', note: '提交订单数' }),
     cardMetric('today_device_count', { label: '新增设备', value: valueOf(ledger.value, 'device_count'), unit: '台', color: 'text-purple', note: '订单内设备数' }),
     cardMetric('signed_device_count', { label: '签收设备', value: valueOf(ledger.value, 'signed_device_count'), unit: '台', color: 'text-green', note: '已进入仓内处理' }),
-    cardMetric('today_paid_amount', { label: '已打款金额', value: formatMoney(valueOf(financeSummary.value, 'selected_paid_amount')), unit: '元', color: 'text-red', note: '所选时间打款' }),
+    cardMetric('today_paid_amount', { label: '已结算金额', value: formatMoney(valueOf(financeSummary.value, 'selected_paid_amount')), unit: '元', color: 'text-red', note: '所选时间结算，含折账' }),
 ])
 
 const todoMetrics = computed<MetricItem[]>(() => [
@@ -404,16 +425,16 @@ const todoMetrics = computed<MetricItem[]>(() => [
 ])
 
 const financeMetrics = computed(() => [
-    { key: 'selected_paid', label: '所选时间打款', note: '按设备打款/订单打款口径', value: formatMoney(valueOf(financeSummary.value, 'selected_paid_amount')) },
-    { key: 'pending_pay', label: '待打款金额', note: '待打款设备报价合计', value: formatMoney(valueOf(financeSummary.value, 'pending_pay_amount')) },
+    { key: 'selected_paid', label: '所选时间已结算', note: '按实际结算流水，包含折账', value: formatMoney(valueOf(financeSummary.value, 'selected_paid_amount')) },
+    { key: 'pending_pay', label: '待打款金额', note: '尚未结清的差额，已付部分不重复累计', value: formatMoney(valueOf(financeSummary.value, 'pending_pay_amount')) },
     { key: 'inventory_cost', label: '库存回收成本', note: '已回收未出库成本快照', value: formatMoney(valueOf(financeSummary.value, 'inventory_recovery_cost')) },
-    { key: 'month_paid', label: '近30天打款', note: '滚动周期成本支出', value: formatMoney(valueOf(financeSummary.value, 'last_30_days_paid_amount', financeSummary.value.month_paid_amount)) },
+    { key: 'month_paid', label: '近30天已结算', note: '按流水发生日期统计，包含折账', value: formatMoney(valueOf(financeSummary.value, 'last_30_days_paid_amount', financeSummary.value.month_paid_amount)) },
 ])
 
 const trendChartData = computed(() => {
     const categories = Array.isArray(trendData.value.x_axis) ? trendData.value.x_axis.map(formatShortDate) : []
     const rows = Array.isArray(trendData.value.series) ? trendData.value.series : []
-    const visibleNames = ['新增订单', '新增设备', '打款金额']
+    const visibleNames = ['新增订单', '新增设备', '结算金额']
     return {
         categories,
         series: rows
@@ -474,9 +495,9 @@ const hasCategoryData = computed(() => {
 })
 
 const trendPaidText = computed(() => {
-    const paidSeries = trendChartData.value.series.find((item: any) => item.name === '打款金额')?.data || []
+    const paidSeries = trendChartData.value.series.find((item: any) => item.name === '结算金额')?.data || []
     const total = paidSeries.reduce((sum: number, item: any) => sum + Number(item || 0), 0)
-    return total > 0 ? `所选周期打款合计 ¥${formatMoney(total)}` : ''
+    return total > 0 ? `所选周期结算合计 ¥${formatMoney(total)}（含折账）` : ''
 })
 
 const getDashboardCard = (key: string) => dashboardCardMap.value[key]
@@ -582,7 +603,7 @@ const formatShortDate = (value: any) => {
     return parts.length ? parts[parts.length - 1] : text
 }
 
-// trend 图只展示 订单/设备 两条柱（打款金额另用文字 trendPaidText 展示）
+// trend 图只展示订单/设备两条柱（结算金额另用文字 trendPaidText 展示）
 const trendChart = computed(() => ({
     categories: trendChartData.value.categories,
     series: trendChartData.value.series.filter((s: any) => s.name === '新增订单' || s.name === '新增设备')
@@ -646,15 +667,12 @@ const getDateRange = (type: string) => {
     return { start_time: start, end_time: end }
 }
 
-let statsInflight = false
+let statsRequestId = 0
 const loadStats = async () => {
-    // in-flight 守卫：下拉/切日期/刷新按钮/onShow 任一在请求中，后续调用直接跳过，避免并发与抖动
-    if (statsInflight) {
-        refreshing.value = false
-        return
-    }
-    statsInflight = true
+    // 日期切换不能被旧请求吞掉，也不能让较晚返回的旧数据覆盖当前日期。
+    const requestId = ++statsRequestId
     loading.value = true
+    loadError.value = ''
     try {
         const params = getDateRange(currentDate.value)
         const [overviewRes, trendRes, boardRes]: any[] = await Promise.all([
@@ -662,18 +680,27 @@ const loadStats = async () => {
             getDashboardTrend(params),
             getStatBoard({ days: 7 })
         ])
+        if (requestId !== statsRequestId) return
+        if (!Array.isArray(boardRes?.data?.stages) || !boardRes.data.stages.length || boardRes.data.stages.some((stage: any) =>
+            !stage || stage.count === '' || !['number', 'string'].includes(typeof stage.count) ||
+            !Number.isInteger(Number(stage.count)) || Number(stage.count) < 0)) {
+            throw new Error('在途统计返回异常，请重试或联系管理员检查统计服务。')
+        }
         statsData.value = overviewRes?.data || {}
         trendData.value = trendRes?.data || {}
         stageBoard.value = boardRes?.data || { stages: [] }
     } catch (e: any) {
+        if (requestId !== statsRequestId) return
         statsData.value = {}
         trendData.value = {}
-        uni.showToast({ title: e?.msg || e?.message || '统计数据加载失败', icon: 'none' })
+        stageBoard.value = { stages: [] }
+        loadError.value = e?.msg || e?.message || '请检查网络后重试，加载失败不代表业务数据为零。'
     } finally {
-        statsInflight = false
-        loading.value = false
-        refreshing.value = false
-        uni.stopPullDownRefresh()
+        if (requestId === statsRequestId) {
+            loading.value = false
+            refreshing.value = false
+            uni.stopPullDownRefresh()
+        }
         // 图表由 qiun-data-charts 响应式自渲染，无需手动触发
     }
 }
@@ -690,7 +717,7 @@ const switchDate = (value: string) => {
     loadStats()
 }
 
-onLoad(() => {
+onShow(() => {
     loadStats()
 })
 
@@ -700,6 +727,7 @@ onPullDownRefresh(() => {
 </script>
 
 <style scoped lang="scss">
+.stage-scope { margin: -8rpx 0 18rpx; line-height: 1.6; }
 .stats-page {
     min-height: 100vh;
     height: 100vh;

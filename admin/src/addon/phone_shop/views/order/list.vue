@@ -23,6 +23,7 @@
                             <el-option :label="t('orderNo')" value="order_no"></el-option>
                             <el-option :label="t('outTradeNo')" value="out_trade_no"></el-option>
                             <el-option :label="t('goodsName')" value="goods_name"></el-option>
+                            <el-option :label="t('imei')" value="sku_no"></el-option>
                         </el-select>
                         <el-input class="input-item ml-3" v-model.trim="orderTable.searchParam.search_name" />
                     </el-form-item>
@@ -138,6 +139,8 @@
                                                         <p class="multi-hidden text-[14px]">{{ row.goods_name }}</p>
                                                     </el-tooltip>
                                                     <span class="text-[12px] text-[#999] truncate">{{ row.sku_name }}</span>
+                                                    <span class="text-[12px] text-[#999] truncate">{{ row.sku.sku_no }}</span>
+                                                    <order-device-identity :row="row" @complete="loadOrderList(orderTable.page)" />
                                                     <span class="px-[4px]  text-[12px] text-[#fff] rounded-[4px] bg-primary leading-[18px]" v-if="row.is_gift == 1">赠品</span>
                                                 </div>
                                             </div>
@@ -202,8 +205,8 @@
                                                     <el-button type="warning" link @click="openOfflineProcess(item, 'confirm_credit')">确认挂账</el-button>
                                                     <el-button type="danger" link @click="closeOfflineUnreachable(item)">无法联系并关闭</el-button>
                                                 </template>
-                                                <el-button v-else type="primary" link @click="close(item)">{{ t('orderClose') }}</el-button>
-                                                <el-button v-if="item.payment_mode !== 'offline_pending'" type="primary" link @click="orderAdjustMoney(item)">{{ t('editPrice') }}</el-button>
+                                                <el-button v-else-if="!item.relate_source && !item.is_credit && !['offline_cash', 'offline_credit'].includes(item.payment_mode)" type="primary" link @click="close(item)">{{ t('orderClose') }}</el-button>
+                                                <el-button v-if="item.payment_mode !== 'offline_pending' && !item.relate_source && !item.is_credit" type="primary" link @click="orderAdjustMoney(item)">{{ t('editPrice') }}</el-button>
                                             </template>
                                             <el-button type="primary" v-if="(item.status == 2 || item.status == 1) && item.delivery_type != 'virtual' && item.delivery_type!='store' && item.activity_type != 'giftcard'" link @click="orderEditAddressFn(item)">{{ t('editAddress') }}</el-button>
                                             <el-button type="primary" link @click="delivery(item,'add')" v-if="item.status == 2 && item.delivery_type!='store'">{{ t('sendOutGoods') }}</el-button>
@@ -215,7 +218,8 @@
                                             >确认交付</el-button>
                                             <el-button type="primary" link @click="delivery(item,'edit')" v-if="item.status == 3 && item.delivery_type!='store' && item.delivery_type != 'virtual'">{{ t('修改发货') }}</el-button>
                                             <el-button type="primary" link @click="finish(item)" v-if="item.status == 3">{{ t('confirmTakeDelivery') }}</el-button>
-                                            <el-button type="primary" v-if="item.is_refund_show && item.status != 1 && item.status != -1" link @click="refundEvent(item)">{{ t('voluntaryRefund') }}</el-button>
+                                            <el-button type="primary" v-if="item.is_refund_show && item.status != 1 && item.status != -1 && !item.relate_source && !['offline_cash', 'offline_credit'].includes(item.payment_mode)" link @click="refundEvent(item)">{{ t('voluntaryRefund') }}</el-button>
+                                            <order-return-guide v-if="item.status != 1 || item.relate_source || item.is_credit" :order="item" />
                                             <el-button type="primary" v-if="item.status == -1" link @click="deleteEvent(item)">{{ t('delete') }}</el-button>
 
                                         </template>
@@ -347,6 +351,8 @@ import OrderExportSelect from '@/addon/phone_shop/views/order/components/order-e
 import orderEditAddress from '@/addon/phone_shop/views/order/components/order-edit-address.vue'
 import AdjustMoney from '@/addon/phone_shop/views/order/components/adjust-money.vue'
 import ShopActiveRefund from '@/addon/phone_shop/views/order/components/shop-active-refund.vue'
+import OrderDeviceIdentity from '@/addon/phone_shop/views/order/components/order-device-identity.vue'
+import OrderReturnGuide from '@/addon/phone_shop/views/order/components/order-return-guide.vue'
 import electronicSheetPrint from '@/addon/phone_shop/views/order/components/electronic-sheet-print.vue'
 import { img, setTablePageStorage, getTablePageStorage } from '@/utils/common'
 import { ElMessage, ElMessageBox, FormInstance } from 'element-plus'

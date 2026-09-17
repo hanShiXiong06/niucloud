@@ -14,6 +14,7 @@ class DeviceAssetDict
     public const STATUS_READY_EXPORT = 'ready_export';
     public const STATUS_EXPORTED = 'exported';
     public const STATUS_ARCHIVED = 'archived';
+    public const STATUS_ERP_HANDOFF = 'erp_handoff';
 
     public const PHOTO_STATUS_WAIT = 'wait_photo';
     public const PHOTO_STATUS_PHOTOING = 'photoing';
@@ -62,6 +63,7 @@ class DeviceAssetDict
             self::STATUS_READY_EXPORT => '待导出',
             self::STATUS_EXPORTED => '已导出',
             self::STATUS_ARCHIVED => '已归档',
+            self::STATUS_ERP_HANDOFF => '已交 ERP',
         ][$status] ?? $status;
     }
 

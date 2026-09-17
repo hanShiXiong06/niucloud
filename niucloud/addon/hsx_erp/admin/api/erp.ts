@@ -1,5 +1,8 @@
 import request from '@/utils/request'
 
+export const previewErpMallInventory = (params: Record<string, any>) => request.get('erp/mall_inventory/preview', { params })
+export const confirmErpMallInventory = (data: Record<string, any>) => request.post('erp/mall_inventory/confirm', data)
+
 // ── ERP 打印中心 ────────────────────────────────────────────────────────────
 export const getErpPrintMeta = () => request.get('erp/print/meta')
 export const getErpPrinters = () => request.get('erp/print/printers')

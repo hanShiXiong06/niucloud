@@ -204,6 +204,9 @@
                 <template v-if="component.componentName == 'RecycleSpiderQuotationList'">
                    <diy-recycle-spider-quotation-list ref="diyRecycleSpiderQuotationListRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.RecycleSpiderQuotationList" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
+                <template v-if="component.componentName == 'RecycleSpiderSearch'">
+                   <diy-recycle-spider-search ref="diyRecycleSpiderSearchRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.RecycleSpiderSearch" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
                 <template v-if="component.componentName == 'AiAssistantEntry'">
                    <diy-ai-assistant-entry ref="diyAiAssistantEntryRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.AiAssistantEntry" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
@@ -263,6 +266,7 @@
    import diyPhoneSingleRecommend from '@/addon/phone_shop/components/diy/phone-single-recommend/index.vue';
    import diyRecycleQuotationList from '@/addon/recycle_daheng_quote/components/diy/recycle-quotation-list/index.vue';
    import diyRecycleSpiderQuotationList from '@/addon/recycle_quote_spider/components/diy/recycle-spider-quotation-list/index.vue';
+   import diyRecycleSpiderSearch from '@/addon/recycle_quote_spider/components/diy/recycle-spider-search/index.vue';
    import diyAiAssistantEntry from '@/addon/hsx_ai/components/diy/ai-assistant-entry/index.vue';
    import diyProjectCenterAreaEligibility from '@/addon/hsx_project_center/components/diy/project-center-area-eligibility/index.vue';
    import diyProjectCenterCollapse from '@/addon/hsx_project_center/components/diy/project-center-collapse/index.vue';

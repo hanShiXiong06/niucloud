@@ -77,17 +77,23 @@
         </div>
 
         <div v-if="widget.key === 'ledger'" class="ledger-grid">
-          <button
+          <div
             v-for="item in ledgerStats"
             :key="item.label"
-            type="button"
             :class="['ledger-cell', item.urgent ? 'is-urgent' : '']"
-            @click="$emit('drilldown-ledger', item)"
           >
-            <span>{{ item.label }}</span>
-            <strong>{{ item.value }}</strong>
-            <em>{{ item.unit }}</em>
-          </button>
+            <button type="button" class="ledger-action" @click="$emit('drilldown-ledger', item)">
+              <span :class="{ 'has-help': item.hint }">{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+              <em>{{ item.unit }}</em>
+              <span v-if="item.scope" class="ledger-scope">{{ item.scope }}</span>
+            </button>
+            <el-popover v-if="item.hint" trigger="click" placement="top" :width="270" :content="item.hint" title="统计说明">
+              <template #reference>
+                <button type="button" class="ledger-help" :aria-label="`${item.label}统计说明`" :title="item.hint" @click.stop>?</button>
+              </template>
+            </el-popover>
+          </div>
         </div>
 
         <VueChart v-else-if="widget.key === 'flow'" :option="flowChartOption" height="310px" class="chart" />
@@ -295,15 +301,26 @@ const overviewText = computed(() => {
   return `${props.dateLabel}新增订单 ${orderCount} 单、设备 ${deviceCount} 台；待质检 ${pendingCheck} 台，待打款 ${pendingPay} 台。所有金额、数量以后台接口实时返回为准。`;
 });
 
-const ledgerStats = computed(() => [
+type LedgerStat = {
+  label: string;
+  value: number;
+  unit: string;
+  filterKey: string;
+  viewMode?: string;
+  urgent?: boolean;
+  scope?: string;
+  hint?: string;
+};
+
+const ledgerStats = computed<LedgerStat[]>(() => [
   { label: "签收手机", value: Number(ledger.value.signed_device_count || 0), unit: "台", filterKey: "signed_today", viewMode: "device_expand" },
   { label: "新增订单", value: Number(ledger.value.order_count || 0), unit: "单", filterKey: "today_created_orders" },
   { label: "待质检", value: Number(ledger.value.pending_check_device_count || 0), unit: "台", urgent: true, filterKey: "device_pending_check", viewMode: "device_expand" },
   { label: "质检中", value: Number(ledger.value.checking_device_count || 0), unit: "台", urgent: true, filterKey: "device_checking", viewMode: "device_expand" },
   { label: "待打款", value: Number(ledger.value.pending_pay_device_count || 0), unit: "台", urgent: true, filterKey: "pending_pay", viewMode: "device_expand" },
   { label: "已完成", value: Number(ledger.value.completed_device_count || 0), unit: "台", filterKey: "completed_today", viewMode: "device_expand" },
-  { label: "退货", value: Number(ledger.value.return_device_count || 0), unit: "台", filterKey: "returned_devices", viewMode: "device_expand" },
-  { label: "退货待处理", value: Number(ledger.value.pending_return_count || 0), unit: "台", urgent: true, filterKey: "pending_return", viewMode: "device_expand" },
+  { label: "已退回客户", value: Number(ledger.value.return_device_count || 0), unit: "台", filterKey: "returned_devices", viewMode: "device_expand", scope: "所选时间内完成", hint: "当前有效退回单及设备明细均已完成，并且退回完成时间在所选日期内。按设备台数去重，不是退回单数；刚申请或仍在退回中的设备不计入。点击数字查看对应设备。" },
+  { label: "退回未完成", value: Number(ledger.value.pending_return_count || 0), unit: "台", urgent: true, filterKey: "pending_return", viewMode: "device_expand", scope: "当前全部 · 不限日期", hint: "当前有效退回单中，待处理和退回中的设备台数，不是退回单数。不受顶部日期影响；同一设备只计一次，已完成、已取消、已删除的退回单不计入。点击数字查看对应设备。" },
 ]);
 
 const consignmentProgress = computed(() => [
@@ -784,11 +801,57 @@ onUnmounted(() => {
   background: #fff7ed;
 }
 
+.ledger-action {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ledger-action .has-help {
+  padding-right: 20px;
+}
+
+.ledger-help {
+  position: absolute;
+  top: 6px;
+  right: 4px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #667085;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.ledger-help:hover {
+  background: rgba(100, 116, 139, 0.1);
+}
+
+.ledger-action:focus-visible,
+.ledger-help:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 3px;
+}
+
 .ledger-cell span,
 .consignment-cell span {
   display: block;
   color: #667085;
   font-size: 12px;
+}
+
+.ledger-cell .ledger-scope {
+  margin-top: 7px;
+  font-size: 11px;
+  color: #667085;
 }
 
 .ledger-cell strong,

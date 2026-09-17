@@ -9,6 +9,7 @@ use app\service\admin\auth\AuthService;
 use app\service\admin\sys\MenuService;
 use app\service\admin\sys\RoleService;
 use core\base\BaseAdminService;
+use core\exception\CommonException;
 
 /**
  * 手机管理端应用。
@@ -22,12 +23,18 @@ class AppsService extends BaseAdminService
 
         foreach ($apps as $key => $item) {
             $item_menu_key = $item['menu_key'] ?? '';
-            if (!empty($item_menu_key) && !in_array($item_menu_key, $menu_keys)) {
+            if (!empty($item_menu_key) && !in_array($item_menu_key, $menu_keys, true)) {
                 unset($apps[$key]);
             }
         }
 
-        return array_values(array_filter($apps));
+        $apps = array_values(array_filter($apps));
+        // 必须先排序再选取首页默认入口，不能让插件字典的加载顺序决定展示范围。
+        usort($apps, function ($app_a, $app_b) {
+            return ($app_a['sort'] ?? 0) <=> ($app_b['sort'] ?? 0);
+        });
+
+        return $apps;
     }
 
     public function getAppsOfIndex(array $param = [])
@@ -35,17 +42,24 @@ class AppsService extends BaseAdminService
         $apps = $this->getApps();
         $keys = (new CoreAdminAppService())->getValue($this->uid, $this->site_id, 'app');
 
-        $app_limit = env('system.todo_limit', 9);
-        if (empty($keys)) {
-            $apps_of_index = array_slice($apps, 0, $app_limit);
-        } else {
-            $apps_of_index = [];
-            foreach ($apps as $item) {
-                if (in_array($item['key'], $keys)) {
-                    $item['sort'] = array_search($item['key'], $keys);
-                    $apps_of_index[] = $item;
-                }
+        $keys = is_array($keys) ? array_values(array_unique(array_filter($keys, function ($key) {
+            return is_string($key) && $key !== '';
+        }))) : [];
+
+        $apps_of_index = [];
+        foreach ($apps as $item) {
+            $position = array_search($item['key'], $keys, true);
+            if ($position !== false) {
+                $item['sort'] = $position;
+                $apps_of_index[] = $item;
             }
+        }
+
+        // 权限收回、插件卸载或错误配置导致所有选项失效时，展示有权限的默认入口。
+        // 只做读取兜底，不回写用户配置；仍有效的个性化选择及顺序保持不变。
+        if (empty($apps_of_index)) {
+            $app_limit = (int) env('system.todo_limit', 9);
+            return array_slice($apps, 0, $app_limit > 0 ? $app_limit : 9);
         }
 
         usort($apps_of_index, function ($app_a, $app_b) {
@@ -57,7 +71,19 @@ class AppsService extends BaseAdminService
 
     public function setAppsOfIndex(array $param = [])
     {
-        (new CoreAdminAppService())->setValue($this->uid, $this->site_id, 'app', $param);
+        $allowed_keys = array_column($this->getApps(), 'key');
+        $keys = [];
+        foreach ($param as $key) {
+            if (!is_string($key) || !in_array($key, $allowed_keys, true)) {
+                throw new CommonException('快捷入口不存在或您暂无访问权限，请刷新应用列表后重新选择');
+            }
+            if (!in_array($key, $keys, true)) {
+                $keys[] = $key;
+            }
+        }
+
+        // 保存移动入口 key，而非 menu_key；空数组沿用恢复默认入口的约定。
+        (new CoreAdminAppService())->setValue($this->uid, $this->site_id, 'app', $keys);
         return true;
     }
 
@@ -68,10 +94,6 @@ class AppsService extends BaseAdminService
 
         usort($app_groups, function ($app_groups_a, $app_groups_b) {
             return $app_groups_a['sort'] <=> $app_groups_b['sort'];
-        });
-
-        usort($apps, function ($app_a, $app_b) {
-            return $app_a['sort'] <=> $app_b['sort'];
         });
 
         foreach ($app_groups as &$app_group) {

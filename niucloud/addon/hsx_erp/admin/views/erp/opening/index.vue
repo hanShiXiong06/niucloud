@@ -7,6 +7,7 @@
                         把启用 ERP 前已有的设备库存、应收应付、资金余额和客户资料一次迁入；上传只校验，确认后才正式入账。
                 </template>
                 <template #extra><div class="head-actions">
+                        <el-button type="primary" plain @click="mallInventoryVisible = true">商城库存对账</el-button>
                         <el-button :icon="Download" @click="downloadTemplate">下载完整模板</el-button>
                         <el-button :icon="Refresh" :loading="loading" @click="loadBatches">刷新</el-button>
                         <el-button type="primary" :icon="Upload" @click="openUpload">上传并校验</el-button>
@@ -126,6 +127,7 @@
             </div>
         </el-card>
 
+        <ErpMallInventoryDrawer v-model="mallInventoryVisible" />
         <HsxDialog :confirm-loading="uploading" v-model="uploadVisible" title="上传期初建账表" width="560px" append-to-body destroy-on-close>
             <el-form label-position="top">
                 <el-form-item label="统一期初日期">
@@ -332,6 +334,7 @@
 </template>
 
 <script setup lang="ts">
+import ErpMallInventoryDrawer from '@/addon/hsx_erp/components/ErpMallInventoryDrawer.vue'
 import { HsxTitle, HsxPage, HsxDialog, HsxDrawer, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessageBox } from 'element-plus'
@@ -347,6 +350,7 @@ import {
     uploadErpOpening
 } from '@/addon/hsx_erp/api/erp'
 const hsxFeedback = useFeedback()
+const mallInventoryVisible = ref(false)
 
 
 const loading = ref(false)

@@ -32,6 +32,14 @@ export function getDeviceIntakeMaterialPolicy() {
     return request.get('phone_shop/device_intake/material_policy')
 }
 
+export function getDeviceIntakeMaterial(id: number) {
+    return request.get(`phone_shop/device_intake/material/${id}`)
+}
+
+export function saveDeviceIntakeMaterial(id: number, data: Record<string, any>) {
+    return request.put(`phone_shop/device_intake/material/${id}`, data)
+}
+
 /**
  * 由货源建品并上架
  */

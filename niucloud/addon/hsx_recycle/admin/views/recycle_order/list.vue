@@ -2,7 +2,7 @@
   <PremiumTheme class="recycle-order-list h-full">
     <el-card class="box-card !border-none h-full relative" shadow="never">
       <div class="order-list-header">
-        <HsxTitle title="回收订单管理" size="page" class="mb-4">
+        <HsxTitle title="回收订单管理" size="page" class="order-list-title mb-4">
             <template #extra><el-button type="primary" :icon="Plus" @click="showAddOrderDialog">代下单</el-button></template>
         </HsxTitle>
 
@@ -69,9 +69,10 @@
       </div>
 
       <!-- 列表 -->
-      <div :class="isMobile ? 'order-table-region order-table-region--mobile' : 'order-table-region'">
+      <div ref="orderTableRegion" class="order-table-region" :class="{ 'order-table-region--compact': isPhoneList }">
         <RecycleOrderDesktopTable
-          v-if="!isMobile"
+          v-if="!isPhoneList"
+          :compact="isCompactList"
           :loading="loading"
           :list="list"
           :expand-row-keys="expandRowKeys"
@@ -131,8 +132,7 @@
           :img="img"
           :is-mobile-order-expanded="isMobileOrderExpanded"
           :toggle-mobile-order-expand="toggleMobileOrderExpand"
-          :is-mobile-device-selected="isMobileDeviceSelected"
-          :handle-mobile-device-selection="handleMobileDeviceSelection"
+          :handle-device-selection-change="handleDeviceSelectionChange"
           :check-device="checkDevice"
           :price-device="priceDevice"
           :batch-recycle-device="batchRecycleDevice"
@@ -154,9 +154,9 @@
       </div>
 
       <!-- 分页 -->
-      <div :class="isMobile ? 'order-pagination order-pagination--mobile' : 'order-pagination'">
+      <div :class="isPhoneList ? 'order-pagination order-pagination--mobile' : 'order-pagination'">
         <div class="text-sm text-gray-500">
-          <template v-if="isMobile">
+          <template v-if="isCompactList">
             共 {{ pagination.total }} 条记录
           </template>
           <template v-else>
@@ -170,8 +170,9 @@
           :page-size="pagination.limit"
           :total="pagination.total"
           :hide-on-single-page="false"
-          :small="isMobile"
-          :layout="isMobile ? 'prev, pager, next' : 'sizes, prev, pager, next, jumper'"
+          :small="isCompactList"
+          :pager-count="isCompactList ? 5 : 7"
+          :layout="isCompactList ? 'prev, pager, next' : 'sizes, prev, pager, next, jumper'"
           @size-change="handleSizeChange"
           @current-change="handleCurrentChange"
         />
@@ -364,7 +365,7 @@ import { getDevicePaymentOwner } from "@/addon/hsx_recycle/utils/payment-scope";
 import { transferDeviceToConsignment } from "@/addon/hsx_recycle/api/consignment_order";
 import { getExpress } from "@/addon/hsx_recycle/api/device_query_api";
 import { generateOrderShortLink } from "@/addon/hsx_recycle/api/shortlink";
-import { useClipboard } from "@vueuse/core";
+import { useClipboard, useResizeObserver } from "@vueuse/core";
 
 // 导入打印API
 import {
@@ -548,9 +549,18 @@ const paymentInfo = ref<any[]>([]);
 const selectedPayTypeIndex = ref(0);
 const checkDeviceLogVisible = ref(false);
 const priceDeviceLogVisible = ref(false);
-const isMobile = ref(false);
+const isMobile = ref(window.innerWidth <= 768);
+const orderTableRegion = ref<HTMLElement | null>(null);
+const isCompactList = ref(window.innerWidth < 1200);
+const isPhoneList = ref(window.innerWidth < 600);
+// 平板仍使用 PC 表格；只有手机级窄屏改为订单摘要，展开设备保持表格。
+useResizeObserver(orderTableRegion, ([entry]) => {
+  if (entry.contentRect.width > 0) {
+    isCompactList.value = entry.contentRect.width < 1160;
+    isPhoneList.value = entry.contentRect.width < 600;
+  }
+});
 const mobileSearchVisible = ref(false);
-const mobileExpandedOrders = ref<Array<number | string>>([]);
 const noticeLogVisible = ref(false);
 const noticeLogOrderId = ref<number | string>(0);
 const consignmentDialog = reactive({
@@ -753,7 +763,6 @@ const updateResponsiveState = () => {
   isMobile.value = window.innerWidth <= 768;
   if (!isMobile.value) {
     mobileSearchVisible.value = false;
-    mobileExpandedOrders.value = [];
   }
 };
 
@@ -773,47 +782,15 @@ const handleExpandChange = (row: any, expandedRows: any[]) => {
 };
 
 const toggleMobileOrderExpand = (orderId: number | string) => {
-  const index = mobileExpandedOrders.value.findIndex((id) => id === orderId);
-  if (index > -1) {
-    mobileExpandedOrders.value.splice(index, 1);
-  } else {
-    mobileExpandedOrders.value.push(orderId);
-  }
+  const current = expandRowKeys.value;
+  const exists = current.some(id => String(id) === String(orderId));
+  setExpandedRows(exists ? current.filter(id => String(id) !== String(orderId)) : [...current, orderId]);
 };
 
 const isMobileOrderExpanded = (orderId: number | string) => {
-  return mobileExpandedOrders.value.includes(orderId);
+  return expandRowKeys.value.some(id => String(id) === String(orderId));
 };
 
-const isMobileDeviceSelected = (
-  orderId: number | string,
-  deviceId: number | string
-) => {
-  const selectedList = selectedDevices.value[orderId] || [];
-  return selectedList.some((item: any) => item.id === deviceId);
-};
-
-const handleMobileDeviceSelection = (
-  orderId: number | string,
-  device: any,
-  checked: string | number | boolean
-) => {
-  const selectedList = selectedDevices.value[orderId]
-    ? [...selectedDevices.value[orderId]]
-    : [];
-  const index = selectedList.findIndex((item: any) => item.id === device.id);
-  const isChecked = !!checked;
-
-  if (isChecked && index === -1) {
-    selectedList.push(device);
-  }
-
-  if (!isChecked && index > -1) {
-    selectedList.splice(index, 1);
-  }
-
-  handleDeviceSelectionChange(selectedList, orderId);
-};
 
 const deviceLogVisible = ref(false);
 
@@ -1348,7 +1325,7 @@ const shareOrder = async (row: any) => {
     color: var(--el-text-color-secondary);
   }
   :deep(.el-table .el-table__cell) {
-    padding: 10px 0;
+    padding: 7px 0;
   }
   /* 标签页：下划线更精致 */
   :deep(.el-tabs__item) {
@@ -1382,6 +1359,16 @@ const shareOrder = async (row: any) => {
     min-width: 0;
   }
 
+  .order-list-title {
+    align-items: center;
+    flex-wrap: nowrap;
+
+    :deep(.hsx-title__extra) {
+      width: auto;
+      flex: none;
+    }
+  }
+
   .order-page-header {
     display: flex;
     align-items: center;
@@ -1397,18 +1384,18 @@ const shareOrder = async (row: any) => {
 
   .order-table-region {
     flex: none;
-    min-height: 320px;
-    height: clamp(320px, 52vh, 680px);
-    overflow: hidden;
+    min-width: 0;
+    height: auto;
+    overflow: visible;
     border: 1px solid #e5e7eb;
     border-radius: 8px;
     background: #fff;
   }
 
-  .order-table-region--mobile {
+  .order-table-region--compact {
     min-height: 0;
     height: auto;
-    overflow-y: auto;
+    overflow: visible;
     border: 0;
     background: transparent;
   }
@@ -1416,6 +1403,7 @@ const shareOrder = async (row: any) => {
   .order-pagination {
     flex: 0 0 auto;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: 12px;

@@ -173,9 +173,7 @@
 
                         <template v-if="goodsEdit.formData.spec_type == 'single'">
                             <el-form-item :label="t('price')" prop="price">
-                                <el-input v-model.trim="goodsEdit.formData.price" clearable placeholder="0.00" class="input-width" maxlength="8" :disabled="goodsEdit.isDisabledPrice()">
-                                    <template #append>{{ t('yuan') }}</template>
-                                </el-input>
+                                <TierPriceInput class="input-width" v-model="goodsEdit.formData.price" v-model:base-price="goodsEdit.formData.pricing_base_price" :disabled="goodsEdit.isDisabledPrice()" @policy="value => tierPricingEnabled = Number(value.enabled) === 1" />
                             </el-form-item>
 
                             <el-form-item :label="t('marketPrice')" prop="market_price">
@@ -359,7 +357,7 @@
                                                                                 <td class="el-table__cell">
                                                                                     <div class="cell">
                                                                                         <el-form-item :prop="key + '.price'" :rules="goodsEdit.skuPriceRules()" class="sku-form-item-wrap">
-                                                                                            <el-input v-model.trim="item.price" clearable placeholder="0.00" maxlength="8" :disabled="goodsEdit.isDisabledPrice()" />
+                                                                                            <TierPriceInput v-model="item.price" v-model:base-price="item.pricing_base_price" :disabled="goodsEdit.isDisabledPrice()" />
                                                                                         </el-form-item>
                                                                                     </div>
                                                                                 </td>
@@ -424,7 +422,7 @@
                                 </div>
                             </div>
                         </div>
-                        <el-form-item :label="t('memberDiscount')">
+                        <el-form-item v-if="!tierPricingEnabled" :label="t('memberDiscount')">
                             <div>
                                 <el-radio-group v-model="goodsEdit.formData.member_discount">
                                     <el-radio label="">{{ t('nonparticipation') }}</el-radio>
@@ -667,6 +665,10 @@
 </template>
 
 <script lang="ts" setup>
+import TierPriceInput from '@/addon/phone_shop/views/goods/components/TierPriceInput.vue'
+import { getTierPricing } from '@/addon/phone_shop/api/tier_pricing'
+const tierPricingEnabled = ref(false)
+getTierPricing().then(res => { tierPricingEnabled.value = Number(res.data.enabled) === 1 })
 import { reactive, ref ,onMounted,nextTick} from 'vue'
 import { t } from '@/lang'
 import { FormInstance } from 'element-plus'

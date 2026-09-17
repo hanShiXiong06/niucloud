@@ -28,8 +28,8 @@ export function saveAssetMedia(id: number | string, data: Record<string, any>) {
     return request.post(`device_asset/media/${ id }`, data)
 }
 
-export function confirmAssetPhotos(id: number | string) {
-    return request.post(`device_asset/photos/confirm/${ id }`)
+export function confirmAssetPhotos(id: number | string, data: Record<string, any> = {}) {
+    return request.post(`device_asset/photos/confirm/${ id }`, data)
 }
 
 export function completeAssetPrice(id: number | string, data: Record<string, any>) {

@@ -36,7 +36,8 @@ class RecycleDashboard extends BaseAdminController
             ['high_cost_amount', RecycleDashboardFilterService::DEFAULT_HIGH_COST_AMOUNT],
         ]);
 
-        return success($this->cached('overview', $params, fn() => $this->metricService->getOverview($params)));
+        // overview 同时含当前待办快照，不能因用户选择历史日期而把待办缓存一天。
+        return success($this->metricService->getOverview($params));
     }
 
     public function trend(): Response
@@ -54,17 +55,14 @@ class RecycleDashboard extends BaseAdminController
     }
 
     /**
-     * 看板数据缓存层：避免每次打开都实时扫大表。
-     * TTL 按时间段定：含今天的区间数据还在变 → 短缓存(60秒，兼顾新增数据及时可见与挡住高频扫表)；
-     * 纯历史区间不变 → 长缓存(1天)。
+     * 趋势短缓存：历史日期也可能收到补付/延迟结算记录，不能缓存一天。
+     * 当前待办快照不走此缓存。
      */
     protected function cached(string $type, array $params, \Closure $builder): array
     {
         $siteId = $this->request->siteId();
-        $endDate = (string)($params['end_time'] ?? date('Y-m-d'));
-        $includesToday = substr($endDate, 0, 10) >= date('Y-m-d');
-        $ttl = $includesToday ? 60 : 86400;
-        $key = 'recycle_dash_' . $type . '_' . $siteId . '_' . md5(json_encode($params));
+        $ttl = 60;
+        $key = 'recycle_dash_v2_' . $type . '_' . $siteId . '_' . md5(json_encode($params));
         return cache_remember($key, $builder, 'recycle_dashboard', ['expire' => $ttl]);
     }
 

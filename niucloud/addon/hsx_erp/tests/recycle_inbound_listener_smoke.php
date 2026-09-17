@@ -4,9 +4,12 @@ declare(strict_types=1);
 require dirname(__DIR__, 3) . '/vendor/autoload.php';
 
 use addon\hsx_erp\app\listener\ErpDeviceInboundRequested;
+use addon\hsx_erp\app\support\ErpIdempotency;
 use core\exception\CommonException;
 
-$assert = static function (bool $condition, string $message): void {
+$assertionCount = 0;
+$assert = static function (bool $condition, string $message) use (&$assertionCount): void {
+    $assertionCount++;
     if (!$condition) {
         fwrite(STDERR, "[FAIL] {$message}\n");
         exit(1);
@@ -37,6 +40,9 @@ class FakeRecycleInboundListener extends ErpDeviceInboundRequested
 
     protected function createPurchase(array $data): int
     {
+        // 替身也执行真实服务的幂等键校验，避免仅测试追加编排而漏掉入库边界。
+        ErpIdempotency::normalize($data['request_id'] ?? '');
+        ErpIdempotency::normalize($data['settlement_request_id'] ?? '');
         $this->created[] = $data;
         $orderId = (int)($data['append_order_id'] ?? 0);
         if ($orderId <= 0) {
@@ -275,6 +281,13 @@ $assert(($laterResult['order_ids'][0] ?? 0) === ($result['order_ids'][0] ?? 0), 
 $assert(($laterResult['created_count'] ?? 0) === 1, '后续完成的设备必须报告一台新增');
 $laterCreate = $listener->created[array_key_last($listener->created)];
 $assert((int)($laterCreate['append_order_id'] ?? 0) === (int)$result['order_ids'][0], '后续设备必须使用append_order_id追加，不得再建采购单');
+$assert(strlen($laterCreate['request_id']) === 62, '追加采购键固定为62字符，不能在原采购键上不断拼接');
+$assert(strlen($laterCreate['settlement_request_id']) === 74, '追加设备的已付核销键也必须小于80字符');
+
+$createdBeforeSameEventReplay = count($listener->created);
+$sameEventReplay = $listener->handle($laterDeviceEvent);
+$assert(($sameEventReplay['status'] ?? '') === 'duplicate'
+    && count($listener->created) === $createdBeforeSameEventReplay, '同一追加事件重试不得重复创建采购明细或核销');
 
 $laterReplay = $laterDeviceEvent;
 $laterReplay['event_id'] = 'recycle-inbound-100005-test-003';
@@ -337,4 +350,108 @@ $assert(str_contains($recycleSyncSource, 'memberSnapshot') && str_contains($recy
 $purchaseSource = (string)file_get_contents(dirname(__DIR__) . '/app/service/admin/ErpPurchaseService.php');
 $assert(str_contains($purchaseSource, 'ErpPartyMember') && str_contains($purchaseSource, 'bindPartyMember'), 'ERP采购入库必须把来源会员稳定绑定到往来主体');
 
-echo "[PASS] ERP recycle inbound listener smoke test\n";
+// 回归线上“一单多台，第一台成功、后续设备 request_id 超长”场景。
+class RetryBoundaryRecycleInboundListener extends FakeRecycleInboundListener
+{
+    public bool $failNextPurchase = false;
+    public array $attemptedPurchaseData = [];
+
+    protected function createPurchase(array $data): int
+    {
+        ErpIdempotency::normalize($data['request_id'] ?? '');
+        ErpIdempotency::normalize($data['settlement_request_id'] ?? '');
+        $this->attemptedPurchaseData[] = $data;
+        if ($this->failNextPurchase) {
+            $this->failNextPurchase = false;
+            throw new CommonException('模拟追加前失败');
+        }
+        return parent::createPurchase($data);
+    }
+}
+
+$boundary = new RetryBoundaryRecycleInboundListener();
+$initialEvent = $event;
+$initialEvent['event_id'] = str_repeat('a', ErpIdempotency::MAX_REQUEST_ID_LENGTH);
+$initialEvent['devices'] = [$device(301, 777, 'RC-APPEND-LENGTH-TEST', $counterpartyA, 1, 11)];
+$initialEvent['devices'][0]['paid_amount'] = 0;
+$initialEvent['devices'][0]['settlement_status'] = 'unpaid';
+$initialResult = $boundary->handle($initialEvent);
+$initialData = $boundary->created[0];
+$expectedInitialKey = 'source-purchase:' . substr(hash('sha256', '100005|hsx_recycle|hsx_recycle.recycle_purchase|RC-APPEND-LENGTH-TEST'), 0, 48);
+$assert($initialData['request_id'] === $expectedInitialKey, '首次采购幂等键必须保持旧算法，不能导致已有订单另建一单');
+$assert(strlen($initialData['request_id']) === 64 && strlen($initialData['settlement_request_id']) === 76,
+    '80字符事件号不能使首次采购或核销键超长');
+
+$appendEvent = $initialEvent;
+$appendEvent['event_id'] = str_repeat('b', ErpIdempotency::MAX_REQUEST_ID_LENGTH);
+$appendEvent['devices'] = [$device(302, 777, 'RC-APPEND-LENGTH-TEST', $counterpartyA, 1, 11)];
+$boundary->failNextPurchase = true;
+$appendFailed = false;
+try {
+    $boundary->handle($appendEvent);
+} catch (CommonException $e) {
+    $appendFailed = $e->getMessage() === '模拟追加前失败';
+}
+$failedData = $boundary->attemptedPurchaseData[array_key_last($boundary->attemptedPurchaseData)];
+$assert($appendFailed && count($boundary->created) === 1, '追加失败保留首次采购，不制造第二张采购单');
+$assert(($boundary->inboxes['100005:' . $appendEvent['event_id']]['status'] ?? '') === 'failed', '追加失败保留原事件供重试');
+$recovered = $boundary->handle($appendEvent);
+$recoveredData = $boundary->created[1];
+$assert($recovered['order_ids'] === $initialResult['order_ids'] && $recovered['created_count'] === 1,
+    '同一失败事件重试只把第二台追加到原采购单');
+$assert($failedData['request_id'] === $recoveredData['request_id']
+    && $failedData['settlement_request_id'] === $recoveredData['settlement_request_id'], '失败重试必须生成稳定采购和核销编号');
+$assert($boundary->created[0] === $initialData, '后续设备不能覆盖第一台设备及其付款快照');
+$assert($recoveredData['paid_amount'] === 1000.0 && $recoveredData['items'][0]['source_paid_amount'] === 1000.0,
+    '追加设备保留自己已付金额，不分摊给第一台未付设备');
+$replayed = $boundary->handle($appendEvent);
+$assert($replayed['status'] === 'duplicate' && count($boundary->created) === 2, '补齐成功后再次重试不得重复入账');
+
+$thirdEvent = $initialEvent;
+$thirdEvent['event_id'] = str_repeat('c', ErpIdempotency::MAX_REQUEST_ID_LENGTH);
+$thirdEvent['devices'] = [
+    $device(303, 777, 'RC-APPEND-LENGTH-TEST', $counterpartyA, 1, 11),
+    $device(304, 777, 'RC-APPEND-LENGTH-TEST', $counterpartyA, 1, 11),
+];
+$thirdEvent['devices'][0]['paid_amount'] = 0;
+$thirdEvent['devices'][0]['settlement_status'] = 'unpaid';
+$thirdEvent['devices'][1]['paid_amount'] = 300;
+$thirdResult = $boundary->handle($thirdEvent);
+$thirdData = $boundary->created[2];
+$assert($thirdResult['order_ids'] === $initialResult['order_ids'] && $thirdResult['created_count'] === 2,
+    '第三批多台设备仍追加原采购单');
+$assert($thirdData['request_id'] !== $recoveredData['request_id']
+    && $thirdData['settlement_request_id'] !== $recoveredData['settlement_request_id'], '不同追加批次不能复用上一批核销编号');
+$assert($thirdData['paid_amount'] === 300.0 && $thirdData['items'][0]['source_paid_amount'] === 0.0
+    && $thirdData['items'][1]['source_paid_amount'] === 300.0, '多台混合已付未付时仅按各自金额核销');
+
+$otherSite = new FakeRecycleInboundListener();
+$otherSite->siteId = 100006;
+$otherSiteInitial = array_replace($initialEvent, ['site_id' => 100006]);
+$otherSiteAppend = array_replace($appendEvent, ['site_id' => 100006]);
+$otherSite->handle($otherSiteInitial);
+$otherSite->handle($otherSiteAppend);
+$assert($otherSite->created[1]['request_id'] !== $recoveredData['request_id'], '相同订单号与事件号在不同站点不能生成相同追加键');
+
+$otherOrder = new FakeRecycleInboundListener();
+$otherOrderInitial = $initialEvent;
+$otherOrderAppend = $appendEvent;
+foreach ($otherOrderInitial['devices'] as &$row) { $row['source_id'] = 778; $row['source_order_no'] = 'RC-OTHER-ORDER'; }
+unset($row);
+foreach ($otherOrderAppend['devices'] as &$row) { $row['source_id'] = 778; $row['source_order_no'] = 'RC-OTHER-ORDER'; }
+unset($row);
+$otherOrder->handle($otherOrderInitial);
+$otherOrder->handle($otherOrderAppend);
+$assert($otherOrder->created[1]['request_id'] !== $recoveredData['request_id'], '不同来源订单不能生成相同追加键');
+
+$oversizedEvent = $initialEvent;
+$oversizedEvent['event_id'] .= 'x';
+$oversizedRejected = false;
+try {
+    (new FakeRecycleInboundListener())->handle($oversizedEvent);
+} catch (CommonException $e) {
+    $oversizedRejected = str_contains($e->getMessage(), 'request_id长度不能超过80个字符');
+}
+$assert($oversizedRejected, '不得通过放宽原事件80字符校验来修复派生编号');
+
+echo "[PASS] ERP recycle inbound listener smoke test: {$assertionCount} assertions; no database or payment\n";

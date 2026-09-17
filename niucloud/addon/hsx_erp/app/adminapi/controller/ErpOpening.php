@@ -4,10 +4,25 @@ declare(strict_types=1);
 namespace addon\hsx_erp\app\adminapi\controller;
 
 use addon\hsx_erp\app\service\admin\ErpOpeningService;
+use addon\hsx_erp\app\service\admin\ErpMallInventoryService;
 use core\base\BaseAdminController;
 
 class ErpOpening extends BaseAdminController
 {
+    public function mallInventoryPreview()
+    {
+        return success((new ErpMallInventoryService())->preview($this->request->params([
+            ['keyword', ''], ['page', 1], ['limit', 20], ['include_linked', 0], ['receivable_id', 0], ['scope', 'stock'],
+        ])));
+    }
+
+    public function mallInventoryConfirm()
+    {
+        return success((new ErpMallInventoryService())->confirm($this->request->params([
+            ['items', []], ['receivable_id', 0], ['warehouse_id', 0], ['location_id', 0], ['opening_at', 0],
+        ])));
+    }
+
     public function upload()
     {
         $openingDate = (int)$this->request->param('opening_date', 0);

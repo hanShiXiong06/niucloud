@@ -60,6 +60,7 @@ export function useGoodsEdit(params: any = {}) {
         // 价格库存
         spec_type: 'single',
         price: '',
+        pricing_base_price: null as number | null,
         market_price: '',
         cost_price: '',
         stock: '',
@@ -464,6 +465,7 @@ export function useGoodsEdit(params: any = {}) {
                 // 单规格
                 const skuInfo = data.goods_info.sku_list[0]
                 formData.price = skuInfo.price
+                formData.pricing_base_price = skuInfo.pricing_base_price ?? null
                 formData.market_price = skuInfo.market_price
                 formData.cost_price = skuInfo.cost_price
                 formData.sku_no = skuInfo.sku_no
@@ -503,6 +505,7 @@ export function useGoodsEdit(params: any = {}) {
                             goodsSkuData[key].price = item.price;
                             goodsSkuData[key].market_price = item.market_price;
                             goodsSkuData[key].cost_price = item.cost_price;
+                            goodsSkuData[key].pricing_base_price = item.pricing_base_price ?? null;
 
                             for (let field in appendRefreshGoodsSkuData) {
                                 goodsSkuData[key][field] = item[field];

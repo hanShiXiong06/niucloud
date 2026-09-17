@@ -1,286 +1,108 @@
 <template>
-  <div v-loading="props.loading">
+  <div v-loading="props.loading" class="order-cards">
     <el-empty v-if="!props.list.length" description="暂无订单数据" />
 
-    <div v-else class="grid gap-3">
-      <el-card v-for="row in props.list" :key="row.id" shadow="hover" class="rounded-lg">
-        <div class="mb-2 flex items-start justify-between gap-2">
-          <div class="text-[13px] font-semibold text-gray-700 break-all">
-            订单号：{{ row.order_no || row.id }}
-          </div>
-          <el-tag :type="props.getStatusType(row.status)" :effect="props.getStatusEffect(row.status)" size="small">
-            {{ row.status_name }}
-          </el-tag>
+    <article v-for="row in props.list" :key="row.id" class="order-card" :aria-label="`回收订单 ${row.order_no || ''}`">
+      <header class="order-card__heading">
+        <span class="order-card__number">{{ row.order_no || '订单号待补充' }}</span>
+        <el-tag :type="props.getStatusType(row.status)" :effect="props.getStatusEffect(row.status)" size="small">{{ row.status_name }}</el-tag>
+      </header>
+
+      <div class="order-card__customer">
+        <el-avatar
+          :size="32"
+          :src="row.member?.headimg ? props.img(row.member.headimg) : ''"
+          :class="{ 'order-card__avatar--clickable': row.member?.member_id }"
+          @click="row.member?.member_id && props.openMemberDetail(row.member)"
+        ><el-icon><User /></el-icon></el-avatar>
+        <div class="order-card__contact">
+          <strong>{{ row.recycleUserAddress?.name || row.member?.nickname || '未知用户' }}</strong>
+          <span>{{ row.member?.mobile || row.recycleUserAddress?.mobile || '暂无联系方式' }}</span>
         </div>
+        <el-tag class="order-card__delivery" size="small" :type="deliveryTagType(row.delivery_type)">{{ deliveryLabel(row) }}</el-tag>
+      </div>
 
-        <div class="mb-2 flex items-center gap-2">
-          <el-avatar
-            :size="28"
-            :src="row.member?.headimg ? props.img(row.member.headimg) : ''"
-            :class="row.member?.member_id ? 'cursor-pointer' : ''"
-            @click="row.member?.member_id && props.openMemberDetail(row.member)"
-          >
-            <el-icon><User /></el-icon>
-          </el-avatar>
-          <div class="min-w-0">
-            <div class="text-sm font-semibold text-gray-900">
-              {{ row.recycleUserAddress?.name || row.member?.nickname || "未知用户" }}
-            </div>
-            <div class="text-xs text-gray-500">
-              {{ row.member?.mobile || row.recycleUserAddress?.mobile || "暂无联系方式" }}
-            </div>
+      <div class="order-card__progress">
+        <span :class="{ 'order-card__count--mismatch': !isDeviceCountMatched(row) }">已录 {{ getSignedDeviceCount(row) }} / 提交 {{ getSubmittedDeviceCount(row) }} 台</span>
+        <template v-if="row.flow_summary?.progress?.length">
+          <el-tag
+            v-for="item in row.flow_summary.progress.filter(p => p.value > 0 && p.key !== 'total')"
+            :key="item.key"
+            size="small"
+            :type="['info', 'warning', 'primary', 'success', 'danger'].includes(item.color) ? item.color : 'info'"
+            :effect="item.key === 'paid' ? 'dark' : 'plain'"
+          >{{ item.label }} {{ item.value }}</el-tag>
+        </template>
+      </div>
+
+      <HsxFold title="订单信息" :summary="props.formatDateTime(row.create_at)" class="order-card__metadata">
+        <dl class="order-card__facts">
+          <div><dt>下单来源</dt><dd>{{ row.order_source === 'agent' ? '代下单' : '客户下单' }}{{ row.order_source === 'agent' && row.agent_name ? ' · ' + row.agent_name : '' }}</dd></div>
+          <div><dt>流转方式</dt><dd>{{ row.flow_mode_name || '整单流转' }}</dd></div>
+          <div><dt>创建时间</dt><dd>{{ props.formatDateTime(row.create_at) }}</dd></div>
+          <div v-if="row.sign_at"><dt>签收时间</dt><dd>{{ props.formatDateTime(row.sign_at) }}</dd></div>
+          <div v-if="row.complete_at"><dt>完成时间</dt><dd>{{ props.formatDateTime(row.complete_at) }}</dd></div>
+          <div v-if="row.pay_time"><dt>打款时间</dt><dd>{{ props.formatDateTime(row.pay_time) }}</dd></div>
+          <div v-if="String(row.delivery_type) === '1'">
+            <dt>快递单号</dt>
+            <dd><el-button link type="primary" :loading="props.expressLoading[row.id]" @click="props.handleExpressHover(row)" @mouseleave="props.handleExpressLeave">{{ row.express_no || '暂无' }}</el-button></dd>
           </div>
-        </div>
+          <template v-if="String(row.delivery_type) === '3'">
+            <div><dt>物流车辆</dt><dd>{{ [row.logistics_name, row.logistics_vehicle_no].filter(Boolean).join(' · ') || '待补充' }}</dd></div>
+            <div><dt>取货地点</dt><dd>{{ row.logistics_pickup_address || '待补充' }}</dd></div>
+            <div><dt>物流联系</dt><dd>{{ [row.logistics_contact_name, row.logistics_contact_mobile].filter(Boolean).join(' · ') || '待补充' }}</dd></div>
+            <div v-if="row.logistics_eta_at"><dt>预计到达</dt><dd>{{ props.formatDateTime(row.logistics_eta_at) }}</dd></div>
+          </template>
+        </dl>
+      </HsxFold>
 
-        <div class="mb-2 grid grid-cols-2 gap-2">
-          <div class="rounded-md border border-gray-200 bg-slate-50 p-2">
-            <div class="mb-1 text-xs text-gray-500">配送方式</div>
-            <el-tag size="small" :type="deliveryTagType(row.delivery_type)">
-              {{ deliveryLabel(row) }}
-            </el-tag>
-          </div>
-
-          <div class="rounded-md border border-gray-200 bg-slate-50 p-2">
-            <div class="mb-1 text-xs text-gray-500">设备数量</div>
-            <el-tag v-if="isDeviceCountMatched(row)" type="success" size="small">
-              {{ getSubmittedDeviceCount(row) }}/{{ getSignedDeviceCount(row) }}台
-            </el-tag>
-            <el-tag v-else type="danger" size="small">
-              {{ getSubmittedDeviceCount(row) }}/{{ getSignedDeviceCount(row) }}台
-            </el-tag>
-          </div>
-
-          <div class="col-span-2 rounded-md border border-gray-200 bg-slate-50 p-2">
-            <div class="mb-1 text-xs text-gray-500">创建时间</div>
-            <div class="text-xs text-gray-800">{{ props.formatDateTime(row.create_at) }}</div>
-          </div>
-
-          <div v-if="row.delivery_type === '1'" class="col-span-2 rounded-md border border-gray-200 bg-slate-50 p-2">
-            <div class="mb-1 text-xs text-gray-500">快递单号</div>
-            <div
-              class="cursor-pointer text-xs text-blue-600 break-all"
-              @click="props.handleExpressHover(row)"
-              @mouseleave="props.handleExpressLeave"
-            >
-              <span v-if="!props.expressLoading[row.id]">{{ row.express_no || "暂无" }}</span>
-              <el-icon v-else class="animate-spin text-blue-500">
-                <Loading />
-              </el-icon>
-            </div>
-          </div>
-          <div v-if="String(row.delivery_type) === '3'" class="col-span-2 rounded-md border border-blue-100 bg-blue-50 p-2 text-xs leading-6 text-gray-700">
-            <div class="font-medium text-gray-900">{{ [row.logistics_name, row.logistics_vehicle_no].filter(Boolean).join(' · ') || '物流车辆待补充' }}</div>
-            <div>{{ row.logistics_pickup_address || '取货地点待补充' }}</div>
-            <div>{{ [row.logistics_contact_name, row.logistics_contact_mobile].filter(Boolean).join(' · ') }}</div>
-            <div v-if="row.logistics_eta_at" class="text-amber-700">预计 {{ props.formatDateTime(row.logistics_eta_at) }} 可取</div>
-          </div>
-        </div>
-
-        <div v-if="props.orderStatusMap[row.status]?.action?.length" class="mb-2 flex flex-wrap gap-2">
-          <el-button
-            v-for="action in props.orderStatusMap[row.status].action"
-            v-show="hasActionPerm(action.key)"
-            :key="action.key"
-            size="small"
-            :type="props.getActionButtonType(action.key)"
-            :icon="props.getActionIcon(action.key)"
-            @click="props.handleAction(row, action)"
-          >
-            {{ action.value }}
-          </el-button>
-          <el-button
-            v-if="hasActionPerm('order_payment') && row.available_actions?.can_pay_devices && !props.orderStatusMap[row.status]?.action?.some((action: any) => action.key === 'order_payment')"
-            type="primary"
-            size="small"
-            :icon="props.getActionIcon('order_payment')"
-            @click="props.handleAction(row, { key: 'order_payment', value: '去打款' })"
-          >
-            去打款
-          </el-button>
-          <el-button
-            v-if="row.available_actions?.can_push_confirm_notice && !props.orderStatusMap[row.status]?.action?.some((action: any) => action.key === 'order_push_notify')"
-            type="warning"
-            size="small"
-            :icon="Bell"
-            @click="props.handleAction(row, { key: 'order_push_notify', value: '推送通知' })"
-          >
-            推送通知
-          </el-button>
-          <el-button
-            type="success"
-            size="small"
-            :icon="Share"
-            @click="props.shareOrder(row)"
-          >
-            分享
-          </el-button>
-          <el-button
-            type="info"
-            size="small"
-            :icon="Bell"
-            @click="props.viewNoticeLogs(row)"
-          >
-            通知记录
-          </el-button>
-        </div>
-        <div v-else class="mb-2 flex flex-wrap gap-2">
-          <el-button
-            v-if="hasActionPerm('order_payment') && row.available_actions?.can_pay_devices"
-            type="primary"
-            size="small"
-            :icon="props.getActionIcon('order_payment')"
-            @click="props.handleAction(row, { key: 'order_payment', value: '去打款' })"
-          >
-            去打款
-          </el-button>
-          <el-button
-            v-if="row.available_actions?.can_push_confirm_notice"
-            type="warning"
-            size="small"
-            :icon="Bell"
-            @click="props.handleAction(row, { key: 'order_push_notify', value: '推送通知' })"
-          >
-            推送通知
-          </el-button>
-          <el-button
-            type="success"
-            size="small"
-            :icon="Share"
-            @click="props.shareOrder(row)"
-          >
-            分享
-          </el-button>
-          <el-button
-            type="info"
-            size="small"
-            :icon="Bell"
-            @click="props.viewNoticeLogs(row)"
-          >
-            通知记录
-          </el-button>
-        </div>
-
+      <div class="order-card__toolbar">
         <el-button
-          size="small"
-          text
-          type="primary"
+          class="order-card__expand"
+          text type="primary"
+          :icon="props.isMobileOrderExpanded(row.id) ? ArrowUp : ArrowDown"
+          :aria-expanded="props.isMobileOrderExpanded(row.id)"
+          :aria-controls="`order-devices-${row.id}`"
           @click="props.toggleMobileOrderExpand(row.id)"
-          class="!pl-0"
-        >
-          {{ props.isMobileOrderExpanded(row.id) ? "收起设备列表" : "展开设备列表" }}
-          ({{ row.devices?.length || 0 }})
-        </el-button>
+        >{{ props.isMobileOrderExpanded(row.id) ? '收起设备' : '展开设备' }}（{{ row.devices?.length || 0 }}）</el-button>
+        <el-dropdown trigger="click">
+          <el-button :icon="MoreFilled">更多操作</el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item v-for="action in getOrderActions(row)" :key="action.key" @click="action.handler()">{{ action.label }}</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+      </div>
 
-        <el-collapse-transition>
-          <div v-show="props.isMobileOrderExpanded(row.id)" class="mt-2 grid gap-2 border-t border-dashed border-gray-300 pt-2">
-            <div v-for="device in row.devices || []" :key="device.id" class="rounded-md border border-gray-200 bg-white p-2">
-              <div class="text-xs font-semibold text-gray-800 break-all">
-                {{ device.user_sn || device.imei || "无串号" }}
-              </div>
-              <div v-if="device.user_sn && device.imei" class="text-[11px] text-gray-400 break-all">
-                管理录入：{{ device.imei }}
-              </div>
-              <div class="mt-1 text-xs text-gray-600">{{ device.model || "未知型号" }}</div>
-
-              <div class="mt-2 flex items-center justify-between">
-                <span class="text-sm font-semibold text-red-500">{{ props.formatPrice(device.final_price) }}</span>
-                <DeviceStatusBadge :status="device.status" :status-name="device.status_name" />
-              </div>
-              <div v-if="device.status === 5" class="mt-2">
-                <el-tag :type="Number(device.pay_status || 0) === 1 ? 'success' : 'warning'" size="small">
-                  {{ device.pay_status_name || (Number(device.pay_status || 0) === 1 ? '已打款' : '未打款') }}
-                </el-tag>
-              </div>
-              <div v-if="device.consignment_order_id || device.consignmentOrder" class="mt-2">
-                <el-button link type="primary" size="small" @click="props.viewConsignment(device)">
-                  {{ device.consignmentOrder?.consignment_no || '查看代卖单' }}
-                </el-button>
-              </div>
-
-              <div v-if="row.status == 4" class="mt-2 border-t border-dashed border-gray-200 pt-2">
-                <el-checkbox
-                  :model-value="props.isMobileDeviceSelected(row.id, device.id)"
-                  @change="(checked) => props.handleMobileDeviceSelection(row.id, device, checked)"
-                >
-                  批量选择
-                </el-checkbox>
-              </div>
-
-              <div class="mt-2 flex flex-wrap items-center gap-2">
-                <!-- 主行动：当前状态最该做的下一步 -->
-                <el-button
-                  v-if="getDevicePrimaryAction(device)"
-                  :type="getDevicePrimaryAction(device)!.type || 'primary'"
-                  size="small"
-                  :icon="getDevicePrimaryAction(device)!.icon"
-                  @click="getDevicePrimaryAction(device)!.handler()"
-                >
-                  {{ getDevicePrimaryAction(device)!.label }}
-                </el-button>
-
-                <!-- 更多：次要操作 -->
-                <el-dropdown v-if="getDeviceMoreActions(device).length" trigger="click">
-                  <el-button size="small" :icon="MoreFilled">更多</el-button>
-                  <template #dropdown>
-                    <el-dropdown-menu>
-                      <el-dropdown-item
-                        v-for="a in getDeviceMoreActions(device)"
-                        :key="a.key"
-                        :divided="a.danger"
-                        @click="a.handler()"
-                      >
-                        <span class="flex items-center gap-1" :class="a.danger ? 'text-red-500' : ''">
-                          <el-icon><component :is="a.icon" /></el-icon>{{ a.label }}
-                        </span>
-                      </el-dropdown-item>
-                    </el-dropdown-menu>
-                  </template>
-                </el-dropdown>
-
-                <el-button
-                  type="primary"
-                  link
-                  :icon="View"
-                  @click="props.viewDetail(device)"
-                  size="small"
-                >
-                  详情
-                </el-button>
-              </div>
-            </div>
-
-            <div
-              v-if="props.selectedDevices[row.id] && props.selectedDevices[row.id].length > 0 && row.status == 4"
-              class="flex justify-end"
-            >
-              <el-button type="primary" size="small" :icon="Check" @click="props.batchRecycleDevices(row.id)">
-                批量确认 ({{ props.selectedDevices[row.id].length }})
-              </el-button>
-            </div>
-          </div>
-        </el-collapse-transition>
-      </el-card>
-    </div>
+      <el-collapse-transition>
+        <div v-show="props.isMobileOrderExpanded(row.id)" :id="`order-devices-${row.id}`" class="order-card__devices">
+          <RecycleOrderDeviceList
+            :order="row"
+            :selected-devices="props.selectedDevices[row.id] || []"
+            :format-price="props.formatPrice"
+            :get-device-primary-action="getDevicePrimaryAction"
+            :get-device-more-actions="getDeviceMoreActions"
+            :view-consignment="props.viewConsignment"
+            :view-detail="props.viewDetail"
+            @selection-change="devices => props.handleDeviceSelectionChange(devices, row.id)"
+            @batch-confirm="props.batchRecycleDevices(row.id)"
+          />
+        </div>
+      </el-collapse-transition>
+    </article>
   </div>
 </template>
 
 <script setup lang="ts">
 import {
-  DocumentChecked,
-  PriceTag,
-  Check,
-  Edit,
-  Close,
-  Printer,
-  View,
-  Switch,
+  ArrowDown,
+  ArrowUp,
   User,
-  Loading,
-  Share,
-  Bell,
   MoreFilled,
 } from "@element-plus/icons-vue";
-import DeviceStatusBadge from "./DeviceStatusBadge.vue";
+import { HsxFold } from '@/addon/hsx_components/core';
+import RecycleOrderDeviceList from './RecycleOrderDeviceList.vue';
 import { useDeviceRowActions } from "@/addon/hsx_recycle/hooks/useDeviceRowActions";
 import useUserStore from "@/stores/modules/user";
 
@@ -303,6 +125,7 @@ interface Props {
   list: any[];
   orderStatusMap: Record<string, any>;
   selectedDevices: Record<string | number, any[]>;
+  handleDeviceSelectionChange: (devices: any[], orderId: number | string) => void;
   expressLoading: Record<string | number, boolean>;
   formatPrice: (price: any) => string;
   formatDateTime: (value: any) => string;
@@ -316,12 +139,6 @@ interface Props {
   img: (path: string) => string;
   isMobileOrderExpanded: (orderId: number | string) => boolean;
   toggleMobileOrderExpand: (orderId: number | string) => void;
-  isMobileDeviceSelected: (orderId: number | string, deviceId: number | string) => boolean;
-  handleMobileDeviceSelection: (
-    orderId: number | string,
-    device: any,
-    checked: string | number | boolean
-  ) => void;
   checkDevice: (row: any) => void;
   priceDevice: (row: any) => void;
   batchRecycleDevice: (id: number | string) => void;
@@ -365,4 +182,49 @@ const getSubmittedDeviceCount = (row: any) => normalizeDeviceCount(row.count)
 const getSignedDeviceCount = (row: any) => props.getDeviceCount(row.devices)
 
 const isDeviceCountMatched = (row: any) => getSubmittedDeviceCount(row) === getSignedDeviceCount(row)
+
+const getOrderActions = (row: any) => {
+  const actions = [...(props.orderStatusMap[row.status]?.action || [])];
+  if (row.available_actions?.can_pay_devices && !actions.some(action => action.key === 'order_payment')) {
+    actions.push({ key: 'order_payment', value: '去打款' });
+  }
+  if (row.available_actions?.can_push_confirm_notice && !actions.some(action => action.key === 'order_push_notify')) {
+    actions.push({ key: 'order_push_notify', value: '推送通知' });
+  }
+  return [
+    ...actions.filter(action => hasActionPerm(action.key)).map(action => ({ key: action.key, label: action.value, handler: () => props.handleAction(row, action) })),
+    { key: 'share_order', label: '分享订单', handler: () => props.shareOrder(row) },
+    { key: 'notice_logs', label: '通知记录', handler: () => props.viewNoticeLogs(row) },
+  ];
+};
 </script>
+
+<style scoped>
+.order-cards { display: grid; gap: 14px; min-width: 0; }
+.order-card { min-width: 0; padding: 16px; border: 1px solid var(--hsx-border-color); border-radius: var(--hsx-radius-md); background: var(--hsx-bg-surface); }
+.order-card__heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.order-card__number { min-width: 0; font-size: 12px; line-height: 22px; font-variant-numeric: tabular-nums; color: var(--hsx-text-secondary); overflow-wrap: anywhere; }
+.order-card__heading :deep(.el-tag) { flex: none; }
+.order-card__customer { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.order-card__avatar--clickable { cursor: pointer; }
+.order-card__contact { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.order-card__contact strong { font-size: 15px; color: var(--hsx-text-primary); }
+.order-card__contact span { font-size: 12px; color: var(--hsx-text-secondary); }
+.order-card__delivery { margin-left: auto; }
+.order-card__progress { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin: 12px 0; font-size: 12px; color: var(--hsx-text-regular); }
+.order-card__count--mismatch { color: var(--el-color-danger); }
+.order-card__metadata { margin-bottom: 10px; }
+.order-card__facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 10px 16px; margin: 0; }
+.order-card__facts > div { display: flex; align-items: baseline; min-width: 0; gap: 10px; font-size: 12px; line-height: 20px; }
+.order-card__facts dt { flex: 0 0 54px; color: var(--hsx-text-secondary); }
+.order-card__facts dd { margin: 0; min-width: 0; color: var(--hsx-text-regular); overflow-wrap: anywhere; }
+.order-card__toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.order-card__toolbar :deep(.el-button) { min-height: 40px; margin-left: 0; }
+.order-card__expand { padding-left: 0; }
+.order-card__devices { margin: 10px -4px -4px; }
+@media (max-width: 480px) {
+  .order-card { padding: 12px; }
+  .order-card__contact { flex-direction: column; }
+  .order-card__metadata :deep(.hsx-fold__summary) { font-size: 11px; }
+}
+</style>

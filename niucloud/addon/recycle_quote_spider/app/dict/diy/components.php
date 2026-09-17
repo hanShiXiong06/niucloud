@@ -4,6 +4,27 @@ return [
     'RECYCLE_QUOTE_SPIDER_COMPONENT' => [
         'title' => '爬虫报价组件',
         'list' => [
+            'RecycleSpiderSearch' => [
+                'title' => '报价搜索',
+                'icon' => 'iconfont iconsousuo',
+                'path' => 'edit-recycle-spider-search',
+                'support_page' => [],
+                'uses' => 0,
+                'sort' => 10005,
+                'value' => [
+                    'placeholder' => '搜索型号，查回收价',
+                    'sourceId' => 0,
+                    'buttonColor' => '#2563eb',
+                    'componentStartBgColor' => '#ffffff',
+                    'componentEndBgColor' => '',
+                    'componentGradientAngle' => 'to bottom',
+                    'componentBgUrl' => '',
+                    'componentBgAlpha' => 0,
+                    'topRounded' => 0,
+                    'bottomRounded' => 0,
+                    'margin' => ['top' => 10, 'bottom' => 10, 'both' => 12],
+                ],
+            ],
             'RecycleSpiderQuotationList' => [
                 'title' => '爬虫报价单',
                 'icon' => 'iconfont iconshangpinliebiaopc',

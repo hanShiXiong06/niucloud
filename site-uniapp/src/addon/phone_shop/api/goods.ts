@@ -1,4 +1,6 @@
 import request from '@/utils/request'
+export const getTierPricing = () => request.get('phone_shop/goods/tier_pricing')
+export const previewTierPricing = (base_price: number) => request.get('phone_shop/goods/tier_pricing/preview', { base_price })
 
 /**
  * 商品列表

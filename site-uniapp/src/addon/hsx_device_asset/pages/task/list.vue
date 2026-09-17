@@ -81,7 +81,7 @@
                     <view v-if="item.asset_no" class="task-card__asset">资产编号 {{ item.asset_no }}</view>
 
                     <view class="info-grid">
-                        <view class="info-grid__cell">
+                        <view v-if="!isErpLinked(item)" class="info-grid__cell">
                             <text class="info-grid__k">成本</text>
                             <text class="info-grid__v">¥{{ money(item.recycle_final_price ?? item.final_price) }}</text>
                         </view>
@@ -91,7 +91,7 @@
                         </view>
                         <view class="info-grid__cell">
                             <text class="info-grid__k">销售价</text>
-                            <text class="info-grid__v info-grid__v--price">¥{{ money(item.sale_price) }}</text>
+                            <text class="info-grid__v info-grid__v--price">{{ isErpLinked(item) ? '在 ERP 查看' : `¥${money(item.sale_price)}` }}</text>
                         </view>
                     </view>
 
@@ -207,6 +207,7 @@ const selectTab = (key: TaskTab) => {
 }
 
 const needsPhoto = (item: any) => ['wait_photo', 'photoing', 'photo_review', 'photo_rejected'].includes(item.status)
+const isErpLinked = (item: any) => Number(item.ext_json?.erp_asset_id || 0) > 0
 const needsPrice = (item: any) => item.status === 'wait_price'
 
 const statusTagType = (item: any) => {
@@ -220,12 +221,15 @@ const handleItem = (item: any) => {
     if (needsPhoto(item)) {
         return uni.navigateTo({ url: `/addon/hsx_device_asset/pages/photo/capture?id=${item.id}` })
     }
+    if (isErpLinked(item)) {
+        return uni.navigateTo({ url: `/addon/hsx_erp/pages/stock/detail?id=${Number(item.ext_json.erp_asset_id)}` })
+    }
     uni.navigateTo({ url: `/addon/hsx_device_asset/pages/price/detail?id=${item.id}` })
 }
-const actionText = (item: any) => needsPhoto(item) ? '去拍照' : (needsPrice(item) ? '直接定价' : '查看')
+const actionText = (item: any) => needsPhoto(item) ? '去拍照' : (isErpLinked(item) ? '去 ERP 查看' : (needsPrice(item) ? '直接定价' : '查看'))
 const nextAction = (item: any) => needsPhoto(item)
     ? '下一步：拍照或复检'
-    : (needsPrice(item) ? '下一步：查看资料并定价' : '流程已完成，可查看资料')
+    : (isErpLinked(item) ? '照片已交接，定价与销售在 ERP 继续' : (needsPrice(item) ? '下一步：查看资料并定价' : '流程已完成，可查看资料'))
 const money = (value: any) => Number(value || 0).toFixed(2)
 
 const scanCode = () => uni.scanCode({

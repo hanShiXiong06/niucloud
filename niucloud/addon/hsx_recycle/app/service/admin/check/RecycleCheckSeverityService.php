@@ -166,23 +166,49 @@ class RecycleCheckSeverityService extends BaseAdminService
             if (method_exists($reader, 'setReadDataOnly')) {
                 $reader->setReadDataOnly(true);
             }
-            if (method_exists($reader, 'setLoadSheetsOnly')) {
-                $reader->setLoadSheetsOnly('级别标注');
-            }
+            $sheetNames = $reader->listWorksheetNames($file->getPathname());
+            // 不筛选一个不存在的工作表，否则 PhpSpreadsheet 会返回空白表并误报“没有选项”。
+            $reader->setLoadSheetsOnly(in_array('级别标注', $sheetNames, true) ? '级别标注' : null);
             $spreadsheet = $reader->load($file->getPathname());
-            $sheet = $spreadsheet->getSheetByName('级别标注') ?: $spreadsheet->getActiveSheet();
-            $matrix = $sheet->toArray(null, true, true, false);
-            $spreadsheet->disconnectWorksheets();
+            try {
+                $sheet = $spreadsheet->getSheetByName('级别标注');
+                if ($sheet === null) {
+                    $matches = [];
+                    foreach ($spreadsheet->getWorksheetIterator() as $candidate) {
+                        $headers = $candidate->rangeToArray('A1:' . $candidate->getHighestDataColumn() . '1', null, false, false)[0];
+                        $headers = array_map(fn($value) => $this->normalizeImportHeader($value), $headers);
+                        if (count(array_intersect(['系统选项ID', '选项文本', '建议级别', '确认状态'], $headers)) === 4) {
+                            $matches[] = $candidate;
+                        }
+                    }
+                    if (count($matches) > 1) {
+                        throw new CommonException('多个工作表都包含级别标注数据，请将需要导入的工作表命名为“级别标注”后重新上传');
+                    }
+                    $sheet = $matches[0] ?? null;
+                }
+                if ($sheet === null) {
+                    throw new CommonException('未找到质检选项级别表：需要“系统选项ID、选项文本、建议级别、确认状态”列。请先从“选项级别”导出再标注；“型号、检测项”原始表应到“检测目录”导入。');
+                }
+                if ($sheet->getHighestDataRow() > 20001) {
+                    throw new CommonException('单次最多处理 20000 个质检选项');
+                }
+                // 不计算上传文件中的公式；只核对原始 ID、文本和人工确认值。
+                $matrix = $sheet->rangeToArray('A1:' . $sheet->getHighestDataColumn() . $sheet->getHighestDataRow(), null, false, false);
+            } finally {
+                $spreadsheet->disconnectWorksheets();
+            }
+        } catch (CommonException $e) {
+            throw $e;
         } catch (\Throwable $e) {
             throw new CommonException('Excel 解析失败：' . $e->getMessage());
         }
         if (count($matrix) < 2) {
-            throw new CommonException('Excel 中没有可导入的质检选项');
+            throw new CommonException('级别标注工作表只有表头或没有数据，请从“选项级别”重新导出并填写标注结果');
         }
         if (count($matrix) > 20001) {
             throw new CommonException('单次最多处理 20000 个质检选项');
         }
-        $header = array_map(static fn($value) => trim((string)$value), (array)$matrix[0]);
+        $header = array_map(fn($value) => $this->normalizeImportHeader($value), (array)$matrix[0]);
         $required = ['系统选项ID', '选项文本', '建议级别', '确认状态'];
         $indexes = [];
         foreach ($required as $name) {
@@ -267,6 +293,9 @@ class RecycleCheckSeverityService extends BaseAdminService
             }
         }
 
+        if ($summary['total'] === 0) {
+            throw new CommonException('级别标注工作表没有有效数据行，请填写系统选项ID、选项文本及确认状态后重新上传');
+        }
         $token = bin2hex(random_bytes(20));
         $payload = [
             'site_id' => (int)$this->site_id,
@@ -282,6 +311,11 @@ class RecycleCheckSeverityService extends BaseAdminService
             throw new CommonException('预检结果保存失败，请稍后重试');
         }
         return ['token' => $token, 'summary' => $summary, 'rows' => $previewRows, 'errors' => $errors, 'expires_in' => 1800];
+    }
+
+    private function normalizeImportHeader($value): string
+    {
+        return trim(str_replace(["\xEF\xBB\xBF", "\r", "\n"], '', (string)$value));
     }
 
     /** 用户确认预检结果后原子更新字典；失败不会产生部分更新。 */

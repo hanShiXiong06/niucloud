@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace addon\hsx_device_asset\app\listener;
 
 use addon\hsx_device_asset\app\service\core\DeviceAssetErpEventService;
+use addon\hsx_device_asset\app\support\DeviceAssetPhotoEntry;
 use app\model\site\Site;
 use app\service\core\site\CoreSiteService;
 
@@ -21,7 +22,7 @@ class ErpListingMediaCapability
                 'provider' => 'device_asset',
                 'name' => '标准化拍照中台',
                 'available' => 1,
-                'features' => ['guided_photo', 'industrial_camera', 'image_review', 'sale_price'],
+                'features' => ['guided_photo', 'industrial_camera', 'image_review', 'erp_photo_handoff'],
             ];
         }
 
@@ -45,7 +46,9 @@ class ErpListingMediaCapability
             'available' => 1,
             'prepared' => true,
             'middle_asset_id' => $middleAssetId,
+            'admin_path' => '/device_asset/list?photo_asset_id=' . $middleAssetId,
             'mobile_path' => '/addon/hsx_device_asset/pages/photo/capture?id=' . $middleAssetId,
+            'mobile_url' => DeviceAssetPhotoEntry::mobileUrl(request()->domain(), $siteId, $middleAssetId),
             'message' => !empty($result['created']) ? '标准化拍照任务已创建' : '已找到该设备的拍照任务',
         ];
     }

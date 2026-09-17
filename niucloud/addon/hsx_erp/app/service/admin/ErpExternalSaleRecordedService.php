@@ -9,18 +9,21 @@ use addon\hsx_erp\app\model\ErpReceivable;
 use addon\hsx_erp\app\model\ErpCapitalAccount;
 use core\exception\CommonException;
 
-/** 已线上支付的商城自有商品销售事实：不触碰 ERP 设备库存与采购应付。 */
+/** 商城自有商品销售事实：按串号复用ERP已有库存；绝不在支付回调中创建采购应付。 */
 class ErpExternalSaleRecordedService extends ErpExternalSaleAccountingService
 {
     public const EVENT_NAME = 'ErpExternalSaleRecordedRequested';
     public const CONTRACT_NAME = 'erp.external_sale.recorded_requested.v1';
+    private ?ErpMallInventoryService $inventoryService = null;
 
     public function consume(array $event): array
     {
         $payload = $this->normalize($event);
-        return $this->consumeOnce($payload, self::EVENT_NAME, function (array $request): array {
+        $result = $this->consumeOnce($payload, self::EVENT_NAME, function (array $request): array {
             return $this->record($request);
         });
+        $this->inventoryService?->flushEvents();
+        return $result;
     }
 
     private function normalize(array $event): array
@@ -52,6 +55,7 @@ class ErpExternalSaleRecordedService extends ErpExternalSaleAccountingService
                 'cost' => $cost,
                 'supplier_id' => max(0, (int)($item['supplier_id'] ?? 0)),
                 'inventory_source' => $source,
+                'device' => is_array($item['device'] ?? null) ? $item['device'] : [],
             ];
         }
         if ($items === []) throw new CommonException('外部销售没有可记账的商城自有商品');
@@ -146,13 +150,15 @@ class ErpExternalSaleRecordedService extends ErpExternalSaleAccountingService
             'create_at' => $now,
             'update_at' => $now,
         ]);
+        $inventoryWarnings = [];
+        $this->inventoryService = ErpMallInventoryService::forSite((int)$payload['site_id'], $operatorId, $operatorName);
         foreach ((array)$payload['items'] as $item) {
             $model = trim((string)$item['goods_name'] . ((string)$item['sku_name'] !== '' ? ' · ' . (string)$item['sku_name'] : ''));
-            ErpSaleItem::create([
+            $saleItem = ErpSaleItem::create([
                 'site_id' => (int)$payload['site_id'],
                 'sale_order_id' => (int)$sale->id,
                 'asset_id' => 0,
-                'imei' => '',
+                'imei' => mb_substr(trim((string)(($item['device']['imei'] ?? '') ?: ($item['device']['sn'] ?? '') ?: ($item['device']['sku_no'] ?? ''))), 0, 64),
                 'model' => mb_substr($model, 0, 255),
                 'external_goods_id' => (int)$item['goods_id'],
                 'external_sku_id' => (int)$item['sku_id'],
@@ -173,7 +179,17 @@ class ErpExternalSaleRecordedService extends ErpExternalSaleAccountingService
                 'create_at' => $now,
                 'update_at' => $now,
             ]);
+            if ((string)$payload['source_plugin'] === 'phone_shop' && !empty($item['device'])) {
+                $warning = $this->inventoryService->attachRecordedSale($sale, $saleItem, $item['device']);
+                if ($warning !== '') {
+                    $inventoryWarnings[] = ['line_id' => $item['line_id'], 'message' => $warning];
+                    $saleItem->save(['remark' => mb_substr('库存待核对：' . $warning . '；' . (string)$saleItem->remark, 0, 255)]);
+                }
+            }
         }
+        // 关联原资产时成本以ERP已确认成本为准，包含已有整备费；不倒写商城售价。
+        $totalCost = round((float)ErpSaleItem::where([['site_id', '=', (int)$payload['site_id']], ['sale_order_id', '=', (int)$sale->id]])->sum('cost'), 2);
+        $sale->save(['total_cost' => $totalCost, 'profit' => round($totalAmount - $totalCost, 2)]);
 
         $ledger = $this->ledger((int)$payload['site_id']);
         $settlementId = 0;
@@ -293,6 +309,7 @@ class ErpExternalSaleRecordedService extends ErpExternalSaleAccountingService
             'settlement_id' => $settlementId,
             'capital_account_id' => $capitalAccountId,
             'receivable_created' => $isCredit,
+            'inventory_warnings' => $inventoryWarnings,
             'total_amount' => number_format($totalAmount, 2, '.', ''),
             'total_cost' => number_format($totalCost, 2, '.', ''),
             'profit' => number_format($totalAmount - $totalCost, 2, '.', ''),

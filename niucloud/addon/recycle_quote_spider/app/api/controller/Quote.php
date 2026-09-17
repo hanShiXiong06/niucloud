@@ -8,6 +8,14 @@ use core\base\BaseApiController;
 
 class Quote extends BaseApiController
 {
+    public function search()
+    {
+        $data = $this->request->params([
+            ['keyword', ''], ['source_id', 0], ['page', 1], ['limit', 12],
+        ]);
+        return success((new QuoteQueryService())->search($data));
+    }
+
     public function sources()
     {
         return success((new QuoteQueryService())->sources());

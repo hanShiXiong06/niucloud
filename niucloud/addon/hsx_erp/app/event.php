@@ -3,6 +3,13 @@ declare(strict_types=1);
 
 return [
     'listen' => [
+        'PhoneShopSalesPriceChanged' => ['addon\hsx_erp\app\listener\PhoneShopSalesPriceChanged'],
+        'PhoneShopOrderReturnContext' => [
+            'addon\hsx_erp\app\listener\PhoneShopOrderReturnContext',
+        ],
+        'DeviceAssetPhotoLookupRequested' => [
+            'addon\hsx_erp\app\listener\DeviceAssetPhotoLookupRequested',
+        ],
         'ErpDeviceInboundRequested' => [
             'addon\hsx_erp\app\listener\ErpDeviceInboundRequested',
         ],
@@ -66,6 +73,9 @@ return [
         'HsxErpListingMaterialPolicy' => [
             'addon\hsx_erp\app\listener\marketplace\ListingMaterialPolicy',
         ],
+        'HsxErpBasicListingEligibility' => [
+            'addon\hsx_erp\app\listener\marketplace\BasicListingEligibility',
+        ],
         'HsxErpChannelMappingResolve' => [
             'addon\hsx_erp\app\listener\marketplace\ChannelMappingResolver',
         ],
@@ -74,6 +84,9 @@ return [
         ],
         'DeviceAssetPriceCompleted' => [
             'addon\hsx_erp\app\listener\DeviceAssetPriceCompleted',
+        ],
+        'DeviceAssetPhotosCompleted' => [
+            'addon\hsx_erp\app\listener\DeviceAssetPhotosCompleted',
         ],
         'HsxErpCatalogProducts' => [
             'addon\hsx_erp\app\listener\catalog\ErpCatalogProducts',

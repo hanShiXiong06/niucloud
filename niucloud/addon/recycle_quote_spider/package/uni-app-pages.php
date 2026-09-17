@@ -6,6 +6,15 @@ return [
             "root": "addon/recycle_quote_spider",
             "pages": [
                 {
+                    "path": "pages/price/search",
+                    "style": {
+                        "navigationBarTitleText": "报价搜索",
+                        "backgroundColor": "#f6f7f9",
+                        "onReachBottomDistance": 120
+                    },
+                    "needLogin": true
+                },
+                {
                     "path": "pages/price/show_price",
                     "style": {
                         "navigationBarTitleText": "二手机回收报价单",

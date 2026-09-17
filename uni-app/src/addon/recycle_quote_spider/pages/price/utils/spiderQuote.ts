@@ -55,7 +55,7 @@ function normalizeText(value: unknown): string {
 	return String(value ?? '').replace(/\s+/g, ' ').trim()
 }
 
-function normalizeSpiderPrices(value: unknown, columns: string[] = []): Record<string, unknown> {
+export function normalizeSpiderPrices(value: unknown, columns: string[] = []): Record<string, unknown> {
 	const result: Record<string, unknown> = {}
 	const columnNames = columns.map(column => String(column || '').trim())
 

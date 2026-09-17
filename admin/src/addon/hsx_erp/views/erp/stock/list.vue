@@ -301,13 +301,13 @@
                             <el-button class="mt-[3px] ml-2" link>更多</el-button>
                             <template #dropdown><el-dropdown-menu>
                                 <el-dropdown-item command="flow">完善资料</el-dropdown-item>
-                                <el-dropdown-item command="retail">设置/调整零售价</el-dropdown-item>
+                                <el-dropdown-item command="retail">设置/调整销售价</el-dropdown-item>
                                 <el-dropdown-item command="transfer" :disabled="!row.can_warehouse_action">{{ row.ownership_type === 'consigned' || row.warehouse_policy?.warehouse_type === 'consignment' ? '转为自有' : '调拨' }}</el-dropdown-item>
                                 <el-dropdown-item v-if="canAdjustCost" command="expense">成本调整</el-dropdown-item>
                                 <el-dropdown-item command="print_label">打印设备标签</el-dropdown-item>
                                 <el-dropdown-item v-if="row.refurbish_status === 'pending'" command="start_refurbish">开始整备</el-dropdown-item>
                                 <el-dropdown-item v-if="['pending','processing','failed'].includes(row.refurbish_status)" command="complete_refurbish">登记整备结果</el-dropdown-item>
-                                <el-dropdown-item v-if="(row.listing_status === 'ready' || row.can_handoff_shop === 1) && row.warehouse_policy?.marketplace_available" command="publish_listing">{{ row.can_handoff_shop === 1 ? '交接商城' : '上架商城' }}</el-dropdown-item>
+                                <el-dropdown-item v-if="(row.listing_status === 'ready' || row.can_handoff_shop === 1) && row.warehouse_policy?.marketplace_available" command="publish_listing">{{ row.listing_basic_first === 1 ? '上架并交接资料' : row.can_handoff_shop === 1 ? '交接商城' : '上架商城' }}</el-dropdown-item>
                             </el-dropdown-menu></template>
                         </el-dropdown>
                     </template>
@@ -353,13 +353,14 @@
                             <span class="text-xs leading-5 text-gray-400">保存后由仓库规则和资料完整度自动判断；商城交接及上架结果由渠道回执更新。</span>
                         </div>
                     </el-form-item>
-                    <el-form-item label="内部预估价">
+                    <el-form-item v-if="Number(flow.row?.sales_pricing?.enabled) !== 1" label="内部预估价">
                         <el-input-number v-model="flow.form.estimate_sale_price" :min="0" :precision="2" :controls="false" class="!w-full" />
                     </el-form-item>
                 </div>
                 <ErpListingWorkspaceForm
                     v-model="flow.form"
                     :contract="flow.row?.listing_workspace"
+                    :pricing="flow.row?.sales_pricing"
                     :action="flowContractAction"
                     @catalog-change="onFlowCatalogChange"
                 />
@@ -379,14 +380,23 @@
                         <div class="mt-1 truncate text-xs text-slate-500">{{ erpSerialText(mediaTask.row) }}</div>
                     </div>
                 </div>
-                <div v-if="mediaTask.qr" class="media-task__content">
+                <div v-if="mediaTask.data?.admin_path" class="mt-4 rounded-lg bg-slate-50 p-4">
+                    <div class="font-medium">自动拍摄工位</div>
+                    <p class="mt-2 text-sm text-slate-500">在拍照电脑操作：开始拍摄 → 翻面 → 选图提交。ERP 收到后再定价，不会自动上架。</p>
+                    <el-button class="mt-3" type="primary" @click="openAutomaticPhoto">进入自动拍摄</el-button>
+                </div>
+                <el-collapse v-if="mediaTask.qr" class="mt-4">
+                    <el-collapse-item title="手机拍摄（工位不可用或需要补拍时）" name="phone">
+                <div class="media-task__content">
                     <img :src="mediaTask.qr" class="media-task__qr" alt="移动拍摄二维码" />
                     <div class="media-task__copy">
                         <div class="font-medium text-slate-800">使用手机扫码继续</div>
-                        <div class="mt-2 text-sm leading-6 text-slate-500">拍摄图片并填写销售价格后，结果会自动回写 ERP，设备随后进入资料整理或渠道发布环节。</div>
+                        <div class="mt-2 text-sm leading-6 text-slate-500">手机拍照、去掉不需要的图片，确认后回传 ERP；价格在 ERP 中继续填写。</div>
                         <el-button class="mt-4" type="primary" plain @click="copyMediaTaskUrl">复制拍摄链接</el-button>
                     </div>
                 </div>
+                    </el-collapse-item>
+                </el-collapse>
                 <HsxNotice v-if="mediaTask.data?.degraded" class="mt-4" :title="mediaTask.data?.message" type="warning" :closable="false" />
             </div>
             <template #footer>
@@ -396,11 +406,11 @@
             </template>
         </HsxDialog>
 
-        <HsxDialog :confirm-loading="retail.saving" v-model="retail.visible" :title="Number(retail.row?.retail_price || 0) > 0 ? '调整零售价' : '设置零售价'" width="480px" destroy-on-close>
+        <HsxDialog :confirm-loading="retail.saving" v-model="retail.visible" :title="Number(retail.row?.retail_price || 0) > 0 ? '调整销售价' : '设置销售价'" width="520px" destroy-on-close>
             <div class="rounded-lg bg-slate-50 px-4 py-3"><div class="font-medium text-slate-800">{{ retail.row?.model || '-' }}</div><div class="mt-1 text-xs text-slate-500">IMEI {{ retail.row?.imei || '-' }}<span v-if="canViewCost"> · 成本 {{ money(retail.row?.total_cost) }}</span></div></div>
             <el-form class="mt-4" label-width="92px">
                 <el-form-item label="当前零售价"><span>{{ Number(retail.row?.retail_price || 0) > 0 ? money(retail.row?.retail_price) : '未设置' }}</span></el-form-item>
-                <el-form-item label="新零售价" required><el-input-number v-model="retail.form.retail_price" :min="0.01" :precision="2" :controls="false" class="!w-full" /></el-form-item>
+                <el-form-item :label="salesPriceLabel(retail.row)" required><div class="w-full"><el-input-number v-model="retail.form.retail_price" :min="0.01" :precision="2" :controls="false" class="!w-full" /><div class="text-xs text-primary mt-2">{{ salesPricePreview(retail.row?.sales_pricing, retail.form.retail_price) }}</div></div></el-form-item>
                 <el-form-item label="调整原因" :required="Number(retail.row?.retail_price || 0) > 0"><el-input v-model.trim="retail.form.reason" type="textarea" :rows="3" placeholder="首次定价可不填；已有价格调整请说明市场反馈或处理原因" /></el-form-item>
             </el-form>
             <template #footer><el-button :disabled="retail.saving" @click="retail.visible=false">取消</el-button><el-button :disabled="retail.saving" type="primary" :loading="retail.saving" @click="submitRetailPrice">确认保存</el-button></template>
@@ -715,6 +725,7 @@ import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVouche
 import ErpCatalogProductSelect from '@/addon/hsx_erp/components/ErpCatalogProductSelect.vue'
 import ErpPartySelect from '@/addon/hsx_erp/components/ErpPartySelect.vue'
 import ErpListingWorkspaceForm from '@/addon/hsx_erp/components/ErpListingWorkspaceForm.vue'
+import { salesPriceInput, salesPriceLabel, salesPricePreview } from '@/addon/hsx_erp/hooks/useSalesPricing'
 import ErpSaleProfitReport from '@/addon/hsx_erp/components/ErpSaleProfitReport.vue'
 import { firstPositiveErpAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
 import { erpListingFeedback } from '@/addon/hsx_erp/hooks/useErpListingFeedback'
@@ -1104,7 +1115,7 @@ function openFlow(row: any, mode: FlowMode = 'all') {
         sale_target: row.sale_target || 'unset',
         listing_status: row.listing_status || 'none',
         estimate_sale_price: Number(row.estimate_sale_price || 0),
-        retail_price: Number(row.retail_price || 0),
+        retail_price: salesPriceInput(row),
         catalog_product_id: Number(row.catalog_product_id || 0),
         spec: row.spec || '',
         image_urls: row.image_urls || '',
@@ -1118,19 +1129,19 @@ function openFlow(row: any, mode: FlowMode = 'all') {
 
 function openRetailPrice(row: any) {
     retail.row = row
-    retail.form = { retail_price: Number(row?.retail_price || 0), reason: '' }
+    retail.form = { retail_price: salesPriceInput(row), reason: '' }
     retail.visible = true
 }
 
 async function submitRetailPrice() {
-    if (!retail.row?.id || Number(retail.form.retail_price || 0) <= 0) return feedback.warning('请填写有效零售价')
-    if (Number(retail.row.retail_price || 0) > 0 && !retail.form.reason) return feedback.warning('调整已有零售价时请填写原因')
-    const confirmed = await feedback.confirm({ message: `确认将设备零售价${Number(retail.row.retail_price || 0) > 0 ? `由 ${money(retail.row.retail_price)} 调整为` : '设置为'} ${money(retail.form.retail_price)}？本操作只调整对外销售价格，不修改采购成本。`, title: '确认零售价', type: 'warning', confirmText: '确认保存', cancelText: '返回检查' })
+    if (!retail.row?.id || Number(retail.form.retail_price || 0) <= 0) return feedback.warning('请填写有效销售价格')
+    if (Number(retail.row.retail_price || 0) > 0 && !retail.form.reason) return feedback.warning('调整已有价格时请填写原因')
+    const confirmed = await feedback.confirm({ message: `确认将${salesPriceLabel(retail.row)}设为 ${money(retail.form.retail_price)}？${salesPricePreview(retail.row.sales_pricing, retail.form.retail_price)}。关联商城价格将一并更新；已有订单、采购成本不变。`, title: '确认销售价格', type: 'warning', confirmText: '确认保存', cancelText: '返回检查' })
     if (!confirmed) return
     retail.saving = true
     try {
         const res: any = await adjustErpStockRetailPrice(retail.row.id, { ...retail.form })
-        await showListingFeedback(res?.data?._workflow?.publish, '零售价已保存')
+        await showListingFeedback(res?.data?._workflow?.publish, '销售价格已保存')
         retail.visible = false
         await loadList()
     } finally { retail.saving = false }
@@ -1223,7 +1234,7 @@ async function prepareListingMedia(row: any) {
             feedback.info(data.message || '已切换为 ERP 普通上传')
             return openFlow(row)
         }
-        mediaTask.url = `${window.location.origin}/wap/#${data.mobile_path || ''}`
+        mediaTask.url = String(data.mobile_url || '')
         mediaTask.qr = mediaTask.url
             ? await QRCode.toDataURL(mediaTask.url, { errorCorrectionLevel: 'L', margin: 1, width: 220 })
             : ''
@@ -1246,6 +1257,13 @@ async function copyMediaTaskUrl() {
 function continueWithErpUpload() {
     mediaTask.visible = false
     if (mediaTask.row) openFlow(mediaTask.row)
+}
+
+function openAutomaticPhoto() {
+    const path = String(mediaTask.data?.admin_path || '')
+    if (!path.startsWith('/') || path.startsWith('//')) return
+    mediaTask.visible = false
+    router.push('/site' + path)
 }
 
 async function refreshAfterMediaTask() {
@@ -1322,7 +1340,9 @@ async function submitFlow() {
 
 async function publishListing(row: any) {
     const handoff = Number(row.can_handoff_shop || 0) === 1
-    const confirmed = await feedback.confirm({ message: handoff
+    const confirmed = await feedback.confirm({ message: Number(row.listing_basic_first || 0) === 1
+            ? `确认将设备「${row.model || row.imei || row.sn || '未命名设备'}」上架并交接资料？分类对应成功后客户可立即购买，细节由运营后补；分类未对应则保留待办。`
+            : handoff
             ? `确认把设备「${row.model || row.imei || row.sn || '未命名设备'}」交接给商城运营？运营将在商城完成分类、规格和标签对应，上架结果会自动回写 ERP。`
             : `确认将设备「${row.model || row.imei || row.sn || '未命名设备'}」直接上架商城？系统将使用当前分类、规格、图片和零售价创建一机一品商品。`, title: handoff ? '交接商城' : '上架商城', type: 'warning', confirmText: handoff ? '交接商城' : '确认上架', cancelText: '取消' })
     if (!confirmed) return

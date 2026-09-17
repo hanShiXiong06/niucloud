@@ -11,6 +11,8 @@ use addon\hsx_erp\app\service\admin\ErpStockService;
 use addon\hsx_erp\app\service\admin\ErpWarehousePolicyService;
 use addon\hsx_erp\app\support\ErpListingWorkflow;
 use think\facade\Log;
+use think\facade\Db;
+use addon\hsx_erp\app\service\admin\ErpSalesPriceService;
 
 /** 拍照中台完成销售定价后，先回写 ERP，再由 ERP 决定是否发布各渠道。 */
 class DeviceAssetPriceCompleted
@@ -29,8 +31,10 @@ class DeviceAssetPriceCompleted
         }
 
         try {
-            $asset = ErpAsset::where([['site_id', '=', $siteId], ['id', '=', $assetId]])->findOrEmpty();
-            if ($asset->isEmpty()) return ['consumer' => $consumer, 'status' => 'rejected', 'skipped' => true, 'reason' => 'erp_asset_missing'];
+            Db::startTrans();
+            $asset = ErpAsset::where([['site_id', '=', $siteId], ['id', '=', $assetId]])->lock(true)->findOrEmpty();
+            if ($asset->isEmpty()) throw new \RuntimeException('ERP 设备不存在');
+            if ((string)$asset->status !== 'in_stock') throw new \RuntimeException('设备已不在库，不能回写销售定价');
             $before = $asset->toArray();
             $images = array_values(array_unique(array_filter(array_map(
                 static fn($url): string => trim((string)$url),
@@ -44,10 +48,12 @@ class DeviceAssetPriceCompleted
             if ($salePrice > 0) $save['retail_price'] = $salePrice;
             $peerPrice = round((float)($payload['peer_price'] ?? 0), 2);
             if ($peerPrice > 0) $save['estimate_sale_price'] = $peerPrice;
+            if ($salePrice > 0) $save = array_merge($save, ErpSalesPriceService::fields($siteId, $salePrice));
             if (trim((string)$asset->model) === '' && trim((string)($payload['model_name'] ?? '')) !== '') {
                 $save['model'] = trim((string)$payload['model_name']);
             }
             $asset->save($save);
+            if ($salePrice > 0 || $peerPrice > 0) ErpSalesPriceService::sync($siteId, $asset->toArray());
             $asset = ErpAsset::where([['site_id', '=', $siteId], ['id', '=', $assetId]])->findOrEmpty();
             $warehouse = ErpWarehouse::where([['site_id', '=', $siteId], ['id', '=', (int)$asset->warehouse_id], ['status', '=', 1]])->findOrEmpty();
             $policyService = ErpWarehousePolicyService::forSite($siteId);
@@ -72,6 +78,7 @@ class DeviceAssetPriceCompleted
                 'remark' => '拍照中台已回写商品图片、视频和销售定价',
                 'extra' => ['image_count' => count($images), 'has_video' => $videoUrl !== '', 'retail_price' => $salePrice],
             ]);
+            Db::commit();
             $autoPublish = ErpStockService::forSite(
                 $siteId,
                 (int)($event['operator']['id'] ?? 0),
@@ -87,6 +94,7 @@ class DeviceAssetPriceCompleted
                 'auto_publish' => $autoPublish,
             ];
         } catch (\Throwable $e) {
+            Db::rollback();
             Log::warning('拍照中台结果回写ERP失败', ['asset_id' => $assetId, 'message' => $e->getMessage()]);
             return ['consumer' => $consumer, 'status' => 'failed', 'error' => true, 'message' => $e->getMessage()];
         }

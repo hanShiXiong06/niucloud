@@ -170,10 +170,12 @@
                                 <el-radio-group v-model="form.marketplace.channels.phone_shop.publish_mode" :disabled="form.marketplace.channels.phone_shop.enabled !== 1">
                                     <el-radio-button label="direct">资料齐全直接发布</el-radio-button>
                                     <el-radio-button label="manual">商城运营逐台确认</el-radio-button>
+                                    <el-radio-button label="basic_first">先上架，运营后补</el-radio-button>
                                 </el-radio-group>
                                 <div class="mt-2 text-xs text-gray-400">
-                                    直接发布：ERP 资料齐全且已有必要映射时一键上架，缺少映射会自动转商城待办；逐台确认：所有 ERP 设备均由商城运营核对后发布。
+                                    直接发布：全部必填资料齐全后上架。逐台确认：运营核对后上架。先上架：拍照定价后，分类已对应且库存可售时立即发布，电池、保修等细节由运营后补；没有分类时保留待办，不会错误上架。
                                 </div>
+                                <el-alert v-if="form.marketplace.channels.phone_shop.publish_mode === 'basic_first'" class="mt-3" type="warning" :closable="false" show-icon title="启用后，客户无需等待资料完善即可下单。未确认属性保持未知，不能作为已检测正常的承诺。" />
                             </div>
                         </el-form-item>
                     </el-form>

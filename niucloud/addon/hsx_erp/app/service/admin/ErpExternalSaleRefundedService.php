@@ -9,6 +9,8 @@ use addon\hsx_erp\app\model\ErpReceivable;
 use addon\hsx_erp\app\model\ErpSaleItem;
 use addon\hsx_erp\app\model\ErpSaleOrder;
 use core\exception\CommonException;
+use think\facade\Db;
+use think\facade\Log;
 
 /**
  * 商城线上退款冲销。
@@ -269,11 +271,11 @@ class ErpExternalSaleRefundedService extends ErpExternalSaleAccountingService
             'occurred_at' => (int)$payload['occurred_at'],
             'remark' => '商城线上退款成功，设备恢复原仓库存',
         ]);
-        $queued = (new ErpIntegrationService())->enqueueDomainEvent(
+        $queued = ErpIntegrationService::forSite((int)$payload['site_id'])->enqueueDomainEvent(
             'erp.asset.returned.v1',
             'asset',
             (int)$asset->id,
-            [
+            array_merge(\addon\hsx_erp\app\support\ErpMallOrderReference::fromSale((int)$payload['site_id'], (int)$sale->id, (int)$item->id), [
                 'asset_id' => (int)$asset->id,
                 'asset_no' => (string)$asset->asset_no,
                 'imei' => (string)$asset->imei,
@@ -287,10 +289,11 @@ class ErpExternalSaleRefundedService extends ErpExternalSaleAccountingService
                 'outbound_no' => (string)$sale->sale_no,
                 'return_reason' => (string)$payload['reason'],
                 'return_type' => 'online_payment_refund',
+                'received' => 0, // 退款成功不代表实物已经收到；商城需原业务员确认收回。
                 'origin_plugin' => 'phone_shop',
                 'refund_no' => (string)$payload['refund_no'],
                 'snapshot_at' => $now,
-            ],
+            ]),
             [],
             ['phone_shop.erp_asset_state']
         );
@@ -300,9 +303,17 @@ class ErpExternalSaleRefundedService extends ErpExternalSaleAccountingService
 
     private function flushAssetDomainEvents(): void
     {
+        // 商城退款可能仍被外层事务托管，先提交再通知；队列重试同样固定原站点。
+        if (Db::connect()->getPdo()->inTransaction()) return;
         $ids = array_values(array_unique(array_filter($this->assetOutboxIds)));
         $this->assetOutboxIds = [];
-        $integration = new ErpIntegrationService();
-        foreach ($ids as $id) $integration->dispatchDomainEvent($id);
+        $integration = ErpIntegrationService::forSite((int)$this->site_id);
+        foreach ($ids as $id) {
+            try {
+                $integration->dispatchDomainEvent($id, (int)$this->site_id);
+            } catch (\Throwable $e) {
+                Log::warning('商城退款已入账，库存回流通知待重试：' . $e->getMessage());
+            }
+        }
     }
 }

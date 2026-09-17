@@ -9,6 +9,7 @@ use addon\recycle_quote_spider\app\model\QuoteRow;
 use addon\recycle_quote_spider\app\model\QuoteSource;
 use addon\recycle_quote_spider\app\service\core\QuoteApiCacheService;
 use addon\recycle_quote_spider\app\service\core\QuotePriceHistoryService;
+use addon\recycle_quote_spider\app\support\QuoteSearch;
 use app\model\member\Member;
 use core\base\BaseApiService;
 use core\exception\CommonException;
@@ -17,6 +18,64 @@ use think\facade\Db;
 class QuoteQueryService extends BaseApiService
 {
     private const DEFAULT_NOTICE_TEXT = '温馨提示：报价仅供参考，最终价格以质检结果为准';
+
+    public function search(array $where = []): array
+    {
+        $input = $where['keyword'] ?? '';
+        $keyword = QuoteSearch::keyword(is_scalar($input) ? (string)$input : '');
+        $page = max(1, min(10000, (int)($where['page'] ?? 1)));
+        $limit = max(1, min(30, (int)($where['limit'] ?? 12)));
+        $empty = ['data' => [], 'total' => 0, 'current_page' => $page, 'per_page' => $limit, 'last_page' => 0, 'keyword' => $keyword];
+        if ($keyword === '') return $empty;
+
+        $sources = (new QuoteSource())->where('site_id', $this->site_id)->where('status', 1)
+            ->field('id,source_name')->select()->toArray();
+        $sourceNames = array_column($sources, 'source_name', 'id');
+        // 手动导入允许 source_id=0，不依赖爬虫源。
+        $sourceNames[0] = '手动报价';
+        $categories = (new QuoteCategory())->where('site_id', $this->site_id)
+            ->field('id,source_id,parent_id,is_show')->select()->toArray();
+        $itemQuery = (new QuoteItem())->where('site_id', $this->site_id)->where('is_show', 1)
+            ->where('is_image_quote', 0)->whereIn('source_id', array_keys($sourceNames))
+            ->whereIn('category_id', QuoteSearch::visibleCategoryIds($categories));
+        $sourceId = max(0, (int)($where['source_id'] ?? 0));
+        if ($sourceId > 0) $itemQuery->where('source_id', $sourceId);
+
+        $query = (new QuoteRow())->withSearch(['model_keyword'], ['model_keyword' => $keyword])
+            ->where('site_id', $this->site_id)->where('is_show', 1)
+            ->whereIn('item_id', Db::raw($itemQuery->field('id')->buildSql(false)));
+        $result = $query->field('id,item_id,model_name,brand,tab,columns,final_prices,remark,raw_data,create_at,update_at')
+            ->order('model_name asc,item_id asc,sort asc,id asc')
+            ->paginate(['list_rows' => $limit, 'page' => $page])->toArray();
+        $result['keyword'] = $keyword;
+        if (empty($result['data'])) return $result;
+
+        $items = (new QuoteItem())->where('site_id', $this->site_id)
+            ->whereIn('id', array_unique(array_column($result['data'], 'item_id')))
+            ->field('id,name,source_id,category_id,notice_text')->select()->toArray();
+        $itemMap = array_column($items, null, 'id');
+        $paths = $this->getCategoryPathMap(array_column($items, 'category_id'));
+        foreach ($result['data'] as $index => &$row) {
+            $item = $itemMap[(int)$row['item_id']] ?? null;
+            if ($item === null) {
+                unset($result['data'][$index]);
+                continue;
+            }
+            $this->appendRowDisplayFields($row);
+            $updated = $this->resolveTimestamp($row['update_at'] ?? 0) ?: $this->resolveTimestamp($row['create_at'] ?? 0);
+            $row['price_date'] = $updated > 0 ? date('Y-m-d', $updated) : '';
+            $row['update_at_text'] = $updated > 0 ? $this->formatTime($updated) : '';
+            $row['item_name'] = $this->formatItemTitle($item);
+            $row['source_name'] = (string)($sourceNames[(int)$item['source_id']] ?? '');
+            $row['category_path'] = (string)($paths[(int)$item['category_id']] ?? '');
+            $row['notice_text'] = $this->resolveNoticeText($item['notice_text'] ?? '');
+            // 只返回展示价，不能把源数据、采购口径或手工覆盖配置下发到搜索页。
+            unset($row['raw_data'], $row['create_at'], $row['update_at']);
+        }
+        unset($row);
+        $result['data'] = array_values($result['data']);
+        return $result;
+    }
 
     public function sources(): array
     {

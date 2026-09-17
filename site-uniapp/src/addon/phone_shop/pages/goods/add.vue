@@ -71,9 +71,10 @@
 
         <!-- 底部常驻：价格 + 发布 -->
         <view class="float-bar">
+            <view v-if="autoPricing" style="font-size:24rpx;color:#2563eb;padding:10rpx 20rpx;line-height:1.5">基准价＝最高等级会员价。{{ pricePreview || '填写后自动计算其他身份价格' }}</view>
             <view class="more-panel" v-if="showMore">
                 <view class="mp-field">
-                    <text class="mp-name">同行价</text>
+                    <text class="mp-name">划线价</text>
                     <view class="mp-money"><text class="rmb">¥</text><input class="mp-input" type="digit" v-model="form.market_price" placeholder="0.00" placeholder-class="ph" /></view>
                 </view>
                 <view class="mp-field">
@@ -92,7 +93,8 @@
                 </view>
                 <view class="price-box">
                     <text class="rmb">¥</text>
-                    <input class="price-input" type="digit" v-model="form.price" placeholder="零售价" placeholder-class="ph" />
+                    <input v-if="autoPricing" class="price-input" type="digit" v-model="form.pricing_base_price" placeholder="最低会员价" placeholder-class="ph" />
+                    <input v-else class="price-input" type="digit" v-model="form.price" placeholder="零售价" placeholder-class="ph" />
                 </view>
                 <view class="pub-btn" :class="{ 'pub-btn--ing': submitting }" @click="submit">{{ goodsId ? '保存' : '发布' }}</view>
             </view>
@@ -105,7 +107,12 @@ import { ref, reactive, watch, nextTick } from 'vue';
 import { onLoad } from '@dcloudio/uni-app';
 import { redirect } from '@/utils/common';
 import { uploadImage } from '@/app/api/system';
-import { addGoods, editGoods, getGoodsInit, getGradeList, getSpecOptions, getDeliveryList } from '@/addon/phone_shop/api/goods';
+import { addGoods, editGoods, getGoodsInit, getGradeList, getSpecOptions, getDeliveryList, getTierPricing, previewTierPricing } from '@/addon/phone_shop/api/goods';
+const autoPricing = ref(false), pricingLoaded = ref(false)
+const pricePreview = ref('')
+let previewSequence = 0
+getTierPricing().then(res => { autoPricing.value = Number(res.data.enabled) === 1; pricingLoaded.value = true })
+    .catch(() => uni.showToast({title:'价格规则加载失败，请返回重试',icon:'none'}))
 import CategoryPopup from '@/addon/phone_shop/components/category-popup.vue';
 import ChipSelect from '@/addon/phone_shop/components/chip-select.vue';
 import ShmilyDragImage from '@/components/shmily-drag-image/shmily-drag-image.vue';
@@ -158,6 +165,7 @@ const form = reactive<any>({
     condition_grade: '',
     memory_group: '',
     price: '',
+    pricing_base_price: '' as any,
     market_price: '',
     cost_price: '',
     stock: '',
@@ -166,6 +174,17 @@ const form = reactive<any>({
 });
 
 const gradeList = ref<string[]>([]);
+watch(() => [form.pricing_base_price, autoPricing.value], async () => {
+    const sequence = ++previewSequence
+    if (!autoPricing.value || !(Number(form.pricing_base_price) > 0)) { pricePreview.value = ''; return }
+    pricePreview.value = '正在计算…'
+    try {
+        const res: any = await previewTierPricing(Number(form.pricing_base_price))
+        if (sequence !== previewSequence) return
+        pricePreview.value = (res.data.prices || []).map((v: any) => `${v.name} ¥${v.price}`).join(' · ')
+        form.price = res.data.retail_price
+    } catch (e: any) { if (sequence === previewSequence) pricePreview.value = e?.msg || '规则暂不可用，保存时将再次核对' }
+})
 const memoryList = ref<string[]>([]);
 const deliveryItems = ref<any[]>([]);
 
@@ -253,6 +272,7 @@ const loadInfo = () => {
             || (Array.isArray(d.goods_sku_data) ? d.goods_sku_data[0] : null)
             || d.goods_sku || {};
         form.price = sku.price ?? d.price ?? '';
+        form.pricing_base_price = sku.pricing_base_price ?? '';
         form.market_price = sku.market_price ?? d.market_price ?? '';
         form.cost_price = sku.cost_price ?? d.cost_price ?? '';
         form.stock = sku.stock ?? d.stock ?? '';
@@ -275,6 +295,12 @@ onLoad((option: any) => {
 
 const submit = () => {
     if (submitting.value) return;
+    if (!pricingLoaded.value) return uni.showToast({title:'价格规则尚未加载，请返回重试',icon:'none'});
+    if (autoPricing.value) {
+        if (!(Number(form.pricing_base_price) > 0)) return uni.showToast({title:'请填写最低会员价',icon:'none'});
+        // 提交时后端权威重算；不依赖异步预览是否恰好完成。
+        form.price = form.pricing_base_price;
+    }
     if (!form.goods_image) return uni.showToast({ title: '请上传商品图片', icon: 'none' });
     if (!form.goods_name) return uni.showToast({ title: '请输入商品名称', icon: 'none' });
     if (!form.category_id) return uni.showToast({ title: '请选择分类', icon: 'none' });
@@ -296,6 +322,7 @@ const submit = () => {
         status: statusOn.value ? 1 : 0,
         spec_type: 'single',
         price: form.price,
+        pricing_base_price: autoPricing.value ? form.pricing_base_price : null,
         market_price: form.market_price || 0,
         cost_price: form.cost_price || 0,
         stock: form.stock || 1,

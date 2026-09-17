@@ -29,7 +29,7 @@
                     <el-button @click="clearBatch">{{ t('cancel') }}</el-button>
                 </div>
                 <div v-else>
-                    <el-button type="primary" link @click="setBatchField('price')" v-if="activeGoodsCount == 0">{{ t('price') }}</el-button>
+                    <el-button type="primary" link @click="setBatchField('price')" v-if="activeGoodsCount == 0">{{ autoPricing ? '基准售价' : t('price') }}</el-button>
                     <el-button type="primary" link @click="setBatchField('market_price')">{{ t('marketPrice') }}</el-button>
                     <el-button type="primary" link @click="setBatchField('cost_price')">{{ t('costPrice') }}</el-button>
                 </div>
@@ -41,9 +41,9 @@
                 </template>
 
                 <el-table-column prop="sku_name" :label="t('skuName')" min-width="120" v-if="goodsTable.data.length > 1" />
-                <el-table-column prop="price" :label="t('price')" min-width="120">
+                <el-table-column prop="price" :label="autoPricing ? '基准售价与自动售价' : t('price')" min-width="220">
                     <template #default="{ row }">
-                        <el-input v-model.trim="row.price" clearable placeholder="0.00" maxlength="8" :disabled="activeGoodsCount > 0" />
+                        <TierPriceInput v-model="row.price" v-model:base-price="row.pricing_base_price" :disabled="activeGoodsCount > 0" @policy="value => autoPricing = Number(value.enabled) === 1" />
                     </template>
                 </el-table-column>
 
@@ -79,6 +79,7 @@
 </template>
 
 <script lang="ts" setup>
+import TierPriceInput from '@/addon/phone_shop/views/goods/components/TierPriceInput.vue'
 import { t } from '@/lang'
 import { ref, reactive, computed } from 'vue'
 import { img } from '@/utils/common'
@@ -87,8 +88,7 @@ import { ElMessage } from 'element-plus'
 import {
     getActiveGoodsCount,
     getGoodsSkuList,
-    editGoodsListPrice,
-    editGoodsListMemberPrice
+    editGoodsListPrice
 } from '@/addon/phone_shop/api/goods'
 
 const goods: any = reactive({})
@@ -100,7 +100,8 @@ const showDialog = ref(false)
 const memberLevels: any = ref([])
 const lkey = (lv: any): string => 'level_' + (lv.level_no || lv.level_id)
 // 仅"指定会员价"(fixed_price)且有等级时,才在表格里渲染会员价列
-const hasMemberPrice = computed(() => goods.member_discount === 'fixed_price' && memberLevels.value.length > 0)
+const autoPricing = ref(false)
+const hasMemberPrice = computed(() => !autoPricing.value && goods.member_discount === 'fixed_price' && memberLevels.value.length > 0)
 
 const emit = defineEmits(['load'])
 
@@ -150,7 +151,7 @@ const saveBatch = () => {
     }
 
     goodsTable.data.forEach((item: any) => {
-        item[batchOperation.field] = batchOperation.value
+        item[autoPricing.value && batchOperation.field === 'price' ? 'pricing_base_price' : batchOperation.field] = batchOperation.value
     })
 
     clearBatch()
@@ -286,30 +287,22 @@ const save = () => {
     goodsTable.data.forEach((item: any) => {
         sku_list.push({
             sku_id: item.sku_id,
+            pricing_base_price: item.pricing_base_price,
             price: item.price,
             market_price: item.market_price,
             cost_price: item.cost_price
         })
     })
 
-    // 价格保存 + (有会员价时)会员价保存,两个请求都成功才算完成,一次确定生效
-    const tasks: Promise<any>[] = [
-        editGoodsListPrice({ goods_id: goods.goods_id, sku_list })
-    ]
+    // 普通价和手动会员价也放在同一保存事务，避免两个请求部分成功。
     if (hasMemberPrice.value) {
-        const member_sku_list = goodsTable.data.map((item: any) => {
-            const obj: any = { sku_id: item.sku_id, member_price: {} }
-            memberLevels.value.forEach((lv: any) => { obj.member_price[lkey(lv)] = item[lkey(lv)] })
-            return obj
+        goodsTable.data.forEach((item: any, index: number) => {
+            sku_list[index].member_price = {}
+            memberLevels.value.forEach((lv: any) => { sku_list[index].member_price[lkey(lv)] = item[lkey(lv)] })
         })
-        tasks.push(editGoodsListMemberPrice({
-            goods_id: goods.goods_id,
-            member_discount: 'fixed_price',
-            sku_list: member_sku_list
-        }))
     }
 
-    Promise.all(tasks).then(() => {
+    editGoodsListPrice({goods_id: goods.goods_id, sku_list, member_discount: hasMemberPrice.value ? 'fixed_price' : null}).then(() => {
         emit('load')
         showDialog.value = false
     })

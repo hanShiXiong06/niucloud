@@ -154,6 +154,7 @@ interface PricePageOptions {
 	quotation_id?: string
 	dataset_id?: string
 	item_id?: string
+	model_name?: string
 	source?: string
 	title?: string
 	price_date?: string
@@ -850,6 +851,7 @@ onLoad((options: PricePageOptions) => {
 	if (itemId) {
 		source.value = 'spider'
 		spiderItemId.value = itemId
+		if (options?.model_name) selectedModels.value = [safeDecode(options.model_name)]
 		pageTitle.value = options?.title ? safeDecode(options.title) : '报价查询'
 		loadPriceData()
 		return

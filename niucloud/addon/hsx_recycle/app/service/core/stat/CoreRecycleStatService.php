@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace addon\hsx_recycle\app\service\core\stat;
 
-use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\dict\stat\RecycleStageDict;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
@@ -15,15 +14,15 @@ use core\base\BaseCoreService;
 /**
  * 回收任务/统计 汇总引擎（埋点写入处）
  *
- * 设计：状态流转时只调本服务一次，由它幂等增减两张汇总表：
- *  - recycle_stat_current：实时态计数（当前各环节台数），看板/待办直接读
+ * 状态流转的旁路汇总（不是业务事实，也不具备事件去重保证）：
+ *  - recycle_stat_current：历史增量计数，仅用于辅助汇总，不作为当前在途的依据
  *  - recycle_stat_daily：按日流水（当天进入/完成/打款台数与金额），趋势/绩效直接读
- * 任何看板查询都读这两张表，不再对订单/设备大表做重复聚合。
+ * 当前在途由 CoreRecycleWorkloadService 查询现有业务状态，避免遗漏埋点污染待办。
  */
 class CoreRecycleStatService extends BaseCoreService
 {
     /**
-     * 实时态计数 增减（幂等 upsert）
+     * 辅助实时态计数增减（调用方须保证事件不重复）
      * @param int $siteId
      * @param string $metricKey 指标键，如 stage_check / stage_price ...
      * @param int $uid 维度：0=全站汇总，>0=经手人
@@ -54,7 +53,7 @@ class CoreRecycleStatService extends BaseCoreService
     }
 
     /**
-     * 按日流水 累计（幂等 upsert，按 站点+日期+指标+经手人）
+     * 按日流水累计（按站点+日期+指标+经手人汇总，调用方须保证事件不重复）
      */
     public function incrDaily(int $siteId, string $metricKey, int $uid, int $valueDelta, float $amountDelta = 0, ?int $statDate = null): void
     {
@@ -159,46 +158,13 @@ class CoreRecycleStatService extends BaseCoreService
 
     /**
      * 一次性回填：按当前设备状态重算各环节在途台数，覆盖写入 stat_current（全站维度）。
-     * 部署后执行一次，让看板从第一天就有"当前在途"的准确底数。
-     * 之后由埋点增量维护，不再需要重算。
+     * 保留管理员主动重算辅助汇总的入口；看板本身不依赖该操作，也不会自动回填。
      *
      * @return array stage_key => 台数
      */
     public function rebuildCurrent(int $siteId): array
     {
-        $rows = (new RecycleDevice())
-            ->where([['site_id', '=', $siteId]])
-            ->field('status, pay_status, count(*) as cnt')
-            ->group('status, pay_status')
-            ->select()->toArray();
-
-        $stageCount = [];
-        foreach ($rows as $r) {
-            // 已回收(5) 按打款状态细分：未打款=待打款(pay)，已打款=已入库ERP离场
-            $stage = RecycleStageDict::stageOf((int)$r['status'], (int)$r['pay_status']);
-            if ($stage === '') {
-                continue;
-            }
-            $stageCount[$stage] = ($stageCount[$stage] ?? 0) + (int)$r['cnt'];
-        }
-        // 待签收是订单级环节：在途 = 待签收订单数
-        $stageCount[RecycleStageDict::STAGE_SIGN] = (new \addon\hsx_recycle\app\model\order\RecycleOrder())
-            ->where([['site_id', '=', $siteId], ['status', '=', RecycleOrderDict::ORDER_STATUS_PENDING_SIGN]])
-            ->count();
-        // 质检在途排除"订单未签收"的待质检设备（它们计入待签收，避免与质检任务队列重复）
-        if (!empty($stageCount[RecycleStageDict::STAGE_CHECK])) {
-            $unsignedCheck = (new RecycleDevice())
-                ->where('site_id', '=', $siteId)
-                ->where('status', 'in', [RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK, RecycleOrderDict::DEVICE_STATUS_CHECKING])
-                ->where('order_id', 'in', function ($sub) use ($siteId) {
-                    $sub->name('recycle_order')
-                        ->where('site_id', '=', $siteId)
-                        ->where('status', '=', RecycleOrderDict::ORDER_STATUS_PENDING_SIGN)
-                        ->field('id');
-                })
-                ->count();
-            $stageCount[RecycleStageDict::STAGE_CHECK] = max(0, $stageCount[RecycleStageDict::STAGE_CHECK] - (int)$unsignedCheck);
-        }
+        $stageCount = (new CoreRecycleWorkloadService())->getCurrentCounts($siteId);
 
         $now = time();
         foreach (RecycleStageDict::getStages() as $stage) {
@@ -222,24 +188,19 @@ class CoreRecycleStatService extends BaseCoreService
     }
 
     /**
-     * 经营看板数据（只读两张汇总表，零大表聚合）
+     * 经营看板：在途按当前业务事实查询；旧的今日/趋势汇总字段保留，不混用为在途。
      * 返回：各环节在途台数 + 今日关键数字 + 近 N 天趋势
      */
     public function getBoard(int $siteId, int $days = 7): array
     {
+        $days = max(1, min(31, $days));
         // 环节定义统一取自字典（含待签收，已去处置），避免两处漂移
-        $current = $this->getCurrentMap($siteId, 0);
-        // 待签收是订单级小集合，实时 COUNT 最准（status 有索引），不依赖埋点/回填
-        $signCount = (new \addon\hsx_recycle\app\model\order\RecycleOrder())
-            ->where([['site_id', '=', $siteId], ['status', '=', RecycleOrderDict::ORDER_STATUS_PENDING_SIGN]])
-            ->count();
+        $current = (new CoreRecycleWorkloadService())->getCurrentCounts($siteId);
         $stages = [];
         foreach (RecycleStageDict::getStages() as $s) {
             $key = $s['stage_key'];
-            $count = $key === RecycleStageDict::STAGE_SIGN
-                ? (int)$signCount
-                : (int)($current['stage_' . $key] ?? 0);
-            $stages[] = ['stage_key' => $key, 'name' => $s['name'], 'count' => $count];
+            $stages[] = ['stage_key' => $key, 'name' => $s['name'], 'count' => $current[$key] ?? 0,
+                'unit' => RecycleStageDict::isOrderStage($key) ? '单' : '台'];
         }
 
         // 今日关键数字
@@ -274,7 +235,9 @@ class CoreRecycleStatService extends BaseCoreService
             ];
         }
 
-        return ['stages' => $stages, 'today' => $todayStat, 'trend' => $trend];
+        return ['stages' => $stages, 'today' => $todayStat, 'trend' => $trend,
+            'count_source' => 'current_business', 'scope' => 'site', 'updated_at' => time(),
+            'explain' => '在途统计本站当前有效任务，不随日期筛选变化。未签收设备不计入质检；已取消、已删除订单及无有效订单的设备不计入。异常处理仅含尚未完成的退回任务；部分打款仍计入待打款。这里包括未分配的任务，点击后查看您有权限且已分配给您的任务。'];
     }
 
     // ======================= 每日维度汇总（抗千万级分析） =======================

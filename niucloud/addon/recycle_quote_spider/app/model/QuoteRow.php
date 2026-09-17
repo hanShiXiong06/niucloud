@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace addon\recycle_quote_spider\app\model;
 
 use core\base\BaseModel;
+use addon\recycle_quote_spider\app\support\QuoteSearch;
 
 class QuoteRow extends BaseModel
 {
@@ -83,6 +84,20 @@ class QuoteRow extends BaseModel
         if ($value !== '' && $value !== null) {
             $query->whereLike('model_name|brand|tab|keywords|remark', '%' . $value . '%');
         }
+    }
+
+    public function searchModelKeywordAttr($query, $value, $data)
+    {
+        $term = QuoteSearch::modelTerm((string)$value);
+        if ($term === '') {
+            $query->whereRaw('1 = 0');
+            return;
+        }
+        $expression = "LOWER(REPLACE(REPLACE(REPLACE(REPLACE(CONCAT_WS('', brand, model_name, keywords), ' ', ''), '　', ''), CHAR(9), ''), CHAR(10), ''))";
+        if (preg_match('/\d/u', $term)) {
+            $expression = "REPLACE(REPLACE($expression, 'iphone', ''), '苹果', '')";
+        }
+        $query->whereRaw($expression . " LIKE ? ESCAPE '!'", [QuoteSearch::likePattern($term)]);
     }
 
     public function searchCreateAtStartAttr($query, $value, $data)

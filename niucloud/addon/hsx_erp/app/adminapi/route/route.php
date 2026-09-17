@@ -145,6 +145,8 @@ Route::group('erp', function () {
     Route::delete('capital_account/:id', 'addon\hsx_erp\app\adminapi\controller\CapitalAccount@delete');
     Route::post('capital_account/entry', 'addon\hsx_erp\app\adminapi\controller\CapitalAccount@entry');
     Route::get('capital_account/ledger', 'addon\hsx_erp\app\adminapi\controller\CapitalAccount@ledger');
+    Route::get('mall_inventory/preview', 'addon\hsx_erp\app\adminapi\controller\ErpOpening@mallInventoryPreview');
+    Route::post('mall_inventory/confirm', 'addon\hsx_erp\app\adminapi\controller\ErpOpening@mallInventoryConfirm');
     Route::post('opening/upload', 'addon\hsx_erp\app\adminapi\controller\ErpOpening@upload');
     Route::get('opening/lists', 'addon\hsx_erp\app\adminapi\controller\ErpOpening@lists');
     Route::get('opening/:id', 'addon\hsx_erp\app\adminapi\controller\ErpOpening@info');

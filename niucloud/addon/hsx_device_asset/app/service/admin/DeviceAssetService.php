@@ -10,6 +10,7 @@ use addon\hsx_device_asset\app\model\DeviceAssetOperationLog;
 use addon\hsx_device_asset\app\model\DeviceAssetPhotoTask;
 use addon\hsx_device_asset\app\model\DeviceAssetPriceOrder;
 use addon\hsx_device_asset\app\model\DeviceAssetLocationAssign;
+use addon\hsx_device_asset\app\support\DeviceAssetPhotoEntry;
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
 use app\model\sys\SysUserRole;
@@ -318,7 +319,9 @@ class DeviceAssetService extends BaseAdminService
         if (empty($asset)) {
             throw new CommonException('资产不存在');
         }
-        return $this->enrichAssetQc($asset->toArray());
+        $info = $this->enrichAssetQc($asset->toArray());
+        $info['mobile_photo_url'] = DeviceAssetPhotoEntry::mobileUrl(request()->domain(), $this->site_id, $id);
+        return $info;
     }
 
     /**
@@ -581,6 +584,26 @@ class DeviceAssetService extends BaseAdminService
             throw new CommonException('请输入设备码、IMEI 或 SN');
         }
 
+        // 优先定位已有设备，扫码只接受完整编号，不能用模糊结果决定拍哪一台。
+        $matches = DeviceAssetItem::where('site_id', $this->site_id)
+            ->where(function ($query) use ($keyword) {
+                $query->where('asset_no', $keyword)->whereOr('imei', $keyword)->whereOr('imei2', $keyword)->whereOr('sn', $keyword);
+            })->limit(2)->select()->toArray();
+        if (count($matches) > 1) throw new CommonException('此编号对应多台设备，请从 ERP 库存列表核对后发起拍摄');
+        if ($matches) return ['created' => false, 'asset' => $this->getInfo((int)$matches[0]['id'])];
+
+        foreach ((array)event('DeviceAssetPhotoLookupRequested', ['site_id' => $this->site_id, 'keyword' => $keyword]) as $result) {
+            if (!is_array($result) || empty($result['asset'])) continue;
+            $erpAsset = (array)$result['asset'];
+            $created = (new \addon\hsx_device_asset\app\service\core\DeviceAssetErpEventService())->createFromReadyForPhotoEvent([
+                'event_name' => 'erp.asset.ready_for_photo.v1', 'event_id' => 'photo-scan-' . $this->site_id . '-' . $erpAsset['id'],
+                'site_id' => $this->site_id, 'aggregate_id' => (int)$erpAsset['id'],
+                'operator' => ['id' => $this->uid, 'name' => $this->username],
+                'payload' => array_merge($erpAsset, ['asset_id' => (int)$erpAsset['id']]),
+            ]);
+            return ['created' => !empty($created['created']), 'asset' => $this->getInfo((int)$created['asset_id'])];
+        }
+
         $device = (new RecycleDevice())
             ->where([['site_id', '=', $this->site_id]])
             ->whereIn('status', [RecycleOrderDict::DEVICE_STATUS_RECYCLED, RecycleOrderDict::DEVICE_STATUS_CONSIGNED])
@@ -617,38 +640,56 @@ class DeviceAssetService extends BaseAdminService
 
     public function createPhotoTask(int $assetId, array $data = []): array
     {
-        $asset = $this->getAsset($assetId);
-        $task = DeviceAssetPhotoTask::create([
-            'site_id' => $this->site_id,
-            'task_no' => $this->makeBizNo('PT'),
-            'asset_id' => $assetId,
-            'device_id' => (int)$asset->device_id,
-            'status' => DeviceAssetDict::TASK_STATUS_PROCESSING,
-            'source' => (string)($data['source'] ?? 'pc'),
-            'station_id' => (string)($data['station_id'] ?? ''),
-            'camera_job_id' => (string)($data['camera_job_id'] ?? ''),
-            'operator_uid' => $this->uid,
-            'started_at' => time(),
-            'remark' => (string)($data['remark'] ?? ''),
-        ]);
+        $this->getAsset($assetId);
+        return Db::transaction(function () use ($assetId, $data) {
+            $asset = DeviceAssetItem::where([['site_id', '=', $this->site_id], ['id', '=', $assetId]])->lock(true)->findOrEmpty();
+            $source = (string)($data['source'] ?? 'pc');
+            if (!in_array($source, ['pc', 'mobile', 'auto', 'manual'], true)) throw new CommonException('拍摄来源不正确');
+            $active = DeviceAssetPhotoTask::where([['site_id', '=', $this->site_id], ['asset_id', '=', $assetId]])
+                ->whereIn('status', [DeviceAssetDict::TASK_STATUS_PENDING, DeviceAssetDict::TASK_STATUS_PROCESSING, DeviceAssetDict::TASK_STATUS_REVIEW])
+                ->order('id desc')->findOrEmpty();
+            if (!$active->isEmpty()) {
+                // 一台设备同一时刻只有一个采集任务；自动拍摄和手机补拍共用该任务。
+                $station = trim((string)($data['station_id'] ?? ''));
+                if ($source === 'auto' && $station !== '' && (string)$active->station_id !== '' && $station !== (string)$active->station_id) {
+                    throw new CommonException('这台设备已由另一工位处理，请先完成原工位任务');
+                }
+                if ($station !== '' && (string)$active->station_id === '') $active->save(['station_id' => $station]);
+                return $active->toArray();
+            }
+            $task = DeviceAssetPhotoTask::create([
+                'site_id' => $this->site_id,
+                'task_no' => $this->makeBizNo('PT'),
+                'asset_id' => $assetId,
+                'device_id' => (int)$asset->device_id,
+                'status' => DeviceAssetDict::TASK_STATUS_PROCESSING,
+                'source' => $source,
+                'station_id' => (string)($data['station_id'] ?? ''),
+                'camera_job_id' => (string)($data['camera_job_id'] ?? ''),
+                'operator_uid' => $this->uid,
+                'started_at' => time(),
+                'remark' => (string)($data['remark'] ?? ''),
+            ]);
 
-        $asset->save([
-            'status' => DeviceAssetDict::STATUS_PHOTOING,
-            'photo_status' => DeviceAssetDict::PHOTO_STATUS_PHOTOING,
-        ]);
+            $asset->save([
+                'status' => DeviceAssetDict::STATUS_PHOTOING,
+                'photo_status' => DeviceAssetDict::PHOTO_STATUS_PHOTOING,
+            ]);
 
-        $this->writeLog($assetId, (int)$asset->device_id, DeviceAssetDict::ACTION_PHOTO_TASK_CREATE, [
-            'task_id' => (int)$task->id,
-            'source' => $task->source,
-            'station_id' => $task->station_id,
-        ]);
+            $this->writeLog($assetId, (int)$asset->device_id, DeviceAssetDict::ACTION_PHOTO_TASK_CREATE, [
+                'task_id' => (int)$task->id,
+                'source' => $task->source,
+                'station_id' => $task->station_id,
+            ]);
 
-        return $task->toArray();
+            return $task->toArray();
+        });
     }
 
     public function saveMedia(int $assetId, array $data): array
     {
         $asset = $this->getAsset($assetId);
+        if (!empty($data['simulated'])) throw new CommonException('开发模拟图片不能保存为商品图片');
         $mediaList = $data['media'] ?? [];
         if (!is_array($mediaList) || empty($mediaList)) {
             $mediaList = [[
@@ -662,6 +703,7 @@ class DeviceAssetService extends BaseAdminService
         }
 
         $rows = [];
+        if (count($mediaList) > 100) throw new CommonException('单次最多保存100张图片');
         foreach ($mediaList as $item) {
             $url = trim((string)($item['url'] ?? ''));
             if ($url === '') {
@@ -672,7 +714,7 @@ class DeviceAssetService extends BaseAdminService
                 'asset_id' => $assetId,
                 'device_id' => (int)$asset->device_id,
                 'task_id' => (int)($item['task_id'] ?? $data['task_id'] ?? 0),
-                'media_type' => in_array(($item['media_type'] ?? 'image'), ['image', 'video'], true) ? (string)$item['media_type'] : 'image',
+                'media_type' => in_array(($item['media_type'] ?? 'image'), ['image', 'video'], true) ? (string)($item['media_type'] ?? 'image') : 'image',
                 'scene' => (string)($item['scene'] ?? 'common'),
                 'url' => $url,
                 'oss_key' => (string)($item['oss_key'] ?? ''),
@@ -680,6 +722,7 @@ class DeviceAssetService extends BaseAdminService
                 'status' => DeviceAssetDict::MEDIA_STATUS_APPROVED, // 取消复检：上传即视为通过，不再有"待复检"
                 'sort' => (int)($item['sort'] ?? 0),
                 'operator_uid' => $this->uid,
+                'client_key' => trim((string)($item['client_key'] ?? '')),
             ];
         }
 
@@ -687,26 +730,56 @@ class DeviceAssetService extends BaseAdminService
             throw new CommonException('请上传有效的图片或视频');
         }
 
-        (new DeviceAssetMedia())->saveAll($rows);
-        if (!empty($data['task_id'])) {
-            (new DeviceAssetPhotoTask())->where([
-                ['site_id', '=', $this->site_id],
-                ['id', '=', (int)$data['task_id']],
-            ])->update(['status' => DeviceAssetDict::TASK_STATUS_REVIEW]);
-        }
+        $savedMedia = [];
+        Db::transaction(function () use ($assetId, $rows, &$savedMedia) {
+            $asset = DeviceAssetItem::where([['site_id', '=', $this->site_id], ['id', '=', $assetId]])->lock(true)->findOrEmpty();
+            $ext = is_array($asset->ext_json) ? $asset->ext_json : [];
+            $keys = (array)($ext['capture_media_keys'] ?? []);
+            $created = 0;
+            foreach ($rows as $row) {
+                $clientKey = $row['client_key'];
+                unset($row['client_key']);
+                if ($clientKey !== '' && !preg_match('/^[A-Za-z0-9:._-]{1,160}$/D', $clientKey)) throw new CommonException('照片标识不正确');
+                $taskId = (int)$row['task_id'];
+                $task = null;
+                if ($taskId > 0) {
+                    $task = DeviceAssetPhotoTask::where([['site_id', '=', $this->site_id], ['asset_id', '=', $assetId], ['id', '=', $taskId]])->findOrEmpty();
+                    if ($task->isEmpty() || $task->status === DeviceAssetDict::TASK_STATUS_CANCELLED) throw new CommonException('拍照任务不存在、已取消或不属于此设备');
+                } elseif ($row['source'] === 'auto' || $clientKey !== '') {
+                    throw new CommonException('自动拍摄图片必须绑定当前拍照任务');
+                }
+                $key = $clientKey !== '' ? hash('sha256', $taskId . ':' . $clientKey) : '';
+                $existing = DeviceAssetMedia::where([['site_id', '=', $this->site_id], ['asset_id', '=', $assetId]])
+                    ->where(function ($query) use ($row, $key, $keys) {
+                        $query->where('url', $row['url']);
+                        if ($key !== '' && isset($keys[$key])) $query->whereOr('id', (int)$keys[$key]);
+                    })->findOrEmpty();
+                if (!$existing->isEmpty()) {
+                    if ($key !== '') $keys[$key] = (int)$existing->id;
+                    $savedMedia[] = ['client_key' => $clientKey, 'id' => (int)$existing->id, 'url' => (string)$existing->url];
+                    continue;
+                }
+                if ($task && $task->status === DeviceAssetDict::TASK_STATUS_COMPLETED) throw new CommonException('本次拍摄已交接，请刷新后开始新的拍摄任务');
+                $media = DeviceAssetMedia::create($row);
+                $savedMedia[] = ['client_key' => $clientKey, 'id' => (int)$media->id, 'url' => (string)$media->url];
+                if ($key !== '') $keys[$key] = (int)$media->id;
+                $created++;
+                if ($task) $task->save(['status' => DeviceAssetDict::TASK_STATUS_REVIEW]);
+            }
+            $ext['capture_media_keys'] = $keys;
+            $save = ['ext_json' => $ext];
+            if ($created > 0) {
+                $save['status'] = DeviceAssetDict::STATUS_PHOTO_REVIEW;
+                $save['photo_status'] = DeviceAssetDict::PHOTO_STATUS_REVIEW;
+            }
+            $asset->save($save);
+            $this->refreshMediaCount($assetId);
+            if ($created > 0) $this->writeLog($assetId, (int)$asset->device_id, DeviceAssetDict::ACTION_MEDIA_SAVE, ['count' => $created]);
+        });
 
-        $this->refreshMediaCount($assetId);
-        $asset->save([
-            'status' => DeviceAssetDict::STATUS_PHOTO_REVIEW,
-            'photo_status' => DeviceAssetDict::PHOTO_STATUS_REVIEW,
-        ]);
-
-        $this->writeLog($assetId, (int)$asset->device_id, DeviceAssetDict::ACTION_MEDIA_SAVE, [
-            'count' => count($rows),
-            'task_id' => (int)($data['task_id'] ?? 0),
-        ]);
-
-        return $this->getInfo($assetId);
+        $info = $this->getInfo($assetId);
+        $info['saved_media'] = $savedMedia;
+        return $info;
     }
 
     public function reviewMedia(int $mediaId, string $status, string $reason = ''): array
@@ -825,27 +898,71 @@ class DeviceAssetService extends BaseAdminService
         return $this->getInfo($assetId);
     }
 
-    public function confirmPhotos(int $assetId): array
+    public function confirmPhotos(int $assetId, array $data = []): array
     {
-        $asset = $this->getAsset($assetId);
-        // 不再依赖「复检通过」：拍照员当场删掉糊图，留下的(未删除)图片即视为可用，至少一张即可完成拍照
-        $imageCount = (new DeviceAssetMedia())->where([
-            ['site_id', '=', $this->site_id],
-            ['asset_id', '=', $assetId],
-            ['media_type', '=', 'image'],
-            ['status', '<>', DeviceAssetDict::MEDIA_STATUS_REJECTED],
-        ])->count();
-        if ($imageCount <= 0) {
-            throw new CommonException('请至少拍并保留一张图片');
-        }
-
+        $this->getAsset($assetId); // 保留当前站点范围校验。
+        if (!empty($data['simulated'])) throw new CommonException('开发模拟图片不能提交正式业务');
+        $receipt = null;
         Db::startTrans();
         try {
+            $asset = DeviceAssetItem::where([['site_id', '=', $this->site_id], ['id', '=', $assetId]])->lock(true)->findOrEmpty();
+            $taskId = (int)($data['task_id'] ?? 0);
+            if ($taskId > 0) {
+                $task = DeviceAssetPhotoTask::where([['site_id', '=', $this->site_id], ['asset_id', '=', $assetId], ['id', '=', $taskId]])->findOrEmpty();
+                if ($task->isEmpty() || $task->status === DeviceAssetDict::TASK_STATUS_CANCELLED) throw new CommonException('拍摄任务已经失效，请刷新后重新确认');
+                if (DeviceAssetPhotoTask::where([['site_id', '=', $this->site_id], ['asset_id', '=', $assetId], ['id', '>', $taskId]])->count() > 0) {
+                    throw new CommonException('该设备已有更新的拍摄任务，请刷新后确认最新图片');
+                }
+            }
+            $query = DeviceAssetMedia::where([
+                ['site_id', '=', $this->site_id], ['asset_id', '=', $assetId],
+                ['media_type', '=', 'image'], ['status', '<>', DeviceAssetDict::MEDIA_STATUS_REJECTED],
+            ]);
+            $selected = $data['media_ids'] ?? null;
+            if ($selected !== null) {
+                $selected = array_values(array_unique(array_filter(array_map('intval', (array)$selected))));
+                if ($selected === [] || count($selected) > 100) throw new CommonException('请选择 1 至 100 张商品图片');
+                $query->whereIn('id', $selected);
+            }
+            $media = $query->order('sort asc,id asc')->select()->toArray();
+            if ($media === [] || ($selected !== null && count($media) !== count($selected))) {
+                throw new CommonException('选用图片不存在、已被删除或不属于当前设备，请刷新后重新选择');
+            }
+            $imageCount = count($media);
+            if ($selected !== null) {
+                $byId = array_column($media, null, 'id');
+                $media = array_map(static fn($id) => $byId[$id], $selected);
+            }
+            $ext = is_array($asset->ext_json) ? $asset->ext_json : [];
+            $erpId = (int)($ext['erp_asset_id'] ?? 0);
+            $confirmedMediaIds = array_map('intval', $ext['photo_handoff']['media_ids'] ?? []);
+            $nextMediaIds = array_map('intval', array_column($media, 'id'));
+            if ($erpId > 0 && $asset->photo_status === DeviceAssetDict::PHOTO_STATUS_APPROVED
+                && $confirmedMediaIds && $confirmedMediaIds !== $nextMediaIds) {
+                throw new CommonException('照片已由其他窗口确认；请刷新查看。需要调整时，请先开始新一轮拍摄，避免覆盖已交接图片');
+            }
+            if ($erpId > 0) {
+                $images = array_values(array_unique(array_column($media, 'url')));
+                $event = [
+                    'event_name' => 'device_asset.photos.completed.v1',
+                    'event_id' => 'photo-' . $this->site_id . '-' . $assetId . '-' . hash('sha256', json_encode($images)),
+                    'site_id' => $this->site_id, 'asset_id' => $assetId,
+                    'operator' => ['id' => $this->uid, 'name' => $this->username ?: ''],
+                    'payload' => ['erp_asset_id' => $erpId, 'erp_asset_no' => (string)($ext['asset_no'] ?? ''), 'images' => $images],
+                ];
+                foreach ((array)event('DeviceAssetPhotosCompleted', $event) as $result) {
+                    if (is_array($result) && ($result['consumer'] ?? '') === 'hsx_erp.device_asset_photos'
+                        && in_array($result['status'] ?? '', ['processed', 'duplicate'], true)) $receipt = $result;
+                }
+                if (!$receipt) throw new CommonException('图片已保存，但 ERP 尚未接收；请检查 ERP 插件是否启用，恢复后重新点击提交即可，无需重拍');
+                $ext['photo_handoff'] = ['media_ids' => array_column($media, 'id'), 'event_id' => $event['event_id'], 'received_at' => time(), 'receipt' => $receipt];
+            }
             $asset->save([
-                'status' => DeviceAssetDict::STATUS_WAIT_PRICE,
+                'status' => $erpId > 0 ? DeviceAssetDict::STATUS_ERP_HANDOFF : DeviceAssetDict::STATUS_WAIT_PRICE,
                 'photo_status' => DeviceAssetDict::PHOTO_STATUS_APPROVED,
                 'photo_confirm_uid' => $this->uid,
                 'photo_confirmed_at' => time(),
+                'ext_json' => $ext,
             ]);
             (new DeviceAssetPhotoTask())->where([
                 ['site_id', '=', $this->site_id],
@@ -855,7 +972,7 @@ class DeviceAssetService extends BaseAdminService
                 'status' => DeviceAssetDict::TASK_STATUS_COMPLETED,
                 'completed_at' => time(),
             ]);
-            $this->ensurePriceOrder($asset);
+            if ($erpId <= 0) $this->ensurePriceOrder($asset);
             $this->writeLog($assetId, (int)$asset->device_id, DeviceAssetDict::ACTION_PHOTO_CONFIRM, [
                 'image_count' => $imageCount,
             ]);
@@ -865,12 +982,18 @@ class DeviceAssetService extends BaseAdminService
             throw new CommonException($e->getMessage());
         }
 
-        return $this->getInfo($assetId);
+        $info = $this->getInfo($assetId);
+        $info['photo_handoff'] = $receipt;
+        $info['message'] = $receipt['message'] ?? '图片已确认，进入本应用待定价';
+        return $info;
     }
 
     public function completePrice(int $assetId, array $data): array
     {
         $asset = $this->getAsset($assetId);
+        if ((int)($asset->ext_json['erp_asset_id'] ?? 0) > 0) {
+            throw new CommonException('此设备由 ERP 负责定价；照片确认后，请到 ERP 库存中心继续操作');
+        }
         $salePrice = round((float)($data['sale_price'] ?? 0), 2);
         if ($salePrice <= 0) {
             throw new CommonException('请输入有效的销售价格');
@@ -1341,7 +1464,7 @@ class DeviceAssetService extends BaseAdminService
     protected function applyTaskType($query, string $taskType): void
     {
         $statusMap = [
-            // 中台只做两件事：拍照、定价。完成定价即置 ready_export（待导出=完成）。
+            // ERP 来源交接图片即完成本中台任务；独立来源完成定价后置 ready_export。
             // priced 属"已定价完成"，归入 completed，不再混进待办/待定价。
             'pending' => [
                 DeviceAssetDict::STATUS_WAIT_PHOTO,
@@ -1360,6 +1483,7 @@ class DeviceAssetService extends BaseAdminService
                 DeviceAssetDict::STATUS_WAIT_PRICE,
             ],
             'completed' => [
+                DeviceAssetDict::STATUS_ERP_HANDOFF,
                 DeviceAssetDict::STATUS_PRICED,
                 DeviceAssetDict::STATUS_READY_EXPORT,
                 DeviceAssetDict::STATUS_EXPORTED,

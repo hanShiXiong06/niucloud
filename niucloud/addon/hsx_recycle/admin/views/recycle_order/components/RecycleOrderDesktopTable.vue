@@ -1,151 +1,56 @@
 <template>
   <el-table
+    class="recycle-order-table"
+    :class="{ 'recycle-order-table--compact': props.compact }"
     v-loading="props.loading"
     :data="props.list"
     :expand-row-keys="props.expandRowKeys"
     row-key="id"
-    height="100%"
     style="width: 100%"
     @expand-change="(row, expandedRows) => props.handleExpandChange(row, expandedRows)"
   >
-    <el-table-column type="expand">
+    <el-table-column type="expand" width="36">
       <template #default="{ row }">
-        <div class="p-5 bg-slate-50 rounded-md">
-          <div class="mb-3 flex items-center  border-b border-gray-200 pb-3">
-            <h4 class="text-base font-medium text-gray-800">📱 设备列表</h4>
-            <span class="text-sm text-gray-500">共 {{ row.devices?.length || 0 }} 台设备</span>
-          </div>
-
-          <el-table
-            :data="row.devices"
-            border
-            size="small"
-            @selection-change="(val) => props.handleDeviceSelectionChange(val, row.id)"
-          >
-            <el-table-column type="selection" width="55" />
-            <el-table-column label="串号" width="190">
-              <template #default="{ row: deviceRow }">
-                <div class="text-xs leading-5">
-                  <div v-if="deviceRow.user_sn" class="font-semibold text-gray-800">用户：{{ deviceRow.user_sn }}</div>
-                  <div class="text-gray-500">{{ deviceRow.imei || '未录入' }}</div>
-                </div>
-              </template>
-            </el-table-column>
-            <el-table-column prop="model" label="设备型号" width="250" />
-            <el-table-column prop="final_price" label="最终价格" width="100">
-              <template #default="{ row: deviceRow }">
-                <span class="text-red-500 font-semibold">{{ props.formatPrice(deviceRow.final_price) }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="status_name" label="状态" width="100">
-              <template #default="{ row: deviceRow }">
-                <DeviceStatusBadge :status="deviceRow.status" :status-name="deviceRow.status_name" />
-                <div v-if="deviceRow.consignment_order_id || deviceRow.consignmentOrder" class="mt-1">
-                  <el-button link type="primary" size="small" @click="props.viewConsignment(deviceRow)">
-                    {{ deviceRow.consignmentOrder?.consignment_no || '查看代卖单' }}
-                  </el-button>
-                </div>
-              </template>
-            </el-table-column>
-            <el-table-column prop="confirm_status_name" label="确认状态" width="110">
-              <template #default="{ row: deviceRow }">
-                <el-tag v-if="deviceRow.status >= 4" :type="Number(deviceRow.confirm_status || 0) === 1 || deviceRow.status === 5 ? 'success' : 'warning'" size="small">
-                  {{ deviceRow.confirm_status_name || (Number(deviceRow.confirm_status || 0) === 1 || deviceRow.status === 5 ? '已确认' : '待客户确认') }}
-                </el-tag>
-                <span v-else class="text-xs text-gray-400">-</span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="pay_status_name" label="打款状态" width="100">
-              <template #default="{ row: deviceRow }">
-                <el-tag v-if="deviceRow.status === 5" :type="Number(deviceRow.pay_status || 0) === 1 ? 'success' : 'warning'" size="small">
-                  {{ deviceRow.pay_status_name || (Number(deviceRow.pay_status || 0) === 1 ? '已打款' : '未打款') }}
-                </el-tag>
-                <span v-else class="text-xs text-gray-400">-</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="操作"  fixed="right" width="240">
-              <template #default="{ row: deviceRow }">
-                <div class="flex items-center gap-1">
-                  <!-- 主行动：当前状态最该做的下一步，高亮 -->
-                  <el-button
-                    v-if="getDevicePrimaryAction(deviceRow)"
-                    :type="getDevicePrimaryAction(deviceRow)!.type || 'primary'"
-                    size="small"
-                    :icon="getDevicePrimaryAction(deviceRow)!.icon"
-                    @click="getDevicePrimaryAction(deviceRow)!.handler()"
-                  >
-                    {{ getDevicePrimaryAction(deviceRow)!.label }}
-                  </el-button>
-
-                  <!-- 更多：次要操作（重新定价 / 拒绝 / 转代卖 / 打印） -->
-                  <el-dropdown v-if="getDeviceMoreActions(deviceRow).length" trigger="click">
-                    <el-button size="small" :icon="MoreFilled">更多</el-button>
-                    <template #dropdown>
-                      <el-dropdown-menu>
-                        <el-dropdown-item
-                          v-for="a in getDeviceMoreActions(deviceRow)"
-                          :key="a.key"
-                          :divided="a.danger"
-                          @click="a.handler()"
-                        >
-                          <span class="flex items-center gap-1" :class="a.danger ? 'text-red-500' : ''">
-                            <el-icon><component :is="a.icon" /></el-icon>{{ a.label }}
-                          </span>
-                        </el-dropdown-item>
-                      </el-dropdown-menu>
-                    </template>
-                  </el-dropdown>
-
-                  <el-tooltip content="查看详情" placement="top">
-                    <el-button
-                      type="primary"
-                      link
-                      :icon="View"
-                      @click="props.viewDetail(deviceRow)"
-                      size="small"
-                      aria-label="查看详情"
-                    />
-                  </el-tooltip>
-                </div>
-              </template>
-            </el-table-column>
-          </el-table>
-
-          <div
-            v-if="props.selectedDevices[row.id] && props.selectedDevices[row.id].length > 0 && row.status == 4"
-            class="mt-3 flex justify-end"
-          >
-            <el-button type="primary" size="small" :icon="Check" @click="props.batchRecycleDevices(row.id)">
-              批量确认 ({{ props.selectedDevices[row.id].length }})
-            </el-button>
-          </div>
-        </div>
+        <RecycleOrderDeviceList
+          :compact="props.compact"
+          :order="row"
+          :selected-devices="props.selectedDevices[row.id] || []"
+          :format-price="props.formatPrice"
+          :get-device-primary-action="getDevicePrimaryAction"
+          :get-device-more-actions="getDeviceMoreActions"
+          :view-consignment="props.viewConsignment"
+          :view-detail="props.viewDetail"
+          @selection-change="devices => props.handleDeviceSelectionChange(devices, row.id)"
+          @batch-confirm="props.batchRecycleDevices(row.id)"
+        />
       </template>
     </el-table-column>
 
-    <el-table-column label="订单信息" min-width="220">
+    <el-table-column label="订单信息" :min-width="props.compact ? 210 : 250">
       <template #default="{ row }">
-        <div class="space-y-1">
-          <div class="flex items-center text-sm">
-            <span class="text-gray-400 min-w-[60px]">订单号：</span>
-            <span class="text-gray-800">{{ row.order_no }}</span>
-          </div>
-          <div class="flex items-center text-sm">
-            <span class="text-gray-400 min-w-[60px]">配送：</span>
+        <div class="order-info">
+          <div class="order-info__number">{{ row.order_no }}</div>
+          <div class="order-info__meta">
             <el-tag size="small" :type="deliveryTagType(row.delivery_type)">
               {{ deliveryLabel(row) }}
             </el-tag>
-          </div>
-          <div class="flex items-center text-sm">
-            <span class="text-gray-400 min-w-[60px]">来源：</span>
             <el-tag size="small" :type="row.order_source === 'agent' ? 'primary' : 'info'" effect="plain">
               {{ row.order_source === 'agent' ? '代下单' : '客户下单' }}
             </el-tag>
-            <span v-if="row.order_source === 'agent' && row.agent_name" class="ml-2 text-xs text-gray-500">
+            <span v-if="row.order_source === 'agent' && row.agent_name" class="text-xs text-gray-500">
               {{ row.agent_name }}
             </span>
           </div>
-          <div v-if="row.delivery_type === '1'" class="flex items-start text-sm">
+          <div v-if="props.compact" class="order-info__time">
+            <span>{{ props.formatDateTime(row.create_at) }}</span>
+            <el-popover placement="bottom-start" trigger="click" :width="240">
+              <div v-for="item in getOrderTimes(row)" :key="item.label" class="order-time-cell">
+                <span class="order-time-cell__label">{{ item.label }}</span>{{ item.value }}
+              </div>
+              <template #reference><el-button link type="primary" size="small">时间</el-button></template>
+            </el-popover>
+          </div>
+          <div v-if="String(row.delivery_type) === '1'" class="flex items-start text-xs">
             <span class="text-gray-400 min-w-[60px]">快递单号：</span>
             <span
               class="flex-1 cursor-pointer rounded px-1 py-0.5 text-gray-800 transition hover:bg-blue-50 hover:text-blue-600 break-all"
@@ -181,10 +86,10 @@
       </template>
     </el-table-column>
 
-    <el-table-column label="用户信息" min-width="160">
+    <el-table-column label="客户" :min-width="props.compact ? 128 : 160">
       <template #default="{ row }">
         <div class="flex items-center">
-          <el-tooltip :content="row.member?.member_id ? '查看会员详情' : '未关联会员'" placement="top">
+          <el-tooltip v-if="!props.compact" :content="row.member?.member_id ? '查看会员详情' : '未关联会员'" placement="top">
             <el-avatar
               :size="32"
               :src="row.member?.headimg ? props.img(row.member.headimg) : ''"
@@ -195,12 +100,13 @@
               <el-icon><User /></el-icon>
             </el-avatar>
           </el-tooltip>
-          <div class="flex-1">
+          <div class="flex-1 min-w-0">
             <div class="text-sm font-medium text-gray-800 flex items-center group">
-              <span>{{ getUserDisplayName(row) }}</span>
+              <button v-if="props.compact && row.member?.member_id" type="button" class="order-customer-link" @click="props.openMemberDetail(row.member)">{{ getUserDisplayName(row) }}</button>
+              <span v-else class="order-customer-name">{{ getUserDisplayName(row) }}</span>
               <el-icon
                 v-if="row.member?.member_id"
-                class="ml-1 text-xs text-gray-400 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity"
+                class="order-customer-edit ml-1 text-xs text-gray-400 cursor-pointer"
                 @click="handleEditUsername(row)"
                 title="点击编辑昵称"
               >
@@ -215,66 +121,53 @@
       </template>
     </el-table-column>
 
-    <el-table-column label="状态" width="130" align="center">
+    <el-table-column :label="props.compact ? '状态 / 设备进度' : '状态'" :width="props.compact ? 166 : 130" :align="props.compact ? 'left' : 'center'">
       <template #default="{ row }">
         <span class="soft-pill" :class="`is-${props.getStatusType(row.status)}`">
           <span class="soft-pill__dot"></span>{{ row.status_name }}
         </span>
-        <div class="mt-1 text-[11px] text-gray-400">{{ row.flow_mode_name || '整单流转' }}</div>
+        <template v-if="props.compact">
+          <div class="order-progress-count" :class="{ 'order-progress-count--mismatch': !isDeviceCountMatched(row) }">签收 {{ getSignedDeviceCount(row) }} / {{ getSubmittedDeviceCount(row) }} 台<span> · {{ row.flow_mode_name || '整单流转' }}</span></div>
+          <div class="order-progress-summary">
+            <span v-for="item in getDeviceProgress(row).filter(item => item.key !== 'total')" :key="item.key" :class="`order-progress-summary--${item.color}`">{{ item.label }} {{ item.value }}</span>
+          </div>
+        </template>
+        <div v-else class="mt-1 text-[11px] text-gray-400">{{ row.flow_mode_name || '整单流转' }}</div>
       </template>
     </el-table-column>
 
-    <el-table-column label="设备进度" min-width="240">
+    <el-table-column v-if="!props.compact" label="设备进度" min-width="240">
       <template #default="{ row }">
         <div class="flex flex-wrap gap-1 text-xs items-center">
           <el-tag size="small" effect="plain" :type="isDeviceCountMatched(row) ? 'success' : 'danger'">
             {{ getSubmittedDeviceCount(row) }}/{{ getSignedDeviceCount(row) }}台
           </el-tag>
-          <template v-if="row.flow_summary?.progress?.length">
             <el-tag
-              v-for="item in row.flow_summary.progress.filter(p => p.value > 0 || p.key === 'total')"
+              v-for="item in getDeviceProgress(row)"
               :key="item.key"
               size="small"
-              :type="item.color === 'info' ? 'info' : item.color === 'warning' ? 'warning' : item.color === 'primary' ? 'primary' : item.color === 'success' ? 'success' : item.color === 'danger' ? 'danger' : 'info'"
+              :type="item.color"
               :effect="item.key === 'paid' ? 'dark' : 'plain'"
             >{{ item.label }} {{ item.value }}</el-tag>
-          </template>
-          <template v-else>
-            <el-tag size="small" type="info" effect="plain">共 {{ row.flow_summary?.total || row.devices?.length || 0 }} 台</el-tag>
-            <el-tag size="small" type="warning" effect="plain">待处理 {{ (row.flow_summary?.pending_check || 0) + (row.flow_summary?.checking || 0) }}</el-tag>
-            <el-tag size="small" type="primary" effect="plain">待确认 {{ row.flow_summary?.pending_confirm || 0 }}</el-tag>
-            <el-tag size="small" type="success" effect="plain">待打款 {{ row.flow_summary?.pending_pay || 0 }}</el-tag>
-            <el-tag size="small" type="success" effect="dark">已打款 {{ row.flow_summary?.paid || 0 }}</el-tag>
-            <el-tag v-if="(row.flow_summary?.returned || 0) + (row.flow_summary?.consigned || 0) > 0" size="small" type="danger" effect="plain">异常 {{ (row.flow_summary?.returned || 0) + (row.flow_summary?.consigned || 0) }}</el-tag>
-          </template>
         </div>
       </template>
     </el-table-column>
 
-    <el-table-column label="时间" width="178">
+    <el-table-column v-if="!props.compact" label="时间" width="178">
       <template #default="{ row }">
         <div class="order-time-cell">
-          <div class="order-time-cell__row">
-            <span class="order-time-cell__label">创建</span>{{ props.formatDateTime(row.create_at) }}
-          </div>
-          <div v-if="row.sign_at" class="order-time-cell__row">
-            <span class="order-time-cell__label">签收</span>{{ props.formatDateTime(row.sign_at) }}
-          </div>
-          <div v-if="row.complete_at" class="order-time-cell__row">
-            <span class="order-time-cell__label">完成</span>{{ props.formatDateTime(row.complete_at) }}
-          </div>
-          <div v-if="row.pay_time" class="order-time-cell__row">
-            <span class="order-time-cell__label">打款</span>{{ props.formatDateTime(row.pay_time) }}
+          <div v-for="item in getOrderTimes(row)" :key="item.label" class="order-time-cell__row">
+            <span class="order-time-cell__label">{{ item.label }}</span>{{ item.value }}
           </div>
         </div>
       </template>
     </el-table-column>
 
-    <el-table-column label="操作" width="96" fixed="right" align="center">
+    <el-table-column label="操作" :width="props.compact ? 80 : 96" fixed="right" align="center">
       <template #default="{ row }">
         <el-popover
           placement="left-start"
-          trigger="hover"
+          trigger="click"
           :width="184"
           popper-class="recycle-order-action-popover"
         >
@@ -306,18 +199,11 @@ import { useFeedback } from '@/addon/hsx_components/core'
 import { ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import useUserStore from '@/stores/modules/user'
-import DeviceStatusBadge from './DeviceStatusBadge.vue'
+import RecycleOrderDeviceList from './RecycleOrderDeviceList.vue'
 import { useDeviceRowActions } from '@/addon/hsx_recycle/hooks/useDeviceRowActions'
 import {
   Search,
-  DocumentChecked,
-  PriceTag,
-  Check,
   Edit,
-  Close,
-  Printer,
-  View,
-  Switch,
   User,
   Loading,
   Share,
@@ -328,6 +214,7 @@ const hsxFeedback = useFeedback()
 
 
 interface Props {
+  compact?: boolean;
   loading: boolean;
   list: any[];
   expandRowKeys: Array<number | string>;
@@ -405,6 +292,32 @@ const getSignedDeviceCount = (row: any) => props.getDeviceCount(row.devices)
 const isDeviceCountMatched = (row: any) => getSubmittedDeviceCount(row) === getSignedDeviceCount(row)
 const deliveryLabel = (row: any) => row.delivery_type_name || ({ '1': '快递到店', '2': '客户自送', '3': '物流车配送' }[String(row.delivery_type)] || '未知')
 const deliveryTagType = (value: any) => String(value) === '3' ? 'primary' : (String(value) === '1' ? 'warning' : 'success')
+
+type ProgressColor = 'info' | 'warning' | 'primary' | 'success' | 'danger'
+const getDeviceProgress = (row: any): Array<{ key: string; label: string; value: number; color: ProgressColor }> => {
+  const summary = row.flow_summary || {}
+  const items = summary.progress?.length ? summary.progress : [
+    { key: 'total', label: '共', value: summary.total || row.devices?.length || 0, color: 'info' },
+    { key: 'checking', label: '待处理', value: Number(summary.pending_check || 0) + Number(summary.checking || 0), color: 'warning' },
+    { key: 'pending_confirm', label: '待确认', value: summary.pending_confirm || 0, color: 'primary' },
+    { key: 'pending_pay', label: '待打款', value: summary.pending_pay || 0, color: 'success' },
+    { key: 'paid', label: '已打款', value: summary.paid || 0, color: 'success' },
+    { key: 'exception', label: '异常', value: Number(summary.returned || 0) + Number(summary.consigned || 0), color: 'danger' },
+  ]
+  return items.filter((item: any) => Number(item.value) > 0 || item.key === 'total').map((item: any) => ({
+    key: item.key,
+    label: item.label,
+    value: Number(item.value) || 0,
+    color: (['info', 'warning', 'primary', 'success', 'danger'].includes(item.color) ? item.color : 'info') as ProgressColor,
+  }))
+}
+
+const getOrderTimes = (row: any) => [
+  { label: '创建', value: row.create_at },
+  { label: '签收', value: row.sign_at },
+  { label: '完成', value: row.complete_at },
+  { label: '打款', value: row.pay_time },
+].filter(item => item.value).map(item => ({ ...item, value: props.formatDateTime(item.value) }))
 
 const getRowActions = (row: any) => {
   const statusActions = props.orderStatusMap[row.status]?.action || []
@@ -517,6 +430,37 @@ const handleEditUsername = async (row: any) => {
 </script>
 
 <style scoped>
+:deep(td.el-table__expanded-cell) {
+  padding: 8px 10px !important;
+  background: var(--hsx-bg-muted);
+}
+:deep(.el-table__expand-icon) {
+  width: 28px;
+  height: 36px;
+  margin: auto;
+}
+:deep(.el-table__cell > .cell) { padding-left: 8px; padding-right: 8px; }
+:deep(.el-table__expand-column > .cell) { padding: 0; }
+.order-info { display: grid; gap: 3px; }
+.order-info__number { font-size: 13px; line-height: 20px; color: var(--el-text-color-primary); font-weight: 500; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.order-info__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 6px; }
+.order-info__meta :deep(.el-tag) { font-size: 11px; height: 20px; padding: 0 5px; }
+.order-info__time { display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; color: var(--el-text-color-secondary); font-size: 11px; line-height: 20px; }
+.order-info__time :deep(.el-button) { padding: 0; font-size: 11px; min-height: 20px; }
+.order-customer-name, .order-customer-link { overflow-wrap: anywhere; }
+.order-customer-link { border: 0; padding: 0; background: transparent; text-align: left; color: inherit; cursor: pointer; line-height: 20px; }
+.order-customer-link:hover { color: var(--el-color-primary); }
+.order-customer-edit { flex-shrink: 0; }
+.order-progress-count { margin-top: 2px; color: var(--el-text-color-secondary); font-size: 11px; line-height: 18px; }
+.order-progress-count--mismatch { color: var(--el-color-danger); }
+.order-progress-count span { color: var(--el-text-color-placeholder); }
+.order-progress-summary { display: flex; flex-wrap: wrap; gap: 0 8px; font-size: 11px; line-height: 18px; }
+.order-progress-summary--info { color: var(--el-text-color-secondary); }
+.order-progress-summary--primary { color: var(--el-color-primary); }
+.order-progress-summary--warning { color: var(--el-color-warning); }
+.order-progress-summary--success { color: var(--el-color-success); }
+.order-progress-summary--danger { color: var(--el-color-danger); }
+.recycle-order-table--compact .soft-pill { padding: 0 7px; line-height: 21px; }
 :deep(.el-table__fixed-right .el-table__cell) {
   overflow: visible;
 }

@@ -74,8 +74,8 @@
                         <div class="flex mt-[10px]">
                             <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#ff7f5b] bg-[#fff0e5] cursor-pointer" @click="setNotes">{{ t('notes') }}</span>
                             <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer" @click="delivery" v-if="formData.status == 2">{{ t('delivery') }}</span>
-                            <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer" @click="close" v-if="formData.status == 1">{{ t('close') }}</span>
-                            <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer" @click="orderAdjustMoney" v-if="formData.status == 1">{{ t('editPrice') }}</span>
+                            <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer" @click="close" v-if="formData.status == 1 && !managedByErp">{{ t('close') }}</span>
+                            <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer" @click="orderAdjustMoney" v-if="formData.status == 1 && !managedByErp">{{ t('editPrice') }}</span>
                             <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer" @click="finish" v-if="formData.status == 3">{{ t('finish') }}</span>
                             <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer"
                                 @click="openElectronicSheetPrintDialog"
@@ -88,7 +88,7 @@
                                 v-if="formData.status == 1 && formData.delivery_type != 'virtual' && formData.activity_type != 'giftcard'">{{ t('editAddress') }}</span>
                             <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer"
                                 @click="refundEvent"
-                                v-if="formData.is_refund_show && formData.status != 1 && formData.status != -1">{{ t('voluntaryRefund') }}</span>
+                                v-if="formData.is_refund_show && formData.status != 1 && formData.status != -1 && !managedByErp">{{ t('voluntaryRefund') }}</span>
                             <div class="flex" v-if="formData.order_delivery">
                                 <template v-for="(item, index) in formData.order_delivery" :key="index">
                                     <span v-if="item.delivery_type == 'express' && item.sub_delivery_type == 'express'"
@@ -111,6 +111,7 @@
                     </div>
                 </div>
                 <div v-if="activeName == 'goods'">
+                    <order-return-guide :order="formData" />
                     <el-table :data="formData.order_goods" size="large">
                         <el-table-column :label="t('orderDetailGoodsName')" align="left" width="300">
                             <template #default="{ row }">
@@ -121,6 +122,7 @@
                                     <div class="flex flex-col items-start">
                                         <p class="multi-hidden text-[14px]">{{ row.goods_name }}</p>
                                         <span class="text-[12px] text-[#999]">{{ row.sku_name }}</span>
+                                        <order-device-identity :row="row" @complete="getOrderInfoFn" />
                                         <span class="px-[4px]  text-[12px] text-[#fff] rounded-[4px] bg-primary leading-[18px]" v-if="row.is_gift == 1">赠品</span>
                                     </div>
                                 </div>
@@ -223,9 +225,12 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { t } from '@/lang'
 import { getOrderDetail, orderClose, orderFinish } from '@/addon/phone_shop/api/order'
+import OrderDeviceIdentity from '@/addon/phone_shop/views/order/components/order-device-identity.vue'
+import OrderReturnGuide from '@/addon/phone_shop/views/order/components/order-return-guide.vue'
+const managedByErp = computed(() => !!formData.value?.relate_source || ['offline_cash', 'offline_credit'].includes(formData.value?.payment_mode))
 import { printTicket } from '@/app/api/printer'
 import DeliveryAction from '@/addon/phone_shop/views/order/components/delivery-action.vue'
 import OrderNotes from '@/addon/phone_shop/views/order/components/order-notes.vue'

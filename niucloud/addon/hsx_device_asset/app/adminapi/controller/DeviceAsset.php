@@ -117,6 +117,7 @@ class DeviceAsset extends BaseAdminController
             ['source', 'manual'],
             ['sort', 0],
             ['task_id', 0],
+            ['simulated', false],
         ]);
 
         return success($this->service->saveMedia((int)$id, $data));
@@ -145,7 +146,10 @@ class DeviceAsset extends BaseAdminController
 
     public function confirmPhotos($id)
     {
-        return success($this->service->confirmPhotos((int)$id));
+        $data = $this->request->params([
+            ['media_ids', null], ['task_id', 0], ['simulated', false],
+        ]);
+        return success($this->service->confirmPhotos((int)$id, $data));
     }
 
     /** 设置 / 修改资产库位 */

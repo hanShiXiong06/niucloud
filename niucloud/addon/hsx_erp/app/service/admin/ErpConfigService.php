@@ -37,8 +37,9 @@ class ErpConfigService extends BaseAdminService
         $siteId = $siteId ?? (int)$this->site_id;
         $value = (new CoreConfigService())->getConfigValue($siteId, self::CONFIG_KEY);
         $marketplace = (array)((is_array($value) ? $value : [])['marketplace'] ?? []);
+        // 未保存或仅保存部分渠道配置时，判断和取值必须使用同一默认值。
         $legacyOwner = in_array((string)($marketplace['recycle_material_owner'] ?? 'erp'), ['erp', 'phone_shop'], true)
-            ? (string)$marketplace['recycle_material_owner'] : 'erp';
+            ? (string)($marketplace['recycle_material_owner'] ?? 'erp') : 'erp';
         $channel = (array)($marketplace['channels'][$channelKey] ?? []);
         if ($channel === []) {
             $channel = $legacyOwner === 'phone_shop'
@@ -48,9 +49,9 @@ class ErpConfigService extends BaseAdminService
         return [
             'channel_key' => preg_replace('/[^a-zA-Z0-9_\-]/', '', $channelKey) ?: 'phone_shop',
             'enabled' => $this->boolInt($channel['enabled'] ?? 1),
-            'category_mode' => in_array((string)($channel['category_mode'] ?? 'erp'), ['erp', 'independent'], true) ? (string)$channel['category_mode'] : 'erp',
-            'spec_mode' => in_array((string)($channel['spec_mode'] ?? 'erp'), ['erp', 'independent'], true) ? (string)$channel['spec_mode'] : 'erp',
-            'publish_mode' => in_array((string)($channel['publish_mode'] ?? 'direct'), ['direct', 'manual'], true) ? (string)$channel['publish_mode'] : 'direct',
+            'category_mode' => in_array((string)($channel['category_mode'] ?? 'erp'), ['erp', 'independent'], true) ? (string)($channel['category_mode'] ?? 'erp') : 'erp',
+            'spec_mode' => in_array((string)($channel['spec_mode'] ?? 'erp'), ['erp', 'independent'], true) ? (string)($channel['spec_mode'] ?? 'erp') : 'erp',
+            'publish_mode' => in_array((string)($channel['publish_mode'] ?? 'direct'), ['direct', 'manual', 'basic_first'], true) ? (string)($channel['publish_mode'] ?? 'direct') : 'direct',
             'erp_is_master' => 1,
             'channel_can_write_erp_master' => 0,
         ];
@@ -252,7 +253,7 @@ class ErpConfigService extends BaseAdminService
             : 'collaborative';
 
         $owner = in_array((string)($rules['marketplace']['recycle_material_owner'] ?? 'erp'), ['erp', 'phone_shop'], true)
-            ? (string)$rules['marketplace']['recycle_material_owner']
+            ? (string)($rules['marketplace']['recycle_material_owner'] ?? 'erp')
             : 'erp';
         $storedChannel = (array)($data['marketplace']['channels']['phone_shop'] ?? []);
         $channel = (array)($rules['marketplace']['channels']['phone_shop'] ?? []);
@@ -264,14 +265,14 @@ class ErpConfigService extends BaseAdminService
         }
         $channel['enabled'] = $this->boolInt($channel['enabled'] ?? 1);
         $channel['category_mode'] = in_array((string)($channel['category_mode'] ?? 'erp'), ['erp', 'independent'], true)
-            ? (string)$channel['category_mode'] : 'erp';
+            ? (string)($channel['category_mode'] ?? 'erp') : 'erp';
         $channel['spec_mode'] = in_array((string)($channel['spec_mode'] ?? 'erp'), ['erp', 'independent'], true)
-            ? (string)$channel['spec_mode'] : 'erp';
-        $channel['publish_mode'] = in_array((string)($channel['publish_mode'] ?? 'direct'), ['direct', 'manual'], true)
-            ? (string)$channel['publish_mode'] : 'direct';
+            ? (string)($channel['spec_mode'] ?? 'erp') : 'erp';
+        $channel['publish_mode'] = in_array((string)($channel['publish_mode'] ?? 'direct'), ['direct', 'manual', 'basic_first'], true)
+            ? (string)($channel['publish_mode'] ?? 'direct') : 'direct';
         $rules['marketplace']['channels']['phone_shop'] = $channel;
         // 保留旧字段供已经部署的库存/商城页面读取，但它始终由新策略派生，避免两个开关互相打架。
-        $rules['marketplace']['recycle_material_owner'] = $channel['publish_mode'] === 'manual' ? 'phone_shop' : 'erp';
+        $rules['marketplace']['recycle_material_owner'] = in_array($channel['publish_mode'], ['manual', 'basic_first'], true) ? 'phone_shop' : 'erp';
         $rules['category_sync']['enabled'] = $channel['enabled'];
         $rules['category_sync']['provider'] = 'phone_shop';
         $rules['category_sync']['mode'] = $channel['category_mode'] === 'erp' ? 'erp_master' : 'disabled';
@@ -585,7 +586,7 @@ class ErpConfigService extends BaseAdminService
                         // erp：商城消费 ERP 投影；independent：商城保留独立数据并建立映射。
                         'category_mode' => 'erp',
                         'spec_mode' => 'erp',
-                        // direct：ERP 一键发布；manual：进入商城运营待办。
+                        // direct：资料齐全发布；manual：运营确认；basic_first：基础上架，细节后补。
                         'publish_mode' => 'direct',
                     ],
                 ],

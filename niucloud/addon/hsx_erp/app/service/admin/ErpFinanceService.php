@@ -438,12 +438,17 @@ class ErpFinanceService extends BaseAdminService
         $row['is_mall_source'] = $this->isMallReceivable($receivable);
         $row['sale_order_id'] = $saleOrderId;
         $row['detail_status'] = $this->receivableDetailStatus((array)$row['items']);
+        $hasUnlinkedMallDevice = (string)$receivable->source_type === 'phone_shop.native_goods_sale'
+            && count(array_filter((array)$row['items'], static fn(array $item): bool => (int)($item['asset_id'] ?? 0) <= 0)) > 0;
+        if ($hasUnlinkedMallDevice) $row['detail_status'] = 'partial';
         $row['detail_status_name'] = match ($row['detail_status']) {
             'complete' => '资料完整',
             'partial' => '资料待补全',
             default => '缺少成交明细',
         };
         $sourceOrderStatus = (string)($row['source_order']['status'] ?? '');
+        $row['can_reconcile_mall_inventory'] = $hasUnlinkedMallDevice
+            && (string)$receivable->status !== ErpDict::STATUS_VOID && $sourceOrderStatus === 'completed';
         $hasErpAsset = count(array_filter((array)$row['items'], static fn(array $item): bool => (int)($item['asset_id'] ?? 0) > 0)) > 0;
         $row['can_supplement_sale_detail'] = $row['is_mall_source']
             && $saleOrderId > 0
@@ -530,6 +535,10 @@ class ErpFinanceService extends BaseAdminService
             $assetIds = [];
             $assetLedger = ErpLedgerService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username);
             foreach ($normalized as $index => $item) {
+                $existingAssetId = ErpAsset::where([['site_id', '=', $this->site_id]])
+                    ->where(function ($q) use ($item) { $q->where('imei', $item['imei'])->whereOr('sn', $item['imei']); })
+                    ->lock(true)->value('id');
+                if ($existingAssetId) throw new CommonException('该串号已有ERP设备，请使用“核对商城设备”关联原库存，不能重复补录资产');
                 $remark = mb_substr('商城补录资产' . ($item['remark'] !== '' ? '；' . $item['remark'] : ''), 0, 255);
                 $payload = [
                     'imei' => $item['imei'],
@@ -2246,7 +2255,7 @@ class ErpFinanceService extends BaseAdminService
                 $query->where(function ($q) use ($matchedSaleIds, $matchedReturnIds) {
                     if (!empty($matchedSaleIds)) {
                         $q->where(function ($sale) use ($matchedSaleIds) {
-                            $sale->where('r.source_type', '=', 'sale')->whereIn('r.source_id', array_values(array_unique(array_map('intval', $matchedSaleIds))));
+                            $sale->whereIn('r.source_type', ['sale', 'phone_shop.native_goods_sale'])->whereIn('r.source_id', array_values(array_unique(array_map('intval', $matchedSaleIds))));
                         });
                     }
                     if (!empty($matchedReturnIds)) {
@@ -2362,7 +2371,7 @@ class ErpFinanceService extends BaseAdminService
         $saleIds = [];
         $purchaseReturnIds = [];
         foreach ($page['data'] as $row) {
-            if ((string)$row['source_type'] === 'sale' && (int)$row['source_id'] > 0) {
+            if (in_array((string)$row['source_type'], ['sale', 'phone_shop.native_goods_sale'], true) && (int)$row['source_id'] > 0) {
                 $saleIds[] = (int)$row['source_id'];
             } elseif ((string)$row['source_type'] === 'purchase_return' && (int)$row['source_id'] > 0) {
                 $purchaseReturnIds[] = (int)$row['source_id'];
@@ -2374,7 +2383,7 @@ class ErpFinanceService extends BaseAdminService
         if (!empty($saleIds)) {
             $counts = ErpSaleItem::where([['site_id', '=', $this->site_id]])
                 ->whereIn('sale_order_id', $saleIds)
-                ->field('sale_order_id, COUNT(id) as item_count')
+                ->field('sale_order_id, SUM(quantity) as item_count')
                 ->group('sale_order_id')
                 ->select()
                 ->toArray();
@@ -2437,7 +2446,9 @@ class ErpFinanceService extends BaseAdminService
             } else {
                 // 插件财务事实不是 ERP 销售单，不能再从左连接失败的 sale_order 读取结算方式和销售员。
                 // 新数据读取不可变快照；历史数据由插件只读 Hook 回填，业务说明只作最后兜底。
-                $row['item_count'] = (int)((int)($row['asset_id'] ?? 0) > 0 ? 1 : 0);
+                $row['item_count'] = (string)$row['source_type'] === 'phone_shop.native_goods_sale'
+                    ? ($itemCountMap[(int)$row['source_id']] ?? 0)
+                    : (int)((int)($row['asset_id'] ?? 0) > 0 ? 1 : 0);
                 $row['opening_settle_method'] = (string)($row['settlement_mode_name'] ?? '');
                 if ((string)$row['business_operator_name'] === '') {
                     $row['business_operator_name'] = $this->extractBusinessOperatorName((string)($row['business_reason'] ?? ''));
@@ -4409,7 +4420,7 @@ class ErpFinanceService extends BaseAdminService
             $isConfirmedSupplement = str_contains((string)($item['remark'] ?? ''), '商城补录资产')
                 || str_starts_with((string)($item['external_line_id'] ?? ''), 'manual:');
             if (trim((string)($item['model'] ?? '')) === ''
-                || trim((string)($item['imei'] ?? '')) === ''
+                || (trim((string)($item['imei'] ?? '')) === '' && trim((string)($item['sn'] ?? '')) === '')
                 || (float)($item['sale_price'] ?? 0) <= 0
                 || ((float)($item['cost'] ?? 0) <= 0 && !$isConfirmedSupplement)) {
                 return 'partial';

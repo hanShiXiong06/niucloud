@@ -194,11 +194,9 @@
                 <view class="bottom-actions">
                     <view class="bottom-action-row">
                         <view class="bottom-action-btn full"><u-button type="primary" plain text="打印设备标签" @click="printAssetLabel" /></view>
+                        <view v-if="asset.status === 'in_stock'" class="bottom-action-btn full"><u-button type="primary" :text="asset.turnover_action_label || '处理库存'" @click="handlePrimaryAction" /></view>
                     </view>
-                    <view v-if="asset.status === 'in_stock'" class="bottom-action-row primary-turnover-row">
-                        <view class="bottom-action-btn full"><u-button type="primary" :text="asset.turnover_action_label || '处理库存'" @click="handlePrimaryAction" /></view>
-                    </view>
-                    <view v-if="asset.status === 'in_stock'" class="bottom-action-row">
+                    <view v-if="asset.status === 'in_stock'" class="bottom-action-row mt-2">
                         <view v-if="canAdjustCost" class="bottom-action-btn"><u-button type="primary" text="调整成本" @click="goAdjust" /></view>
                         <view class="bottom-action-btn">
                             <u-button type="primary" plain :text="asset.ownership_type === 'consigned' || asset.warehouse_policy?.warehouse_type === 'consignment' ? '转为自有' : '库存调拨'" :loading="transferring" :disabled="!canOpenTransfer" @click="openTransfer" />
@@ -232,6 +230,7 @@
                     <ErpListingWorkspaceForm
                         v-model="productForm"
                         :contract="asset?.listing_workspace"
+                        :pricing="asset?.sales_pricing"
                         :action="productAction"
                         @catalog-change="onProductCatalogChange"
                     />
@@ -242,7 +241,7 @@
                             type="primary"
                             :loading="productBusy"
                             :disabled="productBusy"
-                            :text="showProductHandoff ? '完成并交接' : productSubmitText"
+                            :text="showProductHandoff ? (Number(asset?.listing_basic_first) === 1 ? '上架并交接资料' : '完成并交接') : productSubmitText"
                             @click="submitProduct(showProductHandoff)"
                         />
                     </view>
@@ -252,8 +251,9 @@
 
         <u-popup :show="retailVisible" mode="bottom" round="20" :safe-area-inset-bottom="true" @close="retailVisible=false">
             <view class="action-popup action-popup--compact">
-                <view class="action-popup__head"><view><text class="action-popup__title">{{ Number(asset?.retail_price || 0) > 0 ? '调整零售价' : '设置零售价' }}</text><text class="action-popup__sub">零售价用于销售，不改变设备成本</text></view><u-icon name="close" color="#94a3b8" size="20" @click="retailVisible=false" /></view>
-                <view class="popup-form-row"><text>新零售价</text><u-input v-model="retailForm.retail_price" type="number" placeholder="0.00" border="none" inputAlign="right" /></view>
+                <view class="action-popup__head"><view><text class="action-popup__title">{{ Number(asset?.retail_price || 0) > 0 ? '调整销售价' : '设置销售价' }}</text><text class="action-popup__sub">{{ Number(asset?.sales_pricing?.enabled) === 1 ? '只填最高等级会员的最低售价，其他价格自动计算' : '对外销售定价，不改变设备成本和已有订单' }}</text></view><u-icon name="close" color="#94a3b8" size="20" @click="retailVisible=false" /></view>
+                <view class="popup-form-row"><text>{{ salesPriceLabel(asset) }}</text><u-input v-model="retailForm.retail_price" type="digit" placeholder="0.00" border="none" inputAlign="right" /></view>
+                <view class="action-popup__sub">{{ salesPricePreview(asset?.sales_pricing, retailForm.retail_price) }}</view>
                 <view class="popup-form-row"><text>调整原因</text><u-input v-model="retailForm.reason" placeholder="已有价格调整时必填" border="none" inputAlign="right" /></view>
                 <view class="action-popup__foot"><u-button type="primary" :loading="retailSaving" text="确认保存" @click="submitRetail" /></view>
             </view>
@@ -285,6 +285,7 @@ import { presentErpListingFeedback } from '@/addon/hsx_erp/hooks/useErpListingFe
 import { formatErpDate, formatErpTime } from '@/addon/hsx_erp/hooks/useErpTime'
 import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
 import ErpListingWorkspaceForm from '@/addon/hsx_erp/components/ErpListingWorkspaceForm.vue'
+import { salesPriceInput, salesPriceLabel, salesPricePreview } from '@/addon/hsx_erp/hooks/useSalesPricing'
 import ErpWarehousePopup from '@/addon/hsx_erp/components/ErpWarehousePopup.vue'
 import { erpListingFormDefinition, erpListingFormPayload, validateErpListingForm, type ErpListingAction } from '@/addon/hsx_erp/hooks/useErpListingForm'
 
@@ -449,7 +450,7 @@ function openProduct(mode: ErpListingAction = 'one_stop') {
     productForm.value = {
         catalog_product_id: Number(asset.value.catalog_product_id || 0), catalog_product_name: asset.value.model || '', category_name: asset.value.category_name || '', category_path: asset.value.category_path || '',
         brand_name: asset.value.brand_name || '', series_name: asset.value.series_name || '',
-        spec: asset.value.spec || '', retail_price: Number(asset.value.retail_price || 0) || '', image_urls: asset.value.image_urls || '', video_url: asset.value.video_url || '',
+        spec: asset.value.spec || '', retail_price: salesPriceInput(asset.value) || '', image_urls: asset.value.image_urls || '', video_url: asset.value.video_url || '',
         quality_remark: asset.value.quality_remark || '', remark_public: asset.value.remark_public || '', remark_internal: asset.value.remark_internal || '',
     }
     productVisible.value = true
@@ -498,10 +499,13 @@ async function submitProduct(handoffToShop = false) {
             const handoff: any = await handoffMobileStockListing(Number(asset.value.id))
             if (handoff?.data?.ok === false) throw new Error(handoff?.data?.message || '商城交接失败')
             productVisible.value = false
+            const published = ['published', 'duplicate'].includes(handoff?.data?.status)
             await new Promise<void>((resolve) => {
                 uni.showModal({
-                    title: '已交接商城资料运营',
-                    content: '当前设备尚未在商城前台上架。图片和销售价格已经交接，内存、颜色、保修及商城分类等资料由下一岗位继续完善。',
+                    title: published ? '已上架商城' : '已交接，尚未上架',
+                    content: published
+                        ? (Number(handoff?.data?.material_pending) === 1 ? '客户现在可以按分类找到并购买。电池、保修等细节由商城运营继续完善，无需再次上架。' : '商品已在商城上架，请以商城实际库存和交易状态为准。')
+                        : (handoff?.data?.message || '图片和价格已保存，商城运营完成分类对应和上架后，客户才可购买。'),
                     showCancel: false,
                     confirmText: '我知道了',
                     complete: () => resolve(),
@@ -537,21 +541,21 @@ async function submitProduct(handoffToShop = false) {
 }
 
 function openRetail() {
-    retailForm.value = { retail_price: String(Number(asset.value?.retail_price || 0) || ''), reason: '' }
+    retailForm.value = { retail_price: String(salesPriceInput(asset.value) || ''), reason: '' }
     retailVisible.value = true
 }
 
 async function submitRetail() {
     const price = Number(retailForm.value.retail_price || 0)
-    if (price <= 0) return uni.showToast({ title: '请填写有效零售价', icon: 'none' })
+    if (price <= 0) return uni.showToast({ title: '请填写有效销售价格', icon: 'none' })
     if (Number(asset.value?.retail_price || 0) > 0 && !retailForm.value.reason.trim()) return uni.showToast({ title: '调整已有价格时请填写原因', icon: 'none' })
-    const confirmed = await confirmErpSensitiveAction({ title: '确认零售价', content: `零售价将设置为 ¥${money(price)}。本操作不会修改采购成本。`, confirmText: '确认保存' })
+    const confirmed = await confirmErpSensitiveAction({ title: '确认销售价格', content: `${salesPriceLabel(asset.value)}将设为 ¥${money(price)}。${salesPricePreview(asset.value?.sales_pricing, price)}。关联商城价格将同步；已有订单和成本不变。`, confirmText: '确认保存' })
     if (!confirmed) return
     retailSaving.value = true
     try {
         const res: any = await adjustMobileStockRetailPrice(asset.value.id, { retail_price: price, reason: retailForm.value.reason })
         retailVisible.value = false
-        await showMobileListingFeedback(res?.data?._workflow?.publish, '零售价已保存')
+        await showMobileListingFeedback(res?.data?._workflow?.publish, '销售价格已保存')
         await reload()
     } catch (e: any) { uni.showToast({ title: e?.message || '保存失败', icon: 'none' }) }
     finally { retailSaving.value = false }
@@ -645,7 +649,9 @@ const publishListing = async () => {
     if (!asset.value || syncingListing.value || (Number(asset.value.warehouse_policy?.can_list_mall || 0) !== 1 && Number(asset.value.can_handoff_shop || 0) !== 1)) return
     const confirmed = await confirmErpSensitiveAction({
         title: Number(asset.value.can_handoff_shop || 0) === 1 ? '交接商城' : '上架商城',
-        content: Number(asset.value.can_handoff_shop || 0) === 1
+        content: Number(asset.value.listing_basic_first || 0) === 1
+            ? `确认将「${asset.value.model || asset.value.imei || '-'}」上架并交接资料？分类对应成功后客户可立即购买，细节由商城运营后补；分类未对应则保留待办。`
+            : Number(asset.value.can_handoff_shop || 0) === 1
             ? `确认把「${asset.value.model || asset.value.imei || '-'}」交给商城运营完善分类、规格并上架？完成后资料会自动回写 ERP。`
             : `确认将「${asset.value.model || asset.value.imei || '-'}」直接上架商城？系统将使用当前分类、规格、图片和零售价创建一机一品商品。`,
         confirmText: Number(asset.value.can_handoff_shop || 0) === 1 ? '交接商城' : '确认上架',

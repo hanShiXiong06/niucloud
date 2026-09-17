@@ -176,9 +176,12 @@
                         <el-tag size="small" :type="detail.row.detail_status === 'complete' ? 'success' : 'warning'">{{ detail.row.detail_status_name }}</el-tag>
                         <el-tag v-if="detail.row.supplement_badge" size="small" type="primary">{{ detail.row.supplement_badge }}</el-tag>
                     </div>
-                    <div class="mt-1 text-xs text-amber-700">这笔账来自商城；补录会建立 ERP 已售资产、成本和出入库台账，不会重复生成应收或采购应付。</div>
+                    <div class="mt-1 text-xs text-amber-700">优先核对商城串号并关联原库存；确实没有库存再确认期初。不会重复生成应收或采购应付，也不会改变已结算金额。</div>
                 </div>
-                <el-button v-if="detail.row.can_supplement_sale_detail" type="primary" @click="openSupplement">补录成交资料</el-button>
+                <div class="flex flex-wrap gap-2">
+                    <el-button v-if="detail.row.can_reconcile_mall_inventory" type="primary" @click="mallInventoryVisible = true">核对商城设备</el-button>
+                    <el-button v-if="detail.row.can_supplement_sale_detail" @click="openSupplement">手动补录</el-button>
+                </div>
             </div>
             <div class="mb-2 font-medium text-gray-900">设备明细</div>
             <el-table :data="detail.items" v-loading="detail.loading" size="small" empty-text="暂无设备明细">
@@ -207,6 +210,7 @@
             <ErpSettlementCards :rows="detail.settlements" :loading="detail.loading" />
         </HsxDrawer>
 
+        <ErpMallInventoryDrawer v-model="mallInventoryVisible" :receivable-id="Number(detail.row?.id || 0)" @saved="onSupplementSaved" />
         <ErpMallReceivableSupplementDialog
             v-model="supplement.visible"
             :receivable="detail.row"
@@ -396,6 +400,7 @@ import ErpFinanceSourceMeta from '@/addon/hsx_erp/components/ErpFinanceSourceMet
 import ErpCopyText from '@/addon/hsx_erp/components/ErpCopyText.vue'
 import ErpOverflowText from '@/addon/hsx_erp/components/ErpOverflowText.vue'
 import ErpMallReceivableSupplementDialog from '@/addon/hsx_erp/components/ErpMallReceivableSupplementDialog.vue'
+import ErpMallInventoryDrawer from '@/addon/hsx_erp/components/ErpMallInventoryDrawer.vue'
 const hsxFeedback = useFeedback()
 
 const receivableRoleFocus = [
@@ -431,6 +436,7 @@ const registeredBusinessSources = ref<any[]>([])
 const registeredChannels = ref<any[]>([])
 const detail = reactive({ visible: false, loading: false, row: null as any, items: [] as any[], settlements: [] as any[] })
 const supplement = reactive({ visible: false })
+const mallInventoryVisible = ref(false)
 const offset = reactive({ visible: false, saving: false, loading: false, row: null as any, payables: [] as any[], receivables: [] as any[], form: { amount: 0, settle_diff: false, capital_account_id: 0, remark: '', voucher_urls: '' } })
 const receipt = reactive({ visible: false, saving: false, loading: false, row: null as any, items: [] as any[], form: { amount: 0, capital_account_id: 0, remark: '', voucher_urls: '' } })
 const summary = computed(() => table.data.filter((row: any) => !isVoid(row)).reduce((acc, row: any) => {

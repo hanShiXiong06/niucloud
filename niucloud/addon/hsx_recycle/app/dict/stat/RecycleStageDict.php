@@ -101,12 +101,14 @@ class RecycleStageDict
 
     /**
      * 设备状态(+打款状态) → 环节key。
-     * status=5(已回收)：未打款→打款环节(pay)；已打款→已入库 ERP，回收系统生命周期结束，离场('')。
+     * status=5(已回收)：未打款/部分打款→打款环节(pay)；已结清→离场('')。
+     * 这里只做环节映射；是否为有效在途还须由 CoreRecycleWorkloadService 校验订单/退回单。
      */
     public static function stageOf(int $status, int $payStatus = 0): string
     {
         if ($status === RecycleOrderDict::DEVICE_STATUS_RECYCLED) {
-            return $payStatus > 0 ? '' : self::STAGE_PAY;
+            return in_array($payStatus, [RecycleOrderDict::PAY_STATUS_UNPAID, RecycleOrderDict::PAY_STATUS_PARTIAL], true)
+                ? self::STAGE_PAY : '';
         }
         return self::stageOfStatus($status);
     }

@@ -18,7 +18,7 @@
         </el-row>
 
         <div class="section-title">最近导入</div>
-        <el-table :data="batches" v-loading="loading" size="default" border empty-text="还没有导入记录，点右上角「导入 CSV」">
+        <el-table :data="batches" v-loading="loading" size="default" border empty-text="还没有导入记录，点右上角「导入 Excel」">
             <el-table-column label="文件" min-width="200" show-overflow-tooltip>
                 <template #default="{ row }">{{ (row.file_name || '').split('|')[0] }}</template>
             </el-table-column>
@@ -40,6 +40,9 @@
                     </el-tag>
                 </template>
             </el-table-column>
+            <el-table-column label="失败原因" min-width="220" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.error_message || '—' }}</template>
+            </el-table-column>
             <el-table-column label="时间" width="170">
                 <template #default="{ row }">{{ formatTime(row.create_at) }}</template>
             </el-table-column>
@@ -47,6 +50,7 @@
         </el-card>
 
         <HsxDialog v-model="importDialog.visible" title="选择导入方式" width="520px" class="" :destroy-on-close="false">
+            <div class="import-format">首个工作表需包含六列：型号、产品ID、检测项、分类、默认选项、全部选项。同一型号的检测项请连续放置；级别标注表请到“选项级别”页面导入。</div>
             <el-radio-group v-model="importDialog.mode" class="import-mode-group">
                 <el-radio value="append" border class="import-mode-item">
                     <div class="mode-title">追加导入</div>
@@ -65,11 +69,13 @@
 
         <HsxDialog v-model="imp.visible" title="导入检测表" width="460px" :close-on-click-modal="false" :show-close="!imp.running" class="" :destroy-on-close="false">
             <div class="imp-file">{{ imp.fileName }}</div>
-            <el-progress :percentage="impPercent" :status="imp.done ? 'success' : undefined" />
-            <div class="imp-line">已处理 {{ imp.rows }} / {{ imp.total }} 行{{ imp.running ? '（后端慢慢跑，请勿关闭）' : '' }}</div>
+            <el-progress :percentage="impPercent" :status="imp.error ? 'exception' : (imp.done ? 'success' : undefined)" />
+            <div class="imp-line">已扫描 {{ imp.scanned }} / {{ imp.total }} 行 · 有效处理 {{ imp.rows }} 行{{ imp.running ? '（正在处理，请勿关闭）' : '' }}</div>
             <div class="imp-line imp-muted">
                 {{ imp.mode === 'overwrite' ? '最新覆盖' : '追加导入' }} · 生成模板 {{ imp.templates }} · 绑定型号 {{ imp.bindings }} · 跳过已有 {{ imp.skipped }}
             </div>
+            <div v-if="imp.error" class="imp-error" role="alert">{{ imp.error }}</div>
+            <div v-else-if="imp.done" class="imp-line">{{ imp.resultMessage }}</div>
             <template #footer>
                 <el-button :disabled="imp.running" type="primary" @click="finishImport">{{ imp.done ? '完成' : '关闭' }}</el-button>
             </template>
@@ -119,10 +125,10 @@ async function loadSummary() {
 const fileInput = ref<HTMLInputElement>()
 const importDialog = reactive({ visible: false, mode: 'append' })
 const imp = reactive({
-    visible: false, running: false, done: false, fileName: '',
+    visible: false, running: false, done: false, fileName: '', error: '', resultMessage: '', scanned: 0,
     total: 0, rows: 0, templates: 0, bindings: 0, skipped: 0, batch_id: 0, token: '', mode: 'append',
 })
-const impPercent = computed(() => (imp.total ? Math.min(100, Math.floor((imp.rows / imp.total) * 100)) : (imp.done ? 100 : 0)))
+const impPercent = computed(() => imp.done ? 100 : (imp.total ? Math.min(99, Math.floor((imp.scanned / imp.total) * 100)) : 0))
 function openImportDialog() {
     importDialog.visible = true
 }
@@ -136,7 +142,7 @@ async function onFileChange(e: Event) {
     input.value = ''
     if (!f) return
     const mode = importDialog.mode === 'overwrite' ? 'overwrite' : 'append'
-    Object.assign(imp, { visible: true, running: true, done: false, fileName: f.name, total: 0, rows: 0, templates: 0, bindings: 0, skipped: 0, mode })
+    Object.assign(imp, { visible: true, running: true, done: false, fileName: f.name, total: 0, rows: 0, templates: 0, bindings: 0, skipped: 0, mode, scanned: 0, error: '', resultMessage: '' })
     try {
         const fd = new FormData()
         fd.append('file', f)
@@ -149,18 +155,30 @@ async function onFileChange(e: Event) {
         // eslint-disable-next-line no-constant-condition
         while (true) {
             const res: any = await importChunkCheckCatalog({ batch_id: imp.batch_id, token: imp.token, offset, limit: 1000, mode })
-            const d = res.data
-            imp.templates = d.templates
-            imp.bindings = d.bindings
-            imp.rows = d.rows_done
+            const d = res.data || {}
+            imp.templates = Number(d.templates || 0)
+            imp.bindings = Number(d.bindings || 0)
+            imp.rows = Number(d.rows_done || 0)
             imp.skipped = Number(d.skipped_exists || 0)
-            offset = Number(d.next_offset || 0)
-            if (d.done) break
+            const nextOffset = Number(d.next_offset || 0)
+            imp.scanned = Math.min(imp.total, Math.max(0, nextOffset - 2))
+            if (d.done) {
+                if (!imp.rows) throw new Error('未读取到有效检测项，不能判定导入成功。请核对首个工作表和六列表头后重新上传。')
+                break
+            }
+            if (nextOffset <= offset) throw new Error('导入进度未推进，已停止请求。请检查文件后重新上传。')
+            offset = nextOffset
         }
         imp.done = true
-        hsxFeedback.success('导入完成')
-    } catch (err) {
-        hsxFeedback.error('导入中断，请重试')
+        imp.scanned = imp.total
+        imp.resultMessage = !imp.templates && !imp.bindings && imp.skipped
+            ? `检测完成：${imp.skipped} 个型号已有模板，按追加规则跳过，没有新增。`
+            : `导入完成：生成 ${imp.templates} 个模板，绑定 ${imp.bindings} 个型号。`
+        if (!imp.bindings && imp.templates) imp.resultMessage += '尚未绑定型号，请核对产品ID与本站型号字典是否对应。'
+        hsxFeedback.success(imp.resultMessage)
+    } catch (err: any) {
+        imp.error = err?.msg || err?.message || '导入中断，请检查网络后重新上传；此前已完成的批次不会自动撤销。'
+        hsxFeedback.error(imp.error)
     } finally {
         imp.running = false
     }
@@ -179,6 +197,8 @@ onMounted(loadSummary)
 .imp-file { margin-bottom: 12px; font-weight: 500; }
 .imp-line { margin-top: 8px; font-size: 13px; }
 .imp-muted { color: var(--el-text-color-secondary); }
+.imp-error { margin-top: 12px; color: var(--el-color-danger); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.import-format { margin-bottom: 16px; color: var(--el-text-color-secondary); font-size: 13px; line-height: 1.6; }
 .import-mode-group { width: 100%; display: grid; gap: 12px; }
 .import-mode-item {
     width: 100%;
