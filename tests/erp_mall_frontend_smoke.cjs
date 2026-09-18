@@ -7,6 +7,7 @@ const ts = require(path.join(root, 'admin/node_modules/typescript'))
 const files = [
     'niucloud/addon/phone_shop/admin/views/intake/list.vue',
     'niucloud/addon/phone_shop/admin/views/intake/components/IntakeMaterialDrawer.vue',
+    'niucloud/addon/phone_shop/admin/views/intake/components/IntakeBuildDialog.vue',
     'niucloud/addon/hsx_erp/admin/views/erp/config/rules.vue',
     'niucloud/addon/hsx_erp/admin/views/erp/stock/list.vue',
     'site-uniapp/src/addon/hsx_erp/pages/stock/detail.vue'
@@ -33,6 +34,7 @@ for (const file of files) {
 const mirrors = [
     ['phone_shop', 'api/device_intake.ts'], ['phone_shop', 'views/intake/list.vue'],
     ['phone_shop', 'views/intake/components/IntakeMaterialDrawer.vue'],
+    ['phone_shop', 'views/intake/components/IntakeBuildDialog.vue'],
     ['hsx_erp', 'views/erp/config/rules.vue'], ['hsx_erp', 'views/erp/stock/list.vue']
 ]
 for (const [addon, file] of mirrors) {
@@ -40,4 +42,4 @@ for (const [addon, file] of mirrors) {
         throw new Error('Plugin/source mismatch: ' + addon + '/' + file)
     }
 }
-console.log('PASS 5 plugin/source mirrors. No publishing or database writes.')
+console.log('PASS ' + mirrors.length + ' plugin/source mirrors. No publishing or database writes.')
