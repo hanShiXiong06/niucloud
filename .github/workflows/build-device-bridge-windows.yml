@@ -12,8 +12,13 @@ on:
         required: false
         default: "https://gl.hsxbk.top"
   push:
+    branches:
+      - "feature/hsx_erp-pc-mobile-alignment"
     tags:
       - "device-bridge-v*"
+    paths:
+      - "device_bridge/**"
+      - ".github/workflows/build-device-bridge-windows.yml"
 
 permissions:
   contents: read
