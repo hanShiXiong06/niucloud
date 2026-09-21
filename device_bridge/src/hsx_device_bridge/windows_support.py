@@ -6,6 +6,8 @@ import subprocess
 import sys
 from typing import Any
 
+from .windows_mtp_reader import diagnostics as mtp_diagnostics
+
 
 def runtime_dependency_diagnostics() -> dict[str, Any]:
     """Verify dependencies that pymobiledevice3 imports dynamically on Windows."""
@@ -27,11 +29,19 @@ def runtime_dependency_diagnostics() -> dict[str, Any]:
             importlib.import_module(module_name)
         except (ImportError, OSError):
             missing_modules.append(module_name)
+    mtp = mtp_diagnostics()
     return {
         "platform": "windows",
-        "ready": not missing_modules,
+        "ready": not missing_modules and mtp["ready"],
         "missing_modules": missing_modules,
+        "android_mtp": mtp,
     }
+
+
+def android_driver_diagnostics() -> dict[str, Any]:
+    if sys.platform != "win32":
+        return {"platform": sys.platform, "required": False, "message": ""}
+    return {"platform": "windows", "required": False, **mtp_diagnostics()}
 
 
 def _apple_service_state() -> str:

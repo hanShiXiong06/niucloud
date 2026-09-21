@@ -12,6 +12,8 @@ if ($LASTEXITCODE -ne 0) { throw "Unable to read bridge source version" }
 if (-not $Version) { $Version = $SourceVersion }
 if ($Version -ne $SourceVersion) { throw "Requested version differs from source $SourceVersion" }
 
+& "$Root\scripts\build_windows_native.ps1" -Version $Version
+
 python -m PyInstaller build_windows.spec --clean --noconfirm
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed" }
 
@@ -21,10 +23,8 @@ if (-not (Test-Path $BridgeExe)) {
 }
 python scripts/verify_version.py --binary $BridgeExe --expected $Version
 if ($LASTEXITCODE -ne 0) { throw "Executable version check failed" }
-$SelfCheck = Start-Process -FilePath $BridgeExe -ArgumentList "self-check" -Wait -PassThru
-if ($SelfCheck.ExitCode -ne 0) {
-    throw "Windows bridge dependency self-check failed with exit code $($SelfCheck.ExitCode)"
-}
+python scripts/verify_windows_package.py --binary $BridgeExe
+if ($LASTEXITCODE -ne 0) { throw "Packaged Windows bridge smoke test failed" }
 
 $Config = @{
     allowed_origins = $AllowedOrigins

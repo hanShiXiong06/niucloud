@@ -235,8 +235,8 @@ class AndroidReaderTest(unittest.TestCase):
             self.assertEqual(result["warnings"][0]["code"], "MTP_BATCH_TIMEOUT")
             self.assertEqual(worker.call_count, 1)
 
-    def test_windows_does_not_advertise_android(self):
-        with patch.object(reader.sys, "platform", "win32"):
+    def test_windows_without_helper_does_not_advertise_android(self):
+        with patch.object(reader.sys, "platform", "win32"), patch.object(reader.windows_mtp_reader, "helper_path", return_value=""):
             self.assertEqual(reader.scan_usb_devices(), [])
             self.assertFalse(device_reader.capabilities()["android_mtp"])
 
@@ -278,6 +278,11 @@ spec.loader.exec_module(version_check)
 
 
 class PackageVersionTest(unittest.TestCase):
+    def setUp(self):
+        platform = patch.object(version_check.sys, "platform", "darwin")
+        platform.start()
+        self.addCleanup(platform.stop)
+
     def test_stale_binary_cannot_be_relabelled(self):
         with patch.object(version_check.subprocess, "run", return_value=Mock(returncode=0, stdout="0.1.1\n")):
             with self.assertRaisesRegex(ValueError, "Rebuild"):

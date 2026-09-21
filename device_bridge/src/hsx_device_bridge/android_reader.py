@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ctypes.util
-from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -14,6 +13,8 @@ import time
 
 from .ios_reader import BridgeReadError
 from .mtp_protocol import RESULT_MARKER, probe
+from .mtp_snapshot import normalize_snapshot
+from . import windows_mtp_reader
 
 _read_lock = threading.Lock()
 DISCOVERY_TIMEOUT = 3
@@ -173,36 +174,27 @@ def normalize_device(metadata: dict, usb_devices: list[dict], include_raw: bool 
     matches = usb_matches(metadata["usb"], usb_devices)
     # Never use the MTP UUID as a factory SN or match multiple phones by model alone.
     serial = matches[0]["usb_serial_number"] if len(matches) == 1 else ""
-    model = str(metadata.get("model_code", "")).strip()
-    snapshot = {
-        "schema_version": "hsx.device.snapshot.v1",
-        "captured_at": datetime.now(timezone.utc).isoformat(),
-        "source": "usb_mtp",
-        "device_id": device_id(metadata["usb"], usb_devices),
-        "platform": "android" if "android.com" in metadata.get("protocol_extensions", []) else "mtp",
-        "identity": {
-            "imei": "", "imei2": "", "serial_number": serial,
-            "serial_number_source": "usb_descriptor" if serial else "",
-            "serial_number_verified": False,
-            "usb_serial_number": serial, "mtp_serial_number": metadata.get("serial_number", ""),
-        },
-        "hardware": {"product_type": model, "model_number": model, "manufacturer": metadata.get("manufacturer", "")},
-        "display": {"device_name": metadata.get("friendly_name") or model, "model_hint": model, "color": "", "capacity": ""},
-        "system": {"version": "", "firmware_raw": metadata.get("device_version_raw", "")},
-        "battery": {"level_percent": metadata.get("battery_level_percent")},
-        "not_read_fields": metadata.get("not_read_fields", []),
-        "warnings": ["SN 来自 USB 序列号，请与手机机身核对；保修查询是否支持需单独确认。"],
+    return normalize_snapshot(metadata, device_id(metadata["usb"], usb_devices), serial, include_raw)
+
+
+def capabilities() -> dict:
+    if sys.platform == "win32":
+        available = bool(windows_mtp_reader.helper_path())
+        backend, status = "windows_wpd", "preview"
+    else:
+        available = bool(library_path())
+        backend, status = "macos_libmtp", "available"
+    return {
+        "android_mtp": available,
+        "android_mtp_scope": "generic" if available else "",
+        "android_mtp_backend": backend if available else "",
+        "android_mtp_status": status if available else "unavailable",
     }
-    if not serial:
-        snapshot["warnings"] = ["未取得唯一 USB 序列号，请手动填写 IMEI/SN；不会使用 MTP UUID 代替。"]
-    if snapshot["platform"] != "android":
-        snapshot["warnings"].append("此设备未声明 Android 协议扩展，请核对设备类型和型号。")
-    if include_raw:
-        snapshot["raw"] = metadata
-    return snapshot
 
 
 def scan_device_ids() -> list[str]:
+    if sys.platform == "win32":
+        return windows_mtp_reader.scan_device_ids()
     if sys.platform != "darwin":
         return []
     library = library_path()
@@ -220,6 +212,8 @@ def scan_device_ids() -> list[str]:
 
 
 def read_result(include_raw: bool = False) -> dict:
+    if sys.platform == "win32":
+        return windows_mtp_reader.read_result(include_raw)
     result = {"data": [], "warnings": []}
     if sys.platform != "darwin":
         return result

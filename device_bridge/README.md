@@ -4,7 +4,9 @@
 
 - iPhone：沿用信任电脑后的读取。
 - macOS Apple Silicon 0.3.1：按 MTP 协议发现安卓设备，不再限制品牌或要求 USB 名称包含 Android；修复魅族读取后 USB 临时地址变化被误判为换机的问题。不代表所有品牌、型号都已实测或能读到相同字段。
-- Windows：仍为 iPhone 读取，本次没有构建或发布支持安卓的 Windows 包。
+- Windows：0.4.0 开发版加入原生 WPD/MTP 读取，复用 Windows 便携设备驱动；iPhone 仍走原链路。本次仅完成源码与跨平台测试，没有构建或发布 Windows 包，原生编译、安装及真机兼容性待验证。
+
+Windows 开发与验收见 [Windows 安卓读取内测说明](docs/windows-mtp-preview.md)。下文的 0.3.1 Mac 包为此前产物，不代表 0.4.0 已发布。
 
 ## 本地开发
 
@@ -19,6 +21,7 @@ PYTHONPATH=src python3 -m hsx_device_bridge serve --port 17890
 浏览器接口：
 
 - `GET http://127.0.0.1:17890/v1/health`
+- `GET http://127.0.0.1:17890/v1/diagnostics`
 - `GET http://127.0.0.1:17890/v1/scan`
 - `GET http://127.0.0.1:17890/v1/devices`
 
@@ -92,6 +95,8 @@ bash scripts/package_macos.sh 0.3.1 "https://你的后台域名"
 
 手机充电电量不回填健康度，固件字符串不回填 Android 版本，未取得的容量、颜色、IMEI、健康度和循环次数保持空白。扫描不读取用户文件，读机在限时子进程中执行，忙碌或超时明确报错，不会自动关闭 ADB 或抢占其他软件。
 
+0.4.0 将两端的快照标准化放在 `mtp_snapshot.py`；Mac 的连接、重试及 USB 身份确认逻辑保持不变。Windows 的 `windows_mtp_reader.py` 调用安装包内的 `native/hsx_wpd_reader.exe`，只打开明确的 WPD 设备根对象读取基础属性，不读取用户文件。原生代码只在 Windows 构建机编译，客户无需安装 Python、编译器或 ADB。
+
 独立协议诊断：
 
 1. 手机解锁，USB 用途选择“文件传输”，不是“USB 网络共享”；不需要开启 USB 调试。
@@ -113,7 +118,7 @@ python3 device_bridge/scripts/probe_android_mtp.py \
 - IMEI、颜色、标称容量、电池健康度、循环次数等未读取项明确列在 `not_read_fields`，不能据此自动填零或推算。
 - `devices: []` 表示没有可读取的 MTP 设备，不代表读机成功。确认数据线、解锁状态和 USB 用途，并检查是否被其他程序占用。
 - 超时会终止本次探测子进程。程序不会自动停止 ADB、抢占其他程序或修改手机 USB 模式。
-- Windows 仍需独立验证原生 WPD 读取；此脚本不代表 Windows 安装包已经支持 Android。
+- 此独立诊断脚本仅针对 libmtp；Windows 改用原生 WPD 读取，仍须独立完成编译和真机验收，不能用 Mac 的结果代替。
 
 真机结果见 [三星 S21 只读探测记录](docs/2026-09-21-samsung-s21-mtp.md)。
 

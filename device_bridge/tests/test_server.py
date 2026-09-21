@@ -5,6 +5,16 @@ from hsx_device_bridge.server import _origin_allowed, BridgeHandler
 
 
 class DeviceResponseTest(unittest.TestCase):
+    def test_windows_android_diagnostics_are_separate_from_apple_driver(self):
+        handler = self.handler("/v1/diagnostics")
+        with patch("hsx_device_bridge.server.apple_driver_diagnostics", return_value={"ready": False}), \
+                patch("hsx_device_bridge.server.android_driver_diagnostics", return_value={"ready": True, "backend": "windows_wpd"}):
+            handler.do_GET()
+        status, body = handler._send.call_args.args
+        self.assertEqual(status, 200)
+        self.assertFalse(body["data"]["driver"]["ready"])
+        self.assertTrue(body["data"]["android_driver"]["ready"])
+
     def handler(self, path, origin="http://localhost:5175"):
         handler = object.__new__(BridgeHandler)
         handler.path = path

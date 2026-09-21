@@ -3,7 +3,7 @@
 a = Analysis(
     ["bridge_entry.py"],
     pathex=["src"],
-    binaries=[],
+    binaries=[("build/native/hsx_wpd_reader.exe", "native")],
     datas=[],
     hiddenimports=[
         "pymobiledevice3",

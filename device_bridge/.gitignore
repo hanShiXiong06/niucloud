@@ -6,3 +6,5 @@ __pycache__/
 tests/*
 !tests/test_mtp_probe.py
 !tests/test_android_reader.py
+!tests/test_windows_mtp_reader.py
+!tests/test_cli.py

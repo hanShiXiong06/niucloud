@@ -63,7 +63,4 @@ def read_devices(include_raw=False):
 
 
 def capabilities():
-    android_mtp = bool(android_reader.library_path())
-    return {"ios": True, "android_mtp": android_mtp,
-            "android_mtp_scope": "generic" if android_mtp else "",
-            "partial_results": True}
+    return {"ios": True, **android_reader.capabilities(), "partial_results": True}

@@ -10,7 +10,7 @@ from urllib.parse import parse_qs, urlparse
 from . import __version__
 from .device_reader import capabilities, read_result, response_payload, scan_result
 from .runtime import log_dir, read_runtime_config
-from .windows_support import apple_driver_diagnostics
+from .windows_support import apple_driver_diagnostics, android_driver_diagnostics
 
 
 def _allowed_origins() -> set[str]:
@@ -102,6 +102,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
                     "version": __version__,
                     "capabilities": capabilities(),
                     "driver": apple_driver_diagnostics(),
+                    "android_driver": android_driver_diagnostics(),
                 },
             })
             return

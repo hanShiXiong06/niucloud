@@ -69,6 +69,11 @@ jobs:
         run: |
           test "$(uname -m)" = arm64
           brew install libmtp libusb
+      - name: Test portable WPD identity and JSON helpers
+        if: runner.os == 'macOS'
+        run: |
+          c++ -std=c++17 -Wall -Wextra -Werror native/windows/test_wpd_contract.cpp -o "$RUNNER_TEMP/wpd-contract-test"
+          "$RUNNER_TEMP/wpd-contract-test"
       - name: Build macOS installer
         if: runner.os == 'macOS'
         env:
