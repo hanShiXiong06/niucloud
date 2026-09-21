@@ -111,6 +111,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          NOTES="device_bridge/docs/release-${RELEASE_TAG#device-bridge-v}.md"
+          test -f "$NOTES"
           mkdir -p release-assets
           find release-packages -type f \( -name '*.pkg' -o -name '*.exe' \) -exec cp {} release-assets/ \;
           test "$(find release-assets -name '*.pkg' | wc -l)" -eq 1
@@ -121,5 +123,5 @@ jobs:
           else
             gh release create "$RELEASE_TAG" release-assets/* --verify-tag \
               --title "HSX Device Bridge ${RELEASE_TAG#device-bridge-v}" \
-              --notes-file device_bridge/docs/release-0.2.0.md
+              --notes-file "$NOTES"
           fi

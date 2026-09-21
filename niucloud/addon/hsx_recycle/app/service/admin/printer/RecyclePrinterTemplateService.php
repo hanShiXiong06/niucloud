@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace addon\hsx_recycle\app\service\admin\printer;
 
 use addon\hsx_recycle\app\model\printer\RecyclePrinterTemplate;
+use addon\hsx_recycle\app\model\check\RecycleCheckTemplate;
 use addon\hsx_recycle\app\service\admin\printer\template\TemplateConverterService;
 use addon\hsx_recycle\app\service\admin\printer\template\TemplatePreviewService;
 use addon\hsx_recycle\app\service\admin\printer\template\TemplatePrintService;
@@ -16,6 +17,7 @@ use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\dict\order\RecycleReturnOrderDict;
 use addon\hsx_recycle\app\service\core\recycle_order\DeviceReadingArchive;
 use addon\hsx_recycle\app\service\core\recycle_order\DeviceSummaryHelper;
+use addon\hsx_recycle\app\service\admin\template\RecycleTemplateBindingService;
 use core\base\BaseAdminService;
 use core\exception\AdminException;
 use core\exception\CommonException;
@@ -831,8 +833,9 @@ class RecyclePrinterTemplateService extends BaseAdminService
 
     /**
      * 按设备本身的质检模板取文案，不使用打印场景/标签模板来解释选项值。
-     * 容量/颜色未命中模板时，只用同设备 result_items 中明确保存的 value/label 兜底，
-     * 不按型号猜测，不拿旧快照覆盖现存字典，也不把整段质检文字当作颜色/容量。
+     * 容量/颜色未命中模板时，使用同设备 result_items 中明确保存的 value/label 兜底。
+     * 未保存模板 ID 时，最后读取质检表单同口径的本站型号绑定，不猜型号、不套用全局模板，
+     * 不覆盖已保存标签，也不把整段质检文字当作颜色/容量。
      */
     private function buildDeviceOptionLabelMap(array $device): array
     {
@@ -867,6 +870,25 @@ class RecyclePrinterTemplateService extends BaseAdminService
                 $label = trim((string)$label);
                 if ($value !== '' && $label !== '' && !isset($map[$fieldKey][$value])) {
                     $map[$fieldKey][$value] = $label;
+                }
+            }
+        }
+
+        $nodeId = (int)($device['category_id'] ?? 0);
+        if ($templateId <= 0 && $nodeId > 0) {
+            // 质检表单使用默认绑定场景；不能按本次自定义打印场景找质检模板。
+            // 这里只读绑定，不调用 schema()，后者可能初始化或修改默认模板。
+            $binding = (new RecycleTemplateBindingService())->resolveByTarget('model_dict', $nodeId, 'manual_device_label', false);
+            $boundTemplateId = (int)($binding['check_template_id'] ?? 0);
+            if ($boundTemplateId > 0 && RecycleCheckTemplate::where([
+                ['site_id', '=', $this->site_id],
+                ['id', '=', $boundTemplateId],
+                ['status', '=', 1],
+            ])->value('id')) {
+                $boundMap = $this->buildTemplateOptionLabelMap($boundTemplateId);
+                // 仅补容量/颜色，不用当前型号的选项区间改写电池等实测数值。
+                foreach (['capacity', 'color'] as $fieldKey) {
+                    $map[$fieldKey] = ($map[$fieldKey] ?? []) + ($boundMap[$fieldKey] ?? []);
                 }
             }
         }

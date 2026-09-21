@@ -45,6 +45,7 @@ export interface DeviceEntryRow {
     /** 最近一次自动识别/映射到的叶子型号；人工改选时据此判断是否要纠正映射。 */
     local_model_resolved_category_id?: number
     model_alias_learning?: boolean
+    model_alias_error?: string
     // 质检模板（按型号触发）
     check_template_id?: number
     check_template_name?: string

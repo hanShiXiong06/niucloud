@@ -17,12 +17,22 @@
                     <el-button size="small" :icon="Connection" :loading="localFetching" @click="readLocalDevices">
                         读取本地设备
                     </el-button>
+                    <el-button link type="primary" size="small" :icon="Download" @click="bridgeHelpVisible = true">
+                        安装与帮助
+                    </el-button>
                 </template>
                 <el-button type="primary" plain size="small" :icon="Plus" @click="addDeviceRow">
                     添加设备
                 </el-button>
             </div>
         </div>
+
+        <el-alert v-if="localReadError" class="local-read-error" type="warning" show-icon closable @close="localReadError = ''">
+            <template #title>
+                <span>{{ localReadError }}</span>
+                <el-button link type="primary" size="small" @click="bridgeHelpVisible = true">下载设备桥 / 排查连接</el-button>
+            </template>
+        </el-alert>
 
         <el-alert
             v-if="showModelEntryTip"
@@ -67,6 +77,8 @@
                         <div class="model-picker-wrap">
                             <div class="model-picker">
                                 <el-cascader
+                                    :key="modelPickerVersions.get(row) || 0"
+                                    :ref="instance => setModelPicker(row, instance)"
                                     v-model="row.model_path"
                                     :options="modelTreeOptions"
                                     :props="modelCascaderProps"
@@ -79,21 +91,36 @@
                                     size="small"
                                     class="model-cascader"
                                     :loading="modelLoading"
+                                    :disabled="row.model_alias_learning"
                                     @visible-change="visible => onModelVisibleChange(row, visible)"
                                     @change="value => handleModelPathChange(row, value)"
-                                />
+                                >
+                                    <template #empty>
+                                        <div class="model-search-empty">
+                                            <span>暂无匹配型号</span>
+                                            <el-button link type="primary" size="small" @click.stop="openExistingModelPicker(row)">浏览已有型号</el-button>
+                                        </div>
+                                    </template>
+                                </el-cascader>
                             </div>
-                            <div v-if="row.model_search_empty" class="model-picker-feedback is-warning">
-                                未找到“{{ row.model_search_keyword }}”，可选择已有型号或
-                                <el-button link type="primary" size="small" @click="openQuickAddModel(row)">新增并关联</el-button>
+                            <div v-if="row.model_search_empty || (row.model && !row.category_id)" class="model-picker-feedback">
+                                <span class="model-picker-warning">{{ row.model_search_empty ? '未找到“' + row.model_search_keyword + '”' : '已识别“' + row.model + '”，待关联' }}</span>
+                                <div class="model-picker-actions">
+                                    <el-button link type="primary" size="small" :icon="Link" @click.stop="openExistingModelPicker(row)">关联已有型号</el-button>
+                                    <el-button link size="small" :icon="Plus" @click="openQuickAddModel(row)">新增型号</el-button>
+                                </div>
                             </div>
-                            <div v-else-if="row.model && !row.category_id" class="model-picker-feedback is-warning">
-                                已识别“{{ row.model }}”，请选择标准型号；型号库没有时可
-                                <el-button link type="primary" size="small" @click="openQuickAddModel(row)">新增并关联</el-button>
+                            <div v-else-if="row.model_alias_error" class="model-picker-feedback">
+                                <span class="model-picker-warning">{{ row.model_alias_error }}</span>
+                                <el-button link type="primary" size="small" :loading="row.model_alias_learning" @click="learnLocalModelAliases(row)">重试关联</el-button>
                             </div>
                         </div>
                     </template>
                     <template v-if="row.device_readings" #summary-actions>
+                        <el-tooltip v-if="row.device_readings.local?.raw?.source === 'usb_mtp'"
+                            content="SN 来自 USB 序列号，请与手机核对；不能保证可用于保修查询。" placement="top">
+                            <el-tag size="small" type="info">USB SN · 待核对</el-tag>
+                        </el-tooltip>
                         <HsxDataArchive :data="row.device_readings" :reset-key="row.id || row._k"
                             :labels="{ local: '本地读取原文与提取值', model_match: '型号匹配记录', external_queries: '外部查询记录（如保修）' }" />
                     </template>
@@ -124,13 +151,15 @@
             :suggested-name="quickAddModelName"
             @created="handleQuickModelCreated"
         />
+        <DeviceBridgeHelpDialog v-model="bridgeHelpVisible" @read="readLocalDevices" />
     </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Connection } from '@element-plus/icons-vue'
+import type { CascaderInstance } from 'element-plus'
+import { Plus, Connection, Download, Link } from '@element-plus/icons-vue'
 import { addOrderDevice, updateOrderDevice, deleteOrderDevice } from '@/addon/hsx_recycle/api/recycle_order'
 import {
     bindRecycleDeviceModelAlias,
@@ -144,6 +173,7 @@ import DeviceEntryCard from './DeviceEntryCard.vue'
 import CheckSummaryDialog from './CheckSummaryDialog.vue'
 import CheckTemplateConfigDrawer from './CheckTemplateConfigDrawer.vue'
 import QuickAddModelDialog from './QuickAddModelDialog.vue'
+import DeviceBridgeHelpDialog from './DeviceBridgeHelpDialog.vue'
 import { useLocalDevice } from './useLocalDevice'
 import { HsxDataArchive } from '@/addon/hsx_components/core'
 import { localReadingArchive, prefillDeviceSummary as prefillSummaryFromLocal, recordModelMatch } from './deviceReadings'
@@ -184,6 +214,29 @@ const modelLoading = ref(false)
 const modelTreeOptions = ref<any[]>([])
 const modelNodeMap = ref<Record<string, any>>({})
 const modelSearching = ref(false)
+const modelPickers = new WeakMap<DeviceEntryRow, CascaderInstance>()
+const modelPickerVersions = reactive(new WeakMap<DeviceEntryRow, number>())
+const setModelPicker = (row: DeviceEntryRow, instance: any) => {
+    if (instance) modelPickers.set(row, instance)
+    else modelPickers.delete(row)
+}
+
+const openExistingModelPicker = async (row: DeviceEntryRow) => {
+    const picker = modelPickers.get(row)
+    if (!picker) return
+    // 重建当前选择器以清除内部搜索态；只浏览已有分类，不调用新增接口。
+    picker.togglePopperVisible(false)
+    if (modelSearching.value) {
+        modelSearching.value = false
+        modelTreeOptions.value = []
+    }
+    row.model_search_keyword = ''
+    row.model_search_empty = false
+    modelPickerVersions.set(row, (modelPickerVersions.get(row) || 0) + 1)
+    await nextTick()
+    const current = modelPickers.get(row)
+    current?.togglePopperVisible(true)
+}
 // 懒加载:只按 pid 取一层(children 接口),避免一次性拉 3 万条整树。
 // 浏览(modelSearching=false)走 lazyLoad;搜索时切非懒加载、用扁平搜索结果(options,带完整 category_path)。
 // 关键:只改 props.lazy 不会重挂组件,输入框焦点不丢,下拉面板按新模式重建。
@@ -296,6 +349,7 @@ const filterModelNode = (node: any, keyword: string) => {
 }
 
 const handleModelPathChange = async (row: DeviceEntryRow, value: Array<string | number> | string | number) => {
+    row.model_alias_error = ''
     const autoResolvedCategoryId = Number(row.local_model_resolved_category_id || 0)
     const path = Array.isArray(value) ? value : [value]
     const leafId = path[path.length - 1]
@@ -481,9 +535,11 @@ const handleQuickModelCreated = async (node: Record<string, any>) => {
     modelTreeOptions.value = []
     await loadCheckTemplate(row)
     prefillSummaryFromLocal(row, row)
-    await learnLocalModelAliases(row)
+    const associated = await learnLocalModelAliases(row)
     recordModelMatch(row, 'manual')
-    ElMessage.success(Number(node.created || 0) === 1 ? '型号已新增并关联' : '已关联型号库中的已有型号')
+    if (associated !== false) {
+        ElMessage.success(Number(node.created || 0) === 1 ? '型号已创建并选用' : '已选用型号库中的已有型号')
+    }
 }
 
 // ============ 行的增删 ============
@@ -602,14 +658,19 @@ const updateDeviceRow = async (row: DeviceEntryRow) => {
 
 // ============ 本地取机 ============
 const enableLocalRead = true
-const { fetching: localFetching, fetchConnected, mapToRow, describeError, startAuto, stopAuto } = useLocalDevice()
+const { fetching: localFetching, readWarnings, fetchConnected, mapToRow, describeError, startAuto, stopAuto } = useLocalDevice()
 const autoLocal = ref(false)
+const bridgeHelpVisible = ref(false)
+const localReadError = ref('')
+watch(readWarnings, warnings => { localReadError.value = warnings.join('；') })
 
 const readLocalDevices = async () => {
+    if (localFetching.value) return
+    localReadError.value = ''
     try {
         const list = await fetchConnected()
         if (!list.length) {
-            ElMessage.warning('未检测到本地连接的设备')
+            localReadError.value = '未发现可读取的设备。安卓请解锁并选择「文件传输」，iPhone 请选择「信任此电脑」；仍无法识别时请打开安装与帮助。'
             return
         }
         let applied = 0
@@ -628,7 +689,7 @@ const readLocalDevices = async () => {
         else if (skipped > 0) ElMessage.info(`检测到的 ${skipped} 台设备均已在清单中`)
         if (unresolved > 0) ElMessage.warning(`${unresolved} 台设备未唯一匹配型号，请确认叶子分类`)
     } catch (error: any) {
-        ElMessage.error(describeError(error))
+        localReadError.value = describeError(error)
     }
 }
 
@@ -673,9 +734,11 @@ const applyLocalDevice = async (m: any) => {
         .map((item: any) => String(item || '').trim())
         .filter(Boolean)))
     row.local_model_resolved_category_id = 0
+    row.model_alias_error = ''
     recordModelMatch(row, 'unmatched')
     // 硬件映射优先；名称只用于数据库唯一精确匹配，不学习成公共别名。
-    const matched = await matchModelToCategory(row, [...row.local_model_aliases, m.model, m.model ? `苹果 ${m.model}` : ''])
+    const matched = await matchModelToCategory(row, [...row.local_model_aliases, m.model,
+        m.model && m.raw?.source !== 'usb_mtp' && m.raw?.platform !== 'android' ? `苹果 ${m.model}` : ''])
     prefillSummaryFromLocal(row, m)
     if (row.saved) row.dirty = true
     return { status: 'applied' as const, matched }
@@ -749,12 +812,16 @@ const learnLocalModelAliases = async (row: DeviceEntryRow) => {
     if (!aliases.length || !categoryId || row.model_alias_learning) return
 
     row.model_alias_learning = true
+    row.model_alias_error = ''
     try {
         await bindRecycleDeviceModelAlias({ aliases, category_id: categoryId })
         row.local_model_resolved_category_id = categoryId
-        ElMessage.success(`已记住“${aliases[0]}”对应的标准型号，下次将自动匹配`)
+        ElMessage.success(`已将“${aliases[0]}”关联到“${row.model}”，下次自动匹配`)
+        return true
     } catch (error) {
+        row.model_alias_error = '型号已选中，但关联未保存'
         console.error('保存设备型号映射失败:', error)
+        return false
     } finally {
         row.model_alias_learning = false
     }
@@ -799,6 +866,7 @@ defineExpose({ savedDeviceCount, addDeviceRow, stopAuto })
 
 .device-entry__head {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
@@ -822,9 +890,14 @@ defineExpose({ savedDeviceCount, addDeviceRow, stopAuto })
 
 .device-entry__actions {
     display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     align-items: center;
     gap: 10px;
 }
+
+.local-read-error { margin-bottom: 10px; }
+.local-read-error .el-button { margin-left: 10px; }
 
 .device-entry__auto {
     display: inline-flex;
@@ -885,9 +958,28 @@ defineExpose({ savedDeviceCount, addDeviceRow, stopAuto })
     line-height: 16px;
 }
 
-.model-picker-feedback.is-warning {
+.model-picker-warning {
     color: var(--el-color-warning-dark-2);
 }
+
+.model-picker-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 12px;
+    margin-top: 2px;
+}
+
+.model-search-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 16px;
+    color: var(--el-text-color-secondary);
+}
+
+:deep(.model-picker-actions .el-button + .el-button) { margin-left: 0; }
 
 :deep(.model-picker-feedback .el-button) {
     height: auto;
@@ -910,6 +1002,7 @@ defineExpose({ savedDeviceCount, addDeviceRow, stopAuto })
 }
 
 @media (max-width: 768px) {
+    .device-entry__actions { justify-content: flex-start; }
     .device-table-head { display: none; }
     .device-list { gap: 8px; }
 }

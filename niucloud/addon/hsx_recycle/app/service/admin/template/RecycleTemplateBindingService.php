@@ -132,7 +132,10 @@ class RecycleTemplateBindingService extends BaseAdminService
         return $this->resolveForDevice($device, $sceneKey);
     }
 
-    public function resolveByTarget(string $targetType, int $targetId, string $sceneKey = 'manual_device_label'): array
+    /**
+     * 读取当前有效绑定；解码未记录模板的设备选项时，可禁用全局兜底，避免套用不相关的字典。
+     */
+    public function resolveByTarget(string $targetType, int $targetId, string $sceneKey = 'manual_device_label', bool $allowGlobalFallback = true): array
     {
         $targetType = $this->normalizeTargetType($targetType);
         $chain = $targetType === 'global' ? [] : $this->getAncestorChain($targetId);
@@ -168,7 +171,7 @@ class RecycleTemplateBindingService extends BaseAdminService
             }
         }
 
-        if ($checkId <= 0 || $printId <= 0) {
+        if ($allowGlobalFallback && ($checkId <= 0 || $printId <= 0)) {
             $global = $this->findBinding('global', 0, $sceneKey);
             if (!empty($global) && (int)($global['status'] ?? 0) === 1) {
                 $pick($global, [], 'global');

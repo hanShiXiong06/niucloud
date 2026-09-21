@@ -1,510 +1,263 @@
 <template>
-    <PremiumTheme class="main-container">
-        <el-card class="!border-none" shadow="never" v-loading="loading">
-            <HsxTitle size="page" collapsible-subtitle class="mb-4">
-                <template #default>下单设置</template>
-                <template #subtitle>控制用户端回收下单入口、设备登记按钮和可用提交方式。</template>
-                <template #extra><el-button type="primary" :loading="saving" @click="save">保存设置</el-button></template>
-            </HsxTitle>
-
-            <div class="config-layout">
-                <div class="config-group-title">
-                    <span>用户端配置</span>
-                    <em>控制用户提交订单、查看进度、联系客服时看到的内容。</em>
-                </div>
-
-                <section class="config-section">
-                    <div class="section-title">前台通知</div>
-                    <div class="setting-row">
-                        <div>
-                            <div class="setting-title">下单页通知</div>
-                            <div class="setting-desc">开启后，在用户下单页顶部展示一条通知，用于说明回收时效、活动规则或注意事项。</div>
-                        </div>
-                        <el-switch v-model="form.notice.enabled" :active-value="1" :inactive-value="0" />
-                    </div>
-                    <div v-if="form.notice.enabled" class="notice-form">
-                        <el-input v-model.trim="form.notice.title" maxlength="30" show-word-limit placeholder="通知标题，如：回收下单须知" />
-                        <el-input
-                            v-model.trim="form.notice.content"
-                            type="textarea"
-                            :rows="4"
-                            maxlength="500"
-                            show-word-limit
-                            placeholder="请输入通知内容，支持普通文本"
-                        />
-                    </div>
-                </section>
-
-                <section class="config-section">
-                    <div class="section-title">设备登记</div>
-                    <div class="setting-row">
-                        <div>
-                            <div class="setting-title">允许用户添加设备明细</div>
-                            <div class="setting-desc">开启后，下单页显示“添加设备”按钮；关闭后，用户仍可直接选择数量提交订单。</div>
-                        </div>
-                        <el-switch v-model="form.device_add_enabled" :active-value="1" :inactive-value="0" />
-                    </div>
-                    <div class="setting-row mt-[18px]">
-                        <div>
-                            <div class="setting-title">默认下单数量</div>
-                            <div class="setting-desc">用户没有添加设备明细时，数量选择器默认显示这个数量。</div>
-                        </div>
-                        <el-input-number v-model="form.default_count" :min="1" :max="99" controls-position="right" />
-                    </div>
-                </section>
-
-                <section class="config-section">
-                    <div class="section-title">提交方式</div>
-                    <div class="mode-grid">
-                        <div class="mode-card" :class="{ active: form.delivery_modes.mail }" @click="toggleMode('mail')">
-                            <div class="mode-head">
-                                <div>
-                                    <div class="mode-title">邮寄到店</div>
-                                    <div class="mode-desc">用户填写快递单号，或使用平台快递上门取件。</div>
-                                </div>
-                                <el-switch v-model="form.delivery_modes.mail" :active-value="1" :inactive-value="0" @click.stop />
-                            </div>
-                        </div>
-                        <div class="mode-card" :class="{ active: form.delivery_modes.self }" @click="toggleMode('self')">
-                            <div class="mode-head">
-                                <div>
-                                    <div class="mode-title">自送到店</div>
-                                    <div class="mode-desc">用户不填写快递信息，直接到门店交付设备。</div>
-                                </div>
-                                <el-switch v-model="form.delivery_modes.self" :active-value="1" :inactive-value="0" @click.stop />
-                            </div>
-                        </div>
-                        <div class="mode-card" :class="{ active: form.delivery_modes.logistics_vehicle }" @click="toggleMode('logistics_vehicle')">
-                            <div class="mode-head">
-                                <div>
-                                    <div class="mode-title">物流车配送</div>
-                                    <div class="mode-desc">客户把设备交给城际物流车，到站后由指定员工前往取货。</div>
-                                </div>
-                                <el-switch v-model="form.delivery_modes.logistics_vehicle" :active-value="1" :inactive-value="0" @click.stop />
-                            </div>
-                        </div>
-                    </div>
-                    <div v-if="form.delivery_modes.logistics_vehicle" class="profile-panel">
-                        <div class="setting-row">
-                            <div>
-                                <div class="setting-title">预计到达规则</div>
-                                <div class="setting-desc">系统据此计算取货时间，并在到时后向取货责任人推送企业微信任务。</div>
-                            </div>
-                            <el-segmented v-model="form.logistics_vehicle.arrival_mode" :options="[{ label: '半天到达', value: 'half_day' }, { label: '次日到达', value: 'next_day' }]" />
-                        </div>
-                        <div v-if="form.logistics_vehicle.arrival_mode === 'half_day'" class="setting-row">
-                            <div>
-                                <div class="setting-title">上午单到达时间</div>
-                                <div class="setting-desc">在截止时间前提交的订单，按当天可取货处理。</div>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <el-time-select v-model="form.logistics_vehicle.morning_cutoff" start="06:00" step="00:30" end="18:00" style="width: 120px" />
-                                <span class="text-xs text-gray-400">前提交，当天</span>
-                                <el-time-select v-model="form.logistics_vehicle.same_day_time" start="08:00" step="00:30" end="23:30" style="width: 120px" />
-                                <span class="text-xs text-gray-400">可取</span>
-                            </div>
-                        </div>
-                        <div class="setting-row">
-                            <div>
-                                <div class="setting-title">次日可取货时间</div>
-                                <div class="setting-desc">下午单或“次日到达”模式统一使用这个时间。</div>
-                            </div>
-                            <el-time-select v-model="form.logistics_vehicle.next_day_time" start="06:00" step="00:30" end="18:00" style="width: 140px" />
-                        </div>
-                    </div>
-                    <HsxNotice default-expanded class="mt-[14px]" type="warning" :closable="false" show-icon>
-                        <template #title>至少需要开启一种提交方式。物流车订单会保存车辆和取货地点，并自动进入“待取货”任务。</template>
-                    </HsxNotice>
-                </section>
-
-                <section class="config-section">
-                    <div class="section-title">个人资料与打款</div>
-                    <div class="setting-row">
-                        <div>
-                            <div class="setting-title">要求用户完善个人资料</div>
-                            <div class="setting-desc">开启后，下单页会提醒用户完善资料；关闭后，不再强提醒姓名、手机号、身份证和收款方式。</div>
-                        </div>
-                        <el-switch v-model="form.profile.enabled" :active-value="1" :inactive-value="0" />
-                    </div>
-
-                    <div v-if="form.profile.enabled" class="profile-panel">
-                        <div class="setting-row">
-                            <div>
-                                <div class="setting-title">要求收款方式</div>
-                                <div class="setting-desc">开启后，用户需要添加足够数量的收款方式，避免回收款无法正常打款。</div>
-                            </div>
-                            <el-switch v-model="form.profile.payment_required" :active-value="1" :inactive-value="0" />
-                        </div>
-                        <div v-if="form.profile.payment_required" class="setting-row">
-                            <div>
-                                <div class="setting-title">最低收款方式数量</div>
-                                <div class="setting-desc">默认 1 种；设置为 2 时，用户至少要提交两种收款方式。</div>
-                            </div>
-                            <el-input-number v-model="form.profile.payment_min_count" :min="1" :max="5" controls-position="right" />
-                        </div>
-                        <div class="setting-row">
-                            <div>
-                                <div class="setting-title">采集身份证信息</div>
-                                <div class="setting-desc">开启后，身份证号和身份证照片为必填；关闭后，用户可只维护基础资料与收款方式。</div>
-                            </div>
-                            <el-switch v-model="form.profile.id_card_required" :active-value="1" :inactive-value="0" />
-                        </div>
-                    </div>
-                </section>
-
-                <div class="config-group-title">
-                    <span>管理端配置</span>
-                    <em>控制后台处理订单、转代卖、通知和打印时的业务规则。</em>
-                </div>
-
-                <ErpIntegrationSettings />
-
-                <section class="config-section">
-                    <div class="section-title">订单流转模式</div>
-                    <div class="mode-grid">
-                        <div class="mode-card" :class="{ active: form.flow.mode === 'order' }" @click="handleFlowModeChange('order')">
-                            <div class="mode-title">整单流转</div>
-                            <div class="mode-desc">所有设备完成质检后，客户统一确认，财务统一打款。适合批量统一结算的商家。</div>
-                        </div>
-                        <div class="mode-card" :class="{ active: form.flow.mode === 'device' }" @click="handleFlowModeChange('device')">
-                            <div class="mode-title">按设备流转</div>
-                            <div class="mode-desc">设备可独立质检、确认、打款。适合一单多机、客户需要部分先回款的场景。</div>
-                        </div>
-                    </div>
-                    <div class="payment-mode-tip">
-                        <div class="setting-title">{{ flowModeMeta.title }}</div>
-                        <div class="setting-desc">{{ flowModeMeta.desc }}</div>
-                    </div>
-                    <HsxNotice default-expanded class="mt-[14px]" type="warning" :closable="false" show-icon>
-                        <template #title>切换后需要点击“保存设置”才会生效。保存后只影响新订单，历史订单仍按创建时的流转模式执行。</template>
-                    </HsxNotice>
-                </section>
-
-                <section class="config-section config-section--wide">
-                    <div class="section-title">代卖业务</div>
-                    <div class="section-tip">代卖是独立订单，来源回收订单只保留追溯关系。开启后，后台可将单台设备转入代卖，用户端可进入代卖订单查看进度。</div>
-                    <div class="setting-row">
-                        <div>
-                            <div class="setting-title">启用代卖业务</div>
-                            <div class="setting-desc">关闭后，后台隐藏转代卖入口，用户端不展示代卖入口，通知和打印也不会自动触发代卖场景。</div>
-                        </div>
-                        <el-switch v-model="form.consignment.enabled" :active-value="1" :inactive-value="0" />
-                    </div>
-
-                    <div class="consignment-panel" :class="{ disabled: !form.consignment.enabled }">
-                        <div class="setting-row">
-                            <div>
-                                <div class="setting-title">后台转代卖二次确认</div>
-                                <div class="setting-desc">开启后，管理员点击“转代卖”时必须再次确认，避免误把已报价设备转入代卖。</div>
-                            </div>
-                            <el-switch v-model="form.consignment.transfer_confirm_required" :active-value="1" :inactive-value="0" :disabled="!form.consignment.enabled" />
-                        </div>
-                        <div class="setting-row">
-                            <div>
-                                <div class="setting-title">用户端展示代卖入口</div>
-                                <div class="setting-desc">开启后，装修组件和用户中心可展示代卖入口，用户能直接进入代卖订单列表。</div>
-                            </div>
-                            <el-switch v-model="form.consignment.user_entry_enabled" :active-value="1" :inactive-value="0" :disabled="!form.consignment.enabled" />
-                        </div>
-                        <div class="setting-row">
-                            <div>
-                                <div class="setting-title">允许用户查看代卖进度</div>
-                                <div class="setting-desc">开启后，用户可查看代卖状态、上架价、成交价、结算金额和操作日志。</div>
-                            </div>
-                            <el-switch v-model="form.consignment.user_view_enabled" :active-value="1" :inactive-value="0" :disabled="!form.consignment.enabled" />
-                        </div>
-                        <div class="setting-row">
-                            <div>
-                                <div class="setting-title">用户端入口标题</div>
-                                <div class="setting-desc">显示在低代码组件和代卖列表顶部，建议短一点。</div>
-                            </div>
-                            <el-input v-model.trim="form.consignment.user_title" maxlength="20" show-word-limit class="setting-input" :disabled="!form.consignment.enabled" placeholder="代卖订单" />
-                        </div>
-                        <div class="setting-row">
-                            <div>
-                                <div class="setting-title">用户端入口说明</div>
-                                <div class="setting-desc">说明用户点进去能看到什么，避免入口含义不清楚。</div>
-                            </div>
-                            <el-input v-model.trim="form.consignment.user_desc" maxlength="80" show-word-limit class="setting-input" :disabled="!form.consignment.enabled" placeholder="查看代卖进度、成交与结算结果" />
-                        </div>
-                        <div class="setting-row">
-                            <div>
-                                <div class="setting-title">代卖通知</div>
-                                <div class="setting-desc">开启后，转入代卖、上架、成交、结算、退回等动作会走系统通知，并写入通知日志。</div>
-                            </div>
-                            <el-switch v-model="form.consignment.notice_enabled" :active-value="1" :inactive-value="0" :disabled="!form.consignment.enabled" />
-                        </div>
-                        <div class="setting-row">
-                            <div>
-                                <div class="setting-title">代卖打印</div>
-                                <div class="setting-desc">开启后，代卖动作可以绑定打印场景。具体何时打印、打印哪个模板，在打印场景里配置。</div>
-                            </div>
-                            <el-switch v-model="form.consignment.print_enabled" :active-value="1" :inactive-value="0" :disabled="!form.consignment.enabled" />
-                        </div>
-                        <div class="setting-row">
-                            <div>
-                                <div class="setting-title">用户端显示服务收益</div>
-                                <div class="setting-desc">默认不显示。开启后用户能看到成交价和结算金额之间的服务收益，建议谨慎开启。</div>
-                            </div>
-                            <el-switch v-model="form.consignment.show_service_fee" :active-value="1" :inactive-value="0" :disabled="!form.consignment.enabled" />
-                        </div>
-                    </div>
-                </section>
-
-                <section class="config-section config-section--wide">
-                    <div class="section-title">企业微信群通知</div>
-                    <div class="section-tip">按不同业务场景推送到不同企业微信群，避免所有消息都挤在一个群里。第一版主要用于用户端“催一下”。</div>
-                    <div class="setting-row">
-                        <div>
-                            <div class="setting-title">启用企业微信群通知</div>
-                            <div class="setting-desc">关闭后，所有企业微信群通知都不会发送，但用户端仍可隐藏催办入口。</div>
-                        </div>
-                        <el-switch v-model="form.work_wechat.enabled" :active-value="1" :inactive-value="0" />
-                    </div>
-                    <div class="work-wechat-list" :class="{ disabled: !form.work_wechat.enabled }">
-                        <div v-for="item in workWechatChannelMetas" :key="item.key" class="work-wechat-card">
-                            <div class="work-wechat-card__head">
-                                <div>
-                                    <div class="setting-title">{{ item.title }}</div>
-                                    <div class="setting-desc">{{ item.desc }}</div>
-                                </div>
-                                <el-switch v-model="form.work_wechat.channels[item.key].enabled" :active-value="1" :inactive-value="0" :disabled="!form.work_wechat.enabled" />
-                            </div>
-                            <div class="work-wechat-card__body">
-                                <el-input v-model.trim="form.work_wechat.channels[item.key].name" maxlength="30" show-word-limit placeholder="群名称" :disabled="!form.work_wechat.enabled || !form.work_wechat.channels[item.key].enabled" />
-                                <el-input v-model.trim="form.work_wechat.channels[item.key].webhook_url" type="password" show-password maxlength="1000" placeholder="企业微信群机器人 Webhook 地址" :disabled="!form.work_wechat.enabled || !form.work_wechat.channels[item.key].enabled" />
-                                <div class="work-wechat-card__rules">
-                                    <div class="rule-item">
-                                        <span>同单限频</span>
-                                        <el-input-number v-model="form.work_wechat.channels[item.key].dedupe_minutes" :min="0" :max="1440" controls-position="right" :disabled="!form.work_wechat.enabled || !form.work_wechat.channels[item.key].enabled" />
-                                        <em>分钟</em>
-                                    </div>
-                                    <div class="rule-item">
-                                        <span>每日上限</span>
-                                        <el-input-number v-model="form.work_wechat.channels[item.key].daily_limit" :min="0" :max="999" controls-position="right" :disabled="!form.work_wechat.enabled || !form.work_wechat.channels[item.key].enabled" />
-                                        <em>0 为不限</em>
-                                    </div>
-                                    <div v-if="item.key === 'order_urge'" class="rule-item">
-                                        <span>用户催办间隔</span>
-                                        <el-input-number v-model="form.work_wechat.channels[item.key].user_cooldown_hours" :min="0" :max="720" controls-position="right" :disabled="!form.work_wechat.enabled || !form.work_wechat.channels[item.key].enabled" />
-                                        <em>小时，0 为不限</em>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <section class="config-section">
-                    <div class="section-title">平台快递包邮</div>
-                    <div class="setting-row">
-                        <div>
-                            <div class="setting-title">前台快递名称</div>
-                            <div class="setting-desc">展示给用户看的名称，选择快递线路时会自动填入线路名，保存前可手动改成更短的展示名。</div>
-                        </div>
-                        <el-input v-model.trim="form.platform_delivery.display_name" maxlength="20" show-word-limit class="setting-input" placeholder="京东快递" />
-                    </div>
-                    <div class="setting-row">
-                        <div>
-                            <div class="setting-title">最低包邮数量</div>
-                            <div class="setting-desc">用户选择“邮寄到店”时，只有达到该数量才允许使用平台快递下单；未达到时仍可手动填写快递单号。</div>
-                        </div>
-                        <el-input-number v-model="form.platform_delivery.free_shipping_min_count" :min="1" :max="99" controls-position="right" />
-                    </div>
-                    <div class="setting-row">
-                        <div>
-                            <div class="setting-title">默认快递服务商</div>
-                            <div class="setting-desc">用户端使用平台快递时实际下单的服务商，来源于第三方快递配置中已开启的服务商。</div>
-                        </div>
-                        <el-select
-                            v-model="form.platform_delivery.provider"
-                            class="setting-input"
-                            placeholder="请选择快递服务商"
-                            :disabled="!form.platform_delivery.provider_options.length"
-                            @change="handleProviderChange"
-                        >
-                            <el-option
-                                v-for="item in form.platform_delivery.provider_options"
-                                :key="item.provider"
-                                :label="item.provider_name"
-                                :value="item.provider"
-                            />
-                        </el-select>
-                    </div>
-                    <div class="setting-row">
-                        <div>
-                            <div class="setting-title">默认快递线路</div>
-                            <div class="setting-desc">用户端平台快递实际使用的产品线路，来源于第三方配置中已启用的亿速产品。</div>
-                        </div>
-                        <el-select
-                            v-model="form.platform_delivery.product_code"
-                            class="setting-input"
-                            placeholder="请选择快递线路"
-                            :disabled="!currentProductOptions.length"
-                            @change="handleProductChange"
-                        >
-                            <el-option
-                                v-for="item in currentProductOptions"
-                                :key="item.product_code"
-                                :label="formatProductLabel(item)"
-                                :value="item.product_code"
-                            />
-                        </el-select>
-                    </div>
-                </section>
-
-                <section class="config-section">
-                    <div class="section-title">公众号关注提醒</div>
-                    <div class="setting-row">
-                        <div>
-                            <div class="setting-title">下单成功后弹出公众号二维码</div>
-                            <div class="setting-desc">开启后，用户提交订单成功会看到关注公众号弹窗；必须先上传公众号二维码图片。</div>
-                        </div>
-                        <el-switch v-model="form.follow_official_account.enabled" :active-value="1" :inactive-value="0" />
-                    </div>
-                    <div v-if="form.follow_official_account.enabled" class="media-config-panel">
-                        <div class="setting-row">
-                            <div>
-                                <div class="setting-title">公众号名称</div>
-                                <div class="setting-desc">展示在二维码上方，方便用户确认关注对象。</div>
-                            </div>
-                            <el-input v-model.trim="form.follow_official_account.wechat_name" maxlength="30" show-word-limit class="setting-input" placeholder="请输入公众号名称" />
-                        </div>
-                        <div class="setting-row">
-                            <div>
-                                <div class="setting-title">弹窗标题</div>
-                                <div class="setting-desc">默认显示“关注公众号”。</div>
-                            </div>
-                            <el-input v-model.trim="form.follow_official_account.title" maxlength="30" show-word-limit class="setting-input" placeholder="关注公众号" />
-                        </div>
-                        <div class="setting-row">
-                            <div>
-                                <div class="setting-title">提示文案</div>
-                                <div class="setting-desc">展示在二维码上方，说明关注后的用途。</div>
-                            </div>
-                            <el-input v-model.trim="form.follow_official_account.content" maxlength="120" show-word-limit class="setting-input" placeholder="关注公众号，及时接收订单状态通知" />
-                        </div>
-                        <div class="setting-row align-start">
-                            <div>
-                                <div class="setting-title">公众号二维码</div>
-                                <div class="setting-desc">开启提醒时必填，用户可长按识别关注。</div>
-                            </div>
-                            <upload-image v-model="form.follow_official_account.qr_code" :limit="1" width="120px" height="120px" image-text="上传二维码" />
-                        </div>
-                    </div>
-                </section>
-
-                <section class="config-section">
-                    <div class="section-title">订单客服</div>
-                    <div class="setting-row">
-                        <div>
-                            <div class="setting-title">开启订单详情客服入口</div>
-                            <div class="setting-desc">开启后，用户可在订单详情中联系工作人员，支持微信客服或自定义客服二维码。</div>
-                        </div>
-                        <el-switch v-model="form.customer_service.enabled" :active-value="1" :inactive-value="0" />
-                    </div>
-                    <div v-if="form.customer_service.enabled" class="media-config-panel">
-                        <div class="setting-row">
-                            <div>
-                                <div class="setting-title">客服方式</div>
-                                <div class="setting-desc">微信客服适合小程序原生客服；二维码客服适合添加指定工作人员。</div>
-                            </div>
-                            <el-radio-group v-model="form.customer_service.type">
-                                <el-radio-button label="wechat">微信客服</el-radio-button>
-                                <el-radio-button label="qrcode">客服二维码</el-radio-button>
-                            </el-radio-group>
-                        </div>
-                        <div class="setting-row">
-                            <div>
-                                <div class="setting-title">入口标题</div>
-                                <div class="setting-desc">展示在订单详情客服入口和弹窗标题中。</div>
-                            </div>
-                            <el-input v-model.trim="form.customer_service.title" maxlength="30" show-word-limit class="setting-input" placeholder="联系客服" />
-                        </div>
-                        <div class="setting-row">
-                            <div>
-                                <div class="setting-title">提示文案</div>
-                                <div class="setting-desc">说明客服可以处理的事项。</div>
-                            </div>
-                            <el-input v-model.trim="form.customer_service.content" maxlength="120" show-word-limit class="setting-input" placeholder="如需议价或咨询订单进度，请联系客服处理" />
-                        </div>
-                        <div v-if="form.customer_service.type === 'qrcode'" class="setting-row align-start">
-                            <div>
-                                <div class="setting-title">客服二维码</div>
-                                <div class="setting-desc">选择二维码客服时必填，用户可长按添加工作人员。</div>
-                            </div>
-                            <upload-image v-model="form.customer_service.qrcode" :limit="1" width="120px" height="120px" image-text="上传二维码" />
-                        </div>
-                    </div>
-                </section>
-
-                <section class="config-section">
-                    <div class="section-title">订单确认</div>
-                    <div class="setting-row">
-                        <div>
-                            <div class="setting-title">允许用户拒绝出售</div>
-                            <div class="setting-desc">开启后，用户在订单详情的每台设备上可以自主点击“拒绝出售”；关闭后，用户端隐藏该按钮，只能由管理员代用户拒绝出售并处理退回。</div>
-                        </div>
-                        <el-switch v-model="form.allow_user_reject_sale" :active-value="1" :inactive-value="0" />
-                    </div>
-                </section>
-
-                <section class="config-section">
-                    <div class="section-title">订单详情页</div>
-                    <div class="setting-row">
-                        <div>
-                            <div class="setting-title">显示质检结果</div>
-                            <div class="setting-desc">控制验机报告里的“检测明细”（质检结论）。关闭后用户看不到检测结果，但仍可单独控制是否显示质检图片。</div>
-                        </div>
-                        <el-switch v-model="form.order_detail.show_inspection_result" :active-value="1" :inactive-value="0" />
-                    </div>
-                    <div class="setting-row">
-                        <div>
-                            <div class="setting-title">显示质检图片</div>
-                            <div class="setting-desc">控制验机报告里的“验机图片”。可与质检结果分开设置，例如只给用户看图片、不展示检测结论。</div>
-                        </div>
-                        <el-switch v-model="form.order_detail.show_inspection_images" :active-value="1" :inactive-value="0" />
-                    </div>
-                </section>
-
-                <section class="config-section">
-                    <div class="section-title">前台主题配色</div>
-                    <div class="section-tip">报价详情页、下单页和订单页统一使用框架“主题风格”中的 hsx_recycle 配色。这里不再单独维护颜色，避免前台出现两套主题不一致。</div>
-                    <div class="theme-entry">
-                        <div>
-                            <div class="setting-title">统一主题配置</div>
-                            <div class="setting-desc">请到“装修管理 / 主题风格”中编辑回收系统配色，保存后前台会通过下单配置接口统一读取。</div>
-                        </div>
-                        <el-button type="primary" plain @click="goThemeStyle">打开主题风格</el-button>
-                    </div>
-                </section>
-
-                <section class="config-section muted">
-                    <div class="section-title">后续配置预留</div>
-                    <div class="placeholder-list">
-                        <div>门店签收字段控制</div>
-                        <div>下单按钮文案</div>
-                        <div>不同分类的包邮规则</div>
-                    </div>
-                </section>
+    <HsxPage title="下单设置" class="order-settings" content-width="standard" header-sticky>
+        <template #extra>
+            <div class="page-actions">
+                <span v-if="isDirty" class="save-status" role="status">有未保存的修改</span>
+                <el-button v-if="activeTab !== 'erp'" type="primary" :icon="Check" :loading="saving" :disabled="!dataLoaded || loading" @click="save">保存设置</el-button>
             </div>
-        </el-card>
-    </PremiumTheme>
+        </template>
+
+        <div v-if="loadError" class="load-error" role="alert">
+            <el-alert :title="loadError" type="error" :closable="false" show-icon />
+            <el-button :icon="Refresh" :loading="loading" @click="load">重新加载</el-button>
+        </div>
+        <el-skeleton v-else-if="!dataLoaded" :rows="7" animated class="settings-skeleton" />
+
+        <el-tabs v-else v-model="activeTab" :tab-position="compactNavigation ? 'top' : 'left'" class="settings-tabs">
+            <el-tab-pane name="customer">
+                <template #label><span class="nav-label"><el-icon><User /></el-icon>客户下单</span></template>
+                <div class="settings-panel">
+                    <header class="panel-heading"><h2>客户下单</h2></header>
+                    <el-alert v-if="validationError && validationTab === 'customer'" :title="validationError" class="validation-error" type="error" :closable="false" show-icon />
+                    <section class="settings-section">
+                        <h3>设备登记</h3>
+                        <SettingRow id="device-add" label="允许添加设备明细" hint="关闭后，客户仅填写设备数量。">
+                            <el-switch v-model="form.device_add_enabled" :active-value="1" :inactive-value="0" aria-label="允许添加设备明细" />
+                        </SettingRow>
+                        <SettingRow id="default-count" label="默认设备数量">
+                            <el-input-number v-model="form.default_count" :min="1" :max="99" controls-position="right" aria-label="默认设备数量" />
+                        </SettingRow>
+                    </section>
+                    <section class="settings-section">
+                        <h3>客户资料</h3>
+                        <SettingRow id="profile-enabled" label="要求完善个人资料">
+                            <el-switch v-model="form.profile.enabled" :active-value="1" :inactive-value="0" aria-label="要求完善个人资料" />
+                        </SettingRow>
+                        <div v-if="form.profile.enabled" class="dependent-fields">
+                            <SettingRow id="payment-required" label="要求添加收款方式">
+                                <el-switch v-model="form.profile.payment_required" :active-value="1" :inactive-value="0" aria-label="要求添加收款方式" />
+                            </SettingRow>
+                            <SettingRow v-if="form.profile.payment_required" id="payment-count" label="最低收款方式数量">
+                                <el-input-number v-model="form.profile.payment_min_count" :min="1" :max="5" controls-position="right" aria-label="最低收款方式数量" />
+                            </SettingRow>
+                            <SettingRow id="id-card-required" label="身份证信息必填" hint="包括身份证号和身份证照片。">
+                                <el-switch v-model="form.profile.id_card_required" :active-value="1" :inactive-value="0" aria-label="身份证信息必填" />
+                            </SettingRow>
+                        </div>
+                    </section>
+                    <section class="settings-section">
+                        <h3>订单查看与确认</h3>
+                        <SettingRow id="reject-sale" label="允许客户拒绝出售" hint="关闭后，需由管理员处理拒售和退回。">
+                            <el-switch v-model="form.allow_user_reject_sale" :active-value="1" :inactive-value="0" aria-label="允许客户拒绝出售" />
+                        </SettingRow>
+                        <SettingRow id="inspection-result" label="向客户显示质检结果">
+                            <el-switch v-model="form.order_detail.show_inspection_result" :active-value="1" :inactive-value="0" aria-label="向客户显示质检结果" />
+                        </SettingRow>
+                        <SettingRow id="inspection-images" label="向客户显示质检图片">
+                            <el-switch v-model="form.order_detail.show_inspection_images" :active-value="1" :inactive-value="0" aria-label="向客户显示质检图片" />
+                        </SettingRow>
+                    </section>
+                </div>
+            </el-tab-pane>
+
+            <el-tab-pane name="delivery">
+                <template #label><span class="nav-label"><el-icon><Van /></el-icon>配送与取货</span></template>
+                <div class="settings-panel">
+                    <header class="panel-heading"><h2>配送与取货</h2></header>
+                    <el-alert v-if="validationError && validationTab === 'delivery'" :title="validationError" class="validation-error" type="error" :closable="false" show-icon />
+                    <section id="delivery-modes" class="settings-section">
+                        <h3>下单渠道 <span class="section-note">至少开启一种</span></h3>
+                        <SettingRow id="delivery-mail" label="邮寄到店" hint="填写快递单号，或使用平台快递。">
+                            <el-switch v-model="form.delivery_modes.mail" :active-value="1" :inactive-value="0" aria-label="邮寄到店" />
+                        </SettingRow>
+                        <SettingRow id="delivery-self" label="自送到店">
+                            <el-switch v-model="form.delivery_modes.self" :active-value="1" :inactive-value="0" aria-label="自送到店" />
+                        </SettingRow>
+                        <SettingRow id="delivery-vehicle" label="物流车配送" hint="设备到站后，由取货责任人前往领取。">
+                            <el-switch v-model="form.delivery_modes.logistics_vehicle" :active-value="1" :inactive-value="0" aria-label="物流车配送" />
+                        </SettingRow>
+                        <div v-if="form.delivery_modes.logistics_vehicle" class="dependent-fields">
+                            <SettingRow id="arrival-mode" label="预计到达" hint="按预计时间推送取货任务。">
+                                <el-radio-group v-model="form.logistics_vehicle.arrival_mode" aria-label="预计到达">
+                                    <el-radio-button label="half_day">半天到达</el-radio-button>
+                                    <el-radio-button label="next_day">次日到达</el-radio-button>
+                                </el-radio-group>
+                            </SettingRow>
+                            <SettingRow v-if="form.logistics_vehicle.arrival_mode === 'half_day'" id="arrival-cutoff" label="上午订单截止时间">
+                                <el-time-select v-model="form.logistics_vehicle.morning_cutoff" start="06:00" step="00:30" end="18:00" aria-label="上午订单截止时间" />
+                            </SettingRow>
+                            <SettingRow v-if="form.logistics_vehicle.arrival_mode === 'half_day'" id="arrival-today" label="上午单当天取货时间">
+                                <el-time-select v-model="form.logistics_vehicle.same_day_time" start="08:00" step="00:30" end="23:30" aria-label="上午单当天取货时间" />
+                            </SettingRow>
+                            <SettingRow id="arrival-next-day" label="次日取货时间" hint="下午单或次日到达的订单使用此时间。">
+                                <el-time-select v-model="form.logistics_vehicle.next_day_time" start="06:00" step="00:30" end="18:00" aria-label="次日取货时间" />
+                            </SettingRow>
+                        </div>
+                    </section>
+                    <section class="settings-section">
+                        <h3>平台快递</h3>
+                        <SettingRow id="delivery-provider" label="快递服务商">
+                            <el-select v-model="form.platform_delivery.provider" placeholder="请选择快递服务商" :disabled="!form.platform_delivery.provider_options.length" @change="handleProviderChange">
+                                <el-option v-for="item in form.platform_delivery.provider_options" :key="item.provider" :label="item.provider_name" :value="item.provider" />
+                            </el-select>
+                        </SettingRow>
+                        <SettingRow id="delivery-product" label="快递线路">
+                            <el-select v-model="form.platform_delivery.product_code" placeholder="请选择快递线路" :disabled="!currentProductOptions.length" @change="handleProductChange">
+                                <el-option v-for="item in currentProductOptions" :key="item.product_code" :label="formatProductLabel(item)" :value="item.product_code" />
+                            </el-select>
+                        </SettingRow>
+                        <p v-if="!currentProductOptions.length" class="field-warning">暂无可用线路，请先在第三方快递配置中启用线路。</p>
+                        <SettingRow id="delivery-name" label="客户看到的快递名称">
+                            <el-input v-model.trim="form.platform_delivery.display_name" maxlength="20" show-word-limit placeholder="如：京东快递" />
+                        </SettingRow>
+                        <SettingRow id="delivery-free-count" label="最低包邮数量" hint="未达到数量时，客户仍可自行寄件、填写单号。">
+                            <el-input-number v-model="form.platform_delivery.free_shipping_min_count" :min="1" :max="99" controls-position="right" aria-label="最低包邮数量" />
+                        </SettingRow>
+                    </section>
+                </div>
+            </el-tab-pane>
+
+            <el-tab-pane name="workflow">
+                <template #label><span class="nav-label"><el-icon><Connection /></el-icon>业务流转</span></template>
+                <div class="settings-panel">
+                    <header class="panel-heading"><h2>业务流转</h2></header>
+                    <el-alert v-if="validationError && validationTab === 'workflow'" :title="validationError" class="validation-error" type="error" :closable="false" show-icon />
+                    <section class="settings-section">
+                        <h3>订单流转</h3>
+                        <SettingRow id="flow-mode" label="流转方式" stacked>
+                            <el-radio-group v-model="flowModeChoice" @change="handleFlowModeChange" aria-label="流转方式">
+                                <el-radio-button label="order">整单流转</el-radio-button>
+                                <el-radio-button label="device">按设备流转</el-radio-button>
+                            </el-radio-group>
+                            <p class="field-hint">{{ flowModeMeta.desc }}</p>
+                        </SettingRow>
+                        <el-alert title="保存后仅对新订单生效，已有订单保持原流转方式。" type="info" :closable="false" show-icon />
+                    </section>
+                    <section class="settings-section">
+                        <h3>代卖业务</h3>
+                        <SettingRow id="consignment-enabled" label="启用代卖" hint="将回收设备转入独立的代卖订单。">
+                            <el-switch v-model="form.consignment.enabled" :active-value="1" :inactive-value="0" aria-label="启用代卖" />
+                        </SettingRow>
+                        <div v-if="form.consignment.enabled" class="dependent-fields">
+                            <SettingRow id="consignment-confirm" label="转代卖时二次确认"><el-switch v-model="form.consignment.transfer_confirm_required" :active-value="1" :inactive-value="0" aria-label="转代卖时二次确认" /></SettingRow>
+                            <SettingRow id="consignment-entry" label="向客户展示代卖入口"><el-switch v-model="form.consignment.user_entry_enabled" :active-value="1" :inactive-value="0" aria-label="向客户展示代卖入口" /></SettingRow>
+                            <SettingRow id="consignment-view" label="允许客户查看代卖进度"><el-switch v-model="form.consignment.user_view_enabled" :active-value="1" :inactive-value="0" aria-label="允许客户查看代卖进度" /></SettingRow>
+                            <SettingRow id="consignment-title" label="入口标题"><el-input v-model.trim="form.consignment.user_title" maxlength="20" show-word-limit placeholder="代卖订单" /></SettingRow>
+                            <SettingRow id="consignment-desc" label="入口说明"><el-input v-model.trim="form.consignment.user_desc" maxlength="80" show-word-limit placeholder="查看代卖进度、成交与结算结果" /></SettingRow>
+                            <SettingRow id="consignment-notice" label="发送代卖通知"><el-switch v-model="form.consignment.notice_enabled" :active-value="1" :inactive-value="0" aria-label="发送代卖通知" /></SettingRow>
+                            <SettingRow id="consignment-print" label="启用代卖打印"><el-switch v-model="form.consignment.print_enabled" :active-value="1" :inactive-value="0" aria-label="启用代卖打印" /></SettingRow>
+                            <SettingRow id="consignment-fee" label="向客户显示服务收益" hint="显示成交价与结算金额的差额，请谨慎开启。"><el-switch v-model="form.consignment.show_service_fee" :active-value="1" :inactive-value="0" aria-label="向客户显示服务收益" /></SettingRow>
+                        </div>
+                    </section>
+                </div>
+            </el-tab-pane>
+
+            <el-tab-pane name="notifications">
+                <template #label><span class="nav-label"><el-icon><Bell /></el-icon>通知与客服</span></template>
+                <div class="settings-panel">
+                    <header class="panel-heading"><h2>通知与客服</h2></header>
+                    <el-alert v-if="validationError && validationTab === 'notifications'" :title="validationError" class="validation-error" type="error" :closable="false" show-icon />
+                    <section class="settings-section">
+                        <SettingRow id="notice-enabled" label="下单页通知"><el-switch v-model="form.notice.enabled" :active-value="1" :inactive-value="0" aria-label="下单页通知" /></SettingRow>
+                        <div v-if="form.notice.enabled" class="dependent-fields">
+                            <SettingRow id="notice-title" label="通知标题"><el-input v-model.trim="form.notice.title" maxlength="30" show-word-limit placeholder="下单提示" /></SettingRow>
+                            <SettingRow id="notice-content" label="通知内容" stacked><el-input v-model.trim="form.notice.content" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="请输入通知内容" /></SettingRow>
+                        </div>
+                    </section>
+                    <section class="settings-section">
+                        <SettingRow id="follow-enabled" label="下单后提醒关注公众号"><el-switch v-model="form.follow_official_account.enabled" :active-value="1" :inactive-value="0" aria-label="下单后提醒关注公众号" /></SettingRow>
+                        <div v-if="form.follow_official_account.enabled" class="dependent-fields">
+                            <SettingRow id="follow-name" label="公众号名称"><el-input v-model.trim="form.follow_official_account.wechat_name" maxlength="30" show-word-limit placeholder="公众号名称" /></SettingRow>
+                            <SettingRow id="follow-title" label="弹窗标题"><el-input v-model.trim="form.follow_official_account.title" maxlength="30" show-word-limit placeholder="关注公众号" /></SettingRow>
+                            <SettingRow id="follow-content" label="提示文案"><el-input v-model.trim="form.follow_official_account.content" maxlength="120" show-word-limit placeholder="关注公众号，及时接收订单状态通知" /></SettingRow>
+                            <SettingRow id="follow-qr" label="公众号二维码"><upload-image v-model="form.follow_official_account.qr_code" :limit="1" width="100px" height="100px" image-text="上传二维码" /></SettingRow>
+                        </div>
+                    </section>
+                    <section class="settings-section">
+                        <SettingRow id="service-enabled" label="订单客服入口"><el-switch v-model="form.customer_service.enabled" :active-value="1" :inactive-value="0" aria-label="订单客服入口" /></SettingRow>
+                        <div v-if="form.customer_service.enabled" class="dependent-fields">
+                            <SettingRow id="service-type" label="客服方式"><el-radio-group v-model="form.customer_service.type"><el-radio-button label="wechat">微信客服</el-radio-button><el-radio-button label="qrcode">客服二维码</el-radio-button></el-radio-group></SettingRow>
+                            <SettingRow id="service-title" label="入口标题"><el-input v-model.trim="form.customer_service.title" maxlength="30" show-word-limit placeholder="联系客服" /></SettingRow>
+                            <SettingRow id="service-content" label="提示文案"><el-input v-model.trim="form.customer_service.content" maxlength="120" show-word-limit placeholder="如需议价或咨询订单进度，请联系客服处理" /></SettingRow>
+                            <SettingRow v-if="form.customer_service.type === 'qrcode'" id="service-qr" label="客服二维码"><upload-image v-model="form.customer_service.qrcode" :limit="1" width="100px" height="100px" image-text="上传二维码" /></SettingRow>
+                        </div>
+                    </section>
+                    <section class="settings-section">
+                        <SettingRow id="work-wechat-enabled" label="企业微信群通知" hint="群机器人通知；员工个人待办仍由协同插件管理。"><el-switch v-model="form.work_wechat.enabled" :active-value="1" :inactive-value="0" aria-label="企业微信群通知" /></SettingRow>
+                        <el-collapse v-if="form.work_wechat.enabled" v-model="activeChannel" accordion class="channel-list">
+                            <el-collapse-item v-for="item in workWechatChannelMetas" :key="item.key" :name="item.key">
+                                <template #title>
+                                    <span class="channel-title">{{ item.title }}</span>
+                                    <span class="channel-status" :class="{ enabled: form.work_wechat.channels[item.key].enabled }">{{ form.work_wechat.channels[item.key].enabled ? '已开启' : '未开启' }}</span>
+                                </template>
+                                <SettingRow :id="'channel-' + item.key" label="启用通知" :hint="item.desc"><el-switch v-model="form.work_wechat.channels[item.key].enabled" :active-value="1" :inactive-value="0" :aria-label="'启用' + item.title" /></SettingRow>
+                                <div v-if="form.work_wechat.channels[item.key].enabled" class="dependent-fields">
+                                    <SettingRow :id="'channel-name-' + item.key" label="群名称"><el-input v-model.trim="form.work_wechat.channels[item.key].name" maxlength="30" placeholder="群名称" /></SettingRow>
+                                    <SettingRow :id="'channel-webhook-' + item.key" label="Webhook 地址"><el-input v-model.trim="form.work_wechat.channels[item.key].webhook_url" type="password" show-password maxlength="1000" placeholder="群机器人 Webhook 地址" /></SettingRow>
+                                    <SettingRow :id="'channel-dedupe-' + item.key" label="同单限频（分钟）"><el-input-number v-model="form.work_wechat.channels[item.key].dedupe_minutes" :min="0" :max="1440" controls-position="right" /></SettingRow>
+                                    <SettingRow :id="'channel-limit-' + item.key" label="每日上限" hint="0 为不限。"><el-input-number v-model="form.work_wechat.channels[item.key].daily_limit" :min="0" :max="999" controls-position="right" /></SettingRow>
+                                    <SettingRow v-if="item.key === 'order_urge'" id="channel-cooldown" label="用户催办间隔（小时）" hint="0 为不限。"><el-input-number v-model="form.work_wechat.channels[item.key].user_cooldown_hours" :min="0" :max="720" controls-position="right" /></SettingRow>
+                                </div>
+                            </el-collapse-item>
+                        </el-collapse>
+                    </section>
+                </div>
+            </el-tab-pane>
+
+            <el-tab-pane name="tools">
+                <template #label><span class="nav-label"><el-icon><Monitor /></el-icon>设备与工具</span></template>
+                <div class="settings-panel">
+                    <header class="panel-heading"><h2>设备与工具</h2></header>
+                    <el-alert v-if="validationError && validationTab === 'tools'" :title="validationError" class="validation-error" type="error" :closable="false" show-icon />
+                    <section id="device-bridge" class="settings-section">
+                        <SettingRow label="设备桥" hint="安装包由 SaaS 平台统一提供。">
+                            <el-button :icon="Monitor" @click="bridgeHelpVisible = true">安装与帮助</el-button>
+                        </SettingRow>
+                    </section>
+                    <section class="settings-section">
+                        <SettingRow id="theme-style" label="前台主题配色">
+                            <el-button :icon="Brush" @click="goThemeStyle">主题风格</el-button>
+                        </SettingRow>
+                    </section>
+                </div>
+            </el-tab-pane>
+
+            <el-tab-pane name="erp" lazy>
+                <template #label><span class="nav-label"><el-icon><Link /></el-icon>ERP 联动</span></template>
+                <div class="settings-panel erp-panel"><ErpIntegrationSettings /></div>
+            </el-tab-pane>
+        </el-tabs>
+        <DeviceBridgeHelpDialog v-model="bridgeHelpVisible" :allow-read="false" />
+    </HsxPage>
 </template>
 
 <script setup lang="ts">
-import { HsxTitle, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
-import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
+import { HsxPage, useFeedback } from '@/addon/hsx_components/core'
+import { Bell, Brush, Check, Connection, Link, Monitor, Refresh, User, Van } from '@element-plus/icons-vue'
+import { useMediaQuery } from '@vueuse/core'
+import SettingRow from './components/OrderSettingRow.vue'
 import ErpIntegrationSettings from './components/ErpIntegrationSettings.vue'
-import { computed, onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import DeviceBridgeHelpDialog from '@/addon/hsx_recycle/components/device-entry/DeviceBridgeHelpDialog.vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import { getOrderSubmitConfig, saveOrderSubmitConfig, type OrderSubmitConfig } from '@/addon/hsx_recycle/api/order_config'
 const hsxFeedback = useFeedback()
+const bridgeHelpVisible = ref(false)
 
 
 const loading = ref(false)
 const saving = ref(false)
+const dataLoaded = ref(false)
+const loadError = ref('')
+const savedSnapshot = ref('')
+type SettingsTab = 'customer' | 'delivery' | 'workflow' | 'notifications' | 'tools' | 'erp'
+const activeTab = ref<SettingsTab>('customer')
+const compactNavigation = useMediaQuery('(max-width: 760px)')
+const flowModeChoice = ref<'order' | 'device'>('order')
+const activeChannel = ref('')
+const validationTab = ref<SettingsTab>('customer')
+const validationError = ref('')
 const router = useRouter()
 
 const defaultPriceDetailThemeColors = {
@@ -619,6 +372,8 @@ const form = reactive<OrderSubmitConfig>({
     }
 })
 
+const isDirty = computed(() => dataLoaded.value && savedSnapshot.value !== JSON.stringify(form))
+
 const goThemeStyle = () => {
     router.push('/diy/theme_style')
 }
@@ -649,6 +404,7 @@ const normalize = (data: Partial<OrderSubmitConfig> = {}) => {
     form.profile.payment_min_count = Math.max(1, Math.min(5, Number(data.profile?.payment_min_count || 1)))
     form.profile.id_card_required = data.profile?.id_card_required === 0 ? 0 : 1
     form.flow.mode = data.flow?.mode === 'device' || data.payment?.mode === 'device' ? 'device' : 'order'
+    flowModeChoice.value = form.flow.mode
     form.payment.mode = form.flow.mode
     form.platform_delivery.display_name = data.platform_delivery?.display_name || ''
     form.platform_delivery.free_shipping_min_count = Math.max(1, Math.min(99, Number(data.platform_delivery?.free_shipping_min_count || 1)))
@@ -821,6 +577,7 @@ const handleFlowModeChange = async (value: 'order' | 'device') => {
         form.payment.mode = value
         hsxFeedback.info('已切换选项，点击保存设置后生效')
     } catch (e) {
+        flowModeChoice.value = oldValue
         form.flow.mode = oldValue
         form.payment.mode = oldValue
     }
@@ -840,64 +597,71 @@ const normalizeTheme = (theme: Partial<OrderSubmitConfig['price_detail_theme']> 
 }
 
 const load = async () => {
+    if (loading.value) return
     loading.value = true
+    loadError.value = ''
     try {
         const res = await getOrderSubmitConfig()
-        normalize(res.data || {})
+        if (!res.data || typeof res.data !== 'object' || Array.isArray(res.data)) throw new Error('配置数据不完整')
+        normalize(res.data)
+        savedSnapshot.value = JSON.stringify(form)
+        dataLoaded.value = true
+    } catch {
+        dataLoaded.value = false
+        loadError.value = '设置加载失败，暂不能修改或保存。请重新加载。'
     } finally {
         loading.value = false
     }
 }
 
-const toggleMode = (key: 'mail' | 'self' | 'logistics_vehicle') => {
-    form.delivery_modes[key] = form.delivery_modes[key] ? 0 : 1
+const showValidation = async (tab: SettingsTab, field: string, message: string) => {
+    activeTab.value = tab
+    validationTab.value = tab
+    validationError.value = message
+    await nextTick()
+    const target = document.getElementById(field)
+    target?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    target?.querySelector<HTMLElement>('input:not(:disabled), textarea, button, [role="switch"]')?.focus({ preventScroll: true })
 }
 
 const save = async () => {
+    if (saving.value || loading.value || !dataLoaded.value) return
+    validationError.value = ''
     if (!form.delivery_modes.mail && !form.delivery_modes.self && !form.delivery_modes.logistics_vehicle) {
-        hsxFeedback.warning('至少需要开启一种提交方式')
-        return
+        return showValidation('delivery', 'delivery-modes', '至少需要开启一种下单渠道')
     }
     if (form.notice.enabled && !form.notice.content.trim()) {
-        hsxFeedback.warning('请填写通知内容')
-        return
+        return showValidation('notifications', 'notice-content', '请填写通知内容')
     }
     if (!form.platform_delivery.display_name.trim()) {
-        hsxFeedback.warning('请填写前台快递名称')
-        return
+        return showValidation('delivery', 'delivery-name', '请填写客户看到的快递名称')
     }
     ensureProviderSelection()
     if (!form.platform_delivery.provider) {
-        hsxFeedback.warning('请选择默认快递服务商')
-        return
+        return showValidation('delivery', 'delivery-provider', '请选择默认快递服务商')
     }
     ensureProductSelection()
     if (!form.platform_delivery.product_code) {
-        hsxFeedback.warning('请选择默认快递线路，请先在第三方快递配置中启用至少一条产品线路')
-        return
+        return showValidation('delivery', 'delivery-product', '请选择默认快递线路，请先在第三方快递配置中启用至少一条产品线路')
     }
     if (form.profile.enabled && form.profile.payment_required && form.profile.payment_min_count < 1) {
-        hsxFeedback.warning('最低收款方式数量不能小于 1')
-        return
+        return showValidation('customer', 'payment-count', '最低收款方式数量不能小于 1')
     }
     if (form.follow_official_account.enabled && !form.follow_official_account.qr_code) {
-        hsxFeedback.warning('开启公众号关注提醒前，请先上传公众号二维码')
-        return
+        return showValidation('notifications', 'follow-qr', '开启公众号关注提醒前，请先上传公众号二维码')
     }
     if (form.customer_service.enabled && form.customer_service.type === 'qrcode' && !form.customer_service.qrcode) {
-        hsxFeedback.warning('选择客服二维码模式前，请先上传客服二维码')
-        return
+        return showValidation('notifications', 'service-qr', '选择客服二维码模式前，请先上传客服二维码')
     }
     if (form.consignment.enabled && !form.consignment.user_title.trim()) {
-        hsxFeedback.warning('请填写代卖用户端入口标题')
-        return
+        return showValidation('workflow', 'consignment-title', '请填写代卖入口标题')
     }
     if (form.work_wechat.enabled) {
         for (const meta of workWechatChannelMetas) {
             const channel = form.work_wechat.channels[meta.key]
             if (channel.enabled && !channel.webhook_url.trim()) {
-                hsxFeedback.warning(`请填写${channel.name || meta.title}的 Webhook 地址`)
-                return
+                activeChannel.value = meta.key
+                return showValidation('notifications', `channel-webhook-${meta.key}`, `请填写${channel.name || meta.title}的 Webhook 地址`)
             }
         }
     }
@@ -905,313 +669,97 @@ const save = async () => {
     saving.value = true
     try {
         form.payment.mode = form.flow.mode
-        await saveOrderSubmitConfig(form)
-        hsxFeedback.success(form.flow.mode === 'device' ? '已保存：新订单将按设备流转' : '已保存：新订单将整单流转')
+        // 固定本次提交的数据；请求期间的新修改仍保留为未保存状态。
+        const snapshot = JSON.stringify(form)
+        await saveOrderSubmitConfig(JSON.parse(snapshot))
+        savedSnapshot.value = snapshot
+    } catch (error: any) {
+        validationTab.value = activeTab.value === 'erp' ? 'customer' : activeTab.value
+        activeTab.value = validationTab.value
+        validationError.value = error?.msg || error?.message || '保存失败，修改已保留，请重试。'
     } finally {
         saving.value = false
     }
 }
 
-onMounted(load)
+const beforeUnload = (event: BeforeUnloadEvent) => {
+    if (!isDirty.value) return
+    event.preventDefault()
+    event.returnValue = ''
+}
+
+onBeforeRouteLeave(async () => {
+    if (!isDirty.value) return true
+    try {
+        await ElMessageBox.confirm('设置尚未保存，确定离开吗？', '未保存的修改', {
+            confirmButtonText: '离开', cancelButtonText: '继续编辑', type: 'warning'
+        })
+        return true
+    } catch {
+        return false
+    }
+})
+
+onMounted(() => {
+    load()
+    window.addEventListener('beforeunload', beforeUnload)
+})
+onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 </script>
 
 <style scoped lang="scss">
-.main-container {
-    width: 100%;
+.order-settings { min-width: 0; }
+.page-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; }
+.save-status { color: var(--el-color-warning-dark-2); font-size: 12px; }
+.load-error { display: flex; align-items: center; gap: 16px; }
+.settings-skeleton { padding: 24px; }
+.settings-tabs { background: var(--el-bg-color); min-height: 640px; }
+.settings-tabs :deep(.el-tabs__header.is-left) { margin: 0; width: 180px; padding-top: 20px; }
+.settings-tabs :deep(.el-tabs__nav.is-left) { width: 100%; }
+.settings-tabs :deep(.el-tabs__nav-wrap.is-left::after) { width: 1px; background: var(--el-border-color-lighter); }
+.settings-tabs :deep(.el-tabs__item.is-left) { justify-content: flex-start; padding: 0 20px; height: 48px; font-size: 14px; }
+.settings-tabs :deep(.el-tabs__item.is-active) { background: var(--el-color-primary-light-9); }
+.settings-tabs :deep(.el-tabs__content) { min-width: 0; padding: 0; }
+.nav-label { display: inline-flex; align-items: center; gap: 10px; white-space: nowrap; }
+.nav-label .el-icon { font-size: 17px; }
+.settings-panel { box-sizing: border-box; padding: 28px 32px; max-width: 1020px; margin: 0 auto; }
+.panel-heading { display: flex; align-items: center; min-width: 0; padding-bottom: 20px; border-bottom: 1px solid var(--el-border-color-lighter); }
+.panel-heading h2 { margin: 0; font-size: 18px; font-weight: 600; line-height: 26px; color: var(--el-text-color-primary); }
+.settings-section { padding: 24px 0; border-bottom: 1px solid var(--el-border-color-lighter); scroll-margin-top: 100px; }
+.settings-section:last-child { border-bottom: none; padding-bottom: 0; }
+.settings-section > h3 { margin: 0 0 4px; font-size: 14px; font-weight: 600; color: var(--el-text-color-primary); }
+.section-note { display: inline-block; margin-left: 10px; font-size: 12px; font-weight: 400; color: var(--el-text-color-secondary); }
+.dependent-fields { padding-left: 18px; border-left: 2px solid var(--el-border-color-lighter); }
+.field-hint { margin: 12px 0 0; font-size: 13px; color: var(--el-text-color-secondary); line-height: 1.7; }
+.field-warning { margin: 0 0 12px; color: var(--el-color-warning-dark-2); font-size: 12px; line-height: 1.7; }
+.validation-error { margin-top: 16px; }
+.channel-list { border-top: none; margin-top: 12px; }
+.channel-title { font-size: 13px; font-weight: 500; }
+.channel-status { margin-left: 12px; font-size: 12px; color: var(--el-text-color-placeholder); }
+.channel-status.enabled { color: var(--el-color-success); }
+.channel-list :deep(.el-collapse-item__content) { padding-bottom: 12px; }
+.erp-panel :deep(.erp-integration) { border: none; border-radius: 0; padding: 0; }
+
+@media (max-width: 1100px) {
+    .settings-tabs :deep(.el-tabs__header.is-left) { width: 154px; }
+    .settings-tabs :deep(.el-tabs__item.is-left) { padding: 0 14px; }
+    .settings-panel { padding: 24px; }
 }
-
-.page-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
+@media (max-width: 760px) {
+    .settings-tabs :deep(.el-tabs__header.is-top) { margin: 0; }
+    .settings-tabs :deep(.el-tabs__nav-wrap.is-top) { margin: 0; overflow-x: auto; padding: 0; }
+    .settings-tabs :deep(.el-tabs__nav-scroll) { overflow: visible; }
+    .settings-tabs :deep(.el-tabs__nav.is-top) { display: flex; float: none; width: max-content; transform: none !important; }
+    .settings-tabs :deep(.el-tabs__item.is-top) { display: inline-flex; height: 44px; padding: 0 14px; border-bottom: 2px solid transparent; }
+    .settings-tabs :deep(.el-tabs__item.is-active) { border-bottom-color: var(--el-color-primary); }
+    .settings-tabs :deep(.el-tabs__active-bar), .settings-tabs :deep(.el-tabs__nav-prev), .settings-tabs :deep(.el-tabs__nav-next) { display: none; }
+    .settings-tabs :deep(.el-tabs__nav-wrap.is-top::after) { width: 100%; height: 1px; top: auto; bottom: 0; }
+    .settings-panel { padding: 20px 16px; }
+    .settings-section { padding: 20px 0; }
+    .load-error { flex-wrap: wrap; }
+    .dependent-fields { padding-left: 12px; }
 }
-
-.page-desc {
-    margin-top: 6px;
-    font-size: 13px;
-    color: #6b7280;
-}
-
-.config-layout {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-    align-items: start;
-    gap: 14px;
-    margin-top: 20px;
-}
-
-.config-group-title {
-    grid-column: 1 / -1;
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 4px 2px 0;
-
-    span {
-        font-size: 16px;
-        font-weight: 700;
-        color: #111827;
-    }
-
-    em {
-        font-style: normal;
-        font-size: 13px;
-        color: #6b7280;
-    }
-}
-
-.config-section {
-    min-height: 100%;
-    padding: 16px;
-    border: 1px solid #ebeef5;
-    border-radius: 8px;
-    background: #fff;
-}
-
-.config-section--wide {
-    grid-column: span 2;
-}
-
-.config-section.muted {
-    background: #fafafa;
-}
-
-.notice-form {
-    display: grid;
-    gap: 12px;
-    margin-top: 16px;
-}
-
-.profile-panel {
-    display: grid;
-    gap: 14px;
-    padding-top: 14px;
-    margin-top: 14px;
-    border-top: 1px dashed #e5e7eb;
-}
-
-.media-config-panel {
-    display: grid;
-    gap: 14px;
-    padding-top: 14px;
-    margin-top: 14px;
-    border-top: 1px dashed #e5e7eb;
-}
-
-.consignment-panel {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px 18px;
-    padding-top: 14px;
-    margin-top: 14px;
-    border-top: 1px dashed #e5e7eb;
-}
-
-.consignment-panel.disabled {
-    opacity: 0.72;
-}
-
-.work-wechat-list {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-    padding-top: 14px;
-    margin-top: 14px;
-    border-top: 1px dashed #e5e7eb;
-}
-
-.work-wechat-list.disabled {
-    opacity: 0.72;
-}
-
-.work-wechat-card {
-    padding: 12px;
-    border: 1px solid #edf0f5;
-    border-radius: 8px;
-    background: #fafafa;
-}
-
-.work-wechat-card__head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 16px;
-}
-
-.work-wechat-card__body {
-    display: grid;
-    gap: 10px;
-    margin-top: 12px;
-}
-
-.work-wechat-card__rules {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-}
-
-.rule-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: #6b7280;
-    font-size: 13px;
-
-    em {
-        font-style: normal;
-        color: #9ca3af;
-    }
-}
-
-.section-title {
-    margin-bottom: 12px;
-    font-size: 15px;
-    font-weight: 600;
-    color: #1f2937;
-}
-
-.section-tip {
-    margin: -4px 0 16px;
-    font-size: 13px;
-    line-height: 1.6;
-    color: #6b7280;
-}
-
-.setting-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-
-    & + & {
-        margin-top: 14px;
-    }
-}
-
-.setting-row.align-start {
-    align-items: flex-start;
-}
-
-.setting-input {
-    width: 240px;
-    flex-shrink: 0;
-}
-
-.setting-title,
-.mode-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: #111827;
-}
-
-.setting-desc,
-.mode-desc {
-    margin-top: 6px;
-    font-size: 13px;
-    color: #6b7280;
-    line-height: 1.5;
-}
-
-.mode-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-}
-
-.mode-card {
-    padding: 14px;
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    cursor: pointer;
-}
-
-.mode-card.active {
-    border-color: var(--el-color-primary);
-    background: var(--el-color-primary-light-9);
-}
-
-.mode-head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 16px;
-}
-
-.payment-mode-group {
-    margin-bottom: 14px;
-}
-
-.payment-mode-tip {
-    padding: 12px;
-    border: 1px solid #edf0f5;
-    border-radius: 8px;
-    background: #fafafa;
-}
-
-.placeholder-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-}
-
-.placeholder-list div {
-    padding: 8px 12px;
-    border-radius: 999px;
-    background: #f3f4f6;
-    color: #6b7280;
-    font-size: 13px;
-}
-
-.theme-entry {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 12px;
-    border: 1px solid #edf0f5;
-    border-radius: 8px;
-    background: #fafafa;
-}
-
-@media (max-width: 1180px) {
-    .consignment-panel,
-    .work-wechat-list {
-        grid-template-columns: 1fr;
-    }
-
-    .config-section--wide {
-        grid-column: auto;
-    }
-}
-
-@media (max-width: 768px) {
-    .config-group-title {
-        align-items: flex-start;
-        flex-direction: column;
-        gap: 4px;
-    }
-
-    .theme-entry {
-        align-items: flex-start;
-        flex-direction: column;
-    }
-
-    .setting-row,
-    .mode-head,
-    .work-wechat-card__head {
-        align-items: flex-start;
-        flex-direction: column;
-    }
-
-    .setting-input {
-        width: 100%;
-    }
-
-    .mode-grid,
-    .work-wechat-card__rules {
-        grid-template-columns: 1fr;
-    }
+@media (prefers-reduced-motion: reduce) {
+    .order-settings :deep(*) { scroll-behavior: auto; }
 }
 </style>

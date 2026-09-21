@@ -1,7 +1,7 @@
 <template>
     <el-dialog
         v-model="dialogVisible"
-        title="新增并关联型号"
+        title="新增型号"
         width="520px"
         destroy-on-close
         append-to-body
@@ -11,7 +11,7 @@
             type="info"
             :closable="false"
             show-icon
-            title="仅在型号库确实没有该设备时新增。保存后会立即关联到当前设备。"
+            title="此操作会在型号库中创建新型号。"
             class="quick-model-alert"
         />
         <el-form label-width="88px" @submit.prevent>
@@ -37,7 +37,7 @@
         </el-form>
         <template #footer>
             <el-button @click="dialogVisible = false">取消</el-button>
-            <el-button type="primary" :loading="saving" @click="submit">新增并关联</el-button>
+            <el-button type="primary" :loading="saving" @click="submit">创建型号并使用</el-button>
         </template>
     </el-dialog>
 </template>
@@ -96,6 +96,7 @@ const resetForm = () => {
 }
 
 const submit = async () => {
+    if (saving.value) return
     const parentId = Number(form.parent_path[form.parent_path.length - 1] || 0)
     const nodeName = String(form.node_name || '').trim()
     if (!parentId) {

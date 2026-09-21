@@ -3,7 +3,7 @@
 `hsx_recycle` 的本地 USB 读取内核。它只负责读取和标准化硬件事实，不创建回收订单、不修改 ERP 数据，也不自行猜测站点分类。
 
 - iPhone：沿用信任电脑后的读取。
-- macOS Apple Silicon 0.2.0：新增三星 MTP 基础读取，已用 Galaxy S21 5G 验证。不是全品牌安卓支持。
+- macOS Apple Silicon 0.3.1：按 MTP 协议发现安卓设备，不再限制品牌或要求 USB 名称包含 Android；修复魅族读取后 USB 临时地址变化被误判为换机的问题。不代表所有品牌、型号都已实测或能读到相同字段。
 - Windows：仍为 iPhone 读取，本次没有构建或发布支持安卓的 Windows 包。
 
 ## 本地开发
@@ -38,14 +38,14 @@ HSX_DEVICE_BRIDGE_ORIGINS=https://erp.example.com
 安装包名称：
 
 ```text
-dist/hsx_device_bridge-0.2.0-macos-arm64.pkg
-dist/installer/hsx_device_bridge-0.2.0-windows-x64-setup.exe
+dist/hsx_device_bridge-0.3.1-macos-arm64.pkg
+dist/installer/hsx_device_bridge-<实际发布版本>-windows-x64-setup.exe
 ```
 
 1. 双击安装包完成安装。当前测试包尚未使用 Apple Developer ID 签名；若系统拦截，请到“系统设置 → 隐私与安全性”中确认仍要打开。
-2. iPhone 解锁后选择“信任此电脑”；三星解锁后选择“文件传输”，允许手机弹出的访问提示。读取不使用 ADB。
+2. iPhone 解锁后选择“信任此电脑”；安卓解锁后选择“文件传输”，允许手机弹出的访问提示。读取不使用 ADB，也不需要开启 USB 调试。
 3. 安装器会注册 `LaunchAgent`，桥接服务会自动启动，不需要再打开桌面应用。
-4. 浏览器访问 `http://127.0.0.1:17890/v1/health`，确认 `version: 0.2.0`。Mac 包应有 `capabilities.android_mtp: true`；`device_count` 表示连接数量，不代表质检信息全部可读。
+4. 浏览器访问 `http://127.0.0.1:17890/v1/health`，确认 `version: 0.3.1`。Mac 包应有 `capabilities.android_mtp: true` 和 `android_mtp_scope: generic`；`device_count` 表示发现数量，不代表质检信息全部可读。
 5. 正式 HTTPS 站点首次读取时，浏览器可能询问是否允许访问本地网络，请选择允许。
 6. 回到回收签收页面，点击“读取本地设备”；需要持续识别时可开启“自动检测”。
 
@@ -62,7 +62,7 @@ Windows: %LOCALAPPDATA%\HSX Device Bridge\logs\bridge.log
 打包时维护允许访问的站点域名。此次本地 Mac 包沿用本站域名 `https://gl.hsxbk.top`，并允许本机开发页面。其他站点需重新设置白名单：
 
 ```bash
-bash scripts/package_macos.sh 0.2.0 "https://你的后台域名"
+bash scripts/package_macos.sh 0.3.1 "https://你的后台域名"
 ./scripts/build_windows.ps1 -AllowedOrigins "https://你的后台域名"
 ```
 
@@ -80,7 +80,13 @@ bash scripts/package_macos.sh 0.2.0 "https://你的后台域名"
 
 ## Android MTP 只读验证
 
-0.2.0 已把三星 MTP 读取接入 `/v1/scan`、`/v1/devices` 和 Mac 安装包；读机协议封装在 `mtp_protocol.py`，独立探测工具复用同一实现。
+0.3.0 将 `/v1/scan`、`/v1/devices` 改为通用 MTP 发现与逐设备读取。读机协议封装在 `mtp_protocol.py`，独立探测工具复用同一实现。
+
+扫描只发现 MTP 候选，不靠品牌白名单，也不把普通 USB 键盘当手机。每台候选在独立限时子进程读取，单台超时不会丢弃其他已成功的设备。设备没有声明 `android.com` 协议扩展时，`platform` 为 `mtp`，不冒充已确认的安卓手机。
+
+接口新增 `device_id`、`warnings`、`partial`：部分成功返回 HTTP 200 和成功快照，失败设备写入 `warnings`；全部失败返回 HTTP 422；没有设备时返回空列表。前端自动检测只标记成功设备，失败设备保留重试机会。
+
+0.3.1 使用厂商、产品、物理 USB 端口和非空 USB 序列号确认同一设备，允许读取后临时 USB 地址重新分配；无法取得稳定身份时不放宽校验。`device_id` 使用该组合的摘要，不因正常地址变化重复触发自动读机。同型号、另一物理端口或另一序列号不能替代原设备。
 
 签收填写规则：型号使用 `SM-G9910` 等稳定硬件标识匹配叶子节点；没有匹配时沿用人工选择与型号绑定。USB 序列号按同一 USB 端口关联后填入 SN，MTP UUID 单独保存，不混作 IMEI。前端保留原始读取档案并提示核对 USB SN。USB SN 是否可用于保修查询需由查询服务另行确认。
 
@@ -122,7 +128,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 
 ```bash
 bash scripts/build_macos.sh
-bash scripts/package_macos.sh 0.2.0 "https://erp.example.com"
+bash scripts/package_macos.sh 0.3.1 "https://erp.example.com"
 ```
 
 安装包会把桥接器安装为 `LaunchAgent`。用户只需安装一次，登录系统后自动运行，不需要再手动打开桌面程序。正式分发前仍需使用 Apple Developer ID 对二进制和安装包签名、公证。

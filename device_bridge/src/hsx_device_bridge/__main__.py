@@ -5,7 +5,7 @@ import json
 
 from . import __version__
 from .android_reader import worker
-from .device_reader import read_devices, scan_device_ids
+from .device_reader import read_result, response_payload, scan_result
 from .ios_reader import BridgeReadError, read_device
 from .server import serve
 from .windows_support import runtime_dependency_diagnostics
@@ -20,6 +20,8 @@ def main() -> None:
     subparsers.add_parser("devices", help="读取所有受支持设备的基础信息")
     worker_parser = subparsers.add_parser("_mtp-worker", help=argparse.SUPPRESS)
     worker_parser.add_argument("--library", required=True)
+    worker_parser.add_argument("--discover-only", action="store_true")
+    worker_parser.add_argument("--target", type=json.loads)
     subparsers.add_parser("self-check", help="检查安装包的 Windows 运行依赖")
     read_parser = subparsers.add_parser("read", help="读取一台 iPhone 的标准快照")
     read_parser.add_argument("--device-id", default="")
@@ -31,14 +33,14 @@ def main() -> None:
     args = parser.parse_args()
     command = args.command or "serve"
     try:
-        if command == "scan":
-            ids = scan_device_ids()
-            print(json.dumps({"code": 0, "count": len(ids), "data": ids}, ensure_ascii=False))
-        elif command == "devices":
-            devices = read_devices()
-            print(json.dumps({"code": 0, "count": len(devices), "data": devices}, ensure_ascii=False))
+        if command in ("scan", "devices"):
+            result = scan_result() if command == "scan" else read_result()
+            payload = response_payload(result)
+            print(json.dumps(payload, ensure_ascii=False))
+            if payload["code"] != 0:
+                raise SystemExit(2)
         elif command == "_mtp-worker":
-            worker(args.library)
+            worker(args.library, discover_only=args.discover_only, target=args.target)
         elif command == "self-check":
             diagnostics = runtime_dependency_diagnostics()
             print(json.dumps({"code": 0 if diagnostics["ready"] else 1, "data": diagnostics}, ensure_ascii=False))

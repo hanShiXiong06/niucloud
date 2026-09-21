@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ctypes.util
 from datetime import datetime, timezone
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -9,12 +10,32 @@ import plistlib
 import subprocess
 import sys
 import threading
+import time
 
 from .ios_reader import BridgeReadError
 from .mtp_protocol import RESULT_MARKER, probe
 
 _read_lock = threading.Lock()
-SAMSUNG_VENDOR = 0x04E8
+DISCOVERY_TIMEOUT = 3
+DEVICE_TIMEOUT = 8
+BATCH_TIMEOUT = 20
+
+
+def usb_identity(device: dict) -> tuple | None:
+    if not device.get("location_id") or not device.get("usb_serial_number"):
+        return None
+    return (device["vendor_id"], device["product_id"], device["location_id"], device["usb_serial_number"])
+
+
+def device_id(port: dict, usb_devices: list[dict] | None = None) -> str:
+    matches = usb_matches(port, usb_devices or [])
+    identity = usb_identity(matches[0]) if len(matches) == 1 else None
+    if identity:
+        digest = hashlib.sha256(json.dumps(identity).encode("utf-8")).hexdigest()[:32]
+        return "mtp:usb:" + digest
+    return "mtp:%s:%s:%s:%s" % tuple(port[key] for key in (
+        "vendor_id", "product_id", "bus_location", "device_number",
+    ))
 
 
 def library_path() -> str:
@@ -34,23 +55,23 @@ def _walk(nodes):
 
 def parse_usb_devices(payload: bytes) -> list[dict]:
     result = []
+    if not payload.strip():
+        return result
     for node in _walk(plistlib.loads(payload)):
-        name = str(node.get("USB Product Name", ""))
-        if node.get("idVendor") != SAMSUNG_VENDOR or "android" not in name.lower():
+        vendor = node.get("idVendor")
+        if vendor is None or vendor == 0x05AC or node.get("bDeviceClass") == 9:
             continue
         serial = str(node.get("USB Serial Number", "")).strip()
         bus = int(node.get("locationID", 0)) >> 24
         address = int(node.get("USB Address", -1))
-        interfaces = list(_walk(node.get("IORegistryEntryChildren", [])))
-        has_mtp = any(
-            child.get("IORegistryEntryName") == "MTP" or child.get("bInterfaceClass") == 6
-            for child in interfaces
-        )
+        # IORegistry may omit interface children even for a working MTP phone.
+        # This is an identity inventory only; libmtp decides which devices speak MTP.
         result.append({
-            "vendor_id": SAMSUNG_VENDOR, "product_id": int(node.get("idProduct", 0)),
+            "vendor_id": vendor, "product_id": int(node.get("idProduct", 0)),
             "bus_location": bus, "device_number": address,
-            "usb_serial_number": serial, "mtp_available": has_mtp,
-            "id": "mtp:samsung:%s:%s:%s" % (bus, address, serial),
+            "location_id": int(node.get("locationID", 0)),
+            "usb_serial_number": serial,
+            "name": str(node.get("USB Product Name", "")).strip(),
         })
     return result
 
@@ -68,21 +89,26 @@ def scan_usb_devices() -> list[dict]:
         raise BridgeReadError("USB_SCAN_FAILED", "查询安卓 USB 连接失败，请重试") from exc
 
 
-def worker(library: str) -> None:
+def worker(library: str, discover_only: bool = False, target: dict | None = None) -> None:
     try:
-        report = probe(library, SAMSUNG_VENDOR)
+        report = probe(library, discover_only=discover_only, target=target)
     except (OSError, AttributeError, RuntimeError):
         report = {"error": "MTP_WORKER_FAILED"}
     print(RESULT_MARKER + json.dumps(report), flush=True)
 
 
-def run_worker(library: str) -> dict:
+def run_worker(library: str, discover_only: bool = False, target: dict | None = None,
+               timeout: float = DEVICE_TIMEOUT) -> dict:
     command = [sys.executable]
     if not getattr(sys, "frozen", False):
         command += ["-m", "hsx_device_bridge"]
     command += ["_mtp-worker", "--library", library]
+    if discover_only:
+        command += ["--discover-only"]
+    if target is not None:
+        command += ["--target", json.dumps(target)]
     try:
-        process = subprocess.run(command, capture_output=True, text=True, errors="replace", timeout=10)
+        process = subprocess.run(command, capture_output=True, text=True, errors="replace", timeout=timeout)
     except subprocess.TimeoutExpired as exc:
         raise BridgeReadError("MTP_TIMEOUT", "读取安卓设备超时，请解锁手机并选择文件传输，关闭其他读机工具后重试") from exc
     except OSError as exc:
@@ -99,21 +125,61 @@ def run_worker(library: str) -> dict:
     return report
 
 
-def normalize_device(metadata: dict, usb_devices: list[dict], include_raw: bool = False) -> dict:
-    port = metadata.get("usb", {})
-    matches = [item for item in usb_devices if (
+def usb_matches(port: dict, usb_devices: list[dict]) -> list[dict]:
+    return [item for item in usb_devices if (
         "%#06x" % item["vendor_id"] == port.get("vendor_id")
         and "%#06x" % item["product_id"] == port.get("product_id")
         and item["bus_location"] == port.get("bus_location")
         and item["device_number"] == port.get("device_number")
     )]
+
+
+def usb_port(device: dict) -> dict:
+    return {
+        "vendor_id": "%#06x" % device["vendor_id"],
+        "product_id": "%#06x" % device["product_id"],
+        "bus_location": device["bus_location"], "device_number": device["device_number"],
+    }
+
+
+def confirm_usb_identity(expected: dict, deadline: float | None = None) -> dict:
+    identity = usb_identity(expected)
+    for delay in (0, 0.1, 0.2, 0.4):
+        if deadline is not None and time.monotonic() + delay >= deadline:
+            raise BridgeReadError("MTP_BATCH_TIMEOUT", "本次读取达到时限，请再次读取尚未完成的设备")
+        if delay:
+            time.sleep(delay)
+        try:
+            devices = scan_usb_devices()
+        except BridgeReadError:
+            continue
+        # macOS can reassign the temporary USB address when MTP releases a phone.
+        # Only a stable physical port AND the same nonempty USB serial allow that.
+        if identity:
+            matches = [item for item in devices if (
+                item["vendor_id"], item["product_id"], item.get("location_id")
+            ) == identity[:3]]
+        else:
+            matches = usb_matches(usb_port(expected), devices)
+        if not matches:
+            continue
+        if len(matches) == 1 and matches[0]["usb_serial_number"] == expected["usb_serial_number"]:
+            return matches[0]
+        break
+    raise BridgeReadError("MTP_CONNECTION_CHANGED", "无法确认仍是同一台设备，请保持连接后重新读取")
+
+
+def normalize_device(metadata: dict, usb_devices: list[dict], include_raw: bool = False) -> dict:
+    matches = usb_matches(metadata["usb"], usb_devices)
     # Never use the MTP UUID as a factory SN or match multiple phones by model alone.
     serial = matches[0]["usb_serial_number"] if len(matches) == 1 else ""
     model = str(metadata.get("model_code", "")).strip()
     snapshot = {
         "schema_version": "hsx.device.snapshot.v1",
         "captured_at": datetime.now(timezone.utc).isoformat(),
-        "source": "usb_mtp", "platform": "android",
+        "source": "usb_mtp",
+        "device_id": device_id(metadata["usb"], usb_devices),
+        "platform": "android" if "android.com" in metadata.get("protocol_extensions", []) else "mtp",
         "identity": {
             "imei": "", "imei2": "", "serial_number": serial,
             "serial_number_source": "usb_descriptor" if serial else "",
@@ -127,28 +193,86 @@ def normalize_device(metadata: dict, usb_devices: list[dict], include_raw: bool 
         "not_read_fields": metadata.get("not_read_fields", []),
         "warnings": ["SN 来自 USB 序列号，请与手机机身核对；保修查询是否支持需单独确认。"],
     }
+    if not serial:
+        snapshot["warnings"] = ["未取得唯一 USB 序列号，请手动填写 IMEI/SN；不会使用 MTP UUID 代替。"]
+    if snapshot["platform"] != "android":
+        snapshot["warnings"].append("此设备未声明 Android 协议扩展，请核对设备类型和型号。")
     if include_raw:
         snapshot["raw"] = metadata
     return snapshot
 
 
-def read_devices(include_raw: bool = False) -> list[dict]:
-    usb_devices = scan_usb_devices()
-    if not usb_devices:
+def scan_device_ids() -> list[str]:
+    if sys.platform != "darwin":
         return []
     library = library_path()
     if not library:
         raise BridgeReadError("MTP_UNAVAILABLE", "当前安装包不包含 Mac 安卓读取组件，请更新设备桥")
-    if any(not item["mtp_available"] for item in usb_devices):
-        raise BridgeReadError("MTP_MODE_REQUIRED", "已连接三星手机，请解锁并将 USB 用途切换为文件传输")
     if not _read_lock.acquire(blocking=False):
         raise BridgeReadError("MTP_BUSY", "正在读取安卓设备，请稍后重试")
     try:
-        report = run_worker(library)
-        if report.get("errors"):
-            raise BridgeReadError("MTP_OPEN_FAILED", "安卓手机被占用或尚未允许文件传输，请解锁、允许连接，并关闭其他读机工具后重试")
-        if not report.get("devices"):
-            raise BridgeReadError("MTP_NO_DEVICE", "手机已断开或文件传输未就绪，请重新连接后重试")
-        return [normalize_device(item, usb_devices, include_raw) for item in report["devices"]]
+        report = run_worker(library, discover_only=True, timeout=DISCOVERY_TIMEOUT)
+        ports = report.get("detected", [])
+        usb_devices = scan_usb_devices() if ports else []
+        return [device_id(port, usb_devices) for port in ports]
     finally:
         _read_lock.release()
+
+
+def read_result(include_raw: bool = False) -> dict:
+    result = {"data": [], "warnings": []}
+    if sys.platform != "darwin":
+        return result
+    library = library_path()
+    if not library:
+        raise BridgeReadError("MTP_UNAVAILABLE", "当前安装包不包含 Mac 安卓读取组件，请更新设备桥")
+    if not _read_lock.acquire(blocking=False):
+        raise BridgeReadError("MTP_BUSY", "正在读取安卓设备，请稍后重试")
+    try:
+        deadline = time.monotonic() + BATCH_TIMEOUT
+        report = run_worker(library, discover_only=True, timeout=DISCOVERY_TIMEOUT)
+        ports = report.get("detected", [])
+        if not ports:
+            return result
+        try:
+            usb_devices = scan_usb_devices()
+        except BridgeReadError as exc:
+            usb_devices = []
+            result["warnings"].append({"code": exc.code, "message": str(exc), "device_id": ""})
+        for port in ports:
+            matches = usb_matches(port, usb_devices)
+            name = matches[0]["name"] if len(matches) == 1 else "MTP 设备"
+            try:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise BridgeReadError("MTP_BATCH_TIMEOUT", "本次读取达到时限，请再次读取尚未完成的设备")
+                bound = confirm_usb_identity(matches[0], deadline) if len(matches) == 1 else None
+                target = usb_port(bound) if bound else port
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise BridgeReadError("MTP_BATCH_TIMEOUT", "本次读取达到时限，请再次读取尚未完成的设备")
+                report = run_worker(library, target=target, timeout=min(DEVICE_TIMEOUT, remaining))
+                devices = report.get("devices", [])
+                if report.get("errors"):
+                    raise BridgeReadError("MTP_OPEN_FAILED", "文件传输未获允许、被其他读机工具占用或设备暂不兼容；请解锁、允许访问并关闭其他工具后重试")
+                if len(devices) != 1 or devices[0].get("usb") != target:
+                    raise BridgeReadError("MTP_NO_DEVICE", "设备已断开或连接发生变化，请重新读取")
+                if bound:
+                    confirm_usb_identity(bound, deadline)
+                result["data"].append(normalize_device(devices[0], [bound] if bound else [], include_raw))
+            except BridgeReadError as exc:
+                result["warnings"].append({
+                    "code": exc.code, "message": "%s：%s" % (name or "MTP 设备", exc),
+                    "device_id": device_id(port, usb_devices),
+                })
+        return result
+    finally:
+        _read_lock.release()
+
+
+def read_devices(include_raw: bool = False) -> list[dict]:
+    result = read_result(include_raw)
+    if not result["data"] and result["warnings"]:
+        first = result["warnings"][0]
+        raise BridgeReadError(first["code"], first["message"])
+    return result["data"]

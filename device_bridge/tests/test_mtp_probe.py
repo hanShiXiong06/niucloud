@@ -69,14 +69,52 @@ class MtpProbeTest(unittest.TestCase):
             return 0
 
         lib.LIBMTP_Detect_Raw_Devices.side_effect = detect
-        lib.LIBMTP_Open_Raw_Device_Uncached.return_value = 99
+        device = probe_module.DeviceHeader()
+        pointer = C.addressof(device)
+        lib.LIBMTP_Open_Raw_Device_Uncached.return_value = pointer
         with patch.object(probe_module, "load_library", return_value=lib):
             result = probe_module.probe("test-library", 0x04E8)
         self.assertEqual(len(result["devices"]), 1)
         self.assertEqual(result["errors"], [])
         lib.LIBMTP_Open_Raw_Device_Uncached.assert_called_once()
-        lib.LIBMTP_Release_Device.assert_called_once_with(99)
+        lib.LIBMTP_Release_Device.assert_called_once_with(pointer)
         self.assertEqual(lib.LIBMTP_FreeMemory.call_count, 2)
+
+    def test_discovery_is_generic_and_opens_no_devices(self):
+        lib = self.make_library()
+        vendors = [0x04E8, 0x2D95, 0x2A45, 0xF123, 0x05AC]
+        raw = (probe_module.RawDevice * len(vendors))()
+        for index, vendor in enumerate(vendors):
+            raw[index].device_entry.vendor_id = vendor
+            raw[index].devnum = index + 1
+        def detect(devices, count):
+            C.cast(devices, C.POINTER(C.POINTER(probe_module.RawDevice)))[0] = C.cast(raw, C.POINTER(probe_module.RawDevice))
+            C.cast(count, C.POINTER(C.c_int))[0] = len(vendors)
+            return 0
+        lib.LIBMTP_Detect_Raw_Devices.side_effect = detect
+        with patch.object(probe_module, "load_library", return_value=lib):
+            result = probe_module.probe("lib", discover_only=True)
+        self.assertEqual([port["vendor_id"] for port in result["detected"]], ["0x04e8", "0x2d95", "0x2a45", "0xf123"])
+        self.assertEqual(result["devices"], [])
+        lib.LIBMTP_Open_Raw_Device_Uncached.assert_not_called()
+        lib.LIBMTP_FreeMemory.assert_called_once()
+        target = result["detected"][2]
+        device = probe_module.DeviceHeader()
+        lib.LIBMTP_Open_Raw_Device_Uncached.return_value = C.addressof(device)
+        with patch.object(probe_module, "load_library", return_value=lib):
+            targeted = probe_module.probe("lib", target=target)
+        self.assertEqual([item["usb"] for item in targeted["devices"]], [target])
+        lib.LIBMTP_Open_Raw_Device_Uncached.assert_called_once()
+
+    def test_extensions_use_public_protocol_metadata_not_vendor_whitelist(self):
+        extension = probe_module.DeviceExtension()
+        extension.name = b"android.com"
+        device = probe_module.DeviceHeader()
+        device.extensions = C.pointer(extension)
+        self.assertEqual(probe_module.read_extensions(C.byref(device)), ["android.com"])
+        extension.next = C.pointer(extension)
+        with self.assertRaisesRegex(RuntimeError, "Invalid MTP extension"):
+            probe_module.read_extensions(C.byref(device))
 
     def test_no_device_is_not_an_invented_successful_read(self):
         lib = self.make_library()

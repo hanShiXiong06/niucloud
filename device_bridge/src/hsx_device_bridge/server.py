@@ -8,8 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from . import __version__
-from .ios_reader import BridgeReadError
-from .device_reader import capabilities, read_devices, scan_device_ids
+from .device_reader import capabilities, read_result, response_payload, scan_result
 from .runtime import log_dir, read_runtime_config
 from .windows_support import apple_driver_diagnostics
 
@@ -79,12 +78,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
         request = urlparse(self.path)
         if request.path == "/v1/health":
             driver = apple_driver_diagnostics()
-            try:
-                device_count = len(scan_device_ids())
-                scan_error = ""
-            except BridgeReadError as exc:
-                device_count = 0
-                scan_error = str(exc)
+            scan = scan_result()
+            device_count = len(scan["data"])
+            scan_error = "；".join(item["message"] for item in scan["warnings"])
             self._send(200, {
                 "code": 0,
                 "data": {
@@ -93,6 +89,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
                     "capabilities": capabilities(),
                     "device_count": device_count,
                     "scan_error": scan_error,
+                    "warnings": scan["warnings"],
                     "driver": driver,
                 },
             })
@@ -109,19 +106,13 @@ class BridgeHandler(BaseHTTPRequestHandler):
             })
             return
         if request.path == "/v1/scan":
-            try:
-                device_ids = scan_device_ids()
-                self._send(200, {"code": 0, "count": len(device_ids), "data": device_ids})
-            except BridgeReadError as exc:
-                self._send(422, {"code": exc.code, "message": str(exc), "data": []})
+            payload = response_payload(scan_result())
+            self._send(200 if payload["code"] == 0 else 422, payload)
             return
         if request.path == "/v1/devices":
             include_raw = parse_qs(request.query).get("include_raw", ["0"])[0] == "1"
-            try:
-                devices = read_devices(include_raw=include_raw)
-                self._send(200, {"code": 0, "count": len(devices), "data": devices})
-            except BridgeReadError as exc:
-                self._send(422, {"code": exc.code, "message": str(exc), "data": []})
+            payload = response_payload(read_result(include_raw=include_raw))
+            self._send(200 if payload["code"] == 0 else 422, payload)
             return
         self._send(404, {"code": 404, "message": "接口不存在"})
 

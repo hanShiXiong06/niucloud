@@ -46,6 +46,16 @@ Storage._fields_ = [
 ]
 
 
+class DeviceExtension(C.Structure):
+    pass
+
+
+DeviceExtension._fields_ = [
+    ("name", C.c_char_p), ("major", C.c_int), ("minor", C.c_int),
+    ("next", C.POINTER(DeviceExtension)),
+]
+
+
 class DeviceHeader(C.Structure):
     # Prefix of the public LIBMTP_mtpdevice_t, not its private PTP parameters.
     _fields_ = [
@@ -53,6 +63,15 @@ class DeviceHeader(C.Structure):
         ("params", C.c_void_p),
         ("usbinfo", C.c_void_p),
         ("storage", C.POINTER(Storage)),
+        ("errorstack", C.c_void_p),
+        ("maximum_battery_level", C.c_uint8),
+        *[(name, C.c_uint32) for name in (
+            "default_music_folder", "default_playlist_folder", "default_picture_folder",
+            "default_video_folder", "default_organizer_folder", "default_zencast_folder",
+            "default_album_folder", "default_text_folder",
+        )],
+        ("cd", C.c_void_p),
+        ("extensions", C.POINTER(DeviceExtension)),
     ]
 
 
@@ -112,6 +131,19 @@ def read_metadata(lib, device):
     return result
 
 
+def read_extensions(device):
+    pointer = C.cast(device, C.POINTER(DeviceHeader)).contents.extensions
+    result, seen = [], set()
+    while pointer:
+        address = C.addressof(pointer.contents)
+        if address in seen or len(seen) >= 64:
+            raise RuntimeError("Invalid MTP extension list")
+        seen.add(address)
+        result.append((pointer.contents.name or b"").decode("utf-8", errors="replace"))
+        pointer = pointer.contents.next
+    return result
+
+
 def read_storage(lib, device):
     if lib.LIBMTP_Get_Storage(device, 0) != 0:
         return {"storage_status": "unavailable", "storage": []}
@@ -142,12 +174,13 @@ def read_storage(lib, device):
     return {"storage_status": "ok", "storage": result}
 
 
-def probe(library_path, vendor_id=None, extended=False):
+def probe(library_path, vendor_id=None, extended=False, discover_only=False, target=None):
     lib = load_library(library_path)
     lib.LIBMTP_Init()
     raw_devices = C.POINTER(RawDevice)()
     count = C.c_int()
-    report = {"transport": "mtp", "read_only": True, "adb_used": False, "devices": [], "errors": []}
+    report = {"transport": "mtp", "read_only": True, "adb_used": False,
+              "detected": [], "devices": [], "errors": []}
     status = lib.LIBMTP_Detect_Raw_Devices(C.byref(raw_devices), C.byref(count))
     try:
         if status == 5:  # LIBMTP_ERROR_NO_DEVICE_ATTACHED
@@ -156,6 +189,9 @@ def probe(library_path, vendor_id=None, extended=False):
             raise RuntimeError("MTP discovery failed (libmtp code %s)" % status)
         for index in range(count.value):
             raw = raw_devices[index]
+            # iPhones stay on the existing Apple transport, never on the MTP path.
+            if raw.device_entry.vendor_id == 0x05AC:
+                continue
             if vendor_id is not None and raw.device_entry.vendor_id != vendor_id:
                 continue
             usb = {
@@ -164,6 +200,11 @@ def probe(library_path, vendor_id=None, extended=False):
                 "bus_location": raw.bus_location,
                 "device_number": raw.devnum,
             }
+            if target is not None and usb != target:
+                continue
+            report["detected"].append(usb)
+            if discover_only:
+                continue
             # Uncached mode avoids enumerating the user's files and media.
             device = lib.LIBMTP_Open_Raw_Device_Uncached(C.byref(raw))
             if not device:
@@ -171,6 +212,7 @@ def probe(library_path, vendor_id=None, extended=False):
                 continue
             try:
                 metadata = {"usb": usb, **read_metadata(lib, device)}
+                metadata["protocol_extensions"] = read_extensions(device)
                 if extended:
                     metadata.update(read_storage(lib, device))
                     # Reports protocol capabilities, never enumerates actual objects.

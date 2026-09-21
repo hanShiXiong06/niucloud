@@ -216,10 +216,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { img } from '@/utils/common'
 import { adjustDeviceCost, getDevice, getDeviceCostAdjustAbility, getDeviceCostAdjustLogs } from '@/addon/hsx_recycle/api/order'
-import { getCheckTemplateSchema } from '@/addon/hsx_recycle/api/check-template'
+import { useDeviceOptionLabels } from '@/addon/hsx_recycle/hooks/useDeviceOptionLabels'
 import RecycleCheckSummary from '@/addon/hsx_recycle/components/RecycleCheckSummary.vue'
 import { confirmDanger } from '@/addon/hsx_recycle/utils/confirm'
 import { previewImages as openPreview } from '@/addon/hsx_recycle/utils/preview'
@@ -272,34 +272,13 @@ const device = computed(() => latestDeviceData.value || props.deviceData || {})
 const info = computed(() => normalizeObject(device.value.info))
 const checkMeta = computed(() => normalizeObject(info.value.check_meta))
 
-// 质检字段选项 value→label 映射（容量/颜色等显示可读文案，而非存储的 key）
-const optionLabelMap = ref<Record<string, Record<string, string>>>({})
-const loadOptionLabels = async () => {
-    const tplId = Number(device.value.check_template_id || 0)
-    const deviceId = Number(device.value.id || 0)
-    if (!tplId && !deviceId) return
-    try {
-        const res: any = await getCheckTemplateSchema(tplId ? { template_id: tplId } : { device_id: deviceId })
-        const groups = Array.isArray(res?.data?.groups) ? res.data.groups : []
-        const map: Record<string, Record<string, string>> = {}
-        groups.forEach((g: any) => (g.fields || []).forEach((f: any) => {
-            const opts = Array.isArray(f.options) ? f.options : []
-            if (!opts.length) return
-            const m: Record<string, string> = {}
-            opts.forEach((o: any) => { m[String(o.value)] = String(o.label || o.name || o.value) })
-            map[String(f.field_key)] = m
-        }))
-        optionLabelMap.value = map
-    } catch (error) {
-        // 回退原值
-    }
-}
-const resolveOptionLabel = (fieldKey: string, value: any): string => {
-    if (value === undefined || value === null || value === '') return ''
-    const m = optionLabelMap.value[fieldKey]
-    if (Array.isArray(value)) return value.map((v) => (m && m[String(v)]) || String(v)).join('、')
-    return (m && m[String(value)]) || String(value)
-}
+const { loadOptionLabels, resolveOptionLabel: resolveDeviceOptionLabel, resetOptionLabels } = useDeviceOptionLabels()
+const resolveOptionLabel = (fieldKey: string, value: any) => resolveDeviceOptionLabel(device.value, fieldKey, value)
+let detailRequestVersion = 0
+onUnmounted(() => {
+    detailRequestVersion++
+    resetOptionLabels()
+})
 const logs = computed(() => Array.isArray(device.value.logs) ? device.value.logs : [])
 const isConsigned = computed(() => isConsignedDevice(device.value))
 const hasCostAdjustment = computed(() => Number(device.value.cost_adjust_count || 0) > 0)
@@ -309,7 +288,14 @@ watch(() => props.visible, (value) => {
     show.value = value
     if (value) {
         loadDeviceDetail()
+    } else {
+        detailRequestVersion++
+        resetOptionLabels()
     }
+})
+
+watch(() => props.deviceData?.id, () => {
+    if (props.visible) loadDeviceDetail()
 })
 
 watch(show, (value) => {
@@ -317,6 +303,8 @@ watch(show, (value) => {
 })
 
 const loadDeviceDetail = async () => {
+    const requestVersion = ++detailRequestVersion
+    resetOptionLabels()
     const deviceId = props.deviceData?.id
     if (!deviceId) {
         latestDeviceData.value = null
@@ -329,15 +317,18 @@ const loadDeviceDetail = async () => {
     loading.value = true
     try {
         const res: any = await getDevice(deviceId)
+        if (requestVersion !== detailRequestVersion) return
         latestDeviceData.value = res?.data || props.deviceData || null
-        loadOptionLabels()
+        void loadOptionLabels([device.value])
         await loadCostAdjustAbility()
+        if (requestVersion !== detailRequestVersion) return
         await loadCostAdjustLogs()
     } catch (error: any) {
+        if (requestVersion !== detailRequestVersion) return
         latestDeviceData.value = props.deviceData || null
         uni.showToast({ title: error?.msg || error?.message || '获取设备详情失败', icon: 'none' })
     } finally {
-        loading.value = false
+        if (requestVersion === detailRequestVersion) loading.value = false
     }
 }
 
@@ -592,17 +583,20 @@ const closeCostAdjust = () => {
 }
 
 const loadCostAdjustLogs = async () => {
+    const requestVersion = detailRequestVersion
     const deviceId = device.value?.id || props.deviceData?.id
     if (!deviceId || !costAdjustAllowed.value) return
     try {
         const res: any = await getDeviceCostAdjustLogs(deviceId)
+        if (requestVersion !== detailRequestVersion) return
         costAdjustLogs.value = Array.isArray(res?.data) ? res.data : []
     } catch (error) {
-        costAdjustLogs.value = []
+        if (requestVersion === detailRequestVersion) costAdjustLogs.value = []
     }
 }
 
 const loadCostAdjustAbility = async () => {
+    const requestVersion = detailRequestVersion
     const deviceId = device.value?.id || props.deviceData?.id
     if (!deviceId) {
         costAdjustAllowed.value = false
@@ -610,9 +604,10 @@ const loadCostAdjustAbility = async () => {
     }
     try {
         const res: any = await getDeviceCostAdjustAbility(deviceId)
+        if (requestVersion !== detailRequestVersion) return
         costAdjustAllowed.value = Boolean(res?.data?.allowed)
     } catch (error) {
-        costAdjustAllowed.value = false
+        if (requestVersion === detailRequestVersion) costAdjustAllowed.value = false
     }
 }
 

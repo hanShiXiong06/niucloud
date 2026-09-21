@@ -14,6 +14,11 @@ use app\adminapi\middleware\AdminCheckRole;
 use app\adminapi\middleware\AdminCheckToken;
 use app\adminapi\middleware\AdminLog;
 
+Route::group('recycle/platform', function () {
+    Route::get('device_bridge', 'addon\hsx_recycle\app\adminapi\controller\device\DeviceBridge@info');
+    Route::post('device_bridge', 'addon\hsx_recycle\app\adminapi\controller\device\DeviceBridge@save');
+})->middleware([AdminCheckToken::class, AdminCheckRole::class, AdminLog::class]);
+
 /**
  * 店铺移动管理端
  */
@@ -120,6 +125,8 @@ Route::group('recycle', function () {
     // 下单配置
     Route::get('order_submit_config', 'addon\hsx_recycle\app\adminapi\controller\order\OrderSubmitConfig@info');
     Route::post('order_submit_config', 'addon\hsx_recycle\app\adminapi\controller\order\OrderSubmitConfig@save');
+    // 签收人员仅读取安装包元信息，不返回下单设置中的通知凭据。
+    Route::get('device_bridge/downloads', 'addon\hsx_recycle\app\adminapi\controller\device\DeviceBridge@downloads');
     // 静态配置路径必须先于 recycle_order/:id 注册，避免被订单更新路由误匹配。
     Route::get('recycle_order/erp-integration', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleOrder@erpIntegration');
     Route::put('recycle_order/erp-integration', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleOrder@saveErpIntegration');
