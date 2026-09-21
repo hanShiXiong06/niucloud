@@ -3,10 +3,10 @@
 `hsx_recycle` 的本地 USB 读取内核。它只负责读取和标准化硬件事实，不创建回收订单、不修改 ERP 数据，也不自行猜测站点分类。
 
 - iPhone：沿用信任电脑后的读取。
-- macOS Apple Silicon 0.3.1：按 MTP 协议发现安卓设备，不再限制品牌或要求 USB 名称包含 Android；修复魅族读取后 USB 临时地址变化被误判为换机的问题。不代表所有品牌、型号都已实测或能读到相同字段。
-- Windows：0.4.0 开发版加入原生 WPD/MTP 读取，复用 Windows 便携设备驱动；iPhone 仍走原链路。本次仅完成源码与跨平台测试，没有构建或发布 Windows 包，原生编译、安装及真机兼容性待验证。
+- macOS Apple Silicon：沿用 0.3.1 的通用 MTP 发现与魅族连接校验修复，不再限制品牌或要求 USB 名称包含 Android。不代表所有品牌、型号都已实测或能读到相同字段。
+- Windows：0.4.0 内测版加入原生 WPD/MTP 读取，复用 Windows 便携设备驱动；iPhone 仍走原链路。GitHub Windows 环境已通过原生编译、组件自检和打包后 HTTP 检查，真实手机及安装升级验收仍待完成。
 
-Windows 开发与验收见 [Windows 安卓读取内测说明](docs/windows-mtp-preview.md)。下文的 0.3.1 Mac 包为此前产物，不代表 0.4.0 已发布。
+Windows 开发与验收见 [Windows 安卓读取内测说明](docs/windows-mtp-preview.md)。0.4.0 的双平台安装包已在 [GitHub Actions](https://github.com/hanShiXiong06/niucloud/actions/runs/35631020579) 构建成功，未发布正式 Release，不能以远程构建结果替代真机验收。
 
 ## 本地开发
 
@@ -41,14 +41,14 @@ HSX_DEVICE_BRIDGE_ORIGINS=https://erp.example.com
 安装包名称：
 
 ```text
-dist/hsx_device_bridge-0.3.1-macos-arm64.pkg
-dist/installer/hsx_device_bridge-<实际发布版本>-windows-x64-setup.exe
+dist/github-v0.4.0/hsx_device_bridge-0.4.0-macos-arm64.pkg
+dist/github-v0.4.0/hsx_device_bridge-0.4.0-windows-x64-setup.exe
 ```
 
 1. 双击安装包完成安装。当前测试包尚未使用 Apple Developer ID 签名；若系统拦截，请到“系统设置 → 隐私与安全性”中确认仍要打开。
 2. iPhone 解锁后选择“信任此电脑”；安卓解锁后选择“文件传输”，允许手机弹出的访问提示。读取不使用 ADB，也不需要开启 USB 调试。
-3. 安装器会注册 `LaunchAgent`，桥接服务会自动启动，不需要再打开桌面应用。
-4. 浏览器访问 `http://127.0.0.1:17890/v1/health`，确认 `version: 0.3.1`。Mac 包应有 `capabilities.android_mtp: true` 和 `android_mtp_scope: generic`；`device_count` 表示发现数量，不代表质检信息全部可读。
+3. Mac 安装器会注册 `LaunchAgent`，Windows 会注册登录启动，桥接服务会自动运行，不需要再打开桌面应用。
+4. 浏览器访问 `http://127.0.0.1:17890/v1/health`，确认 `version: 0.4.0`。Mac 包应有 `capabilities.android_mtp: true` 和 `android_mtp_scope: generic`；Windows 应有 `android_mtp_backend: windows_wpd` 和 `android_mtp_status: preview`。`device_count` 表示发现数量，不代表质检信息全部可读。
 5. 正式 HTTPS 站点首次读取时，浏览器可能询问是否允许访问本地网络，请选择允许。
 6. 回到回收签收页面，点击“读取本地设备”；需要持续识别时可开启“自动检测”。
 
@@ -62,10 +62,10 @@ Windows 安装包默认安装到当前用户目录，不需要管理员权限。
 Windows: %LOCALAPPDATA%\HSX Device Bridge\logs\bridge.log
 ```
 
-打包时维护允许访问的站点域名。此次本地 Mac 包沿用本站域名 `https://gl.hsxbk.top`，并允许本机开发页面。其他站点需重新设置白名单：
+打包时维护允许访问的站点域名。此次双平台包包含本站域名 `https://gl.hsxbk.top`，并允许本机开发页面。不同域名的后台需重新设置白名单：
 
 ```bash
-bash scripts/package_macos.sh 0.3.1 "https://你的后台域名"
+bash scripts/package_macos.sh 0.4.0 "https://你的后台域名"
 ./scripts/build_windows.ps1 -AllowedOrigins "https://你的后台域名"
 ```
 
@@ -118,7 +118,7 @@ python3 device_bridge/scripts/probe_android_mtp.py \
 - IMEI、颜色、标称容量、电池健康度、循环次数等未读取项明确列在 `not_read_fields`，不能据此自动填零或推算。
 - `devices: []` 表示没有可读取的 MTP 设备，不代表读机成功。确认数据线、解锁状态和 USB 用途，并检查是否被其他程序占用。
 - 超时会终止本次探测子进程。程序不会自动停止 ADB、抢占其他程序或修改手机 USB 模式。
-- 此独立诊断脚本仅针对 libmtp；Windows 改用原生 WPD 读取，仍须独立完成编译和真机验收，不能用 Mac 的结果代替。
+- 此独立诊断脚本仅针对 libmtp；Windows 改用原生 WPD 读取，虽已通过独立编译和打包自检，仍须完成真机验收，不能用 Mac 的读机结果代替。
 
 真机结果见 [三星 S21 只读探测记录](docs/2026-09-21-samsung-s21-mtp.md)。
 
@@ -133,7 +133,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 
 ```bash
 bash scripts/build_macos.sh
-bash scripts/package_macos.sh 0.3.1 "https://erp.example.com"
+bash scripts/package_macos.sh 0.4.0 "https://erp.example.com"
 ```
 
 安装包会把桥接器安装为 `LaunchAgent`。用户只需安装一次，登录系统后自动运行，不需要再手动打开桌面程序。正式分发前仍需使用 Apple Developer ID 对二进制和安装包签名、公证。
@@ -144,4 +144,6 @@ bash scripts/package_macos.sh 0.3.1 "https://erp.example.com"
 
 ## GitHub 打包
 
-工作流 `Build Device Bridge Installers` 支持手动运行；推送与源码版本一致的 `device-bridge-v*` 标签时，会分别在 macOS ARM64 和 Windows x64 构建。两端构建成功后，Release 发布安装包和 SHA256 校验文件。客户使用 SaaS 平台维护的网盘地址，不需要访问 GitHub。
+工作流 `Build Device Bridge Installers` 在 `feature/hsx_erp-pc-mobile-alignment` 分支的 `device_bridge/` 或工作流文件变更推送后自动构建 macOS ARM64 和 Windows x64 安装包，Artifact 保留 30 天，不自动发布 Release。工作流还保留手动运行入口；GitHub 网页是否显示该入口取决于默认分支的工作流版本。
+
+仅推送与源码版本一致的 `device-bridge-v*` 标签时，才会在两端构建成功后发布 Release 安装包和 SHA256 校验文件。本次未推送版本标签。客户使用 SaaS 平台维护的网盘地址，不需要访问 GitHub。

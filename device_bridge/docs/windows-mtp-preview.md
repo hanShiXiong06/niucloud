@@ -4,8 +4,10 @@
 
 - 源码版本：0.4.0，Windows 安卓读取标记 `preview`。
 - 已完成：Python 适配、标准快照、多设备隔离、超时与身份校验、Windows 原生 WPD 读取代码、打包检查脚本。
-- 已在 Mac 验证：Python 自动化测试、可移植 C++ 身份解析与 JSON 编码测试。测试中的 Windows 设备返回值是模拟数据，不是真机读取结果。
-- 未完成：Windows SDK 原生程序编译、打包后运行、真实手机及安装升级验收。本次未推送代码、未触发 GitHub Actions、未发布 EXE。
+- 已在 Mac 验证：Python 3.9 / 3.11 下的 81 项自动化测试、可移植 C++ 身份解析与 JSON 编码测试。测试中的 Windows 设备返回值是模拟数据，不是真机读取结果。
+- 已于 2026-09-22 推送并完成 [GitHub Actions 双平台构建](https://github.com/hanShiXiong06/niucloud/actions/runs/35631020579)，构建源码为 `9400642f92c77acad78cc7ae6e9aad4ee628ae6d`。
+- Windows 已通过：81 项 Python 测试、MSVC 原生编译、C++ 契约测试、WPD COM 自检和扫描、打包 EXE 的版本与依赖校验、临时端口 HTTP 冒烟检查；Windows EXE 与 Mac PKG 均已生成。
+- 未完成：Windows 真实手机、安装升级及重新登录自启验收。未发布正式 Release，也未替客户更新下载地址。
 - 没有数据库变更，没有框架变更，不修改运行中的 0.3.1 Mac 服务。
 
 ## 用户操作
@@ -63,7 +65,7 @@ python -m pip install . pyinstaller
 
 `verify_windows_package.py` 不依赖控制台输出，避免无窗口 EXE 校验不到版本。任何检查失败则停止，不生成一个看起来成功的安装包。
 
-后续经用户允许，可先手动运行现有 `Build Device Bridge Installers` 工作流下载 Artifact 做内测，暂不推版本标签或自动对客户发布。远程编译通过不等于手机兼容性验收通过。
+本次通过设备桥路径限定的分支推送触发 `Build Device Bridge Installers` 工作流，下载 Artifact 做内测，未推版本标签或自动对客户发布。远程编译通过不等于手机兼容性验收通过。
 
 ## 首轮实机验收
 
