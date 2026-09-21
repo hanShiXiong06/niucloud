@@ -1,5 +1,7 @@
 import request from '@/utils/request'
 
+export const getErpListingCatalog = () => request.get('erp/stock/listing_catalog')
+
 export const previewErpMallInventory = (params: Record<string, any>) => request.get('erp/mall_inventory/preview', { params })
 export const confirmErpMallInventory = (data: Record<string, any>) => request.post('erp/mall_inventory/confirm', data)
 

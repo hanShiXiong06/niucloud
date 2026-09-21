@@ -190,6 +190,7 @@ class DeviceSummaryHelper
 
         // 3) 组装 [templateId][fieldKey][optionValue] => label
         $map = [];
+        $idAliases = [];
         foreach ($options as $opt) {
             $meta = $fieldMeta[(int)$opt['field_id']] ?? null;
             if ($meta === null) {
@@ -201,10 +202,10 @@ class DeviceSummaryHelper
                 continue;
             }
             $map[$meta['template_id']][$meta['field_key']][$value] = $label;
-            // 兼容历史设备保存的是 option 主键而不是 option_value 的情况。
+            // 主键只是候选别名，不能覆盖另一个选项的正式 option_value。
             $optionId = (string)($opt['id'] ?? '');
             if ($optionId !== '') {
-                $map[$meta['template_id']][$meta['field_key']][$optionId] = $label;
+                $idAliases[$meta['template_id']][$meta['field_key']][$optionId] = $label;
             }
         }
 
@@ -219,22 +220,33 @@ class DeviceSummaryHelper
             $templateId = (int)($template['id'] ?? 0);
             $schema = json_decode((string)($template['schema_json'] ?? ''), true);
             if ($templateId <= 0 || !is_array($schema)) continue;
-            foreach ((array)($schema['groups'] ?? []) as $group) {
+            foreach ((array)($schema['groups'] ?? []) as $groupIndex => $group) {
                 if (!is_array($group)) continue;
-                foreach ((array)($group['fields'] ?? []) as $field) {
+                foreach ((array)($group['fields'] ?? []) as $fieldIndex => $field) {
                     if (!is_array($field)) continue;
                     $fieldKey = trim((string)($field['field_key'] ?? ''));
                     if ($fieldKey === '' || (!empty($fieldKeys) && !in_array($fieldKey, $fieldKeys, true))) continue;
-                    foreach ((array)($field['options'] ?? []) as $option) {
+                    foreach ((array)($field['options'] ?? []) as $optionIndex => $option) {
                         if (!is_array($option)) continue;
                         $label = trim((string)($option['label'] ?? $option['name'] ?? $option['option_label'] ?? ''));
-                        $value = trim((string)($option['value'] ?? $option['option_value'] ?? ''));
+                        // 与 RecycleCheckTemplateService::compactSchemaGroups 的表单值保持一致。
+                        $value = trim((string)($option['value'] ?? ($optionIndex + 1)));
                         if ($label === '') continue;
                         if ($value !== '') $map[$templateId][$fieldKey][$value] = $label;
-                        $optionId = trim((string)($option['id'] ?? ''));
-                        if ($optionId !== '') $map[$templateId][$fieldKey][$optionId] = $label;
+                        $optionId = (int)($option['id'] ?? 0);
+                        if ($optionId === 0) {
+                            $optionId = -(($groupIndex + 1) * 1000000 + ($fieldIndex + 1) * 1000 + $optionIndex + 1);
+                        }
+                        $idAliases[$templateId][$fieldKey][(string)$optionId] = $label;
+                        $legacyValue = trim((string)($option['option_value'] ?? ''));
+                        if ($legacyValue !== '') $idAliases[$templateId][$fieldKey][$legacyValue] = $label;
                     }
                 }
+            }
+        }
+        foreach ($idAliases as $templateId => $fields) {
+            foreach ($fields as $fieldKey => $aliases) {
+                $map[$templateId][$fieldKey] = ($map[$templateId][$fieldKey] ?? []) + $aliases;
             }
         }
         return $map;

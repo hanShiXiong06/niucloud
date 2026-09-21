@@ -1447,6 +1447,9 @@ class ErpStockService extends BaseAdminService
         );
         foreach ($rows as &$row) {
             $row['sales_pricing'] = $salesPricing;
+            $mallCategory = ErpMallListingService::selection($row['spec_json'] ?? '');
+            $row['mall_category_id'] = (int)($mallCategory['value'] ?? 0);
+            $row['mall_category_name'] = (string)($mallCategory['label'] ?? '');
             $policy = (array)($row['warehouse_policy'] ?? []);
             $status = (string)($row['listing_status'] ?? 'none');
             $channelState = (array)($channelStateMap[(int)($row['id'] ?? 0)] ?? []);
@@ -1457,8 +1460,13 @@ class ErpStockService extends BaseAdminService
                 $row['listing_status'] = $status;
             }
             $row['listing_material_owner'] = $materialOwner;
-            $row['listing_basic_first'] = $basicFirst ? 1 : 0;
+            $assetBasicFirst = ($this->decodeJsonObject($row['spec_json'] ?? '')['_mall_listing']['publish_mode'] ?? '') === 'basic_first';
+            $row['listing_basic_first'] = ($basicFirst || $assetBasicFirst) ? 1 : 0;
             $row['listing_workspace'] = $workspace;
+            if ((string)($row['sale_target'] ?? '') !== 'mall') {
+                $row['listing_workspace']['mall'] = ['connected' => 0, 'message' => '当前设备不是商城销售去向，本次仅保存 ERP 资料。'];
+                $row['listing_workspace']['forms'] = ErpListingFormContract::describe($row['listing_workspace'])['forms'];
+            }
             $row['can_handoff_shop'] = (int)(
                 $materialOwner === 'phone_shop'
                 && ErpListingWorkflow::canHandoffToShop($row, $policy)
@@ -1469,6 +1477,12 @@ class ErpStockService extends BaseAdminService
                     $row['turnover_action_key'] = 'prepare_listing_media';
                     $row['turnover_action_label'] = $status === 'need_photo' ? '开始标准拍摄' : '继续销售定价';
                     $row['turnover_action_reason'] = '已启用拍照中台，从当前 ERP 入口创建或继续任务，完成后自动回写';
+                } elseif ((int)($workspace['mall']['connected'] ?? 0) === 1
+                    && in_array($workspaceMode, ['one_stop', 'photo_price'], true)
+                    && in_array($status, ['need_photo', 'need_price', 'need_material', 'ready'], true)) {
+                    $row['turnover_action_key'] = 'complete_listing_media_price';
+                    $row['turnover_action_label'] = '拍摄定价并上架';
+                    $row['turnover_action_reason'] = '选择商城分类、确认实拍图和售价后立即上架，详细属性由商城运营核对';
                 } elseif ($workspaceMode === 'one_stop' && in_array($status, ['need_photo', 'need_price', 'need_material'], true)) {
                     $row['turnover_action_key'] = 'complete_listing';
                     $row['turnover_action_label'] = (int)($workspace['auto_publish'] ?? 0) === 1 ? '一次完善并上架' : '一次完善商品资料';
@@ -1796,6 +1810,11 @@ class ErpStockService extends BaseAdminService
         }
         $workflowAction = trim((string)($data['workflow_action'] ?? ''));
         $workspaceRules = (array)(ErpConfigService::forSite((int)$this->site_id)->getRules()['listing_workspace'] ?? []);
+        if ((string)$asset->sale_target === 'mall') $workspaceRules['mall'] = ErpMallListingService::capability((int)$this->site_id);
+        if ((int)($data['publish_basic'] ?? 0) === 1
+            && (!in_array($workflowAction, ['media_price', 'one_stop'], true) || (int)($workspaceRules['mall']['connected'] ?? 0) !== 1)) {
+            throw new CommonException('当前设备未打通商城上架，请检查销售去向及商城联动设置后重试');
+        }
         $workflowActions = [
             ErpListingFormContract::ACTION_ONE_STOP,
             ErpListingFormContract::ACTION_PHOTO,
@@ -1810,11 +1829,12 @@ class ErpStockService extends BaseAdminService
             $editableFields = ErpListingFormContract::editableFields($workflowAction, $workspaceRules);
             foreach ([
                 'estimate_sale_price', 'retail_price', 'image_urls', 'video_url',
-                'catalog_product_id', 'spec', 'quality_remark', 'remark_public', 'remark_internal',
+                'catalog_product_id', 'spec', 'quality_remark', 'remark_public', 'remark_internal', 'mall_category_id',
             ] as $field) {
                 if (!in_array($field, $editableFields, true)) $data[$field] = null;
             }
             $projectedAsset = $asset->toArray();
+            $projectedAsset['mall_category_id'] = (int)(ErpMallListingService::selection($asset->spec_json)['value'] ?? 0);
             foreach ($editableFields as $field) {
                 if (array_key_exists($field, $data) && $data[$field] !== null) {
                     $projectedAsset[$field] = $data[$field];
@@ -1842,6 +1862,28 @@ class ErpStockService extends BaseAdminService
         ])->findOrEmpty();
         $save = ['update_at' => time()];
         $changes = [];
+        if ((int)($data['publish_basic'] ?? 0) === 1 && $currentListingStatus === 'listed'
+            && isset($data['image_urls']) && $this->normalizeImageUrls($data['image_urls']) !== $this->normalizeImageUrls($asset->image_urls)) {
+            throw new CommonException('商品已上架，请到商城修改商品图片；无需重复上架，修改售价可使用“调整销售价”');
+        }
+        if (isset($data['mall_category_id'])) {
+            $selection = ErpMallListingService::request((int)$this->site_id, 'resolve', (int)$data['mall_category_id'])['selection'] ?? [];
+            if ($selection === []) throw new CommonException('请选择有效的商城末级分类');
+            $specMeta = $this->decodeJsonObject($asset->spec_json);
+            if (($specMeta['_mall_listing']['category'] ?? []) !== $selection) {
+                if (in_array($currentListingStatus, $terminalListingStatuses, true)) {
+                    throw new CommonException('设备已经交接商城，修改分类请到商城“资料核对”中操作，避免两端分类不一致');
+                }
+                $specMeta['_mall_listing']['category'] = $selection;
+                $save['spec_json'] = json_encode($specMeta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                $changes[] = '商城分类';
+            }
+        }
+        if ((int)($data['publish_basic'] ?? 0) === 1) {
+            $specMeta = $this->decodeJsonObject($save['spec_json'] ?? $asset->spec_json);
+            $specMeta['_mall_listing']['publish_mode'] = 'basic_first';
+            $save['spec_json'] = json_encode($specMeta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
         // 兼容旧版前端继续回传当前值，但禁止任何客户端直接推进上架终态。
         if ($listingStatus !== '' && $listingStatus !== $currentListingStatus) {
             throw new CommonException('商城交接和上架状态由系统及渠道回执自动更新，不能手工设置');
@@ -2038,7 +2080,7 @@ class ErpStockService extends BaseAdminService
      * 由 ERP 直接把资料完整的设备发布到已安装商城。
      * 旧方法名保留给已部署前端兼容，语义已经从“同步中台”改为“直接上架”。
      */
-    public function syncListing(int $id, bool $forceShopCompletion = false): array
+    public function syncListing(int $id, bool $forceShopCompletion = false, bool $publishBasic = false): array
     {
         $asset = $this->findAsset($id);
         if ((string)$asset->status !== ErpDict::ASSET_IN_STOCK) {
@@ -2055,8 +2097,9 @@ class ErpStockService extends BaseAdminService
         if ((int)($channelPolicy['enabled'] ?? 0) !== 1) {
             throw new CommonException('自有商城渠道已关闭；设备资料仍保留在 ERP');
         }
-        // 只有显式启用“先上架后补资料”才改变交接语义；原人工确认模式保持不变。
-        $basicFirst = (string)($channelPolicy['publish_mode'] ?? 'direct') === 'basic_first';
+        // 本次“保存并上架”是显式发布；不改站点默认策略或其他岗位的保存行为。
+        $basicFirst = $publishBasic || (string)($channelPolicy['publish_mode'] ?? 'direct') === 'basic_first'
+            || ($this->decodeJsonObject($asset->spec_json)['_mall_listing']['publish_mode'] ?? '') === 'basic_first';
         $shopCompletion = !$basicFirst && ($forceShopCompletion
             || (string)($channelPolicy['publish_mode'] ?? 'direct') === 'manual');
         if ((int)$policy['allow_mall'] !== 1) {
@@ -2101,7 +2144,15 @@ class ErpStockService extends BaseAdminService
         // - 消费 ERP 目录：无论直发还是运营确认，都先完成目录投影并自动预填；
         // - 商城独立分类：已有映射时复用，首次没有映射时交给商城运营选择。
         $basicBlockReason = '';
-        if ((string)$channelPolicy['category_mode'] === 'erp') {
+        $selectedCategory = ErpMallListingService::selection($specMeta);
+        if ($publishBasic || (int)($selectedCategory['value'] ?? 0) > 0) {
+            $selection = ErpMallListingService::request((int)$this->site_id, 'resolve', (int)($selectedCategory['value'] ?? 0))['selection'] ?? [];
+            $categoryPath = (array)($selection['path'] ?? []);
+            if ($categoryPath === []) throw new CommonException('请先选择有效商城分类再上架');
+            $channelMapping['category_ids'] = $categoryPath;
+            $channelMapping['category_name'] = (string)($selection['label'] ?? '');
+            $channelMapping['category_source'] = 'manual_asset';
+        } elseif ((string)$channelPolicy['category_mode'] === 'erp') {
             // 商城运营接手时，ERP 分类只用于“有则预填”，不能反过来成为交接前置条件。
             // 直发模式仍保持严格投影，避免创建没有分类的商城商品。
             try {
@@ -2142,7 +2193,7 @@ class ErpStockService extends BaseAdminService
             'brand_name' => $this->specValueText($specMeta['brand'] ?? ''),
             'memory' => $memory,
             'color' => $assetColor !== '' ? $assetColor : $specColor,
-            'battery_health' => (int)$asset->battery,
+            'battery_health' => $asset->battery === null || $asset->battery === '' ? -1 : (int)$asset->battery,
             'warranty_expire_time' => (int)$asset->warranty,
             'condition_grade' => $conditionGrade,
             'images' => $images,
@@ -2155,6 +2206,9 @@ class ErpStockService extends BaseAdminService
             'sub_title' => (string)$asset->spec,
             'goods_desc' => $description,
             'goods_category' => $categoryPath,
+            // ERP 交接上架统一支持三种配送；商城按站点开通情况和配送范围决定实际可选项。
+            'delivery_type' => ['express', 'local_delivery', 'store'],
+            'category_source' => (int)($selectedCategory['value'] ?? 0) > 0 ? 'manual_asset' : 'mapping',
             'source_plugin' => (string)$asset->source_plugin,
             'source_type' => (string)$asset->source_type,
             'source_id' => (string)$asset->source_id,

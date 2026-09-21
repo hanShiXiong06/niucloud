@@ -35,12 +35,15 @@ export function erpListingFormPayload(form: Record<string, any>, contract: any, 
     return Object.fromEntries([
         ...definition.editable_fields.map((field: string) => [field, form[field]]),
         ['workflow_action', action],
+        ...(Number(definition.publish_basic) === 1 ? [['publish_basic', 1]] : []),
+        ...(contract?.mall && !Number(contract.mall.connected) && ['media_price', 'one_stop'].includes(action) ? [['defer_publish', 1]] : []),
     ])
 }
 
 export function validateErpListingForm(form: Record<string, any>, contract: any, action: ErpListingAction): string {
     const definition = erpListingFormDefinition(contract, action)
     const labels: Record<string, string> = {
+        mall_category_id: '商城分类',
         catalog_product_id: '商品目录型号',
         spec: '设备规格',
         image_urls: '商品图片',
@@ -51,13 +54,12 @@ export function validateErpListingForm(form: Record<string, any>, contract: any,
         remark_internal: '对内备注',
     }
     const missing = (definition.required_fields || []).filter((field: string) => {
-        if (field === 'catalog_product_id') return Number(form[field] || 0) <= 0
-        if (field === 'retail_price') return Number(form[field] || 0) <= 0
+        if (['catalog_product_id', 'mall_category_id', 'retail_price'].includes(field)) return !Number.isFinite(Number(form[field])) || Number(form[field] || 0) <= 0
         if (field === 'image_urls') {
             if (Array.isArray(form[field])) return form[field].filter(Boolean).length === 0
             return String(form[field] || '').split(',').map((item) => item.trim()).filter(Boolean).length === 0
         }
         return !String(form[field] || '').trim()
     })
-    return missing.length ? `请先完善${Array.from(new Set(missing.map((field: string) => labels[field] || '必填资料'))).join('、')}` : ''
+    return missing.length ? `请先完善${missing.map((field: string) => labels[field] || field).join('、')}` : ''
 }

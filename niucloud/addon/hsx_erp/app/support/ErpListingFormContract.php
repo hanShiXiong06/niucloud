@@ -53,7 +53,7 @@ final class ErpListingFormContract
     public static function describe(array $workspace): array
     {
         $mode = in_array((string)($workspace['mode'] ?? 'one_stop'), ['one_stop', 'split', 'photo_price'], true)
-            ? (string)$workspace['mode']
+            ? (string)($workspace['mode'] ?? 'one_stop')
             : 'one_stop';
         $fieldRules = self::normalizeRules((array)($workspace['field_rules'] ?? []));
 
@@ -83,6 +83,22 @@ final class ErpListingFormContract
             $forms[$action] = self::form($action, $fieldRules);
         }
 
+        if ((int)($workspace['mall']['connected'] ?? 0) === 1) {
+            foreach ([self::ACTION_MEDIA_PRICE, self::ACTION_ONE_STOP] as $action) {
+                $fields = array_values(array_diff($forms[$action]['visible_fields'], ['catalog_product_id', 'spec']));
+                $fields = array_values(array_unique(array_merge(['mall_category_id', 'image_urls', 'retail_price'], $fields)));
+                $forms[$action] = array_merge($forms[$action], [
+                    'title' => '拍摄定价并上架',
+                    'description' => '选商城分类、上传实拍图、填写售价。上架后客户即可购买；内存、电池等资料由商城运营核对。',
+                    'submit_label' => '保存并上架',
+                    'publish_basic' => 1,
+                    'visible_fields' => $fields,
+                    'editable_fields' => $fields,
+                    'required_fields' => ['mall_category_id', 'image_urls', 'retail_price'],
+                ]);
+            }
+        }
+
         return [
             'mode' => $mode,
             'entry_mode' => $mode === 'one_stop' ? 'complete' : 'collaborative',
@@ -106,13 +122,14 @@ final class ErpListingFormContract
 
     public static function fieldLabel(string $field): string
     {
+        if ($field === 'mall_category_id') return '商城分类';
         return (string)(self::FIELD_DEFINITIONS[$field]['label'] ?? $field);
     }
 
     public static function hasValue(string $field, mixed $value): bool
     {
-        if ($field === 'catalog_product_id') return (int)$value > 0;
-        if ($field === 'retail_price') return (float)$value > 0;
+        if (in_array($field, ['catalog_product_id', 'mall_category_id'], true)) return (int)$value > 0;
+        if ($field === 'retail_price') return is_numeric($value) && is_finite((float)$value) && (float)$value > 0;
         if ($field === 'image_urls') {
             if (is_array($value)) {
                 return count(array_filter($value, static fn($item): bool => trim((string)$item) !== '')) > 0;

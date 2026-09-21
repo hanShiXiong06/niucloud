@@ -320,7 +320,7 @@ const ledgerStats = computed<LedgerStat[]>(() => [
   { label: "待打款", value: Number(ledger.value.pending_pay_device_count || 0), unit: "台", urgent: true, filterKey: "pending_pay", viewMode: "device_expand" },
   { label: "已完成", value: Number(ledger.value.completed_device_count || 0), unit: "台", filterKey: "completed_today", viewMode: "device_expand" },
   { label: "已退回客户", value: Number(ledger.value.return_device_count || 0), unit: "台", filterKey: "returned_devices", viewMode: "device_expand", scope: "所选时间内完成", hint: "当前有效退回单及设备明细均已完成，并且退回完成时间在所选日期内。按设备台数去重，不是退回单数；刚申请或仍在退回中的设备不计入。点击数字查看对应设备。" },
-  { label: "退回未完成", value: Number(ledger.value.pending_return_count || 0), unit: "台", urgent: true, filterKey: "pending_return", viewMode: "device_expand", scope: "当前全部 · 不限日期", hint: "当前有效退回单中，待处理和退回中的设备台数，不是退回单数。不受顶部日期影响；同一设备只计一次，已完成、已取消、已删除的退回单不计入。点击数字查看对应设备。" },
+  { label: "退回未完成", value: Number(ledger.value.pending_return_count || 0), unit: "台", urgent: true, filterKey: "pending_return", viewMode: "device_expand", scope: "当前全部 · 不限日期", hint: "当前有效退回单中，待寄回和待客户签收的设备台数，不是退回单数。不受顶部日期影响；同一设备只计一次，已完成、已取消、已删除的退回单不计入。人工确认客户签收或发出满72小时自动完成后扣减。点击数字进入退回工作台。" },
 ]);
 
 const consignmentProgress = computed(() => [

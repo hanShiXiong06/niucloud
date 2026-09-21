@@ -359,7 +359,7 @@
                 </div>
                 <ErpListingWorkspaceForm
                     v-model="flow.form"
-                    :contract="flow.row?.listing_workspace"
+                    :contract="flowFormContract"
                     :pricing="flow.row?.sales_pricing"
                     :action="flowContractAction"
                     @catalog-change="onFlowCatalogChange"
@@ -767,7 +767,10 @@ type FlowMode = 'all' | ErpListingAction
 const flow = reactive({ visible: false, saving: false, mode: 'all' as FlowMode, row: null as any, form: defaultFlowForm() })
 const mediaTask = reactive({ visible: false, loading: false, row: null as any, data: null as any, url: '', qr: '' })
 const flowContractAction = computed<ErpListingAction>(() => flow.mode === 'all' ? 'one_stop' : flow.mode)
-const flowFormDefinition = computed(() => erpListingFormDefinition(flow.row?.listing_workspace, flowContractAction.value))
+const flowFormContract = computed(() => flow.mode === 'all'
+    ? { ...flow.row?.listing_workspace, forms: { ...flow.row?.listing_workspace?.forms, one_stop: undefined } }
+    : flow.row?.listing_workspace)
+const flowFormDefinition = computed(() => erpListingFormDefinition(flowFormContract.value, flowContractAction.value))
 const flowDialogTitle = computed(() => flow.mode === 'all' ? '设备流转设置' : flowFormDefinition.value.title)
 const flowSubmitLabel = computed(() => flow.mode === 'all' ? '保存设置' : flowFormDefinition.value.submit_label)
 const retail = reactive({ visible: false, saving: false, row: null as any, form: { retail_price: 0, reason: '' } })
@@ -1116,6 +1119,8 @@ function openFlow(row: any, mode: FlowMode = 'all') {
         listing_status: row.listing_status || 'none',
         estimate_sale_price: Number(row.estimate_sale_price || 0),
         retail_price: salesPriceInput(row),
+        mall_category_id: Number(row.mall_category_id || 0),
+        mall_category_name: row.mall_category_name || '',
         catalog_product_id: Number(row.catalog_product_id || 0),
         spec: row.spec || '',
         image_urls: row.image_urls || '',
@@ -1294,17 +1299,19 @@ function onTargetChange(value: string) {
 }
 
 async function submitFlow() {
-    if (!flow.row?.id) return
-    const validationMessage = validateErpListingForm(flow.form, flow.row?.listing_workspace, flowContractAction.value)
+    if (!flow.row?.id || flow.saving) return
+    const validationMessage = validateErpListingForm(flow.form, flowFormContract.value, flowContractAction.value)
     if (validationMessage) return feedback.warning(validationMessage)
     const confirmed = await feedback.confirm({ message: flow.mode === 'all'
             ? `确认更新设备「${flow.row.model || flow.row.imei || flow.row.sn || '未命名设备'}」的业务流转：${refurbishMeta(flow.form.refurbish_status).label}、${targetMeta(flow.form.sale_target).label}。上架状态将由系统按仓库规则和当前资料自动判断，并保留设备流水。`
-            : `确认完成设备「${flow.row.model || flow.row.imei || flow.row.sn || '未命名设备'}」的“${flowFormDefinition.value.title}”步骤？保存后系统会自动判断并流转到下一岗位。`, title: flow.mode === 'all' ? '确认更新设备流转' : `确认${flowFormDefinition.value.title}`, type: 'warning', confirmText: '确认更新', cancelText: '返回检查' })
-    if (!confirmed) return
+            : Number(flowFormDefinition.value.publish_basic) === 1
+            ? `确认将「${flow.row.model || '本设备'}」上架商城？${salesPricePreview(flow.row.sales_pricing, flow.form.retail_price)}。上架成功后客户可立即购买；请确认分类、照片与价格无误，细节资料由商城运营继续核对。`
+            : `确认完成设备「${flow.row.model || flow.row.imei || flow.row.sn || '未命名设备'}」的“${flowFormDefinition.value.title}”步骤？保存后系统会自动判断并流转到下一岗位。`, title: flow.mode === 'all' ? '确认更新设备流转' : `确认${flowFormDefinition.value.title}`, type: 'warning', confirmText: Number(flowFormDefinition.value.publish_basic) === 1 ? '确认上架' : '确认更新', cancelText: '返回检查' })
+    if (!confirmed || flow.saving) return
     flow.saving = true
     let res: any
     try {
-        const editableForm = erpListingFormPayload(flow.form, flow.row?.listing_workspace, flowContractAction.value)
+        const editableForm = erpListingFormPayload(flow.form, flowFormContract.value, flowContractAction.value)
         const operationalForm = flow.mode === 'all'
             ? {
                 refurbish_status: ['none', 'pending'].includes(flow.row?.refurbish_status) ? flow.form.refurbish_status : '',

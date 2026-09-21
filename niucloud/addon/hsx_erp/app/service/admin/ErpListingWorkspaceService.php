@@ -44,6 +44,7 @@ class ErpListingWorkspaceService extends BaseAdminService
         };
         $degraded = $requested === 'device_asset' && !$deviceAssetReady;
 
+        $config['mall'] = ErpMallListingService::capability((int)$this->site_id);
         $contract = ErpListingFormContract::describe($config);
 
         return [
@@ -64,6 +65,7 @@ class ErpListingWorkspaceService extends BaseAdminService
             'field_rules' => (array)$contract['field_rules'],
             'steps' => (array)$contract['steps'],
             'forms' => (array)$contract['forms'],
+            'mall' => $config['mall'],
             'providers' => array_values(array_merge([[
                 'provider' => 'erp',
                 'name' => 'ERP 普通上传',

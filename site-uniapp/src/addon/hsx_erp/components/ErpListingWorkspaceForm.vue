@@ -5,27 +5,35 @@
                 <u-icon name="info-circle" color="#2563eb" size="17" />
             </view>
             <view class="listing-form__notice-copy">
-                <text class="listing-form__notice-title">{{ definition.title }}</text>
+                <text class="listing-form__notice-title">{{ basicPublish ? '上架前，只需完成 3 项' : definition.title }}</text>
                 <text class="listing-form__notice-desc">{{ definition.description }}</text>
             </view>
         </view>
+        <view v-if="!basicPublish && contract?.mall?.message" class="listing-form__handoff">{{ contract.mall.message }}</view>
+        <ErpMallCategorySelect v-if="visible('mall_category_id')" :model-value="Number(modelValue.mall_category_id || 0)"
+            :selected-label="modelValue.mall_category_name || ''"
+            @change="value => emit('update:modelValue', { ...modelValue, mall_category_id: value.value, mall_category_name: value.label })" />
 
         <view v-if="visible('retail_price')" class="listing-price-card">
-            <view class="listing-price-card__copy">
-                <text class="listing-price-card__title">{{ fieldLabel(Number(pricing?.enabled) === 1 ? '基准售价（最高等级会员价）' : '销售定价', 'retail_price') }}</text>
-                <text class="listing-price-card__desc">{{ salesPricePreview(pricing, modelValue.retail_price) }}</text>
+            <view class="listing-price-card__row">
+                <text class="listing-price-card__title">{{ fieldLabel(autoPricing ? '同行基准价' : '零售价', 'retail_price') }}</text>
+                <view class="listing-price-card__editor">
+                    <text class="listing-price-card__currency">¥</text>
+                    <u-input
+                        :model-value="modelValue.retail_price || ''"
+                        type="digit"
+                        placeholder="请输入金额"
+                        border="none"
+                        inputAlign="right"
+                        :custom-style="priceInputStyle"
+                        @update:model-value="value => updateField('retail_price', value)"
+                    />
+                </view>
             </view>
-            <view class="listing-price-card__editor">
-                <text class="listing-price-card__currency">¥</text>
-                <u-input
-                    :model-value="modelValue.retail_price"
-                    type="digit"
-                    placeholder="0.00"
-                    border="none"
-                    inputAlign="right"
-                    :custom-style="priceInputStyle"
-                    @update:model-value="value => updateField('retail_price', value)"
-                />
+            <text class="listing-price-card__desc">{{ autoPricing ? '填最高等级会员价，其他售价自动计算。' : '普通客户的实际售价，不影响采购成本。' }}</text>
+            <view v-if="pricePreview" class="listing-price-card__preview">
+                <text class="listing-price-card__preview-label">售价预览</text>
+                <text>{{ pricePreview }}</text>
             </view>
         </view>
 
@@ -60,6 +68,8 @@
             :max-count="9"
             @update:model-value="value => updateField('image_urls', value)"
         />
+        <view v-if="basicPublish" class="listing-form__more" @click="showExtras = !showExtras">{{ showExtras ? '收起补充资料' : '补充视频、说明（选填）' }}</view>
+        <view v-show="!basicPublish || showExtras">
         <view v-if="visible('video_url')" class="listing-video">
             <view class="listing-video__head">
                 <view>
@@ -77,7 +87,7 @@
         <view v-if="visible('quality_remark')" class="listing-textarea">
             <view class="listing-textarea__head">
                 <text>{{ fieldLabel('质检备注', 'quality_remark') }}</text>
-                <text class="listing-textarea__badge">内部使用</text>
+                <text class="listing-textarea__badge">随质检报告同步</text>
             </view>
             <u-textarea
                 :model-value="modelValue.quality_remark || ''"
@@ -108,14 +118,17 @@
                 @update:model-value="value => updateField('remark_internal', value)"
             />
         </view>
+        </view>
+        <view v-if="basicPublish" class="listing-form__handoff">上架后客户即可购买。内存、电池等自动匹配，未匹配项不猜测；商城运营在“资料待办”中继续核对。</view>
     </view>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { salesPricePreview } from '@/addon/hsx_erp/hooks/useSalesPricing'
 import ErpCatalogProductPopup from '@/addon/hsx_erp/components/ErpCatalogProductPopup.vue'
 import ErpVoucherUploader from '@/addon/hsx_erp/components/ErpVoucherUploader.vue'
+import ErpMallCategorySelect from '@/addon/hsx_erp/components/ErpMallCategorySelect.vue'
 import { erpListingFieldVisible, erpListingFormDefinition, type ErpListingAction } from '@/addon/hsx_erp/hooks/useErpListingForm'
 
 const props = defineProps<{
@@ -127,7 +140,12 @@ const props = defineProps<{
 const emit = defineEmits(['update:modelValue', 'catalog-change'])
 
 const definition = computed(() => erpListingFormDefinition(props.contract, props.action))
-const priceInputStyle = { fontSize: '40rpx', fontWeight: '700', color: '#2563eb' }
+const basicPublish = computed(() => Number(definition.value.publish_basic) === 1)
+const autoPricing = computed(() => Number(props.pricing?.enabled) === 1)
+const hasPrice = computed(() => Number.isFinite(Number(props.modelValue.retail_price)) && Number(props.modelValue.retail_price) > 0)
+const pricePreview = computed(() => autoPricing.value && hasPrice.value ? salesPricePreview(props.pricing, props.modelValue.retail_price) : '')
+const showExtras = ref(false)
+const priceInputStyle = { fontSize: '30rpx', fontWeight: '600', color: '#0f172a', padding: '0', minWidth: '0' }
 const catalogDisplayLabel = computed(() => [
     props.modelValue.category_path,
     props.modelValue.brand_name,
@@ -148,8 +166,10 @@ function onCatalogChange(payload: any) {
 </script>
 
 <style scoped lang="scss">
+.listing-form__more{padding:24rpx 4rpx;color:#2563eb;font-size:26rpx}
+.listing-form__handoff{padding:20rpx 4rpx;font-size:24rpx;line-height:1.6;color:#64748b}
 .listing-form {
-    padding: 0 24rpx 24rpx;
+    padding: 0 0 24rpx;
 }
 .listing-form__notice {
     display: flex;
@@ -205,51 +225,62 @@ function onCatalogChange(payload: any) {
     font-weight: 500;
 }
 .listing-price-card {
+    margin: 20rpx 0;
+    padding: 20rpx;
+    border: 1rpx solid #e2e8f0;
+    border-radius: 16rpx;
+    background: #fff;
+}
+.listing-price-card__row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 24rpx;
-    margin: 20rpx 0;
-    padding: 24rpx;
-    border: 2rpx solid #bfdbfe;
-    border-radius: 20rpx;
-    background: linear-gradient(135deg, #eff6ff 0%, #f8fbff 100%);
-    box-shadow: 0 8rpx 24rpx rgba(37, 99, 235, .06);
-}
-.listing-price-card__copy {
-    min-width: 0;
-    flex: 1;
-}
-.listing-price-card__title,
-.listing-price-card__desc {
-    display: block;
+    gap: 20rpx;
 }
 .listing-price-card__title {
-    color: #0f172a;
-    font-size: 30rpx;
-    font-weight: 700;
+    flex-shrink: 0;
+    color: #334155;
+    font-size: 28rpx;
+    font-weight: 600;
 }
 .listing-price-card__desc {
-    margin-top: 8rpx;
+    display: block;
+    margin-top: 12rpx;
     color: #64748b;
-    font-size: 22rpx;
-    line-height: 1.45;
+    font-size: 23rpx;
+    line-height: 1.5;
 }
 .listing-price-card__editor {
     display: flex;
     align-items: center;
-    width: 250rpx;
-    min-height: 82rpx;
-    padding: 0 20rpx;
-    border: 2rpx solid #93c5fd;
-    border-radius: 16rpx;
+    flex: 1;
+    min-width: 0;
+    min-height: 72rpx;
+    padding: 0 16rpx;
+    border: 1rpx solid #dcdfe6;
+    border-radius: 10rpx;
     background: #fff;
     box-sizing: border-box;
 }
 .listing-price-card__currency {
-    color: #2563eb;
-    font-size: 30rpx;
-    font-weight: 700;
+    margin-right: 10rpx;
+    color: #64748b;
+    font-size: 28rpx;
+}
+.listing-price-card__preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8rpx 16rpx;
+    margin-top: 16rpx;
+    padding-top: 16rpx;
+    border-top: 1rpx solid #f1f5f9;
+    color: #334155;
+    font-size: 24rpx;
+    line-height: 1.6;
+    word-break: break-word;
+}
+.listing-price-card__preview-label {
+    flex-shrink: 0;
+    color: #64748b;
 }
 .listing-video,
 .listing-textarea {

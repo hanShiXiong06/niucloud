@@ -780,6 +780,10 @@ const handleLedgerDrilldown = (item: {
   viewMode?: string;
 }) => {
   if (!item.filterKey) return;
+  if (item.filterKey === "pending_return") {
+    router.push({ path: "/recycle_return_order/list", query: { status: "unfinished" } });
+    return;
+  }
 
   router.push({
     path: "/recycle_order/list",

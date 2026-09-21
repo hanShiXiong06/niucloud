@@ -84,7 +84,7 @@
                         <template #default="{ row }">
                             <el-button type="primary" link @click="showDetail(row)">详情</el-button>
                             <el-button v-if="row.status === 0 && policy.can_phone_shop_operate === 1" type="success" link @click="openBuild(row)" v-permission="'phone_shop_intake_build'">{{ row.material_task?.status === 'none' ? '完善并上架' : '对应分类并上架' }}</el-button>
-                            <el-button v-if="row.status === 1 && row.goods_id && row.material_task?.status !== 'none'" type="primary" link @click="materialDrawer?.open(row.intake_id)" v-permission="'phone_shop_intake_material_edit'">{{ row.material_task?.status === 'completed' ? '查看完善记录' : '完善资料' }}</el-button>
+                            <el-button v-if="row.status === 1 && row.goods_id && row.material_task?.status !== 'none'" type="primary" link @click="buildDialog?.open(row, 'material')" v-permission="'phone_shop_intake_material_edit'">{{ row.material_task?.status === 'completed' ? '查看完善记录' : '完善资料' }}</el-button>
                             <el-button v-if="row.status === 0" type="info" link @click="markStatus(row, 2)">忽略</el-button>
                             <el-button v-if="row.status === 1 && row.goods_id" type="primary" link @click="goGoods(row)">查看商品</el-button>
                             <el-button v-if="row.status === 2" type="primary" link @click="markStatus(row, 0)">恢复</el-button>
@@ -126,9 +126,8 @@
                 <el-collapse-item title="原始质检备查" name="raw-qc"><pre class="text-xs bg-gray-50 p-2 rounded whitespace-pre-wrap">{{ qcText(detail.data) }}</pre></el-collapse-item>
             </el-collapse>
         </el-dialog>
-        <IntakeMaterialDrawer ref="materialDrawer" @saved="loadList(table.page)" />
 
-        <IntakeBuildDialog ref="buildDialog" @published="loadList(table.page)" />
+        <IntakeBuildDialog ref="buildDialog" @published="loadList(table.page)" @saved="loadList(table.page)" />
     </div>
 </template>
 
@@ -137,7 +136,6 @@ import { reactive, computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { img } from '@/utils/common'
 import { getDeviceIntakePages, getDeviceIntakeInfo, setDeviceIntakeStatus, getDeviceIntakeMaterialPolicy } from '@/addon/phone_shop/api/device_intake'
-import IntakeMaterialDrawer from './components/IntakeMaterialDrawer.vue'
 import IntakeBuildDialog from './components/IntakeBuildDialog.vue'
 const buildDialog = ref<InstanceType<typeof IntakeBuildDialog>>()
 const openBuild = (row: any) => buildDialog.value?.open(row)
@@ -149,7 +147,6 @@ const policyText = computed(() => policy.enabled === 0 ? '商城渠道已关闭�
     ? '先上架，运营后补：分类已对应的设备拍照定价交接后即可购买。资料待办独立处理，不会改变商品价格、库存和交易状态。'
     : policy.can_phone_shop_operate === 1 ? '当前由商城运营核对分类、规格并上架，不会覆盖 ERP 主资料。' : '当前由 ERP 完善并直接上架。已有资料待办仍可继续处理。')
 getDeviceIntakeMaterialPolicy().then((res: any) => Object.assign(policy, res?.data || {})).catch(() => {})
-const materialDrawer = ref<InstanceType<typeof IntakeMaterialDrawer>>()
 
 const table = reactive({
     page: 1,

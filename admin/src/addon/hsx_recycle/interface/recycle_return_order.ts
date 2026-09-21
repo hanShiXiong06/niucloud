@@ -157,4 +157,5 @@ export interface IStatusCount {
   status: number | string;
   name: string;
   count: number;
+  device_count?: number;
 }

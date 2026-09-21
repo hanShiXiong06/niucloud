@@ -76,7 +76,8 @@ class RecycleReturnOrderService extends BaseCoreService
     {
         $info = $this->model->where([
             ['id', '=', $id],
-            ['site_id', '=', $siteId]
+            ['site_id', '=', $siteId],
+            ['delete_at', '=', 0]
         ])
         ->with([
             'returnDevices.device',
@@ -112,7 +113,7 @@ class RecycleReturnOrderService extends BaseCoreService
         }
         
         // 验证设备ID
-        $device_ids = $data['device_ids'] ?? [];
+        $device_ids = array_values(array_unique(array_filter(array_map('intval', (array)($data['device_ids'] ?? [])), static fn($id) => $id > 0)));
         if (empty($device_ids)) {
             return ['code' => -1, 'msg' => '退回设备不能为空', 'data' => []];
         }
@@ -162,6 +163,13 @@ class RecycleReturnOrderService extends BaseCoreService
         // 开始事务
         Db::startTrans();
         try {
+            // 设备归属锁内再核对，避免重复点击生成多个退回单、旧单覆盖新单。
+            $devices = (new RecycleDevice())->where('site_id', $site_id)->where('order_id', $order_id)
+                ->whereIn('id', $device_ids)->lock(true)->select();
+            if (count($devices) !== count($device_ids)) throw new CommonException('部分设备不存在或不属于当前站点订单，本次未创建');
+            foreach ($devices as $device) {
+                if ((int)$device['return_order_id'] > 0) throw new CommonException('设备已关联退回单，请在原退回单继续处理，勿重复创建');
+            }
             // 创建退回订单
             $order_no = 'RT' . date('YmdHis') . rand(1000, 9999);
             $return_order = [
@@ -178,6 +186,8 @@ class RecycleReturnOrderService extends BaseCoreService
                 'member_id' => $order['member_id'],
                 'member_name' => $order['customer_name'] ?? '',
                 'member_mobile' => $order['customer_phone'] ?? '',
+                'create_at' => time(),
+                'update_at' => time(),
             ];
             
             $return_order_id = $this->model->insertGetId($return_order);
@@ -210,7 +220,7 @@ class RecycleReturnOrderService extends BaseCoreService
                     'status' => RecycleReturnOrderDict::ORDER_STATUS_PENDING
                 ]
             ];
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Db::rollback();
             return ['code' => -1, 'msg' => '创建退货订单失败：' . $e->getMessage(), 'data' => []];
         }
@@ -259,38 +269,52 @@ class RecycleReturnOrderService extends BaseCoreService
      */
     public function updateStatus(int $id, int $status, array $data = []): array
     {
-        $comment = $data['comment'] ?? '';
-        $site_id = $data['site_id'];
-
-
-        // 获取订单信息
-        $order = $this->model->where([
-            ['id', '=', $id],
-            ['site_id', '=', $site_id]
-        ])->find();
-        
-        if (empty($order)) {
-            throw new CommonException('退回订单不存在');
-        }
-        
-        // 验证状态转换是否有效
-        $valid_transitions = RecycleReturnOrderDict::getValidStatusTransitions();
-        if (!in_array($status, $valid_transitions[$order['status']] ?? [])) {
-            throw new CommonException('无效的状态转换');
-        }
-
-       
-        
-        // 开始事务
+        $site_id = (int)($data['site_id'] ?? 0);
+        if ($id <= 0 || $site_id <= 0) throw new CommonException('退回单或站点信息不完整');
         Db::startTrans();
         try {
+            // 单笔、批量、定时任务共用同一把行锁，不重复完成、不重复打印。
+            $order = $this->model->where('id', $id)->where('site_id', $site_id)->where('delete_at', 0)->lock(true)->find();
+            if (empty($order)) throw new CommonException('退回订单不存在或已删除');
+            if ((int)$order['status'] === $status && in_array($status, [1, 2, 3], true)) {
+                Db::commit();
+                return ['code' => 0, 'msg' => '该退回单已处理，未重复执行', 'data' => ['id' => $id, 'status' => $status, 'duplicate' => true]];
+            }
+            $transitions = RecycleReturnOrderDict::getValidStatusTransitions();
+            if (!in_array($status, $transitions[(int)$order['status']] ?? [], true)) {
+                throw new CommonException('当前为“' . (RecycleReturnOrderDict::getOrderStatus((int)$order['status'])['name'] ?? '未知状态') . '”，不能执行此操作，请刷新后核对');
+            }
+            $shippedAt = (int)$order->getData('update_at');
+            if (!empty($data['auto_complete']) && ($shippedAt <= 0 || $shippedAt > time() - 72 * 60 * 60)) {
+                throw new CommonException('尚未达到发货后72小时，未自动完成');
+            }
+            $deviceIds = array_values(array_unique(array_map('intval', (new RecycleReturnDevice())->where('return_order_id', $id)->column('device_id'))));
+            $devices = (new RecycleDevice())->where('site_id', $site_id)->where('order_id', (int)$order['order_id'])
+                ->where('return_order_id', $id)->whereIn('id', $deviceIds ?: [0])->lock(true)->select()->toArray();
+            if ($deviceIds === [] || count($devices) !== count($deviceIds)) {
+                throw new CommonException('退回设备缺失或已关联其他退回单，请核对设备明细；本单未修改');
+            }
+            $company = trim((string)($data['express_company'] ?? $order['express_company']));
+            $expressNo = trim((string)($data['express_no'] ?? $order['express_no']));
+            if ($status === RecycleReturnOrderDict::ORDER_STATUS_RETURNING) {
+                $offline = in_array($company, ['自取', '物流车', '物流车/自取', 'express_car', 'self_pickup', 'logistics_car'], true);
+                if ($company === '' || (!$offline && $expressNo === '')) throw new CommonException('请填写快递公司和单号，或明确选择物流车/客户自取');
+                if (mb_strlen($company) > 100 || mb_strlen($expressNo) > 100) throw new CommonException('快递公司或单号不能超过100个字符');
+            }
+            $comment = trim((string)($data['comment'] ?? ''));
+            if (mb_strlen($comment) > 1000) throw new CommonException('处理备注不能超过1000个字符');
+            if ($status === RecycleReturnOrderDict::ORDER_STATUS_CANCELLED && $comment === '') throw new CommonException('请填写取消原因，并确认设备仍在商家手中');
+            $action = [1 => '确认退回发货', 2 => !empty($data['auto_complete']) ? '发出满72小时自动完成（非物流签收确认）' : '确认客户已签收', 3 => '取消退回，设备恢复回收处理'][$status];
+            $operatorName = trim((string)($data['operator_name'] ?? '')) ?: '系统';
+            $record = date('Y-m-d H:i:s') . ' ' . $operatorName . '：' . $action . ($comment !== '' ? '；' . $comment : '');
             $update_data = [
                 'status' => $status,
-                'comment' => $comment ? trim((string)$order['comment']) . (empty($order['comment']) ? '' : "\n") . $comment : $order['comment'],
+                'comment' => trim((string)$order['comment']) . (empty($order['comment']) ? '' : "\n") . $record,
                 'operator_uid' => $data['operator_id'] ?? ($data['operator_uid'] ?? 0),
-                'operator_name' => $data['operator_name'] ?? '',
-                'express_no' => array_key_exists('express_no', $data) ? ($data['express_no'] ?? '') : $order['express_no'],
-                'express_company' => array_key_exists('express_company', $data) ? ($data['express_company'] ?? '') : $order['express_company'],
+                'operator_name' => $operatorName,
+                'update_at' => time(),
+                'express_no' => $expressNo,
+                'express_company' => $company,
                 'member_mobile' => array_key_exists('member_mobile', $data) ? ($data['member_mobile'] ?? '') : $order['member_mobile'],
                 'member_name' => array_key_exists('member_name', $data) ? ($data['member_name'] ?? '') : $order['member_name'],
                 'return_address' => array_key_exists('return_address', $data) ? ($data['return_address'] ?? '') : $order['return_address'],
@@ -301,31 +325,26 @@ class RecycleReturnOrderService extends BaseCoreService
                 $update_data['over_at'] = date('Y-m-d H:i:s');
             }
 
-            $this->model->where('id', $id)->update($update_data);
-            (new RecycleReturnDevice())->where('return_order_id', $id)->update([
+            $this->model->where('site_id', $site_id)->where('id', $id)->update($update_data);
+            $relationUpdate = [
                 'status' => $this->getReturnDeviceStatusByOrderStatus($status),
-                'remark' => $update_data['remark'] ?? '',
                 'update_at' => time()
-            ]);
+            ];
+            if (array_key_exists('remark', $data)) $relationUpdate['remark'] = (string)$data['remark'];
+            (new RecycleReturnDevice())->where('return_order_id', $id)->update($relationUpdate);
             $this->syncLinkedDevicesForReturnOrder((int)$order['order_id'], $id, $status, $data);
             $this->syncParentOrderStatus((int)$order['order_id']);
             Db::commit();
 
-            $this->triggerReturnPrint($status, $id);
-            
-            return [
-                'code' => 0, 
-                'msg' => '更新成功', 
-                'data' => [
-                    'id' => $id,
-                    'status' => $status,
-                    'status_name' => RecycleReturnOrderDict::getOrderStatus($status)['name'] ?? ''
-                ]
-            ];
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Db::rollback();
-            return ['code' => -1, 'msg' => $e->getMessage(), 'data' => []];
+            // 不返回“外层成功、内层失败”的响应，避免界面误报已经完成。
+            throw new CommonException($e->getMessage());
         }
+        $this->triggerReturnPrint($status, $id);
+        return ['code' => 0, 'msg' => '更新成功', 'data' => [
+            'id' => $id, 'status' => $status, 'status_name' => RecycleReturnOrderDict::getOrderStatus($status)['name'] ?? '',
+        ]];
     }
 
     /**
@@ -336,18 +355,12 @@ class RecycleReturnOrderService extends BaseCoreService
      */
     public function confirm(int $id, int $siteId , array $data = []): array
     {
-        return $this->updateStatus($id, RecycleReturnOrderDict::ORDER_STATUS_RETURNING, [
+        return $this->updateStatus($id, RecycleReturnOrderDict::ORDER_STATUS_RETURNING, array_merge(
+            array_intersect_key($data, array_flip(['express_no', 'express_company', 'remark', 'comment', 'member_mobile', 'member_name', 'return_address'])), [
             'site_id' => $siteId,
             'operator_uid' => request()->uid(),
             'operator_name' => request()->username(),
-            'express_no' => $data['express_no'] ?? '',
-            'express_company' => $data['express_company'] ?? '',
-            'remark' => $data['remark'] ?? '',
-            'member_mobile' => $data['member_mobile'] ?? '',
-            'member_name' => $data['member_name'] ?? '',
-            'return_address' => $data['return_address'] ?? '',
-
-        ]);
+        ]));
     }
 
     /**
@@ -418,7 +431,14 @@ class RecycleReturnOrderService extends BaseCoreService
             $result[] = [
                 'status' => $status,
                 'name' => $info['name'],
-                'count' => $count
+                'count' => $count,
+                // 台数复用看板口径；单数仍是退回单数，两者不混用。
+                'device_count' => in_array($status, [0, 1], true)
+                    ? (int)(new \addon\hsx_recycle\app\service\core\stat\CoreRecycleWorkloadService())
+                        ->deviceQuery($siteId, ['abnormal'])->whereIn('return_order_id', function ($query) use ($siteId, $status) {
+                            $query->name('recycle_return_order')->where('site_id', $siteId)->where('status', $status)->where('delete_at', 0)->field('id');
+                        })->count()
+                    : 0,
             ];
         }
         
@@ -497,12 +517,11 @@ class RecycleReturnOrderService extends BaseCoreService
             'dispose_type' => RecycleOrderDict::DISPOSE_TYPE_RETURN,
             'dispose_status' => RecycleOrderDict::DISPOSE_STATUS_RETURNED,
             'return_order_id' => $returnOrderId,
-            'return_remark' => $remark,
+            'return_remark' => $remark !== '' ? $remark : (string)($device['return_remark'] ?? ''),
         ];
 
-        if ($returnOrderStatus === RecycleReturnOrderDict::ORDER_STATUS_COMPLETED || empty($device['return_time'])) {
-            $updateData['return_time'] = time();
-        }
+        // 申请退回/发货不等于已退到客户手中，完成时才记录完成时间。
+        $updateData['return_time'] = $returnOrderStatus === RecycleReturnOrderDict::ORDER_STATUS_COMPLETED ? time() : 0;
 
         return $updateData;
     }
@@ -560,7 +579,7 @@ class RecycleReturnOrderService extends BaseCoreService
         }
 
         $order = (new RecycleOrder())->where('id', $orderId)->find();
-        if (empty($order)) {
+        if (empty($order) || in_array((int)$order['status'], [RecycleOrderDict::ORDER_STATUS_CANCELLED, RecycleOrderDict::ORDER_STATUS_DELETE], true)) {
             return;
         }
 

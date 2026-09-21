@@ -203,13 +203,14 @@
     <template #footer>
       <div class="cdd-footer">
         <div class="cdd-footer__handoff">
-          <span class="cdd-footer__info">已填质检项：{{ checkedCount }}</span>
-          <NextAssigneeSelect v-model="nextAssigneeUid" stage-key="price" label="下一步 · 定价负责人" compact />
+          <span class="cdd-footer__info">已填 <strong>{{ checkedCount }}</strong> 项</span>
+          <NextAssigneeSelect v-model="nextAssigneeUid" class="cdd-footer__assignee"
+            stage-key="price" label="下一步定价" compact :disabled="savingDraft || submitting" />
         </div>
         <div class="cdd-footer__btns">
           <el-button :disabled="savingDraft || submitting" class="cdd-footer__cancel" size="large" @click="handleCancel">取消</el-button>
           <el-button v-permission="'recycle_device_batch_return'" class="cdd-return-btn" type="danger" plain size="large" :disabled="savingDraft || submitting" @click="handleReturnDevice">退回设备</el-button>
-          <el-button :disabled="savingDraft || submitting" type="warning" size="large" :loading="savingDraft" @click="handleSaveDraft">{{ savingDraft ? '暂存中...' : '暂存草稿' }}</el-button>
+          <el-button :disabled="savingDraft || submitting" size="large" :loading="savingDraft" @click="handleSaveDraft">{{ savingDraft ? '暂存中...' : '暂存草稿' }}</el-button>
           <el-button :disabled="savingDraft || submitting" type="primary" size="large" :loading="submitting" @click="handleConfirm"><el-icon v-if="!submitting"><Check /></el-icon>{{ submitting ? '提交中...' : '完成质检' }}</el-button>
         </div>
       </div>
@@ -1512,24 +1513,6 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateDeviceMode) }
 .cdd-camera-tip { font-size: 11px; color: #9ca3af; }
 
 /* ============================================================
-   底部操作栏
-   ============================================================ */
-.cdd-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-
-  &__info {
-    font-size: 12px;
-    color: #6b7280;
-    background: #f3f4f6;
-    padding: 4px 10px;
-    border-radius: 4px;
-  }
-  &__btns { display: flex; gap: 10px; }
-}
-
-/* ============================================================
    工作台布局覆盖
    ============================================================ */
 .cdd-workbench-dialog {
@@ -2000,10 +1983,6 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateDeviceMode) }
   font-weight: 700;
 }
 
-.cdd-footer {
-  min-height: 38px;
-}
-
 /* ============================================================
    响应式
    ============================================================ */
@@ -2123,20 +2102,6 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateDeviceMode) }
     .cdd-photo-block:first-child { border-right: none; border-bottom: 1px solid #e5e7eb; }
   }
 
-  // footer 竖排
-  .cdd-footer {
-    flex-direction: column;
-    gap: 10px;
-    align-items: stretch;
-    &__btns {
-      flex-direction: column;
-
-      .el-button {
-        width: 100%;
-        margin-left: 0;
-      }
-    }
-  }
 }
 
 /* ============================================================
@@ -2824,36 +2789,6 @@ $cdd-warning: #d97706;
   flex-wrap: wrap;
 }
 
-.cdd-footer {
-  min-height: 38px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-
-  &__info {
-    flex: 0 0 auto;
-    padding: 5px 10px;
-    border-radius: 6px;
-    background: #f8fafc;
-    color: #64748b;
-    font-size: 12px;
-    font-weight: 600;
-  }
-
-  &__btns {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    flex-wrap: wrap;
-    gap: 10px;
-
-    .el-button {
-      margin-left: 0;
-    }
-  }
-}
-
 .cdd-return-btn {
   border-color: #fecaca;
   background: #fff7f7;
@@ -2989,24 +2924,6 @@ $cdd-warning: #d97706;
     margin-top: 10px;
   }
 
-  .cdd-footer {
-    align-items: stretch;
-    flex-direction: column;
-
-    &__info {
-      text-align: center;
-    }
-
-    &__btns {
-      flex-direction: column;
-      width: 100%;
-
-      .el-button {
-        width: 100%;
-        margin-left: 0;
-      }
-    }
-  }
 }
 
 /* ============================================================
@@ -3301,18 +3218,6 @@ $cdd-warning: #d97706;
   border-left: 4px solid #8b5cf6;
 }
 
-.cdd-footer__info {
-  background: #eff6ff;
-  color: #1d4ed8;
-}
-.cdd-footer__handoff { display: flex; align-items: center; gap: 14px; min-width: 0; }
-
-.cdd-footer__btns {
-  .el-button {
-    min-width: 104px;
-  }
-}
-
 @media (max-width: 1180px) {
   .cdd-main {
     grid-template-columns: 210px minmax(0, 1fr) 326px;
@@ -3395,6 +3300,112 @@ $cdd-warning: #d97706;
   .cdd-price-input,
   .cdd-price-input :deep(.el-input-number) {
     width: 100%;
+  }
+}
+/* 底部仅保留这一套布局，避免旧窄屏规则将操作按钮强制竖排。 */
+.cdd-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-width: 0;
+  gap: 12px 20px;
+  text-align: left;
+}
+
+.cdd-footer__handoff {
+  display: flex;
+  flex: 1 1 360px;
+  align-items: center;
+  min-width: 0;
+  gap: 16px;
+}
+
+.cdd-footer__info {
+  flex-shrink: 0;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  line-height: 24px;
+  white-space: nowrap;
+
+  strong {
+    color: var(--el-text-color-primary);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.cdd-footer__handoff :deep(.next-assignee.is-compact) {
+  display: flex;
+  flex: 1;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  gap: 6px 8px;
+
+  .next-assignee__copy {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 0;
+  }
+  .next-assignee__label {
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .next-assignee__select {
+    width: 168px;
+    max-width: 100%;
+    min-width: 0;
+  }
+  .next-assignee__empty {
+    flex-basis: 100%;
+    line-height: 18px;
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
+}
+
+.cdd-footer__btns {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  margin-left: auto;
+  gap: 8px;
+
+  .el-button {
+    min-width: 88px;
+    margin: 0;
+    padding: 0 16px;
+  }
+  .el-icon {
+    margin-right: 4px;
+  }
+}
+
+@media (max-width: 640px) {
+  .cdd-footer__handoff {
+    flex-basis: 100%;
+    gap: 8px;
+  }
+  .cdd-footer__handoff :deep(.next-assignee.is-compact .next-assignee__select) {
+    width: 128px;
+  }
+  .cdd-footer__btns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    margin-left: 0;
+
+    .el-button {
+      width: 100%;
+      min-width: 0;
+      padding: 0 10px;
+    }
   }
 }
 </style>

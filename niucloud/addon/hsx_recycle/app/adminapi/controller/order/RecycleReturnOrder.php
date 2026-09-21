@@ -49,15 +49,12 @@ class RecycleReturnOrder extends BaseAdminController
             ['express_no', ''],
             ['status', ''],
             ['order_id', 0],
-            ['create_at', [date('Y-m-d'), date('Y-m-d')] ],
+            ['create_at', []],
             ['start_time', ''],
             ['end_time', ''],
         ]);
         
-        // 
-      if($params['status']==0){
-          unset($params['status']);
-      }
+        // 0 就是待寄回，不能当成“未选择”；空字符串才表示全部。
         
         // 验证参数
         $this->validate->scene('list')->check($params);
@@ -155,10 +152,11 @@ class RecycleReturnOrder extends BaseAdminController
         $params = $this->request->params([
             ['express_no', ''],
             ['express_company', ''],
-            ['member_mobile', ''],
-            ['member_name', ''],
-            ['return_address', ''],
-            ['remark',''],
+            ['member_mobile', null],
+            ['member_name', null],
+            ['return_address', null],
+            ['remark', null],
+            ['comment', ''],
             
            
         ]);
@@ -166,7 +164,7 @@ class RecycleReturnOrder extends BaseAdminController
         // 验证参数
         $this->validate->scene('id')->check(['id' => $id]);
         
-        $result = $this->service->confirm($id, $params);
+        $result = $this->service->confirm($id, array_filter($params, static fn($value) => $value !== null));
         return success($result);
     }
 

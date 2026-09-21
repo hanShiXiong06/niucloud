@@ -169,6 +169,13 @@ class RecycleReturnOrder extends BaseModel
     // 搜索器 本表 status 精确匹配
     public function searchStatusAttr($query, $value, $data)
     {
+        if ($value === 'unfinished') {
+            // 与看板“退回未完成”使用同一设备集合，排除孤儿、过期关联等无效待办。
+            $ids = (new \addon\hsx_recycle\app\service\core\stat\CoreRecycleWorkloadService())
+                ->deviceQuery((int)($data['site_id'] ?? 0), ['abnormal'])->column('return_order_id');
+            $query->whereIn('id', array_values(array_unique($ids ?: [0])))->whereIn('status', [0, 1]);
+            return;
+        }
         if ($value !== '' && $value !== null) {
             $query->where('status', $value);
         }

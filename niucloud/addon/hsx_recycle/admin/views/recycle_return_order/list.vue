@@ -2,7 +2,7 @@
     <PremiumTheme class="return-order-list">
         <el-card class="box-card" shadow="never">
             <template #header>
-                <PageHeader title="退货订单" description="拒绝回收的设备会生成退货订单，在这里确认、完成退货并追踪物流。" />
+                <PageHeader title="设备退回" description="待寄回 → 待客户签收 → 已完成。支持批量登记发货和确认客户签收。" />
             </template>
 
             <!-- 搜索区域 -->
@@ -20,7 +20,7 @@
                     </el-button>
                 </template>
                 <el-form :model="searchParams" ref="searchForm" label-width="100px" inline>
-                    <el-form-item label="订单号" prop="order_id">
+                    <el-form-item label="订单号" prop="order_no">
                         <el-input v-model="searchParams.order_no" placeholder="请输入订单号" clearable />
                     </el-form-item>
                     <el-form-item label="快递单号" prop="express_no">
@@ -29,35 +29,49 @@
 
                     <el-form-item label="创建时间" prop="create_at">
                         <el-date-picker v-model="searchParams.create_at" type="daterange" range-separator="至"
-                            start-placeholder="开始日期" end-placeholder="结束日期" value-format="yyyy-MM-dd" />
+                            start-placeholder="开始日期" end-placeholder="结束日期" value-format="YYYY-MM-DD" :disabled="activeOrderStatus === 'unfinished'" />
                     </el-form-item>
 
                 </el-form>
             </HsxSearchPanel>
 
+            <div class="return-backlog">
+                <el-button link type="primary" @click="showUnfinished">退回未完成 <strong>{{ statusCountReady ? pendingDeviceCount + returningDeviceCount : '—' }}</strong> 台</el-button>
+                <span v-if="statusCountReady">待寄回 {{ pendingDeviceCount }} 台 · 待客户签收 {{ returningDeviceCount }} 台</span>
+                <el-button v-else-if="statusCountError" link type="danger" @click="getStatusCount">统计读取失败，点击重试</el-button>
+                <span v-else>正在读取统计…</span>
+                <el-tooltip content="统计当前有效退回设备，按设备去重，不限日期。发货不会扣减；确认客户签收或发出满72小时自动完成后扣减。无效关联、已取消和已完成记录不计入。"><span class="muted">当前全部 · 统计说明 ⓘ</span></el-tooltip>
+            </div>
             <!-- 状态统计卡片 -->
             <div class="status-cards">
 
-                <el-tabs v-model="activeOrderStatus" @tab-click="filterByStatus">
+                <el-tabs v-model="activeOrderStatus" @tab-change="filterByStatus">
 
-                    <el-tab-pane v-for='(item, key) in statusCards' :label="item.label"
+                    <el-tab-pane v-for="item in statusCards" :key="item.status" :label="item.status === 'unfinished' || !statusCountReady ? item.label : `${item.label} ${item.count}单`"
                         :name="item.status"></el-tab-pane>
                 </el-tabs>
             </div>
 
+            <!-- 与表格相邻，长列表滚动时仍能找到批量操作 -->
+            <div class="batch-actions" v-if="selectedRows.length > 0">
+                <el-button type="primary" size="small" :disabled="!selectedPendingCount" @click="openBatch('ship')">批量退回发货（{{ selectedPendingCount }} 单）</el-button>
+                <el-button type="success" size="small" :disabled="!selectedReturningCount" @click="openBatch('receive')">批量确认客户签收（{{ selectedReturningCount }} 单）</el-button>
+                <el-button link @click="clearSelection">取消选择</el-button>
+                <span class="selected-info">已选择 {{ selectedRows.length }} 项</span>
+            </div>
             <!-- 表格区域 -->
-            <el-table v-loading="tableLoading" :data="formattedTableData" style="width: 100%; margin-top: 20px" border
+            <el-table ref="tableRef" v-loading="tableLoading" :data="formattedTableData" style="width: 100%" border row-key="id"
                 @selection-change="handleSelectionChange">
                 <template #empty>
                     <EmptyState
                         v-if="!tableLoading"
                         icon="search"
-                        title="暂无退货订单"
-                        description="拒绝回收的设备会在这里生成退货订单，可调整筛选条件再试试。"
+                        :title="listError ? '退回单读取失败' : activeOrderStatus === 'unfinished' ? '当前没有待完成的退回设备' : '暂无退回单'"
+                        :description="listError || '可切换页签查看已完成的记录，或调整筛选条件。'"
                     />
                 </template>
                 <el-table-column type="selection" width="55" />
-                <el-table-column prop="order_id" label="退回订单编号" min-width="160" sortable show-overflow-tooltip />
+                <el-table-column prop="order_no" label="退回单号" min-width="190" show-overflow-tooltip />
                 <el-table-column label="快递单号" min-width="170" show-overflow-tooltip>
                     <template #default="scope">
                         <span v-if="scope.row.express_no" class="clickable-text" @click="openReturnExpressTrack(scope.row)">
@@ -101,22 +115,22 @@
                     </template>
                 </el-table-column>
                 <el-table-column prop="create_at" label="创建时间" min-width="180" sortable />
-                <el-table-column label="操作" width="220" fixed="right" align="center">
+                <el-table-column label="操作" width="260" fixed="right" align="center">
                     <template #default="scope">
                         <div class="flex items-center justify-center gap-1">
                             <!-- 主行动：当前状态最该做的下一步 -->
                             <el-button v-if="canPerformAction('CONFIRM', scope.row.status)" type="success" size="small"
                                 :loading="operationLoading && activeOperationId === scope.row.id"
-                                @click="handleConfirm(scope.row.id)">确认退货</el-button>
+                                @click="handleConfirm(scope.row.id)">退回发货</el-button>
                             <el-button v-else-if="canPerformAction('COMPLETE', scope.row.status)" type="success" size="small"
                                 :loading="operationLoading && activeOperationId === scope.row.id"
-                                @click="handleComplete(scope.row.id)">完成退货</el-button>
+                                @click="handleComplete(scope.row.id)">客户已签收</el-button>
 
                             <el-button type="primary" link size="small" @click="handleDetail(scope.row)">详情</el-button>
 
                             <!-- 更多：次要操作 -->
                             <el-dropdown
-                                v-if="scope.row.express_no || canPerformAction('DELETE', scope.row.status) || getVisibleReturnPrintActions(scope.row).length"
+                                v-if="scope.row.express_no || canPerformAction('CANCEL', scope.row.status) || canPerformAction('DELETE', scope.row.status) || getVisibleReturnPrintActions(scope.row).length"
                                 trigger="click"
                             >
                                 <el-button size="small" :icon="MoreFilled" plain>更多</el-button>
@@ -128,6 +142,7 @@
                                             :key="action.scene_key"
                                             @click="printReturnByScene(scope.row, action)"
                                         >{{ action.button_text || action.scene_name }}</el-dropdown-item>
+                                        <el-dropdown-item v-if="canPerformAction('CANCEL', scope.row.status)" @click="handleCancel(scope.row.id)">取消退回（设备仍在手）</el-dropdown-item>
                                         <el-dropdown-item v-if="canPerformAction('DELETE', scope.row.status)" divided @click="handleDelete(scope.row.id)">
                                             <span class="text-red-500">删除</span>
                                         </el-dropdown-item>
@@ -139,13 +154,6 @@
                 </el-table-column>
             </el-table>
 
-            <!-- 批量操作 -->
-            <div class="batch-actions" v-if="selectedRows.length > 0">
-                <el-button type="primary" size="small" @click="batchExport">批量导出</el-button>
-                <el-button v-if="canBatchDelete" type="danger" size="small" @click="batchDelete">批量删除</el-button>
-                <span class="selected-info">已选择 {{ selectedRows.length }} 项</span>
-            </div>
-
             <!-- 分页 -->
             <div class="pagination-container">
                 <el-pagination v-model:current-page="pagination.page" v-model:page-size="pagination.limit"
@@ -153,13 +161,15 @@
                     :total="pagination.total" @size-change="handleSizeChange" @current-change="handleCurrentChange" />
             </div>
         </el-card>
+        <ReturnBatchDialog ref="batchDialogRef" @changed="refreshReturns" />
 
         <!-- 取消订单对话框 -->
         <HsxDialog :confirm-loading="operationLoading" v-model="cancelDialogVisible" title="取消退回订单" width="500px" :close-on-click-modal="false" :destroy-on-close="false">
+            <el-alert title="仅用于设备仍在商家手中，或已成功拦截取回。取消后设备恢复回收流程，不退款、不打款；已经交还客户的请确认签收。" type="warning" :closable="false" class="return-dialog-notice" />
             <el-form :model="cancelForm" label-width="100px" ref="cancelFormRef">
                 <el-form-item label="取消原因" prop="comment"
                     :rules="[{ required: true, message: '请输入取消原因', trigger: 'blur' }]">
-                    <el-input v-model="cancelForm.comment" type="textarea" :rows="3" placeholder="请输入取消原因" />
+                    <el-input v-model="cancelForm.comment" type="textarea" :rows="3" maxlength="500" placeholder="请说明取消原因及设备当前去向" />
                 </el-form-item>
             </el-form>
             <template #footer>
@@ -171,16 +181,18 @@
         </HsxDialog>
 
         <!-- 完成订单对话框 -->
-        <HsxDialog :confirm-loading="operationLoading" v-model="completeDialogVisible" title="完成退回订单" width="500px" :close-on-click-modal="false" :destroy-on-close="false">
+        <HsxDialog :confirm-loading="operationLoading" v-model="completeDialogVisible" title="确认客户已签收" width="500px" :close-on-click-modal="false" :destroy-on-close="false">
+            <el-alert title="确认后本单退回完成，相关设备从未完成台数中扣除。不发生付款或退款。尚未签收的可继续等待，发出满72小时会自动完成。" type="info" :closable="false" class="return-dialog-notice" />
             <el-form :model="completeForm" label-width="100px" ref="completeFormRef">
                 <el-form-item label="备注">
-                    <el-input v-model="completeForm.comment" type="textarea" :rows="3" placeholder="请输入备注信息" />
+                    <el-input v-model="completeForm.comment" type="textarea" :rows="3" maxlength="500" placeholder="可填写签收核实方式等备注" />
                 </el-form-item>
             </el-form>
+            <el-checkbox v-model="completeForm.receiptConfirmed">我已核实客户收到本单全部退回设备</el-checkbox>
             <template #footer>
                 <span class="dialog-footer">
                     <el-button :disabled="operationLoading" @click="completeDialogVisible = false">取消</el-button>
-                    <el-button :disabled="operationLoading" type="primary" :loading="operationLoading" @click="confirmComplete">确认</el-button>
+                    <el-button :disabled="operationLoading || !completeForm.receiptConfirmed" type="primary" :loading="operationLoading" @click="confirmComplete">确认客户已签收</el-button>
                 </span>
             </template>
         </HsxDialog>
@@ -316,7 +328,7 @@
         <HsxDialog v-model="detailDialogVisible" title="退回订单详情" width="800px" :close-on-click-modal="false"
             destroy-on-close>
             <el-descriptions :column="2" border>
-                <el-descriptions-item label="订单编号" >{{ currentDetail.order_id }}</el-descriptions-item>
+                <el-descriptions-item label="退回单号" >{{ currentDetail.order_no }}</el-descriptions-item>
                 <el-descriptions-item label="创建时间">{{ currentDetail.create_at }}</el-descriptions-item>
 
                 <el-descriptions-item label="订单状态">
@@ -325,7 +337,8 @@
                 <el-descriptions-item label="操作人" >{{ currentDetail.operator_name }}</el-descriptions-item>
                 <el-descriptions-item label="快递公司">{{ currentDetail.express_company }}</el-descriptions-item>
                 <el-descriptions-item label="快递单号">{{ currentDetail.express_no || '无' }}</el-descriptions-item>
-                <el-descriptions-item label="备注">{{ currentDetail.comment}}</el-descriptions-item>
+                <el-descriptions-item label="完成时间">{{ currentDetail.over_at || '尚未完成' }}</el-descriptions-item>
+                <el-descriptions-item label="处理记录" :span="2"><div class="return-audit">{{ currentDetail.comment || '暂无记录' }}</div></el-descriptions-item>
                 <el-descriptions-item label="会员信息" :span="2">
                     <div v-if="currentDetail.member">
                         <p>姓名：{{ currentDetail.member.nickname || currentDetail.member.username }}</p>
@@ -351,7 +364,7 @@
                     <el-table-column prop="remark" label="退回原因" min-width="150" />
                     <el-table-column prop="price" label="设备最终定价" width="200">
                         <template #default="scope">
-                            <span class="amount">{{ formatPrice(scope.row.final_price) }}</span>
+                            <span class="amount">{{ formatPrice(scope.row.device?.final_price) }}</span>
                         </template>
                     </el-table-column>
                 </el-table>
@@ -371,7 +384,7 @@
             <template #footer>
                 <span class="dialog-footer">
                     <el-button @click="detailDialogVisible = false">关闭</el-button>
-                    <el-button type="primary" @click="printOrderDetail">打印订单</el-button>
+                    <el-button v-for="action in getVisibleReturnPrintActions(currentDetail)" :key="action.scene_key" type="primary" @click="printReturnByScene(currentDetail, action)">{{ action.button_text || action.scene_name }}</el-button>
                 </span>
             </template>
         </HsxDialog>
@@ -431,6 +444,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { Download, Search, Refresh, View, ArrowDown, MoreFilled } from '@element-plus/icons-vue'
 import EmptyState from '@/addon/hsx_recycle/components/empty-state/index.vue'
 import PageHeader from '@/addon/hsx_recycle/components/PageHeader.vue'
+import ReturnBatchDialog from './components/ReturnBatchDialog.vue'
+import { returnDevices, returnResponseError, returnStatusLabel, type ReturnAction } from './return-workflow'
 
 import {
     getReturnOrderList,
@@ -461,12 +476,12 @@ const route = useRoute()
 
 // 搜索表单数据
 const searchParams = reactive<IReturnOrderListParams>({
-    order_id: '',
+    order_no: '',
     express_no: '',
     status: route.query.status !== undefined && route.query.status !== ''
-        ? Number(route.query.status)
+        ? route.query.status === 'unfinished' ? 'unfinished' : Number(route.query.status)
         : undefined,
-    create_at: route.query.start_time && route.query.end_time
+    create_at: route.query.status !== 'unfinished' && route.query.start_time && route.query.end_time
         ? [String(route.query.start_time), String(route.query.end_time)]
         : []
 })
@@ -482,21 +497,24 @@ const statusOptions = ref([
 // 表格数据
 const tableData = ref<IReturnOrder[]>([])
 const tableLoading = ref(false)
+const listError = ref('')
 const pagination = reactive({
     page: 1,
     limit: 10,
     total: 0
 })
 
-// 导出相关
-const exportLoading = ref(false)
-
 // 批量操作相关
 const selectedRows = ref<IReturnOrder[]>([])
-const canBatchDelete = computed(() => {
-    return selectedRows.value.every(row =>
-        STATUS_ACTION_PERMISSIONS['DELETE'].includes(row.status))
-})
+const tableRef = ref<any>()
+const batchDialogRef = ref<InstanceType<typeof ReturnBatchDialog>>()
+const selectedPendingCount = computed(() => selectedRows.value.filter(row => Number(row.status) === 0).length)
+const selectedReturningCount = computed(() => selectedRows.value.filter(row => Number(row.status) === 1).length)
+const clearSelection = () => { selectedRows.value = []; tableRef.value?.clearSelection() }
+const openBatch = (action: ReturnAction) => batchDialogRef.value?.open(selectedRows.value, action)
+const refreshReturns = () => { void getList(); void getStatusCount() }
+const pendingDeviceCount = ref(0), returningDeviceCount = ref(0)
+const statusCountReady = ref(false), statusCountError = ref('')
 
 // 操作加载状态
 const operationLoading = ref(false)
@@ -523,6 +541,7 @@ const statusCounts = ref<{
 // 计算状态卡片数据
 const statusCards = computed(() => [
     { status: 'all', label: '全部', count: statusCounts.value.all },
+    { status: 'unfinished', label: '未完成', count: 0 },
     { status: String(RETURN_ORDER_STATUS.PENDING), label: RETURN_ORDER_STATUS_TEXT[RETURN_ORDER_STATUS.PENDING], count: statusCounts.value[RETURN_ORDER_STATUS.PENDING] },
     { status: String(RETURN_ORDER_STATUS.RETURNING), label: RETURN_ORDER_STATUS_TEXT[RETURN_ORDER_STATUS.RETURNING], count: statusCounts.value[RETURN_ORDER_STATUS.RETURNING] },
     { status: String(RETURN_ORDER_STATUS.COMPLETED), label: RETURN_ORDER_STATUS_TEXT[RETURN_ORDER_STATUS.COMPLETED], count: statusCounts.value[RETURN_ORDER_STATUS.COMPLETED] },
@@ -533,13 +552,16 @@ const statusCards = computed(() => [
 const formattedTableData = computed(() => {
     return tableData.value.map(item => ({
         ...item,
-        deviceCount: item.returnDevices?.length || 0,
+        status: Number(item.status),
+        status_name: returnStatusLabel(item.status),
+        returnDevices: returnDevices(item),
+        deviceCount: returnDevices(item).length,
         memberInfo: item.member
             ? {
                 name: item.member.nickname || item.member.username,
                 mobile: item.member.mobile || ''
             }
-            : null,
+            : { name: item.member_name || '未填写姓名', mobile: item.member_mobile || '' },
         statusType: getStatusType(item.status)
     }))
 })
@@ -569,7 +591,8 @@ const cancelFormRef = ref<FormInstance>()
 const completeDialogVisible = ref(false)
 const completeForm = reactive({
     id: 0,
-    comment: ''
+    comment: '',
+    receiptConfirmed: false
 })
 const completeFormRef = ref<FormInstance>()
 
@@ -581,8 +604,6 @@ const confirmForm = reactive({
     express_no: '',
     express_company: '',
     remark: '',
-    is_append: false,
-    return_order_id: 0,
     shipment_mode: 'system',
     selected_quote_key: ''
 })
@@ -689,15 +710,10 @@ const focusInput = () => {
 
 // 统一API响应处理
 const handleApiResponse = (res: any, successMsg?: string, errorMsg = '操作失败') => {
-    // 统一检查响应结构
-    if (res && ((res.code === 1) || (res.data && res.data.code === 1))) {
-        successMsg && hsxFeedback.success(successMsg)
-        return true
-    } else {
-        const msg = res?.data?.msg || res?.msg || errorMsg
-        hsxFeedback.error(msg)
-        return false
-    }
+    const error = returnResponseError(res, errorMsg)
+    if (error) { hsxFeedback.error(error); return false }
+    successMsg && hsxFeedback.success(successMsg)
+    return true
 }
 
 // 通用业务操作处理函数
@@ -717,9 +733,9 @@ const performOperation = async (
             getStatusCount()
             return true
         }
-    } catch (error) {
+    } catch (error: any) {
         console.error(`${errorMsg}:`, error)
-        hsxFeedback.error(errorMsg)
+        hsxFeedback.error(error?.msg || error?.message || errorMsg)
     } finally {
         operationLoading.value = false
         activeOperationId.value = null
@@ -989,7 +1005,11 @@ const copyToClipboard = (text: string) => {
 }
 
 // 获取订单列表
+let listRequestId = 0
 const getList = async () => {
+    const requestId = ++listRequestId
+    clearSelection()
+    listError.value = ''
     tableLoading.value = true
     try {
         const params: IReturnOrderListParams = {
@@ -999,8 +1019,11 @@ const getList = async () => {
         }
 
         const res = await getReturnOrderList(params)
+        if (requestId !== listRequestId) return
 
-        if (handleApiResponse(res, '', '获取列表失败')) {
+        const error = returnResponseError(res, '读取退回单失败，请重试')
+        if (error) throw new Error(error)
+        {
             // 确保数据结构一致性
             const responseData = res.data
 
@@ -1020,35 +1043,49 @@ const getList = async () => {
                 tableData.value = Array.isArray(responseData) ? responseData : []
             }
         }
-    } catch (error) {
+    } catch (error: any) {
+        if (requestId !== listRequestId) return
         console.error('获取列表失败:', error)
-        hsxFeedback.error('获取列表失败')
+        tableData.value = []
+        pagination.total = 0
+        listError.value = error?.msg || error?.message || '获取列表失败'
+        hsxFeedback.error(listError.value)
     } finally {
-        tableLoading.value = false
+        if (requestId === listRequestId) tableLoading.value = false
     }
 }
 
 // 获取状态统计
 const getStatusCount = async () => {
+    statusCountError.value = ''
     try {
         const res = await getReturnOrderStatusCount()
-        if (handleApiResponse(res, '', '获取状态统计失败')) {
+        const error = returnResponseError(res, '获取状态统计失败')
+        if (error) throw new Error(error)
+        {
             // 初始化计数
             statusCounts.value = { all: 0, 0: 0, 1: 0, 2: 0, 3: 0 }
 
             // 正确处理返回的数据
-            const countData = res.data?.data || []
+            const countData = Array.isArray(res.data) ? res.data : res.data?.data || []
+            pendingDeviceCount.value = 0
+            returningDeviceCount.value = 0
             countData.forEach((item: IStatusCount) => {
                 if (item.status === 'all') {
-                    statusCounts.value.all = item.count
-                } else if (typeof item.status === 'string' && item.status in statusCounts.value) {
-                    statusCounts.value[item.status] = item.count
+                    statusCounts.value.all = Number(item.count || 0)
+                } else if (String(item.status) in statusCounts.value) {
+                    statusCounts.value[String(item.status)] = Number(item.count || 0)
                 }
+                if (Number(item.status) === 0) pendingDeviceCount.value = Number(item.device_count || 0)
+                if (Number(item.status) === 1) returningDeviceCount.value = Number(item.device_count || 0)
             })
+            statusCountReady.value = true
         }
-    } catch (error) {
+    } catch (error: any) {
+        statusCountReady.value = false
+        statusCountError.value = error?.msg || error?.message || '获取状态统计失败'
         console.error('获取状态统计失败:', error)
-        hsxFeedback.error('获取状态统计失败')
+        hsxFeedback.error(statusCountError.value)
     }
 }
 
@@ -1060,25 +1097,28 @@ const handleSearch = () => {
 
 // 重置搜索
 const resetSearch = () => {
-    searchParams.order_id = ''
+    searchParams.order_no = ''
     searchParams.express_no = ''
     searchParams.status = undefined
     searchParams.create_at = []
+    activeOrderStatus.value = 'all'
     pagination.page = 1
     getList()
 }
 
 // 状态筛选
-const activeOrderStatus = ref('all')
+const activeOrderStatus = ref(searchParams.status === undefined ? 'all' : String(searchParams.status))
 const filterByStatus = (status: any) => {
-
-    if (status === 'all') {
-        searchParams.status = undefined // 全部状态即为不筛选
-    } else {
-        searchParams.status = activeOrderStatus.value
-    }
+    searchParams.status = status === 'all' ? undefined : String(status)
+    if (status === 'unfinished') searchParams.create_at = []
     pagination.page = 1
     getList()
+}
+const showUnfinished = () => {
+    searchParams.order_no = ''
+    searchParams.express_no = ''
+    if (activeOrderStatus.value === 'unfinished') filterByStatus('unfinished')
+    else activeOrderStatus.value = 'unfinished'
 }
 
 // 分页相关
@@ -1114,7 +1154,10 @@ const getExpressStatusType = (status: string) => {
 const handleDetail = async (row: IReturnOrder) => {
     try {
         tableLoading.value = true
-        currentDetail.value = row
+        const res = await getReturnOrderDetail(row.id)
+        if (!handleApiResponse(res, '', '读取退回详情失败')) return
+        const detail = res.data?.data || res.data
+        currentDetail.value = { ...detail, returnDevices: returnDevices(detail), status_name: returnStatusLabel(detail.status) }
         detailDialogVisible.value = true
 
     } catch (error) {
@@ -1214,8 +1257,6 @@ const handleConfirm = async (id: number) => {
             confirmForm.express_no = ''
             confirmForm.express_company = ''
             confirmForm.remark = ''
-            confirmForm.is_append = false
-            confirmForm.return_order_id = 0
             confirmForm.shipment_mode = 'system'
             confirmForm.selected_quote_key = ''
             returnQuoteList.value = []
@@ -1252,24 +1293,6 @@ const handleConfirm = async (id: number) => {
                 fillReturnAddress('receiver', parseAddressText(receiverRawAddress.value))
             }
 
-            // 检查是否已有该订单的退货单
-            if (deviceInfo.order_id) {
-                const existingReturnOrder = await checkExistingReturnOrder(deviceInfo.order_id)
-                if (existingReturnOrder) {
-                    confirmForm.is_append = true
-                    confirmForm.return_order_id = existingReturnOrder.id
-                    confirmForm.express_no = existingReturnOrder.express_no || ''
-                    confirmForm.express_company = existingReturnOrder.express_company || ''
-                    confirmForm.shipment_mode = existingReturnOrder.express_no ? 'manual' : 'system'
-
-                    // 如果已有退货单，显示追加提示
-                    hsxFeedback.light({
-                        type: 'info',
-                        message: `检测到订单 ${deviceInfo.order_no || deviceInfo.order_id} 已有退货单，设备将追加到现有退货单中`
-                    })
-                }
-            }
-
             confirmDialogVisible.value = true
         }
     } catch (error) {
@@ -1280,22 +1303,9 @@ const handleConfirm = async (id: number) => {
     }
 }
 
-// 检查是否已有退货单
-const checkExistingReturnOrder = async (orderId: number) => {
-    try {
-        // 实际实现中，需要调用后端API检查是否存在退货单
-        const res = await getExistingReturnOrder(orderId)
-        if (res.data && res.data.code === 1 && res.data.data) {
-            return res.data.data
-        }
-    } catch (error) {
-        console.error('检查现有退货单失败:', error)
-    }
-    return null
-}
-
 // 提交确认退货
 const submitConfirm = async () => {
+    if (operationLoading.value) return
     operationLoading.value = true
     activeOperationId.value = confirmForm.id
 
@@ -1311,6 +1321,8 @@ const submitConfirm = async () => {
                 return
             }
             try {
+                // 发货登记失败时保留已取得的运单，重试不能重复购买快递。
+                if (!expressOrderNo) {
                 const expressRes = await createExpressOrderDirect({
                     ...returnShipmentForm,
                     remark: confirmForm.remark,
@@ -1324,6 +1336,7 @@ const submitConfirm = async () => {
                     hsxFeedback.success('系统快递下单成功')
                 } else {
                     throw new Error('系统快递下单成功但未返回运单号')
+                }
                 }
             } catch (error) {
                 console.error('系统快递下单失败:', error)
@@ -1340,19 +1353,6 @@ const submitConfirm = async () => {
             expressOrderNo = ''
         }
 
-        if (confirmForm.is_append) {
-            res = await appendToReturnOrder({
-                device_id: confirmForm.id,
-                return_order_id: confirmForm.return_order_id,
-                remark: confirmForm.remark
-            })
-
-            if (handleApiResponse(res, '设备已成功添加到退货单', '添加设备到退货单失败')) {
-                confirmDialogVisible.value = false
-                getList()
-                getStatusCount()
-            }
-        } else {
             res = await confirmReturnOrder(confirmForm.id, {
                 express_no: expressOrderNo,
                 express_company: expressCompany,
@@ -1363,68 +1363,45 @@ const submitConfirm = async () => {
                 return_address: `${returnShipmentForm.receiveProvince}${returnShipmentForm.receiveCity}${returnShipmentForm.receiveDistrict}${returnShipmentForm.receiveAddress}` || return_user_address.value.address,
             })
 
-            if (handleApiResponse(res, '确认退货成功', '确认退货失败')) {
+            if (handleApiResponse(res, '已登记发货，等待客户签收', '退回发货登记失败')) {
                 confirmDialogVisible.value = false
                 getList()
                 getStatusCount()
             }
-        }
-    } catch (error) {
+    } catch (error: any) {
         console.error('确认退货失败:', error)
-        hsxFeedback.error('确认退货失败')
+        hsxFeedback.error(error?.msg || error?.message || '退回发货登记失败')
     } finally {
         operationLoading.value = false
         activeOperationId.value = null
     }
 }
 
-// 获取现有退货单 - 假设这是一个API调用
-const getExistingReturnOrder = async (orderId: number) => {
-    // 实际实现中应替换为真实的API调用
-    // 示例: return request.get(`/hsx_recycle/recycle_order/${orderId}/return_order`)
-    return Promise.resolve({
-        data: {
-            code: 1,
-            data: null // 示例中返回null，表示没有找到现有退货单
-        }
-    })
-}
-
-// 追加设备到现有退货单 - 假设这是一个API调用
-const appendToReturnOrder = async (data: any) => {
-    // 实际实现中应替换为真实的API调用
-    // 示例: return request.post('/hsx_recycle/recycle_return_order/append_device', data)
-    return Promise.resolve({
-        data: {
-            code: 1,
-            msg: '设备已成功添加到退货单'
-        }
-    })
-}
-
 // 完成退货
 const handleComplete = (id: number) => {
     completeForm.id = id
     completeForm.comment = ''
+    completeForm.receiptConfirmed = false
     completeDialogVisible.value = true
 }
 
 // 确认完成
 const confirmComplete = async () => {
+    if (operationLoading.value || !completeForm.receiptConfirmed) return
     operationLoading.value = true
     try {
         const res = await updateReturnOrderStatus(completeForm.id, {
             status: RETURN_ORDER_STATUS.COMPLETED,
             comment: completeForm.comment
         })
-        if (handleApiResponse(res, '完成退货成功', '完成退货失败')) {
+        if (handleApiResponse(res, '已确认客户签收，退回完成', '签收确认失败')) {
             completeDialogVisible.value = false
             getList()
             getStatusCount()
         }
-    } catch (error) {
+    } catch (error: any) {
         console.error('完成退货失败:', error)
-        hsxFeedback.error('完成退货失败')
+        hsxFeedback.error(error?.msg || error?.message || '签收确认失败')
     } finally {
         operationLoading.value = false
     }
@@ -1457,6 +1434,7 @@ const handleCancel = (id: number) => {
 
 // 确认取消
 const confirmCancel = async () => {
+    if (operationLoading.value) return
     // 验证表单
     if (!cancelFormRef.value) return
 
@@ -1474,9 +1452,9 @@ const confirmCancel = async () => {
                 getList()
                 getStatusCount()
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('取消失败:', error)
-            hsxFeedback.error('取消失败')
+            hsxFeedback.error(error?.msg || error?.message || '取消失败')
         } finally {
             operationLoading.value = false
         }
@@ -1486,41 +1464,6 @@ const confirmCancel = async () => {
 // 多选处理
 const handleSelectionChange = (rows: IReturnOrder[]) => {
     selectedRows.value = rows
-}
-
-// 批量导出
-const batchExport = () => {
-    hsxFeedback.success(`已导出选中的 ${selectedRows.value.length} 条记录`)
-    // 实现批量导出逻辑
-}
-
-// 批量删除
-const batchDelete = () => {
-    const ids = selectedRows.value.map(row => row.id)
-    ElMessageBox.confirm(`确定要删除选中的 ${ids.length} 条记录吗？`, '批量删除', {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
-    }).then(() => {
-        hsxFeedback.success('批量删除成功')
-        getList()
-        getStatusCount()
-    }).catch(() => { })
-}
-
-// 导出数据
-const exportReturnOrders = () => {
-    exportLoading.value = true
-    setTimeout(() => {
-        hsxFeedback.success('数据导出成功')
-        exportLoading.value = false
-    }, 1500)
-}
-
-// 打印订单
-const printOrderDetail = () => {
-    hsxFeedback.success('订单打印功能已触发')
-    // 实现打印功能
 }
 
 const escapePrintHtml = (value: any) => String(value ?? '').replace(/[&<>"']/g, (char) => {
@@ -1608,6 +1551,10 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.return-backlog{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:8px 0 4px;font-size:13px;color:var(--el-text-color-regular)}
+.return-backlog strong{font-size:20px;margin:0 5px}.return-backlog .muted{font-size:12px;color:var(--el-text-color-secondary)}
+.return-dialog-notice{margin-bottom:16px}.return-audit{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7}
+.batch-actions{flex-wrap:wrap;gap:8px;position:sticky;top:0;z-index:4;background:var(--el-bg-color);padding:10px 0}
 
 .card-header {
     display: flex;

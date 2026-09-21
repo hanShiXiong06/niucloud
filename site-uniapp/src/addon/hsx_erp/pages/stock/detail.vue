@@ -223,9 +223,9 @@
             </view>
         </scroll-view>
 
-        <u-popup :show="productVisible" mode="bottom" round="20" :safe-area-inset-bottom="true" @close="productVisible = false">
+        <u-popup :show="productVisible" mode="bottom" round="20" :safe-area-inset-bottom="true" :close-on-click-overlay="!productBusy" @close="!productBusy && (productVisible = false)">
             <view class="action-popup">
-                <view class="action-popup__head"><view><text class="action-popup__title">{{ productPopupTitle }}</text><text class="action-popup__sub">{{ productPopupSubtitle }}</text></view><u-icon name="close" color="#94a3b8" size="20" @click="productVisible=false" /></view>
+                <view class="action-popup__head"><view><text class="action-popup__title">{{ productPopupTitle }}</text><text class="action-popup__sub">{{ asset?.model || '当前设备' }} · {{ asset?.imei || asset?.sn || '' }}</text></view><u-icon name="close" color="#94a3b8" size="20" @click="!productBusy && (productVisible=false)" /></view>
                 <scroll-view scroll-y class="action-popup__body">
                     <ErpListingWorkspaceForm
                         v-model="productForm"
@@ -313,9 +313,10 @@ const productForm = ref<any>({ catalog_product_id: 0, catalog_product_name: '', 
 const productAction = computed<ErpListingAction>(() => productMode.value)
 const productFormDefinition = computed(() => erpListingFormDefinition(asset.value?.listing_workspace, productAction.value))
 const productPopupTitle = computed(() => productFormDefinition.value.title)
-const productPopupSubtitle = computed(() => productFormDefinition.value.description)
 const productSubmitText = computed(() => productFormDefinition.value.submit_label)
 const showProductHandoff = computed(() => productAction.value === 'media_price'
+    && Number(productFormDefinition.value.publish_basic) !== 1
+    && Number(asset.value?.listing_workspace?.mall?.connected) === 1
     && asset.value?.status === 'in_stock'
     && asset.value?.sale_target === 'mall')
 const productBusy = computed(() => productSaving.value || productHandoffSaving.value)
@@ -450,6 +451,7 @@ function openProduct(mode: ErpListingAction = 'one_stop') {
     productForm.value = {
         catalog_product_id: Number(asset.value.catalog_product_id || 0), catalog_product_name: asset.value.model || '', category_name: asset.value.category_name || '', category_path: asset.value.category_path || '',
         brand_name: asset.value.brand_name || '', series_name: asset.value.series_name || '',
+        mall_category_id: Number(asset.value.mall_category_id || 0), mall_category_name: asset.value.mall_category_name || '',
         spec: asset.value.spec || '', retail_price: salesPriceInput(asset.value) || '', image_urls: asset.value.image_urls || '', video_url: asset.value.video_url || '',
         quality_remark: asset.value.quality_remark || '', remark_public: asset.value.remark_public || '', remark_internal: asset.value.remark_internal || '',
     }
@@ -472,6 +474,14 @@ async function submitProduct(handoffToShop = false) {
     const validationMessage = validateErpListingForm(productForm.value, asset.value?.listing_workspace, productAction.value)
     if (validationMessage) return uni.showToast({ title: validationMessage, icon: 'none' })
     if (productBusy.value) return
+    if (Number(productFormDefinition.value.publish_basic) === 1) {
+        const confirmed = await new Promise<boolean>(resolve => uni.showModal({
+            title: '确认上架商城',
+            content: `${salesPricePreview(asset.value.sales_pricing, productForm.value.retail_price)}。上架后客户可立即购买，请确认分类、价格、实拍图无误。细节由商城运营继续核对。`,
+            confirmText: '确认上架', cancelText: '返回检查', success: result => resolve(!!result.confirm), fail: () => resolve(false),
+        }))
+        if (!confirmed || productBusy.value) return
+    }
     if (handoffToShop) productHandoffSaving.value = true
     else productSaving.value = true
     let res: any
@@ -483,7 +493,7 @@ async function submitProduct(handoffToShop = false) {
         // 避免交接接口异常时丢失已经录入的图片和销售价格。
         res = await updateMobileStockFlow(asset.value.id, {
             ...payload,
-            defer_publish: productAction.value === 'media_price' ? 1 : 0,
+            defer_publish: Number(payload.publish_basic) === 1 ? 0 : (payload.defer_publish || (productAction.value === 'media_price' ? 1 : 0)),
             remark: actionRemark,
         })
     } catch (e: any) {

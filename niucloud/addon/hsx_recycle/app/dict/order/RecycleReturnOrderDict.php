@@ -59,18 +59,18 @@ class RecycleReturnOrderDict
         return [
             self::ORDER_STATUS_PENDING => [
                 'status' => self::ORDER_STATUS_PENDING,
-                'name' => '待处理',
-                'desc' => '用户或商户发起退回申请，等待平台处理'
+                'name' => '待寄回',
+                'desc' => '待商家将设备寄回或交还客户'
             ],
             self::ORDER_STATUS_RETURNING => [
                 'status' => self::ORDER_STATUS_RETURNING,
-                'name' => '退货中',
-                'desc' => '平台已确认退回申请，等待用户寄回设备'
+                'name' => '待签收',
+                'desc' => '商家已发出，等待客户签收；发出满72小时自动完成'
             ],
             self::ORDER_STATUS_COMPLETED => [
                 'status' => self::ORDER_STATUS_COMPLETED,
                 'name' => '已完成',
-                'desc' => '平台已收到退回设备，退回流程完成'
+                'desc' => '已确认客户签收或发出满72小时自动完成，具体以处理记录为准'
             ],
             self::ORDER_STATUS_CANCELLED => [
                 'status' => self::ORDER_STATUS_CANCELLED,

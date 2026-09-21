@@ -6,7 +6,7 @@ const compiler = require(path.join(root, 'admin/node_modules/@vue/compiler-sfc')
 const ts = require(path.join(root, 'admin/node_modules/typescript'))
 const files = [
     'niucloud/addon/phone_shop/admin/views/intake/list.vue',
-    'niucloud/addon/phone_shop/admin/views/intake/components/IntakeMaterialDrawer.vue',
+    'niucloud/addon/phone_shop/admin/views/intake/components/IntakeMaterialFields.vue',
     'niucloud/addon/phone_shop/admin/views/intake/components/IntakeBuildDialog.vue',
     'niucloud/addon/hsx_erp/admin/views/erp/config/rules.vue',
     'niucloud/addon/hsx_erp/admin/views/erp/stock/list.vue',
@@ -33,7 +33,8 @@ for (const file of files) {
 }
 const mirrors = [
     ['phone_shop', 'api/device_intake.ts'], ['phone_shop', 'views/intake/list.vue'],
-    ['phone_shop', 'views/intake/components/IntakeMaterialDrawer.vue'],
+    ['phone_shop', 'views/intake/components/IntakeMaterialFields.vue'],
+    ['phone_shop', 'views/intake/components/material-options.ts'],
     ['phone_shop', 'views/intake/components/IntakeBuildDialog.vue'],
     ['hsx_erp', 'views/erp/config/rules.vue'], ['hsx_erp', 'views/erp/stock/list.vue']
 ]

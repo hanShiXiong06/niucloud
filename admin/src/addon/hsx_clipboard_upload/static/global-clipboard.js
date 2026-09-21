@@ -1,5 +1,10 @@
 import { getToken, isUrl } from '@/utils/common'
 import storage from '@/utils/storage'
+import { ElNotification } from 'element-plus'
+import {
+    consumeClipboardPassiveTip,
+    hasReachedClipboardPassiveTipLimit
+} from './clipboard-tip-limit'
 /**
  * 全局剪贴板上传功能
  * 可以在任何页面引入使用
@@ -74,7 +79,6 @@ import storage from '@/utils/storage'
             this.createUI();
             this.setupEventListeners();
             this.startClipboardMonitor();
-            this.showWelcomeMessage();
 
         }
 
@@ -212,70 +216,25 @@ import storage from '@/utils/storage'
         }
 
         // 创建提示框
-        createTip(content, type = 'info', position = 'bottom-left') {
-
-            
-            const tip = document.createElement('div');
-            tip.className = `clipboard-tip clipboard-tip-${type}`;
-            
-            const positions = {
-                'top-right': 'top: 80px; right: 20px;',
-                'top-left': 'top: 80px; left: 20px;',
-                'bottom-right': 'bottom: 20px; right: 20px;',
-                'bottom-left': 'bottom: 24px; left: 24px;',
-                'center': 'top: 50%; left: 50%; transform: translate(-50%, -50%);'
+        createTip(content, type = 'info', position = 'top-right') {
+            const notificationType = ['success', 'warning', 'error', 'info'].includes(type) ? type : 'info';
+            const titles = {
+                success: '操作成功',
+                warning: '温馨提示',
+                error: '操作失败',
+                info: '剪贴板上传'
             };
-            
-            tip.style.cssText = `
-                position: fixed;
-                ${positions[position]}
-                background: ${type === 'error' ? '#ef4444' : type === 'success' ? '#10b98199' : '#3b82f6a6'};
-                color: white;
-                padding: 12px 16px;
-                border-radius: 12px;
-                box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
-                pointer-events: auto;
-                max-width: min(360px, calc(100vw - 48px));
-                z-index: ${this.config.toastZIndex};
-                animation: slideInUp 0.3s ease;
-                font-size: 14px;
-                font-weight: 500;
-                display: flex;
-                align-items: center;
-                gap: 10px;
-            `;
-            
-            tip.innerHTML = content;
-            
-            // 添加关闭按钮
-            const closeBtn = document.createElement('button');
-            closeBtn.innerHTML = '✕';
-            closeBtn.style.cssText = `
-                background: none;
-                border: none;
-                color: white;
-                cursor: pointer;
-                font-size: 16px;
-                padding: 0;
-                width: 20px;
-                height: 20px;
-                opacity: 0.8;
-                margin-left: auto;
-            `;
-            closeBtn.onclick = () => {
-                // 如果是剪贴板检测提示，点击关闭时清空剪贴板
-                if (content.includes('检测到剪贴板图片')) {
-                    this.clearClipboard();
-                    this.log('用户主动关闭剪贴板提示，已清空剪贴板', 'info');
-                }
-                tip.remove();
-            };
-            tip.appendChild(closeBtn);
-            
-            this.elements.container.appendChild(tip);
+            const message = String(content).replace(/^(📋|❌|⚠️|🎯|🗑️)\s*/u, '');
 
-            
-            return tip;
+            return ElNotification({
+                title: titles[notificationType],
+                message,
+                type: notificationType,
+                position: position.includes('left') ? 'bottom-left' : 'top-right',
+                duration: notificationType === 'error' ? 5000 : 3500,
+                showClose: true,
+                customClass: 'hsx-clipboard-notification'
+            });
         }
 
         // 创建进度框
@@ -495,6 +454,10 @@ import storage from '@/utils/storage'
         // 剪贴板监控
         startClipboardMonitor() {
 
+            if (hasReachedClipboardPassiveTipLimit()) {
+                return;
+            }
+
             this.timers.clipboard = setInterval(() => {
                 // 只在文档有焦点时检查剪贴板
                 if (document.hasFocus()) {
@@ -503,8 +466,20 @@ import storage from '@/utils/storage'
             }, 3000);
         }
 
+        stopClipboardMonitor() {
+            if (this.timers.clipboard) {
+                clearInterval(this.timers.clipboard);
+                this.timers.clipboard = null;
+            }
+        }
+
         // 检查剪贴板
         async checkClipboardForImages() {
+
+            if (hasReachedClipboardPassiveTipLimit()) {
+                this.stopClipboardMonitor();
+                return;
+            }
 
             
             try {
@@ -532,7 +507,7 @@ import storage from '@/utils/storage'
 
                     if (hasImage || hasVideo || hasFile) {
                         // 检测到媒体文件，显示提示
-                        if (!this.isUploading && !document.querySelector('.clipboard-tip')) {
+                        if (!this.isUploading && !document.querySelector('.hsx-clipboard-notification')) {
 
                             this.showUploadTip(hasImage, hasVideo);
                         } else {
@@ -548,6 +523,12 @@ import storage from '@/utils/storage'
 
         // 显示上传提示
         showUploadTip(hasImage = true, hasVideo = false) {
+            const tipState = consumeClipboardPassiveTip();
+            if (!tipState.allowed) {
+                this.stopClipboardMonitor();
+                return;
+            }
+
             let message = '📋 检测到剪贴板';
             if (hasImage && hasVideo) {
                 message += '图片/视频';
@@ -559,14 +540,11 @@ import storage from '@/utils/storage'
                 message += '文件';
             }
             message += '，按 Ctrl+V 上传';
-            
-            const tip = this.createTip(message, 'info');
-            
-            setTimeout(() => {
-                if (tip.parentElement) {
-                    tip.remove();
-                }
-            }, 3000);
+
+            this.createTip(message, 'info', 'top-right');
+            if (hasReachedClipboardPassiveTipLimit()) {
+                this.stopClipboardMonitor();
+            }
         }
 
         // 从键盘快捷键处理粘贴

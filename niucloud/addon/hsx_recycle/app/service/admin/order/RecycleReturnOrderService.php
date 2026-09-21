@@ -132,7 +132,7 @@ class RecycleReturnOrderService extends BaseAdminService
         
         // 使用withSearch方法进行条件查询
         $search_model = $search_model
-            ->withSearch(['order_no', 'express_no', 'status', 'order_id'], $where)
+            ->withSearch(['order_no', 'express_no', 'status', 'order_id', 'create_at'], $where)
             ->where([['delete_at', '=', 0],['site_id', '=', $this->site_id]]) 
           
             ->with([

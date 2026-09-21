@@ -830,6 +830,50 @@ class RecyclePrinterTemplateService extends BaseAdminService
     }
 
     /**
+     * 按设备本身的质检模板取文案，不使用打印场景/标签模板来解释选项值。
+     * 容量/颜色未命中模板时，只用同设备 result_items 中明确保存的 value/label 兜底，
+     * 不按型号猜测，不拿旧快照覆盖现存字典，也不把整段质检文字当作颜色/容量。
+     */
+    private function buildDeviceOptionLabelMap(array $device): array
+    {
+        $info = $this->normalizeDeviceInfo($device['info'] ?? []);
+        $meta = $this->getDeviceCheckMeta($device, $info);
+        $templateId = (int)($device['check_template_id'] ?? 0);
+        if ($templateId <= 0) {
+            $templateId = (int)($meta['template_id'] ?? 0);
+        }
+        $map = $this->buildTemplateOptionLabelMap($templateId);
+
+        foreach ((array)($meta['result_items'] ?? []) as $item) {
+            if (!is_array($item)) continue;
+            $fieldKey = trim((string)($item['field_key'] ?? ''));
+            // 数值型字段（例如电池健康度）不走此文案兜底，避免附加单位后重复打印。
+            if (!in_array($fieldKey, ['capacity', 'color'], true)) continue;
+            $pairs = [];
+            foreach ((array)($item['option_items'] ?? []) as $option) {
+                if (!is_array($option)) continue;
+                $pairs[] = [$option['value'] ?? null, $option['label'] ?? null];
+            }
+            $values = $item['values'] ?? $item['value'] ?? [];
+            $labels = $item['labels'] ?? $item['label'] ?? [];
+            $values = is_array($values) ? array_values($values) : [$values];
+            $labels = is_array($labels) ? array_values($labels) : [$labels];
+            if (count($values) === count($labels)) {
+                foreach ($values as $index => $value) $pairs[] = [$value, $labels[$index]];
+            }
+            foreach ($pairs as [$value, $label]) {
+                if (!is_scalar($value) || !is_scalar($label)) continue;
+                $value = trim((string)$value);
+                $label = trim((string)$label);
+                if ($value !== '' && $label !== '' && !isset($map[$fieldKey][$value])) {
+                    $map[$fieldKey][$value] = $label;
+                }
+            }
+        }
+        return $map;
+    }
+
+    /**
      * 用选项映射把字段原始值还原成中文标签:
      * - 单值:命中选项→标签,否则原值;
      * - 多值(JSON 数组 / 中英文逗号分隔):逐个还原,用「、」连接;
@@ -981,7 +1025,7 @@ class RecyclePrinterTemplateService extends BaseAdminService
         $deviceInfo = $this->normalizeDeviceInfo($device['info'] ?? []);
         $checkMeta = $this->getDeviceCheckMeta($device, $deviceInfo);
         // 选项字段 ID→中文标签映射(capacity/color/package_type/condition_grade 等存的是 option_value)
-        $optLabelMap = $this->buildTemplateOptionLabelMap((int)($device['check_template_id'] ?? 0));
+        $optLabelMap = $this->buildDeviceOptionLabelMap($device);
         $checkResult = (string)($device['check_result'] ?? '');
         $checkResultSeller = (string)($device['check_result_seller'] ?? '');
         $checkResultBuyer = (string)($device['check_result_buyer'] ?? '');

@@ -80,6 +80,7 @@ Route::group('erp', function () {
     Route::post('stock/quantity_product/:id/category', 'addon\hsx_erp\app\adminapi\controller\ErpStock@updateQuantityProductCategory');
     Route::get('stock/turnover_summary', 'addon\hsx_erp\app\adminapi\controller\ErpStock@turnoverSummary');
     Route::get('stock/listing_workload', 'addon\hsx_erp\app\adminapi\controller\ErpStock@listingWorkload');
+    Route::get('stock/listing_catalog', 'addon\hsx_erp\app\adminapi\controller\ErpStock@listingCatalog');
     Route::post('stock/transfer/preview', 'addon\hsx_erp\app\adminapi\controller\ErpStock@transferPreview');
     Route::post('stock/transfer', 'addon\hsx_erp\app\adminapi\controller\ErpStock@transfer');
     Route::post('stock/consignment/buyout', 'addon\hsx_erp\app\adminapi\controller\ErpStock@buyoutConsignment');

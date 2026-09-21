@@ -98,6 +98,11 @@ class ErpStock extends BaseAdminController
         return success($this->service->listingWorkloadSummary());
     }
 
+    public function listingCatalog()
+    {
+        return success(\addon\hsx_erp\app\service\admin\ErpMallListingService::request((int)$this->request->siteId(), 'options'));
+    }
+
     public function adjustRetailPrice(int $id)
     {
         $params = $this->request->params([
@@ -268,12 +273,23 @@ class ErpStock extends BaseAdminController
             ['remark', ''],
             ['next_assignee_uid', 0],
             ['workflow_action', ''],
+            ['mall_category_id', null],
+            ['publish_basic', 0],
             ['defer_publish', 0],
         ]);
         $this->service->updateFlow($id, $params);
-        $publish = (int)$params['defer_publish'] === 1
-            ? ['triggered' => false, 'reason' => 'manual_confirmation']
-            : $this->service->autoPublishListingIfReady($id);
+        if ((int)$params['publish_basic'] === 1) {
+            // 先可靠保存。发布失败也不能把已保存的价格和照片误报为保存失败。
+            try {
+                $publish = ['triggered' => true, 'result' => $this->service->syncListing($id, false, true)];
+            } catch (\Throwable $e) {
+                $publish = ['triggered' => true, 'failed' => true, 'message' => $e->getMessage()];
+            }
+        } else {
+            $publish = (int)$params['defer_publish'] === 1
+                ? ['triggered' => false, 'reason' => 'manual_confirmation']
+                : $this->service->autoPublishListingIfReady($id);
+        }
         $taskAssigned = (new ErpListingTaskService())->sync($id, (int)$params['next_assignee_uid']);
         return success([
             'saved' => 1,

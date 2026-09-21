@@ -4,7 +4,7 @@ return [
     [
         'key' => 'return_order_auto_complete',
         'name' => '退货订单自动完成',
-        'desc' => '自动将退回的订单状态设置为完成',
+        'desc' => '确认退回发货满72小时自动完成，处理记录与人工签收区分',
         'time' => [
             'type' => 'min',
             'min' => 30

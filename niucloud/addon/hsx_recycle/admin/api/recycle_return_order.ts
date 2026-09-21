@@ -21,7 +21,7 @@ export function getReturnOrderList(params: any) {
  * @param id 订单ID
  */
 export function getReturnOrderDetail(id: number) {
-  return request.get(`/recycle/recycle_return_order/detail/${id}`);
+  return request.get(`/recycle/recycle_return_order/${id}/device_info`);
 }
 
 /**

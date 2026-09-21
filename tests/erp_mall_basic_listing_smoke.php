@@ -4,7 +4,7 @@ declare(strict_types=1);
 // 执行真实货源入库、上架监听器、资料保存及 ERP 库存核对。
 // 数据库、事务、商品基础建品及平台配置用内存替身；不连接真实站点，不发送通知或付款。
 namespace IntakeTest {
-    final class Store { public static array $tables = []; public static array $tx = []; public static array $events = []; public static bool $guard = true; }
+    final class Store { public static array $tables = []; public static array $tx = []; public static array $events = []; public static array $handlers = []; public static bool $guard = true; }
     class Row implements \ArrayAccess {
         public function __construct(public string $table, public array $data = []) {}
         public function __get($key) { $value = $this->data[$key] ?? null; if (in_array($key, ['images', 'qc_info', 'raw_payload'], true) && is_string($value)) return json_decode($value, true) ?? []; return $value; }
@@ -37,7 +37,7 @@ namespace IntakeTest {
         public function select(): Rows { return new Rows(array_map(fn($row) => (new $this->model($this->model, $row))->toArray(), $this->rows())); }
         public function count(): int { return count($this->rows()); }
         public function value($key) { return $this->rows()[0][$key] ?? null; }
-        public function column($key): array { return array_column($this->rows(), $key); }
+        public function column($key, $index = null): array { return array_column($this->rows(), $key, $index); }
         public function update($values): int { $rows = $this->rows(); foreach ($rows as $row) (new $this->model($this->model, $row))->save($values); return count($rows); }
     }
     class Model extends Row {
@@ -56,6 +56,10 @@ namespace core\exception { class AdminException extends \RuntimeException {} cla
 namespace think\facade {
     class Db {
         public static function transaction($fn) { \IntakeTest\Store::$tx[] = \IntakeTest\Store::$tables; try { $result = $fn(); array_pop(\IntakeTest\Store::$tx); return $result; } catch (\Throwable $e) { \IntakeTest\Store::$tables = array_pop(\IntakeTest\Store::$tx); throw $e; } }
+        public static function name(string $table): \IntakeTest\Query {
+            if ($table !== 'phone_shop_goods_category') throw new \RuntimeException('Unexpected table ' . $table);
+            return new \IntakeTest\Query(\addon\phone_shop\app\model\goods\Category::class);
+        }
         public static function connect(): self { return new self(); } public function getPdo(): self { return $this; } public function inTransaction(): bool { return \IntakeTest\Store::$tx !== []; }
     }
     class Log { public static function write(...$args): void {} public static function warning(...$args): void {} }
@@ -71,8 +75,15 @@ namespace addon\phone_shop\app\model\goods {
     class GoodsSku extends \IntakeTest\Model { public const PK = 'sku_id'; }
     class Category extends \IntakeTest\Model { public const PK = 'category_id'; }
     class Service extends \IntakeTest\Model { public const PK = 'service_id'; }
+    class Attr extends \IntakeTest\Model { public const PK = 'attr_id'; }
 }
 namespace addon\phone_shop\app\service\admin\goods {
+    class SpecService {
+        public static array $catalogs = [];
+        public function __construct(private int $site = 0) {}
+        public static function forSite(int $site): self { return new self($site); }
+        public function optionsForCategory(int $category, array $path): array { return self::$catalogs[$this->site] ?? ['spec_groups' => [], 'grades' => []]; }
+    }
     class GoodsService {
         public function addForSite(array $values, int $siteId): int {
             $goods = \addon\phone_shop\app\model\goods\Goods::create($values + ['site_id' => $siteId, 'sale_status' => 'available']);
@@ -82,11 +93,14 @@ namespace addon\phone_shop\app\service\admin\goods {
     }
 }
 namespace addon\phone_shop\app\service\core\order { class CoreOrderInventoryService { public function guardErpSale($site, $asset): void {} } }
-namespace addon\phone_shop\app\service\core\agent { class AgentConfigService { public static bool $master = false; public function isMasterSite($site): bool { return self::$master; } } }
+namespace addon\phone_shop\app\service\core\agent {
+    class AgentConfigService { public static bool $master = false; public function isMasterSite($site): bool { return self::$master; } }
+    class RefDataSyncService { public function resolveAgentRefId($type, $master, $agent, $id): int { return $id + 1000; } }
+}
 namespace addon\phone_shop\app\model\agent { class PhoneShopAgent extends \IntakeTest\Model {} }
 namespace addon\hsx_erp\app\model { class ErpAsset extends \IntakeTest\Model {} class ErpWarehouse extends \IntakeTest\Model {} }
 namespace addon\hsx_erp\app\service\admin {
-    class ErpWarehousePolicyService { public static bool $allowed = true; public static function forSite($site): self { return new self(); } public function evaluate($asset, $warehouse): array { return ['can_prepare_mall' => $warehouse !== null && self::$allowed ? 1 : 0]; } }
+    class ErpWarehousePolicyService { public static bool $allowed = true; public static array $extra = []; public static function forSite($site): self { return new self(); } public function evaluate($asset, $warehouse): array { return ['can_prepare_mall' => $warehouse !== null && self::$allowed ? 1 : 0] + self::$extra; } }
 }
 namespace {
     use IntakeTest\Store;
@@ -101,19 +115,26 @@ namespace {
     use app\service\core\sys\CoreConfigService;
     $base = dirname(__DIR__) . '/niucloud/addon/';
     require $base . 'phone_shop/app/service/core/goods/CoreTierPricingService.php';
+    require $base . 'phone_shop/app/support/IntakeMaterialAttributes.php';
     foreach (['hsx_erp/app/support/ErpListingFormContract.php', 'hsx_erp/app/service/admin/ErpConfigService.php', 'hsx_erp/app/listener/marketplace/BasicListingEligibility.php', 'phone_shop/app/support/IntakeMaterialTask.php', 'phone_shop/app/service/core/goods/CoreDeviceAttributeService.php', 'phone_shop/app/service/core/goods/CoreGoodsDescriptionService.php', 'phone_shop/app/service/core/intake/CoreListingMappingService.php', 'phone_shop/app/service/core/intake/CoreDeviceIntakeService.php', 'phone_shop/app/service/admin/intake/DeviceIntakeService.php', 'phone_shop/app/listener/erp/ErpPublishListing.php'] as $path) require $base . $path;
     set_error_handler(static function ($severity, $message, $file, $line): void { throw new \ErrorException($message, 0, $severity, $file, $line); });
     function event($name, $payload): array {
         Store::$events[] = [$name, $payload];
+        if (isset(Store::$handlers[$name])) return Store::$handlers[$name]($payload);
         if ($name === 'HsxErpBasicListingEligibility') return Store::$guard ? [(new BasicListingEligibility())->handle($payload)] : [];
         if (in_array($name, ['PhoneShopListingMaterialCompleted', 'HsxErpChannelMappingResolve'], true)) return [];
         throw new \RuntimeException('Unexpected event ' . $name);
     }
     $checks = 0;
+    function get_file_url(string $path): string { return 'https://local.test/' . ltrim($path, '/'); }
     function check(bool $pass, string $message): void { if (!$pass) throw new \RuntimeException('FAIL: ' . $message); $GLOBALS['checks']++; }
     function denied(callable $fn, string $message): void { try { $fn(); } catch (\Throwable $e) { check(str_contains($e->getMessage(), $message), '拒绝原因准确: ' . $message . ' / ' . $e->getMessage()); return; } throw new \RuntimeException('未拒绝: ' . $message); }
     function fixture(): array {
         Store::$tables = []; Store::$events = []; Store::$guard = true;
+        \addon\phone_shop\app\service\admin\goods\SpecService::$catalogs = [100005 => [
+            'spec_groups' => [['label' => '内存', 'items' => [['item_value' => '256G']]], ['label' => '颜色', 'items' => [['item_value' => '蓝色'], ['item_value' => '红色']]]],
+            'grades' => [['grade_name' => '9成新', 'status' => 1]],
+        ]];
         \addon\phone_shop\app\service\core\agent\AgentConfigService::$master = false;
         \addon\hsx_erp\app\service\admin\ErpWarehousePolicyService::$allowed = true;
         CoreConfigService::$data = [];
