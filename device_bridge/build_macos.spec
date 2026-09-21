@@ -1,10 +1,22 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import os
+from pathlib import Path
+
+mtp = Path(os.environ.get("HSX_DEVICE_BRIDGE_LIBMTP", "/opt/homebrew/opt/libmtp/lib/libmtp.9.dylib")).resolve()
+usb = Path(os.environ.get("HSX_DEVICE_BRIDGE_LIBUSB", "/opt/homebrew/opt/libusb/lib/libusb-1.0.0.dylib")).resolve()
+mtp_license = mtp.parent.parent / "COPYING"
+usb_license = usb.parent.parent / "COPYING"
+for required in (mtp, usb, mtp_license, usb_license):
+    if not required.is_file():
+        raise SystemExit("Missing MTP build dependency or license: %s" % required)
+
 a = Analysis(
     ["bridge_entry.py"],
     pathex=["src"],
-    binaries=[],
-    datas=[],
+    binaries=[(str(mtp), "native"), (str(usb), "native")],
+    datas=[(str(mtp_license), "licenses/libmtp"), (str(usb_license), "licenses/libusb"),
+           ("packaging/THIRD_PARTY_NOTICES.txt", "licenses")],
     hiddenimports=[
         "pymobiledevice3",
         "pymobiledevice3.lockdown",

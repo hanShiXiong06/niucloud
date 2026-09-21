@@ -3,16 +3,23 @@ from __future__ import annotations
 import argparse
 import json
 
-from .ios_reader import BridgeReadError, read_device, scan_device_ids
+from . import __version__
+from .android_reader import worker
+from .device_reader import read_devices, scan_device_ids
+from .ios_reader import BridgeReadError, read_device
 from .server import serve
 from .windows_support import runtime_dependency_diagnostics
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="hsx-device-bridge")
+    parser.add_argument("--version", action="version", version=__version__)
     subparsers = parser.add_subparsers(dest="command")
 
-    subparsers.add_parser("scan", help="列出当前 USB 连接的 iPhone")
+    subparsers.add_parser("scan", help="列出当前连接的受支持设备")
+    subparsers.add_parser("devices", help="读取所有受支持设备的基础信息")
+    worker_parser = subparsers.add_parser("_mtp-worker", help=argparse.SUPPRESS)
+    worker_parser.add_argument("--library", required=True)
     subparsers.add_parser("self-check", help="检查安装包的 Windows 运行依赖")
     read_parser = subparsers.add_parser("read", help="读取一台 iPhone 的标准快照")
     read_parser.add_argument("--device-id", default="")
@@ -27,6 +34,11 @@ def main() -> None:
         if command == "scan":
             ids = scan_device_ids()
             print(json.dumps({"code": 0, "count": len(ids), "data": ids}, ensure_ascii=False))
+        elif command == "devices":
+            devices = read_devices()
+            print(json.dumps({"code": 0, "count": len(devices), "data": devices}, ensure_ascii=False))
+        elif command == "_mtp-worker":
+            worker(args.library)
         elif command == "self-check":
             diagnostics = runtime_dependency_diagnostics()
             print(json.dumps({"code": 0 if diagnostics["ready"] else 1, "data": diagnostics}, ensure_ascii=False))

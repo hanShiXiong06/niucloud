@@ -3,16 +3,13 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${1:-0.1.0}"
+PYTHON="${PYTHON:-/usr/bin/python3}"
+VERSION="$("$PYTHON" "$ROOT/scripts/verify_version.py" \
+    --binary "$ROOT/dist/hsx_device_bridge/hsx_device_bridge" --expected "${1:-}")"
 ALLOWED_ORIGINS="${2:-http://localhost,http://127.0.0.1}"
 PKG_ROOT="$ROOT/build/pkgroot"
 SCRIPTS_ROOT="$ROOT/build/pkgscripts"
 OUTPUT="$ROOT/dist/hsx_device_bridge-${VERSION}-macos-arm64.pkg"
-
-if [ ! -x "$ROOT/dist/hsx_device_bridge/hsx_device_bridge" ]; then
-    echo "Missing bridge binary. Run scripts/build_macos.sh first."
-    exit 1
-fi
 
 rm -rf "$PKG_ROOT" "$SCRIPTS_ROOT"
 mkdir -p "$PKG_ROOT/Library/Application Support/hsx_device_bridge"
@@ -24,10 +21,14 @@ cp "$ROOT/packaging/macos/com.hsx.device-bridge.plist" "$PKG_ROOT/Library/Launch
     "$PKG_ROOT/Library/LaunchAgents/com.hsx.device-bridge.plist"
 cp "$ROOT/packaging/macos/postinstall" "$SCRIPTS_ROOT/postinstall"
 chmod 755 "$SCRIPTS_ROOT/postinstall"
+COMPONENTS="$ROOT/build/pkg-components.plist"
+pkgbuild --analyze --root "$PKG_ROOT" "$COMPONENTS"
+"$PYTHON" "$ROOT/scripts/macos_components.py" "$COMPONENTS"
 
 pkgbuild \
     --root "$PKG_ROOT" \
     --scripts "$SCRIPTS_ROOT" \
+    --component-plist "$COMPONENTS" \
     --identifier "com.hsx.device-bridge" \
     --version "$VERSION" \
     --install-location "/" \

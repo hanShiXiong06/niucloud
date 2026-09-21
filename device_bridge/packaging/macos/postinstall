@@ -7,8 +7,11 @@ CONSOLE_USER="$(stat -f '%Su' /dev/console)"
 
 if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ]; then
     USER_ID="$(id -u "$CONSOLE_USER")"
-    launchctl bootout "gui/$USER_ID" "$PLIST" >/dev/null 2>&1 || true
-    launchctl bootstrap "gui/$USER_ID" "$PLIST" >/dev/null 2>&1 || true
+    launchctl bootout "gui/$USER_ID/com.hsx.device-bridge" >/dev/null 2>&1 || true
+    if ! launchctl bootstrap "gui/$USER_ID" "$PLIST"; then
+        echo "Device bridge installed, but startup failed. Sign out and back in, then check /v1/health." >&2
+        exit 1
+    fi
 fi
 
 exit 0

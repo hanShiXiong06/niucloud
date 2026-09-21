@@ -8,7 +8,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from . import __version__
-from .ios_reader import BridgeReadError, read_devices, scan_device_ids
+from .ios_reader import BridgeReadError
+from .device_reader import capabilities, read_devices, scan_device_ids
 from .runtime import log_dir, read_runtime_config
 from .windows_support import apple_driver_diagnostics
 
@@ -89,6 +90,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 "data": {
                     "service": "hsx_device_bridge",
                     "version": __version__,
+                    "capabilities": capabilities(),
                     "device_count": device_count,
                     "scan_error": scan_error,
                     "driver": driver,
@@ -101,6 +103,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 "data": {
                     "service": "hsx_device_bridge",
                     "version": __version__,
+                    "capabilities": capabilities(),
                     "driver": apple_driver_diagnostics(),
                 },
             })
