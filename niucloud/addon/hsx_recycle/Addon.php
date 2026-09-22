@@ -39,6 +39,7 @@ class Addon
      */
     public function upgrade()
     {
+        \app\service\core\addon\CoreAddonInstallService::executeSql(__DIR__ . '/sql/update_0.0.4.sql');
         $this->installSystemColumns();
         $this->syncAdminappResources();
         $this->repairAddonSchedule();

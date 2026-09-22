@@ -4,11 +4,13 @@ declare(strict_types=1);
 namespace addon\hsx_recycle\app\service\admin\device;
 
 use addon\hsx_recycle\app\dict\config\RecycleConfigKeyDict;
+use addon\hsx_recycle\app\model\device\RecycleDeviceModelAlias;
 use addon\hsx_recycle\app\model\device\RecycleDeviceModelDict;
 use addon\hsx_recycle\app\service\core\device\CoreRecycleDeviceModelDictService;
 use app\service\core\sys\CoreConfigService;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
+use think\db\exception\PDOException;
 use think\facade\Cache;
 
 /**
@@ -27,9 +29,6 @@ class RecycleDeviceModelDictService extends BaseAdminService
 
     /** 缓存有效期(秒)。型号字典极少改,设长一点;改动时按 tag 主动失效 */
     const CACHE_TTL = 86400;
-
-    /** 小体量别名映射使用站点配置保存，限制数量避免配置无限膨胀 */
-    const ALIAS_MAPPING_LIMIT = 1000;
 
     public function __construct()
     {
@@ -170,23 +169,37 @@ class RecycleDeviceModelDictService extends BaseAdminService
             return ['matched' => false];
         }
 
-        $config = (new CoreConfigService())->getConfigValue(
-            (int)$this->site_id,
-            RecycleConfigKeyDict::DEVICE_MODEL_ALIAS
-        );
-        $mappings = is_array($config['mappings'] ?? null) ? $config['mappings'] : [];
+        $keys = array_map([$this, 'normalizeAlias'], $aliases);
+        try {
+            $mappings = (new RecycleDeviceModelAlias())->where('site_id', '=', (int)$this->site_id)
+                ->whereIn('normalized_alias', $keys)->column('category_id', 'normalized_alias');
+        } catch (PDOException $e) {
+            throw $this->aliasStorageException($e);
+        }
+        $previousMappings = null;
 
         foreach ($aliases as $alias) {
             $key = $this->normalizeAlias($alias);
-            $mapping = is_array($mappings[$key] ?? null) ? $mappings[$key] : [];
-            $categoryId = (int)($mapping['category_id'] ?? 0);
+            if (array_key_exists($key, $mappings)) {
+                $categoryId = (int)$mappings[$key];
+            } else {
+                // 既有配置只读保留；新绑定不再累加 JSON，也不在读取时搬迁旧数据。
+                if ($previousMappings === null) {
+                    $config = (new CoreConfigService())->getConfigValue(
+                        (int)$this->site_id,
+                        RecycleConfigKeyDict::DEVICE_MODEL_ALIAS
+                    );
+                    $previousMappings = is_array($config['mappings'] ?? null) ? $config['mappings'] : [];
+                }
+                $categoryId = (int)($previousMappings[$key]['category_id'] ?? 0);
+            }
             if ($categoryId <= 0) {
                 continue;
             }
 
             try {
                 $node = $this->selectableLeaf($categoryId);
-            } catch (\Throwable $e) {
+            } catch (CommonException $e) {
                 // 历史映射失效时回退到原有精确匹配/人工选择，不让扫码流程中断。
                 continue;
             }
@@ -214,57 +227,59 @@ class RecycleDeviceModelDictService extends BaseAdminService
         }
 
         $node = $this->selectableLeaf($categoryId);
-        $configService = new CoreConfigService();
-        $config = $configService->getConfigValue(
-            (int)$this->site_id,
-            RecycleConfigKeyDict::DEVICE_MODEL_ALIAS
-        );
-        $config = is_array($config) ? $config : [];
-        $mappings = is_array($config['mappings'] ?? null) ? $config['mappings'] : [];
         $now = time();
-        $learned = 0;
+        $rows = [];
 
         foreach ($aliases as $alias) {
             $key = $this->normalizeAlias($alias);
-            if ($key === '') {
-                continue;
-            }
-            // unset 后重写，让最近纠正的映射排到末尾，超限清理时优先保留。
-            unset($mappings[$key]);
-            $mappings[$key] = [
+            $rows[$key] = [
+                'site_id' => (int)$this->site_id,
                 'alias' => $alias,
+                'normalized_alias' => $key,
                 'category_id' => (int)$node['id'],
-                'category_path' => array_map('intval', (array)($node['category_path'] ?? [$node['id']])),
-                'node_name' => (string)($node['node_name'] ?? ''),
-                'model_full_name' => (string)($node['model_full_name'] ?? ''),
-                'update_time' => $now,
+                'operator_uid' => (int)$this->uid,
+                'create_at' => $now,
+                'update_at' => $now,
             ];
-            $learned++;
         }
 
-        if (count($mappings) > self::ALIAS_MAPPING_LIMIT) {
-            $mappings = array_slice($mappings, -self::ALIAS_MAPPING_LIMIT, null, true);
+        // 固定加锁顺序；单条 upsert 配合唯一索引，整批成功或整批失败，不覆盖其他别名。
+        ksort($rows, SORT_STRING);
+        try {
+            (new RecycleDeviceModelAlias())->duplicate(['alias', 'category_id', 'operator_uid', 'update_at'])
+                ->insertAll(array_values($rows));
+        } catch (PDOException $e) {
+            throw $this->aliasStorageException($e);
         }
-
-        $configService->setConfig((int)$this->site_id, RecycleConfigKeyDict::DEVICE_MODEL_ALIAS, [
-            'version' => 1,
-            'mappings' => $mappings,
-            'update_time' => $now,
-        ]);
 
         return [
-            'learned_count' => $learned,
+            'learned_count' => count($rows),
             'node' => $this->formatAliasNode($node),
         ];
+    }
+
+    private function aliasStorageException(PDOException $e): \Throwable
+    {
+        $error = $e->getData()['PDO Error Info'] ?? [];
+        if ((int)($error['Driver Error Code'] ?? 0) === 1146) {
+            return new CommonException('型号绑定表尚未安装，请先执行回收插件 sql/update_0.0.4.sql');
+        }
+        return $e;
     }
 
     private function sanitizeAliases(array $aliases): array
     {
         $result = [];
         foreach (array_slice($aliases, 0, 12) as $alias) {
+            if (!is_string($alias) && !is_numeric($alias)) {
+                continue;
+            }
             $alias = trim((string)$alias);
+            if (!mb_check_encoding($alias, 'UTF-8') || mb_strlen($alias, 'UTF-8') > 120) {
+                continue;
+            }
             $key = $this->normalizeAlias($alias);
-            if ($alias === '' || $key === '' || mb_strlen($alias, 'UTF-8') > 120) {
+            if ($alias === '' || $key === '' || strlen($key) > 512) {
                 continue;
             }
             $result[$key] = $alias;

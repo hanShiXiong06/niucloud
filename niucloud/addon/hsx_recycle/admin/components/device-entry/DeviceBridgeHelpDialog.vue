@@ -101,12 +101,15 @@ const checking = ref(false)
 const health = ref<any>(null)
 const healthError = ref('')
 const genericMtp = computed(() => health.value?.capabilities?.android_mtp_scope === 'generic')
+const windowsMtp = computed(() => health.value?.capabilities?.android_mtp_backend === 'windows_wpd')
 const supportedDevices = computed(() => {
     if (!health.value?.capabilities?.android_mtp) return '支持 iPhone；当前版本未开放安卓读取'
+    if (windowsMtp.value) return '支持 iPhone、安卓 MTP 基础读取（Windows 内测）'
     return genericMtp.value ? '支持 iPhone、安卓 MTP 基础读取（Mac）' : '支持 iPhone、三星 MTP（旧版）'
 })
 const androidHelp = computed(() => {
-    if (!health.value?.capabilities?.android_mtp) return '当前服务未开放安卓读取，请安装支持 MTP 的 Mac 包；现有 Windows 包仅支持 iPhone。'
+    if (!health.value?.capabilities?.android_mtp) return '当前服务未开放安卓读取，请联系管理员获取适用于本机、支持 MTP 的新版安装包。'
+    if (windowsMtp.value) return 'Windows 安卓读取为内测能力，请先用少量设备验证。解锁手机并选择文件传输，无需 USB 调试；字段以设备实际提供为准。USB SN 需核对，不保证可查保修。'
     if (!genericMtp.value) return '此 Mac 版本支持三星 MTP 基础读取；iQOO、魅族等品牌需更新至 0.3.0 或更高版本。'
     return '按 MTP 协议读取，不限制品牌；并非所有型号都提供相同字段。USB 序列号可填入 SN，需核对；不会读取 IMEI、电池健康度，也不保证可查保修。'
 })
