@@ -208,7 +208,10 @@
                 </div>
             </div>
 
-            <export-sure ref="exportSureDialog" :show="flag" type="recycle_device" :searchParam="exportSearchParam" @close="handleClose" />
+            <HsxDialog v-model="flag" title="导出设备 Excel" size="sm" :show-fullscreen="false" show-footer confirm-text="开始导出" :confirm-loading="exportLoading" @confirm="submitExport">
+                <p>{{ selectedDevices.length > 0 ? `导出选中的 ${selectedDevices.length} 台设备。` : '导出当前筛选条件下的全部设备，不限当前页。' }}</p>
+                <p class="mt-2 text-sm text-gray-500">保留 IMEI 文本，并自动附带可扫描的条形码。生成后在导出记录中下载。</p>
+            </HsxDialog>
         </el-card>
 
         <!-- 设备详情对话框 -->
@@ -394,8 +397,8 @@ import { HsxSearchPanel, HsxDialog, HsxNotice, useFeedback } from '@/addon/hsx_c
 import { reactive, ref, computed } from 'vue'
 import { t } from '@/lang'
 import { FormInstance, ElImageViewer, ElMessageBox } from 'element-plus'
-import { useRoute } from 'vue-router'
-import { getRecycleDeviceList, syncRecycleDevicesToErp, updateDevice, getDeviceSyncHealth, resyncRecycleDevice } from '@/addon/hsx_recycle/api/device_export'
+import { useRoute, useRouter } from 'vue-router'
+import { getRecycleDeviceList, exportRecycleDevice, syncRecycleDevicesToErp, updateDevice, getDeviceSyncHealth, resyncRecycleDevice } from '@/addon/hsx_recycle/api/device_export'
 import { getSaleDestinationOptions } from '@/addon/hsx_recycle/api/recycle_order'
 import { img } from '@/utils/common'
 import { View, User, Picture, RefreshRight } from '@element-plus/icons-vue'
@@ -405,6 +408,7 @@ import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 const hsxFeedback = useFeedback()
 
 const route = useRoute()
+const router = useRouter()
 const pageName = route.meta.title
 
 const deviceTableData = reactive({
@@ -700,7 +704,7 @@ const previewImages = (images: string[], index: number) => {
 /**
  * 设备导出
  */
-const exportSureDialog = ref(null)
+const exportLoading = ref(false)
 const flag = ref(false)
 const selectedDevices = ref<any[]>([])
 const erpSyncLoading = ref(false)
@@ -815,8 +819,19 @@ const exportSearchParam = computed(() => {
     return base
 })
 
-const handleClose = (val: boolean) => {
-    flag.value = val
+const submitExport = async () => {
+    if (exportLoading.value) return
+    exportLoading.value = true
+    try {
+        await exportRecycleDevice(exportSearchParam.value)
+        flag.value = false
+        hsxFeedback.success('导出任务已提交，请在导出记录中下载')
+        await router.push('/site/setting/export')
+    } catch {
+        // 请求层显示具体错误，保留弹窗和勾选结果，允许重试。
+    } finally {
+        exportLoading.value = false
+    }
 }
 const exportEvent = () => {
     // 判断要导出的设备列表（选中的 or 当前页全部）

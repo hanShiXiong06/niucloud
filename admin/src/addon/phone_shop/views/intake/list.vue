@@ -22,7 +22,7 @@
                     </el-form-item>
                     <el-form-item label="资料进度">
                         <el-select v-model="table.searchParam.material_status" placeholder="全部" clearable class="w-[140px]">
-                            <el-option label="待完善" value="pending" /><el-option label="处理中" value="processing" /><el-option label="已完成" value="completed" />
+                            <el-option label="待完善" value="pending" /><el-option label="完善中" value="processing" /><el-option label="已完善" value="completed" />
                         </el-select>
                     </el-form-item>
                     <el-form-item label="设备搜索">
@@ -66,6 +66,9 @@
                         <template #default="{ row }">
                             <el-tag :type="row.listing_state === 'saleable' ? 'success' : 'info'" size="small">{{ row.listing_state_name }}</el-tag>
                             <div v-if="row.material_block_reason" class="text-xs text-orange-500 mt-1">{{ row.material_block_reason }}</div>
+                            <el-tooltip v-if="row.agent_distribution?.failed_count" :content="(row.agent_distribution.errors || []).join('；')" placement="top">
+                                <span class="block text-xs text-orange-500 mt-1">上架时有 {{ row.agent_distribution.failed_count }} 个子站未同步</span>
+                            </el-tooltip>
                         </template>
                     </el-table-column>
                     <el-table-column label="资料待办" min-width="175">

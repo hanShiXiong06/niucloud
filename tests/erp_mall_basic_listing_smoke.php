@@ -116,6 +116,7 @@ namespace {
     $base = dirname(__DIR__) . '/niucloud/addon/';
     require $base . 'phone_shop/app/service/core/goods/CoreTierPricingService.php';
     require $base . 'phone_shop/app/support/IntakeMaterialAttributes.php';
+    require $base . 'phone_shop/app/support/InspectionGoodsAttributes.php';
     foreach (['hsx_erp/app/support/ErpListingFormContract.php', 'hsx_erp/app/service/admin/ErpConfigService.php', 'hsx_erp/app/listener/marketplace/BasicListingEligibility.php', 'phone_shop/app/support/IntakeMaterialTask.php', 'phone_shop/app/service/core/goods/CoreDeviceAttributeService.php', 'phone_shop/app/service/core/goods/CoreGoodsDescriptionService.php', 'phone_shop/app/service/core/intake/CoreListingMappingService.php', 'phone_shop/app/service/core/intake/CoreDeviceIntakeService.php', 'phone_shop/app/service/admin/intake/DeviceIntakeService.php', 'phone_shop/app/listener/erp/ErpPublishListing.php'] as $path) require $base . $path;
     set_error_handler(static function ($severity, $message, $file, $line): void { throw new \ErrorException($message, 0, $severity, $file, $line); });
     function event($name, $payload): array {

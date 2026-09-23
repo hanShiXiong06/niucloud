@@ -143,6 +143,9 @@
                                         <span v-if="row.memory_group" class="text-[11px] text-[#64748b] bg-[#f1f5f9] rounded px-[4px]">{{ row.memory_group }}</span>
                                         <span v-if="row.condition_grade" class="text-[11px] text-[#64748b] bg-[#f1f5f9] rounded px-[4px]">{{ row.condition_grade }}</span>
                                         <el-tag v-if="Number((row.goodsSku || row.goods_sku || {}).erp_asset_id) > 0" type="info" size="small" effect="plain">一机一码</el-tag>
+                                        <el-tag v-if="row.material_task && row.material_task.status !== 'none'" :type="row.material_task.status === 'completed' ? 'success' : 'warning'" size="small" effect="plain">
+                                            {{ row.material_task.from_master ? '主站 · ' : '' }}{{ row.material_task.status_name }}
+                                        </el-tag>
                                     </div>
                                     <span class="px-[4px]  text-[12px] text-[#fff] rounded-[4px] bg-primary leading-[18px]" v-if="row.is_gift == 1">赠品</span>
                                     <div class="flex flex-wrap mt-[4px] gap-[4px]">
@@ -234,6 +237,8 @@
                     <el-table-column :label="t('operation')" fixed="right" align="right" min-width="120">
                         <template #default="{ row }">
                             <el-button type="primary" link @click="editEvent(row)">{{ t('edit') }}</el-button>
+                            <el-button v-if="row.material_task?.can_edit" type="primary" link :loading="openingMaterial === row.goods_id"
+                                v-permission="'phone_shop_intake_material_edit'" @click="openMaterial(row)">{{ row.material_task.status === 'completed' ? '资料记录' : '完善资料' }}</el-button>
                             <el-button type="primary" link @click="spreadEvent(row)">{{ t('spreadGoods') }}</el-button>
                             <el-button type="primary" link @click="memberPriceEvent(row)">{{ t('memberPrice') }}</el-button>
                             <el-button type="primary" v-if="row.status == 1" link @click="statusChange(row, 0)">{{ t('statusActionOff') }}</el-button>
@@ -277,12 +282,13 @@
         <goods-batch-settings-popup ref="goodsBatchSettingPopupRef" @load="loadGoodsListReset" />
 
         <goods-transfer-dialog ref="goodsTransferDialogRef" :batch-payload="transferPayload" @completed="loadGoodsList()" />
+        <component :is="materialDialogComponent" v-if="materialDialogComponent" ref="materialDialogRef" @saved="loadGoodsList(goodsTable.page)" />
 
     </div>
 </template>
 
 <script lang="ts" setup>
-import { reactive, ref, nextTick, computed } from 'vue'
+import { reactive, ref, nextTick, computed, shallowRef } from 'vue'
 import { t } from '@/lang'
 import { debounce, img, filterDigit, setTablePageStorage, getTablePageStorage } from '@/utils/common'
 import { ElMessage, ElMessageBox, FormInstance } from 'element-plus'
@@ -919,6 +925,22 @@ const editEvent = (data: any) => {
 }
 
 const goodsPriceEditPopupRef: any = ref(null)
+const materialDialogComponent = shallowRef<any>(null)
+const materialDialogRef = ref<any>()
+const openingMaterial = ref(0)
+const openMaterial = async (row: any) => {
+    if (openingMaterial.value || !row.material_task?.can_edit || !row.material_task?.intake_id) return
+    openingMaterial.value = row.goods_id
+    try {
+        materialDialogComponent.value ||= (await import('@/addon/phone_shop/views/intake/components/IntakeBuildDialog.vue')).default
+        await nextTick()
+        await materialDialogRef.value.open({ intake_id: row.material_task.intake_id }, 'material')
+    } catch {
+        ElMessage.error('资料窗口加载失败，请重试')
+    } finally {
+        openingMaterial.value = 0
+    }
+}
 
 // 编辑商品价格(同一弹窗内含会员价,一次保存)
 const editPriceEvent = (data: any) => {

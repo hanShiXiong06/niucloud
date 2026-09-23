@@ -60,7 +60,7 @@ namespace {
     use addon\phone_shop\app\service\core\goods\CoreGoodsPriceWriteService as Writer;
     use addon\hsx_erp\app\service\admin\ErpSalesPriceService as Erp;
     $root=dirname(__DIR__).'/niucloud/addon/';
-    foreach(['phone_shop/app/support/TierPriceRule.php','phone_shop/app/service/core/goods/CoreTierPricingService.php','phone_shop/app/service/core/goods/CoreGoodsPriceWriteService.php','phone_shop/app/service/core/goods/CoreMemberPriceService.php','phone_shop/app/listener/erp/ErpSalesPricing.php','hsx_erp/app/service/admin/ErpSalesPriceService.php','hsx_erp/app/listener/PhoneShopSalesPriceChanged.php'] as $f) require $root.$f;
+    foreach(['phone_shop/app/support/TierPriceRule.php','phone_shop/app/support/GoodsSource.php','phone_shop/app/service/core/goods/CoreTierPricingService.php','phone_shop/app/service/core/goods/CoreGoodsPriceWriteService.php','phone_shop/app/service/core/goods/CoreMemberPriceService.php','phone_shop/app/listener/erp/ErpSalesPricing.php','hsx_erp/app/service/admin/ErpSalesPriceService.php','hsx_erp/app/listener/PhoneShopSalesPriceChanged.php'] as $f) require $root.$f;
     function event($name,$data): array {
         if($name==='PhoneShopSalesPriceChanged' && S::$erp) return [(new \addon\hsx_erp\app\listener\PhoneShopSalesPriceChanged())->handle($data)];
         if($name==='HsxErpSalesPricing' && S::$mall) return [(new \addon\phone_shop\app\listener\erp\ErpSalesPricing())->handle($data)];
@@ -92,11 +92,12 @@ namespace {
     check((new Pricing())->policy(100024)['enabled']===0,'other site default off');
     check((float)Rule::quote(2000,['enabled'=>0],[])['retail_price']===2000.0,'off no levels');
     S::$tables=['erp_asset'=>[10=>['id'=>10,'site_id'=>100005,'imei'=>'357465822199406','status'=>'in_stock','listing_status'=>'listed','retail_price'=>2200,'estimate_sale_price'=>2000,'total_cost'=>1800]],
-        'phone_shop_goods'=>[20=>['goods_id'=>20,'site_id'=>100005,'is_proxy'=>0,'status'=>1,'member_discount'=>'fixed_price']],
+        'phone_shop_goods'=>[20=>['goods_id'=>20,'site_id'=>100005,'source'=>'100005','is_proxy'=>1,'status'=>1,'member_discount'=>'fixed_price']],
         'phone_shop_goods_sku'=>[30=>['sku_id'=>30,'site_id'=>100005,'goods_id'=>20,'erp_asset_id'=>10,'sku_no'=>'357465822199406','sku_name'=>'','price'=>2200,'sale_price'=>2200,'member_price'=>json_encode($q['member_price']),'device_snapshot'=>json_encode(['check_meta'=>['ok'=>1],'_tier_pricing'=>['base_price'=>2000]]),'stock'=>1]],
         'phone_shop_device_intake'=>[40=>['id'=>40,'site_id'=>100005,'erp_asset_id'=>10,'sale_price'=>2200,'peer_price'=>2000]], 'orders'=>[1=>['amount'=>2200,'paid'=>2200]]];
     function mallWrite($base): void { Db::transaction(function()use($base){$w=new Writer();$old=$w->capture(100005,20);$w->finish(100005,20,[['sku_id'=>30,'price'=>S::$tables['phone_shop_goods_sku'][30]['price'],'pricing_base_price'=>$base]],$old);}); }
     mallWrite(2100);
+    check(count(S::$ledger) === 1, 'local source ignores retired proxy flag; bidirectional sync emits one ERP ledger entry');
     check((float)S::$tables['erp_asset'][10]['retail_price']===2300.0,'mall to erp retail');
     check((float)S::$tables['erp_asset'][10]['estimate_sale_price']===2100.0,'mall to erp baseline');
     check((float)S::$tables['phone_shop_device_intake'][40]['peer_price']===2100.0,'mall updates pending intake');
@@ -104,6 +105,15 @@ namespace {
     check(S::$tables['erp_asset'][10]['total_cost']===1800,'cost unchanged');
     check(Pricing::snapshot(S::$tables['phone_shop_goods_sku'][30]['device_snapshot'])['check_meta']['ok']===1,'QC preserved');
     mallWrite(2100);check((float)S::$tables['phone_shop_goods_sku'][30]['price']===2300.0,'save again no compound');
+    check(count(S::$ledger) === 1, 'unchanged baseline does not create another ERP ledger entry');
+    $state = S::$tables; $ledger = S::$ledger;
+    foreach (['', '0', '1', ' 100005 '] as $source) {
+        S::$tables = $state;
+        S::$tables['phone_shop_goods'][20]['source'] = $source;
+        mallWrite(2150);
+        check((float)S::$tables['erp_asset'][10]['estimate_sale_price'] === 2150.0, 'local source accepted: ' . $source);
+    }
+    S::$tables = $state; S::$ledger = $ledger;
     Db::transaction(function(){ $fields=Erp::fields(100005,2200);S::$tables['erp_asset'][10]=array_merge(S::$tables['erp_asset'][10],$fields);Erp::sync(100005,S::$tables['erp_asset'][10]); });
     check((float)S::$tables['phone_shop_goods_sku'][30]['price']===2400.0,'erp to mall retail');
     check(Pricing::snapshot(S::$tables['phone_shop_goods_sku'][30]['member_price'])['level_1']==='2200.00','erp to mall member');
@@ -115,7 +125,17 @@ namespace {
     S::$erp=false;$before=S::$tables;rejects(fn()=>mallWrite(2300),'未响应');check(S::$tables===$before,'missing erp rolls back whole change');S::$erp=true;
     S::$tables['erp_asset'][10]['imei']='different';$before=S::$tables;rejects(fn()=>mallWrite(2300),'串号不一致');check(S::$tables===$before,'identity mismatch rollback');S::$tables['erp_asset'][10]['imei']='357465822199406';
     S::$tables['erp_asset'][10]['status']='sold';$before=S::$tables;rejects(fn()=>mallWrite(2300),'不在库');check(S::$tables===$before,'sold does not reprice or relist');S::$tables['erp_asset'][10]['status']='in_stock';
-    S::$tables['phone_shop_goods'][20]['is_proxy']=1;rejects(fn()=>mallWrite(2300),'代理商品');S::$tables['phone_shop_goods'][20]['is_proxy']=0;
+    foreach ([0, 1] as $proxyFlag) {
+        S::$tables['phone_shop_goods'][20]['is_proxy'] = $proxyFlag;
+        S::$tables['phone_shop_goods'][20]['source'] = '100024';
+        $before = S::$tables;
+        rejects(fn()=>mallWrite(2300), '代理商品');
+        check(S::$tables === $before, 'foreign source rejected without writes, regardless of proxy flag');
+        rejects(fn()=>Db::transaction(fn()=>(new Writer())->syncToErp(100005, S::$tables['phone_shop_goods_sku'][30])), '代理商品');
+        rejects(fn()=>Db::transaction(fn()=>Erp::sync(100005, S::$tables['erp_asset'][10])), '代理商品');
+    }
+    S::$tables['phone_shop_goods'][20]['source'] = '100005';
+    S::$tables['phone_shop_goods'][20]['is_proxy'] = 1;
     rejects(fn()=>Db::transaction(fn()=>(new Writer())->capture(100024,20)),'不属于当前站点');
     S::$active=true;$before=S::$tables;rejects(fn()=>Db::transaction(function(){S::$tables['erp_asset'][10]['retail_price']=2500;Erp::sync(100005,S::$tables['erp_asset'][10]);}),'营销活动');check(S::$tables===$before,'campaign rollback');S::$active=false;
     S::$config[100005]['enabled']=0;

@@ -268,7 +268,7 @@ async function load() {
         categoryOptions.value = array(categories.data); brandOptions.value = array(brands.data); labelOptions.value = array(labels.data)
         defaultGrades.value = array(grades.data); gradeOptions.value = defaultGrades.value
         serviceOptions.value = array(data.service_options); check.value = data.check || {}
-        if (data.material_task?.status) basicFirst.value = data.material_task.status !== 'none'
+        basicFirst.value = Number(data.basic_first) === 1
         imageUrls.value = array(data.images ?? source.value.images).filter(url => typeof url === 'string' && !!url.trim())
         activeImage.value = 0
         const row = source.value
@@ -295,7 +295,7 @@ async function load() {
 async function open(row: Record<string, any>, mode: 'build' | 'material' = 'build') {
     if (saving.value) return
     materialMode.value = mode === 'material'; materialInfo.value = null; materialForm.value = emptyMaterialForm(); initialMaterial.value = ''; refreshingCatalog.value = false
-    source.value = { ...row }; basicFirst.value = !!row.material_task && row.material_task.status !== 'none'
+    source.value = { ...row }; basicFirst.value = Number(row.basic_first) === 1
     initialForm.value = null; attempted.value = false; activeTab.value = materialMode.value ? 'attributes' : 'basic'; specGroups.value = []; specError.value = ''
     previewing.value = false; visible.value = true
     await load()

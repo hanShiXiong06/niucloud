@@ -329,6 +329,7 @@ Route::group('recycle', function () {
 Route::group('recycle', function () {
     // 设备导出管理
     Route::get('device_export/list', 'addon\hsx_recycle\app\adminapi\controller\device\export\DeviceExportController@list');
+    Route::post('device_export/export', 'addon\hsx_recycle\app\adminapi\controller\device\export\DeviceExportController@export');
     Route::post('device_export/sync_erp', 'addon\hsx_recycle\app\adminapi\controller\device\export\DeviceExportController@syncErp');
     // 下游同步健康度 + 单台重新同步（兜底）
     Route::post('device_export/sync_health', 'addon\hsx_recycle\app\adminapi\controller\device\export\DeviceExportController@syncHealth');

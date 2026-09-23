@@ -31,6 +31,15 @@ export function syncAgentGoodsStep(data: Record<string, any>) {
 export function getAgentDashboard(params: Record<string, any> = {}) {
     return request.get('phone_shop/agent/dashboard', { params })
 }
+export function getAgentReferenceSync(agentSiteId: number) {
+    return request.get('phone_shop/agent/reference_sync', { params: { agent_site_id: agentSiteId } })
+}
+export function startAgentReferenceSync(agentSiteId: number) {
+    return request.post('phone_shop/agent/reference_sync', { agent_site_id: agentSiteId })
+}
+export function stepAgentReferenceSync(data: { agent_site_id: number; token: string; revision: number }) {
+    return request.post('phone_shop/agent/reference_sync/step', data)
+}
 // 设置主站ID
 export function setAgentMasterConfig(data: Record<string, any>) {
     return request.post('phone_shop/agent/master_config', data)

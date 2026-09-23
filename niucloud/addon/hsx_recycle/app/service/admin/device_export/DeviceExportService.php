@@ -5,8 +5,12 @@ namespace addon\hsx_recycle\app\service\admin\device_export;
 
 use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
-use app\job\sys\ExportJob;
+use addon\hsx_recycle\app\job\device\DeviceBarcodeExportJob;
+use app\dict\sys\ExportDict;
+use app\model\sys\SysExport;
+use app\service\core\sys\CoreExportService;
 use core\base\BaseAdminService;
+use core\exception\CommonException;
 
 /**
  * 设备导出服务
@@ -83,11 +87,28 @@ class DeviceExportService extends BaseAdminService
      */
     public function export(array $where = []): bool
     {
-        // 添加站点条件
-        $where['site_id'] = $this->site_id;
-
-        // 调用系统导出Job
-        ExportJob::dispatch(['site_id' => $this->site_id, 'type' => 'recycle_device', 'where' => $where, 'page' => ['page' => 0, 'limit' => 0]]);
+        if ((int)$this->site_id <= 0) throw new CommonException('站点信息无效，请重新登录后重试');
+        DeviceBarcodeWorkbook::assertSupported();
+        $ids = $where['device_ids'] ?? [];
+        if (!is_array($ids)) throw new CommonException('导出设备参数不正确，请刷新列表后重新选择');
+        foreach ($ids as $id) {
+            if ((!is_int($id) && !is_string($id)) || !ctype_digit((string)$id) || (int)$id <= 0) {
+                throw new CommonException('导出设备参数不正确，请刷新列表后重新选择');
+            }
+        }
+        $where['device_ids'] = array_values(array_unique(array_map('intval', $ids)));
+        $exportId = (int)(new CoreExportService())->add([
+            'site_id' => $this->site_id, 'export_key' => 'recycle_device', 'export_num' => 0,
+            'export_status' => ExportDict::EXPORTING, 'create_time' => time(),
+        ]);
+        try {
+            DeviceBarcodeExportJob::dispatch(['site_id' => (int)$this->site_id, 'export_id' => $exportId, 'where' => $where]);
+        } catch (\Throwable $e) {
+            SysExport::where([['id', '=', $exportId], ['site_id', '=', $this->site_id]])->where('export_status', '<>', ExportDict::SUCCESS)->update([
+                'export_status' => ExportDict::FAIL, 'fail_reason' => mb_substr($e->getMessage(), 0, 250),
+            ]);
+            throw $e;
+        }
 
         return true;
     }

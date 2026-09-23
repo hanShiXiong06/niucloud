@@ -29,7 +29,7 @@
                     <div class="text-[16px] font-medium">从站跟随关系</div>
                     <div class="mt-[5px] text-[12px] text-[#94a3b8]">添加并启用后，系统会开始同步该从站的完整货盘</div>
                 </div>
-                <el-button type="primary" @click="openAdd">添加从站</el-button>
+                <el-button v-permission="'phone_shop_agent_add'" type="primary" @click="openAdd">添加从站</el-button>
             </div>
             <el-table v-loading="loading" :data="tableData" class="mt-[14px]" size="large">
                 <template #empty><span>{{ !loading ? '暂无从站跟随关系' : '' }}</span></template>
@@ -40,17 +40,18 @@
                     <template #default="{ row }"><span class="text-[#ef4444]">+{{ money(row.markup_value) }}</span></template>
                 </el-table-column>
                 <el-table-column label="基础资料同步" min-width="130">
-                    <template #default="{ row }"><el-tag :type="row.subscribe_category == 1 ? 'success' : 'info'">{{ row.subscribe_category == 1 ? '已开启' : '已关闭' }}</el-tag></template>
+                    <template #default="{ row }"><el-tag :type="row.ref_sync_mode === 'manual' ? 'info' : 'success'">{{ syncModeName(row) }}</el-tag></template>
                 </el-table-column>
                 <el-table-column label="自动跟随" min-width="120">
                     <template #default="{ row }"><el-tag :type="row.status == 1 ? 'success' : 'danger'">{{ row.status == 1 ? '运行中' : '已停止' }}</el-tag></template>
                 </el-table-column>
-                <el-table-column label="操作" width="310" fixed="right">
+                <el-table-column label="操作" width="400" fixed="right">
                     <template #default="{ row }">
-                        <el-button type="primary" link @click="openDashboard(row.agent_site_id)">数据看板</el-button>
-                        <el-button type="success" link @click="openCategoryMappings(row.agent_site_id)">分类映射</el-button>
-                        <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
-                        <el-button type="danger" link @click="remove(row)">删除</el-button>
+                        <el-button v-permission="'phone_shop_agent_reference'" type="primary" link @click="openReferenceSync(row.agent_site_id)">基础资料</el-button>
+                        <el-button v-permission="'phone_shop_agent_dashboard'" type="primary" link @click="openDashboard(row.agent_site_id)">数据看板</el-button>
+                        <el-button v-permission="'phone_shop_agent_mapping'" type="success" link @click="openCategoryMappings(row.agent_site_id)">分类映射</el-button>
+                        <el-button v-permission="'phone_shop_agent_edit'" type="primary" link @click="openEdit(row)">编辑</el-button>
+                        <el-button v-permission="'phone_shop_agent_delete'" type="danger" link @click="remove(row)">删除</el-button>
                     </template>
                 </el-table-column>
             </el-table>
@@ -65,15 +66,16 @@
                     <div class="text-[16px] font-medium">本站跟随状态</div>
                     <div class="mt-[5px] text-[12px] text-[#94a3b8]">关联成功后不需要再选择商品</div>
                 </div>
-                <div v-if="tableData[0]" class="flex items-center gap-[8px]">
-                    <el-button type="success" plain @click="openCategoryMappings(tableData[0].agent_site_id)">分类映射</el-button>
-                    <el-button @click="openEdit(tableData[0])">设置站点加价</el-button>
-                    <el-button :loading="syncLoading" :disabled="tableData[0].status != 1" @click="syncAll">
+                <div v-if="tableData[0]" class="flex flex-wrap items-center gap-[8px]">
+                    <el-button v-permission="'phone_shop_agent_reference'" type="primary" plain @click="openReferenceSync(tableData[0].agent_site_id)">基础资料同步</el-button>
+                    <el-button v-permission="'phone_shop_agent_mapping'" type="success" plain @click="openCategoryMappings(tableData[0].agent_site_id)">分类映射</el-button>
+                    <el-button v-permission="'phone_shop_agent_edit'" @click="openEdit(tableData[0])">设置站点加价</el-button>
+                    <el-button v-permission="'phone_shop_agent_goods_start'" :loading="syncLoading" :disabled="tableData[0].status != 1" @click="syncAll">
                         {{ syncLoading && syncProgressText ? syncProgressText : '立即全量校准' }}
                     </el-button>
-                    <el-button type="danger" plain @click="remove(tableData[0])">取消跟随</el-button>
+                    <el-button v-permission="'phone_shop_agent_delete'" type="danger" plain @click="remove(tableData[0])">取消跟随</el-button>
                 </div>
-                <el-button v-else type="primary" :loading="saveLoading" @click="followMaster">关注主站并同步商品</el-button>
+                <el-button v-else v-permission="'phone_shop_agent_add'" type="primary" :loading="saveLoading" @click="followMaster">关注主站并同步商品</el-button>
             </div>
 
             <div v-if="tableData[0]" class="mt-[16px] grid grid-cols-1 gap-[12px] md:grid-cols-3">
@@ -102,7 +104,13 @@
                     <el-input-number v-model="form.markup_value" :min="0" :precision="2" :step="50" controls-position="right" class="!w-[200px]" />
                     <div class="mt-[4px] text-[12px] text-[#94a3b8]">从站展示价 = 主站售价 + 此加价</div>
                 </el-form-item>
-                <el-form-item label="同步基础资料"><el-switch v-model="form.subscribe_category" :active-value="1" :inactive-value="0" /></el-form-item>
+                <el-form-item label="基础资料同步">
+                    <el-select v-model="form.ref_sync_mode"><el-option label="仅手动" value="manual" /><el-option label="定时同步" value="interval" /><el-option label="实时跟随" value="realtime" /></el-select>
+                </el-form-item>
+                <el-form-item v-if="form.ref_sync_mode === 'interval'" label="同步周期">
+                    <el-select v-model="form.ref_sync_interval"><el-option v-for="value in syncIntervals" :key="value" :value="value" :label="value < 60 ? `每 ${value} 分钟` : `每 ${value / 60} 小时`" /></el-select>
+                </el-form-item>
+                <el-form-item label="补建缺失分类"><el-switch v-model="form.ref_auto_create_category" :active-value="1" :inactive-value="0" /></el-form-item>
                 <el-form-item v-if="form.id && isMasterSite" label="自动跟随">
                     <el-switch v-model="form.status" :active-value="1" :inactive-value="0" active-text="启用" inactive-text="停用" />
                 </el-form-item>
@@ -113,6 +121,7 @@
             </template>
         </el-dialog>
         <CategoryMappingDrawer ref="categoryMappingRef" />
+        <ReferenceSyncDrawer ref="referenceSyncRef" @changed="loadList()" @open-category="openCategoryMappings" />
         <el-drawer v-model="dashboardVisible" title="从站货盘数据" size="76%" destroy-on-close>
             <AgentDataDashboard v-if="dashboardVisible" ref="drawerDashboardRef" :agent-site-id="dashboardAgentId" @open-category="openCategoryMappings(dashboardAgentId)" />
         </el-drawer>
@@ -125,6 +134,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { addAgent, deleteAgent, editAgent, getAgentList, getAgentMasterConfig, syncAgentGoods, syncAgentGoodsStep } from '@/addon/phone_shop/api/agent'
 import CategoryMappingDrawer from './components/CategoryMappingDrawer.vue'
 import AgentDataDashboard from './components/AgentDataDashboard.vue'
+import ReferenceSyncDrawer from './components/ReferenceSyncDrawer.vue'
 
 const loading = ref(false)
 const tableData = ref<any[]>([])
@@ -139,11 +149,16 @@ const saveLoading = ref(false)
 const syncLoading = ref(false)
 const syncProgressText = ref('')
 const categoryMappingRef = ref<any>(null)
+const referenceSyncRef = ref<any>(null)
+const syncIntervals = [15, 30, 60, 180, 360, 720, 1440]
+const syncModeName = (row: any) => row.ref_sync_mode === 'interval' ? `每 ${row.ref_sync_interval} 分钟` : row.ref_sync_mode === 'manual' ? '仅手动' : '实时跟随'
+const openReferenceSync = (siteId: number) => referenceSyncRef.value?.open(Number(siteId))
 const dashboardRef = ref<any>(null)
 const drawerDashboardRef = ref<any>(null)
 const dashboardVisible = ref(false)
 const dashboardAgentId = ref(0)
-const form = reactive<any>({ id: 0, agent_site_id: undefined, markup_value: 0, subscribe_category: 1, status: 1 })
+const defaultForm = () => ({ id: 0, agent_site_id: undefined, markup_value: 0, subscribe_category: 1, status: 1, ref_sync_mode: 'realtime', ref_sync_interval: 60, ref_auto_create_category: 1 })
+const form = reactive<any>(defaultForm())
 
 const money = (value: any) => Number(value || 0).toFixed(2)
 const loadConfig = async () => {
@@ -159,7 +174,7 @@ const loadList = (p = page.value) => {
         total.value = Number(res.data.total || 0)
     }).finally(() => { loading.value = false })
 }
-const resetForm = () => Object.assign(form, { id: 0, agent_site_id: undefined, markup_value: 0, subscribe_category: 1, status: 1 })
+const resetForm = () => Object.assign(form, defaultForm())
 const openAdd = () => { resetForm(); dialogTitle.value = '添加从站跟随关系'; dialogVisible.value = true }
 const followMaster = () => {
     saveLoading.value = true
@@ -169,7 +184,7 @@ const followMaster = () => {
     }).finally(() => { saveLoading.value = false })
 }
 const openEdit = (row: any) => {
-    Object.assign(form, { id: row.id, agent_site_id: row.agent_site_id, markup_value: Number(row.markup_value || 0), subscribe_category: Number(row.subscribe_category), status: Number(row.status) })
+    Object.assign(form, { id: row.id, agent_site_id: row.agent_site_id, markup_value: Number(row.markup_value || 0), subscribe_category: Number(row.subscribe_category), status: Number(row.status), ref_sync_mode: row.ref_sync_mode || 'manual', ref_sync_interval: Number(row.ref_sync_interval || 60), ref_auto_create_category: Number(row.ref_auto_create_category || 0) })
     dialogTitle.value = '编辑站点跟随关系'
     dialogVisible.value = true
 }

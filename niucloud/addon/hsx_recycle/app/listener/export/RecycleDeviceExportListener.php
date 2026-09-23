@@ -70,8 +70,8 @@ class RecycleDeviceExportListener
             $deviceIds = array_column($data, 'id');
 
             // 批量更新这些设备的 export_time
-            if (!empty($deviceIds)) {
-                (new RecycleDevice())->whereIn('id', $deviceIds)->update(['export_time' => time()]);
+            if (!empty($deviceIds) && ($param['mark_exported'] ?? true)) {
+                (new RecycleDevice())->where('site_id', (int)($param['site_id'] ?? 0))->whereIn('id', $deviceIds)->update(['export_time' => time()]);
             }
 
             // 质检模板保留列(颜色/内存等)存的是选项值(数字 id),按各设备所属模板回译成文案,避免导出偏差
@@ -80,6 +80,7 @@ class RecycleDeviceExportListener
             $optionLabelMap = DeviceSummaryHelper::buildOptionLabelMap($templateIds, $reservedKeys, (int)($param['site_id'] ?? 0));
 
             foreach ($data as $key => $value) {
+                if (!empty($param['keep_device_id'])) $data[$key]['_device_id'] = (int)$value['id'];
                 // “包装”是导出展示字段：不要求额外建表或补历史列。
                 // 新数据优先使用设备列，历史数据为空时从 info JSON / 质检结果中派生。
                 if (trim((string)($data[$key]['package_type'] ?? '')) === '') {

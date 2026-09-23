@@ -1,7 +1,7 @@
 <template>
     <el-drawer v-model="visible" title="分类映射工作台" size="86%" destroy-on-close>
         <div class="mapping-head">
-            <div><div class="text-[16px] font-semibold text-[#1f2937]">主站 {{ masterSiteId }} → 子站 {{ agentSiteId }}</div><div class="mt-[5px] text-[12px] text-[#64748b]">分类各自独立，仅记录等价关系；有歧义时由管理员决定，不会自动复制或覆盖分类。</div></div>
+            <div><div class="text-[16px] font-semibold text-[#1f2937]">主站 {{ masterSiteId }} → 子站 {{ agentSiteId }}</div><div class="mt-[5px] text-[12px] text-[#64748b]">已关联分类跟随主站名称与层级，保留子站 ID；未关联的本地分类保持不变。</div></div>
             <el-button type="primary" :loading="scanLoading" @click="scan">扫描并校准</el-button>
         </div>
         <div class="mt-[14px] grid grid-cols-2 gap-[10px] lg:grid-cols-5"><div v-for="item in summaryCards" :key="item.key" class="summary-card"><span>{{ item.label }}</span><strong :class="item.className">{{ summary[item.key] || 0 }}</strong></div></div>
@@ -21,7 +21,7 @@ const summaryCards=[{key:'mapped',label:'已安全关联',className:'text-[#16a3
 const availableOptions=computed(()=>options.value.filter(item=>Number(item.level)===Number(currentRow.value?.master_level||0))),optionName=(item:any)=>`${item.category_full_name||item.category_name}（ID ${item.category_id}）`
 const candidateNames=(row:any)=>(row.candidate_options||[]).map((item:any)=>item.name).join('、')
 const statusMeta=(status:string)=>({mapped:{label:'已关联',type:'success'},pending:{label:'待处理',type:'warning'},broken:{label:'已失效',type:'danger'},ignored:{label:'已忽略',type:'info'},source_deleted:{label:'主站已删除',type:'info'}} as any)[status]||{label:status||'-',type:'info'}
-const matchTypeName=(type:string)=>({legacy_copy:'已接管历史同步分类',auto_exact:'系统唯一匹配',manual:'管理员手动关联',manual_created:'管理员新建后关联'} as any)[type]||'-'
+const matchTypeName=(type:string)=>({legacy_copy:'已接管历史同步分类',auto_exact:'系统唯一匹配',auto_created:'自动新增并关联',manual:'管理员手动关联',manual_created:'管理员新建后关联'} as any)[type]||'-'
 const loadSummary=async()=>{const res:any=await getAgentCategoryMappingSummary({agent_site_id:agentSiteId.value});Object.assign(summary,res.data||{});masterSiteId.value=Number(res.data?.master_site_id||0)}
 const loadOptions=async()=>{const res:any=await getAgentCategoryOptions({agent_site_id:agentSiteId.value});options.value=res.data||[]}
 const loadList=async(p=page.value)=>{loading.value=true;page.value=Number(p||1);try{const res:any=await getAgentCategoryMappings({agent_site_id:agentSiteId.value,status:filters.status,keyword:filters.keyword,page:page.value,limit:limit.value});rows.value=res.data?.data||[];total.value=Number(res.data?.total||0);masterSiteId.value=Number(res.data?.master_site_id||masterSiteId.value)}finally{loading.value=false}}
