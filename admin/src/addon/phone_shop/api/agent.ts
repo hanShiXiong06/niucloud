@@ -20,6 +20,10 @@ export function deleteAgent(id: number) {
 export function getAgentMasterConfig() {
     return request.get('phone_shop/agent/master_config')
 }
+
+export function setAgentDisplayConfig(data: { agent_name: string }) {
+    return request.put('phone_shop/agent/display_config', data)
+}
 // 子站一键同步主站商品
 export function syncAgentGoods() {
     return request.post('phone_shop/agent/sync_goods', {})

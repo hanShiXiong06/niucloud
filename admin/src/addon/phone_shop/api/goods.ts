@@ -61,6 +61,10 @@ export function retryGoodsArrivalNotice(id: number) {
     return request.post(`phone_shop/goods/transfer/notices/${id}/retry`)
 }
 
+export function supplementGoodsArrivalNotice(id: number, audienceToken: string) {
+    return request.post(`phone_shop/goods/transfer/notices/${id}/retry`, { mode: 'supplement', audience_token: audienceToken })
+}
+
 export function getGoodsArrivalResults(id: number, page = 1) {
     return request.get(`phone_shop/goods/transfer/notices/${id}/results`, { params: { page, limit: 15 } })
 }

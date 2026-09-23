@@ -59,7 +59,7 @@
 						<view class="warehouse-bar" v-if="showWarehouseSwitch">
 							<view class="wh-tab" :class="{ on: warehouse === '' }" @click="switchWarehouse('')">全部</view>
 							<view class="wh-tab" :class="{ on: warehouse === 'local' }" @click="switchWarehouse('local')">本地仓</view>
-							<view class="wh-tab" :class="{ on: warehouse === 'agent' }" @click="switchWarehouse('agent')">{{ warehouseAgentName }}</view>
+							<view class="wh-tab wh-tab--agent" :class="{ on: warehouse === 'agent' }" @click="switchWarehouse('agent')">{{ warehouseAgentName }}</view>
 						</view>
 						<view class="third-row">
 								<scroll-view :scroll-x="true" :show-scrollbar="false" class="third-scroll" v-if="thirdLevelList.length">
@@ -1372,12 +1372,21 @@ const qcAbnormal = (data: any) => {
 	padding: 12rpx 8rpx 0;
 
 	.wh-tab {
+		flex-shrink: 0;
+		white-space: nowrap;
 		padding: 8rpx 28rpx;
 		font-size: 24rpx;
 		color: #5b6b7a;
 		background: #f4f4f4;
 		border-radius: 28rpx;
 		line-height: 1.4;
+
+		&--agent {
+			flex-shrink: 1;
+			min-width: 0;
+			overflow: hidden;
+			text-overflow: ellipsis;
+		}
 
 		&.on {
 			color: #fff;

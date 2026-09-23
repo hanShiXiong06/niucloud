@@ -78,6 +78,8 @@
                 <el-button v-else v-permission="'phone_shop_agent_add'" type="primary" :loading="saveLoading" @click="followMaster">关注主站并同步商品</el-button>
             </div>
 
+            <AgentDisplaySettings v-permission="'phone_shop_agent_display_edit'" :config="displayConfig" @saved="displayConfig = $event" />
+
             <div v-if="tableData[0]" class="mt-[16px] grid grid-cols-1 gap-[12px] md:grid-cols-3">
                 <div class="summary-item"><span>跟随主站</span><strong>{{ tableData[0].master_site_name || tableData[0].master_site_id }}</strong></div>
                 <div class="summary-item"><span>统一加价</span><strong class="!text-[#ef4444]">+{{ money(tableData[0].markup_value) }}</strong></div>
@@ -135,6 +137,7 @@ import { addAgent, deleteAgent, editAgent, getAgentList, getAgentMasterConfig, s
 import CategoryMappingDrawer from './components/CategoryMappingDrawer.vue'
 import AgentDataDashboard from './components/AgentDataDashboard.vue'
 import ReferenceSyncDrawer from './components/ReferenceSyncDrawer.vue'
+import AgentDisplaySettings from './components/AgentDisplaySettings.vue'
 
 const loading = ref(false)
 const tableData = ref<any[]>([])
@@ -143,6 +146,7 @@ const limit = ref(10)
 const total = ref(0)
 const isMasterSite = ref(true)
 const masterSiteId = ref(0)
+const displayConfig = ref<any>({})
 const dialogVisible = ref(false)
 const dialogTitle = ref('添加从站')
 const saveLoading = ref(false)
@@ -165,6 +169,7 @@ const loadConfig = async () => {
     const res: any = await getAgentMasterConfig()
     masterSiteId.value = Number(res.data.master_site_id || 0)
     isMasterSite.value = Number(res.data.is_master_site) === 1
+    displayConfig.value = res.data.display_config || {}
 }
 const loadList = (p = page.value) => {
     loading.value = true

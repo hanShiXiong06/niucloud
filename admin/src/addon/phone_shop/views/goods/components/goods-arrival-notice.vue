@@ -5,12 +5,12 @@
             <template v-if="preview">
                 <div class="notice-stats">
                     <div><strong>{{ preview.saleable_count }}</strong><span>本批当前可售</span></div>
-                    <div><strong>{{ preview.member_count }}</strong><span>已同意本批上新提醒</span></div>
+                    <div><strong>{{ preview.member_count }}</strong><span>匹配订阅客户</span></div>
                     <div><strong>{{ preview.excluded_count }}</strong><span>不可售，已排除</span></div>
                 </div>
                 <el-alert v-if="!preview.capability?.enabled" :title="preview.capability?.reason" type="warning" :closable="false" />
-                <p class="notice-help">未上架、已售、锁定、无库存或未允许线上销售的商品不会推送。只发送给本站“上新提醒”订阅客户；原分类/筛选订阅独立保留，不叠加逐台通知。</p>
-                <el-alert title="一人一批一条，不是永久群发授权" description="微信一次性订阅有额度限制；微信受理不代表客户已经阅读。发送前会再次核验商品及订阅状态。" type="info" :closable="false" />
+                <p class="notice-help">仅包含本批当前可售商品。按客户的分类、筛选或上新订阅匹配，一人一批一条；已取消订阅的不发送。</p>
+                <el-alert title="发送结果以微信回执为准" description="历史订阅缺少本地授权记录时，将提交微信核验；无额度或拒收会显示失败原因。微信受理不代表客户已阅读。" type="info" :closable="false" />
                 <section v-if="notice" class="notice-result">
                     <div class="notice-result__title">{{ stateText(notice.status) }}</div>
                     <p>{{ notice.message }}</p>
@@ -18,6 +18,7 @@
                     <el-alert v-if="notice.error_message" :title="notice.error_message" type="error" :closable="false" />
                     <el-alert v-if="notice.can_resume" title="超过一分钟未更新进度，可检查并恢复任务。仍在执行的任务会被保护，不会重复发送。" type="warning" :closable="false" />
                     <p v-if="notice.result_json?.unknown" class="notice-help">“待核实”表示微信响应未确认，为避免重复消息，不自动重发这部分客户。</p>
+                    <el-alert v-if="preview.supplement?.member_count" :title="`新增匹配 ${preview.supplement.member_count} 位客户，尚未加入本批发送名单`" type="info" :closable="false" />
                     <el-table :data="results" max-height="300" size="small" empty-text="暂无客户结果">
                         <el-table-column prop="member_name" label="客户" min-width="105"><template #default="{row}">{{ row.member_name || `会员 ${row.member_id}` }}</template></el-table-column>
                         <el-table-column prop="result" label="处理结果" min-width="240" />
@@ -27,10 +28,13 @@
             </template>
         </div>
         <template #footer>
+            <div class="notice-footer">
             <el-button @click="visible = false">关闭</el-button>
-            <el-button :loading="loading" @click="load">刷新状态</el-button>
-            <el-button v-if="notice && (notice.can_resume || ['failed', 'partial'].includes(notice.status))" type="primary" :loading="sending" @click="retry">{{ notice.can_resume ? '检查并恢复任务' : '重试未发送/失败项' }}</el-button>
+            <el-button :loading="loading" :disabled="sending" @click="load">刷新状态</el-button>
+            <el-button v-if="notice && (notice.can_resume || ['failed', 'partial'].includes(notice.status))" type="primary" plain :disabled="loading" :loading="sending" @click="retry">{{ notice.can_resume ? '检查并恢复任务' : '重试原名单失败项' }}</el-button>
+            <el-button v-if="notice && preview.supplement?.member_count" type="primary" :disabled="!canSupplement" :loading="sending" @click="supplement">补发新增匹配客户</el-button>
             <el-button v-else-if="!notice" type="primary" :disabled="!canSend" :loading="sending" @click="send">发送上新提醒</el-button>
+            </div>
         </template>
     </el-drawer>
 </template>
@@ -38,7 +42,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { ElMessageBox } from 'element-plus'
-import { getGoodsArrivalPreview, getGoodsArrivalResults, retryGoodsArrivalNotice, sendGoodsArrivalNotice } from '@/addon/phone_shop/api/goods'
+import { getGoodsArrivalPreview, getGoodsArrivalResults, retryGoodsArrivalNotice, sendGoodsArrivalNotice, supplementGoodsArrivalNotice } from '@/addon/phone_shop/api/goods'
 const visible = ref(false)
 const loading = ref(false)
 const sending = ref(false)
@@ -50,6 +54,7 @@ const resultTotal = ref(0)
 const results = ref<any[]>([])
 const notice = computed(() => preview.value?.notice_task)
 const canSend = computed(() => !loading.value && !error.value && preview.value?.capability?.enabled && preview.value.saleable_count > 0 && preview.value.member_count > 0)
+const canSupplement = computed(() => !loading.value && !error.value && !sending.value && preview.value?.supplement?.available)
 const progress = computed(() => notice.value?.total_rows ? Math.min(100, Math.round(notice.value.processed_rows / notice.value.total_rows * 100)) : 0)
 let timer: ReturnType<typeof setTimeout> | undefined
 let generation = 0
@@ -88,7 +93,7 @@ const send = async () => {
     const id = importId.value
     sending.value = true
     try {
-        try { await ElMessageBox.confirm(`将通知 ${preview.value.member_count} 位订阅客户，本批可售 ${preview.value.saleable_count} 台。实际发送以微信授权额度和回执为准，是否发送？`, '确认发送微信上新提醒', { type: 'warning', confirmButtonText: '确认发送', cancelButtonText: '暂不发送' }) }
+        try { await ElMessageBox.confirm(`将向 ${preview.value.member_count} 位匹配订阅客户尝试发送，本批可售 ${preview.value.saleable_count} 台。每位客户只统计符合其订阅条件的商品，实际发送以微信授权额度和回执为准，是否发送？`, '确认发送微信上新提醒', { type: 'warning', confirmButtonText: '确认发送', cancelButtonText: '暂不发送' }) }
         catch { return }
         if (current !== generation) return
         await sendGoodsArrivalNotice(id)
@@ -104,6 +109,24 @@ const retry = async () => {
     catch (e: any) { if (current === generation) error.value = e?.msg || e?.message || '重试提交失败，请刷新核对' }
     finally { if (current === generation) sending.value = false }
 }
+const supplement = async () => {
+    if (!canSupplement.value) return
+    const current = generation
+    const id = notice.value.id
+    const { member_count: count, audience_token: token } = preview.value.supplement
+    sending.value = true
+    try {
+        try { await ElMessageBox.confirm(`仅向新匹配的 ${count} 位客户补发本批上新提醒，发送时再次核验订阅和可售商品。不会重发原名单中的成功、失败或待核实记录，是否继续？`, '确认补发新增客户', { type: 'warning', confirmButtonText: '确认补发', cancelButtonText: '暂不补发' }) }
+        catch { return }
+        if (current !== generation) return
+        const res: any = await supplementGoodsArrivalNotice(id, token)
+        if (current === generation) {
+            resultPage.value = Math.max(1, Math.ceil(Number(res.data?.total_rows || 0) / 15))
+            await load()
+        }
+    } catch (e: any) { if (current === generation) error.value = e?.msg || e?.message || '补发提交失败，请刷新名单后重试' }
+    finally { if (current === generation) sending.value = false }
+}
 const states: Record<string, string> = { queued: '等待队列处理', processing: '正在发送', completed: '本批处理完成', partial: '部分通知未发送成功', failed: '通知任务中断' }
 const stateText = (value: string) => states[value] || value
 defineExpose({ open })
@@ -112,6 +135,7 @@ onBeforeUnmount(stop)
 
 <style scoped>
 .arrival-notice{min-height:120px;color:#334155}
+.notice-footer{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px}.notice-footer .el-button{margin-left:0}
 .notice-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:20px}
 .notice-stats>div{display:flex;flex-direction:column;gap:6px;padding:14px 10px;border-radius:10px;background:#f8fafc}
 .notice-stats strong{font-size:26px}.notice-stats span,.notice-help{font-size:13px;color:#64748b;line-height:1.7}
