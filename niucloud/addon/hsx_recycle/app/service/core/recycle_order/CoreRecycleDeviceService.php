@@ -231,22 +231,26 @@ class CoreRecycleDeviceService extends BaseCoreService
         try {
             Db::startTrans();
 
-            $device = RecycleDevice::where([
+            $preview = RecycleDevice::where([
                 ['id', '=', $id],
                 ['site_id', '=', $siteId],
-            ])->lock(true)->findOrEmpty();
-            if ($device->isEmpty()) {
+            ])->findOrEmpty();
+            if ($preview->isEmpty()) {
                 throw new CommonException('设备不存在或不属于当前站点');
             }
 
             $order = RecycleOrder::where([
-                ['id', '=', (int)$device->order_id],
+                ['id', '=', (int)$preview->order_id],
                 ['site_id', '=', $siteId],
                 ['member_id', '=', $memberId],
             ])->lock(true)->findOrEmpty();
             if ($order->isEmpty()) {
                 throw new CommonException('设备不存在或不属于当前用户订单');
             }
+            $device = RecycleDevice::where([
+                ['id', '=', $id], ['site_id', '=', $siteId], ['order_id', '=', (int)$order->id],
+            ])->lock(true)->findOrEmpty();
+            if ($device->isEmpty()) throw new CommonException('设备不存在或已变更，请刷新后重试');
             if ((float)($device->final_price ?? 0) <= 0) {
                 throw new CommonException('商家尚未完成定价，请等待最终报价后再操作');
             }
@@ -357,6 +361,11 @@ class CoreRecycleDeviceService extends BaseCoreService
     /** 全部设备进入终态后，统一汇总回收订单状态。 */
     private function syncConfirmedOrderStatus(int $orderId, int $siteId, int $now): void
     {
+        $order = RecycleOrder::where([['id', '=', $orderId], ['site_id', '=', $siteId]])->findOrEmpty();
+        if (!$order->isEmpty() && $order->flow_mode === RecycleOrderDict::FLOW_MODE_DEVICE) {
+            (new RecycleOrderProgressService())->sync($siteId, $orderId);
+            return;
+        }
         $statuses = array_map('intval', RecycleDevice::where([
             ['order_id', '=', $orderId],
             ['site_id', '=', $siteId],

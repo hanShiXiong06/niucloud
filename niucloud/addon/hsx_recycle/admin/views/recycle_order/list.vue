@@ -109,6 +109,10 @@
           :handle-express-leave="handleExpressLeave"
           :share-order="shareOrder"
           :view-notice-logs="viewNoticeLogs"
+          :print-order="printOrder"
+          :printing-order-id="printingOrderId"
+          :refresh-order-progress="refreshOrderProgress"
+          :refreshing-order-id="refreshingOrderId"
           @refresh="getList"
 
         />
@@ -150,6 +154,10 @@
           :handle-express-leave="handleExpressLeave"
           :share-order="shareOrder"
           :view-notice-logs="viewNoticeLogs"
+          :print-order="printOrder"
+          :printing-order-id="printingOrderId"
+          :refresh-order-progress="refreshOrderProgress"
+          :refreshing-order-id="refreshingOrderId"
         />
       </div>
 
@@ -350,11 +358,13 @@ import { useRecycleOrderQuery } from "../../hooks/useRecycleOrderQuery";
 import { useRecycleOrderActions } from "../../hooks/useRecycleOrderActions";
 import { useRecycleDeviceActions } from "../../hooks/useRecycleDeviceActions";
 import { useRecycleOrderUi } from "../../hooks/useRecycleOrderUi";
+import { useRecycleOrderPrint } from "../../hooks/useRecycleOrderPrint";
 
 import {
   getRecycleOrderList,
   getRecycleOrderStatusList,
   updateRecycleOrder,
+  refreshRecycleOrderProgress,
   getDevice,
   getDeviceDetailView,
   getCapitalAccountOptions,
@@ -405,6 +415,23 @@ import { img } from "@/utils/common";
 // 提交守卫与危险操作确认通用件
 import { useSubmit, confirmDanger } from "@/addon/hsx_recycle/hooks/useSubmit";
 const hsxFeedback = useFeedback()
+const { printOrder, printingOrderId } = useRecycleOrderPrint({
+  onError: message => hsxFeedback.error(message),
+})
+const refreshingOrderId = ref<number | null>(null)
+const refreshOrderProgress = async (row: OrderItem) => {
+  if (refreshingOrderId.value !== null) return
+  refreshingOrderId.value = row.id
+  try {
+    const response = await refreshRecycleOrderProgress(row.id)
+    await getList()
+    hsxFeedback.success(response.data?.message || '订单状态已核对')
+  } catch (error: any) {
+    hsxFeedback.error(error?.msg || error?.message || '状态核对失败，请重试；未执行任何付款')
+  } finally {
+    refreshingOrderId.value = null
+  }
+}
 
 
 // 状态定义

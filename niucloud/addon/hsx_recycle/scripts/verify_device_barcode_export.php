@@ -68,7 +68,7 @@ namespace {
         same(0, (int)Db::name('recycle_device')->sum('export_time'), '读取导出数据没有提前标记已导出');
 
         $service = new DeviceExportService();
-        same(true, $service->export(['device_ids' => [1, 2, 3, 4, 5, 1]]), '导出选中五台并去重');
+        same(true, $service->export(['device_ids' => [1, 2, 3, 4, 5, 1], 'include_barcode' => 1]), '勾选条形码后导出选中五台并去重');
         $record = Db::name('sys_export')->order('id desc')->find();
         same(2, (int)$record['export_status'], '完整文件生成后任务成功');
         same(5, (int)$record['export_num'], '导出记录台数准确');
@@ -116,6 +116,24 @@ namespace {
         $invalidSiteService = new DeviceExportService();
         $invalidSiteService->site_id = 0;
         throws(fn() => $invalidSiteService->export(['device_ids' => [1]]), '站点信息无效', '无有效站点不能创建导出');
+        foreach ([[], ['include_barcode' => 0], ['include_barcode' => 'false']] as $options) {
+            same(true, $service->export(['device_ids' => [2]] + $options), '默认/关闭条形码仍可导出');
+            $plain = Db::name('sys_export')->order('id desc')->find();
+            $plainBook = IOFactory::load(public_path() . $plain['file_path']);
+            $plainSheet = $plainBook->getActiveSheet();
+            same(0, $plainSheet->getDrawingCollection()->count(), '不勾选时没有任何条码图片');
+            same('imei2', $plainSheet->getCell('C1')->getValue(), '不勾选时没有额外 IMEI 条形码列');
+            same('012345678901234', $plainSheet->getCell('B2')->getValue(), '普通导出保留完整串号和前导零');
+            same('s', $plainSheet->getCell('B2')->getDataType(), '普通导出串号仍为文本');
+            $plainBook->disconnectWorksheets();
+        }
+        foreach (['1', true] as $option) {
+            same(true, $service->export(['device_ids' => [1], 'include_barcode' => $option]), '显式开启选项透传队列');
+            $enabled = Db::name('sys_export')->order('id desc')->find();
+            $enabledBook = IOFactory::load(public_path() . $enabled['file_path']);
+            same(1, $enabledBook->getActiveSheet()->getDrawingCollection()->count(), '显式开启后确实生成条码图片');
+            $enabledBook->disconnectWorksheets();
+        }
         \core\base\BaseJob::$failDispatch = true;
         throws(fn() => $service->export(['device_ids' => [6]]), '队列不可用', '提交队列失败可重试');
         same(-1, (int)Db::name('sys_export')->order('id desc')->value('export_status'), '队列提交失败不会永远显示导出中');

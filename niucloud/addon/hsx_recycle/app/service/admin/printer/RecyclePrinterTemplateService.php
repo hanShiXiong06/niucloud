@@ -1023,6 +1023,64 @@ class RecyclePrinterTemplateService extends BaseAdminService
         return $names[$status] ?? '未知';
     }
 
+    /** 移动管理端设备入口，精确使用记录 ID，重复回收相同 IMEI 也不会混淆。 */
+    public function getDeviceManageUrl(array $device): string
+    {
+        $id = (int)($device['id'] ?? 0);
+        if ($id <= 0) return '';
+        return rtrim(request()->domain(), '/') . '/adminapp/addon/hsx_recycle/pages/check/scan?'
+            . http_build_query(['device_id' => $id, 'site_id' => (int)$this->site_id, 'mode' => 'query']);
+    }
+
+    /**
+     * 标签与 A4 回收单共用的设备摘要；只解释本设备的数据，不加载订单或发送打印。
+     * 调用方可直接传已查询的设备，避免每台重复读取设备、客户及整单清单。
+     */
+    public function getDeviceLabelSummary(array $device): array
+    {
+        $info = $this->normalizeDeviceInfo($device['info'] ?? []);
+        $meta = $this->getDeviceCheckMeta($device, $info);
+        $map = $this->buildDeviceOptionLabelMap($device);
+        $summary = DeviceReadingArchive::decode($info['sign_summary'] ?? []);
+        $result = [];
+        foreach (['capacity', 'color', 'warranty_info', 'package_type', 'condition_grade', 'system_version'] as $key) {
+            $raw = $this->firstNotBlank(
+                $device[$key] ?? null,
+                $info[$key] ?? null,
+                $summary[$key] ?? null,
+                $this->extractCheckMetaResultValue($meta, $key)
+            );
+            $result[$key] = $this->resolveOptionLabel($map, $key, $raw);
+        }
+        $checkText = (string)$this->firstNotBlank(
+            $device['check_result_seller'] ?? '', $device['check_result'] ?? '', $device['check_result_buyer'] ?? ''
+        );
+        $battery = $this->firstNotBlank(
+            $device['battery'] ?? null,
+            $device['battery_health'] ?? null,
+            $meta['battery'] ?? null,
+            $info['battery'] ?? null,
+            $info['battery_health'] ?? null,
+            $summary['battery'] ?? null,
+            $this->extractCheckMetaResultValue($meta, 'battery', ['电池健康度', '电池健康']),
+            $this->extractValueFromCheckText($checkText, '/电池健康度\s*(\d{1,3})\s*%/u')
+        );
+        $cycles = $this->firstNotBlank(
+            $device['battery_cycle'] ?? null,
+            $meta['battery_num'] ?? $meta['batteryNum'] ?? null,
+            $meta['battery_cycle'] ?? null,
+            $info['battery_num'] ?? $info['batteryNum'] ?? null,
+            $info['battery_cycle'] ?? null,
+            $this->extractCheckMetaResultValue($meta, 'battery_num', ['循环次数', '电池循环']),
+            $this->extractCheckMetaResultValue($meta, 'battery_cycle', ['循环次数', '电池循环']),
+            $this->extractValueFromCheckText($checkText, '/循环\s*(\d+)\s*次/u')
+        );
+        $result['battery'] = $this->isBlankPrintValue($battery) ? '-' : $this->resolveOptionLabel($map, 'battery', $battery);
+        $result['battery_num'] = $this->isBlankPrintValue($cycles) ? '-' : $this->resolveOptionLabel($map, 'battery_num', $cycles);
+        $result['battery_cycle'] = $result['battery_num'];
+        return $result;
+    }
+
     /**
      * 根据设备ID获取实际打印数据
      * @param int $device_id
@@ -1046,33 +1104,13 @@ class RecyclePrinterTemplateService extends BaseAdminService
 
         $deviceInfo = $this->normalizeDeviceInfo($device['info'] ?? []);
         $checkMeta = $this->getDeviceCheckMeta($device, $deviceInfo);
-        // 选项字段 ID→中文标签映射(capacity/color/package_type/condition_grade 等存的是 option_value)
-        $optLabelMap = $this->buildDeviceOptionLabelMap($device);
+        $labelSummary = $this->getDeviceLabelSummary($device);
         $checkResult = (string)($device['check_result'] ?? '');
         $checkResultSeller = (string)($device['check_result_seller'] ?? '');
         $checkResultBuyer = (string)($device['check_result_buyer'] ?? '');
         $mainCheckResult = (string)$this->firstNotBlank($checkResultSeller, $checkResult, $checkResultBuyer);
         $refurbishmentRequired = (int)($device['refurbishment_required'] ?? 0) === 1;
         $refurbishmentItemsText = $this->formatRefurbishmentItemsText($device['refurbishment_items'] ?? []);
-        $battery = $this->firstNotBlank(
-            $device['battery'] ?? null,
-            $device['battery_health'] ?? null,
-            $checkMeta['battery'] ?? null,
-            $deviceInfo['battery'] ?? null,
-            $deviceInfo['battery_health'] ?? null,
-            $this->extractCheckMetaResultValue($checkMeta, 'battery', ['电池健康度', '电池健康']),
-            $this->extractValueFromCheckText($mainCheckResult, '/电池健康度\s*(\d{1,3})\s*%/u')
-        );
-        $batteryNum = $this->firstNotBlank(
-            $device['battery_cycle'] ?? null,
-            $checkMeta['battery_num'] ?? $checkMeta['batteryNum'] ?? null,
-            $checkMeta['battery_cycle'] ?? null,
-            $deviceInfo['battery_num'] ?? $deviceInfo['batteryNum'] ?? null,
-            $deviceInfo['battery_cycle'] ?? null,
-            $this->extractCheckMetaResultValue($checkMeta, 'battery_num', ['循环次数', '电池循环']),
-            $this->extractCheckMetaResultValue($checkMeta, 'battery_cycle', ['循环次数', '电池循环']),
-            $this->extractValueFromCheckText($mainCheckResult, '/循环\s*(\d+)\s*次/u')
-        );
 
         // 获取订单信息（如果需要）
         $order_model = new \addon\hsx_recycle\app\model\order\RecycleOrder();
@@ -1133,8 +1171,6 @@ class RecyclePrinterTemplateService extends BaseAdminService
             1 => '质检中',
             2 => '已质检'
         ];
-        $batteryValue = $this->isBlankPrintValue($battery) ? '-' : $this->resolveOptionLabel($optLabelMap, 'battery', $battery);
-        $batteryNumValue = $this->isBlankPrintValue($batteryNum) ? '-' : $this->resolveOptionLabel($optLabelMap, 'battery_num', $batteryNum);
 
         // 组装打印数据
         return [
@@ -1146,15 +1182,15 @@ class RecyclePrinterTemplateService extends BaseAdminService
             'sn' => $device['sn'] ?? '',
             // 截取 25 个字符(必须用 mb_substr 按字符截，substr 按字节会把中文砍成半个 → 非法 UTF-8 → json_encode 报 Malformed UTF-8)
             'model' => mb_substr($device['model'] ?? '', 0, 25, 'UTF-8'),
-            'system_version' => $this->resolveOptionLabel($optLabelMap, 'system_version', $this->firstNotBlank($device['system_version'] ?? null, $deviceInfo['system_version'] ?? null)),
-            'warranty_info' => $this->resolveOptionLabel($optLabelMap, 'warranty_info', $this->firstNotBlank($device['warranty_info'] ?? null, $deviceInfo['warranty_info'] ?? null)),
-            'capacity' => $this->resolveOptionLabel($optLabelMap, 'capacity', $this->firstNotBlank($device['capacity'] ?? null, $deviceInfo['capacity'] ?? null)),
-            'color' => $this->resolveOptionLabel($optLabelMap, 'color', $this->firstNotBlank($device['color'] ?? null, $deviceInfo['color'] ?? null)),
-            'package_type' => $this->resolveOptionLabel($optLabelMap, 'package_type', $this->firstNotBlank($device['package_type'] ?? null, $deviceInfo['package_type'] ?? null)),
-            'condition_grade' => $this->resolveOptionLabel($optLabelMap, 'condition_grade', $this->firstNotBlank($device['condition_grade'] ?? null, $deviceInfo['condition_grade'] ?? null)),
-            'battery' => $batteryValue,
-            'battery_num' => $batteryNumValue,
-            'battery_cycle' => $batteryNumValue,
+            'system_version' => $labelSummary['system_version'],
+            'warranty_info' => $labelSummary['warranty_info'],
+            'capacity' => $labelSummary['capacity'],
+            'color' => $labelSummary['color'],
+            'package_type' => $labelSummary['package_type'],
+            'condition_grade' => $labelSummary['condition_grade'],
+            'battery' => $labelSummary['battery'],
+            'battery_num' => $labelSummary['battery_num'],
+            'battery_cycle' => $labelSummary['battery_cycle'],
             
             // 设备序号信息
             'device_index' => (string)$device_index,
@@ -1251,7 +1287,7 @@ class RecyclePrinterTemplateService extends BaseAdminService
             // 二维码和条形码内容
             'qrcode_content' => "{$device['imei']}",
             'barcode_content' => $device['imei'] ?? '',
-            'device_url' => request()->domain() . '/site/recycle_order/list?id=' . $device['id'],
+            'device_url' => $this->getDeviceManageUrl($device),
 
             // 其他常用字段
             'site_name' => '回收中心'

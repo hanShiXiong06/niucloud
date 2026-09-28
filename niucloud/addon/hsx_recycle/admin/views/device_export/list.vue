@@ -210,7 +210,8 @@
 
             <HsxDialog v-model="flag" title="导出设备 Excel" size="sm" :show-fullscreen="false" show-footer confirm-text="开始导出" :confirm-loading="exportLoading" @confirm="submitExport">
                 <p>{{ selectedDevices.length > 0 ? `导出选中的 ${selectedDevices.length} 台设备。` : '导出当前筛选条件下的全部设备，不限当前页。' }}</p>
-                <p class="mt-2 text-sm text-gray-500">保留 IMEI 文本，并自动附带可扫描的条形码。生成后在导出记录中下载。</p>
+                <el-checkbox v-model="includeBarcode" class="mt-3" :disabled="exportLoading">附带 IMEI 条形码</el-checkbox>
+                <p class="mt-2 text-sm text-gray-500">{{ includeBarcode ? '保留 IMEI 文本，额外增加可扫描的条形码列，文件会稍大。' : '默认仅导出文字数据，不带条形码图片，IMEI 文字仍会保留。' }}生成后在导出记录中下载。</p>
             </HsxDialog>
         </el-card>
 
@@ -705,6 +706,7 @@ const previewImages = (images: string[], index: number) => {
  * 设备导出
  */
 const exportLoading = ref(false)
+const includeBarcode = ref(false)
 const flag = ref(false)
 const selectedDevices = ref<any[]>([])
 const erpSyncLoading = ref(false)
@@ -823,7 +825,7 @@ const submitExport = async () => {
     if (exportLoading.value) return
     exportLoading.value = true
     try {
-        await exportRecycleDevice(exportSearchParam.value)
+        await exportRecycleDevice({ ...exportSearchParam.value, include_barcode: includeBarcode.value ? 1 : 0 })
         flag.value = false
         hsxFeedback.success('导出任务已提交，请在导出记录中下载')
         await router.push('/site/setting/export')
@@ -834,6 +836,7 @@ const submitExport = async () => {
     }
 }
 const exportEvent = () => {
+    includeBarcode.value = false
     // 判断要导出的设备列表（选中的 or 当前页全部）
     const devicesToExport = selectedDevices.value.length > 0 ? selectedDevices.value : deviceTableData.data
 

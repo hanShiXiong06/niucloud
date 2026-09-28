@@ -245,9 +245,9 @@ class RecycleDevice extends BaseAdminController
         $payload = (is_array($raw) && isset($raw['data']) && is_array($raw['data'])) ? $raw['data'] : (is_array($raw) ? $raw : []);
         unset($payload['id']);
 
-        // 参数验证(update 场景历史规则较杂,不整场景强拦;仅对 IMEI 长度做精准强校验:>15 位抛异常拦截)
+        // 只在修改串号时强校验；空字符串/显式 null 也必须拦截，不能清空后绕过必填。
         $this->validate->scene('update')->check(array_merge(['id' => $id], $payload));
-        if (!empty($payload['imei'])) {
+        if (array_key_exists('imei', $payload)) {
             $this->validate->scene('imei')->failException()->check(['imei' => $payload['imei']]);
         }
         if (array_key_exists('category_id', $payload)) {

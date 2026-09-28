@@ -88,7 +88,8 @@ class DeviceExportService extends BaseAdminService
     public function export(array $where = []): bool
     {
         if ((int)$this->site_id <= 0) throw new CommonException('站点信息无效，请重新登录后重试');
-        DeviceBarcodeWorkbook::assertSupported();
+        $where['include_barcode'] = in_array($where['include_barcode'] ?? 0, [1, '1', true], true);
+        DeviceBarcodeWorkbook::assertSupported($where['include_barcode']);
         $ids = $where['device_ids'] ?? [];
         if (!is_array($ids)) throw new CommonException('导出设备参数不正确，请刷新列表后重新选择');
         foreach ($ids as $id) {

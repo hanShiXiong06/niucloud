@@ -49,7 +49,7 @@
 
         <div class="device-table-head">
             <span></span>
-            <span>SN / IMEI</span>
+            <span><span class="text-danger">*</span> IMEI / SN（必填）</span>
             <span>标准型号</span>
             <span>预估价</span>
             <span>买家图</span>
@@ -179,6 +179,7 @@ import { HsxDataArchive } from '@/addon/hsx_components/core'
 import { localReadingArchive, prefillDeviceSummary as prefillSummaryFromLocal, recordModelMatch } from './deviceReadings'
 import { validateSummaryRequired } from './summaryUtil'
 import { normalizeDevice, buildUpdatePayload } from './deviceUtil'
+import { deviceImeiError } from './imeiValidation'
 import type { CheckSummaryField, DeviceEntryRow } from './types'
 
 const props = withDefaults(defineProps<{
@@ -594,7 +595,16 @@ const findDuplicateDevice = (device: any, exclude?: DeviceEntryRow): DeviceEntry
     return props.devices.find(row => row !== exclude && deviceSerialKeys(row).some(key => keys.has(key)))
 }
 
+const validateRowImei = (row: DeviceEntryRow): boolean => {
+    row.imei_touched = true
+    const error = deviceImeiError(row.imei)
+    if (!error) return true
+    ElMessage.warning(`第 ${props.devices.indexOf(row) + 1} 台设备：${error}`)
+    return false
+}
+
 const saveDeviceRow = async (row: DeviceEntryRow, index: number) => {
+    if (!validateRowImei(row)) return
     const payload = normalizeDevice(row)
     if (findDuplicateDevice(row, row)) {
         ElMessage.warning('相同 IMEI/SN 已在设备清单中，本行不再保存')
@@ -621,7 +631,7 @@ const saveDeviceRow = async (row: DeviceEntryRow, index: number) => {
         if (props.autoAppend && index === props.devices.length - 1) addDeviceRow()
     } catch (error: any) {
         console.error('保存设备失败:', error)
-        ElMessage.error(error.message || '保存设备失败')
+        ElMessage.error(error?.msg || error?.message || '保存设备失败')
     } finally {
         row.saving = false
     }
@@ -629,6 +639,7 @@ const saveDeviceRow = async (row: DeviceEntryRow, index: number) => {
 
 const updateDeviceRow = async (row: DeviceEntryRow) => {
     if (!row.id) return
+    if (!validateRowImei(row)) return
     if (findDuplicateDevice(row, row)) {
         ElMessage.warning('相同 IMEI/SN 已在设备清单中，本次修改不再保存')
         return
@@ -650,7 +661,7 @@ const updateDeviceRow = async (row: DeviceEntryRow) => {
         ElMessage.success('已保存修改')
     } catch (error: any) {
         console.error('保存设备修改失败:', error)
-        ElMessage.error(error.message || '保存修改失败')
+        ElMessage.error(error?.msg || error?.message || '保存修改失败')
     } finally {
         row.saving = false
     }

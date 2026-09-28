@@ -37,7 +37,7 @@ class DeviceBarcodeExportJob extends BaseJob
             $relative = 'upload/export/recycle_device_' . $site_id . '_' . $export_id . '_' . bin2hex(random_bytes(12)) . '.xlsx';
             $path = public_path() . $relative;
             $partial = $path . '.part';
-            (new DeviceBarcodeWorkbook())->save($rows, $partial);
+            (new DeviceBarcodeWorkbook())->save($rows, $partial, in_array($where['include_barcode'] ?? 0, [1, '1', true], true));
             if (!rename($partial, $path)) throw new \RuntimeException('Excel 文件保存失败，请重试');
             $size = filesize($path);
             if (!$size) throw new \RuntimeException('Excel 文件为空，请重试');

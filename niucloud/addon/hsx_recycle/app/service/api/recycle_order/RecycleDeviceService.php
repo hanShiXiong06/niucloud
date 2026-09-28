@@ -13,6 +13,7 @@ use addon\hsx_recycle\app\model\order\RecycleReturnDevice;
 use addon\hsx_recycle\app\model\order\RecycleReturnOrder;
 use addon\hsx_recycle\app\service\core\order\OrderSubmitConfigService;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleDeviceService;
+use addon\hsx_recycle\app\service\core\recycle_order\RecycleOrderProgressService;
 use addon\hsx_recycle\app\service\admin\stat\TaskService;
 use addon\hsx_recycle\app\service\admin\order\RecycleDeviceService as AdminRecycleDeviceService;
 use core\base\BaseApiService;
@@ -328,6 +329,11 @@ class RecycleDeviceService extends BaseApiService
      */
     protected function updateOrderStatus(int $order_id)
     {
+        $order = RecycleOrder::where([['id', '=', $order_id], ['site_id', '=', $this->site_id]])->findOrEmpty();
+        if (!$order->isEmpty() && $order->flow_mode === RecycleOrderDict::FLOW_MODE_DEVICE) {
+            (new RecycleOrderProgressService())->sync((int)$this->site_id, $order_id);
+            return true;
+        }
         // 获取订单下所有设备
         $devices = $this->model->where([
             ['order_id', '=', $order_id],

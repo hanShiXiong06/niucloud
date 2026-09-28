@@ -4,7 +4,11 @@
             <span class="device-card__index">{{ index + 1 }}</span>
 
             <div class="device-card__identity">
-                <el-input v-model="device.imei" placeholder="扫描或输入" clearable size="small" @input="markDirty" />
+                <div class="device-card__imei-field" :class="{ 'has-error': imeiError }">
+                    <el-input v-model="device.imei" placeholder="必填，6–15 位字母或数字" aria-label="IMEI（必填）" aria-required="true"
+                        :aria-invalid="!!imeiError" clearable size="small" @input="markDirty" @blur="device.imei_touched = true" />
+                    <div v-if="imeiError" class="device-card__imei-error" role="alert">{{ imeiError }}</div>
+                </div>
                 <el-tooltip v-if="device.user_sn" content="用户自助提交的串号" placement="top">
                     <span class="device-card__usersn">原 {{ device.user_sn }}</span>
                 </el-tooltip>
@@ -90,6 +94,7 @@
 import { computed } from 'vue'
 import { CircleCheck, Clock, Delete, EditPen, Loading, Picture, Setting } from '@element-plus/icons-vue'
 import { buildSummaryChips } from './summaryUtil'
+import { deviceImeiError } from './imeiValidation'
 import type { DeviceEntryRow } from './types'
 
 const props = defineProps<{ device: DeviceEntryRow; index: number; canRemove?: boolean }>()
@@ -103,6 +108,7 @@ const emit = defineEmits<{
 
 const chips = computed(() => buildSummaryChips(props.device.summary_fields || [], props.device.summary_values || {}))
 const buyerImageCount = computed(() => String(props.device.check_images_buyer || '').split(',').filter(Boolean).length)
+const imeiError = computed(() => props.device.imei_touched ? deviceImeiError(props.device.imei) : '')
 
 const markDirty = () => {
     if (props.device.saved) props.device.dirty = true
@@ -153,6 +159,9 @@ const updateBuyerImages = (value: string) => {
 .device-card__identity { min-width: 0; }
 
 .device-card__identity { display: flex; align-items: center; gap: 5px; }
+.device-card__imei-field { flex: 1; min-width: 0; }
+.device-card__imei-error { margin-top: 4px; color: var(--el-color-danger); font-size: 12px; line-height: 1.4; }
+.device-card__imei-field.has-error :deep(.el-input__wrapper) { box-shadow: 0 0 0 1px var(--el-color-danger) inset; }
 .device-card__usersn { color: var(--el-text-color-placeholder); font-size: 11px; white-space: nowrap; }
 
 .device-card__price {

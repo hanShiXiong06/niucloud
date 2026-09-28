@@ -51,7 +51,7 @@ class QueryResultFormatter
             $parts = [];
             foreach ($value as $key => $item) {
                 $childPath = $this->joinPath($path, (string)$key);
-                if ($this->isAssocArray($item)) {
+                if (is_array($item) && $this->isAssocArray($item)) {
                     $nested = $this->stringify($item, $childPath);
                     if ($nested !== '--') {
                         $parts[] = $this->label($childPath) . '：' . $nested;
@@ -66,7 +66,8 @@ class QueryResultFormatter
             return implode('，', $parts) ?: '--';
         }
 
-        return HsxPhoneQueryResultDict::formatValue($path, $value) ?: '--';
+        $displayValue = HsxPhoneQueryResultDict::formatValue($path, $value);
+        return $displayValue !== '' ? $displayValue : '--';
     }
 
     private function buildFields(array $data): array

@@ -115,7 +115,7 @@ class RecycleOrder extends BaseAdminController
         // 参数验证
         $this->validate->scene('detail')->check(['id' => $id]);
 
-        return success($this->service->getInfo($id));
+        return success($this->service->getInfo($id, [], (int)$this->request->param('for_print', 0) === 1));
     }
 
     /**
@@ -518,6 +518,9 @@ class RecycleOrder extends BaseAdminController
         // 参数验证
         $this->validate->scene('update')->check(array_merge(['id' => $id], $data));
 
+        if ($data['action'] === 'order_refresh_progress') {
+            return success($this->service->refreshProgress($id));
+        }
         return success($this->service->update($id, $data));
     }
 
@@ -573,7 +576,8 @@ class RecycleOrder extends BaseAdminController
     public function addDevice(int $id)
     {
         $data = $this->request->params([
-            ['imei', ''],
+            // 串号由专用规则校验，不先用文本过滤器改写后再保存。
+            ['imei', '', false],
             ['imei2', ''],
             ['serial_number', ''],
             ['capacity', ''],

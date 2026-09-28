@@ -238,6 +238,36 @@ namespace {
             }
         }
 
+        seedTemplate(30, [
+            field('capacity', [['value' => '2', 'label' => '256GB']]),
+            field('color', [['value' => '2', 'label' => '银色']]),
+            field('package_type', [['value' => '2', 'label' => '原盒全套']]),
+        ]);
+        seedDevice(3060, 30, '2', '2', ['warranty_info' => '2027-09-17', 'package_type' => '2', 'check_meta' => ['battery' => 75, 'battery_num' => 212]]);
+        $device = Db::name('recycle_device')->where('id', 3060)->find();
+        $summary = $printer->getDeviceLabelSummary($device);
+        $label = $printer->getDevicePrintData(3060);
+        foreach (['capacity', 'color', 'battery', 'warranty_info', 'package_type', 'battery_cycle'] as $key) {
+            same($label[$key], $summary[$key], 'A4摘要与标签同源：' . $key);
+        }
+        same('原盒全套', $summary['package_type'], '包装选项也还原为文字');
+        same('2027-09-17', $summary['warranty_info'], '保修日期不丢失');
+        same('75', $summary['battery'], '电池实测值不丢失');
+        same('212', $summary['battery_cycle'], '循环次数不丢失');
+        same('512GB', $printer->getDeviceLabelSummary(Db::name('recycle_device')->where('id', 3037)->find())['capacity'], '同批打印下一台设备按自己的模板解释同一个编号');
+        same('0', $printer->getDeviceLabelSummary(['info' => ['check_meta' => ['battery' => 0]]])['battery'], '实测0不当成未录入');
+        same('无包装', $printer->getDeviceLabelSummary(['info' => ['sign_summary' => ['package_type' => '无包装']]])['package_type'], '未质检时可读取签收摘要的包装');
+        same('过保', $printer->getDeviceLabelSummary(['info' => ['check_meta' => ['result_items' => [['field_key' => 'warranty_info', 'label' => '过保']]]]])['warranty_info'], '读取同设备质检结果项的保修信息');
+        same('http://print-test.invalid/adminapp/addon/hsx_recycle/pages/check/scan?device_id=3060&site_id=100005&mode=query', $label['device_url'], '标签与A4共用精确设备记录入口，携带站点');
+        same($label['device_url'], $printer->getDeviceManageUrl($device), '两类打印的二维码链接一致');
+        same('', $printer->getDeviceManageUrl([]), '缺少设备ID不伪造二维码链接');
+
+        // 后端同样隔离站点，不能只依赖扫码页的提示。
+        $deviceService = bare(\addon\hsx_recycle\app\service\admin\order\RecycleDeviceService::class);
+        $deviceService->site_id = 100024;
+        $foreignDevice = $deviceService->getInfo(3060);
+        same(false, isset($foreignDevice['id']) || isset($foreignDevice['imei']), '不同站点即使直接请求设备ID也不返回设备');
+
         $before = [];
         foreach (['recycle_device', 'recycle_check_template', 'recycle_template_binding'] as $table) {
             $before[$table] = Db::name($table)->select()->toArray();

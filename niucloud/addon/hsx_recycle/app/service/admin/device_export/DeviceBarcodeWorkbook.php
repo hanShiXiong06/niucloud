@@ -12,12 +12,12 @@ use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
-/** 回收插件的带条形码导出；复用现有导出列和框架条码库，不修改公共导出器。 */
+/** 回收插件设备导出，条形码由客户选择，默认关闭；不修改公共导出器。 */
 class DeviceBarcodeWorkbook
 {
-    public static function assertSupported(): void
+    public static function assertSupported(bool $includeBarcode = false): void
     {
-        if (!extension_loaded('gd') || !function_exists('imagepng')) {
+        if ($includeBarcode && (!extension_loaded('gd') || !function_exists('imagepng'))) {
             throw new \RuntimeException('条形码导出需要 PHP GD 扩展，请联系管理员开启后重试');
         }
         if (!class_exists(\ZipArchive::class)) {
@@ -29,17 +29,20 @@ class DeviceBarcodeWorkbook
      * 图片作为工作簿附件嵌入，不依赖公网图片地址、条码字体或客户电脑联网。
      * 临时 PNG 在写入 xlsx 后清理。缺失/异常串号保留原文，不伪造可扫描的 IMEI。
      */
-    public function save(array $rows, string $path): void
+    public function save(array $rows, string $path, bool $includeBarcode = false): void
     {
-        self::assertSupported();
+        self::assertSupported($includeBarcode);
         $columns = [];
         foreach ((new RecycleDeviceExportDataListener())->handle()['recycle_device']['column'] as $key => $column) {
             $columns[$key] = $column;
-            if ($key === 'imei') $columns['imei_barcode'] = ['name' => 'IMEI 条形码'];
+            if ($includeBarcode && $key === 'imei') $columns['imei_barcode'] = ['name' => 'IMEI 条形码'];
         }
 
-        $tempDir = sys_get_temp_dir() . '/hsx_recycle_barcode_' . bin2hex(random_bytes(12));
-        if (!mkdir($tempDir, 0700)) throw new \RuntimeException('无法创建条形码临时目录，请检查服务器磁盘和权限');
+        $tempDir = '';
+        if ($includeBarcode) {
+            $tempDir = sys_get_temp_dir() . '/hsx_recycle_barcode_' . bin2hex(random_bytes(12));
+            if (!mkdir($tempDir, 0700)) throw new \RuntimeException('无法创建条形码临时目录，请检查服务器磁盘和权限');
+        }
         $images = [];
         $book = new Spreadsheet();
         try {
@@ -60,7 +63,7 @@ class DeviceBarcodeWorkbook
             foreach ($rows as $index => $item) {
                 $row = $index + 2;
                 $imei = trim((string)($item['imei'] ?? ''));
-                $sheet->getRowDimension($row)->setRowHeight(76);
+                $sheet->getRowDimension($row)->setRowHeight($includeBarcode ? 76 : -1);
                 foreach ($columns as $key => $column) {
                     $cell = $column['letter'] . $row;
                     if ($key === 'imei_barcode') {
@@ -99,7 +102,7 @@ class DeviceBarcodeWorkbook
         } finally {
             $book->disconnectWorksheets();
             foreach ($images as $image) if (is_file($image)) unlink($image);
-            if (is_dir($tempDir)) rmdir($tempDir);
+            if ($tempDir !== '' && is_dir($tempDir)) rmdir($tempDir);
         }
     }
 

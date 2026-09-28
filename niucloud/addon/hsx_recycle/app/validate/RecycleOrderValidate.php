@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace addon\hsx_recycle\app\validate;
 
 use core\base\BaseValidate;
+use addon\hsx_recycle\app\service\core\recycle_order\DeviceEntryImei;
 
 /**
  * 回收订单验证器
@@ -38,7 +39,7 @@ class RecycleOrderValidate extends BaseValidate
         'device_ids' => 'array',
         'page' => 'integer|gt:0',
         'limit' => 'integer|between:1,100',
-        'imei' => 'min:2|max:15',
+        'imei' => 'require|entryImei',
         'model' => 'min:2|max:100',
         'initial_price' => 'float|egt:0',
         'category_id' => 'require|integer|gt:0',
@@ -75,8 +76,7 @@ class RecycleOrderValidate extends BaseValidate
         'page.gt' => '页码必须大于0',
         'limit.integer' => '每页数量必须为整数',
         'limit.between' => '每页数量必须在1-100之间',
-        'imei.max' => 'IMEI不能超过15位',
-        'imei.min' => 'IMEI必须至少2个字符',
+        'imei.require' => '请填写 IMEI',
         'model.max' => '设备型号不能超过100个字符',
         'model.min' => '设备型号必须至少2个字符',
         'initial_price.float' => '初始价格必须为数字',
@@ -92,6 +92,11 @@ class RecycleOrderValidate extends BaseValidate
         ,'count.integer' => '数量必须为整数'
         ,'count.between' => '数量必须在0-10000之间'
     ];
+
+    protected function entryImei($value)
+    {
+        return DeviceEntryImei::error($value) ?: true;
+    }
 
     protected $scene = [
         'list' => ['page', 'limit'],

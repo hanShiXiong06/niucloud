@@ -230,7 +230,10 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { getDevice, scanSearchDevice } from '@/addon/hsx_recycle/api/order'
-import { redirect } from '@/utils/common'
+import { redirect, getToken } from '@/utils/common'
+import { useLogin } from '@/hooks/useLogin'
+import { parseDevicePrintTarget } from '@/addon/hsx_recycle/utils/devicePrintLink'
+import type { DevicePrintTarget } from '@/addon/hsx_recycle/utils/devicePrintLink'
 import CheckDevicePopup from '@/addon/hsx_recycle/pages/order/components/CheckDevicePopup.vue'
 import PriceDevicePopup from '@/addon/hsx_recycle/pages/order/components/PriceDevicePopup.vue'
 import { useRecyclePrintActions } from '@/addon/hsx_recycle/hooks/useRecyclePrintActions'
@@ -330,10 +333,22 @@ const primaryActionText = computed(() => {
 })
 
 onLoad((option: any) => {
+    if (!getToken()) {
+        useLogin().setLoginBack({ url: '/addon/hsx_recycle/pages/check/scan', param: option || {} })
+        return
+    }
     if (['process', 'query', 'label'].includes(String(option?.mode || ''))) {
         scanMode.value = String(option.mode) as ScanMode
     }
     loadManualPrintActions()
+
+    // A4/标签直达码使用记录 ID，而非 IMEI 模糊检索；同串号多次回收也能定位本次记录。
+    const directTarget = parseDevicePrintTarget(option)
+    if (directTarget) {
+        openedFromQuery = true
+        void openPrintedDevice(directTarget)
+        return
+    }
 
     const keyword = parseScanKeyword(option?.id || option?.device_id || option?.imei || option?.scene || '')
     if (keyword) {
@@ -353,6 +368,8 @@ const scanDevice = () => {
         onlyFromCamera: false,
         scanType: ['qrCode', 'barCode'],
         success: (res) => {
+            const directTarget = parseDevicePrintTarget(res.result)
+            if (directTarget) { void openPrintedDevice(directTarget); return }
             const keyword = parseScanKeyword(res.result || '')
             if (!keyword) {
                 uni.showToast({ title: '未识别到设备码', icon: 'none' })
@@ -368,6 +385,8 @@ const scanDevice = () => {
 }
 
 const handleManualSubmit = () => {
+    const directTarget = parseDevicePrintTarget(manualText.value)
+    if (directTarget) { void openPrintedDevice(directTarget); return }
     const keyword = parseScanKeyword(manualText.value)
     if (!keyword) {
         uni.showToast({ title: '请输入有效设备码', icon: 'none' })
@@ -410,6 +429,19 @@ const selectCandidate = async (item: any, autoRun = true) => {
     candidateDevices.value = []
     await loadDevice(String(item.id || ''), false)
     if (autoRun) runCurrentMode()
+}
+
+const openPrintedDevice = async (target: DevicePrintTarget) => {
+    candidateDevices.value = []
+    deviceData.value = null
+    const currentSiteId = Number(uni.getStorageSync('siteId') || 0)
+    if (target.siteId && currentSiteId && target.siteId !== currentSiteId) {
+        uni.showModal({ title: '站点不匹配', content: '该设备属于其他站点，请登录对应门店的管理账号后重新扫码。', showCancel: false })
+        return
+    }
+    scanMode.value = 'query'
+    // 只查看，不自动弹质检/定价/打印操作；真正操作继续走原有权限校验。
+    await loadDevice(target.deviceId, false)
 }
 
 const loadDevice = async (id: string, autoOpen = false) => {

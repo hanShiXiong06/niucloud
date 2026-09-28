@@ -16,6 +16,7 @@ use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\service\admin\device\RecycleDeviceModelDictService;
 use addon\hsx_recycle\app\service\admin\order\RecycleDeviceService;
 use addon\hsx_recycle\app\service\core\recycle_order\DeviceSummaryHelper;
+use addon\hsx_recycle\app\service\core\recycle_order\DeviceEntryImei;
 use core\exception\CommonException;
 
 /**
@@ -81,13 +82,14 @@ class SignHandler extends BaseFlowHandler
     private function handleDevices(int $orderId, array $devices, int $memberId, int $siteId): array
     {
         // 如果devices是关联数组（非索引数组），将其转换为索引数组
-        if (isset($devices['imei'])) {
+        if (array_key_exists('imei', $devices)) {
             $devices = [$devices];
         }
+        DeviceEntryImei::assertDevices($devices);
 
         // 获取当前订单已有的设备记录
         $existingDevices = (new RecycleDevice())
-            ->where([['order_id', '=', $orderId]])
+            ->where([['order_id', '=', $orderId], ['site_id', '=', $siteId]])
             ->column('*', 'id');
 
         $deviceService = new RecycleDeviceService();

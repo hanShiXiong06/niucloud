@@ -48,6 +48,7 @@ class DeviceExportController extends BaseAdminController
             ['warehouse_type', ''],
             ['export_status', ''],
              ['device_ids', []],
+             ['include_barcode', 0],
         ]);
 
         (new DeviceExportService())->export($data);

@@ -18,7 +18,7 @@ function readingPayload(device: DeviceEntryRow) {
 export function normalizeDevice(device: DeviceEntryRow) {
     return {
         ...readingPayload(device),
-        imei: (device.imei || '').trim(),
+        imei: device.imei || '',
         model: (device.model || '').trim(),
         initial_price: Number(device.initial_price || 0),
         category_id: device.category_id || 0,
@@ -42,7 +42,7 @@ export function buildUpdatePayload(device: DeviceEntryRow) {
     return {
         ...readingPayload(device),
         model: (device.model || '').trim(),
-        imei: (device.imei || '').trim(),
+        imei: device.imei || '',
         initial_price: Number(device.initial_price || 0),
         category_id: device.category_id || 0,
         check_template_id: Number(device.check_template_id || 0),

@@ -121,6 +121,7 @@ import DeviceEntryList from '@/addon/hsx_recycle/components/device-entry/DeviceE
 import NextAssigneeSelect from '@/addon/hsx_recycle/components/task/NextAssigneeSelect.vue'
 import MemberSelect from '@/addon/hsx_recycle/components/member-select/index.vue'
 import { normalizeDevice } from '@/addon/hsx_recycle/components/device-entry/deviceUtil'
+import { validateDeviceEntryImeis } from '@/addon/hsx_recycle/components/device-entry/imeiValidation'
 import type { DeviceEntryRow } from '@/addon/hsx_recycle/components/device-entry/types'
 const hsxFeedback = useFeedback()
 
@@ -234,6 +235,12 @@ const handleConfirm = async () => {
     const pendingDevice = form.value.devices.find(device => (device.imei || device.model) && !device.saved)
     if (pendingDevice) {
         hsxFeedback.warning('还有已录入但未保存的设备，请先保存或删除后再签收')
+        return
+    }
+
+    const imeiError = validateDeviceEntryImeis(savedDevices)
+    if (imeiError) {
+        hsxFeedback.warning(imeiError)
         return
     }
 

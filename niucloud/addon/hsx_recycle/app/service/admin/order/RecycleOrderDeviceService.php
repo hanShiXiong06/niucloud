@@ -9,6 +9,7 @@ use addon\hsx_recycle\app\model\order\RecycleOrder;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\service\admin\device\RecycleDeviceModelDictService;
 use addon\hsx_recycle\app\service\core\recycle_order\DeviceSummaryHelper;
+use addon\hsx_recycle\app\service\core\recycle_order\DeviceEntryImei;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -33,6 +34,7 @@ class RecycleOrderDeviceService extends BaseAdminService
      */
     public function addDeviceToOrder(int $orderId, array $deviceData): int
     {
+        DeviceEntryImei::assertValid($deviceData['imei'] ?? null);
         $this->logService = new CoreRecycleDeviceLogService();
         
         Db::startTrans();
@@ -137,6 +139,7 @@ class RecycleOrderDeviceService extends BaseAdminService
      */
     public function batchAddDevicesToOrder(int $orderId, array $devices): array
     {
+        DeviceEntryImei::assertDevices($devices);
         $deviceIds = [];
         
         foreach ($devices as $deviceData) {

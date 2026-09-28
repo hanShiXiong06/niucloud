@@ -9,9 +9,12 @@ use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
 use addon\hsx_recycle\app\service\admin\dashboard\RecycleDashboardFilterService;
 use addon\hsx_recycle\app\service\admin\stat\TaskService;
+use addon\hsx_recycle\app\service\admin\printer\RecyclePrinterTemplateService;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderFlowService;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderNotifyService;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderService;
+use addon\hsx_recycle\app\service\core\recycle_order\RecycleOrderProgressService;
+use addon\hsx_recycle\app\service\core\recycle_order\DeviceEntryImei;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -253,6 +256,7 @@ class RecycleOrderService extends BaseAdminService
      */
     public function create(array $data): array
     {
+        DeviceEntryImei::assertDevices(is_array($data['devices'] ?? null) ? $data['devices'] : []);
         $data['site_id'] = $this->site_id;
         $data['order_source'] = $data['order_source'] ?? 'agent';
         $data['agent_uid'] = $this->uid;
@@ -375,13 +379,14 @@ class RecycleOrderService extends BaseAdminService
      * @return array
      * @throws CommonException
      */
-    public function getInfo(int $id, array $field = []): array
+    public function getInfo(int $id, array $field = [], bool $forPrint = false): array
     {
-        $info = (new RecycleOrder())->where([['id', '=', $id]])
+        $info = (new RecycleOrder())->where([['id', '=', $id], ['site_id', '=', $this->site_id], ['delete_at', '=', 0]])
             ->field($field)
             ->with([
-                'devices' => function($query) {
-                    $query->field('id,site_id,order_id,imei,user_sn,model,initial_price, category_id , check_template_id,info, status,check_result,final_price,sell_price,pay_status,pay_amount,pay_time,pay_uid,pay_no,confirm_status,confirm_time,confirm_member_id,confirm_remark,remark,dispose_type,dispose_status,settlement_mode,sale_destination,consignment_order_id,return_order_id,refurbishment_required,refurbishment_assignee_uid,refurbishment_assignee_name,refurbishment_reason,refurbishment_items,refurbishment_estimated_cost')
+                'devices' => function($query) use ($forPrint) {
+                    $printFields = $forPrint ? ',capacity,color,battery,warranty_info,package_type,condition_grade,system_version,check_result_seller,check_result_buyer' : '';
+                    $query->field('id,site_id,order_id,imei,sn,user_sn,model,initial_price, category_id , check_template_id,info, status,check_result,final_price,sell_price,pay_status,pay_amount,pay_time,pay_uid,pay_no,confirm_status,confirm_time,confirm_member_id,confirm_remark,remark,dispose_type,dispose_status,settlement_mode,sale_destination,consignment_order_id,return_order_id,refurbishment_required,refurbishment_assignee_uid,refurbishment_assignee_name,refurbishment_reason,refurbishment_items,refurbishment_estimated_cost' . $printFields)
                         ->with(['consignmentOrder' => function($q) {
                             $q->field('id,consignment_no,source_device_id,status,listing_price,sold_price,settlement_amount,pay_status');
                         }])
@@ -405,8 +410,13 @@ class RecycleOrderService extends BaseAdminService
         // 让设备列表(后台移动端订单详情)也能标出异常项;原先订单详情未注入,列表只显基础数据。
         if (!empty($info['devices']) && is_array($info['devices'])) {
             $deviceSvc = new RecycleDeviceService();
+            $printer = $forPrint ? new RecyclePrinterTemplateService() : null;
             foreach ($info['devices'] as &$dev) {
                 if (is_array($dev)) {
+                    if ($printer !== null) {
+                        $dev['print_summary'] = $printer->getDeviceLabelSummary($dev);
+                        $dev['print_device_url'] = $printer->getDeviceManageUrl($dev);
+                    }
                     $dev = $deviceSvc->enrichDeviceCheckMeta($dev);
                 }
             }
@@ -426,6 +436,19 @@ class RecycleOrderService extends BaseAdminService
             trim((string)($data['remark'] ?? '')),
             (int)($data['confirm_status'] ?? RecycleOrderDict::CONFIRM_STATUS_CONFIRMED)
         );
+    }
+
+    /** 复用订单编辑权限入口；按设备事实刷新，不重新执行任何财务动作。 */
+    public function refreshProgress(int $id): array
+    {
+        $order = RecycleOrder::where([
+            ['id', '=', $id], ['site_id', '=', $this->site_id], ['delete_at', '=', 0],
+        ])->findOrEmpty();
+        if ($order->isEmpty()) throw new CommonException('订单不存在或已删除');
+        if ($this->flowModeService->getOrderFlowMode($order->toArray()) !== RecycleOrderDict::FLOW_MODE_DEVICE) {
+            throw new CommonException('当前为整单流转，请按整单流程处理，不能按设备自动完成');
+        }
+        return (new RecycleOrderProgressService())->sync((int)$this->site_id, $id, (int)$this->uid);
     }
 
     /**

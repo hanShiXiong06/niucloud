@@ -10,6 +10,16 @@ export function updateRecycleOrder(id: number, data: any) {
   return request.put(`/recycle/recycle_order/${id}`, data);
 }
 
+// 复用订单编辑权限，不重放付款/入库事件。
+export function refreshRecycleOrderProgress(id: number) {
+  return request.put(`/recycle/recycle_order/${id}`, { action: 'order_refresh_progress' }, { showErrorMessage: false });
+}
+
+// 取完整订单，不使用当前列表中可能被检索条件裁剪的设备。
+export function getRecycleOrderPrintInfo(id: number) {
+  return request.get(`/recycle/recycle_order/detail/${id}`, { params: { for_print: 1 }, showErrorMessage: false });
+}
+
 // 删除回收订单
 export function deleteRecycleOrder(id: number) {
   return request.delete(`/recycle/recycle_order/${id}`);

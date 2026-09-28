@@ -24,6 +24,8 @@ export interface DeviceEntryRow {
     _k?: number
     id?: number | string
     imei: string
+    /** 仅用于必填校验反馈，不提交后端。 */
+    imei_touched?: boolean
     imei2?: string
     serial_number?: string
     device_readings?: DeviceReadings

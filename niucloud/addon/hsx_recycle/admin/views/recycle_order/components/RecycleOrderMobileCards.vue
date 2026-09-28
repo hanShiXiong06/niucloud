@@ -69,7 +69,7 @@
           <el-button :icon="MoreFilled">更多操作</el-button>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item v-for="action in getOrderActions(row)" :key="action.key" @click="action.handler()">{{ action.label }}</el-dropdown-item>
+              <el-dropdown-item v-for="action in getOrderActions(row)" :key="action.key" :disabled="action.disabled" @click="action.handler()">{{ action.label }}</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
@@ -112,6 +112,8 @@ const ACTION_PERM: Record<string, string> = {
   order_payment: "recycle_order_payment_confirm",
   order_payment_confirm: "recycle_order_payment_confirm",
   order_delete: "recycle_order_delete",
+  order_refresh_progress: "recycle_order_edit",
+  print_order: "recycle_order_detail",
 };
 const hasActionPerm = (key: string) => {
   const perm = ACTION_PERM[key];
@@ -156,6 +158,10 @@ interface Props {
   handleExpressLeave: () => void;
   shareOrder: (row: any) => void;
   viewNoticeLogs: (row: any) => void;
+  printOrder: (row: any) => void;
+  printingOrderId: number | null;
+  refreshOrderProgress: (row: any) => void;
+  refreshingOrderId: number | null;
 }
 
 const props = defineProps<Props>();
@@ -195,7 +201,9 @@ const getOrderActions = (row: any) => {
     ...actions.filter(action => hasActionPerm(action.key)).map(action => ({ key: action.key, label: action.value, handler: () => props.handleAction(row, action) })),
     { key: 'share_order', label: '分享订单', handler: () => props.shareOrder(row) },
     { key: 'notice_logs', label: '通知记录', handler: () => props.viewNoticeLogs(row) },
-  ];
+    { key: 'print_order', label: props.printingOrderId === row.id ? '准备打印中…' : '打印回收单', disabled: props.printingOrderId !== null, handler: () => props.printOrder(row) },
+    ...(row.flow_mode === 'device' ? [{ key: 'order_refresh_progress', label: props.refreshingOrderId === row.id ? '核对中…' : '刷新订单状态', disabled: props.refreshingOrderId !== null, handler: () => props.refreshOrderProgress(row) }] : []),
+  ].filter(action => hasActionPerm(action.key));
 };
 </script>
 

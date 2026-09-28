@@ -18,6 +18,7 @@ use addon\hsx_recycle\app\service\core\recycle_device\CoreRecycleDeviceLogServic
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderNotifyService;
 use addon\hsx_recycle\app\service\core\recycle_order\DeviceSummaryHelper;
 use addon\hsx_recycle\app\service\core\recycle_order\DeviceReadingArchive;
+use addon\hsx_recycle\app\service\core\recycle_order\DeviceEntryImei;
 use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpCapabilityService;
 use addon\hsx_recycle\app\service\core\recycle_order\RecyclePaymentOwnershipService;
 use addon\hsx_recycle\app\service\admin\printer\RecyclePrintSceneService;
@@ -93,7 +94,7 @@ class RecycleDeviceService extends BaseAdminService
     public function getInfo(int $id, array $field = []): array
     {
         
-        $info = (new RecycleDevice())->where([['id', '=', $id]])
+        $info = (new RecycleDevice())->where([['id', '=', $id], ['site_id', '=', $this->site_id]])
         ->field($field)->with(['order','checkUser'])
         ->findOrEmpty()
         ->append(['status_name', 'pay_status_name', 'confirm_status_name', 'dispose_type_name', 'dispose_status_name', 'check_template_name', 'check_images_thumb_small', 'check_images_seller_thumb_small', 'check_images_buyer_thumb_small'])
@@ -962,8 +963,7 @@ class RecycleDeviceService extends BaseAdminService
      */
     public function update(int $id, array $data): bool
     {
-        
-       
+        if (array_key_exists('imei', $data)) DeviceEntryImei::assertValid($data['imei']);
         // 开启事务
         Db::startTrans();
         try {
@@ -2296,9 +2296,18 @@ class RecycleDeviceService extends BaseAdminService
     {
         
         // 获取订单信息
-        $order = RecycleOrder::findOrEmpty($orderId);
+        $order = RecycleOrder::where([['id', '=', $orderId], ['site_id', '=', $this->site_id]])->findOrEmpty();
         if ($order->isEmpty()) {
-            return f已闭环e;
+            return false;
+        }
+
+        if ($order->flow_mode === RecycleOrderDict::FLOW_MODE_DEVICE) {
+            $result = (new \addon\hsx_recycle\app\service\core\recycle_order\RecycleOrderProgressService())
+                ->sync((int)$this->site_id, $orderId, (int)$this->uid);
+            if ($result['changed'] && $result['status'] === RecycleOrderDict::ORDER_STATUS_PENDING_CONFIRM) {
+                $this->notifyService->orderAgreeNotify(['order_id' => $orderId, 'site_id' => $this->site_id]);
+            }
+            return true;
         }
         
         // 获取订单下所有设备

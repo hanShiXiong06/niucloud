@@ -42,8 +42,8 @@
             </span>
           </div>
           <div v-if="props.compact" class="order-info__time">
-            <span>{{ props.formatDateTime(row.create_at) }}</span>
-            <el-popover placement="bottom-start" trigger="click" :width="240">
+            <span class="order-time-value">{{ props.formatDateTime(row.create_at) }}</span>
+            <el-popover placement="bottom-start" trigger="click" :width="260">
               <div v-for="item in getOrderTimes(row)" :key="item.label" class="order-time-cell">
                 <span class="order-time-cell__label">{{ item.label }}</span>{{ item.value }}
               </div>
@@ -153,11 +153,11 @@
       </template>
     </el-table-column>
 
-    <el-table-column v-if="!props.compact" label="时间" width="178">
+    <el-table-column v-if="!props.compact" label="时间" width="220">
       <template #default="{ row }">
         <div class="order-time-cell">
           <div v-for="item in getOrderTimes(row)" :key="item.label" class="order-time-cell__row">
-            <span class="order-time-cell__label">{{ item.label }}</span>{{ item.value }}
+            <span class="order-time-cell__label">{{ item.label }}</span><span class="order-time-value">{{ item.value }}</span>
           </div>
         </div>
       </template>
@@ -177,6 +177,8 @@
               :key="item.key"
               type="button"
               class="recycle-order-action-item"
+              :disabled="item.disabled"
+              :title="item.title || item.value"
               @click="handleRowAction(row, item)"
             >
               <el-icon>
@@ -209,6 +211,8 @@ import {
   Share,
   Bell,
   MoreFilled,
+  Printer,
+  Refresh,
 } from "@element-plus/icons-vue";
 const hsxFeedback = useFeedback()
 
@@ -251,6 +255,10 @@ interface Props {
   handleExpressLeave: () => void;
   shareOrder: (row: any) => void;
   viewNoticeLogs: (row: any) => void;
+  printOrder: (row: any) => void;
+  printingOrderId: number | null;
+  refreshOrderProgress: (row: any) => void;
+  refreshingOrderId: number | null;
 }
 
 const props = defineProps<Props>();
@@ -261,6 +269,8 @@ const ACTION_PERM: Record<string, string> = {
   order_payment: 'recycle_order_payment_confirm',
   order_payment_confirm: 'recycle_order_payment_confirm',
   order_delete: 'recycle_order_delete',
+  order_refresh_progress: 'recycle_order_edit',
+  print_order: 'recycle_order_detail',
 }
 const hasActionPerm = (key: string) => {
   const perm = ACTION_PERM[key]
@@ -356,15 +366,26 @@ const getRowActions = (row: any) => {
   }
 
   actions.push(
+    { key: 'print_order', value: props.printingOrderId === row.id ? '准备打印中…' : '打印回收单', type: 'print_order', icon: Printer, raw: null,
+      disabled: props.printingOrderId !== null, title: 'A4 回收单：订单信息和设备基础清单，不含质检明细' },
     { key: 'share_order', value: '分享订单', type: 'share', icon: Share, raw: null },
     { key: 'notice_logs', value: '通知记录', type: 'notice_logs', icon: Bell, raw: null },
   )
+
+  if (row.flow_mode === 'device') {
+    actions.push({ key: 'order_refresh_progress', value: props.refreshingOrderId === row.id ? '核对中…' : '刷新订单状态',
+      type: 'refresh_progress', icon: Refresh, raw: null, disabled: props.refreshingOrderId !== null,
+      title: '按设备的确认、拒绝和打款结果核对订单，不执行打款或退货签收' })
+  }
 
   // 按权限过滤高危动作（打款/删除等）
   return actions.filter((a: any) => hasActionPerm(a.key))
 }
 
 const handleRowAction = (row: any, item: any) => {
+  if (item.disabled) return
+  if (item.type === 'print_order') return props.printOrder(row)
+  if (item.type === 'refresh_progress') return props.refreshOrderProgress(row)
   if (item.type === 'share') {
     props.shareOrder(row)
     return
@@ -470,11 +491,15 @@ const handleEditUsername = async (row: any) => {
   line-height: 20px;
   color: var(--el-text-color-regular);
 }
+.order-time-cell__row { display: flex; align-items: baseline; flex-wrap: nowrap; }
+.order-time-value { white-space: nowrap; word-break: normal; font-variant-numeric: tabular-nums; flex-shrink: 0; }
 .order-time-cell__label {
   display: inline-block;
   width: 30px;
   color: var(--el-text-color-placeholder);
   margin-right: 4px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 /* 柔和状态药丸（与设备状态徽章统一） */
 .soft-pill {
@@ -533,4 +558,5 @@ const handleEditUsername = async (row: any) => {
   color: #1d4ed8;
   transform: translateX(-2px);
 }
+.recycle-order-action-item:disabled { opacity: .55; cursor: wait; transform: none; }
 </style>

@@ -39,6 +39,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import DeviceEntryList from '@/addon/hsx_recycle/components/device-entry/DeviceEntryList.vue'
 import NextAssigneeSelect from '@/addon/hsx_recycle/components/task/NextAssigneeSelect.vue'
 import { normalizeDevice } from '@/addon/hsx_recycle/components/device-entry/deviceUtil'
+import { validateDeviceEntryImeis } from '@/addon/hsx_recycle/components/device-entry/imeiValidation'
 import type { DeviceEntryRow } from '@/addon/hsx_recycle/components/device-entry/types'
 const hsxFeedback = useFeedback()
 
@@ -131,6 +132,11 @@ const handleConfirm = async () => {
     const savedDevices = rows.value.filter(r => r.saved && r.id)
     if (!savedDevices.length) {
         hsxFeedback.warning('请先保存至少一台设备')
+        return
+    }
+    const imeiError = validateDeviceEntryImeis(savedDevices)
+    if (imeiError) {
+        hsxFeedback.warning(imeiError)
         return
     }
     submitting.value = true
