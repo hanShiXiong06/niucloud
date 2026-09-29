@@ -14,6 +14,12 @@ use core\base\BaseAdminController;
  */
 class ExpressOrderRecord extends BaseAdminController
 {
+    public function resolveUnbooked()
+    {
+        $data = $this->request->params([['remark', '']]);
+        (new ExpressOrderRecordService())->resolveUnbooked((int)$this->request->param('id', 0), (string)$data['remark']);
+        return success([], '已记录人工核实结果，客户可在原回收订单登记自行寄件');
+    }
     /**
      * 获取快递订单记录列表
      * @return \think\Response

@@ -39,11 +39,36 @@ export interface PlatformDeliveryForm {
   area_text: string
   detail_address: string
   pickup_time: string
+  pickup_time_required?: boolean
   weight: string
-  provider?: string
-  provider_name?: string
-  product_code?: string
-  product_name?: string
+}
+
+export type PickupState = 'not_requested' | 'submitting' | 'accepted' | 'confirmed' | 'assigned' | 'picked_up' | 'in_transit' | 'delivered' | 'cancelled' | 'failed' | 'unknown' | 'manual' | 'exception'
+
+export interface PickupInfo {
+  state: PickupState
+  title: string
+  message: string
+  carrier_name: string
+  pickup_time: string
+  courier_name: string
+  courier_phone: string
+  tracking_no: string
+  can_manual: boolean
+  can_refresh: boolean
+  failure_message?: string
+  record_id?: number
+  receiver?: {
+    name?: string
+    contact_name?: string
+    mobile?: string
+    phone?: string
+    province?: string
+    city?: string
+    district?: string
+    address?: string
+    full_address?: string
+  }
 }
 
 // 商家信息
@@ -133,6 +158,7 @@ export interface OrderListItem {
   delivery_type_name: string
   express_no: string
   express_company?: string
+  pickup?: PickupInfo
   logistics_name?: string
   logistics_vehicle_no?: string
   logistics_contact_name?: string
@@ -237,6 +263,7 @@ export interface OrderDetailInfo {
   delivery_type_name: string
   express_no?: string
   express_company?: string
+  pickup?: PickupInfo
   logistics_name?: string
   logistics_vehicle_no?: string
   logistics_contact_name?: string

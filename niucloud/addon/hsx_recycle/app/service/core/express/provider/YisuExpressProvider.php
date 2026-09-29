@@ -36,7 +36,7 @@ class YisuExpressProvider implements ExpressProviderInterface
 
     public function healthCheck(int $siteId): bool
     {
-        $result = $this->thirdPartyService->testConnection($siteId, ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER);
+        $result = $this->thirdPartyService->testConnection($siteId, ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER, $this->key());
         return !empty($result['success']);
     }
 
@@ -96,7 +96,8 @@ class YisuExpressProvider implements ExpressProviderInterface
             ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER,
             $operation,
             $request,
-            $siteId
+            $siteId,
+            $this->key()
         );
 
         if (empty($result['success'])) {

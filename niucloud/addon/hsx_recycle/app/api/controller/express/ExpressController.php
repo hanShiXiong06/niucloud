@@ -69,6 +69,11 @@ class ExpressController extends BaseApiController
      */
     public function track(int $orderId): Response
     {
+        $owned = \addon\hsx_recycle\app\model\order\RecycleOrder::where('site_id', (int)$this->request->siteId())
+            ->where('member_id', (int)$this->request->memberId())->where('delete_at', 0)->find($orderId);
+        if (!$owned) {
+            return fail('订单不存在或无权操作');
+        }
         $expressService = new RecycleExpressService();
 
         $result = $expressService->trackOrder(
@@ -125,7 +130,7 @@ class ExpressController extends BaseApiController
         $productName = trim((string)($platformDelivery['product_name'] ?? ''));
         $frontName = $displayName ?: ($productName ?: $providerName);
 
-        return success([
+        return success(array_merge([
             'enabled' => $enabled,
             'provider' => $provider,
             'provider_name' => $providerName,
@@ -137,7 +142,7 @@ class ExpressController extends BaseApiController
             'prompt' => $enabled && !empty($shopAddress) && $frontName
                 ? '将使用' . $frontName . '进行平台快递下单，请确认寄件地址准确。'
                 : '',
-        ]);
+        ], $expressService->pickupPolicy($siteId)));
     }
 
     /**
@@ -156,6 +161,12 @@ class ExpressController extends BaseApiController
         }
 
         $expressService = new RecycleExpressService();
+        // 此接口接收订单ID，必须校验本人归属，不能只依赖登录态。
+        $owned = \addon\hsx_recycle\app\model\order\RecycleOrder::where('site_id', (int)$this->request->siteId())
+            ->where('member_id', (int)$this->request->memberId())->where('delete_at', 0)->find((int)$data['order_id']);
+        if (!$owned) {
+            return fail('订单不存在或无权操作');
+        }
 
         $operatorInfo = [
             'uid' => 0,
@@ -171,6 +182,40 @@ class ExpressController extends BaseApiController
         );
 
         return success('取消成功');
+    }
+
+    public function kuaidi100Push(): Response
+    {
+        $raw = (string)$this->request->post('param', '');
+        $sign = (string)$this->request->post('sign', '');
+        $id = (int)$this->request->get('record_id', 0);
+        try {
+            if ($id <= 0 || strlen($raw) > 262144 || $raw === '') {
+                throw new \RuntimeException('invalid callback');
+            }
+            $record = \addon\hsx_recycle\app\model\express\ExpressOrderRecord::find($id);
+            $snapshot = $record ? (array)$record->api_response : [];
+            $protocol = \addon\hsx_recycle\app\service\core\express\provider\Kuaidi100Protocol::class;
+            if (!$record || ($snapshot['provider'] ?? '') !== 'kuaidi100'
+                || !$protocol::verifyCallback($raw, $sign, (string)($snapshot['callback_salt'] ?? ''))) {
+                throw new \RuntimeException('invalid signature');
+            }
+            $payload = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+            $third = (string)($payload['data']['thirdOrderId'] ?? $payload['thirdOrderId'] ?? '');
+            if ($third !== '' && !hash_equals($protocol::thirdOrderId((int)$record->site_id, (string)$record->third_order_no), $third)) {
+                throw new \RuntimeException('order mismatch');
+            }
+            $taskId = trim((string)$this->request->post('taskId', ''));
+            if ($taskId !== '' && !empty($snapshot['provider_task_id']) && !hash_equals((string)$snapshot['provider_task_id'], $taskId)) {
+                throw new \RuntimeException('task mismatch');
+            }
+            $result = $protocol::normalizeCallback($payload, $taskId, $snapshot);
+            (new \addon\hsx_recycle\app\service\core\express\RecyclePickupService())->applyResult($record, $result);
+            return json(['result' => true, 'returnCode' => '200', 'message' => '成功']);
+        } catch (\Throwable $e) {
+            \think\facade\Log::warning('快递100回调未处理', ['record_id' => $id, 'reason' => $e->getMessage()]);
+            return json(['result' => false, 'returnCode' => '500', 'message' => '未处理，请重试']);
+        }
     }
 
     /**

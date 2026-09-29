@@ -40,6 +40,12 @@ $adminContracts = [
         => '缺少客户企业授权校验入口',
     "Route::post('staff/:uid/bind-url', 'addon\\hsx_wecom\\app\\adminapi\\controller\\Staff@bindUrl')"
         => '缺少员工企业微信绑定入口',
+    "Route::get('staff/:uid/bind-status', 'addon\\hsx_wecom\\app\\adminapi\\controller\\Staff@bindStatus')"
+        => '缺少员工绑定进度查询入口',
+    "Route::post('staff/:uid/bind-confirm', 'addon\\hsx_wecom\\app\\adminapi\\controller\\Staff@bindConfirm')"
+        => '缺少管理员确认员工身份入口',
+    "Route::post('staff/:uid/bind-cancel', 'addon\\hsx_wecom\\app\\adminapi\\controller\\Staff@bindCancel')"
+        => '缺少撤销绑定入口',
     "Route::post('messages/test', 'addon\\hsx_wecom\\app\\adminapi\\controller\\Message@test')"
         => '缺少通知连通测试入口',
 ];
@@ -57,7 +63,7 @@ $controllerContracts = [
     '/app/api/controller/ProviderAuthorize.php' => ['complete', 'member'],
     '/app/adminapi/controller/Provider.php' => ['info', 'save', 'test'],
     '/app/adminapi/controller/Authorization.php' => ['status', 'start', 'check'],
-    '/app/adminapi/controller/Staff.php' => ['bindUrl'],
+    '/app/adminapi/controller/Staff.php' => ['bindUrl', 'bindStatus', 'bindConfirm', 'bindCancel'],
     '/app/adminapi/controller/Message.php' => ['test'],
 ];
 foreach ($controllerContracts as $relative => $methods) {

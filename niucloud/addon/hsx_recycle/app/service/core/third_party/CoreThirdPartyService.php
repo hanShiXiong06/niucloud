@@ -35,13 +35,13 @@ class CoreThirdPartyService extends BaseCoreService
      * @param string $serviceType
      * @return array { success, provider, provider_name, message }
      */
-    public function testConnection(int $siteId, string $serviceType): array
+    public function testConnection(int $siteId, string $serviceType, string $explicitProvider = ''): array
     {
         if (!ThirdPartyDict::isValidServiceType($serviceType)) {
             return ['success' => false, 'message' => "无效的服务类型: {$serviceType}"];
         }
         try {
-            $provider = $this->getProvider($serviceType, $siteId);
+            $provider = $this->getProvider($serviceType, $siteId, '', $explicitProvider);
             if (!$provider) {
                 return ['success' => false, 'message' => '未配置或当前指定的服务商不可用'];
             }
@@ -73,7 +73,7 @@ class CoreThirdPartyService extends BaseCoreService
      * @return array
      * @throws CommonException
      */
-    public function call(string $serviceType, string $method, array $params, int $siteId): array
+    public function call(string $serviceType, string $method, array $params, int $siteId, string $explicitProvider = ''): array
     {
         // 1. 验证服务类型
         if (!ThirdPartyDict::isValidServiceType($serviceType)) {
@@ -81,7 +81,8 @@ class CoreThirdPartyService extends BaseCoreService
         }
 
         // 2. 获取服务提供者（支持主备切换）
-        $provider = $this->getProvider($serviceType, $siteId);
+        $allowDisabled = $explicitProvider !== '' && in_array($method, ['detail', 'cancel', 'modify', 'waybillPdf', 'fund'], true);
+        $provider = $this->getProvider($serviceType, $siteId, '', $explicitProvider, $allowDisabled);
         if (!$provider) {
             throw new CommonException("没有可用的{$serviceType}服务提供者");
         }
@@ -149,7 +150,7 @@ class CoreThirdPartyService extends BaseCoreService
             $this->updateStats($siteId, $serviceType, $provider->getProviderName(), false, 0, $duration);
 
             // 新配置中心是严格手动选择服务商，不允许在用户不知情时切换线路。
-            if ((new RecycleThirdPartyConfigService())->hasSavedConfig($siteId)) {
+            if ($explicitProvider !== '' || (new RecycleThirdPartyConfigService())->hasSavedConfig($siteId)) {
                 throw new CommonException($errorMsg);
             }
 
@@ -170,15 +171,15 @@ class CoreThirdPartyService extends BaseCoreService
      * @return mixed
      * @throws CommonException
      */
-    private function getProvider(string $serviceType, int $siteId, string $excludeProvider = '')
+    private function getProvider(string $serviceType, int $siteId, string $excludeProvider = '', string $explicitProvider = '', bool $allowDisabled = false)
     {
         $configService = new RecycleThirdPartyConfigService();
         if ($configService->hasSavedConfig($siteId)) {
-            if (!$configService->isServiceEnabled($siteId, $serviceType)) {
+            if (!$allowDisabled && !$configService->isServiceEnabled($siteId, $serviceType)) {
                 throw new CommonException("站点{$siteId}已禁用{$serviceType}服务");
             }
 
-            $provider = $this->getProviderFromConfigCenter($serviceType, $siteId, $excludeProvider, $configService);
+            $provider = $this->getProviderFromConfigCenter($serviceType, $siteId, $excludeProvider, $configService, $explicitProvider, $allowDisabled);
             if ($provider) {
                 return $provider;
             }
@@ -195,6 +196,9 @@ class CoreThirdPartyService extends BaseCoreService
 
         // 按优先级尝试
         foreach ($services as $service) {
+            if ($explicitProvider !== '' && $service['provider_name'] !== $explicitProvider) {
+                continue;
+            }
             // 2.0 阶段快递下单仅保留亿速，忽略历史安果等快递服务商配置
             if (
                 $serviceType === ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER
@@ -258,7 +262,9 @@ class CoreThirdPartyService extends BaseCoreService
         string $serviceType,
         int $siteId,
         string $excludeProvider,
-        RecycleThirdPartyConfigService $configService
+        RecycleThirdPartyConfigService $configService,
+        string $explicitProvider = '',
+        bool $allowDisabled = false
     ) {
         $map = $configService->getServiceMap();
         if (!isset($map[$serviceType])) {
@@ -266,7 +272,7 @@ class CoreThirdPartyService extends BaseCoreService
         }
 
         // 用配置中"当前生效服务商"，支持每个能力挂多个服务商并自由切换（严格手动，不做故障转移）
-        $providerName = $configService->getActiveProvider($siteId, $serviceType);
+        $providerName = $explicitProvider !== '' ? $explicitProvider : $configService->getActiveProvider($siteId, $serviceType);
         if ($providerName === '') {
             $providerName = $map[$serviceType]['provider'];
         }
@@ -274,7 +280,7 @@ class CoreThirdPartyService extends BaseCoreService
             return null;
         }
 
-        $config = $configService->getProviderConfig($siteId, $serviceType, $providerName);
+        $config = $configService->getProviderConfig($siteId, $serviceType, $providerName, $allowDisabled);
         if (empty($config)) {
             return null;
         }

@@ -16,6 +16,7 @@ use addon\hsx_recycle\app\service\admin\order\RecycleDeviceService as AdminRecyc
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderFlowService;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreWorkWechatNotifyService;
 use addon\hsx_recycle\app\service\core\order\LogisticsVehicleService;
+use addon\hsx_recycle\app\service\core\express\RecyclePickupService;
 use app\model\member\Member;
 use core\base\BaseApiService;
 use core\exception\ApiException;
@@ -137,6 +138,7 @@ class RecycleOrderService extends BaseApiService
     public function getPage(array $where = [])
     {
         $field = 'id,order_no,site_id,member_id,delivery_type,express_company,express_no,delivery_platform,delivery_status,delivery_fee,delivery_order_id,pickup_time,logistics_name,logistics_vehicle_no,logistics_contact_name,logistics_contact_mobile,logistics_pickup_address,logistics_eta_at,count,customer_name,customer_phone,remark,status,create_at,update_at';
+        $field .= ',delivery_data';
         $order = 'create_at desc';
 
         // 如果 state = all
@@ -180,7 +182,13 @@ class RecycleOrderService extends BaseApiService
             ->order($order)
             ->append(['status_name', 'delivery_type_name']);
 
-        return $this->pageQuery($search_model);
+        $result = $this->pageQuery($search_model);
+        foreach ($result['data'] as &$row) {
+            $row['pickup'] = (new RecyclePickupService())->view($row);
+            unset($row['delivery_data']);
+        }
+        unset($row);
+        return $result;
     }
 
     /**
@@ -192,6 +200,7 @@ class RecycleOrderService extends BaseApiService
     {
         $field = 'id,order_no,site_id,member_id,delivery_type,express_company,express_no,delivery_platform,delivery_status,delivery_fee,delivery_order_id,pickup_time,logistics_name,logistics_vehicle_no,logistics_contact_name,logistics_contact_mobile,logistics_pickup_address,logistics_eta_at,count,customer_name,customer_phone,remark,status,create_at,update_at';
 
+        $field .= ',delivery_data';
         $info = $this->model
             ->where([
                 ['id', "=", $id],
@@ -224,6 +233,8 @@ class RecycleOrderService extends BaseApiService
 
         $info['devices'] = $this->fillInspectionReportMeta($info['devices'] ?? []);
         $info['devices'] = $this->formatDevicePaymentRecords($info['devices']);
+        $info['pickup'] = (new RecyclePickupService())->view($info);
+        unset($info['delivery_data']);
 
         return $info;
     }
@@ -508,6 +519,7 @@ class RecycleOrderService extends BaseApiService
      */
     public function add(array $data)
     {
+        $transactionOpen = false;
         try {
             // 添加必要的字段
             $data['site_id'] = $this->site_id;
@@ -520,53 +532,15 @@ class RecycleOrderService extends BaseApiService
             $orderSubmitConfig = (new \addon\hsx_recycle\app\service\api\order\OrderSubmitConfigService())->getConfig($this->site_id);
             $data['flow_mode'] = ($orderSubmitConfig['flow']['mode'] ?? $orderSubmitConfig['payment']['mode'] ?? RecycleOrderDict::FLOW_MODE_ORDER);
 
-            // ========== 统一快递服务（亿速）==========
-            if (!empty($data['use_express']) && !empty($data['express_config'])) {
-                // 先创建回收订单
-                $order = $this->model->create($data);
-
-                try {
-                    // 调用统一快递服务下单
-                    $expressService = new \addon\hsx_recycle\app\service\core\express\RecycleExpressService();
-
-                    $operatorInfo = [
-                        'uid' => 0,
-                        'username' => '',
-                        'source' => 'user',
-                        'member_id' => $this->member_id,
-                    ];
-
-                    $expressResult = $expressService->createOrder(
-                        $this->site_id,
-                        $order->id,
-                        $data['express_config'],
-                        $operatorInfo
-                    );
-
-                    $provider = (string)($expressResult['provider'] ?? ($data['express_config']['provider'] ?? ExpressProviderDict::PROVIDER_YISU));
-                    $providerName = trim((string)($expressResult['provider_name'] ?? ($data['express_config']['provider_name'] ?? '')));
-                    if ($providerName === '') {
-                        $providerName = ExpressProviderDict::getProviderName($provider);
-                    }
-                    $order->save([
-                        'express_company' => $providerName,
-                        'delivery_platform' => $provider,
-                        'update_at' => time(),
-                    ]);
-
-                    // 刷新订单数据（快递服务内部已更新了订单字段）
-                    $order->refresh();
-
-                } catch (\Exception $e) {
-                    // 快递下单失败，删除已创建的订单
-                    $order->delete();
-                    throw new ApiException('快递下单失败：' . $e->getMessage());
-                }
-
-            } else {
-                // 不使用平台快递，直接创建订单（自填快递号 或 自送到店）
-                $order = $this->model->create($data);
+            $useExpress = !empty($data['use_express']) && is_array($data['express_config'] ?? null);
+            $expressConfig = $useExpress ? $data['express_config'] : [];
+            if ($useExpress) {
+                $data['delivery_data'] = json_encode(['booking_state' => 'submitting', 'requested_at' => time()], JSON_UNESCAPED_UNICODE);
             }
+            // 回收单及设备先完整落库。外部预约不是本地事务的一部分，失败不能删回收单。
+            Db::startTrans();
+            $transactionOpen = true;
+            $order = $this->model->create($data);
 
             // 如果有设备列表，创建设备
             if (!empty($data['devices'])) {
@@ -595,6 +569,19 @@ class RecycleOrderService extends BaseApiService
                 }
                 (new RecycleDevice())->insertAll($devices);
             }
+            Db::commit();
+            $transactionOpen = false;
+
+            if ($useExpress) {
+                try {
+                    (new RecyclePickupService())->submit((int)$this->site_id, (int)$order->id, $expressConfig, (int)$this->member_id);
+                    $order->refresh();
+                } catch (\Throwable $e) {
+                    // 回收单已提交，网络/数据库短暂故障不能再返回“创建失败”诱发重复下单。
+                    \think\facade\Log::error('回收订单已保存，预约结果待核实', ['site_id' => $this->site_id, 'order_id' => $order->id, 'reason' => $e->getMessage()]);
+                    $order->delivery_data = json_encode(['booking_state' => 'unknown'], JSON_UNESCAPED_UNICODE);
+                }
+            }
 
             try {
                 $stage = (int)$order->delivery_type === (int)RecycleOrderDict::DELIVERY_TYPE_LOGISTICS_VEHICLE
@@ -606,8 +593,14 @@ class RecycleOrderService extends BaseApiService
                 // 工单分配和企业微信通知属于增强能力，不得阻断客户下单。
             }
 
-            return $order->toArray();
-        } catch (\Exception $e) {
+            $result = $order->toArray();
+            $result['pickup'] = (new RecyclePickupService())->view($result);
+            unset($result['delivery_data']);
+            return $result;
+        } catch (\Throwable $e) {
+            if ($transactionOpen) {
+                Db::rollback();
+            }
             throw new ApiException('创建订单失败：' . $e->getMessage());
         }
     }
@@ -620,6 +613,13 @@ class RecycleOrderService extends BaseApiService
      */
     public function edit(int $id, array $data)
     {
+        $owned = $this->model->where('site_id', $this->site_id)->where('member_id', $this->member_id)->where('delete_at', 0)->find($id);
+        if (!$owned) throw new ApiException('订单不存在或无权操作');
+        $pickup = (new RecyclePickupService())->view($owned->toArray());
+        if (!in_array($pickup['state'], ['not_requested', 'manual'], true)
+            && (!empty($data['express_no']) || (!empty($data['delivery_type']) && (int)$data['delivery_type'] !== (int)$owned->delivery_type))) {
+            throw new ApiException('该订单有取件预约，请在订单的取件卡片中核实状态或补运单，不要重复叫件');
+        }
         $data['action'] = $data['action'] ?? '';
         $data['status'] = $data['status'] ?? '';
 

@@ -26,12 +26,12 @@
                     <strong>¥{{ formatMoney(statistics.total_estimated_cost) }}</strong>
                 </div>
                 <div class="stat-item">
-                    <span>实际费用</span>
+                    <span>已登记费用</span>
                     <strong>¥{{ formatMoney(statistics.total_actual_cost) }}</strong>
                 </div>
                 <div class="stat-item">
-                    <span>费用差异</span>
-                    <strong :class="Number(statistics.total_cost_diff || 0) > 0 ? 'danger' : 'success'">¥{{ formatMoney(statistics.total_cost_diff) }}</strong>
+                    <el-tooltip content="预估与已登记费用的账面差额，含待核对记录，不代表退款或最终费用差异"><span>账面差额</span></el-tooltip>
+                    <strong>¥{{ formatMoney(statistics.total_cost_diff) }}</strong>
                 </div>
             </div>
 
@@ -71,7 +71,7 @@
                     <el-row :gutter="12">
                         <el-col :span="6">
                             <el-form-item label="平台订单">
-                                <el-input v-model.trim="searchForm.order_no" clearable placeholder="易速订单号" />
+                                <el-input v-model.trim="searchForm.order_no" clearable placeholder="渠道预约订单号" />
                             </el-form-item>
                         </el-col>
                         <el-col :span="6">
@@ -120,7 +120,8 @@
                         <div v-if="row.delivery_id" class="primary-text clickable-text" @click="openExpressTrack(row)">{{ row.delivery_id }}</div>
                         <div v-else class="primary-text">-</div>
                         <div class="muted-text">平台订单：{{ row.order_no || '-' }}</div>
-                        <div class="muted-text">快递公司：{{ row.provider_name || row.express_company || '-' }}</div>
+                        <div class="muted-text">承运公司：{{ carrierName(row) }}</div>
+                        <div class="muted-text">渠道：{{ row.provider_name || '-' }}</div>
                         <div v-if="row.recycle_order_id" class="muted-text">回收订单：{{ row.recycle_order_id }}</div>
                     </template>
                 </el-table-column>
@@ -145,13 +146,18 @@
                 <el-table-column label="重量/费用" width="150">
                     <template #default="{ row }">
                         <div>{{ row.estimated_weight || 0 }} kg</div>
-                        <div>¥{{ formatMoney(row.estimated_cost) }}</div>
-                        <div v-if="Number(row.actual_cost || 0) > 0" class="muted-text">实付 ¥{{ formatMoney(row.actual_cost) }}</div>
+                        <div>预估 ¥{{ formatMoney(row.estimated_cost) }}</div>
+                        <div v-if="feePending(row)" class="muted-text">最终费用待核对</div>
+                        <div v-else class="muted-text">已登记 ¥{{ formatMoney(row.actual_cost) }}</div>
                     </template>
                 </el-table-column>
-                <el-table-column label="状态" width="110">
+                <el-table-column label="取件安排" min-width="230">
                     <template #default="{ row }">
-                        <el-tag :type="statusMeta(row.order_status).type">{{ row.status_text || statusMeta(row.order_status).label }}</el-tag>
+                        <el-tag :type="statusMeta(bookingState(row)).type">{{ statusMeta(bookingState(row)).label }}</el-tag>
+                        <div v-if="pickupTime(row)" class="muted-text">预约：{{ pickupTime(row) }}</div>
+                        <div v-if="pickupData(row).courier_name || courierPhone(row)" class="muted-text">取件员：{{ pickupData(row).courier_name || '已分配' }} {{ courierPhone(row) }}</div>
+                        <div v-else-if="['confirmed', 'assigned'].includes(bookingState(row))" class="muted-text">等待快递公司分配取件员</div>
+                        <el-tooltip v-if="pickupReason(row)" :content="pickupReason(row)" placement="top"><div class="muted-text text-line" :class="['unknown', 'failed', 'exception'].includes(bookingState(row)) ? 'danger' : ''">{{ pickupReason(row) }}</div></el-tooltip>
                     </template>
                 </el-table-column>
                 <el-table-column label="创建时间" width="170">
@@ -161,10 +167,11 @@
                     <template #default="{ row }">
                         <el-button link type="primary" @click="handleViewDetail(row)">详情</el-button>
                         <el-button link type="warning" @click="handleUpdateActual(row)">更新费用</el-button>
-                        <el-button v-if="row.order_no || row.delivery_id" link type="primary" :loading="operationLoading[row.id] === 'waybill'" @click="handleWaybillPdf(row)">面单</el-button>
+                        <el-button v-if="!isKuaidi100(row) && (row.order_no || row.delivery_id)" link type="primary" :loading="operationLoading[row.id] === 'waybill'" @click="handleWaybillPdf(row)">面单</el-button>
                         <el-button v-if="row.delivery_id" link type="primary" @click="openExpressTrack(row)">查物流</el-button>
                         <el-button v-if="canCancel(row)" link type="danger" :loading="operationLoading[row.id] === 'cancel'" @click="handleCloseOrder(row)">取消</el-button>
                         <el-button v-if="canIntercept(row)" link type="danger" :loading="operationLoading[row.id] === 'intercept'" @click="handleCloseOrder(row)">拦截</el-button>
+                        <el-button v-if="canResolveUnbooked(row)" link type="danger" :loading="operationLoading[row.id] === 'resolve'" @click="handleResolveUnbooked(row)">核实未预约</el-button>
                     </template>
                 </el-table-column>
             </el-table>
@@ -187,11 +194,16 @@
                 <el-descriptions :column="2" border>
                     <el-descriptions-item label="平台订单">{{ currentOrder.order_no || '-' }}</el-descriptions-item>
                     <el-descriptions-item label="运单号">{{ currentOrder.delivery_id || '-' }}</el-descriptions-item>
-                    <el-descriptions-item label="快递公司">{{ currentOrder.provider_name || currentOrder.express_company || '-' }}</el-descriptions-item>
+                    <el-descriptions-item label="承运公司">{{ carrierName(currentOrder) }}</el-descriptions-item>
+                    <el-descriptions-item label="接入渠道">{{ currentOrder.provider_name || '-' }}</el-descriptions-item>
                     <el-descriptions-item label="快递产品">{{ currentOrder.product_name || '-' }}</el-descriptions-item>
                     <el-descriptions-item label="状态">
-                        <el-tag :type="statusMeta(currentOrder.order_status).type">{{ currentOrder.status_text || statusMeta(currentOrder.order_status).label }}</el-tag>
+                        <el-tag :type="statusMeta(bookingState(currentOrder)).type">{{ statusMeta(bookingState(currentOrder)).label }}</el-tag>
                     </el-descriptions-item>
+                    <el-descriptions-item label="预约时段">{{ pickupTime(currentOrder) || '尚未返回' }}</el-descriptions-item>
+                    <el-descriptions-item label="取件员">{{ pickupData(currentOrder).courier_name || '待分配' }} {{ courierPhone(currentOrder) }}</el-descriptions-item>
+                    <el-descriptions-item v-if="pickupReason(currentOrder)" label="异常 / 核实说明" :span="2">{{ pickupReason(currentOrder) }}</el-descriptions-item>
+                    <el-descriptions-item v-if="pickupData(currentOrder).reported_freight != null" label="渠道报告运费">¥{{ formatMoney(pickupData(currentOrder).reported_freight) }}（待核对，不代表已付或最终费用）</el-descriptions-item>
                     <el-descriptions-item label="寄件人">{{ currentOrder.sender_name }} {{ currentOrder.sender_mobile }}</el-descriptions-item>
                     <el-descriptions-item label="收件人">{{ currentOrder.receiver_name }} {{ currentOrder.receiver_mobile }}</el-descriptions-item>
                     <el-descriptions-item label="寄件地址" :span="2">{{ joinAddress(currentOrder, 'sender') }}</el-descriptions-item>
@@ -201,11 +213,13 @@
                     <el-descriptions-item label="预估重量">{{ currentOrder.estimated_weight || 0 }} kg</el-descriptions-item>
                     <el-descriptions-item label="预估费用">¥{{ formatMoney(currentOrder.estimated_cost) }}</el-descriptions-item>
                     <el-descriptions-item label="实际重量">{{ currentOrder.actual_weight || 0 }} kg</el-descriptions-item>
-                    <el-descriptions-item label="实际费用">¥{{ formatMoney(currentOrder.actual_cost) }}</el-descriptions-item>
+                    <el-descriptions-item label="最终费用"><span v-if="feePending(currentOrder)">待核对</span><span v-else>已登记 ¥{{ formatMoney(currentOrder.actual_cost) }}（不代表已付款）</span></el-descriptions-item>
                     <el-descriptions-item label="创建时间">{{ formatTime(currentOrder.create_at) }}</el-descriptions-item>
                     <el-descriptions-item label="更新时间">{{ formatTime(currentOrder.update_at) }}</el-descriptions-item>
                 </el-descriptions>
 
+                <el-alert v-if="['unknown', 'submitting'].includes(bookingState(currentOrder))" class="mt-[12px]" title="预约结果待核实，请勿再次叫件。只有已向渠道确认没有有效取件任务后，才可操作“核实未预约”。" type="warning" :closable="false" />
+                <el-button v-if="canResolveUnbooked(currentOrder)" class="mt-[12px]" type="danger" plain :loading="operationLoading[currentOrder.id] === 'resolve'" @click="handleResolveUnbooked(currentOrder)">核实未预约</el-button>
                 <div class="detail-section-title">系统流程</div>
                 <el-timeline v-if="currentOrder.status_history?.length">
                     <el-timeline-item v-for="(item, index) in currentOrder.status_history" :key="index" :timestamp="formatTime(item.time)">
@@ -217,6 +231,7 @@
         </el-dialog>
 
         <el-dialog v-model="updateDialogVisible" title="更新实际费用" width="500px">
+            <el-alert class="mb-[16px]" title="请按快递公司最终账单核对后填写。保存仅登记已核对的重量与费用，不会向渠道支付或退款。" type="info" :closable="false" />
             <el-form :model="updateForm" label-width="100px">
                 <el-form-item label="实际重量">
                     <el-input-number v-model="updateForm.actual_weight" :min="0" :precision="2" :step="0.1" />
@@ -408,8 +423,9 @@
                                 <el-form-item label="物品" class="goods-field"><el-input v-model="shipmentForm.goods" /></el-form-item>
                                 <el-form-item label="重量kg"><el-input-number v-model="shipmentForm.weight" :min="0.1" :precision="2" :step="0.1" /></el-form-item>
                                 <el-form-item label="包裹数"><el-input-number v-model="shipmentForm.packageCount" :min="1" :max="99" /></el-form-item>
-                                <el-form-item label="保价"><el-input-number v-model="shipmentForm.guaranteeValueAmount" :min="0" :precision="2" /></el-form-item>
-                                <el-form-item label="预约" class="time-field"><el-date-picker v-model="shipmentForm.orderSendTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" placeholder="可选" /></el-form-item>
+                                <el-form-item v-if="!selectedQuoteIsKuaidi100" label="保价"><el-input-number v-model="shipmentForm.guaranteeValueAmount" :min="0" :precision="2" /></el-form-item>
+                                <el-form-item label="预约开始" class="time-field"><el-date-picker v-model="shipmentForm.orderSendTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" placeholder="预约日期及开始时间" /></el-form-item>
+                                <el-form-item v-if="selectedQuoteIsKuaidi100" label="预约结束" class="time-field"><el-time-select v-model="pickupEndTime" start="08:00" step="00:30" end="21:00" placeholder="同日结束时间，顺丰至少1小时" /></el-form-item>
                                 <el-form-item label="备注" class="remark-field"><el-input v-model="shipmentForm.remark" /></el-form-item>
                             </div>
                         </div>
@@ -429,7 +445,7 @@
                                     <span v-if="index === 0" class="quote-rank">最低</span>
                                     {{ row.productName || row.product_name || '快递产品' }}
                                 </strong>
-                                <span>{{ row.channelName || row.channel_name || '易速渠道' }}</span>
+                                <span>{{ row.carrier_name || row.channelName || row.channel_name || '本站已配置渠道' }}</span>
                             </div>
                             <em>¥{{ getQuotePrice(row) }}</em>
                         </div>
@@ -454,7 +470,7 @@
             v-model:visible="expressTrackDialogVisible"
             :express-no="currentTrackOrder?.delivery_id || ''"
             :mobile="currentTrackMobile"
-            :company-name="currentTrackOrder?.provider_name || currentTrackOrder?.express_company || '快递公司'"
+            :company-name="currentTrackOrder ? carrierName(currentTrackOrder) : '快递公司'"
         />
     </PremiumTheme>
 </template>
@@ -471,6 +487,7 @@ import {
     getExpressQuote,
     getExpressOrderRecordList,
     getExpressOrderRecordInfo,
+    resolveExpressOrderUnbooked,
     getExpressWaybillPdf,
     getExpressAddressBookList,
     saveExpressAddressBook,
@@ -482,6 +499,7 @@ import {
 import { parseThirdPartyAddress } from '@/addon/hsx_recycle/api/third_party'
 import { getShopAddressList } from '@/addon/hsx_recycle/api/shop_address'
 import ExpressTrackDialog from '@/addon/hsx_recycle/components/ExpressTrackDialog.vue'
+import storage from '@/utils/storage'
 
 const route = useRoute()
 const loading = ref(false)
@@ -494,7 +512,7 @@ const createDialogVisible = ref(false)
 const expressTrackDialogVisible = ref(false)
 const currentOrder = ref<any>(null)
 const currentTrackOrder = ref<any>(null)
-const operationLoading = reactive<Record<number, '' | 'cancel' | 'intercept' | 'waybill'>>({})
+const operationLoading = reactive<Record<number, '' | 'cancel' | 'intercept' | 'waybill' | 'resolve'>>({})
 const shopAddressList = ref<any[]>([])
 const addressBookList = ref<any[]>([])
 const selectedAddressBookIds = reactive<Record<'sender' | 'receiver', string | number>>({
@@ -567,11 +585,22 @@ const defaultShipmentForm = () => ({
     estimated_cost: 0,
     orderSendTime: getDefaultOrderSendTime(),
     remark: '',
-    thirdOrderNo: ''
+    thirdOrderNo: stableManualRequestId()
 })
 const shipmentForm = reactive<any>(defaultShipmentForm())
+const pickupEndTime = ref('')
 
 const statusOptions = [
+    { label: '提交中', value: 'submitting', type: 'warning' },
+    { label: '结果待核实', value: 'unknown', type: 'warning' },
+    { label: '已受理，待渠道确认', value: 'accepted', type: 'info' },
+    { label: '预约已确认', value: 'confirmed', type: 'success' },
+    { label: '已安排取件员', value: 'assigned', type: 'success' },
+    { label: '预约失败', value: 'failed', type: 'danger' },
+    { label: '异常待处理', value: 'exception', type: 'danger' },
+    { label: '取消核实中', value: 'cancel_pending', type: 'warning' },
+    { label: '自行寄件', value: 'manual', type: 'info' },
+    { label: '已取件', value: 'picked_up', type: 'warning' },
     { label: '待揽收', value: 'pending', type: 'info' },
     { label: '已揽收', value: 'picked', type: 'warning' },
     { label: '运输中', value: 'in_transit', type: 'primary' },
@@ -581,6 +610,43 @@ const statusOptions = [
 
 const statusMeta = (status: string): any => {
     return statusOptions.find(item => item.value === status) || { label: status || '未知', value: status || '', type: 'info' }
+}
+
+const pickupData = (row: any): any => row?.pickup || (typeof row?.api_response === 'object' ? row.api_response : {}) || {}
+const bookingState = (row: any): string => String(pickupData(row).booking_state || row?.order_status || '')
+const isKuaidi100 = (row: any): boolean => pickupData(row).provider === 'kuaidi100' || String(row?.product_code || '').startsWith('kuaidi100:') || row?.provider_name === '快递100'
+const feePending = (row: any): boolean => isKuaidi100(row) && pickupData(row).fee_verification_state !== 'manual_confirmed'
+const courierPhone = (row: any): string => pickupData(row).courier_mobile || pickupData(row).courier_phone || ''
+const carrierName = (row: any): string => pickupData(row).carrier_name || row?.carrier_name || row?.express_company || '待渠道返回'
+const pickupTime = (row: any): string => pickupData(row).pickup_time || row?.pickup_time || [pickupData(row).pickup_start, pickupData(row).pickup_end].filter(Boolean).join(' 至 ')
+const pickupReason = (row: any): string => pickupData(row).manual_review?.remark || pickupData(row).failure_reason || pickupData(row).resolution_remark || pickupData(row).message || ''
+// 以服务端同时核对任务 ID、异常冲突和状态后的结果为准，前端不能自行放宽。
+const canResolveUnbooked = (row: any): boolean => row?.can_resolve_unbooked === true
+
+// 只保存随机预约编号，不保存客户地址。关闭弹窗、接口超时、重新打开均沿用，成功或确认失败后才清除。
+function manualRequestStorageKey() { return `hsx-recycle-manual-pickup:${storage.get('siteId') || 0}` }
+function stableManualRequestId() {
+    try { const saved = sessionStorage.getItem(manualRequestStorageKey()); if (saved) return saved } catch (_) {}
+    const random = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const key = `manual_${random}`
+    try { sessionStorage.setItem(manualRequestStorageKey(), key) } catch (_) {}
+    return key
+}
+function finishManualRequest(key: string) {
+    try { if (sessionStorage.getItem(manualRequestStorageKey()) === key) sessionStorage.removeItem(manualRequestStorageKey()) } catch (_) {}
+}
+
+const handleResolveUnbooked = async (row: any) => {
+    if (!canResolveUnbooked(row)) return
+    let remark = ''
+    try {
+        const result = await ElMessageBox.prompt('仅已联系渠道确认没有有效取件任务后使用。请填写联系时间、渠道人员或工单号及核实结果。', '填写渠道核对记录', { inputType: 'textarea', inputPlaceholder: '例如：09-29 14:00 联系渠道客服，工单 XXX，确认未创建取件任务', inputValidator: (value: string) => value?.trim().length >= 10 && value.trim().length <= 500 || '请填写 10 至 500 字的渠道核对记录', confirmButtonText: '下一步', cancelButtonText: '返回', type: 'warning' })
+        remark = result.value.trim()
+        await ElMessageBox.confirm('确认该渠道不存在有效取件任务？此操作将开放客户自行寄件，不会再次叫件，也不会向渠道发起取消。若判断错误，可能重复上门取件。', '最终确认：核实未预约', { type: 'error', confirmButtonText: '已核实，开放自行寄件', cancelButtonText: '返回核实', distinguishCancelAndClose: true })
+    } catch (_) { return }
+    operationLoading[row.id] = 'resolve'
+    try { await resolveExpressOrderUnbooked(row.id, remark); finishManualRequest(String(row.third_order_no || '')); ElMessage.success('已记录核实结果，客户可继续原回收单自行寄件'); if (currentOrder.value?.id === row.id) await handleViewDetail(row); await refreshPage() }
+    finally { operationLoading[row.id] = '' }
 }
 
 const senderAddressBooks = computed(() => addressBookList.value.filter(item => item.address_type === 'sender'))
@@ -601,6 +667,7 @@ const selectedQuoteName = computed(() => {
     const quote = quoteList.value.find(item => quoteKey(item) === quoteState.selectedKey)
     return quote?.productName || quote?.product_name || shipmentForm.deliveryType || '快递产品'
 })
+const selectedQuoteIsKuaidi100 = computed(() => String(shipmentForm.deliveryType || '').startsWith('kuaidi100:'))
 const createShipmentDisabledTip = computed(() => {
     if (shipmentLoading.create) return ''
     if (!quoteList.value.length) return '请先获取报价'
@@ -731,6 +798,7 @@ const handleConfirmUpdate = async () => {
 
 const resetShipmentForm = () => {
     Object.assign(shipmentForm, defaultShipmentForm())
+    pickupEndTime.value = ''
     senderRawAddress.value = ''
     receiverRawAddress.value = ''
     quoteList.value = []
@@ -849,7 +917,8 @@ const quoteSignature = () => JSON.stringify({
     weight: shipmentForm.weight,
     packageCount: shipmentForm.packageCount,
     guaranteeValueAmount: shipmentForm.guaranteeValueAmount,
-    orderSendTime: shipmentForm.orderSendTime
+    orderSendTime: shipmentForm.orderSendTime,
+    pickupEndTime: pickupEndTime.value
 })
 
 watch(
@@ -1102,31 +1171,46 @@ const runShipmentCreate = async () => {
         quoteState.valid = false
         return
     }
-    if (!shipmentForm.thirdOrderNo) {
-        shipmentForm.thirdOrderNo = `manual_${Date.now()}`
+    if (!shipmentForm.thirdOrderNo) shipmentForm.thirdOrderNo = stableManualRequestId()
+    const payload = { ...shipmentForm }
+    if (selectedQuoteIsKuaidi100.value) {
+        if (!pickupEndTime.value) return ElMessage.warning('请填写预约结束时间，顺丰预约至少 1 小时')
+        if (Number(shipmentForm.guaranteeValueAmount) > 0) return ElMessage.warning('当前快递100上门取件未启用保价能力，请先核实配置，不会忽略保价金额下单')
+        payload.orderSendTime = `${String(shipmentForm.orderSendTime).slice(0, 16)}-${pickupEndTime.value}`
     }
     shipmentLoading.create = true
     try {
-        await createExpressOrderDirect(shipmentForm)
-        ElMessage.success('快递下单成功')
-        createDialogVisible.value = false
+        const res: any = await createExpressOrderDirect(payload)
+        const state = String(res.data?.booking_state || res.data?.pickup?.booking_state || '')
+        if (['failed', 'unknown', 'submitting', 'exception'].includes(state)) {
+            ElMessage.warning(res.data?.failure_reason || (state === 'failed' ? '预约未成功，请查看记录处理' : '预约结果待核实，请勿重复叫件'))
+            if (state === 'failed') finishManualRequest(payload.thirdOrderNo)
+        } else {
+            ElMessage.success(state === 'accepted' ? '渠道已受理，请在记录中等待取件安排确认' : '预约请求已提交，请在记录中查看取件安排')
+            finishManualRequest(payload.thirdOrderNo)
+            createDialogVisible.value = false
+        }
+        await refreshPage()
+    } catch (error: any) {
+        ElMessage.warning(error?.message || '提交结果待核实；已保留本次预约编号，请勿重新叫件')
         await refreshPage()
     } finally {
         shipmentLoading.create = false
     }
 }
 
-const canOperateClose = (row: any) => !['cancelled', 'delivered'].includes(row.order_status) && (row.order_no || row.delivery_id || row.recycle_order_id)
+const canOperateClose = (row: any) => !['cancelled', 'delivered', 'manual', 'failed', 'unknown', 'submitting', 'cancel_pending', 'exception'].includes(bookingState(row)) && (row.order_no || row.delivery_id || row.recycle_order_id)
 
-const canCancel = (row: any) => canOperateClose(row) && ['pending', ''].includes(row.order_status || '')
+const canCancel = (row: any) => canOperateClose(row) && ['pending', '', 'accepted', 'confirmed', 'assigned'].includes(bookingState(row))
 
-const canIntercept = (row: any) => canOperateClose(row) && !canCancel(row)
+const canIntercept = (row: any) => !isKuaidi100(row) && canOperateClose(row) && !canCancel(row)
 
 const buildCancelParams = (row: any, genre: 1 | 3) => {
     const params: Record<string, any> = { genre }
     if (row.order_no) params.order_no = row.order_no
     if (row.delivery_id) params.waybill_no = row.delivery_id
-    if (row.site_id && row.recycle_order_id) params.third_order_no = `recycle_${row.site_id}_${row.recycle_order_id}`
+    if (row.third_order_no) params.third_order_no = row.third_order_no
+    else if (row.site_id && row.recycle_order_id) params.third_order_no = `recycle_${row.site_id}_${row.recycle_order_id}`
     return params
 }
 
@@ -1134,7 +1218,7 @@ const handleCloseOrder = async (row: any) => {
     const genre: 1 | 3 = canCancel(row) ? 1 : 3
     const actionName = genre === 3 ? '拦截' : '取消'
     try {
-        await ElMessageBox.confirm(`确认${actionName}这个运单吗？操作成功后列表状态会变为已关闭。`, `${actionName}运单`, {
+        await ElMessageBox.confirm(`确认${actionName}这个预约吗？提交请求不代表已取消或已退款，请以渠道确认及后续费用核对为准。`, `${actionName}预约`, {
             type: 'warning',
             confirmButtonText: actionName,
             cancelButtonText: '返回'

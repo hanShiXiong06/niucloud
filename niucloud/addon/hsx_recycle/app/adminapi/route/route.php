@@ -14,6 +14,11 @@ use app\adminapi\middleware\AdminCheckRole;
 use app\adminapi\middleware\AdminCheckToken;
 use app\adminapi\middleware\AdminLog;
 
+Route::group('hsx_recycle', function () {
+    Route::get('pickup_notice/config', 'addon\hsx_recycle\app\adminapi\controller\order\PickupNoticeConfig@info');
+    Route::put('pickup_notice/config', 'addon\hsx_recycle\app\adminapi\controller\order\PickupNoticeConfig@save');
+})->middleware([AdminCheckToken::class, AdminCheckRole::class, AdminLog::class]);
+
 Route::group('recycle/platform', function () {
     Route::get('device_bridge', 'addon\hsx_recycle\app\adminapi\controller\device\DeviceBridge@info');
     Route::post('device_bridge', 'addon\hsx_recycle\app\adminapi\controller\device\DeviceBridge@save');
@@ -735,6 +740,7 @@ Route::group('recycle', function () {
 Route::group('recycle', function () {
     // 快递订单记录管理
     Route::get('express_order_record/lists', 'addon\hsx_recycle\app\adminapi\controller\express\ExpressOrderRecord@lists');
+    Route::post('express_order_record/:id/resolve_unbooked', 'addon\hsx_recycle\app\adminapi\controller\express\ExpressOrderRecord@resolveUnbooked');
     Route::get('express_order_record/status_options', 'addon\hsx_recycle\app\adminapi\controller\express\ExpressOrderRecord@statusOptions');
     Route::get('express_order_record/:id', 'addon\hsx_recycle\app\adminapi\controller\express\ExpressOrderRecord@info');
     Route::post('express_order_record', 'addon\hsx_recycle\app\adminapi\controller\express\ExpressOrderRecord@add');

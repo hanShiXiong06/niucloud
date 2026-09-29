@@ -22,6 +22,9 @@ Route::any('recycle/express/yisu_push', 'addon\hsx_recycle\app\api\controller\ex
 Route::any('tk_jhkd/yisunotice', 'addon\hsx_recycle\app\api\controller\express\ExpressController@yisuPush')
     ->middleware(ApiLog::class);
 
+// 不依赖客户登录；通过每单盐验签并从已保存记录确定站点。避免通用日志记录完整回调隐私。
+Route::post('recycle/express/kuaidi100_push', 'addon\hsx_recycle\app\api\controller\express\ExpressController@kuaidi100Push');
+
 Route::group('tk_vip', function() {
     /***************************************************** vip 登录接口 ****************************************************/
     //获取开启等级权益的会员等级
@@ -76,6 +79,8 @@ Route::group('recycle', function() {
     Route::get('recycle_order/:id', 'addon\hsx_recycle\app\api\controller\recycle_order\RecycleOrder@show');
     // 用户催办订单，推送到企业微信群
     Route::post('recycle_order/:id/urge', 'addon\hsx_recycle\app\api\controller\recycle_order\RecycleOrder@urge');
+    Route::post('recycle_order/:id/pickup/refresh', 'addon\hsx_recycle\app\api\controller\recycle_order\RecycleOrder@pickupRefresh');
+    Route::post('recycle_order/:id/pickup/manual', 'addon\hsx_recycle\app\api\controller\recycle_order\RecycleOrder@pickupManual');
     // 创建回收订单
     Route::post('recycle_order', 'addon\hsx_recycle\app\api\controller\recycle_order\RecycleOrder@store');
 

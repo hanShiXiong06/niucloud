@@ -29,6 +29,11 @@ class YisuExpressPushService
             return;
         }
         $siteId = (int)$record->site_id;
+        $provider = (string)($record->api_response['provider'] ?? 'yisu');
+        if ($provider !== 'yisu') {
+            Log::warning('易速回调不能更新其他服务商的运单', ['record_id' => $record->id]);
+            return;
+        }
         $pushType = (int)($payload['pushType'] ?? 0);
 
         Db::startTrans();
@@ -67,6 +72,18 @@ class YisuExpressPushService
             }
 
             Db::commit();
+
+            if (isset($record->api_response['booking_state'])) {
+                $state = ['pending' => 'confirmed', 'picked' => 'picked_up', 'in_transit' => 'in_transit',
+                    'delivered' => 'delivered', 'cancelled' => 'cancelled', 'exception' => 'exception'][(string)$record->order_status] ?? '';
+                $courier = (array)($record->api_response['courier'] ?? []);
+                if ($state === 'confirmed' && !empty($courier['courier_phone'])) $state = 'assigned';
+                (new RecyclePickupService())->applyResult($record, [
+                    'booking_state' => $state, 'deliveryId' => (string)$record->delivery_id,
+                    'courier_name' => (string)($courier['courier_info'] ?? ''),
+                    'courier_phone' => (string)($courier['courier_phone'] ?? ''),
+                ]);
+            }
 
             event('RecycleExpressEvent', [
                 'site_id' => $siteId,

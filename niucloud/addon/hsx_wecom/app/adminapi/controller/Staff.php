@@ -28,4 +28,19 @@ final class Staff extends BaseAdminController
             trim((string)$this->request->param('return_url', ''))
         ));
     }
+
+    public function bindStatus(int $uid): Response
+    {
+        return success((new WecomStaffService())->bindStatus($uid, (int)$this->request->param('intent_id', 0)));
+    }
+
+    public function bindConfirm(int $uid): Response
+    {
+        return success((new WecomStaffService())->bindConfirm($uid, (int)$this->request->param('intent_id', 0)));
+    }
+
+    public function bindCancel(int $uid): Response
+    {
+        return success((new WecomStaffService())->bindCancel($uid, (int)$this->request->param('intent_id', 0)));
+    }
 }

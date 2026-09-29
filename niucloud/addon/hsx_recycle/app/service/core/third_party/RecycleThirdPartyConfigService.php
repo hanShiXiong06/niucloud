@@ -64,12 +64,21 @@ class RecycleThirdPartyConfigService extends BaseCoreService
         // 否则保存“地址解析”会把“快递发件”等其他服务重置为默认值。
         $config = $this->mergeConfig($old, $data);
         $config = $this->keepMaskedSecret($config, $old);
+        // 凭证与回调盐只在后端保存，读取配置时统一掩码；保存草稿不代表已开通权限。
+        if (!empty($config['express_order'][ThirdPartyDict::PROVIDER_KUAIDI100]['api_key'])
+            && empty($config['express_order'][ThirdPartyDict::PROVIDER_KUAIDI100]['callback_salt'])) {
+            $config['express_order'][ThirdPartyDict::PROVIDER_KUAIDI100]['callback_salt'] = bin2hex(random_bytes(24));
+        }
+        if (!empty($config['express_order']['enabled'])
+            && ($config['express_order']['provider'] ?? '') === ThirdPartyDict::PROVIDER_KUAIDI100) {
+            \addon\hsx_recycle\app\service\core\express\provider\Kuaidi100Protocol::validateConfig($config['express_order'][ThirdPartyDict::PROVIDER_KUAIDI100]);
+        }
         $this->configService->setConfig($siteId, RecycleConfigKeyDict::THIRD_PARTY, $config);
 
         return true;
     }
 
-    public function getProviderConfig(int $siteId, string $serviceType, string $provider = ''): array
+    public function getProviderConfig(int $siteId, string $serviceType, string $provider = '', bool $allowDisabled = false): array
     {
         $map = $this->getServiceMap();
         if (!isset($map[$serviceType])) {
@@ -85,7 +94,7 @@ class RecycleThirdPartyConfigService extends BaseCoreService
         $config = $this->getConfig($siteId, false);
         $section = $config[$sectionKey] ?? [];
 
-        if (empty($section['enabled'])) {
+        if (empty($section['enabled']) && !$allowDisabled) {
             return [];
         }
 
@@ -178,6 +187,13 @@ class RecycleThirdPartyConfigService extends BaseCoreService
             'express_order' => [
                 'enabled' => 1,
                 'provider' => ThirdPartyDict::PROVIDER_YISU,
+                ThirdPartyDict::PROVIDER_KUAIDI100 => [
+                    'api_key' => '', 'secret' => '', 'callback_salt' => '',
+                    'mode' => 'online', 'environment' => 'production',
+                    'carrier_code' => 'shunfeng', 'carrier_name' => '顺丰速运',
+                    'service_type' => '', 'payment' => 'SHIPPER', 'channel_sw' => '',
+                    'callback_url' => '', 'timeout' => 30,
+                ],
                 ThirdPartyDict::PROVIDER_YISU => [
                     'base_url' => 'http://open.yisuopen.com',
                     'appid' => '',
@@ -291,6 +307,7 @@ class RecycleThirdPartyConfigService extends BaseCoreService
 
         foreach ([
             ['express_order', ThirdPartyDict::PROVIDER_YISU],
+            ['express_order', ThirdPartyDict::PROVIDER_KUAIDI100],
             ['express_query', ThirdPartyDict::PROVIDER_ALI_EXPRESS],
             ['address_parse', ThirdPartyDict::PROVIDER_TENCENT_CLOUD_MARKET_ADDRESS],
             ['printer', 'xpyun'],
@@ -353,6 +370,7 @@ class RecycleThirdPartyConfigService extends BaseCoreService
             'token',
             'user_key',
             'authorization',
+            'callback_salt',
         ], true);
     }
 
@@ -360,6 +378,9 @@ class RecycleThirdPartyConfigService extends BaseCoreService
     {
         $key = $serviceType . ':' . $provider;
         $map = [
+            ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER . ':' . ThirdPartyDict::PROVIDER_KUAIDI100 => [
+                'api_key', 'secret', 'callback_salt', 'callback_url', 'mode', 'environment', 'carrier_code', 'carrier_name', 'service_type', 'payment',
+            ],
             ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER . ':' . ThirdPartyDict::PROVIDER_YISU => [
                 'base_url',
                 'appid',

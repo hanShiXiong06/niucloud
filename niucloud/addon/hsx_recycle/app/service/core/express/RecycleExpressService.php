@@ -72,6 +72,7 @@ class RecycleExpressService
             'weight' => $weight,
             'packageCount' => $packageCount,
             'provider' => $provider,
+            'deliveryType' => $this->resolveProductCode($siteId, [], (new ExpressGatewayService())->products($siteId)),
         ];
 
         $quoteList = $expressService->getQuote($siteId, $params);
@@ -179,7 +180,7 @@ class RecycleExpressService
             // 快递产品
             'deliveryType' => $productCode,
             'provider' => $provider,
-            'provider_name' => trim((string)($config['provider_name'] ?? $providerInfo['name'] ?? $provider)),
+            'provider_name' => (string)($providerInfo['name'] ?? $provider),
 
             // 寄件人(用户)
             'senderName' => $config['sender_name'] ?? '',
@@ -207,49 +208,21 @@ class RecycleExpressService
 
             // 关联回收订单
             'recycle_order_id' => $order->id,
-            'estimated_cost' => (float)($config['estimated_cost'] ?? 0),
+            'estimated_cost' => 0, // 客户提交的估价不能作为本站运费账目。
         ];
 
         // 调用当前供应商下单
         $apiResult = $expressService->createOrder($siteId, $params);
 
-        $expressNo = $apiResult['deliveryId'] ?? $apiResult['orderNo'] ?? '';
+        $expressNo = $apiResult['deliveryId'] ?? '';
         $orderNo = $apiResult['orderNo'] ?? '';
-        if (empty($expressNo) && empty($orderNo)) {
-            throw new CommonException('快递下单成功但未返回运单号');
-        }
-        $estimatedCost = (float)($config['estimated_cost'] ?? 0);
+        $estimatedCost = 0;
 
-        // 更新回收订单
-        $order->save([
-            'express_no' => $expressNo,
-            'delivery_platform' => $provider,
-            'delivery_fee' => $estimatedCost,
-            'delivery_status' => 1, // 已下单
-            'delivery_order_id' => $orderNo,
-            'delivery_data' => json_encode([
-                'provider' => $provider,
-                'provider_name' => $params['provider_name'] ?? $provider,
-                'sender' => [
-                    'name' => $config['sender_name'] ?? '',
-                    'mobile' => $config['sender_mobile'] ?? '',
-                    'province' => $config['sender_province'] ?? '',
-                    'city' => $config['sender_city'] ?? '',
-                    'district' => $config['sender_district'] ?? '',
-                    'address' => $config['sender_address'] ?? '',
-                ],
-                'receiver' => $shopAddress,
-                'product_code' => $productCode,
-                'weight' => $config['weight'] ?? 1.0,
-                'estimated_cost' => $estimatedCost,
-                'order_no' => $orderNo,
-                'express_no' => $expressNo,
-                'create_time' => date('Y-m-d H:i:s'),
-                'operator' => $operatorInfo,
-            ], JSON_UNESCAPED_UNICODE),
-            'pickup_time' => $config['pickup_time'] ?? '',
-            'update_at' => time(),
-        ]);
+        // 只能从最新持久化记录在同一预约锁内投影，不能拿初始响应覆盖已到达的回调。
+        $record = (new RecyclePickupService())->record($siteId, (int)$order->id);
+        if ($record) {
+            (new RecyclePickupService())->syncOrder($record);
+        }
 
         return [
             'express_no' => $expressNo,
@@ -263,11 +236,7 @@ class RecycleExpressService
 
     private function resolveProductCode(int $siteId, array $config, array $enabledProducts): string
     {
-        $productCode = trim((string)($config['product_code'] ?? ''));
-        if ($productCode !== '') {
-            return $productCode;
-        }
-
+        // 不信任客户传来的 product_code/provider/payment；仅由站点策略决定。
         try {
             $submitConfig = (new OrderSubmitConfigService())->getConfig($siteId);
             $defaultProductCode = trim((string)($submitConfig['platform_delivery']['product_code'] ?? ''));
@@ -282,7 +251,31 @@ class RecycleExpressService
             Log::warning('读取平台快递默认线路失败：' . $e->getMessage(), ['site_id' => $siteId]);
         }
 
-        return !empty($enabledProducts) ? (string)($enabledProducts[0]['product_code'] ?? '') : '';
+        if (count($enabledProducts) === 1) {
+            return (string)$enabledProducts[0]['product_code'];
+        }
+        throw new CommonException('请管理员为回收上门取件指定一个快递产品');
+    }
+
+    public function pickupPolicy(int $siteId): array
+    {
+        try {
+            if (!$this->isExpressEnabled($siteId) || !$this->getShopAddress($siteId)) {
+                throw new CommonException('门店暂未配置可用的上门取件服务');
+            }
+            $products = (new ExpressGatewayService())->products($siteId);
+            $code = $this->resolveProductCode($siteId, [], $products);
+            $product = current(array_filter($products, static function ($item) use ($code) { return ($item['product_code'] ?? '') === $code; })) ?: [];
+            return ['pickup_enabled' => true, 'enabled' => true,
+                'carrier_name' => (string)($product['carrier_name'] ?? $product['product_name'] ?? '本站指定快递'),
+                'payment_tips' => (string)($product['payment_tips'] ?? '运费承担方式请向门店确认，最终费用以快递公司账单为准'),
+                'pickup_time_supported' => !empty($product['pickup_time_supported']),
+                'pickup_time_required' => !empty($product['pickup_time_required']), 'unavailable_reason' => ''];
+        } catch (\Throwable $e) {
+            return ['pickup_enabled' => false, 'enabled' => false, 'carrier_name' => '', 'payment_tips' => '',
+                'pickup_time_supported' => false, 'pickup_time_required' => false,
+                'unavailable_reason' => '门店暂未开通可用的上门取件，请自行寄件或联系门店'];
+        }
     }
 
     /**
@@ -300,7 +293,7 @@ class RecycleExpressService
             throw new CommonException('回收订单不存在');
         }
 
-        if (empty($order->express_no) || $order->delivery_status <= 0) {
+        if (empty($order->delivery_order_id) && empty($order->express_no)) {
             throw new CommonException('该订单未下快递单');
         }
 
@@ -314,23 +307,19 @@ class RecycleExpressService
             $expressService = new ExpressOrderService();
             $orderNo = $order->delivery_order_id ?: $order->express_no;
             $expressService->cancelOrder($siteId, $orderNo, (string)$platform);
-
-            // 更新回收订单
-            $order->save([
-                'delivery_status' => 4, // 已取消
-                'delivery_fee' => 0,    // 取消后费用归零
-                'update_at' => time(),
-            ]);
-
-            // 记录操作日志
-            $deliveryData = json_decode($order->delivery_data ?: '{}', true);
-            $deliveryData['cancel_info'] = [
-                'cancel_time' => date('Y-m-d H:i:s'),
-                'operator' => $operatorInfo,
-            ];
-            $order->save([
-                'delivery_data' => json_encode($deliveryData, JSON_UNESCAPED_UNICODE),
-            ]);
+            // 统一能力已按原预约投影取消结果；不可覆盖冲突状态，也不能把取消当退款。
+            $record = (new RecyclePickupService())->record($siteId, $recycleOrderId);
+            $lockKey = $record ? (string)$record->third_order_no : 'recycle_' . $siteId . '_' . $recycleOrderId;
+            ExpressOperationLock::run($siteId, $lockKey, function () use ($order, $operatorInfo) {
+                // 与渠道回调共用锁，操作备注不能把刚到的取件事实覆盖回旧快照。
+                $order->refresh();
+                $deliveryData = RecyclePickupService::decode($order->delivery_data ?? '');
+                $deliveryData['cancel_info'] = [
+                    'cancel_time' => date('Y-m-d H:i:s'),
+                    'operator' => $operatorInfo,
+                ];
+                $order->save(['delivery_data' => json_encode($deliveryData, JSON_UNESCAPED_UNICODE)]);
+            });
 
             Log::info("回收订单{$recycleOrderId}快递已取消", [
                 'platform' => $platform,

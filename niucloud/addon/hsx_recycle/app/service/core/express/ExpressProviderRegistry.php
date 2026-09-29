@@ -7,6 +7,7 @@ use addon\hsx_recycle\app\dict\third_party\ThirdPartyDict;
 use addon\hsx_recycle\app\model\express\ExpressProviderConfig;
 use addon\hsx_recycle\app\service\core\express\contract\ExpressProviderInterface;
 use addon\hsx_recycle\app\service\core\express\provider\YisuExpressProvider;
+use addon\hsx_recycle\app\service\core\express\provider\Kuaidi100ExpressProvider;
 use addon\hsx_recycle\app\service\core\third_party\RecycleThirdPartyConfigService;
 use core\exception\CommonException;
 use think\facade\Log;
@@ -22,6 +23,7 @@ class ExpressProviderRegistry
     /** @var array<string, class-string<ExpressProviderInterface>> */
     private $providers = [
         ThirdPartyDict::PROVIDER_YISU => YisuExpressProvider::class,
+        ThirdPartyDict::PROVIDER_KUAIDI100 => Kuaidi100ExpressProvider::class,
     ];
 
     public function __construct()

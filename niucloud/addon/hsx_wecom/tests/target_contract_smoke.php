@@ -11,7 +11,9 @@ $resolve = new ReflectionMethod(WecomNotificationService::class, 'target');
 $contract->setAccessible(true);
 $resolve->setAccessible(true);
 
-$assert = static function (bool $condition, string $message): void {
+$checks = 0;
+$assert = static function (bool $condition, string $message) use (&$checks): void {
+    $checks++;
     if (!$condition) throw new RuntimeException($message);
 };
 
@@ -86,4 +88,84 @@ $assert($listTarget['route_key'] === 'hsx_recycle.task.list', '回收任务列�
 $assert($listTarget['miniapp_path'] === 'addon/hsx_recycle/pages/task/index?stage=check', '回收任务列表小程序路径错误');
 $assert($listTarget['web_url'] === 'https://example.com/site/stat/task?stage=check', '回收任务列表网页路径错误');
 
-echo "hsx_wecom target contract smoke passed\n";
+// 线下订单明确携带两种入口，不得借用消费者端不存在于管理端的订单详情页。
+$offlinePath = 'addon/phone_shop/pages/order/list?order_id=123';
+$offlineWebPath = 'site/phone_shop/order/offline?order_id=123';
+$offlineEvent = [
+    'source_plugin' => 'phone_shop',
+    'source_type' => 'offline_order',
+    'source_id' => 123,
+    'target' => [
+        'plugin' => 'phone_shop',
+        'route_key' => 'phone_shop.order.offline',
+        'params' => ['order_id' => 123],
+        'web_path' => $offlineWebPath,
+        'miniapp_path' => $offlinePath,
+    ],
+    'target_path' => $offlineWebPath,
+];
+$config = ['web_base_url' => 'https://example.com', 'miniapp_appid' => 'wx123'];
+$assert($contract->invoke($service, $offlineEvent) === '', '线下订单双入口必须通过目标契约校验');
+foreach (['web', 'miniapp', 'dual'] as $mode) {
+    $target = $resolve->invoke($service, $offlineEvent, $config + ['jump_mode' => $mode]);
+    $assert($target['miniapp_path'] === ($mode === 'web' ? '' : $offlinePath), $mode . '模式的线下订单小程序路径错误');
+    $assert($target['miniapp_appid'] === ($mode === 'web' ? '' : 'wx123'), $mode . '模式的小程序 AppID 错误');
+    $assert($target['web_url'] === ($mode === 'miniapp' ? '' : 'https://example.com/' . $offlineWebPath), $mode . '模式的网页入口语义发生变化');
+
+    $snapshot = $resolve->invoke($service, ['wecom_target' => $target], $config + ['jump_mode' => $mode]);
+    $assert($snapshot === $target, $mode . '模式的有效目标快照不应改变');
+}
+
+// 从旧 target_path 兜底时只允许内部页面，绝不能把 PC 路径传给企业微信的小程序按钮。
+$pcOnlyEvent = $offlineEvent;
+unset($pcOnlyEvent['target']['miniapp_path']);
+foreach (['web', 'miniapp', 'dual'] as $mode) {
+    $target = $resolve->invoke($service, $pcOnlyEvent, $config + ['jump_mode' => $mode]);
+    $assert($target['miniapp_path'] === ($mode === 'miniapp' ? 'app/pages/index/index' : ''), $mode . '模式错误地将 PC 路径作为小程序页面');
+    $assert($target['web_url'] === 'https://example.com/' . $offlineWebPath, $mode . '模式必须保留 PC 业务的精确网页入口');
+}
+
+$legacyMobile = $resolve->invoke($service, ['target_path' => '/' . $offlinePath], $config + ['jump_mode' => 'dual']);
+$assert($legacyMobile['miniapp_path'] === $offlinePath, '合法的小程序 target_path 兜底不应被移除');
+
+$invalidPaths = [
+    $offlineWebPath,
+    '/' . $offlineWebPath,
+    'https://example.com/' . $offlineWebPath,
+    'javascript:alert(1)',
+    'addon/phone_shop/../../site/order',
+    "addon/phone_shop/pages/order/list\n?order_id=123",
+    'addon/phone_shop/pages/order/list#order',
+];
+foreach ($invalidPaths as $invalidPath) {
+    $event = $offlineEvent;
+    $event['target']['miniapp_path'] = $invalidPath;
+    $target = $resolve->invoke($service, $event, $config + ['jump_mode' => 'dual']);
+    $assert($target['miniapp_path'] === '', '结构化目标未拦截非法小程序路径：' . json_encode($invalidPath));
+
+    foreach (['web', 'miniapp', 'dual'] as $mode) {
+        $snapshot = $resolve->invoke($service, ['wecom_target' => [
+            'plugin' => 'phone_shop',
+            'route_key' => 'phone_shop.order.offline',
+            'web_url' => 'https://example.com/' . $offlineWebPath,
+            'miniapp_appid' => 'wx123',
+            'miniapp_path' => $invalidPath,
+        ]], $config + ['jump_mode' => $mode]);
+        $assert($snapshot['miniapp_path'] === ($mode === 'miniapp' ? 'app/pages/index/index' : ''), $mode . '模式的快照绕过了小程序路径防护');
+        $assert($snapshot['web_url'] === 'https://example.com/' . $offlineWebPath, '快照移除非法小程序入口时不能丢失网页入口');
+    }
+}
+
+// 两个业务事件发生处必须真的携带显式移动路径，防止只修测试夹具而遗漏发件代码。
+$phoneShopRoot = dirname(__DIR__, 2) . '/phone_shop';
+foreach ([
+    '/app/listener/order/OfflineOrderSubmitted.php' => "'miniapp_path' => 'addon/phone_shop/pages/order/list' . \$query",
+    '/app/service/api/order/OfflineOrderService.php' => "'miniapp_path' => 'addon/phone_shop/pages/order/list?order_id=' . \$orderId",
+] as $file => $expected) {
+    // phone_shop 是可选插件，未安装时只运行上述通用契约测试。
+    if (!is_file($phoneShopRoot . $file)) continue;
+    $source = file_get_contents($phoneShopRoot . $file);
+    $assert($source !== false && str_contains($source, $expected), '线下订单事件未配置真实管理端路径：' . $file);
+}
+
+echo "hsx_wecom target contract smoke passed ({$checks} checks)\n";

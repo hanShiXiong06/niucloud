@@ -62,15 +62,16 @@
         :use-platform-delivery="enablePlatformDelivery"
         :express-no="form.express_no"
         :platform-delivery-form="platformDeliveryForm"
-        :pickup-time-options="pickupTimeOptions"
         :need-pickup-time="needPickupTime"
+        :pickup-time-supported="pickupTimeSupported"
+        :pickup-available="pickupAvailable"
+        :checking-pickup="checkingPickup"
+        :pickup-unavailable-reason="pickupUnavailableReason"
+        :carrier-name="carrierName"
+        :payment-tips="paymentTips"
         :order-count="deviceCount"
         :free-shipping-min-count="orderSubmitConfig.platform_delivery.free_shipping_min_count"
         :platform-delivery-name="orderSubmitConfig.platform_delivery.display_name"
-        :default-provider="orderSubmitConfig.platform_delivery.provider"
-        :default-provider-name="orderSubmitConfig.platform_delivery.provider_name"
-        :default-product-code="orderSubmitConfig.platform_delivery.product_code"
-        :default-product-name="orderSubmitConfig.platform_delivery.product_name"
         @update:use-platform-delivery="handlePlatformDeliveryChange"
         @update:express-no="form.express_no = $event"
         @update:platform-delivery-form="platformDeliveryForm = $event"
@@ -99,7 +100,7 @@
         />
         <text class="submit-bar__desc">共 {{ deviceCount }} 台设备</text>
       </view>
-      <view class="submit-bar__button" @click="handleSubmitOrder">确认发货</view>
+      <view class="submit-bar__button" :class="{ 'submit-bar__button--busy': preparingSubmit || submitting }" @click="handleSubmitOrder">{{ preparingSubmit || submitting ? '正在提交…' : '提交回收订单' }}</view>
     </view>
 
     <!-- 设备输入弹窗 -->
@@ -185,27 +186,8 @@ const orderSubmitConfig = ref({
     id_card_required: 1
   },
   platform_delivery: {
-    display_name: '京东快递',
-    free_shipping_min_count: 1,
-    provider: 'yisu',
-    provider_name: '亿速物流',
-    product_code: '',
-    product_name: '',
-    provider_options: [] as Array<{
-      provider: string
-      provider_name: string
-      is_default: number
-      support_quote?: boolean
-      support_cancel?: boolean
-      support_track?: boolean
-    }>,
-    product_options: [] as Array<{
-      provider: string
-      product_code: string
-      product_name: string
-      express_type?: string
-      logo?: string
-    }>
+    display_name: '门店快递',
+    free_shipping_min_count: 1
   },
   price_detail_theme: {
     colors: {}
@@ -267,7 +249,12 @@ const {
   enablePlatformDelivery,
   needPickupTime,
   platformDeliveryForm,
-  pickupTimeOptions,
+  pickupTimeSupported,
+  pickupAvailable,
+  checkingPickup,
+  pickupUnavailableReason,
+  carrierName,
+  paymentTips,
   fillAddressFromSelected,
   handlePlatformDeliveryToggle,
   resetPlatformDeliveryForm
@@ -277,7 +264,8 @@ const {
 const { shopInfo, fetchShopInfo, copyShopInfo, openLocation } = useShopInfo()
 
 // 订单提交
-const { submitOrder, showFollowPopup, wechatName, qrCode, followTitle, followContent, dismissFollow } = useOrderSubmit()
+const { submitOrder, submitting, showFollowPopup, wechatName, qrCode, followTitle, followContent, dismissFollow } = useOrderSubmit()
+const preparingSubmit = ref(false)
 
 // 协议勾选
 const isAgreeRecycle = ref(false)
@@ -328,14 +316,8 @@ const normalizeOrderSubmitConfig = (data: any = {}) => {
       id_card_required: data.profile?.id_card_required === 0 ? 0 : 1
     },
     platform_delivery: {
-      display_name: data.platform_delivery?.display_name || '京东快递',
-      free_shipping_min_count: normalizePositiveNumber(data.platform_delivery?.free_shipping_min_count, 1),
-      provider: data.platform_delivery?.provider || 'yisu',
-      provider_name: data.platform_delivery?.provider_name || '亿速物流',
-      product_code: data.platform_delivery?.product_code || '',
-      product_name: data.platform_delivery?.product_name || '',
-      provider_options: Array.isArray(data.platform_delivery?.provider_options) ? data.platform_delivery.provider_options : [],
-      product_options: Array.isArray(data.platform_delivery?.product_options) ? data.platform_delivery.product_options : []
+      display_name: data.platform_delivery?.display_name || '门店快递',
+      free_shipping_min_count: normalizePositiveNumber(data.platform_delivery?.free_shipping_min_count, 1)
     },
     price_detail_theme: data.price_detail_theme || { colors: {} }
   }
@@ -409,9 +391,10 @@ const scanCode = () => {
 
 // 处理平台快递切换
 const handlePlatformDeliveryChange = async (value: boolean) => {
+  if (value && !pickupAvailable.value) return
   if (value && !canUsePlatformDelivery.value) {
     uni.showToast({
-      title: `满 ${orderSubmitConfig.value.platform_delivery.free_shipping_min_count} 台可用${orderSubmitConfig.value.platform_delivery.display_name}包邮`,
+      title: `满${orderSubmitConfig.value.platform_delivery.free_shipping_min_count}台可预约上门取件`,
       icon: 'none'
     })
     enablePlatformDelivery.value = false
@@ -429,11 +412,14 @@ interface ExpressCheckResponse {
   msg?: string
   data?: {
     enabled?: boolean
+    pickup_enabled?: boolean
     provider?: string
     provider_name?: string
     has_shop_address?: boolean
     memo?: string
     prompt?: string
+    unavailable_reason?: string
+    payment_tips?: string
   }
 }
 
@@ -456,7 +442,7 @@ const shouldContinueWithPlatformPrompt = async (): Promise<boolean> => {
 
   if (!canUsePlatformDelivery.value) {
     uni.showToast({
-      title: `满 ${orderSubmitConfig.value.platform_delivery.free_shipping_min_count} 台可用${orderSubmitConfig.value.platform_delivery.display_name}包邮`,
+      title: `满${orderSubmitConfig.value.platform_delivery.free_shipping_min_count}台可预约上门取件`,
       icon: 'none'
     })
     return false
@@ -464,11 +450,14 @@ const shouldContinueWithPlatformPrompt = async (): Promise<boolean> => {
 
   try {
     const res = await checkExpressEnabled() as ExpressCheckResponse
-    if (res.code !== 1 || !res.data) return true
+    if (res.code !== 1 || !res.data) {
+      uni.showToast({ title: '暂未确认取件服务，请稍后重试', icon: 'none' })
+      return false
+    }
 
-    if (!res.data.enabled) {
+    if (!(res.data.pickup_enabled ?? res.data.enabled)) {
       uni.showToast({
-        title: '平台快递未启用',
+        title: res.data.unavailable_reason || '门店暂未开启上门取件',
         icon: 'none'
       })
       return false
@@ -483,13 +472,13 @@ const shouldContinueWithPlatformPrompt = async (): Promise<boolean> => {
     }
 
     const memo = String(res.data.prompt || res.data.memo || '').trim()
-
-    if (!memo) return true
-    return await showPlatformDeliveryMemoConfirm(memo)
+    paymentTips.value = String(res.data.payment_tips || '').trim()
+    const paymentMessage = paymentTips.value || '运费及付款安排请与门店确认，预约服务不代表免费寄件。'
+    return await showPlatformDeliveryMemoConfirm([memo, `运费说明：${paymentMessage}`].filter(Boolean).join('\n\n'))
   } catch (error) {
     console.error('获取平台快递提示信息失败：', error)
-    // 获取提示失败时不阻断下单流程
-    return true
+    uni.showToast({ title: '暂未确认取件服务，请稍后重试或联系门店', icon: 'none' })
+    return false
   }
 }
 
@@ -504,7 +493,7 @@ watch(canUsePlatformDelivery, (canUse) => {
 })
 
 // 提交订单
-const handleSubmitOrder = async () => {
+const prepareAndSubmitOrder = async () => {
   const modeKey = currentTab.value === 0 ? 'mail' : (currentTab.value === 1 ? 'self' : 'logistics_vehicle')
   if (!orderSubmitConfig.value.delivery_modes[modeKey]) {
     uni.showToast({
@@ -540,6 +529,16 @@ const handleSubmitOrder = async () => {
       applyDefaultCount()
     }
   })
+}
+
+const handleSubmitOrder = async () => {
+  if (preparingSubmit.value || submitting.value) return
+  preparingSubmit.value = true
+  try {
+    await prepareAndSubmitOrder()
+  } finally {
+    preparingSubmit.value = false
+  }
 }
 
 // 检查收款信息
@@ -623,6 +622,7 @@ fetchShopInfo()
 </script>
 
 <style scoped lang="scss">
+.submit-bar__button--busy { opacity: 0.65; }
 .recycle-order-page {
   min-height: 100vh;
   background: var(--recycle-bg-main);

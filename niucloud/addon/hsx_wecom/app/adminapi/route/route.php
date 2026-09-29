@@ -19,6 +19,9 @@ Route::group('wecom', function () {
     Route::get('staff', 'addon\hsx_wecom\app\adminapi\controller\Staff@lists');
     Route::put('staff/:uid', 'addon\hsx_wecom\app\adminapi\controller\Staff@save');
     Route::post('staff/:uid/bind-url', 'addon\hsx_wecom\app\adminapi\controller\Staff@bindUrl');
+    Route::get('staff/:uid/bind-status', 'addon\hsx_wecom\app\adminapi\controller\Staff@bindStatus');
+    Route::post('staff/:uid/bind-confirm', 'addon\hsx_wecom\app\adminapi\controller\Staff@bindConfirm');
+    Route::post('staff/:uid/bind-cancel', 'addon\hsx_wecom\app\adminapi\controller\Staff@bindCancel');
     Route::get('messages', 'addon\hsx_wecom\app\adminapi\controller\Message@lists');
     Route::post('messages/test', 'addon\hsx_wecom\app\adminapi\controller\Message@test');
     Route::post('messages/:id/retry', 'addon\hsx_wecom\app\adminapi\controller\Message@retry');

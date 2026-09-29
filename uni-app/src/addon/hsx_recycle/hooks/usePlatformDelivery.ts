@@ -13,13 +13,13 @@ export function usePlatformDelivery() {
   // 是否使用平台快递
   const enablePlatformDelivery = ref(false)
 
-  // 当前激活的服务商，目前 2.0 阶段仅支持 yisu
-  const activeProvider = ref('')
-
-  // 预约时间选项列表，保留字段用于兼容旧组件绑定
-  const pickupTimeOptions = ref<Array<{ label: string; value: string }>>([])
-
-  // 亿速不需要预约时间，保留字段用于兼容旧组件绑定
+  // 是否能预约以本站服务端检查为准，不因有一个服务商名称就当作已配置。
+  const checkingPickup = ref(true)
+  const pickupAvailable = ref(false)
+  const pickupUnavailableReason = ref('正在确认门店取件服务')
+  const carrierName = ref('')
+  const paymentTips = ref('')
+  const pickupTimeSupported = ref(false)
   const needPickupTime = ref(false)
 
   // 平台快递表单数据
@@ -32,28 +32,37 @@ export function usePlatformDelivery() {
     area_text: '',
     detail_address: '',
     pickup_time: '',
-    weight: '1.0',
-    provider: '',
-    provider_name: '',
-    product_code: '',
-    product_name: ''
+    weight: '1.0'
   })
 
   /**
    * 检测当前启用的快递服务商
    */
   const detectProvider = async () => {
+    checkingPickup.value = true
     try {
       const res: any = await checkExpressEnabled()
-      if (res.code === 1 && res.data) {
-        activeProvider.value = res.data.provider || ''
-        needPickupTime.value = false
-      }
-    } catch (error) {
-      console.error('检测快递服务商失败：', error)
-      activeProvider.value = ''
+      if (res.code !== 1 || !res.data) throw new Error('pickup unavailable')
+      const data = res.data
+      pickupAvailable.value = Boolean(data.pickup_enabled ?? data.enabled) && data.has_shop_address === true
+      carrierName.value = String(data.carrier_name || '')
+      paymentTips.value = String(data.payment_tips || '').trim()
+      pickupTimeSupported.value = data.pickup_time_supported === true
+      needPickupTime.value = pickupTimeSupported.value && data.pickup_time_required === true
+      platformDeliveryForm.value.pickup_time_required = needPickupTime.value
+      if (!pickupTimeSupported.value) platformDeliveryForm.value.pickup_time = ''
+      pickupUnavailableReason.value = pickupAvailable.value ? '' : String(data.unavailable_reason || '门店暂未配置可用的上门取件服务，请联系门店或自行寄件')
+    } catch (_) {
+      pickupAvailable.value = false
+      paymentTips.value = ''
+      pickupUnavailableReason.value = '暂时无法确认上门取件服务，请稍后重试或联系门店'
+      pickupTimeSupported.value = false
       needPickupTime.value = false
+    } finally {
+      checkingPickup.value = false
+      if (!pickupAvailable.value) enablePlatformDelivery.value = false
     }
+    return pickupAvailable.value
   }
 
   /**
@@ -108,24 +117,14 @@ export function usePlatformDelivery() {
 
   // 处理平台快递切换
   const handlePlatformDeliveryToggle = async () => {
+    if (!pickupAvailable.value) return
     enablePlatformDelivery.value = true
-
-    // 先检测服务商（如果还没检测过）
-    if (!activeProvider.value) {
-      await detectProvider()
-    }
 
     // 切换到平台快递时，如果没有地址则加载默认地址
     if (!platformDeliveryForm.value.sender_name) {
       await loadDefaultAddress()
     }
 
-  }
-
-  // 2.0 阶段仅支持亿速，亿速不需要预约时间。
-  const loadPickupTime = async () => {
-    pickupTimeOptions.value = []
-    platformDeliveryForm.value.pickup_time = ''
   }
 
   // 初始化：检测服务商 + 加载地址
@@ -150,23 +149,24 @@ export function usePlatformDelivery() {
       detail_address: '',
       pickup_time: '',
       weight: '1.0',
-      provider: '',
-      provider_name: '',
-      product_code: '',
-      product_name: ''
+      pickup_time_required: needPickupTime.value
     }
     enablePlatformDelivery.value = false
   }
 
   return {
     enablePlatformDelivery,
-    activeProvider,
+    checkingPickup,
+    pickupAvailable,
+    pickupUnavailableReason,
+    carrierName,
+    paymentTips,
+    pickupTimeSupported,
     needPickupTime,
     platformDeliveryForm,
-    pickupTimeOptions,
+    detectProvider,
     fillAddressFromSelected,
     handlePlatformDeliveryToggle,
-    loadPickupTime,
     loadDefaultAddress,
     resetPlatformDeliveryForm
   }

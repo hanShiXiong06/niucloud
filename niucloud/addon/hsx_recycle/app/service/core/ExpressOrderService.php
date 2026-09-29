@@ -8,6 +8,8 @@ use addon\hsx_recycle\app\model\express\ExpressOrderRecord;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
 use addon\hsx_recycle\app\service\core\express\ExpressDomainEventService;
 use addon\hsx_recycle\app\service\core\express\ExpressGatewayService;
+use addon\hsx_recycle\app\service\core\express\ExpressOperationLock;
+use addon\hsx_recycle\app\service\core\express\PickupState;
 use core\exception\CommonException;
 use think\facade\Log;
 
@@ -220,6 +222,30 @@ class ExpressOrderService
      */
     public function createOrder(int $siteId, array $params): array
     {
+        $thirdOrderNo = trim((string)($params['thirdOrderNo'] ?? $params['third_order_no'] ?? ''));
+        if ($thirdOrderNo === '') {
+            $thirdOrderNo = !empty($params['recycle_order_id'])
+                ? 'recycle_' . $siteId . '_' . (int)$params['recycle_order_id']
+                : 'ex_' . bin2hex(random_bytes(12));
+        }
+        $params['thirdOrderNo'] = $thirdOrderNo;
+        return ExpressOperationLock::run($siteId, $thirdOrderNo, function () use ($siteId, $params) {
+            return $this->createLocked($siteId, $params);
+        });
+    }
+
+    private function createLocked(int $siteId, array $params): array
+    {
+        // 必须先查原请求：默认配置变化不能让同一次预约被另一渠道重新提交。
+        $existingResult = $this->resolveIdempotentCreateResult($siteId, (string)$params['thirdOrderNo']);
+        if ($existingResult !== null) {
+            return $existingResult;
+        }
+        $provider = $this->expressGateway->activeProvider($siteId);
+        $params['provider'] = $provider['key'];
+        $params['provider_name'] = $provider['name'];
+        $adapter = (new \addon\hsx_recycle\app\service\core\express\ExpressProviderRegistry())->resolve($siteId, $params['provider']);
+        $providerSnapshot = method_exists($adapter, 'prepareSnapshot') ? $adapter->prepareSnapshot($siteId, $params) : [];
         // 必填参数验证
         $requiredFields = ['deliveryType', 'senderName', 'senderMobile', 'senderProvince',
                           'senderCity', 'senderDistrict', 'senderAddress',
@@ -245,10 +271,45 @@ class ExpressOrderService
             return $existingResult;
         }
 
-        $apiData = $this->expressGateway->create($siteId, $params);
-
-        // 创建快递订单记录
-        $record = $this->createExpressRecord($siteId, $params, $apiData);
+        // 外部调用前持久化占位。进程中断/响应丢失也不允许再次叫件。
+        $record = $this->createExpressRecord($siteId, $params, ['booking_state' => 'submitting']);
+        $snapshot = array_replace((array)$record->api_response, $providerSnapshot);
+        $snapshot['callback_salt'] = bin2hex(random_bytes(24));
+        $snapshot['pickup_time'] = (string)($params['orderSendTime'] ?? '');
+        $snapshot['requested_at'] = time();
+        $record->save(['api_response' => $snapshot, 'order_status' => 'submitting']);
+        // 发送前仍按占位时的路由校验，防止管理员并发切换账号/承运商。
+        $params = array_replace($params, $providerSnapshot);
+        $params['callback_salt'] = $snapshot['callback_salt'];
+        $params['record_id'] = (int)$record->id;
+        if (!empty($providerSnapshot['callback_base'])) {
+            $base = (string)$providerSnapshot['callback_base'];
+            $params['callback_url'] = $base . (strpos($base, '?') === false ? '?' : '&') . 'record_id=' . (int)$record->id;
+        }
+        try {
+            $apiData = $this->expressGateway->create($siteId, $params);
+            $apiData['orderNo'] = (string)($apiData['orderNo'] ?? $apiData['orderCode'] ?? '');
+            $apiData['deliveryId'] = (string)($apiData['deliveryId'] ?? $apiData['waybillNo'] ?? $apiData['trackingNum'] ?? '');
+            $apiData['booking_state'] = $apiData['booking_state'] ?? 'accepted';
+            $apiData['record_id'] = (int)$record->id;
+            $apiData['provider'] = $params['provider'];
+            $record->refresh();
+            $merged = PickupState::merge((array)$record->api_response, $apiData);
+            $record->save([
+                'order_no' => (string)($merged['orderNo'] ?? ''),
+                'delivery_id' => (string)($merged['deliveryId'] ?? ''),
+                'order_status' => (string)$merged['booking_state'],
+                'api_response' => $merged,
+            ]);
+        } catch (\Throwable $e) {
+            // 仅适配器明确证明未创建的拒绝才允许自行寄件；其他错误一律待核实。
+            $state = method_exists($e, 'outcome') && $e->outcome() === 'rejected' ? 'failed' : 'unknown';
+            $record->refresh();
+            $snapshot = PickupState::merge((array)$record->api_response, ['booking_state' => $state]);
+            $snapshot['failure_reason'] = mb_substr($e->getMessage(), 0, 500);
+            $record->save(['order_status' => $snapshot['booking_state'], 'api_response' => $snapshot]);
+            throw $e;
+        }
         $this->saveAddressBook($siteId, $params);
         $this->domainEventService->dispatch('express.shipment.created', [
             'site_id' => $siteId,
@@ -273,18 +334,20 @@ class ExpressOrderService
         $record = ExpressOrderRecord::where([
             ['site_id', '=', $siteId],
             ['third_order_no', '=', $thirdOrderNo],
-            ['order_status', '<>', 'cancelled'],
         ])->order('id desc')->find();
-        if (!$record || (empty($record->order_no) && empty($record->delivery_id))) {
+        if (!$record) {
             return null;
         }
-
-        return [
+        $snapshot = (array)$record->api_response;
+        unset($snapshot['callback_salt']);
+        return array_merge($snapshot, [
             'orderNo' => (string)$record->order_no,
             'deliveryId' => (string)$record->delivery_id,
             'waybillNo' => (string)$record->delivery_id,
+            'record_id' => (int)$record->id,
+            'booking_state' => (string)($snapshot['booking_state'] ?? 'accepted'),
             'idempotent' => true,
-        ];
+        ]);
     }
 
     private function saveAddressBook(int $siteId, array $params): void
@@ -424,11 +487,11 @@ class ExpressOrderService
                 'discount_amount' => 0,
 
                 // 订单状态
-                'order_status' => 'pending',
+                'order_status' => (string)($apiResult['booking_state'] ?? 'pending'),
                 'status_history' => [
                     [
                         'status' => 'pending',
-                        'remark' => '订单创建成功',
+                        'remark' => '预约请求已记录，等待渠道确认',
                         'time' => time(),
                     ]
                 ],
@@ -442,7 +505,7 @@ class ExpressOrderService
 
         $record = ExpressOrderRecord::createRecord($recordData);
         if (!$record) {
-            throw new CommonException('快递下单成功，但本地运单记录保存失败，请勿重复下单并联系管理员核对');
+            throw new CommonException('预约记录保存失败，尚未调用快递公司，请联系管理员');
         }
 
         return $record;
@@ -457,23 +520,7 @@ class ExpressOrderService
      */
     public function cancelOrder(int $siteId, string $orderNo, string $providerKey = ''): bool
     {
-        $record = $this->findLocalExpressRecord($siteId, ['order_no' => $orderNo, 'waybill_no' => $orderNo]);
-        $cancelParams = ['order_no' => $orderNo];
-        if ($record) {
-            $cancelParams = $this->buildCancelIdentifierParams($record, $cancelParams);
-        }
-        if ($providerKey !== '') {
-            $cancelParams['provider'] = $providerKey;
-        }
-
-        $this->expressGateway->cancel($siteId, $cancelParams);
-
-        $this->markLocalExpressRecordClosed($siteId, $cancelParams, '用户取消订单');
-        $this->domainEventService->dispatch('express.shipment.cancelled', array_merge([
-            'site_id' => $siteId,
-        ], $cancelParams));
-
-        return true;
+        return $this->cancelOrInterceptOrder($siteId, ['order_no' => $orderNo, 'waybill_no' => $orderNo]);
     }
 
     /**
@@ -510,20 +557,21 @@ class ExpressOrderService
     public function cancelOrInterceptOrder(int $siteId, array $params): bool
     {
         $record = $this->findLocalExpressRecord($siteId, $params);
-        if ($record) {
-            $params = $this->buildCancelIdentifierParams($record, $params);
+        if (!$record) {
+            throw new CommonException('未找到本站原预约记录，不能取消');
         }
-
-        $this->expressGateway->cancel($siteId, $params);
-
-        $remark = ((int)($params['genre'] ?? 1) === 3) ? '已拦截/关闭' : '用户取消订单';
-        $this->markLocalExpressRecordClosed($siteId, $params, $remark);
-        $this->domainEventService->dispatch('express.shipment.cancelled', array_merge([
-            'site_id' => $siteId,
-            'remark' => $remark,
-        ], $params));
-
-        return true;
+        return ExpressOperationLock::run($siteId, (string)$record->third_order_no, function () use ($siteId, $record, $params) {
+            $record->refresh();
+            $params = $this->buildCancelIdentifierParams($record, $params);
+            if ((string)$record->order_status === 'cancelled') return true;
+            $this->expressGateway->cancel($siteId, $params);
+            $remark = ((int)($params['genre'] ?? 1) === 3) ? '已拦截/关闭' : '用户取消订单';
+            $this->markLocalExpressRecordClosed($siteId, $params, $remark);
+            $this->domainEventService->dispatch('express.shipment.cancelled', array_merge([
+                'site_id' => $siteId, 'remark' => $remark,
+            ], $params));
+            return true;
+        });
     }
 
     private function buildCancelIdentifierParams(ExpressOrderRecord $record, array $params): array
@@ -531,7 +579,17 @@ class ExpressOrderService
         $apiResponse = $record->api_response ?? [];
         if (!empty($apiResponse['provider'])) {
             $params['provider'] = $apiResponse['provider'];
+        } elseif (in_array((string)$record->provider_name, ['亿速物流', '易速物流', '亿速', '易速'], true)) {
+            $params['provider'] = 'yisu';
+        } else {
+            throw new CommonException('原运单未标明服务商，请联系管理员核实，不会自动使用新渠道');
         }
+        foreach (['provider_mode', 'provider_environment', 'provider_task_id', 'provider_account_fingerprint', 'carrier_code', 'carrier_name', 'service_type', 'payment'] as $key) {
+            if (isset($apiResponse[$key])) {
+                $params[$key] = $apiResponse[$key];
+            }
+        }
+        $params['orderNo'] = (string)$record->order_no;
         if (!empty($record->order_no)) {
             $params['order_no'] = $record->order_no;
         }
@@ -569,6 +627,12 @@ class ExpressOrderService
         }
 
         $thirdOrderNo = (string)($params['third_order_no'] ?? $params['thirdOrderNo'] ?? '');
+        if ($thirdOrderNo !== '') {
+            $record = (clone $query)->where('third_order_no', $thirdOrderNo)->order('id desc')->find();
+            if ($record) {
+                return $record;
+            }
+        }
         if ($thirdOrderNo !== '' && preg_match('/^recycle_(\d+)_(\d+)$/', $thirdOrderNo, $matches)) {
             return (clone $query)
                 ->where('site_id', (int)$matches[1])
@@ -601,6 +665,11 @@ class ExpressOrderService
                 'remark' => $remark,
                 'time' => time(),
             ];
+            if (isset($apiResponse['booking_state'])) {
+                $record->save(['cancel_reason' => $remark, 'cancel_time' => time(), 'api_response' => $apiResponse]);
+                (new \addon\hsx_recycle\app\service\core\express\RecyclePickupService())->applyResult($record, ['booking_state' => 'cancelled']);
+                return;
+            }
 
             $record->save([
                 'order_status' => 'cancelled',
@@ -613,26 +682,32 @@ class ExpressOrderService
             if (!empty($record->recycle_order_id)) {
                 RecycleOrder::where([['site_id', '=', $siteId], ['id', '=', (int)$record->recycle_order_id]])->update([
                     'delivery_status' => 4,
-                    'delivery_fee' => 0,
-                    'update_at' => time(),
+                'update_at' => time(),
                 ]);
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Log::error('更新快递订单记录关闭状态失败: ' . $e->getMessage(), ['site_id' => $siteId, 'params' => $params]);
+            throw new CommonException('快递公司已受理取消，本地记录暂未更新，请刷新核实，勿重复叫件');
         }
     }
 
     public function modifyOrder(int $siteId, array $params): array
     {
+        $record = $this->findLocalExpressRecord($siteId, $params);
+        if (!$record) {
+            throw new CommonException('未找到本站预约记录，不能修改');
+        }
+        $params = $this->buildCancelIdentifierParams($record, $params);
         return $this->expressGateway->modify($siteId, $params);
     }
 
     public function getOrderDetail(int $siteId, array $params): array
     {
         $record = $this->findLocalExpressRecord($siteId, $params);
-        if ($record) {
-            $params = $this->buildCancelIdentifierParams($record, $params);
+        if (!$record) {
+            throw new CommonException('未找到本站原预约记录，不能查询');
         }
+        $params = $this->buildCancelIdentifierParams($record, $params);
         $detail = $this->expressGateway->detail($siteId, $params);
         $this->syncLocalExpressRecordFromDetail($siteId, $params, $detail);
 
@@ -658,8 +733,35 @@ class ExpressOrderService
             return;
         }
 
+        if (isset($detail['booking_state'])) {
+            (new \addon\hsx_recycle\app\service\core\express\RecyclePickupService())->applyResult($record, $detail);
+            return;
+        }
+
         $status = $this->mapYisuDetailStatus((int)($detail['status'] ?? -1));
         if ($status === '') {
+            return;
+        }
+
+        // 新预约无论来自哪个渠道都走同一状态合并，避免查询旧渠道时绕过终态保护。
+        if (isset($record->api_response['booking_state'])) {
+            $state = ['pending' => 'confirmed', 'in_transit' => 'in_transit', 'delivered' => 'delivered',
+                'cancelled' => 'cancelled', 'exception' => 'exception'][$status] ?? 'unknown';
+            if ($state === 'confirmed' && !empty($detail['courierPhone'])) {
+                $state = 'assigned';
+            }
+            $result = ['booking_state' => $state, 'last_detail' => $detail,
+                'orderNo' => (string)($detail['orderCode'] ?? ''),
+                'deliveryId' => (string)($detail['trackingNum'] ?? ''),
+                'courier_name' => (string)($detail['courierInfo'] ?? ''),
+                'courier_phone' => (string)($detail['courierPhone'] ?? '')];
+            if (isset($detail['payFee']) && is_numeric($detail['payFee']) && (float)$detail['payFee'] >= 0) {
+                $result['actual_cost'] = (float)$detail['payFee'];
+            }
+            if (isset($detail['weightActual']) && is_numeric($detail['weightActual']) && (float)$detail['weightActual'] > 0) {
+                $result['actual_weight'] = (float)$detail['weightActual'];
+            }
+            (new \addon\hsx_recycle\app\service\core\express\RecyclePickupService())->applyResult($record, $result);
             return;
         }
 

@@ -70,12 +70,14 @@ $validContext = [
 $contextService->assertUsable($validContext);
 
 $expectFailure = static function (array $context, string $message) use ($contextService, $assert): void {
+    $failed = false;
     try {
         $contextService->assertUsable($context);
-        $assert(false, $message);
     } catch (Throwable) {
-        // 期望失败。
+        $failed = true;
     }
+    // 在 catch 外断言，避免把断言自身抛出的异常误判为被测服务正确拒绝。
+    $assert($failed, $message);
 };
 $expectFailure(array_replace($validContext, ['corp_authorization_id' => 0]), '缺少企业授权记录时必须禁止投递');
 $expectFailure(array_replace($validContext, ['agent_id' => 0]), '缺少 AgentID 时必须禁止投递');

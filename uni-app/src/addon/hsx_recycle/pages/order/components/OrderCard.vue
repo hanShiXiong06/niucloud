@@ -63,6 +63,13 @@
         <text class="vehicle-summary__address">{{ order.logistics_pickup_address || '取货地点待补充' }}</text>
         <text v-if="order.logistics_eta_at" class="vehicle-summary__time">预计 {{ formatEta(order.logistics_eta_at) }} 可取</text>
       </view>
+      <PickupStatusCard
+        v-if="isMailOrder && order.pickup"
+        :order-id="Number(order.id)"
+        :info="order.pickup"
+        compact
+        @view-detail="handleViewDetail"
+      />
     </view>
 
     <view class="order-content">
@@ -113,6 +120,8 @@ import OrderStatusBadge from './OrderStatusBadge.vue'
 import OrderDeviceList from './OrderDeviceList.vue'
 import OrderActions from './OrderActions.vue'
 import ExpressTrackingModal from './ExpressTrackingModal.vue'
+import PickupStatusCard from './PickupStatusCard.vue'
+import { normalizePickup } from '../../../utils/pickup'
 
 interface Props {
   order: OrderListItem
@@ -215,9 +224,10 @@ const emptyDeviceTip = computed(() => {
 
   // 仅“刚下单”阶段显示物流信息
   if (isMail && status === 1) {
+    if (props.order.pickup) return normalizePickup(props.order.pickup).message
     if (latestExpressMessage.value) return latestExpressMessage.value
-    if (props.order.express_no) return '快递员待揽件，可点击物流号右侧 > 查看物流'
-    return '订单已提交，等待平台分配快递员上门'
+    if (props.order.express_no) return '已登记运单，可点击物流号右侧 > 查看实际物流进度'
+    return '回收订单已提交，取件安排尚未确认，请联系门店核实'
   }
 
   // 有进度后不再展示物流动态，改为订单进度提示

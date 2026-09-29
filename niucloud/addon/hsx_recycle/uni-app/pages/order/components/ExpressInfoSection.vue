@@ -9,16 +9,14 @@
     <up-row customStyle="margin-bottom: 12px">
       <up-col span="12">
         <view class="delivery-mode-toggle">
-          <!-- 动态渲染平台快递渠道 -->
+          <!-- 客户只选择交付方式，承运商与寄件产品由门店固定。 -->
           <view
-            v-for="channel in channels"
-            :key="channel.value"
-            :class="['toggle-item', usePlatformDelivery && currentChannelValue === channel.value ? 'active' : '', !canUsePlatformDelivery ? 'disabled' : '']"
-            @click="handleChannelClick(channel)"
+            :class="['toggle-item', usePlatformDelivery ? 'active' : '', !canUsePlatformDelivery ? 'disabled' : '']"
+            @click="handlePickupToggle"
           >
             <view class="flex items-center justify-center gap-1">
-              <text>{{ getChannelDisplayName(channel) }}</text>
-              <view class="free-tag">
+              <text>上门取件</text>
+              <view v-if="pickupAvailable" class="free-tag">
                 <text class="free-tag-text">{{ platformDeliveryTag }}</text>
               </view>
             </view>
@@ -30,7 +28,7 @@
             :class="['toggle-item', !usePlatformDelivery ? 'active' : '']"
             @click="handleManualToggle"
           >
-            <text>快递单号</text>
+            <text>自行寄件</text>
             <view class="free-tag">
               <text class="free-tag-text">手动输入</text>
             </view>
@@ -65,11 +63,13 @@
 
     <view v-if="!canUsePlatformDelivery" class="platform-threshold-tip">
       <up-icon name="info-circle" size="14" color="var(--recycle-notice-text)"></up-icon>
-      <text>满 {{ freeShippingMinCount }} 台可使用{{ platformDeliveryName }}包邮；当前可手动填写快递单号。</text>
+      <text>{{ unavailableText }}</text>
     </view>
 
     <!-- 平台快递下单 -->
     <view v-if="usePlatformDelivery" class="platform-delivery-section">
+      <view class="pickup-carrier"><text>门店安排承运商</text><text>{{ carrierName || '待门店确认' }}</text></view>
+      <view class="pickup-payment-tip"><text>运费说明：{{ paymentTips || '运费及付款安排请与门店确认，预约服务不代表免费寄件。' }}</text></view>
       <!-- 已选择的地址信息展示（可点击版） -->
       <view
         v-if="platformDeliveryForm.sender_name"
@@ -107,7 +107,20 @@
         <up-icon name="arrow-right" size="14" color="#94a3b8"></up-icon>
       </view>
 
-     
+      <view v-if="pickupTimeSupported" class="pickup-time-fields">
+        <text class="label">期望取件时段{{ needPickupTime ? '（必选）' : '（选填）' }}</text>
+        <picker mode="date" :value="pickupDate" :start="today" @change="changePickupDate">
+          <view class="pickup-time-value">{{ pickupDate || '选择取件日期' }}<up-icon name="arrow-right" size="12" /></view>
+        </picker>
+        <view class="pickup-time-range">
+          <picker mode="time" :value="pickupStart" @change="changePickupStart"><view class="pickup-time-value">{{ pickupStart || '开始时间' }}</view></picker>
+          <text>至</text>
+          <picker mode="time" :value="pickupEnd" @change="changePickupEnd"><view class="pickup-time-value">{{ pickupEnd || '结束时间' }}</view></picker>
+        </view>
+        <text v-if="!needPickupTime && platformDeliveryForm.pickup_time" class="pickup-clear" @tap="clearPickupTime">清除时段，由快递员联系确认</text>
+        <text class="pickup-time-note">这是您的期望时段，是否可约及实际上门安排以预约结果和快递员确认为准。</text>
+      </view>
+      <text v-else class="pickup-time-note">当前取件服务不支持自选时段，具体时间由门店与快递员确认。</text>
     </view>
   </view>
 
@@ -125,49 +138,39 @@
 import { ref, computed, watch } from 'vue'
 import type { PlatformDeliveryForm } from '../../../types/order'
 import AddressSelectPopup from './AddressSelectPopup.vue'
-import { useReceivingChannels, type ChannelItem } from '../../../hooks/useReceivingChannels'
 
 interface Props {
   usePlatformDelivery: boolean
   expressNo: string
   platformDeliveryForm: PlatformDeliveryForm
-  pickupTimeOptions: Array<{ label: string; value: string }>
   needPickupTime: boolean
+  pickupTimeSupported: boolean
+  pickupAvailable: boolean
+  checkingPickup: boolean
+  pickupUnavailableReason: string
+  carrierName: string
+  paymentTips: string
   orderCount?: number
   freeShippingMinCount?: number
   platformDeliveryName?: string
-  defaultProvider?: string
-  defaultProviderName?: string
-  defaultProductCode?: string
-  defaultProductName?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
   orderCount: 1,
   freeShippingMinCount: 1,
-  platformDeliveryName: '京东快递',
-  defaultProvider: '',
-  defaultProviderName: '',
-  defaultProductCode: '',
-  defaultProductName: ''
+  platformDeliveryName: '门店快递'
 })
-
-// 预约时间选择器显示状态
-const showPickupTimePicker = ref(false)
 
 // 地址选择弹窗显示状态
 const showAddressPopup = ref(false)
 
-// 当前选择的平台快递渠道
-const selectedChannelValue = ref('')
-
-// 使用收货渠道 hook
-const {
-  channels,
-  loading,
-  defaultChannelValue,
-  isPlatformChannel
-} = useReceivingChannels()
+const pickupDate = ref('')
+const pickupStart = ref('')
+const pickupEnd = ref('')
+const today = (() => {
+  const date = new Date()
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+})()
 
 const emit = defineEmits<{
   'update:usePlatformDelivery': [value: boolean]
@@ -177,90 +180,61 @@ const emit = defineEmits<{
   'scan-express': []
 }>()
 
-const syncSelectedProvider = (channel?: ChannelItem) => {
-  if (!channel) return
-  emit('update:platformDeliveryForm', {
-    ...props.platformDeliveryForm,
-    provider: channel.provider,
-    provider_name: channel.provider_name || channel.name || props.defaultProviderName || '',
-    product_code: props.defaultProductCode || props.platformDeliveryForm.product_code || '',
-    product_name: props.defaultProductName || props.platformDeliveryForm.product_name || ''
-  })
-}
-
-const resolveDefaultChannel = () => {
-  return channels.value.find(channel => channel.provider === props.defaultProvider)
-    || channels.value.find(channel => channel.value === defaultChannelValue.value)
-    || channels.value[0]
-}
-
-// 监听渠道加载完成后设置默认值
-watch(
-  () => [loading.value, props.defaultProvider, props.defaultProductCode],
-  ([isLoading]) => {
-    if (!isLoading) {
-      // 渠道加载完成，设置默认状态
-      const defaultChannel = resolveDefaultChannel()
-      selectedChannelValue.value = defaultChannel?.value || defaultChannelValue.value
-      syncSelectedProvider(defaultChannel)
-      const defaultState = !!defaultChannel && isPlatformChannel(defaultChannel.value)
-      emit('update:usePlatformDelivery', defaultState && canUsePlatformDelivery.value)
-    }
-  },
-  { immediate: true }
-)
-
-// 计算当前选中的渠道 value
-const currentChannelValue = computed(() => {
-  return props.usePlatformDelivery ? (selectedChannelValue.value || defaultChannelValue.value) : 'manual'
-})
-
 const canUsePlatformDelivery = computed(() => {
-  return Number(props.orderCount || 0) >= Number(props.freeShippingMinCount || 1)
+  return !props.checkingPickup && props.pickupAvailable && Number(props.orderCount || 0) >= Number(props.freeShippingMinCount || 1)
 })
+
+const unavailableText = computed(() => {
+  if (props.checkingPickup) return '正在确认门店取件服务，请稍候'
+  if (!props.pickupAvailable) return props.pickupUnavailableReason || '门店暂未配置可用的上门取件服务，请联系门店或自行寄件'
+  return `满${props.freeShippingMinCount}台可预约上门取件；当前可自行寄件并填写运单号。`
+})
+
+// 首次确定服务可用时自动选中上门取件，客户手动选择后不擅自切回。
+const userChoseMode = ref(false)
+watch(canUsePlatformDelivery, (available) => {
+  if (!available) emit('update:usePlatformDelivery', false)
+  else if (!userChoseMode.value) emit('update:usePlatformDelivery', true)
+}, { immediate: true })
 
 const platformDeliveryTag = computed(() => {
-  return Number(props.freeShippingMinCount || 1) > 1 ? `满${props.freeShippingMinCount}台包邮` : '包邮'
+  return `满${props.freeShippingMinCount || 1}台可预约`
 })
 
-const platformDeliveryDisplayName = computed(() => {
-  return String(props.platformDeliveryName || props.defaultProductName || '京东快递').trim() || '京东快递'
-})
-
-const getChannelDisplayName = (channel: ChannelItem) => {
-  return String(
-    props.platformDeliveryName
-    || props.defaultProductName
-    || channel.front_name
-    || channel.display_name
-    || channel.product_name
-    || channel.name
-    || channel.provider_name
-    || '平台快递'
-  ).trim()
-}
-
-// 处理渠道点击
-const handleChannelClick = (channel: ChannelItem) => {
+const handlePickupToggle = () => {
   if (!canUsePlatformDelivery.value) {
     uni.showToast({
-      title: `满 ${props.freeShippingMinCount} 台可用${platformDeliveryDisplayName.value}包邮`,
+      title: unavailableText.value,
       icon: 'none'
     })
     emit('update:usePlatformDelivery', false)
     return
   }
 
-  if (isPlatformChannel(channel.value)) {
-    selectedChannelValue.value = channel.value
-    syncSelectedProvider(channel)
-    emit('update:usePlatformDelivery', true)
-  }
+  userChoseMode.value = true
+  emit('update:usePlatformDelivery', true)
 }
 
 const handleManualToggle = () => {
+  userChoseMode.value = true
   emit('update:usePlatformDelivery', false)
 }
+
+const syncPickupTime = () => {
+  const hasTime = pickupDate.value || pickupStart.value || pickupEnd.value
+  emit('update:platformDeliveryForm', {
+    ...props.platformDeliveryForm,
+    pickup_time: hasTime ? `${pickupDate.value} ${pickupStart.value}-${pickupEnd.value}` : '',
+    pickup_time_required: props.needPickupTime
+  })
+}
+const changePickupDate = (event: any) => { pickupDate.value = event.detail.value; syncPickupTime() }
+const changePickupStart = (event: any) => { pickupStart.value = event.detail.value; syncPickupTime() }
+const changePickupEnd = (event: any) => { pickupEnd.value = event.detail.value; syncPickupTime() }
+const clearPickupTime = () => { pickupDate.value = ''; pickupStart.value = ''; pickupEnd.value = ''; syncPickupTime() }
+watch(() => props.platformDeliveryForm.pickup_time, (value) => {
+  if (!value) { pickupDate.value = ''; pickupStart.value = ''; pickupEnd.value = '' }
+})
 
 const handleExpressNoChange = (value: string) => {
   emit('update:expressNo', value)
@@ -275,6 +249,15 @@ const handleAddressSelect = (address: any) => {
 </script>
 
 <style scoped lang="scss">
+.pickup-carrier { display: flex; justify-content: space-between; gap: 20rpx; margin-bottom: 18rpx; font-size: 26rpx; color: var(--recycle-text-sub); }
+.pickup-carrier text:last-child { color: var(--recycle-text-main); font-weight: 600; }
+.pickup-payment-tip { padding: 14rpx 18rpx; margin-bottom: 18rpx; border-radius: 10rpx; background: var(--recycle-notice-bg); color: var(--recycle-notice-text); font-size: 24rpx; line-height: 1.6; }
+.pickup-time-fields { display: flex; flex-direction: column; gap: 16rpx; margin-top: 18rpx; }
+.pickup-time-value { display: flex; align-items: center; justify-content: space-between; padding: 18rpx; border: 1rpx solid var(--recycle-line); border-radius: 12rpx; font-size: 26rpx; }
+.pickup-time-range { display: flex; align-items: center; gap: 16rpx; }
+.pickup-time-range picker { flex: 1; }
+.pickup-time-note { display: block; font-size: 23rpx; line-height: 1.6; color: var(--recycle-text-sub); }
+.pickup-clear { color: var(--recycle-brand); font-size: 24rpx; }
 .label {
   font-size: 14px;
   color: var(--recycle-text-main);

@@ -1,5 +1,14 @@
 <?php
 return [
+    'hsx_recycle_pickup_update' => [
+        // 不猜测公共模板编号。管理员填写本小程序真实模板 ID 与字段映射后才可启用。
+        'tid' => '',
+        'kid_list' => [],
+        'is_need_closure_content' => 1,
+        'content' => static fn(array $context) => \addon\hsx_recycle\app\service\core\recycle_order\PickupNoticeConfigService::templateContent('weapp', $context),
+        'scene_desc' => '回收预约取件状态更新',
+        'tips' => '请在回收快递配置的预约通知设置中填写真实模板 ID 和字段映射；用户须主动订阅。发送受理不代表已读。',
+    ],
     'recycle_order_sign' => [
         'tid' => '31224',
         'content' => [

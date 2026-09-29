@@ -10,6 +10,16 @@ export function getOrderDetail(id: number) {
   return request.get(`recycle/recycle_order/${id}`);
 }
 
+// 仅核实已有预约，不创建新寄件单；服务端执行限频与会员归属校验。
+export function refreshOrderPickup(id: number) {
+  return request.post(`recycle/recycle_order/${id}/pickup/refresh`, {}, { showErrorMessage: false });
+}
+
+// 将自行寄件运单补到原回收订单，不能新建订单。
+export function submitManualPickup(id: number, data: { express_company: string; express_no: string }) {
+  return request.post(`recycle/recycle_order/${id}/pickup/manual`, data, { showErrorMessage: false });
+}
+
 // 催办订单，推送到企业微信群
 export function urgeOrder(id: number) {
   return request.post(`recycle/recycle_order/${id}/urge`);
@@ -17,7 +27,7 @@ export function urgeOrder(id: number) {
 
 // 添加回收订单
 export function createOrder(data: any) {
-  return request.post("recycle/recycle_order", data);
+  return request.post("recycle/recycle_order", data, { showErrorMessage: false });
 }
 
 export function getOrderSubmitConfig() {

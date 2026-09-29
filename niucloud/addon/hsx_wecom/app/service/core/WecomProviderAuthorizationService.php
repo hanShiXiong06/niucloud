@@ -165,72 +165,13 @@ final class WecomProviderAuthorizationService
 
     public function memberBindUrl(int $siteId, int $uid, string $returnUrl = ''): array
     {
-        $suite = (new WecomProviderConfigService())->active();
-        if ($suite->isEmpty()) throw new CommonException('平台尚未启用企业微信服务商应用');
-        $authorization = WecomCorpAuthorization::where([
-            ['site_id', '=', $siteId], ['provider_suite_id', '=', (int)$suite->id], ['status', '=', 'authorized'],
-        ])->findOrEmpty();
-        if ($authorization->isEmpty()) throw new CommonException('请先完成客户企业授权');
-        $state = bin2hex(random_bytes(24));
-        $returnUrl = $this->safeReturnUrl($suite, $returnUrl, '/site/hsx_wecom/config?tab=staff');
-        WecomAuthorizationIntent::create([
-            'state' => $state, 'purpose' => 'member_bind', 'site_id' => $siteId, 'uid' => $uid,
-            'provider_suite_id' => (int)$suite->id, 'pre_auth_code' => '', 'return_url' => $returnUrl,
-            'meta_json' => [], 'expires_at' => time() + 600, 'used_at' => 0, 'create_at' => time(),
-        ]);
-        return ['url' => (new WecomProviderCredentialService())->memberOauthUrl($suite, $authorization, $state)];
+        // 保留业务调用入口，禁止旧调用绕过管理员核对直接写绑定。
+        return (new WecomStaffBindingService())->start($siteId, $uid);
     }
 
-    public function completeMemberBind(string $channel, string $state, string $code): string
+    public function completeMemberBind(string $channel, string $state, string $code): array
     {
-        $suite = $this->suite($channel);
-        $intent = $this->intent($suite, $state, 'member_bind');
-        try {
-            $authorization = WecomCorpAuthorization::where([
-                ['site_id', '=', (int)$intent->site_id],
-                ['provider_suite_id', '=', (int)$suite->id],
-                ['status', '=', 'authorized'],
-            ])->findOrEmpty();
-            if ($authorization->isEmpty()) throw new CommonException('当前站点企业微信授权已失效');
-            $info = (new WecomProviderCredentialService())->userInfo3rd($suite, $code);
-            $corpId = trim((string)($info['CorpId'] ?? $info['corpid'] ?? $info['corp_id'] ?? ''));
-            $userId = trim((string)($info['UserId'] ?? $info['userid'] ?? ''));
-            $openUserId = trim((string)($info['open_userid'] ?? $info['OpenUserId'] ?? ''));
-            $recipientId = $openUserId !== '' ? $openUserId : $userId;
-            if ($corpId === '' || $corpId !== (string)$authorization->auth_corpid) throw new CommonException('当前企业微信成员不属于已授权企业');
-            if ($recipientId === '') throw new CommonException('未识别到企业微信成员身份，请在企业微信客户端中打开');
-
-            $data = [
-                'corp_authorization_id' => (int)$authorization->id,
-                'wecom_userid' => $recipientId,
-                'open_userid' => $openUserId,
-                'id_scope' => $openUserId !== '' ? 'open_userid' : 'userid',
-                'bind_source' => 'oauth',
-                'verified_at' => time(),
-                'status' => 1,
-                'update_at' => time(),
-            ];
-            Db::transaction(function () use ($intent, $recipientId, $data): void {
-                $duplicate = WecomStaffBinding::where([
-                    ['site_id', '=', (int)$intent->site_id], ['wecom_userid', '=', $recipientId],
-                ])->where('uid', '<>', (int)$intent->uid)->lock(true)->findOrEmpty();
-                if (!$duplicate->isEmpty()) throw new CommonException('该企业微信成员已经绑定其他系统员工');
-                $binding = WecomStaffBinding::where([
-                    ['site_id', '=', (int)$intent->site_id], ['uid', '=', (int)$intent->uid],
-                ])->lock(true)->findOrEmpty();
-                if ($binding->isEmpty()) {
-                    WecomStaffBinding::create(array_merge($data, [
-                        'site_id' => (int)$intent->site_id, 'uid' => (int)$intent->uid, 'create_at' => time(),
-                    ]));
-                } else {
-                    $binding->save($data);
-                }
-                $intent->save(['used_at' => time()]);
-            });
-            return $this->appendResult((string)$intent->return_url, 'bind_success');
-        } catch (\Throwable $e) {
-            return $this->appendResult((string)$intent->return_url, 'bind_failed', $e->getMessage());
-        }
+        return (new WecomStaffBindingService())->complete($channel, $state, $code);
     }
 
     public function handleCallbackEvent(WecomProviderSuite $suite, array $payload): void

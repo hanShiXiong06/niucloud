@@ -1,4 +1,5 @@
 import { getTabbarPages } from './pages'
+import { navigateWithFeedback } from './navigation'
 import useDiyStore from '@/app/stores/diy'
 import useUserStore from '@/stores/user'
 import useSystemStore from '@/stores/system'
@@ -20,64 +21,7 @@ export const redirect = (redirect: any) => {
 
     mode != 'switchTab' && param && Object.keys(param).length && (url += uni.$u.queryParams(param))
     
-    switch (mode) {
-        case 'switchTab':
-            uni.switchTab({
-                url,
-                success: () => {
-                    success && success()
-                },
-                fail: () => {
-                    fail && fail()
-                },
-                complete: () => {
-                    complete && complete()
-                }
-            })
-            break;
-        case 'navigateTo':
-            uni.navigateTo({
-                url,
-                success: () => {
-                    success && success()
-                },
-                fail: () => {
-                    fail && fail()
-                },
-                complete: () => {
-                    complete && complete()
-                }
-            })
-            break;
-        case 'reLaunch':
-            uni.reLaunch({
-                url,
-                success: () => {
-                    success && success()
-                },
-                fail: () => {
-                    fail && fail()
-                },
-                complete: () => {
-                    complete && complete()
-                }
-            })
-            break;
-        case 'redirectTo':
-            uni.redirectTo({
-                url,
-                success: () => {
-                    success && success()
-                },
-                fail: () => {
-                    fail && fail()
-                },
-                complete: () => {
-                    complete && complete()
-                }
-            })
-            break;
-    }
+    navigateWithFeedback({ url, mode, success, fail, complete })
 }
 
 /**

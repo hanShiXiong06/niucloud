@@ -20,6 +20,7 @@ final class WecomConfigAdminService extends BaseAdminService
                 'provider' => (new WecomProviderConfigService())->info(true),
             ];
         }
+        (new WecomSitePermissionService())->assertApi('get', 'wecom/config');
         $config = (new WecomConfigService())->get((int)$this->site_id, true);
         $config['is_platform'] = 0;
         $config['provider'] = (new WecomProviderConfigService())->siteStatus((int)$this->site_id);
@@ -29,12 +30,14 @@ final class WecomConfigAdminService extends BaseAdminService
     public function save(array $data): array
     {
         if ((int)$this->site_id <= 0) throw new CommonException('平台端请在服务商应用配置中保存');
+        (new WecomSitePermissionService())->assertApi('post', 'wecom/config');
         return (new WecomConfigService())->save((int)$this->site_id, $data);
     }
 
     public function test(): array
     {
         if ((int)$this->site_id <= 0) throw new CommonException('平台端请测试服务商通道');
+        (new WecomSitePermissionService())->assertApi('post', 'wecom/config/test');
         $context = (new WecomDeliveryContextService())->resolve((int)$this->site_id, true);
         return (new WecomClient())->test($context);
     }

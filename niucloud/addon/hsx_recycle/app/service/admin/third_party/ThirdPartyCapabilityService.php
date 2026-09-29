@@ -44,17 +44,20 @@ class ThirdPartyCapabilityService extends BaseAdminService
     {
         $config = $this->thirdPartyConfigService->getConfig($this->site_id, false);
         $section = $config['express_order'] ?? [];
-        $providerConfig = $section[ThirdPartyDict::PROVIDER_YISU] ?? [];
+        $providerKey = (string)($section['provider'] ?? ThirdPartyDict::PROVIDER_YISU);
+        $providerConfig = $section[$providerKey] ?? [];
+        $required = $providerKey === ThirdPartyDict::PROVIDER_KUAIDI100
+            ? ['api_key', 'secret', 'callback_url', 'callback_salt', 'carrier_code', 'service_type'] : ['base_url', 'appid', 'app_secret'];
 
         return $this->buildCapability(
             'express_order',
             '快递发件',
-            '亿速快递',
+            ThirdPartyDict::getProviderName($providerKey),
             ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER,
-            ThirdPartyDict::PROVIDER_YISU,
+            $providerKey,
             !empty($section['enabled']),
-            $this->checkRequired($providerConfig, ['base_url', 'appid', 'app_secret']),
-            ['运费预估', '发件下单', '取消/拦截', '运单修改', '运单详情', '面单PDF', '资金查询', '回调接收']
+            $this->checkRequired($providerConfig, $required),
+            ['运费预估', '预约上门取件', '取消预约', '改约（按渠道能力）', '取件进度', '回调接收']
         );
     }
 

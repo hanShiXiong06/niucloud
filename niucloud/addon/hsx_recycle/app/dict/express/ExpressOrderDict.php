@@ -25,6 +25,14 @@ class ExpressOrderDict
 
     // 订单状态文本映射
     const STATUS_TEXT = [
+        'submitting' => '正在提交预约',
+        'accepted' => '等待渠道确认',
+        'confirmed' => '预约已确认',
+        'assigned' => '已安排取件员',
+        'picked_up' => '快递已取件',
+        'unknown' => '预约结果待核实',
+        'failed' => '预约失败',
+        'manual' => '已自行寄件',
         self::STATUS_PENDING => '待揽收',
         self::STATUS_PICKED => '已揽收',
         self::STATUS_IN_TRANSIT => '运输中',

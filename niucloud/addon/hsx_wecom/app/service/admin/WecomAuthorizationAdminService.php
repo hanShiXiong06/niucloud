@@ -13,18 +13,21 @@ final class WecomAuthorizationAdminService extends BaseAdminService
     public function status(): array
     {
         $this->assertSite();
+        (new WecomSitePermissionService())->assertApi('get', 'wecom/config');
         return (new WecomProviderConfigService())->siteStatus((int)$this->site_id);
     }
 
     public function start(string $returnUrl = ''): array
     {
         $this->assertSite();
+        (new WecomSitePermissionService())->assertApi('post', 'wecom/authorization/start');
         return (new WecomProviderAuthorizationService())->startInstall((int)$this->site_id, (int)$this->uid, $returnUrl);
     }
 
     public function check(): array
     {
         $this->assertSite();
+        (new WecomSitePermissionService())->assertApi('post', 'wecom/authorization/check');
         $status = (new WecomProviderConfigService())->siteStatus((int)$this->site_id);
         if (!in_array((string)($status['status'] ?? ''), ['authorized', 'changed', 'error'], true)) {
             return $status;

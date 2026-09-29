@@ -12,6 +12,7 @@ class ExpressProviderDict
 {
     // 服务商标识
     const PROVIDER_YISU = 'yisu';
+    const PROVIDER_KUAIDI100 = 'kuaidi100';
     const PROVIDER_MANUAL = 'manual'; // 手动录入快递号
 
     // 状态
@@ -25,6 +26,11 @@ class ExpressProviderDict
     public static function getProviders(): array
     {
         return [
+            self::PROVIDER_KUAIDI100 => [
+                'key' => self::PROVIDER_KUAIDI100, 'name' => '快递100',
+                'desc' => '管理员固定承运商与产品，预约上门取件；各站点独立结算',
+                'support_quote' => true, 'support_cancel' => true, 'support_track' => true,
+            ],
             self::PROVIDER_YISU => [
                 'key' => self::PROVIDER_YISU,
                 'name' => '亿速物流',
@@ -54,7 +60,7 @@ class ExpressProviderDict
      */
     public static function isValid(string $provider): bool
     {
-        return in_array($provider, [self::PROVIDER_YISU], true);
+        return array_key_exists($provider, self::getProviders());
     }
 
     /**

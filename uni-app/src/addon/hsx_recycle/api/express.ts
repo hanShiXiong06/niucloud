@@ -88,6 +88,12 @@ export interface ExpressProvider {
 /** 平台快递启用状态 */
 export interface ExpressCheckResult {
   enabled: boolean;
+  pickup_enabled?: boolean;
+  carrier_name?: string;
+  pickup_time_required?: boolean;
+  pickup_time_supported?: boolean;
+  unavailable_reason?: string;
+  payment_tips?: string;
   provider: string;
   provider_name?: string;
   display_name?: string;

@@ -64,6 +64,14 @@
         :mobile="orderInfo.member?.mobile || orderInfo.customer_phone || ''"
       />
 
+      <PickupStatusCard
+        v-if="String(orderInfo.delivery_type) === '1'"
+        :order-id="Number(orderInfo.id)"
+        :info="orderInfo.pickup"
+        @updated="loadOrderDetail(orderInfo.id)"
+        @contact="contactPickupShop"
+      />
+
       <view v-if="String(orderInfo.delivery_type) === '3'" class="logistics-detail-card">
         <view class="logistics-detail-card__title">
           <up-icon name="car" size="17" color="var(--recycle-brand)" />
@@ -227,6 +235,7 @@ import { useDeviceSelection } from '../../hooks/useDeviceSelection'
 import { useReturnOrder } from '../../hooks/useReturnOrder'
 import OrderStatusProgress from './components/OrderStatusProgress.vue'
 import OrderDetailHeader from './components/OrderDetailHeader.vue'
+import PickupStatusCard from './components/PickupStatusCard.vue'
 import DeviceBatchToolbar from './components/DeviceBatchToolbar.vue'
 import DeviceDetailCard from './components/DeviceDetailCard.vue'
 import CustomerServicePopup from './components/CustomerServicePopup.vue'
@@ -258,6 +267,17 @@ const urging = ref(false)
 const currentReportDevice = ref<OrderDetailDevice | null>(null)
 const customerServiceConfig = computed(() => submitConfig.value?.customer_service || {})
 const customerServiceEnabled = computed(() => Number(customerServiceConfig.value?.enabled || 0) === 1)
+const contactPickupShop = () => {
+  const receiver = orderInfo.value.pickup?.receiver
+  const phone = receiver?.mobile || receiver?.phone
+  if (phone) {
+    uni.makePhoneCall({ phoneNumber: phone })
+  } else if (customerServiceEnabled.value) {
+    openCustomerService()
+  } else {
+    uni.showModal({ title: '请联系门店核实', content: '当前页面暂无门店电话，请通过下单门店的现有联系方式确认预约结果。在结果明确前，请勿重复叫件或自行另叫快递。', showCancel: false })
+  }
+}
 const customerServiceType = computed(() => customerServiceConfig.value?.type === 'qrcode' ? 'qrcode' : 'wechat')
 const consignmentConfig = computed(() => submitConfig.value?.consignment || {})
 const consignmentEntryEnabled = computed(() => {

@@ -192,6 +192,21 @@ class RecycleOrder extends BaseApiController
         return success($this->service->edit($id, $data));
     }
 
+    public function pickupRefresh(int $id)
+    {
+        return success((new \addon\hsx_recycle\app\service\core\express\RecyclePickupService())->refresh(
+            (int)$this->request->siteId(), $id, (int)$this->request->memberId()
+        ));
+    }
+
+    public function pickupManual(int $id)
+    {
+        $data = $this->request->params([['express_company', ''], ['express_no', '']]);
+        return success((new \addon\hsx_recycle\app\service\core\express\RecyclePickupService())->manual(
+            (int)$this->request->siteId(), $id, (int)$this->request->memberId(), $data
+        ));
+    }
+
     /**
      * 删除二手机回收报价订单
      * @param int $id

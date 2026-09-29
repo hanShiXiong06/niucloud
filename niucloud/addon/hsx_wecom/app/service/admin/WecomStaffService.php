@@ -6,6 +6,7 @@ namespace addon\hsx_wecom\app\service\admin;
 use addon\hsx_wecom\app\model\WecomStaffBinding;
 use addon\hsx_wecom\app\service\core\WecomConfigService;
 use addon\hsx_wecom\app\service\core\WecomProviderAuthorizationService;
+use addon\hsx_wecom\app\service\core\WecomStaffBindingService;
 use app\model\sys\SysUser;
 use app\model\sys\SysUserRole;
 use core\base\BaseAdminService;
@@ -15,6 +16,7 @@ final class WecomStaffService extends BaseAdminService
 {
     public function lists(): array
     {
+        (new WecomSitePermissionService())->assertApi('get', 'wecom/staff');
         $roles = SysUserRole::where([['site_id', '=', $this->site_id], ['status', '=', 1]])
             ->field('uid,is_admin,role_ids')->order('is_admin desc,id asc')->select()->toArray();
         $uids = array_values(array_unique(array_map('intval', array_column($roles, 'uid'))));
@@ -54,6 +56,7 @@ final class WecomStaffService extends BaseAdminService
 
     public function save(int $uid, array $data): bool
     {
+        (new WecomSitePermissionService())->assertApi('put', 'wecom/staff/<uid>');
         $exists = SysUserRole::where([['site_id', '=', $this->site_id], ['uid', '=', $uid]])->findOrEmpty();
         if ($exists->isEmpty()) throw new CommonException('该员工不属于当前站点');
         $userId = trim((string)($data['wecom_userid'] ?? ''));
@@ -103,8 +106,25 @@ final class WecomStaffService extends BaseAdminService
 
     public function bindUrl(int $uid, string $returnUrl = ''): array
     {
-        $exists = SysUserRole::where([['site_id', '=', $this->site_id], ['uid', '=', $uid]])->findOrEmpty();
-        if ($exists->isEmpty()) throw new CommonException('该员工不属于当前站点');
+        (new WecomSitePermissionService())->assertApi('post', 'wecom/staff/<uid>/bind-url');
         return (new WecomProviderAuthorizationService())->memberBindUrl((int)$this->site_id, $uid, $returnUrl);
+    }
+
+    public function bindStatus(int $uid, int $intentId): array
+    {
+        (new WecomSitePermissionService())->assertApi('get', 'wecom/staff/<uid>/bind-status');
+        return (new WecomStaffBindingService())->status((int)$this->site_id, $uid, $intentId);
+    }
+
+    public function bindConfirm(int $uid, int $intentId): array
+    {
+        (new WecomSitePermissionService())->assertApi('post', 'wecom/staff/<uid>/bind-confirm');
+        return (new WecomStaffBindingService())->confirm((int)$this->site_id, $uid, $intentId);
+    }
+
+    public function bindCancel(int $uid, int $intentId): array
+    {
+        (new WecomSitePermissionService())->assertApi('post', 'wecom/staff/<uid>/bind-cancel');
+        return (new WecomStaffBindingService())->cancel((int)$this->site_id, $uid, $intentId);
     }
 }

@@ -56,6 +56,11 @@ export function getWeightDiffList(params: any) {
     return request.get('recycle/express_order_record/weight_diff_list', { params })
 }
 
+/** 已与渠道核对无有效取件任务；不调用外部取消，不发起新的预约。 */
+export function resolveExpressOrderUnbooked(id: number, remark: string) {
+    return request.post(`recycle/express_order_record/${id}/resolve_unbooked`, { remark })
+}
+
 /**
  * 获取费用差异列表
  */

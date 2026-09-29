@@ -1,5 +1,14 @@
 <?php
 return [
+    'hsx_recycle_pickup_update' => [
+        'addon' => 'hsx_recycle',
+        'key' => 'hsx_recycle_pickup_update',
+        'receiver_type' => 1,
+        'name' => '回收预约取件状态通知',
+        'title' => '回收预约取件状态通知',
+        'async' => false,
+        'variable' => \addon\hsx_recycle\app\service\core\recycle_order\PickupNoticeConfigService::VARIABLES,
+    ],
     // 1. 订单签收通知
     'recycle_order_sign' => [
         'addon' => 'recycle',

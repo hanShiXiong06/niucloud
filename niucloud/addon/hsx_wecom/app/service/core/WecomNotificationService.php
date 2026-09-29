@@ -431,18 +431,23 @@ final class WecomNotificationService
             if (($config['credential_mode'] ?? $config['connection_mode'] ?? '') === 'provider') {
                 $snapshotMiniappAppid = trim((string)($config['miniapp_appid'] ?? ''));
             }
+            $snapshotMiniappPath = $this->normalizeMiniappPath((string)($snapshot['miniapp_path'] ?? ''));
+            if ($snapshotMiniappPath === '' && trim((string)($snapshot['miniapp_path'] ?? '')) !== ''
+                && (string)($config['jump_mode'] ?? 'web') === 'miniapp' && $snapshotMiniappAppid !== '') {
+                $snapshotMiniappPath = 'app/pages/index/index';
+            }
             return [
                 'plugin' => trim((string)($snapshot['plugin'] ?? '')),
                 'route_key' => trim((string)($snapshot['route_key'] ?? '')),
                 'web_url' => trim((string)($snapshot['web_url'] ?? '')),
                 'miniapp_appid' => $snapshotMiniappAppid,
-                'miniapp_path' => ltrim(trim((string)($snapshot['miniapp_path'] ?? '')), '/'),
+                'miniapp_path' => $snapshotMiniappAppid !== '' ? $snapshotMiniappPath : '',
             ];
         }
         $target = $businessTarget;
         $legacyPath = trim((string)($event['target_path'] ?? ''));
         $webPath = trim((string)($target['web_path'] ?? ''));
-        $miniappPath = ltrim(trim((string)($target['miniapp_path'] ?? $legacyPath)), '/');
+        $miniappPath = $this->normalizeMiniappPath((string)($target['miniapp_path'] ?? $legacyPath));
         $mode = (string)($config['jump_mode'] ?? 'web');
         if ($webPath === '' && $mode === 'web') $webPath = $legacyPath;
         $webUrl = $webPath !== '' ? $this->targetUrl($config, $webPath) : '';
@@ -466,6 +471,19 @@ final class WecomNotificationService
             'miniapp_appid' => $miniappAppid,
             'miniapp_path' => $miniappAppid !== '' ? $miniappPath : '',
         ];
+    }
+
+    /** 只接受小程序内部路径，网页目标和旧 target_path 不能直接作为 pagepath。 */
+    private function normalizeMiniappPath(string $path): string
+    {
+        $path = ltrim(trim($path), '/');
+        if ($path === '' || strlen($path) > 1000
+            || str_contains($path, '://') || str_contains($path, '#') || str_contains($path, '..')
+            || preg_match('/[\x00-\x1F\x7F]/', $path)
+            || !preg_match('#^(?:app|addon)/[A-Za-z0-9_./-]+(?:\?.*)?$#u', $path)) {
+            return '';
+        }
+        return $path;
     }
 
     /** 回收任务按站点配置在“待办列表”和“订单详情”之间切换。 */

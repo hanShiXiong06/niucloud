@@ -43,6 +43,17 @@ class ThirdPartyConfig extends BaseAdminController
         if ($serviceType === '') {
             return fail('请指定要测试的能力');
         }
+        if ($serviceType === 'express_order') {
+            try {
+                $provider = (new \addon\hsx_recycle\app\service\core\express\ExpressProviderRegistry())->resolve($this->site_id);
+                $ready = $provider->healthCheck($this->site_id);
+                return success(['success' => $ready, 'provider' => $provider->key(), 'provider_name' => $provider->name(),
+                    'verification_state' => $ready ? 'configured_not_verified' : 'incomplete',
+                    'message' => $ready ? '已保存的配置格式检查通过；未发起真实寄件，账号权限、承运范围和余额仍需验证' : '已保存的配置不完整或付款方式不受支持，请补充后重新保存']);
+            } catch (\Throwable $e) {
+                return success(['success' => false, 'message' => $e->getMessage()]);
+            }
+        }
         return success((new CoreThirdPartyService())->testConnection($this->site_id, $serviceType));
     }
 }
