@@ -6,6 +6,7 @@ namespace addon\hsx_recycle\app\service\core\express\provider;
 use addon\hsx_recycle\app\dict\third_party\ThirdPartyDict;
 use addon\hsx_recycle\app\service\core\express\contract\ExpressProviderInterface;
 use addon\hsx_recycle\app\service\core\express\ExpressSubmissionException;
+use addon\hsx_recycle\app\service\core\express\ExpressTransportRegistry;
 use addon\hsx_recycle\app\service\core\third_party\RecycleThirdPartyConfigService;
 use core\exception\CommonException;
 
@@ -236,21 +237,34 @@ class Kuaidi100ExpressProvider implements ExpressProviderInterface
     {
         $url = Kuaidi100Protocol::endpoint($config);
         $body = Kuaidi100Protocol::signedBody($config, $method, $param);
+        $sharedTransport = null;
+        if (!$this->transport && class_exists(ExpressTransportRegistry::class)) {
+            try {
+                $sharedTransport = ExpressTransportRegistry::resolve($this->key(), (int)($config['_site_id'] ?? 0), (string)($config['environment'] ?? ''));
+            } catch (\Throwable $e) {
+                throw new ExpressSubmissionException($e->getMessage(), 'rejected');
+            }
+        }
         try {
             if ($this->transport) {
                 $response = ($this->transport)($url, $body, $config);
             } else {
-                $handle = curl_init($url);
-                if ($handle === false) throw new \RuntimeException('http unavailable');
-                curl_setopt_array($handle, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => http_build_query($body),
-                    CURLOPT_HTTPHEADER => ['Content-Type: application/x-www-form-urlencoded'], CURLOPT_RETURNTRANSFER => true,
-                    CURLOPT_CONNECTTIMEOUT => 10, CURLOPT_TIMEOUT => max(3, min(60, (int)($config['timeout'] ?? 30))),
-                    CURLOPT_FOLLOWLOCATION => false, CURLOPT_SSL_VERIFYPEER => true, CURLOPT_SSL_VERIFYHOST => 2]);
-                $raw = curl_exec($handle);
-                $code = (int)curl_getinfo($handle, CURLINFO_HTTP_CODE);
-                curl_close($handle);
-                if ($raw === false || $code < 200 || $code >= 300) throw new \RuntimeException('http failed');
-                $response = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+                // 注册事件只选出一个处理器；请求异常由外层归为待核实，不改走另一条通道。
+                if ($sharedTransport !== null) {
+                    $response = $sharedTransport($config, $method, $param);
+                } else {
+                    $handle = curl_init($url);
+                    if ($handle === false) throw new \RuntimeException('http unavailable');
+                    curl_setopt_array($handle, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => http_build_query($body),
+                        CURLOPT_HTTPHEADER => ['Content-Type: application/x-www-form-urlencoded'], CURLOPT_RETURNTRANSFER => true,
+                        CURLOPT_CONNECTTIMEOUT => 10, CURLOPT_TIMEOUT => max(3, min(60, (int)($config['timeout'] ?? 30))),
+                        CURLOPT_FOLLOWLOCATION => false, CURLOPT_SSL_VERIFYPEER => true, CURLOPT_SSL_VERIFYHOST => 2]);
+                    $raw = curl_exec($handle);
+                    $code = (int)curl_getinfo($handle, CURLINFO_HTTP_CODE);
+                    curl_close($handle);
+                    if ($raw === false || $code < 200 || $code >= 300) throw new \RuntimeException('http failed');
+                    $response = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+                }
             }
         } catch (\Throwable $e) {
             throw new ExpressSubmissionException($mutation ? '快递请求结果待核实，请勿重复预约；请等待回调或联系门店' : '快递100查询暂未响应，请稍后重试');
