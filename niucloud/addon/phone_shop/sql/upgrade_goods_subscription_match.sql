@@ -1,0 +1,7 @@
+-- 已安装站点升级商品订阅通知留痕。
+-- 新安装站点无需执行，install.sql 已包含这些字段。
+-- ALTER TABLE `{{prefix}}phone_shop_goods_subscription_match`
+--     ADD COLUMN `price_snapshot` decimal(10,2) NOT NULL DEFAULT 0.00 COMMENT '本次命中售价快照' AFTER `goods_fingerprint`,
+--     ADD COLUMN `stock_snapshot` int(11) NOT NULL DEFAULT 0 COMMENT '本次命中库存快照' AFTER `price_snapshot`,
+--     ADD COLUMN `change_type` varchar(30) NOT NULL DEFAULT 'new_listing' COMMENT '变化类型：new_listing/price_changed' AFTER `stock_snapshot`,
+--     ADD COLUMN `change_summary` varchar(255) NOT NULL DEFAULT '' COMMENT '面向会员的变化摘要' AFTER `change_type`;

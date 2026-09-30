@@ -1,0 +1,775 @@
+<?php
+// +----------------------------------------------------------------------
+// | Niucloud-admin 企业快速开发的多应用管理平台
+// +----------------------------------------------------------------------
+// | 官方网址：https://www.niucloud.com
+// +----------------------------------------------------------------------
+// | niucloud团队 版权所有 开源版本可自由商用
+// +----------------------------------------------------------------------
+// | Author: Niucloud Team
+// +----------------------------------------------------------------------
+
+namespace addon\phone_shop\app\service\admin\order;
+
+use addon\phone_shop\app\dict\delivery\DeliveryDict;
+use addon\phone_shop\app\dict\order\OrderDeliveryDict;
+use addon\phone_shop\app\dict\order\OrderDict;
+use addon\phone_shop\app\dict\order\OrderGoodsDict;
+use addon\phone_shop\app\dict\order\OrderLogDict;
+use addon\phone_shop\app\model\delivery\Store;
+use addon\phone_shop\app\model\goods\Goods;
+use addon\phone_shop\app\model\goods\GoodsSku;
+use addon\phone_shop\app\model\local_delivery\Local;
+use addon\phone_shop\app\model\order\Order;
+use addon\phone_shop\app\model\order\OrderDelivery;
+use addon\phone_shop\app\model\order\OrderGoods;
+use addon\phone_shop\app\model\order\OrderRefund;
+use addon\phone_shop\app\model\order\OrderOfflineRecord;
+use addon\phone_shop\app\service\admin\delivery\DeliveryService;
+use addon\phone_shop\app\service\core\CoreStatService;
+use addon\phone_shop\app\service\core\local_delivery\CoreLocalDeliveryService;
+use addon\phone_shop\app\service\core\goods\CoreGoodsStatService;
+use addon\phone_shop\app\service\core\order\CoreOrderEventService;
+use addon\phone_shop\app\service\core\order\CoreOrderPayService;
+use addon\phone_shop\app\service\core\order\CoreOnlineTradePricingService;
+use addon\phone_shop\app\service\core\order\OfflineOrderSchemaService;
+use app\dict\common\ChannelDict;
+use app\dict\pay\PayDict;
+use app\model\diy_form\DiyFormRecordsFields;
+use app\model\member\Member;
+use app\model\pay\Pay;
+use app\model\verify\Verify;
+use app\service\core\pay\CorePayService;
+use core\base\BaseAdminService;
+use core\exception\AdminException;
+use core\exception\CommonException;
+use Location\Coordinate;
+use Location\Distance\Vincenty;
+use Location\Polygon;
+use think\db\exception\DbException;
+use think\db\Query;
+use think\facade\Db;
+
+/**
+ * 订单
+ */
+class OrderService extends BaseAdminService
+{
+    public function __construct()
+    {
+        parent::__construct();
+        $this->model = new Order();
+    }
+
+    /**
+     * 分页列表
+     * @param array $where
+     * @return array
+     */
+    public function getPage(array $where)
+    {
+        $field = 'buyer_ask_delivery_time,point,activity_type,order_id,order_no,order_type,order_from,out_trade_no,status,member_id,ip,goods_money,delivery_money,order_money,base_order_money,pricing_identity,payment_fee_rate,payment_fee_bearer,payment_fee_amount,merchant_net_amount,create_time,pay_time,delivery_type,taker_name,taker_mobile,taker_full_address,take_store_id,is_enable_refund,member_remark,shop_remark,close_type,close_remark,pay_money,relate_source,relate_order_id,payment_mode,staff_id,is_credit,credit_status,settle_status';
+        $order = 'create_time desc';
+
+        $pay_where = [];
+        if ($where['pay_type']) {
+            if ($where['pay_type'] == PayDict::FRIENDSPAY) {
+                $pay_where = [
+                    ['pay.main_id', '<>', Db::raw("pay.from_main_id")],
+                    ['pay.from_main_id', '>', 0],
+                    ['pay.status', '=', PayDict::STATUS_FINISH]
+                ];
+            } else {
+                $pay_where[] = ['pay.type', '=', $where['pay_type']];
+            }
+        }
+
+        $member_where = [];
+        if ($where['keyword'] != '') {
+            $member_where = [
+                ['member.member_no|member.nickname|member.username|member.mobile', 'like', "%" . $where['keyword'] . "%"],
+            ];
+        }
+        $search_model = $this->model
+            ->where([['order.site_id', '=', $this->site_id]])
+            ->withSearch(['search_type', 'order_from', 'join_status', 'create_time', 'join_pay_time', 'activity_type'], $where)
+            ->field($field)
+            ->withJoin([
+                'pay' => function (Query $query) use ($pay_where) {
+                    $query->where($pay_where);
+                },
+                'member' => function (Query $query) use ($member_where) {
+                    $query->where($member_where);
+                }
+            ], 'left')
+            ->group('order.order_id')
+            ->with([
+                'order_goods' => function ($query) {
+                    $query->with([
+                        'delivery_info' => function ($query) {
+                            $query->field('*')->with(['localDeliveryOrder'])->append(['express_company_name']);
+                        },
+                        'sku' => function ($query) {
+                            $query->field('sku_id,sku_no,is_unique,erp_asset_id,device_snapshot');
+                        }
+                    ])
+                        ->field('extend,order_goods_id, order_id, member_id, goods_id, sku_id, goods_name, sku_name, goods_image, sku_image, price, num, goods_money, is_enable_refund, goods_type, delivery_status, status,discount_money,site_id,delivery_id,is_gift')
+                        ->append(['delivery_status_name', 'status_name', 'goods_image_thumb_small', 'impulse_buy_info']);
+                }
+            ])->order($order)->append(['order_from_name', 'order_type_name', 'status_name', 'delivery_type_name']);
+        if (!empty($where['payment_mode'])) {
+            $search_model->where('order.payment_mode', '=', (string)$where['payment_mode']);
+        }
+        if ((int)($where['offline_workflow'] ?? 0) === 1) {
+            $search_model->whereIn('order.payment_mode', ['offline_pending', 'offline_cash', 'offline_credit']);
+        }
+        $offlineKeyword = trim((string)($where['offline_keyword'] ?? ''));
+        if ($offlineKeyword !== '') {
+            $search_model->where([
+                ['order.order_no|order.taker_name|order.taker_mobile|member.nickname|member.mobile', 'like', '%' . $offlineKeyword . '%'],
+            ]);
+        }
+        if (!empty($where['order_id'])) {
+            $search_model->where('order.order_id', '=', (int)$where['order_id']);
+        }
+        $order_status_list = OrderDict::getStatus();
+        $order_close_list = OrderDict::getCloseType();
+        $list = $this->pageQuery($search_model, function ($item, $key) use ($order_status_list, $order_close_list) {
+            $item['close_type_name'] = $order_close_list[$item['close_type']] ?? "";
+            $item['order_status_data'] = $order_status_list[$item['status']] ?? [];
+            $item_pay = $item['pay'];
+            if (!empty($item_pay)) {
+                $item_pay->append(['type_name']);
+                $item_pay['pay_type_name'] = PayDict::getPayType()[PayDict::FRIENDSPAY]['name'] ?? '';
+            }
+
+            if ($item['order_goods']) {
+                foreach ($item['order_goods'] as $kk => $vv) {
+                    $goods_info = (new Goods())->field('unit')->where([['goods_id', '=', $vv['goods_id']]])->findOrEmpty()->toArray();
+                    if (!empty($goods_info)) {
+                        $item['order_goods'][$kk]['unit'] = $goods_info['unit'];
+                    } else {
+                        $item['order_goods'][$kk]['unit'] = '件';
+                    }
+                }
+            }
+        });
+        $list['data'] = $this->getOrderRelateSourceInfo($list['data']);
+        $list['data'] = $this->appendOfflineRecords($list['data']);
+        return $list;
+    }
+
+    /**
+     * 获取订单来源的活动
+     * @param $order_data
+     * @return mixed
+     */
+    private function getOrderRelateSourceInfo($order_data)
+    {
+        $relate_activity_list = array_reduce($order_data, function ($result, $order_data) {
+            $source = $order_data['relate_source'];
+            $result[$source][] = [
+                'order_id' => $order_data['order_id'],
+                'relate_order_id' => $order_data['relate_order_id'],
+            ];
+            return $result;
+        }, []);
+        $active_res_list = event('ThirdAddonGetOrderActive', $relate_activity_list);
+        $active_list = [];
+        foreach ($active_res_list as $item) {
+            if (empty($item)) {
+                continue;
+            }
+            $active_list += $item;
+        }
+        foreach ($order_data as &$datum) {
+            $datum['relate_active_info'] = $active_list[$datum['order_id']] ?? [];
+        }
+        return $order_data;
+    }
+
+    /**
+     * 详情
+     * @param int $order_id
+     * @return array
+     */
+    public function getDetail(int $order_id)
+    {
+        $field = 'activity_type,point,order_id,order_no,order_type,order_from,out_trade_no,status,member_id,ip,goods_money,delivery_money,order_money,base_order_money,pricing_identity,payment_fee_rate,payment_fee_bearer,payment_fee_amount,merchant_net_amount,pay_money,invoice_id,create_time,pay_time,delivery_time,take_time,finish_time,close_time,delivery_type,taker_name,taker_mobile,buyer_ask_delivery_time,taker_province,taker_city,taker_district,taker_address,taker_full_address,taker_longitude,taker_latitude,take_store_id,is_enable_refund,member_remark,shop_remark,close_remark,discount_money,form_record_id,payment_mode,staff_id,is_credit,credit_status,settle_status';
+        $field .= ',relate_source,relate_order_id';
+        $info = $this->model->where([['order_id', '=', $order_id], ['site_id', '=', $this->site_id]])->field($field)
+            ->with(
+                [
+                    'order_goods' => function ($query) {
+                        $query->with(['sku' => function ($query) {
+                            $query->field('sku_id,sku_no,is_unique,erp_asset_id,device_snapshot');
+                        }])->field('extend,order_goods_id, order_id, member_id, goods_id, sku_id, goods_name, sku_name, goods_image, sku_image, price, num, goods_money, is_enable_refund, goods_type, delivery_status, status,discount_money,delivery_id,is_gift,form_record_id')->append(['delivery_status_name', 'status_name', 'impulse_buy_info']);
+                    },
+                    'member' => function ($query) {
+                        $query->field('member_id, nickname, mobile, headimg');
+                    },
+                    'order_log' => function ($query) {
+                        $query->field('order_id, content, main_type, create_time, main_id, type')->order("create_time desc, id desc")->append(['main_type_name', 'type_name', 'main_name']);
+                    },
+                    'order_discount' => function ($query) {
+                        $query->field('order_id,discount_type,money,content');
+                    }
+                ])->append(['order_from_name', 'order_type_name', 'status_name', 'delivery_type_name'])->findOrEmpty()->toArray();
+        $info['verify_code'] = ''; // 核销码
+        $info['verifier_member'] = ''; // 核销员
+        $order_status_list = OrderDict::getStatus();
+        if (!empty($info)) $info['order_status_data'] = $order_status_list[$info['status']] ?? [];
+        if ($info['delivery_type'] == DeliveryDict::STORE) {
+            $info['store'] = (new Store())->where([['store_id', '=', $info['take_store_id']]])
+                ->field('store_id, store_name, full_address, store_mobile, trade_time')
+                ->findOrEmpty()->toArray();
+            $verify_info = (new Verify())->where([
+                ['site_id', '=', $this->site_id],
+                ['type', '=', 'shopPickUpOrder'],
+                ['relate_tag', '=', $order_id]
+            ])->field('id, code, verifier_member_id')->with(['member' => function ($query) {
+                $query->field('member_id, nickname');
+            }])->findOrEmpty()->toArray();
+            if (!empty($verify_info)) {
+                $info['verify_code'] = $verify_info['code'];
+                $info['verifier_member'] = $verify_info['member'];
+            }
+        }
+
+        if ($info['delivery_type'] == DeliveryDict::EXPRESS || $info['delivery_type'] == DeliveryDict::LOCAL_DELIVERY) {
+            $info['order_delivery'] = (new OrderDelivery())
+                ->where([['order_id', '=', $info['order_id']]])
+                ->field('id, order_id, name, delivery_type, sub_delivery_type,express_company_id, express_number, create_time,third_delivery,local_delivery_order_id')
+                ->append(['third_delivery_name'])
+                ->select()->toArray();
+            if ($info['delivery_type'] == DeliveryDict::LOCAL_DELIVERY) {
+                if (!empty($info['order_delivery'])) {
+                    $local_delivery_order_id = $info['order_delivery'][0]['local_delivery_order_id'];
+                    $local_delivery_order_info = (new CoreLocalDeliveryService()) ->getLocalDeliveryOrderInfo($local_delivery_order_id);
+                    $info = array_merge($info, $local_delivery_order_info);
+                }
+            }
+        }
+
+
+        if ($info['out_trade_no']) {
+            $info['pay'] = (new Pay())->where([['out_trade_no', '=', $info['out_trade_no']]])
+                ->field('main_id, out_trade_no, type, pay_time, status')->append(['type_name'])->findOrEmpty()->toArray();
+
+            if (!empty($info['pay'])) {
+                if ($info['member_id'] != $info['pay']['main_id']) {
+                    $member_info = (new Member())->where([['site_id', '=', $this->site_id], ['member_id', '=', $info['pay']['main_id']]])->findOrEmpty()->toArray();
+                    if (!empty($member_info)) {
+                        $info['pay']['pay_member'] = $member_info['nickname'];
+                    }
+                }
+                $info['pay']['pay_type_name'] = PayDict::getPayType()[PayDict::FRIENDSPAY]['name'] ?? '';
+            }
+        }
+
+        $coupon_money = 0;
+        $manjian_discount_money = 0;
+        if ($info['order_discount']) {
+            foreach ($info['order_discount'] as $item) {
+                if ($item['discount_type'] == 'coupon') {
+                    $coupon_money += $item['money'];
+                }
+                if ($item['discount_type'] == 'manjian') {
+                    $manjian_discount_money += $item['money'];
+                }
+            }
+        }
+        $info['coupon_money'] = number_format($coupon_money, 2, '.', '');
+        $info['manjian_discount_money'] = number_format($manjian_discount_money, 2, '.', '');
+
+        $diy_form_records_fields_model = new DiyFormRecordsFields();
+        if (!empty($info['form_record_id'])) {
+            $field_count = $diy_form_records_fields_model->where([['record_id', '=', $info['form_record_id']], ['site_id', '=', $this->site_id]])->count();
+            if ($field_count > 0) {
+                $info['form_record_show'] = true;
+            } else {
+                $info['form_record_show'] = false;
+            }
+        }
+        if (!empty($info['order_goods'])) {
+            foreach ($info['order_goods'] as &$item) {
+                $goods_info = (new Goods())->field('unit')->where([['goods_id', '=', $item['goods_id']]])->findOrEmpty()->toArray();
+                if (!empty($goods_info)) {
+                    $item['unit'] = $goods_info['unit'];
+                } else {
+                    $item['unit'] = '件';
+                }
+                $field_count = $diy_form_records_fields_model->where([['record_id', '=', $item['form_record_id']], ['site_id', '=', $this->site_id]])->count();
+                if ($field_count > 0) {
+                    $item['form_record_show'] = true;
+                } else {
+                    $item['form_record_show'] = false;
+                }
+                $impulse_buy_tips = '';
+                if (isset($item['extend']['is_impulse_buy']) == 1) {
+                    $impulse_buy_num = $item['extend']['impulse_buy_goods_num'] ?? 0;//5
+                    $impulse_buy_price_total = $item['extend']['impulse_buy_price'] ?? 0;
+                    if ($impulse_buy_num > 0) {
+                        $impulse_buy_price = $impulse_buy_price_total / $impulse_buy_num;
+                        if ($impulse_buy_num == 1) {
+                            $impulse_buy_tips = '第1' . '件' . $impulse_buy_price . '元';
+                        } else {
+                            $impulse_buy_tips = '第1-' . $impulse_buy_num . '件' . $impulse_buy_price . '元';
+                            if ($item['num'] > $impulse_buy_num) {
+                                if ($impulse_buy_num + 1 == $item['num']) {
+                                    $impulse_buy_tips .= ' 第' . ($impulse_buy_num + 1) . '件' . $item['price'] . '元';
+                                } else {
+                                    $impulse_buy_tips .= ' 第' . ($impulse_buy_num + 1) . '-' . $item['num'] . '件' . $item['price'] . '元';
+                                }
+                            }
+                        }
+                    } else {//全原价
+                        $impulse_buy_tips = '第1-' . $item['num'] . '件' . $item['price'] . '元';
+                    }
+                }
+                $item['impulse_buy_info']['show_tips'] = $impulse_buy_tips;
+            }
+        }
+        if ($info) {
+            $records = $this->appendOfflineRecords([$info]);
+            $info = $records[0] ?? $info;
+        }
+        return $info;
+    }
+
+    private function appendOfflineRecords(array $orders): array
+    {
+        if (!$orders) return $orders;
+        OfflineOrderSchemaService::ensure();
+        $ids = array_values(array_unique(array_filter(array_map(static fn($item): int => (int)($item['order_id'] ?? 0), $orders))));
+        if (!$ids) return $orders;
+        $records = OrderOfflineRecord::where('site_id', $this->site_id)->whereIn('order_id', $ids)
+            ->append(['status_name'])->select()->toArray();
+        $map = [];
+        foreach ($records as $record) $map[(int)$record['order_id']] = $record;
+        $erpMap = [];
+        $contextError = '';
+        try {
+            $contextOrders = array_map(static fn($o) => ['order_id' => (int)$o['order_id'], 'relate_source' => (string)($o['relate_source'] ?? '')], $orders);
+            foreach ((array)event('PhoneShopOrderReturnContext', ['site_id' => (int)$this->site_id, 'orders' => $contextOrders]) as $context) {
+                if (($context['provider'] ?? '') === 'hsx_erp') $erpMap = (array)($context['orders'] ?? []);
+            }
+        } catch (\Throwable $e) {
+            $contextError = 'ERP原单信息暂未获取成功，请在ERP按原单号核对后办理退货';
+            \think\facade\Log::warning('[phone_shop] 订单退回信息读取失败：' . $e->getMessage());
+        }
+        foreach ($orders as &$order) {
+            $order['offline_record'] = $map[(int)($order['order_id'] ?? 0)] ?? null;
+            $order['erp_return_context'] = $erpMap[(int)$order['order_id']] ?? null;
+            $order['return_context_error'] = $contextError;
+            $order['return_handler_name'] = (string)($order['offline_record']['handler_name'] ?? '')
+                ?: (string)($order['erp_return_context']['staff_name'] ?? '');
+            $order['order_goods'] = array_map(static fn($line) => \addon\phone_shop\app\service\core\order\OrderDeviceView::decorate($line, $order), (array)($order['order_goods'] ?? []));
+        }
+        unset($order);
+        return $orders;
+    }
+
+    public function confirmDeviceReceived(int $lineId, bool $received): array
+    {
+        if (!$received) throw new AdminException('请确认设备已经实际收回，再恢复库存');
+        return (new \addon\phone_shop\app\service\core\order\CoreOrderDeviceReturnService())->confirmReceived((int)$this->site_id, $lineId, (string)$this->username);
+    }
+
+    /**
+     * 商家留言
+     * @param $data
+     * @return bool
+     */
+    public function shopRemark($data)
+    {
+        $this->model->where([['order_id', '=', $data['order_id']], ['site_id', '=', $this->site_id]])->update(['shop_remark' => $data['shop_remark']]);
+        return true;
+    }
+
+    /**
+     * 订单数量统计
+     * @throws DbException
+     */
+    public function getOrderCount()
+    {
+        $data = [
+            "wait_pay_order" => 0, //待付款
+            "wait_delivery_order" => 0, //待发货
+            "wait_take_order" => 0, //待收货
+            "refund_order" => 0, //退款中（订单项）
+        ];
+
+        $data['wait_pay_order'] = $this->model->where([['site_id', '=', $this->site_id], ['status', '=', OrderDict::WAIT_PAY]])->count();
+        $data['wait_delivery_order'] = $this->model->where([['site_id', '=', $this->site_id], ['status', '=', OrderDict::WAIT_DELIVERY]])->count();
+        $data['wait_take_order'] = $this->model->where([['site_id', '=', $this->site_id], ['status', '=', OrderDict::WAIT_TAKE]])->count();
+        $data['refund_order'] = (new OrderGoods())->where([['site_id', '=', $this->site_id], ['status', '=', OrderGoodsDict::REFUNDING]])->count();
+
+        return $data;
+    }
+
+    /**
+     * 订单改价
+     * @param $data
+     * @return void
+     */
+    public function editPrice($data)
+    {
+        return (new \addon\phone_shop\app\service\core\order\CoreOrderPaymentGuardService())->withOrderLock(
+            (int)$this->site_id,
+            (int)($data['order_id'] ?? 0),
+            fn () => $this->editPriceUnderPaymentLock($data)
+        );
+    }
+
+    /** 与发起支付互斥，避免校验完成后、真正扣款前又被并发改价。 */
+    protected function editPriceUnderPaymentLock($data)
+    {
+        $order_id = $data['order_id'];
+        $order = $this->model->where([['order_id', '=', $order_id], ['site_id', '=', $this->site_id]])->findOrEmpty();
+        if ($order->isEmpty()) throw new AdminException('SHOP_ORDER_NOT_FOUND');
+        // ERP 托管单(有 relate_source):金额以 ERP 为准,禁止商城改价
+        if (!empty($order['relate_source'])) throw new AdminException('此订单由 ERP 统一管理,金额请到 ERP 操作,商城不可改价');
+        if ($order['status'] != OrderDict::WAIT_PAY) throw new AdminException('SHOP_ONLY_PENDING_ORDERS_CAN_BE_REPRICED');
+
+        //关闭相关的支付  todo  封装订单专用的关闭支付相关
+        try {
+            (new CorePayService())->closeByTrade($this->site_id, OrderDict::TYPE, $order_id);
+        } catch (\Exception $e) {
+            throw new AdminException($e->getMessage());
+        }
+
+        $delivery_money = $data['delivery_money'];
+        if ($delivery_money < 0) throw new AdminException('SHOP_THE_SHIPPING_FEE_CANNOT_BE_LESS_THAN_0');
+        $order_goods_data = $data['order_goods_data'];//['order_goods_id' => ['money' => 10]]
+        $order_goods_model = new OrderGoods();
+        $goods_money = 0;
+        Db::startTrans();
+        try {
+            // 关支付到改价之间可能已收到付款回调，锁单后必须再次确认状态。
+            $order = $this->model->where([['order_id', '=', $order_id], ['site_id', '=', $this->site_id]])->lock(true)->findOrEmpty();
+            if ($order->isEmpty() || $order['status'] != OrderDict::WAIT_PAY) {
+                throw new AdminException('订单状态已变化，请刷新后再操作，已付款订单不能改价');
+            }
+            if ((new Pay())->where([
+                ['site_id', '=', $this->site_id], ['trade_type', '=', OrderDict::TYPE],
+                ['trade_id', '=', $order_id], ['status', '<>', PayDict::STATUS_CANCEL],
+            ])->count() > 0) {
+                throw new AdminException('客户已重新发起支付，请先关闭当前支付再修改价格');
+            }
+            $order_goods_list = $order_goods_model->where([['order_id', '=', $order_id], ['site_id', '=', $this->site_id]])->lock(true)->select();
+            foreach ($order_goods_list as $key => $item) {
+                $item_order_goods_id = $item['order_goods_id'];
+                $temp_goods_data = $order_goods_data[$item_order_goods_id] ?? [];
+
+                if (!empty($temp_goods_data)) {
+                    $item_money = $temp_goods_data['money'] ?? 0;
+                    if ($item_money != 0) {
+                        $item_order_goods_money = $item['order_goods_money'];//订单项总额
+                        $item_new_order_goods_money = round($item_order_goods_money + $item_money, 2);//
+                        if ($item_new_order_goods_money < 0) {
+                            throw new AdminException('SHOP_THE_LINE_ITEM_SUBTOTAL_CAN_T_BE_LESS_THAN_0');
+                        }
+                        $item_new_goods_money = $item_new_order_goods_money + $item['discount_money'];
+                        $item_new_price = floor($item_new_goods_money / $item['num'] * 100) / 100;
+
+                        $order_goods_list[$key]['old_goods_money'] = $item['goods_money'];
+
+                        $item->save([
+                            'price' => $item_new_price,
+                            'goods_money' => $item_new_goods_money,
+                            'order_goods_money' => $item_new_order_goods_money
+                        ]);
+                        $goods_money += $item_new_goods_money;
+                        continue;
+                    }
+                }
+                $goods_money += $item['goods_money'];
+            }
+            $order_money = round($goods_money + $delivery_money - $order['discount_money'], 2);
+            if ($order_money < 0) {
+                $order_money = 0;
+            }
+
+            $order['old_delivery_money'] = $order['delivery_money'];
+
+            // 按此订单已确认的费率/承担方重算，不能丢失客户承担的手续费，
+            // 也不能因为后来后台配置变化而擅自更换该订单的收费规则。
+            $pricing = (new CoreOnlineTradePricingService())->calculate(
+                $order_money,
+                (string)($order['pricing_identity'] ?? 'retail'),
+                [
+                    'peer_fee_rate' => ($order['payment_mode'] ?? 'online') === 'online'
+                        ? (float)($order['payment_fee_rate'] ?? 0) : 0,
+                    'peer_fee_bearer' => $order['payment_fee_bearer'] ?? 'merchant',
+                ]
+            );
+            $order_money = (float)$pricing['order_money'];
+            $order->save(array_merge([
+                'goods_money' => $goods_money,
+                'delivery_money' => $delivery_money,
+            ], $pricing));
+
+            $order_param = [
+                'order_data' => $order->toArray(),
+                'order_goods_data' => $order_goods_list->toArray(),
+                'main_id' => $this->uid,
+                'main_type' => OrderLogDict::SYSTEM
+            ];
+            //订单改价操作
+            CoreOrderEventService::orderEditPrice($order_param);
+            //订单改价后操作
+            CoreOrderEventService::orderEditPriceAfter($order_param);
+            if ($order_money == 0) {
+                (new CoreOrderPayService())->pay(['site_id' => $this->site_id, 'trade_id' => $order_id, 'main_type' => OrderLogDict::SYSTEM, 'main_id' => $this->uid]);
+            }
+            Db::commit();
+            return true;
+        } catch (\Exception $e) {
+            Db::rollback();
+            throw new AdminException($e->getMessage());
+        }
+    }
+
+    /**
+     * 修改收货地址
+     * @param $data
+     */
+    public function editDelivery($data)
+    {
+        $data = $this->getEditDeliveryData($data);
+        if ($data['error_code'] < 0) {
+            throw new AdminException($data['error_msg'] ?? '');
+        }
+        $delivery_data = $data['delivery_data'];
+        $this->model->where([['order_id', '=', $data['order_id']], ['site_id', '=', $this->site_id]])->update($delivery_data);
+        return true;
+    }
+
+    /**
+     * 订单修改收货地址信息
+     * @param $data
+     */
+    public function getEditDeliveryData($data)
+    {
+        $delivery_type = $data['delivery_type'];
+        $order_id = $data['order_id'];
+        $order = $this->model->where([['order_id', '=', $order_id], ['site_id', '=', $this->site_id]])->findOrEmpty()->toArray();
+        $delivery_list = (new DeliveryService())->getDeliveryList();
+        if (empty($order)) throw new AdminException('SHOP_ORDER_NOT_FOUND');
+        if (!in_array($order['status'], [OrderDict::WAIT_PAY, OrderDict::WAIT_DELIVERY])) throw new AdminException('SHOP_ONLY_PENDING_ORDERS_EDIT_TAKER');
+        if ($order['delivery_type'] == OrderDeliveryDict::VIRTUAL) throw new AdminException('SHOP_VIRTUAL_ORDERS_EDIT_TAKER');
+        $order['delivery_data'] = $data;
+
+        $order['order_goods'] = (new OrderGoods())->where([['site_id', '=', $this->site_id], ['goods_type', '=', 'real'], ['order_id', '=', $order_id]])->with(['goods'])->select()->toArray();
+        $order['error_code'] = 1;
+        $order['error_msg'] = '';
+        if (empty($delivery_type) || !isset($delivery_list[$delivery_type])) {
+            $order['error_code'] = -1;
+            $order['error_msg'] = get_lang('NOT_SUPPORT_DELIVERY_TYPE');
+            return $order;
+        } else if (!empty($delivery_type) && $delivery_list[$delivery_type]['status'] > 1) {
+            $order['error_code'] = -1;
+            $order['error_msg'] = get_lang('DELIVERY_TYPE_NOT_OPEN');
+            return $order;
+        }
+
+        $goods_name = '';
+        foreach ($order['order_goods'] as $k => &$v) {
+            if (!in_array($delivery_type, $v['goods']['delivery_type'])) {
+                $v['error_code'] = -1;
+                $v['error_msg'] = get_lang('GOODS_NOT_DELIVERY_TYPE');
+                $order['error_code'] = -1;
+                $goods_name .= $v['goods_name'] . ',';
+            }
+        }
+
+        if ($order['error_code'] < 0) {
+            $goods_name = trim($goods_name, ',');
+            if ($goods_name) $order['error_msg'] = $goods_name . '-' . get_lang('GOODS_NOT_DELIVERY_TYPE');
+            return $order;
+        }
+
+        switch ($delivery_type) {
+            case OrderDeliveryDict::EXPRESS:
+                if (empty($data['taker_name'])
+                    || empty($data['taker_mobile'])
+                    || empty($data['taker_province'])
+                    || empty($data['taker_city'])
+                    || empty($data['taker_district'])
+                    || empty($data['taker_address'])
+                    || empty($data['taker_full_address'])
+                ) {
+                    $order['error_code'] = -1;
+                    $order['error_msg'] = get_lang('EXPRESS_FIELD_EMPTY');
+                }
+                break;
+            case OrderDeliveryDict::LOCAL_DELIVERY:
+                if (empty($data['taker_name'])
+                    || empty($data['taker_mobile'])
+                    || empty($data['taker_province'])
+                    || empty($data['taker_city'])
+                    || empty($data['taker_district'])
+                    || empty($data['taker_address'])
+                    || empty($data['taker_full_address'])
+                    || empty($data['taker_longitude'])
+                    || empty($data['taker_latitude'])
+                ) {
+                    $order['error_code'] = -1;
+                    $order['error_msg'] = get_lang('EXPRESS_FIELD_EMPTY');
+                } else {
+                    $order = $this->checkLocationInArea($order, $data);
+                }
+                break;
+            case OrderDeliveryDict::STORE:
+                if (empty($data['take_store_id'])) {
+                    $order['error_code'] = -1;
+                    $order['error_msg'] = get_lang('EXPRESS_FIELD_EMPTY');
+                }
+                break;
+        }
+
+        return $order;
+    }
+
+    /**
+     * 检查收货地址是否在配送区域
+     * @param $order
+     * @param $data
+     * @return mixed
+     */
+    public function checkLocationInArea($order, $data)
+    {
+        $local = (new Local())->where([['site_id', '=', $this->site_id]])->field('fee_type,base_dist,base_price,grad_dist,grad_price,weight_start,weight_unit,weight_price,delivery_type,area,center')->findOrEmpty();
+        if ($local->isEmpty()) {
+            $order['error_code'] = -1;
+            $order['error_msg'] = get_lang('NOT_CONFIGURED_LOCAL_DELIVERY');
+        }
+        // 收货地址
+        $address_point = new Coordinate($data['taker_latitude'], $data['taker_longitude']);
+
+        // 判断所在区域
+        $located_in_area = null;
+        foreach ($local['area'] as $area) {
+            if ($area['area_type'] == 'radius') {
+                $center = new Coordinate($area['area_json']['center']['lat'], $area['area_json']['center']['lng']);
+                $distance = (new Vincenty())->getDistance($address_point, $center);
+                if ($distance <= $area['area_json']['radius']) {
+                    $located_in_area = $area;
+                    break;
+                }
+            } else {
+                $geofence = new Polygon();
+                $geofence->addPoints(array_map(function ($latlng) {
+                    return new Coordinate($latlng['lat'], $latlng['lng']);
+                }, $area['area_json']['paths']));
+                if ($geofence->contains($address_point)) {
+                    $located_in_area = $area;
+                    break;
+                }
+            }
+        }
+        if (!$located_in_area) {
+            $order['error_code'] = -1;
+            $order['error_msg'] = get_lang('NOT_SUPPORT_DELIVERY_ADDRESS');
+        }
+        return $order;
+    }
+
+    /**
+     * 获取订单来源
+     * @return array
+     */
+    public function getOrderFrom()
+    {
+        $order_from_list = ChannelDict::getType();
+        $from_event_list = array_filter(event('OrderFromList')) ?? [];
+        foreach ($from_event_list as $item) {
+            $order_from_list = array_merge($order_from_list, $item);
+        }
+        return $order_from_list;
+    }
+
+    /**
+     * 获取已选商品总重量
+     * @param $data
+     * @return float|int|mixed
+     */
+    public function getSelectOrderGoodsWeight($data)
+    {
+        $sku_ids = (new OrderGoods())->where([['order_goods_id', 'in', $data[ 'order_goods_ids' ]], ['site_id', '=', $this->site_id] ])->column('num', 'sku_id');
+        $weight = 0;
+        foreach ($sku_ids as $sku_id => $value) {
+            $weight += (new GoodsSku())->where([['sku_id', '=', $sku_id], ['site_id', '=', $this->site_id] ])->value('weight') ?? 0 * $value['num'];
+        }
+        return max($weight, 1);
+    }
+
+    /**
+     * 待确定删除逻辑之后再细化
+     * @param $order_ids
+     * @return bool|void
+     */
+    public function delete($order_ids)
+    {
+
+        if (empty($order_ids)) throw new AdminException('SHOP_ORDER_NOT_FOUND');
+
+        $status_list = $this->model->field('order_id, status,order_no,create_time')->whereIn('order_id', $order_ids)->with(['orderGoods' => function ($query) {
+            $query->field('site_id, order_id, goods_id');
+        }])->select()->toArray();
+
+        $error_order_str = '';
+        foreach ($status_list as $item) {
+            if ($item['status'] == OrderDict::CLOSE) {
+                continue;
+            }
+            $error_order_str .= $item['order_no'] . ',';
+        }
+
+        $error_order_str = rtrim($error_order_str, ',');
+        if (!empty($error_order_str)) {
+            $error_str = sprintf(get_lang('SHOP_ORDER_DELETE_STATUS_ERROR'), $error_order_str);
+            throw new AdminException($error_str);
+        }
+
+        Db::startTrans();
+        try {
+            //删除订单表
+            $this->model::destroy(function ($query) use ($order_ids) {
+                $query->where([['order_id', 'in', $order_ids], ['site_id', '=', $this->site_id]]);
+            });
+
+            //删除订单商品项
+            (new OrderGoods())::destroy(function ($query) use ($order_ids) {
+                $query->where([['order_id', 'in', $order_ids], ['site_id', '=', $this->site_id]]);
+            });
+
+            //删除订单退款
+            (new OrderRefund())::destroy(function ($query) use ($order_ids) {
+                $query->where([ [ 'order_id', 'in', $order_ids ], [ 'site_id', '=', $this->site_id ] ]);
+            });
+
+            //删除统计
+            foreach ($status_list as $value) {
+                if (!empty($value['orderGoods'])) {
+                    foreach ($value['orderGoods'] as $v) {
+                        CoreGoodsStatService::decStat(['site_id' => $this->site_id, 'goods_id' => $v['goods_id'], 'time' => $value['create_time'], 'sale_num' => 1]);
+                    }
+                    CoreStatService::decStat(['site_id' => $this->site_id, 'time' => $value['create_time'], 'order_num' => 1]);
+                }
+            }
+
+            Db::commit();
+            return true;
+        } catch (\Exception $e) {
+            Db::rollback();
+            throw new CommonException($e->getMessage());
+        }
+    }
+
+    public function getInfoByOrderNo($order_no)
+    {
+        return $this->model->where('order_no', $order_no)->findOrEmpty()->toArray();
+    }
+}

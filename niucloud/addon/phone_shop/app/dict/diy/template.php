@@ -1,0 +1,50 @@
+<?php
+
+return [
+    'DIY_PHONE_SHOP_INDEX' => [
+        'title' => get_lang('dict_diy.page_shop_index'),
+        'page' => '/addon/phone_shop/pages/index',
+        'action' => 'decorate',
+        'type' => 'index'
+    ],
+    'DIY_PHONE_SHOP_MEMBER_INDEX' => [
+        'title' => get_lang('dict_diy.page_shop_member_index'),
+        'page' => '/addon/phone_shop/pages/member/index',
+        'action' => 'decorate',
+        'type' => 'member_index'
+    ],
+    'DIY_PHONE_SHOP_POINT_INDEX' => [
+        'title' => get_lang('dict_diy.page_shop_point_index'),
+        'page' => '/addon/phone_shop/pages/point/index',
+        'action' => 'decorate',
+        'type' => ''
+    ],
+    'DIY_PHONE_SHOP_GOODS_DETAIL' => [
+        'title' => get_lang('dict_diy.page_shop_detail'),
+        'page' => '/addon/phone_shop/pages/goods/detail',
+        'action' => 'decorate',
+        'type' => '',
+        'ignoreComponents' => ['CarouselSearch'], // 忽略组件名单，商品详情不支持添加轮播搜索组件
+        // 页面数据结构，初始化时覆盖
+        'global' => [
+            'topStatusBar' => [
+                'control' => false, // 隐藏顶部导航栏，禁止编辑
+                'isShow' => false
+            ],
+            'bottomTabBar' => [
+                'control' => false, // 隐藏底部导航，禁止编辑
+                'isShow' => false,
+                'designNav' => [
+                    'title' => '',
+                    'key' => ''
+                ]
+            ],
+            "copyright" => [
+                'control' => true,
+                'isShow' => false,
+                'textColor' =>'#ccc'
+            ],
+        ],
+
+    ],
+];

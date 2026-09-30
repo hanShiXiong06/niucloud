@@ -1,0 +1,10 @@
+{
+  "title": "二手商城系统",
+  "desc": "二手机销售商城，一物一码，线上线下混合支付，对接ERP财务",
+  "key": "phone_shop",
+  "version": "1.6.5",
+  "author": "hsx&&niucloud",
+  "type": "app",
+  "support_app": "",
+  "support_version": "1.2.4"
+}

@@ -35,6 +35,6 @@ niucloud/addon/归档.zip
 **/hsx_finance.removed/
 
 # 在研商城插件(开发中，暂不纳入版本库)
-niucloud/addon/phone_shop/
+# niucloud/addon/phone_shop/
 niucloud/addon/shop/
 niucloud/addon/phone_shop.zip
