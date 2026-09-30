@@ -1,0 +1,11 @@
+{
+  "title": "物流服务",
+  "desc": "站点独立账号、快递100电子面单及云打印服务",
+  "key": "hsx_express",
+  "version": "1.0.0",
+  "author": "hsx",
+  "type": "addon",
+  "support_app": "",
+  "compile":[],
+  "support_version": "1.2.4"
+}
