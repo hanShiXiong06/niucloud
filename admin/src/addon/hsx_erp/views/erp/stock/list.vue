@@ -1,21 +1,17 @@
 <template>
-    <HsxPage padding="none" class="main-container">
-        <el-card class="!border-none" shadow="never">
-            <HsxTitle size="page" collapsible-subtitle class="mb-4">
-                <template #default>库存中心</template>
+    <ErpDesktopPage class="main-container">
+        <section class="erp-list-surface">
+            <ErpWorkspaceHeader page="stock" :filter-count="searchConditionCount">
+                <template #title>库存中心</template>
                 <template #subtitle>查看设备、成本与待办，按当前状态处理下一步。</template>
-                <template #extra><div class="flex flex-wrap gap-2 flex-wrap">
-                        <el-button v-if="selectedPendingIds.length" type="warning" @click="openSendRefurbish()">批量开始整备（{{ selectedPendingIds.length }}）</el-button>
-                        <el-button v-if="selectedSaleableIds.length" type="primary" @click="goSale(selectedSaleableIds)">批量销售（{{ selectedSaleableIds.length }}）</el-button>
-                        <el-button v-if="selectedTransferableIds.length" @click="openTransfer()">批量调拨（{{ selectedTransferableIds.length }}）</el-button>
+                <template #extra><div class="flex flex-wrap gap-2">
                         <el-button type="primary" plain @click="router.push('/site/hsx_erp/stocktake')">库存盘点</el-button>
                         <el-button v-if="canViewProfit || canViewFinance" type="primary" plain @click="ledgerVisible = true">查询 / 导出设备</el-button>
                         <el-button type="primary" plain @click="openSerialTrace">串号追踪</el-button>
                         <el-button :icon="Refresh" :loading="table.loading" @click="loadList">刷新</el-button>
                     </div></template>
-            </HsxTitle>
 
-            <HsxSearchPanel :summary="searchConditionCount ? '已填写 ' + searchConditionCount + ' 项条件，点击查询生效' : ''">
+            <HsxSearchPanel :show-layout-switch="false" :summary="searchConditionCount ? searchConditionCount + ' 项筛选条件' : ''">
                 <template #extra>
                     <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
                     <el-button @click="handleReset">重置</el-button>
@@ -102,7 +98,7 @@
                         </el-form-item>
                         <el-form-item label="库龄">
                             <el-input-number v-model="search.stock_age_min" :min="0" :precision="0" :controls="false" placeholder="最少天" class="!w-[100px]" />
-                            <span class="mx-1 text-gray-400">-</span>
+                            <span class="mx-1 text-[color:var(--el-text-color-secondary)]">-</span>
                             <el-input-number v-model="search.stock_age_max" :min="0" :precision="0" :controls="false" placeholder="最多天" class="!w-[100px]" />
                         </el-form-item>
                         <el-form-item label="周转">
@@ -116,12 +112,12 @@
                         </el-form-item>
                         <el-form-item v-if="canViewCost" label="成本">
                             <el-input-number v-model="search.min_cost" :min="0" :precision="2" :controls="false" placeholder="最低" class="!w-[110px]" />
-                            <span class="mx-1 text-gray-400">-</span>
+                            <span class="mx-1 text-[color:var(--el-text-color-secondary)]">-</span>
                             <el-input-number v-model="search.max_cost" :min="0" :precision="2" :controls="false" placeholder="最高" class="!w-[110px]" />
                         </el-form-item>
                         <el-form-item label="零售价/预估">
                             <el-input-number v-model="search.min_price" :min="0" :precision="2" :controls="false" placeholder="最低" class="!w-[110px]" />
-                            <span class="mx-1 text-gray-400">-</span>
+                            <span class="mx-1 text-[color:var(--el-text-color-secondary)]">-</span>
                             <el-input-number v-model="search.max_price" :min="0" :precision="2" :controls="false" placeholder="最高" class="!w-[110px]" />
                         </el-form-item>
                     </HsxFold>
@@ -129,46 +125,47 @@
                 </el-form>
             </HsxSearchPanel>
 
-            <div class="mt-4 grid grid-cols-2 gap-3" :class="canViewCost ? 'lg:grid-cols-6' : 'lg:grid-cols-5'">
-                <div class="summary-tile summary-tile--clickable" @click="applyTurnoverFilter('')">
+            <div class="mt-4 grid grid-cols-2 gap-3 erp-metrics erp-metrics--stock" :class="canViewCost ? 'lg:grid-cols-6' : 'lg:grid-cols-5'">
+                <div class="summary-tile summary-tile--clickable" role="button" tabindex="0" @click="applyTurnoverFilter('')" @keydown.enter="applyTurnoverFilter('')" @keydown.space.prevent="applyTurnoverFilter('')">
                     <div class="summary-label">有效库存</div>
                     <div class="summary-value">{{ turnoverSummary.total_count || 0 }}</div>
-                    <div class="mt-1 text-xs text-gray-400">平均库龄 {{ turnoverSummary.average_age_days || 0 }} 天</div>
+                    <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">平均库龄 {{ turnoverSummary.average_age_days || 0 }} 天</div>
                 </div>
                 <div v-if="canViewCost" class="summary-tile">
                     <div class="summary-label">库存成本</div>
                     <div class="summary-value">{{ money(turnoverSummary.total_cost) }}</div>
                 </div>
-                <div class="summary-tile summary-tile--clickable" @click="applyTurnoverFilter('healthy')">
+                <div class="summary-tile summary-tile--clickable" role="button" tabindex="0" @click="applyTurnoverFilter('healthy')" @keydown.enter="applyTurnoverFilter('healthy')" @keydown.space.prevent="applyTurnoverFilter('healthy')">
                     <div class="summary-label">周转正常</div>
-                    <div class="summary-value text-green-600">{{ turnoverSummary.healthy_count || 0 }}</div>
-                    <div class="mt-1 text-xs text-gray-400">≤ {{ turnoverSummary.thresholds?.attention_days || 7 }} 天</div>
+                    <div class="summary-value text-[color:var(--el-color-success)]">{{ turnoverSummary.healthy_count || 0 }}</div>
+                    <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">≤ {{ turnoverSummary.thresholds?.attention_days || 7 }} 天</div>
                 </div>
-                <div class="summary-tile summary-tile--clickable" @click="applyTurnoverFilter('attention')">
+                <div class="summary-tile summary-tile--clickable" role="button" tabindex="0" @click="applyTurnoverFilter('attention')" @keydown.enter="applyTurnoverFilter('attention')" @keydown.space.prevent="applyTurnoverFilter('attention')">
                     <div class="summary-label">需要关注</div>
-                    <div class="summary-value text-blue-600">{{ turnoverSummary.attention_count || 0 }}</div>
-                    <div class="mt-1 text-xs text-gray-400">{{ (turnoverSummary.thresholds?.attention_days || 7) + 1 }}～{{ turnoverSummary.thresholds?.warning_days || 15 }} 天</div>
+                    <div class="summary-value text-[color:var(--erp-text-accent)]">{{ turnoverSummary.attention_count || 0 }}</div>
+                    <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">{{ (turnoverSummary.thresholds?.attention_days || 7) + 1 }}～{{ turnoverSummary.thresholds?.warning_days || 15 }} 天</div>
                 </div>
-                <div class="summary-tile summary-tile--clickable" @click="applyTurnoverFilter('warning')">
+                <div class="summary-tile summary-tile--clickable" role="button" tabindex="0" @click="applyTurnoverFilter('warning')" @keydown.enter="applyTurnoverFilter('warning')" @keydown.space.prevent="applyTurnoverFilter('warning')">
                     <div class="summary-label">周转预警</div>
-                    <div class="summary-value text-orange-600">{{ turnoverSummary.warning_count || 0 }}</div>
-                    <div class="mt-1 text-xs text-gray-400">{{ canViewCost ? `占用 ${money(turnoverSummary.warning_cost)}` : '建议尽快处理' }}</div>
+                    <div class="summary-value text-[color:var(--el-color-warning)]">{{ turnoverSummary.warning_count || 0 }}</div>
+                    <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">{{ canViewCost ? `占用 ${money(turnoverSummary.warning_cost)}` : '建议尽快处理' }}</div>
                 </div>
-                <div class="summary-tile summary-tile--clickable" @click="applyTurnoverFilter('critical')">
+                <div class="summary-tile summary-tile--clickable" role="button" tabindex="0" @click="applyTurnoverFilter('critical')" @keydown.enter="applyTurnoverFilter('critical')" @keydown.space.prevent="applyTurnoverFilter('critical')">
                     <div class="summary-label">严重滞销</div>
-                    <div class="summary-value text-red-600">{{ turnoverSummary.critical_count || 0 }}</div>
-                    <div class="mt-1 text-xs text-gray-400">{{ canViewCost ? `占用 ${money(turnoverSummary.critical_cost)}` : '需要优先处理' }}</div>
+                    <div class="summary-value text-[color:var(--el-color-danger)]">{{ turnoverSummary.critical_count || 0 }}</div>
+                    <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">{{ canViewCost ? `占用 ${money(turnoverSummary.critical_cost)}` : '需要优先处理' }}</div>
                 </div>
             </div>
 
             <HsxFold v-if="(turnoverSummary.actions || []).length || (turnoverSummary.warehouse_risks || []).length" class="mt-3" title="待办建议" :summary="(turnoverSummary.actions || []).map(item => `${item.label} ${item.count} 台`).join(' · ')">
                 <div class="flex flex-1 flex-col items-end gap-2">
                     <div class="flex flex-wrap justify-end gap-2"><el-button v-for="item in turnoverSummary.actions" :key="item.key" size="small" plain @click="applySummaryAction(item)">{{ item.label }}（{{ item.count }}）</el-button></div>
-                    <div v-if="(turnoverSummary.warehouse_risks || []).length" class="flex flex-wrap justify-end gap-2 text-xs text-slate-500"><span>重点仓库：</span><button v-for="item in turnoverSummary.warehouse_risks" :key="item.warehouse_id" type="button" class="warehouse-risk-chip" @click="applyWarehouseRisk(item)">{{ item.warehouse_name }} {{ item.warning_count }} 台<span v-if="canViewCost"> / {{ money(item.warning_cost) }}</span></button></div>
+                    <div v-if="(turnoverSummary.warehouse_risks || []).length" class="flex flex-wrap justify-end gap-2 text-xs text-[color:var(--el-text-color-secondary)]"><span>重点仓库：</span><button v-for="item in turnoverSummary.warehouse_risks" :key="item.warehouse_id" type="button" class="warehouse-risk-chip" @click="applyWarehouseRisk(item)">{{ item.warehouse_name }} {{ item.warning_count }} 台<span v-if="canViewCost"> / {{ money(item.warning_cost) }}</span></button></div>
                 </div>
             </HsxFold>
 
             <!-- 状态快筛 Tab -->
+            </ErpWorkspaceHeader>
             <el-tabs v-model="activeTab" class="mt-4 erp-status-tabs" @tab-change="onTabChange">
                 <el-tab-pane label="全部" name="" />
                 <el-tab-pane label="库存中" name="in_stock" />
@@ -178,7 +175,13 @@
                 <el-tab-pane label="已盘亏" name="lost" />
             </el-tabs>
 
-            <el-table :data="table.data" v-loading="table.loading" size="large" :row-class-name="stockRowClassName" @selection-change="onSelectionChange">
+            <div v-show="selectedRows.length" class="erp-selection-bar">
+                <span>已选 {{ selectedRows.length }} 台</span>
+                <el-button v-if="selectedPendingIds.length" size="small" type="warning" plain @click="openSendRefurbish()">开始整备（{{ selectedPendingIds.length }}）</el-button>
+                <el-button v-if="selectedSaleableIds.length" size="small" type="primary" @click="goSale(selectedSaleableIds)">批量销售（{{ selectedSaleableIds.length }}）</el-button>
+                <el-button v-if="selectedTransferableIds.length" size="small" @click="openTransfer()">批量调拨（{{ selectedTransferableIds.length }}）</el-button>
+            </div>
+            <ErpDataTable :data="table.data" v-loading="table.loading" :row-class-name="stockRowClassName" @selection-change="onSelectionChange">
                 <el-table-column type="selection" width="48" :selectable="row => row.status === 'in_stock'" />
                 <el-table-column label="设备" min-width="260">
                     <template #default="{ row }">
@@ -205,20 +208,20 @@
                             在库{{ row.stock_age_days || 0 }}天 · {{ row.turnover_label }}
                         </span>
                         <span v-else class="age-pill age-pill--muted">已退出</span>
-                        <div v-if="row.status === 'in_stock' && row.turnover_level !== 'healthy'" class="mt-1 text-xs text-gray-400">{{ row.turnover_action }}</div>
+                        <div v-if="row.status === 'in_stock' && row.turnover_level !== 'healthy'" class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">{{ row.turnover_action }}</div>
                     </template>
                 </el-table-column>
                 <el-table-column label="价格信息" min-width="175" align="right">
                     <template #default="{ row }">
-                        <div v-if="row.status === 'in_stock'" class="font-medium text-gray-900">{{ Number(row.retail_price || 0) > 0 ? money(row.retail_price) : (Number(row.estimate_sale_price || 0) > 0 ? money(row.estimate_sale_price) : '-') }}</div>
-                        <div v-else-if="hasEffectiveOutbound(row)" class="font-medium text-gray-900">成交 {{ money(row.outbound_net_sale_amount) }}</div>
-                        <div v-else class="font-medium text-gray-400">-</div>
+                        <div v-if="row.status === 'in_stock'" class="font-medium text-[color:var(--el-text-color-primary)]">{{ Number(row.retail_price || 0) > 0 ? money(row.retail_price) : (Number(row.estimate_sale_price || 0) > 0 ? money(row.estimate_sale_price) : '-') }}</div>
+                        <div v-else-if="hasEffectiveOutbound(row)" class="font-medium text-[color:var(--el-text-color-primary)]">成交 {{ money(row.outbound_net_sale_amount) }}</div>
+                        <div v-else class="font-medium text-[color:var(--el-text-color-secondary)]">-</div>
                         <el-popover v-if="canViewCost && row.cost_summary" placement="left" trigger="hover" :width="340">
-                            <template #reference><button type="button" class="mt-1 cursor-help text-xs text-blue-600">总成本 {{ money(row.total_cost) }} ⓘ</button></template>
+                            <template #reference><button type="button" class="mt-1 cursor-help text-xs text-[color:var(--erp-text-accent)]">总成本 {{ money(row.total_cost) }} ⓘ</button></template>
                             <ErpStockCostBreakdown :summary="row.cost_summary" />
                         </el-popover>
-                        <div v-else-if="canViewCost" class="mt-1 text-xs text-gray-500">总成本 {{ money(row.total_cost) }}</div>
-                        <div v-if="canViewProfit && hasEffectiveOutbound(row)" class="mt-1 text-xs" :class="Number(row.outbound_profit || 0) >= 0 ? 'text-green-600' : 'text-red-600'">毛利 {{ money(row.outbound_profit) }}</div>
+                        <div v-else-if="canViewCost" class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">总成本 {{ money(row.total_cost) }}</div>
+                        <div v-if="canViewProfit && hasEffectiveOutbound(row)" class="mt-1 text-xs" :class="Number(row.outbound_profit || 0) >= 0 ? 'text-[color:var(--el-color-success)]' : 'text-[color:var(--el-color-danger)]'">毛利 {{ money(row.outbound_profit) }}</div>
                     </template>
                 </el-table-column>
                 <el-table-column label="出库" min-width="240">
@@ -246,7 +249,7 @@
                 <el-table-column label="当前库存 / 流转" min-width="240">
                     <template #default="{ row }">
                         <template v-if="row.status === 'in_stock'">
-                            <div class="mb-2 text-xs text-gray-500">{{ [row.warehouse_name, row.location_name].filter(Boolean).join(' / ') || '当前无库存位置' }}</div>
+                            <div class="mb-2 text-xs text-[color:var(--el-text-color-secondary)]">{{ [row.warehouse_name, row.location_name].filter(Boolean).join(' / ') || '当前无库存位置' }}</div>
                             <div class="flex flex-wrap gap-1">
                                 <el-tag type="success">库存中</el-tag>
                                 <el-tag v-if="row.ownership_type === 'consigned' || row.warehouse_policy?.warehouse_type === 'consignment'" type="warning" effect="plain">客户代卖</el-tag>
@@ -254,15 +257,15 @@
                                 <el-tag :type="refurbishMeta(row.refurbish_status).type" effect="plain">{{ refurbishMeta(row.refurbish_status).label }}</el-tag>
                                 <el-tag :type="targetMeta(row.sale_target).type" effect="plain">{{ targetMeta(row.sale_target).label }}</el-tag>
                                 <el-tag v-if="row.sale_target === 'mall'" :type="listingMeta(row.listing_status).type" effect="plain">{{ listingMeta(row.listing_status).label }}</el-tag>
-                                <span v-if="row.task_assignee_name" class="text-xs text-gray-400">负责人 {{ row.task_assignee_name }}</span>
+                                <span v-if="row.task_assignee_name" class="text-xs text-[color:var(--el-text-color-secondary)]">负责人 {{ row.task_assignee_name }}</span>
                             </div>
                             <el-tooltip v-if="row.listing_sync?.last_error" :content="row.listing_sync.last_error" placement="top">
-                                <div class="mt-2 max-w-full cursor-help truncate text-xs text-red-500">
+                                <div class="mt-2 max-w-full cursor-help truncate text-xs text-[color:var(--el-color-danger)]">
                                     商城处理失败：{{ row.listing_sync.last_error }}
                                 </div>
                             </el-tooltip>
                             <el-button v-if="row.inspection?.count" class="mt-2" link type="primary" @click="openDetail(row)">查看质检 {{ row.inspection.count }} 项<span v-if="Number(row.inspection.counts?.general || 0) + Number(row.inspection.counts?.abnormal || 0)"> · 需关注 {{ Number(row.inspection.counts?.general || 0) + Number(row.inspection.counts?.abnormal || 0) }}</span></el-button>
-                            <div v-if="row.inspection?.manual_notes?.length" class="mt-2 text-xs text-gray-500 line-clamp-1" :title="row.inspection.manual_notes[0].text">备注：{{ row.inspection.manual_notes[0].text }}</div>
+                            <div v-if="row.inspection?.manual_notes?.length" class="mt-2 text-xs text-[color:var(--el-text-color-secondary)] line-clamp-1" :title="row.inspection.manual_notes[0].text">备注：{{ row.inspection.manual_notes[0].text }}</div>
                         </template>
                         <div v-else class="stock-exit-state" :class="stockExitToneClass(row.status)">
                             <span class="stock-exit-state__dot"></span>
@@ -293,7 +296,7 @@
                         </div>
                     </template>
                 </el-table-column>
-                <el-table-column label="操作" fixed="right" width="260" align="center">
+                <el-table-column label="操作" fixed="right" width="180" align="center">
                     <template #default="{ row }">
                         <el-button type="primary" link @click="openDetail(row)">档案</el-button>
                         <el-button v-if="row.status === 'in_stock'" type="primary" link @click="handleTurnoverAction(row)">{{ row.turnover_action_label || '处理' }}</el-button>
@@ -312,9 +315,9 @@
                         </el-dropdown>
                     </template>
                 </el-table-column>
-            </el-table>
+            </ErpDataTable>
 
-            <div class="mt-4 flex justify-end">
+            <div class="mt-4 flex justify-end erp-pagination">
                 <el-pagination
                     v-model:current-page="table.page"
                     v-model:page-size="table.limit"
@@ -324,14 +327,14 @@
                     @current-change="loadList"
                 />
             </div>
-        </el-card>
+        </section>
         <ErpSaleProfitReport v-model="ledgerVisible" initial-preset="inventory" />
 
-        <HsxDialog :confirm-loading="flow.saving" v-model="flow.visible" :title="flowDialogTitle" width="680px" destroy-on-close>
+        <HsxDialog class="erp-desktop-overlay" :confirm-loading="flow.saving" v-model="flow.visible" :title="flowDialogTitle" width="680px" destroy-on-close>
             <el-form label-width="96px">
-                <div class="mt-4 rounded border border-gray-100 bg-gray-50 px-4 py-3">
+                <div class="mt-4 rounded border border-[color:var(--el-border-color)] bg-[var(--el-fill-color-light)] px-4 py-3">
                     <div class="font-medium">{{ flow.row?.model || '-' }}</div>
-                    <div class="mt-1 text-xs text-gray-500">{{ flow.row?.spec || '未填写规格' }} · IMEI {{ flow.row?.imei || '-' }}</div>
+                    <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">{{ flow.row?.spec || '未填写规格' }} · IMEI {{ flow.row?.imei || '-' }}</div>
                 </div>
                 <div v-if="flow.mode === 'all'" class="mt-4 grid grid-cols-1 gap-x-4 md:grid-cols-2">
                     <el-form-item label="整备状态">
@@ -350,7 +353,7 @@
                     <el-form-item label="上架状态">
                         <div class="flex min-h-8 flex-col items-start justify-center gap-1">
                             <el-tag :type="listingMeta(flow.form.listing_status).type" effect="plain">{{ listingMeta(flow.form.listing_status).label }}</el-tag>
-                            <span class="text-xs leading-5 text-gray-400">保存后由仓库规则和资料完整度自动判断；商城交接及上架结果由渠道回执更新。</span>
+                            <span class="text-xs leading-5 text-[color:var(--el-text-color-secondary)]">保存后由仓库规则和资料完整度自动判断；商城交接及上架结果由渠道回执更新。</span>
                         </div>
                     </el-form-item>
                     <el-form-item v-if="Number(flow.row?.sales_pricing?.enabled) !== 1" label="内部预估价">
@@ -371,18 +374,18 @@
             </template>
         </HsxDialog>
 
-        <HsxDialog v-model="mediaTask.visible" title="标准化拍摄与销售定价" width="520px" destroy-on-close>
+        <HsxDialog class="erp-desktop-overlay" v-model="mediaTask.visible" title="标准化拍摄与销售定价" width="520px" destroy-on-close>
             <div class="media-task">
                 <div class="media-task__device">
                     <div class="media-task__icon">拍</div>
                     <div class="min-w-0">
-                        <div class="truncate font-medium text-slate-800">{{ mediaTask.row?.model || '库存设备' }}</div>
-                        <div class="mt-1 truncate text-xs text-slate-500">{{ erpSerialText(mediaTask.row) }}</div>
+                        <div class="truncate font-medium text-[color:var(--el-text-color-primary)]">{{ mediaTask.row?.model || '库存设备' }}</div>
+                        <div class="mt-1 truncate text-xs text-[color:var(--el-text-color-secondary)]">{{ erpSerialText(mediaTask.row) }}</div>
                     </div>
                 </div>
-                <div v-if="mediaTask.data?.admin_path" class="mt-4 rounded-lg bg-slate-50 p-4">
+                <div v-if="mediaTask.data?.admin_path" class="mt-4 rounded-lg bg-[var(--el-fill-color-light)] p-4">
                     <div class="font-medium">自动拍摄工位</div>
-                    <p class="mt-2 text-sm text-slate-500">在拍照电脑操作：开始拍摄 → 翻面 → 选图提交。ERP 收到后再定价，不会自动上架。</p>
+                    <p class="mt-2 text-sm text-[color:var(--el-text-color-secondary)]">在拍照电脑操作：开始拍摄 → 翻面 → 选图提交。ERP 收到后再定价，不会自动上架。</p>
                     <el-button class="mt-3" type="primary" @click="openAutomaticPhoto">进入自动拍摄</el-button>
                 </div>
                 <el-collapse v-if="mediaTask.qr" class="mt-4">
@@ -390,8 +393,8 @@
                 <div class="media-task__content">
                     <img :src="mediaTask.qr" class="media-task__qr" alt="移动拍摄二维码" />
                     <div class="media-task__copy">
-                        <div class="font-medium text-slate-800">使用手机扫码继续</div>
-                        <div class="mt-2 text-sm leading-6 text-slate-500">手机拍照、去掉不需要的图片，确认后回传 ERP；价格在 ERP 中继续填写。</div>
+                        <div class="font-medium text-[color:var(--el-text-color-primary)]">使用手机扫码继续</div>
+                        <div class="mt-2 text-sm leading-6 text-[color:var(--el-text-color-secondary)]">手机拍照、去掉不需要的图片，确认后回传 ERP；价格在 ERP 中继续填写。</div>
                         <el-button class="mt-4" type="primary" plain @click="copyMediaTaskUrl">复制拍摄链接</el-button>
                     </div>
                 </div>
@@ -406,8 +409,8 @@
             </template>
         </HsxDialog>
 
-        <HsxDialog :confirm-loading="retail.saving" v-model="retail.visible" :title="Number(retail.row?.retail_price || 0) > 0 ? '调整销售价' : '设置销售价'" width="520px" destroy-on-close>
-            <div class="rounded-lg bg-slate-50 px-4 py-3"><div class="font-medium text-slate-800">{{ retail.row?.model || '-' }}</div><div class="mt-1 text-xs text-slate-500">IMEI {{ retail.row?.imei || '-' }}<span v-if="canViewCost"> · 成本 {{ money(retail.row?.total_cost) }}</span></div></div>
+        <HsxDialog class="erp-desktop-overlay" :confirm-loading="retail.saving" v-model="retail.visible" :title="Number(retail.row?.retail_price || 0) > 0 ? '调整销售价' : '设置销售价'" width="520px" destroy-on-close>
+            <div class="rounded-lg bg-[var(--el-fill-color-light)] px-4 py-3"><div class="font-medium text-[color:var(--el-text-color-primary)]">{{ retail.row?.model || '-' }}</div><div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">IMEI {{ retail.row?.imei || '-' }}<span v-if="canViewCost"> · 成本 {{ money(retail.row?.total_cost) }}</span></div></div>
             <el-form class="mt-4" label-width="92px">
                 <el-form-item label="当前零售价"><span>{{ Number(retail.row?.retail_price || 0) > 0 ? money(retail.row?.retail_price) : '未设置' }}</span></el-form-item>
                 <el-form-item :label="salesPriceLabel(retail.row)" required><div class="w-full"><el-input-number v-model="retail.form.retail_price" :min="0.01" :precision="2" :controls="false" class="!w-full" /><div class="text-xs text-primary mt-2">{{ salesPricePreview(retail.row?.sales_pricing, retail.form.retail_price) }}</div></div></el-form-item>
@@ -416,7 +419,7 @@
             <template #footer><el-button :disabled="retail.saving" @click="retail.visible=false">取消</el-button><el-button :disabled="retail.saving" type="primary" :loading="retail.saving" @click="submitRetailPrice">确认保存</el-button></template>
         </HsxDialog>
 
-        <HsxDialog :confirm-loading="transfer.saving" v-model="transfer.visible" :title="transfer.preview?.action === 'buyout' ? '代卖设备转为自有' : '库存调拨'" width="560px" destroy-on-close>
+        <HsxDialog class="erp-desktop-overlay" :confirm-loading="transfer.saving" v-model="transfer.visible" :title="transfer.preview?.action === 'buyout' ? '代卖设备转为自有' : '库存调拨'" width="560px" destroy-on-close>
             <HsxNotice :title="`本次处理 ${transfer.assetIds.length} 台设备。系统会先核对物权和目标仓规则，不会通过普通调拨隐式改变物权。`" type="info" :closable="false" />
             <el-form class="mt-4" label-width="88px">
                 <el-form-item label="目标仓库" required><el-select v-model="transfer.form.warehouse_id" class="w-full" placeholder="选择目标仓库" @change="onTransferWarehouseChange"><el-option v-for="item in warehouses" :key="item.id" :label="item.warehouse_name" :value="item.id" /></el-select></el-form-item>
@@ -425,9 +428,9 @@
                     <HsxNotice v-if="transfer.preview" :title="transfer.preview.label" :description="transfer.preview.reason" :default-expanded="!transfer.preview.allowed" :reset-key="transfer.preview.reason" :type="transfer.preview.allowed ? (transfer.preview.action === 'buyout' ? 'warning' : 'success') : 'error'" :closable="false" />
                 </div>
                 <template v-if="transfer.preview?.action === 'buyout'">
-                    <div class="mb-4 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm">
-                        <div class="font-medium text-slate-800">{{ transfer.preview.items?.[0]?.model || '代卖设备' }}</div>
-                        <div class="mt-1 text-slate-500">物权客户：{{ transfer.preview.items?.[0]?.party_name || '-' }} · IMEI {{ transfer.preview.items?.[0]?.imei || '-' }}</div>
+                    <div class="mb-4 rounded-lg border border-[color:var(--el-color-warning-light-8)] bg-[var(--el-color-warning-light-9)] px-4 py-3 text-sm">
+                        <div class="font-medium text-[color:var(--el-text-color-primary)]">{{ transfer.preview.items?.[0]?.model || '代卖设备' }}</div>
+                        <div class="mt-1 text-[color:var(--el-text-color-secondary)]">物权客户：{{ transfer.preview.items?.[0]?.party_name || '-' }} · IMEI {{ transfer.preview.items?.[0]?.imei || '-' }}</div>
                     </div>
                     <el-form-item label="确认回收价" required><el-input-number v-model="transfer.form.buyout_amount" :min="0.01" :precision="2" :controls="false" class="!w-full" placeholder="形成该设备采购应付" /></el-form-item>
                 </template>
@@ -436,16 +439,16 @@
             <template #footer><el-button :disabled="transfer.saving" @click="transfer.visible=false">取消</el-button><el-button type="primary" :disabled="(!transfer.preview?.allowed) || (transfer.saving)" :loading="transfer.saving" @click="submitTransfer">{{ transfer.preview?.action === 'buyout' ? '确认转为自有' : '确认调拨' }}</el-button></template>
         </HsxDialog>
 
-        <HsxDialog v-model="serialTrace.visible" title="串号追踪" width="920px" destroy-on-close>
+        <HsxDialog class="erp-desktop-overlay" v-model="serialTrace.visible" title="串号追踪" width="920px" destroy-on-close>
             <div class="mb-4 flex gap-2"><el-input v-model.trim="serialTrace.keyword" clearable :placeholder="canViewSupplier ? '输入 IMEI / SN / 型号 / 供货商' : '输入 IMEI / SN / 型号'" @keyup.enter="loadSerialTrace" /><el-button type="primary" @click="loadSerialTrace">查询</el-button></div>
             <HsxNotice class="mb-4" title="每次入库独立留痕" description="同一串号允许多次入库；每次作为独立记录，最新入库排在最上面。" />
             <div v-loading="serialTrace.loading" class="min-h-[120px]">
-                <div v-if="serialTrace.data.length" class="overflow-hidden rounded-lg border border-slate-200">
-                    <div class="grid gap-3 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-500" :class="canViewSupplier ? 'grid-cols-[minmax(220px,2fr)_minmax(140px,1fr)_170px_90px_100px_90px]' : 'grid-cols-[minmax(260px,2fr)_170px_90px_100px_90px]'">
+                <div v-if="serialTrace.data.length" class="overflow-hidden rounded-lg border border-[color:var(--el-border-color)]">
+                    <div class="grid gap-3 bg-[var(--el-fill-color-light)] px-4 py-3 text-xs font-medium text-[color:var(--el-text-color-secondary)]" :class="canViewSupplier ? 'grid-cols-[minmax(220px,2fr)_minmax(140px,1fr)_170px_90px_100px_90px]' : 'grid-cols-[minmax(260px,2fr)_170px_90px_100px_90px]'">
                         <span>设备</span><span v-if="canViewSupplier">供货商</span><span>入库时间</span><span>次数</span><span>状态</span><span>操作</span>
                     </div>
-                    <div v-for="row in serialTrace.data" :key="row.id" class="grid items-center gap-3 border-t border-slate-100 px-4 py-3 text-sm" :class="canViewSupplier ? 'grid-cols-[minmax(220px,2fr)_minmax(140px,1fr)_170px_90px_100px_90px]' : 'grid-cols-[minmax(260px,2fr)_170px_90px_100px_90px]'">
-                        <div class="min-w-0"><div class="truncate font-medium" :title="row.model">{{ row.model || '-' }}</div><div class="mt-1 text-xs text-blue-600">{{ row.serial_no || '-' }}</div><div class="mt-1 truncate text-xs text-gray-400" :title="row.spec">{{ row.spec || '-' }}</div></div>
+                    <div v-for="row in serialTrace.data" :key="row.id" class="grid items-center gap-3 border-t border-[color:var(--el-border-color)] px-4 py-3 text-sm" :class="canViewSupplier ? 'grid-cols-[minmax(220px,2fr)_minmax(140px,1fr)_170px_90px_100px_90px]' : 'grid-cols-[minmax(260px,2fr)_170px_90px_100px_90px]'">
+                        <div class="min-w-0"><div class="truncate font-medium" :title="row.model">{{ row.model || '-' }}</div><div class="mt-1 text-xs text-[color:var(--erp-text-accent)]">{{ row.serial_no || '-' }}</div><div class="mt-1 truncate text-xs text-[color:var(--el-text-color-secondary)]" :title="row.spec">{{ row.spec || '-' }}</div></div>
                         <div v-if="canViewSupplier" class="truncate" :title="row.party_name || '未记录'">{{ row.party_name || '未记录' }}</div>
                         <div>{{ formatTime(row.stock_in_at || row.create_at) }}</div>
                         <div><el-tag v-if="row.inbound_count > 1" type="warning">{{ row.inbound_count }} 次</el-tag><span v-else>首次</span></div>
@@ -458,63 +461,63 @@
             <div class="mt-4 flex justify-end"><el-pagination v-model:current-page="serialTrace.page" :page-size="serialTrace.limit" layout="total,prev,pager,next" :total="serialTrace.total" @current-change="loadSerialTrace" /></div>
         </HsxDialog>
 
-        <HsxDrawer v-model="serialTraceDetail.visible" title="串号生命周期" size="lg" destroy-on-close>
+        <HsxDrawer class="erp-desktop-overlay" v-model="serialTraceDetail.visible" title="串号生命周期" size="lg" destroy-on-close>
             <div v-loading="serialTraceDetail.loading" class="min-h-[320px]">
                 <template v-if="serialTraceDetail.data">
-                    <div class="rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-5">
+                    <div class="rounded-xl border border-[color:var(--el-color-primary-light-8)] bg-[var(--el-fill-color-light)] p-5">
                         <div class="flex items-start justify-between gap-4">
                             <div class="min-w-0">
-                                <div class="truncate text-lg font-semibold text-slate-900" :title="serialTraceDetail.data.model">{{ serialTraceDetail.data.model || '未填写设备名称' }}</div>
-                                <div class="mt-1 truncate text-sm text-slate-500" :title="serialTraceDetail.data.spec">{{ serialTraceDetail.data.spec || '未填写规格' }}</div>
+                                <div class="truncate text-lg font-semibold text-[color:var(--el-text-color-primary)]" :title="serialTraceDetail.data.model">{{ serialTraceDetail.data.model || '未填写设备名称' }}</div>
+                                <div class="mt-1 truncate text-sm text-[color:var(--el-text-color-secondary)]" :title="serialTraceDetail.data.spec">{{ serialTraceDetail.data.spec || '未填写规格' }}</div>
                             </div>
                             <el-tag :type="assetStatusMeta(serialTraceDetail.data.current_status).type">{{ assetStatusMeta(serialTraceDetail.data.current_status).label }}</el-tag>
                         </div>
-                        <div class="mt-4 flex items-center justify-between rounded-lg bg-white/80 px-4 py-3">
-                            <span class="text-sm text-slate-500">IMEI / SN</span>
-                            <span class="select-all font-semibold text-blue-700">{{ serialTraceDetail.data.serial_no || '-' }}</span>
+                        <div class="mt-4 flex items-center justify-between rounded-lg bg-[var(--el-bg-color-overlay)] px-4 py-3">
+                            <span class="text-sm text-[color:var(--el-text-color-secondary)]">IMEI / SN</span>
+                            <span class="select-all font-semibold text-[color:var(--erp-text-accent)]">{{ serialTraceDetail.data.serial_no || '-' }}</span>
                         </div>
                         <div class="mt-4 grid grid-cols-4 gap-3 text-center">
-                            <div><div class="text-xl font-bold text-slate-900">{{ serialTraceDetail.data.inbound_count || 0 }}</div><div class="mt-1 text-xs text-slate-500">入库次数</div></div>
-                            <div><div class="text-xl font-bold text-slate-900">{{ serialTraceDetail.data.sale_count || 0 }}</div><div class="mt-1 text-xs text-slate-500">销售次数</div></div>
-                            <div><div class="text-xl font-bold text-slate-900">{{ serialTraceDetail.data.after_sale_count || 0 }}</div><div class="mt-1 text-xs text-slate-500">售后退回</div></div>
-                            <div><div class="text-xl font-bold text-slate-900">{{ serialTraceDetail.data.purchase_return_count || 0 }}</div><div class="mt-1 text-xs text-slate-500">采购退货</div></div>
+                            <div><div class="text-xl font-bold text-[color:var(--el-text-color-primary)]">{{ serialTraceDetail.data.inbound_count || 0 }}</div><div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">入库次数</div></div>
+                            <div><div class="text-xl font-bold text-[color:var(--el-text-color-primary)]">{{ serialTraceDetail.data.sale_count || 0 }}</div><div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">销售次数</div></div>
+                            <div><div class="text-xl font-bold text-[color:var(--el-text-color-primary)]">{{ serialTraceDetail.data.after_sale_count || 0 }}</div><div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">售后退回</div></div>
+                            <div><div class="text-xl font-bold text-[color:var(--el-text-color-primary)]">{{ serialTraceDetail.data.purchase_return_count || 0 }}</div><div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">采购退货</div></div>
                         </div>
                     </div>
 
                     <div class="mt-6 flex items-end justify-between">
-                        <div><div class="font-semibold text-slate-900">入库周期</div><div class="mt-1 text-xs text-slate-400">同一串号每次重新入库均为一段独立业务</div></div>
+                        <div><div class="font-semibold text-[color:var(--el-text-color-primary)]">入库周期</div><div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">同一串号每次重新入库均为一段独立业务</div></div>
                     </div>
                     <div class="mt-3 grid grid-cols-2 gap-3">
-                        <button v-for="cycle in serialTraceDetail.data.cycles || []" :key="cycle.id" type="button" class="rounded-lg border p-4 text-left transition hover:border-blue-400 hover:bg-blue-50" :class="cycle.is_current ? 'border-blue-400 bg-blue-50' : 'border-slate-200 bg-white'" @click="openTraceCycle(cycle)">
-                            <div class="flex items-center justify-between gap-2"><span class="font-semibold text-blue-700">第 {{ cycle.cycle_no }} 次入库</span><el-tag v-if="cycle.is_current" size="small" type="primary">当前周期</el-tag></div>
-                            <div v-if="canViewSupplier" class="mt-2 truncate text-sm text-slate-700" :title="cycle.party_name || '未记录供应商'">{{ cycle.party_name || '未记录供应商' }}</div>
-                            <div class="mt-1 text-xs text-slate-400">{{ formatTime(cycle.stock_in_at || cycle.create_at) }}</div>
-                            <div class="mt-2 truncate text-xs text-slate-500" :title="`${cycle.warehouse_name || '未记录仓库'} / ${cycle.location_name || '未记录库位'}`">{{ cycle.warehouse_name || '未记录仓库' }} / {{ cycle.location_name || '未记录库位' }}</div>
+                        <button v-for="cycle in serialTraceDetail.data.cycles || []" :key="cycle.id" type="button" class="rounded-lg border p-4 text-left transition hover:border-[color:var(--el-color-primary-light-5)] hover:bg-[var(--el-color-primary-light-9)]" :class="cycle.is_current ? 'border-[color:var(--el-color-primary-light-5)] bg-[var(--el-color-primary-light-9)]' : 'border-[color:var(--el-border-color)] bg-[var(--el-bg-color-overlay)]'" @click="openTraceCycle(cycle)">
+                            <div class="flex items-center justify-between gap-2"><span class="font-semibold text-[color:var(--erp-text-accent)]">第 {{ cycle.cycle_no }} 次入库</span><el-tag v-if="cycle.is_current" size="small" type="primary">当前周期</el-tag></div>
+                            <div v-if="canViewSupplier" class="mt-2 truncate text-sm text-[color:var(--el-text-color-regular)]" :title="cycle.party_name || '未记录供应商'">{{ cycle.party_name || '未记录供应商' }}</div>
+                            <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">{{ formatTime(cycle.stock_in_at || cycle.create_at) }}</div>
+                            <div class="mt-2 truncate text-xs text-[color:var(--el-text-color-secondary)]" :title="`${cycle.warehouse_name || '未记录仓库'} / ${cycle.location_name || '未记录库位'}`">{{ cycle.warehouse_name || '未记录仓库' }} / {{ cycle.location_name || '未记录库位' }}</div>
                         </button>
                     </div>
 
-                    <div class="mb-4 mt-7"><div class="font-semibold text-slate-900">完整流转时间轴</div><div class="mt-1 text-xs text-slate-400">由早到晚展示采购、销售、售后及采退，每一步均保留经办人</div></div>
+                    <div class="mb-4 mt-7"><div class="font-semibold text-[color:var(--el-text-color-primary)]">完整流转时间轴</div><div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">由早到晚展示采购、销售、售后及采退，每一步均保留经办人</div></div>
                     <el-empty v-if="!(serialTraceDetail.data.timeline || []).length" description="暂无流转记录" />
                     <el-timeline v-else class="pr-3">
                         <el-timeline-item v-for="(node, index) in serialTraceDetail.data.timeline || []" :key="`${node.id || index}-${node.cycle_no || 1}`" :timestamp="formatTime(node.occurred_at || node.create_at)" placement="top" :type="traceActionMeta(node.action).type">
-                            <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                            <div class="rounded-lg border border-[color:var(--el-border-color)] bg-[var(--el-bg-color-overlay)] p-4 shadow-sm">
                                 <div class="flex items-start justify-between gap-3">
-                                    <div><span class="font-semibold text-slate-900">{{ node.action_text || assetActionLabel(node.action) }}</span><span class="ml-2 text-xs text-slate-400">第 {{ node.cycle_no || 1 }} 次入库周期</span></div>
+                                    <div><span class="font-semibold text-[color:var(--el-text-color-primary)]">{{ node.action_text || assetActionLabel(node.action) }}</span><span class="ml-2 text-xs text-[color:var(--el-text-color-secondary)]">第 {{ node.cycle_no || 1 }} 次入库周期</span></div>
                                     <el-tag size="small" effect="plain" :type="traceActionMeta(node.action).type">{{ traceActionMeta(node.action).label }}</el-tag>
                                 </div>
-                                <div v-if="node.before_status || node.after_status" class="mt-3 flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-500">
-                                    <span>{{ node.before_status_text || assetStatusMeta(node.before_status).label }}</span><span class="text-slate-300">→</span><strong class="text-slate-700">{{ node.after_status_text || assetStatusMeta(node.after_status).label }}</strong>
+                                <div v-if="node.before_status || node.after_status" class="mt-3 flex items-center gap-2 rounded-md bg-[var(--el-fill-color-light)] px-3 py-2 text-sm text-[color:var(--el-text-color-secondary)]">
+                                    <span>{{ node.before_status_text || assetStatusMeta(node.before_status).label }}</span><span class="text-[color:var(--el-text-color-secondary)]">→</span><strong class="text-[color:var(--el-text-color-regular)]">{{ node.after_status_text || assetStatusMeta(node.after_status).label }}</strong>
                                 </div>
-                                <div v-if="canViewCost && isTraceCostAdjust(node)" class="mt-3 rounded-md border border-amber-100 bg-amber-50 px-3 py-3">
-                                    <div class="flex items-center justify-between gap-3"><span class="text-sm font-medium text-amber-800">{{ node.cost_type_text || '成本调整' }}</span><strong :class="Number(node.cost_delta || 0) >= 0 ? 'text-red-600' : 'text-green-600'">{{ signedMoney(node.cost_delta) }}</strong></div>
-                                    <div class="mt-1 text-xs text-amber-700/80">设备成本：{{ money(node.before_total_cost) }} → {{ money(node.after_total_cost) }}</div>
+                                <div v-if="canViewCost && isTraceCostAdjust(node)" class="mt-3 rounded-md border border-[color:var(--el-color-warning-light-8)] bg-[var(--el-color-warning-light-9)] px-3 py-3">
+                                    <div class="flex items-center justify-between gap-3"><span class="text-sm font-medium text-[color:var(--el-color-warning)]">{{ node.cost_type_text || '成本调整' }}</span><strong :class="Number(node.cost_delta || 0) >= 0 ? 'text-[color:var(--el-color-danger)]' : 'text-[color:var(--el-color-success)]'">{{ signedMoney(node.cost_delta) }}</strong></div>
+                                    <div class="mt-1 text-xs text-[color:var(--el-color-warning)]">设备成本：{{ money(node.before_total_cost) }} → {{ money(node.after_total_cost) }}</div>
                                 </div>
-                                <div class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-slate-500">
-                                    <div>操作人：<span class="text-slate-700">{{ operatorName(node) }}</span></div>
-                                    <div v-if="node.party_name">往来方：<span class="text-slate-700">{{ node.party_name }}</span></div>
-                                    <div v-if="node.source_no" class="col-span-2 truncate" :title="node.source_no">关联单号：<span class="select-all text-slate-700">{{ node.source_no }}</span></div>
+                                <div class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-[color:var(--el-text-color-secondary)]">
+                                    <div>操作人：<span class="text-[color:var(--el-text-color-regular)]">{{ operatorName(node) }}</span></div>
+                                    <div v-if="node.party_name">往来方：<span class="text-[color:var(--el-text-color-regular)]">{{ node.party_name }}</span></div>
+                                    <div v-if="node.source_no" class="col-span-2 truncate" :title="node.source_no">关联单号：<span class="select-all text-[color:var(--el-text-color-regular)]">{{ node.source_no }}</span></div>
                                 </div>
-                                <div v-if="node.remark" class="mt-3 border-t border-dashed border-slate-200 pt-3 text-sm leading-6 text-slate-600">{{ node.remark }}</div>
+                                <div v-if="node.remark" class="mt-3 border-t border-dashed border-[color:var(--el-border-color)] pt-3 text-sm leading-6 text-[color:var(--el-text-color-regular)]">{{ node.remark }}</div>
                             </div>
                         </el-timeline-item>
                     </el-timeline>
@@ -522,11 +525,11 @@
             </div>
         </HsxDrawer>
 
-        <HsxDialog :confirm-loading="expense.saving" v-model="expense.visible" title="设备成本调整" width="680px" destroy-on-close>
+        <HsxDialog class="erp-desktop-overlay" :confirm-loading="expense.saving" v-model="expense.visible" title="设备成本调整" width="680px" destroy-on-close>
             <HsxNotice :title="costTypeTip" type="warning" :closable="false" />
-            <div class="mt-4 rounded border border-gray-100 bg-gray-50 px-4 py-3">
+            <div class="mt-4 rounded border border-[color:var(--el-border-color)] bg-[var(--el-fill-color-light)] px-4 py-3">
                 <div class="font-medium">{{ expense.row?.model || '-' }}</div>
-                <div class="mt-1 text-xs text-gray-500">IMEI {{ expense.row?.imei || '-' }} · 当前成本 {{ money(expense.row?.total_cost) }}</div>
+                <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">IMEI {{ expense.row?.imei || '-' }} · 当前成本 {{ money(expense.row?.total_cost) }}</div>
             </div>
             <el-form class="mt-4" label-width="110px">
                 <el-form-item label="成本类型" required>
@@ -539,7 +542,7 @@
                 <el-form-item v-if="expense.form.cost_type === 'purchase_adjust'" label="本次调价差额">
                     <div>
                         <div class="font-semibold">{{ money(Number(expense.form.after_cost || 0) - Number(expense.row?.total_cost || 0)) }}</div>
-                        <div class="text-xs text-gray-500">上面填写设备总成本，保留原有整备费用。例：总成本4800、另补采购价100，应填4900。</div>
+                        <div class="text-xs text-[color:var(--el-text-color-secondary)]">上面填写设备总成本，保留原有整备费用。例：总成本4800、另补采购价100，应填4900。</div>
                     </div>
                 </el-form-item>
                 <el-form-item label="调整原因" required><el-input v-model.trim="expense.form.reason" type="textarea" :rows="3" placeholder="说明供应商调价或账面修正原因；整备费用请走整备完工" /></el-form-item>
@@ -550,9 +553,9 @@
             </template>
         </HsxDialog>
 
-        <HsxDialog :confirm-loading="sendRefurbish.saving" v-model="sendRefurbish.visible" title="开始整备" width="600px" destroy-on-close>
+        <HsxDialog class="erp-desktop-overlay" :confirm-loading="sendRefurbish.saving" v-model="sendRefurbish.visible" title="开始整备" width="600px" destroy-on-close>
             <HsxNotice :title="sendRefurbish.form.tracking_mode === 'external' ? '外送追踪会记录这些设备当前在哪家整备商手中。' : '简易登记不追踪在谁手中，完工时再填写每项服务商和费用。'" type="info" :closable="false" />
-            <div class="my-4 rounded-lg bg-slate-50 p-4"><strong>本次 {{ sendRefurbish.assetIds.length }} 台设备</strong><div class="mt-1 text-xs text-gray-500">一次确认即可完成整筐设备交接，设备仍归属原库存位置。</div></div>
+            <div class="my-4 rounded-lg bg-[var(--el-fill-color-light)] p-4"><strong>本次 {{ sendRefurbish.assetIds.length }} 台设备</strong><div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">一次确认即可完成整筐设备交接，设备仍归属原库存位置。</div></div>
             <el-form label-width="100px">
                 <el-form-item label="跟踪方式"><el-radio-group v-model="sendRefurbish.form.tracking_mode"><el-radio-button label="simple">简易登记</el-radio-button><el-radio-button label="external">外送追踪</el-radio-button></el-radio-group></el-form-item>
                 <el-form-item v-if="sendRefurbish.form.tracking_mode === 'external'" label="整备商" required><counterparty-select v-model="sendRefurbish.form.provider_party_id" role-type="supplier" placeholder="选择当前接收设备的整备商" /></el-form-item>
@@ -561,26 +564,26 @@
             <template #footer><el-button :disabled="sendRefurbish.saving" @click="sendRefurbish.visible=false">取消</el-button><el-button :disabled="sendRefurbish.saving" type="warning" :loading="sendRefurbish.saving" @click="submitSendRefurbish">确认开始</el-button></template>
         </HsxDialog>
 
-        <HsxDialog :confirm-loading="completeRefurbish.saving" v-model="completeRefurbish.visible" title="登记整备结果" width="820px" destroy-on-close>
-            <div class="rounded-lg bg-slate-50 p-4"><div class="font-medium">{{ completeRefurbish.row?.model || '-' }}</div><div class="mt-1 text-xs text-gray-500">IMEI {{ completeRefurbish.row?.imei || '-' }}<span v-if="canViewCost"> · 当前成本 {{ money(completeRefurbish.row?.total_cost) }}</span></div></div>
+        <HsxDialog class="erp-desktop-overlay" :confirm-loading="completeRefurbish.saving" v-model="completeRefurbish.visible" title="登记整备结果" width="820px" destroy-on-close>
+            <div class="rounded-lg bg-[var(--el-fill-color-light)] p-4"><div class="font-medium">{{ completeRefurbish.row?.model || '-' }}</div><div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">IMEI {{ completeRefurbish.row?.imei || '-' }}<span v-if="canViewCost"> · 当前成本 {{ money(completeRefurbish.row?.total_cost) }}</span></div></div>
             <el-form class="mt-4" label-width="100px">
                 <el-form-item label="整备结果" required><el-radio-group v-model="completeRefurbish.form.result"><el-radio-button label="success">修复成功</el-radio-button><el-radio-button label="partial">部分修复</el-radio-button><el-radio-button label="failed">修复失败</el-radio-button></el-radio-group></el-form-item>
-                <el-form-item label="实际项目"><div class="w-full space-y-2"><div v-for="(item,index) in completeRefurbish.form.refurbish_items" :key="index" class="grid grid-cols-12 gap-2"><el-input v-model.trim="item.name" class="col-span-4" placeholder="例如换屏、换电池、人工" /><el-input-number v-model="item.amount" class="!w-full col-span-3" :min="0" :precision="2" :controls="false" placeholder="金额" /><div class="col-span-4"><counterparty-select v-model="item.party_id" role-type="supplier" placeholder="服务商" /></div><el-button class="col-span-1" text type="danger" @click="removeRefurbishItem(index)">删除</el-button></div><el-button plain type="primary" @click="addRefurbishItem">+ 添加实际整备项目</el-button><div class="text-xs text-gray-400">没有产生费用可以不添加；每项可选择不同整备商，系统按设备、按服务商分别生成应付。</div></div></el-form-item>
+                <el-form-item label="实际项目"><div class="w-full space-y-2"><div v-for="(item,index) in completeRefurbish.form.refurbish_items" :key="index" class="grid grid-cols-12 gap-2"><el-input v-model.trim="item.name" class="col-span-4" placeholder="例如换屏、换电池、人工" /><el-input-number v-model="item.amount" class="!w-full col-span-3" :min="0" :precision="2" :controls="false" placeholder="金额" /><div class="col-span-4"><counterparty-select v-model="item.party_id" role-type="supplier" placeholder="服务商" /></div><el-button class="col-span-1" text type="danger" @click="removeRefurbishItem(index)">删除</el-button></div><el-button plain type="primary" @click="addRefurbishItem">+ 添加实际整备项目</el-button><div class="text-xs text-[color:var(--el-text-color-secondary)]">没有产生费用可以不添加；每项可选择不同整备商，系统按设备、按服务商分别生成应付。</div></div></el-form-item>
                 <el-form-item label="完成后仓库"><el-select v-model="completeRefurbish.form.warehouse_id" class="w-full" placeholder="默认保留原仓库" clearable @change="completeRefurbish.form.location_id=0"><el-option v-for="item in warehouses" :key="item.id" :label="item.warehouse_name" :value="item.id" /></el-select></el-form-item>
                 <el-form-item label="完成后库位"><el-select v-model="completeRefurbish.form.location_id" class="w-full" placeholder="默认保留原库位" clearable><el-option v-for="item in completeLocations" :key="item.id" :label="item.location_name" :value="item.id" /></el-select></el-form-item>
                 <el-form-item label="结果说明"><el-input v-model.trim="completeRefurbish.form.remark" type="textarea" :rows="3" placeholder="记录实际维修结果、未修好原因或异常去向" /></el-form-item>
-                <el-form-item label="整备凭证"><ErpFinanceVoucherUpload v-model="completeRefurbish.form.voucher_urls" /><div class="ml-3 text-xs text-gray-400">可上传维修清单、服务商账单或设备返回照片；实际付款凭证由财务付款时上传。</div></el-form-item>
+                <el-form-item label="整备凭证"><ErpFinanceVoucherUpload v-model="completeRefurbish.form.voucher_urls" /><div class="ml-3 text-xs text-[color:var(--el-text-color-secondary)]">可上传维修清单、服务商账单或设备返回照片；实际付款凭证由财务付款时上传。</div></el-form-item>
             </el-form>
             <template #footer><el-button :disabled="completeRefurbish.saving" @click="completeRefurbish.visible=false">取消</el-button><el-button :disabled="completeRefurbish.saving" type="primary" :loading="completeRefurbish.saving" @click="submitCompleteRefurbish">确认完工</el-button></template>
         </HsxDialog>
 
-        <HsxDrawer v-model="detail.visible" title="设备档案" subtitle="核对报价、质检与流转记录" size="lg" destroy-on-close>
+        <HsxDrawer class="erp-desktop-overlay" v-model="detail.visible" title="设备档案" subtitle="核对报价、质检与流转记录" size="lg" destroy-on-close>
             <div v-loading="detail.loading">
                 <template v-if="detail.data">
                     <div class="flex flex-wrap items-start justify-between gap-4">
                         <div>
                             <div class="text-lg font-semibold">{{ detail.data.model || '-' }}</div>
-                            <div class="mt-1 text-sm text-gray-500">{{ assetSubTitle(detail.data) }}</div>
+                            <div class="mt-1 text-sm text-[color:var(--el-text-color-secondary)]">{{ assetSubTitle(detail.data) }}</div>
                         </div>
                         <div class="flex flex-wrap items-center gap-1">
                             <el-tag :type="assetStatusMeta(detail.data.status).type">{{ assetStatusMeta(detail.data.status).label }}</el-tag>
@@ -607,7 +610,7 @@
                         <el-descriptions-item :label="detail.data.status === 'in_stock' ? '当前仓库' : '出库仓库'">{{ [detail.data.warehouse_name, detail.data.location_name].filter(Boolean).join(' / ') || '-' }}</el-descriptions-item>
                         <el-descriptions-item label="质检员">{{ detail.data.inspector_name || '-' }}</el-descriptions-item>
                         <el-descriptions-item v-if="detail.data.listing_sync?.last_error" label="商城异常" :span="2">
-                            <span class="text-red-500">{{ detail.data.listing_sync.last_error }}</span>
+                            <span class="text-[color:var(--el-color-danger)]">{{ detail.data.listing_sync.last_error }}</span>
                         </el-descriptions-item>
                         <el-descriptions-item v-if="detail.data.status !== 'in_stock'" label="原成交价">{{ Number(detail.data.sale_price || detail.data.last_sale_item?.sale_price || 0) ? money(detail.data.sale_price || detail.data.last_sale_item?.sale_price) : '-' }}</el-descriptions-item>
                         <el-descriptions-item v-if="detail.data.status !== 'in_stock'" label="售后补差">{{ Number(detail.data.sale_compensation_amount || 0) ? `-${money(detail.data.sale_compensation_amount)}` : money(0) }}</el-descriptions-item>
@@ -659,7 +662,7 @@
                             <el-table-column label="仓库库位" min-width="220">
                                 <template #default="{ row }">
                                     <div>{{ [row.after_warehouse_name, row.after_location_name].filter(Boolean).join(' / ') || '-' }}</div>
-                                    <div v-if="row.before_warehouse_name && row.before_warehouse_name !== row.after_warehouse_name" class="text-xs text-gray-400">
+                                    <div v-if="row.before_warehouse_name && row.before_warehouse_name !== row.after_warehouse_name" class="text-xs text-[color:var(--el-text-color-secondary)]">
                                         原：{{ [row.before_warehouse_name, row.before_location_name].filter(Boolean).join(' / ') }}
                                     </div>
                                 </template>
@@ -667,13 +670,13 @@
                             <el-table-column v-if="canViewCost" label="成本变化" width="190" align="right">
                                 <template #default="{ row }">
                                     <div>{{ money(row.before_total_cost) }} → {{ money(row.after_total_cost) }}</div>
-                                    <div v-if="Number(row.cost_delta || 0)" class="text-xs" :class="Number(row.cost_delta || 0) > 0 ? 'text-red-500' : 'text-green-600'">
+                                    <div v-if="Number(row.cost_delta || 0)" class="text-xs" :class="Number(row.cost_delta || 0) > 0 ? 'text-[color:var(--el-color-danger)]' : 'text-[color:var(--el-color-success)]'">
                                         {{ Number(row.cost_delta || 0) > 0 ? '+' : '' }}{{ money(row.cost_delta) }}
                                     </div>
                                 </template>
                             </el-table-column>
                             <el-table-column label="来源" min-width="160">
-                                <template #default="{ row }"><div>{{ row.source_no || '-' }}</div><div v-if="row.source_type" class="mt-1 text-xs text-gray-400">{{ row.source_type_text || sourceTypeLabel(row.source_type) }}</div></template>
+                                <template #default="{ row }"><div>{{ row.source_no || '-' }}</div><div v-if="row.source_type" class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">{{ row.source_type_text || sourceTypeLabel(row.source_type) }}</div></template>
                             </el-table-column>
                             <el-table-column label="操作人" min-width="110">
                                 <template #default="{ row }">{{ operatorName(row) }}</template>
@@ -694,8 +697,8 @@
                                 </template>
                             </el-table-column>
                             <el-table-column label="金额" width="130" align="right"><template #default="{ row }">{{ money(row.amount) }}</template></el-table-column>
-                            <el-table-column label="结算结果" min-width="150"><template #default="{ row }"><span :class="timelineSettlementText(row).includes('待') ? 'text-orange-500' : 'text-green-600'">{{ timelineSettlementText(row) }}</span></template></el-table-column>
-                            <el-table-column label="来源" min-width="180"><template #default="{ row }"><div>{{ row._display_source_no || row.source_no || '-' }}</div><div v-if="row.source_type" class="mt-1 text-xs text-gray-400">{{ row._merged_compensation ? '售后补差' : (row.source_type_text || sourceTypeLabel(row.source_type)) }}</div></template></el-table-column>
+                            <el-table-column label="结算结果" min-width="150"><template #default="{ row }"><span :class="timelineSettlementText(row).includes('待') ? 'text-[color:var(--el-color-warning)]' : 'text-[color:var(--el-color-success)]'">{{ timelineSettlementText(row) }}</span></template></el-table-column>
+                            <el-table-column label="来源" min-width="180"><template #default="{ row }"><div>{{ row._display_source_no || row.source_no || '-' }}</div><div v-if="row.source_type" class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">{{ row._merged_compensation ? '售后补差' : (row.source_type_text || sourceTypeLabel(row.source_type)) }}</div></template></el-table-column>
                             <el-table-column label="说明" min-width="240"><template #default="{ row }">{{ accountLedgerRemark(row) }}</template></el-table-column>
                             <el-table-column label="时间" width="180"><template #default="{ row }">{{ formatTime(row.create_at || row.occurred_at) }}</template></el-table-column>
                         </el-table>
@@ -703,14 +706,17 @@
                 </template>
             </div>
         </HsxDrawer>
-    </HsxPage>
+    </ErpDesktopPage>
 </template>
 
 <script setup lang="ts">
+import ErpDesktopPage from '@/addon/hsx_erp/components/ErpDesktopPage.vue'
+import ErpWorkspaceHeader from '@/addon/hsx_erp/components/ErpWorkspaceHeader.vue'
+import ErpDataTable from '@/addon/hsx_erp/components/ErpDataTable.vue'
 import { erpEnumLabel, erpNamedLabel, erpSerialText, erpSourceLabel } from '@/addon/hsx_erp/utils/display'
 import { computed, nextTick, onActivated, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { HsxDialog, HsxDrawer, HsxNotice, HsxFold, HsxDataArchive, useFeedback, HsxTitle, HsxPage, HsxSearchPanel } from '@/addon/hsx_components/core'
+import { HsxDialog, HsxDrawer, HsxNotice, HsxFold, HsxDataArchive, useFeedback, HsxSearchPanel } from '@/addon/hsx_components/core'
 const feedback = useFeedback()
 import { Refresh, Search } from '@element-plus/icons-vue'
 import { adjustErpStockCost, adjustErpStockRetailPrice, buyoutErpConsignment, completeErpStockRefurbish, getErpSerialTraceDetail, getErpSerialTraceList, getErpStockInfo, getErpStockList, getErpStockTurnoverSummary, handoffErpStockListing, prepareErpStockListingMedia, previewErpStockTransfer, printErpAssetLabel, sendErpStockRefurbish, syncErpStockListing, transferErpStock, updateErpStockFlow } from '@/addon/hsx_erp/api/erp'
@@ -1435,11 +1441,11 @@ function detailMetrics(row: any) {
     if ((row?.status || '') === 'sold') {
         const items: any[] = [
             { label: '原成交价', value: Number(row.sale_price || 0) ? money(row.sale_price) : '-' },
-            { label: '售后补差', value: Number(row.sale_compensation_amount || 0) ? `-${money(row.sale_compensation_amount)}` : money(0), className: Number(row.sale_compensation_amount || 0) ? 'text-orange-500' : '' },
-            { label: '实际销售收入', value: money(row.net_sale_amount), className: 'text-blue-600' }
+            { label: '售后补差', value: Number(row.sale_compensation_amount || 0) ? `-${money(row.sale_compensation_amount)}` : money(0), className: Number(row.sale_compensation_amount || 0) ? 'text-[color:var(--el-color-warning)]' : '' },
+            { label: '实际销售收入', value: money(row.net_sale_amount), className: 'text-[color:var(--erp-text-accent)]' }
         ]
         if (canViewCost.value) items.push({ label: '总成本', value: money(row.total_cost) })
-        if (canViewProfit.value) items.push({ label: '实际毛利', value: money(row.profit), className: Number(row.profit || 0) >= 0 ? 'text-green-600' : 'text-red-600' })
+        if (canViewProfit.value) items.push({ label: '实际毛利', value: money(row.profit), className: Number(row.profit || 0) >= 0 ? 'text-[color:var(--el-color-success)]' : 'text-[color:var(--el-color-danger)]' })
         return items
     }
     if ((row?.status || '') === 'in_stock') {
@@ -1653,9 +1659,9 @@ function formatTime(value: any) {
     align-items: center;
     gap: 12px;
     padding: 14px;
-    border: 1px solid #e6ebf3;
+    border: 1px solid var(--el-border-color);
     border-radius: 12px;
-    background: #f8fafc;
+    background: var(--el-fill-color-light);
 }
 .media-task__icon {
     display: inline-flex;
@@ -1664,8 +1670,8 @@ function formatTime(value: any) {
     flex: 0 0 42px;
     height: 42px;
     border-radius: 12px;
-    color: #fff;
-    background: linear-gradient(145deg, #2563eb, #4f46e5);
+    color: var(--el-color-white);
+    background: linear-gradient(145deg, var(--el-color-primary), #4f46e5);
     box-shadow: 0 7px 18px rgba(37, 99, 235, .18);
 }
 .media-task__content {
@@ -1674,16 +1680,16 @@ function formatTime(value: any) {
     gap: 22px;
     margin-top: 18px;
     padding: 18px;
-    border: 1px solid #dbe7f7;
+    border: 1px solid var(--el-border-color);
     border-radius: 14px;
-    background: linear-gradient(145deg, #f6faff, #fff);
+    background: linear-gradient(145deg, var(--el-color-primary-light-9), var(--el-bg-color-overlay));
 }
 .media-task__qr {
     width: 154px;
     height: 154px;
     padding: 6px;
     border-radius: 10px;
-    background: #fff;
+    background: var(--el-bg-color-overlay);
 }
 .media-task__copy {
     min-width: 0;
@@ -1691,63 +1697,62 @@ function formatTime(value: any) {
 }
 .summary-tile {
     border-radius: 8px;
-    background: #f8fafc;
+    background: var(--el-fill-color-light);
     padding: 14px 16px;
 }
 .summary-tile--clickable { cursor: pointer; transition: transform .18s ease, box-shadow .18s ease, background .18s ease; }
-.summary-tile--clickable:hover { transform: translateY(-2px); background: #fff; box-shadow: 0 8px 24px rgba(15, 23, 42, .08); }
-.turnover-actions-panel { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-top: 14px; border: 1px solid #dbeafe; border-radius: 10px; background: linear-gradient(90deg, #eff6ff 0%, #f8fafc 100%); padding: 13px 16px; }
-.warehouse-risk-chip { border: 1px solid #fed7aa; border-radius: 999px; background: #fff7ed; padding: 4px 9px; color: #c2410c; }
+.summary-tile--clickable:hover { transform: translateY(-2px); background: var(--el-bg-color-overlay); box-shadow: 0 8px 24px rgba(15, 23, 42, .08); }
+.turnover-actions-panel { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-top: 14px; border: 1px solid var(--el-color-primary-light-9); border-radius: 10px; background: linear-gradient(90deg, var(--el-color-primary-light-9) 0%, var(--el-fill-color-light) 100%); padding: 13px 16px; }
+.warehouse-risk-chip { border: 1px solid var(--el-color-warning-light-5); border-radius: 999px; background: var(--el-color-warning-light-9); padding: 4px 9px; color: var(--el-color-warning); }
 .summary-label {
-    color: #64748b;
+    color: var(--el-text-color-secondary);
     font-size: 13px;
 }
 .summary-value {
     margin-top: 6px;
-    color: #111827;
     font-size: 22px;
     font-weight: 650;
 }
 .lifecycle-cell { display: flex; align-items: flex-start; flex-direction: column; gap: 4px; border-radius: 8px; padding: 9px 11px; }
-.lifecycle-cell--inbound { border-left: 3px solid #60a5fa; background: #f4f8ff; }
-.lifecycle-cell--outbound { border-left: 3px solid #cbd5e1; }
-.lifecycle-cell--success { border-left-color: #22c55e; background: #f2fbf5; }
-.lifecycle-cell--warning { border-left-color: #f59e0b; background: #fffbeb; }
-.lifecycle-cell--muted { border-left-color: #cbd5e1; background: #f8fafc; }
-.lifecycle-cell__title { color: #1f2937; font-weight: 600; }
-.lifecycle-cell__line { color: #64748b; font-size: 12px; line-height: 18px; }
-.lifecycle-cell__time { color: #94a3b8; font-size: 11px; }
-.lifecycle-empty { display: flex; align-items: flex-start; gap: 9px; border: 1px dashed #dbe3ee; border-radius: 7px; background: #f8fafc; padding: 10px 11px; }
-.lifecycle-empty__dot { width: 7px; height: 7px; flex: 0 0 auto; margin-top: 5px; border-radius: 50%; background: #cbd5e1; }
-.lifecycle-empty__title { color: #64748b; font-size: 13px; font-weight: 600; }
-.lifecycle-empty__desc { margin-top: 3px; color: #94a3b8; font-size: 11px; line-height: 17px; }
+.lifecycle-cell--inbound { border-left: 3px solid var(--el-color-primary); background: var(--el-color-primary-light-9); }
+.lifecycle-cell--outbound { border-left: 3px solid var(--el-border-color); }
+.lifecycle-cell--success { border-left-color: var(--el-color-success); background: var(--el-color-success-light-9); }
+.lifecycle-cell--warning { border-left-color: var(--el-color-warning); background: var(--el-color-warning-light-9); }
+.lifecycle-cell--muted { border-left-color: var(--el-border-color); background: var(--el-fill-color-light); }
+.lifecycle-cell__title { color: var(--el-text-color-primary); font-weight: 600; }
+.lifecycle-cell__line { color: var(--el-text-color-secondary); font-size: 12px; line-height: 18px; }
+.lifecycle-cell__time { color: var(--el-text-color-secondary); font-size: 11px; }
+.lifecycle-empty { display: flex; align-items: flex-start; gap: 9px; border: 1px dashed var(--el-border-color); border-radius: 7px; background: var(--el-fill-color-light); padding: 10px 11px; }
+.lifecycle-empty__dot { width: 7px; height: 7px; flex: 0 0 auto; margin-top: 5px; border-radius: 50%; background: var(--el-border-color); }
+.lifecycle-empty__title { color: var(--el-text-color-secondary); font-size: 13px; font-weight: 600; }
+.lifecycle-empty__desc { margin-top: 3px; color: var(--el-text-color-secondary); font-size: 11px; line-height: 17px; }
 .age-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 62px; border-radius: 999px; padding: 4px 8px; font-size: 11px; font-weight: 600; white-space: nowrap; }
-.age-pill--success { color: #15803d; background: #dcfce7; }
-.age-pill--neutral { color: #475569; background: #f1f5f9; }
-.age-pill--warning { color: #b45309; background: #fef3c7; }
-.age-pill--danger { color: #b91c1c; background: #fee2e2; }
-.age-pill--primary { color: #1d4ed8; background: #dbeafe; }
-.age-pill--muted { color: #94a3b8; background: #f1f5f9; }
+.age-pill--success { color: var(--el-color-success); background: var(--el-color-success-light-9); }
+.age-pill--neutral { color: var(--el-text-color-regular); background: var(--el-fill-color-light); }
+.age-pill--warning { color: var(--el-color-warning); background: var(--el-color-warning-light-9); }
+.age-pill--danger { color: var(--el-color-danger); background: var(--el-color-danger-light-9); }
+.age-pill--primary { color: var(--el-color-primary); background: var(--el-color-primary-light-9); }
+.age-pill--muted { color: var(--el-text-color-secondary); background: var(--el-fill-color-light); }
 .stock-exit-state { display: flex; align-items: flex-start; gap: 9px; border-radius: 8px; padding: 10px 12px; }
 .stock-exit-state__dot { width: 8px; height: 8px; flex: 0 0 auto; margin-top: 5px; border-radius: 50%; background: currentColor; }
 .stock-exit-state__title { font-size: 13px; font-weight: 650; }
 .stock-exit-state__desc { margin-top: 3px; font-size: 11px; line-height: 17px; opacity: .78; }
-.stock-exit-state--success { color: #15803d; background: #f0fdf4; }
-.stock-exit-state--warning { color: #b45309; background: #fffbeb; }
-.stock-exit-state--muted { color: #64748b; background: #f8fafc; }
-.settlement-line { display: grid; grid-template-columns: 52px max-content; align-items: center; gap: 5px 7px; border-radius: 7px; background: #f8fafc; padding: 8px 9px; }
+.stock-exit-state--success { color: var(--el-color-success); background: var(--el-color-success-light-9); }
+.stock-exit-state--warning { color: var(--el-color-warning); background: var(--el-color-warning-light-9); }
+.stock-exit-state--muted { color: var(--el-text-color-secondary); background: var(--el-fill-color-light); }
+.settlement-line { display: grid; grid-template-columns: 52px max-content; align-items: center; gap: 5px 7px; border-radius: 7px; background: var(--el-fill-color-light); padding: 8px 9px; }
 .settlement-line + .settlement-line { margin-top: 7px; }
-.settlement-line__label { color: #475569; font-size: 12px; font-weight: 650; }
-.settlement-line__amount { grid-column: 1 / -1; color: #94a3b8; font-size: 11px; white-space: nowrap; }
-:deep(.el-table__body tr.stock-row--sold > td.el-table__cell) { background: #fbfefc; }
-:deep(.el-table__body tr.stock-row--returned > td.el-table__cell) { background: #fffdf7; }
-:deep(.el-table__body tr.stock-row--void > td.el-table__cell) { color: #94a3b8; background: #fafafa; }
-:deep(.el-table__body tr:hover > td.el-table__cell) { background: #f3f7ff !important; }
+.settlement-line__label { color: var(--el-text-color-regular); font-size: 12px; font-weight: 650; }
+.settlement-line__amount { grid-column: 1 / -1; color: var(--el-text-color-secondary); font-size: 11px; white-space: nowrap; }
+:deep(.el-table__body tr.stock-row--sold > td.el-table__cell) { background: var(--el-color-success-light-9); }
+:deep(.el-table__body tr.stock-row--returned > td.el-table__cell) { background: var(--el-color-warning-light-9); }
+:deep(.el-table__body tr.stock-row--void > td.el-table__cell) { color: var(--el-text-color-secondary); background: var(--el-fill-color-light); }
+:deep(.el-table__body tr:hover > td.el-table__cell) { background: var(--el-color-primary-light-9) !important; }
 .section-title {
     margin-bottom: 12px;
     border-left: 3px solid var(--el-color-primary);
     padding-left: 10px;
-    color: #111827;
+    color: var(--el-text-color-primary);
     font-size: 15px;
     font-weight: 650;
 }

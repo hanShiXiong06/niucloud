@@ -8,11 +8,11 @@
             <summary>查看准备清单、准确入口和排查方法</summary>
             <template v-if="platform">
                 <dl>
-                    <dt>① 你：准备资格与应用</dt><dd>登录 <a href="https://open.work.weixin.qq.com/" target="_blank" rel="noopener noreferrer">企业微信服务商后台</a> → 提供 SaaS 应用 → 创建应用。当前接入是标准第三方应用，不是“代开发模板”；可测试、审核与上线资格，以该后台提示为准。</dd>
-                    <dt>② 你：提供平台凭据</dt><dd>从同一个应用获取 SuiteID / SuiteSecret，并配置回调 Token / EncodingAESKey。服务商企业 ID 属于你，不是每个客户的企业 ID。不要把密钥放到群聊或操作截图。</dd>
-                    <dt>③ 技术：配置本页</dt><dd>平台 → 系统设置 → 企业微信服务商。填写本套 SaaS 的 HTTPS 根地址、后台管理小程序 AppID，然后先保存。客户销售小程序 AppID 不能代替管理小程序。</dd>
-                    <dt>④ 技术：配置回调</dt><dd>把本页生成的“事件回调 URL”用于接收 SuiteTicket / 授权变更的指令回调；“授权回调 URL”用于安装授权返回。按官方页面完成回调、授权域名与小程序关联配置，不能仅填一个 AppID 就算完成。</dd>
-                    <dt>⑤ 技术：验证运行</dt><dd>等待收到 SuiteTicket，再点“验证服务商通道”。这只验证服务商凭据；还需检查消息队列 / 补偿任务运行，再由一个客户授权、绑定员工、收通知并打开任务。</dd>
+                    <dt>① 你：进入创建应用页</dt><dd>登录 <a href="https://open.work.weixin.qq.com/" target="_blank" rel="noopener noreferrer">企业微信服务商后台</a> → 提供 SaaS 应用 → 创建应用。首次创建尚无 SuiteID / SuiteSecret，这是正常的；不需要先获取它们才能准备回调。当前接入不是“代开发模板”，资格与审核要求以官方后台为准。</dd>
+                    <dt>② 技术：先保存回调准备</dt><dd>在本页第一步填写通道标识、服务商企业 ID、本套 SaaS 的 HTTPS 根地址，以及与官方创建页一致的 Token / EncodingAESKey，点“保存回调准备”。此时不需要小程序 AppID，通道也不会启用。不要把密钥放到群聊或操作截图。</dd>
+                    <dt>③ 你：复制字段并创建</dt><dd>保存成功后，把“安装应用的回调域名”“数据回调 URL”“指令回调 URL”“应用设置 URL”逐项复制到官方同名字段，完成官方回调校验和创建。“安装授权返回 URL”是另一用途，不要混填。数据回调目前只做地址验证与加密数据安全接收确认，不处理聊天或会话存档。</dd>
+                    <dt>④ 技术：补齐凭据并启用</dt><dd>创建成功后，从同一个应用获取 SuiteID / SuiteSecret，填入本页第二步，并配置本套 SaaS 的后台管理小程序 AppID 与名称，点“保存并启用服务商通道”。客户销售小程序不能代替管理小程序；小程序关联与发布仍需按官方要求完成。</dd>
+                    <dt>⑤ 平台与客户：验证运行</dt><dd>收到 SuiteTicket 后再点“验证服务商通道”。这只验证服务商凭据；还需检查消息队列 / 补偿任务运行，再由一个客户授权、绑定员工、收通知并打开任务。应用设置 URL 使用普通 SaaS 站点账号登录，不提供企业微信管理员免登。</dd>
                 </dl>
                 <p class="guide-warning">“配置已保存”不等于接通。另一套独立服务器 / 域名应独立核对通道与回调，不能直接覆盖当前已工作的 Suite 配置。</p>
             </template>
@@ -44,8 +44,8 @@ import { computed } from 'vue'
 const props = defineProps<{ platform: boolean; provider: boolean }>()
 defineEmits<{ (event: 'navigate', tab: string): void }>()
 const steps = computed(() => props.platform ? [
-    { title: '准备服务商应用', owner: '平台负责人', action: '核对应用资格、凭据与管理小程序' },
-    { title: '保存并配置回调', owner: '平台技术人员', action: '配置本套 SaaS；同域客户无需重复填写' },
+    { title: '先保存回调准备', owner: '平台技术人员', action: '无需 Suite 凭据，先保存 Token、Key 与域名' },
+    { title: '创建应用后补齐凭据', owner: '平台负责人 + 技术', action: '完成官方回调校验，取得 Suite 凭据后再启用' },
     { title: '验证并试运行', owner: '平台 + 一位客户', action: '凭据验证后，再验收员工真实收信与跳转' }
 ] : props.provider ? [
     { title: '授权客户企业', owner: '甲方企业管理员', action: '核对企业身份并安装授权', tab: 'config', button: '接入与通知' },

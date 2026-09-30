@@ -103,7 +103,7 @@ class PickupState
         $conflict = !empty($data['conflict']);
         $receiver = is_array($data['receiver'] ?? null) ? $data['receiver'] : [];
         return [
-            'state' => $state, 'title' => $titles[$state] ?? '取件状态待核实',
+            'state' => $state, 'title' => $conflict ? '取件记录待人工核实' : ($titles[$state] ?? '取件状态待核实'),
             'message' => $conflict ? '取件记录存在冲突，请联系门店核实，不要重复寄件。' : ($messages[$state] ?? ''),
             'carrier_name' => (string)($data['carrier_name'] ?? ''),
             'pickup_time' => (string)($data['pickup_time'] ?? $order['pickup_time'] ?? ''),

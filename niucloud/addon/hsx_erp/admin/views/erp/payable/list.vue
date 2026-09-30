@@ -1,17 +1,16 @@
 <template>
-    <HsxPage padding="none" class="main-container">
-        <el-card class="!border-none" shadow="never">
-            <HsxTitle size="page" collapsible-subtitle class="mb-4">
-                <template #default>应付款</template>
+    <ErpDesktopPage class="main-container">
+        <section class="erp-list-surface">
+            <ErpWorkspaceHeader page="payable" :filter-count="searchConditionCount">
+                <template #title>应付款</template>
                 <template #subtitle>统一处理采购、整备、销售退货与售后补差等支出；按业务来源和设备逐笔核对。</template>
                 <template #extra><div class="flex gap-2 flex-wrap">
                         <el-button :icon="Tickets" @click="openSettlement">结算明细</el-button>
                         <el-button :icon="Tickets" @click="openLedger">账目流水</el-button>
                         <el-button :icon="Refresh" :loading="table.loading" @click="loadList">刷新</el-button>
-                    </div></template>
-            </HsxTitle>
+                    <ErpRoleFocus :items="payableRoleFocus" /></div></template>
 
-            <HsxSearchPanel :summary="searchConditionCount ? '已填写 ' + searchConditionCount + ' 项条件，点击查询生效' : ''">
+            <HsxSearchPanel :show-layout-switch="false" :summary="searchConditionCount ? searchConditionCount + ' 项筛选条件' : ''">
                 <template #extra>
                     <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
                     <el-button @click="handleReset">重置</el-button>
@@ -53,9 +52,10 @@
                 </HsxFold>
             </HsxSearchPanel>
 
-            <ErpRoleFocus :items="payableRoleFocus" />
 
-            <div class="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+
+            <div class="erp-summary-heading text-xs text-[color:var(--el-text-color-secondary)]">本页汇总</div>
+            <div class="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4 erp-metrics">
                 <div class="summary-tile">
                     <div class="summary-label">应付批次</div>
                     <div class="summary-value">{{ summary.count }}</div>
@@ -66,13 +66,15 @@
                 </div>
                 <div class="summary-tile">
                     <div class="summary-label">已结算</div>
-                    <div class="summary-value text-green-600">{{ money(summary.settled) }}</div>
+                    <div class="summary-value text-[color:var(--el-color-success)]">{{ money(summary.settled) }}</div>
                 </div>
                 <div class="summary-tile">
                     <div class="summary-label">剩余应付</div>
-                    <div class="summary-value text-orange-600">{{ money(summary.remain) }}</div>
+                    <div class="summary-value text-[color:var(--el-color-warning)]">{{ money(summary.remain) }}</div>
                 </div>
             </div>
+
+            </ErpWorkspaceHeader>
 
             <el-tabs v-model="activeStatus" class="mt-5" @tab-change="handleSearch">
                 <el-tab-pane label="全部" name="" />
@@ -81,39 +83,33 @@
                 <el-tab-pane label="已结清" name="settled" />
             </el-tabs>
 
-            <el-table :data="table.data" v-loading="table.loading" size="large">
+            <ErpDataTable :data="table.data" v-loading="table.loading">
                 <el-table-column label="往来主体" min-width="210">
                     <template #default="{ row }">
-                        <div class="font-medium text-gray-900"><ErpOverflowText :text="row.party_name" max-width="190px" /></div>
-                        <div class="mt-1 flex items-center gap-2 text-xs text-gray-500">
+                        <div class="font-medium text-[color:var(--el-text-color-primary)]"><ErpOverflowText :text="row.party_name" max-width="190px" /></div>
+                        <div class="mt-1 flex items-center gap-2 text-xs text-[color:var(--el-text-color-secondary)]">
                             <el-tag size="small" effect="plain" type="info">{{ partyRoleLabel(row, '付款对象') }}</el-tag>
                             <ErpOverflowText :text="contactText(row)" max-width="140px" />
                         </div>
                     </template>
                 </el-table-column>
-                <el-table-column label="款项来源" min-width="310">
+                <el-table-column label="款项来源" min-width="230">
                     <template #default="{ row }">
                         <ErpFinanceSourceMeta :row="row" compact default-direction="expense" />
-                        <div class="mt-1 text-xs text-gray-400">{{ row.payable_count || 0 }} 笔账 · 业务时间 {{ formatTime(row.purchase_at || row.latest_at) }}</div>
+                        <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">{{ row.payable_count || 0 }} 笔账 · 业务时间 {{ formatTime(row.purchase_at || row.latest_at) }}</div>
                     </template>
                 </el-table-column>
-                <el-table-column label="账目" min-width="240">
+                <el-table-column label="账目" min-width="210">
                     <template #default="{ row }">
                         <div>应付 <span class="font-medium">{{ money(row.amount) }}</span></div>
-                        <div class="mt-1 text-xs text-gray-500">已结算 {{ money(row.settled_amount) }} · 剩余 {{ money(remain(row)) }}</div>
-                        <div class="mt-2 flex flex-wrap gap-1">
-                            <el-tag size="small" effect="plain" type="info">结算约定：{{ row.opening_settle_method || row.settle_method || '-' }}</el-tag>
-                            <el-tag v-if="!(row.settle_summary_items || []).length" size="small" effect="plain" :type="remain(row) > 0 ? 'warning' : 'success'">{{ remain(row) > 0 ? '待清算' : '已结清' }}</el-tag>
-                            <el-tag v-for="item in row.settle_summary_items" :key="item.label" size="small" effect="plain" :type="settleSummaryTagType(item.label)">
-                                {{ item.label }} {{ money(item.amount) }}
-                            </el-tag>
-                        </div>
+                        <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">已结算 {{ money(row.settled_amount) }} · 剩余 {{ money(remain(row)) }}</div>
+
                     </template>
                 </el-table-column>
                 <el-table-column label="业务 / 财务负责人" min-width="150">
                     <template #default="{ row }">
                         <div><ErpOverflowText :text="row.business_operator_name || row.purchaser_name" max-width="135px" /></div>
-                        <div v-if="row.task_assignee_name" class="mt-1 text-xs text-gray-500">财务 {{ row.task_assignee_name }}</div>
+                        <div v-if="row.task_assignee_name" class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">财务 {{ row.task_assignee_name }}</div>
                     </template>
                 </el-table-column>
                 <el-table-column label="状态" width="120">
@@ -128,9 +124,9 @@
                         <el-button v-if="canOffset(row)" type="warning" link @click="openOffset(row)">折账</el-button>
                     </template>
                 </el-table-column>
-            </el-table>
+            </ErpDataTable>
 
-            <div class="mt-4 flex justify-end">
+            <div class="mt-4 flex justify-end erp-pagination">
                 <el-pagination
                     v-model:current-page="table.page"
                     v-model:page-size="table.limit"
@@ -140,35 +136,35 @@
                     @current-change="loadList"
                 />
             </div>
-        </el-card>
+        </section>
 
-        <HsxDialog :confirm-loading="pay.saving" v-model="pay.visible" :title="isNonDevicePay ? '财务确认经营付款' : '财务确认付款'" width="1080px" :destroy-on-close="false">
-            <div v-if="pay.row" class="mb-4 rounded bg-gray-50 px-4 py-3 text-sm text-gray-600">
-                <div>{{ partyRoleLabel(pay.row, '付款对象') }}：<span class="font-medium text-gray-900">{{ pay.row.party_name }}</span></div>
-                <ErpFinanceSourceMeta :row="pay.row" class="mt-3" default-direction="expense" />
+        <HsxDialog class="erp-desktop-overlay" :confirm-loading="pay.saving" v-model="pay.visible" :title="isNonDevicePay ? '财务确认经营付款' : '财务确认付款'" width="1080px" :destroy-on-close="false">
+            <div v-if="pay.row" class="mb-4 rounded bg-[var(--el-fill-color-light)] px-4 py-3 text-sm text-[color:var(--el-text-color-regular)]">
+                <div>{{ partyRoleLabel(pay.row, '付款对象') }}：<span class="font-medium text-[color:var(--el-text-color-primary)]">{{ pay.row.party_name }}</span></div>
+                <ErpFinanceSourceMeta :row="pay.row" compact class="mt-3" default-direction="expense" />
             </div>
-            <div v-if="payeeMethods.length" class="mb-4 rounded border border-amber-200 bg-amber-50 px-4 py-3">
-                <div class="mb-2 text-sm font-medium text-amber-900">客户收款资料 <span class="font-normal text-amber-700">（来自回收订单，仅供付款核对）</span></div>
+            <div v-if="payeeMethods.length" class="mb-4 rounded border border-[color:var(--el-color-warning-light-8)] bg-[var(--el-color-warning-light-9)] px-4 py-3">
+                <div class="mb-2 text-sm font-medium text-[color:var(--el-color-warning)]">客户收款资料 <span class="font-normal text-[color:var(--el-color-warning)]">（来自回收订单，仅供付款核对）</span></div>
                 <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
-                    <div v-for="(method,index) in payeeMethods" :key="`${method.pay_type}-${method.account}-${index}`" class="flex items-center justify-between gap-3 rounded bg-white px-3 py-2">
+                    <div v-for="(method,index) in payeeMethods" :key="`${method.pay_type}-${method.account}-${index}`" class="flex items-center justify-between gap-3 rounded bg-[var(--el-bg-color-overlay)] px-3 py-2">
                         <div class="min-w-0 text-sm">
-                            <div class="font-medium text-gray-900">{{ method.pay_type || '其他收款方式' }} <el-tag v-if="method.is_default" size="small" type="warning" effect="plain">默认</el-tag></div>
-                            <div class="mt-1 break-all text-gray-600">{{ method.account || '未填写账号' }}</div>
+                            <div class="font-medium text-[color:var(--el-text-color-primary)]">{{ method.pay_type || '其他收款方式' }} <el-tag v-if="method.is_default" size="small" type="warning" effect="plain">默认</el-tag></div>
+                            <div class="mt-1 break-all text-[color:var(--el-text-color-regular)]">{{ method.account || '未填写账号' }}</div>
                         </div>
                         <ErpImageGallery v-if="method.qrcode_image" :value="img(method.qrcode_image)" :size="48" :limit="1" />
                     </div>
                 </div>
             </div>
             <div class="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-                <div class="rounded bg-gray-50 px-3 py-2"><div class="text-xs text-gray-500">应付总额（含调价）</div><div class="mt-1 font-medium">{{ money(payAmountSummary.amount) }}</div></div>
-                <div class="rounded bg-green-50 px-3 py-2"><div class="text-xs text-gray-500">累计已付／折账</div><div class="mt-1 font-medium text-green-700">{{ money(payAmountSummary.paid) }}</div></div>
-                <div class="rounded bg-orange-50 px-3 py-2"><div class="text-xs text-gray-500">剩余待付</div><div class="mt-1 font-medium text-orange-600">{{ money(payAmountSummary.remaining) }}</div></div>
-                <div class="rounded bg-red-50 px-3 py-2">
-                    <div class="text-xs text-gray-500">本次付款</div>
-                    <div class="mt-1 font-medium text-red-600">{{ money(paySelectedTotal) }}</div>
+                <div class="rounded bg-[var(--el-fill-color-light)] px-3 py-2"><div class="text-xs text-[color:var(--el-text-color-secondary)]">应付总额（含调价）</div><div class="mt-1 font-medium">{{ money(payAmountSummary.amount) }}</div></div>
+                <div class="rounded bg-[var(--el-color-success-light-9)] px-3 py-2"><div class="text-xs text-[color:var(--el-text-color-secondary)]">累计已付／折账</div><div class="mt-1 font-medium text-[color:var(--el-color-success)]">{{ money(payAmountSummary.paid) }}</div></div>
+                <div class="rounded bg-[var(--el-color-warning-light-9)] px-3 py-2"><div class="text-xs text-[color:var(--el-text-color-secondary)]">剩余待付</div><div class="mt-1 font-medium text-[color:var(--el-color-warning)]">{{ money(payAmountSummary.remaining) }}</div></div>
+                <div class="rounded bg-[var(--el-color-danger-light-9)] px-3 py-2">
+                    <div class="text-xs text-[color:var(--el-text-color-secondary)]">本次付款</div>
+                    <div class="mt-1 font-medium text-[color:var(--el-color-danger)]">{{ money(paySelectedTotal) }}</div>
                 </div>
             </div>
-            <div class="mb-4 text-xs text-gray-500">已选 {{ paySelectedCount }} {{ isNonDevicePay ? '笔' : '台' }}，本次付款后仍欠 {{ money(payAfterRemainTotal) }}。历史付款不重复支付；展开设备行可查看原付款记录。</div>
+            <div class="mb-4 text-xs text-[color:var(--el-text-color-secondary)]">已选 {{ paySelectedCount }} {{ isNonDevicePay ? '笔' : '台' }}，本次付款后仍欠 {{ money(payAfterRemainTotal) }}。历史付款不重复支付；展开设备行可查看原付款记录。</div>
             <el-form label-width="100px">
                 <el-form-item label="付款账户">
                     <el-select v-model="pay.form.capital_account_id" clearable class="w-full" placeholder="选择银行卡/微信/支付宝">
@@ -188,11 +184,11 @@
                         <el-table-column type="expand">
                             <template #default="{ row }">
                                 <div class="px-4 py-2 text-sm">
-                                    <div v-if="row.latest_purchase_adjustment" class="mb-3 text-amber-700">最近调价 {{ money(row.latest_purchase_adjustment.cost_delta) }} · {{ row.latest_purchase_adjustment.remark }} · {{ row.latest_purchase_adjustment.operator_name }}</div>
-                                    <div v-if="!row.settlements?.length" class="text-gray-400">暂无历史结算记录</div>
-                                    <div v-for="record in row.settlements || []" :key="record.settlement_id" class="mb-2 rounded bg-gray-50 p-2">
+                                    <div v-if="row.latest_purchase_adjustment" class="mb-3 text-[color:var(--el-color-warning)]">最近调价 {{ money(row.latest_purchase_adjustment.cost_delta) }} · {{ row.latest_purchase_adjustment.remark }} · {{ row.latest_purchase_adjustment.operator_name }}</div>
+                                    <div v-if="!row.settlements?.length" class="text-[color:var(--el-text-color-secondary)]">暂无历史结算记录</div>
+                                    <div v-for="record in row.settlements || []" :key="record.settlement_id" class="mb-2 rounded bg-[var(--el-fill-color-light)] p-2">
                                         {{ record.settlement_type_text || '结算' }} {{ money(record.applied_amount) }} · {{ record.pay_method_text || record.capital_account_name || '未填写账户' }} · {{ formatTime(record.confirmed_at) }}
-                                        <div v-if="record.remark" class="text-xs text-gray-500">{{ record.remark }}</div>
+                                        <div v-if="record.remark" class="text-xs text-[color:var(--el-text-color-secondary)]">{{ record.remark }}</div>
                                         <ErpImageGallery v-for="entry in record.money_ledgers || []" :key="entry.ledger_no" :value="entry.voucher_urls" :size="48" />
                                     </div>
                                 </div>
@@ -206,13 +202,13 @@
                         <el-table-column label="设备" min-width="230">
                             <template #default="{ row }">
                                 <div class="font-medium">{{ row.model || '-' }}</div>
-                                <div class="mt-1 text-xs text-gray-500">{{ row.spec || '未填写规格' }} · IMEI {{ row.imei || '-' }}</div>
+                                <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">{{ row.spec || '未填写规格' }} · IMEI {{ row.imei || '-' }}</div>
                             </template>
                         </el-table-column>
                         <el-table-column label="应付金额" width="120" align="right">
                             <template #default="{ row }">
                                 <div>{{ money(row.payable_amount) }}</div>
-                                <div v-if="row.current_total_cost" class="mt-1 text-xs text-gray-400">当前成本 {{ money(row.current_total_cost) }}</div>
+                                <div v-if="row.current_total_cost" class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">当前成本 {{ money(row.current_total_cost) }}</div>
                             </template>
                         </el-table-column>
                         <el-table-column label="已付／折账" width="110" align="right">
@@ -252,34 +248,34 @@
             </template>
         </HsxDialog>
 
-        <HsxDialog :confirm-loading="offset.saving" v-model="offset.visible" title="应收应付折账" width="920px" :destroy-on-close="false">
-            <div v-if="offset.row" class="mb-4 rounded bg-amber-50 px-4 py-3 text-sm text-gray-600">
-                <div>往来单位：<span class="font-medium text-gray-900">{{ offset.row.party_name }}</span></div>
-                <div class="mt-1 text-xs text-gray-500">折账就是把“我要付给他的钱”和“他要付给我的钱”互相抵扣，不产生真实收付款。</div>
+        <HsxDialog class="erp-desktop-overlay" :confirm-loading="offset.saving" v-model="offset.visible" title="应收应付折账" width="920px" :destroy-on-close="false">
+            <div v-if="offset.row" class="mb-4 rounded bg-[var(--el-color-warning-light-9)] px-4 py-3 text-sm text-[color:var(--el-text-color-regular)]">
+                <div>往来单位：<span class="font-medium text-[color:var(--el-text-color-primary)]">{{ offset.row.party_name }}</span></div>
+                <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">折账就是把“我要付给他的钱”和“他要付给我的钱”互相抵扣，不产生真实收付款。</div>
             </div>
             <div class="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-                <div class="rounded bg-gray-50 px-3 py-2">
-                    <div class="text-xs text-gray-500">我要付给他</div>
-                    <div class="mt-1 font-medium text-red-600">{{ money(offsetPayableChecked) }}</div>
+                <div class="rounded bg-[var(--el-fill-color-light)] px-3 py-2">
+                    <div class="text-xs text-[color:var(--el-text-color-secondary)]">我要付给他</div>
+                    <div class="mt-1 font-medium text-[color:var(--el-color-danger)]">{{ money(offsetPayableChecked) }}</div>
                 </div>
-                <div class="rounded bg-gray-50 px-3 py-2">
-                    <div class="text-xs text-gray-500">他要付给我</div>
-                    <div class="mt-1 font-medium text-green-600">{{ money(offsetReceivableChecked) }}</div>
+                <div class="rounded bg-[var(--el-fill-color-light)] px-3 py-2">
+                    <div class="text-xs text-[color:var(--el-text-color-secondary)]">他要付给我</div>
+                    <div class="mt-1 font-medium text-[color:var(--el-color-success)]">{{ money(offsetReceivableChecked) }}</div>
                 </div>
-                <div class="rounded bg-amber-50 px-3 py-2">
-                    <div class="text-xs text-gray-500">本次互相抵扣</div>
-                    <div class="mt-1 font-medium text-amber-700">{{ money(offsetAmount) }}</div>
+                <div class="rounded bg-[var(--el-color-warning-light-9)] px-3 py-2">
+                    <div class="text-xs text-[color:var(--el-text-color-secondary)]">本次互相抵扣</div>
+                    <div class="mt-1 font-medium text-[color:var(--el-color-warning)]">{{ money(offsetAmount) }}</div>
                 </div>
-                <div class="rounded bg-gray-50 px-3 py-2">
-                    <div class="text-xs text-gray-500">抵扣后</div>
-                    <div class="mt-1 font-medium text-gray-900">{{ offsetResultText }}</div>
+                <div class="rounded bg-[var(--el-fill-color-light)] px-3 py-2">
+                    <div class="text-xs text-[color:var(--el-text-color-secondary)]">抵扣后</div>
+                    <div class="mt-1 font-medium text-[color:var(--el-text-color-primary)]">{{ offsetResultText }}</div>
                 </div>
             </div>
             <div v-loading="offset.loading" class="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div class="rounded border border-gray-200 p-3">
+                <div class="rounded border border-[color:var(--el-border-color)] p-3">
                     <div class="mb-2 flex items-center justify-between">
-                        <span class="font-medium text-gray-900">我要付给他（应付）</span>
-                        <span class="text-xs text-gray-500">勾选合计 {{ money(offsetPayableChecked) }}</span>
+                        <span class="font-medium text-[color:var(--el-text-color-primary)]">我要付给他（应付）</span>
+                        <span class="text-xs text-[color:var(--el-text-color-secondary)]">勾选合计 {{ money(offsetPayableChecked) }}</span>
                     </div>
                     <el-table :data="offset.payables" size="small" max-height="300" empty-text="无待折应付">
                         <el-table-column width="46">
@@ -288,7 +284,7 @@
                         <el-table-column label="设备 / 来源" min-width="180">
                             <template #default="{ row }">
                                 <div class="text-sm">{{ row.model || row.source_no || '应付' }}</div>
-                                <div class="mt-0.5 text-xs text-gray-500">{{ row.imei ? `IMEI ${row.imei}` : row.payable_no }}</div>
+                                <div class="mt-0.5 text-xs text-[color:var(--el-text-color-secondary)]">{{ row.imei ? `IMEI ${row.imei}` : row.payable_no }}</div>
                             </template>
                         </el-table-column>
                         <el-table-column label="剩余应付" width="110" align="right">
@@ -296,10 +292,10 @@
                         </el-table-column>
                     </el-table>
                 </div>
-                <div class="rounded border border-gray-200 p-3">
+                <div class="rounded border border-[color:var(--el-border-color)] p-3">
                     <div class="mb-2 flex items-center justify-between">
-                        <span class="font-medium text-gray-900">他要付给我（应收）</span>
-                        <span class="text-xs text-gray-500">勾选合计 {{ money(offsetReceivableChecked) }}</span>
+                        <span class="font-medium text-[color:var(--el-text-color-primary)]">他要付给我（应收）</span>
+                        <span class="text-xs text-[color:var(--el-text-color-secondary)]">勾选合计 {{ money(offsetReceivableChecked) }}</span>
                     </div>
                     <el-table :data="offset.receivables" size="small" max-height="300" empty-text="无待折应收">
                         <el-table-column width="46">
@@ -308,8 +304,8 @@
                         <el-table-column label="来源单" min-width="180">
                             <template #default="{ row }">
                                 <div class="text-sm">{{ row.source_no || '应收' }}</div>
-                                <div class="mt-0.5 text-xs text-gray-500">{{ row.receivable_no }}</div>
-                                <div v-if="row.device_summary" class="mt-0.5 text-xs text-gray-500">{{ row.device_summary }}<span v-if="row.device_more"> 等 {{ row.device_more + 2 }} 台</span></div>
+                                <div class="mt-0.5 text-xs text-[color:var(--el-text-color-secondary)]">{{ row.receivable_no }}</div>
+                                <div v-if="row.device_summary" class="mt-0.5 text-xs text-[color:var(--el-text-color-secondary)]">{{ row.device_summary }}<span v-if="row.device_more"> 等 {{ row.device_more + 2 }} 台</span></div>
                             </template>
                         </el-table-column>
                         <el-table-column label="剩余应收" width="110" align="right">
@@ -320,12 +316,12 @@
             </div>
             <el-form class="mt-4" label-width="100px">
                 <el-form-item label="可折金额">
-                    <span class="font-medium text-gray-900">{{ money(offsetMax) }}</span>
-                    <span class="ml-2 text-xs text-gray-500">= 两侧勾选金额的较小值；可改小，剩余部分后续单独结算</span>
+                    <span class="font-medium text-[color:var(--el-text-color-primary)]">{{ money(offsetMax) }}</span>
+                    <span class="ml-2 text-xs text-[color:var(--el-text-color-secondary)]">= 两侧勾选金额的较小值；可改小，剩余部分后续单独结算</span>
                 </el-form-item>
                 <el-form-item label="本次抵扣" required>
                     <el-input-number v-model="offset.form.amount" :min="0" :max="offsetMax" :precision="2" :controls="false" class="!w-[220px]" />
-                    <span class="ml-2 text-xs text-gray-500">这一步只做账目抵扣，不会产生资金流水</span>
+                    <span class="ml-2 text-xs text-[color:var(--el-text-color-secondary)]">这一步只做账目抵扣，不会产生资金流水</span>
                 </el-form-item>
                 <el-form-item v-if="offsetDiffAmount > 0" label="差额处理">
                     <div class="w-full">
@@ -346,99 +342,45 @@
             </template>
         </HsxDialog>
 
-        <HsxDrawer v-model="items.visible" :title="`${financeTypeLabel(items.row, '应付款')} · 设备明细`" size="86%" :destroy-on-close="false">
-            <div v-if="items.row" class="mb-4 rounded bg-gray-50 px-4 py-3 text-sm text-gray-600">
-                <div>{{ partyRoleLabel(items.row, '付款对象') }}：<span class="font-medium text-gray-900">{{ items.row.party_name || '-' }}</span></div>
-                <ErpFinanceSourceMeta :row="items.row" class="mt-3" default-direction="expense" />
-                <div class="mt-3 border-t border-gray-200 pt-2">应付 {{ money(items.row.amount) }} · 已结算 {{ money(items.row.settled_amount) }} · 剩余 {{ money(remain(items.row)) }}</div>
-            </div>
-            <div class="mb-2 font-medium text-gray-900">设备明细</div>
-            <el-table :data="items.data" v-loading="items.loading" size="large">
+        <HsxDrawer class="erp-desktop-overlay" v-model="items.visible" title="应付详情" size="980px" destroy-on-close>
+            <ErpFinanceOverview v-if="items.row" :row="items.row" direction="expense" :party-label="partyRoleLabel(items.row, '付款对象')" :remaining="remain(items.row)" :status="partyStatusMeta(items.row)" />
+            <div class="erp-finance-section-heading"><h3>设备明细</h3><span>{{ items.total }} 台</span></div>
+            <el-table :data="items.data" v-loading="items.loading" size="default" max-height="360" empty-text="暂无设备明细">
+                <el-table-column type="expand" width="44">
+                    <template #default="{ row }">
+                        <el-descriptions class="erp-finance-row-details" :column="2" size="small">
+                            <el-descriptions-item label="来源单号"><ErpCopyText :value="row.source_meta?.source_no || row.source_no || row.purchase_no" title="来源单号" /></el-descriptions-item>
+                            <el-descriptions-item label="采购时间">{{ formatTime(row.purchase_at) }}</el-descriptions-item>
+                            <el-descriptions-item label="库存位置">{{ [row.warehouse_name, row.location_name].filter(Boolean).join(' / ') || '-' }}</el-descriptions-item>
+                            <el-descriptions-item label="应付单号"><ErpCopyText :value="row.payable_no" title="应付单号" /></el-descriptions-item>
+                        </el-descriptions>
+                    </template>
+                </el-table-column>
                 <el-table-column label="设备" min-width="240">
                     <template #default="{ row }">
-                        <div class="font-medium">{{ row.model || '-' }}</div>
-                        <div class="mt-1 text-xs text-gray-500">{{ row.spec || '未填写规格' }} · IMEI {{ row.imei || '-' }}</div>
+                        <div class="font-medium">{{ row.model || '-' }} <span class="erp-finance-secondary">{{ row.spec || '' }}</span></div>
+                        <div class="erp-finance-secondary mt-1">{{ erpSerialText(row) }}</div>
                     </template>
                 </el-table-column>
-                <el-table-column label="位置" min-width="150">
-                    <template #default="{ row }">{{ [row.warehouse_name, row.location_name].filter(Boolean).join(' / ') || '-' }}</template>
-                </el-table-column>
-                <el-table-column label="来源单号" min-width="180">
-                    <template #default="{ row }"><ErpCopyText :value="row.source_meta?.source_no || row.source_no || row.purchase_no" title="来源单号" max-width="170px" /></template>
-                </el-table-column>
-                <el-table-column label="应付" min-width="180" align="right">
-                    <template #default="{ row }">
-                        <div>{{ money(row.payable_amount) }}</div>
-                        <div class="mt-1 text-xs text-gray-500">已结算 {{ money(row.allocated_paid) }}</div>
-                    </template>
-                </el-table-column>
-                <el-table-column label="剩余" width="130" align="right">
-                    <template #default="{ row }">{{ money(row.allocated_remain) }}</template>
-                </el-table-column>
-                <el-table-column label="状态" width="110">
-                    <template #default="{ row }"><el-tag :type="statusMeta(row.payable_status).type">{{ statusMeta(row.payable_status).label }}</el-tag></template>
-                </el-table-column>
-                <el-table-column label="采购时间" width="170">
-                    <template #default="{ row }">{{ formatTime(row.purchase_at) }}</template>
-                </el-table-column>
+                <el-table-column label="应付" width="130" align="right"><template #default="{ row }">{{ money(row.payable_amount) }}</template></el-table-column>
+                <el-table-column label="已结算" width="130" align="right"><template #default="{ row }">{{ money(row.allocated_paid) }}</template></el-table-column>
+                <el-table-column label="剩余待付" width="130" align="right"><template #default="{ row }"><span class="text-[color:var(--el-color-warning)]">{{ money(row.allocated_remain) }}</span></template></el-table-column>
+                <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag size="small" :type="statusMeta(row.payable_status).type">{{ statusMeta(row.payable_status).label }}</el-tag></template></el-table-column>
             </el-table>
-            <div class="mt-4 flex justify-end">
+            <div v-if="items.total > items.limit" class="mt-4 flex justify-end">
                 <el-pagination v-model:current-page="items.page" v-model:page-size="items.limit" layout="total, prev, pager, next" :total="items.total" @current-change="loadItems" />
             </div>
-
-            <div class="mb-2 mt-6 font-medium text-gray-900">结算明细</div>
-            <el-table :data="items.settlements" v-loading="items.loading" size="small" empty-text="暂无结算记录">
-                <el-table-column label="结款方式" min-width="180">
-                    <template #default="{ row }">
-                        <div class="font-medium" :class="row.settlement_type === 'offset' ? 'text-amber-600' : 'text-gray-900'">{{ row.settlement_type_text || '-' }}</div>
-                        <div class="mt-1 text-xs text-gray-500">{{ row.pay_method_text || '-' }}</div>
-                        <div class="mt-1 text-xs text-gray-400"><ErpCopyText :value="row.settlement_no" title="结算单号" max-width="170px" /></div>
-                    </template>
-                </el-table-column>
-                <el-table-column label="本次结算" width="130" align="right">
-                    <template #default="{ row }">{{ money(row.applied_amount) }}</template>
-                </el-table-column>
-                <el-table-column label="确认信息" min-width="190">
-                    <template #default="{ row }">
-                        <div>{{ row.operator_name || '-' }}</div>
-                        <div class="mt-1 text-xs text-gray-500">{{ formatTime(row.confirmed_at) }}</div>
-                        <div v-if="row.remark" class="mt-1 text-xs text-gray-500">{{ row.remark }}</div>
-                    </template>
-                </el-table-column>
-                <el-table-column label="关联设备 / 账目" min-width="330">
-                    <template #default="{ row }">
-                        <div v-for="target in row.targets" :key="`${target.target_type}_${target.target_id}`" class="mb-2 rounded bg-gray-50 px-2 py-2 text-xs text-gray-600">
-                            <div class="flex items-center justify-between gap-2">
-                                <span class="font-medium text-gray-900">{{ target.target_type_text }} {{ target.target_no || target.source_no || '-' }}</span>
-                                <span class="font-medium text-gray-900">结算 {{ money(target.applied_amount) }}</span>
-                            </div>
-                            <div v-for="device in target.devices" :key="`${target.target_type}_${target.target_id}_${device.asset_id}_${device.imei}`" class="mt-2 border-l-2 border-gray-200 pl-2">
-                                <div class="font-medium text-gray-900">{{ device.model || '-' }}</div>
-                                <div class="mt-1 text-gray-500">{{ erpSerialText(device) }}</div>
-                                <div class="mt-1 text-gray-500">{{ deviceSummary(device) }}</div>
-                            </div>
-                            <div v-if="!target.devices?.length" class="mt-1 text-gray-400">{{ target.source_no || '-' }}</div>
-                        </div>
-                        <div v-if="!row.targets?.length" class="text-xs text-gray-400">-</div>
-                    </template>
-                </el-table-column>
-                <el-table-column label="账户收付明细" min-width="260">
-                    <template #default="{ row }">
-                        <div v-for="ledger in row.money_ledgers" :key="ledger.ledger_no" class="mb-2 rounded bg-gray-50 px-2 py-2 text-xs text-gray-600">
-                            <div class="flex items-center justify-between gap-2">
-                                <span class="font-medium text-gray-900">{{ ledger.capital_account_name || row.capital_account_name || '-' }}</span>
-                                <span :class="ledger.direction === 'in' ? 'text-green-600' : 'text-red-600'">{{ ledger.direction === 'in' ? '收款' : '付款' }} {{ money(ledger.amount) }}</span>
-                            </div>
-                            <div class="mt-1 text-gray-400">{{ ledger.ledger_no }} · 账户余额 {{ money(ledger.balance_after) }}</div>
-                            <ErpImageGallery v-if="ledger.voucher_urls" class="mt-2" :value="ledger.voucher_urls" :size="48" :limit="3" />
-                        </div>
-                        <div v-if="!row.money_ledgers?.length" class="text-xs text-gray-400">折账不产生资金流水</div>
-                    </template>
-                </el-table-column>
-            </el-table>
+            <HsxFold class="erp-finance-records" :title="`本页设备结算（${items.settlements.length}）`">
+                <ErpSettlementCards :rows="items.settlements" :loading="items.loading" />
+            </HsxFold>
+            <template #footer>
+                <el-button @click="items.visible = false">关闭</el-button>
+                <el-button v-if="items.row && canOffset(items.row)" type="warning" plain @click="openOffset(items.row); items.visible = false">折账</el-button>
+                <el-button v-if="items.row && canConfirmPay(items.row)" type="primary" @click="openPay(items.row); items.visible = false">去付款</el-button>
+            </template>
         </HsxDrawer>
 
-        <HsxDrawer v-model="ledger.visible" title="账目流水" size="72%" :destroy-on-close="false">
+        <HsxDrawer class="erp-desktop-overlay" v-model="ledger.visible" title="账目流水" size="72%" :destroy-on-close="false">
             <div class="ledger-intro">
                 <div>
                     <b>每笔业务怎样影响账面</b>
@@ -448,8 +390,8 @@
             </div>
             <div class="ledger-summary">
                 <div><span>本页记录</span><b>{{ ledger.data.length }}</b></div>
-                <div><span>实际收付款</span><b class="text-green-600">{{ ledgerPageSummary.cash }} 笔</b></div>
-                <div><span>账款 / 成本变化</span><b class="text-blue-600">{{ ledgerPageSummary.business }} 笔</b></div>
+                <div><span>实际收付款</span><b class="text-[color:var(--el-color-success)]">{{ ledgerPageSummary.cash }} 笔</b></div>
+                <div><span>账款 / 成本变化</span><b class="text-[color:var(--erp-text-accent)]">{{ ledgerPageSummary.business }} 笔</b></div>
             </div>
             <div class="ledger-toolbar">
                 <el-input v-model.trim="ledger.keyword" clearable class="!w-[260px]" placeholder="流水号 / 往来单位 / 单号 / 备注" @keyup.enter="loadLedger" />
@@ -494,7 +436,7 @@
             </div>
         </HsxDrawer>
 
-        <HsxDrawer v-model="settle.visible" title="结算记录" size="72%" :destroy-on-close="false">
+        <HsxDrawer class="erp-desktop-overlay" v-model="settle.visible" title="结算记录" size="72%" :destroy-on-close="false">
             <div class="settlement-intro">
                 <div><b>每笔钱怎么结的</b><span>先看往来单位、金额和结算方式；设备、账款单号、资金流水和凭证按需展开。</span></div>
                 <span>共 {{ settle.total }} 笔</span>
@@ -508,7 +450,7 @@
                 </el-select>
                 <el-button type="primary" @click="reloadSettlement">查询</el-button>
                 <el-button @click="settle.keyword = ''; settle.type = ''; reloadSettlement()">重置</el-button>
-                <span v-if="settle.assetLabel" class="text-sm text-gray-500">当前筛选设备：{{ settle.assetLabel }}
+                <span v-if="settle.assetLabel" class="text-sm text-[color:var(--el-text-color-secondary)]">当前筛选设备：{{ settle.assetLabel }}
                     <el-button link type="primary" @click="settle.assetId = 0; settle.assetLabel = ''; reloadSettlement()">清除</el-button>
                 </span>
             </div>
@@ -523,11 +465,15 @@
                 />
             </div>
         </HsxDrawer>
-    </HsxPage>
+    </ErpDesktopPage>
 </template>
 
 <script setup lang="ts">
-import { HsxTitle, HsxPage, HsxSearchPanel, HsxDialog, HsxDrawer, useFeedback, HsxFold } from '@/addon/hsx_components/core'
+import ErpDesktopPage from '@/addon/hsx_erp/components/ErpDesktopPage.vue'
+import ErpWorkspaceHeader from '@/addon/hsx_erp/components/ErpWorkspaceHeader.vue'
+import ErpDataTable from '@/addon/hsx_erp/components/ErpDataTable.vue'
+import ErpFinanceOverview from '@/addon/hsx_erp/components/ErpFinanceOverview.vue'
+import { HsxSearchPanel, HsxDialog, HsxDrawer, useFeedback, HsxFold } from '@/addon/hsx_components/core'
 import { erpNamedLabel, erpSerialText } from '@/addon/hsx_erp/utils/display'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
@@ -928,7 +874,7 @@ function collectSettlements(rows: any[]) {
     ;(rows || []).forEach((item: any) => {
         ;(item.settlements || []).forEach((settlement: any) => {
             const key = `${settlement.settlement_id}_${settlement.applied_amount}_${item.payable_id}`
-            if (!map.has(key)) map.set(key, settlement)
+            if (!map.has(key)) map.set(key, { ...settlement, _view_key: key })
         })
     })
     return Array.from(map.values())
@@ -1000,7 +946,7 @@ function statusMeta(status: string) {
     return map[status] || { label: '状态待确认', type: 'info' }
 }
 
-function partyStatusMeta(row: any) {
+function partyStatusMeta(row: any): { label: string; type: 'success' | 'primary' | 'warning' } {
     const amount = Number(row.amount || 0)
     const settled = Number(row.settled_amount || 0)
     if (amount > 0 && settled >= amount) return { label: '已结清', type: 'success' }
@@ -1055,21 +1001,21 @@ function ledgerAmountMeta(row: any) {
     const type = String(row?.biz_type || '').toLowerCase()
     const decrease = String(row?.direction || '').toLowerCase() === 'decrease'
     const map: any = {
-        purchase: { text: `新增应付 ${amount}`, className: 'text-orange-600' },
-        purchase_cancel: { text: `冲回应付 ${amount}`, className: 'text-green-600' },
-        purchase_return: { text: `冲回成本 ${amount}`, className: 'text-green-600' },
-        purchase_return_loss: { text: `新增损失 ${amount}`, className: 'text-red-600' },
-        sale: { text: `新增应收 ${amount}`, className: 'text-blue-600' },
-        sale_cancel: { text: `冲回应收 ${amount}`, className: 'text-orange-600' },
-        sale_item_cancel: { text: `冲回应收 ${amount}`, className: 'text-orange-600' },
-        sale_return: { text: `冲回应收 ${amount}`, className: 'text-orange-600' },
-        sale_compensation: { text: `新增应付 ${amount}`, className: 'text-orange-600' },
-        payment: { text: `实际支出 ${amount}`, className: 'text-red-600' },
-        receipt: { text: `实际收入 ${amount}`, className: 'text-green-600' },
+        purchase: { text: `新增应付 ${amount}`, className: 'text-[color:var(--el-color-warning)]' },
+        purchase_cancel: { text: `冲回应付 ${amount}`, className: 'text-[color:var(--el-color-success)]' },
+        purchase_return: { text: `冲回成本 ${amount}`, className: 'text-[color:var(--el-color-success)]' },
+        purchase_return_loss: { text: `新增损失 ${amount}`, className: 'text-[color:var(--el-color-danger)]' },
+        sale: { text: `新增应收 ${amount}`, className: 'text-[color:var(--erp-text-accent)]' },
+        sale_cancel: { text: `冲回应收 ${amount}`, className: 'text-[color:var(--el-color-warning)]' },
+        sale_item_cancel: { text: `冲回应收 ${amount}`, className: 'text-[color:var(--el-color-warning)]' },
+        sale_return: { text: `冲回应收 ${amount}`, className: 'text-[color:var(--el-color-warning)]' },
+        sale_compensation: { text: `新增应付 ${amount}`, className: 'text-[color:var(--el-color-warning)]' },
+        payment: { text: `实际支出 ${amount}`, className: 'text-[color:var(--el-color-danger)]' },
+        receipt: { text: `实际收入 ${amount}`, className: 'text-[color:var(--el-color-success)]' },
         offset: { text: `折账核销 ${amount}`, className: 'text-purple-600' },
-        refurbish: { text: `新增成本 ${amount}`, className: 'text-orange-600' }
+        refurbish: { text: `新增成本 ${amount}`, className: 'text-[color:var(--el-color-warning)]' }
     }
-    return map[type] || { text: `${decrease ? '减少' : '增加'} ${amount}`, className: decrease ? 'text-orange-600' : 'text-blue-600' }
+    return map[type] || { text: `${decrease ? '减少' : '增加'} ${amount}`, className: decrease ? 'text-[color:var(--el-color-warning)]' : 'text-[color:var(--erp-text-accent)]' }
 }
 
 function ledgerImpactText(row: any) {
@@ -1110,57 +1056,56 @@ function formatTime(value: any) {
 <style scoped>
 .summary-tile {
     border-radius: 8px;
-    background: #f8fafc;
+    background: var(--el-fill-color-light);
     padding: 14px 16px;
 }
 .summary-label {
-    color: #64748b;
+    color: var(--el-text-color-secondary);
     font-size: 13px;
 }
 .summary-value {
     margin-top: 6px;
-    color: #111827;
     font-size: 22px;
     font-weight: 650;
 }
-.ledger-intro { display:flex; max-width:1040px; margin:0 auto 12px; align-items:flex-start; justify-content:space-between; gap:18px; padding:14px 16px; border:1px solid #dbeafe; border-radius:8px; background:#f8fbff; }
+.ledger-intro { display:flex; max-width:1040px; margin:0 auto 12px; align-items:flex-start; justify-content:space-between; gap:18px; padding:14px 16px; border:1px solid var(--el-color-primary-light-9); border-radius:8px; background:var(--el-color-primary-light-9); }
 .ledger-intro > div { display:flex; min-width:0; flex-direction:column; gap:4px; }
-.ledger-intro b { color:#1e293b; font-size:15px; }
-.ledger-intro div span { color:#64748b; font-size:12px; line-height:1.6; }
-.ledger-intro > span { flex:none; padding:4px 9px; border-radius:999px; color:#1d4ed8; background:#dbeafe; font-size:12px; font-weight:600; }
+.ledger-intro b { color:var(--el-text-color-primary); font-size:15px; }
+.ledger-intro div span { color:var(--el-text-color-secondary); font-size:12px; line-height:1.6; }
+.ledger-intro > span { flex:none; padding:4px 9px; border-radius:999px; color:var(--el-color-primary); background:var(--el-color-primary-light-9); font-size:12px; font-weight:600; }
 .ledger-summary { display:grid; max-width:1040px; margin:0 auto 12px; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
-.ledger-summary > div { display:flex; min-width:0; flex-direction:column; gap:5px; padding:11px 14px; border:1px solid #e5e7eb; border-radius:7px; background:#fff; }
-.ledger-summary span { color:#94a3b8; font-size:12px; }
-.ledger-summary b { color:#1e293b; font-size:17px; }
-.ledger-toolbar { display:flex; max-width:1040px; margin:0 auto 14px; align-items:center; flex-wrap:wrap; gap:8px; padding:10px 12px; border-radius:7px; background:#f8fafc; }
+.ledger-summary > div { display:flex; min-width:0; flex-direction:column; gap:5px; padding:11px 14px; border:1px solid var(--el-border-color); border-radius:7px; background:var(--el-bg-color-overlay); }
+.ledger-summary span { color:var(--el-text-color-secondary); font-size:12px; }
+.ledger-summary b { color:var(--el-text-color-primary); font-size:17px; }
+.ledger-toolbar { display:flex; max-width:1040px; margin:0 auto 14px; align-items:center; flex-wrap:wrap; gap:8px; padding:10px 12px; border-radius:7px; background:var(--el-fill-color-light); }
 .ledger-body { min-height:160px; }
 .ledger-event-list { max-width:1040px; margin:0 auto; border-top:0; }
-.ledger-event-list :deep(.el-collapse-item) { margin-bottom:10px; overflow:hidden; border:1px solid #e5e7eb; border-radius:8px; background:#fff; }
+.ledger-event-list :deep(.el-collapse-item) { margin-bottom:10px; overflow:hidden; border:1px solid var(--el-border-color); border-radius:8px; background:var(--el-bg-color-overlay); }
 .ledger-event-list :deep(.el-collapse-item__header) { height:auto; min-height:76px; padding:0 16px; border-bottom:0; line-height:normal; }
-.ledger-event-list :deep(.el-collapse-item__wrap) { border-top:1px solid #f1f5f9; border-bottom:0; }
+.ledger-event-list :deep(.el-collapse-item__wrap) { border-top:1px solid var(--el-fill-color-light); border-bottom:0; }
 .ledger-event-list :deep(.el-collapse-item__content) { padding:12px 16px 16px; }
 .ledger-event-head { display:flex; width:100%; min-width:0; align-items:center; gap:12px; padding:12px 10px 12px 0; }
 .ledger-event-dot { width:9px; height:9px; flex:none; border-radius:50%; }
-.ledger-event-dot.is-increase { background:#3b82f6; box-shadow:0 0 0 4px #dbeafe; }
-.ledger-event-dot.is-decrease { background:#f59e0b; box-shadow:0 0 0 4px #fef3c7; }
+.ledger-event-dot.is-increase { background:var(--el-color-primary); box-shadow:0 0 0 4px var(--el-color-primary-light-9); }
+.ledger-event-dot.is-decrease { background:var(--el-color-warning); box-shadow:0 0 0 4px var(--el-color-warning-light-9); }
 .ledger-event-main { display:flex; min-width:0; flex:1; flex-direction:column; gap:6px; }
 .ledger-event-title { display:flex; min-width:0; align-items:center; gap:9px; }
-.ledger-event-title b { overflow:hidden; color:#1e293b; font-size:14px; text-overflow:ellipsis; white-space:nowrap; }
-.ledger-event-main > span { overflow:hidden; color:#64748b; font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
+.ledger-event-title b { overflow:hidden; color:var(--el-text-color-primary); font-size:14px; text-overflow:ellipsis; white-space:nowrap; }
+.ledger-event-main > span { overflow:hidden; color:var(--el-text-color-secondary); font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
 .ledger-event-result { display:flex; min-width:150px; flex:none; align-items:flex-end; flex-direction:column; gap:5px; }
 .ledger-event-result strong { font-size:18px; }
-.ledger-event-result span { color:#94a3b8; font-size:12px; }
+.ledger-event-result span { color:var(--el-text-color-secondary); font-size:12px; }
 .ledger-event-detail { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 18px; padding-left:21px; }
 .ledger-event-detail > div { display:flex; min-width:0; flex-direction:column; gap:4px; }
-.ledger-event-detail span { color:#94a3b8; font-size:12px; }
-.ledger-event-detail b { overflow-wrap:anywhere; color:#475569; font-size:13px; font-weight:500; }
+.ledger-event-detail span { color:var(--el-text-color-secondary); font-size:12px; }
+.ledger-event-detail b { overflow-wrap:anywhere; color:var(--el-text-color-regular); font-size:13px; font-weight:500; }
 .ledger-pagination { display:flex; max-width:1040px; margin:16px auto 0; justify-content:flex-end; }
 @media (max-width: 900px) { .ledger-summary { grid-template-columns:1fr; } .ledger-event-result { min-width:110px; } .ledger-event-detail { grid-template-columns:1fr; } }
-.settlement-intro { display:flex; max-width:1040px; margin:0 auto 12px; align-items:flex-start; justify-content:space-between; gap:18px; padding:14px 16px; border:1px solid #dbeafe; border-radius:8px; background:#f8fbff; }
+.settlement-intro { display:flex; max-width:1040px; margin:0 auto 12px; align-items:flex-start; justify-content:space-between; gap:18px; padding:14px 16px; border:1px solid var(--el-color-primary-light-9); border-radius:8px; background:var(--el-color-primary-light-9); }
 .settlement-intro > div { display:flex; flex-direction:column; gap:4px; }
-.settlement-intro b { color:#1e293b; font-size:15px; }
-.settlement-intro div span { color:#64748b; font-size:12px; }
-.settlement-intro > span { flex:none; padding:4px 9px; border-radius:999px; color:#1d4ed8; background:#dbeafe; font-size:12px; font-weight:600; }
-.settlement-toolbar { display:flex; max-width:1040px; margin:0 auto 14px; align-items:center; flex-wrap:wrap; gap:8px; padding:10px 12px; border-radius:7px; background:#f8fafc; }
+.settlement-intro b { color:var(--el-text-color-primary); font-size:15px; }
+.settlement-intro div span { color:var(--el-text-color-secondary); font-size:12px; }
+.settlement-intro > span { flex:none; padding:4px 9px; border-radius:999px; color:var(--el-color-primary); background:var(--el-color-primary-light-9); font-size:12px; font-weight:600; }
+.settlement-toolbar { display:flex; max-width:1040px; margin:0 auto 14px; align-items:center; flex-wrap:wrap; gap:8px; padding:10px 12px; border-radius:7px; background:var(--el-fill-color-light); }
 .settlement-pagination { display:flex; max-width:1040px; margin:16px auto 0; justify-content:flex-end; }
 </style>

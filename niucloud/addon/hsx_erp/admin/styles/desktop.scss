@@ -1,0 +1,120 @@
+:root { --erp-text-accent: var(--el-color-primary); }
+html.dark { --erp-text-accent: #9aa8ff; --erp-text-accent: color-mix(in srgb, var(--el-color-primary) 45%, white); }
+
+:is(.erp-desktop-page, .erp-desktop-overlay) {
+    .el-button--primary.is-link, .el-tabs__item.is-active, .el-tabs__item:hover, .hsx-fold__label, .el-pager li.is-active { color: var(--erp-text-accent); }
+}
+
+.erp-desktop-page {
+    --erp-border: var(--el-border-color);
+    --erp-muted: var(--el-text-color-secondary);
+    letter-spacing: 0;
+    .erp-list-surface, .erp-workbench {
+        min-width: 0;
+        padding: 16px 20px;
+        background: var(--el-bg-color-overlay);
+    }
+    .erp-list-surface > .hsx-title, .erp-workbench > .hsx-title { margin-bottom: 12px; }
+    .hsx-title { letter-spacing: 0; }
+    .hsx-title__heading { letter-spacing: 0; }
+    .hsx-title--page .hsx-title__heading { font-size: 20px; line-height: 28px; }
+    .erp-workspace-header > .hsx-title > .hsx-title__content { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; }
+    .erp-workspace-header > .hsx-title .hsx-title__subtitle { flex-basis: 100%; }
+    .hsx-title__extra { gap: 8px; }
+    .el-button + .el-button { margin-left: 0; }
+    .erp-workspace-header__body > .hsx-search-panel {
+        margin: 0 0 12px;
+        padding: 10px 12px;
+        background: var(--el-fill-color-light);
+        border-color: var(--erp-border);
+        .hsx-search-panel__heading { margin-bottom: 8px; }
+        .hsx-search-panel__summary { max-width: 280px; }
+        .el-form--inline { gap: 8px 12px; }
+        .el-form--inline .el-form-item { flex-direction: row; align-items: center; }
+        .el-form--inline .el-form-item > .el-form-item__label { padding: 0 8px 0 0; line-height: 20px; margin: 0; }
+        .hsx-fold { border: 0; background: transparent; border-radius: 0; }
+        .hsx-fold__trigger { padding: 4px 0; min-height: 28px; }
+        .hsx-fold__summary { display: none; }
+        .hsx-fold__body { padding: 8px 0 0; }
+    }
+    .erp-workspace-header__body > .erp-metrics {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0;
+        margin: 10px 0 0;
+        padding: 8px 0;
+        border-block: 1px solid var(--erp-border);
+        .summary-tile, .summary-card {
+            min-width: 0;
+            padding: 0 16px;
+            border: 0;
+            border-right: 1px solid var(--erp-border);
+            border-radius: 0;
+            background: transparent;
+            box-shadow: none;
+        }
+        > :first-child { padding-left: 0; }
+        > :last-child { border-right: 0; }
+        .summary-label, .text-xs { color: var(--erp-muted); font-size: 12px; }
+        .summary-value, .text-2xl {
+            margin-top: 3px;
+            font-size: 20px;
+            line-height: 26px;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+            overflow-wrap: anywhere;
+        }
+        .summary-tile--clickable { transition: background-color .16s; }
+        .summary-tile--clickable:hover { transform: none; background: var(--el-fill-color-light); }
+        .summary-value:not([class*="text-"]) { color: var(--el-text-color-primary); }
+    }
+    .erp-workspace-header__body > .erp-metrics--stock { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    .erp-workspace-header__body > .erp-summary-heading { margin-top: 8px; }
+    .erp-workspace-header__toolbar > .erp-mode-switch { margin: 0; padding: 0; background: none; }
+    .erp-list-surface > .el-tabs { margin-top: 8px; }
+    .erp-list-surface > .el-tabs .el-tabs__header { margin-bottom: 8px; }
+    .erp-list-surface > .el-tabs .el-tabs__item { height: 36px; }
+    .erp-data-table {
+        width: 100%;
+        border: 1px solid var(--erp-border);
+        border-radius: 6px;
+        --el-table-header-bg-color: var(--el-fill-color-light);
+        --el-table-row-hover-bg-color: var(--el-color-primary-light-9);
+        .el-table__cell { padding: 9px 0; }
+        .el-table__header .el-table__cell { padding: 8px 0; color: var(--el-text-color-regular); font-weight: 500; }
+        .cell { font-size: 13px; line-height: 21px; }
+        .el-table__empty-block { min-height: 180px; }
+        .el-button.is-link { padding: 3px 5px; min-height: 28px; }
+    }
+    .erp-selection-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 12px; margin-bottom: 8px; border-left: 3px solid var(--el-color-primary); background: var(--el-color-primary-light-9); font-size: 13px; }
+    .erp-list-surface > .erp-pagination {
+        margin-top: 10px;
+        min-height: 32px;
+        flex-wrap: wrap;
+        gap: 8px;
+        .el-pagination { flex-wrap: wrap; row-gap: 8px; }
+    }
+    button:focus-visible, [tabindex="0"]:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: 2px; }
+    @media (max-width: 1100px) {
+        .erp-list-surface, .erp-workbench { padding: 12px; }
+        .hsx-title__extra { flex-wrap: wrap; }
+        .erp-workspace-header__body > .erp-metrics--stock { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 12px; }
+        .erp-metrics--stock > :nth-child(3) { border-right: 0; }
+        .erp-metrics--stock > :nth-child(4) { padding-left: 0; }
+        .erp-pagination .el-pagination__jump { display: none; }
+    }
+    @media (min-width: 768px) {
+        .hsx-title { flex-wrap: nowrap; }
+        .hsx-title__extra { width: auto; justify-content: flex-end; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+    }
+}
+
+// These explicit ERP classes also apply inside teleported finance drawers.
+.erp-finance-section-heading { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; color: var(--el-text-color-primary); }
+.erp-finance-section-heading h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.erp-finance-section-heading > span, .erp-finance-secondary { color: var(--el-text-color-secondary); font-size: 12px; font-weight: 400; }
+.erp-finance-row-details { padding: 12px 20px; background: var(--el-fill-color-light); }
+.erp-finance-records { margin-top: 20px; }

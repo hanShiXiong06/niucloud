@@ -12,8 +12,19 @@ final class ProviderCallback extends BaseController
 {
     public function event(string $channel): Response
     {
+        return $this->receive($channel, false);
+    }
+
+    public function data(string $channel): Response
+    {
+        return $this->receive($channel, true);
+    }
+
+    private function receive(string $channel, bool $data): Response
+    {
         try {
-            $result = (new WecomProviderCallbackService())->serve(
+            $method = $data ? 'serveData' : 'serve';
+            $result = (new WecomProviderCallbackService())->{$method}(
                 $channel,
                 (string)$this->request->method(),
                 (string)$this->request->url(true),
@@ -25,7 +36,8 @@ final class ProviderCallback extends BaseController
             }
             return $response;
         } catch (\Throwable $e) {
-            Log::error('企业微信服务商回调处理失败', ['channel' => $channel, 'message' => $e->getMessage()]);
+            // 不记录请求正文、查询串或第三方异常原文，避免泄露消息、签名和密钥。
+            Log::error('企业微信服务商回调处理失败', ['channel' => $channel, 'callback' => $data ? 'data' : 'event', 'error_type' => get_class($e)]);
             return response('failed', 500)->header(['Content-Type' => 'text/plain;charset=utf-8']);
         }
     }

@@ -13,11 +13,4 @@ class PickupNoticeConfig extends BaseAdminController
         return success((new PickupNoticeConfigService())->get((int)$this->request->siteId()));
     }
 
-    public function save()
-    {
-        (new PickupNoticeConfigService())->save((int)$this->request->siteId(), $this->request->params([
-            ['weapp', []], ['wechat', []],
-        ]));
-        return success('EDIT_SUCCESS');
-    }
 }

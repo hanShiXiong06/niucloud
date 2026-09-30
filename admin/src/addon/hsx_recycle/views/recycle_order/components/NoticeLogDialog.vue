@@ -9,7 +9,7 @@
   >
     <div class="notice-log-dialog__body">
       <HsxNotice default-expanded
-        title="这里记录每一次通知的发送参数、关联设备、跳转页面和成功失败结果，方便复盘微信模板、用户触达和业务操作链路。"
+        title="这里记录通知的执行参数、关联设备和处理结果。「已交给通知框架」不代表微信已受理或客户已收到；请结合系统通知记录核实，不要直接重复发送。"
         type="info"
         :closable="false"
         show-icon
@@ -26,7 +26,7 @@
             <span v-else class="text-xs text-gray-400">整单</span>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="110" align="center">
+        <el-table-column label="状态" min-width="150" align="center">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.status)" size="small">{{ row.status_name }}</el-tag>
           </template>
@@ -71,6 +71,7 @@ const getStatusType = (status: number) => {
   if (Number(status) === 1) return "success";
   if (Number(status) === 2) return "danger";
   if (Number(status) === 3) return "info";
+  if (Number(status) === 4) return "info";
   return "warning";
 };
 

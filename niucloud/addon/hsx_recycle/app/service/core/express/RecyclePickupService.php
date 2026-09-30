@@ -14,7 +14,9 @@ class RecyclePickupService
 {
     public static function decode($data): array
     {
-        return is_array($data) ? $data : (json_decode((string)$data, true) ?: []);
+        if (is_array($data)) return $data;
+        $decoded = json_decode((string)$data, true);
+        return is_array($decoded) ? $decoded : [];
     }
 
     public function view(array $order): array
@@ -145,27 +147,46 @@ class RecyclePickupService
         $order = $this->ownedOrder($siteId, $orderId, $memberId);
         $record = $this->record($siteId, $orderId);
         if (!$record || ($this->view($order->toArray())['state'] === 'manual')) {
-            return $this->view($order->toArray());
+            return $this->view($order->toArray()) + ['refresh_result' => [
+                'status' => 'not_required', 'message' => '当前没有需要向渠道核实的预约，请按订单中的寄件方式办理', 'retry_after' => 0,
+            ]];
         }
-        ExpressOperationLock::run($siteId, (string)$record->third_order_no, function () use ($record, $siteId) {
+        $refreshResult = ExpressOperationLock::run($siteId, (string)$record->third_order_no, function () use ($record, $siteId) {
             $record->refresh();
             $data = (array)$record->api_response;
-            if (time() - (int)($data['last_query_at'] ?? 0) < 60) {
-                return;
+            $remaining = 60 - (time() - (int)($data['last_query_at'] ?? 0));
+            if ($remaining > 0) {
+                // 上次回调可能已经保存渠道事实但订单投影失败，节流也须修复本地展示。
+                $this->syncOrder($record);
+                return ['status' => 'throttled', 'message' => '已显示当前记录，请稍后再核实渠道状态', 'retry_after' => $remaining];
+            }
+            if (($data['provider'] ?? '') === 'kuaidi100' && empty($data['provider_task_id'])) {
+                $this->syncOrder($record);
+                return ['status' => 'waiting_callback', 'message' => '尚未收到渠道预约编号，请等待回调或联系门店核实，勿重复叫件', 'retry_after' => 60];
             }
             $data['last_query_at'] = time();
             $record->save(['api_response' => $data]);
             try {
                 (new ExpressOrderService())->getOrderDetail($siteId, ['thirdOrderNo' => (string)$record->third_order_no]);
+                $record->refresh();
+                $data = (array)$record->api_response;
+                unset($data['last_query_error']);
+                $data['last_query_success_at'] = time();
+                $record->save(['api_response' => $data]);
+                $result = ['status' => 'updated', 'message' => '已核实渠道状态，请以当前取件安排为准', 'retry_after' => 60];
             } catch (\Throwable $e) {
                 $record->refresh();
                 $data = (array)$record->api_response;
                 $data['last_query_error'] = mb_substr($e->getMessage(), 0, 300);
                 $record->save(['api_response' => $data]);
+                // 不把上游异常详情和账号信息返回客户，也不能将查询失败当预约失败。
+                $result = ['status' => 'unavailable', 'message' => '暂未取得渠道最新状态，保留原预约，请稍后再试或联系门店', 'retry_after' => 60];
             }
+            $this->syncOrder($record);
+            return $result;
         });
         $order->refresh();
-        return $this->view($order->toArray());
+        return $this->view($order->toArray()) + ['refresh_result' => $refreshResult];
     }
 
     public function manual(int $siteId, int $orderId, int $memberId, array $input): array

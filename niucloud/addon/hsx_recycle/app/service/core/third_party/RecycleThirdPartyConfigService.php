@@ -6,6 +6,8 @@ namespace addon\hsx_recycle\app\service\core\third_party;
 use addon\hsx_recycle\app\dict\config\RecycleConfigKeyDict;
 use addon\hsx_recycle\app\dict\third_party\ThirdPartyDict;
 use addon\hsx_recycle\app\service\core\device_query\DeviceQueryConfigService;
+use addon\hsx_recycle\app\service\core\express\ExpressSubmissionException;
+use addon\hsx_recycle\app\service\core\express\provider\Kuaidi100ProductCatalog;
 use app\service\core\sys\CoreConfigService;
 use core\base\BaseCoreService;
 
@@ -55,6 +57,13 @@ class RecycleThirdPartyConfigService extends BaseCoreService
 
     public function setConfig(int $siteId, array $data): bool
     {
+        if (array_key_exists('express_order', $data)) {
+            if (!is_array($data['express_order'])
+                || (array_key_exists(ThirdPartyDict::PROVIDER_KUAIDI100, $data['express_order'])
+                    && !is_array($data['express_order'][ThirdPartyDict::PROVIDER_KUAIDI100]))) {
+                throw new ExpressSubmissionException('寄件配置格式不正确，请刷新页面后重新填写', 'rejected');
+            }
+        }
         $old = $this->getConfig($siteId, false);
         if (isset($data['device_query']) && is_array($data['device_query'])) {
             $this->deviceQueryConfigService->setConfig($siteId, $data['device_query']);
@@ -69,9 +78,21 @@ class RecycleThirdPartyConfigService extends BaseCoreService
             && empty($config['express_order'][ThirdPartyDict::PROVIDER_KUAIDI100]['callback_salt'])) {
             $config['express_order'][ThirdPartyDict::PROVIDER_KUAIDI100]['callback_salt'] = bin2hex(random_bytes(24));
         }
-        if (!empty($config['express_order']['enabled'])
-            && ($config['express_order']['provider'] ?? '') === ThirdPartyDict::PROVIDER_KUAIDI100) {
-            \addon\hsx_recycle\app\service\core\express\provider\Kuaidi100Protocol::validateConfig($config['express_order'][ThirdPartyDict::PROVIDER_KUAIDI100]);
+        // 新目录只约束本次提交的寄件配置，不在读取/历史订单处理中校验，
+        // 也不因保存地址解析等其他配置而拦截或重写原寄件产品。
+        if (isset($data['express_order']) && is_array($data['express_order'])) {
+            $strict = !empty($config['express_order']['enabled'])
+                && ($config['express_order']['provider'] ?? '') === ThirdPartyDict::PROVIDER_KUAIDI100;
+            try {
+                $config['express_order'][ThirdPartyDict::PROVIDER_KUAIDI100] = Kuaidi100ProductCatalog::normalizeForSave(
+                    $config['express_order'][ThirdPartyDict::PROVIDER_KUAIDI100], $strict
+                );
+            } catch (\InvalidArgumentException $e) {
+                throw new ExpressSubmissionException($e->getMessage(), 'rejected');
+            }
+            if ($strict) {
+                \addon\hsx_recycle\app\service\core\express\provider\Kuaidi100Protocol::validateConfig($config['express_order'][ThirdPartyDict::PROVIDER_KUAIDI100]);
+            }
         }
         $this->configService->setConfig($siteId, RecycleConfigKeyDict::THIRD_PARTY, $config);
 

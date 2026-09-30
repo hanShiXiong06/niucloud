@@ -67,7 +67,12 @@ $signed = P::signedBody($config, 'bOrder', $param, '1234567890000');
 check($signed['sign'] === strtoupper(md5($signed['param'] . '1234567890000test-keytest-secret')), 'exact request signature');
 
 $calls = [];
-$transport = static function ($url, $body) use (&$calls) { $calls[] = [$url, $body]; return ['result' => true, 'returnCode' => '200', 'data' => ['taskId' => 'T42', 'orderId' => 'O42', 'kuaidinum' => null, 'pollToken' => 'private-token']]; };
+$transport = static function ($url, $body) use (&$calls) {
+    $calls[] = [$url, $body];
+    $data = ['taskId' => 'T42', 'orderId' => 'O42', 'kuaidinum' => null, 'pollToken' => 'private-token'];
+    if ($body['method'] === 'detail') $data['status'] = 200;
+    return ['result' => true, 'returnCode' => '200', 'data' => $data];
+};
 $provider = new Provider(fn() => $config, $transport);
 $configReads = 0;
 $raceCalls = 0;
@@ -82,6 +87,9 @@ $created = $provider->create(100000, $request);
 check(count($calls) === 1 && $calls[0][1]['method'] === 'bOrder', 'one submission only');
 check($created['orderNo'] === 'O42' && $created['deliveryId'] === '', 'provider ID never masquerades as tracking');
 check($created['booking_state'] === 'accepted', 'API accepted not completed pickup');
+$conflictingCreate = new Provider(fn() => $config, fn() => ['result' => true, 'returnCode' => '200',
+    'data' => ['taskId' => 'T42', 'orderId' => 'O42', 'kuaidiCom' => 'jd']]);
+check($conflictingCreate->create(100000, $request)['booking_state'] === 'exception', 'create acceptance cannot hide changed carrier conflict');
 check(!isset($created['raw']['pollToken']) && strpos(json_encode($created), 'test-secret') === false, 'secret not in normalized return');
 check($provider->products(100000)[0]['pickup_time_required'] === true, 'frontend knows appointment required');
 check($created['provider_account_fingerprint'] === hash('sha256', 'test-key'), 'account fingerprint');
@@ -96,6 +104,26 @@ $timeout = new Provider(fn() => $config, static function () { throw new RuntimeE
 rejects(fn() => $timeout->create(100000, $request), 'unknown', 'network timeout unknown');
 $badResponse = new Provider(fn() => $config, fn() => ['result' => true, 'returnCode' => '200', 'data' => []]);
 rejects(fn() => $badResponse->create(100000, $request), 'unknown', 'missing order identity unknown');
+foreach ([['taskId' => 'PARTIAL_TASK'], ['orderId' => 'PARTIAL_ORDER', 'kuaidinum' => 'PARTIAL_WAYBILL']] as $partialData) {
+    $partial = new Provider(fn() => $config, fn() => ['result' => true, 'returnCode' => '200', 'data' => $partialData]);
+    try {
+        $partial->create(100000, $request);
+        throw new RuntimeException('partial create accepted');
+    } catch (ExpressSubmissionException $e) {
+        check($e->outcome() === 'unknown', 'partial create never claims booking accepted or rejected');
+        $expected = isset($partialData['taskId']) ? ['provider_task_id' => 'PARTIAL_TASK']
+            : ['orderNo' => 'PARTIAL_ORDER', 'deliveryId' => 'PARTIAL_WAYBILL'];
+        check($e->identifiers() === $expected, 'partial identifiers remain available for durable reconciliation');
+    }
+}
+foreach ([[], ['taskId' => 'T42'], ['status' => null], ['status' => ''], ['status' => []]] as $emptyDetail) {
+    $invalidDetail = new Provider(fn() => $config, fn() => ['result' => true, 'returnCode' => '200', 'data' => $emptyDetail]);
+    rejects(fn() => $invalidDetail->detail(100000, $created), 'unknown', 'detail without usable status is a failed verification');
+}
+check(P::normalize([], $created)['booking_state'] === '', 'missing status is neutral outside complete create response');
+check(P::normalize(['status' => 1, 'taskId' => ''], $created)['provider_task_id'] === 'T42', 'blank returned task id cannot erase original query identifier');
+$safeException = new ExpressSubmissionException('mock', 'unknown', null, ['provider_task_id' => 'T42', 'booking_state' => 'confirmed', 'secret' => 'do-not-persist']);
+check($safeException->identifiers() === ['provider_task_id' => 'T42'], 'exception evidence only permits identifiers, not state or credentials');
 foreach (['400' => 'rejected', '503' => 'rejected', '500' => 'unknown', '501' => 'unknown'] as $code => $outcome) {
     $failed = new Provider(fn() => $config, fn() => ['result' => false, 'returnCode' => (string)$code, 'message' => '模拟失败']);
     rejects(fn() => $failed->create(100000, $request), $outcome, 'provider error ' . $code);

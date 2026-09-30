@@ -1,12 +1,5 @@
 <?php
-return [
-    'hsx_recycle_pickup_update' => [
-        'temp_key' => '',
-        'keyword_name_list' => [],
-        'is_need_closure_content' => 1,
-        'content' => static fn(array $context) => \addon\hsx_recycle\app\service\core\recycle_order\PickupNoticeConfigService::templateContent('wechat', $context),
-        'tips' => '请在回收快递配置的预约通知设置中填写本公众号真实模板 ID 和字段映射；用户须关注并绑定公众号。',
-    ],
+return array_replace(\addon\hsx_recycle\app\dict\notice\PickupNoticeTemplate::channel('wechat'), [
     // 订单签收通知
     'recycle_order_sign' => [
         'temp_key' => '62949',
@@ -67,4 +60,4 @@ return [
         'keyword_name_list' => ['订单编号', '完成时间', '奖励积分', '温馨提示'],
         'tips' => '使用该消息请将微信公众号服务类目选择为：商家自营/3C数码'
     ],
-];
+]);

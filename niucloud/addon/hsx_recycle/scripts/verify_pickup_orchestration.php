@@ -153,6 +153,7 @@ namespace addon\hsx_recycle\app\service\core\express {
             $this->calls[] = ['create', $siteId, $request, $row];
             Store::$events[] = ['gateway_create', $row['id']];
             $outcome = Store::$outcomes[$siteId . '|' . $request['thirdOrderNo']] ?? 'accepted';
+            if ($outcome instanceof ExpressSubmissionException) throw $outcome;
             if ($outcome !== 'accepted') throw new ExpressSubmissionException('Simulated ' . $outcome, $outcome);
             return ['booking_state' => 'accepted', 'orderNo' => 'ORDER_' . $siteId . '_' . $row['id'],
                 'deliveryId' => '', 'provider_task_id' => 'TASK_' . $row['id']];
@@ -271,6 +272,28 @@ namespace {
             same($before + 1, count(calls($gateway, 'create')), $outcome . ' 重复提交不再请求渠道');
         }
 
+        foreach ([['provider_task_id' => 'PARTIAL_TASK'], ['orderNo' => 'PARTIAL_ORDER', 'deliveryId' => 'PARTIAL_WAYBILL']] as $index => $identifiers) {
+            $key = 'partial-identifiers-' . $index;
+            Store::$outcomes['1|' . $key] = new ExpressSubmissionException('Partial upstream response', 'unknown', null, $identifiers);
+            $before = count(calls($gateway, 'create'));
+            try { $service->createOrder(1, params($key)); }
+            catch (ExpressSubmissionException $e) { same('unknown', $e->outcome(), '部分编号响应保持结果未知'); }
+            $saved = record(1, $key);
+            same('unknown', $saved->order_status, '部分编号不能把预约标成成功');
+            foreach ($identifiers as $field => $value) same($value, $saved->api_response[$field] ?? null, '部分响应编号已持久化 ' . $field);
+            same($identifiers['orderNo'] ?? '', $saved->order_no, '已取得的渠道订单号同步到索引列');
+            same($identifiers['deliveryId'] ?? '', $saved->delivery_id, '已取得的运单号同步到索引列');
+            $again = $service->createOrder(1, params($key));
+            same('unknown', $again['booking_state'], '部分响应重试复用原未知状态');
+            same(true, $again['idempotent'], '部分响应重试仍然命中幂等');
+            same($before + 1, count(calls($gateway, 'create')), '部分响应后不重复调用创建');
+            if (isset($identifiers['provider_task_id'])) {
+                $service->getOrderDetail(1, ['thirdOrderNo' => $key]);
+                $detailCalls = calls($gateway, 'detail');
+                same('PARTIAL_TASK', end($detailCalls)[2]['provider_task_id'], '仅有 taskId 也能沿原账号继续核实');
+            }
+        }
+
         $otherSite = $service->createOrder(2, params('same-request'));
         same(false, $otherSite['record_id'] === $first['record_id'], '相同商户请求号按站点隔离记录');
         same(2, record(2, 'same-request')->site_id, '第二站点使用自己的预约记录');
@@ -279,7 +302,8 @@ namespace {
         Store::$providers[1] = 'NEW_DEFAULT';
         $service->getOrderDetail(1, ['order_no' => $first['orderNo'], 'provider' => 'ATTACKER',
             'provider_mode' => 'ATTACKER', 'provider_account_fingerprint' => 'ATTACKER']);
-        $detail = calls($gateway, 'detail')[0];
+        $detailCalls = calls($gateway, 'detail');
+        $detail = end($detailCalls);
         same('ORIGINAL_1', $detail[2]['provider'], '查询沿用存储的服务商而非请求或新默认');
         same('online', $detail[2]['provider_mode'], '查询沿用存储的模式');
         same(Store::$snapshots[1]['provider_account_fingerprint'], $detail[2]['provider_account_fingerprint'], '查询沿用原账号指纹');

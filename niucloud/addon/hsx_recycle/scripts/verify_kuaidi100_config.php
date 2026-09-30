@@ -28,6 +28,7 @@ namespace {
     require __DIR__ . '/../app/dict/third_party/ThirdPartyDict.php';
     require __DIR__ . '/../app/service/core/express/ExpressSubmissionException.php';
     require __DIR__ . '/../app/service/core/express/provider/Kuaidi100Protocol.php';
+    require __DIR__ . '/../app/service/core/express/provider/Kuaidi100ProductCatalog.php';
     require __DIR__ . '/../app/service/core/third_party/RecycleThirdPartyConfigService.php';
     require __DIR__ . '/../app/service/core/third_party/CoreThirdPartyService.php';
     $checks = 0;

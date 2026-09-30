@@ -1457,16 +1457,10 @@ return [
                                 'is_show' => '1',
                                 'children' => [
                                     [
-                                        'menu_name' => '读取预约通知配置', 'menu_key' => 'pickup_notice_config_info',
+                                        'menu_name' => '读取预约通知接入状态', 'menu_key' => 'pickup_notice_config_info',
                                         'menu_short_name' => '预约通知', 'parent_select_key' => '', 'menu_type' => '2',
                                         'icon' => '', 'api_url' => 'hsx_recycle/pickup_notice/config', 'router_path' => '',
                                         'view_path' => '', 'methods' => 'get', 'sort' => '0', 'status' => '1', 'is_show' => '0',
-                                    ],
-                                    [
-                                        'menu_name' => '保存预约通知配置', 'menu_key' => 'pickup_notice_config_save',
-                                        'menu_short_name' => '预约通知', 'parent_select_key' => '', 'menu_type' => '2',
-                                        'icon' => '', 'api_url' => 'hsx_recycle/pickup_notice/config', 'router_path' => '',
-                                        'view_path' => '', 'methods' => 'put', 'sort' => '0', 'status' => '1', 'is_show' => '0',
                                     ],
                                 ],
                             ],

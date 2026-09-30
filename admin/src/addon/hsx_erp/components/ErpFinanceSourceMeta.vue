@@ -12,7 +12,7 @@
             <span v-if="partyRoleLabel">对象：{{ partyRoleLabel }}</span>
             <span>方向：{{ directionMeta.label }}</span>
         </div>
-        <el-tooltip :content="`来源单号：${sourceNo}`" placement="top" :show-after="250">
+        <el-tooltip v-if="!compact" :content="`来源单号：${sourceNo}`" placement="top" :show-after="250">
             <div class="finance-source__order">来源单号：<b>{{ sourceNo }}</b></div>
         </el-tooltip>
         <el-tooltip v-if="!compact && showInternalSourceNo" :content="`ERP关联单号：${internalSourceNo}`" placement="top" :show-after="250">
@@ -32,6 +32,10 @@
                 <div>来源单号：{{ sourceNo }}</div>
                 <div v-if="showInternalSourceNo">ERP关联单号：{{ internalSourceNo }}</div>
                 <div v-if="channelName">渠道：{{ channelName }}</div>
+                <div v-if="row.payable_no || row.receivable_no">账款单号：{{ row.payable_no || row.receivable_no }}</div>
+                <div v-if="openingSettleMethod">结算约定：{{ openingSettleMethod }}</div>
+                <div v-if="settleSummary">结算进度：{{ settleSummary }}</div>
+                <div v-for="item in row.settle_summary_items || []" :key="item.label">{{ item.label }}：¥{{ Number(item.amount || 0).toFixed(2) }}</div>
                 <div v-if="showReason && businessReason">{{ reasonLabel }}：{{ businessReason }}</div>
             </div>
         </el-popover>
@@ -113,17 +117,17 @@ function readable(name: any, key: any, fallback: string, map: Record<string, str
 </script>
 
 <style scoped>
-.finance-source { min-width:0; color:#475569; font-size:12px; line-height:1.5; }
+.finance-source { min-width:0; color:var(--el-text-color-regular); font-size:12px; line-height:1.5; }
 .finance-source__head { display:flex; min-width:0; align-items:center; flex-wrap:wrap; gap:6px; }
-.finance-source__business { display:block; overflow:hidden; min-width:0; max-width:200px; color:#1e293b; font-size:13px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
-.finance-source__meta { display:flex; margin-top:7px; flex-wrap:wrap; gap:4px 12px; color:#64748b; }
-.finance-source__order { overflow:hidden; margin-top:5px; color:#64748b; text-overflow:ellipsis; white-space:nowrap; }
-.finance-source__order b { color:#334155; font-weight:550; }
-.finance-source__order--internal { margin-top:2px; color:#94a3b8; }
-.finance-source__order--internal b { color:#64748b; }
-.finance-source__settlement { display:flex; margin-top:5px; flex-wrap:wrap; gap:4px 12px; color:#475569; }
-.finance-source__reason { display:-webkit-box; overflow:hidden; margin-top:7px; padding:6px 8px; border-radius:5px; color:#92400e; background:#fffbeb; line-height:1.45; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
-.finance-source__reason span { margin-right:6px; color:#b45309; font-weight:650; }
+.finance-source__business { display:block; overflow:hidden; min-width:0; max-width:200px; color:var(--el-text-color-primary); font-size:13px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
+.finance-source__meta { display:flex; margin-top:7px; flex-wrap:wrap; gap:4px 12px; color:var(--el-text-color-secondary); }
+.finance-source__order { overflow:hidden; margin-top:5px; color:var(--el-text-color-secondary); text-overflow:ellipsis; white-space:nowrap; }
+.finance-source__order b { color:var(--el-text-color-primary); font-weight:550; }
+.finance-source__order--internal { margin-top:2px; color:var(--el-text-color-secondary); }
+.finance-source__order--internal b { color:var(--el-text-color-secondary); }
+.finance-source__settlement { display:flex; margin-top:5px; flex-wrap:wrap; gap:4px 12px; color:var(--el-text-color-regular); }
+.finance-source__reason { display:-webkit-box; overflow:hidden; margin-top:7px; padding:6px 8px; border-radius:5px; color:var(--el-color-warning); background:var(--el-color-warning-light-9); line-height:1.45; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
+.finance-source__reason span { margin-right:6px; color:var(--el-color-warning); font-weight:650; }
 .is-compact .finance-source__meta { margin-top:5px; }
 .is-compact .finance-source__reason { padding:4px 7px; -webkit-line-clamp:1; }
 .finance-source__explain { margin-top: 4px; }

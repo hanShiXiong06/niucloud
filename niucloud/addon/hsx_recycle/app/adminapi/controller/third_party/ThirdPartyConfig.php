@@ -6,6 +6,7 @@ namespace addon\hsx_recycle\app\adminapi\controller\third_party;
 use addon\hsx_recycle\app\service\admin\third_party\RecycleThirdPartyConfigService;
 use addon\hsx_recycle\app\service\admin\third_party\ThirdPartyCapabilityService;
 use addon\hsx_recycle\app\service\core\third_party\CoreThirdPartyService;
+use addon\hsx_recycle\app\service\core\express\provider\Kuaidi100ProductCatalog;
 use core\base\BaseAdminController;
 
 /**
@@ -27,6 +28,12 @@ class ThirdPartyConfig extends BaseAdminController
     public function getDefaultConfig()
     {
         return success((new RecycleThirdPartyConfigService())->getDefaultConfig());
+    }
+
+    /** 公开官方资料的本地快照；无账号读取、外部请求或配置写入。 */
+    public function kuaidi100Guide()
+    {
+        return success(Kuaidi100ProductCatalog::guide());
     }
 
     public function overview()

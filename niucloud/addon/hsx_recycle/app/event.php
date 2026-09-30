@@ -20,6 +20,8 @@ return [
 
         //通知
         'NoticeData' => [
+            // 预约取件状态：复用 notice 标准业务数据契约
+            'addon\hsx_recycle\app\listener\notice_template\PickupUpdate',
             // 签收通知
             'addon\hsx_recycle\app\listener\notice_template\OrderSign',
             // 下单通知

@@ -16,6 +16,7 @@ class CoreRecycleNoticeLogService extends BaseCoreService
     public const STATUS_SUCCESS = 1;
     public const STATUS_FAIL = 2;
     public const STATUS_SKIPPED = 3;
+    public const STATUS_DISPATCHED = 4;
 
     private NoticeService $noticeService;
 
@@ -65,6 +66,17 @@ class CoreRecycleNoticeLogService extends BaseCoreService
             'fail_reason' => '',
             'send_time' => time(),
             'update_at' => time(),
+        ]);
+    }
+
+    /** 只确认移交给原生通知框架，不能作为微信受理或客户已读凭证。 */
+    public function markDispatched(int $id, array $response): void
+    {
+        if ($id <= 0) return;
+        RecycleNoticeLog::where('id', $id)->update([
+            'status' => self::STATUS_DISPATCHED,
+            'response_data' => $this->jsonEncode($response),
+            'fail_reason' => '', 'send_time' => 0, 'update_at' => time(),
         ]);
     }
 

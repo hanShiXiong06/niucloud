@@ -132,12 +132,19 @@ class Kuaidi100ExpressProvider implements ExpressProviderInterface
         $param = Kuaidi100Protocol::createParams($siteId, $config, $request);
         $data = $this->request($config, $config['mode'] === 'online' ? 'bOrder' : 'cOrder', $param, true);
         if (empty($data['orderId']) || empty($data['taskId'])) {
-            throw new ExpressSubmissionException('快递100已响应但未返回完整预约编号，结果待核实，请勿重复下单');
+            throw new ExpressSubmissionException('快递100已响应但未返回完整预约编号，结果待核实，请勿重复下单', 'unknown', null, [
+                'orderNo' => $data['orderId'] ?? null,
+                'provider_task_id' => $data['taskId'] ?? null,
+                'deliveryId' => $data['kuaidiNum'] ?? $data['kuaidinum'] ?? null,
+            ]);
         }
         $snapshot['third_order_no'] = $param['thirdOrderId'];
         $snapshot['pickup_start'] = (string)($request['pickup_start'] ?? $request['orderSendTime'] ?? '');
         $snapshot['pickup_end'] = (string)($request['pickup_end'] ?? '');
-        return array_merge($snapshot, Kuaidi100Protocol::normalize($data, $snapshot));
+        $result = Kuaidi100Protocol::normalize($data, $snapshot);
+        // 只有完整建单响应可以在无状态字段时证明受理；普通查询不能作此推断。
+        if (!isset($data['status']) && empty($result['conflict'])) $result['booking_state'] = 'accepted';
+        return array_merge($snapshot, $result);
     }
 
     private function historicalConfig(int $siteId, array $request): array
@@ -163,6 +170,9 @@ class Kuaidi100ExpressProvider implements ExpressProviderInterface
     {
         $config = $this->historicalConfig($siteId, $request);
         $data = $this->request($config, 'detail', ['taskId' => $request['provider_task_id']]);
+        if (!isset($data['status']) || !is_scalar($data['status']) || trim((string)$data['status']) === '') {
+            throw new ExpressSubmissionException('快递100查询未返回订单状态，原预约仍待核实，请勿重复下单');
+        }
         return Kuaidi100Protocol::normalize($data, $request);
     }
 

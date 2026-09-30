@@ -22,17 +22,32 @@ export function normalizePickup(value?: Partial<PickupInfo> | null): PickupInfo 
   return {
     ...value,
     state,
-    title: String(value?.title || stateCopy[state].title),
-    message: String(value?.message || stateCopy[state].message),
+    title: value?.conflict ? '取件记录待人工核实' : String(value?.title || stateCopy[state].title),
+    message: value?.conflict ? '取件记录存在冲突，请联系门店核实，不要重复寄件。' : String(value?.message || stateCopy[state].message),
     carrier_name: String(value?.carrier_name || ''),
     pickup_time: String(value?.pickup_time || ''),
     courier_name: String(value?.courier_name || ''),
     courier_phone: String(value?.courier_phone || ''),
     tracking_no: String(value?.tracking_no || ''),
     // 结果未知、受理中即使收到错误的操作标记，也绝不显示另行叫件入口。
-    can_manual: value?.can_manual === true && ['failed', 'cancelled'].includes(state),
+    can_manual: !value?.conflict && value?.can_manual === true && ['failed', 'cancelled'].includes(state),
     can_refresh: value?.can_refresh === true,
   }
+}
+
+/** 刷新只是核实原预约，不能以 HTTP 成功推断快递预约成功。 */
+export function pickupRefreshFeedback(value?: Partial<PickupInfo>): { message: string; retryAfter: number } {
+  const result = value?.refresh_result
+  const retryAfter = Math.min(60, Math.max(0, Number(result?.retry_after) || 0))
+  if (value?.conflict) return { message: '取件记录存在冲突，请联系门店核实，勿重复寄件', retryAfter }
+  const messages: Record<string, string> = {
+    updated: '已核实渠道状态，请查看最新取件安排',
+    throttled: `已显示当前记录，请${retryAfter || 60}秒后再刷新`,
+    waiting_callback: '暂未收到渠道预约编号，请联系门店核实，勿重复叫件',
+    unavailable: '暂未取得渠道最新状态，原预约已保留',
+    not_required: '请按当前订单中的寄件方式办理',
+  }
+  return { message: messages[result?.status || ''] || '已读取当前记录，请查看取件安排', retryAfter }
 }
 
 export function pickupReceiverText(receiver?: PickupInfo['receiver']): string {

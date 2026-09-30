@@ -40,12 +40,14 @@ class RecycleNoticeLogService extends BaseAdminService
             0 => '待发送',
             1 => '发送成功',
             2 => '发送失败',
-            3 => '重复跳过',
+            3 => '已跳过',
+            4 => '已交给通知框架',
         ][$status] ?? '未知';
     }
 
     private function getSceneName(string $scene): string
     {
+        if (str_starts_with($scene, 'pickup:')) return '回收预约取件状态更新';
         return [
             'order_confirm' => '整单待客户确认',
             'device_confirm' => '设备待客户确认',

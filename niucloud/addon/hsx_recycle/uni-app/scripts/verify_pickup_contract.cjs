@@ -40,6 +40,21 @@ for (const state of ['failed', 'cancelled']) {
   check(utils.normalizePickup({ state, can_manual: true }).can_manual, `${state} can follow server permission`)
   check(!utils.normalizePickup({ state, can_manual: false }).can_manual, `${state} respects server denial`)
 }
+for (const state of ['failed', 'cancelled', 'assigned', 'delivered', 'manual']) {
+  const conflicted = utils.normalizePickup({ state, conflict: true, can_manual: true, title: '预约成功' })
+  check(!conflicted.can_manual, `${state} conflict cannot expose another manual shipment`)
+  check(conflicted.title === '取件记录待人工核实', `${state} conflict cannot retain misleading success title`)
+}
+for (const status of ['updated', 'throttled', 'waiting_callback', 'unavailable', 'not_required']) {
+  const feedback = utils.pickupRefreshFeedback({ refresh_result: { status, message: 'UNSAFE_UPSTREAM_ERROR', retry_after: 23 } })
+  check(feedback.message.length > 0 && !feedback.message.includes('UNSAFE'), `${status} has safe refresh feedback`)
+  check(feedback.retryAfter === 23, `${status} respects server cooldown`)
+}
+check(utils.pickupRefreshFeedback({ refresh_result: { status: 'throttled', retry_after: 23 } }).message.includes('23秒'), 'throttle names remaining cooldown')
+check(utils.pickupRefreshFeedback({ conflict: true, refresh_result: { status: 'updated' } }).message.includes('冲突'), 'successful query still warns about conflict')
+check(utils.pickupRefreshFeedback({ refresh_result: { retry_after: -1 } }).retryAfter === 0, 'invalid negative cooldown clamped')
+check(utils.pickupRefreshFeedback({ refresh_result: { retry_after: Infinity } }).retryAfter === 60, 'invalid enormous cooldown clamped')
+check(utils.pickupRefreshFeedback().message.includes('当前记录'), 'older backend response does not claim successful channel query')
 check(utils.pickupReceiverText({ contact_name: '测试门店', mobile: '00000000000', province: '测试省', city: '测试市', address: '测试地址' }).includes('测试省测试市测试地址'), 'copy receiver address')
 
 async function testAvailability() {

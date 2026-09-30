@@ -17,36 +17,41 @@
                         <section class="channel-summary">
                             <div class="channel-mark"><el-icon><Connection /></el-icon></div>
                             <div class="channel-main">
-                                <div class="channel-title-row"><h2>{{ providerConfig.admin_miniapp_name || '后台管理小程序' }}</h2><el-tag :type="providerVerified ? 'success' : 'warning'" effect="light">{{ providerVerified ? '本次凭据验证通过' : providerConfigured ? '配置已保存 · 待验证' : '等待配置' }}</el-tag></div>
-                                <p>{{ providerConfig.channel_code ? `通道 ${providerConfig.channel_code}；保存配置不代表客户已经接通通知。` : '先保存平台配置，再完成官方回调和凭据验证。' }}</p>
+                                <div class="channel-title-row"><h2>{{ providerConfig.admin_miniapp_name || '后台管理小程序' }}</h2><el-tag :type="pageStatus.type" effect="light">{{ pageStatus.label }}</el-tag></div>
+                                <p>{{ providerPreparing ? '回调准备已保存，可去企业微信创建应用；尚未启用通道，也不代表官方回调验证已通过。' : !canPrepareProvider ? '此通道已有服务商应用；修改后请正式保存，再核对凭据、客户授权与员工实测结果。' : '首次创建应用还没有 SuiteID / SuiteSecret？先完成第一步，创建后再回来补齐第二步。' }}</p>
                                 <div class="summary-meta"><span>SuiteID：{{ maskValue(providerConfig.suite_id) }}</span><span>小程序：{{ maskValue(providerConfig.admin_miniapp_appid) }}</span><span>最近 Ticket：{{ formatTime(providerState.suite_ticket_at) }}</span></div>
                             </div>
                         </section>
                         <el-alert v-if="providerState.last_error" class="mb-[18px]" type="error" :closable="false" show-icon :title="providerState.last_error" />
+                        <el-alert v-if="providerLoadError" class="mb-[18px]" type="error" :closable="false" show-icon :title="providerLoadError"><el-button link type="primary" :loading="providerLoading" @click="loadProviderConfig">重试读取已保存配置</el-button></el-alert>
 
-                        <el-form ref="providerFormRef" :model="providerConfig" :rules="providerRules" label-width="165px" class="provider-form">
+                        <el-form ref="providerFormRef" :model="providerConfig" :rules="providerRules" :disabled="providerLoading || providerSaving" label-width="165px" class="provider-form">
                             <div class="form-section">
-                                <div class="section-heading"><div><h3>服务商通道</h3><p>这些参数只由平台管理员维护，客户站点不会看到密钥。</p></div></div>
-                                <el-form-item label="启用服务商通道"><el-switch v-model="providerConfig.enabled" :active-value="1" :inactive-value="0" /></el-form-item>
+                                <div class="section-heading"><div><h3>第一步：先准备回调，再创建应用</h3><p>这一步不需要 SuiteID、SuiteSecret 或小程序 AppID。参数仅由平台管理员维护。</p></div></div>
                                 <el-form-item label="通道标识" prop="channel_code"><el-input v-model.trim="providerConfig.channel_code" placeholder="例如 saas_a" clearable /><div class="field-help">用于区分不同服务器和后台管理小程序，保存后不建议随意修改。</div></el-form-item>
                                 <el-form-item label="服务商企业 ID" prop="provider_corp_id"><el-input v-model.trim="providerConfig.provider_corp_id" placeholder="企业微信服务商 CorpID" clearable /></el-form-item>
-                                <el-form-item label="SuiteID" prop="suite_id"><el-input v-model.trim="providerConfig.suite_id" placeholder="服务商应用 SuiteID" clearable /></el-form-item>
-                                <el-form-item label="SuiteSecret" prop="suite_secret"><el-input v-model.trim="providerConfig.suite_secret" type="password" show-password autocomplete="new-password" placeholder="已配置时会以掩码显示" /></el-form-item>
-                                <el-form-item label="回调 Token" prop="callback_token"><el-input v-model.trim="providerConfig.callback_token" type="password" show-password autocomplete="new-password" placeholder="企业微信回调 Token" /></el-form-item>
-                                <el-form-item label="EncodingAESKey" prop="encoding_aes_key"><el-input v-model.trim="providerConfig.encoding_aes_key" type="password" show-password autocomplete="new-password" placeholder="企业微信回调 EncodingAESKey" /></el-form-item>
-                            </div>
-                            <div class="form-section">
-                                <div class="section-heading"><div><h3>后台管理入口</h3><p>企业微信通知统一跳转到本套 SaaS 的后台管理小程序。</p></div></div>
-                                <el-form-item label="管理小程序 AppID" prop="admin_miniapp_appid"><el-input v-model.trim="providerConfig.admin_miniapp_appid" placeholder="例如 wxe00f1f93e4d87ac7" clearable /></el-form-item>
-                                <el-form-item label="管理小程序名称" prop="admin_miniapp_name"><el-input v-model.trim="providerConfig.admin_miniapp_name" placeholder="客户在企业微信中看到的名称" clearable /></el-form-item>
-                                <el-form-item label="网页管理端地址" prop="web_base_url"><el-input v-model.trim="providerConfig.web_base_url" placeholder="https://example.com" clearable /><div class="field-help">用于电脑端打开业务页面，也作为授权完成后的安全回跳域名。</div></el-form-item>
+                                <el-form-item label="回调 Token" prop="callback_token"><el-input v-model.trim="providerConfig.callback_token" type="password" show-password autocomplete="new-password" placeholder="填写与企业微信创建页一致的 Token" /><div class="field-help">在企业微信创建页与本页填入同一组 Token / EncodingAESKey，先保存本页，再提交官方校验。已保存密钥显示为掩码，请勿把 ****** 填入企业微信。</div></el-form-item>
+                                <el-form-item label="EncodingAESKey" prop="encoding_aes_key"><el-input v-model.trim="providerConfig.encoding_aes_key" type="password" show-password autocomplete="new-password" placeholder="企业微信创建页生成的 43 位 EncodingAESKey" /></el-form-item>
+                                <el-form-item label="网页管理端地址" prop="web_base_url"><el-input v-model.trim="providerConfig.web_base_url" placeholder="https://example.com" clearable /><div class="field-help">填写本套 SaaS 对外可访问的 HTTPS 根地址，用于生成官方回调和管理入口。</div></el-form-item>
+                                <el-form-item v-if="canPrepareProvider"><el-button type="primary" :loading="providerSaving" :disabled="!providerLoaded || providerLoading || providerTesting" @click="saveProviderPreparation">{{ providerPreparing ? '更新回调准备' : '保存回调准备' }}</el-button><div class="field-help">只保存回调基础参数，通道保持未启用，不校验或保存下方 Suite 与小程序凭据。</div></el-form-item>
+                                <el-form-item v-else><div class="field-help">此通道已有 Suite 凭据或已启用，不能退回“回调准备”。修改以上参数后，请用第二步的保存按钮提交。</div></el-form-item>
                             </div>
                             <div class="form-section callback-section">
-                                <div class="section-heading"><div><h3>企业微信回调地址</h3><p>先保存再复制。事件回调用于 SuiteTicket / 授权变更指令；授权回调用于客户安装授权返回。</p></div></div>
-                                <el-form-item label="事件回调 URL"><el-input :model-value="providerConfig.event_callback_url" readonly placeholder="保存通道后由系统生成"><template #append><el-button :icon="CopyDocument" @click="copyText(providerConfig.event_callback_url)" /></template></el-input></el-form-item>
-                                <el-form-item label="授权回调 URL"><el-input :model-value="providerConfig.auth_callback_url" readonly placeholder="保存通道后由系统生成"><template #append><el-button :icon="CopyDocument" @click="copyText(providerConfig.auth_callback_url)" /></template></el-input></el-form-item>
+                                <div class="section-heading"><div><h3>复制到企业微信创建页</h3><p>以下内容来自服务器已保存配置。字段用途不同，请按名称逐项填写。</p></div></div>
+                                <el-alert v-if="!providerCallbackReady" type="warning" :closable="false" show-icon class="mb-[18px]" title="尚未保存可用的回调准备，请先完成第一步。仅填写表单不会让服务器通过回调校验。" />
+                                <el-alert v-else-if="providerBaseChanged" type="warning" :closable="false" show-icon class="mb-[18px]" title="回调基础参数有未保存修改。下方仍是上次保存的地址，请保存成功后再复制和校验。" />
+                                <el-alert v-else type="info" :closable="false" show-icon class="mb-[18px]" title="本系统已保存回调准备；是否通过官方校验，请以企业微信创建页的结果为准。" />
+                                <el-form-item v-for="field in providerCallbackFields" :key="field.key" :label="field.label"><el-input :model-value="savedProviderConfig[field.key] || ''" readonly placeholder="保存回调准备后由系统生成"><template #append><el-button :icon="CopyDocument" :aria-label="`复制${field.label}`" :disabled="!providerLoaded || !providerCallbackReady || providerBaseChanged || !savedProviderConfig[field.key]" @click="copyText(savedProviderConfig[field.key])" /></template></el-input><div class="field-help">{{ field.help }}</div></el-form-item>
                             </div>
-                            <div class="form-actions"><el-button type="primary" :loading="providerSaving" @click="saveProviderConfig">保存服务商通道</el-button><el-button type="success" plain :loading="providerTesting" :disabled="!providerConfigured || providerSaving" @click="testProviderConnection">验证服务商通道</el-button><el-button :icon="Refresh" :loading="providerLoading" @click="loadProviderConfig">刷新状态</el-button><div class="field-help">验证使用已经保存的配置，不会测试尚未保存的输入；通过后仍需客户授权与员工实测。</div></div>
+                            <div class="form-section">
+                                <div class="section-heading"><div><h3>第二步：应用创建后，补齐凭据并启用</h3><p>从刚创建的同一个应用获取 SuiteID / SuiteSecret，再关联本套 SaaS 的后台管理小程序。</p></div></div>
+                                <el-form-item v-if="!canPrepareProvider" label="启用服务商通道"><el-switch v-model="providerConfig.enabled" :active-value="1" :inactive-value="0" /></el-form-item>
+                                <el-form-item label="SuiteID" prop="suite_id"><el-input v-model.trim="providerConfig.suite_id" placeholder="应用创建成功后取得的 SuiteID" clearable /></el-form-item>
+                                <el-form-item label="SuiteSecret" prop="suite_secret"><el-input v-model.trim="providerConfig.suite_secret" type="password" show-password autocomplete="new-password" placeholder="应用创建成功后取得；已配置时显示掩码" /></el-form-item>
+                                <el-form-item label="管理小程序 AppID" prop="admin_miniapp_appid"><el-input v-model.trim="providerConfig.admin_miniapp_appid" placeholder="例如 wxe00f1f93e4d87ac7" clearable /></el-form-item>
+                                <el-form-item label="管理小程序名称" prop="admin_miniapp_name"><el-input v-model.trim="providerConfig.admin_miniapp_name" placeholder="客户在企业微信中看到的名称" clearable /></el-form-item>
+                            </div>
+                            <div class="form-actions"><el-button type="primary" :loading="providerSaving" :disabled="!providerLoaded || providerLoading || providerTesting" @click="saveProviderConfig">{{ canPrepareProvider ? '保存并启用服务商通道' : '保存服务商通道' }}</el-button><el-button type="success" plain :loading="providerTesting" :disabled="!providerLoaded || !providerConfigured || providerSaving || providerLoading" @click="testProviderConnection">验证服务商通道</el-button><el-button :icon="Refresh" :loading="providerLoading" :disabled="providerSaving || providerTesting" @click="loadProviderConfig">刷新状态</el-button><div class="field-help">回调准备不等于正式启用。补齐凭据、保存启用并收到 SuiteTicket 后才能验证；验证使用已保存配置，通过后仍需客户授权与员工实测。</div></div>
                             <el-alert v-if="providerTestResult" class="provider-test-result" :type="providerTestResult.connected ? 'success' : 'error'" :closable="false" show-icon>
                                 <template #title>{{ providerTestResult.message }}</template>
                                 <div class="provider-test-meta"><span>通道：{{ providerTestResult.channel_code || providerConfig.channel_code || '—' }}</span><span>SuiteID：{{ maskValue(providerTestResult.suite_id || providerConfig.suite_id) }}</span><span>SuiteTicket：{{ providerTestResult.suite_ticket_at ? `最近接收于 ${formatTime(providerTestResult.suite_ticket_at)}` : '尚未接收' }}</span><span>验证时间：{{ formatTime(providerTestResult.tested_at) }}</span></div>
@@ -153,7 +158,7 @@ import { Bell, CircleCheckFilled, Connection, CopyDocument, Refresh, Search, War
 import { checkWecomAuthorization, getWecomConfig, getWecomMessages, getWecomProviderConfig, getWecomStaff, retryWecomMessage, saveWecomConfig, saveWecomProviderConfig, saveWecomStaff, startWecomAuthorization, testWecomConnection, testWecomMessage, testWecomProviderConnection } from '../../api'
 import ConnectionGuide from './components/ConnectionGuide.vue'
 import StaffBindingDialog from './components/StaffBindingDialog.vue'
-import { hasSavedProviderConfiguration, readAuthorizationCallback } from '../../utils/binding-session'
+import { canPrepareProviderConfiguration, hasSavedProviderCallbackPreparation, hasSavedProviderConfiguration, readAuthorizationCallback } from '../../utils/binding-session'
 
 const SECRET_MASK = '******'
 const route = useRoute()
@@ -173,13 +178,35 @@ const providerDefaults = { configured: 0, status: '', channel_code: '', corp_nam
 const providerState = reactive<any>({ ...providerDefaults })
 const providerFormRef = ref<FormInstance>()
 const providerLoading = ref(false)
+const providerLoaded = ref(false)
+const providerLoadError = ref('')
 const providerSaving = ref(false)
 const providerTesting = ref(false)
 const providerTestResult = ref<any>(null)
 const savedProviderConfigured = ref(false)
+const savedProviderConfig = ref<Record<string, any>>({})
+const providerPreparationFields = ['channel_code', 'provider_corp_id', 'callback_token', 'encoding_aes_key', 'web_base_url']
+const providerCallbackFields = [
+    { key: 'installation_callback_domain', label: '安装完成回调域名', help: '填入官方同名字段：只填域名，不含 https://、路径或端口。' },
+    { key: 'data_callback_url', label: '数据回调 URL', help: '填入官方“数据回调 URL”。当前仅支持地址验证与加密数据安全接收确认，不接入聊天、会话存档或业务消息处理。' },
+    { key: 'event_callback_url', label: '指令回调 URL', help: '填入官方“指令回调 URL”：接收 SuiteTicket 和授权变更指令。接口字段名为 event_callback_url。' },
+    { key: 'application_settings_url', label: '应用设置 URL', help: '填入官方“应用设置 URL”：这是普通 SaaS 站点登录后的企业微信配置入口，需要本站账号登录；不是企业微信管理员免登或单点登录。' },
+    { key: 'auth_callback_url', label: '安装授权返回 URL', help: '客户安装授权后的返回地址，不要误填到“安装完成回调域名”“数据回调 URL”或“应用设置 URL”。' }
+]
 const providerConfig = reactive<any>({ enabled: 0, channel_code: '', provider_corp_id: '', suite_id: '', suite_secret: '', callback_token: '', encoding_aes_key: '', admin_miniapp_appid: '', admin_miniapp_name: '', web_base_url: '', event_callback_url: '', auth_callback_url: '' })
 const providerRules: FormRules = {
-    channel_code: [{ required: true, message: '请填写通道标识', trigger: 'blur' }], provider_corp_id: [{ required: true, message: '请填写服务商企业 ID', trigger: 'blur' }], suite_id: [{ required: true, message: '请填写 SuiteID', trigger: 'blur' }], suite_secret: [{ required: true, message: '请填写 SuiteSecret', trigger: 'blur' }], callback_token: [{ required: true, message: '请填写回调 Token', trigger: 'blur' }], encoding_aes_key: [{ required: true, message: '请填写 EncodingAESKey', trigger: 'blur' }], admin_miniapp_appid: [{ required: true, message: '请填写管理小程序 AppID', trigger: 'blur' }, { pattern: /^wx[a-zA-Z0-9]{16}$/, message: '请输入正确的小程序 AppID', trigger: 'blur' }], admin_miniapp_name: [{ required: true, message: '请填写管理小程序名称', trigger: 'blur' }], web_base_url: [{ required: true, message: '请填写网页管理端地址', trigger: 'blur' }, { pattern: /^https?:\/\//i, message: '请输入以 http:// 或 https:// 开头的地址', trigger: 'blur' }]
+    channel_code: [{ required: true, message: '请填写通道标识', trigger: 'blur' }, { pattern: /^[a-z][a-z0-9_-]{1,39}$/, message: '使用 2—40 位小写字母、数字、短横线或下划线，且以字母开头', trigger: 'blur' }],
+    provider_corp_id: [{ required: true, message: '请填写服务商企业 ID', trigger: 'blur' }],
+    suite_id: [{ required: true, message: '请填写 SuiteID', trigger: 'blur' }],
+    suite_secret: [{ required: true, message: '请填写 SuiteSecret', trigger: 'blur' }],
+    callback_token: [{ required: true, message: '请填写回调 Token', trigger: 'blur' }],
+    encoding_aes_key: [{ required: true, message: '请填写 EncodingAESKey', trigger: 'blur' }, { validator: (_rule, value, callback) => {
+        const storedMask = value === SECRET_MASK && Number(savedProviderConfig.value.encoding_aes_key_configured) === 1
+        callback(storedMask || /^[A-Za-z0-9+/]{43}$/.test(String(value || '')) ? undefined : new Error('EncodingAESKey 应为 43 位字符，请从企业微信创建页复制'))
+    }, trigger: 'blur' }],
+    admin_miniapp_appid: [{ required: true, message: '请填写管理小程序 AppID', trigger: 'blur' }, { pattern: /^wx[a-zA-Z0-9]{16}$/, message: '请输入正确的小程序 AppID', trigger: 'blur' }],
+    admin_miniapp_name: [{ required: true, message: '请填写管理小程序名称', trigger: 'blur' }],
+    web_base_url: [{ required: true, message: '请填写网页管理端地址', trigger: 'blur' }, { pattern: /^https?:\/\//i, message: '请输入以 https:// 开头的地址；本地调试可用 http://', trigger: 'blur' }]
 }
 const selfBuiltFormRef = ref<FormInstance>()
 const selfBuiltRules: FormRules = { corp_id: [{ required: true, message: '请输入企业 ID', trigger: 'blur' }], agent_id: [{ required: true, message: '请输入应用 AgentId', trigger: 'change' }], secret: [{ required: true, message: '请输入应用 Secret', trigger: 'blur' }], web_base_url: [{ pattern: /^https?:\/\//i, message: '请输入以 http:// 或 https:// 开头的地址', trigger: 'blur' }], miniapp_appid: [{ pattern: /^wx[a-zA-Z0-9]{16}$/, message: '请输入正确的小程序 AppID', trigger: 'blur' }] }
@@ -189,6 +216,10 @@ const isProviderMode = computed(() => config.connection_mode !== 'self_built')
 const authorizedStatuses = ['authorized', 'active', 'connected', 'success']
 const isAuthorized = computed(() => authorizedStatuses.includes(String(providerState.status || '').toLowerCase()))
 const providerConfigured = computed(() => isPlatform.value ? savedProviderConfigured.value : Number(providerState.configured || 0) === 1)
+const providerCallbackReady = computed(() => hasSavedProviderCallbackPreparation(savedProviderConfig.value))
+const providerPreparing = computed(() => savedProviderConfig.value.status === 'preparing' && providerCallbackReady.value)
+const canPrepareProvider = computed(() => canPrepareProviderConfiguration(savedProviderConfig.value))
+const providerBaseChanged = computed(() => providerPreparationFields.some(key => String(providerConfig[key] || '') !== String(savedProviderConfig.value[key] || '')))
 const providerVerified = computed(() => providerTestResult.value?.connected === true)
 const authorizationStatus = computed(() => {
     const status = String(providerState.status || '').toLowerCase()
@@ -199,7 +230,13 @@ const authorizationStatus = computed(() => {
     return { key: 'default', type: 'info', icon: markRaw(Connection), label: '未授权', title: '连接甲方自己的企业微信', description: '由甲方企业管理员完成授权，再绑定本站员工。不需要更换域名，也不用加入服务商的企业。' }
 })
 const pageStatus = computed(() => {
-    if (isPlatform.value) return providerVerified.value ? { type: 'success', label: '本次凭据验证通过' } : { type: 'warning', label: providerConfigured.value ? '配置已保存 · 待验证' : '等待配置' }
+    if (isPlatform.value) {
+        if (providerVerified.value) return { type: 'success', label: '本次凭据验证通过' }
+        if (providerConfigured.value) return { type: 'warning', label: '通道已启用 · 待验证' }
+        if (providerPreparing.value) return { type: 'warning', label: '回调准备已保存 · 未启用' }
+        if (Number(savedProviderConfig.value.id) > 0 && !canPrepareProvider.value) return { type: 'info', label: '通道已保存 · 未启用' }
+        return { type: 'warning', label: '等待回调准备' }
+    }
     if (!isProviderMode.value) return config.enabled ? { type: 'success', label: '自建应用已启用' } : { type: 'info', label: '自建应用未启用' }
     return { type: authorizationStatus.value.type, label: authorizationStatus.value.label }
 })
@@ -230,21 +267,60 @@ function applyConfig(data: any) {
     if (!['detail', 'list'].includes(config.recycle_task_target)) config.recycle_task_target = 'list'
 }
 async function loadConfig() { configLoading.value = true; try { const res: any = await getWecomConfig(); applyConfig(res.data || {}) } finally { configLoading.value = false } }
+function applyProviderConfig(data: any) {
+    const saved = data.config && typeof data.config === 'object' ? data.config : data
+    Object.assign(providerConfig, saved)
+    savedProviderConfig.value = { ...saved }
+    savedProviderConfigured.value = hasSavedProviderConfiguration(saved)
+    providerLoaded.value = true
+    providerLoadError.value = ''
+    providerTestResult.value = null
+    if (data.provider && typeof data.provider === 'object') Object.assign(providerState, data.provider)
+    else Object.assign(providerState, { configured: data.configured ?? providerState.configured, status: data.status ?? providerState.status, suite_ticket_at: data.suite_ticket_at ?? providerState.suite_ticket_at, last_error: data.last_error ?? providerState.last_error })
+}
 async function loadProviderConfig() {
     providerLoading.value = true
+    providerLoaded.value = false
+    providerLoadError.value = ''
     try {
-        const res: any = await getWecomProviderConfig(); const data = res.data || {}; const saved = data.config && typeof data.config === 'object' ? data.config : data; Object.assign(providerConfig, saved); savedProviderConfigured.value = hasSavedProviderConfiguration(saved)
-        if (data.provider && typeof data.provider === 'object') Object.assign(providerState, data.provider)
-        else Object.assign(providerState, { configured: data.configured ?? providerState.configured, status: data.status ?? providerState.status, suite_ticket_at: data.suite_ticket_at ?? providerState.suite_ticket_at, last_error: data.last_error ?? providerState.last_error })
+        const res: any = await getWecomProviderConfig(); applyProviderConfig(res.data || {})
+        return true
+    } catch {
+        providerLoadError.value = '无法读取已保存的服务商配置。请重试读取成功后再保存，避免覆盖现有通道。'
+        return false
     } finally { providerLoading.value = false }
 }
-async function saveProviderConfig() {
-    if (providerConfig.enabled && !(await providerFormRef.value?.validate().catch(() => false))) return
+async function saveProviderPreparation() {
+    if (!providerLoaded.value || providerLoading.value || providerSaving.value || providerTesting.value) return ElMessage.warning('请先读取已保存配置，并等待当前操作完成')
+    if (!canPrepareProvider.value) return ElMessage.warning('已有 Suite 凭据或启用通道不能退回回调准备，请使用第二步保存')
+    if (!(await providerFormRef.value?.validateField(providerPreparationFields).catch(() => false))) return
     providerSaving.value = true
     providerTestResult.value = null
-    try { const res: any = await saveWecomProviderConfig({ ...providerConfig }); const data = res.data || {}; Object.assign(providerConfig, data.config && typeof data.config === 'object' ? data.config : data); if (data.provider && typeof data.provider === 'object') Object.assign(providerState, data.provider); ElMessage.success('服务商通道已保存'); await loadProviderConfig() } finally { providerSaving.value = false }
+    try {
+        const payload = Object.fromEntries(providerPreparationFields.map(key => [key, providerConfig[key]]))
+        const suiteDraft = Object.fromEntries(['suite_id', 'suite_secret', 'admin_miniapp_appid', 'admin_miniapp_name'].map(key => [key, providerConfig[key]]))
+        const res: any = await saveWecomProviderConfig({ ...payload, id: savedProviderConfig.value.id || 0, enabled: 0, prepare_only: 1 })
+        applyProviderConfig(res.data || {})
+        Object.assign(providerConfig, suiteDraft)
+        if (!providerPreparing.value) return ElMessage.warning('接口未确认回调准备已就绪，请刷新检查服务端版本和保存结果')
+        ElMessage.success('回调准备已保存，请复制对应字段到企业微信创建页完成官方校验')
+    } finally { providerSaving.value = false }
+}
+async function saveProviderConfig() {
+    if (!providerLoaded.value || providerLoading.value || providerSaving.value || providerTesting.value) return ElMessage.warning('请先读取已保存配置，并等待当前操作完成')
+    const enabled = canPrepareProvider.value ? 1 : Number(providerConfig.enabled)
+    if (enabled && !(await providerFormRef.value?.validate().catch(() => false))) return
+    providerSaving.value = true
+    providerTestResult.value = null
+    try {
+        const res: any = await saveWecomProviderConfig({ ...providerConfig, enabled, prepare_only: 0 })
+        applyProviderConfig(res.data || {})
+        ElMessage.success(enabled ? '服务商通道已保存并启用，请等待 SuiteTicket 后验证' : '服务商通道已保存为停用')
+        if (!(await loadProviderConfig())) providerLoadError.value = '配置保存已成功，但重新读取失败。请重试读取已保存配置后继续操作。'
+    } finally { providerSaving.value = false }
 }
 async function testProviderConnection() {
+    if (!providerLoaded.value || !providerConfigured.value || providerLoading.value || providerSaving.value || providerTesting.value) return ElMessage.warning('请先读取并保存完整的启用配置后再验证')
     providerTesting.value = true
     providerTestResult.value = null
     try {

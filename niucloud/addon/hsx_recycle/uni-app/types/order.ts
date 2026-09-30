@@ -56,6 +56,12 @@ export interface PickupInfo {
   tracking_no: string
   can_manual: boolean
   can_refresh: boolean
+  conflict?: boolean
+  refresh_result?: {
+    status: 'updated' | 'throttled' | 'waiting_callback' | 'unavailable' | 'not_required'
+    message: string
+    retry_after: number
+  }
   failure_message?: string
   record_id?: number
   receiver?: {

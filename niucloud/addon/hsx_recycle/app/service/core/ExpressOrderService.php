@@ -9,6 +9,7 @@ use addon\hsx_recycle\app\model\order\RecycleOrder;
 use addon\hsx_recycle\app\service\core\express\ExpressDomainEventService;
 use addon\hsx_recycle\app\service\core\express\ExpressGatewayService;
 use addon\hsx_recycle\app\service\core\express\ExpressOperationLock;
+use addon\hsx_recycle\app\service\core\express\ExpressSubmissionException;
 use addon\hsx_recycle\app\service\core\express\PickupState;
 use core\exception\CommonException;
 use think\facade\Log;
@@ -305,9 +306,18 @@ class ExpressOrderService
             // 仅适配器明确证明未创建的拒绝才允许自行寄件；其他错误一律待核实。
             $state = method_exists($e, 'outcome') && $e->outcome() === 'rejected' ? 'failed' : 'unknown';
             $record->refresh();
-            $snapshot = PickupState::merge((array)$record->api_response, ['booking_state' => $state]);
+            $snapshot = (array)$record->api_response;
+            if ($e instanceof ExpressSubmissionException) {
+                foreach ($e->identifiers() as $field => $value) {
+                    // 不用部分响应覆盖回调已经落库的编号，只补齐缺失的查询证据。
+                    if (empty($snapshot[$field])) $snapshot[$field] = $value;
+                }
+            }
+            $snapshot = PickupState::merge($snapshot, ['booking_state' => $state]);
             $snapshot['failure_reason'] = mb_substr($e->getMessage(), 0, 500);
-            $record->save(['order_status' => $snapshot['booking_state'], 'api_response' => $snapshot]);
+            $record->save(['order_status' => $snapshot['booking_state'], 'api_response' => $snapshot,
+                'order_no' => (string)($snapshot['orderNo'] ?? '') ?: (string)($record->order_no ?? ''),
+                'delivery_id' => (string)($snapshot['deliveryId'] ?? '') ?: (string)($record->delivery_id ?? '')]);
             throw $e;
         }
         $this->saveAddressBook($siteId, $params);

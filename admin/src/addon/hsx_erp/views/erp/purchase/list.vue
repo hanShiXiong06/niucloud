@@ -1,16 +1,25 @@
 <template>
-    <HsxPage padding="none" class="main-container">
-        <el-card class="!border-none" shadow="never">
-            <HsxTitle size="page" collapsible-subtitle class="mb-4">
-                <template #default>采购管理</template>
+    <ErpDesktopPage class="main-container">
+        <section class="erp-list-surface">
+            <ErpWorkspaceHeader page="purchase" :filter-count="searchConditionCount">
+                <template #title>采购管理</template>
                 <template #subtitle>{{ listMode === 'device' ? '一机一码管理二手机采购、成本、位置和账目状态。' : '按数量管理壳、膜、配件和批量新机的采购入库。' }}</template>
                 <template #extra><div class="flex gap-2 flex-wrap">
                         <el-button :icon="Refresh" :loading="table.loading" @click="loadList">刷新</el-button>
                         <el-button type="primary" :icon="Plus" @click="openCreate">采购开单</el-button>
-                    </div></template>
-            </HsxTitle>
+                    <ErpRoleFocus :items="purchaseRoleFocus" /></div></template>
 
-            <HsxSearchPanel :summary="searchConditionCount ? '已填写 ' + searchConditionCount + ' 项条件，点击查询生效' : ''">
+            <template #toolbar>
+            <div class="erp-mode-switch flex items-center justify-between rounded-lg bg-[var(--el-fill-color-light)] p-2">
+                <el-radio-group v-model="listMode" @change="onListModeChange">
+                    <el-radio-button label="device">设备采购</el-radio-button>
+                    <el-radio-button label="standard">标品采购</el-radio-button>
+                </el-radio-group>
+                <div class="pr-2 text-xs text-[color:var(--el-text-color-secondary)]">{{ listMode === 'device' ? '二手机 · 独立串号资产' : '壳膜配件 · 数量库存' }}</div>
+            </div>
+
+            </template>
+            <HsxSearchPanel :show-layout-switch="false" :summary="searchConditionCount ? searchConditionCount + ' 项筛选条件' : ''">
                 <template #extra>
                     <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
                     <el-button @click="handleReset">重置</el-button>
@@ -56,7 +65,7 @@
                         </el-form-item>
                         <el-form-item label="成本">
                             <el-input-number v-model="search.min_amount" :min="0" :precision="2" :controls="false" placeholder="最低" class="!w-[110px]" />
-                            <span class="mx-1 text-gray-400">-</span>
+                            <span class="mx-1 text-[color:var(--el-text-color-secondary)]">-</span>
                             <el-input-number v-model="search.max_amount" :min="0" :precision="2" :controls="false" placeholder="最高" class="!w-[110px]" />
                         </el-form-item>
                     </HsxFold>
@@ -64,21 +73,15 @@
                 </el-form>
             </HsxSearchPanel>
 
-            <ErpRoleFocus :items="purchaseRoleFocus" />
 
-            <div class="mt-5 flex items-center justify-between rounded-lg bg-slate-50 p-2">
-                <el-radio-group v-model="listMode" @change="onListModeChange">
-                    <el-radio-button label="device">设备采购</el-radio-button>
-                    <el-radio-button label="standard">标品采购</el-radio-button>
-                </el-radio-group>
-                <div class="pr-2 text-xs text-slate-400">{{ listMode === 'device' ? '二手机 · 独立串号资产' : '壳膜配件 · 数量库存' }}</div>
-            </div>
 
-            <div class="mt-5 flex flex-wrap items-center justify-between gap-2">
-                <div class="text-sm font-medium text-gray-700">本页有效采购汇总</div>
-                <div class="text-xs text-gray-400">已退货、已作废货品不计入</div>
+
+
+            <div class="mt-5 flex flex-wrap items-center justify-between gap-2 erp-summary-heading">
+                <div class="text-sm font-medium text-[color:var(--el-text-color-regular)]">本页有效采购汇总</div>
+                <div class="text-xs text-[color:var(--el-text-color-secondary)]">已退货、已作废货品不计入</div>
             </div>
-            <div class="mt-2 grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div class="mt-2 grid grid-cols-2 gap-3 md:grid-cols-4 erp-metrics">
                 <div class="summary-tile">
                     <div class="summary-label">{{ listMode === 'device' ? '采购台数' : '采购数量' }}</div>
                     <div class="summary-value">{{ quantityText(summary.count) }}</div>
@@ -89,15 +92,16 @@
                 </div>
                 <div class="summary-tile">
                     <div class="summary-label">已结采购款</div>
-                    <div class="summary-value text-green-600">{{ money(summary.paid) }}</div>
+                    <div class="summary-value text-[color:var(--el-color-success)]">{{ money(summary.paid) }}</div>
                 </div>
                 <div class="summary-tile">
                     <div class="summary-label">待结采购款</div>
-                    <div class="summary-value text-orange-600">{{ money(summary.payable) }}</div>
+                    <div class="summary-value text-[color:var(--el-color-warning)]">{{ money(summary.payable) }}</div>
                 </div>
             </div>
 
             <!-- 状态快筛 Tab -->
+            </ErpWorkspaceHeader>
             <el-tabs v-model="activeTab" class="mt-4 erp-status-tabs" @tab-change="onTabChange">
                 <el-tab-pane label="全部" name="" />
                 <el-tab-pane label="待付款" name="pending" />
@@ -106,7 +110,7 @@
                 <el-tab-pane label="已撤销" name="void" />
             </el-tabs>
 
-            <el-table v-if="listMode === 'device'" :data="table.data" v-loading="table.loading" size="large" :row-class-name="purchaseRowClassName">
+            <ErpDataTable v-if="listMode === 'device'" :data="table.data" v-loading="table.loading" :row-class-name="purchaseRowClassName">
                 <el-table-column label="设备" min-width="240">
                     <template #default="{ row }">
                         <ErpDeviceIdentity :model="row.model" :spec="row.spec" :imei="row.imei" :sn="row.sn" :asset-no="row.asset_no" />
@@ -115,16 +119,16 @@
                 <el-table-column label="供货商" min-width="160">
                     <template #default="{ row }">
                         <div>{{ row.party_name || '-' }}</div>
-                        <div class="mt-1 text-xs text-gray-500">M号：{{ row.m_no || '-' }}</div>
+                        <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">M号：{{ row.m_no || '-' }}</div>
                     </template>
                 </el-table-column>
                 <el-table-column label="采购成本" min-width="180" align="right">
                     <template #default="{ row }">
-                        <div class="font-medium text-gray-900">{{ money(row.purchase_cost) }}</div>
-                        <div v-if="Number(row.adjust_cost)" class="mt-1 text-xs" :class="Number(row.adjust_cost) > 0 ? 'text-orange-500' : 'text-green-600'">供应商调价 {{ signedMoney(row.adjust_cost) }}</div>
-                        <div v-else class="mt-1 text-xs text-gray-400">采购本金</div>
-                        <div v-if="Number(row.refurbish_cost)" class="mt-1 text-xs text-orange-500">整备支出 +{{ money(row.refurbish_cost) }}（独立应付）</div>
-                        <div v-if="Math.abs(Number(row.total_cost || 0) - Number(row.purchase_cost || 0)) > 0.0001" class="mt-1 text-xs text-gray-400">当前总成本 {{ money(row.total_cost) }}</div>
+                        <div class="font-medium text-[color:var(--el-text-color-primary)]">{{ money(row.purchase_cost) }}</div>
+                        <div v-if="Number(row.adjust_cost)" class="mt-1 text-xs" :class="Number(row.adjust_cost) > 0 ? 'text-[color:var(--el-color-warning)]' : 'text-[color:var(--el-color-success)]'">供应商调价 {{ signedMoney(row.adjust_cost) }}</div>
+                        <div v-else class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">采购本金</div>
+                        <div v-if="Number(row.refurbish_cost)" class="mt-1 text-xs text-[color:var(--el-color-warning)]">整备支出 +{{ money(row.refurbish_cost) }}（独立应付）</div>
+                        <div v-if="Math.abs(Number(row.total_cost || 0) - Number(row.purchase_cost || 0)) > 0.0001" class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">当前总成本 {{ money(row.total_cost) }}</div>
                     </template>
                 </el-table-column>
                 <el-table-column label="位置" min-width="160">
@@ -136,14 +140,14 @@
                             <span class="batch-dot" :class="`batch-dot--${batchTone(row)}`"></span>
                             <span class="font-medium">{{ row.purchase_no || '-' }}</span>
                         </div>
-                        <div v-if="isBatchFirst($index)" class="mt-1 text-xs font-medium text-blue-600">本页同批 {{ batchPageSize(row) }} 台</div>
-                        <div class="mt-1 text-xs text-slate-500">来源：{{ erpSourceLabel(row.origin_name, 'ERP采购') }}</div>
-                        <div class="mt-1 text-xs text-gray-500">{{ formatTime(row.purchase_at) }}</div>
+                        <div v-if="isBatchFirst($index)" class="mt-1 text-xs font-medium text-[color:var(--erp-text-accent)]">本页同批 {{ batchPageSize(row) }} 台</div>
+                        <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">来源：{{ erpSourceLabel(row.origin_name, 'ERP采购') }}</div>
+                        <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">{{ formatTime(row.purchase_at) }}</div>
                         <div class="batch-staff-line">
                             <span>采购 {{ row.purchaser_name || '-' }}</span>
                             <span v-if="row.inspector_name">质检 {{ row.inspector_name }}</span>
                         </div>
-                        <div v-if="Number(row.retail_price || row.estimate_sale_price)" class="mt-1 text-xs text-gray-400">销售价格：{{ money(row.retail_price || row.estimate_sale_price) }}</div>
+                        <div v-if="Number(row.retail_price || row.estimate_sale_price)" class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">销售价格：{{ money(row.retail_price || row.estimate_sale_price) }}</div>
                     </template>
                 </el-table-column>
                 <el-table-column label="当前状态" min-width="175">
@@ -170,25 +174,25 @@
                         </el-tooltip>
                     </template>
                 </el-table-column>
-            </el-table>
-            <el-table v-else :data="table.data" v-loading="table.loading" size="large" :row-class-name="purchaseRowClassName">
+            </ErpDataTable>
+            <ErpDataTable v-else :data="table.data" v-loading="table.loading" :row-class-name="purchaseRowClassName">
                 <el-table-column label="标品" min-width="250">
                     <template #default="{ row }">
-                        <div class="font-medium text-slate-900">{{ row.model || '-' }}</div>
-                        <div v-if="row.spec" class="mt-1 text-xs text-slate-500">{{ row.spec }}</div>
-                        <div class="mt-1 text-xs text-slate-400">编码：{{ row.product_code || '-' }}</div>
+                        <div class="font-medium text-[color:var(--el-text-color-primary)]">{{ row.model || '-' }}</div>
+                        <div v-if="row.spec" class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">{{ row.spec }}</div>
+                        <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">编码：{{ row.product_code || '-' }}</div>
                     </template>
                 </el-table-column>
                 <el-table-column label="采购数量" min-width="130" align="right">
                     <template #default="{ row }">
-                        <div class="font-medium text-slate-900">{{ quantityText(row.quantity) }} {{ row.unit || '件' }}</div>
-                        <div class="mt-1 text-xs text-slate-400">单价 {{ money(row.unit_cost) }}</div>
+                        <div class="font-medium text-[color:var(--el-text-color-primary)]">{{ quantityText(row.quantity) }} {{ row.unit || '件' }}</div>
+                        <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">单价 {{ money(row.unit_cost) }}</div>
                     </template>
                 </el-table-column>
                 <el-table-column label="采购金额" min-width="140" align="right">
                     <template #default="{ row }">
-                        <div class="font-medium text-slate-900">{{ money(row.purchase_cost) }}</div>
-                        <div class="mt-1 text-xs" :class="Number(row.asset_unpaid_amount || 0) > 0 ? 'text-orange-500' : 'text-green-600'">
+                        <div class="font-medium text-[color:var(--el-text-color-primary)]">{{ money(row.purchase_cost) }}</div>
+                        <div class="mt-1 text-xs" :class="Number(row.asset_unpaid_amount || 0) > 0 ? 'text-[color:var(--el-color-warning)]' : 'text-[color:var(--el-color-success)]'">
                             {{ Number(row.asset_unpaid_amount || 0) > 0 ? `待付 ${money(row.asset_unpaid_amount)}` : '已结清' }}
                         </div>
                     </template>
@@ -196,14 +200,14 @@
                 <el-table-column label="库存位置" min-width="190">
                     <template #default="{ row }">
                         <div>{{ [row.warehouse_name, row.location_name].filter(Boolean).join(' / ') || '-' }}</div>
-                        <div class="mt-1 text-xs text-blue-600">当前库存 {{ quantityText(row.current_stock) }} {{ row.unit || '件' }}</div>
+                        <div class="mt-1 text-xs text-[color:var(--erp-text-accent)]">当前库存 {{ quantityText(row.current_stock) }} {{ row.unit || '件' }}</div>
                     </template>
                 </el-table-column>
                 <el-table-column label="供货商 / 批次" min-width="230">
                     <template #default="{ row }">
-                        <div class="font-medium text-slate-900">{{ row.party_name || '-' }}</div>
-                        <div class="mt-1 text-xs text-slate-500">{{ row.purchase_no || '-' }}</div>
-                        <div class="mt-1 text-xs text-slate-400">{{ formatTime(row.purchase_at) }} · {{ row.purchaser_name || '-' }}</div>
+                        <div class="font-medium text-[color:var(--el-text-color-primary)]">{{ row.party_name || '-' }}</div>
+                        <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">{{ row.purchase_no || '-' }}</div>
+                        <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">{{ formatTime(row.purchase_at) }} · {{ row.purchaser_name || '-' }}</div>
                     </template>
                 </el-table-column>
                 <el-table-column label="状态" min-width="150">
@@ -211,7 +215,7 @@
                         <el-tag :type="row.order_status === 'void' ? 'info' : 'success'" effect="plain">
                             {{ row.order_status === 'void' ? '已撤销' : '已入库' }}
                         </el-tag>
-                        <div class="mt-2 text-xs text-slate-500">采购款 · {{ financeStatusMeta(row.finance_status).label }}</div>
+                        <div class="mt-2 text-xs text-[color:var(--el-text-color-secondary)]">采购款 · {{ financeStatusMeta(row.finance_status).label }}</div>
                     </template>
                 </el-table-column>
                 <el-table-column label="操作" fixed="right" width="100" align="center">
@@ -219,9 +223,9 @@
                         <el-button type="primary" link @click="openDetail(row)">采购单</el-button>
                     </template>
                 </el-table-column>
-            </el-table>
+            </ErpDataTable>
 
-            <div class="mt-4 flex justify-end">
+            <div class="mt-4 flex justify-end erp-pagination">
                 <el-pagination
                     v-model:current-page="table.page"
                     v-model:page-size="table.limit"
@@ -231,14 +235,14 @@
                     @current-change="loadList"
                 />
             </div>
-        </el-card>
+        </section>
 
         <HsxDialog :confirm-loading="create.saving"
             v-model="create.visible"
             title="采购开单"
             width="94vw"
             destroy-on-close
-            class="create-purchase-dialog"
+            class="erp-desktop-overlay create-purchase-dialog"
         >
             <el-form label-width="96px" class="create-purchase-form">
                 <div class="section-title">1. 用户</div>
@@ -257,15 +261,15 @@
                         <el-radio-button value="device">二手机 / 一机一码</el-radio-button>
                         <el-radio-button value="standard">标品 / 数量入库</el-radio-button>
                     </el-radio-group>
-                    <span class="ml-3 text-xs text-gray-400">
+                    <span class="ml-3 text-xs text-[color:var(--el-text-color-secondary)]">
                         {{ create.form.item_type_mode === 'device' ? '每台设备建立独立资产与串号追踪' : '适合壳、膜、配件和批量新机' }}
                     </span>
                 </el-form-item>
                 <!-- <div class="batch-location-panel">
                     <div class="batch-location-panel__head">
                         <div>
-                            <div class="font-medium text-gray-900">批量默认位置</div>
-                            <div class="mt-1 text-xs text-gray-500">只用于快速填充；每台设备最终保存自己的仓库和库位，可在“编辑设备”中单独修改。</div>
+                            <div class="font-medium text-[color:var(--el-text-color-primary)]">批量默认位置</div>
+                            <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">只用于快速填充；每台设备最终保存自己的仓库和库位，可在“编辑设备”中单独修改。</div>
                         </div>
                         <el-button :disabled="!create.form.warehouse_id || !create.form.location_id" @click="applyDefaultLocationToAll(true)">应用到全部设备</el-button>
                     </div>
@@ -422,8 +426,8 @@
                             </el-table-column>
                             <el-table-column label="商品信息" min-width="220">
                                 <template #default="{ row }">
-                                    <div class="font-medium text-slate-800">{{ row.model || '待选择' }}</div>
-                                    <div class="mt-1 text-xs text-slate-400">{{ [row.spec, row.product_code].filter(Boolean).join(' · ') || '选择已有商品，找不到可创建新品' }}</div>
+                                    <div class="font-medium text-[color:var(--el-text-color-primary)]">{{ row.model || '待选择' }}</div>
+                                    <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">{{ [row.spec, row.product_code].filter(Boolean).join(' · ') || '选择已有商品，找不到可创建新品' }}</div>
                                 </template>
                             </el-table-column>
                             <el-table-column prop="unit" label="单位" min-width="82" align="center" />
@@ -476,7 +480,7 @@
                             </div>
                         </div>
                     </div>
-                    <div v-if="create.form.item_type_mode === 'device'" class="mt-3 text-right text-sm text-gray-500">本单采购成本合计：<span class="font-semibold text-gray-800">{{ money(createTotal) }}</span></div>
+                    <div v-if="create.form.item_type_mode === 'device'" class="mt-3 text-right text-sm text-[color:var(--el-text-color-secondary)]">本单采购成本合计：<span class="font-semibold text-[color:var(--el-text-color-primary)]">{{ money(createTotal) }}</span></div>
                 </div>
 
                 <div class="section-title">3. 账目</div>
@@ -509,7 +513,7 @@
             </template>
         </HsxDialog>
 
-        <HsxDrawer v-model="itemExtra.visible" size="720px" direction="rtl" append-to-body class="purchase-item-drawer" :destroy-on-close="false">
+        <HsxDrawer v-model="itemExtra.visible" size="720px" direction="rtl" append-to-body class="erp-desktop-overlay purchase-item-drawer" :destroy-on-close="false">
             <template #header>
                 <div class="item-extra-drawer-title">
                     <div>
@@ -720,7 +724,7 @@
             </template>
         </HsxDrawer>
 
-        <HsxDrawer v-model="detail.visible" title="采购单详情" size="76%" destroy-on-close>
+        <HsxDrawer class="erp-desktop-overlay" v-model="detail.visible" title="采购单详情" size="76%" destroy-on-close>
             <div v-loading="detail.loading">
                 <el-descriptions v-if="detail.data" :column="4" border>
                     <el-descriptions-item label="采购单号">{{ detail.data.purchase_no }}</el-descriptions-item>
@@ -752,7 +756,7 @@
                     <el-table-column v-if="detailIsStandard" label="数量 / 单价" min-width="150" align="right">
                         <template #default="{ row }">
                             <div>{{ quantityText(row.quantity) }} {{ row.unit || '件' }}</div>
-                            <div class="mt-1 text-xs text-slate-400">{{ money(row.unit_cost) }} / {{ row.unit || '件' }}</div>
+                            <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">{{ money(row.unit_cost) }} / {{ row.unit || '件' }}</div>
                         </template>
                     </el-table-column>
                     <el-table-column label="入库位置" min-width="170">
@@ -765,8 +769,8 @@
                     <el-table-column label="成本" width="160" align="right">
                         <template #default="{ row }">
                             <div>{{ money(row.purchase_cost) }}</div>
-                            <div v-if="Number(row.adjust_cost)" class="text-xs text-gray-500">调整 {{ money(row.adjust_cost) }}</div>
-                            <div v-if="Number(row.refurbish_cost)" class="text-xs text-orange-500">整备 {{ money(row.refurbish_cost) }}（另付）</div>
+                            <div v-if="Number(row.adjust_cost)" class="text-xs text-[color:var(--el-text-color-secondary)]">调整 {{ money(row.adjust_cost) }}</div>
+                            <div v-if="Number(row.refurbish_cost)" class="text-xs text-[color:var(--el-color-warning)]">整备 {{ money(row.refurbish_cost) }}（另付）</div>
                         </template>
                     </el-table-column>
                     <el-table-column v-if="!detailIsStandard" label="质检备注" min-width="210">
@@ -787,23 +791,23 @@
             </div>
         </HsxDrawer>
 
-        <HsxDialog :confirm-loading="adjust.saving" v-model="adjust.visible" title="供应商采购价调整" width="620px" :destroy-on-close="false">
-            <div v-if="adjust.item" class="mb-4 rounded bg-gray-50 px-4 py-3 text-sm text-gray-600">
-                <div>设备：<span class="font-medium text-gray-900">{{ adjust.item.model || '-' }}</span></div>
+        <HsxDialog class="erp-desktop-overlay" :confirm-loading="adjust.saving" v-model="adjust.visible" title="供应商采购价调整" width="620px" :destroy-on-close="false">
+            <div v-if="adjust.item" class="mb-4 rounded bg-[var(--el-fill-color-light)] px-4 py-3 text-sm text-[color:var(--el-text-color-regular)]">
+                <div>设备：<span class="font-medium text-[color:var(--el-text-color-primary)]">{{ adjust.item.model || '-' }}</span></div>
                 <div class="mt-1">{{ adjust.item.spec || '-' }} · IMEI {{ adjust.item.imei || '-' }}</div>
             </div>
             <div class="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                <div class="rounded bg-gray-50 px-3 py-2">
-                    <div class="text-xs text-gray-500">当前成本</div>
-                    <div class="mt-1 font-medium text-gray-900">{{ money(adjustCurrentCost) }}</div>
+                <div class="rounded bg-[var(--el-fill-color-light)] px-3 py-2">
+                    <div class="text-xs text-[color:var(--el-text-color-secondary)]">当前成本</div>
+                    <div class="mt-1 font-medium text-[color:var(--el-text-color-primary)]">{{ money(adjustCurrentCost) }}</div>
                 </div>
-                <div :class="adjust.form.type === 'deduct' ? 'bg-red-50' : 'bg-blue-50'" class="rounded px-3 py-2">
-                    <div class="text-xs text-gray-500">本次调整</div>
-                    <div class="mt-1 font-medium" :class="adjust.form.type === 'deduct' ? 'text-red-600' : 'text-blue-600'">{{ money(adjustSignedAmount) }}</div>
+                <div :class="adjust.form.type === 'deduct' ? 'bg-[var(--el-color-danger-light-9)]' : 'bg-[var(--el-color-primary-light-9)]'" class="rounded px-3 py-2">
+                    <div class="text-xs text-[color:var(--el-text-color-secondary)]">本次调整</div>
+                    <div class="mt-1 font-medium" :class="adjust.form.type === 'deduct' ? 'text-[color:var(--el-color-danger)]' : 'text-[color:var(--erp-text-accent)]'">{{ money(adjustSignedAmount) }}</div>
                 </div>
-                <div class="rounded bg-gray-50 px-3 py-2">
-                    <div class="text-xs text-gray-500">调整后成本</div>
-                    <div class="mt-1 font-medium text-gray-900">{{ money(adjustAfterCost) }}</div>
+                <div class="rounded bg-[var(--el-fill-color-light)] px-3 py-2">
+                    <div class="text-xs text-[color:var(--el-text-color-secondary)]">调整后成本</div>
+                    <div class="mt-1 font-medium text-[color:var(--el-text-color-primary)]">{{ money(adjustAfterCost) }}</div>
                 </div>
             </div>
             <el-form label-width="90px">
@@ -815,7 +819,7 @@
                 </el-form-item>
                 <el-form-item label="调整金额" required>
                     <el-input-number v-model="adjust.form.amount" :min="0" :precision="2" :controls="false" class="!w-[220px]" />
-                    <div class="mt-1 text-xs text-gray-500">只填正数；扣款会减少成本，补款会增加成本。</div>
+                    <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">只填正数；扣款会减少成本，补款会增加成本。</div>
                 </el-form-item>
                 <el-form-item label="影响说明">
                     <HsxNotice default-expanded
@@ -834,11 +838,14 @@
                 <el-button :disabled="adjust.saving" type="primary" :loading="adjust.saving" @click="submitAdjust">确认调整并记账</el-button>
             </template>
         </HsxDialog>
-    </HsxPage>
+    </ErpDesktopPage>
 </template>
 
 <script setup lang="ts">
-import { HsxTitle, HsxPage, HsxSearchPanel, HsxDialog, HsxDrawer, HsxNotice, useFeedback , HsxFold } from '@/addon/hsx_components/core'
+import ErpDesktopPage from '@/addon/hsx_erp/components/ErpDesktopPage.vue'
+import ErpWorkspaceHeader from '@/addon/hsx_erp/components/ErpWorkspaceHeader.vue'
+import ErpDataTable from '@/addon/hsx_erp/components/ErpDataTable.vue'
+import { HsxSearchPanel, HsxDialog, HsxDrawer, HsxNotice, useFeedback , HsxFold } from '@/addon/hsx_components/core'
 import { erpEnumLabel, erpSourceLabel } from '@/addon/hsx_erp/utils/display'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
@@ -1819,16 +1826,15 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
 <style scoped>
 .summary-tile {
     border-radius: 8px;
-    background: #f8fafc;
+    background: var(--el-fill-color-light);
     padding: 14px 16px;
 }
 .summary-label {
-    color: #64748b;
+    color: var(--el-text-color-secondary);
     font-size: 13px;
 }
 .summary-value {
     margin-top: 6px;
-    color: #111827;
     font-size: 22px;
     font-weight: 650;
 }
@@ -1836,14 +1842,14 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
     margin: 18px 0 12px;
     border-left: 3px solid var(--el-color-primary);
     padding-left: 10px;
-    color: #111827;
+    color: var(--el-text-color-primary);
     font-size: 15px;
     font-weight: 650;
 }
 .batch-location-panel {
-    border: 1px solid #dbeafe;
+    border: 1px solid var(--el-color-primary-light-9);
     border-radius: 8px;
-    background: #f8fbff;
+    background: var(--el-color-primary-light-9);
     padding: 12px 14px 0;
 }
 .batch-location-panel__head {
@@ -1859,25 +1865,25 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
     flex: 0 0 auto;
     border-radius: 50%;
 }
-.batch-dot--0 { background: #60a5fa; }
-.batch-dot--1 { background: #34d399; }
+.batch-dot--0 { background: var(--el-color-primary); }
+.batch-dot--1 { background: var(--el-color-success); }
 .batch-dot--2 { background: #a78bfa; }
-.batch-dot--3 { background: #f59e0b; }
-.batch-staff-line { display:flex; flex-wrap:wrap; gap:4px 12px; margin-top:6px; color:#94a3b8; font-size:12px; }
+.batch-dot--3 { background: var(--el-color-warning); }
+.batch-staff-line { display:flex; flex-wrap:wrap; gap:4px 12px; margin-top:6px; color:var(--el-text-color-secondary); font-size:12px; }
 .purchase-status-stack { display:flex; align-items:flex-start; flex-direction:column; gap:5px; }
-.purchase-status-stack__business { color:#334155; font-size:12px; font-weight:600; }
-.purchase-status-stack__finance { color:#64748b; font-size:12px; }
-.purchase-status-stack__exception { color:#dc2626; font-size:12px; }
-.purchase-status-stack__source { overflow:hidden; max-width:160px; color:#94a3b8; font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
+.purchase-status-stack__business { color:var(--el-text-color-primary); font-size:12px; font-weight:600; }
+.purchase-status-stack__finance { color:var(--el-text-color-secondary); font-size:12px; }
+.purchase-status-stack__exception { color:var(--el-color-danger); font-size:12px; }
+.purchase-status-stack__source { overflow:hidden; max-width:160px; color:var(--el-text-color-secondary); font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
 .purchase-return-action { white-space: nowrap; }
 .supplier-adjust-disabled-wrap { display:inline-flex; margin-left:12px; vertical-align:middle; }
 .purchase-return-disabled-wrap { display: inline-flex; margin-left: 12px; vertical-align: middle; }
-:deep(.el-table__body tr.erp-batch-tone-0 > td.el-table__cell) { background: #f7fbff; }
-:deep(.el-table__body tr.erp-batch-tone-1 > td.el-table__cell) { background: #f7fcfa; }
-:deep(.el-table__body tr.erp-batch-tone-2 > td.el-table__cell) { background: #fbf9ff; }
-:deep(.el-table__body tr.erp-batch-tone-3 > td.el-table__cell) { background: #fffaf3; }
-:deep(.el-table__body tr.erp-batch-start > td.el-table__cell) { border-top: 2px solid #dbe4ef; }
-:deep(.el-table__body tr:hover > td.el-table__cell) { background: #eef5ff !important; }
+:deep(.el-table__body tr.erp-batch-tone-0 > td.el-table__cell) { background: var(--el-color-primary-light-9); }
+:deep(.el-table__body tr.erp-batch-tone-1 > td.el-table__cell) { background: var(--el-color-success-light-9); }
+:deep(.el-table__body tr.erp-batch-tone-2 > td.el-table__cell) { background: var(--el-color-info-light-9); }
+:deep(.el-table__body tr.erp-batch-tone-3 > td.el-table__cell) { background: var(--el-color-warning-light-9); }
+:deep(.el-table__body tr.erp-batch-start > td.el-table__cell) { border-top: 2px solid var(--el-border-color); }
+:deep(.el-table__body tr:hover > td.el-table__cell) { background: var(--el-color-primary-light-9) !important; }
 .create-purchase-dialog :deep(.el-dialog__body) {
     padding-top: 10px;
 }
@@ -1904,20 +1910,20 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--el-border-color);
     border-bottom: 0;
     border-radius: 8px 8px 0 0;
-    background: #f8fafc;
+    background: var(--el-fill-color-light);
     padding: 9px 12px;
-    color: #64748b;
+    color: var(--el-text-color-secondary);
     font-size: 12px;
 }
 .standard-entry-table {
     width: 100%;
 }
 .standard-entry-table :deep(.el-table__header th.el-table__cell) {
-    background: #f1f5f9;
-    color: #475569;
+    background: var(--el-fill-color-light);
+    color: var(--el-text-color-regular);
     font-size: 12px;
     font-weight: 650;
 }
@@ -1930,7 +1936,7 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
     width: 100%;
 }
 .standard-entry-table :deep(.el-input__wrapper) {
-    box-shadow: 0 0 0 1px #dbe3ee inset;
+    box-shadow: 0 0 0 1px var(--el-border-color) inset;
 }
 .standard-entry-table :deep(.el-input__wrapper:hover),
 .standard-entry-table :deep(.el-input__wrapper.is-focus) {
@@ -1942,33 +1948,33 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
     content: '*';
 }
 .standard-entry__subtotal {
-    color: #0f172a;
+    color: var(--el-text-color-primary);
     font-size: 14px;
     font-variant-numeric: tabular-nums;
 }
 .standard-entry__unit-price {
-    color: #64748b;
+    color: var(--el-text-color-secondary);
     font-variant-numeric: tabular-nums;
 }
 .standard-entry__footer {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--el-border-color);
     border-top: 0;
     border-radius: 0 0 8px 8px;
-    background: #fff;
+    background: var(--el-bg-color-overlay);
     padding: 10px 12px;
 }
 .standard-entry__footer > div {
     display: flex;
     align-items: baseline;
     gap: 12px;
-    color: #64748b;
+    color: var(--el-text-color-secondary);
     font-size: 13px;
 }
 .standard-entry__footer strong {
-    color: #0f172a;
+    color: var(--el-text-color-primary);
     font-size: 20px;
     font-variant-numeric: tabular-nums;
 }
@@ -1985,10 +1991,10 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
 .device-entry__toolbar {
     justify-content: space-between;
     gap: 16px;
-    border: 1px solid #dbe5f1;
+    border: 1px solid var(--el-border-color);
     border-bottom: 0;
     border-radius: 10px 10px 0 0;
-    background: linear-gradient(90deg, #f8fbff 0%, #f8fafc 100%);
+    background: linear-gradient(90deg, var(--el-color-primary-light-9) 0%, var(--el-fill-color-light) 100%);
     padding: 10px 12px;
 }
 .device-entry__default {
@@ -1997,13 +2003,13 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
 }
 .device-entry__default-label {
     flex: 0 0 auto;
-    color: #475569;
+    color: var(--el-text-color-regular);
     font-size: 13px;
     font-weight: 650;
 }
 .device-entry__count {
     flex: 0 0 auto;
-    color: #64748b;
+    color: var(--el-text-color-secondary);
     font-size: 13px;
 }
 .device-entry__count strong {
@@ -2015,8 +2021,8 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
 }
 .device-entry-table :deep(.el-table__header th.el-table__cell) {
     height: 42px;
-    background: #f1f5f9;
-    color: #475569;
+    background: var(--el-fill-color-light);
+    color: var(--el-text-color-regular);
     font-size: 12px;
     font-weight: 650;
 }
@@ -2029,7 +2035,7 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
     width: 100%;
 }
 .device-entry-table :deep(.el-input__wrapper) {
-    box-shadow: 0 0 0 1px #dbe3ee inset;
+    box-shadow: 0 0 0 1px var(--el-border-color) inset;
 }
 .device-entry-table :deep(.el-input__wrapper:hover),
 .device-entry-table :deep(.el-input__wrapper.is-focus) {
@@ -2043,7 +2049,7 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
     border: 0;
     background: transparent;
     padding: 1px 0;
-    color: #1e293b;
+    color: var(--el-text-color-primary);
     text-align: left;
     cursor: pointer;
 }
@@ -2060,7 +2066,7 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
 .device-entry__model > small {
     overflow: hidden;
     margin-top: 3px;
-    color: #94a3b8;
+    color: var(--el-text-color-secondary);
     font-size: 11px;
     font-weight: 400;
     text-overflow: ellipsis;
@@ -2076,24 +2082,24 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
 }
 .device-entry__progress span {
     border-radius: 999px;
-    background: #f1f5f9;
+    background: var(--el-fill-color-light);
     padding: 3px 7px;
-    color: #94a3b8;
+    color: var(--el-text-color-secondary);
     font-size: 11px;
     line-height: 1;
 }
 .device-entry__progress span.is-done {
-    background: #ecfdf3;
-    color: #16a34a;
+    background: var(--el-color-success-light-9);
+    color: var(--el-color-success);
 }
 .device-entry__footer {
     justify-content: space-between;
-    border: 1px solid #dbe5f1;
+    border: 1px solid var(--el-border-color);
     border-top: 0;
     border-radius: 0 0 10px 10px;
-    background: #fff;
+    background: var(--el-bg-color-overlay);
     padding: 9px 12px;
-    color: #94a3b8;
+    color: var(--el-text-color-secondary);
     font-size: 12px;
 }
 .purchase-device-scroll {
@@ -2109,9 +2115,9 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
     gap: 12px;
 }
 .purchase-device-card {
-    border: 1px solid #dfe7f1;
+    border: 1px solid var(--el-border-color);
     border-radius: 10px;
-    background: #fff;
+    background: var(--el-bg-color-overlay);
     padding: 0;
     overflow: hidden;
 }
@@ -2123,8 +2129,8 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
     gap: 12px;
 }
 .purchase-device-card__head {
-    border-bottom: 1px solid #edf2f7;
-    background: #f8fafc;
+    border-bottom: 1px solid var(--el-border-color-lighter);
+    background: var(--el-fill-color-light);
     padding: 12px 14px;
 }
 .purchase-device-card__identity {
@@ -2141,14 +2147,14 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
     align-items: center;
     justify-content: center;
     border-radius: 8px;
-    background: #eaf2ff;
+    background: var(--el-color-primary-light-9);
     color: var(--el-color-primary);
     font-size: 12px;
     font-weight: 700;
 }
 .purchase-device-card__index {
     overflow: hidden;
-    color: #111827;
+    color: var(--el-text-color-primary);
     font-size: 15px;
     font-weight: 650;
     text-overflow: ellipsis;
@@ -2156,7 +2162,7 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
 }
 .purchase-device-card__hint {
     margin-top: 2px;
-    color: #94a3b8;
+    color: var(--el-text-color-secondary);
     font-size: 12px;
 }
 .purchase-device-card__editor {
@@ -2174,12 +2180,12 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
     justify-content: space-between;
     gap: 8px;
     margin-bottom: 6px;
-    color: #475569;
+    color: var(--el-text-color-regular);
     font-size: 12px;
     font-weight: 600;
 }
 .purchase-device-field__label em {
-    color: #f97316;
+    color: var(--el-color-warning);
     font-size: 11px;
     font-style: normal;
     font-weight: 400;
@@ -2191,7 +2197,7 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
 }
 .purchase-device-card__footer {
     align-items: center;
-    border-top: 1px solid #edf2f7;
+    border-top: 1px solid var(--el-border-color-lighter);
     padding: 10px 14px;
 }
 .purchase-device-profile {
@@ -2201,14 +2207,14 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
 }
 .purchase-device-profile span {
     border-radius: 999px;
-    background: #f1f5f9;
+    background: var(--el-fill-color-light);
     padding: 3px 8px;
-    color: #94a3b8;
+    color: var(--el-text-color-secondary);
     font-size: 11px;
 }
 .purchase-device-profile span.is-done {
-    background: #ecfdf3;
-    color: #16a34a;
+    background: var(--el-color-success-light-9);
+    color: var(--el-color-success);
 }
 .purchase-device-actions {
     display: flex;
@@ -2226,9 +2232,9 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
     justify-content: space-between;
     gap: 16px;
     margin-bottom: 14px;
-    border: 1px solid #dbeafe;
+    border: 1px solid var(--el-color-primary-light-9);
     border-radius: 10px;
-    background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 72%);
+    background: linear-gradient(135deg, var(--el-color-primary-light-9) 0%, var(--el-fill-color-light) 72%);
     padding: 16px 18px;
 }
 .item-extra-drawer-title {
@@ -2239,13 +2245,13 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
     gap: 16px;
 }
 .item-extra-title {
-    color: #111827;
+    color: var(--el-text-color-primary);
     font-size: 16px;
     font-weight: 650;
 }
 .item-extra-sub {
     margin-top: 6px;
-    color: #64748b;
+    color: var(--el-text-color-secondary);
     font-size: 13px;
 }
 .item-extra-tags {
@@ -2261,7 +2267,7 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
     flex-direction: column;
     align-items: center;
     gap: 5px;
-    color: #64748b;
+    color: var(--el-text-color-secondary);
     font-size: 11px;
 }
 .item-extra-layout {
@@ -2270,35 +2276,35 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
     gap: 12px;
 }
 .item-extra-section {
-    border: 1px solid #e5eaf2;
+    border: 1px solid var(--el-border-color);
     border-radius: 10px;
-    background: #fff;
+    background: var(--el-bg-color-overlay);
     padding: 18px;
 }
 .item-extra-section--primary {
-    border-color: #bfdbfe;
+    border-color: var(--el-color-primary-light-5);
     box-shadow: 0 4px 14px rgb(37 99 235 / 6%);
 }
 .drawer-mobile-form :deep(.el-form-item) {
     margin-bottom: 14px;
 }
 .drawer-mobile-form :deep(.el-form-item__label) {
-    color: #475569;
+    color: var(--el-text-color-regular);
     font-weight: 600;
     line-height: 22px;
 }
 .purchase-item-drawer :deep(.el-drawer__body) {
-    background: #f8fafc;
+    background: var(--el-fill-color-light);
     padding-top: 14px;
 }
 .purchase-item-drawer :deep(.el-drawer__footer) {
-    border-top: 1px solid #eef2f7;
-    background: #fff;
+    border-top: 1px solid var(--el-border-color-lighter);
+    background: var(--el-bg-color-overlay);
 }
 .item-extra-tabs :deep(.el-tabs__header) {
     margin: 0 0 14px;
     border-radius: 9px;
-    background: #eef2f7;
+    background: var(--el-border-color-lighter);
     padding: 4px;
 }
 .item-extra-tabs :deep(.el-tabs__nav-wrap::after),
@@ -2308,11 +2314,11 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
 .item-extra-tabs :deep(.el-tabs__item) {
     height: 38px;
     border-radius: 7px;
-    color: #64748b;
+    color: var(--el-text-color-secondary);
     font-weight: 600;
 }
 .item-extra-tabs :deep(.el-tabs__item.is-active) {
-    background: #fff;
+    background: var(--el-bg-color-overlay);
     color: var(--el-color-primary);
     box-shadow: 0 1px 4px rgb(15 23 42 / 8%);
 }
@@ -2334,13 +2340,13 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
     margin-bottom: 12px;
 }
 .item-extra-section__title {
-    color: #111827;
+    color: var(--el-text-color-primary);
     font-size: 15px;
     font-weight: 650;
 }
 .item-extra-section__desc {
     margin-top: 4px;
-    color: #94a3b8;
+    color: var(--el-text-color-secondary);
     font-size: 12px;
 }
 .spec-grid {
@@ -2353,7 +2359,7 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
 }
 .spec-label {
     margin-bottom: 6px;
-    color: #475569;
+    color: var(--el-text-color-regular);
     font-size: 13px;
     font-weight: 600;
 }
@@ -2362,7 +2368,7 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
 }
 .erp-image-upload__tips {
     margin-top: 6px;
-    color: #94a3b8;
+    color: var(--el-text-color-secondary);
     font-size: 12px;
     line-height: 18px;
 }

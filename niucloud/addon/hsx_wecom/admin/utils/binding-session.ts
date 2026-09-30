@@ -31,9 +31,21 @@ export function bindingOutcomeStillUncertain(status: BindingStatus, confirmation
 
 /** Provider info exposes saved rows, not the site's `configured` flag. Never inspect unsaved input. */
 export function hasSavedProviderConfiguration(data: Record<string, unknown>): boolean {
-    return Number(data.id) > 0 && Number(data.enabled) === 1
+    return Number(data.id) > 0 && Number(data.enabled) === 1 && data.status !== 'preparing'
         && ['channel_code', 'provider_corp_id', 'suite_id', 'admin_miniapp_appid', 'admin_miniapp_name', 'web_base_url'].every(key => typeof data[key] === 'string' && String(data[key]).trim().length > 0)
         && ['suite_secret_configured', 'callback_token_configured', 'encoding_aes_key_configured'].every(key => Number(data[key]) === 1)
+}
+
+/** Callback readiness is a saved server result, never inferred from the editable form. */
+export function hasSavedProviderCallbackPreparation(data: Record<string, unknown>): boolean {
+    return Number(data.id) > 0 && (data.callback_ready === true || Number(data.callback_ready) === 1)
+        && ['channel_code', 'provider_corp_id', 'web_base_url'].every(key => typeof data[key] === 'string' && String(data[key]).trim().length > 0)
+        && ['callback_token_configured', 'encoding_aes_key_configured'].every(key => Number(data[key]) === 1)
+}
+
+/** An existing Suite must use the formal save path, even when currently disabled. */
+export function canPrepareProviderConfiguration(data: Record<string, unknown>): boolean {
+    return Number(data.enabled) !== 1 && !String(data.suite_id || '').trim() && Number(data.suite_secret_configured) !== 1
 }
 
 /** Query strings are hints only; successful authorization must be re-read from the server. */

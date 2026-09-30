@@ -1,61 +1,79 @@
 <template>
-  <div class="cashier">
+  <div ref="cashierRef" class="cashier" :style="{ height: `${cashierHeight}px` }">
     <!-- 顶部:富检索(关键字 / IMEI / 内存 / 成色,联动) -->
     <div class="cashier-topbar">
-      <el-input v-model.trim="filter.keyword" clearable placeholder="型号/标题/副标题" class="!w-[200px]" @keyup.enter="reloadGoods" @clear="reloadGoods" />
-      <el-input v-model.trim="filter.imei" clearable placeholder="IMEI" class="!w-[150px]" @keyup.enter="reloadGoods" @clear="reloadGoods" />
-      <el-select v-model="filter.memory_group" multiple collapse-tags collapse-tags-tooltip clearable placeholder="内存" class="!w-[180px]" @change="onFilterChange">
+      <el-input v-model.trim="filter.keyword" clearable placeholder="型号/标题/副标题" aria-label="商品关键词" class="cashier-keyword" @keyup.enter="reloadGoods" @clear="reloadGoods" />
+      <el-input v-model.trim="filter.imei" clearable placeholder="IMEI" aria-label="IMEI" class="cashier-filter" @keyup.enter="reloadGoods" @clear="reloadGoods" />
+      <el-select v-model="filter.memory_group" multiple collapse-tags collapse-tags-tooltip clearable placeholder="内存" class="cashier-filter" @change="onFilterChange">
         <el-option v-for="m in memOptions" :key="m" :label="m" :value="m" />
       </el-select>
-      <el-select v-model="filter.condition_grade" multiple collapse-tags collapse-tags-tooltip clearable placeholder="成色等级" class="!w-[180px]" @change="onFilterChange">
+      <el-select v-model="filter.condition_grade" multiple collapse-tags collapse-tags-tooltip clearable placeholder="成色等级" class="cashier-filter" @change="onFilterChange">
         <el-option v-for="g in gradeOptions" :key="g" :label="g" :value="g" />
       </el-select>
       <el-button type="primary" :icon="Search" @click="reloadGoods">查询</el-button>
+      <el-tooltip :content="cartCollapsed ? '展开结算区' : '折叠结算区'" placement="bottom">
+        <el-button class="cashier-collapse" :icon="cartCollapsed ? Expand : Fold" :aria-label="cartCollapsed ? '展开结算区' : '折叠结算区'" :aria-expanded="!cartCollapsed" @click="cartCollapsed = !cartCollapsed" />
+      </el-tooltip>
     </div>
 
     <div class="cashier-body">
       <aside class="cashier-cats">
         <!-- 三级分类:逐级下钻 + 返回。点父级=按其下全部商品筛选并进入子级 -->
-        <div v-if="catStack.length" class="cat-back" @click="catBack">
-          <span class="cat-back__arrow">‹</span>{{ catStackTop.category_name }}
-        </div>
-        <div v-if="!catStack.length" :class="['cat-item', categoryId === 0 && 'is-active']" @click="selectAllCats">全部</div>
-        <div v-for="c in currentCats" :key="c.category_id" :class="['cat-item', categoryId === c.category_id && 'is-active']" @click="onCatClick(c)">
+        <button v-if="catStack.length" class="cat-back" @click="catBack">
+          <el-icon><ArrowLeft /></el-icon>{{ catStackTop.category_name }}
+        </button>
+        <button v-if="!catStack.length" :class="['cat-item', categoryId === 0 && 'is-active']" @click="selectAllCats">全部</button>
+        <button v-for="c in currentCats" :key="c.category_id" :class="['cat-item', categoryId === c.category_id && 'is-active']" @click="onCatClick(c)">
           <span class="cat-item__name">{{ c.category_name }}</span>
           <span v-if="c.children && c.children.length" class="cat-item__more">›</span>
-        </div>
+        </button>
         <div v-if="!currentCats.length" class="cat-empty">无子分类</div>
       </aside>
 
-      <main class="cashier-goods" v-loading="goodsLoading">
-        <div class="goods-grid">
-          <div v-for="g in goods" :key="g.sku_id" :class="['goods-card', inCart(g.sku_id) && 'is-selected']" @click="addToCart(g)">
+      <main class="cashier-goods">
+        <div class="goods-toolbar">
+          <span class="goods-count">{{ goodsTotal }} 件商品</span>
+          <div class="goods-sort">
+            <el-button :type="sortBy === '' ? 'primary' : 'default'" :plain="sortBy !== ''" size="small" @click="setSort('')">最新</el-button>
+            <el-tooltip :content="memberId ? '按当前买家价格排序' : '按零售价排序'">
+              <el-button size="small" :type="sortBy === 'price' ? 'primary' : 'default'" :plain="sortBy !== 'price'" :aria-label="sortBy === 'price' ? `价格${sortDirection === 'asc' ? '从低到高' : '从高到低'}` : '价格排序'" @click="setSort('price')">价格<el-icon><component :is="sortBy === 'price' ? (sortDirection === 'asc' ? SortUp : SortDown) : Sort" /></el-icon></el-button>
+            </el-tooltip>
+            <el-button size="small" :type="sortBy === 'memory' ? 'primary' : 'default'" :plain="sortBy !== 'memory'" :aria-label="sortBy === 'memory' ? `内存${sortDirection === 'asc' ? '从小到大' : '从大到小'}` : '内存排序'" @click="setSort('memory')">内存<el-icon><component :is="sortBy === 'memory' ? (sortDirection === 'asc' ? SortUp : SortDown) : Sort" /></el-icon></el-button>
+          </div>
+        </div>
+        <div ref="goodsViewportRef" class="goods-viewport" v-loading="goodsLoading">
+        <div v-if="goods.length" class="goods-grid" :style="{ gridTemplateColumns: `repeat(${gridLayout.columns}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${gridLayout.rows}, minmax(220px, 1fr))` }">
+          <article v-for="g in goods" :key="g.sku_id" :class="['goods-card', inCart(g.sku_id) && 'is-selected']" @click="toggleCart(g)">
             <div class="goods-card__img">
-              <el-image :src="img(g.goods_cover)" fit="cover" lazy><template #error><div class="goods-card__noimg">🖼</div></template></el-image>
-              <span v-if="inCart(g.sku_id)" class="goods-card__check">✓</span>
-              <button class="goods-card__eye" title="查看详情" @click.stop="openDetail(g)"><el-icon><View /></el-icon></button>
+              <el-image :src="img(g.goods_cover)" fit="contain" :preview-src-list="imageUrls(g)" preview-teleported hide-on-click-modal :alt="g.goods_name" @click.stop><template #error><div class="goods-card__noimg"><el-icon><Picture /></el-icon></div></template></el-image>
+              <button class="goods-card__select" :class="{ 'is-selected': inCart(g.sku_id) }" :aria-label="`${inCart(g.sku_id) ? '取消选中' : '选中'} ${g.goods_name}`" :aria-pressed="inCart(g.sku_id)" :disabled="submitting" @click.stop="toggleCart(g)"><el-icon><Check v-if="inCart(g.sku_id)" /><Plus v-else /></el-icon></button>
+              <el-tooltip content="查看商品详情"><button class="goods-card__eye" aria-label="查看详情" @click.stop="openDetail(g)"><el-icon><View /></el-icon></button></el-tooltip>
             </div>
-            <div class="goods-card__name" :title="g.goods_name">{{ g.goods_name }}</div>
+            <div class="goods-card__info">
+            <button class="goods-card__name" :title="g.goods_name" @click.stop="openDetail(g)">{{ g.goods_name }}</button>
             <div v-if="g.sub_title" class="goods-card__sub" :title="g.sub_title">{{ g.sub_title }}</div>
             <div v-if="g.imei" class="goods-card__imei" :title="g.imei">IMEI: {{ g.imei }}</div>
             <div class="goods-card__tags">
-              <span v-if="g.memory_group">{{ g.memory_group }}</span>
+              <span v-if="g.memory_label">{{ g.memory_label }}</span>
               <span v-if="g.condition_grade">{{ g.condition_grade }}</span>
             </div>
             <div class="goods-card__meta">
               <div class="goods-card__prices">
                 <span class="goods-card__price">¥{{ priceOf(g) }}</span>
-                <span v-if="g.has_member_price" class="goods-card__origin">¥{{ g.price.toFixed(2) }}</span>
+                <span v-if="g.has_member_price" class="goods-card__origin">¥{{ Number(g.price).toFixed(2) }}</span>
               </div>
               <span class="goods-card__stock">库存{{ g.stock }}</span>
             </div>
-          </div>
-          <el-empty v-if="!goodsLoading && !goods.length" description="暂无商品" :image-size="80" />
+            </div>
+          </article>
         </div>
-        <div v-if="goods.length < goodsTotal" class="goods-more"><el-button :loading="goodsLoading" @click="loadMore">加载更多（{{ goods.length }}/{{ goodsTotal }}）</el-button></div>
+        <div v-if="goodsError" class="goods-error"><el-empty description="商品加载失败" :image-size="64" /><el-button :icon="Refresh" @click="loadGoods()">重试</el-button></div>
+        <el-empty v-else-if="!goodsLoading && !goods.length" description="暂无商品" :image-size="64" />
+        </div>
+        <div class="goods-pagination"><span>{{ goodsLimit }} 件/页</span><el-pagination v-model:current-page="goodsPage" :page-size="goodsLimit" :total="goodsTotal" :pager-count="5" layout="prev, pager, next" :disabled="goodsLoading" @current-change="loadGoods()" /></div>
       </main>
 
-      <aside class="cashier-cart">
+      <aside v-show="!cartCollapsed" class="cashier-cart">
         <!-- 头部:买家 + 结算方式 + 收款户头 -->
         <div class="cart-top">
           <div class="cart-buyer">
@@ -101,7 +119,7 @@
         <div class="cart-head">已选 {{ cart.length }} 台<span v-if="memberId" class="cart-head__mp">· {{ buyerIsMember ? buyerLevelName + '价' : '零售价' }}</span></div>
         <div class="cart-list">
           <div v-for="(it, i) in cart" :key="it.sku_id" class="cart-row">
-            <el-image class="cart-row__img" :src="img(it.cover)" fit="cover" />
+            <el-image class="cart-row__img" :src="img(it.cover)" :preview-src-list="[img(it.cover)]" preview-teleported fit="cover" />
             <div class="cart-row__body">
               <div class="cart-row__name" :title="it.goods_name">{{ it.goods_name }}</div>
               <div v-if="it.sub_title" class="cart-row__sub" :title="it.sub_title">{{ it.sub_title }}</div>
@@ -121,19 +139,32 @@
           <el-button type="primary" size="large" class="!w-full" :loading="submitting" :disabled="!cart.length || !memberId || (paymentMode === 'offline_cash' && splitPay && !paySumOk)" @click="checkout">开单</el-button>
         </div>
       </aside>
+      <aside v-if="cartCollapsed" class="cashier-cart-rail">
+        <el-tooltip content="展开结算区" placement="left"><el-button :icon="ShoppingCart" aria-label="展开结算区" @click="cartCollapsed = false" /></el-tooltip>
+        <strong>{{ cart.length }}</strong><span>已选</span>
+        <span class="cart-rail-total">¥{{ total }}</span>
+        <el-tooltip content="展开并结算" placement="left"><el-button :icon="ArrowLeft" type="primary" aria-label="展开并结算" @click="cartCollapsed = false" /></el-tooltip>
+      </aside>
     </div>
 
     <!-- 详情(类移动端商品详情:图片 + 质检报告) -->
-    <el-dialog v-model="detail.visible" :title="detail.row?.goods_name || '商品详情'" width="640px" top="5vh">
+    <el-dialog v-model="detail.visible" :title="detail.row?.goods_name || '商品详情'" width="min(1000px, 94vw)" top="5vh" class="cashier-detail-dialog" destroy-on-close>
       <div v-if="detail.row" class="cdetail">
-        <el-image v-if="detail.row.goods_cover" :src="img(detail.row.goods_cover)" fit="cover" class="cdetail__cover" />
+        <section class="cdetail__gallery">
+        <el-image v-if="detailImages.length" :src="detailImages[detailImageIndex]" :preview-src-list="detailImages" :initial-index="detailImageIndex" preview-teleported hide-on-click-modal fit="contain" class="cdetail__cover" />
+        <el-empty v-else description="暂无图片" :image-size="64" />
+        <div v-if="detailImages.length > 1" class="cdetail__thumbs"><button v-for="(url, i) in detailImages" :key="url" :class="{ 'is-active': i === detailImageIndex }" :aria-label="`第 ${i + 1} 张图片`" @click="detailImageIndex = i"><el-image :src="url" fit="cover" /></button></div>
+        </section>
+        <section class="cdetail__content">
+        <div class="cdetail__price">¥{{ priceOf(detail.row) }}<small v-if="detail.row.has_member_price">会员价 · 标价 ¥{{ Number(detail.row.price).toFixed(2) }}</small></div>
         <div v-if="detail.row.sub_title" class="cdetail__sub">{{ detail.row.sub_title }}</div>
         <div class="cdetail__base">
-          <span v-if="detail.row.memory_group">内存 {{ detail.row.memory_group }}</span>
+          <span v-if="detail.row.memory_label">内存 {{ detail.row.memory_label }}</span>
           <span v-if="detail.row.condition_grade">成色 {{ detail.row.condition_grade }}</span>
           <span v-if="detail.row.imei">IMEI {{ detail.row.imei }}</span>
-          <span class="cdetail__price">¥{{ priceOf(detail.row) }}</span>
+          <span>库存 {{ detail.row.stock }}</span>
         </div>
+        <div class="cdetail__report">
         <CheckResultPanel
           v-if="detail.row.check_meta?.result_items?.length || detail.row.check_meta?.summary_fields?.length"
           :summary-fields="detail.row.check_meta.summary_fields"
@@ -142,25 +173,42 @@
           :items="detail.row.check_meta.result_items"
         />
         <el-empty v-else description="暂无质检报告" :image-size="60" />
+        </div>
+        </section>
       </div>
       <template #footer>
         <el-button @click="detail.visible = false">关闭</el-button>
-        <el-button type="primary" @click="addToCart(detail.row); detail.visible = false">加入</el-button>
+        <el-button :type="inCart(detail.row?.sku_id) ? 'default' : 'primary'" :disabled="submitting" @click="toggleCart(detail.row)">{{ inCart(detail.row?.sku_id) ? '取消选中' : '选中商品' }}</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Delete, View } from '@element-plus/icons-vue'
+import { Search, Delete, View, Fold, Expand, Sort, SortUp, SortDown, Picture, Check, Plus, ShoppingCart, ArrowLeft, Refresh } from '@element-plus/icons-vue'
 import { img } from '@/utils/common'
 import { cashierGoods, cashierCheckout, cashierCategoryTree } from '@/addon/phone_shop/api/cashier'
 import { getSpecGroups, getGrades } from '@/addon/phone_shop/api/spec'
 import { getErpCapitalAccounts, getErpSettleConfig } from '@/addon/phone_shop/api/erp_outbound'
 import CheckResultPanel from '@/addon/phone_shop/components/CheckResultPanel.vue'
 import CashierMemberPicker from '@/addon/phone_shop/components/CashierMemberPicker.vue'
+import { cashierGridLayout, cashierImages, cashierSelectionIndex } from '@/addon/phone_shop/utils/cashier-layout'
+
+const cashierRef = ref<HTMLElement>()
+const goodsViewportRef = ref<HTMLElement>()
+const cashierHeight = ref(600)
+const cartCollapsed = ref(false)
+const gridLayout = ref({ columns: 4, rows: 2 })
+const goodsLimit = ref(8)
+const sortBy = ref<'' | 'price' | 'memory'>('')
+const sortDirection = ref<'asc' | 'desc'>('asc')
+const setSort = (field: '' | 'price' | 'memory') => {
+  sortDirection.value = sortBy.value === field && sortDirection.value === 'asc' ? 'desc' : 'asc'
+  sortBy.value = field
+  reloadGoods()
+}
 
 const categories = ref<any[]>([])
 const categoryId = ref(0)
@@ -198,6 +246,8 @@ const goods = ref<any[]>([])
 const goodsTotal = ref(0)
 const goodsPage = ref(1)
 const goodsLoading = ref(false)
+const goodsError = ref(false)
+let goodsRequest = 0
 
 const memberId = ref<number | undefined>(undefined)
 const selectedMember = ref<any>(null)
@@ -220,6 +270,9 @@ const paidSum = computed(() => payments.value.reduce((s, p) => s + Number(p.amou
 const cart = ref<any[]>([])
 const submitting = ref(false)
 const detail = reactive<{ visible: boolean; row: any }>({ visible: false, row: null })
+const detailImageIndex = ref(0)
+const imageUrls = (g: any) => cashierImages(g).map(url => img(url))
+const detailImages = computed(() => imageUrls(detail.row))
 
 const priceOf = (g: any) => Number(g.has_member_price ? g.member_price : g.price).toFixed(2)
 const levelNameOf = (m: any) => { const n = m && m.member_level_name; return (n && String(n).trim()) ? String(n).trim() : '' }
@@ -231,7 +284,8 @@ const onMemberResolved = (member: any | null) => {
   reloadGoods()
 }
 const total = computed(() => cart.value.reduce((s, it) => s + Number(it.sale_price || 0), 0).toFixed(2))
-const inCart = (skuId: number) => cart.value.some((it) => it.sku_id === skuId)
+const selectedSkuIds = computed(() => new Set(cart.value.map(it => Number(it.sku_id))))
+const inCart = (skuId: number) => selectedSkuIds.value.has(Number(skuId))
 // 分笔:差额 / 合计是否对齐(2位精度)
 const payRemain = computed(() => Number(total.value) - paidSum.value)
 const paySumOk = computed(() => Math.abs(payRemain.value) < 0.01)
@@ -248,22 +302,28 @@ const loadCategories = async () => {
   try { const res: any = await cashierCategoryTree(); categories.value = res.data || [] } catch (e) { /* */ }
 }
 const loadGoods = async (reset = false) => {
+  const requestId = ++goodsRequest
+  if (reset) goodsPage.value = 1
   goodsLoading.value = true
+  goodsError.value = false
+  goods.value = []
   try {
-    if (reset) { goodsPage.value = 1; goods.value = [] }
     const res: any = await cashierGoods({
-      page: goodsPage.value, limit: 18, member_id: memberId.value || 0, category_id: categoryId.value || 0, category_ids: categoryIds.value, ...filter,
+      page: goodsPage.value, limit: goodsLimit.value, member_id: memberId.value || 0, category_id: categoryId.value || 0, category_ids: categoryIds.value, ...filter,
+      sort_by: sortBy.value, sort_direction: sortDirection.value,
     })
+    if (requestId !== goodsRequest) return
     const d = res.data || {}
-    goods.value = goodsPage.value === 1 ? (d.data || []) : goods.value.concat(d.data || [])
+    goods.value = d.data || []
     goodsTotal.value = Number(d.total || 0)
     // 后端联动选项为空时,用已加载商品兜底填充,确保下拉始终有值
     if (!memOptions.value.length) memOptions.value = deriveOptions('memory_group')
     if (!gradeOptions.value.length) gradeOptions.value = deriveOptions('condition_grade')
-  } finally { goodsLoading.value = false }
+  } catch (e) {
+    if (requestId === goodsRequest) goodsError.value = true
+  } finally { if (requestId === goodsRequest) goodsLoading.value = false }
 }
 const reloadGoods = () => loadGoods(true)
-const loadMore = () => { goodsPage.value++; loadGoods(false) }
 
 // 内存选项 = 规格组(spec/group,按分类联动)的子项 item_value;成色选项 = goods/grade 字典(全局)
 const loadFilters = async () => {
@@ -290,18 +350,20 @@ const loadFilters = async () => {
 // 从已加载商品里去重派生候选项(字典接口无返回时的兜底)
 const deriveOptions = (key: string): string[] => {
   const set = new Set<string>()
-  goods.value.forEach((g: any) => { const v = String(g[key] ?? '').trim(); if (v) set.add(v) })
+  goods.value.forEach((g: any) => { const v = String((key === 'memory_group' ? g.memory_label : g[key]) ?? '').trim(); if (v) set.add(v) })
   return Array.from(set).sort()
 }
 const onFilterChange = () => { reloadGoods() }
 
-const addToCart = (g: any) => {
-  if (!g || inCart(g.sku_id)) return
+const toggleCart = (g: any) => {
+  if (!g || submitting.value) return
+  const selectedIndex = cashierSelectionIndex(cart.value, g.sku_id)
+  if (selectedIndex >= 0) { removeFromCart(selectedIndex); return }
   if (Number(g.stock) <= 0) { ElMessage.warning('该商品无库存'); return }
-  cart.value.push({ sku_id: g.sku_id, goods_id: g.goods_id, erp_asset_id: g.erp_asset_id, goods_name: g.goods_name, sub_title: g.sub_title, imei: g.imei, memory_group: g.memory_group, condition_grade: g.condition_grade, cover: g.goods_cover, sale_price: Number(priceOf(g)) })
+  cart.value.push({ sku_id: g.sku_id, goods_id: g.goods_id, erp_asset_id: g.erp_asset_id, goods_name: g.goods_name, sub_title: g.sub_title, imei: g.imei, memory_group: g.memory_label, condition_grade: g.condition_grade, cover: g.goods_cover, sale_price: Number(priceOf(g)) })
 }
 const removeFromCart = (i: number) => cart.value.splice(i, 1)
-const openDetail = (g: any) => { detail.row = g; detail.visible = true }
+const openDetail = (g: any) => { detail.row = g; detailImageIndex.value = 0; detail.visible = true }
 
 const loadAccounts = async () => {
   try { const res: any = await getErpCapitalAccounts(); accountOptions.value = res.data?.data || res.data?.list || res.data || [] } catch (e) { /* ERP 未启用时忽略 */ }
@@ -363,47 +425,105 @@ const checkout = async () => {
   } finally { submitting.value = false }
 }
 
-onMounted(() => { loadCategories(); loadFilters(); loadGoods(true); loadAccounts(); loadSettleConfig() })
+let layoutObserver: ResizeObserver | undefined
+let layoutTimer: ReturnType<typeof setTimeout> | undefined
+let layoutActive = false
+let initialized = false
+const fitLayout = async () => {
+  if (!layoutActive || !cashierRef.value) return
+  const root = cashierRef.value
+  let scrollOffset = 0
+  for (let parent = root.parentElement; parent; parent = parent.parentElement) scrollOffset += parent.scrollTop
+  cashierHeight.value = Math.max(420, window.innerHeight - root.getBoundingClientRect().top - scrollOffset - 16)
+  await nextTick()
+  if (!layoutActive || !goodsViewportRef.value) return
+  const next = cashierGridLayout(goodsViewportRef.value.clientWidth, goodsViewportRef.value.clientHeight)
+  gridLayout.value = next
+  if (goodsLimit.value !== next.limit) {
+    goodsLimit.value = next.limit
+    if (initialized) reloadGoods()
+  }
+}
+const scheduleLayout = () => {
+  clearTimeout(layoutTimer)
+  layoutTimer = setTimeout(fitLayout, 100)
+}
+const startLayout = () => {
+  if (layoutActive) return
+  layoutActive = true
+  layoutObserver = new ResizeObserver(scheduleLayout)
+  if (goodsViewportRef.value) layoutObserver.observe(goodsViewportRef.value)
+  if (cashierRef.value) layoutObserver.observe(cashierRef.value)
+  window.addEventListener('resize', scheduleLayout)
+}
+const stopLayout = () => {
+  layoutActive = false
+  clearTimeout(layoutTimer)
+  layoutObserver?.disconnect()
+  window.removeEventListener('resize', scheduleLayout)
+}
+onMounted(async () => {
+  startLayout()
+  await fitLayout()
+  initialized = true
+  loadCategories(); loadFilters(); loadGoods(true); loadAccounts(); loadSettleConfig()
+})
+onActivated(() => { if (initialized) { startLayout(); fitLayout() } })
+onDeactivated(stopLayout)
+onBeforeUnmount(() => { stopLayout(); goodsRequest++ })
 </script>
 
 <style lang="scss" scoped>
-.cashier { display: flex; flex-direction: column; height: calc(100vh - 100px); background: #fff; border-radius: 10px; overflow: hidden; }
-.cashier-topbar { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--el-border-color-lighter); flex-wrap: wrap; }
+.cashier { display: flex; flex-direction: column; min-width: 0; background: var(--el-bg-color-overlay); color: var(--el-text-color-primary); overflow: hidden; }
+.cashier-topbar { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--el-border-color-lighter); flex-wrap: wrap; }
+.cashier-keyword { width: 200px; }
+.cashier-filter { width: 145px; }
+.cashier-collapse { margin-left: auto !important; }
 .cashier-body { flex: 1; display: flex; min-height: 0; }
 
-.cashier-cats { width: 140px; flex-shrink: 0; border-right: 1px solid var(--el-border-color-lighter); overflow-y: auto; padding: 8px 0; }
-.cat-item { display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 10px 12px 10px 16px; font-size: 13px; cursor: pointer; color: var(--el-text-color-regular); border-left: 3px solid transparent; }
+.cashier-cats { width: 116px; flex-shrink: 0; border-right: 1px solid var(--el-border-color-lighter); overflow-y: auto; padding: 8px 0; }
+.cat-item { display: flex; width: 100%; background: transparent; border: 0; text-align: left; align-items: center; justify-content: space-between; gap: 4px; padding: 10px 12px; font-size: 13px; cursor: pointer; color: var(--el-text-color-regular); border-left: 3px solid transparent; }
 .cat-item:hover { background: var(--el-fill-color-light); }
 .cat-item.is-active { background: var(--el-color-primary-light-9); border-left-color: var(--el-color-primary); color: var(--el-color-primary); font-weight: 600; }
 .cat-item__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cat-item__more { color: var(--el-text-color-placeholder); font-size: 14px; flex: none; }
-.cat-back { display: flex; align-items: center; gap: 4px; padding: 8px 12px; font-size: 12px; color: var(--el-color-primary); cursor: pointer; border-bottom: 1px solid var(--el-border-color-lighter); margin-bottom: 4px; font-weight: 600; }
+.cat-back { display: flex; width: 100%; background: transparent; border: 0; text-align: left; align-items: center; gap: 4px; padding: 8px 12px; font-size: 12px; color: var(--el-color-primary); cursor: pointer; border-bottom: 1px solid var(--el-border-color-lighter); margin-bottom: 4px; font-weight: 600; }
 .cat-back__arrow { font-size: 16px; line-height: 1; }
 .cat-empty { padding: 16px; font-size: 12px; color: var(--el-text-color-placeholder); text-align: center; }
 
-.cashier-goods { flex: 1; min-width: 0; overflow-y: auto; padding: 14px; }
-.goods-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 12px; }
-.goods-card { border: 1px solid var(--el-border-color-lighter); border-radius: 10px; overflow: hidden; cursor: pointer; transition: all .15s; background: #fff; }
-.goods-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); transform: translateY(-2px); }
+.cashier-goods { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; padding: 10px 12px 0; }
+.goods-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; min-height: 32px; margin-bottom: 10px; }
+.goods-count { color: var(--el-text-color-secondary); font-size: 12px; }
+.goods-sort { display: flex; align-items: center; gap: 6px; .el-button { margin: 0; } .el-icon { margin-left: 4px; } }
+.goods-viewport { flex: 1; min-height: 0; overflow: auto; }
+.goods-grid { display: grid; height: 100%; gap: 12px; }
+.goods-card { display: flex; flex-direction: column; min-width: 0; min-height: 0; border: 1px solid var(--el-border-color-lighter); border-radius: 6px; overflow: hidden; cursor: pointer; transition: border-color .15s, box-shadow .15s; background: var(--el-bg-color-overlay); }
+.goods-card:hover { border-color: var(--el-color-primary-light-5); box-shadow: var(--el-box-shadow-lighter); }
 .goods-card.is-selected { border-color: var(--el-color-primary); box-shadow: 0 0 0 2px var(--el-color-primary-light-7); }
-.goods-card__img { position: relative; aspect-ratio: 1; background: var(--el-fill-color-light); :deep(.el-image) { width: 100%; height: 100%; } }
-.goods-card__noimg { display: flex; align-items: center; justify-content: center; height: 100%; font-size: 28px; color: #cbd5e1; }
-.goods-card__check { position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; border-radius: 50%; background: var(--el-color-primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+.goods-card__img { position: relative; flex: 1; min-height: 80px; background: var(--el-fill-color-light); :deep(.el-image) { display: block; width: 100%; height: 100%; } }
+.goods-card__noimg { display: flex; align-items: center; justify-content: center; height: 100%; font-size: 28px; color: var(--el-text-color-placeholder); }
+.goods-card__select { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border: 1px solid var(--el-border-color); border-radius: 4px; background: var(--el-bg-color-overlay); color: var(--el-text-color-regular); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.goods-card__select.is-selected { background: var(--el-color-primary); border-color: var(--el-color-primary); color: #fff; }
 .goods-card__eye { position: absolute; bottom: 6px; right: 6px; width: 26px; height: 26px; border-radius: 6px; border: none; background: rgba(0,0,0,.45); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .goods-card__eye:hover { background: rgba(0,0,0,.7); }
-.goods-card__name { padding: 8px 8px 2px; font-size: 12px; line-height: 1.4; height: 38px; overflow: hidden; }
+.goods-card__info { display: flex; flex-direction: column; flex: 0 0 132px; min-height: 132px; padding-top: 4px; }
+.goods-card__name { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; width: 100%; padding: 0 8px; color: var(--el-text-color-primary); background: transparent; border: 0; text-align: left; cursor: pointer; font-size: 13px; font-weight: 500; line-height: 19px; height: 38px; overflow: hidden; }
+.goods-card__name:hover { color: var(--el-color-primary); }
 .goods-card__sub { padding: 0 8px; font-size: 11px; color: var(--el-text-color-secondary); line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.goods-card__imei { padding: 1px 8px 0; font-size: 10px; color: var(--el-text-color-placeholder); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.goods-card__imei { padding: 1px 8px 0; font-size: 11px; color: var(--el-text-color-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .goods-card__tags { display: flex; gap: 4px; padding: 2px 8px 0; span { font-size: 10px; color: var(--el-text-color-secondary); background: var(--el-fill-color-light); border-radius: 4px; padding: 1px 6px; } }
-.goods-card__meta { display: flex; align-items: flex-end; justify-content: space-between; padding: 4px 8px 8px; }
-.goods-card__prices { display: flex; align-items: baseline; gap: 5px; }
+.goods-card__meta { display: flex; align-items: flex-end; justify-content: space-between; gap: 4px; margin-top: auto; padding: 4px 8px 8px; }
+.goods-card__prices { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 5px; min-width: 0; }
 .goods-card__price { color: var(--el-color-danger); font-weight: 700; font-size: 14px; }
 .goods-card__origin { color: var(--el-text-color-placeholder); font-size: 11px; text-decoration: line-through; }
-.goods-card__stock { font-size: 11px; color: var(--el-text-color-secondary); }
-.goods-more { text-align: center; margin-top: 14px; }
+.goods-card__stock { font-size: 11px; color: var(--el-text-color-secondary); white-space: nowrap; }
+.goods-pagination { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; min-height: 44px; gap: 4px; font-size: 12px; color: var(--el-text-color-secondary); }
+.goods-error { display: flex; flex-direction: column; align-items: center; }
 
-.cashier-cart { width: 340px; flex-shrink: 0; border-left: 1px solid var(--el-border-color-lighter); display: flex; flex-direction: column; }
-.cart-top { padding: 12px 14px 6px; border-bottom: 1px solid var(--el-border-color-lighter); display: flex; flex-direction: column; gap: 8px; }
+.cashier-cart { width: 320px; min-height: 0; flex-shrink: 0; border-left: 1px solid var(--el-border-color-lighter); display: flex; flex-direction: column; }
+.cashier-cart-rail { width: 76px; flex: none; border-left: 1px solid var(--el-border-color-lighter); padding: 12px 6px; display: flex; flex-direction: column; align-items: center; gap: 12px; font-size: 12px; color: var(--el-text-color-secondary); .el-button { margin: 0; } strong { color: var(--el-text-color-primary); font-size: 20px; } }
+.cart-rail-total { margin-top: auto; max-width: 100%; overflow-wrap: anywhere; text-align: center; color: var(--el-color-danger); font-variant-numeric: tabular-nums; }
+.cart-top { padding: 12px 14px 6px; max-height: 50%; overflow-y: auto; flex-shrink: 0; border-bottom: 1px solid var(--el-border-color-lighter); display: flex; flex-direction: column; gap: 8px; }
 .cart-buyer { padding-bottom: 3px; }
 .cart-buyer__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
 .cart-buyer__head > span { color: var(--el-text-color-primary); font-size: 13px; font-weight: 600; }
@@ -420,7 +540,7 @@ onMounted(() => { loadCategories(); loadFilters(); loadGoods(true); loadAccounts
 .pay-sum { font-size: 12px; color: var(--el-text-color-secondary); }
 .pay-sum.bad { color: var(--el-color-danger); }
 .cart-head { padding: 10px 14px; font-weight: 600; font-size: 13px; border-bottom: 1px solid var(--el-border-color-lighter); .cart-head__mp { font-size: 12px; color: var(--el-color-primary); font-weight: 400; } }
-.cart-list { flex: 1; overflow-y: auto; padding: 8px 10px; }
+.cart-list { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 10px; }
 .cart-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px dashed var(--el-border-color-lighter); }
 .cart-row__img { width: 42px; height: 42px; border-radius: 6px; flex-shrink: 0; }
 .cart-row__body { flex: 1; min-width: 0; }
@@ -431,11 +551,17 @@ onMounted(() => { loadCategories(); loadFilters(); loadGoods(true); loadAccounts
 .cdetail__sub { margin-top: 8px; font-size: 13px; color: var(--el-text-color-secondary); line-height: 1.4; }
 .cart-row__price-input { width: 110px; margin-top: 3px; :deep(.el-input__inner) { color: var(--el-color-danger); font-weight: 600; text-align: left; } }
 .cart-empty { color: var(--el-text-color-placeholder); text-align: center; padding: 30px 0; font-size: 13px; }
-.cart-foot { padding: 12px 14px; border-top: 1px solid var(--el-border-color-lighter); }
+.cart-foot { flex-shrink: 0; padding: 12px 14px; border-top: 1px solid var(--el-border-color-lighter); }
 .cart-total { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; b { font-size: 20px; color: var(--el-color-danger); } }
 
-.cdetail { display: flex; flex-direction: column; gap: 12px; }
-.cdetail__cover { width: 100%; max-height: 240px; border-radius: 8px; }
+.cdetail { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 20px; height: min(62vh, 620px); min-height: 300px; }
+.cdetail__gallery { display: flex; flex-direction: column; min-width: 0; min-height: 0; gap: 8px; }
+.cdetail__cover { flex: 1; min-height: 0; width: 100%; border-radius: 6px; background: var(--el-fill-color-light); }
+.cdetail__thumbs { display: flex; gap: 6px; overflow-x: auto; flex-shrink: 0; padding-bottom: 4px; button { width: 56px; height: 56px; padding: 2px; flex: none; border: 1px solid var(--el-border-color); border-radius: 4px; background: var(--el-bg-color-overlay); cursor: pointer; } button.is-active { border-color: var(--el-color-primary); } .el-image { width: 100%; height: 100%; } }
+.cdetail__content { display: flex; flex-direction: column; min-width: 0; min-height: 0; gap: 12px; }
+.cdetail__report { flex: 1; min-height: 0; overflow-y: auto; border-top: 1px solid var(--el-border-color-lighter); }
 .cdetail__base { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 12px; color: var(--el-text-color-secondary); }
-.cdetail__price { color: var(--el-color-danger); font-weight: 700; font-size: 16px; margin-left: auto; }
+.cdetail__price { color: var(--el-color-danger); font-weight: 700; font-size: 24px; small { display: block; color: var(--el-text-color-secondary); font-size: 12px; font-weight: 400; margin-top: 4px; } }
+@media (max-width: 1100px) { .cashier-keyword { width: 180px; } .cashier-filter { width: 130px; } .cashier-cats { width: 100px; } .cashier-cart { width: 292px; } .cart-buyer__head small { display: none; } }
+@media (prefers-reduced-motion: reduce) { .goods-card { transition: none; } }
 </style>

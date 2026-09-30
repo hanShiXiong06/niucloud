@@ -16,7 +16,6 @@ use app\adminapi\middleware\AdminLog;
 
 Route::group('hsx_recycle', function () {
     Route::get('pickup_notice/config', 'addon\hsx_recycle\app\adminapi\controller\order\PickupNoticeConfig@info');
-    Route::put('pickup_notice/config', 'addon\hsx_recycle\app\adminapi\controller\order\PickupNoticeConfig@save');
 })->middleware([AdminCheckToken::class, AdminCheckRole::class, AdminLog::class]);
 
 Route::group('recycle/platform', function () {
@@ -620,6 +619,7 @@ Route::group('recycle', function () {
     Route::get('third_party_config', 'addon\hsx_recycle\app\adminapi\controller\third_party\ThirdPartyConfig@getConfig');
     Route::post('third_party_config', 'addon\hsx_recycle\app\adminapi\controller\third_party\ThirdPartyConfig@setConfig');
     Route::get('third_party_config/default', 'addon\hsx_recycle\app\adminapi\controller\third_party\ThirdPartyConfig@getDefaultConfig');
+    Route::get('third_party_config/kuaidi100_guide', 'addon\hsx_recycle\app\adminapi\controller\third_party\ThirdPartyConfig@kuaidi100Guide');
     Route::post('third_party_config/test', 'addon\hsx_recycle\app\adminapi\controller\third_party\ThirdPartyConfig@testConnection');
     Route::post('third_party/address_parse', 'addon\hsx_recycle\app\adminapi\controller\third_party\AddressParse@parse');
 

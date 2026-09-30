@@ -1,17 +1,16 @@
 <template>
-    <HsxPage padding="none" class="main-container">
+    <ErpDesktopPage class="main-container">
         <!-- 退货单列表：只在列表模式展示，不再固定占用左栏 -->
-        <div v-show="mode !== 'detail'" class="erp-list-panel">
-            <HsxTitle size="page" collapsible-subtitle class="mb-4">
-                <template #default>采购退货</template>
+        <div v-show="mode !== 'detail'" class="erp-list-panel erp-list-surface">
+            <ErpWorkspaceHeader page="purchase_return" :filter-count="Number(!!listWhere.keyword) + Number(!!listWhere.party_id) + Number(!!listWhere.dateRange?.length)">
+                <template #title>采购退货</template>
                 <template #subtitle>将仍在库且符合条件的设备退还供货方，系统自动判断冲销应付或退款应收。</template>
                 <template #extra><div class="flex gap-2 flex-wrap">
                         <el-button :icon="Refresh" :loading="listLoading" @click="loadList">刷新</el-button>
                         <el-button type="primary" :icon="Plus" @click="openCreate">新建退货</el-button>
                     </div></template>
-            </HsxTitle>
 
-            <HsxSearchPanel>
+            <HsxSearchPanel :show-layout-switch="false">
                 <template #extra>
                     <el-button type="primary" :icon="Search" @click="searchList">查询</el-button>
                     <el-button @click="resetListWhere">重置</el-button>
@@ -31,22 +30,23 @@
             </HsxSearchPanel>
 
             <!-- 状态 Tab -->
+            </ErpWorkspaceHeader>
             <el-tabs v-model="listWhere.status" class="mt-4 erp-status-tabs" @tab-change="switchStatus">
                 <el-tab-pane v-for="tab in statusTabs" :key="tab.value" :label="tab.label" :name="tab.value" />
             </el-tabs>
 
-            <el-table :data="listData" v-loading="listLoading" size="large" @row-click="selectItem">
+            <ErpDataTable :data="listData" v-loading="listLoading" @row-click="selectItem">
                 <el-table-column prop="return_no" label="退货单" min-width="220" />
                 <el-table-column label="供货商 / 原采购单" min-width="220">
-                    <template #default="{ row }"><div class="font-medium">{{ row.party_name || '-' }}</div><div class="mt-1 text-xs text-gray-500">{{ row.purchase_no || '-' }}</div></template>
+                    <template #default="{ row }"><div class="font-medium">{{ row.party_name || '-' }}</div><div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">{{ row.purchase_no || '-' }}</div></template>
                 </el-table-column>
                 <el-table-column label="账务处理" min-width="150"><template #default="{ row }">{{ refundModeLabel(row.refund_mode) }}</template></el-table-column>
-                <el-table-column label="退货金额" width="140" align="right"><template #default="{ row }"><span class="font-medium text-orange-600">¥{{ row.total_amount }}</span></template></el-table-column>
+                <el-table-column label="退货金额" width="140" align="right"><template #default="{ row }"><span class="font-medium text-[color:var(--el-color-warning)]">¥{{ row.total_amount }}</span></template></el-table-column>
                 <el-table-column label="状态" width="140" align="center"><template #default="{ row }"><el-tag :type="row.process_status_type || statusTagType(row.status)" effect="plain">{{ row.process_status_label || statusLabel(row.status) }}</el-tag></template></el-table-column>
-                <el-table-column label="操作" width="100" align="center"><template #default="{ row }"><el-button type="primary" link @click.stop="selectItem(row)">查看</el-button></template></el-table-column>
-            </el-table>
+                <el-table-column label="操作" width="100" align="center" fixed="right"><template #default="{ row }"><el-button type="primary" link @click.stop="selectItem(row)">查看</el-button></template></el-table-column>
+            </ErpDataTable>
 
-            <div class="panel-footer">
+            <div class="panel-footer erp-pagination">
                 <el-pagination
                     v-model:current-page="pagination.page"
                     :page-size="pagination.limit"
@@ -185,8 +185,8 @@
                                 <div class="decision-copy">{{ returnPolicyText }}</div>
                                 <div class="decision-metrics">
                                     <div><span>退出库存</span><b>{{ form.items.length }} 台</b></div>
-                                    <div><span>冲销应付</span><b class="text-green-600">¥{{ selectedOffsetTotal.toFixed(2) }}</b></div>
-                                    <div><span>退款应收</span><b :class="selectedRequiresRefund ? 'text-orange-600' : ''">¥{{ selectedRefundTotal.toFixed(2) }}</b></div>
+                                    <div><span>冲销应付</span><b class="text-[color:var(--el-color-success)]">¥{{ selectedOffsetTotal.toFixed(2) }}</b></div>
+                                    <div><span>退款应收</span><b :class="selectedRequiresRefund ? 'text-[color:var(--el-color-warning)]' : ''">¥{{ selectedRefundTotal.toFixed(2) }}</b></div>
                                 </div>
                             </section>
 
@@ -196,7 +196,7 @@
                                     <el-radio-button value="cash">当场收款</el-radio-button>
                                     <el-radio-button value="receivable">记账待收</el-radio-button>
                                 </el-radio-group>
-                                <div class="mt-2 text-xs leading-5 text-gray-500">
+                                <div class="mt-2 text-xs leading-5 text-[color:var(--el-text-color-secondary)]">
                                     {{ form.refund_mode === 'cash' ? '供货方已经退款：选择实际到账账户，本次直接完成，不进入财务待办。' : '供货方暂未退款：生成设备级应收，由财务后续收款或折账。' }}
                                 </div>
                                 <el-select v-if="form.refund_mode === 'cash'" v-model="form.capital_account_id" class="mt-3 w-full" placeholder="选择实际到账账户">
@@ -254,7 +254,7 @@
                     <div class="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
                         <div class="return-metric">
                             <div class="metric-label">退货金额</div>
-                            <div class="metric-value text-orange-600">¥{{ selected.total_amount }}</div>
+                            <div class="metric-value text-[color:var(--el-color-warning)]">¥{{ selected.total_amount }}</div>
                         </div>
                         <div class="return-metric">
                             <div class="metric-label">退货台数</div>
@@ -266,7 +266,7 @@
                         </div>
                         <div class="return-metric">
                             <div class="metric-label">退款到账</div>
-                            <div class="metric-value" :class="refundReceivable?.status === 'settled' ? 'text-green-600' : 'text-orange-600'">{{ refundProgressText }}</div>
+                            <div class="metric-value" :class="refundReceivable?.status === 'settled' ? 'text-[color:var(--el-color-success)]' : 'text-[color:var(--el-color-warning)]'">{{ refundProgressText }}</div>
                         </div>
                     </div>
                     <el-descriptions :column="3" border size="small" class="mb-4">
@@ -281,7 +281,7 @@
 
                     <div class="mb-2 flex items-center justify-between">
                         <span class="text-sm font-medium">退货明细</span>
-                        <span class="text-xs text-gray-500">已付款才需要真实退款，未付款部分会冲销原应付。</span>
+                        <span class="text-xs text-[color:var(--el-text-color-secondary)]">已付款才需要真实退款，未付款部分会冲销原应付。</span>
                     </div>
                     <el-table :data="selectedDetail?.items || []" size="small" border>
                         <el-table-column prop="imei" label="IMEI" min-width="130" />
@@ -294,20 +294,23 @@
                         </el-table-column>
                         <el-table-column label="处理方式" width="120">
                             <template #default="{ row }">
-                                <span v-if="Number(row.refund_receivable_amount || 0) <= 0" class="text-gray-500">冲销应付 ¥{{ Number(row.unpaid_offset_amount || 0).toFixed(2) }}</span>
-                                <span v-else-if="Number(row.unpaid_offset_amount || 0) <= 0" class="text-blue-600">退款应收 ¥{{ Number(row.refund_receivable_amount || 0).toFixed(2) }}</span>
-                                <span v-else class="text-orange-600">冲应付 {{ Number(row.unpaid_offset_amount || 0).toFixed(2) }} / 应收 {{ Number(row.refund_receivable_amount || 0).toFixed(2) }}</span>
+                                <span v-if="Number(row.refund_receivable_amount || 0) <= 0" class="text-[color:var(--el-text-color-secondary)]">冲销应付 ¥{{ Number(row.unpaid_offset_amount || 0).toFixed(2) }}</span>
+                                <span v-else-if="Number(row.unpaid_offset_amount || 0) <= 0" class="text-[color:var(--erp-text-accent)]">退款应收 ¥{{ Number(row.refund_receivable_amount || 0).toFixed(2) }}</span>
+                                <span v-else class="text-[color:var(--el-color-warning)]">冲应付 {{ Number(row.unpaid_offset_amount || 0).toFixed(2) }} / 应收 {{ Number(row.refund_receivable_amount || 0).toFixed(2) }}</span>
                             </template>
                         </el-table-column>
                         <el-table-column prop="reason" label="原因" min-width="100" />
                     </el-table>
                 </div>
         </div>
-    </HsxPage>
+    </ErpDesktopPage>
 </template>
 
 <script setup lang="ts">
-import { HsxTitle, HsxPage, HsxSearchPanel, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
+import ErpDesktopPage from '@/addon/hsx_erp/components/ErpDesktopPage.vue'
+import ErpWorkspaceHeader from '@/addon/hsx_erp/components/ErpWorkspaceHeader.vue'
+import ErpDataTable from '@/addon/hsx_erp/components/ErpDataTable.vue'
+import { HsxSearchPanel, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
 import { erpEnumLabel } from '@/addon/hsx_erp/utils/display'
 import { ref, computed, reactive } from 'vue'
 import { Plus, Refresh, Search } from '@element-plus/icons-vue'
@@ -634,7 +637,7 @@ function assetSettlementText(row: any) {
 
 function assetSettlementClass(row: any) {
     const paid = Number(row?.paid_amount || 0)
-    return paid > 0.0001 ? 'text-green-600' : 'text-orange-500'
+    return paid > 0.0001 ? 'text-[color:var(--el-color-success)]' : 'text-[color:var(--el-color-warning)]'
 }
 
 function calculateReturnFlow(item: any) {
@@ -793,7 +796,7 @@ if (route.query.purchase_order_id) {
     padding: 20px;
     border: 0;
     border-radius: 0;
-    background: #fff;
+    background: var(--el-bg-color-overlay);
     box-shadow: none;
 }
 .erp-form-panel {
@@ -806,13 +809,13 @@ if (route.query.purchase_order_id) {
     gap: 16px;
     padding: 0;
 }
-.panel-title { color:#111827; font-weight:650; font-size:20px; }
-.panel-subtitle { margin-top:5px; color:#64748b; font-size:13px; line-height:20px; }
-.return-status-tabs { padding:0 22px; border-top:1px solid #f0f3f7; }
+.panel-title { color:var(--el-text-color-primary); font-weight:650; font-size:20px; }
+.panel-subtitle { margin-top:5px; color:var(--el-text-color-secondary); font-size:13px; line-height:20px; }
+.return-status-tabs { padding:0 22px; border-top:1px solid var(--el-border-color-lighter); }
 .return-status-tabs :deep(.el-tabs__header) { margin:0; }
-.return-status-tabs :deep(.el-tabs__nav-wrap::after) { height:1px; background:#f0f3f7; }
+.return-status-tabs :deep(.el-tabs__nav-wrap::after) { height:1px; background:var(--el-border-color-lighter); }
 .return-status-tabs :deep(.el-tabs__item) { height:48px; padding:0 18px; }
-.panel-search { display:flex; align-items:center; flex-wrap:wrap; gap:10px; padding:14px 22px; background:#fbfcfe; }
+.panel-search { display:flex; align-items:center; flex-wrap:wrap; gap:10px; padding:14px 22px; background:var(--el-fill-color-light); }
 .panel-search > * { max-width:100%; min-width:0; }
 .filter-keyword { width:min(360px,100%); }
 .filter-party { width:220px; max-width:100%; min-width:0; }
@@ -824,12 +827,12 @@ if (route.query.purchase_order_id) {
     min-width:0;
     padding:14px 15px;
     cursor: pointer;
-    border:1px solid #e7ecf3;
+    border:1px solid var(--el-border-color);
     border-radius:9px;
-    background:#fff;
+    background:var(--el-bg-color-overlay);
     transition:border-color .15s,box-shadow .15s,transform .15s;
 }
-.list-item:hover { border-color:#a8c7ff; box-shadow:0 5px 16px rgba(37,99,235,.08); transform:translateY(-1px); }
+.list-item:hover { border-color:var(--el-color-primary-light-5); box-shadow:0 5px 16px rgba(37,99,235,.08); transform:translateY(-1px); }
 .list-item.selected { border-color:var(--el-color-primary); background:var(--el-color-primary-light-9); }
 .panel-list :deep(.el-empty) { grid-column:1/-1; }
 .panel-footer { padding-top:16px; display:flex; justify-content:flex-end; }
@@ -839,98 +842,98 @@ if (route.query.purchase_order_id) {
     justify-content: space-between;
     margin-bottom: 16px;
     padding-bottom: 12px;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--el-border-color-lighter);
 }
-.form-title { color:#111827; font-size:17px; font-weight:650; }
-.form-subtitle { margin-top:3px; color:#94a3b8; font-size:12px; }
+.form-title { color:var(--el-text-color-primary); font-size:17px; font-weight:650; }
+.form-subtitle { margin-top:3px; color:var(--el-text-color-secondary); font-size:12px; }
 .form-body { padding: 0 4px; }
 .create-return-shell { max-width:1440px; margin:0 auto; }
 .detail-body { max-width:1440px; margin:0 auto; padding:0 4px; }
-.return-flow-guide { display:grid; max-width:1100px; margin:0 auto 18px; grid-template-columns:minmax(0,1fr) 44px minmax(0,1fr) 44px minmax(0,1fr); align-items:center; border:1px solid #dbeafe; border-radius:10px; background:#f8fbff; padding:12px 16px; }
+.return-flow-guide { display:grid; max-width:1100px; margin:0 auto 18px; grid-template-columns:minmax(0,1fr) 44px minmax(0,1fr) 44px minmax(0,1fr); align-items:center; border:1px solid var(--el-color-primary-light-9); border-radius:10px; background:var(--el-color-primary-light-9); padding:12px 16px; }
 .return-flow-guide div { display:grid; grid-template-columns:28px 1fr; column-gap:9px; align-items:center; }
-.return-flow-guide span { display:flex; width:28px; height:28px; grid-row:1/3; align-items:center; justify-content:center; border-radius:50%; color:#fff; background:var(--el-color-primary); font-size:12px; font-weight:700; }
-.return-flow-guide b { color:#1e293b; font-size:13px; }
-.return-flow-guide small { margin-top:2px; color:#94a3b8; font-size:11px; }
-.return-flow-guide i { height:1px; background:#bfdbfe; }
+.return-flow-guide span { display:flex; width:28px; height:28px; grid-row:1/3; align-items:center; justify-content:center; border-radius:50%; color:var(--el-color-white); background:var(--el-color-primary); font-size:12px; font-weight:700; }
+.return-flow-guide b { color:var(--el-text-color-primary); font-size:13px; }
+.return-flow-guide small { margin-top:2px; color:var(--el-text-color-secondary); font-size:11px; }
+.return-flow-guide i { height:1px; background:var(--el-color-primary-light-5); }
 .return-metric {
     border-radius: 8px;
-    background: #f8fafc;
+    background: var(--el-fill-color-light);
     padding: 12px 14px;
 }
 .metric-label {
-    color: #64748b;
+    color: var(--el-text-color-secondary);
     font-size: 12px;
 }
 .metric-value {
     margin-top: 4px;
-    color: #111827;
+    color: var(--el-text-color-primary);
     font-size: 18px;
     font-weight: 600;
 }
-.create-source-card { margin-bottom:16px; padding:14px 16px; border:0; border-radius:6px; background:#f8fafc; }
+.create-source-card { margin-bottom:16px; padding:14px 16px; border:0; border-radius:6px; background:var(--el-fill-color-light); }
 .source-picker-row { display:flex; align-items:center; justify-content:space-between; gap:24px; }
 .source-query-fields { width:min(420px,100%); }
 .source-query-field { margin:0; }
-.source-query-field :deep(.el-form-item__label) { height:auto; margin-bottom:5px; color:#64748b; font-size:12px; line-height:1.3; }
-.section-kicker { color:#111827; font-size:15px; font-weight:650; }
-.section-hint { margin-top:3px; color:#94a3b8; font-size:12px; }
-.source-summary { display:grid; grid-template-columns:minmax(220px,1.5fr) repeat(3,minmax(120px,1fr)); gap:16px; margin-top:14px; padding-top:14px; border-top:1px solid #eef2f7; }
+.source-query-field :deep(.el-form-item__label) { height:auto; margin-bottom:5px; color:var(--el-text-color-secondary); font-size:12px; line-height:1.3; }
+.section-kicker { color:var(--el-text-color-primary); font-size:15px; font-weight:650; }
+.section-hint { margin-top:3px; color:var(--el-text-color-secondary); font-size:12px; }
+.source-summary { display:grid; grid-template-columns:minmax(220px,1.5fr) repeat(3,minmax(120px,1fr)); gap:16px; margin-top:14px; padding-top:14px; border-top:1px solid var(--el-border-color-lighter); }
 .source-summary__main { min-width:0; }
-.source-summary__label { color:#94a3b8; font-size:12px; }
-.source-summary__party { margin-top:5px; color:#111827; font-size:16px; font-weight:650; }
-.source-summary__no { margin-top:5px; color:#64748b; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.source-summary__label { color:var(--el-text-color-secondary); font-size:12px; }
+.source-summary__party { margin-top:5px; color:var(--el-text-color-primary); font-size:16px; font-weight:650; }
+.source-summary__no { margin-top:5px; color:var(--el-text-color-secondary); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .source-summary__item { display:flex; flex-direction:column; gap:6px; }
-.source-summary__item span { color:#94a3b8; font-size:12px; }
-.source-summary__item b { color:#334155; font-size:13px; font-weight:600; }
+.source-summary__item span { color:var(--el-text-color-secondary); font-size:12px; }
+.source-summary__item b { color:var(--el-text-color-primary); font-size:13px; font-weight:600; }
 .create-return-grid { display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:20px; align-items:start; }
-.return-device-panel { min-width:0; padding:0; border:0; border-radius:0; background:#fff; }
+.return-device-panel { min-width:0; padding:0; border:0; border-radius:0; background:var(--el-bg-color-overlay); }
 .section-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:14px; }
 .selected-count { padding:4px 10px; border-radius:999px; color:var(--el-color-primary); background:var(--el-color-primary-light-9); font-size:12px; font-weight:600; }
 .return-device-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(360px,1fr)); gap:12px; min-height:100px; }
-.return-device-card { min-width:0; padding:14px; border:1px solid #dfe5ec; border-radius:6px; background:#fff; cursor:pointer; transition:border-color .15s,box-shadow .15s,background .15s; }
-.return-device-card:hover { border-color:#a5b4fc; }
-.return-device-card.selected { border-color:var(--el-color-primary); background:#f8fbff; box-shadow:0 0 0 1px var(--el-color-primary-light-7); }
-.return-device-card.blocked { color:#94a3b8; background:#f8fafc; cursor:not-allowed; }
-.return-device-card.blocked:hover { border-color:#e2e8f0; }
+.return-device-card { min-width:0; padding:14px; border:1px solid var(--el-border-color); border-radius:6px; background:var(--el-bg-color-overlay); cursor:pointer; transition:border-color .15s,box-shadow .15s,background .15s; }
+.return-device-card:hover { border-color:var(--el-color-primary-light-5); }
+.return-device-card.selected { border-color:var(--el-color-primary); background:var(--el-color-primary-light-9); box-shadow:0 0 0 1px var(--el-color-primary-light-7); }
+.return-device-card.blocked { color:var(--el-text-color-secondary); background:var(--el-fill-color-light); cursor:not-allowed; }
+.return-device-card.blocked:hover { border-color:var(--el-border-color); }
 .device-card-head { display:flex; align-items:flex-start; gap:10px; }
 .device-card-title-wrap { flex:1; min-width:0; }
-.device-card-title { overflow:hidden; color:#111827; font-size:15px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
-.device-card-spec { margin-top:4px; overflow:hidden; color:#64748b; font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
-.device-card-identities { display:flex; flex-wrap:wrap; gap:6px 14px; margin:12px 0; color:#64748b; font-size:12px; }
-.device-card-identities span { padding:3px 7px; border-radius:5px; background:#f1f5f9; }
-.device-money-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; padding-top:11px; border-top:1px solid #eef2f7; }
+.device-card-title { overflow:hidden; color:var(--el-text-color-primary); font-size:15px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
+.device-card-spec { margin-top:4px; overflow:hidden; color:var(--el-text-color-secondary); font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
+.device-card-identities { display:flex; flex-wrap:wrap; gap:6px 14px; margin:12px 0; color:var(--el-text-color-secondary); font-size:12px; }
+.device-card-identities span { padding:3px 7px; border-radius:5px; background:var(--el-fill-color-light); }
+.device-money-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; padding-top:11px; border-top:1px solid var(--el-border-color-lighter); }
 .device-money-grid div { display:flex; min-width:0; flex-direction:column; gap:4px; }
-.device-money-grid span { color:#94a3b8; font-size:11px; }
-.device-money-grid b { overflow:hidden; color:#334155; font-size:12px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
-.device-block-reason { margin-top:11px; padding:8px 10px; border-radius:6px; color:#dc2626; background:#fef2f2; font-size:12px; line-height:1.5; }
-.device-card-form { display:grid; grid-template-columns:minmax(0,1fr); gap:11px; margin-top:12px; padding-top:12px; border-top:1px dashed #cbd5e1; }
+.device-money-grid span { color:var(--el-text-color-secondary); font-size:11px; }
+.device-money-grid b { overflow:hidden; color:var(--el-text-color-primary); font-size:12px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
+.device-block-reason { margin-top:11px; padding:8px 10px; border-radius:6px; color:var(--el-color-danger); background:var(--el-color-danger-light-9); font-size:12px; line-height:1.5; }
+.device-card-form { display:grid; grid-template-columns:minmax(0,1fr); gap:11px; margin-top:12px; padding-top:12px; border-top:1px dashed var(--el-border-color); }
 .device-field { display:flex; min-width:0; flex-direction:column; gap:6px; }
-.device-field label { color:#64748b; font-size:12px; }
-.device-field label span { margin-left:4px; color:#a8b2c1; font-weight:400; }
+.device-field label { color:var(--el-text-color-secondary); font-size:12px; }
+.device-field label span { margin-left:4px; color:var(--el-text-color-secondary); font-weight:400; }
 .device-field :deep(.el-input-number) { width:100%; }
-.unpaid-result { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 11px; border:1px solid #dcfce7; border-radius:7px; background:#f0fdf4; }
+.unpaid-result { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 11px; border:1px solid var(--el-color-success-light-9); border-radius:7px; background:var(--el-color-success-light-9); }
 .unpaid-result__main { display:flex; min-width:0; align-items:center; gap:8px; }
-.unpaid-result__main b { color:#166534; font-size:12px; font-weight:650; white-space:nowrap; }
-.unpaid-result__badge { flex:none; padding:2px 6px; border-radius:4px; color:#15803d; background:#dcfce7; font-size:11px; font-weight:650; }
-.unpaid-result__tip { color:#65a30d; font-size:11px; text-align:right; }
-.device-empty-guide { display:flex; grid-column:1/-1; min-height:100px; align-items:center; justify-content:center; border:1px dashed #cbd5e1; border-radius:6px; color:#94a3b8; background:#f8fafc; font-size:13px; }
+.unpaid-result__main b { color:var(--el-color-success); font-size:12px; font-weight:650; white-space:nowrap; }
+.unpaid-result__badge { flex:none; padding:2px 6px; border-radius:4px; color:var(--el-color-success); background:var(--el-color-success-light-9); font-size:11px; font-weight:650; }
+.unpaid-result__tip { color:var(--el-color-success); font-size:11px; text-align:right; }
+.device-empty-guide { display:flex; grid-column:1/-1; min-height:100px; align-items:center; justify-content:center; border:1px dashed var(--el-border-color); border-radius:6px; color:var(--el-text-color-secondary); background:var(--el-fill-color-light); font-size:13px; }
 .return-device-grid :deep(.el-empty) { grid-column:1/-1; }
 .return-decision-panel { position:sticky; top:0; display:flex; flex-direction:column; gap:12px; }
-.decision-card { padding:17px; border:1px solid #bbf7d0; border-radius:12px; background:linear-gradient(145deg,#f0fdf4,#fff); }
-.decision-card.refund { border-color:#fed7aa; background:linear-gradient(145deg,#fff7ed,#fff); }
-.decision-label { color:#64748b; font-size:12px; }
-.decision-title { margin-top:5px; color:#166534; font-size:18px; font-weight:700; }
-.decision-card.refund .decision-title { color:#c2410c; }
-.decision-copy { margin-top:8px; color:#64748b; font-size:12px; line-height:1.6; }
+.decision-card { padding:17px; border:1px solid var(--el-color-success-light-5); border-radius:12px; background:linear-gradient(145deg,var(--el-color-success-light-9),var(--el-bg-color-overlay)); }
+.decision-card.refund { border-color:var(--el-color-warning-light-5); background:linear-gradient(145deg,var(--el-color-warning-light-9),var(--el-bg-color-overlay)); }
+.decision-label { color:var(--el-text-color-secondary); font-size:12px; }
+.decision-title { margin-top:5px; color:var(--el-color-success); font-size:18px; font-weight:700; }
+.decision-card.refund .decision-title { color:var(--el-color-warning); }
+.decision-copy { margin-top:8px; color:var(--el-text-color-secondary); font-size:12px; line-height:1.6; }
 .decision-metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; margin-top:14px; padding-top:13px; border-top:1px solid rgba(148,163,184,.22); }
 .decision-metrics div { display:flex; min-width:0; flex-direction:column; gap:5px; }
-.decision-metrics span { color:#94a3b8; font-size:11px; }
-.decision-metrics b { overflow:hidden; color:#334155; font-size:12px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
-.side-form-card { padding:14px; border:1px solid #e2e8f0; border-radius:10px; background:#fff; }
-.side-form-label { display:block; margin-bottom:8px; color:#334155; font-size:13px; font-weight:600; }
-.handover-confirm { margin:0; padding:14px; border:1px solid #fed7aa; border-radius:10px; background:#fffaf5; }
-.handover-confirm :deep(.el-checkbox__label) { color:#1e293b; font-weight:600; white-space:normal; }
-.handover-confirm__tip { margin-top:7px; padding-left:24px; color:#9a3412; font-size:12px; line-height:1.55; }
+.decision-metrics span { color:var(--el-text-color-secondary); font-size:11px; }
+.decision-metrics b { overflow:hidden; color:var(--el-text-color-primary); font-size:12px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
+.side-form-card { padding:14px; border:1px solid var(--el-border-color); border-radius:10px; background:var(--el-bg-color-overlay); }
+.side-form-label { display:block; margin-bottom:8px; color:var(--el-text-color-primary); font-size:13px; font-weight:600; }
+.handover-confirm { margin:0; padding:14px; border:1px solid var(--el-color-warning-light-5); border-radius:10px; background:var(--el-color-warning-light-9); }
+.handover-confirm :deep(.el-checkbox__label) { color:var(--el-text-color-primary); font-weight:600; white-space:normal; }
+.handover-confirm__tip { margin-top:7px; padding-left:24px; color:var(--el-color-warning); font-size:12px; line-height:1.55; }
 @media (max-width:1280px) {
     .create-return-grid { grid-template-columns:minmax(0,1fr) 300px; }
 }

@@ -193,7 +193,7 @@ class Kuaidi100Protocol
         $carrierCode = trim((string)($data['kuaidiCom'] ?? $data['kuaidicom'] ?? '')) ?: (string)($context['carrier_code'] ?? '');
         $conflict = in_array((string)$status, ['166', '302'], true)
             || (!empty($context['carrier_code']) && $carrierCode !== (string)$context['carrier_code']);
-        $bookingState = $status === null ? 'accepted' : self::state($status);
+        $bookingState = $status === null ? '' : self::state($status);
         if ($bookingState === 'confirmed' && (!empty($data['courierName']) || !empty($data['courierMobile']))) $bookingState = 'assigned';
         if ($conflict) $bookingState = 'exception';
         $knownCarriers = ['shunfeng' => '顺丰速运', 'jd' => '京东快递', 'yuantong' => '圆通速递', 'zhongtong' => '中通快递'];
@@ -202,7 +202,7 @@ class Kuaidi100Protocol
             'provider' => 'kuaidi100', 'provider_name' => '快递100',
             'orderNo' => (string)($data['orderId'] ?? $context['orderNo'] ?? ''),
             'deliveryId' => (string)($data['kuaidiNum'] ?? $data['kuaidinum'] ?? ''),
-            'provider_task_id' => (string)($data['taskId'] ?? $context['provider_task_id'] ?? ''),
+            'provider_task_id' => trim((string)($data['taskId'] ?? '')) ?: (string)($context['provider_task_id'] ?? ''),
             'provider_mode' => (string)($context['provider_mode'] ?? ''),
             'provider_environment' => (string)($context['provider_environment'] ?? ''),
             'booking_state' => $bookingState, 'provider_status' => $status, 'conflict' => $conflict,

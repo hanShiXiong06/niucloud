@@ -36,11 +36,26 @@ final class WecomProviderConfigService
         }
         if ($suite->isEmpty()) return $this->defaults();
 
+        return $this->describe($suite, $maskSecrets);
+    }
+
+    private function describe(WecomProviderSuite $suite, bool $maskSecrets): array
+    {
         $data = $suite->toArray();
         $data['enabled'] = (string)$suite->status === 'enabled' ? 1 : 0;
         $data['suite_secret_configured'] = trim((string)$suite->suite_secret_cipher) !== '' ? 1 : 0;
         $data['encoding_aes_key_configured'] = trim((string)$suite->encoding_aes_key_cipher) !== '' ? 1 : 0;
         $data['callback_token_configured'] = trim((string)$suite->callback_token) !== '' ? 1 : 0;
+        $data['setup_stage'] = (string)$suite->status;
+        $data['callback_ready'] = in_array((string)$suite->status, ['preparing', 'enabled'], true)
+            && trim((string)$suite->provider_corp_id) !== ''
+            && $data['encoding_aes_key_configured'] && $data['callback_token_configured'] ? 1 : 0;
+        $baseUrl = rtrim((string)$suite->web_base_url, '/');
+        $channel = rawurlencode((string)$suite->channel_code);
+        $data['installation_callback_domain'] = (string)(parse_url($baseUrl, PHP_URL_HOST) ?: '');
+        $data['data_callback_url'] = $baseUrl !== '' ? $baseUrl . '/api/wecom/provider/data/' . $channel : '';
+        // 普通 SaaS 登录入口，不冒充企业微信管理员免登回调。
+        $data['application_settings_url'] = $baseUrl !== '' ? $baseUrl . '/site/hsx_wecom/config' : '';
         if ($maskSecrets) {
             $data['suite_secret'] = $data['suite_secret_configured'] ? self::SECRET_MASK : '';
             $data['encoding_aes_key'] = $data['encoding_aes_key_configured'] ? self::SECRET_MASK : '';
@@ -86,9 +101,35 @@ final class WecomProviderConfigService
         if ($authCallbackUrl !== '' && !$this->validHttpUrl($authCallbackUrl)) throw new CommonException('授权回调地址格式不正确');
 
         $enabled = !empty($input['enabled']);
+        $prepareOnly = !empty($input['prepare_only']);
         $providerCorpId = trim((string)($input['provider_corp_id'] ?? ''));
         $suiteId = trim((string)($input['suite_id'] ?? ''));
         $miniappAppid = trim((string)($input['admin_miniapp_appid'] ?? ''));
+        if ($prepareOnly) {
+            if ($enabled) throw new CommonException('回调准备不能同时启用服务商通道，请先在企业微信创建应用');
+            if ($oldSuiteId !== '' || $storedSecret !== '' || (string)($existing->status ?? '') === 'enabled') {
+                throw new CommonException('已有应用不能退回创建前准备，请使用保存服务商通道更新或停用');
+            }
+            if ($suiteId !== '' || $suiteSecret !== '') {
+                throw new CommonException('已取得应用凭据，请补齐信息后保存服务商通道，不要再次进行创建前准备');
+            }
+            // suite_id 既有唯一索引包含空字符串；创建前只保留一条空凭据草稿。
+            $otherDraft = WecomProviderSuite::where('suite_id', '=', '')
+                ->where('id', '<>', (int)($existing->id ?? 0))->findOrEmpty();
+            if (!$otherDraft->isEmpty()) {
+                throw new CommonException('已有创建中的服务商配置，请刷新并继续填写原配置，不要重复创建通道');
+            }
+        }
+        if ($prepareOnly || $enabled) {
+            if ($providerCorpId === '' || $callbackToken === '' || $aesKey === '' || $webBaseUrl === '') {
+                throw new CommonException('请先填写服务商企业 ID、回调 Token、EncodingAESKey 和本套 SaaS 根地址');
+            }
+            if (!$this->validRootUrl($webBaseUrl)) throw new CommonException('请填写本套 SaaS 根地址，例如 https://example.com，不要包含路径、参数、锚点或账号密码');
+            if (!preg_match('/^[a-zA-Z0-9]{3,32}$/D', $callbackToken)) throw new CommonException('回调 Token 须为 3–32 位英文字母或数字');
+            if (!preg_match('/^[a-zA-Z0-9+\/]{43}$/D', $aesKey) || strlen((string)base64_decode($aesKey . '=', true)) !== 32) {
+                throw new CommonException('EncodingAESKey 须为 43 位有效密钥，请完整复制企业微信生成的值');
+            }
+        }
         if ($enabled) {
             if ($providerCorpId === '' || $suiteId === '' || $suiteSecret === '' || $callbackToken === '' || $aesKey === '') {
                 throw new CommonException('启用服务商通道前，请完整填写服务商 CorpID、SuiteID、SuiteSecret、Token 和 EncodingAESKey');
@@ -118,7 +159,8 @@ final class WecomProviderConfigService
             'web_base_url' => $webBaseUrl,
             'event_callback_url' => $eventCallbackUrl,
             'auth_callback_url' => $authCallbackUrl,
-            'status' => $enabled ? 'enabled' : 'disabled',
+            // 准备状态仅开放签名加密的 GET 验证，不属于 active()，不接收授权或发送消息。
+            'status' => $prepareOnly ? 'preparing' : ($enabled ? 'enabled' : 'disabled'),
             'last_error' => '',
             'update_at' => time(),
         ];
@@ -149,7 +191,7 @@ final class WecomProviderConfigService
         }
         $savedSuite = $id > 0 ? WecomProviderSuite::where('id', '=', $id)->findOrEmpty() : $this->byChannel($channel);
         if (!$savedSuite->isEmpty()) $credential->clearSuiteToken($savedSuite);
-        return $this->info(true);
+        return $savedSuite->isEmpty() ? $this->defaults() : $this->describe($savedSuite, true);
     }
 
     public function siteStatus(int $siteId): array
@@ -192,6 +234,8 @@ final class WecomProviderConfigService
             'event_callback_url' => '', 'auth_callback_url' => '', 'suite_ticket_at' => 0,
             'suite_secret_configured' => 0, 'callback_token_configured' => 0,
             'encoding_aes_key_configured' => 0, 'last_error' => '',
+            'status' => 'not_configured', 'setup_stage' => 'not_configured', 'callback_ready' => 0,
+            'installation_callback_domain' => '', 'data_callback_url' => '', 'application_settings_url' => '',
         ];
     }
 
@@ -207,6 +251,17 @@ final class WecomProviderConfigService
         $host = strtolower((string)parse_url($value, PHP_URL_HOST));
         if (filter_var($value, FILTER_VALIDATE_URL) === false || !in_array($scheme, ['http', 'https'], true)) return false;
         return $scheme === 'https' || in_array($host, ['localhost', '127.0.0.1', '::1'], true);
+    }
+
+    private function validRootUrl(string $value): bool
+    {
+        if (!$this->validHttpUrl($value)) return false;
+        $parts = parse_url($value);
+        if (!is_array($parts)) return false;
+        foreach (['query', 'fragment', 'user', 'pass'] as $key) {
+            if (array_key_exists($key, $parts)) return false;
+        }
+        return !isset($parts['path']) || $parts['path'] === '' || $parts['path'] === '/';
     }
 
     private function maskAppid(string $appid): string

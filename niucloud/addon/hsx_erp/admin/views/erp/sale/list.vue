@@ -1,17 +1,16 @@
 <template>
-    <HsxPage padding="none" class="main-container">
-        <el-card class="!border-none" shadow="never">
-            <HsxTitle size="page" collapsible-subtitle class="mb-4">
-                <template #default>销售出库</template>
+    <ErpDesktopPage class="main-container">
+        <section class="erp-list-surface">
+            <ErpWorkspaceHeader page="sale" :filter-count="searchConditionCount">
+                <template #title>销售出库</template>
                 <template #subtitle>统一查看设备与商城商品的成交金额、成本、毛利、客户和收款状态；销售单作为批次凭证保留。</template>
                 <template #extra><div class="flex gap-2 flex-wrap">
                         <el-button :icon="Refresh" :loading="table.loading" @click="loadList">刷新</el-button>
                         <el-button :icon="TrendCharts" @click="profitReportVisible = true">经营台账</el-button>
                         <el-button type="primary" :icon="Plus" @click="openCreate()">销售出库</el-button>
-                    </div></template>
-            </HsxTitle>
+                    <ErpRoleFocus :items="saleRoleFocus" /></div></template>
 
-            <HsxSearchPanel :summary="searchConditionCount ? '已填写 ' + searchConditionCount + ' 项条件，点击查询生效' : ''">
+            <HsxSearchPanel :show-layout-switch="false" :summary="searchConditionCount ? searchConditionCount + ' 项筛选条件' : ''">
                 <template #extra>
                     <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
                     <el-button @click="handleReset">重置</el-button>
@@ -44,12 +43,12 @@
                         </el-form-item>
                         <el-form-item label="售价">
                             <el-input-number v-model="search.min_amount" :min="0" :precision="2" :controls="false" placeholder="最低" class="!w-[110px]" />
-                            <span class="mx-1 text-gray-400">-</span>
+                            <span class="mx-1 text-[color:var(--el-text-color-secondary)]">-</span>
                             <el-input-number v-model="search.max_amount" :min="0" :precision="2" :controls="false" placeholder="最高" class="!w-[110px]" />
                         </el-form-item>
                         <el-form-item label="毛利">
                             <el-input-number v-model="search.min_profit" :precision="2" :controls="false" placeholder="最低" class="!w-[110px]" />
-                            <span class="mx-1 text-gray-400">-</span>
+                            <span class="mx-1 text-[color:var(--el-text-color-secondary)]">-</span>
                             <el-input-number v-model="search.max_profit" :precision="2" :controls="false" placeholder="最高" class="!w-[110px]" />
                         </el-form-item>
                     </HsxFold>
@@ -57,13 +56,13 @@
                 </el-form>
             </HsxSearchPanel>
 
-            <ErpRoleFocus :items="saleRoleFocus" />
 
-            <div class="mt-5 flex flex-wrap items-center justify-between gap-2">
-                <div class="text-sm font-medium text-gray-700">本页有效销售汇总</div>
-                <div class="text-xs text-gray-400">已取消、已全部退款的明细不计入；毛利为实际销售收入减有效成本</div>
+
+            <div class="mt-5 flex flex-wrap items-center justify-between gap-2 erp-summary-heading">
+                <div class="text-sm font-medium text-[color:var(--el-text-color-regular)]">本页有效销售汇总</div>
+                <div class="text-xs text-[color:var(--el-text-color-secondary)]">已取消、已全部退款的明细不计入；毛利为实际销售收入减有效成本</div>
             </div>
-            <div class="mt-2 grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div class="mt-2 grid grid-cols-2 gap-3 md:grid-cols-4 erp-metrics">
                 <div class="summary-tile">
                     <div class="summary-label">有效销售件数</div>
                     <div class="summary-value">{{ summary.count }}</div>
@@ -78,11 +77,12 @@
                 </div>
                 <div class="summary-tile">
                     <div class="summary-label">实际毛利</div>
-                    <div class="summary-value" :class="summary.profit >= 0 ? 'text-green-600' : 'text-red-600'">{{ money(summary.profit) }}</div>
+                    <div class="summary-value" :class="summary.profit >= 0 ? 'text-[color:var(--el-color-success)]' : 'text-[color:var(--el-color-danger)]'">{{ money(summary.profit) }}</div>
                 </div>
             </div>
 
             <!-- 状态快筛 Tab -->
+            </ErpWorkspaceHeader>
             <el-tabs v-model="activeTab" class="mt-4 erp-status-tabs" @tab-change="onTabChange">
                 <el-tab-pane label="全部" name="" />
                 <el-tab-pane label="待收款" name="pending" />
@@ -90,12 +90,12 @@
                 <el-tab-pane label="已结清" name="settled" />
             </el-tabs>
 
-            <el-table :data="table.data" v-loading="table.loading" size="large" :row-class-name="saleRowClassName">
+            <ErpDataTable :data="table.data" v-loading="table.loading" :row-class-name="saleRowClassName">
                 <el-table-column label="销售商品" min-width="240">
                     <template #default="{ row }">
                         <div v-if="isStandardGoods(row)">
-                            <div class="font-medium text-gray-800">{{ row.model || '-' }}</div>
-                            <div class="mt-1 text-xs text-gray-500">{{ row.product_code || '未设置商品编码' }} · {{ quantityText(itemQuantity(row)) }} {{ row.unit || '件' }}</div>
+                            <div class="font-medium text-[color:var(--el-text-color-primary)]">{{ row.model || '-' }}</div>
+                            <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">{{ row.product_code || '未设置商品编码' }} · {{ quantityText(itemQuantity(row)) }} {{ row.unit || '件' }}</div>
                         </div>
                         <ErpDeviceIdentity v-else :model="row.model" :spec="row.spec" :imei="row.imei" :sn="row.sn" :asset-no="row.asset_no" />
                         <div v-if="isStandardGoods(row)" class="mt-2">
@@ -103,23 +103,23 @@
                         </div>
                         <div v-if="isExternalGoods(row)" class="mt-2 flex items-center gap-2">
                             <el-tag type="success" effect="plain" size="small">商城商品</el-tag>
-                            <span class="text-xs text-gray-500">{{ itemQuantity(row) }} 件 · 商城退款自动同步</span>
+                            <span class="text-xs text-[color:var(--el-text-color-secondary)]">{{ itemQuantity(row) }} 件 · 商城退款自动同步</span>
                         </div>
                     </template>
                 </el-table-column>
                 <el-table-column label="客户 / 渠道" min-width="170">
                     <template #default="{ row }">
                         <div>{{ row.party_name || '-' }}</div>
-                        <div class="mt-1 text-xs text-gray-500">渠道：{{ row.sale_channel || '-' }}</div>
+                        <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">渠道：{{ row.sale_channel || '-' }}</div>
                     </template>
                 </el-table-column>
                 <el-table-column label="成交 / 毛利" min-width="180" align="right">
                     <template #default="{ row }">
                         <div>{{ money(row.net_sale_amount) }}</div>
-                        <div v-if="Number(row.sale_compensation_amount || 0)" class="mt-1 text-xs text-orange-500">原成交 {{ money(row.sale_price) }} · 补差 -{{ money(row.sale_compensation_amount) }}</div>
-                        <div v-if="Number(row.external_refunded_amount || 0)" class="mt-1 text-xs text-orange-500">商城累计退款 -{{ money(row.external_refunded_amount) }}</div>
-                        <div class="mt-1 text-xs text-gray-500">{{ isConsigned(row) ? '代卖结算' : '成本' }} {{ money(row.cost) }} · 毛利 {{ money(row.profit) }}</div>
-                        <div v-if="isConsigned(row)" class="mt-1 text-xs text-orange-500">货主 {{ row.owner_party_name || '-' }} · 服务收益 {{ money(row.consignment_service_fee) }}</div>
+                        <div v-if="Number(row.sale_compensation_amount || 0)" class="mt-1 text-xs text-[color:var(--el-color-warning)]">原成交 {{ money(row.sale_price) }} · 补差 -{{ money(row.sale_compensation_amount) }}</div>
+                        <div v-if="Number(row.external_refunded_amount || 0)" class="mt-1 text-xs text-[color:var(--el-color-warning)]">商城累计退款 -{{ money(row.external_refunded_amount) }}</div>
+                        <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">{{ isConsigned(row) ? '代卖结算' : '成本' }} {{ money(row.cost) }} · 毛利 {{ money(row.profit) }}</div>
+                        <div v-if="isConsigned(row)" class="mt-1 text-xs text-[color:var(--el-color-warning)]">货主 {{ row.owner_party_name || '-' }} · 服务收益 {{ money(row.consignment_service_fee) }}</div>
                     </template>
                 </el-table-column>
                 <el-table-column label="位置" min-width="160">
@@ -131,11 +131,11 @@
                             <span class="batch-dot" :class="`batch-dot--${batchTone(row)}`"></span>
                             <span class="font-medium">{{ row.sale_no || '-' }}</span>
                         </div>
-                        <div v-if="isBatchFirst($index)" class="mt-1 text-xs font-medium text-blue-600">本页同批 {{ batchPageSize(row) }} 件</div>
-                        <div class="mt-1 text-xs text-slate-500">来源：{{ erpSourceLabel(row.origin_name, 'ERP销售') }}</div>
-                        <div class="mt-1 text-xs text-gray-500">渠道：{{ row.sale_channel || '-' }}</div>
-                        <div class="mt-1 text-xs text-gray-500">{{ formatTime(row.sale_at || row.create_at) }}</div>
-                        <div class="mt-1 text-xs text-gray-400">业务员：{{ row.salesman_name || '-' }}</div>
+                        <div v-if="isBatchFirst($index)" class="mt-1 text-xs font-medium text-[color:var(--erp-text-accent)]">本页同批 {{ batchPageSize(row) }} 件</div>
+                        <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">来源：{{ erpSourceLabel(row.origin_name, 'ERP销售') }}</div>
+                        <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">渠道：{{ row.sale_channel || '-' }}</div>
+                        <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">{{ formatTime(row.sale_at || row.create_at) }}</div>
+                        <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">业务员：{{ row.salesman_name || '-' }}</div>
                     </template>
                 </el-table-column>
                 <el-table-column label="当前状态" min-width="180">
@@ -147,7 +147,7 @@
                         </div>
                     </template>
                 </el-table-column>
-                <el-table-column label="操作" fixed="right" width="270" align="center">
+                <el-table-column label="操作" fixed="right" width="200" align="center">
                     <template #default="{ row }">
                         <el-button type="primary" link @click="openDetail(row)">销售单</el-button>
                         <el-button type="primary" link @click="printSaleReceipt(row)">打印小票</el-button>
@@ -155,9 +155,9 @@
                         <el-button v-if="canCancelSaleItemFromList(row)" type="danger" link @click="cancelSaleItem(row)">取消销售</el-button>
                     </template>
                 </el-table-column>
-            </el-table>
+            </ErpDataTable>
 
-            <div class="mt-4 flex justify-end">
+            <div class="mt-4 flex justify-end erp-pagination">
                 <el-pagination
                     v-model:current-page="table.page"
                     v-model:page-size="table.limit"
@@ -167,9 +167,9 @@
                     @current-change="loadList"
                 />
             </div>
-        </el-card>
+        </section>
 
-        <HsxDialog :confirm-loading="create.saving" v-model="create.visible" title="销售出库" width="980px" top="5vh" destroy-on-close>
+        <HsxDialog class="erp-desktop-overlay" :confirm-loading="create.saving" v-model="create.visible" title="销售出库" width="980px" top="5vh" destroy-on-close>
             <el-form label-width="96px">
                 <div class="section-title">1. 客户</div>
                 <div class="grid grid-cols-1 gap-x-4 md:grid-cols-3">
@@ -214,19 +214,19 @@
                     </div>
                     <div class="sale-pick-metric">
                         <div class="metric-label">预计销售</div>
-                        <div class="metric-value text-blue-600">{{ money(selectedAmount) }}</div>
+                        <div class="metric-value text-[color:var(--erp-text-accent)]">{{ money(selectedAmount) }}</div>
                     </div>
                     <div class="sale-pick-metric">
                         <div class="metric-label">预计毛利</div>
-                        <div class="metric-value" :class="selectedProfit >= 0 ? 'text-green-600' : 'text-red-600'">{{ money(selectedProfit) }}</div>
+                        <div class="metric-value" :class="selectedProfit >= 0 ? 'text-[color:var(--el-color-success)]' : 'text-[color:var(--el-color-danger)]'">{{ money(selectedProfit) }}</div>
                     </div>
                 </div>
                 <el-table ref="stockTableRef" class="sale-select-table" :data="stock.data" v-loading="stock.loading" size="small" max-height="360" @row-click="onStockRowClick" @selection-change="onStockSelection">
                     <el-table-column type="selection" width="48" />
                     <el-table-column :label="stock.item_type === 'standard' ? '标品' : '设备'" min-width="280">
                         <template #default="{ row }">
-                            <div class="font-medium text-gray-900">{{ row.model || '-' }}</div>
-                            <div class="mt-0.5 text-xs text-gray-500">{{ stock.item_type === 'standard' ? `${row.product_code || '-'} · 可售 ${quantityText(row.available_quantity)}${row.unit || '件'}` : compactDeviceInfo(row) }}</div>
+                            <div class="font-medium text-[color:var(--el-text-color-primary)]">{{ row.model || '-' }}</div>
+                            <div class="mt-0.5 text-xs text-[color:var(--el-text-color-secondary)]">{{ stock.item_type === 'standard' ? `${row.product_code || '-'} · 可售 ${quantityText(row.available_quantity)}${row.unit || '件'}` : compactDeviceInfo(row) }}</div>
                             <div class="mt-1 flex flex-wrap gap-1">
                                 <el-tag v-if="stock.item_type === 'device' && (row.catalog_product_name || row.category_name)" size="small" effect="plain" type="info">{{ row.catalog_product_name || row.category_name }}</el-tag>
                                 <el-tag v-if="isConsigned(row)" size="small" effect="plain" type="warning">客户代卖</el-tag>
@@ -236,13 +236,13 @@
                     <el-table-column label="来源 / 位置" min-width="170">
                         <template #default="{ row }">
                             <div>{{ stock.item_type === 'standard' ? (row.warehouse_name || '-') : (isConsigned(row) ? `货主：${row.owner_party_name || '-'}` : (row.party_name || '-')) }}</div>
-                            <div class="mt-0.5 text-xs text-gray-500">{{ [row.warehouse_name, row.location_name].filter(Boolean).join(' / ') || '-' }}</div>
+                            <div class="mt-0.5 text-xs text-[color:var(--el-text-color-secondary)]">{{ [row.warehouse_name, row.location_name].filter(Boolean).join(' / ') || '-' }}</div>
                         </template>
                     </el-table-column>
                     <el-table-column label="成本 / 结算" width="130" align="right">
                         <template #default="{ row }">
                             <div>{{ money(rowSelectedCost(row)) }}</div>
-                            <div v-if="isConsigned(row)" class="mt-0.5 text-xs text-orange-500">应付货主</div>
+                            <div v-if="isConsigned(row)" class="mt-0.5 text-xs text-[color:var(--el-color-warning)]">应付货主</div>
                         </template>
                     </el-table-column>
                     <el-table-column v-if="stock.item_type === 'standard'" label="销售数量" width="130" align="right">
@@ -253,7 +253,7 @@
                     </el-table-column>
                 </el-table>
                 <div class="mt-3 flex items-center justify-between">
-                    <div class="text-sm text-gray-500">成本/代卖结算 {{ money(selectedCost) }} · 订单总价由所选货品销售价自动汇总</div>
+                    <div class="text-sm text-[color:var(--el-text-color-secondary)]">成本/代卖结算 {{ money(selectedCost) }} · 订单总价由所选货品销售价自动汇总</div>
                     <el-pagination v-model:current-page="stock.page" v-model:page-size="stock.limit" layout="total, prev, pager, next" :total="stock.total" @current-change="loadStock" />
                 </div>
 
@@ -286,7 +286,7 @@
             </template>
         </HsxDialog>
 
-        <HsxDrawer v-model="detail.visible" title="销售单详情" size="72%" destroy-on-close>
+        <HsxDrawer class="erp-desktop-overlay" v-model="detail.visible" title="销售单详情" size="72%" destroy-on-close>
             <div v-loading="detail.loading">
                 <el-descriptions v-if="detail.data" :column="4" border>
                     <el-descriptions-item label="销售单号">{{ detail.data.sale_no }}</el-descriptions-item>
@@ -306,8 +306,8 @@
                     <el-descriptions-item label="剩余应收">{{ money(detail.data.receivable_amount) }}</el-descriptions-item>
                     <el-descriptions-item label="备注" :span="4">{{ detail.data.remark || '-' }}</el-descriptions-item>
                 </el-descriptions>
-                <div v-if="canCancelSaleOrder" class="mt-4 flex items-center justify-between rounded-lg bg-orange-50 px-4 py-3">
-                    <span class="text-sm text-orange-700">本单尚未收款，撤销后商品会按原数量和原成本退回库存。</span>
+                <div v-if="canCancelSaleOrder" class="mt-4 flex items-center justify-between rounded-lg bg-[var(--el-color-warning-light-9)] px-4 py-3">
+                    <span class="text-sm text-[color:var(--el-color-warning)]">本单尚未收款，撤销后商品会按原数量和原成本退回库存。</span>
                     <el-button type="warning" plain @click="cancelSaleOrder">整单撤销</el-button>
                 </div>
                 <div class="mt-5 font-medium">商品明细</div>
@@ -315,9 +315,9 @@
                     <el-table-column prop="model" label="型号" min-width="180" />
                     <el-table-column label="商品类型" width="130"><template #default="{ row }"><el-tag v-if="isStandardGoods(row)" type="primary" effect="plain">标品</el-tag><el-tag v-else-if="isExternalGoods(row)" type="success" effect="plain">商城商品</el-tag><span v-else>设备</span></template></el-table-column>
                     <el-table-column label="IMEI / 数量" min-width="170"><template #default="{ row }"><span v-if="isStandardGoods(row)">{{ quantityText(itemQuantity(row)) }} {{ row.unit || '件' }}</span><span v-else-if="!isExternalGoods(row)">{{ row.imei || '-' }}</span><span v-else>{{ itemQuantity(row) }} 件</span></template></el-table-column>
-                    <el-table-column label="归属" min-width="150"><template #default="{ row }"><el-tag v-if="isConsigned(row)" type="warning" effect="plain">客户代卖</el-tag><span v-else>自有</span><div v-if="isConsigned(row)" class="mt-1 text-xs text-gray-500">{{ row.owner_party_name || '-' }}</div></template></el-table-column>
-                    <el-table-column label="成本 / 结算" width="140" align="right"><template #default="{ row }">{{ money(row.cost) }}<div v-if="isConsigned(row)" class="text-xs text-orange-500">应付货主</div></template></el-table-column>
-                    <el-table-column label="销售收入" width="190" align="right"><template #default="{ row }"><div>{{ money(row.net_sale_amount) }}</div><div v-if="Number(row.sale_compensation_amount || 0)" class="text-xs text-orange-500">原价 {{ money(row.sale_price) }} · 补差 -{{ money(row.sale_compensation_amount) }}</div><div v-if="Number(row.external_refunded_amount || 0)" class="text-xs text-orange-500">退款 -{{ money(row.external_refunded_amount) }}</div></template></el-table-column>
+                    <el-table-column label="归属" min-width="150"><template #default="{ row }"><el-tag v-if="isConsigned(row)" type="warning" effect="plain">客户代卖</el-tag><span v-else>自有</span><div v-if="isConsigned(row)" class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">{{ row.owner_party_name || '-' }}</div></template></el-table-column>
+                    <el-table-column label="成本 / 结算" width="140" align="right"><template #default="{ row }">{{ money(row.cost) }}<div v-if="isConsigned(row)" class="text-xs text-[color:var(--el-color-warning)]">应付货主</div></template></el-table-column>
+                    <el-table-column label="销售收入" width="190" align="right"><template #default="{ row }"><div>{{ money(row.net_sale_amount) }}</div><div v-if="Number(row.sale_compensation_amount || 0)" class="text-xs text-[color:var(--el-color-warning)]">原价 {{ money(row.sale_price) }} · 补差 -{{ money(row.sale_compensation_amount) }}</div><div v-if="Number(row.external_refunded_amount || 0)" class="text-xs text-[color:var(--el-color-warning)]">退款 -{{ money(row.external_refunded_amount) }}</div></template></el-table-column>
                     <el-table-column label="毛利" width="130" align="right"><template #default="{ row }">{{ money(row.profit) }}</template></el-table-column>
                     <el-table-column label="状态" width="100">
                         <template #default="{ row }">
@@ -328,18 +328,21 @@
                     <el-table-column label="操作" width="120" align="center" fixed="right">
                         <template #default="{ row }">
                             <el-button v-if="canCancelSaleItem(row)" type="danger" link @click="cancelSaleItem(row)">取消销售</el-button>
-                            <span v-else class="text-xs text-gray-400">-</span>
+                            <span v-else class="text-xs text-[color:var(--el-text-color-secondary)]">-</span>
                         </template>
                     </el-table-column>
                 </el-table>
             </div>
         </HsxDrawer>
         <ErpSaleProfitReport v-model="profitReportVisible" />
-    </HsxPage>
+    </ErpDesktopPage>
 </template>
 
 <script setup lang="ts">
-import { HsxTitle, HsxPage, HsxSearchPanel, HsxDialog, HsxDrawer, HsxNotice, useFeedback , HsxFold } from '@/addon/hsx_components/core'
+import ErpDesktopPage from '@/addon/hsx_erp/components/ErpDesktopPage.vue'
+import ErpWorkspaceHeader from '@/addon/hsx_erp/components/ErpWorkspaceHeader.vue'
+import ErpDataTable from '@/addon/hsx_erp/components/ErpDataTable.vue'
+import { HsxSearchPanel, HsxDialog, HsxDrawer, HsxNotice, useFeedback , HsxFold } from '@/addon/hsx_components/core'
 import { erpEnumLabel, erpSourceLabel } from '@/addon/hsx_erp/utils/display'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -895,16 +898,15 @@ function saleRowClassName({ row, rowIndex }: { row: any; rowIndex: number }) {
 <style scoped>
 .summary-tile {
     border-radius: 8px;
-    background: #f8fafc;
+    background: var(--el-fill-color-light);
     padding: 14px 16px;
 }
 .summary-label {
-    color: #64748b;
+    color: var(--el-text-color-secondary);
     font-size: 13px;
 }
 .summary-value {
     margin-top: 6px;
-    color: #111827;
     font-size: 22px;
     font-weight: 650;
 }
@@ -914,40 +916,40 @@ function saleRowClassName({ row, rowIndex }: { row: any; rowIndex: number }) {
     flex: 0 0 auto;
     border-radius: 50%;
 }
-.batch-dot--0 { background: #60a5fa; }
-.batch-dot--1 { background: #34d399; }
+.batch-dot--0 { background: var(--el-color-primary); }
+.batch-dot--1 { background: var(--el-color-success); }
 .batch-dot--2 { background: #a78bfa; }
-.batch-dot--3 { background: #f59e0b; }
+.batch-dot--3 { background: var(--el-color-warning); }
 .sale-status-stack { display: flex; align-items: flex-start; flex-direction: column; gap: 5px; }
-.sale-status-stack__finance { color: #64748b; font-size: 12px; }
-.sale-status-stack__hint { overflow: hidden; max-width: 170px; color: #94a3b8; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-:deep(.el-table__body tr.erp-batch-tone-0 > td.el-table__cell) { background: #f7fbff; }
-:deep(.el-table__body tr.erp-batch-tone-1 > td.el-table__cell) { background: #f7fcfa; }
-:deep(.el-table__body tr.erp-batch-tone-2 > td.el-table__cell) { background: #fbf9ff; }
-:deep(.el-table__body tr.erp-batch-tone-3 > td.el-table__cell) { background: #fffaf3; }
-:deep(.el-table__body tr.erp-batch-start > td.el-table__cell) { border-top: 2px solid #dbe4ef; }
-:deep(.el-table__body tr.erp-sale-inactive > td.el-table__cell) { color: #94a3b8; background: #f8fafc; }
-:deep(.el-table__body tr:hover > td.el-table__cell) { background: #eef5ff !important; }
+.sale-status-stack__finance { color: var(--el-text-color-secondary); font-size: 12px; }
+.sale-status-stack__hint { overflow: hidden; max-width: 170px; color: var(--el-text-color-secondary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+:deep(.el-table__body tr.erp-batch-tone-0 > td.el-table__cell) { background: var(--el-color-primary-light-9); }
+:deep(.el-table__body tr.erp-batch-tone-1 > td.el-table__cell) { background: var(--el-color-success-light-9); }
+:deep(.el-table__body tr.erp-batch-tone-2 > td.el-table__cell) { background: var(--el-color-info-light-9); }
+:deep(.el-table__body tr.erp-batch-tone-3 > td.el-table__cell) { background: var(--el-color-warning-light-9); }
+:deep(.el-table__body tr.erp-batch-start > td.el-table__cell) { border-top: 2px solid var(--el-border-color); }
+:deep(.el-table__body tr.erp-sale-inactive > td.el-table__cell) { color: var(--el-text-color-secondary); background: var(--el-fill-color-light); }
+:deep(.el-table__body tr:hover > td.el-table__cell) { background: var(--el-color-primary-light-9) !important; }
 .section-title {
     margin: 18px 0 12px;
     border-left: 3px solid var(--el-color-primary);
     padding-left: 10px;
-    color: #111827;
+    color: var(--el-text-color-primary);
     font-size: 15px;
     font-weight: 650;
 }
 .sale-pick-metric {
     border-radius: 8px;
-    background: #f8fafc;
+    background: var(--el-fill-color-light);
     padding: 10px 12px;
 }
 .metric-label {
-    color: #64748b;
+    color: var(--el-text-color-secondary);
     font-size: 12px;
 }
 .metric-value {
     margin-top: 4px;
-    color: #111827;
+    color: var(--el-text-color-primary);
     font-size: 18px;
     font-weight: 650;
 }

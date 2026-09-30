@@ -1,11 +1,11 @@
 <template>
-  <view class="pickup-card" :class="[`pickup-card--${pickup.state}`, { 'pickup-card--compact': compact }]">
+  <view class="pickup-card" :class="[`pickup-card--${pickup.state}`, { 'pickup-card--compact': compact, 'pickup-card--conflict': pickup.conflict }]">
     <view class="pickup-heading">
       <view class="pickup-heading__title"><up-icon name="car" size="17" color="var(--recycle-brand)" /><text>{{ pickup.title }}</text></view>
       <text v-if="compact" class="pickup-link" @tap.stop="$emit('view-detail')">查看详情</text>
     </view>
     <view class="pickup-row"><text class="pickup-label">承运商</text><text>{{ pickup.carrier_name || '待确认' }}</text></view>
-    <view class="pickup-row"><text class="pickup-label">申请取件时段</text><text>{{ pickup.pickup_time || '待确认' }}</text></view>
+    <view v-if="pickup.state !== 'manual'" class="pickup-row"><text class="pickup-label">申请取件时段</text><text>{{ pickup.pickup_time || '待确认' }}</text></view>
     <view v-if="pickup.state !== 'manual'" class="pickup-row">
       <text class="pickup-label">取件员</text><text>{{ pickup.courier_name || '待分配' }}</text>
     </view>
@@ -51,27 +51,28 @@ import { computed, ref, watch } from 'vue'
 import { useSubscribeMessage } from '@/hooks/useSubscribeMessage'
 import { refreshOrderPickup, submitManualPickup } from '../../../api/order'
 import type { PickupInfo } from '../../../types/order'
-import { normalizePickup, pickupReceiverText } from '../../../utils/pickup'
+import { normalizePickup, pickupReceiverText, pickupRefreshFeedback } from '../../../utils/pickup'
 
 const props = withDefaults(defineProps<{ orderId: number; info?: PickupInfo; compact?: boolean }>(), { compact: false })
 const emit = defineEmits<{ updated: []; 'view-detail': []; contact: [] }>()
 const pickup = computed(() => normalizePickup(props.info))
 const receiverText = computed(() => pickupReceiverText(pickup.value.receiver))
 const isUncertain = computed(() => ['unknown', 'submitting', 'accepted'].includes(pickup.value.state))
-const needsContact = computed(() => isUncertain.value || pickup.value.state === 'exception' || (['failed', 'cancelled'].includes(pickup.value.state) && !pickup.value.can_manual))
-const canSubscribe = computed(() => !['not_requested', 'manual', 'delivered', 'cancelled'].includes(pickup.value.state))
+const needsContact = computed(() => pickup.value.conflict || isUncertain.value || ['exception', 'failed', 'cancelled'].includes(pickup.value.state))
+const canSubscribe = computed(() => !pickup.value.conflict && !['not_requested', 'manual', 'delivered', 'cancelled', 'failed'].includes(pickup.value.state))
 const refreshing = ref(false)
 const saving = ref(false)
 const showManual = ref(false)
 const manualCompany = ref('')
 const manualTracking = ref('')
-let lastRefreshAt = 0
+let nextRefreshAt = 0
 
 watch(() => [props.orderId, pickup.value.can_manual], () => {
   showManual.value = false
   manualCompany.value = ''
   manualTracking.value = ''
 })
+watch(() => props.orderId, () => { nextRefreshAt = 0 })
 
 const copyText = (value: string) => {
   if (value) uni.setClipboardData({ data: value })
@@ -81,18 +82,21 @@ const callCourier = () => {
 }
 const refreshPickup = async () => {
   if (refreshing.value || saving.value || !pickup.value.can_refresh) return
-  if (Date.now() - lastRefreshAt < 10000) {
-    uni.showToast({ title: '请稍后再刷新', icon: 'none' })
+  if (Date.now() < nextRefreshAt) {
+    uni.showToast({ title: `请${Math.ceil((nextRefreshAt - Date.now()) / 1000)}秒后再刷新`, icon: 'none' })
     return
   }
   refreshing.value = true
-  lastRefreshAt = Date.now()
+  nextRefreshAt = Date.now() + 10000
   try {
     const result: any = await refreshOrderPickup(props.orderId)
     if (result.code !== 1) {
       uni.showToast({ title: result.msg || '暂未取得新的取件状态，请稍后核实', icon: 'none' })
       return
     }
+    const feedback = pickupRefreshFeedback(result.data)
+    nextRefreshAt = Date.now() + feedback.retryAfter * 1000
+    uni.showToast({ title: feedback.message, icon: 'none', duration: 3000 })
     emit('updated')
   } catch (error: any) {
     uni.showToast({ title: [0, 400].includes(Number(error?.code)) ? (error.msg || '暂不能刷新，请稍后再试') : '暂未取得新的状态，请联系门店核实', icon: 'none' })
@@ -145,7 +149,7 @@ const subscribePickup = async () => {
 <style scoped lang="scss">
 .pickup-card { margin: 20rpx 0; padding: 24rpx; border: 1rpx solid var(--recycle-line); border-radius: 18rpx; background: var(--recycle-bg-card); color: var(--recycle-text-main); font-size: 25rpx; line-height: 1.6; }
 .pickup-card--compact { margin: 18rpx 0 0; padding: 20rpx; background: var(--recycle-bg-soft); }
-.pickup-card--unknown, .pickup-card--failed { border-color: var(--recycle-notice-text); }
+.pickup-card--unknown, .pickup-card--failed, .pickup-card--conflict { border-color: var(--recycle-notice-text); }
 .pickup-heading, .pickup-heading__title, .pickup-row { display: flex; align-items: center; gap: 12rpx; }
 .pickup-heading { justify-content: space-between; margin-bottom: 12rpx; }
 .pickup-heading__title { font-weight: 700; font-size: 28rpx; }
