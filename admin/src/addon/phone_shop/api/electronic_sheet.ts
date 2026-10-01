@@ -1,4 +1,5 @@
 import request from '@/utils/request'
+import { providerPdfPath } from '@/addon/phone_shop/utils/electronic-sheet-provider'
 
 /**
  * 获取电子面单分页列表
@@ -118,4 +119,11 @@ export function printElectronicSheet(params: Record<string, any>) {
 /** Optional plugin task; does not confirm shipment or charge the customer. */
 export function electronicSheetProviderTask(params: Record<string, any>) {
     return request.post('phone_shop/electronic_sheet/provider_task', params, { showErrorMessage: true })
+}
+
+/** 只接受当前任务返回的本站受保护 PDF 路径，鉴权沿用框架请求头。 */
+export function electronicSheetProviderPdf(task: Record<string, any>) {
+    const path = providerPdfPath(task)
+    if (!path) return Promise.reject(new Error('面单下载路径无效，请刷新原任务'))
+    return request.get(path, { responseType: 'blob', timeout: 60000, showErrorMessage: false })
 }

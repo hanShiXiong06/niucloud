@@ -16,10 +16,14 @@ class TaskRepository
             ->whereNotIn('state', ['cancelled', 'failed'])->select()->toArray();
     }
     public function findNumber(int $siteId, string $number): array { return Db::name(self::TABLE)->where('site_id', $siteId)->where('task_no', $number)->find() ?: []; }
+    public function findWaybill(int $siteId, string $number): array
+    {
+        return Db::name(self::TABLE)->where('site_id', $siteId)->where('waybill_no', $number)->select()->toArray();
+    }
     public function create(array $data): array
     {
         try { $id = (int)Db::name(self::TABLE)->insertGetId($data); }
-        catch (\Throwable $e) { throw new CommonException('无法保存物流任务，请确认已执行 hsx_express 安装 SQL；未保存前不会请求快递100'); }
+        catch (\Throwable $e) { throw new CommonException('无法保存物流任务，请确认已执行 hsx_express 安装 SQL；未保存前不会请求物流服务商'); }
         return $this->find((int)$data['site_id'], $id);
     }
     public function update(array $task, array $changes, string $operation = ''): array

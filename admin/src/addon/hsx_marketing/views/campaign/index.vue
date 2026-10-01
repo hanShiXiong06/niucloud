@@ -31,7 +31,7 @@
                     </template>
                 </el-table-column>
                 <el-table-column label="任务目标" width="180">
-                    <template #default="{ row }">{{ factName(row.fact_key) }} · {{ compact(row.target_value) }}{{ row.target_unit }}</template>
+                    <template #default="{ row }"><div>{{ factName(row.fact_key) }} · {{ compact(row.target_value) }}{{ row.target_unit }}</div><div v-if="row.fact_key === 'recycle_device_delivered'" class="secondary">{{ row.fact_filter_json?.order_source === 'customer' ? '仅客户自主下单计奖' : '不限来源，含员工代下单' }}</div></template>
                 </el-table-column>
                 <el-table-column label="参与/发放" width="150">
                     <template #default="{ row }"><div>{{ row.participation_mode === 'auto' ? '自动参与' : '手动领取任务' }}</div><div class="secondary">{{ row.grant_mode === 'auto' ? '奖励自动到账' : '奖励手动领取' }}</div></template>
@@ -102,6 +102,14 @@
                             <el-input-number v-model="form.target_value" :min="1" :precision="0" />
                             <span>{{ selectedFact?.unit || '次' }}</span>
                         </div>
+                        <el-form-item v-if="form.fact_key === 'recycle_device_delivered'" label="计奖订单来源" class="order-source-filter">
+                            <el-radio-group v-model="form.fact_filter_json.order_source">
+                                <el-radio value="customer">仅客户自主下单</el-radio>
+                                <el-radio value="all">不限来源（含员工代下单）</el-radio>
+                            </el-radio-group>
+                            <div class="form-help">仅自主下单：客户自己提交的回收单才计入；员工代下单不计入。员工后续签收、质检、报价或打款不改变下单来源。</div>
+                            <div class="form-help">例：客户自主下单的 3 台设备均满足活动条件，计入 3 台；员工代下单的 3 台不计入。仍需完成有效回收，不是提交订单即发奖。修改规则不重新结算已处理记录。</div>
+                        </el-form-item>
                         <div v-if="form.fact_key === 'recycle_device_delivered'" class="amount-filter">
                             <span>仅统计成交价</span>
                             <el-input-number v-model="form.fact_filter_json.min_amount" :min="0" :precision="2" placeholder="最低价" />
@@ -161,7 +169,9 @@ import { addMarketingCampaign, changeMarketingCampaignStatus, deleteMarketingCam
 const query = reactive({ status: '' as any, keyword: '', page: 1, limit: 15 })
 const rows = ref<any[]>([]), total = ref(0), loading = ref(false), saving = ref(false), editorVisible = ref(false)
 const metadata = reactive<any>({ campaign_statuses: {}, fact_options: [], providers: [], member_levels: [], qualification_options: [] })
-const emptyForm = () => ({ id: 0, title: '', subtitle: '', status: 0, date_range: [] as string[], participation_mode: 'manual', cycle_type: 'calendar_month', cycle_days: 30, allowed_level_ids: [] as number[], qualification_key: '', application_url: '', fact_key: 'recycle_device_delivered', fact_filter_json: { min_amount: 0, max_amount: 0 }, target_value: 10, grant_mode: 'manual', claim_valid_days: 7, expire_notice_days: [7, 3, 1], notice_channels: ['weapp', 'wechat', 'sms'], rewards: [] as any[], description: '', sort: 0 })
+const emptyForm = () => ({ id: 0, title: '', subtitle: '', status: 0, date_range: [] as string[], participation_mode: 'manual', cycle_type: 'calendar_month', cycle_days: 30, allowed_level_ids: [] as number[], qualification_key: '', application_url: '', fact_key: 'recycle_device_delivered', fact_filter_json: { min_amount: 0, max_amount: 0, order_source: 'customer' }, target_value: 10, grant_mode: 'manual', claim_valid_days: 7, expire_notice_days: [7, 3, 1], notice_channels: ['weapp', 'wechat', 'sms'], rewards: [] as any[], description: '', sort: 0 })
+// 已有活动未配置来源时保留“不限”，不能在打开编辑页时悄悄改变计奖规则。
+const normalizeFactFilter = (filter: any) => ({ min_amount: 0, max_amount: 0, ...(filter || {}), order_source: filter?.order_source === 'customer' ? 'customer' : 'all' })
 const form = reactive<any>(emptyForm())
 const selectedFact = computed(() => metadata.fact_options.find((item: any) => item.key === form.fact_key))
 const runningCount = computed(() => rows.value.filter(row => Number(row.status) === 1).length)
@@ -182,7 +192,7 @@ const openEditor = async (row?: any) => {
     Object.assign(form, emptyForm())
     if (row?.id) {
         const data: any = (await getMarketingCampaign(Number(row.id))).data || {}
-        Object.assign(form, data, { id: Number(data.id), date_range: [dateValue(data.start_at), dateValue(data.end_at)], fact_filter_json: data.fact_filter_json || { min_amount: 0, max_amount: 0 }, rewards: (data.rewards || []).map(normalizeReward) })
+        Object.assign(form, data, { id: Number(data.id), date_range: [dateValue(data.start_at), dateValue(data.end_at)], fact_filter_json: normalizeFactFilter(data.fact_filter_json), rewards: (data.rewards || []).map(normalizeReward) })
         for (const reward of form.rewards) if (reward.provider_key !== 'member') await loadOptions(reward)
     } else {
         form.qualification_key = metadata.qualification_options.find((item: any) => item.key === 'shop_goods_forward')?.key || ''
@@ -211,5 +221,6 @@ onMounted(async () => { await loadMetadata(); await load() })
 </script>
 
 <style scoped lang="scss">
+.order-source-filter{margin-top:18px}.order-source-filter .form-help{width:100%;line-height:1.7}.order-source-filter :deep(.el-radio-group){display:flex;flex-wrap:wrap;gap:0 12px}
 .page-head,.toolbar,.section-title{display:flex;align-items:center;justify-content:space-between;gap:12px}.page-head{align-items:flex-start;margin-bottom:18px}.page-head p{margin:6px 0 0;color:var(--el-text-color-secondary)}.summary{display:flex;align-items:center;gap:42px;margin-bottom:16px;padding:16px 18px;border-radius:10px;background:linear-gradient(110deg,#f4f7ff,#f8fafc)}.summary>div:not(.summary-tip){display:flex;flex-direction:column;gap:5px}.summary span{color:var(--el-text-color-secondary);font-size:13px}.summary strong{font-size:25px}.summary .success{color:#059669}.summary-tip{margin-left:auto;max-width:520px;color:var(--el-text-color-secondary);font-size:12px}.toolbar{justify-content:flex-start;margin-bottom:14px}.search{width:260px}.status-select{width:150px}.campaign-title{font-weight:650}.secondary,.form-help{margin-top:4px;color:var(--el-text-color-secondary);font-size:12px}.pagination{display:flex;justify-content:flex-end;margin-top:16px}.editor-form section{margin-bottom:16px;padding:16px 18px;border:1px solid var(--el-border-color-lighter);border-radius:10px;background:#fff}.editor-form h3{margin:0 0 15px;font-size:16px}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 16px}.span-2{grid-column:span 2}.w-full{width:100%}.rule-row,.amount-filter{display:flex;align-items:center;gap:12px}.amount-filter{margin-top:14px;padding:12px;border-radius:8px;background:var(--el-fill-color-light)}.rule-fact{flex:1}.reward-row{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-top:1px solid var(--el-border-color-lighter)}.reward-index{width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:7px;background:#eef3ff;color:#315efb;font-weight:700}.reward-body{flex:1;min-width:0}.reward-grid{display:grid;grid-template-columns:1fr 1.2fr 1fr 100px;gap:10px}.option-desc{float:right;margin-left:16px;color:var(--el-text-color-secondary);font-size:12px}.suffix{margin-left:8px;color:var(--el-text-color-secondary)}@media(max-width:760px){.summary{align-items:flex-start;flex-wrap:wrap}.summary-tip{width:100%;margin-left:0}.form-grid,.reward-grid{grid-template-columns:1fr}.span-2{grid-column:span 1}.rule-row,.amount-filter{align-items:stretch;flex-direction:column}}
 </style>

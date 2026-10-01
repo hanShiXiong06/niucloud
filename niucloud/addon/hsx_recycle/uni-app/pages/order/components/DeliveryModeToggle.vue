@@ -2,18 +2,22 @@
   <view class="nav-header">
     <view class="tab-list">
       <view
-        v-for="(tab, index) in tabs"
+        v-for="tab in tabs"
         :key="tab.value"
         :class="['tab-item', modelValue === tab.value ? 'active' : '']"
+        role="tab"
+        :aria-selected="modelValue === tab.value"
         @tap="handleSwitch(tab.value)"
       >
-        {{ tab.label }}
+        <DeliveryIcon :type="tab.value + 1" />
+        <text>{{ tab.label }}</text>
       </view>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
+import DeliveryIcon from './DeliveryIcon.vue'
 interface DeliveryTab {
   label: string
   value: number
@@ -35,6 +39,7 @@ const emit = defineEmits<{
   'update:modelValue': [value: number]
 }>()
 
+
 const handleSwitch = (index: number) => {
   if (!props.tabs.some(tab => tab.value === index)) return
 
@@ -45,58 +50,45 @@ const handleSwitch = (index: number) => {
 
 <style scoped lang="scss">
 .nav-header {
-  background: linear-gradient(100deg, var(--recycle-button-bg) 0%, var(--recycle-brand-deep) 58%, var(--recycle-brand) 100%);
-  border-radius: 12px;
-  padding: 16px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  color: #fff;
-  box-shadow: 0 10rpx 24rpx rgba(31, 41, 55, 0.12);
-  position: relative;
-  overflow: hidden;
-
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: linear-gradient(45deg,
-      rgba(255, 255, 255, 0.12) 0%,
-      rgba(255, 255, 255, 0.06) 50%,
-      rgba(255, 255, 255, 0) 100%);
-    pointer-events: none;
-  }
+  background: var(--recycle-bg-card);
 }
 
 .tab-item {
   flex: 1;
   min-width: 0;
-  padding: 7px 10px;
-  text-align: center;
-  border-radius: 20px;
-  font-size: 14px;
-  background: rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(4px);
-  transition: all 0.3s ease;
   position: relative;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  min-height: 104rpx;
+  padding: 20rpx 8rpx 26rpx;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10rpx;
+  text-align: center;
+  font-size: 28rpx;
+  line-height: 38rpx;
+  color: var(--recycle-text-sub);
+  transition: color .15s;
 
   &.active {
-    background: #fff;
-    color: var(--recycle-brand-deep);
-    font-weight: 500;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    transform: translateY(-1px);
-    border-color: #fff;
+    color: var(--recycle-brand);
+    font-weight: 600;
+  }
+
+  &.active::after {
+    content: '';
+    position: absolute;
+    width: 40rpx;
+    height: 6rpx;
+    border-radius: 3rpx;
+    bottom: 10rpx;
+    left: calc(50% - 20rpx);
+    background: var(--recycle-brand);
   }
 
   &:active {
     opacity: 0.8;
   }
 }
-.tab-list { position: relative; z-index: 1; display: flex; width: 100%; gap: 10px; }
+.tab-list { display: flex; width: 100%; gap: 6rpx; }
 </style>

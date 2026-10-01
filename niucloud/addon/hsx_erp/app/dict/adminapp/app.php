@@ -1,8 +1,8 @@
 <?php
 return [
-     // ── ERP 管理 ────────────────────────────────────────────────────────────
+    // key 保留移动端快捷入口标识；menu_key 必须引用 PC 端现有权限，不能混用。
     [
-        'name' => '经营看板',
+        'name' => '工作台',
         'key' => 'hsx_erp_dashboard',
         'group' => 'hsx_erp',
         'menu_key' => 'hsx_erp_workbench',
@@ -24,7 +24,7 @@ return [
         'key' => 'hsx_erp_sale',
         'group' => 'hsx_erp',
         'menu_key' => 'hsx_erp_sale',
-        'sort' => 11,
+        'sort' => 12,
         'page' => '/addon/hsx_erp/pages/sale/list',
         'icon' => '/addon/hsx_erp/site-app/icon_03.png'
     ],
@@ -33,7 +33,7 @@ return [
         'key' => 'hsx_erp_payable',
         'group' => 'hsx_erp',
         'menu_key' => 'hsx_erp_payable',
-        'sort' => 12,
+        'sort' => 16,
         'page' => '/addon/hsx_erp/pages/payable/list',
         'icon' => '/addon/hsx_erp/site-app/icon_05.png'
     ],
@@ -47,7 +47,7 @@ return [
         'icon' => '/addon/hsx_erp/site-app/icon_06.png'
     ],
     [
-        'name' => '库存设备',
+        'name' => '库存中心',
         'key' => 'hsx_erp_stock',
         'group' => 'hsx_erp',
         'menu_key' => 'hsx_erp_stock',
@@ -62,7 +62,7 @@ return [
         'key' => 'hsx_erp_purchase_return',
         'group' => 'hsx_erp',
         'menu_key' => 'hsx_erp_purchase_return',
-        'sort' => 15,
+        'sort' => 11,
         'page' => '/addon/hsx_erp/pages/purchase_return/list',
         'icon' => '/addon/hsx_erp/site-app/icon_02.png'
     ],
@@ -71,7 +71,7 @@ return [
         'key' => 'hsx_erp_sale_return',
         'group' => 'hsx_erp',
         'menu_key' => 'hsx_erp_sale_return',
-        'sort' => 16,
+        'sort' => 13,
         'page' => '/addon/hsx_erp/pages/sale_return/list',
         'icon' => '/addon/hsx_erp/site-app/icon_04.png'
     ],
@@ -80,7 +80,7 @@ return [
         'key' => 'hsx_erp_operating_finance',
         'group' => 'hsx_erp',
         'menu_key' => 'hsx_erp_operating_finance',
-        'sort' => 13,
+        'sort' => 21,
         'page' => '/addon/hsx_erp/pages/operating_finance/list',
         'icon' => '/addon/hsx_erp/site-app/icon_10.png'
     ],
@@ -88,8 +88,8 @@ return [
         'name' => '成本调整',
         'key' => 'hsx_erp_cost_adjust',
         'group' => 'hsx_erp',
-        'menu_key' => 'hsx_erp_cost_adjust',
-        'sort' => 17,
+        'menu_key' => 'hsx_erp_stock_adjust_cost',
+        'sort' => 18,
         'page' => '/addon/hsx_erp/pages/cost_adjust/list',
         'icon' => '/addon/hsx_erp/site-app/icon_08.png'
     ],
@@ -98,8 +98,8 @@ return [
         'name' => '串号追踪',
         'key' => 'hsx_erp_serial_trace',
         'group' => 'hsx_erp',
-        'menu_key' => 'hsx_erp_serial_trace',
-        'sort' => 18,
+        'menu_key' => 'hsx_erp_stock_serial_trace',
+        'sort' => 19,
         'page' => '/addon/hsx_erp/pages/serial_trace/list',
         'icon' => '/addon/hsx_erp/site-app/icon_09.png'
     ],[
@@ -107,15 +107,15 @@ return [
         'key' => 'hsx_erp_stocktake',
         'group' => 'hsx_erp',
         'menu_key' => 'hsx_erp_stocktake',
-        'sort' => 19,
+        'sort' => 15,
         'page' => '/addon/hsx_erp/pages/stocktake/list',
         'icon' => '/addon/hsx_erp/site-app/icon_11.png'
     ],
     [
-        'name' => '移动打印台',
+        'name' => '打印中心',
         'key' => 'hsx_erp_print',
         'group' => 'hsx_erp',
-        'menu_key' => 'hsx_erp_print',
+        'menu_key' => 'hsx_erp_print_center',
         'sort' => 20,
         'page' => '/addon/hsx_erp/pages/print/index',
         'icon' => '/addon/hsx_erp/site-app/icon_07.png'

@@ -27,7 +27,12 @@ namespace WaybillTest {
         public static array $task = [];
         public static string $carrier = 'shunfeng';
         public static string $waybill = 'SF123';
+        public static array $mapping = [];
         public static $onLock = null;
+        public static array $blockedManualNumbers = [];
+        public static function assertDeliveryAllowed(int $site, array $payload): void {
+            if (in_array($payload['express_number'] ?? '', self::$blockedManualNumbers[$site] ?? [], true)) throw new \core\exception\CommonException('已知测试单号禁止手工发货');
+        }
         public static function withBusinessLock(int $site, string $type, int $orderId, callable $operation) {
             self::$calls[] = [$site, 'lock', [$type, $orderId]];
             if (self::$onLock) { $hook = self::$onLock; self::$onLock = null; $hook(); }
@@ -38,7 +43,15 @@ namespace WaybillTest {
             return $operation === 'query' ? self::$task : ['success' => true, 'task_id' => 7, 'state' => 'ready', 'waybill_no' => self::$waybill, 'carrier_code' => self::$carrier];
         }
     }
-    class OtherProvider { public static function execute(int $site, string $op, array $payload): array { throw new \RuntimeException('Wrong provider called'); } }
+    class OtherProvider {
+        public static bool $allowed = false;
+        public static array $calls = [];
+        public static function execute(int $site, string $op, array $payload): array {
+            if (!self::$allowed) throw new \RuntimeException('Wrong provider called');
+            self::$calls[] = [$site, $op, $payload];
+            return Provider::$task;
+        }
+    }
 }
 namespace addon\phone_shop\app\model\order {
     class Order extends \WaybillTest\Model { public static array $rows = []; }
@@ -59,7 +72,7 @@ namespace addon\phone_shop\app\service\core\delivery {
 }
 namespace {
     function event($name, $data): array { return [['providers' => [
-        ['key' => 'test', 'label' => 'Test', 'handler' => \WaybillTest\Provider::class, 'carrier_code' => \WaybillTest\Provider::$carrier],
+        ['key' => 'test', 'label' => 'Test', 'handler' => \WaybillTest\Provider::class, 'carrier_code' => \WaybillTest\Provider::$carrier, 'carrier_mapping' => \WaybillTest\Provider::$mapping],
         ['key' => 'other', 'label' => 'Other', 'handler' => \WaybillTest\OtherProvider::class],
     ]]]; }
     require __DIR__ . '/../app/service/core/delivery/electronic_sheet/ElectronicSheetProviderRegistry.php';
@@ -124,6 +137,11 @@ namespace {
     Provider::$onLock = static function () { Order::$rows[0]['status'] = -1; };
     rejects(fn() => $service->execute(100005, $params), '待发货');
     Order::$rows = [$order];
+    Order::$rows[0]['order_goods'][0]['extend'] = json_encode(['erp_return' => ['time' => 123]]);
+    Provider::$calls = [];
+    rejects(fn() => $service->execute(100005, $params), '退回 ERP');
+    check(!in_array('create', array_column(Provider::$calls, 1), true), 'ERP returned goods cannot allocate a new waybill');
+    Order::$rows = [$order];
     Order::$rows[0]['order_goods'][0]['delivery_id'] = 2;
     rejects(fn() => $service->execute(100005, $params), '已发货');
     Provider::$task = ['task_id' => 1, 'state' => 'ready', 'waybill_no' => 'SF123', 'carrier_code' => 'shunfeng'];
@@ -141,6 +159,10 @@ namespace {
     $guard->handle($guardData); check(true, 'Undelivered package can request cancellation');
     $recoverData = $guardData; $recoverData['operation'] = 'recover';
     check($guard->handle($recoverData) === true, 'Recover requires explicit business approval');
+    Order::$rows[0]['order_goods'][0]['extend'] = ['erp_return' => ['time' => 123]];
+    rejects(fn() => $guard->handle($recoverData), '退回');
+    check($guard->handle($guardData) === true, 'Cancelling the courier task remains available after ERP return, without changing inventory');
+    Order::$rows = [$order];
     Order::$rows[0]['status'] = -1;
     rejects(fn() => $guard->handle($recoverData), '已关闭');
     Order::$rows = [$order]; Order::$rows[0]['order_goods'][0]['status'] = 2;
@@ -172,6 +194,13 @@ namespace {
         check(!$dispatcher->packages && !$goods->updates, 'Invalid waybill blocked before real shipment branch creates package or updates goods: ' . $state);
     }
     Provider::$task['state'] = 'ready';
+    Provider::$task['environment'] = 'sandbox';
+    Provider::$task['can_confirm_delivery'] = false;
+    rejects(fn() => $dispatcher->express($dispatchData), '仅用于测试');
+    check(!$dispatcher->packages && !$goods->updates, 'Sandbox is blocked in actual shipment method before any order writes');
+    Provider::$task['environment'] = 'production';
+    rejects(fn() => $dispatcher->express($dispatchData), '仅用于测试');
+    Provider::$task['can_confirm_delivery'] = true;
     $wrongNumber = $dispatchData; $wrongNumber['param']['express_number'] = 'WRONG';
     rejects(fn() => $dispatcher->express($wrongNumber), '运单号');
     $wrongCompany = $dispatchData; $wrongCompany['param']['express_company_id'] = 999;
@@ -181,6 +210,10 @@ namespace {
     check(count($dispatcher->packages) === 1 && count($goods->updates) === 1, 'Actual express method allows valid matching original waybill');
     $manual = $dispatchData; unset($manual['param']['waybill_provider_key']); $manual['param']['express_number'] = 'EXTERNAL-MANUAL';
     Provider::$calls = [];
+    Provider::$blockedManualNumbers[100005] = ['SANDBOX-KNOWN'];
+    $sandboxManual = $manual; $sandboxManual['param']['express_number'] = 'SANDBOX-KNOWN';
+    rejects(fn() => $dispatcher->express($sandboxManual), '禁止手工发货');
+    check(count($dispatcher->packages) === 1 && count($goods->updates) === 1, 'Optional known-waybill guard blocks manual bypass before any write');
     $dispatcher->express($manual);
     check(count($dispatcher->packages) === 2 && Provider::$calls === [], 'Original manual shipping remains usable without logistics extension');
     $wrongMode = $dispatchData; $wrongMode['param']['delivery_way'] = 'electronic_sheet';
@@ -206,5 +239,20 @@ namespace {
     $original = $service->execute(100005, array_replace($params, ['operation' => 'query']));
     check($original['carrier_code'] === 'zhongtong' && $original['express_company_id'] === 3, 'Original ZTO task does not turn into SF when current config changes');
     check(\addon\phone_shop\app\model\delivery\Company::$lookups === [[['site_id', '=', 100005], ['kd100_express_no_electronic_sheet', '=', 'zhongtong']]], 'Historical task maps original carrier after config switch');
+    // A provider can explicitly use a normal carrier code without depending on Kuaidi100 columns.
+    Provider::$task = []; Provider::$mapping = ['field' => 'express_no', 'code' => 'SF']; Provider::$waybill = 'SF-DIRECT';
+    \addon\phone_shop\app\model\delivery\Company::$lookups = [];
+    $direct = $service->execute(100005, $params);
+    check($direct['express_company_id'] === 3, 'Generic provider mapping resolves an SF company');
+    foreach (\addon\phone_shop\app\model\delivery\Company::$lookups as $where) check($where === [['site_id', '=', 100005], ['express_no', '=', 'SF']], 'Generic mapping does not couple SF to Kuaidi100 codes');
+    Provider::$task = $direct + ['provider_key' => 'other', 'carrier_mapping' => ['field' => 'express_no', 'code' => 'SF']];
+    Provider::$task['provider_key'] = 'other';
+    Provider::$calls = [];
+    $original = $service->execute(100005, array_replace($params, ['operation' => 'query']));
+    check($original['provider_key'] === 'other' && array_column(Provider::$calls, 1) === ['query'], 'Local query preserves original task provider and has no remote operation');
+    \WaybillTest\OtherProvider::$allowed = true;
+    $service->execute(100005, array_replace($params, ['operation' => 'refresh']));
+    check(\WaybillTest\OtherProvider::$calls[0][1] === 'refresh' && \WaybillTest\OtherProvider::$calls[0][2]['task_id'] === 7, 'Explicit refresh dispatches to original saved provider, not current selection');
+    Provider::$mapping = [];
     echo "PASS: {$passed} checks; no network or database used.\n";
 }

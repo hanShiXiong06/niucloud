@@ -239,6 +239,15 @@ export interface OrderDetailDevice {
   remark?: string
   capacity?: string
   color?: string
+  check_summary?: Array<{
+    field_key: string
+    field_name: string
+    component: string
+    value: unknown
+    label: string
+    unit?: string
+    resolved?: boolean
+  }>
   check_result?: string
   check_result_seller?: string
   check_status: number

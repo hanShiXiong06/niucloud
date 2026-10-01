@@ -1455,14 +1455,6 @@ return [
                                 'sort' => '94',
                                 'status' => '1',
                                 'is_show' => '1',
-                                'children' => [
-                                    [
-                                        'menu_name' => '读取预约通知接入状态', 'menu_key' => 'pickup_notice_config_info',
-                                        'menu_short_name' => '预约通知', 'parent_select_key' => '', 'menu_type' => '2',
-                                        'icon' => '', 'api_url' => 'hsx_recycle/pickup_notice/config', 'router_path' => '',
-                                        'view_path' => '', 'methods' => 'get', 'sort' => '0', 'status' => '1', 'is_show' => '0',
-                                    ],
-                                ],
                             ],
                             [
                                 'menu_name' => '快递产品目录',
@@ -1553,13 +1545,6 @@ return [
                                         'sort' => '10',
                                         'status' => '1',
                                         'is_show' => '0',
-                                    ],
-                                    [
-                                        'menu_name' => '人工核实未预约', 'menu_key' => 'express_pickup_resolve_unbooked',
-                                        'menu_short_name' => '核实预约', 'parent_select_key' => '', 'menu_type' => '2',
-                                        'icon' => '', 'api_url' => 'recycle/express_order_record/<id>/resolve_unbooked',
-                                        'router_path' => '', 'view_path' => '', 'methods' => 'post', 'sort' => '0',
-                                        'status' => '1', 'is_show' => '0',
                                     ],
                                     [
                                         'menu_name' => '更新订单状态',

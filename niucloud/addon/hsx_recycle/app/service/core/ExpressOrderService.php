@@ -594,7 +594,9 @@ class ExpressOrderService
         } else {
             throw new CommonException('原运单未标明服务商，请联系管理员核实，不会自动使用新渠道');
         }
-        foreach (['provider_mode', 'provider_environment', 'provider_task_id', 'provider_account_fingerprint', 'carrier_code', 'carrier_name', 'service_type', 'payment'] as $key) {
+        foreach (['provider_mode', 'provider_environment', 'provider_task_id', 'provider_account_fingerprint',
+            'provider_scene', 'provider_site_id', 'provider_order_id', 'product_code',
+            'carrier_code', 'carrier_name', 'service_type', 'payment'] as $key) {
             if (isset($apiResponse[$key])) {
                 $params[$key] = $apiResponse[$key];
             }

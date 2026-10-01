@@ -4,12 +4,14 @@
       <up-icon name="bell" size="14" color="var(--recycle-notice-text)"></up-icon>
     </view>
     <view class="notice-content">
-      <text class="notice-title">{{ title }}</text>
-      <text class="notice-text">{{ content }}</text>
-      <view v-if="url" class="notice-link" role="button" @tap.stop="openLink">
-        <text>{{ opening ? '正在打开…' : (linkText || '查看详情') }}</text>
-        <up-icon name="arrow-right" size="12" color="var(--recycle-notice-text)" />
+      <view class="notice-heading">
+        <view class="notice-toggle" @tap="expanded = !expanded"><text class="notice-title">{{ title }}</text><up-icon :name="expanded ? 'arrow-up' : 'arrow-down'" size="12" color="var(--recycle-notice-text)" /></view>
+        <view v-if="url" class="notice-link" role="button" @tap.stop="openLink">
+          <text>{{ opening ? '正在打开…' : (linkText || '查看详情') }}</text>
+          <up-icon name="arrow-right" size="12" color="var(--recycle-notice-text)" />
+        </view>
       </view>
+      <text class="notice-text" :class="{ 'notice-text--collapsed': !expanded }" @tap="expanded = !expanded">{{ content }}</text>
     </view>
   </view>
 </template>
@@ -33,6 +35,7 @@ const props = defineProps<{
 
 const visible = computed(() => !!props.enabled && !!String(props.content || '').trim())
 const opening = ref(false)
+const expanded = ref(false)
 const openLink = () => {
   if (opening.value) return
   const target = noticeTarget(props.url || '', props.returnUrl)
@@ -63,23 +66,19 @@ const openLink = () => {
 <style scoped lang="scss">
 .order-notice {
   display: flex;
-  gap: 16rpx;
-  padding: 20rpx;
-  margin-bottom: 20rpx;
+  gap: 12rpx;
+  padding: 12px var(--recycle-order-gutter, 24px);
+  margin-bottom: var(--recycle-order-section-gap, 12px);
   background: var(--recycle-notice-bg);
-  border: 1px solid rgba(245, 158, 11, 0.24);
-  border-radius: 16rpx;
 }
 
 .notice-icon {
   flex-shrink: 0;
-  width: 40rpx;
-  height: 40rpx;
+  width: 28rpx;
+  height: 44rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(245, 158, 11, 0.12);
-  border-radius: 50%;
 }
 
 .notice-content {
@@ -87,6 +86,10 @@ const openLink = () => {
   min-width: 0;
 }
 
+.notice-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0 20rpx; min-height: 44rpx; }
+
+.notice-toggle { display: flex; align-items: center; min-height: 52rpx; gap: 10rpx; }
+.notice-text--collapsed { overflow: hidden; text-overflow: ellipsis; white-space: nowrap !important; }
 .notice-title {
   display: block;
   font-size: 13px;
@@ -98,10 +101,10 @@ const openLink = () => {
 .notice-text {
   display: block;
   margin-top: 6rpx;
-  font-size: 12px;
-  color: var(--recycle-text-main);
+  font-size: 24rpx;
+  color: var(--recycle-text-sub);
   line-height: 1.55;
   white-space: pre-wrap;
 }
-.notice-link { display: inline-flex; align-items: center; gap: 8rpx; margin-top: 12rpx; padding: 8rpx 0; color: var(--recycle-notice-text); font-size: 25rpx; font-weight: 600; }
+.notice-link { display: inline-flex; align-items: center; flex-shrink: 0; gap: 6rpx; min-height: 44rpx; color: var(--recycle-notice-text); font-size: 23rpx; font-weight: 500; }
 </style>

@@ -76,6 +76,7 @@ final class MarketingEngineService
                 if ((string)$fact['process_status'] === 'success') {
                     return ['handled' => true, 'duplicate' => true, 'fact_id' => $factId];
                 }
+                $appliedClaims = null;
                 if ((string)$fact['fact_type'] === 'reversal') {
                     $original = MarketingFact::where([
                         ['site_id', '=', (int)$fact['site_id']],
@@ -85,6 +86,11 @@ final class MarketingEngineService
                     if ($original->isEmpty() || (string)$original['process_status'] !== 'success') {
                         throw new CommonException('原始营销事实尚未处理成功，冲红将在原事实恢复后重试');
                     }
+                    // 新事实记住实际计入的任务。规则调整后，退货仍只冲减当时真正计入的任务。
+                    $originalPayload = (array)$original['payload_json'];
+                    if (is_array($originalPayload['_marketing_applied_claims'] ?? null)) {
+                        $appliedClaims = $originalPayload['_marketing_applied_claims'];
+                    }
                 }
                 $fact->save(['process_status' => 'processing', 'error_message' => '', 'update_at' => time()]);
                 $siteId = (int)$fact['site_id'];
@@ -93,14 +99,26 @@ final class MarketingEngineService
                 $occurredAt = (int)$fact['occurred_at'];
                 $quantity = (float)$fact['quantity'];
                 $isReversal = (string)$fact['fact_type'] === 'reversal' || (int)$fact['direction'] < 0;
-                $campaigns = MarketingCampaign::where([
-                    ['site_id', '=', $siteId], ['status', '=', MarketingDict::CAMPAIGN_ACTIVE], ['fact_key', '=', $factKey],
-                    ['start_at', '<=', $occurredAt], ['end_at', '>=', $occurredAt],
-                ])->select();
+                $campaigns = $appliedClaims !== null
+                    ? ($appliedClaims === [] ? [] : MarketingCampaign::where([
+                        ['site_id', '=', $siteId], ['id', 'in', array_keys($appliedClaims)],
+                    ])->select())
+                    : MarketingCampaign::where([
+                        ['site_id', '=', $siteId], ['status', '=', MarketingDict::CAMPAIGN_ACTIVE], ['fact_key', '=', $factKey],
+                        ['start_at', '<=', $occurredAt], ['end_at', '>=', $occurredAt],
+                    ])->select();
                 $updated = [];
                 foreach ($campaigns as $campaign) {
-                    if (!$this->matchesFactFilter($campaign, $fact)) continue;
-                    $claim = $this->claimForFact($campaign, $memberId, $occurredAt, !$isReversal);
+                    if ($appliedClaims !== null) {
+                        $claim = MarketingClaim::where([
+                            ['id', '=', (int)$appliedClaims[(int)$campaign['id']]],
+                            ['site_id', '=', $siteId], ['campaign_id', '=', (int)$campaign['id']], ['member_id', '=', $memberId],
+                        ])->lock(true)->findOrEmpty();
+                        if ($claim->isEmpty()) throw new CommonException('原计奖任务不存在，退货冲减未执行，请核对营销事实台账');
+                    } else {
+                        if (!$this->matchesFactFilter($campaign, $fact)) continue;
+                        $claim = $this->claimForFact($campaign, $memberId, $occurredAt, !$isReversal);
+                    }
                     if (!$claim) continue;
                     // 手动领取只累计领取后的事实；自动参与必须把触发建档的当前事实计入。
                     if (
@@ -126,7 +144,10 @@ final class MarketingEngineService
                     if ($wasCompleted && !$nowCompleted && $isReversal) (new MarketingRewardService())->reverseClaimRewards((int)$claim['id']);
                     $updated[] = ['campaign_id' => (int)$campaign['id'], 'claim_id' => (int)$claim['id'], 'progress' => $after];
                 }
-                $fact->save(['process_status' => 'success', 'processed_at' => time(), 'next_retry_at' => 0, 'error_message' => '', 'update_at' => time()]);
+                $payload = (array)$fact['payload_json'];
+                // 由计算结果生成，覆盖外部同名参数；复用已有 JSON，不新增表或字段。
+                $payload['_marketing_applied_claims'] = array_column($updated, 'claim_id', 'campaign_id');
+                $fact->save(['payload_json' => $payload, 'process_status' => 'success', 'processed_at' => time(), 'next_retry_at' => 0, 'error_message' => '', 'update_at' => time()]);
                 return ['handled' => true, 'fact_id' => $factId, 'updated' => $updated];
             });
         } catch (\Throwable $e) {
@@ -223,6 +244,9 @@ final class MarketingEngineService
         $filter = (array)($campaign['fact_filter_json'] ?? []);
         if ($filter === []) return true;
         $payload = (array)($fact['payload_json'] ?? []);
+        if ((string)$campaign['fact_key'] === 'recycle_device_delivered'
+            && ($filter['order_source'] ?? 'all') === 'customer'
+            && ($payload['order_source'] ?? 'unknown') !== 'customer') return false;
         $amount = (float)($payload['amount'] ?? $payload['final_price'] ?? $payload['pay_amount'] ?? 0);
         $minAmount = max(0, (float)($filter['min_amount'] ?? 0));
         $maxAmount = max(0, (float)($filter['max_amount'] ?? 0));

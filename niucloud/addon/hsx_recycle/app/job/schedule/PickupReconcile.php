@@ -6,10 +6,11 @@ namespace addon\hsx_recycle\app\job\schedule;
 use addon\hsx_recycle\app\model\express\ExpressOrderRecord;
 use addon\hsx_recycle\app\service\core\ExpressOrderService;
 use addon\hsx_recycle\app\service\core\express\ExpressOperationLock;
+use addon\hsx_recycle\app\service\core\express\ExpressProviderRegistry;
 use core\base\BaseJob;
 use think\facade\Log;
 
-/** 只核实已有快递100任务；绝不通过定时任务重新叫件或改变回收业务状态。 */
+/** 只核实已登记且声明查询能力的渠道任务；绝不重新叫件或改变回收业务状态。 */
 class PickupReconcile extends BaseJob
 {
     public const BATCH_SIZE = 20;
@@ -45,11 +46,12 @@ class PickupReconcile extends BaseJob
                     $meta = $this->decode($data['pickup_reconcile'] ?? []);
                     $meta['last_checked_at'] = $now;
 
-                    // 当前查询协议必须有 taskId。只有 orderNo 不能推定可查、更不能推定未下单。
-                    if (trim((string)($data['provider_task_id'] ?? '')) === '') {
+                    // 标识需求由原渠道声明；缺标识不能推定未下单，更不能换渠道重下。
+                    $missing = $this->missingQueryIdentifiers($data);
+                    if ($missing) {
                         $meta['next_check_at'] = $now + 86400;
-                        $meta['last_error_code'] = 'missing_task_id';
-                        $meta['last_error'] = '尚未取得渠道任务编号，等待回调或管理员核实；未重新叫件';
+                        $meta['last_error_code'] = 'missing_query_identifier';
+                        $meta['last_error'] = '尚未取得原渠道所需的查询标识，等待回调或管理员核实；未重新叫件';
                         $this->saveMeta($siteId, $recordId, $meta);
                         return 'waiting';
                     }
@@ -90,6 +92,9 @@ class PickupReconcile extends BaseJob
 
     protected function candidates(int $now): array
     {
+        $providers = array_keys($this->providerRequirements());
+        if (!$providers) return [];
+        $placeholders = implode(',', array_fill(0, count($providers), '?'));
         // 在 SQL 中排除退避中的记录，避免前二十条长退避任务饿死后面的可查记录。
         $json = "CASE WHEN JSON_VALID(api_response) THEN api_response ELSE '{}' END";
         $number = static function (string $path) use ($json): string {
@@ -99,7 +104,7 @@ class PickupReconcile extends BaseJob
             ->field('id,site_id,third_order_no,order_status,create_at,api_response')
             ->where('third_order_no', '<>', '')
             ->where('create_at', '<=', $now - self::MIN_INTERVAL)
-            ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT({$json}, '$.provider')) = ?", ['kuaidi100'])
+            ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT({$json}, '$.provider')) IN ({$placeholders})", $providers)
             ->whereRaw($number('$.pickup_reconcile.next_check_at') . ' <= ?', [$now])
             ->whereRaw('GREATEST(' . $number('$.last_query_at') . ', ' . $number('$.pickup_reconcile.last_checked_at') . ') <= ?', [$now - self::MIN_INTERVAL])
             ->order('update_at asc,id asc')->limit(self::BATCH_SIZE)->select()->toArray();
@@ -108,13 +113,26 @@ class PickupReconcile extends BaseJob
     protected function eligible(array $record, int $now): bool
     {
         $data = $this->decode($record['api_response'] ?? []);
-        if (($data['provider'] ?? '') !== 'kuaidi100') return false;
+        if (!array_key_exists((string)($data['provider'] ?? ''), $this->providerRequirements())) return false;
         foreach ([(string)($data['booking_state'] ?? ''), (string)($record['order_status'] ?? '')] as $state) {
             if (in_array($state, self::TERMINAL_STATES, true)) return false;
         }
         $meta = $this->decode($data['pickup_reconcile'] ?? []);
         $last = max((int)($data['last_query_at'] ?? 0), (int)($meta['last_checked_at'] ?? 0), (int)($record['create_at'] ?? 0));
         return $now - $last >= self::MIN_INTERVAL && $now >= (int)($meta['next_check_at'] ?? 0);
+    }
+
+    protected function providerRequirements(): array
+    {
+        return (new ExpressProviderRegistry())->queryRequirements();
+    }
+
+    protected function missingQueryIdentifiers(array $data): array
+    {
+        $requirements = $this->providerRequirements()[(string)($data['provider'] ?? '')] ?? [];
+        return array_values(array_filter($requirements, static function (string $field) use ($data): bool {
+            return !isset($data[$field]) || !is_scalar($data[$field]) || trim((string)$data[$field]) === '';
+        }));
     }
 
     protected function failureMeta(array $meta, \Throwable $error, int $now): array

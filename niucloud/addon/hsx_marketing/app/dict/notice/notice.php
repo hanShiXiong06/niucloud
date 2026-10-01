@@ -4,6 +4,9 @@ declare(strict_types=1);
 $variables = [
     'reward_name' => '奖励名称', 'reward_content' => '奖励内容', 'status_text' => '奖励状态',
     'expire_time' => '失效时间', 'failure_reason' => '失败原因', 'url' => '奖励中心链接',
+    'campaign_name' => '活动名称（小程序短文本）', 'activity_type' => '活动类型',
+    'reward_summary' => '奖励说明（小程序短文本）', 'notice_remark' => '奖励操作提示',
+    'status_short' => '奖励状态（小程序短语）', 'reward_number' => '奖励数值或份数',
 ];
 
 return [

@@ -96,6 +96,20 @@
                     </section>
                     <section class="settings-section">
                         <h3>平台快递</h3>
+                        <template v-if="isSfPickup">
+                            <SettingRow id="delivery-provider" label="上门取件渠道" hint="沿用本站已选择的渠道，不在此重复配置账号。">
+                                <el-tag type="info">顺丰直连 · 上门取件</el-tag>
+                            </SettingRow>
+                            <SettingRow id="delivery-product" label="快递产品" hint="与物流服务中的顺丰上门取件配置保持一致。">
+                                <span>{{ form.platform_delivery.product_name || '暂无可用取件产品' }}</span>
+                            </SettingRow>
+                            <SettingRow id="delivery-name" label="客户看到的快递名称">
+                                <span>{{ form.platform_delivery.display_name }}</span>
+                            </SettingRow>
+                            <p v-if="!currentProductOptions.length" class="field-hint">顺丰上门取件尚未就绪，请核对正式环境、账号及取件开关；不会自动改用易速，不影响客户自行寄件。</p>
+                            <el-button plain @click="openSfPickupConfig">查看顺丰取件配置</el-button>
+                        </template>
+                        <template v-else>
                         <SettingRow id="delivery-provider" label="快递服务商">
                             <el-select v-model="form.platform_delivery.provider" placeholder="请选择快递服务商" :disabled="!form.platform_delivery.provider_options.length" @change="handleProviderChange">
                                 <el-option v-for="item in form.platform_delivery.provider_options" :key="item.provider" :label="item.provider_name" :value="item.provider" />
@@ -106,10 +120,11 @@
                                 <el-option v-for="item in currentProductOptions" :key="item.product_code" :label="formatProductLabel(item)" :value="item.product_code" />
                             </el-select>
                         </SettingRow>
-                        <p v-if="!currentProductOptions.length" class="field-warning">暂无可用线路，请先在第三方快递配置中启用线路。</p>
+                        <p v-if="!currentProductOptions.length" class="field-hint">暂无可用的平台快递线路，不影响保存。邮寄到店仍可由客户自行寄件、填写单号。</p>
                         <SettingRow id="delivery-name" label="客户看到的快递名称">
                             <el-input v-model.trim="form.platform_delivery.display_name" maxlength="20" show-word-limit placeholder="如：京东快递" />
                         </SettingRow>
+                        </template>
                         <SettingRow id="delivery-free-count" label="最低包邮数量" hint="未达到数量时，客户仍可自行寄件、填写单号。">
                             <el-input-number v-model="form.platform_delivery.free_shipping_min_count" :min="1" :max="99" controls-position="right" aria-label="最低包邮数量" />
                         </SettingRow>
@@ -536,6 +551,16 @@ const currentProductOptions = computed(() => {
     return form.platform_delivery.product_options.filter(item => item.provider === form.platform_delivery.provider)
 })
 
+const isSfPickup = computed(() => form.platform_delivery.provider === 'sf_direct')
+const openSfPickupConfig = () => {
+    const target = router.resolve('/hsx_express/config?provider=sf_direct&scene=pickup')
+    if (!target.matched.length) {
+        hsxFeedback.info('未找到顺丰配置入口，请确认已更新物流插件并分配配置权限')
+        return
+    }
+    window.open(target.href, '_blank', 'noopener,noreferrer')
+}
+
 const ensureProductSelection = (syncDisplayName = false) => {
     const selected = currentProductOptions.value.find(item => item.product_code === form.platform_delivery.product_code)
         || currentProductOptions.value[0]
@@ -645,16 +670,19 @@ const save = async () => {
     if (form.notice.url && (!/^(\/(addon|app)\/|https?:\/\/)/i.test(form.notice.url) || /[\s\\<>"\u0000-\u001f]/.test(form.notice.url))) {
         return showValidation('notifications', 'notice-url', '请填写站内页面路径或完整 http(s) 网址，不要包含空格')
     }
-    if (!form.platform_delivery.display_name.trim()) {
-        return showValidation('delivery', 'delivery-name', '请填写客户看到的快递名称')
-    }
     ensureProviderSelection()
-    if (!form.platform_delivery.provider) {
-        return showValidation('delivery', 'delivery-provider', '请选择默认快递服务商')
-    }
     ensureProductSelection()
-    if (!form.platform_delivery.product_code) {
-        return showValidation('delivery', 'delivery-product', '请选择默认快递线路，请先在第三方快递配置中启用至少一条产品线路')
+    // 自行寄件不依赖平台线路；未开放邮寄或没有可用线路时，不阻止保存其他设置。
+    if (form.delivery_modes.mail && currentProductOptions.value.length > 0) {
+        if (!form.platform_delivery.display_name.trim()) {
+            return showValidation('delivery', 'delivery-name', '请填写客户看到的快递名称')
+        }
+        if (!form.platform_delivery.provider) {
+            return showValidation('delivery', 'delivery-provider', '请选择默认快递服务商')
+        }
+        if (!form.platform_delivery.product_code) {
+            return showValidation('delivery', 'delivery-product', '请选择默认快递线路')
+        }
     }
     if (form.profile.enabled && form.profile.payment_required && form.profile.payment_min_count < 1) {
         return showValidation('customer', 'payment-count', '最低收款方式数量不能小于 1')

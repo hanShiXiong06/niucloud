@@ -13,6 +13,7 @@ class ExpressProviderDict
     // 服务商标识
     const PROVIDER_YISU = 'yisu';
     const PROVIDER_KUAIDI100 = 'kuaidi100';
+    const PROVIDER_SF_DIRECT = 'sf_direct';
     const PROVIDER_MANUAL = 'manual'; // 手动录入快递号
 
     // 状态
@@ -26,6 +27,13 @@ class ExpressProviderDict
     public static function getProviders(): array
     {
         return [
+            self::PROVIDER_SF_DIRECT => [
+                'key' => self::PROVIDER_SF_DIRECT, 'name' => '顺丰直连',
+                'desc' => '由物流中心独立管理上门取件账号和产品，不共用电子面单开关',
+                'support_quote' => false, 'support_cancel' => true, 'support_track' => false,
+                'configuration_managed_by' => 'hsx_express',
+                'configuration_path' => '/hsx_express/config?provider=sf_direct&scene=pickup',
+            ],
             self::PROVIDER_KUAIDI100 => [
                 'key' => self::PROVIDER_KUAIDI100, 'name' => '快递100',
                 'desc' => '管理员固定承运商与产品，预约上门取件；各站点独立结算',

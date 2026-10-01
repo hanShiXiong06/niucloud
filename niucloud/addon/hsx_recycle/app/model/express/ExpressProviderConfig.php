@@ -92,6 +92,8 @@ class ExpressProviderConfig extends BaseModel
         $isFirst = true;
 
         foreach ($providers as $key => $provider) {
+            // 统一物流配置使用现有站点配置，不在旧服务商表复制账号或开关。
+            if (!empty($provider['configuration_managed_by'])) continue;
             $exists = self::where([
                 ['site_id', '=', $siteId],
                 ['provider', '=', $key],

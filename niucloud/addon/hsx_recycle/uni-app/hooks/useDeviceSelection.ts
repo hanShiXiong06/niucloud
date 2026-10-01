@@ -1,4 +1,5 @@
-import { ref, computed, type Ref } from 'vue'
+import { canDecideDevice } from '../utils/order-presentation'
+import { ref, computed, watch, type Ref } from 'vue'
 import type { OrderDetailDevice } from '../types/order'
 import { copyIMEIs } from '../utils/clipboard'
 
@@ -13,10 +14,7 @@ export function useDeviceSelection(devicesRef: Ref<OrderDetailDevice[]>) {
   // 选中状态映射（用于checkbox绑定）
   const selectedMap = ref<Record<number, boolean>>({})
 
-  const canUserDecideDevice = (device: OrderDetailDevice) => {
-    const price = Number(device.final_price || 0)
-    return Number.isFinite(price) && price > 0 && [4, 7].includes(Number(device.status))
-  }
+  const canUserDecideDevice = canDecideDevice
 
   // 是否全选
   const isAllSelected = computed({
@@ -112,6 +110,11 @@ export function useDeviceSelection(devicesRef: Ref<OrderDetailDevice[]>) {
       selectedMap.value[device.id] = false
     })
   }
+
+  watch(() => devicesRef.value.map(device => device.id), ids => {
+    selectedDeviceIds.value = selectedDeviceIds.value.filter(id => ids.includes(id))
+    selectedMap.value = Object.fromEntries(selectedDeviceIds.value.map(id => [id, true]))
+  })
 
   return {
     selectedDeviceIds,

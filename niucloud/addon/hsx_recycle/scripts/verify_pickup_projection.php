@@ -48,6 +48,9 @@ namespace addon\hsx_recycle\app\model\express {
     class ExpressOrderRecord extends \pickup_projection_test\Model { protected static string $table = 'records'; }
 }
 namespace addon\hsx_recycle\app\service\core\express {
+    class ExpressProviderRegistry {
+        public function queryRequirements(): array { return ['kuaidi100' => ['provider_task_id'], 'sf_direct' => ['provider_order_id']]; }
+    }
     class ExpressOperationLock {
         public static function run(int $site, string $key, callable $run) {
             \pickup_projection_test\Store::$locks[] = [$site, $key];
@@ -134,6 +137,16 @@ namespace {
     same('waiting_callback', $result['refresh_result']['status'], 'missing task does not pretend query success');
     same([], Store::$calls, 'missing task avoids impossible upstream query');
     same(false, $result['can_manual'], 'missing task is not a rejection');
+
+    $service = fixture('unknown', ['provider' => 'sf_direct', 'provider_task_id' => '', 'provider_order_id' => '']);
+    $result = $service->refresh(1, 5, 7);
+    same('waiting_callback', $result['refresh_result']['status'], 'SF missing original order number remains pending verification');
+    same([], Store::$calls, 'SF missing identifier never sends a query or create');
+    same(false, $result['can_manual'], 'SF missing identifier cannot open self-send');
+    $service = fixture('unknown', ['provider' => 'sf_direct', 'provider_task_id' => '', 'provider_order_id' => 'SFP_ORIGINAL_ID']);
+    $result = $service->refresh(1, 5, 7);
+    same('updated', $result['refresh_result']['status'], 'SF registered identifier permits original-record refresh without kuaidi100 taskId');
+    same(1, count(Store::$calls), 'SF refresh is exactly one query, not a new booking');
 
     $service = fixture('assigned');
     Store::$outcome = 'error';

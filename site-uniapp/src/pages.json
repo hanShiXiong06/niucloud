@@ -465,7 +465,7 @@
 				{
 					"path": "pages/stats/index",
 					"style": {
-						"navigationBarTitleText": "数据统计"
+						"navigationBarTitleText": "工作台"
 					},
 					"needLogin": true
 				}
@@ -517,6 +517,8 @@
 		{
 			"root": "addon/hsx_performance",
 			"pages": [
+				{ "path": "pages/output/list", "style": { "navigationBarTitleText": "员工产出" }, "needLogin": true },
+				{ "path": "pages/output/detail", "style": { "navigationBarTitleText": "员工产出详情" }, "needLogin": true },
 				{ "path": "pages/report/list", "style": { "navigationBarTitleText": "经营报告" }, "needLogin": true },
 				{ "path": "pages/report/detail", "style": { "navigationBarTitleText": "经营报告详情" }, "needLogin": true }
 			]

@@ -133,6 +133,7 @@ namespace addon\hsx_recycle\app\service\core\express {
     {
         public array $calls = [];
         public bool $failActive = false;
+        public bool $cancelUnknown = false;
         public function activeProvider(int $siteId): array
         {
             if ($this->failActive) throw new \RuntimeException('Current provider unavailable');
@@ -161,6 +162,7 @@ namespace addon\hsx_recycle\app\service\core\express {
         public function cancel(int $siteId, array $request): array
         {
             $this->calls[] = ['cancel', $siteId, $request];
+            if ($this->cancelUnknown) throw new ExpressSubmissionException('mock cancellation not confirmed', 'unknown');
             return ['booking_state' => 'cancelled'];
         }
         public function detail(int $siteId, array $request): array
@@ -225,6 +227,7 @@ namespace {
             Store::$providers[$site] = 'ORIGINAL_' . $site;
             Store::$snapshots[$site] = ['provider' => 'ORIGINAL_' . $site, 'provider_mode' => 'online',
                 'provider_environment' => 'production', 'provider_account_fingerprint' => hash('sha256', 'mock-account-' . $site),
+                'provider_scene' => 'pickup', 'provider_site_id' => $site, 'provider_order_id' => 'STABLE_ORDER_' . $site,
                 'product_code' => 'TEST_PICKUP', 'carrier_code' => 'mock_carrier', 'carrier_name' => '模拟承运商',
                 'service_type' => '测试时效', 'payment' => '测试结算', 'callback_base' => 'https://example.invalid/push'];
         }
@@ -301,21 +304,33 @@ namespace {
 
         Store::$providers[1] = 'NEW_DEFAULT';
         $service->getOrderDetail(1, ['order_no' => $first['orderNo'], 'provider' => 'ATTACKER',
-            'provider_mode' => 'ATTACKER', 'provider_account_fingerprint' => 'ATTACKER']);
+            'provider_mode' => 'ATTACKER', 'provider_account_fingerprint' => 'ATTACKER',
+            'provider_scene' => 'waybill', 'provider_site_id' => 2, 'provider_order_id' => 'OTHER_ORDER']);
         $detailCalls = calls($gateway, 'detail');
         $detail = end($detailCalls);
         same('ORIGINAL_1', $detail[2]['provider'], '查询沿用存储的服务商而非请求或新默认');
         same('online', $detail[2]['provider_mode'], '查询沿用存储的模式');
         same(Store::$snapshots[1]['provider_account_fingerprint'], $detail[2]['provider_account_fingerprint'], '查询沿用原账号指纹');
         same($first['orderNo'], $detail[2]['orderNo'], '查询沿用原渠道订单号');
+        same('pickup', $detail[2]['provider_scene'], '查询不能被请求切换为电子面单');
+        same(1, $detail[2]['provider_site_id'], '查询不能被请求切换站点');
+        same('STABLE_ORDER_1', $detail[2]['provider_order_id'], '查询不能被请求覆盖原顺丰可查询订单号');
 
+        $gateway->cancelUnknown = true;
+        try { $service->cancelOrInterceptOrder(1, ['order_no' => $first['orderNo']]); }
+        catch (ExpressSubmissionException $e) { same('unknown', $e->outcome(), '渠道未确认取消保持待核实'); }
+        same('accepted', record(1, 'same-request')->api_response['booking_state'], '取消超时不能把原预约标成已取消');
+        same(false, \addon\hsx_recycle\app\service\core\express\PickupState::view(record(1, 'same-request')->api_response)['can_manual'], '取消未知不能自行寄件');
+        $gateway->cancelUnknown = false;
+        $cancelCallsBeforeSuccess = count(calls($gateway, 'cancel'));
         same(true, $service->cancelOrInterceptOrder(1, ['order_no' => $first['orderNo'], 'provider' => 'ATTACKER']), '真实主服务取消已受理');
-        $cancel = calls($gateway, 'cancel')[0];
+        $cancelCalls = calls($gateway, 'cancel');
+        $cancel = end($cancelCalls);
         same('ORIGINAL_1', $cancel[2]['provider'], '取消不允许请求覆盖已存服务商');
         same(Store::$snapshots[1]['provider_account_fingerprint'], $cancel[2]['provider_account_fingerprint'], '取消使用原账号指纹');
         same('cancelled', record(1, 'same-request')->api_response['booking_state'], '取消结果投影到原记录');
         $service->cancelOrder(1, $first['orderNo'], 'ATTACKER');
-        same(1, count(calls($gateway, 'cancel')), '已取消订单重复取消不再请求渠道');
+        same($cancelCallsBeforeSuccess + 1, count(calls($gateway, 'cancel')), '已取消订单重复取消不再请求渠道');
 
         $syncDetail = new \ReflectionMethod($service, 'syncLocalExpressRecordFromDetail');
         $syncDetail->setAccessible(true);

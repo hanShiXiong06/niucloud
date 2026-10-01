@@ -1,41 +1,34 @@
 <template>
   <view>
     <!-- 设备列表 -->
-    <view v-if="devices.length > 0" class="space-y-2 mb-3">
+    <view v-if="devices.length > 0" class="device-list">
       <view
         v-for="(item, index) in devices"
         :key="index"
-        class="flex justify-between items-center p-2 rounded"
-        style="background: rgba(241, 237, 237, 0.8); border-left: 3px solid #D1C2C2;"
+        class="device-row"
       >
-        <view class="flex flex-col gap-1 flex-1">
-          <text class="text-sm">
-            <text class="font-medium mr-1" style="color: #4f46e5;">{{ index + 1 }}</text>
-            用户串号: {{ item.user_sn || item.imei }}
-          </text>
-          <text v-if="item.model" class="text-xs text-gray-600">
-            名称: {{ item.model }}
-          </text>
-          <text v-if="item.initial_price" class="text-xs text-gray-600">
-            定价: ¥{{ item.initial_price }}
-          </text>
+        <text class="device-index">{{ index + 1 }}</text>
+        <view class="device-info">
+          <text class="device-name">{{ item.model || '回收设备' }}</text>
+          <view class="device-detail"><text class="device-detail-label">用户串号</text><text class="device-serial">{{ item.user_sn || item.imei }}</text></view>
+          <view v-if="item.initial_price" class="device-detail"><text class="device-detail-label">预估价</text><text class="device-price">¥{{ item.initial_price }}</text></view>
         </view>
-        <view
+        <button
           v-if="showDeleteButton"
-          class="p-1"
+          class="device-remove"
+          aria-label="删除设备"
           @click="handleRemove(index)"
         >
-          <up-icon name="trash" size="14" color="#ef4444"></up-icon>
-        </view>
+          <up-icon name="trash" size="18" color="var(--recycle-text-sub)"></up-icon>
+        </button>
       </view>
     </view>
 
     <!-- 数量输入 -->
-    <up-row customStyle="margin-bottom: 8px">
-      <up-col span="3">
-        <view class="label">数量</view>
-      </up-col>
-      <up-col span="9">
+    <view class="device-quantity-row">
+      <text class="device-quantity-label">回收数量</text>
+      <view class="device-quantity-control">
+        <view class="device-quantity-input">
         <u-number-box
           v-model="localCount"
           :min="devices.length || 1"
@@ -43,157 +36,176 @@
           :disabled="devices.length > 0"
           @change="handleCountChange"
         ></u-number-box>
-        <text v-if="devices.length > 0" class="text-xs text-gray-500 mt-1">
-          已自动设置为设备数量
+        <text class="device-quantity-unit">台</text>
+        </view>
+        <text v-if="devices.length > 0" class="device-quantity-note">
+          已登记 {{ devices.length }} 台明细
         </text>
-      </up-col>
-    </up-row>
+      </view>
+    </view>
 
-    <!-- 批量添加设备弹窗 -->
-    <up-popup
+    <!-- 下单前的轻量登记，不替代门店签收时的完整串号。 -->
+    <OrderTaskPopup
       :show="showAddDialog"
-      mode="center"
-      :round="10"
-      :closeOnClickOverlay="false"
-      :safeAreaInsetBottom="false"
+      title="添加回收设备"
+      :subtitle="'第 ' + (devices.length + 1) + ' 台'"
+      height="auto"
+      :scrollable="false"
+      :closeOnOverlay="false"
       @close="closeAddDialog"
+      @open="measureDialogContent"
     >
       <view class="add-dialog">
-        <view class="dialog-header">
-          <view>
-            <text class="dialog-title">添加回收设备</text>
-            <text class="dialog-subtitle">用于用户下单前登记，门店签收时再录入完整 IMEI/SN。</text>
-          </view>
-        </view>
-
-        <view class="dialog-content" :id="'dialog-content'">
-          <view class="dialog-tip">
-            <view class="dialog-tip__badge">提示</view>
-            <text class="dialog-tip__text">设备名称和用户串号后 6 位必填。</text>
-          </view>
-
-          <!-- 设备名称输入 -->
-          <view :id="'input-model'" class="form-item">
+        <scroll-view
+          scroll-y
+          :show-scrollbar="false"
+          :scroll-into-view="errorFieldId"
+          class="dialog-scroll"
+          :style="{ height: `${dialogContentHeight}px` }"
+        >
+        <view class="dialog-content">
+          <view id="input-model" class="form-item">
             <view class="form-label">
               <text>设备型号</text>
               <text class="required">*</text>
             </view>
-            <view class="input-wrapper">
+            <view class="input-wrapper" :class="{ 'input-wrapper--invalid': fieldErrors.model }">
               <input
                 v-model="newDevice.model"
                 placeholder="输入或搜索型号"
+                confirm-type="next"
+                :cursor-spacing="24"
                 class="custom-input custom-input--with-picker"
                 @focus="handleModelFocus"
                 @input="handleModelInput"
               />
-              <view class="model-picker-action" @click="openModelPicker">
-                <text>选择</text>
-              </view>
+              <button class="model-picker-action" @click="openModelPicker">
+                <text>选型号</text>
+                <up-icon name="arrow-right" size="12" color="var(--recycle-brand, #3b82f6)"></up-icon>
+              </button>
             </view>
-            <view v-if="showModelSuggestions" class="model-suggestions">
+            <text v-if="fieldErrors.model" class="field-error">{{ fieldErrors.model }}</text>
+            <scroll-view
+              v-if="showModelSuggestions"
+              scroll-y
+              class="model-suggestions"
+              :style="{ height: `${Math.min(Math.max(modelSuggestions.length, 1), 4) * 48}px` }"
+            >
               <view v-if="modelSearching" class="model-suggestion-empty">搜索中...</view>
+              <view v-else-if="modelSearchFailed" class="model-suggestion-empty">搜索暂不可用，可直接输入</view>
               <block v-else>
-                <view
+                <button
                   v-for="item in modelSuggestions"
                   :key="item.id"
                   class="model-suggestion-item"
                   @click="selectModelSuggestion(item)"
                 >
                   <text class="model-suggestion-name">{{ item.node_name }}</text>
-                </view>
+                </button>
               </block>
-              <view v-if="!modelSearching && !modelSuggestions.length" class="model-suggestion-empty">没有找到，可直接输入</view>
-            </view>
-            <text class="form-hint">不知道准确型号时，可以点“选择”按分类查找。</text>
+              <view v-if="!modelSearching && !modelSearchFailed && !modelSuggestions.length" class="model-suggestion-empty">未找到匹配型号，可使用当前名称</view>
+            </scroll-view>
           </view>
 
-          <!-- 用户串号输入（后6位） -->
-          <view :id="'input-imei'" class="form-item">
-            <view class="form-label">
-              <text>用户串号后6位</text>
-              <text class="required">*</text>
+          <view id="input-imei" class="form-item">
+            <view class="form-label-row">
+              <view class="form-label">
+                <text>{{ userSnFromScan ? '设备串号' : '串号后 6 位' }}</text>
+                <text class="required">*</text>
+              </view>
+              <button class="text-button" :aria-expanded="showSnHelp" @click="toggleSnHelp">
+                <up-icon name="question-circle" size="14" color="var(--recycle-text-sub, #6b7280)"></up-icon>
+                <text>{{ showSnHelp ? '收起帮助' : '串号在哪？' }}</text>
+              </button>
             </view>
-            <view class="input-wrapper">
+            <view class="input-wrapper" :class="{ 'input-wrapper--invalid': fieldErrors.user_sn }">
               <input
                 v-model="newDevice.user_sn"
-                placeholder="手输后6位，或扫码录入完整串号"
+                placeholder="输入后 6 位数字或字母"
                 maxlength="64"
                 type="text"
+                confirm-type="done"
+                :cursor-spacing="24"
                 class="custom-input custom-input--with-action"
                 @focus="clearModelSuggestions"
                 @input="handleUserSnInput"
+                @confirm="confirmAdd"
               />
-              <view class="input-action" @click="scanUserSn">
-                <up-icon name="scan" size="20" color="#4f46e5"></up-icon>
-              </view>
+              <button class="input-action" aria-label="扫码录入串号" @click="scanUserSn">
+                <up-icon name="scan" size="22" color="var(--recycle-brand, #3b82f6)"></up-icon>
+              </button>
             </view>
-            <text class="form-hint">用户可在手机拨号输入 *#06#，调出条形码后点击右侧扫码快速录入；也可手动输入后6位数字或字母。</text>
+            <text v-if="fieldErrors.user_sn" class="field-error">{{ fieldErrors.user_sn }}</text>
+            <view v-if="showSnHelp" class="serial-help">
+              <text>在设备拨号页输入 *#06#，或前往「设置 → 关于本机」查看 IMEI / SN。</text>
+              <text>手填后 6 位即可，也可扫码录入完整串号。</text>
+            </view>
           </view>
 
-          <!-- 定价输入 -->
-          <view :id="'input-price'" class="form-item">
-            <view class="form-label">
-              <text>预估价（选填）</text>
-            </view>
-            <view class="input-wrapper">
+          <view class="optional-section">
+            <button class="optional-toggle" :aria-expanded="showEstimatedPrice" @click="toggleEstimatedPrice">
+              <text>预估价</text>
+              <view class="optional-summary">
+                <text>{{ newDevice.initial_price ? `¥${newDevice.initial_price}` : '选填' }}</text>
+                <up-icon :name="showEstimatedPrice ? 'arrow-up' : 'arrow-down'" size="13" color="var(--recycle-text-sub, #6b7280)"></up-icon>
+              </view>
+            </button>
+            <view v-if="showEstimatedPrice" class="optional-content">
+            <view class="input-wrapper price-input">
+              <text class="price-symbol">¥</text>
               <input
                 v-model="newDevice.initial_price"
                 placeholder="不确定可以留空"
-                type="number"
+                type="digit"
+                confirm-type="done"
+                :cursor-spacing="24"
                 class="custom-input"
                 @focus="clearModelSuggestions"
+                @confirm="confirmAdd"
               />
             </view>
-            <text class="form-hint">这里只做下单预估，不会影响门店最终质检报价</text>
+            <text class="form-hint">最终价格以门店质检报价为准</text>
+            </view>
           </view>
         </view>
+        </scroll-view>
 
-        <view class="dialog-footer">
-          <view class="dialog-button cancel" @click="closeAddDialog">
-            取消
-          </view>
-          <view
-            :id="'confirm-btn'"
-            class="dialog-button confirm"
-            @click="confirmAdd"
-          >
-            <text>确定</text>
-          </view>
-        </view>
       </view>
-    </up-popup>
+      <template #footer>
+        <OrderUiButton block @click="closeAddDialog">取消</OrderUiButton>
+        <OrderUiButton block variant="primary" @click="confirmAdd">添加设备</OrderUiButton>
+      </template>
+    </OrderTaskPopup>
 
-    <up-popup
+    <OrderTaskPopup
       :show="showModelPicker"
-      mode="bottom"
-      :round="16"
-      :safeAreaInsetBottom="true"
+      title="选择型号"
+      :scrollable="false"
+      :z-index="10085"
       @close="closeModelPicker"
     >
       <view class="model-picker">
-        <view class="model-picker-header">
-          <view>
-            <text class="model-picker-title">按分类选择型号</text>
-          </view>
-          <view class="model-picker-close" @click="closeModelPicker">
-            <up-icon name="close" size="18" color="#6b7280"></up-icon>
-          </view>
-        </view>
         <view class="model-picker-breadcrumb">
-          <view class="breadcrumb-item root" @click="resetModelPickerPath">全部</view>
-          <view
+          <button class="breadcrumb-item root" :disabled="modelTreeLoading" @click="resetModelPickerPath">全部</button>
+          <button
             v-for="(node, index) in modelPickerPath"
             :key="node.id"
             class="breadcrumb-item"
+            :disabled="modelTreeLoading"
             @click="trimModelPickerPath(index)"
           >
             {{ node.node_name }}
-          </view>
+          </button>
         </view>
         <scroll-view scroll-y class="model-picker-list">
           <view v-if="modelTreeLoading" class="model-picker-empty">分类加载中...</view>
-          <view v-else-if="!currentModelPickerOptions.length" class="model-picker-empty">暂无下级分类</view>
-          <view
+          <view v-else-if="modelTreeFailed" class="model-picker-empty">
+            <text>分类加载失败</text>
+            <button class="text-button" @click="retryModelPicker">重试</button>
+          </view>
+          <view v-else-if="!currentModelPickerOptions.length" class="model-picker-empty">暂无型号，可返回手动输入</view>
+          <block v-else>
+          <button
             v-for="node in currentModelPickerOptions"
             :key="node.id"
             class="model-picker-row"
@@ -204,20 +216,22 @@
               <text v-if="node.model_full_name" class="model-picker-row-path">{{ node.model_full_name }}</text>
             </view>
             <view class="model-picker-row-action">
-              <text>{{ hasModelChildren(node) ? '下级' : '选择' }}</text>
-              <up-icon :name="hasModelChildren(node) ? 'arrow-right' : 'checkmark'" size="14" color="#9ca3af"></up-icon>
+              <up-icon :name="hasModelChildren(node) ? 'arrow-right' : 'plus'" size="16" color="var(--recycle-text-sub, #6b7280)"></up-icon>
             </view>
-          </view>
+          </button>
+          </block>
         </scroll-view>
       </view>
-    </up-popup>
+    </OrderTaskPopup>
   </view>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, getCurrentInstance, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { Device } from '../../../types/order'
 import { getDeviceModelDictChildren, searchDeviceModelDictOptions } from '../../../api/order'
+import OrderTaskPopup from './OrderTaskPopup.vue'
+import OrderUiButton from './OrderUiButton.vue'
 
 interface Props {
   devices: Device[]
@@ -242,16 +256,27 @@ const emit = defineEmits<{
 
 const localCount = ref(props.count)
 const showAddDialog = ref(false)
+const showSnHelp = ref(false)
+const showEstimatedPrice = ref(true)
+const fieldErrors = ref({ model: '', user_sn: '' })
+const errorFieldId = ref('')
+const dialogContentHeight = ref(280)
+const instance = getCurrentInstance()
 const modelSuggestions = ref<any[]>([])
 const modelSearching = ref(false)
+const modelSearchFailed = ref(false)
 const modelFocused = ref(false)
 const userSnFromScan = ref(false)
 const showModelPicker = ref(false)
 const modelTreeLoading = ref(false)
+const modelTreeFailed = ref(false)
 const currentModelPickerOptions = ref<any[]>([])
 const modelPickerPath = ref<any[]>([])
 const selectedModelPathNames = ref<string[]>([])
 let modelSearchTimer: any = null
+let modelSearchVersion = 0
+let modelTreeVersion = 0
+let dialogVersion = 0
 const newDevice = ref<Device>({
   imei: '',
   user_sn: '',
@@ -264,6 +289,31 @@ const newDevice = ref<Device>({
 const showModelSuggestions = computed(() => {
   return modelFocused.value && String(newDevice.value.model || '').trim().length > 0
 })
+
+// scroll-view 在小程序中需要明确高度；内容按实测收缩，上限由 CSS 限制。
+const measureDialogContent = async () => {
+  if (!showAddDialog.value) return
+  await nextTick()
+  uni.createSelectorQuery().in(instance?.proxy).select('.dialog-content').boundingClientRect((rect: any) => {
+    if (showAddDialog.value && rect?.height) dialogContentHeight.value = Math.ceil(rect.height)
+  }).exec()
+}
+
+watch(() => [
+  showAddDialog.value, showSnHelp.value, showEstimatedPrice.value, showModelSuggestions.value,
+  modelSearching.value, modelSearchFailed.value, modelSuggestions.value.length,
+  fieldErrors.value.model, fieldErrors.value.user_sn
+], measureDialogContent)
+
+const toggleSnHelp = () => {
+  clearModelSuggestions()
+  showSnHelp.value = !showSnHelp.value
+}
+
+const toggleEstimatedPrice = () => {
+  clearModelSuggestions()
+  showEstimatedPrice.value = !showEstimatedPrice.value
+}
 
 const normalizeCount = (value: any) => {
   const rawValue = typeof value === 'object' && value !== null ? value.value : value
@@ -304,6 +354,7 @@ const handleRemove = (index: number) => {
 }
 
 const handleBatchAdd = () => {
+  dialogVersion++
   showAddDialog.value = true
 }
 
@@ -312,8 +363,14 @@ defineExpose({
 })
 
 const closeAddDialog = () => {
+  dialogVersion++
   showAddDialog.value = false
+  closeModelPicker()
   clearModelSuggestions()
+  showSnHelp.value = false
+  showEstimatedPrice.value = false
+  fieldErrors.value = { model: '', user_sn: '' }
+  errorFieldId.value = ''
   userSnFromScan.value = false
   newDevice.value = {
     imei: '',
@@ -333,6 +390,7 @@ const handleModelFocus = () => {
 }
 
 const handleModelInput = () => {
+  fieldErrors.value.model = ''
   newDevice.value.category_id = 0
   newDevice.value.category_path = []
   selectedModelPathNames.value = []
@@ -341,10 +399,14 @@ const handleModelInput = () => {
 
 const scheduleModelSearch = () => {
   if (modelSearchTimer) clearTimeout(modelSearchTimer)
-  modelSearchTimer = setTimeout(searchModelSuggestions, 260)
+  const version = ++modelSearchVersion
+  modelSuggestions.value = []
+  modelSearchFailed.value = false
+  modelSearching.value = Boolean(String(newDevice.value.model || '').trim())
+  modelSearchTimer = setTimeout(() => searchModelSuggestions(version), 260)
 }
 
-const searchModelSuggestions = async () => {
+const searchModelSuggestions = async (version = ++modelSearchVersion) => {
   const keyword = String(newDevice.value.model || '').trim()
   if (!keyword) {
     modelSuggestions.value = []
@@ -355,15 +417,19 @@ const searchModelSuggestions = async () => {
   modelSearching.value = true
   try {
     const res: any = await searchDeviceModelDictOptions({ keyword, limit: 20 })
+    if (version !== modelSearchVersion) return
     modelSuggestions.value = Array.isArray(res?.data) ? res.data : []
   } catch (error) {
+    if (version !== modelSearchVersion) return
     modelSuggestions.value = []
+    modelSearchFailed.value = true
   } finally {
-    modelSearching.value = false
+    if (version === modelSearchVersion) modelSearching.value = false
   }
 }
 
 const selectModelSuggestion = (item: any) => {
+  fieldErrors.value.model = ''
   newDevice.value.model = item.node_name || ''
   newDevice.value.category_id = item.id || 0
   newDevice.value.category_path = resolveModelPath(item)
@@ -391,24 +457,25 @@ const resolveModelPathNames = (item: any): string[] => {
 const openModelPicker = async () => {
   clearModelSuggestions()
   showModelPicker.value = true
-  if (!currentModelPickerOptions.value.length) {
-    await loadModelPickerChildren(0)
-  }
+  await loadModelPickerChildren(0, [])
 }
 
 const closeModelPicker = () => {
+  modelTreeVersion++
   showModelPicker.value = false
+  modelTreeLoading.value = false
+  modelTreeFailed.value = false
+  modelPickerPath.value = []
+  currentModelPickerOptions.value = []
 }
 
 const resetModelPickerPath = async () => {
-  modelPickerPath.value = []
-  await loadModelPickerChildren(0)
+  await loadModelPickerChildren(0, [])
 }
 
 const trimModelPickerPath = async (index: number) => {
-  modelPickerPath.value = modelPickerPath.value.slice(0, index + 1)
-  const last = modelPickerPath.value[modelPickerPath.value.length - 1]
-  await loadModelPickerChildren(Number(last?.id || 0))
+  const path = modelPickerPath.value.slice(0, index + 1)
+  await loadModelPickerChildren(Number(path[path.length - 1]?.id || 0), path)
 }
 
 const hasModelChildren = (node: any) => {
@@ -416,9 +483,9 @@ const hasModelChildren = (node: any) => {
 }
 
 const handleModelPickerNode = async (node: any) => {
+  if (modelTreeLoading.value) return
   if (hasModelChildren(node)) {
-    modelPickerPath.value = [...modelPickerPath.value, node]
-    await loadModelPickerChildren(Number(node.id || 0))
+    await loadModelPickerChildren(Number(node.id || 0), [...modelPickerPath.value, node])
     return
   }
 
@@ -427,29 +494,39 @@ const handleModelPickerNode = async (node: any) => {
   newDevice.value.category_id = node.id || 0
   newDevice.value.category_path = pathNodes.map(item => item.id).filter(Boolean)
   selectedModelPathNames.value = pathNodes.map(item => item.node_name).filter(Boolean)
+  fieldErrors.value.model = ''
   closeModelPicker()
 }
 
-const loadModelPickerChildren = async (pid: number) => {
+const retryModelPicker = () => {
+  const path = modelPickerPath.value
+  return loadModelPickerChildren(Number(path[path.length - 1]?.id || 0), path)
+}
+
+const loadModelPickerChildren = async (pid: number, path: any[] = []) => {
+  const version = ++modelTreeVersion
+  modelPickerPath.value = path
   modelTreeLoading.value = true
+  modelTreeFailed.value = false
+  currentModelPickerOptions.value = []
   try {
     const res: any = await getDeviceModelDictChildren({ pid, limit: 200 })
+    if (version !== modelTreeVersion) return
     currentModelPickerOptions.value = Array.isArray(res?.data) ? res.data : []
   } catch (error) {
-    currentModelPickerOptions.value = []
-    uni.showToast({
-      title: '型号分类加载失败',
-      icon: 'none'
-    })
+    if (version !== modelTreeVersion) return
+    modelTreeFailed.value = true
   } finally {
-    modelTreeLoading.value = false
+    if (version === modelTreeVersion) modelTreeLoading.value = false
   }
 }
 
 const clearModelSuggestions = () => {
+  modelSearchVersion++
   if (modelSearchTimer) clearTimeout(modelSearchTimer)
   modelFocused.value = false
   modelSearching.value = false
+  modelSearchFailed.value = false
   modelSuggestions.value = []
 }
 
@@ -458,6 +535,7 @@ const normalizeUserSn = (value: any, maxLength = 64) => {
 }
 
 const handleUserSnInput = () => {
+  fieldErrors.value.user_sn = ''
   if (userSnFromScan.value) {
     newDevice.value.user_sn = normalizeUserSn(newDevice.value.user_sn, 64)
     return
@@ -467,9 +545,11 @@ const handleUserSnInput = () => {
 
 const scanUserSn = () => {
   clearModelSuggestions()
+  const version = dialogVersion
   uni.scanCode({
     scanType: ['barCode', 'qrCode'],
     success: (res: any) => {
+      if (!showAddDialog.value || version !== dialogVersion) return
       const code = normalizeUserSn(res?.result || '', 64)
       if (code.length < 6) {
         uni.showToast({
@@ -480,50 +560,32 @@ const scanUserSn = () => {
       }
       userSnFromScan.value = true
       newDevice.value.user_sn = code
+      fieldErrors.value.user_sn = ''
     },
-    fail: () => {
+    fail: (error: any) => {
+      if (!showAddDialog.value || version !== dialogVersion || /cancel/i.test(error?.errMsg || '')) return
       uni.showToast({
-        title: '扫码取消或失败，可手动输入',
+        title: '暂时无法扫码，可手动输入后6位',
         icon: 'none'
       })
     }
   })
 }
 
-const confirmAdd = () => {
-  // 验证必填项
-  if (!newDevice.value.model?.trim()) {
-    uni.showToast({
-      title: '请输入设备名称',
-      icon: 'none'
-    })
-    return
-  }
-
-  if (!newDevice.value.user_sn?.trim()) {
-    uni.showToast({
-      title: '请输入串号后6位',
-      icon: 'none'
-    })
-    return
-  }
-
+const confirmAdd = async () => {
+  if (!showAddDialog.value) return
+  clearModelSuggestions()
   const userSnLength = String(newDevice.value.user_sn || '').length
-  if (userSnLength < 6 || (!userSnFromScan.value && userSnLength !== 6)) {
-    uni.showToast({
-      title: '请手动输入6位，或扫码录入完整串号',
-      icon: 'none'
-    })
+  fieldErrors.value = {
+    model: newDevice.value.model?.trim() ? '' : '请填写或选择型号',
+    user_sn: userSnLength >= 6 && (userSnFromScan.value || userSnLength === 6) ? '' : '请输入后 6 位，或扫描完整串号'
+  }
+  if (fieldErrors.value.model || fieldErrors.value.user_sn) {
+    errorFieldId.value = ''
+    await nextTick()
+    errorFieldId.value = fieldErrors.value.model ? 'input-model' : 'input-imei'
     return
   }
-
-  // if (!newDevice.value.initial_price?.trim()) {
-  //   uni.showToast({
-  //     title: '请输入定价',
-  //     icon: 'none'
-  //   })
-  //   return
-  // }
 
   // 添加设备
   const newDevices = [...props.devices, { ...newDevice.value }]
@@ -533,139 +595,205 @@ const confirmAdd = () => {
   emit('update:count', newDevices.length)
 
   // 关闭弹窗
-  showAddDialog.value = false
-  clearModelSuggestions()
-  userSnFromScan.value = false
-  newDevice.value = {
-    imei: '',
-    user_sn: '',
-    model: '',
-    initial_price: '',
-    category_id: 0,
-    category_path: []
-  }
-  selectedModelPathNames.value = []
+  closeAddDialog()
 
   uni.showToast({
     title: '添加成功',
     icon: 'success'
   })
 }
+
+onBeforeUnmount(() => {
+  dialogVersion++
+  clearModelSuggestions()
+  modelTreeVersion++
+})
 </script>
 
 <style scoped lang="scss">
-.label {
-  font-size: 14px;
-  color: #374151;
-}
-
-.space-y-2 > view:not(:last-child) {
-  margin-bottom: 0.5rem;
-}
+.device-row { display: flex; align-items: flex-start; gap: 20rpx; padding: 18rpx 0; border-bottom: 1rpx solid var(--recycle-line); }
+.device-index { flex-shrink: 0; min-width: 28rpx; padding-top: 2rpx; color: var(--recycle-text-sub); font-size: 24rpx; line-height: 40rpx; font-variant-numeric: tabular-nums; }
+.device-info { flex: 1; min-width: 0; }
+.device-name { display: block; font-size: 28rpx; line-height: 42rpx; font-weight: 600; color: var(--recycle-text-main); overflow-wrap: anywhere; }
+.device-detail { display: flex; align-items: baseline; gap: 16rpx; margin-top: 8rpx; font-size: 24rpx; line-height: 36rpx; }
+.device-detail-label { flex-shrink: 0; color: var(--recycle-text-sub); }
+.device-serial { min-width: 0; color: var(--recycle-text-sub); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.device-price { color: var(--recycle-text-main); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.device-remove { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 72rpx; height: 72rpx; margin: 0 -12rpx 0 0; padding: 0; background: transparent; border: 0; border-radius: 8rpx; }
+.device-remove::after { border: 0; }
+.device-remove:active { background: var(--recycle-bg-soft); }
+.device-quantity-row { display: flex; align-items: flex-start; gap: 24rpx; padding: 12rpx 0; }
+.device-quantity-label { flex-shrink: 0; width: 112rpx; font-size: 26rpx; line-height: 60rpx; color: var(--recycle-text-sub); }
+.device-quantity-control { flex: 1; min-width: 0; }
+.device-quantity-input { display: flex; align-items: center; gap: 16rpx; }
+.device-quantity-unit { color: var(--recycle-text-sub); font-size: 24rpx; }
+.device-quantity-note { display: block; margin-top: 6rpx; font-size: 22rpx; line-height: 32rpx; color: var(--recycle-text-sub); }
+.device-quantity-control :deep(.u-number-box__minus), .device-quantity-control :deep(.u-number-box__plus), .device-quantity-control :deep(.u-number-box__input) { background: var(--recycle-bg-soft) !important; }
+.device-quantity-control :deep(.u-number-box__input) { color: var(--recycle-text-main) !important; }
 
 .add-dialog {
-  width: 640rpx;
-  max-height: 86vh;
-  background: #fff;
-  border-radius: 20rpx;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  color: var(--recycle-text-main, #1f2937);
+  background: var(--recycle-bg-card, #fff);
   overflow: hidden;
 }
 
+.add-dialog button,
+.model-picker button {
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  line-height: 1.5;
+  text-align: left;
+
+  &::after { border: none; }
+  &:active { opacity: 0.7; }
+}
+
 .dialog-header {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  padding: 32rpx 32rpx 24rpx;
-  border-bottom: 1px solid #f0f0f0;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 12px 8px 20px;
+}
+
+.dialog-heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .dialog-title {
-  display: block;
   font-size: 18px;
   font-weight: 600;
-  color: #333;
   line-height: 1.4;
 }
 
-.dialog-subtitle {
-  display: block;
-  margin-top: 6rpx;
+.dialog-count {
   font-size: 12px;
-  color: #6b7280;
-  line-height: 1.5;
+  color: var(--recycle-text-sub, #6b7280);
+}
+
+.icon-button {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dialog-scroll {
+  min-height: 0;
+  max-height: calc(88vh - 190px - env(safe-area-inset-bottom));
 }
 
 .dialog-content {
-  padding: 32rpx;
-  max-height: 58vh;
-  overflow-y: auto;
-}
-
-.dialog-tip {
-  display: flex;
-  align-items: flex-start;
-  gap: 12rpx;
-  padding: 18rpx 20rpx;
-  margin-bottom: 28rpx;
-  background: #f8fafc;
-  border-radius: 12rpx;
-}
-
-.dialog-tip__badge {
-  flex-shrink: 0;
-  padding: 4rpx 10rpx;
-  background: rgba(79, 70, 229, 0.1);
-  color: var(--primary-color);
-  border-radius: 999rpx;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.4;
-}
-
-.dialog-tip__text {
-  flex: 1;
-  min-width: 0;
-  font-size: 12px;
-  color: #4b5563;
-  line-height: 1.5;
+  box-sizing: border-box;
+  padding: 8px 20px 4px;
 }
 
 .form-item {
-  position: relative;
-  margin-bottom: 24rpx;
+  margin-bottom: 18px;
 }
 
 .form-label {
   display: flex;
   align-items: center;
-  margin-bottom: 12rpx;
+  margin-bottom: 8px;
   font-size: 14px;
-  color: #333;
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.form-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+
+  .form-label { margin-bottom: 0; }
+}
+
+.add-dialog .text-button,
+.model-picker .text-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--recycle-text-sub, #6b7280);
 }
 
 .required {
   color: #ef4444;
-  margin-left: 4rpx;
+  margin-left: 4px;
 }
 
 .form-hint {
   display: block;
-  margin-top: 8rpx;
-  font-size: 12px;
-  color: #999;
-}
-
-.search-strong-tip {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-  padding: 14rpx 16rpx;
-  margin-bottom: 12rpx;
-  border-radius: 10rpx;
-  background: rgba(79, 70, 229, 0.08);
-  color: #4f46e5;
+  margin-top: 8px;
   font-size: 12px;
   line-height: 1.5;
+  color: var(--recycle-text-sub, #6b7280);
+}
+
+.serial-help {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding-left: 10px;
+  border-left: 2px solid var(--recycle-line, #e5e7eb);
+  color: var(--recycle-text-sub, #6b7280);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.field-error {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #dc2626;
+}
+
+.optional-section {
+  border-top: 1px solid var(--recycle-line, #e5e7eb);
+}
+
+.add-dialog .optional-toggle {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.optional-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--recycle-text-sub, #6b7280);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.optional-content {
+  padding-bottom: 12px;
 }
 
 .input-wrapper {
@@ -675,99 +803,113 @@ const confirmAdd = () => {
 
 .custom-input {
   width: 100%;
-  height: 80rpx;
-  padding: 0 24rpx;
-  border: 1px solid #e5e5e5;
-  border-radius: 8rpx;
+  height: 46px;
+  padding: 0 12px;
+  border: 1px solid var(--recycle-line, #e5e7eb);
+  border-radius: 6px;
   font-size: 14px;
-  background: #fff;
+  color: var(--recycle-text-main, #1f2937);
+  background: var(--recycle-bg-card, #fff);
   box-sizing: border-box;
 }
 
 .custom-input--with-action {
-  padding-right: 86rpx;
+  padding-right: 48px;
 }
 
 .custom-input--with-picker {
-  padding-right: 118rpx;
+  padding-right: 88px;
 }
 
 .input-action {
   position: absolute;
   right: 0;
   top: 0;
-  width: 82rpx;
-  height: 80rpx;
+  width: 46px;
+  height: 46px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.model-picker-action {
+.add-dialog .model-picker-action {
   position: absolute;
   right: 0;
   top: 0;
-  width: 112rpx;
-  height: 80rpx;
+  width: 84px;
+  height: 46px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #4f46e5;
+  gap: 4px;
+  color: var(--recycle-brand, #3b82f6);
   font-size: 13px;
   font-weight: 600;
 }
 
 .custom-input:focus {
-  border-color: var(--primary-color);
+  border-color: var(--recycle-brand, #3b82f6);
   outline: none;
 }
 
-.model-suggestions {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: calc(100% - 2rpx);
-  z-index: 20;
-  border: 1px solid #e5e7eb;
-  border-radius: 10rpx;
-  background: #fff;
-  max-height: 280rpx;
-  overflow-y: auto;
-  box-shadow: 0 16rpx 36rpx rgba(15, 23, 42, 0.14);
+.input-wrapper--invalid .custom-input {
+  border-color: #dc2626;
 }
 
-.model-suggestion-item {
-  min-height: 72rpx;
-  padding: 0 22rpx;
+.price-input .custom-input { padding-left: 32px; }
+
+.price-symbol {
+  position: absolute;
+  left: 12px;
+  top: 0;
+  z-index: 1;
+  line-height: 46px;
+  font-size: 14px;
+}
+
+.model-suggestions {
+  margin-top: 8px;
+  border-radius: 6px;
+  background: var(--recycle-bg-soft, #f7f7f8);
+  overflow: hidden;
+}
+
+.add-dialog .model-suggestion-item {
+  min-height: 48px;
+  padding: 8px 12px;
   display: flex;
   align-items: center;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid var(--recycle-line, #e5e7eb);
   box-sizing: border-box;
 }
 
-.model-suggestion-item:last-child {
+.add-dialog .model-suggestion-item:last-child {
   border-bottom: none;
 }
 
 .model-suggestion-name {
   font-size: 14px;
-  color: #1f2937;
+  color: var(--recycle-text-main, #1f2937);
   line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .model-suggestion-empty {
-  min-height: 72rpx;
-  padding: 0 22rpx;
+  min-height: 48px;
+  padding: 8px 12px;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
-  font-size: 13px;
-  color: #9ca3af;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--recycle-text-sub, #6b7280);
 }
 
 .model-picker {
-  height: 78vh;
-  background: #fff;
-  border-radius: 28rpx 28rpx 0 0;
+  height: 100%;
+  min-height: 0;
+  background: var(--recycle-bg-card, #fff);
+  color: var(--recycle-text-main, #1f2937);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -775,77 +917,56 @@ const confirmAdd = () => {
 
 .model-picker-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 20rpx;
-  padding: 30rpx 32rpx 20rpx;
-  border-bottom: 1px solid #f3f4f6;
+  flex-shrink: 0;
+  gap: 12px;
+  padding: 12px 12px 8px 20px;
 }
 
 .model-picker-title {
   display: block;
   font-size: 17px;
-  font-weight: 700;
-  color: #111827;
-}
-
-.model-picker-close {
-  width: 56rpx;
-  height: 56rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.model-picker-search-tip {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-  margin: 20rpx 32rpx 0;
-  padding: 16rpx 18rpx;
-  border-radius: 12rpx;
-  background: rgba(79, 70, 229, 0.08);
-  color: #4f46e5;
-  font-size: 12px;
-  line-height: 1.5;
+  font-weight: 600;
 }
 
 .model-picker-breadcrumb {
   display: flex;
-  gap: 10rpx;
-  padding: 20rpx 32rpx 14rpx;
+  flex-shrink: 0;
+  gap: 8px;
+  padding: 12px 16px;
   overflow-x: auto;
   white-space: nowrap;
 }
 
-.breadcrumb-item {
+.model-picker .breadcrumb-item {
   flex-shrink: 0;
-  padding: 8rpx 14rpx;
-  border-radius: 999rpx;
-  background: #f3f4f6;
-  color: #4b5563;
+  padding: 8px 10px;
+  border-radius: 4px;
+  background: var(--recycle-bg-soft, #f7f7f8);
+  color: var(--recycle-text-sub, #6b7280);
   font-size: 12px;
 }
 
-.breadcrumb-item.root {
-  background: rgba(79, 70, 229, 0.1);
-  color: #4f46e5;
+.model-picker .breadcrumb-item.root {
+  color: var(--recycle-brand, #3b82f6);
 }
 
 .model-picker-list {
   flex: 1;
+  height: 0;
   min-height: 0;
-  border-top: 1px solid #f3f4f6;
+  border-top: 1px solid var(--recycle-line, #e5e7eb);
 }
 
-.model-picker-row {
-  min-height: 96rpx;
-  padding: 18rpx 32rpx;
+.model-picker .model-picker-row {
+  min-height: 52px;
+  padding: 12px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20rpx;
-  border-bottom: 1px solid #f3f4f6;
+  gap: 12px;
+  border-bottom: 1px solid var(--recycle-line, #e5e7eb);
   box-sizing: border-box;
 }
 
@@ -854,59 +975,64 @@ const confirmAdd = () => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6rpx;
+  gap: 4px;
+  overflow-wrap: anywhere;
 }
 
 .model-picker-row-title {
   font-size: 14px;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--recycle-text-main, #1f2937);
 }
 
 .model-picker-row-path {
   font-size: 11px;
-  color: #9ca3af;
+  color: var(--recycle-text-sub, #6b7280);
 }
 
 .model-picker-row-action {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 6rpx;
-  color: #9ca3af;
-  font-size: 12px;
 }
 
 .model-picker-empty {
-  min-height: 180rpx;
+  min-height: 100px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #9ca3af;
+  gap: 12px;
+  color: var(--recycle-text-sub, #6b7280);
   font-size: 13px;
 }
 
 .dialog-footer {
+  flex-shrink: 0;
   display: flex;
-  border-top: 1px solid #f0f0f0;
+  gap: 12px;
+  padding: 12px 20px 18px;
+  border-top: 1px solid var(--recycle-line, #e5e7eb);
 }
 
-.dialog-button {
+.add-dialog .dialog-button {
   flex: 1;
-  height: 100rpx;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  border-radius: 6px;
+  font-size: 15px;
 }
 
-.dialog-button.cancel {
-  color: #666;
-  border-right: 1px solid #f0f0f0;
+.add-dialog .dialog-button.cancel {
+  color: var(--recycle-text-sub, #6b7280);
+  background: var(--recycle-bg-soft, #f7f7f8);
 }
 
-.dialog-button.confirm {
-  color: var(--primary-color);
+.add-dialog .dialog-button.confirm {
+  flex: 2;
+  color: var(--recycle-button-text, #fff);
+  background: var(--recycle-button-bg, #111827);
   font-weight: 600;
 }
 </style>

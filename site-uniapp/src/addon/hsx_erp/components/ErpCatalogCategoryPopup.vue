@@ -1,6 +1,6 @@
 <template>
     <view>
-        <view class="category-trigger" :class="{ 'category-trigger--disabled': disabled }" @click="open">
+        <view v-if="showTrigger" class="category-trigger" :class="{ 'category-trigger--disabled': disabled }" @click="open">
             <view class="category-trigger__copy">
                 <text :class="modelValue ? 'category-trigger__value' : 'category-trigger__placeholder'">
                     {{ leafName || placeholder }}
@@ -10,7 +10,7 @@
             <u-icon name="arrow-right" color="#94a3b8" size="16" />
         </view>
 
-        <u-popup :show="visible" mode="bottom" round="20" :safe-area-inset-bottom="true" @close="close">
+        <u-popup :show="visible" mode="bottom" round="20" :z-index="zIndex" :safe-area-inset-bottom="true" @close="close">
             <view class="category-popup">
                 <view class="category-head">
                     <view>
@@ -63,11 +63,15 @@ const props = withDefaults(defineProps<{
     placeholder?: string
     disabled?: boolean
     showPath?: boolean
+    showTrigger?: boolean
+    zIndex?: number
 }>(), {
     modelValue: '',
     placeholder: '请选择末级分类',
     disabled: false,
     showPath: false,
+    showTrigger: true,
+    zIndex: 10075,
 })
 const emit = defineEmits<{
     (event: 'update:modelValue', value: string): void
@@ -90,6 +94,7 @@ function open() {
     load()
 }
 function close() { visible.value = false }
+defineExpose({ open, close })
 async function load(parent: any = null) {
     loading.value = true
     try {
@@ -139,17 +144,17 @@ function backTo(index: number) {
 .category-trigger__value { color:#334155; font-size:27rpx; font-weight:600; }
 .category-trigger__placeholder { color:#94a3b8; font-size:27rpx; }
 .category-trigger__path { overflow:hidden; color:#94a3b8; font-size:21rpx; text-overflow:ellipsis; white-space:nowrap; }
-.category-popup { min-height:760rpx; max-height:88vh; background:#f8fafc; }
-.category-head { display:flex; align-items:center; justify-content:space-between; padding:30rpx 30rpx 22rpx; background:#fff; }
+.category-popup { height:88vh; display:flex; flex-direction:column; overflow:hidden; background:#f8fafc; }
+.category-head { flex-shrink:0; display:flex; align-items:center; justify-content:space-between; padding:30rpx 30rpx 22rpx; background:#fff; }
 .category-head__title,.category-head__sub { display:block; }
 .category-head__title { color:#0f172a; font-size:34rpx; font-weight:700; }
 .category-head__sub { margin-top:5rpx; color:#94a3b8; font-size:23rpx; }
-.category-search { padding:0 24rpx 20rpx; background:#fff; }
-.category-breadcrumb { width:100%; background:#fff; border-top:1px solid #f1f5f9; }
+.category-search { flex-shrink:0; padding:0 24rpx 20rpx; background:#fff; }
+.category-breadcrumb { flex-shrink:0; width:100%; background:#fff; border-top:1px solid #f1f5f9; }
 .category-breadcrumb__inner { display:inline-flex; align-items:center; gap:10rpx; padding:20rpx 24rpx; white-space:nowrap; }
 .category-breadcrumb__item { color:#64748b; font-size:24rpx; }
 .category-breadcrumb__item.active { color:#2563eb; font-weight:600; }
-.category-list { height:590rpx; padding:18rpx 24rpx; box-sizing:border-box; }
+.category-list { flex:1; height:0; min-height:0; padding:18rpx 24rpx; box-sizing:border-box; }
 .category-row { display:flex; align-items:center; gap:16rpx; min-height:92rpx; margin-bottom:14rpx; padding:0 24rpx; border:1px solid #e2e8f0; border-radius:18rpx; background:#fff; }
 .category-row__copy { min-width:0; flex:1; display:flex; flex-direction:column; gap:5rpx; }
 .category-row__name { color:#1e293b; font-size:28rpx; font-weight:600; }

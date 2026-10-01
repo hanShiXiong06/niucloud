@@ -1,3 +1,4 @@
+import { canDecideDevice } from '../utils/order-presentation'
 import { ref, computed } from 'vue'
 import type { OrderDetailInfo, OrderDetailDevice } from '../types/order'
 import { getOrderDetail, deviceConfirm, deviceAllConfirm, deviceConfirmHandle, getOrderSubmitConfig } from '../api/order'
@@ -12,6 +13,7 @@ import { useSubscribeMessage } from '@/hooks/useSubscribeMessage'
 export function useOrderDetail() {
   // 加载状态
   const loading = ref(true)
+  const loadError = ref('')
 
   // 订单详情
   const orderInfo = ref<OrderDetailInfo>({
@@ -60,10 +62,7 @@ export function useOrderDetail() {
     return Number.isFinite(count) && count > 0 ? Math.min(5, Math.floor(count)) : fallback
   }
 
-  const canUserDecideDevice = (device: OrderDetailDevice) => {
-    const price = Number(device.final_price || 0)
-    return Number.isFinite(price) && price > 0 && [4, 7].includes(Number(device.status))
-  }
+  const canUserDecideDevice = canDecideDevice
 
   const checkPayoutProfile = async () => {
     const configRes = await getOrderSubmitConfig()
@@ -133,14 +132,18 @@ export function useOrderDetail() {
   const loadOrderDetail = async (id: string | number) => {
     try {
       loading.value = true
+      loadError.value = ''
       const numericId = typeof id === 'string' ? parseInt(id) : id
       const res = await getOrderDetail(numericId)
 
       if (res.code === 1) {
-        orderInfo.value = res.data
+        orderInfo.value = { ...res.data, devices: Array.isArray(res.data.devices) ? res.data.devices : [] }
+      } else {
+        loadError.value = res.msg || '订单加载失败，请稍后重试'
       }
       await loadSubmitConfig()
     } catch (error) {
+      loadError.value = '网络异常，订单暂时无法加载'
       console.error('获取订单详情失败:', error)
     } finally {
       loading.value = false
@@ -334,6 +337,7 @@ export function useOrderDetail() {
 
   return {
     loading,
+    loadError,
     orderInfo,
     submitConfig,
     isEmpty,

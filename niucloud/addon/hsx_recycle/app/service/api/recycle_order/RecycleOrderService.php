@@ -17,6 +17,7 @@ use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderFlowService
 use addon\hsx_recycle\app\service\core\recycle_order\CoreWorkWechatNotifyService;
 use addon\hsx_recycle\app\service\core\order\LogisticsVehicleService;
 use addon\hsx_recycle\app\service\core\express\RecyclePickupService;
+use addon\hsx_recycle\app\service\core\recycle_order\DeviceCheckDisplayService;
 use app\model\member\Member;
 use core\base\BaseApiService;
 use core\exception\ApiException;
@@ -210,7 +211,7 @@ class RecycleOrderService extends BaseApiService
             ->field($field)
             ->with([
                 'devices' => function($query) {
-                    $query->field('id,order_id,site_id,imei,imei2,sn,user_sn,model,capacity,color,initial_price,status,final_price,cost_adjust_amount,cost_adjust_count,last_cost_adjust_time,last_cost_adjust_no,remark,check_images,check_images_seller,check_result,check_result_seller,check_at,price_remark,consignment_order_id,info')
+                    $query->field('id,order_id,site_id,imei,imei2,sn,user_sn,model,check_template_id,capacity,color,system_version,warranty_info,initial_price,status,final_price,cost_adjust_amount,cost_adjust_count,last_cost_adjust_time,last_cost_adjust_no,remark,check_images,check_images_seller,check_result,check_result_seller,check_at,price_remark,consignment_order_id,info')
                         ->with(['consignmentOrder' => function($q) {
                             $q->field('id,consignment_no,source_device_id,status');
                         }, 'paymentRecords' => function($q) {
@@ -309,6 +310,7 @@ class RecycleOrderService extends BaseApiService
 
     private function fillInspectionReportMeta(array $devices): array
     {
+        $devices = (new DeviceCheckDisplayService())->enrichDevices($devices, (int)$this->site_id);
         $templateIds = [];
         foreach ($devices as $device) {
             $info = $this->normalizeArray($device['info'] ?? []);

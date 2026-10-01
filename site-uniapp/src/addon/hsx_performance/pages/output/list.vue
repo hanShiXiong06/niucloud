@@ -1,64 +1,133 @@
 <template>
-    <view class="page">
-        <view class="head">
-            <view><text class="title">员工产出</text><text class="subtitle">{{ rangeText }}</text></view>
-            <view class="icon-btn" @click="load"><u-icon name="reload" color="#2563eb" size="20" /></view>
+    <view class="output-page">
+        <view class="page-heading">
+            <text class="page-title">员工产出</text>
+            <button class="icon-button" aria-label="刷新" :disabled="loading" @click="load(true)"><u-icon name="reload" color="#2563eb" size="21" /></button>
         </view>
-        <scroll-view scroll-x class="periods" :show-scrollbar="false"><view class="period-inner"><view v-for="item in periodOptions" :key="item.value" class="period" :class="{ active: query.period === item.value }" @click="changePeriod(item.value)">{{ item.label }}</view></view></scroll-view>
-        <view class="summary">
-            <view><strong>{{ data.summary.employee_count || 0 }}</strong><text>有产出员工</text></view>
-            <view><strong>{{ data.summary.completed_count || 0 }}</strong><text>完成事项</text></view>
-            <view><strong>{{ data.summary.metric_count || 0 }}</strong><text>产出指标</text></view>
+        <view class="period-tabs">
+            <button v-for="item in periods" :key="item.value" class="period-tab" :class="{ active: period === item.value }" @click="changePeriod(item.value)">{{ item.label }}</button>
         </view>
-        <scroll-view v-if="plugins.length" scroll-x class="plugins" :show-scrollbar="false"><view class="plugin-inner"><view class="plugin" :class="{ active: !query.source_plugin }" @click="changePlugin('')">全部业务</view><view v-for="item in plugins" :key="item.value" class="plugin" :class="{ active: query.source_plugin === item.value }" @click="changePlugin(item.value)">{{ item.label }}</view></view></scroll-view>
-
-        <view v-if="loading" class="state"><u-loading-icon size="28" /><text>正在核对产出数据</text></view>
-        <view v-else-if="!data.employees.length" class="state"><u-empty mode="data" text="当前周期暂无员工产出" /></view>
-        <view v-else>
-            <view class="section-title"><text>员工排行</text><text>按有效完成事项</text></view>
-            <view class="employee-list">
-                <view v-for="(row, index) in data.employees" :key="row.employee_uid" class="employee" @click="openEmployee(row)">
-                    <view class="rank">{{ index + 1 }}</view>
-                    <view class="employee-main"><text class="employee-name">{{ row.employee_name || `员工${row.employee_uid}` }}</text><text class="employee-meta">{{ row.metric_count }} 类事项 · 最近 {{ shortTime(row.last_occurred_at) }}</text></view>
-                    <view class="employee-count"><strong>{{ row.completed_count }}</strong><text>项</text></view>
-                    <u-icon name="arrow-right" color="#94a3b8" size="16" />
+        <view class="filter-row">
+            <picker :range="sources" range-key="label" :value="sourceIndex" @change="changeSource">
+                <view class="source-picker"><text>{{ sources[sourceIndex].label }}</text><u-icon name="arrow-down" size="13" color="#64748b" /></view>
+            </picker>
+            <text class="muted range">{{ range.start_date }} ~ {{ range.end_date }}</text>
+        </view>
+        <view class="search-row">
+            <u-icon name="search" color="#94a3b8" size="18" />
+            <input v-model="keyword" placeholder="员工姓名 / 业务指标" confirm-type="search" @confirm="load(true)" />
+            <button class="text-button" @click="load(true)">搜索</button>
+        </view>
+        <view v-if="loading && !rows.length" class="state"><u-loading-icon size="26" /><text>正在读取员工产出</text></view>
+        <view v-else-if="error && !rows.length" class="state"><text>{{ error }}</text><button class="text-button" @click="load(true)">重新加载</button></view>
+        <template v-else>
+            <view class="summary-strip">
+                <view><text class="summary-value">{{ summary.employee_count || 0 }}</text><text class="muted">有产出员工</text></view>
+                <view><text class="summary-value">{{ summary.completed_count || 0 }}</text><text class="muted">有效动作</text></view>
+                <view><text class="summary-value">{{ summary.metric_count || 0 }}</text><text class="muted">业务指标</text></view>
+            </view>
+            <view class="section-heading"><text>员工明细</text><text class="muted">{{ total }} 人</text></view>
+            <view v-if="!rows.length" class="state"><u-empty mode="data" text="当前范围暂无员工产出" /></view>
+            <view v-else class="employee-list">
+                <view v-for="row in rows" :key="row.employee_uid" class="employee-row" @click="openEmployee(row.employee_uid)">
+                    <view class="employee-avatar">{{ (row.employee_name || '员').slice(0, 1) }}</view>
+                    <view class="employee-copy"><text class="row-title">{{ row.employee_name || '未命名员工' }}</text><text class="muted">{{ row.metric_count }} 项指标</text></view>
+                    <view class="employee-count"><text class="row-title">{{ row.completed_count }}</text><text class="muted">有效动作</text></view>
+                    <u-icon name="arrow-right" color="#94a3b8" size="15" />
                 </view>
             </view>
-            <view class="section-title"><text>事项分布</text><text>动作和结果分开</text></view>
-            <view class="metric-list">
-                <view v-for="row in data.metrics" :key="`${row.source_plugin}:${row.metric_key}`" class="metric">
-                    <view><text class="metric-name">{{ row.metric_name }}</text><text class="metric-meta">{{ pluginName(row.source_plugin) }} · {{ scopeName(row.fact_scope) }}</text></view>
-                    <view class="metric-value"><strong>{{ row.completed_count }}</strong><text>{{ unitName(row.unit) }}</text></view>
-                </view>
-            </view>
-        </view>
+            <view v-if="error" class="inline-error">{{ error }}</view>
+            <button v-if="rows.length && (rows.length < total || error)" class="load-more" :disabled="loading" @click="load(false)">{{ loading ? '加载中' : (error ? '重试加载' : '加载更多') }}</button>
+        </template>
     </view>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
-import { getMobilePerformanceOutputOverview } from '@/addon/hsx_performance/api'
+import { computed, onBeforeUnmount, ref } from 'vue'
+import { onReachBottom, onShow } from '@dcloudio/uni-app'
+import { getMobilePerformanceOutputOverview, getMobilePerformanceOutputEmployees } from '@/addon/hsx_performance/api'
 
-const periodOptions = [{ label: '今日', value: 'today' }, { label: '本周', value: 'week' }, { label: '近7天', value: 'last7' }, { label: '本月', value: 'month' }]
-const query = reactive({ period: 'month', source_plugin: '' })
-const data = reactive<any>({ summary: {}, employees: [], metrics: [], range: {}, filters: { plugins: [] } })
-const loading = ref(false)
-const plugins = computed(() => data.filters?.plugins || [])
-const rangeText = computed(() => data.range?.start_date ? `${data.range.start_date} 至 ${data.range.end_date}` : '员工工作事实')
-const load = async () => { loading.value = true; try { Object.assign(data, (await getMobilePerformanceOutputOverview({ ...query })).data || {}) } finally { loading.value = false } }
-const changePeriod = (value: string) => { query.period = value; load() }
-const changePlugin = (value: string) => { query.source_plugin = value; load() }
-const openEmployee = (row: any) => uni.navigateTo({ url: `/addon/hsx_performance/pages/output/detail?uid=${row.employee_uid}&period=${query.period}&source_plugin=${query.source_plugin}` })
-const shortTime = (value: any) => value ? new Date(Number(value) * 1000).toLocaleDateString('zh-CN').replace(/\//g, '-') : '—'
-const pluginName = (value: string) => ({ hsx_recycle: '回收业务', hsx_erp: 'ERP', hsx_member_card: '会员卡' }[value] || value)
-const scopeName = (value: string) => ({ action: '工作动作', outcome: '有效结果', quality: '质量事项' }[value] || value)
-const unitName = (value: string) => ({ device: '台', order: '单', card: '张', service: '次', settlement: '笔', item: '项' }[value] || value)
-onShow(load)
+const periods = [{ value: 'today', label: '今日' }, { value: 'week', label: '本周' }, { value: 'month', label: '本月' }, { value: 'last7', label: '近7天' }]
+const period = ref('month'), source = ref(''), keyword = ref('')
+const sources = ref([{ value: '', label: '全部业务' }])
+const sourceIndex = computed(() => Math.max(0, sources.value.findIndex(item => item.value === source.value)))
+const range = ref({ start_date: '', end_date: '' })
+const summary = ref<any>({}), rows = ref<any[]>([])
+const page = ref(0), total = ref(0), loading = ref(false), error = ref('')
+let sequence = 0
+let appliedFilters = { period: 'month', source_plugin: '', keyword: '' }
+
+async function load(reset = true) {
+    if (!reset && (loading.value || rows.value.length >= total.value)) return
+    const requestId = ++sequence
+    const nextPage = reset ? 1 : page.value + 1
+    if (reset) appliedFilters = { period: period.value, source_plugin: source.value, keyword: keyword.value.trim() }
+    const params = { ...appliedFilters, page: nextPage, limit: 20 }
+    loading.value = true
+    error.value = ''
+    if (reset) {
+        rows.value = []
+        summary.value = {}
+        total.value = 0
+        page.value = 0
+    }
+    try {
+        // Apply overview and list together so rapid filter changes cannot mix periods.
+        const overview: any = reset ? await getMobilePerformanceOutputOverview(params) : null
+        if (requestId !== sequence) return
+        const response: any = await getMobilePerformanceOutputEmployees(params)
+        if (requestId !== sequence) return
+        const data = response.data || {}
+        if (overview) {
+            summary.value = overview.data?.summary || {}
+            sources.value = [{ value: '', label: '全部业务' }, ...(overview.data?.filters?.plugins || [])]
+        }
+        range.value = data.range || overview?.data?.range || range.value
+        rows.value = reset ? (data.data || []) : [...rows.value, ...(data.data || [])]
+        total.value = Number(data.total || 0)
+        page.value = nextPage
+    } catch (err: any) {
+        if (requestId === sequence) error.value = err?.msg || err?.message || '暂时无法读取员工产出'
+    } finally {
+        if (requestId === sequence) loading.value = false
+    }
+}
+function changePeriod(value: string) {
+    if (period.value === value) return
+    period.value = value
+    load(true)
+}
+function changeSource(event: any) {
+    source.value = sources.value[Number(event.detail.value)]?.value || ''
+    load(true)
+}
+function openEmployee(uid: number) {
+    uni.navigateTo({ url: `/addon/hsx_performance/pages/output/detail?uid=${uid}&period=${period.value}&source_plugin=${encodeURIComponent(source.value)}` })
+}
+onShow(() => load(true))
+onReachBottom(() => load(false))
+onBeforeUnmount(() => { sequence++ })
 </script>
 
 <style scoped lang="scss">
-.page{min-height:100vh;padding:28rpx;box-sizing:border-box;background:#f5f7fa}.head{display:flex;align-items:center;justify-content:space-between}.title{display:block;color:#111827;font-size:38rpx;font-weight:700}.subtitle{display:block;margin-top:6rpx;color:#64748b;font-size:22rpx}.icon-btn{width:68rpx;height:68rpx;display:flex;align-items:center;justify-content:center;background:#fff;border:2rpx solid #e5e7eb;border-radius:12rpx}.periods,.plugins{margin:24rpx 0 18rpx;white-space:nowrap}.period-inner,.plugin-inner{display:inline-flex;gap:12rpx}.period,.plugin{padding:13rpx 22rpx;color:#475569;font-size:24rpx;background:#fff;border:2rpx solid #e5e7eb;border-radius:10rpx}.period.active,.plugin.active{color:#fff;background:#2563eb;border-color:#2563eb}
-.summary{display:grid;grid-template-columns:repeat(3,1fr);background:#fff;border:2rpx solid #e5e7eb;border-radius:12rpx}.summary view{padding:22rpx 12rpx;display:flex;flex-direction:column;align-items:center;border-right:2rpx solid #edf0f4}.summary view:last-child{border-right:0}.summary strong{color:#111827;font-size:34rpx}.summary text{margin-top:6rpx;color:#64748b;font-size:20rpx}.section-title{margin:30rpx 2rpx 14rpx;display:flex;justify-content:space-between;align-items:center}.section-title text:first-child{color:#111827;font-size:28rpx;font-weight:650}.section-title text:last-child{color:#94a3b8;font-size:21rpx}
-.employee-list,.metric-list{background:#fff;border:2rpx solid #e5e7eb;border-radius:12rpx}.employee,.metric{min-height:108rpx;padding:20rpx;box-sizing:border-box;display:flex;align-items:center;border-bottom:2rpx solid #edf0f4}.employee:last-child,.metric:last-child{border-bottom:0}.rank{width:48rpx;color:#64748b;font-size:24rpx}.employee-main{min-width:0;flex:1}.employee-name,.metric-name{display:block;overflow:hidden;color:#111827;font-size:27rpx;font-weight:600;text-overflow:ellipsis;white-space:nowrap}.employee-meta,.metric-meta{display:block;margin-top:6rpx;color:#94a3b8;font-size:20rpx}.employee-count,.metric-value{margin-right:18rpx;display:flex;align-items:baseline;gap:4rpx}.employee-count strong,.metric-value strong{color:#111827;font-size:31rpx}.employee-count text,.metric-value text{color:#64748b;font-size:20rpx}.metric{justify-content:space-between}.metric>view:first-child{min-width:0;flex:1}.state{height:520rpx;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18rpx;color:#94a3b8;font-size:24rpx}
+@import './output.scss';
+.period-tabs { display:flex; gap:8rpx; margin:24rpx 0 18rpx; padding:6rpx; background:#e9edf3; border-radius:8px; }
+.period-tab { flex:1; min-width:0; margin:0; padding:0 8rpx; height:72rpx; line-height:72rpx; font-size:26rpx; color:#64748b; background:transparent; border-radius:6px; }
+.period-tab.active { background:#fff; color:#2563eb; font-weight:600; }
+.filter-row { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12rpx; margin-bottom:20rpx; }
+.source-picker { display:flex; align-items:center; gap:12rpx; font-size:26rpx; color:#334155; padding:10rpx 0; }
+.range { font-size:22rpx; }
+.search-row { display:flex; align-items:center; gap:12rpx; padding:4rpx 20rpx; background:#fff; border:1px solid #e2e8f0; border-radius:8px; }
+.search-row input { flex:1; min-width:0; font-size:26rpx; height:72rpx; }
+.summary-strip { display:flex; padding:30rpx 0; border-bottom:1px solid #e2e8f0; }
+.summary-strip > view { flex:1; min-width:0; display:flex; flex-direction:column; gap:6rpx; text-align:center; }
+.summary-value { font-size:36rpx; font-weight:700; color:#1e293b; }
+.employee-list { background:#fff; border-radius:8px; overflow:hidden; }
+.employee-row { display:flex; align-items:center; gap:18rpx; min-height:136rpx; padding:20rpx; box-sizing:border-box; border-bottom:1px solid #eef2f7; }
+.employee-row:last-child { border-bottom:0; }
+.employee-avatar { display:flex; align-items:center; justify-content:center; flex-shrink:0; width:64rpx; height:64rpx; border-radius:8px; background:#eef4ff; color:#2563eb; font-size:28rpx; }
+.employee-copy { flex:1; min-width:0; display:flex; flex-direction:column; gap:8rpx; }
+.employee-count { flex-shrink:0; display:flex; flex-direction:column; gap:8rpx; text-align:right; }
+.load-more { margin-top:18rpx; color:#2563eb; background:#fff; border-radius:8px; font-size:26rpx; }
+.inline-error { margin-top:20rpx; color:#b45309; font-size:24rpx; }
 </style>

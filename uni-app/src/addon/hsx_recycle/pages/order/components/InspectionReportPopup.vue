@@ -1,29 +1,12 @@
 <template>
-  <up-popup
+  <OrderTaskPopup
     :show="visible"
-    mode="bottom"
-    round="20"
-    :close-on-click-overlay="true"
+    title="验机报告"
+    :subtitle="device?.model || '待识别设备'"
+    :scrollable="false"
     @close="handleClose"
   >
     <view class="inspection-popup">
-      <view class="popup-handle"></view>
-
-      <view class="report-head">
-        <view class="report-title-wrap">
-          <view class="report-icon">
-            <up-icon name="file-text" size="20" color="#2563eb"></up-icon>
-          </view>
-          <view class="report-title-main">
-            <text class="report-title">验机报告</text>
-            <text class="report-subtitle">{{ device?.model || '待识别设备' }}</text>
-          </view>
-        </view>
-        <view class="close-btn" @tap="handleClose">
-          <up-icon name="close" size="18" color="#64748b"></up-icon>
-        </view>
-      </view>
-
       <scroll-view scroll-y class="report-scroll">
         <view class="report-summary">
           <view class="summary-item">
@@ -32,7 +15,7 @@
           </view>
           <view class="summary-item">
             <text class="summary-label">最终报价</text>
-            <text class="summary-value price">¥{{ finalPrice }}</text>
+            <text class="summary-value price">{{ Number(device?.final_price) > 0 ? '¥' + finalPrice : '待定价' }}</text>
           </view>
           <view class="summary-item full">
             <text class="summary-label">IMEI</text>
@@ -73,7 +56,7 @@
 
         <view class="section" v-else-if="resultVisible">
           <view class="empty-report">
-            <up-icon name="info-circle" size="22" color="#94a3b8"></up-icon>
+            <up-icon name="info-circle" size="22" color="var(--recycle-text-sub)"></up-icon>
             <text>暂无结构化检测结果</text>
           </view>
         </view>
@@ -110,11 +93,12 @@
         </view>
       </scroll-view>
     </view>
-  </up-popup>
+  </OrderTaskPopup>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import OrderTaskPopup from './OrderTaskPopup.vue'
 import type { OrderDetailDevice } from '../../../types/order'
 import { img, timeStampTurnTime } from '@/utils/common'
 
@@ -308,107 +292,24 @@ const formatTime = (timestamp: number) => timeStampTurnTime(timestamp)
 </script>
 
 <style scoped lang="scss">
-.inspection-popup {
-  height: 78vh;
-  max-height: 1120rpx;
-  background: #f6f8fb;
-  border-radius: 32rpx 32rpx 0 0;
-  overflow: hidden;
-}
-
-.popup-handle {
-  width: 72rpx;
-  height: 8rpx;
-  margin: 18rpx auto 8rpx;
-  border-radius: 999rpx;
-  background: #cbd5e1;
-}
-
-.report-head {
-  margin: 18rpx 28rpx 22rpx;
-  padding: 0 24rpx;
-  border-radius: 18rpx;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: #fff;
-  border-bottom: 1rpx solid #eef2f7;
-}
-
-.report-title-wrap {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-}
-
-.report-icon {
-  width: 64rpx;
-  height: 64rpx;
-  border-radius: 18rpx;
-  background: #eff6ff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  margin-right: 18rpx;
-}
-
-.report-title-main {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.report-title {
-  margin-bottom: 8rpx;
-}
-
-.report-title {
-  font-size: 34rpx;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.report-subtitle {
-  max-width: 480rpx;
-  font-size: 24rpx;
-  color: #64748b;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.close-btn {
-  width: 56rpx;
-  height: 56rpx;
-  border-radius: 50%;
-  background: #f1f5f9;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.report-scroll {
-  height: calc(78vh - 150rpx);
-  box-sizing: border-box;
-}
+.inspection-popup { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--recycle-bg-card); }
+.report-scroll { flex: 1; height: 0; min-height: 0; box-sizing: border-box; }
 
 .report-summary,
 .section,
 .report-note {
-  margin: 20rpx 24rpx 0;
-  background: #fff;
-  border-radius: 18rpx;
-  box-shadow: 0 8rpx 24rpx rgba(15, 23, 42, 0.04);
+  margin: 0 16px;
+  background: var(--recycle-bg-card);
+  border-radius: 0;
+  border-bottom: 1rpx solid var(--recycle-line);
 }
 
 .report-summary {
   padding: 24rpx;
   display: flex;
   flex-wrap: wrap;
-  margin-left: 24rpx;
-  margin-right: 24rpx;
+  margin-left: 16px;
+  margin-right: 16px;
   box-sizing: border-box;
 }
 
@@ -428,18 +329,18 @@ const formatTime = (timestamp: number) => timeStampTurnTime(timestamp)
 .summary-label {
   margin-bottom: 8rpx;
   font-size: 22rpx;
-  color: #94a3b8;
+  color: var(--recycle-text-sub);
 }
 
 .summary-value {
   font-size: 28rpx;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--recycle-text-main);
   word-break: break-all;
 }
 
 .summary-value.price {
-  color: #f97316;
+  color: var(--recycle-price);
 }
 
 .summary-value.mono {
@@ -451,7 +352,7 @@ const formatTime = (timestamp: number) => timeStampTurnTime(timestamp)
 }
 
 .report-section {
-  padding: 24rpx 20rpx 26rpx;
+  padding: 16px 0;
 }
 
 .section.last {
@@ -470,20 +371,20 @@ const formatTime = (timestamp: number) => timeStampTurnTime(timestamp)
   align-items: center;
   justify-content: space-between;
   padding: 0 6rpx 18rpx;
-  border-bottom: 1rpx solid #edf2f7;
+  border-bottom: 1rpx solid var(--recycle-line);
   margin-bottom: 0;
 }
 
 .section-title {
   font-size: 28rpx;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--recycle-text-main);
 }
 
 .section-count,
 .report-count {
   font-size: 22rpx;
-  color: #94a3b8;
+  color: var(--recycle-text-sub);
   margin-left: 16rpx;
   flex-shrink: 0;
 }
@@ -492,16 +393,16 @@ const formatTime = (timestamp: number) => timeStampTurnTime(timestamp)
   display: flex;
   flex-direction: column;
   padding: 4rpx 6rpx 0;
-  background: #fff;
+  background: var(--recycle-bg-card);
 }
 
 .report-row + .report-row {
-  border-top: 1rpx solid #f1f5f9;
+  border-top: 1rpx solid var(--recycle-bg-soft);
 }
 
 .report-row {
   padding: 24rpx 0 20rpx;
-  background: #fff;
+  background: var(--recycle-bg-card);
   display: flex;
   align-items: flex-start;
 }
@@ -519,7 +420,7 @@ const formatTime = (timestamp: number) => timeStampTurnTime(timestamp)
   width: 38rpx;
   font-size: 20rpx;
   line-height: 34rpx;
-  color: #cbd5e1;
+  color: var(--recycle-text-sub);
   font-weight: 700;
   flex-shrink: 0;
 }
@@ -529,7 +430,7 @@ const formatTime = (timestamp: number) => timeStampTurnTime(timestamp)
   font-size: 24rpx;
   line-height: 34rpx;
   font-weight: 600;
-  color: #334155;
+  color: var(--recycle-text-main);
   word-break: break-all;
 }
 
@@ -546,10 +447,10 @@ const formatTime = (timestamp: number) => timeStampTurnTime(timestamp)
   align-items: center;
   min-height: 42rpx;
   padding: 5rpx 16rpx;
-  border: 1rpx solid #dbeafe;
+  border: 1rpx solid var(--recycle-line);
   border-radius: 8rpx;
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: var(--recycle-bg-soft);
+  color: var(--recycle-brand);
   font-size: 22rpx;
   font-weight: 500;
   line-height: 1.25;
@@ -563,8 +464,8 @@ const formatTime = (timestamp: number) => timeStampTurnTime(timestamp)
 
 .remark-box {
   padding: 18rpx;
-  border-radius: 14rpx;
-  background: #f8fafc;
+  border-radius: 4px;
+  background: var(--recycle-bg-soft);
   display: flex;
   flex-direction: column;
 }
@@ -576,13 +477,13 @@ const formatTime = (timestamp: number) => timeStampTurnTime(timestamp)
 .remark-label {
   margin-bottom: 8rpx;
   font-size: 22rpx;
-  color: #94a3b8;
+  color: var(--recycle-text-sub);
 }
 
 .remark-content {
   font-size: 26rpx;
   line-height: 1.55;
-  color: #334155;
+  color: var(--recycle-text-main);
 }
 
 .image-grid {
@@ -601,9 +502,9 @@ const formatTime = (timestamp: number) => timeStampTurnTime(timestamp)
 .report-image {
   width: 100%;
   height: 100%;
-  border-radius: 14rpx;
+  border-radius: 4px;
   overflow: hidden;
-  background: #f1f5f9;
+  background: var(--recycle-bg-soft);
 }
 
 .empty-report {
@@ -617,19 +518,19 @@ const formatTime = (timestamp: number) => timeStampTurnTime(timestamp)
 .empty-report text {
   margin-top: 12rpx;
   font-size: 26rpx;
-  color: #94a3b8;
+  color: var(--recycle-text-sub);
 }
 
 .report-note {
   margin-bottom: calc(28rpx + env(safe-area-inset-bottom));
   padding: 20rpx 24rpx;
-  background: #eef6ff;
+  background: var(--recycle-bg-soft);
   box-shadow: none;
 }
 
 .report-note text {
   font-size: 22rpx;
   line-height: 1.5;
-  color: #4b5563;
+  color: var(--recycle-text-sub);
 }
 </style>

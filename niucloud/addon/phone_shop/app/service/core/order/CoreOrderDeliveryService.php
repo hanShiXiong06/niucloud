@@ -292,6 +292,9 @@ class CoreOrderDeliveryService extends BaseCoreService
             $waybillParams['order_goods_ids'] = $param['waybill_order_goods_ids'] ?? $param['order_goods_ids'];
             (new \addon\phone_shop\app\service\core\delivery\CoreExternalElectronicSheetService())->assertReadyForDelivery((int) $order_data['site_id'], $waybillParams);
         }
+        if ($delivery_way === 'manual_write') {
+            (new \addon\phone_shop\app\service\core\delivery\electronic_sheet\ElectronicSheetProviderRegistry())->assertDeliveryAllowed((int)$order_data['site_id'], $param);
+        }
         $insert_data = array(
             'delivery_ids' => $delivery_ids,
             'order_id' => $order_data['order_id'],

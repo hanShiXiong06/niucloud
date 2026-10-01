@@ -1,227 +1,54 @@
 <template>
   <view class="recycle-order-detail-page" :style="themeVars">
-    <RecyclePageHeader title="订单详情" :subtitle="orderInfo.order_no || '查看设备质检和确认状态'" />
-    <!-- 骨架屏加载状态 -->
-    <view v-if="loading" class="skeleton-container">
-      <view class="mx-3 mt-2 rounded-lg overflow-hidden">
-        <view class="skeleton-line h-24 w-full mb-0"></view>
-        <view class="bg-white p-3">
-          <view class="skeleton-line h-3 w-full mb-2"></view>
-          <view class="skeleton-line h-3 w-2/3"></view>
-        </view>
-      </view>
-      <view class="bg-white rounded-lg shadow-sm mx-3 mt-3 p-4">
-        <view class="skeleton-line h-4 w-1/4 mb-3"></view>
-        <view class="skeleton-line h-3 w-full mb-2"></view>
-        <view class="skeleton-line h-3 w-3/4 mb-2"></view>
-        <view class="skeleton-line h-3 w-1/2"></view>
-      </view>
-      <view class="mx-3 mt-3">
-        <view class="skeleton-line h-4 w-1/4 mb-2"></view>
-        <view v-for="i in 2" :key="i" class="bg-white rounded-lg shadow-sm p-3 mb-2">
-          <view class="skeleton-line h-3 w-3/4 mb-2"></view>
-          <view class="skeleton-line h-3 w-1/2 mb-2"></view>
-          <view class="skeleton-line h-3 w-2/3"></view>
-        </view>
-      </view>
+    <RecyclePageHeader title="订单详情" />
+    <view v-if="loading && isEmpty" class="detail-loading"><up-skeleton rows="4" title :loading="true" :animate="true" /><up-skeleton rows="5" title :loading="true" :animate="true" /></view>
+    <view v-else-if="isEmpty" class="detail-empty">
+      <up-empty mode="order" :text="loadError ? '订单暂时无法加载' : '没有找到这笔订单'" />
+      <text class="detail-empty__message">{{ loadError || '请检查订单是否存在，或返回订单列表。' }}</text>
+      <view class="detail-empty__actions"><OrderUiButton @click="goBack">返回列表</OrderUiButton><OrderUiButton v-if="loadError" variant="primary" @click="retryDetail">重新加载</OrderUiButton></view>
     </view>
-
-    <!-- 空状态 -->
-    <view v-else-if="!loading && isEmpty" class="min-h-screen flex items-center justify-center px-10">
-      <up-empty
-        mode="data"
-        icon="http://cdn.uviewui.com/uview/empty/data.png"
-        text="暂无订单信息"
-        textColor="#999999"
-        textSize="15"
-      >
-        <template #bottom>
-          <view class="flex flex-col items-center mt-4">
-            <text class="text-sm text-gray-400 mb-4">请耐心等待订单处理</text>
-            <up-button type="primary" shape="round" size="normal" @click="goBack">
-              返回订单列表
-            </up-button>
-          </view>
-        </template>
-      </up-empty>
-    </view>
-
-    <!-- 实际内容 -->
     <view v-else>
-      <!-- 订单状态（渐变横幅 + 进度条） -->
-      <OrderStatusProgress
-        :status="orderInfo.status"
-        :statusName="orderInfo.status_name"
-        :createTime="orderInfo.create_at"
-      />
+      <view v-if="loadError" class="detail-error" @tap="retryDetail"><text>{{ loadError }}</text><text>重试</text></view>
+      <OrderStatusProgress :status="orderInfo.status" :statusName="orderInfo.status_name" />
+      <OrderDetailHeader :orderNo="orderInfo.order_no" :deviceCount="orderInfo.devices.length" :totalPrice="totalPrice" :expressNo="orderInfo.express_no" :mobile="orderInfo.member?.mobile || orderInfo.customer_phone || ''" :createTime="orderInfo.create_at" :deliveryName="orderInfo.delivery_type_name" :remark="orderInfo.remark" :cancelReason="orderInfo.cancel_reason" />
 
-      <!-- 订单信息卡片 -->
-      <OrderDetailHeader
-        :orderNo="orderInfo.order_no"
-        :deviceCount="orderInfo.devices.length"
-        :totalPrice="totalPrice"
-        :expressNo="orderInfo.express_no"
-        :mobile="orderInfo.member?.mobile || orderInfo.customer_phone || ''"
-      />
+      <view class="order-device-section">
+        <view class="detail-section-heading"><view><text>设备明细</text><text class="detail-section-count">{{ orderInfo.devices.length }} 台</text></view><OrderUiButton v-if="!hasNoDevices" variant="text" @click="toggleSelectionMode">{{ selectionMode ? '完成' : '批量操作' }}</OrderUiButton></view>
+        <view v-if="hasNoDevices" class="order-empty-devices"><up-icon name="clock" size="24" color="var(--recycle-text-sub)" /><text>暂无设备明细</text><text>门店登记设备后，将在这里显示质检和报价信息。</text></view>
+        <DeviceBatchToolbar v-if="selectionMode && !hasNoDevices" :isAllSelected="isAllSelected" :selectedCount="selectedCount" @toggle-all="toggleSelectAll" @copy-imei="copySelectedIMEIs" />
+        <DeviceDetailCard v-for="(device, index) in orderInfo.devices" :key="device.id" :device="device" :index="index" :isSelected="isDeviceSelected(device.id)" :selectionMode="selectionMode" :busy="decisionBusy || loading" :allowDecision="Number(orderInfo.status) >= 4 && !orderFinished" :showInspectionResult="showInspectionResult" :showInspectionImages="showInspectionImages" :allowRejectSale="submitConfig.allow_user_reject_sale !== 0" :allowApplyConsignment="canApplyConsignment(device)" :allowViewConsignment="canViewConsignment(device)" :useWechatContact="customerServiceEnabled && customerServiceType === 'wechat'" @toggle-select="toggleDeviceSelection(device.id)" @confirm="handleDeviceConfirm(device)" @negotiate="openCustomerService" @reject-sale="handleDeviceRejectSale(device)" @apply-consignment="handleApplyConsignment(device)" @view-consignment="handleViewConsignment(device)" @view-report="openInspectionReport(device)" />
+      </view>
 
-      <PickupStatusCard
-        v-if="String(orderInfo.delivery_type) === '1'"
-        :order-id="Number(orderInfo.id)"
-        :info="orderInfo.pickup"
-        @updated="loadOrderDetail(orderInfo.id)"
-        @contact="contactPickupShop"
-      />
+      <view v-if="String(orderInfo.delivery_type) === '1'" class="detail-delivery-section"><PickupStatusCard :order-id="Number(orderInfo.id)" :info="orderInfo.pickup" @updated="loadOrderDetail(orderInfo.id)" @contact="contactPickupShop" /></view>
+      <view v-if="String(orderInfo.delivery_type) === '3'" class="detail-section">
+        <view class="detail-section-heading"><view><DeliveryIcon type="3" /><text>物流车交付</text></view></view>
+        <view class="detail-info-row"><text>车辆</text><text>{{ [orderInfo.logistics_name, orderInfo.logistics_vehicle_no].filter(Boolean).join(' · ') || '待补充' }}</text></view>
+        <view class="detail-info-row"><text>取货地点</text><text>{{ orderInfo.logistics_pickup_address || '待补充' }}</text></view>
+        <view class="detail-info-row"><text>现场联系</text><text>{{ [orderInfo.logistics_contact_name, orderInfo.logistics_contact_mobile].filter(Boolean).join(' · ') || '待补充' }}</text></view>
+        <view v-if="orderInfo.logistics_eta_at" class="detail-info-row"><text>预计可取</text><text>{{ formatEta(orderInfo.logistics_eta_at) }}</text></view>
+      </view>
 
-      <view v-if="String(orderInfo.delivery_type) === '3'" class="logistics-detail-card">
-        <view class="logistics-detail-card__title">
-          <up-icon name="car" size="17" color="var(--recycle-brand)" />
-          <text>物流车配送</text>
+      <view v-if="customerServiceEnabled || urgeEnabled || hasReturnOrder" class="detail-section detail-support">
+        <view v-if="hasReturnOrder" class="support-row" @tap="goToReturnOrder(orderInfo.id)"><up-icon name="reload" size="20" color="var(--recycle-text-sub)" /><text>退回信息</text><text class="support-row__aside">{{ returnOrderList.length }} 条</text><up-icon name="arrow-right" size="14" color="var(--recycle-text-sub)" /></view>
+        <view v-if="customerServiceEnabled" class="support-row">
+          <up-icon name="server-man" size="20" color="var(--recycle-text-sub)" /><text>{{ customerServiceConfig.title || '联系客服' }}</text>
+          <!-- #ifdef MP-WEIXIN -->
+          <OrderUiButton v-if="customerServiceType === 'wechat'" variant="text" openType="contact">联系</OrderUiButton>
+          <OrderUiButton v-else variant="text" @click="openCustomerService">联系</OrderUiButton>
+          <!-- #endif -->
+          <!-- #ifndef MP-WEIXIN -->
+          <OrderUiButton variant="text" @click="openCustomerService">联系</OrderUiButton>
+          <!-- #endif -->
         </view>
-        <view class="logistics-detail-card__row"><text>车辆</text><text>{{ [orderInfo.logistics_name, orderInfo.logistics_vehicle_no].filter(Boolean).join(' · ') || '待补充' }}</text></view>
-        <view class="logistics-detail-card__row"><text>取货地点</text><text>{{ orderInfo.logistics_pickup_address || '待补充' }}</text></view>
-        <view class="logistics-detail-card__row"><text>现场联系</text><text>{{ [orderInfo.logistics_contact_name, orderInfo.logistics_contact_mobile].filter(Boolean).join(' · ') || '待补充' }}</text></view>
-        <view v-if="orderInfo.logistics_eta_at" class="logistics-detail-card__row logistics-detail-card__row--time"><text>预计可取</text><text>{{ formatEta(orderInfo.logistics_eta_at) }}</text></view>
+        <view v-if="urgeEnabled" class="support-row"><up-icon name="bell" size="20" color="var(--recycle-text-sub)" /><view class="support-row__copy"><text>催办订单</text><text v-if="urgeOnCooldown" class="support-row__hint">{{ urgeCooldownText }}</text></view><OrderUiButton variant="text" :loading="urging" :disabled="urgeOnCooldown" @click="handleUrgeOrder">{{ urgeOnCooldown ? '已提醒' : '提醒处理' }}</OrderUiButton></view>
       </view>
 
-      <view class="order-detail-links">
-      <!-- 客服入口 -->
-      <view v-if="customerServiceEnabled">
-        <!-- #ifdef MP-WEIXIN -->
-        <RecycleLinkCard
-          v-if="customerServiceType === 'wechat'"
-          button
-          openType="contact"
-          icon="server-man"
-          :title="customerServiceConfig.title || '联系客服'"
-          :description="customerServiceConfig.content || '如需议价或咨询订单进度，请联系客服处理'"
-        />
-        <RecycleLinkCard
-          v-else
-          icon="server-man"
-          :title="customerServiceConfig.title || '联系客服'"
-          :description="customerServiceConfig.content || '长按识别二维码添加工作人员'"
-          @tap="openCustomerService"
-        />
-        <!-- #endif -->
-        <!-- #ifndef MP-WEIXIN -->
-        <RecycleLinkCard
-          icon="server-man"
-          :title="customerServiceConfig.title || '联系客服'"
-          :description="customerServiceConfig.content || '如需议价或咨询订单进度，请联系客服处理'"
-          @tap="openCustomerService"
-        />
-        <!-- #endif -->
+      <view v-if="selectionMode && selectedActionableCount > 0 && Number(orderInfo.status) >= 4 && !orderFinished" class="order-confirm-bar">
+        <text class="order-confirm-bar__summary">可确认 {{ selectedActionableCount }} 台</text>
+        <OrderUiButton variant="primary" :loading="decisionBusy" :disabled="loading" @click="handleConfirmSelected">确认选中报价</OrderUiButton>
       </view>
-
-      <!-- 催办入口 -->
-      <view v-if="urgeEnabled">
-        <RecycleLinkCard
-          button
-          icon="bell"
-          iconColor="#d97706"
-          iconBackground="#fff7e6"
-          title="催办订单"
-          :description="urgeOnCooldown ? urgeCooldownText : '提醒工作人员尽快处理当前订单'"
-          :actionText="urging ? '发送中' : (urgeOnCooldown ? '稍后再试' : '发送提醒')"
-          actionColor="#d97706"
-          :disabled="urging || urgeOnCooldown"
-          @tap="handleUrgeOrder"
-        />
-      </view>
-
-      <!-- 退货信息入口 -->
-      <view v-if="hasReturnOrder">
-        <RecycleLinkCard
-          icon="order"
-          iconColor="#dc6262"
-          iconBackground="#fff1f1"
-          title="查看退货信息"
-          description="查看退回设备和处理进度"
-          :badge="`${returnOrderList.length} 条`"
-          badgeColor="#dc6262"
-          badgeBackground="#fff1f1"
-          @tap="goToReturnOrder(orderInfo.id)"
-        />
-      </view>
-      </view>
-
-      <!-- 无设备提示 -->
-      <view v-if="hasNoDevices" class="order-empty-card">
-        <view class="order-empty-card__icon">
-          <up-icon name="clock" size="28" color="#a6afbd" />
-        </view>
-        <text class="order-empty-card__title">订单等待更新</text>
-        <text class="order-empty-card__description">工作人员接收设备后，设备明细会显示在这里</text>
-      </view>
-
-      <!-- 设备列表 -->
-      <view v-else class="order-device-section">
-        <RecycleSectionHeader
-          title="设备明细"
-          description="逐台查看质检、报价与确认结果"
-          :count="`${orderInfo.devices.length} 台`"
-        />
-
-        <!-- 批量操作工具栏 -->
-        <DeviceBatchToolbar
-          v-if="orderInfo.devices && orderInfo.devices.length > 0"
-          :isAllSelected="isAllSelected"
-          :selectedCount="selectedCount"
-          @toggle-all="toggleSelectAll"
-          @copy-imei="copySelectedIMEIs"
-        />
-
-        <!-- 设备卡片列表 -->
-        <DeviceDetailCard
-          v-for="(device, index) in orderInfo.devices"
-          :key="device.id"
-          :device="device"
-          :index="index"
-          :isSelected="isDeviceSelected(device.id)"
-          :showInspectionResult="showInspectionResult"
-          :showInspectionImages="showInspectionImages"
-          :allowRejectSale="submitConfig.allow_user_reject_sale !== 0"
-          :allowApplyConsignment="canApplyConsignment(device)"
-          :allowViewConsignment="canViewConsignment(device)"
-          :useWechatContact="customerServiceEnabled && customerServiceType === 'wechat'"
-          @toggle-select="toggleDeviceSelection(device.id)"
-          @confirm="handleDeviceConfirm(device)"
-          @negotiate="openCustomerService"
-          @reject-sale="handleDeviceRejectSale(device)"
-          @apply-consignment="handleApplyConsignment(device)"
-          @view-consignment="handleViewConsignment(device)"
-          @view-report="openInspectionReport(device)"
-        />
-      </view>
-
-      <!-- 底部批量确认按钮 -->
-      <view
-        v-if="selectedActionableCount > 0 && orderInfo.status == 5"
-        class="order-confirm-bar"
-      >
-        <button
-          class="order-confirm-bar__button"
-          @tap="handleConfirmSelected"
-        >
-          <up-icon name="checkmark-circle" size="16" color="#fff" />
-          确认选中设备 ({{ selectedActionableCount }})
-        </button>
-      </view>
-
-      <CustomerServicePopup
-        :visible="showCustomerServicePopup"
-        :qr-code="customerServiceConfig.qrcode || ''"
-        :title="customerServiceConfig.title"
-        :content="customerServiceConfig.content"
-        @close="showCustomerServicePopup = false"
-      />
-      <InspectionReportPopup
-        :visible="showInspectionReport"
-        :device="currentReportDevice"
-        :showResult="showInspectionResult"
-        :showImages="showInspectionImages"
-        @close="closeInspectionReport"
-      />
+      <CustomerServicePopup :visible="showCustomerServicePopup" :qr-code="customerServiceConfig.qrcode || ''" :title="customerServiceConfig.title" :content="customerServiceConfig.content" @close="showCustomerServicePopup = false" />
+      <InspectionReportPopup :visible="showInspectionReport" :device="currentReportDevice" :showResult="showInspectionResult" :showImages="showInspectionImages" @close="closeInspectionReport" />
     </view>
   </view>
 </template>
@@ -241,19 +68,31 @@ import DeviceDetailCard from './components/DeviceDetailCard.vue'
 import CustomerServicePopup from './components/CustomerServicePopup.vue'
 import InspectionReportPopup from './components/InspectionReportPopup.vue'
 import RecyclePageHeader from '../components/RecyclePageHeader.vue'
-import RecycleLinkCard from '../components/RecycleLinkCard.vue'
-import RecycleSectionHeader from '../components/RecycleSectionHeader.vue'
+import OrderUiButton from './components/OrderUiButton.vue'
+import DeliveryIcon from './components/DeliveryIcon.vue'
+import { canDecideDevice } from '../../utils/order-presentation'
 import { buildRecycleThemeVars } from '../../utils/theme'
 import { urgeOrder } from '../../api/order'
 import type { OrderDetailDevice } from '../../types/order'
 
 const {
-  loading, orderInfo, isEmpty, hasNoDevices, totalPrice,
+  loading, loadError, orderInfo, isEmpty, hasNoDevices, totalPrice,
   submitConfig, loadOrderDetail, confirmDevice, confirmDevices, rejectDeviceSale
 } = useOrderDetail()
 
 const { returnOrderList, hasReturnOrder, loadReturnOrders, goToReturnOrder } = useReturnOrder()
 
+const orderId = ref<string | number>('')
+const decisionBusy = ref(false)
+const selectionMode = ref(false)
+const retryDetail = () => { if (orderId.value && !loading.value) loadOrderDetail(orderId.value) }
+const toggleSelectionMode = () => {
+  selectionMode.value = !selectionMode.value
+  resetSelection()
+}
+const confirmIntent = (content: string) => new Promise<boolean>(resolve => {
+  uni.showModal({ title: '确认回收报价', content, confirmText: '确认报价', cancelText: '再看看', success: result => resolve(result.confirm), fail: () => resolve(false) })
+})
 const devicesRef = computed(() => orderInfo.value.devices)
 const formatEta = (value: number) => {
   const date = new Date(Number(value || 0) * 1000)
@@ -330,24 +169,26 @@ const {
 } = useDeviceSelection(devicesRef)
 const selectedActionableCount = computed(() => getSelectedPendingDevices().length)
 
-const handleDeviceConfirm = async (device: any) => {
-  const success = await confirmDevice(device)
-  if (success) resetSelection()
+const handleDeviceConfirm = async (device: OrderDetailDevice) => {
+  if (decisionBusy.value || loading.value) return
+  decisionBusy.value = true
+  try {
+    if (!await confirmIntent(`确认以 ¥${device.final_price} 回收「${device.model || device.imei}」？`)) return
+    const success = await confirmDevice(device)
+    if (success) resetSelection()
+  } finally { decisionBusy.value = false }
 }
 
-const handleDeviceRejectSale = async (device: any) => {
-  const success = await rejectDeviceSale(device)
-  if (success) resetSelection()
+const handleDeviceRejectSale = async (device: OrderDetailDevice) => {
+  if (decisionBusy.value || loading.value) return
+  decisionBusy.value = true
+  try {
+    const success = await rejectDeviceSale(device)
+    if (success) resetSelection()
+  } finally { decisionBusy.value = false }
 }
 
-const hasDeviceFinalPrice = (device: OrderDetailDevice) => {
-  const price = Number(device.final_price || 0)
-  return Number.isFinite(price) && price > 0
-}
-
-const canUserDecideDevice = (device: OrderDetailDevice) => {
-  return hasDeviceFinalPrice(device) && [4, 7].includes(Number(device.status))
-}
+const canUserDecideDevice = canDecideDevice
 
 const canApplyConsignment = (device: OrderDetailDevice) => {
   if (!consignmentEntryEnabled.value) return false
@@ -367,8 +208,8 @@ const canViewConsignment = (device: OrderDetailDevice) => {
 
 const handleApplyConsignment = (device: OrderDetailDevice) => {
   uni.showModal({
-    title: '申请代卖',
-    content: `当前设备可申请转入代卖：${device.model || device.imei || ''}。用户端申请接口尚未接入，请联系工作人员确认代卖方案。`,
+    title: '咨询代卖',
+    content: `当前设备可申请转入代卖：${device.model || device.imei || ''}。请先联系工作人员确认代卖方案，此操作不会自动转入代卖。`,
     confirmText: customerServiceEnabled.value ? '联系客服' : '知道了',
     cancelText: '取消',
     success: (res) => {
@@ -443,10 +284,16 @@ const handleUrgeOrder = async () => {
 }
 
 const handleConfirmSelected = async () => {
+  if (decisionBusy.value || loading.value) return
   const pendingDevices = getSelectedPendingDevices()
-  const deviceIds = pendingDevices.map(d => d.id)
-  const success = await confirmDevices(deviceIds)
-  if (success) resetSelection()
+  if (!pendingDevices.length) return
+  decisionBusy.value = true
+  try {
+    const amount = pendingDevices.reduce((sum, device) => sum + Number(device.final_price), 0).toFixed(2)
+    if (!await confirmIntent(`确认选中的 ${pendingDevices.length} 台设备报价，合计 ¥${amount}？`)) return
+    const success = await confirmDevices(pendingDevices.map(device => device.id))
+    if (success) resetSelection()
+  } finally { decisionBusy.value = false }
 }
 
 const openCustomerService = () => {
@@ -503,9 +350,9 @@ const getOrderIdFromOptions = (options?: Record<string, any>) => {
 }
 
 onLoad((options?: Record<string, any>) => {
-  const orderId = getOrderIdFromOptions(options)
-  if (orderId) {
-    loadOrderDetail(orderId)
+  orderId.value = getOrderIdFromOptions(options)
+  if (orderId.value) {
+    loadOrderDetail(orderId.value)
     return
   }
   loading.value = false
@@ -520,123 +367,31 @@ onShow(async () => {
 })
 </script>
 
-<style lang="scss">
-.recycle-order-detail-page {
-  min-height: 100vh;
-  padding-bottom: calc(120rpx + env(safe-area-inset-bottom));
-  background: #f5f6f8;
-  color: var(--recycle-text-main);
-}
-
-.skeleton-container {
-  animation: skeleton-fade-in 0.3s ease-in-out;
-}
-.skeleton-line {
-  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-  background-size: 200% 100%;
-  animation: skeleton-loading 1.5s ease-in-out infinite;
-  border-radius: 8rpx;
-}
-@keyframes skeleton-loading {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-@keyframes skeleton-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-.order-detail-links {
-  margin: 0 24rpx 18rpx;
-  display: flex;
-  flex-direction: column;
-  gap: 12rpx;
-}
-
-.order-detail-links > view {
-  width: 100%;
-}
-
-.order-empty-card {
-  margin: 0 24rpx 18rpx;
-  padding: 48rpx 32rpx;
-  border: 1rpx solid #e9edf2;
-  border-radius: 24rpx;
-  background: #fff;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-}
-
-.logistics-detail-card { margin: 0 24rpx 20rpx; padding: 24rpx; border: 1rpx solid #e5ebf3; border-radius: 20rpx; background: #fff; }
-.logistics-detail-card__title { display: flex; align-items: center; gap: 12rpx; margin-bottom: 14rpx; color: #344054; font-size: 27rpx; font-weight: 650; }
-.logistics-detail-card__row { display: grid; grid-template-columns: 130rpx minmax(0, 1fr); gap: 12rpx; padding: 9rpx 0; color: #667085; font-size: 23rpx; line-height: 34rpx; }
-.logistics-detail-card__row > text:first-child { color: #98a2b3; }
-.logistics-detail-card__row--time > text:last-child { color: #b45309; font-weight: 600; }
-
-.order-empty-card__icon {
-  width: 80rpx;
-  height: 80rpx;
-  border-radius: 24rpx;
-  background: #f2f4f7;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.order-empty-card__title {
-  margin-top: 20rpx;
-  color: #4f5c70;
-  font-size: 27rpx;
-  line-height: 38rpx;
-  font-weight: 650;
-}
-
-.order-empty-card__description {
-  margin-top: 8rpx;
-  color: #9aa4b2;
-  font-size: 22rpx;
-  line-height: 34rpx;
-}
-
-.order-device-section {
-  margin: 0 24rpx;
-}
-
-.order-device-section > .recycle-section-header {
-  margin-bottom: 16rpx;
-}
-
-.order-confirm-bar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 40;
-  padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom));
-  border-top: 1rpx solid #edf0f4;
-  background: rgba(255, 255, 255, 0.96);
-  backdrop-filter: blur(18rpx);
-  box-shadow: 0 -8rpx 28rpx rgba(31, 41, 55, 0.07);
-}
-
-.order-confirm-bar__button {
-  width: 100%;
-  height: 82rpx;
-  margin: 0;
-  border-radius: 18rpx;
-  background: var(--recycle-button-bg);
-  color: var(--recycle-button-text);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10rpx;
-  font-size: 26rpx;
-  line-height: 82rpx;
-  font-weight: 650;
-}
-
-.order-confirm-bar__button::after {
-  border: 0;
-}
+<style scoped lang="scss">
+@import './order-ui.scss';
+.recycle-order-detail-page { @include recycle-order-page; padding-bottom: calc(120rpx + env(safe-area-inset-bottom)); }
+.detail-loading { padding: 32rpx 28rpx; display: flex; flex-direction: column; gap: 48rpx; }
+.detail-empty { padding: 120rpx 32rpx; text-align: center; }
+.detail-empty__message { display: block; color: var(--recycle-text-sub); font-size: 25rpx; line-height: 40rpx; margin: 24rpx 0; }
+.detail-empty__actions { display: flex; justify-content: center; gap: 16rpx; }
+.detail-error { display: flex; justify-content: space-between; padding: 20rpx 28rpx; background: var(--recycle-notice-bg); color: var(--recycle-notice-text); font-size: 24rpx; }
+.order-device-section { padding: 0 var(--recycle-order-gutter) 8rpx; }
+.detail-section-heading, .detail-section-heading > view { display: flex; align-items: center; gap: 12rpx; }
+.detail-section-heading { min-height: 88rpx; justify-content: space-between; font-size: 29rpx; font-weight: 600; }
+.detail-section-count { font-size: 24rpx; font-weight: 400; color: var(--recycle-text-sub); }
+.order-empty-devices { display: flex; flex-direction: column; align-items: center; gap: 14rpx; padding: 40rpx 20rpx; text-align: center; color: var(--recycle-text-sub); font-size: 25rpx; line-height: 38rpx; }
+.order-empty-devices > text:last-child { font-size: 23rpx; }
+.detail-section, .detail-delivery-section { margin-bottom: var(--recycle-order-section-gap); padding: 12px var(--recycle-order-gutter) 20px; background: var(--recycle-bg-card); }
+.detail-delivery-section :deep(.pickup-card) { margin: 0; padding: 12rpx 0; border: 0; border-radius: 0; }
+.detail-info-row { display: flex; gap: 24rpx; padding: 10rpx 0; font-size: 25rpx; line-height: 38rpx; }
+.detail-info-row > text:first-child { width: 120rpx; flex-shrink: 0; color: var(--recycle-text-sub); }
+.detail-info-row > text:last-child { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.detail-support { padding-top: 0; padding-bottom: 0; }
+.support-row { display: flex; align-items: center; gap: 16rpx; min-height: 96rpx; padding: 8rpx 0; font-size: 26rpx; }
+.support-row + .support-row { border-top: 1rpx solid var(--recycle-line); }
+.support-row > text:first-of-type, .support-row__copy { flex: 1; }
+.support-row__aside, .support-row__hint { color: var(--recycle-text-sub); font-size: 23rpx; }
+.support-row__hint { display: block; line-height: 34rpx; }
+.order-confirm-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; display: flex; align-items: center; justify-content: space-between; gap: 16rpx; padding: 18rpx var(--recycle-order-gutter) calc(18rpx + env(safe-area-inset-bottom)); background: var(--recycle-toolbar-bg); border-top: 1rpx solid var(--recycle-line); }
+.order-confirm-bar__summary { font-size: 25rpx; color: var(--recycle-text-sub); }
 </style>

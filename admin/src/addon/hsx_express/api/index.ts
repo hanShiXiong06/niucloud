@@ -11,3 +11,8 @@ export const getExpressTask = (id: number) => request.get(`hsx_express/tasks/${i
 export const reprintExpressTask = (id: number) => request.post(`hsx_express/tasks/${id}/reprint`, { confirm: 1 }, actionOptions)
 export const recoverExpressTask = (id: number) => request.post(`hsx_express/tasks/${id}/recover`, { confirm: 1 }, actionOptions)
 export const cancelExpressTask = (id: number, reason: string) => request.post(`hsx_express/tasks/${id}/cancel`, { reason }, actionOptions)
+export const getSfConfig = (scene: 'waybill' | 'pickup') => request.get(`hsx_express/sf/config/${scene}`, readOptions)
+export const saveSfConfig = (scene: 'waybill' | 'pickup', data: Record<string, any>) => request.put(`hsx_express/sf/config/${scene}`, data, readOptions)
+export const checkSfConfig = (scene: 'waybill' | 'pickup') => request.post(`hsx_express/sf/config/${scene}/check`, {}, readOptions)
+export const refreshExpressTask = (id: number) => request.post(`hsx_express/tasks/${id}/refresh`, {}, actionOptions)
+export const downloadExpressTaskPdf = (id: number) => request.get(`hsx_express/tasks/${id}/pdf`, { ...actionOptions, responseType: 'blob' })

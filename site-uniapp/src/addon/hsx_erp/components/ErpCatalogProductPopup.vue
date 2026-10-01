@@ -1,6 +1,6 @@
 <template>
     <view>
-        <view class="field" :class="[`field--${layout}`, { 'field--embedded': embedded, 'field--on': displayLabel }]" @click="open">
+        <view v-if="showTrigger" class="field" :class="[`field--${layout}`, { 'field--embedded': embedded, 'field--on': displayLabel }]" @click="open">
             <text class="label"><text v-if="required" class="req">*</text>{{ label }}</text>
             <view class="value" :class="{ 'value--ph': !displayLabel }">
                 <text class="truncate">{{ displayLabel || placeholder }}</text>
@@ -164,6 +164,7 @@ const props = defineProps({
     layout: { type: String, default: 'horizontal' },
     embedded: { type: Boolean, default: false },
     clearable: { type: Boolean, default: false },
+    showTrigger: { type: Boolean, default: true },
 })
 const emit = defineEmits(['update:modelValue', 'change', 'clear'])
 
@@ -207,10 +208,13 @@ function leafDisplayLabel(value: any) {
     return parts[parts.length - 1] || ''
 }
 
-watch([() => props.modelValue, () => props.categoryPath], ([value, categoryPath]) => {
+watch([() => props.modelValue, () => props.categoryPath, () => props.selectedLabel], ([value, categoryPath]) => {
+    selectedSequence++
+    selectedNode.value = null
+    selectedName.value = ''
     if (!value) {
         if (categoryPath) {
-            selectedNode.value = categoryNode(categoryPath)
+            selectedNode.value = categoryNode(String(categoryPath))
             selectedName.value = String(categoryPath)
         } else {
             selectedNode.value = null
@@ -221,9 +225,6 @@ watch([() => props.modelValue, () => props.categoryPath], ([value, categoryPath]
     if (props.selectedLabel) selectedName.value = props.selectedLabel
     else resolveSelected(value)
 }, { immediate: true })
-watch(() => props.selectedLabel, value => {
-    if (value) selectedName.value = value
-})
 
 function categoryNode(path: string) {
     const categoryPath = String(path || '').trim()
@@ -421,7 +422,13 @@ function open() {
     if (!workspaceReady.value) loadWorkspace()
 }
 
+defineExpose({ open, close })
+
 function close() {
+    if (searchTimer) {
+        clearTimeout(searchTimer)
+        searchTimer = null
+    }
     if (workspaceLoading.value) workspaceReady.value = false
     navigationSequence++
     searchSequence++

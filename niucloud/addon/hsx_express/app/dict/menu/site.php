@@ -23,6 +23,9 @@ return [[
             'children' => [
                 $action('保存配置', 'hsx_express_config_save', 'hsx_express/config', 'put'),
                 $action('配置检查', 'hsx_express_config_check', 'hsx_express/config/check', 'post'),
+                $action('查看顺丰配置', 'hsx_express_sf_config', 'hsx_express/sf/config/<scene>', 'get'),
+                $action('保存顺丰配置', 'hsx_express_sf_config_save', 'hsx_express/sf/config/<scene>', 'put'),
+                $action('检查顺丰配置', 'hsx_express_sf_config_check', 'hsx_express/sf/config/<scene>/check', 'post'),
             ],
         ],
         [
@@ -35,6 +38,8 @@ return [[
                 $action('补打原单', 'hsx_express_tasks_reprint', 'hsx_express/tasks/<id>/reprint', 'post'),
                 $action('恢复原申请', 'hsx_express_tasks_recover', 'hsx_express/tasks/<id>/recover', 'post'),
                 $action('取消运单', 'hsx_express_tasks_cancel', 'hsx_express/tasks/<id>/cancel', 'post'),
+                $action('查询顺丰原单', 'hsx_express_tasks_refresh', 'hsx_express/tasks/<id>/refresh', 'post'),
+                $action('下载顺丰面单', 'hsx_express_tasks_pdf', 'hsx_express/tasks/<id>/pdf', 'get'),
             ],
         ],
     ],

@@ -44,7 +44,7 @@ class CoreElectronicSheetService extends BaseCoreService
         if (!in_array((string) ($data['interface_type'] ?? ''), array_column($options, 'key'), true)) {
             throw new CommonException('所选电子面单服务商未安装或不可用，请先配置物流服务');
         }
-        return ( new ConfigService() )->setConfig($site_id, 'ELECTRONIC_SHEET_CONFIG', $data);
+        return ( new ConfigService() )->setConfig($site_id, 'PHONE_SHOP_ELECTRONIC_SHEET_CONFIG', $data);
     }
 
     /**
@@ -54,7 +54,9 @@ class CoreElectronicSheetService extends BaseCoreService
      */
     public function getElectronicSheetConfig(int $site_id)
     {
-        $info = ( new ConfigService() )->getConfig($site_id, 'ELECTRONIC_SHEET_CONFIG');
+        $info = ( new ConfigService() )->getConfig($site_id, 'PHONE_SHOP_ELECTRONIC_SHEET_CONFIG');
+        // Read the old shared setting only until this plugin is explicitly configured; never rewrite it.
+        if (empty($info)) $info = ( new ConfigService() )->getConfig($site_id, 'ELECTRONIC_SHEET_CONFIG');
         if (empty($info)) {
             $info = [];
             $info[ 'value' ] = [

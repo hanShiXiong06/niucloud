@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace addon\hsx_express\app\integration;
 
-use addon\hsx_express\app\service\core\LogisticsService;
+use addon\hsx_express\app\service\core\WaybillTaskDispatcher;
 
 class PhoneShopElectronicSheetProvider
 {
@@ -14,6 +14,6 @@ class PhoneShopElectronicSheetProvider
 
     public static function execute(int $siteId, string $operation, array $payload): array
     {
-        return (new LogisticsService())->execute($siteId, $operation, $payload);
+        return (new WaybillTaskDispatcher())->execute($siteId, $operation, $payload, 'kuaidi100');
     }
 }

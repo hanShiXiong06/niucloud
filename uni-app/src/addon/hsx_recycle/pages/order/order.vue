@@ -1,14 +1,13 @@
 <template>
   <view class="recycle-order-page" :style="themeVars">
-    <RecyclePageHeader title="立即下单" subtitle="提交设备信息并选择交付方式" />
+    <RecyclePageHeader title="立即下单" />
+    <view class="delivery-sticky">
+      <DeliveryModeToggle
+        v-model="currentTab"
+        :tabs="deliveryTabs"
+      />
+    </view>
     <view class="order-page-content">
-      <view class="delivery-sticky">
-        <DeliveryModeToggle
-          v-model="currentTab"
-          :tabs="deliveryTabs"
-        />
-      </view>
-
       <OrderNoticeBar
         :enabled="orderSubmitConfig.notice.enabled"
         :title="orderSubmitConfig.notice.title"
@@ -23,13 +22,9 @@
       <view class="order-section shipment-section">
         <view class="shipment-header">
           <view class="shipment-title">
-            <up-icon name="info-circle" size="16" color="var(--recycle-brand)"></up-icon>
-            <text>出货信息</text>
+            <text>回收设备</text>
           </view>
-          <view v-if="orderSubmitConfig.device_add_enabled" class="shipment-add-button" @click="openInlineDeviceAdd">
-            <up-icon name="plus" size="14" color="#fff"></up-icon>
-            <text>{{ phoneList.length ? '继续添加' : '添加设备' }}</text>
-          </view>
+          <OrderUiButton v-if="orderSubmitConfig.device_add_enabled" icon="plus" @click="openInlineDeviceAdd">{{ phoneList.length ? '继续添加' : '添加设备' }}</OrderUiButton>
         </view>
 
         <!-- 设备列表管理 -->
@@ -47,16 +42,13 @@
         />
 
         <!-- 备注 -->
-        <up-row>
-          <up-col span="3">
-            <view class="label">备注</view>
-          </up-col>
-          <up-col span="9">
-            <view class="input-wrapper">
-              <up-textarea autoHeight v-model="form.comment" placeholder="请输入备注信息"></up-textarea>
-            </view>
-          </up-col>
-        </up-row>
+        <view class="order-note-toggle" @tap="showRemark = !showRemark"><up-icon name="edit-pen" size="16" color="var(--recycle-text-sub)" /><text>{{ showRemark ? '收起备注' : (form.comment ? '查看备注' : '添加备注（选填）') }}</text><up-icon :name="showRemark ? 'arrow-up' : 'arrow-down'" size="12" color="var(--recycle-text-sub)" /></view>
+        <view v-if="showRemark" class="order-note-row">
+          <text class="order-note-label">备注</text>
+          <view class="order-note-input">
+            <up-textarea autoHeight border="none" v-model="form.comment" placeholder="选填，补充设备或交付说明"></up-textarea>
+          </view>
+        </view>
       </view>
 
       <!-- 寄件信息 -->
@@ -87,6 +79,7 @@
       <!-- 商家信息 -->
       <ShopInfoCard
         :shop-info="shopInfo"
+        :delivery-mode="currentTab"
         @copy="copyShopInfo"
         @open-location="openLocation"
       />
@@ -94,16 +87,11 @@
     </view>
 
     <view class="submit-bar">
-      <view class="submit-bar__meta">
-        <AgreementCheckbox
-          v-model="isAgreeRecycle"
-          agreement-text="我已阅读并同意"
-          agreement-key="recycle_service"
-          agreement-title="回收服务协议"
-        />
-        <text class="submit-bar__desc">共 {{ deviceCount }} 台设备</text>
+      <AgreementCheckbox v-model="isAgreeRecycle" agreement-text="我已阅读并同意" agreement-key="recycle_service" agreement-title="回收服务协议" />
+      <view class="submit-bar__action">
+        <view class="submit-bar__summary"><text>回收数量</text><text class="submit-bar__count">{{ deviceCount }} <text>台</text></text></view>
+        <OrderUiButton variant="primary" :loading="preparingSubmit || submitting" loadingText="正在提交" @click="handleSubmitOrder">提交回收订单</OrderUiButton>
       </view>
-      <view class="submit-bar__button" :class="{ 'submit-bar__button--busy': preparingSubmit || submitting }" @click="handleSubmitOrder">{{ preparingSubmit || submitting ? '正在提交…' : '提交回收订单' }}</view>
     </view>
 
     <!-- 设备输入弹窗 -->
@@ -131,7 +119,7 @@
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onReady, onShow } from '@dcloudio/uni-app'
 import { getPaymentList } from '@/addon/hsx_recycle/api/payment'
 import { getRecycleUserAddressInfo } from '@/addon/hsx_recycle/api/return_order'
 import { checkExpressEnabled } from '@/addon/hsx_recycle/api/express'
@@ -141,6 +129,7 @@ import RecyclePageHeader from '../components/RecyclePageHeader.vue'
 import { buildRecycleThemeVars } from '../../utils/theme'
 
 // 导入组件
+import OrderUiButton from './components/OrderUiButton.vue'
 import DeliveryModeToggle from './components/DeliveryModeToggle.vue'
 import DeviceListManager from './components/DeviceListManager.vue'
 import DeviceInputModal from './components/DeviceInputModal.vue'
@@ -160,6 +149,7 @@ import { useShopInfo } from '../../hooks/useShopInfo'
 import { useOrderSubmit } from '../../hooks/useOrderSubmit'
 
 // Tab 缓存管理
+const showRemark = ref(false)
 const TAB_CACHE_KEY = 'recycle_order_current_tab'
 const { currentTab, switchTab } = useTabCache(TAB_CACHE_KEY, 0)
 
@@ -220,7 +210,7 @@ const normalizePositiveNumber = (value: any, fallback = 1) => {
 }
 
 // 表单管理
-const { form, rules, formRef, resetForm } = useOrderForm(currentTab)
+const { form, rules, formRef, resetForm } = useOrderForm(currentTab, () => enablePlatformDelivery.value)
 const LOGISTICS_CACHE_KEY = 'hsx_recycle_logistics_vehicle_form'
 const emptyLogisticsVehicleForm = () => ({
   logistics_name: '',
@@ -289,6 +279,15 @@ watch(currentTab, (newVal) => {
   if (newVal !== 0) {
     form.value.express_no = ''
   }
+})
+
+watch([currentTab, enablePlatformDelivery], () => {
+  formRef.value?.clearValidate('express_no')
+})
+
+onReady(() => {
+  // 小程序通过组件方法注册含函数的校验规则。
+  formRef.value?.setRules(rules)
 })
 
 const normalizeOrderSubmitConfig = (data: any = {}) => {
@@ -534,6 +533,7 @@ const prepareAndSubmitOrder = async () => {
       if (currentTab.value === 2) uni.setStorageSync(LOGISTICS_CACHE_KEY, logisticsVehicleForm.value)
       // 清空表单
       resetForm()
+      showRemark.value = false
       phoneList.value = []
       resetPlatformDeliveryForm()
       isAgreeRecycle.value = false
@@ -633,166 +633,32 @@ fetchShopInfo()
 </script>
 
 <style scoped lang="scss">
-.submit-bar__button--busy { opacity: 0.65; }
-.recycle-order-page {
-  min-height: 100vh;
-  background: var(--recycle-bg-main);
-  color: var(--recycle-text-main);
-}
-
+@import './order-ui.scss';
+.recycle-order-page { @include recycle-order-page; }
 .order-page-content {
-  padding: 20rpx 20rpx calc(140rpx + 50px + env(safe-area-inset-bottom));
+  --recycle-order-gutter: 16px;
+  padding: 0 16px calc(240rpx + 50px + env(safe-area-inset-bottom));
+  box-sizing: border-box;
 }
-
-.delivery-sticky {
-  position: sticky;
-  top: 0;
-  z-index: 60;
-  padding-top: 12rpx;
-  margin: -12rpx -4rpx 16rpx;
-  background: var(--recycle-bg-main);
-}
-
-.order-section {
-  margin-bottom: 20rpx;
-  padding: 24rpx;
-  border-radius: 16rpx;
-  background: var(--recycle-bg-card);
-  border: 1rpx solid var(--recycle-line);
-  box-shadow: 0 8rpx 20rpx rgba(31, 41, 55, 0.06);
-}
-
-.shipment-section {
-  border-left: 6rpx solid var(--recycle-brand);
-}
-
-.shipment-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20rpx;
-  margin-bottom: 20rpx;
-}
-
-.shipment-title {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-  min-width: 0;
-  color: var(--recycle-brand);
-  font-size: 28rpx;
-  line-height: 38rpx;
-  font-weight: 800;
-}
-
-:deep(.u-button--primary) {
-  background: var(--recycle-button-bg) !important;
-  border-color: var(--recycle-button-bg) !important;
-  color: var(--recycle-button-text) !important;
-}
-
-.submit-bar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: calc(50px + env(safe-area-inset-bottom));
-  z-index: 9998;
-  padding: 18rpx 20rpx;
-  background: var(--recycle-toolbar-bg);
-  border-top: 1rpx solid var(--recycle-line);
-  box-shadow: 0 -8rpx 22rpx rgba(31, 41, 55, 0.08);
-  display: flex;
-  align-items: center;
-  gap: 20rpx;
-}
-
-.submit-bar__meta {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.submit-bar__desc {
-  margin-top: 4rpx;
-  font-size: 22rpx;
-  line-height: 32rpx;
-  color: var(--recycle-text-sub);
-}
-
-.submit-bar__button {
-  flex-shrink: 0;
-  min-width: 230rpx;
-  height: 78rpx;
-  line-height: 78rpx;
-  text-align: center;
-  border-radius: 39rpx;
-  background: var(--recycle-button-bg);
-  color: var(--recycle-button-text);
-  font-size: 28rpx;
-  font-weight: 800;
-}
-
-.submit-bar :deep(.agreement-checkbox) {
-  width: 100%;
-  background: transparent;
-}
-
-.submit-bar :deep(.agreement-checkbox__inner) {
-  min-height: 44rpx;
-  align-items: flex-start;
-}
-
-.submit-bar :deep(.u-checkbox) {
-  margin-top: 4rpx;
-}
-
-.submit-bar :deep(.agreement-checkbox__content) {
-  min-height: 44rpx;
-  margin-left: 8rpx;
-  font-size: 23rpx;
-  line-height: 32rpx;
-}
-
-.submit-bar :deep(.agreement-checkbox__text),
-.submit-bar :deep(.agreement-checkbox__link) {
-  padding: 0;
-}
-
-:deep(.u-form) {
-  color: var(--recycle-text-main);
-}
-
-.shipment-add-button {
-  flex-shrink: 0;
-  min-width: 144rpx;
-  height: 58rpx;
-  padding: 0 20rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8rpx;
-  background: var(--recycle-button-bg);
-  color: var(--recycle-button-text);
-  border-radius: 999rpx;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.label {
-  font-size: 14px;
-  color: var(--recycle-text-main);
-}
-
-.input-wrapper {
-  width: 100%;
-  overflow: hidden;
-}
-
-:deep(.up-button--primary),
-:deep(.u-button--primary) {
-  background: var(--recycle-button-bg) !important;
-  border: none !important;
-  color: var(--recycle-button-text) !important;
-}
+.delivery-sticky { padding: 0 var(--recycle-order-gutter); margin-bottom: var(--recycle-order-section-gap); background: var(--recycle-bg-card); }
+.order-section { padding: 20px var(--recycle-order-gutter) 16px; background: var(--recycle-bg-card); }
+.shipment-header { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; min-height: 76rpx; margin-bottom: 16px; }
+.shipment-title { min-width: 0; font-size: 30rpx; line-height: 42rpx; font-weight: 600; }
+.order-note-toggle { display: flex; align-items: center; gap: 10rpx; min-height: 72rpx; color: var(--recycle-text-sub); font-size: 24rpx; }
+.order-note-row { display: flex; align-items: flex-start; gap: 20rpx; padding-top: 4rpx; }
+.order-note-label { flex-shrink: 0; width: 112rpx; padding-top: 12rpx; color: var(--recycle-text-sub); font-size: 26rpx; line-height: 40rpx; }
+.order-note-input { flex: 1; min-width: 0; }
+.order-note-input :deep(.u-textarea) { padding: 16rpx; border-radius: 8rpx; background: var(--recycle-bg-soft); }
+.order-note-input :deep(.u-textarea__field) { color: var(--recycle-text-main); font-size: 26rpx; line-height: 38rpx; }
+.submit-bar { position: fixed; left: 0; right: 0; bottom: calc(50px + env(safe-area-inset-bottom)); z-index: 90; padding: 12rpx var(--recycle-order-gutter) 20rpx; background: var(--recycle-toolbar-bg); border-top: 1rpx solid var(--recycle-line); }
+.submit-bar__action { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; padding-top: 8rpx; }
+.submit-bar__summary { display: flex; align-items: baseline; gap: 14rpx; font-size: 24rpx; color: var(--recycle-text-sub); }
+.submit-bar__count { color: var(--recycle-text-main); font-size: 34rpx; font-weight: 600; }
+.submit-bar__count > text { font-size: 24rpx; font-weight: 400; }
+.submit-bar__action :deep(.u-button) { min-height: 84rpx !important; padding-left: 30rpx !important; padding-right: 30rpx !important; }
+.submit-bar :deep(.agreement-checkbox) { background: transparent; }
+.submit-bar :deep(.agreement-checkbox__content) { font-size: 23rpx; line-height: 34rpx; margin-left: 8rpx; }
+.submit-bar :deep(.agreement-checkbox__text), .submit-bar :deep(.agreement-checkbox__link) { padding: 6rpx 0; font-weight: 400; }
+:deep(.u-form) { background: transparent; }
+:deep(.u-button--primary) { background: var(--recycle-button-bg); border-color: var(--recycle-button-bg); color: var(--recycle-button-text); }
 </style>

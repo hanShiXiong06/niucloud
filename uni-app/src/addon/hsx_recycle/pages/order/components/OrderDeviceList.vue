@@ -28,10 +28,10 @@
             class="serial-row"
             @longpress="handleCopyDeviceCode(device)"
           >
-            <text class="serial-row__label">IMEI</text>
+            <text class="serial-row__label">{{ device.user_sn ? '用户串号' : 'IMEI' }}</text>
             <text class="serial-row__value">{{ device.user_sn || device.imei }}</text>
             <view class="serial-copy" @tap.stop="handleCopyDeviceCode(device)">
-              <up-icon name="file-text" size="11" color="#8b96a9" />
+              <text>复制</text>
             </view>
           </view>
           <text v-if="device.remark" class="device-item__remark">{{ device.remark }}</text>
@@ -43,9 +43,8 @@
             :color="getDeviceStatusInfo(device.status).color"
             :bgColor="getDeviceStatusInfo(device.status).bgColor"
           />
-          <text v-if="Number(device.final_price || device.initial_price) > 0" class="device-item__price">
-            ¥{{ device.final_price || device.initial_price }}
-          </text>
+          <text v-if="Number(device.final_price) > 0" class="device-item__price">¥{{ device.final_price }}</text>
+          <text v-else-if="Number(device.initial_price) > 0" class="device-item__estimate">预估 ¥{{ device.initial_price }}</text>
           <text v-else class="device-item__pending">待定价</text>
         </view>
       </view>
@@ -89,143 +88,19 @@ const handleCopyDeviceCode = (device: OrderDevice) => {
 </script>
 
 <style scoped lang="scss">
-.device-list {
-  overflow: hidden;
-  border: 1rpx solid #edf0f4;
-  border-radius: 18rpx;
-  background: #f8fafc;
-}
-
-.device-list__head {
-  height: 66rpx;
-  padding: 0 20rpx;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.device-list__title-wrap {
-  display: flex;
-  align-items: center;
-  gap: 10rpx;
-}
-
-.device-list__title {
-  color: #667085;
-  font-size: 22rpx;
-  font-weight: 600;
-}
-
-.device-list__count {
-  color: #9aa4b2;
-  font-size: 20rpx;
-}
-
-.device-list__toggle {
-  display: flex;
-  align-items: center;
-  gap: 6rpx;
-  color: var(--recycle-brand);
-  font-size: 22rpx;
-}
-
-.device-list__body {
-  padding: 0 14rpx 14rpx;
-}
-
-.device-item {
-  min-height: 116rpx;
-  padding: 18rpx;
-  background: #fff;
-  border-radius: 14rpx;
-  display: flex;
-  align-items: flex-start;
-  gap: 16rpx;
-  box-sizing: border-box;
-
-  & + .device-item {
-    margin-top: 10rpx;
-  }
-}
-
-.device-item__main {
-  min-width: 0;
-  flex: 1;
-}
-
-.device-item__model {
-  display: block;
-  color: #172033;
-  font-size: 25rpx;
-  line-height: 36rpx;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.device-item__remark {
-  display: block;
-  margin-top: 8rpx;
-  color: #8b96a9;
-  font-size: 21rpx;
-  line-height: 30rpx;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.device-item__side {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 12rpx;
-}
-
-.device-item__price {
-  color: var(--recycle-price);
-  font-size: 27rpx;
-  line-height: 36rpx;
-  font-weight: 700;
-}
-
-.device-item__pending {
-  color: #9aa4b2;
-  font-size: 21rpx;
-}
-
-.serial-row {
-  margin-top: 7rpx;
-  display: flex;
-  align-items: center;
-  max-width: 100%;
-  gap: 7rpx;
-}
-
-.serial-row__label {
-  color: #a1a9b6;
-  font-size: 19rpx;
-}
-
-.serial-row__value {
-  min-width: 0;
-  color: #6f7b8d;
-  font-size: 21rpx;
-  line-height: 30rpx;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.serial-copy {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30rpx;
-  height: 30rpx;
-  flex-shrink: 0;
-  border-radius: 8rpx;
-  background: #f2f4f7;
-}
+.device-list__head, .device-list__title-wrap, .device-list__toggle { display: flex; align-items: center; gap: 10rpx; }
+.device-list__head { justify-content: space-between; min-height: 52rpx; font-size: 24rpx; color: var(--recycle-text-sub); }
+.device-list__toggle { min-height: 56rpx; color: var(--recycle-brand); }
+.device-item { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 12rpx; padding: 18rpx 0; }
+.device-item + .device-item { border-top: 1rpx solid var(--recycle-line); }
+.device-item__main { flex: 1; min-width: 260rpx; }
+.device-item__model { display: block; font-size: 28rpx; font-weight: 600; line-height: 40rpx; overflow-wrap: anywhere; }
+.device-item__remark { display: block; margin-top: 6rpx; font-size: 23rpx; line-height: 34rpx; color: var(--recycle-text-sub); }
+.device-item__side { display: flex; flex-direction: column; align-items: flex-end; gap: 8rpx; margin-left: auto; max-width: 100%; }
+.device-item__price { font-size: 30rpx; line-height: 42rpx; font-weight: 600; color: var(--recycle-price); overflow-wrap: anywhere; }
+.device-item__estimate, .device-item__pending { color: var(--recycle-text-sub); font-size: 23rpx; line-height: 34rpx; }
+.serial-row { display: flex; align-items: center; gap: 8rpx; color: var(--recycle-text-sub); font-size: 22rpx; line-height: 34rpx; }
+.serial-row__label { flex-shrink: 0; }
+.serial-row__value { min-width: 0; overflow-wrap: anywhere; }
+.serial-copy { display: flex; align-items: center; min-height: 60rpx; padding: 0 8rpx; color: var(--recycle-brand); flex-shrink: 0; }
 </style>

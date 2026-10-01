@@ -424,7 +424,7 @@ class CoreRecycleOrderEventService extends BaseCoreService
         if ($orderId <= 0) return;
         $order = (new \addon\hsx_recycle\app\model\order\RecycleOrder())
             ->where('id', '=', $orderId)
-            ->field('id,site_id,member_id,order_no,complete_at,create_at')
+            ->field('id,site_id,member_id,order_no,order_source,agent_uid,complete_at,create_at')
             ->findOrEmpty();
         if ($order->isEmpty() || (int)$order['site_id'] <= 0 || (int)$order['member_id'] <= 0) return;
         $devices = $order->devices()->select()->toArray();
@@ -491,6 +491,10 @@ class CoreRecycleOrderEventService extends BaseCoreService
         }
         if (!$order || (int)($order['site_id'] ?? 0) <= 0 || (int)($order['member_id'] ?? 0) <= 0) return;
         $siteId = (int)$order['site_id'];
+        // 取原订单的下单来源，与当前是谁质检/打款、由回收还是 ERP 结清无关。
+        $orderSource = (string)($order['order_source'] ?? '');
+        if ((int)($order['agent_uid'] ?? 0) > 0) $orderSource = 'agent';
+        if (!in_array($orderSource, ['customer', 'agent'], true)) $orderSource = 'unknown';
         $originalEventId = 'hsx_recycle:device_delivered:' . $siteId . ':' . $deviceId;
         $amount = (float)($device['pay_amount'] ?? 0);
         if ($amount <= 0) $amount = (float)($device['final_price'] ?? 0);
@@ -505,6 +509,7 @@ class CoreRecycleOrderEventService extends BaseCoreService
             'site_id' => $siteId, 'member_id' => (int)$order['member_id'],
             'business_type' => 'recycle_device', 'business_id' => (string)$deviceId,
             'business_no' => (string)($order['order_no'] ?? ''), 'quantity' => 1,
+            'order_id' => (int)$order['id'], 'order_source' => $orderSource,
             'device_id' => $deviceId, 'imei' => (string)($device['imei'] ?? ''),
             'amount' => $amount, 'final_price' => (float)($device['final_price'] ?? 0),
             'pay_amount' => (float)($device['pay_amount'] ?? 0),

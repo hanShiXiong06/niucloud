@@ -12,9 +12,14 @@ Route::group('hsx_express', function () {
     Route::put('config', $controller . 'save');
     Route::post('config/check', $controller . 'check');
     Route::post('check', $controller . 'check');
+    Route::get('sf/config/:scene', $controller . 'sfConfig');
+    Route::put('sf/config/:scene', $controller . 'saveSfConfig');
+    Route::post('sf/config/:scene/check', $controller . 'checkSfConfig');
     Route::get('tasks', $controller . 'tasks');
     Route::get('tasks/:id', $controller . 'detail');
     Route::post('tasks/:id/reprint', $controller . 'reprint');
     Route::post('tasks/:id/cancel', $controller . 'cancel');
     Route::post('tasks/:id/recover', $controller . 'recover');
-})->middleware([AdminCheckToken::class, AdminCheckRole::class]);
+    Route::post('tasks/:id/refresh', $controller . 'refresh');
+    Route::get('tasks/:id/pdf', $controller . 'pdf');
+})->middleware([AdminCheckToken::class, AdminCheckRole::class])->completeMatch();

@@ -17,6 +17,7 @@ use addon\hsx_recycle\app\service\admin\device\RecycleDeviceModelDictService;
 use addon\hsx_recycle\app\service\core\recycle_device\CoreRecycleDeviceLogService;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderNotifyService;
 use addon\hsx_recycle\app\service\core\recycle_order\DeviceSummaryHelper;
+use addon\hsx_recycle\app\service\core\recycle_order\DeviceCheckDisplayService;
 use addon\hsx_recycle\app\service\core\recycle_order\DeviceReadingArchive;
 use addon\hsx_recycle\app\service\core\recycle_order\DeviceEntryImei;
 use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpCapabilityService;
@@ -122,60 +123,14 @@ class RecycleDeviceService extends BaseAdminService
     }
 
     /**
-     * 产出设备基本质检字段(capacity/color/system_version/warranty_info)的自描述渲染列表。
-     * - 按 recycle_check_field 取 field_name/component/unit;按 recycle_check_option 把存储 ID→label;
-     * - input/number 等无选项字段 label 即原值;查不到选项也回退原值;
-     * - 不改库,只增强返回。前端遍历 check_summary 渲染,零硬编码。
+     * 复用公共模板解析，兼容表结构与 schema_json，只增强返回、不改库。
      * @param array $info getInfo 的设备数组
-     * @return array 增加 $info['check_summary'] = [{field_key,field_name,component,value,label,unit}, ...]
+     * @return array 增加 check_summary，保留原值并标明是否成功解析。
      */
     private function attachCheckSummary(array $info): array
     {
-        $templateId = (int)($info['check_template_id'] ?? 0);
-        if ($templateId <= 0) {
-            return $info;
-        }
-        // 设备级基本字段(存在设备列/info 里),数组顺序即展示顺序
-        $reserved = ['capacity', 'color', 'system_version', 'warranty_info'];
-
-        $fields = Db::name('recycle_check_field')
-            ->where('site_id', $this->site_id)
-            ->where('template_id', $templateId)
-            ->whereIn('field_key', $reserved)
-            ->field('id,field_key,field_name,component,unit')
-            ->select()->toArray();
-        if (empty($fields)) {
-            return $info;
-        }
-        $byKey = [];
-        foreach ($fields as $f) {
-            $byKey[(string)$f['field_key']] = $f;
-        }
-        $optMap = DeviceSummaryHelper::buildOptionLabelMap([$templateId], $reserved, (int)$this->site_id)[$templateId] ?? [];
-
-        $nested = is_array($info['info'] ?? null) ? $info['info'] : [];
-        $summary = [];
-        foreach ($reserved as $fk) {
-            if (empty($byKey[$fk])) {
-                continue;
-            }
-            $raw = $nested[$fk] ?? ($info[$fk] ?? '');
-            if ($raw === '' || $raw === null || $raw === []) {
-                continue;
-            }
-            $summary[] = [
-                'field_key'  => $fk,
-                'field_name' => (string)$byKey[$fk]['field_name'],
-                'component'  => (string)$byKey[$fk]['component'],
-                'value'      => $raw,                         // 存储值(ID),规范
-                'label'      => DeviceSummaryHelper::resolveDisplayValue($raw, $optMap[$fk] ?? []),
-                'unit'       => (string)($byKey[$fk]['unit'] ?? ''),
-            ];
-        }
-        if (!empty($summary)) {
-            $info['check_summary'] = $summary;
-        }
-        return $info;
+        if (!$info) return $info;
+        return (new DeviceCheckDisplayService())->enrichDevices([$info], (int)$this->site_id)[0];
     }
 
     /**

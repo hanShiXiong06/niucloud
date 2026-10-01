@@ -43,6 +43,7 @@ namespace {
         public $afterLock;
         public function __construct(array $records) { foreach ($records as $record) $this->records[$record['id']] = $record; }
         public function inspectCandidateQuery(): array { return parent::candidates($this->clock); }
+        protected function providerRequirements(): array { return ['kuaidi100' => ['provider_task_id'], 'sf_direct' => ['provider_order_id']]; }
         protected function candidates(int $now): array { return array_values($this->records); }
         protected function now(): int { return $this->clock; }
         protected function readRecord(int $siteId, int $recordId): ?array
@@ -96,7 +97,7 @@ namespace {
     check($queryArgs['order'] === ['update_at asc,id asc'], 'stable oldest-first candidate ordering');
     check($queryArgs['field'] === ['id,site_id,third_order_no,order_status,create_at,api_response'], 'candidate query excludes address and customer columns');
     $rawQueries = array_values(array_filter($queryCalls, static fn(array $call): bool => $call[0] === 'whereRaw'));
-    check(count($rawQueries) === 3 && $rawQueries[0][1][1] === ['kuaidi100'], 'SQL provider snapshot filter is bound, not default-channel fallback');
+    check(count($rawQueries) === 3 && $rawQueries[0][1][1] === ['kuaidi100', 'sf_direct'], 'SQL registered provider snapshot filter is bound, not default-channel fallback');
     check(strpos($rawQueries[1][1][0], 'next_check_at') !== false && $rawQueries[1][1][1] === [$job->clock], 'SQL excludes not-yet-due backoff');
     check(strpos($rawQueries[2][1][0], 'last_query_at') !== false && strpos($rawQueries[2][1][0], 'last_checked_at') !== false && $rawQueries[2][1][1] === [$job->clock - 300], 'SQL excludes recent manual and automatic checks');
     check(strpos($rawQueries[0][1][0], 'JSON_VALID') !== false, 'malformed legacy JSON cannot break candidate scan');
@@ -116,13 +117,22 @@ namespace {
     foreach (['delivered', 'cancelled', 'failed', 'manual', 'not_requested'] as $index => $state) $records[] = record($index + 1, $state);
     $records[] = record(9, 'unknown', ['provider' => 'yisu']);
     $terminal = new MockPickupReconcile($records);
-    check($terminal->doJob()['skipped'] === 6 && !$terminal->queried, 'terminal and non-kuaidi100 records not queried');
+    check($terminal->doJob()['skipped'] === 6 && !$terminal->queried, 'terminal and providers without reconciliation capability not queried');
 
     $missing = new MockPickupReconcile([record(1, 'unknown', ['provider_task_id' => ''])]);
     check($missing->doJob()['waiting'] === 1 && !$missing->queried, 'orderNo without taskId never triggers query or new booking');
     check($missing->records[1]['api_response']['booking_state'] === 'unknown', 'missing task remains unknown, never marked failed');
-    check($missing->records[1]['api_response']['pickup_reconcile']['last_error_code'] === 'missing_task_id', 'missing identifier is recorded');
+    check($missing->records[1]['api_response']['pickup_reconcile']['last_error_code'] === 'missing_query_identifier', 'missing identifier is recorded');
     check($missing->records[1]['api_response']['pickup_reconcile']['next_check_at'] === $missing->clock + 86400, 'missing identifier backs off one day');
+
+    $sf = new MockPickupReconcile([
+        record(1, 'unknown', ['provider' => 'sf_direct', 'provider_task_id' => '', 'provider_order_id' => 'SF_LOCAL_17_1']),
+        record(2, 'unknown', ['provider' => 'sf_direct', 'provider_task_id' => '', 'provider_order_id' => ''], 18),
+    ]);
+    $sfCounts = $sf->doJob();
+    check($sfCounts['checked'] === 1 && $sfCounts['waiting'] === 1, 'new provider uses its own declared identifiers, not kuaidi100 taskId');
+    check($sf->queried === [[17, 'mock_1']], 'SF query retains original tenant and original business order');
+    check($sf->records[2]['api_response']['booking_state'] === 'unknown', 'missing SF identifier cannot become failed or trigger another pickup');
 
     $recent = new MockPickupReconcile([
         record(1, 'unknown', ['last_query_at' => 1999999990]),

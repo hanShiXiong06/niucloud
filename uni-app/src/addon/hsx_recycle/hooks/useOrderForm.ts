@@ -5,8 +5,8 @@ import useMemberStore from '@/stores/member'
 /**
  * 订单表单管理
  */
-export function useOrderForm(currentTab: any) {
-  const formRef = ref(null)
+export function useOrderForm(currentTab: any, isPlatformDelivery: () => boolean = () => false) {
+  const formRef = ref<any>(null)
 
   const form = ref<OrderForm>({
     count: 1,
@@ -22,14 +22,16 @@ export function useOrderForm(currentTab: any) {
   // 校验规则
   const rules = {
     express_no: {
-      required: (rule: any, value: string, callback: Function) => {
-        if (form.value.delivery_type === 1 && !value) {
-          callback(new Error('快递单号不能为空'))
+      validator: (rule: any, value: string, callback: Function) => {
+        const needsExpressNo = Number(currentTab.value) === 0 && !isPlatformDelivery()
+        if (needsExpressNo && !String(value ?? '').trim()) {
+          callback(new Error('请输入或扫描快递单号'))
         } else {
           callback()
         }
       },
-      trigger: 'blur'
+      message: '请输入或扫描快递单号',
+      trigger: ['blur', 'change']
     }
   }
 

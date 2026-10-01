@@ -1,0 +1,18 @@
+// Shared only by the three customer order pages.
+@mixin recycle-order-page {
+  --recycle-order-gutter: 12px;
+  --recycle-order-section-gap: 12px;
+  min-height: 100vh;
+  color: var(--recycle-text-main);
+  background: var(--recycle-bg-main);
+  :deep(.recycle-page-header) {
+    background: var(--recycle-bg-card);
+    color: var(--recycle-text-main);
+    border-color: var(--recycle-line);
+    backdrop-filter: none;
+  }
+  :deep(.recycle-page-header__title) { color: var(--recycle-text-main); font-size: 32rpx; font-weight: 600; }
+  @media (max-width: 360px) {
+    --recycle-order-gutter: 20px;
+  }
+}

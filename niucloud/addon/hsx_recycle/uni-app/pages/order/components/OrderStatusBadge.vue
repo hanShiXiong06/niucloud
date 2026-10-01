@@ -23,12 +23,12 @@ const badgeStyle = computed(() => `color:${props.color};background-color:${props
 
 <style scoped lang="scss">
 .order-status-badge {
-  height: 42rpx;
+  min-height: 40rpx;
   padding: 0 14rpx;
-  border-radius: 999rpx;
+  border-radius: 6rpx;
   display: inline-flex;
   align-items: center;
-  font-size: 21rpx;
+  font-size: 23rpx;
   line-height: 42rpx;
   font-weight: 600;
   white-space: nowrap;

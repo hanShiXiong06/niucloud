@@ -25,6 +25,7 @@ class Kuaidi100ExpressProvider implements ExpressProviderInterface
 
     public function key(): string { return 'kuaidi100'; }
     public function name(): string { return '快递100'; }
+    public function queryRequirements(): array { return ['provider_task_id']; }
 
     private function config(int $siteId, bool $allowDisabled = false): array
     {

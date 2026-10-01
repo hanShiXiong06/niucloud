@@ -1,15 +1,15 @@
 <template>
   <view class="pickup-card" :class="[`pickup-card--${pickup.state}`, { 'pickup-card--compact': compact, 'pickup-card--conflict': pickup.conflict }]">
     <view class="pickup-heading">
-      <view class="pickup-heading__title"><up-icon name="car" size="17" color="var(--recycle-brand)" /><text>{{ pickup.title }}</text></view>
+      <view class="pickup-heading__title"><DeliveryIcon type="1" /><text>{{ pickup.title }}</text></view>
       <text v-if="compact" class="pickup-link" @tap.stop="$emit('view-detail')">查看详情</text>
     </view>
-    <view class="pickup-row"><text class="pickup-label">承运商</text><text>{{ pickup.carrier_name || '待确认' }}</text></view>
-    <view v-if="pickup.state !== 'manual'" class="pickup-row"><text class="pickup-label">申请取件时段</text><text>{{ pickup.pickup_time || '待确认' }}</text></view>
-    <view v-if="pickup.state !== 'manual'" class="pickup-row">
+    <view v-if="!compact" class="pickup-row"><text class="pickup-label">承运商</text><text>{{ pickup.carrier_name || '待确认' }}</text></view>
+    <view v-if="!compact && pickup.state !== 'manual'" class="pickup-row"><text class="pickup-label">申请取件时段</text><text>{{ pickup.pickup_time || '待确认' }}</text></view>
+    <view v-if="!compact && pickup.state !== 'manual'" class="pickup-row">
       <text class="pickup-label">取件员</text><text>{{ pickup.courier_name || '待分配' }}</text>
     </view>
-    <view v-if="pickup.state !== 'manual'" class="pickup-row">
+    <view v-if="!compact && pickup.state !== 'manual'" class="pickup-row">
       <text class="pickup-label">取件电话</text>
       <text :class="{ 'pickup-link': pickup.courier_phone }" @tap.stop="callCourier">{{ pickup.courier_phone || '待分配' }}</text>
     </view>
@@ -25,11 +25,11 @@
       <text>{{ receiverText }}</text>
     </view>
     <view v-if="!compact" class="pickup-actions">
-      <up-button v-if="pickup.can_refresh" size="small" plain :loading="refreshing" :disabled="refreshing || saving" @click="refreshPickup">刷新取件状态</up-button>
-      <up-button v-if="pickup.can_manual" type="primary" size="small" :disabled="saving || refreshing" @click="showManual = !showManual">{{ showManual ? '收起补单' : '自行寄件 · 补运单' }}</up-button>
-      <up-button v-if="needsContact" size="small" plain @click="$emit('contact')">联系门店核实</up-button>
+      <OrderUiButton v-if="pickup.can_refresh" size="small" plain :loading="refreshing" :disabled="refreshing || saving" @click="refreshPickup">刷新取件状态</OrderUiButton>
+      <OrderUiButton v-if="pickup.can_manual" variant="primary" size="small" :disabled="saving || refreshing" @click="showManual = !showManual">{{ showManual ? '收起补单' : '自行寄件 · 补运单' }}</OrderUiButton>
+      <OrderUiButton v-if="needsContact" size="small" plain @click="$emit('contact')">联系门店核实</OrderUiButton>
       <!-- #ifdef MP-WEIXIN -->
-      <up-button v-if="canSubscribe" size="small" plain @click="subscribePickup">订阅取件通知</up-button>
+      <OrderUiButton v-if="canSubscribe" size="small" plain @click="subscribePickup">订阅取件通知</OrderUiButton>
       <!-- #endif -->
     </view>
 
@@ -41,12 +41,14 @@
       <up-input v-model="manualTracking" placeholder="输入或扫描已寄出的运单号" maxlength="50" border="surround">
         <template #suffix><up-icon name="scan" size="22" @click="scanTracking" /></template>
       </up-input>
-      <up-button type="primary" :loading="saving" :disabled="saving || refreshing" @click="saveManual">保存运单到本订单</up-button>
+      <OrderUiButton variant="primary" :loading="saving" :disabled="saving || refreshing" @click="saveManual">保存运单到本订单</OrderUiButton>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
+import DeliveryIcon from './DeliveryIcon.vue'
+import OrderUiButton from './OrderUiButton.vue'
 import { computed, ref, watch } from 'vue'
 import { useSubscribeMessage } from '@/hooks/useSubscribeMessage'
 import { refreshOrderPickup, submitManualPickup } from '../../../api/order'
@@ -147,12 +149,12 @@ const subscribePickup = async () => {
 </script>
 
 <style scoped lang="scss">
-.pickup-card { margin: 20rpx 0; padding: 24rpx; border: 1rpx solid var(--recycle-line); border-radius: 18rpx; background: var(--recycle-bg-card); color: var(--recycle-text-main); font-size: 25rpx; line-height: 1.6; }
-.pickup-card--compact { margin: 18rpx 0 0; padding: 20rpx; background: var(--recycle-bg-soft); }
+.pickup-card { margin: 20rpx 0; padding: 24rpx 0; border-top: 1rpx solid var(--recycle-line); border-radius: 0; background: var(--recycle-bg-card); color: var(--recycle-text-main); font-size: 25rpx; line-height: 1.6; }
+.pickup-card--compact { margin: 12rpx 0 0; padding: 16rpx 0 0; background: transparent; }
 .pickup-card--unknown, .pickup-card--failed, .pickup-card--conflict { border-color: var(--recycle-notice-text); }
 .pickup-heading, .pickup-heading__title, .pickup-row { display: flex; align-items: center; gap: 12rpx; }
 .pickup-heading { justify-content: space-between; margin-bottom: 12rpx; }
-.pickup-heading__title { font-weight: 700; font-size: 28rpx; }
+.pickup-heading__title { font-weight: 600; font-size: 28rpx; }
 .pickup-row { align-items: flex-start; justify-content: space-between; margin-top: 8rpx; }
 .pickup-row > text:last-child { flex: 1; text-align: right; word-break: break-all; }
 .pickup-label { flex-shrink: 0; color: var(--recycle-text-sub); }
@@ -161,7 +163,7 @@ const subscribePickup = async () => {
 .pickup-failure, .pickup-safety { color: var(--recycle-notice-text); }
 .pickup-receiver { margin-top: 18rpx; padding-top: 12rpx; border-top: 1rpx solid var(--recycle-line); word-break: break-all; }
 .pickup-actions { display: flex; flex-wrap: wrap; gap: 12rpx; margin-top: 20rpx; }
-.pickup-actions :deep(.u-button) { width: auto; margin: 0; flex: 1; min-width: 210rpx; }
+.pickup-actions > view { flex: 1 1 240rpx; }
 .pickup-manual { display: flex; flex-direction: column; gap: 16rpx; margin-top: 20rpx; padding-top: 20rpx; border-top: 1rpx solid var(--recycle-line); }
 .pickup-manual__title { font-weight: 700; }
 </style>

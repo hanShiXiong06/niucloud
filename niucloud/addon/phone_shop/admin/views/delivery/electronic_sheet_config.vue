@@ -129,7 +129,7 @@ const registryAvailable = ref(false), hasExternal = ref(false)
 const providers = ref<any[]>([{ key: 'kdbird', label: '快递鸟（原有方式）', external: false }])
 const selectedProvider = computed(() => providers.value.find(item => item.key === formData.interface_type))
 const openProviderConfig = () => {
-    if (selectedProvider.value?.config_url) window.open(router.resolve({ path: selectedProvider.value.config_url }).href, '_blank', 'noopener')
+    if (selectedProvider.value?.config_url) window.open(router.resolve(selectedProvider.value.config_url).href, '_blank', 'noopener')
 }
 
 const handleClick = (path: string) => {

@@ -43,6 +43,14 @@ class ElectronicSheetProviderRegistry
         return ($provider['handler'])::execute($siteId, $operation, $payload);
     }
 
+    /** Optional local-only validation for known waybills, including manually entered numbers. */
+    public function assertDeliveryAllowed(int $siteId, array $payload): void
+    {
+        foreach ($this->all($siteId) as $provider) {
+            if (is_callable([$provider['handler'], 'assertDeliveryAllowed'])) ($provider['handler'])::assertDeliveryAllowed($siteId, $payload);
+        }
+    }
+
     /** Shares the provider's order mutex with cancel/create; held through the shipment transaction. */
     public function withBusinessLock(int $siteId, string $providerKey, int $orderId, callable $operation)
     {

@@ -1,25 +1,18 @@
 <template>
-  <up-popup
+  <OrderTaskPopup
     :show="visible"
-    mode="bottom"
-    round="20"
+    title="物流信息"
     @close="handleClose"
   >
     <view class="express-modal">
-      <!-- 头部 -->
-      <view class="modal-header">
-        <text class="header-title">物流信息</text>
-        <up-icon name="close" size="20" @click="handleClose"></up-icon>
-      </view>
-
       <!-- 快递单号 -->
       <view class="express-info">
-        <view class="flex items-center justify-between mb-2">
-          <text class="text-sm text-gray-600">快递单号</text>
-          <view class="flex items-center gap-1" @tap="handleCopyExpressNo">
-            <text class="text-sm font-medium text-gray-800">{{ expressNo }}</text>
-            <up-icon name="cut" size="14" color="#94a3b8"></up-icon>
-          </view>
+        <view class="waybill-row">
+          <text class="waybill-label">快递单号</text>
+          <button class="waybill-copy" aria-label="复制快递单号" @tap="handleCopyExpressNo">
+            <text class="waybill-number">{{ expressNo }}</text>
+            <text class="nc-iconfont nc-icon-fuzhiV6xx" />
+          </button>
         </view>
       </view>
 
@@ -29,12 +22,17 @@
         <text class="text-sm text-gray-500 mt-2">加载中...</text>
       </view>
 
+      <view v-else-if="loadFailed" class="empty-tracking">
+        <text>物流查询失败，请稍后重试</text>
+        <OrderUiButton @click="loadExpressInfo">重新查询</OrderUiButton>
+      </view>
+
       <!-- 物流时间线 -->
       <view v-else-if="trackingList.length > 0" class="tracking-timeline">
         <up-steps
           direction="column"
           :current="0"
-          activeColor="#2979ff"
+          activeColor="var(--recycle-brand)"
         >
           <up-steps-item
             v-for="(item, index) in trackingList"
@@ -66,9 +64,8 @@
       <view v-else class="empty-tracking">
         <up-empty
           mode="data"
-          icon="http://cdn.uviewui.com/uview/empty/data.png"
           text="暂未查询到物流信息"
-          textColor="#999999"
+          textColor="var(--recycle-text-sub)"
           textSize="14"
         >
           <template #bottom>
@@ -80,11 +77,13 @@
         </up-empty>
       </view>
     </view>
-  </up-popup>
+  </OrderTaskPopup>
 </template>
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import OrderTaskPopup from './OrderTaskPopup.vue'
+import OrderUiButton from './OrderUiButton.vue'
 import { getExpress } from '../../../api/order'
 
 interface Props {
@@ -118,6 +117,7 @@ const emit = defineEmits<{
 }>()
 
 const loading = ref(false)
+const loadFailed = ref(false)
 const trackingList = ref<TrackingItem[]>([])
 const mobilePhoneReg = /1[3-9]\d{9}/g
 
@@ -241,8 +241,10 @@ watch(() => props.visible, async (newVal) => {
 
 // 加载物流信息
 const loadExpressInfo = async () => {
+  if (loading.value) return
   try {
     loading.value = true
+    loadFailed.value = false
     trackingList.value = []
     const res = await getExpress(props.expressNo, props.mobile || '')
 
@@ -251,10 +253,12 @@ const loadExpressInfo = async () => {
       trackingList.value = normalizeTrackingList(rawList)
     } else {
       trackingList.value = []
+      loadFailed.value = true
     }
   } catch (error) {
     console.error('获取物流信息失败:', error)
     trackingList.value = []
+    loadFailed.value = true
   } finally {
     loading.value = false
   }
@@ -296,28 +300,18 @@ const handleCallPhone = (phone: string) => {
 
 <style scoped lang="scss">
 .express-modal {
-  padding: 20rpx;
-  max-height: 80vh;
-  overflow-y: auto;
+  padding: 16px;
 }
 
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20rpx;
-  border-bottom: 1rpx solid #f0f0f0;
-  margin-bottom: 20rpx;
-}
-
-.header-title {
-  font-size: 32rpx;
-  font-weight: 600;
-  color: #333;
-}
+.waybill-row { display: flex; align-items: center; gap: 12px; }
+.waybill-label { flex-shrink: 0; font-size: 13px; color: var(--recycle-text-sub); }
+.waybill-copy { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex: 1; min-width: 0; min-height: 40px; margin: 0; padding: 0; background: transparent; border: 0; color: var(--recycle-text-main); font-size: 14px; line-height: 20px; }
+.waybill-copy::after { border: 0; }
+.waybill-copy .nc-iconfont { flex-shrink: 0; font-size: 18px; }
+.waybill-number { overflow-wrap: anywhere; text-align: right; }
 
 .express-info {
-  background: #f8f9fa;
+  background: var(--recycle-bg-soft);
   border-radius: 12rpx;
   padding: 20rpx;
   margin-bottom: 20rpx;
@@ -331,10 +325,10 @@ const handleCallPhone = (phone: string) => {
 
 .quick-call-btn {
   font-size: 22rpx;
-  color: #2563eb;
+  color: var(--recycle-brand);
   padding: 4rpx 12rpx;
   border-radius: 999rpx;
-  background: #eff6ff;
+  background: var(--recycle-bg-soft);
 }
 
 .loading-container {
@@ -359,22 +353,24 @@ const handleCallPhone = (phone: string) => {
 
 .context-text {
   font-size: 26rpx;
-  color: #374151;
+  color: var(--recycle-text-main);
 }
 
 .phone-btn {
   margin: 0 4rpx;
   font-size: 26rpx;
-  color: #2563eb;
+  color: var(--recycle-brand);
   padding: 2rpx 10rpx;
   border-radius: 999rpx;
-  background: rgba(59, 130, 246, 0.12);
+  background: var(--recycle-bg-soft);
 }
 
 .empty-tracking {
   padding: 40rpx 0;
   min-height: 400rpx;
   display: flex;
+  flex-direction: column;
+  gap: 16px;
   align-items: center;
   justify-content: center;
 }

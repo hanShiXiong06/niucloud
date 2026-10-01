@@ -61,7 +61,8 @@ class CoreConfigService extends BaseCoreService
      */
     public function getDeliveryElectronSheeticConfig(int $site_id)
     {
-        $info = ( new ConfigService() )->getConfig($site_id, 'ELECTRONIC_SHEET_CONFIG');
+        $info = ( new ConfigService() )->getConfig($site_id, 'PHONE_SHOP_ELECTRONIC_SHEET_CONFIG');
+        if (empty($info)) $info = ( new ConfigService() )->getConfig($site_id, 'ELECTRONIC_SHEET_CONFIG');
         if (empty($info)) {
             $info = [];
             $info[ 'value' ] = [

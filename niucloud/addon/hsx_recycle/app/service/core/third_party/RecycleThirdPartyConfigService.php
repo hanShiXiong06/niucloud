@@ -156,6 +156,16 @@ class RecycleThirdPartyConfigService extends BaseCoreService
             return !empty($config['enabled']) && !empty($config['services']) && !empty($config['channels']) && !empty($config['mappings']);
         }
 
+        $provider = $provider !== '' ? $provider : $this->getActiveProvider($siteId, $serviceType);
+        if ($serviceType === ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER && $provider === ThirdPartyDict::PROVIDER_SF_DIRECT) {
+            if (!$this->isServiceEnabled($siteId, $serviceType)) return false;
+            try {
+                return (new \addon\hsx_recycle\app\service\core\express\ExpressProviderRegistry())->resolve($siteId, $provider)->healthCheck($siteId);
+            } catch (\Throwable $e) {
+                return false;
+            }
+        }
+
         $config = $this->getProviderConfig($siteId, $serviceType, $provider);
         if (empty($config)) {
             return false;
@@ -208,6 +218,10 @@ class RecycleThirdPartyConfigService extends BaseCoreService
             'express_order' => [
                 'enabled' => 1,
                 'provider' => ThirdPartyDict::PROVIDER_YISU,
+                ThirdPartyDict::PROVIDER_SF_DIRECT => [
+                    'configuration_managed_by' => 'hsx_express',
+                    'configuration_path' => '/hsx_express/config?provider=sf_direct&scene=pickup',
+                ],
                 ThirdPartyDict::PROVIDER_KUAIDI100 => [
                     'api_key' => '', 'secret' => '', 'callback_salt' => '',
                     'mode' => 'online', 'environment' => 'production',
@@ -320,6 +334,13 @@ class RecycleThirdPartyConfigService extends BaseCoreService
 
     private function normalizeConfig(array $config): array
     {
+        // 这里只保存取件渠道选择；顺丰账号、付款方及产品必须到独立 pickup 配置管理。
+        if (isset($config['express_order']) && is_array($config['express_order'])) {
+            $config['express_order'][ThirdPartyDict::PROVIDER_SF_DIRECT] = [
+                'configuration_managed_by' => 'hsx_express',
+                'configuration_path' => '/hsx_express/config?provider=sf_direct&scene=pickup',
+            ];
+        }
         foreach (['express_order', 'express_query', 'address_parse', 'printer'] as $sectionKey) {
             if (isset($config[$sectionKey]['enabled'])) {
                 $config[$sectionKey]['enabled'] = (int)(bool)$config[$sectionKey]['enabled'];

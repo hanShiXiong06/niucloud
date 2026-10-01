@@ -48,10 +48,11 @@ namespace addon\hsx_recycle\app\model\order {
         public function offsetUnset(mixed $offset): void { throw new \RuntimeException('no writes in this test'); }
     }
     class RecycleOrder {
-        public static array $row = ['id' => 7, 'site_id' => 1, 'member_id' => 8, 'order_no' => 'RC-7', 'complete_at' => 100];
+        public static array $row = ['id' => 7, 'site_id' => 1, 'member_id' => 8, 'order_no' => 'RC-7', 'order_source' => 'customer', 'agent_uid' => 0, 'complete_at' => 100];
+        public static string $lastFields = '';
         public static array $devices = [];
         public function where(mixed ...$args): self { return $this; }
-        public function field(string $fields): self { return $this; }
+        public function field(string $fields): self { self::$lastFields = $fields; return $this; }
         public function findOrEmpty(): MemoryOrder { return new MemoryOrder(); }
     }
 }
@@ -127,6 +128,8 @@ namespace {
     $emit->invoke(null, ['order_id' => 7, 'site_id' => 1, 'source_plugin' => 'hsx_recycle'], false);
     $assert(array_column($GLOBALS['facts'], 'device_id') === [1, 2], 'only actually paid known owners emit; unpaid unknown and returned devices do not');
     $assert(array_column($GLOBALS['facts'], 'source_plugin') === ['hsx_recycle', 'hsx_erp'], 'mixed-order source is chosen per actual device owner');
+    $assert(str_contains(RecycleOrder::$lastFields, 'order_source') && str_contains(RecycleOrder::$lastFields, 'agent_uid'), 'order-level emitter actually queries original order source');
+    $assert(array_column($GLOBALS['facts'], 'order_source') === ['customer', 'customer'], 'both local and ERP payments preserve customer order origin');
     $originalIds = array_column($GLOBALS['facts'], 'event_id');
     $assert($originalIds === ['hsx_recycle:device_delivered:1:1', 'hsx_recycle:device_delivered:1:2'], 'existing stable device event IDs are preserved');
     $GLOBALS['facts'] = [];

@@ -136,7 +136,7 @@
         <template #footer>
             <span class="dialog-footer">
                 <el-button @click="handleClose">{{ t('cancel') }}</el-button>
-                <el-button type="primary" :loading="loading || waybillBusy" @click="confirm(formRef)">{{ formData.delivery_way === 'plugin_waybill' ? '已交件，确认发货' : t('confirm') }}</el-button>
+                <el-button type="primary" :loading="loading || waybillBusy" :disabled="waybillDeliveryBlocked" @click="confirm(formRef)">{{ formData.delivery_way === 'plugin_waybill' ? '已交件，确认发货' : t('confirm') }}</el-button>
             </span>
         </template>
     </el-dialog>
@@ -155,6 +155,7 @@ import { getElectronicSheetConfig, getElectronicSheetList, printElectronicSheet 
 import { loadCLodop, getLodop } from '@/utils/lodop'
 import { useRouter } from 'vue-router'
 import ProviderWaybillPanel from './provider-waybill-panel.vue'
+import { providerTaskCanConfirm, providerTaskKey } from '@/addon/phone_shop/utils/electronic-sheet-provider'
 
 const router = useRouter()
 const showDialog = ref(false)
@@ -172,6 +173,7 @@ const externalProvider = ref<any>(null)
 const waybillTask = ref<any>({})
 const waybillBusy = ref(false)
 const waybillUnavailable = ref(false)
+const waybillDeliveryBlocked = computed(() => formData.delivery_type === 'express' && !!waybillTask.value.task_id && (formData.delivery_way === 'plugin_waybill' || waybillTask.value.waybill_no === formData.express_number) && !providerTaskCanConfirm(waybillTask.value))
 const loadSheetConfig = async () => {
     const res: any = await getElectronicSheetConfig()
     externalProvider.value = res.data?.providers?.find((item: any) => item.external && item.key === res.data.interface_type) || null
@@ -479,6 +481,7 @@ const emit = defineEmits(['complete'])
  */
 const confirm = async (formEl: FormInstance | undefined) => {
     if (loading.value || waybillBusy.value || !formEl) return
+    if (waybillDeliveryBlocked.value) { ElMessage.warning('此面单尚不能确认真实发货；沙箱任务、待核实或权限未确认的任务不能用于发货'); return }
     if (formData.delivery_way === 'plugin_waybill' && (!waybillTask.value.waybill_no || !['ready', 'print_pending', 'printed', 'print_failed'].includes(waybillTask.value.state))) {
         ElMessage.warning('请先申请有效面单；任务状态不明或已取消时不能确认发货')
         return
@@ -497,10 +500,10 @@ const confirm = async (formEl: FormInstance | undefined) => {
             const data = { ...formData }
             if (formData.delivery_way === 'plugin_waybill') {
                 data.delivery_way = 'manual_write'
-                data.waybill_provider_key = externalProvider.value.key
+                data.waybill_provider_key = providerTaskKey(waybillTask.value, externalProvider.value.key)
             } else if (externalProvider.value && waybillTask.value.waybill_no === formData.express_number && formData.express_number) {
                 // Switching the display mode must not detach an already generated waybill from its safety check.
-                data.waybill_provider_key = externalProvider.value.key
+                data.waybill_provider_key = providerTaskKey(waybillTask.value, externalProvider.value.key)
             }
             orderDelivery(data).then(res => {
                 if (formData.delivery_type == 'express' && formData.delivery_way == 'electronic_sheet') {

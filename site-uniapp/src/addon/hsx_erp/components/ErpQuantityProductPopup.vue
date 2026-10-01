@@ -1,6 +1,6 @@
 <template>
     <view>
-        <view class="trigger" :class="{ 'trigger--selected': modelValue }" @click="open">
+        <view v-if="showTrigger" class="trigger" :class="{ 'trigger--selected': modelValue }" @click="open">
             <view class="trigger__copy">
                 <text class="trigger__title">{{ selected?.product_name || '选择已有商品' }}</text>
                 <text class="trigger__sub">{{ selected ? [selected.category_name || '未分类', selected.spec, selected.product_code].filter(Boolean).join(' · ') : '搜索补货商品，找不到可创建新品' }}</text>
@@ -21,6 +21,7 @@
                     </view>
                 </view>
 
+                <scroll-view v-if="categoryTarget || creating" scroll-y class="form-scroll" :show-scrollbar="false">
                 <view v-if="categoryTarget" class="create-form category-repair">
                     <view class="repair-product">
                         <text class="repair-product__name">{{ categoryTarget.product_name }}</text>
@@ -28,15 +29,14 @@
                     </view>
                     <view class="category-field">
                         <text class="category-field__label">商品分类 *</text>
-                        <ErpCatalogCategoryPopup v-model="categoryForm.category_path" />
+                        <view class="category-select" @click="categoryPickerRef?.open()"><text>{{ categoryForm.category_path || '选择末级分类' }}</text><u-icon name="arrow-right" color="#94a3b8" size="16" /></view>
                     </view>
-                    <view class="submit-wrap"><u-button type="primary" :loading="categorySaving" text="保存分类并选中" @click="saveCategory" /></view>
                 </view>
 
                 <view v-else-if="creating" class="create-form">
                     <view class="category-field">
                         <text class="category-field__label">商品分类 *</text>
-                        <ErpCatalogCategoryPopup v-model="form.category_path" />
+                        <view class="category-select" @click="categoryPickerRef?.open()"><text>{{ form.category_path || '选择末级分类' }}</text><u-icon name="arrow-right" color="#94a3b8" size="16" /></view>
                     </view>
                     <view class="form-field"><text>商品名称 *</text><u-input v-model="form.product_name" border="none" placeholder="如 iPhone 15 钢化膜" /></view>
                     <view class="form-field"><text>规格</text><u-input v-model="form.spec" border="none" placeholder="如 透明 / 高清" /></view>
@@ -47,8 +47,8 @@
                             <view v-for="unit in units" :key="unit" class="unit" :class="{ active: form.unit === unit }" @click="form.unit = unit">{{ unit }}</view>
                         </view>
                     </view>
-                    <view class="submit-wrap"><u-button type="primary" :loading="saving" text="创建并选中" @click="save" /></view>
                 </view>
+                </scroll-view>
 
                 <template v-else>
                     <view class="search">
@@ -56,10 +56,11 @@
                     </view>
                     <scroll-view scroll-y class="list">
                         <view v-if="loading" class="empty"><u-loading-icon size="28" /><text>正在查询商品档案</text></view>
+                        <view v-else-if="searchError" class="empty"><text>{{ searchError }}</text><text class="empty__action" @click="search">重新加载</text></view>
                         <view v-else-if="!list.length" class="empty">
                             <u-icon name="search" color="#cbd5e1" size="30" />
                             <text>没有找到商品</text>
-                            <text class="empty__action" @click="creating = true">创建新品</text>
+                            <text class="empty__action" @click="toggleMode">创建新品</text>
                         </view>
                         <view v-for="item in list" v-else :key="item.id" class="product" :class="{ selected: Number(item.id) === Number(modelValue) }" @click="choose(item)">
                             <view class="product__main">
@@ -74,17 +75,22 @@
                         </view>
                     </scroll-view>
                 </template>
+                <view v-if="categoryTarget || creating" class="submit-wrap">
+                    <u-button v-if="categoryTarget" type="primary" :loading="categorySaving" text="保存分类并选中" @click="saveCategory" />
+                    <u-button v-else type="primary" :loading="saving" text="创建并选中" @click="save" />
+                </view>
             </view>
         </u-popup>
+        <ErpCatalogCategoryPopup ref="categoryPickerRef" v-model="activeCategoryPath" :show-trigger="false" :z-index="10085" />
     </view>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { createMobileErpQuantityProduct, getMobileErpQuantityProducts, updateMobileErpQuantityProductCategory } from '@/addon/hsx_erp/api/erp'
 import ErpCatalogCategoryPopup from './ErpCatalogCategoryPopup.vue'
 
-const props = withDefaults(defineProps<{ modelValue?: number; selected?: any }>(), { modelValue: 0, selected: null })
+const props = withDefaults(defineProps<{ modelValue?: number; selected?: any; showTrigger?: boolean }>(), { modelValue: 0, selected: null, showTrigger: true })
 const emit = defineEmits<{
     (event: 'update:modelValue', value: number): void
     (event: 'change', value: any | null): void
@@ -98,9 +104,18 @@ const saving = ref(false)
 const categorySaving = ref(false)
 const keyword = ref('')
 const list = ref<any[]>([])
+const searchError = ref('')
+let searchSequence = 0
 const form = ref({ category_path: '', product_name: '', spec: '', product_code: '', unit: '件' })
 const categoryTarget = ref<any>(null)
 const categoryForm = ref({ category_path: '' })
+const categoryPickerRef = ref<any>(null)
+const activeCategoryPath = computed({
+    get: () => categoryTarget.value ? categoryForm.value.category_path : form.value.category_path,
+    set: value => { (categoryTarget.value ? categoryForm.value : form.value).category_path = value },
+})
+
+defineExpose({ open, close })
 
 function open() {
     show.value = true
@@ -109,8 +124,15 @@ function open() {
     keyword.value = ''
     search()
 }
-function close() { show.value = false }
+function close() {
+    if (saving.value || categorySaving.value) return
+    searchSequence++
+    loading.value = false
+    categoryPickerRef.value?.close()
+    show.value = false
+}
 function toggleMode() {
+    if (saving.value || categorySaving.value) return
     if (creating.value || categoryTarget.value) {
         creating.value = false
         categoryTarget.value = null
@@ -120,11 +142,19 @@ function toggleMode() {
     creating.value = true
 }
 async function search() {
+    const sequence = ++searchSequence
     loading.value = true
+    searchError.value = ''
     try {
         const res: any = await getMobileErpQuantityProducts({ keyword: keyword.value, page: 1, limit: 50 })
+        if (sequence !== searchSequence) return
         list.value = Array.isArray(res?.data) ? res.data : (res?.data?.data || [])
-    } finally { loading.value = false }
+    } catch (error: any) {
+        if (sequence === searchSequence) {
+            list.value = []
+            searchError.value = error?.msg || error?.message || '商品列表加载失败'
+        }
+    } finally { if (sequence === searchSequence) loading.value = false }
 }
 function choose(item: any) {
     if (!String(item.category_path || '').trim()) {
@@ -134,9 +164,11 @@ function choose(item: any) {
     }
     emit('update:modelValue', Number(item.id || 0))
     emit('change', item)
-    close()
+    categoryPickerRef.value?.close()
+    show.value = false
 }
 async function save() {
+    if (saving.value) return
     if (!form.value.category_path) return uni.showToast({ title: '请选择商品末级分类', icon: 'none' })
     if (!form.value.product_name.trim()) return uni.showToast({ title: '请填写商品名称', icon: 'none' })
     saving.value = true
@@ -151,6 +183,7 @@ async function save() {
     } finally { saving.value = false }
 }
 async function saveCategory() {
+    if (categorySaving.value) return
     if (!categoryTarget.value?.id || !categoryForm.value.category_path) {
         return uni.showToast({ title: '请选择商品末级分类', icon: 'none' })
     }
@@ -168,6 +201,7 @@ async function saveCategory() {
 }
 function quantityText(value: any) { return Number(value || 0).toFixed(3).replace(/\.?0+$/, '') }
 function money(value: any) { return Number(value || 0).toFixed(2) }
+onBeforeUnmount(() => { searchSequence++ })
 </script>
 
 <style scoped lang="scss">
@@ -176,15 +210,18 @@ function money(value: any) { return Number(value || 0).toFixed(2) }
 .trigger__copy { min-width:0; display:flex; flex-direction:column; gap:6rpx; }
 .trigger__title { color:#334155; font-size:28rpx; font-weight:650; }
 .trigger__sub { color:#94a3b8; font-size:23rpx; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.popup { min-height:780rpx; max-height:88vh; background:#f8fafc; }
-.head { display:flex; align-items:center; justify-content:space-between; padding:30rpx 30rpx 22rpx; background:#fff; }
+.popup { height:88vh; display:flex; flex-direction:column; overflow:hidden; background:#f8fafc; }
+.head { flex-shrink:0; display:flex; align-items:center; justify-content:space-between; gap:16rpx; padding:30rpx 30rpx 22rpx; background:#fff; }
 .head__title,.head__sub { display:block; }
 .head__title { color:#0f172a; font-size:34rpx; font-weight:700; }
 .head__sub { margin-top:5rpx; color:#94a3b8; font-size:23rpx; }
-.head__actions { display:flex; align-items:center; gap:28rpx; }
+.head__actions { flex-shrink:0; display:flex; align-items:center; gap:28rpx; }
 .head__link { color:#2563eb; font-size:26rpx; }
-.search { padding:20rpx 24rpx; background:#fff; border-top:1px solid #f1f5f9; }
-.list { height:650rpx; padding:18rpx 24rpx; box-sizing:border-box; }
+.search { flex-shrink:0; padding:20rpx 24rpx; background:#fff; border-top:1px solid #f1f5f9; }
+.list { flex:1; min-height:0; height:0; padding:18rpx 24rpx; box-sizing:border-box; }
+.form-scroll { flex:1; min-height:0; height:0; }
+.category-select { display:flex; align-items:center; justify-content:space-between; gap:16rpx; min-height:80rpx; padding:0 20rpx; border:1px solid #dbe4f0; border-radius:8px; color:#334155; font-size:27rpx; }
+.category-select text { flex:1; min-width:0; overflow-wrap:anywhere; }
 .product { display:flex; align-items:center; gap:18rpx; margin-bottom:16rpx; padding:24rpx; border:1px solid #e2e8f0; border-radius:20rpx; background:#fff; }
 .product.selected { border-color:#60a5fa; background:#eff6ff; }
 .product__main { min-width:0; flex:1; display:flex; flex-direction:column; gap:7rpx; }
@@ -205,5 +242,5 @@ function money(value: any) { return Number(value || 0).toFixed(2) }
 .unit-list { display:flex; flex-wrap:wrap; gap:14rpx; margin-top:18rpx; }
 .unit { min-width:72rpx; padding:12rpx 20rpx; text-align:center; color:#64748b; border-radius:14rpx; background:#f1f5f9; }
 .unit.active { color:#2563eb; background:#eff6ff; box-shadow:inset 0 0 0 1px #93c5fd; }
-.submit-wrap { padding:28rpx 0; }
+.submit-wrap { flex-shrink:0; padding:20rpx 24rpx; border-top:1px solid #e2e8f0; background:#fff; }
 </style>

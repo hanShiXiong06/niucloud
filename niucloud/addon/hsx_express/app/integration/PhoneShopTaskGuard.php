@@ -28,6 +28,8 @@ class PhoneShopTaskGuard
             $found[] = (int) $goods['order_goods_id'];
             if (!empty($goods['delivery_id'])) throw new CommonException('商城已确认该包裹发货，不能取消或恢复此运单；请联系承运商及业务人员处理');
             if ($operation === 'recover' && (int) ($goods['status'] ?? 0) !== 1) throw new CommonException('原商品已退款或正在退款，不能恢复为可发货运单');
+            $extend = is_array($goods['extend'] ?? null) ? $goods['extend'] : json_decode((string)($goods['extend'] ?? ''), true);
+            if ($operation === 'recover' && !empty($extend['erp_return'])) throw new CommonException('原设备已办理退回，不能恢复为可发货运单');
         }
         if (array_diff($ids, $found)) throw new CommonException('原包裹部分商品不存在，不能自动判断交件状态，请人工核实');
         return true;

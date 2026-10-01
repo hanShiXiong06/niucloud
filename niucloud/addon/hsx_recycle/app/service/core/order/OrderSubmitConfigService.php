@@ -8,6 +8,9 @@ use addon\hsx_recycle\app\dict\express\ExpressProviderDict;
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\model\express\ExpressProviderConfig;
 use addon\hsx_recycle\app\service\core\express\ExpressProductCatalogService;
+use addon\hsx_recycle\app\service\core\express\ExpressGatewayService;
+use addon\hsx_recycle\app\service\core\third_party\RecycleThirdPartyConfigService;
+use addon\hsx_recycle\app\dict\third_party\ThirdPartyDict;
 use app\model\diy\DiyTheme;
 use app\service\core\sys\CoreConfigService;
 use core\exception\CommonException;
@@ -225,6 +228,13 @@ class OrderSubmitConfigService
         $platformDeliveryProductName = trim((string)($platformDelivery['product_name'] ?? ($productMap[$platformDeliveryProvider][$platformDeliveryProductCode]['product_name'] ?? '')));
         if ($platformDeliveryProductName === '') {
             $platformDeliveryProductName = (string)($productMap[$platformDeliveryProvider][$platformDeliveryProductCode]['product_name'] ?? '');
+        }
+        // 顺丰的渠道、产品和客户展示名只跟随本站取件配置，不能沿用旧易速名称，
+        // 也不能通过下单设置再次覆盖物流中心的选择。最低数量规则仍在本页维护。
+        if ($platformDeliveryProvider === ExpressProviderDict::PROVIDER_SF_DIRECT) {
+            $platformDeliveryProviderName = (string)($providerMap[$platformDeliveryProvider]['provider_name'] ?? '顺丰直连');
+            $platformDeliveryProductName = (string)($productMap[$platformDeliveryProvider][$platformDeliveryProductCode]['product_name'] ?? '');
+            $platformDeliveryDisplayName = '顺丰速运';
         }
         $customerServiceType = (string)($customerService['type'] ?? $default['customer_service']['type']);
         if (!in_array($customerServiceType, ['wechat', 'qrcode'], true)) {
@@ -702,6 +712,8 @@ class OrderSubmitConfigService
         $result = [];
 
         foreach ($providers as $key => $provider) {
+            // 旧目录只能兜底旧易速；不能因它为空就默认选择尚未启用的顺丰。
+            if ($key !== ExpressProviderDict::PROVIDER_YISU) continue;
             $result[] = [
                 'provider' => $key,
                 'provider_name' => $provider['name'] ?? $key,
@@ -717,6 +729,16 @@ class OrderSubmitConfigService
 
     private function getPlatformDeliveryProviderOptions(int $siteId): array
     {
+        if ($this->usesSfPickup($siteId)) {
+            return [[
+                'provider' => ExpressProviderDict::PROVIDER_SF_DIRECT,
+                'provider_name' => '顺丰直连',
+                'is_default' => 1,
+                'support_quote' => false,
+                'support_cancel' => true,
+                'support_track' => false,
+            ]];
+        }
         $list = ExpressProviderConfig::getEnabledProviders($siteId);
         if (empty($list)) {
             ExpressProviderConfig::initSiteConfig($siteId);
@@ -750,6 +772,28 @@ class OrderSubmitConfigService
 
     private function getPlatformDeliveryProductOptions(int $siteId): array
     {
+        if ($this->usesSfPickup($siteId)) {
+            // 与实际预约使用同一入口，只读取本站已启用的正式取件产品。
+            // 插件缺失、取件停用或沙箱配置都不回退到易速，也不伪造可用线路。
+            try {
+                $products = (new ExpressGatewayService())->products($siteId);
+            } catch (\Throwable $e) {
+                return [];
+            }
+            $result = [];
+            foreach ($products as $product) {
+                if (($product['provider'] ?? '') !== ExpressProviderDict::PROVIDER_SF_DIRECT
+                    || empty($product['enabled']) || empty($product['product_code'])) continue;
+                $result[] = [
+                    'provider' => ExpressProviderDict::PROVIDER_SF_DIRECT,
+                    'product_code' => (string)$product['product_code'],
+                    'product_name' => (string)($product['product_name'] ?? '顺丰上门取件'),
+                    'express_type' => (string)($product['express_type'] ?? ''),
+                    'logo' => (string)($product['logo'] ?? ''),
+                ];
+            }
+            return $result;
+        }
         $products = (new ExpressProductCatalogService())->getEnabledProducts(
             $siteId,
             ExpressProviderDict::PROVIDER_YISU
@@ -772,6 +816,12 @@ class OrderSubmitConfigService
         }
 
         return $result;
+    }
+
+    private function usesSfPickup(int $siteId): bool
+    {
+        return (new RecycleThirdPartyConfigService())->getActiveProvider($siteId, ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER)
+            === ExpressProviderDict::PROVIDER_SF_DIRECT;
     }
 
     public function isDeliveryModeEnabled(int $siteId, int $deliveryType): bool

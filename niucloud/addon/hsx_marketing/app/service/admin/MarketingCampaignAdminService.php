@@ -135,6 +135,8 @@ final class MarketingCampaignAdminService extends BaseAdminService
         $minAmount = max(0, (float)($factFilter['min_amount'] ?? 0));
         $maxAmount = max(0, (float)($factFilter['max_amount'] ?? 0));
         if ($maxAmount > 0 && $maxAmount < $minAmount) throw new CommonException('回收成交价上限不能小于下限');
+        $orderSource = (string)($factFilter['order_source'] ?? 'all');
+        if (!in_array($orderSource, ['all', 'customer'], true)) throw new CommonException('请选择正确的计奖订单来源');
 
         $providers = [];
         foreach ((new MarketingRewardProviderService())->providers($this->site_id) as $provider) {
@@ -166,7 +168,7 @@ final class MarketingCampaignAdminService extends BaseAdminService
             'allowed_level_ids' => array_values(array_unique(array_filter(array_map('intval', (array)($data['allowed_level_ids'] ?? []))))),
             'qualification_key' => $qualificationKey,
             'ineligible_action' => 'level_apply', 'application_url' => trim((string)($data['application_url'] ?? '')),
-            'fact_key' => $factKey, 'fact_filter_json' => ['min_amount' => $minAmount, 'max_amount' => $maxAmount],
+            'fact_key' => $factKey, 'fact_filter_json' => ['min_amount' => $minAmount, 'max_amount' => $maxAmount, 'order_source' => $orderSource],
             'target_value' => $target, 'target_unit' => (string)($fact['unit'] ?? '次'),
             'grant_mode' => in_array(($data['grant_mode'] ?? ''), ['manual', 'auto'], true) ? (string)$data['grant_mode'] : 'manual',
             'claim_valid_days' => max(1, (int)($data['claim_valid_days'] ?? 7)),

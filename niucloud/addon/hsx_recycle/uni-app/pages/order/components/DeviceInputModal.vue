@@ -1,13 +1,6 @@
 <template>
-  <uni-popup ref="popupRef" type="center" background-color="#fff" :mask-click="true">
+  <OrderTaskPopup :show="visible" :title="mode === 'single' ? '添加设备' : '批量添加设备'" :closeOnOverlay="false" @close="handleClose">
     <view class="imei-modal">
-      <view class="modal-header">
-        <text class="modal-title">{{ mode === 'single' ? '添加设备' : '批量添加设备' }}</text>
-        <view class="close-btn" @click="handleClose">
-          <up-icon name="close" size="16" color="#64748b"></up-icon>
-        </view>
-      </view>
-
       <view class="modal-body">
         <view class="form-group">
           <!-- 单台模式 -->
@@ -20,12 +13,11 @@
                   placeholder="输入用户SN码"
                   border="surround"
                   clearable
-                ></u-input>
-                <view class="scan-btn" @click="handleSingleScan">
-                  <up-icon name="scan" size="16" color="#3b82f6"></up-icon>
-                </view>
+                >
+                  <template #suffix><button class="scan-btn" aria-label="扫码录入串号" @tap="handleSingleScan"><up-icon name="scan" size="20" color="var(--recycle-brand)" /></button></template>
+                </u-input>
               </view>
-              <view v-if="enablePricing" class="input-wrapper">
+              <view v-if="localEnablePricing" class="input-wrapper">
                 <u-input
                   v-model="singleInput.initial_price"
                   type="number"
@@ -48,12 +40,11 @@
                   placeholder="输入用户SN码"
                   border="surround"
                   clearable
-                ></u-input>
-                <view class="scan-btn" @click="() => handleScan(index)">
-                  <up-icon name="scan" size="16" color="#3b82f6"></up-icon>
-                </view>
+                >
+                  <template #suffix><button class="scan-btn" aria-label="扫码录入串号" @tap="handleScan(index)"><up-icon name="scan" size="20" color="var(--recycle-brand)" /></button></template>
+                </u-input>
               </view>
-              <view v-if="enablePricing" class="input-wrapper">
+              <view v-if="localEnablePricing" class="input-wrapper">
                 <u-input
                   v-model="input.initial_price"
                   type="number"
@@ -71,17 +62,17 @@
 
           <!-- 批量模式：添加输入框按钮 -->
           <view v-if="mode === 'batch'" class="add-input-btn" @click="addInput">
-            <up-icon name="plus" size="16" color="#3b82f6"></up-icon>
-            <up-text size="14" text="添加输入框"></up-text>
+            <up-icon name="plus" size="16" color="var(--recycle-brand)"></up-icon>
+            <text>继续添加一台</text>
           </view>
 
           <view class="tip-text">
-            <up-icon name="info-circle" size="14" color="#64748b"></up-icon>
+            <up-icon name="info-circle" size="14" color="var(--recycle-text-sub)"></up-icon>
             <text>如果输入 SN 过长，可以直接只输入后 6 位</text>
           </view>
           <view class="tip-text">
-            <up-icon name="info-circle" size="12" color="#64748b"></up-icon>
-            <text>苹果设备在拨号界面输入*#06#可快速获取 SN 条形码</text>
+            <up-icon name="info-circle" size="12" color="var(--recycle-text-sub)"></up-icon>
+            <text>可在拨号页输入 *#06# 查看 IMEI，或在设置中查看 SN。</text>
           </view>
         </view>
 
@@ -103,23 +94,22 @@
         </view>
       </view>
 
-      <view class="modal-footer">
+      <view class="pricing-toggle">
         <view class="left">
-          <u-switch size="18" v-model="localEnablePricing" activeColor="#3b82f6"></u-switch>
-          <text>启用定价</text>
-        </view>
-        <view class="right">
-          <view class="btn cancel" @click="handleClose">取消</view>
-          <view class="btn confirm" @click="handleConfirm">确定</view>
+          <u-switch size="18" v-model="localEnablePricing" activeColor="var(--recycle-brand)"></u-switch>
+          <text>填写预估价</text>
         </view>
       </view>
     </view>
-  </uni-popup>
+    <template #footer><OrderUiButton block @click="handleClose">取消</OrderUiButton><OrderUiButton block variant="primary" @click="handleConfirm">添加设备</OrderUiButton></template>
+  </OrderTaskPopup>
 </template>
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import type { Device } from '../../../types/order'
+import OrderTaskPopup from './OrderTaskPopup.vue'
+import OrderUiButton from './OrderUiButton.vue'
 
 interface Props {
   visible: boolean
@@ -137,7 +127,6 @@ const emit = defineEmits<{
   confirm: [devices: Device[]]
 }>()
 
-const popupRef = ref(null)
 const localEnablePricing = ref(props.enablePricing)
 
 // 单台模式输入
@@ -156,13 +145,10 @@ const tempDeviceList = ref<Device[]>([])
 
 watch(() => props.visible, (newVal) => {
   if (newVal) {
-    (popupRef.value as any)?.open()
     // 重置数据
     singleInput.value = { user_sn: '', initial_price: '' }
     inputList.value = [{ user_sn: '', initial_price: '' }]
     tempDeviceList.value = []
-  } else {
-    (popupRef.value as any)?.close()
   }
 })
 
@@ -297,8 +283,8 @@ const handleClose = () => {
 
 <style scoped lang="scss">
 .imei-modal {
-  width: 320px;
-  background: #fff;
+  width: 100%;
+  background: var(--recycle-bg-card);
   border-radius: 8px;
   overflow: hidden;
 
@@ -307,12 +293,12 @@ const handleClose = () => {
     justify-content: space-between;
     align-items: center;
     padding: 16px 16px 12px;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid var(--recycle-line);
 
     .modal-title {
       font-size: 16px;
       font-weight: 500;
-      color: #1f2937;
+      color: var(--recycle-text-main);
     }
 
     .close-btn {
@@ -321,15 +307,13 @@ const handleClose = () => {
       cursor: pointer;
 
       &:active {
-        background: #f1f5f9;
+        background: var(--recycle-bg-soft);
       }
     }
   }
 
   .modal-body {
     padding: 16px;
-    max-height: 60vh;
-    overflow-y: auto;
 
     .form-group {
       margin-bottom: 16px;
@@ -349,16 +333,27 @@ const handleClose = () => {
             display: flex;
             align-items: center;
             flex: 1;
+            min-width: 0;
+
+            :deep(.u-input) { flex: 1; min-width: 0; }
 
             .scan-btn {
-              position: absolute;
-              right: 8px;
-              padding: 4px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              width: 36px;
+              height: 36px;
+              padding: 0;
+              margin: 0;
+              border: 0;
+              background: transparent;
               border-radius: 4px;
               cursor: pointer;
 
+              &::after { border: 0; }
+
               &:active {
-                background: #f1f5f9;
+                background: var(--recycle-bg-soft);
               }
             }
           }
@@ -387,12 +382,12 @@ const handleClose = () => {
         margin-top: 8px;
         padding: 6px 12px;
         border-radius: 6px;
-        background: #f1f5f9;
+        background: var(--recycle-bg-soft);
         cursor: pointer;
 
         text {
           font-size: 14px;
-          color: #3b82f6;
+          color: var(--recycle-brand);
         }
 
         &:active {
@@ -408,13 +403,13 @@ const handleClose = () => {
 
         text {
           font-size: 12px;
-          color: #64748b;
+          color: var(--recycle-text-sub);
         }
       }
     }
 
     .device-list {
-      border-top: 1px solid #e5e7eb;
+      border-top: 1px solid var(--recycle-line);
       padding-top: 16px;
 
       .list-header {
@@ -423,10 +418,10 @@ const handleClose = () => {
         gap: 4px;
         margin-bottom: 8px;
         font-size: 14px;
-        color: #1f2937;
+        color: var(--recycle-text-main);
 
         .count {
-          color: #64748b;
+          color: var(--recycle-text-sub);
         }
       }
 
@@ -435,7 +430,7 @@ const handleClose = () => {
         justify-content: space-between;
         align-items: center;
         padding: 8px;
-        background: #f8fafc;
+        background: var(--recycle-bg-soft);
         border-radius: 4px;
         margin-bottom: 8px;
 
@@ -446,12 +441,12 @@ const handleClose = () => {
 
           .imei {
             font-size: 14px;
-            color: #1f2937;
+            color: var(--recycle-text-main);
           }
 
           .price {
             font-size: 12px;
-            color: #3b82f6;
+            color: var(--recycle-brand);
           }
         }
 
@@ -473,7 +468,7 @@ const handleClose = () => {
     justify-content: space-between;
     align-items: center;
     padding: 12px 16px;
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid var(--recycle-line);
 
     .left {
       display: flex;
@@ -482,7 +477,7 @@ const handleClose = () => {
 
       text {
         font-size: 14px;
-        color: #64748b;
+        color: var(--recycle-text-sub);
       }
     }
 
@@ -497,8 +492,8 @@ const handleClose = () => {
         cursor: pointer;
 
         &.cancel {
-          color: #64748b;
-          background: #f1f5f9;
+          color: var(--recycle-text-sub);
+          background: var(--recycle-bg-soft);
 
           &:active {
             background: #e2e8f0;
@@ -506,15 +501,17 @@ const handleClose = () => {
         }
 
         &.confirm {
-          color: #fff;
-          background: #3b82f6;
+          color: var(--recycle-bg-card);
+          background: var(--recycle-brand);
 
           &:active {
-            background: #2563eb;
+            background: var(--recycle-brand);
           }
         }
       }
     }
   }
 }
+.pricing-toggle { padding: 12px 16px 20px; border-top: 1rpx solid var(--recycle-line); }
+.pricing-toggle .left { display: flex; gap: 10px; align-items: center; font-size: 14px; }
 </style>

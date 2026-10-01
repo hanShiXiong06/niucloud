@@ -62,6 +62,8 @@ export const DEVICE_STATUS = {
   5: { text: '已回收', color: '#10b981', bgColor: '#d1fae5' },
   6: { text: '已退回', color: '#ef4444', bgColor: '#fee2e2' },
   7: { text: '已定价', color: '#2563eb', bgColor: '#eaf2ff' },
+  8: { text: '已定价（重新定价）', color: '#2563eb', bgColor: '#eaf2ff' },
+  9: { text: '已转代卖', color: '#6b7280', bgColor: '#f3f4f6' },
 } as const
 
 // ============ 退货订单状态 ============
@@ -76,6 +78,7 @@ export const RETURN_ORDER_STATUS = {
 export const DELIVERY_TYPE = {
   1: { text: '邮寄', color: '#3b82f6' },
   2: { text: '自送', color: '#10b981' },
+  3: { text: '物流车', color: '#6b7280' },
 } as const
 
 // ============ 默认状态 ============

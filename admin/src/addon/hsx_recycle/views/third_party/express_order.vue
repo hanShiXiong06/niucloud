@@ -9,7 +9,14 @@
         <el-alert v-else-if="!configLoaded" title="尚未成功读取本站配置，请刷新后再编辑或保存。" type="warning" :closable="false" show-icon class="draft-alert" />
         <el-form label-position="top" class="service-form" :disabled="configBusy || !configLoaded">
             <div class="section-heading"><div><h3>1. 新预约使用哪个渠道</h3><p>更换只影响新预约，已有订单仍沿原渠道处理。请保留原账号凭证。</p></div><el-switch v-model="form.enabled" :active-value="1" :inactive-value="0" active-text="启用新预约" /></div>
-            <el-form-item label="接入渠道"><el-select v-model="form.provider" class="!w-full"><el-option label="快递100上门取件" value="kuaidi100" /><el-option label="易速（保留原渠道）" value="yisu" /></el-select></el-form-item>
+            <el-form-item label="接入渠道"><el-select v-model="form.provider" class="!w-full"><el-option label="顺丰直连 · 上门取件" value="sf_direct" /><el-option label="快递100上门取件" value="kuaidi100" /><el-option label="易速（保留原渠道）" value="yisu" /></el-select></el-form-item>
+            <template v-if="form.provider === 'sf_direct'">
+                <div class="onboarding-banner"><div><strong>使用顺丰独立的「上门取件」配置</strong><p>本站账号、运行环境、顺丰产品和寄付／到付，统一在物流服务中维护；这里不重复填写凭据。</p></div><el-button type="primary" plain @click="openSfPickupConfig">配置顺丰上门取件</el-button></div>
+                <el-alert title="预约取件不等于电子面单" description="客户无需购买打印机或打印面单。这里只决定新回收预约使用顺丰，不会启用商城电子面单，也不会自动替换历史预约的渠道。" type="info" :closable="false" show-icon class="next" />
+                <div class="section-heading next"><div><h3>2. 上线前核对三件事</h3><p>只选择渠道不代表已开通，保存后请检查已保存配置。</p></div></div>
+                <ol class="form-tip sf-checklist"><li>安装并启用物流服务插件，在「顺丰直连 · 上门取件」完成本站独立账号配置与启用。</li><li>沙箱只用于联调，不允许预约真实客户上门取件。正式环境须先向顺丰确认接口、产品与付款方式权限。</li><li>客户下单后核对预约是否受理、取件安排和通知结果；时间、取件员与电话只有顺丰实际返回后才展示，不自行编造。</li></ol>
+                <p class="form-tip">承运商固定顺丰；产品和付款方由管理员设置，终端客户不用选择。明确失败可按页面提示改为自行寄件，结果未知请先查询原预约，勿重复下单。</p>
+            </template>
             <template v-if="form.provider === 'kuaidi100'">
                 <div class="onboarding-banner"><div><strong>第一次配置？按指引完成，不需要猜产品名称</strong><p>各站点使用自己的账号。选择产品不会开通账号，也不会发起寄件。</p></div><el-button type="primary" plain @click="guideVisible = true">查看完整接入指引</el-button></div>
                 <div class="section-heading next"><div><h3>2. 本站账号与服务模式</h3><p>请先开通对应的上门取件产品。配置检查通过不代表已有寄件权限。</p></div></div>
@@ -34,7 +41,7 @@
                     <el-form-item label="接口超时（秒）"><el-input-number v-model="form.kuaidi100.timeout" :min="3" :max="60" /></el-form-item>
                 </el-collapse-item></el-collapse>
             </template>
-            <template v-else>
+            <template v-else-if="form.provider === 'yisu'">
                 <el-row :gutter="16"><el-col :xs="24" :sm="12"><el-form-item label="App ID"><el-input v-model="form.yisu.appid" /></el-form-item></el-col><el-col :xs="24" :sm="12"><el-form-item label="App Secret"><el-input v-model="form.yisu.app_secret" show-password /></el-form-item></el-col><el-col :span="24"><el-form-item label="回调地址"><el-input v-model="form.yisu.callback_url" /></el-form-item></el-col></el-row>
                 <el-collapse><el-collapse-item title="易速接口高级配置" name="yisu"><el-form-item label="服务地址"><el-input v-model="form.yisu.base_url" /></el-form-item><el-form-item label="接口版本"><el-input v-model="form.yisu.version" /></el-form-item><el-form-item label="超时（秒）"><el-input-number v-model="form.yisu.timeout" :min="3" :max="120" /></el-form-item><el-form-item v-for="item in pathFields" :key="item.key" :label="item.label"><el-input v-model="form.yisu.api_paths[item.key]" /></el-form-item></el-collapse-item></el-collapse>
             </template>
@@ -58,7 +65,7 @@
                 </div>
             </div>
         </el-collapse-item></el-collapse>
-        <template #aside><section class="aside-action-card"><h3>先看指引，再开通</h3><p class="form-tip">谁负责准备账号、每项在哪里获取、失败后怎么办，都在接入指引中。</p><el-button class="!w-full" type="primary" plain @click="guideVisible = true">开通与验收指引</el-button><el-divider /><h3>管理入口</h3><el-button v-if="form.provider === 'yisu'" class="!w-full mt-[12px]" @click="router.push('/third_party/express_product')">管理易速产品</el-button><el-button class="!w-full !ml-0 mt-[8px]" @click="router.push('/express/order_record')">预约与运单记录</el-button><el-button class="!w-full !ml-0 mt-[8px]" @click="router.push('/setting/notice/template')">系统消息管理</el-button><el-button class="!w-full !ml-0 mt-[8px]" @click="router.push('/setting/notice/records')">系统通知记录</el-button><p class="form-tip">预约失败不删除回收单；未知结果先核实，避免重复叫件。快递鸟、直连渠道将在适配器验收后开放，不展示未实现的选项。</p></section></template>
+        <template #aside><section class="aside-action-card"><h3>先看指引，再开通</h3><p class="form-tip">谁负责准备账号、每项在哪里获取、失败后怎么办，都在接入指引中。</p><el-button v-if="form.provider === 'sf_direct'" class="!w-full" type="primary" plain @click="openSfPickupConfig">顺丰独立配置与指引</el-button><el-button v-else class="!w-full" type="primary" plain @click="guideVisible = true">开通与验收指引</el-button><el-divider /><h3>管理入口</h3><el-button v-if="form.provider === 'yisu'" class="!w-full mt-[12px]" @click="router.push('/third_party/express_product')">管理易速产品</el-button><el-button class="!w-full !ml-0 mt-[8px]" @click="router.push('/express/order_record')">预约与运单记录</el-button><el-button class="!w-full !ml-0 mt-[8px]" @click="router.push('/setting/notice/template')">系统消息管理</el-button><el-button class="!w-full !ml-0 mt-[8px]" @click="router.push('/setting/notice/records')">系统通知记录</el-button><p class="form-tip">预约失败不删除回收单；未知结果先核实，避免重复叫件。切换新渠道后，已有预约仍保留原服务商与凭据关系。</p></section></template>
     </ThirdPartyServiceShell>
     <PickupSetupGuide v-model="guideVisible" :catalog="catalog" />
     <PickupNoticeReceipts v-model="pickupReceiptsVisible" />
@@ -76,6 +83,11 @@ import { useThirdPartyServiceConfig } from '@/addon/hsx_recycle/composables/useT
 import { getPickupNoticeConfig } from '@/addon/hsx_recycle/api/pickup_notice'
 import { apiThirdPartyConfigSave, apiThirdPartyConfigTest } from '@/addon/hsx_recycle/api/third_party'
 const router = useRouter()
+const openSfPickupConfig = () => {
+    const target = router.resolve('/hsx_express/config?provider=sf_direct&scene=pickup')
+    if (!target.matched.length) return ElMessage.warning('当前账号未获得物流服务配置入口，请管理员确认已安装插件并分配菜单权限')
+    window.open(target.href, '_blank', 'noopener,noreferrer')
+}
 const guideVisible = ref(false)
 const pickupReceiptsVisible = ref(false)
 const officialLinks = { credentials: 'https://api.kuaidi100.com/document/chakankey', channel: 'https://api.kuaidi100.com/document/shang-jia-ji-jian-duo-tong-dao', online: 'https://api.kuaidi100.com/document/603cb649a62a19500e19866b', offline: 'https://api.kuaidi100.com/document/cduan-ji-jian-jie-kou-wen-dang' }
@@ -98,7 +110,7 @@ const loadCatalog = async () => {
 const defaults = { enabled: 1, provider: 'yisu', kuaidi100: { api_key: '', secret: '', callback_salt: '', mode: 'online', environment: 'production', carrier_code: 'shunfeng', carrier_name: '顺丰速运', service_type: '', payment: 'SHIPPER', channel_sw: '', callback_url: '', timeout: 30 }, yisu: { base_url: 'http://open.yisuopen.com', appid: '', app_secret: '', version: 'V1.0', timeout: 30, callback_url: '', api_paths: { quote: '/openApi/getPrice', create: '/openApi/doOrder', cancel: '/openApi/doCancel', modify: '/openApi/doModify', detail: '/openApi/getOrderDetail', waybillPdf: '/openApi/getWaybillPdf', fund: '/openApi/fund' } } }
 const { form, loading, saving, testing, capabilityInfo, load } = useThirdPartyServiceConfig('express_order', defaults)
 const readableCapability = computed(() => {
-    const labels: Record<string, string> = { api_key: '授权 Key', secret: 'Secret', callback_url: '公开回调地址', callback_salt: '回调校验密钥（保存时自动生成）', carrier_code: '上门取件公司', service_type: '寄件产品', base_url: '服务地址', appid: 'App ID', app_secret: 'App Secret' }
+    const labels: Record<string, string> = { api_key: '授权 Key', secret: 'Secret', callback_url: '公开回调地址', callback_salt: '回调校验密钥（保存时自动生成）', carrier_code: '上门取件公司', service_type: '寄件产品', base_url: '服务地址', appid: 'App ID', app_secret: 'App Secret', client_code: '顺丰顾客编码', check_word: '顺丰校验码', monthly_card: '顺丰月结账号', product_code: '顺丰产品', pay_method: '运费付款方式', use_ack: '顺丰产品与付款权限确认', environment: '顺丰运行环境', plugin: '物流服务插件', enabled: '独立上门取件开关' }
     return { ...capabilityInfo.value, missing_fields: (capabilityInfo.value?.missing_fields || []).map((key: string) => labels[key] || key) }
 })
 const configLoaded = ref(false)
@@ -121,11 +133,13 @@ const selectionIssue = computed(() => {
 })
 const savedProviderLabel = computed(() => {
     if (!configLoaded.value) return '本站已保存渠道 · 待读取'
-    return JSON.parse(savedConfig.value).provider === 'kuaidi100' ? '快递100 · 本站已保存渠道' : '易速 · 本站已保存渠道'
+    return ({ kuaidi100: '快递100', yisu: '易速', sf_direct: '顺丰直连' } as Record<string, string>)[JSON.parse(savedConfig.value).provider] + ' · 本站已保存渠道'
 })
 const errorText = (error: any, fallback: string) => error?.msg || error?.message || fallback
 const readConfig = async () => {
     await load()
+    // 仅补全页面编辑结构，不改变已保存渠道，也不复制顺丰密钥到回收插件。
+    for (const section of ['kuaidi100', 'yisu'] as const) form[section] = { ...JSON.parse(JSON.stringify(defaults[section])), ...(form[section] || {}) }
     savedConfig.value = JSON.stringify(form)
     configLoaded.value = true
 }
@@ -151,9 +165,11 @@ const modeChanged = () => {
     ElMessage.info('服务模式已变更，请重新选择产品并核对账号及付款方式；系统不会自动切换付款方')
 }
 const configValidationError = (data: any): string => {
-    if (!['kuaidi100', 'yisu'].includes(data.provider)) return '请选择受支持的接入渠道'
+    if (!['kuaidi100', 'yisu', 'sf_direct'].includes(data.provider)) return '请选择受支持的接入渠道'
     // 停用时允许保存未完成的草稿，不阻碍关闭新预约。
     if (!Number(data.enabled)) return ''
+    // 顺丰配置由物流插件维护，是否可用由服务端按本站独立 pickup 配置校验。
+    if (data.provider === 'sf_direct') return ''
     const config = data[data.provider]
     const required: Record<string, string> = data.provider === 'kuaidi100'
         ? { api_key: '授权 Key', secret: 'Secret', carrier_code: '上门取件公司', carrier_name: '快递公司名称（选择公司后自动生成）', service_type: '寄件产品（从官方目录选择）', callback_url: '本站公开 HTTPS 回调地址' }

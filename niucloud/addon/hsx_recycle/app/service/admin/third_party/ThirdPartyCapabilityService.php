@@ -48,17 +48,30 @@ class ThirdPartyCapabilityService extends BaseAdminService
         $providerConfig = $section[$providerKey] ?? [];
         $required = $providerKey === ThirdPartyDict::PROVIDER_KUAIDI100
             ? ['api_key', 'secret', 'callback_url', 'callback_salt', 'carrier_code', 'service_type'] : ['base_url', 'appid', 'app_secret'];
+        $status = $this->checkRequired($providerConfig, $required);
+        $actions = ['运费预估', '预约上门取件', '取消预约', '改约（按渠道能力）', '取件进度', '回调接收'];
+        if ($providerKey === ThirdPartyDict::PROVIDER_SF_DIRECT) {
+            $ready = $this->thirdPartyConfigService->isProviderConfigComplete($this->site_id, ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER, $providerKey);
+            $status = ['complete' => $ready, 'missing_fields' => $ready ? [] : ['请到物流中心完成独立的顺丰上门取件配置']];
+            $actions = ['提交上门取件请求', '按原单核实建单结果', '确认取消后开放自寄', '派员及取件回调待开通验收'];
+        }
 
-        return $this->buildCapability(
+        $capability = $this->buildCapability(
             'express_order',
             '快递发件',
             ThirdPartyDict::getProviderName($providerKey),
             ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER,
             $providerKey,
             !empty($section['enabled']),
-            $this->checkRequired($providerConfig, $required),
-            ['运费预估', '预约上门取件', '取消预约', '改约（按渠道能力）', '取件进度', '回调接收']
+            $status,
+            $actions
         );
+        if ($providerKey === ThirdPartyDict::PROVIDER_SF_DIRECT) {
+            $capability['configuration_path'] = '/hsx_express/config?provider=sf_direct&scene=pickup';
+            $capability['verification_state'] = $ready ? 'configured_not_verified' : 'incomplete';
+            $capability['callback_ready'] = false;
+        }
+        return $capability;
     }
 
     private function buildExpressQueryCapability(): array

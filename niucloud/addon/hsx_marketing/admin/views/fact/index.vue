@@ -9,7 +9,7 @@
             </div>
             <el-table :data="rows" v-loading="loading" row-key="id">
                 <el-table-column label="业务事实" min-width="230"><template #default="{ row }"><div class="primary">{{ factName(row.fact_key) }}</div><div class="secondary">{{ row.business_no || row.event_id }}</div></template></el-table-column>
-                <el-table-column label="来源" width="130"><template #default="{ row }">{{ row.source_plugin }}<div class="secondary">{{ row.fact_type === 'reversal' ? '冲红' : '原始事实' }}</div></template></el-table-column>
+                <el-table-column label="来源" width="155"><template #default="{ row }">{{ row.source_plugin }}<div v-if="row.fact_key === 'recycle_device_delivered'" class="secondary">{{ orderSourceName(row.payload_json?.order_source) }}</div><div class="secondary">{{ row.fact_type === 'reversal' ? '冲红' : '原始事实' }}</div></template></el-table-column>
                 <el-table-column label="会员" width="100" prop="member_id" />
                 <el-table-column label="数量" width="100"><template #default="{ row }"><span :class="row.quantity < 0 ? 'danger' : ''">{{ Number(row.quantity) }}</span></template></el-table-column>
                 <el-table-column label="发生时间" width="180"><template #default="{ row }">{{ datetime(row.occurred_at) }}</template></el-table-column>
@@ -31,6 +31,7 @@ const statuses = [{ label: '待处理', value: 'pending' }, { label: '处理中'
 const load = async () => { loading.value = true; try { const data: any = (await getMarketingFacts(query)).data || {}; rows.value = data.data || []; total.value = Number(data.total || 0) } finally { loading.value = false } }
 const retry = async (row: any) => { await retryMarketingFact(Number(row.id)); ElMessage.success('事实已重新处理'); load() }
 const factName = (key: string) => ({ recycle_device_delivered: '回收设备完成交货' } as any)[key] || key
+const orderSourceName = (source: string) => source === 'customer' ? '客户自主下单' : source === 'agent' ? '员工代下单' : '下单来源未记录'
 const statusType = (value: string) => ({ success: 'success', failed: 'danger', pending: 'warning', processing: 'primary' } as any)[value] || 'info'
 const datetime = (value: any) => value ? new Date(Number(value) * 1000).toLocaleString('zh-CN', { hour12: false }) : '—'
 onMounted(load)

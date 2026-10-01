@@ -68,22 +68,16 @@
                     <view class="form-section__head">
                         <view>
                             <text class="form-section__title">设备明细（{{ form.items.length }} 台）</text>
-                            <text v-if="form.items.length" class="gesture-tip">左滑设备卡可管理</text>
                         </view>
                         <view class="form-section__actions">
                             <u-button size="small" plain type="primary" icon="scan" @click="scanAddDevice">扫码录入</u-button>
                             <u-button size="small" type="primary" icon="plus" @click="addDevice">添加设备</u-button>
                         </view>
                     </view>
-                    <ErpSwipeActionItem
+                    <view
                         v-for="(item, idx) in form.items"
                         :key="idx"
-                        class="device-swipe"
-                        :name="idx"
-                        :open="swipeOpenIndex === idx"
-                        :actions="deviceSwipeActions"
-                        @update:open="value => setSwipeOpen(idx, value)"
-                        @action="action => handleItemSwipeAction(action, idx)"
+                        class="detail-item"
                     >
                     <view class="device-form-card" :class="{ 'device-form-card--done': deviceCoreComplete(item) }">
                         <view class="device-form__head" @click="toggleDevice(idx)">
@@ -100,6 +94,9 @@
                                 </view>
                             </view>
                             <view class="device-form__tools">
+                                <button class="remove-item" aria-label="删除设备" @click.stop="confirmRemoveItem(item)">
+                                    <u-icon name="trash" color="#dc2626" size="18" />
+                                </button>
                                 <u-icon :name="expandedDeviceIndex === idx ? 'arrow-up' : 'arrow-down'" color="#94a3b8" size="16" />
                             </view>
                         </view>
@@ -116,18 +113,14 @@
                                     <u-icon name="scan" color="#3b6ef5" size="20" />
                                 </view>
                             </view>
-                            <ErpCatalogProductPopup
-                                v-model="item.catalog_product_id"
-                                :selected-label="catalogDisplayLabel(item)"
-                                :category-path="item.category_path"
-                                label="分类 / 型号"
-                                placeholder="先选品类，再选择品牌、系列和型号"
-                                layout="horizontal"
-                                :embedded="true"
-                                :clearable="true"
-                                @change="payload => onCatalogProductChange(idx, payload)"
-                                @clear="clearItemCatalogProduct(idx)"
-                            />
+                            <view class="form-row" @click="openCatalogPicker(item)">
+                                <text class="form-label required">分类 / 型号</text>
+                                <view class="form-input" :class="{ 'form-input--on': item.category_path }">
+                                    <text :class="item.category_path ? 'input-text' : 'input-placeholder'">{{ catalogDisplayLabel(item) || '选择品类与型号' }}</text>
+                                    <view v-if="item.category_path" class="inline-clear" @click.stop="clearItemCatalogProduct(idx)"><u-icon name="close-circle-fill" color="#94a3b8" size="17" /></view>
+                                    <u-icon name="arrow-right" color="#cbd5e1" size="16" />
+                                </view>
+                            </view>
                             <view class="form-row">
                                 <text class="form-label required">设备名称</text>
                                 <u-input
@@ -219,7 +212,7 @@
                             </view>
                         </view>
                     </view>
-                    </ErpSwipeActionItem>
+                    </view>
                     <view class="add-hint" v-if="!form.items.length">点击「添加设备」开始录入</view>
                 </view>
                 <view v-else class="form-section">
@@ -227,44 +220,45 @@
                         <view>
                             <text class="form-section__title">标品明细（{{ form.items.length }} 项）</text>
                             <text class="mode-desc">同款商品一次填写数量，无需录入串号</text>
-                            <text v-if="form.items.length" class="gesture-tip">左滑商品行可管理</text>
                         </view>
                         <view class="form-section__actions">
                             <u-button size="small" type="primary" icon="plus" @click="addStandardItem">添加商品</u-button>
                         </view>
                     </view>
-                    <ErpSwipeActionItem
+                    <view
                         v-for="(item, idx) in form.items"
                         :key="idx"
-                        class="device-swipe"
-                        :name="idx"
-                        :open="swipeOpenIndex === idx"
-                        :actions="deviceSwipeActions"
-                        @update:open="value => setSwipeOpen(idx, value)"
-                        @action="action => handleItemSwipeAction(action, idx)"
+                        class="detail-item"
                     >
                     <view class="device-form-card standard-form-card">
                         <view class="device-form__head">
                             <text class="device-form__index">{{ item.quantity_product_id ? '补货' : '标品' }} {{ idx + 1 }}</text>
+                            <button class="remove-item" aria-label="删除商品" @click="confirmRemoveItem(item)"><u-icon name="trash" color="#dc2626" size="18" /></button>
                         </view>
+                        <view class="standard-form__body">
                         <view class="standard-product-picker">
-                            <ErpQuantityProductPopup
-                                v-model="item.quantity_product_id"
-                                :selected="item.quantity_product_snapshot"
-                                @change="product => onStandardProductChange(item, product)"
-                            />
+                            <button class="product-select-trigger" :class="{ 'product-select-trigger--selected': item.quantity_product_id }" @click="openQuantityPicker(item)">
+                                <view class="product-select-copy">
+                                    <text class="product-select-name">{{ item.quantity_product_snapshot?.product_name || '选择已有商品' }}</text>
+                                    <text v-if="item.quantity_product_id" class="product-select-meta">{{ [item.quantity_product_snapshot?.category_name, item.spec].filter(Boolean).join(' · ') || item.unit || '件' }}</text>
+                                </view>
+                                <text v-if="item.quantity_product_id" class="product-select-action">更换</text>
+                                <u-icon name="arrow-right" color="#94a3b8" size="16" />
+                            </button>
                         </view>
                         <view class="form-row">
                             <text class="form-label required">采购数量</text>
-                            <u-input v-model="item.quantity" type="number" placeholder="1" :customStyle="inputStyle" />
-                            <view class="unit-select" @click="openUnitPicker(idx)">
-                                <text>{{ item.unit || '件' }}</text>
-                                <u-icon name="arrow-down" size="12" color="#64748b" />
+                            <view class="quantity-input">
+                                <u-input v-model="item.quantity" type="number" border="none" placeholder="1" :customStyle="inputStyle" />
+                                <view class="unit-select" @click="openUnitPicker(idx)">
+                                    <text>{{ item.unit || '件' }}</text>
+                                    <u-icon name="arrow-down" size="12" color="#64748b" />
+                                </view>
                             </view>
                         </view>
                         <view class="form-row">
                             <text class="form-label required">采购总价</text>
-                            <u-input v-model="item.line_total" type="number" placeholder="0.00" :customStyle="inputStyle" />
+                            <u-input v-model="item.line_total" type="number" border="none" placeholder="0.00" :customStyle="inputStyle" />
                         </view>
                         <view class="form-row" @click="openItemWarehouse(idx)">
                             <text class="form-label required">入库位置</text>
@@ -277,8 +271,9 @@
                             <text>折算单价</text>
                             <text class="standard-total__money">¥{{ standardUnitCostText(item) }} / {{ item.unit || '件' }}</text>
                         </view>
+                        </view>
                     </view>
-                    </ErpSwipeActionItem>
+                    </view>
                 </view>
 
                 <!-- 备注 -->
@@ -314,6 +309,22 @@
         </view>
 
         <!-- 组件弹窗 -->
+        <!-- 选择器放在页面层，避免明细卡和滚动容器裁切弹出内容。 -->
+        <ErpCatalogProductPopup
+            ref="catalogPickerRef"
+            :show-trigger="false"
+            :model-value="activeCatalogItem?.catalog_product_id || 0"
+            :selected-label="activeCatalogItem ? catalogDisplayLabel(activeCatalogItem) : ''"
+            :category-path="activeCatalogItem?.category_path || ''"
+            @change="onActiveCatalogChange"
+        />
+        <ErpQuantityProductPopup
+            ref="quantityPickerRef"
+            :show-trigger="false"
+            :model-value="activeQuantityItem?.quantity_product_id || 0"
+            :selected="activeQuantityItem?.quantity_product_snapshot"
+            @change="onActiveQuantityChange"
+        />
         <ErpPartyPopup
             v-model:show="showPartyPicker"
             role-type="supplier"
@@ -360,7 +371,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, nextTick, onMounted } from 'vue'
 import { createMobileErpPurchase, getMobileCapitalAccounts, getMobileErpConfig, getMobileErpGoodsMeta } from '@/addon/hsx_erp/api/erp'
 import ErpPartyPopup from '@/addon/hsx_erp/components/ErpPartyPopup.vue'
 import ErpWarehousePopup from '@/addon/hsx_erp/components/ErpWarehousePopup.vue'
@@ -370,7 +381,6 @@ import { scanErpCode } from '@/addon/hsx_erp/hooks/useErpScan'
 import ErpCatalogProductPopup from '@/addon/hsx_erp/components/ErpCatalogProductPopup.vue'
 import { confirmErpSensitiveAction } from '@/addon/hsx_erp/hooks/useErpSensitiveConfirm'
 import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
-import ErpSwipeActionItem from '@/addon/hsx_erp/components/ErpSwipeActionItem.vue'
 import ErpVoucherUploader from '@/addon/hsx_erp/components/ErpVoucherUploader.vue'
 import ErpQuantityProductPopup from '@/addon/hsx_erp/components/ErpQuantityProductPopup.vue'
 import { erpPartyDisplayName } from '@/addon/hsx_erp/hooks/useErpPartyText'
@@ -385,10 +395,10 @@ const goodsMeta = ref<any>({})
 const purchaseEntryMode = ref<'quick' | 'complete' | 'collaborative'>('quick')
 const listingWorkspace = ref<any>({ mode: 'one_stop', field_rules: {} })
 const expandedDeviceIndex = ref(0)
-const swipeOpenIndex = ref(-1)
-const deviceSwipeActions = [
-    { key: 'delete', text: '删除', icon: 'trash', backgroundColor: '#ef4444', width: '74px' },
-]
+const catalogPickerRef = ref<any>(null)
+const quantityPickerRef = ref<any>(null)
+const activeCatalogItem = ref<any>(null)
+const activeQuantityItem = ref<any>(null)
 const showPartyPicker = ref(false)
 const showWhPicker = ref(false)
 const showItemWhPicker = ref(false)
@@ -508,8 +518,8 @@ function addDevice() {
     expandedDeviceIndex.value = form.value.items.length - 1
 }
 function removeDevice(idx: number) {
+    if (idx < 0 || idx >= form.value.items.length) return
     form.value.items.splice(idx, 1)
-    swipeOpenIndex.value = -1
     if (!form.value.items.length) {
         expandedDeviceIndex.value = -1
     } else if (expandedDeviceIndex.value > idx) {
@@ -519,13 +529,30 @@ function removeDevice(idx: number) {
     }
 }
 
-function setSwipeOpen(idx: number, open: boolean) {
-    swipeOpenIndex.value = open ? idx : (swipeOpenIndex.value === idx ? -1 : swipeOpenIndex.value)
+async function openCatalogPicker(item: any) {
+    activeCatalogItem.value = item
+    await nextTick()
+    catalogPickerRef.value?.open()
 }
 
-function handleItemSwipeAction(action: string, idx: number) {
-    if (action !== 'delete') return
-    const item = form.value.items[idx]
+async function openQuantityPicker(item: any) {
+    activeQuantityItem.value = item
+    await nextTick()
+    quantityPickerRef.value?.open()
+}
+
+function onActiveCatalogChange(payload: any) {
+    const index = form.value.items.indexOf(activeCatalogItem.value)
+    if (index >= 0) return onCatalogProductChange(index, payload)
+}
+
+function onActiveQuantityChange(product: any) {
+    if (form.value.items.includes(activeQuantityItem.value)) onStandardProductChange(activeQuantityItem.value, product)
+}
+
+function confirmRemoveItem(item: any) {
+    const idx = form.value.items.indexOf(item)
+    if (idx < 0) return
     const label = String(item?.model || '').trim() || (form.value.item_type_mode === 'standard' ? `标品 ${idx + 1}` : `设备 ${idx + 1}`)
     uni.showModal({
         title: '确认删除',
@@ -533,7 +560,7 @@ function handleItemSwipeAction(action: string, idx: number) {
         confirmText: '删除',
         confirmColor: '#ef4444',
         success: result => {
-            if (result.confirm) removeDevice(idx)
+            if (result.confirm) removeDevice(form.value.items.indexOf(item))
         },
     })
 }
@@ -543,7 +570,8 @@ function changeItemTypeMode(mode: 'device' | 'standard') {
     form.value.item_type_mode = mode
     form.value.items = [mode === 'standard' ? newStandardItem() : newDeviceItem()]
     expandedDeviceIndex.value = mode === 'device' ? 0 : -1
-    swipeOpenIndex.value = -1
+    activeCatalogItem.value = null
+    activeQuantityItem.value = null
 }
 
 function addStandardItem() {
@@ -1137,10 +1165,17 @@ const money = (v: any) => Number(v || 0).toFixed(2)
 .purchase-flow-card__tag { padding:5rpx 12rpx; border-radius:999rpx; color:#3b6ef5; background:rgba(255,255,255,.8); font-size:19rpx; }
 .purchase-flow-card__desc { display:block; margin-top:6rpx; color:#64748b; font-size:22rpx; line-height:1.45; }
 .form-section { background:#fff; border-radius:28rpx; padding:0 28rpx; overflow:hidden; box-shadow:0 2rpx 12rpx rgba(0,0,0,.04); }
-.form-section__head { display:flex; align-items:center; justify-content:space-between; padding-top:20rpx; margin-bottom:16rpx; }
-.form-section__actions { display:flex; align-items:center; gap:12rpx; }
-.gesture-tip { display:block; margin-top:6rpx; color:#94a3b8; font-size:20rpx; line-height:1.35; }
-.device-swipe { display:block; margin-bottom:18rpx; overflow:hidden; border-radius:22rpx; }
+.form-section__head { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16rpx; padding-top:20rpx; margin-bottom:16rpx; }
+.form-section__actions { display:flex; align-items:center; gap:12rpx; flex-shrink:0; }
+.detail-item { display:block; margin-bottom:18rpx; }
+.remove-item { display:flex; align-items:center; justify-content:center; width:40px; height:40px; flex-shrink:0; margin:0; padding:0; background:transparent; border:0; }
+.remove-item::after, .product-select-trigger::after { border:0; }
+.product-select-trigger { display:flex; align-items:center; justify-content:space-between; gap:16rpx; width:100%; min-height:92rpx; padding:20rpx; margin:0; box-sizing:border-box; background:#f8fafc; border:1px solid #dbe4f0; border-radius:8px; text-align:left; line-height:1.5; }
+.product-select-trigger--selected { background:#f5f9ff; border-color:#bfdbfe; }
+.product-select-copy { flex:1; min-width:0; display:flex; flex-direction:column; gap:6rpx; font-size:28rpx; color:#334155; }
+.product-select-name { overflow-wrap:anywhere; font-weight:600; }
+.product-select-meta { font-size:23rpx; color:#64748b; overflow-wrap:anywhere; }
+.product-select-action { flex-shrink:0; font-size:24rpx; font-weight:500; color:#2563eb; }
 .mode-desc { display:block; margin-top:5rpx; color:#94a3b8; font-size:22rpx; }
 .mode-tabs { display:grid; grid-template-columns:1fr 1fr; gap:14rpx; }
 .mode-tab {
@@ -1149,15 +1184,20 @@ const money = (v: any) => Number(v || 0).toFixed(2)
     border:2rpx solid #e2e8f0; border-radius:16rpx;
 }
 .mode-tab.active { color:#2563eb; background:#eff6ff; border-color:#93c5fd; }
-.standard-form-card { padding-bottom:12rpx; }
+.standard-form__body { padding:4rpx 24rpx 24rpx; }
+.standard-product-picker { margin-bottom:12rpx; }
+.standard-form__body .form-row { min-height:104rpx; padding:12rpx 0; box-sizing:border-box; }
+.standard-form__body .form-label { width:138rpx; }
+.standard-form__body :deep(.u-input) { flex:1; min-width:0; box-sizing:border-box; }
+.quantity-input { flex:1; min-width:0; display:flex; align-items:center; gap:12rpx; }
 .unit-select {
-    min-width:104rpx; height:68rpx; padding:0 16rpx; box-sizing:border-box; display:flex;
+    flex-shrink:0; min-width:88rpx; height:68rpx; padding:0 12rpx; box-sizing:border-box; display:flex;
     align-items:center; justify-content:center; gap:8rpx; background:#f1f5f9;
     border-radius:12rpx; color:#475569; font-size:25rpx;
 }
 .standard-total {
     display:flex; align-items:center; justify-content:space-between;
-    padding:20rpx 4rpx 6rpx; color:#64748b; font-size:24rpx;
+    gap:16rpx; padding:22rpx 0 0; color:#64748b; font-size:24rpx;
 }
 .standard-total__money { color:#0f172a; font-size:30rpx; font-weight:700; }
 .form-section__title { font-size:30rpx; font-weight:700; color:#0f172a; }
@@ -1177,7 +1217,7 @@ const money = (v: any) => Number(v || 0).toFixed(2)
 }
 .device-form-card--done { border-color:#bbf7d0; box-shadow:0 5rpx 18rpx rgba(22,163,74,.06); }
 .device-form__head {
-    min-height:104rpx; padding:16rpx 18rpx; box-sizing:border-box; display:flex; align-items:center;
+    min-height:104rpx; padding:16rpx 24rpx; box-sizing:border-box; display:flex; align-items:center;
     justify-content:space-between; gap:14rpx; background:linear-gradient(90deg,#fff 0%,#f8fafc 100%);
 }
 .device-form__identity { min-width:0; flex:1; display:flex; align-items:center; gap:14rpx; }
@@ -1198,7 +1238,7 @@ const money = (v: any) => Number(v || 0).toFixed(2)
     white-space:nowrap; color:#94a3b8; font-size:20rpx;
 }
 .device-form__tools { flex:none; display:flex; align-items:center; gap:14rpx; }
-.device-form__body { padding:0 18rpx 18rpx; border-top:2rpx solid #f1f5f9; }
+.device-form__body { margin:0 24rpx; padding:0 0 24rpx; border-top:2rpx solid #f1f5f9; }
 .device-subtitle { display:flex; align-items:center; justify-content:space-between; padding:18rpx 2rpx 4rpx; color:#334155; font-size:23rpx; font-weight:700; }
 .device-subtitle text:last-child { color:#94a3b8; font-size:19rpx; font-weight:500; }
 .device-material { margin-top:18rpx; overflow:hidden; border:2rpx solid #e8edf5; border-radius:18rpx; background:#f8fafc; }

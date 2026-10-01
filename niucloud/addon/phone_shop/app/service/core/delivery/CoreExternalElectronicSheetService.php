@@ -25,7 +25,7 @@ class CoreExternalElectronicSheetService
     public function execute(int $siteId, array $params): array
     {
         $operation = (string) ($params['operation'] ?? 'query');
-        if (!in_array($operation, ['create', 'query', 'reprint', 'cancel'], true)) throw new CommonException('不支持的面单操作');
+        if (!in_array($operation, ['create', 'query', 'refresh', 'reprint', 'cancel'], true)) throw new CommonException('不支持的面单操作');
         $orderId = (int) ($params['order_id'] ?? 0);
         $ids = $params['order_goods_ids'] ?? [];
         if (!is_array($ids)) $ids = explode(',', (string) $ids);
@@ -55,6 +55,8 @@ class CoreExternalElectronicSheetService
         if ($operation !== 'create') {
             if (empty($existing['task_id'])) throw new CommonException('本包裹尚未申请电子面单');
             if ($operation === 'cancel' && array_filter($goods, fn($row) => !empty($row['delivery_id']))) throw new CommonException('本包裹已经确认发货，不能在此取消；请先联系快递公司核实实际交件情况');
+            // The saved task owns its channel, even after the site's selected channel changes.
+            $providerKey = (string)($existing['provider_key'] ?? $existing['provider_code'] ?? $providerKey);
             return $this->decorate($siteId, $providerKey, $registry->execute($siteId, $providerKey, $operation, $identity + ['task_id' => (int) $existing['task_id'], 'reason' => trim((string) ($params['reason'] ?? '')), 'confirm' => (int) ($params['confirm'] ?? 0)]));
         }
         // Reopening or double clicking retrieves the same durable task; never creates a second waybill.
@@ -62,13 +64,15 @@ class CoreExternalElectronicSheetService
         if (($order['delivery_type'] ?? '') !== 'express' || !in_array((int) $order['status'], [OrderDict::WAIT_DELIVERY, OrderDict::WAIT_TAKE], true)) throw new CommonException('仅物流配送且待发货的商品可申请面单');
         foreach ($goods as $row) {
             if ((int) $row['status'] !== 1 || !empty($row['delivery_id'])) throw new CommonException('选中商品已发货或正在退款，请重新选择未发货商品');
+            $extend = is_array($row['extend'] ?? null) ? $row['extend'] : (json_decode((string)($row['extend'] ?? ''), true) ?: []);
+            if (!empty($extend['erp_return'])) throw new CommonException('选中商品已退回 ERP 库存，不能继续申请面单，请刷新后重新选择');
         }
         $sender = (new ShopAddress())->where([['site_id', '=', $siteId], ['is_delivery_address', '=', 1], ['is_default_delivery', '=', 1]])->findOrEmpty()->toArray();
         if (!$sender) throw new CommonException('请先在商城地址库设置默认发货地址');
         $weight = (float) ($params['weight'] ?? 1);
         if ($weight <= 0 || $weight > 100) throw new CommonException('请输入实际包裹重量（大于 0 且不超过 100 千克）');
         $descriptor = $registry->all($siteId)[$providerKey] ?? [];
-        if (!$this->companyId($siteId, (string) ($descriptor['carrier_code'] ?? ''))) throw new CommonException('尚未唯一匹配商城快递公司，请先在商城物流公司中配置对应的快递100编码；未申请运单');
+        if (!$this->companyId($siteId, (string) ($descriptor['carrier_code'] ?? ''), $descriptor['carrier_mapping'] ?? [])) throw new CommonException('尚未唯一匹配商城快递公司，请先配置所选服务商对应的物流公司编码；未申请运单');
         $payload = $identity + [
             'business_no' => (string) $order['order_no'],
             'order_id' => $orderId,
@@ -91,6 +95,9 @@ class CoreExternalElectronicSheetService
         if (empty($task['task_id']) || empty($task['waybill_no']) || !in_array($task['state'] ?? '', ['ready', 'print_pending', 'printed', 'print_failed'], true)) {
             throw new CommonException('电子面单尚未确认有效，或已取消/状态不明，请先到物流任务核实；订单未发货');
         }
+        if (($task['environment'] ?? '') === 'sandbox' || (array_key_exists('can_confirm_delivery', $task) && !$task['can_confirm_delivery'])) {
+            throw new CommonException('此面单仅用于测试或尚未达到交件条件，不能用于正式订单发货');
+        }
         if (!hash_equals((string) $task['waybill_no'], trim((string) ($params['express_number'] ?? '')))) throw new CommonException('运单号与本包裹的面单任务不一致，请重新获取任务后发货');
         if (empty($task['express_company_id']) || (int) $task['express_company_id'] !== (int) ($params['express_company_id'] ?? 0)) throw new CommonException('未唯一匹配商城快递公司，或承运商与电子面单不一致，请核对商城物流公司编码');
     }
@@ -103,17 +110,27 @@ class CoreExternalElectronicSheetService
 
     private function decorate(int $siteId, string $providerKey, array $result): array
     {
+        $providerKey = (string)($result['provider_key'] ?? $result['provider_code'] ?? $providerKey);
         $result['provider_key'] = $providerKey;
         $result['express_company_id'] = 0;
         $carrier = (string) ($result['carrier_code'] ?? '');
         if ($carrier !== '') {
-            $result['express_company_id'] = $this->companyId($siteId, $carrier);
+            $descriptor = (new ElectronicSheetProviderRegistry())->all($siteId)[$providerKey] ?? [];
+            $result['express_company_id'] = $this->companyId($siteId, $carrier, $result['carrier_mapping'] ?? $descriptor['carrier_mapping'] ?? []);
         }
         return $result;
     }
 
-    private function companyId(int $siteId, string $carrier): int
+    private function companyId(int $siteId, string $carrier, array $mapping = []): int
     {
+        // Optional, provider-neutral mapping. Field names are fixed to local carrier code columns.
+        if ($mapping) {
+            $field = (string)($mapping['field'] ?? '');
+            $code = (string)($mapping['code'] ?? '');
+            if (!in_array($field, ['express_no', 'express_no_electronic_sheet', 'kd100_express_no', 'kd100_express_no_electronic_sheet'], true) || $code === '') return 0;
+            $companies = (new Company())->where([['site_id', '=', $siteId], [$field, '=', $code]])->column('company_id');
+            return count($companies) === 1 ? (int)$companies[0] : 0;
+        }
         if ($carrier === '') return 0;
         foreach (['kd100_express_no_electronic_sheet', 'kd100_express_no'] as $field) {
             $companies = (new Company())->where([['site_id', '=', $siteId], [$field, '=', $carrier]])->column('company_id');

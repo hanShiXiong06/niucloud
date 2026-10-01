@@ -24,7 +24,7 @@ return [
         'icon' => '/addon/hsx_recycle/site-tabbar/icon_01.png'
     ],
     [
-        'name' => '数据统计',
+        'name' => '工作台',
         'key' => 'hsx_recycle_stats',
         'group' => 'hsx_recycle',
         'menu_key' => 'recycle_workbench',
@@ -43,7 +43,7 @@ return [
         'icon' => '/addon/hsx_recycle/site-tabbar/icon_02.png'
     ],
     [
-        'name' => '订单管理',
+        'name' => '回收订单',
         'key' => 'hsx_recycle_order',
         'group' => 'hsx_recycle',
         'menu_key' => 'recycle_order_list',

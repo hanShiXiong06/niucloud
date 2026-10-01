@@ -69,6 +69,29 @@ class ExpressProviderRegistry
         return $this->providers;
     }
 
+    /**
+     * 可自动核实的渠道与查询所需的持久化标识。
+     * 可选能力由 Provider 自己声明，调度器不枚举厂商，也不自动重下单。
+     *
+     * @return array<string, array<int, string>>
+     */
+    public function queryRequirements(): array
+    {
+        $result = [];
+        foreach ($this->providers as $key => $class) {
+            if (!class_exists($class) || !is_subclass_of($class, ExpressProviderInterface::class)
+                || !method_exists($class, 'queryRequirements')) {
+                continue;
+            }
+            $requirements = (new $class())->queryRequirements();
+            if (!is_array($requirements)) continue;
+            $result[$key] = array_values(array_filter($requirements, static function ($field): bool {
+                return is_string($field) && preg_match('/^[a-zA-Z][a-zA-Z0-9_]*$/D', $field) === 1;
+            }));
+        }
+        return $result;
+    }
+
     private function loadEventProviders(): void
     {
         try {

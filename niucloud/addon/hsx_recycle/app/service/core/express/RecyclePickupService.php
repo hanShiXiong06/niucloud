@@ -160,9 +160,13 @@ class RecyclePickupService
                 $this->syncOrder($record);
                 return ['status' => 'throttled', 'message' => '已显示当前记录，请稍后再核实渠道状态', 'retry_after' => $remaining];
             }
-            if (($data['provider'] ?? '') === 'kuaidi100' && empty($data['provider_task_id'])) {
+            $requirements = (new ExpressProviderRegistry())->queryRequirements()[(string)($data['provider'] ?? '')] ?? [];
+            $missingIdentifiers = array_filter($requirements, static function (string $field) use ($data): bool {
+                return !isset($data[$field]) || !is_scalar($data[$field]) || trim((string)$data[$field]) === '';
+            });
+            if ($missingIdentifiers) {
                 $this->syncOrder($record);
-                return ['status' => 'waiting_callback', 'message' => '尚未收到渠道预约编号，请等待回调或联系门店核实，勿重复叫件', 'retry_after' => 60];
+                return ['status' => 'waiting_callback', 'message' => '尚未取得渠道所需的查询标识，请联系门店核实，勿重复叫件', 'retry_after' => 60];
             }
             $data['last_query_at'] = time();
             $record->save(['api_response' => $data]);

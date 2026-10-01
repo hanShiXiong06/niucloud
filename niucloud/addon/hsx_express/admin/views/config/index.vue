@@ -1,6 +1,13 @@
 <template>
     <HsxPage title="物流接入与上手" subtitle="配置本站账号，再从商城验证首单。原有快递鸟无需迁移。" content-width="narrow" class="express-page" :loading="loading">
         <template #extra><el-button @click="router.push('/hsx_express/tasks')">运单与打印记录</el-button></template>
+        <el-tabs v-model="activeConfig" :before-leave="beforeConfigChange" class="config-tabs">
+            <el-tab-pane label="快递100 · 面单" name="kuaidi100" />
+            <el-tab-pane label="顺丰直连 · 面单" name="sf_waybill" />
+            <el-tab-pane label="顺丰直连 · 上门取件" name="sf_pickup" />
+        </el-tabs>
+        <SfConfigPanel v-if="activeConfig !== 'kuaidi100'" :key="activeConfig" ref="sfPanel" :scene="activeConfig === 'sf_pickup' ? 'pickup' : 'waybill'" />
+        <template v-else>
         <HsxNotice v-if="loadError" type="error" title="配置读取失败" :description="loadError" :default-expanded="true" :closable="false">
             <template #actions><el-button link type="primary" :loading="loading" @click="load">重新读取</el-button></template>
         </HsxNotice>
@@ -94,19 +101,23 @@
                 <el-button link type="primary" @click="router.push('/hsx_express/tasks')">查看运单与异常 →</el-button>
             </HsxFold>
         </section>
+        </template>
     </HsxPage>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { HsxFold, HsxNotice, HsxPage } from '@/addon/hsx_components/core'
 import SavedCredentialInput from '../../components/saved-credential-input.vue'
+import SfConfigPanel from '../../components/sf-config-panel.vue'
 import { checkExpressConfig, getExpressConfig, saveExpressConfig } from '../../api'
 import { applyCarrierSelection, configDefaults, configForEditing, requestError } from '../../utils/presentation'
 
-const router = useRouter()
+const router = useRouter(), route = useRoute()
+const activeConfig = ref(route.query.provider === 'sf_direct' ? route.query.scene === 'pickup' ? 'sf_pickup' : 'sf_waybill' : 'kuaidi100')
+const sfPanel = ref<any>(null)
 const loading = ref(false), saving = ref(false), loadError = ref('')
 const busy = computed(() => loading.value || saving.value || !!loadError.value)
 const form = reactive<Record<string, any>>(configDefaults())
@@ -130,6 +141,22 @@ function accountFieldLabel(field: Record<string, any>) {
 }
 function selectScene(scene: string) { if (!busy.value) form.scene = scene }
 function carrierChanged() { applyCarrierSelection(form, selectedCarrier.value) }
+async function beforeConfigChange(next: string | number) {
+    const sf = sfPanel.value
+    if (activeConfig.value === 'kuaidi100' ? loading.value || saving.value : sf?.loading || sf?.saving) {
+        ElMessage.warning('正在读取或保存，请完成后再切换配置')
+        return false
+    }
+    const unsaved = activeConfig.value === 'kuaidi100' ? !!savedFingerprint.value && dirty.value : sf?.dirty
+    if (unsaved) {
+        try { await ElMessageBox.confirm('切换将放弃当前未保存的配置，已保存的其他业务配置不受影响。', '切换物流配置', { confirmButtonText: '放弃修改并切换', cancelButtonText: '继续编辑', type: 'warning' }) } catch { return false }
+    }
+    const query = { ...route.query }
+    if (next === 'kuaidi100') { delete query.provider; delete query.scene; void load() }
+    else { query.provider = 'sf_direct'; query.scene = next === 'sf_pickup' ? 'pickup' : 'waybill' }
+    await router.replace({ query })
+    return true
+}
 async function load() {
     loading.value = true
     loadError.value = ''
@@ -158,7 +185,7 @@ async function saveAndCheck() {
     } catch (error: any) { ElMessage.error(requestError(error, '保存或检查未完成，请核对提示后重试')) }
     finally { saving.value = false }
 }
-onMounted(load)
+onMounted(() => { if (activeConfig.value === 'kuaidi100') void load() })
 </script>
 
 <style scoped lang="scss">

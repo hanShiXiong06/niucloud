@@ -1,6 +1,6 @@
 <template>
   <view class="recycle-order-list-page" :style="pageVars">
-    <RecyclePageHeader title="我的订单" subtitle="查看回收进度和物流状态" />
+    <RecyclePageHeader title="我的订单" />
     <z-paging
       ref="pagingRef"
       v-model="orderList"
@@ -12,7 +12,8 @@
       :auto-clean-list-when-reload="false"
       :hide-no-more-inside="true"
       :show-loading-more-no-more-line="false"
-      empty-view-text="暂无订单数据"
+      :empty-view-text="hasFilters ? '没有符合条件的订单' : '还没有回收订单'"
+      empty-view-error-text="订单加载失败，点击重试"
       loading-more-no-more-text="没有更多订单了"
       loading-more-loading-text="正在加载订单..."
       @query="queryOrderList"
@@ -39,7 +40,14 @@
         />
 
       </view>
-
+      <template #empty="{ isLoadFailed }">
+        <view class="order-list-empty">
+          <up-empty :mode="isLoadFailed ? 'wifi' : 'order'" :text="isLoadFailed ? '订单加载失败，请稍后重试' : hasFilters ? '没有符合条件的订单' : '还没有回收订单'" />
+          <view class="empty-action">
+            <OrderUiButton variant="primary" @click="isLoadFailed ? refreshList() : handleEmptyAction()">{{ isLoadFailed ? '重新加载' : hasFilters ? '清除筛选' : '去下单' }}</OrderUiButton>
+          </view>
+        </view>
+      </template>
     </z-paging>
 
     <tabbar addon="hsx_recycle" />
@@ -56,6 +64,7 @@ import { getRecycleNavbarMetrics } from '../../hooks/useRecycleNavbar'
 
 // 导入组件
 import OrderListFilters from './components/OrderListFilters.vue'
+import OrderUiButton from './components/OrderUiButton.vue'
 import OrderCard from './components/OrderCard.vue'
 
 // 导入 composables
@@ -70,6 +79,8 @@ const {
   statusOptions,
   deliveryOptions,
   filters,
+  hasFilters,
+  resetFilters,
   fetchStatusCounts
 } = useOrderFilters()
 
@@ -78,9 +89,7 @@ const {
   orderList,
   pagingRef,
   queryList,
-  refreshList,
-  removeOrder,
-  updateOrderStatus
+  refreshList
 } = useOrderList()
 
 const { themeVars, loadTheme } = useRecyclePageTheme()
@@ -92,7 +101,7 @@ const pageVars = computed(() => [
 ].join(''))
 const pagingStyle = computed(() => ({
   height: `calc(100vh - ${navbarMetrics.navbarHeightPx}px - var(--recycle-tabbar-height) - env(safe-area-inset-bottom))`,
-  background: '#f5f6f8'
+  background: 'var(--recycle-bg-main)'
 }))
 
 onShow(() => {
@@ -109,34 +118,36 @@ watch([currentStatus, deliveryType], () => {
   refreshList()
 })
 
+const handleEmptyAction = () => {
+  if (hasFilters.value) {
+    const statusWillChange = currentStatus.value !== 'all' || deliveryType.value !== 0
+    resetFilters()
+    if (!statusWillChange) refreshList()
+  } else {
+    uni.navigateTo({ url: '/addon/hsx_recycle/pages/order/order' })
+  }
+}
+
 // 搜索处理
 const handleSearch = () => {
   refreshList()
 }
 
 // 操作成功后的处理
-const handleActionSuccess = (action: string) => {
+const handleActionSuccess = () => {
   // 刷新列表
   refreshList()
 
   // 删除订单后，同步刷新筛选栏中的远程统计数量
-    fetchStatusCounts()
+  fetchStatusCounts()
 }
 </script>
 
 <style scoped lang="scss">
-.recycle-order-list-page {
-  min-height: 100vh;
-  background: #f5f6f8;
-  color: var(--recycle-text-main);
-}
-
-.order-list-filter-shell {
-  background: #fff;
-}
-
-.order-list-content {
-  padding: 18rpx 0 20rpx;
-}
-
+@import './order-ui.scss';
+.recycle-order-list-page { @include recycle-order-page; }
+.order-list-filter-shell { background: var(--recycle-bg-card); }
+.order-list-content { padding: 20rpx 0; }
+.order-list-empty { padding: 48rpx 28rpx; }
+.empty-action { padding: 24rpx; display: flex; justify-content: center; }
 </style>

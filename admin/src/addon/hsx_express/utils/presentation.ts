@@ -31,14 +31,14 @@ export function configForEditing(data: Record<string, any>) {
 
 const states: Record<string, { text: string; type: 'info' | 'warning' | 'success' | 'danger'; next: string }> = {
     creating: { text: '正在取号', type: 'info', next: '请求处理中，请刷新查看结果，不要重复发起。' },
-    unknown: { text: '取号结果待核实', type: 'warning', next: '可能已经生成运单。先到快递100核实原任务，勿重新取号或更换服务商下单。' },
+    unknown: { text: '取号结果待核实', type: 'warning', next: '可能已经生成运单。先向原服务商核实原任务，勿重新取号或更换服务商下单。' },
     failed: { text: '取号失败', type: 'danger', next: '根据失败原因修正配置或订单资料，再从商城原订单操作。' },
     ready: { text: '面单已生成', type: 'success', next: '打开面单并打印；确认贴单后，在商城完成发货。生成面单不等于已发货。' },
     print_pending: { text: '等待打印回执', type: 'warning', next: '先检查打印机和纸张，并刷新状态。不要因为等待回执重新申请运单。' },
     printed: { text: '打印成功', type: 'success', next: '核对面单并贴单；实际交件后按商城流程处理发货。' },
     print_failed: { text: '打印失败', type: 'danger', next: '运单可能已生成。修复打印机后补打原单，不要重新取号。' },
-    cancelling: { text: '取消处理中', type: 'warning', next: '等待快递100取消结果；未确认取消前不要另开运单。' },
-    cancel_unknown: { text: '取消结果待核实', type: 'warning', next: '先向快递100确认原运单是否取消，不能把超时当成取消成功。' },
+    cancelling: { text: '取消处理中', type: 'warning', next: '等待原服务商取消结果；未确认取消前不要另开运单。' },
+    cancel_unknown: { text: '取消结果待核实', type: 'warning', next: '先向原服务商确认原运单是否取消，不能把超时当成取消成功。' },
     cancelled: { text: '运单已取消', type: 'info', next: '仅取消快递运单，不会关闭商城订单或自动退款。' }
 }
 
@@ -54,7 +54,14 @@ export function canReprint(task: Record<string, any>) {
 export function operationLabel(operation: string) {
     return ({ create: '申请面单', reprint_requested: '请求补打', reprint: '补打原单', reprint_unknown: '补打结果待核实',
         print_callback: '打印回调', recover_requested: '请求恢复原申请', recover: '恢复原申请', recover_unknown: '恢复结果待核实',
-        recover_conflict: '恢复结果需人工核实', cancel_requested: '请求取消运单', cancel: '取消运单', cancel_unknown: '取消结果待核实'
+        recover_conflict: '恢复结果需人工核实', cancel_requested: '请求取消运单', cancel: '取消运单', cancel_unknown: '取消结果待核实',
+        refresh: '查询原运单', refresh_requested: '请求查询原运单', pdf_requested: '请求原单 PDF', pdf_download: '下载原单 PDF', pdf_ready: '原单 PDF 已就绪',
+        sf_create_unconfirmed: '顺丰建单待确认', sf_create_unknown: '顺丰建单结果待核实', sf_create_rejected: '顺丰未受理',
+        sf_order_created: '顺丰已建单', sf_order_queried: '已查询原顺丰单', sf_order_conflict: '原顺丰单需人工核对',
+        sf_query_unavailable: '原单查询暂不可用', sf_query_unconfirmed: '原单查询待确认', sf_pdf_requested: '请求原单 PDF',
+        sf_pdf_ready: '原单 PDF 已就绪', sf_pdf_unavailable: '原单 PDF 待获取', sf_pdf_downloaded: '已下载原单 PDF',
+        sf_cancel_requested: '请求取消顺丰单', sf_cancel_unconfirmed: '顺丰取消待确认', sf_cancel_unknown: '顺丰取消结果待核实',
+        sf_cancel_verified: '已核实顺丰取消结果', sf_cancelled: '顺丰原单已取消'
     } as Record<string, string>)[operation] || '处理记录'
 }
 
@@ -64,6 +71,7 @@ export function canRecover(task: Record<string, any>) {
 }
 
 export function canCancel(task: Record<string, any>) {
+    if ((task.provider_key === 'hsx_express_sf_direct' || task.provider_code === 'hsx_express_sf_direct') && task.state === 'cancel_unknown') return task.can_cancel === true
     return !!task.can_cancel && ['ready', 'printed', 'print_pending', 'print_failed'].includes(task.state)
 }
 

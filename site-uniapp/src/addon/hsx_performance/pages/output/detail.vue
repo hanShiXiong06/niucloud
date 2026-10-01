@@ -1,34 +1,86 @@
 <template>
-    <view class="page">
-        <view v-if="loading" class="state"><u-loading-icon size="28" /><text>正在读取员工产出</text></view>
-        <template v-else>
-            <view class="employee-head"><view class="avatar">{{ initial }}</view><view><text class="name">{{ data.employee?.employee_name || '员工产出' }}</text><text class="period">{{ data.range?.start_date }} 至 {{ data.range?.end_date }}</text></view></view>
-            <view class="summary"><view><strong>{{ data.employee?.completed_count || 0 }}</strong><text>完成事项</text></view><view><strong>{{ data.employee?.metric_count || 0 }}</strong><text>指标数</text></view><view><strong>¥{{ money(data.employee?.amount) }}</strong><text>业务金额</text></view></view>
-            <view class="section-title">指标构成</view>
-            <view class="metric-list"><view v-for="row in data.metrics" :key="row.metric_key" class="metric"><view><text class="metric-name">{{ row.metric_name }}</text><text class="metric-meta">{{ scopeName(row.fact_scope) }}</text></view><text class="metric-count">{{ row.completed_count }}</text></view></view>
-            <view class="section-title">事实明细</view>
-            <view v-if="!data.facts?.length" class="empty">暂无事实明细</view>
-            <view v-else class="facts"><view v-for="row in data.facts" :key="row.id" class="fact"><view class="dot" :class="{ reversal: row.fact_type === 'reversal' }" /><view class="fact-main"><view class="fact-title"><text>{{ row.metric_name }}</text><text :class="{ negative: row.fact_type === 'reversal' }">{{ row.fact_type === 'reversal' ? '冲红' : `+${Number(row.quantity || 0)}` }}</text></view><text class="fact-object">{{ row.business_no || row.imei || `${row.business_type} #${row.business_id}` }}</text><text v-if="row.imei" class="imei">IMEI {{ row.imei }}</text><text class="fact-time">{{ time(row.occurred_at) }}</text></view></view></view>
+    <view class="output-page">
+        <view v-if="loading" class="state"><u-loading-icon size="26" /><text>正在读取产出明细</text></view>
+        <view v-else-if="error" class="state"><text>{{ error }}</text><button class="text-button" @click="load">重新加载</button></view>
+        <template v-else-if="detail">
+            <view class="page-heading"><text class="page-title">{{ detail.employee.employee_name || '未命名员工' }}</text><button class="icon-button" aria-label="刷新" @click="load"><u-icon name="reload" color="#2563eb" size="21" /></button></view>
+            <text class="muted date-range">{{ detail.range.start_date }} ~ {{ detail.range.end_date }}</text>
+            <view class="employee-summary"><text class="total-value">{{ detail.employee.completed_count }}</text><text class="muted">有效动作 · {{ detail.employee.metric_count }} 项指标</text></view>
+            <view class="section-heading"><text>业务指标</text></view>
+            <view class="metric-list">
+                <view v-for="item in detail.metrics" :key="`${item.source_plugin}:${item.business_chain}:${item.metric_key}`" class="metric-row">
+                    <view class="metric-main"><text class="row-title">{{ item.metric_name }}</text><text class="metric-quantity">{{ quantity(item.quantity) }} {{ item.unit }}</text></view>
+                    <view class="metric-foot"><text>{{ item.completed_count }} 次有效动作</text><text v-if="Number(item.amount)">金额 ¥{{ money(item.amount) }}</text><text v-if="Number(item.profit)">毛利 ¥{{ money(item.profit) }}</text></view>
+                </view>
+            </view>
+            <view class="section-heading"><text>最近记录</text><text class="muted">最近 {{ detail.facts.length }} 条</text></view>
+            <view v-if="!detail.facts.length" class="state"><u-empty mode="data" text="暂无业务记录" /></view>
+            <view v-for="item in detail.facts" :key="item.id" class="fact-row">
+                <view class="fact-heading"><text class="row-title">{{ item.metric_name || item.action_key }}</text><text class="fact-type" :class="{ reversal: item.fact_type === 'reversal' }">{{ item.fact_type === 'reversal' ? '冲红' : '完成' }}</text></view>
+                <view class="fact-meta"><text>{{ dateTime(item.occurred_at) }}</text><text>{{ quantity(item.quantity) }} {{ item.unit }}</text></view>
+                <text v-if="item.business_no" class="business-no">单号 {{ item.business_no }}</text>
+            </view>
         </template>
     </view>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { onBeforeUnmount, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { getMobilePerformanceOutputEmployee } from '@/addon/hsx_performance/api'
-const params = reactive({ uid: 0, period: 'month', source_plugin: '' })
-const data = reactive<any>({ employee: null, metrics: [], facts: [], range: {} })
-const loading = ref(false)
-const initial = computed(() => String(data.employee?.employee_name || '员').slice(0, 1))
-const load = async () => { if (!params.uid) return; loading.value = true; try { Object.assign(data, (await getMobilePerformanceOutputEmployee(params.uid, { period: params.period, source_plugin: params.source_plugin })).data || {}) } finally { loading.value = false } }
+
+const detail = ref<any>(null), loading = ref(false), error = ref('')
+let uid = 0, sequence = 0
+const filters = { period: 'month', source_plugin: '' }
+async function load() {
+    if (!Number.isSafeInteger(uid) || uid <= 0) {
+        error.value = '员工参数无效，请返回员工列表重新选择'
+        return
+    }
+    const requestId = ++sequence
+    loading.value = true
+    error.value = ''
+    try {
+        const response: any = await getMobilePerformanceOutputEmployee(uid, filters)
+        if (requestId === sequence) detail.value = response.data
+    } catch (err: any) {
+        if (requestId === sequence) error.value = err?.msg || err?.message || '暂时无法读取产出明细'
+    } finally {
+        if (requestId === sequence) loading.value = false
+    }
+}
+const quantity = (value: any) => Number(value || 0).toFixed(3).replace(/\.?0+$/, '')
 const money = (value: any) => Number(value || 0).toFixed(2)
-const time = (value: any) => value ? new Date(Number(value) * 1000).toLocaleString('zh-CN', { hour12: false }) : '—'
-const scopeName = (value: string) => ({ action: '工作动作', outcome: '有效结果', quality: '质量事项' }[value] || value)
-onLoad((options: any) => { params.uid = Number(options?.uid || 0); params.period = String(options?.period || 'month'); params.source_plugin = String(options?.source_plugin || ''); load() })
+function dateTime(value: any) {
+    if (!value) return ''
+    const date = new Date(Number(value) * 1000)
+    const pad = (part: number) => String(part).padStart(2, '0')
+    return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+onLoad((options: any) => {
+    uid = Number(options?.uid)
+    filters.period = ['today', 'week', 'month', 'last7'].includes(options?.period) ? options.period : 'month'
+    filters.source_plugin = String(options?.source_plugin || '')
+    load()
+})
+onBeforeUnmount(() => { sequence++ })
 </script>
 
 <style scoped lang="scss">
-.page{min-height:100vh;padding:28rpx;box-sizing:border-box;background:#f5f7fa}.employee-head{padding:20rpx 4rpx;display:flex;align-items:center;gap:20rpx}.avatar{width:82rpx;height:82rpx;display:flex;align-items:center;justify-content:center;color:#fff;font-size:32rpx;font-weight:700;background:#2563eb;border-radius:12rpx}.name{display:block;color:#111827;font-size:34rpx;font-weight:700}.period{display:block;margin-top:6rpx;color:#64748b;font-size:21rpx}.summary{margin-top:12rpx;display:grid;grid-template-columns:repeat(3,1fr);background:#fff;border:2rpx solid #e5e7eb;border-radius:12rpx}.summary view{padding:22rpx 8rpx;display:flex;flex-direction:column;align-items:center;border-right:2rpx solid #edf0f4}.summary view:last-child{border-right:0}.summary strong{max-width:100%;overflow:hidden;color:#111827;font-size:30rpx;text-overflow:ellipsis}.summary text{margin-top:6rpx;color:#64748b;font-size:20rpx}.section-title{margin:30rpx 2rpx 14rpx;color:#111827;font-size:28rpx;font-weight:650}
-.metric-list,.facts,.empty{background:#fff;border:2rpx solid #e5e7eb;border-radius:12rpx}.metric{min-height:96rpx;padding:18rpx 22rpx;display:flex;align-items:center;justify-content:space-between;border-bottom:2rpx solid #edf0f4}.metric:last-child{border-bottom:0}.metric-name{display:block;color:#111827;font-size:26rpx;font-weight:600}.metric-meta{display:block;margin-top:4rpx;color:#94a3b8;font-size:20rpx}.metric-count{color:#111827;font-size:30rpx;font-weight:700}.fact{padding:22rpx;display:flex;gap:18rpx;border-bottom:2rpx solid #edf0f4}.fact:last-child{border-bottom:0}.dot{width:14rpx;height:14rpx;margin-top:12rpx;flex:none;background:#16a34a;border-radius:50%}.dot.reversal{background:#dc2626}.fact-main{min-width:0;flex:1}.fact-title{display:flex;align-items:center;justify-content:space-between;color:#111827;font-size:25rpx;font-weight:600}.fact-object,.imei,.fact-time{display:block;margin-top:7rpx;color:#64748b;font-size:21rpx}.imei{color:#475569}.fact-time{color:#94a3b8}.negative{color:#dc2626}.empty{padding:80rpx 20rpx;color:#94a3b8;font-size:23rpx;text-align:center}.state{height:700rpx;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18rpx;color:#94a3b8;font-size:24rpx}
+@import './output.scss';
+.date-range { display:block; margin-top:12rpx; }
+.employee-summary { display:flex; align-items:baseline; gap:18rpx; padding:26rpx 0; border-bottom:1px solid #e2e8f0; }
+.total-value { font-size:48rpx; font-weight:700; color:#1e293b; }
+.metric-list { background:#fff; border-radius:8px; overflow:hidden; }
+.metric-row { padding:24rpx; border-bottom:1px solid #eef2f7; }
+.metric-row:last-child { border-bottom:0; }
+.metric-main { display:flex; align-items:baseline; justify-content:space-between; gap:20rpx; }
+.metric-quantity { flex-shrink:0; font-size:28rpx; color:#2563eb; font-weight:600; }
+.metric-foot { display:flex; flex-wrap:wrap; gap:10rpx 22rpx; margin-top:10rpx; color:#64748b; font-size:22rpx; }
+.fact-row { margin-bottom:16rpx; padding:24rpx; background:#fff; border-radius:8px; }
+.fact-heading,.fact-meta { display:flex; align-items:center; justify-content:space-between; gap:16rpx; }
+.fact-type { flex-shrink:0; color:#15803d; background:#f0fdf4; padding:4rpx 12rpx; font-size:22rpx; border-radius:4px; }
+.fact-type.reversal { color:#b45309; background:#fffbeb; }
+.fact-meta,.business-no { margin-top:12rpx; font-size:23rpx; color:#64748b; }
+.business-no { display:block; overflow-wrap:anywhere; }
 </style>

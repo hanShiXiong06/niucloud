@@ -258,7 +258,8 @@ class RecycleOrderService extends BaseAdminService
     {
         DeviceEntryImei::assertDevices(is_array($data['devices'] ?? null) ? $data['devices'] : []);
         $data['site_id'] = $this->site_id;
-        $data['order_source'] = $data['order_source'] ?? 'agent';
+        // 后台入口始终是员工代下单，不接受请求参数伪装为客户自主下单参与计奖。
+        $data['order_source'] = 'agent';
         $data['agent_uid'] = $this->uid;
         $data['agent_name'] = trim((string)($data['agent_name'] ?? '')) ?: $this->getOperatorName();
         $data['agent_mobile'] = trim((string)($data['agent_mobile'] ?? ''));

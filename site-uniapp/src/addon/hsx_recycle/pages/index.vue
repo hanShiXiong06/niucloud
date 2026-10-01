@@ -59,7 +59,7 @@ const modules = [
         color: 'linear-gradient(135deg, #0f766e 0%, #14b8a6 100%)'
     },
     {
-        name: '订单管理',
+        name: '回收订单',
         short: '单',
         desc: '订单处理主链路',
         url: '/addon/hsx_recycle/pages/order/list',
@@ -87,7 +87,7 @@ const modules = [
         color: 'linear-gradient(135deg, #7c3aed 0%, #9f67ff 100%)'
     },
     {
-        name: '数据统计',
+        name: '工作台',
         short: '数',
         desc: '经营数据和业务概览',
         url: '/addon/hsx_recycle/pages/stats/index',

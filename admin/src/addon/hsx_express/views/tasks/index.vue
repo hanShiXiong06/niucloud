@@ -1,7 +1,7 @@
 <template>
     <HsxPage title="运单与打印记录" subtitle="取号、打印、取消分别核实。这里只管理快递任务，不会自动关闭订单或退款。" class="express-tasks">
         <template #extra><el-button @click="router.push('/hsx_express/config')">接入配置</el-button><el-button :loading="loading" @click="load">刷新</el-button></template>
-        <HsxNotice type="warning" title="结果待核实的任务，请勿重复取号" description="接口超时不代表失败。先到快递100核对原业务单和运单，确认结果后再处理；不要切换服务商重下。打印失败应补打原单，不重新生成运单。" />
+        <HsxNotice type="warning" title="结果待核实的任务，请勿重复取号" description="接口超时不代表失败。先核对原渠道的业务单和运单，确认结果后再处理；不要切换服务商重下。打印失败应处理原单，不重新生成运单。" />
         <div class="surface">
             <el-form class="search" @submit.prevent="search">
                 <el-input v-model.trim="filters.keyword" clearable placeholder="业务单号 / 运单号 / 任务号" aria-label="搜索业务单号、运单号或任务号" />
@@ -11,22 +11,24 @@
             <HsxNotice v-if="error" type="error" title="记录加载失败" :description="error" :default-expanded="true" :closable="false" />
             <el-table v-loading="loading" :data="rows" row-key="id" empty-text="暂无任务；请从商城真实订单发起电子面单取号。">
                 <el-table-column label="业务与运单" min-width="230"><template #default="{ row }"><strong>{{ row.waybill_no || '尚未取得运单号' }}</strong><div class="muted">{{ businessName(row.business_type) }} · {{ row.business_no || '订单号待读取，请查看任务详情' }}</div></template></el-table-column>
-                <el-table-column label="快递 / 打印方式" min-width="150"><template #default="{ row }"><div>{{ row.carrier_name || carrierName(row.carrier) }} · {{ row.exp_type || '—' }}</div><div class="muted">{{ row.print_type === 'CLOUD' ? '云打印' : '电脑打印' }}</div></template></el-table-column>
+                <el-table-column label="快递 / 打印方式" min-width="170"><template #default="{ row }"><div>{{ row.carrier_name || carrierName(row.carrier) }} · {{ productName(row) }}</div><div class="muted">{{ isSfTask(row) ? '顺丰直连 · PDF面单' : row.print_type === 'CLOUD' ? '快递100 · 云打印' : '快递100 · 电脑打印' }}</div><el-tag v-if="isSandboxTask(row)" size="small" type="warning">沙箱测试 · 非真实寄件</el-tag></template></el-table-column>
                 <el-table-column label="进度" min-width="220"><template #default="{ row }"><div class="progress"><el-tag :type="row.waybill_no ? 'success' : 'info'" size="small">{{ row.waybill_no ? '已取号' : '未确认取号' }}</el-tag><el-tag :type="taskState(row.state).type" size="small">{{ row.state_name || taskState(row.state).text }}</el-tag></div><p class="message">{{ row.message || taskState(row.state).next }}</p></template></el-table-column>
                 <el-table-column label="更新时间" min-width="160"><template #default="{ row }"><span class="time">{{ displayTime(row.update_at || row.create_at) }}</span></template></el-table-column>
-                <el-table-column label="操作" width="180" fixed="right"><template #default="{ row }"><div class="table-actions"><el-button link type="primary" @click="openDetail(row.id)">详情</el-button><el-button v-if="labelLinks(row.labels || row.label).length && !['cancelled', 'cancelling', 'cancel_unknown'].includes(row.state)" link type="primary" @click="openDetail(row.id)">打开面单</el-button><el-button v-if="canRecover(row)" link type="warning" :disabled="!!actingId" @click="recover(row)">恢复原申请</el-button><el-button v-if="canReprint(row)" link type="primary" :disabled="!!actingId" @click="reprint(row)">补打原单</el-button><el-button v-if="canCancel(row)" link type="danger" :disabled="!!actingId" @click="cancel(row)">取消运单</el-button></div></template></el-table-column>
+                <el-table-column label="操作" width="180" fixed="right"><template #default="{ row }"><div class="table-actions"><el-button link type="primary" @click="openDetail(row.id)">详情</el-button><el-button v-if="canDownloadSfPdf(row) || (labelLinks(row.labels || row.label).length && !['cancelled', 'cancelling', 'cancel_unknown'].includes(row.state))" link type="primary" @click="openDetail(row.id)">{{ isSfTask(row) ? 'PDF 面单' : '打开面单' }}</el-button><el-button v-if="canRecover(row)" link type="warning" :disabled="!!actingId" @click="recover(row)">恢复原申请</el-button><el-button v-if="canReprint(row)" link type="primary" :disabled="!!actingId" @click="reprint(row)">{{ isSfTask(row) ? '获取原单 PDF' : '补打原单' }}</el-button><el-button v-if="canCancel(row)" link type="danger" :disabled="!!actingId" @click="cancel(row)">{{ isSfTask(row) && row.state === 'cancel_unknown' ? '重试确认取消' : '取消运单' }}</el-button></div></template></el-table-column>
             </el-table>
             <div class="pagination"><el-pagination v-model:current-page="filters.page" v-model:page-size="filters.limit" :total="total" :page-sizes="[15, 30, 50]" layout="total, prev, pager, next, sizes" @current-change="load" @size-change="search" /></div>
         </div>
         <HsxDrawer v-model="detailVisible" title="快递任务详情" subtitle="操作针对原运单；业务订单状态请回商城核对。" :body-loading="detailLoading" size="md">
             <template v-if="detail">
+                <HsxNotice v-if="isSandboxTask(detail)" type="warning" title="沙箱任务，不代表真实寄件" description="此任务只用于接口联调，不得用来确认真实商城发货。下载 PDF 也不能证明实际出纸或顺丰已揽收。" :default-expanded="true" :closable="false" />
                 <HsxNotice :type="taskState(detail.state).type === 'danger' ? 'error' : taskState(detail.state).type === 'success' ? 'success' : 'warning'" :title="detail.state_name || taskState(detail.state).text" :description="detail.message || taskState(detail.state).next" :default-expanded="true" :closable="false" />
-                <el-descriptions :column="1" border class="details"><el-descriptions-item label="业务来源">{{ businessName(detail.business_type) }}</el-descriptions-item><el-descriptions-item label="业务单">{{ detail.business_no || '订单号待读取，可用下方定位编号核实' }}</el-descriptions-item><el-descriptions-item label="运单号">{{ detail.waybill_no || '尚未确认' }}</el-descriptions-item><el-descriptions-item label="快递产品">{{ detail.carrier_name || carrierName(detail.carrier) }} · {{ detail.exp_type || '—' }}</el-descriptions-item><el-descriptions-item label="取号结果">{{ detail.waybill_no ? '已取得运单号' : '未确认取得运单号' }}</el-descriptions-item><el-descriptions-item label="打印结果">{{ printStatus(detail) }}</el-descriptions-item><el-descriptions-item label="创建时间">{{ displayTime(detail.create_at) }}</el-descriptions-item><el-descriptions-item label="更新时间">{{ displayTime(detail.update_at) }}</el-descriptions-item></el-descriptions>
+                <el-descriptions :column="1" border class="details"><el-descriptions-item label="业务来源">{{ businessName(detail.business_type) }}</el-descriptions-item><el-descriptions-item label="业务单">{{ detail.business_no || '订单号待读取，可用下方定位编号核实' }}</el-descriptions-item><el-descriptions-item label="运单号">{{ detail.waybill_no || '尚未确认' }}</el-descriptions-item><el-descriptions-item label="快递产品">{{ detail.carrier_name || carrierName(detail.carrier) }} · {{ productName(detail) }}</el-descriptions-item><el-descriptions-item label="取号结果">{{ detail.waybill_no ? '已取得运单号' : '未确认取得运单号' }}</el-descriptions-item><el-descriptions-item label="打印结果">{{ printStatus(detail) }}</el-descriptions-item><el-descriptions-item label="创建时间">{{ displayTime(detail.create_at) }}</el-descriptions-item><el-descriptions-item label="更新时间">{{ displayTime(detail.update_at) }}</el-descriptions-item></el-descriptions>
                 <div v-if="detailLabels.length && !['cancelled', 'cancelling', 'cancel_unknown'].includes(detail.state)" class="label-files"><h3>原单面单文件</h3><p class="muted">打开后使用浏览器或 PDF 阅读器打印。请核对纸张与缩放，文件可能有有效期。</p><a v-for="(url, index) in detailLabels" :key="url" :href="url" target="_blank" rel="noopener noreferrer" class="file-link">打开面单 {{ detailLabels.length > 1 ? index + 1 : '' }} ↗</a></div>
+                <div v-if="isSfTask(detail)" class="label-files"><h3>顺丰 PDF 面单</h3><p class="muted">{{ detail.label_state === 'expired' ? '原 PDF 已过期，请查询原单并重新获取面单；不要重新取号。' : detail.label_state === 'ready' ? '文件已准备好，通过本站鉴权下载，不对外暴露面单地址。' : 'PDF 尚不可下载；先查询原顺丰单，再根据结果获取原单面单。' }}</p><HsxExport v-if="canDownloadSfPdf(detail)" button-text="下载原单 PDF" :exporter="exportPdf" @error="pdfError" /><p class="muted">PDF 生成或下载成功不等于打印机出纸、包裹交件或快递揽收。</p></div>
                 <HsxNotice v-if="detail.print_type === 'IMAGE'" title="电脑是否实际出纸，需要人工确认" description="系统能确认面单文件生成，但无法检测你的本地打印机是否出纸；不要将“面单已生成”视为“客户已收货”。" />
                 <HsxNotice v-if="canRecover(detail)" type="warning" title="可使用原账号与原包裹编号恢复申请" description="这不是只读查询。服务商已成功时返回原单；原请求未受理时，可能首次真正取号并计费。恢复后不会自动确认商城发货。" :default-expanded="true" :closable="false" />
                 <p v-if="detail.cancel_unavailable_reason" class="muted">{{ detail.cancel_unavailable_reason }}</p>
-                <div class="drawer-actions"><el-button v-if="canRecover(detail)" type="warning" :loading="actingId === detail.id" @click="recover(detail)">恢复原申请</el-button><el-button v-if="canReprint(detail)" type="primary" :loading="actingId === detail.id" @click="reprint(detail)">补打原单</el-button><el-button v-if="canCancel(detail)" type="danger" plain :loading="actingId === detail.id" @click="cancel(detail)">取消运单</el-button><el-button :loading="detailLoading" @click="openDetail(detail.id)">刷新结果</el-button></div>
+                <div class="drawer-actions"><el-button v-if="detail.can_refresh" :loading="actingId === detail.id" @click="refreshOriginal(detail)">查询原顺丰单</el-button><el-button v-if="canRecover(detail)" type="warning" :loading="actingId === detail.id" @click="recover(detail)">恢复原申请</el-button><el-button v-if="canReprint(detail)" type="primary" :loading="actingId === detail.id" @click="reprint(detail)">{{ isSfTask(detail) ? '重新获取原单 PDF' : '补打原单' }}</el-button><el-button v-if="canCancel(detail)" type="danger" plain :loading="actingId === detail.id" @click="cancel(detail)">{{ isSfTask(detail) && detail.state === 'cancel_unknown' ? '重试确认取消' : '取消运单' }}</el-button><el-button :loading="detailLoading" @click="openDetail(detail.id)">刷新本站记录</el-button></div>
                 <HsxFold title="操作记录与定位编号" summary="供核对服务商结果使用，不展示账号密钥"><p class="muted">本地任务：{{ detail.task_no }}<br />服务商任务：{{ detail.provider_task_id || '尚未返回' }}<br />内部关联标识：{{ detail.business_id || '—' }}</p><el-empty v-if="!detail.logs?.length" description="暂无操作记录" :image-size="60" /><div v-for="(log, index) in detail.logs || []" :key="log.id || index" class="log"><span>{{ displayTime(log.create_at || log.created_at || log.at) }}</span><strong :title="log.operation || log.action || log.event">{{ log.action_name || operationLabel(log.operation || log.action || log.event) }}</strong><p>{{ log.message || log.result_message || '—' }}</p></div></HsxFold>
             </template>
             <HsxNotice v-else-if="detailError" type="error" title="任务详情读取失败" :description="detailError" :default-expanded="true" />
@@ -39,8 +41,10 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { HsxDrawer, HsxFold, HsxNotice, HsxPage } from '@/addon/hsx_components/core'
-import { cancelExpressTask, getExpressTask, getExpressTasks, recoverExpressTask, reprintExpressTask } from '../../api'
+import HsxExport from '@/addon/hsx_components/components/HsxExport/index.vue'
+import { cancelExpressTask, downloadExpressTaskPdf, getExpressTask, getExpressTasks, recoverExpressTask, refreshExpressTask, reprintExpressTask } from '../../api'
 import { canCancel, canRecover, canReprint, displayTime, labelLinks, operationLabel, requestError, stateOptions, taskState } from '../../utils/presentation'
+import { canDownloadSfPdf, isSandboxTask, isSfTask, validatedPdf } from '../../utils/sf'
 
 const router = useRouter()
 const filters = reactive({ keyword: '', state: '', page: 1, limit: 15 })
@@ -50,12 +54,28 @@ const detailLabels = computed(() => labelLinks(detail.value?.labels || detail.va
 let listRequest = 0, detailRequest = 0
 const carrierName = (carrier: string) => ({ shunfeng: '顺丰', jd: '京东' } as Record<string, string>)[carrier] || carrier || '—'
 const businessName = (business: string) => ({ phone_shop: '手机商城', hsx_recycle: '回收业务' } as Record<string, string>)[business] || '业务发货'
+const productName = (task: Record<string, any>) => task.exp_type_name || (isSfTask(task) ? '产品见原顺丰单' : task.exp_type || '—')
 function printStatus(task: Record<string, any>) {
+    if (isSfTask(task)) return task.label_state === 'ready' ? 'PDF 已生成；出纸、交件需人工核对' : task.label_state === 'expired' ? 'PDF 已过期，需获取原单面单' : 'PDF 尚未就绪'
     if (task.state === 'printed') return '云打印回执成功'
     if (task.state === 'print_failed') return '打印失败，保留原运单'
     if (task.state === 'print_pending') return '等待云打印回执'
     if (task.print_type === 'IMAGE' && task.waybill_no) return '面单文件已生成，实际出纸请人工核对'
     return '尚未确认'
+}
+async function exportPdf() {
+    if (!detail.value || !canDownloadSfPdf(detail.value)) throw new Error('当前任务不可下载 PDF，请刷新后核实')
+    const current = detail.value
+    const blob = await validatedPdf(await downloadExpressTaskPdf(Number(current.id)))
+    return { blob, filename: `${isSandboxTask(current) ? '沙箱测试-' : ''}顺丰面单-${current.waybill_no || current.task_no}.pdf` }
+}
+function pdfError(error: any) { ElMessage.error(requestError(error, 'PDF 下载失败，请刷新原任务后重试')) }
+async function refreshOriginal(task: Record<string, any>) {
+    if (actingId.value || !task.can_refresh || !isSfTask(task)) return
+    actingId.value = Number(task.id)
+    try { await refreshExpressTask(Number(task.id)); await load(); await openDetail(Number(task.id)) }
+    catch (error) { ElMessage.error(requestError(error, '原单查询失败，未重新取号')); await load(); await openDetail(Number(task.id)) }
+    finally { actingId.value = 0 }
 }
 async function load() {
     const current = ++listRequest
@@ -78,11 +98,11 @@ async function openDetail(id: number) {
 }
 async function reprint(task: Record<string, any>) {
     if (actingId.value || !canReprint(task)) return
-    try { await ElMessageBox.confirm(task.print_type === 'CLOUD' ? '请先检查打印机和原面单是否已出纸。本次会再次向原运单关联的云打印机发送打印任务，可能再次出纸，不会重新取号。确认仍需补打后再继续。' : '请先检查原面单是否已经打印。本次将重新获取原运单的面单文件，重复打印可能再次出纸，不会重新取号。官方补打有时效与次数限制，以返回结果为准。', '补打原单：请先检查是否已出纸', { confirmButtonText: '已检查，确认补打', cancelButtonText: '先检查打印机', type: 'warning', closeOnClickModal: false }) } catch { return }
+    try { await ElMessageBox.confirm(isSfTask(task) ? '仅为原顺丰运单重新获取 PDF，不重新取号，不会自动发给打印机或确认商城发货。打印前请检查原面单是否已出纸，避免重复贴单。' : task.print_type === 'CLOUD' ? '请先检查打印机和原面单是否已出纸。本次会再次向原运单关联的云打印机发送打印任务，可能再次出纸，不会重新取号。确认仍需补打后再继续。' : '请先检查原面单是否已经打印。本次将重新获取原运单的面单文件，重复打印可能再次出纸，不会重新取号。官方补打有时效与次数限制，以返回结果为准。', isSfTask(task) ? '重新获取原单 PDF' : '补打原单：请先检查是否已出纸', { confirmButtonText: isSfTask(task) ? '确认获取原单 PDF' : '已检查，确认补打', cancelButtonText: '暂不处理', type: 'warning', closeOnClickModal: false }) } catch { return }
     actingId.value = Number(task.id)
     try {
         await reprintExpressTask(Number(task.id))
-        ElMessage.success('补打请求已处理，请查看原任务结果')
+        ElMessage.success(isSfTask(task) ? '原单 PDF 请求已处理，请查看下载状态；未自动打印或发货' : '补打请求已处理，请查看原任务结果')
         await load(); await openDetail(Number(task.id))
     } catch (err: any) {
         ElMessage.error(requestError(err, '补打请求未能确认，请核对原任务结果，不要重复取号'))
@@ -108,7 +128,8 @@ async function cancel(task: Record<string, any>) {
     if (actingId.value || !canCancel(task)) return
     let reason = ''
     try {
-        const result = await ElMessageBox.prompt('只取消这张快递运单，不关闭商城订单、不退款。已交件的运单可能无法取消；请填写原因。', '取消原运单', { confirmButtonText: '确认取消运单', cancelButtonText: '保留运单', inputPlaceholder: '例如：客户修改地址，尚未交件', inputValidator: (value: string) => value?.trim().length >= 2 && value.trim().length <= 200 || '请填写 2–200 字的取消原因', type: 'warning' })
+        const retry = isSfTask(task) && task.state === 'cancel_unknown'
+        const result = await ElMessageBox.prompt(retry ? '将再次向原顺丰订单请求取消并核实结果，可能执行原单取消，不会创建新运单。未确认取消前禁止重新下单；不会关闭商城订单，也不处理退款或库存。请填写本次核对原因。' : '只取消这张快递运单，不关闭商城订单、不退款。已交件的运单可能无法取消；请填写原因。', retry ? '重试确认取消' : '取消原运单', { confirmButtonText: retry ? '确认重试原单取消' : '确认取消运单', cancelButtonText: '暂不操作', inputPlaceholder: '例如：客户修改地址，尚未交件', inputValidator: (value: string) => value?.trim().length >= 2 && value.trim().length <= 200 || '请填写 2–200 字的取消原因', type: 'warning' })
         reason = result.value.trim()
     } catch { return }
     actingId.value = Number(task.id)

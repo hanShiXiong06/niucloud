@@ -1,35 +1,45 @@
 <template>
   <view class="order-list-filters">
-    <view class="filter-search">
+    <view v-if="showSearch || searchKeyword" class="filter-search">
       <up-search
         :modelValue="searchKeyword"
         placeholder="订单号 / 快递单号 / 设备串号"
         :showAction="false"
         clearable
-        bgColor="#f3f5f8"
-        searchIconColor="#8b96a9"
-        placeholderColor="#a6afbd"
+        bgColor="var(--recycle-bg-soft)" color="var(--recycle-text-main)"
+        searchIconColor="var(--recycle-text-sub)"
+        placeholderColor="var(--recycle-text-sub)"
         @update:modelValue="$emit('update:searchKeyword', $event)"
         @search="$emit('search')"
-        @clear="$emit('search')"
+        @clear="clearSearch"
       />
     </view>
 
     <view class="status-filter">
-      <scroll-view scroll-x class="status-filter__scroll" show-scrollbar="false">
+      <scroll-view
+        scroll-x
+        scroll-with-animation
+        :scroll-into-view="activeStatusId"
+        class="status-filter__scroll"
+        :show-scrollbar="false"
+      >
         <view class="status-filter__track">
           <view
-            v-for="item in statusFilterOptions"
+            v-for="(item, index) in statusFilterOptions"
             :key="item.value"
+            :id="'order-status-' + index"
             class="status-filter__item"
             :class="{ active: currentStatus === item.value }"
             @tap="handleStatusTap(item.value)"
           >
-            <text>{{ item.label }}</text>
-            <text v-if="item.count !== undefined" class="status-filter__count">{{ item.count }}</text>
+            <text class="status-filter__label">{{ item.label }}</text>
+            <text v-if="Number(item.count) > 0" class="status-filter__count">{{ item.count }}</text>
           </view>
         </view>
       </scroll-view>
+      <button class="search-toggle" aria-label="搜索订单" @tap="showSearch = !showSearch">
+        <up-icon name="search" size="20" color="var(--recycle-text-main)" />
+      </button>
     </view>
 
     <view class="filter-toolbar">
@@ -50,7 +60,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 interface StatusOption {
   label?: string
@@ -70,6 +80,7 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const showSearch = ref(false)
 
 const emit = defineEmits<{
   'update:currentStatus': [value: string]
@@ -100,110 +111,39 @@ const statusFilterOptions = computed(() => {
   })).filter(item => item.label && item.value)
 })
 
+const activeStatusId = computed(() => {
+  const index = statusFilterOptions.value.findIndex(item => item.value === props.currentStatus)
+  return index < 0 ? '' : `order-status-${index}`
+})
+
+const clearSearch = () => {
+  emit('update:searchKeyword', '')
+  emit('search')
+}
+
 const handleStatusTap = (value: string) => {
   emit('update:currentStatus', value)
 }
 </script>
 
 <style scoped lang="scss">
-.order-list-filters {
-  background: #fff;
-  border-bottom: 1rpx solid #edf0f4;
-}
-
-.filter-search {
-  padding: 18rpx 24rpx 6rpx;
-}
-
-.status-filter {
-  padding: 12rpx 0 10rpx;
-}
-
-.status-filter__scroll {
-  width: 100%;
-  white-space: nowrap;
-}
-
-.status-filter__track {
-  display: inline-flex;
-  align-items: center;
-  gap: 10rpx;
-  padding: 0 24rpx;
-}
-
-.status-filter__item {
-  height: 58rpx;
-  padding: 0 22rpx;
-  display: inline-flex;
-  align-items: center;
-  gap: 8rpx;
-  border-radius: 999rpx;
-  border: 1rpx solid transparent;
-  background: #f4f6f8;
-  color: #5f6b7d;
-  font-size: 24rpx;
-  line-height: 58rpx;
-  white-space: nowrap;
-
-  &.active {
-    color: var(--recycle-brand);
-    border-color: rgba(59, 130, 246, 0.18);
-    background: rgba(59, 130, 246, 0.09);
-    font-weight: 700;
-  }
-}
-
-.status-filter__count {
-  min-width: 28rpx;
-  height: 28rpx;
-  padding: 0 8rpx;
-  border-radius: 999rpx;
-  color: inherit;
-  background: rgba(255, 255, 255, 0.75);
-  font-size: 20rpx;
-  line-height: 28rpx;
-  text-align: center;
-}
-
-.filter-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 16rpx;
-  padding: 10rpx 24rpx 20rpx;
-}
-
-.filter-toolbar__label {
-  color: #8b96a9;
-  font-size: 22rpx;
-  line-height: 52rpx;
-  white-space: nowrap;
-}
-
-.delivery-filter {
-  min-width: 0;
-  display: flex;
-  background: #f3f5f8;
-  border-radius: 14rpx;
-  padding: 4rpx;
-  gap: 4rpx;
-
-  .filter-item {
-    min-width: 92rpx;
-    height: 48rpx;
-    padding: 0 18rpx;
-    border-radius: 11rpx;
-    font-size: 22rpx;
-    line-height: 48rpx;
-    color: #667085;
-    text-align: center;
-    white-space: nowrap;
-
-    &.active {
-      background: #fff;
-      color: var(--recycle-brand);
-      font-weight: 600;
-      box-shadow: 0 2rpx 8rpx rgba(31, 41, 55, 0.07);
-    }
-  }
-}
+.order-list-filters { background: var(--recycle-bg-card); border-bottom: 1rpx solid var(--recycle-line); }
+.filter-search { padding: 20rpx var(--recycle-order-gutter, 24px) 8rpx; }
+.status-filter { display: flex; align-items: center; padding-right: 8px; }
+.status-filter__scroll { flex: 1; min-width: 0; width: 0; height: 48px; white-space: nowrap; }
+.search-toggle { display: flex; align-items: center; justify-content: center; flex: 0 0 44px; width: 44px; height: 44px; margin: 0; padding: 0; border: 0; border-left: 1rpx solid var(--recycle-line); border-radius: 0; background: var(--recycle-bg-card); }
+.search-toggle::after { border: 0; }
+.status-filter__track { display: inline-flex; flex-wrap: nowrap; align-items: center; height: 48px; padding: 0 var(--recycle-order-gutter, 24px); gap: 24px; box-sizing: border-box; }
+.status-filter__item { position: relative; display: inline-flex; flex: 0 0 auto; align-items: baseline; justify-content: center; gap: 4px; height: 48px; line-height: 48px; font-size: 14px; color: var(--recycle-text-sub); white-space: nowrap; }
+// H5's uni-text sets pre-line, so the labels must override it directly.
+.status-filter__label, .status-filter__count { flex: 0 0 auto; white-space: nowrap; }
+.status-filter__item.active { color: var(--recycle-brand); font-weight: 600; }
+.status-filter__item.active::after { content: ''; position: absolute; bottom: 5px; height: 3px; width: 20px; left: 50%; transform: translateX(-50%); border-radius: 2px; background: var(--recycle-brand); }
+.status-filter__count { font-size: 11px; font-weight: 400; }
+.filter-toolbar { display: flex; align-items: center; gap: 12px; padding: 8px var(--recycle-order-gutter, 24px) 12px; }
+.filter-toolbar__label { flex-shrink: 0; font-size: 12px; color: var(--recycle-text-sub); white-space: nowrap; }
+.delivery-filter { display: flex; flex: 1; min-width: 0; padding: 4rpx; border-radius: 10rpx; background: var(--recycle-bg-soft); }
+.filter-item { flex: 1; min-width: 0; min-height: 30px; display: flex; align-items: center; justify-content: center; padding: 2px; font-size: 12px; color: var(--recycle-text-sub); border-radius: 8rpx; text-align: center; }
+.filter-item text { white-space: nowrap; }
+.filter-item.active { color: var(--recycle-brand); background: var(--recycle-bg-card); font-weight: 500; }
 </style>

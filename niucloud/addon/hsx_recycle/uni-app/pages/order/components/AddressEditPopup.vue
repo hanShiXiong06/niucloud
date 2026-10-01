@@ -1,20 +1,13 @@
 <template>
-  <u-popup
+  <OrderTaskPopup
     :show="show"
-    mode="bottom"
-    :round="20"
+    title="添加寄件地址"
+    :scrollable="false"
+    :busy="saving"
+    :closeOnOverlay="false"
     @close="handleClose"
-    :safeAreaInsetBottom="true"
   >
     <view class="address-edit-popup">
-      <!-- 标题栏 -->
-      <view class="popup-header">
-        <text class="header-title">添加地址</text>
-        <view class="close-btn" @click="handleClose">
-          <up-icon name="close" size="20" color="#64748b"></up-icon>
-        </view>
-      </view>
-
       <!-- 表单内容 -->
       <scroll-view scroll-y class="form-content">
         <u-form :model="formData" :rules="rules" ref="formRef" labelPosition="left">
@@ -23,7 +16,7 @@
             <u-form-item label="姓名" prop="name" labelWidth="80">
               <u-input
                 v-model="formData.name"
-                placeholder="请输入收货人姓名"
+                placeholder="请输入寄件人姓名"
                 border="none"
                 clearable
                 maxlength="25"
@@ -51,7 +44,7 @@
               <view class="area-selector" @click="openAreaSelect">
                 <text v-if="formData.area" class="area-text">{{ formData.area }}</text>
                 <text v-else class="placeholder-text">请选择省市区</text>
-                <up-icon name="arrow-right" size="14" color="#94a3b8"></up-icon>
+                <up-icon name="arrow-right" size="14" color="var(--recycle-text-sub)"></up-icon>
               </view>
             </u-form-item>
           </view>
@@ -59,13 +52,12 @@
           <!-- 详细地址 -->
           <view class="form-item">
             <u-form-item label="详细地址" prop="address" labelWidth="80">
-              <u-input
+              <u-textarea
                 v-model="formData.address"
                 placeholder="请输入详细地址"
                 border="none"
                 clearable
                 maxlength="120"
-                type="textarea"
                 :autoHeight="true"
               />
             </u-form-item>
@@ -79,35 +71,27 @@
                 size="20"
                 :activeValue="1"
                 :inactiveValue="0"
-                activeColor="#3b82f6"
+                activeColor="var(--recycle-brand)"
               />
             </u-form-item>
           </view>
         </u-form>
       </scroll-view>
 
-      <!-- 保存按钮 -->
-      <view class="save-btn-wrapper">
-        <up-button
-          type="primary"
-          :loading="saving"
-          :disabled="saving"
-          @click="handleSave"
-          text="保存"
-          customStyle="background: linear-gradient(135deg, #3b82f6, #2563eb); border: none; height: 44px; border-radius: 22px;"
-        ></up-button>
-      </view>
     </view>
-  </u-popup>
+    <template #footer><OrderUiButton block variant="primary" :loading="saving" @click="handleSave">保存地址</OrderUiButton></template>
+  </OrderTaskPopup>
 
   <!-- 地区选择器 -->
   <area-select ref="areaRef" @complete="handleAreaComplete" />
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { addAddress } from '@/app/api/member'
 import AreaSelect from '@/components/area-select/area-select.vue'
+import OrderTaskPopup from './OrderTaskPopup.vue'
+import OrderUiButton from './OrderUiButton.vue'
 
 interface Props {
   show: boolean
@@ -142,7 +126,7 @@ const rules = computed(() => {
     name: {
       type: 'string',
       required: true,
-      message: '请输入收货人姓名',
+      message: '请输入寄件人姓名',
       trigger: ['blur', 'change']
     },
     mobile: [
@@ -179,6 +163,12 @@ const rules = computed(() => {
 })
 
 // 打开地区选择器
+watch(() => props.show, async show => {
+  if (!show) return
+  await nextTick()
+  formRef.value?.setRules(rules.value)
+})
+
 const openAreaSelect = () => {
   areaRef.value.open()
 }
@@ -214,13 +204,13 @@ const handleSave = () => {
       emit('success')
 
       // 关闭弹窗
-      handleClose()
+      emit('update:show', false)
     } catch (error) {
       console.error('保存地址失败：', error)
     } finally {
       saving.value = false
     }
-  })
+  }).catch(() => {})
 }
 
 // 重置表单
@@ -240,14 +230,16 @@ const resetForm = () => {
 
 // 关闭弹窗
 const handleClose = () => {
+  if (saving.value) return
   emit('update:show', false)
 }
 </script>
 
 <style scoped lang="scss">
 .address-edit-popup {
-  background: #fff;
-  max-height: 80vh;
+  background: var(--recycle-bg-card);
+  height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 
@@ -256,12 +248,12 @@ const handleClose = () => {
     justify-content: space-between;
     align-items: center;
     padding: 16px 20px;
-    border-bottom: 1px solid #f1f5f9;
+    border-bottom: 1px solid var(--recycle-bg-soft);
 
     .header-title {
       font-size: 16px;
       font-weight: 600;
-      color: #1e293b;
+      color: var(--recycle-text-main);
     }
 
     .close-btn {
@@ -276,15 +268,15 @@ const handleClose = () => {
 
   .form-content {
     flex: 1;
-    overflow-y: auto;
+    height: 0;
+    min-height: 0;
     padding: 12px 20px;
     box-sizing: border-box;
 
     .form-item {
-      margin-bottom: 16px;
-      background: #f8fafc;
-      border-radius: 8px;
-      padding: 12px;
+      margin-bottom: 8px;
+      border-bottom: 1rpx solid var(--recycle-line);
+      padding: 8px 0;
 
       .area-selector {
         display: flex;
@@ -295,13 +287,13 @@ const handleClose = () => {
 
         .area-text {
           font-size: 14px;
-          color: #1e293b;
+          color: var(--recycle-text-main);
           flex: 1;
         }
 
         .placeholder-text {
           font-size: 14px;
-          color: #94a3b8;
+          color: var(--recycle-text-sub);
           flex: 1;
         }
       }
@@ -315,7 +307,7 @@ const handleClose = () => {
 
   .save-btn-wrapper {
     padding: 16px 20px;
-    border-top: 1px solid #f1f5f9;
+    border-top: 1px solid var(--recycle-bg-soft);
   }
 }
 </style>

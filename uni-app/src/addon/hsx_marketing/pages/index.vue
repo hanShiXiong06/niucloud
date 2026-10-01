@@ -104,6 +104,7 @@
                 <view class="task-rule">
                     <text>{{ item.participation_mode === 'manual' ? (item.claimed ? '已领取：只累计领取后的有效业务。' : '需先领取：仅打开本页或下单不会自动领取任务。') : '自动参与：满足资格后，完成有效业务会自动累计。' }}</text>
                     <text>统计条件：{{ item.fact_name || '有效业务完成' }}，不是提交订单即达标。</text>
+                    <text v-if="item.fact_key === 'recycle_device_delivered' && item.fact_filter_json?.order_source === 'customer'">下单要求：需由您自主提交回收单，员工代下单不计入；后续由员工处理不受影响。</text>
                     <text v-if="Number(item.fact_filter_json?.min_amount) || Number(item.fact_filter_json?.max_amount)">成交价范围：{{ Number(item.fact_filter_json?.min_amount) || 0 }} 元起{{ Number(item.fact_filter_json?.max_amount) ? '，不超过 ' + item.fact_filter_json.max_amount + ' 元' : '，上限不限' }}。</text>
                     <text>达标奖励：{{ item.grant_mode === 'auto' ? '系统自动发放，可在“我的奖励”查看结果。' : '需要在“我的奖励”主动领取。' }}</text>
                 </view>
@@ -169,7 +170,11 @@ import useMemberStore from '@/stores/member'
 import { useLogin } from '@/hooks/useLogin'
 import { TASK_PAGE, parseTaskEntry, businessTarget } from '../utils/task-entry'
 
-const NOTICE_KEYS = 'hsx_marketing_reward_available,hsx_marketing_reward_grant_success,hsx_marketing_reward_grant_failed,hsx_marketing_reward_expiring'
+// 微信单次最多订阅三条模板，按用途分组，由用户主动选择，不影响领取任务。
+const NOTICE_GROUPS = [
+    { title: '领取与发放提醒（3项）', keys: 'hsx_marketing_reward_available,hsx_marketing_reward_grant_success,hsx_marketing_reward_grant_failed' },
+    { title: '奖励到期提醒（1项）', keys: 'hsx_marketing_reward_expiring' },
+]
 const overview = reactive<any>({}), activeTab = ref<'tasks' | 'rewards'>('tasks'), rows = ref<any[]>([]), loading = ref(false), page = ref(1), finished = ref(false)
 const entry = reactive(parseTaskEntry())
 const pendingAction = ref(''), loadError = ref('')
@@ -205,7 +210,14 @@ const refresh = async () => { if (!ensureLogin()) return; await Promise.all([loa
 const switchTab = async (value: 'tasks' | 'rewards') => { if (activeTab.value === value) return; activeTab.value = value; await load(true) }
 const subscribeNotice = () => {
     // #ifdef MP-WEIXIN
-    useSubscribeMessage().request(NOTICE_KEYS)
+    if (!ensureLogin()) return
+    uni.showActionSheet({
+        itemList: NOTICE_GROUPS.map(group => group.title),
+        success: ({ tapIndex }) => {
+            const group = NOTICE_GROUPS[tapIndex]
+            if (group) useSubscribeMessage().request(group.keys)
+        },
+    })
     // #endif
     // #ifndef MP-WEIXIN
     uni.showToast({ title: '请在微信小程序内设置提醒', icon: 'none' })
