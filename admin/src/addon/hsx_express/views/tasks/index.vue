@@ -24,7 +24,7 @@
                 <HsxNotice :type="taskState(detail.state).type === 'danger' ? 'error' : taskState(detail.state).type === 'success' ? 'success' : 'warning'" :title="detail.state_name || taskState(detail.state).text" :description="detail.message || taskState(detail.state).next" :default-expanded="true" :closable="false" />
                 <el-descriptions :column="1" border class="details"><el-descriptions-item label="业务来源">{{ businessName(detail.business_type) }}</el-descriptions-item><el-descriptions-item label="业务单">{{ detail.business_no || '订单号待读取，可用下方定位编号核实' }}</el-descriptions-item><el-descriptions-item label="运单号">{{ detail.waybill_no || '尚未确认' }}</el-descriptions-item><el-descriptions-item label="快递产品">{{ detail.carrier_name || carrierName(detail.carrier) }} · {{ productName(detail) }}</el-descriptions-item><el-descriptions-item label="取号结果">{{ detail.waybill_no ? '已取得运单号' : '未确认取得运单号' }}</el-descriptions-item><el-descriptions-item label="打印结果">{{ printStatus(detail) }}</el-descriptions-item><el-descriptions-item label="创建时间">{{ displayTime(detail.create_at) }}</el-descriptions-item><el-descriptions-item label="更新时间">{{ displayTime(detail.update_at) }}</el-descriptions-item></el-descriptions>
                 <div v-if="detailLabels.length && !['cancelled', 'cancelling', 'cancel_unknown'].includes(detail.state)" class="label-files"><h3>原单面单文件</h3><p class="muted">打开后使用浏览器或 PDF 阅读器打印。请核对纸张与缩放，文件可能有有效期。</p><a v-for="(url, index) in detailLabels" :key="url" :href="url" target="_blank" rel="noopener noreferrer" class="file-link">打开面单 {{ detailLabels.length > 1 ? index + 1 : '' }} ↗</a></div>
-                <div v-if="isSfTask(detail)" class="label-files"><h3>顺丰 PDF 面单</h3><p class="muted">{{ detail.label_state === 'expired' ? '原 PDF 已过期，请查询原单并重新获取面单；不要重新取号。' : detail.label_state === 'ready' ? '文件已准备好，通过本站鉴权下载，不对外暴露面单地址。' : 'PDF 尚不可下载；先查询原顺丰单，再根据结果获取原单面单。' }}</p><HsxExport v-if="canDownloadSfPdf(detail)" button-text="下载原单 PDF" :exporter="exportPdf" @error="pdfError" /><p class="muted">PDF 生成或下载成功不等于打印机出纸、包裹交件或快递揽收。</p></div>
+                <div v-if="isSfTask(detail)" class="label-files"><h3>顺丰 PDF 面单</h3><p class="muted">{{ detail.label_state === 'expired' ? '原 PDF 已过期，请查询原单并重新获取面单；不要重新取号。' : detail.label_state === 'ready' ? '点「打印面单」打开打印窗口，无需先下载。' : 'PDF 尚不可打印；先查询原顺丰单，再根据结果获取原单面单。' }}</p><div v-if="canDownloadSfPdf(detail)" class="pdf-actions"><HsxPdfPrint :context-key="detail.id" :loader="exportPdf" :disabled="!!actingId || detailLoading || !detailVisible" type="primary" /><HsxExport button-text="下载 PDF（备用）" :disabled="!!actingId || detailLoading" :exporter="exportPdf" @error="pdfError" /></div><p class="muted">打开打印窗口不代表已经出纸；实际打印、交件和揽收需分别核实。</p></div>
                 <HsxNotice v-if="detail.print_type === 'IMAGE'" title="电脑是否实际出纸，需要人工确认" description="系统能确认面单文件生成，但无法检测你的本地打印机是否出纸；不要将“面单已生成”视为“客户已收货”。" />
                 <HsxNotice v-if="canRecover(detail)" type="warning" title="可使用原账号与原包裹编号恢复申请" description="这不是只读查询。服务商已成功时返回原单；原请求未受理时，可能首次真正取号并计费。恢复后不会自动确认商城发货。" :default-expanded="true" :closable="false" />
                 <p v-if="detail.cancel_unavailable_reason" class="muted">{{ detail.cancel_unavailable_reason }}</p>
@@ -42,6 +42,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { HsxDrawer, HsxFold, HsxNotice, HsxPage } from '@/addon/hsx_components/core'
 import HsxExport from '@/addon/hsx_components/components/HsxExport/index.vue'
+import HsxPdfPrint from '@/addon/hsx_components/components/HsxPdfPrint/index.vue'
 import { cancelExpressTask, downloadExpressTaskPdf, getExpressTask, getExpressTasks, recoverExpressTask, refreshExpressTask, reprintExpressTask } from '../../api'
 import { canCancel, canRecover, canReprint, displayTime, labelLinks, operationLabel, requestError, stateOptions, taskState } from '../../utils/presentation'
 import { canDownloadSfPdf, isSandboxTask, isSfTask, validatedPdf } from '../../utils/sf'
@@ -64,9 +65,10 @@ function printStatus(task: Record<string, any>) {
     return '尚未确认'
 }
 async function exportPdf() {
-    if (!detail.value || !canDownloadSfPdf(detail.value)) throw new Error('当前任务不可下载 PDF，请刷新后核实')
-    const current = detail.value
+    if (actingId.value || detailLoading.value || !detailVisible.value || !detail.value || !canDownloadSfPdf(detail.value)) throw new Error('当前任务不可使用 PDF，请刷新后核实')
+    const current = { ...detail.value }
     const blob = await validatedPdf(await downloadExpressTaskPdf(Number(current.id)))
+    if (!detailVisible.value || !detail.value || current.id !== detail.value.id || !canDownloadSfPdf(detail.value)) throw new Error('任务已变化，请重新核对面单')
     return { blob, filename: `${isSandboxTask(current) ? '沙箱测试-' : ''}顺丰面单-${current.waybill_no || current.task_no}.pdf` }
 }
 function pdfError(error: any) { ElMessage.error(requestError(error, 'PDF 下载失败，请刷新原任务后重试')) }
@@ -146,5 +148,6 @@ onMounted(load)
 </script>
 
 <style scoped lang="scss">
+.pdf-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.pdf-actions .el-button + .el-button{margin-left:0}
 .express-tasks { color: #1f2937; }.surface { margin-top: 16px; padding: 18px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; }.search { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }.search > .el-input { width: 290px; }.search > .el-select { width: 190px; }.search .el-button + .el-button { margin-left: 0; }.muted { margin-top: 5px; color: #64748b; font-size: 12px; line-height: 1.65; }.subtle { margin-top: 4px; color: #94a3b8; font-size: 11px; overflow-wrap: anywhere; }.progress,.table-actions { display: flex; flex-wrap: wrap; gap: 8px; }.table-actions .el-button + .el-button { margin-left: 0; }.message { margin: 7px 0 0; color: #64748b; font-size: 12px; line-height: 1.6; }.time { white-space: nowrap; font-size: 12px; }.pagination { margin-top: 18px; overflow-x: auto; }.details { margin: 18px 0; }.label-files { padding: 14px; margin-bottom: 16px; border: 1px solid #dce2eb; border-radius: 8px; }.label-files h3 { margin: 0; font-size: 14px; }.file-link { display: inline-flex; margin: 10px 16px 0 0; color: var(--el-color-primary); font-size: 13px; }.drawer-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0; }.drawer-actions .el-button + .el-button { margin-left: 0; }.log { display: grid; grid-template-columns: 150px 1fr; gap: 6px 12px; padding: 12px 0; border-top: 1px solid #edf0f5; font-size: 12px; }.log span { color: #64748b; }.log p { grid-column: 2; margin: 0; color: #475569; line-height: 1.65; overflow-wrap: anywhere; }@media(max-width:640px) { .surface { padding: 12px; }.search > .el-input { width: 100%; }.search > .el-select { flex: 1; min-width: 140px; }.log { grid-template-columns: 1fr; }.log p { grid-column: 1; } }
 </style>

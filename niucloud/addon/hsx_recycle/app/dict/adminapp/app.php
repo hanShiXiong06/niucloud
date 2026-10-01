@@ -15,7 +15,7 @@ return [
     // ],
     [
         'name' => '我的任务',
-        'key' => 'hsx_recycle_my_task',
+        'key' => 'recycle_my_task',
         'group' => 'hsx_recycle',
         // 入口权限与后台一致；任务数据仍按角色负责的环节过滤。
         'menu_key' => 'recycle_my_task',
@@ -25,7 +25,7 @@ return [
     ],
     [
         'name' => '工作台',
-        'key' => 'hsx_recycle_stats',
+        'key' => 'recycle_stats',
         'group' => 'hsx_recycle',
         'menu_key' => 'recycle_workbench',
         'sort' => 1,
@@ -34,7 +34,7 @@ return [
     ],
     [
         'name' => '扫码处理',
-        'key' => 'hsx_recycle_scan_check',
+        'key' => 'recycle_scan_check',
         'group' => 'hsx_recycle',
         // 扫码是订单/设备查询入口，具体业务操作继续校验各自的接口权限。
         'menu_key' => 'recycle_order_list',

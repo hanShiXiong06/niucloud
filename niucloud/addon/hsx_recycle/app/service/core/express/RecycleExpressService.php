@@ -266,16 +266,31 @@ class RecycleExpressService
             $products = (new ExpressGatewayService())->products($siteId);
             $code = $this->resolveProductCode($siteId, [], $products);
             $product = current(array_filter($products, static function ($item) use ($code) { return ($item['product_code'] ?? '') === $code; })) ?: [];
-            return ['pickup_enabled' => true, 'enabled' => true,
+            $delivery = (new OrderSubmitConfigService())->getConfig($siteId)['platform_delivery'];
+            // 客户说明由门店维护，不使用供应商的技术结算文案，也不改变实际付款方式。
+            $paymentTips = trim((string)($delivery['payment_tips'] ?? '')) ?: '运费由谁承担，请先联系门店确认。';
+            $appointment = !empty($product['pickup_time_supported'])
+                ? PickupAppointmentPolicy::resolve($delivery['pickup_schedule'])
+                : ['pickup_time' => '', 'pickup_time_text' => ''];
+            return array_merge($appointment, ['pickup_enabled' => true, 'enabled' => true,
                 'carrier_name' => (string)($product['carrier_name'] ?? $product['product_name'] ?? '本站指定快递'),
-                'payment_tips' => (string)($product['payment_tips'] ?? '运费承担方式请向门店确认，最终费用以快递公司账单为准'),
+                'payment_tips' => $paymentTips,
                 'pickup_time_supported' => !empty($product['pickup_time_supported']),
-                'pickup_time_required' => !empty($product['pickup_time_required']), 'unavailable_reason' => ''];
+                'pickup_time_required' => !empty($product['pickup_time_required']), 'unavailable_reason' => '']);
         } catch (\Throwable $e) {
             return ['pickup_enabled' => false, 'enabled' => false, 'carrier_name' => '', 'payment_tips' => '',
                 'pickup_time_supported' => false, 'pickup_time_required' => false,
                 'unavailable_reason' => '门店暂未开通可用的上门取件，请自行寄件或联系门店'];
         }
+    }
+
+    public function validatePickupTime(int $siteId, string $value): string
+    {
+        $policy = $this->pickupPolicy($siteId);
+        if (!$policy['pickup_enabled']) throw new CommonException($policy['unavailable_reason']);
+        if (!$policy['pickup_time_supported']) return '';
+        $delivery = (new OrderSubmitConfigService())->getConfig($siteId)['platform_delivery'];
+        return PickupAppointmentPolicy::validate($value, $delivery['pickup_schedule']);
     }
 
     /**

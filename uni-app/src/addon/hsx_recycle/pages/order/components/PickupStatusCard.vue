@@ -4,12 +4,13 @@
       <view class="pickup-heading__title"><DeliveryIcon type="1" /><text>{{ pickup.title }}</text></view>
       <text v-if="compact" class="pickup-link" @tap.stop="$emit('view-detail')">查看详情</text>
     </view>
-    <view v-if="!compact" class="pickup-row"><text class="pickup-label">承运商</text><text>{{ pickup.carrier_name || '待确认' }}</text></view>
-    <view v-if="!compact && pickup.state !== 'manual'" class="pickup-row"><text class="pickup-label">申请取件时段</text><text>{{ pickup.pickup_time || '待确认' }}</text></view>
-    <view v-if="!compact && pickup.state !== 'manual'" class="pickup-row">
+    <text v-if="pickup.can_manual" class="pickup-order-saved">回收订单已提交，不需要重新下单</text>
+    <view v-if="!compact && !pickup.can_manual" class="pickup-row"><text class="pickup-label">承运商</text><text>{{ pickup.carrier_name || '待确认' }}</text></view>
+    <view v-if="!compact && !pickup.can_manual && pickup.state !== 'manual'" class="pickup-row"><text class="pickup-label">申请取件时段</text><text>{{ pickup.pickup_time || '待确认' }}</text></view>
+    <view v-if="!compact && !pickup.can_manual && pickup.state !== 'manual'" class="pickup-row">
       <text class="pickup-label">取件员</text><text>{{ pickup.courier_name || '待分配' }}</text>
     </view>
-    <view v-if="!compact && pickup.state !== 'manual'" class="pickup-row">
+    <view v-if="!compact && !pickup.can_manual && pickup.state !== 'manual'" class="pickup-row">
       <text class="pickup-label">取件电话</text>
       <text :class="{ 'pickup-link': pickup.courier_phone }" @tap.stop="callCourier">{{ pickup.courier_phone || '待分配' }}</text>
     </view>
@@ -17,38 +18,50 @@
       <text class="pickup-label">运单号</text><text class="pickup-link" @tap.stop="copyText(pickup.tracking_no)">{{ pickup.tracking_no }} · 复制</text>
     </view>
     <text class="pickup-message">{{ pickup.message }}</text>
-    <text v-if="pickup.state === 'failed' && pickup.can_manual && pickup.failure_message && pickup.failure_message !== pickup.message" class="pickup-failure">{{ pickup.failure_message }}</text>
     <text v-if="isUncertain" class="pickup-safety">请勿重复叫件或自行另叫快递，请先联系门店核实。</text>
 
+    <view v-if="!compact && pickup.can_manual" class="pickup-next-steps">
+      <text class="pickup-manual__title">接下来这样做</text>
+      <text>1. 复制下方门店地址，自行联系快递寄出。</text>
+      <text>2. 寄出后点「填写寄件单号」，不用再下回收单。</text>
+      <text>不方便自行寄件？请联系门店协助。</text>
+    </view>
     <view v-if="!compact && receiverText" class="pickup-receiver">
       <view class="pickup-row"><text class="pickup-label">门店收件信息</text><text class="pickup-link" @tap="copyText(receiverText)">复制</text></view>
       <text>{{ receiverText }}</text>
     </view>
     <view v-if="!compact" class="pickup-actions">
-      <OrderUiButton v-if="pickup.can_refresh" size="small" plain :loading="refreshing" :disabled="refreshing || saving" @click="refreshPickup">刷新取件状态</OrderUiButton>
-      <OrderUiButton v-if="pickup.can_manual" variant="primary" size="small" :disabled="saving || refreshing" @click="showManual = !showManual">{{ showManual ? '收起补单' : '自行寄件 · 补运单' }}</OrderUiButton>
+      <OrderUiButton v-if="pickup.can_manual" variant="primary" :disabled="saving || refreshing" @click="showManual = true">我已寄出 · 填写单号</OrderUiButton>
+      <OrderUiButton v-if="pickup.can_refresh && !pickup.can_manual" :loading="refreshing" :disabled="refreshing || saving" @click="refreshPickup">刷新取件状态</OrderUiButton>
       <OrderUiButton v-if="needsContact" size="small" plain @click="$emit('contact')">联系门店核实</OrderUiButton>
       <!-- #ifdef MP-WEIXIN -->
       <OrderUiButton v-if="canSubscribe" size="small" plain @click="subscribePickup">订阅取件通知</OrderUiButton>
       <!-- #endif -->
     </view>
 
-    <view v-if="!compact && showManual && pickup.can_manual" class="pickup-manual">
-      <text class="pickup-manual__title">补充当前订单的寄件运单</text>
-      <text class="pickup-message">自行寄出后填写，保存后仍是本回收订单，不会再次预约快递。</text>
-      <text v-if="!receiverText" class="pickup-safety">暂未取得门店收件地址，请先联系门店确认收件信息后再寄出。</text>
-      <up-input v-model="manualCompany" placeholder="已寄出快递的公司名称" maxlength="40" border="surround" />
-      <up-input v-model="manualTracking" placeholder="输入或扫描已寄出的运单号" maxlength="50" border="surround">
+  </view>
+  <OrderTaskPopup v-if="!compact" :show="showManual && pickup.can_manual" title="填写寄件单号" subtitle="只补充本订单的寄件信息，不会重新下单或叫快递。" height="65vh" :busy="saving" @close="showManual = false">
+    <view class="pickup-manual">
+      <text v-if="!receiverText" class="pickup-safety">暂无门店地址，请先联系门店确认，寄出后再填写。</text>
+      <text class="pickup-label">快递公司</text>
+      <view class="pickup-company-presets">
+        <text v-for="company in ['顺丰速运', '中通快递', '圆通速递', '京东物流']" :key="company" :class="{ active: manualCompany === company }" @tap="!saving && (manualCompany = company)">{{ company }}</text>
+      </view>
+      <up-input v-model="manualCompany" placeholder="选择上方公司，或输入其他快递公司" maxlength="40" border="surround" :disabled="saving" />
+      <text class="pickup-label">已寄出的运单号</text>
+      <up-input v-model="manualTracking" placeholder="输入运单号，也可点右侧扫码" maxlength="50" border="surround" :disabled="saving">
         <template #suffix><up-icon name="scan" size="22" @click="scanTracking" /></template>
       </up-input>
-      <OrderUiButton variant="primary" :loading="saving" :disabled="saving || refreshing" @click="saveManual">保存运单到本订单</OrderUiButton>
+      <text class="pickup-message">请填写实际寄出包裹的单号，门店会据此核对收货。</text>
     </view>
-  </view>
+    <template #footer><OrderUiButton block variant="primary" :loading="saving" :disabled="saving || refreshing" @click="saveManual">确认保存寄件信息</OrderUiButton></template>
+  </OrderTaskPopup>
 </template>
 
 <script setup lang="ts">
 import DeliveryIcon from './DeliveryIcon.vue'
 import OrderUiButton from './OrderUiButton.vue'
+import OrderTaskPopup from './OrderTaskPopup.vue'
 import { computed, ref, watch } from 'vue'
 import { useSubscribeMessage } from '@/hooks/useSubscribeMessage'
 import { refreshOrderPickup, submitManualPickup } from '../../../api/order'
@@ -107,6 +120,7 @@ const refreshPickup = async () => {
   }
 }
 const scanTracking = () => {
+  if (saving.value) return
   uni.scanCode({ onlyFromCamera: true, success: (result) => { manualTracking.value = result.result.trim() } })
 }
 const saveManual = async () => {
@@ -130,7 +144,7 @@ const saveManual = async () => {
       return
     }
     showManual.value = false
-    uni.showToast({ title: '运单已补充', icon: 'success' })
+    uni.showToast({ title: '寄件信息已保存', icon: 'success' })
     emit('updated')
   } catch (error: any) {
     uni.showToast({ title: [0, 400].includes(Number(error?.code)) ? (error.msg || '暂不能保存，请刷新原订单核实') : '保存结果待核实，请刷新原订单查看', icon: 'none' })
@@ -164,6 +178,11 @@ const subscribePickup = async () => {
 .pickup-receiver { margin-top: 18rpx; padding-top: 12rpx; border-top: 1rpx solid var(--recycle-line); word-break: break-all; }
 .pickup-actions { display: flex; flex-wrap: wrap; gap: 12rpx; margin-top: 20rpx; }
 .pickup-actions > view { flex: 1 1 240rpx; }
-.pickup-manual { display: flex; flex-direction: column; gap: 16rpx; margin-top: 20rpx; padding-top: 20rpx; border-top: 1rpx solid var(--recycle-line); }
+.pickup-manual { display: flex; flex-direction: column; gap: 20rpx; padding: 28rpx 32rpx; }
 .pickup-manual__title { font-weight: 700; }
+.pickup-order-saved { display: block; color: var(--recycle-text-main); font-weight: 500; margin: 8rpx 0; }
+.pickup-next-steps { display: flex; flex-direction: column; gap: 12rpx; margin-top: 20rpx; padding: 20rpx; background: var(--recycle-bg-soft); border-radius: 12rpx; }
+.pickup-company-presets { display: flex; flex-wrap: wrap; gap: 12rpx; }
+.pickup-company-presets text { padding: 8rpx 16rpx; border: 1rpx solid var(--recycle-line); border-radius: 8rpx; }
+.pickup-company-presets text.active { color: var(--recycle-brand); border-color: var(--recycle-brand); background: var(--recycle-bg-soft); }
 </style>

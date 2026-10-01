@@ -92,7 +92,7 @@ class PickupState
             'accepted' => '正在确认取件安排', 'unknown' => '取件安排待核实', 'confirmed' => '预约成功，等待分配取件员',
             'assigned' => '已安排取件员', 'picked_up' => '快递已取件', 'in_transit' => '运输中',
             'delivered' => '快递已签收', 'cancelled' => '取件预约已取消', 'failed' => '上门取件预约失败', 'manual' => '已登记自行寄件', 'exception' => '取件/运输异常，请联系门店'];
-        $messages = ['failed' => '回收订单已保留。请自行预约寄件并补填运单号，或联系门店协助。',
+        $messages = ['failed' => '本次未能安排快递员上门。您可以自行寄件，或联系门店协助。',
             'unknown' => '正在核实是否已预约，请勿重复叫件；如有疑问请联系门店。',
             'submitting' => '正在提交取件预约，请勿重复操作。',
             'accepted' => '已提交快递公司，等待确认取件安排。',
@@ -115,7 +115,7 @@ class PickupState
             'can_manual' => !$conflict && in_array($state, ['failed', 'cancelled'], true)
                 && (!isset($order['status']) || (int)$order['status'] === 1),
             'can_refresh' => !in_array($state, ['not_requested', 'manual'], true),
-            'failure_message' => $state === 'failed' ? '自动预约未成功，请按指引自行寄件或联系门店。' : '',
+            'failure_message' => '',
             'receiver' => array_intersect_key($receiver, array_flip(['contact_name', 'name', 'mobile', 'province', 'city', 'district', 'address'])),
             'conflict' => $conflict,
         ];

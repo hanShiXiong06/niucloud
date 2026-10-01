@@ -185,9 +185,11 @@ export function useOrderSubmit() {
         await new Promise<void>(resolve => {
           uni.showModal({
             title: '回收订单已提交',
-            content: `${pickup.title}。${pickup.message}`,
+            content: pickup.can_manual
+              ? '上门取件预约未成功，回收订单已保留。请在原订单查看门店地址，自行寄出后填写运单号；也可联系门店协助。不需要重新下单。'
+              : `${pickup.title}。${pickup.message}`,
             showCancel: false,
-            confirmText: '查看订单',
+            confirmText: pickup.can_manual ? '去处理寄件' : '查看订单',
             complete: () => {
               uni.navigateTo({ url: createdOrderId > 0 ? `/addon/hsx_recycle/pages/order/detail?id=${createdOrderId}` : '/addon/hsx_recycle/pages/order/list' })
               resolve()

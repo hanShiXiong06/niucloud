@@ -60,7 +60,8 @@ namespace {
     function event($name, $data) { return []; }
     $root = dirname(__DIR__);
     foreach (['dict/config/RecycleConfigKeyDict', 'dict/order/RecycleOrderDict', 'dict/express/ExpressProviderDict',
-        'dict/third_party/ThirdPartyDict', 'service/core/order/OrderSubmitConfigService'] as $file) {
+        'dict/third_party/ThirdPartyDict', 'service/core/express/PickupAppointmentPolicy', 'service/core/order/OrderSubmitConfigService',
+        'service/core/express/RecycleExpressService'] as $file) {
         require $root . '/app/' . $file . '.php';
     }
     use addon\hsx_recycle\app\dict\config\RecycleConfigKeyDict as Keys;
@@ -129,5 +130,56 @@ namespace {
     $delivery = $service->getConfig(2)['platform_delivery'];
     check(count($delivery['provider_options']) === 1 && $delivery['provider_options'][0]['provider'] === 'yisu', 'empty legacy directory does not advertise unselected SF');
     check($service->canUsePlatformDelivery(1, 5) && !$service->canUsePlatformDelivery(1, 4), 'existing count eligibility unchanged');
+    $config = $service->getConfig(1);
+    check($config['platform_delivery']['payment_tips'] === '', 'no invented merchant freight promise');
+    check($config['platform_delivery']['pickup_schedule'] === ['start' => '09:00', 'end' => '18:00', 'cutoff' => '16:00'], 'old settings get explicit daily defaults');
+    $config['platform_delivery']['payment_tips'] = '  运费由商家承担，您无需支付。  ';
+    $config['platform_delivery']['pickup_schedule'] = ['start' => '10:00', 'end' => '17:00', 'cutoff' => '15:00'];
+    $service->setConfig(1, $config);
+    $readback = $service->getConfig(1)['platform_delivery'];
+    check($readback['payment_tips'] === '运费由商家承担，您无需支付。', 'editable customer explanation round trips');
+    check($readback['pickup_schedule'] === $config['platform_delivery']['pickup_schedule'], 'schedule round trips in existing config');
+    check($service->getConfig(2)['platform_delivery']['payment_tips'] === '', 'freight explanation is site scoped');
+    $config['platform_delivery']['payment_tips'] = str_repeat('字', 130);
+    $service->setConfig(1, $config);
+    check(mb_strlen($service->getConfig(1)['platform_delivery']['payment_tips']) === 120, 'server limits explanation length');
+    $config['platform_delivery']['pickup_schedule']['end'] = '09:00';
+    $writes = count(Storage::$writes);
+    try { $service->setConfig(1, $config); throw new \RuntimeException('invalid schedule saved'); }
+    catch (\core\exception\CommonException $e) { check(count(Storage::$writes) === $writes, 'invalid schedule rejected before persistence'); }
+    Gateway::$products[1] = [array_replace($sfProduct, ['pickup_time_supported' => true, 'pickup_time_required' => true,
+        'payment_tips' => '供应商技术结算说明'])];
+    $config['platform_delivery']['pickup_schedule'] = ['start' => '10:00', 'end' => '17:00', 'cutoff' => '15:00'];
+    $config['platform_delivery']['payment_tips'] = '运费由商家承担，您无需支付。';
+    $service->setConfig(1, $config);
+    $pickup = new class extends \addon\hsx_recycle\app\service\core\express\RecycleExpressService {
+        public bool $available = true;
+        public function isExpressEnabled(int $siteId): bool { return $this->available; }
+        public function getShopAddress(int $siteId): ?array { return ['name' => '测试门店']; }
+    };
+    $policy = $pickup->pickupPolicy(1);
+    check($policy['pickup_enabled'] === true && $policy['pickup_time_required'] === true, 'actual service exposes usable appointment policy');
+    check($policy['payment_tips'] === $config['platform_delivery']['payment_tips'], 'actual service uses customer wording not provider billing text');
+    check(str_ends_with($policy['pickup_time'], '-17:00') && $policy['pickup_time_text'] !== '', 'actual service generates complete maintained window');
+    check($pickup->validatePickupTime(1, $policy['pickup_time']) === $policy['pickup_time'], 'displayed policy validates unchanged before creating recycle order');
+    $writes = count(Storage::$writes);
+    foreach (['', " \t\n"] as $missing) {
+        $generated = $pickup->validatePickupTime(1, $missing);
+        check(str_ends_with($generated, '-17:00') && preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}-/', $generated), 'missing client time becomes full configured appointment');
+        check($pickup->validatePickupTime(1, $generated) === $generated, 'fallback is valid for downstream submission');
+    }
+    foreach (['2026-01-01 09:00-18:00', '09:00-18:00'] as $invalid) {
+        try { $pickup->validatePickupTime(1, $invalid); throw new \RuntimeException('invalid client time accepted'); }
+        catch (\core\exception\CommonException $e) { check(str_contains($e->getMessage(), '尚未提交订单'), 'invalid client appointment has actionable error'); }
+    }
+    check(count(Storage::$writes) === $writes, 'policy read and validation do not write business data');
+    $pickup->available = false;
+    check($pickup->pickupPolicy(1)['pickup_enabled'] === false, 'disabled pickup does not advertise a booking');
+    try { $pickup->validatePickupTime(1, $policy['pickup_time']); throw new \RuntimeException('disabled pickup accepted'); }
+    catch (\core\exception\CommonException $e) { check(str_contains($e->getMessage(), '暂未开通'), 'disabled service rejected before order'); }
+    try { $pickup->validatePickupTime(1, ''); throw new \RuntimeException('fallback enabled disabled pickup'); }
+    catch (\core\exception\CommonException $e) { check(str_contains($e->getMessage(), '暂未开通'), 'default time cannot bypass disabled service'); }
+    $controller = file_get_contents($root . '/app/api/controller/recycle_order/RecycleOrder.php');
+    check(strpos($controller, '->validatePickupTime(') < strpos($controller, '$this->service->add($data)'), 'controller validates time before creating the recycle order');
     echo "PASS {$checks} submit/SF configuration checks (memory only; no DB/network)\n";
 }

@@ -50,7 +50,8 @@ export function usePlatformDelivery() {
       pickupTimeSupported.value = data.pickup_time_supported === true
       needPickupTime.value = pickupTimeSupported.value && data.pickup_time_required === true
       platformDeliveryForm.value.pickup_time_required = needPickupTime.value
-      if (!pickupTimeSupported.value) platformDeliveryForm.value.pickup_time = ''
+      platformDeliveryForm.value.pickup_time = pickupTimeSupported.value ? String(data.pickup_time || '') : ''
+      platformDeliveryForm.value.pickup_time_text = pickupTimeSupported.value ? String(data.pickup_time_text || '') : ''
       pickupUnavailableReason.value = pickupAvailable.value ? '' : String(data.unavailable_reason || '门店暂未配置可用的上门取件服务，请联系门店或自行寄件')
     } catch (_) {
       pickupAvailable.value = false
@@ -58,6 +59,9 @@ export function usePlatformDelivery() {
       pickupUnavailableReason.value = '暂时无法确认上门取件服务，请稍后重试或联系门店'
       pickupTimeSupported.value = false
       needPickupTime.value = false
+      platformDeliveryForm.value.pickup_time_required = false
+      platformDeliveryForm.value.pickup_time = ''
+      platformDeliveryForm.value.pickup_time_text = ''
     } finally {
       checkingPickup.value = false
       if (!pickupAvailable.value) enablePlatformDelivery.value = false

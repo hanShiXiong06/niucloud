@@ -66,7 +66,7 @@
     <!-- 平台快递下单 -->
     <view v-if="usePlatformDelivery" class="platform-delivery-section">
       <view class="pickup-carrier"><text>门店安排承运商</text><text>{{ carrierName || '待门店确认' }}</text></view>
-      <view class="pickup-payment-tip"><text>运费说明：{{ paymentTips || '运费及付款安排请与门店确认，预约服务不代表免费寄件。' }}</text></view>
+      <view class="pickup-payment-tip"><text>运费说明：{{ paymentTips || '运费由谁承担，请先联系门店确认。' }}</text></view>
       <!-- 已选择的地址信息展示（可点击版） -->
       <view
         v-if="platformDeliveryForm.sender_name"
@@ -105,19 +105,11 @@
       </view>
 
       <view v-if="pickupTimeSupported" class="pickup-time-fields">
-        <text class="label">期望取件时段{{ needPickupTime ? '（必选）' : '（选填）' }}</text>
-        <picker mode="date" :value="pickupDate" :start="today" @change="changePickupDate">
-          <view class="pickup-time-value">{{ pickupDate || '选择取件日期' }}<up-icon name="arrow-right" size="12" /></view>
-        </picker>
-        <view class="pickup-time-range">
-          <picker mode="time" :value="pickupStart" @change="changePickupStart"><view class="pickup-time-value">{{ pickupStart || '开始时间' }}</view></picker>
-          <text>至</text>
-          <picker mode="time" :value="pickupEnd" @change="changePickupEnd"><view class="pickup-time-value">{{ pickupEnd || '结束时间' }}</view></picker>
-        </view>
-        <text v-if="!needPickupTime && platformDeliveryForm.pickup_time" class="pickup-clear" @tap="clearPickupTime">清除时段，由快递员联系确认</text>
-        <text class="pickup-time-note">这是您的期望时段，是否可约及实际上门安排以预约结果和快递员确认为准。</text>
+        <text class="label">预约上门时段</text>
+        <view class="pickup-time-value">{{ platformDeliveryForm.pickup_time_text || platformDeliveryForm.pickup_time || '正在确认取件时段' }}</view>
+        <text class="pickup-time-note">门店已为您安排预约时段，无需选择。下单后以预约结果和快递员联系为准。</text>
       </view>
-      <text v-else class="pickup-time-note">当前取件服务不支持自选时段，具体时间由门店与快递员确认。</text>
+      <text v-else class="pickup-time-note">上门时间由门店与快递员联系确认。</text>
     </view>
   </view>
 
@@ -161,14 +153,6 @@ const props = withDefaults(defineProps<Props>(), {
 
 // 地址选择弹窗显示状态
 const showAddressPopup = ref(false)
-
-const pickupDate = ref('')
-const pickupStart = ref('')
-const pickupEnd = ref('')
-const today = (() => {
-  const date = new Date()
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-})()
 
 const emit = defineEmits<{
   'update:usePlatformDelivery': [value: boolean]
@@ -214,22 +198,6 @@ const handleManualToggle = () => {
   emit('update:usePlatformDelivery', false)
 }
 
-const syncPickupTime = () => {
-  const hasTime = pickupDate.value || pickupStart.value || pickupEnd.value
-  emit('update:platformDeliveryForm', {
-    ...props.platformDeliveryForm,
-    pickup_time: hasTime ? `${pickupDate.value} ${pickupStart.value}-${pickupEnd.value}` : '',
-    pickup_time_required: props.needPickupTime
-  })
-}
-const changePickupDate = (event: any) => { pickupDate.value = event.detail.value; syncPickupTime() }
-const changePickupStart = (event: any) => { pickupStart.value = event.detail.value; syncPickupTime() }
-const changePickupEnd = (event: any) => { pickupEnd.value = event.detail.value; syncPickupTime() }
-const clearPickupTime = () => { pickupDate.value = ''; pickupStart.value = ''; pickupEnd.value = ''; syncPickupTime() }
-watch(() => props.platformDeliveryForm.pickup_time, (value) => {
-  if (!value) { pickupDate.value = ''; pickupStart.value = ''; pickupEnd.value = '' }
-})
-
 const handleExpressNoChange = (value: string) => {
   emit('update:expressNo', value)
 }
@@ -248,10 +216,7 @@ const handleAddressSelect = (address: any) => {
 .pickup-payment-tip { padding: 14rpx 18rpx; margin-bottom: 18rpx; border-radius: 10rpx; background: var(--recycle-notice-bg); color: var(--recycle-notice-text); font-size: 24rpx; line-height: 1.6; }
 .pickup-time-fields { display: flex; flex-direction: column; gap: 16rpx; margin-top: 18rpx; }
 .pickup-time-value { display: flex; align-items: center; justify-content: space-between; padding: 18rpx; border: 1rpx solid var(--recycle-line); border-radius: 12rpx; font-size: 26rpx; }
-.pickup-time-range { display: flex; align-items: center; gap: 16rpx; }
-.pickup-time-range picker { flex: 1; }
 .pickup-time-note { display: block; font-size: 23rpx; line-height: 1.6; color: var(--recycle-text-sub); }
-.pickup-clear { color: var(--recycle-brand); font-size: 24rpx; }
 .label {
   font-size: 14px;
   color: var(--recycle-text-main);

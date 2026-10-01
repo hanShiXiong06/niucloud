@@ -36,6 +36,8 @@ export interface OrderSubmitConfig {
     platform_delivery: {
         display_name: string
         free_shipping_min_count: number
+        payment_tips: string
+        pickup_schedule: { start: string; end: string; cutoff: string }
         provider: string
         provider_name: string
         provider_options: Array<{

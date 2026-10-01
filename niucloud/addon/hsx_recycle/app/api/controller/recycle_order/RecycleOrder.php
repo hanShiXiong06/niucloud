@@ -15,6 +15,7 @@ namespace addon\hsx_recycle\app\api\controller\recycle_order;
 
 use core\base\BaseApiController;
 use addon\hsx_recycle\app\service\core\order\OrderSubmitConfigService;
+use addon\hsx_recycle\app\service\core\express\RecycleExpressService;
 use addon\hsx_recycle\app\service\api\recycle_order\RecycleOrderService;
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use think\App;
@@ -143,12 +144,12 @@ class RecycleOrder extends BaseApiController
             'devices.*.initial_price.min' => '预估价格必须大于0',
         ]);
 
-        // 如果使用统一快递服务（亿速）
+        // 使用本站已配置的上门取件服务。
         $orderSubmitConfigService = new OrderSubmitConfigService();
 
         if ($data['use_express']) {
             if (!$orderSubmitConfigService->canUsePlatformDelivery((int)$this->site_id, (int)$data['count'])) {
-                return fail('当前数量未达到平台包邮下单要求');
+                return fail('当前台数未达到门店的上门取件要求，请增加台数或自行寄件');
             }
 
             $expressConfig = $data['express_config'];
@@ -164,6 +165,15 @@ class RecycleOrder extends BaseApiController
             if (empty($expressConfig['sender_address'])) {
                 return fail('请输入寄件人详细地址');
             }
+            $pickupTime = $expressConfig['pickup_time'] ?? '';
+            if (!is_string($pickupTime)) {
+                return fail('取件时段格式不正确，请刷新后重试');
+            }
+            // 未提供取件时间时由服务端按门店配置生成，再传入订单及快递服务。
+            $data['express_config']['pickup_time'] = (new RecycleExpressService())->validatePickupTime(
+                (int)$this->site_id,
+                $pickupTime
+            );
         } elseif ((int)$data['delivery_type'] === 1 && empty($data['express_no'])) {
             // 如果不使用平台快递，且配送方式是快递，则需要快递单号
             return fail('请输入快递单号');

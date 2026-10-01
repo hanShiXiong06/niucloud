@@ -23,6 +23,7 @@ namespace {
     require dirname($root) . '/hsx_recycle/app/service/core/express/contract/ExpressProviderInterface.php';
     require dirname($root) . '/hsx_recycle/app/service/core/express/ExpressSubmissionException.php';
     require dirname($root) . '/hsx_recycle/app/service/core/express/PickupState.php';
+    require dirname($root) . '/hsx_recycle/app/service/core/express/PickupAppointmentPolicy.php';
     require $root . '/app/integration/RecycleSfPickupProvider.php';
     require $root . '/app/integration/RecycleSfProviderRegistry.php';
     require dirname($root) . '/hsx_recycle/app/dict/third_party/ThirdPartyDict.php';
@@ -104,6 +105,12 @@ namespace {
     check(!str_contains(json_encode($sent), 'attacker.invalid'), 'untrusted callback URL is never sent');
     check($result['pickup_time'] === $day . ' 10:00-12:00', 'customer requested time window retained as request, not arrival guarantee');
     check(count(array_filter($loaded, static fn(array $row): bool => $row[1] !== 'pickup')) === 0, 'never reads waybill credentials');
+
+    $appointment = \addon\hsx_recycle\app\service\core\express\PickupAppointmentPolicy::resolve([]);
+    $scheduled = $provider->create(17, array_replace($input, $snapshot, ['orderSendTime' => $appointment['pickup_time']]));
+    check($scheduled['pickup_time'] === $appointment['pickup_time'], 'server-assigned window passes real SF adapter unchanged');
+    check(end($requests)[1]['sendStartTm'] === substr($appointment['pickup_time'], 0, 16) . ':00', 'SF receives same server-generated future start');
+    check(str_contains(json_encode(end($requests)[1]['extraInfoList']), substr($appointment['pickup_time'], -5) . ':00'), 'SF receives same window end as customer display');
 
     $before = count($requests);
     reject(static fn() => $provider->create(17, array_replace($input, $snapshot, ['provider_scene' => 'waybill'])), 'rejected', 'cannot replace pickup scene');

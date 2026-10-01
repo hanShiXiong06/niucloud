@@ -430,13 +430,17 @@ interface ExpressCheckResponse {
     prompt?: string
     unavailable_reason?: string
     payment_tips?: string
+    pickup_time?: string
+    pickup_time_text?: string
+    pickup_time_supported?: boolean
+    pickup_time_required?: boolean
   }
 }
 
 const showPlatformDeliveryMemoConfirm = (content: string): Promise<boolean> => {
   return new Promise(resolve => {
     uni.showModal({
-      title: '平台快递提示',
+      title: '确认上门取件安排',
       content,
       confirmText: '继续下单',
       cancelText: '我再看看',
@@ -483,8 +487,19 @@ const shouldContinueWithPlatformPrompt = async (): Promise<boolean> => {
 
     const memo = String(res.data.prompt || res.data.memo || '').trim()
     paymentTips.value = String(res.data.payment_tips || '').trim()
-    const paymentMessage = paymentTips.value || '运费及付款安排请与门店确认，预约服务不代表免费寄件。'
-    return await showPlatformDeliveryMemoConfirm([memo, `运费说明：${paymentMessage}`].filter(Boolean).join('\n\n'))
+    pickupTimeSupported.value = res.data.pickup_time_supported === true
+    needPickupTime.value = pickupTimeSupported.value && res.data.pickup_time_required === true
+    platformDeliveryForm.value.pickup_time_required = needPickupTime.value
+    platformDeliveryForm.value.pickup_time = pickupTimeSupported.value ? String(res.data.pickup_time || '') : ''
+    platformDeliveryForm.value.pickup_time_text = pickupTimeSupported.value ? String(res.data.pickup_time_text || '') : ''
+    if (pickupTimeSupported.value && !platformDeliveryForm.value.pickup_time) {
+      uni.showToast({ title: '暂未取得取件时段，请刷新后重试或联系门店', icon: 'none' })
+      return false
+    }
+    const paymentMessage = paymentTips.value || '运费由谁承担，请先联系门店确认。'
+    const timeMessage = platformDeliveryForm.value.pickup_time_text
+      ? `预约时段：${platformDeliveryForm.value.pickup_time_text}，实际上门时间以快递员联系为准。` : ''
+    return await showPlatformDeliveryMemoConfirm([memo, `运费说明：${paymentMessage}`, timeMessage].filter(Boolean).join('\n\n'))
   } catch (error) {
     console.error('获取平台快递提示信息失败：', error)
     uni.showToast({ title: '暂未确认取件服务，请稍后重试或联系门店', icon: 'none' })

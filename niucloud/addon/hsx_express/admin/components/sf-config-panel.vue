@@ -1,6 +1,6 @@
 <template>
     <section class="sf-config" v-loading="loading">
-        <div class="sf-heading"><div><h2>{{ isWaybill ? '顺丰直连 · 电子面单' : '顺丰直连 · 上门取件' }}</h2><p>{{ isWaybill ? '门店发货：取号 → 下载 PDF → 打印贴单 → 实际交件 → 商城确认发货。' : '回收预约：提交回收单 → 请求顺丰取件 → 核对原单受理结果；实际安排以顺丰返回为准。' }}</p></div><el-tag :type="form.environment === 'sandbox' ? 'warning' : 'danger'">{{ form.environment === 'sandbox' ? '沙箱测试 · 非真实寄件' : '正式环境 · 可能计费' }}</el-tag></div>
+        <div class="sf-heading"><div><h2>{{ isWaybill ? '顺丰直连 · 电子面单' : '顺丰直连 · 上门取件' }}</h2><p>{{ isWaybill ? '门店发货：取号 → 打印面单（无需下载）→ 贴单交件 → 商城确认发货。' : '回收预约：提交回收单 → 请求顺丰取件 → 核对原单受理结果；实际安排以顺丰返回为准。' }}</p></div><el-tag :type="form.environment === 'sandbox' ? 'warning' : 'danger'">{{ form.environment === 'sandbox' ? '沙箱测试 · 非真实寄件' : '正式环境 · 可能计费' }}</el-tag></div>
         <HsxNotice :title="isWaybill ? '电子面单不等于预约快递员上门' : '上门取件不要求客户打印面单'" :description="isWaybill ? '此配置只用于商城发货面单。生成 PDF 不能证明打印机已出纸、已交件或已揽收；上门取件使用另一套独立配置。' : '此配置只用于回收预约取件，不需要填写打印模板。与商城电子面单分别开通、分别启用，不能用面单权限代替预约权限。'" :default-expanded="true" :closable="false" />
         <p v-if="!isWaybill" class="sf-help">当前可按原单核对建单结果；派员、取件时间与联系电话的推送回调仍需开通并实单验收。没有收到的信息不会显示为“已派员”或虚构取件时间。</p>
         <HsxNotice v-if="loadError" type="error" title="顺丰配置读取失败" :description="loadError" :default-expanded="true" :closable="false"><template #actions><el-button link type="primary" @click="load">重新读取</el-button></template></HsxNotice>

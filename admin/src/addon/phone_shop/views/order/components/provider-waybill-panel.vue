@@ -6,7 +6,7 @@
         </div>
         <p class="provider-waybill__hint">先在下方勾选本次包裹商品，默认发货地址来自商城地址库。取号或打印不会改变订单状态；包裹实际交给快递员后，再点击底部「确认发货」。</p>
         <el-alert v-if="provider.environment === 'sandbox' || task.environment === 'sandbox'" title="顺丰沙箱测试：不是实际寄件，不可确认真实商城发货" type="warning" :closable="false" />
-        <p v-if="provider.key === 'hsx_express_sf_direct'" class="provider-waybill__hint">顺丰电子面单不等于预约上门取件。取号后通过本站下载 PDF，实际出纸和交件需人工核实。</p>
+        <p v-if="provider.key === 'hsx_express_sf_direct'" class="provider-waybill__hint">顺丰电子面单不等于预约上门取件。取号后点「打印面单」，无需先下载；实际出纸和交件请现场核实。</p>
         <div class="provider-waybill__actions">
             <span>重量</span><el-input-number v-model="weight" :min="0.01" :max="100" :precision="2" :step="0.1" :disabled="hasActiveTask" size="small"/><span>kg</span>
             <el-button type="primary" :disabled="!goodsIds.length || hasActiveTask || failedToLoad" @click="createTask">{{ task.task_id ? '重新申请面单' : '申请面单' }}</el-button>
@@ -22,7 +22,8 @@
             <p v-if="task.waybill_no && !task.express_company_id">未唯一匹配商城快递公司，暂不能确认发货。请在商城「物流公司」中检查{{ isSfWaybillTask(task) ? '顺丰公司及其承运编码' : '与本运单承运商一致且唯一的快递100编码' }}，再刷新任务；仅选择上方公司不能代替编码关联。</p>
             <div class="provider-waybill__actions">
                 <a v-for="(url, index) in labelUrls" :key="url" :href="url" target="_blank" rel="noopener noreferrer" class="provider-waybill__link">打开面单{{ labelUrls.length > 1 ? index + 1 : '' }}打印</a>
-                <HsxExport v-if="canDownloadProviderPdf(task)" size="small" button-text="下载原单 PDF" :exporter="exportPdf" @error="pdfError" />
+                <HsxPdfPrint v-if="canDownloadProviderPdf(task)" :context-key="packageIdentity + ':' + task.task_id" :loader="exportPdf" :disabled="busy || failedToLoad" type="primary" size="small" />
+                <HsxExport v-if="canDownloadProviderPdf(task)" size="small" button-text="下载 PDF（备用）" :disabled="busy || failedToLoad" :exporter="exportPdf" @error="pdfError" />
                 <el-button v-if="task.can_refresh" size="small" @click="operate('refresh')">查询原顺丰单</el-button>
                 <el-button v-if="canReprint" size="small" @click="reprintTask">{{ isSfWaybillTask(task) ? '重新获取原单 PDF' : task.print_type === 'CLOUD' ? '原单云补打' : '重新获取原单面单' }}</el-button>
                 <el-button v-if="canCancel" size="small" type="danger" plain @click="cancelTask">{{ isSfWaybillTask(task) && task.state === 'cancel_unknown' ? '重试确认取消' : '取消本运单' }}</el-button>
@@ -39,6 +40,7 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import HsxExport from '@/addon/hsx_components/components/HsxExport/index.vue'
+import HsxPdfPrint from '@/addon/hsx_components/components/HsxPdfPrint/index.vue'
 import { electronicSheetProviderPdf, electronicSheetProviderTask } from '@/addon/phone_shop/api/electronic_sheet'
 import { canDownloadProviderPdf, isSfWaybillTask, providerPdfBlob, providerTaskKey, SF_WAYBILL_PDF_CONFIRM, trustedWaybillLabels, WAYBILL_CREATE_CONFIRM, WAYBILL_REPRINT_CONFIRM } from '@/addon/phone_shop/utils/electronic-sheet-provider'
 
@@ -57,9 +59,11 @@ const canReprint = computed(() => !failedToLoad.value && task.value.can_reprint 
 const canCancel = computed(() => !failedToLoad.value && task.value.can_cancel === true)
 const openPage = (path: string) => window.open(router.resolve(path).href, '_blank', 'noopener')
 const exportPdf = async () => {
-    if (!canDownloadProviderPdf(task.value)) throw new Error('PDF 当前不可下载，请刷新原任务')
-    const current = task.value
+    if (busy.value || failedToLoad.value || !canDownloadProviderPdf(task.value)) throw new Error('PDF 当前不可用，请刷新原任务')
+    const current = { ...task.value }
+    const identity = packageIdentity.value
     const blob = await providerPdfBlob(await electronicSheetProviderPdf(current))
+    if (identity !== packageIdentity.value || current.task_id !== task.value.task_id || !canDownloadProviderPdf(task.value)) throw new Error('包裹或任务已变化，请重新核对面单')
     return { blob, filename: `${current.environment === 'sandbox' ? '沙箱测试-' : ''}顺丰面单-${current.waybill_no || current.task_id}.pdf` }
 }
 const pdfError = (error: any) => ElMessage.error(error?.msg || error?.message || 'PDF 下载失败，请刷新原任务后重试')

@@ -9,6 +9,7 @@ use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\model\express\ExpressProviderConfig;
 use addon\hsx_recycle\app\service\core\express\ExpressProductCatalogService;
 use addon\hsx_recycle\app\service\core\express\ExpressGatewayService;
+use addon\hsx_recycle\app\service\core\express\PickupAppointmentPolicy;
 use addon\hsx_recycle\app\service\core\third_party\RecycleThirdPartyConfigService;
 use addon\hsx_recycle\app\dict\third_party\ThirdPartyDict;
 use app\model\diy\DiyTheme;
@@ -95,6 +96,8 @@ class OrderSubmitConfigService
             'platform_delivery' => [
                 'display_name' => '',
                 'free_shipping_min_count' => 1,
+                'payment_tips' => '',
+                'pickup_schedule' => PickupAppointmentPolicy::DEFAULTS,
                 'provider' => ExpressProviderDict::PROVIDER_YISU,
                 'provider_name' => ExpressProviderDict::getProviderName(ExpressProviderDict::PROVIDER_YISU),
                 'product_code' => '',
@@ -283,6 +286,8 @@ class OrderSubmitConfigService
             'platform_delivery' => [
                 'display_name' => $platformDeliveryDisplayName ?: ($platformDeliveryProductName ?: '京东快递'),
                 'free_shipping_min_count' => $freeShippingMinCount,
+                'payment_tips' => mb_substr(trim(is_string($platformDelivery['payment_tips'] ?? null) ? $platformDelivery['payment_tips'] : ''), 0, 120),
+                'pickup_schedule' => PickupAppointmentPolicy::normalize(is_array($platformDelivery['pickup_schedule'] ?? null) ? $platformDelivery['pickup_schedule'] : [], $strict),
                 'provider' => $platformDeliveryProvider,
                 'provider_name' => $platformDeliveryProviderName ?: $default['platform_delivery']['provider_name'],
                 'product_code' => $platformDeliveryProductCode,

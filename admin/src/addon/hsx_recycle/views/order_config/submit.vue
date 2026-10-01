@@ -125,8 +125,26 @@
                             <el-input v-model.trim="form.platform_delivery.display_name" maxlength="20" show-word-limit placeholder="如：京东快递" />
                         </SettingRow>
                         </template>
-                        <SettingRow id="delivery-free-count" label="最低包邮数量" hint="未达到数量时，客户仍可自行寄件、填写单号。">
-                            <el-input-number v-model="form.platform_delivery.free_shipping_min_count" :min="1" :max="99" controls-position="right" aria-label="最低包邮数量" />
+                        <SettingRow id="delivery-free-count" label="上门取件最低台数" hint="满多少台可以预约上门取件；未满仍可自行寄件。这个数量不代表包邮。">
+                            <el-input-number v-model="form.platform_delivery.free_shipping_min_count" :min="1" :max="99" controls-position="right" aria-label="上门取件最低台数" />
+                        </SettingRow>
+                        <SettingRow id="delivery-payment-tips" label="客户运费说明" hint="只修改客户看到的说明，不改变快递的扣款方式。请确认与实际承担方式一致。" stacked>
+                            <el-input v-model.trim="form.platform_delivery.payment_tips" type="textarea" :rows="2" maxlength="120" show-word-limit placeholder="直接写清楚谁付运费，如：运费由商家承担，您无需支付。" />
+                            <div class="delivery-copy-presets">
+                                <el-button size="small" @click="form.platform_delivery.payment_tips = '运费由商家承担，您无需支付。'">填入：商家承担</el-button>
+                                <el-button size="small" @click="form.platform_delivery.payment_tips = '运费由您承担，寄件时请向快递员支付。'">填入：寄件人承担</el-button>
+                            </div>
+                            <p class="field-hint">客户看到：{{ form.platform_delivery.payment_tips || '运费由谁承担，请先联系门店确认。' }}</p>
+                        </SettingRow>
+                        <SettingRow id="delivery-pickup-schedule" label="每日取件时段" hint="客户不用选时间，系统自动安排今天或明天的预约时段；不支持预约时间的快递渠道不使用此设置。" stacked>
+                            <div class="pickup-schedule-controls">
+                                <el-time-select v-model="form.platform_delivery.pickup_schedule.start" start="00:00" step="00:30" end="23:30" placeholder="开始时间" aria-label="取件开始时间" />
+                                <span>至</span>
+                                <el-time-select v-model="form.platform_delivery.pickup_schedule.end" start="00:00" step="00:30" end="23:30" placeholder="结束时间" aria-label="取件结束时间" />
+                            </div>
+                        </SettingRow>
+                        <SettingRow id="delivery-pickup-cutoff" label="当天预约截止" hint="到达截止时间后安排明天。当天预约至少预留30分钟；实际到达以快递员联系为准。">
+                            <el-time-select v-model="form.platform_delivery.pickup_schedule.cutoff" start="00:00" step="00:30" end="23:30" placeholder="截止时间" aria-label="当天预约截止时间" />
                         </SettingRow>
                     </section>
                 </div>
@@ -340,6 +358,8 @@ const form = reactive<OrderSubmitConfig>({
     platform_delivery: {
         display_name: '京东快递',
         free_shipping_min_count: 1,
+        payment_tips: '',
+        pickup_schedule: { start: '09:00', end: '18:00', cutoff: '16:00' },
         provider: 'yisu',
         provider_name: '亿速物流',
         provider_options: [],
@@ -432,6 +452,12 @@ const normalize = (data: Partial<OrderSubmitConfig> = {}) => {
     form.payment.mode = form.flow.mode
     form.platform_delivery.display_name = data.platform_delivery?.display_name || ''
     form.platform_delivery.free_shipping_min_count = Math.max(1, Math.min(99, Number(data.platform_delivery?.free_shipping_min_count || 1)))
+    form.platform_delivery.payment_tips = data.platform_delivery?.payment_tips || ''
+    form.platform_delivery.pickup_schedule = {
+        start: data.platform_delivery?.pickup_schedule?.start || '09:00',
+        end: data.platform_delivery?.pickup_schedule?.end || '18:00',
+        cutoff: data.platform_delivery?.pickup_schedule?.cutoff || '16:00'
+    }
     form.platform_delivery.provider_options = normalizeProviderOptions(data.platform_delivery?.provider_options)
     form.platform_delivery.provider = data.platform_delivery?.provider || form.platform_delivery.provider_options[0]?.provider || 'yisu'
     form.platform_delivery.provider_name = data.platform_delivery?.provider_name || ''
@@ -670,6 +696,14 @@ const save = async () => {
     if (form.notice.url && (!/^(\/(addon|app)\/|https?:\/\/)/i.test(form.notice.url) || /[\s\\<>"\u0000-\u001f]/.test(form.notice.url))) {
         return showValidation('notifications', 'notice-url', '请填写站内页面路径或完整 http(s) 网址，不要包含空格')
     }
+    const schedule = form.platform_delivery.pickup_schedule
+    const minuteOf = (value: string) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3))
+    if (![schedule.start, schedule.end, schedule.cutoff].every(value => /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value)) || schedule.start >= schedule.end) {
+        return showValidation('delivery', 'delivery-pickup-schedule', '请设置有效的取件时段，结束时间须晚于开始时间')
+    }
+    if (minuteOf(schedule.end) - minuteOf(schedule.cutoff) < 30) {
+        return showValidation('delivery', 'delivery-pickup-cutoff', '当天预约截止时间须至少早于取件结束时间30分钟')
+    }
     ensureProviderSelection()
     ensureProductSelection()
     // 自行寄件不依赖平台线路；未开放邮寄或没有可用线路时，不阻止保存其他设置。
@@ -771,6 +805,9 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 .section-note { display: inline-block; margin-left: 10px; font-size: 12px; font-weight: 400; color: var(--el-text-color-secondary); }
 .dependent-fields { padding-left: 18px; border-left: 2px solid var(--el-border-color-lighter); }
 .field-hint { margin: 12px 0 0; font-size: 13px; color: var(--el-text-color-secondary); line-height: 1.7; }
+.delivery-copy-presets, .pickup-schedule-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+.delivery-copy-presets :deep(.el-button + .el-button) { margin-left: 0; }
+.pickup-schedule-controls :deep(.el-select) { width: 150px; }
 .field-warning { margin: 0 0 12px; color: var(--el-color-warning-dark-2); font-size: 12px; line-height: 1.7; }
 .validation-error { margin-top: 16px; }
 .channel-list { border-top: none; margin-top: 12px; }

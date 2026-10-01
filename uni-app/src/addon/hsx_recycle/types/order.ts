@@ -40,6 +40,7 @@ export interface PlatformDeliveryForm {
   detail_address: string
   pickup_time: string
   pickup_time_required?: boolean
+  pickup_time_text?: string
   weight: string
 }
 

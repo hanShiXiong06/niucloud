@@ -92,6 +92,8 @@ export interface ExpressCheckResult {
   carrier_name?: string;
   pickup_time_required?: boolean;
   pickup_time_supported?: boolean;
+  pickup_time?: string;
+  pickup_time_text?: string;
   unavailable_reason?: string;
   payment_tips?: string;
   provider: string;

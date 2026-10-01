@@ -58,16 +58,18 @@ export function pickupReceiverText(receiver?: PickupInfo['receiver']): string {
   return [name, mobile, address].filter(Boolean).join('，')
 }
 
-/** 客户选择的是申请时段，最终安排仍由门店所配置的寄件服务确认。 */
+/** 后台安排的预约时段，最终上门仍需快递员确认。 */
 export function validatePickupTime(value: string, required = false, now = new Date()): string {
   const text = value.trim()
-  if (!text) return required ? '请选择期望取件日期和时段' : ''
+  if (!text) return required ? '暂未取得取件时段，请刷新后重试' : ''
   const match = /^(\d{4})-(\d{2})-(\d{2}) ([01]\d|2[0-3]):([0-5]\d)-([01]\d|2[0-3]):([0-5]\d)$/.exec(text)
-  if (!match) return '请选择完整的日期和取件时段'
+  if (!match) return '取件时段信息不完整，请刷新后重试'
   const [, year, month, day, startHour, startMinute, endHour, endMinute] = match.map(Number)
-  const start = new Date(year, month - 1, day, startHour, startMinute)
-  if (start.getFullYear() !== year || start.getMonth() !== month - 1 || start.getDate() !== day) return '取件日期无效'
+  // 门店时段与顺丰接口统一使用北京时间，不能受客户手机时区影响。
+  const calendar = new Date(Date.UTC(year, month - 1, day))
+  if (calendar.getUTCFullYear() !== year || calendar.getUTCMonth() !== month - 1 || calendar.getUTCDate() !== day) return '取件日期无效'
+  const start = new Date(Date.UTC(year, month - 1, day, startHour - 8, startMinute))
   if (endHour * 60 + endMinute <= startHour * 60 + startMinute) return '结束时间须晚于开始时间'
-  if (start.getTime() <= now.getTime()) return '请选择尚未开始的取件时段'
+  if (start.getTime() <= now.getTime()) return '取件时段已更新，请刷新后确认新的时间'
   return ''
 }

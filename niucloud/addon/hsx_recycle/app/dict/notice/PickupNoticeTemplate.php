@@ -40,8 +40,8 @@ final class PickupNoticeTemplate
     public const WEAPP_TIPS = [
         'confirmed' => '请查看预约时间并准备交件',
         'assigned' => '请查看取件员信息并保持电话畅通',
-        'failed' => '预约失败，请自行寄件或联系商家',
-        'cancelled' => '预约已取消，需要寄件请重新预约',
+        'failed' => '上门预约失败，请进入原订单处理寄件',
+        'cancelled' => '预约已取消，请在原订单处理寄件',
         'picked_up' => '快件已取走，请查看物流进度',
     ];
     // 公众号需独立核实 temp_key/content/keyword_name_list/tips。
