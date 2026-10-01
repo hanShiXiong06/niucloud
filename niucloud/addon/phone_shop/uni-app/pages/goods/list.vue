@@ -101,12 +101,13 @@
 
         <mescroll-body ref="mescrollRef" :top="mescrollTop" bottom="60px" @init="onMescrollInit" :down="{ use: false }" @up="getAllAppListFn">
             <view v-if="categoryConfigFailed" class="config-retry" @click="loadCategoryConfig">商品操作配置加载失败，点击重试</view>
-            <view v-if="goodsList.length" class="sidebar-margin">
+            <view v-if="entryParams.new_arrival === 1" class="config-retry">仅显示最近 24 小时上架的商品</view>
+            <view v-if="visibleGoodsList.length" class="sidebar-margin">
                 <template v-if="listType">
-                    <view v-for="(item, index) in goodsList" :key="index"
+                    <view v-for="(item, index) in visibleGoodsList" :key="item.goods_id"
                           class="goods-row-card bg-white flex p-[12rpx]  rounded-[var(--rounded-small)] overflow-hidden top-mar"
-                          :class="{ 'mb-[20rpx]': (index+1) == goodsList.length}" @click="toDetail(item.goods_id)">
-                        <view class="goods-row-cover"><PhoneGoodsCover :src="item.goods_cover_thumb_mid" :grade="item.condition_grade" /></view>
+                          :class="{ 'mb-[20rpx]': (index+1) == visibleGoodsList.length}" @click="toDetail(item.goods_id)">
+                        <view class="goods-row-cover"><PhoneGoodsCover :src="item.goods_cover_thumb_mid" :grade="item.condition_grade" :recent-tag="recentTag(item)" /></view>
 
                         <view class="goods-row-content flex-1 flex flex-col ml-[20rpx]">
                             <view class="goods-row-title text-[28rpx] text-[#333] leading-[40rpx] multi-hidden">
@@ -141,18 +142,18 @@
                     </view>
                 </template>
                 <template v-else>
-                    <PhoneGoodsWaterfall :items="goodsList" :estimate-height="estimateGoodsCardHeight">
+                    <PhoneGoodsWaterfall :items="visibleGoodsList" :estimate-height="estimateGoodsCardHeight">
                         <template #default="{ item }">
-                            <PhoneGoodsWaterfallCard :item="item" :action="goodsAction" @click="toDetail(item.goods_id)" @action="handleGoodsAction(item)" />
+                            <PhoneGoodsWaterfallCard :item="item" :action="goodsAction" :recent-tag="recentTag(item)" @click="toDetail(item.goods_id)" @action="handleGoodsAction(item)" />
                         </template>
                     </PhoneGoodsWaterfall>
                 </template>
             </view>
-            <mescroll-empty v-if="!goodsList.length && loading" :option="{tip : '暂无商品', btnText:'去逛逛'}" @emptyclick="redirect({ url: '/addon/phone_shop/pages/index', mode: 'reLaunch' })"></mescroll-empty>
+            <mescroll-empty v-if="!visibleGoodsList.length && loading" :option="{tip : '暂无商品', btnText:'去逛逛'}" @emptyclick="redirect({ url: '/addon/phone_shop/pages/index', mode: 'reLaunch' })"></mescroll-empty>
         </mescroll-body>
 
         <add-cart-popup ref="cartRef" />
-        <GoodsArrivalSubscription v-if="accessReady" back-url="/addon/phone_shop/pages/goods/list" :back-params="entryParams" />
+        <GoodsArrivalSubscription v-if="accessReady" back-url="/addon/phone_shop/pages/goods/list" :back-params="currentEntryParams" />
         <tabbar />
     </view>
     </view>
@@ -187,6 +188,9 @@ import PhoneGoodsWaterfallCard from '@/addon/phone_shop/components/PhoneGoodsWat
 import PhoneGoodsActionButton from '@/addon/phone_shop/components/PhoneGoodsActionButton.vue'
 import addCartPopup from './components/add-cart-popup.vue'
 import { resolveGoodsCardAction } from '@/addon/phone_shop/utils/goods-card'
+import { createGoodsListFilters, parseGoodsListRoute } from '@/addon/phone_shop/utils/goods-list-route'
+import { useGoodsRecentActivity } from '@/addon/phone_shop/hooks/useGoodsRecentActivity'
+import { isRecentGoodsTime } from '@/addon/phone_shop/utils/goods-recent-activity'
 import { useGoodsDetailNavigation } from '@/addon/phone_shop/hooks/useGoodsDetailNavigation'
 import ShareDownload from '@/addon/phone_shop/components/share-download/share-download.vue'
 import useMemberStore from '@/stores/member'
@@ -215,7 +219,10 @@ const shareDownloadRef = ref<any>(null)
 const forwardItem = ref<any>({})
 const cartRef = ref<any>(null)
 const entryParams = ref<Record<string, any>>({})
-const access = useGoodsPageAccess(() => ({url: '/addon/phone_shop/pages/goods/list', param: entryParams.value}))
+const { now: recentNow, sync: syncRecentTime, tag: recentTag } = useGoodsRecentActivity()
+const visibleGoodsList = computed(() => entryParams.value.new_arrival === 1
+    ? goodsList.value.filter(item => isRecentGoodsTime(item.created_at, recentNow.value)) : goodsList.value)
+const access = useGoodsPageAccess(() => ({url: '/addon/phone_shop/pages/goods/list', param: currentEntryParams.value}))
 const {ready: accessReady, status: accessStatus, message: accessMessage, hasContent, config: categoryConfig} = access
 const categoryConfigFailed = computed(() => accessStatus.value === 'error')
 const goodsAction = computed(() => resolveGoodsCardAction(categoryConfig.value))
@@ -271,21 +278,36 @@ const mescrollTop = computed(() => {
     return `${ statusTopPx.value + uni.upx2px(168) }px`
 })
 
-const filters = reactive({
-    category_ids: [] as string[],
-    memory_group: [] as string[],
-    condition_grade: [] as string[],
-    device_color: [] as string[],
-    battery_range: [] as string[],
-    warranty_range: [] as string[],
-    label_ids: [] as string[],
-    service_ids: [] as string[],
-    brand_ids: [] as string[],
-    start_price: '' as string | number,
-    end_price: '' as string | number,
-    warehouse: '',
-    in_stock: false
-})
+const filters = reactive(createGoodsListFilters())
+
+// API 与登录回跳共用当前条件，避免翻页或登录后丢失入口筛选。
+const goodsQuery = computed(() => ({
+    goods_category: filters.category_ids.join(','),
+    keyword: goods_name.value,
+    coupon_id: coupon_id.value,
+    arrival_batch_id: Number(entryParams.value.arrival_batch_id || 0),
+    new_arrival: entryParams.value.new_arrival === 1 ? 1 : '',
+    order: searchType.value === 'all' ? '' : searchType.value,
+    sort: searchType.value === 'price' ? price.value : (searchType.value === 'sale_num' ? sale_num.value : 'desc'),
+    memory_group: filters.memory_group.join(','),
+    condition_grade: filters.condition_grade.join(','),
+    device_color: filters.device_color.join(','),
+    battery_range: filters.battery_range.join(','),
+    warranty_range: filters.warranty_range.join(','),
+    label_ids: filters.label_ids.join(','),
+    service_ids: filters.service_ids.join(','),
+    brand_id: filters.brand_ids.join(','),
+    start_price: filters.start_price,
+    end_price: filters.end_price,
+    source: filters.source,
+    warehouse: filters.warehouse,
+    in_stock: filters.in_stock ? 1 : ''
+}))
+const currentEntryParams = computed(() => ({
+    ...entryParams.value,
+    ...goodsQuery.value,
+    layout: listType.value ? 'list' : 'waterfall'
+}))
 
 const popup = reactive({
     category: false,
@@ -415,16 +437,21 @@ const currentSubscriptionRule = computed(() => {
 
 const hasSubscriptionRule = computed(() => Object.keys(currentSubscriptionRule.value).length > 0)
 
-onLoad((option: any) => {
+onLoad((option: any = {}) => {
     showBack.value = getCurrentPages().length > 1
     // #ifdef MP-WEIXIN
     // 处理小程序场景值参数
     option = handleOnloadParams(option);
     // #endif
-    entryParams.value = {...option}
-    if (option.curr_goods_category) filters.category_ids = [String(option.curr_goods_category)]
-    goods_name.value = option.goods_name ? decodeURIComponent(option.goods_name) : ''
-    coupon_id.value = option.coupon_id || ''
+    const entry = parseGoodsListRoute(option)
+    entryParams.value = {...option, arrival_batch_id: entry.arrivalBatchId, new_arrival: entry.newArrival ? 1 : ''}
+    Object.assign(filters, entry.filters)
+    goods_name.value = entry.keyword
+    coupon_id.value = entry.couponId
+    searchType.value = entry.order
+    price.value = entry.order === 'price' ? entry.sort : ''
+    sale_num.value = entry.order === 'sale_num' ? entry.sort : ''
+    listType.value = entry.layout !== 'waterfall'
 })
 
 interface mescrollStructure {
@@ -441,28 +468,12 @@ const getAllAppListFn = async(mescroll: mescrollStructure) => {
     }
     loading.value = false;
     let data: object = {
-        goods_category: filters.category_ids.join(','),
+        ...goodsQuery.value,
         page: mescroll.num,
-        limit: mescroll.size,
-        keyword: goods_name.value,
-        coupon_id: coupon_id.value,
-        arrival_batch_id: Number(entryParams.value.arrival_batch_id || 0),
-        order: searchType.value === 'all' ? '' : searchType.value,
-        sort: searchType.value == 'price' ? price.value : (searchType.value === 'sale_num' ? sale_num.value : 'desc'),
-        memory_group: filters.memory_group.join(','),
-        condition_grade: filters.condition_grade.join(','),
-        device_color: filters.device_color.join(','),
-        battery_range: filters.battery_range.join(','),
-        warranty_range: filters.warranty_range.join(','),
-        label_ids: filters.label_ids.join(','),
-        service_ids: filters.service_ids.join(','),
-        brand_id: filters.brand_ids.join(','),
-        start_price: filters.start_price,
-        end_price: filters.end_price,
-        warehouse: filters.warehouse,
-        in_stock: filters.in_stock ? 1 : ''
+        limit: mescroll.size
     };
     getGoodsPages(data).then((res: any) => {
+        syncRecentTime(res.data.server_time)
         let newArr = (res.data.data as Array<Object>);
         //设置列表数据
         if (Number(mescroll.num) === 1) {
@@ -498,7 +509,7 @@ const ensureLogin = () => {
     if (memberStore.token) return true
     useLogin().setLoginBack({
         url: '/addon/phone_shop/pages/goods/list',
-        param: goods_name.value ? { goods_name: goods_name.value } : {}
+        param: currentEntryParams.value
     })
     return false
 }
@@ -642,7 +653,10 @@ const applyMoreFilters = (value: any) => {
     filters.brand_ids = value.brand_ids || []
     filters.battery_range = value.battery_range || []
     filters.warranty_range = value.warranty_range || []
-    filters.warehouse = value.warehouse || ''
+    const warehouse = value.warehouse || ''
+    // 手动更换/清空货源后，不再让链接中的 source 暗中覆盖用户选择。
+    if (warehouse !== filters.warehouse) filters.source = ''
+    filters.warehouse = warehouse
     filters.in_stock = Boolean(value.in_stock)
     searchType.value = value.order || 'all'
     price.value = searchType.value === 'price' ? (value.sort || 'asc') : ''
@@ -717,6 +731,7 @@ const toCart = () => {
 }
 
 const forwardGoods = async(item: any) => {
+    if (!ensureLogin()) return
     forwardItem.value = item || {}
     await nextTick()
     await shareDownloadRef.value?.handleDownload?.()

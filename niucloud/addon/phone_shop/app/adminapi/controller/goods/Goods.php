@@ -72,6 +72,12 @@ class Goods extends BaseAdminController
         return success((new GoodsService())->getInfo($id));
     }
 
+    /** 商品修改日志，复用商品列表查看权限。 */
+    public function changeLogs(int $id)
+    {
+        return success((new \addon\phone_shop\app\service\admin\goods\GoodsChangeLogService())->getPage($id));
+    }
+
     /**
      * 获取商品添加/编辑数据
      * @description 获取初始化数据

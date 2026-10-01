@@ -5,6 +5,7 @@ namespace addon\phone_shop\app\listener\erp;
 use addon\phone_shop\app\model\goods\GoodsSku;
 use addon\phone_shop\app\service\admin\goods\GoodsService;
 use addon\phone_shop\app\service\core\goods\CoreGoodsPriceWriteService;
+use addon\phone_shop\app\service\core\goods\CoreGoodsChangeLogService;
 use addon\phone_shop\app\service\core\goods\CoreTierPricingService;
 use addon\phone_shop\app\support\GoodsSource;
 use core\exception\CommonException;
@@ -38,6 +39,7 @@ final class ErpSalesPricing
             if ($active && abs((float)$row['price'] - (float)$asset['retail_price']) > .001) throw new CommonException('商城商品正在参加营销活动，请结束活动后再改价');
             $writer = new CoreGoodsPriceWriteService();
             $before = $writer->capture($site, (int)$row['goods_id']);
+            $auditBefore = (new CoreGoodsChangeLogService())->capture($site, (int)$row['goods_id']);
             $input = ['sku_id' => (int)$row['sku_id'], 'price' => (float)$asset['retail_price'], 'pricing_base_price' => (float)$asset['estimate_sale_price']];
             $save = ['price' => $input['price'], 'sale_price' => $input['price']];
             if ($active) unset($save['sale_price']);
@@ -51,6 +53,7 @@ final class ErpSalesPricing
             }
             GoodsSku::where('site_id', $site)->where('sku_id', (int)$row['sku_id'])->update($save);
             $writer->finish($site, (int)$row['goods_id'], [$input], $before, false, $active, true);
+            (new CoreGoodsChangeLogService())->record($site, (int)$row['goods_id'], $auditBefore, 'erp_price');
             $goodsIds[] = (int)$row['goods_id'];
         }
         // 交接中尚未建品的货源也要更新，否则运营后上架会拿到旧价格。

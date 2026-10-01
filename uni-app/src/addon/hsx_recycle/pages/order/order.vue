@@ -13,6 +13,9 @@
         :enabled="orderSubmitConfig.notice.enabled"
         :title="orderSubmitConfig.notice.title"
         :content="orderSubmitConfig.notice.content"
+        :url="orderSubmitConfig.notice.url"
+        :link-text="orderSubmitConfig.notice.link_text"
+        return-url="/addon/hsx_recycle/pages/order/order"
       />
 
       <u-form :model="form" :rules="rules" ref="formRef" label-position="left">
@@ -165,7 +168,9 @@ const orderSubmitConfig = ref({
   notice: {
     enabled: 0,
     title: '下单提示',
-    content: ''
+    content: '',
+    url: '',
+    link_text: '查看详情'
   },
   default_count: 1,
   delivery_modes: {
@@ -295,7 +300,9 @@ const normalizeOrderSubmitConfig = (data: any = {}) => {
     notice: {
       enabled: data.notice?.enabled ? 1 : 0,
       title: data.notice?.title || '下单提示',
-      content: data.notice?.content || ''
+      content: data.notice?.content || '',
+      url: data.notice?.url || '',
+      link_text: data.notice?.link_text || '查看详情'
     },
     default_count: normalizePositiveNumber(data.default_count, 1),
     delivery_modes: {
@@ -345,7 +352,11 @@ const loadOrderSubmitConfig = async () => {
   applyDefaultCount()
 }
 
+// 默认台数仅初始化一次；领取任务、补收款资料等页面返回时保留客户已填台数。
+let defaultCountApplied = false
 const applyDefaultCount = () => {
+  if (defaultCountApplied) return
+  defaultCountApplied = true
   if (phoneList.value.length > 0) return
 
   form.value.count = normalizePositiveNumber(orderSubmitConfig.value.default_count, 1)

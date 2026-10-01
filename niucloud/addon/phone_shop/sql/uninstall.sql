@@ -28,6 +28,7 @@ DROP TABLE IF EXISTS `{{prefix}}phone_shop_discount`;
 DROP TABLE IF EXISTS `{{prefix}}phone_shop_discount_goods`;
 
 DROP TABLE IF EXISTS `{{prefix}}phone_shop_goods`;
+DROP TABLE IF EXISTS `{{prefix}}phone_shop_goods_change_log`;
 
 DROP TABLE IF EXISTS `{{prefix}}phone_shop_goods_attr`;
 

@@ -15,7 +15,7 @@ const coreId = '\0order-settings-core'
 const bridgeId = '\0order-settings-bridge'
 const fixture = {
     device_add_enabled: 1, default_count: 1,
-    notice: { enabled: 0, title: '下单提示', content: '测试通知保留' },
+    notice: { enabled: 0, title: '下单提示', content: '测试通知保留', url: '', link_text: '查看详情' },
     delivery_modes: { mail: 1, self: 1, logistics_vehicle: 0 },
     logistics_vehicle: { arrival_mode: 'half_day', morning_cutoff: '12:00', same_day_time: '16:00', next_day_time: '09:00' },
     profile: { enabled: 1, payment_required: 1, payment_min_count: 1, id_card_required: 1 },
@@ -119,6 +119,12 @@ async function main() {
         assert.equal(await tab('通知与客服').getAttribute('aria-selected'), 'true')
         assert.equal(await page.evaluate(() => window.__settings.calls.length), 0)
         await page.locator('#notice-content textarea').fill('跨分区保存的通知')
+        await page.locator('#notice-url input').fill('javascript:alert(1)')
+        await save()
+        await page.getByText('请填写站内页面路径或完整 http(s) 网址，不要包含空格', { exact: true }).waitFor()
+        assert.equal(await page.evaluate(() => window.__settings.calls.length), 0, 'Invalid links cannot be saved')
+        await page.locator('#notice-url input').fill('/addon/hsx_marketing/pages/index?campaign_id=107')
+        await page.locator('#notice-link-text input').fill('先领任务再下单')
 
         await page.locator('#work-wechat-enabled .el-switch').click()
         await tab('客户下单').click()
@@ -135,6 +141,8 @@ async function main() {
         const saved = await page.evaluate(() => window.__settings.calls[0])
         assert.equal(saved.default_count, 3)
         assert.equal(saved.notice.content, '跨分区保存的通知')
+        assert.equal(saved.notice.url, '/addon/hsx_marketing/pages/index?campaign_id=107')
+        assert.equal(saved.notice.link_text, '先领任务再下单')
         assert.equal('device_bridge' in saved, false, 'Site save does not write shared downloads')
         assert.equal(saved.consignment.user_title, '测试代卖入口', 'Collapsed values survive saves')
         assert.equal(saved.follow_official_account.wechat_name, '保留公众号')
@@ -206,7 +214,7 @@ async function main() {
         await failed.evaluate(() => { window.__settings.loadError = false })
         await failed.getByRole('button', { name: '重新加载', exact: true }).click()
         await failed.getByRole('tab', { name: '客户下单', exact: true }).waitFor()
-        console.log('PASS: six sections, preserved fields, validation navigation, ERP isolation, flow confirmation, save/load failures, in-flight changes, leave guard, desktop/narrow layouts')
+        console.log('PASS: notice link validation/save, six sections, preserved fields, validation navigation, ERP isolation, flow confirmation, save/load failures, in-flight changes, leave guard, desktop/narrow layouts')
         console.log('Screenshots: ' + output)
     } finally {
         if (browser) await browser.close()

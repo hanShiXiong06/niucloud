@@ -6,6 +6,8 @@ export interface OrderSubmitConfig {
         enabled: number
         title: string
         content: string
+        url: string
+        link_text: string
     }
     default_count: number
     delivery_modes: {

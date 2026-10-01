@@ -322,6 +322,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}phone_shop_goods`
     `sale_num`              int(11) NOT NULL DEFAULT '0' COMMENT '销量',
     `virtual_sale_num`      int(11) NOT NULL DEFAULT '0' COMMENT '虚拟销量',
     `status`                tinyint(4) NOT NULL DEFAULT '1' COMMENT '商品状态（1.正常0下架）',
+    `price_changed_at`      int(11) NOT NULL DEFAULT '0' COMMENT '最近销售价格实际变更时间，0表示无记录',
     `sort`                  int(11) NOT NULL DEFAULT '0' COMMENT '排序',
     `delivery_type`         varchar(255)   NOT NULL DEFAULT '' COMMENT '支持的配送方式',
     `is_free_shipping`      tinyint(4) NOT NULL DEFAULT '1' COMMENT '是否免邮',
@@ -378,6 +379,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}phone_shop_goods`
     KEY                     `idx_goods_status` (`status`),
     KEY                     `idx_goods_sale_status` (`sale_status`),
     KEY                     `idx_goods_site_sale` (`site_id`, `status`, `sale_status`),
+    KEY                     `idx_goods_site_created` (`site_id`, `status`, `create_time`),
     KEY                     `idx_goods_site_color` (`site_id`, `device_color`),
     KEY                     `idx_goods_site_battery` (`site_id`, `battery_health`),
     KEY                     `idx_goods_site_warranty` (`site_id`, `warranty_expire_time`),
@@ -1571,4 +1573,17 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}phone_shop_forward_application` (
   KEY `idx_site_member` (`site_id`,`member_id`),
   KEY `idx_reviewer_status` (`site_id`,`reviewer_uid`,`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_general_ci COMMENT='二手商城-同行转发权益申请';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}phone_shop_goods_change_log` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点',
+  `goods_id` int NOT NULL DEFAULT 0 COMMENT '商品',
+  `operator_uid` int NOT NULL DEFAULT 0 COMMENT '操作人，0为系统任务',
+  `operator_name` varchar(100) NOT NULL DEFAULT '' COMMENT '操作人名称快照',
+  `source` varchar(32) NOT NULL DEFAULT '' COMMENT '修改来源',
+  `changes` longtext NOT NULL COMMENT '实际修改前后值 JSON',
+  `create_time` int NOT NULL DEFAULT 0 COMMENT '操作时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_site_goods_log` (`site_id`, `goods_id`, `id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_general_ci COMMENT='二手机商城商品修改记录';
 

@@ -45,9 +45,10 @@
                 <el-table-column label="状态" width="110">
                     <template #default="{ row }"><el-tag :type="statusType(row.status)" effect="plain">{{ row.status_name }}</el-tag></template>
                 </el-table-column>
-                <el-table-column label="操作" width="245" fixed="right" align="right">
+                <el-table-column label="操作" width="315" fixed="right" align="right">
                     <template #default="{ row }">
                         <el-button link type="primary" @click="openEditor(row)">编辑</el-button>
+                        <el-button link type="primary" @click="entryCampaign = row">领取入口</el-button>
                         <el-button v-if="row.status !== 1" link type="success" @click="setStatus(row, 1)">启用</el-button>
                         <el-button v-else link type="warning" @click="setStatus(row, 2)">暂停</el-button>
                         <el-button link type="danger" @click="remove(row)">删除</el-button>
@@ -55,6 +56,15 @@
                 </el-table-column>
             </el-table>
             <div class="pagination"><el-pagination v-model:current-page="query.page" v-model:page-size="query.limit" layout="total,prev,pager,next" :total="total" @current-change="load" /></div>
+
+            <el-dialog :model-value="!!entryCampaign" title="客户领取入口" width="min(600px, 92vw)" @close="entryCampaign = null">
+                <p>{{ entryCampaign?.title }}</p>
+                <el-input :model-value="campaignEntryUrl" readonly aria-label="活动领取地址" @focus="selectEntryUrl" />
+                <p class="form-help">复制此地址到回收「下单设置 → 通知与客服 → 跳转 URL」。按钮文字可填写「先领任务再下单」。客户领取后可以返回原下单页，已填写内容不会因返回而清空。</p>
+                <el-alert v-if="entryCampaign?.status !== 1" type="warning" :closable="false" title="此活动尚未启用，客户暂时无法领取；请先启用并确认活动时间。" />
+                <p class="form-help">{{ entryCampaign?.participation_mode === 'manual' ? '手动任务须由客户点击领取成功后才开始累计有效业务。' : '此活动为自动参与，不要求客户手动领取。' }} 达标不等于奖励已到账，请按奖励发放规则查看结果。</p>
+                <template #footer><el-button @click="entryCampaign = null">关闭</el-button></template>
+            </el-dialog>
 
             <el-drawer v-model="editorVisible" size="min(760px, 96vw)" :title="form.id ? '编辑营销活动' : '新建营销活动'" destroy-on-close>
                 <el-form label-position="top" class="editor-form">
@@ -155,6 +165,9 @@ const emptyForm = () => ({ id: 0, title: '', subtitle: '', status: 0, date_range
 const form = reactive<any>(emptyForm())
 const selectedFact = computed(() => metadata.fact_options.find((item: any) => item.key === form.fact_key))
 const runningCount = computed(() => rows.value.filter(row => Number(row.status) === 1).length)
+const entryCampaign = ref<any>(null)
+const campaignEntryUrl = computed(() => entryCampaign.value ? `/addon/hsx_marketing/pages/index?campaign_id=${entryCampaign.value.id}` : '')
+const selectEntryUrl = (event: FocusEvent) => (event.target as HTMLInputElement)?.select()
 
 const providerKey = (provider: any) => `${provider.provider_key}:${provider.reward_type}`
 const compact = (value: any) => Number(value || 0).toString()

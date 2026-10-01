@@ -11,6 +11,8 @@
 
 namespace addon\phone_shop\app\service\admin\goods;
 
+use addon\phone_shop\app\service\core\goods\CoreGoodsChangeLogService;
+
 use addon\phone_shop\app\dict\goods\GoodsDict;
 use addon\phone_shop\app\dict\order\OrderDict;
 use addon\phone_shop\app\model\goods\Brand;
@@ -626,6 +628,7 @@ class GoodsService extends BaseAdminService
             $goods_stat_model->create($goods_stat_data);
             (new CoreGoodsPriceWriteService())->finish((int)$this->site_id, (int)$res->goods_id,
                 $data['spec_type'] === 'single' ? [$data] : (array)$data['goods_sku_data'], [], true);
+            if (empty($data['_defer_agent_sync'])) (new CoreGoodsChangeLogService())->record((int)$this->site_id, (int)$res->goods_id, [], 'create');
             Db::commit();
 
             event('AfterGoodsEdit', [
@@ -683,6 +686,7 @@ class GoodsService extends BaseAdminService
         try {
             Db::startTrans();
             $priceBefore = (new CoreGoodsPriceWriteService())->capture((int)$this->site_id, $goods_id);
+            $auditBefore = (new CoreGoodsChangeLogService())->capture((int)$this->site_id, $goods_id);
             $deviceAttributeService = new CoreDeviceAttributeService();
 
             $goods_sku_model = new GoodsSku();
@@ -1004,6 +1008,7 @@ class GoodsService extends BaseAdminService
                 $data['spec_type'] === 'single' ? [$data] : (array)$data['goods_sku_data'], $priceBefore, false, $active_goods_count > 0);
             // 推广素材必须使用最终普通售价，不能把员工输入的会员基准价当作零售价。
             $goods_price = GoodsSku::where('site_id', $this->site_id)->where('goods_id', $goods_id)->where('is_default', 1)->value('price');
+            (new CoreGoodsChangeLogService())->record((int)$this->site_id, $goods_id, $auditBefore, 'edit');
             Db::commit();
 
             event('AfterGoodsEdit', [
@@ -1065,14 +1070,18 @@ class GoodsService extends BaseAdminService
                 [ 'goods_id', 'in', $goods_ids ]
             ];
             $affected = $this->model->where($base_where)->column('goods_id');
-            $query = $this->model->where($base_where);
-            $update = [ 'status' => 0, 'delete_time' => time() ];
         } else {
             $affected = $this->getBatchAllQuery($data[ 'where' ], $goods_ids)->column('goods.goods_id');
-            $query = $this->getBatchAllQuery($data[ 'where' ], $goods_ids);
-            $update = [ 'goods.status' => 0, 'goods.delete_time' => time() ];
         }
-        $res = $query->update($update);
+        $res = Db::transaction(function () use ($affected) {
+            $updated = 0;
+            foreach (array_chunk($affected, 500) as $chunk) {
+                $updated += (new CoreGoodsChangeLogService())->mutate((int)$this->site_id, $chunk, 'delete', function () use ($chunk) {
+                    return $this->model->where('site_id', $this->site_id)->whereIn('goods_id', $chunk)->update(['status' => 0, 'delete_time' => time()]);
+                });
+            }
+            return $updated;
+        });
         $this->dispatchMasterGoodsStatus($affected, 0);
         event('PhoneShopGoodsSaleableChanged', [
             'site_id' => $this->site_id,
@@ -1088,7 +1097,15 @@ class GoodsService extends BaseAdminService
      */
     public function recycle($goods_ids)
     {
-        $res = $this->model->restore([ [ 'goods_id', 'in', $goods_ids ], [ 'site_id', '=', $this->site_id ] ]);
+        $affected = Db::name('phone_shop_goods')->where('site_id', $this->site_id)->whereIn('goods_id', $goods_ids)->where('delete_time', '>', 0)->column('goods_id');
+        $res = Db::transaction(function () use ($affected) {
+            foreach (array_chunk($affected, 500) as $chunk) {
+                (new CoreGoodsChangeLogService())->mutate((int)$this->site_id, $chunk, 'restore', function () use ($chunk) {
+                    return $this->model->restore([['goods_id', 'in', $chunk], ['site_id', '=', $this->site_id]]);
+                });
+            }
+            return true;
+        });
         return $res;
     }
 
@@ -1108,7 +1125,9 @@ class GoodsService extends BaseAdminService
      */
     public function editSort($data)
     {
-        return $this->model->where([ [ 'goods_id', '=', $data[ 'goods_id' ] ], [ 'site_id', '=', $this->site_id ] ])->update([ 'sort' => $data[ 'sort' ] ]);
+        return (new CoreGoodsChangeLogService())->mutate((int)$this->site_id, [(int)$data['goods_id']], 'sort', function () use ($data) {
+            return $this->model->where([['goods_id', '=', $data['goods_id']], ['site_id', '=', $this->site_id]])->update(['sort' => $data['sort']]);
+        });
     }
 
     /**
@@ -1132,15 +1151,20 @@ class GoodsService extends BaseAdminService
             ];
             $affected = $this->model->where($base_where)
                 ->whereNotIn('goods_id', $explode_goods_ids)->column('goods_id');
-            if ((int)$data['status'] === 1) $this->assertRelistable($affected);
-            $res = $this->model->where($base_where)
-                ->whereNotIn('goods_id', $explode_goods_ids)->update([ 'status' => $data[ 'status' ] ]);
         } else {
             $explode_goods_ids = array_merge($explode_goods_ids, $data[ 'goods_ids' ]);
             $affected = $this->getBatchAllQuery($data[ 'where' ], $explode_goods_ids)->column('goods.goods_id');
-            if ((int)$data['status'] === 1) $this->assertRelistable($affected);
-            $res = $this->getBatchAllQuery($data[ 'where' ], $explode_goods_ids)->update([ 'goods.status' => $data[ 'status' ] ]);
         }
+        if ((int)$data['status'] === 1) $this->assertRelistable($affected);
+        $res = Db::transaction(function () use ($affected, $data) {
+            $updated = 0;
+            foreach (array_chunk($affected, 500) as $chunk) {
+                $updated += (new CoreGoodsChangeLogService())->mutate((int)$this->site_id, $chunk, 'status', function () use ($chunk, $data) {
+                    return $this->model->where('site_id', $this->site_id)->whereIn('goods_id', $chunk)->update(['status' => $data['status']]);
+                });
+            }
+            return $updated;
+        });
         // 主站上下架 -> 联动所有启用站点关系的从站副本。
         $this->dispatchMasterGoodsStatus($affected, (int) $data[ 'status' ]);
         event('PhoneShopGoodsSaleableChanged', [
@@ -1165,10 +1189,9 @@ class GoodsService extends BaseAdminService
         }
         if (!empty($explode_goods_ids)) throw new AdminException('SHOP_GOODS_PARTICIPATE_IN_ACTIVE_DISABLED_EDIT');
 
-        $this->model->where([
-            [ 'site_id', '=', $this->site_id ],
-            [ 'goods_id', '=', $data[ 'goods_id' ] ]
-        ])->update([ 'status' => $data[ 'status' ] ]);
+        (new CoreGoodsChangeLogService())->mutate((int)$this->site_id, [(int)$data['goods_id']], 'status', function () use ($data) {
+            return $this->model->where('site_id', $this->site_id)->where('goods_id', $data['goods_id'])->update(['status' => $data['status']]);
+        });
         // 主站上下架 -> 铺货/联动子站
         $this->dispatchMasterGoodsStatus([ $data[ 'goods_id' ] ], (int) $data[ 'status' ]);
         event('PhoneShopGoodsSaleableChanged', [
@@ -1274,6 +1297,7 @@ class GoodsService extends BaseAdminService
                 $goods_spec_model->saveAll($spec_list);
             }
 
+            (new CoreGoodsChangeLogService())->record((int)$this->site_id, (int)$res->goods_id, [], 'create');
             Db::commit();
             return $res->goods_id;
         } catch (\Exception $e) {
@@ -1699,6 +1723,7 @@ class GoodsService extends BaseAdminService
     {
         try {
             Db::startTrans();
+            $auditBefore = (new CoreGoodsChangeLogService())->capture((int)$this->site_id, (int)$params['goods_id']);
 
             $goods_info = $this->model->where([
                 [ 'goods_id', '=', $params[ 'goods_id' ] ],
@@ -1731,6 +1756,7 @@ class GoodsService extends BaseAdminService
                     'stock' => $goods_stock,
                 ]);
             }
+            (new CoreGoodsChangeLogService())->record((int)$this->site_id, (int)$params['goods_id'], $auditBefore, 'stock');
             Db::commit();
             event('PhoneShopGoodsSaleableChanged', [
                 'site_id' => $this->site_id,
@@ -1753,6 +1779,7 @@ class GoodsService extends BaseAdminService
         try {
             Db::startTrans();
             $priceBefore = (new CoreGoodsPriceWriteService())->capture((int)$this->site_id, (int)$params['goods_id']);
+            $auditBefore = (new CoreGoodsChangeLogService())->capture((int)$this->site_id, (int)$params['goods_id']);
 
             $goods_info = $this->model->where([
                 [ 'goods_id', '=', $params[ 'goods_id' ] ],
@@ -1794,6 +1821,7 @@ class GoodsService extends BaseAdminService
                 $this->model->where('site_id', $this->site_id)->where('goods_id', $params['goods_id'])->update(['member_discount' => 'fixed_price']);
             }
             (new CoreGoodsPriceWriteService())->finish((int)$this->site_id, (int)$params['goods_id'], (array)$params['sku_list'], $priceBefore, false, $active_goods_count > 0);
+            (new CoreGoodsChangeLogService())->record((int)$this->site_id, (int)$params['goods_id'], $auditBefore, 'price');
             Db::commit();
             event('PhoneShopGoodsSaleableChanged', [
                 'site_id' => $this->site_id,
@@ -1819,6 +1847,7 @@ class GoodsService extends BaseAdminService
         try {
             Db::startTrans();
             $priceBefore = (new CoreGoodsPriceWriteService())->capture((int)$this->site_id, (int)$params['goods_id']);
+            $auditBefore = (new CoreGoodsChangeLogService())->capture((int)$this->site_id, (int)$params['goods_id']);
             if ($this->getActiveGoodsCount((int)$params['goods_id']) > 0) throw new CommonException('商品参与营销活动，暂不能修改会员价格');
 
             $goods_info = $this->model->where([
@@ -1853,6 +1882,7 @@ class GoodsService extends BaseAdminService
                 }
             }
             (new CoreGoodsPriceWriteService())->finish((int)$this->site_id, (int)$params['goods_id'], (array)$params['sku_list'], $priceBefore);
+            (new CoreGoodsChangeLogService())->record((int)$this->site_id, (int)$params['goods_id'], $auditBefore, 'member_price');
             Db::commit();
             return true;
         } catch (\Exception $e) {
@@ -2185,18 +2215,17 @@ class GoodsService extends BaseAdminService
                 if (!isset($data[ 'set_value' ][ 'stock_type' ]) || empty($data[ 'set_value' ][ 'stock_type' ]) || !isset($data[ 'set_value' ][ 'stock' ]) || $data[ 'set_value' ][ 'stock' ] <= 0) break;
                 $update_stock = (int) $data[ 'set_value' ][ 'stock' ];
 
-                if ($data[ 'set_value' ][ 'stock_type' ] == 'inc') {
-                    (new GoodsSku())->where([['site_id', '=', $this->site_id]])->whereIn('goods_id', $target_ids)
-                        ->update(['stock' => Db::raw("stock + {$update_stock}")]);
-                } else {
-                    (new GoodsSku())->where([['site_id', '=', $this->site_id]])->whereIn('goods_id', $target_ids)
-                        ->update(['stock' => Db::raw("CASE WHEN stock >= $update_stock THEN stock - $update_stock ELSE 0 END")]);
-                }
-                foreach (array_chunk($target_ids, 500) as $chunk) {
-                    Goods::where([['site_id', '=', $this->site_id]])->whereIn('goods_id', $chunk)->update([
-                        'stock' => Db::raw("(SELECT COALESCE(SUM(stock), 0) FROM " . (new GoodsSku())->getTable() . " WHERE goods_id = " . (new Goods())->getTable() . ".goods_id AND site_id = " . (int)$this->site_id . ")")
-                    ]);
-                }
+                Db::transaction(function () use ($target_ids, $data, $update_stock) {
+                    foreach (array_chunk($target_ids, 500) as $chunk) {
+                        (new CoreGoodsChangeLogService())->mutate((int)$this->site_id, $chunk, 'batch', function () use ($chunk, $data, $update_stock) {
+                            $stock = $data['set_value']['stock_type'] === 'inc' ? "stock + {$update_stock}" : "CASE WHEN stock >= $update_stock THEN stock - $update_stock ELSE 0 END";
+                            (new GoodsSku())->where('site_id', $this->site_id)->whereIn('goods_id', $chunk)->update(['stock' => Db::raw($stock)]);
+                            Goods::where('site_id', $this->site_id)->whereIn('goods_id', $chunk)->update([
+                                'stock' => Db::raw("(SELECT COALESCE(SUM(stock), 0) FROM " . (new GoodsSku())->getTable() . " WHERE goods_id = " . (new Goods())->getTable() . ".goods_id AND site_id = " . (int)$this->site_id . ")")
+                            ]);
+                        });
+                    }
+                });
                 return ['matched_count' => count($target_ids), 'updated_count' => count($target_ids)];
         }
 
@@ -2211,14 +2240,16 @@ class GoodsService extends BaseAdminService
         $updated = 0;
         Db::transaction(function () use ($target_ids, $updateData, $data, &$updated) {
             foreach (array_chunk($target_ids, 500) as $chunk) {
-                $updated += (int)$this->model->where([['site_id', '=', $this->site_id]])->whereIn('goods_id', $chunk)->update($updateData);
-            }
-            if ($data['set_type'] === GoodsDict::MEMBER_DISCOUNT) {
-                (new GoodsSku())->where([['site_id', '=', $this->site_id]])->whereIn('goods_id', $target_ids)->update(['member_price' => '']);
-            }
-            if ($data['set_type'] === GoodsDict::CONDITION_GRADE) {
-                (new GoodsSku())->where([['site_id', '=', $this->site_id]])->whereIn('goods_id', $target_ids)
-                    ->update(['condition_grade' => $updateData['condition_grade']]);
+                $updated += (int)(new CoreGoodsChangeLogService())->mutate((int)$this->site_id, $chunk, 'batch', function () use ($chunk, $updateData, $data) {
+                    $count = (int)$this->model->where('site_id', $this->site_id)->whereIn('goods_id', $chunk)->update($updateData);
+                    if ($data['set_type'] === GoodsDict::MEMBER_DISCOUNT) {
+                        (new GoodsSku())->where('site_id', $this->site_id)->whereIn('goods_id', $chunk)->update(['member_price' => '']);
+                    }
+                    if ($data['set_type'] === GoodsDict::CONDITION_GRADE) {
+                        (new GoodsSku())->where('site_id', $this->site_id)->whereIn('goods_id', $chunk)->update(['condition_grade' => $updateData['condition_grade']]);
+                    }
+                    return $count;
+                });
             }
         });
         return ['matched_count' => count($target_ids), 'updated_count' => $updated];
@@ -2310,8 +2341,10 @@ class GoodsService extends BaseAdminService
                     foreach ($ids as $id) {
                         foreach ($lineage($id, $nextParents) as $ancestor) $mapped[$ancestor] = (string)$ancestor;
                     }
-                    (new Goods())->where([['site_id', '=', $this->site_id], ['goods_id', '=', $cursor]])
-                        ->update(['goods_category' => array_values($mapped), 'update_time' => time()]);
+                    (new CoreGoodsChangeLogService())->mutate((int)$this->site_id, [$cursor], 'category', function () use ($cursor, $mapped) {
+                        return (new Goods())->where([['site_id', '=', $this->site_id], ['goods_id', '=', $cursor]])
+                            ->update(['goods_category' => array_values($mapped)]);
+                    });
                 }
             } while (count($rows) === 200);
         });

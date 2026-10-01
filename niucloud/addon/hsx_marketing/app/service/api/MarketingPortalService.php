@@ -31,6 +31,8 @@ final class MarketingPortalService extends BaseApiService
             ['site_id', '=', $this->site_id], ['status', '=', MarketingDict::CAMPAIGN_ACTIVE],
             ['start_at', '<=', $now], ['end_at', '>=', $now],
         ]);
+        // 指定活动入口仍然受当前站点、启用状态及活动时间限制。
+        if ((int)($where['campaign_id'] ?? 0) > 0) $query->where('id', '=', (int)$where['campaign_id']);
         $page = $query->order('sort desc,id desc')->paginate($this->pageOptions($where))->toArray();
         $key = isset($page['data']) ? 'data' : 'list';
         $rows = (array)($page[$key] ?? []);
@@ -45,6 +47,7 @@ final class MarketingPortalService extends BaseApiService
             $row['qualification_message'] = (string)($qualification['message'] ?? '');
             $row['application_url'] = (string)($qualification['application_url'] ?? '');
             $row['claimed'] = $claim !== [];
+            $row['fact_name'] = array_column(MarketingDict::factOptions(), 'name', 'key')[$row['fact_key']] ?? '有效业务';
             $row['claim'] = $claim;
             $row['progress_value'] = (float)($claim['progress_value'] ?? 0);
             $row['progress_percent'] = min(100, round($row['progress_value'] / max(0.01, (float)$row['target_value']) * 100, 1));

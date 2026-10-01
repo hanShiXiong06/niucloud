@@ -299,6 +299,7 @@ Route::group('phone_shop', function () {
     Route::get('goods/transfer/notices/:id/results', 'addon\phone_shop\app\adminapi\controller\goods\GoodsTransfer@noticeResults');
 
     //商品详情
+    Route::get('goods/:id/change_logs', 'addon\phone_shop\app\adminapi\controller\goods\Goods@changeLogs');
     Route::get('goods/:id', 'addon\phone_shop\app\adminapi\controller\goods\Goods@info');
 
     //添加实物商品

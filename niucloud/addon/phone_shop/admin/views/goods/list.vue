@@ -237,6 +237,7 @@
                     <el-table-column :label="t('operation')" fixed="right" align="right" min-width="120">
                         <template #default="{ row }">
                             <el-button type="primary" link @click="editEvent(row)">{{ t('edit') }}</el-button>
+                            <el-button type="primary" link @click="goodsChangeLogRef?.open(row)">修改记录</el-button>
                             <el-button v-if="row.material_task?.can_edit" type="primary" link :loading="openingMaterial === row.goods_id"
                                 v-permission="'phone_shop_intake_material_edit'" @click="openMaterial(row)">{{ row.material_task.status === 'completed' ? '资料记录' : '完善资料' }}</el-button>
                             <el-button type="primary" link @click="spreadEvent(row)">{{ t('spreadGoods') }}</el-button>
@@ -282,6 +283,7 @@
         <goods-batch-settings-popup ref="goodsBatchSettingPopupRef" @load="loadGoodsListReset" />
 
         <goods-transfer-dialog ref="goodsTransferDialogRef" :batch-payload="transferPayload" @completed="loadGoodsList()" />
+        <goods-change-log-drawer ref="goodsChangeLogRef" />
         <component :is="materialDialogComponent" v-if="materialDialogComponent" ref="materialDialogRef" @saved="loadGoodsList(goodsTable.page)" />
 
     </div>
@@ -299,6 +301,7 @@ import goodsStockEditPopup from '@/addon/phone_shop/views/goods/components/goods
 import goodsPriceEditPopup from '@/addon/phone_shop/views/goods/components/goods-price-edit-popup.vue'
 import goodsBatchSettingsPopup from '@/addon/phone_shop/views/goods/components/goods-batch-settings-popup.vue'
 import goodsTransferDialog from '@/addon/phone_shop/views/goods/components/goods-transfer-dialog.vue'
+import goodsChangeLogDrawer from '@/addon/phone_shop/views/goods/components/goods-change-log-drawer.vue'
 import sellDialog from '@/addon/phone_shop/views/goods/components/sell-dialog.vue'
 import { getGoodsPageList, getCategoryTree, getGoodsType, getBrandList, getLabelList, editGoodsSort, editGoodsStatus, copyGoods, deleteGoods,editGoodssingleStatus, getMemberLevelNoList } from '@/addon/phone_shop/api/goods'
 import { syncAgentGoods } from '@/addon/phone_shop/api/agent'
@@ -311,6 +314,7 @@ const route = useRoute()
 const pageName = route.meta.title
 const repeat = ref(false)
 const goodsTransferDialogRef = ref()
+const goodsChangeLogRef = ref()
 const showSourceFilter = computed(() => !isMasterSite.value)
 const initialSaleState = () => {
     const queryState = Array.isArray(route.query.sale_state) ? route.query.sale_state[0] : route.query.sale_state

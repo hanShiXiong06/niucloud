@@ -11,6 +11,8 @@
 
 namespace addon\phone_shop\app\service\admin\goods;
 
+use addon\phone_shop\app\service\core\goods\CoreGoodsChangeLogService;
+
 use addon\phone_shop\app\dict\active\ActiveDict;
 use addon\phone_shop\app\model\active\ActiveGoods;
 use addon\phone_shop\app\model\discount\DiscountGoods;
@@ -336,6 +338,7 @@ class VirtualGoodsService extends BaseAdminService
                 'goods_id' => $res->goods_id,
             ];
             $goods_stat_model->create($goods_stat_data);
+            (new CoreGoodsChangeLogService())->record((int)$this->site_id, (int)$res->goods_id, [], 'create');
 
             Db::commit();
 
@@ -362,6 +365,7 @@ class VirtualGoodsService extends BaseAdminService
     {
         try {
             Db::startTrans();
+            $auditBefore = (new CoreGoodsChangeLogService())->capture((int)$this->site_id, $goods_id);
 
             $goods_sku_model = new GoodsSku();
             $goods_spec_model = new GoodsSpec();
@@ -664,6 +668,7 @@ class VirtualGoodsService extends BaseAdminService
 
             }
 
+            (new CoreGoodsChangeLogService())->record((int)$this->site_id, $goods_id, $auditBefore, 'edit');
             Db::commit();
 
             event('AfterGoodsEdit', [

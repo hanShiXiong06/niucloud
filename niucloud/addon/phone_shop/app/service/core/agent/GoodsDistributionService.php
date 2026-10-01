@@ -5,6 +5,8 @@
 
 namespace addon\phone_shop\app\service\core\agent;
 
+use addon\phone_shop\app\service\core\goods\CoreGoodsChangeLogService;
+
 use addon\phone_shop\app\model\agent\PhoneShopAgent;
 use addon\phone_shop\app\model\goods\Goods;
 use addon\phone_shop\app\model\goods\GoodsSku;
@@ -459,9 +461,11 @@ class GoodsDistributionService extends BaseCoreService
             }
             if (!$exist->isEmpty()) {
                 $goodsId = (int) $exist->goods_id;
+                $auditBefore = (new CoreGoodsChangeLogService())->capture($agentSiteId, $goodsId);
                 $goodsModel->where('goods_id', $goodsId)->update($goodsData);
             } else {
                 $goodsData['create_time'] = $now;
+                $auditBefore = [];
                 $created = $goodsModel->create($goodsData);
                 $goodsId = (int) $created->goods_id;
             }
@@ -470,6 +474,7 @@ class GoodsDistributionService extends BaseCoreService
             $this->syncSku((int) $master['goods_id'], $goodsId, $agentSiteId, $markup);
             // 复制规格值
             $this->syncSpec((int) $master['goods_id'], $goodsId);
+            (new CoreGoodsChangeLogService())->record($agentSiteId, $goodsId, $auditBefore, 'agent_sync', ['uid' => 0, 'name' => '主站同步']);
             Db::commit();
             return $goodsId;
         } catch (\Throwable $e) {

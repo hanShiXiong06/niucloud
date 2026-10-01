@@ -1,6 +1,6 @@
 <template>
     <view class="waterfall-card" @click="emit('click')">
-        <PhoneGoodsCover :src="item.goods_cover_thumb_mid" :grade="item.condition_grade" variant="grid" />
+        <PhoneGoodsCover :src="item.goods_cover_thumb_mid" :grade="item.condition_grade" :recent-tag="recentTag" variant="grid" />
         <view class="waterfall-card__content">
             <view class="waterfall-card__title multi-hidden">
                 <view v-if="item.goods_brand" class="brand-tag" :style="diyGoods.baseTagStyle(item.goods_brand)">
@@ -38,9 +38,11 @@ import type { GoodsCardAction } from '@/addon/phone_shop/utils/goods-card'
 const props = withDefaults(defineProps<{
     item?: Record<string, any>
     action?: GoodsCardAction | null
+    recentTag?: 'new' | 'updated' | ''
 }>(), {
     item: () => ({}),
-    action: null
+    action: null,
+    recentTag: ''
 })
 
 const emit = defineEmits<{

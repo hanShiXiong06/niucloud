@@ -14,6 +14,11 @@ export function getGoodsPageList(params: Record<string, any>) {
     return request.get(`phone_shop/goods`, { params })
 }
 
+/** 查看本站商品实际修改记录，权限与商品列表一致。 */
+export function getGoodsChangeLogs(goodsId: number, params: Record<string, any>) {
+    return request.get(`phone_shop/goods/${goodsId}/change_logs`, { params })
+}
+
 /** 商品批量导入模板 */
 export function downloadGoodsImportTemplate() {
     return request.get(`phone_shop/goods/transfer/template`, { responseType: 'blob' })

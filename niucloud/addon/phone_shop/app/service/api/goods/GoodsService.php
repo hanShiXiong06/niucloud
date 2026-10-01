@@ -11,6 +11,8 @@
 
 namespace addon\phone_shop\app\service\api\goods;
 
+use addon\phone_shop\app\support\GoodsRecentActivity;
+
 use addon\phone_shop\app\dict\active\ActiveDict;
 use addon\phone_shop\app\dict\goods\GoodsDict;
 use addon\phone_shop\app\model\coupon\CouponGoods;
@@ -58,6 +60,8 @@ class GoodsService extends BaseApiService
      */
     public function getPage(array $where = [])
     {
+        $now = time();
+        $newArrival = (string)($where['new_arrival'] ?? '') === '1';
         foreach ([ 'goods_category', 'label_ids', 'service_ids', 'brand_id' ] as $multi_key) {
             $normalized = $this->normalizeMultiValue($where[$multi_key] ?? '');
             if (!empty($normalized)) {
@@ -68,6 +72,8 @@ class GoodsService extends BaseApiService
         $field = 'site_id,goods_id,source,is_proxy,goods_name,sub_title,goods_type,goods_cover,unit,sale_num + goods.virtual_sale_num as sale_num,is_limit,limit_type,max_buy,min_buy,member_discount,virtual_receive_type,label_ids,brand_id,stock,status,sale_status,is_online_sellable,memory_group,condition_grade,device_color,battery_health,warranty_expire_time,qc_report';
 
         $master_site_id = ( new \addon\phone_shop\app\service\core\agent\AgentConfigService() )->getMasterSiteId();
+        // 使用数字时间戳，避免客户端时区/字符串日期解析影响标签。
+        $field .= ',create_time as created_at,price_changed_at';
         $is_agent_site = $this->site_id !== $master_site_id;
         $sku_where = [
             [ 'goodsSku.is_default', '=', 1 ],
@@ -80,6 +86,7 @@ class GoodsService extends BaseApiService
         // 无论自营还是代理，只有明确允许线上销售的商品才能进入小程序列表。
         // 跟随同步会把主站当前可售副本设置为 1，不能再用来源字段绕过该事实。
         $sku_where[] = [ 'goods.is_online_sellable', '=', 1 ];
+        if ($newArrival) $sku_where = array_merge($sku_where, GoodsRecentActivity::recentWhere($now));
         if (!empty($where['arrival_batch_id'])) {
             $batchIds = (new \addon\phone_shop\app\service\core\goods\CoreGoodsArrivalService())->batchGoodsIds((int)$this->site_id, (int)$where['arrival_batch_id']);
             $sku_where[] = ['goods.goods_id', 'in', $batchIds ?: [0]];
@@ -162,6 +169,8 @@ class GoodsService extends BaseApiService
         // 参数过滤
         if (!empty($where[ 'order' ]) && in_array($where[ 'order' ], [ 'sale_num', 'price' ])) {
             $order = $where[ 'order' ] . ' ' . ($where[ 'sort' ] === 'asc' ? 'asc' : 'desc');
+        } elseif ($newArrival) {
+            $order = 'goods.create_time desc,goods.goods_id desc';
         } elseif (($where[ 'order' ] ?? '') === 'latest') {
             $order = 'goods.goods_id desc';
         } else {
@@ -182,6 +191,7 @@ class GoodsService extends BaseApiService
         $search_model->order($order)->append([ 'goods_cover_thumb_small','goods_cover_thumb_mid', 'goods_label_name', 'goods_brand', 'sale_state', 'warranty_expire_date' ]);
         $this->applyDeviceRangeFilters($search_model, $where);
         $list = $this->pageQuery($search_model);
+        $list['server_time'] = $now;
         $goods_active_price_service = ( new CoreGoodsActivePriceService() );
         foreach ($list[ 'data' ] as $k => &$v) {
             if (!empty($v[ 'goodsSku' ])) {

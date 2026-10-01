@@ -62,6 +62,8 @@ class OrderSubmitConfigService
                 'enabled' => 0,
                 'title' => '下单提示',
                 'content' => '',
+                'url' => '',
+                'link_text' => '查看详情',
             ],
             'default_count' => 1,
             'delivery_modes' => [
@@ -239,6 +241,8 @@ class OrderSubmitConfigService
                 'enabled' => !empty($notice['enabled']) ? 1 : 0,
                 'title' => mb_substr(trim((string)($notice['title'] ?? $default['notice']['title'])), 0, 30),
                 'content' => mb_substr(trim((string)($notice['content'] ?? '')), 0, 500),
+                'url' => $this->sanitizeNoticeUrl($notice['url'] ?? '', $strict),
+                'link_text' => mb_substr(trim((string)($notice['link_text'] ?? '')), 0, 12) ?: '查看详情',
             ],
             'default_count' => $defaultCount,
             'delivery_modes' => [
@@ -524,6 +528,27 @@ class OrderSubmitConfigService
             'theme_name' => mb_substr(trim((string)($theme['theme_name'] ?? $preset['name'])), 0, 20) ?: $preset['name'],
             'colors' => $resultColors,
         ];
+    }
+
+    private function sanitizeNoticeUrl($value, bool $strict): string
+    {
+        $url = is_string($value) ? trim($value) : '';
+        if ($url === '') return '';
+        $valid = strlen($url) <= 1000 && !preg_match('/[\s\\\\<>"\x00-\x1f]/u', $url);
+        $parts = parse_url($url);
+        if (str_starts_with($url, '/')) {
+            $valid = $valid && is_array($parts)
+                && preg_match('~^/(addon|app)/[a-zA-Z0-9_/-]+$~D', $parts['path'] ?? '')
+                && !str_contains($parts['path'] ?? '', '//')
+                && !isset($parts['host']) && !isset($parts['fragment']);
+        } else {
+            $valid = $valid && is_array($parts) && filter_var($url, FILTER_VALIDATE_URL)
+                && in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true)
+                && !isset($parts['user']) && !isset($parts['pass']);
+        }
+        if ($valid) return $url;
+        if ($strict) throw new CommonException('通知跳转地址请填写 /addon/ 或 /app/ 开头的页面路径，或完整的 http(s) 网址；不要包含空格或账号密码');
+        return '';
     }
 
     private function sanitizeColor(string $value, string $default): string

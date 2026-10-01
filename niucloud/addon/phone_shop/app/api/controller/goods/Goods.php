@@ -48,6 +48,7 @@ class Goods extends BaseApiController
             [ 'service_ids', '' ], // 商品服务(多值逗号分隔)
             [ 'in_stock', '' ], // 仅看有货:1
             [ 'arrival_batch_id', 0 ], // 上新通知的导入批次（后端限定本站及可售商品）
+            [ 'new_arrival', '' ], // 1=仅最近24小时上架；与普通筛选叠加
         ]);
         return success(( new GoodsService() )->getPage($data));
     }

@@ -152,9 +152,8 @@ async function main() {
     const listSource = sfc.parse(fs.readFileSync(path.join(base,'pages/goods/list.vue'),'utf8')).descriptor.scriptSetup.content
     const listFn = listSource.slice(listSource.indexOf('const getAllAppListFn ='),listSource.indexOf('onPageScroll((e)=>'))
     let listAllowed = false, goodsRequests = 0, endErrors = 0
-    const filters = Object.fromEntries(['category_ids','memory_group','condition_grade','device_color','battery_range','warranty_range','label_ids','service_ids','brand_ids'].map(key => [key,[]]))
-    const list = execute("import {access,filters,loading,goods_name,coupon_id,searchType,price,sale_num,goodsList,getGoodsPages,entryParams} from 'state';\n" + listFn + '\nexport {getAllAppListFn};', {
-        state:{access:{ensure:async() => listAllowed},filters,entryParams:vue.ref({}),loading:vue.ref(false),goods_name:vue.ref(''),coupon_id:vue.ref(''),searchType:vue.ref('all'),price:vue.ref(''),sale_num:vue.ref(''),goodsList:vue.ref([]),getGoodsPages:async() => {goodsRequests++;return {data:{data:[]}}}}
+    const list = execute("import {access,goodsQuery,loading,goodsList,getGoodsPages} from 'state';\n" + listFn + '\nexport {getAllAppListFn};', {
+        state:{access:{ensure:async() => listAllowed},goodsQuery:vue.ref({label_ids:'107'}),loading:vue.ref(false),goodsList:vue.ref([]),getGoodsPages:async() => {goodsRequests++;return {data:{data:[]}}}}
     })
     await list.getAllAppListFn({num:1,size:10,endErr:() => endErrors++,endSuccess:() => {}})
     check('未通过门禁的列表不请求商品接口', () => {assert.equal(goodsRequests,0);assert.equal(endErrors,1)})

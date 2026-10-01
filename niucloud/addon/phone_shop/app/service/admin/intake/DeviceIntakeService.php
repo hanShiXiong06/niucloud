@@ -5,6 +5,8 @@
 
 namespace addon\phone_shop\app\service\admin\intake;
 
+use addon\phone_shop\app\service\core\goods\CoreGoodsChangeLogService;
+
 use addon\phone_shop\app\model\intake\DeviceIntake;
 use addon\phone_shop\app\model\goods\Goods;
 use addon\phone_shop\app\model\goods\GoodsSku;
@@ -475,6 +477,7 @@ class DeviceIntakeService extends BaseAdminService
                 || abs((float)($priceSnapshot['_tier_pricing']['base_price'] ?? $intake['peer_price']) - (float)$intake['peer_price']) > .001)) {
             (new \addon\phone_shop\app\service\core\goods\CoreGoodsPriceWriteService())->syncToErp((int)$this->site_id, $pricedSku->toArray());
         }
+        (new CoreGoodsChangeLogService())->record((int)$this->site_id, (int)$goods_id, [], 'intake');
         // 所有商城资料补齐后再按站点关系推送。这里不是单品关注，只是主站
         // “新增商品”事件的最终落点，服务会自动处理全部启用从站。
         $distribution = ['success_count' => 0, 'failed_count' => 0, 'errors' => []];
@@ -639,6 +642,7 @@ class DeviceIntakeService extends BaseAdminService
             if (count($skus) !== 1 || (int)$skus[0]['erp_asset_id'] !== (int)$intake->erp_asset_id) throw new AdminException('商城与 ERP 设备关联异常，请核对后处理');
             $goods = (new Goods())->where('site_id', $this->site_id)->where('goods_id', (int)$intake->goods_id)->lock(true)->findOrEmpty();
             if ($goods->isEmpty()) throw new AdminException('关联商品不存在，请联系管理员');
+            $auditBefore = (new CoreGoodsChangeLogService())->capture((int)$this->site_id, (int)$goods->goods_id);
             $catalog = $this->materialCatalog($goods->toArray());
             $save = IntakeMaterialAttributes::normalizeParameters($data, $goods->toArray(), $catalog);
             IntakeMaterialAttributes::validateChoices($data, $goods->toArray(), $catalog,
@@ -658,6 +662,7 @@ class DeviceIntakeService extends BaseAdminService
             if (isset($save['condition_grade'])) (new GoodsSku())->where('site_id', $this->site_id)->where('sku_id', (int)$skus[0]['sku_id'])->update(['condition_grade' => $save['condition_grade']]);
             $raw = IntakeMaterialTask::transition($raw, $action, (int)$this->uid, trim((string)$this->username) ?: '商城运营', time());
             $intake->save(['raw_payload' => $raw, 'update_time' => time()]);
+            (new CoreGoodsChangeLogService())->record((int)$this->site_id, (int)$goods->goods_id, $auditBefore, 'material');
             return (int)$goods->goods_id;
         });
         // 资料传播在主商品保存成功后触发；失败明确反馈，不误导用户重复保存或重新上架。
@@ -689,6 +694,7 @@ class DeviceIntakeService extends BaseAdminService
                 $proxyGoods = (new Goods())->where($where)->where('source', (string)$this->site_id)
                     ->where('source_goods_id', $goodsId)->lock(true)->findOrEmpty();
                 if ($proxyGoods->isEmpty()) continue;
+                $auditBefore = (new CoreGoodsChangeLogService())->capture((int)$proxy['site_id'], (int)$proxy['goods_id']);
                 $proxyFields = $fields;
                 $mappedIds = [];
                 foreach ($this->decodeArray($fields['attr_ids'] ?? []) as $id) {
@@ -709,6 +715,7 @@ class DeviceIntakeService extends BaseAdminService
                 }
                 $proxyGoods->save($proxyFields + ['update_time' => time()]);
                 (new GoodsSku())->where($where)->update(['condition_grade' => (string)($fields['condition_grade'] ?? '')]);
+                (new CoreGoodsChangeLogService())->record((int)$proxy['site_id'], (int)$proxy['goods_id'], $auditBefore, 'agent_sync', ['uid' => 0, 'name' => '主站资料同步']);
             }
         });
     }

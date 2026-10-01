@@ -162,6 +162,11 @@
                         <div v-if="form.notice.enabled" class="dependent-fields">
                             <SettingRow id="notice-title" label="通知标题"><el-input v-model.trim="form.notice.title" maxlength="30" show-word-limit placeholder="下单提示" /></SettingRow>
                             <SettingRow id="notice-content" label="通知内容" stacked><el-input v-model.trim="form.notice.content" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="请输入通知内容" /></SettingRow>
+                            <SettingRow id="notice-url" label="跳转 URL" stacked hint="选填，留空仅展示通知。站内填写 /addon/... 或 /app/... 页面路径，可携带参数；外部填写完整 https:// 网址，小程序需配置业务域名。">
+                                <el-input v-model.trim="form.notice.url" maxlength="1000" clearable placeholder="粘贴页面路径或活动入口地址" />
+                                <p class="field-hint">营销任务：到「营销任务」点击对应活动的「领取入口」，复制地址到这里。客户须在任务页面主动领取；点击通知不会自动领取，也不会阻止正常下单。</p>
+                            </SettingRow>
+                            <SettingRow v-if="form.notice.url" id="notice-link-text" label="跳转按钮文字"><el-input v-model.trim="form.notice.link_text" maxlength="12" show-word-limit placeholder="例如：先领任务再下单" /></SettingRow>
                         </div>
                     </section>
                     <section class="settings-section">
@@ -289,7 +294,9 @@ const form = reactive<OrderSubmitConfig>({
     notice: {
         enabled: 0,
         title: '下单提示',
-        content: ''
+        content: '',
+        url: '',
+        link_text: '查看详情'
     },
     default_count: 1,
     delivery_modes: {
@@ -391,6 +398,8 @@ const normalize = (data: Partial<OrderSubmitConfig> = {}) => {
     form.notice.enabled = data.notice?.enabled ? 1 : 0
     form.notice.title = data.notice?.title || '下单提示'
     form.notice.content = data.notice?.content || ''
+    form.notice.url = data.notice?.url || ''
+    form.notice.link_text = data.notice?.link_text || '查看详情'
     form.default_count = Math.max(1, Math.min(99, Number(data.default_count || 1)))
     form.delivery_modes.mail = data.delivery_modes?.mail ? 1 : 0
     form.delivery_modes.self = data.delivery_modes?.self ? 1 : 0
@@ -632,6 +641,9 @@ const save = async () => {
     }
     if (form.notice.enabled && !form.notice.content.trim()) {
         return showValidation('notifications', 'notice-content', '请填写通知内容')
+    }
+    if (form.notice.url && (!/^(\/(addon|app)\/|https?:\/\/)/i.test(form.notice.url) || /[\s\\<>"\u0000-\u001f]/.test(form.notice.url))) {
+        return showValidation('notifications', 'notice-url', '请填写站内页面路径或完整 http(s) 网址，不要包含空格')
     }
     if (!form.platform_delivery.display_name.trim()) {
         return showValidation('delivery', 'delivery-name', '请填写客户看到的快递名称')
