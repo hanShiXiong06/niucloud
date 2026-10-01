@@ -1891,8 +1891,10 @@ class ErpFinanceService extends BaseAdminService
     private function saleReturnPayableItems(int $partyId, array $where): array
     {
         $assetTable = (new ErpAsset())->getTable();
+        $returnItemTable = (new \addon\hsx_erp\app\model\ErpSaleReturnItem())->getTable();
         $query = ErpPayable::alias('p')
             ->leftJoin($assetTable . ' a', 'a.id = p.asset_id AND a.site_id = p.site_id')
+            ->leftJoin($returnItemTable . ' ri', 'ri.return_id=p.source_id AND ri.site_id=p.site_id AND ri.asset_id=p.asset_id')
             ->where([
                 ['p.site_id', '=', $this->site_id],
                 ['p.source_type', '=', 'sale_return'],
@@ -1908,14 +1910,14 @@ class ErpFinanceService extends BaseAdminService
         }
         if (!empty($where['keyword'])) {
             $kw = trim((string)$where['keyword']);
-            $query->whereLike('p.payable_no|p.source_no|p.remark|a.asset_no|a.imei|a.sn|a.model|a.spec', '%' . $kw . '%');
+            $query->whereLike('p.payable_no|p.source_no|p.remark|a.asset_no|a.imei|a.sn|a.model|a.spec|ri.imei|ri.model', '%' . $kw . '%');
         }
         $page = $query->field([
             'a.id',
             'a.asset_no',
-            'a.imei',
+            'COALESCE(a.imei, ri.imei) as imei',
             'a.sn',
-            'a.model',
+            'COALESCE(a.model, ri.model) as model',
             'a.spec',
             'a.status',
             'a.warehouse_name',

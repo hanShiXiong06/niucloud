@@ -31,6 +31,64 @@ use think\facade\Db;
  */
 class ErpSaleReturnService extends BaseAdminService
 {
+    /** 商城原生商品没有 ERP 资产，也可以按原销售明细退货；不补造资产和采购应付。 */
+    public function returnNativeItem(int $saleItemId, string $requestId, string $reason): int
+    {
+        if (!Db::connect()->getPdo()->inTransaction()) throw new CommonException('商城退货必须在原订单事务中办理');
+        $existing = $this->existingReturnId($requestId);
+        if ($existing > 0) return $existing;
+        $item = ErpSaleItem::where('site_id', $this->site_id)->where('id', $saleItemId)->lock(true)->findOrEmpty();
+        if ($item->isEmpty() || (int)$item->asset_id !== 0 || (string)$item->status !== 'sold') {
+            throw new CommonException('商城原销售明细不存在或已退回，请刷新后核对');
+        }
+        $sale = ErpSaleOrder::where('site_id', $this->site_id)->where('id', (int)$item->sale_order_id)->lock(true)->findOrEmpty();
+        $this->assertRefundEntry($sale);
+        if ((string)$sale->origin_plugin !== 'phone_shop' || (int)$sale->party_id <= 0) throw new CommonException('原销售客户尚未确认，未办理退货');
+        if ((float)$item->refunded_amount > 0.001 || $this->confirmedCompensationAmount($saleItemId) > 0.001) {
+            throw new CommonException('该设备已有退款或售后补差，请在 ERP 核对剩余可退金额后办理');
+        }
+        $amount = round((float)$item->sale_price, 2);
+        $received = (float)($this->receivedBySaleItem((int)$sale->id)[$saleItemId] ?? 0);
+        $now = time();
+        $return = ErpSaleReturnOrder::create([
+            'site_id' => $this->site_id, 'request_id' => $requestId, 'business_type' => 'external_goods_return',
+            'return_no' => ErpLedgerService::makeNo('SR'), 'sale_order_id' => (int)$sale->id, 'sale_no' => (string)$sale->sale_no,
+            'party_id' => (int)$sale->party_id, 'party_name' => (string)$sale->party_name,
+            'operator_id' => (int)$this->uid, 'operator_name' => (string)$this->username,
+            'total_amount' => $amount, 'settled_amount' => 0, 'status' => 'confirmed', 'refund_mode' => 'payable',
+            'remark' => $reason, 'occurred_at' => $now, 'create_at' => $now, 'update_at' => $now,
+        ]);
+        $returnItem = ErpSaleReturnItem::create([
+            'site_id' => $this->site_id, 'return_id' => (int)$return->id, 'asset_id' => 0, 'asset_no' => '',
+            'imei' => (string)$item->imei, 'model' => (string)$item->model, 'sale_item_id' => $saleItemId,
+            'sale_price' => $amount, 'return_price' => $amount, 'received_amount' => $received,
+            'reason' => $reason, 'create_at' => $now,
+        ]);
+        $receivable = $this->findSaleReceivable((int)$sale->id);
+        if ($amount - $received > 0.001) {
+            if ($receivable === null) throw new CommonException('原销售应收不存在，未冲销账目');
+            $this->reduceReceivable($receivable, round($amount - $received, 2));
+        }
+        if ($received > 0.001) $this->createReturnPayable($return, $returnItem, $received, $reason, $now);
+        $item->save(['status' => 'returned', 'refunded_amount' => $amount, 'refunded_cost' => (float)$item->cost, 'profit' => 0, 'update_at' => $now]);
+        $active = ErpSaleItem::where('site_id', $this->site_id)->where('sale_order_id', (int)$sale->id)->where('status', 'sold')->select()->toArray();
+        $sale->save([
+            'status' => $active === [] ? 'returned' : 'completed',
+            'refunded_amount' => round((float)$sale->refunded_amount + $amount, 2),
+            'refunded_cost' => round((float)$sale->refunded_cost + (float)$item->cost, 2),
+            'profit' => round(array_sum(array_column($active, 'profit')), 2), 'update_at' => $now,
+        ]);
+        $this->refreshSaleFinance((int)$sale->id);
+        (new ErpLedgerService())->account([
+            'biz_type' => 'sale_return', 'direction' => 'decrease', 'amount' => $amount,
+            'party_id' => (int)$sale->party_id, 'party_name' => (string)$sale->party_name,
+            'asset_id' => 0, 'sale_item_id' => $saleItemId, 'source_type' => 'sale_return',
+            'source_id' => (int)$return->id, 'source_no' => (string)$return->return_no,
+            'remark' => '商城原生设备退回；冲销未收款，已收款转财务退款。' . $reason,
+        ]);
+        return (int)$return->id;
+    }
+
     /** 店内退货一站式处理：登记即代表设备已经交回，立即回库并完成账务分流。 */
     public function createAndConfirm(array $data): array
     {
@@ -196,9 +254,7 @@ class ErpSaleReturnService extends BaseAdminService
 
             // 获取该销售单的应收，用于计算各设备已收金额
             $receivable = $this->findSaleReceivable($saleOrderId);
-            $itemSettledMap = $receivable === null
-                ? []
-                : $this->saleItemSettledMap($receivable, $saleOrderId);
+            $itemSettledMap = $this->settledByAsset($saleOrderId);
 
             $totalAmount = 0.0;
             $itemsData   = [];
@@ -373,9 +429,7 @@ class ErpSaleReturnService extends BaseAdminService
 
             $returnSaleOrderId = (int)$return->sale_order_id;
             $returnReceivable = $this->findSaleReceivable($returnSaleOrderId);
-            $confirmedSettledMap = $returnReceivable === null
-                ? []
-                : $this->saleItemSettledMap($returnReceivable, $returnSaleOrderId);
+            $confirmedSettledMap = $this->settledByAsset($returnSaleOrderId);
 
             $remark = trim((string)($data['remark'] ?? '销售退货'));
             if ($remark === '') {
@@ -592,6 +646,9 @@ class ErpSaleReturnService extends BaseAdminService
                 return;
             }
 
+            if ((string)$return->business_type === 'external_goods_return') {
+                throw new CommonException('商城原生商品退回已同步原单；如需再次出售，请重新上架开单，不能撤销后覆盖商城库存');
+            }
             if ((string)$return->status !== 'confirmed' || (string)$return->business_type === 'after_sale_compensation') {
                 throw new CommonException('当前退货单不能撤销');
             }
@@ -765,8 +822,9 @@ class ErpSaleReturnService extends BaseAdminService
             $row['items'] = $itemMap[(int)$row['id']] ?? [];
             $row['item_count'] = count($row['items']);
             $row['first_item'] = $row['items'][0] ?? null;
-            $row['can_cancel'] = (string)$row['status'] === 'pending'
-                || ((string)$row['status'] === 'confirmed' && (string)$row['refund_mode'] === 'payable' && empty($settledMap[(int)$row['id']]));
+            $row['can_cancel'] = !in_array((string)$row['business_type'], ['external_goods_return', 'after_sale_compensation'], true) && ((string)$row['status'] === 'pending'
+                || ((string)$row['status'] === 'confirmed' && (string)$row['refund_mode'] === 'payable' && empty($settledMap[(int)$row['id']])));
+            $row['can_cancel'] = (bool)$row['can_cancel'];
         }
         unset($row);
         ErpPartyMemberNames::append($this->site_id, $page['data']);
@@ -836,9 +894,9 @@ class ErpSaleReturnService extends BaseAdminService
         foreach ($payables as $payable) {
             if ((float)($payable['settled_amount'] ?? 0) > 0.0001) $hasSettledRefund = true;
         }
-        $return['can_cancel'] = (string)$return['status'] === 'pending'
+        $return['can_cancel'] = (string)$return['business_type'] !== 'external_goods_return' && ((string)$return['status'] === 'pending'
             || ((string)$return['status'] === 'confirmed' && (string)$return['business_type'] !== 'after_sale_compensation'
-                && (string)$return['refund_mode'] === 'payable' && !$hasSettledRefund);
+                && (string)$return['refund_mode'] === 'payable' && !$hasSettledRefund));
         $partyRows = [$return];
         ErpPartyMemberNames::append($this->site_id, $partyRows);
         $return = $partyRows[0];
@@ -971,37 +1029,68 @@ class ErpSaleReturnService extends BaseAdminService
      */
     private function saleItemSettledMap(ErpReceivable $receivable, int $saleOrderId): array
     {
-        $map = $this->receivableItemSettledMap((int)$receivable->id);
-        $fallback = max(0, round((float)$receivable->settled_amount - array_sum($map), 2));
-        if ($fallback <= 0.0001) {
-            return $map;
+        return $this->settledByAsset($saleOrderId);
+    }
+
+    private function settledByAsset(int $saleOrderId): array
+    {
+        $amounts = $this->receivedBySaleItem($saleOrderId);
+        $map = [];
+        foreach (ErpSaleItem::where('site_id', $this->site_id)->where('sale_order_id', $saleOrderId)->select() as $item) {
+            if ((int)$item->asset_id > 0) $map[(int)$item->asset_id] = $amounts[(int)$item->id] ?? 0.0;
         }
-        $items = ErpSaleItem::where([
-            ['site_id', '=', $this->site_id],
-            ['sale_order_id', '=', $saleOrderId],
-        ])->field('asset_id,sale_price')->order('id asc')->select()->toArray();
-        $capacities = [];
-        foreach ($items as $row) {
-            $assetId = (int)$row['asset_id'];
-            $capacities[$assetId] = max(0, round((float)$row['sale_price'] - (float)($map[$assetId] ?? 0), 2));
-        }
-        $capacityTotal = round(array_sum($capacities), 2);
-        if ($capacityTotal <= 0.0001) {
-            return $map;
-        }
-        $remaining = min($fallback, $capacityTotal);
-        $remainingCapacity = $capacityTotal;
-        foreach ($capacities as $assetId => $capacity) {
-            if ($capacity <= 0.0001 || $remaining <= 0.0001) {
-                continue;
+        return $map;
+    }
+
+    /** 按原销售明细核对实收。商城原生商品 asset_id=0，不能把多台设备合并为同一台。 */
+    public function receivedBySaleItem(int $saleOrderId): array
+    {
+        $sale = $this->findSaleOrder($saleOrderId);
+        $items = ErpSaleItem::where('site_id', $this->site_id)->where('sale_order_id', $saleOrderId)->order('id asc')->select()->toArray();
+        $receivable = $this->findSaleReceivable($saleOrderId);
+        $map = [];
+        if ($receivable === null) {
+            // 商城线下现结直接记入资金账户，没有待收应收；不能因此当成未付款退货。
+            if (!in_array((string)$sale->payment_mode, ['offline_cash', 'cash'], true)
+                || (float)$sale->received_amount + 0.001 < (float)$sale->total_amount) {
+                throw new CommonException('原销售收款记录不完整，请先核对原单账目；未执行退货或退款');
             }
-            $allocated = $remainingCapacity <= $capacity + 0.0001
-                ? $remaining
-                : round($remaining * $capacity / $remainingCapacity, 2);
-            $allocated = min($capacity, $allocated, $remaining);
-            $map[$assetId] = round((float)($map[$assetId] ?? 0) + $allocated, 2);
-            $remaining = round($remaining - $allocated, 2);
-            $remainingCapacity = round($remainingCapacity - $capacity, 2);
+            foreach ($items as $item) $map[(int)$item['id']] = round((float)$item['sale_price'], 2);
+            return $map;
+        }
+        $rows = ErpAccountLedger::where('site_id', $this->site_id)->where('biz_type', 'receipt')
+            ->where('source_type', 'receivable')->where('source_id', (int)$receivable->id)
+            ->field('sale_item_id,asset_id,SUM(amount) as amount')->group('sale_item_id,asset_id')->select()->toArray();
+        foreach ($rows as $row) {
+            foreach ($items as $item) {
+                if (((int)$row['sale_item_id'] > 0 && (int)$row['sale_item_id'] === (int)$item['id'])
+                    || ((int)$row['sale_item_id'] === 0 && (int)$row['asset_id'] > 0 && (int)$row['asset_id'] === (int)$item['asset_id'])) {
+                    $id = (int)$item['id'];
+                    $map[$id] = round(($map[$id] ?? 0) + (float)$row['amount'], 2);
+                }
+            }
+        }
+        $returnTable = (new ErpSaleReturnOrder())->getTable();
+        $returned = ErpSaleReturnItem::alias('i')->join($returnTable . ' r', 'r.id=i.return_id AND r.site_id=i.site_id')
+            ->where('i.site_id', $this->site_id)->where('r.sale_order_id', $saleOrderId)->where('r.status', 'confirmed')
+            ->where('r.business_type', '<>', 'after_sale_compensation')->field('i.sale_item_id,i.received_amount')->select()->toArray();
+        foreach ($returned as $row) $map[(int)$row['sale_item_id']] = round((float)$row['received_amount'], 2);
+        $left = round((float)$receivable->settled_amount - array_sum($map), 2);
+        if ($left < -0.01) throw new CommonException('原销售逐台收款与总收款不一致，请财务核对后退货');
+        $capacities = [];
+        foreach ($items as $item) {
+            $id = (int)$item['id'];
+            $map[$id] = $map[$id] ?? 0.0;
+            if ($map[$id] > (float)$item['sale_price'] + 0.01) throw new CommonException('该设备已收金额超过成交价，请财务核对');
+            if ($item['status'] === 'sold') $capacities[$id] = max(0, round((float)$item['sale_price'] - $map[$id], 2));
+        }
+        $capacityLeft = array_sum($capacities);
+        if ($left > $capacityLeft + 0.01) throw new CommonException('原销售剩余收款无法对应设备，请财务核对');
+        foreach ($capacities as $id => $capacity) {
+            $amount = $capacityLeft > 0 ? min($capacity, $left, round($left * $capacity / $capacityLeft, 2)) : 0;
+            $map[$id] = round($map[$id] + $amount, 2);
+            $left = round($left - $amount, 2);
+            $capacityLeft = round($capacityLeft - $capacity, 2);
         }
         return $map;
     }
@@ -1026,7 +1115,7 @@ class ErpSaleReturnService extends BaseAdminService
         }
         $receivable->save([
             'amount'    => $newAmount,
-            'status'    => ErpDict::financeStatus($newAmount, $settled),
+            'status'    => $newAmount <= 0.001 ? ErpDict::STATUS_VOID : ErpDict::financeStatus($newAmount, $settled),
             'update_at' => time(),
         ]);
     }
@@ -1109,12 +1198,12 @@ class ErpSaleReturnService extends BaseAdminService
             return;
         }
         $receivable = $this->findSaleReceivable($saleId, false);
-        $received = $receivable === null ? 0.0 : (float)$receivable->settled_amount;
-        $total = (float)$order->total_amount;
+        $received = $receivable === null ? (float)$order->received_amount : (float)$receivable->settled_amount;
+        $total = $receivable === null ? $received : (float)$receivable->amount;
         $order->save([
             'received_amount'  => round($received, 2),
             'receivable_amount'=> max(0, round($total - $received, 2)),
-            'finance_status'   => ErpDict::financeStatus($total, $received),
+            'finance_status'   => $receivable === null ? ErpDict::STATUS_SETTLED : (string)$receivable->status,
             'update_at'        => time(),
         ]);
     }

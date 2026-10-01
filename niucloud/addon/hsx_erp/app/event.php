@@ -7,6 +7,9 @@ return [
         'PhoneShopOrderReturnContext' => [
             'addon\hsx_erp\app\listener\PhoneShopOrderReturnContext',
         ],
+        'ErpOfflineSaleReturnRequested' => [
+            'addon\hsx_erp\app\listener\ErpOfflineSaleReturnRequested',
+        ],
         'DeviceAssetPhotoLookupRequested' => [
             'addon\hsx_erp\app\listener\DeviceAssetPhotoLookupRequested',
         ],

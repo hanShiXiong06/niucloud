@@ -96,7 +96,7 @@ class CoreOrderDeliveryService extends BaseCoreService
             ['delivery_status', '=', OrderDeliveryDict::WAIT_DELIVERY]
         ])->column('order_goods_id');
         if (!empty($gift_order_goods_ids)) {
-            $order_goods_ids = array_merge($order_goods_ids, $gift_order_goods_ids);
+            $order_goods_ids = array_values(array_unique(array_merge($order_goods_ids, $gift_order_goods_ids)));
             $data['order_goods_ids'] = $order_goods_ids;
         }
 
@@ -132,6 +132,9 @@ class CoreOrderDeliveryService extends BaseCoreService
         if ($order_goods_data->count() != count($order_goods_ids)) throw new CommonException('SHOP_ORDER_DELIVERY_NOT_ALLOW_REFUND_OR_DELIVERY_FINISH');//存在退款的商品不能发货
         $has_goods_type_array = [];
         foreach ($order_goods_data as $v) {
+            if (!empty(ErpDeviceSnapshot::decode($v['extend'])['erp_return'])) {
+                throw new CommonException('所选设备已办理退回，不能再次作为原订单发货');
+            }
 
             if ($v['is_gift'] == 1) continue;
 
@@ -436,7 +439,8 @@ class CoreOrderDeliveryService extends BaseCoreService
                 'status', '<>', OrderGoodsDict::REFUND_FINISH,//不包含退款完毕的
             ]
         );
-        $order_goods_count = (new OrderGoods())->where($where)->count();
+        $active = static function ($row) { return empty(ErpDeviceSnapshot::decode($row['extend'])['erp_return']); };
+        $order_goods_count = count(array_filter((new OrderGoods())->where($where)->field('extend')->select()->toArray(), $active));
         $where_delivery = array(
             [
                 'delivery_status', 'in', [OrderDeliveryDict::DELIVERY_FINISH, OrderDeliveryDict::TAKED]
@@ -448,7 +452,7 @@ class CoreOrderDeliveryService extends BaseCoreService
                 'status', '<>', OrderGoodsDict::REFUND_FINISH,//不包含退款完毕的
             ]
         );
-        $order_goods_delivery_count = (new OrderGoods())->where($where_delivery)->count();
+        $order_goods_delivery_count = count(array_filter((new OrderGoods())->where($where_delivery)->field('extend')->select()->toArray(), $active));
         //完成
         if ($order_goods_count == 0 && $order_goods_delivery_count > 0) {
             $this->finish($data);

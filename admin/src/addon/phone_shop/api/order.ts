@@ -1,5 +1,10 @@
 import request from '@/utils/request'
 
+/** 有明确确认步骤的退回/批量动作：保留抽屉内错误，不误报整批成功。 */
+export function processOfflineOrderAction(params: Record<string, any>) {
+    return request.post('phone_shop/order/offline/process', params, { showSuccessMessage: false, showErrorMessage: false })
+}
+
 /**
  * 获取交易配置
  * @returns

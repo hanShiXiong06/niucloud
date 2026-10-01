@@ -71,6 +71,21 @@ namespace {
     $ok($param['partnerSecret'] === 'verify-secret' && $param['partnerSecret'] !== $param['partnerId'], 'partner secret not confused with monthly account');
     $ok($param['printType'] === 'IMAGE' && $param['code'] === 'sf_secret', 'web IMAGE supports official reprint; SF auth code included');
     $ok($param['reorder'] === false, 'provider-side duplicate order protection explicitly enabled');
+    $lengthCalls = [];
+    $lengthClient = new Kuaidi100Client(function ($url, $form) use (&$lengthCalls) { $lengthCalls[] = $form; return ['success' => true, 'code' => 200]; });
+    foreach ([null, '', 'x', str_repeat('x', 33), 'HX20260930172022' . str_repeat('a', 20), ['invalid']] as $badId) {
+        try {
+            $lengthClient->request(Kuaidi100Client::WAYBILL_URL, 'order', array_replace($param, ['orderId' => $badId]), $cfg);
+            $ok(false, 'invalid orderId must fail before transport');
+        } catch (ProviderException $e) {
+            $ok(!$e->isUnknown() && str_contains($e->getMessage(), '2至32位'), 'invalid length explains platform fix and definite no-send');
+        }
+    }
+    $ok(count($lengthCalls) === 0, 'invalid orderId never reaches paid external endpoint');
+    foreach (['AB', str_repeat('x', 32)] as $validId) {
+        $lengthClient->request(Kuaidi100Client::WAYBILL_URL, 'order', array_replace($param, ['orderId' => $validId]), $cfg);
+        $ok(json_decode(end($lengthCalls)['param'], true)['orderId'] === $validId, '2/32 length boundaries preserve exact id');
+    }
     $throws(fn() => WaybillProtocol::normalizePayload(array_replace($payload, ['weight' => 0])), 'reject zero weight');
     $throws(fn() => WaybillProtocol::normalizePayload(array_replace($payload, ['count' => 2])), 'no unsupported multi-child parcel');
     $ok(WaybillProtocol::labels('https://api.kuaidi100.com/label/1,javascript:alert(1),https://evil.com/x,http://ckd.im/abc') === ['https://api.kuaidi100.com/label/1', 'http://ckd.im/abc'], 'only trusted short links, never raw HTML');
@@ -88,6 +103,14 @@ namespace {
     $service = new LogisticsService(new Kuaidi100Client($transport), $repo, function () use (&$cfg) { return $cfg; }, $lock,
         function ($data) use (&$blocked) { if ($blocked) throw new \RuntimeException('already dispatched'); return [true]; });
     $created = $service->execute(100005, 'create', $payload);
+    $createdParam = json_decode($calls[0]['form']['param'], true);
+    $ok(strlen($created['task_no']) === 32 && preg_match(LogisticsService::TASK_NUMBER_PATTERN, $created['task_no']) === 1, 'new task fits 32-character limit and callback validator');
+    $ok($createdParam['orderId'] === $created['task_no'], 'create sends exact persisted task identity');
+    $ok($createdParam['callBackUrl'] === 'https://example.com/api/hsx_express/callback/100005/' . $created['task_no'], 'callback URL uses same new task number');
+    $ok(preg_match(LogisticsService::TASK_NUMBER_PATTERN, 'HX20260930172022' . str_repeat('a', 20)) === 1, 'old 36-character callback route remains valid');
+    foreach (['HX20260930172022' . str_repeat('a', 17), '../task', $created['task_no'] . "\n", 'HX20260930172022' . str_repeat('a', 21)] as $invalidCallbackId) {
+        $ok(preg_match(LogisticsService::TASK_NUMBER_PATTERN, $invalidCallbackId) === 0, 'malformed callback number rejected');
+    }
     $ok($created['state'] === 'ready' && $created['success'] && $created['can_reprint'], 'web create has printable result');
     $ok($created['business_no'] === 'SALE-TEST-101', 'human business number retained separately from idempotency key');
     $ok(count($calls) === 1 && count($repo->rows) === 1, 'one create request');
@@ -123,6 +146,7 @@ namespace {
     $response = ['success' => true, 'code' => 200, 'data' => ['taskId' => 'provider-2', 'kuaidinum' => 'SF200']];
     $next = $service->execute(100005, 'create', $changed);
     $ok($next['task_id'] !== $created['task_id'] && $next['attempt'] === 2 && count($repo->rows) === 2, 'cancelled parcel may create new attempt, original retained');
+    $ok($next['task_no'] !== $created['task_no'] && strlen($next['task_no']) === 32, 'new allowed attempt gets independent valid number');
     $response = new \RuntimeException('raw request including test-secret');
     $unknownPayload = array_replace($payload, ['business_id' => '102:timeout', 'order_id' => 102]);
     $unknown = $service->execute(100005, 'create', $unknownPayload);
@@ -177,9 +201,13 @@ namespace {
     $rejectedPayload = array_replace($payload, ['business_id' => '104:reject', 'order_id' => 104]);
     $failed = $service->execute(100005, 'create', $rejectedPayload);
     $ok($failed['state'] === 'failed', 'known parameter rejection safe to fix');
+    $oldRejectedNumber = 'HX20260930172022' . str_repeat('b', 20);
+    $repo->rows[$failed['task_id']]['task_no'] = $oldRejectedNumber;
     $response = ['success' => true, 'code' => 200, 'data' => ['taskId' => 'provider-fixed', 'kuaidinum' => 'SF400']];
     $fixed = $service->execute(100005, 'create', $rejectedPayload);
     $ok($fixed['attempt'] === 2 && $fixed['task_id'] !== $failed['task_id'], 'safe failure retry retains historical attempt');
+    $ok($fixed['task_no'] !== $failed['task_no'] && strlen($fixed['task_no']) === 32, 'failed attempt retry uses fresh 32-character task');
+    $ok($repo->rows[$failed['task_id']]['task_no'] === $oldRejectedNumber && $repo->rows[$failed['task_id']]['state'] === 'failed', 'old 36-character rejected attempt remains unchanged, no migration needed');
     $ok(!WaybillProtocol::safeCreateFailure(['success' => false, 'code' => 30010]), 'printer failure cannot prove no waybill');
     $response = new \RuntimeException('timeout');
     $unresolvedPayload = array_replace($payload, ['business_id' => '105:unclear', 'order_id' => 105]);

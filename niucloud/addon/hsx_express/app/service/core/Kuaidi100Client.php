@@ -17,6 +17,13 @@ class Kuaidi100Client
             'https://poll.kuaidi100.com/order/borderapi.do' => ['bOrder', 'cancel', 'price', 'detail', 'modifyOrder'],
             'https://order.kuaidi100.com/order/corderapi.do' => ['cOrder', 'cancel', 'price', 'detail', 'modifyOrder']];
         if (!in_array($method, $allowlist[$endpoint] ?? [], true)) throw new ProviderException('不支持的物流接口', false);
+        if ($endpoint === self::WAYBILL_URL && $method === 'order') {
+            $orderId = $param['orderId'] ?? null;
+            // 不截断或临时换号，避免恢复原请求时改变幂等身份而重复取号。
+            if (!is_string($orderId) || strlen($orderId) < 2 || strlen($orderId) > 32) {
+                throw new ProviderException('物流请求编号必须为2至32位，请联系平台更新物流插件；本次未向快递100提交', false);
+            }
+        }
         $key = trim((string)($credentials['key'] ?? $credentials['api_key'] ?? ''));
         $secret = trim((string)($credentials['secret'] ?? ''));
         if ($key === '' || $secret === '') throw new ProviderException('物流接口凭据未配置', false);

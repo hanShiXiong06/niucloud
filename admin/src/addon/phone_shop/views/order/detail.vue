@@ -212,7 +212,7 @@
                 </div>
 
                 <h3 class="panel-title">{{ t('goodsDetail') }}</h3>
-                <order-return-guide :order="formData" />
+                <order-return-guide :order="formData" @complete="setFormData(orderId)" />
                 <el-table :data="formData.order_goods" size="large">
                     <el-table-column :label="t('goodsName')" align="left" width="300">
                         <template #default="{ row }">

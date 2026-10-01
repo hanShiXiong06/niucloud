@@ -99,7 +99,12 @@ class CoreOrderFinishService extends BaseCoreService
         $order_goods_data = array(
             'delivery_status' => OrderDeliveryDict::TAKED
         );
-        ( new OrderGoods() )->where($order_goods_where)->update($order_goods_data);
+        // 退回设备保留其原交付事实，不能随剩余设备确认收货而被改成客户已收货。
+        $activeIds = [];
+        foreach ((new OrderGoods())->where($order_goods_where)->field('order_goods_id,extend')->select() as $line) {
+            if (empty(ErpDeviceSnapshot::decode($line['extend'])['erp_return'])) $activeIds[] = (int)$line['order_goods_id'];
+        }
+        if ($activeIds) (new OrderGoods())->where($order_goods_where)->whereIn('order_goods_id', $activeIds)->update($order_goods_data);
         return true;
     }
 

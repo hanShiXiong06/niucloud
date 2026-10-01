@@ -53,6 +53,9 @@ class OfflineOrderService extends BaseAdminService
     {
         $orderId = (int)($data['order_id'] ?? 0);
         $action = (string)($data['action'] ?? '');
+        if ($action === 'return_preview') return (new OfflineOrderReturnService())->preview($orderId);
+        if ($action === 'return_received') return (new OfflineOrderReturnService())->confirm($data);
+        if (in_array($action, ['batch_delivery', 'batch_finish'], true)) return (new OfflineOrderBatchService())->process($data);
         if ($orderId <= 0 || !in_array($action, ['contacted', 'confirm_paid', 'confirm_credit', 'confirm_delivery', 'reject_voucher', 'close_unreachable'], true)) {
             throw new AdminException('线下订单处理参数不正确');
         }
@@ -336,10 +339,15 @@ class OfflineOrderService extends BaseAdminService
             throw new AdminException('线下订单责任记录尚未完成收款或挂账');
         }
 
-        $orderGoodsIds = array_values(array_map('intval', (new OrderGoods())->where([
+        $deliveryLines = (new OrderGoods())->where([
             ['site_id', '=', $this->site_id],
             ['order_id', '=', $orderId],
-        ])->column('order_goods_id')));
+        ])->select()->toArray();
+        $orderGoodsIds = array_column(array_filter($deliveryLines, static function ($line) {
+            return empty(\addon\phone_shop\app\service\core\order\ErpDeviceSnapshot::decode($line['extend'])['erp_return'])
+                && (int)$line['is_gift'] !== 1
+                && (string)$line['delivery_status'] === OrderDeliveryDict::WAIT_DELIVERY;
+        }), 'order_goods_id');
         if (!$orderGoodsIds) throw new AdminException('订单没有可交付商品');
 
         (new OrderDeliveryService())->delivery([

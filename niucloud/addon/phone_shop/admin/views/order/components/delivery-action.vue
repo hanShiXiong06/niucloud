@@ -530,8 +530,8 @@ const setFormData = async (row: any = null,type:any) => {
         formData.local_delivery_type = 'merchant'
         formData.store_id = row.take_store_id
         formData.local_deliver_id = row.order_goods[0]?.delivery_info?.local_deliver_id
-        goodsData.value = row.order_goods
-        goodsDataArr.value = row.order_goods
+        goodsData.value = row.order_goods.filter((item: any) => !item.return_state)
+        goodsDataArr.value = goodsData.value
         isHasVirtual.value = false
         await getOrderDeliveryType({
             delivery_type: row.delivery_type

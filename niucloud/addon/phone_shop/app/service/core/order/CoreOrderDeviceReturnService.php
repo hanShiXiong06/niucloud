@@ -16,6 +16,34 @@ use think\facade\Db;
 /** 只处理原单留痕与实物回库。绝不创建销售、应收或调用付款接口。 */
 class CoreOrderDeviceReturnService
 {
+    /** 商城线下退回与 ERP 账务在同一事务中确认；这里不创建新销售或实际转账。 */
+    public function receiveOffline(int $siteId, int $lineId, array $result, string $receiver): array
+    {
+        if (!Db::connect()->getPdo()->inTransaction()) throw new CommonException('线下退回必须在原订单事务内办理');
+        $line = OrderGoods::where('site_id', $siteId)->where('order_goods_id', $lineId)->lock(true)->findOrEmpty();
+        if ($line->isEmpty() || (int)$line->num !== 1) throw new CommonException('原订单设备明细无效');
+        $order = Order::where('site_id', $siteId)->where('order_id', (int)$line->order_id)->lock(true)->findOrEmpty();
+        if ($order->isEmpty() || (empty($order->relate_source) && !in_array((string)$order->payment_mode, ['offline_cash', 'offline_credit'], true))) {
+            throw new CommonException('此入口仅支持已收款或已挂账的线下订单');
+        }
+        if (!empty(ErpDeviceSnapshot::decode($line->extend)['erp_return']['received'])) return ['duplicate' => true];
+        if ((int)($result['return_id'] ?? 0) <= 0 || (string)($result['return_no'] ?? '') === '') throw new CommonException('ERP 未确认退货账务，本次未恢复库存');
+        $sku = GoodsSku::where('site_id', $siteId)->where('sku_id', (int)$line->sku_id)->lock(true)->findOrEmpty();
+        if ($sku->isEmpty()) throw new CommonException('原商城商品不存在，未执行本次退回');
+        $identity = ErpDeviceSnapshot::fromOrderLine($line->toArray(), $sku->toArray());
+        if ((int)$sku->is_unique !== 1 && (int)$sku->erp_asset_id <= 0 && ($identity['imei'] ?? '') === '') {
+            throw new CommonException('此入口仅支持单台实物设备，普通多库存商品请通过原售后流程办理');
+        }
+        if ((int)$sku->erp_asset_id !== (int)($result['asset_id'] ?? 0)) throw new CommonException('原商品的 ERP 关联已变化，请核对后退回；未覆盖库存');
+        if ((int)$sku->erp_asset_id > 0 && !$this->erpAssetIsCurrentReturn($siteId, (int)$sku->erp_asset_id, PHP_INT_MAX)) {
+            throw new CommonException('ERP 设备未回库，本次退货已回滚');
+        }
+        return $this->record($siteId, $order, $line, $sku, [
+            'received' => 1, 'type' => 'sale_return', 'no' => (string)$result['return_no'],
+            'receiver' => mb_substr($receiver, 0, 30),
+        ]);
+    }
+
     public function fromErp(int $siteId, int $assetId, string $outboundNo, array $context): array
     {
         return Db::transaction(function () use ($siteId, $assetId, $outboundNo, $context) {

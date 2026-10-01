@@ -111,7 +111,7 @@
                     </div>
                 </div>
                 <div v-if="activeName == 'goods'">
-                    <order-return-guide :order="formData" />
+                    <order-return-guide :order="formData" @complete="getOrderInfoFn" />
                     <el-table :data="formData.order_goods" size="large">
                         <el-table-column :label="t('orderDetailGoodsName')" align="left" width="300">
                             <template #default="{ row }">

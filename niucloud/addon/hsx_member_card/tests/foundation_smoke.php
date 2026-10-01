@@ -136,4 +136,22 @@ $assert(str_contains($noticeServiceSource, 'catch (\\Throwable $e)'), '通知失
 $memberPages = (string)file_get_contents(dirname(__DIR__) . '/package/uni-app-pages.php');
 $assert(str_contains($memberPages, 'pages/member/index') && str_contains($memberPages, 'pages/member/detail'), '用户端必须提供会员卡列表与详情页面');
 
+$diyLinks = require dirname(__DIR__) . '/app/dict/diy/links.php';
+$memberLinkGroup = $diyLinks['HSX_MEMBER_CARD_LINK'] ?? [];
+$assert(($memberLinkGroup['key'] ?? '') === 'hsx_member_card', '装修链接必须归属会员服务卡插件');
+$memberLinks = $memberLinkGroup['child_list'] ?? [];
+$assert(count($memberLinks) === 1, '装修应提供不需要指定卡号的会员卡统一查询入口');
+$memberLink = $memberLinks[0];
+$assert($memberLink['url'] === '/addon/hsx_member_card/pages/member/index', '装修入口必须指向顾客的会员卡列表');
+$assert($memberLink['is_share'] === 0 && $memberLink['action'] === '', '私人会员卡入口不能作为分享页或装修模板');
+
+$memberPageConfig = require dirname(__DIR__) . '/package/uni-app-pages.php';
+$pageFragment = preg_replace('/^\s*\/\/.*$/m', '', $memberPageConfig['pages']);
+$subPackage = json_decode(rtrim(trim($pageFragment), ','), true, 512, JSON_THROW_ON_ERROR);
+$registeredPages = array_column($subPackage['pages'], null, 'path');
+$memberIndex = $registeredPages['pages/member/index'] ?? [];
+$assert(($memberIndex['needLogin'] ?? false) === true, '装修入口指向的页面必须要求会员登录');
+$assert('/' . $subPackage['root'] . '/' . $memberIndex['path'] === $memberLink['url'], '装修链接必须与打包注册路由一致');
+$assert(is_file(dirname(__DIR__) . '/uni-app/' . $memberIndex['path'] . '.vue'), '装修入口必须具备随插件发布的顾客页面');
+
 echo "HSX member card foundation smoke passed.\n";

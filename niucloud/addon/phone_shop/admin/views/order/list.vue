@@ -70,8 +70,12 @@
                 <el-tab-pane :label="t('closed')" name="-1"></el-tab-pane>
             </el-tabs>
             <div>
-                <!-- todo 后续完善，增加批量发货，再修改判断逻辑 -->
-                <div class="mb-[10px] flex items-center">
+                <div class="mb-[10px] flex items-center flex-wrap gap-[8px]">
+                    <template v-if="isOfflineView">
+                        <el-button size="small" @click="openOfflineBatch('batch_delivery')">批量发货</el-button>
+                        <el-button size="small" @click="openOfflineBatch('batch_finish')">批量完成</el-button>
+                        <span class="text-[12px] text-[#909399]">已选 {{ Object.keys(multipleSelection).length }} 笔 · 按整单处理</span>
+                    </template>
                     <el-button @click="batchPrintElectronicSheet" size="small" v-if="activeName == 3">
                         {{ t('batchPrintElectronicSheet') }}
                     </el-button>
@@ -219,7 +223,7 @@
                                             <el-button type="primary" link @click="delivery(item,'edit')" v-if="item.status == 3 && item.delivery_type!='store' && item.delivery_type != 'virtual'">{{ t('修改发货') }}</el-button>
                                             <el-button type="primary" link @click="finish(item)" v-if="item.status == 3">{{ t('confirmTakeDelivery') }}</el-button>
                                             <el-button type="primary" v-if="item.is_refund_show && item.status != 1 && item.status != -1 && !item.relate_source && !['offline_cash', 'offline_credit'].includes(item.payment_mode)" link @click="refundEvent(item)">{{ t('voluntaryRefund') }}</el-button>
-                                            <order-return-guide v-if="item.status != 1 || item.relate_source || item.is_credit" :order="item" />
+                                            <order-return-guide v-if="item.status != 1 || item.relate_source || item.is_credit" :order="item" @complete="loadOrderList(orderTable.page)" />
                                             <el-button type="primary" v-if="item.status == -1" link @click="deleteEvent(item)">{{ t('delete') }}</el-button>
 
                                         </template>
@@ -242,6 +246,7 @@
             </div>
         </el-card>
 
+        <order-offline-batch ref="offlineBatchDialog" @complete="loadOrderList(orderTable.page)" />
         <adjust-money ref="orderAdjustMoneyActionDialog" @complete="loadOrderList(getTablePageStorage(orderTable.searchParam).page)" />
         <delivery-action ref="deliveryActionDialog" @complete="loadOrderList(getTablePageStorage(orderTable.searchParam).page)" />
         <order-notes ref="orderNotesDialog" @complete="loadOrderList(getTablePageStorage(orderTable.searchParam).page)" />
@@ -353,6 +358,7 @@ import AdjustMoney from '@/addon/phone_shop/views/order/components/adjust-money.
 import ShopActiveRefund from '@/addon/phone_shop/views/order/components/shop-active-refund.vue'
 import OrderDeviceIdentity from '@/addon/phone_shop/views/order/components/order-device-identity.vue'
 import OrderReturnGuide from '@/addon/phone_shop/views/order/components/order-return-guide.vue'
+import OrderOfflineBatch from '@/addon/phone_shop/views/order/components/order-offline-batch.vue'
 import electronicSheetPrint from '@/addon/phone_shop/views/order/components/electronic-sheet-print.vue'
 import { img, setTablePageStorage, getTablePageStorage } from '@/utils/common'
 import { ElMessage, ElMessageBox, FormInstance } from 'element-plus'
@@ -377,6 +383,13 @@ const setFormData = async () => {
 setFormData()
 
 const multipleSelection: any = reactive({}) // 选中数据
+const offlineBatchDialog = ref()
+const openOfflineBatch = (action: string) => {
+    const orders = Object.values(multipleSelection)
+    if (!orders.length) return ElMessage.info('请先勾选要处理的订单')
+    if (orders.length > 50) return ElMessage.warning('每次最多处理 50 笔订单')
+    offlineBatchDialog.value.open(orders, action)
+}
 const multipleTable = reactive<Record<number, any>>({}) // 使用object而不是array儲存表格引用
 const isSelectAll = ref(false)
 

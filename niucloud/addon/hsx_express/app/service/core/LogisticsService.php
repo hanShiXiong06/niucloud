@@ -9,6 +9,8 @@ use core\exception\CommonException;
 /** 面单任务编排。地址、账号只加密存储；未知结果不能重下，取消后新建独立尝试保留历史。 */
 class LogisticsService
 {
+    // 新任务为32位；仍接收原36位任务的回调，不改动已提交任务的身份。
+    public const TASK_NUMBER_PATTERN = '/\AHX[0-9]{14}(?:[a-f0-9]{16}|[a-f0-9]{20})\z/';
     private Kuaidi100Client $client;
     private TaskRepository $repository;
     private $configLoader;
@@ -68,7 +70,8 @@ class LogisticsService
             if (empty($config['enabled'])) throw new CommonException('本站尚未启用物流服务，请先完成物流配置');
             $check = ConfigService::readiness($config);
             if (!$check['ready']) throw new CommonException('物流配置不完整：' . implode('；', array_column(array_filter($check['checks'], static fn($row) => !$row['passed']), 'message')));
-            $taskNo = 'HX' . date('YmdHis') . bin2hex(random_bytes(10));
+            // orderId 接口限制2至32位：2位前缀 + 14位时间 + 16位随机数。
+            $taskNo = 'HX' . date('YmdHis') . bin2hex(random_bytes(8));
             $snapshot = ['config' => $config, 'payload' => $payload, 'salt' => bin2hex(random_bytes(24))];
             $param = WaybillProtocol::create($config, $payload, $taskNo, $snapshot['salt'], $siteId);
             $task = $this->repository->create(['site_id' => $siteId, 'task_no' => $taskNo,

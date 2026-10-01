@@ -9,7 +9,7 @@ final class Callback
     public function receive(int $site_id, string $task_no)
     {
         try {
-            if ($site_id <= 0 || !preg_match('/^HX[0-9]{14}[a-f0-9]{20}$/', $task_no)) throw new \RuntimeException('invalid task');
+            if ($site_id <= 0 || !preg_match(LogisticsService::TASK_NUMBER_PATTERN, $task_no)) throw new \RuntimeException('invalid task');
             return json((new LogisticsService())->callback($site_id, $task_no, request()->post()));
         } catch (\Throwable $e) {
             // 响应不暴露数据库、凭据或地址，失败ACK供服务商按协议重试。

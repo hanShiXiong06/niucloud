@@ -91,6 +91,14 @@ class Order extends BaseAdminController
             ['remark', ''],
             ['voucher_urls', []],
             ['close_reason', ''],
+            ['order_goods_ids', []],
+            ['received', false],
+            ['reason', ''],
+            ['preview_token', ''],
+            ['warehouse_id', 0],
+            ['location_id', 0],
+            ['items', []],
+            ['confirmed', false],
         ]);
         return success('操作成功', (new OfflineOrderService())->process($data));
     }

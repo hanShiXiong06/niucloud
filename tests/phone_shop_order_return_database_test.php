@@ -21,13 +21,15 @@ if (!in_array(config('database.connections.mysql.hostname'), ['localhost', '127.
 $site = 900000915;
 $tables = ['phone_shop_goods', 'phone_shop_goods_sku', 'phone_shop_order', 'phone_shop_order_goods', 'phone_shop_order_refund', 'erp_asset', 'erp_asset_ledger', 'erp_sale_order', 'erp_sale_item', 'erp_sale_return', 'erp_sale_return_item', 'erp_receivable', 'erp_payable', 'erp_account_ledger', 'erp_money_ledger', 'erp_party', 'erp_warehouse', 'erp_warehouse_location', 'erp_operation_log', 'erp_outbox_event', 'erp_inbox_event', 'pay'];
 $tables[] = 'phone_shop_order_offline_record';
+$tables = array_merge($tables, ['erp_capital_account', 'erp_settlement', 'erp_settlement_link', 'erp_party_member', 'member', 'phone_shop_order_delivery', 'phone_shop_delivery_company']);
 foreach ($tables as $table) {
     if (Db::name($table)->where('site_id', $site)->count()) throw new RuntimeException('隔离站点已被占用：' . $table);
     $meta = Db::query('SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?', [config('database.connections.mysql.prefix') . $table]);
     if (strtoupper($meta[0]['ENGINE'] ?? '') !== 'INNODB') throw new RuntimeException('表不支持回滚：' . $table);
 }
 request()->siteId($site); request()->uid(1); request()->username('收货测试员'); request()->appType('adminapi');
-foreach (['ErpDomainEvent', 'PhoneShopOrderReturnContext', 'PhoneShopSaleReturnCancelled', 'PhoneShopGoodsSaleableChanged', 'HsxPerformanceFactRecorded', 'HsxErpMallInventory'] as $event) Event::remove($event);
+foreach (['ErpDomainEvent', 'PhoneShopOrderReturnContext', 'PhoneShopSaleReturnCancelled', 'PhoneShopGoodsSaleableChanged', 'HsxPerformanceFactRecorded', 'HsxErpMallInventory', 'ErpOfflineSaleReturnRequested', 'AfterPhoneShopOrderDelivery'] as $event) Event::remove($event);
+Event::listen('ErpOfflineSaleReturnRequested', \addon\hsx_erp\app\listener\ErpOfflineSaleReturnRequested::class);
 Event::listen('PhoneShopOrderReturnContext', PhoneShopOrderReturnContext::class);
 Event::listen('PhoneShopSaleReturnCancelled', \addon\phone_shop\app\listener\erp\ErpSaleReturnCancelled::class);
 Event::listen('HsxErpMallInventory', \addon\phone_shop\app\listener\erp\ErpMallInventoryProvider::class);
@@ -38,6 +40,9 @@ class ReturnTestEvents {
     public static function orderCreateAfter($d) {}
     public static function orderClose($d) {}
     public static function orderCloseAfter($d) {}
+    public static function orderDelivery($d) {}
+    public static function orderFinish($d) {}
+    public static function orderFinishAfter($d) {}
 }
 class_alias(ReturnTestEvents::class, 'addon\phone_shop\app\service\core\order\CoreOrderEventService');
 class ReturnTestCheckout {
@@ -213,6 +218,119 @@ try {
     $assert(count($offlinePage['data']) === 1 && $offlinePage['data'][0]['order_goods'][0]['device_identity']['imei'] === $mixed['skus'][0]['sku_no'], '真实线下订单列表接口显示原设备IMEI');
     $assert($offlinePage['data'][0]['erp_return_context']['refund_pending'] === 1000.0, '线下订单列表显示实际待退款，不把原成交金额再次当应收');
     $throws(fn() => (new \addon\phone_shop\app\service\admin\order\OrderService())->confirmDeviceReceived($online['lineIds'][0], false), '确认');
+    // 2026-10-01：从商城入口直接退回，覆盖无 ERP 资产、重复提交、金额变化、财务登记和批量交付。
+    $offline = new \addon\phone_shop\app\service\admin\order\OfflineOrderService();
+    $native = static function(float $paid = 0, int $num = 1, bool $noAr = false) use ($makeSale, $q): array {
+        $row = $makeSale($paid, $num, $paid === 5000.0 * $num ? 'offline_cash' : 'offline_credit');
+        $q('erp_asset')->whereIn('id', $row['assets'])->delete(); // 仅删除本测试刚构造的隔离样本，模拟商城原生商品。
+        $q('erp_sale_item')->where('sale_order_id', $row['sale'])->update(['asset_id' => 0, 'model' => '商城原生测试手机']);
+        foreach ($row['skus'] as $sku) $q('phone_shop_goods_sku')->where('sku_id', $sku['sku_id'])->update(['erp_asset_id' => 0]);
+        if ($noAr) $q('erp_receivable')->where('id', $row['ar'])->delete();
+        return $row;
+    };
+    $preview = static fn($s) => $offline->process(['action' => 'return_preview', 'order_id' => $s['order']]);
+    $perform = static function($s, array $ids = []) use ($offline, $preview) {
+        $plan = $preview($s);
+        return $offline->process(['action' => 'return_received', 'order_id' => $s['order'], 'order_goods_ids' => $ids ?: $s['lineIds'],
+            'preview_token' => $plan['preview_token'], 'reason' => '实际收回，隔离回归测试', 'received' => true]);
+    };
+    $n = $native(0);
+    $assert($preview($n)['items'][0]['can_return'], '原生商品不能因 asset_id 为0被禁用');
+    $out = $perform($n);
+    $assert($out['offset_amount'] === 5000.0 && $out['refund_amount'] === 0.0, '挂账整退只冲应收，不产生退款');
+    $assert($q('erp_receivable')->where('id', $n['ar'])->value('status') === 'void', '全额未收应收作废，不再催款');
+    $assert((int)$q('phone_shop_order')->where('order_id', $n['order'])->value('status') === -1, '商城直接入口全退关闭原单');
+    $assert((int)$q('phone_shop_goods_sku')->where('sku_id', $n['skus'][0]['sku_id'])->value('stock') === 1, '商城原生退回恢复一台');
+    $returnCount = $q('erp_sale_return')->count();
+    $assert($perform($n)['duplicate'], '重复提交退回返回原结果');
+    $assert($returnCount === $q('erp_sale_return')->count(), '重复提交不能重复建退款单');
+    $assert((int)$q('phone_shop_goods_sku')->where('sku_id', $n['skus'][0]['sku_id'])->value('stock') === 1, '重复提交不重复加库存');
+    $atomic = $native(0, 2); $atomicPlan = $preview($atomic);
+    $q('phone_shop_goods_sku')->where('sku_id', $atomic['skus'][1]['sku_id'])->update(['erp_asset_id' => 99999999]);
+    $beforeReturns = $q('erp_sale_return')->count();
+    $throws(fn() => $offline->process(['action' => 'return_received', 'order_id' => $atomic['order'], 'order_goods_ids' => $atomic['lineIds'],
+        'reason' => '验证整笔事务回滚', 'received' => true, 'preview_token' => $atomicPlan['preview_token']]), '关联已变化');
+    $assert($q('erp_sale_return')->count() === $beforeReturns && (float)$q('erp_receivable')->where('id', $atomic['ar'])->value('amount') === 10000.0, '第二台库存校验失败，第一台退货及整笔冲账一并回滚');
+    $assert((int)$q('phone_shop_goods_sku')->where('sku_id', $atomic['skus'][0]['sku_id'])->value('stock') === 0, '事务失败不遗留第一台回库');
+
+    $nPaid = $native(5000, 1, true);
+    $memberId = $add('member', ['nickname' => '原生成交客户', 'username' => 'return-' . $tag, 'mobile' => '13900000001']);
+    $q('phone_shop_order')->where('order_id', $nPaid['order'])->update(['member_id' => $memberId]);
+    $q('erp_sale_order')->where('id', $nPaid['sale'])->update(['party_id' => 0]);
+    $assetCount = $q('erp_asset')->count(); $cashCount = $q('erp_money_ledger')->count();
+    $out = $perform($nPaid); $nativeReturnId = $out['items'][0]['return_id'];
+    $assert($out['refund_amount'] === 5000.0 && $out['offset_amount'] === 0.0, '现结无应收记录也必须全额转退款');
+    $assert($q('erp_asset')->count() === $assetCount, '原生退回不得补造 ERP 设备');
+    $assert($q('erp_money_ledger')->count() === $cashCount, '收回设备不表示已经给客户转账');
+    $nativePayable = $q('erp_payable')->where('source_type', 'sale_return')->where('source_id', $nativeReturnId)->find();
+    $assert((int)$nativePayable['party_id'] > 0 && $nativePayable['status'] === 'pending', '原会员解析为退款对象，待财务处理');
+    $assert(str_contains($preview($nPaid)['items'][0]['reason'], '待财务退款'), '再次打开订单明确提示仍待退款，不重复办理');
+    $finance = new \addon\hsx_erp\app\service\admin\ErpFinanceService();
+    $method = new ReflectionMethod($finance, 'saleReturnPayableItems'); $method->setAccessible(true);
+    $page = $method->invoke($finance, (int)$nativePayable['party_id'], ['source_type' => 'sale_return', 'purchase_order_id' => $nativeReturnId]);
+    $assert($page['data'][0]['imei'] === $nPaid['skus'][0]['sku_no'], '财务退款明细必须显示原生商品 IMEI');
+    $account = $add('erp_capital_account', ['account_name' => '隔离退款账户', 'account_type' => 'bank', 'balance' => 20000, 'status' => 1]);
+    $settlement = $finance->confirmPayableItemsInTransaction((int)$nativePayable['party_id'], [['payable_id' => $nativePayable['id'], 'amount' => 5000]],
+        ['capital_account_id' => $account, 'remark' => '模拟已实际转账后登记，不调用支付渠道']);
+    $assert($settlement > 0 && $q('erp_payable')->where('id', $nativePayable['id'])->value('status') === 'settled', '财务可选择账户登记完整退款');
+    $assert((float)$q('erp_capital_account')->where('id', $account)->value('balance') === 15000.0, '登记退款只扣所选账户5000');
+    $returnDetail = $erpReturn->info($nativeReturnId);
+    $assert((float)$returnDetail['items'][0]['refund_settled_amount'] === 5000.0 && (float)$returnDetail['items'][0]['refund_remain_amount'] === 0.0, '退货详情从应付事实显示已退款，不保留虚假的待退款');
+    $assert(str_contains($preview($nPaid)['items'][0]['reason'], '退款已登记'), '财务登记后商城退回提示更新');
+    $throws(fn() => $finance->confirmPayableItemsInTransaction((int)$nativePayable['party_id'], [['payable_id' => $nativePayable['id'], 'amount' => 5000]], ['capital_account_id' => $account]), '只能付款');
+
+    $nMulti = $native(10000, 2, true);
+    $out = $perform($nMulti, [$nMulti['lineIds'][0]]);
+    $assert($out['refund_amount'] === 5000.0, '两台同为asset0的原生商品不能合并退款');
+    $assert((int)$q('phone_shop_order')->where('order_id', $nMulti['order'])->value('status') === 2, '部分退回保留其他设备订单');
+    $out = $perform($nMulti, [$nMulti['lineIds'][1]]);
+    $assert($out['refund_amount'] === 5000.0 && (int)$q('phone_shop_order')->where('order_id', $nMulti['order'])->value('status') === -1, '剩余设备独立退款，全退才关闭');
+    $nPartial = $native(1000, 2);
+    $out = $perform($nPartial);
+    $assert($out['refund_amount'] === 1000.0 && $out['offset_amount'] === 9000.0, '分次收款异常情形也不多退，逐台分摊后合计守恒');
+
+    $linked = $makeSale(0);
+    $out = $perform($linked);
+    $assert($out['offset_amount'] === 5000.0 && $q('erp_asset')->where('id', $linked['assets'][0])->value('status') === 'in_stock', '关联ERP设备通过商城入口实际回库');
+    $firstLinkedReturn = $out['items'][0]['return_id'];
+    $erpReturn->cancel($firstLinkedReturn, '隔离样本：撤销后重新收回');
+    $out = $perform($linked);
+    $assert($out['items'][0]['return_id'] !== $firstLinkedReturn && $out['offset_amount'] === 5000.0, '合法撤销后可重新退回，不误用已撤销幂等键');
+    $changed = $native();
+    $stalePlan = $preview($changed);
+    $q('erp_receivable')->where('id', $changed['ar'])->update(['settled_amount' => 100]);
+    $throws(fn() => $offline->process(['action' => 'return_received', 'order_id' => $changed['order'], 'order_goods_ids' => $changed['lineIds'], 'preview_token' => $stalePlan['preview_token'], 'reason' => '测试金额变更', 'received' => true]), '状态已变化');
+    $assert((int)$q('phone_shop_goods_sku')->where('sku_id', $changed['skus'][0]['sku_id'])->value('stock') === 0, '金额变化拒绝后不恢复库存');
+    $throws(fn() => $offline->process(['action' => 'return_received', 'order_id' => $changed['order'], 'order_goods_ids' => $changed['lineIds'], 'reason' => '未收实物', 'received' => false]), '实际收回');
+    $throws(fn() => $perform($changed, $nPaid['lineIds']), '不属于');
+    request()->siteId($site + 1);
+    $throws(fn() => (new \addon\phone_shop\app\service\admin\order\OfflineOrderService())->process(['action' => 'return_preview', 'order_id' => $changed['order']]), '不存在');
+    request()->siteId($site);
+    Event::remove('ErpOfflineSaleReturnRequested');
+    $throws(fn() => $preview($changed), '服务未就绪');
+    Event::listen('ErpOfflineSaleReturnRequested', \addon\hsx_erp\app\listener\ErpOfflineSaleReturnRequested::class);
+    $missing = $native();
+    $q('erp_sale_order')->where('id', $missing['sale'])->delete();
+    $throws(fn() => $preview($missing), '未找到原销售');
+
+    // 原订单两台已退一台，剩余一台仍可正常交付和完成；按单反馈，不伪造整批成功。
+    $ship = $native(0, 2); $perform($ship, [$ship['lineIds'][0]]);
+    $q('phone_shop_order')->where('order_id', $ship['order'])->update(['delivery_type' => 'express']);
+    $q('phone_shop_order_goods')->where('order_id', $ship['order'])->update(['goods_type' => 'real', 'delivery_status' => 'wait_delivery']);
+    $company = $add('phone_shop_delivery_company', ['company_name' => '隔离测试快递', 'express_no' => 'test']);
+    $batch = new \addon\phone_shop\app\service\admin\order\OfflineOrderBatchService();
+    $result = $batch->process(['action' => 'batch_delivery', 'confirmed' => true, 'items' => [
+        ['order_id' => $ship['order'], 'express_company_id' => $company, 'express_number' => 'TEST123456789'],
+        ['order_id' => $nPaid['order'], 'express_company_id' => $company, 'express_number' => 'TEST987654321'],
+    ]]);
+    $assert($result['success_count'] === 1 && $result['failed_count'] === 1, '批量发货逐单反馈：' . json_encode($result, JSON_UNESCAPED_UNICODE));
+    $assert((int)$q('phone_shop_order')->where('order_id', $ship['order'])->value('status') === 3, '已退回行不阻止剩余设备进入待收货');
+    $assert($q('phone_shop_order_delivery')->where('order_id', $ship['order'])->count() === 1, '批量发货只登记一个真实运单');
+    $result = $batch->process(['action' => 'batch_finish', 'confirmed' => true, 'items' => [['order_id' => $ship['order']], ['order_id' => $missing['order']]]]);
+    $assert($result['success_count'] === 1 && $result['failed_count'] === 1, '只有已发货订单可以批量完成');
+    $assert((int)$q('phone_shop_order')->where('order_id', $ship['order'])->value('status') === 5, '完成后订单状态正确');
+    $assert($q('phone_shop_order_goods')->where('order_goods_id', $ship['lineIds'][0])->value('delivery_status') !== 'taked', '已退回行不能被批量完成改成客户收货');
+    $throws(fn() => $batch->process(['action' => 'batch_delivery', 'confirmed' => false, 'items' => [['order_id' => $missing['order']]]]), '确认实际');
 } finally { Db::rollback(); }
 foreach ($tables as $table) if (Db::name($table)->where('site_id', $site)->count()) throw new RuntimeException('样本未回滚：' . $table);
 echo "PASS: {$assertions} assertions; all isolated rows rolled back.\n";
