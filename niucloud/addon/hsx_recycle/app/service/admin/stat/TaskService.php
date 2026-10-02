@@ -107,6 +107,7 @@ class TaskService extends BaseAdminService
      */
     public function getMyStages(): array
     {
+        if ($this->canViewAllTasks()) return array_keys(RecycleStageDict::getStagePermissions());
         // 角色↔权限统一交给 ERP/核心；这里只判断"我有没有该环节动作的权限"
         $myMenuKeys = $this->getCurrentUserMenuKeys();
         $stagePerms = RecycleStageDict::getStagePermissions();
@@ -128,6 +129,15 @@ class TaskService extends BaseAdminService
         return array_column($menuList, 'menu_key');
     }
 
+    /** 复用框架管理员身份；全量范围仍严格限定当前站点，不接受客户端传权限。 */
+    protected function canViewAllTasks(): bool
+    {
+        if ((int)$this->uid <= 0 || (int)$this->site_id <= 0) return false;
+        if (AuthService::isSuperAdmin()) return true;
+        $role = (new AuthService())->getAuthRole((int)$this->site_id);
+        return (int)($role['is_admin'] ?? 0) === 1 && (int)($role['status'] ?? 0) === 1;
+    }
+
     /**
      * 我的工单列表（按环节，FIFO：先进先处理）
      * @param array $params stage(可选,单环节) / keyword(IMEI/SN/型号) / page / limit
@@ -143,7 +153,7 @@ class TaskService extends BaseAdminService
         $limit = max(1, (int)($params['limit'] ?? 15));
 
         if (empty($stages)) {
-            return ['count' => 0, 'list' => []];
+            return ['count' => 0, 'list' => [], 'view_scope' => $this->canViewAllTasks() ? 'site' : 'assigned'];
         }
 
         // 待取货、待签收是订单级环节，单独查询。
@@ -153,14 +163,14 @@ class TaskService extends BaseAdminService
         // 设备级环节：排除订单级任务（"全部"页签保持设备任务的稳定分页）。
         $stages = array_values(array_filter($stages, static fn(string $stage): bool => !RecycleStageDict::isOrderStage($stage)));
         if (empty($stages)) {
-            return ['count' => 0, 'list' => []];
+            return ['count' => 0, 'list' => [], 'view_scope' => $this->canViewAllTasks() ? 'site' : 'assigned'];
         }
 
         $tableFields = (new RecycleDevice())->getTableFields();
         // 与经营看板共用业务状态口径，再叠加“分配给我”的权限范围。
         $query = (new CoreRecycleWorkloadService())->applyDeviceStages(new RecycleDevice(), $this->site_id, $stages);
         // “全部”也必须匹配设备当前环节的归属，不能因曾负责上一个环节而看到别人的当前任务。
-        $query->where(function ($assigned) use ($stages) {
+        if (!$this->canViewAllTasks()) $query->where(function ($assigned) use ($stages) {
             foreach ($stages as $stage) {
                 $assigned->whereOr(function ($part) use ($stage) {
                     $part->whereIn('status', RecycleStageDict::getStageStatuses()[$stage] ?? [])
@@ -213,7 +223,7 @@ class TaskService extends BaseAdminService
         }
         unset($d);
 
-        return ['count' => $count, 'list' => $rows];
+        return ['count' => $count, 'list' => $rows, 'view_scope' => $this->canViewAllTasks() ? 'site' : 'assigned'];
     }
 
     /**
@@ -231,12 +241,14 @@ class TaskService extends BaseAdminService
         } else {
             $query->where('delivery_type', '<>', RecycleOrderDict::DELIVERY_TYPE_LOGISTICS_VEHICLE);
         }
-        $assignedOrderIds = RecycleTaskClaim::where([
-            ['site_id', '=', $this->site_id],
-            ['stage_key', '=', $stageKey],
-            ['assignee_uid', '=', (int)$this->uid],
-        ])->column('device_id');
-        $query->whereIn('id', $assignedOrderIds !== [] ? array_map('intval', $assignedOrderIds) : [0]);
+        if (!$this->canViewAllTasks()) {
+            $assignedOrderIds = RecycleTaskClaim::where([
+                ['site_id', '=', $this->site_id],
+                ['stage_key', '=', $stageKey],
+                ['assignee_uid', '=', (int)$this->uid],
+            ])->column('device_id');
+            $query->whereIn('id', $assignedOrderIds !== [] ? array_map('intval', $assignedOrderIds) : [0]);
+        }
         $keyword = trim((string)($params['keyword'] ?? ''));
         if ($keyword !== '') {
             $query->where(function ($q) use ($keyword) {
@@ -302,7 +314,7 @@ class TaskService extends BaseAdminService
         }
         unset($o);
 
-        return ['count' => $count, 'list' => $rows];
+        return ['count' => $count, 'list' => $rows, 'view_scope' => $this->canViewAllTasks() ? 'site' : 'assigned'];
     }
 
     /**

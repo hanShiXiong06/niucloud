@@ -180,6 +180,12 @@ class RecycleExpressService
             }
         }
 
+        // 立即取件在实际调用前重新计算，页面停留、订单保存耗时不会传出过期的预览时间。
+        // 跨过本站截止时间则明确失败，不悄悄替客户预约到第二天。
+        if (!empty($config['pickup_immediate'])) {
+            $config['pickup_time'] = $this->validatePickupTime($siteId, 'immediate');
+        }
+
         $params = [
             // 快递产品
             'deliveryType' => $productCode,
@@ -209,6 +215,7 @@ class RecycleExpressService
             'thirdOrderNo' => 'recycle_' . $siteId . '_' . $order->id,
             'remark' => $config['remark'] ?? '',
             'orderSendTime' => $config['pickup_time'] ?? '',
+            'pickup_immediate' => !empty($config['pickup_immediate']),
 
             // 关联回收订单
             'recycle_order_id' => $order->id,
@@ -274,12 +281,13 @@ class RecycleExpressService
             // 客户说明由门店维护，不使用供应商的技术结算文案，也不改变实际付款方式。
             $paymentTips = trim((string)($delivery['payment_tips'] ?? '')) ?: '运费由谁承担，请先联系门店确认。';
             $appointment = !empty($product['pickup_time_supported'])
-                ? PickupAppointmentPolicy::resolve($delivery['pickup_schedule'], null, $selectedTime)
+                ? PickupAppointmentPolicy::resolve($delivery['pickup_schedule'], null, $selectedTime, !empty($product['pickup_immediate_supported']))
                 : ['pickup_time' => '', 'pickup_time_text' => ''];
             return array_merge($appointment, ['pickup_enabled' => true, 'enabled' => true,
                 'carrier_name' => (string)($product['carrier_name'] ?? $product['product_name'] ?? '本站指定快递'),
                 'payment_tips' => $paymentTips,
                 'pickup_time_supported' => !empty($product['pickup_time_supported']),
+                'pickup_immediate_supported' => !empty($product['pickup_immediate_supported']),
                 'pickup_time_required' => !empty($product['pickup_time_required']), 'unavailable_reason' => '']);
         } catch (\Throwable $e) {
             return ['pickup_enabled' => false, 'enabled' => false, 'carrier_name' => '', 'payment_tips' => '',
@@ -290,11 +298,19 @@ class RecycleExpressService
 
     public function validatePickupTime(int $siteId, string $value): string
     {
+        return $this->validatePickupSelection($siteId, $value)['pickup_time'];
+    }
+
+    /** 对外仅接收预约意图；生成可留痕的实际时段与内部立即取件标记。 */
+    public function validatePickupSelection(int $siteId, string $value): array
+    {
         $policy = $this->pickupPolicy($siteId);
         if (!$policy['pickup_enabled']) throw new CommonException($policy['unavailable_reason']);
-        if (!$policy['pickup_time_supported']) return '';
+        if (!$policy['pickup_time_supported']) return ['pickup_time' => '', 'pickup_immediate' => false];
+        $value = trim($value) !== '' ? trim($value) : (string)$policy['pickup_time'];
         $delivery = (new OrderSubmitConfigService())->getConfig($siteId)['platform_delivery'];
-        return PickupAppointmentPolicy::validate($value, $delivery['pickup_schedule']);
+        return ['pickup_time' => PickupAppointmentPolicy::validate($value, $delivery['pickup_schedule'], null, !empty($policy['pickup_immediate_supported'])),
+            'pickup_immediate' => $value === 'immediate'];
     }
 
     /**

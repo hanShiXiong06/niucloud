@@ -14,6 +14,16 @@ namespace core\base {
     }
     class BaseCoreService { public function __construct() {} }
 }
+namespace app\service\admin\auth {
+    class AuthService {
+        public static bool $super = false;
+        public static array $role = [];
+        public static array $menus = [];
+        public static function isSuperAdmin(): bool { return self::$super; }
+        public function getAuthRole(int $site): array { return self::$role[$site] ?? []; }
+        public function getAuthMenuList(): array { return array_map(static fn($key) => ['menu_key' => $key], self::$menus); }
+    }
+}
 namespace addon\hsx_recycle\app\model\order {
     // 只替换与本次聚合无关的展示属性，查询构造和 SQL 执行仍使用真实 ThinkORM。
     class RecycleDevice extends \think\Model { protected $name = 'recycle_device'; }
@@ -62,6 +72,11 @@ namespace {
     ] as $table => $fields) Db::execute('CREATE TABLE ut_' . $table . ' (' . $fields . ')');
 
     $n = 0;
+    function invokePrivate($object, string $method, ...$args) {
+        $reflection = new \ReflectionMethod($object, $method);
+        $reflection->setAccessible(true);
+        return $reflection->invoke($object, ...$args);
+    }
     $check = static function (bool $ok, string $name) use (&$n): void {
         if (!$ok) throw new \RuntimeException('FAIL ' . $name);
         $n++;
@@ -148,13 +163,13 @@ namespace {
 
     $metric = new RecycleDashboardMetricService();
     $range = $filter->normalizeParams(['start_time'=>date('Y-m-d'), 'end_time'=>date('Y-m-d')]);
-    $ledger = (new \ReflectionMethod($metric, 'buildLedger'))->invoke($metric, $range);
+    $ledger = invokePrivate($metric, 'buildLedger', $range);
     $check($ledger['pending_check_device_count'] + $ledger['checking_device_count'] === 3
         && $ledger['pending_confirm_count'] === 1 && $ledger['pending_pay_device_count'] === 2
         && $ledger['pending_return_count'] === 2, 'overview 台账待办实际调用统一口径');
     foreach (['buildCheckingTask'=>3, 'buildPendingQuoteTask'=>3, 'buildPendingConfirmTask'=>1,
         'buildPendingPayTask'=>2, 'buildPendingReturnTask'=>2] as $method => $expectedCount) {
-        $task = (new \ReflectionMethod($metric, $method))->invoke($metric, $range);
+        $task = invokePrivate($metric, $method, $range);
         $check($task['device_count'] === $expectedCount
             && array_sum(array_column($task['owners'], 'device_count')) === $expectedCount,
             '责任分布统计与看板一致，退回关联重复不放大且不统计整单无关设备：' . $method);
@@ -166,12 +181,13 @@ namespace {
             'pay_time'=>time()+$offset,'amount'=>$amount,'pay_type'=>$type]);
     }
     $sumSettled = new \ReflectionMethod($metric, 'sumActualPaidAmount');
+    $sumSettled->setAccessible(true);
     $check($sumSettled->invoke($metric, $range) === 5100.0, '结算按真实流水发生日期和站点求和，含折账，排除无效负金额');
     $check($metric->getTrend($range)['series'][2]['data'] === [5100.0], '趋势金额与实际结算口径一致');
     $check($filter->getOrderIds(Filter::PAID_TODAY, $range) === [8]
         && array_map('intval', $filter->applyDeviceFilter($filter->newDeviceQuery($range), Filter::PAID_TODAY, $range)->column('id')) === [8],
         '结算下钻根据当期实际流水找到设备，不依赖整单完成付款；列表仍排除已删除订单');
-    $paidCard = (new \ReflectionMethod($metric, 'todayPaidAmount'))->invoke($metric, $range);
+    $paidCard = invokePrivate($metric, 'todayPaidAmount', $range);
     $check((float)$paidCard['value'] === 5100.0 && $paidCard['title'] === '已结算金额', '关键指标不再用整单报价替代实际结算');
     $check($sumSettled->invoke($metric, $range) === 5100.0, '已删除订单的真实历史资金流水不会因订单状态被抹掉');
     Db::name('recycle_order')->where('id',7)->update(['pay_time'=>time()]);
@@ -194,15 +210,41 @@ namespace {
     $tasks = new TaskProbe();
     foreach (['check' => [3], 'pay' => [7,8], 'confirm' => [6], 'abnormal' => [16]] as $stage => $expectedIds) {
         $result = $tasks->getTaskList(['stage' => $stage]);
-        $check(array_column($result['list'], 'id') === $expectedIds && $result['count'] === count($expectedIds),
+        $check(array_map('intval', array_column($result['list'], 'id')) === $expectedIds && $result['count'] === count($expectedIds),
             '真实任务列表共用口径并保留本人责任范围：' . $stage);
-        $check((new \ReflectionMethod($tasks, 'countAssignedPending'))->invoke($tasks, 21, $stage) === count($expectedIds),
+        $check(invokePrivate($tasks, 'countAssignedPending', 21, $stage) === count($expectedIds),
             '分配时的个人在途计数与任务列表一致：' . $stage);
     }
     $check($tasks->getTaskList([])['count'] === 5, '全部设备任务不被其他环节条件误伤且不显示其他员工的任务');
     $check(!in_array(4, array_column($tasks->getTaskList([])['list'], 'id')),
         '曾负责另一环节的历史归属不会混入当前个人待办');
     $check($tasks->getTaskList(['stage' => 'pay', 'keyword' => '无匹配'])['count'] === 0, '关键字仍在当前环节及责任范围内生效');
+
+    $allTasks = new TaskService();
+    \app\service\admin\auth\AuthService::$role = [100005 => ['is_admin' => 1, 'status' => 1]];
+    $check(count($allTasks->getMyStages()) === 7, '本站管理员无需个人岗位权限即可查看全部七个环节');
+    foreach ($expected as $stage => $count) {
+        $result = $allTasks->getTaskList(['stage' => $stage]);
+        $check($result['count'] === $count && $result['view_scope'] === 'site', '管理员可见本站全部有效待办，含未分配和其他负责人：' . $stage);
+    }
+    $check($allTasks->getTaskList(['stage' => 'check', 'keyword' => '无匹配'])['count'] === 0, '管理员查看全部仍受关键字限制');
+    $check($allTasks->getTaskList(['stage' => 'invalid'])['count'] === 0, '管理员伪造环节也不能查询其他数据');
+    \app\service\admin\auth\AuthService::$role = [];
+    \app\service\admin\auth\AuthService::$super = true;
+    $check($allTasks->getTaskList(['stage' => 'check'])['count'] === 3, '超管在当前站点看到全部而非跨站混合');
+    $allTasks->site_id = 100024;
+    $check($allTasks->getTaskList(['stage' => 'check'])['count'] === 1, '切站后只返回新站点任务');
+    $allTasks->site_id = 100005;
+    \app\service\admin\auth\AuthService::$super = false;
+    \app\service\admin\auth\AuthService::$role = [100024 => ['is_admin' => 1, 'status' => 1]];
+    $check($allTasks->getMyStages() === [], '他站管理员不能获得本站管理员范围');
+    \app\service\admin\auth\AuthService::$role = [100005 => ['is_admin' => 1, 'status' => 0]];
+    $check($allTasks->getMyStages() === [], '停用的管理员关系不提供全站权限');
+    \app\service\admin\auth\AuthService::$role = [];
+    \app\service\admin\auth\AuthService::$menus = ['recycle_device_check'];
+    $check($allTasks->getMyStages() === ['check'] && $allTasks->getTaskList(['stage' => 'check', 'scope' => 'site'])['count'] === 1, '普通员工即使伪造全站范围仍只看自己负责的当前环节');
+    $check($allTasks->getTaskList(['stage' => 'pay'])['count'] === 0, '普通员工不能越过环节权限');
+    \app\service\admin\auth\AuthService::$menus = [];
 
     Db::name('recycle_device')->where('id', 8)->update(['pay_amount'=>4700,'pay_status'=>1]);
     Db::name('recycle_return_order')->where('id',1)->update(['status'=>2]);
@@ -258,9 +300,9 @@ namespace {
     $yesterday = ['start_time' => date('Y-m-d', $todayAt - 86400), 'end_time' => date('Y-m-d', $todayAt - 86400)];
     $check($filter->countDevices(Filter::RETURNED_DEVICES, $yesterday) === 1,
         '昨天退完今天改资料，仍按昨天退回完成时间统计');
-    $returnTask = (new \ReflectionMethod($metric, 'buildReturnCompletedTask'))->invoke($metric, $range);
-    $pendingReturnTask = (new \ReflectionMethod($metric, 'buildPendingReturnTask'))->invoke($metric, $range);
-    $returnLedger = (new \ReflectionMethod($metric, 'buildLedger'))->invoke($metric, $range);
+    $returnTask = invokePrivate($metric, 'buildReturnCompletedTask', $range);
+    $pendingReturnTask = invokePrivate($metric, 'buildPendingReturnTask', $range);
+    $returnLedger = invokePrivate($metric, 'buildLedger', $range);
     $check($returnTask['device_count'] === 2 && $returnTask['order_count'] === 1
         && $returnLedger['return_device_count'] === 2, '已退回客户的台账、责任分布、订单与设备明细数量一致');
     $check($pendingReturnTask['device_count'] === 1 && $pendingReturnTask['order_count'] === 1

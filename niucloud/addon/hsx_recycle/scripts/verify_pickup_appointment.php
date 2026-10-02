@@ -62,5 +62,34 @@ namespace {
         catch (\core\exception\CommonException $e) { check(true, 'invalid administrator setting rejected'); }
         check(Policy::normalize($invalid) === Policy::DEFAULTS, 'read-only fallback does not crash');
     }
+    $openLate = ['start' => '09:00', 'end' => '18:00', 'cutoff' => '17:30'];
+    foreach (['16:00:00' => '16:00-17:00', '16:39:00' => '16:39-17:00', '16:44:59' => '16:44-17:00',
+        '16:45:00' => '17:00-18:00', '16:59:59' => '17:00-18:00', '17:01:00' => '17:01-18:00'] as $time => $range) {
+        $clock = new \DateTimeImmutable('2026-10-02 ' . $time, $zone);
+        $result = Policy::resolve($openLate, $clock, '', true);
+        check($result['pickup_time'] === 'immediate', 'immediate default at ' . $time);
+        check($result['pickup_time_range'] === '2026-10-02 ' . $range, 'requested minute boundary at ' . $time);
+        check(Policy::validate('immediate', $openLate, $clock, true) === $result['pickup_time_range'], 'submit recalculates immediate range');
+        check(Policy::validate('', $openLate, $clock, true) === $result['pickup_time_range'], 'missing time also gets nearest range');
+        check($result['pickup_time_options'][0]['slots'][0]['value'] === 'immediate', 'immediate is first selectable option');
+        check(str_contains($result['pickup_time_text'], $range), 'customer sees actual interval');
+    }
+    $clock = new \DateTimeImmutable('2026-10-02 16:39:00', $zone);
+    check(Policy::resolve([], $clock, '', true)['pickup_time'] === '2026-10-03 09:00-18:00', 'default 16:00 cutoff is never bypassed');
+    check(Policy::resolve($openLate, $clock, '2026-10-03 09:00-11:00', true)['pickup_time'] === '2026-10-03 09:00-11:00', 'manual future choice is not replaced by immediate');
+    check(Policy::resolve($openLate, new \DateTimeImmutable('2026-10-02 17:30:00', $zone), 'immediate', true)['pickup_time_changed'], 'crossing cutoff requires confirmation instead of silently booking tomorrow');
+    check(Policy::resolve($openLate, new \DateTimeImmutable('2026-10-02 08:00:00', $zone), '', true)['pickup_time'] !== 'immediate', 'no immediate option before opening');
+    foreach ([false, true] as $capability) {
+        try {
+            Policy::validate('immediate', [], $clock, $capability);
+            throw new \RuntimeException('immediate accepted outside capability/hours');
+        } catch (\core\exception\CommonException $e) { check(true, 'immediate cannot bypass capability or cutoff'); }
+    }
+    check(Policy::validate('immediate', $openLate, new \DateTimeImmutable('2026-10-02T08:39:00Z'), true) === '2026-10-02 16:39-17:00', 'immediate calculation uses Beijing timezone');
+    for ($minute = 0; $minute < 1440; $minute++) {
+        $clock = (new \DateTimeImmutable('2026-10-02 00:00:00', $zone))->modify('+' . $minute . ' minutes');
+        $result = Policy::resolve($openLate, $clock, '', true);
+        check(Policy::validate($result['pickup_time'], $openLate, $clock, true) === $result['pickup_time_range'], 'all minutes default accepted ' . $minute);
+    }
     echo "PASS {$checks} appointment checks; no DB/network/real booking\n";
 }

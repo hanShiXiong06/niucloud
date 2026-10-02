@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 /** 真实顺丰协议与回收桥接，配置/站点/网络均为替身；不读取 .env、不下单、不扣费、不发通知。 */
 namespace core\exception { class CommonException extends \RuntimeException {} }
+namespace addon\hsx_express\app\integration { function time(): int { return $GLOBALS['sf_test_now'] ?? \time(); } }
+namespace addon\hsx_express\app\service\core { function time(): int { return $GLOBALS['sf_test_now'] ?? \time(); } }
 namespace app\service\core\sys {
     class CoreConfigService {
         public static array $data = [];
@@ -111,6 +113,20 @@ namespace {
     check($scheduled['pickup_time'] === $appointment['pickup_time'], 'server-assigned window passes real SF adapter unchanged');
     check(end($requests)[1]['sendStartTm'] === substr($appointment['pickup_time'], 0, 16) . ':00', 'SF receives same server-generated future start');
     check(str_contains(json_encode(end($requests)[1]['extraInfoList']), substr($appointment['pickup_time'], -5) . ':00'), 'SF receives same window end as customer display');
+
+    $GLOBALS['sf_test_now'] = (new \DateTimeImmutable('2026-10-02 16:39:35', new \DateTimeZone('Asia/Shanghai')))->getTimestamp();
+    $immediateResult = $provider->create(17, array_replace($input, $snapshot, ['orderSendTime' => '2026-10-02 16:39-17:00', 'pickup_immediate' => true]));
+    check(!isset(end($requests)[1]['sendStartTm']) && end($requests)[1]['isDocall'] === 1, 'immediate uses carrier receipt time and calls dispatch now');
+    check($immediateResult['pickup_time'] === '2026-10-02 16:39-17:00', 'immediate stores actual window, not token');
+    check(end($requests)[1]['extraInfoList'][0]['attrVal'] === '2026-10-02 17:00:00', 'immediate preserves requested end');
+    $GLOBALS['sf_test_now'] += 325;
+    $provider->create(17, array_replace($input, $snapshot, ['orderSendTime' => '2026-10-02 17:00-18:00', 'pickup_immediate' => true]));
+    check(end($requests)[1]['sendStartTm'] === '2026-10-02 17:00:00', '16:45 calls now with next-hour appointment, never a delayed local job');
+    $beforeImmediateInvalid = count($requests);
+    reject(static fn() => $provider->create(17, array_replace($input, $snapshot, ['orderSendTime' => '2026-10-02 16:39-17:00', 'pickup_immediate' => true])), 'rejected', 'stale immediate snapshot is not silently repurposed');
+    reject(static fn() => $provider->create(17, array_replace($input, $snapshot, ['orderSendTime' => '2026-10-02 16:45-17:00', 'pickup_immediate' => false])), 'rejected', 'ordinary appointments cannot use past start');
+    check(count($requests) === $beforeImmediateInvalid, 'invalid immediate windows make no external calls');
+    unset($GLOBALS['sf_test_now']);
 
     $before = count($requests);
     reject(static fn() => $provider->create(17, array_replace($input, $snapshot, ['provider_scene' => 'waybill'])), 'rejected', 'cannot replace pickup scene');

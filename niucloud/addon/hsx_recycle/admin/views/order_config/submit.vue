@@ -136,14 +136,14 @@
                             </div>
                             <p class="field-hint">客户看到：{{ form.platform_delivery.payment_tips || '运费由谁承担，请先联系门店确认。' }}</p>
                         </SettingRow>
-                        <SettingRow id="delivery-pickup-schedule" label="每日取件时段" hint="客户不用选时间，系统自动安排今天或明天的预约时段；不支持预约时间的快递渠道不使用此设置。" stacked>
+                        <SettingRow id="delivery-pickup-schedule" label="每日取件时段" hint="顺丰营业时段内默认立即取件：当前时间至下一整点；距整点剩余15分钟及以内，改约下一小时。客户也可选择未来三天。" stacked>
                             <div class="pickup-schedule-controls">
                                 <el-time-select v-model="form.platform_delivery.pickup_schedule.start" start="00:00" step="00:30" end="23:30" placeholder="开始时间" aria-label="取件开始时间" />
                                 <span>至</span>
                                 <el-time-select v-model="form.platform_delivery.pickup_schedule.end" start="00:00" step="00:30" end="23:30" placeholder="结束时间" aria-label="取件结束时间" />
                             </div>
                         </SettingRow>
-                        <SettingRow id="delivery-pickup-cutoff" label="当天预约截止" hint="到达截止时间后安排明天。当天预约至少预留30分钟；实际到达以快递员联系为准。">
+                        <SettingRow id="delivery-pickup-cutoff" label="当天预约截止" hint="包括立即取件在内，到达此时间后不再接当天预约，默认安排明天。实际到达以快递员联系为准。">
                             <el-time-select v-model="form.platform_delivery.pickup_schedule.cutoff" start="00:00" step="00:30" end="23:30" placeholder="截止时间" aria-label="当天预约截止时间" />
                         </SettingRow>
                     </section>

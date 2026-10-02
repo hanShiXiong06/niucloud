@@ -110,7 +110,7 @@
           <text>{{ loadingTimes ? '正在更新可预约时段…' : (platformDeliveryForm.pickup_time_text || platformDeliveryForm.pickup_time || '请选择取件时段') }}</text>
           <view class="pickup-time-change"><text>{{ loadingTimes ? '' : '更改' }}</text><up-icon name="arrow-right" size="13" color="var(--recycle-text-sub)" /></view>
         </view>
-        <text class="pickup-time-note">默认最近可预约时段，也可改选明天、后天或大后天。实际上门时间以快递员联系为准。</text>
+        <text class="pickup-time-note">{{ platformDeliveryForm.pickup_time === 'immediate' ? '提交后立即向快递发起预约，时段按提交时间更新。' : '已为你选择可预约时段，也可改选明天、后天或大后天。' }}实际上门时间以快递员联系为准。</text>
       </view>
       <text v-else class="pickup-time-note">上门时间由门店与快递员联系确认。</text>
     </view>

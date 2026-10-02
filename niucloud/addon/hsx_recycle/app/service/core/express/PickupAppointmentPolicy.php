@@ -28,7 +28,7 @@ class PickupAppointmentPolicy
         return $result;
     }
 
-    public static function resolve(array $schedule, ?\DateTimeImmutable $now = null, string $selected = ''): array
+    public static function resolve(array $schedule, ?\DateTimeImmutable $now = null, string $selected = '', bool $allowImmediate = false): array
     {
         $schedule = self::normalize($schedule, true);
         $zone = new \DateTimeZone('Asia/Shanghai');
@@ -40,17 +40,21 @@ class PickupAppointmentPolicy
         // 至少预留30分钟，向上对齐半小时，避免把已开始的时段提交给顺丰。
         $earliest = $now->setTimestamp((int)(ceil(($now->getTimestamp() + 1800) / 1800) * 1800));
         $start = $start > $earliest ? $start : $earliest;
-        $tomorrow = $now >= $cutoff || $start >= $end;
+        $immediate = $allowImmediate ? self::immediateWindow($schedule, $now) : '';
+        $tomorrow = $immediate === '' && ($now >= $cutoff || $start >= $end);
         if ($tomorrow) {
             $date = $now->modify('+1 day')->format('Y-m-d');
             $start = new \DateTimeImmutable($date . ' ' . $schedule['start'], $zone);
             $end = new \DateTimeImmutable($date . ' ' . $schedule['end'], $zone);
         }
         $range = $start->format('H:i') . '-' . $end->format('H:i');
-        $value = $date . ' ' . $range;
+        $value = $immediate !== '' ? 'immediate' : $date . ' ' . $range;
         $changed = false;
         if (trim($selected) !== '') {
-            try { $value = self::validate($selected, $schedule, $now); }
+            try {
+                self::validate($selected, $schedule, $now, $allowImmediate);
+                $value = trim($selected);
+            }
             catch (CommonException $e) { $changed = true; }
         }
         $options = [];
@@ -61,6 +65,11 @@ class PickupAppointmentPolicy
             $dayEnd = new \DateTimeImmutable($day . ' ' . $schedule['end'], $zone);
             $availableStart = $offset === 0 && $dayStart < $earliest ? $earliest : $dayStart;
             $slots = [];
+            if ($offset === 0 && $immediate !== '') {
+                $slots['immediate'] = ['value' => 'immediate', 'label' => '立即取件',
+                    'text' => '立即取件 · 今天 ' . substr($immediate, 11),
+                    'hint' => substr($immediate, 11) . '，提交后立即发起预约'];
+            }
             $append = static function (string $slot, string $hint = '') use (&$slots, $day, $label): void {
                 $slots[$slot] = ['value' => $slot, 'label' => substr($slot, 11), 'text' => $label . '（'
                     . substr($day, 5, 2) . '月' . substr($day, 8, 2) . '日）' . substr($slot, 11), 'hint' => $hint];
@@ -82,11 +91,12 @@ class PickupAppointmentPolicy
         $selectedText = '';
         foreach ($options as $option) foreach ($option['slots'] as $slot) if ($slot['value'] === $value) $selectedText = $slot['text'];
         return ['pickup_time' => $value, 'pickup_time_text' => $selectedText,
+            'pickup_time_range' => $value === 'immediate' ? $immediate : $value,
             'pickup_time_changed' => $changed, 'pickup_time_options' => $options, 'pickup_server_time' => $now->getTimestamp()];
     }
 
     /** 未传时由后台安排；已传但过期/配置已改变的时段应刷新后确认，不擅自改约。 */
-    public static function validate(string $value, array $schedule, ?\DateTimeImmutable $now = null): string
+    public static function validate(string $value, array $schedule, ?\DateTimeImmutable $now = null, bool $allowImmediate = false): string
     {
         $zone = new \DateTimeZone('Asia/Shanghai');
         $now = ($now ?? new \DateTimeImmutable('now', $zone))->setTimezone($zone);
@@ -94,7 +104,12 @@ class PickupAppointmentPolicy
         $value = trim($value);
         // 客户端没有提供时段（含空字符串）时，使用北京时间计算出的本站预约窗口。
         // 只兜底缺省值；明确传来的错误/过期时段仍需确认，避免静默改成另一天。
-        if ($value === '') return self::resolve($schedule, $now)['pickup_time'];
+        if ($value === '') return self::resolve($schedule, $now, '', $allowImmediate)['pickup_time_range'];
+        if ($value === 'immediate') {
+            $range = $allowImmediate ? self::immediateWindow($schedule, $now) : '';
+            if ($range === '') throw new CommonException('当前已不能立即取件，请刷新后选择可预约时段；尚未提交订单');
+            return $range;
+        }
         if (!preg_match('/^(\d{4}-\d{2}-\d{2}) ((?:[01]\d|2[0-3]):[0-5]\d)-((?:[01]\d|2[0-3]):[0-5]\d)$/D', $value, $m)
             || $m[1] < $now->format('Y-m-d') || $m[1] > $now->modify('+3 days')->format('Y-m-d')
             || !checkdate((int)substr($m[1], 5, 2), (int)substr($m[1], 8, 2), (int)substr($m[1], 0, 4))
@@ -111,5 +126,26 @@ class PickupAppointmentPolicy
     private static function minutes(string $time): int
     {
         return (int)substr($time, 0, 2) * 60 + (int)substr($time, 3, 2);
+    }
+
+    /** 动态意图只在本站营业窗口内有效；不把客户端预览时间当成固定预约。 */
+    private static function immediateWindow(array $schedule, \DateTimeImmutable $now): string
+    {
+        $day = $now->format('Y-m-d');
+        $zone = $now->getTimezone();
+        $opening = new \DateTimeImmutable($day . ' ' . $schedule['start'], $zone);
+        $closing = new \DateTimeImmutable($day . ' ' . $schedule['end'], $zone);
+        $cutoff = new \DateTimeImmutable($day . ' ' . $schedule['cutoff'], $zone);
+        if ($now < $opening || $now >= $cutoff) return '';
+        $nextHour = $now->setTime((int)$now->format('H'), 0)->modify('+1 hour');
+        $start = $now->setTime((int)$now->format('H'), (int)$now->format('i'));
+        $end = $nextHour;
+        if ($nextHour->getTimestamp() - $now->getTimestamp() <= 900) {
+            $start = $nextHour;
+            $end = $nextHour->modify('+1 hour');
+        }
+        $end = min($end, $closing);
+        if ($end->getTimestamp() - max($start->getTimestamp(), $now->getTimestamp()) <= 900) return '';
+        return $day . ' ' . $start->format('H:i') . '-' . $end->format('H:i');
     }
 }

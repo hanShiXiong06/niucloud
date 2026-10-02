@@ -170,10 +170,12 @@ class RecycleOrder extends BaseApiController
                 return fail('取件时段格式不正确，请刷新后重试');
             }
             // 未提供取件时间时由服务端按门店配置生成，再传入订单及快递服务。
-            $data['express_config']['pickup_time'] = (new RecycleExpressService())->validatePickupTime(
+            $selection = (new RecycleExpressService())->validatePickupSelection(
                 (int)$this->site_id,
                 $pickupTime
             );
+            // 此标记只能由已校验的选择生成，不接纳客户端自行传来的内部标记。
+            $data['express_config'] = array_replace($expressConfig, $selection);
         } elseif ((int)$data['delivery_type'] === 1 && empty($data['express_no'])) {
             // 如果不使用平台快递，且配送方式是快递，则需要快递单号
             return fail('请输入快递单号');

@@ -63,6 +63,8 @@ export function pickupReceiverText(receiver?: PickupInfo['receiver']): string {
 export function validatePickupTime(value: string, required = false, now = new Date()): string {
   const text = value.trim()
   if (!text) return required ? '暂未取得取件时段，请刷新后重试' : ''
+  // 动态意图由服务端在下单时计算，不能用手机时钟冻结为已经过去的分钟。
+  if (text === 'immediate') return ''
   const match = /^(\d{4})-(\d{2})-(\d{2}) ([01]\d|2[0-3]):([0-5]\d)-([01]\d|2[0-3]):([0-5]\d)$/.exec(text)
   if (!match) return '取件时段信息不完整，请刷新后重试'
   const [, year, month, day, startHour, startMinute, endHour, endMinute] = match.map(Number)

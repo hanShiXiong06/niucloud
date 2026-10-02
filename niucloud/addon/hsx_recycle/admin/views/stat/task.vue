@@ -2,12 +2,13 @@
     <PremiumTheme class="recycle-my-task">
         <el-card shadow="never">
             <HsxTitle size="page" class="mb-4">
-                <template #default>{{ t('我的任务') }}</template>
+                <template #default>{{ viewScope === 'site' ? '本站任务' : '我的任务' }}</template>
                 <template #extra>
                     <el-button :icon="Setting" @click="openAssignmentSettings">{{ t('默认负责人') }}</el-button>
                     <el-button :icon="Refresh" @click="loadAll">{{ t('刷新') }}</el-button>
                 </template>
             </HsxTitle>
+            <p class="text-xs text-gray-500 mb-3">{{ viewScope === 'site' ? '管理员可查看本站所有负责人的待办及未分配任务。' : '显示当前环节分配给我的待办。' }}待取货、待签收按订单展示，请切换对应环节查看。</p>
 
             <!-- 无负责环节 -->
             <EmptyState
@@ -20,7 +21,7 @@
             <template v-else>
                 <!-- 环节切换 -->
                 <el-tabs v-model="activeStage" @tab-change="onStageChange">
-                    <el-tab-pane :label="t('全部')" name="" />
+                    <el-tab-pane :label="t('全部设备任务')" name="" />
                     <el-tab-pane
                         v-for="s in stages"
                         :key="s.stage_key"
@@ -182,6 +183,7 @@ const route = useRoute()
 const router = useRouter()
 
 const loading = ref(false)
+const viewScope = ref<'site' | 'assigned'>('assigned')
 const stages = ref<any[]>([])
 const activeStage = ref<string>(typeof route.query.stage === 'string' ? route.query.stage : '')
 const keyword = ref(typeof route.query.keyword === 'string' ? route.query.keyword : '')
@@ -236,6 +238,7 @@ const loadList = async () => {
             limit: pagination.limit
         })
         tableData.value = res.data?.list || []
+        viewScope.value = res.data?.view_scope === 'site' ? 'site' : 'assigned'
         pagination.total = res.data?.count || 0
     } catch (e) {
         tableData.value = []

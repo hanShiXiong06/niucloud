@@ -114,6 +114,7 @@ final class RecycleSfPickupProvider implements ExpressProviderInterface
             'carrier_code' => 'SF', 'carrier_name' => '顺丰速运', 'payment' => (int)$config['pay_method'],
             'payment_tips' => '运费按本站顺丰合同与付款方式结算，最终费用以顺丰账单为准；未报价不代表免费',
             'enabled' => 1, 'pickup_time_supported' => true, 'pickup_time_required' => true,
+            'pickup_immediate_supported' => true,
             'capabilities' => ['quote' => false, 'pickup' => true, 'cancel_before_pickup' => true,
                 'modify_subject_to_carrier' => false, 'waybill_print' => false, 'account_balance' => false,
                 'callback' => false, 'courier_assignment' => false],
@@ -158,10 +159,14 @@ final class RecycleSfPickupProvider implements ExpressProviderInterface
         };
         $startAt = $parse($pickup);
         $endAt = $end !== '' ? $parse($end) : null;
-        if (!$startAt || $startAt->getTimestamp() <= time() || ($end !== '' && (!$endAt || $endAt <= $startAt))) {
+        $now = time();
+        $immediate = ($request['pickup_immediate'] ?? false) === true;
+        if (!$startAt || ($startAt->getTimestamp() <= $now && (!$immediate || $now - $startAt->getTimestamp() >= 300))
+            || ($end !== '' && (!$endAt || $endAt <= $startAt || $endAt->getTimestamp() <= $now))) {
             throw new ExpressSubmissionException('请选择有效的未来取件时间，未发起顺丰预约', 'rejected');
         }
         $payload['pickup_start_at'] = $startAt->format('Y-m-d H:i:s');
+        $payload['pickup_immediate'] = $immediate;
         if ($endAt) $payload['pickup_end_at'] = $endAt->format('Y-m-d H:i:s');
         $payload['pickup_time'] = $startAt->format('Y-m-d H:i') . ($endAt ? '-' . $endAt->format('H:i') : '');
         return $payload;

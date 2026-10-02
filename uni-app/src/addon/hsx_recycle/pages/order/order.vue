@@ -477,7 +477,7 @@ const shouldContinueWithPlatformPrompt = async (): Promise<boolean> => {
   }
 
   try {
-    const res = await checkExpressEnabled(platformDeliveryForm.value.pickup_time_selected ? platformDeliveryForm.value.pickup_time : '') as ExpressCheckResponse
+    const res = await checkExpressEnabled(platformDeliveryForm.value.pickup_time_selected || platformDeliveryForm.value.pickup_time === 'immediate' ? platformDeliveryForm.value.pickup_time : '') as ExpressCheckResponse
     if (res.code !== 1 || !res.data) {
       uni.showToast({ title: '暂未确认取件服务，请稍后重试', icon: 'none' })
       return false

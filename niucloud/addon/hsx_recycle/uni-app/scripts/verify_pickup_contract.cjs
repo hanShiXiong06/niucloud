@@ -25,6 +25,7 @@ const utils = compileModule('utils/pickup.ts')
 const now = new Date(2030, 0, 1, 8, 0)
 check(utils.validatePickupTime('', false, now) === '', 'optional blank time')
 check(utils.validatePickupTime('', true, now) !== '', 'required blank time rejected')
+check(utils.validatePickupTime('immediate', true, now) === '', 'immediate intent does not expire on client clock')
 check(utils.validatePickupTime('2030-01-01 09:00-11:00', true, now) === '', 'future valid slot')
 for (const value of ['2030-01-01 07:00-09:00', '2030-01-01 11:00-09:00', '2030-01-01 09:00-09:00', '2030-02-30 09:00-11:00', '2030-01-01 25:00-26:00', '2030-01-01 09:00-', 'tomorrow']) {
   check(utils.validatePickupTime(value, true, now) !== '', `invalid slot ${value}`)
@@ -59,10 +60,11 @@ check(utils.pickupReceiverText({ contact_name: '测试门店', mobile: '00000000
 
 async function testAvailability() {
   let response = { code: 1, data: { enabled: false, has_shop_address: true } }
+  let selectedRequest = ''
   const hook = compileModule('hooks/usePlatformDelivery.ts', {
     vue: { ref: value => ({ value }), onMounted() {} },
     './useAddressParser': { useAddressParser: () => ({ parseAddressInfo: () => ({}) }) },
-    '../api/express': { checkExpressEnabled: async () => response },
+    '../api/express': { checkExpressEnabled: async selected => { selectedRequest = selected; return response } },
     '@/app/api/member': { getAddressList: async () => ({ code: 1, data: [] }) }
   }, { uni: { showToast() {} } }).usePlatformDelivery()
   await hook.detectProvider()
@@ -74,8 +76,19 @@ async function testAvailability() {
   check(hook.pickupAvailable.value && hook.needPickupTime.value, 'explicitly configured pickup/time allowed')
   check(hook.paymentTips.value === response.data.payment_tips, 'configured payer explanation is available read-only')
   hook.platformDeliveryForm.value.pickup_time = '2030-01-02 09:00-11:00'
+  hook.platformDeliveryForm.value.pickup_time_selected = true
+  response.data.pickup_time = '2030-01-02 09:00-11:00'
   await hook.detectProvider()
-  check(hook.platformDeliveryForm.value.pickup_time === '2030-01-02 09:00-11:00', 'rechecking supported service preserves selected slot')
+  check(selectedRequest === response.data.pickup_time && hook.platformDeliveryForm.value.pickup_time === response.data.pickup_time, 'rechecking preserves server-validated manual selection')
+  hook.platformDeliveryForm.value.pickup_time = 'immediate'
+  hook.platformDeliveryForm.value.pickup_time_selected = false
+  response.data.pickup_time = 'immediate'
+  response.data.pickup_time_text = '立即取件 · 今天 16:39-17:00'
+  await hook.detectProvider()
+  check(selectedRequest === 'immediate' && hook.platformDeliveryForm.value.pickup_time_text.includes('16:39-17:00'), 'default immediate intent is also revalidated, not silently changed to tomorrow')
+  response.data.pickup_time = '2030-01-02 09:00-18:00'
+  response.data.pickup_time_changed = true
+  check(hook.applyPickupPolicy(response.data) === true, 'cutoff transition requests customer reconfirmation')
   response = { code: 1, data: { pickup_enabled: true, has_shop_address: false } }
   await hook.detectProvider()
   check(!hook.pickupAvailable.value, 'missing store address cannot book pickup')
@@ -148,8 +161,8 @@ async function testSubmit(state, reject = false, validationError = false) {
   const orderSource = fs.readFileSync(path.join(base, 'pages/order/order.vue'), 'utf8')
   check(!formSource.includes('包邮') && !orderSource.includes('包邮'), 'customer booking UI never promises free shipping')
   check(formSource.includes('Number(props.orderCount || 0) >= Number(props.freeShippingMinCount || 1)'), 'existing quantity threshold is retained')
-  check(formSource.includes('运费说明：{{ paymentTips ||') && formSource.includes('预约服务不代表免费寄件'), 'payer explanation rendered with safe fallback')
-  check(orderSource.includes('paymentTips.value = String(res.data.payment_tips ||') && orderSource.includes('运费说明：${paymentMessage}'), 'latest payer explanation included in submission confirmation')
+  check(formSource.includes('运费说明：{{ paymentTips ||') && formSource.includes('运费由谁承担，请先联系门店确认。'), 'payer explanation rendered with safe fallback')
+  check(orderSource.includes('applyPickupPolicy(res.data)') && orderSource.includes('运费说明：${paymentMessage}'), 'latest server policy included in submission confirmation')
   const apiSource = fs.readFileSync(path.join(base, 'api/order.ts'), 'utf8')
   check(apiSource.includes('recycle/recycle_order/${id}/pickup/manual'), 'manual waybill targets existing order')
   check(apiSource.includes('recycle/recycle_order/${id}/pickup/refresh'), 'refresh targets existing order')

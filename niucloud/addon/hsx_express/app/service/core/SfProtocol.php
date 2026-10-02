@@ -50,8 +50,13 @@ final class SfProtocol
         if ($scene === 'pickup') {
             $start = self::appointment((string)($payload['pickup_start_at'] ?? ''));
             $end = self::appointment((string)($payload['pickup_end_at'] ?? ''));
-            if ($start->getTimestamp() <= time() || $end <= $start) throw new ProviderException('请选择未来的有效上门取件时段，本次未叫件', false);
-            $data['sendStartTm'] = $start->format('Y-m-d H:i:s');
+            $now = time();
+            $immediate = ($payload['pickup_immediate'] ?? false) === true && $start->getTimestamp() <= $now;
+            if (($start->getTimestamp() <= $now && (!$immediate || $now - $start->getTimestamp() >= 300))
+                || $end <= $start || $end->getTimestamp() <= $now) throw new ProviderException('请选择未来的有效上门取件时段，本次未叫件', false);
+            // 顺丰文档：不传 sendStartTm 默认报文接收时间。立即取件不能传已经过去的分钟起点。
+            // 临近整点顺延的时段仍传具体未来开始时间，但现在就调用下单接口，不延迟任务。
+            if (!$immediate) $data['sendStartTm'] = $start->format('Y-m-d H:i:s');
             $data['extraInfoList'] = [['attrName' => 'pickupAppointEndTime', 'attrVal' => $end->format('Y-m-d H:i:s')]];
         }
         return $data;

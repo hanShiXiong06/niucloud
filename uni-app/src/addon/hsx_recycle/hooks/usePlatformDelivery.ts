@@ -56,7 +56,7 @@ export function usePlatformDelivery() {
   const detectProvider = async () => {
     checkingPickup.value = true
     try {
-      const res: any = await checkExpressEnabled(platformDeliveryForm.value.pickup_time_selected ? platformDeliveryForm.value.pickup_time : '')
+      const res: any = await checkExpressEnabled(platformDeliveryForm.value.pickup_time_selected || platformDeliveryForm.value.pickup_time === 'immediate' ? platformDeliveryForm.value.pickup_time : '')
       if (res.code !== 1 || !res.data) throw new Error('pickup unavailable')
       const data = res.data
       pickupAvailable.value = Boolean(data.pickup_enabled ?? data.enabled) && data.has_shop_address === true
