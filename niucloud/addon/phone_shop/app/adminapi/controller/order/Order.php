@@ -67,7 +67,7 @@ class Order extends BaseAdminController
     public function confirmDeviceReceived(int $id)
     {
         $data = $this->request->params([['received', false]]);
-        return success('设备已收回，商品恢复待上架；未生成新账目', (new OrderService())->confirmDeviceReceived($id, in_array($data['received'], [true, 1, '1'], true)));
+        return success('设备已收回，商品恢复上架；未生成新账目', (new OrderService())->confirmDeviceReceived($id, in_array($data['received'], [true, 1, '1'], true)));
     }
 
     /**

@@ -81,6 +81,7 @@ class CoreExternalElectronicSheetService
             'receiver' => ['name' => $order['taker_name'], 'mobile' => $order['taker_mobile'], 'address' => $this->address($order['taker_province'], $order['taker_city'], $order['taker_district'], $order['taker_address'])],
             'cargo' => mb_substr(implode('、', array_column($goods, 'goods_name')), 0, 100),
             'weight' => $weight,
+            'freight_payment' => $params['freight_payment'] ?? 'receiver',
             'count' => 1,
         ];
         return $this->decorate($siteId, $providerKey, $registry->execute($siteId, $providerKey, 'create', $payload));
@@ -113,9 +114,9 @@ class CoreExternalElectronicSheetService
         $providerKey = (string)($result['provider_key'] ?? $result['provider_code'] ?? $providerKey);
         $result['provider_key'] = $providerKey;
         $result['express_company_id'] = 0;
-        $carrier = (string) ($result['carrier_code'] ?? '');
+        $descriptor = (new ElectronicSheetProviderRegistry())->all($siteId)[$providerKey] ?? [];
+        $carrier = (string) ($result['carrier_code'] ?? (empty($result['task_id']) ? ($descriptor['carrier_code'] ?? '') : ''));
         if ($carrier !== '') {
-            $descriptor = (new ElectronicSheetProviderRegistry())->all($siteId)[$providerKey] ?? [];
             $result['express_company_id'] = $this->companyId($siteId, $carrier, $result['carrier_mapping'] ?? $descriptor['carrier_mapping'] ?? []);
         }
         return $result;

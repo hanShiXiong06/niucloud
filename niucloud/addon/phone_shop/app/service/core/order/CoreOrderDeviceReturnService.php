@@ -159,9 +159,10 @@ class CoreOrderDeviceReturnService
             }
         }
         if ((int)$sku->stock > 1) throw new CommonException('单台设备的商城库存大于一台，请先核对异常数量，未自动覆盖');
-        // 同一实物只能恢复一台；已经回库/手工上架的重复事件不再下架。
-        if ((int)$sku->stock > 0) return;
-        $sku->save(['stock' => 1]);
+        // 有原订单时，首次确认收回必须同时恢复可售，不能因库存已经为1漏掉上架。
+        // 重复确认已由原明细的 erp_return.received 拦截；无原单的重复 ERP 通知不覆盖人工上下架。
+        if ((int)$sku->stock > 0 && $originalLineId === 0) return;
+        if ((int)$sku->stock <= 0) $sku->save(['stock' => 1]);
         (new CoreOrderInventoryService())->refreshGoods($siteId, (int)$sku->goods_id, true);
     }
 

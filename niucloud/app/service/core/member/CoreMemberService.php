@@ -289,20 +289,29 @@ class CoreMemberService extends BaseCoreService
             $dict = ( new DictLoader("MemberGift") )->load();
 
             foreach ($gifts as $key => $item) {
-                if (!$item[ 'is_use' ] || !isset($dict[ $key ]) || !isset($dict[ $key ][ 'grant' ]) || empty($dict[ $key ][ 'grant' ])) continue;
+                if (empty($item['is_use'])) continue;
+                if (empty($dict[$key]['grant'])) {
+                    if (!empty($param['strict'])) throw new CommonException('奖励配置不可用，请联系管理员检查');
+                    continue;
+                }
                 try {
                     $grant = $dict[ $key ][ 'grant' ];
                     if ($grant instanceof \Closure) {
                         $grant($site_id, $member_id, $item, $param);
                     } else if (class_exists($grant)) {
                         ( new $grant() )->handle($site_id, $member_id, $item, $param);
+                    } else if (!empty($param['strict'])) {
+                        throw new CommonException('奖励发放服务不可用，请联系管理员检查');
                     }
                 } catch (CommonException $e) {
+                    // 由调用方管理事务的礼包（如签到）不得吞掉异常后宣称发奖成功。
+                    if (!empty($param['strict'])) throw $e;
                     Log::write('会员礼包' . $key . '发放失败，错误原因：' . $e->getMessage() . $e->getFile() . $e->getLine());
                 }
             }
             return true;
         } catch (CommonException $e) {
+            if (!empty($param['strict'])) throw $e;
             Log::write('会员礼包发放失败，错误原因：' . $e->getMessage() . $e->getFile() . $e->getLine());
             Log::write('参数：' . json_encode([
                     'site_id' => $site_id,

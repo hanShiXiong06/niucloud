@@ -43,7 +43,7 @@ for (const value of ['https://api.kuaidi100.com/label/test', 'http://ckd.im/test
 for (const value of ['https://kuaidi100.com.evil.test/x', 'https://evil-kuaidi100.com/x', 'javascript:alert(1)', 'https://user:pass@api.kuaidi100.com/x', '/relative']) check(() => assert.equal(ui.labelLinks(value).length, 0))
 check(() => assert.equal(ui.requestError({ msg: '明确原因' }, '兜底'), '明确原因'))
 check(() => assert.equal(ui.requestError(null, '兜底'), '兜底'))
-for (const relative of ['views/config/index.vue', 'views/tasks/index.vue', 'components/saved-credential-input.vue', 'utils/presentation.ts', 'api/index.ts']) {
+for (const relative of ['views/config/index.vue', 'views/tasks/index.vue', 'components/saved-credential-input.vue', 'components/sf-config-panel.vue', 'utils/presentation.ts', 'api/index.ts']) {
     const filename = path.join(source, relative), text = fs.readFileSync(filename, 'utf8')
     check(() => assert.equal(fs.readFileSync(path.join(mirror, relative), 'utf8'), text, 'runtime mirror ' + relative))
     if (relative.endsWith('.vue')) {

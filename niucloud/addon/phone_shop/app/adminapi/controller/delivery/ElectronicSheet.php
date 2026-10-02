@@ -191,7 +191,7 @@ class ElectronicSheet extends BaseAdminController
     {
         $data = $this->request->params([
             ['operation', 'query'], ['provider_key', ''], ['order_id', 0],
-            ['order_goods_ids', []], ['weight', 1], ['reason', ''], ['confirm', 0],
+            ['order_goods_ids', []], ['weight', 1], ['reason', ''], ['confirm', 0], ['freight_payment', 'receiver'],
         ]);
         return success((new ElectronicSheetService())->providerTask($data));
     }

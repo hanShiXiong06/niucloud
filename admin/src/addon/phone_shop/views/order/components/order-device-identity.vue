@@ -27,7 +27,7 @@ const identity = computed(() => props.row.device_identity || props.row.extend?.e
 async function confirmReceipt() {
     if (busy.value) return
     try {
-        await ElMessageBox.confirm(`请核对 ${identity.value.imei || identity.value.sn || identity.value.sku_no || '该设备'} 已经实际收回。确认后恢复一台库存并保持待上架；不会再收款或新增应收，原退款记录保留。`, '确认实物收回', { type: 'warning', confirmButtonText: '已核对并收回', cancelButtonText: '尚未收回' })
+        await ElMessageBox.confirm(`请核对 ${identity.value.imei || identity.value.sn || identity.value.sku_no || '该设备'} 已经实际收回。确认后恢复一台库存并自动上架；不会再收款或新增应收，原退款记录保留。`, '确认实物收回', { type: 'warning', confirmButtonText: '已核对并收回', cancelButtonText: '尚未收回' })
     } catch { return }
     busy.value = true
     try {

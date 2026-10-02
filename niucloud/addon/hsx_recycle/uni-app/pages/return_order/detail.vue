@@ -1,4 +1,6 @@
 <template>
+  <page-meta :page-style="popupPageStyle" />
+  <uni-layout name="default">
   <view class="return-detail-page">
     <RecyclePageHeader title="退货详情" :subtitle="orderDetail.order_no || '查看退货处理结果'" />
 
@@ -168,11 +170,15 @@
       @update:visible="showExpressTracking = $event"
     />
   </view>
+  </uni-layout>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
+import { useRecyclePopupPage } from '../../hooks/useRecyclePopupScroll'
+
+const { popupPageStyle } = useRecyclePopupPage()
 import { getReturnOrderDetail } from '../../api/return_order'
 import { getReturnOrderStatusInfo, getDeviceStatusInfo } from '../../utils/theme'
 import { copyOrderNo, copyExpressNo, copyIMEI } from '../../utils/clipboard'

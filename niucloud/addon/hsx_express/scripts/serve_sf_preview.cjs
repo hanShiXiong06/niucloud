@@ -14,11 +14,18 @@ const config = scene => ({ enabled: scene === 'waybill' ? 1 : 0, environment: 's
 const task = (id, state, environment, overrides = {}) => ({ id, task_id: id, task_no: `QA-SF-${id}`, business_no: `QA-ORDER-${id}`, business_type: 'phone_shop', business_id: `${id}:internal-package`, provider_code: 'hsx_express_sf_direct', provider_key: 'hsx_express_sf_direct', carrier: 'shunfeng', carrier_name: '顺丰速运', exp_type: '2', exp_type_name: '顺丰标快', print_type: 'PDF', state, state_name: state === 'ready' ? '原单 PDF 已生成' : state === 'unknown' ? '顺丰取号结果待核实' : state === 'cancel_unknown' ? '顺丰取消结果待核实' : '已取号，PDF 待获取', environment, can_confirm_delivery: environment === 'production' && state === 'ready', waybill_no: state === 'unknown' ? '' : `QA-SF-WAYBILL-${id}`, express_company_id: 1, can_download: state === 'ready', can_refresh: true, can_reprint: !['unknown', 'cancel_unknown'].includes(state), can_cancel: state !== 'unknown', can_recover: false, label_state: state === 'ready' ? 'ready' : 'unavailable', pdf_download_path: state === 'ready' ? `hsx_express/tasks/${id}/pdf` : '', message: state === 'unknown' ? '模拟超时：先查询原顺丰单，不得重复取号或切换渠道' : '仅本地预览任务；PDF 下载和查询均为内存模拟，不会联系顺丰', create_at: 1790899200, update_at: 1790899800, logs: [{ operation: 'sf_order_created', at: 1790899200, message: '模拟：原顺丰单受理成功' }, { operation: state === 'ready' ? 'sf_pdf_ready' : 'sf_query_unconfirmed', at: 1790899800, message: state === 'ready' ? '模拟：原单 PDF 已就绪' : '模拟：原单查询结果待核实' }], ...overrides })
 const fixture = {
     sfConfigs: { waybill: config('waybill'), pickup: config('pickup') },
-    tasks: [task(101, 'ready', 'production'), task(102, 'unknown', 'production'), task(103, 'ready', 'sandbox'), task(104, 'print_failed', 'production', { label_state: 'expired' }), task(105, 'cancel_unknown', 'production', { message: '模拟：原单取消结果待核实，仅允许重试原单取消，不能重下。' })],
+    tasks: [task(101, 'ready', 'production', { freight_payment: 'sender', freight_payment_label: '寄方付 · 本站月结', monthly_card_tail: '4567' }), task(102, 'unknown', 'production'), task(103, 'ready', 'sandbox'), task(104, 'print_failed', 'production', { label_state: 'expired' }), task(105, 'cancel_unknown', 'production', { message: '模拟：原单取消结果待核实，仅允许重试原单取消，不能重下。' })],
     selectedShopTask: 103, operations: [], routes: [], messages: [], failSave: false, failConfigLoad: false, failDownload: false
 }
 function compile(file) {
-    const { descriptor, errors } = sfc.parse(fs.readFileSync(file, 'utf8'), { filename: file }); assert.deepEqual(errors, [])
+    let source = fs.readFileSync(file, 'utf8')
+    // Close/lifecycle regression tests must not be blocked by Chrome's native print
+    // modal. This flag only changes the in-memory QA bundle, never application files.
+    if (process.argv.includes('--no-native-print') && file.endsWith('/HsxPdfPrint/index.vue')) {
+        assert.ok(source.includes('frame.value.contentWindow.print()'))
+        source = source.replace('frame.value.contentWindow.print()', "window.qaNotice('隔离测试：已触发打印请求，本次不打开系统打印窗口、不出纸')")
+    }
+    const { descriptor, errors } = sfc.parse(source, { filename: file }); assert.deepEqual(errors, [])
     const id = crypto.createHash('sha256').update(file).digest('hex').slice(0, 8)
     const script = sfc.compileScript(descriptor, { id })
     const template = sfc.compileTemplate({ source: descriptor.template.content, filename: file, id, scoped: descriptor.styles.some(style => style.scoped), compilerOptions: { bindingMetadata: script.bindings, expressionPlugins: ['typescript'] } }); assert.deepEqual(template.errors, [])
@@ -41,7 +48,7 @@ export async function reprintExpressTask(id){await wait();const t=row(id);state.
 export async function cancelExpressTask(id,reason){await wait();const t=row(id);state.operations.push({kind:'cancel-original',id,reason});t.state='cancelled';t.state_name='顺丰运单已取消';t.can_download=false;t.can_cancel=false;t.can_reprint=false;t.can_confirm_delivery=false;t.can_refresh=false;return {data:copy(t)}}
 export async function recoverExpressTask(){throw new Error('顺丰不支持重新创建方式恢复')}
 export async function downloadExpressTaskPdf(id){await wait();state.operations.push({kind:'pdf-download',id});if(state.failDownload){state.failDownload=false;return new Blob([JSON.stringify({msg:'模拟 PDF 已过期，请重新获取原单 PDF'})],{type:'application/json'})}return new Blob([Uint8Array.from(atob(${JSON.stringify(fs.readFileSync(path.join(__dirname, 'fixtures/print-preview-pdf.base64'), 'utf8').trim())}), ch=>ch.charCodeAt(0))],{type:'application/pdf'})}
-export async function electronicSheetProviderTask(payload){state.operations.push({kind:'shop-'+payload.operation});const id=state.selectedShopTask;if(payload.operation==='query'||payload.operation==='refresh')return getExpressTask(id);if(payload.operation==='reprint')return reprintExpressTask(id);if(payload.operation==='cancel')return cancelExpressTask(id,payload.reason);throw new Error('预览只提供既有任务，不创建运单')}
+export async function electronicSheetProviderTask(payload){state.operations.push({kind:'shop-'+payload.operation,freight_payment:payload.freight_payment});const id=state.selectedShopTask;if(id>=106){await wait();if(payload.operation==='query')return {data:{express_company_id:1}};if(payload.operation==='create'){window.qaNotice('已核对模拟请求：'+payload.freight_payment+'，未请求顺丰、未产生真实运单');return {data:{express_company_id:1}}}}if(payload.operation==='query'||payload.operation==='refresh')return getExpressTask(id);if(payload.operation==='reprint')return reprintExpressTask(id);if(payload.operation==='cancel')return cancelExpressTask(id,payload.reason);throw new Error('预览不创建真实运单')}
 export async function electronicSheetProviderPdf(task){return downloadExpressTaskPdf(task.task_id||task.id)}
 `
 async function main() {
@@ -57,8 +64,8 @@ h('nav',{},['waybill','pickup','tasks','shop'].map((name,i)=>h('button',{'data-t
 h('div',{class:'qa-tools'},[h('button',{onClick:()=>{window.qa.failSave=true;message.value='下一次保存将模拟失败'}},'模拟下次保存失败'),h('button',{onClick:()=>{window.qa.failConfigLoad=true;revision.value++;}},'模拟读取失败'),h('button',{onClick:()=>{window.qa.failDownload=true;message.value='下一次下载将模拟过期'}},'模拟下次 PDF 过期'),message.value?h('span',message.value):null]),
 tab.value==='tasks'?h(Tasks,{key:revision.value}):tab.value==='shop'?h('section',{class:'qa-shop'},[
 h('h2','模拟商城物流发货：仅展示真实面单面板'),
-h('div',{class:'qa-tools'},[h('label','选择包裹场景：'),h('select',{value:window.qa.selectedShopTask,onChange:event=>{window.qa.selectedShopTask=Number(event.target.value);revision.value++;shopTask.value={}}},[h('option',{value:101},'生产模拟：PDF 就绪'),h('option',{value:102},'生产模拟：取号待核实'),h('option',{value:103},'沙箱模拟：PDF 就绪'),h('option',{value:104},'生产模拟：PDF 过期'),h('option',{value:105},'生产模拟：取消待核实')])]),
-h(ShopPanel,{key:revision.value,orderId:window.qa.selectedShopTask,goodsIds:[1],provider,onTask:value=>shopTask.value=value}),
+h('div',{class:'qa-tools'},[h('label','选择包裹场景：'),h('select',{value:window.qa.selectedShopTask,onChange:event=>{window.qa.selectedShopTask=Number(event.target.value);revision.value++;shopTask.value={}}},[h('option',{value:101},'生产模拟：PDF 就绪'),h('option',{value:102},'生产模拟：取号待核实'),h('option',{value:103},'沙箱模拟：PDF 就绪'),h('option',{value:104},'生产模拟：PDF 过期'),h('option',{value:105},'生产模拟：取消待核实'),h('option',{value:106},'新包裹：已配置月结账号'),h('option',{value:107},'新包裹：未配置月结账号')])]),
+h(ShopPanel,{key:revision.value,orderId:window.qa.selectedShopTask,goodsIds:[1],provider:{...provider,freight_payment:{default:'receiver',sender_monthly_card_ready:window.qa.selectedShopTask!==107,sender_monthly_card_tail:window.qa.selectedShopTask!==107?'4567':'',sender_unavailable_reason:'未配置本站顺丰月结账号，请先到账号与打印配置填写；也可继续使用到付'}},onTask:value=>shopTask.value=value}),
 h('button',{class:'qa-primary',disabled:!shopTask.value.task_id||!providerTaskCanConfirm(shopTask.value),onClick:()=>message.value='仅模拟：没有调用真实确认发货接口'},'已交件，确认发货（仅模拟）'),
 h('p',{class:'qa-footnote'},'生产任务仍为本地假数据。沙箱任务必须禁用确认发货；按钮状态调用实际商城同一判断函数。')
 ]):h(SfConfig,{scene:tab.value,key:tab.value+revision.value})

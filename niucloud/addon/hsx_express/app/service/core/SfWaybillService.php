@@ -49,7 +49,10 @@ final class SfWaybillService
 
     private function create(int $siteId, array $payload): array
     {
+        $payment = $payload['freight_payment'] ?? 'receiver';
+        if (!in_array($payment, ['receiver', 'sender'], true)) throw new CommonException('请选择到付或寄方付，未申请运单');
         $payload = WaybillProtocol::normalizePayload($payload);
+        $payload['freight_payment'] = $payment;
         return ($this->lockRunner)($siteId, self::lockKey($payload + ['business_order_id' => $payload['order_id']]), function () use ($siteId, $payload) {
             $existing = $this->repository->findBusiness($siteId, $payload['business_type'], $payload['business_id']);
             if ($existing && !in_array($existing['state'], ['failed', 'cancelled'], true)) {
@@ -61,6 +64,7 @@ final class SfWaybillService
             }
             $config = ($this->configLoader)($siteId);
             if (empty($config['enabled'])) throw new CommonException('本站顺丰电子面单尚未启用，请完成独立面单配置');
+            $config = SfConfigService::withWaybillPayment($config, $payload['freight_payment']);
             $check = SfConfigService::readiness($config, 'waybill');
             if (empty($check['ready'])) throw new CommonException('顺丰电子面单配置未就绪，请检查账号、产品、月结与 PDF 模板配置');
             $taskNo = 'SF' . date('YmdHis') . bin2hex(random_bytes(8));
@@ -71,7 +75,9 @@ final class SfWaybillService
                 'site_id' => $siteId, 'task_no' => $taskNo, 'business_type' => $payload['business_type'], 'business_id' => $payload['business_id'],
                 'attempt' => (int)($existing['attempt'] ?? 0) + 1, 'business_order_id' => $payload['order_id'],
                 'business_refs_json' => json_encode(['order_id' => $payload['order_id'], 'order_goods_ids' => $payload['order_goods_ids'],
-                    'order_no' => $payload['business_no'], 'environment' => $config['environment'] ?? 'sandbox'], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+                    'order_no' => $payload['business_no'], 'environment' => $config['environment'] ?? 'sandbox',
+                    'freight_payment' => $payload['freight_payment'],
+                    'monthly_card_tail' => $payload['freight_payment'] === 'sender' ? substr($config['monthly_card'], -4) : ''], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
                 'payload_hash' => hash('sha256', json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)),
                 'provider' => 'sf_direct', 'carrier' => 'shunfeng', 'exp_type' => (string)($config['product_code'] ?? ''), 'print_type' => 'PDF',
                 'state' => 'creating', 'snapshot_cipher' => self::encode($snapshot), 'logs_json' => '[]', 'label' => '',
@@ -264,6 +270,8 @@ final class SfWaybillService
             'exp_type_name' => ['1' => '顺丰特快', '2' => '顺丰标快'][(string)($task['exp_type'] ?? '')] ?? '顺丰产品（以原单为准）',
             'carrier_mapping' => ['field' => 'express_no', 'code' => 'SF'], 'state' => $state, 'state_name' => $names[$state] ?? '顺丰状态待核实',
             'business_refs' => $refs, 'business_no' => (string)($refs['order_no'] ?? ''), 'environment' => $environment,
+            'freight_payment' => $refs['freight_payment'] ?? '', 'monthly_card_tail' => $refs['monthly_card_tail'] ?? '',
+            'freight_payment_label' => ['receiver' => '到付 · 收件人付运费', 'sender' => '寄方付 · 本站月结'][$refs['freight_payment'] ?? ''] ?? '原单付款方式未记录，请以顺丰面单为准',
             'can_confirm_delivery' => $valid && $environment === 'production', 'success' => $valid || $state === 'cancelled',
             'label' => '', 'labels' => [], 'label_state' => $pdf['ready'] ? 'ready' : ($pdf['expires_at'] ? 'expired' : 'unavailable'),
             'pdf_expires_at' => $pdf['expires_at'], 'can_download' => $valid && $pdf['ready'],

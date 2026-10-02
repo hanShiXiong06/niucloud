@@ -4,10 +4,13 @@ declare(strict_types=1);
 /** Real pickup projection/manual/refresh service with memory model, gateway and notification boundaries. */
 namespace { if (PHP_SAPI !== 'cli') { http_response_code(404); exit; } }
 namespace core\exception { class CommonException extends \RuntimeException {} }
+namespace core\base { class BaseCoreService {} }
 namespace pickup_projection_test {
     final class Store {
         public static array $orders = [], $records = [], $notifications = [], $calls = [], $locks = [], $writes = [];
         public static string $outcome = 'ok';
+        public static bool $verifyFlow = false, $failReturn = false;
+        public static int $lockDepth = 0;
     }
     class Model {
         protected array $data;
@@ -24,6 +27,7 @@ namespace pickup_projection_test {
         }
         public function refresh(): self { $this->data = Store::${static::$table}[$this->data['id']]; return $this; }
         public function toArray(): array { return $this->data; }
+        public function isEmpty(): bool { return empty($this->data); }
     }
     final class Query {
         private string $class, $table;
@@ -31,6 +35,8 @@ namespace pickup_projection_test {
         public function __construct(string $class, string $table) { $this->class = $class; $this->table = $table; }
         public function where($key, $value): self { $this->conditions[$key] = $value; return $this; }
         public function order(string $value): self { return $this; }
+        public function findOrEmpty(): Model { return $this->find() ?? new $this->class([]); }
+        public function update(array $data): int { $row = $this->find(); if (!$row) return 0; $row->save($data); return 1; }
         public function find(?int $id = null): ?Model {
             foreach (array_reverse(Store::${$this->table}, true) as $row) {
                 if ($id !== null && $row['id'] !== $id) continue;
@@ -54,12 +60,26 @@ namespace addon\hsx_recycle\app\service\core\express {
     class ExpressOperationLock {
         public static function run(int $site, string $key, callable $run) {
             \pickup_projection_test\Store::$locks[] = [$site, $key];
-            return $run();
+            ++\pickup_projection_test\Store::$lockDepth;
+            try { return $run(); } finally { --\pickup_projection_test\Store::$lockDepth; }
         }
     }
 }
 namespace addon\hsx_recycle\app\service\core {
     class ExpressOrderService {
+        public function cancelOrInterceptOrder(int $site, array $params): bool {
+            if (\pickup_projection_test\Store::$verifyFlow) {
+                \same(false, \think\facade\Db::$active, '真实流程提交后才请求快递取消');
+                \same(9, \pickup_projection_test\Store::$orders[5]['status'], '请求快递时业务已取消');
+                \same(true, \pickup_projection_test\Store::$lockDepth > 0, '持有原预约锁直至渠道处理完毕');
+            }
+            \pickup_projection_test\Store::$calls[] = ['cancel', $site, $params];
+            if (\pickup_projection_test\Store::$outcome === 'error') throw new \RuntimeException('secret=DO_NOT_RETURN timeout');
+            $record = \addon\hsx_recycle\app\model\express\ExpressOrderRecord::where('site_id', $site)->where('third_order_no', $params['third_order_no'])->find();
+            (new \addon\hsx_recycle\app\service\core\express\RecyclePickupService())->applyResult($record,
+                ['booking_state' => 'cancelled', 'cancellation' => ['state' => 'confirmed']]);
+            return true;
+        }
         public function getOrderDetail(int $site, array $params): array {
             \pickup_projection_test\Store::$calls[] = [$site, $params];
             if (\pickup_projection_test\Store::$outcome === 'error') throw new \RuntimeException('secret=DO_NOT_RETURN timeout');
@@ -71,17 +91,53 @@ namespace addon\hsx_recycle\app\service\core {
     }
 }
 namespace addon\hsx_recycle\app\service\core\recycle_order {
+    class CoreRecycleOrderStatusService {
+        public function transition(int $id, int $status, array $data): void { \pickup_projection_test\Store::$orders[$id]['status'] = $status; }
+    }
+    class CoreRecycleOrderCancelReturnService {
+        public function sync(...$args): void {
+            if (\pickup_projection_test\Store::$failReturn) throw new \core\exception\CommonException('模拟取消订单事务失败');
+        }
+    }
     class CoreRecyclePickupNotifyService {
         public function notify(int $site, int $id, array $pickup): void { \pickup_projection_test\Store::$notifications[] = [$site, $id, $pickup]; }
     }
 }
-namespace think\facade { class Log { public static function warning(...$args): void {} } }
+namespace addon\hsx_recycle\app\dict\order {
+    class RecycleOrderApiFlowDict {
+        public static function getFlowConfig(int $status): array {
+            return ['status_name' => '测试待签收', 'actions' => $status === 1 ? ['cancel'] : [],
+                'transitions' => ['cancel' => ['to_status' => 9, 'handler' => 'CancelHandler', 'require_data' => ['reason']]]];
+        }
+    }
+}
+namespace think\facade {
+    class Log { public static function warning(...$args): void {} public static function error(...$args): void {} public static function info(...$args): void {} }
+    class Db {
+        public static bool $active = false;
+        private static array $snapshot = [];
+        public static function startTrans(): void {
+            self::$snapshot = [\pickup_projection_test\Store::$orders, \pickup_projection_test\Store::$records];
+            self::$active = true;
+        }
+        public static function commit(): void { self::$active = false; }
+        public static function rollback(): void {
+            if (self::$active) [\pickup_projection_test\Store::$orders, \pickup_projection_test\Store::$records] = self::$snapshot;
+            self::$active = false;
+        }
+    }
+}
 namespace {
     use pickup_projection_test\Store;
     use addon\hsx_recycle\app\service\core\express\RecyclePickupService;
     use addon\hsx_recycle\app\model\express\ExpressOrderRecord;
     require dirname(__DIR__) . '/app/service/core/express/PickupState.php';
     require dirname(__DIR__) . '/app/service/core/express/RecyclePickupService.php';
+    require dirname(__DIR__) . '/app/service/core/express/RecyclePickupCancellationService.php';
+    require dirname(__DIR__) . '/app/service/core/express/RecycleExpressService.php';
+    require dirname(__DIR__) . '/app/service/core/recycle_order/handler/BaseFlowHandler.php';
+    require dirname(__DIR__) . '/app/service/core/recycle_order/handler/CancelHandler.php';
+    require dirname(__DIR__) . '/app/service/core/recycle_order/CoreRecycleOrderFlowService.php';
     $checks = 0;
     function same($expected, $actual, string $label): void {
         if ($expected !== $actual) throw new \RuntimeException('FAIL ' . $label . ': ' . json_encode([$expected, $actual], JSON_UNESCAPED_UNICODE));
@@ -181,5 +237,80 @@ namespace {
     foreach (Store::$writes as [$table, $id, $data]) if ($table === 'orders') {
         same([], array_intersect(array_keys($data), ['status', 'pay_status', 'total_price']), 'projection never writes recycle/payment fields');
     }
-    echo "PASS {$checks} projection checks (real service, memory models/gateway/notifications; no DB/network)\n";
+    // 真实回收取消处理器：状态 0 / 无运单号不能漏取消，且外部调用在提交阶段之后。
+    $cancellation = new \addon\hsx_recycle\app\service\core\express\RecyclePickupCancellationService();
+    $handler = new \addon\hsx_recycle\app\service\core\recycle_order\handler\CancelHandler();
+    foreach (['accepted', 'unknown', 'submitting', 'assigned'] as $state) {
+        $service = fixture($state, ['provider' => 'sf_direct', 'provider_order_id' => 'SF_ORIGINAL']);
+        Store::$records[11]['delivery_id'] = '';
+        $result = $handler->handle(Store::$orders[5], ['reason' => '本地测试取消'], ['operator_id' => 7]);
+        same('pending', $result['data']['pickup_cancellation']['state'], $state . ' 创建取消意图');
+        same([], Store::$calls, $state . ' 事务内不发送外部取消');
+        same('pending', Store::$records[11]['api_response']['cancellation']['state'], $state . ' 后台可查取消意图');
+        Store::$orders[5]['status'] = 9; // 模拟流程引擎提交回收取消，以下才运行提交后动作。
+        $result = $cancellation->complete(1, 5);
+        same('confirmed', $result['state'], $state . ' 通过原预约完成取消');
+        same([['cancel', 1, ['third_order_no' => 'recycle_1_5']]], Store::$calls, $state . ' 使用原预约编号而不是运单号');
+        same('回收订单和取件预约均已取消，无需寄件。', $service->view(Store::$orders[5])['message'], $state . ' 不再引导已取消客户寄件');
+    }
+    $service = fixture('accepted');
+    $handler->handle(Store::$orders[5], ['reason' => '取消'], []);
+    Store::$orders[5]['status'] = 9;
+    Store::$outcome = 'error';
+    $result = $cancellation->complete(1, 5);
+    same('unknown', $result['state'], '取消超时不报确定成功');
+    $view = $service->view(Store::$orders[5]);
+    same('取件取消待核实', $view['title'], '客户详情显示取消异常');
+    same(false, str_contains(json_encode($view), 'DO_NOT_RETURN'), '异常不泄漏上游原始信息');
+    same(9, Store::$orders[5]['status'], '取消快递失败不撤销已提交的回收取消');
+    same(false, $view['can_manual'], '未知取消结果不开放自行寄件');
+    foreach (['picked_up', 'in_transit', 'delivered'] as $state) {
+        fixture($state);
+        $result = $handler->handle(Store::$orders[5], ['reason' => '取消'], []);
+        same('manual_review', $result['data']['pickup_cancellation']['state'], $state . ' 提醒联系快递拦截/退回');
+        $cancellation->complete(1, 5);
+        same([], Store::$calls, $state . ' 不误取消已履约包裹');
+    }
+    foreach (['cancelled', 'failed'] as $state) {
+        fixture($state);
+        $handler->handle(Store::$orders[5], ['reason' => '取消'], []);
+        $cancellation->complete(1, 5);
+        same([], Store::$calls, $state . ' 不重复联系快递');
+    }
+    fixture('accepted'); Store::$orders[5]['delivery_platform'] = 'manual';
+    same('not_required', $cancellation->prepare(Store::$orders[5])['state'], '自行寄件不冒充平台预约取消');
+    same([], Store::$calls, '自行寄件不调用取消');
+    fixture('accepted'); Store::$records = []; Store::$orders[5]['delivery_order_id'] = 'ORPHAN';
+    same('manual_review', $cancellation->prepare(Store::$orders[5])['state'], '有预约编号但缺原记录明确留人工核实');
+    same([], Store::$calls, '缺失原记录不切换默认服务商盲目取消');
+    $flow = new \addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderFlowService();
+    fixture('accepted'); Store::$verifyFlow = true;
+    $result = $flow->execute(5, 'cancel', ['reason' => '测试取消'], 'api', ['site_id' => 1]);
+    same(true, $result['success'], '真实流程引擎执行取消成功');
+    same('confirmed', $result['data']['data']['pickup_cancellation']['state'], '渠道取消结果合并回流程响应');
+    same(0, Store::$lockDepth, '成功释放预约锁');
+    fixture('accepted'); Store::$failReturn = true;
+    blocks(fn() => $flow->execute(5, 'cancel', ['reason' => '测试取消'], 'api', ['site_id' => 1]), '提交前失败正确回滚');
+    same(1, Store::$orders[5]['status'], '事务失败保留原回收状态');
+    same(false, isset(Store::$records[11]['api_response']['cancellation']), '事务失败不残留取消意图');
+    same([], Store::$calls, '事务失败绝不先取消外部预约');
+    same(0, Store::$lockDepth, '失败释放预约锁');
+    Store::$failReturn = false;
+    fixture('accepted'); Store::$outcome = 'error';
+    $result = $flow->execute(5, 'cancel', ['reason' => '测试取消'], 'api', ['site_id' => 1]);
+    same(true, $result['success'], '渠道超时仍明确业务已取消');
+    same('unknown', $result['data']['data']['pickup_cancellation']['state'], '渠道超时不冒充取消成功');
+    same(9, Store::$orders[5]['status'], '渠道超时不回滚已经提交的业务状态');
+    fixture('accepted');
+    blocks(fn() => $flow->execute(5, 'cancel', ['reason' => '测试取消'], 'api', ['site_id' => 2]), '跨站取消被流程阻断');
+    same([], Store::$calls, '跨站取消不联系服务商');
+    blocks(fn() => $flow->execute(5, 'cancel', [], 'api', ['site_id' => 1]), '缺少取消理由不执行');
+    same([], Store::$calls, '业务校验不通过不联系服务商');
+    foreach ([8, 9, -1] as $closedStatus) {
+        fixture('accepted'); Store::$orders[5]['status'] = $closedStatus;
+        blocks(fn() => (new \addon\hsx_recycle\app\service\core\express\RecycleExpressService())->createOrder(1, 5, []), '已取消/关闭订单不再叫件 ' . $closedStatus);
+        same([[1, 'recycle_1_5']], Store::$locks, '叫件与取消按原单共用锁');
+        same([], Store::$calls, '关闭闸门先于任何渠道请求');
+    }
+    echo "PASS {$checks} projection/cancellation checks (real service, memory models/gateway/notifications; no DB/network)\n";
 }

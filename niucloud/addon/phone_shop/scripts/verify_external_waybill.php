@@ -113,6 +113,13 @@ namespace {
     check(array_column(Provider::$calls, 1) === ['lock', 'query', 'create'], 'Exactly one selected provider, locked reread and query before create');
     check(Provider::$calls[2][2]['order_goods_ids'] === [9, 8], 'Task preserves goods ownership references');
     check(Provider::$calls[2][0] === 100005, 'Site isolation passes through handler');
+    check(Provider::$calls[2][2]['freight_payment'] === 'receiver', 'Omitted freight payment defaults to receiver');
+    Provider::$calls = []; Provider::$task = [];
+    $service->execute(100005, $params + ['freight_payment' => 'sender']);
+    check(Provider::$calls[2][2]['freight_payment'] === 'sender', 'Per-package payment reaches provider without client account credentials');
+    Provider::$task = [];
+    $empty = $service->execute(100005, array_replace($params, ['operation' => 'query']));
+    check($empty['express_company_id'] === 3 && empty($empty['task_id']), 'Mapped courier preselected without creating a task');
     rejects(fn() => $service->execute(100024, $params), '不属于当前站点');
     rejects(fn() => $service->execute(100005, array_replace($params, ['order_goods_ids' => [99]])), '不属于当前订单');
     rejects(fn() => $service->execute(100005, array_replace($params, ['provider_key' => 'other'])), '设置已变化');

@@ -12,7 +12,7 @@ function compile(file) {
     return script.content.replace('export default', 'const __component =')+'\n'+template.code+'\n__component.render=render;__component.__scopeId='+JSON.stringify('data-v-'+id)+';export default __component;\nconst style=document.createElement("style");style.textContent='+JSON.stringify(styles)+';document.head.appendChild(style);'
 }
 async function main() {
-    for (const file of ['views/order/list.vue','views/order/detail.vue','views/order/components/order-detail.vue','views/order/components/order-device-identity.vue','views/order/components/order-return-guide.vue','views/order/components/order-offline-batch.vue','views/order/components/delivery-action.vue']) compile(path.join(base,file))
+    for (const file of ['views/order/config.vue','views/order/list.vue','views/order/detail.vue','views/order/components/order-detail.vue','views/order/components/order-device-identity.vue','views/order/components/order-return-guide.vue','views/order/components/order-offline-batch.vue','views/order/components/delivery-action.vue']) compile(path.join(base,file))
     compile(path.join(root,'niucloud/addon/hsx_erp/admin/views/erp/sale_return/list.vue'))
     fs.mkdirSync(out,{recursive:true})
     const bootstrap = `import {createApp,h,reactive} from 'vue';import ElementPlus from 'element-plus';import 'element-plus/dist/index.css';
@@ -76,7 +76,7 @@ async function main() {
         await page.goto(url)
         await page.getByText('357465822199501',{exact:true}).waitFor();assert.ok(await page.getByText('TESTSN001',{exact:true}).isVisible())
         const receive=page.getByRole('button',{name:'确认设备已收回',exact:true})
-        await receive.click();await page.getByRole('button',{name:'尚未收回',exact:true}).click();assert.equal(await page.evaluate(()=>testState.posts.length),0)
+        await receive.click();assert.ok(await page.getByText(/确认后恢复一台库存并自动上架/).isVisible());await page.getByRole('button',{name:'尚未收回',exact:true}).click();assert.equal(await page.evaluate(()=>testState.posts.length),0)
         await page.evaluate(()=>testState.fail=true);await receive.click();await page.getByRole('button',{name:'已核对并收回',exact:true}).click()
         await page.getByText('ERP退回尚未同步成功，请核对后重试',{exact:true}).waitFor();assert.equal(await receive.isDisabled(),false)
         await receive.click();await page.getByRole('button',{name:'已核对并收回',exact:true}).click();await page.waitForFunction(()=>testState.posts.length===2)
@@ -89,6 +89,7 @@ async function main() {
         assert.ok(await submit.isDisabled());assert.equal(await page.evaluate(()=>testState.returnPosts.length),0)
         await page.getByRole('button',{name:'重新核对原账',exact:true}).click()
         await page.getByText('商城原生测试手机',{exact:true}).waitFor()
+        assert.ok(await page.getByText('确认收回后自动恢复上架，请先核对实物；不会自动退款',{exact:true}).isVisible())
         assert.ok(await page.getByText(/原业务员：原业务员/).isVisible())
         assert.ok(await submit.isDisabled(),'未填原因、未确认实物不能提交')
         await page.getByPlaceholder('例如：客户未售出退回，已核对原设备').fill('客户未售出，已收回原机')
@@ -132,7 +133,7 @@ async function main() {
         await page.getByText(/成功 2 笔 · 未成功 0 笔/).waitFor()
         assert.deepEqual(await page.evaluate(()=>testState.batchPosts[1].items.map(r=>r.order_id)),[2])
         assert.deepEqual(errors,[])
-        console.log('PASS: 8 page/components plus shared Drawer/Notice compiled; IMEI, original staff, ERP failure/retry, native-item selection, receipt guard, stale plan, submit lock, refresh, batch partial success/retry; 1280/960/640/390 layout; no runtime errors.')
+        console.log('PASS: 9 page/components plus shared Drawer/Notice compiled; IMEI, original staff, ERP failure/retry, native-item selection, receipt guard, auto-relist notice, stale plan, submit lock, refresh, batch partial success/retry; 1280/960/640/390 layout; no runtime errors.')
     } finally {if(browser)await browser.close();await new Promise(resolve=>server.close(resolve))}
 }
 main().catch(e=>{console.error(e);process.exitCode=1})

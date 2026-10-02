@@ -36,6 +36,7 @@ return [
 				},
 				{
 					"path": "pages/order/order",
+					"layout": false,
 					"style": {
 						"navigationBarTitleText": "立即下单",
 						 // #ifndef H5
@@ -46,6 +47,7 @@ return [
 				},
 				{
 					"path": "pages/order/list",
+					"layout": false,
 					"style": {
 						"navigationBarTitleText": "订单列表",
 						 // #ifndef H5
@@ -56,6 +58,7 @@ return [
 				},
 				{
 					"path": "pages/order/detail",
+					"layout": false,
 					"style": {
 						"navigationBarTitleText": "订单详情",
 						 // #ifndef H5
@@ -66,6 +69,7 @@ return [
 				},
 				{
 					"path": "pages/payment/index",
+					"layout": false,
 					"style": {
 						"navigationBarTitleText": "收款管理",
 						 // #ifndef H5
@@ -85,6 +89,7 @@ return [
                     "needLogin": true
                 },{
                     "path": "pages/return_order/detail",
+                    "layout": false,
                     "style": {
                         "navigationBarTitleText": "退货订单详情",
 						 // #ifndef H5

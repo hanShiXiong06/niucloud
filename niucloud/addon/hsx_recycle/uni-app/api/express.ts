@@ -39,8 +39,8 @@ export function getExpressProviders() {
  * 检查平台快递是否启用
  * GET /api/hsx_recycle/express/check
  */
-export function checkExpressEnabled() {
-  return request.get("recycle/express/check");
+export function checkExpressEnabled(pickupTime = '') {
+  return request.get("recycle/express/check", { pickup_time: pickupTime });
 }
 
 /**
@@ -94,6 +94,9 @@ export interface ExpressCheckResult {
   pickup_time_supported?: boolean;
   pickup_time?: string;
   pickup_time_text?: string;
+  pickup_time_changed?: boolean;
+  pickup_time_options?: import('../types/order').PickupTimeDay[];
+  pickup_server_time?: number;
   unavailable_reason?: string;
   payment_tips?: string;
   provider: string;

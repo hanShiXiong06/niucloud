@@ -1,6 +1,7 @@
 <template>
     <HsxPage title="运单与打印记录" subtitle="取号、打印、取消分别核实。这里只管理快递任务，不会自动关闭订单或退款。" class="express-tasks">
         <template #extra><el-button @click="router.push('/hsx_express/config')">接入配置</el-button><el-button :loading="loading" @click="load">刷新</el-button></template>
+        <div v-if="pickupRecordsPath" class="pickup-entry"><span>这里是电子面单。回收上门取件的预约、取消结果请到取件记录核实。</span><el-button type="primary" plain @click="router.push(pickupRecordsPath)">上门取件记录</el-button></div>
         <HsxNotice type="warning" title="结果待核实的任务，请勿重复取号" description="接口超时不代表失败。先核对原渠道的业务单和运单，确认结果后再处理；不要切换服务商重下。打印失败应处理原单，不重新生成运单。" />
         <div class="surface">
             <el-form class="search" @submit.prevent="search">
@@ -48,6 +49,8 @@ import { canCancel, canRecover, canReprint, displayTime, labelLinks, operationLa
 import { canDownloadSfPdf, isSandboxTask, isSfTask, validatedPdf } from '../../utils/sf'
 
 const router = useRouter()
+// 仅在本站已安装回收插件且拥有相应菜单时显示，不强依赖另一个插件的组件/API。
+const pickupRecordsPath = computed(() => router.getRoutes().find(route => route.path.endsWith('/express/order_record'))?.path || '')
 const filters = reactive({ keyword: '', state: '', page: 1, limit: 15 })
 const loading = ref(false), error = ref(''), rows = ref<any[]>([]), total = ref(0), actingId = ref(0)
 const detailVisible = ref(false), detailLoading = ref(false), detailError = ref(''), detail = ref<any>(null)
@@ -148,6 +151,7 @@ onMounted(load)
 </script>
 
 <style scoped lang="scss">
+.pickup-entry{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 16px;margin-bottom:14px;border:1px solid #dbeafe;border-radius:8px;background:#f8fbff;font-size:13px;color:#475569}
 .pdf-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.pdf-actions .el-button + .el-button{margin-left:0}
 .express-tasks { color: #1f2937; }.surface { margin-top: 16px; padding: 18px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; }.search { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }.search > .el-input { width: 290px; }.search > .el-select { width: 190px; }.search .el-button + .el-button { margin-left: 0; }.muted { margin-top: 5px; color: #64748b; font-size: 12px; line-height: 1.65; }.subtle { margin-top: 4px; color: #94a3b8; font-size: 11px; overflow-wrap: anywhere; }.progress,.table-actions { display: flex; flex-wrap: wrap; gap: 8px; }.table-actions .el-button + .el-button { margin-left: 0; }.message { margin: 7px 0 0; color: #64748b; font-size: 12px; line-height: 1.6; }.time { white-space: nowrap; font-size: 12px; }.pagination { margin-top: 18px; overflow-x: auto; }.details { margin: 18px 0; }.label-files { padding: 14px; margin-bottom: 16px; border: 1px solid #dce2eb; border-radius: 8px; }.label-files h3 { margin: 0; font-size: 14px; }.file-link { display: inline-flex; margin: 10px 16px 0 0; color: var(--el-color-primary); font-size: 13px; }.drawer-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0; }.drawer-actions .el-button + .el-button { margin-left: 0; }.log { display: grid; grid-template-columns: 150px 1fr; gap: 6px 12px; padding: 12px 0; border-top: 1px solid #edf0f5; font-size: 12px; }.log span { color: #64748b; }.log p { grid-column: 2; margin: 0; color: #475569; line-height: 1.65; overflow-wrap: anywhere; }@media(max-width:640px) { .surface { padding: 12px; }.search > .el-input { width: 100%; }.search > .el-select { flex: 1; min-width: 140px; }.log { grid-template-columns: 1fr; }.log p { grid-column: 1; } }
 </style>

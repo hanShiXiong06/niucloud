@@ -26,10 +26,13 @@ export function useOrderActions() {
               })
 
               if (result.code === 1) {
-                uni.showToast({
-                  title: '订单已取消',
-                  icon: 'success'
-                })
+                uni.hideLoading()
+                const pickup = result.data?.pickup
+                if (pickup?.conflict || ['pending', 'unknown', 'manual_review'].includes(pickup?.cancellation?.state)) {
+                  uni.showModal({ title: '订单已取消，快递需核实', content: pickup.message || '快递取消尚未确认，请联系门店核实；如快递员联系您，请说明不再寄件。', showCancel: false })
+                } else {
+                  uni.showToast({ title: '订单已取消', icon: 'success' })
+                }
                 resolve(true)
               } else {
                 uni.showToast({

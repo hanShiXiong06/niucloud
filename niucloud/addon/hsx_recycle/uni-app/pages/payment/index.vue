@@ -1,4 +1,6 @@
 <template>
+  <page-meta :page-style="popupPageStyle" />
+  <uni-layout name="default">
     <view class="payment-page" :style="themeVars">
         <RecyclePageHeader title="收款管理" subtitle="管理您的收款方式" />
         <!-- 实名认证信息卡片 (已认证状态可折叠) -->
@@ -223,7 +225,7 @@
         </view>
 
         <!-- 简单版添加/编辑弹窗 -->
-        <uni-popup ref="popup" type="center" :mask-click="false">
+        <uni-popup ref="popup" type="center" :mask-click="false" @change="setPopupOpen('payment-editor', $event.show)">
             <view class="popup-content">
                 <view class="popup-header">
                     <view class="popup-title">{{ isEdit ? '编辑收款方式' : '添加收款方式' }}</view>
@@ -313,6 +315,7 @@
             @complete="handleAuthAreaSelectComplete"
         ></area-select>
     </view>
+  </uni-layout>
 </template>
 
 <script setup lang="ts">
@@ -325,6 +328,9 @@ import { img } from '@/utils/common'
 import { uploadImage } from '@/app/api/system'
 import areaSelect from './area-select.vue'
 import { buildRecycleThemeVars } from '../../utils/theme'
+import { useRecyclePopupPage } from '../../hooks/useRecyclePopupScroll'
+
+const { popupPageStyle, setPopupOpen } = useRecyclePopupPage()
 
 const themeVars = computed(() => buildRecycleThemeVars(orderSubmitConfig.value.price_detail_theme?.colors || {}))
 

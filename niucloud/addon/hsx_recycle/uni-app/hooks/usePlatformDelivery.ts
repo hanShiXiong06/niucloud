@@ -1,5 +1,6 @@
 import { ref, onMounted } from 'vue'
-import type { PlatformDeliveryForm, AddressInfo } from '../types/order'
+import type { PlatformDeliveryForm, AddressInfo, PickupTimeDay } from '../types/order'
+import type { ExpressCheckResult } from '../api/express'
 import { useAddressParser } from './useAddressParser'
 import { checkExpressEnabled } from '../api/express'
 import { getAddressList } from '@/app/api/member'
@@ -21,6 +22,7 @@ export function usePlatformDelivery() {
   const paymentTips = ref('')
   const pickupTimeSupported = ref(false)
   const needPickupTime = ref(false)
+  const pickupTimeOptions = ref<PickupTimeDay[]>([])
 
   // 平台快递表单数据
   const platformDeliveryForm = ref<PlatformDeliveryForm>({
@@ -35,29 +37,38 @@ export function usePlatformDelivery() {
     weight: '1.0'
   })
 
+  // 展示与提交复用服务器校验结果；客户已经选定的日期不能被默认时间覆盖。
+  const applyPickupPolicy = (data: Partial<ExpressCheckResult>) => {
+    paymentTips.value = String(data.payment_tips || '').trim()
+    pickupTimeSupported.value = data.pickup_time_supported === true
+    needPickupTime.value = pickupTimeSupported.value && data.pickup_time_required === true
+    pickupTimeOptions.value = pickupTimeSupported.value && Array.isArray(data.pickup_time_options) ? data.pickup_time_options : []
+    platformDeliveryForm.value.pickup_time_required = needPickupTime.value
+    platformDeliveryForm.value.pickup_time = pickupTimeSupported.value ? String(data.pickup_time || '') : ''
+    platformDeliveryForm.value.pickup_time_text = pickupTimeSupported.value ? String(data.pickup_time_text || '') : ''
+    if (data.pickup_time_changed || !pickupTimeSupported.value) platformDeliveryForm.value.pickup_time_selected = false
+    return data.pickup_time_changed === true
+  }
+
   /**
    * 检测当前启用的快递服务商
    */
   const detectProvider = async () => {
     checkingPickup.value = true
     try {
-      const res: any = await checkExpressEnabled()
+      const res: any = await checkExpressEnabled(platformDeliveryForm.value.pickup_time_selected ? platformDeliveryForm.value.pickup_time : '')
       if (res.code !== 1 || !res.data) throw new Error('pickup unavailable')
       const data = res.data
       pickupAvailable.value = Boolean(data.pickup_enabled ?? data.enabled) && data.has_shop_address === true
       carrierName.value = String(data.carrier_name || '')
-      paymentTips.value = String(data.payment_tips || '').trim()
-      pickupTimeSupported.value = data.pickup_time_supported === true
-      needPickupTime.value = pickupTimeSupported.value && data.pickup_time_required === true
-      platformDeliveryForm.value.pickup_time_required = needPickupTime.value
-      platformDeliveryForm.value.pickup_time = pickupTimeSupported.value ? String(data.pickup_time || '') : ''
-      platformDeliveryForm.value.pickup_time_text = pickupTimeSupported.value ? String(data.pickup_time_text || '') : ''
+      applyPickupPolicy(data)
       pickupUnavailableReason.value = pickupAvailable.value ? '' : String(data.unavailable_reason || '门店暂未配置可用的上门取件服务，请联系门店或自行寄件')
     } catch (_) {
       pickupAvailable.value = false
       paymentTips.value = ''
       pickupUnavailableReason.value = '暂时无法确认上门取件服务，请稍后重试或联系门店'
       pickupTimeSupported.value = false
+      pickupTimeOptions.value = []
       needPickupTime.value = false
       platformDeliveryForm.value.pickup_time_required = false
       platformDeliveryForm.value.pickup_time = ''
@@ -166,6 +177,8 @@ export function usePlatformDelivery() {
     carrierName,
     paymentTips,
     pickupTimeSupported,
+    pickupTimeOptions,
+    applyPickupPolicy,
     needPickupTime,
     platformDeliveryForm,
     detectProvider,

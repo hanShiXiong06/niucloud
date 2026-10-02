@@ -4,7 +4,7 @@
         <div class="return-online">
             <strong>线上付款请走原路退款</strong>
             <p>原业务员：{{ order.return_handler_name || '尚未记录' }}。请先核对串号并接收退货。</p>
-            <p>退款成功后，点击设备下方的“确认设备已收回”。收回后恢复待上架，原订单和收付款记录保留。</p>
+            <p>退款成功后，点击设备下方的“确认设备已收回”。确认后自动恢复上架，请先核对实物；原订单和收付款记录保留。</p>
             <p v-if="order.return_context_error">{{ order.return_context_error }}</p>
         </div>
     </el-popover>
@@ -13,7 +13,7 @@
         size="lg" show-footer confirm-text="确认收回并处理原账" :body-loading="loading"
         :confirm-loading="submitting" :confirm-disabled="!canSubmit" @confirm="submit">
         <div class="return-form">
-            <HsxNotice title="收回后恢复待上架，不会自动退款" :closable="false"
+            <HsxNotice title="确认收回后自动恢复上架，请先核对实物；不会自动退款" :closable="false"
                 description="未收款部分冲销原应收；已收款部分生成待退款。财务实际转账后，在 ERP 待付款中选择退款账户确认。全部设备退回后关闭原订单，原成交记录保留。" />
             <div class="return-owner">原业务员：{{ order.return_handler_name || '尚未记录' }}<span> · 本次操作人将作为退回接收人留痕。</span></div>
             <HsxNotice v-if="error" type="error" :title="error" :closable="false">
@@ -89,7 +89,7 @@ async function submit() {
             order_id: props.order.order_id, action: 'return_received', order_goods_ids: selected.value.map(row => row.order_goods_id),
             reason: reason.value.trim(), received: true, preview_token: plan.preview_token
         })
-        ElMessage.success(data.duplicate ? data.message : `设备已收回；冲销未收 ¥${money(data.offset_amount)}，待财务退款 ¥${money(data.refund_amount)}`)
+        ElMessage.success(data.duplicate ? data.message : `设备已收回并恢复上架；冲销未收 ¥${money(data.offset_amount)}，待财务退款 ¥${money(data.refund_amount)}`)
         visible.value = false; emit('complete')
     } catch (e) { error.value = message(e); received.value = false } finally { submitting.value = false }
 }

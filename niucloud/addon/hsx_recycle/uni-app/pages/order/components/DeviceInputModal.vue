@@ -101,7 +101,8 @@
         </view>
       </view>
     </view>
-    <template #footer><OrderUiButton block @click="handleClose">取消</OrderUiButton><OrderUiButton block variant="primary" @click="handleConfirm">添加设备</OrderUiButton></template>
+    <template #secondary><OrderUiButton block @click="handleClose">取消</OrderUiButton></template>
+    <template #primary><OrderUiButton block variant="primary" @click="handleConfirm">添加设备</OrderUiButton></template>
   </OrderTaskPopup>
 </template>
 

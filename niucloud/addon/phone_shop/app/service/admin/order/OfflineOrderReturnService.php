@@ -77,7 +77,7 @@ class OfflineOrderReturnService extends BaseAdminService
                 'main_type' => OrderLogDict::STORE, 'main_id' => (int)$this->uid, 'type' => OrderDict::ORDER_REMARK_ACTION,
                 'content' => (string)$this->username . '已核对并收回 ' . count($ids) . ' 台；原因：' . $reason . '；已收款转财务退款，未进行自动转账。',
             ]);
-            return ['message' => '设备已收回并恢复待上架；已收款转财务退款，不会自动转账', 'items' => array_values($returned),
+            return ['message' => '设备已收回并恢复上架；已收款转财务退款，不会自动转账', 'items' => array_values($returned),
                 'offset_amount' => round(array_sum(array_column($returned, 'offset_amount')), 2),
                 'refund_amount' => round(array_sum(array_column($returned, 'refund_amount')), 2)];
         });

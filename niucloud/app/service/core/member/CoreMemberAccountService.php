@@ -17,7 +17,6 @@ use app\model\member\Member;
 use app\model\member\MemberAccountLog;
 use core\base\BaseCoreService;
 use core\exception\CommonException;
-use Exception;
 use think\facade\Db;
 
 /**
@@ -34,36 +33,33 @@ class CoreMemberAccountService extends BaseCoreService
         $member_account_log_model = new MemberAccountLog();
         //账户检测
         Db::startTrans();
-        $member_info = $member_model->where([
-            [ 'member_id', '=', $member_id ],
-            [ 'site_id', '=', $site_id ]
-        ])->field($account_type . ',' . $account_type . "_get" . ', username, mobile, nickname')->lock(true)->find();
-        if (empty($member_info)) {
-            Db::rollback();
-            throw new CommonException('MEMBER_NOT_EXIST');
-        }
-        $account_new_data = round((float) $member_info[ $account_type ] + (float) $account_data, 2);
-
-        if ($account_new_data < 0) {
-            Db::rollback();
-            throw new CommonException('ACCOUNT_INSUFFICIENT');
-        }
-
-        $data = [
-            'site_id' => $site_id,
-            'member_id' => $member_id,
-            'account_type' => $account_type,
-            'account_data' => $account_data,
-            "account_sum" => $account_new_data,
-            'from_type' => $from_type,
-            'create_time' => time(),
-            'nickname' => $member_info[ 'nickname' ],
-            'mobile' => $member_info[ 'mobile' ],
-            'memo' => $memo,
-            'related_id' => $related_id,
-        ];
         try {
+            $member_info = $member_model->where([
+                [ 'member_id', '=', $member_id ],
+                [ 'site_id', '=', $site_id ]
+            ])->field($account_type . ',' . $account_type . "_get" . ', username, mobile, nickname')->lock(true)->find();
+            if (empty($member_info)) {
+                throw new CommonException('MEMBER_NOT_EXIST');
+            }
+            $account_new_data = round((float) $member_info[ $account_type ] + (float) $account_data, 2);
 
+            if ($account_new_data < 0) {
+                throw new CommonException('ACCOUNT_INSUFFICIENT');
+            }
+
+            $data = [
+                'site_id' => $site_id,
+                'member_id' => $member_id,
+                'account_type' => $account_type,
+                'account_data' => $account_data,
+                "account_sum" => $account_new_data,
+                'from_type' => $from_type,
+                'create_time' => time(),
+                'nickname' => $member_info[ 'nickname' ],
+                'mobile' => $member_info[ 'mobile' ],
+                'memo' => $memo,
+                'related_id' => $related_id,
+            ];
             $res = $member_account_log_model->create($data);
             //账户更新
             if ($account_data > 0) {
@@ -95,7 +91,7 @@ class CoreMemberAccountService extends BaseCoreService
             event("MemberAccount", $data);
             Db::commit();
             return $res->id;
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             Db::rollback();
             throw new CommonException($e->getMessage());
         }

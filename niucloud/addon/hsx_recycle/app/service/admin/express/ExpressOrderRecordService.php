@@ -36,6 +36,8 @@ class ExpressOrderRecordService extends BaseAdminService
 
         $order = 'create_at desc';
         $where['site_id'] = $this->site_id;
+        $cancellationReview = ($where['order_status'] ?? '') === 'cancellation_review';
+        if ($cancellationReview) $where['order_status'] = '';
 
         $searchModel = $this->model->withSearch(['site_id', 'keyword', 'order_no', 'third_order_no', 'delivery_id', 'order_status',
                                                   'recycle_order_id', 'recycle_device_id', 'provider_name',
@@ -44,11 +46,18 @@ class ExpressOrderRecordService extends BaseAdminService
             ->order($order)
             ->append(['status_text', 'payment_status_text']);
 
+        if ($cancellationReview) {
+            // 复用原响应 JSON，不新增表字段；过滤在数据库分页之前完成。
+            $searchModel->where('order_status', '<>', 'cancelled')->whereRaw(
+                "JSON_UNQUOTE(JSON_EXTRACT(IF(JSON_VALID(api_response), api_response, '{}'), '$.cancellation.state')) IN ('pending','unknown','manual_review')"
+            );
+        }
+
         $list = $this->pageQuery($searchModel);
         foreach ($list['data'] as &$row) {
             $raw = is_array($row['api_response'] ?? null) ? $row['api_response'] : [];
             $row['pickup'] = array_intersect_key($raw, array_flip(['provider', 'booking_state', 'carrier_name', 'pickup_time',
-                'courier_name', 'courier_phone', 'courier_mobile', 'failure_reason', 'conflict', 'conflict_state', 'reported_freight', 'fee_verification_state', 'manual_review']));
+                'courier_name', 'courier_phone', 'courier_mobile', 'failure_reason', 'conflict', 'conflict_state', 'reported_freight', 'fee_verification_state', 'manual_review', 'cancellation']));
             $row['can_resolve_unbooked'] = $this->canResolveUnbooked($row, $raw);
             unset($row['api_response']);
         }

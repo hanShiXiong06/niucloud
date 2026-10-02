@@ -15,7 +15,6 @@ use addon\phone_shop\app\service\core\goods\CoreGoodsSaleNumService;
 use addon\phone_shop\app\service\core\goods\CoreGoodsStatService;
 use addon\phone_shop\app\service\core\goods\CoreGoodsStockService;
 use addon\phone_shop\app\service\core\order\CoreInvoiceService;
-use addon\phone_shop\app\service\core\order\CoreOrderConfigService;
 use addon\phone_shop\app\service\core\order\CoreOrderLogService;
 use think\facade\Db;
 use think\facade\Log;
@@ -122,25 +121,8 @@ class AfterShopOrderCreate
 
             //消息发送
 
-            //创建定时关闭任务
-            $core_order_config_service = new CoreOrderConfigService();
-            $order_config = $core_order_config_service->orderClose($site_id);
-            $isOfflinePending = (string)($order_data['payment_mode'] ?? 'online') === 'offline_pending';
-            if ($isOfflinePending) {
-                $tradeConfig = $core_order_config_service->getOnlineTradeConfig((int)$site_id);
-                $order_config = [
-                    'is_close' => 1,
-                    'close_length' => (int)($tradeConfig['offline_timeout_minutes'] ?? 20),
-                ];
-            }
-            if ($order_config[ 'is_close' ] == 1) {
-                if ($order_config[ 'close_length' ] > 0) {
-                    ( new Order() )->where([ [ 'order_id', '=', $order_data[ 'order_id' ] ] ])->update([
-                        'timeout' => $data[ 'time' ] + $order_config[ 'close_length' ] * 60
-                    ]);
-//                OrderClose::dispatch(['order_id' => $order_data['order_id'] ], secs: $order_config['close_length'] * 60);
-                }
-            }
+            // 自动关闭时间已在同步创建事务中保存。
+            // 此处不能重写：后置队列可能晚于付款、联系客户暂停锁单或管理员延时。
             //增加统计数据
             CoreStatService::addStat([ 'site_id' => $site_id, 'order_num' => 1 ]);
 

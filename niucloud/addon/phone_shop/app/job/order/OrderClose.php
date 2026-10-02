@@ -34,6 +34,7 @@ class OrderClose extends BaseJob
         $data['close_type'] = OrderDict::AUTO_CLOSE;
         $list = (new Order())->where([
             ['status', '=', OrderDict::WAIT_PAY],
+            ['payment_mode', 'in', ['', 'online', 'offline_pending']],
             ['timeout', '<=', time()],
             ['timeout', '>', 0]
         ])->select();

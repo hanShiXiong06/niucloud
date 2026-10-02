@@ -23,6 +23,23 @@ function run(source, context = {}) {
 }
 async function main() {
   const utils = run(read('utils/pickup.ts'))
+  for (const cancelState of ['pending', 'unknown', 'manual_review', 'confirmed']) {
+    const dialogs = [], cancelToasts = []
+    const actions = run(read('hooks/useOrderActions.ts').replace(/^import .*$/gm, ''), {
+      updateOrderStatus: async () => ({ code: 1, data: { pickup: { state: 'accepted', cancellation: { state: cancelState }, message: '请联系门店核实原预约' } } }),
+      uni: { showLoading() {}, hideLoading() {}, showToast: args => cancelToasts.push(args),
+        showModal: args => { dialogs.push(args); if (args.title === '提示') args.success({ confirm: true }) } }
+    }).useOrderActions()
+    assert.equal(await actions.cancelOrder({ id: 123 }), true)
+    check(`customer cancellation explains carrier result: ${cancelState}`, () => {
+      if (cancelState === 'confirmed') assert.equal(cancelToasts[0].title, '订单已取消')
+      else { assert.equal(cancelToasts.length, 0); assert.equal(dialogs[1].title, '订单已取消，快递需核实') }
+    })
+  }
+  check('pending cancellation cannot unlock manual shipping or imply refreshed success', () => {
+    assert.equal(utils.normalizePickup({ state: 'failed', can_manual: true, cancellation: { state: 'unknown' } }).can_manual, false)
+    assert.ok(utils.pickupRefreshFeedback({ cancellation: { state: 'unknown' }, refresh_result: { status: 'updated' } }).message.includes('取消尚未确认'))
+  })
   const now = new Date('2026-10-02T05:44:54+08:00')
   check('log-time appointment validates as Beijing time', () => assert.equal(utils.validatePickupTime('2026-10-02 09:00-18:00', true, now), ''))
   check('expired appointment does not pass', () => assert.match(utils.validatePickupTime('2026-10-02 05:00-18:00', true, now), /刷新/))
@@ -37,7 +54,8 @@ async function main() {
   let response = { code: 1, data: { pickup_enabled: true, has_shop_address: true, pickup_time_supported: true, pickup_time_required: true,
     pickup_time: '2026-10-02 09:00-18:00', pickup_time_text: '今天（10月02日）09:00-18:00', payment_tips: '运费由商家承担，您无需支付。' } }
   let fail = false
-  const checkExpressEnabled = async () => { if (fail) throw Error('offline'); return response }
+  const policyRequests = []
+  const checkExpressEnabled = async selected => { policyRequests.push(selected); if (fail) throw Error('offline'); return response }
   const hook = run(read('hooks/usePlatformDelivery.ts'), {
     require(name) {
       if (name === 'vue') return { ...vue, onMounted() {} }
@@ -65,13 +83,14 @@ async function main() {
   const promptSource = page.slice(page.indexOf('const shouldContinueWithPlatformPrompt ='), page.indexOf('const canUsePlatformDelivery ='))
   assert.ok(promptSource.length > 500)
   const confirmations = [], toasts = []
-  const form = vue.ref({ pickup_time: 'old', pickup_time_text: 'old' })
+  const form = hook.platformDeliveryForm
+  form.value.pickup_time = 'old'
   fail = false
   const prompt = run(promptSource + '\nexport { shouldContinueWithPlatformPrompt }', {
     currentTab: vue.ref(0), enablePlatformDelivery: vue.ref(true), canUsePlatformDelivery: vue.ref(true),
     orderSubmitConfig: vue.ref({ platform_delivery: { free_shipping_min_count: 1 } }),
-    pickupTimeSupported: vue.ref(false), needPickupTime: vue.ref(false), platformDeliveryForm: form,
-    paymentTips: vue.ref(''), checkExpressEnabled, console: { error() {} },
+    pickupTimeSupported: hook.pickupTimeSupported, needPickupTime: hook.needPickupTime, platformDeliveryForm: form,
+    applyPickupPolicy: hook.applyPickupPolicy, paymentTips: hook.paymentTips, checkExpressEnabled, console: { error() {} },
     uni: { showToast: args => toasts.push(args) },
     showPlatformDeliveryMemoConfirm: async text => { confirmations.push(text); return true }
   }).shouldContinueWithPlatformPrompt
@@ -81,16 +100,35 @@ async function main() {
     assert.ok(confirmations[0].includes(response.data.pickup_time_text))
     assert.ok(confirmations[0].includes(response.data.payment_tips))
   })
-  response = { code: 1, data: { ...response.data, pickup_time: '' } }
+  const chosen = '2026-10-04 13:00-15:00'
+  form.value.pickup_time = chosen
+  form.value.pickup_time_selected = true
+  response = { code: 1, data: { ...response.data, pickup_time: chosen, pickup_time_text: '后天（10月04日）13:00-15:00' } }
+  assert.equal(await prompt(), true)
+  check('chosen future day goes to server preflight and is never silently replaced by default', () => {
+    assert.equal(policyRequests.at(-1), chosen)
+    assert.equal(form.value.pickup_time, chosen)
+    assert.ok(confirmations.at(-1).includes('后天'))
+  })
+  response = { code: 1, data: { ...response.data, pickup_time_changed: true, pickup_time: '2026-10-05 09:00-18:00' } }
+  assert.equal(await prompt(), false)
+  check('expired explicit choice blocks submission and asks customer to reconfirm', () => {
+    assert.equal(confirmations.length, 2)
+    assert.equal(form.value.pickup_time_selected, false)
+    assert.ok(toasts.at(-1).title.includes('原取件时段'))
+  })
+  response = { code: 1, data: { ...response.data, pickup_time_changed: false, pickup_time: '' } }
   assert.equal(await prompt(), false)
   check('missing time never proceeds to order confirmation', () => {
-    assert.equal(confirmations.length, 1)
+    assert.equal(confirmations.length, 2)
     assert.ok(toasts.at(-1).title.includes('取件时段'))
   })
   const section = read('pages/order/components/ExpressInfoSection.vue')
-  check('customer time selection is replaced by the assigned interval', () => {
+  check('customer gets default interval and can open date/slot selector without manual time input', () => {
     assert.ok(!section.includes('mode="date"') && !section.includes('mode="time"'))
     assert.ok(section.includes('pickup_time_text'))
+    assert.ok(section.includes('<PickupTimePicker') && section.includes('pickup_time_selected: true'))
+    assert.ok(section.includes('if (props.checkingPickup) return'))
   })
   const card = read('pages/order/components/PickupStatusCard.vue')
   check('manual waybill form is in the shared closeable popup', () => {

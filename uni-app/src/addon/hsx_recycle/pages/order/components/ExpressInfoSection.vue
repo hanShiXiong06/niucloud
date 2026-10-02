@@ -106,8 +106,11 @@
 
       <view v-if="pickupTimeSupported" class="pickup-time-fields">
         <text class="label">预约上门时段</text>
-        <view class="pickup-time-value">{{ platformDeliveryForm.pickup_time_text || platformDeliveryForm.pickup_time || '正在确认取件时段' }}</view>
-        <text class="pickup-time-note">门店已为您安排预约时段，无需选择。下单后以预约结果和快递员联系为准。</text>
+        <view class="pickup-time-value" @tap="openTimePicker">
+          <text>{{ loadingTimes ? '正在更新可预约时段…' : (platformDeliveryForm.pickup_time_text || platformDeliveryForm.pickup_time || '请选择取件时段') }}</text>
+          <view class="pickup-time-change"><text>{{ loadingTimes ? '' : '更改' }}</text><up-icon name="arrow-right" size="13" color="var(--recycle-text-sub)" /></view>
+        </view>
+        <text class="pickup-time-note">默认最近可预约时段，也可改选明天、后天或大后天。实际上门时间以快递员联系为准。</text>
       </view>
       <text v-else class="pickup-time-note">上门时间由门店与快递员联系确认。</text>
     </view>
@@ -121,13 +124,15 @@
     @update:show="showAddressPopup = $event"
     @select="handleAddressSelect"
   />
+  <PickupTimePicker v-model:show="showTimePicker" :model-value="platformDeliveryForm.pickup_time" :days="pickupTimeOptions" @select="selectPickupTime" />
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import type { PlatformDeliveryForm } from '../../../types/order'
+import type { PlatformDeliveryForm, PickupTimeDay, PickupTimeSlot } from '../../../types/order'
 import AddressSelectPopup from './AddressSelectPopup.vue'
 import DeliveryIcon from './DeliveryIcon.vue'
+import PickupTimePicker from './PickupTimePicker.vue'
 
 interface Props {
   usePlatformDelivery: boolean
@@ -135,6 +140,8 @@ interface Props {
   platformDeliveryForm: PlatformDeliveryForm
   needPickupTime: boolean
   pickupTimeSupported: boolean
+  pickupTimeOptions?: PickupTimeDay[]
+  refreshPickupTimes?: () => Promise<boolean>
   pickupAvailable: boolean
   checkingPickup: boolean
   pickupUnavailableReason: string
@@ -148,11 +155,28 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   orderCount: 1,
   freeShippingMinCount: 1,
-  platformDeliveryName: '门店快递'
+  platformDeliveryName: '门店快递',
+  pickupTimeOptions: () => []
 })
 
 // 地址选择弹窗显示状态
 const showAddressPopup = ref(false)
+const showTimePicker = ref(false)
+const loadingTimes = ref(false)
+const openTimePicker = async () => {
+  if (loadingTimes.value) return
+  loadingTimes.value = true
+  try {
+    if (props.refreshPickupTimes && !(await props.refreshPickupTimes())) {
+      uni.showToast({ title: '暂未取得可预约时段，请稍后重试', icon: 'none' })
+      return
+    }
+    showTimePicker.value = true
+  } finally { loadingTimes.value = false }
+}
+const selectPickupTime = (slot: PickupTimeSlot) => {
+  emit('update:platformDeliveryForm', { ...props.platformDeliveryForm, pickup_time: slot.value, pickup_time_text: slot.text, pickup_time_selected: true })
+}
 
 const emit = defineEmits<{
   'update:usePlatformDelivery': [value: boolean]
@@ -175,6 +199,7 @@ const unavailableText = computed(() => {
 // 首次确定服务可用时自动选中上门取件，客户手动选择后不擅自切回。
 const userChoseMode = ref(false)
 watch(canUsePlatformDelivery, (available) => {
+  if (props.checkingPickup) return // 更新时间不应把客户已经选好的上门取件切换为自行寄件。
   if (!available) emit('update:usePlatformDelivery', false)
   else if (!userChoseMode.value) emit('update:usePlatformDelivery', true)
 }, { immediate: true })
@@ -216,6 +241,7 @@ const handleAddressSelect = (address: any) => {
 .pickup-payment-tip { padding: 14rpx 18rpx; margin-bottom: 18rpx; border-radius: 10rpx; background: var(--recycle-notice-bg); color: var(--recycle-notice-text); font-size: 24rpx; line-height: 1.6; }
 .pickup-time-fields { display: flex; flex-direction: column; gap: 16rpx; margin-top: 18rpx; }
 .pickup-time-value { display: flex; align-items: center; justify-content: space-between; padding: 18rpx; border: 1rpx solid var(--recycle-line); border-radius: 12rpx; font-size: 26rpx; }
+.pickup-time-change { display: flex; align-items: center; flex-shrink: 0; gap: 8rpx; margin-left: 12rpx; color: var(--recycle-text-sub); font-size: 24rpx; }
 .pickup-time-note { display: block; font-size: 23rpx; line-height: 1.6; color: var(--recycle-text-sub); }
 .label {
   font-size: 14px;

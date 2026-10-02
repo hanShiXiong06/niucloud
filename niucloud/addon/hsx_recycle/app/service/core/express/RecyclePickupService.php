@@ -116,7 +116,7 @@ class RecyclePickupService
         $current = self::decode($order->delivery_data ?? '');
         $raw = (array)$record->api_response;
         $incoming = array_intersect_key($raw, array_flip(['booking_state', 'carrier_name', 'carrier_code', 'pickup_time',
-            'courier_name', 'courier_phone', 'courier_mobile', 'conflict', 'conflict_state', 'highest_booking_state', 'requested_at']));
+            'courier_name', 'courier_phone', 'courier_mobile', 'conflict', 'conflict_state', 'highest_booking_state', 'requested_at', 'cancellation']));
         $incoming['record_id'] = (int)$record->id;
         $incoming['attempt_id'] = 'pickup_' . (int)$record->id;
         $incoming['deliveryId'] = (string)$record->delivery_id;
@@ -231,7 +231,7 @@ class RecyclePickupService
 
     private function notify(int $siteId, int $orderId, array $pickup): void
     {
-        if (!empty($pickup['conflict'])) {
+        if (!empty($pickup['conflict']) || in_array($pickup['cancellation']['state'] ?? '', ['pending', 'unknown', 'manual_review'], true)) {
             return; // 状态冲突不能发“预约成功/取消成功”的确定性通知。
         }
         try {

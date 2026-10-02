@@ -4,7 +4,7 @@
             <div class="page-head">
                 <div>
                     <span class="text-page-title">快递运单记录</span>
-                    <div class="page-desc">查看站点内通过回收插件创建的快递运单，按时间、状态、单号和联系人快速筛选。</div>
+                    <div class="page-desc">上门取件预约也在这里；回收订单取消不等于快递已取消，请关注“取消待核实”记录。</div>
                 </div>
                 <div class="head-actions">
                     <el-button type="primary" @click="openCreateDialog">新建运单</el-button>
@@ -154,6 +154,7 @@
                 <el-table-column label="取件安排" min-width="230">
                     <template #default="{ row }">
                         <el-tag :type="statusMeta(bookingState(row)).type">{{ statusMeta(bookingState(row)).label }}</el-tag>
+                        <el-tag v-if="cancelNeedsReview(row)" type="warning" size="small">取消待核实</el-tag>
                         <div v-if="pickupTime(row)" class="muted-text">预约：{{ pickupTime(row) }}</div>
                         <div v-if="pickupData(row).courier_name || courierPhone(row)" class="muted-text">取件员：{{ pickupData(row).courier_name || '已分配' }} {{ courierPhone(row) }}</div>
                         <div v-else-if="['confirmed', 'assigned'].includes(bookingState(row))" class="muted-text">等待快递公司分配取件员</div>
@@ -167,9 +168,9 @@
                     <template #default="{ row }">
                         <el-button link type="primary" @click="handleViewDetail(row)">详情</el-button>
                         <el-button link type="warning" @click="handleUpdateActual(row)">更新费用</el-button>
-                        <el-button v-if="!isKuaidi100(row) && (row.order_no || row.delivery_id)" link type="primary" :loading="operationLoading[row.id] === 'waybill'" @click="handleWaybillPdf(row)">面单</el-button>
+                        <el-button v-if="!isKuaidi100(row) && pickupData(row).provider !== 'sf_direct' && (row.order_no || row.delivery_id)" link type="primary" :loading="operationLoading[row.id] === 'waybill'" @click="handleWaybillPdf(row)">面单</el-button>
                         <el-button v-if="row.delivery_id" link type="primary" @click="openExpressTrack(row)">查物流</el-button>
-                        <el-button v-if="canCancel(row)" link type="danger" :loading="operationLoading[row.id] === 'cancel'" @click="handleCloseOrder(row)">取消</el-button>
+                        <el-button v-if="canCancel(row)" link type="danger" :loading="operationLoading[row.id] === 'cancel'" @click="handleCloseOrder(row)">{{ cancelNeedsReview(row) ? '重试原单取消' : '取消' }}</el-button>
                         <el-button v-if="canIntercept(row)" link type="danger" :loading="operationLoading[row.id] === 'intercept'" @click="handleCloseOrder(row)">拦截</el-button>
                         <el-button v-if="canResolveUnbooked(row)" link type="danger" :loading="operationLoading[row.id] === 'resolve'" @click="handleResolveUnbooked(row)">核实未预约</el-button>
                     </template>
@@ -598,7 +599,8 @@ const statusOptions = [
     { label: '已安排取件员', value: 'assigned', type: 'success' },
     { label: '预约失败', value: 'failed', type: 'danger' },
     { label: '异常待处理', value: 'exception', type: 'danger' },
-    { label: '取消核实中', value: 'cancel_pending', type: 'warning' },
+    { label: '取消待核实', value: 'cancellation_review', type: 'warning' },
+    { label: '渠道取消核实中', value: 'cancel_pending', type: 'warning' },
     { label: '自行寄件', value: 'manual', type: 'info' },
     { label: '已取件', value: 'picked_up', type: 'warning' },
     { label: '待揽收', value: 'pending', type: 'info' },
@@ -619,7 +621,8 @@ const feePending = (row: any): boolean => isKuaidi100(row) && pickupData(row).fe
 const courierPhone = (row: any): string => pickupData(row).courier_mobile || pickupData(row).courier_phone || ''
 const carrierName = (row: any): string => pickupData(row).carrier_name || row?.carrier_name || row?.express_company || '待渠道返回'
 const pickupTime = (row: any): string => pickupData(row).pickup_time || row?.pickup_time || [pickupData(row).pickup_start, pickupData(row).pickup_end].filter(Boolean).join(' 至 ')
-const pickupReason = (row: any): string => pickupData(row).manual_review?.remark || pickupData(row).failure_reason || pickupData(row).resolution_remark || pickupData(row).message || ''
+const cancelNeedsReview = (row: any): boolean => bookingState(row) !== 'cancelled' && ['pending', 'unknown', 'manual_review'].includes(pickupData(row).cancellation?.state)
+const pickupReason = (row: any): string => (cancelNeedsReview(row) ? pickupData(row).cancellation?.message : '') || pickupData(row).manual_review?.remark || pickupData(row).failure_reason || pickupData(row).resolution_remark || pickupData(row).message || ''
 // 以服务端同时核对任务 ID、异常冲突和状态后的结果为准，前端不能自行放宽。
 const canResolveUnbooked = (row: any): boolean => row?.can_resolve_unbooked === true
 
@@ -1201,9 +1204,10 @@ const runShipmentCreate = async () => {
 
 const canOperateClose = (row: any) => !['cancelled', 'delivered', 'manual', 'failed', 'unknown', 'submitting', 'cancel_pending', 'exception'].includes(bookingState(row)) && (row.order_no || row.delivery_id || row.recycle_order_id)
 
-const canCancel = (row: any) => canOperateClose(row) && ['pending', '', 'accepted', 'confirmed', 'assigned'].includes(bookingState(row))
+const canCancel = (row: any) => !pickupData(row).conflict && (canOperateClose(row) && ['pending', '', 'accepted', 'confirmed', 'assigned'].includes(bookingState(row))
+    || pickupData(row).provider === 'sf_direct' && ['unknown', 'submitting', 'cancel_pending'].includes(bookingState(row)) && !!row.third_order_no)
 
-const canIntercept = (row: any) => !isKuaidi100(row) && canOperateClose(row) && !canCancel(row)
+const canIntercept = (row: any) => !isKuaidi100(row) && pickupData(row).provider !== 'sf_direct' && canOperateClose(row) && !canCancel(row)
 
 const buildCancelParams = (row: any, genre: 1 | 3) => {
     const params: Record<string, any> = { genre }
@@ -1234,6 +1238,7 @@ const handleCloseOrder = async (row: any) => {
         await refreshPage()
     } catch (error: any) {
         ElMessage.error(error.message || `${actionName}失败`)
+        await refreshPage()
     } finally {
         operationLoading[row.id] = ''
     }

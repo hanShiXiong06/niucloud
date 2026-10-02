@@ -129,6 +129,8 @@ class ExpressController extends BaseApiController
         $displayName = trim((string)($platformDelivery['display_name'] ?? ''));
         $productName = trim((string)($platformDelivery['product_name'] ?? ''));
         $frontName = $displayName ?: ($productName ?: $providerName);
+        $selection = $this->request->params([['pickup_time', '']]);
+        $selectedTime = is_string($selection['pickup_time']) ? substr($selection['pickup_time'], 0, 40) : '';
 
         return success(array_merge([
             'enabled' => $enabled,
@@ -142,7 +144,7 @@ class ExpressController extends BaseApiController
             'prompt' => $enabled && !empty($shopAddress) && $frontName
                 ? '将使用' . $frontName . '进行平台快递下单，请确认寄件地址准确。'
                 : '',
-        ], $expressService->pickupPolicy($siteId)));
+        ], $expressService->pickupPolicy($siteId, $selectedTime)));
     }
 
     /**

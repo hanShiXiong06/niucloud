@@ -76,12 +76,12 @@ class CoreOrderInventoryService
         }
     }
 
-    /** 一物一码没库存时退出可售；退货先待上架，业务员验机后自行上架。 */
+    /** 已确认实物退回后恢复上架及可售；仅关单或退款不得传入 returned。 */
     public function refreshGoods(int $siteId, int $goodsId, bool $returned): void
     {
         $stock = max(0, (int)GoodsSku::where('site_id', $siteId)->where('goods_id', $goodsId)->sum('stock'));
         $data = ['stock' => $stock, 'update_time' => time()];
-        if ($returned) $data += ['status' => 0, 'sale_status' => 'available'];
+        if ($returned && $stock > 0) $data += ['status' => 1, 'sale_status' => 'available'];
         Goods::where('site_id', $siteId)->where('goods_id', $goodsId)->update($data);
     }
 

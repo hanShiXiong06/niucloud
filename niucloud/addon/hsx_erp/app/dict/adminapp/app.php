@@ -3,7 +3,7 @@ return [
     // key 保留移动端快捷入口标识；menu_key 必须引用 PC 端现有权限，不能混用。
     [
         'name' => '工作台',
-        'key' => 'hsx_erp_dashboard',
+        'key' => 'hsx_erp_workbench',
         'group' => 'hsx_erp',
         'menu_key' => 'hsx_erp_workbench',
         'sort' => 9,
@@ -86,9 +86,9 @@ return [
     ],
     [
         'name' => '成本调整',
-        'key' => 'hsx_erp_cost_adjust',
+        'key' => 'hsx_erp_purchase_adjust_cost',
         'group' => 'hsx_erp',
-        'menu_key' => 'hsx_erp_stock_adjust_cost',
+        'menu_key' => 'hsx_erp_purchase_adjust_cost',
         'sort' => 18,
         'page' => '/addon/hsx_erp/pages/cost_adjust/list',
         'icon' => '/addon/hsx_erp/site-app/icon_08.png'
@@ -96,7 +96,7 @@ return [
     // site-uniapp/src/addon/hsx_erp/pages/serial_trace/list.vue
      [
         'name' => '串号追踪',
-        'key' => 'hsx_erp_serial_trace',
+        'key' => 'hsx_erp_stock_serial_trace',
         'group' => 'hsx_erp',
         'menu_key' => 'hsx_erp_stock_serial_trace',
         'sort' => 19,
@@ -113,7 +113,7 @@ return [
     ],
     [
         'name' => '打印中心',
-        'key' => 'hsx_erp_print',
+        'key' => 'hsx_erp_print_center',
         'group' => 'hsx_erp',
         'menu_key' => 'hsx_erp_print_center',
         'sort' => 20,

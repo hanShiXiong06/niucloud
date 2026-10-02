@@ -173,6 +173,7 @@ namespace addon\hsx_recycle\app\service\core\express {
     }
     final class RecyclePickupService
     {
+        public function syncOrder(\addon\hsx_recycle\app\model\express\ExpressOrderRecord $record): void {}
         public function applyResult(\addon\hsx_recycle\app\model\express\ExpressOrderRecord $record, array $result): void
         {
             // 此边界只保留本地快递记录投影，不触及回收订单/通知。
@@ -320,6 +321,9 @@ namespace {
         try { $service->cancelOrInterceptOrder(1, ['order_no' => $first['orderNo']]); }
         catch (ExpressSubmissionException $e) { same('unknown', $e->outcome(), '渠道未确认取消保持待核实'); }
         same('accepted', record(1, 'same-request')->api_response['booking_state'], '取消超时不能把原预约标成已取消');
+        same('unknown', record(1, 'same-request')->api_response['cancellation']['state'], '取消超时单独持久化核实状态');
+        same('取件取消待核实', \addon\hsx_recycle\app\service\core\express\PickupState::view(record(1, 'same-request')->api_response)['title'], '客户可见取消待核实，不是预约成功');
+        same(true, count(record(1, 'same-request')->status_history) >= 2, '取消请求与异常有历史记录');
         same(false, \addon\hsx_recycle\app\service\core\express\PickupState::view(record(1, 'same-request')->api_response)['can_manual'], '取消未知不能自行寄件');
         $gateway->cancelUnknown = false;
         $cancelCallsBeforeSuccess = count(calls($gateway, 'cancel'));
@@ -329,6 +333,7 @@ namespace {
         same('ORIGINAL_1', $cancel[2]['provider'], '取消不允许请求覆盖已存服务商');
         same(Store::$snapshots[1]['provider_account_fingerprint'], $cancel[2]['provider_account_fingerprint'], '取消使用原账号指纹');
         same('cancelled', record(1, 'same-request')->api_response['booking_state'], '取消结果投影到原记录');
+        same('confirmed', record(1, 'same-request')->api_response['cancellation']['state'], '原单重试成功收敛取消待核实状态');
         $service->cancelOrder(1, $first['orderNo'], 'ATTACKER');
         same($cancelCallsBeforeSuccess + 1, count(calls($gateway, 'cancel')), '已取消订单重复取消不再请求渠道');
 

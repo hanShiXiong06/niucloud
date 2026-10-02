@@ -1,7 +1,9 @@
 <template>
+  <page-meta :page-style="popupPageStyle" />
+  <uni-layout name="default">
   <view class="recycle-order-page" :style="themeVars">
     <RecyclePageHeader title="立即下单" />
-    <view class="delivery-sticky">
+    <view class="delivery-sticky" :style="{ top: `${navbarHeight}px` }">
       <DeliveryModeToggle
         v-model="currentTab"
         :tabs="deliveryTabs"
@@ -59,6 +61,8 @@
         :platform-delivery-form="platformDeliveryForm"
         :need-pickup-time="needPickupTime"
         :pickup-time-supported="pickupTimeSupported"
+        :pickup-time-options="pickupTimeOptions"
+        :refresh-pickup-times="detectProvider"
         :pickup-available="pickupAvailable"
         :checking-pickup="checkingPickup"
         :pickup-unavailable-reason="pickupUnavailableReason"
@@ -115,11 +119,14 @@
 
     <tabbar addon="hsx_recycle" />
   </view>
+  </uni-layout>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { onReady, onShow } from '@dcloudio/uni-app'
+import { getRecycleNavbarMetrics } from '../../hooks/useRecycleNavbar'
+import { useRecyclePopupPage } from '../../hooks/useRecyclePopupScroll'
 import { getPaymentList } from '@/addon/hsx_recycle/api/payment'
 import { getRecycleUserAddressInfo } from '@/addon/hsx_recycle/api/return_order'
 import { checkExpressEnabled } from '@/addon/hsx_recycle/api/express'
@@ -189,6 +196,8 @@ const orderSubmitConfig = ref({
   }
 })
 
+const { popupPageStyle } = useRecyclePopupPage()
+const navbarHeight = getRecycleNavbarMetrics().navbarHeightPx
 const themeVars = computed(() => buildRecycleThemeVars(orderSubmitConfig.value.price_detail_theme?.colors || {}))
 
 const deliveryTabs = computed(() => {
@@ -245,6 +254,9 @@ const {
   needPickupTime,
   platformDeliveryForm,
   pickupTimeSupported,
+  pickupTimeOptions,
+  applyPickupPolicy,
+  detectProvider,
   pickupAvailable,
   checkingPickup,
   pickupUnavailableReason,
@@ -432,6 +444,8 @@ interface ExpressCheckResponse {
     payment_tips?: string
     pickup_time?: string
     pickup_time_text?: string
+    pickup_time_changed?: boolean
+    pickup_time_options?: import('../../types/order').PickupTimeDay[]
     pickup_time_supported?: boolean
     pickup_time_required?: boolean
   }
@@ -463,7 +477,7 @@ const shouldContinueWithPlatformPrompt = async (): Promise<boolean> => {
   }
 
   try {
-    const res = await checkExpressEnabled() as ExpressCheckResponse
+    const res = await checkExpressEnabled(platformDeliveryForm.value.pickup_time_selected ? platformDeliveryForm.value.pickup_time : '') as ExpressCheckResponse
     if (res.code !== 1 || !res.data) {
       uni.showToast({ title: '暂未确认取件服务，请稍后重试', icon: 'none' })
       return false
@@ -486,12 +500,10 @@ const shouldContinueWithPlatformPrompt = async (): Promise<boolean> => {
     }
 
     const memo = String(res.data.prompt || res.data.memo || '').trim()
-    paymentTips.value = String(res.data.payment_tips || '').trim()
-    pickupTimeSupported.value = res.data.pickup_time_supported === true
-    needPickupTime.value = pickupTimeSupported.value && res.data.pickup_time_required === true
-    platformDeliveryForm.value.pickup_time_required = needPickupTime.value
-    platformDeliveryForm.value.pickup_time = pickupTimeSupported.value ? String(res.data.pickup_time || '') : ''
-    platformDeliveryForm.value.pickup_time_text = pickupTimeSupported.value ? String(res.data.pickup_time_text || '') : ''
+    if (applyPickupPolicy(res.data)) {
+      uni.showToast({ title: '原取件时段已不可用，请确认页面上的新时段后再下单', icon: 'none', duration: 3000 })
+      return false
+    }
     if (pickupTimeSupported.value && !platformDeliveryForm.value.pickup_time) {
       uni.showToast({ title: '暂未取得取件时段，请刷新后重试或联系门店', icon: 'none' })
       return false
@@ -655,7 +667,7 @@ fetchShopInfo()
   padding: 0 16px calc(240rpx + 50px + env(safe-area-inset-bottom));
   box-sizing: border-box;
 }
-.delivery-sticky { padding: 0 var(--recycle-order-gutter); margin-bottom: var(--recycle-order-section-gap); background: var(--recycle-bg-card); }
+.delivery-sticky { position: sticky; z-index: 98; padding: 0 var(--recycle-order-gutter); margin-bottom: var(--recycle-order-section-gap); background: var(--recycle-bg-card); border-bottom: 1rpx solid var(--recycle-line); }
 .order-section { padding: 20px var(--recycle-order-gutter) 16px; background: var(--recycle-bg-card); }
 .shipment-header { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; min-height: 76rpx; margin-bottom: 16px; }
 .shipment-title { min-width: 0; font-size: 30rpx; line-height: 42rpx; font-weight: 600; }

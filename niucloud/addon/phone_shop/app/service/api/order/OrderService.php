@@ -62,7 +62,7 @@ class OrderService extends BaseApiService
      */
     public function getPage(array $where)
     {
-        $field = 'point,activity_type,order_id,order_no,close_type,order_type,order_from,out_trade_no,status,member_id,site_id,ip,goods_money,delivery_money,order_money,create_time,pay_time,delivery_type,taker_name,taker_mobile,taker_full_address,take_store_id,is_enable_refund,member_remark,shop_remark,close_remark,pay_money,is_evaluate,invoice_id,payment_mode,pricing_identity,staff_id,is_credit,credit_status,settle_status';
+        $field = 'point,activity_type,order_id,order_no,close_type,order_type,order_from,out_trade_no,status,member_id,site_id,ip,goods_money,delivery_money,order_money,create_time,pay_time,timeout,delivery_type,taker_name,taker_mobile,taker_full_address,take_store_id,is_enable_refund,member_remark,shop_remark,close_remark,pay_money,is_evaluate,invoice_id,payment_mode,pricing_identity,staff_id,is_credit,credit_status,settle_status';
         $order = 'create_time desc';
         $search_model = $this->model
             ->where([['site_id', '=', $this->site_id], ['member_id', '=', $this->member_id],['user_delete_time','=',0]])
@@ -93,14 +93,13 @@ class OrderService extends BaseApiService
             $item['close_type_name'] = $order_close_list[$item['close_type']] ?? "";
             $item['order_status_data'] = $order_status_list[$item['status']] ?? [];
         });
-        $config = (new CoreOrderConfigService())->getConfig($this->site_id);
-        $close_length = $config['close_order_info']['close_length'];
         $orderConfigService = new CoreOrderConfigService();
         $onlineTradeConfig = $orderConfigService->getOnlineTradeConfig((int)$this->site_id);
         foreach ($list['data'] as $k => $v) {
 
             $list['data'][$k]['now_time'] = time();
-            $list['data'][$k]['expire_time'] = strtotime($v['create_time']) + 60 * $close_length;
+            $list['data'][$k]['expire_time'] = (int)$v['status'] === OrderDict::WAIT_PAY
+                ? max(0, (int)($v['timeout'] ?? 0)) : 0;
             if ($v['out_trade_no']) {
                 $list['data'][$k]['pay'] = (new Pay())->where([['out_trade_no', '=', $v['out_trade_no']]])
                     ->field('type, pay_time')->append(['type_name'])
@@ -291,12 +290,10 @@ class OrderService extends BaseApiService
                     (array)($config['online_trade'] ?? [])
                 )
             );
-            $close_length = $config['close_order_info']['close_length'];
 
             $info['now_time'] = time();
-            $info['expire_time'] = (int)($info['timeout'] ?? 0) > 0
-                ? (int)$info['timeout']
-                : strtotime($info['create_time']) + 60 * $close_length;
+            $info['expire_time'] = (int)$info['status'] === OrderDict::WAIT_PAY
+                ? max(0, (int)($info['timeout'] ?? 0)) : 0;
 
             if ((string)($info['payment_mode'] ?? '') === 'offline_pending') {
                 OfflineOrderSchemaService::ensure();

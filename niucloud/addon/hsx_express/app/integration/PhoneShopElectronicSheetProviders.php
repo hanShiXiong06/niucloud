@@ -29,6 +29,6 @@ class PhoneShopElectronicSheetProviders
             'carrier_code' => 'shunfeng',
             'carrier_mapping' => ['field' => 'express_no', 'code' => 'SF'],
             'description' => '使用本站独立顺丰账号取号、下载 PDF；实际交件后再确认发货，不替换已有物流渠道。',
-        ]]];
+        ] + (new \addon\hsx_express\app\service\core\SfConfigService())->waybillOptions($siteId)]];
     }
 }

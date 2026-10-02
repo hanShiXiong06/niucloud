@@ -49,6 +49,19 @@ class CoreOrderCloseService extends BaseCoreService
                 ['site_id', '=', $data['site_id']]
             ])->lock(true)->findOrEmpty()->toArray();
             if (empty($order_data)) throw new CommonException('SHOP_ORDER_NOT_FOUND');//订单不存在
+            if (($data['close_type'] ?? '') === OrderDict::AUTO_CLOSE && (
+                (int)$order_data['status'] !== OrderDict::WAIT_PAY
+                || (int)($order_data['timeout'] ?? 0) <= 0
+                || (int)$order_data['timeout'] > time()
+                || !empty($order_data['relate_source'])
+                || (int)($order_data['is_credit'] ?? 0) === 1
+                || (float)($order_data['pay_money'] ?? 0) > 0
+                || !in_array((string)($order_data['payment_mode'] ?? ''), ['', 'online', 'offline_pending'], true)
+            )) {
+                // 扫描后可能已付款、延长时限或暂停锁单；持锁重读后决定，不能用旧快照关单。
+                Db::commit();
+                return false;
+            }
             // 架构:ERP 驱动的订单(代下单/出库卖出,有 relate_source)以 ERP 为唯一事实源,商城侧只读留痕。
             // 禁止从商城手动关闭(SHOP_CLOSE),请到 ERP 操作;关闭/退回由 ERP→商城 单向同步(直接 update,不经本方法)完成。
             if (!empty($order_data['relate_source']) && ($data['close_type'] ?? '') == OrderDict::SHOP_CLOSE) {

@@ -1,4 +1,6 @@
 <template>
+  <page-meta :page-style="popupPageStyle" />
+  <uni-layout name="default">
   <view class="recycle-order-detail-page" :style="themeVars">
     <RecyclePageHeader title="订单详情" />
     <view v-if="loading && isEmpty" class="detail-loading"><up-skeleton rows="4" title :loading="true" :animate="true" /><up-skeleton rows="5" title :loading="true" :animate="true" /></view>
@@ -7,10 +9,10 @@
       <text class="detail-empty__message">{{ loadError || '请检查订单是否存在，或返回订单列表。' }}</text>
       <view class="detail-empty__actions"><OrderUiButton @click="goBack">返回列表</OrderUiButton><OrderUiButton v-if="loadError" variant="primary" @click="retryDetail">重新加载</OrderUiButton></view>
     </view>
-    <view v-else>
+    <view v-else class="detail-content">
       <view v-if="loadError" class="detail-error" @tap="retryDetail"><text>{{ loadError }}</text><text>重试</text></view>
-      <OrderStatusProgress :status="orderInfo.status" :statusName="orderInfo.status_name" />
-      <OrderDetailHeader :orderNo="orderInfo.order_no" :deviceCount="orderInfo.devices.length" :totalPrice="totalPrice" :expressNo="orderInfo.express_no" :mobile="orderInfo.member?.mobile || orderInfo.customer_phone || ''" :createTime="orderInfo.create_at" :deliveryName="orderInfo.delivery_type_name" :remark="orderInfo.remark" :cancelReason="orderInfo.cancel_reason" />
+      <view class="detail-card"><OrderStatusProgress :status="orderInfo.status" :statusName="orderInfo.status_name" /></view>
+      <view class="detail-card"><OrderDetailHeader :orderNo="orderInfo.order_no" :deviceCount="orderInfo.devices.length" :totalPrice="totalPrice" :expressNo="orderInfo.express_no" :mobile="orderInfo.member?.mobile || orderInfo.customer_phone || ''" :createTime="orderInfo.create_at" :deliveryName="orderInfo.delivery_type_name" :remark="orderInfo.remark" :cancelReason="orderInfo.cancel_reason" /></view>
 
       <view class="order-device-section">
         <view class="detail-section-heading"><view><text>设备明细</text><text class="detail-section-count">{{ orderInfo.devices.length }} 台</text></view><OrderUiButton v-if="!hasNoDevices" variant="text" @click="toggleSelectionMode">{{ selectionMode ? '完成' : '批量操作' }}</OrderUiButton></view>
@@ -51,11 +53,13 @@
       <InspectionReportPopup :visible="showInspectionReport" :device="currentReportDevice" :showResult="showInspectionResult" :showImages="showInspectionImages" @close="closeInspectionReport" />
     </view>
   </view>
+  </uni-layout>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
+import { useRecyclePopupPage } from '../../hooks/useRecyclePopupScroll'
 import { useSubscribeMessage } from '@/hooks/useSubscribeMessage'
 import { useOrderDetail } from '../../hooks/useOrderDetail'
 import { useDeviceSelection } from '../../hooks/useDeviceSelection'
@@ -74,6 +78,8 @@ import { canDecideDevice } from '../../utils/order-presentation'
 import { buildRecycleThemeVars } from '../../utils/theme'
 import { urgeOrder } from '../../api/order'
 import type { OrderDetailDevice } from '../../types/order'
+
+const { popupPageStyle } = useRecyclePopupPage()
 
 const {
   loading, loadError, orderInfo, isEmpty, hasNoDevices, totalPrice,
@@ -375,13 +381,18 @@ onShow(async () => {
 .detail-empty__message { display: block; color: var(--recycle-text-sub); font-size: 25rpx; line-height: 40rpx; margin: 24rpx 0; }
 .detail-empty__actions { display: flex; justify-content: center; gap: 16rpx; }
 .detail-error { display: flex; justify-content: space-between; padding: 20rpx 28rpx; background: var(--recycle-notice-bg); color: var(--recycle-notice-text); font-size: 24rpx; }
-.order-device-section { padding: 0 var(--recycle-order-gutter) 8rpx; }
+.detail-content { padding: var(--recycle-order-section-gap) var(--recycle-order-gutter) 0; }
+.detail-card, .detail-section, .detail-delivery-section, .order-device-section { margin-bottom: var(--recycle-order-section-gap); border: 1rpx solid var(--recycle-line); border-radius: 12px; background: var(--recycle-bg-card); }
+.detail-card :deep(.order-progress-section) { padding: 16px 12px; border-radius: 12px; }
+.detail-card :deep(.order-overview) { margin-bottom: 0; padding: 0 12px; border-radius: 12px; }
+.detail-card :deep(.order-overview__amount) { border-top: 0; }
+.order-device-section { padding: 0 12px 8rpx; }
 .detail-section-heading, .detail-section-heading > view { display: flex; align-items: center; gap: 12rpx; }
 .detail-section-heading { min-height: 88rpx; justify-content: space-between; font-size: 29rpx; font-weight: 600; }
 .detail-section-count { font-size: 24rpx; font-weight: 400; color: var(--recycle-text-sub); }
 .order-empty-devices { display: flex; flex-direction: column; align-items: center; gap: 14rpx; padding: 40rpx 20rpx; text-align: center; color: var(--recycle-text-sub); font-size: 25rpx; line-height: 38rpx; }
 .order-empty-devices > text:last-child { font-size: 23rpx; }
-.detail-section, .detail-delivery-section { margin-bottom: var(--recycle-order-section-gap); padding: 12px var(--recycle-order-gutter) 20px; background: var(--recycle-bg-card); }
+.detail-section, .detail-delivery-section { padding: 12px 12px 16px; }
 .detail-delivery-section :deep(.pickup-card) { margin: 0; padding: 12rpx 0; border: 0; border-radius: 0; }
 .detail-info-row { display: flex; gap: 24rpx; padding: 10rpx 0; font-size: 25rpx; line-height: 38rpx; }
 .detail-info-row > text:first-child { width: 120rpx; flex-shrink: 0; color: var(--recycle-text-sub); }

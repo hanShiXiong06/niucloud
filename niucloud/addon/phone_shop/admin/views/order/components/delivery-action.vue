@@ -155,7 +155,7 @@ import { getElectronicSheetConfig, getElectronicSheetList, printElectronicSheet 
 import { loadCLodop, getLodop } from '@/utils/lodop'
 import { useRouter } from 'vue-router'
 import ProviderWaybillPanel from './provider-waybill-panel.vue'
-import { providerTaskCanConfirm, providerTaskKey } from '@/addon/phone_shop/utils/electronic-sheet-provider'
+import { defaultDeliveryWay, providerTaskCanConfirm, providerTaskKey } from '@/addon/phone_shop/utils/electronic-sheet-provider'
 
 const router = useRouter()
 const showDialog = ref(false)
@@ -422,7 +422,7 @@ const deliveryChange = () => {
     }
     goodsDataArr.value = cloneDeep(arr)
     if (formData.delivery_type && formData.delivery_type == 'express') {
-        formData.delivery_way = 'manual_write'
+        formData.delivery_way = defaultDeliveryWay(externalProvider.value, showType.value)
     } else if (formData.delivery_type && formData.delivery_type == 'local_delivery') {
         formData.delivery_way = 'store_delivery'
     }

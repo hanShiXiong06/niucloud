@@ -1,4 +1,6 @@
 <template>
+  <page-meta :page-style="popupPageStyle" />
+  <uni-layout name="default">
   <view class="recycle-order-list-page" :style="pageVars">
     <RecyclePageHeader title="我的订单" />
     <z-paging
@@ -7,6 +9,8 @@
       class="order-z-paging"
       :paging-style="pagingStyle"
       :fixed="false"
+      :scrollable="!popupScrollLocked"
+      :refresher-enabled="!popupScrollLocked"
       :safe-area-inset-bottom="false"
       :default-page-size="10"
       :auto-clean-list-when-reload="false"
@@ -52,11 +56,15 @@
 
     <tabbar addon="hsx_recycle" />
   </view>
+  </uni-layout>
 </template>
 
 <script setup lang="ts">
 import { onShow } from '@dcloudio/uni-app'
 import { computed, watch } from 'vue'
+import { useRecyclePopupPage } from '../../hooks/useRecyclePopupScroll'
+
+const { popupPageStyle, popupScrollLocked } = useRecyclePopupPage()
 import ZPaging from '../../components/z-paging/z-paging/z-paging.vue'
 import RecyclePageHeader from '../components/RecyclePageHeader.vue'
 import { useRecyclePageTheme } from '../../hooks/useRecyclePageTheme'

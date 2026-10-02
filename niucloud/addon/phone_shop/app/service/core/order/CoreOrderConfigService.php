@@ -139,18 +139,26 @@ class CoreOrderConfigService extends BaseCoreService
     public function orderClose(int $site_id)
     {
         $data = ( new CoreConfigService() )->getConfigValue($site_id, 'SHOP_ORDER_CONFIG');
-        if (empty($data)) {
-            $closeOrderInfo = [
-                'is_close' => true,
-                'close_length' => 120
-            ];
+        $config = (array)($data['order_close'] ?? []);
+        $enabled = (int)($config['is_close'] ?? 1) === 1;
+        $minutes = (int)($config['close_length'] ?? 120);
+        // 部分站点只保存过成交方式，没有 order_close；不能因缺项让创建监听失败。
+        return ['is_close' => $enabled ? '1' : '2', 'close_length' => $minutes > 0 ? $minutes : 120];
+    }
+
+    /** 在创建订单的同步事务内写入关闭时间，不依赖后置队列成功。 */
+    public function pendingPaymentTimeout(int $siteId, string $paymentMode, int $createdAt): int
+    {
+        if ($paymentMode === 'offline_pending') {
+            $minutes = (int)$this->getOnlineTradeConfig($siteId)['offline_timeout_minutes'];
+        } elseif (in_array($paymentMode, ['', 'online'], true)) {
+            $config = $this->orderClose($siteId);
+            if ((int)$config['is_close'] !== 1) return 0;
+            $minutes = (int)$config['close_length'];
         } else {
-            $closeOrderInfo = [
-                'is_close' => $data[ 'order_close' ][ 'is_close' ],
-                'close_length' => $data[ 'order_close' ][ 'close_length' ]
-            ];
+            return 0;
         }
-        return $closeOrderInfo;
+        return $createdAt + $minutes * 60;
     }
 
     /**
@@ -162,10 +170,6 @@ class CoreOrderConfigService extends BaseCoreService
     {
         $data = ( new CoreConfigService() )->getConfigValue($site_id, 'SHOP_ORDER_CONFIG');
         if (empty($data)) {
-            $data[ 'close_order_info' ] = [
-                'is_close' => true,
-                'close_length' => 120
-            ];
             $data[ 'confirm' ] = [
                 'is_finish' => true,
                 'finish_length' => 14
@@ -177,10 +181,6 @@ class CoreOrderConfigService extends BaseCoreService
             $data[ 'form_id' ] = '';
             $data[ 'online_trade' ] = $this->normalizeOnlineTradeConfig([]);
         } else {
-            $data[ 'close_order_info' ] = [
-                'is_close' => $data[ 'order_close' ][ 'is_close' ],
-                'close_length' => $data[ 'order_close' ][ 'close_length' ]
-            ];
             $data[ 'confirm' ] = [
                 'is_finish' => $data[ 'order_finish' ][ 'is_finish' ],
                 'finish_length' => $data[ 'order_finish' ][ 'finish_length' ],
@@ -203,6 +203,8 @@ class CoreOrderConfigService extends BaseCoreService
                 }
             }
         }
+
+        $data['close_order_info'] = $this->orderClose($site_id);
 
         //发票
         $data[ 'invoice' ] = ( new CoreConfigService() )->getConfigValue($site_id, 'SHOP_INVOICE');

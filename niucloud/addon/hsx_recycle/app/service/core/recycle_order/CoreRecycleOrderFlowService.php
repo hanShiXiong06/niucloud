@@ -66,6 +66,19 @@ class CoreRecycleOrderFlowService extends BaseCoreService
      */
     public function execute(int $orderId, string $action, array $data = [], string $flowType = self::FLOW_TYPE_ADMIN, array $context = []): array
     {
+        // 与预约、回调、重试共用原预约锁，并持有到本地提交及取消结果落库结束。
+        // 不能在事务中短暂取得后提前释放，否则回调可能用旧快照覆盖取消意图。
+        if ($action === 'cancel' && empty($context['_pickup_cancel_lock'])) {
+            $siteId = (int)($context['site_id'] ?? $this->request->siteId());
+            if ($siteId <= 0) throw new CommonException('无法确认取消订单所属站点');
+            $record = (new \addon\hsx_recycle\app\service\core\express\RecyclePickupService())->record($siteId, $orderId);
+            $key = $record ? (string)$record->third_order_no : 'recycle_' . $siteId . '_' . $orderId;
+            return \addon\hsx_recycle\app\service\core\express\ExpressOperationLock::run($siteId, $key, function () use ($orderId, $action, $data, $flowType, $context, $siteId) {
+                $context['_pickup_cancel_lock'] = true;
+                $context['site_id'] = $siteId;
+                return $this->execute($orderId, $action, $data, $flowType, $context);
+            });
+        }
         // 开启事务
         Db::startTrans();
         try {
@@ -75,7 +88,7 @@ class CoreRecycleOrderFlowService extends BaseCoreService
                 $paymentSiteId = (int)($context['site_id'] ?? $this->request->siteId());
                 if ($paymentSiteId <= 0) throw new CommonException('无法确认付款站点，已停止打款');
             }
-            $order = $this->getOrderInfo($orderId, $paymentSiteId, $action === 'payment');
+            $order = $this->getOrderInfo($orderId, $action === 'cancel' ? (int)$context['site_id'] : $paymentSiteId, $action === 'payment');
 
             // 2. 获取流程配置
             $flowConfig = $this->getFlowConfig($order['status'], $flowType);
@@ -123,6 +136,17 @@ class CoreRecycleOrderFlowService extends BaseCoreService
 
             // 提交事务
             Db::commit();
+
+            if ($action === 'cancel') {
+                try {
+                    $handlerResult['data']['pickup_cancellation'] = (new \addon\hsx_recycle\app\service\core\express\RecyclePickupCancellationService())
+                        ->complete((int)$order['site_id'], $orderId);
+                } catch (\Throwable $e) {
+                    // 回收取消已提交，不回滚、不误报成未取消；已保存的取消意图供后台重试。
+                    Log::error('订单已取消，取件取消需后台核实', ['order_id' => $orderId, 'reason' => $e->getMessage()]);
+                    $handlerResult['data']['pickup_cancellation'] = ['state' => 'unknown'];
+                }
+            }
 
             // 记录日志
             Log::info("订单流程执行成功", [

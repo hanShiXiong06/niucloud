@@ -644,10 +644,12 @@ class RecycleOrderService extends BaseApiService
 
         // 取消订单走流程引擎，以触发快递拦截等业务逻辑
         if ($data['action'] == 'cancel') {
-            return $this->cancel($id, [
+            $this->cancel($id, [
                 'reason' => $data['reason'] ?? '用户取消订单',
                 'remark' => $data['remark'] ?? '',
             ]);
+            $owned->refresh();
+            return ['cancelled' => true, 'pickup' => (new RecyclePickupService())->view($owned->toArray())];
         }
 
         $data['update_at'] = time();

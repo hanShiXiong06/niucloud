@@ -116,6 +116,16 @@ class RecycleExpressService
      */
     public function createOrder(int $siteId, int $recycleOrderId, array $expressConfig, array $operatorInfo = []): array
     {
+        // 与回收取消使用同一把锁，防止订单取消后，先前读到旧状态的请求又发起叫件。
+        return ExpressOperationLock::run($siteId, 'recycle_' . $siteId . '_' . $recycleOrderId,
+            fn() => $this->createOrderLocked($siteId, $recycleOrderId, $expressConfig, $operatorInfo));
+    }
+
+    private function createOrderLocked(int $siteId, int $recycleOrderId, array $expressConfig, array $operatorInfo): array
+    {
+        $order = RecycleOrder::where('site_id', $siteId)->where('delete_at', 0)->find($recycleOrderId);
+        if (!$order) throw new CommonException('回收订单不存在');
+        if (in_array((int)$order->status, [8, 9, -1], true)) throw new CommonException('回收订单已取消或关闭，不能再预约上门取件');
         $provider = $this->getActiveProvider($siteId);
 
         // 获取收件地址(商户)
@@ -125,12 +135,6 @@ class RecycleExpressService
         }
 
         try {
-            // 获取回收订单
-            $order = RecycleOrder::where('site_id', $siteId)->find($recycleOrderId);
-            if (!$order) {
-                throw new CommonException('回收订单不存在');
-            }
-
             // 检查是否已下单快递
             if (!empty($order->express_no) && $order->delivery_status > 0) {
                 throw new CommonException('该订单已有快递单，运单号：' . $order->express_no);
@@ -257,7 +261,7 @@ class RecycleExpressService
         throw new CommonException('请管理员为回收上门取件指定一个快递产品');
     }
 
-    public function pickupPolicy(int $siteId): array
+    public function pickupPolicy(int $siteId, string $selectedTime = ''): array
     {
         try {
             if (!$this->isExpressEnabled($siteId) || !$this->getShopAddress($siteId)) {
@@ -270,7 +274,7 @@ class RecycleExpressService
             // 客户说明由门店维护，不使用供应商的技术结算文案，也不改变实际付款方式。
             $paymentTips = trim((string)($delivery['payment_tips'] ?? '')) ?: '运费由谁承担，请先联系门店确认。';
             $appointment = !empty($product['pickup_time_supported'])
-                ? PickupAppointmentPolicy::resolve($delivery['pickup_schedule'])
+                ? PickupAppointmentPolicy::resolve($delivery['pickup_schedule'], null, $selectedTime)
                 : ['pickup_time' => '', 'pickup_time_text' => ''];
             return array_merge($appointment, ['pickup_enabled' => true, 'enabled' => true,
                 'carrier_name' => (string)($product['carrier_name'] ?? $product['product_name'] ?? '本站指定快递'),
@@ -308,20 +312,25 @@ class RecycleExpressService
             throw new CommonException('回收订单不存在');
         }
 
-        if (empty($order->delivery_order_id) && empty($order->express_no)) {
+        $record = (new RecyclePickupService())->record($siteId, $recycleOrderId);
+        if (!$record && empty($order->delivery_order_id) && empty($order->express_no)) {
             throw new CommonException('该订单未下快递单');
         }
 
-        if ($order->delivery_status >= 3) {
-            throw new CommonException('快递已签收或已取消，无法操作');
+        if ((int)$order->delivery_status === 3) {
+            throw new CommonException('快递已签收，请联系门店处理退回');
         }
 
         $platform = $order->delivery_platform;
 
         try {
             $expressService = new ExpressOrderService();
-            $orderNo = $order->delivery_order_id ?: $order->express_no;
-            $expressService->cancelOrder($siteId, $orderNo, (string)$platform);
+            if ($record) {
+                $expressService->cancelOrInterceptOrder($siteId, ['third_order_no' => (string)$record->third_order_no]);
+            } else {
+                $orderNo = $order->delivery_order_id ?: $order->express_no;
+                $expressService->cancelOrder($siteId, $orderNo, (string)$platform);
+            }
             // 统一能力已按原预约投影取消结果；不可覆盖冲突状态，也不能把取消当退款。
             $record = (new RecyclePickupService())->record($siteId, $recycleOrderId);
             $lockKey = $record ? (string)$record->third_order_no : 'recycle_' . $siteId . '_' . $recycleOrderId;

@@ -7,9 +7,25 @@
         <p class="provider-waybill__hint">先在下方勾选本次包裹商品，默认发货地址来自商城地址库。取号或打印不会改变订单状态；包裹实际交给快递员后，再点击底部「确认发货」。</p>
         <el-alert v-if="provider.environment === 'sandbox' || task.environment === 'sandbox'" title="顺丰沙箱测试：不是实际寄件，不可确认真实商城发货" type="warning" :closable="false" />
         <p v-if="provider.key === 'hsx_express_sf_direct'" class="provider-waybill__hint">顺丰电子面单不等于预约上门取件。取号后点「打印面单」，无需先下载；实际出纸和交件请现场核实。</p>
+        <div v-if="showFreightPayment" class="provider-waybill__payment">
+            <span class="provider-waybill__label">运费付款方式</span>
+            <template v-if="hasActiveTask">
+                <strong>{{ task.freight_payment_label || '原单付款方式未记录，请以顺丰面单为准' }}</strong>
+                <span v-if="task.monthly_card_tail" class="provider-waybill__note">月结账号尾号 {{ task.monthly_card_tail }}</span>
+                <span class="provider-waybill__note">已申请，付款方式已锁定</span>
+            </template>
+            <template v-else>
+                <el-radio-group v-model="freightPayment" size="small" :disabled="busy || failedToLoad">
+                    <el-radio-button label="receiver">到付 · 收件人付</el-radio-button>
+                    <el-radio-button label="sender">寄方付 · 本站月结</el-radio-button>
+                </el-radio-group>
+                <span class="provider-waybill__note">{{ freightPayment === 'sender' ? (provider.freight_payment?.sender_monthly_card_ready ? `使用本站月结账号（尾号 ${provider.freight_payment.sender_monthly_card_tail}）` : '请先配置本站月结账号') : '收件人付运费，不使用本站月结账号' }}</span>
+            </template>
+        </div>
+        <el-alert v-if="paymentIssue" :title="paymentIssue" type="warning" :closable="false" />
         <div class="provider-waybill__actions">
             <span>重量</span><el-input-number v-model="weight" :min="0.01" :max="100" :precision="2" :step="0.1" :disabled="hasActiveTask" size="small"/><span>kg</span>
-            <el-button type="primary" :disabled="!goodsIds.length || hasActiveTask || failedToLoad" @click="createTask">{{ task.task_id ? '重新申请面单' : '申请面单' }}</el-button>
+            <el-button type="primary" :disabled="!goodsIds.length || hasActiveTask || failedToLoad || !!paymentIssue" @click="createTask">{{ task.task_id ? '重新申请面单' : '申请面单' }}</el-button>
             <el-button :disabled="!goodsIds.length" @click="operate('query')">刷新任务</el-button>
         </div>
         <el-alert v-if="!goodsIds.length" title="请先勾选下方需要装入同一包裹的商品" type="info" :closable="false" />
@@ -51,9 +67,17 @@ const busy = ref(false)
 const failedToLoad = ref(false)
 const task = ref<Record<string, any>>({})
 const weight = ref(1)
+const freightPayment = ref('receiver')
 let sequence = 0
 const packageIdentity = computed(() => `${props.orderId}:${[...props.goodsIds].sort((a, b) => a - b).join(',')}:${props.provider.key}`)
 const hasActiveTask = computed(() => !!task.value.task_id && !['cancelled', 'failed'].includes(task.value.state))
+const showFreightPayment = computed(() => hasActiveTask.value ? isSfWaybillTask(task.value) : props.provider.key === 'hsx_express_sf_direct')
+const paymentIssue = computed(() => {
+    if (!showFreightPayment.value || hasActiveTask.value) return ''
+    if (!props.provider.freight_payment) return '付款配置未返回，请更新物流服务后端后重新打开发货窗口；本次未申请运单'
+    if (freightPayment.value === 'sender' && !props.provider.freight_payment.sender_monthly_card_ready) return props.provider.freight_payment.sender_unavailable_reason || '寄方付需要本站顺丰月结账号，请先到账号与打印配置填写'
+    return ''
+})
 const labelUrls = computed(() => trustedWaybillLabels(Array.isArray(task.value.labels) ? task.value.labels : task.value.label))
 const canReprint = computed(() => !failedToLoad.value && task.value.can_reprint === true)
 const canCancel = computed(() => !failedToLoad.value && task.value.can_cancel === true)
@@ -70,12 +94,13 @@ const pdfError = (error: any) => ElMessage.error(error?.msg || error?.message ||
 
 const operate = async (operation: string, reason = '', confirm = 0) => {
     if (busy.value || !props.goodsIds.length) return
+    if (operation === 'create' && paymentIssue.value) { ElMessage.warning(paymentIssue.value); return }
     const token = ++sequence
     busy.value = true
     emit('busy', true)
     try {
         const providerKey = ['create', 'query'].includes(operation) ? props.provider.key : providerTaskKey(task.value, props.provider.key)
-        const response = await electronicSheetProviderTask({ operation, reason, confirm, provider_key: providerKey, order_id: props.orderId, order_goods_ids: [...props.goodsIds], weight: weight.value })
+        const response = await electronicSheetProviderTask({ operation, reason, confirm, provider_key: providerKey, order_id: props.orderId, order_goods_ids: [...props.goodsIds], weight: weight.value, freight_payment: freightPayment.value })
         if (token !== sequence) return
         task.value = response.data || {}
         failedToLoad.value = false
@@ -88,16 +113,20 @@ const operate = async (operation: string, reason = '', confirm = 0) => {
 }
 const confirmOperation = async (operation: 'create' | 'reprint') => {
     if (busy.value || !props.goodsIds.length) return
-    if (operation === 'create' && (hasActiveTask.value || failedToLoad.value)) return
+    if (operation === 'create' && (hasActiveTask.value || failedToLoad.value || paymentIssue.value)) return
     if (operation === 'reprint' && !canReprint.value) return
     const identity = packageIdentity.value
     const originalTaskId = task.value.task_id
+    const originalWeight = weight.value
+    const originalPayment = freightPayment.value
+    const paymentNotice = showFreightPayment.value ? (freightPayment.value === 'sender' ? `运费由本站承担，使用本站月结账号（尾号 ${props.provider.freight_payment?.sender_monthly_card_tail}）。` : '运费到付，由收件人承担。') : ''
+    const createNotice = showFreightPayment.value ? paymentNotice + '请核对收发地址、商品和重量。将向顺丰申请运单，可能产生费用；不会自动预约上门或确认商城发货。' : WAYBILL_CREATE_CONFIRM
     try {
-        await ElMessageBox.confirm(operation === 'create' ? WAYBILL_CREATE_CONFIRM : isSfWaybillTask(task.value) ? SF_WAYBILL_PDF_CONFIRM : WAYBILL_REPRINT_CONFIRM, operation === 'create' ? '确认申请面单：可能计费' : isSfWaybillTask(task.value) ? '重新获取原单 PDF' : '确认补打原单', {
+        await ElMessageBox.confirm(operation === 'create' ? createNotice : isSfWaybillTask(task.value) ? SF_WAYBILL_PDF_CONFIRM : WAYBILL_REPRINT_CONFIRM, operation === 'create' ? '确认申请面单：可能计费' : isSfWaybillTask(task.value) ? '重新获取原单 PDF' : '确认补打原单', {
             type: 'warning', confirmButtonText: operation === 'create' ? '核对无误，申请面单' : isSfWaybillTask(task.value) ? '确认获取原单 PDF' : '已核实，补打原单', cancelButtonText: '暂不操作', closeOnClickModal: false
         })
     } catch { return }
-    if (identity !== packageIdentity.value || originalTaskId !== task.value.task_id) {
+    if (identity !== packageIdentity.value || originalTaskId !== task.value.task_id || (operation === 'create' && (originalWeight !== weight.value || originalPayment !== freightPayment.value))) {
         ElMessage.warning('包裹或任务已变化，请重新核对后操作')
         return
     }
@@ -123,6 +152,7 @@ watch(packageIdentity, async () => {
     busy.value = false
     failedToLoad.value = false
     task.value = {}
+    freightPayment.value = 'receiver'
     emit('task', {})
     emit('busy', false)
     await operate('query')
@@ -134,4 +164,5 @@ watch(packageIdentity, async () => {
 .provider-waybill__head,.provider-waybill__actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.provider-waybill__head{justify-content:space-between}
 .provider-waybill__hint{font-size:12px;line-height:1.7;color:var(--el-text-color-secondary);margin:8px 0 12px}.provider-waybill__result{margin-top:14px;padding-top:12px;border-top:1px solid var(--el-border-color-light)}
 .provider-waybill__result p{font-size:12px;line-height:1.6;margin:8px 0}.provider-waybill__link{color:var(--el-color-primary);font-size:13px}.provider-waybill__actions{margin:8px 0}
+.provider-waybill__payment{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;margin:12px 0}.provider-waybill__label{font-size:13px}.provider-waybill__note{font-size:12px;color:var(--el-text-color-secondary)}
 </style>

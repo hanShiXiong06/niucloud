@@ -49,6 +49,7 @@
 <script setup lang="ts">
 import { ref, reactive, watch, computed } from 'vue'
 import { getAreaListByPid, getAreaByCode } from '@/app/api/system'
+import { useRecyclePopupLock } from '../../hooks/useRecyclePopupScroll'
 
 const prop = defineProps({
     areaId: {
@@ -58,6 +59,7 @@ const prop = defineProps({
 })
 
 const show = ref(false)
+useRecyclePopupLock(() => show.value)
 const areaList = reactive({
     province: [] as any[],
     city: [] as any[],

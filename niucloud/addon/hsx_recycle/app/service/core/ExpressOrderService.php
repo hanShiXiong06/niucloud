@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace addon\hsx_recycle\app\service\core;
 
+use addon\hsx_recycle\app\service\core\express\RecyclePickupService;
+
 use addon\hsx_recycle\app\model\express\ExpressAddressBook;
 use addon\hsx_recycle\app\model\express\ExpressOrderRecord;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
@@ -572,16 +574,51 @@ class ExpressOrderService
         }
         return ExpressOperationLock::run($siteId, (string)$record->third_order_no, function () use ($siteId, $record, $params) {
             $record->refresh();
-            $params = $this->buildCancelIdentifierParams($record, $params);
-            if ((string)$record->order_status === 'cancelled') return true;
-            $this->expressGateway->cancel($siteId, $params);
-            $remark = ((int)($params['genre'] ?? 1) === 3) ? '已拦截/关闭' : '用户取消订单';
-            $this->markLocalExpressRecordClosed($siteId, $params, $remark);
-            $this->domainEventService->dispatch('express.shipment.cancelled', array_merge([
-                'site_id' => $siteId, 'remark' => $remark,
-            ], $params));
+            $raw = (array)$record->api_response;
+            if (!empty($raw['conflict'])) throw new CommonException('原预约存在履约冲突，请先联系快递核实');
+            if ((string)$record->order_status === 'cancelled') {
+                $this->saveCancellationResult($record, 'confirmed', '快递已确认取消，不会重复发起取消请求');
+                return true;
+            }
+            if ((int)($params['genre'] ?? 1) !== 3 && in_array((string)($raw['highest_booking_state'] ?? $record->order_status), ['picked_up', 'in_transit', 'delivered'], true)) {
+                $this->saveCancellationResult($record, 'manual_review', '包裹已取件，请联系快递核实拦截或退回，不能当作未寄件取消');
+                throw new CommonException('包裹已取件，请联系快递核实拦截或退回');
+            }
+            $this->saveCancellationResult($record, 'pending', '正在向原渠道核实取消结果，请勿重新叫件');
+            try {
+                $params = $this->buildCancelIdentifierParams($record, $params);
+                $this->expressGateway->cancel($siteId, $params);
+                $remark = ((int)($params['genre'] ?? 1) === 3) ? '已拦截/关闭' : '用户取消订单';
+                $this->markLocalExpressRecordClosed($siteId, $params, $remark);
+                $record->refresh();
+                if (!empty($record->api_response['conflict'])) throw new CommonException('取消与履约状态冲突，请联系渠道核实');
+                $this->saveCancellationResult($record, 'confirmed', '快递已确认取消原取件预约');
+            } catch (\Throwable $e) {
+                $this->saveCancellationResult($record, 'unknown', '取消尚未确认，请核对原预约；可重试原单取消，不能重新叫件');
+                throw $e;
+            }
+            try {
+                $this->domainEventService->dispatch('express.shipment.cancelled', array_merge([
+                    'site_id' => $siteId, 'remark' => $remark,
+                ], $params));
+            } catch (\Throwable $e) {
+                Log::warning('取件已取消，后续事件未完成', ['site_id' => $siteId, 'record_id' => $record->id]);
+            }
             return true;
         });
+    }
+
+    private function saveCancellationResult(ExpressOrderRecord $record, string $state, string $message): void
+    {
+        $record->refresh();
+        $raw = (array)$record->api_response;
+        $cancel = (array)($raw['cancellation'] ?? []);
+        $raw['cancellation'] = array_replace($cancel, ['state' => $state, 'message' => $message,
+            'requested_at' => $cancel['requested_at'] ?? time(), 'updated_at' => time()]);
+        $history = (array)$record->status_history;
+        $history[] = ['status' => (string)$record->order_status, 'remark' => $message, 'time' => time()];
+        $record->save(['api_response' => $raw, 'status_history' => $history]);
+        (new RecyclePickupService())->syncOrder($record);
     }
 
     private function buildCancelIdentifierParams(ExpressOrderRecord $record, array $params): array

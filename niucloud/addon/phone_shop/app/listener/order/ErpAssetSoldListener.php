@@ -16,7 +16,7 @@ use think\facade\Db;
 /**
  * 监听 ERP 域事件(ErpDomainEvent)：
  *   - erp.asset.sold.v1     出库成交 → 建商城订单 + 商品置已售/锁定 + 推送(后续)
- *   - erp.asset.returned.v1 ERP退回 → 保留原单并恢复待上架；退款未收货不恢复库存。
+ *   - erp.asset.returned.v1 ERP退回 → 确认收回后保留原单并恢复上架；退款未收货不恢复库存。
  * 与 hsx_recycle 共享该事件；故障返回失败，由ERP持久化事件记录和重试。
  */
 class ErpAssetSoldListener
@@ -81,7 +81,7 @@ class ErpAssetSoldListener
         }
 
         // 代下单收银台(build_mall_order=false)：纯 ERP 出库,商城不建订单,只把商品下架。
-        // 已售→下架+库存清零；挂账也退出可售，实际退回后由 returnSaleItemByAsset 恢复待上架。
+        // 已售→下架+库存清零；挂账也退出可售，实际退回后由 returnSaleItemByAsset 恢复上架。
         $buildMallOrder = !array_key_exists('build_mall_order', $p) || (bool) $p['build_mall_order'];
         if (!$buildMallOrder) {
             $resultStatus = ((string) ($p['result_status'] ?? 'sold')) === 'locked' ? 'locked' : 'sold';
@@ -133,7 +133,7 @@ class ErpAssetSoldListener
         return $res;
     }
 
-    /** ERP 退回 → 保留原订单明细，已收回设备恢复待上架，不重新记销售账。 */
+    /** ERP 退回 → 保留原订单明细，已收回设备恢复上架，不重新记销售账。 */
     protected function onReturned(array $event): array
     {
         $p = (array) ($event['payload'] ?? []);

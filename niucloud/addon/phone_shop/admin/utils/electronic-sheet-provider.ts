@@ -30,6 +30,10 @@ export const WAYBILL_REPRINT_CONFIRM = '请先核实原面单是否已经出纸�
 export function providerTaskKey(task: Record<string, any>, fallback = ''): string {
     return task.provider_key || task.provider_code || fallback
 }
+/** 只使用商家已选且已启用的默认通道，不擅自更改站点的服务商配置。 */
+export function defaultDeliveryWay(provider: Record<string, any> | null, mode: string): string {
+    return mode === 'add' && provider?.default_for_delivery === true ? 'plugin_waybill' : 'manual_write'
+}
 export function isSfWaybillTask(task: Record<string, any>): boolean {
     return providerTaskKey(task) === 'hsx_express_sf_direct'
 }

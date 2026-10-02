@@ -11,7 +11,10 @@
                     <el-form-item label="运行环境" required><el-select v-model="form.environment" @change="identityChanged"><el-option v-for="item in environments" :key="item.value" :label="item.label" :value="item.value" /></el-select><div class="sf-help">沙箱凭据与正式凭据不能混用；更换环境会停用并要求重新填写校验码。</div></el-form-item>
                     <el-form-item label="顺丰顾客编码 / Client Code" required><el-input v-model.trim="form.client_code" autocomplete="off" placeholder="从顺丰开放平台已开通应用中获取" @change="identityChanged" /><div class="sf-help">这是顺丰直连接口身份，不是快递100 Key，也不是月结卡号。</div></el-form-item>
                     <el-form-item label="顺丰校验码 / Check Word" required><SavedCredentialInput :key="credentialRevision" v-model="form.check_word" field="sf_check_word" label="顺丰校验码" :saved="hasSavedSecret" :disabled="busy" /><div class="sf-help">已保存的密钥不返回原文。更换后保存才生效，留空保留原值。</div><el-button v-if="hasSavedSecret" link type="danger" @click="requestClearSecret">清空已保存校验码</el-button><div v-if="clearSecret" class="sf-warning">{{ form.check_word ? '保存时使用新校验码替换原值。' : '待清空：保存后原校验码将移除，此配置保持停用。' }}</div></el-form-item>
-                    <el-form-item :label="Number(form.pay_method) === 3 ? '获授权的第三方月结卡号' : '顺丰月结卡号（选填）'" :required="Number(form.pay_method) === 3"><el-input v-model.trim="form.monthly_card" autocomplete="off" :disabled="Number(form.pay_method) === 2" :placeholder="Number(form.pay_method) === 2 ? '到付不填写月结卡号' : Number(form.pay_method) === 3 ? '填写获得授权的第三方月结卡号' : '寄付可填月结卡号；留空按现结处理'" @change="form.use_ack = 0" /><div class="sf-help">{{ Number(form.pay_method) === 2 ? '到付由收件方结算，不能同时提交本站月结卡号。' : Number(form.pay_method) === 3 ? '第三方付必须填写已经获得授权的月结卡号；不能借用未授权的账号。' : form.environment === 'sandbox' ? '寄付留空表示现结；测试月结请使用顺丰提供的沙箱卡号，不填写虚构号码或正式卡号。' : '寄付支持现结或月结；使用月结时，由本站签约网点提供卡号并确认应用授权关系。' }}</div></el-form-item>
+                    <el-form-item :label="Number(form.pay_method) === 3 ? '获授权的第三方月结卡号' : isWaybill ? '本站顺丰月结账号（寄方付必填）' : '顺丰月结卡号（选填）'" :required="Number(form.pay_method) === 3">
+                        <el-input v-model.trim="form.monthly_card" autocomplete="off" :disabled="!isWaybill && Number(form.pay_method) === 2" :placeholder="isWaybill ? '填写已绑定当前顺丰应用的10位月结账号' : Number(form.pay_method) === 2 ? '到付不填写月结卡号' : '填写已获授权的月结卡号；寄付现结可留空'" @change="form.use_ack = 0" />
+                        <div class="sf-help">{{ Number(form.pay_method) === 3 ? '当前是第三方月结账号，不能用于商城的本站寄方付。请核对账号归属及付款方式。' : isWaybill ? '在此保存一次即可。发货默认到付，不使用此账号；改为寄方付时自动使用本站月结账号，未填写则不能寄方付。账号须已绑定当前顺丰应用，沙箱须使用沙箱账号。' : Number(form.pay_method) === 2 ? '到付由收件方结算，不能同时提交本站月结卡号。' : '寄付支持现结或月结；月结账号由本站签约网点提供，并须绑定当前顺丰应用。' }}</div>
+                    </el-form-item>
                 </div>
                 <HsxFold title="这些参数从哪里获取？" summary="顺丰直连账号与两个产品的开通范围"><ul class="sf-guide"><li>管理员在顺丰开放平台创建或进入本站应用，获取当前环境的 Client Code 和 Check Word。</li><li v-if="isWaybill">PDF 模板：进入当前应用的「查看 API → 基础通用 API → 云打印面单转PDF接口 → 查看」，复制分配给当前应用的模板编码；不要照抄接口请求示例，也不要使用其他账号的模板。确认模板尺寸与打印纸匹配。</li><li>联系顺丰客户经理确认{{ isWaybill ? '下单与电子面单 PDF' : '预约取件' }}接口、产品、月结账号以及付款方式已开通。</li><li>仅有月结账号，不代表接口权限已经开通。沙箱通过，也不代表正式账号已授权。</li><li>电子面单和上门取件的启用状态独立，本页只保存「{{ isWaybill ? '电子面单' : '上门取件' }}」。</li></ul><a href="https://open.sf-express.com/" target="_blank" rel="noopener noreferrer">顺丰开放平台 ↗</a></HsxFold>
             </div>
@@ -19,7 +22,7 @@
                 <h3>2. 确认产品与业务设置</h3>
                 <div class="sf-grid">
                     <el-form-item label="已申请使用的顺丰产品" required><el-select v-model="form.product_code" :disabled="!products.length" placeholder="从服务端官方参考目录选择" @change="form.use_ack = 0"><el-option v-for="item in products" :key="item.value" :label="item.label" :value="String(item.value)" /></el-select><div class="sf-help">这是参考目录，不是本站账号已开通清单；不能通过手写产品名绕过授权。</div></el-form-item>
-                    <el-form-item label="运费付款方式" required><el-select v-model="form.pay_method" :disabled="!payMethods.length" placeholder="选择本站已开通的付款方式" @change="paymentChanged"><el-option v-for="item in payMethods" :key="item.value" :label="item.label" :value="Number(item.value)" /></el-select><div class="sf-help">寄付可现结或月结；到付不使用本站月结卡号。与客户购买商品的支付方式不是一回事。</div></el-form-item>
+                    <el-form-item label="运费付款方式" required><el-select v-model="form.pay_method" :disabled="!payMethods.length" placeholder="选择本站已开通的付款方式" @change="paymentChanged"><el-option v-for="item in payMethods" :key="item.value" :label="item.label" :value="Number(item.value)" /></el-select><div class="sf-help">{{ isWaybill ? '商城面单以发货弹窗所选方式为准，每次默认到付；寄方付必须使用本站月结账号。到付不会清空此处保存的账号，也不会使用它扣运费。' : '寄付可现结或月结；到付不使用本站月结卡号。与客户购买商品的支付方式不是一回事。' }}</div></el-form-item>
                     <el-form-item v-if="isWaybill" label="顺丰面单模板编码" required><el-input v-model.trim="form.template_code" placeholder="复制当前应用已分配的 PDF 模板编码" /><div class="sf-help">获取路径见上方说明；不要照抄接口示例，也不是快递100模板 ID。模板填错时，修正保存后只需重新获取原单 PDF，不必重新取号。</div></el-form-item>
                 </div>
                 <HsxFold title="回调与高级信息" summary="当前以原单查询核实结果；不填写不代表已启用推送回调"><el-form-item label="本站公网 HTTPS 根地址（可选）"><el-input v-model.trim="form.callback_base_url" placeholder="例如 https://example.com，不带路径" /><div class="sf-help">仅保存配置，不会自动为你在顺丰侧订阅或开通回调。</div></el-form-item></HsxFold>
@@ -60,7 +63,7 @@ const hasSavedSecret = computed(() => !!stored.value.has_check_word && !clearSec
 function identityChanged() { form.enabled = 0; form.use_ack = 0; form.check_word = ''; clearSecret.value = true; credentialRevision.value++ }
 function paymentChanged() {
     form.use_ack = 0
-    if (Number(form.pay_method) === 2 && form.monthly_card) {
+    if (!isWaybill.value && Number(form.pay_method) === 2 && form.monthly_card) {
         form.monthly_card = ''
         ElMessage.info('已选择到付，本页月结卡号已清空；保存后生效，原有运单不受影响')
     }
@@ -83,7 +86,7 @@ async function load() {
 }
 async function save() {
     if (busy.value) return
-    if (Number(form.pay_method) === 2 && form.monthly_card) return ElMessage.warning('到付不能同时填写月结卡号，请清空后再保存')
+    if (!isWaybill.value && Number(form.pay_method) === 2 && form.monthly_card) return ElMessage.warning('到付不能同时填写月结卡号，请清空后再保存')
     if (form.enabled && form.environment === 'production' && (stored.value.environment !== 'production' || !stored.value.enabled)) {
         try { await ElMessageBox.confirm('开启后，后续业务操作可能生成真实顺丰运单或预约并计费。请确认本站正式账号、月结关系与接口权限已经开通。本次保存本身不下单。', '启用顺丰正式业务', { type: 'warning', confirmButtonText: '已核实，启用正式环境', cancelButtonText: '返回检查' }) } catch { return }
     }

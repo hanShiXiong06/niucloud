@@ -44,6 +44,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useRecyclePopupLock } from '../../../hooks/useRecyclePopupScroll'
 import type { OrderDetailDevice } from '../../../types/order'
 import OrderUiButton from './OrderUiButton.vue'
 import OrderStatusBadge from './OrderStatusBadge.vue'
@@ -94,6 +95,7 @@ const finalPrice = computed(() => Number(props.device.final_price || 0))
 const hasFinalPrice = computed(() => Number.isFinite(finalPrice.value) && finalPrice.value > 0)
 const canUserDecide = computed(() => props.allowDecision !== false && canDecideDevice(props.device))
 const showMore = ref(false)
+useRecyclePopupLock(() => showMore.value)
 const moreActions = computed(() => {
   if (!canUserDecide.value) return []
   const actions: Array<{ name: string; action: 'apply-consignment' | 'reject-sale'; color?: string }> = []
@@ -203,7 +205,9 @@ const formatSignedMoney = (value: any) => {
 </script>
 
 <style scoped lang="scss">
-.device-detail-card { padding: 24rpx; margin-bottom: 16rpx; border: 1rpx solid var(--recycle-line); border-radius: 16rpx; background: var(--recycle-bg-card); }
+.device-detail-card { padding: 24rpx; margin-bottom: 16rpx; border-bottom: 1rpx solid var(--recycle-line);  background: var(--recycle-bg-card); }
+// 最后一个卡片不显示下边框
+.device-detail-card:last-child { border-bottom: none; }
 .device-detail-card--selected { border-color: var(--recycle-brand); }
 .device-heading { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 12rpx; }
 .device-select { padding-top: 4rpx; }
@@ -219,7 +223,7 @@ const formatSignedMoney = (value: any) => {
 .price-label { display: block; font-size: 23rpx; line-height: 34rpx; color: var(--recycle-text-sub); }
 .price-value { display: block; margin-top: 6rpx; font-size: 28rpx; line-height: 42rpx; overflow-wrap: anywhere; }
 .device-price__final .price-value { color: var(--recycle-price); font-size: 36rpx; font-weight: 600; }
-.device-entry { display: flex; align-items: center; gap: 12rpx; padding: 20rpx 0; border-top: 1rpx solid var(--recycle-line); }
+.device-entry { display: flex; align-items: center; gap: 12rpx; padding: 20rpx 0;  }
 .device-entry__copy { flex: 1; min-width: 0; font-size: 26rpx; line-height: 38rpx; }
 .device-entry__summary { display: block; color: var(--recycle-text-sub); font-size: 23rpx; line-height: 34rpx; overflow-wrap: anywhere; }
 .inspection-warning { font-size: 22rpx; color: #b45309; flex-shrink: 0; }

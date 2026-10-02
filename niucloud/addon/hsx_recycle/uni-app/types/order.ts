@@ -29,6 +29,9 @@ export interface OrderForm {
   devices?: Device[]
 }
 
+export interface PickupTimeSlot { value: string; label: string; text: string; hint?: string }
+export interface PickupTimeDay { date: string; label: string; date_text: string; slots: PickupTimeSlot[] }
+
 // 平台快递表单
 export interface PlatformDeliveryForm {
   sender_name: string
@@ -41,12 +44,14 @@ export interface PlatformDeliveryForm {
   pickup_time: string
   pickup_time_required?: boolean
   pickup_time_text?: string
+  pickup_time_selected?: boolean
   weight: string
 }
 
 export type PickupState = 'not_requested' | 'submitting' | 'accepted' | 'confirmed' | 'assigned' | 'picked_up' | 'in_transit' | 'delivered' | 'cancelled' | 'failed' | 'unknown' | 'manual' | 'exception'
 
 export interface PickupInfo {
+  cancellation?: { state: string; message?: string; updated_at?: number }
   state: PickupState
   title: string
   message: string

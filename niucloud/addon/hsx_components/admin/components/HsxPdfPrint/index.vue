@@ -3,7 +3,7 @@ export default { name: 'HsxPdfPrint', inheritAttrs: false }
 </script>
 
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { Printer } from '@element-plus/icons-vue'
 import HsxButton from '../HsxButton/index.vue'
 import HsxDialog from '../HsxDialog/index.vue'
@@ -32,12 +32,14 @@ function release() {
     ready.value = false
     const previous = pdfUrl.value
     pdfUrl.value = ''
-    // Remove the PDF viewer before releasing its local URL. Never revoke on afterprint:
-    // that event also fires on cancellation, and the customer may need to retry.
-    frame.value?.remove()
-    frame.value = undefined
-    if (previous) URL.revokeObjectURL(previous)
+    // Vue owns the iframe created by v-if. Removing it here during a synchronous
+    // close watcher leaves Vue with a detached patch anchor and can strand the dialog.
+    // Let Vue remove the viewer first, then release this specific URL (not a new one).
+    // Never revoke on afterprint: cancellation must still allow printing again.
+    if (previous) void nextTick(() => URL.revokeObjectURL(previous))
 }
+
+function close() { visible.value = false }
 
 async function open() {
     if (props.disabled || loading.value) return
@@ -81,7 +83,7 @@ function requestPrint() {
     try {
         frame.value.contentWindow.focus()
         frame.value.contentWindow.print()
-        hint.value = '请在打印窗口中选择打印机并确认。若未弹出，可点击“打开打印窗口”或 PDF 内的打印图标。'
+        hint.value = '请先在系统打印窗口中完成打印或取消，再关闭此预览。若未弹出，可点击“打开打印窗口”或 PDF 内的打印图标。'
     } catch {
         hint.value = '浏览器未允许自动打开打印窗口，请点击 PDF 预览内的打印图标。无需下载文件。'
     }
@@ -118,7 +120,7 @@ onBeforeUnmount(release)
             <p v-if="hint" role="status" class="hsx-pdf-print__note">{{ hint }}</p>
         </template>
         <template #footer>
-            <el-button @click="visible = false">关闭</el-button>
+            <el-button @click="close">关闭</el-button>
             <el-button v-if="!error" type="primary" :icon="Printer" :disabled="!ready || disabled" @click="requestPrint">打开打印窗口</el-button>
         </template>
     </HsxDialog>

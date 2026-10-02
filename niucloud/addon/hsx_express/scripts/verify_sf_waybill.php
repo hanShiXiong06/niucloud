@@ -241,5 +241,30 @@ namespace {
     }
     check($safeDownloader->download($artifact)['mime'] === 'application/pdf' && $downloaded === 1, 'Only bounded PDF content accepted');
     check(!str_contains(json_encode($repo->operations), 'fixture-secret') && !str_contains(json_encode($repo->operations), 'fixture-download-token'), 'Audit updates do not disclose secret or token');
+    // Per-package freight selection is independent from pickup and original-order operations.
+    $config = $originalConfig; $createMode = $pdfMode = $searchMode = $cancelMode = 'success';
+    $config['monthly_card'] = '7551234567';
+    $receiver = $service->execute(1, 'create', payload(601));
+    $request = $remote[count($remote) - 2];
+    check($request['service'] === SfClient::CREATE_ORDER && $request['data']['payMethod'] === 2 && !isset($request['data']['monthlyCard']), 'Default receiver payment never sends saved monthly card');
+    check($receiver['freight_payment'] === 'receiver' && $receiver['monthly_card_tail'] === '' && $config['monthly_card'] === '7551234567', 'Receiver choice persisted without erasing saved site account');
+    $config['pay_method'] = 2;
+    $sender = $service->execute(1, 'create', payload(602) + ['freight_payment' => 'sender']);
+    $request = $remote[count($remote) - 2];
+    check($request['data']['payMethod'] === 1 && $request['data']['monthlyCard'] === '7551234567', 'Sender uses current site monthly account, not arbitrary request account');
+    check($sender['freight_payment'] === 'sender' && $sender['monthly_card_tail'] === '4567' && !str_contains(json_encode($sender), '7551234567'), 'Public task states actual payment and only account tail');
+    $before = count($remote);
+    $repeat = $service->execute(1, 'create', payload(602) + ['freight_payment' => 'receiver']);
+    check($repeat['task_id'] === $sender['task_id'] && $repeat['freight_payment'] === 'sender' && count($remote) === $before, 'Changing UI payment cannot change or duplicate active waybill');
+    $config['monthly_card'] = '7559999999';
+    $service->execute(1, 'reprint', ['task_id' => $sender['task_id']]);
+    check(end($remote)['cfg']['monthly_card'] === '7551234567' && end($remote)['cfg']['pay_method'] === 1, 'Original PDF retains original billing after site change');
+    $config['monthly_card'] = '';
+    $before = count($remote); $rowsBefore = count($repo->rows);
+    rejects(fn() => $service->execute(1, 'create', payload(603) + ['freight_payment' => 'sender', 'monthly_card' => '7551234567']), '寄方付需要本站顺丰月结账号');
+    foreach ([[],1,true,'third_party',''] as $value) rejects(fn() => $service->execute(1, 'create', payload(603) + ['freight_payment' => $value]), '请选择到付或寄方付');
+    $config['pay_method'] = 3; $config['monthly_card'] = '7551234567';
+    rejects(fn() => $service->execute(1, 'create', payload(603) + ['freight_payment' => 'sender']), '第三方月结账号');
+    check(count($remote) === $before && count($repo->rows) === $rowsBefore, 'Invalid payment/account cannot persist task or call courier');
     echo "PASS: {$checks} SF waybill checks; mocked HTTP only, no database or real courier requests.\n";
 }

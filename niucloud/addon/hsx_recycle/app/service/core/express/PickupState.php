@@ -101,10 +101,22 @@ class PickupState
             'cancelled' => '原取件预约已取消，可自行寄件并补填运单号。',
             'manual' => '请按实际运单查看物流，门店收到设备后继续办理回收。'];
         $conflict = !empty($data['conflict']);
+        $cancellation = (array)($data['cancellation'] ?? []);
+        $cancelState = (string)($cancellation['state'] ?? '');
+        // 渠道明确返回取消后才收敛；普通“已受理”查询不能清除取消待核实状态。
+        if ($state === 'cancelled' && !$conflict) $cancelState = 'confirmed';
+        $cancelPending = in_array($cancelState, ['pending', 'unknown', 'manual_review'], true);
+        $cancelMessage = '回收订单已取消，但快递取消尚未确认。请联系门店核实；如快递员联系您，请说明不再寄件。';
+        if (!in_array((int)($order['status'] ?? 0), [8, 9, -1], true)) {
+            $cancelMessage = '取件取消尚未确认，请联系门店核实原预约，不要重复叫件或自行寄件。';
+        } elseif ($state === 'cancelled') {
+            $messages['cancelled'] = '回收订单和取件预约均已取消，无需寄件。';
+        }
         $receiver = is_array($data['receiver'] ?? null) ? $data['receiver'] : [];
         return [
-            'state' => $state, 'title' => $conflict ? '取件记录待人工核实' : ($titles[$state] ?? '取件状态待核实'),
-            'message' => $conflict ? '取件记录存在冲突，请联系门店核实，不要重复寄件。' : ($messages[$state] ?? ''),
+            'state' => $state, 'title' => $conflict ? '取件记录待人工核实' : ($cancelPending ? '取件取消待核实' : ($titles[$state] ?? '取件状态待核实')),
+            'message' => $conflict ? '取件记录存在冲突，请联系门店核实，不要重复寄件。' : ($cancelPending ? $cancelMessage : ($messages[$state] ?? '')),
+            'cancellation' => ['state' => $cancelState, 'message' => $cancelPending ? $cancelMessage : '', 'updated_at' => (int)($cancellation['updated_at'] ?? 0)],
             'carrier_name' => (string)($data['carrier_name'] ?? ''),
             'pickup_time' => (string)($data['pickup_time'] ?? $order['pickup_time'] ?? ''),
             'courier_name' => (string)($data['courier_name'] ?? ''),
@@ -112,7 +124,7 @@ class PickupState
             'tracking_no' => (string)($data['deliveryId'] ?? $order['express_no'] ?? ''),
             'record_id' => (int)($data['record_id'] ?? 0),
             'attempt_id' => (string)($data['attempt_id'] ?? ''),
-            'can_manual' => !$conflict && in_array($state, ['failed', 'cancelled'], true)
+            'can_manual' => !$conflict && !$cancelPending && in_array($state, ['failed', 'cancelled'], true)
                 && (!isset($order['status']) || (int)$order['status'] === 1),
             'can_refresh' => !in_array($state, ['not_requested', 'manual'], true),
             'failure_message' => '',

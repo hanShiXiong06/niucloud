@@ -69,8 +69,8 @@ async function testSubmit(state, throws = false) {
 ;(async () => {
     for (const state of ['unknown', 'submitting', 'failed', 'exception', 'accepted', 'confirmed']) await testSubmit(state)
     await testSubmit('unknown', true)
-    check(source.includes('v-if="!isKuaidi100(row) && (row.order_no || row.delivery_id)"'), 'K100 labels hidden')
-    check(source.includes('!isKuaidi100(row) && canOperateClose(row)'), 'K100 intercept hidden')
+    check(source.includes('v-if="!isKuaidi100(row) && pickupData(row).provider !== \'sf_direct\' && (row.order_no || row.delivery_id)"'), 'K100 and SF pickup labels hidden')
+    check(source.includes('!isKuaidi100(row) && pickupData(row).provider !== \'sf_direct\' && canOperateClose(row)'), 'K100 and SF pickup unsupported interception hidden')
     check(source.includes('ElMessageBox.prompt') && source.includes('最终确认：核实未预约'), 'manual unlock requires evidence and second confirmation')
     console.log(`PASS ${checks} admin pickup checks (SFC + state/idempotency mocks, no DB/network)`)
 })().catch(error => { console.error(error); process.exitCode = 1 })

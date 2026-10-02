@@ -28,7 +28,7 @@ foreach ($tables as $table) {
     if (strtoupper($meta[0]['ENGINE'] ?? '') !== 'INNODB') throw new RuntimeException('表不支持回滚：' . $table);
 }
 request()->siteId($site); request()->uid(1); request()->username('收货测试员'); request()->appType('adminapi');
-foreach (['ErpDomainEvent', 'PhoneShopOrderReturnContext', 'PhoneShopSaleReturnCancelled', 'PhoneShopGoodsSaleableChanged', 'HsxPerformanceFactRecorded', 'HsxErpMallInventory', 'ErpOfflineSaleReturnRequested', 'AfterPhoneShopOrderDelivery'] as $event) Event::remove($event);
+foreach (['ErpDomainEvent', 'PhoneShopOrderReturnContext', 'PhoneShopSaleReturnCancelled', 'PhoneShopGoodsSaleableChanged', 'HsxPerformanceFactRecorded', 'HsxErpMallInventory', 'ErpOfflineSaleReturnRequested', 'AfterPhoneShopOrderDelivery', 'PayClose'] as $event) Event::remove($event);
 Event::listen('ErpOfflineSaleReturnRequested', \addon\hsx_erp\app\listener\ErpOfflineSaleReturnRequested::class);
 Event::listen('PhoneShopOrderReturnContext', PhoneShopOrderReturnContext::class);
 Event::listen('PhoneShopSaleReturnCancelled', \addon\phone_shop\app\listener\erp\ErpSaleReturnCancelled::class);
@@ -36,7 +36,10 @@ Event::listen('HsxErpMallInventory', \addon\phone_shop\app\listener\erp\ErpMallI
 // 只替换外部副作用出口；调用的订单创建/关闭/库存核心代码仍为实际实现。
 class ReturnTestEvents {
     public static array $created = [];
-    public static function orderCreate($d) { self::$created = $d; }
+    public static function orderCreate($d) {
+        self::$created = $d;
+        (new \addon\phone_shop\app\listener\order\ShopOrderCreate())->handle($d);
+    }
     public static function orderCreateAfter($d) {}
     public static function orderClose($d) {}
     public static function orderCloseAfter($d) {}
@@ -45,6 +48,9 @@ class ReturnTestEvents {
     public static function orderFinishAfter($d) {}
 }
 class_alias(ReturnTestEvents::class, 'addon\phone_shop\app\service\core\order\CoreOrderEventService');
+// 用户订单接口会查询微信发货能力；本回归只验证订单数据，禁止请求外部微信服务。
+class ReturnTestWeappDelivery { public function getIsTradeManaged() { return false; } }
+class_alias(ReturnTestWeappDelivery::class, 'app\service\api\weapp\WeappDeliveryService');
 class ReturnTestCheckout {
     use \addon\phone_shop\app\service\core\order\CoreOrderCreateTrait;
     public function invoice() {}
@@ -61,13 +67,13 @@ $q = static fn($table) => Db::name($table)->where('site_id', $site);
 $now = time(); $tag = 'RET' . bin2hex(random_bytes(4)); $serial = 500;
 $makeSku = static function() use ($add, &$serial): array {
     $imei = '357465822199' . (++$serial);
-    $goods = $add('phone_shop_goods', ['goods_name' => '退回测试手机', 'goods_type' => 'real', 'stock' => 1, 'status' => 1, 'sale_status' => 'available', 'source' => '1']);
+    $goods = $add('phone_shop_goods', ['goods_name' => '退回测试手机', 'goods_type' => 'real', 'stock' => 1, 'status' => 1, 'sale_status' => 'available', 'is_online_sellable' => 1, 'source' => '1']);
     $sku = $add('phone_shop_goods_sku', ['goods_id' => $goods, 'sku_no' => $imei, 'stock' => 1, 'is_unique' => 1, 'price' => 5000, 'cost_price' => 4500]);
     return ['goods_id' => $goods, 'sku_id' => $sku, 'sku_no' => $imei, 'is_unique' => 1];
 };
-$checkout = static function(array $sku) use ($site): int {
+$checkout = static function(array $sku, string $mode = 'offline_pending') use ($site): int {
     $service = new ReturnTestCheckout(); $service->site_id = $site; $service->param = ['order_from' => 'weapp'];
-    $result = $service->createOrder(['order_data' => ['site_id' => $site, 'member_id' => 0, 'order_type' => OrderDict::TYPE, 'payment_mode' => 'offline_pending', 'status' => OrderDict::WAIT_PAY, 'goods_money' => 5000, 'order_money' => 5000],
+    $result = $service->createOrder(['order_data' => ['site_id' => $site, 'member_id' => 0, 'order_type' => OrderDict::TYPE, 'payment_mode' => $mode, 'status' => OrderDict::WAIT_PAY, 'goods_money' => 5000, 'order_money' => 5000],
         'order_goods_data' => [['site_id' => $site, 'member_id' => 0, 'order_id' => &$service->order_id, 'goods_id' => $sku['goods_id'], 'sku_id' => $sku['sku_id'], 'num' => 1, 'price' => 5000, 'goods_money' => 5000, 'status' => 1, 'goods_type' => 'real', 'extend' => ErpDeviceSnapshot::extend([], $sku, ['source' => '1'])]]]);
     return (int)$result['order_id'];
 };
@@ -88,6 +94,74 @@ try {
     (new CoreOrderInventoryService())->releaseCancelled($site, $orderId, false);
     $assert((int)$q('phone_shop_goods_sku')->where('sku_id', $sku['sku_id'])->value('stock') === 0, '旧取消重试不能释放新订单');
     $throws(fn() => (new \addon\phone_shop\app\service\core\order\CoreOrderPayService())->pay(['site_id' => $site, 'trade_id' => $orderId]), '原订单已关闭');
+
+    // 创建事务写入真实时限；到期关闭后释放库存，暂停/付款/延时都必须受到保护。
+    $configService = new \addon\phone_shop\app\service\core\order\CoreOrderConfigService();
+    $assert($configService->orderClose($site) === ['is_close' => '1', 'close_length' => 120], '未配置时保留原自动关闭默认规则');
+    $assert($configService->getConfig($site)['close_order_info']['is_close'] === '1', '配置接口返回与创建订单一致的关闭规则');
+    $configured = new class extends \addon\phone_shop\app\service\core\order\CoreOrderConfigService {
+        public bool $enabled = true;
+        public function orderClose(int $site_id) { return ['is_close' => $this->enabled ? '1' : '2', 'close_length' => 20]; }
+    };
+    $assert($configured->pendingPaymentTimeout($site, 'online', $now) === $now + 1200, '按本站配置的20分钟计算时限');
+    $configured->enabled = false;
+    $assert($configured->pendingPaymentTimeout($site, 'online', $now) === 0, '关闭开关后新线上订单不自动关单');
+    $assert($configured->pendingPaymentTimeout($site, 'offline_pending', $now) === $now + 1200, '线下待处理保留独立的20分钟时限');
+    $assert($configured->pendingPaymentTimeout($site, 'offline_cash', $now) === 0 && $configured->pendingPaymentTimeout($site, 'offline_credit', $now) === 0, '现结和挂账订单不设置自动关闭时间');
+    request()->memberId(0);
+    $customerOrders = new \addon\phone_shop\app\service\api\order\OrderService();
+    foreach (['online', ''] as $mode) {
+        $heldSku = $makeSku(); $heldOrder = $checkout($heldSku, $mode);
+        $timeout = (int)ReturnTestEvents::$created['time'] + 7200;
+        $assert((int)$q('phone_shop_order')->where('order_id', $heldOrder)->value('timeout') === $timeout, '后置队列未运行也已写入线上订单到期时间');
+        $assert($customerOrders->getDetail($heldOrder)['expire_time'] === $timeout, '订单详情返回真实到期时间');
+        $customerPage = $customerOrders->getPage(['order_no' => $q('phone_shop_order')->where('order_id', $heldOrder)->value('order_no'), 'status' => '', 'activity_type' => '', 'body' => '']);
+        $assert(count($customerPage['data']) === 1 && $customerPage['data'][0]['expire_time'] === $timeout, '列表与详情采用相同的真实到期时间');
+        $beforeHold = $q('phone_shop_order_goods')->where('order_id', $heldOrder)->value('extend');
+        $autoClose = static fn() => (new CoreOrderCloseService())->close(['site_id' => $site, 'order_id' => $heldOrder, 'close_type' => OrderDict::AUTO_CLOSE]);
+        $assert($autoClose() === false, '未到期/管理员延时后，过期扫描快照不能关单');
+        $q('phone_shop_order')->where('order_id', $heldOrder)->update(['timeout' => 0]);
+        $assert($autoClose() === false && $customerOrders->getDetail($heldOrder)['expire_time'] === 0, '暂停锁单后不自动关闭也不显示虚假倒计时');
+        $assert($q('phone_shop_order_goods')->where('order_id', $heldOrder)->value('extend') === $beforeHold, '跳过关闭不改占库记录');
+        $q('phone_shop_order')->where('order_id', $heldOrder)->update(['timeout' => time() - 1]);
+        $assert($autoClose() === true, '到期的线上未付款订单自动关闭');
+        $assert((int)$q('phone_shop_order')->where('order_id', $heldOrder)->value('status') === OrderDict::CLOSE, '自动关闭实际更新订单状态');
+        $stock = $q('phone_shop_goods')->where('goods_id', $heldSku['goods_id'])->find();
+        $assert((int)$stock['stock'] === 1 && (int)$stock['status'] === 1 && $stock['sale_status'] === 'available', '关单后立即恢复一台库存及可售状态');
+        $assert(\addon\phone_shop\app\dict\goods\GoodsDict::getSaleState($stock)['can_sell'] === 1, '关单后商品可再次购买');
+        $assert($autoClose() === false, '重复自动关闭不重复加库存');
+        $checkout($heldSku, 'online');
+        $assert($autoClose() === false && (int)$q('phone_shop_goods_sku')->where('sku_id', $heldSku['sku_id'])->value('stock') === 0, '旧任务重试不能释放新订单已占用的库存');
+    }
+    $offlineSku = $makeSku(); $offlineOrder = $checkout($offlineSku);
+    $offlineTimeout = (int)ReturnTestEvents::$created['time'] + 1200;
+    $assert((int)$q('phone_shop_order')->where('order_id', $offlineOrder)->value('timeout') === $offlineTimeout, '线下时限也在创建事务内确定，不依赖后置队列');
+    $assert($customerOrders->getDetail($offlineOrder)['expire_time'] === $offlineTimeout, '线下待处理仍返回真实处理时限');
+    $assert((new CoreOrderCloseService())->close(['site_id' => $site, 'order_id' => $offlineOrder, 'close_type' => OrderDict::AUTO_CLOSE]) === false, '未到期线下待处理单不能提前关闭');
+    $q('phone_shop_order')->where('order_id', $offlineOrder)->update(['timeout' => time() - 1]);
+    (new CoreOrderCloseService())->close(['site_id' => $site, 'order_id' => $offlineOrder, 'close_type' => OrderDict::AUTO_CLOSE]);
+    $assert((int)$q('phone_shop_order')->where('order_id', $offlineOrder)->value('status') === OrderDict::CLOSE, '不改变线下待处理超时规则');
+
+    foreach ([['status' => OrderDict::WAIT_DELIVERY], ['pay_money' => 5000], ['is_credit' => 1], ['payment_mode' => 'offline_cash'], ['payment_mode' => 'offline_credit'], ['relate_source' => 'hsx_erp']] as $protected) {
+        $guardSku = $makeSku(); $guardOrder = $checkout($guardSku, 'online');
+        $q('phone_shop_order')->where('order_id', $guardOrder)->update($protected + ['timeout' => time() - 1]);
+        $assert((new CoreOrderCloseService())->close(['site_id' => $site, 'order_id' => $guardOrder, 'close_type' => OrderDict::AUTO_CLOSE]) === false, '付款/挂账/ERP接管后，旧扫描不能关闭订单');
+        $assert((int)$q('phone_shop_goods_sku')->where('sku_id', $guardSku['sku_id'])->value('stock') === 0, '受保护订单库存不释放');
+    }
+    foreach ([\app\dict\pay\PayDict::STATUS_WAIT, \app\dict\pay\PayDict::STATUS_FINISH] as $payStatus) {
+        $paySku = $makeSku(); $payOrder = $checkout($paySku, 'online');
+        $q('phone_shop_order')->where('order_id', $payOrder)->update(['timeout' => time() - 1]);
+        $tradeNo = $tag . $payOrder;
+        $add('pay', ['out_trade_no' => $tradeNo, 'trade_type' => OrderDict::TYPE, 'trade_id' => $payOrder, 'money' => 5000, 'status' => $payStatus]);
+        $closePayOrder = static fn() => (new CoreOrderCloseService())->close(['site_id' => $site, 'order_id' => $payOrder, 'close_type' => OrderDict::AUTO_CLOSE]);
+        if ($payStatus === \app\dict\pay\PayDict::STATUS_FINISH) {
+            $throws($closePayOrder, '支付状态尚未确认');
+            $assert((int)$q('phone_shop_goods_sku')->where('sku_id', $paySku['sku_id'])->value('stock') === 0, '支付单已收款而业务单尚未回写时，禁止释放库存');
+        } else {
+            $assert($closePayOrder() === true, '未付款支付单随业务单关闭');
+            $assert((string)$q('pay')->where('out_trade_no', $tradeNo)->value('status') === \app\dict\pay\PayDict::STATUS_CANCEL, '真实支付记录已取消，不只是关闭页面');
+        }
+    }
 
     $warehouse = $add('erp_warehouse', ['warehouse_name' => $tag, 'status' => 1, 'allow_direct_sale' => 1]);
     $location = $add('erp_warehouse_location', ['warehouse_id' => $warehouse, 'location_name' => '原库位', 'status' => 1]);
@@ -133,13 +207,14 @@ try {
     $assert((float)$q('erp_receivable')->where('id', $unpaid['ar'])->value('amount') === 0.0, '未收款冲减原应收');
     $assert($q('erp_payable')->where('source_type', 'sale_return')->where('source_id', $returnId)->count() === 0, '未收款退回不能新增待退款');
     $stock = $q('phone_shop_goods')->where('goods_id', $unpaid['skus'][0]['goods_id'])->find();
-    $assert((int)$stock['stock'] === 1 && (int)$stock['status'] === 0 && $stock['sale_status'] === 'available', '退回恢复一台，等待业务员上架');
+    $assert((int)$stock['stock'] === 1 && (int)$stock['status'] === 1 && $stock['sale_status'] === 'available', '实际退回同时恢复一台库存、上架和可售');
+    $assert(\addon\phone_shop\app\dict\goods\GoodsDict::getSaleState($stock)['can_sell'] === 1, '退回后统一销售状态必须为可售');
     $soldMethod = new ReflectionMethod(\addon\phone_shop\app\listener\order\ErpAssetSoldListener::class, 'onSold');
     $soldMethod->setAccessible(true);
     $staleSold = $soldMethod->invoke(new \addon\phone_shop\app\listener\order\ErpAssetSoldListener(), ['site_id' => $site, 'payload' => ['asset_id' => $unpaid['assets'][0], 'sale_order_id' => $unpaid['sale'], 'build_mall_order' => false]]);
     $assert($staleSold['stale'] && (int)$q('phone_shop_goods_sku')->where('sku_id', $unpaid['skus'][0]['sku_id'])->value('stock') === 1, '迟到的旧出库通知不能覆盖已退回的库存');
     $moneyCount = $q('erp_money_ledger')->count(); $arCount = $q('erp_receivable')->count();
-    (new GoodsService())->editSingleStatus(['goods_id' => $unpaid['skus'][0]['goods_id'], 'status' => 1]);
+    // 不再手动上架，直接验证退回后的真实下单占库链路。
     $resale = $checkout($unpaid['skus'][0]);
     $assert($mallReturn->fromErp($site, $unpaid['assets'][0], $payload['outbound_no'], $payload)['duplicate'], '旧退回通知重试应幂等');
     $assert((int)$q('phone_shop_goods_sku')->where('sku_id', $unpaid['skus'][0]['sku_id'])->value('stock') === 0, '旧通知不能释放新拍下订单');
@@ -190,6 +265,7 @@ try {
     $assert($publish['status'] === 'failed' && str_contains($publish['message'], '尚未确认实物收回'), 'ERP发布商城同样拒绝退款未收回的设备');
     $mallReturn->confirmReceived($site, $online['lineIds'][0], '收货员');
     $assert((int)$q('phone_shop_goods_sku')->where('sku_id', $online['skus'][0]['sku_id'])->value('stock') === 1, '确认实物收回后才可恢复库存');
+    $assert((int)$q('phone_shop_goods')->where('goods_id', $online['skus'][0]['goods_id'])->value('status') === 1, '线上全额退款并确认收回后恢复上架');
     $assert($mallReturn->confirmReceived($site, $online['lineIds'][0], '收货员')['duplicate'], '确认收回重复点击不增库存');
     $assert($guard($online['assets'][0])[0]['data']['allowed'], '确认实物收回后解除ERP再售限制');
     Db::startTrans();
@@ -241,10 +317,23 @@ try {
     $assert($q('erp_receivable')->where('id', $n['ar'])->value('status') === 'void', '全额未收应收作废，不再催款');
     $assert((int)$q('phone_shop_order')->where('order_id', $n['order'])->value('status') === -1, '商城直接入口全退关闭原单');
     $assert((int)$q('phone_shop_goods_sku')->where('sku_id', $n['skus'][0]['sku_id'])->value('stock') === 1, '商城原生退回恢复一台');
+    $assert((int)$q('phone_shop_goods')->where('goods_id', $n['skus'][0]['goods_id'])->value('status') === 1, '商城原生退回自动恢复上架');
     $returnCount = $q('erp_sale_return')->count();
     $assert($perform($n)['duplicate'], '重复提交退回返回原结果');
     $assert($returnCount === $q('erp_sale_return')->count(), '重复提交不能重复建退款单');
     $assert((int)$q('phone_shop_goods_sku')->where('sku_id', $n['skus'][0]['sku_id'])->value('stock') === 1, '重复提交不重复加库存');
+    $q('phone_shop_goods')->where('goods_id', $n['skus'][0]['goods_id'])->update(['status' => 0]);
+    $perform($n);
+    $assert((int)$q('phone_shop_goods')->where('goods_id', $n['skus'][0]['goods_id'])->value('status') === 0, '重复退回不能覆盖后来人工下架');
+    $alreadyStocked = $native(0);
+    $q('phone_shop_goods_sku')->where('sku_id', $alreadyStocked['skus'][0]['sku_id'])->update(['stock' => 1]);
+    $perform($alreadyStocked);
+    $assert((int)$q('phone_shop_goods')->where('goods_id', $alreadyStocked['skus'][0]['goods_id'])->value('status') === 1, '首次确认时库存已回补也不能漏掉恢复上架');
+    $assert((int)$q('phone_shop_goods_sku')->where('sku_id', $alreadyStocked['skus'][0]['sku_id'])->value('stock') === 1, '首次确认库存已回补不能增加到两台');
+    $offlineOnly = $native(0);
+    $q('phone_shop_goods')->where('goods_id', $offlineOnly['skus'][0]['goods_id'])->update(['is_online_sellable' => 0]);
+    $perform($offlineOnly);
+    $assert((int)$q('phone_shop_goods')->where('goods_id', $offlineOnly['skus'][0]['goods_id'])->value('is_online_sellable') === 0, '退回不擅自打开原本禁用的线上销售权限');
     $atomic = $native(0, 2); $atomicPlan = $preview($atomic);
     $q('phone_shop_goods_sku')->where('sku_id', $atomic['skus'][1]['sku_id'])->update(['erp_asset_id' => 99999999]);
     $beforeReturns = $q('erp_sale_return')->count();
@@ -252,6 +341,7 @@ try {
         'reason' => '验证整笔事务回滚', 'received' => true, 'preview_token' => $atomicPlan['preview_token']]), '关联已变化');
     $assert($q('erp_sale_return')->count() === $beforeReturns && (float)$q('erp_receivable')->where('id', $atomic['ar'])->value('amount') === 10000.0, '第二台库存校验失败，第一台退货及整笔冲账一并回滚');
     $assert((int)$q('phone_shop_goods_sku')->where('sku_id', $atomic['skus'][0]['sku_id'])->value('stock') === 0, '事务失败不遗留第一台回库');
+    $assert((int)$q('phone_shop_goods')->where('goods_id', $atomic['skus'][0]['goods_id'])->value('status') === 0, '事务失败同时回滚第一台自动上架');
 
     $nPaid = $native(5000, 1, true);
     $memberId = $add('member', ['nickname' => '原生成交客户', 'username' => 'return-' . $tag, 'mobile' => '13900000001']);
@@ -283,6 +373,7 @@ try {
     $out = $perform($nMulti, [$nMulti['lineIds'][0]]);
     $assert($out['refund_amount'] === 5000.0, '两台同为asset0的原生商品不能合并退款');
     $assert((int)$q('phone_shop_order')->where('order_id', $nMulti['order'])->value('status') === 2, '部分退回保留其他设备订单');
+    $assert((int)$q('phone_shop_goods')->where('goods_id', $nMulti['skus'][0]['goods_id'])->value('status') === 1 && (int)$q('phone_shop_goods')->where('goods_id', $nMulti['skus'][1]['goods_id'])->value('status') === 0, '部分退回仅恢复已收到的设备上架');
     $out = $perform($nMulti, [$nMulti['lineIds'][1]]);
     $assert($out['refund_amount'] === 5000.0 && (int)$q('phone_shop_order')->where('order_id', $nMulti['order'])->value('status') === -1, '剩余设备独立退款，全退才关闭');
     $nPartial = $native(1000, 2);

@@ -171,8 +171,10 @@
         </scroll-view>
 
       </view>
-      <template #footer>
+      <template #secondary>
         <OrderUiButton block @click="closeAddDialog">取消</OrderUiButton>
+      </template>
+      <template #primary>
         <OrderUiButton block variant="primary" @click="confirmAdd">添加设备</OrderUiButton>
       </template>
     </OrderTaskPopup>

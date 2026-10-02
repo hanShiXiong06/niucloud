@@ -61,7 +61,7 @@ final class SfConfigService
         if ($identityChanged) { $data['enabled'] = 0; $data['use_ack'] = 0; }
         if ($data['client_code'] !== '' && (!preg_match('/^[A-Za-z0-9_-]{1,64}$/D', $data['client_code']))) throw new CommonException('顾客编码格式不正确，请复制顺丰后台的编码');
         if ($data['monthly_card'] !== '' && !preg_match('/^[0-9]{10}$/D', $data['monthly_card'])) throw new CommonException('月结卡号应为10位数字；现结请留空');
-        if ($data['pay_method'] === 2 && $data['monthly_card'] !== '') throw new CommonException('到付不能同时提交寄方月结卡号，请清空月结卡号后保存');
+        if ($scene !== 'waybill' && $data['pay_method'] === 2 && $data['monthly_card'] !== '') throw new CommonException('到付不能同时提交寄方月结卡号，请清空月结卡号后保存');
         if ($data['pay_method'] === 3 && $data['monthly_card'] === '' && $data['enabled']) throw new CommonException('第三方付需要已获授权的第三方月结卡号');
         $data['callback_base_url'] = rtrim($data['callback_base_url'], '/');
         if ($data['callback_base_url'] !== '' && !ConfigService::validBaseUrl($data['callback_base_url'])) throw new CommonException('公网根地址须为不带路径、参数或账号的 HTTPS 域名');
@@ -85,13 +85,43 @@ final class SfConfigService
         $add('check_word', '当前环境校验码', $secret !== '' && $secret !== self::MASK, '填写对应沙箱或生产环境的校验码，不是应用名称');
         $add('product', '快递产品', in_array((string)($config['product_code'] ?? ''), array_column(self::products(), 'value'), true), '请选择与顺丰客户经理约定开通的产品');
         $pay = (int)($config['pay_method'] ?? 0); $card = (string)($config['monthly_card'] ?? '');
-        $add('payment', '运费付款方式', in_array($pay, [1,2,3], true) && ($pay !== 2 || $card === '') && ($pay !== 3 || $card !== ''), '到付不填月结号；第三方付须填写获授权的第三方月结号');
-        $add('monthly_card', '月结卡号（现结可空）', $card === '' || (bool)preg_match('/^[0-9]{10}$/D', $card), '月结卡号应为10位数字，且已绑定当前应用；现结请留空');
+        $add('payment', '运费付款方式', in_array($pay, [1,2,3], true) && ($scene === 'waybill' || $pay !== 2 || $card === '') && ($pay !== 3 || $card !== ''), $scene === 'waybill' ? '商城发货默认到付；寄方付须在发货时选择，并使用本站月结账号' : '到付不填月结号；第三方付须填写获授权的第三方月结号');
+        $add('monthly_card', $scene === 'waybill' ? '本站月结账号（寄方付必填）' : '月结卡号（现结可空）', $card === '' || (bool)preg_match('/^[0-9]{10}$/D', $card), $scene === 'waybill' ? '月结账号应为10位数字，且已绑定当前应用；未填写只能在商城选择到付' : '月结卡号应为10位数字，且已绑定当前应用；现结请留空');
         if ($scene === 'waybill') $add('template', '顺丰 PDF 模板', trim((string)($config['template_code'] ?? '')) !== '', '从顺丰云打印面单2.0获取模板编码，不是快递100模板ID');
         $add('confirmation', '开通确认', !empty($config['use_ack']), '确认当前账号具备对应产品、付款方式及接口权限');
         $missing = array_column(array_filter($checks, static fn($row) => !$row['passed']), 'message');
         return ['ready' => !$missing, 'checks' => $checks, 'missing' => $missing, 'external_verified' => false,
             'message' => '仅检查本地配置，不下单、不叫件、不扣费，不代表服务地区、额度或实际打印已验证。'];
+    }
+
+    /** 发货页只获取账号就绪状态及尾号，不解密、返回接口凭据或完整月结号。 */
+    public function waybillOptions(int $siteId): array
+    {
+        $raw = (new CoreConfigService())->getConfigValue($siteId, self::key('waybill'));
+        $config = is_array($raw) ? $raw : [];
+        $card = (string)($config['monthly_card'] ?? '');
+        $ready = (int)($config['pay_method'] ?? 0) !== 3 && preg_match('/^[0-9]{10}$/D', $card) === 1;
+        return ['default_for_delivery' => !empty($config['enabled']), 'environment' => $config['environment'] ?? 'sandbox',
+            'freight_payment' => ['default' => 'receiver', 'sender_monthly_card_ready' => $ready,
+                'sender_monthly_card_tail' => $ready ? substr($card, -4) : '',
+                'sender_unavailable_reason' => $ready ? '' : ((int)($config['pay_method'] ?? 0) === 3
+                    ? '当前保存的是第三方月结配置，请先在账号与打印配置中改为本站寄方月结账号'
+                    : '未配置本站顺丰月结账号，请先到账号与打印配置填写；也可继续使用到付')]];
+    }
+
+    /** 按单选择，复制出有效配置；到付不把已保存的月结卡号提交给顺丰。 */
+    public static function withWaybillPayment(array $config, $payment = 'receiver'): array
+    {
+        if (!in_array($payment, ['receiver', 'sender'], true)) throw new CommonException('请选择到付或寄方付，未申请运单');
+        if ($payment === 'receiver') {
+            $config['pay_method'] = 2;
+            $config['monthly_card'] = '';
+        } else {
+            if ((int)($config['pay_method'] ?? 0) === 3) throw new CommonException('第三方月结账号不能作为本站寄方月结账号，请先修改账号与打印配置，未申请运单');
+            if (!preg_match('/^[0-9]{10}$/D', (string)($config['monthly_card'] ?? ''))) throw new CommonException('寄方付需要本站顺丰月结账号，请先在账号与打印配置填写10位月结卡号，未申请运单');
+            $config['pay_method'] = 1;
+        }
+        return $config;
     }
     public static function products(): array
     {
