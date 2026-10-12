@@ -1,0 +1,11 @@
+{
+  "title": "金蝶精斗云对接",
+  "key": "hsx_kingdee_jdy",
+  "version": "0.1.0",
+  "author": "hsx",
+  "desc": "精斗云云进销存授权检查、ERP事件预检、映射与异常工作台。真实写单等待授权账套验收。",
+  "type": "addon",
+  "support_app": "hsx_erp",
+  "support_version": "1.2.4",
+  "compile": []
+}

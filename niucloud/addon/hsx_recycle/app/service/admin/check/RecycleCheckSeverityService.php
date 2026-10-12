@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace addon\hsx_recycle\app\service\admin\check;
 
 use addon\hsx_recycle\app\model\check\RecycleCheckDict;
-use core\base\BaseAdminService;
+use addon\hsx_recycle\app\service\core\device\CatalogAdminService;
 use core\exception\CommonException;
 use PhpOffice\PhpSpreadsheet\Cell\DataValidation;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -20,7 +20,7 @@ use think\facade\Log;
  * normal正常(success绿)/general一般(info)/abnormal异常(danger红)。
  * 用户改过的标 is_user_modified=1，重导播种时不覆盖。
  */
-class RecycleCheckSeverityService extends BaseAdminService
+class RecycleCheckSeverityService extends CatalogAdminService
 {
     public const SEVERITIES = ['normal', 'general', 'abnormal'];
 
@@ -151,6 +151,7 @@ class RecycleCheckSeverityService extends BaseAdminService
     /** 上传 Excel 并生成一次性预检令牌，不直接修改业务数据。 */
     public function previewImport($file): array
     {
+        $this->assertCatalogWritable();
         if (!$file || !$file->isValid()) {
             throw new CommonException('Excel 文件上传失败');
         }
@@ -321,6 +322,7 @@ class RecycleCheckSeverityService extends BaseAdminService
     /** 用户确认预检结果后原子更新字典；失败不会产生部分更新。 */
     public function confirmImport(string $token): array
     {
+        $this->assertCatalogWritable();
         if (!preg_match('/^[a-f0-9]{40}$/', $token)) {
             throw new CommonException('预检令牌无效，请重新上传');
         }
@@ -379,6 +381,7 @@ class RecycleCheckSeverityService extends BaseAdminService
 
     public function setSeverity(int $id, string $severity): bool
     {
+        $this->assertCatalogWritable();
         if (!in_array($severity, self::SEVERITIES, true)) {
             throw new CommonException('级别不正确');
         }
@@ -392,6 +395,7 @@ class RecycleCheckSeverityService extends BaseAdminService
 
     public function batchSetSeverity(array $ids, string $severity): int
     {
+        $this->assertCatalogWritable();
         if (!in_array($severity, self::SEVERITIES, true)) {
             throw new CommonException('级别不正确');
         }
@@ -406,6 +410,7 @@ class RecycleCheckSeverityService extends BaseAdminService
     /** 按关键字批量打标(如含“碎/裂”设为异常) */
     public function setByKeyword(string $keyword, string $severity): int
     {
+        $this->assertCatalogWritable();
         if ($keyword === '' || !in_array($severity, self::SEVERITIES, true)) {
             throw new CommonException('参数不正确');
         }

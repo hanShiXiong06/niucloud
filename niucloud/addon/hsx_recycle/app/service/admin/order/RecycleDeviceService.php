@@ -224,7 +224,7 @@ class RecycleDeviceService extends BaseAdminService
     private function optionSeverityMap(): array
     {
         $rows = Db::name('recycle_check_dict')
-            ->where('site_id', '=', $this->site_id)
+            ->where('site_id', '=', (new \addon\hsx_recycle\app\service\core\device\DeviceCatalogPolicy())->ownerSiteId((int)$this->site_id))
             ->where('dict_type', '=', 'option')
             ->field('text,severity')
             ->select()->toArray();
@@ -312,7 +312,7 @@ class RecycleDeviceService extends BaseAdminService
             return [];
         }
         $fields = Db::name('recycle_check_field')
-            ->where('site_id', '=', $this->site_id)
+            ->whereIn('site_id', \addon\hsx_recycle\app\service\core\device\DeviceCatalogPolicy::referenceSiteIds((int)$this->site_id))
             ->where('template_id', '=', $templateId)
             ->where('is_show', '=', 1)
             ->field('field_key,field_name,sort,extra_config')

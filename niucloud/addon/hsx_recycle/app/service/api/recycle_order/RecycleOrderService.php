@@ -410,7 +410,7 @@ class RecycleOrderService extends BaseApiService
     private function getTemplateOptionMap(array $templateIds): array
     {
         $fields = (new RecycleCheckField())->where([
-            ['site_id', '=', $this->site_id],
+            ['site_id', 'in', \addon\hsx_recycle\app\service\core\device\DeviceCatalogPolicy::referenceSiteIds((int)$this->site_id)],
         ])->whereIn('template_id', $templateIds)->field('id,template_id,field_key')->select()->toArray();
 
         if (empty($fields)) {
@@ -429,7 +429,7 @@ class RecycleOrderService extends BaseApiService
         }
 
         $options = (new RecycleCheckOption())->where([
-            ['site_id', '=', $this->site_id],
+            ['site_id', 'in', \addon\hsx_recycle\app\service\core\device\DeviceCatalogPolicy::referenceSiteIds((int)$this->site_id)],
         ])->whereIn('field_id', $fieldIds)->field('field_id,option_label,option_value,extra_config')->select()->toArray();
 
         $map = [];
@@ -461,7 +461,7 @@ class RecycleOrderService extends BaseApiService
     private function getOptionSeverityMap(): array
     {
         $rows = Db::name('recycle_check_dict')
-            ->where('site_id', '=', $this->site_id)
+            ->where('site_id', '=', (new \addon\hsx_recycle\app\service\core\device\DeviceCatalogPolicy())->ownerSiteId((int)$this->site_id))
             ->where('dict_type', '=', 'option')
             ->field('text,severity')
             ->select()->toArray();

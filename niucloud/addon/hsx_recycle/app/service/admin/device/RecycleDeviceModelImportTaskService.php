@@ -5,7 +5,9 @@ namespace addon\hsx_recycle\app\service\admin\device;
 
 use addon\hsx_recycle\app\job\DeviceModelImport;
 use addon\hsx_recycle\app\model\device\RecycleDeviceModelImportTask;
-use core\base\BaseAdminService;
+use addon\hsx_recycle\app\service\core\device\CatalogAdminService;
+use addon\hsx_recycle\app\service\core\device\DeviceCatalogPolicy;
+use addon\hsx_recycle\app\service\core\device\DeviceCatalogWriteLock;
 use core\exception\CommonException;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Reader\IReadFilter;
@@ -14,7 +16,7 @@ use think\facade\Log;
 /**
  * 设备分类导入任务服务
  */
-class RecycleDeviceModelImportTaskService extends BaseAdminService
+class RecycleDeviceModelImportTaskService extends CatalogAdminService
 {
     private const IMPORT_DIR = 'upload/hsx_recycle/model_import/';
     private const CHUNK_SIZE = 500;
@@ -25,11 +27,22 @@ class RecycleDeviceModelImportTaskService extends BaseAdminService
     public function __construct()
     {
         parent::__construct();
+        // 导入任务保留发起站点，资料归属单独记录，不能丢失授权来源。
+        $this->site_id = $this->catalogBusinessSiteId;
         $this->model = new RecycleDeviceModelImportTask();
+    }
+
+    private function assertTaskWritable(): int
+    {
+        $this->assertCatalogWritable();
+        $owner = (int)$this->site_id;
+        $this->site_id = $this->catalogBusinessSiteId;
+        return $owner;
     }
 
     public function upload($file, string $source = 'recycle_spider'): array
     {
+        $owner = $this->assertTaskWritable();
         if (!$file || !$file->isValid()) {
             throw new CommonException('Excel 文件上传失败');
         }
@@ -62,7 +75,7 @@ class RecycleDeviceModelImportTaskService extends BaseAdminService
             'status' => 'pending',
             'queue_enabled' => env('queue.state', false) ? 1 : 0,
             'message' => '文件已上传，等待进入导入队列',
-            'result_json' => [],
+            'result_json' => ['catalog_owner_site_id' => $owner],
             'create_at' => $now,
             'update_at' => $now,
         ]);
@@ -99,6 +112,7 @@ class RecycleDeviceModelImportTaskService extends BaseAdminService
 
     public function retry(int $id): array
     {
+        $owner = $this->assertTaskWritable();
         $task = $this->getInfo($id);
         if ($task['status'] === 'processing') {
             throw new CommonException('任务正在执行，请勿重复提交');
@@ -117,7 +131,7 @@ class RecycleDeviceModelImportTaskService extends BaseAdminService
             'updated_count' => 0,
             'skipped_count' => 0,
             'error_count' => 0,
-            'result_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+            'result_json' => json_encode(['catalog_owner_site_id' => $owner], JSON_UNESCAPED_UNICODE),
             'error_message' => '',
             'finish_at' => 0,
             'message' => '等待重新进入导入队列',
@@ -128,6 +142,7 @@ class RecycleDeviceModelImportTaskService extends BaseAdminService
 
     public function delete(int $id): bool
     {
+        $this->assertTaskWritable();
         $task = $this->getInfo($id);
         if (in_array($task['status'], ['queued', 'processing'], true)) {
             throw new CommonException('任务正在执行，暂时不能删除');
@@ -145,6 +160,7 @@ class RecycleDeviceModelImportTaskService extends BaseAdminService
 
     public function runTask(int $taskId, int $siteId): void
     {
+        $lock = new DeviceCatalogWriteLock(); $lock->acquire();
         $task = $this->model->where([
             ['site_id', '=', $siteId],
             ['id', '=', $taskId],
@@ -170,6 +186,12 @@ class RecycleDeviceModelImportTaskService extends BaseAdminService
         ]);
 
         try {
+            $policy = new DeviceCatalogPolicy();
+            $policy->assertLocalWritable($siteId);
+            $expectedOwner = (int)($task['result_json']['catalog_owner_site_id'] ?? $siteId);
+            if ($policy->ownerSiteId($siteId) !== $expectedOwner) {
+                throw new CommonException('资料库来源已变化，本次导入未执行，请核对后重新上传');
+            }
             $meta = $this->inspectWorkbook($path);
             $headerRow = $meta['header_row'];
             $totalRows = max(0, $meta['total_rows'] - $headerRow);
@@ -234,6 +256,7 @@ class RecycleDeviceModelImportTaskService extends BaseAdminService
                     'skipped_count' => $skipped,
                     'error_count' => $skipped,
                     'result_json' => json_encode([
+                        'catalog_owner_site_id' => $expectedOwner,
                         'skipped' => $errorSamples,
                         'errors_truncated' => $skipped > count($errorSamples),
                     ], JSON_UNESCAPED_UNICODE),

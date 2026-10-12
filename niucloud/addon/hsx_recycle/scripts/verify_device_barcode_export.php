@@ -40,6 +40,11 @@ namespace {
         'sys_user' => 'uid INTEGER PRIMARY KEY, username TEXT, real_name TEXT, delete_time INTEGER DEFAULT 0',
         'phone_shop_goods_category' => 'category_id INTEGER PRIMARY KEY, category_name TEXT',
         'sys_export' => 'id INTEGER PRIMARY KEY AUTOINCREMENT, site_id INTEGER, export_key TEXT, export_num INTEGER DEFAULT 0, file_path TEXT DEFAULT "", file_size TEXT DEFAULT "", export_status INTEGER DEFAULT 0, fail_reason TEXT DEFAULT "", create_time INTEGER DEFAULT 0',
+        'recycle_check_template' => 'id INTEGER PRIMARY KEY, site_id INTEGER, schema_json TEXT DEFAULT "", status INTEGER DEFAULT 1',
+        'recycle_check_field' => 'id INTEGER PRIMARY KEY, site_id INTEGER, template_id INTEGER, field_key TEXT',
+        'recycle_check_option' => 'id INTEGER PRIMARY KEY, field_id INTEGER, option_value TEXT, option_label TEXT',
+        'recycle_device_model_dict' => 'id INTEGER PRIMARY KEY, site_id INTEGER, pid INTEGER DEFAULT 0',
+        'recycle_template_binding' => 'id INTEGER PRIMARY KEY, site_id INTEGER, target_type TEXT DEFAULT "model_dict", target_id INTEGER, scene_key TEXT DEFAULT "manual_device_label", check_template_id INTEGER, inherit_enabled INTEGER DEFAULT 1, status INTEGER DEFAULT 1',
     ] as $table => $columns) Db::execute('CREATE TABLE ut_' . $table . ' (' . $columns . ')');
     foreach ([1 => '353618265971368', 2 => '012345678901234', 3 => '', 4 => '971368', 5 => '353618265971368', 6 => '123456789012345', 7 => '223456789012345', 90 => '999999999999999'] as $id => $imei) {
         Db::name('recycle_device')->insert(['id' => $id, 'site_id' => $id === 90 ? 100024 : 100005, 'imei' => $imei, 'update_at' => 100 + $id]);
@@ -133,6 +138,109 @@ namespace {
             $enabledBook = IOFactory::load(public_path() . $enabled['file_path']);
             same(1, $enabledBook->getActiveSheet()->getDrawingCollection()->count(), '显式开启后确实生成条码图片');
             $enabledBook->disconnectWorksheets();
+        }
+        // 公共库转换后，普通/条形码导出必须按每台设备自己的模板解析，不能导出选项 key。
+        $seedTemplate = static function (int $id, int $site, string $capacity, string $color): void {
+            $fields = [];
+            foreach (['capacity' => $capacity, 'color' => $color, 'package_type' => '原盒全套', 'warranty_info' => '保修期内'] as $key => $label) {
+                $fields[] = ['field_key' => $key, 'component' => 'radio', 'options' => [['value' => '2', 'label' => $label]]];
+            }
+            Db::name('recycle_check_template')->insert(['id' => $id, 'site_id' => $site, 'schema_json' => json_encode(['groups' => [['fields' => $fields]]], JSON_UNESCAPED_UNICODE)]);
+        };
+        $seedTemplate(10, 0, '256GB', '银色');
+        $seedTemplate(11, 100005, '512GB', '蓝色');
+        $seedTemplate(12, 100024, '其他站点容量', '其他站点颜色');
+        $seedTemplate(13, 0, '1TB', '黑色');
+        $seedTemplate(14, 0, '已停用容量', '已停用颜色');
+        Db::name('recycle_check_template')->where('id', 14)->update(['status' => 0]);
+        Db::name('recycle_check_template')->insert(['id' => 15, 'site_id' => 0]);
+        Db::name('recycle_check_field')->insert(['id' => 100, 'site_id' => 0, 'template_id' => 15, 'field_key' => 'capacity']);
+        Db::name('recycle_check_option')->insertAll([
+            ['id' => 1, 'field_id' => 100, 'option_value' => '2', 'option_label' => '128GB'],
+            ['id' => 2, 'field_id' => 100, 'option_value' => '3', 'option_label' => '256GB'],
+        ]);
+        foreach ([20 => [0, 0], 21 => [0, 20], 22 => [0, 0], 23 => [100024, 0], 24 => [100005, 0], 25 => [0, 0], 26 => [0, 0], 27 => [0, 0], 28 => [0, 0], 29 => [0, 28]] as $id => [$owner, $parent]) {
+            Db::name('recycle_device_model_dict')->insert(['id' => $id, 'site_id' => $owner, 'pid' => $parent]);
+        }
+        foreach ([20 => [0, 10], 23 => [100024, 12], 24 => [100005, 11], 25 => [0, 14], 26 => [0, 12], 27 => [0, 13], 28 => [0, 10]] as $id => [$owner, $templateId]) {
+            Db::name('recycle_template_binding')->insert(['id' => $id, 'site_id' => $owner, 'target_id' => $id, 'check_template_id' => $templateId]);
+        }
+        Db::name('recycle_template_binding')->where('id', 27)->update(['scene_key' => 'custom_print']);
+        Db::name('recycle_template_binding')->where('id', 28)->update(['inherit_enabled' => 0]);
+        Db::name('recycle_template_binding')->insert(['id' => 30, 'site_id' => 0, 'target_type' => 'global', 'target_id' => 0, 'check_template_id' => 13]);
+        // 公共型号即使有原站旧绑定，也应使用公共型号归属的绑定。
+        Db::name('recycle_template_binding')->insert(['id' => 31, 'site_id' => 100005, 'target_id' => 20, 'check_template_id' => 11]);
+        $snapshot = ['check_meta' => ['result_items' => [
+            ['field_key' => 'capacity', 'values' => ['2'], 'labels' => ['原机1TB']],
+            ['field_key' => 'color', 'option_items' => [['value' => '2', 'label' => '原机钛色']]],
+        ]]];
+        $fixtures = [
+            101 => ['check_template_id' => 10],
+            102 => ['info' => ['check_meta' => ['template_id' => 10]]],
+            103 => ['category_id' => 20],
+            104 => ['category_id' => 21],
+            105 => ['category_id' => 24],
+            106 => ['category_id' => 20, 'info' => $snapshot],
+            107 => ['category_id' => 20, 'check_template_id' => 11, 'info' => $snapshot],
+            108 => ['category_id' => 22],
+            109 => ['category_id' => 23],
+            110 => ['category_id' => 25],
+            111 => ['category_id' => 26],
+            112 => ['category_id' => 27],
+            113 => ['category_id' => 29],
+            114 => ['check_template_id' => 15],
+            115 => ['capacity' => '', 'color' => '', 'info' => ['check_meta' => ['template_id' => 10], 'sign_summary' => ['capacity' => '2', 'color' => '2']]],
+            116 => ['category_id' => 20, 'check_template_id' => 999],
+            117 => ['category_id' => 20, 'check_template_id' => 12],
+            118 => ['capacity' => '9', 'info' => $snapshot],
+            119 => ['check_template_id' => 15, 'capacity' => '["2","3"]'],
+            120 => ['capacity' => ['value' => '2', 'label' => '2TB'], 'color' => '紫色', 'warranty_info' => '2027-09-17'],
+            121 => ['category_id' => 20, 'info' => ['check_meta' => ['template_id' => 11]]],
+        ];
+        foreach ($fixtures as $id => $values) {
+            $values += ['site_id' => 100005, 'imei' => '123456789000' . $id, 'capacity' => '2', 'color' => '2', 'package_type' => '2', 'warranty_info' => '2', 'system_version' => '26.6'];
+            foreach (['info', 'capacity'] as $jsonKey) if (isset($values[$jsonKey]) && is_array($values[$jsonKey])) $values[$jsonKey] = json_encode($values[$jsonKey], JSON_UNESCAPED_UNICODE);
+            Db::name('recycle_device')->insert(['id' => $id] + $values);
+        }
+        $before = [];
+        foreach (['recycle_device', 'recycle_check_template', 'recycle_check_field', 'recycle_check_option', 'recycle_template_binding'] as $table) $before[$table] = Db::name($table)->select()->toArray();
+        $resolved = array_column(readRows(['device_ids' => array_keys($fixtures)]), null, '_device_id');
+        foreach ([101, 102, 103, 104, 115] as $id) {
+            same('256GB', $resolved[$id]['capacity'], '公共模板/元数据/型号/继承/签收摘要解析容量 #' . $id);
+            same('银色', $resolved[$id]['color'], '按本设备字段解析颜色 #' . $id);
+        }
+        same('原盒全套', $resolved[103]['package_type'], '包装通过型号绑定还原，不仅处理容量颜色');
+        same('保修期内', $resolved[103]['warranty_info'], '保修选项通过型号绑定还原');
+        $rawResolved = (new \addon\hsx_recycle\app\service\admin\device_export\DeviceExportValueResolver())->resolve([Db::name('recycle_device')->where('id', 103)->find()], 100005);
+        same('26.6', $rawResolved[0]['system_version'], '自由输入版本号保持原值');
+        same('512GB', $resolved[105]['capacity'], '同批次私有模板与公共模板互不串用');
+        same('蓝色', $resolved[105]['color'], '不同模板同一key输出各自颜色');
+        same('原机1TB', $resolved[106]['capacity'], '同设备标签快照优先于当前型号绑定');
+        same('原机钛色', $resolved[106]['color'], 'option_items标签快照解析');
+        same('512GB', $resolved[107]['capacity'], '已保存模板优先于快照和当前型号');
+        same('512GB', $resolved[121]['capacity'], 'meta保存模板优先于当前型号');
+        foreach ([108, 109, 110, 111, 112, 113, 116, 117] as $id) same('2', $resolved[$id]['capacity'], '无可靠关联时不借用外站/全局/停用/自定义场景模板 #' . $id);
+        same('128GB', $resolved[114]['capacity'], '公共拆表模板正式option_value优先于主键别名');
+        same('128GB,256GB', $resolved[119]['capacity'], '多值逐项回译');
+        same('9', $resolved[118]['capacity'], '快照值不一致不能套另一选项标签');
+        same('2TB', $resolved[120]['capacity'], '值自带label时显示文字');
+        same('紫色', $resolved[120]['color'], '已存文字不更改');
+        same('2027-09-17', $resolved[120]['warranty_info'], '保修日期不更改');
+        foreach ($before as $table => $rows) same($rows, Db::name($table)->select()->toArray(), '解析只读，不回写 ' . $table);
+        foreach ([false, true] as $barcode) {
+            same(true, $service->export(['device_ids' => [101, 102, 103, 104, 105, 114], 'include_barcode' => $barcode]), '实际导出公共/私有/型号绑定设备，条形码=' . (int)$barcode);
+            $result = Db::name('sys_export')->order('id desc')->find();
+            $workbook = IOFactory::load(public_path() . $result['file_path']);
+            $cells = $workbook->getActiveSheet()->toArray();
+            $headers = array_flip(array_shift($cells));
+            $byImei = [];
+            foreach ($cells as $row) $byImei[$row[$headers['imei']]] = $row;
+            foreach ([101 => '256GB', 102 => '256GB', 103 => '256GB', 104 => '256GB', 105 => '512GB', 114 => '128GB'] as $id => $label) {
+                same($label, $byImei['123456789000' . $id][$headers['内存']], '重新打开Excel单元格确认不是key #' . $id);
+            }
+            same('银色', $byImei['123456789000103'][$headers['颜色']], 'Excel颜色为银色而不是2');
+            same('原盒全套', $byImei['123456789000103'][$headers['包装']], 'Excel包装为文字');
+            $workbook->disconnectWorksheets();
         }
         \core\base\BaseJob::$failDispatch = true;
         throws(fn() => $service->export(['device_ids' => [6]]), '队列不可用', '提交队列失败可重试');

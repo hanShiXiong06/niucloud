@@ -1,11 +1,12 @@
 <template>
     <PremiumTheme class="check-severity-page">
+        <CatalogSourceNotice :policy="catalogPolicy" :error="catalogError" @retry="loadCatalog" />
         <el-card class="box-card" shadow="never">
             <template #header>
                 <PageHeader title="选项级别" description="导出全部质检选项，由人工或 Codex 标注，预检无误后一次确认更新。">
                     <template #actions>
                         <el-button :loading="exportLoading" @click="handleExport">导出协作表</el-button>
-                        <el-button type="primary" @click="openImport">导入更新</el-button>
+                        <el-button type="primary" :disabled="catalogReadOnly" @click="openImport">导入更新</el-button>
                         <el-button :loading="loading" @click="loadList">刷新</el-button>
                     </template>
                 </PageHeader>
@@ -52,7 +53,7 @@
 
 
 
-            <el-collapse class="quick-tools">
+            <el-collapse v-if="!catalogReadOnly" class="quick-tools">
                 <el-collapse-item title="少量数据快速处理（单项、批量或关键字）" name="quick">
                     <div class="batch-bar">
                         <span class="batch-bar__tip">按关键字：</span>
@@ -90,7 +91,7 @@
                 </el-table-column>
                 <el-table-column label="快速设置" width="240" align="center">
                     <template #default="{ row }">
-                        <el-radio-group :model-value="row.severity" size="small" @change="(v: string) => setOne(row, v)">
+                        <el-radio-group :disabled="catalogReadOnly" :model-value="row.severity" size="small" @change="(v: string) => setOne(row, v)">
                             <el-radio-button label="normal">正常</el-radio-button>
                             <el-radio-button label="general">一般</el-radio-button>
                             <el-radio-button label="abnormal">异常</el-radio-button>
@@ -165,6 +166,9 @@
 </template>
 
 <script lang="ts" setup>
+import { useDeviceCatalog } from '@/addon/hsx_recycle/composables/useDeviceCatalog'
+import CatalogSourceNotice from '@/addon/hsx_recycle/components/device-entry/CatalogSourceNotice.vue'
+const { catalogPolicy, catalogReadOnly, catalogError, loadCatalog } = useDeviceCatalog()
 import { HsxSearchPanel, HsxDialog, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
 import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import PageHeader from '@/addon/hsx_recycle/components/PageHeader.vue'

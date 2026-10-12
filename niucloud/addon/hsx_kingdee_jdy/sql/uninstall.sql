@@ -1,0 +1,2 @@
+-- Preserve mappings, immutable facts and audit records when uninstalling.
+-- Reinstallation must not re-create remote business documents.

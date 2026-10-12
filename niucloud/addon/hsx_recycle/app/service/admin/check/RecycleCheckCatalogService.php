@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace addon\hsx_recycle\app\service\admin\check;
 
 use addon\hsx_recycle\app\model\check\RecycleCheckImportBatch;
-use core\base\BaseAdminService;
+use addon\hsx_recycle\app\service\core\device\CatalogAdminService;
 use core\exception\CommonException;
 use PhpOffice\PhpSpreadsheet\Reader\IReadFilter;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -20,7 +20,7 @@ use XMLReader;
  *
  * 表格列：型号, 产品ID, 检测项, 分类, 默认选项, 全部选项(用 | 分隔)。文件按型号聚集(同型号相邻)。
  */
-class RecycleCheckCatalogService extends BaseAdminService
+class RecycleCheckCatalogService extends CatalogAdminService
 {
     private const IMPORT_DIR = 'upload/check_import/';
     private const TPL_PREFIX = 'pjt_';                 // 拍机堂来源模板的 template_key 前缀
@@ -30,6 +30,7 @@ class RecycleCheckCatalogService extends BaseAdminService
     /** 上传初始化：估算型号数(用行数粗估)，建批次，返回 token */
     public function importInit(string $absPath, string $token, string $fileName, string $mode = 'append'): array
     {
+        $this->assertCatalogWritable();
         $this->ensureCompactColumns();
         $mode = $this->normalizeImportMode($mode);
         if (!is_file($absPath)) {
@@ -50,6 +51,7 @@ class RecycleCheckCatalogService extends BaseAdminService
     /** 处理一片(按型号，最多 limit 个型号)。前端循环调用直到 done。覆盖模式 offset=0 时先清旧拍机堂模板 */
     public function importChunk(int $batchId, string $token, int $offset, int $limit = 80, string $mode = ''): array
     {
+        $this->assertCatalogWritable();
         $this->ensureCompactColumns();
         $path = public_path() . self::IMPORT_DIR . basename($token);
         if (!is_file($path)) {
@@ -335,11 +337,24 @@ class RecycleCheckCatalogService extends BaseAdminService
         if (empty($rows)) { return 0; }
         $model = trim((string)($rows[0][0] ?? '')); $pid = (int)($rows[0][1] ?? 0);
         $count = count($rows);
-        $nodeId = $this->resolveModelNode($nodeCache, $pid, $model);
-        if ($mode === 'append' && $nodeId > 0 && $this->modelHasTemplateBinding($nodeId)) {
+        $nodeIds = $this->resolveModelNodes($nodeCache, $pid);
+        $pendingNodes = [];
+        foreach ($nodeIds as $candidateId) {
+            $template = $this->boundTemplate($candidateId);
+            // 同一来源产品可能出现在多个分类下；逐个判断，不能因第一个已绑定而漏掉其余型号。
+            if ($mode === 'append' && $template &&
+                (($template['scene'] ?? '') !== 'pjt' || $this->templateHasContent($template))) {
+                continue;
+            }
+            $pendingNodes[] = $candidateId;
+        }
+        if ($mode === 'append' && $nodeIds && !$pendingNodes) {
             $skippedExists++;
             return $count;
         }
+        // 只有一个待补型号时才尝试原位填充其独占空模板，避免改动共享模板。
+        $nodeId = count($pendingNodes) === 1 ? $pendingNodes[0] : 0;
+        $boundTemplate = $nodeId > 0 ? $this->boundTemplate($nodeId) : [];
         $items = [];
         foreach ($rows as $r) {
             $field = trim((string)($r[2] ?? ''));
@@ -357,6 +372,16 @@ class RecycleCheckCatalogService extends BaseAdminService
         $templateKey = self::TPL_PREFIX . $sig;
         $tplId = (int)Db::name('recycle_check_template')
             ->where('site_id', $this->site_id)->where('template_key', $templateKey)->value('id');
+        if ($tplId <= 0 && $mode === 'append' && ($boundTemplate['scene'] ?? '') === 'pjt'
+            && !$this->templateHasContent($boundTemplate)) {
+            // 只有该型号独占的空模板才原位补齐，保留模板 ID。共享空模板不可拿单个型号的数据覆盖。
+            $otherBindings = Db::name('recycle_template_binding')
+                ->where('check_template_id', (int)$boundTemplate['id'])
+                ->where(function ($query) use ($nodeId) {
+                    $query->where('site_id', '<>', $this->site_id)->whereOr('target_type', '<>', 'model_dict')->whereOr('target_id', '<>', $nodeId);
+                })->count();
+            if (!$otherBindings) $tplId = (int)$boundTemplate['id'];
+        }
         if ($tplId <= 0) {
             $tplId = (int)Db::name('recycle_check_template')->insertGetId([
                 'site_id' => $this->site_id, 'template_key' => $templateKey,
@@ -366,9 +391,16 @@ class RecycleCheckCatalogService extends BaseAdminService
                 'create_at' => $now, 'update_at' => $now,
             ]);
             $newTpl++;
+        } else {
+            $existing = Db::name('recycle_check_template')->where('site_id', $this->site_id)->where('id', $tplId)->find();
+            if ($existing && !$this->templateHasContent($existing)) {
+                Db::name('recycle_check_template')->where('site_id', $this->site_id)->where('id', $tplId)
+                    ->update(['schema_hash' => $sig, 'schema_json' => $schemaJson,
+                        'version' => (int)$existing['version'] + 1, 'update_at' => $now]);
+            }
         }
 
-        if ($nodeId > 0) {
+        foreach ($pendingNodes as $nodeId) {
             $existBind = (int)Db::name('recycle_template_binding')
                 ->where('site_id', $this->site_id)->where('target_type', 'model_dict')
                 ->where('target_id', $nodeId)->where('scene_key', self::BIND_SCENE)->value('id');
@@ -564,28 +596,45 @@ class RecycleCheckCatalogService extends BaseAdminService
         return $cache[$key];
     }
 
-    /** 拍机堂产品ID → 型号字典节点ID(product_source_id 匹配)。缓存 */
-    private function resolveModelNode(array &$cache, int $pid, string $model): int
+    /** 拍机堂产品ID → 当前资料库内全部启用型号，不跨来源、不绑定分类/品牌节点。 */
+    private function resolveModelNodes(array &$cache, int $pid): array
     {
-        if ($pid <= 0) { return 0; }
+        if ($pid <= 0) { return []; }
         if (isset($cache[$pid])) { return $cache[$pid]; }
-        $id = (int)Db::name('recycle_device_model_dict')
+        $ids = Db::name('recycle_device_model_dict')
             ->where('site_id', $this->site_id)->where('product_source_id', (string)$pid)
-            ->order('id asc')->value('id');
-        $cache[$pid] = $id;
-        return $id;
+            ->where('source', 'recycle_spider')->where('node_type', 'model')->where('status', 1)
+            ->order('id asc')->column('id');
+        $cache[$pid] = array_map('intval', $ids);
+        return $cache[$pid];
     }
 
-    private function modelHasTemplateBinding(int $nodeId): bool
+    private function boundTemplate(int $nodeId): array
     {
-        return (int)Db::name('recycle_template_binding')
+        $templateId = (int)Db::name('recycle_template_binding')
             ->where('site_id', $this->site_id)
             ->where('target_type', 'model_dict')
             ->where('target_id', $nodeId)
             ->where('scene_key', self::BIND_SCENE)
             ->where('check_template_id', '>', 0)
             ->where('status', 1)
-            ->value('id') > 0;
+            ->value('check_template_id');
+        return $templateId > 0 ? (Db::name('recycle_check_template')->where('site_id', $this->site_id)->where('id', $templateId)->find() ?: []) : [];
+    }
+
+    private function templateHasContent(array $template): bool
+    {
+        $json = trim((string)($template['schema_json'] ?? ''));
+        if ($json !== '') {
+            $schema = json_decode($json, true);
+            // 非空但损坏的内容不能在追加导入时静默覆盖，需要先核对原文件。
+            if (!is_array($schema) || !is_array($schema['groups'] ?? null)) return true;
+            foreach ($schema['groups'] as $group) {
+                if (!empty($group['fields'])) return true;
+            }
+        }
+        // 隐藏的字段仍是有效配置，不以可见性判断是否可以覆盖。
+        return Db::name('recycle_check_field')->where('template_id', (int)$template['id'])->count() > 0;
     }
 
     private function normalizeImportMode(string $mode): string
@@ -602,6 +651,14 @@ class RecycleCheckCatalogService extends BaseAdminService
     /** 清掉旧的拍机堂来源模板(template_key 前缀 pjt_)及其分组/字段/选项/绑定。自定义模板不碰 */
     private function clearImported(): void
     {
+        if ((int)$this->site_id === 0) {
+            // 公共库覆盖采用保留旧版本，不删除历史设备引用的模板及字段选项。
+            $rows = Db::name('recycle_check_template')->where('site_id', 0)->whereLike('template_key', self::TPL_PREFIX . '%')->field('id')->select()->toArray();
+            $ids = array_column($rows, 'id');
+            foreach ($rows as $row) Db::name('recycle_check_template')->where('id', $row['id'])->update(['template_key' => 'archived_' . $row['id'] . '_' . time(), 'status' => 0, 'is_default' => 0]);
+            if ($ids) Db::name('recycle_template_binding')->where('site_id', 0)->whereIn('check_template_id', $ids)->update(['check_template_id' => 0]);
+            return;
+        }
         $tplIds = Db::name('recycle_check_template')
             ->where('site_id', $this->site_id)->whereLike('template_key', self::TPL_PREFIX . '%')
             ->column('id');
@@ -900,6 +957,7 @@ class RecycleCheckCatalogService extends BaseAdminService
      */
     public function seedGrades(): int
     {
+        $this->assertCatalogWritable();
         $grades = ['10新|全套', '99新|单机', '98新|微瑕', '95新|小花', '9新|磕碰划痕', '85新|硬划磕伤'];
         $now = time();
         $added = 0;

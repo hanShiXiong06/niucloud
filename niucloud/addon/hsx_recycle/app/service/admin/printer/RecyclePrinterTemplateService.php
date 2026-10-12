@@ -21,6 +21,10 @@ use addon\hsx_recycle\app\service\admin\template\RecycleTemplateBindingService;
 use core\base\BaseAdminService;
 use core\exception\AdminException;
 use core\exception\CommonException;
+use addon\hsx_recycle\app\service\core\printer\PrinterTemplateLibrary;
+use addon\hsx_recycle\app\service\core\device\DeviceCatalogWriteLock;
+use app\dict\sys\AppTypeDict;
+use think\facade\Db;
 
 /**
  * 回收打印模板服务类
@@ -90,10 +94,12 @@ class RecyclePrinterTemplateService extends BaseAdminService
      */
     public function getPage(array $where = [])
     {
-        $field = 'template_id,template_name,template_type,width,height,status,is_default,create_time,update_time';
+        $field = 'template_id,site_id,template_name,template_type,width,height,status,is_default,create_time,update_time';
         $order = 'create_time desc';
 
-        $search_model = $this->model->where([['site_id', '=', $this->site_id]]);
+        $search_model = PrinterTemplateLibrary::query((int)$this->site_id);
+        if (($where['source'] ?? '') === 'public') $search_model->where('site_id', 0);
+        if (($where['source'] ?? '') === 'local') $search_model->where('site_id', (int)$this->site_id);
         
         // 处理搜索条件 - 只有非空值才添加到搜索条件
         if (!empty($where['template_name'])) {
@@ -114,7 +120,12 @@ class RecyclePrinterTemplateService extends BaseAdminService
         
         // 处理返回数据
         if (!empty($list['data'])) {
+            $defaults = [];
             foreach ($list['data'] as &$item) {
+                $item = PrinterTemplateLibrary::describe($item, (int)$this->site_id);
+                $type = $item['template_type'];
+                if (!array_key_exists($type, $defaults)) $defaults[$type] = (int)($this->getDefaultTemplate($type)['template_id'] ?? 0);
+                $item['effective_default'] = $defaults[$type] === (int)$item['template_id'];
                 $item['type_name'] = RecyclePrinterTemplate::getTypeList()[$item['template_type']] ?? '';
                 $item['status_name'] = RecyclePrinterTemplate::getStatusList()[$item['status']] ?? '';
             }
@@ -130,12 +141,14 @@ class RecyclePrinterTemplateService extends BaseAdminService
      */
     public function getInfo(int $id)
     {
-        $field = 'template_id,template_name,template_type,width,height,content,instruction_content,html_content,variables,status,is_default,printer_id,trigger_event,create_time,update_time';
+        $field = 'template_id,site_id,template_name,template_type,width,height,content,instruction_content,html_content,variables,status,is_default,printer_id,trigger_event,create_time,update_time';
         
-        $info = $this->model->field($field)
-            ->where([['template_id', '=', $id], ['site_id', '=', $this->site_id]])
+        $info = PrinterTemplateLibrary::query((int)$this->site_id)->field($field)
+            ->where('template_id', $id)
             ->findOrEmpty()
             ->toArray();
+        if (!$info) return [];
+        $info = PrinterTemplateLibrary::describe($info, (int)$this->site_id);
             
         if (!empty($info)) {
             $info['type_name'] = RecyclePrinterTemplate::getTypeList()[$info['template_type']] ?? '';
@@ -156,11 +169,7 @@ class RecyclePrinterTemplateService extends BaseAdminService
                     // 确保有instruction_content，如果没有则生成
                     if (empty($info['instruction_content'])) {
                         $info['instruction_content'] = $this->converterService->jsonToXml($content_data);
-                        // 更新数据库
-                        $this->model->where([
-                            ['template_id', '=', $id],
-                            ['site_id', '=', $this->site_id]
-                        ])->update(['instruction_content' => $info['instruction_content']]);
+                        // 读取只做运行时转换，不能因站点预览而改写公共模板。
                     }
                     
                     // 为了兼容，也生成XML格式
@@ -175,14 +184,6 @@ class RecyclePrinterTemplateService extends BaseAdminService
                     $info['instruction_content'] = $this->converterService->jsonToXml($content_data);
                     $info['xml_content'] = $info['instruction_content'];
                     
-                    // 更新数据库为新格式
-                    $this->model->where([
-                        ['template_id', '=', $id],
-                        ['site_id', '=', $this->site_id]
-                    ])->update([
-                        'content' => json_encode($content_data),
-                        'instruction_content' => $info['instruction_content']
-                    ]);
                 }
             } else {
                 $info['content'] = ['width' => 58, 'height' => 40, 'elements' => []];
@@ -222,6 +223,9 @@ class RecyclePrinterTemplateService extends BaseAdminService
      */
     public function add(array $data)
     {
+        $this->assertWriteContext();
+        $data = array_merge(['content' => '', 'html_content' => '', 'variables' => [], 'status' => 1], $data);
+        if ((int)$this->site_id === 0) { $data['printer_id'] = 0; $data['trigger_event'] = ''; }
         // 定义数据库表中存在的字段（根据SQL表结构）
         $allowedFields = [
             'site_id', 'template_name', 'template_type', 'size', 'content',
@@ -282,18 +286,16 @@ class RecyclePrinterTemplateService extends BaseAdminService
             }
         }
         
-        // 如果设置为默认模板，先取消其他默认模板
-        if (!empty($saveData['is_default'])) {
-            $this->model->where([
-                ['site_id', '=', $this->site_id],
-                ['template_type', '=', $saveData['template_type']]
-            ])->update(['is_default' => 0]);
-        }
-        
-        $this->model->save($saveData);
-        
-        return $this->model->getKey(); // 返回新插入的模板ID
-        }
+        $lock = new DeviceCatalogWriteLock(); $lock->acquire();
+        return Db::transaction(function () use ($saveData) {
+            if (!empty($saveData['is_default'])) {
+                $this->model->where('site_id', $this->site_id)->where('template_type', $saveData['template_type'])->update(['is_default' => 0]);
+            }
+            $created = RecyclePrinterTemplate::create($saveData);
+            if (!empty($saveData['is_default'])) PrinterTemplateLibrary::selectDefault((int)$this->site_id, $saveData['template_type'], 0);
+            return $created->getKey();
+        });
+    }
         
     /**
      * 编辑模板
@@ -303,6 +305,12 @@ class RecyclePrinterTemplateService extends BaseAdminService
      */
     public function edit(int $id, array $data)
     {
+        $original = $this->assertOwnedTemplate($id);
+        // 已被业务选择的模板不能悄悄改为其它类型。
+        if (isset($data['template_type']) && $data['template_type'] !== $original['template_type']) {
+            throw new CommonException('已保存模板不能更换业务类型，请新建对应类型的模板');
+        }
+        if ((int)$this->site_id === 0) { $data['printer_id'] = 0; $data['trigger_event'] = ''; }
         // 定义数据库表中存在的字段（根据SQL表结构，排除主键和自动字段）
         $allowedFields = [
             'template_name', 'template_type', 'size', 'content',
@@ -362,21 +370,16 @@ class RecyclePrinterTemplateService extends BaseAdminService
             }
         }
         
-        // 如果设置为默认模板，先取消其他默认模板
-        if (!empty($updateData['is_default'])) {
-            $this->model->where([
-                ['site_id', '=', $this->site_id],
-                ['template_type', '=', $updateData['template_type']],
-                ['template_id', '<>', $id]
-            ])->update(['is_default' => 0]);
-        }
-        
-        $this->model->where([
-            ['template_id', '=', $id],
-            ['site_id', '=', $this->site_id]
-        ])->update($updateData);
-        
-        return true;
+        $lock = new DeviceCatalogWriteLock(); $lock->acquire();
+        return Db::transaction(function () use ($id, $updateData, $original) {
+            if (!empty($updateData['is_default'])) {
+                $this->model->where('site_id', $this->site_id)->where('template_type', $original['template_type'])
+                    ->where('template_id', '<>', $id)->update(['is_default' => 0]);
+            }
+            $this->model->where('template_id', $id)->where('site_id', $this->site_id)->update($updateData);
+            if (!empty($updateData['is_default'])) PrinterTemplateLibrary::selectDefault((int)$this->site_id, $original['template_type'], 0);
+            return true;
+        });
     }
 
     /**
@@ -386,6 +389,10 @@ class RecyclePrinterTemplateService extends BaseAdminService
      */
     public function del(int $id)
     {
+        $template = $this->assertOwnedTemplate($id);
+        if ((int)(PrinterTemplateLibrary::defaults((int)$this->site_id)[$template['template_type']] ?? 0) === $id) {
+            PrinterTemplateLibrary::selectDefault((int)$this->site_id, $template['template_type'], 0);
+        }
         $this->model->where([
             ['template_id', '=', $id],
             ['site_id', '=', $this->site_id]
@@ -404,6 +411,7 @@ class RecyclePrinterTemplateService extends BaseAdminService
      */
     public function modifyStatus(int $id, int $status)
     {
+        $this->assertOwnedTemplate($id);
         $this->model->where([
             ['template_id', '=', $id],
             ['site_id', '=', $this->site_id]
@@ -422,25 +430,18 @@ class RecyclePrinterTemplateService extends BaseAdminService
      */
     public function setDefault(int $id)
     {
-        $template = $this->model->where([
-            ['template_id', '=', $id],
-            ['site_id', '=', $this->site_id]
-        ])->findOrEmpty();
-        
-        if ($template->isEmpty()) {
-            throw new CommonException('模板不存在');
-        }
-        
-        // 取消同类型的其他默认模板
-        $this->model->where([
-            ['site_id', '=', $this->site_id],
-            ['template_type', '=', $template['template_type']]
-        ])->update(['is_default' => 0]);
-        
-        // 设置当前模板为默认
-        $template->save(['is_default' => 1, 'update_time' => time()]);
-        
-        return true;
+        $this->assertWriteContext();
+        $lock = new DeviceCatalogWriteLock(); $lock->acquire();
+        return Db::transaction(function () use ($id) {
+            $template = PrinterTemplateLibrary::get((int)$this->site_id, $id);
+            if (!$template || (int)$template['status'] !== 1) throw new CommonException('模板不存在或已停用，请重新选择');
+            $this->model->where('site_id', $this->site_id)->where('template_type', $template['template_type'])->update(['is_default' => 0]);
+            if ((int)$template['site_id'] === (int)$this->site_id) {
+                $this->model->where('template_id', $id)->where('site_id', $this->site_id)->update(['is_default' => 1, 'update_time' => time()]);
+            }
+            PrinterTemplateLibrary::selectDefault((int)$this->site_id, $template['template_type'], (int)$this->site_id > 0 ? $id : 0);
+            return true;
+        });
     }
 
     /**
@@ -459,13 +460,34 @@ class RecyclePrinterTemplateService extends BaseAdminService
      */
     public function getDefaultTemplate(string $type)
     {
-        $template = $this->model->where([
-            ['site_id', '=', $this->site_id],
-            ['template_type', '=', $type],
-            ['is_default', '=', 1],
-            ['status', '=', 1]
-        ])->findOrEmpty()->toArray();
-        
+        return PrinterTemplateLibrary::defaultTemplate((int)$this->site_id, $type);
+    }
+
+    /** 公共模板的修改入口：显式复制，原绑定不偷偷切换。 */
+    public function copyToSite(int $id): int
+    {
+        $this->assertWriteContext();
+        if ((int)$this->site_id <= 0) throw new CommonException('请在站点内创建自己的模板副本');
+        $source = PrinterTemplateLibrary::get((int)$this->site_id, $id);
+        if (!$source) throw new CommonException('模板不存在或公共模板已停用');
+        $data = array_intersect_key($source, array_flip(['template_name','template_type','width','height','content','variables']));
+        $data['template_name'] = mb_substr($data['template_name'], 0, 80) . '（本站副本）';
+        $data['is_default'] = 0; $data['printer_id'] = 0; $data['trigger_event'] = ''; $data['status'] = 1;
+        return (int)$this->add($data);
+    }
+
+    private function assertWriteContext(): void
+    {
+        if (((int)$this->site_id === 0 && $this->app_type === AppTypeDict::ADMIN)
+            || ((int)$this->site_id > 0 && $this->app_type === AppTypeDict::SITE)) return;
+        throw new CommonException('当前身份不能维护打印模板');
+    }
+
+    private function assertOwnedTemplate(int $id): array
+    {
+        $this->assertWriteContext();
+        $template = $this->model->where('site_id', $this->site_id)->where('template_id', $id)->findOrEmpty()->toArray();
+        if (!$template) throw new CommonException('不能修改公共或其他站点的模板；如需定制，请先复制为本站模板');
         return $template;
     }
 
@@ -881,7 +903,7 @@ class RecyclePrinterTemplateService extends BaseAdminService
             $binding = (new RecycleTemplateBindingService())->resolveByTarget('model_dict', $nodeId, 'manual_device_label', false);
             $boundTemplateId = (int)($binding['check_template_id'] ?? 0);
             if ($boundTemplateId > 0 && RecycleCheckTemplate::where([
-                ['site_id', '=', $this->site_id],
+                ['site_id', 'in', \addon\hsx_recycle\app\service\core\device\DeviceCatalogPolicy::referenceSiteIds((int)$this->site_id)],
                 ['id', '=', $boundTemplateId],
                 ['status', '=', 1],
             ])->value('id')) {

@@ -47,7 +47,8 @@ class PrinterTemplate extends BaseAdminController
         $data = $this->request->params([
             ['template_name', ''],
             ['template_type', ''],
-            ['status', '']
+            ['status', ''],
+            ['source', '']
         ]);
         
         return success($this->service->getPage($data));
@@ -61,6 +62,11 @@ class PrinterTemplate extends BaseAdminController
     public function info(int $id)
     {
         return success($this->service->getInfo($id));
+    }
+
+    public function copyToSite(int $id)
+    {
+        return success('已复制为本站模板；修改后可设为默认或在打印场景中选用', ['id' => $this->service->copyToSite($id)]);
     }
 
     /**
@@ -141,6 +147,8 @@ class PrinterTemplate extends BaseAdminController
             $data['content'] = $data['template_data'];
         }
 
+        // 编辑器不传默认设置时保留原值；默认切换由专门入口完成。
+        if (!$this->request->has('is_default', 'param')) unset($data['is_default']);
         $this->service->edit($id, $data);
         return success('编辑成功');
     }

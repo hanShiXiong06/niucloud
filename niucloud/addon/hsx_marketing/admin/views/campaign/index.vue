@@ -11,7 +11,7 @@
 
             <div class="summary">
                 <div><span>当前活动</span><strong>{{ total }}</strong></div>
-                <div><span>运行中</span><strong class="success">{{ runningCount }}</strong></div>
+                <div><span>本页运行中</span><strong class="success">{{ runningCount }}</strong></div>
                 <div class="summary-tip">规则、进度、发放和通知均有台账；旧“订单完成积分”配置建议关闭，避免重复奖励。</div>
             </div>
 
@@ -37,7 +37,7 @@
                     <template #default="{ row }"><div>{{ row.participation_mode === 'auto' ? '自动参与' : '手动领取任务' }}</div><div class="secondary">{{ row.grant_mode === 'auto' ? '奖励自动到账' : '奖励手动领取' }}</div></template>
                 </el-table-column>
                 <el-table-column label="任务进度" width="140">
-                    <template #default="{ row }">{{ row.completed_count || 0 }} / {{ row.claim_count || 0 }} 人达标</template>
+                    <template #default="{ row }"><div>已达标 {{ row.completed_count || 0 }} 期次</div><div class="secondary">共 {{ row.claim_count || 0 }} 条参与记录</div></template>
                 </el-table-column>
                 <el-table-column label="活动时间" width="210">
                     <template #default="{ row }"><div>{{ date(row.start_at) }}</div><div class="secondary">至 {{ date(row.end_at) }}</div></template>
@@ -45,8 +45,9 @@
                 <el-table-column label="状态" width="110">
                     <template #default="{ row }"><el-tag :type="statusType(row.status)" effect="plain">{{ row.status_name }}</el-tag></template>
                 </el-table-column>
-                <el-table-column label="操作" width="315" fixed="right" align="right">
+                <el-table-column label="操作" width="360" fixed="right" align="right">
                     <template #default="{ row }">
+                        <el-button link type="primary" @click="openParticipation(row)">查看详情</el-button>
                         <el-button link type="primary" @click="openEditor(row)">编辑</el-button>
                         <el-button link type="primary" @click="entryCampaign = row">领取入口</el-button>
                         <el-button v-if="row.status !== 1" link type="success" @click="setStatus(row, 1)">启用</el-button>
@@ -56,6 +57,8 @@
                 </el-table-column>
             </el-table>
             <div class="pagination"><el-pagination v-model:current-page="query.page" v-model:page-size="query.limit" layout="total,prev,pager,next" :total="total" @current-change="load" /></div>
+
+            <ParticipationDrawer v-model="participationVisible" :campaign-id="participationCampaignId" />
 
             <el-dialog :model-value="!!entryCampaign" title="客户领取入口" width="min(600px, 92vw)" @close="entryCampaign = null">
                 <p>{{ entryCampaign?.title }}</p>
@@ -164,6 +167,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import ParticipationDrawer from './components/ParticipationDrawer.vue'
 import { addMarketingCampaign, changeMarketingCampaignStatus, deleteMarketingCampaign, editMarketingCampaign, getMarketingCampaign, getMarketingCampaigns, getMarketingMetadata, getMarketingProviderOptions } from '../../api'
 
 const query = reactive({ status: '' as any, keyword: '', page: 1, limit: 15 })
@@ -176,6 +180,8 @@ const form = reactive<any>(emptyForm())
 const selectedFact = computed(() => metadata.fact_options.find((item: any) => item.key === form.fact_key))
 const runningCount = computed(() => rows.value.filter(row => Number(row.status) === 1).length)
 const entryCampaign = ref<any>(null)
+const participationVisible = ref(false), participationCampaignId = ref(0)
+const openParticipation = (row: any) => { participationCampaignId.value = Number(row.id); participationVisible.value = true }
 const campaignEntryUrl = computed(() => entryCampaign.value ? `/addon/hsx_marketing/pages/index?campaign_id=${entryCampaign.value.id}` : '')
 const selectEntryUrl = (event: FocusEvent) => (event.target as HTMLInputElement)?.select()
 

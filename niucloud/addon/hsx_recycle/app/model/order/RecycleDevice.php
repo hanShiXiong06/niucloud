@@ -140,7 +140,7 @@ class RecycleDevice extends BaseModel
 
         return (string)(RecycleCheckTemplate::where([
             ['id', '=', $templateId],
-            ['site_id', '=', (int)($data['site_id'] ?? 0)]
+            ['site_id', 'in', \addon\hsx_recycle\app\service\core\device\DeviceCatalogPolicy::referenceSiteIds((int)($data['site_id'] ?? 0))]
         ])->value('template_name') ?: '');
     }
 

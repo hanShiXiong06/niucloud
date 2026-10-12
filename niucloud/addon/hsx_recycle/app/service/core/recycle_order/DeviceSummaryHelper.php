@@ -172,7 +172,7 @@ class DeviceSummaryHelper
             $fieldQuery->whereIn('field_key', $fieldKeys);
         }
         if ($siteId > 0) {
-            $fieldQuery->where('site_id', '=', $siteId);
+            $fieldQuery->whereIn('site_id', \addon\hsx_recycle\app\service\core\device\DeviceCatalogPolicy::referenceSiteIds($siteId));
         }
         $fields = $fieldQuery->field('id,template_id,field_key')->select()->toArray();
 
@@ -213,7 +213,7 @@ class DeviceSummaryHelper
         // 两种存储格式必须共用同一解析入口，否则同一个 option value 在导出、打印和 ERP 中会退化成数字 ID。
         $templateQuery = Db::name('recycle_check_template')->whereIn('id', $templateIds);
         if ($siteId > 0) {
-            $templateQuery->where('site_id', '=', $siteId);
+            $templateQuery->whereIn('site_id', \addon\hsx_recycle\app\service\core\device\DeviceCatalogPolicy::referenceSiteIds($siteId));
         }
         $compactTemplates = $templateQuery->field('id,schema_json')->select()->toArray();
         foreach ($compactTemplates as $template) {

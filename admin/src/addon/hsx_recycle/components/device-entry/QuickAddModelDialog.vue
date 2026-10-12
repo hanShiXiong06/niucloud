@@ -7,14 +7,15 @@
         append-to-body
         @open="resetForm"
     >
-        <el-alert
+        <CatalogSourceNotice :policy="catalogPolicy" :error="catalogError" @retry="loadCatalog" />
+        <el-alert v-if="!catalogReadOnly"
             type="info"
             :closable="false"
             show-icon
             title="此操作会在型号库中创建新型号。"
             class="quick-model-alert"
         />
-        <el-form label-width="88px" @submit.prevent>
+        <el-form :disabled="catalogReadOnly" label-width="88px" @submit.prevent>
             <el-form-item label="上级分类" required>
                 <el-cascader
                     v-model="form.parent_path"
@@ -37,12 +38,15 @@
         </el-form>
         <template #footer>
             <el-button @click="dialogVisible = false">取消</el-button>
-            <el-button type="primary" :loading="saving" @click="submit">创建型号并使用</el-button>
+            <el-button type="primary" :disabled="catalogReadOnly" :loading="saving" @click="submit">创建型号并使用</el-button>
         </template>
     </el-dialog>
 </template>
 
 <script setup lang="ts">
+import { useDeviceCatalog } from '@/addon/hsx_recycle/composables/useDeviceCatalog'
+import CatalogSourceNotice from '@/addon/hsx_recycle/components/device-entry/CatalogSourceNotice.vue'
+const { catalogPolicy, catalogReadOnly, catalogError, loadCatalog } = useDeviceCatalog()
 import { computed, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { ensureRecycleDeviceModelDictChild, getRecycleDeviceModelDictChildren } from '@/addon/hsx_recycle/api/recycle_device_model_dict'
@@ -91,12 +95,13 @@ const parentProps = {
 }
 
 const resetForm = () => {
+    loadCatalog()
     form.parent_path = []
     form.node_name = String(props.suggestedName || '').trim()
 }
 
 const submit = async () => {
-    if (saving.value) return
+    if (saving.value || catalogReadOnly.value) return
     const parentId = Number(form.parent_path[form.parent_path.length - 1] || 0)
     const nodeName = String(form.node_name || '').trim()
     if (!parentId) {

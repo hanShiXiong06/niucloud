@@ -23,6 +23,48 @@ final class ErpQuantityInventoryService extends ErpExternalContractService
     public const RESTORE_EVENT = 'ErpQuantityInventoryRestoreRequested';
     public const ADJUST_EVENT = 'ErpQuantityInventoryAdjustRequested';
 
+    /** Internal purchase entry: derive stock movement from the persisted source line. */
+    public function purchaseInbound(int $itemId, int $operatorUid, string $operatorName): array
+    {
+        return $this->restoreStock($this->purchaseMovement($itemId, false, $operatorUid, $operatorName));
+    }
+
+    public function purchaseCancel(int $itemId, int $operatorUid, string $operatorName, string $remark = ''): array
+    {
+        $payload = $this->purchaseMovement($itemId, true, $operatorUid, $operatorName);
+        if (trim($remark) !== '') $payload['remark'] = $remark;
+        return $this->consumeStock($payload);
+    }
+
+    private function purchaseMovement(int $itemId, bool $cancel, int $operatorUid, string $operatorName): array
+    {
+        if (!Db::connect()->getPdo()->inTransaction()) throw new CommonException('标品采购库存必须在原采购事务中处理');
+        $item = Db::name('erp_purchase_item')->where([['site_id', '=', $this->site_id], ['id', '=', $itemId]])->lock(true)->find();
+        if (!$item || $item['item_type'] !== 'standard' || (int)$item['quantity_product_id'] <= 0) {
+            throw new CommonException('当前站点的标品采购明细不存在');
+        }
+        $order = Db::name('erp_purchase_order')->where([['site_id', '=', $this->site_id], ['id', '=', $item['purchase_order_id']]])->lock(true)->find();
+        if (!$order || $order['status'] !== 'completed' || $item['status'] !== 'in_stock') {
+            throw new CommonException('标品采购状态不允许变更库存');
+        }
+        if ((float)$item['quantity'] <= 0 || (float)$item['total_cost'] <= 0) throw new CommonException('标品采购数量或成本不正确');
+        return [
+            'site_id' => (int)$this->site_id,
+            'event_id' => ($cancel ? 'purchase-standard-cancel:' : 'purchase-standard:') . $this->site_id . ':' . $order['purchase_no'] . ':' . $itemId,
+            'source_plugin' => 'hsx_erp', 'source_id' => (string)$item['product_code'],
+            'quantity_product_id' => (int)$item['quantity_product_id'],
+            'product_code' => (string)$item['product_code'], 'product_name' => (string)$item['model'],
+            'spec' => (string)$item['spec'], 'unit' => (string)$item['unit'],
+            'quantity' => (float)$item['quantity'], 'cost_amount' => (float)$item['total_cost'],
+            'warehouse_id' => (int)$item['warehouse_id'], 'location_id' => (int)$item['location_id'],
+            'mode' => 'strict', 'biz_type' => $cancel ? 'purchase_standard_cancel' : 'purchase_standard',
+            'biz_id' => $itemId, 'biz_no' => (string)$order['purchase_no'],
+            'operator_uid' => $operatorUid, 'operator_name' => $operatorName,
+            'remark' => $cancel ? '标品采购撤销出库' : '标品采购入库',
+            'occurred_at' => $cancel ? time() : (int)$order['purchase_at'],
+        ];
+    }
+
     /**
      * 数量商品档案查询。
      *
@@ -354,6 +396,11 @@ final class ErpQuantityInventoryService extends ErpExternalContractService
     public function consume(array $event): array
     {
         $payload = array_merge($event, $this->normalizeEnvelope($event, 'erp.quantity_inventory.consume_requested.v1', 1));
+        return $this->consumeStock($payload);
+    }
+
+    private function consumeStock(array $payload): array
+    {
         return $this->consumeOnce($payload, self::CONSUME_EVENT, function (array $request): array {
             $quantity = $this->quantity($request['quantity'] ?? 0);
             if ($quantity <= 0) throw new CommonException('耗材扣减数量必须大于0');
@@ -497,6 +544,11 @@ final class ErpQuantityInventoryService extends ErpExternalContractService
     public function restore(array $event): array
     {
         $payload = array_merge($event, $this->normalizeEnvelope($event, 'erp.quantity_inventory.restore_requested.v1', 1));
+        return $this->restoreStock($payload);
+    }
+
+    private function restoreStock(array $payload): array
+    {
         return $this->consumeOnce($payload, self::RESTORE_EVENT, function (array $request): array {
             $quantity = $this->quantity($request['quantity'] ?? 0);
             if ($quantity <= 0) throw new CommonException('耗材返库数量必须大于0');

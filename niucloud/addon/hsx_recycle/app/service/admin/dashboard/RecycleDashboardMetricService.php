@@ -1035,7 +1035,7 @@ class RecycleDashboardMetricService extends BaseAdminService
 
         try {
             $node = (new RecycleDeviceModelDict())->where([
-                ['site_id', '=', $this->site_id],
+                ['site_id', 'in', \addon\hsx_recycle\app\service\core\device\DeviceCatalogPolicy::referenceSiteIds((int)$this->site_id)],
                 ['id', '=', $categoryId],
             ])->field('node_name,model_full_name')->findOrEmpty();
 

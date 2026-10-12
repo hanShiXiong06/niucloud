@@ -1,10 +1,11 @@
 <template>
     <PremiumTheme class="check-catalog-page">
+        <CatalogSourceNotice :policy="catalogPolicy" :error="catalogError" @retry="loadCatalog" />
         <el-card class="box-card" shadow="never">
             <template #header>
                 <PageHeader title="导入检测表" description="上传拍机堂 Excel/CSV，后端自动去重生成紧凑质检模板并按型号绑定。验机时按需展开，无需逐型号建表。">
                     <template #actions>
-                        <el-button type="primary" @click="openImportDialog">导入 Excel</el-button>
+                        <el-button type="primary" :disabled="catalogReadOnly" @click="openImportDialog">导入 Excel</el-button>
                         <el-button :loading="loading" @click="loadSummary">刷新</el-button>
                         <input ref="fileInput" type="file" accept=".xlsx,.xls,.csv,.txt" style="display:none" @change="onFileChange" />
                     </template>
@@ -54,11 +55,11 @@
             <el-radio-group v-model="importDialog.mode" class="import-mode-group">
                 <el-radio value="append" border class="import-mode-item">
                     <div class="mode-title">追加导入</div>
-                    <div class="mode-desc">已有模板绑定的分类会跳过，只给未配置的分类创建模板。</div>
+                    <div class="mode-desc">保留已有完整模板和人工摘要配置；补齐缺少字段的导入模板，未配置的型号按原文件建立模板。不会覆盖手工模板。</div>
                 </el-radio>
                 <el-radio value="overwrite" border class="import-mode-item">
                     <div class="mode-title">最新覆盖</div>
-                    <div class="mode-desc">清空旧拍机堂导入模板并按最新文件重建，人工调整过的导入规则可能失效。</div>
+                    <div class="mode-desc">{{ catalogPolicy?.effective || catalogPolicy?.site_id === 0 ? '停用旧导入模板，按最新文件建立新模板并更新型号绑定；已录入设备仍保留原模板编号。' : '清空旧拍机堂导入模板并按最新文件重建，人工调整过的导入规则可能失效。' }}</div>
                 </el-radio>
             </el-radio-group>
             <template #footer>
@@ -84,6 +85,9 @@
 </template>
 
 <script lang="ts" setup>
+import { useDeviceCatalog } from '@/addon/hsx_recycle/composables/useDeviceCatalog'
+import CatalogSourceNotice from '@/addon/hsx_recycle/components/device-entry/CatalogSourceNotice.vue'
+const { catalogPolicy, catalogReadOnly, catalogError, loadCatalog } = useDeviceCatalog()
 import { HsxDialog, useFeedback } from '@/addon/hsx_components/core'
 import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import PageHeader from '@/addon/hsx_recycle/components/PageHeader.vue'

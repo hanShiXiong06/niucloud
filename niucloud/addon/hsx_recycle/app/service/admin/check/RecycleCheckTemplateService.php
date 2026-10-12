@@ -8,11 +8,11 @@ use addon\hsx_recycle\app\model\check\RecycleCheckGroup;
 use addon\hsx_recycle\app\model\check\RecycleCheckOption;
 use addon\hsx_recycle\app\model\check\RecycleCheckTemplate;
 use addon\hsx_recycle\app\service\admin\template\RecycleTemplateBindingService;
-use core\base\BaseAdminService;
+use addon\hsx_recycle\app\service\core\device\CatalogAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
 
-class RecycleCheckTemplateService extends BaseAdminService
+class RecycleCheckTemplateService extends CatalogAdminService
 {
     private RecycleCheckTemplate $templateModel;
     private RecycleCheckGroup $groupModel;
@@ -167,6 +167,7 @@ class RecycleCheckTemplateService extends BaseAdminService
 
     public function addTemplate(array $data): int
     {
+        $this->assertCatalogWritable();
         $name = trim((string)($data['template_name'] ?? ''));
         if ($name === '') {
             throw new CommonException('请输入模板名称');
@@ -196,6 +197,7 @@ class RecycleCheckTemplateService extends BaseAdminService
 
     public function editTemplate(int $id, array $data): bool
     {
+        $this->assertCatalogWritable();
         $template = $this->info($id);
         $save = [];
         foreach (['template_key', 'template_name', 'scene'] as $field) {
@@ -220,20 +222,28 @@ class RecycleCheckTemplateService extends BaseAdminService
 
     public function deleteTemplate(int $id): bool
     {
+        $this->assertCatalogWritable();
         $template = $this->info($id);
-        $fieldIds = $this->fieldModel->where('template_id', $id)->column('id');
-        if (!empty($fieldIds)) {
-            $this->optionModel->whereIn('field_id', $fieldIds)->delete();
+        $this->assertPublicStructureMutable($id);
+        if ((int)$this->site_id === 0 && Db::name('recycle_template_binding')->where('check_template_id', $id)->count()) {
+            throw new CommonException('该公共模板仍被型号绑定，请先更换绑定或停用模板，不能直接删除');
         }
-        $this->fieldModel->where('template_id', $id)->delete();
-        $this->groupModel->where('template_id', $id)->delete();
-        $this->templateModel->where('id', $id)->delete();
+        Db::transaction(function () use ($id) {
+            $fieldIds = $this->fieldModel->where('template_id', $id)->column('id');
+            if (!empty($fieldIds)) {
+                $this->optionModel->whereIn('field_id', $fieldIds)->delete();
+            }
+            $this->fieldModel->where('template_id', $id)->delete();
+            $this->groupModel->where('template_id', $id)->delete();
+            $this->templateModel->where('id', $id)->delete();
+        });
         $this->ensureSingleDefault();
         return true;
     }
 
     public function setDefault(int $id): bool
     {
+        $this->assertCatalogWritable();
         $template = $this->info($id);
         Db::transaction(function () use ($id, $template) {
             $this->templateModel->where([
@@ -266,9 +276,13 @@ class RecycleCheckTemplateService extends BaseAdminService
 
     public function saveGroup(array $data): int
     {
+        $this->assertCatalogWritable();
         $templateId = (int)($data['template_id'] ?? 0);
         $this->info($templateId);
         $id = (int)($data['id'] ?? 0);
+        if ($id > 0 && !$this->groupModel->where('site_id', $this->site_id)->where('id', $id)->where('template_id', $templateId)->count()) {
+            throw new CommonException('质检分组不属于当前模板');
+        }
         $save = [
             'site_id' => $this->site_id,
             'template_id' => $templateId,
@@ -293,11 +307,13 @@ class RecycleCheckTemplateService extends BaseAdminService
 
     public function deleteGroup(int $id): bool
     {
+        $this->assertCatalogWritable();
         $group = $this->groupModel->where([['id', '=', $id], ['site_id', '=', $this->site_id]])->findOrEmpty()->toArray();
         if (empty($group)) {
             throw new CommonException('质检分组不存在');
         }
         $fieldIds = $this->fieldModel->where('group_id', $id)->column('id');
+        $this->assertPublicStructureMutable((int)$group['template_id']);
         if (!empty($fieldIds)) {
             $this->optionModel->whereIn('field_id', $fieldIds)->delete();
         }
@@ -387,11 +403,18 @@ class RecycleCheckTemplateService extends BaseAdminService
 
     public function saveField(array $data): int
     {
+        $this->assertCatalogWritable();
         $templateId = (int)($data['template_id'] ?? 0);
         $template = $this->info($templateId);
         $id = (int)($data['id'] ?? 0);
         if ((string)($template['schema_json'] ?? '') !== '') {
             return $this->saveCompactFieldConfig($template, $data);
+        }
+        if ($id > 0 && !$this->fieldModel->where('site_id', $this->site_id)->where('id', $id)->where('template_id', $templateId)->count()) {
+            throw new CommonException('质检字段不属于当前模板');
+        }
+        if (!$this->groupModel->where('site_id', $this->site_id)->where('id', (int)($data['group_id'] ?? 0))->where('template_id', $templateId)->count()) {
+            throw new CommonException('质检分组不属于当前模板');
         }
         $save = [
             'site_id' => $this->site_id,
@@ -495,10 +518,12 @@ class RecycleCheckTemplateService extends BaseAdminService
 
     public function deleteField(int $id): bool
     {
+        $this->assertCatalogWritable();
         $field = $this->fieldModel->where([['id', '=', $id], ['site_id', '=', $this->site_id]])->findOrEmpty()->toArray();
         if (empty($field)) {
             throw new CommonException('质检字段不存在');
         }
+        $this->assertPublicStructureMutable((int)$field['template_id']);
         $this->optionModel->where('field_id', $id)->delete();
         $this->fieldModel->where('id', $id)->delete();
         $this->touchTemplate((int)$field['template_id']);
@@ -507,12 +532,16 @@ class RecycleCheckTemplateService extends BaseAdminService
 
     public function saveOption(array $data): int
     {
+        $this->assertCatalogWritable();
         $fieldId = (int)($data['field_id'] ?? 0);
         $field = $this->fieldModel->where([['id', '=', $fieldId], ['site_id', '=', $this->site_id]])->findOrEmpty()->toArray();
         if (empty($field)) {
             throw new CommonException('质检字段不存在');
         }
         $id = (int)($data['id'] ?? 0);
+        if ($id > 0 && !$this->optionModel->where('site_id', $this->site_id)->where('id', $id)->where('field_id', $fieldId)->count()) {
+            throw new CommonException('质检选项不属于当前字段');
+        }
         $save = [
             'site_id' => $this->site_id,
             'field_id' => $fieldId,
@@ -541,11 +570,13 @@ class RecycleCheckTemplateService extends BaseAdminService
 
     public function deleteOption(int $id): bool
     {
+        $this->assertCatalogWritable();
         $option = $this->optionModel->where([['id', '=', $id], ['site_id', '=', $this->site_id]])->findOrEmpty()->toArray();
         if (empty($option)) {
             throw new CommonException('质检选项不存在');
         }
         $field = $this->fieldModel->where('id', (int)$option['field_id'])->findOrEmpty()->toArray();
+        $this->assertPublicStructureMutable((int)($field['template_id'] ?? 0));
         $this->optionModel->where('id', $id)->delete();
         if (!empty($field)) {
             $this->touchTemplate((int)$field['template_id']);
@@ -558,6 +589,7 @@ class RecycleCheckTemplateService extends BaseAdminService
      */
     public function setOptionDefault(int $optionId, int $isDefault): bool
     {
+        $this->assertCatalogWritable();
         $option = $this->optionModel->where([['id', '=', $optionId], ['site_id', '=', $this->site_id]])->findOrEmpty()->toArray();
         if (empty($option)) {
             throw new CommonException('质检选项不存在');
@@ -587,6 +619,30 @@ class RecycleCheckTemplateService extends BaseAdminService
     }
 
     public function schema(array $where = []): array
+    {
+        $oldSiteId = $this->site_id;
+        $templateId = (int)($where['template_id'] ?? 0);
+        $deviceId = (int)($where['device_id'] ?? 0);
+        if ($deviceId > 0) {
+            $device = Db::name('recycle_device')->where('site_id', $this->catalogBusinessSiteId)->where('id', $deviceId)->find();
+            if (!$device) throw new CommonException('设备不存在');
+            // 已录入设备优先使用原模板，不受站点开关或新版绑定影响。
+            if ($templateId <= 0) {
+                $info = is_array($device['info'] ?? null) ? $device['info'] : json_decode((string)($device['info'] ?? ''), true);
+                $templateId = (int)($device['check_template_id'] ?: ($info['check_meta']['template_id'] ?? 0));
+            }
+        }
+        if ($templateId > 0) {
+            $owner = Db::name('recycle_check_template')->whereIn('site_id', \addon\hsx_recycle\app\service\core\device\DeviceCatalogPolicy::referenceSiteIds($this->catalogBusinessSiteId))->where('id', $templateId)->value('site_id');
+            if ($owner === null) throw new CommonException('质检模板不存在');
+            $this->site_id = (int)$owner;
+            $where['template_id'] = $templateId;
+        }
+        try { return $this->schemaForOwner($where); }
+        finally { $this->site_id = $oldSiteId; }
+    }
+
+    private function schemaForOwner(array $where): array
     {
         $templateId = (int)($where['template_id'] ?? 0);
         $resolve = null;
@@ -629,6 +685,7 @@ class RecycleCheckTemplateService extends BaseAdminService
                 ['status', '=', 1],
             ])->order('is_default desc,sort asc,id asc')->findOrEmpty()->toArray();
             if (empty($template)) {
+                if ($this->isPublicConsumer()) throw new CommonException('公共库尚无可用质检模板，请联系站点管理员，由管理员联系平台添加');
                 $this->initDefault();
                 $template = $this->templateModel->where([
                     ['site_id', '=', $this->site_id],
@@ -645,6 +702,8 @@ class RecycleCheckTemplateService extends BaseAdminService
             return [
                 'template' => $template,
                 'groups' => $compactGroups,
+                'schema_status' => 'ready',
+                'schema_message' => '',
                 'resolve' => [
                     'matched' => !empty($resolve['matched']),
                     'source_type' => (string)($resolve['source_type'] ?? ''),
@@ -684,9 +743,29 @@ class RecycleCheckTemplateService extends BaseAdminService
         foreach ($groups as &$group) {
             $group['fields'] = $fieldMap[(int)$group['id']] ?? [];
         }
+        unset($group);
+        $schemaMessage = '';
+        $schemaStatus = empty($fields) ? 'empty' : 'ready';
+        if (($template['scene'] ?? '') === 'pjt' && empty($fields)) {
+            $rawSchema = json_decode((string)($template['schema_json'] ?? ''), true);
+            $hasStoredFields = $this->fieldModel->where('site_id', $this->site_id)->where('template_id', $template['id'])->count() > 0;
+            foreach (is_array($rawSchema['groups'] ?? null) ? $rawSchema['groups'] : [] as $rawGroup) {
+                if (!empty($rawGroup['fields'])) $hasStoredFields = true;
+            }
+            $schemaStatus = $hasStoredFields ? 'empty' : 'missing';
+            $schemaMessage = $hasStoredFields
+                ? '该模板没有启用的质检字段，请联系资料库维护人员检查分组和字段的显示设置。'
+                : '该导入模板已关联，但没有可用的质检字段。请联系资料库维护人员，在质检目录用对应型号的原始文件追加导入；不要套用其他型号的模板。';
+            if (trim((string)($template['schema_json'] ?? '')) !== '' && (!is_array($rawSchema) || !is_array($rawSchema['groups'] ?? null))) {
+                $schemaStatus = 'invalid';
+                $schemaMessage = '该导入模板的字段结构损坏，请联系资料库维护人员核对原始文件；追加导入不会覆盖已有的非空内容。';
+            }
+        }
         return [
             'template' => $template,
             'groups' => $groups,
+            'schema_status' => $schemaStatus,
+            'schema_message' => $schemaMessage,
             'resolve' => [
                 'matched' => !empty($resolve['matched']),
                 'source_type' => (string)($resolve['source_type'] ?? ''),
@@ -815,6 +894,7 @@ class RecycleCheckTemplateService extends BaseAdminService
 
     public function initDefault(): array
     {
+        $this->assertCatalogWritable();
         $existing = $this->templateModel->where([
             ['site_id', '=', $this->site_id],
             ['template_key', '=', 'default_phone'],
@@ -1057,8 +1137,20 @@ class RecycleCheckTemplateService extends BaseAdminService
         ]);
     }
 
+    private function assertPublicStructureMutable(int $templateId): void
+    {
+        if ((int)$this->site_id !== 0 || $templateId <= 0) return;
+        $used = Db::name('recycle_device')->where(function ($q) use ($templateId) {
+            $q->where('check_template_id', $templateId)->whereOrRaw("CAST(JSON_UNQUOTE(JSON_EXTRACT(CASE WHEN JSON_VALID(info) THEN info ELSE '{}' END, '$.check_meta.template_id')) AS UNSIGNED) = ?", [$templateId]);
+        })->count();
+        if ($used) throw new CommonException('该公共模板已有设备使用，不能删除模板、字段或选项；可停用模板，避免影响已录入设备');
+    }
+
     private function ensureSingleDefault(int $preferredId = 0): void
     {
+        // 纯读取不能修正公共库，也不能把已停用的历史版本重新启用。
+        if ((int)$this->site_id === 0) return;
+        $this->assertCatalogWritable();
         Db::transaction(function () use ($preferredId) {
             if ($preferredId > 0) {
                 $preferred = $this->templateModel->where([

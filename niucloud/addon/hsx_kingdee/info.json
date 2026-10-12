@@ -1,0 +1,11 @@
+{
+  "title": "金蝶云星空对接",
+  "key": "hsx_kingdee",
+  "version": "0.1.0",
+  "author": "hsx",
+  "desc": "ERP 业务事实接入、映射预检和异常工作台。本地预览版，不向账套写入。",
+  "type": "addon",
+  "support_app": "hsx_erp",
+  "support_version": "1.2.4",
+  "compile": []
+}

@@ -897,27 +897,8 @@ class ErpPurchaseService extends BaseAdminService
                         'create_at' => $now,
                         'update_at' => $now,
                     ]);
-                    $inventoryResult = (new ErpQuantityInventoryService())->restore([
-                        'event_id' => 'purchase-standard:' . $this->site_id . ':' . $purchaseNo . ':' . (int)$purchaseItem->id,
-                        'source_plugin' => 'hsx_erp',
-                        'source_id' => $productCode,
-                        'product_code' => $productCode,
-                        'quantity_product_id' => $quantityProductId,
-                        'product_name' => $modelName,
-                        'spec' => $spec,
-                        'unit' => $unit,
-                        'quantity' => $quantity,
-                        'cost_amount' => $cost,
-                        'warehouse_id' => $itemWarehouseId,
-                        'location_id' => $itemLocationId,
-                        'biz_type' => 'purchase_standard',
-                        'biz_id' => (int)$purchaseItem->id,
-                        'biz_no' => $purchaseNo,
-                        'operator_uid' => (int)$this->uid,
-                        'operator_name' => (string)$this->username,
-                        'remark' => '标品采购入库',
-                        'occurred_at' => $purchaseAt,
-                    ]);
+                    $inventoryResult = ErpQuantityInventoryService::forSite((int)$this->site_id)
+                        ->purchaseInbound((int)$purchaseItem->id, (int)$this->uid, (string)$this->username);
                     $purchaseItem->save([
                         'quantity_product_id' => (int)($inventoryResult['product_id'] ?? 0),
                         'update_at' => $now,
@@ -1286,25 +1267,8 @@ class ErpPurchaseService extends BaseAdminService
                 ['item_type', '=', 'standard'],
             ])->lock(true)->select();
             foreach ($standardItems as $standardItem) {
-                (new ErpQuantityInventoryService())->consume([
-                    'event_id' => 'purchase-standard-cancel:' . $this->site_id . ':' . (string)$order->purchase_no . ':' . (int)$standardItem->id,
-                    'source_plugin' => 'hsx_erp',
-                    'source_id' => (string)$standardItem->product_code,
-                    'product_name' => trim((string)$standardItem->model . ' ' . (string)$standardItem->spec),
-                    'unit' => (string)$standardItem->unit,
-                    'quantity' => (float)$standardItem->quantity,
-                    'cost_amount' => (float)$standardItem->total_cost,
-                    'warehouse_id' => (int)$standardItem->warehouse_id,
-                    'location_id' => (int)$standardItem->location_id,
-                    'mode' => 'strict',
-                    'biz_type' => 'purchase_standard_cancel',
-                    'biz_id' => (int)$standardItem->id,
-                    'biz_no' => (string)$order->purchase_no,
-                    'operator_uid' => (int)$this->uid,
-                    'operator_name' => (string)$this->username,
-                    'remark' => $remark !== '' ? $remark : '标品采购撤销出库',
-                    'occurred_at' => $now,
-                ]);
+                ErpQuantityInventoryService::forSite((int)$this->site_id)
+                    ->purchaseCancel((int)$standardItem->id, (int)$this->uid, (string)$this->username, $remark);
                 (new ErpLedgerService())->account([
                     'biz_type' => 'purchase_standard_cancel',
                     'direction' => 'decrease',

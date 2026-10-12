@@ -8,7 +8,7 @@ use addon\hsx_recycle\app\model\device\RecycleDeviceModelAlias;
 use addon\hsx_recycle\app\model\device\RecycleDeviceModelDict;
 use addon\hsx_recycle\app\service\core\device\CoreRecycleDeviceModelDictService;
 use app\service\core\sys\CoreConfigService;
-use core\base\BaseAdminService;
+use addon\hsx_recycle\app\service\core\device\CatalogAdminService;
 use core\exception\CommonException;
 use think\db\exception\PDOException;
 use think\facade\Cache;
@@ -19,7 +19,7 @@ use think\facade\Cache;
  * 设备分类树：pid + level + model_full_name 表达层级。
  * 层级语义由 node_type/source 数据决定，不按固定层级写死。
  */
-class RecycleDeviceModelDictService extends BaseAdminService
+class RecycleDeviceModelDictService extends CatalogAdminService
 {
     protected $model;
     protected CoreRecycleDeviceModelDictService $coreService;
@@ -221,6 +221,7 @@ class RecycleDeviceModelDictService extends BaseAdminService
      */
     public function bindAliases(array $aliases, int $categoryId): array
     {
+        $this->assertCatalogWritable();
         $aliases = $this->sanitizeAliases($aliases);
         if (empty($aliases)) {
             throw new CommonException('没有可记忆的设备型号');
@@ -316,6 +317,7 @@ class RecycleDeviceModelDictService extends BaseAdminService
 
     public function add(array $data): int
     {
+        $this->assertCatalogWritable();
         $path = $this->normalizePath($data);
         $id = $this->createPath($path, (int)($data['status'] ?? 1), (int)($data['sort'] ?? 0), false);
         $this->clearTreeCache();
@@ -328,6 +330,7 @@ class RecycleDeviceModelDictService extends BaseAdminService
      */
     public function ensureChild(int $parentId, string $nodeName): array
     {
+        $this->assertCatalogWritable();
         $nodeName = trim($nodeName);
         if ($parentId <= 0) {
             throw new CommonException('请选择型号所属的上级分类或系列');
@@ -366,12 +369,26 @@ class RecycleDeviceModelDictService extends BaseAdminService
 
     public function edit(int $id, array $data): bool
     {
+        $this->assertCatalogWritable();
         $node = $this->getNode($id);
         if ($this->hasChildren($id)) {
             throw new CommonException('存在下级分类，不能直接改成其他路径');
         }
 
         $path = $this->normalizePath($data);
+        if ((int)$this->site_id === 0) {
+            $parentPath = array_slice($path, 0, -1);
+            $pid = $parentPath ? $this->createPath($parentPath, 1, 0, true) : 0;
+            $name = (string)end($path);
+            $existing = $this->findNode($pid, $name);
+            if ($existing && (int)$existing['id'] !== $id) throw new CommonException('目标分类已存在，不能合并两个型号的业务引用');
+            $this->model->where('site_id', 0)->where('id', $id)->update([
+                'pid' => $pid, 'level' => count($path), 'node_name' => $name, 'model_full_name' => implode('/', $path),
+                'status' => (int)($data['status'] ?? $node['status']), 'sort' => (int)($data['sort'] ?? $node['sort']), 'update_at' => time(),
+            ]);
+            $this->clearTreeCache();
+            return true;
+        }
         $targetId = $this->createPath($path, (int)($data['status'] ?? 1), (int)($data['sort'] ?? 0), false);
         if ($targetId !== $id) {
             $this->model->where([['id', '=', $id], ['site_id', '=', $this->site_id]])->delete();
@@ -388,17 +405,30 @@ class RecycleDeviceModelDictService extends BaseAdminService
 
     public function delete(int $id): bool
     {
+        $this->assertCatalogWritable();
         $this->getNode($id);
         if ($this->hasChildren($id)) {
             throw new CommonException('请先删除下级分类');
         }
-        $this->model->where([['id', '=', $id], ['site_id', '=', $this->site_id]])->delete();
+        if ((int)$this->site_id === 0 && \think\facade\Db::name('recycle_device')->where('category_id', $id)->count()) {
+            throw new CommonException('该公共型号已有设备引用，不能删除；如不再使用，请停用，历史设备不受影响');
+        }
+        if ((int)$this->site_id === 0 && \think\facade\Db::name('recycle_template_binding')->where('target_type', 'model_dict')->where('target_id', $id)->count()) {
+            throw new CommonException('该公共型号仍有模板绑定，请先解除绑定或停用型号，不能直接删除');
+        }
+        \think\facade\Db::transaction(function () use ($id) {
+            if ((int)$this->site_id === 0) {
+                \think\facade\Db::name('recycle_device_model_alias')->where('site_id', 0)->where('category_id', $id)->delete();
+            }
+            $this->model->where([['id', '=', $id], ['site_id', '=', $this->site_id]])->delete();
+        });
         $this->clearTreeCache();
         return true;
     }
 
     public function quickAdd(string $content): array
     {
+        $this->assertCatalogWritable();
         $lines = preg_split('/\r\n|\r|\n/', $content);
         $paths = [];
         $inputKeys = [];
@@ -447,6 +477,7 @@ class RecycleDeviceModelDictService extends BaseAdminService
 
     public function importExternalRows(array $rows, string $source = 'recycle_spider', array $lineNumbers = []): array
     {
+        $this->assertCatalogWritable();
         $source = trim($source) !== '' ? trim($source) : 'recycle_spider';
         $created = 0;
         $skipped = [];
@@ -506,20 +537,27 @@ class RecycleDeviceModelDictService extends BaseAdminService
      */
     public function importExternalRowsForSite(array $rows, string $source, int $siteId, array $lineNumbers = []): array
     {
-        if ($siteId <= 0) {
+        if ($siteId < 0) {
             throw new CommonException('导入任务缺少站点信息');
         }
         $oldSiteId = $this->site_id;
+        $oldBusinessSiteId = $this->catalogBusinessSiteId;
+        $oldWorker = $this->catalogWorker;
+        $this->catalogBusinessSiteId = $siteId;
+        $this->catalogWorker = true;
         $this->site_id = $siteId;
         try {
             return $this->importExternalRows($rows, $source, $lineNumbers);
         } finally {
             $this->site_id = $oldSiteId;
+            $this->catalogBusinessSiteId = $oldBusinessSiteId;
+            $this->catalogWorker = $oldWorker;
         }
     }
 
     public function updateSort(array $rows): bool
     {
+        $this->assertCatalogWritable();
         if (empty($rows)) {
             return true;
         }
@@ -564,6 +602,8 @@ class RecycleDeviceModelDictService extends BaseAdminService
 
     public function incrementSelectCount(int $nodeId): void
     {
+        if ($this->isPublicConsumer()) return;
+        $this->assertCatalogWritable();
         if ($nodeId <= 0) {
             return;
         }
@@ -575,6 +615,10 @@ class RecycleDeviceModelDictService extends BaseAdminService
 
     public function ensureFromModelName(string $modelName, int $siteId = 0): void
     {
+        $businessSiteId = $siteId > 0 ? $siteId : $this->catalogBusinessSiteId;
+        // 业务录入不得自动向公共库添加“未归类”型号，获得维护授权也需要显式操作。
+        if (!empty((new \addon\hsx_recycle\app\service\core\device\DeviceCatalogPolicy())->forSite($businessSiteId)['effective'])) return;
+        $this->assertCatalogWritable();
         $modelName = trim($modelName);
         if ($modelName === '') {
             return;

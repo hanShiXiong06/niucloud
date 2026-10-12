@@ -466,6 +466,7 @@ class RecyclePrintSceneService extends BaseAdminService
             if (empty($templateInfo)) {
                 throw new AdminException('打印模板不存在');
             }
+            if ((int)($templateInfo['status'] ?? 0) !== 1) throw new AdminException('打印模板已停用，请重新选择可用模板');
             if (($templateInfo['template_type'] ?? '') !== $scene['template_type']) {
                 throw new AdminException('打印模板类型与场景不匹配');
             }

@@ -1,0 +1,3 @@
+body { margin: 0; background: #f3f5f7; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+#app { max-width: 1500px; margin: 0 auto; }
+.fixture-banner { background: #edf5ff; color: #285782; padding: 12px 24px; font-size: 13px; line-height: 1.6; }

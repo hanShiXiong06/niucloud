@@ -1,7 +1,18 @@
 import request from '@/utils/request'
+import { checkParticipationDetail, checkParticipationList } from './participation-contract'
 
 export const getMarketingCampaigns = (params: any) => request.get('/marketing/campaigns', { params })
 export const getMarketingCampaign = (id: number) => request.get(`/marketing/campaigns/${id}`)
+export const getMarketingParticipants = async (id: number, params: any) => {
+    const response = await request.get(`/marketing/campaigns/${id}`, { params: { ...params, section: 'participants' } })
+    checkParticipationList(response)
+    return response
+}
+export const getMarketingParticipant = async (id: number, claimId: number, params: any = {}) => {
+    const response = await request.get(`/marketing/campaigns/${id}`, { params: { ...params, section: 'participant', claim_id: claimId } })
+    checkParticipationDetail(response)
+    return response
+}
 export const getMarketingMetadata = () => request.get('/marketing/campaigns/metadata')
 export const getMarketingProviderOptions = (params: any) => request.get('/marketing/campaigns/provider-options', { params })
 export const addMarketingCampaign = (data: any) => request.post('/marketing/campaigns', data)

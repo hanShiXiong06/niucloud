@@ -11,6 +11,9 @@ namespace {
     function config($key) { return $key === 'database.connections.mysql.prefix' ? 'ut_' : null; }
     class CheckImportDb extends \think\DbManager {
         public function query(string $sql, array $bind = []): array {
+            // 该进程只有一个 SQLite 内存连接；MySQL 命名锁由另一个真实 MySQL 回归覆盖。
+            if (str_contains($sql, 'GET_LOCK(')) return [['acquired' => 1]];
+            if (str_contains($sql, 'RELEASE_LOCK(')) return [['released' => 1]];
             if (preg_match('/^SHOW COLUMNS FROM `([a-z_]+)` LIKE \'([a-z_]+)\'$/', $sql, $m)) {
                 return array_values(array_filter($this->connect()->query('PRAGMA table_info(' . $m[1] . ')'), static fn($column) => $column['name'] === $m[2]));
             }
@@ -28,6 +31,12 @@ namespace core\base {
         public int $site_id = 100005;
         public int $uid = 21;
         public string $username = '导入测试';
+        public function __construct() {}
+    }
+}
+namespace app\service\core\sys {
+    class CoreConfigService {
+        public function getConfigValue(int $siteId, string $key): array { return []; }
     }
 }
 namespace addon\hsx_recycle\app\model\check {
@@ -51,7 +60,7 @@ namespace {
         'recycle_check_import_batch' => 'id INTEGER PRIMARY KEY AUTOINCREMENT, site_id INT, source TEXT, file_name TEXT, total_rows INT, status TEXT, error_message TEXT DEFAULT "", operator_uid INT, operator_name TEXT, inserted INT DEFAULT 0, updated INT DEFAULT 0, skipped_same INT DEFAULT 0, skipped_user INT DEFAULT 0, create_at INT, update_at INT',
         'recycle_check_template' => 'id INTEGER PRIMARY KEY AUTOINCREMENT, site_id INT, template_key TEXT, template_name TEXT, scene TEXT, is_default INT, status INT, sort INT, version INT, schema_hash TEXT, schema_json TEXT, create_at INT, update_at INT',
         'recycle_check_dict' => 'id INTEGER PRIMARY KEY AUTOINCREMENT, site_id INT, dict_type TEXT, text TEXT, severity TEXT, is_user_modified INT, sort INT, create_at INT, update_at INT',
-        'recycle_device_model_dict' => 'id INTEGER PRIMARY KEY, site_id INT, product_source_id TEXT',
+        'recycle_device_model_dict' => 'id INTEGER PRIMARY KEY, site_id INT, product_source_id TEXT, source TEXT DEFAULT "recycle_spider", node_type TEXT DEFAULT "model", status INT DEFAULT 1',
         'recycle_template_binding' => 'id INTEGER PRIMARY KEY AUTOINCREMENT, site_id INT, target_type TEXT, target_id INT, scene_key TEXT, check_template_id INT, print_template_id INT, inherit_enabled INT, status INT, sort INT, remark TEXT, create_at INT, update_at INT',
         'recycle_check_field' => 'id INTEGER PRIMARY KEY, site_id INT, template_id INT',
         'recycle_check_group' => 'id INTEGER PRIMARY KEY, site_id INT, template_id INT',

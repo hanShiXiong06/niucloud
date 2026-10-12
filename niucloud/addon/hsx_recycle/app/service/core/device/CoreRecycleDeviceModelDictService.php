@@ -26,7 +26,8 @@ class CoreRecycleDeviceModelDictService extends BaseCoreService
 
     public function searchLeafOptions(int $siteId, string $keyword = '', int $limit = 300, array $extraIdFields = []): array
     {
-        if ($siteId <= 0) {
+        $siteId = (new DeviceCatalogPolicy())->ownerSiteId($siteId);
+        if ($siteId < 0) {
             return [];
         }
 
@@ -85,7 +86,8 @@ class CoreRecycleDeviceModelDictService extends BaseCoreService
 
     public function tree(int $siteId): array
     {
-        if ($siteId <= 0) {
+        $siteId = (new DeviceCatalogPolicy())->ownerSiteId($siteId);
+        if ($siteId < 0) {
             return [];
         }
 
@@ -124,7 +126,8 @@ class CoreRecycleDeviceModelDictService extends BaseCoreService
 
     public function children(int $siteId, int $pid = 0, string $keyword = '', int $limit = 200): array
     {
-        if ($siteId <= 0) {
+        $siteId = (new DeviceCatalogPolicy())->ownerSiteId($siteId);
+        if ($siteId < 0) {
             return [];
         }
 
@@ -243,7 +246,7 @@ class CoreRecycleDeviceModelDictService extends BaseCoreService
     {
         $siteId = (int)($row['site_id'] ?? 0);
         $id = (int)($row['id'] ?? 0);
-        if ($siteId <= 0 || $id <= 0) {
+        if ($siteId < 0 || $id <= 0) {
             return $id > 0 ? [$id] : [];
         }
 

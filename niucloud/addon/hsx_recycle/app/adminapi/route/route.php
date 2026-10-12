@@ -14,6 +14,19 @@ use app\adminapi\middleware\AdminCheckRole;
 use app\adminapi\middleware\AdminCheckToken;
 use app\adminapi\middleware\AdminLog;
 
+Route::group('recycle/catalog', function () {
+    Route::get('config', 'addon\hsx_recycle\app\adminapi\controller\device\DeviceCatalog@info');
+    Route::post('config', 'addon\hsx_recycle\app\adminapi\controller\device\DeviceCatalog@choose');
+    Route::get('print_recovery', 'addon\hsx_recycle\app\adminapi\controller\device\DeviceCatalog@previewPrintRecovery');
+    Route::post('print_recovery', 'addon\hsx_recycle\app\adminapi\controller\device\DeviceCatalog@restorePrintRecovery');
+})->middleware([AdminCheckToken::class, AdminCheckRole::class, AdminLog::class]);
+Route::group('recycle/platform/catalog', function () {
+    Route::get('preview', 'addon\hsx_recycle\app\adminapi\controller\device\DeviceCatalog@preview');
+    Route::post('promote', 'addon\hsx_recycle\app\adminapi\controller\device\DeviceCatalog@promote');
+    Route::get('sites', 'addon\hsx_recycle\app\adminapi\controller\device\DeviceCatalog@sites');
+    Route::post('grant', 'addon\hsx_recycle\app\adminapi\controller\device\DeviceCatalog@grant');
+})->middleware([AdminCheckToken::class, AdminCheckRole::class, AdminLog::class]);
+
 Route::group('hsx_recycle', function () {
     Route::get('pickup_notice/config', 'addon\hsx_recycle\app\adminapi\controller\order\PickupNoticeConfig@info');
 })->middleware([AdminCheckToken::class, AdminCheckRole::class, AdminLog::class]);
@@ -461,6 +474,7 @@ Route::group('recycle', function () {
     // 打印模板管理
     // 获取模板列表
     Route::get('printer_template/lists', 'addon\hsx_recycle\app\adminapi\controller\printer\PrinterTemplate@lists');
+    Route::post('printer_template/copy/:id', 'addon\hsx_recycle\app\adminapi\controller\printer\PrinterTemplate@copyToSite');
     // 获取模板详情
     Route::get('printer_template/:id', 'addon\hsx_recycle\app\adminapi\controller\printer\PrinterTemplate@info');
     // 添加模板

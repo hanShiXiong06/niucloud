@@ -4,7 +4,7 @@ namespace addon\hsx_recycle\app\listener\export;
 
 use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
-use addon\hsx_recycle\app\service\core\recycle_order\DeviceSummaryHelper;
+use addon\hsx_recycle\app\service\admin\device_export\DeviceExportValueResolver;
 
 /**
  * 回收设备导出监听器
@@ -74,13 +74,7 @@ class RecycleDeviceExportListener
                 (new RecycleDevice())->where('site_id', (int)($param['site_id'] ?? 0))->whereIn('id', $deviceIds)->update(['export_time' => time()]);
             }
 
-            // 质检模板保留列(颜色/内存等)存的是选项值(数字 id),按各设备所属模板回译成文案,避免导出偏差
-            $reservedKeys = ['color', 'package_type', 'capacity', 'system_version', 'warranty_info'];
-            $templateIds = array_column($data, 'check_template_id');
-            $optionLabelMap = DeviceSummaryHelper::buildOptionLabelMap($templateIds, $reservedKeys, (int)($param['site_id'] ?? 0));
-
             foreach ($data as $key => $value) {
-                if (!empty($param['keep_device_id'])) $data[$key]['_device_id'] = (int)$value['id'];
                 // “包装”是导出展示字段：不要求额外建表或补历史列。
                 // 新数据优先使用设备列，历史数据为空时从 info JSON / 质检结果中派生。
                 if (trim((string)($data[$key]['package_type'] ?? '')) === '') {
@@ -89,17 +83,10 @@ class RecycleDeviceExportListener
                         (string)($value['check_result'] ?? '')
                     );
                 }
-
-                // 选项值 → 文案回译(input/number 等自由输入字段不命中映射,原样保留)
-                $templateId = (int)($value['check_template_id'] ?? 0);
-                if ($templateId > 0 && !empty($optionLabelMap[$templateId])) {
-                    foreach ($reservedKeys as $rk) {
-                        if (isset($optionLabelMap[$templateId][$rk]) && isset($data[$key][$rk]) && $data[$key][$rk] !== '') {
-                            $data[$key][$rk] = DeviceSummaryHelper::resolveReservedValue((string)$data[$key][$rk], $optionLabelMap[$templateId][$rk]);
-                        }
-                    }
-                }
-
+            }
+            $data = (new DeviceExportValueResolver())->resolve($data, (int)($param['site_id'] ?? 0));
+            foreach ($data as $key => $value) {
+                if (!empty($param['keep_device_id'])) $data[$key]['_device_id'] = (int)$value['id'];
                 $data[$key]['order_no'] = $value['order']['order_no'] ?? '';
                 $data[$key]['create_at'] = !empty($value['update_at']) ? $value['update_at'] : '';
                 $isConsign = ($value['dispose_type'] ?? '') === RecycleOrderDict::DISPOSE_TYPE_CONSIGN

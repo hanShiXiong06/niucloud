@@ -1,11 +1,12 @@
 <template>
     <PremiumTheme class="check-template-page">
+        <CatalogSourceNotice :policy="catalogPolicy" :error="catalogError" @retry="loadCatalog" />
         <el-card class="box-card" shadow="never">
             <template #header>
-                <PageHeader title="质检模板" description="维护站点自己的质检表单、选项、文案和 API 回填字段">
+                <PageHeader title="质检模板" description="管理当前资料库的质检表单、选项、文案和 API 回填字段">
                     <template #actions>
-                        <el-button @click="initDefault">初始化默认模板</el-button>
-                        <el-button type="primary" @click="openTemplateDialog()">新增模板</el-button>
+                        <el-button :disabled="catalogReadOnly" @click="initDefault">初始化默认模板</el-button>
+                        <el-button type="primary" :disabled="catalogReadOnly" @click="openTemplateDialog()">新增模板</el-button>
                     </template>
                 </PageHeader>
             </template>
@@ -76,8 +77,8 @@
                     </el-table-column>
                     <el-table-column label="操作" width="160" fixed="right">
                         <template #default="{ row }">
-                            <el-button link type="primary" @click.stop="openTemplateEditor(row)">编辑质检项</el-button>
-                            <el-dropdown trigger="click" @command="cmd => handleTemplateCommand(String(cmd), row)">
+                            <el-button link type="primary" :disabled="catalogReadOnly" @click.stop="openTemplateEditor(row)">编辑质检项</el-button>
+                            <el-dropdown :disabled="catalogReadOnly" trigger="click" @command="cmd => handleTemplateCommand(String(cmd), row)">
                                 <el-button link type="primary">更多</el-button>
                                 <template #dropdown>
                                     <el-dropdown-menu>
@@ -430,6 +431,9 @@
 </template>
 
 <script setup lang="ts">
+import { useDeviceCatalog } from '@/addon/hsx_recycle/composables/useDeviceCatalog'
+import CatalogSourceNotice from '@/addon/hsx_recycle/components/device-entry/CatalogSourceNotice.vue'
+const { catalogPolicy, catalogReadOnly, catalogError, loadCatalog } = useDeviceCatalog()
 import { HsxDialog, HsxDrawer, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
 import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import PageHeader from '@/addon/hsx_recycle/components/PageHeader.vue'

@@ -1,5 +1,9 @@
 import request from "@/utils/request";
 
+export function copyTemplateToSite(id: number) {
+  return request.post(`/recycle/printer_template/copy/${id}`, {}, { showSuccessMessage: true });
+}
+
 /**
  * 获取模板列表
  * @param params
@@ -184,4 +188,4 @@ export function getTemplateVariables() {
   return request.get('/recycle/printer_template/variables', {
     showSuccessMessage: false
   });
-} 
+}

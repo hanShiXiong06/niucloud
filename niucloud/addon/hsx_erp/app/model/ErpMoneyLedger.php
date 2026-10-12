@@ -10,4 +10,9 @@ class ErpMoneyLedger extends BaseModel
     protected $pk = 'id';
     protected $name = 'erp_money_ledger';
     protected $autoWriteTimestamp = false;
+
+    protected static function onAfterInsert($model): void
+    {
+        \addon\hsx_erp\app\support\ErpLedgerFact::record('money', $model->toArray());
+    }
 }

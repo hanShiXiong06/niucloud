@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace addon\hsx_recycle\app\service\core\recycle_order;
 
 use think\facade\Db;
+use addon\hsx_recycle\app\service\core\device\DeviceCatalogPolicy;
 
 /** Read-only template presentation shared by customer, admin and internal services. */
 class DeviceCheckDisplayService
@@ -131,11 +132,11 @@ class DeviceCheckDisplayService
     {
         $ids = array_values(array_unique(array_filter($ids)));
         if (!$ids) return [];
-        $templates = Db::name('recycle_check_template')->where('site_id', $siteId)->whereIn('id', $ids)->field('id,schema_json')->select()->toArray();
+        $templates = Db::name('recycle_check_template')->whereIn('site_id', DeviceCatalogPolicy::referenceSiteIds($siteId))->whereIn('id', $ids)->field('id,schema_json')->select()->toArray();
         if (!$templates) return [];
         $fields = [];
         foreach ($templates as $template) $fields[(int)$template['id']] = [];
-        $rows = Db::name('recycle_check_field')->where('site_id', $siteId)->whereIn('template_id', array_keys($fields))->select()->toArray();
+        $rows = Db::name('recycle_check_field')->whereIn('site_id', DeviceCatalogPolicy::referenceSiteIds($siteId))->whereIn('template_id', array_keys($fields))->select()->toArray();
         foreach ($rows as $field) $fields[(int)$field['template_id']][(string)$field['field_key']] = $field;
         foreach ($templates as $template) {
             $schema = DeviceReadingArchive::decode($template['schema_json'] ?? []);

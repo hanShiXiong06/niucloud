@@ -596,6 +596,10 @@ class ErpSaleService extends BaseAdminService
                     ErpQuantityStockFlow::where([
                         ['site_id', '=', $this->site_id], ['id', '=', (int)$inventory['flow_id']],
                     ])->update(['biz_id' => (int)$item->id]);
+                    $linkedFlow = ErpQuantityStockFlow::where([
+                        ['site_id', '=', $this->site_id], ['id', '=', (int)$inventory['flow_id']],
+                    ])->findOrEmpty();
+                    \addon\hsx_erp\app\support\ErpLedgerFact::record('quantity', $linkedFlow->toArray());
                     ErpLedgerService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username)->account([
                         'biz_type' => 'sale',
                         'direction' => 'increase',

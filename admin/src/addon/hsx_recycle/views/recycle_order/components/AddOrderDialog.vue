@@ -139,7 +139,7 @@ const dialogVisible = computed({
 const loading = ref(false)
 const form = ref({
     member_id: '' as string | number,
-    delivery_type: '1',
+    delivery_type: '2',
     express_no: '',
     devices: [
         { imei: '', model: '', initial_price: 0, check_images_buyer: '', summary_fields: [], summary_values: {} }

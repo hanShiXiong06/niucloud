@@ -10,6 +10,7 @@
         @open="loadConfig"
     >
         <div v-loading="loading" class="template-config">
+            <el-alert v-if="catalogMessage" :title="catalogMessage" type="info" :closable="false" show-icon class="template-config__notice" />
             <section class="template-context">
                 <div class="template-context__icon"><el-icon><Iphone /></el-icon></div>
                 <div class="template-context__body">
@@ -17,7 +18,8 @@
                     <div class="template-context__name">{{ modelName || '未命名型号' }}</div>
                     <div class="template-context__meta">型号库节点 ID：{{ categoryId || '-' }}</div>
                 </div>
-                <el-tag v-if="effective.check_template_id || effective.print_template_id" type="success" effect="plain">模板已生效</el-tag>
+                <el-tag v-if="schemaError || schemaWarning" type="warning" effect="plain">质检字段待处理</el-tag>
+                <el-tag v-else-if="effective.check_template_id || effective.print_template_id" type="success" effect="plain">模板已关联</el-tag>
                 <el-tag v-else type="warning" effect="plain">待配置</el-tag>
             </section>
 
@@ -35,7 +37,7 @@
                         <div class="config-section__title">1. 关联模板</div>
                         <div class="config-section__desc">当前型号可独立配置质检和标签打印，也可以继续使用上级型号或全局规则。</div>
                     </div>
-                    <el-button v-if="binding.id" link type="primary" :loading="resetting" @click="restoreInheritance">
+                    <el-button v-if="binding.id && !catalogMessage" link type="primary" :loading="resetting" @click="restoreInheritance">
                         恢复继承
                     </el-button>
                 </div>
@@ -44,6 +46,7 @@
                     <el-form-item label="质检模板">
                         <el-select
                             v-model="selectedTemplateId"
+                            :disabled="checkReadOnly"
                             filterable
                             remote
                             reserve-keyword
@@ -70,13 +73,13 @@
                     </el-form-item>
                     <div class="form-help">支持搜索手工模板和外部导入模板，例如输入“iPhone 17 Pro”。</div>
 
-                    <el-form-item label="打印标签模板" class="print-template-form-item">
+                    <el-form-item label="打印标签（可选公共版或本站版）" class="print-template-form-item">
                         <el-select
                             v-model="selectedPrintTemplateId"
                             filterable
                             clearable
                             class="w-full"
-                            placeholder="请选择设备标签打印模板"
+                            placeholder="未单独指定，沿用本站继承或打印场景规则"
                         >
                             <el-option
                                 v-for="item in printTemplateOptions"
@@ -87,11 +90,13 @@
                                 <div class="template-option">
                                     <span>{{ item.template_name }}</span>
                                     <span class="template-option__meta">{{ item.width || '-' }} × {{ item.height || '-' }} mm</span>
+                                    <el-tag size="small" type="info">{{ item.source_name || '本站模板' }}</el-tag>
                                     <el-tag v-if="Number(item.is_default) === 1" size="small" type="success" effect="plain">默认</el-tag>
                                 </div>
                             </el-option>
                         </el-select>
                     </el-form-item>
+                    <div class="form-help">公共标签可直接使用，需要改版式时到“打印模板”复制为本站模板。本站选择不影响他人；平台管理端设置的公共规则会影响使用公共库的站点。原标签丢失可到“型号与模板来源”检查关联。</div>
                 </el-form>
 
                 <div v-if="effective.check_template_id || effective.print_template_id" class="effective-rule">
@@ -105,7 +110,7 @@
                 </div>
 
                 <el-empty v-if="!templateOptions.length && !loading && !checkTemplateSearching" description="还没有可用的质检模板" :image-size="72">
-                    <el-button type="primary" :loading="initializing" @click="initializeDefaultTemplate">初始化默认模板</el-button>
+                    <el-button :disabled="checkReadOnly" type="primary" :loading="initializing" @click="initializeDefaultTemplate">初始化默认模板</el-button>
                 </el-empty>
 
                 <el-alert
@@ -118,13 +123,13 @@
                 />
             </section>
 
-            <section v-if="selectedTemplateId" class="config-section">
+            <section v-if="selectedTemplateId" v-loading="schemaLoading" class="config-section">
                 <div class="config-section__head">
                     <div>
                         <div class="config-section__title">2. 设置设备摘要</div>
                         <div class="config-section__desc">选择最常用的质检项，最多 10 项。摘要属于模板级配置，使用同一模板的型号会同步生效。</div>
                     </div>
-                    <el-tag :type="summaryCount >= 10 ? 'warning' : 'info'" effect="plain">
+                    <el-tag v-if="!schemaLoading && !schemaError && !schemaWarning" :type="summaryCount >= 10 ? 'warning' : 'info'" effect="plain">
                         已选 {{ summaryCount }} / 10
                     </el-tag>
                 </div>
@@ -138,7 +143,12 @@
                     class="template-config__notice"
                 />
 
-                <el-collapse v-if="fieldGroups.length" v-model="activeGroups" class="summary-groups">
+                <el-alert v-if="schemaError" type="error" show-icon :closable="false" title="质检字段加载失败">
+                    <div>{{ schemaError }}</div>
+                    <el-button link type="primary" @click="loadSelectedTemplateSchema">重新加载</el-button>
+                </el-alert>
+                <el-alert v-else-if="schemaWarning" type="warning" show-icon :closable="false" title="质检模板内容不完整" :description="schemaWarning" />
+                <el-collapse v-else-if="fieldGroups.length" v-model="activeGroups" class="summary-groups">
                     <el-collapse-item v-for="group in fieldGroups" :key="group.id" :name="String(group.id)">
                         <template #title>
                             <div class="summary-group__title">
@@ -159,6 +169,7 @@
                                 </div>
                                 <el-switch
                                     :model-value="isSummaryVisible(field)"
+                                    :disabled="checkReadOnly"
                                     inline-prompt
                                     active-text="展示"
                                     inactive-text="隐藏"
@@ -181,7 +192,7 @@
                     <el-button
                         type="primary"
                         :loading="saving"
-                        :disabled="!selectedTemplateId && !selectedPrintTemplateId"
+                        :disabled="loading || schemaLoading || !!schemaError || (!selectedTemplateId && !selectedPrintTemplateId)"
                         @click="saveConfig"
                     >保存并应用</el-button>
                 </div>
@@ -222,8 +233,13 @@ const emit = defineEmits<{
 }>()
 
 const SCENE_KEY = 'manual_device_label'
+const checkReadOnly = ref(true)
+const catalogMessage = ref('')
 const loading = ref(false)
 const schemaLoading = ref(false)
+const schemaError = ref('')
+const schemaWarning = ref('')
+let schemaRequestId = 0
 const checkTemplateSearching = ref(false)
 const saving = ref(false)
 const resetting = ref(false)
@@ -234,7 +250,7 @@ const templateOptions = ref<any[]>([])
 const baseTemplateOptions = ref<any[]>([])
 const printTemplateOptions = ref<any[]>([])
 const selectedTemplateId = ref(0)
-const selectedPrintTemplateId = ref(0)
+const selectedPrintTemplateId = ref<number | ''>('')
 const selectedTemplate = ref<Record<string, any>>({})
 const fieldGroups = ref<any[]>([])
 const activeGroups = ref<string[]>([])
@@ -321,13 +337,15 @@ const loadConfig = async () => {
             scene_key: SCENE_KEY
         })
         const data = res.data || {}
+        checkReadOnly.value = Boolean(data.check_read_only)
+        catalogMessage.value = data.catalog_message || ''
         binding.value = data.binding || {}
         effective.value = data.effective || {}
         baseTemplateOptions.value = data.check_template_options || []
         templateOptions.value = [...baseTemplateOptions.value]
         printTemplateOptions.value = data.print_template_options || []
         selectedTemplateId.value = Number(binding.value.check_template_id || effective.value.check_template_id || 0)
-        selectedPrintTemplateId.value = Number(binding.value.print_template_id || effective.value.print_template_id || 0)
+        selectedPrintTemplateId.value = Number(binding.value.print_template_id || effective.value.print_template_id || 0) || ''
         await searchCheckTemplates(props.modelName || '')
         await loadSelectedTemplateSchema()
     } finally {
@@ -336,6 +354,11 @@ const loadConfig = async () => {
 }
 
 const loadSelectedTemplateSchema = async () => {
+    const requestId = ++schemaRequestId
+    const templateId = selectedTemplateId.value
+    schemaError.value = ''
+    schemaWarning.value = ''
+    schemaLoading.value = false
     fieldGroups.value = []
     activeGroups.value = []
     originalSummaryState.value = {}
@@ -343,19 +366,31 @@ const loadSelectedTemplateSchema = async () => {
     if (!selectedTemplateId.value) return
     schemaLoading.value = true
     try {
-        const res: any = await getCheckTemplateSchema({ template_id: selectedTemplateId.value })
-        selectedTemplate.value = res.data?.template || selectedTemplate.value
-        fieldGroups.value = normalizeSchemaGroups(res.data?.groups || [])
+        const res: any = await getCheckTemplateSchema({ template_id: templateId })
+        if (requestId !== schemaRequestId) return
+        const data = res?.data
+        if (!data?.template || Number(data.template.id) !== Number(templateId) || !Array.isArray(data.groups)) {
+            throw new Error('接口未返回当前模板的完整字段，请重新加载后再保存。')
+        }
+        selectedTemplate.value = data.template
+        fieldGroups.value = normalizeSchemaGroups(data.groups)
+        if (!fieldGroups.value.some(group => group.fields.length) && isImportedTemplate.value) {
+            schemaWarning.value = data.schema_message || '该导入模板已关联，但没有可用的质检字段。请联系资料库维护人员，用对应型号的原始文件追加导入。'
+        }
         activeGroups.value = fieldGroups.value.map(group => String(group.id))
         fieldGroups.value.forEach(group => (group.fields || []).forEach((field: any) => {
             originalSummaryState.value[String(field.id)] = isSummaryVisible(field)
         }))
+    } catch (error: any) {
+        if (requestId !== schemaRequestId) return
+        schemaError.value = error?.message || error?.msg || '请求未完成，请检查网络后重试。'
     } finally {
-        schemaLoading.value = false
+        if (requestId === schemaRequestId) schemaLoading.value = false
     }
 }
 
 const toggleSummary = (field: any, value: any) => {
+    if (checkReadOnly.value) return
     const enabled = Boolean(value)
     if (enabled && !isSummaryVisible(field) && summaryCount.value >= 10) {
         ElMessage.warning('设备摘要最多展示 10 个字段')
@@ -365,7 +400,7 @@ const toggleSummary = (field: any, value: any) => {
 }
 
 const saveConfig = async () => {
-    if ((!selectedTemplateId.value && !selectedPrintTemplateId.value) || saving.value) return
+    if ((!selectedTemplateId.value && !selectedPrintTemplateId.value) || saving.value || loading.value || schemaLoading.value || schemaError.value) return
     saving.value = true
     try {
         await saveTemplateBinding({
@@ -373,7 +408,7 @@ const saveConfig = async () => {
             target_id: Number(props.categoryId),
             scene_key: SCENE_KEY,
             check_template_id: selectedTemplateId.value,
-            print_template_id: selectedPrintTemplateId.value,
+            print_template_id: selectedPrintTemplateId.value || 0,
             inherit_enabled: Number(binding.value.inherit_enabled ?? 1),
             status: 1,
             remark: binding.value.remark || '',
@@ -393,7 +428,8 @@ const saveConfig = async () => {
             }, false)
         }
 
-        ElMessage.success('质检模板、打印模板与摘要字段已应用')
+        if (schemaWarning.value) ElMessage.warning('模板关联已保存；质检字段仍需补齐，尚不能配置摘要。')
+        else ElMessage.success('质检模板、打印模板与摘要字段已应用')
         emit('saved')
         drawerVisible.value = false
     } finally {

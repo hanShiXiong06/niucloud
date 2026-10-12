@@ -5,7 +5,7 @@
       <div class="toolbar-left">
         <el-button @click="goBack" :icon="ArrowLeft" size="small">返回</el-button>
         <el-divider direction="vertical" />
-        <h2 class="toolbar-title">{{ isEdit ? '编辑模板' : '新建模板' }}</h2>
+        <h2 class="toolbar-title">{{ publicReadOnly ? '公共模板 · 修改后另存本站' : (isEdit ? '编辑模板' : '新建模板') }}</h2>
         <el-tag v-if="templateInfo.template_name" type="info" size="small">{{ templateInfo.template_name }}</el-tag>
       </div>
       <div class="toolbar-right">
@@ -20,11 +20,15 @@
           <el-input-number v-model="templateData.height" :min="20" :max="200" size="small" style="width:90px" @change="onCanvasSizeChange" />
           <span class="text-muted">mm</span>
         </template>
-        <el-button @click="testPrint" v-if="isEdit" :icon="Printer" size="small" type="warning" :loading="testing">测试打印</el-button>
-        <el-button @click="goPrintScene" :icon="Setting" size="small">打印场景</el-button>
-        <el-button @click="showSaveDialog" :icon="Document" size="small" type="primary" :loading="saving">保存模板</el-button>
+        <el-button @click="testPrint" v-if="isEdit && !platformLibrary" :icon="Printer" size="small" type="warning" :loading="testing">测试打印</el-button>
+        <el-button v-if="!platformLibrary" @click="goPrintScene" :icon="Setting" size="small">打印场景</el-button>
+        <el-button @click="showSaveDialog" :disabled="loadFailed || loadingTemplate" :icon="Document" size="small" type="primary" :loading="saving">{{ publicReadOnly ? '另存为本站模板' : '保存模板' }}</el-button>
       </div>
     </div>
+
+    <el-alert v-if="loadFailed" title="模板加载失败，请重新打开；为避免覆盖原模板，保存已禁用。" type="error" :closable="false" show-icon />
+    <el-alert v-else-if="publicReadOnly" title="你可以调整版式，保存时会创建本站副本，不会修改公共原版。保存后还需在本站设为默认，或在打印场景中选用。" type="info" :closable="false" show-icon />
+    <el-alert v-else-if="platformLibrary" title="这是所有站点可使用的公共版式。请勿填入某家门店的固定信息；门店名称、联系方式请用变量。修改原版会影响仍在使用它的站点。" type="warning" :closable="true" show-icon />
 
     <!-- 主编辑区域 -->
     <div class="editor-main">
@@ -276,7 +280,7 @@
           <el-input v-model="saveForm.template_name" placeholder="请输入模板名称" />
         </el-form-item>
         <el-form-item label="模板类型">
-          <el-select v-model="saveForm.template_type" style="width:100%">
+          <el-select v-model="saveForm.template_type" :disabled="isEdit && !publicReadOnly" style="width:100%">
             <el-option value="device_label" label="设备标签" />
             <el-option value="order_receipt" label="订单小票" />
             <el-option value="consignment_receipt" label="代卖凭证" />
@@ -297,7 +301,7 @@
 import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, EditPen, Grid, Minus, SemiSelect, FullScreen, Printer, Document, Setting } from '@element-plus/icons-vue'
 import QRCode from 'qrcode'
 import JsBarcode from 'jsbarcode'
@@ -310,6 +314,9 @@ import {
 
 const route = useRoute()
 const router = useRouter()
+const props = defineProps({ platformLibrary: { type: Boolean, default: false } })
+const publicReadOnly = computed(() => Boolean(templateInfo.value.is_public && !templateInfo.value.can_edit))
+const loadingTemplate = ref(false), loadFailed = ref(false)
 
 // 状态
 const isEdit = computed(() => !!(route.query.id || route.params.id))
@@ -738,15 +745,20 @@ function onResizeEnd() {
 // ========== 保存 ==========
 
 function showSaveDialog() {
-  saveForm.template_name = templateInfo.value.template_name || ''
+  saveForm.template_name = (templateInfo.value.template_name || '') + (publicReadOnly.value ? '（本站副本）' : '')
   saveForm.template_type = templateInfo.value.template_type || 'device_label'
   saveDialogVisible.value = true
 }
 
 async function handleSave() {
+  if (saving.value || loadingTemplate.value || loadFailed.value) return
   if (!saveForm.template_name) {
     ElMessage.warning('请输入模板名称')
     return
+  }
+  if (props.platformLibrary && isEdit.value) {
+    try { await ElMessageBox.confirm('保存后，仍在使用此公共原版的站点会使用新版内容；各站点自己的副本不变。', '更新公共模板', { type: 'warning' }) }
+    catch { return }
   }
   saving.value = true
   try {
@@ -765,15 +777,16 @@ async function handleSave() {
       status: 1
     }
 
-    if (isEdit.value) {
+    if (isEdit.value && !publicReadOnly.value) {
       await editTemplate(templateId.value, payload)
     } else {
       const res = await addTemplate(payload)
       if (res.data?.id) {
-        router.replace({ query: { id: res.data.id } })
+        await router.replace({ query: { id: res.data.id } })
       }
     }
     saveDialogVisible.value = false
+    await loadTemplate()
   } catch (e: any) {
     console.error('保存模板失败', e)
   } finally {
@@ -824,9 +837,11 @@ async function loadVariables() {
 
 async function loadTemplate() {
   if (!templateId.value) return
+  loadingTemplate.value = true; loadFailed.value = false
   try {
     const res = await getTemplateInfo(templateId.value)
     const info = res.data || res
+    if (!info?.template_id) throw new Error('模板不存在或已停用')
     templateInfo.value = info
 
     // 加载模板数据
@@ -848,8 +863,9 @@ async function loadTemplate() {
 
     nextTick(() => renderAll())
   } catch (e: any) {
+    loadFailed.value = true
     console.error('加载模板失败', e)
-  }
+  } finally { loadingTemplate.value = false }
 }
 
 onMounted(() => {

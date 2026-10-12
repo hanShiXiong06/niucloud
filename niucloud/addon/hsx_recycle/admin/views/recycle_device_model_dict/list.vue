@@ -1,13 +1,14 @@
 <template>
   <PremiumTheme class="model-dict-page">
+    <CatalogSourceNotice :policy="catalogPolicy" :error="catalogError" @retry="loadCatalog" />
     <el-card class="box-card" shadow="never">
       <template #header>
         <PageHeader title="设备分类" description="按动态层级组织设备分类；签收时只选择最末级节点。">
           <template #actions>
-            <el-button type="primary" plain @click="openImportDialog">导入设备分类</el-button>
-            <el-button type="primary" plain @click="openQuickDialog">快速录入</el-button>
+            <el-button type="primary" plain :disabled="catalogReadOnly" @click="openImportDialog">导入设备分类</el-button>
+            <el-button type="primary" plain :disabled="catalogReadOnly" @click="openQuickDialog">快速录入</el-button>
             <el-button type="primary" plain @click="openTemplateDialog()">通用模板</el-button>
-            <el-button type="primary" @click="openCreateRoot">新增分类</el-button>
+            <el-button type="primary" :disabled="catalogReadOnly" @click="openCreateRoot">新增分类</el-button>
           </template>
         </PageHeader>
       </template>
@@ -71,13 +72,13 @@
                 </el-tag>
               </div>
               <div class="tree-cell tree-cell--actions">
-                <el-button v-if="Number(data.level) < maxLevel" type="primary" link @click.stop="openCreateChild(data)">
+                <el-button v-if="Number(data.level) < maxLevel" type="primary" link :disabled="catalogReadOnly" @click.stop="openCreateChild(data)">
                   添加下级
                 </el-button>
                 <el-button type="primary" link @click.stop="openTemplateDialog(data)">模板配置</el-button>
-                <el-button type="primary" link @click.stop="openSortDialog(data)">排序</el-button>
-                <el-button v-if="isLeaf(data)" type="primary" link @click.stop="openEdit(data)">编辑</el-button>
-                <el-button type="danger" link :disabled="!isLeaf(data)" @click.stop="handleDelete(data)">
+                <el-button type="primary" link :disabled="catalogReadOnly" @click.stop="openSortDialog(data)">排序</el-button>
+                <el-button v-if="isLeaf(data)" type="primary" link :disabled="catalogReadOnly" @click.stop="openEdit(data)">编辑</el-button>
+                <el-button type="danger" link :disabled="catalogReadOnly || !isLeaf(data)" @click.stop="handleDelete(data)">
                   删除
                 </el-button>
               </div>
@@ -313,6 +314,7 @@
     </el-dialog>
 
     <el-dialog v-model="templateDialogVisible" title="模板绑定配置" width="720px">
+      <CatalogSourceNotice :policy="catalogPolicy" :error="catalogError" @retry="loadCatalog" />
       <div class="binding-summary">
         <div>
           <div class="binding-summary__label">配置对象</div>
@@ -344,7 +346,7 @@
 
       <el-form :model="templateForm" label-width="110px" class="binding-form">
         <el-form-item label="质检模板">
-          <el-select v-model="templateForm.check_template_id" clearable filterable placeholder="请选择质检模板">
+          <el-select v-model="templateForm.check_template_id" :disabled="catalogReadOnly" clearable filterable placeholder="请选择质检模板">
             <el-option
               v-for="item in templateBindingInfo.check_template_options"
               :key="item.id"
@@ -353,7 +355,7 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="标签模板">
+        <el-form-item v-if="catalogPolicy?.site_id !== 0" label="本站标签模板">
           <el-select v-model="templateForm.print_template_id" clearable filterable placeholder="请选择打印标签模板">
             <el-option
               v-for="item in templateBindingInfo.print_template_options"
@@ -377,7 +379,7 @@
 
       <template #footer>
         <el-button @click="templateDialogVisible = false">取消</el-button>
-        <el-button :disabled="!templateBindingInfo.binding?.id" @click="handleResetTemplateBinding">恢复继承</el-button>
+        <el-button :disabled="!templateBindingInfo.binding?.id || catalogPolicy?.effective" @click="handleResetTemplateBinding">恢复继承</el-button>
         <el-button type="primary" :loading="templateSaving" @click="handleSaveTemplateBinding">保存</el-button>
       </template>
     </el-dialog>
@@ -385,6 +387,9 @@
 </template>
 
 <script setup lang="ts">
+import { useDeviceCatalog } from '@/addon/hsx_recycle/composables/useDeviceCatalog'
+import CatalogSourceNotice from '@/addon/hsx_recycle/components/device-entry/CatalogSourceNotice.vue'
+const { catalogPolicy, catalogReadOnly, catalogError, loadCatalog } = useDeviceCatalog()
 import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import PageHeader from '@/addon/hsx_recycle/components/PageHeader.vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
@@ -1005,7 +1010,7 @@ const loadTemplateBinding = async () => {
     print_template_options: data.print_template_options || [],
   }
 
-  if (data.binding?.id) {
+  if (data.binding) {
     Object.assign(templateForm, {
       check_template_id: data.binding.check_template_id || '',
       print_template_id: data.binding.print_template_id || '',
