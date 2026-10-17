@@ -1252,11 +1252,27 @@ class HsxPhoneQueryService extends BaseApiService
 
     private function formatJsonField($data): array
     {
-        if (empty($data)) {
-            return [];
+        if (is_string($data)) {
+            // JSON 既可能是对象/列表，也可能是字符串、数字、布尔值或 null。
+            // 大整数按字符串保留，避免设备标识等数字被转成浮点数而丢失精度。
+            $decoded = json_decode($data, true, 512, JSON_BIGINT_AS_STRING);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                $data = $decoded;
+            }
         }
 
-        return is_array($data) ? $data : (json_decode($data, true) ?: []);
+        if (is_array($data)) {
+            return $data;
+        }
+        if ($data === null || $data === '') {
+            return [];
+        }
+        if (is_scalar($data)) {
+            // 纯文本、0、false 都可能是有效查询结果，不能直接返回或用 empty() 丢弃。
+            return ['value' => $data];
+        }
+
+        throw new CommonException('查询结果格式异常，无法解析');
     }
 
     private function formatTimestamp($timestamp): string
