@@ -717,6 +717,10 @@
 		// ERP_PAGE_END
 		,
 		{
+			"root": "addon/hsx_boyuan",
+			"pages": [{ "path": "pages/workbench/index", "style": { "navigationBarTitleText": "博远对接" }, "needLogin": true }]
+		},
+		{
 			"root": "addon/hsx_member_card",
 			"pages": [
 				{ "path": "pages/dashboard/index", "style": { "navigationBarTitleText": "会员卡工作台" }, "needLogin": true },

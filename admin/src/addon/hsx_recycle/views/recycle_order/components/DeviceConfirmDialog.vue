@@ -76,6 +76,7 @@ const mapDeviceToRow = (d: any): DeviceEntryRow => {
     delete summaryValues.check_meta
     delete summaryValues.sign_summary
     delete summaryValues.device_readings
+    delete summaryValues.customer_quote
     if (info.sign_summary && typeof info.sign_summary === 'object') {
         Object.assign(summaryValues, info.sign_summary)
     }
@@ -98,6 +99,8 @@ const mapDeviceToRow = (d: any): DeviceEntryRow => {
         model: d?.model || '',
         user_sn: d?.user_sn || '',
         initial_price: Number(d?.initial_price || 0),
+        initial_price_uid: Number(d?.customer_quote?.uid || info.customer_quote?.uid || 0),
+        initial_price_name: d?.customer_quote?.name || info.customer_quote?.name || '',
         check_images_buyer: String(d?.check_images_buyer || ''),
         category_id: categoryId,
         category_path: categoryPath,

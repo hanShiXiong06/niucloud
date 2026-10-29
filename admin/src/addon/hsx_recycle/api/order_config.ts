@@ -1,7 +1,11 @@
 import request from '@/utils/request'
 
+export const getQuoteUserOptions = () => request.get('recycle/quote_user_options')
+
 export interface OrderSubmitConfig {
     device_add_enabled: number
+    device_pricing: { enabled: number; assign_to_quote_user: number; quote_user_ids: number[] }
+    quote_user_options?: Array<{ uid: number; name: string; can_price?: boolean }>
     notice: {
         enabled: number
         title: string

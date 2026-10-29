@@ -274,7 +274,7 @@ async function load() {
         const row = source.value
         Object.assign(form, emptyForm(), {
             intake_id: row.intake_id, goods_name: data.goods_name || [row.model_name, row.memory, row.condition_grade].filter(Boolean).join(' '),
-            sub_title: data.sub_title || '', goods_category: array(data.goods_category).map(Number).filter(id => id > 0),
+            sub_title: data.sub_title || '', brand_id: Number(data.brand_id) || '', goods_category: array(data.goods_category).map(Number).filter(id => id > 0),
             memory: data.memory_group || row.memory || '', condition_grade: data.condition_grade || row.condition_grade || '',
             service_ids: array(data.service_ids), label_ids: array(data.label_ids),
             delivery_type: array(data.delivery_type).length ? data.delivery_type : ['express'],

@@ -20,6 +20,15 @@ Route::group('recycle/catalog', function () {
     Route::get('print_recovery', 'addon\hsx_recycle\app\adminapi\controller\device\DeviceCatalog@previewPrintRecovery');
     Route::post('print_recovery', 'addon\hsx_recycle\app\adminapi\controller\device\DeviceCatalog@restorePrintRecovery');
 })->middleware([AdminCheckToken::class, AdminCheckRole::class, AdminLog::class]);
+
+Route::group('recycle/quote_image_sync', function () {
+    Route::get('config', 'addon\\hsx_recycle\\app\\adminapi\\controller\\category\\QuoteImageSync@info');
+    Route::post('config', 'addon\\hsx_recycle\\app\\adminapi\\controller\\category\\QuoteImageSync@save');
+    Route::post('discover', 'addon\\hsx_recycle\\app\\adminapi\\controller\\category\\QuoteImageSync@discover');
+    Route::post('run', 'addon\\hsx_recycle\\app\\adminapi\\controller\\category\\QuoteImageSync@run');
+    Route::get('status', 'addon\\hsx_recycle\\app\\adminapi\\controller\\category\\QuoteImageSync@status');
+    Route::post('cancel', 'addon\\hsx_recycle\\app\\adminapi\\controller\\category\\QuoteImageSync@cancel');
+})->middleware([AdminCheckToken::class, AdminCheckRole::class, AdminLog::class]);
 Route::group('recycle/platform/catalog', function () {
     Route::get('preview', 'addon\hsx_recycle\app\adminapi\controller\device\DeviceCatalog@preview');
     Route::post('promote', 'addon\hsx_recycle\app\adminapi\controller\device\DeviceCatalog@promote');
@@ -141,6 +150,7 @@ Route::group('recycle', function () {
 
     // 下单配置
     Route::get('order_submit_config', 'addon\hsx_recycle\app\adminapi\controller\order\OrderSubmitConfig@info');
+    Route::get('quote_user_options', 'addon\hsx_recycle\app\adminapi\controller\order\OrderSubmitConfig@quoteOptions');
     Route::post('order_submit_config', 'addon\hsx_recycle\app\adminapi\controller\order\OrderSubmitConfig@save');
     // 签收人员仅读取安装包元信息，不返回下单设置中的通知凭据。
     Route::get('device_bridge/downloads', 'addon\hsx_recycle\app\adminapi\controller\device\DeviceBridge@downloads');

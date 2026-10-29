@@ -782,6 +782,7 @@ class ErpSaleService extends BaseAdminService
                 ]);
                 $this->recordOnlinePaymentAdjustments($data, $order, $party, $settlementId, $now);
             }
+            ErpIntegrationDocumentService::record((int)$this->site_id, 'sale', $orderId);
         });
         } catch (\Throwable $e) {
             $existing = $this->existingSaleRequest($requestId);
@@ -1032,6 +1033,7 @@ class ErpSaleService extends BaseAdminService
                 'asset_count' => count($items),
                 'amount' => (float)$order->total_amount,
             ]);
+            ErpIntegrationDocumentService::invalidated((int)$this->site_id,'sale',$id,(string)$order->sale_no,$remark);
         });
         $this->flushDomainEvents();
         (new ErpPrintService())->triggerSafely('sale_cancelled', 'sale', $id);
@@ -1235,6 +1237,7 @@ class ErpSaleService extends BaseAdminService
                 'amount' => (float)$item->sale_price,
                 'order_total_amount' => $totalAmount,
             ]);
+            ErpIntegrationDocumentService::invalidated((int)$this->site_id,'sale',(int)$order->id,(string)$order->sale_no,$remark,'item:'.$itemId);
         });
         $this->flushDomainEvents();
         return $result;

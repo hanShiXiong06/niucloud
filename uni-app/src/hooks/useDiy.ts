@@ -3,7 +3,7 @@ import { onLoad, onShow, onHide, onPageScroll, onUnload } from '@dcloudio/uni-ap
 import { img, handleOnloadParams } from '@/utils/common';
 import { getDiyInfo } from '@/app/api/diy';
 import useDiyStore from '@/app/stores/diy';
-import { parseJsonValue } from '@/addon/phone_shop/utils/json';
+import { parseJsonValue } from '@/utils/json';
 
 export function useDiy(params: any = {}) {
 

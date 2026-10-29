@@ -621,6 +621,7 @@ class ErpSaleReturnService extends BaseAdminService
                 'status'    => 'confirmed',
                 'update_at' => $now,
             ]);
+            ErpIntegrationDocumentService::record((int)$this->site_id, 'sale_return', $returnId);
         });
 
         // 外层业务尚未提交时由持久化 Outbox 投递，避免回流读到未提交的库存。
@@ -757,6 +758,7 @@ class ErpSaleReturnService extends BaseAdminService
                 'update_at' => $now,
             ]);
             $this->refreshSaleFinance((int)$return->sale_order_id);
+            ErpIntegrationDocumentService::invalidated((int)$this->site_id,'sale_return',$returnId,(string)$return->return_no,$remark);
         });
         return true;
     }

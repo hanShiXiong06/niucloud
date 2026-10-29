@@ -19,7 +19,7 @@
                                 <view class="brand-tag" v-if="item.goods_brand" :style="diyGoods.baseTagStyle(item.goods_brand)">{{ item.goods_brand.brand_name }}</view>
                                 {{ item.goods_name }}
                             </view>
-                            <PhoneGoodsMeta :subtitle="item.sub_title" :imei="item.goodsSku?.sku_no || item.sku_no" />
+                            <PhoneGoodsMeta :subtitle="item.sub_title" :imei="displayReady ? (item.goodsSku?.sku_no || item.sku_no) : ''" :imei-tail-only="imeiTailOnly" />
                             <view v-if="item.goods_label_name && item.goods_label_name.length && diyComponent.labelStyle.control" class="flex flex-wrap mb-[10rpx]">
                                 <template v-for="(tagItem, tagIndex) in item.goods_label_name">
                                     <image class="img-tag" v-if="tagItem.style_type == 'icon' && tagItem.icon" :src="img(tagItem.icon)" mode="heightFix" @error="diyGoods.error(tagItem,'icon')"/>
@@ -78,7 +78,7 @@
                                         <view class="brand-tag" v-if="item.goods_brand" :style="diyGoods.baseTagStyle(item.goods_brand)">{{ item.goods_brand.brand_name }}</view>
                                         {{ item.goods_name }}
                                     </view>
-                                    <PhoneGoodsMeta :subtitle="item.sub_title" :imei="item.goodsSku?.sku_no || item.sku_no" compact />
+                                    <PhoneGoodsMeta :subtitle="item.sub_title" :imei="displayReady ? (item.goodsSku?.sku_no || item.sku_no) : ''" :imei-tail-only="imeiTailOnly" compact />
                                     <view v-if="item.goods_label_name && item.goods_label_name.length && diyComponent.labelStyle.control" class="flex flex-wrap">
                                         <template v-for="(tagItem, tagIndex) in item.goods_label_name">
                                             <image class="img-tag" v-if="tagItem.style_type == 'icon' && tagItem.icon" :src="img(tagItem.icon)" mode="heightFix" @error="diyGoods.error(tagItem,'icon')" />
@@ -134,7 +134,7 @@
                                         <view class="brand-tag" v-if="item.goods_brand" :style="diyGoods.baseTagStyle(item.goods_brand)">{{ item.goods_brand.brand_name }}</view>
                                         {{ item.goods_name }}
                                     </view>
-                                    <PhoneGoodsMeta :subtitle="item.sub_title" :imei="item.goodsSku?.sku_no || item.sku_no" compact />
+                                    <PhoneGoodsMeta :subtitle="item.sub_title" :imei="displayReady ? (item.goodsSku?.sku_no || item.sku_no) : ''" :imei-tail-only="imeiTailOnly" compact />
                                     <view v-if="item.goods_label_name && item.goods_label_name.length && diyComponent.labelStyle.control" class="flex flex-wrap">
                                         <template v-for="(tagItem, tagIndex) in item.goods_label_name">
                                             <image class="img-tag" v-if="tagItem.style_type == 'icon' && tagItem.icon" :src="img(tagItem.icon)" mode="heightFix" @error="diyGoods.error(tagItem,'icon')" />
@@ -189,7 +189,7 @@
 <!--                                <easy-image class="w-[214rpx] h-[160rpx]" :image-src="item.goods_cover_thumb_small" :imageStyle="imageStyle3" />-->
                                 <view class="relative min-h-[40rpx] px-[10rpx] pt-[16rpx] pb-[10rpx]">
                                     <view class="text-[26rpx] text-[#303133] truncate" :style="{ color : diyComponent.goodsNameStyle.color, fontWeight : diyComponent.goodsNameStyle.fontWeight }" v-if="diyComponent.goodsNameStyle.control">{{ item.goods_name }}</view>
-                                    <PhoneGoodsMeta :subtitle="item.sub_title" :imei="item.goodsSku?.sku_no || item.sku_no" compact />
+                                    <PhoneGoodsMeta :subtitle="item.sub_title" :imei="displayReady ? (item.goodsSku?.sku_no || item.sku_no) : ''" :imei-tail-only="imeiTailOnly" compact />
                                     <view class="text-[var(--price-text-color)] pt-[16rpx] pb-[6rpx] font-bold price-font block truncate max-w-[160rpx] leading-[1] overflow-hidden"
                                         :style="{ color : diyComponent.priceStyle.color }"
                                         v-if="diyComponent.priceStyle.control">
@@ -226,6 +226,7 @@ import useMemberStore from '@/stores/member'
 import { useLogin } from '@/hooks/useLogin'
 import { cloneDeep } from 'lodash-es'
 import PhoneGoodsMeta from '@/addon/phone_shop/components/PhoneGoodsMeta.vue'
+import { useGoodsDisplayConfig } from '@/addon/phone_shop/hooks/useGoodsDisplayConfig'
 
 const cartStore = useCartStore();
 // 查询购物车列表
@@ -238,6 +239,8 @@ const userInfo = computed(() => memberStore.info)
 const diyGoods = useGoods();
 const props = defineProps(['component', 'index', 'value']);
 const diyStore = useDiyStore();
+const { imeiTailOnly, ready: displayReady, ensure: ensureDisplayConfig } = useGoodsDisplayConfig()
+onMounted(() => { if (diyStore.mode !== 'decorate') void ensureDisplayConfig() })
 const emits = defineEmits(['loadingFn']); //商品数据加载完成之后触发
 
 const skeleton = reactive({

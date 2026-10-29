@@ -20,6 +20,7 @@ use addon\phone_shop\app\service\core\intake\CoreListingMappingService;
 use addon\phone_shop\app\service\core\goods\CoreDeviceAttributeService;
 use addon\phone_shop\app\support\IntakeMaterialTask;
 use addon\phone_shop\app\support\IntakeMaterialAttributes;
+use addon\phone_shop\app\support\GoodsWarrantySubtitle;
 use core\base\BaseAdminService;
 use core\exception\AdminException;
 use think\facade\Db;
@@ -156,10 +157,13 @@ class DeviceIntakeService extends BaseAdminService
             $raw = $this->decodeArray($intake['raw_payload']);
             $mapped['goods_category'] = array_values(array_filter(array_map('intval', (array)($raw['goods_category'] ?? []))));
         }
-        if (trim((string)($channelMapping['specs']['memory'] ?? '')) !== '') {
+        $listingMaterial = $this->decodeArray($raw['listing_material'] ?? []);
+        if (!array_key_exists('memory', $listingMaterial) && !array_key_exists('memory', $overrides)
+            && trim((string)($channelMapping['specs']['memory'] ?? '')) !== '') {
             $mapped['memory_group'] = trim((string)$channelMapping['specs']['memory']);
         }
-        if (trim((string)($channelMapping['specs']['condition_grade'] ?? '')) !== '') {
+        if (!array_key_exists('grade', $listingMaterial) && !array_key_exists('condition_grade', $overrides)
+            && trim((string)($channelMapping['specs']['condition_grade'] ?? '')) !== '') {
             $mapped['condition_grade'] = trim((string)$channelMapping['specs']['condition_grade']);
         }
         $mapped['channel_mapping'] = $channelMapping;
@@ -170,6 +174,7 @@ class DeviceIntakeService extends BaseAdminService
             $sub = $this->subTitleFromSummary($mapped['check']);
             if ($sub !== '') $mapped['sub_title'] = $sub;
         }
+        $mapped['sub_title'] = GoodsWarrantySubtitle::composeWithBattery((string)$mapped['sub_title'], (int)($mapped['warranty_expire_time'] ?? 0), (int)($mapped['battery_health'] ?? -1));
         $mapped['material_task'] = IntakeMaterialTask::read($intake['raw_payload']);
         $mapped['basic_first'] = !empty($raw['basic_first']) ? 1 : 0;
         return $mapped;
@@ -277,6 +282,15 @@ class DeviceIntakeService extends BaseAdminService
         $parts = [];
         foreach ($fields as $f) {
             $label = trim((string) ($f[ 'label' ] ?? ''));
+            // 裸数值的电池摘要先转成可识别的测量片段，由最终结构化事实统一更新。
+            // 不处理“电池已更换”等维修说明，也不根据无字段身份的数字猜测电池。
+            $fieldKey = strtolower(trim((string)($f['field_key'] ?? '')));
+            $fieldName = trim((string)($f['field_name'] ?? ''));
+            if ((in_array($fieldKey, ['battery', 'battery_health', 'battery_health_percent'], true)
+                    || in_array($fieldName, ['电池健康度', '电池效率', '电池健康', '电池容量百分比'], true))
+                && preg_match('/^(100|[0-9]{1,2})\s*[%％]?$/uD', $label, $measurement)) {
+                $label = '电池 ' . (int)$measurement[1] . '%';
+            }
             if ($label !== '') {
                 $parts[] = $label;
             }
@@ -318,6 +332,24 @@ class DeviceIntakeService extends BaseAdminService
         $categoryPath = $data['goods_category'];
         $m = IntakeMaterialAttributes::matchKnownOptions($m, SpecService::forSite((int)$this->site_id)
             ->optionsForCategory((int)end($categoryPath), $categoryPath));
+        $sourceMaterial = $this->decodeArray($this->decodeArray($intake['raw_payload'])['listing_material'] ?? []);
+        if (array_key_exists('label_ids', $overrides) || array_key_exists('label_ids', $sourceMaterial)) {
+            $labels = (new \addon\phone_shop\app\model\goods\Label())->where('site_id', $this->site_id)->where('status', 1)
+                ->field('label_id')->select()->toArray();
+            $m['label_ids'] = \addon\phone_shop\app\support\ListingMediaContract::labels(
+                array_key_exists('label_ids', $overrides) ? $overrides['label_ids'] : $sourceMaterial['label_ids'], $labels
+            );
+        }
+        $brandId = (int)($data['brand_id'] ?? 0);
+        if (array_key_exists('brand', $sourceMaterial) && !array_key_exists('brand_id', $data)) $brandId = $sourceMaterial['brand']['id'] ?? 0;
+        if (array_key_exists('brand', $sourceMaterial) || array_key_exists('brand_id', $data)) {
+            $brands = (new \addon\phone_shop\app\model\goods\Brand())->where('site_id', $this->site_id)->where('delete_time', 0)
+                ->field('brand_id,brand_name')->select()->toArray();
+            $brandValue = array_key_exists('brand_id', $data) ? $data['brand_id'] : $brandId;
+            // 商城原建品表单清空 select 会提交空字符串；保留其“无品牌”语义。
+            if ($brandValue === '' || $brandValue === null) $brandValue = 0;
+            $brandId = \addon\phone_shop\app\support\ListingMediaContract::brand($brandValue, $brands)['id'];
+        }
         if ((float)$m['price'] <= 0 || !is_finite((float)$m['price'])) throw new AdminException('请先完成有效销售定价，尚未上架');
         if (empty($m['images'])) throw new AdminException('请先上传商品图片，尚未上架');
         if (trim((string)$m['goods_name']) === '') throw new AdminException('请先核对商品型号，尚未上架');
@@ -345,6 +377,7 @@ class DeviceIntakeService extends BaseAdminService
             $sub = $this->subTitleFromSummary($enrichedCheck);
             if ($sub !== '') $subTitle = $sub;
         }
+        $subTitle = GoodsWarrantySubtitle::composeWithBattery($subTitle, (int)($m['warranty_expire_time'] ?? 0), (int)($m['battery_health'] ?? -1));
 
         $images = $m[ 'images' ];
         $goods_image = implode(',', $images);
@@ -370,7 +403,7 @@ class DeviceIntakeService extends BaseAdminService
             'goods_image_height'   => 0,
             'goods_video'          => trim((string)($data['goods_video'] ?? ($rawPayload['video_url'] ?? ''))),
             'goods_category'       => $data[ 'goods_category' ] ?? [],
-            'brand_id'             => (int) ($data[ 'brand_id' ] ?? 0),
+            'brand_id'             => $brandId,
             'label_ids'            => $m[ 'label_ids' ],
             'service_ids'          => $m[ 'service_ids' ],
             'supplier_id'          => 0,
@@ -658,6 +691,13 @@ class DeviceIntakeService extends BaseAdminService
             $attributes = new CoreDeviceAttributeService();
             if (array_key_exists('battery_health', $data)) $save['battery_health'] = $attributes->normalizeBattery($data['battery_health']);
             if (array_key_exists('warranty_expire_time', $data)) $save['warranty_expire_time'] = $attributes->normalizeWarrantyExpire($data['warranty_expire_time']);
+            if (array_key_exists('sub_title', $save) || array_key_exists('warranty_expire_time', $save) || array_key_exists('battery_health', $save)) {
+                $save['sub_title'] = GoodsWarrantySubtitle::composeWithBattery(
+                    (string)($save['sub_title'] ?? $goods->sub_title),
+                    (int)($save['warranty_expire_time'] ?? $goods->warranty_expire_time),
+                    (int)($save['battery_health'] ?? $goods->battery_health ?? -1)
+                );
+            }
             $goods->save($save + ['update_time' => time()]);
             if (isset($save['condition_grade'])) (new GoodsSku())->where('site_id', $this->site_id)->where('sku_id', (int)$skus[0]['sku_id'])->update(['condition_grade' => $save['condition_grade']]);
             $raw = IntakeMaterialTask::transition($raw, $action, (int)$this->uid, trim((string)$this->username) ?: '商城运营', time());

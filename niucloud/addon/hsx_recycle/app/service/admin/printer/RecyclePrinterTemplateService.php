@@ -1104,6 +1104,36 @@ class RecyclePrinterTemplateService extends BaseAdminService
     }
 
     /**
+     * 定价完成前使用当前报价员快照；完成后保留正式定价事实，不借打印改写责任字段。
+     * customer_quote 姓名由客户下单/后台录单服务校验本站员工后保存，不取本次打印请求中的姓名。
+     */
+    protected function resolvePriceStaffName(array $device, array $deviceInfo): string
+    {
+        $quote = DeviceReadingArchive::decode($deviceInfo['customer_quote'] ?? []);
+        $quoteUid = $quote['uid'] ?? 0;
+        $validQuoteUid = (is_int($quoteUid) || is_string($quoteUid))
+            && preg_match('/^[1-9][0-9]*$/D', (string)$quoteUid);
+        $quoteName = is_string($quote['name'] ?? null) ? trim($quote['name']) : '';
+        $trustedQuote = $validQuoteUid && $quoteName !== ''
+            && in_array($quote['source'] ?? '', ['customer', 'admin'], true);
+
+        $priceUid = (int)($device['price_uid'] ?? 0);
+        if ($priceUid > 0) {
+            $user = DeviceReadingArchive::decode($device['priceUser'] ?? $device['price_user'] ?? []);
+            if (isset($user['uid']) && (int)$user['uid'] !== $priceUid) $user = [];
+            foreach (['real_name', 'username'] as $field) {
+                $name = is_string($user[$field] ?? null) ? trim($user[$field]) : '';
+                if ($name !== '') return $name;
+            }
+            // 正式账号被删除时，只能用同一人的可信快照，不能错印成另一位前置报价员。
+            return $trustedQuote && (int)$quoteUid === $priceUid ? $quoteName : '';
+        }
+
+        // 管理员改选会原位更新此快照；留空/清除后不回退到最初的客户选择或当前操作员。
+        return $trustedQuote ? $quoteName : '';
+    }
+
+    /**
      * 根据设备ID获取实际打印数据
      * @param int $device_id
      * @return array
@@ -1125,6 +1155,7 @@ class RecyclePrinterTemplateService extends BaseAdminService
         }
 
         $deviceInfo = $this->normalizeDeviceInfo($device['info'] ?? []);
+        $priceStaffName = $this->resolvePriceStaffName($device, $deviceInfo);
         $checkMeta = $this->getDeviceCheckMeta($device, $deviceInfo);
         $labelSummary = $this->getDeviceLabelSummary($device);
         $checkResult = (string)($device['check_result'] ?? '');
@@ -1276,8 +1307,8 @@ class RecyclePrinterTemplateService extends BaseAdminService
             'check_time' => $this->formatSafeTime($device['check_at']),
 
             // 定价信息
-            'price_staff' => $device['priceUser']['username'] ?? '',
-            'price_staff_name' => $device['priceUser']['real_name'] ?? $device['priceUser']['username'] ?? '',
+            'price_staff' => $priceStaffName,
+            'price_staff_name' => $priceStaffName,
             'price_time' => $this->formatSafeTime($device['price_at']),
 
             // 快递信息

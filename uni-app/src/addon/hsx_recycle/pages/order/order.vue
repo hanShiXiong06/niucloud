@@ -34,6 +34,8 @@
           ref="deviceListManagerRef"
           :devices="phoneList"
           :count="deviceCount"
+          :enable-pricing="Boolean(orderSubmitConfig.device_add_enabled && orderSubmitConfig.device_pricing.enabled)"
+          :quote-users="orderSubmitConfig.device_pricing.quote_users"
           :show-add-button="true"
           :show-batch-button="false"
           :show-delete-button="true"
@@ -102,7 +104,7 @@
     <DeviceInputModal
       :visible="showDeviceModal"
       :mode="deviceModalMode"
-      :enable-pricing="true"
+      :enable-pricing="Boolean(orderSubmitConfig.device_add_enabled && orderSubmitConfig.device_pricing.enabled)"
       @update:visible="showDeviceModal = $event"
       @confirm="handleDeviceConfirm"
     />
@@ -162,6 +164,7 @@ const { currentTab, switchTab } = useTabCache(TAB_CACHE_KEY, 0)
 
 const orderSubmitConfig = ref({
   device_add_enabled: 1,
+  device_pricing: { enabled: 1, quote_users: [] as Array<{ uid: number; name: string }> },
   notice: {
     enabled: 0,
     title: '下单提示',
@@ -308,6 +311,10 @@ const normalizeOrderSubmitConfig = (data: any = {}) => {
   const logisticsVehicle = data.delivery_modes?.logistics_vehicle ? 1 : 0
   orderSubmitConfig.value = {
     device_add_enabled: data.device_add_enabled ? 1 : 0,
+    device_pricing: {
+      enabled: data.device_pricing?.enabled === 0 ? 0 : 1,
+      quote_users: Array.isArray(data.device_pricing?.quote_users) ? data.device_pricing.quote_users : []
+    },
     notice: {
       enabled: data.notice?.enabled ? 1 : 0,
       title: data.notice?.title || '下单提示',
@@ -375,14 +382,12 @@ const applyDefaultCount = () => {
 
 // 打开单台设备添加弹窗
 const openSingleDeviceModal = () => {
-  deviceModalMode.value = 'single'
-  showDeviceModal.value = true
+  openInlineDeviceAdd()
 }
 
 // 打开批量设备添加弹窗
 const openBatchDeviceModal = () => {
-  deviceModalMode.value = 'batch'
-  showDeviceModal.value = true
+  openInlineDeviceAdd()
 }
 
 const openInlineDeviceAdd = () => {

@@ -216,19 +216,14 @@ const handleClick = (id: number) => {
 };
 
 const previewImages = (images) => {
-    if (!images.startsWith('http')) {
-        images = getImgUrl() + images;
-    }
+    const urls = (Array.isArray(images) ? images : [images]).filter(Boolean).map(item => img(item));
+    if (!urls.length) return;
     uni.previewImage({
         indicator: "number",
         loop: true,
-        urls: Array.isArray(images) ? images : [images]
+        urls
     });
 };
-
-const getImgUrl = () => {
-    return import.meta.env.VITE_IMG_DOMAIN || '';
-}
 
 const toAddOrder = () => {
     uni.navigateTo({ url: '/addon/hsx_recycle/pages/order/order' });

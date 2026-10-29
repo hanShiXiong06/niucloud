@@ -46,7 +46,7 @@ class DeviceSummaryHelper
                 $fieldKey = (string)$key;
                 $value = $item;
             }
-            if ($fieldKey === '' || in_array($fieldKey, ['device_readings', 'check_meta', 'goods_category', 'sign_summary'], true)) {
+            if ($fieldKey === '' || in_array($fieldKey, ['device_readings', 'check_meta', 'goods_category', 'sign_summary', 'customer_quote'], true)) {
                 continue;
             }
             if (is_array($value)) {
@@ -93,6 +93,7 @@ class DeviceSummaryHelper
     public static function buildInfo($existingInfo, array $categoryPath, array $summary, array $device = [], int $siteId = 0): array
     {
         $existingInfo = DeviceReadingArchive::decode($existingInfo);
+        unset($summary['customer_quote']);
 
         $existingInfo['goods_category'] = $categoryPath;
 
@@ -123,6 +124,9 @@ class DeviceSummaryHelper
         );
         if ($archive !== []) $existingInfo['device_readings'] = $archive;
 
+        if (array_key_exists('initial_price_uid', $device)) {
+            return (new \addon\hsx_recycle\app\service\core\order\CustomerQuoteService())->applyAdminQuote($siteId, $existingInfo, $device);
+        }
         return $existingInfo;
     }
 

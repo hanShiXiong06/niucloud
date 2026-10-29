@@ -303,6 +303,7 @@ class ErpExternalSaleRecordedService extends ErpExternalSaleAccountingService
                 ]);
             }
         }
+        ErpIntegrationDocumentService::record((int)$payload['site_id'], 'sale', (int)$sale->id);
         return [
             'sale_order_id' => (int)$sale->id,
             'sale_no' => (string)$sale->sale_no,

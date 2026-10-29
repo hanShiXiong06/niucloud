@@ -1186,6 +1186,7 @@ class ErpPurchaseService extends BaseAdminService
                     'source_paid_reconciliation' => $useSourcePaidAllocation ? 1 : 0,
                 ]);
             }
+            ErpIntegrationDocumentService::record((int)$this->site_id, 'purchase', $orderId, $createdAssetIds);
             });
         } catch (\Throwable $e) {
             $existingId = $appendOrderId > 0 ? 0 : $this->existingPurchaseRequest($requestId);
@@ -1340,6 +1341,7 @@ class ErpPurchaseService extends BaseAdminService
                 'standard_item_count' => count($standardItems),
                 'amount' => (float)$order->total_cost,
             ]);
+            ErpIntegrationDocumentService::invalidated((int)$this->site_id,'purchase',$id,(string)$order->purchase_no,$remark);
         });
         return true;
     }

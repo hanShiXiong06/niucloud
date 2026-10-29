@@ -188,14 +188,12 @@
                         <ErpDeviceIdentity :model="row.model" :spec="row.spec" :imei="row.imei" :sn="row.sn" />
                     </template>
                 </el-table-column>
-                <el-table-column label="入库" min-width="230">
+                <el-table-column label="入库" min-width="190">
                     <template #default="{ row }">
                         <div class="lifecycle-cell lifecycle-cell--inbound">
                             <div class="lifecycle-cell__title">{{ canViewSupplier ? (row.inbound_party_name || row.party_name || '来源未记录') : erpSourceLabel(row.inbound_origin_name, '采购入库') }}</div>
-                            <div class="lifecycle-cell__line">{{ row.inbound_purchase_no || '手工入库' }}</div>
-                            <div class="lifecycle-cell__line">来源 {{ erpSourceLabel(row.inbound_origin_name, 'ERP采购') }}</div>
-                            <div class="lifecycle-cell__line">{{ [row.inbound_warehouse_name, row.inbound_location_name].filter(Boolean).join(' / ') || '位置未记录' }}</div>
                             <div class="lifecycle-cell__time">{{ formatTime(row.inbound_at || row.stock_in_at) }}</div>
+                            <el-popover placement="right" trigger="click" :width="300"><template #reference><el-button link type="primary" size="small">入库详情</el-button></template><div class="lifecycle-cell"><div class="lifecycle-cell__line">单据：{{ row.inbound_purchase_no || '手工入库' }}</div><div class="lifecycle-cell__line">来源：{{ erpSourceLabel(row.inbound_origin_name, 'ERP采购') }}</div><div class="lifecycle-cell__line">位置：{{ [row.inbound_warehouse_name, row.inbound_location_name].filter(Boolean).join(' / ') || '位置未记录' }}</div></div></el-popover>
                         </div>
                     </template>
                 </el-table-column>
@@ -224,18 +222,15 @@
                         <div v-if="canViewProfit && hasEffectiveOutbound(row)" class="mt-1 text-xs" :class="Number(row.outbound_profit || 0) >= 0 ? 'text-[color:var(--el-color-success)]' : 'text-[color:var(--el-color-danger)]'">毛利 {{ money(row.outbound_profit) }}</div>
                     </template>
                 </el-table-column>
-                <el-table-column label="出库" min-width="240">
+                <el-table-column label="出库" min-width="200">
                     <template #default="{ row }">
                         <div v-if="hasEffectiveOutbound(row)" class="lifecycle-cell lifecycle-cell--outbound" :class="outboundToneClass(row.outbound_status)">
                             <div class="flex items-center gap-2">
                                 <el-tag :type="outboundStatusMeta(row.outbound_status).type" size="small" effect="plain">{{ outboundStatusMeta(row.outbound_status).label }}</el-tag>
                                 <span class="lifecycle-cell__title">{{ row.outbound_party_name || '客户未记录' }}</span>
                             </div>
-                            <div class="lifecycle-cell__line">{{ row.outbound_sale_no || '销售单未记录' }}</div>
-                            <div class="lifecycle-cell__line">来源 {{ erpSourceLabel(row.outbound_origin_name, 'ERP销售') }} · 渠道 {{ erpNamedLabel(row.outbound_channel, '', '-') }}</div>
-                            <div class="lifecycle-cell__line">实际收入 {{ money(row.outbound_net_sale_amount) }}<span v-if="canViewProfit"> · 毛利 {{ money(row.outbound_profit) }}</span></div>
-                            <div v-if="Number(row.outbound_compensation_amount || 0)" class="lifecycle-cell__time">原成交 {{ money(row.outbound_sale_price) }} · 售后补差 -{{ money(row.outbound_compensation_amount) }}</div>
                             <div class="lifecycle-cell__time">{{ formatTime(row.outbound_at) }}</div>
+                            <el-popover placement="left" trigger="click" :width="320"><template #reference><el-button link type="primary" size="small">出库详情</el-button></template><div class="lifecycle-cell"><div class="lifecycle-cell__line">单据：{{ row.outbound_sale_no || '销售单未记录' }}</div><div class="lifecycle-cell__line">来源 {{ erpSourceLabel(row.outbound_origin_name, 'ERP销售') }} · 渠道 {{ erpNamedLabel(row.outbound_channel, '', '-') }}</div><div class="lifecycle-cell__line">实际收入 {{ money(row.outbound_net_sale_amount) }}<span v-if="canViewProfit"> · 毛利 {{ money(row.outbound_profit) }}</span></div><div v-if="Number(row.outbound_compensation_amount || 0)" class="lifecycle-cell__time">原成交 {{ money(row.outbound_sale_price) }} · 售后补差 -{{ money(row.outbound_compensation_amount) }}</div></div></el-popover>
                         </div>
                         <div v-else class="lifecycle-empty">
                             <span class="lifecycle-empty__dot"></span>
@@ -253,9 +248,8 @@
                             <div class="flex flex-wrap gap-1">
                                 <el-tag type="success">库存中</el-tag>
                                 <el-tag v-if="row.ownership_type === 'consigned' || row.warehouse_policy?.warehouse_type === 'consignment'" type="warning" effect="plain">客户代卖</el-tag>
-                                <el-tag v-else type="info" effect="plain">本店自有</el-tag>
-                                <el-tag :type="refurbishMeta(row.refurbish_status).type" effect="plain">{{ refurbishMeta(row.refurbish_status).label }}</el-tag>
-                                <el-tag :type="targetMeta(row.sale_target).type" effect="plain">{{ targetMeta(row.sale_target).label }}</el-tag>
+                                <el-tag v-if="row.refurbish_status && row.refurbish_status !== 'none'" :type="refurbishMeta(row.refurbish_status).type" effect="plain">{{ refurbishMeta(row.refurbish_status).label }}</el-tag>
+                                <el-tag v-if="row.sale_target === 'peer'" :type="targetMeta(row.sale_target).type" effect="plain">{{ targetMeta(row.sale_target).label }}</el-tag>
                                 <el-tag v-if="row.sale_target === 'mall'" :type="listingMeta(row.listing_status).type" effect="plain">{{ listingMeta(row.listing_status).label }}</el-tag>
                                 <span v-if="row.task_assignee_name" class="text-xs text-[color:var(--el-text-color-secondary)]">负责人 {{ row.task_assignee_name }}</span>
                             </div>
@@ -310,7 +304,7 @@
                                 <el-dropdown-item command="print_label">打印设备标签</el-dropdown-item>
                                 <el-dropdown-item v-if="row.refurbish_status === 'pending'" command="start_refurbish">开始整备</el-dropdown-item>
                                 <el-dropdown-item v-if="['pending','processing','failed'].includes(row.refurbish_status)" command="complete_refurbish">登记整备结果</el-dropdown-item>
-                                <el-dropdown-item v-if="(row.listing_status === 'ready' || row.can_handoff_shop === 1) && row.warehouse_policy?.marketplace_available" command="publish_listing">{{ row.listing_basic_first === 1 ? '上架并交接资料' : row.can_handoff_shop === 1 ? '交接商城' : '上架商城' }}</el-dropdown-item>
+                                <el-dropdown-item v-if="(row.listing_status === 'ready' || row.can_handoff_shop === 1) && row.warehouse_policy?.marketplace_available" command="publish_listing">{{ row.listing_basic_first === 1 ? '上架' : row.can_handoff_shop === 1 ? '交接商城' : '上架' }}</el-dropdown-item>
                             </el-dropdown-menu></template>
                         </el-dropdown>
                     </template>
@@ -736,6 +730,7 @@ import ErpSaleProfitReport from '@/addon/hsx_erp/components/ErpSaleProfitReport.
 import { firstPositiveErpAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
 import { erpListingFeedback } from '@/addon/hsx_erp/hooks/useErpListingFeedback'
 import { erpListingFormDefinition, erpListingFormPayload, validateErpListingForm, type ErpListingAction } from '@/addon/hsx_erp/hooks/useErpListingForm'
+import { erpMallListingInitialFields } from '@/addon/hsx_erp/hooks/useErpMallListingMedia'
 import QRCode from 'qrcode'
 
 const ledgerVisible = ref(false)
@@ -842,6 +837,7 @@ function turnoverDays(row: any): number {
 
 function defaultFlowForm() {
     return {
+        ...erpMallListingInitialFields({}),
         refurbish_status: 'none',
         sale_target: 'unset',
         listing_status: 'none',
@@ -1120,6 +1116,7 @@ function openFlow(row: any, mode: FlowMode = 'all') {
     flow.row = row
     flow.mode = mode
     flow.form = {
+        ...erpMallListingInitialFields(row),
         refurbish_status: row.refurbish_status || 'none',
         sale_target: row.sale_target || 'unset',
         listing_status: row.listing_status || 'none',

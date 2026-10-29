@@ -86,11 +86,15 @@ final class ErpListingFormContract
         if ((int)($workspace['mall']['connected'] ?? 0) === 1) {
             foreach ([self::ACTION_MEDIA_PRICE, self::ACTION_ONE_STOP] as $action) {
                 $fields = array_values(array_diff($forms[$action]['visible_fields'], ['catalog_product_id', 'spec']));
-                $fields = array_values(array_unique(array_merge(['mall_category_id', 'image_urls', 'retail_price'], $fields)));
+                $fields = array_values(array_unique(array_merge([
+                    'mall_category_id', 'mall_memory', 'mall_color', 'mall_grade_id', 'mall_battery_health', 'mall_warranty_date',
+                    'mall_label_ids', 'mall_brand_id',
+                    'mall_image_mode', 'mall_standard_register', 'image_urls', 'retail_price',
+                ], $fields)));
                 $forms[$action] = array_merge($forms[$action], [
-                    'title' => '拍摄定价并上架',
-                    'description' => '选商城分类、上传实拍图、填写售价。上架后客户即可购买；内存、电池等资料由商城运营核对。',
-                    'submit_label' => '保存并上架',
+                    'title' => '上架',
+                    'description' => '确认商城分类、图片和售价即可上架，商城标签可在此选择；未确认的信息可留空，后续仍可核对。',
+                    'submit_label' => '上架',
                     'publish_basic' => 1,
                     'visible_fields' => $fields,
                     'editable_fields' => $fields,

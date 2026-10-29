@@ -167,8 +167,12 @@
                 </view>
 
               
+                <view v-if="!isReject && deviceData.price_assignment?.mode === 'quote_user'" class="section">
+                    下一步定价：{{ deviceData.price_assignment.name }}（报价员）
+                </view>
+                <view v-if="!isReject && deviceData.price_assignment?.mode === 'unavailable'" class="section">{{ deviceData.price_assignment.message }}</view>
                 <NextAssigneePicker
-                    v-if="!isReject"
+                    v-if="!isReject && deviceData.price_assignment?.mode !== 'quote_user'"
                     v-model="nextAssigneeUid"
                     stage-key="price"
                     label="下一步 · 定价负责人"

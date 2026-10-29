@@ -531,7 +531,9 @@ class RecycleOrderService extends BaseApiService
             $data = (new LogisticsVehicleService())->prepareOrderData((int)$this->site_id, $data);
 
             // 读取站点配置的流转模式（整单/按设备）
-            $orderSubmitConfig = (new \addon\hsx_recycle\app\service\api\order\OrderSubmitConfigService())->getConfig($this->site_id);
+            $orderSubmitConfig = (new \addon\hsx_recycle\app\service\core\order\OrderSubmitConfigService())->getConfig((int)$this->site_id);
+            $data['devices'] = (new \addon\hsx_recycle\app\service\core\order\CustomerQuoteService())
+                ->prepareDevices((int)$this->site_id, $data['devices'] ?? [], $orderSubmitConfig);
             $data['flow_mode'] = ($orderSubmitConfig['flow']['mode'] ?? $orderSubmitConfig['payment']['mode'] ?? RecycleOrderDict::FLOW_MODE_ORDER);
 
             $useExpress = !empty($data['use_express']) && is_array($data['express_config'] ?? null);
@@ -559,7 +561,8 @@ class RecycleOrderService extends BaseApiService
                         'order_id' => $order->id,
                         'category_id' => $categoryId,
                         'info' => [
-                            'goods_category' => array_values(array_map('strval', $categoryPath))
+                            'goods_category' => array_values(array_map('strval', $categoryPath)),
+                            'customer_quote' => $device['customer_quote'],
                         ],
                         'imei' => $device['imei'] ?? '',
                         'user_sn' => $device['user_sn'] ?? ($device['imei'] ?? ''),

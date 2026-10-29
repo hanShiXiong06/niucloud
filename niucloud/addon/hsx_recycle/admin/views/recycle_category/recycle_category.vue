@@ -11,6 +11,7 @@
                     <el-tag v-if="isHistoryMode" type="warning" effect="plain" class="mr-2">
                         {{ t('历史查看模式 · 只读') }}
                     </el-tag>
+                    <el-button @click="quoteImageSyncVisible = true" :disabled="isHistoryMode">自动采集报价</el-button>
                     <el-button class="ml-2 mr-2" type="primary" @click="addEvent" :disabled="isHistoryMode">
                         {{ t('添加报价单') }}
                     </el-button>
@@ -115,6 +116,7 @@
 
         <!-- 商品分类推广弹出框 -->
         <goods-category-spread-popup ref="goodsCategorySpreadPopupRef" />
+        <QuoteImageSyncDrawer v-model="quoteImageSyncVisible" @updated="loadCategoryList" />
 
         <el-image-viewer :url-list="previewImageList" v-if="imageViewer.show" @close="imageViewer.show = false"
             :initial-index="imageViewer.index" :zoom-rate="1" />
@@ -177,6 +179,7 @@ import { img } from '@/utils/common'
 import { ElMessageBox } from 'element-plus'
 import categoryEdit from '@/addon/hsx_recycle/views/recycle_category/components/recycle-category-edit.vue'
 import EmptyState from '@/addon/hsx_recycle/components/empty-state/index.vue'
+import QuoteImageSyncDrawer from './components/QuoteImageSyncDrawer.vue'
 
 import { useRoute, useRouter } from 'vue-router'
 import Sortable from 'sortablejs'
@@ -188,6 +191,7 @@ import { cloneDeep } from 'lodash-es'
 
 const route = useRoute()
 const pageName = route.meta.title
+const quoteImageSyncVisible = ref(false)
 const tableRef = useTemplateRefsList<HTMLElement>()
 
 

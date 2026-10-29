@@ -10,6 +10,10 @@ namespace core\base {
     class BaseAdminService { public int $site_id = 100005; public function __construct() {} }
     class BaseModel extends \think\Model {}
 }
+namespace app\service\core\sys {
+    // 本套测试仅验证标签取值；公共库配置隔离为空，不加载真实缓存或应用配置。
+    class CoreConfigService { public function getConfigValue($siteId, $key) { return []; } }
+}
 namespace addon\hsx_recycle\app\model\order {
     class RecycleDevice extends \think\Model {
         protected $name = 'recycle_device';
@@ -38,7 +42,7 @@ namespace {
         'recycle_order' => 'id INTEGER PRIMARY KEY, site_id INTEGER, order_no TEXT',
         'recycle_device_model_dict' => 'id INTEGER PRIMARY KEY, site_id INTEGER, pid INTEGER DEFAULT 0, node_name TEXT, model_full_name TEXT',
         'recycle_template_binding' => 'id INTEGER PRIMARY KEY, site_id INTEGER, target_type TEXT, target_id INTEGER, scene_key TEXT, check_template_id INTEGER DEFAULT 0, print_template_id INTEGER DEFAULT 0, status INTEGER DEFAULT 1, inherit_enabled INTEGER DEFAULT 1',
-        'recycle_printer_template' => 'template_id INTEGER PRIMARY KEY, site_id INTEGER, template_name TEXT, delete_time INTEGER DEFAULT 0',
+        'recycle_printer_template' => 'template_id INTEGER PRIMARY KEY, site_id INTEGER, template_name TEXT, status INTEGER DEFAULT 1, delete_time INTEGER DEFAULT 0',
     ] as $table => $columns) Db::execute('CREATE TABLE ut_' . $table . ' (' . $columns . ')');
 
     $checks = 0;

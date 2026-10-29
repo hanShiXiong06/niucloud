@@ -20,6 +20,7 @@ function execute(source, mocks, globals = {}) {
     const code = ts.transpileModule(source.replace(/import\.meta\.env/g, '({})'), {compilerOptions:{module:ts.ModuleKind.CommonJS, target:ts.ScriptTarget.ES2020}}).outputText
     vm.runInNewContext(code, {exports, console, require: name => {
         if (name in mocks) return mocks[name]
+        if (name === '@/addon/phone_shop/hooks/useGoodsDisplayConfig') return {rememberGoodsDisplayConfig() {}}
         throw new Error('Unmocked dependency: ' + name)
     }, ...globals})
     return exports

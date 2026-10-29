@@ -3,12 +3,12 @@
         <scroll-view :scroll-y="true" class="w-screen h-screen bg-[var(--page-bg-color)]" v-if="!pageLoading && config.is_open == 1">
             <view class="sidebar-margin pt-[var(--top-m)]">
                 <view class="card-template">
-                    <view class="font-500 text-[30rpx] text-[#333] leading-[42rpx]">最小提现金额为</view>
+                    <view class="font-500 text-[30rpx] text-[#333] leading-[42rpx]">提现金额</view>
                     <view class="flex pt-[30rpx] pb-[8rpx] items-center border-0 border-b-[2rpx] border-solid border-[#F1F2F5]">
                         <text class="pt-[4rpx] text-[44rpx] text-[#333] iconfont iconrenminbiV6xx price-font "></text>
                         <input type="digit" class="h-[76rpx] leading-[76rpx] pl-[10rpx] flex-1 font-500 text-[54rpx] bg-[#fff]"
                                v-model="applyData.apply_money" maxlength="7"
-                               :placeholder="applyData.apply_money?'':('最小提现金额为' + t('currency') + moneyFormat(config.min))"
+                               :placeholder="applyData.apply_money ? '' : (Number(config.min) > 0 ? '最低申请 ' + minimumCashOutText : '请输入提现金额')"
                                placeholder-class="apply-price" :adjust-position="false" />
                         <text v-if="Number(serviceMoney)" class="text-[24rpx] text-[var(--text-color-light6)] mr-[20rpx]">手续费{{ serviceMoney }}
                         </text>
@@ -20,6 +20,10 @@
                             <text>，手续费为{{ config.rate + '%' }}</text>
                         </view>
                         <view class="text-[24rpx] text-primary leading-[36rpx]" @click="allMoney">全部提现</view>
+                    </view>
+                    <view v-if="Number(applyData.apply_money) > 0" class="cash-out-estimate">
+                        <text>本次手续费 {{ t('currency') }}{{ serviceMoney }}</text>
+                        <text>预计到账 {{ t('currency') }}{{ expectedReceived }}</text>
                     </view>
                 </view>
 
@@ -118,28 +122,30 @@
                     </view>
                 </view>
 
-                <!-- 提现规则 -->
-                <view class="mt-[20rpx] card-template">
-                    <view class="font-500 text-[30rpx] text-[#333] leading-[42rpx] mb-[24rpx]">提现规则</view>
-                    <view class="flex items-start mb-[20rpx]">
-                        <text class="mt-[14rpx] mr-[16rpx] w-[8rpx] h-[8rpx] rounded-full bg-[var(--text-color-light9)] flex-shrink-0"></text>
-                        <view class="flex-1 text-[24rpx] text-[var(--text-color-light6)] leading-[36rpx]">可提现额度：单笔最低提现金额为 1 元，每次提现金额不可超过当前可提现余额。</view>
+                <!-- 规则跟随本站真实配置，不另设勾选、阅读倒计时等提现门槛。 -->
+                <view class="mt-[20rpx] card-template cash-out-rules">
+                    <view class="cash-out-rules__heading">提现规则与办理说明</view>
+                    <view class="cash-out-rules__overview">
+                        <view><text>最低申请金额</text><text>{{ minimumCashOutText }}</text></view>
+                        <view><text>提现手续费率</text><text>{{ Number(config.rate) }}%</text></view>
+                        <view><text>审核及打款处理</text><text>3 个自然日内</text></view>
                     </view>
-                    <view class="flex items-start mb-[20rpx]">
-                        <text class="mt-[14rpx] mr-[16rpx] w-[8rpx] h-[8rpx] rounded-full bg-[var(--text-color-light9)] flex-shrink-0"></text>
-                        <view class="flex-1 text-[24rpx] text-[var(--text-color-light6)] leading-[36rpx]">提现手续费：按提现金额的 1% 收取，实际到账金额为提现金额扣除手续费后的余额。</view>
+                    <view class="cash-out-rules__intro">请重点核对最低金额、手续费、收款方式和办理时效。以下金额与方式跟随本站当前配置；提交成功不等于已经到账。</view>
+                    <view v-for="section in cashOutRules" :key="section.key" class="cash-out-rules__section">
+                        <view class="cash-out-rules__title">{{ section.title }}</view>
+                        <view v-for="(paragraph, paragraphIndex) in section.paragraphs" :key="paragraphIndex" class="cash-out-rules__paragraph">{{ paragraph }}</view>
                     </view>
-                    <view class="flex items-start mb-[20rpx]">
-                        <text class="mt-[14rpx] mr-[16rpx] w-[8rpx] h-[8rpx] rounded-full bg-[var(--text-color-light9)] flex-shrink-0"></text>
-                        <view class="flex-1 text-[24rpx] text-[var(--text-color-light6)] leading-[36rpx]">每日提现次数：每日最多可提现 3 次，超过次数请次日再试。</view>
-                    </view>
-                    <view class="flex items-start mb-[20rpx]">
-                        <text class="mt-[14rpx] mr-[16rpx] w-[8rpx] h-[8rpx] rounded-full bg-[var(--text-color-light9)] flex-shrink-0"></text>
-                        <view class="flex-1 text-[24rpx] text-[var(--text-color-light6)] leading-[36rpx]">提现时间：每日 9:00-21:00 可提交提现申请，其余时间提交的申请将在次日处理。</view>
-                    </view>
-                    <view class="flex items-start">
-                        <text class="mt-[14rpx] mr-[16rpx] w-[8rpx] h-[8rpx] rounded-full bg-[var(--text-color-light9)] flex-shrink-0"></text>
-                        <view class="flex-1 text-[24rpx] text-[var(--text-color-light6)] leading-[36rpx]">到账时间：提交申请后由平台审核，审核通过后预计 1-3 个工作日到账；若审核不通过，提现金额将原路退回至账户余额。</view>
+                    <view class="cash-out-rules__help">
+                        <view class="cash-out-rules__title">需要查询进度或核对小额余额？</view>
+                        <view class="cash-out-rules__paragraph">请提供提现单号或提交时间，联系本站商家核实，不要向客服提供支付密码或验证码。</view>
+                        <view class="cash-out-rules__actions">
+                            <view class="cash-out-rules__action" @click="redirect({ url: '/app/pages/member/cash_out' })">查看提现记录</view>
+                            <view class="cash-out-rules__action">
+                                <nc-contact send-message-title="提现进度与余额核对" send-message-path="/app/pages/member/apply_cash_out">
+                                    <view>联系商家</view>
+                                </nc-contact>
+                            </view>
+                        </view>
                     </view>
                 </view>
 
@@ -169,6 +175,7 @@ import { moneyFormat, redirect, getToken, img, deepClone, getWinxinOpenId } from
 import useMemberStore from '@/stores/member'
 import { cashOutConfig, cashOutApply, getFirstCashOutAccountInfo, getCashoutAccountInfo } from '@/app/api/member'
 import { onLoad, onShow } from '@dcloudio/uni-app'
+import { buildCashOutRules } from '@/app/utils/cash-out-rules'
 
 const pageLoading = ref(true)
 const loading = ref(false)
@@ -215,6 +222,16 @@ const config = reactive<AnyObject>({
     rate: 0, // 手续费比率
     transfer_type: [] // 提现方式
 })
+
+const minimumCashOutText = computed(() => Number(config.min) > 0
+    ? `${t('currency')}${moneyFormat(config.min)}` : '未设置额外最低金额')
+const cashOutRules = computed(() => buildCashOutRules({
+    min: config.min,
+    rate: config.rate,
+    isAutoVerify: config.is_auto_verify,
+    transferTypes: config.transfer_type,
+    accountType: applyData.account_type
+}))
 
 let query: any = {}
 let openId = ''
@@ -279,6 +296,8 @@ const serviceMoney = computed(() => {
     }
     return money.toFixed(2);
 })
+const expectedReceived = computed(() => moneyFormat(Math.max(0,
+    (Number(applyData.apply_money) || 0) - Number(serviceMoney.value))))
 
 //全部提现
 const allMoney = () => {
@@ -450,6 +469,41 @@ const transferWechatCode = () => {
 </script>
 
 <style lang="scss" scoped>
+.cash-out-estimate {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 12rpx;
+    padding-top: 16rpx;
+    font-size: 24rpx;
+    line-height: 36rpx;
+    color: var(--text-color-light6);
+}
+.cash-out-rules {
+    color: #333;
+    word-break: break-word;
+    &__heading { font-size: 30rpx; font-weight: 600; line-height: 44rpx; }
+    &__overview {
+        margin-top: 24rpx;
+        padding: 20rpx 24rpx;
+        border-radius: var(--rounded-small);
+        background: var(--page-bg-color);
+        font-size: 24rpx;
+        line-height: 38rpx;
+        > view { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8rpx 20rpx; }
+        > view + view { margin-top: 10rpx; }
+        > view > text:first-child { color: var(--text-color-light6); }
+        > view > text:last-child { font-weight: 500; }
+    }
+    &__intro, &__paragraph { font-size: 24rpx; line-height: 40rpx; color: var(--text-color-light6); }
+    &__intro { margin-top: 24rpx; }
+    &__section { margin-top: 30rpx; }
+    &__title { font-size: 26rpx; font-weight: 600; line-height: 40rpx; }
+    &__paragraph { margin-top: 10rpx; }
+    &__help { margin-top: 30rpx; padding-top: 24rpx; border-top: 1rpx solid #eee; }
+    &__actions { display: flex; flex-wrap: wrap; gap: 20rpx; margin-top: 20rpx; }
+    &__action { flex: 1; min-width: 180rpx; padding: 16rpx 12rpx; border: 1rpx solid var(--primary-color); border-radius: var(--rounded-small); color: var(--primary-color); text-align: center; font-size: 24rpx; line-height: 36rpx; }
+}
 :deep(.apply-price) {
     color: var(--text-color-light9);
     font-size: 26rpx;

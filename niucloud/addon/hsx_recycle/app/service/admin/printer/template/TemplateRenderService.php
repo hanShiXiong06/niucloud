@@ -374,6 +374,7 @@ class TemplateRenderService extends BaseAdminService
             'model' => 'iPhone 14 Pro Max',
             'imei' => '123456789012345',
             'order_no' => 'ORD20250103001',
+            'price_staff' => '张三',
             'price_staff_name' => '张三',
             'check_date' => date('Y-m-d H:i:s'),
             'check_staff' => '李四',

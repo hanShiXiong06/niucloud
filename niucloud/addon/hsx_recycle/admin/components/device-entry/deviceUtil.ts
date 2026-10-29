@@ -8,7 +8,8 @@ function readingPayload(device: DeviceEntryRow) {
         capacity: device.capacity ?? '', color: device.color ?? '',
         system_version: device.system_version ?? '', warranty_info: device.warranty_info ?? '',
         battery_health: device.battery_health ?? '', battery_cycle: device.battery_cycle_count ?? '',
-        device_readings: device.device_readings
+        device_readings: device.device_readings,
+        initial_price_uid: Number(device.initial_price_uid || 0)
     }
 }
 

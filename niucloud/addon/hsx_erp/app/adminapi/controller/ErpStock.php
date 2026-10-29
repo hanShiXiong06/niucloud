@@ -100,7 +100,12 @@ class ErpStock extends BaseAdminController
 
     public function listingCatalog()
     {
-        return success(\addon\hsx_erp\app\service\admin\ErpMallListingService::request((int)$this->request->siteId(), 'options'));
+        $params = $this->request->params([
+            ['category_id', 0], ['asset_id', 0], ['model', ''], ['memory', ''], ['color', ''],
+        ]);
+        return success($this->service->listingCatalog((int)$params['asset_id'], (int)$params['category_id'],
+            ['model' => $params['model'], 'memory' => $params['memory'], 'color' => $params['color']]
+        ));
     }
 
     public function adjustRetailPrice(int $id)
@@ -274,6 +279,15 @@ class ErpStock extends BaseAdminController
             ['next_assignee_uid', 0],
             ['workflow_action', ''],
             ['mall_category_id', null],
+            ['mall_memory', null],
+            ['mall_color', null],
+            ['mall_grade_id', null],
+            ['mall_battery_health', null],
+            ['mall_warranty_date', null],
+            ['mall_label_ids', null],
+            ['mall_brand_id', null],
+            ['mall_image_mode', null],
+            ['mall_standard_register', null],
             ['publish_basic', 0],
             ['defer_publish', 0],
         ]);

@@ -15,6 +15,7 @@ use addon\hsx_erp\app\model\ErpParty;
 use addon\hsx_erp\app\model\ErpPartyMember;
 use addon\hsx_erp\app\model\ErpPayable;
 use addon\hsx_erp\app\model\ErpPurchaseOrder;
+use addon\hsx_erp\app\model\ErpPurchaseItem;
 use addon\hsx_erp\app\model\ErpPurchaseReturnItem;
 use addon\hsx_erp\app\model\ErpPurchaseReturnOrder;
 use addon\hsx_erp\app\model\ErpReceivable;
@@ -3827,7 +3828,20 @@ class ErpFinanceService extends BaseAdminService
             $assets = $this->settlementTargetAssets($target, $side, (int)($link['asset_id'] ?? 0));
             $sourceMeta = ErpFinanceSourceService::forSite((int)$this->site_id)->sourceMeta($target->toArray(), $side);
             $origin = $this->settlementTargetOrigin($target, $side);
+            $integrationDocumentRef = '';
+            $integrationLineRef = null;
+            if ($side === ErpDict::TARGET_PAYABLE && (string)$target->source_type === 'purchase_asset') {
+                $purchaseItem = ErpPurchaseItem::where('site_id', $this->site_id)->where('asset_id', (int)$target->source_id)->findOrEmpty();
+                if (!$purchaseItem->isEmpty()) {
+                    $integrationDocumentRef = 'purchase:' . $purchaseItem->purchase_order_id;
+                    $integrationLineRef = 'purchase_line:' . $purchaseItem->id;
+                }
+            } elseif ($side === ErpDict::TARGET_RECEIVABLE && (string)$target->source_type === 'sale') {
+                $integrationDocumentRef = 'sale:' . $target->source_id;
+            }
             $targets[] = [
+                'source_document_ref' => $integrationDocumentRef,
+                'source_line_ref' => $integrationLineRef,
                 'target_type' => $side,
                 'target_id' => $targetId,
                 'target_no' => $side === ErpDict::TARGET_PAYABLE ? (string)$target->payable_no : (string)$target->receivable_no,
@@ -3873,6 +3887,7 @@ class ErpFinanceService extends BaseAdminService
                 'cash_direction' => (string)$settlement->cash_direction,
                 'capital_account_id' => (int)$settlement->capital_account_id,
                 'capital_account_name' => (string)$settlement->capital_account_name,
+                'capital_account_type' => (string)(ErpCapitalAccount::where('site_id', $this->site_id)->where('id', (int)$settlement->capital_account_id)->value('account_type') ?: ''),
                 'party_id' => (int)$settlement->party_id,
                 'party_name' => (string)$settlement->party_name,
                 'confirmed_at' => (int)$settlement->confirmed_at,

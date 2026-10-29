@@ -399,6 +399,7 @@ class RecycleDeviceErpSyncService extends BaseAdminService
             'sn' => (string)($device['sn'] ?? ''),
             'model' => (string)($device['model'] ?? ''),
             'category_id' => (int)($device['category_id'] ?? 0),
+            'source_catalog' => \addon\hsx_recycle\app\service\core\recycle_order\RecycleErpSourceCatalog::fromModel((int)$this->site_id, (int)($device['category_id'] ?? 0)),
             'capacity' => $spec['capacity_label'],
             'capacity_value' => $spec['capacity_value'],
             'color' => $spec['color_label'],

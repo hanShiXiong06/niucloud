@@ -22,6 +22,12 @@ class OrderSubmitConfigService extends BaseApiService
     public function getConfig(): array
     {
         $config = $this->coreService->getConfig($this->site_id);
+        $pricing = $config['device_pricing'];
+        $config['device_pricing'] = [
+            'enabled' => !empty($config['device_add_enabled']) && !empty($pricing['enabled']) ? 1 : 0,
+            'quote_users' => \addon\hsx_recycle\app\service\core\order\CustomerQuoteService::assignmentEnabled($config)
+                ? (new \addon\hsx_recycle\app\service\core\order\CustomerQuoteService())->getQuoteUsers((int)$this->site_id, $pricing['quote_user_ids']) : [],
+        ];
         unset($config['device_bridge']);
         foreach (($config['work_wechat']['channels'] ?? []) as $key => $channel) {
             unset($config['work_wechat']['channels'][$key]['webhook_url']);

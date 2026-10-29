@@ -67,7 +67,7 @@ export function addOrderDevice(orderId: number, data: any) {
 
 // 更新设备
 export function updateOrderDevice(deviceId: number, data: any) {
-  return request.put(`/recycle/recycle_device/${deviceId}`, data);
+  return request.put(`/recycle/recycle_device/${deviceId}`, { ...data, action: 'sign_save' });
 }
 
 // 删除设备

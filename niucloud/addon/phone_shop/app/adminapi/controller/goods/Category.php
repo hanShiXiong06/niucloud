@@ -152,6 +152,7 @@ class Category extends BaseAdminController
             [ "show_quality", 0 ],
             [ "warehouse_switch", 0 ],
             [ "detail_login_required", 0 ],
+            [ "imei_tail_only", 0 ],
         ]);
         ( new CategoryService() )->setGoodsCategoryConfig($data);
         return success('SUCCESS');

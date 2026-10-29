@@ -14,6 +14,8 @@ namespace addon\phone_shop\app\service\core\goods;
  */
 class CoreGoodsDescriptionService
 {
+    private const AUTO_DESCRIPTION = '<p>本商品为一机一物，具体成色、配置与交付信息请以页面展示及下单前确认为准。</p>';
+
     public function sanitize(?string $description): string
     {
         $description = trim((string)$description);
@@ -28,14 +30,15 @@ class CoreGoodsDescriptionService
 
     public function defaultDescription(): string
     {
-        return '<p>本商品为一机一物，具体成色、配置与交付信息请以页面展示及下单前确认为准。</p>';
+        return '';
     }
 
     /** ERP 上架时把实拍图同时放入详情；只引用原图片，不重新上传或复制文件。 */
     public function withProductImages(?string $description, array $images): string
     {
         $description = $this->sanitize($description);
-        if ($description === '') $description = $this->defaultDescription();
+        // 只在本次生成详情时去掉系统固定段落，不改变历史升级清洗器的判断范围。
+        $description = trim(str_replace(self::AUTO_DESCRIPTION, '', $description));
 
         // 保留人工详情；已有的同一张图片不重复追加，重试结果保持一致。
         $seen = [];
@@ -54,7 +57,7 @@ class CoreGoodsDescriptionService
             $src = htmlspecialchars($url, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
             $imageHtml[] = '<p><img src="' . $src . '" alt="商品实拍图" style="display:block;width:100%;max-width:100%;height:auto;" /></p>';
         }
-        return $description . ($imageHtml === [] ? '' : "\n" . implode("\n", $imageHtml));
+        return $description . ($imageHtml === [] ? '' : ($description === '' ? '' : "\n") . implode("\n", $imageHtml));
     }
 
     private function productImageUrl(string $image): string

@@ -1,9 +1,12 @@
 // 只读前端定向编译检查，不运行 publish.cjs，不覆盖打包目录。
 const fs = require('node:fs')
 const path = require('node:path')
+const vm = require('node:vm')
+const assert = require('node:assert/strict')
 const root = path.resolve(__dirname, '..')
 const compiler = require(path.join(root, 'admin/node_modules/@vue/compiler-sfc'))
 const ts = require(path.join(root, 'admin/node_modules/typescript'))
+const vue = require(path.join(root, 'admin/node_modules/vue'))
 const files = [
     'niucloud/addon/phone_shop/admin/views/intake/list.vue',
     'niucloud/addon/phone_shop/admin/views/intake/components/IntakeMaterialFields.vue',
@@ -30,6 +33,31 @@ for (const file of files) {
         if (result.errors.length) throw result.errors[0]
     }
     console.log('PASS Vue script/template/style: ' + file)
+    if (file === 'site-uniapp/src/addon/hsx_erp/pages/stock/detail.vue') {
+        const scope = vue.effectScope(), env = { exports: {}, require(name) {
+            if (name === 'vue') return vue
+            if (name === '@dcloudio/uni-app') return { onLoad() {}, onShow() {} }
+            if (name.endsWith('/hooks/useErpMallListingMedia')) return { erpMallListingInitialFields: () => ({}) }
+            return {}
+        } }
+        vm.runInNewContext(ts.transpileModule(script.content, { fileName: filename + '.ts', compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS } }).outputText, env)
+        const state = scope.run(() => env.exports.default.setup({}, { expose() {}, emit() {} }))
+        assert.deepEqual([state.costExpanded.value, state.purchaseExpanded.value, state.inspectionExpanded.value, state.ledgerExpanded.value], [false, false, false, false], '移动详情扩展区默认收起')
+        const items = [{ key: 'normal', severity: 'normal' }, { key: 'warn', severity: 'general' }, { key: 'bad', severity: 'abnormal' }, { key: 'unknown', severity: 'unknown' }, { key: 'normal2', severity: 'normal' }]
+        state.asset.value = { id: 666, total_cost: 4500, inspection: { count: items.length, items } }
+        assert.deepEqual(Array.from(state.inspectionPreview.value, item => item.key), ['bad', 'warn', 'unknown'], '首屏最多三条并优先异常和需关注项')
+        assert.deepEqual(items.map(item => item.key), ['normal', 'warn', 'bad', 'unknown', 'normal2'], '预览排序不改动原质检报告顺序')
+        state.asset.value.inspection.items = [{ key: 'a', severity: 'abnormal' }, { key: 'b', severity: 'abnormal' }, { key: 'c', severity: 'general' }, { key: 'd', severity: 'normal' }]
+        assert.deepEqual(Array.from(state.inspectionPreview.value, item => item.key), ['a', 'b', 'c'], '相同严重级别保持原顺序')
+        assert.equal(state.canViewCost.value, false, '折叠重构不扩大成本权限')
+        state.stockCapabilities.value.view_cost = 1
+        assert.equal(state.canViewCost.value, true, '有权限的员工仍可展开查看成本事实')
+        assert.equal(state.costExpanded.value, false, '授予查看权限不强行展开全部成本')
+        state.productMediaBusy.value = true
+        assert.equal(state.productBusy.value, true, '视频处理中仍保护上架提交不抢跑')
+        scope.stop()
+        console.log('PASS mobile stock detail: collapsed cost/purchase/history, inspection severity-first 3, permissions and upload-busy guard; no API calls')
+    }
 }
 const mirrors = [
     ['phone_shop', 'api/device_intake.ts'], ['phone_shop', 'views/intake/list.vue'],

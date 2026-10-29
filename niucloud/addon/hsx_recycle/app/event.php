@@ -46,6 +46,7 @@ return [
 
         // ERP 动态业务来源：只有当前站点套餐包含回收插件时才贡献“回收插件采购”。
         'HsxErpBusinessSourceOptions' => [ 'addon\hsx_recycle\app\listener\erp\ErpBusinessSourceOptionsListener' ],
+        'HsxErpSourceCatalogRequested' => [ 'addon\hsx_recycle\app\listener\erp\ErpSourceCatalogRequested' ],
         'GetRecyclePaymentMethods' => [ 'addon\hsx_recycle\app\listener\erp\RecyclePaymentMethodsProvider' ],
         'ErpSourcePaymentGuardRequested' => [ 'addon\hsx_recycle\app\listener\erp\ErpSourcePaymentGuardRequested' ],
         'HsxBusinessReportMetricsRequested' => [ 'addon\hsx_recycle\app\listener\report\RecycleBusinessReportMetricsProvider' ],

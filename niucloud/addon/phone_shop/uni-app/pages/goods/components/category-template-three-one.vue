@@ -104,7 +104,7 @@
 								</view>
 								<view class="goods-info">
 									<view class="goods-name multi-hidden">{{ item.goods_name }}</view>
-									<PhoneGoodsMeta :subtitle="item.sub_title" :imei="item.goodsSku?.sku_no" compact />
+									<PhoneGoodsMeta :subtitle="item.sub_title" :imei="item.goodsSku?.sku_no" :imei-tail-only="Number(config.imei_tail_only) === 1" compact />
 										<!-- <view class="device-row" v-if="item.memory_group || (config.show_quality && (item.condition_grade || qcAbnormal(item)))">
 											<text v-if="item.memory_group" class="device-chip">{{ item.memory_group }}</text>
 											<text v-if="config.show_quality && item.condition_grade" class="device-chip">{{ item.condition_grade }}</text>

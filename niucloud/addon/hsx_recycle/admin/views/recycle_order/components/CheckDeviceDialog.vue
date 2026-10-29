@@ -204,7 +204,9 @@
       <div class="cdd-footer">
         <div class="cdd-footer__handoff">
           <span class="cdd-footer__info">已填 <strong>{{ checkedCount }}</strong> 项</span>
-          <NextAssigneeSelect v-model="nextAssigneeUid" class="cdd-footer__assignee"
+          <span v-if="deviceData.price_assignment?.mode === 'quote_user'">下一步定价：{{ deviceData.price_assignment.name }}（报价员）</span>
+          <span v-if="deviceData.price_assignment?.mode === 'unavailable'" class="text-warning">{{ deviceData.price_assignment.message }}</span>
+          <NextAssigneeSelect v-if="deviceData.price_assignment?.mode !== 'quote_user'" v-model="nextAssigneeUid" class="cdd-footer__assignee"
             stage-key="price" label="下一步定价" compact :disabled="savingDraft || submitting" />
         </div>
         <div class="cdd-footer__btns">
@@ -247,6 +249,7 @@ const hsxFeedback = useFeedback()
 
 
 interface DeviceInfo {
+  price_assignment?: { mode: string; uid: number; name: string; message: string }
   id?: string | number
   model?: string
   imei?: string

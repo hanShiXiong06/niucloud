@@ -23,12 +23,15 @@ final class ErpMallListingService
         }
     }
 
-    public static function request(int $siteId, string $action, int $categoryId = 0): array
+    public static function request(int $siteId, string $action, int $categoryId = 0, array $context = []): array
     {
-        $channel = ErpConfigService::forSite($siteId)->getMarketplaceChannel('phone_shop');
-        if ((int)($channel['enabled'] ?? 0) !== 1) throw new CommonException('商城联动已关闭，请确认配置后重试');
-        if (!PhoneShopBridge::available($siteId)) throw new CommonException('本站未启用手机商城，不能选择商城分类或上架');
-        foreach ((array)event('HsxErpListingCatalog', ['site_id' => $siteId, 'action' => $action, 'category_id' => $categoryId]) as $result) {
+        // 清理已取得的租约不再依赖途中可能被关闭的渠道配置。
+        if ($action !== 'unlock_media') {
+            $channel = ErpConfigService::forSite($siteId)->getMarketplaceChannel('phone_shop');
+            if ((int)($channel['enabled'] ?? 0) !== 1) throw new CommonException('商城联动已关闭，请确认配置后重试');
+            if (!PhoneShopBridge::available($siteId)) throw new CommonException('本站未启用手机商城，不能选择商城分类或上架');
+        }
+        foreach ((array)event('HsxErpListingCatalog', ['site_id' => $siteId, 'action' => $action, 'category_id' => $categoryId, 'context' => $context]) as $result) {
             if (is_array($result) && ($result['provider'] ?? '') === 'phone_shop' && (int)($result['connected'] ?? 0) === 1) return $result;
         }
         throw new CommonException('商城分类服务未响应，请检查 phone_shop 插件是否已启用并更新配套后端');
@@ -38,5 +41,11 @@ final class ErpMallListingService
     {
         $spec = is_array($specJson) ? $specJson : json_decode((string)$specJson, true);
         return (array)($spec['_mall_listing']['category'] ?? []);
+    }
+
+    public static function material(mixed $specJson): array
+    {
+        $spec = is_array($specJson) ? $specJson : json_decode((string)$specJson, true);
+        return (array)($spec['_mall_listing']['material'] ?? []);
     }
 }

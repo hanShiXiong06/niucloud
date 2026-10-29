@@ -1,6 +1,6 @@
 import request from '@/utils/request'
 
-export const getErpListingCatalog = () => request.get('erp/stock/listing_catalog')
+export const getErpListingCatalog = (params: Record<string, any> = {}) => request.get('erp/stock/listing_catalog', params)
 
 function withErpRequestId(data: Record<string, any>, prefix: string) {
     const current = String(data?.request_id ?? '').trim()

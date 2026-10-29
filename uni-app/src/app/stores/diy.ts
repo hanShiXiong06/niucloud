@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { toRaw } from 'vue'
 import { diyRedirect, currRoute, getToken } from '@/utils/common';
 import { useLogin } from '@/hooks/useLogin';
-import { parseJsonValue } from '@/addon/phone_shop/utils/json';
+import { parseJsonValue } from '@/utils/json';
 
 interface Diy {
     mode: string, // 模式：decorate 装修，为空表示正常

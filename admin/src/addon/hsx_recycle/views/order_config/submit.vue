@@ -24,6 +24,20 @@
                         <SettingRow id="device-add" label="允许添加设备明细" hint="关闭后，客户仅填写设备数量。">
                             <el-switch v-model="form.device_add_enabled" :active-value="1" :inactive-value="0" aria-label="允许添加设备明细" />
                         </SettingRow>
+                        <div v-if="form.device_add_enabled" class="dependent-fields">
+                            <SettingRow id="device-pricing" label="填写预估价格" hint="开启后，添加设备时常显预估价格，客户可以留空；关闭不影响已有订单。">
+                                <el-switch v-model="form.device_pricing.enabled" :active-value="1" :inactive-value="0" aria-label="填写预估价格" />
+                            </SettingRow>
+                            <SettingRow v-if="form.device_pricing.enabled" id="quote-assignment" label="由报价员负责后续定价" hint="开启后，客户可选择谁报的价，质检后交给此人定价。关闭或未选人时，仍由业务员按原流程指定；已分配任务不自动改派。">
+                                <el-switch v-model="form.device_pricing.assign_to_quote_user" :active-value="1" :inactive-value="0" />
+                            </SettingRow>
+                            <SettingRow v-if="form.device_pricing.enabled && form.device_pricing.assign_to_quote_user" id="quote-users" label="客户可选报价员" hint="请选择具有定价权限的本站员工。未设置时客户不选人；设置后，客户填预估价必须选一人。后台录单、签收始终可补选，允许留空。">
+                                <el-select v-model="form.device_pricing.quote_user_ids" multiple filterable clearable placeholder="选填，选择给客户报价的员工" aria-label="可选报价员">
+                                    <el-option v-for="item in quoteUserOptions" :key="item.uid" :label="item.name" :value="item.uid" :disabled="item.disabled" />
+                                </el-select>
+                                <p v-if="!availableQuoteUsers.length" class="field-hint">暂无可用员工，请先在本站管理员列表中添加并启用员工。</p>
+                            </SettingRow>
+                        </div>
                         <SettingRow id="default-count" label="默认设备数量">
                             <el-input-number v-model="form.default_count" :min="1" :max="99" controls-position="right" aria-label="默认设备数量" />
                         </SettingRow>
@@ -282,6 +296,12 @@ import { ElMessageBox } from 'element-plus'
 import { getOrderSubmitConfig, saveOrderSubmitConfig, type OrderSubmitConfig } from '@/addon/hsx_recycle/api/order_config'
 const hsxFeedback = useFeedback()
 const bridgeHelpVisible = ref(false)
+const availableQuoteUsers = ref<Array<{ uid: number; name: string; can_price?: boolean }>>([])
+const quoteUserOptions = computed(() => [
+    ...availableQuoteUsers.value.map(item => ({ ...item, name: item.name + (item.can_price === false ? '（无定价权限）' : ''), disabled: item.can_price === false })),
+    ...form.device_pricing.quote_user_ids.filter(uid => !availableQuoteUsers.value.some(item => item.uid === uid))
+        .map(uid => ({ uid, name: '已停用或移出的员工，请移除', disabled: true }))
+])
 
 
 const loading = ref(false)
@@ -324,6 +344,7 @@ const defaultPriceDetailThemeColors = {
 
 const form = reactive<OrderSubmitConfig>({
     device_add_enabled: 1,
+    device_pricing: { enabled: 1, assign_to_quote_user: 0, quote_user_ids: [] },
     notice: {
         enabled: 0,
         title: '下单提示',
@@ -430,6 +451,10 @@ const workWechatChannelMetas = [
 
 const normalize = (data: Partial<OrderSubmitConfig> = {}) => {
     form.device_add_enabled = data.device_add_enabled ? 1 : 0
+    form.device_pricing.enabled = data.device_pricing?.enabled === 0 ? 0 : 1
+    form.device_pricing.assign_to_quote_user = data.device_pricing?.assign_to_quote_user ? 1 : 0
+    form.device_pricing.quote_user_ids = Array.isArray(data.device_pricing?.quote_user_ids) ? data.device_pricing!.quote_user_ids.map(Number) : []
+    availableQuoteUsers.value = Array.isArray(data.quote_user_options) ? data.quote_user_options : []
     form.notice.enabled = data.notice?.enabled ? 1 : 0
     form.notice.title = data.notice?.title || '下单提示'
     form.notice.content = data.notice?.content || ''

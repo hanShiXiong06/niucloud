@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 return [
     'listen' => [
+        'ErpPhysicalReturnReceived' => ['addon\\hsx_erp\\app\\listener\\ErpPhysicalReturnReceived'],
         'ErpMasterDataLookupRequested' => ['addon\\hsx_erp\\app\\listener\\ErpMasterDataLookupRequested'],
         'PhoneShopSalesPriceChanged' => ['addon\hsx_erp\app\listener\PhoneShopSalesPriceChanged'],
         'PhoneShopOrderReturnContext' => [

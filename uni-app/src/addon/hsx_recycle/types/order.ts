@@ -8,9 +8,13 @@ export interface Device {
   user_sn?: string
   model?: string
   initial_price?: string
+  initial_price_uid?: number
+  initial_price_name?: string
   category_id?: string | number
   category_path?: Array<string | number>
 }
+
+export interface QuoteUser { uid: number; name: string }
 
 // 订单表单
 export interface OrderForm {

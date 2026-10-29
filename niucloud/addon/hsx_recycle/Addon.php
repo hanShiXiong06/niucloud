@@ -42,6 +42,9 @@ class Addon
         \app\service\core\addon\CoreAddonInstallService::executeSql(__DIR__ . '/sql/update_0.0.4.sql');
         $this->installSystemColumns();
         $this->syncAdminappResources();
+        $quoteSchedules = array_values(array_filter(require __DIR__ . '/app/dict/schedule/schedule.php',
+            static fn(array $row): bool => $row['key'] === 'hsx_recycle_quote_image_sync'));
+        (new \app\service\core\schedule\CoreScheduleInstallService())->install($quoteSchedules, 'hsx_recycle');
         $this->repairAddonSchedule();
         return true;
     }

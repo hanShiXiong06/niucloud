@@ -109,6 +109,7 @@ class TemplatePreviewService extends BaseAdminService
             'order_id' => '100001',
             
             // 人员相关
+            'price_staff' => '张三',
             'price_staff_name' => '张三',
             'check_staff' => '李四',
             'operator_name' => '王五',

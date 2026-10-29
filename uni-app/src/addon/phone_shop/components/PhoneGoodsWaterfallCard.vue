@@ -8,7 +8,7 @@
                 </view>
                 {{ item.goods_name }}
             </view>
-            <PhoneGoodsMeta :subtitle="item.sub_title" :imei="item.goodsSku?.sku_no" compact />
+            <PhoneGoodsMeta :subtitle="item.sub_title" :imei="item.goodsSku?.sku_no" :imei-tail-only="imeiTailOnly" compact />
             <PhoneGoodsSaleState :state="item.sale_state" />
             <view class="waterfall-card__footer">
                 <view class="waterfall-card__price">
@@ -39,10 +39,12 @@ const props = withDefaults(defineProps<{
     item?: Record<string, any>
     action?: GoodsCardAction | null
     recentTag?: 'new' | 'updated' | ''
+    imeiTailOnly?: boolean
 }>(), {
     item: () => ({}),
     action: null,
-    recentTag: ''
+    recentTag: '',
+    imeiTailOnly: false
 })
 
 const emit = defineEmits<{

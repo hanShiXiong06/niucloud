@@ -12,6 +12,7 @@
           <text class="device-name">{{ item.model || '回收设备' }}</text>
           <view class="device-detail"><text class="device-detail-label">用户串号</text><text class="device-serial">{{ item.user_sn || item.imei }}</text></view>
           <view v-if="item.initial_price" class="device-detail"><text class="device-detail-label">预估价</text><text class="device-price">¥{{ item.initial_price }}</text></view>
+          <view v-if="item.initial_price_name" class="device-detail"><text class="device-detail-label">报价员</text><text>{{ item.initial_price_name }}</text></view>
         </view>
         <button
           v-if="showDeleteButton"
@@ -124,12 +125,12 @@
                 placeholder="输入后 6 位数字或字母"
                 maxlength="64"
                 type="text"
-                confirm-type="done"
+                :confirm-type="enablePricing ? 'next' : 'done'"
                 :cursor-spacing="24"
                 class="custom-input custom-input--with-action"
                 @focus="clearModelSuggestions"
                 @input="handleUserSnInput"
-                @confirm="confirmAdd"
+                @confirm="focusEstimatedPrice"
               />
               <button class="input-action" aria-label="扫码录入串号" @click="scanUserSn">
                 <up-icon name="scan" size="22" color="var(--recycle-brand, #3b82f6)"></up-icon>
@@ -142,30 +143,45 @@
             </view>
           </view>
 
-          <view class="optional-section">
-            <button class="optional-toggle" :aria-expanded="showEstimatedPrice" @click="toggleEstimatedPrice">
-              <text>预估价</text>
-              <view class="optional-summary">
-                <text>{{ newDevice.initial_price ? `¥${newDevice.initial_price}` : '选填' }}</text>
-                <up-icon :name="showEstimatedPrice ? 'arrow-up' : 'arrow-down'" size="13" color="var(--recycle-text-sub, #6b7280)"></up-icon>
-              </view>
-            </button>
-            <view v-if="showEstimatedPrice" class="optional-content">
-            <view class="input-wrapper price-input">
+          <view v-if="enablePricing" id="input-price" class="form-item price-section">
+            <view class="form-label">
+              <text>预估价格</text>
+              <text class="optional-label">选填</text>
+            </view>
+            <view class="input-wrapper price-input" :class="{ 'input-wrapper--invalid': fieldErrors.initial_price }">
               <text class="price-symbol">¥</text>
               <input
                 v-model="newDevice.initial_price"
-                placeholder="不确定可以留空"
+                placeholder="请输入报价员预估价格"
                 type="digit"
                 confirm-type="done"
+                :focus="priceFocused"
                 :cursor-spacing="24"
                 class="custom-input"
                 @focus="clearModelSuggestions"
+                @input="fieldErrors.initial_price = ''"
+                @blur="priceFocused = false"
                 @confirm="confirmAdd"
               />
             </view>
-            <text class="form-hint">最终价格以门店质检报价为准</text>
-            </view>
+            <text v-if="fieldErrors.initial_price" class="field-error">{{ fieldErrors.initial_price }}</text>
+          </view>
+          <view v-if="needsQuoteUser" id="input-quote-user" class="form-item">
+            <view class="form-label"><text>谁给您报的价</text><text class="required">*</text></view>
+            <radio-group v-if="quoteUsers.length <= 8" class="quote-user-options" @change="selectQuoteUser(Number($event.detail.value))">
+              <label v-for="person in quoteUsers" :key="person.uid" class="quote-user-option" :class="{ 'quote-user-option--selected': newDevice.initial_price_uid === person.uid }">
+                <radio :value="String(person.uid)" :checked="newDevice.initial_price_uid === person.uid" color="#3b82f6" />
+                <text>{{ person.name }}</text>
+              </label>
+            </radio-group>
+            <picker v-else mode="selector" :range="quotePickerOptions" range-key="name" :value="quoteUserIndex + 1" @change="selectQuoteUser(quotePickerOptions[Number($event.detail.value)]?.uid || 0)">
+              <view class="quote-user-picker" :class="{ 'quote-user-picker--empty': quoteUserIndex < 0 }">
+                <text>{{ quoteUserIndex >= 0 ? quoteUsers[quoteUserIndex].name : '请选择报价员' }}</text>
+                <up-icon name="arrow-down" size="14" color="var(--recycle-text-sub)" />
+              </view>
+            </picker>
+            <text v-if="fieldErrors.initial_price_uid" class="field-error">{{ fieldErrors.initial_price_uid }}</text>
+            <view class="field-hint">质检后由该员工跟进定价，预估价格不代表最终成交价。</view>
           </view>
         </view>
         </scroll-view>
@@ -230,7 +246,7 @@
 
 <script setup lang="ts">
 import { computed, getCurrentInstance, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import type { Device } from '../../../types/order'
+import type { Device, QuoteUser } from '../../../types/order'
 import { getDeviceModelDictChildren, searchDeviceModelDictOptions } from '../../../api/order'
 import OrderTaskPopup from './OrderTaskPopup.vue'
 import OrderUiButton from './OrderUiButton.vue'
@@ -238,12 +254,16 @@ import OrderUiButton from './OrderUiButton.vue'
 interface Props {
   devices: Device[]
   count: number
+  enablePricing?: boolean
+  quoteUsers?: QuoteUser[]
   showAddButton?: boolean
   showBatchButton?: boolean
   showDeleteButton?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  enablePricing: true,
+  quoteUsers: () => [],
   showAddButton: true,
   showBatchButton: true,
   showDeleteButton: true
@@ -259,8 +279,8 @@ const emit = defineEmits<{
 const localCount = ref(props.count)
 const showAddDialog = ref(false)
 const showSnHelp = ref(false)
-const showEstimatedPrice = ref(true)
-const fieldErrors = ref({ model: '', user_sn: '' })
+const priceFocused = ref(false)
+const fieldErrors = ref({ model: '', user_sn: '', initial_price: '', initial_price_uid: '' })
 const errorFieldId = ref('')
 const dialogContentHeight = ref(280)
 const instance = getCurrentInstance()
@@ -284,12 +304,29 @@ const newDevice = ref<Device>({
   user_sn: '',
   model: '',
   initial_price: '',
+  initial_price_uid: 0,
+  initial_price_name: '',
   category_id: 0,
   category_path: []
 })
 
 const showModelSuggestions = computed(() => {
   return modelFocused.value && String(newDevice.value.model || '').trim().length > 0
+})
+
+const hasEstimatedPrice = computed(() => props.enablePricing && String(newDevice.value.initial_price ?? '').trim() !== '')
+const needsQuoteUser = computed(() => hasEstimatedPrice.value && props.quoteUsers.length > 0)
+const quoteUserIndex = computed(() => props.quoteUsers.findIndex(person => person.uid === newDevice.value.initial_price_uid))
+const quotePickerOptions = computed(() => [{ uid: 0, name: '请选择报价员' }, ...props.quoteUsers])
+const selectQuoteUser = (uid: number) => {
+  const person = props.quoteUsers.find(item => item.uid === uid)
+  newDevice.value.initial_price_uid = person?.uid || 0
+  newDevice.value.initial_price_name = person?.name || ''
+  fieldErrors.value.initial_price_uid = ''
+}
+watch(() => [props.enablePricing, hasEstimatedPrice.value, props.quoteUsers], () => {
+  if (!props.enablePricing) newDevice.value.initial_price = ''
+  if (!needsQuoteUser.value || quoteUserIndex.value < 0) selectQuoteUser(0)
 })
 
 // scroll-view 在小程序中需要明确高度；内容按实测收缩，上限由 CSS 限制。
@@ -302,9 +339,10 @@ const measureDialogContent = async () => {
 }
 
 watch(() => [
-  showAddDialog.value, showSnHelp.value, showEstimatedPrice.value, showModelSuggestions.value,
+  showAddDialog.value, showSnHelp.value, showModelSuggestions.value,
   modelSearching.value, modelSearchFailed.value, modelSuggestions.value.length,
-  fieldErrors.value.model, fieldErrors.value.user_sn
+  fieldErrors.value.model, fieldErrors.value.user_sn, fieldErrors.value.initial_price,
+  fieldErrors.value.initial_price_uid, props.enablePricing, needsQuoteUser.value, props.quoteUsers.length
 ], measureDialogContent)
 
 const toggleSnHelp = () => {
@@ -312,9 +350,14 @@ const toggleSnHelp = () => {
   showSnHelp.value = !showSnHelp.value
 }
 
-const toggleEstimatedPrice = () => {
+// 串号键盘确认只进入价格输入，不能提前添加设备或关闭弹窗。
+const focusEstimatedPrice = async () => {
+  if (!showAddDialog.value || !props.enablePricing) return
+  const version = dialogVersion
   clearModelSuggestions()
-  showEstimatedPrice.value = !showEstimatedPrice.value
+  priceFocused.value = false
+  await nextTick()
+  if (showAddDialog.value && version === dialogVersion) priceFocused.value = true
 }
 
 const normalizeCount = (value: any) => {
@@ -370,8 +413,8 @@ const closeAddDialog = () => {
   closeModelPicker()
   clearModelSuggestions()
   showSnHelp.value = false
-  showEstimatedPrice.value = false
-  fieldErrors.value = { model: '', user_sn: '' }
+  priceFocused.value = false
+  fieldErrors.value = { model: '', user_sn: '', initial_price: '', initial_price_uid: '' }
   errorFieldId.value = ''
   userSnFromScan.value = false
   newDevice.value = {
@@ -379,6 +422,8 @@ const closeAddDialog = () => {
     user_sn: '',
     model: '',
     initial_price: '',
+    initial_price_uid: 0,
+    initial_price_name: '',
     category_id: 0,
     category_path: []
   }
@@ -578,19 +623,25 @@ const confirmAdd = async () => {
   if (!showAddDialog.value) return
   clearModelSuggestions()
   const userSnLength = String(newDevice.value.user_sn || '').length
+  const price = props.enablePricing ? String(newDevice.value.initial_price ?? '').trim() : ''
   fieldErrors.value = {
     model: newDevice.value.model?.trim() ? '' : '请填写或选择型号',
-    user_sn: userSnLength >= 6 && (userSnFromScan.value || userSnLength === 6) ? '' : '请输入后 6 位，或扫描完整串号'
+    user_sn: userSnLength >= 6 && (userSnFromScan.value || userSnLength === 6) ? '' : '请输入后 6 位，或扫描完整串号',
+    initial_price: price === '' || /^[0-9]{1,8}(\.[0-9]{0,2})?$/.test(price) ? '' : '请填写正确金额，最多两位小数',
+    initial_price_uid: needsQuoteUser.value && quoteUserIndex.value < 0 ? '请选择给您报价的员工' : ''
   }
-  if (fieldErrors.value.model || fieldErrors.value.user_sn) {
+  if (Object.values(fieldErrors.value).some(Boolean)) {
     errorFieldId.value = ''
     await nextTick()
-    errorFieldId.value = fieldErrors.value.model ? 'input-model' : 'input-imei'
+    errorFieldId.value = fieldErrors.value.model ? 'input-model' : fieldErrors.value.user_sn ? 'input-imei'
+      : fieldErrors.value.initial_price ? 'input-price' : 'input-quote-user'
     return
   }
 
   // 添加设备
-  const newDevices = [...props.devices, { ...newDevice.value }]
+  const person = needsQuoteUser.value ? props.quoteUsers[quoteUserIndex.value] : undefined
+  const newDevices = [...props.devices, { ...newDevice.value, initial_price: price,
+    initial_price_uid: person?.uid || 0, initial_price_name: person?.name || '' }]
   emit('update:devices', newDevices)
 
   // 自动更新数量
@@ -771,32 +822,24 @@ onBeforeUnmount(() => {
   color: #dc2626;
 }
 
-.optional-section {
-  border-top: 1px solid var(--recycle-line, #e5e7eb);
+.price-section {
+  padding-top: 14px;
+  // border-top: 1px solid var(--recycle-line, #e5e7eb);
 }
 
-.add-dialog .optional-toggle {
-  width: 100%;
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: 14px;
-}
-
-.optional-summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.optional-label {
+  margin-left: 8px;
   color: var(--recycle-text-sub, #6b7280);
   font-size: 12px;
-  overflow-wrap: anywhere;
+  font-weight: 400;
 }
 
-.optional-content {
-  padding-bottom: 12px;
-}
+.quote-user-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.quote-user-option { display: flex; align-items: center; gap: 4px; padding: 10px 12px; border: 1px solid var(--recycle-line, #e5e7eb); border-radius: 6px; font-size: 14px; overflow-wrap: anywhere; }
+.quote-user-option--selected { border-color: var(--recycle-brand, #3b82f6); background: var(--recycle-bg-soft, #f7f7f8); }
+.quote-user-option radio { transform: scale(.8); flex-shrink: 0; }
+.quote-user-picker { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 46px; padding: 0 12px; border: 1px solid var(--recycle-line, #e5e7eb); border-radius: 6px; font-size: 14px; }
+.quote-user-picker--empty { color: var(--recycle-text-sub, #6b7280); }
 
 .input-wrapper {
   width: 100%;

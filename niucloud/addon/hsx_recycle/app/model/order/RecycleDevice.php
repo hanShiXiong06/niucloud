@@ -74,7 +74,25 @@ class RecycleDevice extends BaseModel
         'dispose_status_name',
         'sale_destination_name',
         'check_template_name',
+        'customer_quote',
     ];
+
+    /** 下单时客户声明的预估报价来源快照，与 price_uid（正式定价人）无关。 */
+    public function getCustomerQuoteAttr($value, $data): array
+    {
+        $info = $data['info'] ?? [];
+        if (is_string($info)) $info = json_decode($info, true);
+        if (is_object($info)) $info = json_decode(json_encode($info), true);
+        $quote = is_array($info) ? ($info['customer_quote'] ?? []) : [];
+        if (!is_array($quote) || !in_array($quote['source'] ?? '', ['customer', 'admin'], true)) return [];
+        return [
+            'uid' => (int)($quote['uid'] ?? 0),
+            'name' => (string)($quote['name'] ?? ''),
+            'price' => (string)($quote['price'] ?? ''),
+            'source' => (string)$quote['source'],
+            'assign_to_quote_user' => (int)($quote['assign_to_quote_user'] ?? 0),
+        ];
+    }
 
     /**
      * 获取设备状态名称

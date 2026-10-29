@@ -9,7 +9,7 @@
                         :aria-invalid="!!imeiError" clearable size="small" @input="markDirty" @blur="device.imei_touched = true" />
                     <div v-if="imeiError" class="device-card__imei-error" role="alert">{{ imeiError }}</div>
                 </div>
-                <el-tooltip v-if="device.user_sn" content="用户自助提交的串号" placement="top">
+                <el-tooltip v-if="device.user_sn && device.user_sn !== device.imei" :content="'用户自助提交的串号：' + device.user_sn" placement="top">
                     <span class="device-card__usersn">原 {{ device.user_sn }}</span>
                 </el-tooltip>
             </div>
@@ -29,10 +29,20 @@
                 />
             </div>
 
+            <div class="device-card__quote">
+                <el-select :model-value="device.initial_price_uid || undefined" :loading="quoteLoading"
+                    :disabled="quoteLoading || quoteError" clearable filterable size="small" placeholder="选填" aria-label="报价员（选填）" @update:model-value="updateQuoteUser">
+                    <el-option v-if="device.initial_price_uid && !quoteUsers?.some(user => user.uid === device.initial_price_uid)"
+                        :value="device.initial_price_uid" :label="(device.initial_price_name || '原报价员') + '（待核对）'" disabled />
+                    <el-option v-for="user in quoteUsers" :key="user.uid" :value="user.uid" :label="user.name + (user.disabled ? '（无定价权限）' : '')" :disabled="user.disabled" />
+                </el-select>
+            </div>
+
             <el-popover placement="bottom" :width="390" trigger="click" popper-class="device-buyer-image-popover">
                 <template #reference>
-                    <el-button size="small" :icon="Picture" class="device-card__images">
-                        {{ buyerImageCount ? `${buyerImageCount} 张` : '添加' }}
+                    <el-button size="small" :icon="Picture" class="device-card__images"
+                        :aria-label="buyerImageCount ? `查看或编辑 ${buyerImageCount} 张买家图` : '添加买家图'" :title="buyerImageCount ? `${buyerImageCount} 张买家图` : '添加买家图'">
+                        {{ buyerImageCount ? `${buyerImageCount}` : '' }}
                     </el-button>
                 </template>
                 <div class="buyer-image-panel">
@@ -57,9 +67,18 @@
             </span>
 
             <div class="device-card__ops">
-                <el-button v-if="!device.saved" type="primary" size="small" :loading="device.saving" @click="emit('save')">保存</el-button>
-                <el-button v-else-if="device.dirty" type="primary" plain size="small" :loading="device.saving" @click="emit('update')">保存修改</el-button>
-                <el-button link type="danger" size="small" :icon="Delete" :disabled="!canRemove" @click="emit('remove')" />
+                <el-button v-if="!device.saved || device.dirty" type="primary" :plain="device.saved" size="small"
+                    :loading="device.saving" :title="device.saved ? '保存修改' : '保存设备'"
+                    @click="device.saved ? emit('update') : emit('save')">保存</el-button>
+                <!-- 2.7.x 的混合 trigger 不会保持菜单 hover；单一 hover 才能在移入菜单时取消关闭。 -->
+                <el-dropdown trigger="hover" :show-timeout="0" :hide-timeout="250" placement="bottom-end" @command="handleCommand">
+                    <el-button link size="small" :icon="MoreFilled" aria-label="更多设备操作" title="更多操作" class="device-card__more" />
+                    <template #dropdown>
+                        <el-dropdown-menu>
+                            <el-dropdown-item command="remove" :icon="Delete" :disabled="!canRemove || device.saving" class="device-card__delete">删除设备</el-dropdown-item>
+                        </el-dropdown-menu>
+                    </template>
+                </el-dropdown>
             </div>
         </div>
 
@@ -92,18 +111,20 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { CircleCheck, Clock, Delete, EditPen, Loading, Picture, Setting } from '@element-plus/icons-vue'
+import { CircleCheck, Clock, Delete, EditPen, Loading, MoreFilled, Picture, Setting } from '@element-plus/icons-vue'
 import { buildSummaryChips } from './summaryUtil'
 import { deviceImeiError } from './imeiValidation'
 import type { DeviceEntryRow } from './types'
 
-const props = defineProps<{ device: DeviceEntryRow; index: number; canRemove?: boolean }>()
+const props = defineProps<{ device: DeviceEntryRow; index: number; canRemove?: boolean;
+    quoteUsers?: Array<{ uid: number; name: string; disabled?: boolean }>; quoteLoading?: boolean; quoteError?: boolean; assignToQuoteUser?: boolean }>()
 const emit = defineEmits<{
     (e: 'save'): void
     (e: 'update'): void
     (e: 'remove'): void
     (e: 'edit-summary'): void
     (e: 'configure-template'): void
+    (e: 'reload-quote-users'): void
 }>()
 
 const chips = computed(() => buildSummaryChips(props.device.summary_fields || [], props.device.summary_values || {}))
@@ -114,6 +135,16 @@ const markDirty = () => {
     if (props.device.saved) props.device.dirty = true
 }
 
+const handleCommand = (command: string) => {
+    if (command === 'remove' && props.canRemove && !props.device.saving) emit('remove')
+}
+
+const updateQuoteUser = (uid?: number) => {
+    props.device.initial_price_uid = Number(uid || 0)
+    props.device.initial_price_name = props.quoteUsers?.find(user => user.uid === Number(uid))?.name || ''
+    markDirty()
+}
+
 const updateBuyerImages = (value: string) => {
     props.device.check_images_buyer = value
     markDirty()
@@ -122,24 +153,27 @@ const updateBuyerImages = (value: string) => {
 
 <style lang="scss" scoped>
 .device-card {
+    --device-entry-row-bg: var(--el-bg-color);
     border: 1px solid var(--el-border-color-lighter);
     border-top: 0;
     padding: 8px 10px;
-    background-color: var(--el-bg-color);
+    background-color: var(--device-entry-row-bg);
     display: flex;
     flex-direction: column;
     gap: 6px;
     transition: background-color 0.2s;
 }
 
-.device-card--active { background-color: var(--el-color-primary-light-9); }
-.device-card:hover { background-color: var(--el-fill-color-light); }
+.device-card--active { --device-entry-row-bg: var(--el-color-primary-light-9); }
+.device-card__quote { min-width: 0; }
+.device-card__quote :deep(.el-select) { width: 100%; }
+.device-card:hover { --device-entry-row-bg: var(--el-fill-color-light); }
 
 .device-card__main {
     display: grid;
-    grid-template-columns: 30px minmax(150px, 1.5fr) minmax(200px, 1.5fr) 100px 82px 64px 100px;
+    grid-template-columns: var(--device-entry-columns, 24px minmax(190px, 1fr) minmax(150px, 220px) 100px 120px 52px 48px 84px);
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     min-height: 32px;
 }
 
@@ -158,11 +192,12 @@ const updateBuyerImages = (value: string) => {
 .device-card__model,
 .device-card__identity { min-width: 0; }
 
-.device-card__identity { display: flex; align-items: center; gap: 5px; }
-.device-card__imei-field { flex: 1; min-width: 0; }
+.device-card__identity { display: flex; flex-direction: column; align-items: stretch; gap: 3px; }
+.device-card__imei-field { min-width: 0; }
+.device-card__imei-field :deep(.el-input__inner) { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; font-size: 13px; }
 .device-card__imei-error { margin-top: 4px; color: var(--el-color-danger); font-size: 12px; line-height: 1.4; }
 .device-card__imei-field.has-error :deep(.el-input__wrapper) { box-shadow: 0 0 0 1px var(--el-color-danger) inset; }
-.device-card__usersn { color: var(--el-text-color-placeholder); font-size: 11px; white-space: nowrap; }
+.device-card__usersn { overflow: hidden; text-overflow: ellipsis; color: var(--el-text-color-placeholder); font-size: 11px; white-space: nowrap; }
 
 .device-card__price {
     display: flex;
@@ -176,7 +211,7 @@ const updateBuyerImages = (value: string) => {
 }
 
 .device-card__price-prefix { color: var(--el-text-color-placeholder); font-size: 13px; }
-.device-card__images { width: 82px; margin: 0; }
+.device-card__images { width: 52px; margin: 0; padding: 5px 8px; }
 
 .device-card__status {
     display: inline-flex;
@@ -191,10 +226,13 @@ const updateBuyerImages = (value: string) => {
 
 .device-card__status.is-saved { background-color: var(--el-color-success-light-9); color: var(--el-color-success-dark-2); }
 .device-card__status.is-pending { background-color: var(--el-color-warning-light-9); color: var(--el-color-warning-dark-2); }
-.device-card__ops { display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
+.device-card__ops { position: sticky; right: 0; z-index: 1; min-height: 32px; display: flex; align-items: center; justify-content: flex-end; gap: 4px; background-color: var(--device-entry-row-bg); box-shadow: -8px 0 8px -8px var(--el-border-color); }
+.device-card__ops :deep(.el-button + .el-button) { margin-left: 0; }
+.device-card__more { width: 24px; height: 28px; }
+.device-card__delete { color: var(--el-color-danger); }
 
 .device-card__summary {
-    margin-left: 40px;
+    margin-left: 32px;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -218,16 +256,4 @@ const updateBuyerImages = (value: string) => {
 :deep(.device-card__price-input .el-input__wrapper) { box-shadow: none !important; padding: 0; background-color: transparent; }
 :deep(.device-card__price-input .el-input__inner) { text-align: left; }
 
-@media (max-width: 768px) {
-    .device-card { border-top: 1px solid var(--el-border-color-lighter); border-radius: 6px; padding: 10px; }
-    .device-card__main { grid-template-columns: 28px minmax(0, 1fr) 88px; }
-    .device-card__index { grid-column: 1; grid-row: 1; }
-    .device-card__identity { grid-column: 2 / 4; grid-row: 1; }
-    .device-card__model { grid-column: 2 / 4; grid-row: 2; }
-    .device-card__price { grid-column: 2; grid-row: 3; }
-    .device-card__images { grid-column: 3; grid-row: 3; }
-    .device-card__status { grid-column: 2; grid-row: 4; justify-self: start; }
-    .device-card__ops { grid-column: 3; grid-row: 4; justify-self: end; }
-    .device-card__summary { margin-left: 0; }
-}
 </style>

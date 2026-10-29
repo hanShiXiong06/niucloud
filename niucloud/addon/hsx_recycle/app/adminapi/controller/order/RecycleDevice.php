@@ -333,10 +333,13 @@ class RecycleDevice extends BaseAdminController
 
 
             // 调用质检完成方法，传递 action 参数
-            return success($this->service->completeCheck($id, $checkData, $payload['remark'] ?? '', $payload['action']));
+            return success($this->service->completeCheck($id, $checkData, $payload['remark'] ?? '', $payload['action'], (int)($payload['next_assignee_uid'] ?? 0)));
         }
 
-        return success($this->service->update($id, $payload));
+        // 签收清单中的“保存”与普通资料编辑分开，只有前者触发签收标签。
+        $signSave = ($payload['action'] ?? '') === 'sign_save';
+        if ($signSave) unset($payload['action']);
+        return success($this->service->update($id, $payload, $signSave));
     }
 
     /**

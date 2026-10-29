@@ -27,15 +27,16 @@ class RecyclePrintTriggerService extends BaseAdminService
      * 自动触发打印
      * @param string $triggerKey
      * @param array $payload
+     * @param bool $reuseAutomatic 兜底触发时复用同业务已有的自动打印任务，避免保存后确认再次出纸
      * @return array
      */
-    public function auto(string $triggerKey, array $payload = []): array
+    public function auto(string $triggerKey, array $payload = [], bool $reuseAutomatic = false): array
     {
         $plans = $this->sceneService->resolvePlansByTrigger($triggerKey, $payload, true);
         $results = [];
 
         foreach ($plans as $plan) {
-            $results[] = $this->executePlanThroughTask($plan, $payload, RecyclePrintTask::MODE_AUTO);
+            $results[] = $this->executePlanThroughTask($plan, $payload, RecyclePrintTask::MODE_AUTO, $reuseAutomatic);
         }
 
         $hasFailure = false;
@@ -72,7 +73,7 @@ class RecyclePrintTriggerService extends BaseAdminService
      * @param string $mode
      * @return array
      */
-    private function executePlanThroughTask(array $plan, array $payload, string $mode): array
+    private function executePlanThroughTask(array $plan, array $payload, string $mode, bool $reuseAutomatic = false): array
     {
         if (empty($plan['can_print'])) {
             $this->sceneService->recordSkippedPlan($plan, $plan['message'] ?? '打印计划不可用');
@@ -82,7 +83,7 @@ class RecyclePrintTriggerService extends BaseAdminService
             ]);
         }
 
-        $taskResult = $this->taskService->createFromPlan($plan, $payload, $mode);
+        $taskResult = $this->taskService->createFromPlan($plan, $payload, $mode, $reuseAutomatic);
         $task = $taskResult['task'] ?? [];
         if (!empty($taskResult['duplicate'])) {
             $message = ((int)($task['status'] ?? 0) === RecyclePrintTask::STATUS_SUCCESS)

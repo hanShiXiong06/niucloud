@@ -155,7 +155,7 @@ import diyGroup from '@/addon/components/diy/group/index.vue';
 import { getDiyInfo } from '@/app/api/diy';
 import { useLocation } from '@/hooks/useLocation'
 import useSystemStore from '@/stores/system';
-import { parseJsonValue } from '@/addon/phone_shop/utils/json';
+import { parseJsonValue } from '@/utils/json';
 
 const systemStore = useSystemStore();
 const instance = getCurrentInstance();

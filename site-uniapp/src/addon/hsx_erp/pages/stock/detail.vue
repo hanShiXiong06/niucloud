@@ -92,7 +92,8 @@
                 </view>
 
                 <view v-if="canViewCost" class="form-card">
-                    <view class="form-card-title">成本拆解</view>
+                    <view class="detail-section-toggle" role="button" :aria-expanded="costExpanded" @click="costExpanded = !costExpanded"><view><text class="form-card-title">成本拆解</text><text class="detail-section-summary">总成本 ¥{{ money(asset.total_cost) }}</text></view><u-icon :name="costExpanded ? 'arrow-up' : 'arrow-down'" size="14" color="#64748b" /></view>
+                    <view v-show="costExpanded">
                     <view class="field"><text class="label">原始采购成本</text><text class="value">¥{{ money(asset.purchase_cost) }}</text></view>
                     <template v-if="asset.cost_summary">
                         <view class="field"><text class="label">回收／采购调价</text><text class="value">¥{{ money(asset.cost_summary.supplier_adjust_cost) }}</text></view>
@@ -111,15 +112,16 @@
                         <text class="value strong">¥{{ money(asset.total_cost) }}</text>
                     </view>
                     <view v-if="asset.cost_summary" class="cost-explain">采购款 ¥{{ money(asset.cost_summary.supplier_amount) }} 不包含整备费和内部修正；内部修正不生成应付、不代表付款。</view>
+                    </view>
                 </view>
 
                 <view v-if="asset.inspection" class="form-card">
                     <view class="form-card-title">质检报告 · {{ asset.inspection.count }} 项</view>
                     <view class="inspection-summary">正常 {{ asset.inspection.counts?.normal || 0 }} · 需关注 {{ asset.inspection.counts?.general || 0 }} · 异常 {{ asset.inspection.counts?.abnormal || 0 }}<text v-if="asset.inspection.counts?.unknown"> · 未分级 {{ asset.inspection.counts.unknown }}</text></view>
-                    <view v-for="item in (inspectionExpanded ? asset.inspection.items : (asset.inspection.items || []).slice(0, 6))" :key="item.key" class="field inspection-item" :class="`inspection-item--${item.severity}`">
+                    <view v-for="item in (inspectionExpanded ? asset.inspection.items : inspectionPreview)" :key="item.key" class="field inspection-item" :class="`inspection-item--${item.severity}`">
                         <text class="label">{{ item.name }}</text><text class="value">{{ item.value }}</text>
                     </view>
-                    <view v-if="asset.inspection.count > 6" class="inspection-expand" @tap="inspectionExpanded = !inspectionExpanded">{{ inspectionExpanded ? '收起质检项目' : `查看全部 ${asset.inspection.count} 项` }}</view>
+                    <view v-if="asset.inspection.count > 3" class="inspection-expand" @tap="inspectionExpanded = !inspectionExpanded">{{ inspectionExpanded ? '收起质检项目' : `查看全部 ${asset.inspection.count} 项` }}</view>
                     <view v-if="asset.inspection.legacy_text" class="cost-explain">历史质检：{{ asset.inspection.legacy_text }}</view>
                     <view class="form-card-title inspection-notes-title">人工备注</view>
                     <view v-if="!asset.inspection.manual_notes?.length" class="inspection-summary">暂无人工备注</view>
@@ -127,12 +129,14 @@
                 </view>
 
                 <view class="form-card" v-if="asset.purchase_order && (canViewSupplier || canViewFinance)">
-                    <view class="form-card-title">采购信息</view>
+                    <view class="detail-section-toggle" role="button" :aria-expanded="purchaseExpanded" @click="purchaseExpanded = !purchaseExpanded"><view><text class="form-card-title">采购信息</text><text class="detail-section-summary">{{ [canViewSupplier ? asset.party_name : '', canViewFinance ? financeLabel(asset.purchase_order.finance_status) : ''].filter(Boolean).join(' · ') || '查看来源与采购单据' }}</text></view><u-icon :name="purchaseExpanded ? 'arrow-up' : 'arrow-down'" size="14" color="#64748b" /></view>
+                    <view v-show="purchaseExpanded">
                     <view v-if="canViewSupplier" class="field"><text class="label">供应商</text><text class="value">{{ asset.party_name }}</text></view>
                     <view class="field"><text class="label">采购单号</text><text class="value">{{ asset.purchase_order.purchase_no }}</text></view>
                     <view v-if="asset.purchase_order.m_no || asset.m_no" class="field"><text class="label">M号</text><text class="value">{{ asset.purchase_order.m_no || asset.m_no }}</text></view>
                     <view v-if="canViewFinance" class="field field--last"><text class="label">付款状态</text>
                         <u-tag :text="financeLabel(asset.purchase_order.finance_status)" :type="financeType(asset.purchase_order.finance_status)" plain plainFill size="mini" />
+                    </view>
                     </view>
                 </view>
 
@@ -151,7 +155,7 @@
                 </view>
 
                 <view class="section-title">设备履历</view>
-                <view class="flow-card" v-for="(flow, idx) in ledger" :key="idx">
+                <view class="flow-card" v-for="(flow, idx) in (ledgerExpanded ? ledger : ledger.slice(0, 3))" :key="idx">
                     <view class="flow-head">
                         <text class="flow-action">{{ erpEnumLabel(flow.action, { [flow.action]: flow.action_text }, actionLabel(flow.action)) }}</text>
                         <text class="flow-time">{{ formatDate(flow.occurred_at || flow.create_at) }}</text>
@@ -165,6 +169,7 @@
                     </view>
                     <view class="card-meta" v-if="flow.remark">{{ flow.remark }}</view>
                 </view>
+                <view v-if="ledger.length > 3" class="account-more" @click="ledgerExpanded = !ledgerExpanded"><text>{{ ledgerExpanded ? '收起设备履历' : `查看全部 ${ledger.length} 条履历` }}</text><u-icon :name="ledgerExpanded ? 'arrow-up' : 'arrow-down'" color="#2563eb" size="13" /></view>
                 <view class="empty-tip" v-if="!ledger.length">暂无设备履历</view>
 
                 <view v-if="canViewFinance">
@@ -228,11 +233,13 @@
                 <view class="action-popup__head"><view><text class="action-popup__title">{{ productPopupTitle }}</text><text class="action-popup__sub">{{ asset?.model || '当前设备' }} · {{ asset?.imei || asset?.sn || '' }}</text></view><u-icon name="close" color="#94a3b8" size="20" @click="!productBusy && (productVisible=false)" /></view>
                 <scroll-view scroll-y class="action-popup__body">
                     <ErpListingWorkspaceForm
+                        v-if="productVisible"
                         v-model="productForm"
                         :contract="asset?.listing_workspace"
                         :pricing="asset?.sales_pricing"
                         :action="productAction"
                         @catalog-change="onProductCatalogChange"
+                        @media-busy="productMediaBusy = $event"
                     />
                 </scroll-view>
                 <view class="action-popup__foot">
@@ -241,7 +248,7 @@
                             type="primary"
                             :loading="productBusy"
                             :disabled="productBusy"
-                            :text="showProductHandoff ? (Number(asset?.listing_basic_first) === 1 ? '上架并交接资料' : '完成并交接') : productSubmitText"
+                            :text="showProductHandoff ? (Number(asset?.listing_basic_first) === 1 ? '上架' : '完成并交接') : productSubmitText"
                             @click="submitProduct(showProductHandoff)"
                         />
                     </view>
@@ -288,9 +295,14 @@ import ErpListingWorkspaceForm from '@/addon/hsx_erp/components/ErpListingWorksp
 import { salesPriceInput, salesPriceLabel, salesPricePreview } from '@/addon/hsx_erp/hooks/useSalesPricing'
 import ErpWarehousePopup from '@/addon/hsx_erp/components/ErpWarehousePopup.vue'
 import { erpListingFormDefinition, erpListingFormPayload, validateErpListingForm, type ErpListingAction } from '@/addon/hsx_erp/hooks/useErpListingForm'
+import { erpMallListingInitialFields } from '@/addon/hsx_erp/hooks/useErpMallListingMedia'
 
 const asset = ref<any>(null)
 const inspectionExpanded = ref(false)
+const costExpanded = ref(false)
+const purchaseExpanded = ref(false)
+const ledgerExpanded = ref(false)
+const inspectionPreview = computed(() => [...(asset.value?.inspection?.items || [])].sort((a: any, b: any) => ({ abnormal: 0, general: 1, unknown: 2, normal: 3 }[a.severity] ?? 2) - ({ abnormal: 0, general: 1, unknown: 2, normal: 3 }[b.severity] ?? 2)).slice(0, 3))
 const stockCapabilities = ref<any>({ is_admin: 0, view_cost: 0, adjust_cost: 0, view_profit: 0, view_supplier: 0, view_finance: 0, view_team_workload: 0 })
 const canViewCost = computed(() => Number(stockCapabilities.value?.view_cost || 0) === 1)
 const canAdjustCost = computed(() => Number(stockCapabilities.value?.adjust_cost || 0) === 1)
@@ -308,8 +320,9 @@ const detailLoaded = ref(false)
 const productVisible = ref(false)
 const productSaving = ref(false)
 const productHandoffSaving = ref(false)
+const productMediaBusy = ref(false)
 const productMode = ref<ErpListingAction>('one_stop')
-const productForm = ref<any>({ catalog_product_id: 0, catalog_product_name: '', category_name: '', category_path: '', brand_name: '', series_name: '', spec: '', retail_price: '', image_urls: '', video_url: '', quality_remark: '', remark_public: '', remark_internal: '' })
+const productForm = ref<any>({ ...erpMallListingInitialFields({}), catalog_product_id: 0, catalog_product_name: '', category_name: '', category_path: '', brand_name: '', series_name: '', spec: '', retail_price: '', image_urls: '', video_url: '', quality_remark: '', remark_public: '', remark_internal: '' })
 const productAction = computed<ErpListingAction>(() => productMode.value)
 const productFormDefinition = computed(() => erpListingFormDefinition(asset.value?.listing_workspace, productAction.value))
 const productPopupTitle = computed(() => productFormDefinition.value.title)
@@ -319,7 +332,7 @@ const showProductHandoff = computed(() => productAction.value === 'media_price'
     && Number(asset.value?.listing_workspace?.mall?.connected) === 1
     && asset.value?.status === 'in_stock'
     && asset.value?.sale_target === 'mall')
-const productBusy = computed(() => productSaving.value || productHandoffSaving.value)
+const productBusy = computed(() => productSaving.value || productHandoffSaving.value || productMediaBusy.value)
 const retailVisible = ref(false)
 const retailSaving = ref(false)
 const retailForm = ref({ retail_price: '', reason: '' })
@@ -449,6 +462,7 @@ function openProduct(mode: ErpListingAction = 'one_stop') {
     if (!asset.value) return
     productMode.value = mode
     productForm.value = {
+        ...erpMallListingInitialFields(asset.value),
         catalog_product_id: Number(asset.value.catalog_product_id || 0), catalog_product_name: asset.value.model || '', category_name: asset.value.category_name || '', category_path: asset.value.category_path || '',
         brand_name: asset.value.brand_name || '', series_name: asset.value.series_name || '',
         mall_category_id: Number(asset.value.mall_category_id || 0), mall_category_name: asset.value.mall_category_name || '',
@@ -477,7 +491,7 @@ async function submitProduct(handoffToShop = false) {
     if (Number(productFormDefinition.value.publish_basic) === 1) {
         const confirmed = await new Promise<boolean>(resolve => uni.showModal({
             title: '确认上架商城',
-            content: `${salesPricePreview(asset.value.sales_pricing, productForm.value.retail_price)}。上架后客户可立即购买，请确认分类、价格、实拍图无误。细节由商城运营继续核对。`,
+            content: `${salesPricePreview(asset.value.sales_pricing, productForm.value.retail_price)}。上架后客户可立即购买，请确认分类、价格、商品图片无误。细节由商城运营继续核对。`,
             confirmText: '确认上架', cancelText: '返回检查', success: result => resolve(!!result.confirm), fail: () => resolve(false),
         }))
         if (!confirmed || productBusy.value) return
@@ -832,6 +846,7 @@ function accountRemark(row: any) {
 </script>
 
 <style scoped lang="scss">
+.detail-section-toggle{display:flex;align-items:center;justify-content:space-between;gap:24rpx;min-height:88rpx}.detail-section-toggle .form-card-title{display:block;margin:0}.detail-section-summary{display:block;margin-top:8rpx;font-size:24rpx;line-height:1.5;color:#64748b}
 .cost-explain{margin-top:16rpx;padding:18rpx;background:#f8fafc;border-radius:12rpx;color:#64748b;font-size:24rpx;line-height:1.7;overflow-wrap:anywhere}
 .inspection-summary{color:#64748b;font-size:24rpx;line-height:1.7;margin-bottom:12rpx}.inspection-item .value{white-space:normal;overflow-wrap:anywhere}.inspection-item--general .value{color:#b45309}.inspection-item--abnormal .value{color:#dc2626}.inspection-expand{padding:20rpx 0;text-align:center;color:#2563eb;font-size:26rpx}.inspection-notes-title{margin-top:24rpx}.inspection-note{padding:12rpx 0;font-size:26rpx;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere}.inspection-note>text{font-size:24rpx;color:#94a3b8}
 @import '@/addon/hsx_erp/styles/erp-mobile.scss';

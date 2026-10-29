@@ -4,7 +4,7 @@ declare(strict_types=1);
 // 执行真实货源入库、上架监听器、资料保存及 ERP 库存核对。
 // 数据库、事务、商品基础建品及平台配置用内存替身；不连接真实站点，不发送通知或付款。
 namespace IntakeTest {
-    final class Store { public static array $tables = []; public static array $tx = []; public static array $events = []; public static array $handlers = []; public static bool $guard = true; }
+    final class Store { public static array $tables = []; public static array $tx = []; public static array $events = []; public static array $handlers = []; public static bool $guard = true; public static array $locks = []; public static array $lockCalls = []; public static bool $lockAvailable = true; }
     class Row implements \ArrayAccess {
         public function __construct(public string $table, public array $data = []) {}
         public function __get($key) { $value = $this->data[$key] ?? null; if (in_array($key, ['images', 'qc_info', 'raw_payload'], true) && is_string($value)) return json_decode($value, true) ?? []; return $value; }
@@ -28,17 +28,34 @@ namespace IntakeTest {
             return $this;
         }
         public function whereIn($key, $values): self { return $this->where($key, 'in', $values); }
+        public function whereFindInSet($key, $value): self {
+            $this->filters[] = static fn($row) => in_array((string)$value, array_map('strval', is_array($row[$key] ?? null) ? $row[$key] : explode(',', (string)($row[$key] ?? ''))), true);
+            return $this;
+        }
+        public function withSearch(array $fields, array $data): self {
+            foreach ($fields as $field) {
+                if ($field !== 'goods_category') throw new \RuntimeException('Unexpected search ' . $field);
+                if (!empty($data[$field])) $this->whereFindInSet($field, $data[$field]);
+            }
+            return $this;
+        }
         public function lock($lock): self { if ($lock && Store::$tx === []) throw new \RuntimeException('Row lock outside transaction'); return $this; }
         public function field($fields): self { return $this; }
+        public function master(): self { return $this; }
+        public function distinct($distinct): self { return $this; }
+        public function limit($limit): self { return $this; }
         public function order($order): self { return $this; }
         public function append($fields): self { return $this; }
         private function rows(): array { return array_values(array_filter(Store::$tables[$this->model] ?? [], function ($row) { foreach ($this->filters as $test) if (!$test($row)) return false; return true; })); }
         public function findOrEmpty(): Row { return new $this->model($this->model, $this->rows()[0] ?? []); }
+        public function find(): ?array { return $this->rows()[0] ?? null; }
         public function select(): Rows { return new Rows(array_map(fn($row) => (new $this->model($this->model, $row))->toArray(), $this->rows())); }
         public function count(): int { return count($this->rows()); }
         public function value($key) { return $this->rows()[0][$key] ?? null; }
         public function column($key, $index = null): array { return array_column($this->rows(), $key, $index); }
         public function update($values): int { $rows = $this->rows(); foreach ($rows as $row) (new $this->model($this->model, $row))->save($values); return count($rows); }
+        public function insert(array $values): int { $this->model::create($values); return 1; }
+        public function insertGetId(array $values): int { return (int)$this->model::create($values)->{$this->model::PK}; }
     }
     class Model extends Row {
         public const PK = 'id';
@@ -55,12 +72,39 @@ namespace core\base {
 namespace core\exception { class AdminException extends \RuntimeException {} class CommonException extends \RuntimeException {} }
 namespace think\facade {
     class Db {
-        public static function transaction($fn) { \IntakeTest\Store::$tx[] = \IntakeTest\Store::$tables; try { $result = $fn(); array_pop(\IntakeTest\Store::$tx); return $result; } catch (\Throwable $e) { \IntakeTest\Store::$tables = array_pop(\IntakeTest\Store::$tx); throw $e; } }
+        public static function transaction($fn) {
+            \IntakeTest\Store::$tx[] = [\IntakeTest\Store::$tables, \app\service\core\sys\CoreConfigService::$data];
+            try { $result = $fn(); array_pop(\IntakeTest\Store::$tx); return $result; }
+            catch (\Throwable $e) {
+                [\IntakeTest\Store::$tables, \app\service\core\sys\CoreConfigService::$data] = array_pop(\IntakeTest\Store::$tx);
+                throw $e;
+            }
+        }
         public static function name(string $table): \IntakeTest\Query {
-            if ($table !== 'phone_shop_goods_category') throw new \RuntimeException('Unexpected table ' . $table);
-            return new \IntakeTest\Query(\addon\phone_shop\app\model\goods\Category::class);
+            $models = ['phone_shop_goods_category' => \addon\phone_shop\app\model\goods\Category::class,
+                'sys_config' => \app\model\sys\SysConfig::class];
+            if (!isset($models[$table])) throw new \RuntimeException('Unexpected table ' . $table);
+            return new \IntakeTest\Query($models[$table]);
         }
         public static function connect(): self { return new self(); } public function getPdo(): self { return $this; } public function inTransaction(): bool { return \IntakeTest\Store::$tx !== []; }
+        public function getConfig(string $key) { return ['database' => 'isolated-memory', 'prefix' => 'fixture_'][$key] ?? null; }
+        // 仅模拟命名锁协议与释放，不能替代真实 MySQL 并发测试。
+        public static function query(string $sql, array $bind = [], ...$options): array {
+            $key = (string)($bind['lock_key'] ?? $bind['key'] ?? reset($bind));
+            if (str_contains($sql, 'GET_LOCK(')) {
+                $acquired = \IntakeTest\Store::$lockAvailable ? 1 : 0;
+                \IntakeTest\Store::$lockCalls[] = ['acquire', $key, count(\IntakeTest\Store::$tx), $acquired];
+                if ($acquired === 1) \IntakeTest\Store::$locks[$key] = (\IntakeTest\Store::$locks[$key] ?? 0) + 1;
+                return [['acquired' => $acquired]];
+            }
+            if (str_contains($sql, 'RELEASE_LOCK(')) {
+                \IntakeTest\Store::$lockCalls[] = ['release', $key, count(\IntakeTest\Store::$tx)];
+                if ((\IntakeTest\Store::$locks[$key] ?? 0) <= 1) unset(\IntakeTest\Store::$locks[$key]);
+                else \IntakeTest\Store::$locks[$key]--;
+                return [['released' => 1]];
+            }
+            throw new \RuntimeException('Unexpected raw query ' . $sql);
+        }
     }
     class Log { public static function write(...$args): void {} public static function warning(...$args): void {} }
 }
@@ -68,6 +112,7 @@ namespace app\service\core\sys {
     class CoreConfigService { public static array $data = []; public function getConfigValue($site, $key) { return self::$data[$site][$key] ?? []; } public function setConfig($site, $key, $data): void { self::$data[$site][$key] = $data; } }
 }
 namespace app\model\member { class MemberLevel extends \IntakeTest\Model {} }
+namespace app\model\sys { class SysConfig extends \IntakeTest\Model {} }
 namespace addon\phone_shop\app\service\admin { class MemberLevelNoService { public static function levelsWithNo($site): array { return []; } } }
 namespace addon\phone_shop\app\model\intake { class DeviceIntake extends \IntakeTest\Model { public const PK = 'intake_id'; public const STATUS_PENDING = 0; public const STATUS_BUILT = 1; public const STATUS_IGNORED = 2; } }
 namespace addon\phone_shop\app\model\goods {
@@ -76,6 +121,9 @@ namespace addon\phone_shop\app\model\goods {
     class Category extends \IntakeTest\Model { public const PK = 'category_id'; }
     class Service extends \IntakeTest\Model { public const PK = 'service_id'; }
     class Attr extends \IntakeTest\Model { public const PK = 'attr_id'; }
+    class Label extends \IntakeTest\Model { public const PK = 'label_id'; }
+    class LabelGroup extends \IntakeTest\Model { public const PK = 'group_id'; }
+    class Brand extends \IntakeTest\Model { public const PK = 'brand_id'; }
 }
 namespace addon\phone_shop\app\service\admin\goods {
     class SpecService {
@@ -93,6 +141,13 @@ namespace addon\phone_shop\app\service\admin\goods {
     }
 }
 namespace addon\phone_shop\app\service\core\order { class CoreOrderInventoryService { public function guardErpSale($site, $asset): void {} } }
+// 商品审计日志不属于本组测试范围；其数据库写入由独立审计测试负责。
+namespace addon\phone_shop\app\service\core\goods {
+    class CoreGoodsChangeLogService {
+        public function capture(int $siteId, int $goodsId): array { return []; }
+        public function record(int $siteId, int $goodsId, array $before, string $source, ?array $actor = null): void {}
+    }
+}
 namespace addon\phone_shop\app\service\core\agent {
     class AgentConfigService { public static bool $master = false; public function isMasterSite($site): bool { return self::$master; } }
     class RefDataSyncService { public function resolveAgentRefId($type, $master, $agent, $id): int { return $id + 1000; } }
@@ -117,6 +172,7 @@ namespace {
     require $base . 'phone_shop/app/service/core/goods/CoreTierPricingService.php';
     require $base . 'phone_shop/app/support/IntakeMaterialAttributes.php';
     require $base . 'phone_shop/app/support/InspectionGoodsAttributes.php';
+    require $base . 'phone_shop/app/support/GoodsWarrantySubtitle.php';
     foreach (['hsx_erp/app/support/ErpListingFormContract.php', 'hsx_erp/app/service/admin/ErpConfigService.php', 'hsx_erp/app/listener/marketplace/BasicListingEligibility.php', 'phone_shop/app/support/IntakeMaterialTask.php', 'phone_shop/app/service/core/goods/CoreDeviceAttributeService.php', 'phone_shop/app/service/core/goods/CoreGoodsDescriptionService.php', 'phone_shop/app/service/core/intake/CoreListingMappingService.php', 'phone_shop/app/service/core/intake/CoreDeviceIntakeService.php', 'phone_shop/app/service/admin/intake/DeviceIntakeService.php', 'phone_shop/app/listener/erp/ErpPublishListing.php'] as $path) require $base . $path;
     set_error_handler(static function ($severity, $message, $file, $line): void { throw new \ErrorException($message, 0, $severity, $file, $line); });
     function event($name, $payload): array {

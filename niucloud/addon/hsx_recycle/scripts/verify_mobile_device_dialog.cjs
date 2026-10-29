@@ -51,7 +51,7 @@ function setup() {
     }
   }
   vm.runInNewContext(transformSync(script.content, { loader: 'ts', format: 'cjs', target: 'es2020' }).code, context, { filename: file })
-  const props = { devices: [], count: 1 }
+  const props = { devices: [], count: 1, enablePricing: true, quoteUsers: [] }
   const state = context.module.exports.default.setup(props, { expose() {}, emit: (...args) => emitted.push(args) })
   return { state, api, emitted, messages, timers, props, scan: () => scan, unmount: () => unmount() }
 }
@@ -61,7 +61,7 @@ async function main() {
   s.handleBatchAdd()
   check('existing initial price visibility is preserved and serial help starts collapsed', () => {
     assert.equal(s.showSnHelp.value, false)
-    assert.equal(s.showEstimatedPrice.value, true)
+    assert.equal(ctx.props.enablePricing, true)
   })
   await s.confirmAdd()
   check('empty form shows both field errors without adding a device', () => {
@@ -73,10 +73,8 @@ async function main() {
   check('model selection keeps leaf and full category mapping', () => assert.deepEqual(json(s.newDevice.value.category_path), [1, 3, 31]))
   s.newDevice.value.user_sn = '000aB1'
   s.handleUserSnInput()
-  s.toggleEstimatedPrice()
   s.newDevice.value.initial_price = '1200.50'
-  s.toggleEstimatedPrice()
-  check('collapsing price preserves the entered value', () => assert.equal(s.newDevice.value.initial_price, '1200.50'))
+  check('visible optional price preserves the entered value', () => assert.equal(s.newDevice.value.initial_price, '1200.50'))
   await s.confirmAdd()
   await s.confirmAdd()
   check('add keeps serial/price/mapping and only emits once', () => {
@@ -91,7 +89,7 @@ async function main() {
   s.handleBatchAdd()
   check('reopening starts clean', () => {
     assert.equal(s.newDevice.value.model, '')
-    assert.equal(s.showEstimatedPrice.value, false)
+    assert.equal(s.newDevice.value.initial_price, '')
     assert.equal(s.fieldErrors.value.model, '')
   })
   s.newDevice.value.model = 'Other phone'

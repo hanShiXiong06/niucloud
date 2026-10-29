@@ -528,6 +528,7 @@ class ErpDeviceInboundRequested
                 'system_version' => (string)($device['system_version'] ?? ''),
                 'warranty_info' => $warrantyText,
                 'source_plugin' => $sourcePlugin,
+                'source_catalog' => is_array($device['source_catalog'] ?? null) ? $device['source_catalog'] : [],
                 'source_device_id' => $sourceDeviceValue,
                 'source_order_no' => trim((string)($device['source_order_no'] ?? '')),
                 'settlement_status' => trim((string)($device['settlement_status'] ?? '')),

@@ -2,6 +2,14 @@
 
 return [
     [
+        'key' => 'hsx_recycle_quote_image_sync',
+        'name' => '报价图片每日自动采集',
+        'desc' => '每5分钟检查各站每日时间，仅对启用映射排队采集；失败保留原图',
+        'time' => ['type' => 'min', 'min' => 5],
+        'class' => 'addon\\hsx_recycle\\app\\job\\schedule\\QuoteImageSyncTick',
+        'function' => 'doJob',
+    ],
+    [
         'key' => 'hsx_recycle_pickup_reconcile',
         'name' => '快递100取件预约自动核实',
         'desc' => '每批最多核实20条已有渠道任务；未知结果不重新叫件，账号配置异常自动退避',

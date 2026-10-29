@@ -60,7 +60,7 @@ namespace {
     function event($name, $data) { return []; }
     $root = dirname(__DIR__);
     foreach (['dict/config/RecycleConfigKeyDict', 'dict/order/RecycleOrderDict', 'dict/express/ExpressProviderDict',
-        'dict/third_party/ThirdPartyDict', 'service/core/express/PickupAppointmentPolicy', 'service/core/order/OrderSubmitConfigService',
+        'dict/third_party/ThirdPartyDict', 'service/core/express/PickupAppointmentPolicy', 'service/core/order/CustomerQuoteService', 'service/core/order/OrderSubmitConfigService',
         'service/core/express/RecycleExpressService'] as $file) {
         require $root . '/app/' . $file . '.php';
     }

@@ -14,7 +14,11 @@ export function useDeviceManagement() {
         imei: device.imei || '',
         user_sn: device.user_sn || device.imei || '',
         model: device.model,
-        initial_price: device.initial_price
+        initial_price: device.initial_price,
+        initial_price_uid: device.initial_price_uid,
+        initial_price_name: device.initial_price_name,
+        category_id: device.category_id,
+        category_path: device.category_path
       })
     })
   }

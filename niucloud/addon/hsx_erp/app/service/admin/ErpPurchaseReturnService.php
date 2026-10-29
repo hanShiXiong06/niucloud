@@ -421,6 +421,7 @@ class ErpPurchaseReturnService extends BaseAdminService
             'settled_amount' => 0,
             'update_at'      => $now,
         ]);
+        ErpIntegrationDocumentService::record((int)$this->site_id, 'purchase_return', $returnId);
         if ($returnedAssets !== []) {
             $queued = (new ErpIntegrationService())->enqueueDomainEvent(
                 'erp.purchase_return.completed.v1',

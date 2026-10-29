@@ -17,6 +17,7 @@ namespace addon\phone_shop\app\service\core\intake;
 use addon\phone_shop\app\service\core\goods\CoreDeviceAttributeService;
 use addon\phone_shop\app\support\InspectionGoodsAttributes;
 use addon\phone_shop\app\support\IntakeMaterialTask;
+use addon\phone_shop\app\support\GoodsWarrantySubtitle;
 
 use app\service\core\sys\CoreConfigService;
 use core\base\BaseCoreService;
@@ -36,7 +37,8 @@ class CoreListingMappingService extends BaseCoreService
             'title_template'        => '{brand} {model} {memory} {color}',
             // 副标题模板:同上占位 + {warranty}
             'subtitle_template'     => '{condition} · 一机一检 · {warranty}',
-            'warranty_text'         => '七天质保',
+            // 保修文案由设备实际到期日生成；保留配置键但不以固定售后承诺代替设备保修。
+            'warranty_text'         => '',
             // 服务标签(service_ids):默认挂哪些;空=不挂。这是主要扩展口之一
             'default_service_ids'   => [],
             // 商品角标(label_ids):默认挂哪些;空=不挂
@@ -96,6 +98,16 @@ class CoreListingMappingService extends BaseCoreService
         $config = $config ?: self::defaultConfig();
         $qc = $this->normalizeQc($intake['qc_info'] ?? []);
         $facts = InspectionGoodsAttributes::fromSnapshot($qc, IntakeMaterialTask::payload($intake['hidden_check_keys'] ?? []));
+        $sourcePayload = IntakeMaterialTask::payload($intake['raw_payload'] ?? []);
+        $listingMaterial = IntakeMaterialTask::payload($sourcePayload['listing_material'] ?? []);
+        $explicitText = static fn($value): string => is_scalar($value) ? trim((string)$value) : '';
+        // 新表单已由商城校验，本台的明确选择（含清空）不能再被旧质检或货源列值回填。
+        $colorBase = array_key_exists('color', $listingMaterial) ? $explicitText($listingMaterial['color'])
+            : (trim((string)($intake['color'] ?? '')) !== '' ? $intake['color'] : ($facts['color'] ?? ''));
+        $gradeBase = array_key_exists('grade', $listingMaterial) ? $explicitText($listingMaterial['grade']['name'] ?? '')
+            : (trim((string)($intake['condition_grade'] ?? '')) !== '' ? $intake['condition_grade'] : ($facts['condition_grade'] ?? ''));
+        $memoryBase = array_key_exists('memory', $listingMaterial) ? $explicitText($listingMaterial['memory'])
+            : (trim((string)($intake['memory'] ?? '')) !== '' ? $intake['memory'] : ($facts['memory'] ?? ''));
 
         // ---- 基础字段(顶层优先,qc_info 兜底)----
         $brand     = $this->pick($overrides, 'brand_name', $intake['brand_name'] ?? '');
@@ -104,13 +116,28 @@ class CoreListingMappingService extends BaseCoreService
         $colorOverride = $overrides['device_color'] ?? ($overrides['color'] ?? null);
         $color     = $colorOverride !== null && trim((string)$colorOverride) !== ''
             ? $colorOverride
-            : (trim((string)($intake['color'] ?? '')) !== '' ? $intake['color'] : ($facts['color'] ?? ''));
-        $condition = $this->pick($overrides, 'condition_grade', trim((string)($intake['condition_grade'] ?? '')) !== '' ? $intake['condition_grade'] : ($facts['condition_grade'] ?? ''));
+            : $colorBase;
+        $condition = $this->pick($overrides, 'condition_grade', $gradeBase);
         $imei      = (string)($intake['imei'] ?? '');
 
         // ---- 2. 内存分类 ----
-        $memoryRaw = $this->pick($overrides, 'memory', trim((string)($intake['memory'] ?? '')) !== '' ? $intake['memory'] : ($facts['memory'] ?? ''));
+        $memoryRaw = $this->pick($overrides, 'memory', $memoryBase);
         $memoryGroup = $this->normalizeMemory($memoryRaw, (array)($config['memory_aliases'] ?? []));
+
+        $deviceAttributes = new CoreDeviceAttributeService();
+        $warrantyFallback = array_key_exists('warranty_expire_time', $listingMaterial)
+            ? $listingMaterial['warranty_expire_time']
+            : ((int)($intake['warranty_expire_time'] ?? 0) > 0 ? $intake['warranty_expire_time'] : ($facts['warranty_expire_time'] ?? ''));
+        $warrantySource = $overrides['warranty_expire_time'] ?? $overrides['warranty_expire_date'] ?? $warrantyFallback;
+        $warrantyExpire = $deviceAttributes->normalizeWarrantyExpire($warrantySource, false);
+        $batteryFallback = array_key_exists('battery_health', $listingMaterial)
+            ? $listingMaterial['battery_health']
+            : ($deviceAttributes->normalizeBattery($intake['battery_health'] ?? '', false) >= 0
+                ? $intake['battery_health'] : ($facts['battery_health'] ?? ''));
+        $batteryHealth = $deviceAttributes->normalizeBattery(
+            array_key_exists('battery_health', $overrides) ? $overrides['battery_health'] : $batteryFallback,
+            false
+        );
 
         // ---- 占位符上下文 ----
         $ctx = [
@@ -120,7 +147,8 @@ class CoreListingMappingService extends BaseCoreService
             '{color}'     => trim((string)$color),
             '{condition}' => trim((string)$condition),
             '{imei}'      => $imei,
-            '{warranty}'  => (string)($config['warranty_text'] ?? '七天质保'),
+            '{warranty}'  => GoodsWarrantySubtitle::label($warrantyExpire),
+            '{battery}'   => GoodsWarrantySubtitle::batteryLabel($batteryHealth),
         ];
 
         // ---- 3. 标题 ----
@@ -138,13 +166,12 @@ class CoreListingMappingService extends BaseCoreService
 
         // ---- 1. 服务标签 / 角标 ----
         $serviceIds = $this->idList($overrides['service_ids'] ?? ($config['default_service_ids'] ?? []));
-        $labelIds   = $this->idList($overrides['label_ids'] ?? ($config['default_label_ids'] ?? []));
+        // 本台明确选择（含空数组）高于站点默认；旧交接未携带标签时保留原有默认行为。
+        $labelIds   = $this->idList($overrides['label_ids'] ?? ($listingMaterial['label_ids'] ?? ($config['default_label_ids'] ?? [])));
 
         // ---- 6. 发货方式：人工选择 > ERP 交接快照 > 站点默认 ----
         // 直上架和待办确认共用此映射，不能把 ERP 带来的三种配送退回为站点默认的仅快递。
-        $sourcePayload = $intake['raw_payload'] ?? [];
-        if (is_string($sourcePayload)) $sourcePayload = json_decode($sourcePayload, true);
-        $sourceDeliveryType = is_array($sourcePayload) ? ($sourcePayload['delivery_type'] ?? null) : null;
+        $sourceDeliveryType = $sourcePayload['delivery_type'] ?? null;
         $deliveryType = $overrides['delivery_type'] ?? $sourceDeliveryType ?? ($config['default_delivery_type'] ?? ['express']);
         $deliveryType = is_array($deliveryType) ? array_values(array_filter(array_map('strval', $deliveryType))) : ['express'];
         if (empty($deliveryType)) $deliveryType = ['express'];
@@ -155,30 +182,17 @@ class CoreListingMappingService extends BaseCoreService
         // ---- 图片 / 价格 清洗(透传)----
         $images = $this->normalizeImages($intake['images'] ?? []);
         $price  = (float)$this->pick($overrides, 'price', $intake['sale_price'] ?? 0);
-        $deviceAttributes = new CoreDeviceAttributeService();
-        $batteryHealth = $deviceAttributes->normalizeBattery(
-            array_key_exists('battery_health', $overrides) ? $overrides['battery_health']
-                : ($deviceAttributes->normalizeBattery($intake['battery_health'] ?? '', false) >= 0
-                    ? $intake['battery_health'] : ($facts['battery_health'] ?? '')),
-            false
-        );
-        $warrantyFallback = (int)($intake['warranty_expire_time'] ?? 0) > 0
-            ? $intake['warranty_expire_time'] : ($facts['warranty_expire_time'] ?? '');
-        $warrantySource = $overrides['warranty_expire_time'] ?? $overrides['warranty_expire_date'] ?? $warrantyFallback;
-        $warrantyExpire = $deviceAttributes->normalizeWarrantyExpire(
-            $warrantySource,
-            false
-        );
 
         return [
             'goods_name'      => $this->squeeze($goodsName),
-            'sub_title'       => $this->squeeze($subTitle),
+            'sub_title'       => GoodsWarrantySubtitle::composeWithBattery($this->squeeze($subTitle), $warrantyExpire, $batteryHealth),
             'memory_group'    => $memoryGroup,
             'service_ids'     => $serviceIds,
             'label_ids'       => $labelIds,
             'delivery_type'   => $deliveryType,
             'qc_report'       => $qcReport,
             'condition_grade' => trim((string)$condition),
+            'brand_id'        => (int)($listingMaterial['brand']['id'] ?? 0),
             'device_color'    => $deviceAttributes->normalizeColor($color, false),
             'battery_health'  => $batteryHealth,
             'warranty_expire_time' => $warrantyExpire,

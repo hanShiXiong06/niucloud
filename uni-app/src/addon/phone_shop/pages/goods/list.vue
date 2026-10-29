@@ -114,7 +114,7 @@
                                 <view class="brand-tag" v-if="item.goods_brand" :style="diyGoods.baseTagStyle(item.goods_brand)">{{ item.goods_brand.brand_name }}</view>
                                 {{ item.goods_name }}
                             </view>
-                            <PhoneGoodsMeta :subtitle="item.sub_title" :imei="item.goodsSku?.sku_no" />
+                            <PhoneGoodsMeta :subtitle="item.sub_title" :imei="item.goodsSku?.sku_no" :imei-tail-only="Number(categoryConfig?.imei_tail_only) === 1" />
                             <PhoneGoodsSaleState :state="item.sale_state" />
 
                             <view class="goods-row-footer">
@@ -144,7 +144,7 @@
                 <template v-else>
                     <PhoneGoodsWaterfall :items="visibleGoodsList" :estimate-height="estimateGoodsCardHeight">
                         <template #default="{ item }">
-                            <PhoneGoodsWaterfallCard :item="item" :action="goodsAction" :recent-tag="recentTag(item)" @click="toDetail(item.goods_id)" @action="handleGoodsAction(item)" />
+                            <PhoneGoodsWaterfallCard :item="item" :action="goodsAction" :recent-tag="recentTag(item)" :imei-tail-only="Number(categoryConfig?.imei_tail_only) === 1" @click="toDetail(item.goods_id)" @action="handleGoodsAction(item)" />
                         </template>
                     </PhoneGoodsWaterfall>
                 </template>

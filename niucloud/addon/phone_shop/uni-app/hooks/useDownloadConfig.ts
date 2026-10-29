@@ -1,6 +1,8 @@
 import { ref } from 'vue'
 import { getToken } from '@/utils/common'
 import { generateShareLink } from '@/addon/phone_shop/api/share'
+import { ensureGoodsDisplayConfig, useGoodsDisplayConfig } from '@/addon/phone_shop/hooks/useGoodsDisplayConfig'
+import { formatGoodsImei } from '@/addon/phone_shop/utils/imei-display'
 
 /**
  * 下载配置类型
@@ -23,6 +25,7 @@ export interface DownloadConfig {
  * 仅限 phone_shop 插件使用
  */
 export function useDownloadConfig() {
+    const displayState = useGoodsDisplayConfig()
     const STORAGE_KEY = 'phone_shop_download_config'
 
     /**
@@ -179,10 +182,11 @@ export function useDownloadConfig() {
             // detail.vue: item.sku_no (直接在 item 上)
             // list.vue: goods.goodsSku.sku_no
             let sku_no = ''
-            if (item.sku_no) {
-                sku_no = '#' + item.sku_no + ' '
-            } else if (goods.goodsSku?.sku_no) {
-                sku_no = '#' + goods.goodsSku.sku_no + ' '
+            const displayConfig = await ensureGoodsDisplayConfig()
+            if (displayState.ready.value && item.sku_no) {
+                sku_no = '#' + formatGoodsImei(item.sku_no, displayConfig.imei_tail_only) + ' '
+            } else if (displayState.ready.value && goods.goodsSku?.sku_no) {
+                sku_no = '#' + formatGoodsImei(goods.goodsSku.sku_no, displayConfig.imei_tail_only) + ' '
             }
 
             const price = getGoodsPrice(item, config)

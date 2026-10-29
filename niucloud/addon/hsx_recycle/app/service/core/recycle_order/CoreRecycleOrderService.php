@@ -105,9 +105,9 @@ class CoreRecycleOrderService extends BaseCoreService
                         'order_id' => $order->id,
                         'member_id' => $data['member_id'] ?? 0,
                         'category_id' => $categoryId,
-                        'info' => [
+                        'info' => (new \addon\hsx_recycle\app\service\core\order\CustomerQuoteService())->applyAdminQuote((int)$data['site_id'], [
                             'goods_category' => array_values(array_map('strval', $categoryPath))
-                        ],
+                        ], $device),
                         'imei' => $imei,
                         'model' => $model,
                         'status' => RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK,

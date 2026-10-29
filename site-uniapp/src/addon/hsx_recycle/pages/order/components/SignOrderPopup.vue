@@ -114,6 +114,7 @@
                         </view>
                     </view>
 
+                    <QuoteUserPicker v-model="editForm.initial_price_uid" v-model:name="editForm.initial_price_name" />
                     <!-- 质检摘要（型号触发的模板摘要字段，最多5个；签收即录，质检时反显） -->
                     <view v-if="summaryLoading" class="summary-loading">
                         <text>加载质检摘要项…</text>
@@ -238,6 +239,7 @@ import { getCheckTemplateSchema } from '@/addon/hsx_recycle/api/check-template'
 import ScanCodeInput from '@/addon/hsx_recycle/components/ScanCodeInput.vue'
 import RecycleTagGroup from '@/addon/hsx_recycle/components/RecycleTagGroup.vue'
 import NextAssigneePicker from '@/addon/hsx_recycle/components/NextAssigneePicker.vue'
+import QuoteUserPicker from '@/addon/hsx_recycle/components/QuoteUserPicker.vue'
 
 interface Props {
     visible: boolean
@@ -359,6 +361,8 @@ const editForm = ref({
     imei: '',
     user_sn: '',
     initial_price: '',
+    initial_price_uid: 0,
+    initial_price_name: '',
     category_id: 0,
     category_path: [] as Array<string | number>,
     check_template_id: 0,
@@ -417,7 +421,10 @@ const loadRootModels = async () => {
 watch(() => props.visible, (val) => {
     show.value = val
     if (val) {
-        devices.value = JSON.parse(JSON.stringify(props.deviceList || []))
+        devices.value = JSON.parse(JSON.stringify(props.deviceList || [])).map((device: any) => ({ ...device,
+            initial_price_uid: Number(device.customer_quote?.uid || device.info?.customer_quote?.uid || 0),
+            initial_price_name: device.customer_quote?.name || device.info?.customer_quote?.name || ''
+        }))
     }
 })
 
@@ -437,7 +444,7 @@ const handleClose = () => {
 
 const addDevice = () => {
     editingIndex.value = -1
-    editForm.value = { model: '', imei: '', user_sn: '', initial_price: '', category_id: 0, category_path: [], check_template_id: 0, summary_fields: [], summary_values: {} }
+    editForm.value = { model: '', imei: '', user_sn: '', initial_price: '', initial_price_uid: 0, initial_price_name: '', category_id: 0, category_path: [], check_template_id: 0, summary_fields: [], summary_values: {} }
     editVisible.value = true
 }
 
@@ -460,6 +467,8 @@ const editDevice = (device: any, index: number) => {
         imei: device.imei || '',
         user_sn: device.user_sn || '',
         initial_price: device.initial_price || '',
+        initial_price_uid: Number(device.initial_price_uid || 0),
+        initial_price_name: device.initial_price_name || '',
         category_id: device.category_id || 0,
         category_path: normalizeCategoryPath(device.category_path || device.info?.goods_category || [], device.category_id || 0),
         check_template_id: Number(device.check_template_id || 0),
@@ -646,6 +655,7 @@ const handleSubmit = async () => {
                 model: d.model,
                 user_sn: d.user_sn || '',
                 initial_price: Number(d.initial_price) || 0,
+                initial_price_uid: Number(d.initial_price_uid || 0),
                 category_id: d.category_id || 0,
                 category_path: normalizeCategoryPath(d.category_path, d.category_id || 0),
                 // 质检模板 + 摘要(field_key: value)，后端落 sign_summary，质检时反显

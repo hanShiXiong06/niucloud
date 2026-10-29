@@ -3,6 +3,7 @@ import { onHide, onUnload } from '@dcloudio/uni-app'
 import useMemberStore from '@/stores/member'
 import { enterPhoneShopLogin, finishPhoneShopLogin } from '@/addon/phone_shop/hooks/usePhoneShopLoginNavigation'
 import request from '@/utils/request'
+import { rememberGoodsDisplayConfig } from '@/addon/phone_shop/hooks/useGoodsDisplayConfig'
 
 export type GoodsPageAccessStatus = 'checking' | 'ready' | 'login' | 'error'
 
@@ -53,6 +54,7 @@ export function useGoodsPageAccess(getTarget: () => {url: string, param?: Record
                     throw new Error('商品访问配置不完整，请联系商家检查配置')
                 }
                 config.value = value
+                rememberGoodsDisplayConfig(value)
                 const token = memberStore.token
                 if (Number(value.detail_login_required) === 1) {
                     if (!token) return requireLogin()

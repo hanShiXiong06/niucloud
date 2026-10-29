@@ -85,6 +85,9 @@ class RecycleOrderService extends BaseAdminService
      */
     public function sign(int $orderId, array $data): bool
     {
+        // 独立签收接口与订单编辑接口均必须先确认本站归属。
+        $order = RecycleOrder::where([['id', '=', $orderId], ['site_id', '=', $this->site_id]])->findOrEmpty();
+        if ($order->isEmpty()) throw new CommonException('ORDER_NOT_FOUND');
         $result = $this->execute($orderId, 'sign', $data);
         if (!empty($result['success'])) {
             try {
@@ -95,6 +98,29 @@ class RecycleOrderService extends BaseAdminService
                 }
             } catch (\Throwable $e) {
                 Log::warning('签收后分配质检任务失败', ['order_id' => $orderId, 'message' => $e->getMessage()]);
+            }
+
+            // 客户已有设备/移动端整单签收也必须补发设备级标签；此时流程事务已提交。
+            // 只处理本次签收结果，不把订单里其他设备一并重打。
+            try {
+                $signedDeviceIds = array_values(array_unique(array_filter(array_map('intval',
+                    (array)($result['data']['data']['device_ids'] ?? [])
+                ), static fn(int $id): bool => $id > 0)));
+                if ($signedDeviceIds !== []) {
+                    $signedDeviceIds = RecycleDevice::where([
+                        ['site_id', '=', $this->site_id], ['order_id', '=', $orderId],
+                    ])->whereIn('id', $signedDeviceIds)->column('id');
+                    foreach ($signedDeviceIds as $deviceId) {
+                        try {
+                            (new \addon\hsx_recycle\app\service\admin\printer\RecyclePrintTriggerService())
+                                ->auto('device.sign.saved', ['device_id' => (int)$deviceId, 'order_id' => $orderId, 'biz_id' => (int)$deviceId], true);
+                        } catch (\Throwable $e) {
+                            Log::error('签收完成后设备标签自动打印触发失败：' . $e->getMessage(), ['device_id' => (int)$deviceId, 'order_id' => $orderId]);
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::error('签收完成后设备标签处理失败：' . $e->getMessage(), ['order_id' => $orderId]);
             }
         }
         return $result['success'];

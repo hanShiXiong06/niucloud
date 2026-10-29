@@ -108,6 +108,9 @@ class RecycleDeviceService extends BaseAdminService
         // 给 check_meta.result_items 逐项打上级别(severity, 实时取字典), 并备好 abnormal_items / severity_summary
         $info = $this->enrichResultItemsSeverity($info);
 
+        if ($info) $info['price_assignment'] = (new \addon\hsx_recycle\app\service\core\order\CustomerQuoteService())
+            ->pricingAssignment((int)$this->site_id, $info['info'] ?? []);
+
         return $info;
     }
 
@@ -913,12 +916,14 @@ class RecycleDeviceService extends BaseAdminService
      * 更新设备信息
      * @param int $id
      * @param array $data
+     * @param bool $signSave 是否来自签收清单的设备保存
      * @return bool
      * @throws CommonException
      */
-    public function update(int $id, array $data): bool
+    public function update(int $id, array $data, bool $signSave = false): bool
     {
         if (array_key_exists('imei', $data)) DeviceEntryImei::assertValid($data['imei']);
+        $signOrderId = 0;
         // 开启事务
         Db::startTrans();
         try {
@@ -926,12 +931,24 @@ class RecycleDeviceService extends BaseAdminService
             if ($device->isEmpty()) {
                 throw new CommonException('DEVICE_NOT_FOUND');
             }
+            if ($signSave) {
+                $order = RecycleOrder::where([
+                    ['id', '=', (int)$device->order_id],
+                    ['site_id', '=', $this->site_id],
+                ])->lock(true)->findOrEmpty();
+                if ($order->isEmpty() || (int)$order->status !== RecycleOrderDict::ORDER_STATUS_PENDING_SIGN) {
+                    throw new CommonException('订单已不在待签收状态，请刷新后操作');
+                }
+                $signOrderId = (int)$device->order_id;
+                // 签收资料保存不能借请求参数迁移设备所属订单、站点或客户。
+                unset($data['order_id'], $data['site_id'], $data['member_id']);
+            }
             if (isset($data['info']) || isset($data['summary']) || isset($data['device_readings'])
-                || isset($data['imei']) || isset($data['imei2']) || isset($data['sn']) || isset($data['serial_number'])) {
+                || isset($data['imei']) || isset($data['imei2']) || isset($data['sn']) || isset($data['serial_number']) || array_key_exists('initial_price_uid', $data)) {
                 $oldInfo = DeviceReadingArchive::decode($device->info);
                 $inputInfo = DeviceReadingArchive::decode($data['info'] ?? []);
                 // 原始证据只经专用契约追加，普通 info 更新不可覆盖或删除原文。
-                unset($inputInfo['device_readings']);
+                unset($inputInfo['device_readings'], $inputInfo['customer_quote']);
                 $summary = DeviceSummaryHelper::normalizeSummary($data['summary'] ?? $inputInfo['sign_summary'] ?? []);
                 $identity = array_replace($device->toArray(), $data);
                 if (array_key_exists('serial_number', $data)) $data['sn'] = (string)$data['serial_number'];
@@ -940,7 +957,7 @@ class RecycleDeviceService extends BaseAdminService
                 $data['info'] = DeviceSummaryHelper::buildInfo(array_replace($oldInfo, $inputInfo), $categoryPath, $summary, $identity, (int)$this->site_id);
                 $data = array_replace($data, DeviceSummaryHelper::reservedColumns($summary, $identity));
             }
-            unset($data['summary'], $data['device_readings'], $data['serial_number'], $data['battery_health'], $data['battery_cycle']);
+            unset($data['summary'], $data['device_readings'], $data['serial_number'], $data['battery_health'], $data['battery_cycle'], $data['initial_price_uid'], $data['initial_price_name'], $data['customer_quote'], $data['price_assignment']);
             
             $currentStatus = $device->status;
             $targetStatus = $data['status'] ?? $currentStatus;
@@ -1074,11 +1091,21 @@ class RecycleDeviceService extends BaseAdminService
             }
             
             Db::commit();
-            return true;
         } catch (\Exception $e) {
             Db::rollback();
             throw new CommonException($e->getMessage());
         }
+
+        // 和新增设备一致：落库成功后才打印，打印故障不能回滚已保存的签收资料。
+        if ($signSave) {
+            try {
+                (new \addon\hsx_recycle\app\service\admin\printer\RecyclePrintTriggerService())
+                    ->auto('device.sign.saved', ['device_id' => $id, 'order_id' => $signOrderId, 'biz_id' => $id]);
+            } catch (\Throwable $e) {
+                Log::error('设备签收保存后自动打印触发失败：' . $e->getMessage(), ['device_id' => $id, 'order_id' => $signOrderId]);
+            }
+        }
+        return true;
     }
 
     /**
@@ -1158,7 +1185,7 @@ class RecycleDeviceService extends BaseAdminService
         // 开启事务
         Db::startTrans();
         try {
-            $device = RecycleDevice::findOrEmpty($id);
+            $device = RecycleDevice::where([['id', '=', $id], ['site_id', '=', $this->site_id]])->lock(true)->findOrEmpty();
             if ($device->isEmpty()) {
                 throw new CommonException('DEVICE_NOT_FOUND');
             }
@@ -1214,6 +1241,10 @@ class RecycleDeviceService extends BaseAdminService
             }
 
 
+
+            if ($action !== 'save_draft' && RecycleStageDict::stageOf($targetStatus) === RecycleStageDict::STAGE_PRICE) {
+                (new TaskService())->resolvePricingAssignee($device->info, $nextAssigneeUid);
+            }
 
             // 更新设备质检信息
             $updateData = [
@@ -1277,7 +1308,7 @@ class RecycleDeviceService extends BaseAdminService
                 // Model 已声明 $json=['info']，save() 时会自动 json_encode，无需手动编码
                 $oldInfo = DeviceReadingArchive::decode($device->info);
                 $newInfo = DeviceReadingArchive::decode($checkData['info'] ?? []);
-                unset($newInfo['device_readings']);
+                unset($newInfo['device_readings'], $newInfo['customer_quote']);
                 foreach (['battery', 'battery_num'] as $key) {
                     if (!array_key_exists($key, (array)($newInfo['check_meta'] ?? [])) && array_key_exists($key, (array)($oldInfo['check_meta'] ?? []))) {
                         $newInfo['check_meta'][$key] = $oldInfo['check_meta'][$key];
@@ -1291,7 +1322,7 @@ class RecycleDeviceService extends BaseAdminService
                 );
                 if ($archive !== []) $updateData['info']['device_readings'] = $archive;
             }
-            unset($updateData['device_readings']);
+            unset($updateData['device_readings'], $updateData['customer_quote'], $updateData['initial_price_uid'], $updateData['initial_price_name'], $updateData['price_assignment']);
 
             $checkMeta = $this->extractCheckMeta($checkData);
             $templateId = (int)($checkData['check_template_id'] ?? ($checkMeta['template_id'] ?? 0));

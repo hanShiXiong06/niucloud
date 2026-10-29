@@ -42,7 +42,7 @@ class TaskService extends BaseAdminService
     }
 
     /** 当前环节可接收任务的员工，按站点管理员、员工UID稳定排序。 */
-    public function getAssignableUsers(string $stageKey): array
+    public function getAssignableUsers(string $stageKey, bool $includeAdmins = false): array
     {
         $permissions = RecycleStageDict::getStagePermissions()[$stageKey] ?? [];
         if ($stageKey === '' || $permissions === []) return [];
@@ -76,7 +76,7 @@ class TaskService extends BaseAdminService
             elseif ((int)($relation['is_admin'] ?? 0) === 1) $adminFallback[] = (int)$relation['uid'];
         }
         // 有岗位员工时只在岗位内自动分配，避免站点管理员因为拥有全部权限而接走所有工单。
-        $eligible = $roleMatched !== [] ? $roleMatched : $adminFallback;
+        $eligible = $includeAdmins ? array_merge($roleMatched, $adminFallback) : ($roleMatched !== [] ? $roleMatched : $adminFallback);
         $eligible = array_values(array_unique(array_filter($eligible)));
         if ($eligible === []) return [];
         $users = SysUser::whereIn('uid', $eligible)->where('status', '=', 1)
@@ -370,6 +370,17 @@ class TaskService extends BaseAdminService
     /** 流程流转后的默认分配：优先使用表单指定人员，否则使用权限候选中的第一人。 */
     public function assignPreferredOrDefault(int $deviceId, string $stageKey, int $preferredUid = 0): bool
     {
+        if ($stageKey === RecycleStageDict::STAGE_PRICE) {
+            $device = RecycleDevice::where([['site_id', '=', $this->site_id], ['id', '=', $deviceId]])->findOrEmpty();
+            if ($device->isEmpty()) throw new AdminException('设备不存在');
+            $assignment = $this->resolvePricingAssignee($device->info, $preferredUid);
+            if ($assignment > 0) {
+                $this->assertTaskInStage($deviceId, $stageKey);
+                $users = array_column($this->getAssignableUsers($stageKey, true), null, 'uid');
+                if (!isset($users[$assignment])) throw new AdminException('定价负责人已不可用，请重新分配');
+                return $this->upsertAssignment($deviceId, $stageKey, $assignment, (string)$users[$assignment]['name'], 'assign', true);
+            }
+        }
         // 只看当前设备责任；同站点仍可能同时存在本地付款和 ERP 付款设备。
         if ($stageKey === RecycleStageDict::STAGE_PAY) {
             try {
@@ -394,6 +405,19 @@ class TaskService extends BaseAdminService
             }
         }
         return $this->assign($deviceId, $stageKey, $assigneeUid);
+    }
+
+    /** 质检提交前和实际交接共用校验，避免先完成质检却没有可接单的人。0 表示原分配逻辑。 */
+    public function resolvePricingAssignee($info, int $preferredUid = 0): int
+    {
+        $assignment = (new \addon\hsx_recycle\app\service\core\order\CustomerQuoteService())->pricingAssignment((int)$this->site_id, $info);
+        if ($assignment['mode'] === 'quote_user') return (int)$assignment['uid'];
+        if ($assignment['mode'] === 'unavailable') {
+            $users = array_column($this->getAssignableUsers(RecycleStageDict::STAGE_PRICE), 'uid');
+            if ($preferredUid <= 0 || !in_array($preferredUid, $users, true)) throw new AdminException($assignment['message']);
+            return $preferredUid;
+        }
+        return 0;
     }
 
     public function defaultAssignees(): array

@@ -56,17 +56,24 @@ class CoreDeviceIntakeService extends BaseCoreService
 
         $now = time();
         $deviceAttributes = new CoreDeviceAttributeService();
+        $listingMaterial = IntakeMaterialTask::payload($payload['listing_material'] ?? []);
+        $explicitText = static fn($value): string => is_scalar($value) ? trim((string)$value) : '';
+        $explicitColor = array_key_exists('color', $listingMaterial);
+        $explicitWarranty = array_key_exists('warranty_expire_time', $listingMaterial);
+        $explicitBattery = array_key_exists('battery_health', $listingMaterial);
         $data = [
             'site_id'         => $siteId,
             'erp_asset_id'    => $erpAssetId,
             'device_id'       => $deviceId,
             'model_name'      => (string) ($payload['model_name'] ?? ''),
             'brand_name'      => (string) ($payload['brand_name'] ?? ''),
-            'memory'          => (string) ($payload['memory'] ?? ''),
-            'color'           => (string) ($payload['color'] ?? ''),
-            'battery_health'  => $deviceAttributes->normalizeBattery($payload['battery_health'] ?? $payload['battery_capacity'] ?? '', false),
-            'warranty_expire_time' => $deviceAttributes->normalizeWarrantyExpire($payload['warranty_expire_time'] ?? $payload['warranty_expire_date'] ?? '', false),
-            'condition_grade' => (string) ($payload['condition_grade'] ?? ''),
+            'memory'          => array_key_exists('memory', $listingMaterial) ? $explicitText($listingMaterial['memory']) : (string)($payload['memory'] ?? ''),
+            'color'           => $explicitColor ? $explicitText($listingMaterial['color']) : (string)($payload['color'] ?? ''),
+            'battery_health'  => $deviceAttributes->normalizeBattery($explicitBattery
+                ? $listingMaterial['battery_health'] : ($payload['battery_health'] ?? $payload['battery_capacity'] ?? ''), false),
+            'warranty_expire_time' => $deviceAttributes->normalizeWarrantyExpire($explicitWarranty
+                ? $listingMaterial['warranty_expire_time'] : ($payload['warranty_expire_time'] ?? $payload['warranty_expire_date'] ?? ''), false),
+            'condition_grade' => array_key_exists('grade', $listingMaterial) ? $explicitText($listingMaterial['grade']['name'] ?? '') : (string)($payload['condition_grade'] ?? ''),
             'imei'            => (string) ($payload['imei'] ?? ''),
             'images'          => $this->toJson($payload['images'] ?? []),
             'sale_price'      => (float) ($payload['sale_price'] ?? 0),
@@ -96,13 +103,13 @@ class CoreDeviceIntakeService extends BaseCoreService
             }
             // 旧版事件可能不携带新增的结构化字段。空值不能反向覆盖运营已经补齐的事实，
             // 否则重新投递一次历史事件就会把颜色、电池和保修资料清空。
-            if ($data['color'] === '' && trim((string)($exist['color'] ?? '')) !== '') {
+            if (!$explicitColor && $data['color'] === '' && trim((string)($exist['color'] ?? '')) !== '') {
                 $data['color'] = (string)$exist['color'];
             }
-            if ((int)$data['battery_health'] < 0 && (int)($exist['battery_health'] ?? -1) >= 0) {
+            if (!$explicitBattery && (int)$data['battery_health'] < 0 && (int)($exist['battery_health'] ?? -1) >= 0) {
                 $data['battery_health'] = (int)$exist['battery_health'];
             }
-            if ((int)$data['warranty_expire_time'] <= 0 && (int)($exist['warranty_expire_time'] ?? 0) > 0) {
+            if (!$explicitWarranty && (int)$data['warranty_expire_time'] <= 0 && (int)($exist['warranty_expire_time'] ?? 0) > 0) {
                 $data['warranty_expire_time'] = (int)$exist['warranty_expire_time'];
             }
             $this->model->where([['site_id', '=', $siteId], ['erp_asset_id', '=', $erpAssetId]])->update($data);

@@ -62,6 +62,10 @@
                     <el-switch v-model="formData.detail_login_required" :active-value="1" :inactive-value="0" />
                     <span class="text-[12px] text-[#999] ml-[10px]">默认关闭。开启后，进入商品分类、商品列表和商品详情前必须登录，登录后返回原分类或商品。商城首页仍可访问；加购、结算与转发继续执行各自权限规则。</span>
                 </el-form-item>
+                <el-form-item label="商品串号仅显示后6位">
+                    <el-switch v-model="formData.imei_tail_only" :active-value="1" :inactive-value="0" />
+                    <span class="text-[12px] text-[#999] ml-[10px]">默认关闭，显示完整串号。开启后仅缩短商品列表、详情与转发文案中的串号，不改变原数据、搜索或订单中的完整串号。</span>
+                </el-form-item>
                 <el-form-item v-if="Number(formData.level) === 3" label="成色/质检">
                     <el-switch v-model="formData.show_quality" :active-value="1" :inactive-value="0" />
                     <span class="text-[12px] text-[#999] ml-[10px]">开启后，商品图片左上角显示成色；存在质检异常时右上角同时提醒。</span>
@@ -182,6 +186,7 @@ interface formDataType {
     show_quality: number
     warehouse_switch: number
     detail_login_required: number
+    imei_tail_only: number
 }
 const formData = ref<formDataType|any>({})
 const levelOptions = [
@@ -263,7 +268,7 @@ const config = reactive<configType|any>({
 const getCategoryConfigFn = () => {
     loading.value = true
     getCategoryConfig().then(res => {
-        formData.value = { ...res.data, detail_login_required: Number(res.data.detail_login_required) === 1 ? 1 : 0 }
+        formData.value = { ...res.data, detail_login_required: Number(res.data.detail_login_required) === 1 ? 1 : 0, imei_tail_only: Number(res.data.imei_tail_only) === 1 ? 1 : 0 }
         loading.value = false
     }).catch(() => {
         loading.value = false

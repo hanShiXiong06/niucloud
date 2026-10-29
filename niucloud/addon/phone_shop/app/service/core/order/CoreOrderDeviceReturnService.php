@@ -116,6 +116,10 @@ class CoreOrderDeviceReturnService
             if ((int)$sku->erp_asset_id > 0 && !$this->erpAssetIsCurrentReturn($siteId, (int)$sku->erp_asset_id, PHP_INT_MAX)) {
                 throw new CommonException('ERP退回尚未同步成功或设备已再次售出，请先核对ERP设备状态');
             }
+            if ((int)$sku->erp_asset_id > 0) event('ErpPhysicalReturnReceived', [
+                'site_id'=>$siteId, 'source_plugin'=>'phone_shop', 'source_order_id'=>(string)$orderId,
+                'source_line_id'=>(string)$lineId, 'asset_id'=>(int)$sku->erp_asset_id, 'receiver'=>$receiver,
+            ]);
             return $this->record($siteId, $order, $line, $sku, array_merge($extend['erp_return'] ?? [], [
                 'received' => 1, 'type' => 'online_payment_refund', 'receiver' => mb_substr($receiver, 0, 30),
             ]));

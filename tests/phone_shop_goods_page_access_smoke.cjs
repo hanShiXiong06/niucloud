@@ -19,6 +19,8 @@ function execute(source, mocks, globals = {}) {
     const exports = {}
     vm.runInNewContext(output.outputText, {exports, require: name => {
         if (name in mocks) return mocks[name]
+        // 展示配置有独立回归；门禁用例只隔离它的共享配置写入，不增加网络请求。
+        if (name === '@/addon/phone_shop/hooks/useGoodsDisplayConfig') return {rememberGoodsDisplayConfig() {}}
         if (name.endsWith('.vue')) return {}
         throw new Error('Unmocked dependency: ' + name)
     }, console, ...globals})

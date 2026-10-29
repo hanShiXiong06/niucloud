@@ -7,7 +7,6 @@
         <div v-else-if="error" class="mall-category__error">{{ error }} <el-button link type="primary" @click="load">重新加载</el-button></div>
         <div v-else-if="!options.length" class="mall-category__error">暂无可选分类，请先在商城创建并启用分类，再点击 <el-button link type="primary" @click="load">刷新</el-button></div>
         <div v-else-if="modelValue && !options.some(item => item.value === modelValue)" class="mall-category__error">原分类已失效，请重新选择。</div>
-        <div v-else class="mall-category__hint">客户按此分类查找商品，不修改 ERP 分类。</div>
     </div>
 </template>
 <script setup lang="ts">

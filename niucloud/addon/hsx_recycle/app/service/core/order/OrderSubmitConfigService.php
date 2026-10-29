@@ -51,6 +51,7 @@ class OrderSubmitConfigService
         );
         $config['price_detail_theme'] = $this->getFrameworkPriceDetailTheme($siteId);
 
+        (new CustomerQuoteService())->validateConfig($siteId, $config);
         return (bool)$this->configService->setConfig(
             $siteId,
             RecycleConfigKeyDict::ORDER_SUBMIT,
@@ -62,6 +63,7 @@ class OrderSubmitConfigService
     {
         return [
             'device_add_enabled' => 1,
+            'device_pricing' => ['enabled' => 1, 'assign_to_quote_user' => 0, 'quote_user_ids' => []],
             'notice' => [
                 'enabled' => 0,
                 'title' => '下单提示',
@@ -181,6 +183,7 @@ class OrderSubmitConfigService
     public function sanitizeConfig(array $data, bool $strict = false, array $platformDeliveryProviders = [], array $platformDeliveryProducts = []): array
     {
         $default = $this->defaultConfig();
+        $devicePricing = is_array($data['device_pricing'] ?? null) ? $data['device_pricing'] : [];
         $deliveryModes = is_array($data['delivery_modes'] ?? null) ? $data['delivery_modes'] : [];
         $logisticsVehicle = is_array($data['logistics_vehicle'] ?? null) ? $data['logistics_vehicle'] : [];
         $notice = is_array($data['notice'] ?? null) ? $data['notice'] : [];
@@ -250,6 +253,11 @@ class OrderSubmitConfigService
 
         $config = [
             'device_add_enabled' => !empty($data['device_add_enabled']) ? 1 : 0,
+            'device_pricing' => [
+                'enabled' => !empty($devicePricing['enabled'] ?? $default['device_pricing']['enabled']) ? 1 : 0,
+                'assign_to_quote_user' => !empty($devicePricing['assign_to_quote_user']) ? 1 : 0,
+                'quote_user_ids' => CustomerQuoteService::normalizeUserIds($devicePricing['quote_user_ids'] ?? [], $strict),
+            ],
             'notice' => [
                 'enabled' => !empty($notice['enabled']) ? 1 : 0,
                 'title' => mb_substr(trim((string)($notice['title'] ?? $default['notice']['title'])), 0, 30),

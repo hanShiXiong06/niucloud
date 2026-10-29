@@ -54,6 +54,7 @@ class CoreGoodsConfigService extends BaseCoreService
             'show_quality' => (int) ( $params[ 'show_quality' ] ?? 0 ), // 商品卡片是否显示成色/质检角标
             'warehouse_switch' => (int) ( $params[ 'warehouse_switch' ] ?? 0 ), // 是否显示 本地仓/代理仓 切换
             'detail_login_required' => (int) ( ( $params[ 'detail_login_required' ] ?? 0 ) == 1 ), // 分类/列表进入商品详情前需登录
+            'imei_tail_only' => $this->normalizeImeiTailOnly($params['imei_tail_only'] ?? 0), // 仅控制客户端展示，不截断真实串号
         ];
 
         $this->core_config_service->setConfig($params[ 'site_id' ], 'GOODS_CATEGORY_CONFIG', $value);
@@ -91,6 +92,7 @@ class CoreGoodsConfigService extends BaseCoreService
                 'show_quality' => 0, // 是否显示成色/质检角标
                 'warehouse_switch' => 0, // 是否显示 本地仓/代理仓 切换
                 'detail_login_required' => 0,
+                'imei_tail_only' => 0,
             ];
         } else {
             $data = [
@@ -104,10 +106,16 @@ class CoreGoodsConfigService extends BaseCoreService
                 'show_quality' => (int) ( $res[ 'value' ][ 'show_quality' ] ?? 0 ), // 是否显示成色/质检角标
                 'warehouse_switch' => (int) ( $res[ 'value' ][ 'warehouse_switch' ] ?? 0 ), // 是否显示 本地仓/代理仓 切换
                 'detail_login_required' => (int) ( ( $res[ 'value' ][ 'detail_login_required' ] ?? 0 ) == 1 ),
+                'imei_tail_only' => $this->normalizeImeiTailOnly($res['value']['imei_tail_only'] ?? 0),
             ];
 
         }
         return $data;
+    }
+
+    private function normalizeImeiTailOnly($value): int
+    {
+        return in_array($value, [1, '1'], true) ? 1 : 0;
     }
 
     /**

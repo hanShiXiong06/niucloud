@@ -31,6 +31,8 @@ export interface DeviceEntryRow {
     device_readings?: DeviceReadings
     model: string
     initial_price: number
+    initial_price_uid?: number
+    initial_price_name?: string
     /** 用户自助提交的串号（确认弹窗展示用，只读） */
     user_sn?: string
     category_id?: string | number

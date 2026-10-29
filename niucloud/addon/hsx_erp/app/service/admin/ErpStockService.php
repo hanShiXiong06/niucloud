@@ -1365,6 +1365,15 @@ class ErpStockService extends BaseAdminService
         );
     }
 
+    /** 仍沿用库存入口权限；asset_id 必须属于当前站点，不接受客户端提供来源型号身份。 */
+    public function listingCatalog(int $assetId = 0, int $categoryId = 0, array $context = []): array
+    {
+        $asset = $assetId > 0 ? $this->findAsset($assetId)->toArray() : null;
+        $result = ErpMallListingService::request((int)$this->site_id, 'options', $categoryId, $context);
+        if ($asset !== null) $result['category_suggestion'] = (new ErpMallModelMappingService())->suggestion((int)$this->site_id, $asset);
+        return $result;
+    }
+
     public function info(int $id): array
     {
         $asset = $this->findAsset($id)->toArray();
@@ -1428,6 +1437,9 @@ class ErpStockService extends BaseAdminService
         $asset['return_flow'] = ErpPurchaseReturnPolicy::assess($asset, $supplierAmount, $paidAmount);
         $asset = (new ErpTurnoverService())->decorate([$asset])[0] ?? $asset;
         $asset = $this->appendListingSyncState([$asset])[0] ?? $asset;
+        if ((int)($asset['listing_workspace']['mall']['connected'] ?? 0) === 1) {
+            $asset['category_suggestion'] = (new ErpMallModelMappingService())->suggestion((int)$this->site_id, $asset);
+        }
         return (new ErpDataVisibilityService())->sanitizeStockDetail($asset);
     }
 
@@ -1450,6 +1462,25 @@ class ErpStockService extends BaseAdminService
             $mallCategory = ErpMallListingService::selection($row['spec_json'] ?? '');
             $row['mall_category_id'] = (int)($mallCategory['value'] ?? 0);
             $row['mall_category_name'] = (string)($mallCategory['label'] ?? '');
+            $mallMaterial = ErpMallListingService::material($row['spec_json'] ?? '');
+            $specMeta = $this->decodeJsonObject($row['spec_json'] ?? '');
+            $row['mall_model'] = trim((string)($row['model'] ?? ''));
+            $row['mall_memory'] = (string)($mallMaterial['memory'] ?? $this->specFieldText($specMeta, ['memory', 'storage', 'capacity'], ['内存', '容量', '存储']));
+            $row['mall_color'] = (string)($mallMaterial['color'] ?? (trim((string)($row['color'] ?? '')) ?: $this->specFieldText($specMeta, ['color'], ['颜色', '色'])));
+            $row['mall_grade_id'] = (int)($mallMaterial['grade']['id'] ?? 0);
+            $row['mall_grade_name'] = (string)($mallMaterial['grade']['name'] ?? $this->specValueText($specMeta['condition_grade'] ?? $specMeta['condition'] ?? $specMeta['grade'] ?? ''));
+            $hasMallBattery = array_key_exists('battery_health', $mallMaterial);
+            $mallBattery = $mallMaterial['battery_health'] ?? $row['battery'] ?? -1;
+            $mallBattery = is_numeric($mallBattery) ? (int)$mallBattery : -1;
+            // ERP 老字段默认 0 不代表实测健康度；只有明确保存的商城 0 才显示为 0。
+            $row['mall_battery_health'] = $mallBattery >= ($hasMallBattery ? 0 : 1) && $mallBattery <= 100 ? $mallBattery : '';
+            $mallWarranty = (int)($mallMaterial['warranty_expire_time'] ?? $row['warranty'] ?? 0);
+            $row['mall_warranty_date'] = $mallWarranty > 0 ? date('Y-m-d', $mallWarranty) : '';
+            $row['mall_label_ids'] = array_values((array)($mallMaterial['label_ids'] ?? []));
+            $row['mall_brand_id'] = (int)($mallMaterial['brand']['id'] ?? 0);
+            $row['mall_brand_name'] = (string)($mallMaterial['brand']['name'] ?? '');
+            // 老照片未经明确登记不能自动变成标准图；新空白表单才默认消费标准图库。
+            $row['mall_image_mode'] = (string)($mallMaterial['image_mode'] ?? ($this->normalizeImageUrls($row['image_urls'] ?? '') === [] ? 'standard' : 'custom'));
             $policy = (array)($row['warehouse_policy'] ?? []);
             $status = (string)($row['listing_status'] ?? 'none');
             $channelState = (array)($channelStateMap[(int)($row['id'] ?? 0)] ?? []);
@@ -1481,8 +1512,8 @@ class ErpStockService extends BaseAdminService
                     && in_array($workspaceMode, ['one_stop', 'photo_price'], true)
                     && in_array($status, ['need_photo', 'need_price', 'need_material', 'ready'], true)) {
                     $row['turnover_action_key'] = 'complete_listing_media_price';
-                    $row['turnover_action_label'] = '拍摄定价并上架';
-                    $row['turnover_action_reason'] = '选择商城分类、确认实拍图和售价后立即上架，详细属性由商城运营核对';
+                    $row['turnover_action_label'] = '上架';
+                    $row['turnover_action_reason'] = '确认商城分类、图片和售价即可上架，商城标签可在当前表单选择';
                 } elseif ($workspaceMode === 'one_stop' && in_array($status, ['need_photo', 'need_price', 'need_material'], true)) {
                     $row['turnover_action_key'] = 'complete_listing';
                     $row['turnover_action_label'] = (int)($workspace['auto_publish'] ?? 0) === 1 ? '一次完善并上架' : '一次完善商品资料';
@@ -1503,7 +1534,7 @@ class ErpStockService extends BaseAdminService
                     $row['turnover_action_reason'] = '图片已完成，等待库位负责人确定销售价格';
                 } elseif ((int)$row['can_handoff_shop'] === 1) {
                     $row['turnover_action_key'] = 'publish_listing';
-                    $row['turnover_action_label'] = $basicFirst ? '上架并交接资料' : '交接商城';
+                    $row['turnover_action_label'] = $basicFirst ? '上架' : '交接商城';
                     $row['turnover_action_reason'] = $basicFirst ? '分类匹配后即可上架可售，细节由商城运营继续完善；缺少分类时明确保留待办' : '图片和售价已完成，由商城资料运营对应分类、规格、标签并发布';
                 } elseif ($status === 'need_material') {
                     $row['turnover_action_key'] = 'complete_listing_material';
@@ -1798,13 +1829,34 @@ class ErpStockService extends BaseAdminService
 
     public function updateFlow(int $id, array $data): void
     {
-        Db::transaction(function () use ($id, $data) { $this->updateFlowInTransaction($id, $data); });
+        $mediaLock = '';
+        $expectedModel = null;
+        if (($data['mall_image_mode'] ?? '') === 'standard' && (int)($data['mall_standard_register'] ?? 0) === 1) {
+            $asset = ErpAsset::where('site_id', $this->site_id)->where('id', $id)->findOrEmpty();
+            if ($asset->isEmpty()) throw new CommonException('设备不存在');
+            $expectedModel = trim((string)$asset->model);
+            $mediaLock = (string)(ErpMallListingService::request((int)$this->site_id, 'lock_media', (int)($data['mall_category_id'] ?? 0), [
+                'model' => $expectedModel, 'memory' => $data['mall_memory'] ?? '', 'color' => $data['mall_color'] ?? '',
+            ])['lock_key'] ?? '');
+            if ($mediaLock === '') throw new CommonException('标准图库登记服务未就绪，请重试或改用自定义实拍');
+        }
+        try {
+            Db::transaction(function () use ($id, $data, $expectedModel) { $this->updateFlowInTransaction($id, $data, $expectedModel); });
+        } finally {
+            if ($mediaLock !== '') {
+                try { ErpMallListingService::request((int)$this->site_id, 'unlock_media', 0, ['lock_key' => $mediaLock]); }
+                catch (\Throwable $e) { Log::error('[ERP 标准图库锁释放失败] asset=' . $id . ' ' . $e->getMessage()); }
+            }
+        }
     }
 
-    private function updateFlowInTransaction(int $id, array $data): void
+    private function updateFlowInTransaction(int $id, array $data, ?string $expectedModel = null): void
     {
         $asset = ErpAsset::where('site_id', $this->site_id)->where('id', $id)->lock(true)->findOrEmpty();
         if ($asset->isEmpty()) throw new CommonException('设备不存在');
+        if ($expectedModel !== null && trim((string)$asset->model) !== $expectedModel) {
+            throw new CommonException('设备型号已变更，请刷新后重新匹配标准图片');
+        }
         if ((string)$asset->status !== ErpDict::ASSET_IN_STOCK) {
             throw new CommonException('只有库存中的设备才能调整流转状态');
         }
@@ -1822,6 +1874,7 @@ class ErpStockService extends BaseAdminService
             ErpListingFormContract::ACTION_MEDIA_PRICE,
             ErpListingFormContract::ACTION_MATERIAL,
         ];
+        $mallMaterial = null;
         if ($workflowAction !== '') {
             if (!in_array($workflowAction, $workflowActions, true)) {
                 throw new CommonException('销售资料处理步骤不正确，请刷新页面后重试');
@@ -1830,6 +1883,7 @@ class ErpStockService extends BaseAdminService
             foreach ([
                 'estimate_sale_price', 'retail_price', 'image_urls', 'video_url',
                 'catalog_product_id', 'spec', 'quality_remark', 'remark_public', 'remark_internal', 'mall_category_id',
+                'mall_memory', 'mall_color', 'mall_grade_id', 'mall_battery_health', 'mall_warranty_date', 'mall_label_ids', 'mall_brand_id', 'mall_image_mode', 'mall_standard_register',
             ] as $field) {
                 if (!in_array($field, $editableFields, true)) $data[$field] = null;
             }
@@ -1839,6 +1893,45 @@ class ErpStockService extends BaseAdminService
                 if (array_key_exists($field, $data) && $data[$field] !== null) {
                     $projectedAsset[$field] = $data[$field];
                 }
+            }
+            if (isset($data['mall_image_mode']) && in_array('mall_image_mode', $editableFields, true)) {
+                $previousMaterial = ErpMallListingService::material($asset->spec_json);
+                if (isset($data['mall_battery_health']) && $data['mall_battery_health'] !== ''
+                    && ((!is_int($data['mall_battery_health']) && !is_string($data['mall_battery_health']))
+                        || !preg_match('/^\d{1,3}$/D', (string)$data['mall_battery_health'])
+                        || (int)$data['mall_battery_health'] > 100)) {
+                    throw new CommonException('电池健康度请填写 0—100 的整数，未知可留空');
+                }
+                if (isset($data['mall_warranty_date']) && (!is_string($data['mall_warranty_date'])
+                    || ($data['mall_warranty_date'] !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/D', $data['mall_warranty_date'])))) {
+                    throw new CommonException('保修到期日格式不正确，请重新选择日期');
+                }
+                if ($data['mall_image_mode'] === 'custom' && ($previousMaterial['image_mode'] ?? '') === 'standard'
+                    && (!isset($data['image_urls']) || $this->normalizeImageUrls($data['image_urls']) === []
+                        || $this->normalizeImageUrls($data['image_urls']) === $this->normalizeImageUrls($asset->image_urls))) {
+                    throw new CommonException('切换自定义实拍后，请上传本台设备照片，不能直接沿用标准图');
+                }
+                $mediaContext = [
+                    'model' => trim((string)$asset->model),
+                    'memory' => $data['mall_memory'] ?? '', 'color' => $data['mall_color'] ?? '',
+                    'grade_id' => $data['mall_grade_id'] ?? 0, 'image_mode' => $data['mall_image_mode'],
+                    'battery_health' => $data['mall_battery_health'] ?? $previousMaterial['battery_health']
+                        ?? ((int)$asset->battery > 0 && (int)$asset->battery <= 100 ? (int)$asset->battery : -1),
+                    'warranty_date' => $data['mall_warranty_date'] ?? $previousMaterial['warranty_expire_time'] ?? $asset->warranty,
+                    'register_standard' => $data['mall_standard_register'] ?? 0,
+                    'images' => $data['image_urls'] ?? $asset->image_urls,
+                    'operator_uid' => (int)$this->uid,
+                ];
+                $hasLabels = isset($data['mall_label_ids']);
+                if ($hasLabels) $mediaContext['label_ids'] = $data['mall_label_ids'];
+                $hasBrand = isset($data['mall_brand_id']);
+                if ($hasBrand) $mediaContext['brand_id'] = $data['mall_brand_id'];
+                $mallMaterial = ErpMallListingService::request((int)$this->site_id, 'resolve_media', (int)$projectedAsset['mall_category_id'], $mediaContext)['material'] ?? null;
+                if (!is_array($mallMaterial)) throw new CommonException('商城图片和等级服务未响应，请刷新后重试');
+                if (!$hasLabels) $mallMaterial += array_intersect_key($previousMaterial, array_flip(['label_ids']));
+                if (!$hasBrand) $mallMaterial += array_intersect_key($previousMaterial, array_flip(['brand']));
+                $data['image_urls'] = implode(',', (array)($mallMaterial['images'] ?? []));
+                $projectedAsset['image_urls'] = $data['image_urls'];
             }
             $missingLabels = [];
             foreach (ErpListingFormContract::requiredFields($workflowAction, $workspaceRules) as $field) {
@@ -1877,6 +1970,18 @@ class ErpStockService extends BaseAdminService
                 $specMeta['_mall_listing']['category'] = $selection;
                 $save['spec_json'] = json_encode($specMeta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
                 $changes[] = '商城分类';
+            }
+        }
+        if ($mallMaterial !== null) {
+            $specMeta = $this->decodeJsonObject($save['spec_json'] ?? $asset->spec_json);
+            $materialSnapshot = array_intersect_key($mallMaterial, array_flip(['model', 'memory', 'color', 'grade', 'battery_health', 'warranty_expire_time', 'label_ids', 'brand', 'image_mode', 'standard_key']));
+            if (($specMeta['_mall_listing']['material'] ?? []) !== $materialSnapshot) {
+                if (in_array($currentListingStatus, $terminalListingStatuses, true)) {
+                    throw new CommonException('设备已经交接商城，修改商品等级、规格、标签、电池、保修或图片请到商城处理，避免两端资料不一致');
+                }
+                $specMeta['_mall_listing']['material'] = $materialSnapshot;
+                $save['spec_json'] = json_encode($specMeta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                $changes[] = '商城规格、等级、标签及图片方式';
             }
         }
         if ((int)($data['publish_basic'] ?? 0) === 1) {
@@ -2184,17 +2289,38 @@ class ErpStockService extends BaseAdminService
             $memory = trim((string)($channelMapping['specs']['memory'] ?? $memory));
             $conditionGrade = trim((string)($channelMapping['specs']['condition_grade'] ?? $conditionGrade));
         }
+        // 本台显式选择高于站点旧映射；不改写回收原始质检或 ERP 采购成本。
+        $mallMaterial = ErpMallListingService::material($specMeta);
+        if ($mallMaterial !== []) {
+            if (($mallMaterial['image_mode'] ?? '') === 'standard') {
+                $verified = ErpMallListingService::request((int)$this->site_id, 'resolve_media', (int)($selectedCategory['value'] ?? 0), [
+                    'model' => trim((string)$asset->model), 'memory' => $mallMaterial['memory'] ?? '',
+                    'color' => $mallMaterial['color'] ?? '', 'grade_id' => $mallMaterial['grade']['id'] ?? 0,
+                    'image_mode' => 'standard', 'register_standard' => 0,
+                ] + array_intersect_key($mallMaterial, array_flip(['label_ids'])))['material'] ?? [];
+                if (($verified['standard_key'] ?? '') !== ($mallMaterial['standard_key'] ?? '')
+                    || $this->normalizeImageUrls($verified['images'] ?? []) !== $images) {
+                    throw new CommonException('型号、颜色或标准图片已变更，请重新打开拍摄定价表单匹配后再上架');
+                }
+            }
+            $memory = (string)($mallMaterial['memory'] ?? $memory);
+            $assetColor = (string)($mallMaterial['color'] ?? $assetColor);
+            if (array_key_exists('grade', $mallMaterial)) $conditionGrade = (string)($mallMaterial['grade']['name'] ?? '');
+        }
+        $publishColor = array_key_exists('color', $mallMaterial)
+            ? (string)$mallMaterial['color'] : ($assetColor !== '' ? $assetColor : $specColor);
         $payload = [
             'erp_asset_id' => $id,
             'device_id' => (int)((string)$asset->source_plugin === 'hsx_recycle' ? $asset->source_id : 0),
             'asset_no' => (string)$asset->asset_no,
             'imei' => (string)$asset->imei,
             'model_name' => (string)$asset->model,
-            'brand_name' => $this->specValueText($specMeta['brand'] ?? ''),
+            'brand_name' => (string)($mallMaterial['brand']['name'] ?? $this->specValueText($specMeta['brand'] ?? '')),
             'memory' => $memory,
-            'color' => $assetColor !== '' ? $assetColor : $specColor,
-            'battery_health' => $asset->battery === null || $asset->battery === '' ? -1 : (int)$asset->battery,
-            'warranty_expire_time' => (int)$asset->warranty,
+            'color' => $publishColor,
+            'battery_health' => (int)($mallMaterial['battery_health']
+                ?? ((int)$asset->battery > 0 && (int)$asset->battery <= 100 ? (int)$asset->battery : -1)),
+            'warranty_expire_time' => (int)($mallMaterial['warranty_expire_time'] ?? $asset->warranty),
             'condition_grade' => $conditionGrade,
             'images' => $images,
             'video_url' => trim((string)($asset->video_url ?? '')),
@@ -2219,6 +2345,9 @@ class ErpStockService extends BaseAdminService
             'channel_mapping' => $channelMapping,
             'erp_context' => $erpContext,
         ];
+        if ($mallMaterial !== []) $payload['listing_material'] = $mallMaterial;
+        if (array_key_exists('label_ids', $mallMaterial)) $payload['label_ids'] = $mallMaterial['label_ids'];
+        if (array_key_exists('brand', $mallMaterial)) $payload['brand_id'] = (int)($mallMaterial['brand']['id'] ?? 0);
 
         $success = null;
         $pending = null;
@@ -2297,9 +2426,19 @@ class ErpStockService extends BaseAdminService
             'mapping_snapshot' => $channelMapping,
             'payload' => $payload,
         ]);
+        $modelMapping = ['status' => 'skipped'];
+        if (($success['status'] ?? '') === 'published' && (int)($selectedCategory['value'] ?? 0) > 0) {
+            try {
+                $modelMapping = (new ErpMallModelMappingService())->recordPublished((int)$this->site_id, $asset->toArray(), $selectedCategory, $mallMaterial, (int)$success['goods_id']);
+            } catch (\Throwable $e) {
+                $modelMapping = ['status' => 'warning', 'message' => '商品已上架，但同型号分类对应尚未保存：' . $e->getMessage()];
+            }
+        }
         return ['ok' => true, 'status' => (string)$success['status'], 'goods_id' => (int)$success['goods_id'],
             'material_pending' => (int)($success['material_pending'] ?? 0),
-            'message' => (string)($success['message'] ?? '已直接上架商城')];
+            'category_mapping' => $modelMapping,
+            'message' => (string)($success['message'] ?? '已直接上架商城')
+                . (in_array($modelMapping['status'], ['conflict', 'warning'], true) ? '；' . $modelMapping['message'] : '')];
     }
 
     /**

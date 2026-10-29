@@ -6,7 +6,7 @@
             </view>
             <view class="listing-scanner__copy">
                 <view class="listing-scanner__title-row">
-                    <text class="listing-scanner__title">扫码拍摄定价</text>
+                    <text class="listing-scanner__title">扫码处理设备</text>
                     <text class="listing-scanner__badge">我的任务</text>
                 </view>
                 <text class="listing-scanner__desc">扫描 IMEI / SN，直接打开分配给我的处理表单</text>

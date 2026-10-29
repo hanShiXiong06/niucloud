@@ -138,7 +138,7 @@
                         <text>{{ diyComponent.goods.condition_grade }}</text>
                         <u-icon name="info-circle" size="13" color="#64748b"></u-icon>
                     </view>
-                    <view class="device-tag device-imei" v-if="diyComponent.imeiShow !== false && imeiVal">IMEI: {{ imeiVal }}</view>
+                    <view class="device-tag device-imei" v-if="diyComponent.imeiShow !== false && imeiVal">{{ imeiTailOnly ? 'imei' : 'IMEI' }}: {{ imeiVal }}</view>
                 </view>
                 <view class="flex justify-between items-start mt-[24rpx]">
                     <view class="text-[24rpx] leading-[34rpx]" v-if="diyComponent.market_price && parseFloat(diyComponent.market_price) && saleInfo.includes('underlined_price')"  :style="{'color': diyComponent.goodsInfo.saleInfoColor}">
@@ -205,9 +205,13 @@ import useDiyStore from '@/app/stores/diy';
 import useSystemStore from '@/stores/system'
 import { useGoods } from '@/addon/phone_shop/hooks/useGoods'
 import useGoodsDetailStore from '@/addon/phone_shop/stores/goodsDetail';
+import { useGoodsDisplayConfig } from '@/addon/phone_shop/hooks/useGoodsDisplayConfig'
+import { formatGoodsImei } from '@/addon/phone_shop/utils/imei-display'
 
 const props = defineProps(['component', 'index', 'value', 'global']);
 const diyStore = useDiyStore();
+const { imeiTailOnly, ready: displayReady, ensure: ensureDisplayConfig } = useGoodsDisplayConfig()
+onMounted(() => { if (diyStore.mode !== 'decorate') void ensureDisplayConfig() })
 const emits = defineEmits(['loadingFn', 'update:componentIsShow']); //商品数据加载完成之后触发
 const topNav = ref(false);
 const switchMedia: any = ref('img');
@@ -243,10 +247,11 @@ const diyComponent = computed(() => {
 // IMEI(二手机一机一码)= 默认 SKU 的 sku_no。详情接口把默认 sku 放在顶层(同 price/market_price),
 // 故优先取 diyComponent.sku_no;再兜底 goods 下结构。
 const imeiVal = computed(() => {
+    if (!displayReady.value) return ''
     const c: any = diyComponent.value || {};
     const g: any = c.goods || {};
     const sku: any = g.goodsSku || g.sku || (Array.isArray(g.sku_list) ? g.sku_list[0] : null);
-    return c.sku_no || g.sku_no || (sku && sku.sku_no) || '';
+    return formatGoodsImei(c.sku_no || g.sku_no || (sku && sku.sku_no) || '', imeiTailOnly.value);
 })
 
 // 商品图片可能来自 Excel、外部平台或手工录入，统一走公共图片地址处理。

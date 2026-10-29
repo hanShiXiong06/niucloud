@@ -1,0 +1,4 @@
+{
+  "root": "addon/hsx_boyuan",
+  "pages": [{"path":"pages/workbench/index","style":{"navigationBarTitleText":"博远对接"},"needLogin":true}]
+}

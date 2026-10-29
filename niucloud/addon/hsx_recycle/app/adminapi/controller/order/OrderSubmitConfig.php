@@ -21,4 +21,9 @@ class OrderSubmitConfig extends BaseAdminController
         (new OrderSubmitConfigService())->setConfig($this->request->post());
         return success('EDIT_SUCCESS');
     }
+
+    public function quoteOptions()
+    {
+        return success((new OrderSubmitConfigService())->quoteOptions());
+    }
 }

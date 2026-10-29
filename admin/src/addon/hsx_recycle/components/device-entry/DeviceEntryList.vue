@@ -47,11 +47,23 @@
             </template>
         </el-alert>
 
+        <el-alert v-if="quoteError" type="warning" show-icon :closable="false" class="quote-load-error">
+            <template #title>
+                报价员加载失败，原选择已保留。
+                <el-button link type="primary" size="small" @click="loadQuoteUsers">重新加载</el-button>
+            </template>
+        </el-alert>
+
+        <div class="device-entry__table-scroll" tabindex="0" aria-label="设备清单，窄屏可左右滚动">
+        <div class="device-entry__table">
         <div class="device-table-head">
             <span></span>
             <span><span class="text-danger">*</span> IMEI / SN（必填）</span>
             <span>标准型号</span>
             <span>预估价</span>
+            <el-tooltip :content="assignToQuoteUser ? '选填。选定后由此人负责后续定价；留空按原流程分配。' : '选填。仅记录谁给客户报的价，后续定价仍按原流程分配。'" placement="top">
+                <span class="quote-column-title">报价员 <el-icon><QuestionFilled /></el-icon></span>
+            </el-tooltip>
             <span>买家图</span>
             <span>状态</span>
             <span class="is-right">操作</span>
@@ -66,6 +78,10 @@
                 <DeviceEntryCard
                     :device="row"
                     :index="index"
+                    :quote-users="quoteUsers"
+                    :quote-loading="quoteLoading"
+                    :quote-error="quoteError"
+                    :assign-to-quote-user="assignToQuoteUser"
                     :can-remove="devices.length > 1"
                     @save="saveDeviceRow(row, index)"
                     @update="updateDeviceRow(row)"
@@ -74,6 +90,7 @@
                     @configure-template="openTemplateConfig(row)"
                 >
                     <template #model>
+                        <el-tooltip :content="row.model || ''" :disabled="!row.model" :show-after="400" placement="top">
                         <div class="model-picker-wrap">
                             <div class="model-picker">
                                 <el-cascader
@@ -115,6 +132,7 @@
                                 <el-button link type="primary" size="small" :loading="row.model_alias_learning" @click="learnLocalModelAliases(row)">重试关联</el-button>
                             </div>
                         </div>
+                        </el-tooltip>
                     </template>
                     <template v-if="row.device_readings" #summary-actions>
                         <el-tooltip v-if="row.device_readings.local?.raw?.source === 'usb_mtp'"
@@ -126,6 +144,8 @@
                     </template>
                 </DeviceEntryCard>
             </div>
+        </div>
+        </div>
         </div>
 
         <CheckSummaryDialog
@@ -159,7 +179,7 @@
 import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { CascaderInstance } from 'element-plus'
-import { Plus, Connection, Download, Link } from '@element-plus/icons-vue'
+import { Plus, Connection, Download, Link, QuestionFilled } from '@element-plus/icons-vue'
 import { addOrderDevice, updateOrderDevice, deleteOrderDevice } from '@/addon/hsx_recycle/api/recycle_order'
 import {
     bindRecycleDeviceModelAlias,
@@ -181,6 +201,23 @@ import { validateSummaryRequired } from './summaryUtil'
 import { normalizeDevice, buildUpdatePayload } from './deviceUtil'
 import { deviceImeiError } from './imeiValidation'
 import type { CheckSummaryField, DeviceEntryRow } from './types'
+import { getQuoteUserOptions } from '@/addon/hsx_recycle/api/order_config'
+
+const quoteUsers = ref<Array<{ uid: number; name: string; disabled?: boolean }>>([])
+const quoteLoading = ref(false)
+const quoteError = ref(false)
+const assignToQuoteUser = ref(false)
+const loadQuoteUsers = async () => {
+    quoteLoading.value = true
+    quoteError.value = false
+    try {
+        const res: any = await getQuoteUserOptions()
+        quoteUsers.value = res.data?.users || []
+        assignToQuoteUser.value = Boolean(res.data?.assign_to_quote_user)
+    } catch { quoteError.value = true }
+    finally { quoteLoading.value = false }
+}
+onMounted(loadQuoteUsers)
 
 const props = withDefaults(defineProps<{
     /** 设备行数组（就地修改，建议父组件以响应式数组传入） */
@@ -873,7 +910,18 @@ defineExpose({ savedDeviceCount, addDeviceRow, stopAuto })
 <style lang="scss" scoped>
 .device-entry {
     width: 100%;
+    min-width: 0;
+    --device-entry-columns: 24px minmax(190px, 1fr) minmax(150px, 220px) 100px 120px 52px 48px 84px;
 }
+
+.device-entry__table-scroll { width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+.device-entry__table-scroll::-webkit-scrollbar { height: 8px; }
+.device-entry__table-scroll::-webkit-scrollbar-track { background: var(--el-fill-color-lighter); }
+.device-entry__table-scroll::-webkit-scrollbar-thumb { border-radius: 4px; background: var(--el-border-color-darker); }
+.device-entry__table { min-width: 850px; }
+.quote-load-error { margin-bottom: 8px; }
+.quote-column-title { display: inline-flex; align-items: center; gap: 4px; cursor: help; }
+.quote-column-title .el-icon { color: var(--el-text-color-placeholder); }
 
 .device-entry__head {
     display: flex;
@@ -937,9 +985,9 @@ defineExpose({ savedDeviceCount, addDeviceRow, stopAuto })
 
 .device-table-head {
     display: grid;
-    grid-template-columns: 30px minmax(150px, 0.8fr) minmax(200px, 1.5fr) 100px 82px 64px 100px;
+    grid-template-columns: var(--device-entry-columns);
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     min-height: 36px;
     padding: 0 10px;
     border: 1px solid var(--el-border-color-lighter);
@@ -948,7 +996,7 @@ defineExpose({ savedDeviceCount, addDeviceRow, stopAuto })
     font-size: 12px;
 }
 
-.device-table-head .is-right { text-align: right; }
+.device-table-head .is-right { position: sticky; right: 0; z-index: 2; height: 100%; display: flex; align-items: center; justify-content: flex-end; background: var(--el-fill-color-light); box-shadow: -8px 0 8px -8px var(--el-border-color); }
 
 .model-picker {
     display: flex;
@@ -1007,6 +1055,8 @@ defineExpose({ savedDeviceCount, addDeviceRow, stopAuto })
     min-width: 0;
 }
 
+.model-cascader :deep(.el-input__inner) { overflow: hidden; text-overflow: ellipsis; }
+
 .model-picker .el-input {
     flex: 1 1 auto;
     min-width: 0;
@@ -1014,7 +1064,5 @@ defineExpose({ savedDeviceCount, addDeviceRow, stopAuto })
 
 @media (max-width: 768px) {
     .device-entry__actions { justify-content: flex-start; }
-    .device-table-head { display: none; }
-    .device-list { gap: 8px; }
 }
 </style>
