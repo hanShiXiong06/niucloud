@@ -224,8 +224,13 @@
 						// #ifndef H5
 						"navigationStyle": "custom",
 						// #endif
-						"navigationBarTitleText": "线下订单工作台"
+                        "navigationBarTitleText": "商城订单"
 					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/order/detail",
+					"style": { "navigationBarTitleText": "订单详情" },
 					"needLogin": true
 				},
 				{
@@ -705,6 +710,11 @@
 				{
 					"path": "pages/stock/detail",
 					"style": { "navigationBarTitleText": "设备档案" },
+					"needLogin": true
+				},
+				{
+					"path": "pages/stock/mall-category",
+					"style": { "navigationBarTitleText": "选择商城分类", "disableScroll": true },
 					"needLogin": true
 				},
 				{

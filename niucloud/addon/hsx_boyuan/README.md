@@ -4,7 +4,11 @@
 
 本插件连接已经确认的 ERP 业务事实，不代替博远的库存和记账服务。模拟、测试、正式共用事件接收、校验、任务、回执核验、异常补偿与手机工作台。
 
-当前已提供本地实现和隔离验收环境。**没有取得博远实际接口文档、测试授权或正式授权，因此没有完成博远真实联调或生产验收。** 当前 HTTP 适配器实现的是双方待确认的 1.0 建议契约，不宣称博远现有接口天然支持该格式。实际协议如有差异，仅在插件网关适配，不让页面猜返回值。
+已按博远《开放平台API开发文档 v1.5.3》实现基础资料适配，并使用授权UAT完成实际只读拉取。结果只保存在本机隔离库。**尚未部署业务站点；博远新的单据接口仍在开发，没有完成真实单据、财务或生产验收。** 原模拟/自定义桥接契约继续用于离线测试，不要求博远照此开发。
+
+基础资料配置、同步方向、UAT结果及现存边界见 [基础资料同步](docs/BASIC_DATA.md)。
+
+1.1.1升级手机工作台：资料归属标识、四类关联管理、手机号候选选择、批量处理已有任务、自动更新逐笔结果、提醒状态及未保存修改保护。当前批量入口是已有任务的人工继续/核验，不更改原有事件接收策略，也不等于已实现全站旧数据停用或新的博远单据接口。
 
 详细参数与回执见 [连接适配契约](docs/CONTRACT.md)，本轮检查证据与验收步骤见 [本地隔离验收记录](docs/LOCAL_ACCEPTANCE.md)。
 
@@ -45,6 +49,10 @@
 
 新增五张插件表：任务 `hsx_boyuan_task`、资料对应 `hsx_boyuan_mapping`、外部单及行关联 `hsx_boyuan_binding`、操作记录 `hsx_boyuan_log`、隔离模拟记录 `hsx_boyuan_mock_record`。均带实际系统表前缀。连接配置及运行心跳复用现有 `sys_config`。**不新增核心框架表或改写历史业务。**
 
+1.1.0另增两张插件表：`hsx_boyuan_reference` 和 `hsx_boyuan_reference_sync`，分别保存脱敏档案与分页任务。总计七张。插件安装/升级钩子幂等执行 `sql/references.sql`；正常版本升级入口 `app/upgrade/v110/Upgrade.php` 同时刷新权限菜单。既有安装必须先执行插件升级，不能只热覆盖代码。新增权限仍需由管理员授予员工，不自动提权。
+
+1.1.1不新增表或字段。`app/upgrade/v111/Upgrade.php` 仅刷新权限菜单，新增“批量处理同步任务”“查看批次结果”和“按手机号匹配人员”权限，仍需管理员按需授权；批量处理员工需同时有批次结果查看权。后端与手机源码镜像需一起更新并重新编译，不改核心框架。
+
 手机端把 `site-uniapp` 内源码同步到移动管理端对应插件目录，并把该目录的 `pages.json` 合并进应用 `subPackages`。当前仓库已注册页面 `/addon/hsx_boyuan/pages/workbench/index`。发布需重新编译手机管理端，不应只上传后端后就声称页面已经上线。
 
 `app/dict/adminapp` 注册手机入口；`app/dict/menu/site.php` 注册权限节点，PC 不新增一套桌面业务页面。异常员工需获相应权限。API 未挂原始请求体审计中间件，防止凭据被记入通用日志；插件自身记录脱敏操作审计。
@@ -72,6 +80,8 @@
 ```bash
 php -d error_reporting=22527 niucloud/addon/hsx_boyuan/tests/unit.php
 php -d error_reporting=22527 -d disable_functions=curl_exec,curl_multi_exec,fsockopen,stream_socket_client niucloud/addon/hsx_boyuan/tests/integration.php --isolated-local-mysql
+php -d error_reporting=22527 -d disable_functions=curl_exec,curl_multi_exec,fsockopen,stream_socket_client niucloud/addon/hsx_boyuan/tests/references.php --isolated-local-mysql
+php -d error_reporting=22527 -d disable_functions=curl_exec,curl_multi_exec,fsockopen,stream_socket_client niucloud/addon/hsx_boyuan/tests/ux.php --isolated-local-mysql
 ```
 
 数据库测试只允许 localhost MySQL，创建随机 `hsx_boyuan_test_` 库，只复制必要表结构，不复制客户数据，正常及断言失败都会清理该测试库。启动中断仍需按准确库名核对清理，不能批量删除其他数据库。测试读取本机项目配置，不输出数据库密码。
@@ -85,6 +95,8 @@ node niucloud/addon/hsx_boyuan/tests/acceptance/server.mjs
 ```
 
 打开 `http://127.0.0.1:5199/`。界面使用实际手机业务页面及真实插件控制器、任务和数据库；仅将原生 UI 基础控件适配为浏览器控件。它不是生产鉴权或小程序真机验收的替代。内置测试采购使用真实 ERP 服务，后台独立进程异步处理。所有 HTTP 外调函数禁用，仅监听本机。演示界面不要填真实授权。
+
+UAT档案验收为单独受限模式：`HSX_BOYUAN_ACCEPTANCE_UAT_READONLY=1`。只接受用户确认的UAT地址、`openapi_v153`协议、业务接收关闭和投递暂停。禁止创建模拟业务单据；仅允许白名单基础资料读取。不要把这种隔离验收代理当作正式登录认证。结束后可使用 `tests/acceptance/cleanup.php --drop-isolated-database --state-file=私有状态文件` 清理对应的随机测试库，不能批量删库。
 
 浏览器回归使用 Playwright 和本机 Chrome，`BOYUAN_PLAYWRIGHT_MODULE` 可指向已有 Playwright 模块，未设置时从环境模块查找：
 

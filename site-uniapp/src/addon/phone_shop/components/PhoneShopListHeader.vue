@@ -61,6 +61,7 @@
                 <u-icon name="reload" color="#64748b" size="17" />
             </view>
         </view>
+        <slot name="after" />
     </view>
 </template>
 

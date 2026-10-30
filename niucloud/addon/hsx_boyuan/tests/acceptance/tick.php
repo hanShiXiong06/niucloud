@@ -5,4 +5,5 @@ $path=getenv('HSX_BOYUAN_ACCEPTANCE_STATE'); if (!$path || !is_file($path)) exit
 $state=json_decode(file_get_contents($path),true);
 require dirname(__DIR__).'/bootstrap.php'; require dirname(__DIR__).'/Fixtures.php';
 [$app,$pdo,$schema,$site]=boyuanBoot($state['schema']);
-\addon\hsx_boyuan\tests\Fixtures::tick($site);
+if(getenv('HSX_BOYUAN_ACCEPTANCE_UAT_READONLY')==='1') (new \addon\hsx_boyuan\app\service\ReferenceService())->tick($site);
+else \addon\hsx_boyuan\tests\Fixtures::tick($site);

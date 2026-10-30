@@ -27,6 +27,9 @@ output/
 .DS_Store
 /.pnpm-store/
 *.md
+*/deliverables/
+deliverables/*
+*/*.mjs
 
 # 备份归档（不应进入版本库）
 归档.zip

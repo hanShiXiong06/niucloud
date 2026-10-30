@@ -120,9 +120,7 @@ class OrderService extends BaseAdminService
         if (!empty($where['payment_mode'])) {
             $search_model->where('order.payment_mode', '=', (string)$where['payment_mode']);
         }
-        if ((int)($where['offline_workflow'] ?? 0) === 1) {
-            $search_model->whereIn('order.payment_mode', ['offline_pending', 'offline_cash', 'offline_credit']);
-        }
+        $this->applyOrderChannelFilter($search_model, $where);
         $offlineKeyword = trim((string)($where['offline_keyword'] ?? ''));
         if ($offlineKeyword !== '') {
             $search_model->where([
@@ -157,6 +155,27 @@ class OrderService extends BaseAdminService
         $list['data'] = $this->getOrderRelateSourceInfo($list['data']);
         $list['data'] = $this->appendOfflineRecords($list['data']);
         return $list;
+    }
+
+    /** 线上/线下是支付业务分组，不是 H5、小程序等 order_from 渠道。 */
+    private function applyOrderChannelFilter($query, array $where): void
+    {
+        $channel = trim((string)($where['order_channel'] ?? ''));
+        if (!in_array($channel, ['', 'all', 'online', 'offline'], true)) {
+            throw new AdminException('订单类型筛选不正确，请重新选择');
+        }
+        // 保留旧 PC 线下工作台；明确选择新分组时不被旧参数覆盖。
+        if ($channel === '' && (int)($where['offline_workflow'] ?? 0) === 1) $channel = 'offline';
+        $offlineModes = ['offline_pending', 'offline_cash', 'offline_credit'];
+        if ($channel === 'offline') {
+            $query->whereIn('order.payment_mode', $offlineModes);
+        } elseif ($channel === 'online') {
+            // SQL 的 NOT IN 不包含 NULL，历史未记录支付模式的普通线上订单也需保留。
+            // OR NULL 必须在独立条件组内，不能越过外层站点、状态等筛选。
+            $query->where(static function ($group) use ($offlineModes): void {
+                $group->whereNotIn('order.payment_mode', $offlineModes)->whereNull('order.payment_mode', 'OR');
+            });
+        }
     }
 
     /**

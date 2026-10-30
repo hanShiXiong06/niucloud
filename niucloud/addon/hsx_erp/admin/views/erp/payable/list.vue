@@ -5,6 +5,7 @@
                 <template #title>应付款</template>
                 <template #subtitle>统一处理采购、整备、销售退货与售后补差等支出；按业务来源和设备逐笔核对。</template>
                 <template #extra><div class="flex gap-2 flex-wrap">
+                        <el-button :icon="Search" @click="payeeLookupVisible = true">查询客户收款码</el-button>
                         <el-button :icon="Tickets" @click="openSettlement">结算明细</el-button>
                         <el-button :icon="Tickets" @click="openLedger">账目流水</el-button>
                         <el-button :icon="Refresh" :loading="table.loading" @click="loadList">刷新</el-button>
@@ -436,6 +437,8 @@
             </div>
         </HsxDrawer>
 
+        <ErpPayeeLookup v-model="payeeLookupVisible" />
+
         <HsxDrawer class="erp-desktop-overlay" v-model="settle.visible" title="结算记录" size="72%" :destroy-on-close="false">
             <div class="settlement-intro">
                 <div><b>每笔钱怎么结的</b><span>先看往来单位、金额和结算方式；设备、账款单号、资金流水和凭证按需展开。</span></div>
@@ -490,9 +493,11 @@ import ErpSettlementCards from '@/addon/hsx_erp/components/ErpSettlementCards.vu
 import ErpFinanceSourceMeta from '@/addon/hsx_erp/components/ErpFinanceSourceMeta.vue'
 import ErpCopyText from '@/addon/hsx_erp/components/ErpCopyText.vue'
 import ErpPartySelect from '@/addon/hsx_erp/components/ErpPartySelect.vue'
+import ErpPayeeLookup from '@/addon/hsx_erp/components/ErpPayeeLookup.vue'
 import ErpOverflowText from '@/addon/hsx_erp/components/ErpOverflowText.vue'
 import { img } from '@/utils/common'
 const hsxFeedback = useFeedback()
+const payeeLookupVisible = ref(false)
 
 const route = useRoute()
 

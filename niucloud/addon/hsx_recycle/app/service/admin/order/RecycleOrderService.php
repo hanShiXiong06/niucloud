@@ -15,6 +15,7 @@ use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderNotifyServi
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderService;
 use addon\hsx_recycle\app\service\core\recycle_order\RecycleOrderProgressService;
 use addon\hsx_recycle\app\service\core\recycle_order\DeviceEntryImei;
+use app\model\member\Member;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -283,6 +284,18 @@ class RecycleOrderService extends BaseAdminService
     public function create(array $data): array
     {
         DeviceEntryImei::assertDevices(is_array($data['devices'] ?? null) ? $data['devices'] : []);
+        $memberId = (int)($data['member_id'] ?? 0);
+        if ($memberId > 0) {
+            // 不能信任前端客户检索结果；Member 模型同时过滤 delete_time 软删除记录。
+            $member = Member::where([
+                ['member_id', '=', $memberId],
+                ['site_id', '=', $this->site_id],
+                ['is_del', '=', 0],
+            ])->field('member_id')->findOrEmpty();
+            if ($member->isEmpty()) {
+                throw new CommonException('所选客户不存在或已删除，请重新选择本站客户');
+            }
+        }
         $data['site_id'] = $this->site_id;
         // 后台入口始终是员工代下单，不接受请求参数伪装为客户自主下单参与计奖。
         $data['order_source'] = 'agent';

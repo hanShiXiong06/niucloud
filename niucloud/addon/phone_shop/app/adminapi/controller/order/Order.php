@@ -46,6 +46,7 @@ class Order extends BaseAdminController
             ['activity_type', ''],
             ['keyword', ''],
             ['payment_mode', ''],
+            ['order_channel', ''],
             ['offline_workflow', 0],
             ['offline_keyword', ''],
             ['order_id', 0],

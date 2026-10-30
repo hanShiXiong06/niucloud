@@ -128,7 +128,7 @@ try {
     Db::name('hsx_boyuan_task')->where('id',$pausedFinance)->update(['next_at'=>0]);
     check(!$service->process($site,$pausedFinance) && Db::name('hsx_boyuan_task')->where('id',$pausedFinance)->value('status')==='pending','disabled finance holds queued tasks without sending');
     $fresh=$configService->get($site);
-    $testConfig=$configService->save($site,1,['revision'=>$fresh['revision'],'mode'=>'test','enabled'=>false,'paused'=>true,'profile'=>['endpoint'=>'https://api.vendor.example','account_id'=>'SAMPLE_TEST_ACCOUNT','token'=>'FAKE_SAMPLE_TOKEN','contract_confirmed'=>true]]);
+    $testConfig=$configService->save($site,1,['revision'=>$fresh['revision'],'mode'=>'test','enabled'=>false,'paused'=>true,'profile'=>['protocol'=>'bridge_v1','endpoint'=>'https://api.vendor.example','account_id'=>'SAMPLE_TEST_ACCOUNT','token'=>'FAKE_SAMPLE_TOKEN','contract_confirmed'=>true]]);
     check(!str_contains(Contract::json($testConfig),'FAKE_SAMPLE_TOKEN'),'credentials not exposed');
     check($testConfig['profiles']['test']['connection_key']!==$connection,'environment connections isolated');
     check(!$service->process($site,$partial),'mock task cannot run in test connection');
@@ -143,7 +143,7 @@ try {
     check($verified['verified'] && $probe->writes===0,'account preflight only performs GET');
     $fresh=$configService->get($site);
     try {$configService->save($site,1,['revision'=>$fresh['revision'],'enabled'=>true,'paused'=>false,'confirm_account'=>'WRONG_ACCOUNT']);check(false,'typed account confirmation');}catch(Problem $e){check($e->reason==='ACCOUNT_CONFIRM_REQUIRED','real mode needs exact account confirmation');}
-    $prod=$configService->save($site,1,['revision'=>$fresh['revision'],'mode'=>'production','enabled'=>false,'paused'=>true,'profile'=>['endpoint'=>'https://api.vendor.example','account_id'=>'SAMPLE_PRODUCTION_ACCOUNT','token'=>'FAKE_SAMPLE_TOKEN','contract_confirmed'=>true]]);
+    $prod=$configService->save($site,1,['revision'=>$fresh['revision'],'mode'=>'production','enabled'=>false,'paused'=>true,'profile'=>['protocol'=>'bridge_v1','endpoint'=>'https://api.vendor.example','account_id'=>'SAMPLE_PRODUCTION_ACCOUNT','token'=>'FAKE_SAMPLE_TOKEN','contract_confirmed'=>true]]);
     $probe->account='SAMPLE_PRODUCTION_ACCOUNT'; $configService->probe($site,1,$probe);
     try {$configService->save($site,1,['revision'=>$prod['revision'],'enabled'=>true,'paused'=>false,'confirm_account'=>'SAMPLE_PRODUCTION_ACCOUNT']);check(false,'production acceptance gate');}catch(Problem $e){check($e->reason==='ACCEPTANCE_REQUIRED','production needs real test acceptance reference');}
     echo Contract::json(['passed'=>true,'checks'=>$checks,'database'=>'isolated random local schema','remote_calls'=>0,'production_modified'=>false])."\n";

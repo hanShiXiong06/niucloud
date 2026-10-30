@@ -8,6 +8,8 @@ use think\facade\Route;
 
 Route::group('erp', function () {
     Route::get('dashboard', 'addon\hsx_erp\app\adminapi\controller\ErpFinance@dashboard');
+    Route::get('finance/payee/customers', 'addon\hsx_erp\app\adminapi\controller\ErpPayeeLookup@customers');
+    Route::get('finance/payee/customer/:member_id', 'addon\hsx_erp\app\adminapi\controller\ErpPayeeLookup@customer');
     Route::get('goods/meta', 'addon\hsx_erp\app\adminapi\controller\ErpGoodsMeta@meta');
     Route::get('goods/catalog/lists', 'addon\hsx_erp\app\adminapi\controller\ErpGoodsCatalog@lists');
     Route::get('goods/catalog/summary', 'addon\hsx_erp\app\adminapi\controller\ErpGoodsCatalog@summary');

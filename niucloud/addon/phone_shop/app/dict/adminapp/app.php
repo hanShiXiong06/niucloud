@@ -21,10 +21,10 @@ return [
         'icon'     => '/addon/phone_shop/site-app/goods.png'
     ],
      [
-        'name'     => '线下订单',
-        'key'      => 'phone_shop_offline_order',
+        'name'     => '订单',
+        'key'      => 'phone_shop_order_list',
         'group'    => 'phone_shop_goods',
-        'menu_key' => 'shop_order_offline_pending',
+        'menu_key' => 'shop_order_list',
         'sort'     => 3,
         'page'     => '/addon/phone_shop/pages/order/list',
         'icon'     => '/addon/phone_shop/site-app/goods.png'

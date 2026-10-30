@@ -1,178 +1,35 @@
 <template>
     <view class="order-card">
-        <view class="card-head">
-            <view class="status-wrap">
-                <view class="status-dot" :class="`status-dot--${ statusTone }`" />
-                <text class="status-text">{{ statusLabel }}</text>
-                <text v-if="order.delivery_type_name" class="delivery-tag">{{ order.delivery_type_name }}</text>
-            </view>
-            <text class="order-time">{{ formatTime(order.create_time) }}</text>
+        <view class="card-head" @click="emit('detail', order)">
+            <view class="status-wrap"><text class="status-text">{{ orderStatusLabel(order) }}</text><text class="order-tag">{{ paymentLabel(order) }}</text></view>
+            <text class="order-time">{{ formatOrderTime(order.create_time).slice(5) }}</text>
         </view>
-
         <view class="customer-row">
-            <view class="customer-avatar"><u-icon name="account" color="#2563eb" size="19" /></view>
-            <view class="customer-info">
-                <text class="customer-name">{{ customerName }}</text>
-                <text class="customer-mobile">{{ mobile || '未留联系电话' }}</text>
-            </view>
-            <view v-if="mobile" class="call-button" @click.stop="callCustomer"><u-icon name="phone" color="#16a34a" size="19" /></view>
+            <view class="customer-main"><text class="customer-name">{{ order.member?.nickname || order.taker_name || '商城客户' }}</text><text class="customer-mobile">{{ mobile || '未留联系电话' }}</text></view>
+            <view v-if="mobile" class="call-button" @click.stop="callCustomer"><u-icon name="phone" color="var(--primary-color)" size="20" /></view>
         </view>
-
-        <view class="goods-preview" @click="emit('toggle', order)">
-            <image v-if="cover(firstGoods)" class="goods-cover" :src="imageUrl(cover(firstGoods))" mode="aspectFill" />
-            <view v-else class="goods-cover goods-cover--empty"><u-icon name="photo" color="#cbd5e1" size="26" /></view>
-            <view class="goods-info">
-                <text class="goods-name">{{ firstGoods?.goods_name || '订单商品' }}</text>
-                <text v-if="firstGoods?.sku_name" class="goods-sku">{{ firstGoods.sku_name }}</text>
-                <text v-if="imei(firstGoods)" class="goods-imei">IMEI {{ imei(firstGoods) }}</text>
-                <text v-if="goodsCount > 1" class="goods-count">共 {{ goodsCount }} 件，点击查看全部</text>
-            </view>
-            <view class="amount-wrap">
-                <text class="amount">¥{{ money(order.order_money) }}</text>
-                <u-icon :name="expanded ? 'arrow-up' : 'arrow-down'" color="#94a3b8" size="13" />
-            </view>
+        <view class="goods-preview" @click="emit('detail', order)">
+            <image v-if="cover" class="goods-cover" :src="img(cover)" mode="aspectFill" /><view v-else class="goods-cover goods-cover--empty"><u-icon name="photo" color="#b4bdc9" size="28" /></view>
+            <view class="goods-main"><text class="goods-name">{{ firstGoods.goods_name || '订单商品' }}</text><text v-if="firstGoods.sku_name" class="goods-meta">{{ firstGoods.sku_name }}</text><text v-if="goodsIdentity(firstGoods)" class="goods-imei">IMEI {{ goodsIdentity(firstGoods) }}</text><text v-if="goods.length > 1" class="goods-meta">共 {{ goods.reduce((sum, item) => sum + Number(item.num || 1), 0) }} 件设备，查看全部 ›</text></view>
         </view>
-
-        <view v-if="expanded" class="goods-detail">
-            <view v-for="(goods, index) in goodsList" :key="goods.order_goods_id || index" class="goods-line">
-                <view class="goods-line__copy">
-                    <text class="goods-line__name">{{ goods.goods_name || '商品' }}</text>
-                    <text class="goods-line__meta">{{ [goods.sku_name, imei(goods) ? `IMEI ${ imei(goods) }` : ''].filter(Boolean).join(' · ') }}</text>
-                </view>
-                <text class="goods-line__price">¥{{ money(goods.price) }} × {{ goods.num || 1 }}</text>
-            </view>
-            <view class="detail-row"><text>订单编号</text><text class="detail-value" selectable>{{ order.order_no || '-' }}</text></view>
-            <view v-if="order.offline_record?.handler_name" class="detail-row"><text>当前负责人</text><text class="detail-value">{{ order.offline_record.handler_name }}</text></view>
-            <view v-if="order.member_remark" class="detail-row detail-row--remark"><text>客户留言</text><text class="detail-value">{{ order.member_remark }}</text></view>
-            <view v-if="voucherUrls.length" class="voucher-block">
-                <text class="voucher-title">客户付款凭证（点击查看）</text>
-                <view class="voucher-list">
-                    <image v-for="(url, index) in voucherUrls" :key="url" :src="imageUrl(url)" mode="aspectFill" class="voucher-image" @click.stop="previewVoucher(index)" />
-                </view>
-            </view>
-        </view>
-
-        <view class="card-foot">
-            <view class="progress-copy">
-                <text>{{ workflowHint }}</text>
-                <text v-if="order.offline_record?.handler_name" class="handler">负责人 {{ order.offline_record.handler_name }}</text>
-            </view>
-            <view v-if="isPending" class="action-group">
-                <view v-if="['pending', 'voucher_rejected'].includes(order.offline_record?.status || 'pending')" class="minor-button" @click.stop="emit('contact', order)">已联系</view>
-                <view class="primary-button" @click.stop="emit('operate', order)">处理订单</view>
-            </view>
-            <view v-else-if="isReadyForDelivery" class="primary-button primary-button--deliver" @click.stop="emit('deliver', order)">确认交付</view>
-            <view v-else class="done-label">{{ Number(order.status) === -1 ? '订单已关闭' : '流程已完成' }}</view>
-        </view>
+        <view class="amount-line"><text>{{ order.delivery_type_name || '配送方式待核对' }}</text><text>订单金额 <text class="amount">¥{{ money(order.order_money) }}</text></text></view>
+        <view v-if="order.return_context_error" class="order-warning">{{ order.return_context_error }}</view>
+        <view class="card-foot"><view class="detail-button" @click="emit('detail', order)">查看详情</view><view v-if="primaryAction" class="primary-button" @click="emit('operate', order)">{{ primaryAction.label }}</view></view>
     </view>
 </template>
-
 <script setup lang="ts">
 import { computed } from 'vue'
 import { img } from '@/utils/common'
-
-const props = withDefaults(defineProps<{ order: Record<string, any>, expanded?: boolean }>(), { expanded: false })
-const emit = defineEmits(['toggle', 'contact', 'operate', 'deliver'])
-
-const goodsList = computed<any[]>(() => Array.isArray(props.order.order_goods) ? props.order.order_goods.filter((item: any) => Number(item.is_gift || 0) !== 1) : [])
-const firstGoods = computed(() => goodsList.value[0] || null)
-const goodsCount = computed(() => goodsList.value.reduce((total, item) => total + Number(item.num || 1), 0))
+import { formatOrderTime, getOrderActions, goodsIdentity, money, orderGoods, orderStatusLabel, paymentLabel } from '@/addon/phone_shop/utils/orderWorkflow'
+const props = defineProps<{ order: Record<string, any> }>()
+const emit = defineEmits(['detail', 'operate'])
+const goods = computed(() => orderGoods(props.order))
+const firstGoods = computed(() => goods.value[0] || {})
+const cover = computed(() => firstGoods.value.sku_image || firstGoods.value.goods_image_thumb_small || firstGoods.value.goods_image || '')
 const mobile = computed(() => String(props.order.taker_mobile || props.order.member?.mobile || ''))
-const customerName = computed(() => props.order.member?.nickname || props.order.taker_name || '到店客户')
-const voucherUrls = computed<string[]>(() => Array.isArray(props.order.offline_record?.voucher_urls) ? props.order.offline_record.voucher_urls : [])
-const isPending = computed(() => Number(props.order.status) === 1 && props.order.payment_mode === 'offline_pending')
-const isReadyForDelivery = computed(() => Number(props.order.status) === 2 && props.order.delivery_type === 'store' && ['offline_cash', 'offline_credit'].includes(props.order.payment_mode))
-const statusLabel = computed(() => {
-    const workflow = String(props.order.offline_record?.status || '')
-    const map: Record<string, string> = { pending: '待联系', contacted: '已联系待到店', voucher_submitted: '凭证待审核', voucher_rejected: '凭证已驳回', paid: '已收款待交付', credit: '已挂账待交付', delivered: '已交付', closed: '已关闭' }
-    if (map[workflow]) return map[workflow]
-    if (isPending.value) return '待处理'
-    if (isReadyForDelivery.value) return props.order.payment_mode === 'offline_credit' ? '已挂账待交付' : '已收款待交付'
-    return Number(props.order.status) === -1 ? '已关闭' : Number(props.order.status) === 5 ? '已完成' : '处理中'
-})
-const statusTone = computed(() => {
-    if (['delivered'].includes(String(props.order.offline_record?.status)) || Number(props.order.status) === 5) return 'success'
-    if (Number(props.order.status) === -1 || props.order.offline_record?.status === 'closed') return 'muted'
-    if (props.order.offline_record?.status === 'credit') return 'warning'
-    return 'primary'
-})
-const workflowHint = computed(() => {
-    if (isPending.value) {
-        if (props.order.offline_record?.status === 'voucher_submitted') return '客户已提交凭证，请核对实际到账'
-        if (props.order.offline_record?.status === 'voucher_rejected') return '凭证已驳回，等待客户重新提交'
-        return props.order.offline_record?.status === 'contacted' ? '等待客户到店付款' : '请先联系客户确认到店安排'
-    }
-    if (isReadyForDelivery.value) return props.order.payment_mode === 'offline_credit' ? '挂账已入 ERP，请核对客户后交付' : '收款已留痕，请核对客户后交付'
-    if (Number(props.order.status) === -1) return props.order.close_remark || '订单已关闭并解除锁定'
-    return '订单处理已完成'
-})
-
-function cover(goods: any) { return goods?.sku_image || goods?.goods_image_thumb_small || goods?.goods_image || '' }
-function imageUrl(value: string) { return img(value) }
-function money(value: any) { return Number(value || 0).toFixed(2) }
-function imei(goods: any) { return String(goods?.sku?.sku_no || goods?.extend?.imei || goods?.extend?.sku_no || '') }
-function formatTime(value: any) {
-    const timestamp = Number(value || 0)
-    if (!timestamp) return '-'
-    const date = new Date(timestamp * 1000)
-    const pad = (num: number) => String(num).padStart(2, '0')
-    return `${ pad(date.getMonth() + 1) }-${ pad(date.getDate()) } ${ pad(date.getHours()) }:${ pad(date.getMinutes()) }`
-}
-function callCustomer() { if (mobile.value) uni.makePhoneCall({ phoneNumber: mobile.value }) }
-function previewVoucher(index: number) { uni.previewImage({ current: imageUrl(voucherUrls.value[index]), urls: voucherUrls.value.map(imageUrl) }) }
+const primaryAction = computed(() => getOrderActions(props.order).find(action => ['confirm_paid', 'delivery', 'finish', 'received'].includes(action.key)))
+function callCustomer() { uni.makePhoneCall({ phoneNumber: mobile.value }) }
 </script>
-
 <style scoped lang="scss">
-.order-card { margin-bottom: 20rpx; overflow: hidden; border-radius: 24rpx; background: #fff; }
-.card-head { min-height: 66rpx; padding: 0 24rpx; border-bottom: 2rpx solid #f3f4f6; display: flex; align-items: center; justify-content: space-between; gap: 14rpx; }
-.voucher-block { padding: 18rpx 0 4rpx; }
-.voucher-title { display: block; margin-bottom: 12rpx; color: #64748b; font-size: 23rpx; }
-.voucher-list { display: flex; flex-wrap: wrap; gap: 12rpx; }
-.voucher-image { width: 112rpx; height: 112rpx; border-radius: 12rpx; background: #f1f5f9; }
-.status-wrap { min-width: 0; display: flex; align-items: center; gap: 9rpx; }
-.status-dot { width: 13rpx; height: 13rpx; flex-shrink: 0; border-radius: 50%; background: #2563eb; }
-.status-dot--success { background: #16a34a; }
-.status-dot--warning { background: #d97706; }
-.status-dot--muted { background: #94a3b8; }
-.status-text { color: #334155; font-size: 23rpx; font-weight: 650; }
-.delivery-tag { padding: 4rpx 10rpx; border-radius: 11rpx; background: #f1f5f9; color: #64748b; font-size: 18rpx; }
-.order-time { flex-shrink: 0; color: #94a3b8; font-size: 20rpx; }
-.customer-row { padding: 20rpx 24rpx 14rpx; display: flex; align-items: center; }
-.customer-avatar { width: 64rpx; height: 64rpx; flex-shrink: 0; border-radius: 17rpx; background: #eff6ff; display: flex; align-items: center; justify-content: center; }
-.customer-info { min-width: 0; flex: 1; margin-left: 14rpx; }
-.customer-name, .customer-mobile { display: block; }
-.customer-name { color: #1e293b; font-size: 27rpx; font-weight: 700; }
-.customer-mobile { margin-top: 4rpx; color: #94a3b8; font-size: 21rpx; }
-.call-button { width: 64rpx; height: 64rpx; border-radius: 50%; background: #f0fdf4; display: flex; align-items: center; justify-content: center; }
-.goods-preview { margin: 0 24rpx; padding: 16rpx; border-radius: 16rpx; background: #f7f9fc; display: flex; align-items: center; gap: 15rpx; }
-.goods-cover { width: 96rpx; height: 96rpx; flex-shrink: 0; border-radius: 13rpx; background: #eef2f7; }
-.goods-cover--empty { display: flex; align-items: center; justify-content: center; }
-.goods-info { min-width: 0; flex: 1; }
-.goods-name, .goods-sku, .goods-imei, .goods-count { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.goods-name { color: #334155; font-size: 25rpx; font-weight: 650; }
-.goods-sku { margin-top: 5rpx; color: #64748b; font-size: 20rpx; }
-.goods-imei, .goods-count { margin-top: 5rpx; color: #94a3b8; font-size: 19rpx; }
-.goods-imei { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.amount-wrap { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 10rpx; }
-.amount { color: #ef4444; font-size: 27rpx; font-weight: 750; }
-.goods-detail { margin: 14rpx 24rpx 0; padding: 4rpx 16rpx; border-radius: 14rpx; border: 2rpx solid #eef2f7; }
-.goods-line { padding: 14rpx 0; border-bottom: 1rpx solid #eef2f7; display: flex; align-items: center; justify-content: space-between; gap: 18rpx; }
-.goods-line__copy { min-width: 0; flex: 1; }
-.goods-line__name, .goods-line__meta { display: block; }
-.goods-line__name { color: #334155; font-size: 22rpx; }
-.goods-line__meta { margin-top: 4rpx; color: #94a3b8; font-size: 18rpx; }
-.goods-line__price { flex-shrink: 0; color: #475569; font-size: 21rpx; }
-.detail-row { padding: 13rpx 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 20rpx; color: #94a3b8; font-size: 19rpx; }
-.detail-value { max-width: 72%; color: #475569; text-align: right; word-break: break-all; }
-.detail-row--remark { border-top: 1rpx solid #eef2f7; }
-.card-foot { min-height: 90rpx; margin-top: 18rpx; padding: 16rpx 24rpx; border-top: 2rpx solid #f3f4f6; display: flex; align-items: center; justify-content: space-between; gap: 18rpx; box-sizing: border-box; }
-.progress-copy { min-width: 0; flex: 1; color: #64748b; font-size: 20rpx; line-height: 1.4; }
-.progress-copy text { display: block; }
-.progress-copy .handler { margin-top: 4rpx; color: #94a3b8; font-size: 18rpx; }
-.action-group { flex-shrink: 0; display: flex; align-items: center; gap: 10rpx; }
-.minor-button, .primary-button { height: 58rpx; padding: 0 20rpx; border-radius: 29rpx; display: flex; align-items: center; justify-content: center; font-size: 22rpx; font-weight: 650; box-sizing: border-box; }
-.minor-button { border: 1rpx solid #bfdbfe; color: #2563eb; background: #fff; }
-.primary-button { color: #fff; background: var(--primary-color); }
-.primary-button--deliver { padding: 0 25rpx; background: #16a34a; }
-.done-label { flex-shrink: 0; color: #94a3b8; font-size: 21rpx; }
+.order-card { margin-bottom: 20rpx; background: #fff; border-radius: 14rpx; overflow: hidden; }.card-head { display: flex; justify-content: space-between; align-items: center; gap: 14rpx; padding: 22rpx 24rpx 16rpx; }.status-wrap { min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 12rpx; }.status-text { font-size: 27rpx; font-weight: 600; color: #263244; }.order-tag { font-size: 21rpx; padding: 4rpx 9rpx; background: #f1f5fa; color: #64748b; border-radius: 6rpx; }.order-time { flex-shrink: 0; font-size: 21rpx; color: #8590a2; }.customer-row { padding: 0 24rpx 18rpx; display: flex; align-items: center; }.customer-main { flex: 1; min-width: 0; }.customer-name { font-size: 27rpx; color: #263244; }.customer-mobile { font-size: 23rpx; color: #8590a2; margin-left: 16rpx; }.call-button { padding: 12rpx 0 12rpx 20rpx; }.goods-preview { display: flex; gap: 18rpx; padding: 0 24rpx 20rpx; }.goods-cover { width: 112rpx; height: 112rpx; flex-shrink: 0; border-radius: 8rpx; background: #f2f4f7; }.goods-cover--empty { display: flex; justify-content: center; align-items: center; }.goods-main { flex: 1; min-width: 0; }.goods-main text { display: block; }.goods-name { color: #263244; font-size: 28rpx; line-height: 1.45; }.goods-meta { color: #8590a2; font-size: 23rpx; margin-top: 6rpx; }.goods-imei { color: #64748b; font-size: 23rpx; margin-top: 8rpx; font-family: monospace; overflow-wrap: anywhere; }.amount-line { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12rpx; padding: 0 24rpx 20rpx; font-size: 24rpx; color: #8590a2; }.amount { font-size: 31rpx; font-weight: 600; color: #263244; margin-left: 6rpx; }.card-foot { display: flex; justify-content: flex-end; gap: 16rpx; padding: 18rpx 24rpx; border-top: 1rpx solid #edf0f4; }.detail-button, .primary-button { min-height: 64rpx; padding: 0 24rpx; display: flex; align-items: center; justify-content: center; border-radius: 9rpx; border: 1rpx solid #dce2ec; font-size: 25rpx; color: #516174; box-sizing: border-box; }.primary-button { color: #fff; background: var(--primary-color); border-color: var(--primary-color); }.order-warning { padding: 12rpx 24rpx; color: #a86a19; font-size: 23rpx; line-height: 1.5; }
 </style>

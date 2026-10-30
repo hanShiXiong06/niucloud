@@ -88,7 +88,14 @@ class CoreRecycleOrderFlowService extends BaseCoreService
                 $paymentSiteId = (int)($context['site_id'] ?? $this->request->siteId());
                 if ($paymentSiteId <= 0) throw new CommonException('无法确认付款站点，已停止打款');
             }
-            $order = $this->getOrderInfo($orderId, $action === 'cancel' ? (int)$context['site_id'] : $paymentSiteId, $action === 'payment');
+            $orderSiteId = $action === 'cancel' ? (int)$context['site_id'] : $paymentSiteId;
+            if ($action === 'sign') {
+                $orderSiteId = (int)($context['site_id'] ?? $this->request->siteId());
+                if ($orderSiteId <= 0) throw new CommonException('无法确认签收订单所属站点');
+                $context['site_id'] = $orderSiteId;
+            }
+            // 签收先锁定本站订单再校验状态；并发重试须等前次提交后重读，不能重复新增设备。
+            $order = $this->getOrderInfo($orderId, $orderSiteId, $action === 'payment' || $action === 'sign');
 
             // 2. 获取流程配置
             $flowConfig = $this->getFlowConfig($order['status'], $flowType);

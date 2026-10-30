@@ -1,5 +1,5 @@
 {
-  "title": "博远ERP对接", "key": "hsx_boyuan", "version": "1.0.0", "author": "hsx",
+  "title": "博远ERP对接", "key": "hsx_boyuan", "version": "1.1.1", "author": "hsx",
   "desc": "ERP事件桥接、异步模拟、联调与生产连接、逐行回执和人工补偿。",
   "type": "addon", "support_app": "hsx_erp", "support_version": "1.2.4", "compile": []
 }

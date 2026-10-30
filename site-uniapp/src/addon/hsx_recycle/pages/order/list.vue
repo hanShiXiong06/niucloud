@@ -47,6 +47,10 @@
             </view>
             <!-- #endif -->
 
+            <view class="agent-order-bar">
+                <text>设备已到店，帮客户录单</text>
+                <view class="agent-order-button" @click="openAgentOrder">＋ 代客户下单</view>
+            </view>
             <RecycleStatusTabs :model-value="currentStatus" :options="statusList" @change="switchStatus" />
         </view>
 
@@ -58,6 +62,7 @@
             :auto="true"
             :default-page-size="15"
             :paging-style="pagingStyle"
+            :scrollable="!agentOrderVisible"
         >
             <template #empty>
                 <RecycleEmptyState
@@ -187,6 +192,8 @@
             </view>
         </z-paging>
 
+        <SignOrderPopup v-if="agentOrderMounted" v-model:visible="agentOrderVisible" mode="agent" @success="onAgentOrderSuccess" @draft-saved="reload" />
+
         <OrderFilterDrawer
             ref="filterDrawerRef"
             v-model:visible="filterVisible"
@@ -223,6 +230,7 @@ import ScanCodeInput from '@/addon/hsx_recycle/components/ScanCodeInput.vue'
 import RecycleEmptyState from '@/addon/hsx_recycle/components/RecycleEmptyState.vue'
 import RecycleStatusTabs from '@/addon/hsx_recycle/components/RecycleStatusTabs.vue'
 import OrderFilterDrawer from './components/OrderFilterDrawer.vue'
+import SignOrderPopup from './components/SignOrderPopup.vue'
 import { getDeviceListPriceMeta, isConsignedDevice, shouldShowConfirmStatus } from '@/addon/hsx_recycle/utils/device'
 import { makePhoneCall } from '@/addon/hsx_recycle/utils/helper'
 import { useRecycleListHeader } from '@/addon/hsx_recycle/hooks/useRecycleListHeader'
@@ -235,6 +243,10 @@ const currentStatus = ref('')
 const filterVisible = ref(false)
 const filterParams = ref<Record<string, any>>({})
 const needRefresh = ref(false) // 标记是否需要刷新
+const agentOrderVisible = ref(false)
+const agentOrderMounted = ref(false)
+const openAgentOrder = () => { agentOrderMounted.value = true; agentOrderVisible.value = true }
+const onAgentOrderSuccess = () => { reload() }
 
 // 时间范围日历（挂在页面层，供筛选抽屉调用）
 const filterDrawerRef = ref<any>(null)
@@ -288,7 +300,7 @@ const initialized = ref(false)
 const lastStatusCounts = ref<Record<string, any>>({})
 
 // 胶囊筛选行高度上调，让设备列表落在胶囊按钮下方、留出间距
-const { pageHeaderStyle, pagingStyle } = useRecycleListHeader(104)
+const { pageHeaderStyle, pagingStyle } = useRecycleListHeader(184, 266)
 
 const statusList = ref<Array<{ label: string, value: string, count?: number }>>([
     { label: '全部', value: '', count: 0 }
@@ -687,6 +699,26 @@ const formatMoney = (value: number | string) => Number(value || 0).toFixed(2)
 </script>
 
 <style scoped lang="scss">
+.agent-order-bar {
+    height: 80rpx;
+    padding: 0 24rpx;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-sizing: border-box;
+    gap: 12rpx;
+    color: #8590a2;
+    font-size: 23rpx;
+}
+.agent-order-button {
+    flex-shrink: 0;
+    padding: 12rpx 22rpx;
+    background: var(--hsx-primary, #2463eb);
+    color: #fff;
+    border-radius: 12rpx;
+    font-size: 26rpx;
+    font-weight: 500;
+}
 .order-list-page {
     min-height: 100vh;
     background: #f5f7fa;

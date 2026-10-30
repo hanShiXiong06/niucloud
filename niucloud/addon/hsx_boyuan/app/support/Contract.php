@@ -139,7 +139,7 @@ final class Contract
     public static function redact(array $value): array
     {
         foreach ($value as $key => &$item) {
-            if (preg_match('/token|secret|password|cipher|authorization|lease_token/i', (string)$key)) $item = '[已隐藏]';
+            if (preg_match('/token|secret|password|cipher|authorization|lease_token/i', (string)$key) || in_array(strtolower((string)$key),['sign','appsec'],true)) $item = '[已隐藏]';
             elseif (is_array($item)) $item = self::redact($item);
             elseif (in_array($key, ['mobile', 'contact_mobile'], true) && is_string($item)) $item = strlen($item) > 6 ? substr($item, 0, 3) . '****' . substr($item, -4) : '***';
         }

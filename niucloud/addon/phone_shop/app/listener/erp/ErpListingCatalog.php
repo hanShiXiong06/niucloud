@@ -33,7 +33,8 @@ final class ErpListingCatalog
             return $result + ['unlocked' => true];
         }
         $rows = (new Category())->where('site_id', $siteId)
-            ->field('category_id,pid,category_name,is_show')->select()->toArray();
+            ->field('category_id,pid,category_name,is_show,sort,create_time')
+            ->order('sort desc,create_time desc,category_id desc')->select()->toArray();
         $options = self::options($rows);
         $action = (string)($event['action'] ?? '');
         $id = (int)($event['category_id'] ?? 0);
@@ -65,7 +66,7 @@ final class ErpListingCatalog
         foreach ($rows as $row) {
             $id = (int)$row['category_id'];
             if (isset($parents[$id])) continue;
-            $path = $names = $visited = [];
+            $path = $names = $pathSort = $pathCreateTime = $visited = [];
             $cursor = $id;
             while ($cursor > 0) {
                 if (isset($visited[$cursor]) || !isset($map[$cursor]) || (int)$map[$cursor]['is_show'] !== 1) {
@@ -75,10 +76,27 @@ final class ErpListingCatalog
                 $visited[$cursor] = true;
                 array_unshift($path, $cursor);
                 array_unshift($names, (string)$map[$cursor]['category_name']);
+                array_unshift($pathSort, (int)($map[$cursor]['sort'] ?? 0));
+                array_unshift($pathCreateTime, (int)($map[$cursor]['create_time'] ?? 0));
                 $cursor = (int)$map[$cursor]['pid'];
             }
-            if ($path !== []) $options[] = ['value' => $id, 'label' => implode(' / ', $names), 'path' => $path, 'names' => $names];
+            if ($path !== []) $options[] = [
+                'value' => $id, 'label' => implode(' / ', $names), 'path' => $path, 'names' => $names,
+                'sort' => (int)($row['sort'] ?? 0), 'path_sort' => $pathSort, 'path_create_time' => $pathCreateTime,
+            ];
         }
+        // 与商城原生分类树一致：每一级兄弟按 sort DESC、create_time DESC；同值以 ID DESC 稳定排序。
+        // 不能只按叶级 sort 排序，否则后出现的叶子会把整个品牌分组带到最前面。
+        usort($options, static function (array $left, array $right): int {
+            $depth = min(count($left['path']), count($right['path']));
+            for ($index = 0; $index < $depth; $index++) {
+                if ($left['path'][$index] === $right['path'][$index]) continue;
+                return ($right['path_sort'][$index] <=> $left['path_sort'][$index])
+                    ?: ($right['path_create_time'][$index] <=> $left['path_create_time'][$index])
+                    ?: ($right['path'][$index] <=> $left['path'][$index]);
+            }
+            return count($left['path']) <=> count($right['path']);
+        });
         return $options;
     }
 }

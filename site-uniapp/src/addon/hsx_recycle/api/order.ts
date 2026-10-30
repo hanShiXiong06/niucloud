@@ -36,6 +36,11 @@ export function searchMemberList(params: Record<string, any>) {
     return request.get('member/member', params)
 }
 
+// 与 PC 代下单使用同一入口；先建空草稿，再通过 order_sign 提交设备。
+export function createAgentOrder(data: Record<string, any>) {
+    return request.post('recycle/recycle_order/create', data, { showErrorMessage: false })
+}
+
 export function updateOrder(id: number | string, data: Record<string, any>) {
     return request.put(`recycle/recycle_order/${id}`, data)
 }

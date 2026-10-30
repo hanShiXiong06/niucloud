@@ -56,6 +56,8 @@ final class Fixtures
     public static function tick(int $site): void
     {
         self::dispatch($site);
+        Db::name('hsx_boyuan_reference_sync')->where('site_id',$site)->whereIn('status',['queued','retry'])->update(['next_at'=>0]);
+        (new \addon\hsx_boyuan\app\service\ReferenceService())->tick($site);
         // Virtual time is accelerated only in this isolated acceptance harness.
         Db::name('hsx_boyuan_task')->where('site_id',$site)->whereIn('status',['pending','waiting','confirming'])->update(['next_at'=>0]);
         (new TaskService())->tick($site,100);

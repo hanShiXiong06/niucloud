@@ -32,9 +32,20 @@ final class HttpTransport implements Transport
     }
     public function send(string $method, string $path, array $body = []): array
     {
+        if ($this->token === '' || preg_match('/[\r\n]/', $this->token . $this->config['account_id'])) throw new Problem('AUTH_INVALID', '请保存有效博远授权');
+        $headers = ['Content-Type: application/json; charset=utf-8', 'Authorization: Bearer ' . $this->token,
+            'X-Account-Id: ' . $this->config['account_id'], 'X-Request-Id: ' . bin2hex(random_bytes(16))];
+        if ($method === 'POST' && isset($body['operation_id'])) $headers[] = 'Idempotency-Key: ' . Contract::id($body['operation_id']);
+        return $this->exchange($method,$path,$body,$headers,false);
+    }
+    public function postForm(string $path,array $body): array
+    {
+        return $this->exchange('POST',$path,$body,['Content-Type: application/x-www-form-urlencoded; charset=utf-8'],true);
+    }
+    private function exchange(string $method,string $path,array $body,array $headers,bool $form): array
+    {
         $base = self::endpoint($this->config['endpoint']);
         if (!preg_match('#^/[a-zA-Z0-9_/{}/.-]+$#D', $path) || str_contains($path, '..') || str_contains($path, '//')) throw new Problem('PATH_INVALID', '接口路径无效');
-        if ($this->token === '' || preg_match('/[\r\n]/', $this->token . $this->config['account_id'])) throw new Problem('AUTH_INVALID', '请保存有效博远授权');
         $host = parse_url($base, PHP_URL_HOST); $ips = [];
         foreach (dns_get_record($host, DNS_A | DNS_AAAA) ?: [] as $record) {
             $ip = $record['ip'] ?? $record['ipv6'] ?? '';
@@ -44,9 +55,6 @@ final class HttpTransport implements Transport
         if (!$ips) throw new Problem('DNS_UNAVAILABLE', '暂时无法解析博远服务域名');
         $ip = $ips[0]; $url = $base . $path;
         if ($method === 'GET' && $body) $url .= '?' . http_build_query($body);
-        $headers = ['Content-Type: application/json; charset=utf-8', 'Authorization: Bearer ' . $this->token,
-            'X-Account-Id: ' . $this->config['account_id'], 'X-Request-Id: ' . bin2hex(random_bytes(16))];
-        if ($method === 'POST' && isset($body['operation_id'])) $headers[] = 'Idempotency-Key: ' . Contract::id($body['operation_id']);
         $curl = curl_init($url); $raw = '';
         curl_setopt_array($curl, [CURLOPT_CUSTOMREQUEST => $method, CURLOPT_HTTPHEADER => $headers,
             CURLOPT_CONNECTTIMEOUT => 5, CURLOPT_TIMEOUT => 20, CURLOPT_FOLLOWLOCATION => false, CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
@@ -56,13 +64,13 @@ final class HttpTransport implements Transport
                 if (strlen($raw) + strlen($chunk) > 2097152) return 0;
                 $raw .= $chunk; return strlen($chunk);
             }]);
-        if ($method === 'POST') curl_setopt($curl, CURLOPT_POSTFIELDS, Contract::json($body));
+        if ($method === 'POST') curl_setopt($curl, CURLOPT_POSTFIELDS, $form ? http_build_query($body,'','&',PHP_QUERY_RFC3986) : Contract::json($body));
         $ok = curl_exec($curl); $status = curl_getinfo($curl, CURLINFO_HTTP_CODE); curl_close($curl);
         if ($ok === false || $status >= 500 || $status === 429) throw new Problem('REMOTE_UNCERTAIN', '请求未获得确定结果，将先查询原操作，不能重复建单', 'unknown');
         if ($status >= 300 && $status < 400) throw new Problem('REDIRECT_DENIED', '博远地址发生跳转，已阻止携带授权跳转', 'unknown');
         try { $reply = Contract::decode($raw); } catch (\Throwable $e) { throw new Problem('RESPONSE_INVALID', '博远未返回有效JSON，请核对原操作', 'unknown'); }
         $reply=Contract::redact($reply); $token=$this->token;
-        array_walk_recursive($reply,static function (&$value) use($token): void { if (is_string($value)) $value=str_replace($token,'[已隐藏]',$value); });
+        array_walk_recursive($reply,static function (&$value) use($token): void { if ($token!=='' && is_string($value)) $value=str_replace($token,'[已隐藏]',$value); });
         return $reply;
     }
 }

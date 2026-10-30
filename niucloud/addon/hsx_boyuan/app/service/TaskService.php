@@ -85,6 +85,25 @@ final class TaskService
             'amount'=>number_format((float)$payload['amount'],2,'.',''),'operator'=>['operator_ref'=>'staff:'.($event['actor']['id']??0),'name'=>$event['actor']['name']??'财务'],
             'allocations'=>$allocations,'manual_required'=>array_filter($allocations,static fn($a)=>$a['source_document_id']==='')?'该退款或调整款项不属于本期自动记款契约，请财务在博远核验后记录处理结果':''];
     }
+    public static function missingMappings(int $site,string $connection,array $snapshot): array
+    {
+        if(!empty($snapshot['outside_scope']) || !empty($snapshot['manual_required'])) return [];
+        $needed=[]; $kind=$snapshot['kind']??'';
+        $add=static function(string $type,string $ref,string $name='') use(&$needed): void { if($ref!=='') $needed[$type.':'.$ref]=['kind'=>$type,'ref'=>$ref,'name'=>$name!==''?$name:$ref]; };
+        if(isset($snapshot['party'])) $add(in_array($kind,['purchase','purchase_return'],true)?'supplier':'customer',(string)$snapshot['party']['ref'],(string)$snapshot['party']['name']);
+        foreach($snapshot['lines']??[] as $line) { $add('product',(string)($line['product_ref']??''),(string)($line['product_name']??'')); $add('warehouse',(string)($line['warehouse_ref']??''),(string)($line['warehouse_name']??'')); }
+        if(in_array($kind,['sale','sale_return'],true)) { $add('staff',(string)($snapshot['salesperson_ref']??''),(string)(($snapshot['salesperson_name']??'')?:'当前销售人员')); $add('method',(string)($snapshot['payment_method_ref']??'')); }
+        if($kind==='settlement_register') { $add((string)$snapshot['party_role'],(string)$snapshot['party_ref']); $add('account',(string)$snapshot['account_ref']); $add('method',(string)$snapshot['method_ref']); }
+        if($kind==='financial_item_ensure') foreach($snapshot['items']??[] as $item) $add((string)$item['party_role'],(string)$item['party_ref']);
+        if(!$needed) return [];
+        $found=[];
+        foreach(Db::name('hsx_boyuan_mapping')->where('site_id',$site)->where('connection_key',$connection)->whereIn('local_ref',array_column($needed,'ref'))->select()->toArray() as $map) {
+            $found[$map['kind'].':'.$map['local_ref']]=true;
+            if($map['kind']==='warehouse' && !empty(Contract::decode($map['extra_json'])['location_required'])) foreach($snapshot['lines']??[] as $line) if(($line['warehouse_ref']??'')===$map['local_ref']) $add('location',(string)($line['location_ref']??''));
+        }
+        foreach($needed as $key=>$item) if($item['kind']==='location' && Db::name('hsx_boyuan_mapping')->where('site_id',$site)->where('connection_key',$connection)->where('kind','location')->where('local_ref',$item['ref'])->count()) $found[$key]=true;
+        return array_values(array_diff_key($needed,$found));
+    }
     private function maps(int $site,string $connection): array
     {
         $maps=[];

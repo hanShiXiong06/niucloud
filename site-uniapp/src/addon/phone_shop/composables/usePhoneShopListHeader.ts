@@ -5,7 +5,7 @@ import { pxToRpx } from '@/utils/common'
  * 商家端商城列表页统一导航尺寸。
  * 小程序端需要避开胶囊，列表起点必须与自定义导航真实高度保持一致。
  */
-export function usePhoneShopListHeader() {
+export function usePhoneShopListHeader(extraHeightRpx = 0) {
     const isMp = ref(false)
 
     // #ifdef MP
@@ -46,8 +46,8 @@ export function usePhoneShopListHeader() {
     ].join(';') + ';'
 
     const listTop = computed(() => isMp.value
-        ? `${ pxToRpx(metrics.navbarHeightPx) + 88 }rpx`
-        : '174rpx')
+        ? `${ pxToRpx(metrics.navbarHeightPx) + 88 + extraHeightRpx }rpx`
+        : `${174 + extraHeightRpx}rpx`)
     const canGoBack = computed(() => getCurrentPages().length > 1)
 
     function handleNavAction() {

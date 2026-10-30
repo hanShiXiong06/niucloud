@@ -1,19 +1,45 @@
 <template>
-    <u-popup :show="show" mode="bottom" round="20" :safeAreaInsetBottom="true" @close="handleClose">
-        <view class="sign-popup">
+    <u-popup :show="show" mode="bottom" round="20" :safeAreaInsetBottom="true" :closeOnClickOverlay="!submitting" @close="handleClose">
+        <view class="sign-popup" :class="{ 'sign-popup--agent': isAgent }">
             <!-- 头部 -->
             <view class="popup-header">
-                <view class="popup-title">订单签收 · {{ devices.length }} 台设备</view>
+                <view class="popup-title">{{ isAgent ? '代客户下单' : '订单签收' }} · {{ devices.length }} 台设备</view>
                 <text class="nc-iconfont nc-icon-guanbiV6xx1 text-[32rpx] text-[#999]" @click="handleClose"></text>
             </view>
 
             <!-- 提示 -->
             <view class="tip-bar">
-                <text>请确认设备信息无误后签收，签收后将进入质检流程</text>
+                <text>{{ isAgent ? '为已收到的设备录单，提交后进入质检；不发起上门取件。' : '请确认设备信息无误后签收，签收后将进入质检流程' }}</text>
             </view>
 
             <!-- 设备列表 -->
             <scroll-view scroll-y class="device-list">
+                <view v-if="isAgent" class="agent-customer">
+                    <view class="agent-customer__row" @click="openMemberPicker">
+                        <text class="agent-customer__label">客户 <text class="agent-required">*</text></text>
+                        <view class="agent-customer__main">
+                            <text :class="{ 'agent-placeholder': !selectedMember }">{{ selectedMember ? (selectedMember.nickname || selectedMember.username || '已选客户') : '选择客户' }}</text>
+                            <text v-if="selectedMember" class="agent-customer__mobile">{{ selectedMember.mobile || '未绑定手机号' }}</text>
+                        </view>
+                        <text v-if="!agentState.draftId && !agentState.creatingUnknown" class="nc-iconfont nc-icon-youV6xx1"></text>
+                    </view>
+                    <view class="agent-delivery">
+                        <text class="agent-customer__label">到货方式</text>
+                        <view class="agent-delivery__options">
+                            <view :class="{ 'agent-delivery--active': deliveryType === '2' }" @click="selectDelivery('2')">到店</view>
+                            <view :class="{ 'agent-delivery--active': deliveryType === '1' }" @click="selectDelivery('1')">快递已到</view>
+                        </view>
+                    </view>
+                    <view v-if="deliveryType === '1'" class="agent-express">
+                        <ScanCodeInput v-model="expressNo" :disabled="Boolean(submitting || agentState.draftId || agentState.creatingUnknown)" :maxlength="80" placeholder="填写或扫描快递单号" inputAlign="left" border="none" />
+                    </view>
+                </view>
+                <view v-if="isAgent && agentState.draftId" class="agent-notice">订单 {{ agentState.orderNo || agentState.draftId }} 已建立，客户及到货方式已锁定；继续提交不会新建订单。</view>
+                <view v-if="isAgent && agentState.creatingUnknown" class="agent-notice agent-notice--error">
+                    <text>创建结果未确认，请先到订单列表核对，避免重复下单。当前填写会保留。</text>
+                    <view class="agent-retry" @click="confirmCreateRetry">已核对没有新订单，重新提交</view>
+                </view>
+                <view v-if="submitError" class="agent-notice agent-notice--error">{{ submitError }}</view>
                 <u-empty v-if="devices.length === 0" text="暂无设备，请点击下方添加" mode="list"></u-empty>
 
                 <view v-for="(device, index) in devices" :key="device.id || index" class="device-card">
@@ -52,9 +78,9 @@
 
             <!-- 底部 -->
             <view class="popup-footer">
-                <u-button @click="handleClose" :customStyle="{ flex: 1 }">取消</u-button>
-                <u-button type="primary" :loading="submitting" @click="handleSubmit" :customStyle="{ flex: 2 }">
-                    确认签收
+                <u-button @click="handleClose" :disabled="submitting" :customStyle="{ flex: 1 }">{{ isAgent && agentState.draftId ? '稍后继续' : '取消' }}</u-button>
+                <u-button type="primary" :loading="submitting" :disabled="isAgent && agentState.creatingUnknown" @click="handleSubmit" :customStyle="{ flex: 2 }">
+                    {{ isAgent ? '下单并签收' : '确认签收' }}
                 </u-button>
             </view>
         </view>
@@ -73,11 +99,11 @@
                             <view class="form-control">
                                 <ScanCodeInput
                                     v-model="editForm.imei"
-                                    type="number"
+                                    type="text"
                                     :maxlength="15"
                                     border="none"
                                     clearable
-                                    placeholder="请输入15位IMEI"
+                                    placeholder="6–15位字母或数字"
                                     inputAlign="right"
                                     fontSize="28rpx"
                                     placeholderClass="text-[var(--text-color-light9)] text-[28rpx]"
@@ -229,32 +255,52 @@
                 </view>
             </view>
         </u-popup>
+        <RecycleMemberPicker v-if="isAgent" v-model:show="memberPickerVisible" :selected-member="selectedMember" @select="selectMember" />
     </u-popup>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { getDeviceModelDictChildren, searchDeviceModelDictOptions, updateOrder } from '@/addon/hsx_recycle/api/order'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { createAgentOrder, getOrderDetail, getDeviceModelDictChildren, searchDeviceModelDictOptions, updateOrder } from '@/addon/hsx_recycle/api/order'
 import { getCheckTemplateSchema } from '@/addon/hsx_recycle/api/check-template'
 import ScanCodeInput from '@/addon/hsx_recycle/components/ScanCodeInput.vue'
 import RecycleTagGroup from '@/addon/hsx_recycle/components/RecycleTagGroup.vue'
 import NextAssigneePicker from '@/addon/hsx_recycle/components/NextAssigneePicker.vue'
 import QuoteUserPicker from '@/addon/hsx_recycle/components/QuoteUserPicker.vue'
+import RecycleMemberPicker from '@/addon/hsx_recycle/components/RecycleMemberPicker.vue'
+import type { RecycleMemberOption } from '@/addon/hsx_recycle/components/RecycleMemberPicker.vue'
+import { agentOrderError, deviceEntryError, newAgentOrderState, submitAgentOrder } from '@/addon/hsx_recycle/utils/agentOrder'
 
 interface Props {
     visible: boolean
-    orderId: string | number
-    deviceList: any[]
+    orderId?: string | number
+    deviceList?: any[]
+    mode?: 'sign' | 'agent'
 }
 
 const props = defineProps<Props>()
-const emit = defineEmits(['update:visible', 'success'])
+const emit = defineEmits(['update:visible', 'success', 'draft-saved'])
 
 const show = ref(false)
 const submitting = ref(false)
 const summaryLoading = ref(false) // 质检摘要字段加载中
 const devices = ref<any[]>([])
 const nextAssigneeUid = ref(0)
+const isAgent = computed(() => props.mode === 'agent')
+const agentState = reactive(newAgentOrderState())
+const selectedMember = ref<RecycleMemberOption | null>(null)
+const memberPickerVisible = ref(false)
+const deliveryType = ref('2')
+const expressNo = ref('')
+const submitError = ref('')
+const openMemberPicker = () => { if (!agentState.draftId && !agentState.creatingUnknown && !submitting.value) memberPickerVisible.value = true }
+const selectMember = (member: RecycleMemberOption) => { selectedMember.value = member; submitError.value = '' }
+const selectDelivery = (type: string) => { if (!agentState.draftId && !agentState.creatingUnknown && !submitting.value) deliveryType.value = type }
+const confirmCreateRetry = () => {
+    uni.showModal({ title: '确认未创建订单', content: '请先在订单列表核对刚才所选客户。只有确认没有新订单时才能重新提交，否则可能重复下单。', confirmText: '确认未创建', success: result => {
+        if (result.confirm) { agentState.creatingUnknown = false; submitError.value = '' }
+    } })
+}
 
 // 摘要字段类型判断 / 取值（与 PC device-entry 口径一致）
 const isMultiSummaryField = (field: any) => field?.component === 'checkbox' || field?.selection_mode === 'multiple'
@@ -420,13 +466,18 @@ const loadRootModels = async () => {
 
 watch(() => props.visible, (val) => {
     show.value = val
-    if (val) {
+    if (!val) {
+        memberPickerVisible.value = false
+        editVisible.value = false
+        modelPickerVisible.value = false
+    }
+    if (val && !isAgent.value) {
         devices.value = JSON.parse(JSON.stringify(props.deviceList || [])).map((device: any) => ({ ...device,
             initial_price_uid: Number(device.customer_quote?.uid || device.info?.customer_quote?.uid || 0),
             initial_price_name: device.customer_quote?.name || device.info?.customer_quote?.name || ''
         }))
     }
-})
+}, { immediate: true })
 
 watch(() => show.value, (val) => {
     if (!val) emit('update:visible', false)
@@ -438,11 +489,18 @@ watch(() => modelKeyword.value, () => {
 })
 
 const handleClose = () => {
+    if (submitting.value) return
+    uni.hideKeyboard()
+    if (isAgent.value && agentState.draftId) emit('draft-saved', agentState.draftId)
+    memberPickerVisible.value = false
+    editVisible.value = false
+    modelPickerVisible.value = false
     show.value = false
     emit('update:visible', false)
 }
 
 const addDevice = () => {
+    if (submitting.value) return
     editingIndex.value = -1
     editForm.value = { model: '', imei: '', user_sn: '', initial_price: '', initial_price_uid: 0, initial_price_name: '', category_id: 0, category_path: [], check_template_id: 0, summary_fields: [], summary_values: {} }
     editVisible.value = true
@@ -461,6 +519,7 @@ const extractDeviceSummaryValues = (device: any): Record<string, any> => {
 }
 
 const editDevice = (device: any, index: number) => {
+    if (submitting.value) return
     editingIndex.value = index
     editForm.value = {
         model: device.model || '',
@@ -485,6 +544,7 @@ const safeJson = (value: any) => {
 }
 
 const deleteDevice = (index: number) => {
+    if (submitting.value) return
     uni.showModal({
         title: '删除设备',
         content: '确定删除该设备？',
@@ -597,12 +657,13 @@ const searchModelKeyword = async () => {
 }
 
 const saveEdit = () => {
-    if (!editForm.value.imei) {
-        uni.showToast({ title: '请输入IMEI串号', icon: 'none' })
+    const error = deviceEntryError(editForm.value)
+    if (error) {
+        uni.showToast({ title: error, icon: 'none' })
         return
     }
-    if (!editForm.value.model) {
-        uni.showToast({ title: '请选择设备分类', icon: 'none' })
+    if (devices.value.some((device, index) => index !== editingIndex.value && String(device.imei || '').toUpperCase() === editForm.value.imei.toUpperCase())) {
+        uni.showToast({ title: '本单已添加该串号，请勿重复录入', icon: 'none' })
         return
     }
     // 必填摘要项校验
@@ -633,6 +694,12 @@ const handleImeiScan = () => {
 }
 
 const handleSubmit = async () => {
+    if (submitting.value) return
+    submitError.value = ''
+    if (isAgent.value) {
+        const error = agentOrderError(Number(selectedMember.value?.member_id || 0), deliveryType.value, expressNo.value, devices.value)
+        if (error) { submitError.value = error; uni.showToast({ title: error, icon: 'none' }); return }
+    }
     if (devices.value.length === 0) {
         uni.showToast({ title: '请至少添加一台设备', icon: 'none' })
         return
@@ -646,10 +713,7 @@ const handleSubmit = async () => {
 
     submitting.value = true
     try {
-        await updateOrder(props.orderId, {
-            action: 'order_sign',
-            next_assignee_uid: nextAssigneeUid.value,
-            devices: devices.value.map(d => ({
+        const payload = devices.value.map(d => ({
                 id: d.id,
                 imei: d.imei,
                 model: d.model,
@@ -662,16 +726,35 @@ const handleSubmit = async () => {
                 check_template_id: Number(d.check_template_id || 0),
                 summary: collectSummaryValues(d.summary_fields || [], d.summary_values || {})
             }))
-        })
-        uni.showToast({ title: '签收成功' })
-        emit('success')
-        handleClose()
+        let resultId = props.orderId
+        if (isAgent.value) {
+            resultId = await submitAgentOrder(agentState, { create: createAgentOrder, detail: getOrderDetail, sign: updateOrder }, {
+                memberId: Number(selectedMember.value?.member_id), deliveryType: deliveryType.value,
+                expressNo: expressNo.value, devices: payload, nextAssigneeUid: nextAssigneeUid.value
+            })
+        } else {
+            await updateOrder(props.orderId!, { action: 'order_sign', next_assignee_uid: nextAssigneeUid.value, devices: payload })
+        }
+        uni.showToast({ title: isAgent.value ? '下单并签收成功' : '签收成功' })
+        emit('success', resultId)
+        show.value = false
+        emit('update:visible', false)
+        if (isAgent.value) {
+            Object.assign(agentState, newAgentOrderState())
+            selectedMember.value = null
+            devices.value = []
+            deliveryType.value = '2'
+            expressNo.value = ''
+            nextAssigneeUid.value = 0
+        }
     } catch (error: any) {
-        uni.showToast({ title: error.message || '签收失败', icon: 'none' })
+        submitError.value = agentState.creatingUnknown ? '创建结果未确认，请先核对订单列表，不要重复提交。' : (error?.msg || error?.message || '提交失败，请重试；已创建的订单不会重复创建')
+        uni.showToast({ title: submitError.value, icon: 'none' })
     } finally {
         submitting.value = false
     }
 }
+onBeforeUnmount(() => { if (modelSearchTimer) clearTimeout(modelSearchTimer) })
 </script>
 
 <style scoped lang="scss">
@@ -683,6 +766,23 @@ const handleSubmit = async () => {
     flex-direction: column;
     box-sizing: border-box;
 }
+.sign-popup--agent { height: 90vh; max-height: 90vh; }
+.sign-popup--agent .device-list { min-height: 0; max-height: none; }
+.agent-customer { margin-bottom: 24rpx; padding: 0 20rpx; border: 1rpx solid #e8ebf0; border-radius: 14rpx; }
+.agent-customer__row, .agent-delivery { display: flex; align-items: center; gap: 16rpx; padding: 22rpx 0; }
+.agent-customer__row { border-bottom: 1rpx solid #f1f3f5; }
+.agent-customer__label { flex-shrink: 0; width: 132rpx; font-size: 26rpx; color: #697386; }
+.agent-required { color: #e34d59; }
+.agent-customer__main { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 28rpx; overflow-wrap: anywhere; }
+.agent-customer__mobile { margin-top: 6rpx; color: #8590a2; font-size: 24rpx; }
+.agent-placeholder { color: var(--hsx-primary); }
+.agent-delivery__options { display: flex; gap: 16rpx; font-size: 26rpx; }
+.agent-delivery__options > view { padding: 12rpx 24rpx; border-radius: 10rpx; border: 1rpx solid #e2e6ec; }
+.agent-delivery__options .agent-delivery--active { color: var(--hsx-primary); border-color: var(--hsx-primary); background: #f0f5ff; }
+.agent-express { padding: 0 0 22rpx; }
+.agent-notice { padding: 18rpx 20rpx; margin-bottom: 20rpx; border-radius: 10rpx; font-size: 24rpx; line-height: 1.6; background: #f4f7fc; color: #697386; }
+.agent-notice--error { color: #c45656; background: #fff3f2; }
+.agent-retry { color: var(--hsx-primary); padding-top: 14rpx; }
 
 .popup-header {
     display: flex;

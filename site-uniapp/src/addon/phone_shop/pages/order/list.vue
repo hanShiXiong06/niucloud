@@ -1,222 +1,69 @@
 <template>
-    <view class="offline-page" :style="themeColor()">
-        <PhoneShopListHeader
-            v-model="keyword"
-            placeholder="订单号 / 客户 / 手机号"
-            :tabs="tabs"
-            :active="activeTab"
-            :is-mp="isMp"
-            :custom-nav-style="customNavStyle"
-            :can-go-back="canGoBack"
-            :handle-nav-action="handleNavAction"
-            show-scan
-            @search="reload"
-            @clear="clearKeyword"
-            @scan="scanOrder"
-            @refresh="reload"
-            @change="changeTab"
-        />
-
-        <z-paging ref="pagingRef" v-model="orders" :fixed="true" :default-page-size="12" :paging-style="pagingStyle" @query="queryOrders">
-            <template #empty>
-                <view class="empty-wrap">
-                    <u-empty mode="order" :text="emptyText" />
-                    <text class="empty-hint">客户选择线下支付并提交后，订单会自动进入这里。</text>
-                </view>
-            </template>
-            <view class="order-list">
-                <OfflineOrderCard
-                    v-for="order in orders"
-                    :key="order.order_id"
-                    :order="order"
-                    :expanded="expandedId === Number(order.order_id)"
-                    @toggle="toggleOrder"
-                    @contact="markContacted"
-                    @operate="openActions"
-                    @deliver="confirmDelivery"
-                />
-            </view>
+    <view class="order-page" :style="themeColor()">
+        <PhoneShopListHeader v-model="keyword" placeholder="订单号 / 客户 / 手机号" :tabs="tabs" :active="activeStatus" :is-mp="isMp" :custom-nav-style="customNavStyle" :can-go-back="canGoBack" :handle-nav-action="handleNavAction" show-scan @search="search" @clear="search" @scan="scanOrder" @refresh="reload" @change="changeStatus">
+            <template #after><view class="channel-filter"><view v-for="item in channels" :key="item.value" :class="{ active: channel === item.value }" @click="changeChannel(item.value)">{{ item.label }}</view><text>共用同一订单流程</text></view></template>
+        </PhoneShopListHeader>
+        <z-paging ref="pagingRef" v-model="orders" :fixed="true" :default-page-size="12" :paging-style="pagingStyle" :scrollable="!actionSheetVisible && !panelVisible" @query="queryOrders">
+            <template #empty><view class="empty-wrap"><u-empty mode="order" text="暂无匹配订单" /><text class="empty-hint">线上、线下订单都在这里；可切换类型和状态查看。</text></view></template>
+            <view class="order-list"><OfflineOrderCard v-for="order in orders" :key="order.order_id" :order="order" @detail="toDetail" @operate="openActions" /></view>
         </z-paging>
-
-        <u-action-sheet
-            :show="actionSheetVisible"
-            title="处理线下订单"
-            description="客户到店后选择真实成交方式"
-            :actions="availableOrderActions"
-            cancelText="取消"
-            @close="actionSheetVisible = false"
-            @select="selectAction"
-        />
-
-        <OfflineOrderProcessPopup
-            :show="processVisible"
-            :order="currentOrder"
-            :action="processAction"
-            @close="processVisible = false"
-            @success="handleProcessSuccess"
-        />
+        <u-action-sheet :show="actionSheetVisible" title="订单操作" :actions="availableActions" cancelText="取消" @close="actionSheetVisible = false" @select="selectAction" />
+        <OrderActionPanel :show="panelVisible" :order="currentOrder" :action="action" @close="panelVisible = false" @changed="reload" />
     </view>
 </template>
-
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import OfflineOrderCard from '@/addon/phone_shop/components/OfflineOrderCard.vue'
-import OfflineOrderProcessPopup from '@/addon/phone_shop/components/OfflineOrderProcessPopup.vue'
+import OrderActionPanel from '@/addon/phone_shop/components/OrderActionPanel.vue'
 import PhoneShopListHeader from '@/addon/phone_shop/components/PhoneShopListHeader.vue'
-import { getOfflineOrderList, processOfflineOrder } from '@/addon/phone_shop/api/order'
+import { getOrderDetail, getOrderList } from '@/addon/phone_shop/api/order'
 import { usePhoneShopListHeader } from '@/addon/phone_shop/composables/usePhoneShopListHeader'
-
-const pagingRef = ref<any>(null)
-const orders = ref<any[]>([])
-const keyword = ref('')
-const activeTab = ref('pending')
-const expandedId = ref(0)
-const actionSheetVisible = ref(false)
-const processVisible = ref(false)
-const currentOrder = ref<any>(null)
-const processAction = ref<'confirm_paid' | 'confirm_credit' | 'close_unreachable'>('confirm_paid')
-const initialOrderId = ref(0)
+import { getOrderActions, orderQuery } from '@/addon/phone_shop/utils/orderWorkflow'
+const pagingRef = ref<any>(null), orders = ref<any[]>([]), keyword = ref(''), activeStatus = ref(''), channel = ref('')
+const actionSheetVisible = ref(false), panelVisible = ref(false), currentOrder = ref<any>(null), action = ref(''), opening = ref(false)
 const hasShown = ref(false)
-const { isMp, customNavStyle, listTop, canGoBack, handleNavAction } = usePhoneShopListHeader()
+const { isMp, customNavStyle, listTop, canGoBack, handleNavAction } = usePhoneShopListHeader(76)
 const pagingStyle = computed(() => ({ top: listTop.value, background: '#f5f7fa' }))
-
-const tabs = [
-    { value: 'pending', label: '待处理' },
-    { value: 'delivery', label: '待交付' },
-    { value: 'complete', label: '已完成' },
-    { value: 'closed', label: '已关闭' },
-    { value: 'all', label: '全部' },
-]
-
-const orderActions = [
-    { name: '确认线下收款', action: 'confirm_paid', color: '#16a34a', subname: '核对到账；凭证可由客户或员工上传' },
-    { name: '确认客户挂账', action: 'confirm_credit', color: '#d97706', subname: '生成 ERP 应收，后续由财务跟进' },
-    { name: '联系不上并关闭', action: 'close_unreachable', color: '#ef4444', subname: '填写原因并解除设备锁定' },
-]
-const availableOrderActions = computed(() => {
-    const actions: any[] = [...orderActions]
-    if (currentOrder.value?.offline_record?.status === 'voucher_submitted') {
-        actions.push({ name: '驳回付款凭证', action: 'reject_voucher', color: '#d97706', subname: '填写原因并通知客户重新提交' })
-    }
-    return actions
-})
-
-const emptyText = computed(() => activeTab.value === 'pending' ? '暂无待处理线下订单' : activeTab.value === 'delivery' ? '暂无待交付订单' : '暂无相关订单')
-
+const channels = [{ label: '全部订单', value: '' }, { label: '线上', value: 'online' }, { label: '线下', value: 'offline' }]
+const tabs = [{ value: '', label: '全部状态' }, { value: '1', label: '待支付/处理' }, { value: '2', label: '待发货/交付' }, { value: '3', label: '待收货' }, { value: '5', label: '已完成' }, { value: '-1', label: '已关闭' }]
+const availableActions = computed(() => getOrderActions(currentOrder.value).map(item => ({ name: item.label, key: item.key, color: item.danger ? '#d14343' : '#263244' })))
 onLoad((options: any) => {
-    initialOrderId.value = Number(options?.order_id || 0)
-    if (initialOrderId.value) activeTab.value = 'all'
+    if (['online', 'offline'].includes(options?.order_channel)) channel.value = options.order_channel
+    if (tabs.some(item => item.value === String(options?.status))) activeStatus.value = String(options.status)
+    const orderId = Number(options?.order_id || options?.id || 0)
+    if (orderId > 0) uni.navigateTo({ url: `/addon/phone_shop/pages/order/detail?order_id=${orderId}` })
 })
-
-onShow(() => {
-    if (hasShown.value) pagingRef.value?.reload()
-    hasShown.value = true
-})
-
-function queryParams() {
-    const params: Record<string, any> = { offline_keyword: keyword.value.trim() }
-    if (initialOrderId.value) params.order_id = initialOrderId.value
-    if (activeTab.value === 'pending') { params.status = 1; params.payment_mode = 'offline_pending' }
-    if (activeTab.value === 'delivery') params.status = 2
-    if (activeTab.value === 'complete') params.status = 5
-    if (activeTab.value === 'closed') params.status = -1
-    return params
-}
-
+onShow(() => { if (hasShown.value) reload(); hasShown.value = true })
+function reload() { pagingRef.value?.reload() }
+function search() { reload() }
+function changeStatus(value: string) { if (activeStatus.value === value) return; activeStatus.value = value; reload() }
+function changeChannel(value: string) { if (channel.value === value) return; channel.value = value; reload() }
 async function queryOrders(page: number, limit: number) {
     try {
-        const response: any = await getOfflineOrderList({ ...queryParams(), page, limit })
-        const payload = response?.data || {}
-        const rows = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload?.list) ? payload.list : []
-        pagingRef.value?.complete(rows)
-        if (initialOrderId.value && rows.length) {
-            expandedId.value = Number(rows[0].order_id)
-            initialOrderId.value = 0
-        }
-    } catch {
-        pagingRef.value?.complete(false)
-    }
+        const response: any = await getOrderList({ ...orderQuery(channel.value, activeStatus.value, keyword.value), page, limit })
+        const data = response?.data
+        if (!data || !Array.isArray(data.data)) throw new Error('订单数据格式异常')
+        pagingRef.value?.complete(data.data)
+    } catch { pagingRef.value?.complete(false) }
 }
-
-function reload() { pagingRef.value?.reload() }
-function clearKeyword() { initialOrderId.value = 0; reload() }
-function changeTab(key: string) { activeTab.value = key; initialOrderId.value = 0; expandedId.value = 0; reload() }
-function toggleOrder(order: any) { expandedId.value = expandedId.value === Number(order.order_id) ? 0 : Number(order.order_id) }
-
+function toDetail(order: any) { uni.navigateTo({ url: `/addon/phone_shop/pages/order/detail?order_id=${Number(order.order_id)}` }) }
+async function openActions(order: any) {
+    if (opening.value) return
+    opening.value = true
+    try { const response: any = await getOrderDetail(order.order_id); currentOrder.value = response.data; actionSheetVisible.value = true }
+    finally { opening.value = false }
+}
+function selectAction(item: any) { actionSheetVisible.value = false; action.value = item.key; panelVisible.value = true }
 function scanOrder() {
     // #ifdef H5
-    uni.showToast({ title: '请在小程序中使用扫码', icon: 'none' })
+    uni.showToast({ title: '浏览器请手动输入订单号', icon: 'none' })
     // #endif
     // #ifndef H5
-    uni.scanCode({
-        success: result => {
-            keyword.value = String(result.result || '').trim()
-            reload()
-        },
-    })
+    uni.scanCode({ success: result => { keyword.value = String(result.result || '').trim(); reload() } })
     // #endif
 }
-
-function openActions(order: any) { currentOrder.value = order; actionSheetVisible.value = true }
-function selectAction(item: any) {
-    actionSheetVisible.value = false
-    if (item.action === 'reject_voucher') {
-        rejectVoucher()
-        return
-    }
-    processAction.value = item.action
-    processVisible.value = true
-}
-
-function rejectVoucher() {
-    if (!currentOrder.value) return
-    uni.showModal({
-        title: '驳回付款凭证', content: '', editable: true,
-        placeholderText: '请输入金额不符、截图不清晰等原因', confirmText: '确认驳回',
-        success: async result => {
-            if (!result.confirm) return
-            const reason = String(result.content || '').trim()
-            if (!reason) return uni.showToast({ title: '请填写驳回原因', icon: 'none' })
-            await processOfflineOrder({ order_id: Number(currentOrder.value.order_id), action: 'reject_voucher', close_reason: reason })
-            reload()
-        }
-    })
-}
-
-function markContacted(order: any) {
-    const name = order.member?.nickname || order.taker_name || '该客户'
-    uni.showModal({
-        title: '确认已联系',
-        content: `确认已经联系 ${ name }，并沟通了到店安排吗？`,
-        confirmText: '已联系',
-        success: async result => {
-            if (!result.confirm) return
-            await processOfflineOrder({ order_id: Number(order.order_id), action: 'contacted', remark: '已主动联系客户并确认到店安排' })
-            reload()
-        },
-    })
-}
-
-function confirmDelivery(order: any) {
-    uni.showModal({
-        title: '确认到店交付',
-        content: `请核对客户身份及设备后，确认订单 ${ order.order_no || '' } 已当面交付。`,
-        confirmText: '确认交付',
-        success: async result => {
-            if (!result.confirm) return
-            await processOfflineOrder({ order_id: Number(order.order_id), action: 'confirm_delivery', remark: '已当面核对客户并完成设备交付' })
-            reload()
-        },
-    })
-}
-
-function handleProcessSuccess() { processVisible.value = false; actionSheetVisible.value = false; reload() }
 </script>
-
 <style scoped lang="scss">
-.offline-page { min-height: 100vh; background: #f5f7fa; color: #1e293b; }
-.order-list { padding: 20rpx 24rpx 42rpx; }
-.empty-wrap { padding-top: 160rpx; text-align: center; }
-.empty-hint { display: block; margin: 18rpx auto 0; max-width: 520rpx; color: #94a3b8; font-size: 21rpx; line-height: 1.55; }
+.order-page { min-height: 100vh; background: #f5f7fa; color: #263244; }.order-list { padding: 18rpx 22rpx 40rpx; }.channel-filter { height: 76rpx; display: flex; align-items: center; gap: 18rpx; box-sizing: border-box; }.channel-filter view { padding: 10rpx 20rpx; font-size: 25rpx; color: #64748b; border-radius: 8rpx; }.channel-filter .active { color: var(--primary-color); background: var(--primary-color-light, #eff5ff); font-weight: 600; }.channel-filter text { font-size: 21rpx; color: #9aa4b2; margin-left: auto; }.empty-wrap { padding-top: 150rpx; text-align: center; }.empty-hint { display: block; margin: 24rpx auto 0; max-width: 570rpx; color: #8590a2; font-size: 24rpx; line-height: 1.6; }
 </style>

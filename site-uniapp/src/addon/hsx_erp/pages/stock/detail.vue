@@ -353,7 +353,8 @@ onLoad((query: any) => {
 })
 
 onShow(() => {
-    if (detailLoaded.value) reload()
+    // 分类选择页返回只更新当前上架草稿，不刷新合同覆盖正在填写的内容。
+    if (detailLoaded.value && !productVisible.value) reload()
 })
 
 async function loadDetail(options: { silent?: boolean } = {}) {

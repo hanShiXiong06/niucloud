@@ -1,0 +1,78 @@
+<?php
+declare(strict_types=1);
+if(PHP_SAPI!=='cli' || !in_array('--isolated-local-mysql',$argv,true)) exit("Requires --isolated-local-mysql\n");
+foreach(['curl_exec','curl_multi_exec','fsockopen','stream_socket_client'] as $fn) if(function_exists($fn)) exit("Disable network functions before testing\n");
+require __DIR__.'/bootstrap.php';
+use addon\hsx_boyuan\app\service\{ConfigService,TaskService,BatchService,MappingCandidateService,MappingSourceService,ReferenceService};
+use addon\hsx_boyuan\app\support\{Contract,Problem};
+use think\facade\Db;
+$pdo=null; $schema=''; $checks=0; $failed=false;
+function ensure(bool $ok,string $label): void {global $checks; if(!$ok) throw new RuntimeException($label); $checks++;}
+function reject(callable $fn,string $label): void {try{$fn();}catch(Problem $e){ensure(true,$label);return;}throw new RuntimeException($label);}
+try {
+    [$app,$pdo,$schema,$site]=boyuanBoot(); (new addon\hsx_boyuan\Addon())->install();
+    $cs=new ConfigService(); $c=$cs->save($site,1,['revision'=>0,'mode'=>'mock','enabled'=>true,'paused'=>false]); $key=$c['profiles']['mock']['connection_key'];
+    $service=new TaskService(); $batch=new BatchService();
+    $make=function(string $name,string $kind='purchase') use($site,$key,$service): int {return $service->enqueue($site,'mock',$key,['kind'=>$kind,'source_document_id'=>$name,'source_document_no'=>$name,'batch_ref'=>'initial'],'EVENT_'.$name);};
+    $a=$make('UX_READY'); $b=$make('UX_UNKNOWN'); $done=$make('UX_DONE'); $funds=$make('UX_FUNDS','settlement_register');
+    Db::name('hsx_boyuan_task')->where('id',$b)->update(['side_effect'=>'unknown','status'=>'confirming','request_json'=>'{"operation_id":"ORIGINAL_OP"}','operation_id'=>'ORIGINAL_OP']);
+    Db::name('hsx_boyuan_task')->where('id',$done)->update(['status'=>'simulated','side_effect'=>'applied']);
+    $base=['mode'=>'mock','connection_key'=>$key,'request_id'=>'UX_BATCH_001'];
+    $result=$batch->submit($site,1,$base+['ids'=>[$a,$a,$b,$done,$funds,99999999]]);
+    ensure(count($result['results'])===5 && $result['queued']===2 && !$result['completed'],'batch reports per-row queued rather than success');
+    ensure($result['results'][1]['action']==='query','unknown effect queries original operation only');
+    ensure(Db::name('hsx_boyuan_task')->where('id',$b)->value('operation_id')==='ORIGINAL_OP' && Db::name('hsx_boyuan_task')->where('id',$b)->value('query_only')===1,'query preserves original operation and prevents repeat write');
+    ensure($result['results'][2]['status']==='skipped','completed business is not submitted twice');
+    ensure($result['results'][3]['code']==='FINANCE_PAUSED','disabled finance guarded on server');
+    ensure($result['results'][4]['code']==='TASK_MISSING','unknown or cross-site task rejected without leaking data');
+    ensure(Db::name('hsx_boyuan_log')->where('action','batch_submit')->count()===2,'each accepted batch action has audit trail');
+    ensure(Db::name('erp_asset')->count()===0 && Db::name('hsx_boyuan_mock_record')->count()===0,'batch submission neither creates inventory nor remote records');
+    $states=$batch->states($site,$base+['ids'=>[$a,$b,99999999]]);
+    ensure(count($states['items'])===2,'batch results retrieved in one scoped query without unknown rows');
+    ensure(!isset($states['items'][0]['snapshot_json']) && !isset($states['items'][0]['request_json']),'status polling does not expose technical payloads');
+    reject(fn()=>$batch->states($site,array_replace($base,['ids'=>[$a],'connection_key'=>str_repeat('f',32)])),'result polling cannot cross account identity');
+    reject(fn()=>$batch->states($site,$base+['ids'=>array_fill(0,51,$a)]),'result polling bounded to fifty tasks');
+    reject(fn()=>$batch->submit($site,1,$base+['ids'=>['1']]),'string identities rejected');
+    reject(fn()=>$batch->submit($site,1,$base+['ids'=>array_fill(0,51,$a)]),'oversized batch rejected');
+    reject(fn()=>$batch->submit($site,1,$base+['ids'=>[]]),'empty batch rejected');
+    $wrong=$batch->submit($site,1,array_replace($base,['connection_key'=>str_repeat('f',32),'ids'=>[$a]])); ensure($wrong['results'][0]['code']==='CONNECTION_CHANGED','stale account cannot enqueue writes');
+    $c=$cs->save($site,1,['revision'=>$c['revision'],'paused'=>true]);
+    ensure($batch->submit($site,1,$base+['ids'=>[$a]])['results'][0]['code']==='SYNC_PAUSED','paused writes rejected');
+    $c=$cs->save($site,1,['revision'=>$c['revision'],'paused'=>false]);
+    Db::name('sys_user')->where('uid',1)->update(['mobile'=>'13800000001']);
+    $run=str_repeat('a',32);
+    Db::name('hsx_boyuan_reference_sync')->insert(['site_id'=>$site,'connection_key'=>$key,'mode'=>'mock','resource'=>'staff','run_key'=>$run,'status'=>'completed','scope_json'=>'{}','operator_uid'=>1]);
+    $add=function(string $id,string $resource,string $hash,array $extra=[]) use($site,$key,$run): void {Db::name('hsx_boyuan_reference')->insert(['site_id'=>$site,'connection_key'=>$key,'resource'=>$resource,'external_id'=>$id,'code'=>$id,'name'=>'虚构候选 '.$id,'enabled'=>1,'phone_hash'=>$hash,'phone_masked'=>'138****0001','extra_json'=>Contract::json($extra),'seen_run'=>$run]);};
+    $hash=ReferenceService::phoneHash($site,'13800000001'); $add('STAFF_A','staff',$hash,['company_name'=>'虚构一店']); $add('STAFF_B','staff',$hash,['company_name'=>'虚构二店']);
+    $candidates=new MappingCandidateService(); $rows=$candidates->search($site,'staff','staff:1');
+    ensure($rows['match']==='ambiguous' && count($rows['items'])===2,'same phone returns candidates for explicit single selection');
+    ensure(!str_contains(Contract::json($rows),'phone_hash') && !str_contains(Contract::json($rows),'13800000001'),'candidate response contains no phone plaintext or hash');
+    ensure(Db::name('hsx_boyuan_mapping')->count()===0,'phone candidates do not silently bind accounts');
+    Db::name('hsx_boyuan_reference')->where('external_id','STAFF_B')->update(['enabled'=>0]); ensure($candidates->search($site,'staff','staff:1')['match']==='unique','disabled remote candidates excluded');
+    Db::name('hsx_boyuan_reference')->where('external_id','STAFF_A')->update(['seen_run'=>str_repeat('b',32)]); ensure($candidates->search($site,'staff','staff:1')['match']==='not_found','unconfirmed historical archive not suggested');
+    Db::name('sys_user')->where('uid',1)->update(['mobile'=>'']); ensure($candidates->search($site,'staff','staff:1')['match']==='missing_phone','missing phone uses manual path');
+    reject(fn()=>$candidates->search($site+1,'staff','staff:1'),'staff identity belongs to active tenant role');
+    $party=(int)Db::name('erp_party')->insertGetId(['site_id'=>$site,'party_no'=>'UX_PARTY','party_name'=>'虚构多角色往来单位','party_type'=>'customer','role_flags'=>'sale_customer,purchase_supplier','contact_mobile'=>'13800000001','status'=>1]);
+    $sources=(new MappingSourceService())->search($site,['kind'=>'supplier']);
+    ensure(count($sources['items'])===1 && $sources['items'][0]['ref']==='party:'.$party,'same local party can be supplier via role flag');
+    MappingSourceService::assertMatches($site,'supplier','party:'.$party); ensure(true,'multi-role source passes identity validation');
+    Db::name('erp_party')->where('id',$party)->update(['status'=>0]);
+    ensure((new MappingSourceService())->search($site,['kind'=>'supplier'])['items']===[],'disabled local source is not offered as a new selection');
+    reject(fn()=>MappingSourceService::assertMatches($site,'supplier','party:'.$party),'disabled source cannot bypass picker validation');
+    Db::name('erp_party')->where('id',$party)->update(['status'=>1]);
+    Db::name('hsx_boyuan_reference_sync')->insert(['site_id'=>$site,'connection_key'=>$key,'mode'=>'mock','resource'=>'parties','run_key'=>$run,'status'=>'completed','scope_json'=>'{}','operator_uid'=>1]);
+    $add('PARTY_A','parties',$hash,['is_cust'=>1,'is_supplier'=>1]); $add('PARTY_B','parties',$hash,['is_cust'=>1,'is_supplier'=>0]);
+    ensure($candidates->search($site,'supplier','party:'.$party)['total']===1,'supplier candidates respect remote role');
+    ensure($candidates->search($site,'customer','party:'.$party)['total']===2,'customer candidates preserve both records instead of merging');
+    Db::name('hsx_boyuan_mapping')->insert(['site_id'=>$site,'connection_key'=>$key,'kind'=>'warehouse','local_ref'=>'warehouse:UX','external_id'=>'EXT_WH','external_code'=>'EXT_WH','external_name'=>'已对应仓库','extra_json'=>'{}']);
+    $missing=TaskService::missingMappings($site,$key,['kind'=>'purchase','lines'=>[['product_ref'=>'model:UX','product_name'=>'待对应商品','warehouse_ref'=>'warehouse:UX']],'salesperson_ref'=>'staff:1','payment_method_ref'=>'method:cash']);
+    ensure(count($missing)===1 && $missing[0]['kind']==='product','purchase only lists actual missing references, not mapped warehouse or unrelated staff');
+    ensure(TaskService::missingMappings($site,$key,['outside_scope'=>true,'kind'=>'sale','lines'=>[['product_ref'=>'old']]])===[],'out-of-scope business does not offer misleading mapping fixes');
+    $c=$cs->save($site,1,['revision'=>$c['revision'],'mode'=>'test','enabled'=>false,'paused'=>true,'profile'=>['protocol'=>'openapi_v153','endpoint'=>'https://open-api-uat.139erp.com/api','app_id'=>'123456','account_id'=>'TEST_ONLY']]);
+    $blocked=$batch->submit($site,1,['ids'=>[$a],'mode'=>'test','connection_key'=>$c['profiles']['test']['connection_key'],'request_id'=>'UX_BATCH_002']);
+    ensure($blocked['results'][0]['code']==='WRITE_UNAVAILABLE','unavailable vendor write API never pretends to submit');
+    ensure(Db::name('hsx_boyuan_task')->count()===4,'all operations retained without duplicate tasks or deletion');
+    echo Contract::json(['passed'=>true,'checks'=>$checks,'remote_calls'=>0,'business_database_modified'=>false])."\n";
+} catch(Throwable $e) { $failed=true; fwrite(STDERR,'FAIL '.get_class($e).': '.($e instanceof Problem?$e->reason:$e->getMessage()).' at '.basename($e->getFile()).':'.$e->getLine()."\n"); }
+finally {if($pdo && preg_match('/^hsx_boyuan_test_[a-f0-9]{16}$/D',$schema)) $pdo->exec('DROP DATABASE `'.$schema.'`');}
+exit($failed?1:0);

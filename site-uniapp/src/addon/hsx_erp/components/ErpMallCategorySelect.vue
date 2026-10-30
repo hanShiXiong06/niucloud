@@ -1,20 +1,21 @@
 <template>
-    <view class="mall-category">
+    <view v-if="!standalone" class="mall-category">
         <view class="mall-category__entry" @click="open">
             <text class="mall-category__label">商城分类 *</text>
             <text class="mall-category__value" :class="{ placeholder: !selected }">{{ selected || '请选择商城分类' }}</text>
             <u-icon name="arrow-right" size="14" color="#94a3b8" />
         </view>
-        <u-popup :show="show" mode="bottom" round="20" :z-index="10100" :safe-area-inset-bottom="true" @close="close">
-            <view v-if="show" class="category-picker" @touchmove.stop.prevent="noop">
+    </view>
+    <!-- 分类浏览独占一页，不再把固定弹层放进上架弹窗的原生 scroll-view。 -->
+    <view v-else class="category-picker" @touchmove.stop.prevent="noop">
                 <view class="category-picker__head">
-                    <view class="category-picker__heading"><text class="category-picker__title">选择商城分类</text><text class="category-picker__subtitle">逐级筛选，或直接搜索具体型号</text></view>
-                    <view class="category-picker__close" role="button" aria-label="关闭分类选择" @click="close"><u-icon name="close" size="21" color="#64748b" /></view>
+                    <text class="category-picker__subtitle">逐级筛选，或直接搜索具体型号</text>
+                    <view class="category-picker__close" role="button" aria-label="取消分类选择" @click="close"><text>取消</text></view>
                 </view>
                 <view class="category-picker__search-row">
                     <view class="category-picker__search-box">
                         <u-icon name="search" size="18" color="#94a3b8" />
-                        <input v-model="keyword" class="category-picker__search-input" placeholder="搜索型号、品牌或系列" confirm-type="search" :maxlength="120" @confirm="submitSearch" />
+                        <input v-model="keyword" class="category-picker__search-input" placeholder="搜索型号、品牌或系列" confirm-type="search" :maxlength="120" :adjust-position="false" :cursor-spacing="16" @keyboardheightchange="onKeyboardHeightChange" @confirm="submitSearch" />
                         <view v-if="keyword" class="category-picker__search-clear" role="button" aria-label="清空搜索" @click="clearSearch"><u-icon name="close-circle-fill" size="17" color="#94a3b8" /></view>
                     </view>
                     <view class="category-picker__search-action" role="button" @click="submitSearch">搜索</view>
@@ -67,18 +68,16 @@
                     <view class="category-picker__current"><text class="category-picker__current-label">当前选择</text><text class="category-picker__current-value">{{ selected || '尚未选择' }}</text></view>
                     <view class="category-picker__foot-actions"><text v-if="selectedOption && !loading && !error" class="category-picker__locate" @click="locateSelected">定位已选</text><text class="category-picker__refresh" :class="{ 'is-disabled': loading }" @click="load(false)">{{ loading ? '加载中…' : '刷新' }}</text></view>
                 </view>
-            </view>
-        </u-popup>
     </view>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { getErpListingCatalog } from '@/addon/hsx_erp/api/erp'
 import { buildMallCategoryIndex, getMallCategoryBrowseRows, getMallCategoryParentPath, getMallCategoryTrail, normalizeCategorySearch, searchMallCategories, type MallCategoryNode, type MallCategoryOption } from '@/addon/hsx_erp/hooks/mallCategoryPicker'
 
-const props = defineProps<{ modelValue: number; selectedLabel?: string }>()
-const emit = defineEmits(['update:modelValue', 'change'])
+const props = defineProps<{ modelValue: number; selectedLabel?: string; standalone?: boolean }>()
+const emit = defineEmits(['update:modelValue', 'change', 'close', 'keyboard-height'])
 const PAGE_SIZE = 40
 const show = ref(false)
 const loading = ref(false)
@@ -95,6 +94,7 @@ const scrollTarget = ref('')
 let requestSeq = 0
 let navigationSeq = 0
 let disposed = false
+let navigating = false
 
 const categoryIndex = computed(() => buildMallCategoryIndex(options.value))
 const rootNodes = computed(() => categoryIndex.value.roots.map(id => categoryIndex.value.nodes.get(id)!))
@@ -114,7 +114,12 @@ const searchListKey = computed(() => 'search-' + normalizeCategorySearch(keyword
 
 function noop() {}
 function resetList() { visibleCount.value = PAGE_SIZE; scrollTarget.value = '' }
-function close() { show.value = false; requestSeq++; loading.value = false }
+function close() {
+    show.value = false; requestSeq++; loading.value = false
+    if (typeof uni.hideKeyboard === 'function') uni.hideKeyboard()
+    if (props.standalone) emit('close')
+}
+function onKeyboardHeightChange(event: any) { emit('keyboard-height', Math.max(0, Number(event?.detail?.height) || 0)) }
 function navigateTo(id: number) {
     if (id !== 0 && !categoryIndex.value.nodes.has(id)) return
     navigationSeq++
@@ -136,7 +141,6 @@ function choose(item: MallCategoryOption) {
     if (!option) return
     emit('update:modelValue', option.value)
     emit('change', option)
-    close()
 }
 async function locateSelected() {
     const item = selectedOption.value
@@ -180,12 +184,35 @@ async function load(relocate = false) {
     } finally { if (!disposed && sequence === requestSeq) loading.value = false }
 }
 function open() {
+    if (!props.standalone) {
+        if (navigating) return
+        navigating = true
+        uni.hideKeyboard()
+        uni.navigateTo({
+            url: `/addon/hsx_erp/pages/stock/mall-category?selected_id=${Number(props.modelValue) || 0}`,
+            events: {
+                mallCategorySelected: (item: any) => {
+                    if (disposed) return
+                    const option = buildMallCategoryIndex([item]).options[0]
+                    if (!option) return
+                    // 反显仍采用同一份商城叶级数据，不猜父级或分类名称。
+                    options.value = [option]
+                    emit('update:modelValue', option.value)
+                    emit('change', option)
+                }
+            },
+            fail: () => uni.showToast({ title: '分类页打开失败，请更新移动管理端后重试', icon: 'none' }),
+            complete: () => { navigating = false }
+        })
+        return
+    }
     show.value = true; keyword.value = ''; searchScope.value = 'all'; resetList()
     if (selectedOption.value) locateSelected()
     else navigateTo(0)
     void load(true)
 }
 watch(() => normalizeCategorySearch(keyword.value) + '|' + searchScope.value, resetList)
+onMounted(() => { if (props.standalone) open() })
 onBeforeUnmount(() => { disposed = true; requestSeq++ })
 defineExpose({ open, close })
 </script>
@@ -193,13 +220,13 @@ defineExpose({ open, close })
 <style scoped lang="scss">
 .mall-category{margin:20rpx 0;padding:20rpx;border:1rpx solid #e2e8f0;border-radius:16rpx;background:#fff;min-width:0}
 .mall-category__entry{display:flex;align-items:center;gap:16rpx;min-height:60rpx}.mall-category__label{flex-shrink:0;font-size:28rpx;color:#334155;font-weight:600}.mall-category__value{flex:1;min-width:0;text-align:right;font-size:26rpx;color:#0f172a;line-height:1.5;word-break:break-word}.placeholder{color:#94a3b8}.mall-category__hint{display:block;margin-top:10rpx;font-size:23rpx;color:#64748b}
-.category-picker{display:flex;flex-direction:column;height:82vh;max-height:calc(100vh - 96rpx);overflow:hidden;box-sizing:border-box;background:#fff;border-radius:24rpx 24rpx 0 0;color:#0f172a}
-.category-picker__head{display:flex;align-items:center;justify-content:space-between;flex-shrink:0;padding:24rpx 20rpx 12rpx 28rpx}.category-picker__heading{display:flex;flex-direction:column;gap:6rpx;min-width:0}.category-picker__title{font-size:17px;font-weight:650;line-height:1.4}.category-picker__subtitle{font-size:12px;line-height:1.5;color:#64748b}.category-picker__close{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:88rpx;height:88rpx}
+.category-picker{display:flex;flex-direction:column;height:100%;width:100%;min-width:0;min-height:0;overflow:hidden;box-sizing:border-box;background:#fff;color:#0f172a}
+.category-picker__head{display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:12rpx;padding:8rpx 20rpx 0 28rpx}.category-picker__subtitle{font-size:12px;line-height:1.5;color:#64748b}.category-picker__close{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:88rpx;height:88rpx;color:#2563eb;font-size:14px}
 .category-picker__search-row{display:flex;align-items:center;gap:12rpx;padding:0 24rpx 20rpx;flex-shrink:0}.category-picker__search-box{display:flex;align-items:center;gap:14rpx;flex:1;min-width:0;height:80rpx;padding:0 20rpx;border-radius:12rpx;background:#f1f5f9}.category-picker__search-input{flex:1;min-width:0;height:80rpx;font-size:14px;color:#0f172a}.category-picker__search-clear{display:flex;align-items:center;justify-content:center;min-width:52rpx;height:80rpx}.category-picker__search-action{display:flex;align-items:center;justify-content:center;min-width:88rpx;height:88rpx;color:#2563eb;font-size:14px;font-weight:500}
 .category-picker__warning{flex-shrink:0;margin:0 24rpx 12rpx;padding:12rpx 16rpx;background:#fffbeb;color:#92400e;font-size:12px;line-height:1.5;border-radius:8rpx}
-.category-picker__breadcrumb{flex-shrink:0;white-space:nowrap;border-top:1rpx solid #f1f5f9;border-bottom:1rpx solid #e2e8f0}.category-picker__breadcrumb-inner{display:inline-flex;align-items:center;gap:16rpx;min-height:84rpx;padding:0 28rpx}.category-picker__crumb{font-size:13px;line-height:1.5;color:#2563eb;padding:18rpx 0}.category-picker__crumb.is-current{font-weight:600;color:#0f172a}.category-picker__crumb-separator{color:#cbd5e1;font-size:12px}
+.category-picker__breadcrumb{flex:none;height:84rpx;white-space:nowrap;border-top:1rpx solid #f1f5f9;border-bottom:1rpx solid #e2e8f0;box-sizing:border-box}.category-picker__breadcrumb-inner{display:inline-flex;align-items:center;gap:16rpx;height:82rpx;padding:0 28rpx}.category-picker__crumb{font-size:13px;line-height:1.5;color:#2563eb;padding:18rpx 0}.category-picker__crumb.is-current{font-weight:600;color:#0f172a}.category-picker__crumb-separator{color:#cbd5e1;font-size:12px}
 .category-picker__scope{display:flex;align-items:center;gap:12rpx;padding:0 24rpx 16rpx;flex-shrink:0;border-bottom:1rpx solid #e2e8f0}.category-picker__scope-item{padding:12rpx 18rpx;border:1rpx solid #e2e8f0;border-radius:8rpx;font-size:12px;color:#475569}.category-picker__scope-item.is-active{background:#eff6ff;border-color:#bfdbfe;color:#2563eb;font-weight:600}.category-picker__count{margin-left:auto;font-size:12px;color:#64748b}.category-picker__scope-note{padding:14rpx 4rpx;font-size:12px;color:#64748b}
-.category-picker__body{display:flex;flex:1;min-height:0;overflow:hidden}.category-picker__workspace{display:flex;flex:1;min-width:0;min-height:0}.category-picker__roots{width:172rpx;flex-shrink:0;height:100%;background:#f5f7fa}.category-picker__root{position:relative;display:flex;flex-direction:column;justify-content:center;gap:4rpx;min-height:108rpx;padding:16rpx 20rpx;box-sizing:border-box;font-size:14px;line-height:1.45;word-break:break-word;color:#475569}.category-picker__root.is-active{color:#2563eb;background:#fff;font-weight:600}.category-picker__root.is-active::before{position:absolute;content:'';left:0;top:30%;height:40%;width:6rpx;border-radius:0 4rpx 4rpx 0;background:#2563eb}.category-picker__root-count{font-size:11px;line-height:1.4;font-weight:400;color:#64748b}
+.category-picker__body{display:flex;flex:1;min-height:0;overflow:hidden}.category-picker__workspace{display:flex;flex:1;min-width:0;min-height:0;width:100%;overflow:hidden}.category-picker__roots{width:172rpx;flex:0 0 172rpx;min-width:0;height:100%;background:#f5f7fa;box-sizing:border-box}.category-picker__root{position:relative;display:flex;flex-direction:column;justify-content:center;gap:4rpx;min-height:108rpx;padding:16rpx 20rpx;box-sizing:border-box;font-size:14px;line-height:1.45;word-break:break-word;color:#475569}.category-picker__root.is-active{color:#2563eb;background:#fff;font-weight:600}.category-picker__root.is-active::before{position:absolute;content:'';left:0;top:30%;height:40%;width:6rpx;border-radius:0 4rpx 4rpx 0;background:#2563eb}.category-picker__root-count{font-size:11px;line-height:1.4;font-weight:400;color:#64748b}
 .category-picker__panel{display:flex;flex-direction:column;flex:1;min-height:0;min-width:0}.category-picker__context{display:flex;align-items:baseline;flex-wrap:wrap;gap:8rpx 16rpx;padding:20rpx 24rpx 10rpx;font-size:14px;font-weight:600;line-height:1.5;flex-shrink:0;word-break:break-word}.category-picker__context-count{font-size:12px;color:#64748b;font-weight:400}.category-picker__tree-list{flex:1;min-height:0;height:100%;box-sizing:border-box}.category-picker__nodes{padding:0 24rpx}.category-picker__nodes--grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16rpx;padding:16rpx 24rpx}.category-picker__node{display:flex;align-items:center;gap:12rpx;min-height:100rpx;padding:20rpx 0;box-sizing:border-box;border-bottom:1rpx solid #eef2f6}.category-picker__nodes--grid .category-picker__node{padding:20rpx;min-height:112rpx;border:1rpx solid #e2e8f0;border-radius:12rpx}.category-picker__node-copy{flex:1;min-width:0}.category-picker__node-name{display:block;font-size:14px;line-height:1.5;word-break:break-word}.category-picker__node-count{display:block;margin-top:5rpx;color:#64748b;font-size:12px}.category-picker__node.is-selected .category-picker__node-name{color:#2563eb;font-weight:600}.category-picker__node.is-selected{background:#f5f9ff}
 .category-picker__results{flex:1;min-width:0;min-height:0;height:100%;padding:0 24rpx;box-sizing:border-box}.category-picker__result{display:flex;align-items:center;gap:16rpx;min-height:116rpx;padding:20rpx 4rpx;border-bottom:1rpx solid #eef2f6;box-sizing:border-box}.category-picker__result-copy{flex:1;min-width:0}.category-picker__result-title{display:block;font-size:15px;line-height:1.5;word-break:break-word}.category-picker__result-path{display:block;margin-top:5rpx;font-size:12px;color:#64748b;line-height:1.5;word-break:break-word}.category-picker__result.is-selected .category-picker__result-title{color:#2563eb;font-weight:600}.category-picker__selected-mark{display:flex;align-items:center;gap:6rpx;flex-shrink:0;font-size:12px;color:#2563eb}
 .category-picker__empty{display:flex;flex:1;min-width:0;flex-direction:column;align-items:center;justify-content:center;gap:14rpx;padding:40rpx 32rpx;text-align:center;color:#64748b;font-size:13px;line-height:1.6;box-sizing:border-box}.category-picker__empty-title{color:#334155;font-size:15px;font-weight:600}.category-picker__empty--search{min-height:320rpx}.category-picker__retry{margin-top:14rpx;min-height:80rpx;display:flex;align-items:center;justify-content:center;padding:0 24rpx;border:1rpx solid #cbd5e1;border-radius:10rpx;color:#2563eb;font-size:14px}.category-picker__more{text-align:center;padding:24rpx 16rpx;font-size:12px;line-height:1.5;color:#64748b}.category-picker__more.is-clickable{color:#2563eb}

@@ -1,0 +1,5 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><title>博远移动端窄屏验收</title><style>body{margin:0;background:#e9edf1;font:14px system-ui,sans-serif;color:#26323e}header{padding:12px 18px;display:flex;align-items:center;gap:14px}select{font:inherit;padding:6px;border:1px solid #ccd3dd;background:white}iframe{display:block;margin:0 auto;border:1px solid #cbd3dd;max-width:100%;background:white}a{color:#245fbe}</style></head>
+<body><header><label>视口 <select id="width"><option>320</option><option>375</option><option>430</option></select></label><a href="/">返回验收页</a></header><iframe id="preview" title="手机管理端验收" height="812" src="/"></iframe><script>const select=document.querySelector('#width'),frame=document.querySelector('#preview');const chosen=new URLSearchParams(location.search).get('width');select.value=['320','375','430'].includes(chosen)?chosen:'375';function resize(){frame.width=select.value}select.addEventListener('change',resize);resize();</script></body>
+</html>

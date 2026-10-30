@@ -1,0 +1,12 @@
+{
+  "title": "商户客资协作",
+  "key": "hsx_lead",
+  "version": "1.1.0",
+  "author": "hsx",
+  "desc": "商户地区档案、ERP只读库存同步、客资派单、成交核验与佣金登记",
+  "type": "app",
+  "support_app": "",
+  "support_version": "1.2.4",
+  "compile": []
+}
+
