@@ -4,7 +4,7 @@
         :confirm-disabled="!confirmed || !pending.length || loading" @confirm="submit">
         <div class="batch-form">
             <HsxNotice :closable="false" :title="action === 'batch_delivery' ? '按整单交付；物流订单填写已有的真实运单号' : '确认客户已收货后，结束所列订单'"
-                :description="action === 'batch_delivery' ? '勾选设备代表选择所属整单。物流发货不申请面单、不调用付费配送；自提订单将确认当面交付并完成。同城配送请逐单办理。已退回设备不会再次发货。' : '本操作不新增收款，不代替财务结算；仅将已发货的订单确认完成。'" />
+                :description="action === 'batch_delivery' ? '勾选设备代表选择所属整单。物流发货不申请面单、不调用付费配送；自提订单登记当面交付，挂账订单需财务结清后才能完成。同城配送请逐单办理。已退回设备不会再次发货。' : '本操作不新增收款；挂账订单仅在 ERP 财务结清后才可完成，未结清订单会保留并提示原因。'" />
             <HsxNotice v-if="error" type="error" :title="error" :closable="false" />
             <div v-if="hasResult" class="batch-summary">成功 {{ rows.filter(row => row.success === true).length }} 笔 · 未成功 {{ pending.length }} 笔。可修改后仅重试未成功订单。</div>
             <el-table :data="rows" border v-loading="loading">
@@ -17,7 +17,7 @@
                             </el-select>
                             <el-input v-model="row.express_number" placeholder="填写实际运单号" maxlength="60" :disabled="busy || row.success === true" />
                         </div>
-                        <span v-else-if="row.delivery_type === 'store'">门店自提：确认当面交付并完成</span>
+                        <span v-else-if="row.delivery_type === 'store'">门店自提：登记当面交付；挂账收款另行核对</span>
                         <span v-else class="batch-warning">同城配送或特殊订单，请逐单办理</span>
                     </template>
                 </el-table-column>

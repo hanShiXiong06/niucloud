@@ -16,6 +16,7 @@ use addon\phone_shop\app\model\goods\Goods;
 use addon\phone_shop\app\model\goods\Label;
 use core\base\BaseAdminService;
 use core\exception\AdminException;
+use think\facade\Db;
 
 
 /**
@@ -38,6 +39,7 @@ class LabelService extends BaseAdminService
      */
     public function getPage(array $where = [])
     {
+        $status = $this->statusValue($where['status'] ?? '', true);
         $field = 'label_id, label_name, group_id, style_type, color_json, icon, status, memo, sort, create_time, update_time';
         $order = 'label_id desc';
         if (!empty($where[ 'order' ])) {
@@ -51,6 +53,7 @@ class LabelService extends BaseAdminService
                 },
             ])
             ->order($order);
+        if ($status !== null) $search_model->where('status', $status);
         $list = $this->pageQuery($search_model);
         return $list;
     }
@@ -161,14 +164,46 @@ class LabelService extends BaseAdminService
     /**
      * 修改状态
      * @param $data
-     * @return Label
+     * @return array
      */
     public function modifyStatus($data)
     {
-        return $this->model->where([
-            [ 'label_id', '=', $data[ 'label_id' ] ],
-            [ 'site_id', '=', $this->site_id ]
-        ])->update([ 'status' => $data[ 'status' ] ]);
+        $status = $this->statusValue($data['status'] ?? null);
+        $values = array_key_exists('label_ids', $data) && $data['label_ids'] !== null
+            ? $data['label_ids'] : [$data['label_id'] ?? null];
+        if (!is_array($values) || count($values) < 1 || count($values) > 100) {
+            throw new AdminException('每次请选择 1 至 100 个标签');
+        }
+        $ids = [];
+        foreach ($values as $value) {
+            if ((!is_int($value) && !is_string($value)) || !preg_match('/^[1-9][0-9]*$/D', (string)$value)
+                || filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) === false) {
+                throw new AdminException('标签选择无效，请刷新后重新选择');
+            }
+            $ids[] = (int)$value;
+        }
+        if (count(array_unique($ids)) !== count($ids)) throw new AdminException('标签选择不能重复');
+        sort($ids, SORT_NUMERIC);
+
+        return Db::transaction(function () use ($ids, $status) {
+            $rows = $this->model->where('site_id', $this->site_id)->whereIn('label_id', $ids)
+                ->field('label_id,status')->order('label_id asc')->lock(true)->select()->toArray();
+            if (count($rows) !== count($ids)) throw new AdminException('部分标签已不存在或不属于本站，未修改任何标签，请刷新后重新选择');
+            $changedIds = array_column(array_filter($rows, static fn($row) => (int)$row['status'] !== $status), 'label_id');
+            if ($changedIds !== []) {
+                $this->model->where('site_id', $this->site_id)->whereIn('label_id', $changedIds)
+                    ->update(['status' => $status, 'update_time' => time()]);
+            }
+            return ['requested_count' => count($ids), 'changed_count' => count($changedIds), 'status' => $status];
+        });
+    }
+
+    /** 空筛选不限制状态；关闭值 0 不能用 empty() 忽略。 */
+    private function statusValue($value, bool $allowEmpty = false): ?int
+    {
+        if ($allowEmpty && ($value === '' || $value === null)) return null;
+        if (!in_array($value, [0, 1, '0', '1'], true)) throw new AdminException('标签状态只能选择启用或停用');
+        return (int)$value;
     }
 
     /**

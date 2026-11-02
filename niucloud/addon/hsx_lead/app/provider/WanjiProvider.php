@@ -18,6 +18,7 @@ final class WanjiProvider extends AbstractProvider
 
     public function login(#[\SensitiveParameter] array $credentials): array
     {
+        $secretTrace = \addon\hsx_lead\app\support\PhpRuntime::guardSecrets();
         $username = $credentials['username'] ?? null;
         $password = $credentials['password'] ?? null;
         if (!is_string($username) || trim($username) === '' || strlen($username) > 512 ||
@@ -31,6 +32,7 @@ final class WanjiProvider extends AbstractProvider
 
     private function loginResult(#[\SensitiveParameter] array $page): array
     {
+        $secretTrace = \addon\hsx_lead\app\support\PhpRuntime::guardSecrets();
         // Authorized live schema: {code:200,data:{access_token,link,expires_in}}.
         // Never hunt recursively for tokens or return the original authentication body.
         $data = $page['data'] ?? null;
@@ -56,6 +58,7 @@ final class WanjiProvider extends AbstractProvider
 
     private function tenantHint(#[\SensitiveParameter] string $token): ?string
     {
+        $secretTrace = \addon\hsx_lead\app\support\PhpRuntime::guardSecrets();
         $parts = explode('.', $token);
         if (count($parts) !== 3 || strlen($parts[1]) > 32768 || !preg_match('/^[A-Za-z0-9_\-]+$/D', $parts[1])) return null;
         $payload = base64_decode(strtr($parts[1], '-_', '+/') . str_repeat('=', (4 - strlen($parts[1]) % 4) % 4), true);
@@ -70,6 +73,7 @@ final class WanjiProvider extends AbstractProvider
 
     public function fetchPage(#[\SensitiveParameter] array $credentials, array $cursor, array $scope): array
     {
+        $secretTrace = \addon\hsx_lead\app\support\PhpRuntime::guardSecrets();
         [$pageNum, $pageSize] = $this->pagination($cursor, $scope);
         $query = $scope['query'] ?? [];
         if (!is_array($query) || array_diff(array_keys($query), self::QUERY_KEYS)) {
@@ -86,7 +90,7 @@ final class WanjiProvider extends AbstractProvider
         if (($scope['omit_machine_type'] ?? false) === true) unset($body['machineType']);
         $page = $this->transport->post(self::STOCK_ENDPOINT, $this->headers($credentials) + ['Authorization' => 'Bearer ' . $this->accessToken($credentials)], $body);
         $this->assertBusinessSuccess($page);
-        if (!isset($page['rows']) || !is_array($page['rows']) || !array_is_list($page['rows']) ||
+        if (!isset($page['rows']) || !is_array($page['rows']) || !\addon\hsx_lead\app\support\PhpRuntime::isList($page['rows']) ||
             !is_bool($page['hasMore'] ?? null) || (string) ($page['pageNum'] ?? '') !== (string) $pageNum ||
             (string) ($page['pageSize'] ?? '') !== (string) $pageSize || count($page['rows']) > $pageSize ||
             ($page['hasMore'] && $page['rows'] === [])) {
@@ -116,6 +120,14 @@ final class WanjiProvider extends AbstractProvider
     public function normalize(array $row, array $context): array
     {
         $safe = $this->safeSnapshot($row);
+        // Verified official 小店状态 filter dictionary (2026-10-31):
+        // https://lite.wanjisaas.com/assets/StockFilters-B4VvnxGD.js
+        // This proves listing only, not the unrelated machineStatus or stock.
+        $listing = match ($row['storeMallFlag'] ?? null) {
+            1, '1' => 'unlisted',
+            2, '2' => 'listed',
+            default => 'unknown',
+        };
         return $this->common($safe, $context, [
             'id' => $row['machineId'] ?? null,
             'store_id' => $row['shopId'] ?? null,
@@ -125,6 +137,7 @@ final class WanjiProvider extends AbstractProvider
             'retail_price' => $row['retailAmount'] ?? null, 'trade_price' => $row['wholesaleAmount'] ?? null,
             'imei' => $row['imeiNoFirst'] ?? null,
             'images' => array_merge([$safe['homeImageUrl']], array_column($safe['imageList'], 'url')),
+            'listing_status' => $listing,
             'source_status' => ['machine_status' => $this->scalar($row['machineStatus'] ?? null),
                 'mall_flag' => $this->scalar($row['storeMallFlag'] ?? null), 'machine_type' => $this->scalar($row['machineType'] ?? null)],
         ]);
@@ -132,6 +145,7 @@ final class WanjiProvider extends AbstractProvider
 
     private function headers(#[\SensitiveParameter] array $credentials): array
     {
+        $secretTrace = \addon\hsx_lead\app\support\PhpRuntime::guardSecrets();
         $result = [];
         foreach (['Platsource' => ['platsource', 'MiniPrograms'], 'DeviceInfo' => ['device_info', null]] as $name => [$key, $default]) {
             $value = $credentials[$key] ?? $default;

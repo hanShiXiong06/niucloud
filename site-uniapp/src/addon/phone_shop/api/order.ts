@@ -41,8 +41,8 @@ export function confirmOrderDeviceReceived(orderGoodsId: number | string) {
     return request.post(`phone_shop/order/device_received/${orderGoodsId}`, { received: true }, { showErrorMessage: false })
 }
 
-export function refundOrder(data: Record<string, any>) {
-    return request.post('phone_shop/order/refund/active', data, { showErrorMessage: false })
+export function getOrderRefundMoney(orderGoodsIds: number[]) {
+    return request.get('phone_shop/order/refund/refund_money', { order_goods_ids: orderGoodsIds }, { showErrorMessage: false })
 }
 
 export function setOrderRemark(orderId: number | string, remark: string) {

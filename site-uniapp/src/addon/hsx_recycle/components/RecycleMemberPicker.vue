@@ -4,14 +4,16 @@
         mode="bottom"
         round="20"
         :z-index="10140"
-        :safe-area-inset-bottom="true"
+        :safe-area-inset-bottom="keyboardHeight === 0"
+        :custom-style="popupStyle"
+        @open="onPopupOpen"
         @close="handleClose"
     >
-        <view class="recycle-member-picker" @touchmove.stop.prevent="noop">
+        <view class="recycle-member-picker" :style="pickerStyle" @touchmove.stop.prevent="noop">
             <view class="recycle-member-picker__header">
                 <view class="recycle-member-picker__heading">
-                    <text class="recycle-member-picker__title">选择客户</text>
-                    <text class="recycle-member-picker__subtitle">选择本站已有客户，订单将记录在该客户名下</text>
+                    <text class="recycle-member-picker__title">{{ title }}</text>
+                    <text v-if="!keyboardHeight" class="recycle-member-picker__subtitle">{{ subtitle }}</text>
                 </view>
                 <view class="recycle-member-picker__close" @tap="handleClose">
                     <text class="nc-iconfont nc-icon-guanbiV6xx1"></text>
@@ -26,6 +28,9 @@
                     placeholder="搜索昵称、手机号或会员编号"
                     confirm-type="search"
                     :maxlength="80"
+                    :focus="searchFocused"
+                    :adjust-position="false"
+                    @keyboardheightchange="onKeyboardHeightChange"
                     @confirm="handleSearch"
                 />
                 <view v-if="keyword" class="recycle-member-picker__clear" @tap="clearSearch">
@@ -34,7 +39,7 @@
                 <view class="recycle-member-picker__search-button" @tap="handleSearch">搜索</view>
             </view>
 
-            <view v-if="selectedMember" class="recycle-member-picker__selected" @tap="selectMember(selectedMember)">
+            <view v-if="selectedMember && !keyboardHeight" class="recycle-member-picker__selected" @tap="selectMember(selectedMember)">
                 <text class="recycle-member-picker__selected-label">当前客户</text>
                 <view class="recycle-member-picker__selected-info">
                     <text class="recycle-member-picker__name">{{ memberName(selectedMember) }}</text>
@@ -100,14 +105,23 @@ export interface RecycleMemberOption {
 </script>
 
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { searchMemberList } from '@/addon/hsx_recycle/api/order'
+import { getRecycleNavbarMetrics } from '@/addon/hsx_recycle/utils/navbar'
 
 const props = withDefaults(defineProps<{
     show: boolean
     selectedMember?: RecycleMemberOption | null
+    title?: string
+    subtitle?: string
+    autoFocus?: boolean
+    searchOnInput?: boolean
 }>(), {
-    selectedMember: null
+    selectedMember: null,
+    title: '选择客户',
+    subtitle: '选择本站已有客户，订单将记录在该客户名下',
+    autoFocus: false,
+    searchOnInput: false
 })
 
 const emit = defineEmits<{
@@ -125,7 +139,21 @@ const hasMore = ref(true)
 const loading = ref(false)
 const error = ref('')
 const scrollTop = ref(0)
+const searchFocused = ref(false)
+const keyboardHeight = ref(0)
+const windowHeight = Number((typeof uni.getWindowInfo === 'function' ? uni.getWindowInfo() : uni.getSystemInfoSync()).windowHeight) || 640
+let pickerSafeTop = 24
+// #ifdef MP
+pickerSafeTop = Math.max(pickerSafeTop, getRecycleNavbarMetrics().navbarHeightPx)
+// #endif
+const popupStyle = computed(() => keyboardHeight.value ? { marginBottom: `${keyboardHeight.value}px` } : {})
+const pickerStyle = computed(() => keyboardHeight.value ? { height: `${Math.max(0, Math.min(windowHeight * .78, windowHeight - keyboardHeight.value - pickerSafeTop))}px` } : {})
 let requestVersion = 0
+let searchTimer: ReturnType<typeof setTimeout> | undefined
+
+const cancelSearchTimer = () => { if (searchTimer) clearTimeout(searchTimer); searchTimer = undefined }
+const onPopupOpen = () => { if (props.show && props.autoFocus) searchFocused.value = true }
+const onKeyboardHeightChange = (event: any) => { keyboardHeight.value = Math.max(0, Number(event?.detail?.height) || 0) }
 
 const noop = () => {}
 const memberName = (member: RecycleMemberOption) => member.nickname || member.username || member.member_no || `会员${ member.member_id }`
@@ -195,11 +223,13 @@ const loadMembers = async (reset = false) => {
 }
 
 const handleSearch = () => {
+    cancelSearchTimer()
     submittedKeyword.value = keyword.value.trim()
     loadMembers(true)
 }
 
 const clearSearch = () => {
+    cancelSearchTimer()
     keyword.value = ''
     submittedKeyword.value = ''
     loadMembers(true)
@@ -209,6 +239,9 @@ const loadMore = () => loadMembers()
 const retry = () => loadMembers(page.value === 0)
 
 const handleClose = () => {
+    cancelSearchTimer()
+    searchFocused.value = false
+    keyboardHeight.value = 0
     ++requestVersion
     loading.value = false
     uni.hideKeyboard()
@@ -222,6 +255,9 @@ const selectMember = (member: RecycleMemberOption) => {
 }
 
 watch(() => props.show, (show) => {
+    cancelSearchTimer()
+    searchFocused.value = false
+    keyboardHeight.value = 0
     if (show) {
         keyword.value = ''
         submittedKeyword.value = ''
@@ -232,7 +268,17 @@ watch(() => props.show, (show) => {
     }
 }, { immediate: true })
 
-onBeforeUnmount(() => { ++requestVersion })
+watch(keyword, () => {
+    if (!props.show || !props.searchOnInput || keyword.value.trim() === submittedKeyword.value) return
+    cancelSearchTimer()
+    ++requestVersion
+    members.value = []
+    loading.value = true
+    error.value = ''
+    // 仅搜索本站客户，不把这段文字传到订单的跨表泛搜。
+    searchTimer = setTimeout(handleSearch, 300)
+})
+onBeforeUnmount(() => { cancelSearchTimer(); ++requestVersion })
 </script>
 
 <style scoped lang="scss">
@@ -255,7 +301,7 @@ onBeforeUnmount(() => { ++requestVersion })
     &__heading { display: flex; flex: 1; min-width: 0; flex-direction: column; }
     &__title { font-size: 32rpx; font-weight: 600; color: var(--hsx-text-strong, #1f2937); }
     &__subtitle { margin-top: 8rpx; font-size: 23rpx; line-height: 34rpx; color: var(--hsx-text-secondary, #6b7280); }
-    &__close { padding: 6rpx 0 12rpx 24rpx; font-size: 34rpx; color: #909399; }
+    &__close { display:flex; align-items:center; justify-content:center; flex-shrink:0; width:88rpx; height:88rpx; min-width:44px; min-height:44px; padding:0; font-size:34rpx; color:#909399; }
 
     &__search {
         display: flex;

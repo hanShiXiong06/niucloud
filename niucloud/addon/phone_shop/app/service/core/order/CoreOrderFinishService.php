@@ -22,6 +22,7 @@ use app\service\core\weapp\CoreWeappDeliveryService;
 use core\base\BaseCoreService;
 use core\exception\CommonException;
 use think\db\exception\DbException;
+use think\facade\Db;
 
 /**
  *  订单完成服务层
@@ -43,6 +44,14 @@ class CoreOrderFinishService extends BaseCoreService
      */
     public function finish(array $data)
     {
+        // 与 ERP 收款核对、设备收货、完成事件保持同一个事务；同一订单重试不重复完成。
+        return Db::transaction(function () use ($data) {
+            return $this->finishLocked($data);
+        });
+    }
+
+    private function finishLocked(array $data)
+    {
         $order_id = $data[ 'order_id' ];
         $site_id = $data[ 'site_id' ];
 
@@ -51,13 +60,25 @@ class CoreOrderFinishService extends BaseCoreService
             [ 'order_id', '=', $order_id ],
             [ 'site_id', '=', $site_id ]
         );
-        $order = $this->model->where($where)->findOrEmpty()->toArray();
+        $order = $this->model->where($where)->lock(true)->findOrEmpty()->toArray();
         if (empty($order)) throw new CommonException('SHOP_ORDER_NOT_FOUND');//订单不存在
-//        if ($order[ 'status' ] != OrderDict::WAIT_TAKE) throw new CommonException('SHOP_ONLY_WAIT_TAKE_CAN_BE_TAKE');//只有待收货的订单才可以收货
+        if ((int)$order['status'] === OrderDict::FINISH) return true;
+        if ((int)$order['status'] === OrderDict::CLOSE) throw new CommonException('已关闭的订单不能完成');
+        if (($order['payment_mode'] ?? '') === 'offline_credit') {
+            // 自提核销本身就是当面交付，其他入口必须先走原发货/交付动作。
+            $verifiedPickup = !empty($data['pickup_verified'])
+                && ($order['delivery_type'] ?? '') === OrderDeliveryDict::STORE
+                && (int)$order['status'] === OrderDict::WAIT_DELIVERY;
+            if ((int)$order['status'] !== OrderDict::WAIT_TAKE && !$verifiedPickup) {
+                throw new CommonException('挂账订单须先完成设备交付，再由 ERP 核实结清后完成');
+            }
+            (new CoreOrderCreditStateService())->assertCanComplete($order);
+        }
 
         //存在退款中的订单项,订单就不可以收货
         $refunding_order_goods_count = ( new OrderGoods() )->where([
             [ 'order_id', '=', $order_id ],
+            [ 'site_id', '=', $site_id ],
             [ 'status', '=', OrderGoodsDict::REFUNDING ]
         ])->count();
         if ($refunding_order_goods_count > 0) throw new CommonException('SHOP_ORDER_HAS_REFUNDING_NOT_ALLOW_FINISH');//是否存在退款中的订单项
@@ -90,6 +111,7 @@ class CoreOrderFinishService extends BaseCoreService
         //将待收货的订单项设置已收货
         $order_goods_where = array(
             [ 'order_id', '=', $order_id ],
+            [ 'site_id', '=', $data['site_id'] ],
             [ 'status', '=', OrderGoodsDict::NORMAL ],
 //            ['delivery_status', '=', OrderDeliveryDict::DELIVERY_FINISH]
         );

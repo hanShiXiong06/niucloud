@@ -22,7 +22,7 @@ return [
     ],
      [
         'name'     => '订单',
-        'key'      => 'phone_shop_order_list',
+        'key'      => 'phone_shop_offline_order',
         'group'    => 'phone_shop_goods',
         'menu_key' => 'shop_order_list',
         'sort'     => 3,

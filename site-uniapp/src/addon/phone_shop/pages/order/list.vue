@@ -52,6 +52,7 @@ async function openActions(order: any) {
     if (opening.value) return
     opening.value = true
     try { const response: any = await getOrderDetail(order.order_id); currentOrder.value = response.data; actionSheetVisible.value = true }
+    catch { /* 请求层会提示真实原因；读取失败不打开旧订单操作。 */ }
     finally { opening.value = false }
 }
 function selectAction(item: any) { actionSheetVisible.value = false; action.value = item.key; panelVisible.value = true }

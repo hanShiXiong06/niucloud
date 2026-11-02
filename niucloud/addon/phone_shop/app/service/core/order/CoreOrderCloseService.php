@@ -167,7 +167,8 @@ class CoreOrderCloseService extends BaseCoreService
                 $data['main_id'] = 0;
                 $data['order_id'] = $order_id;
                 $data['site_id'] = $site_id;
-                (new CoreOrderFinishService())->finish($data);
+                // 挂账退款事实保留并继续发事件，不以普通完成掩盖未结账款，也不抛错要求重做退款。
+                if (($order['payment_mode'] ?? '') !== 'offline_credit') (new CoreOrderFinishService())->finish($data);
             }
             event('AfterPhoneShopOrderAllRefundFinish', $data);
         }

@@ -1,0 +1,21 @@
+<template><view class="coop-region-fields"><picker v-for="(field, index) in fields" :key="field" :range="options(index)" range-key="name" :value="selectedIndex(index)" :disabled="busy || (index > 0 && !modelValue[fields[index - 1]])" @change="choose(index, $event)"><view class="coop-region-fields__choice" :class="{ disabled: index > 0 && !modelValue[fields[index - 1]] }"><text>{{ names[index] || placeholders[index] }}</text><u-icon name="arrow-down" size="11" color="#929aa6" /></view></picker><view v-if="error" class="coop-inline-error" @tap="initialize">{{ error }}，点击重试</view></view></template>
+<script setup lang="ts">
+import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { getAreaListByPid } from '@/app/api/system'
+import { coopError, type CoopRow } from '../../api/cooperation'
+const props = defineProps<{ modelValue: CoopRow; disabled?: boolean }>()
+const emit = defineEmits<{ (event: 'update:modelValue', value: CoopRow): void }>()
+const fields = ['province_id', 'city_id', 'district_id'], placeholders = ['选择省份', '选择城市', '选择区县']
+const lists = reactive<CoopRow[][]>([[], [], []]), names = ref<string[]>(['', '', '']), busy = ref(false), error = ref('')
+let sequence = 0, disposed = false, currentSignature = ''
+const signature = () => fields.map(key => props.modelValue[key] || 0).join(',')
+function options(index: number) { return [{ id: 0, name: placeholders[index] }, ...lists[index]] }
+function selectedIndex(index: number) { return Math.max(0, options(index).findIndex(item => Number(item.id) === Number(props.modelValue[fields[index]]))) }
+async function read(pid: number) { const result: any = await getAreaListByPid(pid); return Array.isArray(result.data) ? result.data : [] }
+async function initialize() { const token = ++sequence; busy.value = true; error.value = ''; try { const values: CoopRow[][] = [await read(0), [], []]; if (Number(props.modelValue.province_id)) values[1] = await read(Number(props.modelValue.province_id)); if (Number(props.modelValue.city_id)) values[2] = await read(Number(props.modelValue.city_id)); if (disposed || token !== sequence) return; values.forEach((rows, index) => lists[index] = rows); names.value = fields.map((key, index) => values[index].find(item => Number(item.id) === Number(props.modelValue[key]))?.name || ''); currentSignature = signature() } catch (cause) { if (!disposed && token === sequence) error.value = coopError(cause, '地区读取失败') } finally { if (!disposed && token === sequence) busy.value = false } }
+async function choose(index: number, event: any) { if (props.disabled || busy.value) return; const row = options(index)[Number(event.detail.value)]; if (!row || !Number(row.id)) return; const next = { ...props.modelValue, [fields[index]]: Number(row.id) }; const selectedNames = [...names.value]; selectedNames[index] = String(row.name); for (let i = index + 1; i < 3; i++) { next[fields[i]] = 0; selectedNames[i] = ''; lists[i] = [] }; next.region_text = selectedNames.filter(Boolean).join(' / '); names.value = selectedNames; currentSignature = fields.map(key => next[key] || 0).join(','); emit('update:modelValue', next); if (index < 2) { const token = ++sequence; busy.value = true; error.value = ''; try { const data = await read(Number(row.id)); if (!disposed && token === sequence) lists[index + 1] = data } catch (cause) { if (!disposed && token === sequence) error.value = coopError(cause, '下级地区读取失败') } finally { if (!disposed && token === sequence) busy.value = false } } }
+watch(signature, value => { if (value !== currentSignature) void initialize() })
+onMounted(initialize)
+onBeforeUnmount(() => { disposed = true; sequence++ })
+</script>
+<style scoped lang="scss">.coop-region-fields { display: flex; flex-wrap: wrap; gap: 12rpx; width: 100%; }.coop-region-fields>picker { flex: 1; min-width: 0; }.coop-region-fields__choice { min-height: 78rpx; display: flex; align-items: center; justify-content: space-between; gap: 7rpx; padding: 8rpx 14rpx; border-radius: 7rpx; background: #f5f6f8; font-size: 23rpx; line-height: 1.5; color: #606b79; }.coop-region-fields__choice>text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.coop-region-fields__choice.disabled { opacity: .55; }.coop-inline-error { width: 100%; color: #ae4e41; font-size: 23rpx; }</style>

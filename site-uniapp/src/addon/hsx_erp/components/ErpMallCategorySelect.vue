@@ -191,6 +191,7 @@ function open() {
         uni.navigateTo({
             url: `/addon/hsx_erp/pages/stock/mall-category?selected_id=${Number(props.modelValue) || 0}`,
             events: {
+                mallCategoryPickerClosed: () => { navigating = false },
                 mallCategorySelected: (item: any) => {
                     if (disposed) return
                     const option = buildMallCategoryIndex([item]).options[0]
@@ -201,8 +202,10 @@ function open() {
                     emit('change', option)
                 }
             },
-            fail: () => uni.showToast({ title: '分类页打开失败，请更新移动管理端后重试', icon: 'none' }),
-            complete: () => { navigating = false }
+            fail: () => {
+                navigating = false
+                uni.showToast({ title: '分类页打开失败，请更新移动管理端后重试', icon: 'none' })
+            }
         })
         return
     }

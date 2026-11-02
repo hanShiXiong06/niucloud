@@ -62,7 +62,7 @@ final class DealProgress
         if ($requested===null && !Data::decode($lead['requirements_json']??'') && isset($input['deal_amount'])) {
             $requested=[['catalog_id'=>'single','quantity'=>1,'unit_price'=>$input['deal_amount']]];
         }
-        if (!is_array($requested) || !array_is_list($requested) || !$requested || count($requested)>20) throw new CommonException('请填写本次实际成交的设备、台数和单价');
+        if (!is_array($requested) || !\addon\hsx_lead\app\support\PhpRuntime::isList($requested) || !$requested || count($requested)>20) throw new CommonException('请填写本次实际成交的设备、台数和单价');
         $items=[]; $seen=[]; $amount='0.00';
         foreach($requested as $entry) {
             if (!is_array($entry)) throw new CommonException('成交明细格式不正确');

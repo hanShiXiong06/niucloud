@@ -45,8 +45,8 @@
                 </view>
 
                 <view class="filter-section">
-                    <view class="filter-section__title">用户与设备</view>
-                    <view class="member-search">
+                    <view class="filter-section__title">{{ showMemberFilter ? '客户与设备' : '设备信息' }}</view>
+                    <view v-if="showMemberFilter" class="member-search">
                         <view class="member-search__bar">
                             <input
                                 v-model="memberKeyword"
@@ -202,9 +202,11 @@ const props = withDefaults(defineProps<{
     visible: boolean
     modelValue?: Record<string, any>
     statusOptions?: Array<{ label: string, value: string }>
+    showMemberFilter?: boolean
 }>(), {
     modelValue: () => ({}),
-    statusOptions: () => []
+    statusOptions: () => [],
+    showMemberFilter: true
 })
 
 const emit = defineEmits(['update:visible', 'update:modelValue', 'confirm', 'reset', 'open-calendar'])
@@ -415,7 +417,7 @@ const validateRanges = () => {
 }
 
 const handleConfirm = () => {
-    if (memberKeyword.value.trim() && !form.member_id) {
+    if (props.showMemberFilter && memberKeyword.value.trim() && !form.member_id) {
         uni.showToast({ title: '请先选择会员', icon: 'none' })
         return
     }

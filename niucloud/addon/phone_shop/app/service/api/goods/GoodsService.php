@@ -31,6 +31,7 @@ use addon\phone_shop\app\service\core\goods\CoreGoodsAccessNumService;
 use addon\phone_shop\app\service\core\goods\CoreGoodsActivePriceService;
 use addon\phone_shop\app\service\core\goods\CoreGoodsConfigService;
 use addon\phone_shop\app\service\core\goods\CoreDeviceAttributeService;
+use addon\phone_shop\app\service\core\goods\CoreMemoryFilterService;
 use addon\phone_shop\app\service\core\goods\CoreGoodsDescriptionService;
 use addon\phone_shop\app\service\core\goods\CoreGoodsStatService;
 use addon\phone_shop\app\service\core\goods\CoreGoodsLimitBuyService;
@@ -111,6 +112,7 @@ class GoodsService extends BaseApiService
         // 二手机:内存 / 成色等级 筛选(支持数组或逗号串)
         if (!empty($where[ 'memory_group' ])) {
             $mem = is_array($where[ 'memory_group' ]) ? $where[ 'memory_group' ] : array_filter(array_map('trim', explode(',', (string) $where[ 'memory_group' ])));
+            $mem = (new CoreMemoryFilterService())->filterValues((int)$this->site_id, $mem);
             if (!empty($mem)) $sku_where[] = [ 'goods.memory_group', 'in', array_values($mem) ];
         }
         if (!empty($where[ 'condition_grade' ])) {
@@ -242,41 +244,20 @@ class GoodsService extends BaseApiService
 
     /**
      * 返回列表页实际可消费的筛选项。
-     * 筛选数据全部按站点隔离；内存优先取当前在售商品的真实值，避免展示空选项。
+     * 筛选数据按站点隔离；内存/规格以本站规格分组的名称、排序和子项为准。
+     * 没有维护规格字典时返回空选项，不回退库存里的未受控值。
      */
     public function getFilterOptions(array $where = []): array
     {
         $category_service = new GoodsCategoryService();
         $categories = $category_service->getTree();
 
-        $memoryQuery = (new Goods())
-            ->where([
-                [ 'site_id', '=', $this->site_id ],
-                [ 'status', '=', 1 ],
-                [ 'sale_status', '=', 'available' ],
-                [ 'delete_time', '=', 0 ],
-                [ 'memory_group', '<>', '' ],
-            ]);
         $optionCategoryIds = $this->normalizeMultiValue($where['goods_category'] ?? '');
-        if ($optionCategoryIds) {
-            $memoryQuery->where(function ($query) use ($optionCategoryIds) {
-                foreach ($optionCategoryIds as $index => $categoryId) {
-                    $method = $index === 0 ? 'where' : 'whereOr';
-                    $query->$method('goods_category', 'like', '%"' . (int)$categoryId . '"%');
-                }
-            });
-        }
         $optionBrandIds = $this->normalizeMultiValue($where['brand_id'] ?? '');
-        if ($optionBrandIds) $memoryQuery->whereIn('brand_id', array_map('intval', $optionBrandIds));
         $optionGrades = $this->normalizeMultiValue($where['condition_grade'] ?? '');
-        if ($optionGrades) $memoryQuery->whereIn('condition_grade', $optionGrades);
-        $optionColors = $this->normalizeMultiValue($where['device_color'] ?? '');
-        if ($optionColors) $memoryQuery->whereIn('device_color', $optionColors);
-        $memories = $memoryQuery
-            ->field('memory_group')
-            ->group('memory_group')
-            ->orderRaw('LENGTH(memory_group) asc, memory_group asc')
-            ->column('memory_group');
+        $memoryService = new CoreMemoryFilterService();
+        $memoryGroups = $memoryService->groups((int)$this->site_id, $optionCategoryIds);
+        $memories = $memoryService->flatten($memoryGroups);
 
         // 颜色只返回当前分类/型号范围内真实存在的值，避免苹果型号展示安卓颜色等无效噪音。
         $colorQuery = (new Goods())->where([
@@ -298,6 +279,7 @@ class GoodsService extends BaseApiService
         $brandIds = $optionBrandIds;
         if ($brandIds) $colorQuery->whereIn('brand_id', array_map('intval', $brandIds));
         $optionMemories = $this->normalizeMultiValue($where['memory_group'] ?? '');
+        $optionMemories = $memoryService->filterValues((int)$this->site_id, $optionMemories);
         if ($optionMemories) $colorQuery->whereIn('memory_group', $optionMemories);
         if ($optionGrades) $colorQuery->whereIn('condition_grade', $optionGrades);
         $colors = $colorQuery->field('device_color')->group('device_color')->order('device_color asc')->column('device_color');
@@ -402,7 +384,8 @@ class GoodsService extends BaseApiService
 
         return [
             'categories' => $categories,
-            'memories' => array_values(array_map(static fn($name) => [ 'value' => (string)$name, 'label' => (string)$name ], $memories)),
+            'memory_groups' => $memoryGroups,
+            'memories' => $memories,
             'grades' => array_values($grades),
             'colors' => array_values(array_map(static fn($name) => ['value' => (string)$name, 'label' => (string)$name], $colors)),
             'battery_ranges' => $deviceAttributes->batteryRanges(),

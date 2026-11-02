@@ -24,6 +24,12 @@
                             <el-option v-for="item in groupList" :key="item.group_id" :label="item.group_name" :value="item.group_id" />
                         </el-select>
                     </el-form-item>
+                    <el-form-item :label="t('status')" prop="status">
+                        <el-select v-model="labelTable.searchParam.status" :placeholder="t('statusAll')" clearable class="!w-[140px]">
+                            <el-option :label="t('statusOn')" :value="1" />
+                            <el-option :label="t('statusOff')" :value="0" />
+                        </el-select>
+                    </el-form-item>
 
                     <el-form-item>
                         <el-button type="primary" @click="loadLabelList()">{{ t('search') }}</el-button>
@@ -33,7 +39,15 @@
             </el-card>
 
             <div class="mt-[10px]">
-                <el-table :data="labelTable.data" size="large" v-loading="labelTable.loading" @sort-change="sortChange">
+                <div class="label-batch-bar">
+                    <span>{{ t('selectedCurrentPage') }} {{ selectedLabelIds.length }} {{ t('labelUnit') }}</span>
+                    <el-button size="small" :disabled="!selectedLabelIds.length || labelTable.loading || isRepeat || batchBusy" @click="batchStatusEvent(1)">{{ t('batchStatusOn') }}</el-button>
+                    <el-button size="small" :disabled="!selectedLabelIds.length || labelTable.loading || isRepeat || batchBusy" @click="batchStatusEvent(0)">{{ t('batchStatusOff') }}</el-button>
+                    <el-button v-if="selectedLabelIds.length" size="small" link :disabled="batchBusy" @click="clearSelection">{{ t('clearSelection') }}</el-button>
+                </div>
+                <el-alert v-if="batchError" :title="batchError" type="warning" show-icon class="mb-[10px]" @close="batchError = ''" />
+                <el-table ref="labelListTableRef" :data="labelTable.data" row-key="label_id" size="large" v-loading="labelTable.loading" @sort-change="sortChange" @selection-change="handleSelectionChange">
+                    <el-table-column type="selection" width="48" fixed="left" :selectable="() => !batchBusy && !isRepeat" />
                     <template #empty>
                         <span>{{ !labelTable.loading ? t('emptyData') : '' }}</span>
                     </template>
@@ -118,6 +132,7 @@ const labelTable = reactive({
     searchParam: {
         label_name: '',
         group_id: '',
+        status: '' as '' | 0 | 1,
         order: '',
         sort: ''
     }
@@ -126,6 +141,19 @@ const labelTable = reactive({
 const groupList: any = reactive([])
 
 const searchFormRef = ref<FormInstance>()
+const labelListTableRef = ref<any>()
+const selectedLabelIds = ref<number[]>([])
+const batchBusy = ref(false)
+const batchError = ref('')
+let labelRequestId = 0
+
+const handleSelectionChange = (rows: any[]) => {
+    selectedLabelIds.value = Array.from(new Set(rows.map(row => Number(row.label_id)).filter(id => Number.isInteger(id) && id > 0)))
+}
+const clearSelection = () => {
+    selectedLabelIds.value = []
+    labelListTableRef.value?.clearSelection()
+}
 
 // 监听排序
 const sortChange = (event: any) => {
@@ -146,6 +174,8 @@ const sortChange = (event: any) => {
  * 获取商品标签列表
  */
 const loadLabelList = (page: number = 1) => {
+    const requestId = ++labelRequestId
+    clearSelection()
     labelTable.loading = true
     labelTable.page = page
 
@@ -154,12 +184,15 @@ const loadLabelList = (page: number = 1) => {
         limit: labelTable.limit,
         ...labelTable.searchParam
     }).then(res => {
+        if (requestId !== labelRequestId) return
         labelTable.loading = false
         labelTable.data = res.data.data
         labelTable.total = res.data.total
+        const lastPage = Math.max(1, Math.ceil(labelTable.total / labelTable.limit))
+        if (labelTable.page > lastPage) return loadLabelList(lastPage)
         setTablePageStorage(labelTable.page, labelTable.limit, labelTable.searchParam)
     }).catch(() => {
-        labelTable.loading = false
+        if (requestId === labelRequestId) labelTable.loading = false
     })
 }
 
@@ -236,7 +269,7 @@ const isRepeat = ref(false)
 
 // 修改状态
 const modifyLabelStatusEvent = (label_id: any, status: any) => {
-    if (isRepeat.value) return
+    if (isRepeat.value || batchBusy.value) return
     isRepeat.value = true
 
     modifyLabelStatus({
@@ -244,8 +277,34 @@ const modifyLabelStatusEvent = (label_id: any, status: any) => {
         status
     }).then((res) => {
         loadLabelList(getTablePageStorage(labelTable.searchParam).page)
-        isRepeat.value = false
-    })
+    }).catch(() => {}).finally(() => { isRepeat.value = false })
+}
+
+const batchStatusEvent = async (status: 0 | 1) => {
+    if (batchBusy.value || isRepeat.value || labelTable.loading || !selectedLabelIds.value.length) return
+    const ids = [...selectedLabelIds.value]
+    batchBusy.value = true
+    batchError.value = ''
+    let submitted = false
+    try {
+        const actionName = t(status === 1 ? 'statusOn' : 'statusOff')
+        await ElMessageBox.confirm(t('batchStatusConfirm').replace('{count}', String(ids.length)).replace('{status}', actionName), t('warning'), {
+            confirmButtonText: t('confirm'), cancelButtonText: t('cancel'), type: 'warning'
+        })
+        submitted = true
+        const res: any = await modifyLabelStatus({ label_ids: ids, status }, { showSuccessMessage: false })
+        if (Number(res.code) !== 1) throw new Error(res.msg || t('batchStatusUnknown'))
+        if (!res.data || Number(res.data.requested_count) !== ids.length || Number(res.data.status) !== status
+            || !Number.isInteger(Number(res.data.changed_count)) || Number(res.data.changed_count) < 0 || Number(res.data.changed_count) > ids.length) {
+            throw new Error(t('batchStatusUnknown'))
+        }
+        ElMessage.success(t('batchStatusSuccess').replace('{count}', String(res.data.requested_count)).replace('{changed}', String(res.data.changed_count)).replace('{status}', actionName))
+        loadLabelList(labelTable.page)
+    } catch (error: any) {
+        if (submitted) batchError.value = error?.msg || error?.message || t('batchStatusUnknown')
+    } finally {
+        batchBusy.value = false
+    }
 }
 // 复制商品
 const copyEvent = (data: any) => {
@@ -277,6 +336,12 @@ const resetForm = (formEl: FormInstance | undefined) => {
     loadLabelList()
 }
 </script>
+
+<style scoped>
+.label-batch-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.label-batch-bar > span { color: var(--el-text-color-secondary); font-size: 13px; margin-right: 8px; }
+.label-batch-bar :deep(.el-button + .el-button) { margin-left: 0; }
+</style>
 
 <style lang="scss" scoped>
 </style>

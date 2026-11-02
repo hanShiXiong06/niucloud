@@ -13,6 +13,7 @@ final class Cipher
     }
     public static function encrypt(#[\SensitiveParameter] array $data, int $site, int $connection): string
     {
+        $secretTrace = PhpRuntime::guardSecrets();
         $iv = random_bytes(12); $tag = '';
         $value = openssl_encrypt(Data::json($data), 'aes-256-gcm', self::key(), OPENSSL_RAW_DATA, $iv, $tag,
             'hsx_lead|'.$site.'|'.$connection);
@@ -21,6 +22,7 @@ final class Cipher
     }
     public static function decrypt(#[\SensitiveParameter] string $value, int $site, int $connection): array
     {
+        $secretTrace = PhpRuntime::guardSecrets();
         $raw = base64_decode($value, true);
         if ($raw === false || strlen($raw) < 29) throw new CommonException('ERP凭据不可读取，请重新保存账号配置');
         $plain = openssl_decrypt(substr($raw,28), 'aes-256-gcm', self::key(), OPENSSL_RAW_DATA, substr($raw,0,12),

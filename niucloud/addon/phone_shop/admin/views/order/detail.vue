@@ -7,6 +7,7 @@
         <el-form :model="formData" label-width="100px" ref="formRef" class="page-form" v-loading="loading" label-position="left">
             <el-card class="box-card !border-none relative" shadow="never" v-if="formData">
                 <h3 class="panel-title">{{ t('orderInfo') }}</h3>
+                <OrderCreditSummary :order="formData" />
                 <el-row class="row-bg px-[30px] mb-[20px]" :gutter="20">
                     <el-col :span="8">
                         <el-form-item :label="t('orderNo')">
@@ -167,7 +168,7 @@
                 <div v-if="isOfflineStoreReady" class="mx-[30px] mb-[20px] flex items-center justify-between rounded-[8px] border border-[#c6eed7] bg-[#f3fbf6] px-[20px] py-[16px]">
                     <div>
                         <div class="text-[15px] font-medium text-[#1f7a46]">收款或挂账已确认，等待客户到店取机</div>
-                        <p class="mt-[5px] text-[13px] text-[#668475]">负责人核对客户、订单和设备后，在此确认交付；系统会完成出库、订单和 ERP 同步。</p>
+                        <p class="mt-[5px] text-[13px] text-[#668475]">负责人核对客户、订单和设备后，在此确认交付并同步 ERP；挂账订单需财务结清后才能完成。</p>
                     </div>
                     <el-button type="success" @click="confirmOfflineDelivery">确认已交付</el-button>
                 </div>
@@ -181,7 +182,8 @@
                         <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer" @click="delivery" v-if="formData.status == 2 && formData.delivery_type !== 'store'">{{ t('delivery') }}</span>
                         <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer" @click="close" v-if="formData.status == 1 && !isOfflinePending && !managedByErp">{{ t('close') }}</span>
                         <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer" @click="orderAdjustMoney" v-if="formData.status == 1 && !managedByErp">{{ t('editPrice') }}</span>
-                        <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer" @click="finish" v-if="formData.status == 3">{{ t('finish') }}</span>
+                        <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer" @click="finish" v-if="formData.status == 3 && creditCanComplete(formData)">{{ t('finish') }}</span>
+                        <span v-if="formData.status == 3 && !creditCanComplete(formData)" class="ml-[30px] text-[13px] text-warning">{{ creditStatusLabel(formData) }}，暂不能完成</span>
                         <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer" @click="openElectronicSheetPrintDialog" v-if="formData.delivery_type == 'express' && formData.status == 3">{{ t('electronicSheetPrintTitle') }}</span>
                         <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer" @click="printTicketEvent" v-if="formData.delivery_type == 'virtual' && (formData.status == 2 || formData.status == 3 || formData.status == 5)">{{ t('printTicket') }}</span>
                         <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer" @click="orderEditAddressFn" v-if="formData.status == 1 && formData.delivery_type != 'virtual' && formData.activity_type != 'giftcard'">{{ t('editAddress') }}</span>
@@ -408,11 +410,13 @@ import electronicSheetPrint from '@/addon/phone_shop/views/order/components/elec
 import ShopActiveRefund from '@/addon/phone_shop/views/order/components/shop-active-refund.vue'
 import OrderDeviceIdentity from '@/addon/phone_shop/views/order/components/order-device-identity.vue'
 import OrderReturnGuide from '@/addon/phone_shop/views/order/components/order-return-guide.vue'
+import OrderCreditSummary from '@/addon/phone_shop/views/order/components/order-credit-summary.vue'
+import { creditCanComplete, creditMessage, creditStatusLabel, isCreditOrder } from '@/addon/phone_shop/utils/order-credit'
 const managedByErp = computed(() => !!formData.value?.relate_source || ['offline_cash', 'offline_credit'].includes(formData.value?.payment_mode))
 import FormDetail from '@/addon/phone_shop/views/order/components/form-detail.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { img } from '@/utils/common'
-import { ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { cloneDeep } from 'lodash-es'
 
 const route = useRoute()
@@ -593,7 +597,7 @@ const closeOfflineUnreachable = async() => {
 
 const confirmOfflineDelivery = async() => {
     const confirmed = await ElMessageBox.confirm(
-        `确认已核对客户，并将订单「${formData.value?.order_no || ''}」中的设备当面交付？确认后订单将完成。`,
+        `确认已核对客户，并将订单「${formData.value?.order_no || ''}」中的设备当面交付？${isCreditOrder(formData.value) ? '交付不代表收款，财务结清后才能完成订单。' : '确认后订单将完成。'}`,
         '确认到店交付',
         { type: 'warning', confirmButtonText: '确认已交付', cancelButtonText: '取消' }
     ).then(() => true).catch(() => false)
@@ -645,6 +649,7 @@ const setNotes = () => {
 }
 // 订单完成
 const finish = () => {
+    if (!creditCanComplete(formData.value)) { ElMessage.warning(creditMessage(formData.value)); return }
     ElMessageBox.confirm(t('orderFinishTips'), t('warning'), {
             confirmButtonText: t('confirm'),
             cancelButtonText: t('cancel'),

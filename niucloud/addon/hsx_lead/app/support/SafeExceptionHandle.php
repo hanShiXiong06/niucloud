@@ -2,6 +2,7 @@
 declare(strict_types=1);
 namespace addon\hsx_lead\app\support;
 
+use addon\hsx_lead\app\provider\ProviderException;
 use core\exception\{CommonException,AuthException};
 use think\exception\Handle;
 use think\Response;
@@ -11,7 +12,7 @@ final class SafeExceptionHandle extends Handle
 {
     public function report(\Throwable $error): void
     {
-        if ($error instanceof CommonException || $error instanceof AuthException) return;
+        if ($error instanceof CommonException || $error instanceof AuthException || $error instanceof ProviderException) return;
         try {
             // Deliberately exclude message, trace, request parameters, SQL and previous exception.
             $site=(int)$this->app->request->siteId();
@@ -25,6 +26,9 @@ final class SafeExceptionHandle extends Handle
     {
         if ($error instanceof AuthException) return fail($error->getMessage(),[], $error->getCode()?:403);
         if ($error instanceof CommonException) return fail($error->getMessage(),[],400);
+        // ProviderException permits only locally-authored safe messages, never a
+        // remote response body, credential, exception cause or stack trace.
+        if ($error instanceof ProviderException) return fail($error->getMessage(),[],400);
         return fail('操作未完成，请联系管理员核对服务状态；没有返回原始错误或凭据',[],500);
     }
 }

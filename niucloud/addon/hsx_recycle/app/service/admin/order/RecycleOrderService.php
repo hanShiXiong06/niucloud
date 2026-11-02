@@ -285,6 +285,11 @@ class RecycleOrderService extends BaseAdminService
     {
         DeviceEntryImei::assertDevices(is_array($data['devices'] ?? null) ? $data['devices'] : []);
         $memberId = (int)($data['member_id'] ?? 0);
+        // 移动代下单先选客户再建草稿，避免后续签收标签没有明确归属。
+        // PC 手工联系人模式不使用该标志，保留原有非会员录单能力。
+        if (!empty($data['draft_device_entry']) && $memberId <= 0) {
+            throw new CommonException('请先选择本站客户，再保存代下单设备');
+        }
         if ($memberId > 0) {
             // 不能信任前端客户检索结果；Member 模型同时过滤 delete_time 软删除记录。
             $member = Member::where([

@@ -101,7 +101,7 @@ class ErpAssetSoldListener
                 Log::write('[phone_shop] ERP出库联动从站失败: ' . $e->getMessage());
             }
             Log::write('[phone_shop] 出库回流(纯ERP·不建单)下架商品 asset_id=' . $assetId . ' sku_id=' . $sku['sku_id'] . ' status=' . $resultStatus);
-            // 挂账展示单经 ERP 收款成交(sold)后,把对应商城展示单标记完成(只动展示状态)
+            // sold 只证明已出库，不证明已收款；结算回传负责账款，正常完成入口负责结束订单。
             if ($resultStatus === 'sold') {
                 (new CoreOfflineSaleService())->finalizeByOutbound(
                     (int) ($event['site_id'] ?? $sku['site_id']),

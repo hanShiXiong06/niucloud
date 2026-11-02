@@ -2,7 +2,7 @@
 declare(strict_types=1);
 namespace addon\hsx_lead\app\service;
 
-use addon\hsx_lead\app\provider\{ProviderRegistry,ProviderException};
+use addon\hsx_lead\app\provider\{ProviderRegistry,ProviderException,ProviderDefinition};
 use addon\hsx_lead\app\support\{Data,Cipher};
 use core\exception\CommonException;
 use think\facade\Db;
@@ -15,6 +15,7 @@ final class SyncService
 
     public function start(int $site,int $merchantId,int $uid=0,string $trigger='manual'): array
     {
+        $secretTrace = \addon\hsx_lead\app\support\PhpRuntime::guardSecrets();
         $runId=Db::transaction(function()use($site,$merchantId,$uid,$trigger){
             $merchant=Data::row('merchant',$site,$merchantId);
             if ((int)$merchant['status']!==1) throw new CommonException('商户已停用，不能同步');
@@ -50,6 +51,10 @@ final class SyncService
             default=>'本轮未发布，保留上一批完整库存',
         };
         $run['progress_known']=false;
+        $summary=Data::decode($run['summary_json']??null);
+        if ($run['status']==='running' && is_string($summary['note']??null) && $summary['note']!=='') {
+            $run['message']=mb_substr($summary['note'],0,500).'（已取'.$run['page_count'].'页、'.$run['record_count'].'条设备）';
+        }
         $run['scheduler_required']=$run['status']!=='completed';
         unset($run['cursor_json'],$run['summary_json']);
         return $run;
@@ -57,6 +62,7 @@ final class SyncService
 
     public function advance(int $site,int $runId): array
     {
+        $secretTrace = \addon\hsx_lead\app\support\PhpRuntime::guardSecrets();
         $lease=bin2hex(random_bytes(16));
         $claim=Db::transaction(function()use($site,$runId,$lease){
             $run=Data::row('sync_run',$site,$runId);
@@ -90,6 +96,7 @@ final class SyncService
             $tenantHint=null;
             if ($definition->loginRequired($credentials,(int)$run['page_count'])) {
                 $login=$provider->login($credentials);
+                $this->assertAuthenticatedStore($definition,$login,$scope);
                 $credentials['access_token']=$login['access_token'];
                 $credentials['expires_at']=$login['expires_at']??0;
                 $tenantHint=$login['identity']['tenant_id']??null;
@@ -100,9 +107,10 @@ final class SyncService
             }
             try { $page=$provider->fetchPage($credentials,$cursor,$scope); }
             catch(ProviderException $error) {
-                if (!$definition->renewable() || $error->reason()!=='auth_required') throw $error;
+                if (!$definition->renewable($credentials) || $error->reason()!=='auth_required') throw $error;
                 // At most one renewal for an expired token; never loop failed passwords.
                 $login=$provider->login($credentials);
+                $this->assertAuthenticatedStore($definition,$login,$scope);
                 $credentials['access_token']=$login['access_token']; $credentials['expires_at']=$login['expires_at']??0;
                 $renewedTenant=$login['identity']['tenant_id']??null;
                 if ($renewedTenant!==null) {
@@ -130,13 +138,21 @@ final class SyncService
                 $keys[$key]=true;
                 $raw=$item['safe_snapshot'];
                 $grade=$definition->grade($raw);
+                $sourceStatus=is_array($item['source_status']??null)?$item['source_status']:[];
+                $sourceStatus['_inventory']=[
+                    'listing_status'=>$item['listing_status']??'unknown',
+                    'stock_status'=>$item['stock_status']??'unknown',
+                    'quantity_basis'=>$item['quantity_basis']??'',
+                ];
                 $rows[]=['site_id'=>$site,'merchant_id'=>$conn['merchant_id'],'connection_id'=>$conn['id'],'sync_run_id'=>$runId,
                     'source_key'=>$key,'source_id'=>$item['source_id'],'source_store_id'=>$item['source_store_id'],'tenant_id'=>$item['tenant_id']??'',
                     'model'=>$item['title']??'','brand'=>$item['brand']??'','memory'=>$item['capacity']??'','color'=>$item['color']??'',
                     'grade'=>is_scalar($grade)?mb_substr((string)$grade,0,100):'','price'=>$item['retail_price'],'trade_price'=>$item['trade_price'],
                     'imei'=>$item['imei']??'','cover'=>$item['cover']??'','images_json'=>Data::json($item['images']),
-                    'source_status_json'=>Data::json($item['source_status']),'snapshot_json'=>Data::json($raw),
-                    'availability'=>'unknown','fetched_at'=>time(),'create_time'=>time(),'update_time'=>time()];
+                    'source_status_json'=>Data::json($sourceStatus),'snapshot_json'=>Data::json($raw),
+                    'availability'=>$item['availability']??'unknown',
+                    'quantity'=>$item['quantity']??null,'saleable_quantity'=>$item['saleable_quantity']??null,
+                    'fetched_at'=>time(),'create_time'=>time(),'update_time'=>time()];
             }
             Db::transaction(function()use($site,$runId,$lease,$conn,$run,$page,$rows,$credentials,$stores,$tenants){
                 $current=Data::row('connection',$site,(int)$conn['id'],true);
@@ -146,7 +162,8 @@ final class SyncService
                 if ($rows) Data::query('inventory',$site)->insertAll($rows);
                 $done=!$page['has_more'];
                 Data::query('sync_run',$site)->where('id',$runId)->update(['status'=>$done?'completed':'running',
-                    'cursor_json'=>Data::json($page['cursor']),'summary_json'=>Data::json(['stores'=>$stores,'tenants'=>$tenants]),
+                    'cursor_json'=>Data::json($page['cursor']),'summary_json'=>Data::json(['stores'=>$stores,'tenants'=>$tenants,
+                        'note'=>is_string($page['note']??null)?mb_substr($page['note'],0,500):'']),
                     'page_count'=>(int)$run['page_count']+1,'record_count'=>(int)$run['record_count']+count($rows),
                     'finished_at'=>$done?time():0,'update_time'=>time()]);
                 $changes=['lease_token'=>'','lease_until'=>0,'credentials_cipher'=>Cipher::encrypt($credentials,$site,(int)$conn['id']),
@@ -168,6 +185,16 @@ final class SyncService
         return $this->detail($site,$runId);
     }
 
+    private function assertAuthenticatedStore(ProviderDefinition $definition,#[\SensitiveParameter] array $login,array $scope): void
+    {
+        $secretTrace = \addon\hsx_lead\app\support\PhpRuntime::guardSecrets();
+        if (!$definition->verifiesIdentity() || ($login['identity']['verified']??false)!==true) return;
+        $store=Data::text($login['identity'],'store_id',100,true);
+        if ((string)($scope['store_id']??'')!=='' && (string)$scope['store_id']!==$store) {
+            throw new CommonException('登录认证门店与已绑定来源门店不一致，本轮未发布；请核对后重新验证接入');
+        }
+    }
+
     private function fail(int $site,int $runId,int $connection,string $lease,string $code,string $message): void
     {
         Db::transaction(function()use($site,$runId,$connection,$lease,$code,$message){
@@ -184,6 +211,7 @@ final class SyncService
 
     public function tick(int $limit=5): array
     {
+        $secretTrace = \addon\hsx_lead\app\support\PhpRuntime::guardSecrets();
         $began=microtime(true); $results=[];
         $connections=Db::name('hsx_lead_connection')->where(function($q){
             $q->where('active_run_id','>',0)->whereOr(function($q){$q->where('enabled',1)->where('next_sync_at','<=',time());});

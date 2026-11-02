@@ -31,6 +31,7 @@ use addon\phone_shop\app\service\core\local_delivery\CoreLocalDeliveryService;
 use addon\phone_shop\app\service\core\goods\CoreGoodsStatService;
 use addon\phone_shop\app\service\core\order\CoreOrderEventService;
 use addon\phone_shop\app\service\core\order\CoreOrderPayService;
+use addon\phone_shop\app\service\core\order\CoreOrderCreditStateService;
 use addon\phone_shop\app\service\core\order\CoreOnlineTradePricingService;
 use addon\phone_shop\app\service\core\order\OfflineOrderSchemaService;
 use app\dict\common\ChannelDict;
@@ -154,6 +155,7 @@ class OrderService extends BaseAdminService
         });
         $list['data'] = $this->getOrderRelateSourceInfo($list['data']);
         $list['data'] = $this->appendOfflineRecords($list['data']);
+        $list['data'] = (new CoreOrderCreditStateService())->enrichOrders($list['data'], (int)$this->site_id);
         return $list;
     }
 
@@ -351,6 +353,7 @@ class OrderService extends BaseAdminService
         }
         if ($info) {
             $records = $this->appendOfflineRecords([$info]);
+            $records = (new CoreOrderCreditStateService())->enrichOrders($records, (int)$this->site_id);
             $info = $records[0] ?? $info;
         }
         return $info;

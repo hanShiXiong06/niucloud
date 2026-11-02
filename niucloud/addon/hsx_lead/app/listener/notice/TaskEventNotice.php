@@ -9,7 +9,9 @@ final class TaskEventNotice
     {
         $action=(string)($event['action']??'');
         $phase=$action==='assigned' || $action==='assign'?'assigned':'changed';
-        // Do not notify merchants about their own accept, followup or sale-submission clicks.
+        // A merchant sees their own accept/follow/outcome/share response immediately;
+        // do not send the same result back through potentially billable channels.
+        // Actual-receipt reminders are not enabled until separately agreed.
         if ($phase==='changed' && !in_array($action,['verify','cancel','close','rejected_by_manager'],true)) return null;
         $site=(int)($event['site_id']??0); $task=(int)($event['task_id']??0);
         if ($site<=0 || $task<=0) return null;

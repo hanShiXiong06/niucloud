@@ -1,5 +1,5 @@
 <template>
-    <OfflineOrderProcessPopup v-if="settlementAction" :show="show" :order="order" :action="settlementAction" @close="emit('close')" @success="done('处理成功')" />
+    <OfflineOrderProcessPopup v-if="settlementAction" :show="show" :order="order" :action="settlementAction" :operation-key="action" @close="emit('close')" @success="done('处理成功')" @refresh="emit('changed')" />
     <u-popup v-else :show="show" mode="bottom" round="20" :closeOnClickOverlay="!submitting" @close="close">
         <view class="order-action-panel" :style="themeColor()">
             <view class="panel-head">
@@ -10,12 +10,13 @@
                 <view v-if="loading" class="panel-state">正在核对订单资料…</view>
                 <view v-if="error" class="panel-error">{{ error }}</view>
                 <view v-if="uncertain" class="panel-notice">结果尚未确认，不能按失败重复提交。请刷新原订单核对处理记录。</view>
+                <view v-if="uncertain" class="panel-link" @click="unlockAfterCheck">已在电脑端核对未处理，解锁重试</view>
                 <template v-if="!loading">
                     <view v-if="action === 'return'" class="panel-notice">确认实际收回后恢复上架，未收款冲销原应收；已收款生成 ERP 待退款，由财务实际转账后确认。此处不会自动退款。</view>
-                    <view v-if="action === 'refund'" class="panel-notice panel-notice--danger">将向支付渠道申请原路退款，可能实际退还资金。退款不等于设备已收回；收回实物后还需确认收回。</view>
+                    <view v-if="action === 'refund'" class="panel-notice panel-notice--danger">线上付款请在电脑端“商城订单 → 详情 → 主动退款”办理原路退款。本页只核对设备及权威可退金额，不会发起资金退款。退款成功后，仍需在本订单确认实物已收回，才能恢复可售。</view>
                     <view v-if="action === 'received'" class="panel-notice">仅在已核对串号并实际收回设备后确认，商品将恢复可售，不重复生成收付款。</view>
                     <view v-if="action === 'close'" class="panel-notice">仅关闭尚未支付的订单并释放占用库存。系统会先核对支付结果，已付款或支付结果不明时不会直接关闭。</view>
-                    <view v-if="action === 'finish'" class="panel-notice">请确认客户已收到本订单设备。确认后订单进入已完成，不等于新增收款。</view>
+                    <view v-if="action === 'finish'" class="panel-notice">{{ isCreditOrder(order) ? creditMessage(order) + ' 另请核实客户已收到设备；完成不会再次收款。' : '请确认客户已收到本订单设备。确认后订单进入已完成，不等于新增收款。' }}</view>
                     <view v-if="action === 'contacted'" class="panel-notice">确认已联系客户并沟通到店安排。此动作不会收款、挂账或交付设备。</view>
                     <template v-if="action === 'delivery'">
                         <view class="panel-notice">{{ order?.delivery_type === 'store' ? '请核对客户身份及串号，确认本次所选设备已当面交付。' : '仅登记已实际交件的物流信息，不会在这里自动叫件或购买面单。需要申请/打印面单时请使用电脑端。' }}</view>
@@ -37,29 +38,31 @@
                     <view v-if="['delivery', 'return', 'refund', 'received'].includes(action)" class="panel-section">
                         <view class="section-heading"><text>选择本次设备</text><text>{{ selectedIds.length }} 件</text></view>
                         <view v-for="goods in lines" :key="goods.order_goods_id" class="selection-line" :class="{ 'selection-line--disabled': !eligible(goods) }" @click="toggle(goods)">
-                            <u-icon :name="selectedIds.includes(Number(goods.order_goods_id)) ? 'checkmark-circle-fill' : 'circle'" :color="selectedIds.includes(Number(goods.order_goods_id)) ? 'var(--primary-color)' : '#aeb7c4'" size="22" />
+                            <u-icon v-if="selectedIds.includes(Number(goods.order_goods_id))" name="checkmark-circle-fill" color="var(--primary-color)" size="22" />
+                            <view v-else class="selection-circle" aria-hidden="true"></view>
                             <view class="selection-copy"><text class="selection-name">{{ goods.goods_name }}</text><text>{{ goods.sku_name }}</text><text class="imei">{{ goods.imei || goodsIdentity(goods) || '未记录串号，请核对实物' }}</text><text v-if="!eligible(goods)" class="line-warning">{{ goods.requires_location ? '原仓库缺失，请到 ERP 退货单选择实际收货仓库' : goods.reason || '当前状态不支持此操作' }}</text></view>
-                            <text class="selection-money">¥{{ money(lineAmount(goods)) }}</text>
+                            <text v-if="action !== 'refund'" class="selection-money">¥{{ money(lineAmount(goods)) }}</text>
                         </view>
                         <view v-if="!lines.length" class="panel-state">没有可处理设备，请刷新原订单核对</view>
                     </view>
                     <view v-if="action === 'return' && selectedIds.length" class="panel-total"><text>冲销未收 ¥{{ money(offsetTotal) }}</text><text>待财务退款 ¥{{ money(refundTotal) }}</text></view>
-                    <view v-if="action === 'refund'" class="panel-total">本次原路退款申请 ¥{{ money(onlineRefundTotal) }}</view>
+                    <view v-if="action === 'refund'" class="panel-total">{{ refundQuoteLoading ? '正在核对可退金额…' : refundQuoteError || (refundQuote === null ? '选择设备查看可退金额' : '当前可退金额 ¥' + money(refundQuote)) }}</view>
                     <view v-if="action === 'return' && lines.some(item => item.requires_location)" class="panel-link" @click="openErpReturns">到 ERP 销售退货核对仓库 ›</view>
 
-                    <view v-if="['return', 'refund', 'reject_voucher', 'remark', 'delivery'].includes(action)" class="panel-section">
+                    <view v-if="['return', 'reject_voucher', 'remark', 'delivery'].includes(action)" class="panel-section">
                         <text class="field-label">{{ ['return', 'refund', 'reject_voucher'].includes(action) ? '处理原因（必填）' : '商家备注（选填）' }}</text>
                         <textarea v-model="remark" :maxlength="action === 'refund' ? 200 : 255" class="panel-textarea" placeholder="填写真实沟通或处理情况" :adjust-position="true" :cursor-spacing="100" />
                     </view>
-                    <view v-if="!['remark', 'contacted', 'reject_voucher'].includes(action)" class="physical-confirm" @click="confirmed = !confirmed">
-                        <u-icon :name="confirmed ? 'checkmark-circle-fill' : 'circle'" :color="confirmed ? 'var(--primary-color)' : '#aeb7c4'" size="22" />
+                    <view v-if="!['remark', 'contacted', 'reject_voucher', 'refund'].includes(action)" class="physical-confirm" @click="confirmed = !confirmed">
+                        <u-icon v-if="confirmed" name="checkmark-circle-fill" color="var(--primary-color)" size="22" />
+                        <view v-else class="selection-circle" aria-hidden="true"></view>
                         <text>{{ confirmationText }}</text>
                     </view>
                 </template>
             </scroll-view>
             <view class="panel-foot">
                 <u-button :customStyle="{ flex: 1 }" :disabled="submitting" @click="close">取消</u-button>
-                <u-button :customStyle="{ flex: 2 }" :type="['return', 'refund', 'close', 'reject_voucher'].includes(action) ? 'error' : 'primary'" :loading="submitting" :disabled="loading || (!uncertain && blocked)" @click="submit">{{ uncertain ? '刷新原单核对' : submitLabel }}</u-button>
+                <u-button :customStyle="{ flex: 2 }" :type="['return', 'close', 'reject_voucher'].includes(action) ? 'error' : 'primary'" :loading="submitting" :disabled="loading || (!uncertain && blocked)" @click="submit">{{ uncertain ? '刷新原单核对' : submitLabel }}</u-button>
             </view>
         </view>
     </u-popup>
@@ -67,35 +70,35 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import OfflineOrderProcessPopup from './OfflineOrderProcessPopup.vue'
-import { closeOrder, confirmOrderDeviceReceived, deliverOrder, finishOrder, getDeliveryCompanies, getOrderDeliveryTypes, processOrderAction, refundOrder, setOrderRemark } from '@/addon/phone_shop/api/order'
-import { goodsIdentity, money, orderGoods } from '@/addon/phone_shop/utils/orderWorkflow'
+import { creditCanComplete, creditMessage, isCreditOrder } from '@/addon/phone_shop/utils/orderCredit'
+import { closeOrder, confirmOrderDeviceReceived, deliverOrder, finishOrder, getDeliveryCompanies, getOrderDeliveryTypes, getOrderRefundMoney, processOrderAction, setOrderRemark } from '@/addon/phone_shop/api/order'
+import { clearOperationUncertain, goodsIdentity, markOperationUncertain, money, operationUncertain, orderGoods } from '@/addon/phone_shop/utils/orderWorkflow'
 const props = defineProps<{ show: boolean; order: Record<string, any> | null; action: string }>()
 const emit = defineEmits(['close', 'changed'])
 const loading = ref(false), submitting = ref(false), error = ref(''), uncertain = ref(false), confirmed = ref(false), remark = ref('')
 const lines = ref<any[]>([]), selectedIds = ref<number[]>([]), previewToken = ref('')
 const deliveryType = ref('express'), companies = ref<any[]>([]), companyId = ref(0), expressNumber = ref(''), deliveryOptions = ref<Array<{ value: string; label: string }>>([])
+const refundQuote = ref<number | null>(null), refundQuoteLoading = ref(false), refundQuoteError = ref('')
+let quoteVersion = 0
 let version = 0
-const settlementAction = computed(() => ['confirm_paid', 'confirm_credit', 'close_unreachable'].includes(props.action) ? props.action as 'confirm_paid' | 'confirm_credit' | 'close_unreachable' : null)
-const title = computed(() => ({ delivery: '发货 / 交付', return: '收回设备并处理原账', refund: '申请原路退款', received: '确认设备已收回', close: '关闭未付款订单', finish: '确认订单完成', contacted: '标记已联系', reject_voucher: '驳回付款凭证', remark: '商家备注' } as Record<string, string>)[props.action] || '处理订单')
-const submitLabel = computed(() => ({ delivery: props.order?.delivery_type === 'store' ? '确认已交付' : '已交件，确认发货', return: '确认收回并处理原账', refund: '确认申请原路退款', received: '确认收回并恢复可售', close: '确认关闭订单', finish: '确认完成', contacted: '确认已联系', reject_voucher: '确认驳回', remark: '保存备注' } as Record<string, string>)[props.action] || '确认')
+const settlementAction = computed(() => props.action === 'recover_paid' ? 'confirm_paid' : ['confirm_paid', 'confirm_credit', 'close_unreachable'].includes(props.action) ? props.action as 'confirm_paid' | 'confirm_credit' | 'close_unreachable' : null)
+const title = computed(() => ({ delivery: '发货 / 交付', return: '收回设备并处理原账', refund: '原路退款指引', received: '确认设备已收回', close: '关闭未付款订单', finish: '确认订单完成', contacted: '标记已联系', reject_voucher: '驳回付款凭证', remark: '商家备注' } as Record<string, string>)[props.action] || '处理订单')
+const submitLabel = computed(() => ({ delivery: props.order?.delivery_type === 'store' ? '确认已交付' : '已交件，确认发货', return: '确认收回并处理原账', refund: '知道了，返回订单', received: '确认收回并恢复可售', close: '确认关闭订单', finish: '确认完成', contacted: '确认已联系', reject_voucher: '确认驳回', remark: '保存备注' } as Record<string, string>)[props.action] || '确认')
 const confirmationText = computed(() => ({ delivery: '我已核对所选设备并实际交付/交件', return: '我已核对所选设备串号并实际收回实物', received: '我已核对串号并实际收回这台设备', refund: '我已核对退款设备及金额，确认发起原路退款', close: '我已确认客户不再购买，并同意核对支付后关闭', finish: '我已确认客户收到设备，可以完成订单' } as Record<string, string>)[props.action] || '我已核对本次操作')
 const chosen = computed(() => lines.value.filter(item => selectedIds.value.includes(Number(item.order_goods_id)) && eligible(item)))
 const offsetTotal = computed(() => chosen.value.reduce((sum, item) => sum + Number(item.offset_amount || 0), 0))
 const refundTotal = computed(() => chosen.value.reduce((sum, item) => sum + Number(item.refund_amount || 0), 0))
-const onlineRefundTotal = computed(() => {
-    const total = chosen.value.reduce((sum, item) => sum + Math.max(0, Number(item.goods_money || 0) - Number(item.discount_money || 0)), 0)
-    return total + (chosen.value.length && chosen.value.length === lines.value.filter(eligible).length ? Number(props.order?.delivery_money || 0) : 0)
-})
 const companyIndex = computed(() => Math.max(0, companies.value.findIndex(item => Number(item.company_id) === companyId.value)))
 const offlineStore = computed(() => props.order?.delivery_type === 'store' && ['offline_cash', 'offline_credit'].includes(props.order?.payment_mode))
-const blocked = computed(() => (['delivery', 'return', 'refund', 'received'].includes(props.action) && !chosen.value.length)
+const blocked = computed(() => (['delivery', 'return', 'received'].includes(props.action) && !chosen.value.length)
+    || (props.action === 'finish' && !creditCanComplete(props.order))
     || (props.action === 'delivery' && props.order?.delivery_type === 'local_delivery')
     || (props.action === 'delivery' && props.order?.delivery_type === 'express' && !deliveryOptions.value.length))
 function eligible(goods: any): boolean {
     if (props.action === 'return') return Boolean(goods.can_return) && !goods.requires_location
     if (props.action === 'received') return Boolean(goods.can_confirm_received)
     if (props.action === 'refund') return Number(goods.status) === 1 && Number(goods.is_enable_refund) === 1
-    if (props.action === 'delivery') return Number(goods.status) === 1 && goods.delivery_status === 'wait_delivery' && goods.return_state !== 'returned'
+    if (props.action === 'delivery') return Number(goods.status) === 1 && goods.delivery_status === 'wait_delivery' && !['returned', 'awaiting_receipt'].includes(goods.return_state)
     return true
 }
 function lineAmount(goods: any) { return props.action === 'return' ? goods.return_amount : props.action === 'refund' ? Number(goods.goods_money || 0) - Number(goods.discount_money || 0) : Number(goods.price || 0) * Number(goods.num || 1) }
@@ -108,7 +111,16 @@ function toggle(goods: any) {
 }
 function close() { if (!submitting.value) { ++version; emit('close') } }
 function done(message: string) { uni.showToast({ title: message, icon: 'none' }); emit('close'); emit('changed') }
-function openErpReturns() { uni.navigateTo({ url: '/addon/hsx_erp/pages/sale_return/list' }) }
+function openErpReturns() {
+    const saleId = Number(lines.value.find(item => item.requires_location)?.sale_order_id || 0)
+    uni.navigateTo({ url: saleId > 0 ? `/addon/hsx_erp/pages/sale_return/create?sale_order_id=${saleId}&refund_mode=payable` : '/addon/hsx_erp/pages/sale_return/list' })
+}
+function unlockAfterCheck() {
+    if (submitting.value || !props.order) return
+    uni.showModal({ title: '确认已经核对原记录', content: '只有已查看原订单、ERP 账目或物流记录，并确认本次确实尚未处理，才能解锁重试。若已有成功记录，请返回查看结果，不要再次转账。', confirmText: '确认尚未处理', success: result => {
+        if (result.confirm) { clearOperationUncertain(Number(props.order!.order_id), props.action); uncertain.value = false; error.value = ''; confirmed.value = false }
+    } })
+}
 function scanExpress() {
     // #ifdef H5
     uni.showToast({ title: '浏览器请手动填写物流单号', icon: 'none' })
@@ -120,7 +132,7 @@ function scanExpress() {
 watch(() => [props.show, props.action, props.order?.order_id], async () => {
     const token = ++version
     if (!props.show || !props.order || settlementAction.value) return
-    loading.value = true; error.value = ''; uncertain.value = false; confirmed.value = false; remark.value = props.action === 'remark' ? String(props.order.shop_remark || '') : ''
+    loading.value = true; error.value = ''; uncertain.value = operationUncertain(Number(props.order.order_id), props.action); confirmed.value = false; remark.value = props.action === 'remark' ? String(props.order.shop_remark || '') : ''
     lines.value = orderGoods(props.order); selectedIds.value = []; previewToken.value = ''; companyId.value = 0; expressNumber.value = ''; companies.value = []; deliveryOptions.value = []
     try {
         if (props.action === 'return') {
@@ -141,9 +153,24 @@ watch(() => [props.show, props.action, props.order?.order_id], async () => {
     } catch (reason: any) { if (token === version) error.value = reason?.msg || reason?.message || '资料加载失败，请关闭后重新核对' }
     finally { if (token === version) loading.value = false }
 }, { immediate: true })
+watch(() => [props.show, props.action, selectedIds.value.join(',')], async () => {
+    const token = ++quoteVersion
+    refundQuote.value = null; refundQuoteError.value = ''; refundQuoteLoading.value = false
+    if (!props.show || props.action !== 'refund' || !selectedIds.value.length) return
+    refundQuoteLoading.value = true
+    try {
+        const response: any = await getOrderRefundMoney([...selectedIds.value])
+        if (token !== quoteVersion) return
+        const amount = Number(response.data?.refund_money)
+        if (!Number.isFinite(amount) || amount < 0) throw new Error('可退金额未核对成功，请在电脑端核对')
+        refundQuote.value = amount
+    } catch (reason: any) { if (token === quoteVersion) refundQuoteError.value = reason?.msg || reason?.message || '金额查询失败，请在电脑端核对' }
+    finally { if (token === quoteVersion) refundQuoteLoading.value = false }
+}, { immediate: true })
 async function submit() {
     if (submitting.value || loading.value || !props.order) return
     if (uncertain.value) { emit('close'); emit('changed'); return }
+    if (props.action === 'refund') { close(); return }
     if (blocked.value) return
     if (!['remark', 'contacted', 'reject_voucher'].includes(props.action) && !confirmed.value) return uni.showToast({ title: '请先勾选操作确认', icon: 'none' })
     if (['return', 'refund', 'reject_voucher'].includes(props.action) && !remark.value.trim()) return uni.showToast({ title: '请填写处理原因', icon: 'none' })
@@ -162,23 +189,27 @@ async function submit() {
             const response: any = await processOrderAction({ order_id: orderId, action: 'return_received', order_goods_ids: selectedIds.value, reason: remark.value.trim(), received: true, preview_token: previewToken.value })
             message = response.data?.message || `设备已收回，¥${money(response.data?.refund_amount)} 待财务退款`
         } else if (props.action === 'received') { await confirmOrderDeviceReceived(selectedIds.value[0]); message = '设备已收回，已恢复可售' }
-        else if (props.action === 'refund') {
-            await refundOrder({ order_goods_ids: selectedIds.value, shop_active_refund_money: onlineRefundTotal.value.toFixed(2), shop_active_refund_remark: remark.value.trim() })
-            message = '退款申请已提交，请核对支付退款结果'
-        } else if (props.action === 'delivery') {
-            if (offlineStore.value) await processOrderAction({ order_id: orderId, action: 'confirm_delivery', remark: remark.value.trim() || '已核对客户并当面交付整单设备' })
-            else await deliverOrder({ order_id: orderId, order_goods_ids: selectedIds.value, delivery_ids: [], delivery_type: deliveryType.value, delivery_way: 'manual_write', express_company_id: companyId.value, express_number: deliveryType.value === 'express' ? expressNumber.value.trim() : '', remark: remark.value.trim() })
-            message = offlineStore.value ? '已记录整单到店交付' : props.order.delivery_type === 'store' ? '已记录交付，请核对订单后确认完成' : '已登记发货'
+        else if (props.action === 'delivery') {
+            if (offlineStore.value) {
+                const response: any = await processOrderAction({ order_id: orderId, action: 'confirm_delivery', remark: remark.value.trim() || '已核对客户并当面交付整单设备' })
+                message = response.data?.message || (isCreditOrder(props.order) ? '已记录交付，待 ERP 财务结清后完成订单' : '已记录整单到店交付')
+            } else {
+                await deliverOrder({ order_id: orderId, order_goods_ids: selectedIds.value, delivery_ids: [], delivery_type: deliveryType.value, delivery_way: 'manual_write', express_company_id: companyId.value, express_number: deliveryType.value === 'express' ? expressNumber.value.trim() : '', remark: remark.value.trim() })
+                message = props.order.delivery_type === 'store' ? '已记录交付，请核对订单后确认完成' : '已登记发货'
+            }
         }
         done(message)
     } catch (reason: any) {
-        uncertain.value = !reason || typeof reason.code !== 'number'
+        uncertain.value = true
+        markOperationUncertain(orderId, props.action)
+        emit('changed')
         error.value = reason?.msg || reason?.message || '提交响应未确认，请刷新订单核对'
         confirmed.value = false
     } finally { submitting.value = false }
 }
 </script>
 <style scoped lang="scss">
+.selection-circle { width:22px; height:22px; flex-shrink:0; border:1.5px solid #aeb7c4; border-radius:50%; box-sizing:border-box; }
 .order-action-panel { height: 88vh; display: flex; flex-direction: column; background: #fff; color: #263244; }
 .panel-head { flex-shrink: 0; padding: 28rpx 28rpx 22rpx; display: flex; justify-content: space-between; border-bottom: 1rpx solid #edf0f4; gap: 18rpx; }
 .panel-title, .panel-subtitle { display: block; }.panel-title { font-size: 32rpx; font-weight: 650; }.panel-subtitle { margin-top: 8rpx; font-size: 22rpx; color: #7b8797; overflow-wrap: anywhere; }

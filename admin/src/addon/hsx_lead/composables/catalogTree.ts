@@ -21,10 +21,10 @@ export function catalogNodeMatches(node: { isLeaf?: boolean, data?: CatalogNode 
     return !!(node.isLeaf || node.data?.leaf) && String(node.data?.search_text || '').includes(normalizeCatalogSearch(keyword))
 }
 export function selectCatalogRequirements(ids: any[], current: Row[], catalog: Row[]): Row[] {
-    return [...new Set((ids || []).map(String))].slice(0, MAX_CATALOG_REQUIREMENTS).map(id => {
+    return [...new Set((ids || []).map(String))].map(id => {
         const existing = current.find(item => String(item.catalog_id) === id)
         if (existing) return existing
         const item = catalog.find(item => String(item.id) === id)
         return item ? { catalog_id: item.id, title: item.title, brand: item.brand || '', quantity: 1, budget_min: undefined, budget_max: undefined, remark: '' } : null
-    }).filter(Boolean) as Row[]
+    }).filter(Boolean).slice(0, MAX_CATALOG_REQUIREMENTS) as Row[]
 }

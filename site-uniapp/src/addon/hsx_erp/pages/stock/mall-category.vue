@@ -15,7 +15,7 @@
 
 <script setup lang="ts">
 import { computed, getCurrentInstance, ref } from 'vue'
-import { onLoad, onResize } from '@dcloudio/uni-app'
+import { onLoad, onResize, onUnload } from '@dcloudio/uni-app'
 import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
 import ErpMallCategorySelect from '@/addon/hsx_erp/components/ErpMallCategorySelect.vue'
 import type { MallCategoryOption } from '@/addon/hsx_erp/hooks/mallCategoryPicker'
@@ -45,6 +45,7 @@ onResize((event: any) => {
         viewportHeight.value = height + keyboardHeight.value
     } else if (height > viewportHeight.value) viewportHeight.value = height
 })
+onUnload(() => { (instance?.proxy as any)?.getOpenerEventChannel?.()?.emit?.('mallCategoryPickerClosed') })
 
 function back() {
     if (leaving) return

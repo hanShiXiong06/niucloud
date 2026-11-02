@@ -319,8 +319,8 @@ export function editLabel(params: Record<string, any>) {
  * 修改商品标签状态
  * @param params
  */
-export function modifyLabelStatus(params: Record<string, any>) {
-    return request.put(`phone_shop/goods/label/status`, params, { showSuccessMessage: true })
+export function modifyLabelStatus(params: Record<string, any>, options: { showSuccessMessage?: boolean } = {}) {
+    return request.put(`phone_shop/goods/label/status`, params, { showSuccessMessage: true, ...options })
 }
 
 /**

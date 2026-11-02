@@ -184,5 +184,42 @@ namespace {
         expect(count(Store::$created) === 1, '超出本次未删除校验范围');
     });
 
+    foreach ([true, 1, '1'] as $draftFlag) {
+        foreach (['member_id=0' => ['member_id' => 0], '缺少 member_id' => [], '负数 member_id' => ['member_id' => -1]] as $label => $input) {
+            check('移动草稿 ' . var_export($draftFlag, true) . ' ' . $label . '在创建前拒绝', function () use ($draftFlag, $input): void {
+                try {
+                    service()->create($input + ['draft_device_entry' => $draftFlag, 'devices' => []]);
+                    throw new \RuntimeException('移动代下单未选客户仍可创建');
+                } catch (CommonException $e) {
+                    expect($e->getMessage() === '请先选择本站客户，再保存代下单设备', '未给出选客户提示');
+                }
+                expect(Store::$created === [] && Store::$assigned === [], '拒绝后仍创建订单或分配任务');
+                expect(Store::$queries === [], '未选客户时不应查其他客户');
+            });
+        }
+    }
+
+    check('移动草稿绑定本站有效客户后可正常创建', function (): void {
+        service()->create(['member_id' => 11, 'draft_device_entry' => true, 'devices' => []]);
+        expect(count(Store::$created) === 1 && count(Store::$assigned) === 1, '有效客户被误拦');
+        expect(Store::$created[0]['member_id'] === 11 && Store::$created[0]['draft_device_entry'] === true, '客户或草稿标志丢失');
+        expect(in_array(['site_id', '=', 100005], Store::$queries[0], true), '移动草稿未核对本站客户');
+    });
+
+    check('移动草稿不能绑定外站客户', function (): void {
+        try {
+            service()->create(['member_id' => 12, 'draft_device_entry' => true, 'devices' => []]);
+            throw new \RuntimeException('移动草稿接受了外站客户');
+        } catch (CommonException $e) {
+            expect($e->getMessage() === '所选客户不存在或已删除，请重新选择本站客户', '外站提示不一致');
+        }
+        expect(Store::$created === [] && Store::$assigned === [], '外站请求产生副作用');
+    });
+
+    check('PC显式关闭移动草稿标志时保留非会员联系人录单', function (): void {
+        service()->create(['member_id' => 0, 'draft_device_entry' => false, 'customer_name' => '手工联系人', 'devices' => []]);
+        expect(count(Store::$created) === 1 && Store::$queries === [], '错误关闭PC手工联系人模式');
+    });
+
     echo '[结果] ' . $passed . ' 项隔离回归全部通过；未连接数据库、未调用打印。' . PHP_EOL;
 }

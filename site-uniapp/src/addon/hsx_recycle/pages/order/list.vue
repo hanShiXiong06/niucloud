@@ -2,21 +2,14 @@
     <view class="order-list-page">
         <!-- #ifdef MP -->
         <RecyclePageHeader title="回收订单" :fill="false" class="order-list-header">
-            <view class="nav-search-box" @tap.stop>
-                <text class="nc-iconfont nc-icon-sousuo-duanV6xx1 nav-search-icon" @click="onSearch()"></text>
-                <ScanCodeInput
-                    v-model="keyword"
-                    class="nav-search-input"
-                    placeholder="搜索订单号、客户、手机号、IMEI"
-                    :maxlength="80"
-                    input-align="left"
-                    font-size="24rpx"
-                    placeholder-class="text-[var(--text-color-light9)] text-[24rpx]"
-                    :show-scan-text="false"
-                    @confirm="onSearch"
-                    @scan="onScanSearch"
-                />
-                <view class="nav-filter-btn" @click="openFilter">
+            <view class="nav-search-box" @tap.stop="openCustomerPicker" role="button" aria-label="搜索客户">
+                <text class="nc-iconfont nc-icon-sousuo-duanV6xx1 nav-search-icon"></text>
+                <view class="customer-search-copy" :class="{ 'customer-search-copy--selected': hasCustomerFilter }">
+                    <text>{{ customerLabel || '搜索客户姓名 / 手机号' }}</text>
+                    <text v-if="customerMobile" class="customer-search-mobile">{{ customerMobile }}</text>
+                </view>
+                <view v-if="hasCustomerFilter" class="customer-search-clear" role="button" aria-label="清除客户筛选" @tap.stop="clearCustomer"><u-icon name="close-circle-fill" size="17" color="#94a3b8" /></view>
+                <view class="nav-filter-btn" @tap.stop="openFilter" role="button" aria-label="高级筛选">
                     <text class="nc-iconfont nc-icon-shaixuanV6xx"></text>
                     <text v-if="activeFilterCount" class="filter-dot">{{ activeFilterCount }}</text>
                 </view>
@@ -26,31 +19,20 @@
 
         <view class="page-header" :style="pageHeaderStyle">
             <!-- #ifndef MP -->
-            <view class="search-box">
-                <text class="nc-iconfont nc-icon-sousuo-duanV6xx1 search-icon" @click="onSearch()"></text>
-                <ScanCodeInput
-                    v-model="keyword"
-                    class="search-input"
-                    placeholder="搜索订单号、客户、手机号、IMEI"
-                    :maxlength="80"
-                    input-align="left"
-                    font-size="26rpx"
-                    placeholder-class="text-[var(--text-color-light9)] text-[26rpx]"
-                    :show-scan-text="false"
-                    @confirm="onSearch"
-                    @scan="onScanSearch"
-                />
-                <view class="search-filter-btn" @click="openFilter">
+            <view class="search-box" @tap="openCustomerPicker" role="button" aria-label="搜索客户">
+                <text class="nc-iconfont nc-icon-sousuo-duanV6xx1 search-icon"></text>
+                <view class="customer-search-copy" :class="{ 'customer-search-copy--selected': hasCustomerFilter }">
+                    <text>{{ customerLabel || '搜索客户姓名 / 手机号' }}</text>
+                    <text v-if="customerMobile" class="customer-search-mobile">{{ customerMobile }}</text>
+                </view>
+                <view v-if="hasCustomerFilter" class="customer-search-clear" role="button" aria-label="清除客户筛选" @tap.stop="clearCustomer"><u-icon name="close-circle-fill" size="18" color="#94a3b8" /></view>
+                <view class="search-filter-btn" @tap.stop="openFilter" role="button" aria-label="高级筛选">
                     <text class="nc-iconfont nc-icon-shaixuanV6xx"></text>
                     <text v-if="activeFilterCount" class="filter-dot">{{ activeFilterCount }}</text>
                 </view>
             </view>
             <!-- #endif -->
 
-            <view class="agent-order-bar">
-                <text>设备已到店，帮客户录单</text>
-                <view class="agent-order-button" @click="openAgentOrder">＋ 代客户下单</view>
-            </view>
             <RecycleStatusTabs :model-value="currentStatus" :options="statusList" @change="switchStatus" />
         </view>
 
@@ -62,7 +44,7 @@
             :auto="true"
             :default-page-size="15"
             :paging-style="pagingStyle"
-            :scrollable="!agentOrderVisible"
+            :scrollable="!agentOrderVisible && !customerPickerVisible && !filterVisible && !calendarShow"
         >
             <template #empty>
                 <RecycleEmptyState
@@ -147,7 +129,7 @@
                             class="device-preview__item"
                         >
                             <view class="device-preview__top">
-                                <text class="device-preview__model">{{ device.model || '未知型号' }}</text>
+                                <text class="device-preview__model">{{ getDeviceModelLeafName(device.model) }}</text>
                                 <view class="device-preview__price-wrap">
                                     <text
                                         class="device-preview__price"
@@ -192,13 +174,17 @@
             </view>
         </z-paging>
 
+        <view v-if="!agentOrderVisible && !customerPickerVisible && !filterVisible && !calendarShow" class="agent-order-fab" hover-class="agent-order-fab--pressed" role="button" aria-label="代客户下单" @tap="openAgentOrder"><u-icon name="plus" color="#fff" size="24" /></view>
+
         <SignOrderPopup v-if="agentOrderMounted" v-model:visible="agentOrderVisible" mode="agent" @success="onAgentOrderSuccess" @draft-saved="reload" />
+        <RecycleMemberPicker v-if="customerPickerMounted" v-model:show="customerPickerVisible" :selected-member="currentCustomer" title="筛选客户" subtitle="仅搜索本站客户，选中后查看该客户的回收订单" auto-focus search-on-input @select="selectCustomer" />
 
         <OrderFilterDrawer
             ref="filterDrawerRef"
             v-model:visible="filterVisible"
             v-model="filterParams"
             :status-options="filterStatusOptions"
+            :show-member-filter="false"
             @confirm="onFilterConfirm"
             @reset="onFilterReset"
             @open-calendar="onOpenCalendar"
@@ -226,19 +212,19 @@ import { getOrderBusinessStageOptions, getOrderList, getOrderStatus, pushOrderNo
 import { redirect } from '@/utils/common'
 import { copyOrderNo, copyIMEI } from '@/addon/hsx_recycle/utils/clipboard'
 import RecyclePageHeader from '@/addon/hsx_recycle/components/RecyclePageHeader.vue'
-import ScanCodeInput from '@/addon/hsx_recycle/components/ScanCodeInput.vue'
+import RecycleMemberPicker from '@/addon/hsx_recycle/components/RecycleMemberPicker.vue'
+import type { RecycleMemberOption } from '@/addon/hsx_recycle/components/RecycleMemberPicker.vue'
 import RecycleEmptyState from '@/addon/hsx_recycle/components/RecycleEmptyState.vue'
 import RecycleStatusTabs from '@/addon/hsx_recycle/components/RecycleStatusTabs.vue'
 import OrderFilterDrawer from './components/OrderFilterDrawer.vue'
 import SignOrderPopup from './components/SignOrderPopup.vue'
-import { getDeviceListPriceMeta, isConsignedDevice, shouldShowConfirmStatus } from '@/addon/hsx_recycle/utils/device'
+import { getDeviceListPriceMeta, getDeviceModelLeafName, isConsignedDevice, shouldShowConfirmStatus } from '@/addon/hsx_recycle/utils/device'
 import { makePhoneCall } from '@/addon/hsx_recycle/utils/helper'
 import { useRecycleListHeader } from '@/addon/hsx_recycle/hooks/useRecycleListHeader'
 import { useRecyclePaging } from '@/addon/hsx_recycle/hooks/useRecyclePaging'
 import { getRecycleMemberAvatar, getRecycleMemberInitial, getRecycleMemberMobile, getRecycleMemberName } from '@/addon/hsx_recycle/hooks/useRecycleMember'
 
 const { pagingRef, list, reload, refresh, complete } = useRecyclePaging()
-const keyword = ref('')
 const currentStatus = ref('')
 const filterVisible = ref(false)
 const filterParams = ref<Record<string, any>>({})
@@ -247,6 +233,32 @@ const agentOrderVisible = ref(false)
 const agentOrderMounted = ref(false)
 const openAgentOrder = () => { agentOrderMounted.value = true; agentOrderVisible.value = true }
 const onAgentOrderSuccess = () => { reload() }
+const customerPickerVisible = ref(false)
+const customerPickerMounted = ref(false)
+const selectedCustomer = ref<RecycleMemberOption | null>(null)
+const currentCustomer = computed(() => Number(selectedCustomer.value?.member_id) === Number(filterParams.value.member_id) ? selectedCustomer.value : null)
+const hasCustomerFilter = computed(() => Boolean(filterParams.value.member_id || filterParams.value.user_mobile || filterParams.value.user_nickname))
+const customerLabel = computed(() => currentCustomer.value?.nickname || currentCustomer.value?.username || filterParams.value.user_nickname || filterParams.value.user_mobile || (filterParams.value.member_id ? '已选客户' : ''))
+const customerMobile = computed(() => currentCustomer.value?.mobile && currentCustomer.value.mobile !== customerLabel.value ? currentCustomer.value.mobile : '')
+const openCustomerPicker = () => { customerPickerMounted.value = true; customerPickerVisible.value = true }
+const selectCustomer = (member: RecycleMemberOption) => {
+    const id = Number(member.member_id)
+    if (!Number.isSafeInteger(id) || id <= 0) return
+    selectedCustomer.value = member
+    const next: Record<string, any> = { ...filterParams.value, member_id: id }
+    delete next.user_mobile
+    delete next.user_nickname
+    filterParams.value = next
+    customerPickerVisible.value = false
+    reload()
+}
+const clearCustomer = () => {
+    selectedCustomer.value = null
+    const next = { ...filterParams.value }
+    ;['member_id', 'user_mobile', 'user_nickname'].forEach(key => delete next[key])
+    filterParams.value = next
+    reload()
+}
 
 // 时间范围日历（挂在页面层，供筛选抽屉调用）
 const filterDrawerRef = ref<any>(null)
@@ -300,7 +312,7 @@ const initialized = ref(false)
 const lastStatusCounts = ref<Record<string, any>>({})
 
 // 胶囊筛选行高度上调，让设备列表落在胶囊按钮下方、留出间距
-const { pageHeaderStyle, pagingStyle } = useRecycleListHeader(184, 266)
+const { pageHeaderStyle, pagingStyle } = useRecycleListHeader(104, 186)
 
 const statusList = ref<Array<{ label: string, value: string, count?: number }>>([
     { label: '全部', value: '', count: 0 }
@@ -353,7 +365,7 @@ const filterStatusOptions = computed(() => statusList.value.map((item) => ({
 })))
 
 const activeFilterCount = computed(() => Object.keys(filterParams.value).filter((key) => {
-    return String(filterParams.value[key] ?? '').trim() !== ''
+    return !['member_id', 'user_mobile', 'user_nickname'].includes(key) && String(filterParams.value[key] ?? '').trim() !== ''
 }).length)
 
 const dashboardFilterTitle = computed(() => String(filterParams.value.dashboard_title || '').trim())
@@ -388,24 +400,30 @@ onShow(async () => {
     needRefresh.value = false
 })
 
+let orderRequestSeq = 0
 const queryList = async (pageNo: number, pageSize: number) => {
+    const requestSeq = ++orderRequestSeq
+    const scope = JSON.stringify([filterParams.value, currentStatus.value])
+    const current = () => requestSeq === orderRequestSeq && scope === JSON.stringify([filterParams.value, currentStatus.value])
     const params: Record<string, any> = {
         page: pageNo,
         limit: pageSize,
-        keyword: keyword.value.trim(),
-        search: keyword.value.trim()
     }
     Object.assign(params, filterParams.value)
+    // 客户先在会员接口中选择；订单列表只按客户 ID 筛选，不再触发跨表泛搜。
+    delete params.keyword
+    delete params.search
     if (currentStatus.value) params.status = currentStatus.value
 
     try {
         const res: any = await getOrderList(params)
+        if (!current()) return
         const pageData = res?.data || {}
         lastStatusCounts.value = pageData.status_counts || {}
         syncStatusCounts(lastStatusCounts.value)
         complete(pageData.data || [])
     } catch (error) {
-        complete(false)
+        if (current()) complete(false)
     }
 }
 
@@ -416,12 +434,6 @@ const syncStatusCounts = (statusCounts: Record<string, any>) => {
         }
         return { ...item, count: Number(statusCounts[item.value] || 0) }
     })
-}
-
-const onSearch = () => reload()
-
-const onScanSearch = () => {
-    reload()
 }
 
 const switchStatus = (value: string) => {
@@ -449,7 +461,7 @@ const onFilterConfirm = (params: Record<string, any>) => {
 const onFilterReset = () => {
     filterParams.value = {}
     currentStatus.value = ''
-    keyword.value = ''
+    selectedCustomer.value = null
     reload()
 }
 
@@ -466,6 +478,7 @@ const buildRouteFilters = (option: Record<string, any>) => {
         'order_no',
         'express_no',
         'delivery_type',
+        'member_id',
         'user_mobile',
         'user_nickname',
         'device_imei',
@@ -486,13 +499,14 @@ const buildRouteFilters = (option: Record<string, any>) => {
         if (value !== undefined && value !== null && String(value).trim() !== '') filters[key] = String(value).trim()
     })
     if (!filters.device_imei && option.imei) filters.device_imei = String(option.imei).trim()
+    if (filters.member_id && !/^[1-9]\d*$/.test(filters.member_id)) delete filters.member_id
     return filters
 }
 
 const toDetail = (item: any, filter = '') => {
     // 返回列表后做原位刷新；不得使用 reload，否则长列表会回到顶部。
     needRefresh.value = true
-    const deviceKeyword = String(filterParams.value.device_imei || keyword.value || '').trim()
+    const deviceKeyword = String(filterParams.value.device_imei || '').trim()
     redirect({
         url: '/addon/hsx_recycle/pages/order/detail',
         param: {
@@ -699,26 +713,30 @@ const formatMoney = (value: number | string) => Number(value || 0).toFixed(2)
 </script>
 
 <style scoped lang="scss">
-.agent-order-bar {
-    height: 80rpx;
-    padding: 0 24rpx;
+.agent-order-fab {
+    position: fixed;
+    right: 36rpx;
+    bottom: calc(60rpx + env(safe-area-inset-bottom));
+    width: 96rpx;
+    height: 96rpx;
+    min-width: 44px;
+    min-height: 44px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    box-sizing: border-box;
-    gap: 12rpx;
-    color: #8590a2;
-    font-size: 23rpx;
-}
-.agent-order-button {
-    flex-shrink: 0;
-    padding: 12rpx 22rpx;
-    background: var(--hsx-primary, #2463eb);
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--hsx-primary, #3b6ef5);
     color: #fff;
-    border-radius: 12rpx;
-    font-size: 26rpx;
-    font-weight: 500;
+    box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, .18);
+    z-index: 20;
+    transition: transform .12s ease;
 }
+.agent-order-fab--pressed { transform: scale(.94); }
+.customer-search-copy { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10rpx; overflow: hidden; color: #94a3b8; font-size: 25rpx; }
+.customer-search-copy text { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.customer-search-copy--selected { flex-direction: column; align-items: flex-start; gap: 0; line-height: 1.15; color: #1f2937; font-weight: 500; }
+.customer-search-mobile { color: #8491a5; font-size: 22rpx; font-weight: 400; }
+.customer-search-clear { flex-shrink: 0; display: flex; align-items: center; justify-content: center; min-width: 48rpx; min-height: 52rpx; margin-left: 6rpx; }
 .order-list-page {
     min-height: 100vh;
     background: #f5f7fa;
@@ -753,27 +771,6 @@ const formatMoney = (value: number | string) => Number(value || 0).toFixed(2)
     padding: 0 18rpx;
     margin-left: 8rpx;
     margin-right: 22rpx;
-}
-
-.nav-search-input {
-    flex: 1;
-    min-width: 0;
-    height: 64rpx;
-    font-size: 24rpx;
-    color: #1f2937;
-}
-
-.nav-search-input :deep(.u-input),
-.nav-search-input :deep(.u-input__content) {
-    height: 64rpx;
-    min-height: 64rpx;
-    padding: 0 !important;
-    background: transparent !important;
-}
-
-.nav-search-input :deep(.u-input__content__field-wrapper__field) {
-    height: 64rpx;
-    line-height: 64rpx;
 }
 
 .nav-search-icon,
@@ -833,25 +830,6 @@ const formatMoney = (value: number | string) => Number(value || 0).toFixed(2)
     padding: 0 20rpx;
 }
 
-.search-input {
-    flex: 1;
-    min-width: 0;
-    font-size: 26rpx;
-}
-
-.search-input :deep(.u-input),
-.search-input :deep(.u-input__content) {
-    height: 72rpx;
-    min-height: 72rpx;
-    padding: 0 !important;
-    background: transparent !important;
-}
-
-.search-input :deep(.u-input__content__field-wrapper__field) {
-    height: 72rpx;
-    line-height: 72rpx;
-}
-
 .search-clear,
 .search-icon {
     font-size: 28rpx;
@@ -906,7 +884,7 @@ const formatMoney = (value: number | string) => Number(value || 0).toFixed(2)
 }
 
 .list-content {
-    padding: 14rpx 18rpx;
+    padding: 14rpx 18rpx calc(180rpx + env(safe-area-inset-bottom));
 }
 
 .dashboard-filter-card {

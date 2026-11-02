@@ -8,6 +8,9 @@ export interface AgentOrderState {
 
 export const newAgentOrderState = (): AgentOrderState => ({ draftId: 0, orderNo: '', creatingUnknown: false, busy: false, lastSignPayload: '' })
 
+export const agentMemberError = (memberId: number): string =>
+    Number.isSafeInteger(memberId) && memberId > 0 ? '' : '请先选择客户'
+
 export const deviceEntryError = (device: any): string => {
     if (!/^[a-zA-Z0-9]{6,15}$/.test(String(device.imei || ''))) return 'IMEI / SN 须为 6–15 位字母或数字'
     if (!String(device.model || '').trim()) return '请选择设备型号'
@@ -15,7 +18,7 @@ export const deviceEntryError = (device: any): string => {
 }
 
 export const agentOrderError = (memberId: number, deliveryType: string, expressNo: string, devices: any[]): string => {
-    if (!memberId) return '请先选择客户'
+    if (agentMemberError(memberId)) return '请先选择客户'
     if (deliveryType === '1' && !expressNo.trim()) return '请填写快递单号'
     if (!devices.length) return '请至少添加一台设备'
     const seen = new Set<string>()

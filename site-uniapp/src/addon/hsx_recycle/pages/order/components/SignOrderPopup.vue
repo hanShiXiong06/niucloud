@@ -9,7 +9,7 @@
 
             <!-- 提示 -->
             <view class="tip-bar">
-                <text>{{ isAgent ? '为已收到的设备录单，提交后进入质检；不发起上门取件。' : '请确认设备信息无误后签收，签收后将进入质检流程' }}</text>
+                <text>{{ isAgent ? '先选择客户，再录入已收到的设备；下单签收后进入质检，不发起上门取件。' : '请确认设备信息无误后签收，签收后将进入质检流程' }}</text>
             </view>
 
             <!-- 设备列表 -->
@@ -45,7 +45,7 @@
                 <view v-for="(device, index) in devices" :key="device.id || index" class="device-card">
                     <view class="card-top">
                         <text class="card-index">{{ index + 1 }}</text>
-                        <text class="card-model">{{ device.model || '未填写型号' }}</text>
+                        <text class="card-model">{{ getDeviceModelLeafName(device.model, '未填写型号') }}</text>
                         <view class="card-actions">
                             <text class="nc-iconfont nc-icon-bianjiV6xx1 action-icon" @click="editDevice(device, index)"></text>
                             <text class="nc-iconfont nc-icon-shanchuV6xx1 action-icon action-icon--danger" @click="deleteDevice(index)"></text>
@@ -80,7 +80,7 @@
             <view class="popup-footer">
                 <u-button @click="handleClose" :disabled="submitting" :customStyle="{ flex: 1 }">{{ isAgent && agentState.draftId ? '稍后继续' : '取消' }}</u-button>
                 <u-button type="primary" :loading="submitting" :disabled="isAgent && agentState.creatingUnknown" @click="handleSubmit" :customStyle="{ flex: 2 }">
-                    {{ isAgent ? '下单并签收' : '确认签收' }}
+                    {{ isAgent ? (agentMemberError(Number(selectedMember?.member_id || 0)) ? '先选择客户' : '下单并签收') : '确认签收' }}
                 </u-button>
             </view>
         </view>
@@ -115,7 +115,7 @@
                         <u-form-item label="设备型号" required :border-bottom="false">
                             <view class="model-select" @click="openModelPicker">
                                 <text class="model-select__text" :class="{ 'model-select__placeholder': !editForm.model }">
-                                    {{ editForm.model || '选择设备分类/末级设备' }}
+                                    {{ getDeviceModelLeafName(editForm.model, '选择设备分类/末级设备') }}
                                 </text>
                                 <text class="nc-iconfont nc-icon-youV6xx1 model-select__icon"></text>
                             </view>
@@ -212,7 +212,7 @@
                             class="model-search-item"
                             @click="chooseModelNode(item)"
                         >
-                            <text class="model-search-item__name">{{ item.model_full_name || item.node_name }}</text>
+                            <text class="model-search-item__name">{{ getDeviceModelLeafName(item.model_full_name || item.node_name) }}</text>
                             <text v-if="item.source_node_id" class="model-search-item__code">ID: {{ item.source_node_id }}</text>
                         </view>
                     </block>
@@ -269,7 +269,8 @@ import NextAssigneePicker from '@/addon/hsx_recycle/components/NextAssigneePicke
 import QuoteUserPicker from '@/addon/hsx_recycle/components/QuoteUserPicker.vue'
 import RecycleMemberPicker from '@/addon/hsx_recycle/components/RecycleMemberPicker.vue'
 import type { RecycleMemberOption } from '@/addon/hsx_recycle/components/RecycleMemberPicker.vue'
-import { agentOrderError, deviceEntryError, newAgentOrderState, submitAgentOrder } from '@/addon/hsx_recycle/utils/agentOrder'
+import { agentMemberError, agentOrderError, deviceEntryError, newAgentOrderState, submitAgentOrder } from '@/addon/hsx_recycle/utils/agentOrder'
+import { getDeviceModelLeafName } from '@/addon/hsx_recycle/utils/device'
 
 interface Props {
     visible: boolean
@@ -293,8 +294,36 @@ const memberPickerVisible = ref(false)
 const deliveryType = ref('2')
 const expressNo = ref('')
 const submitError = ref('')
-const openMemberPicker = () => { if (!agentState.draftId && !agentState.creatingUnknown && !submitting.value) memberPickerVisible.value = true }
-const selectMember = (member: RecycleMemberOption) => { selectedMember.value = member; submitError.value = '' }
+const addAfterMember = ref(false)
+const openMemberPicker = () => {
+    if (!agentState.draftId && !agentState.creatingUnknown && !submitting.value) {
+        addAfterMember.value = false
+        memberPickerVisible.value = true
+    }
+}
+const selectMember = (member: RecycleMemberOption) => {
+    if (submitting.value || agentState.draftId || agentState.creatingUnknown) return
+    const error = agentMemberError(Number(member?.member_id))
+    if (error) { uni.showToast({ title: error, icon: 'none' }); return }
+    const continueAdding = addAfterMember.value
+    addAfterMember.value = false
+    selectedMember.value = member
+    submitError.value = ''
+    memberPickerVisible.value = false
+    if (continueAdding) addDevice()
+}
+const requireAgentCustomer = (continueAdding = false) => {
+    if (!isAgent.value || !agentMemberError(Number(selectedMember.value?.member_id || 0))) return true
+    submitError.value = agentState.draftId || agentState.creatingUnknown
+        ? '原订单客户尚未核对，请从订单列表查看，不会再次保存或打印。'
+        : '请先选择客户，再保存设备，确保标签关联到正确的客户。'
+    uni.showToast({ title: submitError.value, icon: 'none' })
+    if (!agentState.draftId && !agentState.creatingUnknown && !submitting.value) {
+        addAfterMember.value = continueAdding
+        memberPickerVisible.value = true
+    }
+    return false
+}
 const selectDelivery = (type: string) => { if (!agentState.draftId && !agentState.creatingUnknown && !submitting.value) deliveryType.value = type }
 const confirmCreateRetry = () => {
     uni.showModal({ title: '确认未创建订单', content: '请先在订单列表核对刚才所选客户。只有确认没有新订单时才能重新提交，否则可能重复下单。', confirmText: '确认未创建', success: result => {
@@ -467,6 +496,7 @@ const loadRootModels = async () => {
 watch(() => props.visible, (val) => {
     show.value = val
     if (!val) {
+        addAfterMember.value = false
         memberPickerVisible.value = false
         editVisible.value = false
         modelPickerVisible.value = false
@@ -478,6 +508,8 @@ watch(() => props.visible, (val) => {
         }))
     }
 }, { immediate: true })
+
+watch(() => memberPickerVisible.value, (visible) => { if (!visible) addAfterMember.value = false })
 
 watch(() => show.value, (val) => {
     if (!val) emit('update:visible', false)
@@ -501,6 +533,7 @@ const handleClose = () => {
 
 const addDevice = () => {
     if (submitting.value) return
+    if (!requireAgentCustomer(true)) return
     editingIndex.value = -1
     editForm.value = { model: '', imei: '', user_sn: '', initial_price: '', initial_price_uid: 0, initial_price_name: '', category_id: 0, category_path: [], check_template_id: 0, summary_fields: [], summary_values: {} }
     editVisible.value = true
@@ -657,6 +690,7 @@ const searchModelKeyword = async () => {
 }
 
 const saveEdit = () => {
+    if (!requireAgentCustomer()) return
     const error = deviceEntryError(editForm.value)
     if (error) {
         uni.showToast({ title: error, icon: 'none' })
@@ -697,6 +731,7 @@ const handleSubmit = async () => {
     if (submitting.value) return
     submitError.value = ''
     if (isAgent.value) {
+        if (!requireAgentCustomer()) return
         const error = agentOrderError(Number(selectedMember.value?.member_id || 0), deliveryType.value, expressNo.value, devices.value)
         if (error) { submitError.value = error; uni.showToast({ title: error, icon: 'none' }); return }
     }

@@ -14,6 +14,7 @@ abstract class AbstractProvider implements ProviderContract
 
     protected function accessToken(#[\SensitiveParameter] array $credentials): string
     {
+        $secretTrace = \addon\hsx_lead\app\support\PhpRuntime::guardSecrets();
         $token = $credentials['access_token'] ?? $credentials['token'] ?? '';
         if (!is_string($token) || $token === '' || strlen($token) > 16384 || !preg_match('/^[\x21-\x7e]+$/D', $token)) {
             throw new ProviderException('invalid_credentials', '请提供有效的 ERP 授权凭据');
@@ -111,6 +112,32 @@ abstract class AbstractProvider implements ProviderContract
             throw new ProviderException('invalid_scope', '库存采集时间格式不正确');
         }
         $images = array_values(array_unique(array_filter(array_map(fn($url) => $this->url($url), $mapped['images'] ?? []))));
+        // Only an adapter's verified source contract can supply these states. The
+        // generic list boundary must never turn an arbitrary record into stock.
+        $listing = in_array($mapped['listing_status'] ?? null, ['listed', 'unlisted', 'unknown'], true)
+            ? $mapped['listing_status'] : 'unknown';
+        $stock = in_array($mapped['stock_status'] ?? null, ['in_stock', 'out_of_stock', 'unknown'], true)
+            ? $mapped['stock_status'] : 'unknown';
+        $availability = in_array($mapped['availability'] ?? null, ['available', 'unavailable', 'unknown'], true)
+            ? $mapped['availability'] : 'unknown';
+        $quantity = $this->stockQuantity($mapped['quantity'] ?? null);
+        $saleableQuantity = $this->stockQuantity($mapped['saleable_quantity'] ?? null);
+        $quantityBasis = in_array($mapped['quantity_basis'] ?? null, ['source_quantity', 'listed_stock_device'], true)
+            ? $mapped['quantity_basis'] : 'unknown';
+        // "One current, listed device" is a verified per-adapter unit proof,
+        // not a substitute for an absent aggregate source quantity column.
+        if ($quantityBasis === 'listed_stock_device' && ($saleableQuantity !== '1.000' || $quantity !== null)) {
+            $saleableQuantity = null; $quantityBasis = 'unknown';
+        }
+        if ($quantityBasis === 'source_quantity' && ($quantity === null || $saleableQuantity !== $quantity)) {
+            $saleableQuantity = null; $quantityBasis = 'unknown';
+        }
+        if ($quantityBasis === 'unknown') $saleableQuantity = null;
+        // A false availability proof wins over an accidental positive mapping.
+        if ($listing === 'unlisted' || $stock === 'out_of_stock') $availability = 'unavailable';
+        elseif ($availability === 'available' && ($listing !== 'listed' || $stock !== 'in_stock'
+            || $saleableQuantity === null || $saleableQuantity === '0.000')) $availability = 'unknown';
+        if ($availability !== 'available') $saleableQuantity = null;
         return [
             'source_key' => implode(':', array_map('rawurlencode', [$this->key(), $connection, $tenant ?? '', $store, $sourceId])),
             'source_id' => $sourceId,
@@ -126,10 +153,26 @@ abstract class AbstractProvider implements ProviderContract
             'cover' => $images[0] ?? null,
             'images' => $images,
             'source_status' => $mapped['source_status'] ?? [],
-            // No stock/sale enum has been verified; never infer sellability from list presence.
-            'availability' => 'unknown',
+            'listing_status' => $listing,
+            'stock_status' => $stock,
+            'availability' => $availability,
+            // NULL is not zero. Raw per-source counters are retained separately
+            // when their semantics are not a verified available-unit quantity.
+            'quantity' => $quantity,
+            'saleable_quantity' => $saleableQuantity,
+            'quantity_basis' => $quantityBasis,
             'safe_snapshot' => $row,
             'fetched_at' => $fetchedAt,
         ];
+    }
+
+    /** Exact nonnegative decimal supported by the existing DECIMAL(14,3) field. */
+    protected function stockQuantity(mixed $value): ?string
+    {
+        if (!is_int($value) && !is_string($value)) return null;
+        $raw = trim((string)$value);
+        if (!preg_match('/^[0-9]{1,11}(?:\.[0-9]{1,3})?$/D', $raw)) return null;
+        [$whole, $fraction] = array_pad(explode('.', $raw, 2), 2, '');
+        return (ltrim($whole, '0') ?: '0') . '.' . str_pad($fraction, 3, '0');
     }
 }

@@ -8,6 +8,7 @@ use addon\phone_shop\app\model\goods\Goods;
 use addon\phone_shop\app\service\admin\intake\DeviceIntakeService;
 use addon\phone_shop\app\service\core\intake\CoreDeviceIntakeService;
 use addon\phone_shop\app\support\IntakeMaterialTask;
+use addon\phone_shop\app\support\ListingGoodsTitle;
 use think\facade\Log;
 
 /** phone_shop 消费 ERP 发布请求；ERP 不直接依赖商城模型和建品服务。 */
@@ -63,9 +64,8 @@ final class ErpPublishListing
                 return compact('provider') + ['status' => 'pending', 'intake_id' => (int)$intake->intake_id, 'message' => '已进入商城运营待办'];
             }
 
-            $goodsId = DeviceIntakeService::forSite($siteId)->build([
+            $buildData = [
                 'intake_id' => (int)$intake->intake_id,
-                'goods_name' => trim((string)($payload['goods_name'] ?? $payload['model_name'] ?? '')),
                 'sub_title' => trim((string)($payload['sub_title'] ?? '')),
                 'goods_category' => array_values(array_filter(array_map('intval', (array)($payload['goods_category'] ?? [])))),
                 'condition_grade' => trim((string)($payload['condition_grade'] ?? '')),
@@ -77,7 +77,14 @@ final class ErpPublishListing
                 'goods_video' => trim((string)($payload['video_url'] ?? '')),
                 'status' => 1,
                 'sync_back_erp' => false,
-            ]);
+            ];
+            // ERP 的默认 goods_name 只是型号，不能当作人工标题覆盖内存、颜色与尺寸。
+            // 真正自定义过的标题仍原样交给建品服务，不擅自重写运营文案。
+            $title = trim((string)($payload['goods_name'] ?? ''));
+            if ($title !== '' && !ListingGoodsTitle::isModelTitle($title, (string)($payload['model_name'] ?? ''))) {
+                $buildData['goods_name'] = $title;
+            }
+            $goodsId = DeviceIntakeService::forSite($siteId)->build($buildData);
             $saved = (new DeviceIntake())->where('site_id', $siteId)->where('intake_id', (int)$intake->intake_id)->findOrEmpty();
             $distribution = (array)(IntakeMaterialTask::payload($saved->raw_payload)['_agent_distribution'] ?? []);
             $warning = (int)($distribution['failed_count'] ?? 0) > 0

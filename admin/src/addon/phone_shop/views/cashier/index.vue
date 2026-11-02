@@ -316,8 +316,7 @@ const loadGoods = async (reset = false) => {
     const d = res.data || {}
     goods.value = d.data || []
     goodsTotal.value = Number(d.total || 0)
-    // 后端联动选项为空时,用已加载商品兜底填充,确保下拉始终有值
-    if (!memOptions.value.length) memOptions.value = deriveOptions('memory_group')
+    // 成色保留原有兜底；规格只使用后台字典，不从库存反推脏值。
     if (!gradeOptions.value.length) gradeOptions.value = deriveOptions('condition_grade')
   } catch (e) {
     if (requestId === goodsRequest) goodsError.value = true
@@ -331,13 +330,11 @@ const loadFilters = async () => {
   try {
     const res: any = await getSpecGroups({ category_id: categoryId.value || 0 })
     const groups = res.data || []
-    // 优先取 label 含"内存"的规格组,没有则用全部规格组的子项
-    const memGroups = groups.filter((g: any) => String(g.label || '').includes('内存'))
-    const useGroups = memGroups.length ? memGroups : groups
+    // 接口已按分类返回适用组；分组可自由命名，顺序以后台为准。
     const set = new Set<string>()
-    useGroups.forEach((g: any) => (g.items || []).forEach((it: any) => { const v = String(it.item_value ?? '').trim(); if (v) set.add(v) }))
-    memOptions.value = set.size ? Array.from(set) : deriveOptions('memory_group')
-  } catch (e) { memOptions.value = deriveOptions('memory_group') }
+    groups.forEach((g: any) => (g.items || []).forEach((it: any) => { const v = String(it.item_value ?? '').trim(); if (v) set.add(v) }))
+    memOptions.value = Array.from(set)
+  } catch (e) { memOptions.value = [] }
   // 成色:全局字典,加载一次即可
   if (!gradeOptions.value.length) {
     try {

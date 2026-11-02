@@ -3,12 +3,14 @@ declare(strict_types=1);
 namespace addon\hsx_lead\app\service;
 
 use addon\hsx_lead\app\support\Data;
+use addon\hsx_lead\app\support\ListTimeFilter;
+use addon\hsx_lead\app\support\MerchantRegion;
 use core\exception\CommonException;
 use think\facade\Db;
 
 final class MerchantService
 {
-    public function __construct(private readonly Context $context) {}
+    public function __construct(private Context $context) {}
 
     public function members(array $params = []): array
     {
@@ -24,8 +26,16 @@ final class MerchantService
         $this->context->manager();
         $q=Data::query('merchant',$this->context->site);
         $key=Data::text($params,'keyword',100);
-        if ($key !== '') $q->whereLike('name|mobile|contact_name','%'.$key.'%');
+        if ($key !== '') $q->whereLike('name|mobile|contact_name','%'.addcslashes($key, '\\%_').'%');
         if (isset($params['status']) && $params['status'] !== '') $q->where('status',(int)$params['status']);
+        MerchantRegion::apply($q, $params);
+        if (in_array($params['picker'] ?? null, [true, 1, '1'], true)) {
+            // Search/paginate on the server; a first page is not the full merchant list.
+            $result = Data::page($q->field('id,name,contact_name,mobile,province_id,city_id,district_id'), $params);
+            $result['data'] = MerchantRegion::present($result['data']);
+            return $result;
+        }
+        ListTimeFilter::apply($q,$params,['create_time'=>'create_time','update_time'=>'update_time'],'create_time');
         if (!empty($params['provider'])) {
             $provider=Data::text($params,'provider',60);
             $ids=Data::query('connection',$this->context->site)->where('provider',$provider)->column('merchant_id');
@@ -70,6 +80,7 @@ final class MerchantService
 
     public function save(int $id, #[\SensitiveParameter] array $input): array
     {
+        $secretTrace = \addon\hsx_lead\app\support\PhpRuntime::guardSecrets();
         $this->context->manager();
         $site=$this->context->site;
         return Db::transaction(function () use ($id,$input,$site) {

@@ -20,6 +20,7 @@ use think\facade\Log;
 class CoreGoodsSubscriptionMatchService
 {
     private array $categoryParents = [];
+    private ?CoreMemoryFilterService $memoryFilters = null;
     public function match(int $site_id, int $goods_id): int
     {
         if ($site_id <= 0 || $goods_id <= 0) return 0;
@@ -89,7 +90,12 @@ class CoreGoodsSubscriptionMatchService
         )) return false;
         if (!$this->matchesAny($rule['label_ids'] ?? [], $this->toList($goods['label_ids'] ?? []))) return false;
         if (!$this->matchesAny($rule['service_ids'] ?? [], $this->toList($goods['service_ids'] ?? []))) return false;
-        if (!$this->matchesScalar($rule['memory_group'] ?? [], $goods['memory_group'] ?? '')) return false;
+        $memory = $this->toList($rule['memory_group'] ?? []);
+        if ($memory !== []) {
+            $this->memoryFilters = $this->memoryFilters ?? new CoreMemoryFilterService();
+            $memory = $this->memoryFilters->filterValues($site_id, $memory);
+        }
+        if (!$this->matchesScalar($memory, $goods['memory_group'] ?? '')) return false;
         if (!$this->matchesScalar($rule['condition_grade'] ?? [], $goods['condition_grade'] ?? '')) return false;
         if (!$this->matchesScalar($rule['device_color'] ?? [], $goods['device_color'] ?? '')) return false;
         if (!$this->matchesScalar($rule['brand_ids'] ?? [], $goods['brand_id'] ?? '')) return false;

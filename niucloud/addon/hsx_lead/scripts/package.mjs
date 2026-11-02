@@ -6,7 +6,9 @@ import { fileURLToPath } from 'node:url'
 
 // Explicit paths only: unrelated dirty worktrees, .env and user attachments cannot enter this archive.
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..')
-const output = path.join(root, 'output/hsx-lead-1.1.0-release-20261030')
+const version = JSON.parse(await readFile(path.join(root, 'niucloud/addon/hsx_lead/info.json'), 'utf8')).version
+if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error('Invalid plugin version')
+const output = path.join(root, 'output/hsx-lead-' + version + '-release-20261102')
 const roots = ['niucloud/addon/hsx_lead', 'admin/src/addon/hsx_lead', 'uni-app/src/addon/hsx_lead']
 const files = []
 async function visit(relative) {
@@ -28,8 +30,8 @@ for (const name of files) {
     manifest.push({ path: name, bytes: content.length, sha256: createHash('sha256').update(content).digest('hex') })
 }
 await mkdir(output,{recursive:true})
-await writeFile(path.join(output,'manifest.json'),JSON.stringify({version:'1.1.0',built_at:new Date().toISOString(),framework_files:[],files:manifest},null,2)+'\n')
-const archive = path.join(output,'hsx-lead-1.1.0-source.zip')
+await writeFile(path.join(output,'manifest.json'),JSON.stringify({version,built_at:new Date().toISOString(),framework_files:[],files:manifest},null,2)+'\n')
+const archive = path.join(output,'hsx-lead-'+version+'-source.zip')
 const temporary = path.join(output,'.package-'+randomUUID()+'.zip')
 // zip reads a bounded file list from stdin, never the entire workspace.
 const result=spawnSync('zip',['-q','-X',temporary,'-@'],{cwd:root,input:files.join('\n')+'\n',encoding:'utf8'})

@@ -18,6 +18,7 @@ use addon\phone_shop\app\service\core\goods\CoreDeviceAttributeService;
 use addon\phone_shop\app\support\InspectionGoodsAttributes;
 use addon\phone_shop\app\support\IntakeMaterialTask;
 use addon\phone_shop\app\support\GoodsWarrantySubtitle;
+use addon\phone_shop\app\support\ListingGoodsTitle;
 
 use app\service\core\sys\CoreConfigService;
 use core\base\BaseCoreService;
@@ -33,8 +34,8 @@ class CoreListingMappingService extends BaseCoreService
     public static function defaultConfig(): array
     {
         return [
-            // 标题模板:可用占位 {brand} {model} {memory} {color} {condition} {imei}
-            'title_template'        => '{brand} {model} {memory} {color}',
+            // 标题模板:可用占位 {brand} {model} {size} {memory} {color} {condition} {imei}
+            'title_template'        => ListingGoodsTitle::DEFAULT_TEMPLATE,
             // 副标题模板:同上占位 + {warranty}
             'subtitle_template'     => '{condition} · 一机一检 · {warranty}',
             // 保修文案由设备实际到期日生成；保留配置键但不以固定售后承诺代替设备保修。
@@ -140,11 +141,14 @@ class CoreListingMappingService extends BaseCoreService
         );
 
         // ---- 占位符上下文 ----
+        $titleSize = ListingGoodsTitle::screenSize((string)$model, $sourcePayload['screen_size'] ?? '');
+        $displayColor = $deviceAttributes->normalizeColor($color, false);
         $ctx = [
             '{brand}'     => trim((string)$brand),
             '{model}'     => trim((string)$model),
             '{memory}'    => $memoryGroup,
-            '{color}'     => trim((string)$color),
+            '{color}'     => $displayColor,
+            '{size}'      => $titleSize,
             '{condition}' => trim((string)$condition),
             '{imei}'      => $imei,
             '{warranty}'  => GoodsWarrantySubtitle::label($warrantyExpire),
@@ -152,9 +156,12 @@ class CoreListingMappingService extends BaseCoreService
         ];
 
         // ---- 3. 标题 ----
+        $titleTemplate = (string)($config['title_template'] ?? ListingGoodsTitle::DEFAULT_TEMPLATE);
         $goodsName = array_key_exists('goods_name', $overrides) && trim((string)$overrides['goods_name']) !== ''
             ? (string)$overrides['goods_name']
-            : $this->render((string)($config['title_template'] ?? '{brand} {model} {memory} {color}'), $ctx);
+            : (ListingGoodsTitle::isDefaultTemplate($titleTemplate)
+                ? ListingGoodsTitle::compose((string)$brand, (string)$model, $memoryGroup, $displayColor, $titleSize)
+                : $this->render($titleTemplate, $ctx));
         if (trim($goodsName) === '') {
             $goodsName = $this->squeeze(trim($model . ' ' . $memoryGroup . ' ' . $condition));
         }
@@ -193,7 +200,7 @@ class CoreListingMappingService extends BaseCoreService
             'qc_report'       => $qcReport,
             'condition_grade' => trim((string)$condition),
             'brand_id'        => (int)($listingMaterial['brand']['id'] ?? 0),
-            'device_color'    => $deviceAttributes->normalizeColor($color, false),
+            'device_color'    => $displayColor,
             'battery_health'  => $batteryHealth,
             'warranty_expire_time' => $warrantyExpire,
             'images'          => $images,
@@ -232,7 +239,7 @@ class CoreListingMappingService extends BaseCoreService
     }
 
     /** 内存归一化:别名优先;否则把 g/G 规范成 GB,去空格,8+256 → 8GB+256GB */
-    private function normalizeMemory(string $raw, array $aliases): string
+    public function normalizeMemory(string $raw, array $aliases): string
     {
         $m = trim($raw);
         if ($m === '') return '';

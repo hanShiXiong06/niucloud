@@ -530,6 +530,9 @@ button { margin: 0; padding: 0; font-size: inherit; line-height: 1.4; border: 0;
 .nav { position: sticky; top: 0; z-index: 20; }
 .batch-result .task-title, .batch-item .task-title { font-size: 13px; font-weight: 500; }
 .binding-context { padding-top: 16px; }
+/* 微信 WXSS 不支持通配选择器；其他端保留原有减少动画偏好。 */
+/* #ifndef MP-WEIXIN */
 @media (prefers-reduced-motion: reduce) { .bridge *, .bridge *::before { transition: none !important; animation: none !important; } }
+/* #endif */
 @media (max-width: 350px) { .toolbar { padding: 12px; }.title { font-size: 18px; }.nav { gap: 22px; }.task { padding: 12px; }.state { font-size: 10px; }.sheet-body { padding: 0 12px; }.sheet-footer { padding-left: 12px; padding-right: 12px; } }
 </style>

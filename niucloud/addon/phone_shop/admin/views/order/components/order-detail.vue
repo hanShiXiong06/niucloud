@@ -10,6 +10,7 @@
 
             <el-form :model="formData" label-width="100px" ref="formRef" class="page-form" v-if="!loading" label-position="left">
                 <div v-if="activeName == 'order'">
+                    <OrderCreditSummary :order="formData" />
                     <el-row class="row-bg px-[30px] mb-[20px]" :gutter="20">
                         <el-col :span="8">
                             <el-form-item :label="t('orderDetailNo')">
@@ -76,7 +77,8 @@
                             <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer" @click="delivery" v-if="formData.status == 2">{{ t('delivery') }}</span>
                             <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer" @click="close" v-if="formData.status == 1 && !managedByErp">{{ t('close') }}</span>
                             <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer" @click="orderAdjustMoney" v-if="formData.status == 1 && !managedByErp">{{ t('editPrice') }}</span>
-                            <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer" @click="finish" v-if="formData.status == 3">{{ t('finish') }}</span>
+                            <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer" @click="finish" v-if="formData.status == 3 && creditCanComplete(formData)">{{ t('finish') }}</span>
+                            <span v-if="formData.status == 3 && !creditCanComplete(formData)" class="ml-[30px] text-[13px] text-warning">{{ creditStatusLabel(formData) }}，暂不能完成</span>
                             <span class="text-[14px] px-[15px] py-[5px] ml-[30px] text-[#5c96fc] bg-[#ebf3ff] cursor-pointer"
                                 @click="openElectronicSheetPrintDialog"
                                 v-if="formData.delivery_type == 'express' && formData.status == 3">{{ t('electronicSheetPrintTitle') }}</span>
@@ -230,6 +232,8 @@ import { t } from '@/lang'
 import { getOrderDetail, orderClose, orderFinish } from '@/addon/phone_shop/api/order'
 import OrderDeviceIdentity from '@/addon/phone_shop/views/order/components/order-device-identity.vue'
 import OrderReturnGuide from '@/addon/phone_shop/views/order/components/order-return-guide.vue'
+import OrderCreditSummary from '@/addon/phone_shop/views/order/components/order-credit-summary.vue'
+import { creditCanComplete, creditMessage, creditStatusLabel } from '@/addon/phone_shop/utils/order-credit'
 const managedByErp = computed(() => !!formData.value?.relate_source || ['offline_cash', 'offline_credit'].includes(formData.value?.payment_mode))
 import { printTicket } from '@/app/api/printer'
 import DeliveryAction from '@/addon/phone_shop/views/order/components/delivery-action.vue'
@@ -240,7 +244,7 @@ import AdjustMoney from '@/addon/phone_shop/views/order/components/adjust-money.
 import electronicSheetPrint from '@/addon/phone_shop/views/order/components/electronic-sheet-print.vue'
 import ShopActiveRefund from '@/addon/phone_shop/views/order/components/shop-active-refund.vue'
 import { img } from '@/utils/common'
-import { ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { cloneDeep } from 'lodash-es'
 
 const showDialog = ref(false)
@@ -322,6 +326,7 @@ const setNotes = () => {
 }
 // 订单完成
 const finish = () => {
+    if (!creditCanComplete(formData.value)) { ElMessage.warning(creditMessage(formData.value)); return }
     ElMessageBox.confirm(t('orderFinishTips'), t('warning'), {
         confirmButtonText: t('confirm'),
         cancelButtonText: t('cancel'),

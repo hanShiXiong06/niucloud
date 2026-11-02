@@ -511,7 +511,6 @@ const refreshStructuredOptions = async () => {
         const res: any = await getSpecGroups({ category_id: 0 })
         const values = new Set<string>()
         ;(res.data || []).forEach((group: any) => {
-            if (!String(group.label || '').includes('内存')) return
             ;(group.items || []).forEach((item: any) => {
                 const value = String(item.item_value || '').trim()
                 if (value) values.add(value)

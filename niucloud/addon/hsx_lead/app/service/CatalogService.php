@@ -11,11 +11,17 @@ use think\facade\Db;
 final class CatalogService
 {
     public const KEY='HSX_LEAD_DEMAND_CATALOG';
-    public function __construct(private readonly Context $context) {}
+    public function __construct(private Context $context) {}
 
     public function get(): array
     {
         $this->context->manager();
+        return $this->directory();
+    }
+
+    /** Read-only demand labels; contains no customer data, stock prices or credentials. */
+    public function directory(): array
+    {
         $value=(new CoreConfigService())->getConfigValue($this->context->site,self::KEY);
         if (!empty($value['items'])) return ['items'=>$value['items'],'source'=>'configured','updated_at'=>(int)($value['updated_at']??0)];
         $rows=Db::name('hsx_lead_inventory')->alias('i')
@@ -52,7 +58,7 @@ final class CatalogService
             if (is_array($rows) && isset($rows['items'])) $rows=$rows['items'];
         } elseif ($format==='csv') $rows=$this->csv($content);
         else throw new CommonException('请上传CSV或JSON；Excel请先另存为UTF-8 CSV');
-        if (!is_array($rows) || !array_is_list($rows) || count($rows)>5000) throw new CommonException('清单应为数组，最多5000项');
+        if (!is_array($rows) || !\addon\hsx_lead\app\support\PhpRuntime::isList($rows) || count($rows)>5000) throw new CommonException('清单应为数组，最多5000项');
         if (!$rows) throw new CommonException('设备清单为空，未覆盖已有配置');
         $items=[];
         foreach($rows as $index=>$row) {
@@ -105,7 +111,7 @@ final class CatalogService
     public function resolve(array $requested,array $previous=[]): array
     {
         $this->context->manager();
-        if (!$requested || count($requested)>20 || !array_is_list($requested)) throw new CommonException('请勾选1—20项意向设备');
+        if (!$requested || count($requested)>20 || !\addon\hsx_lead\app\support\PhpRuntime::isList($requested)) throw new CommonException('请勾选1—20项意向设备');
         $directory=array_column($this->get()['items'],null,'id');
         foreach($previous as $item) if (isset($item['catalog_id']) && !isset($directory[$item['catalog_id']])) {
             $directory[$item['catalog_id']]=['id'=>$item['catalog_id'],'title'=>$item['title'],'brand'=>$item['brand']??'',

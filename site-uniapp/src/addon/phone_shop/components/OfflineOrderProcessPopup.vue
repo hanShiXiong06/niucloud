@@ -20,6 +20,11 @@
                     </view>
                     <text class="order-no">订单 {{ order?.order_no || '-' }}</text>
                 </view>
+                <view v-if="error" class="account-warning">{{ error }}</view>
+                <view v-if="uncertain" class="account-warning">上次提交结果尚未核实，不会重复处理。请先刷新原订单并核对处理记录；不要再次转账。</view>
+                <view v-if="uncertain" class="unlock-check" @click="unlockAfterCheck">已在电脑端核对未处理，解锁重试</view>
+                <view v-if="isRecovery" class="account-warning">之前已记录线下收款，本次只继续核对入账；客户和门店不需要再转账。原成交价已锁定。</view>
+                <view v-if="isRecovery" class="recovery-check" @click="recoveryChecked = !recoveryChecked"><u-icon v-if="recoveryChecked" name="checkmark-circle-fill" color="var(--primary-color)" size="22" /><view v-else class="selection-circle" aria-hidden="true"></view><text>我已核对原到账及 ERP 账目，本次只继续入账，不再转账</text></view>
 
                 <template v-if="isSettlement">
                     <view class="form-card">
@@ -29,7 +34,7 @@
                         </view>
                         <view class="money-input">
                             <text class="currency">¥</text>
-                            <input v-model="form.deal_total" type="digit" class="amount-input" placeholder="0.00" />
+                            <input v-model="form.deal_total" type="digit" class="amount-input" placeholder="0.00" :disabled="isRecovery || uncertain" />
                         </view>
                         <view v-if="priceDiff !== 0" class="price-change" :class="priceDiff < 0 ? 'price-change--discount' : 'price-change--increase'">
                             {{ priceDiff < 0 ? '本次优惠' : '本次加价' }} ¥{{ Math.abs(priceDiff).toFixed(2) }}
@@ -78,7 +83,7 @@
 
             <view class="sheet-foot">
                 <view class="submit-button">
-                    <u-button :type="action === 'close_unreachable' ? 'error' : 'primary'" shape="circle" :loading="submitting" :text="submitText" @click="submit" />
+                    <u-button :type="action === 'close_unreachable' ? 'error' : 'primary'" shape="circle" :loading="submitting" :text="uncertain ? '关闭并核对原单' : submitText" @click="submit" />
                 </view>
             </view>
         </view>
@@ -97,32 +102,42 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import UploadImg from '@/components/upload-img/upload-img.vue'
-import { getOfflineCapitalAccounts, processOfflineOrder } from '@/addon/phone_shop/api/order'
+import { getOfflineCapitalAccounts, processOrderAction } from '@/addon/phone_shop/api/order'
+import { clearOperationUncertain, markOperationUncertain, operationUncertain } from '@/addon/phone_shop/utils/orderWorkflow'
 
 const props = defineProps<{
     show: boolean
     order?: Record<string, any> | null
     action: 'confirm_paid' | 'confirm_credit' | 'close_unreachable'
+    operationKey?: string
 }>()
 
-const emit = defineEmits(['close', 'success'])
+const emit = defineEmits(['close', 'success', 'refresh'])
 const submitting = ref(false)
+const uncertain = ref(false), error = ref('')
+const recoveryChecked = ref(false)
+let accountsVersion = 0
 const accounts = ref<any[]>([])
 const accountSheet = ref(false)
 const form = reactive({ deal_total: '', capital_account_id: 0, voucher_urls: '', remark: '' })
 
 const isSettlement = computed(() => ['confirm_paid', 'confirm_credit'].includes(props.action))
+const isRecovery = computed(() => props.action === 'confirm_paid' && props.order?.payment_mode === 'offline_cash' && Number(props.order?.status) === 1)
 const customerName = computed(() => props.order?.member?.nickname || props.order?.taker_name || '到店客户')
 const goodsCount = computed(() => (props.order?.order_goods || []).filter((item: any) => Number(item.is_gift || 0) !== 1).reduce((total: number, item: any) => total + Number(item.num || 1), 0))
 const priceDiff = computed(() => Number(form.deal_total || 0) - Number(props.order?.order_money || 0))
 const selectedAccount = computed(() => accounts.value.find(item => Number(item.id) === Number(form.capital_account_id)))
 const accountActions = computed(() => accounts.value.map(item => ({ ...item, name: `${ item.name || '资金账户' }${ item.type_name ? ` · ${ item.type_name }` : '' }` })))
-const title = computed(() => props.action === 'confirm_paid' ? '确认线下收款' : props.action === 'confirm_credit' ? '确认客户挂账' : '关闭线下订单')
-const subtitle = computed(() => props.action === 'confirm_paid' ? '记录真实到账后进入待交付' : props.action === 'confirm_credit' ? '生成 ERP 应收后进入待交付' : '关闭后设备会解除锁定')
-const submitText = computed(() => props.action === 'confirm_paid' ? '确认已收款' : props.action === 'confirm_credit' ? '确认挂账' : '确认关闭订单')
+const title = computed(() => isRecovery.value ? '核对收款入账' : props.action === 'confirm_paid' ? '确认线下收款' : props.action === 'confirm_credit' ? '确认客户挂账' : '关闭线下订单')
+const subtitle = computed(() => isRecovery.value ? '只继续核对入账，不要重复转账' : props.action === 'confirm_paid' ? '记录真实到账后进入待交付' : props.action === 'confirm_credit' ? '生成 ERP 应收后进入待交付' : '关闭后设备会解除锁定')
+const submitText = computed(() => isRecovery.value ? '继续核对入账' : props.action === 'confirm_paid' ? '确认已收款' : props.action === 'confirm_credit' ? '确认挂账' : '确认关闭订单')
 
 watch(() => props.show, async visible => {
+    const version = ++accountsVersion
     if (!visible || !props.order) return
+    error.value = ''
+    uncertain.value = operationUncertain(Number(props.order.order_id), props.operationKey || props.action)
+    recoveryChecked.value = false
     form.deal_total = Number(props.order.order_money || 0).toFixed(2)
     form.capital_account_id = 0
     form.voucher_urls = props.action === 'confirm_paid' && Array.isArray(props.order.offline_record?.voucher_urls)
@@ -132,20 +147,30 @@ watch(() => props.show, async visible => {
     if (props.action !== 'confirm_paid') return
     try {
         const response: any = await getOfflineCapitalAccounts()
+        if (version !== accountsVersion || !props.show) return
         accounts.value = Array.isArray(response?.data) ? response.data : []
         const defaultAccount = accounts.value.find(item => Number(item.is_default) === 1) || accounts.value[0]
-        form.capital_account_id = Number(defaultAccount?.id || 0)
-    } catch {
-        accounts.value = []
+        form.capital_account_id = isRecovery.value ? 0 : Number(defaultAccount?.id || 0)
+    } catch (reason: any) {
+        if (version !== accountsVersion || !props.show) return
+        accounts.value = []; error.value = reason?.msg || reason?.message || '资金账户读取失败，请重新打开核对'
     }
-})
+}, { immediate: true })
 
 function money(value: any) { return Number(value || 0).toFixed(2) }
 function close() { if (!submitting.value) emit('close') }
 function selectAccount(item: any) { form.capital_account_id = Number(item?.id || 0); accountSheet.value = false }
+function unlockAfterCheck() {
+    if (submitting.value || !props.order) return
+    uni.showModal({ title: '确认已核对原账', content: '请先在电脑端查看原订单、收付款及 ERP 入账记录。只有确认本次尚未完成时才重试；已实际转账的不需要再转账。', confirmText: '确认尚未完成', success: result => {
+        if (result.confirm) { clearOperationUncertain(Number(props.order!.order_id), props.operationKey || props.action); uncertain.value = false; error.value = '' }
+    } })
+}
 
 async function submit() {
     if (!props.order || submitting.value) return
+    if (uncertain.value) { emit('refresh'); emit('close'); return }
+    if (isRecovery.value && !recoveryChecked.value) return uni.showToast({ title: '请先确认已核对原到账和账目', icon: 'none' })
     if (isSettlement.value && Number(form.deal_total) <= 0) return uni.showToast({ title: '请输入有效成交价', icon: 'none' })
     if (props.action === 'confirm_paid' && !form.capital_account_id) return uni.showToast({ title: '请选择实际到账账户', icon: 'none' })
     const vouchers = String(form.voucher_urls || '').split(',').map(item => item.trim()).filter(Boolean)
@@ -153,16 +178,21 @@ async function submit() {
 
     submitting.value = true
     try {
-        await processOfflineOrder({
+        await processOrderAction({
             order_id: Number(props.order.order_id),
             action: props.action,
             capital_account_id: form.capital_account_id,
-            deal_total: isSettlement.value ? Number(form.deal_total) : null,
+            deal_total: isRecovery.value ? null : isSettlement.value ? Number(form.deal_total) : null,
             remark: form.remark.trim(),
             close_reason: props.action === 'close_unreachable' ? form.remark.trim() : '',
             voucher_urls: vouchers,
         })
         emit('success')
+    } catch (reason: any) {
+        error.value = reason?.msg || reason?.message || '处理响应未确认，请先核对原单'
+        uncertain.value = true
+        markOperationUncertain(Number(props.order.order_id), props.operationKey || props.action)
+        emit('refresh')
     } finally {
         submitting.value = false
     }
@@ -170,6 +200,7 @@ async function submit() {
 </script>
 
 <style scoped lang="scss">
+.selection-circle { width:22px; height:22px; flex-shrink:0; border:1.5px solid #aeb7c4; border-radius:50%; box-sizing:border-box; }
 .process-sheet { height: 84vh; background: #f5f7fa; display: flex; flex-direction: column; color: #1e293b; }
 .sheet-head { flex-shrink: 0; padding: 28rpx 30rpx 22rpx; background: #fff; display: flex; align-items: flex-start; justify-content: space-between; }
 .head-copy { min-width: 0; flex: 1; }
@@ -208,4 +239,6 @@ async function submit() {
 .safe-space { height: 28rpx; }
 .sheet-foot { flex-shrink: 0; padding: 18rpx 26rpx calc(18rpx + env(safe-area-inset-bottom)); background: #fff; border-top: 1rpx solid #eef2f7; }
 .submit-button { width: 100%; }
+.unlock-check { padding: 20rpx 0 0; color: var(--primary-color); font-size: 24rpx; line-height: 1.5; }
+.recovery-check { display: flex; align-items: flex-start; gap: 16rpx; margin-top: 20rpx; font-size: 25rpx; color: #516174; line-height: 1.6; }.recovery-check text { flex: 1; }
 </style>

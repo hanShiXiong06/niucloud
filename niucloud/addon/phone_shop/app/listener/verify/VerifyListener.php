@@ -20,8 +20,10 @@ use addon\phone_shop\app\model\order\Order;
 use addon\phone_shop\app\model\order\OrderGoods;
 use addon\phone_shop\app\service\core\order\CoreOrderDeliveryService;
 use addon\phone_shop\app\service\core\order\CoreOrderFinishService;
+use addon\phone_shop\app\service\core\order\CoreOrderCreditStateService;
 use app\model\pay\Pay;
 use core\exception\CommonException;
+use think\facade\Db;
 
 /**
  * 核销功能实现
@@ -33,6 +35,11 @@ class VerifyListener
      * @throws \think\db\exception\DbException
      */
     public function handle($params = [])
+    {
+        return Db::transaction(fn() => $this->handleLocked($params));
+    }
+
+    private function handleLocked($params)
     {
         if ($params[ 'type' ] == 'shopVirtualGoods') {
             //执行
@@ -48,9 +55,10 @@ class VerifyListener
             if ($order_goods_info[ 'verify_count' ] >= $order_goods_info[ 'num' ]) throw new CommonException('SHOP_ORDER_MAXIMUM_NUMBER_OF_WRITE_OFFS_HAS_BEEN_REACHED');
 
             //todo  判断订单项状态(已收货 已核销  核销已过期)
-            $order_info = ( new Order() )->where([ ['site_id','=',$site_id],[ 'order_id', '=', $order_goods_info[ 'order_id' ] ] ])->findOrEmpty();
+            $order_info = ( new Order() )->where([ ['site_id','=',$site_id],[ 'order_id', '=', $order_goods_info[ 'order_id' ] ] ])->lock(true)->findOrEmpty();
             if ($order_info->isEmpty()) throw new CommonException('SHOP_ORDER_NOT_FOUND');
             if (in_array($order_info[ 'status' ], [ OrderDict::FINISH, OrderDict::CLOSE ])) throw new CommonException('SHOP_ORDER_HAS_BEEN_CLOSED_OR_COMPLETED');
+            (new CoreOrderCreditStateService())->assertCanComplete($order_info->toArray());
             //核销次数累加1,达到最大核销次数后订单自动完成
             $order_goods_info->save([
                 'verify_count' => $order_goods_info[ 'verify_count' ] + 1,
@@ -69,9 +77,10 @@ class VerifyListener
             $site_id = $params[ 'site_id' ];
             $param = $params[ 'data' ];//订单信息
             $order_id = $param[ 'order_id' ];
-            $order_info = ( new Order() )->where([ ['site_id','=',$site_id],[ 'order_id', '=', $order_id ] ])->findOrEmpty();
+            $order_info = ( new Order() )->where([ ['site_id','=',$site_id],[ 'order_id', '=', $order_id ] ])->lock(true)->findOrEmpty();
             if ($order_info->isEmpty()) throw new CommonException('SHOP_ORDER_NOT_FOUND');
             if (in_array($order_info[ 'status' ], [ OrderDict::FINISH, OrderDict::CLOSE ])) throw new CommonException('SHOP_ORDER_HAS_BEEN_CLOSED_OR_COMPLETED');
+            (new CoreOrderCreditStateService())->assertCanComplete($order_info->toArray());
             $order_goods_list = ( new OrderGoods() )->where([
                 [ 'order_id', '=', $order_id ],
                 [ 'site_id', '=', $site_id ],
@@ -83,7 +92,7 @@ class VerifyListener
 
             if($order_info[ 'status' ] == OrderDict::WAIT_DELIVERY){
                 $pay_info = (new Pay())->where([['out_trade_no', '=', $order_info['out_trade_no']], ['site_id', '=', $site_id]])->field('channel')->findOrEmpty()->toArray();
-                if($pay_info['channel'] == 'weapp'){
+                if(($pay_info['channel'] ?? '') == 'weapp'){
                     // 小程序同步发货
                     (new CoreOrderDeliveryService())->orderShippingUploadShippingInfo(['site_id' => $site_id, 'order_id' => $order_id]);
                 }
@@ -95,6 +104,7 @@ class VerifyListener
                 'main_id' => 0,
                 'order_id' => $order_id,
                 'site_id' => $site_id,
+                'pickup_verified' => true,
             ]);
         }
         return;

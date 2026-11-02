@@ -312,8 +312,7 @@ class OfflineOrderService extends BaseAdminService
     /**
      * 线下自提的责任人在同一个订单页完成交付。
      *
-     * 先调用商城原生门店自提发货，再调用原生完成服务，
-     * 以保证商品出库、订单事件、ERP 同步和财务事实仍走统一链路。
+     * 交付不等于收款。挂账只完成设备交付，财务在 ERP 结清后才允许完成订单。
      */
     private function confirmDelivery(int $orderId, string $remark): array
     {
@@ -357,7 +356,8 @@ class OfflineOrderService extends BaseAdminService
             'delivery_type' => OrderDeliveryDict::STORE,
             'remark' => $remark !== '' ? $remark : '线下自提当面交付',
         ]);
-        (new OrderFinishService())->finish($orderId);
+        $isCredit = (string)$order['payment_mode'] === 'offline_credit';
+        if (!$isCredit) (new OrderFinishService())->finish($orderId);
         $this->updateWorkflow($orderId, [
             'handler_uid' => $this->uid,
             'handler_name' => $this->username,
@@ -366,12 +366,22 @@ class OfflineOrderService extends BaseAdminService
             'remark' => $remark !== '' ? $remark : '已核对客户并完成设备交付',
         ]);
 
-        return [
+        $result = [
             'order_id' => $orderId,
             'payment_mode' => (string)$order['payment_mode'],
-            'status' => OrderDict::FINISH,
-            'next_action' => 'completed',
+            'status' => $isCredit ? OrderDict::WAIT_TAKE : OrderDict::FINISH,
+            'next_action' => $isCredit ? 'collection' : 'completed',
+            'message' => $isCredit ? '设备已交付；ERP 收款结清后，可确认完成订单。' : '设备已交付，订单已完成。',
         ];
+        if ($isCredit) {
+            $result['finance_snapshot'] = (new \addon\phone_shop\app\service\core\order\CoreOrderCreditStateService())
+                ->getState($order->toArray());
+            if (!empty($result['finance_snapshot']['can_complete'])) {
+                $result['next_action'] = 'finish';
+                $result['message'] = '设备已交付，ERP 已结清，可确认完成订单。';
+            }
+        }
+        return $result;
     }
 
     /** 当前实际处理人的公开联系方式快照，避免多人接单后仍显示默认负责人的电话。 */

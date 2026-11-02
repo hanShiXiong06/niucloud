@@ -13,12 +13,14 @@
             <view class="goods-main"><text class="goods-name">{{ firstGoods.goods_name || '订单商品' }}</text><text v-if="firstGoods.sku_name" class="goods-meta">{{ firstGoods.sku_name }}</text><text v-if="goodsIdentity(firstGoods)" class="goods-imei">IMEI {{ goodsIdentity(firstGoods) }}</text><text v-if="goods.length > 1" class="goods-meta">共 {{ goods.reduce((sum, item) => sum + Number(item.num || 1), 0) }} 件设备，查看全部 ›</text></view>
         </view>
         <view class="amount-line"><text>{{ order.delivery_type_name || '配送方式待核对' }}</text><text>订单金额 <text class="amount">¥{{ money(order.order_money) }}</text></text></view>
+        <OrderCreditSummary :order="order" compact />
         <view v-if="order.return_context_error" class="order-warning">{{ order.return_context_error }}</view>
         <view class="card-foot"><view class="detail-button" @click="emit('detail', order)">查看详情</view><view v-if="primaryAction" class="primary-button" @click="emit('operate', order)">{{ primaryAction.label }}</view></view>
     </view>
 </template>
 <script setup lang="ts">
 import { computed } from 'vue'
+import OrderCreditSummary from './OrderCreditSummary.vue'
 import { img } from '@/utils/common'
 import { formatOrderTime, getOrderActions, goodsIdentity, money, orderGoods, orderStatusLabel, paymentLabel } from '@/addon/phone_shop/utils/orderWorkflow'
 const props = defineProps<{ order: Record<string, any> }>()
@@ -27,7 +29,7 @@ const goods = computed(() => orderGoods(props.order))
 const firstGoods = computed(() => goods.value[0] || {})
 const cover = computed(() => firstGoods.value.sku_image || firstGoods.value.goods_image_thumb_small || firstGoods.value.goods_image || '')
 const mobile = computed(() => String(props.order.taker_mobile || props.order.member?.mobile || ''))
-const primaryAction = computed(() => getOrderActions(props.order).find(action => ['confirm_paid', 'delivery', 'finish', 'received'].includes(action.key)))
+const primaryAction = computed(() => getOrderActions(props.order).find(action => ['confirm_paid', 'recover_paid', 'delivery', 'finish', 'received'].includes(action.key)))
 function callCustomer() { uni.makePhoneCall({ phoneNumber: mobile.value }) }
 </script>
 <style scoped lang="scss">

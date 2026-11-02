@@ -1,5 +1,12 @@
 import { formatMoney } from './helper'
 
+/** 只缩短展示，不改变型号原值、分类路径或模板解析依据。 */
+export const getDeviceModelLeafName = (value: unknown, fallback = '未知型号'): string => {
+    if (typeof value !== 'string') return fallback
+    const parts = value.split(/[\/／]/).map(part => part.trim()).filter(Boolean)
+    return parts[parts.length - 1] || fallback
+}
+
 const DEVICE_STATUS_PENDING_CONFIRM = 4
 const DEVICE_STATUS_RECYCLED = 5
 const DEVICE_STATUS_RETURNED = 6

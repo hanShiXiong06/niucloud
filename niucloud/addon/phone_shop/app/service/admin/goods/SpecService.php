@@ -51,19 +51,16 @@ class SpecService extends BaseAdminService
     public function groupAdd(array $data): int
     {
         $categoryIds = $this->normalizeCategoryIds($data);
-        $label = trim((string)($data['label'] ?? '内存'));
+        $label = $this->groupLabel(array_key_exists('label', $data) ? $data['label'] : '内存');
         if (empty($categoryIds)) {
             throw new AdminException('请选择绑定的商品分类');
-        }
-        if ($label === '') {
-            throw new AdminException('请填写规格标签名');
         }
         $now = time();
         $rowData = [
             'site_id'      => $this->site_id,
             'category_id'  => $categoryIds[0],
             'label'        => $label,
-            'sort'         => (int)($data['sort'] ?? 0),
+            'sort'         => $this->specSort(array_key_exists('sort', $data) ? $data['sort'] : 0),
             'create_time'  => $now,
             'update_time'  => $now,
         ];
@@ -100,8 +97,8 @@ class SpecService extends BaseAdminService
         }
         $updateData = [
             'category_id'  => $categoryIds[0],
-            'label'        => trim((string)($data['label'] ?? '内存')),
-            'sort'         => (int)($data['sort'] ?? 0),
+            'label'        => $this->groupLabel(array_key_exists('label', $data) ? $data['label'] : '内存'),
+            'sort'         => $this->specSort(array_key_exists('sort', $data) ? $data['sort'] : 0),
             'update_time'  => time(),
         ];
         if ($this->hasCategoryIdsColumn()) {
@@ -127,17 +124,14 @@ class SpecService extends BaseAdminService
     public function itemAdd(array $data): int
     {
         $groupId = (int)($data['group_id'] ?? 0);
-        $value = trim((string)($data['item_value'] ?? ''));
+        $value = $this->specValue($data['item_value'] ?? '');
         $this->findGroup($groupId);
-        if ($value === '') {
-            throw new AdminException('请填写规格值');
-        }
         $now = time();
         $row = (new GoodsSpecItem())->create([
             'site_id'     => $this->site_id,
             'group_id'    => $groupId,
             'item_value'  => $value,
-            'sort'        => (int)($data['sort'] ?? 0),
+            'sort'        => $this->specSort(array_key_exists('sort', $data) ? $data['sort'] : 0),
             'create_time' => $now,
             'update_time' => $now,
         ]);
@@ -147,13 +141,42 @@ class SpecService extends BaseAdminService
 
     public function itemEdit(int $itemId, array $data): bool
     {
+        $item = (new GoodsSpecItem())->where([['site_id', '=', $this->site_id], ['item_id', '=', $itemId]])->findOrEmpty();
+        if ($item->isEmpty()) throw new AdminException('规格值不存在或不属于本站');
         (new GoodsSpecItem())->where([['site_id', '=', $this->site_id], ['item_id', '=', $itemId]])->update([
-            'item_value'  => trim((string)($data['item_value'] ?? '')),
-            'sort'        => (int)($data['sort'] ?? 0),
+            'item_value'  => $this->specValue($data['item_value'] ?? ''),
+            'sort'        => $this->specSort(array_key_exists('sort', $data) ? $data['sort'] : 0),
             'update_time' => time(),
         ]);
         RefDataSyncService::pushIfMaster('spec_item', (int)$this->site_id, $itemId);
         return true;
+    }
+
+    /** 复用既有 label 字段作为商城规格分组标题，不新增名称列。 */
+    private function groupLabel($value): string
+    {
+        if (!is_string($value)) throw new AdminException('请填写规格分组名称');
+        $value = trim($value);
+        if ($value === '') throw new AdminException('请填写规格分组名称');
+        if (mb_strlen($value) > 50) throw new AdminException('规格分组名称最多50个字符');
+        return $value;
+    }
+
+    private function specValue($value): string
+    {
+        if (!is_string($value)) throw new AdminException('请填写规格值');
+        $value = trim($value);
+        if ($value === '') throw new AdminException('请填写规格值');
+        if (mb_strlen($value) > 50) throw new AdminException('规格值最多50个字符');
+        return $value;
+    }
+
+    private function specSort($value): int
+    {
+        if ((!is_int($value) && !is_string($value)) || !preg_match('/^\d{1,6}$/D', (string)$value)) {
+            throw new AdminException('规格排序请填写0至999999的整数');
+        }
+        return (int)$value;
     }
 
     public function itemDel(int $itemId): bool

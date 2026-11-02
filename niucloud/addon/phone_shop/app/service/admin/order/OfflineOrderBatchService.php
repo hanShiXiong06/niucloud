@@ -57,8 +57,8 @@ class OfflineOrderBatchService extends BaseAdminService
         }
         if ((int)$order->status !== OrderDict::WAIT_DELIVERY) throw new CommonException('订单已发货、完成或关闭，请核对当前状态；未重复发货');
         if ((string)$order->delivery_type === OrderDeliveryDict::STORE) {
-            (new OfflineOrderService())->process(['order_id' => $orderId, 'action' => 'confirm_delivery', 'remark' => '批量确认：已当面核对客户并交付']);
-            return '已当面交付，自提订单完成';
+            $result = (new OfflineOrderService())->process(['order_id' => $orderId, 'action' => 'confirm_delivery', 'remark' => '批量确认：已当面核对客户并交付']);
+            return (string)$result['message'];
         }
         if ((string)$order->delivery_type !== OrderDeliveryDict::EXPRESS) throw new CommonException('同城配送或特殊订单请进入单笔发货，不批量发起付费配送');
         $companyId = (int)($item['express_company_id'] ?? 0);

@@ -1,8 +1,8 @@
 <template>
     <view class="requirements-detail">
         <view class="requirements-title">完整购机需求</view>
-        <view class="requirements-mode">{{ mode === 'all' ? '分别要多台' : '任选一款' }} · {{ items.length }} 款机型</view>
-        <view class="requirements-explanation">{{ mode === 'all' ? '以下每项分别需要，请逐项核对设备、数量和预算。' : '以下是可接受的备选机型，只需满足其中一款，不是每款都要。' }}</view>
+        <view class="requirements-mode">共 {{ items.length }} 款设备 · 数量与预算</view>
+        <view v-if="mode === 'any'" class="requirements-explanation">备选需求，只需满足其中一款。</view>
         <view v-for="(item, index) in items" :key="`${item.catalog_id || item.title}-${index}`" class="requirement-row">
             <view class="requirement-heading"><text>{{ index + 1 }}. {{ item.title }}</text><text class="requirement-quantity">需求 {{ item.quantity || 1 }} 台</text></view>
             <view v-if="item.brand" class="requirement-meta">品牌：{{ item.brand }}</view>
@@ -14,7 +14,7 @@
     </view>
 </template>
 <script setup lang="ts">
-withDefaults(defineProps<{ items: Record<string, any>[], mode?: string }>(), { mode: 'any' })
+withDefaults(defineProps<{ items: Record<string, any>[], mode?: string }>(), { mode: 'all' })
 const money = (value: any) => `¥${Number(value || 0).toFixed(2)}`
 const budget = (row: Record<string, any>) => Number(row.budget_min) > 0 && Number(row.budget_max) > 0 ? `${money(row.budget_min)} – ${money(row.budget_max)}` : Number(row.budget_max) > 0 ? `最高 ${money(row.budget_max)}` : Number(row.budget_min) > 0 ? `${money(row.budget_min)} 起` : '预算未确定'
 </script>

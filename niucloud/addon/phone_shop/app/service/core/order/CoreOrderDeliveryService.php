@@ -242,6 +242,7 @@ class CoreOrderDeliveryService extends BaseCoreService
                 } else if ($virtual_receive_type == 'auto') {//todo 自动收货  (订单发货后,校验订单项是否全部收货,如果已全部收货,订单就只接完成)
                     (new CoreOrderFinishService())->orderGoodsTake([
                         'order_id' => $order_data['order_id'],
+                        'site_id' => $order_data['site_id'],
                         'order_goods_ids' => [$v['order_goods_id']]
                     ]);
                 }
@@ -505,7 +506,9 @@ class CoreOrderDeliveryService extends BaseCoreService
         ])->select()->toArray();
         if (count($order_goods_list) == 1) {
             $first_order_goods = $order_goods_list[0];
-            if ($first_order_goods['goods_type'] == GoodsDict::VIRTUAL && $first_order_goods['delivery_status'] == OrderDeliveryDict::TAKED) {
+            // 挂账先履约不等于已结清，不因自动完成被拦而把已交付动作误报为失败。
+            if (($order['payment_mode'] ?? '') !== 'offline_credit'
+                && $first_order_goods['goods_type'] == GoodsDict::VIRTUAL && $first_order_goods['delivery_status'] == OrderDeliveryDict::TAKED) {
                 (new CoreOrderFinishService())->finish(['order_id' => $order_id, 'site_id' => $data['site_id']]);
             }
         }

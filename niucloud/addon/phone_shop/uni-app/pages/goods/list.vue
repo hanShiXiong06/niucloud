@@ -44,7 +44,7 @@
                         <u-icon name="arrow-down-fill" size="10" :color="filters.category_ids.length || categorySubscriptionCount ? 'var(--primary-color)' : '#94a3b8'" />
                     </view>
                     <view class="filter-entry" :class="{ 'filter-entry--active': filters.memory_group.length }" @click="popup.memory = true">
-                        内存<text v-if="filters.memory_group.length" class="filter-entry__count">{{ filters.memory_group.length }}</text><u-icon name="arrow-down-fill" size="10" :color="filters.memory_group.length ? 'var(--primary-color)' : '#94a3b8'" />
+                        规格<text v-if="filters.memory_group.length" class="filter-entry__count">{{ filters.memory_group.length }}</text><u-icon name="arrow-down-fill" size="10" :color="filters.memory_group.length ? 'var(--primary-color)' : '#94a3b8'" />
                     </view>
                     <view class="filter-entry" :class="{ 'filter-entry--active': filters.condition_grade.length }" @click="popup.grade = true">
                         成色<text v-if="filters.condition_grade.length" class="filter-entry__count">{{ filters.condition_grade.length }}</text><u-icon name="arrow-down-fill" size="10" :color="filters.condition_grade.length ? 'var(--primary-color)' : '#94a3b8'" />
@@ -75,7 +75,7 @@
             @subscribe-node="subscribeCategoryNode"
             @cancel-node="cancelCategoryNode"
         />
-        <GoodsOptionFilterPopup v-model:show="popup.memory" title="选择内存" :tip="filterContextTip" :model-value="filters.memory_group" :groups="memoryGroups" @confirm="applyFilter('memory_group', $event)" />
+        <GoodsOptionFilterPopup v-model:show="popup.memory" title="选择规格" :tip="filterContextTip" :model-value="filters.memory_group" :groups="memoryGroups" @confirm="applyFilter('memory_group', $event)" />
         <GoodsOptionFilterPopup v-model:show="popup.grade" title="选择成色" :tip="filterContextTip" :model-value="filters.condition_grade" :groups="gradeGroups" @confirm="applyFilter('condition_grade', $event)" />
         <GoodsOptionFilterPopup v-model:show="popup.color" title="选择颜色" :tip="filterContextTip" :model-value="filters.device_color" :groups="colorGroups" @confirm="applyFilter('device_color', $event)" />
         <GoodsOptionFilterPopup v-model:show="popup.label" title="选择标签" :model-value="filters.label_ids" :groups="labelGroups" @confirm="applyFilter('label_ids', $event)" />
@@ -189,6 +189,7 @@ import PhoneGoodsActionButton from '@/addon/phone_shop/components/PhoneGoodsActi
 import addCartPopup from './components/add-cart-popup.vue'
 import { resolveGoodsCardAction } from '@/addon/phone_shop/utils/goods-card'
 import { createGoodsListFilters, parseGoodsListRoute } from '@/addon/phone_shop/utils/goods-list-route'
+import { goodsSpecFilterGroups } from '@/addon/phone_shop/utils/goods-spec-filter'
 import { useGoodsRecentActivity } from '@/addon/phone_shop/hooks/useGoodsRecentActivity'
 import { isRecentGoodsTime } from '@/addon/phone_shop/utils/goods-recent-activity'
 import { useGoodsDetailNavigation } from '@/addon/phone_shop/hooks/useGoodsDetailNavigation'
@@ -330,7 +331,7 @@ const categorySubscriptionCount = computed(() => Object.keys(categorySubscriptio
 
 const filterOptions = reactive<any>({
     categories: [],
-    memories: [],
+    memory_groups: [],
     grades: [],
     colors: [],
     battery_ranges: [],
@@ -342,14 +343,7 @@ const filterOptions = reactive<any>({
     price_ranges: []
 })
 
-const memoryGroups = computed(() => [{
-    key: 'memory',
-    title: '内存容量',
-    items: (filterOptions.memories || []).map((item: any) => ({
-        value: item.value,
-        label: item.label
-    }))
-}])
+const memoryGroups = computed(() => goodsSpecFilterGroups(filterOptions))
 
 const gradeGroups = computed(() => [{
     key: 'grade',
@@ -626,8 +620,10 @@ const loadFilterOptions = async() => {
             device_color: filters.device_color.join(',')
         })
         if (requestId !== filterOptionRequestId) return
-        Object.assign(filterOptions, res.data || {})
-    } catch (e) {}
+        Object.assign(filterOptions, { memory_groups: [] }, res.data || {})
+    } catch (e) {
+        if (requestId === filterOptionRequestId) filterOptions.memory_groups = []
+    }
 }
 
 const applyFilter = async(key: 'category_ids' | 'memory_group' | 'condition_grade' | 'device_color' | 'label_ids' | 'service_ids', value: string[]) => {

@@ -221,7 +221,8 @@
                                                 @click="confirmOfflineDelivery(item)"
                                             >确认交付</el-button>
                                             <el-button type="primary" link @click="delivery(item,'edit')" v-if="item.status == 3 && item.delivery_type!='store' && item.delivery_type != 'virtual'">{{ t('修改发货') }}</el-button>
-                                            <el-button type="primary" link @click="finish(item)" v-if="item.status == 3">{{ t('confirmTakeDelivery') }}</el-button>
+                                            <el-button type="primary" link @click="finish(item)" v-if="item.status == 3 && creditCanComplete(item)">{{ isCreditOrder(item) ? '确认订单完成' : t('confirmTakeDelivery') }}</el-button>
+                                            <span v-if="item.status == 3 && !creditCanComplete(item)" class="text-[12px] text-warning">{{ creditStatusLabel(item) }}，暂不能完成</span>
                                             <el-button type="primary" v-if="item.is_refund_show && item.status != 1 && item.status != -1 && !item.relate_source && !['offline_cash', 'offline_credit'].includes(item.payment_mode)" link @click="refundEvent(item)">{{ t('voluntaryRefund') }}</el-button>
                                             <order-return-guide v-if="item.status != 1 || item.relate_source || item.is_credit" :order="item" @complete="loadOrderList(orderTable.page)" />
                                             <el-button type="primary" v-if="item.status == -1" link @click="deleteEvent(item)">{{ t('delete') }}</el-button>
@@ -229,6 +230,7 @@
                                         </template>
                                     </el-table-column>
                                 </el-table>
+                                <OrderCreditSummary :order="item" compact />
                                 <div v-if="item.shop_remark" class="text-[14px] min-h-[30px] leading-[30px] px-3 bg-[#fff0e5] text-[#ff7f5b]">
                                     <span class="mr-[5px]">{{ t('notes') }}：</span>
                                     <span>{{ item.shop_remark }}</span>
@@ -359,6 +361,8 @@ import ShopActiveRefund from '@/addon/phone_shop/views/order/components/shop-act
 import OrderDeviceIdentity from '@/addon/phone_shop/views/order/components/order-device-identity.vue'
 import OrderReturnGuide from '@/addon/phone_shop/views/order/components/order-return-guide.vue'
 import OrderOfflineBatch from '@/addon/phone_shop/views/order/components/order-offline-batch.vue'
+import OrderCreditSummary from '@/addon/phone_shop/views/order/components/order-credit-summary.vue'
+import { creditCanComplete, creditMessage, creditStatusLabel, isCreditOrder } from '@/addon/phone_shop/utils/order-credit'
 import electronicSheetPrint from '@/addon/phone_shop/views/order/components/electronic-sheet-print.vue'
 import { img, setTablePageStorage, getTablePageStorage } from '@/utils/common'
 import { ElMessage, ElMessageBox, FormInstance } from 'element-plus'
@@ -728,7 +732,7 @@ const closeOfflineUnreachable = async(order: any) => {
 
 const confirmOfflineDelivery = async(order: any) => {
     const confirmed = await ElMessageBox.confirm(
-        `确认已核对客户，并将订单「${order.order_no}」中的设备当面交付？确认后订单将完成。`,
+        `确认已核对客户，并将订单「${order.order_no}」中的设备当面交付？${isCreditOrder(order) ? '交付不代表收款，财务结清后才能完成订单。' : '确认后订单将完成。'}`,
         '确认到店交付',
         { type: 'warning', confirmButtonText: '确认已交付', cancelButtonText: '取消' }
     ).then(() => true).catch(() => false)
@@ -790,6 +794,7 @@ const setNotes = (data: any) => {
 
 // 订单完成
 const finish = (data: any) => {
+    if (!creditCanComplete(data)) { ElMessage.warning(creditMessage(data)); return }
     ElMessageBox.confirm(t('orderFinishTips'), t('warning'),
         {
             confirmButtonText: t('confirm'),

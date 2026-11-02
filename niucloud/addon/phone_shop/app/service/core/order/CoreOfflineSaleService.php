@@ -10,6 +10,7 @@ use addon\phone_shop\app\model\order\OrderGoods;
 use addon\phone_shop\app\model\goods\Goods;
 use addon\phone_shop\app\model\goods\GoodsSku;
 use addon\phone_shop\app\dict\order\OrderDict;
+use addon\phone_shop\app\dict\order\OrderDeliveryDict;
 use core\base\BaseCoreService;
 use think\facade\Db;
 use think\facade\Log;
@@ -49,7 +50,8 @@ class CoreOfflineSaleService extends BaseCoreService
         $price        = (float) ($d['sale_price'] ?? $sku['sale_price'] ?? 0);
         $resultStatus = ((string) ($d['result_status'] ?? 'sold')) === 'locked' ? 'locked' : 'sold';
         $paymentMode  = (string) ($d['payment_mode'] ?? 'offline_cash');
-        $isCredit     = $resultStatus === 'locked';   // 挂账=未结清(已出货,待结款)
+        $isCredit     = $paymentMode === 'offline_credit' || $resultStatus === 'locked';
+        if ($isCredit) $paymentMode = 'offline_credit'; // 已出库 sold 不是已收款。
         $outboundNo   = (string) ($d['outbound_no'] ?? '');
         $now = time();
 
@@ -71,7 +73,7 @@ class CoreOfflineSaleService extends BaseCoreService
                     'order_no'         => create_no(),
                     'order_type'       => OrderDict::TYPE,
                     'order_from'       => 'offline',
-                    'status'           => $isCredit ? OrderDict::WAIT_PAY : OrderDict::FINISH,
+                    'status'           => $isCredit ? OrderDict::WAIT_TAKE : OrderDict::FINISH,
                     'member_id'        => $memberId,
                     'goods_money'      => 0,
                     'order_money'      => 0,
@@ -79,6 +81,7 @@ class CoreOfflineSaleService extends BaseCoreService
                     'pay_time'         => $isCredit ? 0 : $now,
                     'finish_time'      => $isCredit ? 0 : $now,
                     'create_time'      => $now,
+                    'delivery_time'    => $now,
                     'timeout'          => 0,                              // 不自动关单
                     'payment_mode'     => $paymentMode,
                     'buyer_type'       => (string) ($d['buyer_type'] ?? 'c'),
@@ -112,6 +115,7 @@ class CoreOfflineSaleService extends BaseCoreService
                 'goods_type'        => 'real',
                 'extend'            => json_encode(ErpDeviceSnapshot::extend([], $sku->toArray(), $goods->toArray())),
                 'status'            => 0,
+                'delivery_status'   => $isCredit ? OrderDeliveryDict::DELIVERY_FINISH : OrderDeliveryDict::TAKED,
             ]]);
 
             // 重算订单合计 + 摘要(body) + 收款
@@ -151,8 +155,8 @@ class CoreOfflineSaleService extends BaseCoreService
     }
 
     /**
-     * ERP 收款成交后:把对应"ERP 托管展示单"(relate_source=出库单号)由待付款标记为已完成。
-     * 只动展示状态,不碰钱;现结单建单即已完成,本方法主要处理"挂账→ERP 收款"后的状态同步。
+     * 出库事件只核对展示单，不把 sold 当作收款成功。
+     * 真正收款由结算事件回传；订单结清后仍由正常完成入口结束，不绕过统一闸门。
      */
     public function finalizeByOutbound(int $siteId, string $outboundNo): array
     {
@@ -160,19 +164,12 @@ class CoreOfflineSaleService extends BaseCoreService
         $order = (new Order())->where([
             ['site_id', '=', $siteId],
             ['relate_source', '=', $outboundNo],
-            ['status', '=', OrderDict::WAIT_PAY],
+            ['status', '<>', OrderDict::CLOSE],
         ])->findOrEmpty();
         if ($order->isEmpty()) return ['skipped' => true];
-        $now = time();
-        (new Order())->where('order_id', (int) $order['order_id'])->update([
-            'status'        => OrderDict::FINISH,
-            'pay_money'     => $order['order_money'],
-            'pay_time'      => $now,
-            'finish_time'   => $now,
-            'credit_status' => 'settled',
-            'settle_status' => 1,
-        ]);
-        return ['ok' => true, 'order_id' => (int) $order['order_id']];
+        $state = (new CoreOrderCreditStateService())->getState($order->toArray());
+        return ['ok' => true, 'order_id' => (int)$order['order_id'],
+            'can_complete' => !empty($state['can_complete']), 'finance_snapshot' => $state];
     }
 
     /** 该台机(sku)是否已在未关闭订单成交过 */

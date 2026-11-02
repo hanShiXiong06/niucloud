@@ -26,6 +26,7 @@ final class Data
 
     public static function text(#[\SensitiveParameter] array $input, string $key, int $limit = 200, bool $required = false): string
     {
+        $secretTrace = PhpRuntime::guardSecrets();
         $raw = $input[$key] ?? '';
         if (!is_string($raw) && !is_numeric($raw)) throw new CommonException('字段格式错误：'.$key);
         $value = trim((string)$raw);
@@ -44,11 +45,13 @@ final class Data
 
     public static function json(#[\SensitiveParameter] array $value): string
     {
+        $secretTrace = PhpRuntime::guardSecrets();
         return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
     }
 
     public static function decode(#[\SensitiveParameter] ?string $value): array
     {
+        $secretTrace = PhpRuntime::guardSecrets();
         if (!$value) return [];
         $decoded = json_decode($value, true);
         return is_array($decoded) ? $decoded : [];
@@ -64,6 +67,7 @@ final class Data
 
     public static function region(#[\SensitiveParameter] array $input): array
     {
+        $secretTrace = PhpRuntime::guardSecrets();
         $result = []; $parent = 0;
         foreach (['province_id','city_id','district_id'] as $index => $field) {
             $id = (int)($input[$field] ?? 0);
@@ -91,6 +95,7 @@ final class Data
     /** Explicit province/city/district coverage; omitted trailing levels mean all descendants. */
     public static function serviceArea(#[\SensitiveParameter] array $input): array
     {
+        $secretTrace = PhpRuntime::guardSecrets();
         $result=['province_id'=>0,'city_id'=>0,'district_id'=>0]; $parent=0; $ended=false;
         foreach(array_keys($result) as $index=>$field) {
             $id=(int)($input[$field]??0);
@@ -106,6 +111,7 @@ final class Data
     /** Passwords are opaque strings; trimming can make a valid remote password unusable. */
     public static function secret(#[\SensitiveParameter] array $input,string $key,int $maxBytes): string
     {
+        $secretTrace = PhpRuntime::guardSecrets();
         $value=$input[$key]??'';
         if (!is_string($value) || strlen($value)>$maxBytes) throw new CommonException('请检查凭据格式及长度');
         return $value;

@@ -9,6 +9,9 @@ return [
         'PhoneShopOrderReturnContext' => [
             'addon\hsx_erp\app\listener\PhoneShopOrderReturnContext',
         ],
+        'PhoneShopOrderCreditStateRequested' => [
+            'addon\hsx_erp\app\listener\PhoneShopOrderCreditStateRequested',
+        ],
         'ErpOfflineSaleReturnRequested' => [
             'addon\hsx_erp\app\listener\ErpOfflineSaleReturnRequested',
         ],

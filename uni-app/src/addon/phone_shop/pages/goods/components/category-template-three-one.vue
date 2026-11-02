@@ -204,14 +204,14 @@
 								<view v-else class="ftr-empty">该分类下暂无三级分类</view>
 							</template>
 							<template v-else-if="activeDim === 'memory'">
-								<view v-for="grp in memoryGroups" :key="grp.name" class="ftr-group">
-									<text class="ftr-group-name">{{ grp.name }}</text>
+								<view v-for="grp in memoryGroups" :key="grp.key" class="ftr-group">
+									<text class="ftr-group-name">{{ grp.title }}</text>
 									<view class="ftr-chips">
-										<view v-for="m in (expand['mem_' + grp.name] ? grp.items : grp.items.slice(0, 6))" :key="m" class="ftr-chip" :class="{ on: tmpMemory.includes(m) }" @click="toggleChip(tmpMemory, m)"><text>{{ m }}</text></view>
-										<view v-if="grp.items.length > 6" class="ftr-chip more" @click="toggleExpand('mem_' + grp.name)"><text>{{ expand['mem_' + grp.name] ? '收起' : '查看更多' }}</text></view>
+										<view v-for="m in (expand[grp.key] ? grp.items : grp.items.slice(0, 6))" :key="m.value" class="ftr-chip" :class="{ on: tmpMemory.includes(m.value) }" @click="toggleChip(tmpMemory, m.value)"><text>{{ m.label }}</text></view>
+										<view v-if="grp.items.length > 6" class="ftr-chip more" @click="toggleExpand(grp.key)"><text>{{ expand[grp.key] ? '收起' : '查看更多' }}</text></view>
 									</view>
 								</view>
-								<view v-if="!memoryGroups.length" class="ftr-empty">暂无内存可筛选</view>
+								<view v-if="!memoryGroups.length" class="ftr-empty">当前分类暂无已配置的规格</view>
 							</template>
 							<template v-else-if="activeDim === 'grade'">
 								<view class="ftr-chips" v-if="gradeOptions.length">
@@ -314,6 +314,7 @@ import DownloadConfigDialog from '@/addon/phone_shop/components/download-config-
 import PhoneGoodsMeta from '@/addon/phone_shop/components/PhoneGoodsMeta.vue'
 import PhoneGoodsActionButton from '@/addon/phone_shop/components/PhoneGoodsActionButton.vue'
 import { resolveGoodsCardAction, goodsPriceBadgeType } from '@/addon/phone_shop/utils/goods-card'
+import { goodsSpecFilterGroups } from '@/addon/phone_shop/utils/goods-spec-filter'
 import { useGoodsDetailNavigation } from '@/addon/phone_shop/hooks/useGoodsDetailNavigation'
 import GoodsPriceRangePicker from '@/addon/phone_shop/components/goods-filter/GoodsPriceRangePicker.vue'
 
@@ -378,7 +379,7 @@ const tmpThird = ref<any>(-1);
 const expand = ref<Record<string, boolean>>({});
 const dims = computed(() => [
 	{ key: 'category', label: '分类' },
-	{ key: 'memory', label: '内存' },
+	{ key: 'memory', label: '规格' },
 	{ key: 'grade', label: '成色' },
 	{ key: 'color', label: '颜色' },
 	{ key: 'device', label: '设备' },
@@ -387,18 +388,8 @@ const dims = computed(() => [
 ]);
 const thirdOptions = computed(() => thirdLevelList.value || []);
 const categoryInitial = (name: string) => String(name || '类').trim().slice(0, 1);
-// 不按苹果/安卓写死：直接消费在售商品的真实值，仅按数据形态分组。
-const memoryGroups = computed(() => {
-	const storage: string[] = [], combination: string[] = [];
-	(filterOptions.value.memories || []).forEach((item: any) => {
-		const m = String(item?.value ?? item ?? '').trim();
-		if (m) (m.includes('+') ? combination : storage).push(m);
-	});
-	const g: any[] = [];
-	if (storage.length) g.push({ name: '存储容量', items: storage });
-	if (combination.length) g.push({ name: '运行内存 + 存储', items: combination });
-	return g;
-});
+// 分组名称、选项与顺序统一由后台规格库维护，不按值形态推测分组。
+const memoryGroups = computed(() => goodsSpecFilterGroups(filterOptions.value));
 const toggleExpand = (k: string) => { expand.value = { ...expand.value, [k]: !expand.value[k] }; }
 const dimHasSelected = (key: string) => {
 	if (key === 'category') return tmpThird.value !== -1;
@@ -411,7 +402,7 @@ const dimHasSelected = (key: string) => {
 	return false;
 }
 const filterOptions = ref<any>({
-	memories: [],
+	memory_groups: [],
 	grades: [],
 	colors: [],
 	battery_ranges: [],
@@ -777,11 +768,11 @@ const loadFilterOptions = async(categoryValue: any = selectedCategoryId.value) =
 		const res: any = await getGoodsFilterOptions({ goods_category: categoryValue || '' });
 		if (requestId !== filterOptionRequestId) return;
 		filterOptions.value = Object.assign({
-			memories: [], grades: [], colors: [], battery_ranges: [], warranty_ranges: [], price_ranges: []
+			memory_groups: [], grades: [], colors: [], battery_ranges: [], warranty_ranges: [], price_ranges: []
 		}, res.data || {});
 	} catch (e) {
 		if (requestId !== filterOptionRequestId) return;
-		filterOptions.value = { memories: [], grades: [], colors: [], battery_ranges: [], warranty_ranges: [], price_ranges: [] };
+		filterOptions.value = { memory_groups: [], grades: [], colors: [], battery_ranges: [], warranty_ranges: [], price_ranges: [] };
 	}
 }
 const openFilter = () => {

@@ -16,6 +16,8 @@ final class Merchant extends BaseApiController
     public function reject(int $id) { return $this->action($id,'reject'); }
     public function follow(int $id) { return $this->action($id,'follow'); }
     public function deal(int $id) { return $this->action($id,'deal'); }
+    public function outcome(int $id) { return $this->action($id,'outcome'); }
+    public function share(int $id) { return $this->action($id,'share'); }
     public function close(int $id) { return $this->action($id,'close'); }
     private function action(int $id,string $action) { return success($this->workflow()->act($id,$action,$this->request->param())); }
 }

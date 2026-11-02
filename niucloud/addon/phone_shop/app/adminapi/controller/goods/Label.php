@@ -32,6 +32,7 @@ class Label extends BaseAdminController
         $data = $this->request->params([
             [ "label_name", "" ],
             [ 'group_id', 0 ],
+            [ 'status', '' ],
             [ 'order', '' ],
             [ 'sort', '' ]
         ]);
@@ -145,10 +146,10 @@ class Label extends BaseAdminController
     {
         $data = $this->request->params([
             [ 'label_id', '' ],
+            [ 'label_ids', null ],
             [ 'status', '' ],
         ]);
-        ( new LabelService() )->modifyStatus($data);
-        return success('SUCCESS');
+        return success('SUCCESS', (new LabelService())->modifyStatus($data));
     }
 
     /**

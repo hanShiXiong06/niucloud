@@ -1,25 +1,36 @@
 <?php
 declare(strict_types=1);
 namespace addon\hsx_lead\app\adminapi\controller;
-use addon\hsx_lead\app\service\{Context,MerchantService,WorkflowService,ReadService,SyncService,CatalogService,ConnectionService,NoticeService,NoticeConfigService};
+use addon\hsx_lead\app\service\{Context,MerchantService,WorkflowService,ReadService,SyncService,CatalogService,ConnectionService,AuthChallengeService,AutomaticAuthService,CaptchaConfigService,NoticeService,NoticeConfigService};
 use addon\hsx_lead\app\provider\ProviderRegistry;
+use addon\hsx_lead\app\support\Data;
 use core\base\BaseAdminController;
 
 final class Workbench extends BaseAdminController
 {
     private function context(): Context { return new Context((int)$this->request->siteId(),(int)$this->request->uid()); }
     private function workflow(): WorkflowService { return new WorkflowService($this->context()); }
+    public function scope() { return success($this->context()->ownership()->scope()); }
+    public function owners() { return success($this->context()->ownership()->owners($this->request->param())); }
+    public function transferOwner(int $id) { return success($this->workflow()->transferOwner($id,$this->request->param())); }
     public function dashboard() { return success((new ReadService($this->context()))->dashboard()); }
     public function members() { return success((new MerchantService($this->context()))->members($this->request->param())); }
     public function providers() { $this->context()->manager(); return success(['items'=>ProviderRegistry::supported()]); }
     public function connection(int $id) { return success((new ConnectionService($this->context()))->get($id)); }
+    public function authorizationChallenge(int $id) { return success((new AuthChallengeService($this->context()))->begin($id,$this->request->param())); }
+    public function automaticAuthorization(int $id) { return success((new AutomaticAuthService($this->context()))->start($id,$this->request->param())); }
+    public function advanceAutomaticAuthorization(int $id) { return success((new AutomaticAuthService($this->context()))->advance($id,Data::secret($this->request->param(),'task_token',64))); }
+    public function cancelAutomaticAuthorization(int $id) { return success((new AutomaticAuthService($this->context()))->cancel($id,Data::secret($this->request->param(),'task_token',64))); }
+    public function captchaConfig() { return success((new CaptchaConfigService($this->context()))->get()); }
+    public function saveCaptchaConfig() { return success((new CaptchaConfigService($this->context()))->save($this->request->param())); }
+    public function captchaBalance() { return success((new CaptchaConfigService($this->context()))->balance()); }
     public function probeConnection(int $id) { return success((new ConnectionService($this->context()))->probe($id,$this->request->param())); }
     public function activateConnection(int $id) { return success((new ConnectionService($this->context()))->activate($id,$this->request->param())); }
     public function connectionSettings(int $id) { return success((new ConnectionService($this->context()))->syncSettings($id,$this->request->param())); }
     public function noticeConfig() { $ctx=$this->context(); $ctx->manager(); return success((new NoticeConfigService())->get($ctx->site)); }
     public function saveNoticeConfig() { $ctx=$this->context(); $ctx->manager(); return success((new NoticeConfigService())->save($ctx->site,$this->request->param(),$ctx->uid)); }
-    public function taskNotice(int $id) { $ctx=$this->context(); $ctx->manager(); $ctx->task($id); return success((new NoticeService())->statusForTask($ctx->site,$id)); }
-    public function retryNotice(int $id) { $ctx=$this->context(); $ctx->manager(); $ctx->task($id); return success((new NoticeService())->retryTask($ctx->site,$id,$ctx->uid)); }
+    public function taskNotice(int $id) { return success($this->workflow()->taskNotice($id)); }
+    public function retryNotice(int $id) { return success($this->workflow()->retryNotice($id)); }
     public function catalog() { return success((new CatalogService($this->context()))->get()); }
     public function saveCatalog() { return success((new CatalogService($this->context()))->save($this->request->param())); }
     public function merchants() { return success((new MerchantService($this->context()))->lists($this->request->param())); }

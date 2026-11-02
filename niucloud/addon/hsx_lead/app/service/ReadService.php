@@ -4,6 +4,9 @@ declare(strict_types=1);
 namespace addon\hsx_lead\app\service;
 
 use addon\hsx_lead\app\support\Data;
+use addon\hsx_lead\app\support\ListTimeFilter;
+use addon\hsx_lead\app\support\MerchantRegion;
+use addon\hsx_lead\app\support\InventoryAvailability;
 use core\exception\CommonException;
 use think\facade\Db;
 
@@ -11,10 +14,12 @@ use think\facade\Db;
 final class ReadService
 {
     private const INVENTORY_FIELDS = 'i.id,i.merchant_id,i.connection_id,i.sync_run_id,i.source_id,i.source_store_id,i.tenant_id,'
-        . 'i.model,i.memory,i.brand,i.color,i.grade,i.price,i.trade_price,i.quantity,i.imei,i.cover,i.availability,i.fetched_at,'
-        . 'm.name AS merchant_name,c.provider,c.last_sync_at,c.last_sync_status,c.sync_interval_minutes';
+        . 'i.model,i.memory,i.brand,i.color,i.grade,i.price,i.trade_price,i.quantity,i.saleable_quantity,i.imei,i.cover,i.availability,i.source_status_json,i.fetched_at,'
+        . 'm.name AS merchant_name,m.status AS merchant_status,m.province_id,m.city_id,m.district_id,'
+        . 'mp.name AS province_name,mc.name AS city_name,md.name AS district_name,'
+        . 'c.provider,c.last_sync_at,c.last_sync_status,c.sync_interval_minutes';
 
-    public function __construct(private readonly Context $context) {}
+    public function __construct(private Context $context) {}
 
     public function inventory(array $params = [], ?int $merchantId = null): array
     {
@@ -25,7 +30,9 @@ final class ReadService
         } else {
             $this->authorizeMerchant($merchantId);
         }
-        $query = $this->inventoryQuery($merchantId);
+        $scope=InventoryAvailability::scope($params,$this->context->uid>0);
+        $query = $this->inventoryQuery($merchantId,'all');
+        MerchantRegion::apply($query, $params, 'm.');
         $keyword = Data::text($params, 'keyword', 200);
         if ($keyword !== '') $query->whereLike('i.model|i.memory|i.brand|i.color|i.imei', $this->like($keyword));
         foreach (['model', 'brand', 'memory', 'color'] as $field) {
@@ -35,32 +42,41 @@ final class ReadService
         foreach (['min_price' => '>=', 'max_price' => '<='] as $key => $operator) {
             if (isset($params[$key]) && $params[$key] !== '') $query->where('i.price', $operator, Data::amount($params[$key]));
         }
+        ListTimeFilter::apply($query, $params, ['fetched_at' => 'i.fetched_at', 'last_sync_at' => 'c.last_sync_at'], 'fetched_at');
+        InventoryAvailability::apply($query,$scope);
         $page = max(1, (int) ($params['page'] ?? 1));
         $size = max(1, min(100, (int) ($params['limit'] ?? $params['page_size'] ?? 20)));
         $total = (int) (clone $query)->count();
         $rows = $query->field(self::INVENTORY_FIELDS)->order('i.id desc')->page($page, $size)->select()->toArray();
         return ['data' => array_map(fn(array $row): array => $this->presentInventory($row), $rows), 'total' => $total,
             'per_page' => $size, 'current_page' => $page, 'scope' => 'published_generations_only',
-            'notice' => '仅展示各连接最近一次完整发布的库存；失败同步保留旧快照，列表存在不等于实物可售或已锁货'];
+            'inventory_scope'=>$scope,
+            'notice' => '默认只展示来源已确认在售且有货的有效快照；下架、无货、状态未核实及过期资料不参与匹配。来源未再返回的设备随完整同步退出当前清单，不能据此认定已成交；失败或未完成同步不发布新库存'];
     }
 
     public function dashboard(): array
     {
         $this->context->manager();
+        $scope=$this->context->ownership();
+        $leads=$scope->leads(Data::query('lead',$this->context->site));
+        $tasks=$scope->tasks(Data::query('task',$this->context->site));
         return [
             'merchants' => (int) Data::query('merchant', $this->context->site)->where('status', 1)->count(),
             'inventory' => (int) $this->inventoryQuery()->count(),
-            'leads_pending' => (int) Data::query('lead', $this->context->site)->where('status', 'pending')->count(),
-            'tasks_following' => (int) Data::query('task', $this->context->site)->where('status', 'following')->count(),
-            'deals_pending' => (int) Data::query('task', $this->context->site)->where('status', 'deal_pending')->count(),
-            'tasks_overdue' => (int) Data::query('task', $this->context->site)->where('status','assigned')->where('response_deadline','<',time())->count(),
-            'tasks_partial' => (int) Data::query('task', $this->context->site)->where('status','following')->where('completion_status','partial')->count(),
+            'leads_pending' => (int) (clone $leads)->where('status', 'pending')->count(),
+            'tasks_following' => (int) (clone $tasks)->where('status', 'following')->count(),
+            'deals_pending' => (int) (clone $tasks)->where('status', 'deal_pending')->count(),
+            // Merchant-reported results, not platform-verified consumer payments.
+            'reported_deals' => (int) (clone $tasks)->where('status', 'completed')->where('completion_status', 'reported_deal')->count(),
+            'tasks_overdue' => (int) (clone $tasks)->where('status','assigned')->where('response_deadline','<',time())->count(),
+            'tasks_partial' => (int) (clone $tasks)->where('status','following')->where('completion_status','partial')->count(),
             'commission_unpaid' => $this->commissionTotal('unpaid'),
             'commission_received' => $this->commissionTotal('paid'),
             'sync_failed' => (int) Data::query('connection', $this->context->site)->where('last_sync_status', 'failed')->count(),
             'recent_tasks' => $this->recentTasks(),
             'recent_syncs' => $this->recentSyncs(),
             'is_manager' => true,
+            'viewer_scope' => $scope->scope(),
         ];
     }
 
@@ -68,7 +84,7 @@ final class ReadService
     public function matches(int $leadId): array
     {
         $this->context->manager();
-        $lead = Data::row('lead', $this->context->site, $leadId);
+        $lead = $this->context->lead($leadId);
         $rawRequirements = trim((string) ($lead['requirements_json'] ?? ''));
         $requirements = [];
         foreach (Data::decode($rawRequirements) as $requirement) {
@@ -96,7 +112,9 @@ final class ReadService
             $matched = [];
             $unmatched = [];
             foreach ($requirements as $requirement) {
-                $query = $this->inventoryQuery((int) $merchant['id'])->where('i.price', '>', '0.00');
+                // Keep stale, previously confirmed stock only as explicitly labelled manual references.
+                $query = $this->inventoryQuery((int) $merchant['id'],'all')->where('i.price', '>', '0.00');
+                InventoryAvailability::apply($query,'sellable',false);
                 $variants = [$requirement['title']];
                 foreach (is_array($requirement['aliases'] ?? null) ? $requirement['aliases'] : [] as $alias) {
                     if (is_string($alias) && trim($alias) !== '') $variants[] = trim($alias);
@@ -124,7 +142,6 @@ final class ReadService
                     // Legacy free-text fixtures retain their previous search semantics.
                     if ($structuredRequirements && !$this->exactDemandModel($variants, $row)) continue;
                     if (preg_match('/报废|内爆|故障|损坏|不开机/u', (string) $row['model'] . ' ' . (string) $row['grade'])) continue;
-                    if (($row['availability'] ?? 'unknown') === 'unavailable') continue;
                     $item = $this->presentInventory($row);
                     if ($item['is_stale']) {
                         $uniqueStaleItems[$item['id']] = $item;
@@ -166,12 +183,14 @@ final class ReadService
     public function portalStats(int $merchantId): array
     {
         $this->authorizeMerchant($merchantId);
+        $tasks=Data::query('task',$this->context->site)->where('merchant_id',$merchantId);
+        if ($this->context->uid>0) $this->context->ownership()->tasks($tasks);
         $connection = Data::query('connection', $this->context->site)->where('merchant_id', $merchantId)
             ->field('last_sync_at,last_sync_status,last_sync_message,published_run_id')->find();
         return ['inventory' => (int) $this->inventoryQuery($merchantId)->count(),
-            'tasks_pending' => (int) Data::query('task', $this->context->site)->where('merchant_id', $merchantId)->where('status', 'assigned')->count(),
-            'tasks_following' => (int) Data::query('task', $this->context->site)->where('merchant_id', $merchantId)->where('status', 'following')->count(),
-            'deals_pending' => (int) Data::query('task', $this->context->site)->where('merchant_id', $merchantId)->where('status', 'deal_pending')->count(),
+            'tasks_pending' => (int) (clone $tasks)->where('status', 'assigned')->count(),
+            'tasks_following' => (int) (clone $tasks)->where('status', 'following')->count(),
+            'deals_pending' => (int) (clone $tasks)->where('status', 'deal_pending')->count(),
             'commission_unpaid' => $this->commissionTotal('unpaid', $merchantId),
             'commission_received' => $this->commissionTotal('paid', $merchantId),
             'last_sync_at' => (int) ($connection['last_sync_at'] ?? 0),
@@ -192,37 +211,43 @@ final class ReadService
         }
     }
 
-    private function inventoryQuery(?int $merchantId = null)
+    private function inventoryQuery(?int $merchantId = null, string $scope='sellable')
     {
         // The publication pointer is compared inside the same SQL statement; no row from
         // active_run_id or any other partially written generation can leak into this read.
         $query = Db::name('hsx_lead_inventory')->alias('i')
             ->join('hsx_lead_connection c', 'c.id=i.connection_id AND c.site_id=i.site_id AND c.merchant_id=i.merchant_id AND c.published_run_id=i.sync_run_id')
             ->join('hsx_lead_merchant m', 'm.id=i.merchant_id AND m.site_id=i.site_id')
+            ->leftJoin('sys_area mp', 'mp.id=m.province_id')
+            ->leftJoin('sys_area mc', 'mc.id=m.city_id')
+            ->leftJoin('sys_area md', 'md.id=m.district_id')
             ->where('i.site_id', $this->context->site)->where('c.published_run_id', '>', 0);
         if ($merchantId !== null) $query->where('i.merchant_id', $merchantId);
-        return $query;
+        return InventoryAvailability::apply($query,$scope);
     }
 
     private function presentInventory(array $row): array
     {
         $lastSync = (int) ($row['last_sync_at'] ?? 0);
         $fetched = (int) ($row['fetched_at'] ?? 0);
-        $threshold = max(2 * max(1, (int) ($row['sync_interval_minutes'] ?? 60)), 120) * 60;
-        $failed = ($row['last_sync_status'] ?? '') === 'failed';
-        $timestamp = max($lastSync, $fetched);
-        return ['id' => (int) $row['id'], 'merchant_id' => (int) $row['merchant_id'],
+        $province = (string)($row['province_name'] ?? '');
+        $city = (string)($row['city_name'] ?? '');
+        $district = (string)($row['district_name'] ?? '');
+        return array_replace(['id' => (int) $row['id'], 'merchant_id' => (int) $row['merchant_id'],
             'merchant_name' => (string) ($row['merchant_name'] ?? ''), 'model' => (string) ($row['model'] ?? ''),
+            'province_id' => (int)($row['province_id'] ?? 0), 'city_id' => (int)($row['city_id'] ?? 0),
+            'district_id' => (int)($row['district_id'] ?? 0), 'province_name' => $province,
+            'city_name' => $city, 'district_name' => $district,
+            'region_text' => implode(' / ', array_values(array_filter([$province, $city, $district], static fn(string $name): bool => $name !== ''))),
             'memory' => (string) ($row['memory'] ?? ''), 'brand' => (string) ($row['brand'] ?? ''),
             'color' => (string) ($row['color'] ?? ''), 'grade' => (string) ($row['grade'] ?? ''),
             'price' => $row['price'] === null ? null : (string) $row['price'],
             'trade_price' => $row['trade_price'] === null ? null : (string) $row['trade_price'],
-            'quantity' => $row['quantity'] === null ? null : (string) $row['quantity'],
             'imei' => (string) ($row['imei'] ?? ''), 'cover' => (string) ($row['cover'] ?? ''),
-            'availability' => 'unknown', 'is_stale' => $failed || $timestamp <= 0 || $timestamp + $threshold < time(),
-            'last_sync_at' => $lastSync, 'fetched_at' => $fetched, 'stale_after_minutes' => intdiv($threshold, 60),
-            'sync_failed' => $failed, 'last_sync_status' => (string) ($row['last_sync_status'] ?? 'idle'),
-            'provider' => (string) ($row['provider'] ?? ''), 'sync_run_id' => (int) ($row['sync_run_id'] ?? 0)];
+            'last_sync_at' => $lastSync, 'fetched_at' => $fetched,
+            'last_sync_status' => (string) ($row['last_sync_status'] ?? 'idle'),
+            'provider' => (string) ($row['provider'] ?? ''), 'sync_run_id' => (int) ($row['sync_run_id'] ?? 0)]
+            ,InventoryAvailability::present($row));
     }
 
     private function like(string $value): string
@@ -304,6 +329,7 @@ final class ReadService
     private function commissionTotal(string $status, ?int $merchantId = null): string
     {
         $query = Data::query('commission', $this->context->site)->where('status', $status);
+        if ($this->context->uid>0) $this->context->ownership()->commissions($query);
         if ($merchantId !== null) $query->where('merchant_id', $merchantId);
         // ThinkORM sum() returns float; use a DECIMAL aggregate row instead.
         $row = $query->fieldRaw('COALESCE(SUM(amount), 0) AS total')->find();
@@ -312,13 +338,17 @@ final class ReadService
 
     private function recentTasks(): array
     {
-        $rows = Data::query('task', $this->context->site)->field('id,task_no,lead_id,merchant_id,status,response_deadline,create_time,update_time')
+        $rows = $this->context->ownership()->tasks(Data::query('task', $this->context->site))->field('id,task_no,lead_id,merchant_id,status,response_deadline,create_time,update_time')
             ->order('id desc')->limit(8)->select()->toArray();
         foreach ($rows as &$row) {
             $row['merchant_name'] = (string) (Data::query('merchant', $this->context->site)->where('id', $row['merchant_id'])->value('name') ?? '');
-            $lead = Data::query('lead', $this->context->site)->where('id', $row['lead_id'])->field('customer_name,model')->find();
+            $lead = Data::query('lead', $this->context->site)->where('id', $row['lead_id'])->field('customer_name,model,owner_uid')->find();
             $row['customer_name'] = (string) ($lead['customer_name'] ?? '');
             $row['model'] = (string) ($lead['model'] ?? '');
+            $row=array_replace($row,$lead?$this->context->ownership()->present($lead):[
+                'association_anomaly'=>true,'association_anomaly_label'=>'关联客资缺失，仅核对',
+                'owner_uid'=>null,'owner_name'=>'关联资料缺失','can_transfer'=>false,
+            ]);
         }
         unset($row);
         return $rows;

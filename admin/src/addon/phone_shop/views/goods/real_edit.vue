@@ -946,12 +946,10 @@ const loadMemGradeOptions = async () => {
     try {
         const res: any = await getSpecGroups({ category_id: 0 })
         const groups = res.data || []
-        const memGroups = groups.filter((g: any) => String(g.label || '').includes('内存'))
-        const useGroups = memGroups.length ? memGroups : groups
         const set = new Set<string>()
-        useGroups.forEach((g: any) => (g.items || []).forEach((it: any) => { const v = String(it.item_value ?? '').trim(); if (v) set.add(v) }))
-        memOptions.value = Array.from(set).sort()
-    } catch (e) { /* */ }
+        groups.forEach((g: any) => (g.items || []).forEach((it: any) => { const v = String(it.item_value ?? '').trim(); if (v) set.add(v) }))
+        memOptions.value = Array.from(set)
+    } catch (e) { memOptions.value = [] }
     try {
         const res: any = await getGrades()
         gradeOptions.value = (res.data || []).map((x: any) => String(x.grade_name ?? '').trim()).filter(Boolean)

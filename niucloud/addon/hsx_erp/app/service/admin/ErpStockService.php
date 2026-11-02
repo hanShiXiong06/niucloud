@@ -2318,6 +2318,7 @@ class ErpStockService extends BaseAdminService
             'brand_name' => (string)($mallMaterial['brand']['name'] ?? $this->specValueText($specMeta['brand'] ?? '')),
             'memory' => $memory,
             'color' => $publishColor,
+            'screen_size' => $this->specFieldText($specMeta, ['screen_size', 'display_size'], ['屏幕尺寸', '屏幕大小', '尺寸']),
             'battery_health' => (int)($mallMaterial['battery_health']
                 ?? ((int)$asset->battery > 0 && (int)$asset->battery <= 100 ? (int)$asset->battery : -1)),
             'warranty_expire_time' => (int)($mallMaterial['warranty_expire_time'] ?? $asset->warranty),

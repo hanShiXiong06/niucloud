@@ -1,12 +1,12 @@
 <template>
     <div class="lead-region">
-        <el-select v-model="ids[0]" :loading="loading[0]" clearable filterable placeholder="选择省份" aria-label="省份" @change="changeProvince">
+        <el-select v-model="ids[0]" :teleported="teleported" :loading="loading[0]" clearable filterable placeholder="选择省份" aria-label="省份" @change="changeProvince">
             <el-option v-for="item in options[0]" :key="item.id" :label="item.name" :value="Number(item.id)" />
         </el-select>
-        <el-select v-model="ids[1]" :disabled="!ids[0]" :loading="loading[1]" clearable filterable placeholder="选择城市" aria-label="城市" @change="changeCity">
+        <el-select v-model="ids[1]" :teleported="teleported" :disabled="!ids[0]" :loading="loading[1]" clearable filterable placeholder="选择城市" aria-label="城市" @change="changeCity">
             <el-option v-for="item in options[1]" :key="item.id" :label="item.name" :value="Number(item.id)" />
         </el-select>
-        <el-select v-model="ids[2]" :disabled="!ids[1]" :loading="loading[2]" clearable filterable placeholder="选择区县" aria-label="区县" @change="emitValue">
+        <el-select v-model="ids[2]" :teleported="teleported" :disabled="!ids[1]" :loading="loading[2]" clearable filterable placeholder="选择区县" aria-label="区县" @change="emitValue">
             <el-option v-for="item in options[2]" :key="item.id" :label="item.name" :value="Number(item.id)" />
         </el-select>
         <div v-if="error" class="lead-error">{{ error }} <el-button link type="primary" @click="initialise">重试加载</el-button></div>
@@ -16,7 +16,9 @@
 import { onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { getAreaListByPid } from '@/app/api/sys'
 import { errorText, type Row } from '../../composables/useLeadUi'
-const props = defineProps<{ modelValue: Row }>()
+// Keep normal form dropdowns teleported; nested popovers opt out so option
+// clicks stay inside their owner instead of triggering its outside-close handler.
+const props = withDefaults(defineProps<{ modelValue: Row; teleported?: boolean }>(), { teleported: true })
 const emit = defineEmits<{ (e: 'update:modelValue', value: Row): void }>()
 const ids = ref<any[]>([undefined, undefined, undefined]), options = ref<Row[][]>([[], [], []]), loading = reactive([false, false, false]), error = ref('')
 let revision = 0, disposed = false, initialised = false

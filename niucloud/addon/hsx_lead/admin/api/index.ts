@@ -4,6 +4,9 @@ import type { Row } from '../composables/useLeadUi'
 const root = 'hsx_lead'
 const quiet = { showErrorMessage: false }
 export const getDashboard = () => request.get(`${root}/dashboard`, quiet)
+export const getViewerScope = () => request.get(`${root}/scope`, quiet)
+export const getOwners = (params: Row = {}) => request.get(`${root}/owners`, { ...quiet, params })
+export const transferLeadOwner = (id: number, data: { owner_uid: number; expected_owner_uid: number }) => request.post(`${root}/leads/${id}/owner`, data, quiet)
 export const getCatalog = () => request.get(`${root}/catalog`, quiet)
 export const saveCatalog = (data: { content: string, format: 'csv' | 'json' }) => request.put(`${root}/catalog`, data, quiet)
 export const getMembers = (keyword = '') => request.get(`${root}/members`, { ...quiet, params: { keyword } })
@@ -12,6 +15,13 @@ export const getMerchant = (id: number) => request.get(`${root}/merchants/${id}`
 export const saveMerchant = (data: Row) => data.id ? request.put(`${root}/merchants/${data.id}`, data, quiet) : request.post(`${root}/merchants`, data, quiet)
 export const getProviders = () => request.get(`${root}/providers`, quiet)
 export const getConnection = (id: number) => request.get(`${root}/merchants/${id}/connection`, quiet)
+export const getAuthorizationChallenge = (id: number, data: Row) => request.post(`${root}/merchants/${id}/connection/auth/challenge`, data, quiet)
+export const getCaptchaConfig = () => request.get(`${root}/captcha/config`, quiet)
+export const saveCaptchaConfig = (data: Row) => request.put(`${root}/captcha/config`, data, quiet)
+export const checkCaptchaBalance = () => request.post(`${root}/captcha/balance`, {}, { ...quiet, timeout: 45000 })
+export const startAutomaticAuthorization = (id: number, data: Row) => request.post(`${root}/merchants/${id}/connection/auth/automatic`, data, quiet)
+export const advanceAutomaticAuthorization = (id: number, data: Row) => request.post(`${root}/merchants/${id}/connection/auth/automatic/advance`, data, { ...quiet, timeout: 45000 })
+export const cancelAutomaticAuthorization = (id: number, data: Row) => request.post(`${root}/merchants/${id}/connection/auth/automatic/cancel`, data, quiet)
 export const probeConnection = (id: number, data: Row) => request.post(`${root}/merchants/${id}/connection/probe`, data, quiet)
 export const activateConnection = (id: number, data: Row) => request.post(`${root}/merchants/${id}/connection/activate`, data, quiet)
 export const saveSyncSettings = (id: number, data: Row) => request.put(`${root}/merchants/${id}/connection/settings`, data, quiet)

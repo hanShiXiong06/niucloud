@@ -13,6 +13,7 @@ final class Schema
         if (!preg_match('/^[a-zA-Z0-9_]*$/D',$prefix)) throw new \RuntimeException('Unsupported table prefix');
         $changes=[];
         $definitions=[
+            'lead'=>['owner_uid'=>'INT UNSIGNED NOT NULL DEFAULT 0'],
             'task'=>[
                 'deal_items_json'=>'LONGTEXT NULL','confirmed_items_json'=>'LONGTEXT NULL','deal_history_json'=>'LONGTEXT NULL',
                 'deal_revision'=>'INT UNSIGNED NOT NULL DEFAULT 0','last_verified_revision'=>'INT UNSIGNED NOT NULL DEFAULT 0',
@@ -29,6 +30,17 @@ final class Schema
                 Db::execute('ALTER TABLE `'.$table.'` ADD COLUMN `'.$field.'` '.$definition);
                 $changes[]='hsx_lead_'.$short.'.'.$field;
             }
+            if ($short==='lead' && isset($columns['owner_uid']) && (
+                !preg_match('/^int(?:\([0-9]+\))? unsigned$/i',(string)$columns['owner_uid']['Type'])
+                || $columns['owner_uid']['Null']!=='NO' || (string)$columns['owner_uid']['Default']!=='0'
+            )) throw new \RuntimeException('Existing lead owner field conflicts; inspect before retrying');
+        }
+        $lead=$prefix.'hsx_lead_lead'; $indexes=self::indexes($lead);
+        if (!isset($indexes['idx_site_owner_status'])) {
+            Db::execute('ALTER TABLE `'.$lead.'` ADD KEY `idx_site_owner_status` (`site_id`,`owner_uid`,`status`,`id`)');
+            $changes[]='hsx_lead_lead.idx_site_owner_status';
+        } elseif ($indexes['idx_site_owner_status']['unique'] || $indexes['idx_site_owner_status']['columns']!==['site_id','owner_uid','status','id']) {
+            throw new \RuntimeException('Existing lead ownership index conflicts; inspect before retrying');
         }
         $table=$prefix.'hsx_lead_commission'; $indexes=self::indexes($table);
         if (!isset($indexes['uk_site_task_revision'])) {
@@ -50,8 +62,8 @@ final class Schema
         } elseif (!$indexes['uk_site_dedupe']['unique'] || $indexes['uk_site_dedupe']['columns']!==['site_id','dedupe_key']) {
             throw new \RuntimeException('Existing audit dedupe index conflicts; inspect before retrying');
         }
-        foreach(['task','commission','audit'] as $short) Db::connect()->getSchemaInfo($prefix.'hsx_lead_'.$short,true);
-        return ['version'=>'1.1.0','changes'=>$changes,'business_rows_rewritten'=>0,'framework_tables_altered'=>0,
+        foreach(['lead','task','commission','audit'] as $short) Db::connect()->getSchemaInfo($prefix.'hsx_lead_'.$short,true);
+        return ['version'=>'1.1.1','changes'=>$changes,'business_rows_rewritten'=>0,'framework_tables_altered'=>0,
             'notice'=>'MySQL DDL may auto-commit; retries are idempotent. Back up plugin tables before upgrading.'];
     }
 
