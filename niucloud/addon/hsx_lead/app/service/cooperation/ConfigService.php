@@ -15,7 +15,7 @@ final class ConfigService
     {
         return ['enabled'=>false,'publishing_required'=>true,'publishing_price'=>'0.00','certification_price'=>'0.00','certification_months'=>12,
             'fee_percent'=>'10.00','fee_minimum'=>'9.90','fee_confirmed'=>false,'commission_minimum'=>'50.00','response_minutes'=>30,
-            'contact_hours'=>24,'review_hours'=>48,'inventory_fresh_hours'=>24,
+            'contact_hours'=>24,'review_hours'=>48,'inventory_fresh_hours'=>24,'demand_model_limit'=>5,
             'grades'=>[['id'=>'S','name'=>'S','rank'=>30,'min_inventory'=>100,'all_models'=>false,'status'=>1],['id'=>'A','name'=>'A','rank'=>20,'min_inventory'=>30,'all_models'=>false,'status'=>1],['id'=>'B','name'=>'B','rank'=>10,'min_inventory'=>0,'all_models'=>false,'status'=>1]]];
     }
     public function get(): array
@@ -34,7 +34,7 @@ final class ConfigService
         foreach(['publishing_price','certification_price','fee_percent','fee_minimum','commission_minimum'] as $key) $next[$key]=Rules::amount(Rules::cents($input[$key]??$next[$key]));
         if (Rules::cents($next['fee_percent'])>=10000 || Rules::cents($next['commission_minimum'])<5000 || Rules::cents($next['fee_minimum'])>=Rules::cents($next['commission_minimum'])) throw new CommonException('平台费须低于最低佣金，且成交佣金不能低于50元');
         if ($next['fee_confirmed']) Rules::split(Rules::cents($next['commission_minimum']),$next);
-        foreach(['certification_months'=>[1,120],'response_minutes'=>[0,10080],'contact_hours'=>[0,720],'review_hours'=>[0,2160],'inventory_fresh_hours'=>[1,168]] as $key=>$range) {
+        foreach(['certification_months'=>[0,120],'response_minutes'=>[0,10080],'contact_hours'=>[0,720],'review_hours'=>[0,2160],'inventory_fresh_hours'=>[1,168]] as $key=>$range) {
             $v=$input[$key]??$next[$key];if ((!is_int($v)&&!is_string($v)) || !ctype_digit((string)$v) || (int)$v<$range[0] || (int)$v>$range[1]) throw new CommonException('请核对时间设置：'.$key);$next[$key]=(int)$v;
         }
         $rows=$input['grades']??null;if (!is_array($rows)||!$rows||count($rows)>20) throw new CommonException('请设置1—20个商户等级');
@@ -50,6 +50,7 @@ final class ConfigService
         $active=array_values(array_filter($grades,static fn(array $g):bool=>$g['status']===1));if (!$active) throw new CommonException('至少保留一个启用等级');
         $highest=max(array_column($active,'rank'));foreach($grades as $g) if ($g['all_models']&&($g['status']!==1||$g['rank']!==$highest)) throw new CommonException('只有当前最高启用等级可以授权全型号交付能力');
         $next['grades']=$grades;
+        $next['demand_model_limit']=Rules::demandLimit($input['demand_model_limit']??$next['demand_model_limit']);
         Db::transaction(function()use($next):void { Db::name('site')->where('site_id',$this->context->site)->lock(true)->find();(new CoreConfigService())->setConfig($this->context->site,self::KEY,$next);$this->context->audit('cooperation_config',0,'saved',['enabled'=>$next['enabled'],'fee_confirmed'=>$next['fee_confirmed']]); });
         return $next;
     }

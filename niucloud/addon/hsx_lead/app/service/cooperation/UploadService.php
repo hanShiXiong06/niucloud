@@ -13,12 +13,21 @@ final class UploadService
     public function image(): array
     {
         if ($this->context->uid>0) Store::permission($this->context,'review');else (new PartnerService($this->context))->own(true);
+        return $this->upload('cooperation_attachment');
+    }
+    public function storefront(): array
+    {
+        (new StorefrontService($this->context))->assertUploadAllowed();
+        return $this->upload(StorefrontService::UPLOAD_ENTITY);
+    }
+    private function upload(string $entity): array
+    {
         $owner=$this->context->uid>0?'u'.$this->context->uid:'m'.$this->context->memberId;
         $upload=new CoreUploadService(true);$upload->setValidate(['ext'=>['jpg','jpeg','png','webp'],'mime'=>['image/jpeg','image/png','image/webp'],'size'=>5*1024*1024]);
         $result=$upload->image('file',$this->context->site,'hsx_lead/'.$this->context->site.'/'.$owner.'/'.date('Ym/d'));
         $row=Db::name('sys_attachment')->where('site_id',$this->context->site)->where('att_id',(int)($result['att_id']??0))->find();
         if (!$row) throw new CommonException('图片已上传但素材登记未完成，请重新上传后提交');
-        $this->context->audit('cooperation_attachment',(int)$row['att_id'],'uploaded',[]);
+        $this->context->audit($entity,(int)$row['att_id'],'uploaded',[]);
         return ['url'=>$result['url'],'path'=>$row['path'],'att_id'=>(int)$row['att_id']];
     }
 }

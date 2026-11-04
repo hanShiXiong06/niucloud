@@ -10,8 +10,7 @@ use think\facade\Db;
 final class OwnershipScope
 {
     public const ALL_DATA='hsx_lead_manage_all_data';
-    public const TRANSFER='hsx_lead_manage_lead_owner';
-    private bool $schemaChecked=false;
+    public const TRANSFER='hsx_lead_cooperation_owner';
 
     public function __construct(private Context $context) {}
 
@@ -47,7 +46,6 @@ final class OwnershipScope
 
     public function scope(): array
     {
-        $this->ensureSchema();
         $actor=$this->operator();
         $all=$actor['admin'] || in_array(self::ALL_DATA,$actor['keys'],true);
         return ['all_data'=>$all,'can_transfer'=>$all && ($actor['admin'] || in_array(self::TRANSFER,$actor['keys'],true)),
@@ -65,11 +63,6 @@ final class OwnershipScope
         return $actor['admin'] || in_array($key,$actor['keys'],true);
     }
 
-    public function requireTransfer(): void
-    {
-        if (!$this->scope()['can_transfer']) throw new CommonException('仅有全量查看及归属转交权限的管理员可转交客资');
-    }
-
     /** Query constraints precede pagination, counts, aggregate and keyword matching. */
     public function leads($query,array $params=[],string $prefix='')
     {
@@ -84,37 +77,6 @@ final class OwnershipScope
         return $query;
     }
 
-    public function tasks($query,array $params=[],string $prefix='')
-    {
-        $scope=$this->scope();
-        $filtered=array_key_exists('owner_uid',$params) && $params['owner_uid']!=='' && $params['owner_uid']!==null;
-        if ($scope['all_data'] && !$filtered) return $query;
-        return $query->whereIn($prefix.'lead_id',function($sub)use($params):void {
-            $sub->name('hsx_lead_lead')->field('id')->where('site_id',$this->context->site);
-            $this->leads($sub,$params);
-        });
-    }
-
-    public function commissions($query,array $params=[],string $prefix='')
-    {
-        $scope=$this->scope();
-        $filtered=array_key_exists('owner_uid',$params) && $params['owner_uid']!=='' && $params['owner_uid']!==null;
-        if ($scope['all_data'] && !$filtered) return $query;
-        return $query->whereIn($prefix.'task_id',function($sub)use($params):void {
-            $sub->name('hsx_lead_task')->field('id')->where('site_id',$this->context->site);
-            $this->tasks($sub,$params);
-        });
-    }
-
-    public function lead(int $id,bool $lock=false): array
-    {
-        $query=$this->leads(Data::query('lead',$this->context->site))->where('id',$id);
-        if ($lock) $query->lock(true);
-        $row=$query->find();
-        if (!$row) throw new CommonException('客资不存在，或不在当前可查看的范围内');
-        return $row;
-    }
-
     public function present(array $lead): array
     {
         // Merchant/member APIs need no internal employee names or identifiers.
@@ -123,53 +85,6 @@ final class OwnershipScope
         $name=$owner>0?Db::name('sys_user')->where('uid',$owner)->where('status',1)->where('is_del',0)->where('delete_time',0)->field('uid,real_name,username')->find():null;
         return ['owner_uid'=>$owner,'owner_name'=>$owner===0?'未分配（历史资料）':($name?$this->name($name):'原工作人员（已失效）'),
             'can_transfer'=>$this->context->uid>0 && $this->scope()['can_transfer']];
-    }
-
-    public function owners(array $params=[]): array
-    {
-        $this->requireTransfer();
-        $keyword=Data::text($params,'q',80);
-        $query=Db::name('sys_user')->alias('u')->join('sys_user_role ur','ur.uid=u.uid')
-            ->where('ur.site_id',$this->context->site)->where('ur.status',1)->where('ur.delete_time',0)
-            ->where('u.status',1)->where('u.is_del',0)->where('u.delete_time',0);
-        if ($keyword!=='') $query->whereLike('u.username|u.real_name','%'.addcslashes($keyword,'\\%_').'%');
-        // Eligibility depends on current enabled role/menu grants, not just membership.
-        $users=$query->distinct(true)->field('u.uid,u.username,u.real_name')->order('u.uid')->select()->toArray();
-        $eligible=[];
-        foreach ($users as $user) {
-            try {$actor=$this->operator((int)$user['uid']);} catch (CommonException $error) {continue;}
-            if (!$this->eligible($actor)) continue;
-            $eligible[]=['uid'=>(int)$user['uid'],'name'=>$actor['name']];
-        }
-        $page=max(1,(int)($params['page']??1)); $size=max(1,min(100,(int)($params['limit']??20)));
-        return ['data'=>array_slice($eligible,($page-1)*$size,$size),'total'=>count($eligible),'per_page'=>$size,'current_page'=>$page];
-    }
-
-    public function target(int $uid): array
-    {
-        $actor=$this->operator($uid);
-        if (!$this->eligible($actor)) throw new CommonException('归属人员必须是本站启用且有客资列表及详情权限的工作人员');
-        return $actor;
-    }
-
-    private function eligible(array $actor): bool
-    {
-        return $actor['site_role'] && ($actor['admin']
-            || (in_array('hsx_lead_manage_leads',$actor['keys'],true) && in_array('hsx_lead_manage_lead_info',$actor['keys'],true)));
-    }
-
-    private function ensureSchema(): void
-    {
-        if ($this->schemaChecked) return;
-        $prefix=(string)Db::connect()->getConfig('prefix');
-        if (!preg_match('/^[a-zA-Z0-9_]*$/D',$prefix)) throw new CommonException('请先完成客资协作 1.1.1 数据库升级后重试');
-        try {$columns=Db::query('SHOW COLUMNS FROM `'.$prefix.'hsx_lead_lead`');}
-        catch (\Throwable $error) {throw new CommonException('请先完成客资协作 1.1.1 数据库升级后重试');}
-        $fields=array_column($columns,null,'Field'); $owner=$fields['owner_uid']??null;
-        if (!$owner || !preg_match('/^int(?:\([0-9]+\))? unsigned$/i',(string)$owner['Type']) || $owner['Null']!=='NO' || (string)$owner['Default']!=='0') {
-            throw new CommonException('请先完成客资协作 1.1.1 数据库升级：缺少有效归属字段 owner_uid，未放开数据范围');
-        }
-        $this->schemaChecked=true;
     }
 
     public static function ownerId($value,bool $zero=false): int

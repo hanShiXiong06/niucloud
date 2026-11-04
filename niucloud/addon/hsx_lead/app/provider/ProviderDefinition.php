@@ -25,6 +25,26 @@ final class ProviderDefinition
         $secretTrace = \addon\hsx_lead\app\support\PhpRuntime::guardSecrets();
         return (bool)($this->configuration($credentials)['renewal']['automatic']??false);
     }
+    /** Public capability only: never expose account, password or derived token. */
+    public function renewalStatus(#[\SensitiveParameter] array $credentials): array
+    {
+        $secretTrace = \addon\hsx_lead\app\support\PhpRuntime::guardSecrets();
+        $configuration=$this->configuration($credentials);
+        $mode=(string)($configuration['renewal']['mode']??'manual_token');
+        $automatic=(bool)($configuration['renewal']['automatic']??false);
+        if (!$automatic) {
+            $interactive=$mode==='interactive_login';
+            return ['automatic'=>false,'ready'=>false,'mode'=>$mode,
+                'status'=>$interactive?'interactive_required':'manual_token',
+                'message'=>$interactive?'该ERP需要验证码登录；当前会话失效后需重新验证，不能仅凭密码自动续登。':'当前仅保存临时Token，无法自动续登；请切换为账号密码登录并验证启用。'];
+        }
+        $complete=true;
+        foreach($configuration['fields'] as $field) {
+            if (!empty($field['required']) && (!is_string($credentials[$field['key']]??null) || $credentials[$field['key']]==='')) $complete=false;
+        }
+        return ['automatic'=>true,'ready'=>$complete,'mode'=>$mode,'status'=>$complete?'automatic':'credentials_required',
+            'message'=>$complete?'已保存登录资料；授权失效时自动重新登录、保存新授权并继续同步。':'登录资料不完整，无法自动续登；请补齐账号密码并验证启用。'];
+    }
     /** Opt-in only for adapters that read authenticated profile/HTML, never JWT claims. */
     public function verifiesIdentity(): bool { return ($this->definition['verified_identity']??false)===true; }
     public function verifiedTenantRequired(): bool { return empty($this->definition['identity_tenant_optional']); }

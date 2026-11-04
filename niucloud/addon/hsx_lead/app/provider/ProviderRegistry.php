@@ -51,7 +51,7 @@ final class ProviderRegistry
                     'scope_fields'=>[$field('store_id','来源店铺ID','text',true,false,100)],
                     'renewal'=>['automatic'=>false,'mode'=>'manual_token','max_attempts'=>0,'description'=>'仅用于已有授权测试，到期后需要重新提供，不自动尝试密码登录']],
             ],
-            'notes'=>['默认使用账号密码登录并自动核对来源门店，Token仅保留为临时测试入口','登录协议参考会员卡既有接口，但不依赖会员卡插件，不读取客户、会员卡、成本或内部备注','库存预览后仍需明确启用，再完成完整分页同步'],
+            'notes'=>['默认使用账号密码登录并逐台核对来源门店，Token仅保留为临时测试入口','按真实上下架和售出状态同步；已上架且未售设备参与匹配，不要求额外的数量字段','不调用客户或财务接口，库存响应中的客户、成本和内部备注会剥离；分店ID不冒充认证门店ID','库存预览后仍需明确启用，再完成完整分页同步；完整同步后消失的设备不再参与匹配'],
         ]),new ProviderDefinition([
             'key'=>'jixiaoer','name'=>'机小二','aliases'=>['guanql'],'adapter'=>JixiaoerProvider::class,'grade_field'=>'fineness',
             'verified_identity'=>true,'auth_mode'=>'password','auth_type'=>'password','renderer'=>'fields','read_only'=>true,

@@ -53,7 +53,6 @@ final class Context
     }
     public function ownership(): OwnershipScope { return $this->ownership??=new OwnershipScope($this); }
     public function permission(string $key): void { $this->ownership()->permission($key); }
-    public function lead(int $id,bool $lock=false): array { return $this->ownership()->lead($id,$lock); }
     public function merchant(): array
     {
         if ($this->memberId <= 0) throw new CommonException('请使用已绑定商户的会员身份登录');
@@ -64,20 +63,6 @@ final class Context
         if (!$row) throw new CommonException('当前会员尚未绑定启用中的商户，请联系平台管理员');
         return $row;
     }
-    public function task(int $id, bool $lock = false): array
-    {
-        $row = Data::row('task',$this->site,$id,$lock);
-        if ($this->uid>0) {
-            // All-data administrators may inspect an orphan as an anomaly. Every
-            // mutation still locks/validates the real lead before changing facts.
-            if (!$this->ownership()->scope()['all_data']) $this->lead((int)$row['lead_id']);
-        }
-        elseif ((int)$row['merchant_id'] !== (int)$this->merchant()['id']) {
-            throw new CommonException('工单不存在，或不属于当前商户');
-        }
-        return $row;
-    }
-
     /** Explicit ERP owner authorization. A member never inherits administrator powers. */
     public function connectionMerchant(int $id,bool $lock=false): array
     {

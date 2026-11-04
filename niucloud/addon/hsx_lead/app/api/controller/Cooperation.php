@@ -18,14 +18,15 @@ final class Cooperation extends BaseApiController
     public function createLead() { return success($this->service()->create($this->request->param())); }
     public function detail(int $id) { return success($this->service()->detail($id)); }
     public function stores() { return success($this->service()->stores($this->request->param())); }
+    public function storeInventory(int $id) { return success($this->service()->storeInventory($id,$this->request->param())); }
     public function leadStores(int $id) { return success($this->service()->stores($this->request->param(),$id)); }
     public function assign(int $id) { return success($this->service()->assign($id,$this->request->param())); }
     public function action(int $id) { return success($this->service()->action($id,$this->request->param())); }
     public function createOrder() { return success((new PaymentService($this->context()))->createOrder($this->request->param())); }
     public function order(int $id) { return success((new PaymentService($this->context()))->order($id)); }
     public function wallet() { return success((new PaymentService($this->context()))->wallet($this->request->param())); }
-    public function withdrawal() { return success((new PaymentService($this->context()))->withdraw($this->request->param())); }
     public function attachment() { return success((new UploadService($this->context()))->image()); }
+    public function storefront() { return success((new UploadService($this->context()))->storefront()); }
     private function own(Context $ctx): int { return (int)(new PartnerService($ctx))->own(true)['id']; }
     public function connection() { $ctx=$this->context();return success((new ConnectionService($ctx))->get($this->own($ctx))); }
     public function challenge() { $ctx=$this->context();return success((new AuthChallengeService($ctx))->begin($this->own($ctx),$this->request->param())); }

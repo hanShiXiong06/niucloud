@@ -3,7 +3,7 @@ declare(strict_types=1);
 namespace addon\hsx_lead\app\service\cooperation;
 
 use addon\hsx_lead\app\provider\ProviderRegistry;
-use addon\hsx_lead\app\service\Context;
+use addon\hsx_lead\app\service\{Context,ProviderChannelService};
 use addon\hsx_lead\app\support\{Data,InventoryAvailability,MerchantRegion};
 use core\exception\CommonException;
 use think\facade\Db;
@@ -26,26 +26,31 @@ final class PartnerService
         $member=Db::name('member')->where('site_id',$this->context->site)->where('member_id',$memberId)->where('status',1)->where('is_del',0)->where('delete_time',0)->find();
         if (!$member) throw new CommonException('请先登录本站有效会员');
         $m=Data::query('merchant',$this->context->site)->where('member_id',$memberId)->find();
-        if (!$m) return ['profile'=>null,'config'=>$config,'stats'=>[],'wallet'=>null,'providers'=>ProviderRegistry::supported(),'needs_onboarding'=>true];
+        if (!$m) return ['profile'=>null,'config'=>$config,'stats'=>[],'wallet'=>null,'providers'=>(new ProviderChannelService($this->context->site))->available(),'needs_onboarding'=>true];
         $profile=$this->present($m,true);$id=(int)$m['id'];
         $out=Store::query('collaboration',$this->context->site)->where('publisher_id',$id);
         $in=Store::query('collaboration',$this->context->site)->where('receiver_id',$id);
         $stats=['outgoing'=>(int)(clone $out)->count(),'incoming'=>(int)(clone $in)->count(),'selecting'=>(int)(clone $out)->where('status','selecting')->count(),
             'assigned'=>(int)(clone $in)->where('status','assigned')->count(),'following'=>(int)(clone $in)->where('status','following')->count(),'unpaid'=>(int)(clone $in)->where('status','unpaid')->count()];
-        return ['profile'=>$profile,'config'=>$config,'stats'=>$stats,'wallet'=>['available'=>$profile['available_balance'],'frozen'=>$profile['frozen_balance'],'total_income'=>$profile['total_income'],'withdrawn'=>$profile['withdrawn_amount']],
-            'providers'=>ProviderRegistry::supported(),'needs_onboarding'=>false];
+        return ['profile'=>$profile,'config'=>$config,'stats'=>$stats,'wallet'=>PaymentService::accountSummary($this->context->site,$memberId),
+            'providers'=>(new ProviderChannelService($this->context->site))->available(),'needs_onboarding'=>false];
     }
 
     public function saveProfile(array $input): array
     {
         $memberId=$this->context->memberId;if ($memberId<=0) throw new CommonException('请先使用会员身份登录');
         $region=Data::region($input);$phone=self::phone($input['mobile']??'');
-        $provider=Data::text($input,'provider',60,true);(new ProviderRegistry())->definition($provider);
+        $provider=Data::text($input,'provider',60);
+        if ($provider!=='') $provider=(new ProviderRegistry())->definition($provider)->key();
         $values=$region+['name'=>Data::text($input,'name',120,true),'contact_name'=>Data::text($input,'contact_name',60,true),'mobile'=>$phone,'address'=>Data::text($input,'address',500,true)];
-        $id=Db::transaction(function()use($memberId,$values,$provider,$phone):int {
+        $id=Db::transaction(function()use($memberId,$values,$provider,$phone,$input):int {
+            $policy=new ProviderChannelService($this->context->site);$policy->lockSite();
             $member=Db::name('member')->where('site_id',$this->context->site)->where('member_id',$memberId)->lock(true)->find();
             if (!$member||(int)$member['status']!==1||(int)$member['is_del']!==0||(int)$member['delete_time']>0) throw new CommonException('会员已停用，请重新登录');
             $old=Data::query('merchant',$this->context->site)->where('member_id',$memberId)->lock(true)->find();
+            $requested=$old?Store::query('partner',$this->context->site)->where('merchant_id',$old['id'])->value('provider_requested'):null;
+            if ($old && ($requested===null || $requested==='')) $requested=Data::query('connection',$this->context->site)->where('merchant_id',$old['id'])->value('provider');
+            if ($provider!==''&&(!$old || (string)$requested!==$provider)) $policy->assertEnabled($provider);
             if ($old) {
                 $id=(int)$old['id'];$p=Store::partner($this->context->site,$id,true);
                 if ((int)$p['blocked_at']>0||(int)$old['status']!==1) throw new CommonException('当前商户已停止合作，不能通过重填资料重新入驻');
@@ -59,6 +64,8 @@ final class PartnerService
             }
             Data::query('merchant',$this->context->site)->where('id',$id)->update($values+['update_time'=>time()]);
             Store::query('partner',$this->context->site)->where('id',$p['id'])->update(['provider_requested'=>$provider,'update_time'=>time()]);
+            (new CapabilityService($this->context))->save($id,$input);
+            (new StorefrontService($this->context))->save($id,$input);
             $this->context->audit('partner',$id,'profile_saved',['provider'=>$provider]);return $id;
         });
         return $this->present(Data::row('merchant',$this->context->site,$id),true);
@@ -72,15 +79,24 @@ final class PartnerService
         if ($p['grade_mode']==='manual') foreach($grades as $g) if ($g['id']===$p['grade_id']) $grade=$g;
         if (!$grade) foreach($grades as $g) if ($count>=(int)$g['min_inventory']) {$grade=$g;break;}
         $grade=$grade??['id'=>'','name'=>'未分级','rank'=>0,'all_models'=>false];
+        $manualModels=(new CapabilityService($this->context))->models($id);
         $row=Data::regionNames(array_intersect_key($merchant,array_flip(['id','name','contact_name','mobile','province_id','city_id','district_id','address','status','create_time','update_time'])));
-        $conn=Data::query('connection',$this->context->site)->where('merchant_id',$id)->field('id,provider,enabled,last_sync_status,last_sync_at,last_sync_message,active_run_id,published_run_id,sync_interval_minutes')->find();
-        $row+=['grade_id'=>$grade['id'],'grade_name'=>$grade['name'],'grade_rank'=>(int)$grade['rank'],'grade_mode'=>$p['grade_mode'],'all_models'=>(bool)$grade['all_models'],
-            'certification_status'=>$p['certification_status'],'is_reliable'=>$p['certification_status']==='active'&&(int)$p['cert_expires_at']>time()&&(int)$p['blocked_at']===0,
+        $conn=Data::query('connection',$this->context->site)->where('merchant_id',$id)->field('id,merchant_id,provider,enabled,config_version,last_sync_status,last_sync_at,last_sync_message,active_run_id,published_run_id,sync_interval_minutes')->find();
+        if ($conn) $conn=array_replace($conn,\addon\hsx_lead\app\support\SyncStatus::connection($this->context->site,$conn));
+        $row+=['storefront_image'=>(new StorefrontService($this->context))->image($id),'grade_id'=>$grade['id'],'grade_name'=>$grade['name'],'grade_rank'=>(int)$grade['rank'],'grade_mode'=>$p['grade_mode'],'all_models'=>(bool)$grade['all_models'],
+            'certification_status'=>$p['certification_status'],'is_reliable'=>$p['certification_status']==='active'&&((int)$p['cert_expires_at']===0||(int)$p['cert_expires_at']>time())&&(int)$p['blocked_at']===0&&(int)$merchant['status']===1,
             'cert_expires_at'=>(int)$p['cert_expires_at'],'publisher_until'=>(int)$p['publisher_until'],'blocked_at'=>(int)$p['blocked_at'],'blocked'=>(int)$p['blocked_at']>0,
-            'inventory_count'=>$count,'provider_requested'=>$p['provider_requested'],'match_models'=>[],
-            'connection'=>$conn?['connected'=>true,'connection_id'=>(int)$conn['id'],'provider'=>$conn['provider'],'enabled'=>(bool)$conn['enabled'],'last_sync_status'=>$conn['last_sync_status'],'last_sync_at'=>(int)$conn['last_sync_at'],'last_sync_message'=>$conn['last_sync_message'],'active_run_id'=>(int)$conn['active_run_id'],'published_run_id'=>(int)$conn['published_run_id'],'interval_minutes'=>(int)$conn['sync_interval_minutes']]:['connected'=>false,'last_sync_status'=>'idle','last_sync_message'=>'请完成ERP授权并同步库存']];
-        if ($private) $row+=array_intersect_key($p,array_flip(['block_reason','available_balance','frozen_balance','total_income','withdrawn_amount','remark']));
-        if ($this->context->uid>0) unset($row['available_balance'],$row['frozen_balance'],$row['total_income'],$row['withdrawn_amount']);
+            'inventory_count'=>$count,'manual_models'=>$manualModels,'manual_model_count'=>count($manualModels),
+            'capability_source'=>$grade['all_models']?'all_models':($count>0?($manualModels?'mixed':'erp'):($manualModels?'manual':'none')),
+            'provider_requested'=>$p['provider_requested'],'match_models'=>[],
+            'connection'=>$conn?['connected'=>true,'connection_id'=>(int)$conn['id'],'provider'=>$conn['provider'],'enabled'=>(bool)$conn['enabled'],'last_sync_status'=>$conn['last_sync_status'],'last_sync_at'=>(int)$conn['last_sync_at'],'last_sync_message'=>$conn['last_sync_message'],'active_run_id'=>(int)$conn['active_run_id'],'published_run_id'=>(int)$conn['published_run_id'],'interval_minutes'=>(int)$conn['sync_interval_minutes'],'sync_progress'=>$conn['sync_progress'],'requires_sync_restart'=>$conn['requires_sync_restart']]:['connected'=>false,'last_sync_status'=>'idle','last_sync_message'=>'可选择接入ERP，或手动设置可交付型号']];
+        if ($private) $row+=array_intersect_key($p,array_flip(['block_reason','remark']));
+        if ($p['provider_requested']!=='') $row['provider_requested_name']=(new ProviderRegistry())->definition((string)$p['provider_requested'])->metadata()['name'];
+        if ($conn) {
+            $channel=(new ProviderChannelService($this->context->site))->enabled((string)$conn['provider']);
+            $row['connection']+=['provider_name'=>(new ProviderRegistry())->definition((string)$conn['provider'])->metadata()['name'],
+                'channel_enabled'=>$channel,'channel_message'=>$channel?'':'本站已关闭该ERP渠道，采集暂停，账号和历史资料仍保留。'];
+        }
         return $row;
     }
 
@@ -115,7 +131,7 @@ final class PartnerService
         if (!in_array($mode,['auto','manual'],true)||($mode==='manual'&&!in_array($grade,array_column(array_filter($config['grades'],static fn(array $g):bool=>(int)$g['status']===1),'id'),true))) throw new CommonException('请选择有效的商户等级');
         $status=Data::text($input,'certification_status',20,true);if (!in_array($status,['none','pending','active','revoked'],true)) throw new CommonException('认证状态无效');
         foreach(['cert_expires_at','publisher_until'] as $field) {$v=$input[$field]??0;if ((!is_int($v)&&!is_string($v))||!preg_match('/^(?:0|[1-9][0-9]{0,9})$/D',(string)$v)||(float)$v>4294967295) throw new CommonException('有效期请填写合法的秒级时间');}
-        $expires=(int)($input['cert_expires_at']??0);$until=(int)($input['publisher_until']??0);if ($status==='active'&&$expires<=time()) throw new CommonException('启用认证时请填写未来的到期时间');
+        $expires=(int)($input['cert_expires_at']??0);$until=(int)($input['publisher_until']??0);if ($status==='active'&&$expires!==0&&$expires<=time()) throw new CommonException('请选择未来的认证期限或永久有效');
         Db::transaction(function()use($id,$mode,$grade,$status,$expires,$until,$input):void {
             $p=Store::partner($this->context->site,$id,true);if ((int)$p['blocked_at']>0) throw new CommonException('已永久停止合作，不能通过资料修改重新启用');
             Store::query('partner',$this->context->site)->where('id',$p['id'])->update(['grade_mode'=>$mode,'grade_id'=>$grade,'certification_status'=>$status,'cert_expires_at'=>$expires,'publisher_until'=>$until,'remark'=>Data::text($input,'remark',2000),'update_time'=>time()]);

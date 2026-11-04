@@ -8,9 +8,25 @@ return [
                 {
                     "path": "pages/workbench/index",
                     "style": {
-                        "navigationBarTitleText": "商户工作台",
+                        "navigationStyle": "custom",
+                        "navigationBarTitleText": "商户交付",
                         "enablePullDownRefresh": true
                     },
+                    "needLogin": true
+                },
+                {
+                    "path": "pages/stores/index",
+                    "style": { "navigationStyle": "custom", "navigationBarTitleText": "找交付门店", "enablePullDownRefresh": true },
+                    "needLogin": true
+                },
+                {
+                    "path": "pages/wallet/index",
+                    "style": { "navigationStyle": "custom", "navigationBarTitleText": "我的收益", "enablePullDownRefresh": true },
+                    "needLogin": true
+                },
+                {
+                    "path": "pages/profile/index",
+                    "style": { "navigationStyle": "custom", "navigationBarTitleText": "我的门店", "enablePullDownRefresh": true },
                     "needLogin": true
                 }
             ]

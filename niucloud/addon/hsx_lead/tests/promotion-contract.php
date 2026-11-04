@@ -1,0 +1,31 @@
+<?php
+declare(strict_types=1);
+// Static plugin-boundary contract; does not boot the framework or touch a database/network.
+$plugin=dirname(__DIR__);$checks=0;
+$check=static function(bool $ok,string $label)use(&$checks):void {if(!$ok)throw new RuntimeException($label);$checks++;};
+$api=file_get_contents($plugin.'/app/api/route/promotion.php');$admin=file_get_contents($plugin.'/app/adminapi/route/promotion.php');
+$service=file_get_contents($plugin.'/app/service/cooperation/PromotionService.php');$payment=file_get_contents($plugin.'/app/service/cooperation/PaymentService.php');
+$check(str_contains($api,'ApiCheckToken::class,true')&&str_contains($api,'ApiChannel::class'),'member endpoints require authenticated same-channel identity');
+$check(str_contains($admin,'PermissionGate::class')&&str_contains($admin,'AdminCheckRole::class'),'admin endpoints use both framework and plugin API permissions');
+$check(str_contains($service,"ownership()->scope()['all_data']"),'promotion administration requires all-data authority');
+foreach(['config_save','providers_save','hold','resume'] as $key)$check(str_contains($service,"admin('".$key."')"),'write service checks independent permission '.$key);
+$check(str_contains($api,"Route::post('bind'")&&!str_contains($api,"Route::get('bind'"),'relationship writes are not hidden behind GET');
+$check(str_contains($service,"->where('pid',0)->update(['pid'=>\$id])"),'binding uses existing framework member.pid only when empty');
+$check(str_contains($service,'循环')&&str_contains($service,'can_bind'),'binding protects confirmation and cycles');
+$check(str_contains($service,"$"."source==='maintenance'?\$order['fee_amount']:\$order['amount']"),'maintenance reward is from fee, not full commission');
+$check(str_contains($payment,'PromotionService::recordPaid')&&str_contains($payment,'PayDict::STATUS_FINISH'),'source callback integrates after verified framework payment');
+$check(str_contains($service,'CoreMemberAccountService())->addLog')&&!preg_match('/function\s+withdraw\s*\(/',$service),'reward credit uses framework commission and adds no independent withdrawal API');
+$check(str_contains($service,'MemberAccountTypeDict::COMMISSION')&&str_contains($service,'account_log_id'),'settlement retains framework ledger reference');
+$check(str_contains($service,'RefundDict::WAIT,RefundDict::DEALING,RefundDict::SUCCESS'),'pending and successful refunds prevent new award credits');
+$check(str_contains($service,"\$row['status']!=='held'")&&str_contains($service,'已有账本记录'),'resume rejects already-settled/recorded credits');
+$check(str_contains($service,"'status'=>'pending','review_required'=>0")&&str_contains($service,"'resumed'"),'resume is an auditable state change, not another account credit');
+$check(str_contains(file_get_contents($plugin.'/app/event.php'),'PromotionRefundSuccess'),'refund listener registered through framework hook');
+$check(str_contains(file_get_contents($plugin.'/Addon.php'),'promotionStatus')&&str_contains(file_get_contents($plugin.'/app/dict/schedule/schedule.php'),'hsx_lead_promotion_settle'),'separate scheduled settlement is registered and preserved/default-off');
+$sql=file_get_contents($plugin.'/sql/install.sql');
+$check(substr_count($sql,'CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_promotion_reward`')===1,'one new reward audit table only');
+$check(str_contains($sql,'UNIQUE KEY `uk_site_order` (`site_id`,`coop_order_id`)'),'database enforces per-site source idempotency');
+$check(!str_contains($sql,'hsx_lead_wallet')&&!str_contains($sql,'hsx_lead_withdrawal'),'no new wallet or withdrawal table');
+$menus=require $plugin.'/app/dict/menu/site.php';$keys=[];$walk=function(array $rows)use(&$walk,&$keys):void{foreach($rows as $row){$keys[$row['menu_key']]=$row;if(!empty($row['children']))$walk($row['children']);}};$walk($menus);
+foreach(['manage','rewards','config','config_save','providers','providers_save','settle','hold','resume'] as $key)$check(isset($keys['hsx_lead_promotion_'.$key]),'explicit menu/API permission '.$key);
+$check(($keys['hsx_lead_promotion_manage']['view_path']??'')==='promotion/index','platform navigation points to the actual promoted UI');
+echo 'PASS '.$checks." promotion API/permission/schema contracts; no application boot or network.\n";

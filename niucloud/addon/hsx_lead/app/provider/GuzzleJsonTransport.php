@@ -13,6 +13,7 @@ final class GuzzleJsonTransport implements RequestTransportContract
         'https://lite.wanjisaas.com/lite-api/auth/login',
         'https://lite.wanjisaas.com/lite-api/erp/stock/selectMachineDetailV2',
         'https://www.dianddnet.cn/sjk-erp-service/api/sku/homePage',
+        'https://www.dianddnet.cn/sjk-erp-service/api/sku/page',
         'https://www.dianddnet.cn/sjk-erp-service/api/member/login',
         'https://api.aiguanji.com/api/v1/index/index',
         'https://api.aiguanji.com/api/v1/storage/product/index',

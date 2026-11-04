@@ -2,6 +2,7 @@
     <HsxDrawer v-model="visible" title="ERP 接入向导" :subtitle="merchantName" size="md" :body-loading="loading" :confirm-loading="busy">
         <el-steps :active="step" finish-status="success" simple class="lead-banner"><el-step title="选 ERP" /><el-step title="填授权" /><el-step title="验证预览" /><el-step title="启用同步" /></el-steps>
         <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" class="lead-error-banner" />
+        <el-alert v-if="original.channel_enabled === false" title="原 ERP 渠道已关闭，采集暂停" :description="original.channel_message || '账号与历史数据仍保留。若需更换接入，请从下方选择开放渠道并重新验证；不会自动切换原连接。'" type="warning" show-icon :closable="false" class="lead-banner" />
         <template v-if="!loading">
             <template v-if="step === 0"><p class="lead-muted">先验证新授权，验证失败不会影响原来的接入。当前每个商户保留一个启用连接。</p><div v-for="item in providers" :key="item.key" class="lead-candidate" :class="{ 'is-selected': provider === item.key }" role="radio" :aria-checked="provider === item.key" tabindex="0" @click="choose(item.key)" @keydown.enter.prevent="choose(item.key)"><h4>{{ item.name }}</h4><p class="lead-muted">{{ Array.isArray(item.notes) ? item.notes.join('；') : item.notes || '只读获取库存资料，不修改 ERP 的商品与库存。' }}</p></div><el-empty v-if="!providers.length" description="暂无可用 ERP，请联系管理员确认插件配置" /></template>
             <template v-if="step === 1">
@@ -14,6 +15,7 @@
                     <el-radio-button v-for="mode in authModes" :key="mode.key" :value="mode.key" :label="mode.key">{{ mode.label }}</el-radio-button>
                 </el-radio-group>
                 <p v-if="!supportsInteractive && selectedAuthMode?.notes?.length" class="lead-muted">{{ selectedAuthMode.notes.join('；') }}</p>
+                <el-alert v-if="schema" :title="renewalHint.title" :description="renewalHint.message" :type="renewalHint.type" :closable="false" show-icon class="lead-auth-renewal" />
                 <div v-if="interactiveMode && automaticCapability && !companies.length" class="lead-auth-automatic-heading">
                     <div><el-tag v-if="automaticReady" size="small" type="success">自动登录已就绪</el-tag><span v-else class="lead-muted">{{ captchaConfigLoading ? '正在检查自动登录设置…' : '自动识别未启用或不可用，仍可手动登录。' }}</span></div>
                     <el-button link type="primary" :disabled="busy || automatic.active.value" @click="captchaSettingsVisible = true">自动登录设置</el-button>
@@ -83,7 +85,7 @@
                 <el-checkbox v-if="!needsStoreProbe && preview.can_activate !== false" v-model="confirmed" style="margin-top: 18px">我已核对 ERP 及来源门店，确认启用{{ original.connected ? '并替换当前接入' : '' }}</el-checkbox>
                 <p class="lead-muted">验证有效期至 {{ time(probeExpires) }}；启用时不再次传送凭据。</p>
             </template>
-            <template v-if="step === 3"><el-result icon="success" title="ERP 接入已启用" sub-title="下一步完成首次同步，完整发布库存后才参与库存匹配。" /><el-form label-position="top" class="lead-form"><el-form-item label="自动同步"><el-switch v-model="settings.enabled" /></el-form-item><el-form-item label="同步间隔（分钟）"><el-input-number v-model="settings.interval_minutes" :min="15" :max="1440" :precision="0" /><p class="lead-muted">默认 60 分钟；修改周期不会替你开启牛云服务器计划任务。</p></el-form-item></el-form></template>
+            <template v-if="step === 3"><el-result icon="success" title="ERP 接入已启用" sub-title="下一步完成首次同步，完整发布库存后才参与库存匹配。" /><el-alert :title="renewalHint.title" :description="renewalHint.message" :type="renewalHint.type" :closable="false" show-icon class="lead-auth-renewal" /><el-form label-position="top" class="lead-form"><el-form-item label="自动同步"><el-switch v-model="settings.enabled" /></el-form-item><el-form-item label="同步间隔（分钟）"><el-input-number v-model="settings.interval_minutes" :min="15" :max="1440" :precision="0" /><p class="lead-muted">默认 60 分钟；修改周期不会替你开启牛云服务器计划任务。</p></el-form-item></el-form></template>
         </template>
         <template #footer><div class="lead-actions" style="justify-content: flex-end"><el-button :disabled="busy" @click="visible = false">关闭</el-button><el-button v-if="step > 0 && step < 3" :disabled="busy" @click="previous">上一步</el-button><el-button v-if="step === 0" type="primary" :disabled="!provider || loading" @click="step = 1">填写授权</el-button><el-button v-if="step === 1" type="primary" :disabled="challengeLoading || automatic.active.value" :loading="busy || automatic.working.value" @click="probe">{{ companies.length ? '确认公司并验证' : automaticMode ? '自动登录并预览' : '只读验证与预览' }}</el-button><el-button v-if="step === 2 && needsStoreProbe" type="primary" :disabled="!selectedStore" :loading="busy" @click="reprobeStore">确认门店并重新验证</el-button><el-button v-if="step === 2 && !needsStoreProbe" type="primary" :disabled="!confirmed || !probeToken || preview.can_activate === false" :loading="busy" @click="activate">确认启用接入</el-button><el-button v-if="step === 3" type="primary" :loading="busy" @click="initialSync">保存周期并开始首次同步</el-button></div></template>
     </HsxDrawer>
@@ -96,6 +98,7 @@ import CaptchaSettings from './CaptchaSettings.vue'
 import * as api from '../../api'
 import { errorText, time, type Row } from '../../composables/useLeadUi'
 import { useAutomaticAuthorization } from '../../composables/useAutomaticAuthorization'
+import { authRenewalLabel, authRenewalPolicy } from '../../composables/authRenewal'
 const props = defineProps<{ modelValue: boolean, merchantId: number, merchantName?: string }>()
 const emit = defineEmits<{ (e: 'update:modelValue', value: boolean): void, (e: 'changed'): void, (e: 'sync', merchantId: number): void }>()
 const visible = computed({ get: () => props.modelValue, set: value => { if (!value) invalidateRequests(); emit('update:modelValue', value) } })
@@ -109,6 +112,10 @@ const interactiveCredentialFields = computed(() => (schema.value?.fields || []).
 const interactiveFields = computed(() => schema.value?.interactive_auth?.fields || [])
 const authModes = computed<Row[]>(() => !supportsInteractive.value && Array.isArray(schema.value?.auth_modes) ? schema.value.auth_modes : [])
 const selectedAuthMode = computed(() => authModes.value.find(mode => mode.key === authMode.value))
+const activatedRenewal = ref<Row>({})
+const renewalHint = computed(() => step.value === 3 && activatedRenewal.value.message
+    ? { title: authRenewalLabel(activatedRenewal.value), message: String(activatedRenewal.value.message), type: activatedRenewal.value.automatic === true && activatedRenewal.value.ready === true ? 'success' as const : 'warning' as const }
+    : authRenewalPolicy(schema.value || {}, authMode.value))
 const activeFields = computed<Row[]>(() => interactiveMode.value ? interactiveCredentialFields.value : selectedAuthMode.value?.fields || schema.value?.fields || [])
 const activeScopeFields = computed<Row[]>(() => selectedAuthMode.value?.scope_fields || schema.value?.scope_fields || [])
 const captchaConfig = ref<Row>({}), captchaConfigLoading = ref(false), captchaSettingsVisible = ref(false), recognitionChoice = ref('')
@@ -149,7 +156,7 @@ async function loadCaptchaConfig() {
 function applyProvider(key: string) {
     restoring = true
     try {
-        clearSecrets(); Object.keys(scope).forEach(name => delete scope[name]); provider.value = key
+        clearSecrets(); activatedRenewal.value = {}; Object.keys(scope).forEach(name => delete scope[name]); provider.value = key
         if (original.value.provider === key) { Object.assign(credentials, original.value.credentials || {}); Object.assign(scope, original.value.scope || {}) }
         const savedMode = original.value.provider === key ? original.value.credentials?.auth_mode : ''
         authMode.value = supportsInteractive.value ? (schema.value?.interactive_auth?.default ? 'interactive' : 'token')
@@ -158,7 +165,7 @@ function applyProvider(key: string) {
         recognitionChoice.value = ''
     } finally { restoring = false }
 }
-function choose(key: string) { if (provider.value === key) return; invalidateRequests(); error.value = ''; applyProvider(key) }
+function choose(key: string) { if (provider.value === key || !providers.value.some(item => item.key === key && item.enabled !== false)) return; invalidateRequests(); error.value = ''; applyProvider(key) }
 const identityKey = computed(() => JSON.stringify([provider.value, ...activeFields.value.filter((field: Row) => !field.secret && field.identity).map((field: Row) => [field.key, String(credentials[field.key] || '')])]))
 function invalidateAuthorizationIdentity(clearScope: boolean) {
     invalidateRequests()
@@ -243,7 +250,7 @@ async function load() {
         const [list, connection] = await Promise.all([api.getProviders(), api.getConnection(props.merchantId)])
         if (!isCurrent(token)) return
         providers.value = list.data.items || []; original.value = connection.data || {}
-        applyProvider(original.value.provider || providers.value[0]?.key || '')
+        applyProvider(providers.value.some(item => item.key === original.value.provider) ? original.value.provider : providers.value[0]?.key || '')
         void loadCaptchaConfig()
         settings.enabled = original.value.connected ? !!original.value.enabled : true; settings.interval_minutes = Number(original.value.interval_minutes || 60)
     } catch (cause) { if (isCurrent(token)) error.value = errorText(cause, '接入信息读取失败，请关闭后重试。') }
@@ -298,8 +305,9 @@ async function activate() {
     if (!confirmed.value || !probeToken.value || needsStoreProbe.value || preview.value.can_activate === false || busy.value) return
     const token = ++sequence; busy.value = true; error.value = ''
     try {
-        await api.activateConnection(props.merchantId, { probe_token: probeToken.value, ...(scope.store_id ? { store_id: scope.store_id } : {}), confirm_switch: true })
+        const result = await api.activateConnection(props.merchantId, { probe_token: probeToken.value, ...(scope.store_id ? { store_id: scope.store_id } : {}), confirm_switch: true })
         if (!isCurrent(token)) return
+        activatedRenewal.value = result.data?.auth_renewal || {}
         clearSecrets(); probeToken.value = ''; step.value = 3; emit('changed')
     } catch (cause) { if (isCurrent(token)) error.value = errorText(cause, '启用未完成，验证可能已过期，请重新验证。') }
     finally { if (isCurrent(token)) busy.value = false }
@@ -315,6 +323,7 @@ onBeforeUnmount(() => { configSequence++; invalidateRequests(); clearSecrets() }
 </script>
 <style scoped>
 .lead-auth-methods { margin-bottom: 20px; }
+.lead-auth-renewal { margin-bottom: 16px; }
 .lead-auth-automatic-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 16px; }
 .lead-auth-automatic-heading > :first-child { flex: 1; }
 .lead-auth-automatic-heading :deep(.el-radio-group) { flex-basis: 100%; }

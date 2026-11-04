@@ -3,10 +3,6 @@ import type { Row } from '../composables/useLeadUi'
 
 const root = 'hsx_lead'
 const quiet = { showErrorMessage: false }
-export const getDashboard = () => request.get(`${root}/dashboard`, quiet)
-export const getViewerScope = () => request.get(`${root}/scope`, quiet)
-export const getOwners = (params: Row = {}) => request.get(`${root}/owners`, { ...quiet, params })
-export const transferLeadOwner = (id: number, data: { owner_uid: number; expected_owner_uid: number }) => request.post(`${root}/leads/${id}/owner`, data, quiet)
 export const getCatalog = () => request.get(`${root}/catalog`, quiet)
 export const saveCatalog = (data: { content: string, format: 'csv' | 'json' }) => request.put(`${root}/catalog`, data, quiet)
 export const getMembers = (keyword = '') => request.get(`${root}/members`, { ...quiet, params: { keyword } })
@@ -29,17 +25,5 @@ export const syncMerchant = (id: number) => request.post(`${root}/merchants/${id
 export const getSync = (id: number) => request.get(`${root}/sync/${id}`, quiet)
 export const advanceSync = (id: number) => request.post(`${root}/sync/${id}/advance`, {}, quiet)
 export const getInventory = (params: Row) => request.get(`${root}/inventory`, { ...quiet, params })
-export const getLeads = (params: Row) => request.get(`${root}/leads`, { ...quiet, params })
-export const getLead = (id: number) => request.get(`${root}/leads/${id}`, quiet)
-export const saveLead = (data: Row) => data.id ? request.put(`${root}/leads/${data.id}`, data, quiet) : request.post(`${root}/leads`, data, quiet)
-export const getMatches = (id: number) => request.get(`${root}/leads/${id}/matches`, quiet)
-export const assignLead = (id: number, data: Row) => request.post(`${root}/leads/${id}/assign`, data, quiet)
-export const getWorkorders = (params: Row) => request.get(`${root}/workorders`, { ...quiet, params })
-export const getWorkorder = (id: number) => request.get(`${root}/workorders/${id}`, quiet)
-export const workorderAction = (id: number, action: string, data: Row = {}) => request.post(`${root}/workorders/${id}/${action}`, data, quiet)
-export const getCommissions = (params: Row) => request.get(`${root}/commissions`, { ...quiet, params })
-export const commissionAction = (id: number, action: 'receive' | 'refund', data: Row) => request.post(`${root}/commissions/${id}/${action}`, data, quiet)
 export const getNoticeConfig = () => request.get(`${root}/notice/config`, quiet)
 export const saveNoticeConfig = (data: Row) => request.put(`${root}/notice/config`, data, quiet)
-export const getTaskNotice = (id: number) => request.get(`${root}/workorders/${id}/notice`, quiet)
-export const retryTaskNotice = (id: number) => request.post(`${root}/workorders/${id}/notice/retry`, {}, quiet)

@@ -46,6 +46,7 @@ final class AuthChallengeService
             $rate['count']=(int)$rate['count']+1;
             if (!Cache::set($key,$rate,max(1,(int)$rate['reset_at']-time()))) throw new CommonException('无法保存授权校验状态，请检查缓存配置');
         });
+        (new ProviderChannelService($this->context->site))->assertEnabled($definition->key());
         $challenge=$provider->beginAuthorization();
         if (!is_array($challenge['public']??null) || !is_array($challenge['state']??null)) {
             throw new ProviderException('schema_changed','ERP验证码授权返回结构变化，请重新获取');
@@ -91,6 +92,7 @@ final class AuthChallengeService
         try {
             $answer=$this->answer($claim,$capability,$authorization);
             // The provider's HTTP request deliberately happens after the claim commits.
+            (new ProviderChannelService($this->context->site))->assertEnabled($definition->key());
             $result=$provider->authorize($credentials,$claim['private_state'],$answer);
             if (($result['status']??null)==='authorized') {
                 $authorized=$this->authorizedCredentials($result['credentials']??null,$credentials);
@@ -127,6 +129,7 @@ final class AuthChallengeService
     private function capability(string $key): array
     {
         $definition=$this->providers->definition($key);
+        (new ProviderChannelService($this->context->site))->assertEnabled($definition->key());
         $metadata=$definition->metadata();
         $capability=$metadata['interactive_auth']??null;
         $provider=$this->providers->get($definition->key());
@@ -176,6 +179,8 @@ final class AuthChallengeService
 
     private function assertCurrent(int $merchantId,array $binding,bool $lock): void
     {
+        // Follow the shared site -> merchant lock order at commit boundaries.
+        (new ProviderChannelService($this->context->site))->assertEnabled((string)$binding['provider'],$lock);
         $merchant=$this->context->connectionMerchant($merchantId,$lock);
         if ((int)$merchant['status']!==1) throw new CommonException('商户已暂停，不能继续授权');
         if ($this->revision($merchantId)!==$binding['revision']) throw new CommonException('ERP接入配置已变化，请重新获取验证码');

@@ -1,21 +1,53 @@
-<template><view><view class="coop-balance-card"><view class="coop-muted">可提现收益</view><view class="coop-balance">{{ coopMoney(wallet.available) }}</view><view class="coop-withdraw-entry"><u-button type="primary" shape="circle" text="申请提现" :disabled="loading || Number(wallet.available || 0) <= 0" @click="open" /></view><view class="coop-income-summary"><view><text>冻结中</text><text>{{ coopMoney(wallet.frozen) }}</text></view><view><text>累计到账</text><text>{{ coopMoney(wallet.total_income) }}</text></view><view><text>已提现</text><text>{{ coopMoney(wallet.withdrawn) }}</text></view></view></view><view class="coop-wallet-note">仅已支付佣金产生收益，提现申请需平台实际转账后确认。</view><CoopState v-if="loading || error" :loading="loading" :error="error" @retry="$emit('reload')" /><template v-else><view class="coop-form-section"><view class="coop-section-title">收益明细</view><view v-for="row in entries" :key="row.id" class="coop-wallet-entry"><view><view>{{ row.type_label || entryLabels[row.type] || row.remark || '收益变动' }}</view><text>{{ coopDate(row.create_time) }}</text></view><text :class="{ credit: Number(row.balance_delta) > 0 }">{{ Number(row.balance_delta) > 0 ? '+' : '' }}{{ coopMoney(row.balance_delta) }}</text></view><view v-if="!entries.length" class="coop-muted">暂无余额变动记录</view></view><view class="coop-form-section"><view class="coop-section-title">提现记录</view><view v-for="row in withdrawals" :key="row.id" class="coop-wallet-entry"><view><view>{{ withdrawalLabels[row.status] || '待核对' }} · {{ coopMoney(row.amount) }}</view><text>{{ row.payee_masked || row.payee_account_masked || '收款账户已脱敏' }}</text><text>{{ coopDate(row.create_time) }}</text><text v-if="row.remark">{{ row.remark }}</text></view><text>{{ row.status === 'paid' ? '已实际打款' : row.status === 'rejected' ? '已解冻' : '待平台处理' }}</text></view><view v-if="!withdrawals.length" class="coop-muted">暂无提现申请</view></view><view v-if="hasMore" class="coop-loadmore" @tap="!loading && $emit('more')">{{ loading ? '正在读取更早记录…' : '加载更早的收益和提现记录' }}</view></template><CoopTaskSheet :show="visible" title="申请提现" :busy="busy" @close="close"><view class="coop-form-section"><view class="coop-muted">可申请 {{ coopMoney(wallet.available) }}；申请后冻结相应收益，不代表已打款。</view><view class="coop-form-column"><text>提现金额</text><u-input v-model="form.amount" type="digit" placeholder="输入提现金额" :disabled="busy" /></view><view class="coop-form-row"><text>收款方式</text><picker :range="methods" range-key="label" :value="methodIndex" :disabled="busy" @change="form.payee_type = methods[Number($event.detail.value)].value"><view>{{ methods[methodIndex].label }} ›</view></picker></view><view class="coop-form-column"><text>收款人姓名</text><u-input v-model="form.payee_name" placeholder="实际收款人姓名" :disabled="busy" maxlength="80" /></view><view class="coop-form-column"><text>收款账号</text><u-input v-model="form.payee_account" placeholder="请核对账号，平台按此账户人工打款" :disabled="busy" maxlength="200" /></view></view><view v-if="submitError" class="coop-inline-error coop-form-error">{{ submitError }}</view><template #footer><u-button type="primary" shape="circle" text="确认申请并冻结收益" :loading="busy" :disabled="busy" @click="submit" /></template></CoopTaskSheet></view></template>
+<template>
+    <view>
+        <view class="coop-balance-card">
+            <view class="coop-muted">会员佣金账户 · 可提现收益</view>
+            <view class="coop-balance">{{ coopMoney(wallet.available) }}</view>
+            <view class="coop-withdraw-entry"><u-button type="primary" shape="circle" text="申请提现" :disabled="loading || Number(wallet.available || 0) <= 0" @click="withdraw" /></view>
+            <view class="coop-income-summary"><view><text>提现处理中</text><text>{{ coopMoney(wallet.frozen) }}</text></view><view><text>累计佣金</text><text>{{ coopMoney(wallet.total_income) }}</text></view><view><text>已提现</text><text>{{ coopMoney(wallet.withdrawn) }}</text></view></view>
+        </view>
+        <view class="coop-wallet-note">本账户包含其他业务佣金。协作净收益也进入这里；提现条件与手续费以会员中心申请页为准。</view>
+        <view class="coop-form-section coop-wallet-links"><view class="coop-menu-row" @tap="cashOutRecords"><text>提现记录</text><u-icon name="arrow-right" size="14" color="#929ba8" /></view><view class="coop-menu-row" @tap="commissionAccount"><text>会员佣金总账</text><u-icon name="arrow-right" size="14" color="#929ba8" /></view></view>
+        <CoopState v-if="loading || error" :loading="loading" :error="error" @retry="$emit('reload')" />
+        <view v-else class="coop-form-section">
+            <view class="coop-section-title">协作收益明细</view>
+            <view v-for="row in entries" :key="row.id" class="coop-wallet-entry"><view><view>{{ row.customer_name ? row.customer_name + '的交付' : '协作佣金收益' }}</view><text>{{ row.status === 'paid' ? '已支付佣金形成的发布方净收益' : '款项状态待核对，不代表已到账' }}</text><text>{{ coopDate(row.pay_time || row.paid_at || row.create_time) }}</text></view><text :class="{ credit: row.status === 'paid' }">{{ row.status === 'paid' ? '+' : '' }}{{ coopMoney(row.net_amount ?? row.amount) }}</text></view>
+            <view v-if="!entries.length" class="coop-muted">暂无已支付的协作收益</view>
+            <view v-if="hasMore" class="coop-loadmore" @tap="!loading && $emit('more')">{{ loading ? '正在读取更早记录…' : '加载更早的协作收益' }}</view>
+        </view>
+    </view>
+</template>
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, ref } from 'vue'
-import { getToken } from '@/utils/common'
-import { cooperationWithdrawal, coopDate, coopError, coopMoney, coopRequestId, type CoopRow } from '../../api/cooperation'
-import CoopTaskSheet from './CoopTaskSheet.vue'
+import { computed } from 'vue'
+import { redirect } from '@/utils/common'
+import { coopDate, coopMoney, type CoopRow } from '../../api/cooperation'
 import CoopState from './CoopState.vue'
 const props = defineProps<{ wallet: CoopRow; loading?: boolean; error?: string }>()
-const emit = defineEmits<{ (event: 'reload' | 'changed' | 'more'): void; (event: 'overlay', value: boolean): void }>()
-let disposed = false
-const visible = ref(false), busy = ref(false), submitError = ref(''), form = reactive({ amount: '', payee_type: 'bank', payee_name: '', payee_account: '', request_id: coopRequestId() })
-const methods = [{ value: 'bank', label: '银行卡' }, { value: 'wechat', label: '微信账号' }, { value: 'alipay', label: '支付宝' }], methodIndex = computed(() => Math.max(0, methods.findIndex(item => item.value === form.payee_type)))
-const entries = computed(() => Array.isArray(props.wallet.entries) ? props.wallet.entries : props.wallet.entries?.data || []), withdrawals = computed(() => Array.isArray(props.wallet.withdrawals) ? props.wallet.withdrawals : props.wallet.withdrawals?.data || [])
-const hasMore = computed(() => entries.value.length < Number(props.wallet.entries?.total || 0) || withdrawals.value.length < Number(props.wallet.withdrawals?.total || 0))
-const entryLabels: Record<string, string> = { commission: '协作佣金收益', commission_income: '协作佣金收益', withdrawal_freeze: '提现申请冻结', withdrawal_paid: '提现已打款', withdrawal_reject: '提现驳回解冻' }, withdrawalLabels: Record<string, string> = { pending: '待处理', paid: '已打款', rejected: '已驳回' }
-function open() { if (busy.value) return; visible.value = true; submitError.value = ''; form.request_id = coopRequestId(); emit('overlay', true) }
-function close() { if (busy.value) return; visible.value = false; emit('overlay', false) }
-async function submit() { if (busy.value) return; submitError.value = ''; if (!/^\d{1,12}(\.\d{1,2})?$/.test(form.amount) || Number(form.amount) <= 0 || Number(form.amount) > Number(props.wallet.available)) { submitError.value = '请输入不超过可用收益的有效金额，最多两位小数'; return }; if (!form.payee_name.trim() || !form.payee_account.trim()) { submitError.value = '请填写真实收款人和账号'; return }; busy.value = true; const identity = String(getToken() || ''); try { await cooperationWithdrawal({ ...form, payee_name: form.payee_name.trim(), payee_account: form.payee_account.trim() }); if (disposed || identity !== String(getToken() || '')) return; visible.value = false; emit('overlay', false); form.amount = ''; form.payee_account = ''; form.request_id = coopRequestId(); uni.showToast({ title: '提现已申请，等待平台打款', icon: 'none' }); emit('changed') } catch (cause) { if (disposed || identity !== String(getToken() || '')) return; submitError.value = coopError(cause, '申请结果未确认，请刷新提现记录核对，勿重复申请') } finally { busy.value = false } }
-onBeforeUnmount(() => { disposed = true; form.payee_account = ''; form.payee_name = '' })
-defineExpose({ close })
+defineEmits<{ (event: 'reload' | 'more'): void }>()
+const entries = computed(() => Array.isArray(props.wallet.entries) ? props.wallet.entries : props.wallet.entries?.data || [])
+const hasMore = computed(() => entries.value.length < Number(props.wallet.entries?.total || 0))
+function withdraw() { uni.setStorageSync('cashOutAccountType', 'commission'); redirect({ url: '/app/pages/member/apply_cash_out' }) }
+function cashOutRecords() { uni.setStorageSync('cashOutAccountType', 'commission'); redirect({ url: '/app/pages/member/cash_out' }) }
+function commissionAccount() { redirect({ url: '/app/pages/member/commission' }) }
 </script>
+<style scoped lang="scss">
+@import './cooperation-shared';
+@include hsx-coop-form-section;
+@include hsx-coop-section-title;
+@include hsx-coop-muted;
+@include hsx-coop-menu-row;
+@include hsx-coop-loadmore;
+.coop-balance-card { padding: 40rpx 30rpx 26rpx; background: #fff; text-align: center; }
+.coop-balance { font-size: 76rpx; font-weight: 650; line-height: 1.6; color: #242930; margin: 12rpx 0; }
+.coop-withdraw-entry { width: 250rpx; margin: 0 auto 32rpx; }
+.coop-income-summary { display: flex; gap: 20rpx; padding-top: 28rpx; border-top: 1rpx solid #edf0f3; }
+.coop-income-summary>view { display: flex; flex-direction: column; gap: 13rpx; flex: 1; font-size: 27rpx; color: #5e6a78; }
+.coop-income-summary>view>text:first-child { font-size: 21rpx; color: #929da9; }
+.coop-wallet-note { font-size: 23rpx; line-height: 1.8; color: #939daa; text-align: center; padding: 22rpx 30rpx; }
+.coop-wallet-entry { display: flex; align-items: flex-start; justify-content: space-between; gap: 20rpx; font-size: 26rpx; padding: 22rpx 0; border-bottom: 1rpx solid #edf0f3; line-height: 1.7; color: #586778; }
+.coop-wallet-entry>view { display: flex; flex-direction: column; gap: 6rpx; min-width: 0; }
+.coop-wallet-entry>view>text { color: #949eab; font-size: 21rpx; word-break: break-word; }
+.coop-wallet-entry>text { flex: none; font-size: 25rpx; }
+.coop-wallet-entry>text.credit { color: #537561; }
+.coop-wallet-links { padding-top: 0; padding-bottom: 0; }.coop-wallet-links .coop-menu-row:first-child { border-top: 0; }
+</style>

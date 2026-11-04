@@ -9,7 +9,7 @@ final class Data
 {
     public static function query(string $table, int $site)
     {
-        if (!in_array($table, ['merchant','connection','inventory','sync_run','lead','task','commission','followup','audit'], true) || $site <= 0) {
+        if (!in_array($table, ['merchant','connection','inventory','sync_run','audit'], true) || $site <= 0) {
             throw new CommonException('无效的站点或数据范围');
         }
         return Db::name('hsx_lead_'.$table)->where('site_id', $site);

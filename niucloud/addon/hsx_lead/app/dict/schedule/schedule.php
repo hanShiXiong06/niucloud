@@ -8,5 +8,12 @@ return [[
     'time' => ['type' => 'min', 'min' => 1],
     'class' => 'addon\\hsx_lead\\app\\job\\SyncInventory',
     'function' => 'doJob',
+],[
+    'key' => 'hsx_lead_promotion_settle',
+    'name' => '商户一级推广奖励到期结算',
+    'desc' => '核对原付款及退款状态后，将到期奖励记入框架会员佣金；不执行提现打款',
+    'time' => ['type' => 'min', 'min' => 5],
+    'class' => 'addon\\hsx_lead\\app\\job\\SettlePromotion',
+    'function' => 'doJob',
 ]];
 

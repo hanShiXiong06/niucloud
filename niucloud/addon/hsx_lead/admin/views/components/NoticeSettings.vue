@@ -1,5 +1,5 @@
 <template>
-    <HsxDrawer v-model="visible" title="商户工单通知" subtitle="统一使用牛云通知渠道；工单始终保留在商户工作台，不以消息送达代替业务状态。" size="lg" :body-loading="loading" :confirm-loading="saving">
+    <HsxDrawer v-model="visible" title="商户协作通知" subtitle="使用牛云通知渠道；交付记录始终保留在商户工作台，不以消息送达代替业务状态。" size="lg" :body-loading="loading" :confirm-loading="saving">
         <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" class="lead-error-banner" />
         <el-tabs v-model="channel" class="notice-tabs">
             <el-tab-pane label="公众号" name="wechat" />
@@ -16,7 +16,7 @@
                 <el-collapse-item v-for="item in activeTemplates" :key="channel + item.phase" :name="item.phase">
                     <template #title><div class="notice-phase-heading"><strong>{{ item.name || phases[item.phase] }}</strong><el-tag size="small" :type="item.enabled ? 'success' : 'info'">{{ item.enabled ? '框架已开启' : item.configured ? '待框架配置' : '未配置映射' }}</el-tag><el-tag v-if="isDirty(item, channel)" size="small" type="warning">未保存</el-tag></div></template>
                     <p class="lead-muted">{{ item.message || '模板消息仅包含工单提示，不包含客户姓名、电话和地址。' }}</p>
-                    <el-form label-position="top" class="lead-form" :disabled="saving">
+                    <el-form label-position="top" class="lead-form" :disabled="saving || !canEdit">
                         <template v-if="channel === 'weapp'">
                             <el-form-item label="真实微信公共模板编号（tid）"><el-input v-model.trim="item.tid" placeholder="从本站小程序模板库核对，不填写私有模板 ID" /></el-form-item>
                             <el-form-item label="关键词 ID 列表（kid_list）"><el-input v-model="item.kid_list_text" placeholder="填写该模板实际提供的关键词 ID，以逗号分隔" /></el-form-item>
@@ -43,7 +43,7 @@
             <el-descriptions v-if="currentSetting.phases?.length" :column="1" border><el-descriptions-item v-for="item in currentSetting.phases" :key="item.phase" :label="phases[item.phase]">{{ item.message || item.status || (item.enabled ? '已开启，请核对真实投递记录' : '尚未开启') }}</el-descriptions-item></el-descriptions>
         </template>
         <el-collapse class="notice-extra"><el-collapse-item title="企业微信与站内待办说明"><p class="lead-muted">当前商户使用本站会员身份。企业微信通知面向已绑定的员工身份，不能把商户会员当作员工直接发送；本页不提供无绑定关系的企微开关。</p><p class="lead-muted">工单本身就是商户工作台的站内待办，目前不是独立站内信。配置齐全、已入队或框架有记录，都不等于客户已经收到通知。</p></el-collapse-item></el-collapse>
-        <template #footer><div class="notice-footer"><span class="lead-muted">{{ channel === 'sms' ? '短信在框架配置，本页不重复保存' : changedTemplates.length ? '当前渠道有 ' + changedTemplates.length + ' 个阶段待保存；其他渠道不会被覆盖' : '当前渠道没有待保存修改' }}</span><div class="lead-actions"><el-button :disabled="saving" @click="visible = false">关闭</el-button><el-button :loading="loading" :disabled="saving" @click="load">刷新状态</el-button><el-button v-if="channel !== 'sms'" type="primary" :loading="saving" :disabled="loading || !!error || !changedTemplates.length" @click="save">保存当前渠道映射</el-button></div></div></template>
+        <template #footer><div class="notice-footer"><span class="lead-muted">{{ channel === 'sms' ? '短信在框架配置，本页不重复保存' : !canEdit ? '当前账号仅可查看通知配置' : changedTemplates.length ? '当前渠道有 ' + changedTemplates.length + ' 个阶段待保存；其他渠道不会被覆盖' : '当前渠道没有待保存修改' }}</span><div class="lead-actions"><el-button :disabled="saving" @click="visible = false">关闭</el-button><el-button :loading="loading" :disabled="saving" @click="load">刷新状态</el-button><el-button v-if="channel !== 'sms' && canEdit" type="primary" :loading="saving" :disabled="loading || !!error || !changedTemplates.length" @click="save">保存当前渠道映射</el-button></div></div></template>
     </HsxDrawer>
 </template>
 <script setup lang="ts">
@@ -54,7 +54,7 @@ import HsxDrawer from '@/addon/hsx_components/components/HsxDrawer/index.vue'
 import { getNoticeConfig, saveNoticeConfig } from '../../api'
 import { errorText, type Row } from '../../composables/useLeadUi'
 type Channel = 'weapp' | 'wechat' | 'sms'
-const props = defineProps<{ modelValue: boolean }>()
+const props = withDefaults(defineProps<{ modelValue: boolean; canEdit?: boolean }>(), { canEdit: false })
 const emit = defineEmits<{ (e: 'update:modelValue', value: boolean): void }>()
 const visible = computed({ get: () => props.modelValue, set: value => { if (!saving.value) emit('update:modelValue', value) } })
 const router = useRouter(), channel = ref<Channel>('wechat')
@@ -97,10 +97,10 @@ async function load() {
     catch (cause) { if (token === sequence) error.value = errorText(cause, '通知配置读取失败。') }
     finally { if (token === sequence) loading.value = false }
 }
-function clearPhase(item: Row) { item.tid = ''; item.temp_key = ''; item.kid_list_text = ''; item.scene_desc = ''; item.fields = []; item.confirmed = false }
+function clearPhase(item: Row) { if (!props.canEdit) return; item.tid = ''; item.temp_key = ''; item.kid_list_text = ''; item.scene_desc = ''; item.fields = []; item.confirmed = false }
 async function openFramework(key: string) { if (!routes[key]) return; try { await router.push(routes[key]) } catch { ElMessage.warning('未能打开配置页，请核对当前岗位权限。') } }
 async function save() {
-    if (saving.value || loading.value || channel.value === 'sms' || !changedTemplates.value.length) return
+    if (!props.canEdit || saving.value || loading.value || channel.value === 'sms' || !changedTemplates.value.length) return
     const current = channel.value, updates = changedTemplates.value
     if (updates.some(item => !item.confirmed)) { ElMessage.warning('请确认实际修改阶段的真实模板与关键词；清空映射也需确认'); return }
     const token = sequence; saving.value = true

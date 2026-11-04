@@ -1,7 +1,7 @@
 <template>
     <section>
-        <LeadSectionHeader title="全店库存快照" description="按型号查看各门店的库存参考；不会修改商户 ERP 的价格或库存。"><el-button :icon="Refresh" :loading="loading" @click="load">刷新快照</el-button></LeadSectionHeader>
-        <el-alert title="默认仅查看在售且有货的设备。下架、无货及状态待核实的设备不参与库存匹配；快照不会锁货，接单前仍需核对实物。" type="info" :closable="false" show-icon class="lead-banner" />
+        <LeadSectionHeader title="库存快照"><el-button :icon="Refresh" :loading="loading" @click="load">刷新快照</el-button></LeadSectionHeader>
+        <el-alert title="默认只看在售有货；库存快照不锁货，接单前请核对实物。" type="info" show-icon closable class="lead-banner" />
         <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" class="lead-error-banner" />
         <div class="lead-card lead-table-card">
             <LeadFilterBar :query="query" :time-fields="timeFields" :reset-values="resetValues" :extra-active-count="Number(regionActive) + Number(!!query.merchant_id) + Number(query.inventory_scope !== 'sellable')" default-time-field="fetched_at" :total="total" :loading="loading" label="库存快照" search-label="商品或规格" placeholder="搜索型号、规格或商品名称" @apply="applyFilters" @reload="load">
@@ -77,7 +77,7 @@ import { errorText, money, region, time, useLeadList, type Row } from '../../com
 const resetValues = { merchant_id: '', merchant_label: '', province_id: '', city_id: '', district_id: '', province_name: '', city_name: '', district_name: '', inventory_scope: 'sellable' }
 const { rows, total, loading, error, query, load, search } = useLeadList(api.getInventory, { ...resetValues, time_field: 'fetched_at', start_time: 0, end_time: 0 })
 const merchants = ref<Row[]>([]), merchantLoading = ref(false), merchantError = ref(''), merchantTotal = ref(0), merchantPage = ref(0), merchantKeyword = ref(''), merchantDraft = ref<string | number>(''), merchantSelection = ref<Row>({}), merchantOpened = ref(false), regionOpened = ref(false), regionDraft = reactive<Row>({}), drawer = ref(false), detail = ref<Row>({})
-const inventoryScopeOptions = [{ value: 'sellable', label: '在售有货' }, { value: 'all', label: '全部快照（含不可售）' }, { value: 'off_shelf', label: '已下架' }, { value: 'sold_out', label: '无可售库存' }, { value: 'unverified', label: '状态或库存待核实' }]
+const inventoryScopeOptions = [{ value: 'sellable', label: '在售有货' }, { value: 'all', label: '全部快照（含不可售）' }, { value: 'off_shelf', label: '已下架' }, { value: 'sold_out', label: '已售出 / 无可售库存' }, { value: 'unverified', label: '未确认上架 / 状态待核实' }]
 const inventoryScopeOpened = ref(false), inventoryScopeDraft = ref('sellable')
 const inventoryScopeLabel = computed(() => inventoryScopeOptions.find(option => option.value === query.inventory_scope)?.label || '在售有货')
 const inventoryTone = (row: Row) => row.is_sellable === true ? 'success' : row.sale_status === 'unknown' ? 'warning' : 'info'

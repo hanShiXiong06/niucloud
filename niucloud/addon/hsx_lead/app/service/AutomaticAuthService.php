@@ -37,6 +37,7 @@ final class AutomaticAuthService
         $this->context->manager();
         $key=Data::text($input,'provider',60,true);
         $definition=$this->providers->definition($key);
+        (new ProviderChannelService($this->context->site))->assertEnabled($definition->key());
         $metadata=$definition->metadata();
         $capability=$metadata['interactive_auth']??[];
         if (($capability['type']??null)!=='image_captcha' || ($capability['automatic_recognition']??false)!==true
@@ -53,6 +54,7 @@ final class AutomaticAuthService
         if (!$resumeOnly && (empty($settings['enabled']) || empty($settings['api_key']))) throw new CommonException('自动登录尚未配置，请先配置识别服务，或改用手动验证码');
         $fingerprint=hash('sha256',Data::json([$definition->key(),$credentials,$scope,$password]));
         return Db::transaction(function()use($merchantId,$definition,$credentials,$scope,$password,$requestId,$fingerprint,$settings,$resumeOnly){
+            (new ProviderChannelService($this->context->site))->assertEnabled($definition->key(),true);
             $this->merchant($merchantId,true);
             $requestKey=$this->requestKey($merchantId,$requestId);
             $prior=$this->pointer($requestKey,$merchantId);
@@ -96,9 +98,12 @@ final class AutomaticAuthService
         $secretTrace = \addon\hsx_lead\app\support\PhpRuntime::guardSecrets();
         $this->context->manager();
         $claim=Db::transaction(function()use($merchantId,$token){
+            $pending=$this->read($token,$merchantId); $this->owner($pending,$merchantId);
+            $channelOpen=$this->channelOpen((string)$pending['provider'],true);
             $this->merchant($merchantId,true);
             $state=$this->read($token,$merchantId); $this->owner($state,$merchantId);
             if ($state['status']!=='processing') return ['public'=>$this->publicState($state,$token)];
+            if (!$channelOpen) return ['public'=>$this->endForClosedChannel($token,$state)];
             if ((int)$state['expires_at']<=time()) return ['public'=>$this->end($token,$state,'expired','本次自动登录已过期，请重新登录或手动填写验证码')];
             if ($state['revision']!==$this->revision($merchantId)) return ['public'=>$this->end($token,$state,'cancelled','ERP接入配置已变化，本次自动登录已停止，请重新核对账号')];
             if ($state['lease']!=='' && (int)$state['lease_until']>time()) return ['public'=>$this->publicState($state,$token)];
@@ -117,6 +122,7 @@ final class AutomaticAuthService
         if (isset($claim['public'])) return $claim['public'];
         $state=$claim['state'];
         try {
+            (new ProviderChannelService($this->context->site))->assertEnabled((string)$state['provider']);
             $settings=$this->config->credentials();
             if (empty($settings['enabled']) || empty($settings['api_key']) || (string)$settings['revision']!==$state['config_revision']) {
                 throw new CommonException('识别服务配置已变化或已关闭，本次自动登录已停止，请重新发起');
@@ -156,12 +162,14 @@ final class AutomaticAuthService
         // Recheck cancellation before the irreversible API call. This short claim
         // is committed before HTTP; the counter is conservatively not refunded.
         $canSubmit=Db::transaction(function()use($merchantId,$token,$state){
+            (new ProviderChannelService($this->context->site))->assertEnabled((string)$state['provider'],true);
             $this->merchant($merchantId,true);
             $current=$this->read($token,$merchantId); $this->owner($current,$merchantId);
             return $this->sameClaim($current,$state) && $current['revision']===$this->revision($merchantId)
                 && (int)$current['expires_at']>time();
         });
         if (!$canSubmit) return $this->current($merchantId,$token);
+        (new ProviderChannelService($this->context->site))->assertEnabled((string)$state['provider']);
         $taskId=$this->recognizer->create($settings['api_key'],$challenge['captcha_image'],4);
         return $this->commit($merchantId,$token,$state,['stage'=>'recognizing','recognition_task'=>$taskId,
             'challenge_token'=>$challenge['challenge_token'],'expires_at'=>min((int)$state['expires_at'],(int)$challenge['expires_at']),
@@ -171,6 +179,7 @@ final class AutomaticAuthService
     private function queryRecognition(int $merchantId,string $token,#[\SensitiveParameter] array $state,#[\SensitiveParameter] array $settings): array
     {
         $secretTrace = \addon\hsx_lead\app\support\PhpRuntime::guardSecrets();
+        (new ProviderChannelService($this->context->site))->assertEnabled((string)$state['provider']);
         $result=$this->recognizer->result($settings['api_key'],(string)($state['recognition_task']??''),4);
         if (($result['status']??null)==='processing') return $this->commit($merchantId,$token,$state,
             ['message'=>'验证码仍在识别中，正在等待原任务结果','next_poll_at'=>time()+self::POLL]);
@@ -183,6 +192,7 @@ final class AutomaticAuthService
     private function login(int $merchantId,string $token,#[\SensitiveParameter] array $state): array
     {
         $secretTrace = \addon\hsx_lead\app\support\PhpRuntime::guardSecrets();
+        (new ProviderChannelService($this->context->site))->assertEnabled((string)$state['provider']);
         try {
             $result=(new ConnectionService($this->context,$this->providers))->probe($merchantId,
                 ['provider'=>$state['provider'],'credentials'=>$state['credentials'],'scope'=>$state['scope'],
@@ -201,9 +211,11 @@ final class AutomaticAuthService
     {
         $secretTrace = \addon\hsx_lead\app\support\PhpRuntime::guardSecrets();
         return Db::transaction(function()use($merchantId,$token,$claim,$changes){
+            $channelOpen=$this->channelOpen((string)$claim['provider'],true);
             $this->merchant($merchantId,true);
             $state=$this->read($token,$merchantId); $this->owner($state,$merchantId);
             if (!$this->sameClaim($state,$claim)) return $this->publicState($state,$token);
+            if (!$channelOpen) return $this->endForClosedChannel($token,$state);
             if ((int)$state['expires_at']<=time()) return $this->end($token,$state,'expired','本次自动登录已过期，请重新验证');
             if ($state['revision']!==$this->revision($merchantId)) return $this->end($token,$state,'cancelled','ERP接入配置已变化，本次结果未采用');
             $settings=$this->config->credentials();
@@ -217,6 +229,19 @@ final class AutomaticAuthService
                 ['provider'=>$state['provider'],'attempts'=>(int)$state['attempts']]);
             return $this->publicState($state,$token);
         });
+    }
+
+    /** Closed channels stop existing short-lived authorization tasks without another HTTP call. */
+    private function channelOpen(string $provider,bool $lockSite=false): bool
+    {
+        try { (new ProviderChannelService($this->context->site))->assertEnabled($provider,$lockSite); return true; }
+        catch(ProviderException $error) { if ($error->reason()==='channel_disabled') return false; throw $error; }
+    }
+
+    private function endForClosedChannel(string $token,#[\SensitiveParameter] array $state): array
+    {
+        $secretTrace = \addon\hsx_lead\app\support\PhpRuntime::guardSecrets();
+        return $this->end($token,$state,'cancelled','该ERP登录渠道已关闭，本次自动登录已停止；不会继续提交识别或登录。已提交的识别任务可能计费。');
     }
 
     private function end(string $token,#[\SensitiveParameter] array $state,string $status,string $message): array

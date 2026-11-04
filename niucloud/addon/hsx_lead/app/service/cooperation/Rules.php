@@ -6,6 +6,23 @@ use core\exception\CommonException;
 /** Integer minor units throughout; no float arithmetic in settlement calculations. */
 final class Rules
 {
+    public static function demandLimit($value): int
+    {
+        if ((!is_int($value)&&!is_string($value)) || !preg_match('/^(?:0|[1-9][0-9]{0,3})$/D',(string)$value) || (int)$value>5000) throw new CommonException('需求型号数量上限请填写0—5000的整数');
+        return (int)$value;
+    }
+    /** Zero removes the business limit; the bounded directory still protects request size. */
+    public static function demandIds($ids,int $limit): array
+    {
+        if (!is_array($ids)||!$ids||!\addon\hsx_lead\app\support\PhpRuntime::isList($ids)||count($ids)>5000) throw new CommonException('请从型号清单选择客户需求，单次不得超过完整清单范围');
+        $unique=[];
+        foreach($ids as $id) {
+            if (!is_string($id)||$id===''||strlen($id)>100) throw new CommonException('所选型号格式不正确，请重新选择');
+            $unique[$id]=$id;
+        }
+        if ($limit>0&&count($unique)>$limit) throw new CommonException('本次最多选择'.$limit.'个客户需求型号，请减少后重试');
+        return array_values($unique);
+    }
     public static function cents($value): int
     {
         if ((!is_string($value)&&!is_int($value)) || !preg_match('/^(0|[1-9][0-9]{0,11})(?:\.([0-9]{1,2}))?$/D',(string)$value,$m)) throw new CommonException('金额请填写非负数字，最多两位小数');
@@ -42,6 +59,6 @@ final class Rules
     }
     public static function status(string $status): string
     {
-        return ['selecting'=>'待选门店','assigned'=>'待接单','following'=>'跟进中','unpaid'=>'成交待付佣','paid'=>'已付佣','no_deal'=>'未成交','cancelled'=>'已结束'][$status]??'待核对';
+        return ['selecting'=>'待选门店','assigned'=>'待接单','following'=>'跟进中','unpaid'=>'成交待付佣','paid'=>'已付佣','no_deal'=>'未成交','cancelled'=>'已取消'][$status]??'待核对';
     }
 }

@@ -1,6 +1,6 @@
 <template>
     <section>
-        <header class="coop-head"><div><h2>客服抽检与复核</h2><p>记录客户真实反馈，再由人工判断；未成交次数不直接等于飞单或违规。</p></div><el-button type="primary" @click="beginCreate()">记录客户回访</el-button></header>
+        <header class="coop-head"><h2>客服抽检</h2><el-button type="primary" @click="beginCreate()">记录客户回访</el-button></header>
         <CooperationFilter :query="query" :loading="loading" :statuses="statuses" placeholder="搜索线索、客户或回访内容" @search="search" @reload="load" />
         <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="coop-error" />
         <div class="coop-surface"><HsxTable :columns="columns" :data="rows" :loading="loading" empty-text="暂无对应的客服回访记录">

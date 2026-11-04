@@ -120,6 +120,8 @@ abstract class AbstractProvider implements ProviderContract
             ? $mapped['stock_status'] : 'unknown';
         $availability = in_array($mapped['availability'] ?? null, ['available', 'unavailable', 'unknown'], true)
             ? $mapped['availability'] : 'unknown';
+        $saleState = in_array($mapped['sale_state'] ?? null, ['unsold', 'sold', 'unknown'], true)
+            ? $mapped['sale_state'] : 'unknown';
         $quantity = $this->stockQuantity($mapped['quantity'] ?? null);
         $saleableQuantity = $this->stockQuantity($mapped['saleable_quantity'] ?? null);
         $quantityBasis = in_array($mapped['quantity_basis'] ?? null, ['source_quantity', 'listed_stock_device'], true)
@@ -133,6 +135,8 @@ abstract class AbstractProvider implements ProviderContract
             $saleableQuantity = null; $quantityBasis = 'unknown';
         }
         if ($quantityBasis === 'unknown') $saleableQuantity = null;
+        // A proven sale is distinct from mere unlisting or a zero stock count.
+        if ($saleState === 'sold') $stock = 'out_of_stock';
         // A false availability proof wins over an accidental positive mapping.
         if ($listing === 'unlisted' || $stock === 'out_of_stock') $availability = 'unavailable';
         elseif ($availability === 'available' && ($listing !== 'listed' || $stock !== 'in_stock'
@@ -155,6 +159,7 @@ abstract class AbstractProvider implements ProviderContract
             'source_status' => $mapped['source_status'] ?? [],
             'listing_status' => $listing,
             'stock_status' => $stock,
+            'sale_state' => $saleState,
             'availability' => $availability,
             // NULL is not zero. Raw per-source counters are retained separately
             // when their semantics are not a verified available-unit quantity.

@@ -3,7 +3,7 @@ declare(strict_types=1);
 namespace addon\hsx_lead\app\service;
 
 use addon\hsx_lead\app\provider\{ProviderRegistry,ProviderDefinition};
-use addon\hsx_lead\app\support\{Data,Cipher};
+use addon\hsx_lead\app\support\{Data,Cipher,SyncStatus};
 use core\exception\CommonException;
 use think\facade\{Db,Cache};
 
@@ -24,17 +24,23 @@ final class ConnectionService
         $result=['merchant_id'=>$merchantId,'connected'=>false,'connection_id'=>0,'provider'=>'','provider_name'=>'',
             'credentials'=>[],'configured_fields'=>[],'scope'=>['tenant_id'=>'','store_id'=>''],'enabled'=>false,'interval_minutes'=>60,
             'config_revision'=>0,'last_sync_status'=>'idle','last_sync_at'=>0,'last_sync_message'=>'尚未接入ERP',
-            'active_run_id'=>0,'published_run_id'=>0,'requires_initial_sync'=>false,'authorization_attention'=>false];
+            'active_run_id'=>0,'published_run_id'=>0,'next_sync_at'=>0,'requires_initial_sync'=>false,'authorization_attention'=>false,
+            'auth_renewal'=>['automatic'=>false,'ready'=>false,'mode'=>'','status'=>'credentials_required','message'=>'尚未接入ERP，请先保存并验证登录资料。'],
+            'channel_enabled'=>true,'channel_message'=>'','sync_progress'=>null,'requires_sync_restart'=>false];
         if (!$conn) return $result;
         $definition=$this->providers->definition((string)$conn['provider']);
+        $channelEnabled=(new ProviderChannelService($this->context->site))->enabled($definition->key());
         $result=array_replace($result,['connected'=>true,'connection_id'=>(int)$conn['id'],'provider'=>$definition->key(),
+            'channel_enabled'=>$channelEnabled,'channel_message'=>$channelEnabled?'':'本站已关闭该ERP渠道，授权及采集暂停，账号与历史库存仍保留。',
             'provider_name'=>$definition->metadata()['name'],'scope'=>['tenant_id'=>(string)$conn['expected_tenant_id'],'store_id'=>(string)$conn['store_id']],
             'enabled'=>(bool)$conn['enabled'],'interval_minutes'=>(int)$conn['sync_interval_minutes'],'config_revision'=>(int)$conn['config_version'],
             'last_sync_status'=>(string)$conn['last_sync_status'],'last_sync_at'=>(int)$conn['last_sync_at'],'last_sync_message'=>(string)$conn['last_sync_message'],
-            'active_run_id'=>(int)$conn['active_run_id'],'published_run_id'=>(int)$conn['published_run_id'],'requires_initial_sync'=>(int)$conn['published_run_id']===0]);
+            'active_run_id'=>(int)$conn['active_run_id'],'published_run_id'=>(int)$conn['published_run_id'],'next_sync_at'=>(int)$conn['next_sync_at'],'requires_initial_sync'=>(int)$conn['published_run_id']===0]);
+        $result=array_replace($result,SyncStatus::connection($this->context->site,$conn));
         try {
             $credentials=Cipher::decrypt((string)$conn['credentials_cipher'],$this->context->site,(int)$conn['id']);
             $result=array_replace($result,$definition->publicCredentials($credentials));
+            $result['auth_renewal']=$definition->renewalStatus($credentials);
             $expires=(int)($credentials['expires_at']??0);
             // Renewable adapters handle routine token expiry with their already verified
             // credentials; only a non-renewable token needs manual reauthorization.
@@ -42,6 +48,7 @@ final class ConnectionService
         } catch(\Throwable $error) {
             $result['authorization_attention']=true;
             $result['credential_error']='凭据无法读取，请核对部署密钥后重新探测授权';
+            $result['auth_renewal']=['automatic'=>false,'ready'=>false,'mode'=>'','status'=>'credential_error','message'=>'登录资料无法解密，未尝试自动登录；请核对部署密钥后重新验证。'];
         }
         return $result;
     }
@@ -54,6 +61,7 @@ final class ConnectionService
         $conn=$this->connection($merchantId);
         $revision=$this->revision($conn);
         $definition=$this->providers->definition(Data::text($input,'provider',60,true));
+        (new ProviderChannelService($this->context->site))->assertEnabled($definition->key());
         $saved=[];
         if ($conn && $conn['provider']===$definition->key()) {
             try { $saved=Cipher::decrypt((string)$conn['credentials_cipher'],$this->context->site,(int)$conn['id']); }
@@ -97,6 +105,7 @@ final class ConnectionService
             }
             $scope['store_id']=$verified['store_id'];
         }
+        (new ProviderChannelService($this->context->site))->assertEnabled($definition->key());
         $page=$provider->fetchPage($credentials,['page'=>1],['tenant_id'=>$scope['tenant_id']?:null,'store_id'=>$scope['store_id']?:null,'page_size'=>100]);
         $stores=[]; $tenants=[]; $items=[];
         if ($verified!==null) {
@@ -131,6 +140,7 @@ final class ConnectionService
             'provider'=>$definition->key(),'credentials'=>$credentials,'credentials_fingerprint'=>$this->fingerprint($credentials),
             'identity_fingerprint'=>$definition->identityFingerprint($credentials),'scope'=>$scope,'stores'=>array_keys($stores),
             'expires_at'=>$expires,'can_activate'=>$canActivate];
+        (new ProviderChannelService($this->context->site))->assertEnabled($definition->key());
         if (!Cache::set($this->cacheKey($token),Cipher::encrypt($payload,$this->context->site,-$merchantId),self::PROBE_TTL)) {
             throw new CommonException('无法保存短期校验凭证，请检查缓存配置后重试');
         }
@@ -165,6 +175,7 @@ final class ConnectionService
         }
         $definition=$this->providers->definition((string)$proof['provider']);
         $impact=Db::transaction(function()use($merchantId,$proof,$scope,$definition){
+            (new ProviderChannelService($this->context->site))->assertEnabled($definition->key(),true);
             $merchant=$this->context->connectionMerchant($merchantId,true);
             if ((int)$merchant['status']!==1) throw new CommonException('商户已停用，不能激活连接');
             $conn=Data::query('connection',$this->context->site)->where('merchant_id',$merchantId)->lock(true)->find();
@@ -202,10 +213,12 @@ final class ConnectionService
             throw new CommonException('请明确选择自动同步开关，间隔需为15—1440分钟');
         }
         Db::transaction(function()use($merchantId,$enabled,$interval){
+            $policy=new ProviderChannelService($this->context->site);$policy->lockSite();
             $merchant=Data::row('merchant',$this->context->site,$merchantId,true);
             if ((bool)$enabled && (int)$merchant['status']!==1) throw new CommonException('商户已停用，不能开启自动同步');
             $conn=Data::query('connection',$this->context->site)->where('merchant_id',$merchantId)->lock(true)->find();
             if (!$conn) throw new CommonException('请先探测并激活ERP连接');
+            if (in_array($enabled,[true,1,'1'],true) && !(int)$conn['enabled']) $policy->assertEnabled((string)$conn['provider']);
             // Settings do not alter config_version, lease, cursor, or active/manual run.
             Data::query('connection',$this->context->site)->where('id',$conn['id'])->update(['enabled'=>(bool)$enabled?1:0,
                 'sync_interval_minutes'=>(int)$interval,'next_sync_at'=>time()+(int)$interval*60,'update_time'=>time()]);

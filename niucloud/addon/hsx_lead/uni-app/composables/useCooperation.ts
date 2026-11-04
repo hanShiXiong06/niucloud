@@ -1,16 +1,16 @@
 import { computed, reactive, ref } from 'vue'
 import { getToken } from '@/utils/common'
 import * as api from '../api/cooperation'
-import type { CoopRow, Direction, LeadAction } from '../api/cooperation'
+import type { CoopRow, CooperationTab, Direction, LeadAction } from '../api/cooperation'
 
 /** Server-owned capabilities and money; this layer only manages requests and view state. */
-export function useCooperation() {
+export function useCooperation(initialTab: CooperationTab = 'deliveries') {
     const loggedIn = ref(false), ready = ref(false), loading = ref(false), error = ref(''), profile = ref<CoopRow>({}), config = ref<CoopRow>({}), providers = ref<CoopRow[]>([]), stats = ref<CoopRow>({}), wallet = ref<CoopRow>({})
-    const tab = ref('deliveries'), direction = ref<Direction>('outgoing'), query = reactive({ keyword: '', status: '', page: 1, limit: 20 }), rows = ref<CoopRow[]>([]), total = ref(0), listLoading = ref(false), listError = ref(''), walletLoading = ref(false), walletError = ref('')
+    const tab = ref<CooperationTab>(initialTab), direction = ref<Direction>('outgoing'), query = reactive({ keyword: '', status: '', page: 1, limit: 20 }), rows = ref<CoopRow[]>([]), total = ref(0), listLoading = ref(false), listError = ref(''), walletLoading = ref(false), walletError = ref('')
     const detail = ref<CoopRow>({}), detailLoading = ref(false), detailError = ref(''), busy = ref(false), writeError = ref('')
     const canLoadMore = computed(() => rows.value.length < total.value)
     const walletPage = ref(0)
-    const walletCanLoadMore = computed(() => ['entries', 'withdrawals'].some(key => (wallet.value[key]?.data || []).length < Number(wallet.value[key]?.total || 0)))
+    const walletCanLoadMore = computed(() => ['entries'].some(key => (wallet.value[key]?.data || []).length < Number(wallet.value[key]?.total || 0)))
     let identity = '', generation = 0, listGeneration = 0, detailGeneration = 0, walletGeneration = 0, active = true, disposed = false
     const current = (value: string) => active && !disposed && value !== '' && value === identity && value === String(getToken() || '')
     function identify() { const value = String(getToken() || ''); loggedIn.value = !!value; if (identity !== value) { identity = value; generation++; listGeneration++; detailGeneration++; walletGeneration++; profile.value = {}; config.value = {}; providers.value = []; stats.value = {}; rows.value = []; total.value = 0; detail.value = {}; wallet.value = {}; ready.value = false; error.value = ''; listError.value = ''; detailError.value = ''; writeError.value = '' }; return value }
@@ -36,7 +36,7 @@ export function useCooperation() {
         catch (cause) { if (current(who) && token === detailGeneration) detailError.value = api.coopError(cause, '工单读取失败'); return false }
         finally { if (token === detailGeneration) detailLoading.value = false }
     }
-    async function loadWallet(append = false) { if (walletLoading.value) return false; const who = identity, token = ++walletGeneration, page = append ? walletPage.value + 1 : 1; if (!current(who) || !profile.value.id) return false; walletLoading.value = true; walletError.value = ''; try { const response: any = await api.cooperationWallet({ page, limit: 20 }); if (!current(who) || token !== walletGeneration) return false; const next = response.data || {}; if (append) for (const key of ['entries', 'withdrawals']) { const previous = wallet.value[key]?.data || [], incoming = next[key]?.data || []; next[key] = { ...(next[key] || {}), data: [...previous, ...incoming.filter((row: CoopRow) => !previous.some((item: CoopRow) => Number(item.id) === Number(row.id)))] } }; wallet.value = next; walletPage.value = page; return true } catch (cause) { if (current(who) && token === walletGeneration) walletError.value = api.coopError(cause, '收益读取失败'); return false } finally { if (token === walletGeneration) walletLoading.value = false } }
+    async function loadWallet(append = false) { if (walletLoading.value) return false; const who = identity, token = ++walletGeneration, page = append ? walletPage.value + 1 : 1; if (!current(who) || !profile.value.id) return false; walletLoading.value = true; walletError.value = ''; try { const response: any = await api.cooperationWallet({ page, limit: 20 }); if (!current(who) || token !== walletGeneration) return false; const next = response.data || {}; if (append) for (const key of ['entries']) { const previous = wallet.value[key]?.data || [], incoming = next[key]?.data || []; next[key] = { ...(next[key] || {}), data: [...previous, ...incoming.filter((row: CoopRow) => !previous.some((item: CoopRow) => Number(item.id) === Number(row.id)))] } }; wallet.value = next; walletPage.value = page; return true } catch (cause) { if (current(who) && token === walletGeneration) walletError.value = api.coopError(cause, '收益读取失败'); return false } finally { if (token === walletGeneration) walletLoading.value = false } }
     async function write(work: () => Promise<any>) { if (busy.value || !current(identity)) return null; const who = identity; busy.value = true; writeError.value = ''; try { const response: any = await work(); if (!current(who)) return null; return response.data || {} } catch (cause) { if (current(who)) writeError.value = api.coopError(cause, '结果尚未确认，请保留内容并刷新核对，勿重复提交'); return null } finally { busy.value = false } }
     const saveProfile = (data: CoopRow) => write(() => api.saveCooperationProfile(data, !!profile.value.id))
     const createLead = (data: CoopRow) => write(() => api.createCooperationLead(data))
@@ -44,10 +44,9 @@ export function useCooperation() {
     const action = (type: LeadAction) => { const snapshot = { ...detail.value }; return write(() => api.actCooperationLead(Number(snapshot.id), type, Number(snapshot.assignment_version), '')) }
     const order = (data: CoopRow) => write(() => api.createCooperationOrder(data))
     async function changeDirection(value: Direction) { if (direction.value === value || busy.value) return; direction.value = value; query.status = ''; query.keyword = ''; rows.value = []; total.value = 0; await loadLeads() }
-    async function changeTab(value: string) { if (tab.value === value) return; tab.value = value; if (value === 'wallet') await loadWallet(); if (value === 'deliveries') await loadLeads() }
-    async function refresh() { const success = await bootstrap(); if (success && profile.value.id) { if (tab.value === 'wallet') await loadWallet(); else await loadLeads() }; return success }
+    async function refresh() { const success = await bootstrap(); if (success && profile.value.id) { if (tab.value === 'wallet') await loadWallet(); else if (tab.value === 'deliveries') await loadLeads() }; return success }
     function resume() { active = true; disposed = false; return identify() }
     function pause() { active = false; generation++; listGeneration++; detailGeneration++; walletGeneration++; loading.value = false; listLoading.value = false; detailLoading.value = false; walletLoading.value = false }
     function dispose() { pause(); disposed = true }
-    return { loggedIn, ready, loading, error, profile, config, providers, stats, wallet, tab, direction, query, rows, total, listLoading, listError, walletLoading, walletError, detail, detailLoading, detailError, busy, writeError, canLoadMore, walletCanLoadMore, bootstrap, loadLeads, loadDetail, loadWallet, saveProfile, createLead, assign, action, order, changeDirection, changeTab, refresh, resume, pause, dispose }
+    return { loggedIn, ready, loading, error, profile, config, providers, stats, wallet, tab, direction, query, rows, total, listLoading, listError, walletLoading, walletError, detail, detailLoading, detailError, busy, writeError, canLoadMore, walletCanLoadMore, bootstrap, loadLeads, loadDetail, loadWallet, saveProfile, createLead, assign, action, order, changeDirection, refresh, resume, pause, dispose }
 }

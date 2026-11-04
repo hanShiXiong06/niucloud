@@ -12,3 +12,17 @@ const fee = computed(() => locked.value ? coopMoney(props.lead.fee_amount) : fee
 watch(() => props.show, show => { if (show) { amount.value = String(Number(props.lead.commission_amount) >= minimum.value ? props.lead.commission_amount : minimum.value); localError.value = '' } })
 function submit() { localError.value = ''; if (!/^\d{1,12}(\.\d{1,2})?$/.test(amount.value) || Number(amount.value) < minimum.value) { localError.value = `请输入至少 ${coopMoney(minimum.value)} 的佣金，最多两位小数`; return }; emit('submit', Number(amount.value).toFixed(2)) }
 </script>
+<style scoped lang="scss">
+@import './cooperation-shared';
+@include hsx-coop-form-section;
+@include hsx-coop-section-title;
+@include hsx-coop-muted;
+@include hsx-coop-detail-shop;
+@include hsx-coop-form-error;
+.coop-amount-input { display: flex; align-items: center; gap: 8rpx; border-bottom: 1rpx solid #dce2e9; height: 156rpx; margin: 20rpx 0 24rpx; }
+.coop-amount-input>text { font-size: 47rpx; line-height: 1.4; padding-top: 18rpx; }
+.coop-amount-input>input { flex: 1; min-width: 0; font-size: 82rpx; font-weight: 650; height: 130rpx; line-height: 130rpx; }
+.coop-amount-presets { display: flex; gap: 18rpx; margin-bottom: 23rpx; }
+.coop-amount-presets>text { flex: 1; text-align: center; border: 1rpx solid #dce3eb; color: #778493; border-radius: 8rpx; font-size: 25rpx; line-height: 70rpx; }
+.coop-amount-presets>text.active { color: var(--primary-color, #d93833); border-color: var(--primary-color, #d93833); }
+</style>

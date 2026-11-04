@@ -21,18 +21,19 @@ final class InventoryAvailability
     public static function apply($query, string $scope='sellable', bool $fresh=true)
     {
         $listing=self::jsonState('listing_status'); $stock=self::jsonState('stock_status');
+        $sold="(".self::jsonState('sale_state')." = 'sold')";
         $off="($listing = 'unlisted')";
-        $empty="($stock = 'out_of_stock' OR i.saleable_quantity = 0 OR i.quantity = 0)";
+        $empty="($sold OR $stock = 'out_of_stock' OR i.saleable_quantity = 0 OR i.quantity = 0)";
         $positive="(COALESCE(i.saleable_quantity,i.quantity) > 0 AND (i.quantity IS NULL OR i.quantity > 0))";
-        $known="(i.availability = 'available' AND $positive AND $listing = 'listed' AND $stock = 'in_stock')";
+        $known="(i.availability = 'available' AND $positive AND $listing = 'listed' AND $stock = 'in_stock' AND NOT $sold)";
         $current=self::freshSql();
         if ($scope==='sellable') {
             $query->whereRaw($known)->where('m.status',1);
             if ($fresh) $query->whereRaw($current,[time()]);
         } elseif ($scope==='off_shelf') {
-            $query->whereRaw($off);
+            $query->whereRaw("($off AND NOT $sold)");
         } elseif ($scope==='sold_out') {
-            $query->whereRaw("(NOT $off AND $empty)");
+            $query->whereRaw("($sold OR (NOT $off AND $empty))");
         } elseif ($scope==='unverified') {
             // SQL COALESCE avoids NULL quantities dropping unknown records from diagnostics.
             $query->whereRaw("((NOT $off AND NOT COALESCE($empty,0) AND NOT COALESCE($known,0)) OR NOT $current OR m.status <> 1)",[time()]);
@@ -46,6 +47,8 @@ final class InventoryAvailability
         $state=is_array($source['_inventory']??null)?$source['_inventory']:[];
         $listing=in_array($state['listing_status']??'', ['listed','unlisted','unknown'],true)?$state['listing_status']:'unknown';
         $stock=in_array($state['stock_status']??'', ['in_stock','out_of_stock','unknown'],true)?$state['stock_status']:'unknown';
+        $saleState=in_array($state['sale_state']??'', ['unsold','sold','unknown'],true)?$state['sale_state']:'unknown';
+        $sold=$saleState==='sold';
         $quantity=self::decimal($row['quantity']??null);
         $saleable=self::decimal($row['saleable_quantity']??null);
         $amount=$saleable??$quantity;
@@ -53,21 +56,21 @@ final class InventoryAvailability
         $positive=$amount!==null && bccomp($amount,'0',3)>0 && !$zero;
         $availability=in_array($row['availability']??'', ['available','unavailable','unknown'],true)?$row['availability']:'unknown';
         $off=$listing==='unlisted';
-        $empty=$stock==='out_of_stock' || $zero;
+        $empty=$sold || $stock==='out_of_stock' || $zero;
         $known=$availability==='available' && $positive && $listing==='listed' && $stock==='in_stock' && !$empty;
-        $sale=$off?'off_shelf':($empty?'sold_out':($listing==='listed'||$known?'on_sale':'unknown'));
+        $sale=$sold?'sold_out':($off?'off_shelf':($empty?'sold_out':($listing==='listed'||$known?'on_sale':'unknown')));
         $lastSync=(int)($row['last_sync_at']??0); $fetched=(int)($row['fetched_at']??0);
         $threshold=max(2*max(1,(int)($row['sync_interval_minutes']??60)),120)*60;
         $timestamp=max($lastSync,$fetched);
         $failed=in_array($row['last_sync_status']??'', ['failed','cancelled'],true);
         $stale=$failed || $timestamp<=0 || $timestamp+$threshold<time();
         $merchantActive=(int)($row['merchant_status']??1)===1;
-        $stockLabel=$empty?'无可售库存':($positive?'有货 · '.rtrim(rtrim($amount,'0'),'.').' 台':'库存待核实');
+        $stockLabel=$empty?'无可售库存':($positive?'有货 · '.rtrim(rtrim($amount,'0'),'.').' 台':($stock==='in_stock'?'在库，接单前请核对':'库存待核实'));
         $basis=in_array($state['quantity_basis']??'', ['source_quantity','listed_stock_device'],true)?$state['quantity_basis']:'unknown';
         return [
             'availability'=>$availability,'quantity'=>$quantity,'saleable_quantity'=>$saleable,
-            'listing_status'=>$listing,'stock_status'=>$stock,'sale_status'=>$sale,
-            'sale_status_label'=>['on_sale'=>'在售','off_shelf'=>'已下架','sold_out'=>'无可售库存','unknown'=>'状态待核实'][$sale],
+            'listing_status'=>$listing,'stock_status'=>$stock,'sale_state'=>$saleState,'sale_status'=>$sale,
+            'sale_status_label'=>$sold?'已售出':($sale==='unknown'&&$stock==='in_stock'?'在库 · 未标记上架':['on_sale'=>'在售','off_shelf'=>'已下架','sold_out'=>'无可售库存','unknown'=>'状态待核实'][$sale]),
             'stock_status_label'=>$stockLabel,'quantity_basis'=>$basis,
             'is_sellable'=>$known && !$stale && $merchantActive,'is_stale'=>$stale,
             'sync_failed'=>$failed,'stale_after_minutes'=>intdiv($threshold,60),

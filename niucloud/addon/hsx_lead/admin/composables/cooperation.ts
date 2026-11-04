@@ -1,6 +1,7 @@
-import { computed, onBeforeUnmount, reactive, ref } from 'vue'
+import { onBeforeUnmount, reactive, ref } from 'vue'
 import useUserStore from '@/stores/modules/user'
 import { errorText, timestampParts } from './useLeadUi'
+import { hasLeadPagePermission } from './navigation'
 
 export type CoopRow = Record<string, any>
 export const cooperationStatuses = [
@@ -22,8 +23,7 @@ export const coopBusiness = (value: unknown) => ({ purchase: '购买', rent: '�
 export const coopError = errorText
 export function useCooperationAccess() {
     const user = useUserStore()
-    const rules = computed(() => user.rules || [])
-    const allows = (key: string) => rules.value.includes(`hsx_lead_cooperation_${key}`)
+    const allows = (key: string) => hasLeadPagePermission(user,`hsx_lead_cooperation_${key}`)
     return { allows }
 }
 

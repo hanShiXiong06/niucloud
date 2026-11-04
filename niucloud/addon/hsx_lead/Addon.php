@@ -7,7 +7,6 @@ use app\service\core\addon\CoreAddonInstallService;
 use app\service\core\schedule\CoreScheduleInstallService;
 use app\dict\schedule\ScheduleDict;
 use app\model\sys\SysSchedule;
-use addon\hsx_lead\app\support\Schema;
 use addon\hsx_lead\app\service\NoticeConfigService;
 
 /**
@@ -18,7 +17,6 @@ final class Addon
     public function install(): bool
     {
         CoreAddonInstallService::executeSql(__DIR__ . '/sql/install.sql');
-        Schema::upgrade();
         NoticeConfigService::syncAssignedSites();
         $this->registerSchedule(true);
         return true;
@@ -27,7 +25,6 @@ final class Addon
     public function upgrade(): bool
     {
         CoreAddonInstallService::executeSql(__DIR__ . '/sql/install.sql');
-        Schema::upgrade();
         NoticeConfigService::syncAssignedSites();
         $this->registerSchedule(false);
         return true;
@@ -45,8 +42,12 @@ final class Addon
         $where = [['addon', '=', 'hsx_lead'], ['key', '=', 'hsx_lead_inventory_sync']];
         $existing = $model->where($where)->findOrEmpty();
         $status = $disable || $existing->isEmpty() ? ScheduleDict::OFF : (int)$existing['status'];
+        $promotionWhere = [['addon', '=', 'hsx_lead'], ['key', '=', 'hsx_lead_promotion_settle']];
+        $promotion = $model->where($promotionWhere)->findOrEmpty();
+        $promotionStatus = $disable || $promotion->isEmpty() ? ScheduleDict::OFF : (int)$promotion['status'];
         (new CoreScheduleInstallService())->installAddonSchedule('hsx_lead');
         $model->where($where)->update(['status' => $status]);
+        $model->where($promotionWhere)->update(['status' => $promotionStatus]);
     }
 }
 

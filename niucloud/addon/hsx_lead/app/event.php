@@ -1,12 +1,12 @@
 <?php
 declare(strict_types=1);
 return ['listen'=>[
+    'BottomNavigation'=>['addon\hsx_lead\app\listener\BottomNavigationListener'],
     'HttpRun'=>['addon\hsx_lead\app\listener\pay\CooperationPaymentGuardRegistration'],
     'PayCreate'=>['addon\hsx_lead\app\listener\pay\CooperationPayCreate'],
     'PaySuccess'=>['addon\hsx_lead\app\listener\pay\CooperationPaySuccess'],
+    'RefundSuccess'=>['addon\hsx_lead\app\listener\pay\PromotionRefundSuccess'],
     'HsxLeadCollaborationChanged'=>['addon\hsx_lead\app\listener\notice\CooperationChanged'],
-    'NoticeData'=>['addon\hsx_lead\app\listener\notice\TaskNoticeData'],
-    'HsxLeadTaskAssigned'=>['addon\hsx_lead\app\listener\notice\TaskEventNotice'],
-    'HsxLeadTaskChanged'=>['addon\hsx_lead\app\listener\notice\TaskEventNotice'],
+    'NoticeData'=>['addon\hsx_lead\app\listener\notice\CooperationNoticeData'],
 ]];
 

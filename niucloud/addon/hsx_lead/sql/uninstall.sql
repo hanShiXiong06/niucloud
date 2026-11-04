@@ -1,5 +1,5 @@
--- Intentional data preservation: uninstalling the plugin does not erase merchants,
--- ERP inventory generations, customer consent, assignments, commissions or audit.
--- Framework removal handles menu and schedules; no existing or plugin table is dropped.
--- A separate explicit, reviewed data-deletion request is required for permanent cleanup.
+-- Intentional data preservation: uninstalling does not erase merchant profiles,
+-- ERP inventory generations, collaborations, payment snapshots, reviews or audit.
+-- Framework removal handles menus and schedules; no table is dropped.
+-- Permanent data deletion requires a separate explicit request.
 

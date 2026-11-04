@@ -1,6 +1,6 @@
--- HSX Lead 1.1.0. Only this plugin owns these tables.
+-- HSX Lead 0.0.1. Complete fresh-install schema for merchant cooperation.
 -- The framework substitutes {{prefix}} during installation.
--- No existing table is changed and no historical business record is rewritten.
+-- Plugin-owned tables only. No existing table or historical business record is changed.
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_merchant` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
@@ -113,106 +113,6 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_sync_run` (
   KEY `idx_site_merchant` (`site_id`,`merchant_id`,`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP paginated sync runs and safe publication progress';
 
-CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_lead` (
-  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `site_id` int unsigned NOT NULL,
-  `owner_uid` int unsigned NOT NULL DEFAULT 0 COMMENT 'Current responsible operator; 0 is unassigned, never public',
-  `lead_no` varchar(64) NOT NULL,
-  `customer_name` varchar(80) NOT NULL DEFAULT '',
-  `mobile` varchar(32) NOT NULL DEFAULT '',
-  `province_id` int unsigned NOT NULL DEFAULT 0,
-  `city_id` int unsigned NOT NULL DEFAULT 0,
-  `district_id` int unsigned NOT NULL DEFAULT 0,
-  `model` varchar(200) NOT NULL DEFAULT '',
-  `budget_min` decimal(14,2) DEFAULT NULL,
-  `requirements_json` longtext NULL COMMENT 'Catalog-validated requirements: catalog_id/title/brand/quantity/budget_min/budget_max/remark',
-  `demand_mode` varchar(8) NOT NULL DEFAULT 'any' COMMENT 'any: choose one model; all: separate multi-device demand',
-  `budget_max` decimal(14,2) DEFAULT NULL,
-  `remark` varchar(2000) NOT NULL DEFAULT '',
-  `status` varchar(24) NOT NULL DEFAULT 'pending',
-  `active_task_id` bigint unsigned NOT NULL DEFAULT 0 COMMENT 'Single active assignment, switched under row lock',
-  `consent_at` int unsigned NOT NULL DEFAULT 0,
-  `create_time` int unsigned NOT NULL DEFAULT 0,
-  `update_time` int unsigned NOT NULL DEFAULT 0,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_site_no` (`site_id`,`lead_no`),
-  KEY `idx_site_status` (`site_id`,`status`,`id`),
-  KEY `idx_site_owner_status` (`site_id`,`owner_uid`,`status`,`id`),
-  KEY `idx_site_mobile` (`site_id`,`mobile`,`id`),
-  KEY `idx_site_area` (`site_id`,`province_id`,`city_id`,`district_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Consented customer leads';
-
-CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_task` (
-  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `site_id` int unsigned NOT NULL,
-  `task_no` varchar(64) NOT NULL,
-  `lead_id` bigint unsigned NOT NULL,
-  `merchant_id` bigint unsigned NOT NULL,
-  `inventory_id` bigint unsigned NOT NULL DEFAULT 0,
-  `status` varchar(24) NOT NULL DEFAULT 'assigned' COMMENT 'assigned/following/deal_pending/completed/rejected/reassigned/closed/cancelled',
-  `response_deadline` int unsigned NOT NULL DEFAULT 0,
-  `deal_no` varchar(100) NOT NULL DEFAULT '',
-  `deal_amount` decimal(14,2) DEFAULT NULL,
-  `evidence` longtext NULL COMMENT 'Deal verification evidence entered by merchant',
-  `deal_items_json` longtext NULL COMMENT 'Current submitted batch requirement quantities and amounts',
-  `confirmed_items_json` longtext NULL COMMENT 'Cumulative confirmed requirement quantities and amounts',
-  `deal_history_json` longtext NULL COMMENT 'Append-only batch verification snapshots',
-  `deal_revision` int unsigned NOT NULL DEFAULT 0,
-  `last_verified_revision` int unsigned NOT NULL DEFAULT 0,
-  `completion_status` varchar(24) NOT NULL DEFAULT 'none',
-  `close_remaining` tinyint unsigned NOT NULL DEFAULT 0,
-  `remaining_reason` varchar(1000) NOT NULL DEFAULT '',
-  `commission_amount` decimal(14,2) DEFAULT NULL,
-  `accepted_at` int unsigned NOT NULL DEFAULT 0,
-  `reported_at` int unsigned NOT NULL DEFAULT 0,
-  `verified_at` int unsigned NOT NULL DEFAULT 0,
-  `verified_uid` int unsigned NOT NULL DEFAULT 0,
-  `close_reason` varchar(1000) NOT NULL DEFAULT '',
-  `create_time` int unsigned NOT NULL DEFAULT 0,
-  `update_time` int unsigned NOT NULL DEFAULT 0,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_site_no` (`site_id`,`task_no`),
-  KEY `idx_site_lead` (`site_id`,`lead_id`,`id`),
-  KEY `idx_site_merchant_status` (`site_id`,`merchant_id`,`status`,`id`),
-  KEY `idx_site_deadline` (`site_id`,`status`,`response_deadline`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Merchant assignments and independently verified deal progress';
-
-CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_commission` (
-  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `site_id` int unsigned NOT NULL,
-  `task_id` bigint unsigned NOT NULL,
-  `merchant_id` bigint unsigned NOT NULL,
-  `deal_revision` int unsigned NOT NULL DEFAULT 0,
-  `amount` decimal(14,2) NOT NULL DEFAULT 0.00,
-  `status` varchar(24) NOT NULL DEFAULT 'unpaid' COMMENT 'unpaid/paid/void/refund_pending/refunded; ledger only, no payment action',
-  `received_at` int unsigned NOT NULL DEFAULT 0,
-  `received_uid` int unsigned NOT NULL DEFAULT 0,
-  `receipt_no` varchar(100) NOT NULL DEFAULT '',
-  `remark` varchar(2000) NOT NULL DEFAULT '',
-  `refunded_at` int unsigned NOT NULL DEFAULT 0,
-  `refund_no` varchar(100) NOT NULL DEFAULT '',
-  `create_time` int unsigned NOT NULL DEFAULT 0,
-  `update_time` int unsigned NOT NULL DEFAULT 0,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_site_task_revision` (`site_id`,`task_id`,`deal_revision`),
-  KEY `idx_site_merchant_status` (`site_id`,`merchant_id`,`status`,`id`),
-  KEY `idx_site_status` (`site_id`,`status`,`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Commission registration and receipt/refund evidence; not payment processing';
-
-CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_followup` (
-  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `site_id` int unsigned NOT NULL,
-  `task_id` bigint unsigned NOT NULL,
-  `uid` int unsigned NOT NULL DEFAULT 0,
-  `operator_member_id` int unsigned NOT NULL DEFAULT 0,
-  `content` varchar(4000) NOT NULL DEFAULT '',
-  `action` varchar(60) NOT NULL DEFAULT 'followup',
-  `create_time` int unsigned NOT NULL DEFAULT 0,
-  `update_time` int unsigned NOT NULL DEFAULT 0,
-  PRIMARY KEY (`id`),
-  KEY `idx_site_task` (`site_id`,`task_id`,`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Append-only assignment follow-up history';
-
 CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_audit` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `site_id` int unsigned NOT NULL,
@@ -231,7 +131,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_audit` (
   KEY `idx_site_action` (`site_id`,`action`,`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Safe plugin business audit';
 
--- Merchant cooperation V2: additive plugin-owned tables only. No legacy rows are rewritten.
+-- Merchant collaboration, entitlements, framework payments and customer sampling.
 CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_partner` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `site_id` int unsigned NOT NULL,
@@ -244,16 +144,12 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_partner` (
   `provider_requested` varchar(60) NOT NULL DEFAULT '',
   `blocked_at` int unsigned NOT NULL DEFAULT 0,
   `block_reason` varchar(1000) NOT NULL DEFAULT '',
-  `available_balance` decimal(14,2) NOT NULL DEFAULT 0.00,
-  `frozen_balance` decimal(14,2) NOT NULL DEFAULT 0.00,
-  `total_income` decimal(14,2) NOT NULL DEFAULT 0.00,
-  `withdrawn_amount` decimal(14,2) NOT NULL DEFAULT 0.00,
   `remark` varchar(2000) NOT NULL DEFAULT '',
   `create_time` int unsigned NOT NULL DEFAULT 0,
   `update_time` int unsigned NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`), UNIQUE KEY `uk_site_merchant` (`site_id`,`merchant_id`),
   KEY `idx_site_block` (`site_id`,`blocked_at`,`merchant_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Merchant cooperation rights and locked wallet balances';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Merchant cooperation rights; money uses framework member commission';
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_collaboration` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
@@ -319,45 +215,6 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_coop_order` (
   KEY `idx_site_merchant` (`site_id`,`merchant_id`,`status`,`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Framework payment trade snapshots, never customer purchase money';
 
-CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_wallet_entry` (
-  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `site_id` int unsigned NOT NULL,
-  `merchant_id` bigint unsigned NOT NULL,
-  `entry_key` varchar(100) NOT NULL,
-  `type` varchar(24) NOT NULL,
-  `ref_id` bigint unsigned NOT NULL,
-  `amount` decimal(14,2) NOT NULL DEFAULT 0.00,
-  `balance_delta` decimal(14,2) NOT NULL DEFAULT 0.00,
-  `frozen_delta` decimal(14,2) NOT NULL DEFAULT 0.00,
-  `balance_after` decimal(14,2) NOT NULL DEFAULT 0.00,
-  `frozen_after` decimal(14,2) NOT NULL DEFAULT 0.00,
-  `remark` varchar(1000) NOT NULL DEFAULT '',
-  `create_time` int unsigned NOT NULL DEFAULT 0,
-  PRIMARY KEY (`id`), UNIQUE KEY `uk_site_entry` (`site_id`,`entry_key`),
-  KEY `idx_site_merchant` (`site_id`,`merchant_id`,`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Immutable cooperation wallet journal';
-
-CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_withdrawal` (
-  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `site_id` int unsigned NOT NULL,
-  `merchant_id` bigint unsigned NOT NULL,
-  `member_id` int unsigned NOT NULL,
-  `withdrawal_no` varchar(64) NOT NULL,
-  `request_id` varchar(64) NOT NULL,
-  `amount` decimal(14,2) NOT NULL,
-  `payee_cipher` longtext NOT NULL,
-  `status` varchar(20) NOT NULL DEFAULT 'pending',
-  `receipt_no` varchar(100) NOT NULL DEFAULT '',
-  `remark` varchar(2000) NOT NULL DEFAULT '',
-  `operator_uid` int unsigned NOT NULL DEFAULT 0,
-  `processed_at` int unsigned NOT NULL DEFAULT 0,
-  `create_time` int unsigned NOT NULL DEFAULT 0,
-  `update_time` int unsigned NOT NULL DEFAULT 0,
-  PRIMARY KEY (`id`), UNIQUE KEY `uk_site_no` (`site_id`,`withdrawal_no`),
-  UNIQUE KEY `uk_merchant_request` (`site_id`,`merchant_id`,`request_id`),
-  KEY `idx_site_status` (`site_id`,`status`,`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Frozen withdrawal requests, manually paid with evidence';
-
 CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_review` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `site_id` int unsigned NOT NULL,
@@ -378,5 +235,34 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_review` (
   PRIMARY KEY (`id`), KEY `idx_site_status` (`site_id`,`status`,`id`),
   KEY `idx_site_lead` (`site_id`,`lead_id`,`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Manual customer sampling and evidence-based cooperation decisions';
+
+-- One extra table: immutable paid-source/rule snapshots and idempotent framework commission credit.
+-- Qualifications/config use existing sys_config; referral relationship uses existing member.pid.
+CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_promotion_reward` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int unsigned NOT NULL,
+  `coop_order_id` bigint unsigned NOT NULL,
+  `out_trade_no` varchar(64) NOT NULL DEFAULT '',
+  `source` varchar(24) NOT NULL,
+  `payer_member_id` int unsigned NOT NULL,
+  `provider_member_id` int unsigned NOT NULL,
+  `base_amount` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `rate` decimal(6,2) NOT NULL DEFAULT 0.00,
+  `amount` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `status` varchar(20) NOT NULL DEFAULT 'pending',
+  `review_required` tinyint unsigned NOT NULL DEFAULT 0,
+  `reason` varchar(1000) NOT NULL DEFAULT '',
+  `rule_json` longtext NULL,
+  `available_at` int unsigned NOT NULL DEFAULT 0,
+  `settled_at` int unsigned NOT NULL DEFAULT 0,
+  `account_log_id` bigint unsigned NOT NULL DEFAULT 0,
+  `create_time` int unsigned NOT NULL DEFAULT 0,
+  `update_time` int unsigned NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_order` (`site_id`,`coop_order_id`),
+  KEY `idx_provider_status` (`site_id`,`provider_member_id`,`status`,`id`),
+  KEY `idx_due` (`status`,`available_at`,`site_id`,`id`),
+  KEY `idx_receipt` (`site_id`,`out_trade_no`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='First-level promotion award audit; money remains in framework member commission';
 
 

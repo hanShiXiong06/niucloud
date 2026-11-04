@@ -5,6 +5,7 @@ namespace addon\hsx_lead\app\service;
 use addon\hsx_lead\app\support\Data;
 use addon\hsx_lead\app\support\ListTimeFilter;
 use addon\hsx_lead\app\support\MerchantRegion;
+use addon\hsx_lead\app\service\cooperation\PartnerService;
 use core\exception\CommonException;
 use think\facade\Db;
 
@@ -43,7 +44,7 @@ final class MerchantService
         }
         $ready=Data::text($params,'ready_state',32);
         if ($ready!=='') {
-            if (!in_array($ready,['member_required','connection_required','sync_required','ready','attention','paused'],true)) throw new CommonException('请选择有效的商户就绪状态');
+            if (!in_array($ready,['member_required','capability_required','connection_required','sync_required','ready','attention','paused'],true)) throw new CommonException('请选择有效的商户就绪状态');
             // Readiness spans merchant/member/auth/publication freshness. Filter the full
             // scoped set before pagination, never merely the currently requested page.
             $rows=array_values(array_filter(array_map(fn($r)=>$this->present($r),$q->order('id desc')->select()->toArray()),fn($r)=>$r['ready_state']===$ready));
@@ -67,11 +68,15 @@ final class MerchantService
         $conn=(new ConnectionService($this->context))->get((int)$row['id']);
         $row=array_replace($row,['provider'=>$conn['provider'],'provider_name'=>$conn['provider_name'],
             'connection_id'=>$conn['connection_id'],'sync_interval_minutes'=>$conn['interval_minutes'],'sync_enabled'=>$conn['enabled'],
+            'auth_renewal'=>$conn['auth_renewal'],'next_sync_at'=>$conn['next_sync_at'],
+            'channel_enabled'=>$conn['channel_enabled'],'channel_message'=>$conn['channel_message'],
             'last_sync_status'=>$conn['last_sync_status'],'last_sync_at'=>$conn['last_sync_at'],'last_sync_message'=>$conn['last_sync_message'],
             'last_run_id'=>$conn['active_run_id'],'published_run_id'=>$conn['published_run_id']]);
         $row['status']=(int)$row['status'];
         $member=Db::name('member')->where('site_id',$this->context->site)->where('member_id',$row['member_id'])->field('nickname,status,is_del,delete_time')->find();
         $row['member_name']=(string)($member['nickname']??'');
+        $capability=(new PartnerService($this->context))->present($row);
+        foreach(['manual_models','manual_model_count','capability_source','inventory_count','all_models','grade_name','is_reliable','blocked_at'] as $key) $row[$key]=$capability[$key];
         [$row['ready_state'],$row['ready_reason']]=$this->readiness($row,$conn,$member?:null);
         $row['service_areas']=Data::decode($row['service_areas_json']??'');
         unset($row['service_areas_json']);
@@ -118,13 +123,14 @@ final class MerchantService
     private function readiness(array $merchant,array $conn,?array $member): array
     {
         if (!$member || (int)$member['status']!==1 || (int)$member['is_del']!==0 || (int)$member['delete_time']>0) return ['member_required','请先绑定本站启用中的会员，商户才可独立接单'];
-        if ((int)$merchant['status']!==1) return ['paused','商户已暂停，不参与地区匹配；自动同步已关闭'];
-        if (!$conn['connected']) return ['connection_required','基本资料已保存，请独立探测并激活ERP连接'];
-        if ($conn['authorization_attention']) return ['attention','ERP授权需重新验证，请检查授权状态后再同步'];
-        if ($conn['last_sync_status']==='failed') return ['attention','最近同步失败，保留旧快照供人工参考，请核对后重试'];
-        if (!$conn['published_run_id']) return ['sync_required','ERP已接入，请完成首次完整同步，旧范围库存不参与匹配'];
-        $threshold=max(2*$conn['interval_minutes'],120)*60;
-        if (!$conn['last_sync_at'] || $conn['last_sync_at']+$threshold<time()) return ['attention','库存快照已过期，请重新完整同步；不能据此承诺可售'];
-        return ['ready','会员与接入正常，有新鲜完整库存资料；实物可售、数量与价格仍需门店确认'];
+        if ((int)$merchant['status']!==1 || (int)($merchant['blocked_at']??0)>0) return ['paused','商户已停止合作，不参与门店推荐；历史记录仍保留'];
+        if (!empty($merchant['all_models'])) return ['ready','按平台授予的等级承接全部型号；不代表有现货，交付前需核对'];
+        if ((int)($merchant['manual_model_count']??0)>0) return ['ready','已手选可交付型号，可参与对应需求推荐；无需接入ERP，实物和价格请向门店核对'];
+        if ((int)($merchant['inventory_count']??0)>0) return ['ready','已有有效在售库存可参与需求推荐；接单前仍需核对现货'];
+        if (!$conn['connected']) return ['capability_required','请商户在手机端选择可交付型号；也可选择连接ERP，发单不依赖ERP'];
+        if (!$conn['channel_enabled']) return ['attention','ERP渠道已关闭；可手选可交付型号继续参与需求推荐'];
+        if ($conn['authorization_attention']) return ['attention','ERP授权待核对；可重新授权，也可手选可交付型号'];
+        if (in_array($conn['last_sync_status'],['pending','running'],true)) return ['sync_required','库存同步进行中；也可先手选可交付型号'];
+        return ['capability_required','当前没有有效的可售库存，请手选可交付型号或重新同步；发单不受影响'];
     }
 }

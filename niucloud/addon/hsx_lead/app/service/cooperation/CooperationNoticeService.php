@@ -31,7 +31,7 @@ final class CooperationNoticeService
             $field=$channel==='sms'?'sms_id':$channel.'_template_id';
             if (empty($config['is_'.$channel])) {$status='disabled';$message='本站未开启该渠道，门店仍可在工作台查看';}
             elseif (empty($config[$field])||empty($mapping[$key])) {$status='pending_configuration';$message='请在牛云通知设置核验、获取并开启本站模板';}
-            $member=$memberId>0?Db::name('member')->where('site_id',$site)->where('member_id',$memberId)->where('status',1)->where('is_del',0)->where('delete_time',0)->find():null;
+            $member=self::recipient($site,$merchant);
             $identity=['weapp'=>'weapp_openid','wechat'=>'wx_openid','sms'=>'mobile'][$channel];
             if ($status==='dispatching'&&(!$member||empty($member[$identity]))) {$status='pending_recipient';$message='接收会员尚未完成本渠道身份绑定；小程序还需主动订阅';}
             if ($status==='dispatching'&&$channel==='sms'&&!NoticeConfigService::smsAccountConfigured($site)) {$status='pending_configuration';$message='短信服务尚未开通或账号未就绪，本次未提交';}
@@ -69,6 +69,11 @@ final class CooperationNoticeService
         if ((int)$state['assignment_version']!==(int)$lead['assignment_version']||$state['lead_status']!==$lead['status']) throw new \RuntimeException('原交付已变化，不再发送过时提醒');
         $merchant=Data::row('merchant',$site,(int)$state['merchant_id']);
         if ((int)$merchant['member_id']!==(int)$state['member_id']||((int)$merchant['id']!==(int)$lead['publisher_id']&&(int)$merchant['id']!==(int)$lead['receiver_id'])) throw new \RuntimeException('通知接收身份已变化');
+        // Recheck after claiming: disabling a merchant/member or changing its binding
+        // must stop an in-flight reminder before it reaches a framework sender.
+        $member=self::recipient($site,$merchant);
+        $identity=['weapp'=>'weapp_openid','wechat'=>'wx_openid','sms'=>'mobile'][$channel]??'';
+        if (!$member||$identity===''||empty($member[$identity])) throw new \RuntimeException('通知接收账号已停用或渠道身份失效，未发送');
         $entry=NoticePortalEntry::get($site);$page=$entry['miniapp_path'].'?collaboration_id='.$leadId;$url=$entry['h5_url']!==''?$entry['h5_url'].'?collaboration_id='.$leadId:'';
         $vars=['__weapp_page'=>$page,'__wechat_page'=>$url,'url'=>$url,'__hsx_lead_notice_id'=>(string)$auditId,'__hsx_lead_notice_channel'=>$channel,'__hsx_lead_notice_attempt'=>'1',
             'task_id'=>(string)$leadId,'task_no'=>mb_substr($lead['lead_no'],0,32),'status_text'=>Rules::status($lead['status']),'notice_remark'=>$state['phase']==='assigned'?'有新的协作交付，请登录处理':'协作状态已更新，请登录核实',
@@ -77,5 +82,14 @@ final class CooperationNoticeService
         foreach($mapping[$key]['content']??[] as $field) {$v=trim((string)$field[1],'{}');$k=(string)$field[2];if(!isset($vars[$v]))continue;
             if(str_starts_with($k,'thing'))$vars[$v]=mb_substr($vars[$v],0,20);elseif(str_starts_with($k,'phrase'))$vars[$v]=mb_substr($vars[$v],0,5);elseif(str_starts_with($k,'character_string'))$vars[$v]=mb_substr($vars[$v],0,32);elseif(str_starts_with($k,'date'))$vars[$v]=date('Y-m-d');}
         return ['to'=>['member_id'=>(int)$state['member_id']],'vars'=>$vars];
+    }
+
+    private static function recipient(int $site,array $merchant): ?array
+    {
+        if ((int)($merchant['site_id']??0)!==$site||(int)($merchant['status']??0)!==1||(int)($merchant['member_id']??0)<=0) return null;
+        $partner=Store::query('partner',$site)->where('merchant_id',(int)$merchant['id'])->find();
+        if ($partner&&(int)$partner['blocked_at']>0) return null;
+        return Db::name('member')->where('site_id',$site)->where('member_id',(int)$merchant['member_id'])
+            ->where('status',1)->where('is_del',0)->where('delete_time',0)->find()?:null;
     }
 }

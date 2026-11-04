@@ -8,9 +8,10 @@ Route::group('hsx_lead/cooperation',function():void {
     Route::get('bootstrap',$c.'bootstrap');Route::post('profile',$c.'profile');Route::put('profile',$c.'profile');
     Route::get('catalog',$c.'catalog');Route::get('leads',$c.'leads');Route::post('leads',$c.'createLead');
     Route::get('leads/:id',$c.'detail');Route::get('leads/:id/stores',$c.'leadStores');Route::get('stores',$c.'stores');
+    Route::get('stores/:id/inventory',$c.'storeInventory');
     Route::post('leads/:id/assign',$c.'assign');Route::post('leads/:id/action',$c.'action');
-    Route::post('orders',$c.'createOrder');Route::get('orders/:id',$c.'order');Route::get('wallet',$c.'wallet');Route::post('withdrawals',$c.'withdrawal');
-    Route::post('attachments',$c.'attachment');Route::get('connection',$c.'connection');Route::post('connection/challenge',$c.'challenge');
+    Route::post('orders',$c.'createOrder');Route::get('orders/:id',$c.'order');Route::get('wallet',$c.'wallet');
+    Route::post('attachments',$c.'attachment');Route::post('storefront',$c.'storefront');Route::get('connection',$c.'connection');Route::post('connection/challenge',$c.'challenge');
     Route::post('connection/probe',$c.'probe');Route::post('connection/activate',$c.'activate');
     Route::put('connection/settings',$c.'connectionSettings');
     Route::post('sync',$c.'sync');Route::get('sync/:id',$c.'syncInfo');Route::post('sync/:id/advance',$c.'advanceSync');

@@ -10,7 +10,7 @@ use think\facade\Db;
 /** All cooperation queries are tenant scoped; identities never come from payloads. */
 final class Store
 {
-    private const TABLES=['partner','collaboration','coop_order','wallet_entry','withdrawal','review'];
+    private const TABLES=['partner','collaboration','coop_order','review'];
     public static function query(string $table,int $site)
     {
         if ($site<=0 || !in_array($table,self::TABLES,true)) throw new CommonException('无效的协作数据范围');
@@ -36,12 +36,10 @@ final class Store
         });
     }
     public static function permission(Context $ctx,string $name): void { $ctx->permission('hsx_lead_cooperation_'.$name); }
-    /** Share the all-data boundary, not the old platform-dispatch transfer grant. */
+    /** Shared employee data boundary for current merchant collaborations. */
     public static function scope(Context $ctx): array
     {
-        $scope=$ctx->ownership()->scope();$actor=$ctx->ownership()->operator();
-        $scope['can_transfer']=$scope['all_data']&&($actor['admin']||in_array('hsx_lead_cooperation_owner',$actor['keys'],true));
-        return $scope;
+        return $ctx->ownership()->scope();
     }
     public static function requireTransfer(Context $ctx): void
     {

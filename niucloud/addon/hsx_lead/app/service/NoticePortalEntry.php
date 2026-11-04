@@ -7,9 +7,9 @@ use think\facade\Db;
 /** Explicit-site portal links for workers; never fall back to a request's localhost. */
 final class NoticePortalEntry
 {
-    public static function get(int $site,int $taskId=0): array
+    public static function get(int $site): array
     {
-        $page='addon/hsx_lead/pages/workbench/index'.($taskId>0?'?task_id='.$taskId:'');
+        $page='addon/hsx_lead/pages/workbench/index';
         $custom=(string)(Db::name('site')->where('site_id',$site)->value('site_domain')??'');
         $base=$custom!==''?(str_contains($custom,'://')?$custom:'https://'.$custom):(string)env('system.wap_domain','');
         $parts=parse_url($base); $host=strtolower((string)($parts['host']??''));

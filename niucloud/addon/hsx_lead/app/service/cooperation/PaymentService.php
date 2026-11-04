@@ -3,16 +3,19 @@ declare(strict_types=1);
 namespace addon\hsx_lead\app\service\cooperation;
 
 use addon\hsx_lead\app\service\Context;
-use addon\hsx_lead\app\support\{Cipher,Data};
+use addon\hsx_lead\app\support\Data;
+use app\dict\member\{MemberAccountTypeDict,MemberCashOutDict};
 use app\dict\pay\PayDict;
+use app\service\core\member\CoreMemberAccountService;
 use core\exception\CommonException;
 use think\facade\{Db,Log};
 
-/** Immutable business prices + framework payment facts + an append-only wallet. */
+/** Business prices and payment facts; member commission and withdrawals belong to NiuCloud. */
 final class PaymentService
 {
     public const TRADE_TYPE='hsx_lead_cooperation';
-    private const MAX_CENTS=99999999999999;
+    public const INCOME_TYPE='hsx_lead_cooperation_income';
+    private const MAX_CENTS=9999999999; // Framework member/pay DECIMAL(10,2), not a business commission ceiling.
     public function __construct(private Context $context) {}
 
     public function createOrder(array $input): array
@@ -27,6 +30,10 @@ final class PaymentService
             if ($old) {
                 if ($old['purpose']!==$purpose || ($purpose==='commission' && (int)$old['lead_id']!==(int)($input['lead_id']??0))) throw new CommonException('同一请求标识不能用于不同付款，请刷新后核对');
                 if ($purpose==='commission'&&array_key_exists('amount',$input)&&Rules::cents($input['amount'])!==Rules::cents((string)$old['amount'])) throw new CommonException('该请求已创建另一金额的付佣订单，请先核对原单，不会重复改价');
+                if ($old['status']==='unpaid') {
+                    self::assertFrameworkAmount(Rules::cents((string)$old['amount']));
+                    if ($purpose==='commission') self::assertCommissionCapacity($this->context->site,Store::row('collaboration',$this->context->site,(int)$old['lead_id']),Rules::cents((string)$old['net_amount']));
+                }
                 return (int)$old['id'];
             }
             $config=(new ConfigService($this->context))->get();
@@ -40,11 +47,16 @@ final class PaymentService
             } else {
                 if ($purpose==='publishing' && empty($config['publishing_required'])) throw new CommonException('本站发单暂不需要购买权益，请返回发单');
                 if ($purpose==='certification' && $partner['certification_status']==='pending') throw new CommonException('认证已提交，正在等待平台审核，请勿重复付款');
+                if ($purpose==='certification' && $partner['certification_status']==='active' && (int)$partner['cert_expires_at']===0) throw new CommonException('当前靠谱商家认证已永久有效，无需重复购买');
                 $key=$purpose.':'.$merchant['id'].':'.($purpose==='publishing'?(int)$partner['publisher_until']:(int)$partner['cert_expires_at']);
             }
             $existing=Store::query('coop_order',$this->context->site)->where('business_key',$key)->lock(true)->find();
             if ($existing) {
                 if ($purpose==='commission' && array_key_exists('amount',$input) && Rules::cents($input['amount'])!==Rules::cents((string)$existing['amount'])) throw new CommonException('本单已有固定金额的待支付订单，请先按原金额核对付款，不会重复创建或改价');
+                if ($existing['status']==='unpaid') {
+                    self::assertFrameworkAmount(Rules::cents((string)$existing['amount']));
+                    if ($lead) self::assertCommissionCapacity($this->context->site,$lead,Rules::cents((string)$existing['net_amount']));
+                }
                 return (int)$existing['id'];
             }
             if ($purpose==='commission') {
@@ -54,6 +66,8 @@ final class PaymentService
                 if ($amount<=0) throw new CommonException('平台尚未设置该项收费价格，请联系管理员；当前未创建付款');
                 $split=['amount'=>Rules::amount($amount),'fee_amount'=>'0.00','net_amount'=>'0.00'];
             }
+            self::assertFrameworkAmount(Rules::cents($split['amount']));
+            if ($lead) self::assertCommissionCapacity($this->context->site,$lead,Rules::cents($split['net_amount']));
             $snapshot=['purpose'=>$purpose,'fee_percent'=>$config['fee_percent'],'fee_minimum'=>$config['fee_minimum'],
                 'commission_minimum'=>$config['commission_minimum'],'fee_confirmed'=>(bool)$config['fee_confirmed'],
                 'months'=>$purpose==='publishing'?1:(int)$config['certification_months']];
@@ -82,13 +96,16 @@ final class PaymentService
     {
         $row=$this->order($id);
         if ($row['status']!=='unpaid') throw new CommonException('该业务已支付或已关闭，请返回刷新结果，请勿重复付款');
+        self::assertFrameworkAmount(Rules::cents((string)$row['amount']));
         if ($row['purpose']!=='commission'&&(int)Store::partner($this->context->site,(int)$row['merchant_id'])['blocked_at']>0) throw new CommonException('门店已停止合作，不能继续购买权益；当前未发起支付');
         if ($row['purpose']==='commission') {
             $lead=Store::row('collaboration',$this->context->site,(int)$row['lead_id']);
             if ($lead['status']!=='unpaid' || (int)$lead['payment_order_id']!==$id || (int)$lead['receiver_id']!==(int)$row['merchant_id']) throw new CommonException('交付状态与付款订单不一致，请返回详情核对');
+            self::assertCommissionCapacity($this->context->site,$lead,Rules::cents((string)$row['net_amount']));
         }
         foreach(Db::name('pay')->where('site_id',$this->context->site)->where('trade_type',self::TRADE_TYPE)->where('trade_id',$id)->where('status','<>',PayDict::STATUS_CANCEL)->select()->toArray() as $pay) {
             if (Rules::cents((string)$pay['money'])!==Rules::cents((string)$row['amount']) || (int)$pay['main_id']!==$this->context->memberId) throw new CommonException('收银台金额或付款身份与业务不符，请联系平台核对，当前未发起支付');
+            if ((int)$pay['status']===(int)PayDict::STATUS_FINISH) throw new CommonException('原支付流水已收款，正在核对业务入账，请勿再次付款');
         }
         return $row;
     }
@@ -97,10 +114,13 @@ final class PaymentService
     {
         $row=Store::row('coop_order',$site,$id);
         if ($row['status']!=='unpaid' || Rules::cents((string)$row['amount'])<=0) throw new CommonException('该业务当前不可付款，请刷新核对');
+        self::assertFrameworkAmount(Rules::cents((string)$row['amount']));
         if ($row['purpose']==='commission') {
             $lead=Store::row('collaboration',$site,(int)$row['lead_id']);
             if ($lead['status']!=='unpaid'||(int)$lead['payment_order_id']!==$id) throw new CommonException('交付付佣状态已变化，请返回详情核对');
+            self::assertCommissionCapacity($site,$lead,Rules::cents((string)$row['net_amount']));
         }
+        if (Db::name('pay')->where('site_id',$site)->where('trade_type',self::TRADE_TYPE)->where('trade_id',$id)->where('status',PayDict::STATUS_FINISH)->find()) throw new CommonException('原支付流水已收款，正在核对业务入账，请勿再次付款');
         $ctx=new Context($site,0,(int)$row['member_id']);
         if ((int)$ctx->merchant()['id']!==(int)$row['merchant_id']) throw new CommonException('付款会员与商户归属已变化，请联系管理员核对');
         if ($row['purpose']!=='commission'&&(int)Store::partner($site,(int)$row['merchant_id'])['blocked_at']>0) throw new CommonException('门店已停止合作，不能继续购买权益');
@@ -114,6 +134,7 @@ final class PaymentService
         $site=(int)($event['site_id']??0);$id=(int)($event['trade_id']??0);$no=(string)($event['out_trade_no']??'');
         if (($event['trade_type']??'')!==self::TRADE_TYPE || $site<=0 || $id<=0 || $no==='') throw new CommonException('支付回调缺少可核对的业务凭据');
         $noticeLead=Db::transaction(function()use($site,$id,$no):int {
+            PromotionService::lockSite($site);
             $initial=Store::row('coop_order',$site,$id);
             $lead=(int)$initial['lead_id']>0?Store::row('collaboration',$site,(int)$initial['lead_id'],true):null;
             $order=Store::row('coop_order',$site,$id,true);
@@ -129,10 +150,21 @@ final class PaymentService
             if ($order['purpose']==='commission') {
                 if (!$lead || $lead['status']!=='unpaid' || (int)$lead['payment_order_id']!==$id || (int)$lead['receiver_id']!==(int)$order['merchant_id']) throw new CommonException('支付与原交付状态不一致，暂未入账，请联系平台核对');
                 if (Rules::cents((string)$order['fee_amount'])+Rules::cents((string)$order['net_amount'])!==Rules::cents((string)$order['amount'])) throw new CommonException('分账快照不平衡，未增加余额');
-                $partner=Store::partner($site,(int)$lead['publisher_id'],true);
                 $net=Rules::cents((string)$order['net_amount']);
-                self::entry($site,$partner,'income:'.$id,'commission_income',$id,$net,0,Rules::amount($net),'已支付协作佣金的发布方净收益',['total_income'=>self::checkedAdd((string)$partner['total_income'],$net)]);
-                Store::query('collaboration',$site)->where('id',$lead['id'])->update(['status'=>'paid','paid_at'=>time(),'update_time'=>time()]);
+                try {
+                    $member=self::assertCommissionCapacity($site,$lead,$net,true);
+                } catch (CommonException $error) {
+                    // A completed provider receipt must never become an invitation to pay again.
+                    // Preserve it and explicitly queue the uncredited income for human handling.
+                    $rule['requires_manual_review']=str_contains($error->getMessage(),'精度范围')?'commission_credit_capacity_exceeded':'publisher_member_unavailable';
+                    $member=null;
+                }
+                if ($member) {
+                    // The locked order and member account update share one transaction.
+                    (new CoreMemberAccountService())->addLog($site,(int)$member['member_id'],MemberAccountTypeDict::COMMISSION,
+                        Rules::amount($net),self::INCOME_TYPE,'线索协作收益 '.$lead['lead_no'],$id);
+                }
+                Store::query('collaboration',$site)->where('id',$lead['id'])->update(['status'=>'paid','paid_at'=>time(),'rule_json'=>Data::json($rule),'update_time'=>time()]);
             } elseif (in_array($order['purpose'],['publishing','certification'],true)) {
                 $partner=Store::partner($site,(int)$order['merchant_id'],true);
                 if ((int)$partner['blocked_at']>0) {
@@ -143,13 +175,18 @@ final class PaymentService
                 } elseif ($order['purpose']==='publishing') {
                     $changes=['publisher_until'=>Rules::addMonths(max(time(),(int)$partner['publisher_until']),1)];
                 } else {
-                    $changes=['certification_status'=>$partner['certification_status']==='active'?'active':'pending','cert_expires_at'=>Rules::addMonths(max(time(),(int)$partner['cert_expires_at']),(int)($rule['months']??12))];
+                    $months=(int)($rule['months']??12);
+                    // Permanent orders and already-permanent grants must never become finite on renewal.
+                    $permanent=$months===0||($partner['certification_status']==='active'&&(int)$partner['cert_expires_at']===0);
+                    $changes=['certification_status'=>$partner['certification_status']==='active'?'active':'pending','cert_expires_at'=>$permanent?0:Rules::addMonths(max(time(),(int)$partner['cert_expires_at']),$months)];
                 }
                 Store::query('partner',$site)->where('id',$partner['id'])->update($changes+['update_time'=>time()]);
             } else throw new CommonException('未知的收费业务，未确认到账');
-            Store::query('coop_order',$site)->where('id',$id)->update(['status'=>'paid','out_trade_no'=>$no,'pay_time'=>time(),'update_time'=>time()]);
+            Store::query('coop_order',$site)->where('id',$id)->update(['status'=>'paid','out_trade_no'=>$no,'rule_json'=>Data::json($rule),'pay_time'=>time(),'update_time'=>time()]);
+            // Freeze first-level inviter/rules only after a matching real receipt. Same transaction, no client grants.
+            if (empty($rule['requires_manual_review'])) PromotionService::recordPaid($site,array_replace($order,['status'=>'paid','out_trade_no'=>$no,'pay_time'=>time()]));
             Data::audit($site,0,(int)$order['member_id'],'coop_order',$id,'payment_confirmed',['purpose'=>$order['purpose'],'amount'=>$order['amount'],'out_trade_no'=>$no]);
-            return $lead?(int)$lead['id']:0;
+            return $lead&&empty($rule['requires_manual_review'])?(int)$lead['id']:0;
         });
         if ($noticeLead) self::notify($site,$noticeLead,'paid');
         return true;
@@ -157,93 +194,53 @@ final class PaymentService
 
     public function wallet(array $params=[]): array
     {
-        $merchant=$this->context->merchant();$partner=Store::partner($this->context->site,(int)$merchant['id']);
-        $entries=Data::page(Store::query('wallet_entry',$this->context->site)->where('merchant_id',$merchant['id']),$params);
-        $withdrawals=Data::page(Store::query('withdrawal',$this->context->site)->where('merchant_id',$merchant['id']),$params);
-        $withdrawals['data']=array_map(fn(array $row):array=>$this->presentWithdrawal($row,false),$withdrawals['data']);
-        return ['available'=>$partner['available_balance'],'frozen'=>$partner['frozen_balance'],'total_income'=>$partner['total_income'],'withdrawn'=>$partner['withdrawn_amount'],'entries'=>$entries,'withdrawals'=>$withdrawals];
+        $merchant=$this->context->merchant();
+        $prefix=(string)config('database.connections.mysql.prefix');
+        $q=Db::name('hsx_lead_coop_order')->alias('o')->join([$prefix.'hsx_lead_collaboration'=>'c'],'c.payment_order_id=o.id AND c.site_id=o.site_id')
+            ->join([$prefix.'member_account_log'=>'a'],"a.related_id=o.id AND a.site_id=o.site_id AND a.account_type='commission' AND a.from_type='".self::INCOME_TYPE."'")
+            ->where('o.site_id',$this->context->site)->where('c.publisher_id',(int)$merchant['id'])->where('c.status','paid')
+            ->where('a.member_id',$this->context->memberId)->where('o.purpose','commission')->where('o.status','paid');
+        $page=max(1,(int)($params['page']??1));$size=max(1,min(100,(int)($params['limit']??$params['page_size']??20)));
+        $entries=['data'=>(clone $q)->field('o.id,o.status,o.net_amount,o.pay_time,c.customer_name,c.lead_no')->order('o.id desc')->page($page,$size)->select()->toArray(),
+            'total'=>(int)(clone $q)->count(),'per_page'=>$size,'current_page'=>$page];
+        return self::accountSummary($this->context->site,$this->context->memberId)+['entries'=>$entries];
     }
 
-    public function withdraw(array $input): array
+    /** Shared member commission account, not a second plugin-specific balance. */
+    public static function accountSummary(int $site,int $memberId): array
     {
-        $merchant=$this->context->merchant();$request=Store::requestId($input);$amount=Rules::cents($input['amount']??'');
-        if ($amount<=0) throw new CommonException('提现金额须大于0，且不能超过可提现收益');
-        $type=Data::text($input,'payee_type',16,true);$name=Data::text($input,'payee_name',80,true);$account=Data::text($input,'payee_account',160,true);
-        if (!in_array($type,['bank','wechat','alipay'],true)||preg_match('/[\x00-\x1F\x7F]/',$name.$account)) throw new CommonException('请核对收款方式、户名和账号');
-        if ($type==='bank' && !preg_match('/^[0-9]{8,32}$/D',$account)) throw new CommonException('银行卡号请填写8—32位数字，不要包含空格');
-        $id=Db::transaction(function()use($merchant,$request,$amount,$type,$name,$account):int {
-            $partner=Store::partner($this->context->site,(int)$merchant['id'],true);
-            $old=Store::query('withdrawal',$this->context->site)->where('merchant_id',$merchant['id'])->where('request_id',$request)->find();
-            if ($old) {
-                $payee=Cipher::decrypt((string)$old['payee_cipher'],$this->context->site,-1000000000-(int)$old['id']);
-                if (Rules::cents((string)$old['amount'])!==$amount || $payee!==['type'=>$type,'name'=>$name,'account'=>$account]) throw new CommonException('该请求已提交不同的提现资料，请先查看原记录，不要重复申请');
-                return (int)$old['id'];
-            }
-            if (Rules::cents((string)$partner['available_balance'])<$amount) throw new CommonException('可提现收益不足，请刷新余额；未付佣金不计入收益');
-            $id=(int)Store::query('withdrawal',$this->context->site)->insertGetId(['site_id'=>$this->context->site,'merchant_id'=>$merchant['id'],'member_id'=>$this->context->memberId,
-                'withdrawal_no'=>Data::number('CW'),'request_id'=>$request,'amount'=>Rules::amount($amount),'payee_cipher'=>'','status'=>'pending','create_time'=>time(),'update_time'=>time()]);
-            Store::query('withdrawal',$this->context->site)->where('id',$id)->update(['payee_cipher'=>Cipher::encrypt(['type'=>$type,'name'=>$name,'account'=>$account],$this->context->site,-1000000000-$id)]);
-            self::entry($this->context->site,$partner,'withdrawal:freeze:'.$id,'withdrawal_freeze',$id,-$amount,$amount,Rules::amount($amount),'申请提现，收益已冻结，等待平台实际打款');
-            $this->context->audit('withdrawal',$id,'requested',['amount'=>Rules::amount($amount),'payee_type'=>$type]);
-            return $id;
-        });
-        return $this->presentWithdrawal(Store::row('withdrawal',$this->context->site,$id),false);
+        $member=Db::name('member')->where('site_id',$site)->where('member_id',$memberId)->where('delete_time',0)
+            ->field('commission,commission_cash_outing,commission_get')->find();
+        if (!$member || $memberId<=0) throw new CommonException('当前会员账户不存在，请重新登录后核对');
+        $withdrawals=Db::name('member_cash_out')->where('site_id',$site)->where('member_id',$memberId)
+            ->where('account_type',MemberAccountTypeDict::COMMISSION)->where('status',MemberCashOutDict::TRANSFERED);
+        return ['framework_cash_out'=>true,'account_scope'=>'member_commission','available'=>(string)$member['commission'],'frozen'=>(string)$member['commission_cash_outing'],
+            'total_income'=>(string)$member['commission_get'],'withdrawn'=>bcadd((string)(clone $withdrawals)->sum('apply_money'),'0',2),
+            'withdrawn_received'=>bcadd((string)(clone $withdrawals)->sum('money'),'0',2)];
     }
 
     public function adminOrders(array $params=[]): array
     {
         $this->finance();$q=Store::query('coop_order',$this->context->site);$this->filter($q,$params,['status','purpose','merchant_id'],'order_no|out_trade_no');
-        if (in_array($params['requires_manual_review']??false,[true,1,'1'],true)) $q->whereLike('rule_json','%merchant_blocked_during_payment%');
+        if (in_array($params['requires_manual_review']??false,[true,1,'1'],true)) $q->whereLike('rule_json','%requires_manual_review%');
         $page=Data::page($q,$params);$page['data']=array_map(fn(array $r):array=>$this->merchantName(self::presentOrder($r)),$page['data']);return $page;
     }
-    public function adminWithdrawals(array $params=[]): array
+    private static function assertFrameworkAmount(int $amount): void
     {
-        $this->finance();$q=Store::query('withdrawal',$this->context->site);$this->filter($q,$params,['status','merchant_id'],'withdrawal_no|receipt_no|remark');
-        $page=Data::page($q,$params);$page['data']=array_map(fn(array $r):array=>$this->merchantName($this->presentWithdrawal($r,false)),$page['data']);return $page;
+        if ($amount<0 || $amount>self::MAX_CENTS) throw new CommonException('金额超出框架账户99,999,999.99元的精度范围，未执行资金变动，请平台核对');
     }
-    public function withdrawalDetail(int $id): array
+    /** Rechecked under the member row lock on callback; early checks prevent avoidable charges. */
+    private static function assertCommissionCapacity(int $site,array $lead,int $net,bool $lock=false): array
     {
-        $this->finance();$row=Store::row('withdrawal',$this->context->site,$id);
-        $result=$this->presentWithdrawal($row,true);$this->context->audit('withdrawal',$id,'payee_viewed',['merchant_id'=>(int)$row['merchant_id']]);return $result;
-    }
-    public function markPaid(int $id,array $input): array
-    {
-        $this->finance();if (!in_array($input['confirm']??null,[true,1,'1'],true)) throw new CommonException('请先确认已实际向该收款账户打款');
-        $receipt=Data::text($input,'receipt_no',100,true);$remark=Data::text($input,'remark',2000);
-        $row=Db::transaction(function()use($id,$receipt,$remark):array {
-            $initial=Store::row('withdrawal',$this->context->site,$id);$partner=Store::partner($this->context->site,(int)$initial['merchant_id'],true);$row=Store::row('withdrawal',$this->context->site,$id,true);
-            if ($row['status']==='paid') {if ($row['receipt_no']!==$receipt) throw new CommonException('此提现已处理，原打款凭据不可重复覆盖');return $row;}
-            if ($row['status']!=='pending') throw new CommonException('此提现已驳回或已处理，请刷新查看');
-            $amount=Rules::cents((string)$row['amount']);
-            self::entry($this->context->site,$partner,'withdrawal:paid:'.$id,'withdrawal_paid',$id,0,-$amount,$row['amount'],'平台已实际打款',['withdrawn_amount'=>self::checkedAdd((string)$partner['withdrawn_amount'],$amount)]);
-            $change=['status'=>'paid','receipt_no'=>$receipt,'remark'=>$remark,'operator_uid'=>$this->context->uid,'processed_at'=>time(),'update_time'=>time()];
-            Store::query('withdrawal',$this->context->site)->where('id',$id)->update($change);$this->context->audit('withdrawal',$id,'paid',['amount'=>$row['amount'],'receipt_no'=>$receipt]);return array_replace($row,$change);
-        });return $this->presentWithdrawal($row,true);
-    }
-    public function reject(int $id,array $input): array
-    {
-        $this->finance();$reason=Data::text($input,'reason',1000,true);
-        $row=Db::transaction(function()use($id,$reason):array {
-            $initial=Store::row('withdrawal',$this->context->site,$id);$partner=Store::partner($this->context->site,(int)$initial['merchant_id'],true);$row=Store::row('withdrawal',$this->context->site,$id,true);
-            if ($row['status']==='rejected') return $row;
-            if ($row['status']!=='pending') throw new CommonException('此提现已打款，不可再次驳回或解冻');
-            $amount=Rules::cents((string)$row['amount']);self::entry($this->context->site,$partner,'withdrawal:release:'.$id,'withdrawal_release',$id,$amount,-$amount,$row['amount'],'提现驳回，冻结收益已退回');
-            $change=['status'=>'rejected','remark'=>$reason,'operator_uid'=>$this->context->uid,'processed_at'=>time(),'update_time'=>time()];
-            Store::query('withdrawal',$this->context->site)->where('id',$id)->update($change);$this->context->audit('withdrawal',$id,'rejected',['amount'=>$row['amount'],'reason'=>$reason]);return array_replace($row,$change);
-        });return $this->presentWithdrawal($row,true);
-    }
-
-    private static function entry(int $site,array $partner,string $key,string $type,int $ref,int $delta,int $frozen,string $amount,string $remark,array $extra=[]): void
-    {
-        if (Store::query('wallet_entry',$site)->where('entry_key',$key)->find()) return;
-        $available=self::checkedAdd((string)$partner['available_balance'],$delta);$held=self::checkedAdd((string)$partner['frozen_balance'],$frozen);
-        Store::query('partner',$site)->where('id',$partner['id'])->update(['available_balance'=>$available,'frozen_balance'=>$held,'update_time'=>time()]+$extra);
-        Store::query('wallet_entry',$site)->insert(['site_id'=>$site,'merchant_id'=>$partner['merchant_id'],'entry_key'=>$key,'type'=>$type,'ref_id'=>$ref,'amount'=>$amount,
-            'balance_delta'=>Rules::amount($delta),'frozen_delta'=>Rules::amount($frozen),'balance_after'=>$available,'frozen_after'=>$held,'remark'=>$remark,'create_time'=>time()]);
-    }
-    private static function checkedAdd(string $value,int $delta): string
-    {
-        $next=Rules::cents($value)+$delta;if ($next<0||$next>self::MAX_CENTS) throw new CommonException('余额与冻结记录不一致或已超出系统金额精度，未执行资金变动，请人工核对');return Rules::amount($next);
+        $publisher=Data::row('merchant',$site,(int)$lead['publisher_id']);$memberId=(int)$publisher['member_id'];
+        $q=Db::name('member')->where('site_id',$site)->where('member_id',$memberId)->where('delete_time',0);
+        if ($lock) $q->lock(true);
+        $member=$q->find();
+        if (!$member || $memberId<=0) throw new CommonException('发布门店未绑定有效会员，当前不能收取协作佣金，请平台核对');
+        self::assertFrameworkAmount($net);
+        self::assertFrameworkAmount(Rules::cents((string)$member['commission'])+$net);
+        self::assertFrameworkAmount(Rules::cents((string)$member['commission_get'])+$net);
+        return $member;
     }
     private function finance(): void
     {
@@ -268,17 +265,18 @@ final class PaymentService
     private static function presentOrder(array $row): array
     {
         $rule=Data::decode($row['rule_json']??null);$row['requires_manual_review']=!empty($rule['requires_manual_review']);
-        $row['review_message']=$row['requires_manual_review']?'实际收款时门店已停止合作，未开通权益；请平台核对原支付流水并处理退款事宜':'';
+        $row['review_message']=self::reviewMessage($rule);
         unset($row['rule_json'],$row['request_id'],$row['business_key']);$row['trade_type']=self::TRADE_TYPE;
         $row['purpose_label']=['commission'=>'协作佣金','publishing'=>'发单权益','certification'=>'靠谱认证'][$row['purpose']]??'待核对';
         $row['status_label']=['unpaid'=>'待支付','paid'=>'已支付','closed'=>'已关闭'][$row['status']]??'待核对';return $row;
     }
-    private function presentWithdrawal(array $row,bool $admin): array
+    public static function reviewMessage(array $rule): string
     {
-        $payee=Cipher::decrypt((string)$row['payee_cipher'],$this->context->site,-1000000000-(int)$row['id']);
-        $account=(string)($payee['account']??'');$length=mb_strlen($account);$masked=$length<=4?str_repeat('*',max(1,$length)):str_repeat('*',min(8,$length-4)).mb_substr($account,-4);
-        unset($row['payee_cipher'],$row['request_id']);$row['payee_type']=$payee['type']??'';$row['payee_name']=$payee['name']??'';$row['payee_account']=$admin?$account:$masked;$row['payee_account_masked']=$masked;
-        $row['status_label']=['pending'=>'待审核打款','paid'=>'已打款','rejected'=>'已驳回并解冻'][$row['status']]??'待核对';return $row;
+        return [
+            'merchant_blocked_during_payment'=>'实际收款时门店已停止合作，未开通权益；请平台核对原支付流水并处理退款事宜',
+            'commission_credit_capacity_exceeded'=>'本单已实际收款；发布方会员佣金账户达到金额精度上限，收益尚未入账，请平台核对处理，勿重复付款',
+            'publisher_member_unavailable'=>'本单已实际收款；发布门店的会员账户暂不可入账，请平台核对会员归属与原支付流水，勿重复付款',
+        ][(string)($rule['requires_manual_review']??'')]??(!empty($rule['requires_manual_review'])?'本单已收款，结果需要平台人工核对，请勿重复付款':'');
     }
     private static function notify(int $site,int $lead,string $action): void
     {

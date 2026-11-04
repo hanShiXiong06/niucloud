@@ -1,5 +1,5 @@
 <template>
-    <HsxDrawer v-model="visible" title="设备清单" subtitle="客服从清单勾选机型；清单不代表实际库存或价格。" size="md" :body-loading="loading" :confirm-loading="saving" show-footer confirm-text="保存并替换清单" :confirm-disabled="!content || loading || !!fileError" @confirm="save">
+    <HsxDrawer v-model="visible" title="需求型号清单" subtitle="商户发布需求时从清单选择型号；清单不代表实际库存或价格。" size="md" :body-loading="loading" :confirm-loading="saving" show-footer confirm-text="保存并替换清单" :confirm-disabled="!content || loading || !!fileError" @confirm="save">
         <el-alert v-if="error" :title="error" type="error" :closable="false" class="lead-error-banner" />
         <el-alert :title="source === 'configured' ? '正在使用自定义设备清单。替换清单只影响以后选择，不覆盖已录入的客户需求。' : source === 'inventory' ? '尚未配置自定义清单，暂使用当前已同步库存的型号作为选项。可上传清单，后续客服直接勾选。' : '尚未上传自定义清单，先提供常用机型，并补充当前已同步库存型号。这些只是需求选项，不代表门店有实际库存；可随后上传自定义清单。'" type="info" show-icon :closable="false" class="lead-banner" />
         <div class="lead-actions"><el-upload accept=".csv,.json" :auto-upload="false" :show-file-list="false" :on-change="chooseFile" :disabled="saving"><el-button type="primary" plain>选择 CSV / JSON 文件</el-button></el-upload><el-button @click="downloadTemplate">下载 CSV 模板</el-button><el-button :loading="loading" :disabled="saving" @click="load">刷新当前清单</el-button></div>
