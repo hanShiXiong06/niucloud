@@ -483,6 +483,13 @@ class RecyclePrintSceneService extends BaseAdminService
                 throw new AdminException($bindPrinterId > 0 ? '场景或模板绑定的打印机未启用或不存在' : '当前账号未绑定可用打印机');
             }
 
+            $labelEdit = $this->resolveLabelEditConfig($scene, $templateInfo, $bizInfo['print_data']);
+            if (($payload['entry'] ?? '') === 'scan_label'
+                && ($scene['biz_type'] ?? 'device') === 'device'
+                && ($scene['template_type'] ?? '') === 'device_label') {
+                $labelEdit['enabled'] = 1;
+            }
+
             return [
                 'can_print' => true,
                 'message' => '打印计划已就绪',
@@ -520,7 +527,7 @@ class RecyclePrintSceneService extends BaseAdminService
                 'printer_info' => $printer,
                 'device_data' => $bizInfo['print_data'],
                 'print_data' => $bizInfo['print_data'],
-                'label_edit' => $this->resolveLabelEditConfig($scene, $templateInfo, $bizInfo['print_data']),
+                'label_edit' => $labelEdit,
             ];
         } catch (AdminException $e) {
             return [
@@ -1662,6 +1669,13 @@ class RecyclePrintSceneService extends BaseAdminService
         $button = $scene['button_config'] ?? [];
         if (empty($button['enabled'])) {
             return false;
+        }
+        // 扫码打标是独立的手动补打入口，不受设备流程/确认/付款状态限制。
+        // 仍必须是启用的设备标签场景；后续解析照常核实本站设备、模板和打印机。
+        if (($payload['entry'] ?? '') === 'scan_label'
+            && ($scene['biz_type'] ?? 'device') === 'device'
+            && ($scene['template_type'] ?? '') === 'device_label') {
+            return true;
         }
         $visibleStatuses = $button['visible_device_status'] ?? [];
         if (empty($visibleStatuses)) {

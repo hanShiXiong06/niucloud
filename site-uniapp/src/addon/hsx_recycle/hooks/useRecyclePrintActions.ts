@@ -11,6 +11,7 @@ type PrintAction = {
     visible_device_status?: Array<number | string>
     confirm_required?: number | string
     copies?: number | string
+    template_type?: string
 }
 
 type PrintTarget = {
@@ -20,6 +21,7 @@ type PrintTarget = {
     consignment_id?: number | string
     biz_id?: number | string
     print_data_override?: Record<string, any>
+    entry?: 'scan_label'
 }
 
 const getDefaultPosition = (bizType: BizType) => {
@@ -46,10 +48,11 @@ export function useRecyclePrintActions(bizType: BizType, options: { position?: s
         }
     }
 
-    const getVisiblePrintActions = (record: Record<string, any> = {}) => {
+    const getVisiblePrintActions = (record: Record<string, any> = {}, options: { ignoreBusinessStatus?: boolean } = {}) => {
         const currentRecord = record || {}
         return manualPrintActions.value.filter((action: PrintAction) => {
             if ((action.button_position || position) !== position) return false
+            if (options.ignoreBusinessStatus && bizType === 'device' && action.template_type === 'device_label') return true
             const visibleStatuses = Array.isArray(action.visible_device_status)
                 ? action.visible_device_status.map((item) => Number(item))
                 : []

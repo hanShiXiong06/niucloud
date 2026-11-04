@@ -148,6 +148,7 @@ class PrintScene extends BaseAdminController
             ['consignment_id', 0],
             ['biz_id', 0],
             ['print_data_override', []],
+            ['entry', ''],
         ]);
         $result = $this->service->resolvePlanBySceneKey($sceneKey, [
             'device_id' => (int)$data['device_id'],
@@ -156,6 +157,7 @@ class PrintScene extends BaseAdminController
             'consignment_id' => (int)$data['consignment_id'],
             'biz_id' => (int)$data['biz_id'],
             'print_data_override' => is_array($data['print_data_override']) ? $data['print_data_override'] : [],
+            'entry' => (string)$data['entry'],
         ], false);
         // ===== 临时调试 + 兜底:定位并清洗非UTF-8字段，避免 json_encode 抛 Malformed UTF-8 =====
         array_walk_recursive($result, function (&$v, $k) {
@@ -186,6 +188,7 @@ class PrintScene extends BaseAdminController
             ['consignment_id', 0],
             ['biz_id', 0],
             ['print_data_override', []],
+            ['entry', ''],
         ]);
         $result = $this->service->printScene($sceneKey, [
             'device_id' => (int)$data['device_id'],
@@ -194,6 +197,7 @@ class PrintScene extends BaseAdminController
             'consignment_id' => (int)$data['consignment_id'],
             'biz_id' => (int)$data['biz_id'],
             'print_data_override' => is_array($data['print_data_override']) ? $data['print_data_override'] : [],
+            'entry' => (string)$data['entry'],
         ]);
         // 同 plan:定位并清洗非UTF-8字段，避免 json_encode 抛 Malformed UTF-8
         array_walk_recursive($result, function (&$v, $k) {

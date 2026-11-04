@@ -97,6 +97,13 @@ class SignHandler extends BaseFlowHandler
 
         foreach ($devices as $device) {
             $categoryId = (int)($device['category_id'] ?? 0);
+            // 型号 ID 决定设备名称，不能把客户端传来的整条分类路径存成型号。
+            // 无分类的手工型号保持原样，不按斜杠猜测或截断人工输入。
+            $modelName = (string)($device['model'] ?? '');
+            if ($categoryId > 0) {
+                $category = (new RecycleDeviceModelDictService())->selectableLeaf($categoryId);
+                $modelName = (string)$category['node_name'];
+            }
             $categoryPath = DeviceSummaryHelper::normalizeCategoryPath($device['category_path'] ?? null, $categoryId);
             // 统一摘要契约：summary = { field_key: value }
             $summary = DeviceSummaryHelper::normalizeSummary($device['summary'] ?? []);
@@ -109,7 +116,7 @@ class SignHandler extends BaseFlowHandler
                 $deviceData = [
                     'imei' => $device['imei'] ?? '',
                     'imei2' => $device['imei2'] ?? '',
-                    'model' => $device['model'] ?? '',
+                    'model' => $modelName,
                     'initial_price' => $device['initial_price'] ?? 0,
                     'category_id' => $categoryId,
                     'site_id' => $siteId,
@@ -134,7 +141,7 @@ class SignHandler extends BaseFlowHandler
                     'order_id' => $orderId,
                     'imei' => $device['imei'] ?? '',
                     'imei2' => $device['imei2'] ?? '',
-                    'model' => $device['model'] ?? '',
+                    'model' => $modelName,
                     // 保留字段(从 summary 回填，兼容顶层)
                     'sn' => $device['serial_number'] ?? '',
                     'color' => $cols['color'],

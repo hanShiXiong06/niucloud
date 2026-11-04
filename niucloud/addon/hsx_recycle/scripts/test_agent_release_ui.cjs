@@ -118,6 +118,18 @@ async function main() {
         c.dispose()
     }
     {
+        const c = component(), s = c.state
+        const node = { id: 8, node_name: '苹果 iPhone 14 Pro', model_full_name: '手机/苹果/iPhone 14系列/苹果 iPhone 14 Pro', has_children: 0, category_path: [1, 2, 7, 8] }
+        s.chooseModelNode(node)
+        check(s.editForm.value.model, '苹果 iPhone 14 Pro', 'new selection stores leaf name before local save')
+        check(s.editForm.value.category_id, 8, 'new selection retains category identity')
+        check(s.editForm.value.category_path, [1, 2, 7, 8], 'new selection retains full ID path for templates')
+        check(node.model_full_name, '手机/苹果/iPhone 14系列/苹果 iPhone 14 Pro', 'selection does not mutate dictionary source path')
+        s.chooseModelNode({ id: 9, node_name: '', model_full_name: '手机／苹果／ 苹果 iPhone Air', has_children: 0, category_path: [1, 2, 9] })
+        check(s.editForm.value.model, '苹果 iPhone Air', 'missing node name falls back to leaf path')
+        c.dispose()
+    }
+    {
         const c = component('sign'), s = c.state
         check(s.devices.value.length, 1, 'existing sign mode remains available')
         s.addDevice()

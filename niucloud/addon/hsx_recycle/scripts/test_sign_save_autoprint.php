@@ -207,6 +207,7 @@ namespace addon\hsx_recycle\app\service\core\recycle_order {
 namespace addon\hsx_recycle\app\service\core\recycle_device { class CoreRecycleDeviceLogService {} }
 namespace addon\hsx_recycle\app\service\admin\device {
     class RecycleDeviceModelDictService {
+        public function selectableLeaf(int $id): array { return ['id' => $id, 'node_name' => $id === 8 ? '全新签收设备' : '已核对机型' . $id]; }
         public function incrementSelectCount($unused): void {}
         public function ensureFromModelName($name, $site): void {}
     }
@@ -282,7 +283,7 @@ namespace {
         return $service;
     }
     function deviceInput(int $id = 101): array {
-        return ['id' => $id, 'imei' => '35390000000' . str_pad((string)$id, 4, '0', STR_PAD_LEFT), 'model' => '已核对机型' . $id, 'category_id' => 8, 'summary' => ['battery' => 99]];
+        return ['id' => $id, 'imei' => '35390000000' . str_pad((string)$id, 4, '0', STR_PAD_LEFT), 'model' => '已核对机型' . $id, 'category_id' => $id, 'summary' => ['battery' => 99]];
     }
     function tasks(): array { return array_values(Store::$tables[RecyclePrintTask::class] ?? []); }
 

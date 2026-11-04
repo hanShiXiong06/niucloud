@@ -1,3 +1,0 @@
-<template><view class="coop-models"><text v-for="(item, index) in items" :key="String(item.id || item.catalog_id || index)" class="coop-model-tag">{{ item.title || item.name || '未命名型号' }}</text><text v-if="!items.length" class="coop-models__empty">{{ empty }}</text></view></template>
-<script setup lang="ts">withDefaults(defineProps<{ items: Record<string, any>[]; empty?: string }>(), { empty: '未填写意向型号' })</script>
-<style scoped lang="scss">.coop-models { display: flex; flex-wrap: wrap; gap: 12rpx; }.coop-model-tag { background: #f2f4f6; color: #3d444e; border-radius: 7rpx; padding: 9rpx 14rpx; font-size: 24rpx; line-height: 1.6; word-break: break-word; max-width: 100%; }.coop-models__empty { font-size: 24rpx; color: #969da7; }</style>

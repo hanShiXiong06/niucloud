@@ -7,8 +7,9 @@
                 <span v-if="field.unit" class="summary-unit">({{ field.unit }})</span>
             </label>
             <el-select
-                v-if="field.component === 'select' || (field.component === 'radio' && field.selection_mode !== 'multiple' && (field.options || []).length > 4)"
+                v-if="field.component === 'select' || (field.component === 'radio' && (field.options || []).length > 4)"
                 v-model="modelValue[field.field_key]"
+                :multiple="field.component === 'select' && field.selection_mode === 'multiple'"
                 :placeholder="field.placeholder || '请选择'"
                 clearable
                 class="summary-control"
@@ -19,7 +20,7 @@
                 <el-radio v-for="opt in field.options" :key="String(opt.value)" :label="opt.value">{{ opt.label }}</el-radio>
             </el-radio-group>
             <el-checkbox-group
-                v-else-if="field.component === 'checkbox' || field.selection_mode === 'multiple'"
+                v-else-if="field.component === 'checkbox'"
                 v-model="modelValue[field.field_key]"
             >
                 <el-checkbox v-for="opt in field.options" :key="String(opt.value)" :label="opt.value">{{ opt.label }}</el-checkbox>

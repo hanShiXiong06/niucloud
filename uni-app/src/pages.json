@@ -849,21 +849,6 @@
             ]
         },
         // HSX_PROJECT_CENTER_PAGE_END
-        // HSX_LEAD_PAGE_BEGIN
-        {
-            "root": "addon/hsx_lead",
-            "pages": [
-                {
-                    "path": "pages/workbench/index",
-                    "style": {
-                        "navigationBarTitleText": "商户工作台",
-                        "enablePullDownRefresh": true
-                    },
-                    "needLogin": true
-                }
-            ]
-        },
-        // HSX_LEAD_PAGE_END
 // {{ PAGE_END }}
         {
             "root": "app/components",

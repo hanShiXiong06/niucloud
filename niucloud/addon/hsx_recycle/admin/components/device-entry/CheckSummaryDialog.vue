@@ -74,7 +74,7 @@ watch(() => props.visible, (v) => {
         const base: Record<string, any> = {}
         // 用字段默认值兜底，再覆盖已有值
         ;(props.fields || []).forEach((f) => {
-            const isMultiple = f.component === 'checkbox' || f.selection_mode === 'multiple'
+            const isMultiple = f.component === 'checkbox' || (f.component === 'select' && f.selection_mode === 'multiple')
             base[f.field_key] = isMultiple ? [] : ''
         })
         localValues.value = { ...base, ...(props.values || {}) }

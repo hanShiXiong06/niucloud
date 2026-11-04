@@ -475,7 +475,7 @@ const loadCheckTemplate = async (row: DeviceEntryRow) => {
         const defaults = new Set(row.summary_default_keys || [])
         summaryFields.forEach((field) => {
             if (values[field.field_key] === undefined || values[field.field_key] === '') {
-                const isMultiple = field.component === 'checkbox' || field.selection_mode === 'multiple'
+                const isMultiple = field.component === 'checkbox' || (field.component === 'select' && field.selection_mode === 'multiple')
                 if (field.default_value !== undefined && field.default_value !== null && field.default_value !== '') {
                     values[field.field_key] = isMultiple
                         ? (Array.isArray(field.default_value) ? field.default_value : [field.default_value])

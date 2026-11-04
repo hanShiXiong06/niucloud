@@ -39,7 +39,7 @@ class RecycleDeviceModelDict extends BaseAdminController
             ['keyword', ''],
         ]);
 
-        return success($this->service->options($data));
+        return success($this->mobileModelChoices($this->service->options($data), true));
     }
 
     public function children()
@@ -51,7 +51,37 @@ class RecycleDeviceModelDict extends BaseAdminController
             ['limit', 200],
         ]);
 
-        return success($this->service->children($data));
+        return success($this->mobileModelChoices($this->service->children($data)));
+    }
+
+    /**
+     * 已发布管理小程序使用 model_full_name 回填设备名称。
+     * 只在业务选型响应中显示末级名，不能改字典原值或污染共享缓存。
+     */
+    private function mobileModelChoices(array $rows, bool $leafOnly = false): array
+    {
+        if ($this->request->getChannel() !== 'weapp') {
+            return $rows;
+        }
+        foreach ($rows as &$row) {
+            if (!$leafOnly && (!array_key_exists('has_children', $row) || (int)$row['has_children'] !== 0)) {
+                continue;
+            }
+            $fullName = (string)($row['model_full_name'] ?? '');
+            $leafName = trim((string)($row['node_name'] ?? ''));
+            if ($leafName === '') {
+                $parts = preg_split('~[/／]+~u', $fullName) ?: [];
+                $parts = array_values(array_filter(array_map('trim', $parts), static fn(string $part): bool => $part !== ''));
+                $leafName = (string)($parts[count($parts) - 1] ?? '');
+            }
+            if ($leafName === '') {
+                continue;
+            }
+            $row['model_path'] = $fullName;
+            $row['model_full_name'] = $leafName;
+        }
+        unset($row);
+        return $rows;
     }
 
     public function tree()

@@ -87,11 +87,11 @@ export function localReadingArchive(mapped: LocalMappedDevice): DeviceReadings {
 const normalizeOptionText = (value: unknown): string => text(value).toLowerCase().replace(/\s+/g, '').replace(/gb$/, 'g').replace(/tb$/, 't').replace(/%$/, '')
 function resolveField(field: CheckSummaryField, raw: any): any {
     if (!hasReadingValue(raw)) return undefined
-    if (field.options?.length) {
+    if (['radio', 'select', 'checkbox'].includes(field.component) && field.options?.length) {
         // 读取的是物理值，不把颜色代码、容量数字当成数据库 option ID，更不按数组下标猜颜色。
         const matches = field.options.filter(option => [option.label, option.name].some(label => normalizeOptionText(label) === normalizeOptionText(raw)))
         if (matches.length !== 1) return undefined
-        return field.component === 'checkbox' || field.selection_mode === 'multiple' ? [matches[0].value] : matches[0].value
+        return field.component === 'checkbox' || (field.component === 'select' && field.selection_mode === 'multiple') ? [matches[0].value] : matches[0].value
     }
     return field.component === 'number' ? numeric(raw) : raw
 }

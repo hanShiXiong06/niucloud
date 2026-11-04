@@ -132,7 +132,7 @@
                 </view>
             </view>
             <view class="device-card__actions">
-                <view class="device-card__btn" @click="openDeviceAction">
+                <view class="device-card__btn" @click="runCurrentMode">
                     <text :class="['nc-iconfont', currentMode.icon, 'device-card__btn-icon']"></text>
                     <text>{{ primaryActionText }}</text>
                 </view>
@@ -173,7 +173,7 @@
                 <view class="label-edit-popup__header">
                     <view>
                         <view class="label-edit-popup__title">编辑打印标签</view>
-                        <view class="label-edit-popup__subtitle">默认使用系统字段，可按本次打印临时调整</view>
+                        <view class="label-edit-popup__subtitle">仅修改本次标签内容，不修改设备资料、价格或业务状态</view>
                     </view>
                     <text class="nc-iconfont nc-icon-guanbiV6xx1 label-edit-popup__close" @click="closeLabelEdit"></text>
                 </view>
@@ -251,6 +251,8 @@ const labelEditVisible = ref(false)
 const loadedDeviceId = ref('')
 const scanMode = ref<ScanMode>('process')
 const pendingPrintAction = ref<any>(null)
+const pendingPrintTarget = ref<any>(null)
+let labelPlanRequestId = 0
 const labelLineLimit = ref(17)
 const labelCnCharWidth = ref(2.5)
 const labelAsciiCharWidth = ref(1)
@@ -307,8 +309,8 @@ const scanModes: Array<{ value: ScanMode, label: string, title: string, desc: st
         value: 'label',
         label: '扫码打标',
         title: '扫码打标',
-        desc: '扫码后按设备状态匹配可用打印/打标动作。',
-        tip: '打标动作来自后台打印场景配置，没有可用动作时会进入订单详情。',
+        desc: '扫码后编辑打印标签，已回收等状态也可使用。',
+        tip: '仅调整本次标签，不改变设备状态；打印模板和打印机沿用后台场景配置。',
         icon: 'nc-icon-dayinjiV6xx'
     }
 ]
@@ -324,6 +326,8 @@ const customerName = computed(() => {
 })
 
 const primaryActionText = computed(() => {
+    if (scanMode.value === 'label') return '编辑打印标签'
+    if (scanMode.value === 'query') return '查看订单'
     const action = getDeviceActionType()
     if (action === 'check') {
         return deviceData.value?.check_result_seller || deviceData.value?.check_result ? '继续质检' : '开始质检'
@@ -364,6 +368,7 @@ onShow(() => {
 })
 
 const scanDevice = () => {
+    closeLabelEdit()
     uni.scanCode({
         onlyFromCamera: false,
         scanType: ['qrCode', 'barCode'],
@@ -397,11 +402,13 @@ const handleManualSubmit = () => {
 
 const switchMode = (value: ScanMode) => {
     if (scanMode.value === value) return
+    closeLabelEdit()
     scanMode.value = value
     candidateDevices.value = []
 }
 
 const resolveScanKeyword = async (keyword: string, autoRun = false) => {
+    closeLabelEdit()
     loading.value = true
     candidateDevices.value = []
     deviceData.value = null
@@ -432,6 +439,7 @@ const selectCandidate = async (item: any, autoRun = true) => {
 }
 
 const openPrintedDevice = async (target: DevicePrintTarget) => {
+    closeLabelEdit()
     candidateDevices.value = []
     deviceData.value = null
     const currentSiteId = Number(uni.getStorageSync('siteId') || 0)
@@ -439,13 +447,16 @@ const openPrintedDevice = async (target: DevicePrintTarget) => {
         uni.showModal({ title: '站点不匹配', content: '该设备属于其他站点，请登录对应门店的管理账号后重新扫码。', showCancel: false })
         return
     }
-    scanMode.value = 'query'
-    // 只查看，不自动弹质检/定价/打印操作；真正操作继续走原有权限校验。
+    const labelMode = scanMode.value === 'label'
+    scanMode.value = labelMode ? 'label' : 'query'
+    // 普通直达码只查询；用户明确选择扫码打标时才打开标签编辑。
     await loadDevice(target.deviceId, false)
+    if (labelMode && deviceData.value?.id) await openLabelAction()
 }
 
 const loadDevice = async (id: string, autoOpen = false) => {
     if (!id) return
+    closeLabelEdit()
     loading.value = true
     try {
         const res: any = await getDevice(id)
@@ -515,10 +526,10 @@ const openLabelAction = async () => {
         return
     }
 
-    const actions = getVisiblePrintActions(deviceData.value)
+    const actions = getVisiblePrintActions(deviceData.value, { ignoreBusinessStatus: true })
+        .filter((action: any) => action.template_type === 'device_label')
     if (!actions.length) {
-        uni.showToast({ title: '当前状态暂无打标动作', icon: 'none' })
-        openOrderDetail()
+        uni.showToast({ title: '未配置可用的设备标签场景，请联系管理员', icon: 'none' })
         return
     }
 
@@ -537,42 +548,57 @@ const openLabelAction = async () => {
 }
 
 const executeDevicePrint = async (action: any) => {
-    const labelEditConfig = await loadLabelEditConfig(action)
-    if (!labelEditConfig.enabled) {
-        await executePrintAction(action, {
-            device_id: deviceData.value?.id,
-            order_id: deviceData.value?.order_id || deviceData.value?.order?.id,
-            biz_id: deviceData.value?.id
-        })
-        return
+    const requestId = ++labelPlanRequestId
+    const target = {
+        device_id: deviceData.value?.id,
+        order_id: deviceData.value?.order_id || deviceData.value?.order?.id,
+        biz_id: deviceData.value?.id,
+        entry: 'scan_label' as const
     }
-
-    const form = buildLabelEditForm()
-    pendingPrintAction.value = action
-    labelEditForm.value = { ...form }
-    labelEditOriginalForm.value = { ...form }
-    labelEditVisible.value = true
+    try {
+        const config = await loadLabelEditConfig(action, target)
+        if (requestId !== labelPlanRequestId || scanMode.value !== 'label'
+            || String(deviceData.value?.id || '') !== String(target.device_id || '')
+            || String(deviceData.value?.order_id || deviceData.value?.order?.id || '') !== String(target.order_id || '')) return
+        applyLabelEditConfig(config)
+        const form = buildLabelEditForm()
+        pendingPrintAction.value = action
+        pendingPrintTarget.value = target
+        labelEditForm.value = { ...form }
+        labelEditOriginalForm.value = { ...form }
+        labelEditVisible.value = true
+    } catch (error: any) {
+        if (requestId !== labelPlanRequestId) return
+        uni.showToast({ title: error?.data?.message || error?.msg || error?.message || '标签加载失败，请重试', icon: 'none' })
+    }
 }
 
 const confirmLabelPrint = async () => {
     const action = pendingPrintAction.value
-    if (!action) {
+    const target = pendingPrintTarget.value
+    if (!action || !target) {
         closeLabelEdit()
         return
     }
-    labelEditVisible.value = false
-    pendingPrintAction.value = null
+    if (scanMode.value !== 'label' || String(deviceData.value?.id || '') !== String(target.device_id || '')
+        || String(deviceData.value?.order_id || deviceData.value?.order?.id || '') !== String(target.order_id || '')) {
+        closeLabelEdit()
+        uni.showToast({ title: '设备已切换，请重新打开标签', icon: 'none' })
+        return
+    }
+    const override = buildPrintDataOverride()
+    closeLabelEdit()
     await executePrintAction(action, {
-        device_id: deviceData.value?.id,
-        order_id: deviceData.value?.order_id || deviceData.value?.order?.id,
-        biz_id: deviceData.value?.id,
-        print_data_override: buildPrintDataOverride()
+        ...target,
+        print_data_override: override
     })
 }
 
 const closeLabelEdit = () => {
+    labelPlanRequestId++
     labelEditVisible.value = false
     pendingPrintAction.value = null
+    pendingPrintTarget.value = null
 }
 
 const buildLabelEditForm = (): LabelEditForm => {
@@ -594,19 +620,10 @@ const buildPrintDataOverride = () => {
     return data
 }
 
-const loadLabelEditConfig = async (action: any) => {
-    const fallback = action?.label_edit || {}
-    try {
-        const payload = {
-            device_id: deviceData.value?.id,
-            order_id: deviceData.value?.order_id || deviceData.value?.order?.id,
-            biz_id: deviceData.value?.id
-        }
-        const res: any = await getPrintScenePlan(action.scene_key, payload)
-        return applyLabelEditConfig(res?.data?.label_edit || fallback)
-    } catch (error) {
-        return applyLabelEditConfig(fallback)
-    }
+const loadLabelEditConfig = async (action: any, payload: Record<string, any>) => {
+    const res: any = await getPrintScenePlan(action.scene_key, payload)
+    if (res?.code !== 1 || !res?.data?.can_print) throw new Error(res?.data?.message || res?.msg || '打印计划不可用')
+    return res.data.label_edit || {}
 }
 
 const applyLabelEditConfig = (config: any = {}) => {

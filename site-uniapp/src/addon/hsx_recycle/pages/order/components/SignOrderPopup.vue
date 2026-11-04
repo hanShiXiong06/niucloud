@@ -141,9 +141,15 @@
                     </view>
 
                     <QuoteUserPicker v-model="editForm.initial_price_uid" v-model:name="editForm.initial_price_name" />
-                    <!-- 质检摘要（型号触发的模板摘要字段，最多5个；签收即录，质检时反显） -->
+                    <!-- 按后台模板显示全部已配置的设备摘要，不在移动端再次截断。 -->
                     <view v-if="summaryLoading" class="summary-loading">
                         <text>加载质检摘要项…</text>
+                    </view>
+                    <view v-else-if="summaryError" class="summary-error" role="alert">
+                        <text class="summary-error__title">设备摘要加载失败</text>
+                        <text class="summary-error__message">{{ summaryError }}</text>
+                        <text class="summary-error__tip">已填写的信息会保留，请重试后再保存。</text>
+                        <u-button size="small" :plain="true" type="primary" @click="loadSummaryFields">重新加载</u-button>
                     </view>
                     <view v-else-if="editForm.summary_fields && editForm.summary_fields.length" class="summary-section">
                         <view class="summary-section__title">质检摘要 <text class="summary-section__tip">（签收即录，质检时自动带出）</text></view>
@@ -165,6 +171,7 @@
                             <u-input
                                 v-else
                                 v-model="editForm.summary_values[field.field_key]"
+                                :type="field.component === 'number' ? 'number' : 'text'"
                                 border="bottom"
                                 clearable
                                 :placeholder="field.placeholder || '请输入'"
@@ -174,12 +181,13 @@
                             ></u-input>
                         </view>
                     </view>
+                    <view v-else-if="summaryLoaded" class="summary-empty">{{ summaryEmptyMessage || '此型号的模板未配置设备摘要，可继续录入基础信息。' }}</view>
 
                 </scroll-view>
 
                 <view class="popup-footer">
                     <u-button @click="closeEdit" :customStyle="{ flex: 1 }">取消</u-button>
-                    <u-button type="primary" @click="saveEdit" :customStyle="{ flex: 2 }">保存</u-button>
+                    <u-button type="primary" :disabled="summaryLoading || !!summaryError" @click="saveEdit" :customStyle="{ flex: 2 }">{{ summaryLoading ? '摘要加载中' : '保存' }}</u-button>
                 </view>
             </view>
         </u-popup>
@@ -285,6 +293,17 @@ const emit = defineEmits(['update:visible', 'success', 'draft-saved'])
 const show = ref(false)
 const submitting = ref(false)
 const summaryLoading = ref(false) // 质检摘要字段加载中
+const summaryError = ref('')
+const summaryLoaded = ref(false)
+const summaryEmptyMessage = ref('')
+let summaryRequestId = 0
+const invalidateSummaryLoad = () => {
+    summaryRequestId++
+    summaryLoading.value = false
+    summaryError.value = ''
+    summaryLoaded.value = false
+    summaryEmptyMessage.value = ''
+}
 const devices = ref<any[]>([])
 const nextAssigneeUid = ref(0)
 const isAgent = computed(() => props.mode === 'agent')
@@ -331,10 +350,10 @@ const confirmCreateRetry = () => {
     } })
 }
 
-// 摘要字段类型判断 / 取值（与 PC device-entry 口径一致）
-const isMultiSummaryField = (field: any) => field?.component === 'checkbox' || field?.selection_mode === 'multiple'
-const isOptionSummaryField = (field: any) =>
-    ['radio', 'select', 'checkbox'].includes(field?.component) || (Array.isArray(field?.options) && field.options.length > 0)
+// 组件类型决定交互；input/number 等不能被残留 options 或多选标记变成选择组件。
+const isMultiSummaryField = (field: any) => field?.component === 'checkbox'
+    || (field?.component === 'select' && field?.selection_mode === 'multiple')
+const isOptionSummaryField = (field: any) => ['radio', 'select', 'checkbox'].includes(field?.component)
 const isSwitchSummaryField = (field: any) => field?.component === 'switch'
 
 const summaryOptionActive = (field: any, optionValue: any) => {
@@ -367,23 +386,35 @@ const collectSummaryValues = (fields: any[] = [], values: Record<string, any> = 
     return out
 }
 
-// 选型号后解析质检模板 + 摘要字段（summary_visible 最多 5 个），并预填默认/已有值
+// 与 PC 一样消费后台模板的设备摘要配置，保留后台顺序和已有输入。
 const loadSummaryFields = async () => {
+    const requestId = ++summaryRequestId
     const categoryId = Number(editForm.value.category_id || 0)
+    summaryError.value = ''
+    summaryLoaded.value = false
+    summaryEmptyMessage.value = ''
     editForm.value.summary_fields = []
     editForm.value.check_template_id = 0
-    if (!categoryId) return
+    if (!categoryId) { summaryLoading.value = false; return }
     summaryLoading.value = true
     try {
         const res: any = await getCheckTemplateSchema({ category_id: categoryId })
-        const data = res?.data || {}
-        const groups = Array.isArray(data.groups) ? data.groups : []
+        if (requestId !== summaryRequestId || categoryId !== Number(editForm.value.category_id || 0)) return
+        const data = res?.data
+        if (!data || !Array.isArray(data.groups) || !data.template) throw new Error('未取得有效的质检模板，请重新加载或联系管理员检查型号绑定。')
+        if (['missing', 'invalid'].includes(String(data.schema_status || ''))) {
+            throw new Error(data.schema_message || '该型号的质检模板暂无可用字段，请联系管理员检查模板配置。')
+        }
+        if (data.schema_status === 'empty') {
+            summaryEmptyMessage.value = `${data.schema_message || '此型号的模板暂无启用的质检字段。'} 可继续录入基础信息。`
+        }
+        const groups = data.groups
         const resolve = data.resolve || {}
         const template = data.template || {}
         const fields: any[] = []
         groups.forEach((group: any) => {
             ;(group.fields || []).forEach((field: any) => {
-                if (Number(field?.extra_config?.summary_visible || 0) === 1 && fields.length < 5) {
+                if (Number(field?.extra_config?.summary_visible || 0) === 1) {
                     fields.push({
                         field_key: String(field.field_key),
                         field_name: String(field.field_name),
@@ -416,10 +447,12 @@ const loadSummaryFields = async () => {
             }
         })
         editForm.value.summary_values = values
-    } catch (error) {
-        console.warn('加载质检摘要字段失败', error)
+        summaryLoaded.value = true
+    } catch (error: any) {
+        if (requestId !== summaryRequestId || categoryId !== Number(editForm.value.category_id || 0)) return
+        summaryError.value = error?.msg || error?.message || '网络异常，暂时无法加载设备摘要，请重试。'
     } finally {
-        summaryLoading.value = false
+        if (requestId === summaryRequestId) summaryLoading.value = false
     }
 }
 const modelColumns = ref<Array<{ pid: number | string, items: any[], activeId: string | number }>>([])
@@ -496,6 +529,7 @@ const loadRootModels = async () => {
 watch(() => props.visible, (val) => {
     show.value = val
     if (!val) {
+        invalidateSummaryLoad()
         addAfterMember.value = false
         memberPickerVisible.value = false
         editVisible.value = false
@@ -523,6 +557,7 @@ watch(() => modelKeyword.value, () => {
 const handleClose = () => {
     if (submitting.value) return
     uni.hideKeyboard()
+    invalidateSummaryLoad()
     if (isAgent.value && agentState.draftId) emit('draft-saved', agentState.draftId)
     memberPickerVisible.value = false
     editVisible.value = false
@@ -534,6 +569,7 @@ const handleClose = () => {
 const addDevice = () => {
     if (submitting.value) return
     if (!requireAgentCustomer(true)) return
+    invalidateSummaryLoad()
     editingIndex.value = -1
     editForm.value = { model: '', imei: '', user_sn: '', initial_price: '', initial_price_uid: 0, initial_price_name: '', category_id: 0, category_path: [], check_template_id: 0, summary_fields: [], summary_values: {} }
     editVisible.value = true
@@ -553,6 +589,7 @@ const extractDeviceSummaryValues = (device: any): Record<string, any> => {
 
 const editDevice = (device: any, index: number) => {
     if (submitting.value) return
+    invalidateSummaryLoad()
     editingIndex.value = index
     editForm.value = {
         model: device.model || '',
@@ -588,6 +625,7 @@ const deleteDevice = (index: number) => {
 }
 
 const closeEdit = () => {
+    invalidateSummaryLoad()
     editVisible.value = false
 }
 
@@ -617,7 +655,7 @@ const selectModelNode = async (node: any, columnIndex: number) => {
 
 const chooseModelNode = (node: any) => {
     if (!isLeafNode(node)) return
-    editForm.value.model = node.model_full_name || node.node_name || ''
+    editForm.value.model = String(node.node_name || '').trim() || getDeviceModelLeafName(node.model_full_name, '')
     editForm.value.category_id = node.id || 0
     editForm.value.category_path = resolveNodePath(node)
     closeModelPicker()
@@ -691,6 +729,10 @@ const searchModelKeyword = async () => {
 
 const saveEdit = () => {
     if (!requireAgentCustomer()) return
+    if (summaryLoading.value || summaryError.value) {
+        uni.showToast({ title: summaryLoading.value ? '设备摘要正在加载，请稍候' : '设备摘要加载失败，请重新加载后再保存', icon: 'none' })
+        return
+    }
     const error = deviceEntryError(editForm.value)
     if (error) {
         uni.showToast({ title: error, icon: 'none' })
@@ -789,7 +831,7 @@ const handleSubmit = async () => {
         submitting.value = false
     }
 }
-onBeforeUnmount(() => { if (modelSearchTimer) clearTimeout(modelSearchTimer) })
+onBeforeUnmount(() => { invalidateSummaryLoad(); if (modelSearchTimer) clearTimeout(modelSearchTimer) })
 </script>
 
 <style scoped lang="scss">
@@ -1239,6 +1281,23 @@ onBeforeUnmount(() => { if (modelSearchTimer) clearTimeout(modelSearchTimer) })
     color: #999;
     text-align: center;
 }
+
+.summary-error {
+    display: flex;
+    flex-direction: column;
+    gap: 12rpx;
+    padding: 20rpx;
+    margin-top: 12rpx;
+    border: 1rpx solid #f4d7b5;
+    border-radius: 12rpx;
+    background: #fff8ee;
+    color: #8c5b24;
+    font-size: 24rpx;
+}
+.summary-error__title { font-weight: 600; }
+.summary-error__message { line-height: 1.6; overflow-wrap: anywhere; }
+.summary-error__tip { font-size: 22rpx; color: #8a7964; }
+.summary-empty { padding: 20rpx 0; color: #8590a2; font-size: 24rpx; line-height: 1.6; }
 
 .summary-section {
     margin-top: 8rpx;
