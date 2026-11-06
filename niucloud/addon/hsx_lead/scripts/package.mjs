@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-// A clean source installer, not an upgrader, compiler or database installer.
+// Plugin sources plus explicit, separately documented maintenance entries; not an implicit installer.
 // Only this plugin's installation sources are read. Mounted application sources
 // may not exist after uninstall and are deliberately not a packaging dependency.
 const plugin = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -26,7 +26,15 @@ if (!/^\d{8}$/.test(releaseDate)) throw new Error('Release date must be YYYYMMDD
 
 const runtimeDirectories = ['app', 'admin', 'uni-app', 'package', 'resource']
 const installationFiles = ['Addon.php', 'info.json', 'README.md', 'install.sql', 'uninstall.sql', 'sql/install.sql', 'sql/uninstall.sql']
-const guideFiles = ['docs/COOPERATION_GUIDE.md', 'docs/ERP_INTEGRATION.md', 'docs/CONFIGURATION.md', 'docs/DELIVERY_EXPERIENCE.md', 'docs/PROMOTION_INTEGRATION.md', 'docs/TEST_REPORT.md']
+const guideFiles = ['docs/COOPERATION_GUIDE.md', 'docs/ERP_INTEGRATION.md', 'docs/CONFIGURATION.md', 'docs/DELIVERY_EXPERIENCE.md', 'docs/PROMOTION_INTEGRATION.md', 'docs/TEST_REPORT.md', 'docs/PHASE_ONE_GUIDE.md', 'docs/PHASE_ONE_TEST_REPORT.md', 'docs/LOCAL_ACCEPTANCE_20261105.md', 'docs/PAYMENT_PROFILE_DIY_20261105.md', 'docs/NATIVE_DIY_CONNECTION_UI_20261105.md', 'docs/BUSINESS_LICENSE_20261105.md', 'docs/MOBILE_UI_AUDIT_20261105.md', 'docs/UPGRADE_COMMAND_20261105.md']
+// Do not include the development scripts directory or temporary repair tools.
+guideFiles.push('docs/CATALOG_RETURN_FIX_20261105.md', 'docs/INVENTORY_INITIAL_LOAD_FIX_20261105.md', 'docs/ROLE_TABS_UI_20261105.md')
+guideFiles.push('docs/PHONE_SERVICES_20261106.md')
+guideFiles.push('docs/ENTITY_MEMBERSHIP_20261106.md')
+guideFiles.push('docs/ENTITY_MEMBERSHIP_TEST_20261106.md')
+guideFiles.push('docs/DIY_APPEARANCE_20261106.md')
+guideFiles.push('docs/POSTER_SHARE_20261106.md')
+const maintenanceFiles = ['scripts/upgrade.php', 'scripts/upgrade-entity-membership.php', 'scripts/clean-retired-membership.php']
 const bannedDirectories = new Set(['.git', 'node_modules', 'dist', 'build', 'output', 'tests', 'scripts', 'runtime', '.vite', '__MACOSX'])
 const allowedExtensions = new Set(['.php', '.vue', '.ts', '.js', '.mjs', '.json', '.css', '.scss', '.sass', '.less', '.png', '.svg', '.jpg', '.jpeg', '.webp', '.gif', '.ico', '.woff', '.woff2', '.ttf'])
 const files = []
@@ -64,15 +72,15 @@ async function inspect(relative, expectedDirectory = false) {
 }
 
 for (const folder of runtimeDirectories) await inspect(folder, true)
-for (const file of [...installationFiles, ...guideFiles]) await inspect(file)
+for (const file of [...installationFiles, ...guideFiles, ...maintenanceFiles]) await inspect(file)
 files.sort()
 if (new Set(files).size !== files.length) throw new Error('Duplicate release source')
 
 const pageSource = await readFile(path.join(plugin, 'package/uni-app-pages.php'), 'utf8')
-const mobilePages = ['pages/workbench/index', 'pages/stores/index', 'pages/wallet/index', 'pages/profile/index']
+const mobilePages = ['pages/index', 'pages/workbench/index', 'pages/stores/index', 'pages/wallet/index', 'pages/profile/index', 'pages/task/index', 'pages/catalog/index', 'pages/entity/index', 'pages/membership/index']
 const declaredPages = [...pageSource.matchAll(/"path"\s*:\s*"([^"]+)"/g)].map(match => match[1])
 if (JSON.stringify([...declaredPages].sort()) !== JSON.stringify([...mobilePages].sort())) {
-    throw new Error('The installer must register exactly the four current mobile pages')
+    throw new Error('The installer must register exactly the nine current mobile pages')
 }
 for (const page of mobilePages) if (!files.includes('uni-app/' + page + '.vue')) {
     throw new Error('Registered mobile page is missing: ' + page)
@@ -97,16 +105,30 @@ for (const relative of files) {
 const manifest = {
     plugin: 'hsx_lead', version, package_type: 'fresh-install-source', built_at: new Date().toISOString(),
     archive_root: prefix, framework_files: [],
+    required_framework_updates: [{ path: 'uni-app/src/components/top-tabbar/top-tabbar.vue', reason: 'Optional generic typography and H5 visibility support for the existing DIY header. This source archive does not contain framework files; update the separately supplied file before compiling the mobile frontend.' }],
+    maintenance_entry: { path: prefix + '/scripts/upgrade.php', check: 'php addon/hsx_lead/scripts/upgrade.php --check', apply: 'php addon/hsx_lead/scripts/upgrade.php --apply', executes_ddl: false, compiles_frontends: false },
+    entity_schema_entry: { path: prefix + '/scripts/upgrade-entity-membership.php', check: 'php addon/hsx_lead/scripts/upgrade-entity-membership.php --check', apply: 'php addon/hsx_lead/scripts/upgrade-entity-membership.php --apply', executes_ddl: true, adds_tables: 1, adds_columns: 3, clears_business_data: false },
+    retired_test_cleanup_entry: { path: prefix + '/scripts/clean-retired-membership.php', check: 'php addon/hsx_lead/scripts/clean-retired-membership.php --check', apply: 'php addon/hsx_lead/scripts/clean-retired-membership.php --apply --confirm-all-plugin-data-is-test', allowed_database: 'localhost_mysql_only', scope: 'all_plugin_sites_must_be_test', production_migration: false, external_refunds: false, requires_explicit_test_confirmation: true, backs_up_affected_rows: true, deletes_retired_test_facts_and_columns: true },
     source_directories: runtimeDirectories.map(directory => prefix + '/' + directory),
     mobile_pages: mobilePages.map(page => 'addon/hsx_lead/' + page),
     generated_configuration_files: [{
         path: 'uni-app/src/pages.json', source: prefix + '/package/uni-app-pages.php',
-        reason: 'Four mobile pages are registered by the framework plugin page compiler. Do not overlay the shared page manifest.'
+        reason: 'Nine mobile pages, including subject membership/team, are registered by the framework plugin page compiler. Do not overlay the shared page manifest.'
+    }, {
+        path: 'uni-app/src/addon/components/diy/group/index.vue', source: prefix + '/uni-app/components/diy',
+        reason: 'The framework registers the cooperation home entry and four member-center DIY components in its generated group. Regenerate on the target project; do not overlay the shared component group.'
     }],
     installation: [
         'Copy the plugin directory into the target project and use the framework application installation and site authorization workflow.',
         'Integrate plugin admin/mobile sources and resources with the framework compiler, then build and publish the frontends.',
         'Configure site business rules, payment, notification, withdrawal and the existing scheduler before accepting real business.'
+    ],
+    existing_installation: [
+        'Back up deployment files, database and private uploads before replacing source files.',
+        'From the PHP project root, explicitly preflight/apply scripts/upgrade-entity-membership.php for the one plugin table and three fields, then preflight/apply scripts/upgrade.php for source/menu mounting. No business data reset is performed.',
+        'The maintenance entry backs up its own affected targets before synchronization; it cannot back up source files already overwritten by the user.',
+        'clean-retired-membership.php is an optional destructive localhost-only TEST reset, not a normal upgrade or production refund. Run --check first; --apply requires --confirm-all-plugin-data-is-test for every plugin site and a complete database backup.',
+        'Rebuild and publish admin/mobile frontends separately; PHP maintenance completion is not frontend deployment or payment verification.'
     ],
     excluded: ['mounted frontend directories', 'framework source', 'tests', 'development scripts', 'temporary tools', 'historical upgrades', 'credentials', 'database data', 'compiled frontend output'],
     files: fileManifest

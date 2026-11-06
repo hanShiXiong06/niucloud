@@ -29,7 +29,7 @@ try{
     $pctx=new Context($site,0,101);$p=new CooperationService($pctx);
     $models=$p->catalog(['keyword'=>'iPhone']);deliveryCheck(count($models)>0,'valid unregistered member can search common delivery models');$model=$models[0];
     deliveryDenied(fn()=>(new CooperationService(new Context($site,0,103)))->catalog(),'foreign-site member cannot browse pre-registration catalog');
-    $base=['name'=>'Publisher','contact_name'=>'Operator','mobile'=>'18800000001','province_id'=>910000,'city_id'=>910200,'district_id'=>910201,'address'=>'Synthetic road','provider'=>'','manual_models'=>[]];
+    $base=['name'=>'Publisher','contact_name'=>'Operator','mobile'=>'18800000001','province_id'=>910000,'city_id'=>910200,'district_id'=>910201,'address'=>'Synthetic road','provider'=>'','business_capabilities'=>[]];
     $profile=new PartnerService($pctx);$publisher=$profile->saveProfile($base);$pid=(int)$publisher['id'];
     deliveryCheck($publisher['connection']['connected']===false&&$publisher['provider_requested']==='','profile does not require an ERP provider or authorization');
     deliveryCheck($publisher['manual_models']===[]&&$publisher['capability_source']==='none','publisher-only merchant can register without pretending delivery capability');
@@ -37,19 +37,19 @@ try{
     deliveryCheck($merchants->detail($pid)['ready_state']==='capability_required','platform asks an unconfigured delivery shop to choose models, not to force ERP');
     deliveryCheck(Data::query('connection',$site)->count()===0,'registering without ERP creates no connection row');
     $make=static function(int $mid,string $name,int $city,int $district)use($site,$base,$model):array{
-        return(new PartnerService(new Context($site,0,$mid)))->saveProfile(array_replace($base,['name'=>$name,'mobile'=>'18800000'.$mid,'city_id'=>$city,'district_id'=>$district,'manual_models'=>[['id'=>$model['id'],'title'=>'FORGED TITLE','brand'=>'FORGED BRAND']]]));
+        return(new PartnerService(new Context($site,0,$mid)))->saveProfile(array_replace($base,['name'=>$name,'mobile'=>'18800000'.$mid,'city_id'=>$city,'district_id'=>$district,'business_capabilities'=>[['business_type'=>'purchase','option_ids'=>[$model['id']],'items'=>[['title'=>'FORGED TITLE','brand'=>'FORGED BRAND']]]]]));
     };
     $county=$make(102,'County shop',910100,910101);$countyId=(int)$county['id'];
     $city=$make(104,'City shop',910100,910102);$cityId=(int)$city['id'];
     $province=$make(105,'Province shop',910200,910201);$provinceId=(int)$province['id'];
     deliveryCheck($county['manual_models'][0]===$model,'manual model labels are rebuilt from the current catalog, not client labels');
     deliveryCheck($county['manual_model_count']===1&&$county['inventory_count']===0&&$county['capability_source']==='manual','declared capabilities do not fabricate ERP inventory count or inventory-based grade');
-    $ready=$merchants->detail($countyId);deliveryCheck($ready['ready_state']==='ready'&&$ready['inventory_count']===0&&$ready['grade_name']==='B','platform classifies manual delivery as ready without inventing stock or raising stock-based grade');
+    $ready=$merchants->detail($countyId);deliveryCheck($ready['ready_state']==='ready'&&$ready['inventory_count']===0&&!$ready['membership_active'],'platform classifies free manual delivery as ready without inventing stock or paid rank');
     deliveryCheck($merchants->lists(['ready_state'=>'ready'])['total']===3&&$merchants->lists(['ready_state'=>'capability_required'])['total']===1,'platform readiness filter includes manual providers and isolates shops lacking capability');
     deliveryCheck((new CapabilityService($ctx))->models($countyId)===$county['manual_models'],'framework config stores delivery declaration without new schema');
-    deliveryDenied(fn()=>(new CapabilityService($pctx))->save($countyId,['manual_models'=>[]]),'capability helper cannot be reused to edit another member shop');
+    deliveryDenied(fn()=>(new CapabilityService($pctx))->save($countyId,['business_capabilities'=>[]]),'capability helper cannot be reused to edit another member shop');
     $countyProfile=new PartnerService(new Context($site,0,102));
-    deliveryDenied(fn()=>$countyProfile->saveProfile(array_replace($base,['manual_models'=>[['id'=>'fake-model']]])),'unknown catalog model cannot become a declared capability');
+    deliveryDenied(fn()=>$countyProfile->saveProfile(array_replace($base,['business_capabilities'=>[['business_type'=>'purchase','option_ids'=>['fake-model']]]])),'unknown catalog model cannot become a declared capability');
     deliveryCheck((new CapabilityService($ctx))->models($countyId)===$county['manual_models'],'invalid declaration does not erase the prior profile or capability');
     $countyProfile->saveProfile(array_replace($base,['name'=>'County shop','city_id'=>910100,'district_id'=>910101]));
     deliveryCheck((new CapabilityService($ctx))->models($countyId)===[],'explicit empty model list clears declared capability');

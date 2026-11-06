@@ -4,9 +4,10 @@ if (PHP_SAPI!=='cli'||!in_array('--isolated-local-mysql',$argv,true)) exit("Requ
 foreach(['curl_exec','curl_multi_exec','fsockopen','pfsockopen','stream_socket_client','socket_connect'] as $f) if (function_exists($f)) exit("Disable HTTP functions before testing\n");
 if (filter_var(ini_get('allow_url_fopen'),FILTER_VALIDATE_BOOLEAN)) exit("Disable allow_url_fopen\n");
 require __DIR__.'/bootstrap.php';
+require __DIR__.'/membership-fixtures.php';
 require_once dirname(__DIR__,3).'/vendor/autoload.php';
 use addon\hsx_lead\app\service\{Context,ConnectionService};
-use addon\hsx_lead\app\service\cooperation\{ConfigService,Rules,Store,PartnerService,CooperationService,ReviewService};
+use addon\hsx_lead\app\service\cooperation\{ConfigService,Rules,Store,PartnerService,CooperationService,ReviewService,MembershipCatalogService};
 use addon\hsx_lead\app\support\Data;
 use addon\hsx_lead\app\provider\{ProviderRegistry,TransportContract};
 use addon\hsx_lead\app\support\Cipher;
@@ -27,14 +28,16 @@ try {
     coopCheck(date('H:i:s',Rules::addMonths(strtotime('2026-01-31 10:20:30'),1))==='10:20:30','entitlement preserves time');
 
     [$app,$pdo,$schema,$site]=leadBoot();
+    leadMembershipSeed($site);
+    Db::name('member_level')->where('site_id',$site)->where('level_id',704)->update(['level_benefits'=>leadMembershipDefinition(704,4,10,false,['all_models'=>true])['level_benefits']]);
     $official=file_get_contents(dirname(__DIR__,3).'/app/install/source/database.sql');
     if (!preg_match('/CREATE TABLE\s+`sys_attachment`\s*\(.*?\)\s*ENGINE\s*=\s*InnoDB[^;]*;/si',$official,$ddl)) throw new RuntimeException('Missing official attachment DDL');
     $pdo->exec(str_replace('`sys_attachment`','`lt_sys_attachment`',$ddl[0]));
     $ctx=new Context($site,1);$admin=new CooperationService($ctx);$partners=new PartnerService($ctx);$configService=new ConfigService($ctx);
-    $cfg=$configService->get();$cfg['enabled']=true;$cfg['publishing_required']=false;$cfg['fee_confirmed']=true;$cfg['grades'][0]['all_models']=true;$configService->save($cfg);
+    $cfg=$configService->get();$cfg['enabled']=true;$cfg['publishing_required']=false;$cfg['fee_confirmed']=true;$configService->save($cfg);
     coopCheck($configService->get()['enabled'],'site settings persisted');
-    $bad=$cfg;$bad['grades'][0]['rank']='abc';coopDeny(fn()=>$configService->save($bad),'malformed grade rank does not coerce to zero');
-    $bad=$cfg;$bad['grades'][0]['min_inventory']='1.5';coopDeny(fn()=>$configService->save($bad),'fractional inventory threshold rejected');
+    $bad=leadMembershipDefinition(701,1,1);$bad['growth']='abc';coopDeny(fn()=>MembershipCatalogService::normalize($bad),'malformed framework growth does not coerce to zero');
+    coopDeny(fn()=>MembershipCatalogService::normalize(leadMembershipDefinition(701,1,1,false,['account_limit'=>'1.5'])),'fractional account allowance rejected');
     $bad=$cfg;$bad['fee_minimum']='50.00';coopDeny(fn()=>$configService->save($bad),'fee cannot consume entire minimum commission');
     $publisherCtx=new Context($site,0,101);$receiverCtx=new Context($site,0,102);$publisherService=new PartnerService($publisherCtx);$receiverService=new PartnerService($receiverCtx);
     coopCheck($publisherService->bootstrap()['needs_onboarding'],'unbound member sees onboarding');
@@ -43,7 +46,7 @@ try {
     $pid=(int)$publisher['id'];$rid=(int)$receiver['id'];
     coopCheck((int)Data::row('merchant',$site,$pid)['member_id']===101,'profile identity comes from context');
     coopCheck($receiverService->bootstrap()['profile']['id']===$receiver['id'],'onboarding reuses bound member shop');
-    $partners->update($rid,['grade_mode'=>'manual','grade_id'=>'S','certification_status'=>'active','cert_expires_at'=>time()+3600,'publisher_until'=>0]);
+    leadSetEntryDefinition($site,704);leadMembershipGrant($site,102,'ML704');
     $p=new CooperationService($publisherCtx);$r=new CooperationService($receiverCtx);$model=$p->catalog(['keyword'=>'iPhone'])[0];
     coopCheck(is_string($model['id'])&&str_starts_with($model['id'],'cat_'),'catalog identifiers are strings');
     $input=['request_id'=>'cooperation-test-0001','customer_name'=>'Synthetic buyer','mobile'=>'13800000000','province_id'=>910000,'city_id'=>910100,'district_id'=>910101,
@@ -53,7 +56,7 @@ try {
     coopCheck($p->create($input)['id']===$lead['id']&&Store::query('collaboration',$site)->count()===1,'creation retry is idempotent');
     coopDeny(fn()=>$p->create(array_replace($input,['customer_name'=>'Another buyer'])),'same request cannot overwrite content');
     coopDeny(fn()=>$r->detail($id),'unassigned merchant cannot read lead');
-    $stores=$p->stores(['scope'=>'auto'],$id);coopCheck($stores['scope']==='district'&&(int)$stores['data'][0]['id']===$rid&&$stores['data'][0]['is_reliable'],'local reliable manually capable shop recommended');
+    $stores=$p->stores(['scope'=>'auto'],$id);coopCheck($stores['scope']==='district'&&(int)$stores['data'][0]['id']===$rid&&$stores['data'][0]['membership_active'],'local paid capable shop recommended');
     coopCheck(!isset($stores['data'][0]['available_balance']),'recommendations do not reveal wallet balances');
     $assigned=$p->assign($id,['merchant_id'=>$rid,'assignment_version'=>0]);
     coopCheck($assigned['status']==='assigned'&&(int)$assigned['assignment_version']===1,'single versioned assignment');

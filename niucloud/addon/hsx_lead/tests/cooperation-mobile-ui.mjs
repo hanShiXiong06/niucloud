@@ -79,9 +79,9 @@ function component(file) {
     const filename = path.join(mobile, 'components/cooperation', file); if (cache.has(filename)) return cache.get(filename)
     const descriptor = compiler.parse(fs.readFileSync(filename, 'utf8'), { filename }).descriptor
     const script = compiler.compileScript(descriptor, { id: filename, inlineTemplate: true })
-    const dependencies = { vue: Vue, '../../api/cooperation': api, '@/utils/common': { img: value => value, redirect() {} }, '@/app/api/system': { getAreaListByPid: async () => ({ data: [] }) } }
+    const dependencies = { vue: Vue, '../../api/cooperation': api, '../../api/regions': { searchCooperationRegions: async () => ({ data: { data: [], total: 0 } }) }, '@/utils/common': { img: value => value, redirect() {} }, '@/app/api/system': { getAreaListByPid: async () => ({ data: [] }) } }
     for (const match of script.content.matchAll(/from\s+['"](\.\/[^'"]+\.vue)['"]/g)) dependencies[match[1]] = { default: component(path.basename(match[1])) }
-    const result = execute(script.content, dependencies, { uni: { showToast() {}, previewImage() {}, makePhoneCall() {} } }).default; cache.set(filename, result); return result
+    const result = execute(script.content, dependencies, { uni: { showToast() {}, previewImage() {}, makePhoneCall() {}, getStorageSync() {}, setStorageSync() {}, removeStorageSync() {} } }).default; cache.set(filename, result); return result
 }
 async function html(Component, props) {
     const app = Vue.createSSRApp({ render: () => Vue.h(Component, props) }); app.config.warnHandler = () => {}
@@ -93,23 +93,31 @@ async function html(Component, props) {
 }
 let rendered = await html(component('CoopLeadCard.vue'), { lead: { id: 1, customer_name: '合成客户', status: 'selecting', can_assign: true, models: [{ id: 'cat_a', title: 'iPhone 16 Pro', quantity: 99 }], region_text: '河北 / 石家庄 / 长安区' }, direction: 'outgoing' })
 check(rendered.includes('选择门店') && rendered.includes('iPhone 16 Pro') && !rendered.includes('99') && !rendered.includes('台'), 'actual lead card only renders model labels, not demand quantity')
-rendered = await html(component('CoopStoreCard.vue'), { store: { id: 2, name: '合成门店', grade_name: 'S级商户', is_reliable: true, all_models: true, region_text: '合成地区' }, selected: true, selectable: true })
-check(rendered.includes('靠谱认证') && rendered.includes('S级商户') && rendered.includes('全型号交付能力'), 'reliable certification, grade and model capability remain separate')
-for (const reliable of [false, 0, '0', 'false', '', undefined]) {
-    rendered = await html(component('CoopMerchantAvatar.vue'), { name: '普通商家', image: '', reliable })
-    check(!rendered.includes('is-reliable') && !rendered.includes('coop-merchant-avatar__badge') && !rendered.includes('coop-merchant-avatar__glint'), 'uncertified value ' + String(reliable) + ' cannot render a VIP ring, sweep or certification mark')
-    rendered = await html(component('CoopStoreCard.vue'), { store: { id: 2, name: '普通商家', grade_name: 'S级商户', is_reliable: reliable, region_text: '合成地区' } })
-    check(!rendered.includes('is-reliable') && !rendered.includes('靠谱认证') && !rendered.includes('coop-merchant-avatar__badge'), 'a high merchant grade never turns uncertified value ' + String(reliable) + ' into a reliable store badge')
+rendered = await html(component('CoopStoreCard.vue'), { store: { id: 2, name: '合成门店', membership:{level_code:'ML8',level_name:'旗舰商户',display_rank:8,active:true,level_visual:{start_color:'#123456',end_color:'#654321'}}, all_models: true, region_text: '合成地区' }, selected: true, selectable: true })
+check(rendered.includes('旗舰商户') && rendered.includes('level-8') && rendered.includes('全型号交付能力'), 'framework-owned membership name and actual delivery capability remain distinct facts')
+check(rendered.includes('--lead-member-start:#123456')&&rendered.includes('--lead-member-end:#654321'),'merchant card forwards the configured subject skin to avatar and badge')
+for(const highlighted of [false,0,'0','false',undefined,1,'1']){
+    rendered=await html(component('CoopMerchantAvatar.vue'),{name:'普通商家',image:'',highlighted})
+    check(!rendered.includes('is-highlighted')&&!rendered.includes('coop-merchant-avatar__glint'),'only an explicit boolean presentation flag can render wings: '+String(highlighted))
 }
-for (const reliable of [true, 1, '1']) {
-    rendered = await html(component('CoopMerchantAvatar.vue'), { name: '靠谱商家', image: 'upload/hsx_lead/owned.png', reliable })
-    check(rendered.includes('is-reliable') && rendered.includes('coop-merchant-avatar__wing') && !rendered.includes('coop-merchant-avatar__badge') && rendered.includes('coop-merchant-avatar__glint') && rendered.includes('owned.png'), 'server-certified merchants get the storefront photo and exclusive treatment')
+rendered=await html(component('CoopMerchantAvatar.vue'),{name:'等级头像',image:'upload/hsx_lead/owned.png',active:true,rank:8,highlighted:true})
+check(rendered.includes('is-highlighted')&&rendered.includes('coop-merchant-avatar__wing')&&rendered.includes('coop-merchant-avatar__glint')&&rendered.includes('owned.png')&&!rendered.includes('靠谱商家'),'highlighted presentation keeps the storefront photo, wings and animation without inventing a qualification')
+for(const [rank,active,expected] of [[2,true,false],[3,false,false],[3,true,true],[8,true,true]]){
+    rendered=await html(component('CoopStoreCard.vue'),{store:{id:2,name:'合成门店',membership:{level_code:'ML8',level_name:'会员',display_rank:rank,active},region_text:'合成地区'}})
+    check(rendered.includes('is-highlighted')===expected,'store wings use active server membership and visual rank only: '+rank+'/'+active)
 }
-rendered = await html(component('CoopProfilePanel.vue'), { profile: { id: 7, name: '永久靠谱商户', is_reliable: true, certification_status: 'active', cert_expires_at: 0 }, config: {}, providers: [] })
-check(rendered.includes('永久有效') && rendered.includes('is-reliable') && rendered.includes('已永久认证'), 'a server-certified zero-expiry profile is visibly permanent, cannot reapply, and retains its VIP avatar')
-rendered = await html(component('CoopProfilePanel.vue'), { profile: { id: 7, name: '普通商户', is_reliable: false, certification_status: 'none', cert_expires_at: 0 }, config: {}, providers: [] })
-check(!rendered.includes('永久有效') && !rendered.includes('is-reliable'), 'zero expiry alone does not grant a permanent reliable badge')
-rendered = await html(component('CoopMerchantAvatar.vue'), { name: '未上传图片商家', reliable: false })
+rendered=await html(component('CoopProfilePanel.vue'),{profile:{id:7,name:'主体会员门店',membership:{active:true,level_code:'ML8',level_name:'旗舰商户',display_rank:8,expires_at:1900000000,level_visual:{start_color:'#123456',end_color:'#654321'}}},config:{},providers:[]})
+check(rendered.includes('旗舰商户')&&rendered.includes('level-8')&&rendered.includes('会员权益'),'profile renders real subject rights and a dynamic tier badge instead of separate certification products')
+check(rendered.includes('--lead-member-start:#123456'),'personal shop identity uses the same actual membership skin')
+rendered=await html(component('CoopProfilePanel.vue'),{profile:{id:7,name:'待编辑门店'},config:{},providers:[],page:true,editing:true})
+check(rendered.includes('is-page-panel')&&rendered.includes('coop-sheet is-full is-page'),'routed profile wrapper allocates a full parent-height flex area to its active sheet')
+rendered=await html(component('CoopProfilePanel.vue'),{profile:{id:7,name:'装修门店'},config:{},providers:[],page:true,displayOnly:true,section:'identity'})
+check(rendered.includes('is-diy')&&!rendered.includes('is-page-panel'),'DIY personal-centre sections remain intrinsic height even if a caller passes page')
+rendered=await html(component('CoopProfilePanel.vue'),{profile:{id:7,name:'普通资料卡'},config:{},providers:[]})
+check(!rendered.includes('is-page-panel'),'ordinary embedded profile and popup mode do not acquire routed-page height')
+rendered=await html(component('CoopProfilePanel.vue'),{profile:{id:7,name:'普通商户',membership:{active:false}},config:{},providers:[]})
+check(!rendered.includes('永久有效')&&!rendered.includes('靠谱认证'),'an ordinary subject does not gain a separate premium state')
+rendered = await html(component('CoopMerchantAvatar.vue'), { name: '未上传图片商家', highlighted: false })
 check(!rendered.includes('coop-merchant-avatar__image') && rendered.includes('data-icon="home"'), 'no storefront photo displays a neutral shop icon, not a phone image or broken thumbnail')
 const merchantAvatar = fs.readFileSync(path.join(mobile, 'components/cooperation/CoopMerchantAvatar.vue'), 'utf8')
 check(merchantAvatar.includes('@error=') && merchantAvatar.includes('prefers-reduced-motion') && merchantAvatar.includes('animation: none'), 'avatar handles image failure and supports reduced-motion settings')
@@ -147,19 +155,19 @@ for (const collaboration_id of ['0', '-1', '1.5', '4294967296', 'abc']) {
     check(pageState.page.collaborationId.value === 0, 'invalid collaboration identifier is rejected: ' + collaboration_id)
 }
 check(workbench.includes("import FrameworkTabbar from '@/components/tabbar/tabbar.vue'") && workbench.includes('<FrameworkTabbar addon="hsx_lead"') && !workbench.includes('coop-bottom-nav') && !workbench.includes('const tabs ='), 'merchant navigation is rendered by the framework and never a static replacement')
-check(workbench.includes('restoreCanonicalRoute()') && workbench.includes('!overlay.value && !childOverlay.value') && workbench.includes('!canonicalPending.value'), 'deep links and modal tasks hide the framework bar until safe canonical routing')
+check(workbench.includes('!overlay.value && !childOverlay.value') && workbench.includes('!canonicalPending.value') && workbench.includes('openCooperationTask') && workbench.includes('backCooperationTask'), 'deep links and real task pages keep framework navigation separate from the active task')
 check(workbench.includes('locked = computed(() => ui.busy.value || confirming.value)') && /showFrameworkTabbar = computed\([^\n]*!locked\.value/.test(workbench), 'submission and confirmation locks hide navigation so framework clicks cannot abandon an active mutation')
-check(workbench.includes('pageUrl = cooperationPageUrls[props.initialTab]') && workbench.includes('url: cooperationPageUrls.profile'), 'cashier returns to the current real page and publishing rights route to the profile page')
+check(workbench.includes('pageUrl = cooperationPageUrls[props.initialTab]') && workbench.includes('uni.navigateTo({ url: membershipPageUrl })'), 'cashier keeps the canonical commission route while membership opens its own native page')
 for (const [tab, folder] of [['deliveries', 'workbench'], ['stores', 'stores'], ['wallet', 'wallet'], ['profile', 'profile']]) {
     const wrapper = fs.readFileSync(path.join(mobile, 'pages', folder, 'index.vue'), 'utf8')
-    check(wrapper.includes(`initial-tab="${tab}"`) && wrapper.includes('useCooperationPage'), 'real registered route shares lifecycle for ' + tab)
+    check(tab === 'profile' ? wrapper.includes('DIY_HSX_LEAD_MEMBER_INDEX') && wrapper.includes('createProfileDiyContext') : wrapper.includes(`initial-tab="${tab}"`) && wrapper.includes('useCooperationPage'), 'real registered route uses its framework-backed lifecycle for ' + tab)
     const routed = harness(tab); routed.state.resume(); await routed.state.refresh()
     check(routed.state.tab.value === tab && (tab === 'wallet' ? routed.calls.some(row => row?.name === 'wallet') : tab === 'deliveries' ? routed.calls.some(row => row?.name === 'leads') : !routed.calls.some(row => row?.name === 'leads' || row?.name === 'wallet')), 'route initial state only reads its own business data for ' + tab)
 }
 check(workbench.includes("open('hsx_lead_cooperation'") && workbench.includes('cooperationOrder(id)'), 'payment uses framework cashier and authoritative order verification')
 check(workbench.includes('requires_manual_review') && workbench.includes('已收款，需平台核对'), 'paid-but-ungranted rights get an explicit manual-review warning')
 check(workbench.includes('hsx_lead_task_assigned,hsx_lead_task_changed'), 'subscription reuses configured framework notification keys')
-check(workbench.includes("value === 'reject' || value === 'withdraw' || value === 'no_deal'"), 'terminal/rejected handling refreshes list without querying a lost receiver permission')
+check(workbench.includes("['reject', 'withdraw', 'no_deal', 'cancel'].includes(value)") && workbench.includes('markChanged()') && workbench.includes('if (props.task) closeOverlay(); else await refreshBusinessData()'), 'terminal/rejected handling returns to the previous list and marks the single pager owner for refresh without querying lost receiver permission')
 const walletPanel = fs.readFileSync(path.join(mobile, 'components/cooperation/CoopWalletPanel.vue'), 'utf8')
 check(walletPanel.includes('/app/pages/member/apply_cash_out') && walletPanel.includes('/app/pages/member/cash_out') && walletPanel.includes('/app/pages/member/commission') && (walletPanel.match(/setStorageSync\('cashOutAccountType', 'commission'\)/g) || []).length === 2, 'withdrawal and record entry both select the framework commission account')
 check(!apiSource.includes('cooperationWithdrawal') && !walletPanel.includes('cooperationWithdrawal') && walletPanel.includes('包含其他业务佣金'), 'wallet does not recreate withdrawals or claim shared commission belongs exclusively to collaboration')

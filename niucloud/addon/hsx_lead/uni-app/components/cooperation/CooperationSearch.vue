@@ -8,7 +8,7 @@
             :show-action="showAction"
             :action-text="actionText"
             :disabled="disabled || loading"
-            :height="compact ? 38 : 42"
+            :height="44"
             bg-color="#ffffff"
             color="#2e4059"
             placeholder-color="#687a94"
@@ -54,7 +54,7 @@ const focused = ref(false), searchRef = ref<{ clear?: () => void } | null>(null)
 const resolvedInputStyle = computed(() => ({ fontSize: '14px', ...props.inputStyle }))
 // u-search hides its action via width:0, so a positive minWidth would bring it
 // back even with showAction=false. Hide it explicitly in that branch.
-const resolvedActionStyle = computed(() => props.showAction ? ({ color: 'var(--primary-color, #3478cc)', background: '#edf4ff', fontSize: '14px', fontWeight: '550', minWidth: '50px', minHeight: props.compact ? '38px' : '42px', lineHeight: props.compact ? '38px' : '42px', borderRadius: '7px', marginRight: '2px', ...props.actionStyle }) : ({ display: 'none', width: '0', minWidth: '0', margin: '0' }))
+const resolvedActionStyle = computed(() => props.showAction ? ({ color: 'var(--primary-color, #3478cc)', background: '#edf4ff', fontSize: '14px', fontWeight: '550', minWidth: '50px', minHeight: '44px', lineHeight: '44px', borderRadius: '7px', marginRight: '2px', ...props.actionStyle }) : ({ display: 'none', width: '0', minWidth: '0', margin: '0' }))
 function update(value: string | number) { emit('update:modelValue', value) }
 // Keep u-search events distinct: Enter emits only search, the action emits only
 // custom. Consumers already listen to the appropriate event; no extra reload.

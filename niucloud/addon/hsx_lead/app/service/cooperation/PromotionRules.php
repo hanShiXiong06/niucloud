@@ -10,14 +10,13 @@ final class PromotionRules
     public static function defaults(): array
     {
         return ['enabled'=>false,'settlement_days'=>3,'eligibility_months'=>0,'sources'=>[
-            'publishing'=>['enabled'=>false,'rate'=>'0.00','renewal'=>false],
-            'certification'=>['enabled'=>false,'rate'=>'0.00','renewal'=>false],
-            'maintenance'=>['enabled'=>false,'rate'=>'0.00','renewal'=>true],
+            'membership'=>['enabled'=>false,'normal_rate'=>'0.00','provider_rate'=>'0.00','renewal'=>false],
+            'maintenance'=>['enabled'=>false,'normal_rate'=>'0.00','provider_rate'=>'0.00','renewal'=>true],
         ]];
     }
     public static function source(string $purpose): string
     {
-        return ['commission'=>'maintenance','publishing'=>'publishing','certification'=>'certification'][$purpose]??'';
+        return ['commission'=>'maintenance','membership'=>'membership'][$purpose]??'';
     }
     public static function bool($value): bool
     {
@@ -33,12 +32,24 @@ final class PromotionRules
             $next[$key]=(int)$value;
         }
         if (isset($input['sources'])&&!is_array($input['sources'])) throw new CommonException('推广收入规则格式不正确');
+        if (array_diff(array_keys($input['sources']??[]),array_keys($next['sources']))) throw new CommonException('推广收入只支持主体会员费与平台维护费');
         foreach($next['sources'] as $source=>$default) {
             $row=$input['sources'][$source]??$default;if (!is_array($row)) throw new CommonException('请核对推广收入来源');
-            $rate=Rules::cents($row['rate']??'0.00');if ($rate>10000) throw new CommonException('推广比例须在0—100%之间');
-            $next['sources'][$source]=['enabled'=>self::bool($row['enabled']??false),'rate'=>Rules::amount($rate),'renewal'=>$source==='maintenance'?true:self::bool($row['renewal']??false)];
+            $normal=Rules::cents($row['normal_rate']??'0.00');$provider=Rules::cents($row['provider_rate']??'0.00');
+            if ($normal>10000||$provider>10000) throw new CommonException('普通会员及服务商推广比例须在0—100%之间');
+            $next['sources'][$source]=['enabled'=>self::bool($row['enabled']??false),'normal_rate'=>Rules::amount($normal),
+                'provider_rate'=>Rules::amount($provider),
+                'renewal'=>$source==='maintenance'?true:self::bool($row['renewal']??false)];
         }
         return $next;
+    }
+    /** Exactly one tier applies; service-provider and normal rewards never stack. */
+    public static function rateFor(array $config,string $source,string $role): string
+    {
+        if (!in_array($role,['normal','provider'],true)||!isset($config['sources'][$source])) throw new CommonException('推广身份或收入来源无效');
+        $row=$config['sources'][$source];$rate=Rules::cents($row[$role==='provider'?'provider_rate':'normal_rate']??'0.00');
+        if ($rate>10000) throw new CommonException('推广比例须在0—100%之间');
+        return Rules::amount($rate);
     }
     public static function reward(int $base,string $rate): int
     {

@@ -6,6 +6,8 @@ use addon\hsx_lead\app\support\Data;
 use addon\hsx_lead\app\support\ListTimeFilter;
 use addon\hsx_lead\app\support\MerchantRegion;
 use addon\hsx_lead\app\service\cooperation\PartnerService;
+use addon\hsx_lead\app\service\cooperation\CapabilityService;
+use addon\hsx_lead\app\service\cooperation\{ConfigService,BusinessService};
 use core\exception\CommonException;
 use think\facade\Db;
 
@@ -44,25 +46,26 @@ final class MerchantService
         }
         $ready=Data::text($params,'ready_state',32);
         if ($ready!=='') {
-            if (!in_array($ready,['member_required','capability_required','connection_required','sync_required','ready','attention','paused'],true)) throw new CommonException('请选择有效的商户就绪状态');
+            if (!in_array($ready,['member_required','membership_required','capability_required','connection_required','sync_required','ready','attention','paused'],true)) throw new CommonException('请选择有效的商户就绪状态');
             // Readiness spans merchant/member/auth/publication freshness. Filter the full
             // scoped set before pagination, never merely the currently requested page.
             $rows=array_values(array_filter(array_map(fn($r)=>$this->present($r),$q->order('id desc')->select()->toArray()),fn($r)=>$r['ready_state']===$ready));
             $page=max(1,(int)($params['page']??1));$size=max(1,min(100,(int)($params['limit']??$params['page_size']??20)));
-            return ['data'=>array_slice($rows,($page-1)*$size,$size),'total'=>count($rows),'per_page'=>$size,'current_page'=>$page];
+            return ['data'=>array_slice($rows,($page-1)*$size,$size),'total'=>count($rows),'per_page'=>$size,'current_page'=>$page,'business_definitions'=>$this->businessDefinitions()];
         }
         $result=Data::page($q,$params);
         $result['data']=array_map(fn($r)=>$this->present($r),$result['data']);
+        $result['business_definitions']=$this->businessDefinitions();
         return $result;
     }
 
     public function detail(int $id): array
     {
         $this->context->manager();
-        return $this->present(Data::row('merchant',$this->context->site,$id));
+        return $this->present(Data::row('merchant',$this->context->site,$id),true);
     }
 
-    private function present(array $row): array
+    private function present(array $row,bool $withDefinitions=false): array
     {
         $row=Data::regionNames($row);
         $conn=(new ConnectionService($this->context))->get((int)$row['id']);
@@ -76,11 +79,19 @@ final class MerchantService
         $member=Db::name('member')->where('site_id',$this->context->site)->where('member_id',$row['member_id'])->field('nickname,status,is_del,delete_time')->find();
         $row['member_name']=(string)($member['nickname']??'');
         $capability=(new PartnerService($this->context))->present($row);
-        foreach(['manual_models','manual_model_count','capability_source','inventory_count','all_models','grade_name','is_reliable','blocked_at'] as $key) $row[$key]=$capability[$key];
+        foreach(['manual_models','manual_model_count','business_capabilities','business_capability_count','capability_source','inventory_count','all_models',
+            'membership_rank','display_rank','blocked_at','membership','membership_active','membership_tier','membership_expires_at',
+            'can_collaborate','can_publish','can_accept','can_view_inventory','capabilities'] as $key) $row[$key]=$capability[$key];
+        if ($withDefinitions) $row['business_definitions']=$this->businessDefinitions();
         [$row['ready_state'],$row['ready_reason']]=$this->readiness($row,$conn,$member?:null);
         $row['service_areas']=Data::decode($row['service_areas_json']??'');
         unset($row['service_areas_json']);
         return $row;
+    }
+
+    private function businessDefinitions(): array
+    {
+        return array_map(function(array $business):array {return array_intersect_key($business,array_flip(['key','name','enabled','dimension']))+['options'=>(new BusinessService($this->context))->options($business)];},(new ConfigService($this->context))->get()['businesses']);
     }
 
     public function save(int $id, #[\SensitiveParameter] array $input): array
@@ -89,13 +100,20 @@ final class MerchantService
         $this->context->manager();
         $site=$this->context->site;
         return Db::transaction(function () use ($id,$input,$site) {
+            Db::name('site')->where('site_id',$site)->lock(true)->field('site_id')->find();
             $old=$id ? Data::row('merchant',$site,$id,true) : [];
             $region=Data::region($input);
             $memberId=(int)($input['member_id']??0);
             if ($memberId>0) {
                 $member=Db::name('member')->where('site_id',$site)->where('member_id',$memberId)->lock(true)->find();
                 if (!$member || (int)$member['status']!==1 || (int)$member['is_del']!==0 || (int)$member['delete_time']>0) throw new CommonException('请选择本站启用中的会员');
-                if (Data::query('merchant',$site)->where('member_id',$memberId)->where('id','<>',$id)->count()) throw new CommonException('该会员已绑定其他商户');
+                if (Data::query('merchant',$site)->where('member_id',$memberId)->where('id','<>',$id)->lock(true)->find()) throw new CommonException('该会员已绑定其他商户');
+                if (Db::name('hsx_lead_merchant_member')->where('site_id',$site)->where('member_id',$memberId)->whereIn('status',['active','pending'])->lock(true)->find()) throw new CommonException('该会员已有门店成员关系或待确认申请，请先处理原归属，不能直接绑定为另一主体负责人');
+            }
+            if ($old&&(int)$old['member_id']!==$memberId) {
+                $hasTeam=Db::name('hsx_lead_merchant_member')->where('site_id',$site)->where('merchant_id',$id)->whereIn('status',['active','pending'])->lock(true)->find();
+                $tier=Db::name('hsx_lead_partner')->where('site_id',$site)->where('merchant_id',$id)->lock(true)->value('membership_level');
+                if ($hasTeam||$tier) throw new CommonException('该主体已有成员或付费会员权益，不能通过编辑资料直接更换负责人，请先核对成员、账款和原权益');
             }
             $mobile=Data::text($input,'mobile',32,true);
             if (!preg_match('/^[0-9+() -]{5,32}$/D',$mobile)) throw new CommonException('请填写有效联系电话');
@@ -112,6 +130,7 @@ final class MerchantService
                 'service_areas_json'=>Data::json($checkedAreas),'update_time'=>time()];
             if (!$id) $id=(int)Data::query('merchant',$site)->insertGetId($values+['site_id'=>$site,'create_time'=>time()]);
             else Data::query('merchant',$site)->where('id',$id)->update($values);
+            (new CapabilityService($this->context))->save($id,$input,true);
             // Basic editing owns no ERP credentials, revision, lease or run state.
             // Pausing a merchant may stop future scheduled runs, not rewrite its connection.
             if ($values['status']===0) Data::query('connection',$site)->where('merchant_id',$id)->update(['enabled'=>0,'update_time'=>time()]);
@@ -124,8 +143,9 @@ final class MerchantService
     {
         if (!$member || (int)$member['status']!==1 || (int)$member['is_del']!==0 || (int)$member['delete_time']>0) return ['member_required','请先绑定本站启用中的会员，商户才可独立接单'];
         if ((int)$merchant['status']!==1 || (int)($merchant['blocked_at']??0)>0) return ['paused','商户已停止合作，不参与门店推荐；历史记录仍保留'];
+        if (empty($merchant['can_accept'])) return ['membership_required',empty($merchant['membership_active'])?'门店会员未开通或已到期，暂不能接收新的客户线索；已有工单仍可处理':'当前门店会员未包含接收客户线索权益，请在会员页核对权益'];
         if (!empty($merchant['all_models'])) return ['ready','按平台授予的等级承接全部型号；不代表有现货，交付前需核对'];
-        if ((int)($merchant['manual_model_count']??0)>0) return ['ready','已手选可交付型号，可参与对应需求推荐；无需接入ERP，实物和价格请向门店核对'];
+        if ((int)($merchant['business_capability_count']??0)>0) return ['ready','已设置业务能力，可参与对应需求推荐；无需接入ERP，交付范围请向门店核对'];
         if ((int)($merchant['inventory_count']??0)>0) return ['ready','已有有效在售库存可参与需求推荐；接单前仍需核对现货'];
         if (!$conn['connected']) return ['capability_required','请商户在手机端选择可交付型号；也可选择连接ERP，发单不依赖ERP'];
         if (!$conn['channel_enabled']) return ['attention','ERP渠道已关闭；可手选可交付型号继续参与需求推荐'];

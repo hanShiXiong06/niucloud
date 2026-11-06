@@ -1,0 +1,13 @@
+{
+  "decorate": "Decorate",
+  "changePage": "Settings",
+  "preview": "Preview",
+  "pageSelectTips": "Select a page",
+  "developTitle": "Development configuration",
+  "wapDomain": "WAP domain (WAP_DOMAIN)",
+  "wapDomainPlaceholder": "Enter the WAP domain",
+  "settingTips": "Configuration help",
+  "link": "Link",
+  "copy": "Copy",
+  "scanQRCodeOnRight": "Scan the QR code to preview"
+}

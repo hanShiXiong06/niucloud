@@ -4,6 +4,7 @@ if (PHP_SAPI!=='cli'||!in_array('--isolated-local-mysql',$argv,true)) exit("Requ
 foreach(['curl_exec','curl_multi_exec','fsockopen','pfsockopen','stream_socket_client','socket_connect'] as $f) if(function_exists($f)) exit("Disable HTTP/network functions before isolated testing\n");
 if(filter_var(ini_get('allow_url_fopen'),FILTER_VALIDATE_BOOLEAN))exit("Disable allow_url_fopen\n");
 require __DIR__.'/bootstrap.php';require_once dirname(__DIR__,3).'/vendor/autoload.php';
+require __DIR__.'/membership-fixtures.php';
 use addon\hsx_lead\app\service\Context;
 use addon\hsx_lead\app\service\cooperation\{ConfigService,CooperationService,PartnerService,PaymentService,Rules,Store,CooperationNoticeService};
 use addon\hsx_lead\app\support\Data;
@@ -18,6 +19,8 @@ function financeCheck(bool $ok,string $label):void {global $checks;if(!$ok)throw
 function financeReject(callable $call,string $label):void {try{$call();}catch(core\exception\CommonException $e){financeCheck(true,$label);return;}throw new RuntimeException('Not rejected: '.$label);}
 try {
     [$app,$pdo,$schema,$site]=leadBoot();leadAssertIsolated($schema);
+    leadMembershipSeed($site);
+    Db::name('member_level')->where('site_id',$site)->where('level_id',704)->update(['level_benefits'=>leadMembershipDefinition(704,4,10,false,['all_models'=>true])['level_benefits']]);
     $official=file_get_contents(dirname(__DIR__,3).'/app/install/source/database.sql');
     foreach(['pay','member_cash_out_account','pay_transfer'] as $table) {
         preg_match('/CREATE TABLE\s+`'.preg_quote($table,'/').'`\s*\(.*?\)\s*ENGINE\s*=\s*InnoDB[^;]*;/si',$official,$matches);
@@ -26,10 +29,12 @@ try {
     }
     $admin=new Context($site,1);$pubCtx=new Context($site,0,101);$recCtx=new Context($site,0,102);
     $configService=new ConfigService($admin);$config=ConfigService::defaults();$config['enabled']=true;$config['publishing_required']=false;$config['fee_confirmed']=true;
-    $config['grades'][0]['all_models']=true;$configService->save($config);
+    // Keep this existing 50/9.9 ledger fixture; new-business defaults are tested separately.
+    $config['businesses'][0]['commission_minimum']='50.00';
+    $configService->save($config);
     $merchant=static function(int $member,string $name)use($site):int{return(int)Data::query('merchant',$site)->insertGetId(['site_id'=>$site,'name'=>$name,'contact_name'=>'Fixture','mobile'=>'19900000'.$member,'member_id'=>$member,'province_id'=>910000,'city_id'=>910100,'district_id'=>910101,'create_time'=>time(),'update_time'=>time()]);};
     $pub=$merchant(101,'Publisher fixture');$rec=$merchant(102,'Receiver fixture');
-    $partners=new PartnerService($admin);$partners->update($rec,['grade_mode'=>'manual','grade_id'=>'S','certification_status'=>'none','cert_expires_at'=>0,'publisher_until'=>0]);
+    leadSetEntryDefinition($site,704);$partners=new PartnerService($admin);leadMembershipGrant($site,102,'ML704');
     $pubService=new CooperationService($pubCtx);$recService=new CooperationService($recCtx);$catalog=$pubService->catalog();
     financeCheck(count($catalog)>0,'server-owned searchable model directory');
     $create=['request_id'=>'finance-lead-fixture','customer_name'=>'Test customer','mobile'=>'13900000000','province_id'=>910000,'city_id'=>910100,'district_id'=>910101,'business_type'=>'purchase','model_ids'=>[$catalog[0]['id']],'attachments'=>[],'remark'=>'Fixture only','consent'=>true];
@@ -125,25 +130,28 @@ try {
     financeReject(fn()=>$cash->transfer($site,$cashId2,['transfer_type'=>TransferDict::OFFLINE]),'completed framework withdrawal cannot transfer twice');
     $cashId3=(int)$cash->apply($site,101,array_replace($cashInput,['apply_money'=>'5.00']));$cash->cancel($site,$cashId3);
     financeCheck($publisher->wallet()['available']==='30.10'&&$publisher->wallet()['frozen']==='0.00'&&$publisher->wallet()['withdrawn']==='20.00','cancelled withdrawals neither consume balance nor count as paid');
+    // Explicit replacement of closed business orders: keep historical rows and every receipt/rule gate.
+    Db::name('member')->insert(['site_id'=>$site,'member_id'=>104,'nickname'=>'Closed-payment fixture']);$replacementMerchant=$merchant(104,'Closed-payment fixture');
+    $replacementContext=new Context($site,0,104);$replacementPayments=new PaymentService($replacementContext);$replacementCooperation=new CooperationService($replacementContext);
+    leadMembershipGrant($site,104,'ML704');
+    $configService->save($config);$closedLead=$pubService->create(array_replace($create,['request_id'=>'closed-commission-lead']));$pubService->assign((int)$closedLead['id'],['merchant_id'=>$replacementMerchant,'assignment_version'=>0]);$replacementCooperation->action((int)$closedLead['id'],['action'=>'accept','assignment_version'=>1]);$replacementCooperation->action((int)$closedLead['id'],['action'=>'deal','assignment_version'=>1]);
+    $closedCommission=$replacementPayments->createOrder(['purpose'=>'commission','lead_id'=>$closedLead['id'],'amount'=>'50.00','request_id'=>'closed-commission-original']);Store::query('coop_order',$site)->where('id',$closedCommission['id'])->update(['status'=>'closed']);$commissionBefore=Store::row('coop_order',$site,(int)$closedCommission['id']);
+    financeReject(fn()=>$replacementPayments->createOrder(['purpose'=>'commission','lead_id'=>$closedLead['id'],'amount'=>'60.00','request_id'=>'closed-commission-reprice']),'closed commission cannot silently change its original agreed amount');
+    $rebuiltCommission=$replacementPayments->createOrder(['purpose'=>'commission','lead_id'=>$closedLead['id'],'amount'=>'50.00','request_id'=>'closed-commission-replacement']);$commissionAfter=Store::row('coop_order',$site,(int)$closedCommission['id']);
+    financeCheck($rebuiltCommission['id']!==$closedCommission['id']&&$commissionAfter['rule_json']===$commissionBefore['rule_json']&&Store::row('collaboration',$site,(int)$closedLead['id'])['payment_order_id']==$rebuiltCommission['id']&&$rebuiltCommission['net_amount']==='40.10','closed commission rebuild preserves fee snapshots and switches only the active lead payment pointer');
+    financeReject(fn()=>PaymentService::paymentInfo($site,(int)$closedCommission['id']),'superseded closed commission history cannot reopen its cashier');
     $partners->block($pub,['confirm'=>true,'reason'=>'Isolated fixture review']);
     financeCheck($publisher->wallet()['available']==='30.10','stopping cooperation does not confiscate earned framework commission');
-    $config['publishing_required']=true;$config['publishing_price']='1.00';$config['certification_price']='2.00';$configService->save($config);
-    $pubOrder=$receiver->createOrder(['purpose'=>'publishing','request_id'=>'publishing-fixture']);
-    financeCheck($pubOrder['amount']==='1.00','publishing price comes from confirmed site config');
-    $fact=static function(array $o,string $no)use($site):array{Db::name('pay')->insert(['site_id'=>$site,'trade_type'=>PaymentService::TRADE_TYPE,'trade_id'=>$o['id'],'main_type'=>PayDict::MEMBER,'main_id'=>102,'from_main_id'=>102,'out_trade_no'=>$no,'money'=>$o['amount'],'status'=>PayDict::STATUS_FINISH]);return ['site_id'=>$site,'trade_type'=>PaymentService::TRADE_TYPE,'trade_id'=>$o['id'],'out_trade_no'=>$no];};
-    PaymentService::confirm($fact($pubOrder,'FIXTURE_PUBLISH_PAY'));
-    financeCheck((int)Store::partner($site,$rec)['publisher_until']>time(),'paid publication grants one purchased month');
-    $certOrder=$receiver->createOrder(['purpose'=>'certification','request_id'=>'certification-fixture']);PaymentService::confirm($fact($certOrder,'FIXTURE_CERT_PAY'));
-    financeCheck(Store::partner($site,$rec)['certification_status']==='pending','paying certification does not claim trusted before review');
-    financeReject(fn()=>$receiver->createOrder(['purpose'=>'certification','request_id'=>'repeat-cert-fixture']),'pending certification prevents duplicate charge');
-    $lateOrder=$receiver->createOrder(['purpose'=>'publishing','request_id'=>'publishing-late-fixture']);$beforeUntil=(int)Store::partner($site,$rec)['publisher_until'];
+    $config['publishing_required']=true;$configService->save($config);
+    $fact=static function(array $o,string $no)use($site):array{Db::name('pay')->insert(['site_id'=>$site,'trade_type'=>PaymentService::TRADE_TYPE,'trade_id'=>$o['id'],'main_type'=>PayDict::MEMBER,'main_id'=>102,'from_main_id'=>102,'out_trade_no'=>$no,'money'=>$o['amount'],'status'=>PayDict::STATUS_FINISH,'pay_time'=>time()]);return ['site_id'=>$site,'trade_type'=>PaymentService::TRADE_TYPE,'trade_id'=>$o['id'],'out_trade_no'=>$no];};
+    $membership=new \addon\hsx_lead\app\service\cooperation\EntityMembershipService($recCtx);$quote=$membership->quote('ML704','month');$lateOrder=$receiver->createOrder(['purpose'=>'membership','level_code'=>'ML704','cycle'=>'month','quote_token'=>$quote['quote_token'],'request_id'=>'membership-late-fixture']);$beforeUntil=(int)Store::partner($site,$rec)['membership_until'];
     $partners->block($rec,['confirm'=>true,'reason'=>'Fixture stop while payment is in flight']);
     financeReject(fn()=>$receiver->assertPayable((int)$lateOrder['id']),'stopped merchant cannot start paying a previously-created rights order');
     financeReject(fn()=>PaymentService::paymentInfo($site,(int)$lateOrder['id']),'new cashier creation also rechecks stopped merchant');
     PaymentService::confirm($fact($lateOrder,'FIXTURE_LATE_BLOCKED_PAY'));
     $late=$receiver->order((int)$lateOrder['id']);
     financeCheck($late['status']==='paid'&&$late['requires_manual_review']===true,'late actual receipt is retained as a manual-review case');
-    financeCheck((int)Store::partner($site,$rec)['publisher_until']===$beforeUntil,'late stopped-merchant receipt does not grant unusable rights');
+    financeCheck((int)Store::partner($site,$rec)['membership_until']===$beforeUntil,'late stopped-merchant receipt does not grant unusable rights');
     financeCheck($finance->adminOrders(['requires_manual_review'=>1])['total']===1,'finance can find the receipt awaiting human review');
     $notices=new CooperationNoticeService(static fn(array $payload)=>throw new RuntimeException('Disabled channels must not dispatch'));
     $noticeEvent=['site_id'=>$site,'lead_id'=>$lead['id'],'action'=>'paid'];$notices->changed($noticeEvent);$noticeCount=Data::query('audit',$site)->where('entity_type','collaboration_notice')->count();$notices->changed($noticeEvent);

@@ -1,7 +1,7 @@
 import { onBeforeUnmount, reactive, ref } from 'vue'
 
 export type Row = Record<string, any>
-export const readyLabels: Record<string, string> = { member_required: '待绑会员', capability_required: '待设置交付型号', connection_required: '待设置交付能力', sync_required: '库存同步中', ready: '可接收线索', attention: '需要处理', paused: '已暂停' }
+export const readyLabels: Record<string, string> = { member_required: '待绑会员', membership_required: '待开通入驻权益', capability_required: '待设置交付型号', connection_required: '待设置交付能力', sync_required: '库存同步中', ready: '可接收线索', attention: '需要处理', paused: '已暂停' }
 export const syncLabel = (status: string) => ({ idle: '尚未同步', pending: '等待处理', queued: '等待处理', running: '逐页同步中', completed: '同步完成', success: '同步完成', failed: '同步失败', cancelled: '任务已取消', interrupted: '同步已中断', paused: '渠道已关闭 · 采集暂停' }[status] || '尚未同步')
 export const money = (value: any) => `¥${Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 export const time = (value: any) => value ? new Date(typeof value === 'number' || /^\d+$/.test(value) ? Number(value) * 1000 : value).toLocaleString('zh-CN', { hour12: false }) : '尚未记录'

@@ -14,7 +14,7 @@ export const getCooperationLeads = (params: CoopRow = {}) => request.get(`${root
 export const getCooperationLead = (id: number) => request.get(`${root}/leads/${id}`, quiet)
 export const transferCooperationOwner = (id: number, data: CoopRow) => request.post(`${root}/leads/${id}/owner`, data, quiet)
 export const getCooperationPartners = (params: CoopRow = {}) => request.get(`${root}/partners`, { ...quiet, params })
-export const saveCooperationPartner = (id: number, data: CoopRow) => request.put(`${root}/partners/${id}`, data, quiet)
+export const getCooperationBusinessLicense = (id: number) => request.get(`${root}/partners/${id}/business-license`, quiet)
 export const blockCooperationPartner = (id: number, data: CoopRow) => request.post(`${root}/partners/${id}/block`, data, quiet)
 export const getCooperationOrders = (params: CoopRow = {}) => request.get(`${root}/orders`, { ...quiet, params })
 export const getCooperationReviews = (params: CoopRow = {}) => request.get(`${root}/reviews`, { ...quiet, params })

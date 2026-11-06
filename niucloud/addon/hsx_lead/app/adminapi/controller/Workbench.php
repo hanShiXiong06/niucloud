@@ -23,7 +23,7 @@ final class Workbench extends BaseAdminController
     public function connectionSettings(int $id) { return success((new ConnectionService($this->context()))->syncSettings($id,$this->request->param())); }
     public function noticeConfig() { $ctx=$this->context(); $ctx->manager(); return success((new NoticeConfigService())->get($ctx->site)); }
     public function saveNoticeConfig() { $ctx=$this->context(); $ctx->manager(); return success((new NoticeConfigService())->save($ctx->site,$this->request->param(),$ctx->uid)); }
-    public function catalog() { return success((new CatalogService($this->context()))->get()); }
+    public function catalog() { return success((new CatalogService($this->context()))->get($this->request->param())); }
     public function saveCatalog() { return success((new CatalogService($this->context()))->save($this->request->param())); }
     public function merchants() { return success((new MerchantService($this->context()))->lists($this->request->param())); }
     public function merchant(int $id) { return success((new MerchantService($this->context()))->detail($id)); }

@@ -2,6 +2,7 @@ import { onBeforeUnmount, reactive, ref } from 'vue'
 import useUserStore from '@/stores/modules/user'
 import { errorText, timestampParts } from './useLeadUi'
 import { hasLeadPagePermission } from './navigation'
+import { demandNames } from './business'
 
 export type CoopRow = Record<string, any>
 export const cooperationStatuses = [
@@ -12,14 +13,15 @@ export const cooperationStatuses = [
 const labels: Record<string, string> = {
     ...Object.fromEntries(cooperationStatuses.map(item => [item.value, item.label])),
     pending: '待处理', review: '待复核', followup: '继续跟进', clear: '核查无违规', resolved: '已处理', confirmed_violation: '确认违规',
-    rejected: '已驳回', closed: '已关闭', active: '已认证', none: '未认证', revoked: '已撤销', commission: '协作佣金', publishing: '发单权益', certification: '靠谱认证'
+    rejected: '已驳回', closed: '已关闭', active: '已生效', none: '未开通', revoked: '已撤销', commission: '协作佣金', membership: '主体会员'
 }
 export const coopLabel = (value: unknown) => labels[String(value)] || String(value || '未设置')
 export const coopMoney = (value: unknown) => value === undefined || value === null || value === '' ? '—' : `¥${Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 export const coopTime = (value: unknown) => timestampParts(value)?.full || '未记录'
 export const coopTone = (value: unknown): 'success' | 'warning' | 'danger' | 'info' => ['paid', 'active', 'clear', 'resolved'].includes(String(value)) ? 'success' : ['confirmed_violation', 'revoked', 'rejected'].includes(String(value)) ? 'danger' : ['assigned', 'pending', 'review', 'unpaid'].includes(String(value)) ? 'warning' : 'info'
-export const coopModels = (row: CoopRow): string[] => (Array.isArray(row.models) ? row.models : []).map((item: CoopRow) => String(item.title || item.name || '')).filter(Boolean)
-export const coopBusiness = (value: unknown) => ({ purchase: '购买', rent: '租机', exchange: '置换' }[String(value)] || '购买')
+export const coopModels = demandNames
+const businessLabels:Record<string,string>={purchase:'二手机',new_phone:'新机',rent:'租机',exchange:'二手机置换',broadband:'宽带',repair:'手机维修',home_recycle:'二手机上门回收'}
+export const coopBusiness = (value: unknown, name?: unknown) => String(name || businessLabels[String(value)] || value || '未返回业务')
 export const coopError = errorText
 export function useCooperationAccess() {
     const user = useUserStore()

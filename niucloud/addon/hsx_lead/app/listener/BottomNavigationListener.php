@@ -22,7 +22,8 @@ final class BottomNavigationListener
     {
         $links=require dirname(__DIR__).'/dict/diy/links.php';
         $items=[
-            'HSX_LEAD_MERCHANT_WORKBENCH'=>['交付','deliveries'],
+            'HSX_LEAD_MERCHANT_HOME'=>['首页','home'],
+            'HSX_LEAD_MERCHANT_WORKBENCH'=>['找客户','deliveries'],
             'HSX_LEAD_MERCHANT_STORES'=>['找门店','stores'],
             'HSX_LEAD_MERCHANT_WALLET'=>['收益','wallet'],
             'HSX_LEAD_MERCHANT_PROFILE'=>['我的','profile'],

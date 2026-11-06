@@ -1,9 +1,17 @@
 @import './cooperation-shared';
-@include hsx-coop-loadmore;
 
-.hsx-cooperation { --coop-primary: var(--primary-color, #d93833); height: calc(100vh - var(--window-top, 0px) - var(--window-bottom, 0px)); min-height: 600rpx; background: #f5f6f8; color: #202124; display: flex; flex-direction: column; box-sizing: border-box; font-size: 26rpx; }
+.hsx-cooperation { --coop-primary: var(--primary-color, #d93833); height: calc(100vh - var(--window-top, 0px) - var(--window-bottom, 0px)); min-height: 0; background: #f5f6f8; color: #202124; display: flex; flex-direction: column; box-sizing: border-box; font-size: 26rpx; }
+/* #ifdef H5 */
+.hsx-cooperation { height: calc(100dvh - var(--window-top, 0px) - var(--window-bottom, 0px)); }
+/* #endif */
 .coop-overlay-root { flex: none; height: 0; width: 100%; overflow: visible; }
+// Framework popup roots are flex items even while closed; keep the cashier out of page sizing.
+// Its native fixed overlay remains unchanged and can extend beyond this zero-height mount.
+.coop-cashier-mount { flex: none; height: 0; min-height: 0; width: 100%; overflow: visible; }
+.coop-overlay-root.is-task-page { flex: 1; height: 100%; min-height: 0; display: flex; flex-direction: column; }.coop-onboarding-entry { padding: 0 24rpx 36rpx; }
 .coop-main-scroll { height: 0; min-height: 0; flex: 1; }
+.coop-main-paging { height: 0; min-height: 0; flex: 1; width: 100%; }.coop-lead-empty { padding: 24rpx; }
+.coop-lead-pager { height: 100%; width: 100%; }
 // The header and filters are siblings of the native scroll-view: they remain
 // visible without relying on H5-only sticky behavior inside a native scroller.
 .coop-delivery-controls { flex: none; min-width: 0; background: #fff; border-bottom: 1rpx solid #e8edf4; }
@@ -13,16 +21,12 @@
 .coop-framework-tabbar { flex: none; height: calc(51px + env(safe-area-inset-bottom)); }
 // Keep the framework's internal spacers out of document flow without clipping its fixed bar.
 .coop-framework-tabbar-mount { position: fixed; left: 0; right: 0; bottom: 0; height: 0; }
-.coop-direction-tabs { display: flex; gap: 44rpx; padding: 0 30rpx; background: #fff; height: 90rpx; flex: none; }
-.coop-direction-tabs>view { position: relative; font-size: 33rpx; color: #9098a3; line-height: 78rpx; }
-.coop-direction-tabs>view.active { color: #202124; font-weight: 650; }
-.coop-direction-tabs>view.active::after { content: ''; position: absolute; left: 0; bottom: 5rpx; width: 40rpx; height: 5rpx; border-radius: 4rpx; background: var(--coop-primary); }
 .coop-list-tools { padding: 22rpx 30rpx 0; }
 .coop-status-tabs { margin-top: 10rpx; }
 .coop-status-tabs__inner { display: flex; align-items: center; gap: 32rpx; width: max-content; }
 .coop-status-tabs__inner>text { white-space: nowrap; min-height: 78rpx; line-height: 78rpx; color: #88929e; font-size: 24rpx; }
 .coop-status-tabs__inner>text.active { color: #202124; font-weight: 650; }
-.coop-lead-list { padding: 0 24rpx 20rpx; }
+.coop-lead-list { padding: 0 24rpx 20rpx; margin-top: 20rpx; }
 .coop-publish-dock { padding: 16rpx 30rpx 20rpx; background: #f5f6f8; flex: none; }
 .coop-warning,.coop-payment-status { margin: 20rpx 24rpx; padding: 19rpx 22rpx; border-radius: 10rpx; font-size: 23rpx; line-height: 1.7; background: #fff3e9; color: #9a6e48; }
 .coop-payment-status { background: #edf3fa; color: #617795; display: flex; flex-wrap: wrap; gap: 14rpx; justify-content: space-between; }

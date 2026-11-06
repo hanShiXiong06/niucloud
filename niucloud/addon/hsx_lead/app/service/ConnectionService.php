@@ -11,6 +11,7 @@ use think\facade\{Db,Cache};
 final class ConnectionService
 {
     private const PROBE_TTL=600;
+    private const RECENT_RUN_LIMIT=10;
     private ProviderRegistry $providers;
     public function __construct(private Context $context,?ProviderRegistry $providers=null)
     {
@@ -26,7 +27,8 @@ final class ConnectionService
             'config_revision'=>0,'last_sync_status'=>'idle','last_sync_at'=>0,'last_sync_message'=>'尚未接入ERP',
             'active_run_id'=>0,'published_run_id'=>0,'next_sync_at'=>0,'requires_initial_sync'=>false,'authorization_attention'=>false,
             'auth_renewal'=>['automatic'=>false,'ready'=>false,'mode'=>'','status'=>'credentials_required','message'=>'尚未接入ERP，请先保存并验证登录资料。'],
-            'channel_enabled'=>true,'channel_message'=>'','sync_progress'=>null,'requires_sync_restart'=>false];
+            'channel_enabled'=>true,'channel_message'=>'','sync_progress'=>null,'requires_sync_restart'=>false,
+            'recent_runs'=>[],'recent_runs_total'=>0,'recent_runs_limit'=>self::RECENT_RUN_LIMIT,'recent_runs_has_more'=>false];
         if (!$conn) return $result;
         $definition=$this->providers->definition((string)$conn['provider']);
         $channelEnabled=(new ProviderChannelService($this->context->site))->enabled($definition->key());
@@ -37,6 +39,7 @@ final class ConnectionService
             'last_sync_status'=>(string)$conn['last_sync_status'],'last_sync_at'=>(int)$conn['last_sync_at'],'last_sync_message'=>(string)$conn['last_sync_message'],
             'active_run_id'=>(int)$conn['active_run_id'],'published_run_id'=>(int)$conn['published_run_id'],'next_sync_at'=>(int)$conn['next_sync_at'],'requires_initial_sync'=>(int)$conn['published_run_id']===0]);
         $result=array_replace($result,SyncStatus::connection($this->context->site,$conn));
+        $result=array_replace($result,$this->recentRuns($merchantId,$conn,$channelEnabled));
         try {
             $credentials=Cipher::decrypt((string)$conn['credentials_cipher'],$this->context->site,(int)$conn['id']);
             $result=array_replace($result,$definition->publicCredentials($credentials));
@@ -51,6 +54,66 @@ final class ConnectionService
             $result['auth_renewal']=['automatic'=>false,'ready'=>false,'mode'=>'','status'=>'credential_error','message'=>'登录资料无法解密，未尝试自动登录；请核对部署密钥后重新验证。'];
         }
         return $result;
+    }
+
+    /** Existing persisted runs only. This read never logs in, advances a task or exposes provider payloads. */
+    private function recentRuns(int $merchantId,array $connection,bool $channelEnabled): array
+    {
+        $query=Data::query('sync_run',$this->context->site)->where('merchant_id',$merchantId)->where('connection_id',(int)$connection['id']);
+        $total=(int)(clone $query)->count();
+        $rows=$query->field('id,config_version,status,trigger_type,page_count,record_count,started_at,finished_at,error_code,cursor_json,create_time,update_time')
+            ->order('id desc')->limit(self::RECENT_RUN_LIMIT)->select()->toArray();
+        $labels=['pending'=>'等待同步','running'=>'同步中','completed'=>'已完成','failed'=>'未完成','cancelled'=>'已取消',
+            'interrupted'=>'已中断','paused'=>'已暂停','unknown'=>'状态待核对'];
+        $triggers=['manual'=>'后台手动','merchant'=>'门店手动','scheduled'=>'自动同步','unknown'=>'来源未记录'];
+        // Do not echo stored error_message: old provider text can contain account details.
+        $errors=[
+            'auth_required'=>'ERP 登录已失效，请重新验证账号后再同步',
+            'invalid_credentials'=>'ERP 登录资料未通过校验，请核对账号与授权',
+            'http_error'=>'ERP 暂时没有正常响应，请稍后重试',
+            'schema_changed'=>'ERP 返回的数据暂时无法完整识别，本轮未更新库存，请联系平台核对',
+            'scope_mismatch'=>'ERP 返回的门店与绑定范围不一致，本轮未更新库存，请重新核对授权',
+            'invalid_scope'=>'本轮查询范围未通过校验，请核对门店范围后重新同步',
+            'response_too_large'=>'ERP 单次返回资料超过处理上限，请联系平台核对',
+            'generation_expired'=>'本轮同步间隔过久，暂存资料已失效，请重新完整同步',
+            'unsupported_environment'=>'当前同步服务缺少必要能力，请联系平台处理',
+            'forbidden_endpoint'=>'ERP 接口配置未通过校验，请联系平台处理',
+            'sync_failed'=>'本轮同步未完成，未更新库存，请重试或联系平台核对',
+        ];
+        $runs=[];
+        foreach($rows as $row) {
+            $storedStatus=isset($labels[$row['status']])?(string)$row['status']:'unknown';
+            $status=$storedStatus;
+            $currentConfig=(int)$row['config_version']===(int)$connection['config_version'];
+            if (in_array($status,['pending','running'],true)) {
+                if ((int)$row['id']!==(int)$connection['active_run_id']||!$currentConfig) $status='interrupted';
+                elseif (!$channelEnabled) $status='paused';
+            }
+            $trigger=isset($triggers[$row['trigger_type']])?(string)$row['trigger_type']:'unknown';
+            $progress=SyncStatus::progress(array_replace($row,['status'=>$status]));
+            $error='';$message='';
+            if ($status==='failed'||$status==='cancelled') {
+                $raw=(string)($row['error_code']??'');
+                $error=isset($errors[$raw])?$raw:($status==='failed'?'sync_failed':'');
+                $message=$error!==''?$errors[$error]:'本轮同步已取消，未更新库存';
+            }
+            elseif ($status==='interrupted') $message='本轮同步已中断，未更新库存；请重新完整同步';
+            elseif ($status==='paused') $message='本站已关闭该 ERP 渠道，本轮同步暂停，已有资料保留';
+            $runs[]=[
+                'id'=>(int)$row['id'],'status'=>$status,'stored_status'=>$storedStatus,'status_label'=>$labels[$status],
+                'config_revision'=>(int)$row['config_version'],'is_current_configuration'=>$currentConfig,
+                'trigger_type'=>$trigger,'trigger_label'=>$triggers[$trigger],
+                'page_count'=>max(0,(int)$row['page_count']),'record_count'=>$progress['record_count'],
+                'total_records'=>$progress['total_records'],'progress_known'=>$progress['progress_known'],
+                'progress_percent'=>$progress['progress_percent'],'complete'=>$progress['complete'],
+                'is_current_snapshot'=>$status==='completed'&&(int)($connection['published_run_id']??0)===(int)$row['id'],
+                'started_at'=>max(0,(int)$row['started_at']),'finished_at'=>max(0,(int)$row['finished_at']),
+                'create_time'=>max(0,(int)$row['create_time']),'update_time'=>max(0,(int)$row['update_time']),
+                'error_code'=>$error,'error_message'=>$message,'message'=>$message!==''?$message:$progress['message'],
+            ];
+        }
+        return ['recent_runs'=>$runs,'recent_runs_total'=>$total,'recent_runs_limit'=>self::RECENT_RUN_LIMIT,
+            'recent_runs_has_more'=>$total>count($runs)];
     }
 
     public function probe(int $merchantId,#[\SensitiveParameter] array $input): array

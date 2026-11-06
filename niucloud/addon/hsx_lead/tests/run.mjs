@@ -10,7 +10,7 @@ const mode = process.argv[2] || 'pure'
 if (!['pure', 'database', 'ui'].includes(mode)) throw Error('Usage: PHP_BIN=/path/to/php node tests/run.mjs [pure|database|ui]')
 const phpOptions = ['-d', 'allow_url_fopen=0', '-d', 'disable_functions=curl_exec,curl_multi_exec,fsockopen,pfsockopen,stream_socket_client,socket_connect']
 const results = []
-for (const name of fs.readdirSync(directory).filter(name => mode === 'ui' ? name.endsWith('-ui.mjs') : name.endsWith('.php') && name !== 'bootstrap.php').sort()) {
+for (const name of fs.readdirSync(directory).filter(name => mode === 'ui' ? name.endsWith('-ui.mjs') : name.endsWith('.php') && !['bootstrap.php','membership-fixtures.php'].includes(name)).sort()) {
     const file = path.join(directory, name)
     const isolated = fs.readFileSync(file, 'utf8').includes('--isolated-local-mysql')
     if (mode !== 'ui' && (mode === 'database') !== isolated) continue

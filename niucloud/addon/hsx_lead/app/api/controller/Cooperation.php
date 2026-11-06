@@ -2,7 +2,7 @@
 declare(strict_types=1);
 namespace addon\hsx_lead\app\api\controller;
 use addon\hsx_lead\app\service\{Context,ConnectionService,AuthChallengeService,SyncService};
-use addon\hsx_lead\app\service\cooperation\{PartnerService,CooperationService,PaymentService,UploadService};
+use addon\hsx_lead\app\service\cooperation\{PartnerService,CooperationService,PaymentService,UploadService,BusinessLicenseService};
 use addon\hsx_lead\app\support\Data;
 use core\base\BaseApiController;
 use core\exception\CommonException;
@@ -24,10 +24,12 @@ final class Cooperation extends BaseApiController
     public function action(int $id) { return success($this->service()->action($id,$this->request->param())); }
     public function createOrder() { return success((new PaymentService($this->context()))->createOrder($this->request->param())); }
     public function order(int $id) { return success((new PaymentService($this->context()))->order($id)); }
-    public function wallet() { return success((new PaymentService($this->context()))->wallet($this->request->param())); }
+    public function wallet() { $ctx=$this->context();\addon\hsx_lead\app\service\cooperation\TeamService::assertOwner($ctx);return success((new PaymentService($ctx))->wallet($this->request->param())); }
     public function attachment() { return success((new UploadService($this->context()))->image()); }
     public function storefront() { return success((new UploadService($this->context()))->storefront()); }
-    private function own(Context $ctx): int { return (int)(new PartnerService($ctx))->own(true)['id']; }
+    public function businessLicenseUpload() { return success((new BusinessLicenseService($this->context()))->upload()); }
+    public function businessLicensePreview() { return success((new BusinessLicenseService($this->context()))->preview(Data::text($this->request->param(),'token',64,true)))->header(['Cache-Control'=>'private, no-store','Pragma'=>'no-cache']); }
+    private function own(Context $ctx): int { \addon\hsx_lead\app\service\cooperation\TeamService::assertOwner($ctx);return (int)(new PartnerService($ctx))->own(true)['id']; }
     public function connection() { $ctx=$this->context();return success((new ConnectionService($ctx))->get($this->own($ctx))); }
     public function challenge() { $ctx=$this->context();return success((new AuthChallengeService($ctx))->begin($this->own($ctx),$this->request->param())); }
     public function probe() { $ctx=$this->context();return success((new ConnectionService($ctx))->probe($this->own($ctx),$this->request->param())); }

@@ -9,7 +9,8 @@ Route::group('hsx_lead/cooperation',function():void {
     Route::get('config',$c.'config');Route::put('config',$c.'saveConfig');Route::get('dashboard',$c.'dashboard');Route::get('scope',$c.'scope');
     Route::get('owners',$c.'owners');
     Route::get('leads',$c.'leads');Route::get('leads/:id',$c.'detail');Route::post('leads/:id/owner',$c.'transferOwner');
-    Route::get('partners',$c.'partners');Route::put('partners/:id',$c.'updatePartner');Route::post('partners/:id/block',$c.'blockPartner');
+    Route::get('partners',$c.'partners');Route::post('partners/:id/block',$c.'blockPartner');
+    Route::get('partners/:id/business-license',$c.'businessLicensePreview');
     Route::get('orders',$c.'orders');
     Route::get('reviews',$c.'reviews');Route::post('reviews',$c.'createReview');Route::post('reviews/:id/resolve',$c.'resolve');Route::post('attachments',$c.'attachment');
 })->middleware([SafeErrors::class,AdminCheckToken::class,AdminCheckRole::class,PermissionGate::class])->completeMatch();

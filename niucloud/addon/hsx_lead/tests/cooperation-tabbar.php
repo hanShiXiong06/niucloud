@@ -18,11 +18,11 @@ try{
     $listener=new BottomNavigationListener();
     tabbarCheck($listener->handle(['key'=>'phone_shop'])===null,'another application never receives lead defaults');
     $default=$listener->handle(['key'=>'hsx_lead']);
-    tabbarCheck($default['key']==='hsx_lead'&&count($default['value']['list'])===4,'authorized merchant application exposes four default destinations');
+    tabbarCheck($default['key']==='hsx_lead'&&count($default['value']['list'])===5,'authorized merchant application exposes five default destinations including DIY home');
     tabbarCheck(($default['info']['type']??'')==='app','framework receives actual add-on metadata');
     $urls=array_column(array_column($default['value']['list'],'link'),'url');
-    tabbarCheck(count(array_unique($urls))===4,'each tab is a distinct real page rather than a client-only state');
-    tabbarCheck(array_column($default['value']['list'],'text')===['交付','找门店','收益','我的'],'default business labels are explicit');
+    tabbarCheck(count(array_unique($urls))===5,'each tab is a distinct real page rather than a client-only state');
+    tabbarCheck(array_column($default['value']['list'],'text')===['首页','找客户','找门店','收益','我的'],'default business labels are explicit');
     $package=require $plugin.'/package/uni-app-pages.php';
     foreach($default['value']['list'] as $item){
         $url=$item['link']['url'];$page=substr($url,strlen('/addon/hsx_lead/'));

@@ -42,6 +42,7 @@ function setup(name) {
         useLeadList: () => ({ rows, total: Vue.ref(0), loading: Vue.ref(false), error: Vue.ref(''), query: Vue.reactive({}), load: unexpected, search: unexpected }) }
     const dependencies = { vue: { ...Vue, onMounted() {}, onBeforeUnmount() {} }, 'element-plus': { ElMessage: {}, ElMessageBox: {} }, '@element-plus/icons-vue': { Plus: {} }, '../../api': {},
         '../../composables/useLeadUi': shared, '../../composables/authRenewal': helper,
+        '../../composables/cooperation': { coopBusiness:value=>String(value) },
         '../../composables/useAutomaticAuthorization': { useAutomaticAuthorization: () => automatic },
         '../../composables/filtering': { hasListFilters: () => false }, '../../composables/serviceScope': { serviceScopeFor: () => 'default' } }
     const module = moduleOf(script.content, key => key.endsWith('.vue') ? { default: {} } : key in dependencies ? dependencies[key] : (() => { throw Error('Unexpected dependency ' + key) })())
@@ -55,7 +56,7 @@ const Table = Vue.defineComponent({ props: ['data'], setup: (props, { slots }) =
 async function render(view) {
     const fn = new Function('Vue', compile(view.template, { mode: 'function', prefixIdentifiers: true }).code)(Vue)
     const app = Vue.createSSRApp({ setup: () => ({ ...view.state, merchantName: '合成商户' }), render: fn })
-    for (const tag of ['HsxDrawer', 'HsxPagination', 'ConnectionWizard', 'SyncProgressDrawer', 'LeadSectionHeader', 'LeadFilterBar', 'LeadTimestamp', 'RegionSelect', 'CaptchaSettings',
+    for (const tag of ['HsxDrawer', 'HsxPagination', 'ConnectionWizard', 'SyncProgressDrawer', 'LeadSectionHeader', 'LeadFilterBar', 'LeadTimestamp', 'RegionSelect', 'CaptchaSettings', 'BusinessCapabilities',
         'el-steps', 'el-step', 'el-radio-group', 'el-radio-button', 'el-radio', 'el-form', 'el-form-item', 'el-input', 'el-collapse', 'el-collapse-item', 'el-button', 'el-result', 'el-switch', 'el-input-number', 'el-empty', 'el-tooltip', 'el-dropdown', 'el-dropdown-menu', 'el-dropdown-item', 'el-tag', 'el-option', 'el-select', 'el-descriptions', 'el-descriptions-item', 'el-table-column', 'el-table', 'el-checkbox']) app.component(tag, Box)
     app.component('el-alert', Alert); app.component('HsxTable', Table)
     app.config.warnHandler = () => {}

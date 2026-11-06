@@ -12,6 +12,7 @@ catch(error){
     sharp=createRequire(path.join(path.dirname(process.env.HSX_IMAGE_NODE_MODULES),'package.json'))('sharp')
 }
 const shapes={
+    home:'<path d="m3 11 9-8 9 8M5 10v11h5v-7h4v7h5V10"/>',
     deliveries:'<path d="M8 5H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="8" y="2" width="8" height="5" rx="1.5"/><path d="m8 14 2.5 2.5L16 11"/>',
     stores:'<path d="M4 10v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V10M9 21v-7h6v7M3 10l2-7h14l2 7"/><path d="M3 10a3 3 0 0 0 4.5 2.6A3 3 0 0 0 12 12.6a3 3 0 0 0 4.5 0A3 3 0 0 0 21 10"/>',
     wallet:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M17 5V3H5a2 2 0 0 0-2 2M21 10h-5a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h5"/><circle cx="17.5" cy="13" r=".6" fill="currentColor" stroke="none"/>',
@@ -35,4 +36,4 @@ if(process.argv.includes('--copy-local-public')){
         await copyFile(path.join(dest,file),path.join(actual,file))
     }
 }
-console.log('Built 8 transparent PNG navigation icons (81 x 81) with SVG sources; no external assets.')
+console.log(`Built ${Object.keys(shapes).length * 2} transparent PNG navigation icons (81 x 81) with SVG sources; no external assets.`)

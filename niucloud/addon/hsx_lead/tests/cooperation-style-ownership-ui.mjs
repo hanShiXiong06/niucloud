@@ -108,11 +108,9 @@ for (const name of fs.readdirSync(directory).filter(name => name.endsWith('.vue'
             for (const child of node.children || []) findActions(child)
         }
         findActions(dom.baseParse(template))
-        check(actions.length === 2, 'profile publishing and certification both retain their own purchase row')
-        check(actions.every(row => !row.children.some(child => child.type === 1 && child.tag === 'u-button') && row.children.some(child => child.type === 1 && child.tag === 'view' && child.props.some(prop => prop.type === 6 && prop.name === 'class' && prop.value?.content === 'coop-profile-purchase-action'))), 'both profile purchase buttons use native layout owners instead of direct full-width u-button flex children')
-        const bounded = []
-        postcss.parse(css.join('\n')).walkRules(rule => { if (rule.selector.includes('.coop-profile-purchase-action')) bounded.push(...rule.nodes.filter(node => node.type === 'decl' && node.prop === 'width').map(node => node.value)) })
-        check(bounded.some(value => /^\d+(?:\.\d+)?rpx$/.test(value)), 'the profile action has an explicit responsive width and cannot squeeze the fee into multiple lines')
+        check(actions.length === 0 && template.includes('<CoopMembershipEntry '), 'profile replaces competing purchase rows with one component-owned entity membership entry')
+        check(template.includes("shown('showMembership')") && template.includes(':profile="profile"'), 'consolidated entity entry respects existing DIY visibility flags and uses real subject rights')
+        check(template.includes('@open="$emit(\'membership\')"') && !template.includes("$emit('purchase'"), 'profile entry is read-only native navigation, not a competing instant-purchase action')
     }
     hooks += required.size; components++
 }

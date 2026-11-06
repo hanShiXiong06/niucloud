@@ -32,7 +32,7 @@ function fixture(){
         cooperationChallenge:async()=>{throw Error('Not a captcha fixture')}
     }
     const module={exports:{}}
-    vm.runInNewContext('(function(require,module,exports){'+js+'})',{Date,Number,String,JSON,console,setTimeout:callback=>{timers.set(++timerId,callback);return timerId},clearTimeout:id=>timers.delete(id),uni:{showToast:data=>toasts.push(data)}})(key=>key==='vue'?{...Vue,onBeforeUnmount(){}}:key==='../../api/cooperation'?api:key==='../../utils/connection-actions'?loadMobileUtility('connection-actions'):key.endsWith('.vue')?{default:{}}:(()=>{throw Error('Unexpected dependency')})(),module,module.exports)
+    vm.runInNewContext('(function(require,module,exports){'+js+'})',{Date,Number,String,JSON,console,setTimeout:callback=>{timers.set(++timerId,callback);return timerId},clearTimeout:id=>timers.delete(id),uni:{showToast:data=>toasts.push(data)}})(key=>key==='vue'?{...Vue,onBeforeUnmount(){}}:key==='../../api/cooperation'?api:key==='../../utils/mobile-ui'?loadMobileUtility('mobile-ui'):key==='../../utils/connection-actions'?loadMobileUtility('connection-actions'):key.endsWith('.vue')?{default:{}}:(()=>{throw Error('Unexpected dependency')})(),module,module.exports)
     const props=Vue.reactive({show:true,profile:{},providers}),emitted=[]
     const state=module.exports.default.setup(props,{expose(){},emit:(...args)=>{emitted.push(args);if(args[0]==='close')props.show=false}})
     state.connection.value={...saved};state.provider.value='synthetic'
@@ -52,9 +52,9 @@ await initial.state.activate();check(!initial.calls.some(c=>c[0]==='activate'),'
 initial.state.confirmed.value=true;await initial.state.activate()
 check(initial.calls.map(c=>c[0]).join(',')==='probe,activate,settings,read,sync,advance,advance,advance,read','explicit consent creates authorization, enables synchronization and advances the complete three-page inventory')
 check(initial.state.connection.value.enabled===true&&initial.state.run.value.id===66,'only persisted enabled state and created task are displayed')
-check(initial.state.run.value.record_count===205&&initial.state.syncStateLabel.value==='同步完成'&&initial.state.progressText.value==='完整同步 205 条库存'&&!initial.state.error.value,'three pages and all 205 inventory records complete before successful terminal status is displayed')
+check(initial.state.run.value.record_count===205&&initial.state.publishedRun.value===true&&initial.state.currentSyncStatus.value==='completed'&&initial.state.syncStateLabel.value==='货盘已更新'&&initial.state.progressText.value==='本轮整理 205 条库存资料'&&!initial.state.error.value,'three pages and all 205 inventory records are published before successful terminal status is displayed')
 initial.state.run.value={id:66,status:'running',record_count:100};await initial.state.refresh()
-check(initial.state.syncStateLabel.value==='同步完成'&&initial.state.run.value.record_count===205,'authoritative connection refresh replaces a stale local one-page running cache')
+check(initial.state.syncStateLabel.value==='货盘已更新'&&initial.state.run.value.record_count===205&&initial.state.publishedRun.value===true,'authoritative connection refresh replaces a stale local one-page running cache')
 check(initial.state.probeToken.value===''&&!initial.state.credentials.password&&initial.state.setupStage.value==='','consumed proof and password are cleared')
 check(source.includes('同意保存授权并开启自动库存同步')&&source.includes('connectionActionState')&&loadMobileUtility('connection-actions').connectionActionState({hasPreview:true}).primaryLabel==='确认并启用同步','consent and button explain the full action')
 

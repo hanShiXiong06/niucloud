@@ -3,8 +3,8 @@ import type { Row } from '../composables/useLeadUi'
 
 const root = 'hsx_lead'
 const quiet = { showErrorMessage: false }
-export const getCatalog = () => request.get(`${root}/catalog`, quiet)
-export const saveCatalog = (data: { content: string, format: 'csv' | 'json' }) => request.put(`${root}/catalog`, data, quiet)
+export const getCatalog = (params: Row = {}) => request.get(`${root}/catalog`, { ...quiet, params })
+export const saveCatalog = (data: { content: string, format: 'csv' | 'json' | 'xlsx', business_type?: string, preview?: boolean }) => request.put(`${root}/catalog`, data, quiet)
 export const getMembers = (keyword = '') => request.get(`${root}/members`, { ...quiet, params: { keyword } })
 export const getMerchants = (params: Row) => request.get(`${root}/merchants`, { ...quiet, params })
 export const getMerchant = (id: number) => request.get(`${root}/merchants/${id}`, quiet)

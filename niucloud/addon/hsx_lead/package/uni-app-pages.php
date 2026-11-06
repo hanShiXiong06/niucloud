@@ -5,18 +5,23 @@ return [
         {
             "root": "addon/hsx_lead",
             "pages": [
+                { "path": "pages/index", "style": { "navigationStyle": "custom", "navigationBarTitleText": "商户协作" }, "needLogin": false },
+                { "path": "pages/task/index", "style": { "navigationStyle": "custom", "navigationBarTitleText": "商户协作" }, "needLogin": true },
+                { "path": "pages/catalog/index", "style": { "navigationStyle": "custom", "navigationBarTitleText": "选择业务能力" }, "needLogin": true },
+                { "path": "pages/entity/index", "style": { "navigationStyle": "custom", "navigationBarTitleText": "成员管理" }, "needLogin": true },
+                { "path": "pages/membership/index", "style": { "navigationStyle": "custom", "navigationBarTitleText": "门店会员" }, "needLogin": true },
                 {
                     "path": "pages/workbench/index",
                     "style": {
                         "navigationStyle": "custom",
-                        "navigationBarTitleText": "商户交付",
-                        "enablePullDownRefresh": true
+                        "navigationBarTitleText": "找客户",
+                        "enablePullDownRefresh": false
                     },
                     "needLogin": true
                 },
                 {
                     "path": "pages/stores/index",
-                    "style": { "navigationStyle": "custom", "navigationBarTitleText": "找交付门店", "enablePullDownRefresh": true },
+                    "style": { "navigationStyle": "custom", "navigationBarTitleText": "找门店", "enablePullDownRefresh": false },
                     "needLogin": true
                 },
                 {
@@ -27,7 +32,7 @@ return [
                 {
                     "path": "pages/profile/index",
                     "style": { "navigationStyle": "custom", "navigationBarTitleText": "我的门店", "enablePullDownRefresh": true },
-                    "needLogin": true
+                    "needLogin": false
                 }
             ]
         },

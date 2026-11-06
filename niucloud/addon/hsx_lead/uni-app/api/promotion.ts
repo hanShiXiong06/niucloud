@@ -8,3 +8,5 @@ export const promotionTeam = (query: CoopRow) => request.get(`${root}/team`, que
 export const promotionRewards = (query: CoopRow) => request.get(`${root}/rewards`, query, quiet)
 export const promotionInvitation = (mid: number) => request.get(`${root}/invitation`, { mid }, quiet)
 export const bindPromotionInviter = (mid: number) => request.post(`${root}/bind`, { mid, confirm: true }, quiet)
+export const promotionApplication = () => request.get(`${root}/application`, {}, quiet)
+export const submitPromotionApplication = () => request.post(`${root}/application`, { confirm: true }, quiet)

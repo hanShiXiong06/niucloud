@@ -30,7 +30,8 @@ function normalize(rows: unknown, preserveUnknown: boolean): CatalogModel[] {
         const id = rowId(raw.id), title = text(raw.title) || text(raw.model_name) || text(raw.name)
         if (!id || seen.has(id) || (!title && !preserveUnknown)) continue
         seen.add(id)
-        result.push({ ...raw, id, title: title || '未命名型号', brand: text(raw.brand) || text(raw.brand_name) || '其他品牌', category: text(raw.category) || text(raw.category_name) || '其他品类' })
+        const path = Array.isArray(raw.path) ? raw.path.map(text).filter(Boolean) : []
+        result.push({ ...raw, id, title: title || '未命名选项', path, brand: path[1] || text(raw.brand) || text(raw.brand_name) || '全部', category: path[0] || text(raw.category) || text(raw.category_name) || '全部分类' })
     }
     return result
 }
@@ -58,7 +59,8 @@ export function visibleModels(rows: unknown, filter: CatalogFilter = {}): Catalo
     const terms = text(filter.keyword).toLocaleLowerCase().split(/\s+/).filter(Boolean)
     return normalizeCatalog(rows).filter(row => {
         if (category && row.category !== category || brand && row.brand !== brand) return false
-        const haystack = `${row.category} ${row.brand} ${row.title}`.toLocaleLowerCase().replace(/\s+/g, '')
+        const aliases = Array.isArray(row.aliases) ? row.aliases.map(text).join(' ') : ''
+        const haystack = `${row.category} ${row.brand} ${row.title} ${aliases}`.toLocaleLowerCase().replace(/\s+/g, '')
         return terms.every(term => haystack.includes(term))
     })
 }
@@ -89,6 +91,6 @@ export function applySelection(selection: unknown, range: unknown, mode: Catalog
         items = [...previous, ...rows.filter(row => !chosenIds.has(row.id))]
     }
     const limit = Number.isFinite(max) ? Math.max(0, Math.floor(max)) : 100
-    if (limit > 0 && items.length > limit && items.some(row => !chosenIds.has(row.id))) return { items: previous, error: `最多选择 ${limit} 个型号，本次未更改选择` }
+    if (limit > 0 && items.length > limit && items.some(row => !chosenIds.has(row.id))) return { items: previous, error: `最多选择 ${limit} 项，本次未更改选择` }
     return { items }
 }

@@ -18,39 +18,44 @@ final class CooperationService
     public function catalog(array $params=[]): array
     {
         if ($this->context->uid>0) $this->context->manager();else (new StorefrontService($this->context))->assertUploadAllowed();
-        $items=(new CatalogService($this->context))->directory()['items'];$keyword=mb_strtolower(Data::text($params,'keyword',100));
-        if ($keyword!=='') $items=array_values(array_filter($items,static fn(array $item):bool=>str_contains(mb_strtolower(implode(' ',[$item['title'],$item['brand'],implode(' ',$item['aliases']??[])])),$keyword)));
+        $business=(new BusinessService($this->context))->definition(Data::text($params,'business_type',16)?:'purchase');
+        $normalize=static fn(string $value):string=>preg_replace('/\s+/u','',mb_strtolower($value))??'';
+        $items=(new BusinessService($this->context))->options($business);$keyword=$normalize(Data::text($params,'keyword',100));
+        if ($keyword!=='') $items=array_values(array_filter($items,static fn(array $item):bool=>str_contains($normalize(implode(' ',[$item['title'],$item['brand'],implode(' ',$item['path']??[]),implode(' ',$item['aliases']??[])])),$keyword)));
         $browse=$params['browse']??false;
         if (!in_array($browse,[false,true,0,1,'0','1'],true)) throw new CommonException('型号目录浏览参数无效');
         $limit=in_array($browse,[true,1,'1'],true)?5000:100;
-        return array_map(static fn(array $item):array=>array_intersect_key($item,array_flip(['id','title','brand','category_name'])),array_slice($items,0,$limit));
+        return array_slice($items,0,$limit);
     }
 
     public function create(array $input): array
     {
-        $config=$this->enabled();$merchant=$this->partners()->own(true);$id=(int)$merchant['id'];$request=Store::requestId($input);
-        if ($config['publishing_required']&&(int)$merchant['publisher_until']<=time()) throw new CommonException('发单权益尚未开通或已到期，请先开通一个月发单权益');
+        $merchant=$this->partners()->own(true);$id=(int)$merchant['id'];$request=Store::requestId($input);
         if (!in_array($input['consent']??null,[true,1,'1'],true)) throw new CommonException('请先向客户说明联系方式用途并取得同意');
-        $type=Data::text($input,'business_type',16,true);if (!in_array($type,['purchase','rent','exchange'],true)) throw new CommonException('请选择购买、租机或置换');
-        $ids=Rules::demandIds($input['model_ids']??null,Rules::demandLimit($config['demand_model_limit']));
-        $directory=array_column((new CatalogService($this->context))->directory()['items'],null,'id');$models=[];
-        foreach($ids as $modelId) {
-            if (!is_string($modelId)||!isset($directory[$modelId])) throw new CommonException('所选型号已变化，请重新搜索选择');
-            $item=$directory[$modelId];$models[$modelId]=['id'=>$modelId,'title'=>$item['title'],'brand'=>$item['brand'],'category_name'=>(string)($item['category_name']??'')];
-        }
-        $values=Data::region($input)+['customer_name'=>Data::text($input,'customer_name',80,true),'mobile'=>PartnerService::phone($input['mobile']??''),
-            'business_type'=>$type,'models_json'=>Data::json(array_values($models)),'attachments_json'=>Data::json(Store::attachments($input['attachments']??[],$this->context)),
+        $base=Data::region($input)+['customer_name'=>Data::text($input,'customer_name',80,true),'mobile'=>PartnerService::phone($input['mobile']??''),
+            'attachments_json'=>Data::json(Store::attachments($input['attachments']??[],$this->context)),
             'remark'=>Data::text($input,'remark',2000)];
-        $leadId=Db::transaction(function()use($id,$values,$request,$config):int {
+        $leadId=Db::transaction(function()use($id,$base,$request,$input):int {
+            // Configuration saves lock this same site row: closure and fee changes cannot race publication.
+            Db::name('site')->where('site_id',$this->context->site)->lock(true)->field('site_id')->find();
             $partner=Store::partner($this->context->site,$id,true);if ((int)$partner['blocked_at']>0) throw new CommonException('商户已停止合作，不能新增线索');
-            if ($config['publishing_required']&&(int)$partner['publisher_until']<=time()) throw new CommonException('发单权益已到期，请刷新后开通');
             $old=Store::query('collaboration',$this->context->site)->where('publisher_id',$id)->where('request_id',$request)->find();
             if ($old) {
-                foreach($values as $key=>$value) if ((string)$old[$key]!== (string)$value) throw new CommonException('该请求已用于另一份内容，请刷新核对原线索，不要重复发布');
+                foreach($base as $key=>$value) if ((string)$old[$key]!== (string)$value) throw new CommonException('该请求已用于另一份内容，请刷新核对原线索，不要重复发布');
+                $ids=Rules::demandIds($input['demand_ids']??$input['model_ids']??null,0);$oldIds=array_column(Data::decode($old['models_json']),'id');sort($ids);sort($oldIds);
+                $rule=Data::decode($old['rule_json']);$form=BusinessService::formValues($rule['business_snapshot']??['fields'=>[]],$input['form_values']??[]);
+                if ($ids!==$oldIds||Data::text($input,'business_type',16,true)!==$old['business_type']||($rule['form_values']??[])!==$form) throw new CommonException('该请求已用于另一份业务需求，请核对原单');
                 return (int)$old['id'];
             }
+            $config=$this->enabled();Rules::assertCapability($partner,$config,'can_publish');
+            $type=Data::text($input,'business_type',16,true);$business=(new BusinessService($this->context))->definition($type,true,$config);
+            if (empty($config['fee_confirmed'])) throw new CommonException('平台尚未确认本业务收费规则，暂不能发布，请联系管理员');
+            $models=(new BusinessService($this->context))->resolve($business,$input['demand_ids']??$input['model_ids']??null);
+            $form=BusinessService::formValues($business,$input['form_values']??[]);$snapshot=BusinessService::snapshot($business,$config,$form);
+            Rules::split(Rules::cents($business['commission_minimum']),$snapshot);
+            $values=$base+['business_type'=>$type,'models_json'=>Data::json($models),'rule_json'=>Data::json($snapshot)];
             $new=(int)Store::query('collaboration',$this->context->site)->insertGetId($values+['site_id'=>$this->context->site,'lead_no'=>Data::number('LC'),'publisher_id'=>$id,'request_id'=>$request,
-                'consent_at'=>time(),'status'=>'selecting','rule_json'=>Data::json($config),'create_time'=>time(),'update_time'=>time()]);
+                'consent_at'=>time(),'status'=>'selecting','create_time'=>time(),'update_time'=>time()]);
             Store::audit($this->context,$new,'published',['publisher_id'=>$id,'model_count'=>count(Data::decode($values['models_json']))]);return $new;
         });return $this->detail($leadId);
     }
@@ -84,16 +89,28 @@ final class CooperationService
     {
         $row=Data::regionNames($row);$row['models']=Data::decode($row['models_json']);$row['attachments']=Data::decode($row['attachments_json']);$row['status_label']=Rules::status($row['status']);
         $rule=Data::decode($row['rule_json']);$row['requires_manual_review']=!empty($rule['requires_manual_review']);$row['review_message']=PaymentService::reviewMessage($rule);
+        $row['business_name']=$rule['business_name']??(['purchase'=>'二手机','rent'=>'租机','exchange'=>'置换'][$row['business_type']]??$row['business_type']);
+        $row['demands']=$row['models'];$row['form_values']=$rule['form_values']??[];$row['business_snapshot']=$rule['business_snapshot']??null;
+        $row['fields']=$rule['business_snapshot']['fields']??[];
+        $row['commission_minimum']=$rule['commission_minimum']??'50.00';$row['fee_percent']=$rule['fee_percent']??'10.00';$row['fee_minimum']=$rule['fee_minimum']??'9.90';
+        $row['fee_confirmed']=!empty($rule['fee_confirmed']);
+        $row['dimension']=$rule['dimension']??'model';$row['selection_label']=['model'=>'型号','brand'=>'品牌','operator'=>'运营商'][$row['dimension']]??'需求';
         $row['publisher']=$this->summary((int)$row['publisher_id']);$row['receiver']=(int)$row['receiver_id']>0?$this->summary((int)$row['receiver_id']):null;
         $admin=$this->context->uid>0;$actor=$admin?0:(int)$this->partners()->own()['id'];$publisher=$actor===(int)$row['publisher_id'];$receiver=$actor===(int)$row['receiver_id'];
         $blocked=!$admin&&(int)Store::partner($this->context->site,$actor)['blocked_at']>0;
-        if (!$admin&&!$publisher&&(!(int)$row['accepted_at']||$row['status']==='assigned')) {$row['mobile']='';$row['attachments']=[];$row['remark']='';}
-        $row['can_assign']=!$blocked&&($publisher||$admin)&&$row['status']==='selecting';$row['can_accept']=!$blocked&&$receiver&&$row['status']==='assigned';
-        $row['can_reject']=$row['can_accept'];$row['can_report']=!$blocked&&$receiver&&$row['status']==='following';$row['can_pay']=$receiver&&$row['status']==='unpaid';
+        if (!$admin&&!$publisher&&(!(int)$row['accepted_at']||$row['status']==='assigned')) {$row['mobile']='';$row['attachments']=[];$row['remark']='';$row['form_values']=[];}
+        $config=$this->config();
+        $publisherRights=Rules::capabilities(Store::partner($this->context->site,(int)$row['publisher_id']),$config);
+        $actorRights=$admin?[]:Rules::capabilities(Store::partner($this->context->site,$actor),$config);
+        $row['can_assign']=!$blocked&&!empty($config['enabled'])&&$publisherRights['can_publish']&&($publisher||$admin)&&$row['status']==='selecting';$row['can_accept']=!$blocked&&!empty($config['enabled'])&&!empty($actorRights['can_accept'])&&$receiver&&$row['status']==='assigned';
+        // Expiry must not trap a recipient in an assignment or prevent settlement of accepted work.
+        $row['can_reject']=!$blocked&&$receiver&&$row['status']==='assigned';$row['can_report']=!$blocked&&$receiver&&$row['status']==='following';$row['can_pay']=$receiver&&$row['status']==='unpaid';
+        $needsPermission=($publisher&&$row['status']==='selecting'&&!$publisherRights['can_publish'])||($receiver&&$row['status']==='assigned'&&empty($actorRights['can_accept']));
+        $row['membership_required']=!$admin&&$needsPermission;$row['membership_message']=$row['membership_required']?'当前门店会员未包含本次新操作所需权益，或会员已到期。请查看会员权益；已有工单与账款仍可处理':'';
         $row['can_withdraw']=!$blocked&&$publisher&&$row['status']==='assigned';
         $row['can_cancel']=!$blocked&&$publisher&&$row['status']==='selecting'&&(int)$row['receiver_id']===0;
         $row['can_review']=$admin;$row['history']=[];
-        $config=$this->config();$now=time();$row['response_overdue']=$row['status']==='assigned'&&(int)$row['response_deadline']>0&&(int)$row['response_deadline']<$now;
+        $now=time();$row['response_overdue']=$row['status']==='assigned'&&(int)$row['response_deadline']>0&&(int)$row['response_deadline']<$now;
         $row['contact_overdue']=$row['status']==='following'&&(int)$config['contact_hours']>0&&(int)$row['accepted_at']+(int)$config['contact_hours']*3600<$now;
         $row['review_overdue']=$row['status']==='unpaid'&&(int)$config['review_hours']>0&&(int)$row['outcome_at']+(int)$config['review_hours']*3600<$now;
         $row['attention_reasons']=array_values(array_filter([$row['review_message'],$row['response_overdue']?'门店确认已超时，请人工联系核对':null,$row['contact_overdue']?'跟进时间较长，建议联系门店核对进展':null,$row['review_overdue']?'成交后尚未付佣，建议平台抽检核对':null]));
@@ -110,14 +127,20 @@ final class CooperationService
 
     private function summary(int $id): array
     {
-        $m=Data::row('merchant',$this->context->site,$id);return array_intersect_key($this->partners()->present($m),array_flip(['id','name','storefront_image','contact_name','mobile','region_text','grade_id','grade_name','grade_rank','is_reliable','certification_status']));
+        $m=Data::row('merchant',$this->context->site,$id);return array_intersect_key($this->partners()->present($m),array_flip(['id','name','storefront_image','contact_name','mobile','region_text','membership','membership_rank','display_rank']));
     }
 
     public function stores(array $params=[],int $leadId=0): array
     {
-        if ($this->context->uid>0) Store::permission($this->context,'leads');else $this->partners()->own();
+        $config=$this->config();
+        if ($this->context->uid>0) Store::permission($this->context,'leads');else { $config=$this->enabled();Rules::assertCapability($this->partners()->own(true),$config,'can_publish'); }
         if ($leadId) {$lead=$this->authorized($leadId);$publisherId=(int)$lead['publisher_id'];if ($this->context->uid<=0&&$publisherId!==(int)$this->partners()->own()['id']) throw new CommonException('只有发布门店可以选择交付门店');$region=$lead;$models=Data::decode($lead['models_json']);}
         else {$publisherId=$this->context->uid>0?0:(int)$this->partners()->own()['id'];$region=$params;$models=[];}
+        $businessKey=$leadId?(string)$lead['business_type']:(Data::text($params,'business_type',16)?:'purchase');
+        $leadRule=$leadId?Data::decode($lead['rule_json']):[];
+        $business=$leadRule['business_snapshot']??(new BusinessService($this->context))->definition($businessKey,!$leadId);
+        $dimension=$business['dimension'];
+        if (!$leadId&&array_key_exists('demand_ids',$params)&&$params['demand_ids']!==[]) $models=(new BusinessService($this->context))->resolve($business,$params['demand_ids']);
         // Reuse the common hierarchy validator without narrowing the actual
         // recommendation query before county -> city -> province fallback.
         MerchantRegion::apply(Data::query('merchant',$this->context->site),$region);
@@ -131,17 +154,24 @@ final class CooperationService
         if ($region['province_id']<=0) throw new CommonException('请先选择客户所在省份');
         $q->where('province_id',$region['province_id']);$candidates=[];
         foreach($q->select()->toArray() as $m) {
+            if (!Rules::allows(Store::partner($this->context->site,(int)$m['id']),$config,'can_accept')) continue;
             $inventory=$this->partners()->inventory((int)$m['id']);$p=$this->partners()->present($m,false,$inventory);if ($p['blocked_at']>0) continue;
             if ($keyword!==''&&!str_contains(mb_strtolower($p['name'].' '.$p['contact_name']),$keyword)) continue;
             $matched=[];
-            $declared=$p['manual_models'];
+            $declared=[];foreach($p['business_capabilities'] as $capability) if ($capability['business_type']===$businessKey) $declared=$capability['items'];
+            // Sellable ERP stock proves used-phone supply only, not new phones, rental or broadband.
+            $inventory=$businessKey==='purchase'&&$dimension==='model'?$inventory:[];
+            $allModels=$dimension==='model'&&in_array($businessKey,['purchase','rent','exchange'],true)&&$p['all_models'];
             foreach($models as $model) {
                 foreach($inventory as $stock) if (self::matches($model['title'],$stock['model'])) {$matched[$model['id']]=$model;break;}
-                foreach($declared as $ability) if ($ability['id']===$model['id']||self::matches($model['title'],$ability['title'])) {$matched[$model['id']]=$model;break;}
+                foreach($declared as $ability) if ($ability['id']===$model['id']||($dimension==='model'&&self::matches($model['title'],$ability['title']))) {$matched[$model['id']]=$model;break;}
             }
-            if ($models&&!$p['all_models']&&!$matched) continue;
-            if (!$models&&!$p['all_models']&&!$inventory&&!$declared) continue;
-            $p['match_models']=$p['all_models']?$models:array_values($matched);$candidates[]=$p;
+            if ($models&&!$allModels&&!$matched) continue;
+            if (!$models&&!$allModels&&!$inventory&&!$declared) continue;
+            $p['all_models']=$allModels;$p['match_models']=$allModels?$models:array_values($matched);$p['match_demands']=$p['match_models'];
+            $p['business_type']=$businessKey;$p['business_name']=$business['name'];$p['capability_dimension']=$dimension;
+            if ($dimension!=='model') $p['capability_source']=$declared?'manual':'none';
+            $candidates[]=$p;
         }
         $choose=static function(array $rows,string $range)use($region):array {
             if ($range==='district') return array_values(array_filter($rows,static fn(array $m):bool=>(int)$m['district_id']===$region['district_id']&&$region['district_id']>0));
@@ -151,7 +181,7 @@ final class CooperationService
         if ($scope==='auto') {
             foreach(['district','city','province'] as $level) {$items=$choose($candidates,$level);$actual=$level;if ($items) break;}
         } else $items=$choose($candidates,$scope);
-        usort($items,static fn(array $a,array $b):int=>[(int)$b['is_reliable'],(int)$b['grade_rank'],count($b['match_models']),(int)$b['inventory_count'],-(int)$b['id']]<=>[(int)$a['is_reliable'],(int)$a['grade_rank'],count($a['match_models']),(int)$a['inventory_count'],-(int)$a['id']]);
+        usort($items,static fn(array $a,array $b):int=>[(int)$b['membership_rank'],count($b['match_models']),(int)$b['inventory_count'],-(int)$b['id']]<=>[(int)$a['membership_rank'],count($a['match_models']),(int)$a['inventory_count'],-(int)$a['id']]);
         $reason=$scope==='auto'&&$actual!=='district'?($actual==='city'?'本区县暂无匹配门店，已查找全市':'本市暂无匹配门店，已查找全省'):'按客户所在地区查找';
         if (!$items) $reason='所选地区暂时没有可承接该需求的门店';
         return Store::pageArray($items,$params)+['scope'=>$actual,'region'=>$region,'reason'=>$reason];
@@ -160,7 +190,7 @@ final class CooperationService
     /** Public, safe stock reference for registered merchants, never raw ERP data. */
     public function storeInventory(int $merchantId,array $params=[]): array
     {
-        if ($this->context->uid>0) Store::permission($this->context,'partners');else $this->partners()->own(true);
+        if ($this->context->uid>0) Store::permission($this->context,'partners');else { $own=$this->partners()->own(true);if ((int)$own['id']!==$merchantId) Rules::assertCapability($own,$this->enabled(),'can_view_inventory'); }
         $merchant=Data::row('merchant',$this->context->site,$merchantId);
         $partner=Store::partner($this->context->site,$merchantId);
         if ((int)$merchant['status']!==1||(int)$partner['blocked_at']>0) throw new CommonException('该门店暂时不能提供库存参考');
@@ -208,11 +238,15 @@ final class CooperationService
         if ($publisher&&(int)$lead['publisher_id']!==(int)$publisher['id']) throw new CommonException('只有发布门店可以交付该线索');
         $config=$this->config();
         Db::transaction(function()use($id,$input,$merchantId,$config):void {
+            Db::name('site')->where('site_id',$this->context->site)->lock(true)->field('site_id')->find();
+            $config=$this->enabled();
             $row=$this->authorized($id,true);Rules::version($row,$input);if ($row['status']!=='selecting') throw new CommonException('该线索已交付，请刷新状态后操作');
             $publisher=Store::partner($this->context->site,(int)$row['publisher_id'],true);if ((int)$publisher['blocked_at']>0) throw new CommonException('发布门店已停止合作，不能新增交付');
+            Rules::assertCapability($publisher,$config,'can_publish');
             $result=$this->stores(['scope'=>'province','_target_merchant_id'=>$merchantId],$id);if (!in_array($merchantId,array_map('intval',array_column($result['data'],'id')),true)) throw new CommonException('门店已不可承接该需求，请重新选择');
             $receiver=Store::partner($this->context->site,$merchantId,true);$m=Data::row('merchant',$this->context->site,$merchantId,true);
             if ((int)$receiver['blocked_at']>0||(int)$m['status']!==1) throw new CommonException('该门店已停止合作');
+            Rules::assertCapability($receiver,$config,'can_accept');
             Store::query('collaboration',$this->context->site)->where('id',$id)->update(['receiver_id'=>$merchantId,'status'=>'assigned','assignment_version'=>(int)$row['assignment_version']+1,
                 'accepted_at'=>0,'response_deadline'=>(int)$config['response_minutes']>0?time()+(int)$config['response_minutes']*60:0,'update_time'=>time()]);
             Store::audit($this->context,$id,'assigned',['receiver_id'=>$merchantId,'assignment_version'=>(int)$row['assignment_version']+1]);
@@ -224,6 +258,7 @@ final class CooperationService
         $action=Data::text($input,'action',20,true);if (!in_array($action,['accept','reject','withdraw','cancel','deal','no_deal'],true)) throw new CommonException('操作无效');
         $m=$this->partners()->own(true);$mid=(int)$m['id'];$remark=Data::text($input,'remark',1000);
         $changed=Db::transaction(function()use($id,$input,$action,$mid,$remark):bool {
+            if ($action==='accept') Db::name('site')->where('site_id',$this->context->site)->lock(true)->field('site_id')->find();
             $partner=Store::partner($this->context->site,$mid,true);if ((int)$partner['blocked_at']>0) throw new CommonException('当前门店已停止合作，不能继续接单或回填');
             $row=$this->authorized($id,true);
             if ($action==='cancel'&&(int)$row['publisher_id']===$mid&&$row['status']==='cancelled') return false;
@@ -238,6 +273,7 @@ final class CooperationService
                 if ((int)$row['receiver_id']!==$mid) throw new CommonException('当前门店不是本次接收方');
                 if (in_array($action,['accept','reject'],true)) {
                     if ($row['status']!=='assigned') throw new CommonException('该交付已处理，请刷新');
+                    if ($action==='accept') Rules::assertCapability($partner,$this->enabled(),'can_accept');
                     $values=$action==='accept'?['status'=>'following','accepted_at'=>time()]:['status'=>'selecting','receiver_id'=>0,'response_deadline'=>0,'assignment_version'=>(int)$row['assignment_version']+1];
                 } else {
                     if ($row['status']!=='following') throw new CommonException('只有接单后且尚未反馈的线索可以回填');

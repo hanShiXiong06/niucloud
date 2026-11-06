@@ -4,8 +4,9 @@ if(PHP_SAPI!=='cli'||!in_array('--isolated-local-mysql',$argv,true))exit("Requir
 foreach(['curl_exec','curl_multi_exec','fsockopen','pfsockopen','stream_socket_client','socket_connect'] as $f)if(function_exists($f))exit("Disable external HTTP/network functions before isolated testing\n");
 if(filter_var(ini_get('allow_url_fopen'),FILTER_VALIDATE_BOOLEAN))exit("Disable allow_url_fopen\n");
 require __DIR__.'/bootstrap.php';
+require __DIR__.'/membership-fixtures.php';
 use addon\hsx_lead\app\service\Context;
-use addon\hsx_lead\app\service\cooperation\{PartnerService,StorefrontService,Store,UploadService};
+use addon\hsx_lead\app\service\cooperation\{PartnerService,StorefrontService,Store,UploadService,ConfigService};
 use addon\hsx_lead\app\support\Data;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -15,9 +16,12 @@ function storefrontCheck(bool $ok,string $label):void{global $checks;if(!$ok)thr
 function storefrontReject(callable $call,string $label):void{try{$call();}catch(CommonException $e){storefrontCheck(true,$label);return;}throw new RuntimeException('Not rejected: '.$label);}
 try{
     [$app,$pdo,$schema,$site]=leadBoot();leadAssertIsolated($schema);
+    leadMembershipSeed($site);
+    $settings=new ConfigService(new Context($site,1));$config=$settings->get();$config['enabled']=true;$settings->save($config);
     $official=file_get_contents(dirname(__DIR__,3).'/app/install/source/database.sql');
     if(!preg_match('/CREATE TABLE\s+`sys_attachment`\s*\(.*?\)\s*ENGINE\s*=\s*InnoDB[^;]*;/si',$official,$matches))throw new RuntimeException('Missing official attachment fixture');
     $pdo->exec(str_replace('CREATE TABLE `sys_attachment`','CREATE TABLE `lt_sys_attachment`',$matches[0]));
+    foreach(['pay','pay_refund'] as $table){preg_match('/CREATE TABLE\s+`'.$table.'`\s*\(.*?\)\s*ENGINE\s*=\s*InnoDB[^;]*;/si',$official,$match);$pdo->exec(str_replace('CREATE TABLE `'.$table.'`','CREATE TABLE `lt_'.$table.'`',$match[0]));}
     $beforeTables=Db::query('SHOW TABLES');$beforeFields=Db::query('SHOW COLUMNS FROM lt_hsx_lead_merchant');
     $ctx=new Context($site,0,101);$other=new Context($site,0,102);$cross=new Context($site+1,0,103);
     $photos=new StorefrontService($ctx);$profiles=new PartnerService($ctx);
@@ -36,7 +40,7 @@ try{
     $input=['name'=>'Storefront fixture','contact_name'=>'Fixture contact','mobile'=>'13900000101','province_id'=>910000,'city_id'=>910100,'district_id'=>910101,'address'=>'Fixture address','provider'=>'wanji','storefront_image'=>$own,'is_reliable'=>true,'certification_status'=>'active'];
     $profile=$profiles->saveProfile($input);$id=(int)$profile['id'];
     storefrontCheck($profile['storefront_image']===$own,'new onboarding persists and returns the uploaded path');
-    storefrontCheck($profile['is_reliable']===false&&$profile['certification_status']==='none','member cannot acquire reliable certification through profile payload');
+    storefrontCheck(!$profile['membership_active']&&$profile['membership']['level_code']==='','member cannot acquire paid rights through profile payload');
     storefrontCheck(Db::name('sys_config')->where('site_id',$site)->where('config_key','HSX_LEAD_STOREFRONT_'.$id)->count()===1,'media uses existing per-site config row');
     storefrontCheck($profiles->present(Data::row('merchant',$site,$id),false,[])['storefront_image']===$own,'public store cards receive the same storefront');
     storefrontCheck($profiles->present(Data::row('merchant',$site,$id),true,[])['storefront_image']===$own,'private profile receives storefront');
@@ -59,14 +63,14 @@ try{
     Db::name('member')->where('member_id',101)->update(['status'=>0]);storefrontReject(fn()=>$photos->assertUploadAllowed(),'disabled member cannot upload');Db::name('member')->where('member_id',101)->update(['status'=>1]);
     Db::name('member')->where('member_id',101)->update(['is_del'=>1]);storefrontReject(fn()=>$photos->assertUploadAllowed(),'deleted member cannot upload');Db::name('member')->where('member_id',101)->update(['is_del'=>0]);
     Data::query('merchant',$site)->where('id',$id)->update(['status'=>0]);storefrontReject(fn()=>$photos->assertUploadAllowed(),'paused merchant cannot upload');Data::query('merchant',$site)->where('id',$id)->update(['status'=>1]);
-    Store::query('partner',$site)->where('merchant_id',$id)->update(['certification_status'=>'active','cert_expires_at'=>time()+86400]);
-    storefrontCheck($profiles->present(Data::row('merchant',$site,$id),false,[])['is_reliable']===true,'active future certification remains server-owned reliable state');
-    Store::query('partner',$site)->where('merchant_id',$id)->update(['cert_expires_at'=>time()-1]);
-    storefrontCheck($profiles->present(Data::row('merchant',$site,$id),false,[])['is_reliable']===false,'expired certification never yields reliable effect');
-    Store::query('partner',$site)->where('merchant_id',$id)->update(['cert_expires_at'=>time()+86400,'blocked_at'=>time()]);
+    $paid=leadMembershipGrant($site,101,'ML701');
+    storefrontCheck($profiles->present(Data::row('merchant',$site,$id),false,[])['membership_active'],'paid rights come from verified subject ledger');
+    Store::query('coop_order',$site)->where('id',$paid['id'])->update(['status'=>'closed']);
+    storefrontCheck(!$profiles->present(Data::row('merchant',$site,$id),false,[])['membership_active'],'cached partner code alone never grants paid effects');
+    Store::query('partner',$site)->where('merchant_id',$id)->update(['blocked_at'=>time()]);
     storefrontReject(fn()=>$photos->assertUploadAllowed(),'blocked merchant cannot upload');
     storefrontReject(fn()=>$profiles->saveProfile($input),'blocked merchant cannot save storefront or profile');
-    storefrontCheck($profiles->present(Data::row('merchant',$site,$id),false,[])['is_reliable']===false,'blocked certification never yields reliable effect');
+    storefrontCheck(!$profiles->present(Data::row('merchant',$site,$id),false,[])['can_collaborate'],'blocked merchant never yields an actionable collaboration card');
     storefrontCheck(Db::query('SHOW TABLES')===$beforeTables&&Db::query('SHOW COLUMNS FROM lt_hsx_lead_merchant')===$beforeFields,'no application table or field added');
     echo "PASS cooperation storefront: {$checks} checks; real framework storage references/config with isolated local schema, no uploads or external requests\n";
 }catch(Throwable $error){$failed=true;fwrite(STDERR,'FAIL cooperation storefront: '.$error->getMessage()."\n".$error->getFile().':'.$error->getLine()."\n");}

@@ -12,6 +12,7 @@ Route::group('hsx_lead/cooperation',function():void {
     Route::post('leads/:id/assign',$c.'assign');Route::post('leads/:id/action',$c.'action');
     Route::post('orders',$c.'createOrder');Route::get('orders/:id',$c.'order');Route::get('wallet',$c.'wallet');
     Route::post('attachments',$c.'attachment');Route::post('storefront',$c.'storefront');Route::get('connection',$c.'connection');Route::post('connection/challenge',$c.'challenge');
+    Route::post('business-license',$c.'businessLicenseUpload');Route::post('business-license/preview',$c.'businessLicensePreview');
     Route::post('connection/probe',$c.'probe');Route::post('connection/activate',$c.'activate');
     Route::put('connection/settings',$c.'connectionSettings');
     Route::post('sync',$c.'sync');Route::get('sync/:id',$c.'syncInfo');Route::post('sync/:id/advance',$c.'advanceSync');

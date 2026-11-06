@@ -11,6 +11,8 @@ final class Promotion extends BaseAdminController
     public function saveConfig() { return success($this->service()->saveConfig($this->request->param())); }
     public function providers() { return success($this->service()->providers($this->request->param())); }
     public function saveProvider(int $id) { return success($this->service()->saveProvider($id,$this->request->param())); }
+    public function reviewProvider(int $id) { return success($this->service()->reviewProvider($id,$this->request->param())); }
+    public function retryPromotion(int $id) { return success($this->service()->retryPromotion($id)); }
     public function rewards() { return success($this->service()->rewards($this->request->param(),true)); }
     public function settle() { return success($this->service()->settle($this->request->param())); }
     public function hold(int $id) { return success($this->service()->hold($id,$this->request->param())); }

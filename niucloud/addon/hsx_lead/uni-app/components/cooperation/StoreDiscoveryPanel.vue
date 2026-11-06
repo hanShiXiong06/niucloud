@@ -24,7 +24,7 @@
             <button class="discovery__shortcut discovery__shortcut--capability" aria-label="管理我的交付能力" @tap="navigate('capability')">
                 <view class="discovery__shortcut-top"><image :src="capabilityArt" mode="aspectFit" aria-hidden="true" /><u-icon name="arrow-right" size="13" color="#8d9caf" /></view>
                 <text class="discovery__shortcut-title">交付能力</text>
-                <view class="discovery__metric"><text class="discovery__metric-number">{{ modelCount }}</text><text>款已登记型号</text></view>
+                <view class="discovery__metric"><text class="discovery__metric-number">{{ modelCount }}</text><text>项已登记能力</text></view>
             </button>
         </view>
     </view>
@@ -33,16 +33,18 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { interactionFeedback } from '../../utils/interaction-feedback'
+import { bundledImage } from '../../utils/bundled-image'
 // Plugin-local assets are bundled by the app build, not fetched from a demo server.
-import storeArt from '../../static/cooperation/visuals/store-discovery.png'
-import inventoryArt from '../../static/cooperation/visuals/inventory.png'
-import capabilityArt from '../../static/cooperation/visuals/delivery-capability.png'
+import storeAsset from '../../static/cooperation/visuals/store-discovery.png'
+import inventoryAsset from '../../static/cooperation/visuals/inventory.png'
+import capabilityAsset from '../../static/cooperation/visuals/delivery-capability.png'
+const storeArt = bundledImage(storeAsset), inventoryArt = bundledImage(inventoryAsset), capabilityArt = bundledImage(capabilityAsset)
 
 const props = defineProps<{ profile: Record<string, any> }>()
 const emit = defineEmits<{ (event: 'browse'): void; (event: 'inventory'): void; (event: 'capability'): void }>()
 const count = (value: unknown) => Number.isFinite(Number(value)) && Number(value) > 0 ? Math.floor(Number(value)) : 0
 const inventoryCount = computed(() => count(props.profile.inventory_count))
-const modelCount = computed(() => count(props.profile.manual_model_count))
+const modelCount = computed(() => Array.isArray(props.profile.business_capabilities) ? props.profile.business_capabilities.reduce((sum: number, item: any) => sum + (Array.isArray(item.option_ids) ? item.option_ids.length : 0), 0) : count(props.profile.manual_model_count))
 const buttonStyle = { height: '46px', fontSize: '15px', fontWeight: '600', border: '0', boxShadow: '0 5px 12px rgba(52,120,204,.12)' }
 function navigate(destination: 'browse' | 'inventory' | 'capability') {
     interactionFeedback('navigate')

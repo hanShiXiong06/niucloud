@@ -11,4 +11,14 @@ function preview(url: string) { uni.previewImage({ urls: props.modelValue.map(im
 async function afterRead(event: any) { if (props.disabled || uploading.value) return; const files = (Array.isArray(event.file) ? event.file : [event.file]).slice(0, 6 - props.modelValue.length); const values = [...props.modelValue]; uploading.value = true; error.value = ''; emit('pending', true); try { for (const file of files) { if (Number(file.size) > 5242880) throw new Error('每张图片不能超过 5 MB'); const result: any = await uploadCooperationAttachment(file.url); const value = result.data?.path; if (typeof value !== 'string' || !value) throw new Error('上传未返回有效附件引用'); if (disposed) return; if (!values.includes(value)) values.push(value); emit('update:modelValue', [...values]) } } catch (cause) { if (!disposed) error.value = coopError(cause, '部分图片上传未完成，可重新选择') } finally { if (!disposed) { uploading.value = false; emit('pending', false) } } }
 onBeforeUnmount(() => { disposed = true })
 </script>
-<style scoped lang="scss">.coop-upload-grid { display: flex; flex-wrap: wrap; gap: 18rpx; }.coop-upload-image,.coop-upload-add { width: 126rpx; height: 126rpx; border-radius: 8rpx; position: relative; overflow: hidden; }.coop-upload-image>image { width: 100%; height: 100%; }.coop-upload-image>button { position: absolute; top: 0; right: 0; width: 42rpx; height: 42rpx; padding: 0; margin: 0; border: 0; background: #646c77; border-radius: 0 0 0 8rpx; display: flex; align-items: center; justify-content: center; }.coop-upload-image>button::after { border: 0; }.coop-upload-add { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10rpx; border: 1rpx dashed #d1d8e1; color: #8d97a4; font-size: 21rpx; }.coop-upload-hint,.coop-upload-error { color: #8c95a0; font-size: 22rpx; line-height: 1.7; margin-top: 16rpx; }.coop-upload-error { color: #af4e42; }</style>
+<style scoped lang="scss">
+.coop-upload-grid { display: flex; flex-wrap: wrap; gap: 12px; }
+.coop-upload-image,.coop-upload-add { width: 84px; height: 84px; border-radius: 8px; position: relative; overflow: hidden; box-sizing: border-box; }
+.coop-upload-image>image { width: 100%; height: 100%; }
+.coop-upload-image>button { position: absolute; top: 0; right: 0; width: 44px; height: 44px; padding: 0; margin: 0; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; z-index: 1; }
+.coop-upload-image>button::before { content: ''; position: absolute; width: 20px; height: 20px; border-radius: 50%; background: rgba(42, 55, 73, .65); z-index: -1; }
+.coop-upload-image>button::after { border: 0; }
+.coop-upload-add { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; border: 1px dashed #c6d2e1; color: #71859e; font-size: 12px; background: #f5f8fc; }
+.coop-upload-hint,.coop-upload-error { color: #7d8ba0; font-size: 12px; line-height: 1.7; margin-top: 8px; }
+.coop-upload-error { color: #af4e42; }
+</style>

@@ -9,24 +9,28 @@ try {
     menuCheck(count($menu)===1&&$menu[0]['menu_key']==='hsx_lead','single plugin top-level directory');
     menuCheck($menu[0]['parent_key']===''&&(int)$menu[0]['menu_type']===0,'plugin directory remains top level');
     $visible=array_values(array_filter($menu[0]['children'],static fn(array $r):bool=>(int)$r['is_show']===1));
-    menuCheck(count($visible)===9,'nine current supervision/resource/promotion business pages');
+    menuCheck(count($visible)===13,'thirteen current supervision/resource/entity/deposit/promotion/home/profile business pages');
     $expected=[
         'hsx_lead/workbench'=>'workbench/index',
         'hsx_lead/cooperation/leads'=>'cooperation/leads-page',
         'hsx_lead/resource/merchants'=>'resource/merchants',
         'hsx_lead/resource/inventory'=>'resource/inventory',
         'hsx_lead/cooperation/partners'=>'cooperation/partners-page',
+        'hsx_lead/cooperation/entities'=>'cooperation/entities-page',
         'hsx_lead/cooperation/reviews'=>'cooperation/reviews-page',
         'hsx_lead/cooperation/orders'=>'cooperation/orders-page',
+        'hsx_lead/cooperation/deposits'=>'cooperation/deposits-page',
         'hsx_lead/cooperation/settings'=>'cooperation/settings-page',
         'hsx_lead/promotion/index'=>'promotion/index',
+        'hsx_lead/cooperation/home'=>'cooperation/home-page',
+        'hsx_lead/cooperation/profile-home'=>'cooperation/profile-home-page',
     ];
     menuCheck(count(array_filter($menu[0]['children'],static fn(array $r):bool=>$r['menu_key']==='hsx_lead_manage_leads'))===0,'retired platform workflow and route are removed, not hidden');
     $configuration=array_values(array_filter($visible,static fn(array $r):bool=>$r['menu_key']==='hsx_lead_cooperation_config'))[0];
     $configKeys=array_column($configuration['children'],'menu_key');
     foreach(['hsx_lead_manage_catalog','hsx_lead_manage_catalog_save','hsx_lead_manage_notice_config','hsx_lead_manage_notice_config_save'] as $key) menuCheck(in_array($key,$configKeys,true),'business configuration owns catalog and framework notice grants: '.$key);
     $settings=file_get_contents($plugin.'/admin/views/cooperation/Settings.vue');
-    menuCheck(str_contains($settings,'v-if="canEditCatalog"')&&str_contains($settings,'<CatalogDrawer v-if="canEditCatalog"')&&str_contains($settings,'需求型号清单'),'demand model management survives retirement behind the settings action');
+    menuCheck(str_contains($settings,'canEditCatalog')&&str_contains($settings,'<CatalogDrawer v-if="canEditCatalog"')&&str_contains($settings,'catalogBusiness'),'per-business directory management remains behind the settings permission');
     menuCheck(str_contains($settings,"hasLeadPagePermission(user,'hsx_lead_manage_catalog')&&hasLeadPagePermission(user,'hsx_lead_manage_catalog_save')"),'catalog editor requires both existing read and write grants, not configuration visibility alone');
     $css=file_get_contents($root.'/admin/src/styles/icon/official-iconfont.css');
     foreach(array_merge([$menu[0]],$visible) as $node) {
@@ -38,6 +42,20 @@ try {
         menuCheck(is_file($plugin.'/admin/views/'.$page['view_path'].'.vue'),'plugin page exists: '.$page['view_path']);
         if ($page['menu_key']==='hsx_lead_promotion_manage') {
             foreach(['hsx_lead_promotion_rewards','hsx_lead_promotion_config','hsx_lead_promotion_config_save','hsx_lead_promotion_providers','hsx_lead_promotion_providers_save','hsx_lead_promotion_settle','hsx_lead_promotion_hold','hsx_lead_promotion_resume'] as $key) menuCheck(in_array($key,array_column($page['children'],'menu_key'),true),'promotion page keeps explicit read/write/settlement grants: '.$key);
+        } elseif ($page['menu_key']==='hsx_lead_entity_manage') {
+            foreach(['hsx_lead_entity_detail','hsx_lead_entity_review','hsx_lead_entity_remove'] as $key) menuCheck(in_array($key,array_column($page['children'],'menu_key'),true),'entity page keeps explicit detail/review/remove grants: '.$key);
+            menuCheck($page['api_url']==='hsx_lead/entities'&&$page['methods']==='get','entity listing has its own permission without inheriting finance or configuration writes');
+        } elseif ($page['menu_key']==='hsx_lead_deposit_manage') {
+            menuCheck($page['api_url']==='hsx_lead/cooperation/deposits'&&$page['methods']==='get','deposit listing is a distinct reviewed-money permission');
+            $buttons=array_column($page['children'],null,'menu_key');
+            foreach(['detail'=>['hsx_lead/cooperation/deposits/<id>','get'],'review'=>['hsx_lead/cooperation/deposits/<id>/review','post'],'refresh'=>['hsx_lead/cooperation/deposits/<id>/refresh','post'],'scope'=>['hsx_lead/cooperation/scope','get']]as$action=>[$api,$method]){
+                $key='hsx_lead_deposit_'.$action;menuCheck(isset($buttons[$key])&&$buttons[$key]['api_url']===$api&&$buttons[$key]['methods']===$method,'deposit action has its own exact route and method: '.$action);
+            }
+            $routes=file_get_contents($plugin.'/app/adminapi/route/deposit.php');
+            foreach(["Route::get('',\$c.'lists')","Route::get(':id',\$c.'detail')","Route::post(':id/review',\$c.'review')","Route::post(':id/refresh',\$c.'refresh')",'PermissionGate::class']as$part)menuCheck(str_contains($routes,$part),'deposit routes keep fail-closed native permission gates: '.$part);
+            $service=file_get_contents($plugin.'/app/service/cooperation/MembershipDepositService.php');menuCheck(str_contains($service,"permission('hsx_lead_deposit_'.\$action)")&&str_contains($service,"scope()['all_data']"),'direct service invocation requires per-action and whole-site authority');
+        } elseif (in_array($page['menu_key'],['hsx_lead_cooperation_home','hsx_lead_cooperation_profile_home'],true)) {
+            menuCheck($page['api_url']===''&&$page['methods']===''&&$page['children']===[],'home decoration does not invent a plugin API or inherit config authority');
         } else menuCheck(count(array_filter($page['children'],static fn(array $r):bool=>$r['api_url']==='hsx_lead/cooperation/scope'&&$r['methods']==='get'))===1,'page owns its authorized scope-read button');
         foreach($page['children'] as $button) menuCheck((int)$button['menu_type']===2&&(int)$button['is_show']===0&&$button['router_path']==='','third-level entries are hidden actions, not another navigation layer');
     }

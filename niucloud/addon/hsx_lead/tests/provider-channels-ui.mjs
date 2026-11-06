@@ -104,16 +104,17 @@ for (const method of ['cooperationConnection', 'cooperationChallenge', 'cooperat
 const providers = [{ key: 'open', name: '开放渠道', auth_modes: [{ key: 'password', fields: [{ key: 'password', required: true }], renewal: { automatic: true } }] }]
 const mobile = setup(mobileFile, Vue.reactive({ show: true, profile: {}, providers }), { '../../api/cooperation': mobileApi }, { uni: { showToast() {} } })
 mobile.state.connection.value = { connected: true, provider: 'closed', provider_name: '原渠道', enabled: true, channel_enabled: false, channel_message: '合成：渠道关闭采集暂停' }; mobile.state.provider.value = 'closed'
-check(mobile.state.channelClosed.value && !mobile.state.selectedChannelAvailable.value && mobile.state.syncStateLabel.value.includes('采集暂停'), 'merchant sees source-policy pause separately from saved synchronization preference')
+check(mobile.state.channelClosed.value && !mobile.state.selectedChannelAvailable.value && mobile.state.syncStateLabel.value === '该 ERP 渠道已暂停', 'merchant sees source-policy pause separately from saved synchronization preference')
 await mobile.state.probe(); await mobile.state.challenge(); await mobile.state.sync(); await mobile.state.resumeSetup()
 check(mobileCalls.length === 0 && mobile.state.error.value.includes('渠道关闭'), 'paused merchant cannot trigger auth or acquisition requests by calling handlers directly')
 mobile.state.changeProvider('open'); check(mobile.state.selectedChannelAvailable.value && mobile.state.provider.value === 'open', 'merchant can choose a different open source without altering old connection')
 mobile.state.changeProvider('closed'); check(mobile.state.provider.value === 'open', 'closed source cannot be reselected through a direct picker handler call')
 
 const profile = setup('niucloud/addon/hsx_lead/uni-app/components/cooperation/CoopProfilePanel.vue', Vue.reactive({
-    profile: { id: 7, provider_requested: 'closed', name: '合成门店', contact_name: '合成联系人', mobile: '18800000001', district_id: 910101, address: '合成地址', connection: { provider: 'closed', provider_name: '原渠道', channel_enabled: false } }, config: {}, providers, onboarding: false, busy: false, error: ''
-}), { '../../api/cooperation': { coopDate: String, coopMoney: String } })
+    profile: { id: 7, provider_requested: 'closed', name: '合成门店', contact_name: '合成联系人', mobile: '18800000001', province_id:910000,city_id:910100,district_id: 910101, address: '合成地址', connection: { provider: 'closed', provider_name: '原渠道', channel_enabled: false } }, config: {}, providers, editing:true,onboarding: false, busy: false, error: ''
+}), { '../../api/cooperation': { coopDate: String, coopMoney: String }, '@/utils/common': { img: value => value } }, {uni:{getStorageSync:()=>'',setStorageSync(){},removeStorageSync(){}}})
 profile.state.open()
+check(profile.emitted.some(event=>event[0]==='edit'),'profile entry opens the dedicated edit route without mutating ERP')
 const oldIndex = profile.state.providerOptions.value.findIndex(item => item.key === 'closed'), openIndex = profile.state.providerOptions.value.findIndex(item => item.key === 'open')
 check(oldIndex > 0 && profile.state.providerOptions.value[oldIndex].disabled && profile.state.providerOptions.value[oldIndex].name.includes('已关闭'), 'existing closed ERP remains visibly labelled when editing merchant base profile')
 profile.state.submit(); check(profile.emitted.some(event => event[0] === 'submit' && event[1].provider === 'closed'), 'existing merchant can retain original closed ERP while editing basic details')

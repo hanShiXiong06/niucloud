@@ -36,7 +36,7 @@ function leadBoot(): array
         // Only official checked-in CREATE DDL; no source-database CREATE LIKE or seed rows.
         $official = file_get_contents($root . '/app/install/source/database.sql');
         foreach (['addon', 'site', 'site_group', 'sys_config', 'sys_area', 'sys_user',
-            'sys_user_role', 'sys_role', 'sys_menu', 'sys_schedule', 'sys_schedule_log', 'member', 'member_account_log', 'member_cash_out', 'sys_notice', 'sys_notice_log'] as $table) {
+            'sys_user_role', 'sys_role', 'sys_menu', 'sys_schedule', 'sys_schedule_log', 'member', 'member_level', 'member_account_log', 'member_cash_out', 'sys_notice', 'sys_notice_log'] as $table) {
             $pattern = '/CREATE TABLE\s+`' . preg_quote($table, '/') . '`\s*\(.*?\)\s*ENGINE\s*=\s*InnoDB[^;]*;/si';
             if (!preg_match($pattern, $official, $matches)) throw new RuntimeException('Missing official fixture DDL: ' . $table);
             $ddl = preg_replace('/CREATE TABLE\s+`' . preg_quote($table, '/') . '`/i', 'CREATE TABLE `' . $prefix . $table . '`', $matches[0], 1);

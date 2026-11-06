@@ -225,6 +225,30 @@
                 <template v-if="component.componentName == 'ProjectFormLocation'">
                    <diy-project-form-location ref="diyProjectFormLocationRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.ProjectFormLocation" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
+                <template v-if="component.componentName == 'LeadBusinessNavigation'">
+                   <diy-lead-business-navigation ref="diyLeadBusinessNavigationRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.LeadBusinessNavigation" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'LeadCooperationEntry'">
+                   <diy-lead-cooperation-entry ref="diyLeadCooperationEntryRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.LeadCooperationEntry" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'LeadCooperationHero'">
+                   <diy-lead-cooperation-hero ref="diyLeadCooperationHeroRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.LeadCooperationHero" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'LeadProfileBenefits'">
+                   <diy-lead-profile-benefits ref="diyLeadProfileBenefitsRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.LeadProfileBenefits" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'LeadProfileIdentity'">
+                   <diy-lead-profile-identity ref="diyLeadProfileIdentityRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.LeadProfileIdentity" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'LeadProfilePromotion'">
+                   <diy-lead-profile-promotion ref="diyLeadProfilePromotionRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.LeadProfilePromotion" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'LeadProfileTools'">
+                   <diy-lead-profile-tools ref="diyLeadProfileToolsRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.LeadProfileTools" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'LeadRoleEntry'">
+                   <diy-lead-role-entry ref="diyLeadRoleEntryRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.LeadRoleEntry" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
                 </view>
             </view>
         </template>
@@ -273,6 +297,14 @@
    import diyProjectCenterIncomeBoard from '@/addon/hsx_project_center/components/diy/project-center-income-board/index.vue';
    import diyProjectCenterReferenceGallery from '@/addon/hsx_project_center/components/diy/project-center-reference-gallery/index.vue';
    import diyProjectFormLocation from '@/addon/hsx_project_center/components/diy/project-form-location/index.vue';
+   import diyLeadBusinessNavigation from '@/addon/hsx_lead/components/diy/lead-business-navigation/index.vue';
+   import diyLeadCooperationEntry from '@/addon/hsx_lead/components/diy/lead-cooperation-entry/index.vue';
+   import diyLeadCooperationHero from '@/addon/hsx_lead/components/diy/lead-cooperation-hero/index.vue';
+   import diyLeadProfileBenefits from '@/addon/hsx_lead/components/diy/lead-profile-benefits/index.vue';
+   import diyLeadProfileIdentity from '@/addon/hsx_lead/components/diy/lead-profile-identity/index.vue';
+   import diyLeadProfilePromotion from '@/addon/hsx_lead/components/diy/lead-profile-promotion/index.vue';
+   import diyLeadProfileTools from '@/addon/hsx_lead/components/diy/lead-profile-tools/index.vue';
+   import diyLeadRoleEntry from '@/addon/hsx_lead/components/diy/lead-role-entry/index.vue';
    import topTabbar from '@/components/top-tabbar/top-tabbar.vue'
    import popAds from '@/components/pop-ads/pop-ads.vue'
    import useDiyStore from '@/app/stores/diy';

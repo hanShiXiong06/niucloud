@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_merchant` (
   `address` varchar(500) NOT NULL DEFAULT '',
   `service_areas_json` longtext NULL COMMENT 'Explicit service areas; not inferred from the street address',
   `member_id` int unsigned NOT NULL DEFAULT 0 COMMENT 'Existing site member; uses member-token authentication',
+  `subject_code` char(10) DEFAULT NULL COMMENT 'Tenant scoped, shareable merchant identifier; not an authorization secret',
   `status` tinyint unsigned NOT NULL DEFAULT 1,
   `remark` varchar(2000) NOT NULL DEFAULT '',
   `create_time` int unsigned NOT NULL DEFAULT 0,
@@ -21,6 +22,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_merchant` (
   PRIMARY KEY (`id`),
   KEY `idx_site_status` (`site_id`,`status`,`id`),
   KEY `idx_site_member` (`site_id`,`member_id`),
+  UNIQUE KEY `uk_site_subject_code` (`site_id`,`subject_code`),
   KEY `idx_site_area` (`site_id`,`province_id`,`city_id`,`district_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Lead merchant directory';
 
@@ -136,11 +138,8 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_partner` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `site_id` int unsigned NOT NULL,
   `merchant_id` bigint unsigned NOT NULL,
-  `grade_mode` varchar(12) NOT NULL DEFAULT 'auto',
-  `grade_id` varchar(40) NOT NULL DEFAULT '',
-  `certification_status` varchar(20) NOT NULL DEFAULT 'none',
-  `cert_expires_at` int unsigned NOT NULL DEFAULT 0,
-  `publisher_until` int unsigned NOT NULL DEFAULT 0,
+  `membership_level` varchar(16) NOT NULL DEFAULT '' COMMENT 'Subject-owned framework level code, never member.member_level',
+  `membership_until` int unsigned NOT NULL DEFAULT 0,
   `provider_requested` varchar(60) NOT NULL DEFAULT '',
   `blocked_at` int unsigned NOT NULL DEFAULT 0,
   `block_reason` varchar(1000) NOT NULL DEFAULT '',
@@ -150,6 +149,24 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_partner` (
   PRIMARY KEY (`id`), UNIQUE KEY `uk_site_merchant` (`site_id`,`merchant_id`),
   KEY `idx_site_block` (`site_id`,`blocked_at`,`merchant_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Merchant cooperation rights; money uses framework member commission';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_merchant_member` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int unsigned NOT NULL,
+  `merchant_id` bigint unsigned NOT NULL,
+  `member_id` int unsigned NOT NULL,
+  `role` varchar(12) NOT NULL DEFAULT 'member',
+  `status` varchar(16) NOT NULL DEFAULT 'pending',
+  `reviewed_at` int unsigned NOT NULL DEFAULT 0,
+  `reviewer_member_id` int unsigned NOT NULL DEFAULT 0,
+  `last_actor_member_id` int unsigned NOT NULL DEFAULT 0,
+  `create_time` int unsigned NOT NULL DEFAULT 0,
+  `update_time` int unsigned NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_merchant_member` (`site_id`,`merchant_id`,`member_id`),
+  KEY `idx_site_member_status` (`site_id`,`member_id`,`status`),
+  KEY `idx_site_merchant_status` (`site_id`,`merchant_id`,`status`,`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Subject account membership and responsible-owner approval';
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_collaboration` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,

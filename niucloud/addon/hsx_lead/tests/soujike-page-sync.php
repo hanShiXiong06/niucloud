@@ -8,11 +8,12 @@ foreach(['curl_exec','curl_multi_exec','fsockopen','pfsockopen','stream_socket_c
 }
 if(filter_var(ini_get('allow_url_fopen'),FILTER_VALIDATE_BOOLEAN)) exit("Disable allow_url_fopen before isolated testing\n");
 require __DIR__.'/bootstrap.php';
+require __DIR__.'/membership-fixtures.php';
 require_once dirname(__DIR__,3).'/vendor/autoload.php';
 
 use addon\hsx_lead\app\provider\{ProviderRegistry,SoujikeProvider,TransportContract};
 use addon\hsx_lead\app\service\{Context,ReadService,SyncService};
-use addon\hsx_lead\app\service\cooperation\{CooperationService,PartnerService};
+use addon\hsx_lead\app\service\cooperation\{CooperationService,PartnerService,Store,ConfigService,EntityMembershipService};
 use addon\hsx_lead\app\support\{Cipher,Data};
 use think\facade\Db;
 
@@ -58,9 +59,15 @@ function sjkPageSyncPage(array $rows,int $page=1,?int $total=null):array
 
 try{
     [$app,$pdo,$schema,$site]=leadBoot();leadAssertIsolated($schema);$now=time();
+    leadMembershipSeed($site);
+    $settings=new ConfigService(new Context($site,1));$config=$settings->get();$config['enabled']=true;$config['fee_confirmed']=true;$settings->save($config);
     $insert=static fn(string $table,array $data):int=>(int)Db::name('hsx_lead_'.$table)->insertGetId(['site_id'=>$site,'create_time'=>$now,'update_time'=>$now]+$data);
     $merchant=$insert('merchant',['name'=>'Synthetic Soujike receiver','member_id'=>101,'status'=>1,'province_id'=>910000,'city_id'=>910100,'district_id'=>910101]);
     $publisher=$insert('merchant',['name'=>'Synthetic publisher','member_id'=>102,'status'=>1,'province_id'=>910000,'city_id'=>910100,'district_id'=>910101]);
+    // Admit both subjects using the same dynamic catalog and verified synthetic
+    // framework receipts as real member checkout, never cached partner flags.
+    leadMembershipGrant($site,101,'ML701');leadMembershipGrant($site,102,'ML701');
+    sjkPageSyncCheck(EntityMembershipService::state($site,$merchant)['active']&&EntityMembershipService::state($site,$publisher)['active'],'both source-matching fixtures have independently verified subject membership');
     $connection=$insert('connection',['merchant_id'=>$merchant,'provider'=>'soujike','store_id'=>'36183','enabled'=>1,'config_version'=>1,'sync_interval_minutes'=>60]);
     Data::query('connection',$site)->where('id',$connection)->update(['credentials_cipher'=>Cipher::encrypt(['auth_mode'=>'token','access_token'=>'synthetic-page-token'],$site,$connection)]);
     $adminContext=new Context($site,1);$admin=new ReadService($adminContext);$member=new ReadService(new Context($site,0,101));

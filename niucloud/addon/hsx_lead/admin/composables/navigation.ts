@@ -1,7 +1,7 @@
 import type { LocationQuery, LocationQueryRaw } from 'vue-router'
 export const leadPagePaths={
     workbench:'/site/hsx_lead/workbench',leads:'/site/hsx_lead/cooperation/leads',
-    partners:'/site/hsx_lead/cooperation/partners',reviews:'/site/hsx_lead/cooperation/reviews',
+    partners:'/site/hsx_lead/cooperation/partners',entities:'/site/hsx_lead/cooperation/entities',reviews:'/site/hsx_lead/cooperation/reviews',
     orders:'/site/hsx_lead/cooperation/orders',settings:'/site/hsx_lead/cooperation/settings',
     merchants:'/site/hsx_lead/resource/merchants',inventory:'/site/hsx_lead/resource/inventory'
 } as const

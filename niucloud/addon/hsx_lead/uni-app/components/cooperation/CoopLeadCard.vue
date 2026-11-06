@@ -1,11 +1,11 @@
 <template>
     <view class="coop-lead-card" @tap="$emit('open', lead.id)">
 <view class="coop-lead-card__head">
-<view class="coop-lead-card__customer">{{ lead.customer_name || '客户需求' }}<text class="coop-business-tag">{{ businessLabels[lead.business_type] || '购机需求' }}</text>
+<view class="coop-lead-card__customer">{{ lead.customer_name || '客户需求' }}<text class="coop-business-tag">{{ lead.business_name || businessLabels[lead.business_type] || '业务需求' }}</text>
 </view>
 <text class="coop-status" :class="'is-' + lead.status">{{ lead.status_label || coopStatusLabels[lead.status] || '待核对' }}</text>
 </view>
-<CoopModels :items="lead.models || []" />
+<CoopModels :items="lead.demands || lead.models || []" />
 <view class="coop-lead-card__region">
 <u-icon name="map" size="13" color="#8b929c" />
 <text>{{ lead.region_text || '地区未填写' }}</text>

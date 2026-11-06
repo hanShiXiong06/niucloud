@@ -55,19 +55,13 @@ final class Context
     public function permission(string $key): void { $this->ownership()->permission($key); }
     public function merchant(): array
     {
-        if ($this->memberId <= 0) throw new CommonException('请使用已绑定商户的会员身份登录');
-        $member=Db::name('member')->where('site_id',$this->site)->where('member_id',$this->memberId)
-            ->where('status',1)->where('is_del',0)->where('delete_time',0)->field('member_id')->find();
-        if (!$member) throw new CommonException('会员身份已停用或失效，请联系平台管理员');
-        $row = Data::query('merchant',$this->site)->where('member_id',$this->memberId)->where('status',1)->find();
-        if (!$row) throw new CommonException('当前会员尚未绑定启用中的商户，请联系平台管理员');
-        return $row;
+        return \addon\hsx_lead\app\service\cooperation\TeamService::resolve($this);
     }
     /** Explicit ERP owner authorization. A member never inherits administrator powers. */
     public function connectionMerchant(int $id,bool $lock=false): array
     {
         if ($this->uid>0) {$this->manager();return Data::row('merchant',$this->site,$id,$lock);}
-        $own=$this->merchant();if ((int)$own['id']!==$id) throw new CommonException('只能管理当前会员绑定门店的ERP');
+        $own=\addon\hsx_lead\app\service\cooperation\TeamService::assertOwner($this,$id);
         $row=Data::row('merchant',$this->site,$id,$lock);
         if ((int)$row['member_id']!==$this->memberId||(int)$row['status']!==1) throw new CommonException('门店绑定关系已变化，请重新登录');
         $partner=Db::name('hsx_lead_partner')->where('site_id',$this->site)->where('merchant_id',$id)->find();

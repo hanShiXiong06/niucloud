@@ -490,9 +490,9 @@ $menus = [
                 ],
             ],
             [
-                'menu_name' => '等级认证',
+                'menu_name' => '商户监管',
                 'menu_key' => 'hsx_lead_cooperation_partners',
-                'menu_short_name' => '等级认证',
+                'menu_short_name' => '商户监管',
                 'parent_select_key' => '',
                 'menu_type' => '1',
                 'icon' => 'nc-iconfont nc-icon-huiyuandengjiV6xx',
@@ -505,16 +505,16 @@ $menus = [
                 'is_show' => '1',
                 'children' => [
                     [
-                        'menu_name' => '维护等级认证与发单权益',
-                        'menu_key' => 'hsx_lead_cooperation_partner_edit',
-                        'menu_short_name' => '维护等级认证与发单权益',
+                        'menu_name' => '私密查看营业执照',
+                        'menu_key' => 'hsx_lead_cooperation_license_read',
+                        'menu_short_name' => '私密查看营业执照',
                         'parent_select_key' => '',
                         'menu_type' => '2',
                         'icon' => '',
-                        'api_url' => 'hsx_lead/cooperation/partners/<id>',
+                        'api_url' => 'hsx_lead/cooperation/partners/<id>/business-license',
                         'router_path' => '',
                         'view_path' => '',
-                        'methods' => 'put',
+                        'methods' => 'get',
                         'sort' => '100',
                         'status' => '1',
                         'is_show' => '0',
@@ -792,6 +792,25 @@ $promotionPermission=static function(string $name,string $key,string $api,string
         'api_url'=>$api,'router_path'=>'','view_path'=>'','methods'=>$method,'sort'=>'100','status'=>'1','is_show'=>'0'];
 };
 $menus[0]['children'][]=[
+    'menu_name'=>'主体与成员','menu_key'=>'hsx_lead_entity_manage','menu_short_name'=>'主体与成员','parent_select_key'=>'','menu_type'=>'1',
+    'icon'=>'nc-iconfont nc-icon-huiyuanliebiao','api_url'=>'hsx_lead/entities','router_path'=>'hsx_lead/cooperation/entities','view_path'=>'cooperation/entities-page',
+    'methods'=>'get','sort'=>'265','status'=>'1','is_show'=>'1','children'=>[
+        $promotionPermission('查看主体成员详情','hsx_lead_entity_detail','hsx_lead/entities/<id>','get'),
+        $promotionPermission('审核主体加入申请','hsx_lead_entity_review','hsx_lead/entities/<id>/members/<member_id>/review','post'),
+        $promotionPermission('移除主体成员','hsx_lead_entity_remove','hsx_lead/entities/<id>/members/<member_id>','delete'),
+    ],
+];
+$menus[0]['children'][]=[
+    'menu_name'=>'押金退还','menu_key'=>'hsx_lead_deposit_manage','menu_short_name'=>'押金退还','parent_select_key'=>'','menu_type'=>'1',
+    'icon'=>'nc-iconfont nc-icon-tuikuan','api_url'=>'hsx_lead/cooperation/deposits','router_path'=>'hsx_lead/cooperation/deposits','view_path'=>'cooperation/deposits-page',
+    'methods'=>'get','sort'=>'160','status'=>'1','is_show'=>'1','children'=>[
+        $promotionPermission('查看押金退还申请','hsx_lead_deposit_detail','hsx_lead/cooperation/deposits/<id>','get'),
+        $promotionPermission('审核押金退还申请','hsx_lead_deposit_review','hsx_lead/cooperation/deposits/<id>/review','post'),
+        $promotionPermission('核对原路退还结果','hsx_lead_deposit_refresh','hsx_lead/cooperation/deposits/<id>/refresh','post'),
+        $promotionPermission('读取押金管理范围','hsx_lead_deposit_scope','hsx_lead/cooperation/scope','get'),
+    ],
+];
+$menus[0]['children'][]=[
     'menu_name'=>'推广管理','menu_key'=>'hsx_lead_promotion_manage','menu_short_name'=>'推广管理','parent_select_key'=>'','menu_type'=>'1',
     'icon'=>'nc-iconfont nc-icon-huiyuanliebiao','api_url'=>'hsx_lead/promotion/rewards','router_path'=>'hsx_lead/promotion/index','view_path'=>'promotion/index',
     'methods'=>'get','sort'=>'150','status'=>'1','is_show'=>'1','children'=>[
@@ -800,9 +819,21 @@ $menus[0]['children'][]=[
         $promotionPermission('保存推广规则','hsx_lead_promotion_config_save','hsx_lead/promotion/config','put'),
         $promotionPermission('查看服务商','hsx_lead_promotion_providers','hsx_lead/promotion/providers','get'),
         $promotionPermission('开通或停用服务商','hsx_lead_promotion_providers_save','hsx_lead/promotion/providers/<id>','put'),
+        $promotionPermission('审核服务商申请','hsx_lead_promotion_provider_review','hsx_lead/promotion/providers/<id>/review','post'),
         $promotionPermission('结算到期推广奖励','hsx_lead_promotion_settle','hsx_lead/promotion/settle','post'),
+        $promotionPermission('核对重试原付款推广','hsx_lead_promotion_retry','hsx_lead/promotion/orders/<id>/retry','post'),
         $promotionPermission('暂停推广奖励','hsx_lead_promotion_hold','hsx_lead/promotion/rewards/<id>/hold','post'),
         $promotionPermission('核对恢复推广奖励','hsx_lead_promotion_resume','hsx_lead/promotion/rewards/<id>/resume','post'),
     ],
+];
+$menus[0]['children'][]=[
+    'menu_name'=>'首页装修','menu_key'=>'hsx_lead_cooperation_home','menu_short_name'=>'首页装修','parent_select_key'=>'','menu_type'=>'1',
+    'icon'=>'nc-iconfont nc-icon-shouyezhuangxiu','api_url'=>'','router_path'=>'hsx_lead/cooperation/home','view_path'=>'cooperation/home-page',
+    'methods'=>'','sort'=>'140','status'=>'1','is_show'=>'1','children'=>[],
+];
+$menus[0]['children'][]=[
+    'menu_name'=>'个人中心装修','menu_key'=>'hsx_lead_cooperation_profile_home','menu_short_name'=>'个人中心装修','parent_select_key'=>'','menu_type'=>'1',
+    'icon'=>'nc-iconfont nc-icon-gerenzhongxinV6xx','api_url'=>'','router_path'=>'hsx_lead/cooperation/profile-home','view_path'=>'cooperation/profile-home-page',
+    'methods'=>'','sort'=>'139','status'=>'1','is_show'=>'1','children'=>[],
 ];
 return $menus;

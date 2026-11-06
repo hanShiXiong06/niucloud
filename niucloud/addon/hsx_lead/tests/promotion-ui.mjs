@@ -83,7 +83,7 @@ check(adminApiCalls[0].method==='post'&&adminApiCalls[0].url==='hsx_lead/promoti
 const adminUser=Vue.reactive({rules:['hsx_lead_promotion_resume']}),dialogs=[],notices=[],resumeCalls=[]
 let promptWork=async()=>({value:'已核实原支付未退款'}),resumeWork=async id=>({data:{id,status:'pending'}})
 const adminDeps={vue:{...Vue,onMounted(){},onBeforeUnmount(){}},'element-plus':{ElMessage:{success:value=>notices.push({kind:'success',value}),warning:value=>notices.push({kind:'warning',value})},ElMessageBox:{prompt:async(...args)=>{dialogs.push(args);return promptWork(...args)},confirm:async()=>{}}},'@element-plus/icons-vue':{Refresh:{}},'@/stores/modules/user':{default:()=>adminUser},'../../composables/navigation':{hasLeadPagePermission:(user,key)=>user.rules.includes(key)},'../../composables/cooperation':{coopError:(cause,fallback)=>cause?.msg||cause?.message||fallback,coopMoney:value=>value,coopTime:value=>value},'../../api/promotion':{resumePromotionReward:async(id,reason)=>{resumeCalls.push({id,reason});return resumeWork(id,reason)},getPromotionRewards:async()=>({data:{data:[],total:0}})}}
-for(const name of ['HsxTable','HsxPagination','HsxDrawer'])adminDeps[`@/addon/hsx_components/components/${name}/index.vue`]={default:{}}
+for(const name of ['HsxTable','HsxPagination','HsxDrawer','HsxSearchInput'])adminDeps[`@/addon/hsx_components/components/${name}/index.vue`]={default:{}}
 adminDeps['../components/PageShell.vue']={default:{}}
 const adminScript=compiler.parse(admin).descriptor.scriptSetup.content+'\nexport {resume,holding,rewardError,resumeReasons};'
 const adminState=execute(adminScript,adminDeps)
