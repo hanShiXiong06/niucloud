@@ -5,7 +5,6 @@ namespace addon\hsx_lead\app\service\cooperation;
 use addon\hsx_lead\app\service\Context;
 use addon\hsx_lead\app\support\Data;
 use app\dict\pay\{PayDict,RefundDict};
-use app\service\core\pay\CorePayService;
 use core\exception\CommonException;
 use think\facade\Db;
 
@@ -149,7 +148,7 @@ final class EntityMembershipService
     {
         $ctx=new Context($site,0,(int)$order['member_id']);TeamService::assertOwner($ctx,(int)$order['merchant_id'],true);
         if(MembershipDepositService::exited($site,(int)$order['merchant_id'],true))throw new CommonException('门店退押金或退出协作正在处理中，未发起付款');
-        $rule=Data::decode($order['rule_json']);self::assertSnapshot($order,$rule);
+        $rule=Data::decode($order['rule_json']);self::assertSnapshot($order,$rule);self::assertPriceOverrideSource($site,$order,$rule);
         if (!self::catalogMatches($rule,MembershipCatalogService::levels($site,true))) throw new CommonException('原会员套餐已调整或停售，请先取消未支付单后重新选择；当前未发起支付');
         if ((int)($rule['quoted_at']??0)+self::TTL<time()) throw new CommonException('原会员报价已过期，请先取消未支付订单，再重新报价；当前未扣款');
         $rows=self::ledger($site,(int)$order['merchant_id'],true);$partner=Store::partner($site,(int)$order['merchant_id'],true);
@@ -161,7 +160,7 @@ final class EntityMembershipService
     /** Called after framework receipt verification under site, order and partner locks. */
     public static function grant(int $site,array $order,array &$rule,int $paidAt): array
     {
-        self::assertSnapshot($order,$rule);$partner=Store::partner($site,(int)$order['merchant_id'],true);
+        self::assertSnapshot($order,$rule);self::assertPriceOverrideSource($site,$order,$rule);$partner=Store::partner($site,(int)$order['merchant_id'],true);
         if(MembershipDepositService::exited($site,(int)$order['merchant_id'],true))throw new CommonException('实际付款时门店正在退出协作，请平台核对原付款');
         $rows=self::ledger($site,(int)$order['merchant_id'],true);
         if (!hash_equals((string)($rule['base_fingerprint']??''),self::fingerprint($rows,$partner))) throw new CommonException('原权益状态已变化，已收款须人工核对，不能覆盖新权益');
@@ -179,31 +178,40 @@ final class EntityMembershipService
 
     public function closeUnpaid(int $id): array
     {
-        $merchant=TeamService::assertOwner($this->context,null,true);$site=$this->context->site;
-        $connection=Db::connect();$scope=(string)$connection->getConfig('database').':'.(string)$connection->getConfig('prefix');
-        $key='lead_coop_pay:'.substr(hash('sha256',$scope.':'.$site.':'.$id),0,40);
-        $locked=$connection->query('SELECT GET_LOCK(:lock_key, 3) AS acquired',['lock_key'=>$key],true);
-        if ((int)($locked[0]['acquired']??0)!==1) throw new CommonException('该笔支付正在处理，请稍后刷新，不要重复操作');
-        try {
-            $order=Store::row('coop_order',$site,$id,true);
-            if ($order['purpose']!=='membership'||(int)$order['merchant_id']!==(int)$merchant['id']||(int)$order['member_id']!==$this->context->memberId) throw new CommonException('只能关闭本人为当前主体创建的会员付款订单');
-            if ($order['status']==='closed') return (new PaymentService($this->context))->order($id);
-            if ($order['status']!=='unpaid') throw new CommonException('该订单已收款，不能取消；需要退款请联系平台');
-            $pays=Db::name('pay')->where('site_id',$site)->where('trade_type',PaymentService::TRADE_TYPE)->where('trade_id',$id)->lock(true)->select()->toArray();
-            foreach($pays as $pay) {
-                if ($pay['main_type']!==PayDict::MEMBER||(int)$pay['main_id']!==$this->context->memberId||Rules::cents((string)$pay['money'])!==Rules::cents((string)$order['amount'])) throw new CommonException('原支付流水归属或金额异常，未关闭订单');
-                if ((int)$pay['status']===(int)PayDict::STATUS_FINISH) throw new CommonException('原支付已经收款，请等待入账核对，不能取消或重新支付');
-                if (!in_array((int)$pay['status'],[(int)PayDict::STATUS_WAIT,(int)PayDict::STATUS_CANCEL],true)) throw new CommonException('支付渠道仍在处理中，请先在原收银台核实取消结果，未关闭业务，请勿另开付款');
-            }
-            // WAIT is not yet sent to a provider. Never treat an uncertain ING result as cancellation.
-            foreach($pays as $pay) if ((int)$pay['status']===(int)PayDict::STATUS_WAIT&&(new CorePayService())->close($site,(string)$pay['out_trade_no'])!==true) throw new CommonException('原支付尚未确认关闭，请勿重新下单');
-            Db::transaction(function()use($site,$id):void {
-                PromotionService::lockSite($site);$order=Store::row('coop_order',$site,$id,true);TeamService::assertOwner($this->context,(int)$order['merchant_id'],true);
-                if ($order['status']!=='unpaid') throw new CommonException('原订单状态已变化，请刷新核对');
-                if (Db::name('pay')->where('site_id',$site)->where('trade_type',PaymentService::TRADE_TYPE)->where('trade_id',$id)->where('status','<>',PayDict::STATUS_CANCEL)->lock(true)->field('id')->select()->toArray()) throw new CommonException('原支付未全部确认关闭，当前未关闭业务');
-                Store::query('coop_order',$site)->where('id',$id)->update(['status'=>'closed','update_time'=>time()]);$this->context->audit('coop_order',$id,'closed',['purpose'=>'membership']);
-            });return (new PaymentService($this->context))->order($id);
-        } finally {try {$connection->query('SELECT RELEASE_LOCK(:lock_key) AS released',['lock_key'=>$key],true);}catch(\Throwable $ignored){}}
+        $merchant=TeamService::assertOwner($this->context);$order=Store::row('coop_order',$this->context->site,$id);
+        if($order['purpose']!=='membership'||(int)$order['merchant_id']!==(int)$merchant['id']||(int)$order['member_id']!==$this->context->memberId)throw new CommonException('只能关闭本人为当前主体创建的会员付款订单');
+        return(new PaymentOrderLifecycle($this->context))->close($id,['confirm'=>true]);
+    }
+
+    /** Trusted admin orchestration calls before closing, then again before inserting a replacement. */
+    public static function prepareRepricedSnapshot(int $site,array $old,string $serviceAmount,array $provenance): array
+    {
+        if($site<=0||(int)($old['site_id']??0)!==$site||($old['purpose']??'')!=='membership'||!in_array($old['status']??'',['unpaid','closed'],true))throw new CommonException('仅本站未付或已核实关闭的会员原单可以调整服务费');
+        $ctx=new Context($site,0,(int)$old['member_id']);TeamService::assertOwner($ctx,(int)$old['merchant_id'],true);$config=(new ConfigService($ctx))->get(true);$partner=Store::partner($site,(int)$old['merchant_id'],true);
+        if(empty($config['enabled'])||(int)$partner['blocked_at']>0)throw new CommonException('当前门店不可购买会员，未创建改价替换单');
+        $pending=Store::query('coop_order',$site)->where('merchant_id',(int)$old['merchant_id'])->where('purpose','membership')->where('status','unpaid')->where('id','<>',(int)$old['id'])->lock(true)->find();
+        if($pending)throw new CommonException('门店已有另一笔待支付会员单，未创建改价替换单');
+        $rule=Data::decode($old['rule_json']);if(($rule['schema_version']??'')!==self::SNAPSHOT_SCHEMA)throw new CommonException('原会员单缺少三项费用快照，请重新报价，不能直接改价');
+        if(!empty($rule['requires_manual_review']))throw new CommonException('原会员付款仍需人工核对，不能通过改价重新收费');
+        if((int)($rule['quoted_at']??0)>time()||(int)($rule['quoted_at']??0)+self::TTL<=time())throw new CommonException('原会员报价已过期或时间异常，请重新报价，不能通过改价延长原单期限');
+        self::assertOrderPayable($site,$old);self::assertSources(self::ledger($site,(int)$old['merchant_id'],true),$rule);
+        // Keep quoted_at and all period/credit-source timestamps. Resetting the
+        // ten-minute TTL would silently extend an old upgrade-credit valuation.
+        return MembershipCostService::repriceService($old,$rule,$serviceAmount,$provenance);
+    }
+
+    /** Repricing never trusts a detached amount or an arbitrary old trade ID. */
+    private static function assertPriceOverrideSource(int $site,array $order,array $rule): void
+    {
+        if(!isset($rule['price_override']))return;$override=$rule['price_override'];$id=(int)$override['source_order_id'];
+        if($id===(int)$order['id'])throw new CommonException('改价必须使用独立替换付款单');
+        $source=Store::row('coop_order',$site,$id,true);$sourceRule=Data::decode($source['rule_json']);
+        if($source['status']!=='closed'||$source['purpose']!=='membership'||!empty($sourceRule['requires_manual_review'])||(int)$source['member_id']!==(int)$order['member_id']||(int)$source['merchant_id']!==(int)$order['merchant_id']||!hash_equals($override['source_snapshot_fingerprint'],MembershipCostService::pricingFingerprint($source,$sourceRule)))throw new CommonException('会员改价原单未关闭或来源快照已变化，暂不继续付款或开通权益');
+        $expected=MembershipCostService::repriceService($source,$sourceRule,$rule['service_amount'],['operator_uid'=>$override['operator_uid'],'reason'=>$override['reason'],'at'=>$override['at']]);
+        // Processing metadata may be appended by the payment/promotion services;
+        // every immutable financial/rights field must match the trusted source.
+        foreach($expected['rule'] as$key=>$value)if(($rule[$key]??null)!==$value)throw new CommonException('会员改价替换单与原权益、押金或经验明细不一致');
+        if(Rules::cents((string)$order['amount'])!==Rules::cents($expected['amount']))throw new CommonException('会员改价合计与真实付款金额不一致');
     }
 
     /** Verified successful refund only; partial refunds freeze affected rights, never guess days. */
@@ -311,7 +319,7 @@ final class EntityMembershipService
     {
         foreach($tiers as $tier) if ($tier['code']===($rule['level_code']??'')) {
             if (empty($tier['enabled'])||!hash_equals((string)($rule['catalog_fingerprint']??''),self::tierFingerprint($tier))) return false;
-            foreach($tier['cycles'] as $cycle) if ($cycle['key']===($rule['cycle']??'')) return !empty($cycle['enabled'])&&$cycle['months']===($rule['months']??0)&&Rules::cents($cycle['price'])===Rules::cents($rule['full_amount']??'');
+            foreach($tier['cycles'] as $cycle) if ($cycle['key']===($rule['cycle']??'')) return !empty($cycle['enabled'])&&$cycle['months']===($rule['months']??0)&&Rules::cents($cycle['price'])===Rules::cents($rule['price_override']['catalog_full_amount']??$rule['full_amount']??'');
         }return false;
     }
     /** Appearance edits never invalidate a payment quote or original grant. */

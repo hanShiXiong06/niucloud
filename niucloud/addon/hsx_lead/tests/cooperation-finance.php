@@ -155,8 +155,8 @@ try {
     financeCheck($finance->adminOrders(['requires_manual_review'=>1])['total']===1,'finance can find the receipt awaiting human review');
     $notices=new CooperationNoticeService(static fn(array $payload)=>throw new RuntimeException('Disabled channels must not dispatch'));
     $noticeEvent=['site_id'=>$site,'lead_id'=>$lead['id'],'action'=>'paid'];$notices->changed($noticeEvent);$noticeCount=Data::query('audit',$site)->where('entity_type','collaboration_notice')->count();$notices->changed($noticeEvent);
-    financeCheck($noticeCount===3&&Data::query('audit',$site)->where('entity_type','collaboration_notice')->count()===3,'independent notification channels recorded and deduplicated without sending');
-    financeCheck(count(CooperationNoticeService::statusForLead($site,(int)$lead['id']))===3,'notification configuration/disabled reasons are visible in business detail');
+    financeCheck($noticeCount===6&&Data::query('audit',$site)->where('entity_type','collaboration_notice')->count()===6,'both participants notification channels recorded and deduplicated without sending');
+    financeCheck(count(array_filter(CooperationNoticeService::statusForLead($site,(int)$lead['id']),static fn(array $entry):bool=>$entry['channel']!=='queue'))===6,'both participants notification configuration/disabled reasons are visible beside durable event tasks');
     financeCheck(date('Y-m-d',Rules::addMonths(strtotime('2027-01-31 12:34:00'),1))==='2027-02-28','purchased month clamps at month end');
     financeCheck(Rules::split(5000,$config)['net_amount']==='40.10','minor units never treated as whole yuan');
     Db::name('member')->where('member_id',101)->update(['commission'=>'99999999.98']);

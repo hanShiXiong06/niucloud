@@ -3,6 +3,7 @@ import path from 'node:path'
 import { createRequire } from 'node:module'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { validateMobileApiBase } from './mobile-api-env.mjs'
 
 // Isolated compilation of real installation sources. Never runs publish.cjs or an installer.
 const plugin = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -11,6 +12,12 @@ const require = createRequire(path.join(workspace, 'uni-app/package.json'))
 const JSON5 = require('json5')
 const platform = process.argv[2] || 'mp-weixin'
 if (!['mp-weixin', 'h5'].includes(platform)) throw new Error('Usage: node scripts/build-mobile.mjs [mp-weixin|h5]')
+// Match Vite's real production envDir and shell-override precedence. Fail
+// before touching any generated input/output, so an invalid MP URL preserves
+// the previous build instead of producing another request:fail invalid url.
+const { loadEnv } = require('vite')
+const mobileApi = validateMobileApiBase(platform, loadEnv('production', path.join(workspace, 'uni-app'), 'VITE_APP_BASE_URL').VITE_APP_BASE_URL)
+if (mobileApi.warning) console.warn(mobileApi.warning)
 const area = path.join(workspace, 'output/hsx-lead-live-build')
 const input = path.join(area, 'input'), output = path.join(area, platform)
 const marker = path.join(input, '.hsx-lead-generated')
@@ -89,7 +96,7 @@ for (const file of ['utils/request.ts', 'components/pay/pay.vue']) {
 }
 const result = spawnSync(process.execPath, [path.join(workspace, 'uni-app/node_modules/@dcloudio/vite-plugin-uni/bin/uni.js'), 'build', '-p', platform, '--config', config], {
     cwd: path.join(workspace, 'uni-app'), stdio: 'inherit',
-    env: { ...process.env, UNI_CLI_CONTEXT: path.join(workspace, 'uni-app'), UNI_INPUT_DIR: input, UNI_OUTPUT_DIR: output, UNI_PLATFORM: platform, NODE_ENV: 'production', NODE_OPTIONS: '--max-old-space-size=4096' },
+    env: { ...process.env, VITE_APP_BASE_URL: mobileApi.baseUrl, UNI_CLI_CONTEXT: path.join(workspace, 'uni-app'), UNI_INPUT_DIR: input, UNI_OUTPUT_DIR: output, UNI_PLATFORM: platform, NODE_ENV: 'production', NODE_OPTIONS: '--max-old-space-size=4096' },
 })
 if (result.error || result.status !== 0) throw new Error('Real-source compilation failed; no deployment or upload was attempted')
 if (platform === 'mp-weixin') {

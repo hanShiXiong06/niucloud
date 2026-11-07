@@ -43,6 +43,13 @@ return [
                 'action' => 'decorate',
             ],
             [
+                'name' => 'HSX_LEAD_PAYMENT_ORDERS',
+                'title' => '我的付款单',
+                'url' => '/addon/hsx_lead/pages/orders/index',
+                'is_share' => 0,
+                'action' => '',
+            ],
+            [
                 'name' => 'HSX_LEAD_MERCHANT_PROFILE_EDIT',
                 'title' => '门店资料与交付能力',
                 'url' => '/addon/hsx_lead/pages/task/index?task=profile-edit',

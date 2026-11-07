@@ -16,6 +16,10 @@ final class CooperationPaymentGuard
     {
         $controller=strtolower(str_replace(['\\','/'],'.',$request->controller()));
         $action=strtolower($request->action());
+        if(app()->http->getName()==='adminapi'&&in_array($controller,['pay.payrefund','app.adminapi.controller.pay.payrefund'],true)&&$action==='transfer'){
+            $number=$request->param('refund_no','');
+            if(is_string($number)&&$number!==''&&Db::name('pay_refund')->where('site_id',(int)$request->siteId())->where('refund_no',$number)->where('trade_type',PaymentService::TRADE_TYPE)->find())throw new CommonException('请从商户协作支付订单或押金退还中处理原退款，不能从通用入口重复提交');
+        }
         if (app()->http->getName()!=='api'||!in_array($controller,['pay.pay','app.api.controller.pay.pay'],true)||!in_array($action,['pay','info','friendspayinfo','getpaytype','close'],true)) return $next($request);
         $site=(int)$request->siteId();$type=(string)$request->param('trade_type','');$id=$request->param('trade_id',0);
         if ($action==='close') {

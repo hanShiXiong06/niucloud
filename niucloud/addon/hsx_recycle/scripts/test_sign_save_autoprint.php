@@ -212,6 +212,13 @@ namespace addon\hsx_recycle\app\service\admin\device {
         public function ensureFromModelName($name, $site): void {}
     }
 }
+namespace addon\hsx_recycle\app\service\admin\order {
+    // 首录审计的完整事务/责任测试在 test_device_info_correction.php 中覆盖。
+    class RecycleDeviceInfoCorrectionService {
+        public function recordInitialEntry(...$arguments): void {}
+        public function recordFirstModelFill(...$arguments): void {}
+    }
+}
 namespace addon\hsx_recycle\app\service\admin\stat {
     class TaskService { public function assignPreferredOrDefault($id, $stage, $uid): void {} }
 }

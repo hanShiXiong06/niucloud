@@ -60,7 +60,7 @@ const formData = ref<any>({})
 const ruleRefs = ref(null)
 const loading = ref(true)
 
-const modules: any = import.meta.glob('@/**/*.vue')
+import { dynamicComponentModules as modules } from '@/utils/dynamic-components'
 getGrowthRuleDict().then(({ data }) => {
     Object.keys(data).forEach((key: string) => {
         data[key].component && (data[key].component = defineAsyncComponent(modules[data[key].component]))

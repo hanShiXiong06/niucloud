@@ -15,6 +15,7 @@ use think\facade\Db;
 $checks=0;$pdo=null;$schema='';$failed=false;
 function deliveryCheck(bool $ok,string $message):void{if(!$ok)throw new RuntimeException('Assertion failed: '.$message);$GLOBALS['checks']++;}
 function deliveryDenied(callable $call,string $message):void{try{$call();}catch(CommonException $error){deliveryCheck(true,$message);return;}throw new RuntimeException('Expected denial: '.$message);}
+function externalDelivery(array $result):array{$count=count($result['data']);$result['data']=array_values(array_filter($result['data'],static fn(array $row):bool=>empty($row['is_internal'])));$result['total']-=$count-count($result['data']);return$result;}
 try{
     [$app,$pdo,$schema,$site]=leadBoot();leadAssertIsolated($schema);$now=time();$installedTables=Db::query('SHOW TABLES');
     Db::name('sys_area')->insertAll([
@@ -57,19 +58,19 @@ try{
     $input=['request_id'=>'delivery-fixture-0001','customer_name'=>'Customer','mobile'=>'13800000000','province_id'=>910000,'city_id'=>910100,'district_id'=>910101,'business_type'=>'purchase','model_ids'=>[$model['id']],'attachments'=>[],'consent'=>true];
     $lead=$p->create($input);$id=(int)$lead['id'];
     deliveryCheck($lead['can_cancel']&&$lead['can_assign']&&$lead['status']==='selecting','new unassigned lead exposes cancel and choose-store actions');
-    $found=$p->stores([],$id);
+    $found=externalDelivery($p->stores([],$id));
     deliveryCheck($found['scope']==='district'&&array_column($found['data'],'id')===[$countyId],'default search starts in the customer county, not publisher address');
     deliveryCheck($found['region']['district_id']===910101,'response identifies the actual customer search region');
     deliveryCheck($p->stores(['province_id'=>920000,'city_id'=>920100,'district_id'=>920101],$id)['scope']==='district','lead parameters cannot replace its customer location');
     deliveryCheck($found['data'][0]['inventory_count']===0&&count($found['data'][0]['match_models'])===1,'manual declaration qualifies model matching without claiming stock');
     Data::query('merchant',$site)->where('id',$countyId)->update(['status'=>0]);
-    $found=$p->stores([],$id);deliveryCheck($found['scope']==='city'&&array_column($found['data'],'id')===[$cityId],'county without candidates automatically expands to customer city');
+    $found=externalDelivery($p->stores([],$id));deliveryCheck($found['scope']==='city'&&array_column($found['data'],'id')===[$cityId],'county without external candidates automatically expands to customer city');
     Data::query('merchant',$site)->where('id',$cityId)->update(['status'=>0]);
-    $found=$p->stores([],$id);deliveryCheck($found['scope']==='province'&&array_column($found['data'],'id')===[$provinceId],'city without candidates automatically expands to customer province');
+    $found=externalDelivery($p->stores([],$id));deliveryCheck($found['scope']==='province'&&array_column($found['data'],'id')===[$provinceId],'city without external candidates automatically expands to customer province');
     foreach([$countyId,$cityId] as $mid)Data::query('merchant',$site)->where('id',$mid)->update(['status'=>1]);
-    deliveryCheck($p->stores(['province_id'=>910000,'scope'=>'province'])['total']===3,'province alone can query every eligible shop in that province');
-    deliveryCheck($p->stores(['province_id'=>910000,'city_id'=>910100,'scope'=>'city'])['total']===2,'province and city can query without selecting a county');
-    deliveryCheck($p->stores(['province_id'=>910000,'city_id'=>910100,'district_id'=>910101,'scope'=>'district'])['total']===1,'county can query exact customer area');
+    deliveryCheck(externalDelivery($p->stores(['province_id'=>910000,'scope'=>'province']))['total']===3,'province alone can query every eligible external shop in that province');
+    deliveryCheck(externalDelivery($p->stores(['province_id'=>910000,'city_id'=>910100,'scope'=>'city']))['total']===2,'province and city can query without selecting a county');
+    deliveryCheck(externalDelivery($p->stores(['province_id'=>910000,'city_id'=>910100,'district_id'=>910101,'scope'=>'district']))['total']===1,'county can query exact customer area');
     deliveryCheck($p->stores(['province_id'=>910000,'scope'=>'province','keyword'=>'City shop'])['total']===1,'store keyword search intersects the selected region');
     deliveryCheck($p->stores(['province_id'=>910000,'city_id'=>910100,'district_id'=>910101,'scope'=>'district','keyword'=>'City shop'])['total']===0,'explicit county search does not silently widen its scope');
     deliveryCheck($p->stores(['keyword'=>'City shop'],$id)['scope']==='city','automatic fallback applies after the requested keyword and delivery capability');

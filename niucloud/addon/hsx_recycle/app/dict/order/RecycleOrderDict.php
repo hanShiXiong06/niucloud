@@ -393,6 +393,9 @@ class RecycleOrderDict
         $action = (string)($log['action'] ?? '');
 
         $operationMap = [
+            'info_correction' => '基础资料修改',
+            'initial_entry' => '首次资料录入',
+            'record_creator' => '设备占位创建',
             'sign' => '设备签收',
             'check_start' => '开始质检',
             'check_draft' => '暂存质检',

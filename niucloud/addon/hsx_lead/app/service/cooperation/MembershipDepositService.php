@@ -88,10 +88,8 @@ final class MembershipDepositService
                 $balance=MembershipCostService::balances($this->context->site,(int)$order['merchant_id'],true);if($balance['review_required']||$balance['balance']!==$r['amount'])throw new CommonException('押金或原退款状态已变化，当前未发起退款');
                 $fresh=$this->sources((int)$order['merchant_id'],true);$map=[];foreach($fresh as$s)$map[$s['order_id']]=$s['amount_cents'];
                 foreach($r['sources'] as &$source){if(($map[$source['order_id']]??-1)!==Rules::cents($source['amount']))throw new CommonException('原押金来源已变化，未创建退款');$original=Store::row('coop_order',$this->context->site,(int)$source['order_id'],true);$originalRule=Data::decode($original['rule_json']);
-                    // Framework create only persists a refund record; it does not send it.
-                    $number=(new CoreRefundService())->create($this->context->site,(string)$original['out_trade_no'],(float)$source['amount'],'商户正常退出，仅退还押金',PaymentService::TRADE_TYPE,(string)$original['id']);
-                    if(!is_string($number)||$number==='')throw new CommonException('原退款编号未能创建，当前未发起退款');
-                    $source['refund_no']=$number;$source['status']='reserved';$originalRule['membership_deposit_return_anchor']=$id;$originalRule['membership_refund_allocations'][$number]=['deposit'=>$source['amount'],'service'=>'0.00','experience'=>'0.00','quantity'=>'0.00'];self::save((int)$original['id'],$this->context->site,$originalRule);
+                    $reservation=$this->reserveRefund($original,$source['amount']);$number=$reservation['refund_no'];
+                    $source['refund_no']=$number;$source['refund_record_id']=$reservation['id'];$source['status']='reserved';$originalRule['membership_deposit_return_anchor']=$id;$originalRule['membership_refund_allocations'][$number]=['deposit'=>$source['amount'],'service'=>'0.00','experience'=>'0.00','quantity'=>'0.00'];self::save((int)$original['id'],$this->context->site,$originalRule);
                 }unset($source);$r['status']='approved';
             }
             $r['review_reason']=$reason;$r['review_at']=time();$r['reviewer_uid']=$this->context->uid;$r['update_at']=time();$latest=Store::row('coop_order',$this->context->site,$id,true);$rule=Data::decode($latest['rule_json']);$rule[self::KEY]=$r;self::save($id,$this->context->site,$rule);$this->context->audit('membership_deposit',$id,$decision,['merchant_id'=>(int)$order['merchant_id'],'amount'=>$r['amount']]);
@@ -114,6 +112,17 @@ final class MembershipDepositService
         $rule=Data::decode($source['rule_json']);$anchor=(int)($rule['membership_deposit_return_anchor']??0);
         if($anchor<=0)return;
         (new self(new Context($site,0,(int)$source['member_id'])))->reconcile($anchor);
+    }
+
+    /** Retain the framework's refund quota and payment validation. Its current
+     * create_no() restarts Snowflake's sequence on every call, so two fresh rows
+     * can share a millisecond identity. Before any dispatch, re-key ONLY the
+     * strictly identified row just inserted on this same transactional PDO.
+     * No historical or already submitted refund identity is ever rewritten.
+     */
+    private function reserveRefund(array $original,string $amount):array
+    {
+        return FrameworkRefundReservation::create($this->context->site,$original,$amount,'商户正常退出，仅退还押金','LD');
     }
 
     /** Explicit administrator verification only. The official balance driver
@@ -172,7 +181,7 @@ final class MembershipDepositService
 
     private function refundRecord(array $anchor,array $source,bool $lock=false):?array
     {
-        if(empty($source['refund_no']))return null;$q=Db::name('pay_refund')->where('site_id',$this->context->site)->where('refund_no',$source['refund_no']);if($lock)$q->lock(true);$rows=$q->select()->toArray();if(count($rows)!==1)throw new CommonException('原退款编号缺失或重复，请平台核对，未重复退款');$row=$rows[0];$original=Store::row('coop_order',$this->context->site,(int)$source['order_id'],$lock);if((int)$original['merchant_id']!==(int)$anchor['merchant_id']||$row['out_trade_no']!==$original['out_trade_no']||$row['trade_type']!==PaymentService::TRADE_TYPE||(int)$row['trade_id']!==(int)$original['id']||Rules::cents((string)$row['money'])!==Rules::cents($source['amount']))throw new CommonException('原退款来源或金额不符，请平台核对');return$row;
+        if(empty($source['refund_no']))return null;$q=Db::name('pay_refund')->where('site_id',$this->context->site)->where('refund_no',$source['refund_no']);if($lock)$q->lock(true);$rows=$q->select()->toArray();if(count($rows)!==1)throw new CommonException('原退款编号缺失或重复，请平台核对，未重复退款');$row=$rows[0];$original=Store::row('coop_order',$this->context->site,(int)$source['order_id'],$lock);if((int)$original['merchant_id']!==(int)$anchor['merchant_id']||$row['out_trade_no']!==$original['out_trade_no']||$row['trade_type']!==PaymentService::TRADE_TYPE||(int)$row['trade_id']!==(int)$original['id']||(isset($source['refund_record_id'])&&(int)$source['refund_record_id']!==(int)$row['id'])||Rules::cents((string)$row['money'])!==Rules::cents($source['amount']))throw new CommonException('原退款来源或金额不符，请平台核对');return$row;
     }
 
     private function sources(int $merchant,bool $lock):array
@@ -183,8 +192,13 @@ final class MembershipDepositService
 
     private function blocking(int $merchant,bool $lock=false):array
     {
-        $out=[];$q=Store::query('collaboration',$this->context->site)->where(function($q)use($merchant):void{$q->where('publisher_id',$merchant)->whereOr('receiver_id',$merchant);})->whereIn('status',['selecting','assigned','following','unpaid']);if($lock)$q->lock(true);$count=count($q->field('id')->select()->toArray());if($count)$out[]=['key'=>'unfinished_collaboration','title'=>'还有未完成的线索或待付佣协作','count'=>$count];
-        $q=Store::query('coop_order',$this->context->site)->where('merchant_id',$merchant)->where('status','unpaid');if($lock)$q->lock(true);$count=count($q->field('id')->select()->toArray());if($count)$out[]=['key'=>'unpaid_order','title'=>'还有未处理的付款订单','count'=>$count];return$out;
+        return self::blockingFor($this->context->site,$merchant,$lock);
+    }
+    /** Shared deposit release prerequisite; neither chooses a refund nor changes merchant state. */
+    public static function blockingFor(int $site,int $merchant,bool $lock=false):array
+    {
+        $out=[];$q=Store::query('collaboration',$site)->where(function($q)use($merchant):void{$q->where('publisher_id',$merchant)->whereOr('receiver_id',$merchant);})->whereIn('status',['selecting','assigned','following','unpaid']);if($lock)$q->lock(true);$count=count($q->field('id')->select()->toArray());if($count)$out[]=['key'=>'unfinished_collaboration','title'=>'还有未完成的线索或待付佣协作','count'=>$count];
+        $q=Store::query('coop_order',$site)->where('merchant_id',$merchant)->where('status','unpaid');if($lock)$q->lock(true);$count=count($q->field('id')->select()->toArray());if($count)$out[]=['key'=>'unpaid_order','title'=>'还有未处理的付款订单','count'=>$count];return$out;
     }
 
     private static function current(int $site,int $merchant,bool $lock=false):?array

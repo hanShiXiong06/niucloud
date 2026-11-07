@@ -30,10 +30,37 @@ $check(!PromotionRules::eligible($config,'membership',false,$at,Rules::addMonths
 $config['eligibility_months']=0;$check(PromotionRules::eligible($config,'membership',false,$at,$at+10*365*86400),'zero eligibility month means permanent');
 $normalized=PromotionRules::config($config);$check($normalized['sources']['maintenance']['renewal']===true,'maintenance always per paid business');
 $deny(static fn()=>PromotionRules::config(['sources'=>['publishing'=>['enabled'=>true,'rate'=>'20.00']]]),'removed income source configuration is rejected');
+foreach(['publishing','certification','unknown_future_source'] as $source) {
+    try { PromotionRules::config(['sources'=>[$source=>['enabled'=>true,'normal_rate'=>'10.00','provider_rate'=>'20.00']]]);throw new RuntimeException('Retired or unknown source was accepted'); }
+    catch(CommonException $error) { $check(str_contains($error->getMessage(),'刷新页面后重新核对')&&str_contains($error->getMessage(),'不含押金、经验费'),'source mismatch gives an actionable explanation without converting old rates'); }
+}
+$deny(static fn()=>PromotionRules::config(['sources'=>['publishing'=>['normal_rate'=>'10.00'],'certification'=>['normal_rate'=>'20.00'],'membership'=>['normal_rate'=>'1.00']]]),'conflicting old sources never merge into or replace an explicit membership service rate');
+$legacy=['enabled'=>true,'sources'=>['publishing'=>['enabled'=>true,'normal_rate'=>'11.00','provider_rate'=>'22.00'],'certification'=>['enabled'=>true,'normal_rate'=>'33.00','provider_rate'=>'44.00'],'maintenance'=>['enabled'=>true,'normal_rate'=>'7.00','provider_rate'=>'13.00']]];
+$unchanged=$legacy;$read=PromotionRules::readConfiguration($legacy);
+$check($legacy===$unchanged,'reading a known old configuration does not mutate its source data');
+$check(array_keys($read['sources'])===['membership','maintenance']&&$read['requires_review']&&$read['ignored_source_keys']===['publishing','certification'],'known old sources are excluded only from the effective read projection and explicitly reported');
+$check(!$read['sources']['membership']['enabled']&&$read['sources']['membership']['normal_rate']==='0.00'&&$read['sources']['membership']['provider_rate']==='0.00','unconfigured membership service sharing stays off instead of reusing or adding retired rates');
+$check($read['sources']['maintenance']['enabled']&&$read['sources']['maintenance']['normal_rate']==='7.00'&&$read['sources']['maintenance']['provider_rate']==='13.00','existing explicit maintenance rates remain unchanged');
+$check(str_contains($read['review_message'],'未自动换算或合并')&&str_contains($read['review_message'],'确认后再保存'),'read response explains the pending manual configuration review');
+$legacy['sources']['membership']=['enabled'=>true,'normal_rate'=>'5.00','provider_rate'=>'8.00','renewal'=>true];$explicit=PromotionRules::readConfiguration($legacy);
+$check($explicit['sources']['membership']['normal_rate']==='5.00'&&$explicit['sources']['membership']['provider_rate']==='8.00'&&$explicit['sources']['membership']['renewal'],'explicit current membership rates are preserved even alongside retired sources');
+$current=PromotionRules::readConfiguration(PromotionRules::config($read));
+$check(!$current['requires_review']&&$current['ignored_source_keys']===[]&&$current['review_message']==='','a strict current-source save clears the review metadata');
+$deny(static fn()=>PromotionRules::readConfiguration(['sources'=>['unknown_future_source'=>[]]]),'unrecognized persisted source is not silently dropped');
+$deny(static fn()=>PromotionRules::readConfiguration(['sources'=>['publishing'=>[],'membership'=>['normal_rate'=>'101.00']]]),'invalid current rates still block reads instead of silently disabling or changing a real current rule');
 $tiers=PromotionRules::config(['sources'=>['maintenance'=>['enabled'=>true,'normal_rate'=>'10.00','provider_rate'=>'30.00']]]);
 $check(PromotionRules::rateFor($tiers,'maintenance','normal')==='10.00'&&PromotionRules::rateFor($tiers,'maintenance','provider')==='30.00','two roles choose exactly one independently configured rate');
 $check(!isset($tiers['sources']['maintenance']['rate']),'ambiguous single-rate alias is not returned');
 $deny(static fn()=>PromotionRules::config(['sources'=>['membership'=>['normal_rate'=>'100.01']]]),'normal rate above actual base is rejected');
 $deny(static fn()=>PromotionRules::config(['sources'=>['membership'=>['provider_rate'=>'100.01']]]),'provider rate above actual base is rejected');
 $deny(static fn()=>PromotionRules::rateFor($tiers,'maintenance','unknown'),'unknown promoter role cannot choose a rate');
+$tiers['sources']['membership']['level_rates']=['ML701'=>'13.50','ML702'=>'0.00'];
+$tiers=PromotionRules::config($tiers);
+$check(PromotionRules::rateFor($tiers,'membership','normal','ML701')==='13.50','dynamic paid tier may override normal rate');
+$check(PromotionRules::rateFor($tiers,'membership','normal','ML702')==='0.00','explicit tier zero never falls back');
+$check(PromotionRules::rateFor($tiers,'membership','normal','ML999')===$tiers['sources']['membership']['normal_rate'],'unconfigured tier explicitly inherits ordinary rate');
+$check(PromotionRules::rateFor($tiers,'membership','provider','ML701')===$tiers['sources']['membership']['provider_rate'],'provider wins independently without stacking tier');
+foreach([['V1'=>'10.00'],[0=>'10.00'],['ML0'=>'10.00'],['ML701'=>'100.01'],['ML701'=>1.2]]as$bad)$deny(static fn()=>PromotionRules::config(['sources'=>['membership'=>['level_rates'=>$bad]]]),'invalid dynamic tier map is rejected');
+$retained=PromotionRules::config(['sources'=>['membership'=>['level_rates'=>['ML4294967295'=>'12.00']]]]);
+$check($retained['sources']['membership']['level_rates']['ML4294967295']==='12.00','valid stable IDs are retained without deleting disabled historical tier configuration');
 echo 'PASS '.$checks." pure promotion rule checks; no network, database, payment or file mutation.\n";

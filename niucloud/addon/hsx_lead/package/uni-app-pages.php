@@ -10,6 +10,7 @@ return [
                 { "path": "pages/catalog/index", "style": { "navigationStyle": "custom", "navigationBarTitleText": "选择业务能力" }, "needLogin": true },
                 { "path": "pages/entity/index", "style": { "navigationStyle": "custom", "navigationBarTitleText": "成员管理" }, "needLogin": true },
                 { "path": "pages/membership/index", "style": { "navigationStyle": "custom", "navigationBarTitleText": "门店会员" }, "needLogin": true },
+                { "path": "pages/orders/index", "style": { "navigationStyle": "custom", "navigationBarTitleText": "我的付款单" }, "needLogin": true },
                 {
                     "path": "pages/workbench/index",
                     "style": {
@@ -17,12 +18,12 @@ return [
                         "navigationBarTitleText": "找客户",
                         "enablePullDownRefresh": false
                     },
-                    "needLogin": true
+                    "needLogin": false
                 },
                 {
                     "path": "pages/stores/index",
                     "style": { "navigationStyle": "custom", "navigationBarTitleText": "找门店", "enablePullDownRefresh": false },
-                    "needLogin": true
+                    "needLogin": false
                 },
                 {
                     "path": "pages/wallet/index",

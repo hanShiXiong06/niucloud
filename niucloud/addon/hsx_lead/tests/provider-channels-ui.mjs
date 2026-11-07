@@ -34,7 +34,7 @@ const Table = Vue.defineComponent({ props: ['data'], setup: (props, { slots }) =
 async function render(view) {
     const fn = new Function('Vue', compile(view.template, { mode: 'function', prefixIdentifiers: true }).code)(Vue)
     const app = Vue.createSSRApp({ setup: () => ({ ...view.state, canEdit: true }), render: fn })
-    for (const tag of ['HsxDrawer', 'el-button', 'el-switch']) app.component(tag, Box)
+    for (const tag of ['HsxDrawer', 'el-button', 'el-switch', 'el-input']) app.component(tag, Box)
     app.component('el-alert', Alert); app.component('HsxTable', Table); app.config.warnHandler = () => {}
     return renderToString(app)
 }
@@ -42,13 +42,13 @@ const component = 'niucloud/addon/hsx_lead/admin/views/components/ProviderChanne
 function fixture(canEdit = true) {
     const calls = [], confirmations = [], messages = []
     let server = { revision: 'synthetic-revision-1', items: [
-        { key: 'first', name: '合成渠道一', enabled: true, connection_count: 3, automatic_sync_count: 2, renewal: { automatic: true } },
-        { key: 'second', name: '合成渠道二', enabled: true, connection_count: 1, automatic_sync_count: 0 }
+        { key: 'first', name: '合成渠道一', display_name: '合成渠道一', technical_name: '合成原接口一', enabled: true, connection_count: 3, automatic_sync_count: 2, renewal: { automatic: true } },
+        { key: 'second', name: '合成渠道二', display_name: '合成渠道二', technical_name: '合成原接口二', enabled: true, connection_count: 1, automatic_sync_count: 0 }
     ], policy_message: '关闭暂停采集，保留历史和原商户开关' }
     let rejectWrite = false, rejectRead = false, rejectConfirmation = false
     const api = {
         getProviderChannels: async () => { calls.push('read'); if (rejectRead) { rejectRead = false; throw Error('合成：读取失败') }; return { data: clone(server) } },
-        saveProviderChannels: async input => { calls.push(['save', clone(input)]); if (rejectWrite) throw Error('合成：配置已被其他管理员修改'); server = { ...server, revision: 'synthetic-revision-2', items: server.items.map(item => ({ ...item, enabled: input.items.find(next => next.key === item.key).enabled })) }; return { data: clone(server) } }
+        saveProviderChannels: async input => { calls.push(['save', clone(input)]); if (rejectWrite) throw Error('合成：配置已被其他管理员修改'); server = { ...server, revision: 'synthetic-revision-2', items: server.items.map(item => { const value=input.items.find(next => next.key === item.key);return { ...item, enabled:value.enabled,display_name:value.display_name,name:value.display_name } }) }; return { data: clone(server) } }
     }
     const view = setup(component, Vue.reactive({ modelValue: true, canEdit }), {
         'element-plus': { ElMessage: { success: value => messages.push(value) }, ElMessageBox: { confirm: async (...args) => { confirmations.push(args); if (rejectConfirmation) throw Error('cancel') } } },
@@ -86,6 +86,20 @@ const cancel = fixture(); await flush(); cancel.state.rows.value[0].enabled = fa
 check(!cancel.calls.some(Array.isArray) && cancel.state.dirty.value, 'cancelling closure confirmation performs no write and retains changes')
 const readOnly = fixture(false); await flush(); readOnly.state.rows.value[0].enabled = false; await readOnly.state.save()
 check(!readOnly.calls.some(Array.isArray), 'view-only configuration permission cannot invoke channel save')
+const renamed=fixture();await flush();renamed.state.rows.value[0].display_name='自营 W 平台'
+check(renamed.state.dirty.value && renamed.state.closing.value.length===0, 'changing only a display alias is a savable draft without pausing a channel')
+await renamed.state.save()
+check(renamed.calls.find(Array.isArray)[1].items[0].display_name==='自营 W 平台' && !renamed.state.dirty.value && renamed.confirmations.length===0, 'alias travels in the existing section API and is freshly read back without a closure confirmation')
+check(renamed.state.rows.value[0].key==='first' && renamed.state.rows.value[0].enabled===true && renamed.state.rows.value[0].technical_name==='合成原接口一', 'renaming preserves canonical identifier, technical identity and enable switch')
+html=await render(renamed)
+check(html.includes('<details') && html.includes('接口识别信息') && html.includes('合成原接口一') && !html.includes('<details open'), 'real technical identity is available only in collapsed administrator detail, not the primary display title')
+const invalidName=fixture();await flush()
+for(const value of ['', '   ', '<b>平台</b>', '平台\n名称', '平台\u200b', '界'.repeat(25)]) {
+    invalidName.state.rows.value[0].display_name=value;await invalidName.state.save()
+    check(!invalidName.calls.some(Array.isArray) && !invalidName.state.awaitingReadback.value, 'invalid display alias is rejected before any write: '+JSON.stringify(value))
+}
+const aliasConflict=fixture();await flush();aliasConflict.state.rows.value[0].display_name='草稿 W';aliasConflict.rejectWrite();await aliasConflict.state.save();await aliasConflict.state.reload()
+check(aliasConflict.state.rows.value[0].display_name==='草稿 W' && aliasConflict.state.baseline.value[0].display_name==='合成渠道一' && aliasConflict.state.dirty.value, 'uncertain alias write preserves the alias draft alongside enable flags after readback')
 const apiSource = fs.readFileSync(path.join(root, 'niucloud/addon/hsx_lead/admin/api/cooperation.ts'), 'utf8')
 check(apiSource.includes("section: 'erp_channels'") && apiSource.includes('getProviderChannels') && apiSource.includes('saveProviderChannels'), 'API uses explicit section within existing authorized configuration endpoint')
 check(fs.readFileSync(path.join(root, 'niucloud/addon/hsx_lead/admin/views/cooperation/Settings.vue'), 'utf8').includes('<ProviderChannelsSettings') && !normal.source.includes('saveCooperationConfig'), 'business settings opens independent reusable channel component')

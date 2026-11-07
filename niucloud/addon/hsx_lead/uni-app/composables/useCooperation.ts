@@ -1,11 +1,14 @@
 import { computed, reactive, ref } from 'vue'
-import { getToken } from '@/utils/common'
+import { getSiteId, getToken } from '@/utils/common'
 import * as api from '../api/cooperation'
 import type { CoopRow, CooperationTab, Direction, LeadAction } from '../api/cooperation'
 
 /** Server-owned capabilities and money; this layer only manages requests and view state. */
 export function useCooperation(initialTab: CooperationTab = 'deliveries') {
-    const loggedIn = ref(false), ready = ref(false), loading = ref(false), error = ref(''), profile = ref<CoopRow>({}), config = ref<CoopRow>({}), providers = ref<CoopRow[]>([]), stats = ref<CoopRow>({}), wallet = ref<CoopRow>({}), pendingEntity = ref<CoopRow>({})
+    // Session presence is known synchronously. Do not render the visitor shell
+    // for one frame while an already signed-in page waits for mounted/resume.
+    // Business data still requires the current identity and a successful read.
+    const loggedIn = ref(!!getToken()), ready = ref(false), loading = ref(false), error = ref(''), profile = ref<CoopRow>({}), config = ref<CoopRow>({}), providers = ref<CoopRow[]>([]), stats = ref<CoopRow>({}), wallet = ref<CoopRow>({}), pendingEntity = ref<CoopRow>({}), memberId = ref(0)
     const tab = ref<CooperationTab>(initialTab), direction = ref<Direction>('outgoing'), query = reactive({ keyword: '', status: '', page: 1, limit: 20 }), rows = ref<CoopRow[]>([]), total = ref(0), listLoading = ref(false), listError = ref(''), walletLoading = ref(false), walletError = ref('')
     const detail = ref<CoopRow>({}), detailLoading = ref(false), detailError = ref(''), busy = ref(false), writeError = ref('')
     const canLoadMore = computed(() => rows.value.length < total.value)
@@ -16,12 +19,14 @@ export function useCooperation(initialTab: CooperationTab = 'deliveries') {
     type DetailRead = { who: string; id: number }
     let pendingListRead: ListRead | null = null, interruptedListRead: ListRead | null = null, pendingDetailRead: DetailRead | null = null, interruptedDetailRead: DetailRead | null = null
     const listSignature = () => JSON.stringify([direction.value, query.keyword, query.status, query.limit])
-    const current = (value: string) => active && !disposed && value !== '' && value === identity && value === String(getToken() || '')
-    function identify() { const value = String(getToken() || ''); loggedIn.value = !!value; if (identity !== value) { identity = value; generation++; listGeneration++; detailGeneration++; walletGeneration++; pendingListRead = null; interruptedListRead = null; pendingDetailRead = null; interruptedDetailRead = null; profile.value = {}; pendingEntity.value = {}; config.value = {}; providers.value = []; stats.value = {}; rows.value = []; total.value = 0; detail.value = {}; wallet.value = {}; ready.value = false; error.value = ''; listError.value = ''; detailError.value = ''; writeError.value = '' }; return value }
+    const siteId = () => String(getSiteId(typeof uni !== 'undefined' && typeof uni.getStorageSync === 'function' ? uni.getStorageSync('wap_site_id') || '' : '') || '')
+    const sessionScope = () => { const token = String(getToken() || ''); return token ? `${siteId()}:${token}` : '' }
+    const current = (value: string) => active && !disposed && value !== '' && value === identity && value === sessionScope()
+    function identify() { const value = sessionScope(); loggedIn.value = !!getToken(); if (identity !== value) { identity = value; generation++; listGeneration++; detailGeneration++; walletGeneration++; pendingListRead = null; interruptedListRead = null; pendingDetailRead = null; interruptedDetailRead = null; profile.value = {}; memberId.value = 0; pendingEntity.value = {}; config.value = {}; providers.value = []; stats.value = {}; rows.value = []; total.value = 0; detail.value = {}; wallet.value = {}; ready.value = false; loading.value = false; listLoading.value = false; detailLoading.value = false; walletLoading.value = false; walletPage.value = 0; query.keyword = ''; query.status = ''; query.page = 1; error.value = ''; listError.value = ''; detailError.value = ''; walletError.value = ''; writeError.value = '' }; return value }
     async function bootstrap() {
         const who = identify(), token = ++generation; if (!who) return false
         loading.value = true; error.value = ''
-        try { const response: any = await api.cooperationBootstrap(); if (!current(who) || token !== generation) return false; const data = response.data; if (!data || typeof data !== 'object' || !data.config) throw new Error('协作配置未完整返回，请核对配套后端'); profile.value = data.profile || {}; pendingEntity.value = data.pending_entity || {}; config.value = data.config; providers.value = Array.isArray(data.providers) ? data.providers : data.providers?.items || []; stats.value = data.stats || {}; wallet.value = data.wallet || {}; ready.value = true; return true }
+        try { const response: any = await api.cooperationBootstrap(); if (!current(who) || token !== generation) return false; const data = response.data; if (!data || typeof data !== 'object' || !data.config) throw new Error('协作配置未完整返回，请核对配套后端'); const viewer = Number(data.current_member_id); memberId.value = Number.isSafeInteger(viewer) && viewer > 0 ? viewer : 0; profile.value = data.profile || {}; pendingEntity.value = data.pending_entity || {}; config.value = data.config; providers.value = Array.isArray(data.providers) ? data.providers : data.providers?.items || []; stats.value = data.stats || {}; wallet.value = data.wallet || {}; ready.value = true; return true }
         catch (cause) { if (current(who) && token === generation) error.value = api.coopError(cause, '协作工作台读取失败，请重试'); return false }
         finally { if (token === generation) loading.value = false }
     }
@@ -62,5 +67,5 @@ export function useCooperation(initialTab: CooperationTab = 'deliveries') {
     function resume() { active = true; disposed = false; return identify() }
     function pause() { if (listLoading.value && pendingListRead) interruptedListRead = pendingListRead; if (detailLoading.value && pendingDetailRead) interruptedDetailRead = pendingDetailRead; pendingListRead = null; pendingDetailRead = null; active = false; generation++; listGeneration++; detailGeneration++; walletGeneration++; loading.value = false; listLoading.value = false; detailLoading.value = false; walletLoading.value = false }
     function dispose() { pause(); disposed = true }
-    return { loggedIn, ready, loading, error, profile, config, providers, stats, wallet, pendingEntity, tab, direction, query, rows, total, listLoading, listError, walletLoading, walletError, detail, detailLoading, detailError, busy, writeError, canLoadMore, walletCanLoadMore, bootstrap, loadLeads, loadDetail, loadWallet, saveProfile, createLead, assign, action, order, changeDirection, refresh, resume, pause, dispose, resumeInterruptedReads }
+    return { loggedIn, ready, loading, error, profile, memberId, siteId, sessionScope, config, providers, stats, wallet, pendingEntity, tab, direction, query, rows, total, listLoading, listError, walletLoading, walletError, detail, detailLoading, detailError, busy, writeError, canLoadMore, walletCanLoadMore, bootstrap, loadLeads, loadDetail, loadWallet, saveProfile, createLead, assign, action, order, changeDirection, refresh, resume, pause, dispose, resumeInterruptedReads }
 }

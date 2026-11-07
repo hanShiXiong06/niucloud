@@ -629,9 +629,9 @@ $menus = [
                 ],
             ],
             [
-                'menu_name' => '协作收款',
+                'menu_name' => '支付订单',
                 'menu_key' => 'hsx_lead_cooperation_finance',
-                'menu_short_name' => '协作收款',
+                'menu_short_name' => '支付订单',
                 'parent_select_key' => '',
                 'menu_type' => '1',
                 'icon' => 'nc-iconfont nc-icon-dingdanbianhaoV6xx',
@@ -643,6 +643,56 @@ $menus = [
                 'status' => '1',
                 'is_show' => '1',
                 'children' => [
+                    [
+                        'menu_name' => '关闭未支付订单',
+                        'menu_key' => 'hsx_lead_cooperation_order_close',
+                        'menu_short_name' => '关闭未支付订单',
+                        'parent_select_key' => '',
+                        'menu_type' => '2',
+                        'icon' => '',
+                        'api_url' => 'hsx_lead/cooperation/orders/<id>/close',
+                        'router_path' => '',
+                        'view_path' => '',
+                        'methods' => 'post',
+                        'sort' => '90',
+                        'status' => '1',
+                        'is_show' => '0',
+                    ],
+                    [
+                        'menu_name'=>'调整待支付订单金额','menu_key'=>'hsx_lead_cooperation_order_price','menu_short_name'=>'调整待支付订单金额',
+                        'parent_select_key'=>'','menu_type'=>'2','icon'=>'','api_url'=>'hsx_lead/cooperation/orders/<id>/reprice',
+                        'router_path'=>'','view_path'=>'','methods'=>'post','sort'=>'88','status'=>'1','is_show'=>'0',
+                    ],
+                    [
+                        'menu_name'=>'查看订单改价日志','menu_key'=>'hsx_lead_cooperation_order_price_log','menu_short_name'=>'查看订单改价日志',
+                        'parent_select_key'=>'','menu_type'=>'2','icon'=>'','api_url'=>'hsx_lead/cooperation/orders/<id>/pricing/logs',
+                        'router_path'=>'','view_path'=>'','methods'=>'get','sort'=>'87','status'=>'1','is_show'=>'0',
+                    ],
+                    [
+                        'menu_name'=>'查看订单退款','menu_key'=>'hsx_lead_cooperation_order_refund_detail','menu_short_name'=>'查看订单退款',
+                        'parent_select_key'=>'','menu_type'=>'2','icon'=>'','api_url'=>'hsx_lead/cooperation/orders/<id>/refund',
+                        'router_path'=>'','view_path'=>'','methods'=>'get','sort'=>'86','status'=>'1','is_show'=>'0',
+                    ],
+                    [
+                        'menu_name'=>'发起订单原路退款','menu_key'=>'hsx_lead_cooperation_order_refund','menu_short_name'=>'发起订单原路退款',
+                        'parent_select_key'=>'','menu_type'=>'2','icon'=>'','api_url'=>'hsx_lead/cooperation/orders/<id>/refund',
+                        'router_path'=>'','view_path'=>'','methods'=>'post','sort'=>'85','status'=>'1','is_show'=>'0',
+                    ],
+                    [
+                        'menu_name'=>'审核订单退款申请','menu_key'=>'hsx_lead_cooperation_order_refund_review','menu_short_name'=>'审核订单退款申请',
+                        'parent_select_key'=>'','menu_type'=>'2','icon'=>'','api_url'=>'hsx_lead/cooperation/orders/<id>/refund/review',
+                        'router_path'=>'','view_path'=>'','methods'=>'post','sort'=>'84','status'=>'1','is_show'=>'0',
+                    ],
+                    [
+                        'menu_name'=>'核对订单原退款进度','menu_key'=>'hsx_lead_cooperation_order_refund_refresh','menu_short_name'=>'核对订单原退款进度',
+                        'parent_select_key'=>'','menu_type'=>'2','icon'=>'','api_url'=>'hsx_lead/cooperation/orders/<id>/refund/refresh',
+                        'router_path'=>'','view_path'=>'','methods'=>'post','sort'=>'83','status'=>'1','is_show'=>'0',
+                    ],
+                    [
+                        'menu_name'=>'继续已审核原退款','menu_key'=>'hsx_lead_cooperation_order_refund_continue','menu_short_name'=>'继续已审核原退款',
+                        'parent_select_key'=>'','menu_type'=>'2','icon'=>'','api_url'=>'hsx_lead/cooperation/orders/<id>/refund/continue',
+                        'router_path'=>'','view_path'=>'','methods'=>'post','sort'=>'82','status'=>'1','is_show'=>'0',
+                    ],
                     [
                         'menu_name' => '读取当前业务范围',
                         'menu_key' => 'hsx_lead_cooperation_finance_scope_read',
@@ -720,6 +770,17 @@ $menus = [
                         'status' => '1',
                         'is_show' => '0',
                     ],
+                    ...array_map(static function(array $item):array {
+                        return ['menu_name'=>$item[0],'menu_key'=>$item[1],'menu_short_name'=>$item[0],
+                            'parent_select_key'=>'','menu_type'=>'2','icon'=>'','api_url'=>$item[2],
+                            'router_path'=>'','view_path'=>'','methods'=>$item[3],'sort'=>'100','status'=>'1','is_show'=>'0'];
+                    },[
+                        ['查询业务目录项','hsx_lead_catalog_items','hsx_lead/catalog/items','get'],
+                        ['新增业务目录项','hsx_lead_catalog_add','hsx_lead/catalog/items','post'],
+                        ['修改业务目录项','hsx_lead_catalog_edit','hsx_lead/catalog/items/<id>','put'],
+                        ['删除业务目录项','hsx_lead_catalog_delete','hsx_lead/catalog/items/<id>','delete'],
+                        ['查看目录操作日志','hsx_lead_catalog_logs','hsx_lead/catalog/logs','get'],
+                    ]),
                     [
                         'menu_name' => '读取当前业务范围',
                         'menu_key' => 'hsx_lead_cooperation_config_scope_read',

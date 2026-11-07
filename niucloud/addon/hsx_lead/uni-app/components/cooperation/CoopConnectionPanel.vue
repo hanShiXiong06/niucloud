@@ -2,7 +2,7 @@
 <CoopTaskSheet :page="page" :show="show" title="ERP 库存同步" :subtitle="flow.subtitle" :busy="busy && !syncing" full @close="close">
 <template v-if="flow.step !== 'authorize' && flow.step !== 'preview'">
     <view class="coop-connection-overview" :class="'is-' + summaryTone">
-        <view class="coop-connection-provider"><view class="coop-connection-provider__icon"><u-icon name="grid" size="23" color="#557fb4" /></view><view><text>{{ connection.provider_name || schema?.name || '当前 ERP' }}</text><text>{{ authorizationLabel }}</text></view><text class="coop-connection-auto" :class="{ 'is-paused': channelClosed || !connection.enabled }">{{ channelClosed ? '渠道暂停' : connection.enabled ? '自动同步已开启' : '自动同步已关闭' }}</text></view>
+        <view class="coop-connection-provider"><view class="coop-connection-provider__icon"><u-icon name="grid" size="23" color="#557fb4" /></view><view><text>{{ connectionProviderName }}</text><text>{{ authorizationLabel }}</text></view><text class="coop-connection-auto" :class="{ 'is-paused': channelClosed || !connection.enabled }">{{ channelClosed ? '渠道暂停' : connection.enabled ? '自动同步已开启' : '自动同步已关闭' }}</text></view>
         <view class="coop-connection-status"><u-icon :name="statusIcon" size="25" :color="statusColor" /><text>{{ syncStateLabel }}</text></view>
         <view class="coop-connection-summary">{{ statusDescription }}</view>
         <view v-if="run.id && !channelClosed && !connection.requires_sync_restart" class="coop-sync-progress" :class="{ complete: currentSyncStatus === 'completed' }"><view><text>{{ progressText }}</text><text v-if="knownProgressPercent !== null">{{ knownProgressPercent }}%</text></view><view v-if="knownProgressPercent !== null" class="coop-connection-progress-track"><view :style="{ width: knownProgressPercent + '%' }" /></view></view>
@@ -30,13 +30,13 @@
     <view class="coop-connection-settings"><u-collapse :border="false"><u-collapse-item title="同步设置" name="sync-settings" icon="setting"><view class="coop-connection-settings__body"><view class="coop-form-row"><text>同步间隔</text><picker :range="intervals" range-key="label" :value="intervalIndex" :disabled="busy" @change="selectInterval(Number($event.detail.value))"><view>{{ intervals[intervalIndex].label }} ›</view></picker></view><view v-if="intervalDirty" class="coop-sync-toggle"><u-button :custom-style="cooperationButtonStyle" text="保存设置" :disabled="busy" :loading="busy" @click="saveSettings" /></view><view class="coop-detail-shop"><text>自动同步</text><text>{{ channelClosed ? '平台已暂停渠道' : connection.enabled ? '已开启' : '已关闭' }}</text></view><view v-if="connection.enabled && connection.next_sync_at && !channelClosed" class="coop-detail-shop"><text>计划同步时间</text><text>{{ coopDate(connection.next_sync_at) }}</text></view><view v-if="connection.enabled && !setupStage" class="coop-sync-toggle"><u-button :custom-style="cooperationButtonStyle" text="暂停自动同步" :loading="busy" :disabled="busy" @click="toggleSync" /></view><view v-if="channelClosed" class="coop-muted">平台恢复渠道后才能继续读取库存；也可以保留账号并关闭本站自动同步。</view></view></u-collapse-item><u-collapse-item title="授权账号" name="authorization-settings" icon="account"><view class="coop-connection-settings__body"><view class="coop-detail-shop"><text>账号授权</text><text>{{ authorizationLabel }}</text></view><view v-if="renewal.message" class="coop-muted">{{ renewal.message }}</view><view class="coop-sync-toggle"><u-button :custom-style="cooperationButtonStyle" :text="channelClosed ? '更换 ERP 渠道' : tokenOnly ? '补齐账号密码' : '更换或重新验证账号'" :disabled="busy" @click="editAuthorization" /></view></view></u-collapse-item><u-collapse-item title="同步说明" name="sync-help" icon="info-circle"><view class="coop-connection-help-body"><view>只读取 ERP 库存，不修改来源系统的价格或库存。</view><view>一轮完整同步结束后才更新货盘；未完成时保留上一批完整记录。</view><view>记录中的数量是本轮整理的库存资料，不等于当前可售设备数。</view></view></u-collapse-item></u-collapse></view>
 </template>
 <view v-if="flow.step === 'authorize'" class="coop-form-section">
-<view class="coop-section-title">填写 ERP 账号</view>
+<view class="coop-section-title">{{ selectedChannelAvailable ? '填写' + selectedProviderName + '账号' : '填写 ERP 账号' }}</view>
 <template v-if="flow.step === 'authorize'">
 <view v-if="!selectedChannelAvailable" class="coop-task-rule">{{ providers.length ? '当前渠道已关闭，请选择其他开放的 ERP。原账号和历史数据不会因此删除。' : '本站当前没有开放 ERP 接入，请联系平台管理员。已有账号及历史数据保留。' }}</view>
 <view class="coop-form-column">
 <text>ERP 来源</text>
-<picker :range="providers" range-key="name" :value="providerIndex" :disabled="busy || !providers.length" @change="changeProvider(providers[Number($event.detail.value)]?.key || '')">
-<view class="coop-picker-field">{{ schema?.name || (channelClosed && provider === connection.provider ? (connection.provider_name || '原渠道') + '（已关闭）' : '选择 ERP') }} ›</view>
+<picker :range="providerOptions" range-key="name" :value="providerIndex" :disabled="busy || !providers.length" @change="changeProvider(providerOptions[Number($event.detail.value)]?.key || '')">
+<view class="coop-picker-field">{{ schema ? selectedProviderName : (channelClosed && provider === connection.provider ? connectionProviderName + '（已关闭）' : '选择 ERP') }} ›</view>
 </picker>
 </view>
 <template v-if="selectedChannelAvailable">
@@ -89,7 +89,7 @@
 </picker>
 <view class="coop-consent" @tap="!busy && (confirmed = !confirmed)">
 <CoopSelectionMark :selected="confirmed" />
-<text>我已核对来源门店，同意保存授权并开启自动库存同步。</text>
+<text>我已核对{{ selectedProviderName }}的来源门店，同意保存授权并开启自动库存同步。</text>
 </view>
 <view class="coop-muted">确认后会保存本次授权并开始首次同步；不会修改 ERP 库存。更换账号将影响后续库存匹配。</view>
 </view>
@@ -100,8 +100,14 @@
 </template>
 </CoopTaskSheet>
 </template>
+<script lang="ts">
+// Match Vue's transparent layout in native Mini Programs: an extra custom
+// component host otherwise breaks the page's definite-height flex chain.
+export default { options: { virtualHost: true } }
+</script>
 <script setup lang="ts">
 import { connectionActionState } from '../../utils/connection-actions'
+import { erpProviderDisplayName } from '../../utils/erp-provider-display'
 import { cooperationButtonStyle, cooperationInputStyle } from '../../utils/mobile-ui'
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { cooperationConnection, cooperationChallenge, cooperationProbe, cooperationActivate, cooperationSync, cooperationSyncInfo, cooperationSyncAdvance, cooperationConnectionSettings, coopDate, coopError, type CoopRow } from '../../api/cooperation'
@@ -112,6 +118,9 @@ const emit = defineEmits<{ (event: 'close' | 'changed'): void }>()
 const intervals = [{ value: 15, label: '每15分钟' }, { value: 30, label: '每30分钟' }, { value: 60, label: '每小时（默认）' }, { value: 120, label: '每2小时' }, { value: 360, label: '每6小时' }, { value: 1440, label: '每天' }], interval = ref(60), intervalIndex = computed(() => Math.max(0, intervals.findIndex(item => item.value === interval.value))), intervalDirty = ref(false)
 const connection = ref<CoopRow>({}), run = ref<CoopRow>({}), provider = ref(''), credentials = reactive<CoopRow>({}), authorization = reactive<CoopRow>({}), scope = reactive<CoopRow>({}), busy = ref(false), error = ref(''), editing = ref(false), scopeOpen = ref(false), captchaImage = ref(''), challengeToken = ref(''), challengeExpires = ref(0), companies = ref<CoopRow[]>([]), companyId = ref(''), preview = ref<CoopRow | null>(null), probeToken = ref(''), confirmed = ref(false)
 const schema = computed(() => props.providers.find(item => item.key === provider.value)), providerIndex = computed(() => Math.max(0, props.providers.findIndex(item => item.key === provider.value))), interactive = computed(() => schema.value?.interactive_auth?.type === 'image_captcha')
+const providerOptions = computed(() => props.providers.map(item => ({ ...item, name: erpProviderDisplayName(item.key, props.providers) })))
+const selectedProviderName = computed(() => erpProviderDisplayName(provider.value, props.providers, provider.value === connection.value.provider ? connection.value.provider_name : ''))
+const connectionProviderName = computed(() => erpProviderDisplayName(connection.value.provider || provider.value, props.providers, connection.value.provider_name))
 const defaultMode = computed(() => schema.value?.auth_modes?.find((item: CoopRow) => item.key === 'password') || schema.value?.auth_modes?.[0]), credentialFields = computed<CoopRow[]>(() => interactive.value ? (schema.value?.fields || []).filter((field: CoopRow) => (schema.value?.interactive_auth?.credential_fields || []).includes(field.key)) : defaultMode.value?.fields || schema.value?.fields || []), scopeFields = computed<CoopRow[]>(() => defaultMode.value?.scope_fields || schema.value?.scope_fields || [])
 const companyIndex = computed(() => Math.max(0, companies.value.findIndex(item => String(item.id) === companyId.value))), storeIndex = computed(() => Math.max(0, (preview.value?.stores || []).findIndex((item: CoopRow) => String(item.store_id) === String(scope.store_id))))
 const setupStage = ref(''), setupPublishedBaseline = ref(0), renewal = computed(() => connection.value.auth_renewal || {}), renewalPolicy = computed(() => defaultMode.value?.renewal || schema.value?.renewal || {})

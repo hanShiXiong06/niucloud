@@ -1,0 +1,2 @@
+export function noticeChannel(value: string) { return ({ weapp:'小程序', wechat:'公众号', sms:'短信', queue:'通知任务' } as Record<string,string>)[value] || '提醒' }
+export function noticeStatus(value: string) { return ({ pending:'待处理',processing:'处理中',processed:'已处理',obsolete:'已过时',failed:'待人工核对',submitted:'已提交渠道',uncertain:'结果待核实',disabled:'未开启',pending_configuration:'待配置',pending_recipient:'待绑定',dispatching:'提交结果待核实' } as Record<string,string>)[value] || '待核对' }

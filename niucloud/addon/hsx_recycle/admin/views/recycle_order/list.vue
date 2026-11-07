@@ -93,6 +93,7 @@
           :handle-expand-change="handleExpandChange"
           :handle-device-selection-change="handleDeviceSelectionChange"
           :check-device="checkDevice"
+          :correct-device-info="openDeviceInfoCorrection"
           :price-device="priceDevice"
           :batch-recycle-device="batchRecycleDevice"
           :batch-return-device="batchReturnDevice"
@@ -138,6 +139,7 @@
           :toggle-mobile-order-expand="toggleMobileOrderExpand"
           :handle-device-selection-change="handleDeviceSelectionChange"
           :check-device="checkDevice"
+          :correct-device-info="openDeviceInfoCorrection"
           :price-device="priceDevice"
           :batch-recycle-device="batchRecycleDevice"
           :batch-return-device="batchReturnDevice"
@@ -218,6 +220,8 @@
       :submitting="priceSubmitting"
       @confirm="submitDevicePrice"
     />
+
+    <DeviceInfoCorrectionDialog v-model:visible="correctionVisible" :device-id="correctionDeviceId" @saved="getList(pagination.page)" />
 
     <!-- 使用设备详情对话框组件 -->
     <DeviceDetailDialog
@@ -405,6 +409,7 @@ import CheckDeviceDialog from "./components/CheckDeviceDialog.vue";
 import DeviceConfirmDialog from "./components/DeviceConfirmDialog.vue";
 // 导入设备详情对话框组件
 import DeviceDetailDialog from "./components/DeviceDetailDialog.vue";
+import DeviceInfoCorrectionDialog from "./components/DeviceInfoCorrectionDialog.vue";
 import RecycleOrderSearchPanel from "./components/RecycleOrderSearchPanel.vue";
 import RecycleOrderDesktopTable from "./components/RecycleOrderDesktopTable.vue";
 import RecycleOrderMobileCards from "./components/RecycleOrderMobileCards.vue";
@@ -415,6 +420,12 @@ import { img } from "@/utils/common";
 // 提交守卫与危险操作确认通用件
 import { useSubmit, confirmDanger } from "@/addon/hsx_recycle/hooks/useSubmit";
 const hsxFeedback = useFeedback()
+const correctionVisible = ref(false)
+const correctionDeviceId = ref<number | string>(0)
+const openDeviceInfoCorrection = (device: any) => {
+  correctionDeviceId.value = device.id
+  correctionVisible.value = true
+}
 const { printOrder, printingOrderId } = useRecycleOrderPrint({
   onError: message => hsxFeedback.error(message),
 })

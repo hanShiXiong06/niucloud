@@ -15,10 +15,10 @@ import { computed, reactive, ref, watch } from 'vue'
 import { Refresh, Search } from '@element-plus/icons-vue'
 import HsxSearchPanel from '@/addon/hsx_components/components/HsxSearchPanel/index.vue'
 import type { CoopRow } from '../../composables/cooperation'
-const props = withDefaults(defineProps<{ query: CoopRow; label?: string; placeholder?: string; statuses?: { value: string; label: string }[]; loading?: boolean; withDate?: boolean }>(), { label: '协作业务筛选', placeholder: '搜索客户、门店或线索号', statuses: () => [], loading: false, withDate: true })
+const props = withDefaults(defineProps<{ query: CoopRow; label?: string; placeholder?: string; statuses?: { value: string; label: string }[]; loading?: boolean; withDate?: boolean; extraActive?: boolean }>(), { label: '协作业务筛选', placeholder: '搜索客户、门店或线索号', statuses: () => [], loading: false, withDate: true, extraActive: false })
 const emit = defineEmits<{ (event: 'search', value: CoopRow): void; (event: 'reload'): void; (event: 'reset'): void }>()
 const draft = reactive({ keyword: String(props.query.keyword || ''), status: String(props.query.status || '') }), range = ref<string[] | null>(null)
-const hasFilters = computed(() => !!draft.keyword || !!draft.status || !!range.value?.length)
+const hasFilters = computed(() => !!draft.keyword || !!draft.status || !!range.value?.length || props.extraActive)
 const shortcuts = [{ text: '今天', value: () => { const start = new Date(); start.setHours(0, 0, 0, 0); return [start, new Date()] } }, { text: '近7天', value: () => [new Date(Date.now() - 6 * 86400000), new Date()] }, { text: '近30天', value: () => [new Date(Date.now() - 29 * 86400000), new Date()] }]
 function boundary(value: string, end = false) { const [y, m, d] = value.split('-').map(Number); return Math.floor(new Date(y, m - 1, d, end ? 23 : 0, end ? 59 : 0, end ? 59 : 0).getTime() / 1000) }
 function apply() { emit('search', { keyword: draft.keyword.trim(), status: draft.status, start_time: range.value?.[0] ? boundary(range.value[0]) : 0, end_time: range.value?.[1] ? boundary(range.value[1], true) : 0 }) }

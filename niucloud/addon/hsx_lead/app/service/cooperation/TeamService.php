@@ -63,7 +63,10 @@ final class TeamService
         // Identification is not an invitation secret; no contact, members or inventory is exposed.
         $this->throttle('lookup',30);
         $merchant=$this->byCode($code);
-        return ['merchant_id'=>(int)$merchant['id'],'name'=>$merchant['name']];
+        $membership=$this->membership((int)$merchant['id']);
+        $canJoin=$membership['unlimited']||self::usedAccounts($this->context->site,$merchant)<(int)$membership['account_limit'];
+        return ['merchant_id'=>(int)$merchant['id'],'name'=>$merchant['name'],'can_join'=>$canJoin,
+            'join_message'=>$canJoin?'提交申请后，由门店负责人确认':'这家门店暂时没有可用的店员名额，请联系负责人升级门店会员后再试'];
     }
 
     public function join(array $input): array

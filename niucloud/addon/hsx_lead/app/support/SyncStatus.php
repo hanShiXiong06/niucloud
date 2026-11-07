@@ -13,13 +13,14 @@ final class SyncStatus
         $raw=$cursor['source_total']??null;
         $total=(is_int($raw)||is_string($raw))&&preg_match('/^(?:0|[1-9][0-9]{0,7})$/D',(string)$raw)?(int)$raw:null;
         $complete=$status==='completed';
-        $message=(string)($run['error_message']??'');
-        if ($message==='') $message=match($status) {
+        // Stored adapter diagnostics stay in the task record, never in a user-facing summary.
+        $reason=(string)($run['error_code']??'');
+        $message=match($status) {
             'pending'=>'已开始全量同步，正在准备读取库存',
             'running'=>'已读取 '.$count.' 条库存，正在继续同步'.($total!==null?'（共 '.$total.' 条）':''),
             'completed'=>'完整同步已完成，共读取 '.$count.' 条库存；可售情况请向门店核对',
-            'cancelled'=>'本次同步已取消，未替换已有完整快照',
-            'failed'=>'本次同步未完成，保留上一批完整快照，请重试',
+            'cancelled'=>$reason==='generation_expired'?ProviderPublicMessage::forReason($reason):'本次同步已取消，未替换已有完整快照',
+            'failed'=>ProviderPublicMessage::forReason($reason!==''?$reason:'sync_failed'),
             default=>'同步状态待核对，请刷新或重新同步',
         };
         return ['run_id'=>(int)($run['id']??0),'status'=>$status,'page_count'=>(int)($run['page_count']??0),
@@ -32,7 +33,7 @@ final class SyncStatus
     public static function connection(int $site,array $connection): array
     {
         $status=(string)($connection['last_sync_status']??'idle');
-        $result=['last_sync_status'=>$status,'last_sync_message'=>(string)($connection['last_sync_message']??''),
+        $result=['last_sync_status'=>$status,'last_sync_message'=>ProviderPublicMessage::syncStatus($status),
             'active_run_id'=>(int)($connection['active_run_id']??0),'sync_progress'=>null,'requires_sync_restart'=>false];
         if ($site<=0||(int)($connection['id']??0)<=0||(int)($connection['merchant_id']??0)<=0) return $result;
         $query=static fn()=>Data::query('sync_run',$site)->where('connection_id',(int)$connection['id'])->where('merchant_id',(int)$connection['merchant_id']);

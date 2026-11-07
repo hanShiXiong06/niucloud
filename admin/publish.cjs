@@ -1,40 +1,7 @@
-const fs = require('fs')
-
-const publish = () => {
-    const src = './dist'
-    const dest = '../niucloud/public/admin'
-
-    solve()
-
-    // 目标目录不存在停止复制
-    try {
-        const dir = fs.readdirSync(dest)
-    } catch (e) {
-        return
-    }
-
-    // 删除目标目录下文件
-    fs.rm(dest, { recursive: true }, err => {
-        if(err) {
-            console.log(err)
-            return
-        }
-
-        fs.cp(src, dest, { recursive: true }, (err) => {
-            if (err) {
-                console.error(err)
-            }
-        })
-    })
-}
-
-const solve = () => {
-    const fn = './dist/index.html'
-    const fc = fs.readFileSync(fn, 'utf-8')
-    let text = new String(fc)
-    text = text.replaceAll('./assets/', '/admin/assets/')
-    text = text.replace('./niucloud.ico', '/admin/niucloud.ico')
-    fs.writeFileSync(fn, text, 'utf8')
-}
-
-publish()
+// Preserve the manual publish entry, without removing the live directory.
+const { publishSafe } = require('./scripts/publish-safe.cjs')
+const controller = new AbortController()
+for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => controller.abort())
+publishSafe({ signal: controller.signal })
+    .then(result => console.log(JSON.stringify(result)))
+    .catch(error => { console.error('[发布未完成] ' + error.message); process.exitCode = error.code === 'ABORT_ERR' ? 130 : 1 })

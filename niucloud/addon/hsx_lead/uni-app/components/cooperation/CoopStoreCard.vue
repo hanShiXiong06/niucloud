@@ -6,7 +6,8 @@
             <CoopSelectionMark v-if="selectable" :selected="selected" />
         </view>
         <view class="coop-store__region"><u-icon name="map" size="13" color="#89939e" /><text>{{ store.region_text || '地区未填写' }}</text></view>
-        <view class="coop-store__capability"><text>{{ capabilityText }}</text><view class="coop-store__source"><text>{{ capabilitySourceText }}</text><view v-if="modelDimension" class="coop-store__stock-link" role="button" aria-label="查看门店货盘" @tap.stop="$emit('inventory', store)"><text>{{ Number(store.inventory_count) > 0 ? '查看库存' : '查看货盘' }}</text><u-icon name="arrow-right" size="11" color="var(--primary-color, #3478cc)" /></view></view></view>
+        <view v-if="store.is_internal" class="coop-store__capability"><text>本店内部交付</text><view class="coop-store__source"><text>由本店成员共同处理，不收协作费</text></view></view>
+        <view v-else class="coop-store__capability"><text>{{ capabilityText }}</text><view class="coop-store__source"><text>{{ capabilitySourceText }}</text><view v-if="modelDimension && store.erp_visible !== false" class="coop-store__stock-link" role="button" aria-label="查看门店货盘" @tap.stop="$emit('inventory', store)"><text>{{ Number(store.inventory_count) > 0 ? '查看库存' : '查看货盘' }}</text><u-icon name="arrow-right" size="11" color="var(--primary-color, #3478cc)" /></view></view></view>
     </view>
 </template>
 <script setup lang="ts">
@@ -28,10 +29,11 @@ const capabilityCount = computed(() => {
     return new Set(capability?.option_ids || (capability?.items || []).map((item: CoopRow) => String(item.id))).size
 })
 const capabilityText = computed(() => {
+    if (props.store.erp_visible === false && modelDimension.value) return props.store.all_models ? '全型号交付能力' : capabilityCount.value ? `已登记 ${capabilityCount.value} 个可交付型号` : '交付能力请向门店确认'
     if (!modelDimension.value) return capabilityCount.value ? `${props.store.business_name || '该业务'} · 可承接 ${capabilityCount.value} 个${dimensionLabel.value}` : `${props.store.business_name || '该业务'}交付能力待门店确认`
     return props.store.all_models ? '全型号交付能力' : matchedDemands.value.length ? `可承接 ${capabilityCount.value} 个意向型号` : Number(props.store.manual_model_count) > 0 ? `已登记 ${props.store.manual_model_count} 个可交付型号` : Number(props.store.inventory_count) > 0 ? `${props.store.inventory_count} 条在售库存参考` : '交付能力待门店确认'
 })
-const capabilitySourceText = computed(() => !modelDimension.value ? '门店自主登记 · 以实际受理为准' : props.store.capability_source === 'manual' ? '门店自主登记 · 非现货承诺' : props.store.capability_source === 'mixed' ? 'ERP 库存 + 自主登记' : props.store.all_models ? '平台已授权' : '库存需向门店核对')
+const capabilitySourceText = computed(() => props.store.erp_visible === false ? '交付能力以门店确认为准' : !modelDimension.value ? '门店自主登记 · 以实际受理为准' : props.store.capability_source === 'manual' ? '门店自主登记 · 非现货承诺' : props.store.capability_source === 'mixed' ? 'ERP 库存 + 自主登记' : props.store.all_models ? '平台已授权' : '库存需向门店核对')
 defineEmits<{ (event: 'select' | 'inventory', row: CoopRow): void }>()
 </script>
 <style scoped lang="scss">

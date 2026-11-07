@@ -19,6 +19,11 @@
         </view>
     </u-popup></view>
 </template>
+<script lang="ts">
+// Match Vue's transparent layout in native Mini Programs: an extra custom
+// component host otherwise breaks the page's definite-height flex chain.
+export default { options: { virtualHost: true } }
+</script>
 <script setup lang="ts">
 import CooperationNav from './CooperationNav.vue'
 let taskSheetZIndex = 10090

@@ -445,7 +445,7 @@ const offlineOrderGoodsCount = computed(() => (formData.value?.order_goods || []
     .reduce((total: number, item: any) => total + Number(item.num || 1), 0))
 const offlinePriceChange = computed(() => Number(offlineDialog.deal_total || 0) - Number(formData.value?.order_money || 0))
 const tableData = ref([]);
-const modules: any = import.meta.glob('@/**/*.vue')
+import { dynamicComponentModules as modules } from '@/utils/dynamic-components'
 const formDetailDialog: any = ref(null)
 const formDetailEvent = (data: any) => {
     formDetailDialog.value.show(data)

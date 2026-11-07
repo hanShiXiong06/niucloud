@@ -44,7 +44,7 @@ function harness(initialTab = 'deliveries') {
         createCooperationLead: async data => { calls.push({ name: 'create', data }); return controls.write(data) },
         assignCooperationLead: async (...args) => { calls.push({ name: 'assign', args }); return controls.write(...args) }
     }
-    const module = execute(fs.readFileSync(path.join(mobile, 'composables/useCooperation.ts'), 'utf8'), { vue: Vue, '@/utils/common': { getToken: () => identity }, '../api/cooperation': doubles })
+    const module = execute(fs.readFileSync(path.join(mobile, 'composables/useCooperation.ts'), 'utf8'), { vue: Vue, '@/utils/common': { getSiteId:()=>100005, getToken: () => identity }, '../api/cooperation': doubles })
     return { state: module.useCooperation(initialTab), calls, controls, setIdentity: value => { identity = value } }
 }
 let h = harness(), s = h.state
@@ -102,9 +102,9 @@ for(const highlighted of [false,0,'0','false',undefined,1,'1']){
 }
 rendered=await html(component('CoopMerchantAvatar.vue'),{name:'等级头像',image:'upload/hsx_lead/owned.png',active:true,rank:8,highlighted:true})
 check(rendered.includes('is-highlighted')&&rendered.includes('coop-merchant-avatar__wing')&&rendered.includes('coop-merchant-avatar__glint')&&rendered.includes('owned.png')&&!rendered.includes('靠谱商家'),'highlighted presentation keeps the storefront photo, wings and animation without inventing a qualification')
-for(const [rank,active,expected] of [[2,true,false],[3,false,false],[3,true,true],[8,true,true]]){
+for(const [rank,active,expected] of [[2,true,true],[3,false,false],[3,true,true],[8,true,true]]){
     rendered=await html(component('CoopStoreCard.vue'),{store:{id:2,name:'合成门店',membership:{level_code:'ML8',level_name:'会员',display_rank:rank,active},region_text:'合成地区'}})
-    check(rendered.includes('is-highlighted')===expected,'store wings use active server membership and visual rank only: '+rank+'/'+active)
+    check(rendered.includes('is-highlighted')===expected,'all paid tiers show configured wings while inactive tiers remain neutral: '+rank+'/'+active)
 }
 rendered=await html(component('CoopProfilePanel.vue'),{profile:{id:7,name:'主体会员门店',membership:{active:true,level_code:'ML8',level_name:'旗舰商户',display_rank:8,expires_at:1900000000,level_visual:{start_color:'#123456',end_color:'#654321'}}},config:{},providers:[]})
 check(rendered.includes('旗舰商户')&&rendered.includes('level-8')&&rendered.includes('会员权益'),'profile renders real subject rights and a dynamic tier badge instead of separate certification products')
@@ -117,6 +117,12 @@ rendered=await html(component('CoopProfilePanel.vue'),{profile:{id:7,name:'普�
 check(!rendered.includes('is-page-panel'),'ordinary embedded profile and popup mode do not acquire routed-page height')
 rendered=await html(component('CoopProfilePanel.vue'),{profile:{id:7,name:'普通商户',membership:{active:false}},config:{},providers:[]})
 check(!rendered.includes('永久有效')&&!rendered.includes('靠谱认证'),'an ordinary subject does not gain a separate premium state')
+rendered=await html(component('CoopProfilePanel.vue'),{profile:{id:7,name:'关闭ERP的门店',connection:{connected:true,provider:'wanji'}},config:{erp_visible:false},providers:[{key:'wanji',name:'合成渠道'}],displayOnly:true,section:'tools',appearance:{showInventory:1,showConnection:1,showProfile:1,showCapability:1}})
+check(!rendered.includes('ERP 同步')&&!rendered.includes('库存快照')&&rendered.includes('交付能力'),'global ERP switch overrides saved DIY entry flags without removing manual capabilities')
+rendered=await html(component('CoopProfilePanel.vue'),{profile:{id:7,name:'ERP关闭编辑'},config:{erp_visible:false},providers:[{key:'wanji',name:'合成渠道'}],page:true,editing:true})
+check(!rendered.includes('ERP 库存同步')&&!rendered.includes('暂不连接 ERP')&&rendered.includes('经营业务与交付能力'),'profile editing hides authorization choice but preserves its ordinary onboarding form')
+rendered=await html(component('CoopStoreCard.vue'),{store:{id:2,name:'隐藏库存参考的门店',erp_visible:false,inventory_count:999,capability_source:'mixed',manual_model_count:1,business_type:'purchase',business_capabilities:[{business_type:'purchase',option_ids:['A']}],membership:{active:false}}})
+check(!rendered.includes('查看货盘')&&!rendered.includes('查看库存')&&!rendered.includes('ERP')&&!rendered.includes('999')&&rendered.includes('已登记 1 个可交付型号'),'recommendation shows declared capability and no inventory or ERP entry when globally hidden')
 rendered = await html(component('CoopMerchantAvatar.vue'), { name: '未上传图片商家', highlighted: false })
 check(!rendered.includes('coop-merchant-avatar__image') && rendered.includes('data-icon="home"'), 'no storefront photo displays a neutral shop icon, not a phone image or broken thumbnail')
 const merchantAvatar = fs.readFileSync(path.join(mobile, 'components/cooperation/CoopMerchantAvatar.vue'), 'utf8')
@@ -160,13 +166,14 @@ check(workbench.includes('locked = computed(() => ui.busy.value || confirming.va
 check(workbench.includes('pageUrl = cooperationPageUrls[props.initialTab]') && workbench.includes('uni.navigateTo({ url: membershipPageUrl })'), 'cashier keeps the canonical commission route while membership opens its own native page')
 for (const [tab, folder] of [['deliveries', 'workbench'], ['stores', 'stores'], ['wallet', 'wallet'], ['profile', 'profile']]) {
     const wrapper = fs.readFileSync(path.join(mobile, 'pages', folder, 'index.vue'), 'utf8')
-    check(tab === 'profile' ? wrapper.includes('DIY_HSX_LEAD_MEMBER_INDEX') && wrapper.includes('createProfileDiyContext') : wrapper.includes(`initial-tab="${tab}"`) && wrapper.includes('useCooperationPage'), 'real registered route uses its framework-backed lifecycle for ' + tab)
+    check(tab === 'profile' ? wrapper.includes('DIY_HSX_LEAD_MEMBER_INDEX') && wrapper.includes('createProfileDiyContext') : tab === 'wallet' ? wrapper.includes('CoopIncomePanel') && wrapper.includes('FrameworkTabbar') && wrapper.includes('onShow(') : wrapper.includes(`initial-tab="${tab}"`) && wrapper.includes('useCooperationPage'), 'real registered route uses its framework-backed lifecycle for ' + tab)
     const routed = harness(tab); routed.state.resume(); await routed.state.refresh()
     check(routed.state.tab.value === tab && (tab === 'wallet' ? routed.calls.some(row => row?.name === 'wallet') : tab === 'deliveries' ? routed.calls.some(row => row?.name === 'leads') : !routed.calls.some(row => row?.name === 'leads' || row?.name === 'wallet')), 'route initial state only reads its own business data for ' + tab)
 }
-check(workbench.includes("open('hsx_lead_cooperation'") && workbench.includes('cooperationOrder(id)'), 'payment uses framework cashier and authoritative order verification')
+check(workbench.includes("open('hsx_lead_cooperation'") && workbench.includes('cooperationOrder(target)') && workbench.includes('if (!await verifyPayment()) return'), 'payment uses framework cashier only after authoritative original/replacement order verification')
 check(workbench.includes('requires_manual_review') && workbench.includes('已收款，需平台核对'), 'paid-but-ungranted rights get an explicit manual-review warning')
-check(workbench.includes('hsx_lead_task_assigned,hsx_lead_task_changed'), 'subscription reuses configured framework notification keys')
+const subscribeHook=fs.readFileSync(path.join(mobile,'composables/useCooperationSubscribe.ts'),'utf8')
+check(workbench.includes('useCooperationSubscribe') && subscribeHook.includes('hsx_lead_task_assigned,hsx_lead_task_changed') && subscribeHook.includes('getWeappTemplateId(noticeKeys)'), 'shared subscription hook reuses configured framework notification keys')
 check(workbench.includes("['reject', 'withdraw', 'no_deal', 'cancel'].includes(value)") && workbench.includes('markChanged()') && workbench.includes('if (props.task) closeOverlay(); else await refreshBusinessData()'), 'terminal/rejected handling returns to the previous list and marks the single pager owner for refresh without querying lost receiver permission')
 const walletPanel = fs.readFileSync(path.join(mobile, 'components/cooperation/CoopWalletPanel.vue'), 'utf8')
 check(walletPanel.includes('/app/pages/member/apply_cash_out') && walletPanel.includes('/app/pages/member/cash_out') && walletPanel.includes('/app/pages/member/commission') && (walletPanel.match(/setStorageSync\('cashOutAccountType', 'commission'\)/g) || []).length === 2, 'withdrawal and record entry both select the framework commission account')
@@ -177,6 +184,9 @@ const connectionPanel = fs.readFileSync(path.join(mobile, 'components/cooperatio
 check(connectionPanel.includes('cooperationConnectionSettings({ enabled: next, interval_minutes: interval.value })') && connectionPanel.includes('connectionActionState') && connectionPanel.includes("flow.value.primary === 'activate'") && connectionPanel.includes("setupStage.value = 'enable_sync'"), 'ERP activation explicitly enables synchronization and preserves partial-stage recovery')
 const upload = fs.readFileSync(path.join(mobile, 'components/cooperation/CoopAttachmentUpload.vue'), 'utf8')
 check(upload.includes('result.data?.path') && !upload.includes('file/image'), 'attachments store server-owned references, not arbitrary external URLs')
+rendered = await html(component('CoopTaskDetail.vue'), { show: true, lead: { id: 91, status: 'following', is_internal: true, can_report: true, models: [], notice: [ { id: 1, channel: 'queue', status: 'pending', message: '业务已保存，通知等待处理', create_time: 1790000000 }, { id: 2, channel: 'weapp', status: 'uncertain', message: '请核对框架通知日志', create_time: 1790000001 } ] }, config: {} })
+check(rendered.includes('确认本店交付完成') && !rendered.includes('已成交，去付佣'), 'same-store feedback action never promises a paid commission step')
+check(rendered.includes('通知任务 · 待处理') && rendered.includes('小程序 · 结果待核实') && !rendered.includes('通知已送达'), 'mobile task log distinguishes durable processing from uncertain channel delivery')
 const files = ['api/cooperation.ts', 'composables/useCooperation.ts', 'composables/useCooperationPage.ts', 'pages/workbench/index.vue', 'pages/stores/index.vue', 'pages/wallet/index.vue', 'pages/profile/index.vue', ...fs.readdirSync(path.join(mobile, 'components/cooperation')).map(name => 'components/cooperation/' + name)]
 for (const file of files) check(fs.statSync(path.join(mobile, file)).size > 0, 'current source exists: ' + file)
 console.log(`PASS ${checks} cooperation mobile checks; actual Vue state and SFC render with synthetic APIs. No live ERP, upload, payment, notification or database actions.`)

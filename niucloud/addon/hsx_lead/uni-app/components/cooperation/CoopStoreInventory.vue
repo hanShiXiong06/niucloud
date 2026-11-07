@@ -13,6 +13,11 @@
         <template #footer><u-button :custom-style="cooperationButtonStyle" shape="circle" text="返回门店" @click="$emit('close')" /></template>
     </CoopTaskSheet>
 </template>
+<script lang="ts">
+// Match Vue's transparent layout in native Mini Programs: an extra custom
+// component host otherwise breaks the page's definite-height flex chain.
+export default { options: { virtualHost: true } }
+</script>
 <script setup lang="ts">
 import ZPaging from 'z-paging/components/z-paging/z-paging.vue'
 import CooperationSearch from './CooperationSearch.vue'

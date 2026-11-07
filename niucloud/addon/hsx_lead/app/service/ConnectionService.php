@@ -34,9 +34,9 @@ final class ConnectionService
         $channelEnabled=(new ProviderChannelService($this->context->site))->enabled($definition->key());
         $result=array_replace($result,['connected'=>true,'connection_id'=>(int)$conn['id'],'provider'=>$definition->key(),
             'channel_enabled'=>$channelEnabled,'channel_message'=>$channelEnabled?'':'本站已关闭该ERP渠道，授权及采集暂停，账号与历史库存仍保留。',
-            'provider_name'=>$definition->metadata()['name'],'scope'=>['tenant_id'=>(string)$conn['expected_tenant_id'],'store_id'=>(string)$conn['store_id']],
+            'provider_name'=>(new ProviderChannelService($this->context->site))->displayName($definition->key()),'scope'=>['tenant_id'=>(string)$conn['expected_tenant_id'],'store_id'=>(string)$conn['store_id']],
             'enabled'=>(bool)$conn['enabled'],'interval_minutes'=>(int)$conn['sync_interval_minutes'],'config_revision'=>(int)$conn['config_version'],
-            'last_sync_status'=>(string)$conn['last_sync_status'],'last_sync_at'=>(int)$conn['last_sync_at'],'last_sync_message'=>(string)$conn['last_sync_message'],
+            'last_sync_status'=>(string)$conn['last_sync_status'],'last_sync_at'=>(int)$conn['last_sync_at'],'last_sync_message'=>'',
             'active_run_id'=>(int)$conn['active_run_id'],'published_run_id'=>(int)$conn['published_run_id'],'next_sync_at'=>(int)$conn['next_sync_at'],'requires_initial_sync'=>(int)$conn['published_run_id']===0]);
         $result=array_replace($result,SyncStatus::connection($this->context->site,$conn));
         $result=array_replace($result,$this->recentRuns($merchantId,$conn,$channelEnabled));

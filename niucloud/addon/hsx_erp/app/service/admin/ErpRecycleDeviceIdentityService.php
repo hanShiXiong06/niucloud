@@ -6,12 +6,39 @@ namespace addon\hsx_erp\app\service\admin;
 use addon\hsx_erp\app\model\ErpAsset;
 use addon\hsx_erp\app\model\ErpPayable;
 use addon\hsx_erp\app\model\ErpPurchaseItem;
+use addon\hsx_erp\app\model\ErpPurchaseOrder;
 use addon\hsx_erp\app\support\ErpRecycleDeviceIdentity;
 use core\exception\CommonException;
 
 /** 只读关联解析；历史 JSON 可按站点扫描，任何查询异常都向上抛出。 */
 class ErpRecycleDeviceIdentityService
 {
+    /** 基础资料修改只读门禁：采购尚未生成资产时同样视为已交接 ERP。 */
+    public function infoCorrectionLinks(int $siteId, array $deviceIds): array
+    {
+        $assets = $this->deviceAssets($siteId, $deviceIds);
+        $result = [];
+        foreach ($assets as $id => $entry) $result[$id] = ['has_asset' => (bool)$entry['has_asset'], 'has_purchase' => false, 'ambiguous' => (bool)$entry['ambiguous']];
+        foreach ($this->loadRecyclePurchaseItems($siteId) as $item) {
+            if ((int)($item['site_id'] ?? 0) !== $siteId) continue;
+            $snapshot = is_array($item['spec_json'] ?? null) ? $item['spec_json'] : json_decode((string)($item['spec_json'] ?? ''), true);
+            if (!is_array($snapshot)) continue;
+            $id = ErpRecycleDeviceIdentity::positiveId($snapshot['source_device_id'] ?? 0);
+            if (isset($result[$id])) {
+                $result[$id]['has_purchase'] = true;
+                if (!in_array((string)($snapshot['source_plugin'] ?? ''), ['', 'hsx_recycle'], true)) $result[$id]['ambiguous'] = true;
+            }
+        }
+        return $result;
+    }
+
+    protected function loadRecyclePurchaseItems(int $siteId): array
+    {
+        $orderIds = ErpPurchaseOrder::where([['site_id', '=', $siteId], ['source_plugin', '=', 'hsx_recycle']])->column('id');
+        if ($orderIds === []) return [];
+        return ErpPurchaseItem::where([['site_id', '=', $siteId]])->whereIn('purchase_order_id', $orderIds)->field('id,site_id,purchase_order_id,spec_json')->select()->toArray();
+    }
+
     public function deviceAssets(int $siteId, array $deviceIds): array
     {
         if ($siteId <= 0) throw new CommonException('回收设备关联查询缺少有效站点');

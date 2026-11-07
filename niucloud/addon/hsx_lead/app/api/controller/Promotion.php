@@ -10,6 +10,7 @@ final class Promotion extends BaseApiController
     public function overview() { return success($this->service()->overview()); }
     public function team() { return success($this->service()->team($this->request->param())); }
     public function rewards() { return success($this->service()->rewards($this->request->param())); }
+    public function income() { return success($this->service()->income($this->request->param())); }
     public function rules() { return success($this->service()->rules()); }
     public function invitation() { return success($this->service()->invitation((int)$this->request->param('mid',0))); }
     public function bind() { return success($this->service()->bind($this->request->param())); }

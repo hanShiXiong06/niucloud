@@ -6,6 +6,7 @@ const quiet = { showErrorMessage: false }
 export const promotionOverview = () => request.get(`${root}/overview`, {}, quiet)
 export const promotionTeam = (query: CoopRow) => request.get(`${root}/team`, query, quiet)
 export const promotionRewards = (query: CoopRow) => request.get(`${root}/rewards`, query, quiet)
+export const promotionIncome = (query: CoopRow) => request.get(`${root}/income`, query, quiet)
 export const promotionInvitation = (mid: number) => request.get(`${root}/invitation`, { mid }, quiet)
 export const bindPromotionInviter = (mid: number) => request.post(`${root}/bind`, { mid, confirm: true }, quiet)
 export const promotionApplication = () => request.get(`${root}/application`, {}, quiet)

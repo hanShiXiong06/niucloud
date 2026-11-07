@@ -1,0 +1,13 @@
+// Keep NiuCloud's renderer, measured placeholder, scroll colours and Tabbar.
+// Only these plugin pages opt into a permanently fixed custom navigation bar;
+// the framework otherwise switches it to absolute at scrollTop <= 0.
+.lead-diy-page :deep(.diy-group > .ns-navbar-wrap > .u-navbar) {
+    position: fixed;
+}
+
+// Same page-style integration as phone_shop, including native child pages.
+/* #ifdef MP */
+.diy-template-wrap :deep(.child-diy-template-wrap .diy-group > .draggable-element.top-fixed-diy) {
+    display: block !important;
+}
+/* #endif */

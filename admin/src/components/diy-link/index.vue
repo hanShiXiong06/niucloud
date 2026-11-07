@@ -159,7 +159,7 @@ const dynamicComponentRefs: any = ref(null) // 动态组件ref
 
 const selectLink: any = ref([])
 
-const modules: any = import.meta.glob('@/**/*.vue')
+import { dynamicComponentModules as modules } from '@/utils/dynamic-components'
 
 const show = () => {
     getLinkFn(() => {

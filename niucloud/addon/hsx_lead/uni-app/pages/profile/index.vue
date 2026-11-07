@@ -1,9 +1,8 @@
 <template>
-    <view class="lead-profile-page" :style="themeColor()">
-        <loading-page :loading="diy.getLoading() && !timedOut" />
-        <view v-if="timedOut" class="lead-profile-page__status"><CoopState error="个人中心暂时没有加载出来" @retry="retryPage" /></view>
-        <view v-show="!diy.getLoading()" :style="diy.pageStyle() + (!context.preview.value && !context.displayable.value ? 'min-height:0;' : '')"><diy-group ref="groupRef" :data="diy.data" /></view>
-        <template v-if="!context.preview.value">
+    <view class="lead-profile-page lead-diy-page" :style="themeColor()">
+        <CoopDiyPageStatus :loading="pageLoad.loading.value" :error="pageLoad.error.value" @retry="retryPage" />
+        <view v-show="pageLoad.ready.value" class="diy-template-wrap bg-index" :style="diy.pageStyle() + (!context.preview.value && !context.displayable.value ? 'min-height:0;' : '')"><diy-group ref="groupRef" :data="diy.data" /></view>
+        <template v-if="pageLoad.ready.value && !context.preview.value">
             <view v-if="!context.loggedIn.value" class="lead-profile-page__status"><CoopState title="欢迎来到商户协作" hint="登录后查看自己的门店、权益与协作收益" icon="account" /><u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" text="使用会员身份登录" @click="context.login(loginParams)" /></view>
             <view v-else-if="context.loading.value || context.error.value" class="lead-profile-page__status"><CoopState :loading="context.loading.value" :error="context.error.value" @retry="context.refresh()" /></view>
             <view v-else-if="context.ready.value && !context.profile.value.id && context.pendingEntity.value.status === 'pending'" class="lead-profile-page__status"><CoopState title="等待负责人确认" :hint="context.pendingEntity.value.name" icon="clock" /><u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" text="查看加入申请" @click="openEntity" /></view>
@@ -27,21 +26,24 @@ import { cooperationButtonStyle } from '../../utils/mobile-ui'
 import { applyCooperationDiyTitle } from '../../utils/diy-title'
 import { entityPageUrl } from '../../utils/entity-membership'
 import { cooperationInviteParams } from '../../utils/cooperation-invite'
-const diy = useDiy({ name:'DIY_HSX_LEAD_MEMBER_INDEX' }), groupRef = ref<any>(null), timedOut = ref(false)
+import { useCooperationDiyLoad } from '../../composables/useCooperationDiyLoad'
+import CoopDiyPageStatus from '../../components/cooperation/CoopDiyPageStatus.vue'
+const pageLoad = useCooperationDiyLoad('个人中心')
+const diy = useDiy({ name:'DIY_HSX_LEAD_MEMBER_INDEX', ...pageLoad.requestOptions }), groupRef = ref<any>(null)
 const context = createProfileDiyContext(), loginParams = ref<Record<string,any>>({}), { setShare, onShareAppMessage } = useShare()
 provide(profileDiyKey,context)
 onShareAppMessage()
-let timer:ReturnType<typeof setTimeout>|undefined, pendingLead=0, pendingPromotion=false, pendingInviter=0, disposed=false
+let pendingLead=0, pendingPromotion=false, pendingInviter=0, disposed=false
 const positiveId=(value:unknown)=>{const number=Number(value);return Number.isSafeInteger(number)&&number>0&&number<=4294967295?number:0}
 diy.onLoad()
 onLoad(raw=>{
     const options=cooperationInviteParams(raw)
     pendingLead=positiveId(options?.collaboration_id);pendingPromotion=String(options?.promotion_invite||'')==='1';pendingInviter=positiveId(options?.mid)
     loginParams.value={...(pendingLead?{collaboration_id:pendingLead}:{}),...(pendingPromotion?{promotion_invite:1,...(pendingInviter?{mid:pendingInviter}:{})}:{})}
-    timer=setTimeout(()=>{if(diy.getLoading())timedOut.value=true},12000)
+    if(options?.mode==='decorate')pageLoad.complete();else pageLoad.start()
 })
 diy.onShow((data:any)=>{
-    timedOut.value=false;if(timer)clearTimeout(timer)
+    if(!pageLoad.complete())return
     // Keep the framework's selected-page contract, rather than forcing the
     // component layout when the administrator has chosen a different page.
     if(!data.value&&data.page){redirect({url:data.page,mode:'reLaunch'});return}
@@ -55,13 +57,15 @@ onShow(async()=>{
     if(pendingPromotion){pendingPromotion=false;openCooperationTask('promotion',{tab:'overview',...(pendingInviter?{mid:pendingInviter}:{})})}
     else if(pendingLead&&context.profile.value.id){const id=pendingLead;pendingLead=0;openCooperationTask('detail',{collaboration_id:id})}
 })
-onHide(()=>context.pause())
+onHide(()=>{context.pause();pageLoad.pause()})
 onPullDownRefresh(async()=>{try{await context.refresh()}finally{uni.stopPullDownRefresh()}})
-onBeforeUnmount(()=>{disposed=true;context.dispose();if(timer)clearTimeout(timer)})
+onBeforeUnmount(()=>{disposed=true;context.dispose();pageLoad.dispose()})
 function retryPage(){uni.redirectTo({url:'/addon/hsx_lead/pages/profile/index'})}
 function openEntity(){uni.navigateTo({url:entityPageUrl+'?mode=join'})}
 </script>
 <style scoped lang="scss">
+@import '@/styles/diy.scss';
+@import '../../components/cooperation/cooperation-diy-page';
 .lead-profile-page { min-height: 100vh; background:#f6f6f6; }
 .lead-profile-page__status { padding: 48rpx 30rpx 24rpx; }
 .lead-profile-page__status>.u-button { margin-top:24rpx; }

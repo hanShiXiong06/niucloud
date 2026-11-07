@@ -22,6 +22,15 @@ final class Cooperation extends BaseAdminController
     public function blockPartner(int $id) { return success((new PartnerService($this->context()))->block($id,$this->request->param())); }
     public function businessLicensePreview(int $id) { return success((new BusinessLicenseService($this->context()))->adminPreview($id))->header(['Cache-Control'=>'private, no-store','Pragma'=>'no-cache']); }
     public function orders() { return success((new PaymentService($this->context()))->adminOrders($this->request->param())); }
+    public function orderOptions() { $ctx=$this->context();Store::permission($ctx,'finance');return success(\addon\hsx_lead\app\service\cooperation\OrderPaymentReadService::options()); }
+    public function orderRefund(int $id) { return success((new \addon\hsx_lead\app\service\cooperation\PaymentRefundService($this->context()))->detail($id,true)); }
+    public function requestOrderRefund(int $id) { return success((new \addon\hsx_lead\app\service\cooperation\PaymentRefundService($this->context()))->apply($id,$this->request->param(),true)); }
+    public function reviewOrderRefund(int $id) { return success((new \addon\hsx_lead\app\service\cooperation\PaymentRefundService($this->context()))->review($id,$this->request->param())); }
+    public function refreshOrderRefund(int $id) { return success((new \addon\hsx_lead\app\service\cooperation\PaymentRefundService($this->context()))->refresh($id,true)); }
+    public function continueOrderRefund(int $id) { return success((new \addon\hsx_lead\app\service\cooperation\PaymentRefundService($this->context()))->continue($id,$this->request->param())); }
+    public function closeOrder(int $id) { return success((new \addon\hsx_lead\app\service\cooperation\PaymentOrderLifecycle($this->context()))->close($id,$this->request->param(),true)); }
+    public function repriceOrder(int $id) { return success((new \addon\hsx_lead\app\service\cooperation\OrderPricingService($this->context()))->reprice($id,$this->request->param())); }
+    public function orderPricingLogs(int $id) { return success((new \addon\hsx_lead\app\service\cooperation\OrderPricingService($this->context()))->logs($id,$this->request->param())); }
     public function reviews() { return success((new ReviewService($this->context()))->lists($this->request->param())); }
     public function createReview() { return success((new ReviewService($this->context()))->create($this->request->param())); }
     public function resolve(int $id) { return success((new ReviewService($this->context()))->resolve($id,$this->request->param())); }

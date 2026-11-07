@@ -28,7 +28,7 @@ final class PromotionService
         $raw=Db::name('sys_config')->where('site_id',$site)->where('config_key',$key)->value('value');
         return is_array($raw)?$raw:Data::decode($raw);
     }
-    public static function configuration(int $site): array { return PromotionRules::config(self::value($site,self::CONFIG_KEY)); }
+    public static function configuration(int $site): array { return PromotionRules::readConfiguration(self::value($site,self::CONFIG_KEY)); }
     public static function provider(int $site,int $id): ?array
     {
         $row=self::value($site,self::PROVIDER_PREFIX.$id);if (!$row) return null;
@@ -46,14 +46,26 @@ final class PromotionService
     {
         self::member($site,$id);$provider=self::provider($site,$id);
         $allowed=!(($provider['status']??'')==='disabled'&&($provider['disabled_mode']??'normal')==='blocked');
-        $merchant=Data::query('merchant',$site)->where('member_id',$id)->find();
+        $owned=Data::query('merchant',$site)->where('member_id',$id)->find();
+        if ($owned&&(int)$owned['status']!==1) $allowed=false;
+        $merchant=TeamService::resolve(new Context($site,0,$id),false);
+        $level=['code'=>'','level_id'=>0,'name'=>'普通会员','active'=>false];
         if ($merchant) {
             $partner=Store::query('partner',$site)->where('merchant_id',$merchant['id'])->find();
             if ((int)$merchant['status']!==1||!$partner||(int)$partner['blocked_at']>0) $allowed=false;
+            if ($allowed&&$partner) {
+                $state=EntityMembershipService::state($site,(int)$merchant['id']);
+                if (!empty($state['active'])) $level=['code'=>(string)$state['level_code'],'level_id'=>(int)$state['level_id'],'name'=>(string)$state['level_name'],'active'=>true];
+            }
         }
-        return ['role'=>!empty($provider['enabled'])?'provider':'normal','promotion_allowed'=>$allowed,'provider'=>$provider];
+        return ['role'=>!empty($provider['enabled'])?'provider':'normal','promotion_allowed'=>$allowed,'provider'=>$provider,'level'=>$level];
     }
-    public static function rateFor(array $config,string $source,string $role): string { return PromotionRules::rateFor($config,$source,$role); }
+    public static function rateFor(array $config,string $source,string $role,string $levelCode=''): string { return PromotionRules::rateFor($config,$source,$role,$levelCode); }
+    private static function configView(int $site,array $config): array
+    {
+        $levels=[];foreach(MembershipCatalogService::levels($site) as $level) $levels[]=['code'=>$level['code'],'level_id'=>$level['level_id'],'name'=>$level['name'],'display_rank'=>$level['display_rank']];
+        return $config+['member_levels'=>$levels];
+    }
     private static function statusLabel(string $status): string
     {
         return ['none'=>'尚未申请','pending'=>'待审核','approved'=>'已通过','rejected'=>'未通过','disabled'=>'已停用'][$status]??'待核对';
@@ -136,12 +148,14 @@ final class PromotionService
     public function overview(): array
     {
         $member=$this->own();$id=(int)$member['member_id'];$q=self::query($this->context->site)->where('provider_member_id',$id);$role=self::resolveRole($this->context->site,$id);$config=self::configuration($this->context->site);
+        $rates=[];foreach($config['sources'] as $source=>$definition) $rates[$source]=self::rateFor($config,$source,$role['role'],$role['level']['code']);
         return ['enabled'=>$config['enabled'],'member'=>self::summary($member),'provider'=>$this->publicProvider($role['provider']),
+            'level'=>$role['level'],'current_rates'=>$rates,
             'role'=>$role['role'],'promotion_allowed'=>$config['enabled']&&$role['promotion_allowed'],'application'=>$this->applicationView($id,$role['provider']),
             'upstream'=>$this->upstream((int)$member['pid']),
             'stats'=>['team_count'=>(int)$this->teamQuery($id)->count(),'pending'=>(string)(clone $q)->where('status','pending')->sum('amount'),
                 'settled'=>(string)(clone $q)->where('status','settled')->sum('amount'),'held'=>(string)(clone $q)->where('status','held')->sum('amount')],
-            'account'=>PaymentService::accountSummary($this->context->site,$id),'rules'=>$config,
+            'account'=>PaymentService::accountSummary($this->context->site,$id),'rules'=>self::configView($this->context->site,$config),
             'share'=>['mid'=>$id,'path'=>'/addon/hsx_lead/pages/profile/index?mid='.$id.'&promotion_invite=1']];
     }
     private function publicProvider(?array $provider): ?array { if ($provider) unset($provider['remark']);return $provider; }
@@ -200,13 +214,13 @@ final class PromotionService
             return ['upstream'=>$this->upstream($id),'already_bound'=>false];
         });
     }
-    public function rules(): array { $this->own();return self::configuration($this->context->site); }
-    public function adminConfig(): array { $this->admin('config');return self::configuration($this->context->site); }
+    public function rules(): array { $this->own();return self::configView($this->context->site,self::configuration($this->context->site)); }
+    public function adminConfig(): array { $this->admin('config');return self::configView($this->context->site,self::configuration($this->context->site)); }
     public function saveConfig(array $input): array
     {
         $this->admin('config_save');$next=PromotionRules::config($input);
         Db::transaction(function()use($next):void {self::lockSite($this->context->site);(new CoreConfigService())->setConfig($this->context->site,self::CONFIG_KEY,$next);$this->context->audit('promotion_config',0,'saved',['enabled'=>$next['enabled']]);});
-        return $next;
+        return self::configView($this->context->site,self::configuration($this->context->site));
     }
     public function providers(array $params=[]): array
     {
@@ -299,6 +313,7 @@ final class PromotionService
         if ($inviter<=0||$inviter===(int)$payer['member_id']) return array_replace($snapshot,['reason'=>'no_inviter']);
         try {$resolved=self::resolveRole($site,$inviter);}catch(CommonException $ignored){return array_replace($snapshot,['reason'=>'inviter_unavailable','inviter_member_id'=>$inviter]);}
         $provider=$resolved['provider'];$snapshot=array_replace($snapshot,['inviter_member_id'=>$inviter,'promoter_role'=>$resolved['role'],
+            'promoter_level_code'=>$resolved['level']['code'],'promoter_level_name'=>$resolved['level']['name'],
             'provider_status'=>$provider['status']??'none','provider_version'=>(int)($provider['version']??0),'provider_city'=>(string)($provider['city']??'')]);
         if (!$resolved['promotion_allowed']) return array_replace($snapshot,['reason'=>'promotion_blocked']);
         $relation=self::value($site,self::RELATION_PREFIX.$payer['member_id']);
@@ -311,7 +326,7 @@ final class PromotionService
         if (!PromotionRules::eligible($config,$source,$renewal,$boundAt,$paidAt)) return array_replace($snapshot,['reason'=>'outside_eligibility']);
         $gross=Rules::cents((string)$order['amount']);$base=$source==='membership'?MembershipCostService::promotionBase($order):Rules::cents((string)$order['fee_amount']);
         if ($base>$gross) throw new CommonException('推广计佣基数超过实收，需平台核对，不会减少发布方收益');
-        $rate=self::rateFor($config,$source,$resolved['role']);$amount=PromotionRules::reward($base,$rate);
+        $rate=self::rateFor($config,$source,$resolved['role'],$resolved['level']['code']);$amount=PromotionRules::reward($base,$rate);
         return array_replace($snapshot,['eligible'=>$amount>0,'reason'=>$amount>0?'eligible':'zero_reward','base_amount'=>Rules::amount($base),'rate'=>$rate,'amount'=>Rules::amount($amount)]);
     }
     private static function assertSnapshot(int $site,array $order,array $snapshot): void
@@ -379,6 +394,44 @@ final class PromotionService
         $page=Data::page($q,$params);$page['data']=array_map(fn(array $row):array=>$this->presentReward($row,$admin),$page['data']);
         if ($admin) $page['payment_reviews']=$this->paymentReviews();return $page;
     }
+    /** One read-only list over existing cooperation receipts and promotion facts.
+     * A member needs no paid plan or merchant record to view their own promotion.
+     * Publisher income is included only if the framework ledger credited this
+     * exact member; joining another store never grants access to its finances.
+     */
+    public function income(array $params=[]): array
+    {
+        $this->own();$site=$this->context->site;$id=$this->context->memberId;
+        $type=(string)($params['income_type']??'all');
+        if (!in_array($type,['all','publisher','membership','maintenance'],true)) throw new CommonException('请选择有效的收益类型');
+        $status=(string)($params['status']??'');
+        if (!in_array($status,['','pending','settled','held'],true)) throw new CommonException('请选择有效的收益状态');
+        $prefix=(string)config('database.connections.mysql.prefix');
+        $rewards=Db::name('hsx_lead_promotion_reward')->alias('r')->where('r.site_id',$site)->where('r.provider_member_id',$id)
+            ->leftJoin([$prefix.'member'=>'m'],'m.site_id=r.site_id AND m.member_id=r.payer_member_id')
+            ->leftJoin([$prefix.'hsx_lead_coop_order'=>'o'],'o.site_id=r.site_id AND o.id=r.coop_order_id')
+            ->fieldRaw("r.id,CONCAT('promotion:',r.id) AS record_key,r.source AS income_type,r.amount,r.status,r.review_required,r.reason,r.create_time,r.available_at,o.order_no,COALESCE(NULLIF(m.nickname,''),NULLIF(m.username,''),'原会员') AS payer_name,'' AS customer_name,'' AS lead_no");
+        $published=Db::name('hsx_lead_coop_order')->alias('o')
+            ->join([$prefix.'hsx_lead_collaboration'=>'c'],'c.payment_order_id=o.id AND c.site_id=o.site_id')
+            ->join([$prefix.'member_account_log'=>'a'],"a.related_id=o.id AND a.site_id=o.site_id AND a.account_type='commission' AND a.from_type='".PaymentService::INCOME_TYPE."'")
+            ->where('o.site_id',$site)->where('a.member_id',$id)->where('a.account_data','>',0)
+            ->where('c.status','paid')->where('o.purpose','commission')->where('o.status','paid')
+            ->fieldRaw("o.id,CONCAT('publisher:',o.id) AS record_key,'publisher' AS income_type,o.net_amount AS amount,'settled' AS status,0 AS review_required,'' AS reason,o.pay_time AS create_time,o.pay_time AS available_at,o.order_no,'' AS payer_name,c.customer_name,c.lead_no");
+        if ($type==='publisher') $query=Db::table($published->buildSql().' income');
+        elseif ($type!=='all') {$rewards->where('r.source',$type);$query=Db::table($rewards->buildSql().' income');}
+        else $query=Db::table($rewards->unionAll($published->buildSql())->buildSql().' income');
+        if ($status!=='') $query->where('status',$status);
+        foreach(['start_time'=>'>=','end_time'=>'<='] as $key=>$operator) if ((int)($params[$key]??0)>0) $query->where('create_time',$operator,(int)$params[$key]);
+        $page=max(1,(int)($params['page']??1));$size=max(1,min(100,(int)($params['limit']??$params['page_size']??20)));
+        $total=(int)(clone $query)->count();$rows=$query->order('create_time desc,record_key desc')->page($page,$size)->select()->toArray();
+        foreach($rows as &$row) {
+            $row['review_required']=(bool)$row['review_required'];$row['source']=$row['income_type'];
+            $row['title']=['publisher'=>'线索交付收益','membership'=>'会员服务费推广佣金','maintenance'=>'平台维护费推广佣金'][$row['income_type']]??'推广收益';
+            $row['status_label']=$row['review_required']&&$row['status']==='settled'?'已入账·待平台核对':(['pending'=>'待结算','settled'=>'已入账','held'=>'暂停待核对'][$row['status']]??'待核对');
+        }unset($row);
+        return ['account'=>PaymentService::accountSummary($site,$id),'entries'=>['data'=>$rows,'total'=>$total,'current_page'=>$page,'per_page'=>$size],
+            'types'=>[['value'=>'all','label'=>'全部'],['value'=>'publisher','label'=>'交付收益'],['value'=>'membership','label'=>'会员服务费'],['value'=>'maintenance','label'=>'平台维护费']]];
+    }
     private function paymentReviews(): array
     {
         $site=$this->context->site;$q=Store::query('coop_order',$site)->where('status','paid')->whereLike('rule_json','%"promotion_review_required":true%');
@@ -399,9 +452,12 @@ final class PromotionService
         $payer=Db::name('member')->where('site_id',$this->context->site)->where('member_id',$row['payer_member_id'])->find();
         $provider=Db::name('member')->where('site_id',$this->context->site)->where('member_id',$row['provider_member_id'])->find();
         $row['payer_name']=$payer?self::summary($payer)['name']:'原会员';$row['provider_name']=$provider?self::summary($provider)['name']:'原推广会员';
-        $row['order_no']=(string)(Store::query('coop_order',$this->context->site)->where('id',$row['coop_order_id'])->value('order_no')??'');
-        $row['source_label']=['membership'=>'主体会员费','maintenance'=>'平台维护费'][$row['source']]??'待核对';
+        $sourceOrder=Store::query('coop_order',$this->context->site)->where('id',$row['coop_order_id'])->field('order_no,rule_json')->find();
+        $row['order_no']=(string)($sourceOrder['order_no']??'');
+        $row['source_label']=['membership'=>'会员服务费','maintenance'=>'平台维护费'][$row['source']]??'待核对';
         $row['status_label']=!empty($row['review_required'])&&$row['status']==='settled'?'已入账·待人工追偿':(['pending'=>'待结算','settled'=>'已入框架佣金','held'=>'暂停待核对'][$row['status']]??'待核对');
+        $sourceRefund=$sourceOrder?Data::decode($sourceOrder['rule_json'])[PaymentRefundService::KEY]??[]:[];
+        if(($sourceRefund['status']??'')==='refunded'&&$row['status']==='held'&&empty($row['review_required']))$row['status_label']=(int)$row['account_log_id']>0?'原推广奖励已退回':'原推广奖励已取消';
         $row['review_required']=(bool)$row['review_required'];$row['rule']=Data::decode($row['rule_json']);unset($row['rule_json']);
         if (!$admin) unset($row['out_trade_no'],$row['account_log_id']);return $row;
     }
@@ -498,8 +554,14 @@ final class PromotionService
         return Db::transaction(function()use($site,$no):bool {
             self::lockSite($site);$refund=Db::name('pay_refund')->where('site_id',$site)->where('refund_no',$no)->where('status',RefundDict::SUCCESS)->find();if (!$refund) throw new CommonException('未找到成功退款凭据，未变更推广奖励');
             $rows=self::query($site)->where('out_trade_no',$refund['out_trade_no'])->lock(true)->select()->toArray();
+            $managedOrder=Store::query('coop_order',$site)->where('out_trade_no',$refund['out_trade_no'])->find();
+            $managed=$managedOrder?Data::decode($managedOrder['rule_json'])[PaymentRefundService::KEY]??[]:[];
             foreach($rows as $row) {
                 if(!self::hasRefund($site,(string)$row['out_trade_no']))continue;
+                if(($managed['refund_no']??'')===$no&&($managed['status']??'')==='refunded'){
+                    // The reviewed order refund already reclaimed every credited reward atomically before dispatch.
+                    self::query($site)->where('id',$row['id'])->update(['status'=>'held','review_required'=>0,'reason'=>(int)$row['account_log_id']>0?'原支付已退款，原推广奖励已从可用佣金退回':'原支付已退款，未发放的推广奖励已取消','update_time'=>time()]);continue;
+                }
                 $credited=$row['status']==='settled';
                 self::query($site)->where('id',$row['id'])->update(['status'=>$credited?'settled':'held','review_required'=>1,
                     'reason'=>$credited?'原支付已退款；奖励此前已入框架佣金，需平台人工核对追偿，未自动扣回':'原支付已退款；奖励未入账，已暂停并等待平台核对','update_time'=>time()]);

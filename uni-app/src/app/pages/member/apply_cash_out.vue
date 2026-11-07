@@ -129,6 +129,14 @@
                         <view><text>最低申请金额</text><text>{{ minimumCashOutText }}</text></view>
                         <view><text>提现手续费率</text><text>{{ Number(config.rate) }}%</text></view>
                         <view><text>审核及打款处理</text><text>3 个自然日内</text></view>
+                        <!-- 用户无法及时提现 -->
+                         <view>
+                            <text>无法即时提现 </text>
+                            <text>
+                                提现申请提交成功后，商家将在3个自然日内完成审核及打款。
+                                您可在“提现记录”查看进度；超过时限仍未收到款项，请点击“联系商家”核查。
+                            </text>
+                        </view>
                     </view>
                     <view class="cash-out-rules__intro">请重点核对最低金额、手续费、收款方式和办理时效。以下金额与方式跟随本站当前配置；提交成功不等于已经到账。</view>
                     <view v-for="section in cashOutRules" :key="section.key" class="cash-out-rules__section">

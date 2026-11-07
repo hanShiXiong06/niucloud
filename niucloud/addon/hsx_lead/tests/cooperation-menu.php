@@ -31,7 +31,7 @@ try {
     foreach(['hsx_lead_manage_catalog','hsx_lead_manage_catalog_save','hsx_lead_manage_notice_config','hsx_lead_manage_notice_config_save'] as $key) menuCheck(in_array($key,$configKeys,true),'business configuration owns catalog and framework notice grants: '.$key);
     $settings=file_get_contents($plugin.'/admin/views/cooperation/Settings.vue');
     menuCheck(str_contains($settings,'canEditCatalog')&&str_contains($settings,'<CatalogDrawer v-if="canEditCatalog"')&&str_contains($settings,'catalogBusiness'),'per-business directory management remains behind the settings permission');
-    menuCheck(str_contains($settings,"hasLeadPagePermission(user,'hsx_lead_manage_catalog')&&hasLeadPagePermission(user,'hsx_lead_manage_catalog_save')"),'catalog editor requires both existing read and write grants, not configuration visibility alone');
+    menuCheck(str_contains($settings,"hasLeadPagePermission(user,'hsx_lead_catalog_items')"),'directory entrance requires the dedicated read grant; item writes are separately guarded by the drawer and API');
     $css=file_get_contents($root.'/admin/src/styles/icon/official-iconfont.css');
     foreach(array_merge([$menu[0]],$visible) as $node) {
         $icon=explode(' ',$node['icon']);$class=end($icon);

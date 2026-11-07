@@ -13,7 +13,7 @@
         <div class="edit-attr-item-wrap"><h3>各业务外观</h3><el-alert :title="previewMessage" :type="previewState==='error'?'error':previewState==='denied'?'warning':'info'" :closable="false" show-icon><template #default><el-button v-if="canReadConfig" link type="primary" :loading="previewLoading" @click="loadPreview">刷新启用业务</el-button></template></el-alert>
             <el-collapse class="business-items"><el-collapse-item v-for="row in businesses" :key="row.key" :name="row.key" :title="item(row.key).title||row.name"><el-form label-width="100px">
                 <el-form-item label="显示名称"><el-input :model-value="item(row.key).title" :placeholder="row.name" maxlength="30" @update:model-value="patchItem(row.key,'title',$event)" /></el-form-item>
-                <el-form-item label="图标方式"><el-select :model-value="item(row.key).iconMode" @update:model-value="patchItem(row.key,'iconMode',$event)"><el-option label="彩色 CSS 图标" value="css" /><el-option label="原版图片" value="original" /><el-option label="图标库" value="library" /><el-option label="上传图片" value="image" /><el-option label="只显示文字" value="none" /></el-select></el-form-item>
+                <el-form-item label="图标方式"><el-select :model-value="item(row.key).iconMode" @update:model-value="patchItem(row.key,'iconMode',$event)"><el-option label="彩色线性图标" value="css" /><el-option label="原版图片" value="original" /><el-option label="图标库" value="library" /><el-option label="上传图片" value="image" /><el-option label="只显示文字" value="none" /></el-select></el-form-item>
                 <el-form-item v-if="item(row.key).iconMode==='image'" label="图标图片"><UploadImage :model-value="item(row.key).image" @update:model-value="patchItem(row.key,'image',$event)" /></el-form-item>
                 <el-form-item v-if="item(row.key).iconMode==='library'" label="图标"><el-select :model-value="item(row.key).icon" @update:model-value="patchItem(row.key,'icon',$event)"><el-option v-for="icon in iconOptions" :key="icon.value" :label="icon.label" :value="icon.value" /></el-select></el-form-item>
                 <el-form-item v-if="!['image','original','none'].includes(item(row.key).iconMode)" label="图标颜色"><el-color-picker :model-value="item(row.key).iconColor" @update:model-value="patchItem(row.key,'iconColor',$event||'')" /></el-form-item>
@@ -25,7 +25,7 @@
         </div>
         </div>
         <div v-show="diyStore.editTab==='style'" class="business-style-tab"><div class="edit-attr-item-wrap"><h3>内容外观</h3><el-form label-width="100px"><el-form-item v-for="field in styleColors.filter(row=>row.key!=='borderColor'||component.layoutPreset==='list')" :key="field.key" :label="field.label"><el-color-picker v-model="component[field.key]" :show-alpha="field.key==='borderColor'" /></el-form-item><el-form-item v-for="field in styleSizes" :key="field.key" :label="field.label"><el-input-number v-model="component[field.key]" :min="field.min" :max="field.max" :precision="0" /> px</el-form-item></el-form></div>
-        <el-collapse class="business-help"><el-collapse-item title="外观、背景与业务开关" name="help"><p>这里只调整本站已启用业务的展示，不会开通业务或修改客户表单、费用。容器背景色、背景图与圆角使用下方牛云通用样式设置。CSS 图标为内置绘制样式，不接受任意代码。</p></el-collapse-item></el-collapse>
+        <el-collapse class="business-help"><el-collapse-item title="外观、背景与业务开关" name="help"><p>这里只调整本站已启用业务的展示，不会开通业务或修改客户表单、费用。容器背景色、背景图与圆角使用下方牛云通用样式设置。彩色线性图标使用内置绘制样式，可单独修改颜色，不接受任意代码。</p></el-collapse-item></el-collapse>
         <slot name="style" />
         </div>
     </div>

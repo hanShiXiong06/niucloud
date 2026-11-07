@@ -31,6 +31,7 @@ export interface DeviceRowAction {
 
 export interface DeviceRowActionHandlers {
   checkDevice: (device: any) => void
+  correctDeviceInfo?: (device: any) => void
   priceDevice: (device: any) => void
   batchRecycleDevice: (id: number | string) => void
   batchReturnDevice: (id: number | string) => void
@@ -66,6 +67,13 @@ export function useDeviceRowActions(handlers: DeviceRowActionHandlers) {
   const getDeviceMoreActions = (device: any): DeviceRowAction[] => {
     const status = Number(device.status)
     const actions: DeviceRowAction[] = []
+
+    // 确认即交接 ERP；资料纠错不能重新打开质检或定价流程。
+    if (handlers.correctDeviceInfo && [3, 4, 7, 8].includes(status)
+      && Number(device.confirm_status || 0) === 0 && Number(device.pay_status || 0) !== 1
+      && !Number(device.downstream_erp_asset_id || 0) && device.info_correction?.allowed !== false) {
+      actions.push({ key: 'correct_info', label: '修改资料', icon: Edit, handler: () => handlers.correctDeviceInfo!(device) })
+    }
 
     // 待确认状态下可重新定价 / 拒绝
     if (status === 4) {

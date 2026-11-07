@@ -142,6 +142,7 @@ interface Props {
   isMobileOrderExpanded: (orderId: number | string) => boolean;
   toggleMobileOrderExpand: (orderId: number | string) => void;
   checkDevice: (row: any) => void;
+  correctDeviceInfo?: (row: any) => void;
   priceDevice: (row: any) => void;
   batchRecycleDevice: (id: number | string) => void;
   batchReturnDevice: (id: number | string) => void;
@@ -169,6 +170,7 @@ const props = defineProps<Props>();
 // 设备操作主次：主行动 + 更多动作（与桌面表格共用同一逻辑）
 const { getDevicePrimaryAction, getDeviceMoreActions } = useDeviceRowActions({
   checkDevice: props.checkDevice,
+  correctDeviceInfo: props.correctDeviceInfo,
   priceDevice: props.priceDevice,
   batchRecycleDevice: props.batchRecycleDevice,
   batchReturnDevice: props.batchReturnDevice,

@@ -239,6 +239,7 @@ interface Props {
   handleExpandChange: (row: any, expandedRows: any[]) => void;
   handleDeviceSelectionChange: (val: any[], orderId: string | number) => void;
   checkDevice: (row: any) => void;
+  correctDeviceInfo?: (row: any) => void;
   priceDevice: (row: any) => void;
   batchRecycleDevice: (id: number | string) => void;
   batchReturnDevice: (id: number | string) => void;
@@ -281,6 +282,7 @@ const emit = defineEmits(['refresh'])
 // 设备操作主次：主行动 + 更多动作（单一真源，桌面/移动复用）
 const { getDevicePrimaryAction, getDeviceMoreActions } = useDeviceRowActions({
   checkDevice: props.checkDevice,
+  correctDeviceInfo: props.correctDeviceInfo,
   priceDevice: props.priceDevice,
   batchRecycleDevice: props.batchRecycleDevice,
   batchReturnDevice: props.batchReturnDevice,

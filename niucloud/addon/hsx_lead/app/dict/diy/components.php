@@ -34,7 +34,7 @@ $groups=['HSX_LEAD_COMPONENT'=>['title'=>'商户协作','list'=>[
     ],
 ]]];
 $sections=[
-    'LeadProfileIdentity'=>['title'=>'门店身份','path'=>'edit-lead-profile-identity','value'=>['title'=>'我的门店','showTitle'=>0,'showRegion'=>1,'showGrade'=>1,'buttonText'=>'门店资料','secondaryText'=>'门店成员','outgoingText'=>'找门店','incomingText'=>'找客户']],
+    'LeadProfileIdentity'=>['title'=>'门店身份','path'=>'edit-lead-profile-identity','value'=>['title'=>'我的门店','showTitle'=>0,'identityStyle'=>'store','showRegion'=>1,'showGrade'=>1,'showMemberNo'=>1,'showBalance'=>1,'showSettings'=>1,'showStats'=>1,'buttonText'=>'门店资料','secondaryText'=>'门店成员','outgoingText'=>'找门店','incomingText'=>'找客户']],
     'LeadProfileTools'=>['title'=>'消息与偏好','path'=>'edit-lead-profile-tools','value'=>['title'=>'消息与偏好','showNotice'=>1,'showFeedback'=>1,'noticeText'=>'工单通知','feedbackText'=>'触感反馈',
         'showProfile'=>0,'showCapability'=>0,'showInventory'=>0,'showConnection'=>0,'showMembers'=>0,'profileText'=>'门店资料','capabilityText'=>'交付能力','inventoryText'=>'我的货盘','connectionText'=>'ERP连接','membersText'=>'门店成员',
         'profileImage'=>'','capabilityImage'=>'','inventoryImage'=>'','connectionImage'=>'','membersImage'=>'','noticeImage'=>'']],

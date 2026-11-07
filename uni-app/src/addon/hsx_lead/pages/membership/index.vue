@@ -60,10 +60,11 @@ import { entityAccounts, entityExpiry, entityLevel, entityPageUrl, membershipPag
 import { backCooperationTask } from '../../utils/cooperation-navigation'
 import { cooperationButtonStyle } from '../../utils/mobile-ui'
 import { membershipSkin, membershipSkinVars } from '../../utils/membership-skin'
+import { cooperationPaymentReplacementId, cooperationPaymentReplacementMatches } from '../../utils/cooperation-payment-orders'
 const state = useEntityPage(entityMembership), summary = state.data, selected = ref(''), cycle = ref(''), buyExperience = ref(false), quote = ref<CoopRow>({}), quoteError = ref(''), quoting = ref(false), order = ref<CoopRow>({}), paymentMessage = ref(''), checking = ref(false), closing = ref(false), recovering = ref(false), orderCheckError = ref(''), orderCheckKind = ref(''), payRef = ref<any>(null)
 const orderReadFailed = computed(() => !!order.value.id && !!orderCheckError.value)
 const tiers = computed<CoopRow[]>(() => (Array.isArray(summary.value.tiers) ? summary.value.tiers : []).filter((tier: CoopRow) => !!entityLevel(tier.code))), chosen = computed(() => tiers.value.find(tier => tier.code === selected.value)), selectedIndex = computed(() => Math.max(0, tiers.value.findIndex(tier => tier.code === selected.value))), paymentLocked = computed(() => !!order.value.id && (orderReadFailed.value || !!order.value.requires_manual_review || !['closed', 'refunded', 'paid'].includes(String(order.value.status)))), cashierReturn = computed(() => `${membershipPageUrl}?payment_order_id=${Number(order.value.id || 0)}`)
-const mainLabel = computed(() => orderReadFailed.value ? '重新核对付款单' : order.value.requires_manual_review ? '已收款，需平台核对' : summary.value.cost_review_required ? '款项待核对' : order.value.membership_refund_status === 'refunded' || order.value.status === 'refunded' ? '退款已确认，返回' : order.value.status === 'unpaid' && order.value.quote_expired ? '原报价已过期' : order.value.id && order.value.status === 'unpaid' ? '继续原单付款' : order.value.status === 'paid' ? '支付已确认，返回' : depositFrozen.value ? '协作暂停，请核对押金申请' : chosen.value?.experience_eligible === false && !quote.value.can_purchase ? '经验未达标' : summary.value.level_code === selected.value && summary.value.active ? '确认续费' : summary.value.active && summary.value.level_code ? '确认补差升级' : '确认开通')
+const mainLabel = computed(() => orderReadFailed.value ? '重新核对付款单' : order.value.requires_manual_review ? '已收款，需平台核对' : summary.value.cost_review_required ? '款项待核对' : order.value.membership_refund_status === 'refunded' || order.value.status === 'refunded' ? '退款已确认，返回' : order.value.status === 'closed' ? '付款单已关闭，返回' : order.value.status === 'unpaid' && order.value.quote_expired ? '原报价已过期' : order.value.id && order.value.status === 'unpaid' ? '继续原单付款' : order.value.status === 'paid' ? '支付已确认，返回' : depositFrozen.value ? '协作暂停，请核对押金申请' : chosen.value?.experience_eligible === false && !quote.value.can_purchase ? '经验未达标' : summary.value.level_code === selected.value && summary.value.active ? '确认续费' : summary.value.active && summary.value.level_code ? '确认补差升级' : '确认开通')
 const cycles = computed(() => membershipCycles(chosen.value)), displayBenefits = computed(() => membershipBenefits(chosen.value || summary.value))
 const experienceOffer = computed(() => chosen.value?.experience_purchase_enabled === true && Number(chosen.value?.experience_remaining) > 0)
 const displayedCosts = computed(() => membershipCosts(order.value.id ? order.value : quote.value))
@@ -122,14 +123,24 @@ async function verifyPayment() {
     if (!id || checking.value || !summary.value.merchant_id) return false
     checking.value = true
     try {
-        const response: any = await cooperationOrder(id)
-        if (!pageActive || !state.current(who) || id !== Number(order.value.id)) return false
-        const value = validateOrder(response?.data || {}, id); order.value = value; selected.value = value.level_code; cycle.value = value.cycle; buyExperience.value = value.buy_experience === true; orderCheckError.value = ''; orderCheckKind.value = ''
+        let target = id, previous: CoopRow | null = null, value: CoopRow = {}; const seen = new Set<number>()
+        for (let hop = 0; hop < 6; hop++) {
+            if (seen.has(target)) throw new Error('会员付款单替换关系异常，请联系平台核对'); seen.add(target)
+            const response: any = await cooperationOrder(target)
+            if (!pageActive || !state.current(who) || id !== Number(order.value.id)) return false
+            value = validateOrder(response?.data || {}, target)
+            if (previous && !cooperationPaymentReplacementMatches(previous, value)) throw new Error('调整后会员单与原门店或套餐不一致，当前未打开收银台')
+            const replacement = cooperationPaymentReplacementId(value)
+            if (!replacement || value.requires_manual_review) break
+            previous = value; target = replacement
+            if (hop === 5) throw new Error('会员付款单多次调整，请联系平台核对最新订单')
+        }
+        order.value = value; selected.value = value.level_code; cycle.value = value.cycle; buyExperience.value = value.buy_experience === true; orderCheckError.value = ''; orderCheckKind.value = ''
         if (value.requires_manual_review) { paymentMessage.value = value.review_message || '款项已收到，权益需平台核对，请勿重复付款'; return false }
         if (value.membership_refund_status === 'refunded') { paymentMessage.value = '原单已退款，请核对当前门店权益。'; await state.refresh(); return true }
         if (value.status === 'paid') { paymentMessage.value = '支付已确认，门店权益已更新'; await state.refresh() }
-        else if (value.status === 'unpaid') paymentMessage.value = value.quote_expired ? '原报价已过期，不能继续付款。请取消这笔待支付订单，再核对新的费用。' : '原单尚未确认支付，可继续原单付款，或刷新核对。'
-        else if (value.status === 'closed' || value.status === 'refunded') { paymentMessage.value = value.status === 'refunded' ? '原单已退款，请核对当前门店权益。' : '原单已关闭，重新开通需再次确认费用。'; requestId = ''; requestKey = ''; await state.refresh(); await loadQuote() }
+        else if (value.status === 'unpaid') paymentMessage.value = value.quote_expired ? '原报价已过期，不能继续付款。请取消这笔待支付订单，再核对新的费用。' : previous ? '平台已调整服务费，请核对下方新付款单及费用，再继续支付。' : '原单尚未确认支付，可继续原单付款，或刷新核对。'
+        else if (value.status === 'closed' || value.status === 'refunded') { paymentMessage.value = value.status === 'refunded' ? '原单已退款，请核对当前门店权益。' : '原单已关闭，不会自动创建或恢复原价格付款单。需要重新开通时请返回选择套餐。'; requestId = ''; requestKey = ''; await state.refresh() }
         else { paymentMessage.value = '原单状态待核实，暂不重复付款，请联系平台核对。'; orderCheckError.value = paymentMessage.value; orderCheckKind.value = 'unknown' }
         return value.status === 'paid' || (value.status === 'unpaid' && !value.quote_expired)
     } catch (cause) { if (pageActive && state.current(who) && id === Number(order.value.id)) { const message = coopError(cause, '连接未完成，请重新核对原付款单，勿重复付款'); orderCheckError.value = message; orderCheckKind.value = /记录不存在|付款订单不存在|不属于(?:本站|当前站点|当前会员)/.test(message) ? 'missing' : 'unknown'; paymentMessage.value = orderCheckKind.value === 'missing' ? message + '。请重新核对，系统不会直接重新下单。' : message }; return false }
@@ -162,7 +173,7 @@ async function submitMembershipPayment() {
     if (orderReadFailed.value) { await retryPaymentOrder(); return }
     if (order.value.status === 'unpaid' && order.value.quote_expired) return
     if (depositFrozen.value && !order.value.id) return
-    if (order.value.id && (order.value.status === 'paid' || order.value.status === 'refunded' || order.value.membership_refund_status === 'refunded')) { backCooperationTask(); return }
+    if (order.value.id && (order.value.status === 'paid' || order.value.status === 'closed' || order.value.status === 'refunded' || order.value.membership_refund_status === 'refunded')) { backCooperationTask(); return }
     if (order.value.id && order.value.status === 'unpaid') { const who = state.identity(), verified = await verifyPayment(); if (verified && state.current(who) && order.value.status === 'unpaid' && !order.value.requires_manual_review && !order.value.quote_expired && pageActive) payRef.value?.open('hsx_lead_cooperation', Number(order.value.id), cashierReturn.value); return }
     if (!quoteMatches(quote.value, Number(summary.value.merchant_id), selected.value, cycle.value, buyExperience.value)) { await loadQuote(); return }
     const snapshot = { ...quote.value }, key = `${summary.value.merchant_id}:${selected.value}:${cycle.value}:${snapshot.quote_token}`
@@ -183,10 +194,15 @@ async function closeOrder() {
     if (!Number.isSafeInteger(id) || id <= 0 || !current()) return
     closing.value = true
     try {
-        const confirmed = await new Promise<boolean>(resolve => uni.showModal({ title: '取消待支付订单？', content: '仅取消这笔未支付的开通或续费订单，不影响现有有效权益。若支付结果待核实，系统会阻止取消。', confirmText: '确认取消', success: result => resolve(!!result.confirm), fail: () => resolve(false) }))
+        const confirmed = await new Promise<boolean>(resolve => uni.showModal({ title: order.value.close_requires_check ? '核对支付后取消？' : '取消待支付订单？', content: '仅取消这笔未支付的开通或续费订单，不影响现有有效权益。系统会先核对原支付，已收款不会取消，结果不明时保留原单。', confirmText: order.value.close_requires_check ? '核对后取消' : '确认取消', success: result => resolve(!!result.confirm), fail: () => resolve(false) }))
         if (!confirmed || !current()) return
         const result = await state.write(() => { if (!current()) throw new Error('原付款单或登录已变化，请重新核对，未执行取消'); return entityCloseOrder(id) })
-        if (result && current()) { order.value = {}; requestId = ''; requestKey = ''; paymentMessage.value = ''; await refresh() }
+        if (result && current()) {
+            const value = validateOrder(result, id); order.value = value; requestId = ''; requestKey = ''
+            paymentMessage.value = value.close_message || (value.status === 'closed' ? '付款单已取消，不会自动创建新付款单。' : value.status === 'paid' ? '原付款已确认，不能取消，请勿重复支付。' : '取消结果尚未确认，请刷新核对原单。')
+            if (value.status === 'closed' && cooperationPaymentReplacementId(value)) await verifyPayment()
+            else await state.refresh()
+        }
     } finally { closing.value = false }
 }
 function checkedDeposit(value: CoopRow) {

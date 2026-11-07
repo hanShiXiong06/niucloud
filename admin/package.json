@@ -5,7 +5,10 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "build": "vite build && node publish.cjs",
+        "build": "node scripts/build-safe.mjs",
+        "build:check": "node scripts/build-safe.mjs --check",
+        "build:compile": "node scripts/build-safe.mjs --compile-only",
+        "test:build-safety": "node --test tests/build-policy.test.mjs tests/build-safe.test.mjs tests/install-build-safety.test.mjs tests/publish-safe.test.cjs",
         "preview": "vite preview"
     },
     "dependencies": {

@@ -39,7 +39,7 @@ watch(() => formData.value, () => {
     value.value = formData.value
 }, { deep: true })
 
-const modules: any = import.meta.glob('@/**/*.vue')
+import { dynamicComponentModules as modules } from '@/utils/dynamic-components'
 getGiftDict().then(({ data }) => {
     Object.keys(data).forEach((key: string) => {
         data[key].component && (data[key].component = defineAsyncComponent(modules[data[key].component]))

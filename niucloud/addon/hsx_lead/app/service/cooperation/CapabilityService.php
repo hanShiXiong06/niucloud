@@ -2,9 +2,9 @@
 declare(strict_types=1);
 namespace addon\hsx_lead\app\service\cooperation;
 
-use addon\hsx_lead\app\service\{Context,CatalogService};
-use app\service\core\sys\CoreConfigService;
+use addon\hsx_lead\app\service\{Context,CatalogConfigStorage};
 use core\exception\CommonException;
+use think\facade\Db;
 
 /** Declared delivery skills are not inventory. Uses the framework configuration store. */
 final class CapabilityService
@@ -18,13 +18,34 @@ final class CapabilityService
         return [];
     }
 
-    public function businesses(int $merchantId): array
+    /** Live presentation/matching must not reinterpret a saved brand as a model/operator. */
+    public function businesses(int $merchantId,?array $config=null): array
     {
-        $value=(new CoreConfigService())->getConfigValue($this->context->site,self::PREFIX.$merchantId);
-        if (!is_array($value)) return [];
+        $definitions=array_column(($config??(new ConfigService($this->context))->get())['businesses'],null,'key');
+        $result=[];
+        foreach($this->savedBusinesses($merchantId) as $entry) {
+            $business=$definitions[$entry['business_type']??'']??null;
+            if (!$business) continue;
+            $items=self::itemsForDimension($entry,(string)$business['dimension']);
+            if ($items) $result[]=array_replace($entry,['items'=>$items,'option_ids'=>array_column($items,'id')]);
+        }
+        return $result;
+    }
+
+    /** A frozen lead adds its own dimension check after the live-business projection. */
+    public static function itemsForDimension(array $entry,string $dimension): array
+    {
+        return array_values(array_filter($entry['items']??[],static fn($item):bool=>is_array($item)&&($item['dimension']??null)===$dimension));
+    }
+
+    /** Keep persisted declarations intact for disabled-business retries; never migrate on a read. */
+    private function savedBusinesses(int $merchantId): array
+    {
+        $value=CatalogConfigStorage::read($this->context->site,self::PREFIX.$merchantId);
         if (array_key_exists('business_capabilities',$value)) return is_array($value['business_capabilities'])?$value['business_capabilities']:[];
         // Existing declarations are readable as second-hand capability, never mass-migrated.
         $items=array_values(array_filter($value['models']??[],static fn($row):bool=>is_array($row)&&is_string($row['id']??null)&&is_string($row['title']??null)&&is_string($row['brand']??null)));
+        $items=array_map(static fn(array $item):array=>array_replace($item,['dimension'=>'model']),$items);
         return $items?[['business_type'=>'purchase','option_ids'=>array_column($items,'id'),'items'=>$items]]:[];
     }
 
@@ -35,16 +56,28 @@ final class CapabilityService
             if (array_key_exists('manual_models',$input)) throw new CommonException('请通过业务能力选项设置可承接范围，旧型号字段仅供读取');
             return;
         }
+        Db::transaction(function()use($merchantId,$input,$admin):void {
+            // Also protect direct capability saves, not only profile saves.
+            // Keep the same lock order as profile/config/catalog mutations.
+            if (!Db::name('site')->where('site_id',$this->context->site)->lock(true)->field('site_id')->find()) throw new CommonException('站点不存在，未保存交付能力');
+            $this->saveLocked($merchantId,$input,$admin);
+        });
+        CatalogConfigStorage::evict($this->context->site,self::PREFIX.$merchantId);
+    }
+
+    private function saveLocked(int $merchantId,array $input,bool $admin): void
+    {
         if ($admin) {$this->context->manager();$merchant=\addon\hsx_lead\app\support\Data::row('merchant',$this->context->site,$merchantId);}
         else {$merchant=$this->context->merchant();if ((int)$merchant['id']!==$merchantId) throw new CommonException('只能设置当前门店的业务能力');}
         if ((int)$merchant['status']!==1||(int)Store::partner($this->context->site,$merchantId)['blocked_at']>0) throw new CommonException('已停止合作的门店不能设置业务能力');
         $selected=$input['business_capabilities'];
         if (!is_array($selected)||!\addon\hsx_lead\app\support\PhpRuntime::isList($selected)||count($selected)>30) throw new CommonException('业务能力格式错误，最多30项业务');
-        $service=new BusinessService($this->context);$capabilities=[];$seen=[];$prior=array_column($this->businesses($merchantId),null,'business_type');
+        $service=new BusinessService($this->context);$config=(new ConfigService($this->context))->get();
+        $capabilities=[];$seen=[];$prior=array_column($this->savedBusinesses($merchantId),null,'business_type');
         foreach($selected as $entry) {
             if (!is_array($entry)) throw new CommonException('业务能力格式错误');
             $key=BusinessService::key($entry['business_type']??null,'业务标识');if (isset($seen[$key])) throw new CommonException('同一业务不能重复登记');$seen[$key]=true;
-            $business=$service->definition($key,false);$ids=$entry['option_ids']??null;
+            $business=$service->definition($key,false,$config);$ids=$entry['option_ids']??null;
             if (!$business['enabled']) {
                 if (!is_array($ids)||!\addon\hsx_lead\app\support\PhpRuntime::isList($ids)||count($ids)>5000) throw new CommonException('业务能力选项格式错误');
                 foreach($ids as $optionId) if (!is_string($optionId)||strlen($optionId)>100) throw new CommonException('业务能力选项ID格式错误');
@@ -54,7 +87,10 @@ final class CapabilityService
             } else $items=$service->resolve($business,$ids,true);
             if ($items) $capabilities[]=['business_type'=>$key,'option_ids'=>array_column($items,'id'),'items'=>$items];
         }
-        $config=new CoreConfigService();$old=$config->getConfigValue($this->context->site,self::PREFIX.$merchantId);
-        $config->setConfig($this->context->site,self::PREFIX.$merchantId,array_replace(is_array($old)?$old:[],['business_capabilities'=>$capabilities,'updated_at'=>time()]));
+        $key=self::PREFIX.$merchantId;
+        $old=CatalogConfigStorage::read($this->context->site,$key);
+        $stored=array_replace($old,['business_capabilities'=>$capabilities,'updated_at'=>time()]);
+        CatalogConfigStorage::write($this->context->site,$key,$stored);
+        if ((CatalogConfigStorage::read($this->context->site,$key)['business_capabilities']??null)!==$capabilities) throw new CommonException('交付能力保存回读不完整，当前事务已停止，请重新核对');
     }
 }

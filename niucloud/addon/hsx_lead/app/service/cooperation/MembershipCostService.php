@@ -11,6 +11,7 @@ use think\facade\Db;
 final class MembershipCostService
 {
     public const SCHEMA='hsx_lead.membership_cost.v1';
+    public const PRICE_OVERRIDE_SCHEMA='hsx_lead.membership_service_price_override.v1';
     public const FIELDS=['cost_schema','deposit_required','deposit_balance','deposit_amount','service_full_amount','service_credit_amount','service_amount','experience_purchase_enabled','experience_unit_price','buy_experience','experience_quantity','experience_amount','promotion_base_amount'];
     public static function flag($value,string $label): bool
     {
@@ -48,6 +49,38 @@ final class MembershipCostService
         $expected=self::calculate($tier,['price'=>$rule['service_full_amount']],['value'=>$rule['experience_value']??'0.00'],['balance'=>$rule['deposit_balance']],self::flag($rule['buy_experience']??null,'购买经验'),Rules::cents($rule['service_credit_amount']));
         foreach(self::FIELDS as $key)if(($rule[$key]??null)!==$expected[$key])throw new CommonException('会员分项费用与原报价不一致：'.$key);
         if(Rules::cents($rule['full_amount'])!==Rules::cents($rule['service_full_amount'])||Rules::cents($rule['credit_amount'])!==Rules::cents($rule['service_credit_amount'])||Rules::cents((string)$order['amount'])!==Rules::cents($expected['payable_amount'])||($rule['payable_amount']??null)!==$expected['payable_amount'])throw new CommonException('会员三项费用合计与原实付不一致');
+        self::assertPriceOverride($rule);
+    }
+    /** A stable source proof excludes closure/retry/promotion processing metadata. */
+    public static function pricingFingerprint(array $order,array $rule): string
+    {
+        $fields=array_merge(self::FIELDS,['schema_version','purpose','level_code','level_id','rank','display_rank','level_name','cycle','cycle_name','months','entitlement_months','account_limit','unlimited','is_entry','experience_required','experience_value','experience_remaining','capabilities','benefits','period_start_at','period_end_at','quoted_at','full_amount','credit_amount','payable_amount','credit_sources','base_fingerprint','catalog_fingerprint','cost_fingerprint','price_override']);
+        $facts=[];foreach($fields as$key)if(array_key_exists($key,$rule))$facts[$key]=$rule[$key];
+        return hash('sha256',Data::json([(int)$order['site_id'],(int)$order['id'],(int)$order['merchant_id'],(int)$order['member_id'],(string)$order['purpose'],(string)$order['amount'],$facts]));
+    }
+    /** Only service revenue changes. Deposit, points, credit and quote expiry stay frozen. */
+    public static function repriceService(array $order,array $rule,string $serviceAmount,array $provenance): array
+    {
+        self::assertSnapshot($order,$rule);$service=Rules::cents(self::money($serviceAmount,'调整后服务费'));
+        if($service===Rules::cents($rule['service_amount']))throw new CommonException('服务费未变化，无需创建替换付款单');
+        $credit=Rules::cents($rule['service_credit_amount']);$full=$service+$credit;$total=$service+Rules::cents($rule['deposit_amount'])+Rules::cents($rule['experience_amount']);
+        if($full>9999999999||$total<=0||$total>9999999999)throw new CommonException('调整后服务费或合计金额超出可支付范围');
+        $uid=$provenance['operator_uid']??0;$reason=trim((string)($provenance['reason']??''));$at=$provenance['at']??time();
+        if(!is_int($uid)||$uid<=0||$reason===''||mb_strlen($reason)>500||!is_int($at)||$at<=0||$at>time()+60)throw new CommonException('请完整记录改价操作人、原因和时间');
+        $next=$rule;foreach(['promotion_snapshot','promotion_review_required','promotion_review_message','requires_manual_review','review_message','closure','close_check','pricing_intent','reprices_order_id','replacement_order_id','replacement_order_no','pricing_request_id','refund_receipts','membership_refund_allocations','membership_refund_status']as$key)unset($next[$key]);
+        $next['price_override']=['schema_version'=>self::PRICE_OVERRIDE_SCHEMA,'source_order_id'=>(int)$order['id'],'operator_uid'=>$uid,'reason'=>$reason,'at'=>$at,
+            'source_amount'=>(string)$order['amount'],'source_service_amount'=>$rule['service_amount'],'service_amount'=>Rules::amount($service),
+            'catalog_full_amount'=>$rule['price_override']['catalog_full_amount']??$rule['service_full_amount'],'source_snapshot_fingerprint'=>self::pricingFingerprint($order,$rule)];
+        $next['service_amount']=Rules::amount($service);$next['service_full_amount']=Rules::amount($full);$next['full_amount']=Rules::amount($full);$next['promotion_base_amount']=Rules::amount($service);$next['payable_amount']=Rules::amount($total);
+        self::assertSnapshot(array_replace($order,['amount'=>Rules::amount($total)]),$next);
+        return ['amount'=>Rules::amount($total),'rule'=>$next];
+    }
+    private static function assertPriceOverride(array $rule): void
+    {
+        if(!array_key_exists('price_override',$rule))return;$override=$rule['price_override'];
+        if(!is_array($override)||($override['schema_version']??'')!==self::PRICE_OVERRIDE_SCHEMA||!is_int($override['source_order_id']??null)||$override['source_order_id']<=0||!is_int($override['operator_uid']??null)||$override['operator_uid']<=0||!is_string($override['reason']??null)||trim($override['reason'])===''||mb_strlen($override['reason'])>500||!is_int($override['at']??null)||$override['at']<=0||!is_string($override['source_snapshot_fingerprint']??null)||!preg_match('/^[a-f0-9]{64}$/D',$override['source_snapshot_fingerprint']))throw new CommonException('会员服务费调整凭据不完整');
+        foreach(['source_amount','source_service_amount','service_amount','catalog_full_amount']as$key)if(!is_string($override[$key]??null))throw new CommonException('会员服务费调整金额凭据缺失');
+        if(Rules::cents($override['source_amount'])<=0||Rules::cents($override['catalog_full_amount'])<=0||Rules::cents($override['service_amount'])!==Rules::cents($rule['service_amount'])||Rules::cents($override['source_service_amount'])===Rules::cents($override['service_amount']))throw new CommonException('会员服务费调整与实付明细不一致');
     }
     /** Refund allocation must be explicit, or a genuine full refund. Never guess deposit first. */
     public static function refundedComponents(array $order,array $rule,array $refunds): array

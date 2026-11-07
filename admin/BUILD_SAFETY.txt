@@ -1,0 +1,51 @@
+管理端服务器安全构建，2026-11-07
+
+更新方法（管理端根目录，不是src）
+cd /www/wwwroot/p.hsxbk.top/niucloud-master/admin
+node scripts/install-build-safety.mjs
+npm run build:check
+
+只有Linux检查显示内存、CPU、Swap、磁盘实际限额通过，才继续：
+npm run build
+只编译不发布：npm run build:compile
+
+安装器只改package.json构建相关scripts，备份原文件，不替换dependencies、其他scripts或你的Vite自定义配置。
+遇到原有prebuild/postbuild等生命周期脚本会拒绝安装，先核对，避免旁路任务无保护运行。
+无需SQL、无需卸载插件、无需安装新依赖。不要用npx vite build绕过保护。
+
+要求Node>=18.17、Linux systemd+cgroup v2、cpu/memory/io控制器和可识别的本地块磁盘。
+不支持或不能核实实际限额时拒绝编译，不自动降级无保护运行。
+root使用系统service，非root尝试用户service；权限不够会明确报错。
+macOS/Windows本地分支不宣称Linux硬保护。
+
+默认总构建内存：物理/容器内存一半、4096MB、当前可用内存留余量，三者取最小值。
+Node堆低于总额度至少512MiB，为native/esbuild/线程/文件缓存留空间；不足3072MB不启动。
+在相同3776MiB总额度下，新堆额度3264MiB（旧3008MiB），只改变组内分配，不扩大MemoryMax。
+--memory-mb只能在安全预算以内调整，不自动放大。
+本次构建禁用Swap，不swapoff系统Swap，不改全局swappiness、不清全局缓存。
+4核机器默认最多合计2核CPU；低调度优先级；磁盘读50MiB/s、写20MiB/s、读500IOPS、写250IOPS。
+worker启动Vite之前读回memory.max/high、swap.max、cpu.max、oom.group、oom_score_adj、io.max；不符即退出。
+检查模式还核对子进程是否继承隔离。LimitCORE=0+CoredumpFilter=0过滤崩溃转储内存，30分钟超时；OOM优先退出本次构建，按进程组清理。
+Ctrl+C/SSH挂断会尝试停止该systemd单元。单份日志最多32MiB，磁盘剩余不足1GiB不启动。
+
+同一管理端只能有一个构建；原PID退出不等于worker退出，还要确认systemd单元停止。
+状态不明保留锁。不要直接删build.lock重试；先看owner.json里的PID/unit并核实状态。
+原锁回收有独立原子锁与token复查，不会让两份构建共用一个失效锁。
+
+Vite先编译到admin/.build-safe/runs/<编号>/dist；成功后提升到admin/dist，旧dist保留在本次previous-dist。
+发布器先校验/准备文件，新hash资源增量加入，最后原子替换index.html；旧hash资源保留。
+不删除整个niucloud/public/admin。失败/取消只清理本次新建内容。
+新静态目录/文件为755/644，日志/计划为私有权限，避免root打包后Nginx读不到。
+同名非hash资源若内容不同会拒绝覆盖并提示文件名，不静默修改旧页面仍使用的资源。
+
+每次打印的日志目录中：
+plan.json=预算与unit；limits.json=实际隔离额度；build.log=日志；progress.json=阶段与内存峰值；
+result.json=checked/guarded/compiled/published；process-result.json与unit-result.txt=退出状态。
+V8崩溃或cgroup OOM时可能没有最终result，以退出状态、build.log与最后progress联合核对。
+启动成功不等于构建成功，构建成功不等于发布成功。旧产物/日志不自动删除，需按需维护。
+
+gzip体积统计已关闭，但esbuild压缩保留；不改变Nginx的HTTP gzip。
+原线上日历deep括号空格告警是另一问题，本地未找到该源文件，不冒称已替换。
+本地已做真实管理端编译和锁、失败/取消、原子发布、权限回归；开发机为macOS。
+用户已反馈Linux限额读回通过，但6187模块版本仍触发Node堆上限，需结合实际progress峰值继续处理。
+本保护不是对其他服务、云盘故障或任意主机问题的绝对保证；不能把本地模拟称作Linux OOM压测通过。

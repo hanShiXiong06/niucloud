@@ -26,24 +26,25 @@ final class PartnerService
         $member=Db::name('member')->where('site_id',$this->context->site)->where('member_id',$memberId)->where('status',1)->where('is_del',0)->where('delete_time',0)->find();
         if (!$member) throw new CommonException('请先登录本站有效会员');
         $m=TeamService::resolve($this->context,false);
-        if (!$m) return ['profile'=>null,'config'=>$config,'stats'=>[],'wallet'=>null,'providers'=>(new ProviderChannelService($this->context->site))->available(),'needs_onboarding'=>true,'pending_entity'=>(new TeamService($this->context))->pending()];
+        if (!$m) return ['current_member_id'=>$memberId,'profile'=>null,'config'=>$config,'stats'=>[],'wallet'=>null,'providers'=>!empty($config['erp_visible'])?(new ProviderChannelService($this->context->site))->available():[],'needs_onboarding'=>true,'pending_entity'=>(new TeamService($this->context))->pending()];
         $profile=$this->present($m,(bool)$m['is_owner']);$id=(int)$m['id'];
         $profile['team_role']=$m['team_role'];$profile['is_owner']=(bool)$m['is_owner'];
         $profile['membership']=(new EntityMembershipService($this->context))->summary();
-        $profile['permissions']=['can_manage_members'=>(bool)$m['is_owner'],'can_manage_billing'=>(bool)$m['is_owner'],'can_manage_erp'=>(bool)$m['is_owner'],'can_withdraw'=>(bool)$m['is_owner']];
+        $profile['permissions']=['can_manage_members'=>(bool)$m['is_owner'],'can_manage_billing'=>(bool)$m['is_owner'],'can_manage_erp'=>(bool)$m['is_owner']&&!empty($config['erp_visible']),'can_withdraw'=>(bool)$m['is_owner']];
         $out=Store::query('collaboration',$this->context->site)->where('publisher_id',$id);
         $in=Store::query('collaboration',$this->context->site)->where('receiver_id',$id);
         $stats=['outgoing'=>(int)(clone $out)->count(),'incoming'=>(int)(clone $in)->count(),'selecting'=>(int)(clone $out)->where('status','selecting')->count(),
             'assigned'=>(int)(clone $in)->where('status','assigned')->count(),'following'=>(int)(clone $in)->where('status','following')->count(),'unpaid'=>(int)(clone $in)->where('status','unpaid')->count()];
-        return ['profile'=>$profile,'config'=>$config,'stats'=>$stats,'wallet'=>$m['is_owner']?PaymentService::accountSummary($this->context->site,$memberId):null,
-            'providers'=>(new ProviderChannelService($this->context->site))->available(),'needs_onboarding'=>false];
+        return ['current_member_id'=>$memberId,'profile'=>$profile,'config'=>$config,'stats'=>$stats,'wallet'=>$m['is_owner']?PaymentService::accountSummary($this->context->site,$memberId):null,
+            'providers'=>!empty($config['erp_visible'])?(new ProviderChannelService($this->context->site))->available():[],'needs_onboarding'=>false];
     }
 
     public function saveProfile(array $input): array
     {
         $memberId=$this->context->memberId;if ($memberId<=0) throw new CommonException('请先使用会员身份登录');
         $region=Data::region($input);$phone=self::phone($input['mobile']??'');
-        $provider=Data::text($input,'provider',60);
+        $erpVisible=ConfigService::erpVisible($this->context->site);
+        $provider=$erpVisible?Data::text($input,'provider',60):'';
         if ($provider!=='') $provider=(new ProviderRegistry())->definition($provider)->key();
         $values=$region+['name'=>Data::text($input,'name',120,true),'contact_name'=>Data::text($input,'contact_name',60,true),'mobile'=>$phone,'address'=>Data::text($input,'address',500,true)];
         $id=Db::transaction(function()use($memberId,$values,$provider,$phone,$input):int {
@@ -56,6 +57,9 @@ final class PartnerService
             if (!$old&&(new TeamService($this->context))->pending(true)) throw new CommonException('已有待确认的加入申请，请先撤销申请再创建门店');
             $requested=$old?Store::query('partner',$this->context->site)->where('merchant_id',$old['id'])->value('provider_requested'):null;
             if ($old && ($requested===null || $requested==='')) $requested=Data::query('connection',$this->context->site)->where('merchant_id',$old['id'])->value('provider');
+            // An old mobile form may still submit its previous ERP choice.
+            // Hiding the feature must not switch, erase or create a connection.
+            if(!ConfigService::erpVisible($this->context->site))$provider=(string)($requested??'');
             if ($provider!==''&&(!$old || (string)$requested!==$provider)) $policy->assertEnabled($provider);
             if ($old) {
                 $id=(int)$old['id'];$p=Store::partner($this->context->site,$id,true);
@@ -81,11 +85,15 @@ final class PartnerService
     public function present(array $merchant,bool $private=false,?array $inventory=null): array
     {
         $id=(int)$merchant['id'];$p=Store::partner($this->context->site,$id);$config=(new ConfigService($this->context))->get();
+        $erpVisible=!empty($config['erp_visible'])||$this->context->uid>0;
         $inventory=$inventory??$this->inventory($id,$config);$count=count($inventory);
         $membership=Rules::membershipState($p,$config);$rights=Rules::capabilities($p,$config,$membership);
         $available=!empty($config['enabled'])&&(int)$p['blocked_at']===0&&(int)$merchant['status']===1;
-        $manualModels=(new CapabilityService($this->context))->models($id);
-        $capabilities=(new CapabilityService($this->context))->businesses($id);$capabilityCount=array_sum(array_map(static fn($entry)=>count($entry['option_ids']),$capabilities));
+        // A large declared range is read once, not decoded twice just to
+        // derive the legacy second-hand summary and the business counts.
+        $capabilities=(new CapabilityService($this->context))->businesses($id,$config);$manualModels=[];
+        foreach($capabilities as $capability) if ($capability['business_type']==='purchase') {$manualModels=$capability['items'];break;}
+        $capabilityCount=array_sum(array_map(static fn($entry)=>count($entry['option_ids']),$capabilities));
         $businessNames=array_column($config['businesses'],'name','key');
         foreach($capabilities as &$capability) $capability['business_name']=$businessNames[$capability['business_type']]??$capability['business_type'];unset($capability);
         $row=Data::regionNames(array_intersect_key($merchant,array_flip(['id','name','contact_name','mobile','province_id','city_id','district_id','address','status','create_time','update_time'])));
@@ -97,7 +105,7 @@ final class PartnerService
             'membership'=>$membership,'membership_active'=>(bool)$membership['active'],'membership_tier'=>$membership['level_code'],
             'membership_expires_at'=>(int)$membership['expires_at'],'can_collaborate'=>$available&&($rights['can_publish']||$rights['can_accept']),
             'can_publish'=>$available&&$rights['can_publish'],'can_accept'=>$available&&$rights['can_accept'],
-            'can_view_inventory'=>$available&&$rights['can_view_inventory'],'capabilities'=>$rights,
+            'can_view_inventory'=>$available&&$rights['can_view_inventory']&&$erpVisible,'erp_visible'=>$erpVisible,'capabilities'=>$rights,
             'inventory_count'=>$count,'manual_models'=>$manualModels,'manual_model_count'=>count($manualModels),'business_capabilities'=>$capabilities,'business_capability_count'=>$capabilityCount,
             'capability_source'=>$rights['all_models']?'all_models':($count>0?($capabilityCount?'mixed':'erp'):($capabilityCount?'manual':'none')),
             'provider_requested'=>$p['provider_requested'],'match_models'=>[],
@@ -105,12 +113,13 @@ final class PartnerService
         if ($private) {
             $row+=array_intersect_key($p,array_flip(['block_reason','remark']));$row+=(new BusinessLicenseService($this->context))->ownSummary($merchant);
         }
-        if ($p['provider_requested']!=='') $row['provider_requested_name']=(new ProviderRegistry())->definition((string)$p['provider_requested'])->metadata()['name'];
+        if ($p['provider_requested']!=='') $row['provider_requested_name']=(new ProviderChannelService($this->context->site))->displayName((string)$p['provider_requested']);
         if ($conn) {
             $channel=(new ProviderChannelService($this->context->site))->enabled((string)$conn['provider']);
-            $row['connection']+=['provider_name'=>(new ProviderRegistry())->definition((string)$conn['provider'])->metadata()['name'],
+            $row['connection']+=['provider_name'=>(new ProviderChannelService($this->context->site))->displayName((string)$conn['provider']),
                 'channel_enabled'=>$channel,'channel_message'=>$channel?'':'本站已关闭该ERP渠道，采集暂停，账号和历史资料仍保留。'];
         }
+        if(!$erpVisible){$row['connection']=['connected'=>false];$row['provider_requested']='';unset($row['provider_requested_name']);}
         return $row;
     }
 

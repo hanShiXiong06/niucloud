@@ -11,7 +11,9 @@ let channel: any
 onLoad(() => { channel = (instance?.proxy as any)?.getOpenerEventChannel?.(); channel?.on('initialize', (options: Record<string, any>) => { title.value = String(options.title || '选择业务能力'); max.value = Math.max(0, Number(options.max) || 0); businessType.value = String(options.business_type || 'purchase'); selectionMode.value = options.selection_mode === 'single' ? 'single' : 'multiple'; bulkActions.value = options.allow_bulk === true; items.value = Array.isArray(options.items) ? options.items : []; ready.value = true }) })
 // Keep one update listener: the mini-program compiler otherwise lets v-model's
 // generated setter replace the callback that returns choices to the opener.
-function select(value: Record<string, any>[]) { items.value = value; channel?.emit('selected', value) }
+// The picker closes immediately after returning the choice. Updating its input
+// here would send thousands of leaves through the native bridge a second time.
+function select(value: Record<string, any>[]) { channel?.emit('selected', value) }
 </script>
 <style scoped>
 .catalog-page { height:calc(100vh - var(--window-top,0px) - var(--window-bottom,0px));min-height:0;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box; }

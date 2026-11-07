@@ -62,7 +62,8 @@ for(const relative of ['uni-app/components/cooperation/CoopPromotionPanel.vue','
     check(!/\b(?:window|document|localStorage|navigator)\s*\.|@prototype|shared\/state|D\.member|D\.reward/.test(source),relative+' does not import browser fixtures or a synthetic ledger')
 }
 const panel=read('uni-app/components/cooperation/CoopPromotionPanel.vue')
-check(panel.includes('/app/pages/member/apply_cash_out')&&panel.includes("'cashOutAccountType','commission'")&&!panel.includes('requestPayment'),'withdrawals reuse the framework commission UI, not a new payment channel')
+const incomePanel=read('uni-app/components/cooperation/CoopIncomePanel.vue')
+check(panel.includes('openIncome')&&incomePanel.includes('/app/pages/member/apply_cash_out')&&incomePanel.includes("'cashOutAccountType', 'commission'")&&!incomePanel.includes('requestPayment'),'unified income withdrawals reuse the framework commission UI, not a new payment channel')
 check(panel.includes('useShare')&&panel.includes('isStop:true')&&panel.includes('open-type="share"')&&panel.includes('restoreShare'),'invitations use framework sharing and restore earlier share context')
 check(panel.includes('position:sticky')&&panel.includes('bindConfirmed')&&panel.includes('ui.bind(inviterMid.value)'),'tabs remain sticky and invitation binding requires explicit local consent')
 check(!/模拟提现|本地模拟消息|本地原型|DEMO-MID|演示身份/.test(panel),'production panel has no demo withdrawal, notifications or role controls')

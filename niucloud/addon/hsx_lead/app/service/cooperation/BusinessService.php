@@ -106,6 +106,9 @@ final class BusinessService
                 $cleanOptions[]=['id'=>$id,'title'=>$title,'brand'=>isset($option['brand'])&&$option['brand']!==''?self::label($option['brand']):'','category_name'=>isset($option['category_name'])&&$option['category_name']!==''?self::label($option['category_name']):'','path'=>$path,'aliases'=>$aliases];
             }
             $clean=['key'=>$key,'name'=>self::label($row['name']??null),'enabled'=>self::flag($row['enabled']??false),'dimension'=>$dimension,'selection_mode'=>$mode,'selection_limit'=>Rules::demandLimit($row['selection_limit']??0),'commission_minimum'=>self::money($row['commission_minimum']??'0.00','成交最低协作费用',true),'fee_override'=>self::flag($row['fee_override']??false),'fields'=>$cleanFields,'options'=>$cleanOptions];
+            // An explicitly maintained empty directory must not borrow another
+            // business's models after the administrator removes its last item.
+            if (array_key_exists('catalog_configured',$row)) $clean['catalog_configured']=self::flag($row['catalog_configured']);
             if ($clean['fee_override']) {
                 // Validate even a currently disabled preset, without activating charging.
                 $clean['fee_percent']=Rules::amount(Rules::cents($row['fee_percent']??null));
@@ -130,7 +133,7 @@ final class BusinessService
     public function options(array $business): array
     {
         $rows=$business['options'];
-        if (!$rows&&$business['dimension']==='model') $rows=(new CatalogService($this->context))->directory()['items'];
+        if (!$rows&&$business['dimension']==='model'&&(($business['key']??'')==='purchase'||empty($business['catalog_configured']))) $rows=(new CatalogService($this->context))->directory()['items'];
         return array_map(static function(array $item)use($business):array {
             $path=$item['path']??array_values(array_filter([$item['category_name']??'',$item['brand']??'',$item['title']],static fn($v)=>$v!==''));
             return ['id'=>$item['id'],'title'=>$item['title'],'brand'=>$item['brand']??'','category_name'=>$item['category_name']??'','dimension'=>$business['dimension'],'path'=>$path,'aliases'=>$item['aliases']??[]];

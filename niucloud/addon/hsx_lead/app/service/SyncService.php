@@ -63,6 +63,7 @@ final class SyncService
             if (in_array($run['status'],['pending','running'],true)) {$run['stored_status']=$run['status'];$run['status']='paused';$run['message']=$run['paused_reason'];}
             $run['scheduler_required']=false;$run['can_advance']=false;
         }
+        if ((string)($run['error_message']??'')!=='') $run['error_message']=\addon\hsx_lead\app\support\ProviderPublicMessage::forReason((string)($run['error_code']??''));
         unset($run['cursor_json'],$run['summary_json']);
         return $run;
     }

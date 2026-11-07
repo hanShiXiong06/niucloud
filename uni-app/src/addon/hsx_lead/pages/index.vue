@@ -1,8 +1,7 @@
 <template>
-    <view class="lead-home" :style="themeColor()">
-        <loading-page :loading="diy.getLoading() && !timedOut" />
-        <view v-if="timedOut" class="lead-home-error"><u-icon name="wifi-off" size="36" color="#91a6c1" /><text>首页暂时没有加载出来</text><u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" text="重新加载" @click="retry" /></view>
-        <view v-show="!diy.getLoading()" :style="diy.pageStyle()"><diy-group ref="groupRef" :data="diy.data" /></view>
+    <view class="lead-home lead-diy-page" :style="themeColor()">
+        <CoopDiyPageStatus :loading="pageLoad.loading.value" :error="pageLoad.error.value" @retry="retry" />
+        <view v-show="pageLoad.ready.value" class="diy-template-wrap bg-index" :style="diy.pageStyle()"><diy-group ref="groupRef" :data="diy.data" /></view>
     </view>
 </template>
 <script setup lang="ts">
@@ -13,21 +12,22 @@ import { useShare } from '@/hooks/useShare'
 import { parseJsonValue } from '@/utils/json'
 import { redirect } from '@/utils/common'
 import diyGroup from '@/addon/components/diy/group/index.vue'
-import { cooperationButtonStyle } from '../utils/mobile-ui'
 import { applyCooperationDiyTitle } from '../utils/diy-title'
-const diy = useDiy({ name: 'DIY_HSX_LEAD_INDEX' }), groupRef = ref<any>(null), timedOut = ref(false)
+import { useCooperationDiyLoad } from '../composables/useCooperationDiyLoad'
+import CoopDiyPageStatus from '../components/cooperation/CoopDiyPageStatus.vue'
+const pageLoad = useCooperationDiyLoad('首页')
+const diy = useDiy({ name: 'DIY_HSX_LEAD_INDEX', ...pageLoad.requestOptions }), groupRef = ref<any>(null)
 const { setShare } = useShare()
-let timer: ReturnType<typeof setTimeout> | undefined
 let shown = false, disposed = false, entryRefresh: Promise<void> | null = null
-onLoad(() => { timer = setTimeout(() => { if (diy.getLoading()) timedOut.value = true },12000) })
 diy.onLoad()
+onLoad(options => { if (options?.mode === 'decorate') pageLoad.complete(); else pageLoad.start() })
 diy.onShow((data: any) => {
-    timedOut.value = false; if (timer) clearTimeout(timer)
+    if (!pageLoad.complete()) return
     // Match the framework's chosen-page mode as well as component decoration.
     if (!data.value && data.page) { redirect({ url:data.page, mode:'reLaunch' }); return }
     applyCooperationDiyTitle(unref(diy.data)); setShare(parseJsonValue(data.share,{})); groupRef.value?.refresh?.(); void refreshEntries()
 })
-diy.onHide(); diy.onUnload(); diy.onPageScroll()
+diy.onHide(() => pageLoad.pause()); diy.onUnload(); diy.onPageScroll()
 function retry() { uni.redirectTo({ url: '/addon/hsx_lead/pages/index' }) }
 function refreshEntries(): Promise<void> {
     // The child owns its initial onMounted read; only a later page return needs
@@ -44,8 +44,10 @@ function refreshEntries(): Promise<void> {
     })().finally(() => { entryRefresh = null })
     return entryRefresh
 }
-onBeforeUnmount(() => { disposed = true; if (timer) clearTimeout(timer) })
+onBeforeUnmount(() => { disposed = true; pageLoad.dispose() })
 </script>
 <style lang="scss" scoped>
-.lead-home{min-height:100vh;background:#fff}.lead-home-error{padding:180rpx 40rpx;display:flex;flex-direction:column;align-items:center;gap:30rpx;color:#718199;font-size:28rpx}.lead-home-error>u-button{width:300rpx}
+@import '@/styles/diy.scss';
+@import '../components/cooperation/cooperation-diy-page';
+.lead-home{min-height:100vh;background:#fff}
 </style>

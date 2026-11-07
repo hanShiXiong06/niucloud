@@ -258,6 +258,12 @@
             @updated="loadDetail"
         />
 
+        <DeviceInfoCorrectionPopup
+            v-model:visible="correctionPopupVisible"
+            :deviceData="currentDevice"
+            @saved="loadDetail"
+        />
+
         <OrderLogPopup
             v-model:visible="paymentLogsVisible"
             title="打款记录"
@@ -310,6 +316,7 @@ import PaymentConfirmPopup from './components/PaymentConfirmPopup.vue'
 import ConsignmentPopup from './components/ConsignmentPopup.vue'
 import ReturnDevicePopup from './components/ReturnDevicePopup.vue'
 import DeviceDetailPopup from './components/DeviceDetailPopup.vue'
+import DeviceInfoCorrectionPopup from './components/DeviceInfoCorrectionPopup.vue'
 import DeviceFlowCard from './components/DeviceFlowCard.vue'
 import OrderLogPopup from './components/OrderLogPopup.vue'
 import { isConsignedDevice, shouldShowConfirmStatus } from '@/addon/hsx_recycle/utils/device'
@@ -328,6 +335,7 @@ const paymentScopeChecking = ref(false)
 const consignmentPopupVisible = ref(false)
 const returnPopupVisible = ref(false)
 const deviceDetailVisible = ref(false)
+const correctionPopupVisible = ref(false)
 const paymentLogsVisible = ref(false)
 const noticeLogsVisible = ref(false)
 const expressTrackVisible = ref(false)
@@ -638,6 +646,12 @@ const getDeviceActions = (device: any) => {
         actions.push({ label: status === 3 ? '定价' : '重新定价', type: 'price', primary: status === 3 })
     }
 
+    if ([3, 4, 7, 8].includes(status) && Number(device.confirm_status || 0) === 0
+        && Number(device.pay_status || 0) !== 1 && !Number(device.downstream_erp_asset_id || 0)
+        && device.info_correction?.allowed !== false) {
+        actions.push({ label: '修改资料', type: 'correct_info' })
+    }
+
     if (device.can_confirm) {
         actions.push({ label: '确认回收', type: 'confirm', primary: true })
     }
@@ -869,6 +883,12 @@ const handleDeviceAction = async (type: string, device: any) => {
     if (type === 'detail') {
         currentDevice.value = device
         deviceDetailVisible.value = true
+        return
+    }
+
+    if (type === 'correct_info') {
+        currentDevice.value = device
+        correctionPopupVisible.value = true
         return
     }
 

@@ -8,6 +8,12 @@ import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 // https://vitejs.dev/config/
 export default defineConfig({
     base: '',
+    build: {
+        // This disables size reporting, not minification or HTTP gzip.
+        reportCompressedSize: false,
+        sourcemap: false,
+        minify: 'esbuild'
+    },
     server: {
         host: '0.0.0.0',
         proxy: {

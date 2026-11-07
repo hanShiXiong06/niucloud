@@ -2,7 +2,7 @@
 export const businessIconNames=['store','customer','order','stock','team','wallet','member','invite','connection'] as const
 export const businessIconModes=['css','original','library','image','none'] as const
 const designs:Record<string,{shape:string;icon:string;color:string;original:string}>={
-    purchase:{shape:'phone',icon:'stock',color:'#3b82c4',original:'stores'},new_phone:{shape:'new',icon:'member',color:'#a47a3f',original:'home'},rent:{shape:'rent',icon:'order',color:'#7d69ad',original:'deliveries'},exchange:{shape:'exchange',icon:'connection',color:'#508a81',original:'stores'},broadband:{shape:'wifi',icon:'connection',color:'#5484a0',original:'home'},repair:{shape:'repair',icon:'order',color:'#987250',original:'profile'},home_recycle:{shape:'recycle',icon:'store',color:'#5b8a65',original:'stores'},
+    purchase:{shape:'phone',icon:'stock',color:'#347cd4',original:'stores'},new_phone:{shape:'new',icon:'member',color:'#c98524',original:'home'},rent:{shape:'rent',icon:'order',color:'#8061c1',original:'deliveries'},exchange:{shape:'exchange',icon:'connection',color:'#278f84',original:'stores'},broadband:{shape:'wifi',icon:'connection',color:'#318caa',original:'home'},repair:{shape:'repair',icon:'order',color:'#c4774a',original:'profile'},home_recycle:{shape:'recycle',icon:'store',color:'#438d65',original:'stores'},
 }
 const text=(value:unknown,max:number)=>typeof value==='string'?value.slice(0,max):''
 function color(value:unknown,fallback:string){return typeof value==='string'&&/^(?:#[\da-f]{3,4}|#[\da-f]{6}|#[\da-f]{8}|rgba?\([\d\s.,%]+\)|transparent)$/i.test(value.trim())?value.trim():fallback}

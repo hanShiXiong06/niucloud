@@ -3,7 +3,6 @@ declare(strict_types=1);
 namespace addon\hsx_lead\app\service;
 
 use addon\hsx_lead\app\support\Data;
-use app\service\core\sys\CoreConfigService;
 use core\exception\CommonException;
 use think\facade\Db;
 use addon\hsx_lead\app\service\cooperation\{BusinessService,ConfigService};
@@ -12,6 +11,8 @@ use addon\hsx_lead\app\service\cooperation\{BusinessService,ConfigService};
 final class CatalogService
 {
     public const KEY='HSX_LEAD_DEMAND_CATALOG';
+    /** Deployment guard for the explicit one-off catalog reset command. */
+    public const BACKEND_ONLY=true;
     public function __construct(private Context $context) {}
 
     public function get(array $params=[]): array
@@ -24,35 +25,144 @@ final class CatalogService
         return $this->directory()+['supports_preview'=>true];
     }
 
-    /** Read-only demand labels; contains no customer data, stock prices or credentials. */
+    /** Paginated administrator view; do not send 5000 rows to a table at once. */
+    public function items(array $params=[]): array
+    {
+        $this->context->permission('hsx_lead_catalog_items');
+        $businessKey=$this->businessKey($params);
+        $business=(new BusinessService($this->context))->definition($businessKey,false);
+        $items=(new BusinessService($this->context))->options($business);
+        $revision=$this->revision($items);
+        $keyword=mb_strtolower(Data::text($params,'keyword',200));
+        if ($keyword!=='') $items=array_values(array_filter($items,static function(array $row)use($keyword):bool {
+            return mb_strpos(mb_strtolower(implode(' ',[$row['id'],$row['title'],$row['brand'],$row['category_name'],...($row['path']??[]),...($row['aliases']??[])])),$keyword)!==false;
+        }));
+        $page=max(1,(int)($params['page']??1));$limit=max(1,min(100,(int)($params['limit']??20)));
+        return ['data'=>array_slice($items,($page-1)*$limit,$limit),'total'=>count($items),'per_page'=>$limit,'current_page'=>$page,
+            'revision'=>$revision,'business_type'=>$businessKey,'business_name'=>$business['name'],'dimension'=>$business['dimension'],
+            'supports_preview'=>true,'supports_item_management'=>true];
+    }
+
+    public function add(array $input): array { return $this->mutate('', $input, 'created'); }
+    public function update(string $id,array $input): array { return $this->mutate($id,$input,'updated'); }
+    public function remove(string $id,array $input): array { return $this->mutate($id,$input,'deleted'); }
+
+    private function mutate(string $id,array $input,string $action): array
+    {
+        $this->context->permission(['created'=>'hsx_lead_catalog_add','updated'=>'hsx_lead_catalog_edit','deleted'=>'hsx_lead_catalog_delete'][$action]);
+        $businessKey=$this->businessKey($input);$revision=$this->expectedRevision($input,true);
+        if ($id!==''&&!preg_match('/^[A-Za-z0-9_-]{1,100}$/D',$id)) throw new CommonException('目录ID格式错误');
+        $result=Db::transaction(function()use($id,$input,$action,$businessKey,$revision):array {
+            Db::name('site')->where('site_id',$this->context->site)->lock(true)->field('site_id')->find();
+            $service=new BusinessService($this->context);$business=$service->definition($businessKey,false);
+            $items=$service->options($business);
+            if (!hash_equals($this->revision($items),$revision)) throw new CommonException('目录已被其他操作修改，请刷新目录后重新核对；本次未保存');
+            $index=null;$before=null;
+            foreach($items as $position=>$row) if ($row['id']===$id) {$index=$position;$before=$this->auditItem($row);break;}
+            if ($action!=='created'&&$index===null) throw new CommonException('目录项不存在或已被移除，请刷新目录');
+            $after=null;
+            if ($action==='deleted') array_splice($items,$index,1);
+            else {
+                $candidate=$input['item']??null;
+                if (!is_array($candidate)) throw new CommonException('请填写完整目录信息');
+                if ($action==='updated') {
+                    if (isset($candidate['id'])&&(string)$candidate['id']!==$id) throw new CommonException('已保存目录ID不能修改，请只调整名称和分类');
+                    $candidate['id']=$id;
+                } elseif (!isset($candidate['id'])||$candidate['id']==='') $candidate['id']='cat_'.bin2hex(random_bytes(12));
+                $after=$this->item($candidate);
+                if ($action==='created') {
+                    if (count($items)>=5000) throw new CommonException('当前业务目录最多5000项，请先移除不再使用的选项');
+                    foreach($items as $row) if ($row['id']===$after['id']) throw new CommonException('目录ID已存在，请核对后再新增');
+                    $items[]=$after;
+                } else $items[$index]=$after;
+            }
+            $candidate=$business;$candidate['options']=$items;BusinessService::validate([$candidate]);
+            $this->persistItems($items,$businessKey,$action,['item_id'=>$after['id']??$id,'before'=>$before,'after'=>$after]);
+            return ['item'=>$after,'deleted'=>$action==='deleted','business_type'=>$businessKey,'count'=>count($items)];
+        });
+        CatalogConfigStorage::evict($this->context->site,ConfigService::KEY);CatalogConfigStorage::evict($this->context->site,self::KEY);
+        $saved=$this->get(['business_type'=>$businessKey]);
+        $current=null;foreach($saved['items'] as $row)if($row['id']===($result['item']['id']??$id)){$current=$this->auditItem($row);break;}
+        if (($action==='deleted'&&$current!==null)||($action!=='deleted'&&$current!==$result['item'])) throw new CommonException('目录已提交，但回读内容已变化，请刷新核对，不要重复提交');
+        return $result+['revision'=>$this->revision($saved['items']),'message'=>'目录已保存；已有线索和商户能力记录未改动'];
+    }
+
+    /** Whitelisted audit projection; never returns ERP bodies or credentials. */
+    public function logs(array $params=[]): array
+    {
+        $this->context->permission('hsx_lead_catalog_logs');$businessKey=$this->businessKey($params);
+        (new BusinessService($this->context))->definition($businessKey,false);
+        $query=Data::query('audit',$this->context->site)->where('entity_type','catalog');
+        // JSON extraction is parameterized and narrows the existing audit table.
+        $query->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(detail_json, '$.business_type')) = ?",[$businessKey]);
+        $action=Data::text($params,'action',20);
+        if ($action!=='') {if (!in_array($action,['created','updated','deleted','replaced'],true)) throw new CommonException('请选择有效的目录操作类型');$query->where('action',$action);}
+        $page=Data::page($query,$params);$uids=array_values(array_unique(array_filter(array_map(static fn(array $row):int=>(int)$row['operator_uid'],$page['data']))));
+        $users=$uids?Db::name('sys_user')->whereIn('uid',$uids)->field('uid,username,real_name')->select()->toArray():[];$names=[];
+        foreach($users as $user) $names[(int)$user['uid']]=(string)($user['real_name']?:$user['username']);
+        $labels=['created'=>'新增目录项','updated'=>'修改目录项','deleted'=>'删除目录项','replaced'=>'批量导入替换'];
+        $page['data']=array_map(function(array $row)use($names,$labels):array {
+            $detail=Data::decode($row['detail_json']??'');$safe=array_intersect_key($detail,array_flip(['business_type','business_name','item_id','before','after','items_count','changes','change_counts','changes_truncated']));
+            return ['id'=>(int)$row['id'],'action'=>$row['action'],'action_label'=>$labels[$row['action']]??'目录维护',
+                'operator_uid'=>(int)$row['operator_uid'],'operator_name'=>$names[(int)$row['operator_uid']]??'原工作人员',
+                'create_time'=>(int)$row['create_time'],'detail'=>$safe];
+        },$page['data']);
+        return $page+['business_type'=>$businessKey];
+    }
+
+    private function businessKey(array $input): string { return Data::text($input,'business_type',16)?:'purchase'; }
+    private function expectedRevision(array $input,bool $required=false): ?string
+    {
+        $value=$input['revision']??null;
+        if ($value===null&&!$required) return null;
+        if (!is_string($value)||!preg_match('/^[a-f0-9]{64}$/D',$value)) throw new CommonException('未取得有效目录版本，请刷新后重试');
+        return $value;
+    }
+    private function revision(array $items): string { return hash('sha256',Data::json(array_map(fn(array $row):array=>$this->auditItem($row),$items))); }
+    private function auditItem(array $row): array { return array_intersect_key($row,array_flip(['id','title','brand','category_name','path','aliases'])); }
+
+    /** Called only under the site lock, shared by item edits and full import. */
+    private function persistItems(array $items,string $businessKey,string $action,array $detail=[]): void
+    {
+        $config=(new ConfigService($this->context))->get();$service=new BusinessService($this->context);$found=false;$businessName='';
+        foreach($config['businesses'] as &$entry) {
+            if ($businessKey==='purchase'&&$entry['key']!=='purchase'&&$entry['dimension']==='model'&&!$entry['options']&&empty($entry['catalog_configured'])) {$entry['options']=$service->options($entry);$entry['catalog_configured']=true;}
+            if ($entry['key']===$businessKey) {$found=true;$businessName=$entry['name'];$entry['options']=$businessKey==='purchase'?[]:$items;$entry['catalog_configured']=true;}
+        }unset($entry);
+        if (!$found) throw new CommonException('业务已变化，请重新选择目录业务');
+        $config['businesses']=BusinessService::validate($config['businesses']);unset($config['membership_levels'],$config['membership_configuration_source']);
+        CatalogConfigStorage::write($this->context->site,ConfigService::KEY,$config);
+        if ($businessKey==='purchase') CatalogConfigStorage::write($this->context->site,self::KEY,['items'=>array_map(fn(array $row):array=>$this->auditItem($row),$items),'updated_at'=>time()]);
+        $this->context->audit('catalog',0,$action,['business_type'=>$businessKey,'business_name'=>$businessName,'items_count'=>count($items)]+$detail);
+    }
+
+    /** Only backend-maintained labels may enter a business directory, never ERP stock. */
     public function directory(): array
     {
-        $value=(new CoreConfigService())->getConfigValue($this->context->site,self::KEY);
-        if (!empty($value['items'])) return ['items'=>$value['items'],'source'=>'configured','updated_at'=>(int)($value['updated_at']??0)];
-        $rows=Db::name('hsx_lead_inventory')->alias('i')
-            ->join('hsx_lead_connection c','c.id=i.connection_id AND c.site_id=i.site_id AND c.merchant_id=i.merchant_id AND c.published_run_id=i.sync_run_id')
-            ->join('hsx_lead_merchant m','m.id=i.merchant_id AND m.site_id=i.site_id')
-            ->where('i.site_id',$this->context->site)->where('m.status',1)->where('i.model','<>','')
-            ->field('i.brand,i.model')->group('i.brand,i.model')->limit(5000)->select()->toArray();
-        $items=[]; $seen=[];
+        // The plugin store reads persisted data without permanent caching and
+        // transparently reconstructs directories larger than a TEXT config row.
+        $value=CatalogConfigStorage::read($this->context->site,self::KEY);
+        // An explicitly emptied directory must stay empty until the administrator
+        // imports it again. Do not silently restore defaults or scan inventory.
+        if (is_array($value) && array_key_exists('items',$value)) {
+            if (!is_array($value['items']) || !\addon\hsx_lead\app\support\PhpRuntime::isList($value['items'])) throw new CommonException('后台业务目录格式异常，请管理员重新导入');
+            return ['items'=>$value['items'],'source'=>'configured','updated_at'=>(int)($value['updated_at']??0)];
+        }
+        $items=[];
         foreach(require dirname(__DIR__).'/dict/catalog/default.php' as $row) {
-            $item=$this->item($row); $items[$item['id']]=$item; $seen[$item['brand'].'|'.$item['title']]=true;
+            $item=$this->item($row); $items[$item['id']]=$item;
         }
-        foreach($rows as $row) {
-            if (preg_match('/报废|内爆|故障|损坏|不开机/u',(string)$row['model'])) continue;
-            $item=$this->item($row);
-            // A stock-derived duplicate must not erase the curated aliases/category.
-            $key=$item['brand'].'|'.$item['title'];
-            if (!isset($seen[$key]) && count($items)<5000) { $items[$item['id']]=$item; $seen[$key]=true; }
-        }
-        return ['items'=>array_values($items),'source'=>'default_and_inventory','updated_at'=>0,
-            'notice'=>'内置常用需求选项，补充已同步库存型号；清单本身不代表商户有货'];
+        return ['items'=>array_values($items),'source'=>'default','updated_at'=>0,
+            'notice'=>'后台内置常用目录；分类仅由后台维护，不从ERP库存自动补充'];
     }
 
     public function save(array $input): array
     {
-        $this->context->manager();
-        $content=Data::text($input,'content',3000000);
+        $this->context->permission('hsx_lead_manage_catalog_save');
+        // Do not trim a delimited file: trailing tabs/commas represent empty
+        // optional cells, not whitespace that may be discarded.
+        $content=$input['content']??'';
+        if (!is_string($content)) throw new CommonException('目录文件内容格式错误，请重新选择文件');
         if (strlen($content)>3000000) throw new CommonException('目录文件内容过大，请将原文件控制在2MB以内');
         $format=Data::text($input,'format',10);
         if (!mb_check_encoding($content,'UTF-8')) throw new CommonException('请使用UTF-8编码的CSV或JSON文件');
@@ -65,7 +175,7 @@ final class CatalogService
         elseif ($format==='xlsx') $rows=$this->xlsx($content);
         else throw new CommonException('请上传XLSX、UTF-8 CSV或JSON');
         if (!is_array($rows) || !\addon\hsx_lead\app\support\PhpRuntime::isList($rows) || count($rows)>5000) throw new CommonException('清单应为数组，最多5000项');
-        if (!$rows) throw new CommonException('设备清单为空，未覆盖已有配置');
+        if (!$rows) throw new CommonException('文件中未读取到目录数据，请确认表头下有型号记录，且已保存到本次上传的文件；未覆盖已有配置');
         $businessKey=Data::text($input,'business_type',16)?:'purchase';
         $business=(new BusinessService($this->context))->definition($businessKey,false);
         $items=[];$lastHierarchy=['',''];
@@ -76,7 +186,7 @@ final class CatalogService
                 foreach(['一级分类','二级分类'] as $level=>$column) if (array_key_exists($column,$row)) {if ($row[$column]==='') $row[$column]=$lastHierarchy[$level];else $lastHierarchy[$level]=$row[$column];}
             }
             try {$item=$this->item($row);} catch(CommonException $error) {throw new CommonException('第'.($index+2).'行：'.$error->getMessage());}
-            if ($business['dimension']!=='model'&&(!isset($row['id'])||$row['id']==='')) $item['id']='opt_'.substr(hash('sha256',$businessKey.'|'.implode('|',$item['path']).'|'.$item['title']),0,24);
+            if ($business['dimension']!=='model'&&(!isset($row['id'])||(is_string($row['id'])&&trim($row['id'])===''))) $item['id']='opt_'.substr(hash('sha256',$businessKey.'|'.implode('|',$item['path']).'|'.$item['title']),0,24);
             if (isset($items[$item['id']])) throw new CommonException('目录存在重复选项ID或重复路径，请核对后重新导入');
             $items[$item['id']]=$item;
         }
@@ -85,29 +195,36 @@ final class CatalogService
         $preview=$input['preview']??false;
         if (!in_array($preview,[true,false,0,1,'0','1'],true)) throw new CommonException('预览参数无效');
         if (in_array($preview,[true,1,'1'],true)) return ['items'=>$items,'count'=>count($items),'preview'=>true,'business_type'=>$businessKey,'source'=>'preview'];
-        Db::transaction(function()use($items,$businessKey){
+        $revision=$this->expectedRevision($input);
+        Db::transaction(function()use($items,$businessKey,$revision){
             Db::name('site')->where('site_id',$this->context->site)->lock(true)->field('site_id')->find();
-            $config=(new ConfigService($this->context))->get();$found=false;
-            foreach($config['businesses'] as &$entry) {
-                // Preserve sibling model directories before replacing their old shared fallback.
-                if ($businessKey==='purchase'&&$entry['key']!=='purchase'&&$entry['dimension']==='model'&&!$entry['options']) $entry['options']=(new BusinessService($this->context))->options($entry);
-                if ($entry['key']===$businessKey) {$found=true;$entry['options']=$businessKey==='purchase'?[]:$items;}
-            }unset($entry);
-            if (!$found) throw new CommonException('业务已变化，请重新选择导入业务');
-            $config['businesses']=BusinessService::validate($config['businesses']);
-            (new CoreConfigService())->setConfig($this->context->site,ConfigService::KEY,$config);
-            if ($businessKey==='purchase') (new CoreConfigService())->setConfig($this->context->site,self::KEY,['items'=>$items,'updated_at'=>time()]);
-            $this->context->audit('catalog',0,'replaced',['business_type'=>$businessKey,'items_count'=>count($items)]);
+            $service=new BusinessService($this->context);$current=$service->options($service->definition($businessKey,false));
+            if ($revision!==null&&!hash_equals($this->revision($current),$revision)) throw new CommonException('目录已被其他操作修改，请刷新并重新核对文件；本次未替换');
+            $before=array_column($current,null,'id');$after=array_column($items,null,'id');$counts=['created'=>0,'updated'=>0,'deleted'=>0];$changes=[];
+            foreach($after as $id=>$row) {
+                $action=!isset($before[$id])?'created':($this->auditItem($before[$id])!==$this->auditItem($row)?'updated':'');
+                if ($action==='') continue;$counts[$action]++;
+                if (count($changes)<20) $changes[]=['action'=>$action,'before'=>isset($before[$id])?$this->auditItem($before[$id]):null,'after'=>$this->auditItem($row)];
+            }
+            foreach($before as $id=>$row) if (!isset($after[$id])) {$counts['deleted']++;if(count($changes)<20)$changes[]=['action'=>'deleted','before'=>$this->auditItem($row),'after'=>null];}
+            $this->persistItems($items,$businessKey,'replaced',['change_counts'=>$counts,'changes'=>$changes,'changes_truncated'=>array_sum($counts)>count($changes)]);
         });
+        CatalogConfigStorage::evict($this->context->site,ConfigService::KEY);
+        CatalogConfigStorage::evict($this->context->site,self::KEY);
         return $this->get(['business_type'=>$businessKey])+['count'=>count($items),'message'=>'当前业务目录已保存；其他业务和既有工单需求快照未改动'];
     }
 
     private function item(array $row): array
     {
-        $title=Data::text(['title'=>$row['title']??$row['model']??$row['名称']??$row['型号']??$row['三级分类']??''],'title',200,true);
-        $brand=Data::text(['brand'=>$row['brand']??$row['品牌']??''],'brand',100);
-        $category=Data::text(['category'=>$row['category_name']??$row['category']??$row['分类']??$row['一级分类']??''],'category',100);
-        $path=$row['path']??array_values(array_filter([$row['一级分类']??$category,$row['二级分类']??$brand,$row['三级分类']??$title],static fn($v)=>$v!==''));
+        $title=$this->firstText($row,['title','model','名称','型号','三级分类'],'title',200);
+        if ($title==='') throw new CommonException('请填写三级分类或名称，至少一项不能为空');
+        $brand=$this->firstText($row,['brand','品牌'],'brand',100);
+        $category=$this->firstText($row,['category_name','category','分类','一级分类'],'category',100);
+        $path=$row['path']??array_values(array_filter([
+            $this->firstText($row,['一级分类'],'category',100)?:$category,
+            $this->firstText($row,['二级分类'],'brand',100)?:$brand,
+            $this->firstText($row,['三级分类'],'title',200)?:$title,
+        ],static fn($v)=>$v!==''));
         if (!is_array($path)||!\addon\hsx_lead\app\support\PhpRuntime::isList($path)||count($path)>3) throw new CommonException('目录分类最多三级');
         $path=array_map(static fn($part)=>BusinessService::label($part),$path);BusinessService::label($title,200);
         if ($brand!=='') BusinessService::label($brand);if ($category!=='') BusinessService::label($category);
@@ -116,10 +233,25 @@ final class CatalogService
         if (!is_array($aliases) || count($aliases)>20) throw new CommonException('每个型号最多20个别名，使用分号或竖线分隔');
         $clean=[];
         foreach($aliases as $alias) $clean[]=Data::text(['alias'=>$alias],'alias',200,true);
-        $id=isset($row['id'])&&$row['id']!==''?$row['id']:'cat_'.substr(hash('sha256',$brand.'|'.$title.'|'.$category.(isset($row['一级分类'])||isset($row['path'])?'|'.implode('|',$path):'')),0,24);
+        $id=$row['id']??'';
+        if (is_int($id)) $id=(string)$id;
+        if (!is_string($id)) throw new CommonException('目录ID须为文本或整数');
+        $id=trim($id);
+        if ($id==='') $id='cat_'.substr(hash('sha256',$brand.'|'.$title.'|'.$category.(isset($row['一级分类'])||isset($row['path'])?'|'.implode('|',$path):'')),0,24);
         if (!is_string($id)||!preg_match('/^[A-Za-z0-9_-]{1,100}$/D',$id)) throw new CommonException('目录ID格式错误');
         return ['id'=>$id,'title'=>$title,'brand'=>$brand,
             'category_name'=>$category,'path'=>$path,'aliases'=>array_values(array_unique($clean))];
+    }
+
+    /** Optional aliases must not mask a populated lower-priority column. */
+    private function firstText(array $row,array $keys,string $label,int $limit): string
+    {
+        foreach($keys as $key) {
+            if (!isset($row[$key])) continue;
+            $value=Data::text([$label=>$row[$key]],$label,$limit);
+            if ($value!=='') return $value;
+        }
+        return '';
     }
 
     private function xlsx(string $content): array
@@ -168,13 +300,36 @@ final class CatalogService
         if (!$stream) throw new CommonException('无法读取CSV文件');
         try {
             fwrite($stream,$content); rewind($stream);
-            $header=fgetcsv($stream,0,',','"','');
+            // Excel exports may use comma, tab or locale-dependent semicolon.
+            // Detect only from the header, with CSV quoting still respected.
+            $delimiter=',';$header=[];
+            foreach([',',"\t",';'] as $candidate) {
+                rewind($stream);
+                while(($cells=fgetcsv($stream,0,$candidate,'"',''))!==false) {
+                    $cells=array_map(static fn($value)=>trim((string)($value??'')),$cells);
+                    if (!array_filter($cells,static fn($value)=>$value!=='')) continue;
+                    if (count($cells)>count($header)) {$delimiter=$candidate;$header=$cells;}
+                    break;
+                }
+            }
             if (!$header) return [];
-            $header=array_map('trim',$header); $rows=[];
-            if (count(array_unique($header))!==count($header)) throw new CommonException('CSV表头有重复列，请核对后重新导入');
-            while(($values=fgetcsv($stream,0,',','"',''))!==false) {
-                if (count($values)===1 && trim((string)$values[0])==='') continue;
-                if (count($values)!==count($header)) throw new CommonException('CSV列数不一致，请核对表头、逗号和引号');
+            if (in_array('',$header,true)||count(array_unique($header))!==count($header)) throw new CommonException('CSV表头不得为空或重复，请核对后重新导入');
+            if (!array_intersect($header,['title','model','名称','型号','三级分类'])) throw new CommonException('未找到名称或三级分类列，请使用三级目录模板');
+            rewind($stream);
+            // Skip the same leading blank lines and then consume the header.
+            do {$cells=fgetcsv($stream,0,$delimiter,'"','');} while($cells!==false&&!array_filter($cells,static fn($value)=>trim((string)($value??''))!==''));
+            $rows=[];
+            while(($values=fgetcsv($stream,0,$delimiter,'"',''))!==false) {
+                $values=array_map(static fn($value)=>trim((string)($value??'')),$values);
+                if (!array_filter($values,static fn($value)=>$value!=='')) continue;
+                if (count($values)!==count($header)) {
+                    // Clipboard TSV often drops its final empty cells. Only
+                    // omitted alias columns may be restored; never guess an
+                    // omitted ID/brand or mix delimiters within a CSV file.
+                    $missing=array_slice($header,count($values));
+                    if ($delimiter!=="\t" || count($values)>count($header) || array_diff($missing,['aliases','别名'])) throw new CommonException('文件列数与表头不一致，请统一分隔符；空白单元格也需保留分隔符');
+                    $values=array_pad($values,count($header),'');
+                }
                 $rows[]=array_combine($header,$values);
                 if (count($rows)>5000) throw new CommonException('设备清单最多5000项');
             }

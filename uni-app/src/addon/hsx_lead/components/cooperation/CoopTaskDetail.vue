@@ -56,7 +56,7 @@
 <text v-else>尚未选定</text>
 </view>
 </view>
-<view v-if="lead.status === 'unpaid' || lead.status === 'paid'" class="coop-form-section">
+<view v-if="!lead.is_internal && (lead.status === 'unpaid' || lead.status === 'paid')" class="coop-form-section">
 <view class="coop-section-title">协作佣金</view>
 <view class="coop-detail-shop">
 <text>{{ lead.status === 'paid' ? '已付佣金' : '待付佣金' }}</text>
@@ -67,7 +67,8 @@
 <text>{{ coopMoney(lead.net_amount) }}</text>
 </view>
 </view>
-<view class="coop-task-rule">成交后最低付佣 {{ coopMoney(lead.commission_minimum) }}；未成交不收协作佣金。</view>
+<view v-if="lead.is_internal" class="coop-task-rule">本店内部交付，不收协作费，不产生推广奖励。</view>
+<view v-else class="coop-task-rule">成交后最低付佣 {{ coopMoney(lead.commission_minimum) }}；未成交不收协作佣金。</view>
 <view class="coop-detail-service-note"><u-collapse :border="false"><u-collapse-item title="交付与费用说明" name="delivery-rule"><view class="coop-muted">按本单发布时规则计费。客户货款由客户与门店直接结算；认证与库存匹配不代表平台担保或锁货。</view></u-collapse-item></u-collapse></view>
 <view class="coop-form-section">
 <view class="coop-fold-title" role="button" :aria-expanded="history" @tap="history = !history">编号与处理记录<u-icon :name="history ? 'arrow-up' : 'arrow-down'" size="12" color="#89939f" />
@@ -81,6 +82,7 @@
 <view v-if="!lead.history?.length" class="coop-muted">暂无处理记录</view>
 </template>
 </view>
+<view v-if="lead.notice?.length" class="coop-form-section"><u-collapse :border="false"><u-collapse-item title="消息提醒记录" name="notice-records"><view v-for="item in lead.notice" :key="item.id" class="coop-history-item"><view><text>{{ noticeChannel(item.channel) }} · {{ noticeStatus(item.status) }}</text><view class="coop-muted">{{ item.message }}</view></view><text>{{ coopDate(item.create_time) }}</text></view></u-collapse-item></u-collapse></view>
 </template>
 <template #footer>
 <view v-if="lead.id && !loading && !error" class="coop-footer-actions">
@@ -97,7 +99,7 @@
 <u-button :custom-style="cooperationButtonStyle" shape="circle" text="未成交" :disabled="busy" @click="$emit('action', 'no_deal')" />
 </view>
 <view class="coop-primary">
-<u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" text="已成交，去付佣" :disabled="busy" :loading="busy" @click="$emit('action', 'deal')" />
+<u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" :text="lead.is_internal ? '确认本店交付完成' : '已成交，去付佣'" :disabled="busy" :loading="busy" @click="$emit('action', 'deal')" />
 </view>
 </template>
 <view v-else-if="lead.can_pay" class="coop-primary">
@@ -130,6 +132,11 @@
 </template>
 </CoopTaskSheet>
 </template>
+<script lang="ts">
+// Match Vue's transparent layout in native Mini Programs: an extra custom
+// component host otherwise breaks the page's definite-height flex chain.
+export default { options: { virtualHost: true } }
+</script>
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { img } from '@/utils/common'
@@ -141,6 +148,7 @@ import CoopMerchantAvatar from './CoopMerchantAvatar.vue'
 import { cooperationButtonStyle } from '../../utils/mobile-ui'
 import { membershipBadgeRank } from '../../utils/entity-membership'
 import { businessFieldValue, businessAddressText, type BusinessField } from '../../utils/cooperation-business'
+import { noticeChannel, noticeStatus } from '../../utils/cooperation-notice'
 const props = withDefaults(defineProps<{ show: boolean; page?: boolean; lead: CoopRow; config: CoopRow; loading?: boolean; busy?: boolean; error?: string }>(), { loading: false, busy: false, error: '' })
 defineEmits<{ (event: 'close' | 'reload' | 'pay' | 'select' | 'membership'): void; (event: 'action', value: LeadAction): void }>()
 const history = ref(false), canCall = computed(() => /^1\d{10}$/.test(String(props.lead.mobile || '')))

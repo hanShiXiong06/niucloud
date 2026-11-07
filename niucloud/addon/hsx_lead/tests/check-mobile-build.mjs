@@ -299,6 +299,14 @@ assert.ok(nativeMemberConfig.usingComponents?.['coop-experience-progress'], 'Nat
 const nativeExperience = JSON.parse(fs.readFileSync(path.join(directory, 'CoopExperienceProgress.json'), 'utf8'))
 assert.ok(nativeExperience.usingComponents?.['u-line-progress']?.endsWith('/u-line-progress/u-line-progress'), 'Growth progress resolves the installed uview progress bar'); checks++
 const nativeMemberWxml = fs.readFileSync(path.join(output, 'addon/hsx_lead/pages/membership/index.wxml'), 'utf8')
+// H5 transparent component roots do not imply native transparency. Capture the
+// actual compiled component options, without executing setup/auth or requests.
+const viewportComponents=['CoopTaskSheet','CoopPublishForm','CoopStorePicker','CoopTaskDetail','CoopCommissionForm','CoopConnectionPanel','CoopPromotionPanel','ModelCatalogPicker','CoopStoreInventory','CoopProfilePanel']
+let nativeTaskSheet
+for(const name of viewportComponents){let captured;vm.runInNewContext(fs.readFileSync(path.join(directory,name+'.js'),'utf8'),{require:dependency=>dependency.endsWith('/common/vendor.js')?{defineComponent:value=>value,_export_sfc:value=>value}: {},wx:{createComponent:value=>{captured=value}},exports:{}},{timeout:1000});assert.equal(captured?.options?.virtualHost,true,name+': actual WeChat component removes its extra auto-height native host');checks++;if(name==='CoopTaskSheet')nativeTaskSheet=captured}
+const nativeSheetWxml=fs.readFileSync(path.join(directory,'CoopTaskSheet.wxml'),'utf8')
+assert.ok(nativeSheetWxml.includes('<slot />')&&nativeSheetWxml.includes('<slot name="footer" />'),'Native shared sheet preserves default content and named footer slots; layout must not be “fixed” by removing either');checks++
+assert.ok(nativeMemberWxml.includes('membership-current')&&nativeMemberWxml.includes('membership-content')&&nativeMemberWxml.includes('slot="footer"'),'Native membership retains its real ready-state body and footer together');checks++
 assert.ok(/<swiper\b[^>]*\bbindchange="\{\{[\w$]+\}\}"/.test(nativeMemberWxml), 'Member level cards retain their native swipe handler'); checks++
 assert.ok(/<pay\b[^>]*\bbindconfirm="\{\{[\w$]+\}\}"/.test(nativeMemberWxml), 'Cashier completion retains a native result-verification binding'); checks++
 const nativeTeamWxml = fs.readFileSync(path.join(output, 'addon/hsx_lead/pages/entity/index.wxml'), 'utf8')

@@ -21,6 +21,11 @@
         <template #footer><view v-if="localError || error" class="coop-inline-error coop-submit-error" role="alert" aria-live="polite">{{ localError || error }}</view><u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" text="下一步，选交付门店" :loading="busy || uploading" loading-text="正在保存" :disabled="busy || uploading || !business" @click="submit" /></template>
     </CoopTaskSheet>
 </template>
+<script lang="ts">
+// Match Vue's transparent layout in native Mini Programs: an extra custom
+// component host otherwise breaks the page's definite-height flex chain.
+export default { options: { virtualHost: true } }
+</script>
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { coopMoney, coopRequestId, type CoopRow } from '../../api/cooperation'

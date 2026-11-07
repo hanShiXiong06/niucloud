@@ -52,7 +52,7 @@ const smsTableData = reactive({
     data: []
 })
 
-const modules: any = import.meta.glob('@/**/*.vue')
+import { dynamicComponentModules as modules } from '@/utils/dynamic-components'
 /**
  * 获取配置信息
  */

@@ -75,7 +75,7 @@ const pageName = route.meta.title
 
 const payTypeList = ref([])
 const payTypeRefs = ref({})
-const modules: any = import.meta.glob('@/**/*.vue')
+import { dynamicComponentModules as modules } from '@/utils/dynamic-components'
 
 getAllPayType().then(({ data }) => {
     Object.keys(data).forEach((key: string) => {

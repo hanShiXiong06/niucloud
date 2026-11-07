@@ -9,7 +9,7 @@ require __DIR__.'/bootstrap.php';
 
 use addon\hsx_lead\app\listener\notice\CooperationNoticeData;
 use addon\hsx_lead\app\service\{FrameworkNoticeGateway,NoticeConfigService};
-use addon\hsx_lead\app\service\cooperation\{CooperationNoticeService,Store};
+use addon\hsx_lead\app\service\cooperation\{CooperationNoticeService,CooperationNoticeOutbox,Store};
 use addon\hsx_lead\app\support\Data;
 use app\dict\sys\ConfigKeyDict;
 use app\service\core\sys\CoreConfigService;
@@ -65,14 +65,17 @@ try {
     // persists precise reasons, but never enters a network-capable sender.
     $disabled=$newLead($site,$publisher,$receiver);
     event('HsxLeadCollaborationChanged',['site_id'=>$site,'lead_id'=>$disabled,'action'=>'assigned']);
+    coopNoticeCheck(coopNoticeStates($site,$disabled)===[],'disabled queue records a durable business event without synchronous notification claims');
+    foreach(Data::query('audit',$site)->where('entity_type',CooperationNoticeOutbox::TYPE)->where('entity_id',$disabled)->where('action','notice_pending')->column('id')as$pending)CooperationNoticeOutbox::process($site,(int)$pending);
     $states=coopNoticeStates($site,$disabled);
     coopNoticeCheck(count($states)===6&&array_unique(array_column($states,'status'))===['disabled'],'real assigned event creates six independent disabled-channel audit facts');
     event('HsxLeadCollaborationChanged',['site_id'=>$site,'lead_id'=>$disabled,'action'=>'assigned']);
     coopNoticeCheck(count(coopNoticeStates($site,$disabled))===6,'real business event is idempotent before any sender is configured');
     Store::query('collaboration',$site)->where('id',$disabled)->update(['status'=>'following']);
     event('HsxLeadCollaborationChanged',['site_id'=>$site,'lead_id'=>$disabled,'action'=>'accepted']);
+    foreach(Data::query('audit',$site)->where('entity_type',CooperationNoticeOutbox::TYPE)->where('entity_id',$disabled)->where('action','notice_pending')->column('id')as$pending)CooperationNoticeOutbox::process($site,(int)$pending);
     $changedStates=coopNoticeStates($site,$disabled);
-    coopNoticeCheck(count($changedStates)===9&&array_column(array_slice($changedStates,-3),'phase')===['changed','changed','changed'],'real changed event follows the current cooperation listener, not retired task events');
+    coopNoticeCheck(count($changedStates)===12&&array_column(array_slice($changedStates,-6),'phase')===array_fill(0,6,'changed'),'real changed event reaches both parties through the current cooperation listener, not retired task events');
     Event::remove('HsxLeadCollaborationChanged');
 
     $configure=static function(int $owner,string $suffix):void {
@@ -124,8 +127,8 @@ try {
 
     Store::query('collaboration',$site)->where('id',$id)->update(['status'=>'following']);$before=count($sent);
     $notices->changed(['site_id'=>$site,'lead_id'=>$id,'action'=>'accepted']);
-    coopNoticeCheck(count($sent)-$before===3&&count(coopNoticeStates($site,$id))===9,'changed business state receives a separate audit and publisher notification');
-    foreach(array_slice($sent,$before) as $row) coopNoticeCheck($row['event']['to']['member_id']===101&&$row['event']['key']===NoticeConfigService::PHASES['changed'],'follow-up does not notify an unrelated recipient');
+    coopNoticeCheck(count($sent)-$before===6&&count(coopNoticeStates($site,$id))===12,'changed business state receives separate audits and both participant notifications');
+    foreach(array_slice($sent,$before) as $row) coopNoticeCheck(in_array($row['event']['to']['member_id'],[101,102],true)&&$row['event']['key']===NoticeConfigService::PHASES['changed'],'follow-up notifies both parties but never unrelated recipients');
 
     // The same source ids and request host must never select another tenant's
     // account, notice switches, templates, members or callback path.
@@ -211,6 +214,54 @@ try {
     $falseId=$newLead($site,$publisher,0,'following');$unconfirmed=new CooperationNoticeService(static fn(array $payload):bool=>false);
     $unconfirmed->changed(['site_id'=>$site,'lead_id'=>$falseId,'action'=>'accepted']);
     coopNoticeCheck(array_values(array_unique(array_column(coopNoticeStates($site,$falseId),'status')))===['uncertain'],'a false sender result is uncertain, not successful delivery');
+
+    // A shop is one entity with several independently authenticated accounts.
+    // Valid employees receive their own channel claim, never the owner's to/id.
+    foreach([105,106,107,108,109,110,111]as$memberId)Db::name('member')->insert(['site_id'=>$site,'member_id'=>$memberId,'nickname'=>'Synthetic staff '.$memberId,'mobile'=>'19900000'.$memberId,'weapp_openid'=>'staff-weapp-'.$memberId,'wx_openid'=>'staff-wechat-'.$memberId,'status'=>$memberId===110?0:1,'is_del'=>$memberId===111?1:0]);
+    $link=static function(int$owner,int$shop,int$memberId,string$status='active'):void{Db::name('hsx_lead_merchant_member')->insert(['site_id'=>$owner,'merchant_id'=>$shop,'member_id'=>$memberId,'status'=>$status,'role'=>'member']);};
+    $link($site,$publisher,105);$link($site,$receiver,106);$link($site,$receiver,102); // Duplicate owner association.
+    $link($site,$receiver,107,'suspended');$link($site,$receiver,108,'removed');$link($site,$receiver,109,'pending');
+    $link($site,$receiver,110);$link($site,$receiver,111);$link($site,$receiver,103); // Foreign member must fail current-tenant validation.
+    $link($site+1,$receiver,104); // Same merchant number in another site is not an employee here.
+    $staffId=$newLead($site,$publisher,$receiver,'following');$before=count($sent);$notices->changed(['site_id'=>$site,'lead_id'=>$staffId,'action'=>'accepted']);
+    $staffSent=array_slice($sent,$before);$recipients=array_column(array_column($staffSent,'event'),'to');$recipientIds=array_column($recipients,'member_id');sort($recipientIds);
+    coopNoticeCheck($recipientIds===[101,101,101,102,102,102,105,105,105,106,106,106],'both owners and active valid employees receive exactly one notice per channel');
+    coopNoticeCheck(count(array_filter(coopNoticeStates($site,$staffId),static fn(array$r):bool=>in_array((int)$r['member_id'],[107,108,109],true)))===0,'suspended removed and unapproved employees receive no claims');
+    coopNoticeCheck(count(array_filter(coopNoticeStates($site,$staffId),static fn(array$r):bool=>in_array((int)$r['member_id'],[103,110,111],true)&&$r['status']==='pending_recipient'))===9,'foreign disabled and deleted accounts are audited but never dispatched');
+    $before=count($sent);$notices->changed(['site_id'=>$site,'lead_id'=>$staffId,'action'=>'accepted']);coopNoticeCheck(count($sent)===$before,'member-aware audit dedupe prevents owner or employee replay');
+    foreach(['suspended','removed','pending']as$leaveStatus){
+        $staffRaceId=$newLead($site,$publisher,$receiver,'following');$before=count($sent);$staffChanged=false;
+        $staffRace=new CooperationNoticeService(static function(array$payload)use(&$staffChanged,$gateway,$site,$receiver,$leaveStatus,$listener):bool{
+            $audit=Data::row('audit',$site,(int)$payload['data']['notice_audit_id']);$detail=Data::decode($audit['detail_json']);
+            if(!$staffChanged&&(int)$detail['member_id']===106){
+                $staffChanged=true;
+                coopNoticeReject(static fn()=>$listener->handle(array_replace($payload,['key'=>NoticeConfigService::PHASES['assigned']])),'an employee audit cannot be consumed with another notice scene');
+                Db::name('hsx_lead_merchant_member')->where('site_id',$site)->where('merchant_id',$receiver)->where('member_id',106)->update(['status'=>$leaveStatus]);
+            }
+            return$gateway->dispatch($payload);
+        });
+        $staffRace->changed(['site_id'=>$site,'lead_id'=>$staffRaceId,'action'=>'accepted']);
+        $out=array_slice($sent,$before);$outIds=array_column(array_column(array_column($out,'event'),'to'),'member_id');
+        coopNoticeCheck($staffChanged&&count($out)===9&&!in_array(106,$outIds,true),'leaving or suspended employee cannot reach sender after claiming: '.$leaveStatus);
+        coopNoticeCheck(count(array_filter(coopNoticeStates($site,$staffRaceId),static fn(array$r):bool=>(int)$r['member_id']===106&&$r['status']==='uncertain'))===1,'in-flight employee claim remains uncertain without blind retry: '.$leaveStatus);
+        Db::name('hsx_lead_merchant_member')->where('site_id',$site)->where('merchant_id',$receiver)->where('member_id',106)->update(['status'=>'active']);
+        $staffRace->changed(['site_id'=>$site,'lead_id'=>$staffRaceId,'action'=>'accepted']);coopNoticeCheck(count($sent)-$before===9,'restoring employee does not automatically resubmit a claimed notice');
+    }
+    $internalId=$newLead($site,$publisher,$publisher);$before=count($sent);$notices->changed(['site_id'=>$site,'lead_id'=>$internalId,'action'=>'assigned']);
+    $internalSent=array_slice($sent,$before);coopNoticeCheck(count($internalSent)===6,'same-entity assignment sends one notice per owner/employee/channel, not publisher plus receiver duplicates');
+    coopNoticeCheck(count(array_filter($internalSent,static fn(array$r):bool=>$r['event']['key']===NoticeConfigService::PHASES['assigned']))===6,'same-entity assigned event has one consistent actionable template');
+    Store::query('collaboration',$site)->where('id',$internalId)->update(['status'=>'paid']);$before=count($sent);$notices->changed(['site_id'=>$site,'lead_id'=>$internalId,'action'=>'internal_completed']);
+    $internalDone=array_slice($sent,$before);coopNoticeCheck(count($internalDone)===6,'same-store completion notifies each valid account once');
+    foreach($internalDone as$done)if($done['channel']!=='sms')coopNoticeCheck($done['event']['vars']['status_text']==='已完成','internal free completion never claims paid commission');
+    $keyRaceId=$newLead($site,$publisher,0,'following');$before=count($sent);$keyChanged=false;
+    $keyRace=new CooperationNoticeService(static function(array$payload)use(&$keyChanged,$gateway,$site):bool{
+        if(!$keyChanged){$keyChanged=true;Db::name('sys_notice')->where('site_id',$site)->where('key',$payload['key'])->update(['is_weapp'=>0]);}
+        return$gateway->dispatch($payload);
+    });
+    $keyRace->changed(['site_id'=>$site,'lead_id'=>$keyRaceId,'action'=>'accepted']);
+    coopNoticeCheck($keyChanged&&count($sent)-$before===4,'disabling channel after claim blocks in-flight weapp without stopping other channels');
+    $staffSafe=Data::json(['sent'=>array_slice($sent,-30),'audit'=>coopNoticeStates($site,$staffId)]);
+    foreach(['HiddenCustomerMarker','18800009999','HiddenModelMarker','HiddenRemarkMarker']as$secret)coopNoticeCheck(!str_contains($staffSafe,$secret),'staff notices do not expose customer detail: '.$secret);
     leadAssertIsolated($schema);
     echo "PASS cooperation notice: $checks checks; random local schema, framework sender double, no external requests or real notifications\n";
 } catch(Throwable $error) {

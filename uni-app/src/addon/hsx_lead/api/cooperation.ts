@@ -12,6 +12,8 @@ export const cooperationPageUrls: Record<CooperationTab, string> = {
 export type LeadAction = 'accept' | 'reject' | 'withdraw' | 'cancel' | 'deal' | 'no_deal'
 const root = 'hsx_lead/cooperation'
 const quiet = { showErrorMessage: false }
+// This endpoint contains only the visitor entry policy, never merchant/private business data.
+export const cooperationAccess = () => request.get(`${root}/access`, {}, quiet)
 export const cooperationBootstrap = () => request.get(`${root}/bootstrap`, {}, quiet)
 export const saveCooperationProfile = (data: CoopRow, existing = false) => existing ? request.put(`${root}/profile`, data, quiet) : request.post(`${root}/profile`, data, quiet)
 export const cooperationCatalog = (keyword = '', options: { browse?: boolean | number; business_type?: string } = {}) => request.get(`${root}/catalog`, { keyword, ...options }, quiet)
@@ -26,6 +28,13 @@ export const createCooperationOrder = (data: CoopRow) => request.post(`${root}/o
 // Quote is read-only. Prices and unused-term credit are calculated by the server;
 // the returned token is confirmed later when creating a new entitlement order.
 export const cooperationOrder = (id: number) => request.get(`${root}/orders/${id}`, {}, quiet)
+export const cooperationOrders = (query: CoopRow) => request.get(`${root}/orders`, query, quiet)
+export const closeCooperationOrder = (id: number) => request.post(`${root}/orders/${id}/close`, { confirm: true }, quiet)
+export const cooperationOrderRefund = (id: number) => request.get(`${root}/orders/${id}/refund`, {}, quiet)
+export const requestCooperationOrderRefund = (id: number, data: { confirm: true; reason: string; request_id: string }) => request.post(`${root}/orders/${id}/refund`, data, quiet)
+// Refresh only reads the original refund identity. It must never create a new refund.
+export const refreshCooperationOrderRefund = (id: number) => request.post(`${root}/orders/${id}/refund/refresh`, {}, quiet)
+export const cancelCooperationOrderRefund = (id: number, request_version: string) => request.post(`${root}/orders/${id}/refund/cancel`, { request_version }, quiet)
 export const cooperationWallet = (data: CoopRow = {}) => request.get(`${root}/wallet`, data, quiet)
 export const uploadCooperationAttachment = (filePath: string) => request.upload(`${root}/attachments`, { filePath, name: 'file' }, quiet)
 export const uploadCooperationStorefront = (filePath: string) => request.upload(`${root}/storefront`, { filePath, name: 'file' }, quiet)

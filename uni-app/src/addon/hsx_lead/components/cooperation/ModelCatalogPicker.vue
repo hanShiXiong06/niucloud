@@ -31,11 +31,12 @@
                         <view class="catalog-brand" role="button" :aria-pressed="!activeBrand" :class="{ active: !activeBrand }" @tap="activeBrand = ''"><view class="catalog-brand-copy"><text>全部分类</text><text>{{ categoryCount(activeCategory) }}/{{ categoryRows.length }}</text></view><view v-if="selectionMode === 'multiple'" class="catalog-parent-check" role="checkbox" :aria-label="`${categorySelectionState(activeCategory).checked ? '取消全选' : '全选'}${activeCategory}分类`" :aria-checked="categorySelectionState(activeCategory).indeterminate ? 'mixed' : categorySelectionState(activeCategory).checked" @tap.stop="toggleCategory(activeCategory)"><view class="catalog-check" :class="{ checked: categorySelectionState(activeCategory).checked, partial: categorySelectionState(activeCategory).indeterminate }"><text v-if="categorySelectionState(activeCategory).checked">✓</text><text v-else-if="categorySelectionState(activeCategory).indeterminate">−</text></view></view></view>
                         <view v-for="item in activeGroup?.brands || []" :key="item.key" class="catalog-brand" role="button" :aria-label="`查看${item.name}选项`" :aria-pressed="activeBrand === item.key" :class="{ active: activeBrand === item.key }" @tap="activeBrand = item.key"><view class="catalog-brand-copy"><text>{{ item.name }}</text><text>{{ brandCount(item.key) }}/{{ item.count }}</text></view><view v-if="selectionMode === 'multiple'" class="catalog-parent-check" role="checkbox" :aria-label="`${brandSelectionState(item.key).checked ? '取消全选' : '全选'}${activeCategory}下${item.name}`" :aria-checked="brandSelectionState(item.key).indeterminate ? 'mixed' : brandSelectionState(item.key).checked" @tap.stop="toggleBrand(item.key)"><view class="catalog-check" :class="{ checked: brandSelectionState(item.key).checked, partial: brandSelectionState(item.key).indeterminate }"><text v-if="brandSelectionState(item.key).checked">✓</text><text v-else-if="brandSelectionState(item.key).indeterminate">−</text></view></view></view>
                     </scroll-view>
-                    <scroll-view :key="modelPaneKey" scroll-y class="catalog-models" :show-scrollbar="false">
-                        <view v-for="item in visibleRows" :key="item.id" class="catalog-model" role="checkbox" :aria-label="item.title" :aria-checked="selectedIds.has(item.id)" @tap="toggle(item)">
+                    <scroll-view :key="modelPaneKey" scroll-y class="catalog-models" :show-scrollbar="false" :lower-threshold="160" @scrolltolower="loadMore">
+                        <view v-for="item in renderedRows" :key="item.id" class="catalog-model" role="checkbox" :aria-label="item.title" :aria-checked="selectedIds.has(item.id)" @tap="toggle(item)">
                             <view class="catalog-model-identity"><text class="catalog-model-title">{{ item.title }}</text><text v-if="query || selectedView" class="catalog-model-path">{{ item.category }} · {{ item.brand }}</text></view>
                             <view class="catalog-check" :class="{ checked: selectedIds.has(item.id) }"><text v-if="selectedIds.has(item.id)">✓</text></view>
                         </view>
+                        <view v-if="renderedRows.length < visibleRows.length" class="catalog-load-more">上滑查看更多</view>
                         <view v-if="!visibleRows.length" class="catalog-empty"><u-icon name="search" size="31" color="#90a2ba" /><text>{{ selectedView && !query ? '还没有选择选项' : query ? '没有匹配的选项' : '当前分类暂无选项' }}</text><button v-if="query" @tap="keyword = ''">清除搜索</button><button v-else-if="selectedView" @tap="toggleSelectedView">去分类选择</button></view>
                     </scroll-view>
                 </view>
@@ -48,26 +49,39 @@
         </template>
     </CoopTaskSheet>
 </template>
+<script lang="ts">
+// Match Vue's transparent layout in native Mini Programs: an extra custom
+// component host otherwise breaks the page's definite-height flex chain.
+export default { options: { virtualHost: true } }
+</script>
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import CooperationSearch from './CooperationSearch.vue'
 import { interactionFeedback } from '../../utils/interaction-feedback'
 import { cooperationButtonStyle } from '../../utils/mobile-ui'
 import { cooperationCatalog, coopError, type CoopRow } from '../../api/cooperation'
 import CoopTaskSheet from './CoopTaskSheet.vue'
 import CoopState from './CoopState.vue'
-import { normalizeCatalog, catalogCategories, visibleModels, selectionState, applySelection, type CatalogModel, type CatalogSelectionMode } from '../../utils/catalog-selection'
+import { normalizeCatalog, indexCatalog, indexedModels, indexedSelectionState, indexedSelectionStates, applySelection, applyIndexedSelection, type CatalogModel, type CatalogSelectionMode } from '../../utils/catalog-selection'
 
 const props = withDefaults(defineProps<{ show: boolean; page?: boolean; modelValue: CoopRow[]; title?: string; subtitle?: string; max?: number; businessType?: string; selectionMode?: 'multiple' | 'single'; initialView?: 'browse' | 'selected'; bulkActions?: boolean }>(), { title: '选择业务能力', subtitle: '', max: 0, businessType: 'purchase', selectionMode: 'multiple', initialView: 'browse', bulkActions: true })
 const emit = defineEmits<{ (event: 'close'): void; (event: 'update:modelValue', value: CoopRow[]): void }>()
-const rows = ref<CatalogModel[]>([]), chosen = ref<CatalogModel[]>([]), keyword = ref(''), activeCategory = ref(''), activeBrand = ref(''), selectedView = ref(false), loading = ref(false), loadError = ref(''), selectionError = ref('')
+// Catalog and choices change by replacement only. Thousands of immutable leaves
+// should not become deep reactive proxies or thousands of native view nodes.
+const rows = shallowRef<CatalogModel[]>([]), chosen = shallowRef<CatalogModel[]>([]), keyword = ref(''), activeCategory = ref(''), activeBrand = ref(''), selectedView = ref(false), loading = ref(false), loadError = ref(''), selectionError = ref('')
+const renderLimit = ref(60)
 let sequence = 0
-const query = computed(() => keyword.value.trim()), categories = computed(() => catalogCategories(rows.value)), activeGroup = computed(() => categories.value.find(item => item.key === activeCategory.value))
-const selectedIds = computed(() => new Set(chosen.value.map(item => item.id))), categoryRows = computed(() => visibleModels(rows.value, { category: activeCategory.value }))
-const visibleRows = computed(() => selectedView.value ? visibleModels(chosen.value, { keyword: query.value }) : query.value ? visibleModels(rows.value, { keyword: query.value }) : visibleModels(rows.value, { category: activeCategory.value, brand: activeBrand.value }))
-const rangeState = computed(() => selectionState(chosen.value, visibleRows.value))
-const categorySelections = computed(() => new Map(categories.value.map(item => [item.key, selectionState(chosen.value, visibleModels(rows.value, { category: item.key }))])))
-const brandSelections = computed(() => new Map((activeGroup.value?.brands || []).map(item => [item.key, selectionState(chosen.value, visibleModels(rows.value, { category: activeCategory.value, brand: item.key }))])))
+const catalogIndex = computed(() => indexCatalog(rows.value)), chosenIndex = computed(() => indexCatalog(chosen.value))
+const query = computed(() => keyword.value.trim()), categories = computed(() => catalogIndex.value.categories), activeGroup = computed(() => categories.value.find(item => item.key === activeCategory.value))
+const selectedIds = computed(() => new Set(chosen.value.map(item => item.id))), categoryRows = computed(() => indexedModels(catalogIndex.value, { category: activeCategory.value }))
+// Selection and bulk actions always address this complete range, not the
+// incremental rendering window below. A 5,000-item choice is never truncated.
+const visibleRows = computed(() => selectedView.value ? indexedModels(chosenIndex.value, { keyword: query.value }) : query.value ? indexedModels(catalogIndex.value, { keyword: query.value }) : indexedModels(catalogIndex.value, { category: activeCategory.value, brand: activeBrand.value }))
+const renderedRows = computed(() => visibleRows.value.slice(0, renderLimit.value))
+const rangeState = computed(() => indexedSelectionState(selectedIds.value, visibleRows.value))
+const parentSelections = computed(() => indexedSelectionStates(catalogIndex.value, selectedIds.value))
+const categorySelections = computed(() => parentSelections.value.categories)
+const brandSelections = computed(() => parentSelections.value.brands.get(activeCategory.value) || new Map())
 const allowBulk = computed(() => props.bulkActions === true && props.selectionMode === 'multiple' && Number(props.max) <= 0)
 const selectionHint = computed(() => props.selectionMode === 'single' ? '请选择 1 项，可再次点击取消' : allowBulk.value ? '批量操作仅影响当前显示范围' : Number(props.max) > 0 ? `最多可选 ${props.max} 项` : '可选择多项')
 const modelPaneKey = computed(() => JSON.stringify([selectedView.value, activeCategory.value, activeBrand.value, query.value]))
@@ -76,13 +90,14 @@ function categorySelectionState(category: string) { return categorySelections.va
 function brandSelectionState(brand: string) { return brandSelections.value.get(brand) || { checked:false, indeterminate:false, count:0, total:0 } }
 function categoryCount(category: string) { return categorySelectionState(category).count }
 function brandCount(brand: string) { return brandSelectionState(brand).count }
-function toggleCategory(category: string) { if (props.selectionMode !== 'multiple' || !categories.value.some(item => item.key === category)) return; updateSelection(visibleModels(rows.value, { category }), 'toggle_all') }
-function toggleBrand(brand: string) { if (props.selectionMode !== 'multiple' || !activeGroup.value?.brands.some(item => item.key === brand)) return; updateSelection(visibleModels(rows.value, { category: activeCategory.value, brand }), 'toggle_all') }
+function toggleCategory(category: string) { if (props.selectionMode !== 'multiple' || !categories.value.some(item => item.key === category)) return; updateSelection(indexedModels(catalogIndex.value, { category }), 'toggle_all') }
+function toggleBrand(brand: string) { if (props.selectionMode !== 'multiple' || !activeGroup.value?.brands.some(item => item.key === brand)) return; updateSelection(indexedModels(catalogIndex.value, { category: activeCategory.value, brand }), 'toggle_all') }
 function selectCategory(category: string) { activeCategory.value = category; activeBrand.value = ''; selectionError.value = '' }
 function search() { keyword.value = keyword.value.trim(); selectionError.value = '' }
 function clearSearch() { keyword.value = ''; selectionError.value = '' }
 function toggleSelectedView() { selectedView.value = !selectedView.value; keyword.value = ''; selectionError.value = '' }
-function updateSelection(range: CatalogModel[], mode: CatalogSelectionMode) { if (loading.value || loadError.value) return; const result = applySelection(chosen.value, range, mode, props.max); selectionError.value = (result.error || '').replace(/个型号/g, '项'); if (!result.error) { if (JSON.stringify(chosen.value.map(item => item.id)) !== JSON.stringify(result.items.map(item => item.id))) interactionFeedback('select'); chosen.value = result.items } }
+function updateSelection(range: CatalogModel[], mode: CatalogSelectionMode) { if (loading.value || loadError.value) return; const result = applyIndexedSelection(chosen.value, range, mode, props.max); selectionError.value = (result.error || '').replace(/个型号/g, '项'); if (!result.error && result.items !== chosen.value) { interactionFeedback('select'); chosen.value = result.items } }
+function loadMore() { renderLimit.value = Math.min(visibleRows.value.length, renderLimit.value + 60) }
 function batch(mode: CatalogSelectionMode) { if (!allowBulk.value) return; updateSelection(visibleRows.value, mode) }
 function toggle(item: CatalogModel) { if (props.selectionMode === 'single') { chosen.value = selectedIds.value.has(item.id) ? [] : [item]; selectionError.value = ''; interactionFeedback('select'); return }; updateSelection([item], selectedIds.value.has(item.id) ? 'clear' : 'select_all') }
 async function load() {
@@ -104,6 +119,7 @@ async function load() {
 function cancel() { emit('close') }
 function confirm() { if (loading.value || loadError.value) return; if (props.max > 0 && chosen.value.length > props.max) { selectionError.value = `最多选择 ${props.max} 项，请先移除多余选择`; return }; interactionFeedback('confirm'); emit('update:modelValue', chosen.value.map(item => ({ ...item }))); emit('close') }
 watch(() => props.show, show => { if (show) { chosen.value = applySelection(props.modelValue, [], 'clear', props.max).items; keyword.value = ''; activeCategory.value = ''; activeBrand.value = ''; selectedView.value = props.initialView === 'selected'; selectionError.value = ''; void load() } else { sequence++; loading.value = false; loadError.value = '' } }, { immediate: true })
+watch(modelPaneKey, () => { renderLimit.value = 60 })
 onBeforeUnmount(() => { sequence++ })
 </script>
 <style scoped lang="scss">
@@ -126,5 +142,6 @@ onBeforeUnmount(() => { sequence++ })
 .catalog-brand-copy { display:flex; flex:1; min-width:0; flex-direction:column; gap:4px; }
 .catalog-brand-copy>text:first-child { font-size:13px; line-height:19px; word-break:normal; overflow-wrap:break-word; }
 .catalog-brand-copy>text:last-child { font-size:10px; line-height:16px; color:#8a9bb1; white-space:nowrap; }
+.catalog-load-more { padding:14px; color:#8a9bb0; font-size:11px; line-height:20px; text-align:center; }
 @media(max-width:340px) { .catalog-brands { width:112px; flex-basis:112px; } }
 </style>

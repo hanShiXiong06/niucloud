@@ -85,6 +85,8 @@ class RecycleDevice extends BaseAdminController
 
         $data = $this->service->getInfo($id);
 
+        $data['info_correction'] = (new \addon\hsx_recycle\app\service\admin\order\RecycleDeviceInfoCorrectionService())->describe($data);
+
         // 获取设备完整操作链路日志：设备主流程 + 关联代卖流程
         $data['logs'] = $this->service->getTimelineLogs($id, 50);
 
@@ -105,6 +107,7 @@ class RecycleDevice extends BaseAdminController
         $this->validate->scene('detail')->check(['id' => $id]);
 
         $data = $this->service->getInfo($id);
+        $data['info_correction'] = (new \addon\hsx_recycle\app\service\admin\order\RecycleDeviceInfoCorrectionService())->describe($data);
         $data['logs'] = $this->service->getTimelineLogs($id, 50);
 
         // 区块结构
@@ -126,7 +129,7 @@ class RecycleDevice extends BaseAdminController
             'check_at', 'checkUser', 'check_result', 'check_result_seller', 'check_result_buyer',
             'check_images', 'check_images_buyer', 'check_images_seller',
             'check_images_thumb_small', 'check_images_seller_thumb_small', 'check_images_buyer_thumb_small',
-            'remark',
+            'remark', 'info_correction',
         ];
         $slim = [];
         foreach ($keep as $k) {
@@ -244,6 +247,12 @@ class RecycleDevice extends BaseAdminController
         $raw = $this->request->param();
         $payload = (is_array($raw) && isset($raw['data']) && is_array($raw['data'])) ? $raw['data'] : (is_array($raw) ? $raw : []);
         unset($payload['id']);
+
+        // 确认前基础资料纠错独立处理，不能进入质检/定价/状态更新或自动打印分支。
+        if (($payload['action'] ?? '') === 'correct_info') {
+            unset($payload['action']);
+            return success((new \addon\hsx_recycle\app\service\admin\order\RecycleDeviceInfoCorrectionService())->correct($id, $payload));
+        }
 
         // 只在修改串号时强校验；空字符串/显式 null 也必须拦截，不能清空后绕过必填。
         $this->validate->scene('update')->check(array_merge(['id' => $id], $payload));

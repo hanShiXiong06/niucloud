@@ -5,6 +5,11 @@ const root = 'hsx_lead'
 const quiet = { showErrorMessage: false }
 export const getCatalog = (params: Row = {}) => request.get(`${root}/catalog`, { ...quiet, params })
 export const saveCatalog = (data: { content: string, format: 'csv' | 'json' | 'xlsx', business_type?: string, preview?: boolean }) => request.put(`${root}/catalog`, data, quiet)
+export const getCatalogItems = (params: Row = {}) => request.get(`${root}/catalog/items`, { ...quiet, params })
+export const addCatalogItem = (data: Row) => request.post(`${root}/catalog/items`, data, quiet)
+export const updateCatalogItem = (id: string, data: Row) => request.put(`${root}/catalog/items/${encodeURIComponent(id)}`, data, quiet)
+export const deleteCatalogItem = (id: string, data: Row) => request.delete(`${root}/catalog/items/${encodeURIComponent(id)}`, { ...quiet, data })
+export const getCatalogLogs = (params: Row = {}) => request.get(`${root}/catalog/logs`, { ...quiet, params })
 export const getMembers = (keyword = '') => request.get(`${root}/members`, { ...quiet, params: { keyword } })
 export const getMerchants = (params: Row) => request.get(`${root}/merchants`, { ...quiet, params })
 export const getMerchant = (id: number) => request.get(`${root}/merchants/${id}`, quiet)

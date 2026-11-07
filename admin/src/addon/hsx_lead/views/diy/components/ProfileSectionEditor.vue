@@ -1,6 +1,7 @@
 <template>
     <div v-show="diyStore.editTab==='content'" class="content-wrap">
         <div class="edit-attr-item-wrap"><h3 class="mb-[10px]">{{ definition.label }}</h3><el-form label-width="100px" class="px-[10px]">
+            <el-form-item v-if="kind==='identity'" label="展示版本"><el-radio-group v-model="diyStore.editComponent.identityStyle"><el-radio label="store">经典门店版</el-radio><el-radio label="member">会员中心版</el-radio></el-radio-group><p class="profile-editor-note">同一个组件切换展示，只显示选中的版本；设置入口沿用牛云的个人设置与退出登录。</p></el-form-item>
             <el-form-item label="区块标题"><el-input v-model.trim="diyStore.editComponent.title" maxlength="30" show-word-limit /></el-form-item>
             <el-form-item label="显示标题"><el-switch v-model="diyStore.editComponent.showTitle" :active-value="1" :inactive-value="0" /></el-form-item>
             <el-form-item label="补充文字"><el-input v-model.trim="diyStore.editComponent.subtitle" maxlength="100" placeholder="选填，留空不显示" /></el-form-item>
@@ -24,7 +25,7 @@ const props=defineProps<{kind:ProfileSection;value?:Record<string,any>}>()
 const diyStore=useDiyStore()
 const appearanceDefaults={showTitle:1,primaryColor:'',panelColor:'',titleColor:'#202124',textColor:'#606266',subtleColor:'#909399',iconColor:'#333333',borderColor:'#e4e8ef',buttonColor:'',buttonTextColor:'#ffffff',titleSize:18,textSize:14,contentPadding:16,rowGap:12,itemRadius:8,buttonRadius:6,entryImage:'',subtitle:''}
 const sections={
-    identity:{name:'LeadProfileIdentity',label:'门店身份',defaults:{title:'我的门店',showTitle:0,showRegion:1,showGrade:1,buttonText:'门店资料',secondaryText:'门店成员',outgoingText:'找门店',incomingText:'找客户'},texts:[{key:'buttonText',label:'资料按钮'},{key:'secondaryText',label:'成员按钮'},{key:'outgoingText',label:'发单入口'},{key:'incomingText',label:'接单入口'}],switches:[{key:'showRegion',label:'门店地区'},{key:'showGrade',label:'商户等级'}]},
+    identity:{name:'LeadProfileIdentity',label:'门店身份',defaults:{title:'我的门店',showTitle:0,identityStyle:'store',showRegion:1,showGrade:1,showMemberNo:1,showBalance:1,showSettings:1,showStats:1,buttonText:'门店资料',secondaryText:'门店成员',outgoingText:'找门店',incomingText:'找客户'},texts:[{key:'buttonText',label:'资料按钮'},{key:'secondaryText',label:'成员按钮'},{key:'outgoingText',label:'发单入口'},{key:'incomingText',label:'接单入口'}],switches:[{key:'showRegion',label:'门店地区'},{key:'showGrade',label:'商户等级'},{key:'showMemberNo',label:'用户编号'},{key:'showBalance',label:'账户余额'},{key:'showSettings',label:'设置入口'},{key:'showStats',label:'协作数据'}]},
     tools:{name:'LeadProfileTools',label:'消息与偏好',defaults:{title:'消息与偏好',showNotice:1,showFeedback:1,noticeText:'工单通知',feedbackText:'触感反馈',showProfile:0,showCapability:0,showInventory:0,showConnection:0,showMembers:0,profileText:'门店资料',capabilityText:'交付能力',inventoryText:'我的货盘',connectionText:'ERP连接',membersText:'门店成员',profileImage:'',capabilityImage:'',inventoryImage:'',connectionImage:'',membersImage:'',noticeImage:''},texts:[{key:'noticeText',label:'通知入口'},{key:'feedbackText',label:'触感设置'}],switches:[{key:'showNotice',label:'工单通知'},{key:'showFeedback',label:'触感反馈'}]},
     benefits:{name:'LeadProfileBenefits',label:'会员权益',defaults:{title:'会员权益',showMembership:1,buttonText:'查看会员权益',secondaryText:''},texts:[{key:'buttonText',label:'入口按钮'}],switches:[{key:'showMembership',label:'主体会员权益'}]},
     promotion:{name:'LeadProfilePromotion',label:'推广入口',defaults:{title:'推广合作',showInviter:1,buttonText:'推广中心',secondaryText:'服务商申请'},texts:[{key:'buttonText',label:'推广按钮'},{key:'secondaryText',label:'服务商按钮'}],switches:[{key:'showInviter',label:'邀请我的人'}]},
@@ -39,6 +40,7 @@ onMounted(()=>{
         const target=diyStore.value[index]
         if(!target||target.componentName!==definition.value.name)return{code:true,message:''}
         if(target.showTitle===1&&!String(target.title||'').trim())return{code:false,message:'请填写区块标题或关闭标题显示'}
+        if(props.kind==='identity'&&!['store','member'].includes(target.identityStyle))return{code:false,message:'请选择会员信息展示版本'}
         const switches=[{key:'showTitle',label:'标题显示'},...definition.value.switches,...(props.kind==='tools'?toolEntries.map(field=>({key:field.show,label:field.label})):[])]
         for(const field of switches)if(![0,1].includes(target[field.key]))return{code:false,message:'请检查'+field.label+'的展示开关'}
         return{code:true,message:''}

@@ -7,12 +7,14 @@
                     <CoopMerchantAvatar :image="profile.storefront_image" :name="profile.name" :active="profile.membership?.active===true" :rank="membershipBadgeRank(profile.membership)" :appearance="profile.membership?.level_visual" :highlighted="membershipBadgeRank(profile.membership)>=3" />
                     <view class="coop-profile-identity">
                         <view class="coop-profile-name-line"><view class="coop-profile-name">{{ profile.name }}</view><view v-if="shown('showGrade')" class="coop-profile-name-badge"><CoopLevelBadge :level="membershipBadgeRank(profile.membership)" :label="profile.membership?.level_name||'普通会员'" :appearance="profile.membership?.level_visual" :state="membershipState(profile.membership||{})" variant="inline" size="small" /></view></view>
+                        <view v-if="shown('showMemberNo') && memberNo" class="coop-profile-region">{{ memberIdentifier.label }}：{{ memberNo }}</view>
                         <view v-if="shown('showRegion') && profile.region_text" class="coop-profile-region">{{ profile.region_text }}</view>
                         <view v-if="profile.blocked_at" class="coop-profile-badges"><text class="is-blocked">已停止合作</text></view>
                     </view>
                     <button v-if="canEdit" class="coop-profile-edit" :aria-label="text('buttonText','门店资料')" @tap="open"><u-icon name="edit-pen" size="19" :color="iconColor" /></button>
+                    <button v-if="shown('showSettings') && member.member_id" class="coop-profile-edit" aria-label="设置与退出登录" @tap="$emit('settings')"><u-icon name="setting" size="21" :color="iconColor" /></button>
                 </view>
-                <view v-if="profile.cooperation_stats" class="coop-profile-stats"><button @tap="$emit('outgoing')"><text class="coop-profile-stats__count">{{ statCount('outgoing') }}</text><text>{{ text('outgoingText','找门店') }}</text></button><button @tap="$emit('incoming')"><text class="coop-profile-stats__count">{{ statCount('incoming') }}</text><text>{{ text('incomingText','找客户') }}</text></button><button @tap="$emit('members')"><text class="coop-profile-stats__count">{{ profile.membership?.used_accounts ?? '—' }}</text><text>{{ text('secondaryText','门店成员') }}</text></button></view>
+                <view v-if="profile.cooperation_stats && shown('showStats') || shown('showBalance') && member.member_id" class="coop-profile-stats"><button v-if="shown('showBalance') && member.member_id" @tap="$emit('balance')"><text class="coop-profile-stats__count">{{ memberBalance }}</text><text>余额（元）</text></button><template v-if="profile.cooperation_stats && shown('showStats')"><button @tap="$emit('outgoing')"><text class="coop-profile-stats__count">{{ statCount('outgoing') }}</text><text>{{ text('outgoingText','找门店') }}</text></button><button @tap="$emit('incoming')"><text class="coop-profile-stats__count">{{ statCount('incoming') }}</text><text>{{ text('incomingText','找客户') }}</text></button><button @tap="$emit('members')"><text class="coop-profile-stats__count">{{ profile.membership?.used_accounts ?? '—' }}</text><text>{{ text('secondaryText','门店成员') }}</text></button></template></view>
             </template>
             <template v-if="hasSection('tools')">
                 <view v-if="hasConfiguredTools" class="coop-profile-tools" :class="{ 'is-list': appearance?.layout === 'list' }"><button v-for="tool in tools" :key="tool.key" class="coop-profile-tool" hover-class="coop-profile-pressed" @tap="toolAction(tool.key)"><image v-if="tool.image" class="coop-profile-tool__image" :src="tool.image" mode="aspectFit" /><CoopBusinessIcon v-else :name="tool.icon" size="small" :color="iconColor" /><view><text class="coop-profile-tool__label">{{ tool.label }}</text><text v-if="tool.hint" class="coop-profile-tool__hint">{{ tool.hint }}</text></view></button></view>
@@ -20,7 +22,7 @@
                 <TouchFeedbackPreference v-if="shown('showFeedback')" :label="text('feedbackText','轻触反馈')" />
             </template>
         </view>
-        <view v-if="!editing && profile?.id && hasSection('promotion')" class="coop-profile-card coop-profile-promotion"><button class="coop-profile-promotion__main" hover-class="coop-profile-pressed" @tap="$emit('promotion','overview')"><image v-if="toolPicture('entryImage')" class="coop-profile-tool__image" :src="toolPicture('entryImage')" mode="aspectFit" /><CoopBusinessIcon v-else name="invite" :color="iconColor" /><view class="coop-profile-promotion__copy"><text class="coop-profile-promotion__title">{{ text('buttonText','推广中心') }}</text><text v-if="appearance.subtitle" class="coop-profile-promotion__hint">{{ appearance.subtitle }}</text></view><u-icon name="arrow-right" size="12" :color="subtleColor" /></button><view class="coop-profile-promotion__links"><button v-if="shown('showInviter')" hover-class="coop-profile-pressed" @tap="$emit('promotion','upstream')"><u-icon name="account" size="17" :color="iconColor" /><text>邀请关系</text><u-icon name="arrow-right" size="11" :color="subtleColor" /></button><button hover-class="coop-profile-pressed" @tap="$emit('promotion','application')"><u-icon name="man-add" size="17" :color="iconColor" /><text>{{ text('secondaryText','服务商申请') }}</text><u-icon name="arrow-right" size="11" :color="subtleColor" /></button></view></view>
+        <view v-if="!editing && (profile?.id || member.member_id) && hasSection('promotion')" class="coop-profile-card coop-profile-promotion"><button class="coop-profile-promotion__main" hover-class="coop-profile-pressed" @tap="$emit('promotion','overview')"><image v-if="toolPicture('entryImage')" class="coop-profile-tool__image" :src="toolPicture('entryImage')" mode="aspectFit" /><CoopBusinessIcon v-else name="invite" :color="iconColor" /><view class="coop-profile-promotion__copy"><text class="coop-profile-promotion__title">{{ text('buttonText','推广中心') }}</text><text v-if="appearance.subtitle" class="coop-profile-promotion__hint">{{ appearance.subtitle }}</text></view><u-icon name="arrow-right" size="12" :color="subtleColor" /></button><view class="coop-profile-promotion__links"><button v-if="shown('showInviter')" hover-class="coop-profile-pressed" @tap="$emit('promotion','upstream')"><u-icon name="account" size="17" :color="iconColor" /><text>邀请关系</text><u-icon name="arrow-right" size="11" :color="subtleColor" /></button><button hover-class="coop-profile-pressed" @tap="$emit('promotion','application')"><u-icon name="man-add" size="17" :color="iconColor" /><text>{{ text('secondaryText','服务商申请') }}</text><u-icon name="arrow-right" size="11" :color="subtleColor" /></button></view></view>
         <view v-if="!editing && profile?.blocked_at && !displayOnly" class="coop-task-rule">合作已停用：{{ profile.block_reason || '请联系平台核对' }}。历史记录和已形成收益仍保留。</view>
         <CoopMembershipEntry v-if="!editing && profile?.id && hasSection('benefits') && shown('showMembership')" :profile="profile" :appearance="appearance" :embedded="displayOnly" @open="$emit('membership')" />
         <CoopTaskSheet v-if="!displayOnly && editing && !canEdit" :page="page" :show="true" title="门店资料" full @close="close"><view class="coop-form-section"><view class="coop-section-title">资料由门店负责人管理</view><view class="coop-muted">你可以处理负责人授权的协作业务，不能修改门店资质、付款或 ERP 授权。</view></view></CoopTaskSheet>
@@ -39,12 +41,17 @@
                 <view v-if="disabledCapabilities.length" class="coop-form-column"><text>已停用业务（只读保留）</text><view v-for="capability in disabledCapabilities" :key="capability.business_type" class="coop-disabled-capability"><view><text>{{ capability.business_name }}</text><text>已停用 · 已登记 {{ capability.option_ids.length }} 项</text></view><u-icon name="lock" size="16" color="#8b97a8" /></view><view class="coop-capability-help">已有能力按原记录保留，不影响修改门店资料。业务停用期间不能新增或扩大能力。</view></view>
                 <view v-if="fieldError('capabilities')" class="coop-profile-field-error" role="alert">{{ fieldError('capabilities') }}</view>
             </view>
-            <view class="coop-form-section coop-profile-erp"><u-collapse :border="false"><u-collapse-item title="ERP 库存同步" :label="profile.connection?.connected ? (profile.connection.provider_name || profile.provider_requested_name || form.provider) + ' · ' + connectionLabel : '选填'" name="erp-settings" icon="grid" :disabled="locked"><view class="coop-form-column"><template v-if="profile.connection?.connected"><view class="coop-connected-source"><view class="coop-connection-source"><text>{{ profile.connection.provider_name || profile.provider_requested_name || form.provider }}</text><text class="coop-connection-state" :class="{ 'is-paused': profile.connection.channel_enabled === false || !profile.connection.enabled }">{{ profile.connection.channel_enabled === false ? '渠道已关闭' : profile.connection.enabled ? '自动同步开启' : '自动同步暂停' }}</text></view><text role="button" aria-label="管理ERP连接" @tap="manageConnection">管理连接 ›</text></view></template><template v-else><picker :range="providerOptions" range-key="name" :value="providerIndex" :disabled="locked" @change="selectProvider(Number($event.detail.value))"><view class="coop-picker-field">{{ providerOptions[providerIndex]?.name || '暂不连接 ERP' }} ›</view></picker><view v-if="providerOptions[providerIndex]?.disabled" class="coop-muted">原渠道已关闭，原库存和接入资料仍保留。</view></template></view><view class="coop-profile-help-body"><view>登记的是可交付能力，不代表当前有现货。</view><view>手工型号与 ERP 库存参考可以同时使用。保存门店资料不会切换现有 ERP 账号。</view><view>需要暂停自动同步或更换账号时，进入“管理连接”操作。</view></view></u-collapse-item></u-collapse></view>
+            <view v-if="erpVisible" class="coop-form-section coop-profile-erp"><u-collapse :border="false"><u-collapse-item title="ERP 库存同步" :label="profile.connection?.connected ? connectionProviderName + ' · ' + connectionLabel : '选填'" name="erp-settings" icon="grid" :disabled="locked"><view class="coop-form-column"><template v-if="profile.connection?.connected"><view class="coop-connected-source"><view class="coop-connection-source"><text>{{ connectionProviderName }}</text><text class="coop-connection-state" :class="{ 'is-paused': profile.connection.channel_enabled === false || !profile.connection.enabled }">{{ profile.connection.channel_enabled === false ? '渠道已关闭' : profile.connection.enabled ? '自动同步开启' : '自动同步暂停' }}</text></view><text role="button" aria-label="管理ERP连接" @tap="manageConnection">管理连接 ›</text></view></template><template v-else><picker :range="providerOptions" range-key="name" :value="providerIndex" :disabled="locked" @change="selectProvider(Number($event.detail.value))"><view class="coop-picker-field">{{ providerOptions[providerIndex]?.name || '暂不连接 ERP' }} ›</view></picker><view v-if="providerOptions[providerIndex]?.disabled" class="coop-muted">原渠道已关闭，原库存和接入资料仍保留。</view></template></view><view class="coop-profile-help-body"><view>登记的是可交付能力，不代表当前有现货。</view><view>手工型号与 ERP 库存参考可以同时使用。保存门店资料不会切换现有 ERP 账号。</view><view>需要暂停自动同步或更换账号时，进入“管理连接”操作。</view></view></u-collapse-item></u-collapse></view>
             <view v-if="onboarding" class="coop-profile-promotion-entry" role="button" :aria-disabled="locked" @tap="openPromotion"><u-icon name="share" size="18" color="#587eaf" /><text>推广中心</text><u-icon name="arrow-right" size="13" color="#8b9ab0" /></view>
             <template #footer><view v-if="localError || error" class="coop-inline-error coop-submit-error" role="alert" aria-live="polite">{{ localError || error }}</view><u-button type="primary" shape="circle" :custom-style="cooperationButtonStyle" :text="licenseUploading ? '营业执照上传中' : uploading ? '门头图片上传中' : '保存门店资料'" :loading="locked" :disabled="locked" @click="submit" /></template>
         </CoopTaskSheet>
     </view>
 </template>
+<script lang="ts">
+// Match Vue's transparent layout in native Mini Programs: an extra custom
+// component host otherwise breaks the page's definite-height flex chain.
+export default { options: { virtualHost: true } }
+</script>
 <script setup lang="ts">
 import CoopBusinessIcon from './CoopBusinessIcon.vue'
 import CoopMembershipEntry from './CoopMembershipEntry.vue'
@@ -63,9 +70,12 @@ import { openCooperationCatalog } from '../../utils/cooperation-navigation'
 import { entityPageUrl, membershipBadgeRank, membershipState } from '../../utils/entity-membership'
 import { cooperationButtonStyle, cooperationInputStyle } from '../../utils/mobile-ui'
 import { cooperationDiyVars } from '../../utils/cooperation-diy-style'
+import { erpProviderDisplayName } from '../../utils/erp-provider-display'
+import { profileMemberIdentifier, profileMemberBalance } from '../../utils/profile-identity'
 import { img } from '@/utils/common'
-const props = withDefaults(defineProps<{ profile: CoopRow; page?: boolean; editing?: boolean; config: CoopRow; providers: CoopRow[]; onboarding?: boolean; busy?: boolean; error?: string; displayOnly?: boolean; section?: string; appearance?: CoopRow }>(), { onboarding: false, busy: false, error: '', displayOnly: false, section: 'all', appearance: () => ({}) })
-const emit = defineEmits<{ (event: 'submit', value: CoopRow): void; (event: 'connection' | 'subscribe' | 'inventory' | 'edit' | 'close' | 'membership' | 'members' | 'outgoing' | 'incoming'): void; (event: 'promotion', value: string): void; (event: 'overlay', value: boolean): void }>()
+const props = withDefaults(defineProps<{ profile: CoopRow; member?: CoopRow; page?: boolean; editing?: boolean; config: CoopRow; providers: CoopRow[]; onboarding?: boolean; busy?: boolean; error?: string; displayOnly?: boolean; section?: string; appearance?: CoopRow }>(), { member: () => ({}), onboarding: false, busy: false, error: '', displayOnly: false, section: 'all', appearance: () => ({}) })
+const emit = defineEmits<{ (event: 'submit', value: CoopRow): void; (event: 'connection' | 'subscribe' | 'inventory' | 'edit' | 'close' | 'membership' | 'members' | 'outgoing' | 'incoming' | 'settings' | 'balance'): void; (event: 'promotion', value: string): void; (event: 'overlay', value: boolean): void }>()
+const memberIdentifier = computed(() => profileMemberIdentifier(props.member)), memberNo = computed(() => memberIdentifier.value.value), memberBalance = computed(() => profileMemberBalance(props.member))
 const hasSection = (key: string) => !props.section || props.section === 'all' || props.section === key
 const canEdit = computed(() => !props.profile.id || props.profile.permissions?.can_manage_billing !== false)
 const shown = (key: string) => ![false, 0, '0'].includes(props.appearance?.[key]) && (!['showProfile', 'showCapability'].includes(key) || canEdit.value) && (key !== 'showConnection' || props.profile.permissions?.can_manage_erp !== false)
@@ -78,13 +88,14 @@ const text = (key:string,fallback:string) => props.appearance[key] === undefined
 const customTool = (key:string) => !props.displayOnly || (Object.prototype.hasOwnProperty.call(props.appearance,key) ? shown(key) : ['showProfile','showCapability','showInventory','showConnection'].includes(key))
 const toolPicture = (key:string) => typeof props.appearance[key] === 'string' && props.appearance[key].trim() ? img(props.appearance[key].trim()) : ''
 const noticeImage = computed(() => toolPicture('noticeImage') || toolPicture('entryImage'))
+const erpVisible = computed(() => props.config.erp_visible !== false && props.profile.erp_visible !== false)
 const tools = computed(() => [
     { key:'profile',flag:'showProfile',icon:'store',label:text('profileText','门店资料'),hint:'',image:toolPicture('profileImage') },
     { key:'capability',flag:'showCapability',icon:'order',label:text('capabilityText','交付能力'),hint:'',image:toolPicture('capabilityImage') },
     { key:'inventory',flag:'showInventory',icon:'stock',label:text('inventoryText','库存快照'),hint:typeof props.profile.inventory_count === 'number' ? props.profile.inventory_count+' 条参考' : '',image:toolPicture('inventoryImage') },
     { key:'connection',flag:'showConnection',icon:'connection',label:text('connectionText','ERP 同步'),hint:connectionLabel.value,image:toolPicture('connectionImage') },
     { key:'members',flag:'showMembers',icon:'team',label:text('membersText','门店成员'),hint:'',image:toolPicture('membersImage') },
-].filter(tool => customTool(tool.flag) && shown(tool.flag)))
+].filter(tool => customTool(tool.flag) && shown(tool.flag) && (erpVisible.value || !['inventory','connection'].includes(tool.key))))
 function statCount(key:string) { const raw=props.profile.cooperation_stats?.[key],count=typeof raw==='number'||typeof raw==='string'&&raw!==''?Number(raw):NaN;return Number.isSafeInteger(count) && count>=0 ? count : '—' }
 function toolAction(key:string) { if (locked.value) return; if (key==='profile'||key==='capability') open();else if (key==='members') emit('members');else if (key==='inventory') emit('inventory');else if (key==='connection') emit('connection') }
 const defaults = () => ({ name: '', contact_name: '', mobile: '', province_id: 0, city_id: 0, district_id: 0, address: '', provider: '', storefront_image: '', business_license_token: '', manual_models: [] as CoopRow[] })
@@ -94,10 +105,16 @@ const visible = ref(false), localError = ref(''), uploading = ref(false), form =
 const licenseUploading = ref(false)
 const errorField = ref(''), scrollTarget = ref('')
 const locked = computed(() => props.busy || uploading.value || licenseUploading.value)
+function profileProviderName(key: unknown) {
+    const connection = props.profile.connection || {}
+    const fallback = key === connection.provider ? connection.provider_name : key === props.profile.provider_requested ? props.profile.provider_requested_name : ''
+    return erpProviderDisplayName(key, props.providers, fallback)
+}
+const connectionProviderName = computed(() => profileProviderName(props.profile.connection?.provider || props.profile.provider_requested || form.provider))
 const region = computed({ get: () => form, set: value => Object.assign(form, value) }), providerOptions = computed(() => {
-    const items: CoopRow[] = [{ key: '', name: '暂不连接 ERP，手动选择交付型号' }, ...props.providers]
+    const items: CoopRow[] = [{ key: '', name: '暂不连接 ERP，手动选择交付型号' }, ...props.providers.map(item => ({ ...item, name: erpProviderDisplayName(item.key, props.providers) }))]
     const current = props.profile.provider_requested || props.profile.connection?.provider || ''
-    if (props.profile.id && current && !props.providers.some(item => item.key === current)) items.push({ key: current, name: (props.profile.connection?.provider_name || props.profile.provider_name || current) + '（已关闭，保留原选择）', disabled: true })
+    if (props.profile.id && current && !props.providers.some(item => item.key === current)) items.push({ key: current, name: profileProviderName(current) + '（已关闭，保留原选择）', disabled: true })
     return items
 }), providerIndex = computed(() => Math.max(0, providerOptions.value.findIndex(item => item.key === form.provider)))
 const connectionLabel = computed(() => props.profile.connection?.channel_enabled === false ? '渠道关闭·同步暂停' : props.profile.connection?.connected && !props.profile.connection?.enabled ? '同步已暂停' : props.profile.connection?.last_sync_status === 'completed' ? '已同步' : props.profile.connection?.enabled ? '查看进度' : '选填，不影响协作')
@@ -118,7 +135,7 @@ function toggleBusiness(key: string) { if (locked.value || !businesses.value.som
 function openModelCatalog(key: string) { if (locked.value) return; const business = businesses.value.find(item => item.key === key); if (!business) return; openCooperationCatalog({ title: '选择' + business.name + '交付' + businessDimensionLabel(business), business_type: key, max: 0, selection_mode: 'multiple', allow_bulk: true, items: capabilityChoices[key] || [] }, items => { capabilityChoices[key] = items; localError.value = '' }) }
 function open() { if (!locked.value && canEdit.value) emit('edit') }
 function close() { if (locked.value) return; if (props.editing || props.page) { emit('close'); return }; visible.value = false; emit('overlay', false) }
-function manageConnection() { if (!locked.value) emit('connection') }
+function manageConnection() { if (!locked.value && erpVisible.value) emit('connection') }
 function openPromotion() { if (!locked.value) emit('promotion', 'overview') }
 function joinExisting() { if (!locked.value) uni.navigateTo({ url: entityPageUrl + '?mode=join' }) }
 function clearDraft() { draftActive = false; uni.removeStorageSync(draftKey()) }

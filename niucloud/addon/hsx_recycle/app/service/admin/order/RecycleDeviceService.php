@@ -643,6 +643,7 @@ class RecycleDeviceService extends BaseAdminService
     {
         $deviceLogs = (new RecycleDeviceLog())
             ->getDeviceLogList(['device_id' => $deviceId], 1, $limit, 'id desc')['list'] ?? [];
+        $deviceLogs = (new RecycleDeviceInfoCorrectionService())->groupTimelineLogs($deviceLogs, $deviceId);
 
         $timeline = [];
         $deviceActionKeys = [];
@@ -817,16 +818,20 @@ class RecycleDeviceService extends BaseAdminService
      * @param array $data
      * @return int
      */
-    public function add(array $data): int
+    public function add(array $data, int $trustedSiteId = 0): int
     {
-        $data['status'] = RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK;
-        
-        $data['category_id'] = (int)($data['category_id'] ?? 0);
-        
-        $model = new RecycleDevice();
-        $model->save($data);
-        $this->incrementCategorySelectCount((int)$data['category_id']);
-        return $model->id;
+        $siteId = $trustedSiteId > 0 ? $trustedSiteId : (int)$this->site_id;
+        if ($siteId <= 0 || (isset($data['site_id']) && (int)$data['site_id'] !== $siteId)) throw new CommonException('设备录入站点不一致');
+        $data['site_id'] = $siteId;
+        return Db::transaction(function () use ($data, $siteId): int {
+            $data['status'] = RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK;
+            $data['category_id'] = (int)($data['category_id'] ?? 0);
+            $model = new RecycleDevice();
+            $model->save($data);
+            (new RecycleDeviceInfoCorrectionService())->recordInitialEntry((int)$model->id, 'staff_entry', $siteId);
+            $this->incrementCategorySelectCount((int)$data['category_id']);
+            return $model->id;
+        });
     }
 
     private function incrementCategorySelectCount(int $categoryId): void
@@ -844,17 +849,21 @@ class RecycleDeviceService extends BaseAdminService
      * @param array $data 更新数据
      * @return bool
      */
-    public function signUpdate(int $id, array $data): bool
+    public function signUpdate(int $id, array $data, int $trustedSiteId = 0): bool
     {
-        $model = RecycleDevice::find($id);
-        if (empty($model)) {
-            return false;
-        }
-        $saved = $model->save($data);
-        if ($saved && isset($data['category_id'])) {
-            $this->incrementCategorySelectCount((int)$data['category_id']);
-        }
-        return $saved;
+        $siteId = $trustedSiteId > 0 ? $trustedSiteId : (int)$this->site_id;
+        if ($siteId <= 0 || (isset($data['site_id']) && (int)$data['site_id'] !== $siteId)) throw new CommonException('设备签收站点不一致');
+        return Db::transaction(function () use ($id, $data, $siteId): bool {
+            $model = RecycleDevice::where([['site_id', '=', $siteId], ['id', '=', $id]])->lock(true)->findOrEmpty();
+            if ($model->isEmpty()) return false;
+            $before = $model->toArray();
+            $saved = $model->save($data);
+            if ($saved) {
+                (new RecycleDeviceInfoCorrectionService())->recordFirstModelFill($id, $before, 'sign_first_info', $siteId);
+                if (isset($data['category_id'])) $this->incrementCategorySelectCount((int)$data['category_id']);
+            }
+            return $saved;
+        });
     }
 
     /**
@@ -948,7 +957,7 @@ class RecycleDeviceService extends BaseAdminService
                 $oldInfo = DeviceReadingArchive::decode($device->info);
                 $inputInfo = DeviceReadingArchive::decode($data['info'] ?? []);
                 // 原始证据只经专用契约追加，普通 info 更新不可覆盖或删除原文。
-                unset($inputInfo['device_readings'], $inputInfo['customer_quote']);
+                unset($inputInfo['device_readings'], $inputInfo['customer_quote'], $inputInfo['entry_audit'], $inputInfo['info_correction_audit']);
                 $summary = DeviceSummaryHelper::normalizeSummary($data['summary'] ?? $inputInfo['sign_summary'] ?? []);
                 $identity = array_replace($device->toArray(), $data);
                 if (array_key_exists('serial_number', $data)) $data['sn'] = (string)$data['serial_number'];
@@ -1083,7 +1092,9 @@ class RecycleDeviceService extends BaseAdminService
             }
             
             // 更新设备信息
+            $beforeBasicInfo = $device->toArray();
             $device->save($data);
+            if ($signSave) (new RecycleDeviceInfoCorrectionService())->recordFirstModelFill($id, $beforeBasicInfo, 'sign_first_info', (int)$this->site_id);
             
             // 同步更新订单状态（如果需要）
             if (isset($data['status']) || isset($data['final_price'])) {
@@ -1189,6 +1200,7 @@ class RecycleDeviceService extends BaseAdminService
             if ($device->isEmpty()) {
                 throw new CommonException('DEVICE_NOT_FOUND');
             }
+            $beforeBasicInfo = $device->toArray();
 
             // 获取订单信息
             $order = RecycleOrder::findOrEmpty($device->order_id);
@@ -1308,7 +1320,7 @@ class RecycleDeviceService extends BaseAdminService
                 // Model 已声明 $json=['info']，save() 时会自动 json_encode，无需手动编码
                 $oldInfo = DeviceReadingArchive::decode($device->info);
                 $newInfo = DeviceReadingArchive::decode($checkData['info'] ?? []);
-                unset($newInfo['device_readings'], $newInfo['customer_quote']);
+                unset($newInfo['device_readings'], $newInfo['customer_quote'], $newInfo['entry_audit'], $newInfo['info_correction_audit']);
                 foreach (['battery', 'battery_num'] as $key) {
                     if (!array_key_exists($key, (array)($newInfo['check_meta'] ?? [])) && array_key_exists($key, (array)($oldInfo['check_meta'] ?? []))) {
                         $newInfo['check_meta'][$key] = $oldInfo['check_meta'][$key];
@@ -1336,6 +1348,8 @@ class RecycleDeviceService extends BaseAdminService
             }
 
             $device->save($updateData);
+
+            (new RecycleDeviceInfoCorrectionService())->recordFirstModelFill($id, $beforeBasicInfo, 'check_first_info', (int)$this->site_id);
 
             // 记录日志
             if (!isset($this->logService)) {

@@ -56,7 +56,10 @@ try {
     coopCheck($p->create($input)['id']===$lead['id']&&Store::query('collaboration',$site)->count()===1,'creation retry is idempotent');
     coopDeny(fn()=>$p->create(array_replace($input,['customer_name'=>'Another buyer'])),'same request cannot overwrite content');
     coopDeny(fn()=>$r->detail($id),'unassigned merchant cannot read lead');
-    $stores=$p->stores(['scope'=>'auto'],$id);coopCheck($stores['scope']==='district'&&(int)$stores['data'][0]['id']===$rid&&$stores['data'][0]['membership_active'],'local paid capable shop recommended');
+    $stores=$p->stores(['scope'=>'auto'],$id);
+    coopCheck(!empty($stores['data'][0]['is_internal'])&&(int)$stores['data'][0]['id']===(int)$publisher['id'],'own store is a distinct first internal-delivery option');
+    $stores['data']=array_values(array_filter($stores['data'],static fn(array $row):bool=>empty($row['is_internal'])));
+    coopCheck($stores['scope']==='district'&&(int)$stores['data'][0]['id']===$rid&&$stores['data'][0]['membership_active'],'external local paid capable shop remains recommended');
     coopCheck(!isset($stores['data'][0]['available_balance']),'recommendations do not reveal wallet balances');
     $assigned=$p->assign($id,['merchant_id'=>$rid,'assignment_version'=>0]);
     coopCheck($assigned['status']==='assigned'&&(int)$assigned['assignment_version']===1,'single versioned assignment');

@@ -26,7 +26,7 @@ import { getFormRecordsInfo } from '@/app/api/diy_form'
 const loading = ref(true)
 const showDialog = ref(false)
 const tableData = ref({})
-const modules: any = import.meta.glob('@/**/*.vue')
+import { dynamicComponentModules as modules } from '@/utils/dynamic-components'
 
 const show = (data: any) => {
     loading.value = true

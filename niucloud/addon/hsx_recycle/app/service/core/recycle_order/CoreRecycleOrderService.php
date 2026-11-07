@@ -119,7 +119,11 @@ class CoreRecycleOrderService extends BaseCoreService
 
                 // 只有在有有效设备信息时才批量保存
                 if (!empty($devices)) {
-                    (new RecycleDevice())->saveAll($devices);
+                    $createdDevices = (new RecycleDevice())->saveAll($devices);
+                    foreach ($createdDevices as $createdDevice) {
+                        (new \addon\hsx_recycle\app\service\admin\order\RecycleDeviceInfoCorrectionService())
+                            ->recordInitialEntry((int)$createdDevice->id, ($data['order_source'] ?? 'customer') === 'customer' ? 'customer_order' : 'staff_order', (int)$data['site_id']);
+                    }
                 }
             }
 

@@ -1,11 +1,12 @@
 <template>
-    <view class="w-screen h-screen flex flex-col  " :style="themeColor()" v-if="type">
+    <view class="w-screen h-screen flex flex-col  " :style="themeColor()">
         <!-- #ifdef MP-WEIXIN || APP-PLUS -->
         <view :style="{'height':headerHeight}">
-            <top-tabbar :data="param" :scrollBool="topTabarObj.getScrollBool()" class="top-header" />
+            <top-tabbar :data="param" :scrollBool="topTabarObj.getScrollBool()" :customBack="cancelLogin" class="top-header" />
         </view>
         <!-- #endif -->
-        <view class="mx-[60rpx]">
+        <view v-if="!type" class="login-config-status"><text>{{ loginConfigError || '正在读取登录方式…' }}</text><button v-if="loginConfigError" @click="loadLoginOptions">重新加载</button></view>
+        <view v-if="type" class="mx-[60rpx]">
             <view class="pt-[140rpx] text-[44rpx] font-500 text-[#333]">{{ type == 'username' ? t('accountLogin') : t('mobileLogin') }}</view>
             <view class="text-[26rpx] text-[#333] leading-[34rpx] mt-[24rpx] mb-[90rpx]" @click="redirect({ url: '/app/pages/auth/register',param:{type} })">
                 <text>{{ t('noAccount') }},</text>
@@ -79,6 +80,7 @@
                 </view>
             </view>
         </view>
+        <view class="login-cancel-entry"><button class="login-cancel-button" @click="cancelLogin">暂不登录</button></view>
         <uni-popup ref="popupRef" type="dialog">
             <view class="bg-[#fff] flex flex-col justify-between w-[600rpx] min-h-[280rpx] rounded-[var(--rounded-big)] box-border px-[35rpx] pt-[35rpx] pb-[8rpx] relative">
                 <view class="flex justify-center">
@@ -115,8 +117,8 @@ import useMemberStore from '@/stores/member'
 import useConfigStore from '@/stores/config'
 import { useLogin } from '@/hooks/useLogin'
 import { t } from '@/locale'
-import { redirect, getToken, pxToRpx, isWeixinBrowser } from '@/utils/common'
-import { onLoad } from '@dcloudio/uni-app';
+import { redirect, getToken, pxToRpx, isWeixinBrowser, currRoute } from '@/utils/common'
+import { onLoad, onShow } from '@dcloudio/uni-app';
 import { topTabar } from '@/utils/topTabbar'
 import useSystemStore from "@/stores/system";
 
@@ -130,8 +132,12 @@ const headerHeight = computed(() => {
 })
 const real_name_input = ref(true);
 const memberStore = useMemberStore()
+const loginFlow = useLogin()
+const cancelLogin = () => loginFlow.cancelLogin()
 const configStore = useConfigStore()
 const type = ref('')
+const loginConfigError = ref('')
+const loginOptions = ref<any>({})
 const isAgree = ref(false)
 const isShowQuickLogin = ref(false) // 是否显示快捷登录
 const popupRef = ref()
@@ -151,11 +157,17 @@ const dialogConfirm = () => {
     handleLogin()
 }
 
-onLoad(async(option: any) => {
+const loadLoginOptions = async() => {
+    const option = loginOptions.value
+    const loadEpoch = loginFlow.getLoginEpoch()
+    loginConfigError.value = ''
+    try {
     await configStore.getLoginConfig()
+    if (!loginFlow.isCurrentLogin(loadEpoch)) return
     if (!getToken() && !configStore.login.is_username && !configStore.login.is_mobile) {
         uni.showToast({ title: '商家未开启普通账号登录', icon: 'none' })
         setTimeout(() => {
+            if (!loginFlow.isCurrentLogin(loadEpoch)) return
             redirect({ url: '/app/pages/index/index', mode: 'reLaunch' })
         }, 100)
     }
@@ -214,6 +226,17 @@ onLoad(async(option: any) => {
         isShowQuickLogin.value = true;
     }
     // #endif
+    } catch (_) {
+        if (loginFlow.isCurrentLogin(loadEpoch)) loginConfigError.value = '登录方式暂时没有加载出来，请稍后重试'
+    }
+}
+onLoad((option: any) => {
+    loginFlow.beginLogin()
+    loginOptions.value = option || {}
+    return loadLoginOptions()
+})
+onShow(() => {
+    if (currRoute() === 'app/pages/auth/login' && !getToken() && !loginFlow.isCurrentLogin()) loginFlow.beginLogin()
 })
 
 const formData = reactive({
@@ -283,7 +306,9 @@ const rules = computed(() => {
 const formRef: any = ref(null)
 
 const handleLogin = () => {
+    const submitEpoch = loginFlow.getLoginEpoch()
     formRef.value.validate().then(() => {
+        if (!loginFlow.isCurrentLogin(submitEpoch)) return
         if (configStore.login.agreement_show && !isAgree.value) {
             popupRef.value.open();
             // uni.showToast({ title: t('isAgreeTips'), icon: 'none' });
@@ -295,13 +320,14 @@ const handleLogin = () => {
 
         const login = type.value == 'username' ? usernameLogin : mobileLogin
         login(formData).then((res: any) => {
+            if (!loginFlow.isCurrentLogin(submitEpoch)) return
 
             memberStore.setToken(res.data.token)
             // todo 已注册的会员不受影响
             // if (configStore.login.is_bind_mobile && !res.data.mobile) {
             //     uni.setStorageSync('isBindMobile', true)
             // }
-            useLogin().handleLoginBack()
+            loginFlow.handleLoginBack()
         }).catch(() => {
             loading.value = false
         })
@@ -344,6 +370,12 @@ const toResetpwd = () =>{
 }
 </script>
 <style lang="scss" scoped>
+.login-cancel-entry { display: flex; justify-content: center; margin: 24rpx auto; }
+.login-cancel-button { margin: 0; padding: 0 32rpx; min-height: 88rpx; line-height: 88rpx; color: #777; background: transparent; font-size: 26rpx; border: 0; }
+.login-cancel-button::after { border: 0; }
+.login-config-status { margin: 72rpx 60rpx 16rpx; color: #888; font-size: 26rpx; text-align: center; }
+.login-config-status button { margin: 16rpx auto 0; padding: 0 24rpx; min-height: 88rpx; line-height: 88rpx; background: transparent; color: var(--primary-color); font-size: 26rpx; }
+.login-config-status button::after { border: 0; }
 :deep(.u-input) {
     background-color: transparent !important;
 }

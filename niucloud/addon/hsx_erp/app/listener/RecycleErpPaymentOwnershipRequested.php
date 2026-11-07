@@ -15,7 +15,9 @@ class RecycleErpPaymentOwnershipRequested
             throw new CommonException('回收付款归属查询参数不正确');
         }
         return ['consumer' => 'hsx_erp', 'status' => 'processed',
-            'devices' => $this->identityService()->paymentOwnership((int)$event['site_id'], $event['device_ids'])];
+            'devices' => ($event['purpose'] ?? '') === 'info_correction'
+                ? $this->identityService()->infoCorrectionLinks((int)$event['site_id'], $event['device_ids'])
+                : $this->identityService()->paymentOwnership((int)$event['site_id'], $event['device_ids'])];
     }
 
     protected function identityService(): ErpRecycleDeviceIdentityService

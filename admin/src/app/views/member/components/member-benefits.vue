@@ -49,7 +49,7 @@ watch(() => formData.value, () => {
     value.value = formData.value
 }, { deep: true })
 
-const modules: any = import.meta.glob('@/**/*.vue')
+import { dynamicComponentModules as modules } from '@/utils/dynamic-components'
 getBenefitsDict().then(({ data }) => {
     Object.keys(data).forEach((key: string) => {
         const componentPath = data[key].component

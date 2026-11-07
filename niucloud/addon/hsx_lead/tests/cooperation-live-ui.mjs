@@ -95,5 +95,5 @@ for (const name of fs.readdirSync(components).filter(name => name.endsWith('.vue
     check(!/@prototype|@mobile|prototypeSession|simulatePay|readMobile|writeMobile/.test(text), name + ' has no prototype business-data dependency')
 }
 const pageDictionary = fs.readFileSync(path.join(plugin, 'package/uni-app-pages.php'), 'utf8')
-check((pageDictionary.match(/"navigationStyle": "custom"/g) || []).length === 9 && pageDictionary.includes('pages/entity/index') && pageDictionary.includes('pages/membership/index'), 'the tabs, task/catalog and real entity/membership registrations all disable duplicate native title bars')
+check((pageDictionary.match(/"navigationStyle": "custom"/g) || []).length === (pageDictionary.match(/"path": "pages\//g) || []).length && pageDictionary.includes('pages/entity/index') && pageDictionary.includes('pages/membership/index') && pageDictionary.includes('pages/orders/index'), 'all actual page registrations, including payment orders, disable duplicate native title bars')
 console.log(`PASS ${checks} real mobile UI migration checks; actual plugin utilities and page lifecycle with synthetic inputs, no API/payment/database calls.`)

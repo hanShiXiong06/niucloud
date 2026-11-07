@@ -234,7 +234,7 @@ const getDiyFormFieldStatFn = (form_id: any) => {
     })
 }
 
-const modules: any = import.meta.glob('@/**/*.vue')
+import { dynamicComponentModules as modules } from '@/utils/dynamic-components'
 const formDetail = ref([])
 
 const formDetailEvent = (row: any) => {

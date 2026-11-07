@@ -7,7 +7,8 @@ return ['listen'=>[
     'HttpRun'=>['addon\hsx_lead\app\listener\pay\CooperationPaymentGuardRegistration'],
     'PayCreate'=>['addon\hsx_lead\app\listener\pay\CooperationPayCreate'],
     'PaySuccess'=>['addon\hsx_lead\app\listener\pay\CooperationPaySuccess'],
-    'RefundSuccess'=>['addon\hsx_lead\app\listener\pay\MembershipRefundSuccess','addon\hsx_lead\app\listener\pay\PromotionRefundSuccess'],
+    'PayClose'=>['addon\hsx_lead\app\listener\pay\CooperationPayCloseGuard'],
+    'RefundSuccess'=>['addon\hsx_lead\app\listener\pay\MembershipRefundSuccess','addon\hsx_lead\app\listener\pay\CooperationOrderRefundSuccess','addon\hsx_lead\app\listener\pay\PromotionRefundSuccess'],
     'HsxLeadCollaborationChanged'=>['addon\hsx_lead\app\listener\notice\CooperationChanged'],
     'NoticeData'=>['addon\hsx_lead\app\listener\notice\CooperationNoticeData'],
 ]];

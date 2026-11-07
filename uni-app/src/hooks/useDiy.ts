@@ -103,6 +103,9 @@ export function useDiy(params: any = {}) {
             if (diyStore.mode == 'decorate') {
                 diyStore.init();
             } else {
+                // Optional lifecycle notifications let a page provide its own
+                // loading/error UI without copying this renderer or loader.
+                if (typeof params.onRequestStart === 'function') params.onRequestStart();
                 getDiyInfo({
                     id: id.value,
                     name: name.value,
@@ -162,6 +165,14 @@ export function useDiy(params: any = {}) {
 
                     if (callback) callback(requestData)
 
+                }).catch((error: unknown) => {
+                    if (typeof params.onRequestError === 'function') {
+                        loading.value = false;
+                        params.onRequestError(error);
+                        return;
+                    }
+                    // Preserve the existing error contract for other pages.
+                    throw error;
                 });
             }
         })

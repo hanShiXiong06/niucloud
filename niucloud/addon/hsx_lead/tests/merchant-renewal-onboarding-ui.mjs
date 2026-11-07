@@ -32,7 +32,7 @@ function fixture(){
         cooperationChallenge:async()=>{throw Error('Not a captcha fixture')}
     }
     const module={exports:{}}
-    vm.runInNewContext('(function(require,module,exports){'+js+'})',{Date,Number,String,JSON,console,setTimeout:callback=>{timers.set(++timerId,callback);return timerId},clearTimeout:id=>timers.delete(id),uni:{showToast:data=>toasts.push(data)}})(key=>key==='vue'?{...Vue,onBeforeUnmount(){}}:key==='../../api/cooperation'?api:key==='../../utils/mobile-ui'?loadMobileUtility('mobile-ui'):key==='../../utils/connection-actions'?loadMobileUtility('connection-actions'):key.endsWith('.vue')?{default:{}}:(()=>{throw Error('Unexpected dependency')})(),module,module.exports)
+    vm.runInNewContext('(function(require,module,exports){'+js+'})',{Date,Number,String,JSON,console,setTimeout:callback=>{timers.set(++timerId,callback);return timerId},clearTimeout:id=>timers.delete(id),uni:{showToast:data=>toasts.push(data)}})(key=>key==='vue'?{...Vue,onBeforeUnmount(){}}:key==='../../api/cooperation'?api:key==='../../utils/mobile-ui'?loadMobileUtility('mobile-ui'):key==='../../utils/erp-provider-display'?loadMobileUtility('erp-provider-display'):key==='../../utils/connection-actions'?loadMobileUtility('connection-actions'):key.endsWith('.vue')?{default:{}}:(()=>{throw Error('Unexpected dependency')})(),module,module.exports)
     const props=Vue.reactive({show:true,profile:{},providers}),emitted=[]
     const state=module.exports.default.setup(props,{expose(){},emit:(...args)=>{emitted.push(args);if(args[0]==='close')props.show=false}})
     state.connection.value={...saved};state.provider.value='synthetic'

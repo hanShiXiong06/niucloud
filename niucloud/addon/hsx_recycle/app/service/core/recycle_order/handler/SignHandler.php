@@ -132,7 +132,7 @@ class SignHandler extends BaseFlowHandler
                 if ($checkTemplateId > 0) {
                     $deviceData['check_template_id'] = $checkTemplateId;
                 }
-                $deviceService->signUpdate((int)$device['id'], $deviceData);
+                if (!$deviceService->signUpdate((int)$device['id'], $deviceData, $siteId)) throw new CommonException('设备签收资料保存失败，请刷新后重试');
                 (new RecycleDeviceModelDictService())->ensureFromModelName((string)($deviceData['model'] ?? ''), $siteId);
                 $deviceIds[] = $device['id'];
             } else {
@@ -158,7 +158,7 @@ class SignHandler extends BaseFlowHandler
                     'member_id' => $memberId,
                     'site_id' => $siteId
                 ];
-                $newDeviceId = $deviceService->add($deviceData);
+                $newDeviceId = $deviceService->add($deviceData, $siteId);
                 (new RecycleDeviceModelDictService())->ensureFromModelName((string)($deviceData['model'] ?? ''), $siteId);
                 $deviceIds[] = $newDeviceId;
             }

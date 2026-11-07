@@ -89,6 +89,9 @@ final class CooperationService
     {
         $row=Data::regionNames($row);$row['models']=Data::decode($row['models_json']);$row['attachments']=Data::decode($row['attachments_json']);$row['status_label']=Rules::status($row['status']);
         $rule=Data::decode($row['rule_json']);$row['requires_manual_review']=!empty($rule['requires_manual_review']);$row['review_message']=PaymentService::reviewMessage($rule);
+        $row['is_internal']=(int)$row['receiver_id']>0&&(int)$row['publisher_id']===(int)$row['receiver_id'];
+        if ($row['is_internal']&&$row['status']==='paid') $row['status_label']='已完成 · 本店交付';
+        if($row['status']==='cancelled'&&isset($rule['commission_refund'])){$row['status_label']='已退款关闭';$row['commission_refund_amount']=(string)($rule['commission_refund']['amount']??'');}
         $row['business_name']=$rule['business_name']??(['purchase'=>'二手机','rent'=>'租机','exchange'=>'置换'][$row['business_type']]??$row['business_type']);
         $row['demands']=$row['models'];$row['form_values']=$rule['form_values']??[];$row['business_snapshot']=$rule['business_snapshot']??null;
         $row['fields']=$rule['business_snapshot']['fields']??[];
@@ -102,10 +105,10 @@ final class CooperationService
         $config=$this->config();
         $publisherRights=Rules::capabilities(Store::partner($this->context->site,(int)$row['publisher_id']),$config);
         $actorRights=$admin?[]:Rules::capabilities(Store::partner($this->context->site,$actor),$config);
-        $row['can_assign']=!$blocked&&!empty($config['enabled'])&&$publisherRights['can_publish']&&($publisher||$admin)&&$row['status']==='selecting';$row['can_accept']=!$blocked&&!empty($config['enabled'])&&!empty($actorRights['can_accept'])&&$receiver&&$row['status']==='assigned';
+        $row['can_assign']=!$blocked&&!empty($config['enabled'])&&$publisherRights['can_publish']&&($publisher||$admin)&&$row['status']==='selecting';$row['can_accept']=!$blocked&&!empty($config['enabled'])&&(!empty($actorRights['can_accept'])||$row['is_internal'])&&$receiver&&$row['status']==='assigned';
         // Expiry must not trap a recipient in an assignment or prevent settlement of accepted work.
-        $row['can_reject']=!$blocked&&$receiver&&$row['status']==='assigned';$row['can_report']=!$blocked&&$receiver&&$row['status']==='following';$row['can_pay']=$receiver&&$row['status']==='unpaid';
-        $needsPermission=($publisher&&$row['status']==='selecting'&&!$publisherRights['can_publish'])||($receiver&&$row['status']==='assigned'&&empty($actorRights['can_accept']));
+        $row['can_reject']=!$blocked&&$receiver&&$row['status']==='assigned';$row['can_report']=!$blocked&&$receiver&&$row['status']==='following';$row['can_pay']=$receiver&&$row['status']==='unpaid'&&!$row['is_internal'];
+        $needsPermission=($publisher&&$row['status']==='selecting'&&!$publisherRights['can_publish'])||($receiver&&!$row['is_internal']&&$row['status']==='assigned'&&empty($actorRights['can_accept']));
         $row['membership_required']=!$admin&&$needsPermission;$row['membership_message']=$row['membership_required']?'当前门店会员未包含本次新操作所需权益，或会员已到期。请查看会员权益；已有工单与账款仍可处理':'';
         $row['can_withdraw']=!$blocked&&$publisher&&$row['status']==='assigned';
         $row['can_cancel']=!$blocked&&$publisher&&$row['status']==='selecting'&&(int)$row['receiver_id']===0;
@@ -117,7 +120,7 @@ final class CooperationService
         $row['needs_attention']=(bool)$row['attention_reasons'];
         if ($detail) {
             $history=Data::query('audit',$this->context->site)->where('entity_type','collaboration')->where('entity_id',$row['id'])->order('id asc')->field('id,action,detail_json,create_time')->select()->toArray();
-            $row['history']=array_map(static function(array $a):array {$a['detail']=Data::decode($a['detail_json']);unset($a['detail_json']);return $a;},$history);
+            $row['history']=array_map(static function(array $a):array {$a['detail']=Data::decode($a['detail_json']);if($a['action']==='commission_refunded')$a['action_label']='协作费用已原路退还';unset($a['detail_json']);return $a;},$history);
             $row['notice']=CooperationNoticeService::statusForLead($this->context->site,(int)$row['id']);
         }
         unset($row['models_json'],$row['attachments_json'],$row['rule_json'],$row['request_id']);
@@ -141,8 +144,8 @@ final class CooperationService
         $business=$leadRule['business_snapshot']??(new BusinessService($this->context))->definition($businessKey,!$leadId);
         $dimension=$business['dimension'];
         if (!$leadId&&array_key_exists('demand_ids',$params)&&$params['demand_ids']!==[]) $models=(new BusinessService($this->context))->resolve($business,$params['demand_ids']);
-        // Reuse the common hierarchy validator without narrowing the actual
-        // recommendation query before county -> city -> province fallback.
+        // Validate the whole hierarchy first. Only explicit ranges narrow SQL;
+        // auto still needs the full province for county -> city -> province fallback.
         MerchantRegion::apply(Data::query('merchant',$this->context->site),$region);
         $region=array_intersect_key($region,array_flip(['province_id','city_id','district_id']));
         foreach(['province_id','city_id','district_id'] as $key) $region[$key]=(int)($region[$key]??0);
@@ -152,13 +155,23 @@ final class CooperationService
         $keyword=mb_strtolower(Data::text($params,'keyword',100));$q=Data::query('merchant',$this->context->site)->where('status',1)->where('id','<>',$publisherId);
         if ((int)($params['_target_merchant_id']??0)>0) $q->where('id',(int)$params['_target_merchant_id']);
         if ($region['province_id']<=0) throw new CommonException('请先选择客户所在省份');
-        $q->where('province_id',$region['province_id']);$candidates=[];
+        $q->where('province_id',$region['province_id']);
+        if ($scope==='district') $q->where('city_id',$region['city_id'])->where('district_id',$region['district_id']);
+        elseif ($scope==='city') $q->where('city_id',$region['city_id']);
+        if ($keyword!=='') {
+            // Literal substring semantics match the final PHP check, including
+            // a query spanning the name/contact separator. An explicit escape
+            // keeps %, _ and ! literal, independent of SQL backslash mode.
+            $pattern='%'.str_replace(['!','%','_'],['!!','!%','!_'],$keyword).'%';
+            $q->whereRaw("LOWER(CONCAT(name,' ',contact_name)) LIKE BINARY ? ESCAPE '!'",[$pattern]);
+        }
+        $candidates=[];
         foreach($q->select()->toArray() as $m) {
             if (!Rules::allows(Store::partner($this->context->site,(int)$m['id']),$config,'can_accept')) continue;
             $inventory=$this->partners()->inventory((int)$m['id']);$p=$this->partners()->present($m,false,$inventory);if ($p['blocked_at']>0) continue;
             if ($keyword!==''&&!str_contains(mb_strtolower($p['name'].' '.$p['contact_name']),$keyword)) continue;
             $matched=[];
-            $declared=[];foreach($p['business_capabilities'] as $capability) if ($capability['business_type']===$businessKey) $declared=$capability['items'];
+            $declared=[];foreach($p['business_capabilities'] as $capability) if ($capability['business_type']===$businessKey) $declared=CapabilityService::itemsForDimension($capability,$dimension);
             // Sellable ERP stock proves used-phone supply only, not new phones, rental or broadband.
             $inventory=$businessKey==='purchase'&&$dimension==='model'?$inventory:[];
             $allModels=$dimension==='model'&&in_array($businessKey,['purchase','rent','exchange'],true)&&$p['all_models'];
@@ -184,6 +197,18 @@ final class CooperationService
         usort($items,static fn(array $a,array $b):int=>[(int)$b['membership_rank'],count($b['match_models']),(int)$b['inventory_count'],-(int)$b['id']]<=>[(int)$a['membership_rank'],count($a['match_models']),(int)$a['inventory_count'],-(int)$a['id']]);
         $reason=$scope==='auto'&&$actual!=='district'?($actual==='city'?'本区县暂无匹配门店，已查找全市':'本市暂无匹配门店，已查找全省'):'按客户所在地区查找';
         if (!$items) $reason='所选地区暂时没有可承接该需求的门店';
+        // Staff accounts resolve to this same tenant-owned merchant. Internal
+        // delivery uses the shared team queue, not another paid referral.
+        if ($publisherId>0 && ((int)($params['_target_merchant_id']??0)===0||(int)$params['_target_merchant_id']===$publisherId)) {
+            $own=Data::row('merchant',$this->context->site,$publisherId);
+            $ownPartner=Store::partner($this->context->site,$publisherId);
+            if ((int)$own['status']===1&&(int)$ownPartner['blocked_at']===0&&($keyword===''||str_contains(mb_strtolower($own['name'].' '.$own['contact_name']),$keyword))) {
+                $internal=$this->partners()->present($own,false,[]);
+                $internal=array_replace($internal,['is_internal'=>true,'match_models'=>$models,'match_demands'=>$models,'business_type'=>$businessKey,'business_name'=>$business['name'],'capability_dimension'=>$dimension]);
+                array_unshift($items,$internal);
+                if (count($items)===1) $reason='本店成员可直接承接；暂无匹配的外部门店';
+            }
+        }
         return Store::pageArray($items,$params)+['scope'=>$actual,'region'=>$region,'reason'=>$reason];
     }
 
@@ -243,13 +268,16 @@ final class CooperationService
             $row=$this->authorized($id,true);Rules::version($row,$input);if ($row['status']!=='selecting') throw new CommonException('该线索已交付，请刷新状态后操作');
             $publisher=Store::partner($this->context->site,(int)$row['publisher_id'],true);if ((int)$publisher['blocked_at']>0) throw new CommonException('发布门店已停止合作，不能新增交付');
             Rules::assertCapability($publisher,$config,'can_publish');
+            $internal=$merchantId===(int)$row['publisher_id'];
             $result=$this->stores(['scope'=>'province','_target_merchant_id'=>$merchantId],$id);if (!in_array($merchantId,array_map('intval',array_column($result['data'],'id')),true)) throw new CommonException('门店已不可承接该需求，请重新选择');
             $receiver=Store::partner($this->context->site,$merchantId,true);$m=Data::row('merchant',$this->context->site,$merchantId,true);
             if ((int)$receiver['blocked_at']>0||(int)$m['status']!==1) throw new CommonException('该门店已停止合作');
-            Rules::assertCapability($receiver,$config,'can_accept');
+            if (!$internal) Rules::assertCapability($receiver,$config,'can_accept');
+            $rule=Data::decode($row['rule_json']);$rule['internal_delivery']=$internal;
             Store::query('collaboration',$this->context->site)->where('id',$id)->update(['receiver_id'=>$merchantId,'status'=>'assigned','assignment_version'=>(int)$row['assignment_version']+1,
-                'accepted_at'=>0,'response_deadline'=>(int)$config['response_minutes']>0?time()+(int)$config['response_minutes']*60:0,'update_time'=>time()]);
+                'rule_json'=>Data::json($rule),'accepted_at'=>0,'response_deadline'=>(int)$config['response_minutes']>0?time()+(int)$config['response_minutes']*60:0,'update_time'=>time()]);
             Store::audit($this->context,$id,'assigned',['receiver_id'=>$merchantId,'assignment_version'=>(int)$row['assignment_version']+1]);
+            CooperationNoticeOutbox::record($this->context->site,$id,'assigned');
         });$this->notify($id,'assigned');return $this->detail($id);
     }
 
@@ -273,14 +301,17 @@ final class CooperationService
                 if ((int)$row['receiver_id']!==$mid) throw new CommonException('当前门店不是本次接收方');
                 if (in_array($action,['accept','reject'],true)) {
                     if ($row['status']!=='assigned') throw new CommonException('该交付已处理，请刷新');
-                    if ($action==='accept') Rules::assertCapability($partner,$this->enabled(),'can_accept');
+                    if ($action==='accept') { $activeConfig=$this->enabled();if ((int)$row['publisher_id']!==$mid) Rules::assertCapability($partner,$activeConfig,'can_accept'); }
                     $values=$action==='accept'?['status'=>'following','accepted_at'=>time()]:['status'=>'selecting','receiver_id'=>0,'response_deadline'=>0,'assignment_version'=>(int)$row['assignment_version']+1];
                 } else {
                     if ($row['status']!=='following') throw new CommonException('只有接单后且尚未反馈的线索可以回填');
-                    $values=['status'=>$action==='deal'?'unpaid':'no_deal','outcome_at'=>time()];
+                    $internal=(int)$row['publisher_id']===(int)$row['receiver_id'];
+                    $values=['status'=>$action==='deal'?($internal?'paid':'unpaid'):'no_deal','outcome_at'=>time()];
+                    if ($internal&&$action==='deal') $values+=['commission_amount'=>'0.00','fee_amount'=>'0.00','net_amount'=>'0.00','payment_order_id'=>0,'paid_at'=>0];
                 }
             }
             Store::query('collaboration',$this->context->site)->where('id',$id)->update($values+['update_time'=>time()]);Store::audit($this->context,$id,$action,['merchant_id'=>$mid,'remark'=>$remark]);
+            CooperationNoticeOutbox::record($this->context->site,$id,$action);
             return true;
         });if ($changed) $this->notify($id,$action);
         if ($action==='reject') return ['id'=>$id,'status'=>'selecting','message'=>'已退回发布门店，可由对方重新选择'];

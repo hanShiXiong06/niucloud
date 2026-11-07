@@ -24,6 +24,11 @@
     </CoopTaskSheet>
     <CoopStoreInventory :show="show && !!inventoryStore" :store="inventoryStore || {}" @close="inventoryStore = null" />
 </template>
+<script lang="ts">
+// Match Vue's transparent layout in native Mini Programs: an extra custom
+// component host otherwise breaks the page's definite-height flex chain.
+export default { options: { virtualHost: true } }
+</script>
 <script setup lang="ts">
 import CooperationSearch from './CooperationSearch.vue'
 import { openCooperationTask, openCooperationCatalog } from '../../utils/cooperation-navigation'

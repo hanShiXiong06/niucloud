@@ -16,6 +16,7 @@
 // visible without relying on H5-only sticky behavior inside a native scroller.
 .coop-delivery-controls { flex: none; min-width: 0; background: #fff; border-bottom: 1rpx solid #e8edf4; }
 .coop-delivery-controls .coop-list-tools { padding-top: 14rpx; }
+.coop-delivery-controls.is-pending .coop-status-tabs { opacity: .55; pointer-events: none; }
 // The framework has two internal spacers. Reserve only the actual fixed bar plus safe area.
 // Keep native fixed positioning intact; do not depend on selectors inside framework components.
 .coop-framework-tabbar { flex: none; height: calc(51px + env(safe-area-inset-bottom)); }
