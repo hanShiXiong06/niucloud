@@ -28,46 +28,81 @@ final class CatalogConfigStorage
                 if ($lock) throw new CommonException('当前事务未能定位后台目录配置，请刷新后重试；没有使用默认收费规则');
                 return [];
             }
-            $value=self::decode($row['value']??null);
-            if (!array_key_exists(self::MARKER,$value)) return $value;
-            $manifest=self::manifest($value);
-            $keys=self::partKeys($key,$manifest);
-            // A manifest obtained by a current locking read may be newer than
-            // an outer REPEATABLE READ snapshot. Persisted primary IDs avoid
-            // a snapshot-only name lookup, and FORCE PRIMARY keeps the lock
-            // range confined even when the table has no site/key index.
-            $rows=Db::name('sys_config')->force('PRIMARY')->whereIn('id',$manifest['row_ids'])->where('site_id',$site)
-                ->field('id,site_id,config_key,value')->lock($lock?true:'LOCK IN SHARE MODE')->select()->toArray();
-            if (count($rows)!==$manifest['parts']) throw new CommonException('后台目录配置分片缺失，请管理员核对或重新导入；没有返回不完整目录');
-            $byKey=[];
-            foreach($rows as $partRow) {
-                $partKey=(string)$partRow['config_key'];
-                if (isset($byKey[$partKey]) || !in_array($partKey,$keys,true)) throw new CommonException('后台目录配置存在重复或错配分片，请管理员核对');
-                $byKey[$partKey]=$partRow;
-            }
-            $payload='';
-            foreach($keys as $index=>$partKey) {
-                if (!isset($byKey[$partKey]) || (int)$byKey[$partKey]['id']!==$manifest['row_ids'][$index]) throw new CommonException('后台目录配置分片缺失或索引变化，请管理员核对或重新导入');
-                $part=self::decode($byKey[$partKey]['value']??null);
-                if (($part[self::MARKER]??null)!==self::PART_VERSION || ($part['base_key']??null)!==$key
-                    || ($part['generation']??null)!==$manifest['generation'] || ($part['index']??null)!==$index
-                    || !is_string($part['data']??null) || strlen($part['data'])>32768) {
-                    throw new CommonException('后台目录配置分片不匹配，请管理员核对；没有返回不完整目录');
-                }
-                $bytes=base64_decode($part['data'],true);
-                $expectedLength=$index===$manifest['parts']-1?$manifest['bytes']-($index*self::PART_BYTES):self::PART_BYTES;
-                if ($bytes===false || strlen($bytes)!==$expectedLength || base64_encode($bytes)!==$part['data']) {
-                    throw new CommonException('后台目录配置分片内容不完整，请管理员核对');
-                }
-                $payload.=$bytes;
-            }
-            if (strlen($payload)!==$manifest['bytes'] || !hash_equals($manifest['sha256'],hash('sha256',$payload))) {
-                throw new CommonException('后台目录配置完整性核对失败，请管理员核对；没有返回截断目录');
-            }
-            $decoded=self::decode($payload);
-            if (array_key_exists(self::MARKER,$decoded)) throw new CommonException('后台目录配置包含保留存储标识，请管理员核对');
-            return $decoded;
+            return self::expand($site,$key,$row,$lock);
         });
+    }
+
+    /** Same coherent/verified read as read(), with base lookups batched for a page. */
+    public static function readMany(int $site,array $keys): array
+    {
+        $keys=array_values(array_unique($keys));
+        if (!$keys) return [];
+        if (count($keys)>100) throw new CommonException('单次后台目录读取范围过大');
+        foreach($keys as $key) self::identity($site,$key);
+        return Db::transaction(static function()use($site,$keys):array {
+            $located=Db::name('sys_config')->where('site_id',$site)->whereIn('config_key',$keys)->field('id,config_key')->select()->toArray();
+            $ids=[];$seen=[];$result=array_fill_keys($keys,[]);
+            foreach($located as $row) {
+                $key=(string)$row['config_key'];
+                if(isset($seen[$key])) throw new CommonException('后台目录配置存在重复记录，请管理员核对');
+                $seen[$key]=(int)$row['id'];$ids[]=(int)$row['id'];
+            }
+            if(!$ids) return $result;
+            // Lock only located primary IDs, not a site/key scan across tenants.
+            $rows=Db::name('sys_config')->force('PRIMARY')->where('site_id',$site)->whereIn('id',$ids)
+                ->field('id,site_id,config_key,value')->lock('LOCK IN SHARE MODE')->select()->toArray();
+            if(count($rows)!==count($located)) throw new CommonException('后台目录配置定位已变化，请刷新后重试');
+            foreach($rows as $row) {
+                $key=(string)$row['config_key'];
+                if(!isset($seen[$key])||$seen[$key]!== (int)$row['id']) throw new CommonException('后台目录配置定位已变化，请刷新后重试');
+                $result[$key]=self::expand($site,$key,$row,false);
+            }
+            return $result;
+        });
+    }
+
+    /** Caller holds the shared/exclusive base-row lock until reconstruction ends. */
+    private static function expand(int $site,string $key,array $row,bool $lock): array
+    {
+        $value=self::decode($row['value']??null);
+        if (!array_key_exists(self::MARKER,$value)) return $value;
+        $manifest=self::manifest($value);
+        $keys=self::partKeys($key,$manifest);
+        // A manifest obtained by a current locking read may be newer than
+        // an outer REPEATABLE READ snapshot. Persisted primary IDs avoid
+        // a snapshot-only name lookup, and FORCE PRIMARY keeps the lock
+        // range confined even when the table has no site/key index.
+        $rows=Db::name('sys_config')->force('PRIMARY')->whereIn('id',$manifest['row_ids'])->where('site_id',$site)
+            ->field('id,site_id,config_key,value')->lock($lock?true:'LOCK IN SHARE MODE')->select()->toArray();
+        if (count($rows)!==$manifest['parts']) throw new CommonException('后台目录配置分片缺失，请管理员核对或重新导入；没有返回不完整目录');
+        $byKey=[];
+        foreach($rows as $partRow) {
+            $partKey=(string)$partRow['config_key'];
+            if (isset($byKey[$partKey]) || !in_array($partKey,$keys,true)) throw new CommonException('后台目录配置存在重复或错配分片，请管理员核对');
+            $byKey[$partKey]=$partRow;
+        }
+        $payload='';
+        foreach($keys as $index=>$partKey) {
+            if (!isset($byKey[$partKey]) || (int)$byKey[$partKey]['id']!==$manifest['row_ids'][$index]) throw new CommonException('后台目录配置分片缺失或索引变化，请管理员核对或重新导入');
+            $part=self::decode($byKey[$partKey]['value']??null);
+            if (($part[self::MARKER]??null)!==self::PART_VERSION || ($part['base_key']??null)!==$key
+                || ($part['generation']??null)!==$manifest['generation'] || ($part['index']??null)!==$index
+                || !is_string($part['data']??null) || strlen($part['data'])>32768) {
+                throw new CommonException('后台目录配置分片不匹配，请管理员核对；没有返回不完整目录');
+            }
+            $bytes=base64_decode($part['data'],true);
+            $expectedLength=$index===$manifest['parts']-1?$manifest['bytes']-($index*self::PART_BYTES):self::PART_BYTES;
+            if ($bytes===false || strlen($bytes)!==$expectedLength || base64_encode($bytes)!==$part['data']) {
+                throw new CommonException('后台目录配置分片内容不完整，请管理员核对');
+            }
+            $payload.=$bytes;
+        }
+        if (strlen($payload)!==$manifest['bytes'] || !hash_equals($manifest['sha256'],hash('sha256',$payload))) {
+            throw new CommonException('后台目录配置完整性核对失败，请管理员核对；没有返回截断目录');
+        }
+        $decoded=self::decode($payload);
+        if (array_key_exists(self::MARKER,$decoded)) throw new CommonException('后台目录配置包含保留存储标识，请管理员核对');
+        return $decoded;
     }
 
     /** Caller must hold the site row lock and an encompassing DB transaction. */

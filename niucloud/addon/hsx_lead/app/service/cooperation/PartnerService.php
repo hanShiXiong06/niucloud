@@ -26,17 +26,19 @@ final class PartnerService
         $member=Db::name('member')->where('site_id',$this->context->site)->where('member_id',$memberId)->where('status',1)->where('is_del',0)->where('delete_time',0)->find();
         if (!$member) throw new CommonException('请先登录本站有效会员');
         $m=TeamService::resolve($this->context,false);
-        if (!$m) return ['current_member_id'=>$memberId,'profile'=>null,'config'=>$config,'stats'=>[],'wallet'=>null,'providers'=>!empty($config['erp_visible'])?(new ProviderChannelService($this->context->site))->available():[],'needs_onboarding'=>true,'pending_entity'=>(new TeamService($this->context))->pending()];
+        $onboardingInviter=(new OnboardingInviterService($this->context))->state();
+        if (!$m) return ['current_member_id'=>$memberId,'profile'=>null,'config'=>$config,'stats'=>[],'wallet'=>null,'providers'=>!empty($config['erp_visible'])?(new ProviderChannelService($this->context->site))->available():[],'needs_onboarding'=>true,'pending_entity'=>(new TeamService($this->context))->pending(),'onboarding_inviter'=>$onboardingInviter];
         $profile=$this->present($m,(bool)$m['is_owner']);$id=(int)$m['id'];
         $profile['team_role']=$m['team_role'];$profile['is_owner']=(bool)$m['is_owner'];
         $profile['membership']=(new EntityMembershipService($this->context))->summary();
         $profile['permissions']=['can_manage_members'=>(bool)$m['is_owner'],'can_manage_billing'=>(bool)$m['is_owner'],'can_manage_erp'=>(bool)$m['is_owner']&&!empty($config['erp_visible']),'can_withdraw'=>(bool)$m['is_owner']];
         $out=Store::query('collaboration',$this->context->site)->where('publisher_id',$id);
         $in=Store::query('collaboration',$this->context->site)->where('receiver_id',$id);
+        TeamService::scopeIncoming($in,$memberId);
         $stats=['outgoing'=>(int)(clone $out)->count(),'incoming'=>(int)(clone $in)->count(),'selecting'=>(int)(clone $out)->where('status','selecting')->count(),
             'assigned'=>(int)(clone $in)->where('status','assigned')->count(),'following'=>(int)(clone $in)->where('status','following')->count(),'unpaid'=>(int)(clone $in)->where('status','unpaid')->count()];
         return ['current_member_id'=>$memberId,'profile'=>$profile,'config'=>$config,'stats'=>$stats,'wallet'=>$m['is_owner']?PaymentService::accountSummary($this->context->site,$memberId):null,
-            'providers'=>!empty($config['erp_visible'])?(new ProviderChannelService($this->context->site))->available():[],'needs_onboarding'=>false];
+            'providers'=>!empty($config['erp_visible'])?(new ProviderChannelService($this->context->site))->available():[],'needs_onboarding'=>false,'onboarding_inviter'=>$onboardingInviter];
     }
 
     public function saveProfile(array $input): array
@@ -47,13 +49,15 @@ final class PartnerService
         $provider=$erpVisible?Data::text($input,'provider',60):'';
         if ($provider!=='') $provider=(new ProviderRegistry())->definition($provider)->key();
         $values=$region+['name'=>Data::text($input,'name',120,true),'contact_name'=>Data::text($input,'contact_name',60,true),'mobile'=>$phone,'address'=>Data::text($input,'address',500,true)];
-        $id=Db::transaction(function()use($memberId,$values,$provider,$phone,$input):int {
+        $onboardingInviter=null;$profileFormEvent=[];
+        $id=Db::transaction(function()use($memberId,$values,$provider,$phone,$input,&$onboardingInviter,&$profileFormEvent):int {
             $policy=new ProviderChannelService($this->context->site);$policy->lockSite();
             $member=Db::name('member')->where('site_id',$this->context->site)->where('member_id',$memberId)->lock(true)->find();
             if (!$member||(int)$member['status']!==1||(int)$member['is_del']!==0||(int)$member['delete_time']>0) throw new CommonException('会员已停用，请重新登录');
             $old=Data::query('merchant',$this->context->site)->where('member_id',$memberId)->lock(true)->find();
             $current=TeamService::resolve($this->context,false,true);
             if ($current&&!$current['is_owner']) throw new CommonException('门店资料由负责人维护，成员不能创建新主体覆盖已有归属');
+            $profileForm=new ProfileFormService($this->context);$prepared=$profileForm->prepare($input,$old?:null);$input=$prepared['input'];
             if (!$old&&(new TeamService($this->context))->pending(true)) throw new CommonException('已有待确认的加入申请，请先撤销申请再创建门店');
             $requested=$old?Store::query('partner',$this->context->site)->where('merchant_id',$old['id'])->value('provider_requested'):null;
             if ($old && ($requested===null || $requested==='')) $requested=Data::query('connection',$this->context->site)->where('merchant_id',$old['id'])->value('provider');
@@ -77,9 +81,16 @@ final class PartnerService
             (new CapabilityService($this->context))->save($id,$input);
             (new StorefrontService($this->context))->save($id,$input);
             (new BusinessLicenseService($this->context))->save($id,$input);
+            $onboardingInviter=(new OnboardingInviterService($this->context))->finishFirstProfile($id,!$old,$input);
+            $profileForm->persist($id,$prepared);
+            $profileFormEvent=['site_id'=>$this->context->site,'member_id'=>$memberId,'merchant_id'=>$id,'form_id'=>$prepared['form_id'],'version'=>$prepared['version'],'occurred_at'=>time()];
             $this->context->audit('partner',$id,'profile_saved',['provider'=>$provider]);return $id;
         });
-        return $this->present(Data::row('merchant',$this->context->site,$id),true);
+        // Never call a saved extension before an outer transaction commits.
+        // Normal API saves have committed here. A nested caller owns its
+        // post-commit notification; it must not publish an uncommitted fact.
+        if(!Db::connect()->getPdo()->inTransaction())try{event('HsxLeadMerchantProfileSaved',$profileFormEvent);}catch(\Throwable$error){\think\facade\Log::warning('门店资料已保存，扩展处理未完成：site='.$this->context->site.', merchant='.$id.', type='.get_class($error));}
+        return $this->present(Data::row('merchant',$this->context->site,$id),true)+['onboarding_inviter'=>$onboardingInviter];
     }
 
     public function present(array $merchant,bool $private=false,?array $inventory=null): array

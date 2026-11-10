@@ -1,13 +1,17 @@
 <template>
     <PageShell permission="hsx_lead_promotion_manage">
-        <header class="coop-head"><div><h2>推广管理</h2><p class="promotion-subtitle">普通邀请、服务商审核与奖励结算</p></div><div class="coop-actions"><el-button :icon="Refresh" :loading="activeLoading" @click="reloadActive">刷新当前页</el-button></div></header>
+        <header class="coop-head"><div><h2>推广管理</h2><p class="promotion-subtitle">邀请关系、付费情况、服务商审核与奖励结算</p></div><div class="coop-actions"><el-button :icon="Refresh" :loading="activeLoading" @click="reloadActive">刷新当前页</el-button></div></header>
         <el-tabs v-model="tab" @tab-change="loadTab">
+            <el-tab-pane v-if="canRelations" label="推广人汇总" name="inviters" />
+            <el-tab-pane v-if="canRelations" label="邀请关系" name="relations" />
             <el-tab-pane v-if="canProviderRead" label="服务商" name="providers" />
-            <el-tab-pane v-if="canRewards" label="奖励记录" name="rewards" />
+            <el-tab-pane v-if="canRewards" label="分佣台账" name="rewards" />
             <el-tab-pane v-if="canConfigRead" label="推广规则" name="rules" />
         </el-tabs>
 
-        <template v-if="tab==='providers'">
+        <PromotionInviters v-if="tab==='inviters' && canRelations" ref="invitersPanel" :can-view-rewards="canRewards" @relations="showInviterRelations" @rewards="showInviterRewards" />
+        <PromotionRelations v-else-if="tab==='relations' && canRelations" ref="relationsPanel" :initial-inviter="selectedInviter" />
+        <template v-else-if="tab==='providers'">
             <div class="promotion-filters"><HsxSearchInput v-model="providerQuery.keyword" placeholder="搜索会员、门店或手机号" class="promotion-keyword" :disabled="providerLoading" :show-button="false" @search="searchProviders" /><el-select v-model="providerQuery.application_status" clearable placeholder="全部申请状态" :disabled="providerLoading" aria-label="申请状态"><el-option v-for="item in applicationStatuses" :key="item.value" :label="item.label" :value="item.value" /></el-select><el-select v-model="providerQuery.role" clearable placeholder="全部推广身份" :disabled="providerLoading" aria-label="推广身份"><el-option label="普通会员" value="normal" /><el-option label="服务商" value="provider" /></el-select><el-button type="primary" :disabled="providerLoading" @click="searchProviders">查询</el-button><el-button :disabled="providerLoading" @click="showPendingProviders">查看待审核</el-button></div>
             <el-alert v-if="providerError" :title="providerError" type="error" :closable="false" show-icon class="coop-error" />
             <div class="coop-surface"><HsxTable :columns="providerColumns" :data="providers" :loading="providerLoading" row-key="member_id" empty-text="没有符合条件的会员，可调整搜索条件">
@@ -19,6 +23,7 @@
         </template>
 
         <template v-else-if="tab==='rewards'">
+            <div v-if="rewardQuery.provider_member_id" class="promotion-selected-inviter"><el-tag closable effect="plain" @close="clearRewardInviter">{{ rewardInviterName }}的分佣台账</el-tag><span>按原推广人核对每笔奖励，不含店员加入记录</span></div>
             <div class="promotion-filters"><HsxSearchInput v-model="rewardQuery.keyword" class="promotion-keyword" placeholder="搜索推广人、来源会员或业务单号" :disabled="rewardLoading" :show-button="false" @search="searchRewards" /><el-select v-model="rewardQuery.status" clearable placeholder="全部奖励状态" :disabled="rewardLoading"><el-option v-for="item in statuses" :key="item.value" :label="item.label" :value="item.value" /></el-select><el-select v-model="rewardQuery.source" clearable placeholder="全部收益来源" :disabled="rewardLoading"><el-option v-for="item in sources" :key="item.key" :label="item.label" :value="item.key" /></el-select><el-date-picker v-model="rewardDates" type="datetimerange" value-format="X" start-placeholder="产生时间起" end-placeholder="产生时间止" :disabled="rewardLoading" /><el-button type="primary" :disabled="rewardLoading" @click="searchRewards">查询</el-button><el-button v-if="canSettle" :loading="settling" :disabled="rewardLoading || settling || holding || retrying>0" @click="settle">结算已到期奖励</el-button></div>
             <el-alert v-if="rewardError" :title="rewardError" type="error" :closable="false" show-icon class="coop-error" />
             <el-collapse v-if="paymentReviewTotal>0" v-model="reviewExpanded" class="promotion-explainer promotion-payment-reviews"><el-collapse-item :title="`待核对付款 · ${paymentReviewTotal} 笔`" name="payments"><HsxTable :columns="paymentReviewColumns" :data="paymentReviews" row-key="id"><template #business="{row}"><div class="coop-cell"><strong>{{ purposeLabel(row.purpose) }} · {{ coopMoney(row.amount) }}</strong><small>{{ row.order_no }}</small><small>已付款 {{ coopTime(row.pay_time) }}</small></div></template><template #issue="{row}"><span>{{ row.message || '推广奖励尚未核对完成' }}</span></template><template #action="{row}"><el-button v-if="canRetry&&row.can_retry" link type="primary" :disabled="settling||holding||retrying>0||retryReadRequired" :loading="retrying===Number(row.id)" @click="retryPayment(row)">{{ retryReadRequired?'请先刷新核对':'按原付款快照恢复' }}</el-button><span v-else class="coop-muted">{{ row.can_retry?'需结算与恢复权限':'需人工核对原单' }}</span></template></HsxTable><p class="coop-form-note">这里只列最近10笔待核对付款，不受下方奖励筛选影响；恢复不会重新扣款，也不按当前比例补算。没有原快照的付款需人工核对。</p></el-collapse-item></el-collapse>
@@ -84,6 +89,8 @@ import HsxDrawer from '@/addon/hsx_components/components/HsxDrawer/index.vue'
 import HsxSearchInput from '@/addon/hsx_components/components/HsxSearchInput/index.vue'
 import useUserStore from '@/stores/modules/user'
 import PageShell from '../components/PageShell.vue'
+import PromotionRelations from './PromotionRelations.vue'
+import PromotionInviters from './PromotionInviters.vue'
 import { hasLeadPagePermission } from '../../composables/navigation'
 import { coopError, coopMoney, coopTime, type CoopRow } from '../../composables/cooperation'
 import { getPromotionConfig, savePromotionConfig, getPromotionProviders, savePromotionProvider, reviewPromotionProvider, getPromotionRewards, settlePromotionRewards, holdPromotionReward, resumePromotionReward, retryPromotionPayment } from '../../api/promotion'
@@ -93,12 +100,14 @@ const canProviderRead=computed(()=>allows('hsx_lead_promotion_providers')),canPr
 const canProviderReview=computed(()=>allows('hsx_lead_promotion_provider_review'))
 const canRewards=computed(()=>allows('hsx_lead_promotion_rewards')),canSettle=computed(()=>allows('hsx_lead_promotion_settle')),canHold=computed(()=>allows('hsx_lead_promotion_hold')),canResume=computed(()=>allows('hsx_lead_promotion_resume'))
 const canRetry=computed(()=>allows('hsx_lead_promotion_retry')&&canSettle.value)
+const canRelations=computed(()=>allows('hsx_lead_promotion_relations')),relationsPanel=ref<{refresh:()=>Promise<void>;loading:boolean}>()
+const invitersPanel=ref<{refresh:()=>Promise<void>;loading:boolean}>(),selectedInviter=ref<CoopRow|null>(null),rewardInviterName=ref('')
 const tab=ref('providers'),providers=ref<CoopRow[]>([]),providerTotal=ref(0),providerLoading=ref(false),providerError=ref(''),providerQuery=reactive<CoopRow>({keyword:'',application_status:'',role:'',page:1,limit:20})
-const rewards=ref<CoopRow[]>([]),rewardTotal=ref(0),rewardLoading=ref(false),rewardError=ref(''),rewardQuery=reactive<CoopRow>({keyword:'',status:'',source:'',page:1,limit:20}),rewardDates=ref<string[]>([])
+const rewards=ref<CoopRow[]>([]),rewardTotal=ref(0),rewardLoading=ref(false),rewardError=ref(''),rewardQuery=reactive<CoopRow>({keyword:'',status:'',source:'',provider_member_id:'',page:1,limit:20}),rewardDates=ref<string[]>([])
 const paymentReviews=ref<CoopRow[]>([]),paymentReviewTotal=ref(0),reviewExpanded=ref<string[]>(['payments']),retrying=ref(0),retryReadRequired=ref(false)
 const config=reactive<CoopRow>({sources:{}}),configReady=ref(false),configLoading=ref(false),configSaving=ref(false),configError=ref(''),settling=ref(false),holding=ref(false)
 const configRequiresReview=ref(false),configReviewMessage=ref('')
-const activeLoading=computed(()=>tab.value==='providers'?providerLoading.value:tab.value==='rewards'?rewardLoading.value:configLoading.value)
+const activeLoading=computed(()=>tab.value==='inviters'?invitersPanel.value?.loading===true:tab.value==='relations'?relationsPanel.value?.loading===true:tab.value==='providers'?providerLoading.value:tab.value==='rewards'?rewardLoading.value:configLoading.value)
 const sources=[{key:'membership',label:'会员服务费'},{key:'maintenance',label:'平台维护费'}]
 const memberLevels=ref<CoopRow[]>([])
 // Table cells must receive the edited fields as row data, not just static metadata plus an outer slot closure.
@@ -163,7 +172,10 @@ async function loadConfig(){const token=++configSeq;configLoading.value=true;con
 function searchProviders(){providerQuery.page=1;return loadProviders()}function searchRewards(){rewardQuery.page=1;return loadRewards()}function providerPage(value:{page:number;limit:number}){Object.assign(providerQuery,value);return loadProviders()}function rewardPage(value:{page:number;limit:number}){Object.assign(rewardQuery,value);return loadRewards()}
 function showPendingProviders(){Object.assign(providerQuery,{application_status:'pending',role:'',page:1});return loadProviders()}
 function loadTab(){if(tab.value==='providers'&&canProviderRead.value)return loadProviders();if(tab.value==='rewards'&&canRewards.value)return loadRewards();if(tab.value==='rules'&&canConfigRead.value&&!configReady.value)return loadConfig()}
-async function reloadActive(){if(tab.value==='rules'&&configReady.value&&JSON.stringify(config)!==configBaseline){try{await ElMessageBox.confirm('重新读取会覆盖尚未保存的推广规则，是否继续？','保留修改或重新读取',{confirmButtonText:'放弃修改并读取',cancelButtonText:'继续编辑',type:'warning'})}catch{return}}if(tab.value==='rules')await loadConfig();else await loadTab()}
+function showInviterRelations(member:CoopRow){if(!canRelations.value||!Number.isSafeInteger(Number(member?.member_id))||Number(member.member_id)<=0)return;selectedInviter.value={...member};tab.value='relations'}
+function showInviterRewards(member:CoopRow){if(!canRewards.value||!Number.isSafeInteger(Number(member?.member_id))||Number(member.member_id)<=0)return;Object.assign(rewardQuery,{keyword:'',status:'',source:'',provider_member_id:Number(member.member_id),page:1});rewardInviterName.value=String(member.name||member.member_no||`会员 #${member.member_id}`);rewardDates.value=[];rewards.value=[];rewardTotal.value=0;rewardError.value='';rewardSeq++;const alreadyOpen=tab.value==='rewards';tab.value='rewards';if(alreadyOpen)return loadRewards()}
+function clearRewardInviter(){rewardQuery.provider_member_id='';rewardInviterName.value='';rewardQuery.page=1;return loadRewards()}
+async function reloadActive(){if(tab.value==='inviters'){await invitersPanel.value?.refresh();return}if(tab.value==='relations'){await relationsPanel.value?.refresh();return}if(tab.value==='rules'&&configReady.value&&JSON.stringify(config)!==configBaseline){try{await ElMessageBox.confirm('重新读取会覆盖尚未保存的推广规则，是否继续？','保留修改或重新读取',{confirmButtonText:'放弃修改并读取',cancelButtonText:'继续编辑',type:'warning'})}catch{return}}if(tab.value==='rules')await loadConfig();else await loadTab()}
 async function saveRules(){
     if(configSaving.value||!canConfigWrite.value||!configReady.value)return
     configError.value=''
@@ -234,10 +246,10 @@ const ruleColumns=[{prop:'label',label:'收入来源',slot:'source',minWidth:240
 const levelRateColumns=[{prop:'name',label:'邀请人会员等级',slot:'level',minWidth:180},{prop:'membership',label:'会员服务费分佣',slot:'membership',minWidth:320},{prop:'maintenance',label:'平台维护费分佣',slot:'maintenance',minWidth:320}]
 const trialColumns=[{prop:'role',label:'邀请人身份',slot:'identity',minWidth:150},{prop:'rate',label:'本档比例',slot:'rate',minWidth:130},{prop:'reward',label:'推广奖励',slot:'reward',minWidth:160},{prop:'retained',label:'平台留存',slot:'retained',minWidth:160}]
 const paymentReviewColumns=[{prop:'order_no',label:'待核对付款',slot:'business',minWidth:230},{prop:'message',label:'核对事项',slot:'issue',minWidth:250},{prop:'action',label:'处理',slot:'action',width:190}]
-onMounted(()=>{tab.value=canConfigRead.value?'rules':canProviderRead.value?'providers':canRewards.value?'rewards':'none';void loadTab()});onBeforeUnmount(()=>{disposed=true;providerSeq++;rewardSeq++;configSeq++})
+onMounted(()=>{tab.value=canRelations.value?'inviters':canConfigRead.value?'rules':canProviderRead.value?'providers':canRewards.value?'rewards':'none';void loadTab()});onBeforeUnmount(()=>{disposed=true;providerSeq++;rewardSeq++;configSeq++})
 </script>
 <style scoped>
-.promotion-subtitle{margin-top:8px;font-size:13px;color:#8a96a8}.promotion-filters{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:20px;background:#fff;border:1px solid #e8edf4;border-radius:10px;margin:8px 0 18px}.promotion-filters .promotion-keyword{width:300px;max-width:100%}.promotion-filters .el-select{width:180px}.promotion-filters .el-date-editor{max-width:100%;width:340px}.promotion-rule-section{margin-top:16px}.promotion-unit{padding-left:8px;color:#8a96a8}.promotion-explainer{margin-top:16px;background:#fff;padding:0 20px;border:1px solid #e8edf4;border-radius:10px}.promotion-help{font-size:13px;color:#7f8da2;line-height:1.9;max-width:1000px}@media(max-width:1280px){.promotion-filters{padding:16px;gap:10px}.promotion-filters .promotion-keyword{width:260px}}
+.promotion-subtitle{margin-top:8px;font-size:13px;color:#8a96a8}.promotion-selected-inviter{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:12px 0;color:var(--el-text-color-secondary);font-size:12px}.promotion-selected-inviter .el-tag{width:auto;max-width:100%;flex:0 0 auto}.promotion-filters{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:20px;background:#fff;border:1px solid #e8edf4;border-radius:10px;margin:8px 0 18px}.promotion-filters .promotion-keyword{width:300px;max-width:100%}.promotion-filters .el-select{width:180px}.promotion-filters .el-date-editor{max-width:100%;width:340px}.promotion-rule-section{margin-top:16px}.promotion-unit{padding-left:8px;color:#8a96a8}.promotion-explainer{margin-top:16px;background:#fff;padding:0 20px;border:1px solid #e8edf4;border-radius:10px}.promotion-help{font-size:13px;color:#7f8da2;line-height:1.9;max-width:1000px}@media(max-width:1280px){.promotion-filters{padding:16px;gap:10px}.promotion-filters .promotion-keyword{width:260px}}
 .promotion-badges{display:flex;align-items:center;flex-wrap:wrap;gap:6px}.promotion-trial{margin-top:16px}.promotion-trial-controls{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px}.promotion-trial-controls .el-select{width:190px}.promotion-trial-note{padding:10px 0;color:var(--el-text-color-secondary);font-size:13px}.promotion-money{color:var(--el-color-primary)}.promotion-application{padding-bottom:12px}.promotion-application dl{display:grid;grid-template-columns:100px minmax(0,1fr);gap:14px 12px;margin:22px 0}.promotion-application dt{color:var(--el-text-color-secondary)}.promotion-application dd{margin:0;overflow-wrap:anywhere;line-height:1.5}.promotion-disabled-modes{display:flex;align-items:flex-start;flex-direction:column;gap:8px}.promotion-disabled-modes :deep(.el-radio){height:auto;white-space:normal;line-height:1.5}.promotion-drawer-help{margin-top:16px}.promotion-drawer-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px}.promotion-drawer-actions .el-button+.el-button{margin-left:0}.promotion-payment-reviews{margin:0 0 18px}
 .promotion-rule-intro{margin:0 0 16px;color:var(--el-text-color-secondary);font-size:13px;line-height:1.7}.promotion-level-rate{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:6px 0}.promotion-level-rate-input{display:flex;align-items:center}.promotion-level-help{margin-top:16px;border-bottom:0}.promotion-level-help :deep(.el-collapse-item__header){font-size:13px;color:var(--el-text-color-secondary)}
 </style>

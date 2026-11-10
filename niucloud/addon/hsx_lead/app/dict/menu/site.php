@@ -79,9 +79,9 @@ $menus = [
                         'is_show' => '0',
                     ],
                     [
-                        'menu_name' => '查询协作归属人员',
+                        'menu_name' => '查询平台监管人员',
                         'menu_key' => 'hsx_lead_cooperation_owners',
-                        'menu_short_name' => '查询协作归属人员',
+                        'menu_short_name' => '查询平台监管人员',
                         'parent_select_key' => '',
                         'menu_type' => '2',
                         'icon' => '',
@@ -94,9 +94,9 @@ $menus = [
                         'is_show' => '0',
                     ],
                     [
-                        'menu_name' => '转交协作归属',
+                        'menu_name' => '调整监管负责人',
                         'menu_key' => 'hsx_lead_cooperation_owner',
-                        'menu_short_name' => '转交协作归属',
+                        'menu_short_name' => '调整监管负责人',
                         'parent_select_key' => '',
                         'menu_type' => '2',
                         'icon' => '',
@@ -119,6 +119,36 @@ $menus = [
                         'router_path' => '',
                         'view_path' => '',
                         'methods' => 'get',
+                        'sort' => '100',
+                        'status' => '1',
+                        'is_show' => '0',
+                    ],
+                    [
+                        'menu_name' => '查看线索通知记录',
+                        'menu_key' => 'hsx_lead_cooperation_notice_list',
+                        'menu_short_name' => '查看线索通知记录',
+                        'parent_select_key' => '',
+                        'menu_type' => '2',
+                        'icon' => '',
+                        'api_url' => 'hsx_lead/cooperation/leads/<id>/notices',
+                        'router_path' => '',
+                        'view_path' => '',
+                        'methods' => 'get',
+                        'sort' => '100',
+                        'status' => '1',
+                        'is_show' => '0',
+                    ],
+                    [
+                        'menu_name' => '复查并发送未发通知',
+                        'menu_key' => 'hsx_lead_cooperation_notice_retry',
+                        'menu_short_name' => '复查并发送未发通知',
+                        'parent_select_key' => '',
+                        'menu_type' => '2',
+                        'icon' => '',
+                        'api_url' => 'hsx_lead/cooperation/leads/<id>/notices/<notice_id>/retry',
+                        'router_path' => '',
+                        'view_path' => '',
+                        'methods' => 'post',
                         'sort' => '100',
                         'status' => '1',
                         'is_show' => '0',
@@ -643,6 +673,17 @@ $menus = [
                 'status' => '1',
                 'is_show' => '1',
                 'children' => [
+                    ...array_map(static function(array $item):array {
+                        return ['menu_name'=>$item[0],'menu_key'=>$item[1],'menu_short_name'=>$item[0],
+                            'parent_select_key'=>'','menu_type'=>'2','icon'=>'','api_url'=>$item[2],
+                            'router_path'=>'','view_path'=>'','methods'=>$item[3],'sort'=>'80','status'=>'1','is_show'=>'0'];
+                    },[
+                        ['确认线下收款','hsx_lead_cooperation_order_manual_receipt','hsx_lead/cooperation/orders/<id>/manual-receipt','post'],
+                        ['预览线下收款','hsx_lead_cooperation_order_manual_receipt_preview','hsx_lead/cooperation/orders/<id>/manual-receipt','get'],
+                        ['查看线下收款记录','hsx_lead_cooperation_order_manual_receipt_read','hsx_lead/cooperation/manual-receipts/<id>','get'],
+                        ['恢复已登记线下收款','hsx_lead_cooperation_order_manual_receipt_retry','hsx_lead/cooperation/manual-receipts/<id>/retry','post'],
+                        ['确认实际线下退款','hsx_lead_cooperation_order_manual_refund','hsx_lead/cooperation/orders/<id>/manual-refund','post'],
+                    ]),
                     [
                         'menu_name' => '关闭未支付订单',
                         'menu_key' => 'hsx_lead_cooperation_order_close',
@@ -725,6 +766,13 @@ $menus = [
                 'status' => '1',
                 'is_show' => '1',
                 'children' => [
+                    ...array_map(static function(array $item):array {
+                        return ['menu_name'=>$item[0],'menu_key'=>$item[1],'menu_short_name'=>$item[0],'parent_select_key'=>'','menu_type'=>'2','icon'=>'','api_url'=>$item[2],'router_path'=>'','view_path'=>'','methods'=>$item[3],'sort'=>'100','status'=>'1','is_show'=>'0'];
+                    },[
+                        ['查看门店资料表单','hsx_lead_cooperation_profile_form','hsx_lead/cooperation/profile-form','get'],
+                        ['保存门店资料表单','hsx_lead_cooperation_profile_form_save','hsx_lead/cooperation/profile-form','put'],
+                        ['查看门店补充资料','hsx_lead_cooperation_profile_form_record','hsx_lead/cooperation/partners/<id>/profile-form','get'],
+                    ]),
                     [
                         'menu_name' => '保存商户协作规则',
                         'menu_key' => 'hsx_lead_cooperation_config_save',
@@ -875,6 +923,7 @@ $menus[0]['children'][]=[
     'menu_name'=>'推广管理','menu_key'=>'hsx_lead_promotion_manage','menu_short_name'=>'推广管理','parent_select_key'=>'','menu_type'=>'1',
     'icon'=>'nc-iconfont nc-icon-huiyuanliebiao','api_url'=>'hsx_lead/promotion/rewards','router_path'=>'hsx_lead/promotion/index','view_path'=>'promotion/index',
     'methods'=>'get','sort'=>'150','status'=>'1','is_show'=>'1','children'=>[
+        $promotionPermission('查看邀请关系与付费','hsx_lead_promotion_relations','hsx_lead/promotion/relations','get'),
         $promotionPermission('查看推广奖励','hsx_lead_promotion_rewards','hsx_lead/promotion/rewards','get'),
         $promotionPermission('读取推广规则','hsx_lead_promotion_config','hsx_lead/promotion/config','get'),
         $promotionPermission('保存推广规则','hsx_lead_promotion_config_save','hsx_lead/promotion/config','put'),
@@ -897,4 +946,47 @@ $menus[0]['children'][]=[
     'icon'=>'nc-iconfont nc-icon-gerenzhongxinV6xx','api_url'=>'','router_path'=>'hsx_lead/cooperation/profile-home','view_path'=>'cooperation/profile-home-page',
     'methods'=>'','sort'=>'139','status'=>'1','is_show'=>'1','children'=>[],
 ];
+$menus[0]['children'][] = [
+    'menu_name' => '通知中心', 'menu_key' => 'hsx_lead_notice_center_read', 'menu_short_name' => '通知中心',
+    'parent_select_key' => '', 'menu_type' => '1', 'icon' => 'nc-iconfont nc-icon-xinxi',
+    'api_url' => 'hsx_lead/notice/tasks', 'router_path' => 'hsx_lead/notice', 'view_path' => 'notice/index',
+    'methods' => 'get', 'sort' => '138', 'status' => '1', 'is_show' => '1', 'children' => [
+        $promotionPermission('读取通知规则', 'hsx_lead_notice_settings', 'hsx_lead/notice/settings', 'get'),
+        $promotionPermission('读取微信公共模板库', 'hsx_lead_notice_library', 'hsx_lead/notice/library', 'get'),
+        $promotionPermission('保存通知规则', 'hsx_lead_notice_center_save', 'hsx_lead/notice/settings', 'put'),
+        $promotionPermission('查看通知投递明细', 'hsx_lead_notice_attempts', 'hsx_lead/notice/tasks/<id>/attempts', 'get'),
+        $promotionPermission('重试指定通知', 'hsx_lead_notice_center_retry', 'hsx_lead/notice/tasks/<id>/retry', 'post'),
+    ],
+];
+
+// Only navigation changes: page/action keys and endpoint authority are preserved.
+// Existing installations must explicitly run scripts/upgrade-menu-groups.php first;
+// NiuCloud does not infer new parent-directory grants from an old role's leaf grants.
+$pages = array_column($menus[0]['children'], null, 'menu_key');
+$grouped = [];
+$groupSort = 600;
+foreach (require __DIR__ . '/site-groups.php' as $key => $group) {
+    $children = [];
+    $pageSort = 300;
+    foreach ($group['pages'] as $pageKey) {
+        if (!isset($pages[$pageKey])) throw new \RuntimeException('客资协作菜单分组缺少页面：' . $pageKey);
+        $page = $pages[$pageKey];
+        $page['parent_key'] = $key;
+        $page['sort'] = (string)$pageSort--;
+        $children[] = $page;
+        unset($pages[$pageKey]);
+    }
+    $grouped[] = [
+        'menu_name' => $group['name'], 'menu_key' => $key, 'menu_short_name' => $group['name'],
+        'parent_select_key' => '', 'parent_key' => 'hsx_lead', 'menu_type' => '0',
+        'icon' => 'nc-iconfont ' . $group['icon'], 'api_url' => '', 'router_path' => $group['path'],
+        'view_path' => '', 'methods' => '', 'sort' => (string)$groupSort--, 'status' => '1', 'is_show' => '1',
+        'children' => $children,
+    ];
+}
+foreach ($pages as $page) {
+    if ((int)$page['menu_type'] !== 2 || (int)$page['is_show'] !== 0) throw new \RuntimeException('客资协作可见页面尚未配置菜单分组');
+    $grouped[] = $page;
+}
+$menus[0]['children'] = $grouped;
 return $menus;

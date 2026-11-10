@@ -1,7 +1,6 @@
 <template>
     <CoopTaskSheet :page="page" :show="show" :title="heading" :busy="ui.saving.value" full @close="closePanel">
         <view class="live-promotion">
-            <view v-if="task && !(page && initialTab === 'application')" class="promo-back" @tap="back"><u-icon name="arrow-left" size="13" color="#7185a0" /><text>返回推广中心</text></view>
             <template v-if="task === 'bind'">
                 <view v-if="ui.confirmedUpstream.value" class="promo-section promo-note">服务端已确认邀请人：{{ ui.confirmedUpstream.value.name || '已确认的直属上级' }}。若下方刷新失败，请重新读取，不要重复提交绑定。</view>
                 <CoopState v-if="ui.invitationLoading.value || ui.invitationError.value" :loading="ui.invitationLoading.value" :error="ui.invitationError.value" @retry="inspectInvitation" />
@@ -24,7 +23,7 @@
                         <view class="promo-section promo-application-status" :class="'is-' + application.status"><view class="promo-person"><view class="promo-avatar is-provider"><u-icon :name="application.status === 'approved' ? 'checkmark-circle' : application.status === 'pending' ? 'clock' : 'account'" size="28" color="#a48349" /></view><view class="promo-grow"><view class="promo-title">{{ application.status_label || applicationStatusLabel }}</view><view class="promo-muted">{{ applicationStatusHint }}</view></view></view><view v-if="application.reason && ['rejected','disabled'].includes(application.status)" class="promo-note">{{ application.reason }}</view><view v-if="application.submitted_at" class="promo-application-time">提交于 {{ coopDate(application.submitted_at) }}<text v-if="application.reviewed_at"> · 审核于 {{ coopDate(application.reviewed_at) }}</text></view></view>
                         <view class="promo-section"><view class="promo-title">本次申请资料</view><view class="promo-kv"><text>门店</text><text>{{ application.merchant_name || '尚未完善' }}</text></view><view class="promo-kv"><text>所在城市</text><text>{{ application.city || '尚未完善' }}</text></view><view class="promo-kv"><text>联系人</text><text>{{ application.contact_name || '尚未完善' }}</text></view><view class="promo-kv"><text>联系电话</text><text>{{ application.mobile_masked || '尚未完善' }}</text></view><view v-if="!application.can_apply && application.apply_reason && !['pending','approved'].includes(application.status)" class="promo-note">{{ application.apply_reason }}</view></view>
                     </template>
-                    <view v-if="ui.applicationError.value" class="promo-section promo-application-error" role="alert"><view>{{ ui.applicationError.value }}</view><u-button :custom-style="cooperationButtonStyle" size="small" shape="circle" :text="ui.applicationUncertain.value ? '核对申请结果' : '重新读取状态'" :loading="ui.applicationLoading.value" :disabled="ui.saving.value" @click="ui.readApplication()" /></view>
+                    <view v-if="ui.applicationError.value" class="promo-section promo-application-error" role="alert">{{ ui.applicationError.value }}</view>
                     <view class="promo-explainer"><u-collapse :border="false"><u-collapse-item title="服务商与推广规则" name="provider"><view class="promo-help">普通会员也可以邀请。服务商申请免费、不要求先购买入驻权益，提交后由平台人工审核，不保证通过。通过后按服务商档位计算新的有效付款奖励，两档不叠加。服务商不自动获得门店会员权益，也不免除发单、接单所需的入驻权益费。</view></u-collapse-item></u-collapse></view>
                 </template>
                 <template v-else-if="task === 'rules'">
@@ -39,14 +38,18 @@
                 <template v-else>
                     <view class="promo-tabs"><view v-for="item in tabs" :key="item.key" :class="{ active: tab === item.key }" @tap="changeTab(item.key)">{{ item.label }}</view><button class="promo-refresh" :disabled="ui.loading.value" aria-label="刷新推广数据" @tap="refresh"><u-icon name="reload" size="17" color="#7b8faa" /></button></view>
                     <template v-if="tab === 'overview'">
-                        <view class="promo-section promo-identity"><view class="promo-kicker"><u-icon name="share" size="15" color="#d8b575" /><text>城市协作 · 一级推广</text></view><view class="promo-person"><view class="promo-avatar"><u-icon name="account" size="28" color="#6484af" /></view><view class="promo-grow"><view class="promo-title">{{ data.member.name }}</view><view class="promo-muted">{{ data.provider?.city || '连接本地生意' }}</view></view><text class="promo-tag" :class="{ 'is-good': providerRole }">{{ currentRoleLabel }}</text></view><view v-if="!data.promotion_allowed" class="promo-identity-notice">{{ !data.enabled ? '本站推广暂未开放' : '新的邀请与奖励已暂停，历史记录保留' }}</view><view v-else class="promo-current-rate"><view><text>会员服务费奖励</text><text>{{ membershipRateLabel }}</text></view><text>普通用户也能分享得佣</text></view></view>
-                        <view class="promo-section promo-application-entry" role="button" @tap="openApplication"><view class="promo-menu-icon is-gold"><u-icon name="account-fill" size="22" color="#a8884d" /></view><view class="promo-grow"><view class="promo-title">{{ applicationEntryLabel }}</view><view class="promo-muted">{{ application.status === 'pending' ? '资料已提交，等待平台审核' : providerRole ? '查看服务商资料与审核记录' : '使用已有门店资料，一键提交审核' }}</view></view><u-icon name="arrow-right" size="14" color="#9aabbe" /></view>
+                        <view class="promo-section promo-identity"><view class="promo-kicker"><u-icon name="share" size="15" color="#d8b575" /><text>城市协作 · 一级推广</text></view><view class="promo-person"><view class="promo-avatar"><u-icon name="account" size="28" color="#6484af" /></view><view class="promo-grow"><view class="promo-title">{{ data.member.name }}</view><view class="promo-muted">{{ data.provider?.city || '连接本地生意' }}</view></view><text class="promo-tag" :class="{ 'is-good': providerRole }">{{ currentRoleLabel }}</text></view>
+                            <button v-if="promotionId" class="promo-id" aria-label="复制我的推广ID" :disabled="ui.saving.value || ui.loading.value" @tap.stop="copyPromotionId"><text>推广 ID</text><text class="promo-id__value">{{ promotionId }}</text><text class="promo-id__action">复制</text><u-icon name="file-text" size="14" color="var(--primary-color,#3478cc)" /></button>
+                            <view v-if="!data.promotion_allowed" class="promo-identity-notice">{{ !data.enabled ? '本站推广暂未开放' : '新的邀请与奖励已暂停，历史记录保留' }}</view><view v-else class="promo-current-rate"><view><text>会员服务费奖励</text><text>{{ membershipRateLabel }}</text></view><text>普通用户也能分享得佣</text></view></view>
+                        <view class="promo-section promo-application-entry" role="button" @tap="openApplication"><view class="promo-menu-icon is-gold"><u-icon name="account" size="22" color="#a8884d" /></view><view class="promo-grow"><view class="promo-title">{{ applicationEntryLabel }}</view><view class="promo-muted">{{ application.status === 'pending' ? '资料已提交，等待平台审核' : providerRole ? '查看服务商资料与审核记录' : '使用已有门店资料，一键提交审核' }}</view></view><u-icon name="arrow-right" size="14" color="#9aabbe" /></view>
                         <view class="promo-section"><view class="promo-row"><view class="promo-title">推广收益</view><text class="promo-link" @tap="task='rules'">收益规则 ›</text></view><view class="promo-stats"><view @tap="showRewards('pending')"><text class="promo-stat-value">{{ coopMoney(data.stats.pending) }}</text><text>待结算</text></view><view @tap="showRewards('settled')"><text class="promo-stat-value">{{ coopMoney(data.stats.settled) }}</text><text>累计已入账</text></view><view @tap="showRewards('held')"><text class="promo-stat-value">{{ coopMoney(data.stats.held) }}</text><text>待核对</text></view></view></view>
                         <view class="promo-section promo-income-entry" @tap="openIncome()"><view><view class="promo-title">我的收益</view><view class="promo-muted">推广佣金、线索收益统一查看</view></view><u-icon name="arrow-right" size="14" color="#8a9db7" /></view>
-                        <view class="promo-section promo-menu-group"><view class="promo-menu" @tap="changeTab('team')"><view class="promo-menu-icon"><u-icon name="man-add" size="22" color="#6484af" /></view><text class="promo-grow">我邀请的商户</text><text class="promo-muted">{{ data.stats.team_count }} 位</text><u-icon name="arrow-right" size="13" color="#8a9db7" /></view><view class="promo-menu" @tap="task='upstream'"><view class="promo-menu-icon is-gold"><u-icon name="account" size="22" color="#a58c5f" /></view><text class="promo-grow">邀请我的人</text><text class="promo-muted">{{ data.upstream?.name || '未绑定' }}</text><u-icon name="arrow-right" size="13" color="#8a9db7" /></view></view>
+                        <view class="promo-section promo-menu-group"><view class="promo-menu" @tap="changeTab('team')"><view class="promo-menu-icon"><u-icon name="man-add" size="22" color="#6484af" /></view><text class="promo-grow">我的邀请</text><text class="promo-muted">{{ data.stats.team_count }} 位</text><u-icon name="arrow-right" size="13" color="#8a9db7" /></view><view class="promo-menu" @tap="task='upstream'"><view class="promo-menu-icon is-gold"><u-icon name="account" size="22" color="#a58c5f" /></view><text class="promo-grow">邀请我的人</text><text class="promo-muted">{{ data.upstream?.name || '未绑定' }}</text><u-icon name="arrow-right" size="13" color="#8a9db7" /></view></view>
                     </template>
                     <template v-else-if="tab === 'invite'">
-                        <view v-if="canInvite" class="promo-section promo-invite"><view class="promo-kicker">我的专属邀请</view><view class="promo-invite-title">一起把本地生意做好</view><view class="promo-muted">{{ data.member.name }}邀请你加入商户协作</view><view class="promo-invite-art"><u-icon name="home" size="62" color="#4b79b7" /><view class="promo-invite-plus"><u-icon name="man-add" size="22" color="#b49760" /></view></view>
+                        <view v-if="canInvite" class="promo-section promo-invite"><view class="promo-kicker">我的专属邀请</view><view class="promo-invite-title">一起把本地生意做好</view><view class="promo-muted">{{ data.member.name }}邀请你加入商户协作</view>
+                            <button v-if="promotionId" class="promo-id" aria-label="复制我的推广ID" :disabled="ui.saving.value || ui.loading.value" @tap.stop="copyPromotionId"><text>推广 ID</text><text class="promo-id__value">{{ promotionId }}</text><text class="promo-id__action">复制</text><u-icon name="file-text" size="14" color="var(--primary-color,#3478cc)" /></button>
+                            <view class="promo-invite-art"><u-icon name="share" size="44" color="#4b79b7" /></view>
                             <!-- #ifdef MP-WEIXIN -->
                             <button class="promo-share-button" open-type="share">分享给朋友 / 同行</button>
                             <!-- #endif -->
@@ -59,16 +62,14 @@
                         <view class="promo-explainer"><u-collapse :border="false"><u-collapse-item title="邀请商户后会发生什么？" name="invite"><view class="promo-help">商户通过邀请入口使用本站会员身份加入，关系以服务器保存的直属上级为准。满足本站推广规则的真实付款，才会形成对应奖励。已有邀请关系不会被新链接覆盖。</view></u-collapse-item></u-collapse></view>
                     </template>
                     <template v-else-if="tab === 'team'">
-                        <view class="promo-section promo-filter"><CooperationSearch v-model="ui.teamKeyword.value" placeholder="搜索直属商户或联系人" :loading="ui.teamLoading.value" @search="ui.loadTeam()" @custom="ui.loadTeam()" @clear="ui.loadTeam()" /><view class="promo-filter-count">共 {{ ui.teamTotal.value }} 位直属会员</view></view>
+                        <view class="promo-section promo-filter"><CooperationSearch v-model="ui.teamKeyword.value" placeholder="搜索受邀会员或门店" :loading="ui.teamLoading.value" @search="ui.loadTeam()" @custom="ui.loadTeam()" @clear="ui.loadTeam()" /><view class="promo-filter-count">已邀请 {{ ui.teamTotal.value }} 位会员</view></view>
                         <CoopState v-if="ui.teamLoading.value && !ui.team.value.length || ui.teamError.value" :loading="ui.teamLoading.value" :error="ui.teamError.value" @retry="ui.loadTeam()" />
-                        <view v-else class="promo-section"><CoopState v-if="!ui.team.value.length" title="暂无符合条件的直属商户" hint="邀请关系以会员本人确认及服务器记录为准。" icon="man-add" /><view v-for="item in ui.team.value" :key="item.member_id" class="promo-record"><view class="promo-row"><view class="promo-grow"><view class="promo-title">{{ item.merchant_name || item.name }}</view><view class="promo-muted">{{ item.name }} · {{ item.mobile_masked }}</view></view><text class="promo-tag">{{ item.stage_label || stageLabel(item.stage) }}</text></view><view class="promo-muted">{{ item.region_text || '门店资料待完善' }}</view></view><view v-if="ui.teamMore.value" class="promo-more" @tap="ui.loadTeam(true)">{{ ui.teamLoading.value ? '正在读取…' : '加载更多' }}</view></view>
+                        <view v-else class="promo-section"><CoopState v-if="!ui.team.value.length" title="暂无符合条件的邀请记录" hint="邀请关系以会员本人确认及服务器记录为准。" icon="man-add" /><view v-for="item in ui.team.value" :key="item.member_id" class="promo-record"><view class="promo-row"><view class="promo-grow"><view class="promo-title">{{ item.merchant_name || item.name }}</view><view class="promo-muted">{{ item.name }}<text v-if="item.mobile_masked"> · {{ item.mobile_masked }}</text></view></view><text class="promo-tag">{{ item.stage_label || stageLabel(item.stage) }}</text></view><view class="promo-muted">{{ item.region_text || '门店资料待完善' }}</view><view class="promo-team-membership"><text>门店会员</text><text class="promo-tag" :class="'is-' + membershipStatus(item)">{{ membershipStatusLabel(item) }}</text><text v-if="item.membership?.level_name" class="promo-team-membership__level">{{ item.membership.level_name }}</text><text v-if="item.membership?.shared" class="promo-muted">共享门店权益</text></view></view><view v-if="ui.teamMore.value" class="promo-more" @tap="ui.loadTeam(true)">{{ ui.teamLoading.value ? '正在读取…' : '加载更多' }}</view></view>
                     </template>
                 </template>
             </template>
         </view>
-        <template v-if="task==='bind' && ui.invitation.value.can_bind && !ui.confirmedUpstream.value" #footer><view class="promo-bind-actions"><view><u-button :custom-style="cooperationButtonStyle" shape="circle" text="取消" :disabled="ui.saving.value" @click="emit('close')" /></view><view><u-button :custom-style="cooperationButtonStyle" shape="circle" type="primary" text="确认邀请关系" :loading="ui.saving.value" :disabled="!bindConfirmed || ui.saving.value" @click="confirmInvitation" /></view></view></template>
-        <template v-else-if="task==='application' && ui.applicationReady.value && (application.can_apply || ui.applicationUncertain.value)" #footer><u-button :custom-style="cooperationButtonStyle" shape="circle" type="primary" :text="ui.applicationUncertain.value ? '核对申请结果' : application.status === 'rejected' ? '重新申请（免费）' : '确认资料，免费申请'" :loading="ui.saving.value || ui.applicationLoading.value" :disabled="ui.saving.value || ui.applicationLoading.value" @click="submitApplication" /></template>
-        <template v-else-if="task==='application' && ui.applicationReady.value && !application.merchant_name && data.enabled && data.promotion_allowed && ['none','rejected'].includes(application.status)" #footer><u-button :custom-style="cooperationButtonStyle" shape="circle" type="primary" text="完善申请资料" @click="openCooperationTask('profile-edit')" /></template>
+        <template v-if="footerKind" #footer><view v-if="footerKind==='bind'" class="promo-bind-actions"><view><u-button :custom-style="cooperationButtonStyle" shape="circle" text="取消" :disabled="ui.saving.value" @click="emit('close')" /></view><view><u-button :custom-style="cooperationButtonStyle" shape="circle" type="primary" text="确认邀请关系" :loading="ui.saving.value" :disabled="!bindConfirmed || ui.saving.value" @click="confirmInvitation" /></view></view><u-button v-else :custom-style="cooperationButtonStyle" shape="circle" type="primary" :text="footerLabel" :loading="ui.saving.value || ui.applicationLoading.value" :disabled="ui.saving.value || ui.applicationLoading.value" @click="footerAction" /></template>
     </CoopTaskSheet>
     <CoopInvitePoster :show="posterOpen" scene="promotion" :allowed="show && canInvite && tab === 'invite'" @close="posterOpen = false" />
 </template>
@@ -91,12 +92,14 @@ import CooperationSearch from './CooperationSearch.vue'
 import CoopInvitePoster from './CoopInvitePoster.vue'
 import { openCooperationTask } from '../../utils/cooperation-navigation'
 import { cooperationButtonStyle } from '../../utils/mobile-ui'
+import { profileMemberNo } from '../../utils/profile-identity'
 const props=withDefaults(defineProps<{show:boolean;page?:boolean;initialTab?:string}>(),{initialTab:'overview'})
 const posterOpen=ref(false)
 const emit=defineEmits<{(event:'close'|'changed'):void}>(),ui=usePromotion(),data=computed(()=>ui.overview.value),tab=ref('overview'),task=ref(''),inviterMid=ref(0),bindConfirmed=ref(false)
 const tabs=[{key:'overview',label:'推广概览'},{key:'invite',label:'邀请同行'},{key:'team',label:'我的邀请'},{key:'earnings',label:'我的收益'}]
 const sourceOptions=[{key:'membership',label:'会员服务费'},{key:'maintenance',label:'平台维护费'}]
 const providerRole=computed(()=>data.value.role==='provider'),application=computed(()=>ui.application.value)
+const promotionId=computed(()=>profileMemberNo(data.value.member || {}))
 const currentRoleLabel=computed(()=>providerRole.value?'城市服务商':data.value.level?.active?data.value.level.name:'普通会员')
 const membershipRateLabel=computed(()=>data.value.rules?.enabled&&data.value.rules?.sources?.membership?.enabled?(data.value.current_rates?.membership===undefined?'比例待核对':data.value.current_rates.membership+'%'):'暂未开启')
 function rateRows(key:string){const source=data.value.rules?.sources?.[key]||{},levels=Array.isArray(data.value.rules?.member_levels)?data.value.rules.member_levels:[];return[{key:'normal',name:'普通会员',value:source.normal_rate??'—'},...levels.map((level:any)=>({key:level.code,name:level.name,value:source.level_rates?.[level.code]??source.normal_rate??'—'})),{key:'provider',name:'城市服务商（独立比例）',value:source.provider_rate??'—'}]}
@@ -105,12 +108,39 @@ const applicationEntryLabel=computed(()=>({pending:'服务商申请 · 待审核
 const applicationStatusLabel=computed(()=>({none:'申请成为城市服务商',pending:'申请待审核',approved:'已成为城市服务商',rejected:'本次申请未通过',disabled:'服务商已停用'}[application.value.status]||'申请状态待核对'))
 const applicationStatusHint=computed(()=>({none:'免费申请 · 平台人工审核',pending:'审核结果会在这里更新，勿重复申请',approved:'新的有效付款按服务商档位计算奖励',rejected:'核对原因后，可免费重新提交审核',disabled:application.value.disabled_mode==='blocked'?'新的邀请与奖励已暂停':'已切换普通推广身份，历史奖励保留'}[application.value.status]||''))
 const heading=computed(()=>({upstream:'邀请我的人',rules:'推广规则',bind:'确认邀请关系',application:'服务商申请'}[task.value]||'推广中心'))
+const footerKind=computed(()=>{
+    if(task.value==='bind')return ui.invitation.value.can_bind&&!ui.confirmedUpstream.value?'bind':''
+    if(task.value!=='application')return ''
+    if(ui.applicationUncertain.value||ui.applicationError.value)return 'check'
+    if(!ui.applicationReady.value)return ''
+    if(application.value.can_apply)return 'apply'
+    if(!application.value.merchant_name&&data.value.enabled&&data.value.promotion_allowed&&['none','rejected'].includes(application.value.status))return 'profile'
+    return ''
+})
+const footerLabel=computed(()=>footerKind.value==='check'?'核对申请状态':footerKind.value==='profile'?'完善申请资料':application.value.status==='rejected'?'重新申请（免费）':'确认资料，免费申请')
 const system=useSystemStore(),share=useShare();let previousShare:any=null,previousWeapp:any,previousCallback:any,sharePrepared=false
-function stageLabel(value:string){return({registered:'已注册',onboarded:'已完善门店',paid:'已有有效付费'} as Record<string,string>)[value]||'已加入'}
+function stageLabel(value:string){return({registered:'已注册',onboarded:'已完善门店',paid:'已有有效付费','已登记门店':'已登记门店','待完善门店':'待完善门店','已加入门店':'已加入门店'} as Record<string,string>)[value]||'已加入'}
+function membershipStatus(item:any){return ['not_opened','active','expired','inactive','review'].includes(item.membership?.status)?item.membership.status:'review'}
+function membershipStatusLabel(item:any){if(!item.membership)return '状态待更新';return({not_opened:'未开通',active:'生效中',expired:'已到期',inactive:'当前未生效',review:'待核对'} as Record<string,string>)[membershipStatus(item)]}
 function invitationUrl(){const base=String(system.site?.wap_url||'').replace(/\/$/,'');return /^https?:\/\//i.test(base)&&data.value.share?.path?base+data.value.share.path:''}
 function prepareShare(){if(!canInvite.value){restoreShare();return}if(!sharePrepared){previousShare=JSON.parse(JSON.stringify(system.shareOptions||{}));previousWeapp=uni.getStorageSync('weappOptions');previousCallback=system.shareCallback;sharePrepared=true}const url=invitationUrl();share.setShare({isStop:true,weapp:{title:'一起把本地生意做好 · 商户协作邀请',path:data.value.share.path},...(url?{wechat:{title:'商户协作邀请',desc:'连接本地商户，一起承接好生意',link:url}}:{})})}
 function restoreShare(){if(!sharePrepared)return;system.$patch({shareOptions:previousShare,shareCallback:previousCallback});if(previousWeapp)uni.setStorageSync('weappOptions',previousWeapp);else uni.removeStorageSync('weappOptions');sharePrepared=false}
-async function copyInvitation(){const url=invitationUrl();if(!url){uni.showToast({title:'本站分享地址尚未配置，请联系平台核对',icon:'none'});return}uni.setClipboardData({data:url,fail:()=>uni.showToast({title:'复制失败，请重试',icon:'none'})})}
+async function copyInvitation(){
+    const url=invitationUrl()
+    if(!url){uni.showToast({title:'本站分享地址尚未配置，请联系平台核对',icon:'none'});return}
+    uni.setClipboardData({
+        data:url,
+        fail(){uni.showToast({title:'复制失败，请重试',icon:'none'})}
+    })
+}
+function copyPromotionId(){
+    if(!props.show||!ui.resume()||!ui.ready.value||ui.saving.value||ui.loading.value||!promotionId.value)return
+    uni.setClipboardData({
+        data:promotionId.value,
+        success(){uni.showToast({title:'推广 ID 已复制',icon:'none'})},
+        fail(){uni.showToast({title:'复制失败，请重试',icon:'none'})}
+    })
+}
 function openIncome(status=''){if(ui.saving.value)return;redirect({url:'/addon/hsx_lead/pages/wallet/index',param:status?{status}:{}})}
 async function refresh(){const loaded=await ui.reload();if(loaded){prepareShare();if(tab.value==='team')await ui.loadTeam()}}
 async function changeTab(value:string){if(ui.saving.value)return;if(value==='earnings'){openIncome();return}posterOpen.value=false;task.value='';tab.value=value;if(value==='team')await ui.loadTeam();if(value==='invite')prepareShare()}
@@ -122,6 +152,7 @@ async function openInvitation(mid:number){inviterMid.value=Number(mid);bindConfi
 async function confirmInvitation(){if(!bindConfirmed.value)return;if(await ui.bind(inviterMid.value)){task.value='upstream';emit('changed');uni.showToast({title:'邀请关系已核对',icon:'none'})}}
 async function openApplication(){if(ui.saving.value)return;if(props.page){openCooperationTask('promotion',{tab:'application'});return}task.value='application';await ui.readApplication()}
 async function submitApplication(){if(await ui.applyProvider()){emit('changed');uni.showToast({title:ui.application.value.status==='approved'?'服务商状态已更新':'申请已提交，等待审核',icon:'none'})}}
+function footerAction(){if(ui.saving.value||ui.applicationLoading.value)return;if(footerKind.value==='check'){ui.readApplication();return}if(footerKind.value==='profile'){openCooperationTask('profile-edit');return}if(footerKind.value==='apply')submitApplication()}
 watch(()=>props.show,async show=>{if(!show){posterOpen.value=false;ui.stop();restoreShare();return}task.value=['upstream','application'].includes(props.initialTab)?props.initialTab:'';tab.value=tabs.some(item=>item.key===props.initialTab)&&props.initialTab!=='earnings'?props.initialTab:'overview';await refresh();if(props.show&&props.initialTab==='application')await ui.readApplication();if(props.show&&props.initialTab==='earnings')openIncome()},{immediate:true})
 onHide(()=>{posterOpen.value=false})
 onBeforeUnmount(()=>{ui.stop();restoreShare()})
@@ -142,5 +173,16 @@ defineExpose({openInvitation,refresh})
 .promo-poster-button { display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;line-height:44px;margin:12px 0 0;padding:0 12px;background:#eff4fb;color:#6683a8;border-radius:22px;font-size:14px; }.promo-poster-button::after { border:0; }
 .promo-current-rate { padding-top:14px;margin-top:16px;border-top:1px solid #e1e9f4; }.promo-current-rate>view { display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;color:#657990; }.promo-current-rate>view>text:last-child { font-size:28px;line-height:1.4;color:var(--primary-color,#3478cc);font-weight:650; }.promo-current-rate>view>text:last-child>text { font-size:14px;margin-left:2px; }.promo-current-rate>text { display:block;margin-top:5px;font-size:12px;color:#8a96a8; }
 .promo-income-entry { display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:76px;box-sizing:border-box; }.promo-level-rates { padding:0 16px 16px; }.promo-level-rates+.promo-level-rates { border-top:1px solid #edf1f6;padding-top:16px; }
+.promo-team-membership { display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:10px;font-size:12px;color:#7d8795; }.promo-team-membership>.promo-tag { max-width:none; }.promo-team-membership>.promo-muted { margin:0;font-size:11px; }.promo-team-membership__level { color:#4f6076;font-weight:600; }.promo-team-membership .is-active { background:#edf6f1;color:#4f8065; }.promo-team-membership .is-expired,.promo-team-membership .is-review { background:#faf3e7;color:#9b7a43; }
+.promo-invite-art { width:88px;height:88px;margin:20px auto;background:#eff4fb;border:0;border-radius:22px;transform:none; }
+.promo-id {
+    display:flex;align-items:center;gap:8px;min-height:44px;box-sizing:border-box;width:100%;
+    margin:12px 0 0;padding:8px 12px;border-radius:8px;background:rgba(255,255,255,.78);
+    text-align:left;font-size:12px;line-height:20px;color:#7b8b9e;
+}
+.promo-id::after { border:0; }
+.promo-id__value { flex:1;min-width:0;overflow-wrap:anywhere;font-size:15px;font-weight:650;font-variant-numeric:tabular-nums;color:#354b66; }
+.promo-id__action { flex:none;color:var(--primary-color,#3478cc); }
+.promo-id[disabled] { opacity:.55; }
 @media(max-width:340px) { .promo-tabs>view { font-size:13px; }.promo-section { margin:12px;padding:12px; }.promo-filter { top:44px; } }
 </style>

@@ -104,6 +104,7 @@ final class PaymentRefundService
             PromotionService::lockSite($this->context->site);$order=Store::row('coop_order',$this->context->site,$id,true);$rule=Data::decode($order['rule_json']);$r=$rule[self::KEY]??[];
             if(($r['status']??'')!=='approved'||!empty($r['dispatch_started_at']))return '';
             $refund=self::receipt($order,$r,true);if($refund['status']!==RefundDict::WAIT||$refund['refund_type']!=='')throw new CommonException('原退款状态已变化，只能核对原单，不能重复提交');
+            if($refund['type']===PayDict::OFFLINEPAY){$r['manual_refund_required']=true;$r['message']='退款已审核，待平台实际转账后确认；系统不会自动转账';$rule[self::KEY]=$r;self::save($order,$rule);return '';}
             $r['dispatch_started_at']=time();$r['status']='refunding';$r['message']='已提交原路退款，等待渠道确认';$rule[self::KEY]=$r;self::save($order,$rule);return$r['refund_no'];
         });
         if($number==='')return;
@@ -118,6 +119,10 @@ final class PaymentRefundService
     private function recover(int $id): void
     {
         $order=Store::row('coop_order',$this->context->site,$id);$r=Data::decode($order['rule_json'])[self::KEY]??[];
+        if(!empty($r['refund_no'])&&in_array($r['status']??'',['approved','refunding','attention'],true)){
+            $manual=self::receipt($order,$r);
+            if(ManualRefundService::resume($this->context->site,$order,$manual))return;
+        }
         if(!empty($r['refund_no'])&&!empty($r['dispatch_started_at'])&&in_array($r['status']??'',['refunding','attention'],true)){
             $refund=self::receipt($order,$r);
             if(in_array($refund['status'],[RefundDict::WAIT,RefundDict::DEALING],true))try{
@@ -129,6 +134,7 @@ final class PaymentRefundService
     /** Trusted bounded scheduler: query only durable submitted originals, never create or dispatch. */
     public static function tick(int $limit=20): array
     {
+        ManualRefundService::tick($limit);
         $rows=Db::name('hsx_lead_coop_order')->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(CASE WHEN JSON_VALID(rule_json) THEN rule_json ELSE '{}' END,'$.order_refund.status')) IN ('refunding','attention')")
             ->whereRaw("CAST(JSON_UNQUOTE(JSON_EXTRACT(rule_json,'$.order_refund.dispatch_started_at')) AS UNSIGNED)>0")->order('update_time,id')->limit(max(1,min(50,$limit)))->select()->toArray();
         $out=['examined'=>0,'refunded'=>0,'failed'=>0,'attention'=>0];
@@ -198,7 +204,8 @@ final class PaymentRefundService
         if((string)($order['out_trade_no']??'')==='')throw new CommonException('原支付流水缺失');
         $pay=$knownPay??OrderPaymentReadService::payment($order,$lock);
         if(!$pay||(int)$pay['status']!==(int)PayDict::STATUS_FINISH||$pay['main_type']!==PayDict::MEMBER||(int)$pay['main_id']!==(int)$order['member_id']||Rules::cents((string)$pay['money'])!==Rules::cents((string)$order['amount']))throw new CommonException('原支付身份、金额或状态不一致');
-        if(!in_array($pay['type'],[PayDict::BALANCEPAY,PayDict::WECHATPAY,PayDict::ALIPAY],true))throw new CommonException('原支付方式不支持此处原路退款，请平台人工核对');
+        if(!in_array($pay['type'],[PayDict::BALANCEPAY,PayDict::WECHATPAY,PayDict::ALIPAY,PayDict::OFFLINEPAY],true))throw new CommonException('原支付方式不支持此处原路退款，请平台人工核对');
+        OrderPaymentReadService::assertManualSource($order,$pay);
         $q=Db::name('pay_refund')->where('site_id',(int)$order['site_id'])->where('out_trade_no',$order['out_trade_no']);if($lock)$q->lock(true);$refunds=$q->select()->toArray();
         $refunded=0;$pending=false;$seen=[];foreach($refunds as$refund){$no=(string)$refund['refund_no'];if(isset($seen[$no]))throw new CommonException('退款凭据重复，需人工核对');$seen[$no]=true;if($refund['trade_type']!==PaymentService::TRADE_TYPE||(string)$refund['trade_id']!==(string)$order['id'])throw new CommonException('退款归属不一致');if($refund['status']===RefundDict::SUCCESS)$refunded+=Rules::cents((string)$refund['money']);if(in_array($refund['status'],[RefundDict::WAIT,RefundDict::DEALING],true))$pending=true;}
         $amount=Rules::cents((string)$order['amount'])-$refunded;if($amount<0)throw new CommonException('原单累计退款超额');
@@ -284,8 +291,23 @@ final class PaymentRefundService
     private static function receipt(array $order,array $r,bool $lock=false): array
     {
         $q=Db::name('pay_refund')->where('site_id',(int)$order['site_id'])->where('id',(int)($r['refund_record_id']??0))->where('refund_no',(string)($r['refund_no']??''));if($lock)$q->lock(true);$refund=$q->find();
-        if(!$refund||$refund['trade_type']!==PaymentService::TRADE_TYPE||(string)$refund['trade_id']!==(string)$order['id']||$refund['out_trade_no']!==$order['out_trade_no']||Rules::cents((string)$refund['money'])!==Rules::cents((string)$r['amount'])||!in_array($refund['refund_type'],['',RefundDict::BACK],true))throw new CommonException('原退款凭据与本订单不符，未重复发起');
-        $pay=OrderPaymentReadService::payment($order,$lock);if(!$pay||(int)$pay['status']!==(int)PayDict::STATUS_FINISH||$pay['type']!==$refund['type']||$pay['channel']!==$refund['channel']||(int)$pay['main_id']!==(int)$order['member_id']||$pay['main_type']!==PayDict::MEMBER||Rules::cents((string)$pay['money'])!==Rules::cents((string)$order['amount']))throw new CommonException('原退款与已收款凭据不一致');return$refund;
+        if(!$refund||$refund['trade_type']!==PaymentService::TRADE_TYPE||(string)$refund['trade_id']!==(string)$order['id']||$refund['out_trade_no']!==$order['out_trade_no']||Rules::cents((string)$refund['money'])!==Rules::cents((string)$r['amount'])||!in_array($refund['refund_type'],($refund['type']??'')===PayDict::OFFLINEPAY?['',RefundDict::OFFLINE]:['',RefundDict::BACK],true))throw new CommonException('原退款凭据与本订单不符，未重复发起');
+        $pay=OrderPaymentReadService::payment($order,$lock);if(!$pay||(int)$pay['status']!==(int)PayDict::STATUS_FINISH||$pay['type']!==$refund['type']||$pay['channel']!==$refund['channel']||(int)$pay['main_id']!==(int)$order['member_id']||$pay['main_type']!==PayDict::MEMBER||Rules::cents((string)$pay['money'])!==Rules::cents((string)$order['amount']))throw new CommonException('原退款与已收款凭据不一致');
+        OrderPaymentReadService::assertManualSource($order,$pay);
+        if($pay['type']===PayDict::OFFLINEPAY&&$refund['status']===RefundDict::SUCCESS)ManualRefundService::assertRefundReceipt((int)$order['site_id'],$order,$refund);
+        return$refund;
+    }
+    /** Shared by privileged manual-transfer registration and exact-proof compensation only. */
+    public static function manualConfirmation(int $site,array $order,array $refund,bool $mark): bool
+    {
+        $rule=Data::decode($order['rule_json']);$r=$rule[self::KEY]??[];
+        if(($r['refund_no']??'')!==$refund['refund_no'])return false;
+        if(!in_array($r['status']??'',['approved','refunding','attention','refunded'],true)||($refund['type']??'')!==PayDict::OFFLINEPAY)throw new CommonException('原线下退款尚未审核通过');
+        self::receipt($order,$r,true);
+        if(($r['status']??'')==='refunded'){if($refund['status']!==RefundDict::SUCCESS)throw new CommonException('原退款成功状态不一致');return true;}
+        foreach($r['reservations']??[]as$reservation)self::assertReservation($site,$r,$reservation);
+        if($mark){$r['status']='refunding';$r['dispatch_started_at']=($r['dispatch_started_at']??0)?:time();$r['manual_refund_required']=true;$r['message']='实际退款凭据已登记，正在更新业务结果';$rule[self::KEY]=$r;self::save($order,$rule);}
+        return true;
     }
     /** Balance driver may have credited once before an interrupted business callback. Verify that exact ledger; never refund twice. */
     private function recoverBalance(array $order,array $r): bool
@@ -310,6 +332,9 @@ final class PaymentRefundService
             $this->assertNoDepositExit($order,false);
             if(Rules::cents($out['components']['deposit'])>0){$blocks=MembershipDepositService::blockingFor((int)$order['site_id'],(int)$order['merchant_id']);if($blocks)throw new CommonException($blocks[0]['title'].'；请先处理后退还押金');}
         }catch(CommonException$error){$out['can_request']=false;$out['block_reason']=$error->getMessage();}
+        $refund=null;if(!empty($r['refund_no']))try{$refund=self::receipt($order,$r);}catch(\Throwable$ignored){}
+        $manual=ManualRefundService::metadata($order,$refund,$admin&&in_array($status,['approved','refunding','attention'],true)&&$this->context->ownership()->allows('hsx_lead_cooperation_order_manual_refund'));$out=array_replace($out,$manual);
+        if($manual['manual_refund_required']){$out['can_continue']=false;$out['can_refresh']=in_array($status,['approved','refunding','attention'],true);if($status==='approved')$out['status_name']='待人工退款';}
         return$out;
     }
     private static function requestVersion(array $order,array $r): string{return hash('sha256',Data::json([(int)$order['site_id'],(int)$order['id'],(string)($r['request_id']??''),(int)($r['requested_at']??0)]));}

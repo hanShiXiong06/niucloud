@@ -42,13 +42,13 @@ class CoreNoticeLogService extends BaseCoreService
 
 
     public function getPage(int $site_id, array $where){
-        $field = 'id, site_id, key, notice_type, uid, member_id, nickname, receiver, is_click, is_visit, visit_time, create_time, params, content';
+        $field = 'id, site_id, key, notice_type, uid, member_id, nickname, receiver, is_click, is_visit, visit_time, create_time, params, content, result';
         $search_model = $this->model->where([['site_id', '=', $site_id]])->withSearch(['key','receiver', 'create_time'], $where)->field($field)->order('create_time desc')->append(['name', 'notice_type_name']);
         return $this->pageQuery($search_model);
     }
 
     public function getInfo(int $site_id, int $id){
-        $field = 'id, site_id, key, notice_type, uid, member_id, nickname, receiver, is_click, is_visit, visit_time, create_time, params, content';
+        $field = 'id, site_id, key, notice_type, uid, member_id, nickname, receiver, is_click, is_visit, visit_time, create_time, params, content, result';
         return $this->model->where([['site_id', '=', $site_id], ['id', '=', $id]])->field($field)->append(['name', 'notice_type_name'])->findOrEmpty()->toArray();
     }
 }

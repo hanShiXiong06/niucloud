@@ -165,9 +165,9 @@ class CoreDiyFormRecordsService extends BaseCoreService
                     $form_field_info = $form_field_list[ $component[ 'id' ] ] ?? [];
 
                     if (!empty($form_field_info)) {
-                        if ($form_field_info[ 'field_required' ] == 1 && empty($field_value)) {
+                        if ($form_field_info[ 'field_required' ] == 1 && self::isBlank($field_value)) {
                             throw new CommonException(($component[ 'field' ][ 'name' ] ?? $component[ 'componentTitle' ]) . '不能为空');
-                        } else if (empty($check_field_value)) {
+                        } else if (self::isBlank($check_field_value)) {
                             // 过滤空数据
                             continue;
                         }
@@ -182,7 +182,7 @@ class CoreDiyFormRecordsService extends BaseCoreService
                         if ($form_field_info[ 'field_unique' ] == 1 && in_array($field_value, $field_values)) {
                             throw new CommonException(($component[ 'field' ][ 'name' ] ?? $component[ 'componentTitle' ]) . '不能重复');
                         }
-                    } else if (empty($check_field_value)) {
+                    } else if (self::isBlank($check_field_value)) {
                         // 过滤空数据
                         continue;
                     }
@@ -236,6 +236,12 @@ class CoreDiyFormRecordsService extends BaseCoreService
             Db::rollback();
             throw new CommonException($e->getMessage());
         }
+    }
+
+    /** Numeric zero is a valid field value, not an empty answer. */
+    private static function isBlank($value): bool
+    {
+        return $value === null || $value === false || is_string($value) && trim($value) === '' || is_array($value) && $value === [];
     }
 
     /**

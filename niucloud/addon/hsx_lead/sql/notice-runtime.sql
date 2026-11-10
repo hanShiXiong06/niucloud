@@ -1,0 +1,66 @@
+-- Structured runtime facts; rules/templates remain in the framework configuration.
+CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_notice_task` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int unsigned NOT NULL,
+  `event_key` varchar(64) NOT NULL,
+  `source_type` varchar(32) NOT NULL,
+  `source_id` bigint unsigned NOT NULL,
+  `recipient_member_id` int unsigned NOT NULL,
+  `channel` varchar(16) NOT NULL,
+  `dedupe_key` char(64) NOT NULL,
+  `status` varchar(32) NOT NULL DEFAULT 'pending',
+  `payload_json` longtext NULL,
+  `attempt_count` int unsigned NOT NULL DEFAULT 0,
+  `manual_retry_count` int unsigned NOT NULL DEFAULT 0,
+  `next_retry_at` int unsigned NOT NULL DEFAULT 0,
+  `lease_token` char(32) NOT NULL DEFAULT '',
+  `lease_until` int unsigned NOT NULL DEFAULT 0,
+  `expires_at` int unsigned NOT NULL DEFAULT 0,
+  `provider_code` varchar(40) NOT NULL DEFAULT '',
+  `framework_log_id` bigint unsigned NOT NULL DEFAULT 0,
+  `last_message` varchar(500) NOT NULL DEFAULT '',
+  `create_time` int unsigned NOT NULL DEFAULT 0,
+  `update_time` int unsigned NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_dedupe` (`site_id`,`dedupe_key`),
+  KEY `idx_due` (`status`,`next_retry_at`,`id`),
+  KEY `idx_site_due` (`site_id`,`status`,`next_retry_at`,`id`),
+  KEY `idx_site_page` (`site_id`,`id`),
+  KEY `idx_recipient` (`site_id`,`recipient_member_id`,`id`),
+  KEY `idx_source` (`site_id`,`source_type`,`source_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Member notice tasks; no credentials or payment authority';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_notice_attempt` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int unsigned NOT NULL,
+  `task_id` bigint unsigned NOT NULL,
+  `attempt_no` int unsigned NOT NULL,
+  `trigger_type` varchar(16) NOT NULL,
+  `operator_uid` int unsigned NOT NULL DEFAULT 0,
+  `reason` varchar(200) NOT NULL DEFAULT '',
+  `status` varchar(32) NOT NULL,
+  `provider_code` varchar(40) NOT NULL DEFAULT '',
+  `message` varchar(500) NOT NULL DEFAULT '',
+  `framework_log_id` bigint unsigned NOT NULL DEFAULT 0,
+  `lease_token` char(32) NOT NULL DEFAULT '',
+  `request_key` varchar(64) DEFAULT NULL,
+  `create_time` int unsigned NOT NULL DEFAULT 0,
+  `finish_time` int unsigned NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_attempt` (`site_id`,`task_id`,`attempt_no`),
+  UNIQUE KEY `uk_request` (`site_id`,`task_id`,`request_key`),
+  KEY `idx_task` (`site_id`,`task_id`,`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Notice attempt history; results are not delivery/read receipts';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_notice_preference` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int unsigned NOT NULL,
+  `member_id` int unsigned NOT NULL,
+  `event_key` varchar(64) NOT NULL,
+  `channel` varchar(16) NOT NULL,
+  `enabled` tinyint unsigned NOT NULL DEFAULT 1,
+  `create_time` int unsigned NOT NULL DEFAULT 0,
+  `update_time` int unsigned NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_preference` (`site_id`,`member_id`,`event_key`,`channel`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Member channel preference; never proof of native WeChat consent';

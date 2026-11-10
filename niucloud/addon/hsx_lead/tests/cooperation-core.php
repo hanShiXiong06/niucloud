@@ -57,7 +57,7 @@ try {
     coopDeny(fn()=>$p->create(array_replace($input,['customer_name'=>'Another buyer'])),'same request cannot overwrite content');
     coopDeny(fn()=>$r->detail($id),'unassigned merchant cannot read lead');
     $stores=$p->stores(['scope'=>'auto'],$id);
-    coopCheck(!empty($stores['data'][0]['is_internal'])&&(int)$stores['data'][0]['id']===(int)$publisher['id'],'own store is a distinct first internal-delivery option');
+    coopCheck(!in_array((int)$publisher['id'],array_map('intval',array_column($stores['data'],'id')),true),'single-account shop is not offered as a self-delivery option');
     $stores['data']=array_values(array_filter($stores['data'],static fn(array $row):bool=>empty($row['is_internal'])));
     coopCheck($stores['scope']==='district'&&(int)$stores['data'][0]['id']===$rid&&$stores['data'][0]['membership_active'],'external local paid capable shop remains recommended');
     coopCheck(!isset($stores['data'][0]['available_balance']),'recommendations do not reveal wallet balances');

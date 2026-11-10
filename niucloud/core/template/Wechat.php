@@ -12,6 +12,7 @@
 namespace core\template;
 
 use app\service\core\wechat\CoreWechatService;
+use core\exception\NoticeDeliveryException;
 use EasyWeChat\Kernel\Exceptions\InvalidArgumentException;
 use EasyWeChat\Kernel\Exceptions\InvalidConfigException;
 use EasyWeChat\Kernel\Support\Collection;
@@ -59,7 +60,11 @@ class Wechat extends BaseTemplate
 
         if (!empty($first)) $data[ 'first' ] = $first;
         if (!empty($remark)) $data[ 'remark' ] = $remark;
-        $api = CoreWechatService::appApiClient($this->site_id);
+        try {
+            $api = NoticeTransport::client(CoreWechatService::app($this->site_id));
+        } catch (\Throwable $error) {
+            throw new NoticeDeliveryException('wechat', 'not_submitted', '', '公众号通知账号尚未就绪，本次未提交发送', $error);
+        }
         $param = [
             'touser' => $openid,
             'template_id' => $template_id,
@@ -70,7 +75,15 @@ class Wechat extends BaseTemplate
         if(!empty($client_msg_id)){
             $param['client_msg_id'] = $client_msg_id;
         }
-        return $api->postJson('cgi-bin/message/template/send', $param);
+        try {
+            $response = $api->postJson('cgi-bin/message/template/send', $param);
+            NoticeReceipt::accepted($response->toArray(), 'wechat');
+            return $response;
+        } catch (NoticeDeliveryException $error) {
+            throw $error;
+        } catch (\Throwable $error) {
+            throw new NoticeDeliveryException('wechat', 'unknown', '', '公众号通知发送结果未能核实，请先核对记录，勿重复发送', $error);
+        }
     }
 
     /**

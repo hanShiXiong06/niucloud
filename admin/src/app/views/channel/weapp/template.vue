@@ -41,7 +41,10 @@
 
                     <el-table-column :label="t('response')" min-width="180">
                         <template #default="{ row }">
-                            <div v-for="(item, index) in row.weapp.content" :key="'a' + index" class="text-left">{{ item.join(":") }}</div>
+                            <div v-if="configurationRequired(row)" class="text-warning">配置未就绪：{{ configurationMessage(row) }}</div>
+                            <template v-else>
+                                <div v-for="(item, index) in row.weapp.content" :key="'a' + index" class="text-left">{{ item.join(":") }}</div>
+                            </template>
                         </template>
                     </el-table-column>
 
@@ -55,8 +58,8 @@
 
                     <el-table-column :label="t('operation')" fixed="right" align="right" width="200">
                         <template #default="{ row }">
-                            <el-button type="primary" link @click="infoSwitch(row)">{{ row.is_weapp == 1 ? t('close') : t('open') }}</el-button>
-                            <el-button type="primary" link @click="batchAcquisitionFn(row)">{{ t('regain') }}</el-button>
+                            <el-button type="primary" link :disabled="configurationRequired(row) && row.is_weapp != 1" @click="infoSwitch(row)">{{ row.is_weapp == 1 ? t('close') : t('open') }}</el-button>
+                            <el-button type="primary" link :disabled="configurationRequired(row)" @click="batchAcquisitionFn(row)">{{ t('regain') }}</el-button>
                         </template>
                     </el-table-column>
                 </el-table>
@@ -71,7 +74,7 @@ import { reactive, ref } from 'vue'
 import { t } from '@/lang'
 import { getTemplateList, getBatchAcquisition } from '@/app/api/weapp'
 import { editNoticeStatus } from '@/app/api/notice'
-import { ElLoading } from 'element-plus'
+import { ElLoading, ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { AnyObject } from '@/types/global'
 
@@ -136,7 +139,17 @@ const templateSpan = (row : any) => {
 /**
  * 批量获取
  */
+const configurationRequired = (row: AnyObject) => {
+    const tid = String(row.weapp?.tid || '').trim()
+    return !!row.weapp?.configuration_required || !tid || tid === '0'
+}
+const configurationMessage = (row: AnyObject) => row.weapp?.configuration_message || '公共模板尚未配置，请联系开发方核验模板定义后再获取或开启。'
 const batchAcquisitionFn = (row: AnyObject | null = null) => {
+    const pendingRow = row ? (configurationRequired(row) ? row : null) : cronTableData.data.find(configurationRequired)
+    if (pendingRow) {
+        ElMessage.warning(configurationMessage(pendingRow))
+        return
+    }
     const loading = ElLoading.service({ lock: true, background: 'rgba(0, 0, 0, 0)' })
     getBatchAcquisition({ keys: row ? [row.key] : [] }).then(() => {
         loadCronList()
@@ -155,12 +168,16 @@ interface Switch {
     status: number
 }
 const infoSwitch = (res:any) => {
+    if (res.is_weapp != 1 && configurationRequired(res)) {
+        ElMessage.warning(configurationMessage(res))
+        return
+    }
     const data = ref<Switch>({
         key: '',
         type: '',
         status: 0
     })
-    data.value.status = res.is_weapp ? 0 : 1
+    data.value.status = res.is_weapp == 1 ? 0 : 1
     data.value.key = res.key
     data.value.type = 'weapp'
     cronTableData.loading = true

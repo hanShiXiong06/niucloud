@@ -19,8 +19,17 @@ final class FrameworkNoticeGateway
         if(!is_array($data)||!is_array($data['to']??null)||!is_array($data['vars']??null)||empty($data['to']['member_id'])) {
             throw new NoticePreflightException('通知数据钩子未就绪，未提交发送；请核对插件事件加载');
         }
+        if(isset($payload['expected_recipient_member_id'])){
+            if((int)$data['to']['member_id']!==(int)$payload['expected_recipient_member_id']
+                ||($data['vars']['__hsx_lead_notice_id']??'')!==(string)($payload['data']['financial_task_id']??'')
+                ||($data['vars']['__hsx_lead_notice_attempt']??'')!==(string)($payload['data']['notice_attempt']??'')
+                ||($data['vars']['__hsx_lead_notice_channel']??'')!==$channel
+                ||($data['vars']['__hsx_lead_notice_lease']??'')!==($payload['data']['lease_token']??''))
+                throw new NoticePreflightException('通知钩子接收会员或执行关联不一致，未提交发送');
+        }
         $event=['site_id'=>(int)$payload['site_id'],'key'=>$payload['key'],'template'=>$payload['template'],
             'to'=>$data['to'],'vars'=>$data['vars']];
+        if(in_array($channel,['weapp','wechat','sms'],true))$event['return_receipt']=true;
         if($channel==='sms'){
             // The official SMS listener persists the whole event as params, but
             // forwards vars to the SMS provider. Correlation belongs to the log

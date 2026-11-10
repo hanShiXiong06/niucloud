@@ -8,7 +8,7 @@ final class Promotion extends BaseApiController
 {
     private function service(): PromotionService { return new PromotionService(new Context((int)$this->request->siteId(),0,(int)$this->request->memberId())); }
     public function overview() { return success($this->service()->overview()); }
-    public function team() { return success($this->service()->team($this->request->param())); }
+    public function team() { return success($this->service()->team($this->request->param()))->header(['Cache-Control'=>'private, no-store']); }
     public function rewards() { return success($this->service()->rewards($this->request->param())); }
     public function income() { return success($this->service()->income($this->request->param())); }
     public function rules() { return success($this->service()->rules()); }

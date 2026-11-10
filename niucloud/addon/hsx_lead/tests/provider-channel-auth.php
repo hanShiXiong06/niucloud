@@ -46,7 +46,7 @@ final class ChannelAuthCaptcha implements CaptchaRecognizerContract
     }
     public function balance(#[SensitiveParameter]string $key):string{throw new RuntimeException('No balance request expected');}
 }
-$checks=0;$failed=false;$pdo=null;$schema='';
+$checks=0;$failed=false;$pdo=null;$schema='';$case='initial';
 function caCheck(bool $condition,string $label):void{if(!$condition)throw new RuntimeException('Assertion failed: '.$label);$GLOBALS['checks']++;}
 function caDenied(callable $action):void
 {
@@ -114,6 +114,6 @@ try{
         if($case==='before_create')caCheck($f['recognizer']->creates===0,'closure before submit never creates a recognition');
     }
     leadAssertIsolated($schema);echo json_encode(['passed'=>true,'checks'=>$checks,'scope'=>'channel gating for manual CAPTCHA, cached challenges, automatic stages, in-flight close and cancellation','remote_calls'=>0,'paid_tasks'=>0,'existing_business_rows_read'=>0],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES).PHP_EOL;
-}catch(Throwable$error){$failed=true;fwrite(STDERR,'FAIL '.get_class($error).': '.($error instanceof PDOException?'isolated MySQL '.$error->getCode():$error->getMessage()).' at '.basename($error->getFile()).':'.$error->getLine().PHP_EOL);}
+}catch(Throwable$error){$failed=true;fwrite(STDERR,'FAIL after '.$checks.' checks (case '.$case.'): '.get_class($error).': '.($error instanceof PDOException?'isolated MySQL '.$error->getCode():$error->getMessage()).' at '.basename($error->getFile()).':'.$error->getLine().PHP_EOL);}
 finally{if($pdo instanceof PDO&&$schema!=='')try{leadCleanup($pdo,$schema);}catch(Throwable$error){$failed=true;fwrite(STDERR,"FAIL owned database cleanup\n");}}
 exit($failed?1:0);

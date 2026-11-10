@@ -149,14 +149,14 @@ final class PromotionService
     {
         $member=$this->own();$id=(int)$member['member_id'];$q=self::query($this->context->site)->where('provider_member_id',$id);$role=self::resolveRole($this->context->site,$id);$config=self::configuration($this->context->site);
         $rates=[];foreach($config['sources'] as $source=>$definition) $rates[$source]=self::rateFor($config,$source,$role['role'],$role['level']['code']);
-        return ['enabled'=>$config['enabled'],'member'=>self::summary($member),'provider'=>$this->publicProvider($role['provider']),
+        return ['enabled'=>$config['enabled'],'member'=>self::summary($member)+['member_no'=>(string)($member['member_no']??'')],'provider'=>$this->publicProvider($role['provider']),
             'level'=>$role['level'],'current_rates'=>$rates,
             'role'=>$role['role'],'promotion_allowed'=>$config['enabled']&&$role['promotion_allowed'],'application'=>$this->applicationView($id,$role['provider']),
             'upstream'=>$this->upstream((int)$member['pid']),
             'stats'=>['team_count'=>(int)$this->teamQuery($id)->count(),'pending'=>(string)(clone $q)->where('status','pending')->sum('amount'),
                 'settled'=>(string)(clone $q)->where('status','settled')->sum('amount'),'held'=>(string)(clone $q)->where('status','held')->sum('amount')],
             'account'=>PaymentService::accountSummary($this->context->site,$id),'rules'=>self::configView($this->context->site,$config),
-            'share'=>['mid'=>$id,'path'=>'/addon/hsx_lead/pages/profile/index?mid='.$id.'&promotion_invite=1']];
+            'share'=>['mid'=>$id,'path'=>'/addon/hsx_lead/pages/invite/index?mid='.$id.'&promotion_invite=1']];
     }
     private function publicProvider(?array $provider): ?array { if ($provider) unset($provider['remark']);return $provider; }
     private function teamQuery(int $id)
@@ -176,12 +176,34 @@ final class PromotionService
             $ids=Data::query('merchant',$this->context->site)->whereLike('name|contact_name',$like)->column('member_id');
             $q->where(function($part)use($like,$ids):void {$part->whereLike('nickname|username',$like);if($ids)$part->whereOr('member_id','in',$ids);});
         }
-        $page=self::memberPage($q,$params);$rows=[];
+        $page=self::memberPage($q,$params);$rows=[];$subjects=[];$subjectErrors=[];$states=[];$merchantIds=[];
+        // Resolve only this already-filtered page. Reuse the same owner/staff
+        // subject rules as the member centre, not an unscoped merchant scan.
+        foreach($page['data'] as $row){
+            $id=(int)$row['member_id'];
+            try{$shop=TeamService::resolve(new Context($this->context->site,0,$id),false);$subjects[$id]=$shop;if($shop)$merchantIds[(int)$shop['id']]=(int)$shop['id'];}
+            catch(CommonException$error){$subjects[$id]=null;$subjectErrors[$id]=true;}
+        }
+        $paidSubjects=$merchantIds?Store::query('coop_order',$this->context->site)->whereIn('merchant_id',array_values($merchantIds))->where('purpose','membership')->where('status','paid')->distinct(true)->column('merchant_id'):[];
+        $paidSubjects=array_fill_keys(array_map('intval',$paidSubjects),true);
         foreach($page['data'] as $row) {
-            $shop=Data::query('merchant',$this->context->site)->where('member_id',$row['member_id'])->find();
+            $id=(int)$row['member_id'];$shop=$subjects[$id]??null;$shared=$shop&&!$shop['is_owner'];
             $region=$shop?Data::regionNames($shop):[];
+            $membership=['status'=>'not_opened','status_label'=>'未开通','level_name'=>'','shared'=>(bool)$shared];
+            if(isset($subjectErrors[$id]))$membership['status']='review';
+            elseif($shop){
+                $mid=(int)$shop['id'];
+                if(!array_key_exists($mid,$states))try{$states[$mid]=EntityMembershipService::state($this->context->site,$mid);}catch(CommonException$error){$states[$mid]=null;}
+                $state=$states[$mid];
+                if($state===null)$membership['status']='review';
+                elseif(!empty($state['active'])){$membership['status']='active';$membership['level_name']=(string)$state['level_name'];}
+                elseif((int)($state['expires_at']??0)>0&&(int)$state['expires_at']<=time()){$membership['status']='expired';$membership['level_name']=(string)$state['level_name'];}
+                elseif(isset($paidSubjects[$mid]))$membership['status']='inactive';
+            }
+            $membership['status_label']=['not_opened'=>'未开通','active'=>'生效中','expired'=>'已到期','inactive'=>'当前未生效','review'=>'待核对'][$membership['status']];
+            $stage=$shop?($shared?'已加入门店':'已登记门店'):'待完善门店';
             $rows[]=self::summary($row)+['merchant_name'=>(string)($shop['name']??''),'region_text'=>(string)($region['region_text']??''),
-                'stage'=>$shop?'已登记门店':'待完善门店','create_time'=>(int)$row['create_time']];
+                'stage'=>$stage,'stage_key'=>$shop?'onboarded':'registered','stage_label'=>$stage,'membership'=>$membership,'create_time'=>(int)$row['create_time']];
         }
         $page['data']=$rows;return $page;
     }
@@ -208,7 +230,8 @@ final class PromotionService
                 if ($cursor===$this->context->memberId||isset($seen[$cursor])||count($seen)>=1000) throw new CommonException('邀请关系存在循环或过深，不能绑定');
                 $seen[$cursor]=true;$ancestor=self::member($this->context->site,$cursor,true);$cursor=(int)$ancestor['pid'];
             }
-            Db::name('member')->where('site_id',$this->context->site)->where('member_id',$this->context->memberId)->where('pid',0)->update(['pid'=>$id]);
+            $changed=Db::name('member')->where('site_id',$this->context->site)->where('member_id',$this->context->memberId)->where('pid',0)->update(['pid'=>$id]);
+            if($changed!==1)throw new CommonException('邀请关系已发生变化，请重新查看；不会覆盖已确认的邀请人');
             (new CoreConfigService())->setConfig($this->context->site,self::RELATION_PREFIX.$this->context->memberId,['pid'=>$id,'bound_at'=>time()]);
             $this->context->audit('promotion_relation',$this->context->memberId,'bound',['inviter_member_id'=>$id]);
             return ['upstream'=>$this->upstream($id),'already_bound'=>false];
@@ -553,6 +576,15 @@ final class PromotionService
         $site=(int)($event['site_id']??0);$no=(string)($event['refund_no']??'');if ($site<=0||$no==='') throw new CommonException('退款推广核对缺少凭据');
         return Db::transaction(function()use($site,$no):bool {
             self::lockSite($site);$refund=Db::name('pay_refund')->where('site_id',$site)->where('refund_no',$no)->where('status',RefundDict::SUCCESS)->find();if (!$refund) throw new CommonException('未找到成功退款凭据，未变更推广奖励');
+            if($refund['type']===PayDict::BALANCEPAY){
+                $balanceSource=Store::query('coop_order',$site)->where('id',(int)$refund['trade_id'])->where('out_trade_no',$refund['out_trade_no'])->lock(true)->find();
+                if($balanceSource){$balancePay=OrderPaymentReadService::payment($balanceSource,true);if($balancePay)OrderPaymentReadService::assertManualSource($balanceSource,$balancePay);}
+            }
+            if($refund['type']===PayDict::OFFLINEPAY){
+                $manualSource=Store::query('coop_order',$site)->where('id',(int)$refund['trade_id'])->where('out_trade_no',$refund['out_trade_no'])->lock(true)->find();
+                if(!$manualSource)throw new CommonException('原线下退款业务单无法核对，未变更推广奖励');
+                ManualRefundService::assertRefundReceipt($site,$manualSource,$refund);
+            }
             $rows=self::query($site)->where('out_trade_no',$refund['out_trade_no'])->lock(true)->select()->toArray();
             $managedOrder=Store::query('coop_order',$site)->where('out_trade_no',$refund['out_trade_no'])->find();
             $managed=$managedOrder?Data::decode($managedOrder['rule_json'])[PaymentRefundService::KEY]??[]:[];

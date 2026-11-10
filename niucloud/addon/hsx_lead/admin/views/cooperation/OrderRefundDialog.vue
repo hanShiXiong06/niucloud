@@ -7,7 +7,7 @@
                 <el-alert v-if="actionError" :title="actionError" type="warning" :closable="false" show-icon class="refund-notice"><template #default><el-button link :disabled="busy || reading" @click="readDetail">核对最新进度</el-button></template></el-alert>
                 <el-alert v-if="detail.block_reason || detail.message" :title="detail.block_reason || detail.message" type="warning" :closable="false" show-icon class="refund-notice" />
                 <el-descriptions :column="2" border size="small" class="refund-facts">
-                    <el-descriptions-item label="退款方式">原支付渠道退回</el-descriptions-item><el-descriptions-item label="原退款单号">{{ detail.refund_no || '尚未创建' }}</el-descriptions-item>
+                    <el-descriptions-item label="退款方式">{{ detail.manual_refund_required===true?'线下实际退款后登记':'原支付渠道退回' }}</el-descriptions-item><el-descriptions-item label="原退款单号">{{ detail.refund_no || '尚未创建' }}</el-descriptions-item>
                     <el-descriptions-item v-if="detail.requested_at" label="申请时间">{{ coopTime(detail.requested_at) }}</el-descriptions-item><el-descriptions-item v-if="detail.review_at" label="审核时间">{{ coopTime(detail.review_at) }}</el-descriptions-item>
                     <el-descriptions-item v-if="detail.reason" label="申请原因" :span="2">{{ detail.reason }}</el-descriptions-item><el-descriptions-item v-if="detail.review_reason" label="审核说明" :span="2">{{ detail.review_reason }}</el-descriptions-item>
                     <el-descriptions-item v-if="detail.purpose==='membership' && detail.components" label="退款构成" :span="2">服务费 {{ coopMoney(detail.components.service) }}<template v-if="detail.components.deposit!==undefined"> · 押金 {{ coopMoney(detail.components.deposit) }}</template><template v-if="detail.components.experience!==undefined"> · 经验费 {{ coopMoney(detail.components.experience) }}</template></el-descriptions-item>
@@ -19,13 +19,15 @@
             </template>
             <el-empty v-else-if="!reading && !readError" description="尚未读取订单退款资料" :image-size="72" />
         </div>
-        <template #footer><div class="refund-footer"><el-button :disabled="busy" @click="close">关闭</el-button><el-button v-if="readRequired" type="primary" :loading="reading" :disabled="busy" @click="readDetail">重新核对原单</el-button><template v-else-if="detail.order_id && !reading"><template v-if="canReview && detail.can_review===true"><el-button :disabled="busy" @click="review('reject')">拒绝申请</el-button><el-button type="primary" :loading="busy" @click="review('approve')">审核并申请退款</el-button></template><el-button v-else-if="canContinue && detail.can_continue===true" type="primary" :loading="busy" @click="continueRefund">继续原退款</el-button><el-button v-else-if="showRequestForm" type="primary" :loading="busy" @click="requestRefund">确认申请原路退款</el-button><el-button v-else-if="canRefresh && detail.can_refresh===true" type="primary" :loading="busy" @click="refresh">核对原退款进度</el-button></template></div></template>
+        <template #footer><div class="refund-footer"><el-button :disabled="busy" @click="close">关闭</el-button><el-button v-if="readRequired" type="primary" :loading="reading" :disabled="busy" @click="readDetail">重新核对原单</el-button><template v-else-if="detail.order_id && !reading"><template v-if="canReview && detail.can_review===true"><el-button :disabled="busy" @click="review('reject')">拒绝申请</el-button><el-button type="primary" :loading="busy" @click="review('approve')">{{ detail.manual_refund_required===true?'审核通过，待实际退款':'审核并申请退款' }}</el-button></template><el-button v-else-if="canManualRefund && (detail.can_confirm_manual_refund===true || Number(detail.manual_refund_receipt_id)>0)" type="primary" :disabled="busy" @click="openManualRefund">{{ detail.can_confirm_manual_refund===true?'登记已实际退款':'查看实际退款登记' }}</el-button><el-button v-else-if="canContinue && detail.can_continue===true" type="primary" :loading="busy" @click="continueRefund">继续原退款</el-button><el-button v-else-if="showRequestForm" type="primary" :loading="busy" @click="requestRefund">{{ detail.manual_refund_required===true?'提交退款申请':'确认申请原路退款' }}</el-button><el-button v-else-if="canRefresh && detail.can_refresh===true" type="primary" :loading="busy" @click="refresh">核对原退款进度</el-button></template></div></template>
     </el-dialog>
+    <ManualRefundDialog ref="manualRefundDialog" @changed="manualRefundChanged" />
 </template>
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import useUserStore from '@/stores/modules/user'
+import ManualRefundDialog from './ManualRefundDialog.vue'
 import { getOrderRefund, requestOrderRefund, reviewOrderRefund, refreshOrderRefund, continueOrderRefund } from '../../api/cooperation'
 import { hasLeadPagePermission } from '../../composables/navigation'
 import { coopError, coopMoney, coopTime, type CoopRow } from '../../composables/cooperation'
@@ -33,6 +35,7 @@ import { coopError, coopMoney, coopTime, type CoopRow } from '../../composables/
 const emit=defineEmits<{(event:'changed'):void}>(),user=useUserStore()
 const allowed=(action:string)=>hasLeadPagePermission(user,'hsx_lead_cooperation_finance')&&hasLeadPagePermission(user,'hsx_lead_cooperation_order_refund_'+action)
 const canDetail=computed(()=>allowed('detail')),canReview=computed(()=>canDetail.value&&allowed('review')),canCreate=computed(()=>canReview.value&&hasLeadPagePermission(user,'hsx_lead_cooperation_order_refund')),canRefresh=computed(()=>canDetail.value&&allowed('refresh')),canContinue=computed(()=>canReview.value&&allowed('continue'))
+const canManualRefund=computed(()=>canDetail.value&&hasLeadPagePermission(user,'hsx_lead_cooperation_order_manual_refund')),manualRefundDialog=ref<InstanceType<typeof ManualRefundDialog>|null>(null)
 const visible=ref(false),detail=ref<CoopRow>({}),reading=ref(false),busy=ref(false),readError=ref(''),actionError=ref(''),readRequired=ref(false),reason=ref('')
 const statuses:Record<string,string>={none:'未申请退款',pending:'待平台审核',approved:'审核通过，待提交',refunding:'退款处理中',refunded:'退款已确认',rejected:'申请已拒绝',cancelled:'申请已撤回',attention:'原退款待核对',failed:'渠道退款失败'}
 const statusLabel=(value:string)=>statuses[value]||'状态待核对',statusTone=(value:string):'success'|'danger'|'warning'|'info'=>value==='refunded'?'success':value==='attention'||value==='failed'?'danger':value==='pending'||value==='refunding'?'warning':'info'
@@ -41,6 +44,8 @@ let selectedId=0,generation=0,disposed=false,requestId=''
 function identity(){const site=Number(user.siteInfo?.site_id||0),token=String(user.token||'');return site>0&&Number.isSafeInteger(site)&&token?site+':'+token:''}
 function current(actor:string,id:number,action:'detail'|'create'|'review'|'refresh'='detail'){return !disposed&&!!actor&&identity()===actor&&visible.value&&id===selectedId&&(action==='create'?canCreate.value:action==='review'?canReview.value:action==='refresh'?canRefresh.value:canDetail.value)}
 function validate(value:CoopRow,id:number){if(Number(value?.order_id)!==id||!Object.prototype.hasOwnProperty.call(statuses,value.status)||typeof value.amount!=='string'||!/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/.test(value.amount)||!Array.isArray(value.logs))throw Error('退款资料未完整返回，请重新读取原单');if((value.can_review===true||value.can_continue===true)&&(typeof value.request_version!=='string'||!/^[a-f0-9]{64}$/.test(value.request_version)))throw Error('申请版本未完整返回，暂不能审核');return value}
+async function openManualRefund(){const actor=identity(),id=selectedId,refundNo=String(detail.value.refund_no||'');if(!canManualRefund.value||!current(actor,id)||busy.value||reading.value||readRequired.value||detail.value.can_confirm_manual_refund!==true&&!Number(detail.value.manual_refund_receipt_id))return;await manualRefundDialog.value?.open({...detail.value},async()=>{if(!current(actor,id)||!await readDetail()||!current(actor,id)||String(detail.value.refund_no||'')!==refundNo)throw Error('原退款申请已变化，请返回重新核对');return{...detail.value}})}
+async function manualRefundChanged(){const actor=identity(),id=selectedId;if(!current(actor,id)||!await readDetail()||!current(actor,id))return;emit('changed')}
 async function open(row:CoopRow){if(!canDetail.value||busy.value)return;const id=Number(row.id);if(!Number.isSafeInteger(id)||id<=0)return;selectedId=id;detail.value={};actionError.value='';reason.value='';readRequired.value=false;requestId='refund_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,14);visible.value=true;await readDetail()}
 async function readDetail(){const actor=identity(),id=selectedId;if(!current(actor,id))return false;const turn=++generation;reading.value=true;readError.value='';try{const result=await getOrderRefund(id);if(turn!==generation||!current(actor,id))return false;detail.value=validate(result.data,id);readRequired.value=false;actionError.value='';return true}catch(cause){if(turn===generation&&current(actor,id)){readError.value=coopError(cause,'退款资料读取失败');readRequired.value=true}return false}finally{if(turn===generation&&!disposed)reading.value=false}}
 async function mutate(action:'create'|'approve'|'reject'|'refresh'|'continue'){
@@ -50,7 +55,9 @@ async function mutate(action:'create'|'approve'|'reject'|'refresh'|'continue'){
     const note=reason.value.trim();if(['create','approve','reject'].includes(action)&&note.length<4){actionError.value=action==='reject'?'请填写至少4个字符的拒绝原因':action==='approve'?'请填写至少4个字符的审核说明':'请填写至少4个字符的退款原因';return}
     const version=String(detail.value.request_version||'');busy.value=true;actionError.value='';let sent=false
     try{
-        if(action!=='refresh')await ElMessageBox.confirm(action==='reject'?`拒绝订单 ${detail.value.order_no} 的退款申请？不会修改原收款。`:action==='continue'?`继续订单 ${detail.value.order_no} 已审核但尚未发送的原退款？金额 ${coopMoney(detail.value.amount)}。沿用原退款号；已提交的原退款不会重复发送。`:`确认将订单 ${detail.value.order_no} 的 ${coopMoney(detail.value.amount)} 按原支付渠道退回？系统将先核对权益和已分出的收益；提交不代表到账。`,action==='reject'?'拒绝退款申请':action==='continue'?'继续已审核退款':'确认原路退款',{type:'warning',confirmButtonText:action==='reject'?'确认拒绝':action==='continue'?'继续原退款':'核对并申请退款',cancelButtonText:'取消',distinguishCancelAndClose:true})
+        const offline=detail.value.manual_refund_required===true
+        const confirmation=action==='reject'?`拒绝订单 ${detail.value.order_no} 的退款申请？不会修改原收款。`:offline?`核对订单 ${detail.value.order_no} 的线下退款申请 ${coopMoney(detail.value.amount)}。审核或准备退款不会自动转账；经办人实际退款后，仍需登记本笔真实退款凭证。`:action==='continue'?`继续订单 ${detail.value.order_no} 已审核但尚未发送的原退款？金额 ${coopMoney(detail.value.amount)}。沿用原退款号；已提交的原退款不会重复发送。`:`确认将订单 ${detail.value.order_no} 的 ${coopMoney(detail.value.amount)} 按原支付渠道退回？系统将先核对权益和已分出的收益；提交不代表到账。`
+        if(action!=='refresh')await ElMessageBox.confirm(confirmation,action==='reject'?'拒绝退款申请':action==='continue'?'继续已审核退款':offline?'核对线下退款申请':'确认原路退款',{type:'warning',confirmButtonText:action==='reject'?'确认拒绝':action==='continue'?'继续原退款':'核对并申请退款',cancelButtonText:'取消',distinguishCancelAndClose:true})
         if(!current(actor,id,permission)||turn!==generation||String(detail.value.request_version||'')!==version||action==='continue'&&!canContinue.value)return
         sent=true
         if(action==='create')await requestOrderRefund(id,{confirm:true,reason:note,request_id:requestId})
@@ -61,7 +68,7 @@ async function mutate(action:'create'|'approve'|'reject'|'refresh'|'continue'){
         const loaded=await readDetail();if(!current(actor,id,permission))return
         if(!loaded)throw Error('退款处理结果未核实，请重新读取原单，勿重复申请')
         if(action==='reject'&&detail.value.status!=='rejected')throw Error('拒绝结果未核实，请读取最新申请')
-        if(action==='reject')ElMessage.success('退款申请已拒绝');else if(detail.value.status==='refunded')ElMessage.success('原渠道已确认退款成功');else ElMessage.warning(detail.value.status_name||statusLabel(detail.value.status))
+        if(action==='reject')ElMessage.success('退款申请已拒绝');else if(detail.value.status==='refunded')ElMessage.success(detail.value.manual_refund_required===true?'实际退款已确认':'原渠道已确认退款成功');else ElMessage.warning(detail.value.status_name||statusLabel(detail.value.status))
         emit('changed')
     }catch(cause){if(current(actor,id,permission)&&cause!=='cancel'&&cause!=='close'){actionError.value=coopError(cause,'退款结果待核对，请读取原单，不要重复申请');if(sent)readRequired.value=true}}
     finally{busy.value=false}

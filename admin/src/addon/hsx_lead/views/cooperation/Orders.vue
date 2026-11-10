@@ -1,26 +1,32 @@
 <template>
     <section>
         <header class="coop-head"><h2>支付订单</h2></header>
-        <CooperationFilter :query="query" :loading="loading" :statuses="statuses" :extra-active="!!(purpose || paymentType || paymentChannel || refundStatus || reviewOnly)" placeholder="搜索业务单号、门店或支付流水" @search="search" @reload="load" @reset="resetExtraFilters">
+        <CooperationFilter :query="query" :loading="loading" :statuses="statuses" :extra-active="!!(mobile || purpose || paymentType || paymentChannel || refundStatus || reviewOnly)" placeholder="搜索单号、门店、付款会员或手机号" @search="search" @reload="load" @reset="resetExtraFilters">
+            <el-input v-model="mobile" class="order-phone-filter" placeholder="完整手机号（精确查询）" maxlength="64" clearable aria-label="完整手机号"><template #prepend><el-select v-model="mobileScope" aria-label="手机号所属对象"><el-option label="付款会员" value="payer" /><el-option label="线索客户" value="customer" /><el-option label="门店联系人" value="store" /><el-option label="全部对象" value="all" /></el-select></template></el-input>
             <el-select v-model="purpose" clearable placeholder="全部收款类型" aria-label="收款类型"><el-option label="协作佣金" value="commission" /><el-option label="主体会员" value="membership" /></el-select>
             <el-select v-model="paymentType" clearable placeholder="全部支付方式" aria-label="支付方式"><el-option v-for="item in paymentTypes" :key="item.value" :label="item.label" :value="item.value" /></el-select>
             <el-select v-model="paymentChannel" clearable placeholder="全部支付终端" aria-label="支付终端"><el-option v-for="item in paymentChannels" :key="item.value" :label="item.label" :value="item.value" /></el-select>
             <el-select v-model="refundStatus" clearable placeholder="全部退款状态" aria-label="退款状态"><el-option v-for="item in refundStatuses" :key="item.value" :label="item.label" :value="item.value" /></el-select>
             <el-checkbox v-model="reviewOnly">仅需人工核对</el-checkbox>
         </CooperationFilter>
+        <el-alert v-if="mobileError" :title="mobileError" type="warning" :closable="false" show-icon class="coop-error" />
         <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="coop-error" />
         <div class="coop-surface"><HsxTable :columns="columns" :data="rows" :loading="loading" empty-text="暂无符合条件的业务收款单">
             <template #order="{row}"><div class="coop-cell"><strong>{{ row.order_no }}</strong><small>{{ coopLabel(row.purpose) }} · {{ row.merchant_name || row.merchant?.name || '付款商户' }}</small><small v-if="row.lead_no">关联 {{ row.lead_no }}</small></div></template>
+            <template #payer="{row}"><div class="coop-cell"><strong>{{ row.payer_name || '原付款会员资料未返回' }}</strong><small v-if="row.payer_member_no">UID：{{ row.payer_member_no }}</small><span v-if="row.payer_mobile" class="order-contact-phone">{{ row.payer_mobile }}</span><small v-else>未登记付款手机号</small><small v-if="row.mobile_match_sources?.includes('customer')" class="order-phone-match">线索客户：{{ row.customer_name || '未填写姓名' }} · {{ row.customer_mobile }}</small><small v-if="row.mobile_match_sources?.includes('store')" class="order-phone-match">门店联系人：{{ row.merchant_contact_name || '未填写姓名' }} · {{ row.merchant_mobile }}</small></div></template>
             <template #money="{row}"><div class="coop-cell"><strong class="coop-price">{{ coopMoney(row.amount) }}</strong><small v-if="row.purpose==='commission'">平台费 {{ coopMoney(row.fee_amount) }} · 净收益 {{ coopMoney(row.net_amount) }}</small><template v-else-if="row.purpose==='membership' && row.service_amount!==undefined"><small>押金 {{ coopMoney(row.deposit_amount) }} · 服务费 {{ coopMoney(row.service_amount) }}</small><small>补足经验 {{ coopMoney(row.experience_amount) }} · {{ row.experience_quantity }} 点</small><small>邀请计佣基数 {{ coopMoney(row.promotion_base_amount) }}</small></template></div></template>
             <template #status="{row}"><div class="coop-cell"><el-tag :type="coopTone(row.status)" size="small">{{ row.status==='paid'?'已确认支付':row.status==='closed'?'已关闭':'待支付' }}</el-tag><el-tag v-if="row.refund_status && row.refund_status!=='none'" :type="row.refund_status==='refunded'?'success':'warning'" size="small">{{ row.refund_status_name || '退款待核对' }}</el-tag><small v-if="Number(row.refunded_amount)>0">已退 {{ coopMoney(row.refunded_amount) }}</small><el-tag v-if="row.requires_manual_review" type="danger" size="small">已收款 · 待人工核对</el-tag></div></template>
             <template #pay="{row}"><div class="coop-cell"><strong>{{ row.payment_type_name || (row.status==='unpaid'?'尚未支付':'支付方式待核对') }}<template v-if="row.payment_channel_name"> · {{ row.payment_channel_name }}</template></strong><small>{{ row.out_trade_no || '尚无支付流水' }}</small><small>{{ row.pay_time ? `支付于 ${coopTime(row.pay_time)}` : `创建于 ${coopTime(row.create_time)}` }}</small><span v-if="row.requires_manual_review" class="coop-danger-copy">{{ row.review_message || '已收到款项，但收益入账或权益开通未完成。请核对支付流水与具体原因，避免重复收款或重复入账，再按实际结果人工处理。' }}</span></div></template>
-            <template #operation="{row}"><div class="coop-cell"><el-button link type="primary" @click="showDetail(row)">查看详情</el-button><el-button v-if="showRefundAction(row)" link :type="row.refund_status==='pending' || row.can_admin_request_refund===true?'warning':'primary'" :disabled="closing || pricing || loading" @click="openRefund(row)">{{ refundActionLabel(row) }}</el-button><el-button v-if="canPrice && row.can_reprice===true" link type="primary" :disabled="closing || pricing || loading" @click="openPrice(row)">调整待付金额</el-button><el-button v-if="canPrice && row.can_resume_reprice===true" link type="warning" :disabled="closing || pricing || loading" @click="resumePrice(row)">继续原改价处理</el-button><el-button v-if="row.replacement_order_id" link type="primary" :disabled="pricing" @click="openRelated(row.replacement_order_id)">查看新付款单</el-button><el-button v-if="canClose && row.can_close===true" link type="danger" :disabled="closing || pricing || loading" @click="closeOrder(row)">关闭未付订单</el-button><small v-else-if="row.status==='unpaid'">{{ row.close_reason || '请核对付款状态' }}</small><small v-if="row.repricing_message">{{ row.repricing_message }}</small></div></template>
+            <template #operation="{row}"><div class="coop-cell"><el-button link type="primary" @click="showDetail(row)">查看详情</el-button><el-button v-if="showManualReceipt(row)" link type="warning" :disabled="closing || pricing || loading" @click="openManualReceipt(row)">{{ manualReceiptActionLabel(row) }}</el-button><el-button v-if="showRefundAction(row)" link :type="row.refund_status==='pending' || row.can_admin_request_refund===true?'warning':'primary'" :disabled="closing || pricing || loading" @click="openRefund(row)">{{ refundActionLabel(row) }}</el-button><el-button v-if="canPrice && row.can_reprice===true" link type="primary" :disabled="closing || pricing || loading" @click="openPrice(row)">调整待付金额</el-button><el-button v-if="canPrice && row.can_resume_reprice===true" link type="warning" :disabled="closing || pricing || loading" @click="resumePrice(row)">继续原改价处理</el-button><el-button v-if="row.replacement_order_id" link type="primary" :disabled="pricing" @click="openRelated(row.replacement_order_id)">查看新付款单</el-button><el-button v-if="canClose && row.can_close===true" link type="danger" :disabled="closing || pricing || loading" @click="closeOrder(row)">关闭未付订单</el-button><small v-else-if="row.status==='unpaid'">{{ row.close_reason || '请核对付款状态' }}</small><small v-if="row.repricing_message">{{ row.repricing_message }}</small></div></template>
         </HsxTable><div class="coop-pagination"><HsxPagination :current-page="query.page" :page-size="query.limit" :total="total" :disabled="loading" @change="changePage" /></div></div>
         <el-dialog v-model="detailVisible" title="支付订单详情" width="min(620px, 94vw)" @close="invalidateDetail">
             <el-descriptions :column="1" border>
                 <el-descriptions-item label="订单号">{{ selected.order_no }}</el-descriptions-item>
                 <el-descriptions-item label="收款用途">{{ coopLabel(selected.purpose) }}</el-descriptions-item>
-                <el-descriptions-item label="付款会员">{{ selected.member_no || selected.member_id || '—' }}</el-descriptions-item>
+                <el-descriptions-item label="付款会员">{{ selected.payer_name || '原付款会员资料未返回' }}<template v-if="selected.payer_member_no"> · UID：{{ selected.payer_member_no }}</template><template v-else-if="selected.member_id"> · 会员ID：{{ selected.member_id }}</template></el-descriptions-item>
+                <el-descriptions-item label="付款会员手机号">{{ selected.payer_mobile || '未登记' }}</el-descriptions-item>
+                <el-descriptions-item v-if="selected.customer_mobile" label="线索客户">{{ selected.customer_name || '未填写姓名' }} · {{ selected.customer_mobile }}</el-descriptions-item>
+                <el-descriptions-item v-if="selected.merchant_mobile" label="门店联系人">{{ selected.merchant_contact_name || '未填写姓名' }} · {{ selected.merchant_mobile }}</el-descriptions-item>
                 <el-descriptions-item label="应付金额">{{ coopMoney(selected.amount) }}</el-descriptions-item>
                 <el-descriptions-item v-if="selected.purpose==='membership'" label="服务费 / 押金 / 经验费">{{ coopMoney(selected.service_amount) }} / {{ coopMoney(selected.deposit_amount) }} / {{ coopMoney(selected.experience_amount) }}</el-descriptions-item>
                 <el-descriptions-item label="创建时间">{{ coopTime(selected.create_time) }}</el-descriptions-item>
@@ -36,9 +42,10 @@
                 <el-descriptions-item v-if="selected.repricing_message" label="改价进度">{{ selected.repricing_message }}</el-descriptions-item>
             </el-descriptions>
             <el-alert v-if="selected.requires_manual_review" :title="selected.review_message || '已收到款项，需人工核对'" type="warning" :closable="false" show-icon class="coop-error" />
-            <template #footer><el-button v-if="canPriceLogs" @click="showPricingLogs(selected)">查看改价与关闭记录</el-button><el-button v-if="showRefundAction(selected)" @click="openRefund(selected)">{{ selected.can_admin_request_refund===true?'处理晚到账退款':'退款与处理记录' }}</el-button><el-button @click="detailVisible=false">关闭</el-button></template>
+            <template #footer><el-button v-if="canPriceLogs" @click="showPricingLogs(selected)">查看改价与关闭记录</el-button><el-button v-if="showManualReceipt(selected)" type="warning" @click="openManualReceipt(selected)">{{ manualReceiptActionLabel(selected) }}</el-button><el-button v-if="showRefundAction(selected)" @click="openRefund(selected)">{{ selected.can_admin_request_refund===true?'处理晚到账退款':'退款与处理记录' }}</el-button><el-button @click="detailVisible=false">关闭</el-button></template>
         </el-dialog>
         <OrderRefundDialog ref="refundDialog" @changed="refundChanged" />
+        <ManualReceiptDialog ref="manualReceiptDialog" @changed="manualReceiptChanged" />
         <el-collapse class="orders-help"><el-collapse-item title="订单处理规则" name="help"><p>这里只管理会员费与协作付佣，不含客户向门店支付的货款。超时关闭由计划任务执行；支付中、结果待核实或已收款的订单不会直接关闭。关闭付佣支付单不会取消已成交工单的付佣责任。</p></el-collapse-item></el-collapse>
         <el-dialog v-model="priceVisible" title="调整待支付订单" width="min(580px, 94vw)" :close-on-click-modal="false" :show-close="!pricing" :close-on-press-escape="!pricing" :before-close="closePrice">
             <el-alert v-if="priceError" :title="priceError" type="warning" :closable="false" show-icon class="coop-error" />
@@ -58,16 +65,23 @@ import HsxTable from '@/addon/hsx_components/components/HsxTable/index.vue'
 import HsxPagination from '@/addon/hsx_components/components/HsxPagination/index.vue'
 import CooperationFilter from './CooperationFilter.vue'
 import OrderRefundDialog from './OrderRefundDialog.vue'
+import ManualReceiptDialog from './ManualReceiptDialog.vue'
 import { getCooperationOrders, closeCooperationOrder, repriceCooperationOrder, getOrderPricingLogs } from '../../api/cooperation'
 import { businessAmountCents, cooperationFeePreview } from '../../composables/business'
 import { coopLabel, coopMoney, coopTime, coopTone, coopError, useCooperationAccess, useCooperationList, type CoopRow } from '../../composables/cooperation'
 const statuses=[{value:'unpaid',label:'待支付'},{value:'paid',label:'已确认支付'},{value:'closed',label:'已关闭'}],purpose=ref(''),reviewOnly=ref(false)
+const mobile=ref(''),mobileScope=ref('payer'),mobileError=ref('')
 const paymentType=ref(''),paymentChannel=ref(''),refundStatus=ref(''),paymentTypes=ref<CoopRow[]>([]),paymentChannels=ref<CoopRow[]>([]),refundStatuses=ref<CoopRow[]>([]),refundDialog=ref<InstanceType<typeof OrderRefundDialog>|null>(null)
 const {rows,total,loading,error,query,load,search:searchList,changePage}=useCooperationList(async params=>{const result=await getCooperationOrders(params);const filters=result.data?.filters;if(filters){paymentTypes.value=filterOptions(filters.payment_types);paymentChannels.value=filterOptions(filters.payment_channels);refundStatuses.value=filterOptions(filters.refund_statuses)}return result})
 function filterOptions(items:unknown):CoopRow[]{return Array.isArray(items)?items.filter(item=>typeof item?.value==='string'&&typeof item?.label==='string'):[]}
 const { allows } = useCooperationAccess(), canClose=computed(()=>allows('order_close')), closing=ref(false), detailVisible=ref(false), selected=ref<CoopRow>({})
 const canPrice=computed(()=>allows('order_price')&&canClose.value),canPriceLogs=computed(()=>allows('order_price_log'))
 const canRefundDetail=computed(()=>allows('order_refund_detail'))
+const canManualReceiptPreview=computed(()=>allows('finance')&&allows('order_manual_receipt_preview')),manualReceiptDialog=ref<InstanceType<typeof ManualReceiptDialog>|null>(null)
+function showManualReceipt(row:CoopRow){if(!canManualReceiptPreview.value)return false;const recorded=Number(row.manual_receipt_id)>0;if(row.status==='closed')return recorded;return row.status==='unpaid'||row.status==='paid'&&(recorded||row.payment_type==='offlinepay')}
+function manualReceiptActionLabel(row:CoopRow){return row.status==='unpaid'&&!Number(row.manual_receipt_id)?'确认线下收款':'查看收款记录'}
+function openManualReceipt(row:CoopRow){if(disposed||!showManualReceipt(row)||closing.value||pricing.value||loading.value)return;detailVisible.value=false;invalidateDetail();void manualReceiptDialog.value?.open(row)}
+async function manualReceiptChanged(){invalidateDetail();detailVisible.value=false;await load()}
 const priceVisible=ref(false),pricing=ref(false),priceOrder=ref<CoopRow>({}),priceAmount=ref<number|null>(null),priceReason=ref(''),priceError=ref(''),priceRequest=ref('')
 const pricingLogsVisible=ref(false),pricingLogsLoading=ref(false),pricingLogsError=ref(''),pricingLogs=ref<CoopRow[]>([]),pricingLogPage=ref(1),pricingLogTotal=ref(0),pricingLogOrder=ref(0);let pricingLogSequence=0
 const pricePreview=computed(()=>{
@@ -105,14 +119,22 @@ async function closeOrder(row:CoopRow){
     }catch(cause){if(cause!=='cancel'&&cause!=='close'){ElMessage.error(coopError(cause,'关闭结果未确认，请刷新核对'));await load()}}
     finally{closing.value=false}
 }
-function resetExtraFilters(){purpose.value='';reviewOnly.value=false;paymentType.value='';paymentChannel.value='';refundStatus.value=''}
-function search(patch:CoopRow={}){return searchList({...patch,purpose:purpose.value,payment_type:paymentType.value,payment_channel:paymentChannel.value,refund_status:refundStatus.value,requires_manual_review:reviewOnly.value?'1':''})}
+function resetExtraFilters(){mobile.value='';mobileScope.value='payer';mobileError.value='';purpose.value='';reviewOnly.value=false;paymentType.value='';paymentChannel.value='';refundStatus.value=''}
+function search(patch:CoopRow={}){
+    mobileError.value=''
+    const raw=mobile.value.trim(),digits=raw.replace(/[ +\-]/g,'')
+    if(raw&&(!/^\+?[0-9][0-9 -]*$/.test(raw)||digits.length<7||digits.length>20)){mobileError.value='请输入7至20位的完整手机号，可带 +86、空格或连字符，不支持尾号查询';return}
+    return searchList({...patch,mobile:raw,mobile_scope:mobileScope.value,purpose:purpose.value,payment_type:paymentType.value,payment_channel:paymentChannel.value,refund_status:refundStatus.value,requires_manual_review:reviewOnly.value?'1':''})
+}
 async function refundChanged(){detailVisible.value=false;invalidateDetail();await load()}
 function showRefundAction(row:CoopRow){return canRefundDetail.value&&(row.status==='paid'||row.can_admin_request_refund===true||!!row.refund_status&&row.refund_status!=='none')}
 function refundActionLabel(row:CoopRow){return row.can_admin_request_refund===true?'处理晚到账退款':row.refund_status==='pending'?'退款申请':row.refund_status&&row.refund_status!=='none'?'退款进度':'订单退款'}
 function openRefund(row:CoopRow){if(disposed||!showRefundAction(row)||closing.value||pricing.value||loading.value)return;detailVisible.value=false;invalidateDetail();void refundDialog.value?.open(row)}
-const columns=[{prop:'order_no',label:'业务单 / 付款商户',slot:'order',minWidth:250},{prop:'amount',label:'应付金额 / 分账快照',slot:'money',minWidth:220},{prop:'status',label:'支付 / 退款状态',slot:'status',minWidth:160},{prop:'out_trade_no',label:'支付方式 / 终端 / 流水',slot:'pay',minWidth:250},{prop:'id',label:'操作',slot:'operation',width:180,fixed:'right' as const}]
+const columns=[{prop:'order_no',label:'业务单 / 付款商户',slot:'order',minWidth:250},{prop:'payer_name',label:'原付款会员 / 手机号',slot:'payer',minWidth:220},{prop:'amount',label:'应付金额 / 分账快照',slot:'money',minWidth:220},{prop:'status',label:'支付 / 退款状态',slot:'status',minWidth:160},{prop:'out_trade_no',label:'支付方式 / 终端 / 流水',slot:'pay',minWidth:250},{prop:'id',label:'操作',slot:'operation',width:180,fixed:'right' as const}]
 onMounted(load)
 onBeforeUnmount(()=>{disposed=true;invalidateDetail();pricingLogSequence++})
 </script>
+<style scoped>
+.order-phone-filter{flex:0 1 360px!important;min-width:300px!important;max-width:400px!important}.order-phone-filter :deep(.el-input-group__prepend){padding:0 12px}.order-phone-filter :deep(.el-input-group__prepend .el-select){width:130px;margin:-10px -12px}.order-contact-phone{font-size:13px;font-variant-numeric:tabular-nums}.order-phone-match{color:var(--el-color-primary)!important;overflow-wrap:anywhere}
+</style>
 <style scoped>.orders-help{margin-top:16px}.orders-help p{line-height:1.8;font-size:13px;color:var(--el-text-color-secondary)}.order-price-summary{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-bottom:20px;font-size:14px}.order-price-note{font-size:13px;color:var(--el-text-color-secondary);line-height:1.8;width:100%;margin:8px 0 0}.order-price-breakdown{padding:16px;background:var(--el-fill-color-extra-light);border:1px solid var(--el-border-color-lighter);border-radius:6px}.order-price-breakdown>div{display:flex;justify-content:space-between;gap:12px;margin-bottom:12px}.order-price-breakdown>div:last-child{margin-bottom:0}.order-price-total{padding-top:12px;border-top:1px solid var(--el-border-color-lighter)}.order-price-total strong{color:var(--el-color-primary)}</style>

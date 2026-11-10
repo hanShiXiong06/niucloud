@@ -4,14 +4,13 @@ namespace addon\hsx_lead\app\service\cooperation;
 
 use addon\hsx_lead\app\job\DispatchCooperationNotice;
 use addon\hsx_lead\app\support\Data;
-use app\service\core\sys\CoreConfigService;
-use think\facade\{Db,Log};
+use think\facade\{Cache,Db,Log};
 
 /** Durable business intents; NiuCloud owns the queue, templates and senders. */
 final class CooperationNoticeOutbox
 {
     public const TYPE='collaboration_notice_outbox';
-    private const CURSOR='HSX_LEAD_NOTICE_RECOVERY_CURSOR';
+    private const CURSOR='hsx_lead_notice_recovery_cursor:';
     public static function record(int $site,int $leadId,string $action): int
     {
         if(!in_array($action,['assigned','accept','accepted','reject','withdraw','cancel','deal','no_deal','paid'],true))return 0;
@@ -34,7 +33,7 @@ final class CooperationNoticeOutbox
         // Dispatch falls back to synchronous execution when the framework
         // queue is disabled. Keep the durable intent for scheduled recovery
         // instead of waiting on external channels in a customer's request.
-        if(Db::connect()->getPdo()->inTransaction()||!filter_var(env('queue.state',false),FILTER_VALIDATE_BOOLEAN))return;
+        if(\addon\hsx_lead\app\service\notice\NoticeTaskRuntime::inTransaction()||!filter_var(env('queue.state',false),FILTER_VALIDATE_BOOLEAN))return;
         try{DispatchCooperationNotice::dispatch([['site_id'=>$site,'id'=>$id]]);}
         catch(\Throwable $error){Log::warning('协作通知已保留待补偿事件：site='.$site.', id='.$id.', type='.get_class($error));}
     }
@@ -42,12 +41,20 @@ final class CooperationNoticeOutbox
     {
         // Dispatchers must run after the caller's business transaction commits,
         // even when an integration directly invokes this worker synchronously.
-        if(Db::connect()->getPdo()->inTransaction())return false;
+        if(\addon\hsx_lead\app\service\notice\NoticeTaskRuntime::inTransaction())return false;
         $event=Db::transaction(function()use($site,$id):?array {
             $row=Data::row('audit',$site,$id,true);if($row['entity_type']!==self::TYPE||$row['action']!=='notice_pending')return null;
             $state=Data::decode($row['detail_json']);
             if(($state['status']??'')==='processing'&&(int)$row['update_time']>time()-180)return null;
-            $lead=Store::row('collaboration',$site,(int)$row['entity_id']);
+            $lead=Store::query('collaboration',$site)->where('id',(int)$row['entity_id'])->find();
+            // Missing business facts are not a transient provider error. Keep a
+            // visible terminal record so one orphan cannot poison every later
+            // event in the bounded scheduled batch.
+            if(!$lead){self::finish($site,$id,$state,'failed','原协作记录已不存在，通知未发送，请平台核对');return null;}
+            if(!is_string($state['action']??null)||!in_array($state['action'],['assigned','accept','accepted','reject','withdraw','cancel','deal','no_deal','paid'],true)
+                ||!is_numeric($state['assignment_version']??null)||(int)$state['assignment_version']<=0||!is_string($state['lead_status']??null)){
+                self::finish($site,$id,$state,'failed','通知事件快照不完整，通知未发送，请平台核对');return null;
+            }
             if((int)$lead['assignment_version']!==(int)$state['assignment_version']||$lead['status']!==$state['lead_status']){
                 self::finish($site,$id,$state,'obsolete','工单已更新，不发送过时提醒');return null;
             }
@@ -93,15 +100,29 @@ final class CooperationNoticeOutbox
         $lock='lead_notice_recover:'.substr(hash('sha256',$scope),0,35);$owned=$db->query('SELECT GET_LOCK(:key_name,0) AS acquired',['key_name'=>$lock],true);
         if((int)($owned[0]['acquired']??0)!==1)return['examined'=>0,'processed'=>0,'busy'=>true];
         try{
-            $config=new CoreConfigService();$cursor=(int)($config->getConfigValue(0,self::CURSOR)['site_id']??0);
+            // This cursor is a rebuildable scheduling hint, not a business fact
+            // or rule. Cache deletion restarts the fair scan; persisted intents
+            // and per-channel dedupe still decide whether anything is sent.
+            $cursorKey=self::CURSOR.hash('sha256',$scope);$cursor=0;
+            try{$value=Cache::get($cursorKey);if(is_int($value)||(is_string($value)&&ctype_digit($value)))$cursor=max(0,(int)$value);}
+            catch(\Throwable $error){Log::warning('协作通知轮转缓存不可读，将从首个站点核对：type='.get_class($error));}
             $sites=Db::name('site')->where('status',1)->where('site_id','>',$cursor)->order('site_id')->limit(max(1,min(20,$siteLimit)))->column('site_id');
             if(!$sites)$sites=Db::name('site')->where('status',1)->order('site_id')->limit(max(1,min(20,$siteLimit)))->column('site_id');
             $result=['examined'=>0,'processed'=>0,'busy'=>false];
             foreach($sites as$site){$site=(int)$site;
-                $ids=Data::query('audit',$site)->where('action','notice_pending')->where('entity_type',self::TYPE)->where('update_time','<=',time()-180)->order('id')->limit(max(1,min(50,$eventLimit)))->column('id');
-                foreach($ids as$id){$result['examined']++;if(self::process($site,(int)$id,$dispatcher))$result['processed']++;}
+                // A fresh pending intent is safe on the next scheduled round.
+                // Only an in-flight worker owns the 180-second processing lease.
+                $ids=Data::query('audit',$site)->where('action','notice_pending')->where('entity_type',self::TYPE)
+                    ->whereRaw("(JSON_UNQUOTE(JSON_EXTRACT(IF(JSON_VALID(detail_json),detail_json,'{}'),'$.status')) = 'pending' OR update_time <= :lease_before)",['lease_before'=>time()-180])
+                    ->order('id')->limit(max(1,min(50,$eventLimit)))->column('id');
+                foreach($ids as$id){
+                    $result['examined']++;
+                    try{if(self::process($site,(int)$id,$dispatcher))$result['processed']++;}
+                    catch(\Throwable $error){Log::warning('协作通知单条恢复异常，后续事件继续核对：site='.$site.', id='.(int)$id.', type='.get_class($error));}
+                }
             }
-            if($sites)$config->setConfig(0,self::CURSOR,['site_id'=>(int)end($sites)]);
+            if($sites)try{Cache::set($cursorKey,(int)end($sites),86400);}
+            catch(\Throwable $error){Log::warning('协作通知轮转缓存不可写，业务通知记录未丢失：type='.get_class($error));}
             return$result;
         }finally{try{$db->query('SELECT RELEASE_LOCK(:key_name) AS released',['key_name'=>$lock],true);}catch(\Throwable $ignored){}}
     }

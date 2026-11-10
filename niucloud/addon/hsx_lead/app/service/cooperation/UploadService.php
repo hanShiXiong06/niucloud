@@ -27,7 +27,18 @@ final class UploadService
         $result=$upload->image('file',$this->context->site,'hsx_lead/'.$this->context->site.'/'.$owner.'/'.date('Ym/d'));
         $row=Db::name('sys_attachment')->where('site_id',$this->context->site)->where('att_id',(int)($result['att_id']??0))->find();
         if (!$row) throw new CommonException('图片已上传但素材登记未完成，请重新上传后提交');
+        // Published clients use `path` both for preview and form submission.
+        // A cloud object key is not a file on the application server. Only
+        // public storefront images may expose their registered display URL;
+        // private lead evidence retains its existing reference contract.
+        $path=$row['path'];
+        if ($entity===StorefrontService::UPLOAD_ENTITY) {
+            $path=StorefrontService::displayReference($row);
+            if ($path==='') throw new CommonException('门头图片已上传，但图片访问地址未配置正确，请联系管理员核对存储域名；原照片未替换');
+        }
         $this->context->audit($entity,(int)$row['att_id'],'uploaded',[]);
-        return ['url'=>$result['url'],'path'=>$row['path'],'att_id'=>(int)$row['att_id']];
+        $response=['url'=>$result['url'],'path'=>$path,'att_id'=>(int)$row['att_id']];
+        if ($entity===StorefrontService::UPLOAD_ENTITY) $response['storage_path']=$row['path'];
+        return $response;
     }
 }

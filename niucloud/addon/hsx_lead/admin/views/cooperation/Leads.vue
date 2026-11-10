@@ -1,8 +1,8 @@
 <template>
     <section>
         <header class="coop-head"><h2>协作线索</h2></header>
-        <CooperationFilter :query="query" :statuses="cooperationStatuses" :loading="loading" @search="search" @reload="load" @reset="resetExtra">
-            <OwnerSelect v-if="viewerScope.can_transfer" v-model="owner" include-unassigned placeholder="按归属员工筛选" class="coop-owner-filter" />
+        <CooperationFilter :query="query" :statuses="cooperationStatuses" :loading="loading" placeholder="搜索客户、手机号、型号、门店或线索号" @search="search" @reload="load" @reset="resetExtra">
+            <OwnerSelect v-if="viewerScope.can_transfer" v-model="owner" include-unassigned placeholder="按监管负责人筛选" class="coop-owner-filter" />
         </CooperationFilter>
         <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="coop-error"><template #default><el-button link type="primary" @click="load">重新加载</el-button></template></el-alert>
         <div class="coop-surface">
@@ -11,7 +11,7 @@
                 <template #models="{row}"><div class="coop-cell"><div class="coop-tags"><el-tag v-for="name in coopModels(row).slice(0,3)" :key="name" size="small" effect="plain" type="info">{{ name }}</el-tag><el-tag v-if="coopModels(row).length>3" size="small" type="info">另{{ coopModels(row).length-3 }}项</el-tag><span v-if="!coopModels(row).length" class="coop-muted">需求未返回</span></div><small v-for="field in businessFormEntries(row).slice(0,2)" :key="field.key">{{ field.label }}：{{ field.value }}</small><small>冻结最低协作费：{{ coopMoney(row.commission_minimum) }}</small></div></template>
                 <template #stores="{row}"><div class="coop-cell"><strong>发布：{{ row.publisher?.name || row.publisher_name || '未返回' }}</strong><small>承接：{{ row.receiver?.name || row.receiver_name || '尚未选择' }}</small></div></template>
                 <template #status="{row}"><el-tag :type="coopTone(row.status)" size="small">{{ row.status_label || coopLabel(row.status) }}</el-tag></template>
-                <template #owner="{row}"><div class="coop-cell"><strong>{{ row.owner_name || (Number(row.owner_uid) ? '归属员工' : '待分配') }}</strong><small>{{ coopTime(row.create_time) }}</small></div></template>
+                <template #owner="{row}"><div class="coop-cell"><strong>{{ row.owner_name || (Number(row.owner_uid) ? '平台员工' : '未指定') }}</strong><small>{{ coopTime(row.create_time) }}</small></div></template>
                 <template #actions="{row}"><el-button link type="primary" @click="open(row.id)">查看详情</el-button></template>
             </HsxTable>
             <div class="coop-pagination"><HsxPagination :current-page="Number(query.page)" :page-size="Number(query.limit)" :total="total" :disabled="loading" @change="changePage" /></div>
@@ -35,7 +35,7 @@ const owner = ref<number | ''>('')
 const { rows, total, loading, error, query, load, search: searchList, changePage } = useCooperationList(getCooperationLeads,props.initialFilter)
 function search(patch: CoopRow = {}) { return searchList({ ...patch, owner_uid: owner.value }) }
 function resetExtra() { owner.value = '' }
-const columns = [ { prop: 'customer_name', label: '客户 / 业务 / 地区', slot: 'customer', minWidth: 185 }, { prop: 'models', label: '客户需求 / 冻结规则', slot: 'models', minWidth: 240 }, { prop: 'publisher_name', label: '发布 / 承接门店', slot: 'stores', minWidth: 190 }, { prop: 'status', label: '当前状态', slot: 'status', width: 120 }, { prop: 'owner_uid', label: '归属 / 发布于', slot: 'owner', minWidth: 155 }, { prop: 'actions', label: '操作', slot: 'actions', width: 100, fixed: 'right' as const } ]
+const columns = [ { prop: 'customer_name', label: '客户 / 业务 / 地区', slot: 'customer', minWidth: 185 }, { prop: 'models', label: '客户需求 / 冻结规则', slot: 'models', minWidth: 240 }, { prop: 'publisher_name', label: '发布 / 承接门店', slot: 'stores', minWidth: 190 }, { prop: 'status', label: '当前状态', slot: 'status', width: 120 }, { prop: 'owner_uid', label: '监管负责人 / 发布于', slot: 'owner', minWidth: 165 }, { prop: 'actions', label: '操作', slot: 'actions', width: 100, fixed: 'right' as const } ]
 const detailVisible = ref(false), selectedId = ref(0)
 function open(id: number) { selectedId.value = Number(id); detailVisible.value = true }
 onMounted(load)

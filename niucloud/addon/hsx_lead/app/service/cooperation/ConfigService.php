@@ -35,12 +35,28 @@ final class ConfigService
         return $result;
     }
     public function publicConfig(): array { return $this->get(); }
-    /** Anonymous presentation policy only. Never expose member, ERP or billing data. */
+    /** Anonymous presentation only. Never expose member, ERP or billing data. */
     public static function publicAccess(int $site): array
     {
         if ($site<=0) throw new CommonException('请先选择有效站点');
         $value=CatalogConfigStorage::read($site,self::KEY);
-        return ['login_required'=>in_array($value['listing_login_required']??false,[true,1,'1'],true),'erp_visible'=>in_array($value['erp_visible']??true,[true,1,'1'],true)];
+        $enabled=in_array($value['enabled']??false,[true,1,'1'],true);$businesses=[];$seen=[];
+        // Project from this same read. Do not call get()/publicConfig(): those
+        // include membership definitions, directory options and billing rules.
+        if($enabled&&is_array($value['businesses']??null))foreach(array_slice($value['businesses'],0,30) as $row){
+            if(!is_array($row)||!in_array($row['enabled']??false,[true,1,'1'],true))continue;
+            $key=$row['key']??null;$name=$row['name']??null;$dimension=$row['dimension']??null;
+            if(!is_string($key)||!preg_match('/^[a-z][a-z0-9_]{0,15}$/D',$key)
+                ||in_array($key,['__proto__','prototype','constructor'],true)||isset($seen[$key])
+                ||!is_string($name)||!mb_check_encoding($name,'UTF-8')||trim($name)===''||mb_strlen($name)>100||preg_match('/[<>\x00-\x1F\x7F]/u',$name)
+                ||!in_array($dimension,['model','brand','operator'],true))continue;
+            $seen[$key]=true;$businesses[]=['key'=>$key,'name'=>trim($name),'dimension'=>$dimension];
+        }
+        // Keep the historical flag for paired older clients. It is not an
+        // authorization policy; new visitor pages never auto-launch login.
+        return ['login_required'=>in_array($value['listing_login_required']??false,[true,1,'1'],true),
+            'erp_visible'=>in_array($value['erp_visible']??true,[true,1,'1'],true),
+            'visitor'=>['enabled'=>$enabled,'businesses'=>$businesses]];
     }
     /** Presentation policy, not a destructive disconnect or scheduler switch. */
     public static function erpVisible(int $site): bool

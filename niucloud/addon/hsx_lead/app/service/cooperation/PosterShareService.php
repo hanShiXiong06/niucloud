@@ -51,7 +51,7 @@ final class PosterShareService
             if (!PromotionService::configuration($site)['enabled'] || !$role['promotion_allowed']) throw new CommonException('当前账号尚未开放推广邀请，不能生成推广海报');
             $name=Db::name('member')->where('site_id',$site)->where('member_id',$member)->value('nickname');
             return $this->payload($this->text((string)$name,18)?:'本站会员',
-                'addon/hsx_lead/pages/profile/index',[
+                'addon/hsx_lead/pages/invite/index',[
                     ['key'=>'mid','value'=>(string)$member],['key'=>'pi','value'=>'1'],
                 ]);
         }

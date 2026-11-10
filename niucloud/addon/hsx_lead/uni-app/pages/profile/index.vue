@@ -17,7 +17,7 @@ import { onHide, onLoad, onPullDownRefresh, onShow } from '@dcloudio/uni-app'
 import { useDiy } from '@/hooks/useDiy'
 import { useShare } from '@/hooks/useShare'
 import { parseJsonValue } from '@/utils/json'
-import { redirect } from '@/utils/common'
+import { getToken, redirect } from '@/utils/common'
 import diyGroup from '@/addon/components/diy/group/index.vue'
 import CoopState from '../../components/cooperation/CoopState.vue'
 import { createProfileDiyContext, profileDiyKey } from '../../composables/useProfileDiy'
@@ -33,16 +33,24 @@ const diy = useDiy({ name:'DIY_HSX_LEAD_MEMBER_INDEX', ...pageLoad.requestOption
 const context = createProfileDiyContext(), loginParams = ref<Record<string,any>>({}), { setShare, onShareAppMessage } = useShare()
 provide(profileDiyKey,context)
 onShareAppMessage()
-let pendingLead=0, pendingPromotion=false, pendingInviter=0, disposed=false
+let pendingLead=0, pendingPromotion=false, pendingInviter=0, disposed=false, redirectingInvitation=false
 const positiveId=(value:unknown)=>{const number=Number(value);return Number.isSafeInteger(number)&&number>0&&number<=4294967295?number:0}
 diy.onLoad()
 onLoad(raw=>{
     const options=cooperationInviteParams(raw)
     pendingLead=positiveId(options?.collaboration_id);pendingPromotion=String(options?.promotion_invite||'')==='1';pendingInviter=positiveId(options?.mid)
     loginParams.value={...(pendingLead?{collaboration_id:pendingLead}:{}),...(pendingPromotion?{promotion_invite:1,...(pendingInviter?{mid:pendingInviter}:{})}:{})}
+    // Already-issued promotion QR images may still point to this old route.
+    // A promotion scan is login entry, never an instruction to join a store.
+    if(options?.mode!=='decorate' && pendingPromotion && !getToken()){
+        redirectingInvitation=true
+        redirect({url:'/addon/hsx_lead/pages/invite/index',param:loginParams.value,mode:'redirectTo'})
+        return
+    }
     if(options?.mode==='decorate')pageLoad.complete();else pageLoad.start()
 })
 diy.onShow((data:any)=>{
+    if(redirectingInvitation)return
     if(!pageLoad.complete())return
     // Keep the framework's selected-page contract, rather than forcing the
     // component layout when the administrator has chosen a different page.
@@ -52,6 +60,7 @@ diy.onShow((data:any)=>{
 })
 diy.onHide();diy.onUnload();diy.onPageScroll()
 onShow(async()=>{
+    if(redirectingInvitation)return
     const success=await context.refresh()
     if(!success||disposed||context.preview.value)return
     if(pendingPromotion){pendingPromotion=false;openCooperationTask('promotion',{tab:'overview',...(pendingInviter?{mid:pendingInviter}:{})})}

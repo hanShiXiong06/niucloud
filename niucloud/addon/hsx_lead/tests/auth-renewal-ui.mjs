@@ -4,6 +4,7 @@ import path from 'node:path'
 import vm from 'node:vm'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
+import { loadAdminUtility } from './admin-utils.mjs'
 
 // Real plugin SFC setup/render with public synthetic capabilities, no API or database access.
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..')
@@ -40,8 +41,8 @@ function setup(name) {
     check(!template.errors.length, name + ' template compiles')
     const shared = { errorText: e => String(e?.message || e), time: String, readyLabels: {}, region: () => '合成地区', syncLabel: String,
         useLeadList: () => ({ rows, total: Vue.ref(0), loading: Vue.ref(false), error: Vue.ref(''), query: Vue.reactive({}), load: unexpected, search: unexpected }) }
-    const dependencies = { vue: { ...Vue, onMounted() {}, onBeforeUnmount() {} }, 'element-plus': { ElMessage: {}, ElMessageBox: {} }, '@element-plus/icons-vue': { Plus: {} }, '../../api': {},
-        '../../composables/useLeadUi': shared, '../../composables/authRenewal': helper,
+    const dependencies = { vue: { ...Vue, onMounted() {}, onBeforeUnmount() {} }, 'element-plus': { ElMessage: {}, ElMessageBox: {} }, '@element-plus/icons-vue': { Plus: {} }, '../../api': {},'@/stores/modules/user':{default:()=>({rules:[]})},'../../composables/navigation':{hasLeadPagePermission:()=>false},'../../api/cooperation':{getMerchantProfileFormRecord:async()=>({data:{fields:[]}})},
+        '../../composables/useLeadUi': shared, '../../composables/authRenewal': helper, '../../composables/useRemoteOptions': loadAdminUtility('useRemoteOptions'),
         '../../composables/cooperation': { coopBusiness:value=>String(value) },
         '../../composables/useAutomaticAuthorization': { useAutomaticAuthorization: () => automatic },
         '../../composables/filtering': { hasListFilters: () => false }, '../../composables/serviceScope': { serviceScopeFor: () => 'default' } }

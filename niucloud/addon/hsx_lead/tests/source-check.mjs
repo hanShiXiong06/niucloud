@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createRequire } from 'node:module'
 
 // Source-only acceptance after uninstall: never remount or install the plugin.
@@ -35,7 +35,10 @@ for (const directory of ['admin', 'uni-app']) {
             assert.deepEqual(result.errors, [], filename)
             checkImports(descriptor.scriptSetup?.content || descriptor.script?.content || '', filename)
             for (const style of descriptor.styles) {
-                const compiled = style.lang === 'scss' ? sass.compileString(style.content, { loadPaths: [path.dirname(filename)] }).css : style.content
+                const compiled = style.lang === 'scss' ? sass.compileString(style.content, {
+                    url: pathToFileURL(filename), loadPaths: [path.dirname(filename)],
+                    importers: [{ findFileUrl: specifier => specifier.startsWith('@/') ? pathToFileURL(path.join(workspace, directory === 'admin' ? 'admin/src' : 'uni-app/src', specifier.slice(2))) : null }]
+                }).css : style.content
                 assert.ok(style.scoped || !/:deep\s*\(/.test(compiled), `Unscoped :deep selector will not render correctly: ${filename}`)
                 const result = compiler.compileStyle({ source: compiled, filename, id: `source-${sfc}`, scoped: style.scoped })
                 assert.deepEqual(result.errors, [], filename)

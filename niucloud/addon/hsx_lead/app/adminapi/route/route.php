@@ -9,6 +9,7 @@ require __DIR__.'/promotion.php';
 require __DIR__.'/entity.php';
 require __DIR__.'/deposit.php';
 require __DIR__.'/catalog.php';
+require __DIR__.'/notice.php';
 
 // No AdminLog: it records full request bodies, including ERP passwords. Services write whitelist audits instead.
 Route::group('hsx_lead',function(){

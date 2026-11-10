@@ -49,7 +49,7 @@
                         <div v-else class="lead-auth-company">
                             <el-alert title="账号属于多个公司，请选择本商户对应的公司后继续。不会自动选择或切换其他公司。" type="info" :closable="false" />
                             <el-form-item label="来源公司" required>
-                                <el-select v-model="selectedCompany" placeholder="请选择本次授权返回的公司" style="width: 100%"><el-option v-for="company in companies" :key="company.id" :value="company.id" :label="company.name" /></el-select>
+                                <el-select v-model="selectedCompany" filterable no-match-text="没有匹配的公司，请核对名称或编号" aria-label="搜索授权来源公司" placeholder="搜索并选择本次授权返回的公司" style="width: 100%"><el-option v-for="company in companies" :key="company.id" :value="company.id" :label="`${company.name} · ${company.id}`" /></el-select>
                             </el-form-item>
                             <el-button link :disabled="busy || challengeLoading" @click="refreshChallenge">放弃本次选择，重新获取验证码</el-button>
                         </div>
@@ -79,7 +79,7 @@
                         <p v-if="preview.note" class="lead-muted">{{ preview.note }}</p>
                     </el-collapse-item>
                 </el-collapse>
-                <el-form v-if="preview.stores?.length" label-position="top" style="margin-top: 20px"><el-form-item label="确认来源门店"><el-select v-model="selectedStore" placeholder="请选择本商户对应的来源门店" style="width: 100%"><el-option v-for="store in preview.stores" :key="store.store_id" :label="`${store.name || '来源门店'} · ${store.store_id}`" :value="String(store.store_id)" /></el-select></el-form-item></el-form>
+                <el-form v-if="preview.stores?.length" label-position="top" style="margin-top: 20px"><el-form-item label="确认来源门店"><el-select v-model="selectedStore" filterable no-match-text="没有匹配的门店，请核对名称或编号" aria-label="搜索授权来源门店" placeholder="搜索并选择本商户对应的来源门店" style="width: 100%"><el-option v-for="store in preview.stores" :key="store.store_id" :label="`${store.name || '来源门店'} · ${store.store_id}`" :value="String(store.store_id)" /></el-select></el-form-item></el-form>
                 <el-alert v-if="preview.requires_store_selection || storeChanged" title="需确认门店范围。选择后会重新进行只读验证；不能跳过范围校验直接启用。" type="warning" :closable="false" />
                 <el-alert v-if="impact.message" :title="impact.message" :type="impact.switching || impact.published_snapshot_will_be_hidden ? 'warning' : 'info'" :closable="false" style="margin-top: 16px" />
                 <el-checkbox v-if="!needsStoreProbe && preview.can_activate !== false" v-model="confirmed" style="margin-top: 18px">我已核对 ERP 及来源门店，确认启用{{ original.connected ? '并替换当前接入' : '' }}</el-checkbox>

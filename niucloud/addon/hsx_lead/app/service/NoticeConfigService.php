@@ -26,7 +26,7 @@ final class NoticeConfigService
         foreach(self::PHASES as $phase=>$key) {
             $row=$stored[$phase]??['phase'=>$phase,'tid'=>'','kid_list'=>[],'scene_desc'=>'','fields'=>[]];
             $notice=Db::name('sys_notice')->where('site_id',$site)->where('key',$key)->find()?:[];
-            $configured=!empty($row['tid']) && !empty($row['fields']);
+            $configured=self::weappTemplate($row)!==null;
             $templateId=(string)($notice['weapp_template_id']??'');
             $enabled=(bool)($notice['is_weapp']??false);
             $status=!$configured?'unconfigured':($templateId===''?'awaiting_template':($enabled?'ready':'disabled'));
@@ -34,7 +34,7 @@ final class NoticeConfigService
                 'phase'=>$phase,'notice_key'=>$key,'name'=>$phase==='assigned'?'商户新工单提醒':'商户工单处理结果提醒',
                 'configured'=>$configured,'framework_template_id'=>$templateId,'enabled'=>$enabled,'status'=>$status,
                 'message'=>match($status){
-                    'unconfigured'=>'尚未配置已核验公共模板；工单仍在商户工作台待办中，不会向微信发送',
+                    'unconfigured'=>'请从本站微信模板库选择适用的工单模板并确认字段；未完成前不发送，工单仍在商户工作台待办中',
                     'awaiting_template'=>'请前往小程序订阅消息重新获取本站模板，再开启；会员仍需主动订阅授权',
                     'disabled'=>'本站模板已获取但通知开关关闭，不会发送',
                     default=>'框架模板与开关已就绪；会员需已登录小程序并订阅，仍不保证终端送达',
@@ -73,7 +73,7 @@ final class NoticeConfigService
         $channels[]=['channel'=>'wecom','name'=>'企业微信','route'=>'','status'=>'unsupported','billable'=>false,'phases'=>[],
             'message'=>'当前企业微信通道面向员工uid；商户绑定的是会员member_id，不能直接当作员工发送，尚未建立合法身份绑定'];
         return ['templates'=>$rows,'wechat_templates'=>$wechatRows,'channel_settings'=>$channels,'portal_entry'=>NoticePortalEntry::get($site),
-            'variables'=>array_map(static fn($key,$label)=>['key'=>$key,'label'=>$label],array_keys(self::VARIABLES),self::VARIABLES),
+            'variables'=>array_map(static fn($key,$label)=>['key'=>$key,'label'=>$label,'field_types'=>array_keys(array_filter(self::weappFieldRules(),static fn($variables)=>in_array($key,$variables,true)))],array_keys(self::VARIABLES),self::VARIABLES),
             'notice'=>'只登记本站管理员已核验的公共模板，不自动申请、开启或发送。公众号、小程序与短信使用牛云各自的模板和开关；短信可能计费。'];
     }
 
@@ -96,7 +96,7 @@ final class NoticeConfigService
                 if (!empty($row['kid_list']) || !empty($row['fields'])) throw new CommonException('清空模板时请同时清空关键词编号与字段');
                 $item=['phase'=>$phase,'tid'=>'','kid_list'=>[],'scene_desc'=>'','fields'=>[]];
             } else {
-                if (!ctype_digit($tid) || ($row['confirmed']??false)!==true) throw new CommonException('请先在本站小程序官方后台核验公共模板编号、关键词与场景，并勾选确认');
+                if (!preg_match('/^[1-9][0-9]{0,19}$/D',$tid) || ($row['confirmed']??false)!==true) throw new CommonException('请先在本站小程序官方后台核验公共模板编号、关键词与场景，并勾选确认');
                 $kids=$row['kid_list']??null; $fields=$row['fields']??null;
                 if (!is_array($kids) || !\addon\hsx_lead\app\support\PhpRuntime::isList($kids) || !$kids || count($kids)>10
                     || !is_array($fields) || !\addon\hsx_lead\app\support\PhpRuntime::isList($fields) || count($fields)!==count($kids)) throw new CommonException('模板关键词与字段必须一一对应，最多10项');
@@ -115,8 +115,7 @@ final class NoticeConfigService
                     $fieldIds[$keyword]=true;
                     if (isset($variablesUsed[$variable])) throw new CommonException('同一通知变量请只映射一次，避免不同字段类型造成歧义');
                     $variablesUsed[$variable]=true;
-                    if (in_array($parts[1],['time','date'],true) && $variable!=='occurred_at') throw new CommonException('时间字段请映射通知时间');
-                    if ($parts[1]==='number' && $variable!=='task_id') throw new CommonException('数字字段请映射工单数字ID');
+                    if (!in_array($variable,self::weappFieldRules()[$parts[1]],true)) throw new CommonException('通知变量与微信字段类型不匹配：字符字段仅用于工单编号或数字ID，短语仅用于状态，时间与数字须使用对应变量');
                     $cleanFields[]=['label'=>Data::text($field,'label',30,true),'variable'=>$variable,'keyword'=>$keyword];
                 }
                 if (count(array_unique(array_map(static fn($f)=>(int)preg_replace('/\D/','',$f['keyword']),$cleanFields)))!==count($cleanKids)) {
@@ -176,17 +175,62 @@ final class NoticeConfigService
     }
 
     /** Explicit site is mandatory in workers. Dict loading alone may use the current admin request site. */
+    public static function weappDefinitionsForSite(int $site): array
+    {
+        $result=self::weappForSite($site);
+        // A partial upload must not expose an empty-tid retrieval button in an old framework.
+        if (!defined(\app\service\admin\weapp\WeappTemplateService::class.'::SUPPORTS_PENDING_DEFINITIONS')) return $result;
+        foreach(self::PHASES as $key) if (!isset($result[$key])) {
+            $result[$key]=['tid'=>'','kid_list'=>[],'scene_desc'=>'','content'=>[],
+                'configuration_required'=>true,
+                'configuration_message'=>'尚未选择本站可用的微信公共模板。请到应用「业务配置 → 通知渠道 → 小程序」读取微信模板库并配置；未就绪前不能获取或开启。',
+                'tips'=>'场景已注册，模板尚待配置。公共模板和关键词从本站小程序的微信模板库读取，私有模板仍由本页获取；不复用其他站点的模板 ID。'];
+        }
+        return $result;
+    }
+
     public static function weappForSite(int $site): array
     {
         if ($site<=0) return [];
         $config=(new CoreConfigService())->getConfigValue($site,self::CONFIG_KEY); $result=[];
         foreach(($config['templates']??[]) as $phase=>$row) {
-            if (!isset(self::PHASES[$phase]) || empty($row['tid']) || empty($row['fields'])) continue;
-            $result[self::PHASES[$phase]]=['tid'=>$row['tid'],'kid_list'=>$row['kid_list'],'scene_desc'=>$row['scene_desc'],
-                'content'=>array_map(static fn($f)=>[$f['label'],'{'.$f['variable'].'}',$f['keyword']],$row['fields']),
-                'tips'=>'公共模板与字段由本站管理员核验配置。请重新获取本站模板并开启；仍需接收会员主动订阅，不保证终端送达。'];
+            if (!isset(self::PHASES[$phase])) continue;
+            $template=self::weappTemplate($row);
+            if ($template!==null) $result[self::PHASES[$phase]]=$template;
         }
         return $result;
+    }
+
+    /** Keep field semantics shared by save validation, discovery readiness and delivery. */
+    public static function weappFieldRules(): array
+    {
+        return ['character_string'=>['task_no','task_id'],'phrase'=>['status_text'],
+            'time'=>['occurred_at'],'date'=>['occurred_at'],'number'=>['task_id'],'thing'=>array_keys(self::VARIABLES)];
+    }
+
+    private static function weappTemplate($row): ?array
+    {
+        if (!is_array($row)||(!is_string($row['tid']??null)&&!is_int($row['tid']??null))
+            ||!preg_match('/^[1-9][0-9]{0,19}$/D',(string)$row['tid'])||!is_string($row['scene_desc']??null)||trim($row['scene_desc'])==='') return null;
+        $kids=$row['kid_list']??null;$fields=$row['fields']??null;
+        if (!is_array($kids)||!is_array($fields)||!$fields||count($fields)>10||count($kids)!==count($fields)
+            ||!\addon\hsx_lead\app\support\PhpRuntime::isList($kids)||!\addon\hsx_lead\app\support\PhpRuntime::isList($fields)) return null;
+        $cleanKids=[];$used=[];$mapped=[];$content=[];$rules=self::weappFieldRules();
+        foreach($kids as $kid) {
+            if ((!is_int($kid)&&!is_string($kid))||!preg_match('/^[1-9][0-9]{0,2}$/D',(string)$kid)||isset($cleanKids[(int)$kid])) return null;
+            $cleanKids[(int)$kid]=true;
+        }
+        foreach($fields as $field) {
+            if (!is_array($field)||!is_string($field['label']??null)||trim($field['label'])===''
+                ||!is_string($field['keyword']??null)||!is_string($field['variable']??null)
+                ||!preg_match('/^(thing|character_string|time|date|phrase|number)([1-9][0-9]{0,2})$/D',$field['keyword'],$parts)
+                ||!isset($cleanKids[(int)$parts[2]])||isset($mapped[(int)$parts[2]])||isset($used[$field['variable']])
+                ||!in_array($field['variable'],$rules[$parts[1]],true)) return null;
+            $mapped[(int)$parts[2]]=true;$used[$field['variable']]=true;
+            $content[]=[$field['label'],'{'.$field['variable'].'}',$field['keyword']];
+        }
+        return ['tid'=>(string)$row['tid'],'kid_list'=>array_keys($cleanKids),'scene_desc'=>$row['scene_desc'],'content'=>$content,
+            'tips'=>'公共模板与字段由本站管理员核验配置。请重新获取本站模板并开启；仍需接收会员主动订阅，不保证终端送达。'];
     }
 
     public static function wechatForSite(int $site): array

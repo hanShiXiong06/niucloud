@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import vm from 'node:vm'
 import { loadMobileUtility } from './mobile-utils.mjs'
+import { viteFixture } from './vite-fixture.mjs'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 
@@ -14,7 +15,7 @@ const mobile = path.join(root, 'niucloud/addon/hsx_lead/uni-app')
 let checks = 0
 function check(condition, message) { assert.ok(condition, message); checks++ }
 function deferred() { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b }); return { promise, resolve, reject } }
-function execute(source, deps, globals = {}) { const module = { exports: {} }; const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText; vm.runInNewContext(`(function(require,module,exports){${js}\n})`, { Date, Math, Number, String, Map, Promise, console, setTimeout, clearTimeout, ...globals })(key => { if (key.startsWith('../../utils/')) return loadMobileUtility(path.basename(key)); if (/\.png$/.test(key)) return { default: '/synthetic-local-asset/' + path.basename(key) }; if (!(key in deps)) throw Error('Unexpected dependency ' + key); return deps[key] }, module, module.exports); return module.exports }
+function execute(source, deps, globals = {}) { const module = { exports: {} }; const js = ts.transpileModule(viteFixture(source), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText; vm.runInNewContext(`(function(require,module,exports){${js}\n})`, { Date, Math, Number, String, Map, Promise, console, setTimeout, clearTimeout, ...globals })(key => { if (key.startsWith('../../utils/')) return loadMobileUtility(path.basename(key)); if (/\.png$/.test(key)) return { default: '/synthetic-local-asset/' + path.basename(key) }; if (!(key in deps)) throw Error('Unexpected dependency ' + key); return deps[key] }, module, module.exports); return module.exports }
 const apiSource = fs.readFileSync(path.join(mobile, 'api/cooperation.ts'), 'utf8')
 const transport = [], request = Object.fromEntries(['get', 'post', 'put', 'upload'].map(method => [method, async (url, data) => { transport.push({ method, url, data }); return { data: {} } }]))
 const api = execute(apiSource, { '@/utils/request': { default: request } })
@@ -79,7 +80,7 @@ function component(file) {
     const filename = path.join(mobile, 'components/cooperation', file); if (cache.has(filename)) return cache.get(filename)
     const descriptor = compiler.parse(fs.readFileSync(filename, 'utf8'), { filename }).descriptor
     const script = compiler.compileScript(descriptor, { id: filename, inlineTemplate: true })
-    const dependencies = { vue: Vue, '../../api/cooperation': api, '../../api/regions': { searchCooperationRegions: async () => ({ data: { data: [], total: 0 } }) }, '@/utils/common': { img: value => value, redirect() {} }, '@/app/api/system': { getAreaListByPid: async () => ({ data: [] }) } }
+    const dependencies = { vue: Vue, '../../composables/useResponseDeadline':execute(fs.readFileSync(path.join(mobile,'composables/useResponseDeadline.ts'),'utf8'),{vue:Vue}), '../../api/cooperation': api, '@/addon/components/diy-form/index.vue': {default:{render:()=>Vue.h('supplement-form-fixture')}}, '../../api/regions': { searchCooperationRegions: async () => ({ data: { data: [], total: 0 } }) }, '@/utils/common': { img: value => value, redirect() {} }, '@/app/api/system': { getAreaListByPid: async () => ({ data: [] }) } }
     for (const match of script.content.matchAll(/from\s+['"](\.\/[^'"]+\.vue)['"]/g)) dependencies[match[1]] = { default: component(path.basename(match[1])) }
     const result = execute(script.content, dependencies, { uni: { showToast() {}, previewImage() {}, makePhoneCall() {}, getStorageSync() {}, setStorageSync() {}, removeStorageSync() {} } }).default; cache.set(filename, result); return result
 }

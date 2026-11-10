@@ -113,6 +113,7 @@ final class TeamService
             if ($merchant&&$merchant['is_owner']) throw new CommonException('负责人不能直接退出，请先联系平台处理主体责任和未结业务');
             $link=Db::name(self::TABLE)->where('site_id',$this->context->site)->where('member_id',$this->context->memberId)->whereIn('status',['active','pending'])->lock(true)->find();
             if (!$link) return;
+            if ($link['status']==='active') $this->assertNoOpenInternalAssignments((int)$link['merchant_id'],$this->context->memberId);
             Db::name(self::TABLE)->where('id',$link['id'])->update(['status'=>'removed','update_time'=>time(),'last_actor_member_id'=>$this->context->memberId]);
             $this->context->audit('merchant_team',(int)$link['merchant_id'],$link['status']==='pending'?'join_cancelled':'member_left',['member_id'=>$this->context->memberId]);
         });
@@ -123,13 +124,36 @@ final class TeamService
     {
         $this->context->permission('hsx_lead_entity_manage');
         $q=Data::query('merchant',$this->context->site);$keyword=Data::text($params,'keyword',100);
-        if ($keyword!=='') $q->whereLike('name|subject_code|contact_name|mobile','%'.addcslashes($keyword,'\\%_').'%');
-        $rows=[];foreach($q->order('id desc')->select()->toArray() as $merchant) {
-            $row=$this->present($merchant,true,false);
-            if (!empty($params['level_code'])&&$params['level_code']!==$row['membership']['level_code']) continue;
-            $rows[]=$row;
+        \addon\hsx_lead\app\support\AdminKeywordSearch::merchants($q,$this->context->site,$keyword,true);
+        if (empty($params['level_code'])) {
+            // Present only the SQL page. In particular, do not generate subject
+            // codes or calculate membership for every shop just to show 20 rows.
+            $page=Data::page($q,$params);
+            $config=$page['data']?(new ConfigService($this->context))->get():null;
+            $page['data']=array_map(fn(array $merchant):array=>$this->present($merchant,true,false,$config),$page['data']);
+            return $page+['tiers'=>$config['membership_levels']??MembershipCatalogService::levels($this->context->site)];
         }
-        return Store::pageArray($rows,$params)+['tiers'=>MembershipCatalogService::levels($this->context->site)];
+        // Membership is derived from verified receipts/refunds, not the
+        // possibly stale partner.membership_level cache. Scan bounded batches
+        // using the existing read projection; only present the requested page.
+        // This keeps complete filter totals without per-shop ledger queries or
+        // generating subject codes for every matching shop.
+        $page=Store::pageArray([],$params);$offset=($page['current_page']-1)*$page['per_page'];
+        $config=(new ConfigService($this->context))->get();$lastId=null;$selected=[];$now=time();
+        do{
+            $batchQuery=clone$q;if($lastId!==null)$batchQuery->where('id','<',$lastId);
+            $batch=$batchQuery->order('id desc')->limit(200)->select()->toArray();if(!$batch)break;
+            $states=EntityMembershipService::states($this->context->site,array_column($batch,'id'),$config,$now);
+            foreach($batch as$merchant){
+                $state=$states[(int)$merchant['id']]??null;
+                if($state===null||$state['level_code']!==$params['level_code'])continue;
+                if($page['total']>=$offset&&count($selected)<$page['per_page'])$selected[]=[$merchant,$state];
+                $page['total']++;
+            }
+            $lastId=(int)$batch[count($batch)-1]['id'];
+        }while(count($batch)===200);
+        foreach($selected as[$merchant,$state])$page['data'][]=$this->present($merchant,true,false,$config,$state);
+        return $page+['tiers'=>$config['membership_levels']??[]];
     }
 
     public function adminDetail(int $id): array
@@ -155,6 +179,49 @@ final class TeamService
         // a current locking read, not an aggregate from that old snapshot.
         $staff=$lock?count($query->lock(true)->column('member_id')):(int)$query->count();
         return $staff+((int)$merchant['member_id']>0?1:0); // Include the responsible owner's login, if configured.
+    }
+
+    /** Real, currently usable accounts, not purchased seats or pending invitations. */
+    public static function assignmentMembers(int $site,array $merchant,int $excludeMemberId=0,bool $lock=false,int $onlyMemberId=0): array
+    {
+        if ((int)($merchant['site_id']??0)!==$site||(int)($merchant['status']??0)!==1) return [];
+        $links=Db::name(self::TABLE)->where('site_id',$site)->where('merchant_id',(int)$merchant['id'])->where('status','active');
+        if ($lock) $links->lock(true);
+        $ids=array_values(array_unique(array_merge([(int)$merchant['member_id']],array_map('intval',$links->column('member_id')))));
+        $ids=array_values(array_filter($ids,static fn(int $id):bool=>$id>0&&$id!==$excludeMemberId&&($onlyMemberId<=0||$id===$onlyMemberId)));
+        if (!$ids) return [];
+        $query=Db::name('member')->where('site_id',$site)->whereIn('member_id',$ids)->where('status',1)->where('is_del',0)->where('delete_time',0)->field('member_id,nickname,member_no');
+        if ($lock) $query->lock(true);
+        $result=[];
+        foreach($query->order('member_id')->select()->toArray() as $member) {
+            // A stale or ambiguous cross-merchant binding is not an eligible recipient.
+            try {$resolved=self::resolve(new Context($site,0,(int)$member['member_id']),false,$lock);}catch(CommonException $ignored){continue;}
+            if (!$resolved||(int)$resolved['id']!==(int)$merchant['id']) continue;
+            $owner=(int)$merchant['member_id']===(int)$member['member_id'];
+            $result[]=['member_id'=>(int)$member['member_id'],'name'=>trim((string)$member['nickname'])?:((string)$member['member_no']?:'门店成员'),
+                'role'=>$owner?'owner':'employee','role_label'=>$owner?'负责人':'店员'];
+        }
+        return $result;
+    }
+
+    /** Missing keys mean an untouched historic shared queue; malformed new snapshots fail closed. */
+    public static function internalAssignment(array $lead,bool $includeReturned=false): ?array
+    {
+        $rule=Data::decode($lead['rule_json']??'');
+        $current=(int)($lead['receiver_id']??0)>0&&(int)$lead['receiver_id']===(int)($lead['publisher_id']??0);
+        $returned=$includeReturned&&(int)($lead['receiver_id']??0)===0&&in_array($lead['status']??'',['selecting','cancelled'],true)&&($rule['internal_delivery']??false)===true;
+        if (!$current&&!$returned) return null;
+        if (!array_key_exists('internal_assignee_member_id',$rule)) return null;
+        $assignee=$rule['internal_assignee_member_id'];$publisher=$rule['internal_publisher_member_id']??0;
+        return ['assignee_member_id'=>is_int($assignee)&&$assignee>0?$assignee:0,'publisher_member_id'=>is_int($publisher)&&$publisher>0?$publisher:0];
+    }
+
+    /** Use the same predicate before pagination and dashboard counts. */
+    public static function scopeIncoming($query,int $memberId)
+    {
+        $json="IF(JSON_VALID(rule_json),rule_json,'{}')";
+        $assignee="JSON_EXTRACT($json, '$.internal_assignee_member_id')";$publisher="JSON_EXTRACT($json, '$.internal_publisher_member_id')";
+        return $query->whereRaw("(publisher_id <> receiver_id OR JSON_CONTAINS_PATH($json, 'one', '$.internal_assignee_member_id') = 0 OR (JSON_TYPE($assignee) = 'INTEGER' AND JSON_TYPE($publisher) = 'INTEGER' AND CAST(JSON_UNQUOTE($publisher) AS SIGNED) > 0 AND JSON_UNQUOTE($publisher) <> JSON_UNQUOTE($assignee) AND CAST(JSON_UNQUOTE($assignee) AS UNSIGNED) = ?))",[$memberId]);
     }
 
     private function decide(int $merchantId,int $memberId,bool $approve,bool $admin): void
@@ -184,16 +251,29 @@ final class TeamService
             if ((int)$merchant['member_id']===$memberId) throw new CommonException('不能移除门店负责人');
             $link=$this->link($merchantId,$memberId,true);
             if (!$link||!in_array($link['status'],['active','pending'],true)) throw new CommonException('成员已移除或申请已处理，请刷新');
+            if ($link['status']==='active') $this->assertNoOpenInternalAssignments($merchantId,$memberId);
             Db::name(self::TABLE)->where('id',$link['id'])->update(['status'=>'removed','last_actor_member_id'=>$this->context->memberId,'update_time'=>time()]);
             $this->context->audit('merchant_team',$merchantId,'member_removed',['member_id'=>$memberId]);
         });
     }
 
-    private function present(array $merchant,bool $admin,bool $includeMembers=true): array
+    /** A selected colleague must finish or return their work before losing the only write authority. */
+    private function assertNoOpenInternalAssignments(int $merchantId,int $memberId): void
+    {
+        $query=Store::query('collaboration',$this->context->site)->where('publisher_id',$merchantId)->where('receiver_id',$merchantId)->whereIn('status',['assigned','following']);
+        self::scopeIncoming($query,$memberId);
+        foreach($query->field('id,publisher_id,receiver_id,status,rule_json')->lock(true)->select()->toArray() as $lead) {
+            $assignment=self::internalAssignment($lead);
+            if ($assignment===null||$assignment['assignee_member_id']!==$memberId||$assignment['publisher_member_id']<=0||$assignment['publisher_member_id']===$memberId) continue;
+            throw new CommonException($lead['status']==='assigned'?'该成员还有待接单的本店交付，请先退回或由发布方撤回，再退出或移除成员':'该成员还有正在跟进的本店交付，请先反馈成交或未成交结果，再退出或移除成员');
+        }
+    }
+
+    private function present(array $merchant,bool $admin,bool $includeMembers=true,?array $config=null,?array $membershipState=null): array
     {
         $id=(int)$merchant['id'];$owner=(int)$merchant['member_id'];$isOwner=$owner===$this->context->memberId;
         if ($admin||$isOwner) $merchant['subject_code']=$this->ensureCode($id);
-        $state=$this->membership($id);$state['used_accounts']=self::usedAccounts($this->context->site,$merchant);$state['can_manage']=$isOwner||$admin;
+        $state=$membershipState??$this->membership($id,false,$config);$state['used_accounts']=self::usedAccounts($this->context->site,$merchant);$state['can_manage']=$isOwner||$admin;
         $state['state']=$state['active']?'active':((int)$state['expires_at']>0?'expired':'locked');
         $ownerMember=Db::name('member')->where('site_id',$this->context->site)->where('member_id',$owner)->field('member_id,nickname,mobile')->find();
         $row=['id'=>$id,'merchant_id'=>$id,'name'=>$merchant['name'],'subject_code'=>($isOwner||$admin)?($merchant['subject_code']??''):'','owner_member_id'=>$owner,
@@ -214,9 +294,9 @@ final class TeamService
         return $row;
     }
 
-    private function membership(int $merchantId,bool $lock=false): array
+    private function membership(int $merchantId,bool $lock=false,?array $config=null): array
     {
-        return EntityMembershipService::state($this->context->site,$merchantId,(new ConfigService($this->context))->get($lock),null,$lock);
+        return EntityMembershipService::state($this->context->site,$merchantId,$config??(new ConfigService($this->context))->get($lock),null,$lock);
     }
 
     private function ensureCode(int $id): string

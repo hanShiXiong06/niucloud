@@ -4,6 +4,8 @@ const root='hsx_lead/promotion',quiet={showErrorMessage:false}
 export const getPromotionConfig=()=>request.get(`${root}/config`,quiet)
 export const savePromotionConfig=(data:CoopRow)=>request.put(`${root}/config`,data,quiet)
 export const getPromotionProviders=(params:CoopRow)=>request.get(`${root}/providers`,{...quiet,params})
+export const getPromotionRelations=(params:CoopRow)=>request.get(`${root}/relations`,{...quiet,params})
+export const getPromotionInviters=(params:CoopRow)=>request.get(`${root}/relations`,{...quiet,params:{...params,view:'inviters'}})
 export const savePromotionProvider=(memberId:number,data:CoopRow)=>request.put(`${root}/providers/${memberId}`,data,quiet)
 export const reviewPromotionProvider=(memberId:number,data:{decision:'approve'|'reject';version:number;reason:string})=>request.post(`${root}/providers/${memberId}/review`,data,quiet)
 export const getPromotionRewards=(params:CoopRow)=>request.get(`${root}/rewards`,{...quiet,params})

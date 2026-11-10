@@ -5,6 +5,7 @@ import vm from 'node:vm'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { loadMobileUtility } from './mobile-utils.mjs'
+import { profileConfigApi } from './profile-config-fixture.mjs'
 
 // Current merchant flows: real Vue state/SFC compilation, synthetic APIs only.
 const plugin = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -13,7 +14,7 @@ const Vue = require('vue'), compiler = require('@vue/compiler-sfc'), ts = requir
 const directory = path.join(plugin, 'uni-app/components/cooperation')
 let checks = 0
 const check = (value, label) => { assert.ok(value, label); checks++ }
-const apiBase = { coopDate: String, coopMoney: value => value == null ? '—' : `¥${Number(value).toFixed(2)}`, coopError: (error, fallback) => error?.message || fallback }
+const apiBase = { ...profileConfigApi, coopDate: String, coopMoney: value => value == null ? '—' : `¥${Number(value).toFixed(2)}`, coopError: (error, fallback) => error?.message || fallback }
 function setup(name, values, api = {}) {
     const file = path.join(directory, name + '.vue'), source = fs.readFileSync(file, 'utf8')
     const { descriptor, errors } = compiler.parse(source, { filename: file }); check(!errors.length, name + ' parses')
@@ -23,7 +24,7 @@ function setup(name, values, api = {}) {
     const js = ts.transpileModule(script.content, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText
     const module = { exports: {} }, emitted = [], props = Vue.reactive(values), cleanups = []
     const storage = new Map()
-    vm.runInNewContext('(function(require,module,exports){' + js + '})', { Date, Math, Number, String, JSON, Map, Promise, console, setTimeout, clearTimeout, uni: { getStorageSync: key => storage.get(key), setStorageSync: (key, value) => storage.set(key, value), removeStorageSync: key => storage.delete(key), showToast() {}, showModal() {}, makePhoneCall() {} } })(key => key === 'vue' ? { ...Vue, onMounted: callback => callback(), onBeforeUnmount: callback => cleanups.push(callback) } : key === '../../api/cooperation' ? { ...apiBase, ...api } : key === '../../utils/profile-identity' ? loadMobileUtility('profile-identity') : key === '../../utils/cooperation-diy-style' ? loadMobileUtility('cooperation-diy-style') : key === '../../utils/entity-membership' ? loadMobileUtility('entity-membership') : key === '../../utils/mobile-ui' ? loadMobileUtility('mobile-ui') : key === '../../utils/erp-provider-display' ? loadMobileUtility('erp-provider-display') : key === '../../utils/cooperation-business' ? loadMobileUtility('cooperation-business') : key === '../../utils/cooperation-payment' ? loadMobileUtility('cooperation-payment') : key === '../../utils/cooperation-navigation' ? { openCooperationTask() {}, openCooperationCatalog() {} } : key === '../../api/regions' ? { searchCooperationRegions: async () => ({ data: { data: [], total: 0 } }) } : key === '@/app/api/system' ? api : key.endsWith('.vue') ? { default: {} } : key === '@/utils/common' ? { img: value => value } : (() => { throw Error('Unexpected import ' + key) })(), module, module.exports)
+    vm.runInNewContext('(function(require,module,exports){' + js + '})', { Date, Math, Number, String, JSON, Map, Promise, console, setTimeout, clearTimeout, uni: { getStorageSync: key => storage.get(key), setStorageSync: (key, value) => storage.set(key, value), removeStorageSync: key => storage.delete(key), showToast() {}, showModal() {}, makePhoneCall() {} } })(key => key === 'vue' ? { ...Vue, onMounted: callback => callback(), onBeforeUnmount: callback => cleanups.push(callback) } : key === '../../api/cooperation' ? { ...apiBase, ...api } : key === '../../utils/profile-identity' ? loadMobileUtility('profile-identity') : key === '../../utils/profile-draft' ? loadMobileUtility('profile-draft') : key === '../../utils/cooperation-diy-style' ? loadMobileUtility('cooperation-diy-style') : key === '../../utils/entity-membership' ? loadMobileUtility('entity-membership') : key === '../../utils/mobile-ui' ? loadMobileUtility('mobile-ui') : key === '../../utils/erp-provider-display' ? loadMobileUtility('erp-provider-display') : key === '../../utils/cooperation-business' ? loadMobileUtility('cooperation-business') : key === '../../utils/cooperation-payment' ? loadMobileUtility('cooperation-payment') : key === '../../utils/cooperation-navigation' ? { openCooperationTask() {}, openCooperationCatalog() {} } : key === '../../api/regions' ? { searchCooperationRegions: async () => ({ data: { data: [], total: 0 } }) } : key === '@/app/api/system' ? api : key.endsWith('.vue') ? { default: {} } : key === '@/utils/common' ? { img: value => value } : (() => { throw Error('Unexpected import ' + key) })(), module, module.exports)
     const state = module.exports.default.setup(props, { expose() {}, emit: (...args) => emitted.push(args) })
     return { state, props, emitted, source, cleanups }
 }
@@ -49,7 +50,7 @@ check(picker.state.appliedRegion.value.city_id === 11, 'editing a region draft d
 picker.state.keyword.value = 'hold'; const pending = picker.state.load(); await settle(); picker.props.show = false; await settle(); deferredResolve({ data: { data: [{ id: 99 }], total: 1 } }); await pending
 check(picker.state.rows.value.length === 0 && !picker.state.loading.value, 'closed discovery rejects late responses and releases loading state')
 check(!picker.source.includes('优先本区县') && !picker.source.includes('ERP 的地区编号') && picker.source.includes('!region.province_id'), 'UI has no technical/auto-option clutter and province is the only query requirement')
-const leadCalls = [], leadPicker = setup('CoopStorePicker', { show: false, lead: { id: 51, province_id: 20, city_id: 21, district_id: 22 }, profile: { province_id: 999 }, busy: false }, { cooperationStores: async (query, id) => { leadCalls.push({ query, id }); return { data: { data: [], total: 0, scope: 'city' } } } })
+const leadCalls = [], leadPicker = setup('CoopStorePicker', { show: false, lead: { id: 51, status:'selecting',can_assign:true, province_id: 20, city_id: 21, district_id: 22 }, profile: { province_id: 999 }, busy: false }, { cooperationStores: async (query, id) => { leadCalls.push({ query, id }); return { data: { data: [], total: 0, scope: 'city' } } } })
 leadPicker.props.show = true; await settle()
 check(leadCalls.length === 1 && leadCalls[0].id === 51 && leadCalls[0].query.scope === 'auto' && !('province_id' in leadCalls[0].query), 'lead-based discovery delegates customer-location county/city/province fallback to the authoritative lead API')
 const regionFields = setup('CoopRegionFields', { modelValue: { province_id: 10, city_id: 11, district_id: 12 }, disabled: false, minLevel: 1 }, { getAreaListByPid: async pid => ({ data: [{ id: pid === 0 ? 10 : pid === 10 ? 11 : 12, name: '合成地区' }] }) })
@@ -59,6 +60,7 @@ check(clearedCity.province_id === 10 && clearedCity.city_id === 0 && clearedCity
 
 const businesses = [{ key: 'purchase', name: '二手机', enabled: true, dimension: 'model', selection_mode: 'multiple', selection_limit: 0, commission_minimum: '100.00', fields: [], options: [] }]
 const profile = setup('CoopProfilePanel', { profile: {}, config: { businesses }, providers: [], onboarding: true, busy: false, error: '' })
+await settle()
 Object.assign(profile.state.form, { name: '无ERP合成门店', contact_name: '店员', mobile: '18800000001', province_id: 10, city_id: 11, district_id: 12, address: '合成地址', provider: '', manual_models: [{ id: 'cat_1', title: 'iPhone 16', brand: '苹果' }] })
 profile.state.selectedBusinesses.value = ['purchase']; profile.state.capabilityChoices.purchase = [{ id: 'cat_1', title: 'iPhone 16' }]
 profile.state.submit()

@@ -16,6 +16,7 @@ const quiet = { showErrorMessage: false }
 export const cooperationAccess = () => request.get(`${root}/access`, {}, quiet)
 export const cooperationBootstrap = () => request.get(`${root}/bootstrap`, {}, quiet)
 export const saveCooperationProfile = (data: CoopRow, existing = false) => existing ? request.put(`${root}/profile`, data, quiet) : request.post(`${root}/profile`, data, quiet)
+export const getCooperationProfileForm = () => request.get(`${root}/profile-form`, {}, quiet)
 export const cooperationCatalog = (keyword = '', options: { browse?: boolean | number; business_type?: string } = {}) => request.get(`${root}/catalog`, { keyword, ...options }, quiet)
 export const cooperationLeads = (data: CoopRow) => request.get(`${root}/leads`, data, quiet)
 export const cooperationLead = (id: number) => request.get(`${root}/leads/${id}`, {}, quiet)
@@ -28,6 +29,8 @@ export const createCooperationOrder = (data: CoopRow) => request.post(`${root}/o
 // Quote is read-only. Prices and unused-term credit are calculated by the server;
 // the returned token is confirmed later when creating a new entitlement order.
 export const cooperationOrder = (id: number) => request.get(`${root}/orders/${id}`, {}, quiet)
+// Reconcile/close only an abandoned original cashier attempt; never creates a charge.
+export const resumeCooperationOrder = (id: number) => request.post(`${root}/orders/${id}/resume`, {}, quiet)
 export const cooperationOrders = (query: CoopRow) => request.get(`${root}/orders`, query, quiet)
 export const closeCooperationOrder = (id: number) => request.post(`${root}/orders/${id}/close`, { confirm: true }, quiet)
 export const cooperationOrderRefund = (id: number) => request.get(`${root}/orders/${id}/refund`, {}, quiet)

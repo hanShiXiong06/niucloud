@@ -8,7 +8,7 @@
         <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="coop-error" />
         <HsxTable :columns="columns" :data="rows" :loading="loading" empty-text="没有符合条件的合作商户">
             <template #merchant="{row}"><div class="coop-cell"><strong>{{ row.name }}</strong><small>{{ row.contact_name }} · {{ row.mobile }}</small><small>{{ row.region_text||'地区未填写' }}</small><div class="coop-tags"><el-tag v-for="business in (row.business_capabilities||[]).slice(0,3)" :key="business.business_type" size="small" type="info" effect="plain">{{ business.business_name||coopBusiness(business.business_type) }}</el-tag></div></div></template>
-            <template #membership="{row}"><div class="coop-cell"><strong>{{ row.membership?.level_name||'普通会员' }}</strong><el-tag :type="entityMembershipState(row.membership).tone" effect="plain">{{ entityMembershipState(row.membership).label }}</el-tag><small>{{ expiry(row.membership) }}</small></div></template>
+            <template #membership="{row}"><MembershipSummary :membership="row.membership" /></template>
             <template #inventory="{row}"><div class="coop-cell"><strong>{{ Number(row.inventory_count||0)>0?row.inventory_count+' 条可售快照':Number(row.manual_model_count||0)>0?'已登记交付能力':'待登记交付能力' }}</strong><small v-if="Number(row.manual_model_count||0)>0">{{ row.manual_model_count }} 个自主登记型号</small><small v-else>接单前仍需向门店核对现货</small></div></template>
             <template #state="{row}"><el-tag :type="row.blocked_at?'danger':'success'" effect="plain">{{ row.blocked_at?'已停止合作':'合作中' }}</el-tag></template>
             <template #actions="{row}"><div class="coop-actions"><el-button link type="primary" @click="open(row)">查看资料</el-button><el-button v-if="canBlock" link type="danger" :disabled="!!row.blocked_at||actionBusy" @click="block(row)">停止合作</el-button></div></template>
@@ -34,6 +34,7 @@ import HsxPagination from '@/addon/hsx_components/components/HsxPagination/index
 import HsxDrawer from '@/addon/hsx_components/components/HsxDrawer/index.vue'
 import RegionSelect from '../components/RegionSelect.vue'
 import CooperationFilter from './CooperationFilter.vue'
+import MembershipSummary from './MembershipSummary.vue'
 import { blockCooperationPartner,getCooperationPartners,getCooperationBusinessLicense } from '../../api/cooperation'
 import { normalizeEntityLevels,entitySeatText,entityMembershipState,subjectCapabilityLabels,type EntityLevel } from '../../composables/entity'
 import { coopBusiness,coopError,coopTime,useCooperationList,type CoopRow } from '../../composables/cooperation'

@@ -42,6 +42,34 @@ final class CapabilityService
     private function savedBusinesses(int $merchantId): array
     {
         $value=CatalogConfigStorage::read($this->context->site,self::PREFIX.$merchantId);
+        return self::savedFromValue($value);
+    }
+
+    /** Bounded list summaries retain dimension checks, without copying all item payloads. */
+    public function summaries(array $merchantIds,array $config): array
+    {
+        $keys=[];foreach($merchantIds as $id) $keys[]=self::PREFIX.(int)$id;
+        $values=CatalogConfigStorage::readMany($this->context->site,$keys);
+        $definitions=array_column($config['businesses'],null,'key');$result=[];
+        foreach($merchantIds as $id) {
+            $entries=[];$count=0;$models=0;
+            foreach(self::savedFromValue($values[self::PREFIX.(int)$id]??[]) as $entry) {
+                $business=$definitions[$entry['business_type']??'']??null;
+                if(!$business) continue;
+                $itemCount=count(self::itemsForDimension($entry,(string)$business['dimension']));
+                if(!$itemCount) continue;
+                $entries[]=['business_type'=>$business['key'],'business_name'=>$business['name'],
+                    'dimension'=>$business['dimension'],'option_count'=>$itemCount];
+                $count+=$itemCount;
+                if($business['key']==='purchase') $models=$itemCount;
+            }
+            $result[(int)$id]=['business_capabilities'=>$entries,'business_capability_count'=>$count,'manual_model_count'=>$models];
+        }
+        return $result;
+    }
+
+    private static function savedFromValue(array $value): array
+    {
         if (array_key_exists('business_capabilities',$value)) return is_array($value['business_capabilities'])?$value['business_capabilities']:[];
         // Existing declarations are readable as second-hand capability, never mass-migrated.
         $items=array_values(array_filter($value['models']??[],static fn($row):bool=>is_array($row)&&is_string($row['id']??null)&&is_string($row['title']??null)&&is_string($row['brand']??null)));

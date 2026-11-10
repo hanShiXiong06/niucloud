@@ -23,10 +23,65 @@ final class EntityMembershipService
         $state=self::stateFrom($rows,$partner,[],$now??time());
         // A renamed directory label is presentation, not a new entitlement.
         // Keep paid rights, capacity, amount and expiry frozen; never rewrite the receipt.
-        foreach($config['membership_levels']??[] as $tier) if (($tier['code']??'')===$state['level_code']) {$state['level_name']=$tier['name'];$state['level_visual']=$tier['level_visual'];$state['level_color']=$tier['level_visual']['accent_color'];break;}
         $exited=MembershipDepositService::exited($site,$merchant,$lock);
+        return self::displayState($state,$site,$merchant,$config,$exited,self::ledgerNeedsReview($rows));
+    }
+
+    /** Request-scoped, read-only projection. Payment/write gates must keep using state(..., lock:true).
+     * Loads the same receipts and runs the same snapshot/refund/dependency validation as a single read.
+     * Does not create missing partner records or cache financial results across requests.
+     */
+    public static function states(int $site,array $merchantIds,array $config=[],?int $now=null): array
+    {
+        $ids=array_values(array_unique(array_filter(array_map('intval',$merchantIds),static fn(int $id):bool=>$id>0)));
+        if(!$ids)return[];
+        $now=$now??time();$out=[];
+        foreach(array_chunk($ids,500)as$chunk){
+            $partners=Store::query('partner',$site)->whereIn('merchant_id',$chunk)->select()->toArray();$partnerMap=[];
+            foreach($partners as$partner)$partnerMap[(int)$partner['merchant_id']]=$partner;
+            $orders=Store::query('coop_order',$site)->whereIn('merchant_id',$chunk)->where('purpose','membership')->where('status','paid')->order('id')->select()->toArray();
+            $grouped=[];$payments=[];$refunds=[];
+            foreach($orders as$order)$grouped[(int)$order['merchant_id']][]=$order;
+            if($orders){
+                $paid=Db::name('pay')->where('site_id',$site)->where('trade_type',PaymentService::TRADE_TYPE)->whereIn('trade_id',array_column($orders,'id'))->where('status',PayDict::STATUS_FINISH)->order('id')->select()->toArray();
+                foreach($paid as$receipt){$key=(int)$receipt['trade_id'].':'.(string)$receipt['out_trade_no'];if(!isset($payments[$key]))$payments[$key]=$receipt;}
+                // Preserve the single-read refund lookup even for a malformed
+                // empty receipt reference; dropping it could hide an existing refund.
+                $nos=array_values(array_unique(array_map('strval',array_column($orders,'out_trade_no'))));
+                if($nos)foreach(Db::name('pay_refund')->where('site_id',$site)->whereIn('out_trade_no',$nos)->select()->toArray()as$refund)$refunds[(string)$refund['out_trade_no']][]=$refund;
+            }
+            $exits=MembershipDepositService::exitedMany($site,$chunk);
+            foreach($chunk as$id){
+                $partner=$partnerMap[$id]??['site_id'=>$site,'merchant_id'=>$id];
+                $ledger=self::ledger($site,$id,false,['orders'=>$grouped[$id]??[],'payments'=>$payments,'refunds'=>$refunds]);
+                $out[$id]=self::displayState(self::stateFrom($ledger,$partner,[],$now),$site,$id,$config,!empty($exits[$id]),self::ledgerNeedsReview($ledger));
+            }
+        }
+        return$out;
+    }
+
+    private static function ledgerNeedsReview(array $rows):bool
+    {
+        foreach($rows as$row)if(!empty($row['review'])||!empty($row['refund_pending']))return true;
+        return false;
+    }
+
+    private static function displayState(array $state,int $site,int $merchant,array $config,bool $exited,bool $review):array
+    {
+        foreach($config['membership_levels']??[] as $tier) if (($tier['code']??'')===$state['level_code']) {$state['level_name']=$tier['name'];$state['level_visual']=$tier['level_visual'];$state['level_color']=$tier['level_visual']['accent_color'];break;}
         $state['cooperation_exited']=$exited;
+        // Read-only explanation for operators; never substitute it for the
+        // existing active/capability and locked payment/renewal decisions.
+        $state['review_required']=$review;
         if($exited){$state['active']=false;$state['capabilities']=MembershipCatalogService::emptyCapabilities();$state['benefits']=MembershipCatalogService::benefits($state['capabilities']);}
+        // Presentation is shared by the subject page and optional member-admin
+        // extension. It must not replace active/capabilities in authorization.
+        if($review){$status='review';$label='待核对';}
+        elseif($exited){$status='inactive';$label='协作已停用';}
+        elseif($state['active']){$status='active';$label='生效中';}
+        elseif((int)$state['expires_at']>0){$status='expired';$label='已到期';}
+        else{$status='not_opened';$label='未开通';}
+        $state['display_status']=$status;$state['display_status_text']=$label;
         return $state+['merchant_id'=>$merchant,'configuration_source'=>'framework_member_level'];
     }
 
@@ -255,16 +310,21 @@ final class EntityMembershipService
         return $complete;
     }
 
-    private static function ledger(int $site,int $merchant,bool $lock=false): array
+    private static function ledger(int $site,int $merchant,bool $lock=false,?array $preloaded=null): array
     {
-        $query=Store::query('coop_order',$site)->where('merchant_id',$merchant)->where('purpose','membership')->where('status','paid')->order('id');if ($lock) $query->lock(true);$rows=$query->select()->toArray();$out=[];
+        if($preloaded===null){$query=Store::query('coop_order',$site)->where('merchant_id',$merchant)->where('purpose','membership')->where('status','paid')->order('id');if ($lock) $query->lock(true);$rows=$query->select()->toArray();}
+        else $rows=$preloaded['orders'];
+        $out=[];
         foreach($rows as $row) {
             $rule=Data::decode($row['rule_json']);$row['rule']=$rule;$row['valid']=false;$row['refund_pending']=false;$row['review']=!empty($rule['requires_manual_review']);$parts=null;
             try {
                 self::assertSnapshot($row,$rule);
-                $payment=Db::name('pay')->where('site_id',$site)->where('trade_type',PaymentService::TRADE_TYPE)->where('trade_id',$row['id'])->where('out_trade_no',$row['out_trade_no'])->where('status',PayDict::STATUS_FINISH);if ($lock) $payment->lock(true);$pay=$payment->find();
+                if($preloaded===null){$payment=Db::name('pay')->where('site_id',$site)->where('trade_type',PaymentService::TRADE_TYPE)->where('trade_id',$row['id'])->where('out_trade_no',$row['out_trade_no'])->where('status',PayDict::STATUS_FINISH);if ($lock) $payment->lock(true);$pay=$payment->find();}
+                else $pay=$preloaded['payments'][(int)$row['id'].':'.(string)$row['out_trade_no']]??null;
                 if (!$pay||$pay['main_type']!==PayDict::MEMBER||(int)$pay['main_id']!==(int)$row['member_id']||Rules::cents((string)$pay['money'])!==Rules::cents((string)$row['amount'])) throw new CommonException('原会员收款事实不完整');
-                $refundQuery=Db::name('pay_refund')->where('site_id',$site)->where('out_trade_no',$row['out_trade_no']);if ($lock) $refundQuery->lock(true);$refunds=$refundQuery->select()->toArray();$refunded=0;
+                if($preloaded===null){$refundQuery=Db::name('pay_refund')->where('site_id',$site)->where('out_trade_no',$row['out_trade_no']);if ($lock) $refundQuery->lock(true);$refunds=$refundQuery->select()->toArray();}
+                else $refunds=$preloaded['refunds'][(string)$row['out_trade_no']]??[];
+                $refunded=0;
                 foreach($refunds as $refund) {if ($refund['status']===RefundDict::SUCCESS) $refunded+=Rules::cents((string)$refund['money']);if (in_array($refund['status'],[RefundDict::WAIT,RefundDict::DEALING],true)) $row['refund_pending']=true;}
                 if(($rule['schema_version']??'')===self::SNAPSHOT_SCHEMA){$parts=MembershipCostService::refundedComponents($row,$rule,$refunds);$refunded=$parts['total'];$row['refund_pending']=$parts['pending'];if($parts['review'])$row['review']=true;}
                 $row['refunded']=$refunded;$rightsRefunded=$refunded;

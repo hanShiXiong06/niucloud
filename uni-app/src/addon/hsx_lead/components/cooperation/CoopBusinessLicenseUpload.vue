@@ -1,6 +1,6 @@
 <template>
     <view class="coop-license-upload">
-        <view class="coop-license-upload__heading"><text>营业执照</text><text class="coop-license-upload__optional">选填</text><view class="coop-license-upload__privacy"><u-icon name="lock" size="12" color="#71849c" /><text>仅本人和平台可查看</text></view></view>
+        <view class="coop-license-upload__heading"><text>营业执照</text><text class="coop-license-upload__optional">{{ required ? '必填' : '选填' }}</text><view class="coop-license-upload__privacy"><u-icon name="lock" size="12" color="#71849c" /><text>仅本人和平台可查看</text></view></view>
         <view class="coop-license-upload__content">
             <view v-if="modelValue" class="coop-license-upload__tile" role="button" aria-label="预览营业执照" :aria-disabled="uploading || reading" @tap.stop="preview">
                 <image v-if="previewSource" :src="previewSource" mode="aspectFit" />
@@ -19,7 +19,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { coopError, previewCooperationBusinessLicense, uploadCooperationBusinessLicense } from '../../api/cooperation'
-const props = withDefaults(defineProps<{ modelValue?: string; disabled?: boolean }>(), { modelValue: '', disabled: false })
+const props = withDefaults(defineProps<{ modelValue?: string; disabled?: boolean; required?: boolean }>(), { modelValue: '', disabled: false, required: false })
 const emit = defineEmits<{ (event: 'update:modelValue', value: string): void; (event: 'pending', value: boolean): void }>()
 const uploader = ref<{ chooseFile: () => void } | null>(null), uploading = ref(false), reading = ref(false), error = ref(''), previewSource = ref('')
 let disposed = false, generation = 0, localFile = ''

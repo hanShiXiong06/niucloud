@@ -28,6 +28,8 @@ use think\db\exception\ModelNotFoundException;
  */
 class WeappTemplateService extends BaseAdminService
 {
+    /** Optional discovery contract: pending definitions are visible but never sent to a template provider. */
+    public const SUPPORTS_PENDING_DEFINITIONS = true;
 
     /**
      * 获取订阅消息
@@ -78,7 +80,9 @@ class WeappTemplateService extends BaseAdminService
         $key = $item['key'] ?? '';
         $weapp = $item['weapp'] ?? [];
         $tid = $weapp['tid'] ?? '';
-        if(empty($tid)) $error = 'WECHAT_TEMPLATE_NEED_NO';
+        if (!empty($weapp['configuration_required']) || empty($tid) || (is_string($tid) && trim($tid) === '')) {
+            throw new NoticeException($weapp['configuration_message'] ?? 'WECHAT_TEMPLATE_NEED_NO');
+        }
         $weapp_template_id = $item['weapp_template_id'];
         //删除原来的消息模板
         $template_loader = (new TemplateLoader(NoticeTypeDict::WEAPP, ['site_id' => $this->site_id]));

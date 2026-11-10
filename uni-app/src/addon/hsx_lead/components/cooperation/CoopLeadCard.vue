@@ -14,6 +14,11 @@
 <u-icon name="home" size="14" color="#8b929c" />
 <text>{{ direction === 'incoming' ? '来自' : '交付给' }} {{ counterparty.name }}</text>
 </view>
+<view v-if="assigneeName" class="coop-lead-card__shop">
+<u-icon name="account" size="14" color="#8b929c" />
+<text>接收成员 · {{ assigneeName }}</text>
+</view>
+<CoopResponseDeadline :lead="lead" :active="active" :direction="direction" compact />
 <view class="coop-lead-card__foot">
 <text>{{ coopDate(lead.update_time || lead.create_time) }}</text>
 <text v-if="lead.can_cancel" class="coop-card-cancel" @tap.stop="$emit('cancel', lead.id)">取消线索</text>
@@ -25,9 +30,11 @@
 import { computed } from 'vue'
 import { businessLabels, coopDate, coopStatusLabels, type CoopRow, type Direction } from '../../api/cooperation'
 import CoopModels from './CoopModels.vue'
-const props = defineProps<{ lead: CoopRow; direction: Direction }>()
+import CoopResponseDeadline from './CoopResponseDeadline.vue'
+const props = withDefaults(defineProps<{ lead: CoopRow; direction: Direction; active?: boolean }>(), { active: true })
 defineEmits<{ (event: 'open' | 'select' | 'cancel', id: number): void }>()
 const counterparty = computed(() => props.direction === 'incoming' ? props.lead.publisher : props.lead.receiver)
+const assigneeName = computed(() => props.lead.is_internal ? String(props.lead.internal_assignee?.name || props.lead.internal_assignee_name || '') : '')
 </script>
 <style scoped>.coop-card-cancel { margin-left: auto; padding: 15rpx 6rpx; font-size: 23rpx; color: #788594; white-space: nowrap; }</style>
 <style scoped lang="scss">.coop-lead-card { padding: 28rpx; margin-bottom: 20rpx; border-radius: 16rpx; background: #fff; }.coop-lead-card__head { display: flex; justify-content: space-between; gap: 16rpx; align-items: flex-start; margin-bottom: 24rpx; }.coop-lead-card__customer { min-width: 0; font-size: 31rpx; font-weight: 650; line-height: 1.6; word-break: break-word; }.coop-business-tag { display: inline-block; font-size: 21rpx; padding: 1rpx 10rpx; margin-left: 12rpx; color: #7f8791; font-weight: 400; background: #f2f4f6; border-radius: 5rpx; vertical-align: 3rpx; }.coop-status { flex: none; font-size: 22rpx; line-height: 1.7; padding: 3rpx 10rpx; border-radius: 5rpx; color: #828a95; background: #f2f4f6; }.coop-status.is-selecting,.coop-status.is-assigned,.coop-status.is-unpaid { color: #a76637; background: #fff1e8; }.coop-status.is-following { color: #4d6e97; background: #edf3fa; }.coop-status.is-paid { color: #49735e; background: #edf7f0; }.coop-lead-card__region,.coop-lead-card__shop { margin-top: 19rpx; font-size: 23rpx; line-height: 1.7; color: #7b8490; display: flex; align-items: center; gap: 8rpx; }.coop-lead-card__foot { display: flex; justify-content: space-between; align-items: center; gap: 12rpx; border-top: 1rpx solid #eff1f4; margin-top: 23rpx; padding-top: 20rpx; color: #8f97a1; font-size: 21rpx; }.coop-card-action { margin: 0; font-size: 23rpx; padding: 0 25rpx; height: 64rpx; line-height: 64rpx; background: #fff; color: #4c5662; border: 1rpx solid #dde2e8; border-radius: 36rpx; flex: none; }.coop-card-action::after { border: 0; }.coop-card-action.primary { background: var(--primary-color, #d93833); color: #fff; border-color: transparent; }</style>

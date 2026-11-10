@@ -229,7 +229,8 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_coop_order` (
   PRIMARY KEY (`id`), UNIQUE KEY `uk_site_business` (`site_id`,`business_key`),
   UNIQUE KEY `uk_site_no` (`site_id`,`order_no`),
   KEY `idx_site_member` (`site_id`,`member_id`,`id`),
-  KEY `idx_site_merchant` (`site_id`,`merchant_id`,`status`,`id`)
+  KEY `idx_site_merchant` (`site_id`,`merchant_id`,`status`,`id`),
+  KEY `idx_status_expiry` (`status`,`create_time`,`site_id`,`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Framework payment trade snapshots, never customer purchase money';
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_review` (
@@ -281,5 +282,107 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_promotion_reward` (
   KEY `idx_due` (`status`,`available_at`,`site_id`,`id`),
   KEY `idx_receipt` (`site_id`,`out_trade_no`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='First-level promotion award audit; money remains in framework member commission';
+
+-- Structured runtime facts; rules/templates remain in the framework configuration.
+CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_notice_task` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int unsigned NOT NULL,
+  `event_key` varchar(64) NOT NULL,
+  `source_type` varchar(32) NOT NULL,
+  `source_id` bigint unsigned NOT NULL,
+  `recipient_member_id` int unsigned NOT NULL,
+  `channel` varchar(16) NOT NULL,
+  `dedupe_key` char(64) NOT NULL,
+  `status` varchar(32) NOT NULL DEFAULT 'pending',
+  `payload_json` longtext NULL,
+  `attempt_count` int unsigned NOT NULL DEFAULT 0,
+  `manual_retry_count` int unsigned NOT NULL DEFAULT 0,
+  `next_retry_at` int unsigned NOT NULL DEFAULT 0,
+  `lease_token` char(32) NOT NULL DEFAULT '',
+  `lease_until` int unsigned NOT NULL DEFAULT 0,
+  `expires_at` int unsigned NOT NULL DEFAULT 0,
+  `provider_code` varchar(40) NOT NULL DEFAULT '',
+  `framework_log_id` bigint unsigned NOT NULL DEFAULT 0,
+  `last_message` varchar(500) NOT NULL DEFAULT '',
+  `create_time` int unsigned NOT NULL DEFAULT 0,
+  `update_time` int unsigned NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_dedupe` (`site_id`,`dedupe_key`),
+  KEY `idx_due` (`status`,`next_retry_at`,`id`),
+  KEY `idx_site_due` (`site_id`,`status`,`next_retry_at`,`id`),
+  KEY `idx_site_page` (`site_id`,`id`),
+  KEY `idx_recipient` (`site_id`,`recipient_member_id`,`id`),
+  KEY `idx_source` (`site_id`,`source_type`,`source_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Member notice tasks; no credentials or payment authority';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_notice_attempt` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int unsigned NOT NULL,
+  `task_id` bigint unsigned NOT NULL,
+  `attempt_no` int unsigned NOT NULL,
+  `trigger_type` varchar(16) NOT NULL,
+  `operator_uid` int unsigned NOT NULL DEFAULT 0,
+  `reason` varchar(200) NOT NULL DEFAULT '',
+  `status` varchar(32) NOT NULL,
+  `provider_code` varchar(40) NOT NULL DEFAULT '',
+  `message` varchar(500) NOT NULL DEFAULT '',
+  `framework_log_id` bigint unsigned NOT NULL DEFAULT 0,
+  `lease_token` char(32) NOT NULL DEFAULT '',
+  `request_key` varchar(64) DEFAULT NULL,
+  `create_time` int unsigned NOT NULL DEFAULT 0,
+  `finish_time` int unsigned NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_attempt` (`site_id`,`task_id`,`attempt_no`),
+  UNIQUE KEY `uk_request` (`site_id`,`task_id`,`request_key`),
+  KEY `idx_task` (`site_id`,`task_id`,`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Notice attempt history; results are not delivery/read receipts';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_notice_preference` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int unsigned NOT NULL,
+  `member_id` int unsigned NOT NULL,
+  `event_key` varchar(64) NOT NULL,
+  `channel` varchar(16) NOT NULL,
+  `enabled` tinyint unsigned NOT NULL DEFAULT 1,
+  `create_time` int unsigned NOT NULL DEFAULT 0,
+  `update_time` int unsigned NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_preference` (`site_id`,`member_id`,`event_key`,`channel`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Member channel preference; never proof of native WeChat consent';
+
+-- Explicit additive upgrade: only the operator-attested receipt evidence table.
+-- Payment/refund balances and lifecycle remain in framework pay/pay_refund.
+CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_manual_receipt` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int unsigned NOT NULL,
+  `kind` varchar(16) NOT NULL,
+  `order_id` bigint unsigned NOT NULL,
+  `target_order_id` bigint unsigned NOT NULL DEFAULT 0,
+  `member_id` int unsigned NOT NULL,
+  `source_receipt_id` bigint unsigned NOT NULL DEFAULT 0,
+  `out_trade_no` varchar(64) NOT NULL DEFAULT '',
+  `refund_no` varchar(64) NOT NULL DEFAULT '',
+  `request_id` varchar(80) NOT NULL,
+  `method` varchar(20) NOT NULL,
+  `account_label` varchar(100) NOT NULL,
+  `external_no` varchar(100) NOT NULL,
+  `reference_hash` char(64) NOT NULL,
+  `amount` decimal(12,2) NOT NULL,
+  `received_at` int unsigned NOT NULL,
+  `operator_uid` int unsigned NOT NULL,
+  `status` varchar(24) NOT NULL,
+  `reason` varchar(500) NOT NULL,
+  `message` varchar(500) NOT NULL DEFAULT '',
+  `snapshot_json` longtext NOT NULL,
+  `create_time` int unsigned NOT NULL,
+  `update_time` int unsigned NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_request` (`site_id`,`kind`,`request_id`),
+  UNIQUE KEY `uk_reference` (`site_id`,`reference_hash`),
+  KEY `idx_source` (`site_id`,`order_id`,`kind`,`id`),
+  KEY `idx_target` (`site_id`,`target_order_id`,`kind`,`status`),
+  KEY `idx_payment` (`site_id`,`out_trade_no`),
+  KEY `idx_refund` (`site_id`,`refund_no`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Operator-attested payment/refund evidence; not a second wallet or automatic transfer';
 
 

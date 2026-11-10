@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import vm from 'node:vm'
 import { loadMobileUtility } from './mobile-utils.mjs'
+import { profileConfigApi } from './profile-config-fixture.mjs'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..'), require = createRequire(path.join(root, 'admin/package.json'))
@@ -126,7 +127,8 @@ mobile.state.changeProvider('closed'); check(mobile.state.provider.value === 'op
 
 const profile = setup('niucloud/addon/hsx_lead/uni-app/components/cooperation/CoopProfilePanel.vue', Vue.reactive({
     profile: { id: 7, provider_requested: 'closed', name: '合成门店', contact_name: '合成联系人', mobile: '18800000001', province_id:910000,city_id:910100,district_id: 910101, address: '合成地址', connection: { provider: 'closed', provider_name: '原渠道', channel_enabled: false } }, config: {}, providers, editing:true,onboarding: false, busy: false, error: ''
-}), { '../../api/cooperation': { coopDate: String, coopMoney: String }, '@/utils/common': { img: value => value } }, {uni:{getStorageSync:()=>'',setStorageSync(){},removeStorageSync(){}}})
+}), { '../../api/cooperation': { ...profileConfigApi, coopDate: String, coopMoney: String }, '@/utils/common': { img: value => value } }, {uni:{getStorageSync:()=>'',setStorageSync(){},removeStorageSync(){}}})
+await flush()
 profile.state.open()
 check(profile.emitted.some(event=>event[0]==='edit'),'profile entry opens the dedicated edit route without mutating ERP')
 const oldIndex = profile.state.providerOptions.value.findIndex(item => item.key === 'closed'), openIndex = profile.state.providerOptions.value.findIndex(item => item.key === 'open')

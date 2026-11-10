@@ -88,6 +88,8 @@ class CoreMemberAccountService extends BaseCoreService
                 $account_type => $account_new_data,
                 $account_type . "_get" => $account_type_get
             ];
+            // Stable source identity for optional account-event consumers.
+            $data['account_log_id'] = (int) $res->id;
             event("MemberAccount", $data);
             Db::commit();
             return $res->id;

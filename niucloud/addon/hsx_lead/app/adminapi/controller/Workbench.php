@@ -21,7 +21,11 @@ final class Workbench extends BaseAdminController
     public function probeConnection(int $id) { return success((new ConnectionService($this->context()))->probe($id,$this->request->param())); }
     public function activateConnection(int $id) { return success((new ConnectionService($this->context()))->activate($id,$this->request->param())); }
     public function connectionSettings(int $id) { return success((new ConnectionService($this->context()))->syncSettings($id,$this->request->param())); }
-    public function noticeConfig() { $ctx=$this->context(); $ctx->manager(); return success((new NoticeConfigService())->get($ctx->site)); }
+    public function noticeConfig() {
+        $ctx=$this->context();$ctx->manager();$input=$this->request->param();
+        if (($input['library']??null)==='1'||($input['library']??null)===1) return success((new \addon\hsx_lead\app\service\WeappNoticeLibrary())->read($ctx->site,$input));
+        return success((new NoticeConfigService())->get($ctx->site));
+    }
     public function saveNoticeConfig() { $ctx=$this->context(); $ctx->manager(); return success((new NoticeConfigService())->save($ctx->site,$this->request->param(),$ctx->uid)); }
     public function catalog() { return success((new CatalogService($this->context()))->get($this->request->param())); }
     public function saveCatalog() { return success((new CatalogService($this->context()))->save($this->request->param())); }

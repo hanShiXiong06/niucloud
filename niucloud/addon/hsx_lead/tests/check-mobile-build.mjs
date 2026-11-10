@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import vm from 'node:vm'
+import os from 'node:os'
+import { spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 
@@ -24,7 +26,7 @@ const expectations = {
     CoopMembershipEntry: ['entity-membership-entry', 'entity-membership-entry__body', 'entity-membership-entry__title', 'entity-membership-entry__hint', 'entity-membership-entry__bottom'],
     CoopInvitePoster: ['coop-poster', 'coop-poster__header', 'coop-poster__title', 'coop-poster__preview', 'coop-poster__image', 'coop-poster__status', 'coop-poster__retry', 'coop-poster__actions', 'coop-poster__cancel', 'coop-poster__primary', 'coop-poster__error', 'coop-poster__settings'],
     CoopLevelBadge: ['coop-level-badge', 'coop-level-badge__surface', 'coop-level-badge__mark', 'coop-level-badge__caption', 'coop-level-badge__state', 'coop-level-badge__edge'],
-    CoopBusinessIcon: ['coop-business-icon', 'coop-business-icon__fill', 'coop-business-icon__line'],
+    CoopBusinessIcon: ['coop-business-icon'],
     CoopBusinessNavigation: ['lead-business', 'lead-business-heading', 'lead-business-subtitle', 'lead-business-items', 'lead-business-message', 'lead-business-error'],
     CoopRoleEntryCard: ['coop-role-card', 'coop-role-card__mask', 'coop-role-card__content', 'coop-role-card__copy', 'coop-role-card__title', 'coop-role-card__subtitle', 'coop-role-card__button', 'coop-role-card__art'],
     CoopExperienceProgress: ['coop-experience', 'coop-experience__heading', 'coop-experience__value', 'coop-experience__target', 'coop-experience__hint'],
@@ -32,9 +34,11 @@ const expectations = {
     CoopBusinessLicenseUpload: ['coop-license-upload', 'coop-license-upload__tile', 'coop-license-upload__more', 'coop-license-upload__busy', 'coop-license-upload__error'],
     CoopStorefrontUpload: ['coop-storefront-upload', 'coop-storefront-upload__row', 'coop-storefront-upload__title', 'coop-storefront-upload__controls', 'coop-storefront-upload__tile', 'coop-storefront-upload__choose', 'coop-storefront-upload__preview', 'coop-storefront-upload__more', 'coop-storefront-upload__busy', 'coop-storefront-upload__error'],
     CoopPaymentSummary: ['coop-payment-summary', 'coop-payment-purchase', 'coop-payment-kind', 'coop-payment-symbol', 'coop-payment-name', 'coop-payment-caption', 'coop-payment-total', 'coop-payment-amount', 'coop-payment-loading', 'coop-payment-feedback', 'coop-payment-next'],
+    CoopPaymentHelp: ['coop-payment-help', 'coop-payment-help__entry', 'coop-payment-help__title', 'coop-payment-help__mount', 'coop-payment-help__sheet', 'coop-payment-help__head', 'coop-payment-help__body', 'coop-payment-help__content', 'coop-payment-help__qr', 'coop-payment-help__detail', 'coop-payment-help__safe-end'],
     CoopProfileDiySection: ['lead-profile-section', 'lead-profile-section__heading', 'lead-profile-section__demo', 'lead-profile-section__mask', 'lead-profile-section__content'],
     CoopWalletPanel: ['coop-balance-card', 'coop-balance', 'coop-withdraw-entry', 'coop-income-summary', 'coop-wallet-entry', 'coop-menu-row', 'coop-loadmore'],
     CoopTaskDetail: ['coop-form-section', 'coop-customer-contact', 'coop-state-heading', 'coop-history-item', 'coop-footer-actions', 'coop-secondary', 'coop-primary'],
+    CoopResponseDeadline: ['coop-response-deadline', 'coop-response-deadline__line', 'coop-response-deadline__digits', 'coop-response-deadline__hint'],
     CoopConnectionPanel: ['coop-form-section', 'coop-form-row', 'coop-form-column', 'coop-detail-shop', 'coop-small-actions', 'coop-captcha-row', 'coop-consent', 'coop-connection-overview', 'coop-connection-status', 'coop-connection-history', 'coop-sync-log__toggle', 'coop-sync-log__detail', 'coop-connection-settings'],
     CoopRegionFields: ['region-result', 'region-result__content', 'region-result__tail', 'region-level'],
     CoopTaskSheet: ['coop-sheet', 'coop-sheet__head', 'coop-sheet__body', 'coop-sheet__footer', 'coop-icon-button', 'coop-popup-mount'],
@@ -155,6 +159,9 @@ const nativeAvatarCss = fs.readFileSync(path.join(directory, 'CoopMerchantAvatar
 assert.ok(nativeAvatarCss.includes('--lead-member-gradient') && nativeAvatarCss.includes('--lead-member-accent') && nativeAvatarCss.includes('prefers-reduced-motion'), 'Native avatar uses controlled skin variables and retains reduced-motion treatment'); checks++
 const nativeIconOptions = JSON.parse(fs.readFileSync(path.join(directory, 'CoopBusinessIcon.json'), 'utf8'))
 assert.ok(nativeIconOptions.usingComponents?.['u-icon']?.endsWith('/u-icon/u-icon'), 'Shared business symbols resolve the installed standard uview icon component'); checks++
+const nativeIconTemplate = fs.readFileSync(path.join(directory, 'CoopBusinessIcon.wxml'), 'utf8')
+assert.equal((nativeIconTemplate.match(/<u-icon\b/g) || []).length, 1, 'Native operation icon is one standard outline, not doubled fill/line layers'); checks++
+assert.ok(!/coop-business-icon__(?:fill|line)/.test(nativeIconTemplate), 'Retired doubled icon layers do not survive native compilation'); checks++
 const nativeIconCss = fs.readFileSync(path.join(directory, 'CoopBusinessIcon.wxss'), 'utf8')
 assert.ok(!/gradient\(|box-shadow|infinite/.test(nativeIconCss) && /(?:120ms|\.12s|0\.12s)/.test(nativeIconCss) && nativeIconCss.includes('prefers-reduced-motion'), 'Native business symbols retain neutral short-press styling without continuous decoration'); checks++
 const nativeInventory = fs.readFileSync(path.join(directory, 'CoopStoreInventory.js'), 'utf8')
@@ -208,11 +215,56 @@ assert.equal(returned.length, beforeCancel, 'Cancelling/returning alone must not
 nativeUpdate([])
 assert.equal(JSON.stringify(returned.at(-1)), JSON.stringify(['selected', []]), 'Explicitly clearing all choices returns an empty selection for required validation'); checks++
 const pages = [...(app.pages || []), ...(app.subPackages || app.subpackages || []).flatMap(group => group.pages.map(page => group.root.replace(/\/$/, '') + '/' + page))]
-assert.equal(pages.filter(value => value.startsWith('addon/hsx_lead/')).length, 9, 'Four merchant tabs plus home/task/catalog and subject membership/team pages must be registered'); checks++
-for (const route of ['entity', 'membership']) {
+const originalMerchantPages=['pages/index','pages/workbench/index','pages/stores/index','pages/wallet/index','pages/profile/index','pages/invite/index','pages/task/index','pages/catalog/index','pages/entity/index','pages/membership/index','pages/orders/index']
+assert.deepEqual(pages.filter(value=>value.startsWith('addon/hsx_lead/')).sort(),[...originalMerchantPages,'pages/notifications/index'].map(route=>'addon/hsx_lead/'+route).sort(),'All original eleven merchant/public invitation pages plus the new notification page must be registered exactly once');checks++
+for (const route of ['entity', 'membership', 'orders', 'invite', 'notifications']) {
     assert.ok(pages.includes(`addon/hsx_lead/pages/${route}/index`), `Native ${route} is a real navigable page`); checks++
     assert.ok(fs.readFileSync(path.join(output, `addon/hsx_lead/pages/${route}/index.wxss`), 'utf8').length > 0, `Native ${route} emits page-local styles`); checks++
 }
+const nativeRoutes={exports:{}}
+vm.runInNewContext(fs.readFileSync(path.join(output,'utils/pages.js'),'utf8'),{exports:nativeRoutes.exports,module:nativeRoutes},{timeout:1000})
+const protectedRoutes=nativeRoutes.exports.getNeedLoginPages().filter(route=>route.startsWith('/addon/hsx_lead/'))
+assert.deepEqual([...protectedRoutes].sort(),['task','catalog','entity','membership','orders','wallet','notifications'].map(route=>'/addon/hsx_lead/pages/'+route+'/index').sort(),'Actual framework login registry preserves every original protected merchant page and protects notification preferences');checks++
+for(const route of ['index','invite/index','workbench/index','stores/index','profile/index']){assert.ok(!protectedRoutes.includes('/addon/hsx_lead/pages/'+route),'Public merchant entry remains outside forced authentication: '+route);checks++}
+const notificationPath=path.join(output,'addon/hsx_lead/pages/notifications/index'),notificationCss=fs.readFileSync(notificationPath+'.wxss','utf8'),notificationWxml=fs.readFileSync(notificationPath+'.wxml','utf8'),notificationScript=fs.readFileSync(notificationPath+'.js','utf8'),notificationConfig=JSON.parse(fs.readFileSync(notificationPath+'.json','utf8'))
+assert.equal(notificationConfig.navigationBarTitleText,'通知偏好','Notification page has its own real native title');checks++
+assert.equal(notificationConfig.navigationStyle,'custom','Notification page reuses the custom native header');checks++
+for(const tag of ['cooperation-nav','coop-state','u-switch','u-button']){assert.ok(notificationConfig.usingComponents?.[tag],'Notification preferences resolve actual registered '+tag);checks++}
+const notificationScope=notificationScript.match(/"__scopeId","(data-v-[a-f\d]+)"/)?.[1]
+assert.ok(notificationScope,'Notification preferences retain their own compiled scoped stylesheet');checks++
+for(const className of ['account-notice-page','account-notice-scroll','account-notice-content','account-notice-heading','account-notice-card','account-notice-channel','account-notice-error','account-notice-footer']){assert.ok(notificationWxml.includes(className)&&notificationCss.includes('.'+className+'.'+notificationScope),'Native notification page renders and locally styles '+className);checks++}
+assert.match(notificationWxml,/<scroll-view\b[^>]*scroll-y[^>]*class="account-notice-scroll/,'Notification preferences retain native body scrolling below the fixed header');checks++
+assert.match(notificationWxml,/<button\b[^>]*bindtap="\{\{event\.[\w$]+\}\}"[^>]*>订阅此项<\/button>/,'Each native notification scene has its own user-initiated subscribe binding');checks++
+for(const name of ['CoopTaskDetail','CoopLeadCard']){const config=JSON.parse(fs.readFileSync(path.join(directory,name+'.json'),'utf8'));assert.ok(config.usingComponents?.['coop-response-deadline']?.endsWith('/CoopResponseDeadline')||config.usingComponents?.['coop-response-deadline']==='./CoopResponseDeadline','Native '+name+' reuses the same deadline component');checks++}
+for(const relative of ['components/cooperation/CoopCommissionForm','pages/membership/index','pages/orders/index']){
+ const base=path.join(output,'addon/hsx_lead',relative),config=JSON.parse(fs.readFileSync(base+'.json','utf8')),wxml=fs.readFileSync(base+'.wxml','utf8')
+ assert.ok(config.usingComponents?.['coop-payment-help']?.endsWith('/CoopPaymentHelp'),'Native '+relative+' resolves the shared payment help component');checks++
+ assert.equal((wxml.match(/<coop-payment-help\b/g)||[]).length,1,'Native '+relative+' mounts help once, outside repeated payment rows');checks++
+}
+const paymentHelpTemplate=fs.readFileSync(path.join(directory,'CoopPaymentHelp.wxml'),'utf8'),paymentHelpOptions=JSON.parse(fs.readFileSync(path.join(directory,'CoopPaymentHelp.json'),'utf8'))
+assert.match(paymentHelpTemplate,/<scroll-view\b[^>]*scroll-y[^>]*class="coop-payment-help__body/,'Native help retains an independent scroll body');checks++
+assert.ok(paymentHelpOptions.usingComponents?.['u-popup']?.endsWith('/u-popup/u-popup'),'Native help uses the installed popup, not a replacement cashier');checks++
+// Parse actual generated WXSS with WeChat's own compiler, not just PostCSS.
+const wxssCompiler=process.env.WXSS_COMPILER||'/Applications/wechatwebdevtools.app/Contents/Resources/app.asar.unpacked/node_modules/wcc-exec/wcsc'
+assert.ok(fs.existsSync(wxssCompiler),'A real local WeChat WXSS compiler is required; native grammar validation cannot silently skip');checks++
+const compiledWxss=fs.mkdtempSync(path.join(os.tmpdir(),'hsx-notice-native-wxss-'))
+try{
+ for(const relative of ['addon/hsx_lead/components/cooperation/CoopResponseDeadline.wxss','addon/hsx_lead/pages/notifications/index.wxss','addon/hsx_lead/components/cooperation/CoopProfilePanel.wxss','addon/hsx_lead/components/cooperation/CoopPaymentHelp.wxss']){
+  const result=spawnSync(wxssCompiler,['-lc','-pc','1','-o',path.join(compiledWxss,path.basename(path.dirname(relative))+'-'+path.basename(relative)+'.js'),'./'+relative],{cwd:output,encoding:'utf8',timeout:15000})
+  assert.ok(!result.error&&result.status===0,'Real WeChat WXSS grammar accepts '+relative+': '+(result.error?.message||result.stderr||result.stdout||'').slice(0,500));checks++
+ }
+}finally{fs.rmSync(compiledWxss,{recursive:true,force:true})}
+const nativeNoticeCalls=[],nativeNoticeReports=[],nativeNoticeEvents=['account_balance_changed','account_money_changed','account_commission_changed','cooperation_acceptance_reminder','cooperation_response_overdue','cooperation_assignment_accepted'].map((event_key,index)=>({event_key,name:'合成通知'+index,channels:['weapp','wechat','sms'].map(channel=>({channel,enabled:true,configured:true,authorization_required:channel==='weapp',...(channel==='weapp'?{template_id:'SYNTHETIC_NATIVE_TEMPLATE_'+index}:{})}))}))
+const actualVue=require('vue'),noticeVendor={...actualVue,index:{getStorageSync:()=>'',requestSubscribeMessage:options=>nativeNoticeCalls.push(options)}},nativeNoticeHook={exports:{}}
+vm.runInNewContext(fs.readFileSync(path.join(output,'addon/hsx_lead/composables/useAccountNoticePreferences.js'),'utf8'),{exports:nativeNoticeHook.exports,module:nativeNoticeHook,require:dependency=>{if(dependency.endsWith('/common/vendor.js'))return noticeVendor;if(dependency.endsWith('/utils/common.js'))return{getSiteId:()=>100005,getToken:()=> 'synthetic-native-member'};if(dependency.endsWith('/api/notice.js'))return{getAccountNoticePreferences:async()=>({data:{events:nativeNoticeEvents}}),reportAccountNoticeAuthorization:async keys=>nativeNoticeReports.push([...keys])};if(dependency.endsWith('/api/cooperation.js'))return{coopError:(e,f)=>e?.message||f};throw Error('Unexpected native notice dependency '+dependency)}},{timeout:1000})
+const compiledPreferences=nativeNoticeHook.exports.useAccountNoticePreferences();await compiledPreferences.load()
+assert.equal(compiledPreferences.events.value.length,6,'Actual compiled preference controller retains all six scenes rather than a fixed three-scene whitelist');checks++
+compiledPreferences.subscribe(nativeNoticeEvents[5].event_key);assert.deepEqual([...nativeNoticeCalls[0].tmplIds],['SYNTHETIC_NATIVE_TEMPLATE_5'],'Actual compiled controller requests only the explicitly selected last scene');checks++
+await nativeNoticeCalls[0].success({SYNTHETIC_NATIVE_TEMPLATE_5:'accept'});assert.equal(JSON.stringify(nativeNoticeReports),JSON.stringify([[nativeNoticeEvents[5].event_key]]),'Only accepted native template wakes its specific event');checks++
+const nativeNoticeStart=nativeNoticeCalls.length;compiledPreferences.subscribe();await nativeNoticeCalls.at(-1).success(Object.fromEntries(nativeNoticeCalls.at(-1).tmplIds.map(id=>[id,'reject'])));compiledPreferences.subscribe();assert.equal(nativeNoticeCalls.length,nativeNoticeStart+2,'Native grouped subscription advances only on a second explicit user action');checks++
+assert.deepEqual([...nativeNoticeCalls.at(-1).tmplIds],['SYNTHETIC_NATIVE_TEMPLATE_3','SYNTHETIC_NATIVE_TEMPLATE_4','SYNTHETIC_NATIVE_TEMPLATE_5'],'Actual compiled grouped subscription reaches later cooperation scenes');checks++
+assert.ok(nativeNoticeCalls.every(call=>call.tmplIds.length<=3),'Every actual compiled native consent call has at most three template IDs');checks++
+compiledPreferences.dispose()
 for (const route of ['workbench', 'stores']) {
     const config = JSON.parse(fs.readFileSync(path.join(output, `addon/hsx_lead/pages/${route}/index.json`), 'utf8'))
     assert.equal(config.enablePullDownRefresh, false, `${route}: z-paging owns refresh, not a second native page handler`); checks++
@@ -331,4 +383,4 @@ for (const route of ['entity', 'profile']) {
 }
 const nativeInvite = fs.readFileSync(path.join(output, 'addon/hsx_lead/utils/cooperation-invite.js'), 'utf8')
 assert.ok(nativeInvite.includes('handleOnloadParams') && nativeInvite.includes('promotion_invite'), 'Native QR bridge retains framework parsing and the short promotion flag mapping'); checks++
-console.log(JSON.stringify({ passed: true, checks, components, scope: 'Actual mp-weixin scoped WXSS and slot caller ownership; read-only local artifact check, not real-device visual acceptance' }))
+console.log(JSON.stringify({ passed: true, checks, components, wxss_compiler:'WeChat wcsc (required, not skipped)', scope: 'Actual mp-weixin output, scoped style/slot ownership, real WeChat WXSS grammar and generated preference controller with synthetic callbacks. No live APIs/consent prompts; temporary compiler output only, not real-device visual acceptance.' }))

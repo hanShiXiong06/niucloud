@@ -11,6 +11,7 @@ export function useCooperationSubscribe(options: { enabled?: () => boolean } = {
     const preparing = ref(false), requesting = ref(false), prepared = ref(false), templateIds = ref<string[]>([])
     const loading = computed(() => preparing.value || requesting.value)
     let disposed = false, owner = '', epoch = 0, pending: Promise<boolean> | null = null
+    let notifyPreparationFailure = false
     let supported = false
     // #ifdef MP-WEIXIN
     supported = true
@@ -20,26 +21,32 @@ export function useCooperationSubscribe(options: { enabled?: () => boolean } = {
     const current = (who: string, turn: number) => !disposed && enabled() && !!getToken() && who === owner && who === identity() && turn === epoch
     function identify() {
         const who = identity()
-        if (who !== owner) { owner = who; epoch++; templateIds.value = []; prepared.value = false; preparing.value = false; requesting.value = false; pending = null }
+        if (who !== owner) { owner = who; epoch++; templateIds.value = []; prepared.value = false; preparing.value = false; requesting.value = false; pending = null; notifyPreparationFailure = false }
         return who
     }
     function feedback(title: string) { uni.showToast({ title, icon: 'none' }) }
-    function prepare() {
+    function prepare(notifyFailure = false) {
         if (!enabled() || !supported || disposed || !getToken()) return Promise.resolve(false)
         const who = identify(), turn = epoch
-        if (pending) return pending
+        if (pending) { notifyPreparationFailure ||= notifyFailure; return pending }
         if (prepared.value) return Promise.resolve(true)
+        notifyPreparationFailure = notifyFailure
         preparing.value = true
         pending = (async () => {
             try {
-                const response: any = await getWeappTemplateId(noticeKeys)
+                const response: any = await Promise.resolve().then(() => current(who, turn) ? getWeappTemplateId(noticeKeys) : null)
                 if (!current(who, turn)) return false
                 if (!Array.isArray(response?.data)) throw new Error('invalid templates')
                 templateIds.value = [...new Set<string>(response.data.filter((value: unknown) => typeof value === 'string' && value.trim()).map((value: string) => value.trim()))].slice(0, 3)
                 prepared.value = true
                 return true
-            } catch (_) { return false }
-            finally { if (turn === epoch) { preparing.value = false; pending = null } }
+            } catch (_) {
+                // Background preloading stays quiet; an explicit subscription
+                // attempt must explain failure instead of staying "preparing".
+                if (current(who, turn) && notifyPreparationFailure) feedback('通知模板读取失败，请点击订阅重试')
+                return false
+            }
+            finally { if (turn === epoch) { preparing.value = false; pending = null; notifyPreparationFailure = false } }
         })()
         return pending
     }
@@ -53,7 +60,7 @@ export function useCooperationSubscribe(options: { enabled?: () => boolean } = {
             // Do not call the native authorization after an awaited network
             // request: that can lose WeChat's user-gesture context. Preload on
             // mount; if it is not ready, finish discovery and let the next tap authorize.
-            void prepare(); feedback('订阅入口正在准备，请稍后再点'); return Promise.resolve({ status: 'preparing' })
+            void prepare(true); feedback('订阅入口正在准备，请稍后再点'); return Promise.resolve({ status: 'preparing' })
         }
         if (!templateIds.value.length) { feedback('平台尚未配置通知模板，请联系管理员'); return Promise.resolve({ status: 'unconfigured' }) }
         const ids = [...templateIds.value]

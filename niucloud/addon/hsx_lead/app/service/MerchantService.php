@@ -18,18 +18,23 @@ final class MerchantService
     public function members(array $params = []): array
     {
         $this->context->manager();
-        $q = Db::name('member')->where('site_id',$this->context->site)->where('status',1)->where('is_del',0)->where('delete_time',0)->field('member_id,nickname,mobile');
+        $q = Db::name('member')->where('site_id',$this->context->site)->where('status',1)->where('is_del',0)->where('delete_time',0)->field('member_id,member_no,nickname,mobile');
         $key = Data::text($params,'keyword',100);
-        if ($key !== '') $q->whereLike('nickname|mobile','%'.$key.'%');
+        \addon\hsx_lead\app\support\AdminKeywordSearch::members($q,$this->context->site,$key);
         return $q->limit(200)->select()->map(function ($r) { $r['id']=$r['member_id']; return $r; })->toArray();
     }
 
     public function lists(array $params = []): array
     {
         $this->context->manager();
+        // The editor loads the large directory only when opened, under this
+        // same existing merchant API permission. Ordinary pages stay summaries.
+        if (in_array($params['definitions'] ?? null, [true, 1, '1'], true)) {
+            return ['business_definitions'=>$this->businessDefinitions()];
+        }
         $q=Data::query('merchant',$this->context->site);
         $key=Data::text($params,'keyword',100);
-        if ($key !== '') $q->whereLike('name|mobile|contact_name','%'.addcslashes($key, '\\%_').'%');
+        \addon\hsx_lead\app\support\AdminKeywordSearch::merchants($q,$this->context->site,$key);
         if (isset($params['status']) && $params['status'] !== '') $q->where('status',(int)$params['status']);
         MerchantRegion::apply($q, $params);
         if (in_array($params['picker'] ?? null, [true, 1, '1'], true)) {
@@ -44,18 +49,32 @@ final class MerchantService
             $ids=Data::query('connection',$this->context->site)->where('provider',$provider)->column('merchant_id');
             $q->whereIn('id',$ids?:[0]);
         }
+        $q->field('id,site_id,name,contact_name,mobile,province_id,city_id,district_id,address,member_id,status,create_time,update_time');
         $ready=Data::text($params,'ready_state',32);
         if ($ready!=='') {
             if (!in_array($ready,['member_required','membership_required','capability_required','connection_required','sync_required','ready','attention','paused'],true)) throw new CommonException('请选择有效的商户就绪状态');
             // Readiness spans merchant/member/auth/publication freshness. Filter the full
             // scoped set before pagination, never merely the currently requested page.
-            $rows=array_values(array_filter(array_map(fn($r)=>$this->present($r),$q->order('id desc')->select()->toArray()),fn($r)=>$r['ready_state']===$ready));
+            $presenter=new MerchantListService($this->context);
             $page=max(1,(int)($params['page']??1));$size=max(1,min(100,(int)($params['limit']??$params['page_size']??20)));
-            return ['data'=>array_slice($rows,($page-1)*$size,$size),'total'=>count($rows),'per_page'=>$size,'current_page'=>$page,'business_definitions'=>$this->businessDefinitions()];
+            $rows=[];$total=0;$start=($page-1)*$size;
+            // Keep cross-table readiness filtering before pagination, while
+            // bounding each batch's inventory/config/association read set.
+            $beforeId=null;
+            do {
+                $batchQuery=clone $q;
+                if($beforeId!==null) $batchQuery->where('id','<',$beforeId);
+                $batch=$batchQuery->order('id desc')->limit(100)->select()->toArray();
+                foreach($presenter->present($batch) as $row) if($row['ready_state']===$ready) {
+                    if($total>=$start&&count($rows)<$size) $rows[]=$row;
+                    $total++;
+                }
+                if($batch) $beforeId=(int)$batch[count($batch)-1]['id'];
+            } while(count($batch)===100);
+            return ['data'=>$rows,'total'=>$total,'per_page'=>$size,'current_page'=>$page];
         }
         $result=Data::page($q,$params);
-        $result['data']=array_map(fn($r)=>$this->present($r),$result['data']);
-        $result['business_definitions']=$this->businessDefinitions();
+        $result['data']=(new MerchantListService($this->context))->present($result['data']);
         return $result;
     }
 
@@ -83,7 +102,7 @@ final class MerchantService
             'membership_rank','display_rank','blocked_at','membership','membership_active','membership_tier','membership_expires_at',
             'can_collaborate','can_publish','can_accept','can_view_inventory','capabilities'] as $key) $row[$key]=$capability[$key];
         if ($withDefinitions) $row['business_definitions']=$this->businessDefinitions();
-        [$row['ready_state'],$row['ready_reason']]=$this->readiness($row,$conn,$member?:null);
+        [$row['ready_state'],$row['ready_reason']]=self::readiness($row,$conn,$member?:null);
         $row['service_areas']=Data::decode($row['service_areas_json']??'');
         unset($row['service_areas_json']);
         return $row;
@@ -139,7 +158,7 @@ final class MerchantService
         });
     }
 
-    private function readiness(array $merchant,array $conn,?array $member): array
+    public static function readiness(array $merchant,array $conn,?array $member): array
     {
         if (!$member || (int)$member['status']!==1 || (int)$member['is_del']!==0 || (int)$member['delete_time']>0) return ['member_required','请先绑定本站启用中的会员，商户才可独立接单'];
         if ((int)$merchant['status']!==1 || (int)($merchant['blocked_at']??0)>0) return ['paused','商户已停止合作，不参与门店推荐；历史记录仍保留'];

@@ -12,7 +12,7 @@ use think\facade\{Db,Log};
 /** Cancelling a payment never cancels a delivered lead or creates a refund. */
 final class PaymentOrderLifecycle
 {
-    public const COMMISSION_TIMEOUT_SECONDS=1200;
+    public const UNPAID_TIMEOUT_SECONDS=120;
     private ?\Closure $providerFactory;
     public function __construct(private Context $context,?callable $providerFactory=null) {$this->providerFactory=$providerFactory===null?null:\Closure::fromCallable($providerFactory);}
 
@@ -25,7 +25,7 @@ final class PaymentOrderLifecycle
         $this->own();$query=Store::query('coop_order',$this->context->site)->where('member_id',$this->context->memberId);
         foreach(['status'=>['unpaid','paid','closed'],'purpose'=>['membership','commission']]as$key=>$allowed){$value=$params[$key]??'';if($value!==''){if(!is_string($value)||!in_array($value,$allowed,true))throw new CommonException('付款订单筛选条件无效');$query->where($key,$value);}}
         OrderPaymentReadService::filter($query,$params,$this->context->site);
-        $page=Data::page($query,$params);$page['data']=array_map([PaymentService::class,'presentOrder'],$page['data']);$page['filters']=OrderPaymentReadService::options();return$page;
+        $page=Data::page($query,$params);$page['data']=ManualPaymentService::withPendingScope($this->context->site,array_column($page['data'],'id'),fn():array=>array_map([PaymentService::class,'presentOrder'],$page['data']));$page['filters']=OrderPaymentReadService::options();return$page;
     }
     public function close(int $id,array $input=[],bool $admin=false): array
     {
@@ -37,11 +37,22 @@ final class PaymentOrderLifecycle
         $reason=$admin?Data::text($input,'reason',500,true):'会员取消未支付订单';
         return self::closeSafely($this->context->site,$id,$admin?'admin':'member',$reason,$this->context->uid,$this->context->memberId,$this->providerFactory);
     }
+    /** A customer resuming an expired quote uses the same safe timeout path as the schedule. */
+    public function expireOwn(int $id): array
+    {
+        $this->own();$row=Store::row('coop_order',$this->context->site,$id);
+        if((int)$row['member_id']!==$this->context->memberId)throw new CommonException('只能核对本人创建的付款订单');
+        return self::closeSafely($this->context->site,$id,'timeout','未支付超时自动关闭',0,$this->context->memberId,$this->providerFactory);
+    }
     public static function expiresAt(array $row): int
     {
-        $created=(int)($row['create_time']??0);$rule=Data::decode($row['rule_json']??null);
-        if(($row['purpose']??'')==='membership')return (int)($rule['quoted_at']??$created)+600;
-        return $created+self::COMMISSION_TIMEOUT_SECONDS;
+        // Use order creation, not update_time: opening the cashier or checking a
+        // payment must not extend its life. The signed membership quote retains
+        // its own maximum validity and cannot be revived by creating an order.
+        $created=(int)($row['create_time']??0);$deadline=$created+self::UNPAID_TIMEOUT_SECONDS;
+        $rule=Data::decode($row['rule_json']??null);
+        if(($row['purpose']??'')==='membership')return min($deadline,(int)($rule['quoted_at']??$created)+600);
+        return $deadline;
     }
     public static function decorate(array $raw,array $presented): array
     {
@@ -66,20 +77,51 @@ final class PaymentOrderLifecycle
             PromotionService::lockSite($site);$row=Store::row('coop_order',$site,$id,true);
             if($row['status']==='closed')return PaymentService::presentOrder($row);
             if($row['status']!=='unpaid')throw new CommonException('原订单已收款或状态已变化，不能取消，请刷新核对');
-            $rule=Data::decode($row['rule_json']);if(!empty($rule['requires_manual_review']))throw new CommonException('原支付仍待平台核对，未关闭订单');
+            $rule=Data::decode($row['rule_json']);
+            $recoverReceipt=$by==='timeout'&&($rule['requires_manual_review']??'')==='gateway_payment_receipt_review';
+            if(!empty($rule['requires_manual_review'])&&!$recoverReceipt)throw new CommonException('原支付仍待平台核对，未关闭订单');
             if(!in_array($row['purpose'],['membership','commission'],true))throw new CommonException('未知付款业务，未执行关闭');
             if($by==='timeout'&&self::expiresAt($row)>time())return PaymentService::presentOrder($row);
             $pays=Db::name('pay')->where('site_id',$site)->where('trade_type',PaymentService::TRADE_TYPE)->where('trade_id',$id)->lock(true)->select()->toArray();$knownNo=(string)$row['out_trade_no']==='';
             foreach($pays as$pay){
                 if($pay['main_type']!==PayDict::MEMBER||(int)$pay['main_id']!==(int)$row['member_id']||Rules::cents((string)$pay['money'])!==Rules::cents((string)$row['amount']))throw new CommonException('原支付流水归属或金额异常，未关闭订单');
-                if(!in_array((int)$pay['status'],[(int)PayDict::STATUS_WAIT,(int)PayDict::STATUS_CANCEL,(int)PayDict::STATUS_ING],true))throw new CommonException('原收银台已收款或状态待核对；当前未关闭业务，请勿另开付款');
+                if(!in_array((int)$pay['status'],[(int)PayDict::STATUS_WAIT,(int)PayDict::STATUS_CANCEL,(int)PayDict::STATUS_ING,(int)PayDict::STATUS_FINISH],true))throw new CommonException('原收银台状态待核对；当前未关闭业务，请勿另开付款');
+                if(PaymentService::hasUnconfirmedBalanceDebit($site,$pay))throw new CommonException('发现本次付款的账户扣款记录，未关闭订单，请核对到账情况');
                 if((string)$pay['out_trade_no']===(string)$row['out_trade_no'])$knownNo=true;
             }
             if(!$knownNo)throw new CommonException('原付款流水去向待核实，未关闭订单');
+            $finished=array_values(array_filter($pays,static fn(array $pay):bool=>(int)$pay['status']===(int)PayDict::STATUS_FINISH));
+            if($finished){
+                // A durable successful core receipt is a recovery fact, not a
+                // reason to leave the same unpaid business blocked forever.
+                // Never close any sibling trade or initiate a second payment.
+                $openReceipts=array_filter($pays,static fn(array $pay):bool=>(int)$pay['status']!==(int)PayDict::STATUS_CANCEL);
+                if(count($finished)!==1||count($openReceipts)!==1){
+                    $rule['requires_manual_review']='multiple_payment_receipts';
+                    Store::query('coop_order',$site)->where('id',$id)->update(['rule_json'=>Data::json($rule)]);
+                    return self::closeCheck($site,$id,'paid_pending','发现多笔未取消的付款流水且已有收款，未关闭或重复入账，请平台核对');
+                }
+                $paid=$finished[0];
+                if($recoverReceipt){
+                    // Retry only our transient receipt-recovery marker. Real
+                    // business conflicts (blocked shop, multiple receipts,
+                    // refund/rights conflict) are never cleared by a sweep.
+                    unset($rule['requires_manual_review']);
+                    Store::query('coop_order',$site)->where('id',$id)->update(['rule_json'=>Data::json($rule)]);
+                }
+                try{PaymentService::confirm(['site_id'=>$site,'trade_type'=>PaymentService::TRADE_TYPE,'trade_id'=>$id,'out_trade_no'=>$paid['out_trade_no']]);}
+                catch(\Throwable $error){return self::closeCheck($site,$id,'paid_pending','原单已收款，业务结果尚未确认；订单未取消，请勿再次付款',(string)$paid['out_trade_no']);}
+                $current=Store::row('coop_order',$site,$id,true);
+                if($current['status']!=='paid'||!empty(Data::decode($current['rule_json'])['requires_manual_review']))return self::closeCheck($site,$id,'paid_pending','原单已收款，业务结果仍待平台核对；订单未取消，请勿再次付款',(string)$paid['out_trade_no']);
+                return self::closeCheck($site,$id,'paid','已核实原单收款并补齐业务处理；订单未取消',(string)$paid['out_trade_no']);
+            }
+            if($recoverReceipt&&!array_filter($pays,static fn(array $pay):bool=>(int)$pay['status']===(int)PayDict::STATUS_ING&&PaymentGatewayReconciler::supports($pay)))return self::closeCheck($site,$id,'paid_pending','渠道已返回收款，但本地成功凭据仍待核对；未取消或再次扣款');
             foreach($pays as$pay){
+                if($recoverReceipt&&(int)$pay['status']!==(int)PayDict::STATUS_ING)continue;
                 if((int)$pay['status']===(int)PayDict::STATUS_WAIT){if(PaymentCloseScope::run($site,(string)$pay['out_trade_no'],static fn()=>(new CorePayService())->close($site,(string)$pay['out_trade_no']))!==true)return self::closeCheck($site,$id,'uncertain','原支付尚未确认关闭，请稍后核对，不要重新下单');}
                 elseif((int)$pay['status']===(int)PayDict::STATUS_ING){
-                    $result=(new PaymentGatewayReconciler($providerFactory))->reconcile($site,$pay);
+                    $reconciler=new PaymentGatewayReconciler($providerFactory);
+                    $result=$recoverReceipt?$reconciler->recoverPaid($site,$pay):$reconciler->reconcile($site,$pay);
                     if($result['state']!=='closed')return self::closeCheck($site,$id,$result['state'],$result['message'],(string)$pay['out_trade_no']);
                 }
             }
@@ -95,7 +137,7 @@ final class PaymentOrderLifecycle
     {
         $row=Store::row('coop_order',$site,$id,true);$rule=Data::decode($row['rule_json']);
         $rule['close_check']=['at'=>time(),'state'=>$state,'message'=>$message];
-        if($state==='paid_pending'){$rule['requires_manual_review']='gateway_payment_receipt_review';if($row['out_trade_no']===''&&$no!=='')$row['out_trade_no']=$no;}
+        if($state==='paid_pending'){if(empty($rule['requires_manual_review']))$rule['requires_manual_review']='gateway_payment_receipt_review';if($row['out_trade_no']===''&&$no!=='')$row['out_trade_no']=$no;}
         Store::query('coop_order',$site)->where('id',$id)->update(['rule_json'=>Data::json($rule),'out_trade_no'=>$row['out_trade_no'],'update_time'=>time()]);
         Data::audit($site,0,0,'coop_order',$id,'close_reconciled',['state'=>$state,'message'=>$message]);
         return PaymentService::presentOrder(Store::row('coop_order',$site,$id));
@@ -103,12 +145,12 @@ final class PaymentOrderLifecycle
     /** Bounded framework schedule entry; reconciles original trades, never refunds. */
     public static function tick(int $siteLimit=5,int $orderLimit=50,?callable $providerFactory=null): array
     {
-        $now=time();$query=Db::name('hsx_lead_coop_order')->where('status','unpaid')->where(function($q)use($now):void{
-            $q->where(function($m)use($now):void{$m->where('purpose','membership')->where('create_time','<=',$now-600);})->whereOr(function($c)use($now):void{$c->where('purpose','commission')->where('create_time','<=',$now-self::COMMISSION_TIMEOUT_SECONDS);});
-        });
-        $sites=(clone$query)->group('site_id')->orderRaw('MIN(update_time) ASC')->limit(max(1,min(20,$siteLimit)))->column('site_id');$result=['examined'=>0,'closed'=>0,'blocked'=>0];
+        $now=time();$query=Db::name('hsx_lead_coop_order')->where('status','unpaid')
+            ->whereIn('purpose',['membership','commission'])
+            ->where('create_time','<=',$now-self::UNPAID_TIMEOUT_SECONDS);
+        $sites=(clone$query)->group('site_id')->orderRaw('MIN(update_time) ASC')->limit(max(1,min(20,$siteLimit)))->column('site_id');$result=['examined'=>0,'closed'=>0,'reconciled'=>0,'blocked'=>0];
         foreach($sites as$site){$site=(int)$site;$ids=(clone$query)->where('site_id',$site)->order('update_time,id')->limit(max(1,min(100,$orderLimit)))->column('id');
-            foreach($ids as$id){$result['examined']++;try{$row=self::closeSafely($site,(int)$id,'timeout','未支付超时自动关闭',0,0,$providerFactory);if($row['status']==='closed')$result['closed']++;elseif($row['status']==='unpaid')$result['blocked']++;}catch(\Throwable$error){$result['blocked']++;$ruleRow=Store::query('coop_order',$site)->where('id',$id)->where('status','unpaid')->find();if($ruleRow){Store::query('coop_order',$site)->where('id',$id)->where('status','unpaid')->update(['update_time'=>time()]);}Log::warning('商户协作超时支付单未关闭，需核对原收银台：site='.$site.', order='.(int)$id.', type='.get_class($error));}}
+            foreach($ids as$id){$result['examined']++;try{$row=self::closeSafely($site,(int)$id,'timeout','未支付超时自动关闭',0,0,$providerFactory);if($row['status']==='closed')$result['closed']++;elseif($row['status']==='paid'&&empty($row['requires_manual_review']))$result['reconciled']++;else$result['blocked']++;}catch(\Throwable$error){$result['blocked']++;$ruleRow=Store::query('coop_order',$site)->where('id',$id)->where('status','unpaid')->find();if($ruleRow){Store::query('coop_order',$site)->where('id',$id)->where('status','unpaid')->update(['update_time'=>time()]);}Log::warning('商户协作超时支付单未关闭，需核对原收银台：site='.$site.', order='.(int)$id.', type='.get_class($error));}}
         }return$result;
     }
 }

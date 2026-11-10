@@ -10,6 +10,7 @@
 <view>{{ lead.can_accept ? '等待你接单' : lead.can_report ? '联系客户，反馈结果' : lead.can_pay ? '已成交，等待付佣' : lead.status_label || coopStatusLabels[lead.status] }}</view>
 <text>{{ lead.can_accept ? '接单后开放必要联系方式与附件' : '客户货款由客户与门店直接结算' }}</text>
 </view>
+<CoopResponseDeadline :lead="lead" :active="active && show && !loading && !error" />
 <view class="coop-form-section">
 <view class="coop-section-title">客户需求<text>{{ lead.business_name || businessLabels[lead.business_type] || '业务需求' }}</text>
 </view>
@@ -54,6 +55,11 @@
 <text>{{ lead.receiver.name }}</text>
 </view>
 <text v-else>尚未选定</text>
+</view>
+<view v-if="lead.can_withdraw" class="coop-detail-withdraw"><button :disabled="busy" @tap="$emit('action','withdraw')">撤回交付</button></view>
+<view v-if="assigneeName" class="coop-detail-shop">
+<text>接收成员</text>
+<text>{{ assigneeName }}</text>
 </view>
 </view>
 <view v-if="!lead.is_internal && (lead.status === 'unpaid' || lead.status === 'paid')" class="coop-form-section">
@@ -117,12 +123,12 @@
 <u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" text="选择交付门店" :disabled="busy" @click="$emit('select')" />
 </view>
 </template>
-<template v-else-if="lead.can_withdraw">
+<template v-else-if="lead.can_reassign">
 <view class="coop-secondary">
-<u-button :custom-style="cooperationButtonStyle" shape="circle" text="撤回交付" :disabled="busy" @click="$emit('action', 'withdraw')" />
+<u-button :custom-style="cooperationButtonStyle" shape="circle" text="继续等待" :disabled="busy" @click="$emit('close')" />
 </view>
 <view class="coop-primary">
-<u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" text="返回列表" @click="$emit('close')" />
+<u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" text="重新选择门店" :disabled="busy" :loading="busy" @click="$emit('reselect')" />
 </view>
 </template>
 <view v-else class="coop-primary">
@@ -145,13 +151,15 @@ import CoopTaskSheet from './CoopTaskSheet.vue'
 import CoopState from './CoopState.vue'
 import CoopModels from './CoopModels.vue'
 import CoopMerchantAvatar from './CoopMerchantAvatar.vue'
+import CoopResponseDeadline from './CoopResponseDeadline.vue'
 import { cooperationButtonStyle } from '../../utils/mobile-ui'
 import { membershipBadgeRank } from '../../utils/entity-membership'
 import { businessFieldValue, businessAddressText, type BusinessField } from '../../utils/cooperation-business'
 import { noticeChannel, noticeStatus } from '../../utils/cooperation-notice'
-const props = withDefaults(defineProps<{ show: boolean; page?: boolean; lead: CoopRow; config: CoopRow; loading?: boolean; busy?: boolean; error?: string }>(), { loading: false, busy: false, error: '' })
-defineEmits<{ (event: 'close' | 'reload' | 'pay' | 'select' | 'membership'): void; (event: 'action', value: LeadAction): void }>()
+const props = withDefaults(defineProps<{ show: boolean; page?: boolean; lead: CoopRow; config: CoopRow; loading?: boolean; busy?: boolean; error?: string; active?: boolean }>(), { loading: false, busy: false, error: '', active: true })
+defineEmits<{ (event: 'close' | 'reload' | 'pay' | 'select' | 'reselect' | 'membership'): void; (event: 'action', value: LeadAction): void }>()
 const history = ref(false), canCall = computed(() => /^1\d{10}$/.test(String(props.lead.mobile || '')))
+const assigneeName = computed(() => props.lead.is_internal ? String(props.lead.internal_assignee?.name || props.lead.internal_assignee_name || '') : '')
 function call() { if (canCall.value) uni.makePhoneCall({ phoneNumber: String(props.lead.mobile), fail: () => uni.showToast({ title: '未能拨打，请手动联系', icon: 'none' }) }) }
 function preview(url: string) { uni.previewImage({ urls: (props.lead.attachments || []).map(img), current: img(url) }) }
 function fieldValue(field: BusinessField) { return businessFieldValue(field, props.lead.form_values) }
@@ -195,6 +203,7 @@ watch(() => props.show, () => { history.value = false })
 .coop-history-item>text:last-child { font-size: 21rpx; color: #9ba3ad; }
 .coop-detail-party { align-items: center; min-height: 100rpx; }.coop-detail-merchant { display: flex; align-items: center; justify-content: flex-end; gap: 18rpx; max-width: 76%; min-width: 0; }.coop-detail-merchant>text { min-width: 0; word-break: break-word; text-align: right; line-height: 1.6; }
 .coop-detail-service-note { margin: 0 12px 12px; padding: 0 12px; background: #fff; border-radius: 8px; }
+.coop-detail-withdraw{display:flex;justify-content:flex-end;border-top:1rpx solid #edf0f3;padding-top:8rpx}.coop-detail-withdraw>button{min-height:44px;margin:0;padding:0 4px;border:0;background:transparent;color:#7d8998;font-size:24rpx;line-height:44px}.coop-detail-withdraw>button::after{border:0}
 .coop-customer-contact>view:first-child { min-width: 0; flex: 1; }
 .coop-customer-name,.coop-contact-number { overflow-wrap: anywhere; }
 .coop-form-section>.coop-fold-title:first-child { margin-top: 0; border-top: 0; }

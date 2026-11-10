@@ -2,20 +2,36 @@
     <section>
         <LeadSectionHeader title="合作商户" description="维护门店资料与交付能力，ERP 接入可选"><el-button type="primary" :icon="Plus" @click="open()">添加商户</el-button></LeadSectionHeader>
         <el-alert v-if="error || providerError" :title="error || providerError" type="error" show-icon :closable="false" class="lead-error-banner" />
-        <div class="lead-card lead-table-card"><LeadFilterBar :query="query" :filters="filterOptions" :time-fields="timeFields" :total="total" :loading="loading" label="合作商户" search-label="商户或联系人" placeholder="搜索店铺、联系人或手机号" @apply="applyFilters" @reload="load" />
+        <div class="lead-card lead-table-card"><LeadFilterBar :query="query" :filters="filterOptions" :time-fields="timeFields" :total="total" :loading="loading" label="合作商户" search-label="门店或关联会员" placeholder="搜索门店、联系人、会员编号或手机号" @apply="applyFilters" @reload="load" />
             <HsxTable :columns="columns" :data="rows" :loading="loading" :empty-text="error ? '列表未加载，请查看上方提示后重试' : filtered ? '没有符合当前筛选的商户，可清空筛选后查看全部' : '尚无商户，先添加门店资料即可'">
                 <template #merchant="{ row }"><div class="lead-cell"><strong>{{ row.name }}</strong><small>{{ region(row) }}</small></div></template>
                 <template #contact="{ row }"><div class="lead-cell"><strong>{{ row.contact_name }}</strong><small>{{ row.mobile }}</small></div></template>
-                <template #capabilities="{ row }"><div class="lead-cell"><div class="lead-actions"><el-tag v-for="capability in (row.business_capabilities || []).slice(0,3)" :key="capability.business_type" size="small" type="info" effect="plain">{{ capability.business_name || coopBusiness(capability.business_type) }} · {{ capability.option_ids?.length || capability.items?.length || 0 }}项</el-tag><small v-if="row.business_capabilities?.length>3">另{{ row.business_capabilities.length-3 }}项业务</small></div><small v-if="!row.business_capabilities?.length">尚未登记业务能力</small></div></template>
+                <template #capabilities="{ row }"><div class="lead-cell"><div class="lead-actions"><el-tag v-for="capability in (row.business_capabilities || []).slice(0,3)" :key="capability.business_type" size="small" type="info" effect="plain">{{ capability.business_name || coopBusiness(capability.business_type) }} · {{ capability.option_count ?? '—' }}项</el-tag><small v-if="row.business_capabilities?.length>3">另{{ row.business_capabilities.length-3 }}项业务</small></div><small v-if="!row.business_capabilities?.length">尚未登记业务能力</small></div></template>
                 <template #ready="{ row }"><div class="lead-cell"><el-tooltip :content="row.ready_reason" :disabled="!row.ready_reason" placement="top" :show-after="300"><el-tag :type="row.ready_state === 'ready' ? 'success' : row.ready_state === 'attention' ? 'danger' : 'warning'">{{ readyLabels[row.ready_state] || '待完善资料' }}</el-tag></el-tooltip><small v-if="row.ready_state !== 'ready'">{{ row.ready_reason }}</small></div></template>
                 <template #connection="{ row }"><div class="lead-cell"><strong>{{ row.provider_name || providerName(row.provider) }}</strong><el-tooltip v-if="row.channel_enabled === false" :content="row.channel_message || 'ERP渠道已关闭，采集暂停；账号及历史数据保留。'" placement="top"><small class="lead-renewal-attention">渠道已关闭 · 采集暂停</small></el-tooltip><small v-else>{{ row.connection_id ? syncLabel(row.last_sync_status) : '可选接入，不影响发单' }}</small><el-tooltip v-if="row.connection_id && row.auth_renewal" :content="row.auth_renewal.message" :disabled="!row.auth_renewal.message" placement="top" :show-after="300"><small :class="{ 'lead-renewal-attention': row.auth_renewal.ready !== true }">{{ authRenewalLabel(row.auth_renewal) }}</small></el-tooltip><LeadTimestamp v-if="row.connection_id" :value="row.last_sync_at" empty="尚未同步" compact /></div></template>
                 <template #actions="{ row }"><div class="lead-actions"><el-button link type="primary" @click="open(row.id)">{{ row.ready_state === 'member_required' ? '绑定会员' : '资料' }}</el-button><el-button link type="primary" @click="connect(row)">{{ row.connection_id ? '接入管理' : '接入 ERP' }}</el-button><el-button v-if="row.connection_id" link type="primary" :disabled="Number(row.status) !== 1 || row.channel_enabled === false" @click="sync(row.id)">{{ row.ready_state === 'sync_required' ? '首次同步' : '同步' }}</el-button><el-dropdown v-if="row.connection_id || row.last_run_id || row.active_run_id" trigger="click" @command="command => command === 'settings' ? openSettings(row) : showRun(row.last_run_id || row.active_run_id)"><el-button link type="primary" :aria-label="`${row.name}更多操作`">更多</el-button><template #dropdown><el-dropdown-menu><el-dropdown-item v-if="row.connection_id" command="settings">同步周期</el-dropdown-item><el-dropdown-item v-if="row.last_run_id || row.active_run_id" command="progress">查看同步进度</el-dropdown-item></el-dropdown-menu></template></el-dropdown></div></template>
             </HsxTable><div class="lead-pagebar"><HsxPagination layout="sizes, prev, pager, next, jumper" v-model:current-page="query.page" v-model:page-size="query.limit" :total="total" @change="load" /></div>
         </div>
         <HsxDrawer v-model="visible" :title="form.id ? '商户资料' : '添加合作商户'" subtitle="只保存门店、服务范围和会员绑定，不修改 ERP 或中断同步。" size="md" :body-loading="detailLoading" :confirm-loading="saving">
-            <el-alert v-if="detailError" :title="detailError" type="error" :closable="false" class="lead-error-banner" />
-            <el-form v-if="!detailLoading && !detailError" ref="formRef" :model="form" :rules="rules" label-position="top" class="lead-form" :disabled="saving"><el-form-item label="商户 / 门店名称" prop="name"><el-input v-model.trim="form.name" maxlength="100" /></el-form-item><div class="lead-grid-2"><el-form-item label="联系人" prop="contact_name"><el-input v-model.trim="form.contact_name" maxlength="50" /></el-form-item><el-form-item label="联系电话" prop="mobile"><el-input v-model.trim="form.mobile" maxlength="30" /></el-form-item></div><el-form-item label="门店地区" prop="district_id"><RegionSelect v-model="area" /></el-form-item><el-form-item label="详细地址"><el-input v-model.trim="form.address" maxlength="255" /></el-form-item><el-form-item label="服务范围"><el-select v-model="serviceScope"><el-option label="优先按所在地推荐（默认）" value="default" /><el-option label="仅本区县" value="district" /><el-option label="整个城市" value="city" /><el-option label="整个省份" value="province" /><el-option v-if="serviceScope === 'custom'" label="保留已登记范围" value="custom" /></el-select></el-form-item><el-form-item label="商户会员身份（可稍后绑定）"><el-select v-model="form.member_id" filterable remote clearable :remote-method="loadMembers" :loading="membersLoading" placeholder="搜索现有会员昵称或手机号" @visible-change="value => value && loadMembers()"><el-option v-for="member in members" :key="member.member_id || member.id" :value="Number(member.member_id || member.id)" :label="`${member.nickname || '未设置昵称'} · ${member.mobile || `会员 #${member.member_id || member.id}`}`" /></el-select><p class="lead-muted">使用原有会员登录；未绑定可先建档；绑定后可在手机端选择交付型号，不要求接入 ERP。</p><span v-if="membersError" class="lead-error">{{ membersError }}</span></el-form-item><el-form-item label="合作状态"><el-radio-group v-model="form.status"><el-radio :value="1">合作中</el-radio><el-radio :value="0">暂停合作</el-radio></el-radio-group></el-form-item><el-form-item label="运营备注"><el-input v-model="form.remark" type="textarea" :rows="3" maxlength="1000" /></el-form-item></el-form>
+            <el-alert v-if="detailError" :title="detailError" type="error" :closable="false" class="lead-error-banner"><el-button link type="primary" @click="open(detailId)">重新加载资料</el-button></el-alert>
+            <el-form v-if="!detailLoading && !detailError" ref="formRef" :model="form" :rules="rules" label-position="top" class="lead-form" :disabled="saving">
+                <el-form-item label="商户 / 门店名称" prop="name"><el-input v-model.trim="form.name" maxlength="100" /></el-form-item>
+                <div class="lead-grid-2"><el-form-item label="联系人" prop="contact_name"><el-input v-model.trim="form.contact_name" maxlength="50" /></el-form-item><el-form-item label="联系电话" prop="mobile"><el-input v-model.trim="form.mobile" maxlength="30" /></el-form-item></div>
+                <el-form-item label="门店地区" prop="district_id"><RegionSelect v-model="area" /></el-form-item>
+                <el-form-item label="详细地址"><el-input v-model.trim="form.address" maxlength="255" /></el-form-item>
+                <el-form-item label="服务范围"><el-select v-model="serviceScope"><el-option label="优先按所在地推荐（默认）" value="default" /><el-option label="仅本区县" value="district" /><el-option label="整个城市" value="city" /><el-option label="整个省份" value="province" /><el-option v-if="serviceScope === 'custom'" label="保留已登记范围" value="custom" /></el-select></el-form-item>
+                <el-form-item label="商户会员身份（可稍后绑定）">
+                    <el-select v-model="form.member_id" filterable remote clearable remote-show-suffix :remote-method="searchMembers" :loading="membersLoading" loading-text="正在查找会员…" no-match-text="没有匹配的会员" :no-data-text="membersError ? '会员读取失败，请重试' : '没有匹配的会员，可换昵称、手机号或编号搜索'" aria-label="搜索并绑定商户会员" placeholder="搜索会员昵称、手机号、会员编号或 ID" @visible-change="value => value && loadMembers()">
+                        <el-option v-for="member in members" :key="member.member_id || member.id" :value="Number(member.member_id || member.id)" :label="memberOptionLabel(member)" />
+                        <template v-if="membersError" #footer><span class="lead-error">{{ membersError }}</span> <el-button link type="primary" :loading="membersLoading" @click.stop="loadMembers()">重新读取候选</el-button></template>
+                    </el-select>
+                    <p class="lead-muted">使用原有会员登录；未绑定可先建档；绑定后可在手机端选择交付型号，不要求接入 ERP。</p><div v-if="membersError" class="lead-error" role="alert">{{ membersError }} <el-button link type="primary" :disabled="membersLoading" @click="loadMembers()">重新读取</el-button></div>
+                </el-form-item>
+                <el-form-item label="合作状态"><el-radio-group v-model="form.status"><el-radio :value="1">合作中</el-radio><el-radio :value="0">暂停合作</el-radio></el-radio-group></el-form-item>
+                <el-form-item label="运营备注"><el-input v-model.trim="form.remark" type="textarea" :rows="3" maxlength="1000" /></el-form-item>
+            </el-form>
             <el-form v-if="!detailLoading && !detailError" :disabled="saving || Number(form.status)!==1" label-position="top"><BusinessCapabilities v-model="form.business_capabilities" :definitions="businessDefinitions" /><p v-if="Number(form.status)!==1" class="lead-muted">暂停合作期间只保留原有能力，恢复合作后再调整能力。</p></el-form>
+            <section v-if="detailId && canViewExtraRecord" class="lead-profile-extra-record"><h3>商户补充资料</h3><el-skeleton v-if="extraRecordLoading" :rows="3" animated /><el-alert v-else-if="extraRecordError" :title="extraRecordError" type="error" :closable="false" show-icon><template #default><el-button link type="primary" @click="loadExtraRecord(detailId)">重新读取</el-button></template></el-alert><template v-else><p v-if="extraRecord.title" class="lead-muted">{{ extraRecord.title }} · 商户提交记录</p><dl v-if="extraRecord.fields?.length" class="lead-profile-extra-fields"><template v-for="field in extraRecord.fields" :key="field.id"><dt>{{ field.label }}</dt><dd>{{ field.display_value || '未填写' }}</dd></template></dl><p v-else class="lead-muted">尚未提交补充资料</p></template></section>
             <template #footer><el-button :disabled="saving" @click="visible = false">取消</el-button><el-button :loading="saving" :disabled="detailLoading || !!detailError" @click="save(true)">保存后接入 ERP</el-button><el-button type="primary" :loading="saving" :disabled="detailLoading || !!detailError" @click="save(false)">保存商户资料</el-button></template>
         </HsxDrawer>
         <ConnectionWizard v-model="connectionVisible" :merchant-id="selectedMerchant.id || 0" :merchant-name="selectedMerchant.name || ''" @changed="load" @sync="sync" />
@@ -24,7 +40,7 @@
     </section>
 </template>
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import HsxDrawer from '@/addon/hsx_components/components/HsxDrawer/index.vue'
@@ -40,12 +56,15 @@ import SyncProgressDrawer from './SyncProgressDrawer.vue'
 import { serviceScopeFor } from '../../composables/serviceScope'
 import * as api from '../../api'
 import { errorText, readyLabels, region, syncLabel, useLeadList, type Row } from '../../composables/useLeadUi'
+import { remoteOptionRows, useRemoteOptions } from '../../composables/useRemoteOptions'
 import { authRenewalLabel } from '../../composables/authRenewal'
 import BusinessCapabilities from './BusinessCapabilities.vue'
+import useUserStore from '@/stores/modules/user'
+import { hasLeadPagePermission } from '../../composables/navigation'
+import { getMerchantProfileFormRecord } from '../../api/cooperation'
 import { coopBusiness } from '../../composables/cooperation'
 const props = withDefaults(defineProps<{ initialFilter?: Row }>(), { initialFilter: () => ({}) })
-const listedBusinessDefinitions=ref<Row[]>([])
-const { rows, total, loading, error, query, load, search } = useLeadList(async(params:Row)=>{const result=await api.getMerchants(params);if(Array.isArray(result.data?.business_definitions))listedBusinessDefinitions.value=result.data.business_definitions;return result}, { provider: '', ready_state: props.initialFilter.ready_state || '', time_field: 'create_time', start_time: 0, end_time: 0 })
+const { rows, total, loading, error, query, load, search } = useLeadList(api.getMerchants, { provider: '', ready_state: props.initialFilter.ready_state || '', time_field: 'create_time', start_time: 0, end_time: 0 })
 const columns = [{ prop: 'name', label: '商户 / 地区', slot: 'merchant', minWidth: 190 }, { prop: 'contact_name', label: '联系人', slot: 'contact', minWidth: 145 }, { prop: 'business_capabilities', label: '可承接业务', slot: 'capabilities', minWidth: 220 }, { prop: 'ready_state', label: '交付状态 / 下一步', slot: 'ready', minWidth: 200 }, { prop: 'provider', label: 'ERP / 同步', slot: 'connection', minWidth: 165 }, { prop: 'actions', label: '操作', slot: 'actions', minWidth: 220, fixed: 'right' as const }]
 const providers = ref<Row[]>([]), providerError = ref('')
 const filterOptions = computed(() => [{ key: 'ready_state', label: '准备状态', options: Object.entries(readyLabels).map(([value, label]) => ({ value, label })) }, { key: 'provider', label: 'ERP 渠道', options: providers.value.map(item => ({ value: item.key, label: item.name })) }])
@@ -56,25 +75,47 @@ const providerName = (value: string) => providers.value.find(item => item.key ==
 const empty = () => ({ id: 0, name: '', contact_name: '', mobile: '', province_id: 0, city_id: 0, district_id: 0, province_name: '', city_name: '', district_name: '', address: '', member_id: undefined as number | undefined, status: 1, remark: '', service_areas: [] as Row[], business_capabilities: [] as Row[] })
 const businessDefinitions=ref<Row[]>([])
 const form = reactive<Row>(empty()), formRef = ref<FormInstance>(), visible = ref(false), saving = ref(false), detailLoading = ref(false), detailError = ref(''), serviceScope = ref('default')
-const members = ref<Row[]>([]), membersLoading = ref(false), membersError = ref('')
+const detailId=ref(0)
+const user=useUserStore(),canViewExtraRecord=computed(()=>hasLeadPagePermission(user,'hsx_lead_cooperation_profile_form_record'))
+const extraRecord=ref<Row>({}),extraRecordLoading=ref(false),extraRecordError=ref('')
+let recordSequence=0
+const recordActor=()=>String(user.token||'')+':'+String(user.siteInfo?.site_id||'')
+function clearExtraRecord(){recordSequence++;extraRecord.value={};extraRecordError.value='';extraRecordLoading.value=false}
+async function loadExtraRecord(id:number){
+    clearExtraRecord();const turn=recordSequence,actor=recordActor()
+    if(!id||!canViewExtraRecord.value||!visible.value)return
+    const current=()=>turn===recordSequence&&visible.value&&id===detailId.value&&actor===recordActor()&&canViewExtraRecord.value
+    extraRecordLoading.value=true
+    try{const response=await getMerchantProfileFormRecord(id);if(current()){if(!Array.isArray(response.data?.fields))throw Error('补充资料返回不完整，请重新读取');extraRecord.value=response.data}}
+    catch(cause){if(current())extraRecordError.value=errorText(cause,'补充资料读取失败，请重新读取')}
+    finally{if(turn===recordSequence)extraRecordLoading.value=false}
+}
+watch(recordActor,()=>{clearExtraRecord();visible.value=false})
+watch(canViewExtraRecord,allowed=>{clearExtraRecord();if(allowed&&visible.value)void loadExtraRecord(detailId.value)})
+watch(visible,open=>{if(!open)clearExtraRecord()})
+const memberCandidates=useRemoteOptions<Row>({request:async keyword=>remoteOptionRows(await api.getMembers(keyword),row=>row.member_id||row.id),key:row=>Number(row.member_id||row.id),selectedKey:()=>form.member_id,scope:()=>`${recordActor()}:${visible.value}:${detailId.value}`,errorText,fallback:'会员列表加载失败，请重新读取。'})
+const {options:members,loading:membersLoading,error:membersError,load:loadMembers,search:searchMembers}=memberCandidates
 const originalMemberId = ref(0), originalStatus = ref(1)
 const area = computed({ get: () => ({ province_id: form.province_id, city_id: form.city_id, district_id: form.district_id }), set: value => Object.assign(form, value) })
 const rules: FormRules = { name: [{ required: true, message: '请填写门店名称', trigger: 'blur' }], contact_name: [{ required: true, message: '请填写联系人', trigger: 'blur' }], mobile: [{ required: true, message: '请填写联系电话', trigger: 'blur' }], district_id: [{ validator: (_rule, _value, callback) => form.province_id && form.city_id && form.district_id ? callback() : callback(new Error('请选择完整省、市、区县')), trigger: 'change' }] }
-let detailSequence = 0, memberSequence = 0,capabilityBaseline='[]'
+let detailSequence = 0,capabilityBaseline='[]'
 async function open(id = 0) {
-    const token=++detailSequence
-    Object.assign(form,empty());capabilityBaseline='[]';businessDefinitions.value=listedBusinessDefinitions.value;serviceScope.value='default';originalMemberId.value=0;originalStatus.value=1;visible.value=true;detailError.value='';detailLoading.value=!!id
-    if(!id)return
+    const token=++detailSequence,actor=recordActor()
+    memberCandidates.reset();Object.assign(form,empty());capabilityBaseline='[]';businessDefinitions.value=[];detailId.value=id;serviceScope.value='default';originalMemberId.value=0;originalStatus.value=1;visible.value=true;detailError.value='';detailLoading.value=true
+    void loadExtraRecord(id)
     try{
-        const result=await api.getMerchant(id)
-        if(token!==detailSequence)return
+        const result=id?await api.getMerchant(id):await api.getMerchantBusinessDefinitions()
+        if(token!==detailSequence||!visible.value||detailId.value!==id||actor!==recordActor())return
         const row=result.data
+        if(!Array.isArray(row?.business_definitions))throw new Error('业务目录未完整返回，请重新加载或核对配套后端')
+        businessDefinitions.value=row.business_definitions
+        if(!id)return
         for(const key of Object.keys(empty()))if(row[key]!==undefined)form[key]=row[key]
-        capabilityBaseline=JSON.stringify(form.business_capabilities);businessDefinitions.value=Array.isArray(row.business_definitions)?row.business_definitions:[];form.status=Number(row.status);originalStatus.value=Number(row.status);originalMemberId.value=Number(row.member_id||0);form.member_id=row.member_id?Number(row.member_id):undefined;serviceScope.value=serviceScopeFor(row.service_areas||[],row)
-        if(form.member_id)members.value=[{member_id:form.member_id,nickname:row.member_name||`会员 #${form.member_id}`,mobile:row.member_mobile||''}]
-    }catch(cause){if(token===detailSequence)detailError.value=errorText(cause,'商户资料加载失败。')}finally{if(token===detailSequence)detailLoading.value=false}
+        capabilityBaseline=JSON.stringify(form.business_capabilities);form.status=Number(row.status);originalStatus.value=Number(row.status);originalMemberId.value=Number(row.member_id||0);form.member_id=row.member_id?Number(row.member_id):undefined;serviceScope.value=serviceScopeFor(row.service_areas||[],row)
+        if(form.member_id)memberCandidates.remember({member_id:form.member_id,nickname:row.member_name||`会员 #${form.member_id}`,member_no:row.member_no||'',mobile:row.member_mobile||''})
+    }catch(cause){if(token===detailSequence&&visible.value&&actor===recordActor())detailError.value=errorText(cause,'商户资料加载失败。')}finally{if(token===detailSequence)detailLoading.value=false}
 }
-async function loadMembers(keyword = '') { const token = ++memberSequence; membersLoading.value = true; membersError.value = ''; try { const result = await api.getMembers(keyword); if (token === memberSequence) members.value = Array.isArray(result.data) ? result.data : result.data.data || [] } catch (cause) { if (token === memberSequence) membersError.value = errorText(cause, '会员列表加载失败。') } finally { if (token === memberSequence) membersLoading.value = false } }
+function memberOptionLabel(member: Row) { return [member.nickname || '未设置昵称', member.member_no || `会员 #${member.member_id || member.id}`, member.mobile].filter(Boolean).join(' · ') }
 async function save(next:boolean){
     if(saving.value)return
     saving.value=true
@@ -100,9 +141,10 @@ async function sync(id: number) { if (rows.value.find(row => Number(row.id) === 
 const settingsVisible = ref(false), settingsLoading = ref(false), settingsSaving = ref(false), settingsError = ref(''), settingsRenewal = ref<Row>({}), settingsChannel = ref<Row>({}), settings = reactive({ enabled: true, interval_minutes: 60 })
 async function openSettings(row: Row) { selectedMerchant.value = row; settingsVisible.value = true; settingsLoading.value = true; settingsError.value = ''; settingsRenewal.value = {}; settingsChannel.value = {}; try { const result = await api.getConnection(row.id); settings.enabled = !!result.data.enabled; settings.interval_minutes = Number(result.data.interval_minutes || 60); settingsRenewal.value = result.data.auth_renewal || {}; settingsChannel.value = { enabled: result.data.channel_enabled, message: result.data.channel_message || '渠道关闭期间采集暂停，商户的原自动同步设置保留。' } } catch (cause) { settingsError.value = errorText(cause, '设置读取失败。') } finally { settingsLoading.value = false } }
 async function saveSettings() { if (settingsLoading.value || settingsError.value) return; settingsSaving.value = true; try { await api.saveSyncSettings(selectedMerchant.value.id, { ...settings }); settingsVisible.value = false; ElMessage.success('同步周期已保存'); await load() } catch (cause) { settingsError.value = errorText(cause, '同步周期未保存。') } finally { settingsSaving.value = false } }
-onBeforeUnmount(() => { detailSequence++; memberSequence++ })
+onBeforeUnmount(() => { detailSequence++; recordSequence++ })
 onMounted(async () => { void load(); try { const result = await api.getProviders(); providers.value = result.data.items || [] } catch (cause) { providerError.value = errorText(cause, 'ERP 选项加载失败，仍可维护商户资料。') } })
 </script>
 <style scoped>
 .lead-cell .lead-renewal-attention { color: var(--el-color-warning-dark-2, #a66b0b); }
+.lead-profile-extra-record{margin-top:24px;padding-top:20px;border-top:1px solid var(--el-border-color-lighter)}.lead-profile-extra-record h3{font-size:15px;margin:0 0 12px}.lead-profile-extra-fields{display:grid;grid-template-columns:minmax(100px,.4fr) minmax(0,1fr);gap:12px 18px;margin:14px 0;font-size:13px;line-height:1.7}.lead-profile-extra-fields dt{color:var(--el-text-color-secondary)}.lead-profile-extra-fields dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--el-text-color-primary)}
 </style>

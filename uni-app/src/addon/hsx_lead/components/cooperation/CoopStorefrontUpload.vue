@@ -1,7 +1,7 @@
 <template>
     <view class="coop-storefront-upload">
         <view class="coop-storefront-upload__row">
-            <view class="coop-storefront-upload__title">门头照片<text>选填</text></view>
+            <view class="coop-storefront-upload__title">门头照片<text>{{ required ? '必填' : '选填' }}</text></view>
             <view class="coop-storefront-upload__controls">
                 <view v-if="modelValue" class="coop-storefront-upload__tile coop-storefront-upload__preview" role="button" aria-label="预览门头照片" :aria-disabled="uploading" @tap.stop="preview">
                     <image v-if="!imageFailed" :src="img(modelValue)" mode="aspectFill" @error="imageFailed = true" />
@@ -21,7 +21,7 @@
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { img } from '@/utils/common'
 import { coopError, uploadCooperationStorefront } from '../../api/cooperation'
-const props = withDefaults(defineProps<{ modelValue?: string; disabled?: boolean }>(), { modelValue: '', disabled: false })
+const props = withDefaults(defineProps<{ modelValue?: string; disabled?: boolean; required?: boolean }>(), { modelValue: '', disabled: false, required: false })
 const emit = defineEmits<{ (event: 'update:modelValue', value: string): void; (event: 'pending', value: boolean): void }>()
 const uploading = ref(false), error = ref(''), imageFailed = ref(false), uploader = ref<{ chooseFile: () => void } | null>(null)
 let disposed = false

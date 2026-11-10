@@ -1,17 +1,17 @@
 <template>
     <section class="entity-management">
         <header class="coop-head"><div><h2>主体与成员</h2><p>查看门店共享的会员权益、账号名额和加入申请。</p></div></header>
-        <CooperationFilter :query="query" :loading="loading" :with-date="false" placeholder="搜索门店、主体码、负责人或手机" @search="search" @reload="load" @reset="resetLevel"><el-select v-if="levels.length" v-model="levelFilter" filterable clearable placeholder="全部会员等级" aria-label="主体会员等级" @change="search()"><el-option v-for="level in levels" :key="level.code" :label="level.name" :value="level.code" /></el-select><el-input v-else v-model="levelFilter" clearable placeholder="等级编码，如 ML2" aria-label="主体会员等级编码" @keyup.enter="search()" /></CooperationFilter>
+        <CooperationFilter :query="query" :loading="loading" :with-date="false" placeholder="搜索门店、主体码、负责人、手机号或会员编号" @search="search" @reload="load" @reset="resetLevel"><el-select v-if="levels.length" v-model="levelFilter" filterable clearable placeholder="全部会员等级" aria-label="主体会员等级" @change="search()"><el-option v-for="level in levels" :key="level.code" :label="level.name" :value="level.code" /></el-select><el-input v-else v-model="levelFilter" clearable placeholder="等级编码，如 ML2" aria-label="主体会员等级编码" @keyup.enter="search()" /></CooperationFilter>
         <el-alert v-if="error" class="coop-error" :title="error" type="error" :closable="false" show-icon><template #default><el-button link type="primary" @click="load">重新读取</el-button></template></el-alert>
         <HsxTable :columns="columns" :data="rows" :loading="loading" row-key="id" empty-text="暂无匹配的门店主体">
             <template #entity="{row}"><div class="coop-cell"><strong>{{ row.name }}</strong><small>{{ row.region_text || '未填写地区' }}</small></div></template>
             <template #code="{row}"><div class="entity-code-cell"><code>{{ row.subject_code || '尚未生成' }}</code><el-button v-if="row.subject_code" link :icon="CopyDocument" aria-label="复制主体码" @click="copyCode(row.subject_code)" /></div></template>
-            <template #membership="{row}"><div class="coop-cell"><div class="coop-tags"><el-tag effect="plain">{{ row.membership?.level_name || row.membership?.level_code || '普通会员' }}</el-tag><el-tag :type="entityMembershipState(row.membership).tone" effect="plain">{{ entityMembershipState(row.membership).label }}</el-tag></div><small>{{ expiry(row.membership) }}</small></div></template>
+            <template #membership="{row}"><MembershipSummary :membership="row.membership" /></template>
             <template #accounts="{row}"><div class="coop-cell"><strong>{{ entitySeatText(row.membership) }}</strong><small v-if="Number(row.pending_count)>0" class="entity-pending">{{ row.pending_count }} 人待审核</small></div></template>
             <template #owner="{row}"><div class="coop-cell"><strong>{{ row.owner_name || '未返回负责人' }}</strong><small>{{ row.owner_mobile || '未填写手机' }}</small></div></template>
             <template #actions="{row}"><el-button v-if="canDetail" link type="primary" @click="open(row)">查看成员<template v-if="Number(row.pending_count)>0">（{{ row.pending_count }}）</template></el-button><span v-else class="coop-muted">仅列表权限</span></template>
         </HsxTable>
-        <HsxPagination :total="total" :page="query.page" :limit="query.limit" class="coop-pagination" @pagination="changePage" />
+        <HsxPagination :total="total" :current-page="query.page" :page-size="query.limit" class="coop-pagination" @change="changePage" />
 
         <HsxDrawer v-model="detailVisible" :title="detail.name ? `${detail.name} · 主体与成员` : '主体与成员'" size="lg" :confirm-loading="actionBusy" :body-loading="detailLoading" @closed="clearDetail">
             <el-alert v-if="detailError" :title="detailError" type="error" :closable="false" show-icon class="coop-error"><template #default><el-button link type="primary" :disabled="actionBusy||detailLoading" @click="loadDetail">重新读取</el-button></template></el-alert>
@@ -46,6 +46,7 @@ import HsxTable from '@/addon/hsx_components/components/HsxTable/index.vue'
 import HsxPagination from '@/addon/hsx_components/components/HsxPagination/index.vue'
 import HsxDrawer from '@/addon/hsx_components/components/HsxDrawer/index.vue'
 import CooperationFilter from './CooperationFilter.vue'
+import MembershipSummary from './MembershipSummary.vue'
 import { getEntities, getEntity, reviewEntityMember, removeEntityMember } from '../../api/entity'
 import { normalizeEntityLevels, entitySeatText, entityMembershipState, filterEntityMembers, type EntityLevel } from '../../composables/entity'
 import { hasLeadPagePermission } from '../../composables/navigation'

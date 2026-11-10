@@ -47,8 +47,60 @@ final class SyncStatus
         if (!$run && in_array($status,['failed','cancelled'],true)) {
             $run=$query()->where('config_version',$revision)->where('status',$status)->order('id desc')->find();
         }
+        return self::connectionFromRun($connection,$run?:null);
+    }
+
+    /** Resolve only the active/published/latest fallback rows for a page, never history lists. */
+    public static function connections(int $site,array $connections): array
+    {
+        if(!$connections) return [];
+        $ids=[];foreach($connections as $connection) foreach(['active_run_id','published_run_id'] as $key) {
+            if((int)($connection[$key]??0)>0) $ids[]=(int)$connection[$key];
+        }
+        $runs=[];
+        if($ids) foreach(Data::query('sync_run',$site)->whereIn('id',array_unique($ids))->select()->toArray() as $run) $runs[(int)$run['id']]=$run;
+        $chosen=[];$fallback=[];
+        foreach($connections as $connection) {
+            $id=(int)$connection['id'];$active=$runs[(int)($connection['active_run_id']??0)]??null;
+            if(self::runMatches($active,$connection,true)) {$chosen[$id]=$active;continue;}
+            $status=(string)($connection['last_sync_status']??'idle');
+            if(in_array($status,['pending','running','failed','cancelled'],true)) $fallback[$id]=$connection;
+            elseif($status==='completed') {
+                $published=$runs[(int)($connection['published_run_id']??0)]??null;
+                if(self::runMatches($published,$connection,false)&&$published['status']==='completed') $chosen[$id]=$published;
+            }
+        }
+        if($fallback) {
+            $latest=Data::query('sync_run',$site)->where(function($query)use($fallback):void {
+                foreach($fallback as $connection) $query->whereOr(function($query)use($connection):void {
+                    $query->where('connection_id',(int)$connection['id'])->where('merchant_id',(int)$connection['merchant_id'])
+                        ->where('config_version',(int)$connection['config_version']);
+                    if(in_array($connection['last_sync_status'],['failed','cancelled'],true)) $query->where('status',$connection['last_sync_status']);
+                });
+            })->field('MAX(id) AS id')->group('connection_id,merchant_id')->select()->toArray();
+            $latest=array_column($latest,'id');
+            if($latest) foreach(Data::query('sync_run',$site)->whereIn('id',$latest)->select()->toArray() as $run) $chosen[(int)$run['connection_id']]=$run;
+        }
+        $result=[];
+        foreach($connections as $connection) $result[(int)$connection['id']]=self::connectionFromRun($connection,$chosen[(int)$connection['id']]??null);
+        return $result;
+    }
+
+    private static function runMatches(?array $run,array $connection,bool $revision): bool
+    {
+        return $run!==null&&(int)$run['connection_id']===(int)$connection['id']
+            &&(int)$run['merchant_id']===(int)$connection['merchant_id']
+            &&(!$revision||(int)$run['config_version']===(int)$connection['config_version']);
+    }
+
+    private static function connectionFromRun(array $connection,?array $run): array
+    {
+        $status=(string)($connection['last_sync_status']??'idle');
+        $result=['last_sync_status'=>$status,'last_sync_message'=>ProviderPublicMessage::syncStatus($status),
+            'active_run_id'=>(int)($connection['active_run_id']??0),'sync_progress'=>null,'requires_sync_restart'=>false];
+        $activeId=$result['active_run_id'];
         if (!$run) {
-            if ($activeId>0 || $busy || $status==='completed') {
+            if ($activeId>0 || in_array($status,['pending','running'],true) || $status==='completed') {
                 $result['active_run_id']=0;$result['last_sync_status']='interrupted';$result['requires_sync_restart']=true;
                 $result['last_sync_message']='未找到可继续的同步任务，请重新同步；已有完整快照仍保留';
             }

@@ -2,7 +2,7 @@
 declare(strict_types=1);
 namespace addon\hsx_lead\app\listener\pay;
 
-use addon\hsx_lead\app\service\cooperation\{EntityMembershipService,MembershipCostService,MembershipDepositService,PaymentService,PromotionService,Rules,Store};
+use addon\hsx_lead\app\service\cooperation\{EntityMembershipService,MembershipCostService,MembershipDepositService,OrderPaymentReadService,PaymentService,PromotionService,Rules,Store};
 use app\dict\pay\{PayDict,RefundDict};
 use core\exception\CommonException;
 use think\facade\Db;
@@ -19,6 +19,15 @@ final class MembershipRefundSuccess
             PromotionService::lockSite($site);
             $refund=Db::name('pay_refund')->where('site_id',$site)->where('refund_no',$number)->where('status',RefundDict::SUCCESS)->lock(true)->find();
             if (!$refund) throw new CommonException('未找到成功退款凭据，未变更主体会员权益');
+            if($refund['type']===PayDict::BALANCEPAY){
+                $balanceSource=Store::query('coop_order',$site)->where('id',(int)$refund['trade_id'])->where('out_trade_no',$refund['out_trade_no'])->lock(true)->find();
+                if($balanceSource){$balancePay=OrderPaymentReadService::payment($balanceSource,true);if($balancePay)OrderPaymentReadService::assertManualSource($balanceSource,$balancePay);}
+            }
+            if($refund['type']===PayDict::OFFLINEPAY){
+                $manualSource=Store::query('coop_order',$site)->where('id',(int)$refund['trade_id'])->where('out_trade_no',$refund['out_trade_no'])->lock(true)->find();
+                if(!$manualSource)throw new CommonException('原线下退款业务单无法核对，未变更主体权益');
+                \addon\hsx_lead\app\service\cooperation\ManualRefundService::assertRefundReceipt($site,$manualSource,$refund);
+            }
             // A closed late-collected purchase has no grant to revoke, but its
             // financial lock may be resolved after complete original refunds.
             $closedPay=Db::name('pay')->where('site_id',$site)->where('out_trade_no',$refund['out_trade_no'])->where('trade_type',PaymentService::TRADE_TYPE)->where('status',PayDict::STATUS_FINISH)->lock(true)->find();

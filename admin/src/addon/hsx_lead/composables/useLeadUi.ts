@@ -30,9 +30,10 @@ export function useLeadList(request: (params: Row) => Promise<any>, initial: Row
         try {
             const result = await request({ ...query })
             if (current !== sequence || disposed) return
-            const page = result.data || {}
-            rows.value = Array.isArray(page.data) ? page.data : []
-            total.value = Number(page.total || 0)
+            const page = result?.data
+            if (!page || !Array.isArray(page.data) || !['string', 'number'].includes(typeof page.total) || String(page.total).trim() === '' || !Number.isSafeInteger(Number(page.total)) || Number(page.total) < 0) throw new Error('返回的列表格式不完整，请核对配套后端')
+            rows.value = page.data
+            total.value = Number(page.total)
         } catch (cause) {
             if (current === sequence && !disposed) { rows.value = []; total.value = 0; error.value = errorText(cause, '列表加载失败，请检查访问权限并重试。') }
         } finally { if (current === sequence && !disposed) loading.value = false }

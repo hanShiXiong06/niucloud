@@ -1,7 +1,7 @@
 <template>
     <view class="payment-orders-page" :style="themeColor()">
         <CoopTaskSheet page :show="true" title="我的付款单" fixed-body :busy="!!busyId" @close="backCooperationTask">
-            <template #filters><view class="order-filters"><view class="order-filters__inner"><button v-for="item in cooperationPaymentOrderStatuses" :key="item.value" :class="{ 'is-active': status === item.value }" :disabled="!!busyId" @tap="filter(item.value)">{{ item.label }}</button></view></view></template>
+            <template #filters><view class="order-filters"><view class="order-filters__inner"><button v-for="item in cooperationPaymentOrderStatuses" :key="item.value" :class="{ 'is-active': status === item.value }" :disabled="!!busyId" @tap="filter(item.value)">{{ item.label }}</button></view></view><CoopPaymentHelp :active="active && loggedIn" :inset="12" :spacing="12" /></template>
             <z-paging v-if="active && loggedIn" :key="revision" ref="pagingRef" :model-value="rows" class="orders-pager" :fixed="false" height="100%" :auto="true" :concat="false" :scrollable="!busyId" :refresher-enabled="!busyId" :default-page-size="20" :auto-clean-list-when-reload="false" :safe-area-inset-bottom="false" :call-network-reject="false" :show-loading-more-no-more-line="false" loading-more-fail-text="读取失败，点击重试" loading-more-no-more-text="已显示全部付款单" @query="pagingQuery">
                 <view v-if="error && rows.length" class="order-error" role="alert">{{ error }}</view>
                 <view v-for="row in rows" :key="row.id" class="payment-order">
@@ -33,6 +33,7 @@ import { useLogin } from '@/hooks/useLogin'
 import ZPaging from 'z-paging/components/z-paging/z-paging.vue'
 import CoopTaskSheet from '../../components/cooperation/CoopTaskSheet.vue'
 import CoopState from '../../components/cooperation/CoopState.vue'
+import CoopPaymentHelp from '../../components/cooperation/CoopPaymentHelp.vue'
 import PaymentRefundSheet from './components/PaymentRefundSheet.vue'
 import { cooperationOrders, cooperationOrder, closeCooperationOrder, cooperationOrderRefund, requestCooperationOrderRefund, refreshCooperationOrderRefund, cancelCooperationOrderRefund, coopRequestId, coopDate, coopMoney, coopError, type CoopRow } from '../../api/cooperation'
 import { cooperationPaymentOrderStatuses, cooperationPaymentOrderStatus, cooperationPaymentOrderResumeUrl, cooperationPaymentReplacementId, cooperationPaymentReplacementMatches, cooperationPaymentRefundDetail } from '../../utils/cooperation-payment-orders'

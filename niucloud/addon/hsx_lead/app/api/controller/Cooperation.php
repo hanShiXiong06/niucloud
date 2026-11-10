@@ -9,11 +9,16 @@ use core\exception\CommonException;
 
 final class Cooperation extends BaseApiController
 {
+    public function paymentHelp()
+    {
+        return success(\addon\hsx_lead\app\service\cooperation\PaymentHelpService::get($this->context()))->header(['Cache-Control'=>'private, no-store']);
+    }
     private function context(): Context { return new Context((int)$this->request->siteId(),0,(int)$this->request->memberId()); }
     private function service(): CooperationService { return new CooperationService($this->context()); }
     public function access() { return success(\addon\hsx_lead\app\service\cooperation\ConfigService::publicAccess((int)$this->request->siteId()))->header(['Cache-Control'=>'no-store']); }
     public function bootstrap() { return success((new PartnerService($this->context()))->bootstrap()); }
     public function profile() { return success((new PartnerService($this->context()))->saveProfile($this->request->param())); }
+    public function profileForm() { return success((new \addon\hsx_lead\app\service\cooperation\ProfileFormService($this->context()))->member())->header(['Cache-Control'=>'private, no-store']); }
     public function catalog() { return success($this->service()->catalog($this->request->param())); }
     public function leads() { return success($this->service()->lists($this->request->param())); }
     public function createLead() { return success($this->service()->create($this->request->param())); }
@@ -25,6 +30,7 @@ final class Cooperation extends BaseApiController
     public function action(int $id) { return success($this->service()->action($id,$this->request->param())); }
     public function createOrder() { return success((new PaymentService($this->context()))->createOrder($this->request->param())); }
     public function order(int $id) { return success((new PaymentService($this->context()))->order($id)); }
+    public function resumeOrder(int $id) { return success((new \addon\hsx_lead\app\service\cooperation\PaymentOrderRecovery($this->context()))->resume($id))->header(['Cache-Control'=>'private, no-store']); }
     public function orders() { return success((new \addon\hsx_lead\app\service\cooperation\PaymentOrderLifecycle($this->context()))->orders($this->request->param())); }
     public function orderOptions() { $this->context();return success(\addon\hsx_lead\app\service\cooperation\OrderPaymentReadService::options()); }
     public function orderRefund(int $id) { return success((new \addon\hsx_lead\app\service\cooperation\PaymentRefundService($this->context()))->detail($id)); }

@@ -33,7 +33,41 @@ final class StorefrontService
     {
         if ($merchantId<=0) return '';
         $config=(new CoreConfigService())->getConfigValue($this->context->site,self::PREFIX.$merchantId);
-        return is_array($config)&&is_string($config['image']??null)?$config['image']:'';
+        $path=is_array($config)&&is_string($config['image']??null)?$config['image']:'';
+        if ($path==='') return '';
+        $attachment=$this->attachment($path);
+        return $attachment?self::displayReference($attachment):'';
+    }
+
+    /** Keep the framework attachment's cloud URL separate from its object key.
+     * No URL is constructed from client input or fetched from a remote host. */
+    public static function displayReference(array $attachment): string
+    {
+        $path=$attachment['path']??'';
+        $url=$attachment['url']??'';
+        $isLocal=($attachment['storage_type']??'local')==='local';
+        if (!is_string($path)||$path===''||!is_string($url)) return '';
+        if ($url==='') {
+            if (!$isLocal) return '';
+            $url=$path;
+        }
+        if (strlen($url)>1000||preg_match('/[\x00-\x20\x7f]/',$url)||str_contains($url,'\\')) return '';
+        $parts=parse_url($url);
+        if ($parts===false||isset($parts['user'])||isset($parts['pass'])) return '';
+        if (isset($parts['scheme'])) {
+            return in_array(strtolower($parts['scheme']),['http','https'],true)&&!empty($parts['host'])?$url:'';
+        }
+        // Local uploads remain relative references for the framework img().
+        if (!$isLocal||$url!==$path||str_starts_with($url,'/')||str_contains($url,'..')
+            ||isset($parts['host'])||isset($parts['query'])||isset($parts['fragment'])) return '';
+        return $url;
+    }
+
+    private function attachment(string $reference): ?array
+    {
+        $rows=Db::name('sys_attachment')->where('site_id',$this->context->site)->where('att_type','image')
+            ->where(function($query)use($reference):void{$query->where('path',$reference)->whereOr('url',$reference);})->limit(2)->select()->toArray();
+        return count($rows)===1?$rows[0]:null;
     }
 
     /** Called inside the profile transaction, after the merchant/member locks. */
@@ -46,11 +80,16 @@ final class StorefrontService
         $path=$input['storefront_image'];
         if (!is_string($path)||strlen($path)>1000||str_contains($path,'..')) throw new CommonException('请使用本人在本站上传的门头图片');
         if ($path!=='') {
-            $attachment=Db::name('sys_attachment')->where('site_id',$this->context->site)->where('att_type','image')->where('path',$path)->find();
+            $attachment=$this->attachment($path);
             if (!$attachment) throw new CommonException('门头图片不存在或不属于本站，请重新上传');
             $owned=Data::query('audit',$this->context->site)->where('entity_type',self::UPLOAD_ENTITY)
                 ->where('entity_id',$attachment['att_id'])->where('action','uploaded')->where('operator_member_id',$this->context->memberId)->count();
             if (!$owned) throw new CommonException('请重新上传本人门头，不能使用其他账号或聊天附件');
+            if (self::displayReference($attachment)==='') throw new CommonException('门头图片访问地址无效，请联系管理员核对存储域名');
+            // Presentation URLs may change with the storage/CDN configuration;
+            // persist only the exact registered storage reference, never a URL
+            // supplied by the client or a URL with extra query parameters.
+            $path=$attachment['path'];
         }
         (new CoreConfigService())->setConfig($this->context->site,self::PREFIX.$merchantId,['image'=>$path]);
     }

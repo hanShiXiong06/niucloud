@@ -8,6 +8,7 @@ require __DIR__.'/membership-fixtures.php';
 use addon\hsx_lead\app\service\Context;
 use addon\hsx_lead\app\service\cooperation\{PartnerService,StorefrontService,Store,UploadService,ConfigService};
 use addon\hsx_lead\app\support\Data;
+use app\service\core\sys\CoreConfigService;
 use core\exception\CommonException;
 use think\facade\Db;
 
@@ -33,7 +34,7 @@ try{
     storefrontReject(fn()=>(new StorefrontService(new Context($site+1,0,101)))->assertUploadAllowed(),'cross-site member identity cannot upload');
     $fixture=static function(string $name,Context $owner,string $kind=StorefrontService::UPLOAD_ENTITY)use($site):string{
         $path='upload/hsx_lead/storefront-fixture/'.$name.'.png';
-        $id=(int)Db::name('sys_attachment')->insertGetId(['site_id'=>$owner->site,'path'=>$path,'url'=>'https://cdn.invalid/'.$name.'.png','att_type'=>'image']);
+        $id=(int)Db::name('sys_attachment')->insertGetId(['site_id'=>$owner->site,'path'=>$path,'url'=>$path,'att_type'=>'image','storage_type'=>'local']);
         $owner->audit($kind,$id,'uploaded',[]);return $path;
     };
     $own=$fixture('own',$ctx);$otherImage=$fixture('other',$other);$crossImage=$fixture('cross',$cross);$chat=$fixture('private-chat',$ctx,'cooperation_attachment');
@@ -45,6 +46,67 @@ try{
     storefrontCheck($profiles->present(Data::row('merchant',$site,$id),false,[])['storefront_image']===$own,'public store cards receive the same storefront');
     storefrontCheck($profiles->present(Data::row('merchant',$site,$id),true,[])['storefront_image']===$own,'private profile receives storefront');
     storefrontCheck((new StorefrontService($cross))->image($id)==='','same numeric merchant id does not expose another site photo');
+    // COS objects live behind the storage driver's domain, not this app's
+    // /upload route. Preserve canonical references but project the registered
+    // public URL; never create an artificial site-domain URL from an object key.
+    $cloudPath='upload/hsx_lead/'.$site.'/m101/202611/10/photo_tencent.jpg';
+    $cloudUrl='https://merchant-images.example.invalid/'.$cloudPath;
+    $cloudId=(int)Db::name('sys_attachment')->insertGetId(['site_id'=>$site,'path'=>$cloudPath,'url'=>$cloudUrl,'att_type'=>'image','storage_type'=>'tencent']);
+    $ctx->audit(StorefrontService::UPLOAD_ENTITY,$cloudId,'uploaded',[]);
+    $savedConfig=static fn():array=>Db::name('sys_config')->where('site_id',$site)->where('config_key','HSX_LEAD_STOREFRONT_'.$id)->find();
+    $storedImage=static function()use($savedConfig):string{$row=$savedConfig();$value=Data::decode($row['value']);return(string)($value['image']??'');};
+    $cloudInput=array_replace($input,['storefront_image'=>$cloudPath]);
+    storefrontCheck($profiles->saveProfile($cloudInput)['storefront_image']===$cloudUrl,'saving a cloud object key projects the actual registered COS URL');
+    storefrontCheck($storedImage()===$cloudPath,'cloud persistence retains its canonical storage path');
+    $beforeRead=$savedConfig();
+    storefrontCheck($photos->image($id)===$cloudUrl,'saved legacy cloud path resolves to registered public URL on read');
+    storefrontCheck($savedConfig()===$beforeRead,'reading legacy cloud path does not rewrite its configuration or timestamps');
+    storefrontCheck($profiles->present(Data::row('merchant',$site,$id),false,[])['storefront_image']===$cloudUrl,'public storefront card uses COS domain, not the SaaS host');
+    storefrontCheck($profiles->present(Data::row('merchant',$site,$id),true,[])['storefront_image']===$cloudUrl,'private form receives the same resolved COS image');
+    storefrontCheck($profiles->saveProfile(array_replace($input,['storefront_image'=>$cloudUrl]))['storefront_image']===$cloudUrl,'already-released client may return the exact registered cloud URL on save');
+    storefrontCheck($storedImage()===$cloudPath,'saving projected cloud URL still writes canonical path, not presentation URL');
+    $cloudWithout=$cloudInput;unset($cloudWithout['storefront_image']);
+    storefrontCheck($profiles->saveProfile($cloudWithout)['storefront_image']===$cloudUrl&&$storedImage()===$cloudPath,'omitting cloud field preserves canonical reference and correct display');
+    $configs=new CoreConfigService();
+    $configs->setConfig($site,'HSX_LEAD_STOREFRONT_'.$id,['image'=>$cloudUrl]);$beforeRead=$savedConfig();
+    storefrontCheck($photos->image($id)===$cloudUrl&&$savedConfig()===$beforeRead,'registered legacy URL can display without a history migration');
+    storefrontCheck($profiles->saveProfile(array_replace($input,['storefront_image'=>$cloudUrl]))['storefront_image']===$cloudUrl&&$storedImage()===$cloudPath,'normal save canonicalizes a registered legacy URL');
+    foreach(['',$cloudPath]as$unresolvedCloudUrl){
+        Db::name('sys_attachment')->where('site_id',$site)->where('att_id',$cloudId)->update(['url'=>$unresolvedCloudUrl]);$beforeRead=$savedConfig();
+        storefrontCheck($photos->image($id)===''&&$savedConfig()===$beforeRead,'cloud attachment without an absolute URL never falls back to the SaaS domain');
+        storefrontReject(fn()=>$profiles->saveProfile($cloudInput),'missing cloud domain cannot be confirmed as a valid storefront photo');
+    }
+    Db::name('sys_attachment')->where('site_id',$site)->where('att_id',$cloudId)->update(['url'=>$cloudUrl]);
+    foreach([[$otherImage,$site],[$crossImage,$site+1],[$chat,$site]]as[$badPath,$badSite]){
+        $badUrl='https://unshared.example.invalid/'.basename($badPath);
+        Db::name('sys_attachment')->where('site_id',$badSite)->where('path',$badPath)->update(['url'=>$badUrl]);
+        storefrontReject(fn()=>$profiles->saveProfile(array_replace($input,['storefront_image'=>$badUrl])),'registered URL does not bypass uploader, site or public-storefront audit scope');
+        storefrontCheck($storedImage()===$cloudPath&&$photos->image($id)===$cloudUrl,'forbidden URL save leaves the existing cloud image intact');
+    }
+    foreach(['https://merchant-images.example.invalid/unregistered.jpg','https://merchant-images.example.invalid/'.$cloudPath.'?forged=1']as$badUrl){
+        storefrontReject(fn()=>$profiles->saveProfile(array_replace($input,['storefront_image'=>$badUrl])),'same CDN host or similar URL is not an exact registered image');
+    }
+    // Local storage can return a blank public URL. That case must retain its
+    // valid local reference instead of losing the photo or adding a wrong host.
+    Db::name('sys_attachment')->where('site_id',$site)->where('path',$own)->update(['url'=>'']);
+    storefrontCheck($profiles->saveProfile($input)['storefront_image']===$own,'blank local attachment URL falls back to its canonical local path');
+    $configs->setConfig($site,'HSX_LEAD_STOREFRONT_'.$id,['image'=>'upload/hsx_lead/missing_tencent.jpg']);$beforeRead=$savedConfig();
+    storefrontCheck($photos->image($id)===''&&$savedConfig()===$beforeRead,'missing attachment is hidden, not guessed as a SaaS-host URL or silently rewritten');
+    foreach(['javascript:alert(1)','data:image/png;base64,AAAA','//untrusted.example.invalid/photo.jpg','https://user:password@example.invalid/photo.jpg']as$index=>$unsafeUrl){
+        $unsafePath='upload/hsx_lead/storefront-fixture/unsafe-'.$index.'_tencent.jpg';
+        $unsafeId=(int)Db::name('sys_attachment')->insertGetId(['site_id'=>$site,'path'=>$unsafePath,'url'=>$unsafeUrl,'att_type'=>'image','storage_type'=>'tencent']);
+        $ctx->audit(StorefrontService::UPLOAD_ENTITY,$unsafeId,'uploaded',[]);
+        $configs->setConfig($site,'HSX_LEAD_STOREFRONT_'.$id,['image'=>$unsafePath]);$beforeRead=$savedConfig();
+        storefrontCheck($photos->image($id)===''&&$savedConfig()===$beforeRead,'unsafe registered display URL never reaches image markup or rewrites history');
+        storefrontReject(fn()=>$profiles->saveProfile(array_replace($input,['storefront_image'=>$unsafePath])),'unsafe attachment URL is rejected even when its path and uploader are real');
+        storefrontReject(fn()=>$profiles->saveProfile(array_replace($input,['storefront_image'=>$unsafeUrl])),'unsafe URL cannot be used as the client image reference');
+    }
+    $configs->setConfig($site,'HSX_LEAD_STOREFRONT_'.$id,['image'=>$cloudPath]);
+    $duplicate=(int)Db::name('sys_attachment')->insertGetId(['site_id'=>$site,'path'=>'upload/hsx_lead/duplicate_tencent.jpg','url'=>$cloudUrl,'att_type'=>'image','storage_type'=>'tencent']);
+    $ctx->audit(StorefrontService::UPLOAD_ENTITY,$duplicate,'uploaded',[]);
+    storefrontReject(fn()=>$profiles->saveProfile(array_replace($input,['storefront_image'=>$cloudUrl])),'ambiguous registered URL does not arbitrarily select one attachment');
+    Db::name('sys_attachment')->where('site_id',$site)->where('att_id',$duplicate)->delete();
+    storefrontCheck($profiles->saveProfile($input)['storefront_image']===$own,'restore local profile without converting or losing stored media');
     storefrontReject(fn()=>(new StorefrontService($other))->save($id,['storefront_image'=>$otherImage]),'another member cannot mutate this merchant media');
     foreach([$otherImage,$crossImage,$chat,'https://invalid.example/unowned.png','https://cdn.invalid/own.png','../own.png',str_repeat('x',1001),null,[],true] as $bad){
         storefrontReject(fn()=>$profiles->saveProfile(array_replace($input,['name'=>'must-rollback','storefront_image'=>$bad])),'reject invalid, foreign or non-storefront reference');

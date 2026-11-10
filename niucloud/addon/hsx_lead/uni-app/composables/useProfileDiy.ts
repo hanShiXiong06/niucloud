@@ -34,6 +34,7 @@ export function createProfileDiyContext() {
         if (owner.value !== nextOwner) { sequence++; pending = null; ui.pause(); clear(); owner.value = nextOwner }
         ui.resume()
         if (!getToken()) { clear(); return false }
+        void subscribeState.prepare()
         if (pending) return pending
         const turn = ++sequence, captured = owner.value
         memberLoading.value = true; memberError.value = ''

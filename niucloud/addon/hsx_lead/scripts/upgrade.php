@@ -50,7 +50,7 @@ final class UpgradeCommand
         }
         $ddl = file_get_contents($this->plugin . '/sql/install.sql');
         if (!is_string($ddl) || !preg_match_all('/CREATE TABLE IF NOT EXISTS `\{\{prefix\}\}([a-z_]+)`\s*\((.*?)\)\s*ENGINE\s*=/s', $ddl, $tables, PREG_SET_ORDER)
-            || count($tables) !== 11) throw new RuntimeException('安装SQL声明不完整；请完整上传本插件，未执行升级');
+            || count($tables) !== 15) throw new RuntimeException('安装SQL声明不完整；请完整上传本插件，未执行升级');
         $database = Db::getConfig();
         $prefix = (string)($database['connections'][$database['default']]['prefix'] ?? '');
         if (!preg_match('/^[a-zA-Z0-9_]*$/D', $prefix)) throw new RuntimeException('数据库表前缀格式异常');
@@ -63,8 +63,16 @@ final class UpgradeCommand
             foreach (array_diff($fields[1], $names) as $field) $missing[] = $table[1] . '.' . $field;
         }
         if ($missing) throw new RuntimeException("基础表结构未齐全，升级已阻止，不自动建表/加字段：\n- " . implode("\n- ", $missing)
-            . "\n主体会员更新请先执行 php addon/hsx_lead/scripts/upgrade-entity-membership.php --check，再按文档备份并执行 --apply；其他缺失字段需单独核对，勿卸载重装。");
+            . "\n主体会员更新请先执行 php addon/hsx_lead/scripts/upgrade-entity-membership.php --check；通知任务表请先执行 php addon/hsx_lead/scripts/upgrade-notice-runtime.php --check；人工收款凭据表请先执行 php addon/hsx_lead/scripts/upgrade-manual-receipts.php --check，再按文档备份并执行 --apply；其他缺失字段需单独核对，勿卸载重装。");
         if (!Db::name('addon')->where('key', 'hsx_lead')->find()) throw new RuntimeException('插件尚未安装；本命令不执行安装，请先在平台正常安装');
+        // A native menu refresh does not infer parent-directory grants for old roles.
+        // Never silently migrate permissions from this general-purpose updater.
+        if (Db::name('sys_menu')->where('addon', 'hsx_lead')->where('app_type', 'site')->where('menu_key', 'hsx_lead')->find()) {
+            if (!defined('HSX_LEAD_MENU_GROUPS_LIBRARY_ONLY')) define('HSX_LEAD_MENU_GROUPS_LIBRARY_ONLY', true);
+            require_once $this->plugin . '/scripts/upgrade-menu-groups.php';
+            $menuGroups = (new MenuGroupsUpgrade($this->plugin, $this->backend))->check();
+            if ($menuGroups['affected_roles'] > 0) throw new RuntimeException("原角色尚缺少本次新增的菜单目录，已阻止普通刷新，避免页面消失。请先执行：\nphp addon/hsx_lead/scripts/upgrade-menu-groups.php --check\nphp addon/hsx_lead/scripts/upgrade-menu-groups.php --apply\n再重新执行 upgrade.php --check / --apply；本命令不会静默修改角色权限。");
+        }
         // A global menu key must never REPLACE another addon's or a customized menu.
         $menu = new CoreMenuService();
         foreach (['admin', 'site'] as $type) {
@@ -318,7 +326,7 @@ function main(array $arguments): int
         bootstrap($backend);
         $command = new UpgradeCommand($plugin, $backend, dirname($backend));
         $result = $arguments[0] === '--check' ? $command->check() : $command->apply();
-        if ($arguments[0] === '--check') echo "[通过] 11张基础表及字段、菜单冲突、前端目录已预检；未写入数据库/文件/缓存。\n";
+        if ($arguments[0] === '--check') echo "[通过] 14张基础表及字段、菜单冲突、前端目录已预检；未写入数据库/文件/缓存。\n";
         else echo "[完成] hsx_lead菜单、通知记录、任务注册与源码挂载已更新。\n备份：" . $result['backup'] . "\n已有任务状态保持；新增任务关闭。未编译/上传/发布前端，请按原流程打包。\n";
         return 0;
     } catch (Throwable $error) {

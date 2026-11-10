@@ -1024,6 +1024,9 @@ class RecyclePrintSceneService extends BaseAdminService
             'biz_id',
             'device_id',
             'order_id',
+            'device_index',
+            'device_total',
+            'device_number',
         ];
         return !in_array($key, $readonlyKeys, true);
     }

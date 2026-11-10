@@ -1,7 +1,7 @@
 <template>
     <div class="lead-owner-select">
-        <el-select :model-value="modelValue === '' || modelValue == null ? undefined : Number(modelValue)" filterable remote clearable :remote-method="scheduleSearch" :loading="loading" :disabled="disabled" :teleported="teleported" :placeholder="placeholder" aria-label="搜索归属员工" @focus="opened(true)" @visible-change="opened" @change="select">
-            <el-option v-if="includeUnassigned" label="未分配" :value="0" />
+        <el-select :model-value="modelValue === '' || modelValue == null ? undefined : Number(modelValue)" filterable remote clearable :remote-method="scheduleSearch" :loading="loading" :disabled="disabled" :teleported="teleported" :placeholder="placeholder" aria-label="搜索平台监管负责人" @focus="opened(true)" @visible-change="opened" @change="select">
+            <el-option v-if="includeUnassigned" label="未指定监管负责人" :value="0" />
             <el-option v-for="item in visibleOptions" :key="item.uid" :label="item.name" :value="item.uid" :disabled="Number(item.uid) === excludeUid" />
             <template #footer><div class="lead-owner-select__footer"><span>{{ loading ? '正在查询…' : '已显示 ' + rows.length + ' / ' + total + ' 人' }}</span><el-button v-if="rows.length < total" link type="primary" :loading="loading" @click.stop="loadMore">加载更多</el-button><el-button v-else-if="error" link type="primary" @click.stop="load(false)">重试</el-button></div></template>
         </el-select>
@@ -33,7 +33,7 @@ async function load(append = false) {
 function scheduleSearch(value: string) { keyword.value = value.trim(); sequence++; loading.value = false; if (timer) clearTimeout(timer); timer = setTimeout(() => { timer = undefined; void load(false) }, 250) }
 function opened(value: boolean) { if (value && !rows.value.length && !loading.value) { if (timer) clearTimeout(timer); timer = undefined; void load(false) } }
 function loadMore() { if (!loading.value && rows.value.length < total.value) void load(true) }
-function select(value: any) { const uid = value === '' || value === undefined || value === null ? '' : Number(value); if (uid !== '' && (!Number.isSafeInteger(uid) || uid < 0 || uid === props.excludeUid)) return; selected.value = uid === '' ? null : uid === 0 ? { uid: 0, name: '未分配' } : visibleOptions.value.find(item => item.uid === uid) || null; emit('update:modelValue', uid); emit('selected', selected.value) }
+function select(value: any) { const uid = value === '' || value === undefined || value === null ? '' : Number(value); if (uid !== '' && (!Number.isSafeInteger(uid) || uid < 0 || uid === props.excludeUid)) return; selected.value = uid === '' ? null : uid === 0 ? { uid: 0, name: '未指定监管负责人' } : visibleOptions.value.find(item => item.uid === uid) || null; emit('update:modelValue', uid); emit('selected', selected.value) }
 onBeforeUnmount(() => { disposed = true; sequence++; if (timer) clearTimeout(timer) })
 </script>
 <style scoped>

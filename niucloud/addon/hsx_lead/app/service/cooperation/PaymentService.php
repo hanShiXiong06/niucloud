@@ -4,6 +4,7 @@ namespace addon\hsx_lead\app\service\cooperation;
 
 use addon\hsx_lead\app\service\Context;
 use addon\hsx_lead\app\support\Data;
+use addon\hsx_lead\app\support\AdminKeywordSearch;
 use app\dict\member\{MemberAccountTypeDict,MemberCashOutDict};
 use app\dict\pay\PayDict;
 use app\service\core\member\CoreMemberAccountService;
@@ -104,11 +105,12 @@ final class PaymentService
     public function assertPayable(int $id): array
     {
         $this->order($id);$raw=Store::row('coop_order',$this->context->site,$id,true);$row=self::presentOrder($raw);
+        ManualPaymentService::assertNoPendingReceipt($this->context->site,$id);
         if ($row['status']!=='unpaid') throw new CommonException('该业务已支付或已关闭，请返回刷新结果，请勿重复付款');
         if(!empty($row['requires_manual_review']))throw new CommonException($row['review_message']?:'原付款结果待平台核对，请勿重复付款');
         if(!empty(Data::decode($raw['rule_json'])['pricing_intent']))throw new CommonException('平台正在核对这笔订单的改价，请刷新订单后使用确认的新付款单，勿继续支付旧金额');
         self::assertReplacementChain($this->context->site,$raw,true);
-        if (PaymentOrderLifecycle::expiresAt($raw)<=time()) throw new CommonException('原付款订单已超时，请先取消原单，再重新核对金额下单');
+        if (PaymentOrderLifecycle::expiresAt($raw)<=time()) throw new CommonException('本次付款已过期，请关闭付款窗口，重新确认费用后支付');
         self::assertCommissionRules($raw);
         if ($row['purpose']==='membership') EntityMembershipService::assertOrderPayable($this->context->site,$raw);
         self::assertFrameworkAmount(Rules::cents((string)$row['amount']));
@@ -122,7 +124,8 @@ final class PaymentService
         foreach(Db::name('pay')->where('site_id',$this->context->site)->where('trade_type',self::TRADE_TYPE)->where('trade_id',$id)->where('status','<>',PayDict::STATUS_CANCEL)->lock(true)->select()->toArray() as $pay) {
             if (Rules::cents((string)$pay['money'])!==Rules::cents((string)$row['amount']) || (int)$pay['main_id']!==$this->context->memberId) throw new CommonException('收银台金额或付款身份与业务不符，请联系平台核对，当前未发起支付');
             if ((int)$pay['status']===(int)PayDict::STATUS_FINISH) throw new CommonException('原支付流水已收款，正在核对业务入账，请勿再次付款');
-            if ((int)$pay['status']===(int)PayDict::STATUS_ING) throw new CommonException('原支付尚在核对中，请先在支付订单中核对或取消原单，不能直接重开付款');
+            if (self::hasUnconfirmedBalanceDebit($this->context->site,$pay)) throw new CommonException('发现本次付款的账户扣款记录，请联系平台核对，暂勿重复支付');
+            if ((int)$pay['status']===(int)PayDict::STATUS_ING) throw new CommonException('正在确认上次付款结果，请稍后再次点击付款，暂勿重复支付');
         }
         return $row;
     }
@@ -130,11 +133,12 @@ final class PaymentService
     public static function paymentInfo(int $site,int $id): array
     {
         $row=Store::row('coop_order',$site,$id,true);
+        ManualPaymentService::assertNoPendingReceipt($site,$id);
         if ($row['status']!=='unpaid' || Rules::cents((string)$row['amount'])<=0) throw new CommonException('该业务当前不可付款，请刷新核对');
         if(!empty(Data::decode($row['rule_json'])['requires_manual_review']))throw new CommonException('原付款结果待平台核对，请勿重复付款');
         if(!empty(Data::decode($row['rule_json'])['pricing_intent']))throw new CommonException('平台正在核对这笔订单的改价，请刷新订单后使用确认的新付款单，勿继续支付旧金额');
         self::assertReplacementChain($site,$row,true);
-        if (PaymentOrderLifecycle::expiresAt($row)<=time()) throw new CommonException('原付款订单已超时，请先取消原单，再重新核对金额下单');
+        if (PaymentOrderLifecycle::expiresAt($row)<=time()) throw new CommonException('本次付款已过期，请关闭付款窗口，重新确认费用后支付');
         self::assertCommissionRules($row);
         if ($row['purpose']==='membership') EntityMembershipService::assertOrderPayable($site,$row);
         self::assertFrameworkAmount(Rules::cents((string)$row['amount']));
@@ -145,12 +149,26 @@ final class PaymentService
             self::assertCommissionCapacity($site,$lead,Rules::cents((string)$row['net_amount']));
         }
         if (Db::name('pay')->where('site_id',$site)->where('trade_type',self::TRADE_TYPE)->where('trade_id',$id)->where('status',PayDict::STATUS_FINISH)->lock(true)->find()) throw new CommonException('原支付流水已收款，正在核对业务入账，请勿再次付款');
-        if (Db::name('pay')->where('site_id',$site)->where('trade_type',self::TRADE_TYPE)->where('trade_id',$id)->where('status',PayDict::STATUS_ING)->lock(true)->find()) throw new CommonException('原支付尚未核实关闭，不能创建另一笔付款，请先核对或取消原单');
+        if (Db::name('pay')->where('site_id',$site)->where('trade_type',self::TRADE_TYPE)->where('trade_id',$id)->where('status',PayDict::STATUS_ING)->lock(true)->find()) throw new CommonException('正在确认上次付款结果，请稍后再次点击付款，暂勿重复支付');
+        foreach(Db::name('pay')->where('site_id',$site)->where('trade_type',self::TRADE_TYPE)->where('trade_id',$id)->where('status',PayDict::STATUS_WAIT)->select()->toArray()as$pay) {
+            if (self::hasUnconfirmedBalanceDebit($site,$pay)) throw new CommonException('发现本次付款的账户扣款记录，请联系平台核对，暂勿重复支付');
+        }
         $ctx=new Context($site,0,(int)$row['member_id']);
         if ((int)$ctx->merchant()['id']!==(int)$row['merchant_id']) throw new CommonException('付款会员与商户归属已变化，请联系管理员核对');
         if ($row['purpose']!=='commission'&&(int)Store::partner($site,(int)$row['merchant_id'],true)['blocked_at']>0) throw new CommonException('门店已停止合作，不能继续购买权益');
         return ['main_type'=>PayDict::MEMBER,'main_id'=>(int)$row['member_id'],'money'=>$row['amount'],
             'trade_type'=>self::TRADE_TYPE,'trade_id'=>$id,'body'=>['commission'=>'协作佣金','membership'=>'门店主体会员'][$row['purpose']]??'商户协作'];
+    }
+
+    /** An unfinished cashier is not proof of non-payment if a local debit exists. */
+    public static function hasUnconfirmedBalanceDebit(int $site,array $pay): bool
+    {
+        if ((int)($pay['site_id']??0)!==$site||($pay['main_type']??'')!==PayDict::MEMBER
+            ||!in_array((int)($pay['status']??-1),[(int)PayDict::STATUS_WAIT,(int)PayDict::STATUS_ING],true)
+            ||(string)($pay['out_trade_no']??'')==='') return false;
+        return Db::name('member_account_log')->where('site_id',$site)->where('member_id',(int)$pay['main_id'])
+            ->where('account_type','balance')->where('from_type','order')->where('account_data','<',0)
+            ->where('related_id',(string)$pay['out_trade_no'])->value('id')!==null;
     }
 
     /** Only completed, matching framework payment facts can create earnings. */
@@ -167,6 +185,7 @@ final class PaymentService
             $pay=Db::name('pay')->where('site_id',$site)->where('trade_type',self::TRADE_TYPE)->where('trade_id',$id)->where('out_trade_no',$no)->lock(true)->find();
             if (!$pay || (int)$pay['status']!==(int)PayDict::STATUS_FINISH || (int)$pay['main_id']!==(int)$order['member_id']
                 || (string)$pay['main_type']!==PayDict::MEMBER || Rules::cents((string)$pay['money'])!==Rules::cents((string)$order['amount'])) throw new CommonException('尚未找到金额、身份和状态均匹配的已支付流水，不会记入收益');
+            OrderPaymentReadService::assertManualSource($order,$pay);
             if ($order['purpose']==='commission') self::assertCommissionRules($order);
             if ($order['status']==='paid') {
                 if (!hash_equals((string)$order['out_trade_no'],$no)) throw new CommonException('发现同一业务的另一笔支付流水，请人工核对；不会重复入账');
@@ -280,12 +299,22 @@ final class PaymentService
 
     public function adminOrders(array $params=[]): array
     {
-        $this->finance();$q=Store::query('coop_order',$this->context->site);$this->filter($q,$params,['status','purpose','merchant_id'],'order_no|out_trade_no');
+        $this->finance();$q=Store::query('coop_order',$this->context->site);$this->filter($q,$params,['status','purpose','merchant_id']);
+        $phoneNumbers=AdminKeywordSearch::orderMobile($q,$this->context->site,$params['mobile']??'',$params['mobile_scope']??'payer');
         if(isset($params['id'])&&$params['id']!==''){if(!preg_match('/^[1-9][0-9]{0,18}$/D',(string)$params['id']))throw new CommonException('订单编号无效');$q->where('id',$params['id']);}
         if (in_array($params['requires_manual_review']??false,[true,1,'1'],true)) $q->whereLike('rule_json','%requires_manual_review%');
         if (in_array($params['promotion_review_required']??false,[true,1,'1'],true)) $q->whereLike('rule_json','%"promotion_review_required":true%');
         OrderPaymentReadService::filter($q,$params,$this->context->site);
-        $page=Data::page($q,$params);$page['data']=array_map(fn(array $r):array=>array_replace($this->merchantName(self::presentOrder($r))+OrderPricingService::adminMetadata($r),PaymentRefundService::adminSummary($r)),$page['data']);$page['filters']=OrderPaymentReadService::options();return $page;
+        $page=Data::page($q,$params);$page['data']=AdminKeywordSearch::orderContacts($page['data'],$this->context->site,$phoneNumbers,$params['mobile_scope']??'payer');$page['data']=self::adminManualReceipts($page['data'],$this->context->site);$page['data']=ManualPaymentService::withPendingScope($this->context->site,array_column($page['data'],'id'),fn():array=>array_map(fn(array $r):array=>array_replace(self::presentOrder($r)+OrderPricingService::adminMetadata($r),PaymentRefundService::adminSummary($r)),$page['data']));$page['filters']=OrderPaymentReadService::options();return $page;
+    }
+    /** Bounded page lookup; administrative contact/receipt details never enter the mobile DTO. */
+    private static function adminManualReceipts(array $rows,int $site): array
+    {
+        if(!$rows)return[];$ids=array_map('intval',array_column($rows,'id'));$receipts=[];
+        try{$records=Db::name('hsx_lead_manual_receipt')->where('site_id',$site)->where('kind','payment')->where(function($q)use($ids):void{$q->whereIn('order_id',$ids)->whereOr('target_order_id','in',$ids);})->field('id,order_id,target_order_id,status,message')->order('id desc')->select()->toArray();}
+        catch(\Throwable$error){if(str_contains($error->getMessage(),'42S02')||str_contains($error->getMessage(),'1146'))$records=[];else throw$error;}
+        foreach($records as$record)foreach([(int)$record['order_id'],(int)$record['target_order_id']]as$id)if($id>0&&!isset($receipts[$id]))$receipts[$id]=$record;
+        foreach($rows as&$row){$r=$receipts[(int)$row['id']]??[];$row['manual_receipt_id']=(int)($r['id']??0);$row['manual_receipt_status']=(string)($r['status']??'');$row['manual_receipt_message']=(string)($r['message']??'');}unset($row);return$rows;
     }
     private static function assertFrameworkAmount(int $amount): void
     {
@@ -382,17 +411,14 @@ final class PaymentService
     {
         Store::permission($this->context,'finance');if (!$this->context->ownership()->scope()['all_data']) throw new CommonException('资金处理还需要全站业务查看权限，请由管理员授权');
     }
-    private function filter($query,array $params,array $fields,string $keywordFields): void
+    private function filter($query,array $params,array $fields): void
     {
         foreach($fields as $f) if (isset($params[$f])&&$params[$f]!=='') {
             if (!is_string($params[$f])&&!is_int($params[$f])) throw new CommonException('筛选条件格式不正确');
             $query->where($f,$params[$f]);
         }
         foreach(['start_time'=>'>=','end_time'=>'<='] as $f=>$op) if ((int)($params[$f]??0)>0) $query->where('create_time',$op,(int)$params[$f]);
-        $term=Data::text($params,'keyword',100);if ($term!=='') {
-            $like='%'.addcslashes($term,'\\%_').'%';$ids=Data::query('merchant',$this->context->site)->whereLike('name|contact_name',$like)->column('id');
-            $query->where(function($sub)use($keywordFields,$like,$ids):void {$sub->whereLike($keywordFields,$like);if($ids)$sub->whereOr('merchant_id','in',$ids);});
-        }
+        $term=Data::text($params,'keyword',100);\addon\hsx_lead\app\support\AdminKeywordSearch::orders($query,$this->context->site,$term);
     }
     private function merchantName(array $row): array
     {
@@ -439,7 +465,9 @@ final class PaymentService
         }
         $row['status_label']=['unpaid'=>'待支付','paid'=>'已支付','closed'=>'已关闭'][$row['status']]??'待核对';$presented=PaymentOrderLifecycle::decorate($raw,$row);
         if($row['status']==='unpaid'&&!empty($rule['pricing_intent'])){$presented['can_pay']=false;$presented['can_pay_reason']='平台正在核对改价，请刷新后使用确认的新付款单';}
-        return OrderPaymentReadService::present($raw,$presented);
+        $pending=ManualPaymentService::pending((int)$raw['site_id'],(int)$raw['id']);
+        if($pending)$pending['can_pay_reason']=$pending['manual_payment_message'];
+        return array_replace(OrderPaymentReadService::present($raw,$presented),$pending);
     }
     public static function reviewMessage(array $rule): string
     {

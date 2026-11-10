@@ -1183,18 +1183,23 @@ class RecyclePrinterTemplateService extends BaseAdminService
             }
         }
 
-        // 计算设备在订单中的序号
+        // 序号按同站同订单的已录入设备排序；总数不能误用逐台录入时的当前进度。
         $device_index = 1;
         $device_total = 1;
         if (!empty($device['order_id'])) {
-            // 查询同订单的所有设备，按创建时间排序
-            $devices = $device_model->where([
+            $devices = array_map('intval', (new \addon\hsx_recycle\app\model\order\RecycleDevice())->where([
                 ['order_id', '=', $device['order_id']],
                 ['site_id', '=', $this->site_id]
-            ])->order('id', 'asc')->column('id');
+            ])->order('id', 'asc')->column('id'));
 
-            $device_total = count($devices);
-            $device_index = array_search($device_id, $devices) + 1; // +1 因为数组从0开始
+            $position = array_search($device_id, $devices, true);
+            if ($position === false) {
+                throw new AdminException('设备清单已变化，请刷新后重新打印');
+            }
+            // count 是订单提交总台数；实际超出申报时不能打印出 11/10。
+            // 未提前填写总台数的草稿，只能以当前已录入数量为准，不能预测后续设备。
+            $device_total = max(count($devices), (int)($order['count'] ?? 0));
+            $device_index = $position + 1;
         }
 
         // 使用设备模型中定义的固定分类数据

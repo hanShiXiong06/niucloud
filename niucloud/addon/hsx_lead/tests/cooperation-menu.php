@@ -8,8 +8,15 @@ function menuCheck(bool $ok,string $message): void {global $checks;if(!$ok)throw
 try {
     menuCheck(count($menu)===1&&$menu[0]['menu_key']==='hsx_lead','single plugin top-level directory');
     menuCheck($menu[0]['parent_key']===''&&(int)$menu[0]['menu_type']===0,'plugin directory remains top level');
-    $visible=array_values(array_filter($menu[0]['children'],static fn(array $r):bool=>(int)$r['is_show']===1));
-    menuCheck(count($visible)===13,'thirteen current supervision/resource/entity/deposit/promotion/home/profile business pages');
+    $groups=array_values(array_filter($menu[0]['children'],static fn(array $r):bool=>(int)$r['is_show']===1));
+    menuCheck(array_column($groups,'menu_name')===['总览','商户与权益','协作监管','财务结算','推广','业务设置'],'six native menu directory groups, not a competing private navigation');
+    $visible=[];$directoryPaths=[];
+    foreach($groups as $group){
+        menuCheck((int)$group['menu_type']===0&&$group['parent_key']==='hsx_lead'&&$group['api_url']===''&&$group['methods']===''&&$group['view_path']==='','new group is a pure directory and carries no API authority');
+        menuCheck(!isset($directoryPaths[$group['router_path']]),'directory routes remain unique');$directoryPaths[$group['router_path']]=true;
+        foreach($group['children'] as $page){menuCheck($page['parent_key']===$group['menu_key'],'each page belongs to exactly one explicit group');$visible[]=$page;}
+    }
+    menuCheck(count($visible)===14,'all thirteen existing pages and the notice center remain visible business pages');
     $expected=[
         'hsx_lead/workbench'=>'workbench/index',
         'hsx_lead/cooperation/leads'=>'cooperation/leads-page',
@@ -24,6 +31,7 @@ try {
         'hsx_lead/promotion/index'=>'promotion/index',
         'hsx_lead/cooperation/home'=>'cooperation/home-page',
         'hsx_lead/cooperation/profile-home'=>'cooperation/profile-home-page',
+        'hsx_lead/notice'=>'notice/index',
     ];
     menuCheck(count(array_filter($menu[0]['children'],static fn(array $r):bool=>$r['menu_key']==='hsx_lead_manage_leads'))===0,'retired platform workflow and route are removed, not hidden');
     $configuration=array_values(array_filter($visible,static fn(array $r):bool=>$r['menu_key']==='hsx_lead_cooperation_config'))[0];
@@ -33,7 +41,7 @@ try {
     menuCheck(str_contains($settings,'canEditCatalog')&&str_contains($settings,'<CatalogDrawer v-if="canEditCatalog"')&&str_contains($settings,'catalogBusiness'),'per-business directory management remains behind the settings permission');
     menuCheck(str_contains($settings,"hasLeadPagePermission(user,'hsx_lead_catalog_items')"),'directory entrance requires the dedicated read grant; item writes are separately guarded by the drawer and API');
     $css=file_get_contents($root.'/admin/src/styles/icon/official-iconfont.css');
-    foreach(array_merge([$menu[0]],$visible) as $node) {
+    foreach(array_merge([$menu[0]],$groups,$visible) as $node) {
         $icon=explode(' ',$node['icon']);$class=end($icon);
         menuCheck(str_contains($css,'.'.$class.':before'),'menu icon exists in the installed icon library: '.$node['menu_name']);
     }
@@ -42,6 +50,9 @@ try {
         menuCheck(is_file($plugin.'/admin/views/'.$page['view_path'].'.vue'),'plugin page exists: '.$page['view_path']);
         if ($page['menu_key']==='hsx_lead_promotion_manage') {
             foreach(['hsx_lead_promotion_rewards','hsx_lead_promotion_config','hsx_lead_promotion_config_save','hsx_lead_promotion_providers','hsx_lead_promotion_providers_save','hsx_lead_promotion_settle','hsx_lead_promotion_hold','hsx_lead_promotion_resume'] as $key) menuCheck(in_array($key,array_column($page['children'],'menu_key'),true),'promotion page keeps explicit read/write/settlement grants: '.$key);
+        } elseif ($page['menu_key']==='hsx_lead_notice_center_read') {
+            $actions=array_column($page['children'],null,'menu_key');
+            foreach(['hsx_lead_notice_settings'=>['hsx_lead/notice/settings','get'],'hsx_lead_notice_center_save'=>['hsx_lead/notice/settings','put'],'hsx_lead_notice_attempts'=>['hsx_lead/notice/tasks/<id>/attempts','get'],'hsx_lead_notice_center_retry'=>['hsx_lead/notice/tasks/<id>/retry','post']]as$key=>[$api,$method])menuCheck(isset($actions[$key])&&$actions[$key]['api_url']===$api&&$actions[$key]['methods']===$method,'notice center has explicit independent action authority: '.$key);
         } elseif ($page['menu_key']==='hsx_lead_entity_manage') {
             foreach(['hsx_lead_entity_detail','hsx_lead_entity_review','hsx_lead_entity_remove'] as $key) menuCheck(in_array($key,array_column($page['children'],'menu_key'),true),'entity page keeps explicit detail/review/remove grants: '.$key);
             menuCheck($page['api_url']==='hsx_lead/entities'&&$page['methods']==='get','entity listing has its own permission without inheriting finance or configuration writes');

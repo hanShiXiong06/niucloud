@@ -15,6 +15,7 @@ final class OrderPaymentReadService
     public static function options(): array
     {
         $types=[];foreach(PayDict::getPayType() as $key=>$item)$types[]=['value'=>(string)$key,'label'=>(string)$item['name']];
+        if(!in_array(PayDict::OFFLINEPAY,array_column($types,'value'),true))$types[]=['value'=>PayDict::OFFLINEPAY,'label'=>'线下确认收款'];
         $channels=[];foreach(ChannelDict::getType() as $key=>$label)$channels[]=['value'=>(string)$key,'label'=>(string)$label];
         $statuses=[];foreach(PaymentRefundService::LABELS as $key=>$label)$statuses[]=['value'=>$key,'label'=>$label];
         return ['payment_types'=>$types,'payment_channels'=>$channels,'refund_statuses'=>$statuses];
@@ -31,10 +32,19 @@ final class OrderPaymentReadService
         if(count($rows)>1&&(int)$rows[0]['status']===(int)PayDict::STATUS_FINISH&&(int)$rows[1]['status']===(int)PayDict::STATUS_FINISH)return null;
         return$rows[0];
     }
+    /** Typed source evidence is required for attested receipts, not for an
+     * ordinary wallet payment. Reused before payment/refund side effects. */
+    public static function assertManualSource(array $order,array $pay): void
+    {
+        $site=(int)$order['site_id'];$type=(string)($pay['type']??'');
+        if($type===PayDict::OFFLINEPAY||($type===PayDict::BALANCEPAY
+            &&(str_starts_with((string)($pay['voucher']??''),'manual-receipt:')
+                ||ManualPaymentService::hasPaymentReceipt($site,(int)$order['id'],(string)$pay['out_trade_no']))))ManualPaymentService::assertPaymentReceipt($site,$order,$pay);
+    }
     public static function hasTable(string $table): bool
     {
         if(!in_array($table,['pay','pay_refund'],true))return false;
-        $name=(string)config('database.connections.mysql.prefix').$table;
+        $name=(string)Db::name($table)->getTable();
         $database=(string)Db::connect()->getConfig('database');$scope=$database.':'.$name;
         if(isset(self::$knownTables[$scope]))return true;
         $rows=Db::query('SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?',[$name]);
@@ -43,13 +53,13 @@ final class OrderPaymentReadService
     public static function present(array $order,array $presented): array
     {
         $pay=self::payment($order);$types=PayDict::getPayType();$type=(string)($pay['type']??'');$channel=(string)($pay['channel']??'');
-        $presented['payment_type']=$type;$presented['payment_type_name']=$type!==''?(string)($types[$type]['name']??'其他支付方式'):'尚未选择';
+        $presented['payment_type']=$type;$presented['payment_type_name']=$type===PayDict::OFFLINEPAY?'线下确认收款':($type!==''?(string)($types[$type]['name']??'其他支付方式'):'尚未选择');
         $presented['payment_channel']=$channel;$presented['payment_channel_name']=$channel!==''?(ChannelDict::getType($channel)?:'其他支付终端'):'尚未确认';
         return array_replace($presented,PaymentRefundService::summary($order,$pay));
     }
     public static function filter($query,array $params,int $site): void
     {
-        $prefix=(string)config('database.connections.mysql.prefix');
+        $prefix=(string)Db::connect()->getConfig('prefix');
         foreach(['payment_type'=>'type','payment_channel'=>'channel'] as $key=>$field){
             if(!isset($params[$key])||$params[$key]==='')continue;
             $value=$params[$key];$allowed=array_column(self::options()[$key==='payment_type'?'payment_types':'payment_channels'],'value');

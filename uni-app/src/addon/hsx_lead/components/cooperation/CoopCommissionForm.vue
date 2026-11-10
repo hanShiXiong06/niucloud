@@ -15,6 +15,7 @@
             <view v-if="locked" class="coop-payment-locked">已有待支付单，按原单金额继续支付。</view>
             <u-collapse :border="false"><u-collapse-item title="查看本单收费规则" name="fee-rule"><view class="coop-muted">{{ snapshot.known ? `按本单发布时规则：佣金的 ${snapshot.percent}% ，最低 ${coopMoney(snapshot.feeMinimum)}` : '本单收费快照不完整，请联系平台核对。' }}</view></u-collapse-item></u-collapse>
         </view>
+        <CoopPaymentHelp :active="show" :inset="16" :spacing="12" />
         <view v-if="localError || error" class="coop-inline-error coop-form-error" role="alert">{{ localError || error }}</view>
         <template #footer><u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" :text="blocked ? '付款信息需核对' : locked ? '继续支付原单' : '确认金额，去支付'" :loading="busy" :disabled="busy || blocked || (!locked && !snapshot.known)" @click="submit" /></template>
     </CoopTaskSheet>
@@ -29,6 +30,7 @@ import { computed, ref, watch } from 'vue'
 import { coopMoney, type CoopRow } from '../../api/cooperation'
 import CoopTaskSheet from './CoopTaskSheet.vue'
 import CoopPaymentSummary from './CoopPaymentSummary.vue'
+import CoopPaymentHelp from './CoopPaymentHelp.vue'
 import { leadFeeSnapshot } from '../../utils/cooperation-business'
 import { cooperationButtonStyle } from '../../utils/mobile-ui'
 const props = defineProps<{ show: boolean; page?: boolean; lead: CoopRow; config: CoopRow; busy?: boolean; blocked?: boolean; error?: string }>()

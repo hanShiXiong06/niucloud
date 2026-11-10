@@ -128,8 +128,12 @@ export function entitySeatText(membership: Record<string, any> = {}): string {
     return Number.isInteger(limit) && limit >= 1 ? `${used} / ${limit} 人` : '名额待核对'
 }
 export function entityMembershipState(membership: Record<string, any> = {}) {
+    const display = { active: { label: '生效中', tone: 'success' as const }, expired: { label: '已到期', tone: 'warning' as const }, review: { label: '待核对', tone: 'warning' as const }, inactive: { label: '协作已停用', tone: 'info' as const }, not_opened: { label: '未开通', tone: 'info' as const } }
+    if (Object.prototype.hasOwnProperty.call(display, membership.display_status)) return display[membership.display_status as keyof typeof display]
+    if (membership.review_required === true) return display.review
+    if (membership.cooperation_exited === true) return display.inactive
     if (membership.active === true) return { label: '生效中', tone: 'success' as const }
-    if (membership.state === 'expired') return { label: '已到期', tone: 'warning' as const }
+    if (membership.state === 'expired' || Number(membership.expires_at) > 0) return { label: '已到期', tone: 'warning' as const }
     return { label: '未开通', tone: 'info' as const }
 }
 export function filterEntityMembers(rows: Record<string, any>[], keyword: string, status = '') {

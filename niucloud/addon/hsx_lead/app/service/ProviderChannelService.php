@@ -69,6 +69,18 @@ final class ProviderChannelService
         }
         return $items;
     }
+    /** One fresh policy read for a bounded presentation batch; not a write gate cache. */
+    public function summaries(array $keys): array
+    {
+        if (!$keys) return [];
+        $config=$this->stored();$registry=new ProviderRegistry();$result=[];
+        foreach(array_unique($keys) as $key) {
+            $canonical=$registry->definition((string)$key)->key();
+            $result[$canonical]=['enabled'=>($config['enabled'][$canonical]??false)===true,
+                'name'=>self::effectiveName($canonical,$config)];
+        }
+        return $result;
+    }
     /** Shared short lock for policy changes, token writes and generation publication. No HTTP under it. */
     public function lockSite(): void
     {

@@ -8,7 +8,6 @@ use app\service\core\notice\CoreNoticeBindMerchantService;
 use app\service\core\notice\CoreNoticeLogService;
 use core\exception\NoticeException;
 use core\template\TemplateLoader;
-use think\facade\Log;
 
 class Weapp
 {
@@ -22,7 +21,7 @@ class Weapp
         $key = $data['key'];
         $to = $data['to'];//发送对象主题
 
-        Log::write("小程序消息发送" . json_encode($data));
+        $openid = '';
         //完全信任消息的设置, 不再依赖support_type
         if ($template['is_weapp']) {
 
@@ -34,7 +33,6 @@ class Weapp
                     $openid = $info[ 'weapp_openid' ] ?? '';
                     $nickname = $info[ 'nickname' ] ?? '';
                 }
-                Log::write("小程序消息发送  member_id:{$member_id}  openid:{$openid}");
 
             }else{ //商户通知不跳转
                 $merchant_id = $to[ 'merchant_id' ] ?? 0;
@@ -71,25 +69,34 @@ class Weapp
                     'content' => $weapp
                 );
 
-                Log::write("小程序消息发送参数" . json_encode($log_data));
                 try {
-                    (new TemplateLoader(NoticeTypeDict::WEAPP, ['site_id' => $site_id]))->send(
+                    $receipt = (new TemplateLoader(NoticeTypeDict::WEAPP, ['site_id' => $site_id]))->send(
                         [
                             'template_id' => $weapp_template_id,
                             'data' => $weapp_data,
                             'openid' => $openid,
                             'page' => $url,
                         ]);
+                    // Validate once more at the listener boundary so partial
+                    // deployments cannot turn a legacy null result into proof.
+                    if (!is_array($receipt) || ($receipt['accepted'] ?? null) !== true || ($receipt['channel'] ?? '') !== 'weapp'
+                        || ($receipt['provider_code'] ?? '') !== '0') {
+                        throw new \core\exception\NoticeDeliveryException('weapp', 'unknown', '', '小程序通知回执未能核实，请先核对记录，勿重复发送');
+                    }
                     (new CoreNoticeLogService())->add($site_id, $log_data);
+                    if (($data['return_receipt'] ?? false) === true) return $receipt;
                 } catch (NoticeException $e) {
                     $log_data['result'] = $e->getMessage();
                     (new CoreNoticeLogService())->add($site_id, $log_data);
                     //这儿决定要不要抛出
-                    if (!$template['async']) {
-                        throw new NoticeException($e->getMessage());
+                    if (!$template['async'] || ($data['return_receipt'] ?? false) === true) {
+                        throw $e;
                     }
                 }
             }
+        }
+        if (($data['return_receipt'] ?? false) === true) {
+            throw new \core\exception\NoticeDeliveryException('weapp', 'not_submitted', '', '小程序通知未执行发送，请核对渠道开关、接收会员及其微信身份');
         }
         return true;
     }

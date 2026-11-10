@@ -217,9 +217,16 @@ class RecycleOrderDeviceService extends BaseAdminService
 
     private function syncOrderDeviceCount(int $orderId): void
     {
-        $count = (new RecycleDevice())->where([['order_id', '=', $orderId]])->count();
-        (new RecycleOrder())->where([['id', '=', $orderId]])->update([
-            'count' => $count,
+        $where = [['id', '=', $orderId], ['site_id', '=', $this->site_id]];
+        $order = (new RecycleOrder())->where($where)->findOrEmpty();
+        if ($order->isEmpty()) throw new CommonException('ORDER_NOT_FOUND');
+        $count = (new RecycleDevice())->where([
+            ['order_id', '=', $orderId], ['site_id', '=', $this->site_id],
+        ])->count();
+        (new RecycleOrder())->where($where)->update([
+            // 保留客户已申报的总台数，逐台保存/移除不能把“提交10台”改成“已录入1台”。
+            // 草稿未给总数或实际超出申报时，随已录入数量向上补足。
+            'count' => max((int)($order['count'] ?? 0), $count),
             'device_count' => $count,
             'update_at' => time(),
         ]);

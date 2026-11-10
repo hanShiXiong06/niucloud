@@ -8,6 +8,7 @@ use app\service\core\notice\CoreNoticeBindMerchantService;
 use app\service\core\notice\CoreNoticeLogService;
 use app\service\core\weapp\CoreWeappConfigService;
 use core\exception\NoticeException;
+use core\template\NoticeReceipt;
 use core\template\TemplateLoader;
 use think\facade\Log;
 
@@ -26,8 +27,6 @@ class Wechat
 
         //完全信任消息的设置, 不再依赖support_type
         if ($template[ 'is_wechat' ]) {
-            Log::write('template_info');
-            Log::write(json_encode($template,256));
 
             if ($template['receiver_type'] ==1){
                 $member_id = $to[ 'member_id' ] ?? 0;
@@ -101,17 +100,25 @@ class Wechat
                         $send_data[ 'miniprogram' ] = $miniprogram;
                     }
                     $send_res = ( new TemplateLoader(NoticeTypeDict::WECHAT, [ 'site_id' => $site_id ]) )->send($send_data);
-                    Log::write('发送结果'.$send_res);
+                    if (!is_array($send_res) && (!is_object($send_res) || !method_exists($send_res, 'toArray'))) {
+                        throw new \core\exception\NoticeDeliveryException('wechat', 'unknown', '', '公众号通知回执未能核实，请先核对记录，勿重复发送');
+                    }
+                    $receipt = NoticeReceipt::accepted(is_array($send_res) ? $send_res : $send_res->toArray(), 'wechat');
+                    Log::write('公众号通知接口已受理：'.json_encode($receipt, JSON_UNESCAPED_UNICODE));
                     ( new CoreNoticeLogService() )->add($site_id, $log_data);
+                    if (($data['return_receipt'] ?? false) === true) return $receipt;
                 } catch (NoticeException $e) {
                     $log_data[ 'result' ] = $e->getMessage();
                     ( new CoreNoticeLogService() )->add($site_id, $log_data);
                     //这儿决定要不要抛出
-                    if (!$template[ 'async' ]) {
-                        throw new NoticeException($e->getMessage());
+                    if (!$template[ 'async' ] || ($data['return_receipt'] ?? false) === true) {
+                        throw $e;
                     }
                 }
             }
+        }
+        if (($data['return_receipt'] ?? false) === true) {
+            throw new \core\exception\NoticeDeliveryException('wechat', 'not_submitted', '', '公众号通知未执行发送，请核对渠道开关、接收会员及其微信身份');
         }
         return true;
     }

@@ -2,6 +2,7 @@
 declare(strict_types=1);
 namespace addon\hsx_lead\app\service\cooperation;
 
+use addon\hsx_lead\app\support\Data;
 use app\dict\pay\{OnlinePayDict,PayDict};
 use app\service\core\pay\{CorePayEventService,CorePayService};
 use think\facade\Db;
@@ -36,6 +37,18 @@ final class PaymentGatewayReconciler
             return['state'=>'uncertain','message'=>'已请求核对取消，但渠道尚未确认关闭；请稍后刷新原单，不要重新下单'];
         }catch(\Throwable $error){return['state'=>'uncertain','message'=>'支付渠道暂未返回可核实的结果；原单保留，请稍后刷新核对'];}
     }
+    /** Revisit an acknowledged paid result after a local hook failed. This is
+     * query-only: even a contradictory NOTPAY/CLOSED cannot authorize a close. */
+    public function recoverPaid(int $site,array $pay): array
+    {
+        if((int)($pay['site_id']??0)!==$site||!self::supports($pay))return['state'=>'paid_pending','message'=>'原收款渠道凭据仍待核对，请勿再次付款'];
+        try{
+            $provider=$this->providerFactory?($this->providerFactory)($site,(string)$pay['channel'],(string)$pay['type']):(new CorePayEventService())->init($site,(string)$pay['channel'],(string)$pay['type']);
+            $result=$provider->getOrder((string)$pay['out_trade_no']);
+            if(is_array($result)&&in_array($result['status']??'',[OnlinePayDict::SUCCESS,OnlinePayDict::TRADE_FINISHED],true))return$this->paid($site,$pay);
+        }catch(\Throwable $error){}
+        return['state'=>'paid_pending','message'=>'原单曾返回收款，当前业务仍待核对；未关闭或再次扣款'];
+    }
     private function closed(int $site,array $pay): array
     {
         // A local successful receipt always wins over an obsolete close query.
@@ -50,10 +63,17 @@ final class PaymentGatewayReconciler
         try{
             $current=Db::name('pay')->where('site_id',$site)->where('id',(int)$pay['id'])->lock(true)->find();
             if(!$current)return['state'=>'paid_pending','message'=>'渠道已收款，原付款记录待平台核对；请勿再次付款'];
+            $order=Store::row('coop_order',$site,(int)$pay['trade_id'],true);$rule=Data::decode($order['rule_json']);
+            if($order['status']==='unpaid'&&($rule['requires_manual_review']??'')==='gateway_payment_receipt_review'){
+                unset($rule['requires_manual_review']);
+                Store::query('coop_order',$site)->where('id',$order['id'])->update(['rule_json'=>Data::json($rule)]);
+            }
             if((int)$current['status']!==(int)PayDict::STATUS_FINISH)(new CorePayService())->paySuccess($site,['out_trade_no'=>$pay['out_trade_no'],'type'=>$pay['type']]);
             // The registered PaySuccess hook normally confirms this. Calling
             // its idempotent business service also handles a missing hook cache.
             PaymentService::confirm(['site_id'=>$site,'trade_type'=>PaymentService::TRADE_TYPE,'trade_id'=>(int)$pay['trade_id'],'out_trade_no'=>$pay['out_trade_no']]);
+            $order=Store::row('coop_order',$site,(int)$pay['trade_id'],true);
+            if($order['status']!=='paid'||!empty(Data::decode($order['rule_json'])['requires_manual_review']))return['state'=>'paid_pending','message'=>'原单已收款，业务结果仍待平台核对；未取消订单，请勿再次付款'];
             return['state'=>'paid','message'=>'已核实原单收款，订单没有取消，请查看付款结果'];
         }catch(\Throwable $error){
             // Return, never throw: an outer cancellation transaction must not
