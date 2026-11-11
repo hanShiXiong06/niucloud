@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 return ['listen'=>[
+    'PayType'=>['addon\\hsx_lead\\app\\listener\\pay\\VirtualPayType'],
+    'WeappMessage'=>['addon\\hsx_lead\\app\\listener\\pay\\VirtualPayMessage'],
     'MemberAccount'=>['addon\hsx_lead\app\listener\member\AccountNoticeListener'],
     'MemberAdminEntitlementDisplay'=>['addon\hsx_lead\app\listener\member\MemberAdminEntitlementDisplay'],
     'GetPosterType'=>['addon\hsx_lead\app\listener\poster\LeadPosterType'],

@@ -9,6 +9,8 @@ export function membershipBadgeRank(value: Record<string, any> = {}) { const ran
 export function membershipBenefits(value: Record<string, any> = {}) { const icons = new Set(['account', 'home', 'order', 'grid', 'star', 'calendar', 'checkmark-circle']); return (Array.isArray(value.benefits) ? value.benefits : []).filter((item: any) => item && typeof item.key === 'string' && typeof item.title === 'string').map((item: any) => ({ key: item.key, title: String(item.title).slice(0, 80), desc: String(item.desc || '').slice(0, 200), enabled: item.enabled === true, icon: icons.has(item.icon) ? item.icon : 'checkmark-circle' })) }
 export function membershipLevelColor(value: Record<string, any> = {}) { const color = String(value.level_color || ''); return /^#(?:[a-f0-9]{3}|[a-f0-9]{6})$/i.test(color) ? color : 'var(--primary-color,#ff4444)' }
 export function experienceText(value: unknown) { const text = String(value ?? ''); return /^(?:0|[1-9][0-9]{0,13})(?:\.[0-9]{1,2})?$/.test(text) ? text.replace(/\.00$/, '').replace(/(\.[0-9])0$/, '$1') : '—' }
+/** Missing fields retain the existing qualification rule; only an explicit server switch waives it. */
+export function experienceGateEnabled(value: Record<string, any> = {}) { return value.experience_gate_enabled !== false }
 export function entityAccounts(value: Record<string, any>) { return value?.unlimited === true || value?.unlimited === 1 ? '不限人数' : `${Number.isSafeInteger(Number(value?.account_limit)) && Number(value.account_limit) > 0 ? Number(value.account_limit) : '—'} 人` }
 export function entityExpiry(value: unknown) { const at = Number(value); if (!Number.isFinite(at) || at <= 0) return '尚未开通'; const date = new Date(at * 1000); return Number.isNaN(date.getTime()) ? '待核对' : `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}` }
 export function membershipState(value: Record<string, any>) { return value.active === true ? 'active' : entityLevel(value.level_code) ? 'expired' : 'locked' }
@@ -19,6 +21,7 @@ export function membershipCosts(value: Record<string, any> = {}) {
     const keys = ['deposit_required','deposit_balance','deposit_amount','service_full_amount','service_credit_amount','service_amount','experience_unit_price','experience_quantity','experience_amount','payable_amount']
     const entries = Object.fromEntries(keys.map(key => [key, amount(key)]))
     if (keys.some(key => entries[key] === null) || typeof value.buy_experience !== 'boolean' || typeof value.experience_purchase_enabled !== 'boolean') return null
+    if (!experienceGateEnabled(value) && (value.buy_experience || value.experience_purchase_enabled || entries.experience_unit_price! !== 0 || entries.experience_quantity! !== 0 || entries.experience_amount! !== 0)) return null
     if (entries.service_full_amount! - entries.service_credit_amount! !== entries.service_amount! || entries.deposit_amount! + entries.service_amount! + entries.experience_amount! !== entries.payable_amount! || entries.payable_amount! <= 0) return null
     if (!value.buy_experience && (entries.experience_quantity! !== 0 || entries.experience_amount! !== 0)) return null
     if (value.buy_experience && (!value.experience_purchase_enabled || entries.experience_unit_price! <= 0 || (entries.experience_quantity! === 0 ? entries.experience_amount! !== 0 : entries.experience_amount! <= 0))) return null

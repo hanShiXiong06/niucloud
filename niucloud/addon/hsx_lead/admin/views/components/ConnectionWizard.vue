@@ -3,11 +3,12 @@
         <el-steps :active="step" finish-status="success" simple class="lead-banner"><el-step title="选 ERP" /><el-step title="填授权" /><el-step title="验证预览" /><el-step title="启用同步" /></el-steps>
         <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" class="lead-error-banner" />
         <el-alert v-if="original.channel_enabled === false" title="原 ERP 渠道已关闭，采集暂停" :description="original.channel_message || '账号与历史数据仍保留。若需更换接入，请从下方选择开放渠道并重新验证；不会自动切换原连接。'" type="warning" show-icon :closable="false" class="lead-banner" />
+        <el-alert v-else-if="step < 2 && syncAttentionFor(original)" :title="syncAttentionFor(original)?.action === 'reauthorize' ? '原账号需要重新登录' : '原连接同步未完成'" :description="syncAttentionFor(original)?.message" type="warning" show-icon :closable="false" class="lead-banner" />
         <template v-if="!loading">
             <template v-if="step === 0"><p class="lead-muted">先验证新授权，验证失败不会影响原来的接入。当前每个商户保留一个启用连接。</p><div v-for="item in providers" :key="item.key" class="lead-candidate" :class="{ 'is-selected': provider === item.key }" role="radio" :aria-checked="provider === item.key" tabindex="0" @click="choose(item.key)" @keydown.enter.prevent="choose(item.key)"><h4>{{ item.name }}</h4><p class="lead-muted">{{ Array.isArray(item.notes) ? item.notes.join('；') : item.notes || '只读获取库存资料，不修改 ERP 的商品与库存。' }}</p></div><el-empty v-if="!providers.length" description="暂无可用 ERP，请联系管理员确认插件配置" /></template>
             <template v-if="step === 1">
                 <h3>{{ schema?.name }} · 授权信息</h3>
-                <el-radio-group v-if="supportsInteractive" v-model="authMode" :disabled="busy || challengeLoading" class="lead-auth-methods" aria-label="授权方式">
+                <el-radio-group v-if="supportsInteractive && !smsMode" v-model="authMode" :disabled="busy || challengeLoading" class="lead-auth-methods" aria-label="授权方式">
                     <el-radio-button value="interactive" label="interactive">账号密码登录</el-radio-button>
                     <el-radio-button value="token" label="token">已有授权 Token</el-radio-button>
                 </el-radio-group>
@@ -21,7 +22,7 @@
                     <el-button link type="primary" :disabled="busy || automatic.active.value" @click="captchaSettingsVisible = true">自动登录设置</el-button>
                     <el-radio-group v-if="automaticReady" v-model="recognitionMode" size="small" aria-label="验证码处理方式"><el-radio-button value="automatic" label="automatic">自动识别</el-radio-button><el-radio-button value="manual" label="manual">手动验证码</el-radio-button></el-radio-group>
                 </div>
-                <div v-if="interactiveMode && !companies.length && automatic.status.value !== 'idle'" class="lead-auth-progress" role="status" aria-live="polite">
+                <div v-if="interactiveMode && !smsMode && !companies.length && automatic.status.value !== 'idle'" class="lead-auth-progress" role="status" aria-live="polite">
                     <div><span v-if="automatic.working.value" class="lead-auth-spinner" /><strong>{{ automatic.stage.value === 'logging_in' ? '正在登录 ERP' : automatic.status.value === 'paused' ? '查询暂时中断' : automatic.status.value === 'failed' || automatic.status.value === 'expired' ? '本次自动登录未完成' : '正在自动登录' }}</strong></div>
                     <p>{{ automatic.message.value }}</p><p class="lead-muted">不需填写公网回调。停止任务不会退还已提交的识别费用；不会自动启用接入。</p>
                     <el-button v-if="automatic.status.value === 'paused'" size="small" type="primary" @click="automatic.resume">继续查询本次申请</el-button><el-button v-if="automatic.active.value" size="small" @click="stopAutomatic">停止本次登录</el-button><el-button v-if="!automatic.working.value" size="small" link @click="recognitionMode = 'manual'">改用手动验证码</el-button>
@@ -37,7 +38,15 @@
                                 <el-input v-model="authorizationInput[field.key]" :type="field.secret ? 'password' : 'text'" :show-password="!!field.secret" :maxlength="field.max_length || 4096" :autocomplete="field.secret ? 'new-password' : 'off'" :placeholder="field.placeholder || `填写${field.label}`" />
                                 <p v-if="field.help" class="lead-muted">{{ field.help }}</p>
                             </el-form-item>
-                            <el-form-item v-if="!automaticMode" label="图片验证码" required>
+                            <el-form-item v-if="smsMode" label="短信验证码" required>
+                                <div class="lead-auth-captcha">
+                                    <el-input v-model="authorizationInput.code" aria-label="短信验证码" :placeholder="`填写 ${codeLength} 位数字验证码`" :maxlength="codeLength" inputmode="numeric" autocomplete="one-time-code" :disabled="!challengeToken || challengeLoading" />
+                                    <el-button :loading="challengeLoading" :disabled="busy || smsRetrySeconds > 0 || !validSmsMobile" @click="refreshChallenge">{{ smsRetrySeconds > 0 ? smsRetrySeconds + 's 后重发' : challengeToken ? '重新获取' : '获取验证码' }}</el-button>
+                                </div>
+                                <p v-if="challengeToken" class="lead-muted" role="status">验证码已发送至 {{ smsMobileMask }}，请在 {{ time(challengeExpires) }} 前完成验证。</p>
+                                <p v-else-if="smsRetrySeconds > 0" class="lead-muted" role="status">请求已提交，如收到短信可稍后重新验证；请勿连续发送。</p>
+                            </el-form-item>
+                            <el-form-item v-else-if="!automaticMode" label="图片验证码" required>
                                 <div class="lead-auth-captcha">
                                     <el-input v-model="authorizationInput.code" aria-label="图片验证码" placeholder="填写图片中的 4 位验证码" :maxlength="4" autocomplete="off" :disabled="!challengeToken || challengeLoading" />
                                     <button v-if="captchaImage" type="button" class="lead-auth-image" :disabled="busy || challengeLoading" aria-label="刷新登录验证码" @click="refreshChallenge"><img :src="captchaImage" alt="登录验证码" /><span>换一张</span></button>
@@ -53,7 +62,7 @@
                             </el-form-item>
                             <el-button link :disabled="busy || challengeLoading" @click="refreshChallenge">放弃本次选择，重新获取验证码</el-button>
                         </div>
-                        <p class="lead-muted">{{ automaticMode ? '点击一次后异步识别并登录；可能由第三方人工识别验证码，按次扣费。只发送验证码图片，不向识别服务发送 ERP 密码。' : '密码和验证码仅用于本次登录；接入后只保存加密授权，失效时需要重新登录。' }}</p>
+                        <p class="lead-muted">{{ smsMode ? '验证码仅用于本次授权。接入后自动同步库存，授权到期时需重新完成短信验证。' : automaticMode ? '点击一次后异步识别并登录；可能由第三方人工识别验证码，按次扣费。只发送验证码图片，不向识别服务发送 ERP 密码。' : '密码和验证码仅用于本次登录；接入后只保存加密授权，失效时需要重新登录。' }}</p>
                     </template>
                     <el-form-item v-for="field in activeScopeFields.filter(item => item.required)" :key="field.key" :label="field.label" required><el-input v-model="scope[field.key]" :maxlength="field.max_length || 100" :placeholder="field.placeholder || '按接口要求填写来源范围'" /></el-form-item>
                     <el-collapse v-if="activeScopeFields.some(item => !item.required)"><el-collapse-item title="来源范围（按接口要求填写；可自动识别的项目可留空）"><el-form-item v-for="field in activeScopeFields.filter(item => !item.required)" :key="field.key" :label="field.label" :required="field.required"><el-input v-model="scope[field.key]" :maxlength="field.max_length || 100" :placeholder="field.placeholder || '按 ERP 来源信息填写'" /><p v-if="field.help" class="lead-muted">{{ field.help }}</p></el-form-item></el-collapse-item></el-collapse></el-form>
@@ -87,7 +96,7 @@
             </template>
             <template v-if="step === 3"><el-result icon="success" title="ERP 接入已启用" sub-title="下一步完成首次同步，完整发布库存后才参与库存匹配。" /><el-alert :title="renewalHint.title" :description="renewalHint.message" :type="renewalHint.type" :closable="false" show-icon class="lead-auth-renewal" /><el-form label-position="top" class="lead-form"><el-form-item label="自动同步"><el-switch v-model="settings.enabled" /></el-form-item><el-form-item label="同步间隔（分钟）"><el-input-number v-model="settings.interval_minutes" :min="15" :max="1440" :precision="0" /><p class="lead-muted">默认 60 分钟；修改周期不会替你开启牛云服务器计划任务。</p></el-form-item></el-form></template>
         </template>
-        <template #footer><div class="lead-actions" style="justify-content: flex-end"><el-button :disabled="busy" @click="visible = false">关闭</el-button><el-button v-if="step > 0 && step < 3" :disabled="busy" @click="previous">上一步</el-button><el-button v-if="step === 0" type="primary" :disabled="!provider || loading" @click="step = 1">填写授权</el-button><el-button v-if="step === 1" type="primary" :disabled="challengeLoading || automatic.active.value" :loading="busy || automatic.working.value" @click="probe">{{ companies.length ? '确认公司并验证' : automaticMode ? '自动登录并预览' : '只读验证与预览' }}</el-button><el-button v-if="step === 2 && needsStoreProbe" type="primary" :disabled="!selectedStore" :loading="busy" @click="reprobeStore">确认门店并重新验证</el-button><el-button v-if="step === 2 && !needsStoreProbe" type="primary" :disabled="!confirmed || !probeToken || preview.can_activate === false" :loading="busy" @click="activate">确认启用接入</el-button><el-button v-if="step === 3" type="primary" :loading="busy" @click="initialSync">保存周期并开始首次同步</el-button></div></template>
+        <template #footer><div class="lead-actions" style="justify-content: flex-end"><el-button :disabled="busy" @click="visible = false">关闭</el-button><el-button v-if="step > 0 && step < 3" :disabled="busy" @click="previous">上一步</el-button><el-button v-if="step === 0" type="primary" :disabled="!provider || loading" @click="step = 1">填写授权</el-button><el-button v-if="step === 1" type="primary" :disabled="challengeLoading || automatic.active.value" :loading="busy || automatic.working.value" @click="probe">{{ companies.length ? '确认公司并验证' : automaticMode ? '自动登录并预览' : smsMode ? '验证并预览' : '只读验证与预览' }}</el-button><el-button v-if="step === 2 && needsStoreProbe" type="primary" :disabled="!selectedStore" :loading="busy" @click="reprobeStore">确认门店并重新验证</el-button><el-button v-if="step === 2 && !needsStoreProbe" type="primary" :disabled="!confirmed || !probeToken || preview.can_activate === false" :loading="busy" @click="activate">确认启用接入</el-button><el-button v-if="step === 3" type="primary" :loading="busy" @click="initialSync">保存周期并开始首次同步</el-button></div></template>
     </HsxDrawer>
     <CaptchaSettings v-model="captchaSettingsVisible" @changed="captchaConfigChanged" />
 </template>
@@ -98,7 +107,7 @@ import CaptchaSettings from './CaptchaSettings.vue'
 import * as api from '../../api'
 import { errorText, time, type Row } from '../../composables/useLeadUi'
 import { useAutomaticAuthorization } from '../../composables/useAutomaticAuthorization'
-import { authRenewalLabel, authRenewalPolicy } from '../../composables/authRenewal'
+import { authRenewalLabel, authRenewalPolicy, syncAttentionFor } from '../../composables/authRenewal'
 const props = defineProps<{ modelValue: boolean, merchantId: number, merchantName?: string }>()
 const emit = defineEmits<{ (e: 'update:modelValue', value: boolean): void, (e: 'changed'): void, (e: 'sync', merchantId: number): void }>()
 const visible = computed({ get: () => props.modelValue, set: value => { if (!value) invalidateRequests(); emit('update:modelValue', value) } })
@@ -106,8 +115,17 @@ const step = ref(0), loading = ref(false), busy = ref(false), error = ref(''), p
 const settings = reactive({ enabled: true, interval_minutes: 60 })
 const schema = computed(() => providers.value.find(item => item.key === provider.value))
 const authMode = ref('token'), authorizationInput = reactive<Row>({}), challengeToken = ref(''), captchaImage = ref(''), challengeExpires = ref(0), challengeLoading = ref(false), companies = ref<Row[]>([]), selectedCompany = ref('')
-const supportsInteractive = computed(() => schema.value?.interactive_auth?.type === 'image_captcha')
-const interactiveMode = computed(() => supportsInteractive.value && authMode.value === 'interactive')
+const smsMode = computed(() => schema.value?.interactive_auth?.type === 'sms_code')
+const supportsInteractive = computed(() => ['image_captcha', 'sms_code'].includes(schema.value?.interactive_auth?.type))
+const interactiveMode = computed(() => supportsInteractive.value && (smsMode.value || authMode.value === 'interactive'))
+const codeLength = computed(() => Number(schema.value?.interactive_auth?.code_length || 4))
+const validSmsMobile = computed(() => /^1[3-9][0-9]{9}$/.test(String(credentials.username || '')))
+const smsRetryAt = ref(0), smsNow = ref(Date.now()), smsMobileMask = ref('')
+const smsRetrySeconds = computed(() => Math.max(0, Math.ceil((smsRetryAt.value - smsNow.value) / 1000)))
+let smsTimer: ReturnType<typeof setTimeout> | undefined
+function stopSmsCountdown(reset = true) { if (smsTimer !== undefined) clearTimeout(smsTimer); smsTimer = undefined; if (reset) { smsRetryAt.value = 0; smsNow.value = Date.now() } }
+function tickSmsCountdown() { stopSmsCountdown(false); smsNow.value = Date.now(); if (smsRetryAt.value > smsNow.value && visible.value) smsTimer = setTimeout(tickSmsCountdown, 1000) }
+function startSmsCountdown(seconds = 60) { smsRetryAt.value = Date.now() + seconds * 1000; tickSmsCountdown() }
 const interactiveCredentialFields = computed(() => (schema.value?.fields || []).filter((field: Row) => !field.secret && (schema.value?.interactive_auth?.credential_fields || []).includes(field.key)))
 const interactiveFields = computed(() => schema.value?.interactive_auth?.fields || [])
 const authModes = computed<Row[]>(() => !supportsInteractive.value && Array.isArray(schema.value?.auth_modes) ? schema.value.auth_modes : [])
@@ -135,10 +153,11 @@ function previewPrice(value: unknown) {
     const [whole, fraction = ''] = raw.split('.')
     return `¥${whole.replace(/^0+(?=\d)/, '')}.${fraction.padEnd(2, '0')}`
 }
-function clearTransient() {
+function clearTransient(keepSmsCooldown = false) {
     Object.keys(authorizationInput).forEach(key => delete authorizationInput[key])
     challengeToken.value = ''; captchaImage.value = ''; challengeExpires.value = 0
-    companies.value = []; selectedCompany.value = ''
+    companies.value = []; selectedCompany.value = ''; smsMobileMask.value = ''
+    if (!keepSmsCooldown) stopSmsCountdown()
 }
 function clearSecrets() { Object.keys(credentials).forEach(key => delete credentials[key]); clearTransient() }
 function invalidateRequests() { sequence++; automatic.stop(); busy.value = false; challengeLoading.value = false; probeToken.value = ''; confirmed.value = false; clearTransient() }
@@ -205,32 +224,41 @@ function validateFields(fields: Row[], values: Row, allowSaved = false) {
 function challengeResponse(payload: Row) {
     const token = payload.challenge_token, expires = Number(payload.expires_at), image = payload.captcha_image
     if (typeof token !== 'string' || !token || token.length > 256 || !Number.isFinite(expires) || expires * 1000 <= Date.now() || expires * 1000 > Date.now() + 600000) throw new Error('验证码授权返回不完整，请重新获取。')
+    if (smsMode.value) {
+        const seconds = Number(payload.retry_after), mobile = String(credentials.username || ''), mask = mobile.slice(0, 3) + '****' + mobile.slice(-4)
+        if (payload.challenge_type !== 'sms_code' || !Number.isSafeInteger(seconds) || seconds < 1 || seconds > 300 || payload.mobile_mask !== mask) throw new Error('短信验证码返回不完整，请稍后重新获取。')
+        return { token, expires, image: '', retry: seconds, mask }
+    }
     if (typeof image !== 'string' || image.length > 200000 || !/^data:image\/(?:jpeg|png|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(image)) throw new Error('验证码图片格式不正确，请重新获取。')
-    return { token, expires, image }
+    return { token, expires, image, retry: 0, mask: '' }
 }
 async function refreshChallenge() {
-    if (!interactiveMode.value || busy.value) return
+    if (!interactiveMode.value || busy.value || (smsMode.value && (challengeLoading.value || smsRetrySeconds.value > 0))) return
+    if (smsMode.value && (!validSmsMobile.value || !Number.isInteger(codeLength.value) || codeLength.value < 4 || codeLength.value > 8)) { error.value = '请填写有效的登录手机号。'; return }
     recognitionChoice.value = 'manual'
     const invalid = validateFields(interactiveCredentialFields.value, credentials)
     if (invalid) { error.value = invalid; return }
     const keptInput = { ...authorizationInput }; delete keptInput.code
     invalidateRequests(); Object.assign(authorizationInput, keptInput)
     const token = sequence; challengeLoading.value = true; error.value = ''
+    if (smsMode.value) startSmsCountdown()
     try {
         const result = await api.getAuthorizationChallenge(props.merchantId, { provider: provider.value, credentials: credentialPayload() })
         if (!isCurrent(token)) return
         const challenge = challengeResponse(result.data || {})
         challengeToken.value = challenge.token; challengeExpires.value = challenge.expires; captchaImage.value = challenge.image
-    } catch (cause) { if (isCurrent(token)) { clearTransient(); error.value = errorText(cause, '验证码获取失败，请重试。') } }
+        if (smsMode.value) { smsMobileMask.value = challenge.mask; startSmsCountdown(challenge.retry) }
+    } catch (cause) { if (isCurrent(token)) { clearTransient(smsMode.value); error.value = errorText(cause, smsMode.value ? '发送结果暂未确认，请稍后重新获取，系统不会自动重发。' : '验证码获取失败，请重试。') } }
     finally { if (isCurrent(token)) challengeLoading.value = false }
 }
 function acceptProbePayload(payload: Row) {
+    if (smsMode.value && (payload.authorization_required === true || payload.status === 'choose_company')) throw new Error('短信登录尚未完成，请重新获取验证码并验证。')
     if (payload.authorization_required === true || payload.status === 'choose_company') { acceptCompanySelection(payload); return }
     if (typeof payload.probe_token !== 'string' || !payload.probe_token) throw new Error('验证结果不完整，请重新验证。')
     probeToken.value = payload.probe_token; probeExpires.value = payload.expires_at; preview.value = payload.preview || {}; impact.value = payload.impact || {}
     verifiedScope.value = String(scope.store_id || preview.value.identity?.store_id || (preview.value.stores?.length === 1 ? preview.value.stores[0].store_id : ''))
     selectedStore.value = verifiedScope.value || (preview.value.stores?.length === 1 ? String(preview.value.stores[0].store_id) : '')
-    clearTransient(); step.value = 2
+    clearTransient(smsMode.value); step.value = 2
 }
 function acceptCompanySelection(payload: Row) {
     const list = payload.companies || payload.public?.companies, token = payload.challenge_token, expires = Number(payload.expires_at)
@@ -279,7 +307,7 @@ async function probe() {
         } else {
             const invalidInput = validateFields(interactiveFields.value, authorizationInput)
             if (invalidInput) { error.value = invalidInput; return }
-            if (!/^[A-Za-z0-9]{4}$/.test(String(authorizationInput.code || ''))) { error.value = '请填写图片中的 4 位验证码。'; return }
+            if (smsMode.value ? !new RegExp('^[0-9]{' + codeLength.value + '}$').test(String(authorizationInput.code || '')) : !/^[A-Za-z0-9]{4}$/.test(String(authorizationInput.code || ''))) { error.value = smsMode.value ? '请填写 ' + codeLength.value + ' 位数字验证码。' : '请填写图片中的 4 位验证码。'; return }
             authorization = Object.fromEntries(interactiveFields.value.map((field: Row) => [field.key, authorizationInput[field.key]]))
             authorization.challenge_token = challengeToken.value; authorization.code = String(authorizationInput.code)
         }
@@ -291,7 +319,7 @@ async function probe() {
         if (!isCurrent(token)) return
         const payload = result.data || {}
         acceptProbePayload(payload)
-    } catch (cause) { if (isCurrent(token)) { if (interactiveMode.value) clearTransient(); error.value = errorText(cause, '验证失败，原接入未更改；请重新获取验证码。') } }
+    } catch (cause) { if (isCurrent(token)) { if (interactiveMode.value) clearTransient(smsMode.value); error.value = errorText(cause, '验证失败，原接入未更改；请重新获取验证码。') } }
     finally { if (isCurrent(token)) busy.value = false }
 }
 async function reprobeStore() {

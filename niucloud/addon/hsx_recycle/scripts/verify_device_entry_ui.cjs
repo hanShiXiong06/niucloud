@@ -50,7 +50,7 @@ async function main() {
 
   let ensureCount = 0
   const row = { imei: '', model: '测试机型', initial_price: 0, category_id: 1 }
-  const list = setup('components/device-entry/DeviceEntryList.vue', { devices: [row], orderId: '', ensureOrder: async () => { ensureCount++; return 90 }, autoAppend: false })
+  const list = setup('components/device-entry/DeviceEntryList.vue', { devices: [row], orderId: '', ensureOrder: async () => { ensureCount++; return 90 }, autoAppend: false, entryReady: true })
   await list.saveDeviceRow(row, 0)
   check('空IMEI不创建草稿、不提交设备，并标记错误行', () => { assert.equal(ensureCount, 0); assert.equal(calls.length, 0); assert.equal(row.imei_touched, true); assert.match(messages.at(-1), /第 1 台设备.*填写/) })
   row.imei = '0000aB'
@@ -121,7 +121,7 @@ async function main() {
     quoteUsers: [{ uid: 11, name: '张报价' }, { uid: 12, name: '李报价' }], assignToQuoteUser: true })
   quoteCard.updateQuoteUser(12)
   check('管理员改选报价员标记待保存', () => { assert.equal(reflected.initial_price_uid, 12); assert.equal(reflected.dirty, true) })
-  const quoteList = setup('components/device-entry/DeviceEntryList.vue', { devices: [reflected], orderId: 90, autoAppend: false })
+  const quoteList = setup('components/device-entry/DeviceEntryList.vue', { devices: [reflected], orderId: 90, autoAppend: false, entryReady: true })
   await quoteList.updateDeviceRow(reflected)
   check('保存修改携带报价员ID，不提交可信姓名或直接写price_uid', () => {
     assert.equal(calls.at(-1)[2].initial_price_uid, 12); assert.equal(calls.at(-1)[2].price_uid, undefined)

@@ -14,9 +14,14 @@ namespace addon\hsx_recycle\app\service\admin\category;
 use addon\hsx_recycle\app\model\category\RecycleCategory;
 use addon\hsx_recycle\app\service\core\category\CoreRecycleCategoryService;
 use addon\hsx_recycle\app\model\category\RecycleCategoryConfig;
+use addon\hsx_recycle\app\model\category\RecycleCategoryQuoteHistory;
+use app\dict\site\SiteDict;
+use app\service\admin\auth\AuthService;
+use app\service\admin\auth\AuthSiteService;
 use core\base\BaseAdminService;
 use core\exception\AdminException;
 use think\facade\Cache;
+use think\facade\Db;
 
 /**
  * 二手机分类服务层
@@ -131,6 +136,113 @@ class RecycleCategoryService extends BaseAdminService
 
         $info = $this->model->field($field)->where([['category_id', "=", $id]])->findOrEmpty()->toArray();
         return $info;
+    }
+
+    /** 移动端只消费报价分类，不开放分类增删改；权限不写入分类树缓存。 */
+    public function quoteOptions(): array
+    {
+        $this->assertQuoteAccess(false);
+        $site = (new AuthSiteService())->getSiteInfo();
+        $canEdit = $this->hasQuotePermission(true)
+            && !in_array((int)($site['status'] ?? SiteDict::CLOSE), [SiteDict::EXPIRE, SiteDict::CLOSE], true);
+        return [
+            'categories' => $this->getTree(),
+            'can_edit' => $canEdit,
+            'site_id' => (int)$this->site_id,
+        ];
+    }
+
+    /**
+     * 仅替换报价图。不能复用完整 edit() 的默认值，否则会覆盖分类名称、排序和会员限制。
+     * 系统上传成功不等于发布；显式确认后，图片与历史快照在同一事务内生效。
+     */
+    public function updateQuoteImage(int $id, array $data): array
+    {
+        $this->assertQuoteAccess(true);
+        if ($id <= 0) throw new AdminException('请选择有效的报价分类');
+        $images = $data['images'] ?? null;
+        $expected = $data['expected_images'] ?? null;
+        $remark = $data['remark'] ?? '';
+        if (!is_string($images) || !is_string($expected) || !is_string($remark)) {
+            throw new AdminException('报价图片参数无效，请刷新页面后重新上传');
+        }
+        $images = trim($images);
+        $urlParts = parse_url($images);
+        $imagePath = is_array($urlParts) ? ($urlParts['path'] ?? null) : null;
+        $scheme = strtolower((string)($urlParts['scheme'] ?? ''));
+        $decodedPath = is_string($imagePath) ? rawurldecode(rawurldecode($imagePath)) : '';
+        if ($images === '' || strlen($images) > 2048 || preg_match('/[\x00-\x20<>"\',]/', $images)
+            || !in_array($scheme, ['', 'https'], true) || substr($images, 0, 2) === '//'
+            || ($scheme === 'https' && empty($urlParts['host'])) || isset($urlParts['user']) || isset($urlParts['pass'])
+            || !is_string($imagePath)
+            || preg_match('/[\x00-\x20\\\\]/', $decodedPath) || preg_match('#(^|/)\.\.(/|$)#', $decodedPath)
+            || !in_array(strtolower(pathinfo($imagePath, PATHINFO_EXTENSION)), ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'], true)) {
+            throw new AdminException('请先通过系统上传一张有效的报价图片，原报价保持不变');
+        }
+        if (strlen($expected) > 65535 || mb_strlen($remark, 'UTF-8') > 200) {
+            throw new AdminException('报价备注过长，请控制在200字以内');
+        }
+
+        $result = Db::transaction(function () use ($id, $images, $expected, $remark): array {
+            $category = $this->model->master(true)->where('category_id', $id)
+                ->where('site_id', (int)$this->site_id)->lock(true)->findOrEmpty()->toArray();
+            if (!$category) throw new AdminException('该报价分类不存在或不属于本站，公共报价分类只支持查看');
+            $oldImages = (string)($category['images'] ?? '');
+            // 响应丢失后的重试无需再次写版本，也无需重复确认旧值。
+            if ($oldImages === $images) {
+                return ['category_id' => $id, 'images' => $oldImages, 'update_time' => (int)($category['update_time'] ?? 0), 'changed' => false];
+            }
+            if ($oldImages !== $expected) {
+                throw new AdminException('当前报价已被其他操作更新，请刷新当前报价后再确认，未覆盖现有图片');
+            }
+
+            $history = new RecycleCategoryQuoteHistoryService();
+            if ($oldImages !== '') {
+                $latestImages = (new RecycleCategoryQuoteHistory())->master(true)
+                    ->where('site_id', (int)$this->site_id)->where('category_id', $id)
+                    ->order('create_time desc,id desc')->value('images');
+                if ((string)$latestImages !== $oldImages) {
+                    $history->snapshot($id, $oldImages, '移动端更新前备份');
+                }
+            }
+            $now = time();
+            $this->model->where('category_id', $id)->where('site_id', (int)$this->site_id)
+                ->update(['images' => $images, 'update_time' => $now]);
+            $history->snapshot($id, $images, trim($remark) ?: '移动管理端更新报价');
+            return ['category_id' => $id, 'images' => $images, 'update_time' => $now, 'changed' => true];
+        });
+        // 幂等重试也清缓存：前一次可能已提交，但客户端未收到响应或缓存清理暂时失败。
+        $this->clearCategoryCache();
+        return $result;
+    }
+
+    private function assertQuoteAccess(bool $write): void
+    {
+        if ((int)$this->site_id <= 0) throw new AdminException('请进入业务站点查看和更新报价单');
+        // 仍走框架域名、停站、过期等校验；新接口再显式映射原有分类权限，覆盖升级无需初始化新菜单。
+        (new AuthService())->checkRole($this->request);
+        if ($write) {
+            $site = (new AuthSiteService())->getSiteInfo();
+            if (in_array((int)($site['status'] ?? SiteDict::CLOSE), [SiteDict::EXPIRE, SiteDict::CLOSE], true)) {
+                throw new AdminException('当前站点已停用或过期，不能更新报价单');
+            }
+        }
+        if (!$this->hasQuotePermission($write)) {
+            throw new AdminException($write ? '需要报价分类编辑权限才能更新报价图片' : '需要报价分类查看权限');
+        }
+    }
+
+    private function hasQuotePermission(bool $write): bool
+    {
+        $auth = new AuthService();
+        if (AuthService::isSuperAdmin()) return true;
+        $role = $auth->getAuthRole((int)$this->site_id);
+        if (!empty($role['is_admin'])) return true;
+        $rules = $auth->getAuthApiList();
+        return (bool)array_intersect(
+            $write ? ['recycle/recycle_category/<id>', 'recycle/recycle_category/:id'] : ['recycle/recycle_category', 'recycle/recycle_category_tree'],
+            $rules[$write ? 'put' : 'get'] ?? []
+        );
     }
 
     /**

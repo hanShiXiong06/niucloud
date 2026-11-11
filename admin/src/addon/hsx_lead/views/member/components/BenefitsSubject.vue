@@ -1,7 +1,7 @@
 <template>
     <section class="subject-benefit">
         <div class="subject-benefit__heading">
-            <div><h3>商户主体权益</h3><p>账号、权限与费用；升级门槛在本页顶部“成长值”中设置</p></div>
+            <div><h3>商户主体权益</h3><p>配置本等级的账号、权限、经验门槛与费用</p></div>
             <el-switch :model-value="draft.is_use===1" active-text="启用" aria-label="启用本等级商户主体权益" @update:model-value="patch('is_use',$event?1:0)" />
         </div>
         <div v-if="draft.is_use===1" class="subject-benefit__content">
@@ -10,6 +10,8 @@
                 <h4>等级设置</h4>
                 <el-switch :model-value="draft.is_entry" active-text="入门等级（无需成交经验）" aria-label="将本等级明确设为入门等级" @update:model-value="patch('is_entry',$event)" />
                 <p class="subject-benefit__hint">同一站点只允许一个启用的入门等级。未设置时，不会自动把其他等级变成入门等级。</p>
+                <el-switch :model-value="draft.experience_gate_enabled" active-text="经验门槛" aria-label="购买本等级是否核验门店经验" @update:model-value="patch('experience_gate_enabled',$event)" />
+                <p class="subject-benefit__hint">{{ !draft.experience_gate_enabled ? '关闭后可直接付费开通、升级或续费，已有经验保留。' : draft.is_entry ? '入门等级免经验门槛，其他规则保持不变。' : '开启后按本页顶部“成长值”核验门店经验；不更改个人会员成长值。' }}</p>
             </div>
             <div class="subject-benefit__section"><el-collapse><el-collapse-item title="会员外观与卡面" name="visual"><div class="member-visual-editor">
                 <div class="member-visual-preview"><div class="member-visual-card" :style="visualPreviewStyle"><img v-if="visualPreviewImage" :src="visualPreviewImage" class="member-visual-card__image" alt="卡面背景预览" /><div class="member-visual-card__content"><span class="member-visual-card__eyebrow">会员外观预览</span><strong>门店会员</strong><span class="member-visual-card__caption">等级卡面与商户标识使用同一套配色</span><div class="member-visual-card__bottom"><span class="member-visual-avatar" :class="{'has-effect':draft.visual.avatar_effect}" :style="{'--member-accent':visualPreview.accent_color}">店</span><span class="member-visual-badge">会员标识</span></div></div></div><p class="subject-benefit__hint">{{ draft.visual.preset==='auto'?'自动模式此处用中性色示意；保存后按实际等级顺序配色。':'预览仅展示外观，不代表已获得会员权益。' }}</p></div>
@@ -34,7 +36,7 @@
                 <h4>押金与经验</h4>
                 <div class="subject-benefit__cost-fields">
                     <label><span>本等级押金（元）</span><el-input :model-value="draft.deposit_amount" inputmode="decimal" placeholder="不收押金填0" aria-label="本等级押金" @update:model-value="patch('deposit_amount',$event)" /><small>升级只补差额，续费不重复收取。</small></label>
-                    <div class="subject-benefit__experience-purchase"><el-switch :model-value="draft.experience_purchase_enabled" active-text="允许付费补足经验" aria-label="允许付费补足本等级经验缺口" @update:model-value="patch('experience_purchase_enabled',$event)" /><label v-if="draft.experience_purchase_enabled"><span>每点经验价格（元）<em>*</em></span><el-input :model-value="draft.experience_unit_price" inputmode="decimal" placeholder="填写大于0的金额" aria-label="每点经验价格" @update:model-value="patch('experience_unit_price',$event)" /></label><small v-else>关闭后，须先通过真实成交付佣积累经验。</small></div>
+                    <div v-if="draft.experience_gate_enabled" class="subject-benefit__experience-purchase"><el-switch :model-value="draft.experience_purchase_enabled" active-text="允许付费补足经验" aria-label="允许付费补足本等级经验缺口" @update:model-value="patch('experience_purchase_enabled',$event)" /><label v-if="draft.experience_purchase_enabled"><span>每点经验价格（元）<em>*</em></span><el-input :model-value="draft.experience_unit_price" inputmode="decimal" placeholder="填写大于0的金额" aria-label="每点经验价格" @update:model-value="patch('experience_unit_price',$event)" /></label><small v-else>未达门槛时，先通过成交付佣积累经验。</small></div>
                 </div>
                 <el-collapse class="subject-benefit__help"><el-collapse-item title="三项费用如何核算？" name="costs"><p>押金可在退出时申请退还，不计平台收入、不参与邀请分佣。已有押金按门店主体累计核对，未付或退款中的金额不当作可用余额。</p><p>下方各周期价格为服务费，邀请奖励只按实际支付的服务费计算；押金和经验费均不参与分佣。服务费升级抵扣沿用剩余有效期规则。</p><p>补足经验由商户主动选择，只购买目标等级的经验缺口，不增加真实成交次数。经验数量与单价会在付款前单独展示。</p></el-collapse-item></el-collapse>
             </div>
@@ -47,7 +49,7 @@
                         <span v-else class="subject-benefit__off">未开启购买</span>
                     </div>
                 </div>
-                <el-collapse class="subject-benefit__help"><el-collapse-item title="成长门槛、周期与历史订单规则" name="rules"><p>门槛在当前会员等级页面顶部的“成长值”调整，不在此处重复配置。成长值同时用于框架个人成长定义和本插件等级排序、升级门槛；只有明确选择的入门等级不设经验门槛，其他等级按所填成长值核验。关闭低档不会把高档自动变成入门等级。</p><p>承接门店实际支付1元协作佣金计1点真实付佣经验，成功退款扣回。开启补足经验后可由商户自选付费补足，两种来源分别展示；押金、服务费本身不增加经验。开通、升级、续费均按实时经验核验；满足门槛后仍须商户确认付款，不自动扣费或晋级。</p><p>门店经验不会增加个人账户成长值，不修改个人会员等级，也不触发个人升级赠礼。</p><p>只有开启并设置有效价格的周期才会向商户展示。月付、季付、年付分别为1、3、12个月；自定义周期为1—120个月，合计最多50项。</p><p>修改价格、关闭或移除周期，仅影响后续购买报价，不改写历史订单、已付金额或已生效期限。账号名额包含负责人，降低名额不会自动移除现有成员。</p><p>权益归门店主体，多位成员共享。购买此权益不会更改个人原有会员等级；服务商申请与推广权益独立管理。</p></el-collapse-item></el-collapse>
+                <el-collapse class="subject-benefit__help"><el-collapse-item title="成长门槛、周期与历史订单规则" name="rules"><p>开启“经验门槛”时，按本页顶部“成长值”核验门店经验；入门等级免核验。关闭后，本等级可直接付费开通、升级或续费，不修改框架成长值与个人等级。</p><p>承接门店实际支付1元协作佣金计1点真实付佣经验，成功退款扣回。开启补足经验后可由商户自选付费补足，两种来源分别展示；押金、服务费本身不增加经验。启用门槛的等级在开通、升级、续费时均按实时经验核验；满足条件仍须商户确认付款，不自动扣费或晋级。</p><p>关闭门槛不清空已有经验，也不改写历史经验费用。门店经验不会增加个人账户成长值，不触发个人升级赠礼。</p><p>只有开启并设置有效价格的周期才会向商户展示。月付、季付、年付分别为1、3、12个月；自定义周期为1—120个月，合计最多50项。</p><p>修改价格、关闭或移除周期，仅影响后续购买报价，不改写历史订单、已付金额或已生效期限。账号名额包含负责人，降低名额不会自动移除现有成员。</p><p>权益归门店主体，多位成员共享。购买此权益不会更改个人原有会员等级；服务商申请与推广权益独立管理。</p></el-collapse-item></el-collapse>
             </div>
         </div>
     </section>
@@ -73,7 +75,7 @@ let dirty=false,lastEmitted='',customSequence=0
 watch(()=>props.modelValue,value=>{const incoming=JSON.stringify(value||{});if(incoming===lastEmitted)return;if(!dirty)draft.value=normalizeSubjectBenefit(value)},{deep:true})
 watch(()=>draft.value.visual.preset,value=>{visualPresetChoice.value=value})
 function publish(){dirty=true;error.value='';const value=subjectBenefitPayload(draft.value);lastEmitted=JSON.stringify(value);emit('update:modelValue',value)}
-function patch(key:keyof Omit<SubjectBenefit,'cycles'>,value:any){draft.value={...draft.value,[key]:value};publish()}
+function patch(key:keyof Omit<SubjectBenefit,'cycles'>,value:any){draft.value={...draft.value,[key]:value,...(key==='experience_gate_enabled'&&value===false?{experience_purchase_enabled:false,experience_unit_price:'0.00'}:{})};publish()}
 function patchVisual(key:keyof SubjectVisual,value:any){draft.value={...draft.value,visual:{...draft.value.visual,[key]:value,...(visualFields.some(field=>field.key===key)?{preset:'custom'}:{})}};publish()}
 function applyVisualPreset(){const preset=visualPresetChoice.value;if(!subjectVisualPresets.some(item=>item.key===preset))return;const colors=preset==='auto'?{start_color:'',end_color:'',text_color:'',accent_color:''}:subjectVisualPresetColors[preset]||{};draft.value={...draft.value,visual:{...draft.value.visual,...colors,preset}};publish()}
 function applyCover(theme:string){const visual=subjectCoverSelection(draft.value.visual,theme,coverFormat.value);if(!visual)return;draft.value={...draft.value,visual};publish()}

@@ -84,9 +84,10 @@ try {
     [$app,$pdo,$schema,$site]=leadBoot();leadAssertIsolated($schema);
     $context=new Context($site,1);$service=new ProviderChannelService($site);$other=new ProviderChannelService($site+1);
     $initial=$service->configuration();$keys=array_column($initial['items'],'key');
-    channelCheck(count($keys)===4&&count(array_filter($initial['items'],static fn(array $row):bool=>$row['enabled']===true))===4,'unconfigured site preserves its four supported channels without writing a policy');
+    $supportedCount=count(ProviderRegistry::supported());
+    channelCheck(count($keys)===$supportedCount&&count(array_filter($initial['items'],static fn(array $row):bool=>$row['enabled']===true))===$supportedCount,'unconfigured site preserves its supported channels without writing a policy');
     channelCheck(Data::query('connection',$site)->count()===0&&Db::name('sys_config')->where('site_id',$site)->where('config_key',ProviderChannelService::KEY)->count()===0,'reading defaults does not create business data or silently configure channels');
-    channelCheck(count($service->available())===4,'public available catalog initially includes all four supported adapters');
+    channelCheck(count($service->available())===$supportedCount,'public available catalog initially includes all supported adapters');
     channelCheck(is_string($initial['revision'])&&$initial['revision']!==''&&!str_contains(json_encode($initial),'credentials_cipher'),'configuration has an optimistic revision and no credential ciphertext');
     $allOff=array_fill_keys($keys,false);$allOn=array_fill_keys($keys,true);
 
@@ -104,7 +105,7 @@ try {
     $coerced=$invalid;$coerced['items'][0]['enabled']='false';channelDenied(static fn()=>$service->save($context,$coerced),'string false cannot become an enabled channel through PHP truthiness');
     $off=channelSet($service,$context,$allOff);
     channelCheck($service->available()===[]&&count(array_filter($off['items'],static fn(array $row):bool=>$row['enabled']))===0,'administrator may explicitly close every channel');
-    channelCheck(count($other->available())===4,'channel policy is isolated from the other site');
+    channelCheck(count($other->available())===$supportedCount,'channel policy is isolated from the other site');
     channelDenied(static fn()=>$service->save($context,$invalid),'stale settings revision cannot overwrite another administrator update');
     channelBlocked(static fn()=>$service->assertEnabled('wanji'),'closed channel cannot be used through normal admission');
 
@@ -277,12 +278,12 @@ try {
     channelCheck((int)$read()['published_run_id']===$published&&Data::query('inventory',$site)->where('sync_run_id',$commitRun['id'])->count()===100,'expired commit cannot append its final page or replace the last good published batch');
     $stored=json_encode(Db::name('sys_config')->where('config_key',ProviderChannelService::KEY)->select()->toArray());$audit=json_encode(Data::query('audit',$site)->select()->toArray());
     channelCheck(!preg_match('/synthetic-channel-(?:password|old-token|fresh-token|uncommitted-token)/',(string)$stored.(string)$audit),'channel configuration and audit contain no ERP passwords or tokens');
-    channelCheck(count($other->available())===4,'all shutdown and resume actions remain isolated to the configured site');
+    channelCheck(count($other->available())===$supportedCount,'all shutdown and resume actions remain isolated to the configured site');
     Db::name('sys_config')->where('site_id',$site)->where('config_key',ProviderChannelService::KEY)->update(['value'=>'{invalid-json']);
     channelCheck($service->available()===[]&&count(array_filter($service->configuration()['items'],static fn(array $item):bool=>$item['enabled']))===0,'malformed persisted policy fails closed rather than silently enabling adapters');
     Data::query('connection',$site)->where('id',$connection)->update(['next_sync_at'=>time()-1]);
     channelCheck($sync(new ChannelFixtureTransport())->tick(1)===[],'SQL policy gate safely skips malformed JSON before the scheduler limit');
-    channelSet($service,$context,$allOn);channelCheck(count($service->available())===4,'administrator can repair malformed policy through the normal explicit full save');
+    channelSet($service,$context,$allOn);channelCheck(count($service->available())===$supportedCount,'administrator can repair malformed policy through the normal explicit full save');
     echo json_encode(['passed'=>true,'checks'=>$checks,'php'=>PHP_VERSION,'scope'=>'site ERP channels, admission gates, paused sync safety, reopening preferences and in-flight closure','remote_calls'=>0,'existing_business_rows_read'=>0],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES).PHP_EOL;
 } catch(Throwable $error) {
     $failed=true;fwrite(STDERR,'FAIL after '.$checks.' checks: '.get_class($error).': '.$error->getMessage().' at '.basename($error->getFile()).':'.$error->getLine().PHP_EOL);

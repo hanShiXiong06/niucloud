@@ -102,7 +102,7 @@ final class PaymentService
     }
 
     /** Called by the plugin-owned guard before every framework cashier request. */
-    public function assertPayable(int $id): array
+    public function assertPayable(int $id,bool $reuseVirtualPending=false): array
     {
         $this->order($id);$raw=Store::row('coop_order',$this->context->site,$id,true);$row=self::presentOrder($raw);
         ManualPaymentService::assertNoPendingReceipt($this->context->site,$id);
@@ -125,7 +125,7 @@ final class PaymentService
             if (Rules::cents((string)$pay['money'])!==Rules::cents((string)$row['amount']) || (int)$pay['main_id']!==$this->context->memberId) throw new CommonException('收银台金额或付款身份与业务不符，请联系平台核对，当前未发起支付');
             if ((int)$pay['status']===(int)PayDict::STATUS_FINISH) throw new CommonException('原支付流水已收款，正在核对业务入账，请勿再次付款');
             if (self::hasUnconfirmedBalanceDebit($this->context->site,$pay)) throw new CommonException('发现本次付款的账户扣款记录，请联系平台核对，暂勿重复支付');
-            if ((int)$pay['status']===(int)PayDict::STATUS_ING) throw new CommonException('正在确认上次付款结果，请稍后再次点击付款，暂勿重复支付');
+            if ((int)$pay['status']===(int)PayDict::STATUS_ING&&(!$reuseVirtualPending||($pay['type']??'')!==\addon\hsx_lead\app\service\virtualpay\VirtualPaySettings::TYPE)) throw new CommonException('正在确认上次付款结果，请稍后再次点击付款，暂勿重复支付');
         }
         return $row;
     }
@@ -441,9 +441,11 @@ final class PaymentService
         unset($row['rule_json'],$row['request_id'],$row['business_key']);$row['trade_type']=self::TRADE_TYPE;
         $row['purpose_label']=['commission'=>'协作佣金','membership'=>'门店主体会员'][$row['purpose']]??'待核对';
         if ($row['purpose']==='membership') {
+            $row['virtual_product_key']=MembershipProductIdentity::forOrder((int)$row['site_id'],(int)$row['id']);
             $row['purpose_label']='门店主体会员';$row['level_code']=(string)($rule['level_code']??'');$row['level_name']=(string)($rule['level_name']??'');$row['cycle']=(string)($rule['cycle']??'');
             $row['level_id']=(int)($rule['level_id']??0);$row['rank']=(int)($rule['rank']??0);$row['display_rank']=(int)($rule['display_rank']??0);
             $row['level_color']=(string)($rule['level_color']??'');$row['experience_required']=(string)($rule['experience_required']??'');
+            $row['experience_gate_enabled']=EntityExperienceService::gateEnabled($rule);
             $row['cycle_name']=(string)($rule['cycle_name']??'');$row['account_limit']=(int)($rule['account_limit']??1);$row['unlimited']=(bool)($rule['unlimited']??false);
             $row['entitlement_cycle']=$row['cycle'];$row['entitlement_months']=(int)($rule['months']??0);$row['entitlement_label']=$row['cycle_name'];
             $row['benefits']=is_array($rule['benefits']??null)?$rule['benefits']:[];

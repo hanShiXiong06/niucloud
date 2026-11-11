@@ -34,9 +34,10 @@ final class ProviderDefinition
         $automatic=(bool)($configuration['renewal']['automatic']??false);
         if (!$automatic) {
             $interactive=$mode==='interactive_login';
+            $sms=($this->definition['interactive_auth']['type']??'')==='sms_code';
             return ['automatic'=>false,'ready'=>false,'mode'=>$mode,
                 'status'=>$interactive?'interactive_required':'manual_token',
-                'message'=>$interactive?'该ERP需要验证码登录；当前会话失效后需重新验证，不能仅凭密码自动续登。':'当前仅保存临时Token，无法自动续登；请切换为账号密码登录并验证启用。'];
+                'message'=>$interactive?($sms?'该ERP需要短信验证码授权；授权失效后请重新收取验证码，不会自动发送短信或尝试密码续登。':'该ERP需要验证码登录；当前会话失效后需重新验证，不能仅凭密码自动续登。'):'当前仅保存临时Token，无法自动续登；请切换为账号密码登录并验证启用。'];
         }
         $complete=true;
         foreach($configuration['fields'] as $field) {
@@ -91,10 +92,14 @@ final class ProviderDefinition
     }
 
     /** Missing/empty secrets may be reused only when the explicit non-secret identity is unchanged. */
-    public function credentials(#[\SensitiveParameter] array $input,#[\SensitiveParameter] array $saved=[]): array
+    public function credentials(#[\SensitiveParameter] array $input,#[\SensitiveParameter] array $saved=[],bool $trustedAuthorization=false): array
     {
         $secretTrace = \addon\hsx_lead\app\support\PhpRuntime::guardSecrets();
         $config=$this->configuration($input);
+        $serverFields=$this->serverCredentialFields();
+        if (!$trustedAuthorization) foreach($serverFields as$field) {
+            if (array_key_exists($field['key'],$input)) throw new CommonException('ERP认证资料由授权服务核验，不能手工提交或修改；请重新完成验证码授权');
+        }
         $multi=!empty($this->definition['auth_modes']);
         $result=$multi?['auth_mode'=>$this->authMode($input)]:[];
         $reuse=!$multi || $saved===[] || $this->authMode($saved)===$result['auth_mode'];
@@ -111,7 +116,44 @@ final class ProviderDefinition
             if ($value==='' && !empty($field['required'])) throw new CommonException('请填写'.$field['label'].'；更换账号时不能沿用原密钥');
             $result[$key]=$value;
         }
+        if ($serverFields) {
+            $sameSecrets=$reuse;
+            foreach($config['fields'] as$field) if (!empty($field['secret']) && ($result[$field['key']]??'')!==($saved[$field['key']]??'')) $sameSecrets=false;
+            if (!$trustedAuthorization && !$sameSecrets) {
+                foreach($serverFields as$field) if (!empty($field['required'])) throw new CommonException('请先完成当前ERP的验证码授权；更换账号或授权Token后不能沿用原认证资料');
+            }
+            $result+=$this->authorizedServerCredentials($trustedAuthorization?$input:($sameSecrets?$saved:[]));
+        }
         return $result;
+    }
+
+    /** Only callers holding an actual provider authorization result may use
+     * these fields. They are deliberately absent from all public metadata. */
+    public function authorizedServerCredentials(#[\SensitiveParameter] array $input): array
+    {
+        $secretTrace = \addon\hsx_lead\app\support\PhpRuntime::guardSecrets();
+        $safe=[];
+        foreach($this->serverCredentialFields() as$field) {
+            $key=$field['key'];$required=!empty($field['required']);$limit=(int)($field['max_length']??512);
+            $value=!empty($field['secret'])?Data::secret($input,$key,$limit):Data::text($input,$key,$limit,$required);
+            if ($required && $value==='') throw new CommonException('ERP授权未返回完整认证资料，请重新验证');
+            if ($value!=='') $safe[$key]=$value;
+        }
+        return $safe;
+    }
+
+    private function serverCredentialFields(): array
+    {
+        $fields=$this->definition['server_credential_fields']??[];
+        if (!is_array($fields) || !\addon\hsx_lead\app\support\PhpRuntime::isList($fields) || count($fields)>20) throw new CommonException('ERP服务端认证字段配置异常');
+        $seen=array_fill_keys(['auth_mode','access_token','token','username','password','code','captcha'],true);
+        foreach(array_merge([$this->definition],$this->definition['auth_modes']??[])as$config) foreach($config['fields']??[]as$field) if(is_array($field)&&is_string($field['key']??null))$seen[$field['key']]=true;
+        foreach($fields as$field) {
+            if (!is_array($field) || !is_string($field['key']??null) || preg_match('/^[a-z][a-z0-9_]{0,63}$/D',$field['key'])!==1
+                || isset($seen[$field['key']]) || !is_int($field['max_length']??null) || $field['max_length']<1 || $field['max_length']>16384) throw new CommonException('ERP服务端认证字段配置异常');
+            $seen[$field['key']]=true;
+        }
+        return $fields;
     }
     public function scope(#[\SensitiveParameter] array $input,#[\SensitiveParameter] array $credentials=[]): array
     {

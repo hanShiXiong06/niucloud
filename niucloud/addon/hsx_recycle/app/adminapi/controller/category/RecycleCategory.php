@@ -61,6 +61,23 @@ class RecycleCategory extends BaseAdminController
         return success((new RecycleCategoryService())->getTree($date ?: null));
     }
 
+    /** 移动管理端报价分类与当前员工能力。 */
+    public function quoteOptions()
+    {
+        return success((new RecycleCategoryService())->quoteOptions());
+    }
+
+    /** 只更新报价图，不接收分类及权限等其他资料。 */
+    public function updateQuoteImage(int $id)
+    {
+        $data = $this->request->params([
+            ['images', null],
+            ['expected_images', null],
+            ['remark', ''],
+        ]);
+        return success('EDIT_SUCCESS', (new RecycleCategoryService())->updateQuoteImage($id, $data));
+    }
+
     /**
      * 报价单历史列表（支持按分类、日期筛选）
      */

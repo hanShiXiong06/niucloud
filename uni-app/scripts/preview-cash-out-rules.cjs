@@ -15,8 +15,10 @@ function previewSource() {
     if (errors.length) throw errors[0]
     const start = descriptor.template.content.indexOf('<view class="mt-[20rpx] card-template cash-out-rules">')
     const end = descriptor.template.content.indexOf('<view class="tab-bar-placeholder">', start)
-    if (start < 0 || end < 0) throw Error('Actual cash-out rule section not found')
-    const template = descriptor.template.content.slice(start, end)
+    const summaryStart = descriptor.template.content.indexOf('<view class="mt-[20rpx] card-template cash-out-rule-summary">')
+    const summaryEnd = descriptor.template.content.indexOf('<!-- /cash-out-rule-summary -->', summaryStart)
+    if (start < 0 || end < 0 || summaryStart < 0 || summaryEnd < 0) throw Error('Actual cash-out rule section not found')
+    const template = descriptor.template.content.slice(summaryStart, summaryEnd) + descriptor.template.content.slice(start, end)
     // A 375px phone preview uses the same rpx scale as a 750rpx design width.
     const styles = descriptor.styles.map(style => style.content.replace(/([\d.]+)rpx/g, (_, value) => `${Number(value) / 2}px`)).join('\n')
     return `<template><main>
@@ -24,11 +26,14 @@ function previewSource() {
       <div class="preview-tools"><button @click="config.min='0.30';config.rate='0';config.transfer_type=['wechatpay'];config.is_auto_verify=1">样本：0.30元 / 免手续费 / 微信</button><button @click="config.min='50';config.rate='2.5';config.transfer_type=['bank'];config.is_auto_verify=0">样本：50元 / 2.5% / 银行卡</button></div>
       <div class="phone-preview">${template}</div>
     </main></template><script setup>
-    import {computed,reactive} from 'vue'
-    import {buildCashOutRules} from '/src/app/utils/cash-out-rules.ts'
+    import {computed,reactive,ref} from 'vue'
+    import {buildCashOutRules,buildCashOutRuleSummary} from '/src/app/utils/cash-out-rules.ts'
     const config=reactive({min:'0.30',rate:'0',is_auto_verify:1,transfer_type:['wechatpay']})
+    const showRuleDetails=ref(false)
+    const ruleOptions=computed(()=>({min:config.min,rate:config.rate,isAutoVerify:config.is_auto_verify,transferTypes:config.transfer_type,accountType:'money',availableMoney:'200.00'}))
     const minimumCashOutText=computed(()=>Number(config.min)>0?'¥'+Number(config.min).toFixed(2):'未设置额外最低金额')
-    const cashOutRules=computed(()=>buildCashOutRules({min:config.min,rate:config.rate,isAutoVerify:config.is_auto_verify,transferTypes:config.transfer_type,accountType:'money'}))
+    const cashOutRules=computed(()=>buildCashOutRules(ruleOptions.value))
+    const cashOutRuleSummary=computed(()=>buildCashOutRuleSummary(ruleOptions.value))
     const redirect=()=>{}
     </script><style lang="scss" scoped>${styles}</style>`
 }

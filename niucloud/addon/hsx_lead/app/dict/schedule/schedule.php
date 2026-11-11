@@ -2,6 +2,13 @@
 declare(strict_types=1);
 
 return [[
+    'key' => 'hsx_lead_virtual_payment_reconcile',
+    'name' => '会员微信虚拟支付原单核对',
+    'desc' => '每分钟分批查询原虚拟支付及重放已核实退款事实；由框架处理收款和权益回退，不新建付款、不重发退款、不将未知结果当作失败',
+    'time' => ['type' => 'min', 'min' => 1],
+    'class' => 'addon\\hsx_lead\\app\\job\\ReconcileVirtualPayments',
+    'function' => 'doJob',
+],[
     'key' => 'hsx_lead_financial_notice_recover',
     'name' => '商户业务通知补偿',
     'desc' => '处理启用后的资金流水及明确的新接单计划；分批补漏、退避重试，过时节点不追发，受理或结果不明不重发',

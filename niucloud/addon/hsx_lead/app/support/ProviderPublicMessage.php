@@ -27,7 +27,18 @@ final class ProviderPublicMessage
         'forbidden_endpoint'=>'ERP 接口配置未通过校验，请联系平台处理',
         'generation_expired'=>'本轮同步间隔过久，暂存资料已失效，请重新完整同步',
         'sync_failed'=>'本轮 ERP 同步未完成，未更新库存，请重试或联系平台核对',
+        'authorization_expired'=>'ERP 授权已到期，请重新验证；已有完整库存快照仍保留',
+        'credential_error'=>'ERP 授权资料无法读取，请联系平台核对配置后重新验证；已有完整库存快照仍保留',
+        'sync_interrupted'=>'本轮 ERP 同步已中断，请重新同步；已有完整库存快照仍保留',
     ];
+
+    /** Provider diagnostics can be arbitrary strings. Only local reason keys
+     * may cross the public API boundary; never echo a stored error as a code. */
+    public static function safeReason(mixed $reason,string $fallback=''): string
+    {
+        if (is_string($reason) && isset(self::REASONS[$reason])) return $reason;
+        return isset(self::REASONS[$fallback])?$fallback:'';
+    }
 
     public static function forReason(string $reason): string
     {

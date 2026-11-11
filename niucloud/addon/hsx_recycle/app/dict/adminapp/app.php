@@ -78,6 +78,16 @@ return [
         'page' => '/addon/hsx_recycle/pages/express/list',
         'icon' => '/addon/hsx_recycle/site-tabbar/icon_06.png'
     ],
+    [
+        'name' => '报价单',
+        'key' => 'hsx_recycle_quote',
+        'group' => 'hsx_recycle',
+        // 沿用电脑端报价分类的查看权限，更新报价另校验分类编辑权限。
+        'menu_key' => 'recycle_category_list',
+        'sort' => 7,
+        'page' => '/addon/hsx_recycle/pages/quote/index',
+        'icon' => '/addon/hsx_recycle/site-tabbar/icon_03.png'
+    ],
 
    
 

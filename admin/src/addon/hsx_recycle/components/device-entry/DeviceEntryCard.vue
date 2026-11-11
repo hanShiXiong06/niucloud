@@ -68,7 +68,7 @@
 
             <div class="device-card__ops">
                 <el-button v-if="!device.saved || device.dirty" type="primary" :plain="device.saved" size="small"
-                    :loading="device.saving" :title="device.saved ? '保存修改' : '保存设备'"
+                    :loading="device.saving" :disabled="saveDisabled" :title="device.saved ? '保存修改' : '保存设备'"
                     @click="device.saved ? emit('update') : emit('save')">保存</el-button>
                 <!-- 2.7.x 的混合 trigger 不会保持菜单 hover；单一 hover 才能在移入菜单时取消关闭。 -->
                 <el-dropdown trigger="hover" :show-timeout="0" :hide-timeout="250" placement="bottom-end" @command="handleCommand">
@@ -117,7 +117,7 @@ import { deviceImeiError } from './imeiValidation'
 import type { DeviceEntryRow } from './types'
 
 const props = defineProps<{ device: DeviceEntryRow; index: number; canRemove?: boolean;
-    quoteUsers?: Array<{ uid: number; name: string; disabled?: boolean }>; quoteLoading?: boolean; quoteError?: boolean; assignToQuoteUser?: boolean }>()
+    quoteUsers?: Array<{ uid: number; name: string; disabled?: boolean }>; quoteLoading?: boolean; quoteError?: boolean; assignToQuoteUser?: boolean; saveDisabled?: boolean }>()
 const emit = defineEmits<{
     (e: 'save'): void
     (e: 'update'): void

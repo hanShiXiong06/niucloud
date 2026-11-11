@@ -41,6 +41,18 @@ class CoreRecycleOrderService extends BaseCoreService
 
             $devicesPayload = $data['devices'] ?? [];
             $isDraftDeviceEntry = !empty($data['draft_device_entry']);
+            $draftDeviceCount = 0;
+            if ($isDraftDeviceEntry && array_key_exists('count', $data)) {
+                $rawCount = $data['count'];
+                // 0 保留未预设总数的现有录单入口；新表单确认时提交 1–10000。
+                // 不把小数、负数、布尔值等静默截断后保存为打印总数。
+                if ((!is_int($rawCount) && !is_string($rawCount))
+                    || !preg_match('/^(0|[1-9][0-9]*)$/D', (string)$rawCount)
+                    || (float)$rawCount > 10000) {
+                    throw new CommonException('总台数须为1至10000的整数，请重新填写后确认');
+                }
+                $draftDeviceCount = (int)$rawCount;
+            }
             if (empty($devicesPayload) && !$isDraftDeviceEntry) {
                 $count = max(1, (int)($data['count'] ?? 1));
                 $devicesPayload = array_fill(0, $count, []);
@@ -75,7 +87,8 @@ class CoreRecycleOrderService extends BaseCoreService
                 'logistics_eta_at' => (int)($data['logistics_eta_at'] ?? 0),
                 'status' => RecycleOrderDict::ORDER_STATUS_PENDING_SIGN,
                 'device_count' => $isDraftDeviceEntry ? 0 : count($devicesPayload),
-                'count' => $isDraftDeviceEntry ? 0 : (int)($data['count'] ?? count($devicesPayload)),
+                // 草稿尚未录入设备，但已确认的订单总台数必须先保存，供首张标签使用。
+                'count' => $isDraftDeviceEntry ? $draftDeviceCount : (int)($data['count'] ?? count($devicesPayload)),
                 'remark' => $data['remark'] ?? '',
                 'create_at' => time(),
                 'update_at' => time(),

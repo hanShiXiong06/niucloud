@@ -26,7 +26,7 @@ function setup(relative, props, dependencies, globals = {}) {
     vm.runInNewContext('(function(require,module,exports){' + js + '})', { Date, Number, String, JSON, Set, Map, Math, console, ...globals })(name => name.startsWith('../../utils/') ? loadMobileUtility(path.basename(name)) : name.endsWith('.vue') ? { default: {} } : imports[name] || (() => { throw Error('Unexpected dependency ' + name) })(), module, module.exports)
     const state = module.exports.default.setup(props, { emit: (...args) => emitted.push(args), expose() {} })
     parsed.set(relative, source)
-    return { state, emitted, source, template: descriptor.template.content }
+    return { state, props, emitted, source, template: descriptor.template.content }
 }
 async function flush() { for (let i = 0; i < 8; i++) { await Promise.resolve(); await Vue.nextTick() } }
 const Box = Vue.defineComponent({ setup(_props, { slots }) { return () => Vue.h('section', [slots.default?.(), slots.reference?.(), slots.footer?.()]) } })
@@ -137,4 +137,8 @@ profile.state.submit(); check(profile.emitted.some(event => event[0] === 'submit
 profile.state.selectProvider(openIndex); profile.state.selectProvider(oldIndex)
 check(profile.state.form.provider === 'open' && profile.state.localError.value.includes('已关闭'), 'profile cannot switch back to an unavailable source once choosing an open one')
 check(profile.state.connectionLabel.value.includes('同步暂停'), 'merchant profile entry does not call paused source successfully synchronized')
+profile.props.profile.connection={connected:true,enabled:true,channel_enabled:true,last_sync_status:'failed',last_sync_message:'合成：登录已失效'}
+check(profile.state.connectionLabel.value==='同步失败，查看处理','profile ERP entry directs failed sync to recovery instead of showing ordinary progress')
+profile.props.profile.connection.last_sync_status='running';check(profile.state.connectionLabel.value==='查看进度','active sync retains its progress entry')
+profile.props.profile.connection.channel_enabled=false;profile.props.profile.connection.last_sync_status='failed';check(profile.state.connectionLabel.value.includes('同步暂停'),'closed channel remains the first profile-entry explanation even with an old error')
 console.log(`PASS ${checks} provider channel UI checks; actual Vue SFC setup/render with synthetic APIs only, no network/database/ERP actions.`)

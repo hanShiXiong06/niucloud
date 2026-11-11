@@ -1,5 +1,5 @@
 <template>
-    <HsxDialog :confirm-loading="loading"
+    <HsxDialog :confirm-loading="loading || draftCreating"
         v-model="dialogVisible"
         :width="isMobile ? 'calc(100vw - 24px)' : '1120px'"
         top="4vh"
@@ -22,7 +22,7 @@
                         <div class="field-label"><span class="is-required">*</span>客户</div>
                         <MemberSelect
                             v-model="form.member_id"
-                            :disabled="!!draftOrder.id"
+                            :disabled="!!draftOrder.id || draftCreating"
                             placeholder="搜索手机号、昵称或会员编号"
                             @change="handleMemberChange"
                         />
@@ -30,7 +30,7 @@
 
                     <div class="base-field">
                         <div class="field-label">到货</div>
-                        <el-radio-group v-model="form.delivery_type" :disabled="!!draftOrder.id" class="delivery-switch">
+                        <el-radio-group v-model="form.delivery_type" :disabled="!!draftOrder.id || draftCreating" class="delivery-switch">
                             <el-radio-button label="1">
                                 <el-icon><Van /></el-icon>
                                 快递
@@ -49,14 +49,14 @@
                             v-model.trim="form.express_no"
                             placeholder="扫描或输入快递单号"
                             clearable
-                            :disabled="!!draftOrder.id"
+                            :disabled="!!draftOrder.id || draftCreating"
                             @keydown.enter.prevent="handleScannerInput"
                             @focus="handleInputFocus"
                             @blur="handleInputBlur"
                         >
                             <template #prefix><el-icon><Tickets /></el-icon></template>
                             <template #append>
-                                <el-button :disabled="!!draftOrder.id" @click="activateScanMode">
+                                <el-button :disabled="!!draftOrder.id || draftCreating" @click="activateScanMode">
                                     <el-icon><Aim /></el-icon>
                                     扫码
                                 </el-button>
@@ -75,7 +75,21 @@
                     :devices="form.devices"
                     :order-id="draftOrder.id || ''"
                     :ensure-order="ensureDraftOrder"
-                />
+                    :entry-ready="!!draftOrder.id"
+                    :max-device-count="draftOrder.id ? confirmedTotal : undefined"
+                >
+                    <template #quantity>
+                        <span class="order-total">
+                            <span>已保存 {{ savedDeviceCount }} / 共</span>
+                            <el-input-number v-model="form.count" :min="1" :max="10000" :precision="0" :controls="false"
+                                :disabled="!!draftOrder.id || draftCreating" size="small" class="order-total__input"
+                                aria-label="本单总台数" @keydown.enter.prevent="confirmTotal" />
+                            <span>台</span>
+                            <el-button v-if="!draftOrder.id" link type="primary" size="small" :loading="draftCreating" @click="confirmTotal">确定</el-button>
+                            <el-tooltip v-else content="总台数已确认并用于标签编号，本单不能再修改" placement="top"><span class="order-total__locked">已锁定</span></el-tooltip>
+                        </span>
+                    </template>
+                </DeviceEntryList>
             </section>
         </el-form>
 
@@ -88,7 +102,7 @@
                     <NextAssigneeSelect v-model="nextAssigneeUid" stage-key="check" label="下一步 · 质检负责人" compact />
                 </div>
                 <div class="dialog-footer__actions">
-                    <el-button :disabled="loading" @click="closeDialog">
+                    <el-button :disabled="loading || draftCreating" @click="closeDialog">
                         {{ draftOrder.id ? '暂存并关闭' : '取消' }}
                     </el-button>
                     <el-button
@@ -107,7 +121,7 @@
 
 <script setup lang="ts">
 import { HsxDialog, useFeedback } from '@/addon/hsx_components/core'
-import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessageBox } from 'element-plus'
 import {
     Aim,
@@ -134,18 +148,23 @@ const nextAssigneeUid = ref(0)
 
 const dialogVisible = computed({
     get: () => props.visible,
-    set: (value: boolean) => emit('update:visible', value)
+    set: (value: boolean) => { if (!draftCreating.value) emit('update:visible', value) }
 })
 const loading = ref(false)
+const draftCreating = ref(false)
 const form = ref({
     member_id: '' as string | number,
     delivery_type: '2',
     express_no: '',
+    count: 1 as number | undefined,
     devices: [
         { imei: '', model: '', initial_price: 0, check_images_buyer: '', summary_fields: [], summary_values: {} }
     ] as DeviceEntryRow[]
 })
 const draftOrder = ref<{ id: number | string; order_no: string }>({ id: '', order_no: '' })
+const confirmedTotal = ref(0)
+let draftCreatePromise: Promise<number | string> | null = null
+let formVersion = 0
 const isMobile = ref(false)
 
 const expressInput = ref<any>(null)
@@ -159,6 +178,7 @@ const pendingDeviceCount = computed(() => form.value.devices.filter(device => {
 const updateResponsiveState = () => { isMobile.value = window.innerWidth <= 768 }
 
 const closeDialog = () => {
+    if (draftCreating.value) return
     emit('update:visible', false)
 }
 
@@ -189,37 +209,73 @@ onMounted(() => {
     window.addEventListener('resize', updateResponsiveState)
 })
 onBeforeUnmount(() => {
+    ++formVersion
     window.removeEventListener('resize', updateResponsiveState)
     if (scanTimer.value) window.clearTimeout(scanTimer.value)
 })
 
+watch(() => props.visible, visible => { if (!visible) ++formVersion })
+
 const validateBaseOrder = (): string => {
     if (!form.value.member_id) return '请先选择客户'
     if (form.value.delivery_type === '1' && !form.value.express_no.trim()) return '请填写快递单号'
+    const count = Number(form.value.count)
+    if (!Number.isInteger(count) || count < 1 || count > 10000) return '请填写 1–10000 的整数总台数'
     return ''
 }
 
-const ensureDraftOrder = async (): Promise<number | string> => {
+const confirmTotal = async (): Promise<number | string | undefined> => {
     if (draftOrder.value.id) return draftOrder.value.id
+    if (draftCreatePromise) {
+        try { return await draftCreatePromise } catch { return undefined }
+    }
     const errorMessage = validateBaseOrder()
     if (errorMessage) {
         hsxFeedback.warning(errorMessage)
-        throw new Error(errorMessage)
+        return
     }
-    const res = await createRecycleOrder({
+    const total = Number(form.value.count)
+    const version = formVersion
+    const payload = {
         member_id: form.value.member_id,
         delivery_type: form.value.delivery_type,
         express_no: form.value.delivery_type === '1' ? form.value.express_no : '',
-        count: 0,
+        count: total,
         order_source: 'agent',
         sign_after_create: false,
         draft_device_entry: true,
         devices: []
-    })
-    if (res.code !== 1) throw new Error(res.message || '创建草稿订单失败')
-    draftOrder.value = { id: res.data.id, order_no: res.data.order_no }
-    hsxFeedback.success('草稿订单已创建，客户与到货信息已锁定')
-    return draftOrder.value.id
+    }
+    draftCreating.value = true
+    const pending = (async (): Promise<number | string> => {
+        const res = await createRecycleOrder(payload)
+        if (res.code !== 1 || !res.data?.id) throw new Error(res.message || res.msg || '确认总台数失败，请重试')
+        if (version !== formVersion || !props.visible) {
+            emit('success')
+            return res.data.id
+        }
+        draftOrder.value = { id: res.data.id, order_no: res.data.order_no }
+        form.value.count = total
+        confirmedTotal.value = total
+        hsxFeedback.success(`本单共 ${total} 台已确认，数量已锁定`)
+        return draftOrder.value.id
+    })()
+    draftCreatePromise = pending
+    try { return await pending }
+    catch (error: any) {
+        if (version === formVersion) hsxFeedback.error(error?.msg || error?.message || '确认总台数失败，请重试')
+        return undefined
+    } finally {
+        if (draftCreatePromise === pending) {
+            draftCreatePromise = null
+            draftCreating.value = false
+        }
+    }
+}
+
+const ensureDraftOrder = async (): Promise<number | string> => {
+    if (draftOrder.value.id) return draftOrder.value.id
+    throw new Error('请先确认本单总台数，再保存设备')
 }
 
 const handleConfirm = async () => {
@@ -270,13 +326,18 @@ const handleConfirm = async () => {
 }
 
 const resetForm = () => {
+    ++formVersion
     form.value = {
         member_id: '',
         delivery_type: '1',
         express_no: '',
+        count: 1,
         devices: [{ imei: '', model: '', initial_price: 0, check_images_buyer: '', summary_fields: [], summary_values: {} }]
     }
     draftOrder.value = { id: '', order_no: '' }
+    confirmedTotal.value = 0
+    draftCreatePromise = null
+    draftCreating.value = false
     isScanMode.value = false
     nextAssigneeUid.value = 0
 }
@@ -321,6 +382,10 @@ const handleClosed = () => {
     min-height: 220px;
     padding: 0;
 }
+
+.order-total { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; color: var(--el-text-color-secondary); font-size: 12px; font-weight: 400; }
+.order-total__input { width: 70px; }
+.order-total__locked { color: var(--el-text-color-placeholder); font-size: 12px; }
 
 .base-grid {
     display: grid;

@@ -10,11 +10,60 @@ assert.deepEqual(result.diagnostics, [])
 const sandbox = { exports: {} }
 vm.runInNewContext(result.outputText, sandbox, { filename: file })
 const build = sandbox.exports.buildCashOutRules
+const buildSummary = sandbox.exports.buildCashOutRuleSummary
 const base = { min: '1', rate: '1', isAutoVerify: '0', transferTypes: ['wechatpay', 'bank'], accountType: 'money' }
 const section = (options, key) => build({ ...base, ...options }).find(item => item.key === key).paragraphs.join('\n')
 const all = options => build({ ...base, ...options }).map(item => `${item.title}\n${item.paragraphs.join('\n')}`).join('\n')
+const summary = options => buildSummary({ ...base, availableMoney: '200.00', ...options })
+const summaryValue = (options, key) => summary(options).find(item => item.key === key).value
 let checks = 0
 const check = (title, test) => { test(); checks++; console.log('PASS', title) }
+check('默认摘要包含六项审核关键规则，标签与key稳定且不重复', () => {
+    const items = summary({})
+    assert.deepEqual(Array.from(items, item => item.key), ['available', 'minimum', 'frequency', 'application-time', 'arrival-time', 'fee'])
+    assert.deepEqual(Array.from(items, item => item.label), ['可提现额度', '最低申请金额', '每日提现次数', '申请时间', '到账时间', '提现手续费'])
+    assert.equal(new Set(items.map(item => item.key)).size, 6)
+    assert.ok(items.every(item => typeof item.value === 'string' && item.value.length > 0))
+})
+check('摘要可提现额度与最低金额动态读取，不写死额度或1元门槛', () => {
+    assert.match(summaryValue({ availableMoney: '13.47', min: '0.30' }, 'available'), /当前13\.47元/)
+    assert.match(summaryValue({ availableMoney: '309.99' }, 'available'), /当前309\.99元/)
+    assert.match(summaryValue({ min: '20.50' }, 'minimum'), /20\.50元/)
+    assert.match(summaryValue({ min: 0 }, 'minimum'), /金额须大于0，未设额外最低门槛/)
+    assert.match(summaryValue({ availableMoney: 0 }, 'available'), /当前0\.00元/)
+})
+check('摘要随费率变化且明确费用从本次申请金额扣除', () => {
+    assert.match(summaryValue({ rate: '2.5' }, 'fee'), /2\.5%.*从本次申请金额中扣除/)
+    assert.match(summaryValue({ rate: '0.6' }, 'fee'), /0\.6%/)
+    assert.match(summaryValue({ rate: 0 }, 'fee'), /不收取提现手续费/)
+})
+check('余额与佣金摘要分别接受对应可提金额，不把两个账户合并', () => {
+    assert.match(summaryValue({ accountType: 'money', availableMoney: '200.00' }, 'available'), /当前200\.00元/)
+    assert.match(summaryValue({ accountType: 'commission', availableMoney: '300.00' }, 'available'), /当前300\.00元/)
+    assert.doesNotMatch(summaryValue({ accountType: 'commission', availableMoney: '300.00' }, 'available'), /500\.00元|200\.00元/)
+})
+check('摘要缺失或非法金额配置提示重试，不虚构余额、门槛或费率', () => {
+    for (const invalid of [undefined, null, '', false, -1, NaN, Infinity, 'not-a-number']) {
+        assert.match(summaryValue({ availableMoney: invalid }, 'available'), /读取中/)
+        assert.match(summaryValue({ min: invalid }, 'minimum'), /未读取成功/)
+        assert.match(summaryValue({ rate: invalid }, 'fee'), /未读取成功/)
+    }
+    assert.match(summaryValue({ rate: 101 }, 'fee'), /未读取成功/)
+    assert.doesNotMatch(summaryValue({ availableMoney: undefined }, 'available'), /当前0\.00元/)
+    assert.doesNotMatch(summaryValue({ min: undefined }, 'minimum'), /1\.00元|0\.00元/)
+    assert.doesNotMatch(summaryValue({ rate: undefined }, 'fee'), /不收取|0%/)
+})
+check('摘要直出无额外次数限制与全天申请，不捏造每日3次或固定营业时段', () => {
+    assert.match(summaryValue({}, 'frequency'), /不设额外次数限制/)
+    assert.match(summaryValue({}, 'application-time'), /每天24小时可提交申请/)
+    const text = summary({}).map(item => item.value).join('\n')
+    assert.doesNotMatch(text, /每日最多.{0,4}3次|9[:：]00|21[:：]00|9[—-]21/)
+})
+check('摘要到账承诺使用既有3自然日共用周期，不承诺自动或即时到账', () => {
+    const text = summaryValue({}, 'arrival-time')
+    assert.match(text, /正常情况下，申请成功后3个自然日内完成审核及打款/)
+    assert.doesNotMatch(text, /工作日|秒到账|立即到账|自动到账|再.{0,3}3/)
+})
 check('完整18节，每节具有稳定key、标题与正文', () => {
     const rules = build(base)
     assert.equal(rules.length, 18)
@@ -87,6 +136,7 @@ check('生成规则不修改传入的配置或通道数组', () => {
     const value = { ...base, transferTypes: ['bank', 'bank'] }
     const before = JSON.stringify(value)
     build(value)
+    buildSummary(value)
     assert.equal(JSON.stringify(value), before)
 })
 console.log(`完成：${checks}项提现规则检查；只执行纯文案函数，无网络、数据库或真实提现。`)

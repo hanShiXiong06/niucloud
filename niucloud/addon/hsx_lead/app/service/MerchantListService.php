@@ -4,7 +4,7 @@ namespace addon\hsx_lead\app\service;
 
 use addon\hsx_lead\app\provider\ProviderRegistry;
 use addon\hsx_lead\app\service\cooperation\{CapabilityService,ConfigService,EntityMembershipService,Rules,Store};
-use addon\hsx_lead\app\support\{Cipher,Data,InventoryAvailability,SyncStatus};
+use addon\hsx_lead\app\support\{Cipher,ConnectionAttention,Data,InventoryAvailability,SyncStatus};
 use think\facade\Db;
 
 /** Request-owned administrator list read model. Detail/edit contracts live in MerchantService. */
@@ -40,8 +40,7 @@ final class MerchantListService
         $policy=(new ProviderChannelService($site))->summaries(array_column($connections,'provider'));
         $connectionMap=[];$registry=new ProviderRegistry();
         foreach($connections as $connection) {
-            $summary=$this->connection($connection,$registry,$policy);
-            $connectionMap[(int)$connection['merchant_id']]=array_replace($summary,$sync[(int)$connection['id']]);
+            $connectionMap[(int)$connection['merchant_id']]=$this->connection($connection,$registry,$policy,$sync[(int)$connection['id']]??[]);
         }
         $inventory=$this->inventoryCounts($ids,$config);
         $capabilities=(new CapabilityService($this->context))->summaries($ids,$config);
@@ -59,7 +58,7 @@ final class MerchantListService
             foreach(['province','city','district'] as $key) {$name=(string)($areas[(int)$merchant[$key.'_id']]??'');$row[$key.'_name']=$name;if($name!=='')$names[]=$name;}
             $row['region_text']=implode(' / ',$names);$row['status']=(int)$row['status'];
             $member=$members[(int)$merchant['member_id']]??null;$row['member_name']=(string)($member['nickname']??'');
-            foreach(['provider','provider_name','connection_id','auth_renewal','next_sync_at','channel_enabled','channel_message','last_sync_status','last_sync_at','last_sync_message','published_run_id'] as $key) $row[$key]=$conn[$key];
+            foreach(['provider','provider_name','connection_id','auth_renewal','next_sync_at','channel_enabled','channel_message','last_sync_status','last_sync_at','last_sync_message','published_run_id','sync_error_code','sync_attention','authorization_attention'] as $key) $row[$key]=$conn[$key];
             $row['sync_interval_minutes']=$conn['interval_minutes'];$row['sync_enabled']=$conn['enabled'];$row['last_run_id']=$conn['active_run_id'];
             $row+=$capabilities[$id];$count=(int)($inventory[$id]??0);$capabilityCount=$row['business_capability_count'];
             $row+=['membership_rank'=>!empty($membership['active'])?(int)$membership['rank']:0,'display_rank'=>!empty($membership['active'])?(int)$membership['display_rank']:0,
@@ -91,27 +90,27 @@ final class MerchantListService
     {
         return ['connected'=>false,'connection_id'=>0,'provider'=>'','provider_name'=>'','enabled'=>false,'interval_minutes'=>60,
             'last_sync_status'=>'idle','last_sync_at'=>0,'last_sync_message'=>'尚未接入ERP','active_run_id'=>0,'published_run_id'=>0,'next_sync_at'=>0,
-            'authorization_attention'=>false,'channel_enabled'=>true,'channel_message'=>'',
+            'authorization_attention'=>false,'channel_enabled'=>true,'channel_message'=>'','sync_error_code'=>'','sync_attention'=>null,
             'auth_renewal'=>['automatic'=>false,'ready'=>false,'mode'=>'','status'=>'credentials_required','message'=>'尚未接入ERP，请先保存并验证登录资料。']];
     }
 
     /** Local credential checks only; no login, provider HTTP, recent history or public credentials. */
-    private function connection(array $connection,ProviderRegistry $registry,array $policy): array
+    private function connection(array $connection,ProviderRegistry $registry,array $policy,array $sync): array
     {
         $definition=$registry->definition((string)$connection['provider']);$channel=$policy[$definition->key()];
         $result=array_replace(self::emptyConnection(),['connected'=>true,'connection_id'=>(int)$connection['id'],
             'provider'=>$definition->key(),'provider_name'=>$channel['name'],'enabled'=>(bool)$connection['enabled'],
             'interval_minutes'=>(int)$connection['sync_interval_minutes'],'last_sync_at'=>(int)$connection['last_sync_at'],
             'published_run_id'=>(int)$connection['published_run_id'],'next_sync_at'=>(int)$connection['next_sync_at'],
-            'channel_enabled'=>$channel['enabled'],'channel_message'=>$channel['enabled']?'':'本站已关闭该ERP渠道，授权及采集暂停，账号与历史库存仍保留。']);
+            'channel_enabled'=>$channel['enabled'],'channel_message'=>$channel['enabled']?'':'本站已关闭该ERP渠道，授权及采集暂停，账号与历史库存仍保留。'],$sync);
+        $credentials=null;$credentialError=false;
         try {
             $credentials=Cipher::decrypt((string)$connection['credentials_cipher'],$this->context->site,(int)$connection['id']);
-            $result['auth_renewal']=$definition->renewalStatus($credentials);$expires=(int)($credentials['expires_at']??0);
-            $result['authorization_attention']=!$definition->renewable($credentials)&&$expires>0&&$expires<=time();
+            $result['auth_renewal']=$definition->renewalStatus($credentials);
         } catch(\Throwable $error) {
-            $result['authorization_attention']=true;
+            $credentialError=true;
             $result['auth_renewal']=['automatic'=>false,'ready'=>false,'mode'=>'','status'=>'credential_error','message'=>'登录资料无法解密，未尝试自动登录；请核对部署密钥后重新验证。'];
         }
-        return $result;
+        return array_replace($result,ConnectionAttention::project($result,$definition,$credentials,$credentialError));
     }
 }

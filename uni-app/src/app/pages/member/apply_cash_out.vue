@@ -27,6 +27,19 @@
                     </view>
                 </view>
 
+                <!-- 关键规则默认展开，申请前即可查看，不附加阅读或勾选门槛。 -->
+                <view class="mt-[20rpx] card-template cash-out-rule-summary">
+                    <view class="cash-out-rules__heading">提现规则</view>
+                    <view class="cash-out-rule-summary__list">
+                        <view v-for="rule in cashOutRuleSummary" :key="rule.key" class="cash-out-rule-summary__row">
+                            <text class="cash-out-rule-summary__label">{{ rule.label }}</text>
+                            <text class="cash-out-rule-summary__value">{{ rule.value }}</text>
+                        </view>
+                    </view>
+                    <view class="cash-out-rule-summary__note">提交成功不代表已经到账。微信零钱如需确认收款，请按提现详情提示操作；超过上述时间仍未到账，请通过下方“联系商家”核查。</view>
+                </view>
+                <!-- /cash-out-rule-summary -->
+
                 <view class="mt-[20rpx] card-template">
                     <view class="font-500 text-[30rpx] text-[#333] leading-[42rpx] mb-[30rpx]">到账方式</view>
                     <!-- 提现到微信 -->
@@ -124,24 +137,16 @@
 
                 <!-- 规则跟随本站真实配置，不另设勾选、阅读倒计时等提现门槛。 -->
                 <view class="mt-[20rpx] card-template cash-out-rules">
-                    <view class="cash-out-rules__heading">提现规则与办理说明</view>
-                    <view class="cash-out-rules__overview">
-                        <view><text>最低申请金额</text><text>{{ minimumCashOutText }}</text></view>
-                        <view><text>提现手续费率</text><text>{{ Number(config.rate) }}%</text></view>
-                        <view><text>审核及打款处理</text><text>3 个自然日内</text></view>
-                        <!-- 用户无法及时提现 -->
-                         <view>
-                            <text>无法即时提现 </text>
-                            <text>
-                                提现申请提交成功后，商家将在3个自然日内完成审核及打款。
-                                您可在“提现记录”查看进度；超过时限仍未收到款项，请点击“联系商家”核查。
-                            </text>
+                    <button class="cash-out-rules__toggle" hover-class="none" :aria-expanded="showRuleDetails" @click="showRuleDetails = !showRuleDetails">
+                        <text>更多提现说明</text>
+                        <text class="cash-out-rules__toggle-state">{{ showRuleDetails ? '收起' : '展开' }}</text>
+                    </button>
+                    <view v-if="showRuleDetails">
+                        <view class="cash-out-rules__intro">以下说明用于核对账户、收款方式、审核进度及异常处理；金额与方式跟随本站当前配置。</view>
+                        <view v-for="section in cashOutRules" :key="section.key" class="cash-out-rules__section">
+                            <view class="cash-out-rules__title">{{ section.title }}</view>
+                            <view v-for="(paragraph, paragraphIndex) in section.paragraphs" :key="paragraphIndex" class="cash-out-rules__paragraph">{{ paragraph }}</view>
                         </view>
-                    </view>
-                    <view class="cash-out-rules__intro">请重点核对最低金额、手续费、收款方式和办理时效。以下金额与方式跟随本站当前配置；提交成功不等于已经到账。</view>
-                    <view v-for="section in cashOutRules" :key="section.key" class="cash-out-rules__section">
-                        <view class="cash-out-rules__title">{{ section.title }}</view>
-                        <view v-for="(paragraph, paragraphIndex) in section.paragraphs" :key="paragraphIndex" class="cash-out-rules__paragraph">{{ paragraph }}</view>
                     </view>
                     <view class="cash-out-rules__help">
                         <view class="cash-out-rules__title">需要查询进度或核对小额余额？</view>
@@ -183,10 +188,11 @@ import { moneyFormat, redirect, getToken, img, deepClone, getWinxinOpenId } from
 import useMemberStore from '@/stores/member'
 import { cashOutConfig, cashOutApply, getFirstCashOutAccountInfo, getCashoutAccountInfo } from '@/app/api/member'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { buildCashOutRules } from '@/app/utils/cash-out-rules'
+import { buildCashOutRules, buildCashOutRuleSummary } from '@/app/utils/cash-out-rules'
 
 const pageLoading = ref(true)
 const loading = ref(false)
+const showRuleDetails = ref(false)
 const memberStore = useMemberStore()
 
 // 申请提现数据
@@ -233,13 +239,16 @@ const config = reactive<AnyObject>({
 
 const minimumCashOutText = computed(() => Number(config.min) > 0
     ? `${t('currency')}${moneyFormat(config.min)}` : '未设置额外最低金额')
-const cashOutRules = computed(() => buildCashOutRules({
+const cashOutRuleOptions = computed(() => ({
     min: config.min,
     rate: config.rate,
     isAutoVerify: config.is_auto_verify,
     transferTypes: config.transfer_type,
-    accountType: applyData.account_type
+    accountType: applyData.account_type,
+    availableMoney: cashOutMoney.value
 }))
+const cashOutRules = computed(() => buildCashOutRules(cashOutRuleOptions.value))
+const cashOutRuleSummary = computed(() => buildCashOutRuleSummary(cashOutRuleOptions.value))
 
 let query: any = {}
 let openId = ''
@@ -491,18 +500,9 @@ const transferWechatCode = () => {
     color: #333;
     word-break: break-word;
     &__heading { font-size: 30rpx; font-weight: 600; line-height: 44rpx; }
-    &__overview {
-        margin-top: 24rpx;
-        padding: 20rpx 24rpx;
-        border-radius: var(--rounded-small);
-        background: var(--page-bg-color);
-        font-size: 24rpx;
-        line-height: 38rpx;
-        > view { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8rpx 20rpx; }
-        > view + view { margin-top: 10rpx; }
-        > view > text:first-child { color: var(--text-color-light6); }
-        > view > text:last-child { font-weight: 500; }
-    }
+    &__toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; text-align: left; font-size: 28rpx; font-weight: 500; line-height: 48rpx; color: #333; }
+    &__toggle::after { border: 0; }
+    &__toggle-state { flex-shrink: 0; margin-left: 20rpx; font-size: 24rpx; font-weight: 400; color: var(--primary-color); }
     &__intro, &__paragraph { font-size: 24rpx; line-height: 40rpx; color: var(--text-color-light6); }
     &__intro { margin-top: 24rpx; }
     &__section { margin-top: 30rpx; }
@@ -511,6 +511,13 @@ const transferWechatCode = () => {
     &__help { margin-top: 30rpx; padding-top: 24rpx; border-top: 1rpx solid #eee; }
     &__actions { display: flex; flex-wrap: wrap; gap: 20rpx; margin-top: 20rpx; }
     &__action { flex: 1; min-width: 180rpx; padding: 16rpx 12rpx; border: 1rpx solid var(--primary-color); border-radius: var(--rounded-small); color: var(--primary-color); text-align: center; font-size: 24rpx; line-height: 36rpx; }
+}
+.cash-out-rule-summary {
+    &__list { margin-top: 12rpx; }
+    &__row { display: flex; align-items: flex-start; padding: 16rpx 0; font-size: 24rpx; line-height: 36rpx; border-bottom: 1rpx solid #f1f2f5; }
+    &__label { flex: 0 0 176rpx; color: #666; }
+    &__value { flex: 1; min-width: 0; color: #333; word-break: break-word; }
+    &__note { margin-top: 20rpx; color: #666; font-size: 24rpx; line-height: 38rpx; }
 }
 :deep(.apply-price) {
     color: var(--text-color-light9);

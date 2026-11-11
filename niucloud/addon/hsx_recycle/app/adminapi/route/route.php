@@ -121,6 +121,9 @@ Route::group('recycle', function () {
 Route::group('recycle', function () {
     //二手机分类列表
     Route::get('recycle_category', 'addon\hsx_recycle\app\adminapi\controller\category\RecycleCategory@lists');
+    // 移动报价图管理：服务内显式复用现有查看/编辑权限，避免新增未初始化权限的接口放行。
+    Route::get('recycle_category/quote-options', 'addon\hsx_recycle\app\adminapi\controller\category\RecycleCategory@quoteOptions');
+    Route::put('recycle_category/:id/quote-image', 'addon\hsx_recycle\app\adminapi\controller\category\RecycleCategory@updateQuoteImage');
     //二手机分类详情
     Route::get('recycle_category/:id', 'addon\hsx_recycle\app\adminapi\controller\category\RecycleCategory@info');
     //添加二手机分类

@@ -6,7 +6,7 @@
             readonly
             :disabled="disabled"
             clearable
-            @clear.stop="clearSelection"
+            @clear="clearSelection"
         >
             <template #prefix><el-icon><User /></el-icon></template>
             <template #suffix><el-icon v-if="!modelValue"><Search /></el-icon></template>
@@ -128,7 +128,7 @@
 </template>
 
 <script lang="ts" setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { Plus, Search, User } from '@element-plus/icons-vue'
@@ -150,11 +150,13 @@ const props = withDefaults(defineProps<{
     placeholder?: string
     showPagination?: boolean
     disabled?: boolean
+    resetKey?: string | number
 }>(), {
     modelValue: null,
     placeholder: '点击选择客户',
     showPagination: false,
-    disabled: false
+    disabled: false,
+    resetKey: 0
 })
 
 const emit = defineEmits<{
@@ -170,6 +172,9 @@ const memberList = ref<Member[]>([])
 const selectedMember = ref<Member | null>(null)
 const total = ref(0)
 const createFormRef = ref<FormInstance>()
+let selectedRequestVersion = 0
+let listRequestVersion = 0
+let createRequestVersion = 0
 
 const searchParams = reactive({ page: 1, limit: 10, keyword: '' })
 const createForm = reactive({
@@ -211,6 +216,7 @@ const createRules: FormRules = {
 const memberInitial = (member: Member) => String(member.nickname || member.username || '客').slice(0, 1)
 
 const loadMembers = async () => {
+    const version = ++listRequestVersion
     loading.value = true
     try {
         const res: any = await getMemberList({
@@ -219,10 +225,16 @@ const loadMembers = async () => {
             keyword: searchParams.keyword,
             status: 1
         })
+        if (version !== listRequestVersion || !selectorVisible.value) return
         memberList.value = res.data?.data || []
         total.value = Number(res.data?.total || memberList.value.length)
+    } catch (error: any) {
+        if (version !== listRequestVersion || !selectorVisible.value) return
+        memberList.value = []
+        total.value = 0
+        ElMessage.error(error?.msg || error?.message || '客户列表加载失败，请重试')
     } finally {
-        loading.value = false
+        if (version === listRequestVersion) loading.value = false
     }
 }
 
@@ -239,14 +251,30 @@ const searchMembers = () => {
 }
 
 const selectMember = (member: Member) => {
+    ++selectedRequestVersion
     selectedMember.value = member
     emit('update:modelValue', member.member_id)
     emit('change', member.member_id, member)
     selectorVisible.value = false
 }
 
-const clearSelection = () => {
+const resetSelectionState = () => {
+    ++selectedRequestVersion
+    ++listRequestVersion
+    ++createRequestVersion
     selectedMember.value = null
+    memberList.value = []
+    total.value = 0
+    searchParams.page = 1
+    searchParams.keyword = ''
+    loading.value = false
+    creating.value = false
+    selectorVisible.value = false
+    createVisible.value = false
+}
+
+const clearSelection = () => {
+    resetSelectionState()
     emit('update:modelValue', null)
     emit('change', null, null)
 }
@@ -274,17 +302,21 @@ const createMember = async () => {
     if (!createFormRef.value || creating.value) return
     const valid = await createFormRef.value.validate().catch(() => false)
     if (!valid) return
+    const version = ++createRequestVersion
     creating.value = true
     try {
         const res: any = await addMember({ ...createForm })
+        if (version !== createRequestVersion || !createVisible.value) return
         let member: Member | null = null
         const memberId = res.data?.member_id || res.data?.id || res.data
         if (memberId && !Number.isNaN(Number(memberId))) {
             const detail: any = await getMemberInfo(Number(memberId))
+            if (version !== createRequestVersion || !createVisible.value) return
             member = detail.data || null
         }
         if (!member) {
             const listRes: any = await getMemberList({ keyword: createForm.mobile, page: 1, limit: 10, status: 1 })
+            if (version !== createRequestVersion || !createVisible.value) return
             member = (listRes.data?.data || []).find((item: Member) => item.mobile === createForm.mobile) || null
         }
         if (!member) throw new Error('客户已新增，但未能自动读取客户资料')
@@ -292,27 +324,39 @@ const createMember = async () => {
         ElMessage.success('客户已新增并选中')
         selectMember(member)
     } catch (error: any) {
-        if (error?.message) ElMessage.error(error.message)
+        if (version === createRequestVersion && error?.message) ElMessage.error(error.message)
     } finally {
-        creating.value = false
+        if (version === createRequestVersion) creating.value = false
     }
 }
 
 const loadSelectedMember = async (value: number | string | null | undefined) => {
+    const version = ++selectedRequestVersion
     if (!value) {
-        selectedMember.value = null
+        resetSelectionState()
         return
     }
     if (String(selectedMember.value?.member_id || '') === String(value)) return
+    selectedMember.value = null
     try {
         const res: any = await getMemberInfo(Number(value))
-        selectedMember.value = res.data || null
+        if (version !== selectedRequestVersion || String(props.modelValue || '') !== String(value)) return
+        selectedMember.value = String(res.data?.member_id || '') === String(value) ? res.data : null
     } catch (error) {
-        selectedMember.value = null
+        if (version === selectedRequestVersion) selectedMember.value = null
     }
 }
 
 watch(() => props.modelValue, loadSelectedMember, { immediate: true })
+// 即使父级ID原本已为空，点击“重置”也清掉弹窗里残留的搜索词、分页与列表。
+watch(() => props.resetKey, resetSelectionState)
+watch(selectorVisible, value => {
+    if (!value) { ++listRequestVersion; loading.value = false }
+})
+watch(createVisible, value => {
+    if (!value) { ++createRequestVersion; creating.value = false }
+})
+onBeforeUnmount(() => { ++selectedRequestVersion; ++listRequestVersion; ++createRequestVersion })
 </script>
 
 <style lang="scss" scoped>

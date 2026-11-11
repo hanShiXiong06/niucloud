@@ -119,7 +119,9 @@ final class CooperationNoticeService
     }
     private function payload(int $site,array $lead,int $id,array $state,array $template): array
     {
-        return['site_id'=>$site,'key'=>$state['notice_key'],'channel'=>$state['channel'],'data'=>['collaboration_id'=>(int)$lead['id'],'notice_audit_id'=>$id,'notice_attempt'=>(int)$state['attempts']],'template'=>$template];
+        return['site_id'=>$site,'key'=>$state['notice_key'],'channel'=>$state['channel'],
+            'expected_recipient_member_id'=>(int)$state['member_id'],'expected_recipient_merchant_id'=>(int)$state['merchant_id'],
+            'data'=>['collaboration_id'=>(int)$lead['id'],'notice_audit_id'=>$id,'notice_attempt'=>(int)$state['attempts']],'template'=>$template];
     }
     private function dispatchClaim(array $claim): void
     {
@@ -217,6 +219,7 @@ final class CooperationNoticeService
         $page=$entry['miniapp_path'].$query;$url=$entry['h5_url']!==''?$entry['h5_url'].$query:'';
         $internalComplete=(int)$lead['publisher_id']>0&&(int)$lead['publisher_id']===(int)$lead['receiver_id']&&$lead['status']==='paid';
         $vars=['__weapp_page'=>$page,'__wechat_page'=>$url,'url'=>$url,'__hsx_lead_notice_id'=>(string)$auditId,'__hsx_lead_notice_channel'=>$channel,'__hsx_lead_notice_attempt'=>(string)max(1,(int)($state['attempts']??1)),
+            '__hsx_lead_notice_merchant_id'=>(string)$state['merchant_id'],
             'task_id'=>(string)$leadId,'task_no'=>mb_substr($lead['lead_no'],0,32),'status_text'=>$internalComplete?'已完成':Rules::status($lead['status']),'notice_remark'=>$internalComplete?'本店协作已完成，请登录核实':($state['phase']==='assigned'?'有新的协作交付，请登录处理':'协作状态已更新，请登录核实'),
             'occurred_at'=>date('Y-m-d H:i:s'),'demand_summary'=>$returned?'本次交付已退回，原客户资料不再可见':'请进入商户工作台查看需求'];
         $mapping=$channel==='weapp'?NoticeConfigService::weappForSite($site):($channel==='wechat'?NoticeConfigService::wechatForSite($site):[]);

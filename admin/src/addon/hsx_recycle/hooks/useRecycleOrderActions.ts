@@ -20,6 +20,7 @@ interface UseRecycleOrderActionsOptions {
   pagination: Ref<{ page: number }>
   getList: (page?: number) => Promise<void>
   currentOrderId: Ref<number | string>
+  currentOrderTotal?: Ref<number>
   currentDevices: Ref<any[]>
   orderDialogVisible: Ref<boolean>
   checkDeviceLogVisible: Ref<boolean>
@@ -48,6 +49,7 @@ export function useRecycleOrderActions(options: UseRecycleOrderActionsOptions) {
     pagination,
     getList,
     currentOrderId,
+    currentOrderTotal,
     currentDevices,
     orderDialogVisible,
     checkDeviceLogVisible,
@@ -66,6 +68,10 @@ export function useRecycleOrderActions(options: UseRecycleOrderActionsOptions) {
 
   const openOrderDeviceDialog = (row: any, targetVisible: Ref<boolean>) => {
     currentOrderId.value = row.id
+    if (currentOrderTotal) {
+      const count = Number(row.count)
+      currentOrderTotal.value = Number.isInteger(count) && count > 0 ? count : 0
+    }
     currentDevices.value = row.devices || []
     targetVisible.value = true
   }

@@ -32,6 +32,7 @@ check(helper.authRenewalLabel({}).includes('待确认'), 'missing metadata never
 const unexpected = async () => { throw Error('No real or mocked writes are permitted in this UI test') }
 const automatic = { active: Vue.ref(false), status: Vue.ref('idle'), working: Vue.ref(false), stage: Vue.ref(''), message: Vue.ref(''), stop() {}, start: unexpected, resume: unexpected }
 const rows = Vue.ref([])
+const syncRequests=[],messages=[]
 function setup(name) {
     const file = path.join(directory, 'views/components', name + '.vue'), source = fs.readFileSync(file, 'utf8')
     const { descriptor, errors } = compiler.parse(source, { filename: file })
@@ -41,7 +42,7 @@ function setup(name) {
     check(!template.errors.length, name + ' template compiles')
     const shared = { errorText: e => String(e?.message || e), time: String, readyLabels: {}, region: () => '合成地区', syncLabel: String,
         useLeadList: () => ({ rows, total: Vue.ref(0), loading: Vue.ref(false), error: Vue.ref(''), query: Vue.reactive({}), load: unexpected, search: unexpected }) }
-    const dependencies = { vue: { ...Vue, onMounted() {}, onBeforeUnmount() {} }, 'element-plus': { ElMessage: {}, ElMessageBox: {} }, '@element-plus/icons-vue': { Plus: {} }, '../../api': {},'@/stores/modules/user':{default:()=>({rules:[]})},'../../composables/navigation':{hasLeadPagePermission:()=>false},'../../api/cooperation':{getMerchantProfileFormRecord:async()=>({data:{fields:[]}})},
+    const dependencies = { vue: { ...Vue, onMounted() {}, onBeforeUnmount() {} }, 'element-plus': { ElMessage: {warning:message=>messages.push(message),error:message=>messages.push(message)}, ElMessageBox: {} }, '@element-plus/icons-vue': { Plus: {} }, '../../api': {syncMerchant:async id=>{syncRequests.push(id);throw Error('合成：网络仍不可用')}},'@/stores/modules/user':{default:()=>({rules:[]})},'../../composables/navigation':{hasLeadPagePermission:()=>false},'../../api/cooperation':{getMerchantProfileFormRecord:async()=>({data:{fields:[]}})},
         '../../composables/useLeadUi': shared, '../../composables/authRenewal': helper, '../../composables/useRemoteOptions': loadAdminUtility('useRemoteOptions'),
         '../../composables/cooperation': { coopBusiness:value=>String(value) },
         '../../composables/useAutomaticAuthorization': { useAutomaticAuthorization: () => automatic },
@@ -53,12 +54,12 @@ function setup(name) {
 }
 const Box = Vue.defineComponent({ setup(_props, { slots }) { return () => Vue.h('section', [slots.reference?.(), slots.default?.(), slots.footer?.()]) } })
 const Alert = Vue.defineComponent({ props: ['title', 'description'], setup: props => () => Vue.h('aside', [props.title, props.description]) })
-const Table = Vue.defineComponent({ props: ['data'], setup: (props, { slots }) => () => Vue.h('table', (props.data || []).flatMap(row => slots.connection?.({ row }) || [])) })
+const Table = Vue.defineComponent({ props: ['data'], setup: (props, { slots }) => () => Vue.h('table', (props.data || []).flatMap(row => [...slots.connection?.({ row }) || [],...slots.actions?.({row}) || []])) })
 async function render(view) {
     const fn = new Function('Vue', compile(view.template, { mode: 'function', prefixIdentifiers: true }).code)(Vue)
     const app = Vue.createSSRApp({ setup: () => ({ ...view.state, merchantName: '合成商户' }), render: fn })
     for (const tag of ['HsxDrawer', 'HsxPagination', 'ConnectionWizard', 'SyncProgressDrawer', 'LeadSectionHeader', 'LeadFilterBar', 'LeadTimestamp', 'RegionSelect', 'CaptchaSettings', 'BusinessCapabilities',
-        'el-steps', 'el-step', 'el-radio-group', 'el-radio-button', 'el-radio', 'el-form', 'el-form-item', 'el-input', 'el-collapse', 'el-collapse-item', 'el-button', 'el-result', 'el-switch', 'el-input-number', 'el-empty', 'el-tooltip', 'el-dropdown', 'el-dropdown-menu', 'el-dropdown-item', 'el-tag', 'el-option', 'el-select', 'el-descriptions', 'el-descriptions-item', 'el-table-column', 'el-table', 'el-checkbox']) app.component(tag, Box)
+        'el-steps', 'el-step', 'el-radio-group', 'el-radio-button', 'el-radio', 'el-form', 'el-form-item', 'el-input', 'el-collapse', 'el-collapse-item', 'el-button', 'el-result', 'el-switch', 'el-input-number', 'el-empty', 'el-tooltip', 'el-dropdown', 'el-dropdown-menu', 'el-dropdown-item', 'el-tag', 'el-option', 'el-select', 'el-descriptions', 'el-descriptions-item', 'el-table-column', 'el-table', 'el-checkbox', 'el-skeleton']) app.component(tag, Box)
     app.component('el-alert', Alert); app.component('HsxTable', Table)
     app.config.warnHandler = () => {}
     return renderToString(app)
@@ -92,5 +93,32 @@ check(html.includes('自动续登已配置'), 'merchant positive label follows a
 merchant.state.settingsRenewal.value = { automatic: false, ready: false, status: 'interactive_required', message: '合成：过期需要登录验证' }
 html = await render(merchant)
 check(html.includes('到期需登录验证') && html.includes('过期需要登录验证'), 'sync settings explains renewal limitations instead of promising every enabled schedule can log in')
+const authIssue={code:'auth_required',message:'合成：自动续登失败，请重新验证账号。',action:'reauthorize',action_label:'重新验证账号'}
+rows.value[0]={...rows.value[0],status:1,last_sync_status:'failed',sync_attention:authIssue,authorization_attention:true}
+html=await render(merchant)
+check(html.includes('需要重新登录')&&html.includes(authIssue.message)&&!html.includes('合成自动续登已配置'),'merchant list prioritizes an actual failed login over renewal-capability metadata')
+check(html.includes('重新登录')&&html.includes('disabled'),'existing connect action becomes login recovery and invalid sync action is disabled')
+await merchant.state.sync(7)
+check(merchant.state.connectionVisible.value&&merchant.state.selectedMerchant.value.id===7&&syncRequests.length===0,'direct sync handler opens existing connection management instead of syncing an invalid session')
+state.step.value=1;state.original.value={...rows.value[0]};html=await render(wizard)
+check(html.includes('原账号需要重新登录')&&html.includes(authIssue.message),'connection wizard shows the current issue before the replacement login form')
+state.step.value=2;html=await render(wizard);check(!html.includes(authIssue.message),'new verified preview is not obscured by the old authorization failure')
+rows.value[0]={...rows.value[0],last_sync_status:'running'};html=await render(merchant)
+check(!html.includes(authIssue.message)&&html.includes('自动续登已配置'),'running state suppresses the previous terminal failure instead of interrupting current sync')
+rows.value[0]={...rows.value[0],channel_enabled:false,last_sync_status:'failed'};html=await render(merchant)
+check(html.includes('渠道已关闭 · 采集暂停')&&!html.includes(authIssue.message),'paused channel takes priority over login recovery in the merchant table')
+rows.value[0]={...rows.value[0],channel_enabled:true,last_sync_status:'failed',authorization_attention:false,sync_attention:{code:'http_error',message:'合成：网络暂时不可用，请重试同步。',action:'retry',action_label:'重试同步'}}
+html=await render(merchant);check(html.includes('同步失败，可重试')&&html.includes('重试同步')&&!html.includes('需要重新登录'),'network failure keeps the user on the sync recovery path')
+await merchant.state.sync(7);check(syncRequests.length===1,'network retry uses the existing sync handler once')
+rows.value[0]={...rows.value[0],sync_attention:{code:'schema_error',message:'合成：接口字段发生变化，请联系平台核对。',action:'contact_support',action_label:'联系平台'}}
+html=await render(merchant);check(html.includes('需要平台协助')&&html.includes('接口字段发生变化'),'schema failure is actionable and visible rather than a generic failed label')
+await merchant.state.sync(7);check(syncRequests.length===1&&messages.at(-1).includes('联系平台'),'schema failure does not blindly repeat a sync request')
+merchant.state.settingsAttention.value=rows.value[0].sync_attention;html=await render(merchant)
+check(html.includes('同步需要处理')&&html.includes('接口字段发生变化')&&!html.includes('过期需要登录验证'),'settings drawer also prioritizes the current diagnosis rather than unrelated renewal policy')
+check(helper.syncAttentionFor({last_sync_status:'interrupted',sync_progress:{status:'running'},sync_attention:authIssue})?.action==='reauthorize','connection projection overrides stale running detail when interrupted')
+check(helper.syncAttentionFor({last_sync_status:'pending',sync_attention:authIssue})===null,'pending state suppresses stale terminal attention')
+check(helper.syncAttentionFor({channel_enabled:false,authorization_attention:true})===null,'closed channel suppresses fallback authorization warning')
+check(helper.syncAttentionFor({last_sync_status:'failed',authorization_attention:true})?.action==='reauthorize','early expiration attention still provides login recovery if diagnostic metadata is absent')
+for(const relative of ['composables/authRenewal.ts','views/components/ConnectionWizard.vue','views/components/MerchantPanel.vue'])check(fs.readFileSync(path.join(directory,relative),'utf8')===fs.readFileSync(path.join(root,'admin/src/addon/hsx_lead',relative),'utf8'),relative+' mounted mirror matches source')
 check(!/soujike|wanji|aiguanji|jixiaoer/.test(fs.readFileSync(helperFile, 'utf8')), 'presentation helper contains no provider-name conditionals')
 console.log(`PASS ${checks} auth renewal UI checks; actual SFC setup/render, synthetic public capabilities only, no HTTP/database access.`)

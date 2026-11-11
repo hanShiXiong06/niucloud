@@ -12,7 +12,15 @@
             <span class="text-lg font-bold">设备信息确认，共 {{ rows.length }} 台</span>
         </template>
 
-        <DeviceEntryList :devices="rows" :order-id="orderId" />
+        <DeviceEntryList :devices="rows" :order-id="orderId">
+            <template v-if="totalCount > 0" #quantity>
+                <span class="device-confirm-total">
+                    <span>已保存 {{ savedCount }} / 共</span>
+                    <el-input-number :model-value="displayTotalCount" :controls="false" disabled size="small" aria-label="本单总台数" />
+                    <span>台</span>
+                </span>
+            </template>
+        </DeviceEntryList>
 
         <template #footer>
             <div class="handoff-footer" :class="{ 'is-mobile': isMobile }">
@@ -47,7 +55,8 @@ const hsxFeedback = useFeedback()
 const props = defineProps({
     visible: { type: Boolean, default: false },
     deviceList: { type: Array as () => any[], default: () => [] },
-    orderId: { type: [Number, String], required: true }
+    orderId: { type: [Number, String], required: true },
+    totalCount: { type: Number, default: 0 }
 })
 
 const emit = defineEmits(['update:visible', 'confirm', 'cancel'])
@@ -63,6 +72,7 @@ const dialogVisible = computed({
 })
 
 const savedCount = computed(() => rows.value.filter(r => r.saved && r.id).length)
+const displayTotalCount = computed(() => Math.max(Number(props.totalCount) || 0, savedCount.value))
 
 const updateResponsiveState = () => { isMobile.value = window.innerWidth <= 768 }
 
@@ -182,4 +192,6 @@ onBeforeUnmount(() => {
 }
 .handoff-footer { display: flex; align-items: center; justify-content: space-between; gap: 20px; width: 100%; }
 .handoff-footer.is-mobile { align-items: stretch; flex-direction: column; }
+.device-confirm-total { display: inline-flex; align-items: center; gap: 6px; color: var(--el-text-color-secondary); font-size: 12px; font-weight: 400; }
+.device-confirm-total .el-input-number { width: 70px; }
 </style>

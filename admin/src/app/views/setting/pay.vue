@@ -31,14 +31,14 @@
                             </div>
                         </div>
                         <div class="flex items-center justify-center w-[110px] select-none">
-                            <el-switch v-if="isEdit" v-model="childrenItem.status" :active-value="1" :inactive-value="0" :active-text="t('isEnable')" @change="enablePaymentMode(childrenItem)" />
+                            <el-switch v-if="isEdit" v-model="childrenItem.status" :active-value="1" :inactive-value="0" :active-text="t('isEnable')" :loading="!!paymentEnablePending[childrenItem.key]" @change="enablePaymentMode(childrenItem)" />
                             <div v-else>
                                 <el-tag v-if="childrenItem.status" class="ml-2" type="success">{{ t('open') }}</el-tag>
                                 <el-tag v-else class="ml-2" type="info">{{ t('notOpen') }}</el-tag>
                             </div>
                         </div>
                         <div class="flex items-center justify-center w-[80px] select-none" v-if="isEdit">
-                            <button class="text-base" @click="configPayFn(childrenItem)" v-if="childrenItem.setting_component">{{ t('clickConfigure') }}</button>
+                            <button class="text-base" :disabled="!!paymentEnablePending[childrenItem.key]" @click="configPayFn(childrenItem)" v-if="childrenItem.setting_component">{{ t('clickConfigure') }}</button>
                             <button v-else>--</button>
                         </div>
                     </div>
@@ -49,7 +49,7 @@
         <div class="fixed-footer-wrap" v-if="isEdit">
             <div class="fixed-footer">
                 <el-button type="primary" :loading="loading" @click="cancelFn">{{ t('cancel') }}</el-button>
-                <el-button type="primary" :loading="loading" @click="saveFn(formRef)">{{ t('save') }}</el-button>
+                <el-button type="primary" :loading="loading" :disabled="paymentEnableBusy" @click="saveFn(formRef)">{{ t('save') }}</el-button>
             </div>
         </div>
         <template v-for="(item, index) in payTypeList">
@@ -60,7 +60,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, watch, nextTick, defineAsyncComponent } from 'vue'
+import { ref, reactive, computed, watch, nextTick, defineAsyncComponent, onBeforeUnmount } from 'vue'
 import { t } from '@/lang'
 import { getPayConfigList, setPatConfig } from '@/app/api/sys'
 import { getAllPayType } from '@/app/api/pay'
@@ -69,9 +69,17 @@ import { ElMessage } from 'element-plus'
 import Sortable, { SortableEvent } from 'sortablejs'
 import { useRoute } from 'vue-router'
 import { cloneDeep } from 'lodash-es'
+import useUserStore from '@/stores/modules/user'
 
 const route = useRoute()
 const pageName = route.meta.title
+const user = useUserStore()
+const paymentActor = () => `${user.token || ''}:${user.siteInfo?.site_id || ''}`
+const paymentEnablePending = reactive<Record<string, boolean>>({})
+const paymentEnableBusy = computed(() => Object.values(paymentEnablePending).some(Boolean))
+const paymentEnableJobs = new Map<string, symbol>()
+let paymentPageAlive = true
+onBeforeUnmount(() => { paymentPageAlive = false; paymentEnableJobs.clear() })
 
 const payTypeList = ref([])
 const payTypeRefs = ref({})
@@ -137,21 +145,49 @@ const setConfigInfo = (data:any) => {
 
 // 初始化配置信息
 const configPayFn = (data:any) => {
+    if (paymentEnablePending[data.key]) return
     payTypeRefs.value[data.key].setFormData(data)
     payTypeRefs.value[data.key].showDialog = true
 }
 
 // 开启支付方式
 const enablePaymentMode = async (data: any) => {
-    if (payTypeRefs.value[data.key] && typeof payTypeRefs.value[data.key].enableVerify == 'function') {
-        payTypeRefs.value[data.key].setFormData(data)
-
-        const verify = payTypeRefs.value[data.key].enableVerify()
-        if (!verify) {
+    // Disabling must not depend on a credential or remote catalogue check.
+    if (Number(data.status) !== 1) return true
+    const key = String(data.key), component = payTypeRefs.value[key]
+    if (paymentEnablePending[key]) { data.status = 0; return false }
+    if (!component) {
+        if (!data.setting_component) return true
+        data.status = 0
+        ElMessage.warning('支付配置组件正在加载，请稍后重试')
+        return false
+    }
+    if (typeof component.enableVerify !== 'function') return true
+    const job = Symbol(key), actor = paymentActor()
+    paymentEnableJobs.set(key, job); paymentEnablePending[key] = true
+    const current = () => paymentPageAlive && isEdit.value && actor === paymentActor()
+        && paymentEnableJobs.get(key) === job
+        && Object.values(payConfigData.value).some((group: any) => group.pay_type?.some((row: any) => row === data))
+    try {
+        // Setting components may read remote options before they can validate.
+        // Await also accepts all existing synchronous component contracts.
+        if (typeof component.setFormData === 'function') await component.setFormData(data)
+        if (!current() || Number(data.status) !== 1) { data.status = 0; return false }
+        const verify = await component.enableVerify()
+        if (!current() || Number(data.status) !== 1) { data.status = 0; return false }
+        if (verify !== true) {
             data.status = 0
-            ElMessage(t('configurePaymentMethod'))
+            const detail = typeof component.getEnableError === 'function' ? component.getEnableError() : ''
+            ElMessage.warning(typeof detail === 'string' && detail ? detail : t('configurePaymentMethod'))
             return false
         }
+        return true
+    } catch (_) {
+        if (current()) ElMessage.warning('支付配置未能核对，请重新打开配置后重试；尚未启用')
+        data.status = 0
+        return false
+    } finally {
+        if (paymentEnableJobs.get(key) === job) { paymentEnableJobs.delete(key); paymentEnablePending[key] = false }
     }
 }
 
@@ -186,6 +222,7 @@ const sortableFn = (item, index) => {
 
 // 保存
 const saveFn = () => {
+    if (paymentEnableBusy.value) { ElMessage.warning('支付配置正在核对，请稍候再保存'); return }
     payLoading.value = true
     const data = cloneDeep(payConfigData.value)
     Object.values(data).forEach((item, index) => {

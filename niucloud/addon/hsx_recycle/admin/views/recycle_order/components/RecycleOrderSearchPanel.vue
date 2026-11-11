@@ -1,8 +1,8 @@
 <template>
   <HsxSearchPanel v-model="collapsed" title="筛选条件" collapsible :summary="activeCount ? '已设置 ' + activeCount + ' 项条件，折叠后仍生效' : '按订单、客户或设备查找'">
-      <template #extra>
+      <template v-if="collapsed" #extra>
           <el-button type="primary" :icon="Search" @click="emit('advanced-search')">查询</el-button>
-          <el-button :icon="Refresh" @click="emit('reset-search')">重置</el-button>
+          <el-button :icon="Refresh" @click="handleReset">重置</el-button>
       </template>
       <el-form :inline="true" :model="props.advancedSearchForm" class="search-form" @submit.prevent>
           <el-form-item label="快递单号" class="search-item search-item--code">
@@ -16,6 +16,7 @@
           <el-form-item label="用户搜索" class="search-item search-item--member">
               <member-select
                   v-model="props.advancedSearchForm.member_id"
+                  :reset-key="memberResetKey"
                   placeholder="输入用户昵称、手机号或用户编号"
                   @change="handleMemberChange"
                   class="w-full"
@@ -37,7 +38,11 @@
                   class="w-full"
               />
           </el-form-item>
-          <HsxFold class="w-full" title="更多筛选" :summary="advancedActiveCount ? '已设置 ' + advancedActiveCount + ' 项条件' : '订单状态、时间、数量与金额'">
+          <div v-if="!advancedOpen" class="search-actions" role="group" aria-label="筛选操作">
+              <el-button type="primary" :icon="Search" @click="emit('advanced-search')">查询</el-button>
+              <el-button :icon="Refresh" @click="handleReset">重置</el-button>
+          </div>
+          <HsxFold v-model="advancedOpen" class="w-full" title="更多筛选" :summary="advancedActiveCount ? '已设置 ' + advancedActiveCount + ' 项条件' : '订单状态、时间、数量与金额'">
               <div class="search-advanced-grid">
                   <el-form-item  label="订单编号" class="search-item search-item--code">
                       <el-input
@@ -199,6 +204,10 @@
                           class="w-full"
                       />
                   </el-form-item>
+                  <div v-if="advancedOpen" class="search-actions" role="group" aria-label="筛选操作">
+                      <el-button type="primary" :icon="Search" @click="emit('advanced-search')">查询</el-button>
+                      <el-button :icon="Refresh" @click="handleReset">重置</el-button>
+                  </div>
               </div>
           </HsxFold>
       </el-form>
@@ -214,6 +223,8 @@ interface Props { isMobile: boolean; mobileSearchVisible: boolean; advancedSearc
 const props = defineProps<Props>()
 const emit = defineEmits(['toggle-mobile-search', 'advanced-search', 'reset-search', 'member-change'])
 const panelCollapsed = ref(false)
+const advancedOpen = ref(false)
+const memberResetKey = ref(0)
 const collapsed = computed({
   get: () => props.isMobile ? !props.mobileSearchVisible : panelCollapsed.value,
   set: value => {
@@ -229,13 +240,22 @@ const activeKeys = computed(() => Object.keys(props.advancedSearchForm).filter(k
 const activeCount = computed(() => activeKeys.value.length)
 const advancedActiveCount = computed(() => activeKeys.value.filter(key => !basicKeys.has(key)).length)
 const handleMemberChange = (...args: any[]) => emit('member-change', ...args)
+const handleReset = () => { ++memberResetKey.value; emit('reset-search') }
 </script>
 
 <style scoped>
 .search-form, .search-advanced-grid { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; }
-.search-form .search-item { flex: 1 1 220px; min-width: 0; margin: 0; }
-.search-advanced-grid :deep(.el-form-item) { display: flex; flex-direction: column; align-items: stretch; }
-.search-advanced-grid :deep(.el-form-item__label) { width: auto !important; justify-content: flex-start; padding-bottom: 4px; height: auto; line-height: 20px; font-size: 12px; color: var(--hsx-text-secondary); }
+/* 只约束本页宽度，不覆盖通用面板的左右/上下排列偏好。 */
+.search-form .search-item { --search-item-width: 272px; flex: 0 1 var(--search-item-width); width: var(--search-item-width); max-width: 100%; min-width: 0; margin: 0; }
+.search-form .search-item--member { --search-item-width: 320px; }
+.search-form .search-item--select { --search-item-width: 240px; }
+.search-form .search-item--range { --search-item-width: 300px; }
+.search-form .search-item--date { --search-item-width: 368px; }
+.search-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 100%; min-height: 32px; }
+.search-actions :deep(.el-button + .el-button) { margin-left: 0; }
 .range-inline { display: flex; align-items: center; gap: 8px; width: 100%; }
-.range-input { min-width: 0; flex: 1; }
+.range-input { width: 0; min-width: 0; flex: 1; }
+@media (max-width: 640px) {
+  .search-form .search-item { flex-basis: 100%; width: 100%; }
+}
 </style>

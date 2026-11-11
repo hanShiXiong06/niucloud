@@ -146,8 +146,11 @@ export function useRecycleOrderQuery<T = any>(options: UseRecycleOrderQueryOptio
   const showAdvancedSearch = ref(true)
   const searchPanelCollapsed = ref(false)
   const activeTab = ref('')
+  let requestVersion = 0
 
   const getList = async (page = pagination.value.page) => {
+    const version = ++requestVersion
+    let isCurrentRequest = () => version === requestVersion
     loading.value = true
 
     try {
@@ -162,8 +165,13 @@ export function useRecycleOrderQuery<T = any>(options: UseRecycleOrderQueryOptio
         quickSearchForm,
         advancedSearchForm
       })
+      const querySignature = JSON.stringify(queryParams)
+      isCurrentRequest = () => version === requestVersion && querySignature === JSON.stringify(buildOrderQueryParams({
+        page: currentPage, limit: pagination.value.limit, quickSearchForm, advancedSearchForm
+      }))
 
       const res = await fetchList(queryParams)
+      if (!isCurrentRequest()) return
 
       if (res.data.data) {
         list.value = res.data.data
@@ -182,10 +190,11 @@ export function useRecycleOrderQuery<T = any>(options: UseRecycleOrderQueryOptio
       paymentMode.value = res.data.payment_mode === 'device' ? 'device' : flowMode.value
       setPagination({ total })
     } catch (error) {
+      if (!isCurrentRequest()) return
       console.error('获取列表失败:', error)
       onError && onError('获取列表失败')
     } finally {
-      loading.value = false
+      if (version === requestVersion) loading.value = false
     }
   }
 

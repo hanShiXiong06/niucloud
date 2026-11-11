@@ -43,6 +43,7 @@ final class MembershipCatalogService
             if (isset($ranks[$tier['rank']])) throw new CommonException('协作会员成长值存在重复，请在会员等级中设置不同的成长值');
             if ($tier['is_entry']&&++$entry>1) throw new CommonException('同一站点只能启用一个入门会员等级，请在会员等级中核对');
             $ranks[$tier['rank']]=true;$tier['display_rank']=count($out)+1;
+            foreach($tier['cycles'] as &$cycle)$cycle['product_key']=MembershipProductIdentity::forCycle($site,(int)$tier['level_id'],(string)$cycle['key']);unset($cycle);
             $out[]=$tier;
         }
         return $out;
@@ -64,9 +65,11 @@ final class MembershipCatalogService
         $rank=self::integer($level['growth']??null,1,2147483647,'会员等级成长值');
         $name=Data::text($level,'level_name',50,true);
         $entry=self::flag($config['is_entry']??false,'入门等级开关');
+        $experienceGate=array_key_exists('experience_gate_enabled',$config)?$config['experience_gate_enabled']:true;
+        if(!is_bool($experienceGate))throw new CommonException('经验门槛开关请明确选择开启或关闭');
         $deposit=MembershipCostService::money($config['deposit_amount']??'0.00','等级押金');
-        $buyExperience=MembershipCostService::flag($config['experience_purchase_enabled']??false,'购买经验');
-        $unit=MembershipCostService::money($config['experience_unit_price']??'0.00','经验单价');
+        $buyExperience=$experienceGate?MembershipCostService::flag($config['experience_purchase_enabled']??false,'购买经验'):false;
+        $unit=$experienceGate?MembershipCostService::money($config['experience_unit_price']??'0.00','经验单价'):'0.00';
         if($buyExperience&&Rules::cents($unit)<=0)throw new CommonException('启用购买经验时，请填写大于0的每经验价格');
         $visual=self::visual($config['visual']??[],$displayRank);
         $limit=self::integer($config['account_limit']??null,1,99999,'账号总名额（含负责人）');
@@ -88,7 +91,7 @@ final class MembershipCatalogService
         return ['code'=>'ML'.$id,'level_id'=>$id,'name'=>$name,'rank'=>$rank,'display_rank'=>0,'enabled'=>true,
             'account_limit'=>$limit,'unlimited'=>$unlimited,'capabilities'=>$caps,'benefits'=>self::benefits($caps),'cycles'=>$periods,
             'deposit_amount'=>$deposit,'experience_purchase_enabled'=>$buyExperience,'experience_unit_price'=>$unit,
-            'is_entry'=>$entry,'experience_required'=>$entry?'0.00':Rules::amount($rank*100),'experience_eligible'=>null,'experience_remaining'=>null,'level_color'=>$visual['accent_color'],'level_visual'=>$visual];
+            'is_entry'=>$entry,'experience_gate_enabled'=>$experienceGate,'experience_required'=>!$experienceGate||$entry?'0.00':Rules::amount($rank*100),'experience_eligible'=>null,'experience_remaining'=>null,'level_color'=>$visual['accent_color'],'level_visual'=>$visual];
     }
 
     /** Stable server-owned benefit cards: no user-supplied image URL or HTML. */

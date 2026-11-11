@@ -18,23 +18,66 @@ final class MembershipDepositService
 {
     private const KEY='membership_deposit_return';
     private const EXIT_STATUSES=['pending','approved','refunding','refunded','attention'];
+    private const PURCHASE_BLOCKING_STATUSES=['pending','approved','refunding','attention'];
     private const LABELS=['pending'=>'待平台审核','approved'=>'已审核，待发起原路退款','refunding'=>'原路退款处理中','refunded'=>'押金已退还，已退出协作','rejected'=>'申请未通过','attention'=>'原退款结果待核对'];
     public function __construct(private Context $context){}
 
     /** Read-only and non-recursive: usable by membership and matching guards. */
     public static function exited(int $site,int $merchant,bool $lock=false):bool
     {
-        $row=self::current($site,$merchant,$lock);
-        return $row&&in_array($row['request']['status']??'',self::EXIT_STATUSES,true);
+        return !empty(self::exitedMany($site,[$merchant],$lock)[$merchant]);
     }
 
     /** Same latest embedded request as current(), batched for read-only lists. */
-    public static function exitedMany(int $site,array $merchantIds):array
+    public static function exitedMany(int $site,array $merchantIds,bool $lock=false):array
     {
         $ids=array_values(array_unique(array_filter(array_map('intval',$merchantIds),static fn(int $id):bool=>$id>0)));
-        if(!$ids)return[];$out=[];
-        $rows=Store::query('coop_order',$site)->whereIn('merchant_id',$ids)->where('purpose','membership')->whereLike('rule_json','%"'.self::KEY.'"%')->field('merchant_id,rule_json')->order('id desc')->select()->toArray();
-        foreach($rows as$row){$id=(int)$row['merchant_id'];if(array_key_exists($id,$out))continue;$request=Data::decode($row['rule_json'])[self::KEY]??null;if(is_array($request))$out[$id]=in_array($request['status']??'',self::EXIT_STATUSES,true);}
+        if(!$ids)return[];$out=[];$completed=[];
+        $rows=self::requestRows($site,$ids,$lock);$epochs=self::epochsFromRows($site,$rows);
+        foreach($rows as$row){$id=(int)$row['merchant_id'];if(array_key_exists($id,$out))continue;$request=Data::decode($row['rule_json'])[self::KEY]??null;if(!is_array($request))continue;$status=$request['status']??'';$out[$id]=in_array($status,self::EXIT_STATUSES,true);if($status==='refunded')$completed[]=$id;}
+        if(!$completed)return$out;
+        // A new draft or a client success callback cannot end the old exit.
+        // Only a freshly quoted membership in this completed-exit epoch, with
+        // an exact native paid receipt and no grant exception, can reopen it.
+        $query=Store::query('coop_order',$site)->whereIn('merchant_id',$completed)->where('purpose','membership')->where('status','paid')->order('id');if($lock)$query->lock(true);
+        $candidates=[];
+        foreach($query->select()->toArray()as$order){$id=(int)$order['merchant_id'];$rule=Data::decode($order['rule_json']);if(empty($epochs[$id])||($rule['membership_deposit_epoch']??'')!==$epochs[$id]||!empty($rule['requires_manual_review']))continue;
+            try{EntityMembershipService::assertSnapshot($order,$rule);}catch(CommonException$error){continue;}$candidates[(int)$order['id']]=$order;}
+        if(!$candidates)return$out;
+        $payments=Db::name('pay')->where('site_id',$site)->where('trade_type',PaymentService::TRADE_TYPE)->whereIn('trade_id',array_keys($candidates))->where('status',PayDict::STATUS_FINISH);if($lock)$payments->lock(true);
+        foreach($payments->select()->toArray()as$pay){$order=$candidates[(int)$pay['trade_id']]??null;if(!$order||$pay['main_type']!==PayDict::MEMBER||(int)$pay['main_id']!==(int)$order['member_id']||$pay['out_trade_no']!==$order['out_trade_no'])continue;
+            try{if(Rules::cents((string)$pay['money'])===Rules::cents((string)$order['amount']))$out[(int)$order['merchant_id']]=false;}catch(CommonException$error){continue;}}
+        return$out;
+    }
+
+    /** Exit of old rights is distinct from a refund still blocking new money. */
+    public static function purchaseState(int $site,int $merchant,bool $lock=false):array
+    {
+        $row=self::current($site,$merchant,$lock);$status=(string)($row['request']['status']??'');
+        return ['deposit_purchase_blocked'=>in_array($status,self::PURCHASE_BLOCKING_STATUSES,true),'deposit_request_status'=>$status];
+    }
+
+    /** Stable scope of new entitlements after a completed exit. Historical
+     * receipts and refund facts are never rewritten or used again as credit.
+     */
+    public static function membershipEpoch(int $site,int $merchant,bool $lock=false):string
+    {
+        return self::membershipEpochs($site,[$merchant],$lock)[$merchant]??'';
+    }
+    public static function membershipEpochs(int $site,array $merchantIds,bool $lock=false):array
+    {
+        $ids=array_values(array_unique(array_filter(array_map('intval',$merchantIds),static fn(int $id):bool=>$id>0)));
+        return $ids?self::epochsFromRows($site,self::requestRows($site,$ids,$lock)):[];
+    }
+    private static function requestRows(int $site,array $ids,bool $lock):array
+    {
+        $query=Store::query('coop_order',$site)->whereIn('merchant_id',$ids)->where('purpose','membership')->whereLike('rule_json','%"'.self::KEY.'"%')->field('id,merchant_id,rule_json')->order('id desc');if($lock)$query->lock(true);return$query->select()->toArray();
+    }
+    private static function epochsFromRows(int $site,array $rows):array
+    {
+        $out=[];
+        foreach($rows as$row){$id=(int)$row['merchant_id'];if(isset($out[$id]))continue;$rule=Data::decode($row['rule_json']);$history=$rule['membership_deposit_return_history']??[];$requests=is_array($history)?array_reverse($history):[];array_unshift($requests,$rule[self::KEY]??null);
+            foreach($requests as$request){if(!is_array($request)||($request['status']??'')!=='refunded')continue;$out[$id]=hash('sha256',Data::json([$site,$id,(int)$row['id'],(string)($request['request_id']??''),(int)($request['created_at']??0)]));break;}}
         return$out;
     }
 
@@ -43,8 +86,9 @@ final class MembershipDepositService
         $merchant=TeamService::resolve($this->context);$id=(int)$merchant['id'];$owner=(int)$merchant['member_id']===$this->context->memberId;
         $balances=MembershipCostService::balances($this->context->site,$id);$blocking=$this->blocking($id);$current=self::current($this->context->site,$id);
         if($balances['review_required'])$blocking[]=['key'=>'financial_review','title'=>'押金、付款或退款记录需要平台核对','count'=>1];
-        $active=$current&&in_array($current['request']['status']??'',self::EXIT_STATUSES,true);
-        return ['merchant_id'=>$id,'is_owner'=>$owner,'balance'=>$balances['balance'],'can_apply'=>$owner&&!$active&&!$blocking&&Rules::cents($balances['balance'])>0,'blocking_reasons'=>$blocking,'cooperation_exited'=>(bool)$active,'request'=>$current?$this->present($current['order'],$current['request'],false):null];
+        if(Rules::cents($balances['balance'])>0)try{$this->sources($id,false);}catch(CommonException$error){$blocking[]=['key'=>'refund_route','title'=>$error->getMessage(),'count'=>1];}
+        $active=self::exited($this->context->site,$id);
+        return ['merchant_id'=>$id,'is_owner'=>$owner,'balance'=>$balances['balance'],'can_apply'=>$owner&&!$active&&!$blocking&&Rules::cents($balances['balance'])>0,'blocking_reasons'=>$blocking,'cooperation_exited'=>$active,'request'=>$current?$this->present($current['order'],$current['request'],false):null]+self::purchaseState($this->context->site,$id);
     }
 
     public function apply(array $input):array
@@ -59,7 +103,7 @@ final class MembershipDepositService
             // not fresh consent to suspend cooperation again. Keep all stored
             // histories intact and acknowledge it with the current summary.
             if(self::seenRequest($site,$mid,$request,true))return;
-            if($current&&in_array($current['request']['status']??'',self::EXIT_STATUSES,true))throw new CommonException('已有押金退还申请，请核对原申请，不会重复退款');
+            if($current&&self::exited($site,$mid,true))throw new CommonException('已有押金退还申请，请核对原申请，不会重复退款');
             $blocking=$this->blocking($mid,true);if($blocking)throw new CommonException($blocking[0]['title'].'；请先完成后再申请');
             $balances=MembershipCostService::balances($site,$mid,true);if($balances['review_required'])throw new CommonException('原押金或退款记录需要平台核对，暂不能申请');
             $sources=$this->sources($mid,true);$amount=array_sum(array_column($sources,'amount_cents'));
@@ -181,6 +225,7 @@ final class MembershipDepositService
      */
     private function reserveRefund(array $original,string $amount):array
     {
+        PaymentRefundService::assertRefundRoute($original,null,true);
         return FrameworkRefundReservation::create($this->context->site,$original,$amount,'商户正常退出，仅退还押金','LD');
     }
 
@@ -224,7 +269,7 @@ final class MembershipDepositService
     {
         // Every first dispatch claims a stable refund identity before an external call.
         [$order,$r]=$this->anchor($id);foreach($r['sources'] as $index=>$source){
-            $send=Db::transaction(function()use($id,$index):?string{PromotionService::lockSite($this->context->site);[$order,$r]=$this->anchor($id,true);$s=$r['sources'][$index]??null;if(!$s||empty($s['refund_no'])||!empty($s['dispatch_started_at'])||!in_array($r['status'],['approved','refunding','attention'],true))return null;$refund=$this->refundRecord($order,$s,true);if(!$refund||$refund['status']!==RefundDict::WAIT)throw new CommonException('原退款记录状态无法核对，未重发退款');
+            $send=Db::transaction(function()use($id,$index):?string{PromotionService::lockSite($this->context->site);[$order,$r]=$this->anchor($id,true);$s=$r['sources'][$index]??null;if(!$s||empty($s['refund_no'])||!empty($s['dispatch_started_at'])||!in_array($r['status'],['approved','refunding','attention'],true))return null;PaymentRefundService::assertRefundRoute(Store::row('coop_order',$this->context->site,(int)$s['order_id'],true),null,true);$refund=$this->refundRecord($order,$s,true);if(!$refund||$refund['status']!==RefundDict::WAIT)throw new CommonException('原退款记录状态无法核对，未重发退款');
                 if($refund['type']===PayDict::OFFLINEPAY){$r['sources'][$index]['manual_refund_required']=true;$r['update_at']=time();$rule=Data::decode($order['rule_json']);$rule[self::KEY]=$r;self::save($id,$this->context->site,$rule);return null;}
                 $r['sources'][$index]['dispatch_started_at']=time();$r['sources'][$index]['status']='dispatching';$r['status']='refunding';$r['update_at']=time();$rule=Data::decode(Store::row('coop_order',$this->context->site,$id,true)['rule_json']);$rule[self::KEY]=$r;self::save($id,$this->context->site,$rule);return(string)$s['refund_no'];});
             if($send!==null)try{(new CoreRefundService())->refund($this->context->site,$send,'',RefundDict::BACK);}catch(\Throwable $error){$this->markAttention($id,$index);}
@@ -268,7 +313,7 @@ final class MembershipDepositService
             if(!$p||$p['main_type']!==PayDict::MEMBER||(int)$p['main_id']!==(int)$order['member_id']||Rules::cents((string)$p['money'])!==Rules::cents((string)$order['amount']))throw new CommonException('原押金付款凭据无法核对');
             OrderPaymentReadService::assertManualSource($order,$p);
             $rq=Db::name('pay_refund')->where('site_id',$this->context->site)->where('out_trade_no',$order['out_trade_no']);if($lock)$rq->lock(true);$ref=MembershipCostService::refundedComponents($order,$rule,$rq->select()->toArray());
-            if($ref['review']||$ref['pending']||!empty($rule['requires_manual_review']))throw new CommonException('原押金或退款仍需平台核对');$amount=Rules::cents($rule['deposit_amount'])-$ref['deposit'];if($amount>0)$out[]=['order_id'=>(int)$order['id'],'amount_cents'=>$amount];
+            if($ref['review']||$ref['pending']||!empty($rule['requires_manual_review']))throw new CommonException('原押金或退款仍需平台核对');$amount=Rules::cents($rule['deposit_amount'])-$ref['deposit'];if($amount>0){PaymentRefundService::assertRefundRoute($order,$p,$lock);$out[]=['order_id'=>(int)$order['id'],'amount_cents'=>$amount];}
         }return$out;
     }
 
@@ -298,18 +343,21 @@ final class MembershipDepositService
     }
     private function present(array $order,array $r,bool $admin):array
     {
-        $sources=[];$canContinue=false;$hasManual=false;
+        $sources=[];$canContinue=false;$hasManual=false;$routeBlock='';
         $canManual=$admin&&in_array($r['status'],['approved','refunding','attention'],true)&&$this->context->ownership()->allows('hsx_lead_cooperation_order_manual_refund')&&$this->context->ownership()->allows('hsx_lead_cooperation_finance');
         foreach($r['sources']??[]as$s){
             $status=(string)($s['status']??'reserved');$refund=null;$original=Store::row('coop_order',$this->context->site,(int)$s['order_id']);
+            $sourceBlock='';try{PaymentRefundService::assertRefundRoute($original);}catch(CommonException$error){$sourceBlock=$error->getMessage();$routeBlock=$sourceBlock;}
             if(!empty($s['refund_no']))try{$refund=$this->refundRecord($order,$s);if($refund&&$refund['status']===RefundDict::SUCCESS)$status='success';if($refund&&$refund['type']!==PayDict::OFFLINEPAY&&$refund['status']===RefundDict::WAIT&&empty($s['dispatch_started_at']))$canContinue=true;}catch(CommonException$e){$status='attention';}
             $item=['order_id'=>(int)$s['order_id'],'source_order_id'=>(int)$s['order_id'],'amount'=>$s['amount'],'status'=>$status,'status_label'=>['reserved'=>'待发起','dispatching'=>'已提交，待核对','pending'=>'退款处理中','success'=>'原路退款已确认','attention'=>'原退款待核对'][$status]??'待核对','message'=>$status==='attention'?'仅核对原退款，不会重复发起':($status==='success'?'已核实框架原路退款成功':'等待原路退款结果')];
-            $manual=ManualRefundService::metadata($original,$refund,$canManual);$item=array_replace($item,$manual);
+            $manual=ManualRefundService::metadata($original,$refund,$canManual&&$sourceBlock==='');$item=array_replace($item,$manual);
             if($manual['manual_refund_required']){$hasManual=true;$item['status_label']=$status==='success'?'线下退款已确认':($manual['manual_refund_receipt_id']>0?'实际退款已登记，待核对':'待人工退款');$item['message']=$manual['manual_refund_message'];}
+            if($sourceBlock!==''){$item['message']=$sourceBlock;$item['can_manual_refund']=false;}
             if($admin){$item['order_no']=(string)$original['order_no'];$item['refund_no']=(string)($s['refund_no']??'');}$sources[]=$item;
         }
         $out=array_intersect_key($r,array_flip(['id','status','amount','reason','review_reason','created_at','review_at']));$out['request_version']=self::version($r);$out['updated_at']=(int)($r['update_at']??0);$out['status_name']=self::LABELS[$r['status']]??'待核对';$out['sources']=$sources;$out['can_refresh']=in_array($r['status'],['approved','refunding','attention'],true);$out['can_review']=$r['status']==='pending';$out['can_continue']=$canContinue&&in_array($r['status'],['approved','refunding','attention'],true);
         if($hasManual&&$r['status']==='approved')$out['status_name']='待人工退款';
+        if($routeBlock!==''){$out['can_review']=false;$out['can_continue']=false;$out['block_reason']=$routeBlock;$out['message']=$routeBlock;}
         if($admin){$merchant=Data::query('merchant',$this->context->site)->where('id',$order['merchant_id'])->field('id,name')->find();$member=Db::name('member')->where('site_id',$this->context->site)->where('member_id',$r['member_id'])->field('member_id,nickname')->find();$out+=['merchant_id'=>(int)$order['merchant_id'],'merchant_name'=>(string)($merchant['name']??'原门店'),'member_id'=>(int)$r['member_id'],'member_name'=>(string)($member['nickname']??'原申请会员')];}return$out;
     }
     private function detailForAllowed(int $id):array{[$order,$r]=$this->anchor($id);return$this->present($order,$r,true);}

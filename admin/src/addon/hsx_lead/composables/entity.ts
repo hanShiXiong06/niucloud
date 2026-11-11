@@ -2,13 +2,13 @@ export type SubjectCycle = { key: string; name: string; months: number; enabled:
 export type SubjectVisual = { preset:string;start_color:string;end_color:string;text_color:string;accent_color:string;angle:number;card_image:string;avatar_effect:boolean }
 export type SubjectBenefit = {
     is_use: 0 | 1; is_entry: boolean; level_color: string; account_limit: number; unlimited: boolean;
-    deposit_amount: string; experience_purchase_enabled: boolean; experience_unit_price: string;
+    deposit_amount: string; experience_gate_enabled: boolean; experience_purchase_enabled: boolean; experience_unit_price: string;
     can_publish: boolean; can_accept: boolean; can_view_inventory: boolean; all_models: boolean;
     cycles: SubjectCycle[]; visual:SubjectVisual
 }
 export type EntityLevel = {
     code: string; level_id: number; name: string; rank: number; display_rank: number;
-    is_entry: boolean; level_color: string; experience_required: string | null; experience_eligible: boolean | null;
+    is_entry: boolean; level_color: string; experience_gate_enabled: boolean; experience_required: string | null; experience_eligible: boolean | null;
     deposit_amount: string; experience_purchase_enabled: boolean; experience_unit_price: string;
     account_limit: number; unlimited: boolean; cycles: SubjectCycle[];
     capabilities: Record<string, boolean>; benefits: {key:string;title:string;desc:string;icon:string;enabled:boolean}[]
@@ -67,12 +67,14 @@ export function defaultSubjectCycles(): SubjectCycle[] {
 /** The editor keeps a private draft; neither defaults nor normalization mutate framework props. */
 export function normalizeSubjectBenefit(value: unknown): SubjectBenefit {
     const row = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, any> : {}
+    const experienceGateEnabled = row.experience_gate_enabled !== false && row.experience_gate_enabled !== 0
     return {
         is_use: enabled(row.is_use) ? 1 : 0,
         is_entry: enabled(row.is_entry), level_color: typeof row.level_color==='string'?row.level_color:'',
         deposit_amount: row.deposit_amount === undefined ? '0.00' : String(row.deposit_amount),
-        experience_purchase_enabled: enabled(row.experience_purchase_enabled),
-        experience_unit_price: row.experience_unit_price === undefined ? '0.00' : String(row.experience_unit_price),
+        experience_gate_enabled: experienceGateEnabled,
+        experience_purchase_enabled: experienceGateEnabled && enabled(row.experience_purchase_enabled),
+        experience_unit_price: !experienceGateEnabled ? '0.00' : row.experience_unit_price === undefined ? '0.00' : String(row.experience_unit_price),
         account_limit: row.account_limit === undefined ? 1 : Number(row.account_limit), unlimited: enabled(row.unlimited),
         can_publish: enabled(row.can_publish), can_accept: enabled(row.can_accept),
         can_view_inventory: enabled(row.can_view_inventory), all_models: enabled(row.all_models),
@@ -87,8 +89,9 @@ export function subjectBenefitError(value: SubjectBenefit): string {
     if (value.is_use !== 1) return ''
     if(typeof value.is_entry!=='boolean')return '请检查入门等级开关'
     if(!money(value.deposit_amount))return '等级押金请填写0或正数金额，最多两位小数'
+    if(typeof value.experience_gate_enabled!=='boolean')return '请检查经验门槛开关'
     if(typeof value.experience_purchase_enabled!=='boolean')return '请检查补足经验开关'
-    if(value.experience_purchase_enabled&&(!money(value.experience_unit_price)||Number(value.experience_unit_price)<=0))return '开启补足经验后，请填写大于0的每点经验价格，最多两位小数'
+    if(value.experience_gate_enabled&&value.experience_purchase_enabled&&(!money(value.experience_unit_price)||Number(value.experience_unit_price)<=0))return '开启补足经验后，请填写大于0的每点经验价格，最多两位小数'
     if(value.level_color!==''&&!validLevelColor(value.level_color))return '等级颜色请选择有效的十六进制颜色'
     const visualError=subjectVisualError(value.visual);if(visualError)return visualError
     if (!Number.isInteger(value.account_limit) || value.account_limit < 1 || value.account_limit > 99999) return '总账号数请填写1—99999，人数包含负责人'
@@ -105,7 +108,8 @@ export function subjectBenefitError(value: SubjectBenefit): string {
 }
 export function subjectBenefitPayload(value: SubjectBenefit): SubjectBenefit {
     return { ...value, deposit_amount: money(value.deposit_amount) ? Number(value.deposit_amount).toFixed(2) : value.deposit_amount,
-        experience_unit_price: value.experience_purchase_enabled ? money(value.experience_unit_price) ? Number(value.experience_unit_price).toFixed(2) : value.experience_unit_price : '0.00',
+        experience_purchase_enabled: value.experience_gate_enabled && value.experience_purchase_enabled,
+        experience_unit_price: value.experience_gate_enabled && value.experience_purchase_enabled ? money(value.experience_unit_price) ? Number(value.experience_unit_price).toFixed(2) : value.experience_unit_price : '0.00',
         visual:{...value.visual}, cycles: value.cycles.map(row => ({ ...row, name: row.name.trim(), price: row.enabled && money(row.price) ? Number(row.price).toFixed(2) : '0.00' })) }
 }
 /** Read-only catalogue projected from framework membership levels; no local V-tier catalogue. */
@@ -117,7 +121,7 @@ export function normalizeEntityLevels(value: unknown): EntityLevel[] {
         const experience_required=/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/.test(required)?required.split('.')[0]+'.'+(required.split('.')[1]||'').padEnd(2,'0'):null
         const experience_eligible=typeof row.experience_eligible==='boolean'?row.experience_eligible:null
         const costs=normalizeSubjectBenefit(row)
-        return { code: String(row.code), level_id: Number(row.level_id), name: String(row.name || ''), rank: Number(row.rank || 0), display_rank: Number(row.display_rank || 0), is_entry:enabled(row.is_entry), level_color:validLevelColor(row.level_color)?row.level_color:'', experience_required, experience_eligible, deposit_amount:costs.deposit_amount,experience_purchase_enabled:costs.experience_purchase_enabled,experience_unit_price:costs.experience_unit_price, account_limit: Number(row.account_limit), unlimited: enabled(row.unlimited), cycles: Array.isArray(row.cycles) ? normalizeSubjectBenefit({ cycles: row.cycles }).cycles : [], capabilities: Object.fromEntries(Object.keys(subjectCapabilityLabels).map(key=>[key,enabled(row.capabilities?.[key])])), benefits }
+        return { code: String(row.code), level_id: Number(row.level_id), name: String(row.name || ''), rank: Number(row.rank || 0), display_rank: Number(row.display_rank || 0), is_entry:enabled(row.is_entry), level_color:validLevelColor(row.level_color)?row.level_color:'', experience_gate_enabled:costs.experience_gate_enabled, experience_required, experience_eligible, deposit_amount:costs.deposit_amount,experience_purchase_enabled:costs.experience_purchase_enabled,experience_unit_price:costs.experience_unit_price, account_limit: Number(row.account_limit), unlimited: enabled(row.unlimited), cycles: Array.isArray(row.cycles) ? normalizeSubjectBenefit({ cycles: row.cycles }).cycles : [], capabilities: Object.fromEntries(Object.keys(subjectCapabilityLabels).map(key=>[key,enabled(row.capabilities?.[key])])), benefits }
     })
 }
 export function entitySeatText(membership: Record<string, any> = {}): string {

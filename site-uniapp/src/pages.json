@@ -378,6 +378,13 @@
 			"root": "addon/hsx_recycle",
 			"pages": [
 				{
+					"path": "pages/quote/index",
+					"style": {
+						"navigationBarTitleText": "报价单"
+					},
+					"needLogin": true
+				},
+				{
 					"path": "pages/task/index",
 					"style": {
 						"navigationBarTitleText": "我的任务"

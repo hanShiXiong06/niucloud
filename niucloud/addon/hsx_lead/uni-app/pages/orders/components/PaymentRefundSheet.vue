@@ -5,7 +5,7 @@
             <view v-if="loading" class="refund-loading">正在核对原付款与退款资料…</view>
             <template v-else-if="detail.order_id">
                 <view class="refund-amount"><text>{{ order.purpose === 'commission' ? '成交协作费退款' : detail.can_request === true ? '本次申请金额' : '申请退款金额' }}</text><text>{{ coopMoney(detail.amount) }}</text></view>
-                <view class="refund-channel">原路退回 · {{ order.payment_type_name || '以原支付记录为准' }}</view>
+                <view class="refund-channel">原路退回 · {{ order.payment_display_name || order.payment_type_name || '以原支付记录为准' }}</view>
                 <view v-if="detail.components && order.purpose === 'membership'" class="refund-components"><text>服务费 {{ coopMoney(detail.components.service) }}</text><text>押金 {{ coopMoney(detail.components.deposit) }}</text><text>经验费 {{ coopMoney(detail.components.experience) }}</text></view>
                 <view v-if="detail.status !== 'none'" class="refund-state" :class="'is-' + detail.status"><text>{{ detail.status_name || '退款待核对' }}</text><text v-if="detail.message">{{ detail.message }}</text></view>
                 <template v-if="detail.can_request === true && !readRequired">

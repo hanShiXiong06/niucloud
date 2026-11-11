@@ -93,6 +93,61 @@ try {
             'is_weapp'=>1,'is_wechat'=>1,'is_sms'=>1,'weapp_template_id'=>'weapp_'.$suffix.'_'.$phase,'wechat_template_id'=>'wechat_'.$suffix.'_'.$phase,'sms_id'=>'sms_'.$suffix.'_'.$phase]);
     };
     $configure($site,'one');$configure($site+1,'two');
+
+    // The framework event bus is shared with other plugins. A wrong or duplicate
+    // NoticeData result must fail closed before the framework sender is called,
+    // even if its shape otherwise looks like a valid collaboration notification.
+    $boundarySends=[];
+    $boundaryGateway=new FrameworkNoticeGateway(static function(string $channel,array $event)use(&$boundarySends):array {
+        $boundarySends[]=['channel'=>$channel,'event'=>$event];
+        return ['accepted'=>true,'channel'=>$channel,'provider_code'=>'0'];
+    });
+    $boundaryCases=['wrong_member','wrong_merchant','wrong_task','wrong_audit','wrong_attempt','wrong_channel',
+        'duplicate_hooks','missing_expected_member','missing_expected_merchant','missing_both_expected'];
+    foreach($boundaryCases as$boundaryCase){
+        Event::remove('NoticeData');
+        $poison=static function(array $payload)use($listener,$boundaryCase,$outsider):?array {
+            $data=$listener->handle($payload);if($data===null)return null;
+            switch($boundaryCase){
+                case 'wrong_member': $data['to']['member_id']=104;break;
+                case 'wrong_merchant': $data['vars']['__hsx_lead_notice_merchant_id']=(string)$outsider;break;
+                case 'wrong_task': $data['vars']['task_id']=(string)((int)$payload['data']['collaboration_id']+9999);break;
+                case 'wrong_audit': $data['vars']['__hsx_lead_notice_id']=(string)((int)$payload['data']['notice_audit_id']+9999);break;
+                case 'wrong_attempt': $data['vars']['__hsx_lead_notice_attempt']=(string)((int)$payload['data']['notice_attempt']+1);break;
+                case 'wrong_channel': $data['vars']['__hsx_lead_notice_channel']=$payload['channel']==='weapp'?'wechat':'weapp';break;
+            }
+            return$data;
+        };
+        Event::listen('NoticeData',$poison);
+        if($boundaryCase==='duplicate_hooks')Event::listen('NoticeData',CooperationNoticeData::class);
+        $boundaryLead=$newLead($site,$publisher,$receiver,'paid');$boundaryBefore=count($boundarySends);$boundaryClaims=[];
+        $guarded=new CooperationNoticeService(static function(array $payload)use($boundaryCase,$boundaryGateway,&$boundaryClaims){
+            $boundaryClaims[]=$payload;
+            if(in_array($boundaryCase,['missing_expected_member','missing_both_expected'],true))unset($payload['expected_recipient_member_id']);
+            if(in_array($boundaryCase,['missing_expected_merchant','missing_both_expected'],true))unset($payload['expected_recipient_merchant_id']);
+            return$boundaryGateway->dispatch($payload);
+        });
+        $guarded->changed(['site_id'=>$site,'lead_id'=>$boundaryLead,'action'=>'paid']);
+        $boundaryStates=coopNoticeStates($site,$boundaryLead);
+        coopNoticeCheck(count($boundaryClaims)===6&&count($boundaryStates)===6,'each related account/channel still gets its independent claim: '.$boundaryCase);
+        coopNoticeCheck(count($boundarySends)===$boundaryBefore,'invalid or ambiguous hook identity never reaches a sender: '.$boundaryCase);
+        coopNoticeCheck(array_values(array_unique(array_column($boundaryStates,'status')))===['not_submitted'],'invalid hook is known not submitted, never accepted/submitted/uncertain: '.$boundaryCase);
+        foreach($boundaryClaims as$boundaryClaim){
+            $stored=Data::decode(Data::row('audit',$site,(int)$boundaryClaim['data']['notice_audit_id'])['detail_json']);
+            coopNoticeCheck((int)$boundaryClaim['expected_recipient_member_id']===(int)$stored['member_id']
+                &&(int)$boundaryClaim['expected_recipient_merchant_id']===(int)$stored['merchant_id'],
+                'independent expected identity comes from the claimed audit, not the hook: '.$boundaryCase);
+        }
+    }
+    Event::remove('NoticeData');Event::listen('NoticeData',CooperationNoticeData::class);
+    $boundaryValid=$newLead($site,$publisher,$receiver,'paid');$boundaryBefore=count($boundarySends);
+    (new CooperationNoticeService(static fn(array $payload)=>$boundaryGateway->dispatch($payload)))
+        ->changed(['site_id'=>$site,'lead_id'=>$boundaryValid,'action'=>'paid']);
+    coopNoticeCheck(count($boundarySends)-$boundaryBefore===6,'one correct hook still sends exactly the original two accounts across three channels');
+    coopNoticeCheck(array_values(array_unique(array_column(coopNoticeStates($site,$boundaryValid),'status')))===['accepted'],'valid independently correlated hook preserves verified provider acceptance');
+    foreach(array_slice($boundarySends,$boundaryBefore)as$boundarySend)
+        coopNoticeCheck(in_array((int)$boundarySend['event']['to']['member_id'],[101,102],true),'valid correlation does not expand the business recipient set');
+
     $claims=[];$sent=[];$resolved=[];
     $gateway=new FrameworkNoticeGateway(static function(string $channel,array $event)use(&$sent):bool {$sent[]=['channel'=>$channel,'event'=>$event];return true;});
     $dispatch=static function(array $payload)use(&$claims,&$resolved,$gateway,$listener) {

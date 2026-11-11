@@ -301,6 +301,13 @@ class CorePayService extends BaseCoreService
             $pay = $this->createByTrade($site_id, $trade_type, $trade_id);
         }
         if ($pay[ 'status' ] == PayDict::STATUS_FINISH) throw new PayException('PAY_SUCCESS');
+        // Some provider contracts reuse an uncompleted payment instead of
+        // cancelling it. Their driver must revalidate its own frozen attempt;
+        // this option creates no receipt, grants no rights and never closes it.
+        if ($pay['status'] == PayDict::STATUS_ING) {
+            $definition = PayDict::getPayType([(string)$pay['type']])[(string)$pay['type']] ?? [];
+            if (($definition['reuse_pending'] ?? false) === true) return $pay;
+        }
 //        if ($pay['status'] == PayDict::STATUS_CANCEL) throw new PayException('PAY_IS_REMOVE');
         if ($pay[ 'status' ] == PayDict::STATUS_ING || $pay[ 'status' ] == PayDict::STATUS_CANCEL) {
             if ($pay[ 'status' ] == PayDict::STATUS_ING) {
@@ -393,6 +400,15 @@ class CorePayService extends BaseCoreService
         ])) throw new PayException('TREAT_PAYMENT_IS_OPEN');
         if ($pay[ 'status' ] == PayDict::STATUS_ING) {
             if (!empty($pay->type)) {
+                // An opt-in driver owns authoritative receipt reconciliation.
+                // Never apply an ambiguous close fallback to that contract or
+                // overwrite a receipt it has already committed while querying.
+                $definition = PayDict::getPayType([(string)$pay->type])[(string)$pay->type] ?? [];
+                if (($definition['manages_receipt'] ?? false) === true) {
+                    $closed = $this->pay_event->init($site_id, $pay->channel, $pay->type)->close($out_trade_no);
+                    if ($closed !== true) return false;
+                    return $this->payClose($site_id, ['out_trade_no' => $out_trade_no, 'type' => $pay->type]);
+                }
                 //尝试取消或关闭第三方支付
                 $close = $this->pay_event->init($site_id, $pay->channel, $pay->type)->close($out_trade_no);
                 if (!$close) {//有问题查询第三方订单详情
@@ -530,6 +546,13 @@ class CorePayService extends BaseCoreService
         if (empty($pay_info))
             return false;
         $status = $pay_info[ 'status' ];
+        $definition = PayDict::getPayType([(string)$type])[(string)$type] ?? [];
+        if (($definition['manages_receipt'] ?? false) === true) {
+            // The driver already reconciled the exact receipt. Do not replay
+            // success without its provider ID, and do not recursively poll an
+            // unpaid trade. Scheduled retries belong to the driver contract.
+            return $status === OnlinePayDict::SUCCESS;
+        }
         switch ($status) {
             case OnlinePayDict::SUCCESS://支付成功
                 $this->paySuccess($site_id, [

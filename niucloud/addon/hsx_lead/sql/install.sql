@@ -385,4 +385,60 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_manual_receipt` (
   KEY `idx_refund` (`site_id`,`refund_no`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Operator-attested payment/refund evidence; not a second wallet or automatic transfer';
 
+-- Additive provider records only. Existing payment/refund/rights data is untouched.
+CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_virtual_order` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int unsigned NOT NULL DEFAULT 0,
+  `pay_id` bigint unsigned NOT NULL DEFAULT 0,
+  `order_id` bigint unsigned NOT NULL DEFAULT 0,
+  `member_id` int unsigned NOT NULL DEFAULT 0,
+  `app_id` varchar(64) NOT NULL DEFAULT '',
+  `offer_id` varchar(64) NOT NULL DEFAULT '',
+  `env` tinyint unsigned NOT NULL DEFAULT 0,
+  `out_trade_no` varchar(32) NOT NULL DEFAULT '',
+  `openid` varchar(128) NOT NULL DEFAULT '',
+  `product_id` varchar(128) NOT NULL DEFAULT '',
+  `amount_cents` bigint unsigned NOT NULL DEFAULT 0,
+  `quantity` int unsigned NOT NULL DEFAULT 1,
+  `attach` varchar(255) NOT NULL DEFAULT '',
+  `snapshot_hash` char(64) NOT NULL DEFAULT '',
+  `status` varchar(32) NOT NULL DEFAULT 'prepared',
+  `wx_order_id` varchar(128) NULL DEFAULT NULL,
+  `order_type` int unsigned NOT NULL DEFAULT 0,
+  `last_provider_status` int unsigned NOT NULL DEFAULT 0,
+  `last_message` varchar(255) NOT NULL DEFAULT '',
+  `paid_at` int unsigned NOT NULL DEFAULT 0,
+  `next_check_at` int unsigned NOT NULL DEFAULT 0,
+  `create_time` int unsigned NOT NULL DEFAULT 0,
+  `update_time` int unsigned NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_trade` (`site_id`,`out_trade_no`),
+  UNIQUE KEY `uk_app_provider_order` (`app_id`,`env`,`wx_order_id`),
+  KEY `ix_recovery` (`status`,`next_check_at`,`id`),
+  KEY `ix_site_business` (`site_id`,`order_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='协作虚拟支付交易记录';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_virtual_refund` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int unsigned NOT NULL DEFAULT 0,
+  `virtual_order_id` bigint unsigned NOT NULL DEFAULT 0,
+  `framework_refund_no` varchar(64) NULL DEFAULT NULL,
+  `refund_order_id` varchar(32) NOT NULL DEFAULT '',
+  `wx_refund_id` varchar(128) NULL DEFAULT NULL,
+  `amount_cents` bigint unsigned NOT NULL DEFAULT 0,
+  `status` varchar(32) NOT NULL DEFAULT 'prepared',
+  `source_kind` varchar(16) NOT NULL DEFAULT 'merchant',
+  `request_hash` char(64) NOT NULL DEFAULT '',
+  `last_message` varchar(255) NOT NULL DEFAULT '',
+  `requested_at` int unsigned NOT NULL DEFAULT 0,
+  `finish_time` int unsigned NOT NULL DEFAULT 0,
+  `create_time` int unsigned NOT NULL DEFAULT 0,
+  `update_time` int unsigned NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_framework_refund` (`site_id`,`framework_refund_no`),
+  UNIQUE KEY `uk_site_provider_refund` (`site_id`,`refund_order_id`),
+  UNIQUE KEY `uk_order_wx_refund` (`virtual_order_id`,`wx_refund_id`),
+  KEY `ix_site_order` (`site_id`,`virtual_order_id`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='协作虚拟支付退款记录';
+
 

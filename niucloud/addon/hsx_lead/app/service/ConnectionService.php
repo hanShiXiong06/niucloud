@@ -3,7 +3,7 @@ declare(strict_types=1);
 namespace addon\hsx_lead\app\service;
 
 use addon\hsx_lead\app\provider\{ProviderRegistry,ProviderDefinition};
-use addon\hsx_lead\app\support\{Data,Cipher,SyncStatus};
+use addon\hsx_lead\app\support\{ConnectionAttention,Data,Cipher,ProviderPublicMessage,SyncStatus};
 use core\exception\CommonException;
 use think\facade\{Db,Cache};
 
@@ -27,7 +27,7 @@ final class ConnectionService
             'config_revision'=>0,'last_sync_status'=>'idle','last_sync_at'=>0,'last_sync_message'=>'尚未接入ERP',
             'active_run_id'=>0,'published_run_id'=>0,'next_sync_at'=>0,'requires_initial_sync'=>false,'authorization_attention'=>false,
             'auth_renewal'=>['automatic'=>false,'ready'=>false,'mode'=>'','status'=>'credentials_required','message'=>'尚未接入ERP，请先保存并验证登录资料。'],
-            'channel_enabled'=>true,'channel_message'=>'','sync_progress'=>null,'requires_sync_restart'=>false,
+            'channel_enabled'=>true,'channel_message'=>'','sync_progress'=>null,'requires_sync_restart'=>false,'sync_error_code'=>'','sync_attention'=>null,
             'recent_runs'=>[],'recent_runs_total'=>0,'recent_runs_limit'=>self::RECENT_RUN_LIMIT,'recent_runs_has_more'=>false];
         if (!$conn) return $result;
         $definition=$this->providers->definition((string)$conn['provider']);
@@ -40,20 +40,17 @@ final class ConnectionService
             'active_run_id'=>(int)$conn['active_run_id'],'published_run_id'=>(int)$conn['published_run_id'],'next_sync_at'=>(int)$conn['next_sync_at'],'requires_initial_sync'=>(int)$conn['published_run_id']===0]);
         $result=array_replace($result,SyncStatus::connection($this->context->site,$conn));
         $result=array_replace($result,$this->recentRuns($merchantId,$conn,$channelEnabled));
+        $credentials=null;$credentialError=false;
         try {
             $credentials=Cipher::decrypt((string)$conn['credentials_cipher'],$this->context->site,(int)$conn['id']);
             $result=array_replace($result,$definition->publicCredentials($credentials));
             $result['auth_renewal']=$definition->renewalStatus($credentials);
-            $expires=(int)($credentials['expires_at']??0);
-            // Renewable adapters handle routine token expiry with their already verified
-            // credentials; only a non-renewable token needs manual reauthorization.
-            $result['authorization_attention']=!$definition->renewable($credentials) && $expires>0 && $expires<=time();
         } catch(\Throwable $error) {
-            $result['authorization_attention']=true;
+            $credentialError=true;
             $result['credential_error']='凭据无法读取，请核对部署密钥后重新探测授权';
             $result['auth_renewal']=['automatic'=>false,'ready'=>false,'mode'=>'','status'=>'credential_error','message'=>'登录资料无法解密，未尝试自动登录；请核对部署密钥后重新验证。'];
         }
-        return $result;
+        return array_replace($result,ConnectionAttention::project($result,$definition,$credentials,$credentialError));
     }
 
     /** Existing persisted runs only. This read never logs in, advances a task or exposes provider payloads. */
@@ -67,19 +64,6 @@ final class ConnectionService
             'interrupted'=>'已中断','paused'=>'已暂停','unknown'=>'状态待核对'];
         $triggers=['manual'=>'后台手动','merchant'=>'门店手动','scheduled'=>'自动同步','unknown'=>'来源未记录'];
         // Do not echo stored error_message: old provider text can contain account details.
-        $errors=[
-            'auth_required'=>'ERP 登录已失效，请重新验证账号后再同步',
-            'invalid_credentials'=>'ERP 登录资料未通过校验，请核对账号与授权',
-            'http_error'=>'ERP 暂时没有正常响应，请稍后重试',
-            'schema_changed'=>'ERP 返回的数据暂时无法完整识别，本轮未更新库存，请联系平台核对',
-            'scope_mismatch'=>'ERP 返回的门店与绑定范围不一致，本轮未更新库存，请重新核对授权',
-            'invalid_scope'=>'本轮查询范围未通过校验，请核对门店范围后重新同步',
-            'response_too_large'=>'ERP 单次返回资料超过处理上限，请联系平台核对',
-            'generation_expired'=>'本轮同步间隔过久，暂存资料已失效，请重新完整同步',
-            'unsupported_environment'=>'当前同步服务缺少必要能力，请联系平台处理',
-            'forbidden_endpoint'=>'ERP 接口配置未通过校验，请联系平台处理',
-            'sync_failed'=>'本轮同步未完成，未更新库存，请重试或联系平台核对',
-        ];
         $runs=[];
         foreach($rows as $row) {
             $storedStatus=isset($labels[$row['status']])?(string)$row['status']:'unknown';
@@ -93,9 +77,8 @@ final class ConnectionService
             $progress=SyncStatus::progress(array_replace($row,['status'=>$status]));
             $error='';$message='';
             if ($status==='failed'||$status==='cancelled') {
-                $raw=(string)($row['error_code']??'');
-                $error=isset($errors[$raw])?$raw:($status==='failed'?'sync_failed':'');
-                $message=$error!==''?$errors[$error]:'本轮同步已取消，未更新库存';
+                $error=ProviderPublicMessage::safeReason($row['error_code']??null,$status==='failed'?'sync_failed':'');
+                $message=$error!==''?ProviderPublicMessage::forReason($error):'本轮同步已取消，未更新库存';
             }
             elseif ($status==='interrupted') $message='本轮同步已中断，未更新库存；请重新完整同步';
             elseif ($status==='paused') $message='本站已关闭该 ERP 渠道，本轮同步暂停，已有资料保留';
@@ -144,7 +127,7 @@ final class ConnectionService
                 throw new CommonException('ERP登录未完成，请重新获取验证码');
             }
             // Interactive secrets are transient; only explicitly declared permanent fields survive.
-            $credentials=$definition->credentials($authorized['credentials']);
+            $credentials=$definition->credentials($authorized['credentials'],[],true);
         } else {
             $credentials=$definition->credentials($input['credentials'],$saved);
         }

@@ -3,25 +3,25 @@
         <div class="device-entry__head">
             <div class="device-entry__title">
                 设备清单
-                <span class="device-entry__count">已保存 {{ savedDeviceCount }} / 共 {{ devices.length }} 台</span>
+                <slot name="quantity"><span class="device-entry__count">已保存 {{ savedDeviceCount }} / 共 {{ devices.length }} 台</span></slot>
                 <slot name="head-tip" />
             </div>
             <div class="device-entry__actions">
                 <template v-if="enableLocalRead">
                     <el-tooltip content="开启后插入手机会自动读取并补全当前空行" placement="top">
                         <span class="device-entry__auto">
-                            <el-switch v-model="autoLocal" size="small" @change="toggleAutoLocal" />
+                            <el-switch v-model="autoLocal" :disabled="!entryReady" size="small" @change="toggleAutoLocal" />
                             <span class="device-entry__auto-label">自动检测</span>
                         </span>
                     </el-tooltip>
-                    <el-button size="small" :icon="Connection" :loading="localFetching" @click="readLocalDevices">
+                    <el-button size="small" :icon="Connection" :loading="localFetching" :disabled="!entryReady" @click="readLocalDevices">
                         读取本地设备
                     </el-button>
                     <el-button link type="primary" size="small" :icon="Download" @click="bridgeHelpVisible = true">
                         安装与帮助
                     </el-button>
                 </template>
-                <el-button type="primary" plain size="small" :icon="Plus" @click="addDeviceRow">
+                <el-button type="primary" plain size="small" :icon="Plus" :disabled="!canAddDeviceRow" @click="addDeviceRow">
                     添加设备
                 </el-button>
             </div>
@@ -82,6 +82,7 @@
                     :quote-loading="quoteLoading"
                     :quote-error="quoteError"
                     :assign-to-quote-user="assignToQuoteUser"
+                    :save-disabled="!entryReady"
                     :can-remove="devices.length > 1"
                     @save="saveDeviceRow(row, index)"
                     @update="updateDeviceRow(row)"
@@ -228,13 +229,26 @@ const props = withDefaults(defineProps<{
     ensureOrder?: () => Promise<number | string>
     /** 保存最后一行后是否自动追加空行 */
     autoAppend?: boolean
+    /** 可选：总台数确认前不提交设备或启动本地读取；旧调用者默认不受影响。 */
+    entryReady?: boolean
+    /** 可选：已确认的本单总台数，未提供则沿用原不限制行数的行为。 */
+    maxDeviceCount?: number
 }>(), {
     orderId: '',
     ensureOrder: undefined,
-    autoAppend: true
+    autoAppend: true,
+    entryReady: true,
+    maxDeviceCount: undefined
 })
 
 const savedDeviceCount = computed(() => props.devices.filter(d => d.saved && d.id).length)
+const deviceLimit = computed(() => Number.isInteger(props.maxDeviceCount) && Number(props.maxDeviceCount) > 0 ? Number(props.maxDeviceCount) : 0)
+const canAddDeviceRow = computed(() => props.entryReady && (!deviceLimit.value || props.devices.length < deviceLimit.value))
+const requireEntryReady = () => {
+    if (props.entryReady) return true
+    ElMessage.warning('请先确认本单总台数，再录入或保存设备')
+    return false
+}
 const MODEL_ENTRY_TIP_CACHE_KEY = 'hsx_recycle:model_entry_tip:dismissed:v1'
 const showModelEntryTip = ref(true)
 
@@ -586,7 +600,13 @@ const makeEmptyRow = (): DeviceEntryRow => ({
     imei: '', model: '', initial_price: 0, summary_fields: [], summary_values: {}, _k: rowKeySeed++ } as any)
 
 const addDeviceRow = () => {
+    if (!requireEntryReady()) return false
+    if (deviceLimit.value && props.devices.length >= deviceLimit.value) {
+        ElMessage.warning(`本单总台数已锁定为 ${deviceLimit.value} 台，不能继续添加`)
+        return false
+    }
     props.devices.push(makeEmptyRow())
+    return true
 }
 
 const removeDeviceRow = async (index: number) => {
@@ -611,6 +631,7 @@ const removeDeviceRow = async (index: number) => {
 
 // ============ 保存 / 修改 ============
 const resolveOrderId = async (): Promise<number | string> => {
+    if (!props.entryReady) throw new Error('请先确认本单总台数，再保存设备')
     if (props.orderId) return props.orderId
     if (props.ensureOrder) return await props.ensureOrder()
     throw new Error('缺少订单信息')
@@ -641,6 +662,12 @@ const validateRowImei = (row: DeviceEntryRow): boolean => {
 }
 
 const saveDeviceRow = async (row: DeviceEntryRow, index: number) => {
+    if (row.saving || !requireEntryReady()) return
+    const reserved = props.devices.filter(d => d !== row && !d.saved && d.saving).length
+    if (deviceLimit.value && savedDeviceCount.value + reserved >= deviceLimit.value) {
+        ElMessage.warning(`本单总台数已锁定为 ${deviceLimit.value} 台，不能继续保存新设备`)
+        return
+    }
     if (!validateRowImei(row)) return
     const payload = normalizeDevice(row)
     if (findDuplicateDevice(row, row)) {
@@ -665,7 +692,7 @@ const saveDeviceRow = async (row: DeviceEntryRow, index: number) => {
         row.saved = true
         row.dirty = false
         ElMessage.success('设备已保存')
-        if (props.autoAppend && index === props.devices.length - 1) addDeviceRow()
+        if (props.autoAppend && index === props.devices.length - 1 && canAddDeviceRow.value) addDeviceRow()
     } catch (error: any) {
         console.error('保存设备失败:', error)
         ElMessage.error(error?.msg || error?.message || '保存设备失败')
@@ -713,7 +740,7 @@ const localReadError = ref('')
 watch(readWarnings, warnings => { localReadError.value = warnings.join('；') })
 
 const readLocalDevices = async () => {
-    if (localFetching.value) return
+    if (localFetching.value || !requireEntryReady()) return
     localReadError.value = ''
     try {
         const list = await fetchConnected()
@@ -724,45 +751,56 @@ const readLocalDevices = async () => {
         let applied = 0
         let skipped = 0
         let unresolved = 0
+        let limited = 0
         for (const d of list) {
             const result = await applyLocalDevice(mapToRow(d))
             if (result.status === 'duplicate') {
                 skipped += 1
                 continue
             }
+            if (result.status === 'limit' || result.status === 'blocked') { limited += 1; continue }
             applied += 1
             if (!result.matched) unresolved += 1
         }
         if (applied > 0) ElMessage.success(`已录入 ${applied} 台设备${skipped > 0 ? `，跳过 ${skipped} 台重复设备` : ''}`)
         else if (skipped > 0) ElMessage.info(`检测到的 ${skipped} 台设备均已在清单中`)
         if (unresolved > 0) ElMessage.warning(`${unresolved} 台设备未唯一匹配型号，请确认叶子分类`)
+        if (limited > 0) ElMessage.warning(`${limited} 台设备未插入：本单总台数已锁定为 ${deviceLimit.value} 台`)
     } catch (error: any) {
         localReadError.value = describeError(error)
     }
 }
 
 const toggleAutoLocal = (val: any) => {
+    if (val && !requireEntryReady()) { autoLocal.value = false; stopAuto(); return }
     if (val) {
         startAuto(async (list: any[]) => {
             let applied = 0
+            let limited = 0
             for (const d of list) {
                 const result = await applyLocalDevice(mapToRow(d))
                 if (result.status === 'applied') applied += 1
+                if (result.status === 'limit') limited += 1
             }
             if (applied > 0) ElMessage.success(`检测到设备，已自动录入 ${applied} 台`)
+            if (limited > 0) ElMessage.warning(`${limited} 台设备未插入：已达到本单总台数 ${deviceLimit.value} 台`)
         })
     } else {
         stopAuto()
     }
 }
 
+watch(() => props.entryReady, ready => { if (!ready) { autoLocal.value = false; stopAuto() } })
+
 const applyLocalDevice = async (m: any) => {
+    if (!props.entryReady) return { status: 'blocked' as const, matched: false }
     if (findDuplicateDevice(m)) {
         return { status: 'duplicate' as const, matched: true }
     }
     let row = props.devices.find(r => !r.saved && !r.model && !r.imei)
     if (!row) {
-        addDeviceRow()
+        if (!canAddDeviceRow.value) return { status: 'limit' as const, matched: false }
+        if (!addDeviceRow()) return { status: 'limit' as const, matched: false }
         row = props.devices[props.devices.length - 1]
     }
     if (!row) return { status: 'duplicate' as const, matched: true }

@@ -50,13 +50,26 @@ final class EntityExperienceService
     /** Every new opening, upgrade AND renewal is assessed on current facts. */
     public static function eligible(array $experience,array $tier): bool
     {
-        return Rules::cents($experience['value']??'0.00')>=Rules::cents($tier['experience_required']??'0.00');
+        return Rules::cents($experience['value']??'0.00')>=Rules::cents(self::required($tier));
+    }
+
+    /** Missing fields preserve the original contract; disabling a gate never
+     * changes the native level's growth or the subject's earned experience. */
+    public static function gateEnabled(array $tier): bool
+    {
+        if(!array_key_exists('experience_gate_enabled',$tier))return true;
+        if(!is_bool($tier['experience_gate_enabled']))throw new CommonException('经验门槛快照请明确选择开启或关闭');
+        return $tier['experience_gate_enabled'];
+    }
+    public static function required(array $tier): string
+    {
+        return self::gateEnabled($tier)?Rules::amount(Rules::cents($tier['experience_required']??'0.00')):'0.00';
     }
 
     public static function decorate(array $tiers,array $experience): array
     {
         $value=Rules::cents($experience['value']??'0.00');$out=[];
-        foreach($tiers as $tier){$required=Rules::cents($tier['experience_required']);$tier['experience_eligible']=$value>=$required;$tier['experience_remaining']=Rules::amount(max(0,$required-$value));$out[]=$tier;}return $out;
+        foreach($tiers as $tier){$tier['experience_required']=self::required($tier);$required=Rules::cents($tier['experience_required']);$tier['experience_eligible']=$value>=$required;$tier['experience_remaining']=Rules::amount(max(0,$required-$value));$out[]=$tier;}return $out;
     }
 
     public static function nextLevel(array $tiers,array $state,array $experience): ?array
@@ -67,7 +80,7 @@ final class EntityExperienceService
         if ($rank===0) foreach($tiers as $tier) if(!empty($tier['is_entry'])){$next=$tier;break;}
         if (!$next) foreach($tiers as $tier) if((int)$tier['rank']>$rank){$next=$tier;break;}
         if (!$next) return null;
-        $required=Rules::cents($next['experience_required']);$value=Rules::cents($experience['value']);
-        return ['code'=>$next['code'],'name'=>$next['name'],'experience_required'=>$next['experience_required'],'experience_remaining'=>Rules::amount(max(0,$required-$value)),'progress_percent'=>$required===0?100:($value>=$required?100:intdiv($value*100,$required)),'experience_eligible'=>$value>=$required,'level_color'=>$next['level_color'],'level_visual'=>$next['level_visual']];
+        $required=Rules::cents(self::required($next));$value=Rules::cents($experience['value']);
+        return ['code'=>$next['code'],'name'=>$next['name'],'experience_gate_enabled'=>self::gateEnabled($next),'experience_required'=>Rules::amount($required),'experience_remaining'=>Rules::amount(max(0,$required-$value)),'progress_percent'=>$required===0?100:($value>=$required?100:intdiv($value*100,$required)),'experience_eligible'=>$value>=$required,'level_color'=>$next['level_color'],'level_visual'=>$next['level_visual']];
     }
 }

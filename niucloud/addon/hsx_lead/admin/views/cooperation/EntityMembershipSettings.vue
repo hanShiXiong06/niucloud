@@ -9,10 +9,10 @@
             <template #eligibility="{row}"><span class="coop-muted">{{ eligibilityText(row) }}</span></template>
             <template #accounts="{row}">{{ row.unlimited?'不限人数':row.account_limit+' 人' }}</template>
             <template #cycles="{row}"><div class="coop-tags"><el-tag v-for="cycle in row.cycles.filter(item=>item.enabled)" :key="cycle.key" effect="plain">{{ cycle.name }} · {{ cycle.months }}个月 · ¥{{ cycle.price }}</el-tag><span v-if="!row.cycles.some(item=>item.enabled)" class="coop-muted">未开启购买周期</span></div></template>
-            <template #costs="{row}"><div class="coop-cell"><span>押金 ¥{{ row.deposit_amount }}</span><small>{{ row.experience_purchase_enabled ? '补足经验 ¥'+row.experience_unit_price+' / 点' : '未开放付费补足经验' }}</small></div></template>
+            <template #costs="{row}"><div class="coop-cell"><span>押金 ¥{{ row.deposit_amount }}</span><small>{{ row.experience_gate_enabled===false ? '无需补足经验' : row.experience_purchase_enabled ? '补足经验 ¥'+row.experience_unit_price+' / 点' : '未开放付费补足经验' }}</small></div></template>
             <template #capabilities="{row}"><span>{{ capabilityText(row) }}</span></template>
         </HsxTable>
-        <el-collapse><el-collapse-item title="等级与经验门槛在哪里调整？" name="entity-level-rules"><p class="coop-muted">在“会员 → 会员等级”新增或编辑等级，页面顶部“成长值”同时定义框架个人成长和本插件升级门槛。仅明确打开“入门等级”的一档不设经验门槛；同一站点最多一个，关闭低档不会把高档自动变成入门。开启“商户主体权益”后设置账号名额、权限及购买周期。本页只读，不另存价格或门槛。</p><p class="coop-muted">门店经验来自承接门店实际支付的协作佣金，1元计1点，会员费不计，成功退款扣回；不向个人账户增加成长值。开通、升级、续费均按实时经验核验，符合条件后由商户自愿支付；退款扣经验不提前终止已生效权益。全站目录未指定门店时不判断具体资格，最终能否购买以实时服务端报价为准。账号名额包含负责人；服务商仍独立审核管理。</p></el-collapse-item></el-collapse>
+        <el-collapse><el-collapse-item title="等级与经验门槛在哪里调整？" name="entity-level-rules"><p class="coop-muted">在“会员 → 会员等级”的“商户主体权益”中，可单独开启或关闭各等级经验门槛。开启后使用该会员等级的“成长值”作为门店门槛；关闭后可直接付费开通、升级或续费，不修改个人成长值。入门等级免经验核验。本页只读，不另存价格或门槛。</p><p class="coop-muted">门店经验来自承接门店实际支付的协作佣金，1元计1点，会员费不计，成功退款扣回；不向个人账户增加成长值。仅启用门槛的等级按实时经验核验，符合条件后由商户自愿支付；退款扣经验不提前终止已生效权益。全站目录未指定门店时不判断具体资格，最终能否购买以实时服务端报价为准。账号名额包含负责人；服务商仍独立审核管理。</p></el-collapse-item></el-collapse>
     </section>
 </template>
 <script setup lang="ts">
@@ -24,8 +24,8 @@ const props=withDefaults(defineProps<{modelValue:EntityLevel[];disabled?:boolean
 const router=useRouter()
 const entryCount=computed(()=>props.modelValue.filter(row=>row.is_entry).length)
 const columns=[{prop:'name',label:'等级名称',slot:'name',minWidth:180},{prop:'experience_required',label:'经验门槛',slot:'experience',minWidth:155},{prop:'experience_eligible',label:'经验资格',slot:'eligibility',minWidth:160},{prop:'account_limit',label:'账号名额（含负责人）',slot:'accounts',minWidth:170},{prop:'cycles',label:'已开启周期 / 服务费',slot:'cycles',minWidth:260},{prop:'deposit_amount',label:'押金 / 补足经验',slot:'costs',minWidth:210},{prop:'capabilities',label:'协作权限',slot:'capabilities',minWidth:200}]
-function experienceText(row:EntityLevel){return row.experience_required===null?'门槛待核对':row.is_entry&&row.experience_required==='0.00'?'不设经验门槛':row.experience_required+' 点'}
-function eligibilityText(row:EntityLevel){return row.experience_eligible===true?'符合经验规则':row.experience_eligible===false?'暂不符合经验规则':'按门店经验核验'}
+function experienceText(row:EntityLevel){return row.experience_gate_enabled===false?'不设经验门槛':row.experience_required===null?'门槛待核对':row.is_entry&&row.experience_required==='0.00'?'不设经验门槛':row.experience_required+' 点'}
+function eligibilityText(row:EntityLevel){return row.experience_gate_enabled===false?'不核验经验':row.experience_eligible===true?'符合经验规则':row.experience_eligible===false?'暂不符合经验规则':'按门店经验核验'}
 function capabilityText(row:EntityLevel){return Object.entries(subjectCapabilityLabels).filter(([key])=>row.capabilities[key]===true).map(([,label])=>label).join('、')||'未授予协作权限'}
 </script>
 <style scoped>

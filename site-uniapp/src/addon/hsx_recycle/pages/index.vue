@@ -11,7 +11,7 @@
             <view class="section-title">业务入口</view>
             <view class="module-grid">
                 <view
-                    v-for="item in modules"
+                    v-for="item in visibleModules"
                     :key="item.name"
                     class="module-card"
                     @click="redirect({ url: item.url })"
@@ -48,7 +48,25 @@
 </template>
 
 <script setup lang="ts">
+import { computed, ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
+import { getApp } from '@/app/api/index'
 import { redirect } from '@/utils/common'
+
+const canReadQuote = ref(false)
+const visibleModules = computed(() => modules.filter(item => item.name !== '报价单' || canReadQuote.value))
+
+onShow(async () => {
+    // 使用框架已有的移动入口权限结果；不因工作台卡片而扩大员工权限。
+    canReadQuote.value = false
+    try {
+        const response: any = await getApp()
+        canReadQuote.value = Array.isArray(response?.data) && response.data.some((group: any) =>
+            Array.isArray(group.childs) && group.childs.some((item: any) => item.key === 'hsx_recycle_quote'))
+    } catch (_) {
+        // 入口加载失败不影响其他业务；报价页接口仍单独鉴权。
+    }
+})
 
 const modules = [
     {
@@ -85,6 +103,13 @@ const modules = [
         desc: '寄件记录和费用核对',
         url: '/addon/hsx_recycle/pages/express/list',
         color: 'linear-gradient(135deg, #7c3aed 0%, #9f67ff 100%)'
+    },
+    {
+        name: '报价单',
+        short: '价',
+        desc: '更新分类报价图片',
+        url: '/addon/hsx_recycle/pages/quote/index',
+        color: 'linear-gradient(135deg, #0f766e 0%, #14b8a6 100%)'
     },
     {
         name: '工作台',

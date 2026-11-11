@@ -18,6 +18,9 @@ final class GuzzleJsonTransport implements RequestTransportContract
         'https://api.aiguanji.com/api/v1/index/index',
         'https://api.aiguanji.com/api/v1/storage/product/index',
         'https://api.aiguanji.com/api/v1/index/login',
+        'https://api.yuanyoukeji.com/api/sms/send',
+        'https://api.yuanyoukeji.com/api/user/mobile_register_login',
+        'https://api.yuanyoukeji.com/api/product_model/productStockList',
     ];
     private const EXTRA_REQUESTS = [
         'POST form https://jx2.guanql.cn/admin/login/in',

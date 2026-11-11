@@ -51,9 +51,10 @@ final class EntityMembershipService
                 if($nos)foreach(Db::name('pay_refund')->where('site_id',$site)->whereIn('out_trade_no',$nos)->select()->toArray()as$refund)$refunds[(string)$refund['out_trade_no']][]=$refund;
             }
             $exits=MembershipDepositService::exitedMany($site,$chunk);
+            $epochs=MembershipDepositService::membershipEpochs($site,$chunk);
             foreach($chunk as$id){
                 $partner=$partnerMap[$id]??['site_id'=>$site,'merchant_id'=>$id];
-                $ledger=self::ledger($site,$id,false,['orders'=>$grouped[$id]??[],'payments'=>$payments,'refunds'=>$refunds]);
+                $ledger=self::ledger($site,$id,false,['orders'=>$grouped[$id]??[],'payments'=>$payments,'refunds'=>$refunds,'membership_epoch'=>$epochs[$id]??'']);
                 $out[$id]=self::displayState(self::stateFrom($ledger,$partner,[],$now),$site,$id,$config,!empty($exits[$id]),self::ledgerNeedsReview($ledger));
             }
         }
@@ -93,20 +94,27 @@ final class EntityMembershipService
         $experience=EntityExperienceService::summary($site,$id);$tiers=[];
         foreach(EntityExperienceService::decorate($config['membership_levels']??[],$experience) as $tier) {$allowed=$manage&&$tier['experience_eligible'];$tier['cycles']=array_map(static fn(array $cycle):array=>$cycle+['can_purchase'=>$allowed&&!empty($cycle['enabled'])],$tier['cycles']);$tiers[]=$tier;}
         $costs=MembershipCostService::balances($site,$id);
-        return $state+['used_accounts'=>$used,'can_manage'=>$manage,'is_owner'=>$manage,'tiers'=>$tiers,'experience'=>$experience,'deposit_balance'=>$costs['balance'],'cost_review_required'=>$costs['review_required'],'cost_review_message'=>$costs['review_message'],'next_level'=>EntityExperienceService::nextLevel($tiers,$state,$experience),'catalog_configured'=>count($tiers)>0,'entry_configured'=>in_array(true,array_column($tiers,'is_entry'),true),'renewable'=>$manage&&$state['level_code']!==''&&in_array($state['level_code'],array_column($tiers,'code'),true),'upgrade_available'=>$manage&&count($tiers)>0];
+        return $state+['used_accounts'=>$used,'can_manage'=>$manage,'is_owner'=>$manage,'tiers'=>$tiers,'experience'=>$experience,'deposit_balance'=>$costs['balance'],'cost_review_required'=>$costs['review_required'],'cost_review_message'=>$costs['review_message'],'next_level'=>EntityExperienceService::nextLevel($tiers,$state,$experience),'catalog_configured'=>count($tiers)>0,'entry_configured'=>in_array(true,array_column($tiers,'is_entry'),true),'renewable'=>$manage&&$state['level_code']!==''&&in_array($state['level_code'],array_column($tiers,'code'),true),'upgrade_available'=>$manage&&count($tiers)>0]+MembershipDepositService::purchaseState($site,$id);
     }
 
     public function quote(string $code,string $cycle,bool $buyExperience=false): array
     {
         $m=TeamService::assertOwner($this->context);$id=(int)$m['id'];$config=(new ConfigService($this->context))->get();$now=time();
-        $quote=self::calculate(self::ledger($this->context->site,$id),Store::partner($this->context->site,$id),$config['membership_levels']??[],$code,$cycle,$now,EntityExperienceService::summary($this->context->site,$id),MembershipCostService::balances($this->context->site,$id),$buyExperience);
+        $experience=EntityExperienceService::summary($this->context->site,$id);
+        $epoch=MembershipDepositService::membershipEpoch($this->context->site,$id);
+        $quote=self::calculate(self::ledger($this->context->site,$id),Store::partner($this->context->site,$id),$config['membership_levels']??[],$code,$cycle,$now,$experience,MembershipCostService::balances($this->context->site,$id),$buyExperience,$epoch);
         $quote['merchant_id']=$id;$quote['existing_order_id']=0;$quote['quote_token']='';
-        if(MembershipDepositService::exited($this->context->site,$id)){$quote['can_purchase']=false;$quote['reason']='门店退押金或退出协作正在处理中，请先由平台核对后再开通';return $quote;}
+        if(MembershipDepositService::purchaseState($this->context->site,$id)['deposit_purchase_blocked']){$quote['can_purchase']=false;$quote['reason']='门店退押金申请仍在审核、退款或核对中，处理完成后可重新开通';return $quote;}
         $pending=Store::query('coop_order',$this->context->site)->where('merchant_id',$id)->where('purpose','membership')->where('status','unpaid')->order('id')->find();
         if ($pending) {
             $rule=Data::decode($pending['rule_json']);$quote['existing_order_id']=(int)$pending['id'];
             if (($rule['level_code']??'')===$code&&($rule['cycle']??'')===$cycle&&(int)$pending['member_id']===$this->context->memberId) {
                 $quote=array_replace($quote,array_intersect_key($rule,array_flip(array_merge(['level_code','level_name','level_id','rank','display_rank','cycle','cycle_name','months','entitlement_months','account_limit','unlimited','capabilities','benefits','period_start_at','period_end_at','full_amount','credit_amount','payable_amount','experience_value','experience_remaining'],MembershipCostService::FIELDS))),['can_purchase'=>true,'reason'=>'已有本套餐待支付订单，请继续核对原单','expires_at'=>0]);
+                // An existing pending quote remains its original financial
+                // contract in the UI, even when the current tier gate changed.
+                $quote['experience_gate_enabled']=EntityExperienceService::gateEnabled($rule);
+                $quote['experience_required']=EntityExperienceService::required($rule);
+                $quote['experience_eligible']=EntityExperienceService::eligible($experience,$rule);
                 if ((int)($rule['quoted_at']??0)+self::TTL<$now) {$quote['can_purchase']=false;$quote['reason']='原会员报价已过期，请先取消未支付订单，再重新读取报价';}
                 elseif (!self::catalogMatches($rule,$config['membership_levels']??[])) {$quote['can_purchase']=false;$quote['reason']='原套餐已调整或停售，请先取消未支付订单，再选择新套餐';}
                 elseif (!$quote['experience_eligible']&&empty($rule['buy_experience'])) {$quote['can_purchase']=false;$quote['reason']='当前门店经验'.$quote['experience_value'].'，本等级需要'.$quote['experience_required'].'；请先完成真实成交付佣，再核对原订单';}
@@ -115,7 +123,7 @@ final class EntityMembershipService
         }
         if (empty($config['enabled'])) {$quote['can_purchase']=false;$quote['reason']='本站尚未启用商户协作';}
         if ((int)Store::partner($this->context->site,$id)['blocked_at']>0) {$quote['can_purchase']=false;$quote['reason']='该主体已停止合作，不能购买新的权益';}
-        if ($quote['can_purchase']) $quote['quote_token']=$this->sign(['site'=>$this->context->site,'member'=>$this->context->memberId,'merchant'=>$id,'code'=>$code,'cycle'=>$cycle,'buy_experience'=>$buyExperience,'cost_fingerprint'=>$quote['cost_fingerprint'],'experience_value'=>$quote['experience_value'],'at'=>$now,'fingerprint'=>$quote['base_fingerprint'],'pricing'=>self::pricingFingerprint($config['membership_levels']??[])]);
+        if ($quote['can_purchase']) $quote['quote_token']=$this->sign(['site'=>$this->context->site,'member'=>$this->context->memberId,'merchant'=>$id,'code'=>$code,'cycle'=>$cycle,'buy_experience'=>$buyExperience,'membership_deposit_epoch'=>$epoch,'cost_fingerprint'=>$quote['cost_fingerprint'],'experience_value'=>$quote['experience_value'],'at'=>$now,'fingerprint'=>$quote['base_fingerprint'],'pricing'=>self::pricingFingerprint($config['membership_levels']??[])]);
         return $quote;
     }
 
@@ -124,16 +132,18 @@ final class EntityMembershipService
         $m=TeamService::assertOwner($this->context);$request=Store::requestId($input);$code=Data::text($input,'level_code',16,true);$cycle=Data::text($input,'cycle',24,true);$buyExperience=MembershipCostService::flag($input['buy_experience']??false,'购买经验');
         $id=Db::transaction(function()use($m,$request,$code,$cycle,$input,$buyExperience):int {
             PromotionService::lockSite($this->context->site);TeamService::assertOwner($this->context,(int)$m['id'],true);$partner=Store::partner($this->context->site,(int)$m['id'],true);
-            if(MembershipDepositService::exited($this->context->site,(int)$m['id'],true))throw new CommonException('门店退押金或退出协作正在处理中，暂不开通新权益');
+            if(MembershipDepositService::purchaseState($this->context->site,(int)$m['id'],true)['deposit_purchase_blocked'])throw new CommonException('门店退押金申请仍在审核、退款或核对中，暂不开通新权益');
+            $epoch=MembershipDepositService::membershipEpoch($this->context->site,(int)$m['id'],true);
             $old=Store::query('coop_order',$this->context->site)->where('merchant_id',$m['id'])->where('request_id',$request)->lock(true)->find();
             if ($old) {$rule=Data::decode($old['rule_json']);if ($old['purpose']!=='membership'||(int)$old['member_id']!==$this->context->memberId||($rule['level_code']??'')!==$code||($rule['cycle']??'')!==$cycle||($rule['buy_experience']??false)!==$buyExperience) throw new CommonException('该请求已用于其他付款，请核对原订单');if($old['status']==='unpaid')self::assertOrderPayable($this->context->site,$old);return (int)$old['id'];}
             $pending=Store::query('coop_order',$this->context->site)->where('merchant_id',$m['id'])->where('purpose','membership')->where('status','unpaid')->lock(true)->find();
             if ($pending) {$rule=Data::decode($pending['rule_json']);if (($rule['level_code']??'')!==$code||($rule['cycle']??'')!==$cycle||(int)$pending['member_id']!==$this->context->memberId||($rule['buy_experience']??false)!==$buyExperience) throw new CommonException('该主体已有待支付会员订单，请先核对原单');self::assertOrderPayable($this->context->site,$pending);return (int)$pending['id'];}
             $config=(new ConfigService($this->context))->get(true);if (empty($config['enabled'])||(int)$partner['blocked_at']>0) throw new CommonException('该主体当前不能购买会员权益');
             $token=$this->verify(Data::text($input,'quote_token',2048,true));$now=time();
+            if(($token['membership_deposit_epoch']??'')!==$epoch)throw new CommonException('门店退出状态已变化，请重新读取开通报价；不会沿用退出前的付款单');
             if (($token['site']??0)!==$this->context->site||($token['member']??0)!==$this->context->memberId||($token['merchant']??0)!==(int)$m['id']||($token['code']??'')!==$code||($token['cycle']??'')!==$cycle||($token['buy_experience']??null)!==$buyExperience||(int)($token['at']??0)>$now||(int)($token['at']??0)<$now-self::TTL||($token['pricing']??'')!==self::pricingFingerprint($config['membership_levels']??[])) throw new CommonException('会员报价已变化或不属于当前负责人，请重新读取报价');
-            $quote=self::calculate(self::ledger($this->context->site,(int)$m['id'],true),$partner,$config['membership_levels']??[],$code,$cycle,(int)$token['at'],EntityExperienceService::summary($this->context->site,(int)$m['id'],true),MembershipCostService::balances($this->context->site,(int)$m['id'],true),$buyExperience);
-            if (!$quote['can_purchase']||!hash_equals((string)$token['fingerprint'],$quote['base_fingerprint'])||($token['cost_fingerprint']??'')!==$quote['cost_fingerprint']||($token['experience_value']??'')!==$quote['experience_value']) throw new CommonException($quote['reason']?:'主体权益、押金或经验已变化，请重新读取报价');
+            $quote=self::calculate(self::ledger($this->context->site,(int)$m['id'],true),$partner,$config['membership_levels']??[],$code,$cycle,(int)$token['at'],EntityExperienceService::summary($this->context->site,(int)$m['id'],true),MembershipCostService::balances($this->context->site,(int)$m['id'],true),$buyExperience,$epoch);
+            if (!$quote['can_purchase']||!hash_equals((string)$token['fingerprint'],$quote['base_fingerprint'])||($token['cost_fingerprint']??'')!==$quote['cost_fingerprint']||(EntityExperienceService::gateEnabled($quote)&&($token['experience_value']??'')!==$quote['experience_value'])) throw new CommonException($quote['reason']?:'主体权益、押金或经验已变化，请重新读取报价');
             $rule=$quote+['schema_version'=>self::SNAPSHOT_SCHEMA,'purpose'=>'membership'];unset($rule['can_purchase'],$rule['reason'],$rule['expires_at']);
             $key='membership:'.$m['id'].':'.substr(hash('sha256',$request),0,48);
             $id=(int)Store::query('coop_order',$this->context->site)->insertGetId(['site_id'=>$this->context->site,'order_no'=>Data::number('CO'),'purpose'=>'membership','lead_id'=>0,'merchant_id'=>$m['id'],'member_id'=>$this->context->memberId,'business_key'=>$key,'request_id'=>$request,'amount'=>$quote['payable_amount'],'fee_amount'=>'0.00','net_amount'=>'0.00','rule_json'=>Data::json($rule),'status'=>'unpaid','create_time'=>$now,'update_time'=>$now]);
@@ -142,7 +152,7 @@ final class EntityMembershipService
     }
 
     /** Pure quote calculation; every credited period has a verified original receipt. */
-    public static function calculate(array $rows,array $partner,array $tiers,string $code,string $cycle,int $now,array $experience=['value'=>'0.00'],array $deposit=[],bool $buyExperience=false): array
+    public static function calculate(array $rows,array $partner,array $tiers,string $code,string $cycle,int $now,array $experience=['value'=>'0.00'],array $deposit=[],bool $buyExperience=false,string $epoch=''): array
     {
         $tier=null;foreach($tiers as $entry) if ($entry['code']===$code) $tier=$entry;
         if (!$tier||!MembershipCatalogService::validCode($code)) throw new CommonException('请选择会员等级中已启用商户协作权益的套餐');
@@ -152,8 +162,10 @@ final class EntityMembershipService
         foreach($segments as [$reserved,$a,$b]) if ($b>$now) {$reservedRank=max($reservedRank,(int)$reserved['rule']['rank']);if ($reserved['rule']['level_code']===$code) $sameEnd=max($sameEnd,$b);}
         $start=$sameEnd>0?max($now,$sameEnd):($state['active']&&$state['level_code']===$code?max($now,$state['expires_at']):$now);
         $full=Rules::cents($period['price']);$end=Rules::addMonths($start,$months);
-        $required=(string)$tier['experience_required'];$value=(string)$experience['value'];$eligible=EntityExperienceService::eligible($experience,$tier);
+        $required=EntityExperienceService::required($tier);$value=(string)$experience['value'];$eligible=EntityExperienceService::eligible($experience,$tier);
         $out=['purpose'=>'membership','level_code'=>$code,'level_id'=>(int)$tier['level_id'],'level_name'=>$tier['name'],'level_color'=>$tier['level_color'],'rank'=>(int)$tier['rank'],'display_rank'=>(int)$tier['display_rank'],'capabilities'=>$tier['capabilities'],'benefits'=>$tier['benefits'],'cycle'=>$cycle,'cycle_name'=>$period['name'],'entitlement_months'=>$months,'months'=>$months,'account_limit'=>(int)$tier['account_limit'],'unlimited'=>(bool)$tier['unlimited'],'is_entry'=>(bool)$tier['is_entry'],'experience_required'=>$required,'experience_value'=>$value,'experience_eligible'=>$eligible,'experience_remaining'=>Rules::amount(max(0,Rules::cents($required)-Rules::cents($value))),'period_start_at'=>$start,'period_end_at'=>$end,'quoted_at'=>$now,'expires_at'=>$now+self::TTL,'full_amount'=>Rules::amount($full),'credit_amount'=>'0.00','payable_amount'=>Rules::amount($full),'credit_sources'=>[],'can_purchase'=>true,'reason'=>'','base_fingerprint'=>self::fingerprint($rows,$partner),'catalog_fingerprint'=>self::tierFingerprint($tier)];
+        $out['experience_gate_enabled']=EntityExperienceService::gateEnabled($tier);
+        if($epoch!=='')$out['membership_deposit_epoch']=$epoch;
         $out=array_replace($out,MembershipCostService::calculate($tier,$period,$experience,$deposit,$buyExperience));$out['cost_fingerprint']=$deposit['fingerprint']??hash('sha256','[]');
         if (empty($tier['enabled'])||empty($period['enabled'])||$full<=0) {$out['can_purchase']=false;$out['reason']='该等级尚未开通当前付费周期，请重新选择';return $out;}
         if(!empty($deposit['review_required'])||!empty($experience['cost_review_required'])){$out['can_purchase']=false;$out['reason']=!empty($deposit['review_message'])?$deposit['review_message']:'原押金、购买经验或退款待平台核对，暂不重复收费';return $out;}
@@ -176,11 +188,13 @@ final class EntityMembershipService
 
     public static function assertSnapshot(array $order,array $rule): void
     {
+        if(array_key_exists('membership_deposit_epoch',$rule)&&(!is_string($rule['membership_deposit_epoch'])||!preg_match('/^[a-f0-9]{64}$/D',$rule['membership_deposit_epoch'])))throw new CommonException('会员重新开通的退出来源快照无效');
         if (!in_array($rule['schema_version']??'',[self::SNAPSHOT_SCHEMA,'hsx_lead.entity_membership.v3'],true)||($rule['purpose']??'')!=='membership'||!MembershipCatalogService::validCode($rule['level_code']??null)||!is_string($rule['cycle']??null)||!preg_match('/^[A-Za-z][A-Za-z0-9_-]{0,23}$/D',$rule['cycle'])||!is_array($rule['credit_sources']??null)) throw new CommonException('主体会员订单快照不完整，请联系平台核对');
         if (!is_int($rule['level_id']??null)||$rule['level_code']!=='ML'.$rule['level_id']||!is_int($rule['rank']??null)||$rule['rank']<1||$rule['rank']>2147483647||!is_int($rule['display_rank']??null)||$rule['display_rank']<1||!is_string($rule['level_name']??null)||trim($rule['level_name'])===''||!is_string($rule['cycle_name']??null)||trim($rule['cycle_name'])===''||!is_bool($rule['unlimited']??null)||!is_int($rule['account_limit']??null)||$rule['account_limit']<1||$rule['account_limit']>99999||!is_int($rule['quoted_at']??null)||$rule['quoted_at']<=0) throw new CommonException('会员等级或账号权益快照无效，请平台核对');
         if (!is_array($rule['capabilities']??null)||!is_array($rule['benefits']??null)||!is_string($rule['catalog_fingerprint']??null)||!preg_match('/^[a-f0-9]{64}$/D',$rule['catalog_fingerprint'])) throw new CommonException('会员原单权益快照不完整');
         $required=Rules::cents($rule['experience_required']??'');
-        if(!is_bool($rule['is_entry']??null)||$required!==($rule['is_entry']?0:$rule['rank']*100))throw new CommonException('会员入门档及经验门槛快照不一致');
+        $gate=EntityExperienceService::gateEnabled($rule);
+        if(!is_bool($rule['is_entry']??null)||$required!==(!$gate||$rule['is_entry']?0:$rule['rank']*100))throw new CommonException('会员入门档及经验门槛快照不一致');
         if(!is_string($rule['level_color']??null)||($rule['level_color']!==''&&!preg_match('/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/iD',$rule['level_color'])))throw new CommonException('会员等级配色快照格式异常');
         foreach(MembershipCatalogService::CAPABILITIES as $key) if (!is_bool($rule['capabilities'][$key]??null)) throw new CommonException('会员原单权限快照不完整');
         // Keep original paid copy frozen too: a later UI title/icon change must
@@ -202,8 +216,9 @@ final class EntityMembershipService
     public static function assertOrderPayable(int $site,array $order): void
     {
         $ctx=new Context($site,0,(int)$order['member_id']);TeamService::assertOwner($ctx,(int)$order['merchant_id'],true);
-        if(MembershipDepositService::exited($site,(int)$order['merchant_id'],true))throw new CommonException('门店退押金或退出协作正在处理中，未发起付款');
+        if(MembershipDepositService::purchaseState($site,(int)$order['merchant_id'],true)['deposit_purchase_blocked'])throw new CommonException('门店退押金申请仍在处理中，未发起付款');
         $rule=Data::decode($order['rule_json']);self::assertSnapshot($order,$rule);self::assertPriceOverrideSource($site,$order,$rule);
+        self::assertDepositEpoch($site,(int)$order['merchant_id'],$rule);
         if (!self::catalogMatches($rule,MembershipCatalogService::levels($site,true))) throw new CommonException('原会员套餐已调整或停售，请先取消未支付单后重新选择；当前未发起支付');
         if ((int)($rule['quoted_at']??0)+self::TTL<time()) throw new CommonException('原会员报价已过期，请先取消未支付订单，再重新报价；当前未扣款');
         $rows=self::ledger($site,(int)$order['merchant_id'],true);$partner=Store::partner($site,(int)$order['merchant_id'],true);
@@ -216,7 +231,8 @@ final class EntityMembershipService
     public static function grant(int $site,array $order,array &$rule,int $paidAt): array
     {
         self::assertSnapshot($order,$rule);self::assertPriceOverrideSource($site,$order,$rule);$partner=Store::partner($site,(int)$order['merchant_id'],true);
-        if(MembershipDepositService::exited($site,(int)$order['merchant_id'],true))throw new CommonException('实际付款时门店正在退出协作，请平台核对原付款');
+        if(MembershipDepositService::purchaseState($site,(int)$order['merchant_id'],true)['deposit_purchase_blocked'])throw new CommonException('实际付款时门店正在退出协作，请平台核对原付款');
+        self::assertDepositEpoch($site,(int)$order['merchant_id'],$rule);
         $rows=self::ledger($site,(int)$order['merchant_id'],true);
         if (!hash_equals((string)($rule['base_fingerprint']??''),self::fingerprint($rows,$partner))) throw new CommonException('原权益状态已变化，已收款须人工核对，不能覆盖新权益');
         foreach($rows as $row) if (!empty($row['refund_pending'])||!empty($row['review'])) throw new CommonException('原权益正在退款或核对，暂未授予新等级');
@@ -314,6 +330,7 @@ final class EntityMembershipService
     {
         if($preloaded===null){$query=Store::query('coop_order',$site)->where('merchant_id',$merchant)->where('purpose','membership')->where('status','paid')->order('id');if ($lock) $query->lock(true);$rows=$query->select()->toArray();}
         else $rows=$preloaded['orders'];
+        $epoch=$preloaded['membership_epoch']??MembershipDepositService::membershipEpoch($site,$merchant,$lock);
         $out=[];
         foreach($rows as $row) {
             $rule=Data::decode($row['rule_json']);$row['rule']=$rule;$row['valid']=false;$row['refund_pending']=false;$row['review']=!empty($rule['requires_manual_review']);$parts=null;
@@ -329,7 +346,7 @@ final class EntityMembershipService
                 if(($rule['schema_version']??'')===self::SNAPSHOT_SCHEMA){$parts=MembershipCostService::refundedComponents($row,$rule,$refunds);$refunded=$parts['total'];$row['refund_pending']=$parts['pending'];if($parts['review'])$row['review']=true;}
                 $row['refunded']=$refunded;$rightsRefunded=$refunded;
                 if(isset($parts)&&($rule['schema_version']??'')===self::SNAPSHOT_SCHEMA&&!$parts['review'])$rightsRefunded=$parts['service']+$parts['experience'];
-                $row['valid']=$rightsRefunded===0&&!$row['review'];
+                $row['valid']=$rightsRefunded===0&&!$row['review']&&($rule['membership_deposit_epoch']??'')===$epoch;
                 if ($row['valid']) self::assertSources($out,$rule);
             } catch(CommonException $error) {$row['valid']=false;$row['dependency_invalid']=!empty($rule['credit_sources']);if (empty($row['refunded'])) $row['review']=true;}
             $out[]=$row;
@@ -362,42 +379,59 @@ final class EntityMembershipService
     public static function stateFrom(array $rows,array $partner,array $tiers,int $now): array
     {
         $none=MembershipCatalogService::emptyCapabilities();
-        $default=['level_code'=>'','level_id'=>0,'level_name'=>'普通会员','level_visual'=>MembershipCatalogService::visual([],0),'level_color'=>MembershipCatalogService::color(0),'rank'=>0,'display_rank'=>0,'active'=>false,'expires_at'=>0,'account_limit'=>1,'unlimited'=>false,'capabilities'=>$none,'benefits'=>MembershipCatalogService::benefits($none),'configuration_source'=>'framework_member_level'];$current=null;$end=0;$segments=self::availableSegments($rows);
+        $default=['level_code'=>'','level_id'=>0,'level_name'=>'普通会员','level_visual'=>MembershipCatalogService::visual([],0),'level_color'=>MembershipCatalogService::color(0),'rank'=>0,'display_rank'=>0,'active'=>false,'expires_at'=>0,'account_limit'=>1,'unlimited'=>false,'capabilities'=>$none,'benefits'=>MembershipCatalogService::benefits($none),'experience_gate_enabled'=>true,'configuration_source'=>'framework_member_level'];$current=null;$end=0;$segments=self::availableSegments($rows);
         foreach($segments as [$row,$a,$b]) if ($a<=$now&&$b>$now&&(!$current||(int)$row['rule']['rank']>(int)$current['rank'])) {$current=$row['rule'];$end=$b;}
         if ($current) {
             do {$before=$end;foreach($segments as [$row,$a,$b]) if ($row['rule']['level_code']===$current['level_code']&&$a<=$end&&$b>$end) $end=$b;}while($before!==$end);
             // A deleted/edited sale definition cannot retrospectively remove
             // rights a merchant has already paid for. Only a verified refund
             // or grant expiry changes this frozen entitlement contract.
-            return array_replace($default,['level_code'=>$current['level_code'],'level_id'=>(int)$current['level_id'],'level_name'=>$current['level_name'],'level_visual'=>MembershipCatalogService::visual([],(int)$current['display_rank']),'level_color'=>MembershipCatalogService::color((int)$current['display_rank']),'rank'=>(int)$current['rank'],'display_rank'=>(int)$current['display_rank'],'active'=>true,'expires_at'=>$end,'account_limit'=>(int)$current['account_limit'],'unlimited'=>(bool)$current['unlimited'],'capabilities'=>$current['capabilities'],'benefits'=>$current['benefits']]);
+            return array_replace($default,['level_code'=>$current['level_code'],'level_id'=>(int)$current['level_id'],'level_name'=>$current['level_name'],'level_visual'=>MembershipCatalogService::visual([],(int)$current['display_rank']),'level_color'=>MembershipCatalogService::color((int)$current['display_rank']),'rank'=>(int)$current['rank'],'display_rank'=>(int)$current['display_rank'],'active'=>true,'expires_at'=>$end,'account_limit'=>(int)$current['account_limit'],'unlimited'=>(bool)$current['unlimited'],'capabilities'=>$current['capabilities'],'benefits'=>$current['benefits'],'experience_gate_enabled'=>EntityExperienceService::gateEnabled($current)]);
         }
-        foreach($rows as $row) if (!empty($row['valid'])&&(int)$row['rule']['period_end_at']<=$now&&(int)$row['rule']['period_end_at']>$default['expires_at']) $default=array_replace($default,['level_code'=>$row['rule']['level_code'],'level_id'=>(int)$row['rule']['level_id'],'level_name'=>$row['rule']['level_name'],'level_visual'=>MembershipCatalogService::visual([],(int)$row['rule']['display_rank']),'level_color'=>MembershipCatalogService::color((int)$row['rule']['display_rank']),'rank'=>(int)$row['rule']['rank'],'display_rank'=>(int)$row['rule']['display_rank'],'expires_at'=>(int)$row['rule']['period_end_at']]);
+        foreach($rows as $row) if (!empty($row['valid'])&&(int)$row['rule']['period_end_at']<=$now&&(int)$row['rule']['period_end_at']>$default['expires_at']) $default=array_replace($default,['level_code'=>$row['rule']['level_code'],'level_id'=>(int)$row['rule']['level_id'],'level_name'=>$row['rule']['level_name'],'level_visual'=>MembershipCatalogService::visual([],(int)$row['rule']['display_rank']),'level_color'=>MembershipCatalogService::color((int)$row['rule']['display_rank']),'rank'=>(int)$row['rule']['rank'],'display_rank'=>(int)$row['rule']['display_rank'],'expires_at'=>(int)$row['rule']['period_end_at'],'experience_gate_enabled'=>EntityExperienceService::gateEnabled($row['rule'])]);
         return $default;
     }
 
     private static function catalogMatches(array $rule,array $tiers): bool
     {
         foreach($tiers as $tier) if ($tier['code']===($rule['level_code']??'')) {
-            if (empty($tier['enabled'])||!hash_equals((string)($rule['catalog_fingerprint']??''),self::tierFingerprint($tier))) return false;
+            $fingerprintTier=$tier;
+            // Existing frozen snapshots had no gate field. Preserve their
+            // exact fingerprint only while the current policy is unchanged.
+            if(!array_key_exists('experience_gate_enabled',$rule)){
+                if(!EntityExperienceService::gateEnabled($tier))return false;
+                unset($fingerprintTier['experience_gate_enabled']);
+            }
+            if (empty($tier['enabled'])||!hash_equals((string)($rule['catalog_fingerprint']??''),self::tierFingerprint($fingerprintTier))) return false;
             foreach($tier['cycles'] as $cycle) if ($cycle['key']===($rule['cycle']??'')) return !empty($cycle['enabled'])&&$cycle['months']===($rule['months']??0)&&Rules::cents($cycle['price'])===Rules::cents($rule['price_override']['catalog_full_amount']??$rule['full_amount']??'');
         }return false;
     }
-    /** Appearance edits never invalidate a payment quote or original grant. */
-    private static function tierFingerprint(array $tier): string {unset($tier['level_visual'],$tier['level_color']);return hash('sha256',Data::json($tier));}
-    private static function pricingFingerprint(array $tiers): string {foreach($tiers as &$tier)unset($tier['level_visual'],$tier['level_color']);unset($tier);return hash('sha256',Data::json($tiers));}
+    /** Appearance and derived external product keys never change entitlement prices. */
+    private static function fingerprintTier(array $tier): array
+    {
+        unset($tier['level_visual'],$tier['level_color']);
+        foreach($tier['cycles'] as &$cycle)unset($cycle['product_key']);unset($cycle);
+        return $tier;
+    }
+    private static function tierFingerprint(array $tier): string {return hash('sha256',Data::json(self::fingerprintTier($tier)));}
+    private static function pricingFingerprint(array $tiers): string {return hash('sha256',Data::json(array_map([self::class,'fingerprintTier'],$tiers)));}
     private static function assertExperience(int $site,int $merchant,string $required): void
     {
         $experience=EntityExperienceService::summary($site,$merchant,true);
         if (!EntityExperienceService::eligible($experience,['experience_required'=>$required])) throw new CommonException('当前门店经验'.$experience['value'].'，本等级需要'.$required.'；尚未满足本次开通、升级或续费条件');
     }
+    private static function assertDepositEpoch(int $site,int $merchant,array $rule):void
+    {
+        if(($rule['membership_deposit_epoch']??'')!==MembershipDepositService::membershipEpoch($site,$merchant,true))throw new CommonException('原付款单属于退出前的权益，请重新核对开通报价；未恢复旧权益');
+    }
     private static function assertFunding(int $site,int $merchant,array $rule,int $confirmingOrder=0): void
     {
         if(($rule['schema_version']??'')!==self::SNAPSHOT_SCHEMA){self::assertExperience($site,$merchant,(string)$rule['experience_required']);return;}
         $costs=MembershipCostService::balances($site,$merchant,true,$confirmingOrder);$experience=EntityExperienceService::summary($site,$merchant,true);
-        if($costs['review_required']||!hash_equals($rule['cost_fingerprint'],$costs['fingerprint'])||($rule['experience_value']??null)!==$experience['value'])throw new CommonException('原押金、经验或退款已变化，请取消未付款单后重新核对；不会重复收费');
+        if($costs['review_required']||!hash_equals($rule['cost_fingerprint'],$costs['fingerprint'])||(EntityExperienceService::gateEnabled($rule)&&($rule['experience_value']??null)!==$experience['value']))throw new CommonException('原押金、经验或退款已变化，请取消未付款单后重新核对；不会重复收费');
         if(Rules::cents($experience['value'])+Rules::cents($rule['experience_quantity'])<Rules::cents($rule['experience_required']))throw new CommonException('本次经验补足后仍未满足等级要求');
     }
-    private static function sourceFingerprint(array $row): string {return hash('sha256',Data::json([(int)$row['id'],(string)$row['out_trade_no'],(int)$row['member_id'],(string)$row['amount'],$row['rule']['period_start_at']??0,$row['rule']['period_end_at']??0,$row['rule']['full_amount']??'',$row['rule']['credit_sources']??[],$row['rule']['level_id']??0,$row['rule']['level_code']??'',$row['rule']['rank']??0,$row['rule']['months']??0,$row['rule']['capabilities']??[],$row['rule']['benefits']??[]]));}
+    private static function sourceFingerprint(array $row): string {$facts=[(int)$row['id'],(string)$row['out_trade_no'],(int)$row['member_id'],(string)$row['amount'],$row['rule']['period_start_at']??0,$row['rule']['period_end_at']??0,$row['rule']['full_amount']??'',$row['rule']['credit_sources']??[],$row['rule']['level_id']??0,$row['rule']['level_code']??'',$row['rule']['rank']??0,$row['rule']['months']??0,$row['rule']['capabilities']??[],$row['rule']['benefits']??[]];if(array_key_exists('experience_gate_enabled',$row['rule']))$facts[]=$row['rule']['experience_gate_enabled'];if(array_key_exists('membership_deposit_epoch',$row['rule']))$facts[]=$row['rule']['membership_deposit_epoch'];return hash('sha256',Data::json($facts));}
     private static function fingerprint(array $rows,array $partner): string {$facts=[];foreach($rows as $row) $facts[]=[(int)$row['id'],(bool)$row['valid'],(bool)$row['refund_pending'],(bool)$row['review'],(int)($row['refunded']??0),self::sourceFingerprint($row)];return hash('sha256',Data::json([$facts,$partner['membership_level']??'',(int)($partner['membership_until']??0)]));}
     private static function prorate(int $amount,int $covered,int $total): int {if ($covered<0||$total<=0||$covered>$total) throw new CommonException('会员剩余期限无效');return (int)bcdiv(bcmul((string)$amount,(string)$covered,0),(string)$total,0);}
     private function secret(): string {$key=(string)env('app.auth_key','');if (strlen($key)<16) throw new CommonException('平台尚未配置安全密钥');return hash('sha256','hsx_lead.entity_membership.quote.v3|'.$key,true);}

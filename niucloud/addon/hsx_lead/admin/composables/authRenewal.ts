@@ -1,5 +1,16 @@
 type RenewalData = Record<string, any>
 
+/** Current sync diagnostics take priority over the connection's renewal capability. */
+export function syncAttentionFor(connection: RenewalData = {}) {
+    const status = String(connection.last_sync_status || connection.sync_progress?.status || '')
+    if (connection.channel_enabled === false || ['pending', 'running'].includes(status)) return null
+    const attention = connection.sync_attention
+    if (attention && ['reauthorize', 'retry', 'contact_support'].includes(attention.action) && typeof attention.message === 'string' && attention.message.trim()) {
+        return { code: String(attention.code || ''), message: attention.message.trim(), action: String(attention.action), action_label: String(attention.action_label || '') }
+    }
+    return connection.authorization_attention === true ? { code: 'auth_required', message: '账号授权已失效，请重新登录后继续同步；原库存记录保留。', action: 'reauthorize', action_label: '重新登录' } : null
+}
+
 /** Public capability metadata only; never inspect or render passwords or runtime tokens. */
 export function authRenewalLabel(value: RenewalData = {}) {
     if (value.automatic === true && value.ready === true) return '自动续登已配置'

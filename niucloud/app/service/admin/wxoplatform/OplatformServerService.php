@@ -14,6 +14,9 @@ namespace app\service\admin\wxoplatform;
 use app\dict\sys\CloudDict;
 use app\model\weapp\WeappVersion;
 use app\service\core\wxoplatform\CoreOplatformService;
+use app\service\core\weapp\CoreWeappMessageSecurity;
+use app\service\core\weapp\CoreWeappMessageEncryptor;
+use app\service\core\weapp\CoreWeappAuthenticatedMessage;
 use core\base\BaseAdminService;
 use think\facade\Log;
 
@@ -68,6 +71,22 @@ class OplatformServerService extends BaseAdminService
      */
     public function message($appid) {
         $app = CoreOplatformService::app();
+        // Authorized mini apps share the component encryptor. A URL AppID or
+        // the legacy LIKE-first lookup alone cannot authorize a tenant hook.
+        $message_site_id = CoreWeappMessageSecurity::uniqueAuthorizedSite((string)$appid);
+        $authenticated_encryptor = null;
+        if ($message_site_id > 0) {
+            $security = CoreWeappMessageSecurity::configuration($message_site_id);
+            if ($security['encrypted_ready'] && $security['source'] === 'open_platform'
+                && hash_equals($security['app_id'], (string)$appid)
+                && hash_equals($security['component_app_id'], $app->getAccount()->getAppId())) {
+                $authenticated_encryptor = new CoreWeappMessageEncryptor(
+                    $app->getEncryptor(), $message_site_id, $security['app_id'],
+                    $security['original_id'], $security['source']
+                );
+                $app->setEncryptor($authenticated_encryptor);
+            }
+        }
         $server = $app->getServer();
 
         $site_id = CoreOplatformService::getSiteIdByAuthorizerAppid($appid);
@@ -80,6 +99,23 @@ class OplatformServerService extends BaseAdminService
                 case 'weapp_audit_fail':
                     $this->weappAuditFail($message);
                     break;
+            }
+            return $next($message);
+        });
+
+        // Keep the existing audit branches above unchanged. The optional
+        // generic hook receives only a target-bound native authentication
+        // result, never an unsigned outer envelope or request flag.
+        $server->with(function($message, \Closure $next) use ($message_site_id, $authenticated_encryptor) {
+            $authenticated_message = $authenticated_encryptor?->authenticatedMessage();
+            if ($authenticated_message instanceof CoreWeappAuthenticatedMessage) {
+                foreach (event('WeappMessage', [
+                    'site_id' => $message_site_id,
+                    'message' => $message->toArray(),
+                    'authenticated_message' => $authenticated_message
+                ]) as $result) {
+                    if ($result instanceof \Psr\Http\Message\ResponseInterface) return $result;
+                }
             }
             return $next($message);
         });

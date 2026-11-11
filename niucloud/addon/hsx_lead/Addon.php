@@ -45,9 +45,13 @@ final class Addon
         $promotionWhere = [['addon', '=', 'hsx_lead'], ['key', '=', 'hsx_lead_promotion_settle']];
         $promotion = $model->where($promotionWhere)->findOrEmpty();
         $promotionStatus = $disable || $promotion->isEmpty() ? ScheduleDict::OFF : (int)$promotion['status'];
+        $virtualWhere = [['addon', '=', 'hsx_lead'], ['key', '=', 'hsx_lead_virtual_payment_reconcile']];
+        $virtual = $model->where($virtualWhere)->findOrEmpty();
+        $virtualStatus = $disable || $virtual->isEmpty() ? ScheduleDict::OFF : (int)$virtual['status'];
         (new CoreScheduleInstallService())->installAddonSchedule('hsx_lead');
         $model->where($where)->update(['status' => $status]);
         $model->where($promotionWhere)->update(['status' => $promotionStatus]);
+        $model->where($virtualWhere)->update(['status' => $virtualStatus]);
     }
 }
 

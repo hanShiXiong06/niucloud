@@ -91,6 +91,8 @@ final class MerchantService
         $row=array_replace($row,['provider'=>$conn['provider'],'provider_name'=>$conn['provider_name'],
             'connection_id'=>$conn['connection_id'],'sync_interval_minutes'=>$conn['interval_minutes'],'sync_enabled'=>$conn['enabled'],
             'auth_renewal'=>$conn['auth_renewal'],'next_sync_at'=>$conn['next_sync_at'],
+            'authorization_attention'=>$conn['authorization_attention'],'sync_attention'=>$conn['sync_attention'],
+            'sync_error_code'=>$conn['sync_error_code'],
             'channel_enabled'=>$conn['channel_enabled'],'channel_message'=>$conn['channel_message'],
             'last_sync_status'=>$conn['last_sync_status'],'last_sync_at'=>$conn['last_sync_at'],'last_sync_message'=>$conn['last_sync_message'],
             'last_run_id'=>$conn['active_run_id'],'published_run_id'=>$conn['published_run_id']]);

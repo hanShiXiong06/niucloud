@@ -71,6 +71,16 @@ final class ProviderRegistry
                 'fields'=>[$field('password','登录密码','password',true,true,4096)],'code_length'=>4,'default'=>true],
             'renewal'=>['automatic'=>false,'mode'=>'interactive_login','max_attempts'=>0,'description'=>'正常手机号、密码和图片验证码登录；到期后重新登录，不自动绕过验证码'],
             'notes'=>['通过本站向导正常登录并核对当前公司，不绑定测试账号或某个浏览器','全部可见仓库；未上架资料可以解析核验，但不计入可派单库存','登录密码和验证码仅本次授权使用；会话失效时保留旧完整快照并提示重新登录'],
+        ]),new ProviderDefinition([
+            'key'=>'jkb','name'=>'JKB平台','aliases'=>[],'adapter'=>JkbProvider::class,'grade_field'=>'_grade',
+            'verified_identity'=>true,'verify_before_sync'=>true,'auth_mode'=>'interactive','auth_type'=>'sms_code','renderer'=>'fields','read_only'=>true,
+            'fields'=>[$field('username','授权手机号','text',true,false,11,true),$field('access_token','短信验证后的授权会话','password',true,true,16384)],
+            'scope_fields'=>[],
+            'server_credential_fields'=>[$field('user_id','认证账号ID','text',true,false,18),$field('merchant_id','认证门店ID','text',true,false,18),
+                $field('store_name','认证门店名称','text',true,false,120),$field('expires_at','授权到期时间','text',true,false,11)],
+            'interactive_auth'=>['type'=>'sms_code','credential_fields'=>['username'],'fields'=>[],'code_length'=>4,'default'=>true,'automatic_recognition'=>false],
+            'renewal'=>['automatic'=>false,'mode'=>'interactive_login','max_attempts'=>0,'description'=>'主动获取短信验证码登录；有效期内自动同步，授权失效后重新验证，不自动发送短信'],
+            'notes'=>['只读取短信授权账号状态1的已上架库存，不回写源平台','完整分页后发布；汇总台数不作为记录总数，不导入ERP业务分类','状态5为在库未上架，暂不纳入；仅已上架且有货的有效快照参与库存匹配，未上架不等于已售'],
         ])];
     }
 }

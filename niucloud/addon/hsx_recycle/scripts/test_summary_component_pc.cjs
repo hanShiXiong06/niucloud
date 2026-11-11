@@ -93,7 +93,7 @@ async function main() {
     dialog.dispose()
 
     let schemaFields = []
-    const list = setupComponent('DeviceEntryList.vue', vue.reactive({ devices: [], orderId: '', autoAppend: true }), {
+    const list = setupComponent('DeviceEntryList.vue', vue.reactive({ devices: [], orderId: '', autoAppend: true, entryReady: true }), {
         '@/addon/hsx_recycle/api/recycle_order': {}, '@/addon/hsx_recycle/api/recycle_device_model_dict': {},
         '@/addon/hsx_recycle/api/check_template': { getCheckTemplateSchema: async () => ({ data: { template: { id: 1 }, resolve: { template_id: 1 }, groups: [{ fields: schemaFields }] } }) },
         './useLocalDevice': { useLocalDevice: () => ({ fetching: vue.ref(false), readWarnings: vue.ref([]), fetchConnected: blocked, mapToRow: blocked, describeError: blocked, startAuto: blocked, stopAuto() {} }) },

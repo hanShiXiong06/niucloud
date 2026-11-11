@@ -4,12 +4,19 @@ export interface CashOutRuleOptions {
     isAutoVerify: unknown
     transferTypes: unknown
     accountType: string
+    availableMoney?: unknown
 }
 
 export interface CashOutRuleSection {
     key: string
     title: string
     paragraphs: string[]
+}
+
+export interface CashOutRuleSummary {
+    key: string
+    label: string
+    value: string
 }
 
 const transferNames: Record<string, string> = {
@@ -23,6 +30,21 @@ const amount = (value: unknown): number | null => {
     if (value === null || value === undefined || value === '' || typeof value === 'boolean') return null
     const number = Number(value)
     return Number.isFinite(number) && number >= 0 ? number : null
+}
+
+/** 申请页默认展示的关键规则，不得只放在折叠说明中。 */
+export function buildCashOutRuleSummary(options: CashOutRuleOptions): CashOutRuleSummary[] {
+    const available = amount(options.availableMoney)
+    const min = amount(options.min)
+    const rate = amount(options.rate)
+    return [
+        { key: 'available', label: '可提现额度', value: available === null ? '读取中，请以账户最新余额为准' : `当前${available.toFixed(2)}元，单笔不能超过此金额` },
+        { key: 'minimum', label: '最低申请金额', value: min === null ? '未读取成功，请刷新后重试' : min > 0 ? `${min.toFixed(2)}元 / 笔` : '金额须大于0，未设额外最低门槛' },
+        { key: 'frequency', label: '每日提现次数', value: '不设额外次数限制，每笔均需满足余额和金额要求' },
+        { key: 'application-time', label: '申请时间', value: '每天24小时可提交申请' },
+        { key: 'arrival-time', label: '到账时间', value: '正常情况下，申请成功后3个自然日内完成审核及打款' },
+        { key: 'fee', label: '提现手续费', value: rate === null || rate > 100 ? '未读取成功，请刷新后重试' : rate === 0 ? '不收取提现手续费' : `申请金额的${Number(rate.toFixed(2))}%，从本次申请金额中扣除` }
+    ]
 }
 
 /** 只生成说明，不更改提现配置、申请金额、审核状态或资金。 */

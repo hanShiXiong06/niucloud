@@ -67,6 +67,11 @@ class CorePayChannelService extends BaseCoreService
             $pay_type_arr = PayDict::getPayType($temp_channel_pay_list);
             foreach ($temp_channel_pay_list as $key) {
                 if (isset($pay_type_arr[$key])) {
+                    // Optional driver metadata scopes a payment capability; no
+                    // plugin names or business decisions belong in the core.
+                    $definition = $pay_type_arr[$key];
+                    if (isset($definition['channels']) && (!is_array($definition['channels']) || !in_array($channel, $definition['channels'], true))) continue;
+                    if (isset($definition['trade_types']) && (!is_array($definition['trade_types']) || !in_array($trade_type, $definition['trade_types'], true))) continue;
                     $pay_type_list[$key] = $pay_type_arr[$key];
                 }
             }

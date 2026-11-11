@@ -200,6 +200,7 @@
       v-model:visible="orderDialogVisible"
       :device-list="currentDevices"
       :order-id="currentOrderId"
+      :total-count="currentOrderTotal"
       @confirm="handleDeviceConfirm"
       @cancel="cancelDeviceEdit"
     />
@@ -580,6 +581,7 @@ const expandRowKeys = computed(() => {
 const orderDialogVisible = ref(false);
 const paymentDialogVisible = ref(false);
 const currentOrderId = ref<number | string>(0);
+const currentOrderTotal = ref(0);
 const currentDevices = ref<any[]>([]);
 const orderDetailVisible = ref(false);
 const orderDetail = ref<OrderDetail | null>(null);
@@ -706,6 +708,7 @@ const { handleAction } = useRecycleOrderActions({
   pagination,
   getList,
   currentOrderId,
+  currentOrderTotal,
   currentDevices,
   orderDialogVisible,
   checkDeviceLogVisible,
@@ -759,6 +762,7 @@ const cancelDeviceEdit = () => {
   // 清空当前设备列表
   currentDevices.value = [];
   currentOrderId.value = 0;
+  currentOrderTotal.value = 0;
 };
 
 // 获取状态列表

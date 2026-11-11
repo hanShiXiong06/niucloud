@@ -4,6 +4,9 @@ namespace addon\hsx_lead\app\middleware;
 use addon\hsx_lead\app\service\Context;
 use addon\hsx_lead\app\service\cooperation\PaymentService;
 use addon\hsx_lead\app\service\cooperation\PaymentOrderRecovery;
+use addon\hsx_lead\app\service\cooperation\MembershipVirtualPayAdapter;
+use addon\hsx_lead\app\service\cooperation\Store;
+use addon\hsx_lead\app\service\virtualpay\VirtualPaySettings;
 use app\Request;
 use app\dict\pay\PayDict;
 use app\service\core\pay\CorePayChannelService;
@@ -49,16 +52,28 @@ final class CooperationPaymentGuard
         if ($type!==PaymentService::TRADE_TYPE) return $next($request);
         if ($site<=0||(int)$request->memberId()<=0) throw new CommonException('请先使用当前商户的会员账号登录');
         if ($action==='friendspayinfo') throw new CommonException('商户协作由当前门店自行付款，不支持找朋友代付');
-        if ($action==='getpaytype') return $this->filterChannels($next($request));
+        if ($action==='getpaytype') {
+            $order=null;
+            if(ctype_digit((string)$id)&&(int)$id>0){(new PaymentService(new Context($site,0,(int)$request->memberId())))->order((int)$id);$order=Store::row('coop_order',$site,(int)$id);}
+            return $this->filterChannels($next($request),$site,$order,$request->getChannel());
+        }
         if ((!is_int($id)&&!is_string($id))||!preg_match('/^[1-9][0-9]{0,17}$/D',(string)$id)) throw new CommonException('支付业务编号无效，请返回详情');
+        $context=new Context($site,0,(int)$request->memberId());$service=new PaymentService($context);
+        $service->order((int)$id);$order=Store::row('coop_order',$site,(int)$id);
+        $virtual=MembershipVirtualPayAdapter::usesVirtual($site,$order,$request->getChannel());
         if ($action==='pay') {
             if (!$request->isPost()) throw new CommonException('请通过确认付款按钮提交，当前未发起支付');
             $selected=$request->param('type');
-            if (!in_array($selected,[PayDict::WECHATPAY,PayDict::ALIPAY,PayDict::BALANCEPAY],true)) throw new CommonException('请选择本站已开通的微信、支付宝或余额支付');
+            $allowed=$virtual?[VirtualPaySettings::TYPE]:[PayDict::WECHATPAY,PayDict::ALIPAY,PayDict::BALANCEPAY];
+            if (!in_array($selected,$allowed,true)) throw new CommonException('当前付款方式已更新，请重新打开付款窗口');
+            if($virtual){
+                if($request->getChannel()!=='weapp')throw new CommonException('请在微信小程序内完成本业务付款');
+                VirtualPaySettings::get($site,true);
+                $code=$request->param('login_code','');if(!is_string($code)||$code===''||strlen($code)>256)throw new CommonException('请重新点击微信支付获取登录凭据');
+            }
             $channels=(new CorePayChannelService())->getAllowPayTypeByChannel($site,$request->getChannel(),PaymentService::TRADE_TYPE);
             if (!in_array($selected,array_column($channels,'key'),true)) throw new CommonException('当前付款方式暂不可用，请选择其他付款方式');
         }
-        $context=new Context($site,0,(int)$request->memberId());$service=new PaymentService($context);
         $connection=Db::connect();$scope=(string)$connection->getConfig('database').':'.(string)$connection->getConfig('prefix');
         $key='lead_coop_pay:'.substr(hash('sha256',$scope.':'.$site.':'.$id),0,40);
         $locked=$connection->query('SELECT GET_LOCK(:lock_key, 3) AS acquired',['lock_key'=>$key],true);
@@ -72,7 +87,7 @@ final class CooperationPaymentGuard
                 // receipt must remain committed even when we stop a second pay.
                 $recovered=(new PaymentOrderRecovery($context,$this->providerFactory))->resume((int)$id);
                 $this->assertRecovered($recovered);
-                $service->assertPayable((int)$id);
+                $service->assertPayable((int)$id,$virtual);
             } elseif (in_array($action,['close','info'],true)) $service->order((int)$id);
             else $service->assertPayable((int)$id);
             // A balance debit and its PaySuccess business hooks are one local
@@ -81,7 +96,7 @@ final class CooperationPaymentGuard
             $response=$action==='pay'&&$request->param('type')===PayDict::BALANCEPAY
                 ?Db::transaction(function()use($service,$id,$next,$request){$service->assertPayable((int)$id);return $next($request);})
                 :$next($request);
-            return $action==='info'?$this->filterChannels($response):$response;
+            return $action==='info'?$this->filterChannels($response,$site,$order,$request->getChannel()):$response;
         } finally {
             try {$connection->query('SELECT RELEASE_LOCK(:lock_key) AS released',['lock_key'=>$key],true);} catch (\Throwable $ignored) { /* MySQL releases it when the connection closes. */ }
         }
@@ -98,13 +113,12 @@ final class CooperationPaymentGuard
             throw new CommonException($message!==''?$message:'暂时无法继续付款，请稍后再次点击付款');
         }
     }
-    private function filterChannels($response)
+    private function filterChannels($response,int $site,?array $order,string $terminal)
     {
         if (!is_object($response)||!method_exists($response,'getData')||!method_exists($response,'data')) return $response;
         $body=$response->getData();if (!is_array($body)||!is_array($body['data']??null)) return $response;
-        $allowed=static fn($row):bool=>is_array($row)&&in_array($row['key']??'',[PayDict::WECHATPAY,PayDict::ALIPAY,PayDict::BALANCEPAY],true);
-        if (isset($body['data']['pay_type_list'])) $body['data']['pay_type_list']=array_values(array_filter($body['data']['pay_type_list'],$allowed));
-        elseif ($body['data']===[]||array_keys($body['data'])===range(0,count($body['data'])-1)) $body['data']=array_values(array_filter($body['data'],$allowed));
+        if (isset($body['data']['pay_type_list'])) $body['data']['pay_type_list']=MembershipVirtualPayAdapter::channels($site,$order,$body['data']['pay_type_list'],$terminal);
+        elseif ($body['data']===[]||array_keys($body['data'])===range(0,count($body['data'])-1)) $body['data']=MembershipVirtualPayAdapter::channels($site,$order,$body['data'],$terminal);
         return $response->data($body);
     }
 }

@@ -27,9 +27,11 @@ final class MembershipCostService
     {
         $required=Rules::cents($tier['deposit_amount']??'0.00');$balance=Rules::cents($deposit['balance']??'0.00');
         $full=Rules::cents($period['price']);if($serviceCredit<0||$serviceCredit>$full)throw new CommonException('会员服务费抵扣超出原价');
-        $enabled=self::flag($tier['experience_purchase_enabled']??false,'购买经验');$unit=Rules::cents($tier['experience_unit_price']??'0.00');
+        $gate=EntityExperienceService::gateEnabled($tier);
+        $enabled=$gate?self::flag($tier['experience_purchase_enabled']??false,'购买经验'):false;$unit=$gate?Rules::cents($tier['experience_unit_price']??'0.00'):0;
         if($enabled&&$unit<=0)throw new CommonException('请先配置有效的经验单价');
-        $gap=max(0,Rules::cents($tier['experience_required'])-Rules::cents($experience['value']??'0.00'));
+        $gap=max(0,Rules::cents(EntityExperienceService::required($tier))-Rules::cents($experience['value']??'0.00'));
+        if(!$gate&&$buyExperience)throw new CommonException('本等级无需经验，不支持购买经验；请刷新报价后直接开通');
         if($buyExperience&&!$enabled)throw new CommonException('本等级未开放购买经验，请通过真实成交积累经验');
         $quantity=$buyExperience?$gap:0;
         // Ceil to one cent: fractional experience cannot create free paid points.
@@ -46,6 +48,7 @@ final class MembershipCostService
         if(($rule['cost_schema']??'')!==self::SCHEMA)throw new CommonException('会员三项费用快照不完整');
         foreach(['deposit_required','deposit_balance','deposit_amount','service_full_amount','service_credit_amount','service_amount','experience_unit_price','experience_quantity','experience_amount','promotion_base_amount'] as $key)if(!is_string($rule[$key]??null))throw new CommonException('会员费用明细缺失：'.$key);
         $tier=['deposit_amount'=>$rule['deposit_required'],'experience_purchase_enabled'=>$rule['experience_purchase_enabled']??null,'experience_unit_price'=>$rule['experience_unit_price'],'experience_required'=>$rule['experience_required']];
+        if(array_key_exists('experience_gate_enabled',$rule))$tier['experience_gate_enabled']=$rule['experience_gate_enabled'];
         $expected=self::calculate($tier,['price'=>$rule['service_full_amount']],['value'=>$rule['experience_value']??'0.00'],['balance'=>$rule['deposit_balance']],self::flag($rule['buy_experience']??null,'购买经验'),Rules::cents($rule['service_credit_amount']));
         foreach(self::FIELDS as $key)if(($rule[$key]??null)!==$expected[$key])throw new CommonException('会员分项费用与原报价不一致：'.$key);
         if(Rules::cents($rule['full_amount'])!==Rules::cents($rule['service_full_amount'])||Rules::cents($rule['credit_amount'])!==Rules::cents($rule['service_credit_amount'])||Rules::cents((string)$order['amount'])!==Rules::cents($expected['payable_amount'])||($rule['payable_amount']??null)!==$expected['payable_amount'])throw new CommonException('会员三项费用合计与原实付不一致');
@@ -54,7 +57,7 @@ final class MembershipCostService
     /** A stable source proof excludes closure/retry/promotion processing metadata. */
     public static function pricingFingerprint(array $order,array $rule): string
     {
-        $fields=array_merge(self::FIELDS,['schema_version','purpose','level_code','level_id','rank','display_rank','level_name','cycle','cycle_name','months','entitlement_months','account_limit','unlimited','is_entry','experience_required','experience_value','experience_remaining','capabilities','benefits','period_start_at','period_end_at','quoted_at','full_amount','credit_amount','payable_amount','credit_sources','base_fingerprint','catalog_fingerprint','cost_fingerprint','price_override']);
+        $fields=array_merge(self::FIELDS,['schema_version','purpose','level_code','level_id','rank','display_rank','level_name','cycle','cycle_name','months','entitlement_months','account_limit','unlimited','is_entry','experience_gate_enabled','experience_required','experience_value','experience_remaining','capabilities','benefits','period_start_at','period_end_at','quoted_at','full_amount','credit_amount','payable_amount','credit_sources','base_fingerprint','catalog_fingerprint','cost_fingerprint','membership_deposit_epoch','price_override']);
         $facts=[];foreach($fields as$key)if(array_key_exists($key,$rule))$facts[$key]=$rule[$key];
         return hash('sha256',Data::json([(int)$order['site_id'],(int)$order['id'],(int)$order['merchant_id'],(int)$order['member_id'],(string)$order['purpose'],(string)$order['amount'],$facts]));
     }

@@ -50,7 +50,7 @@ final class UpgradeCommand
         }
         $ddl = file_get_contents($this->plugin . '/sql/install.sql');
         if (!is_string($ddl) || !preg_match_all('/CREATE TABLE IF NOT EXISTS `\{\{prefix\}\}([a-z_]+)`\s*\((.*?)\)\s*ENGINE\s*=/s', $ddl, $tables, PREG_SET_ORDER)
-            || count($tables) !== 15) throw new RuntimeException('安装SQL声明不完整；请完整上传本插件，未执行升级');
+            || count($tables) !== 17) throw new RuntimeException('安装SQL声明不完整；请完整上传本插件，未执行升级');
         $database = Db::getConfig();
         $prefix = (string)($database['connections'][$database['default']]['prefix'] ?? '');
         if (!preg_match('/^[a-zA-Z0-9_]*$/D', $prefix)) throw new RuntimeException('数据库表前缀格式异常');
@@ -63,7 +63,7 @@ final class UpgradeCommand
             foreach (array_diff($fields[1], $names) as $field) $missing[] = $table[1] . '.' . $field;
         }
         if ($missing) throw new RuntimeException("基础表结构未齐全，升级已阻止，不自动建表/加字段：\n- " . implode("\n- ", $missing)
-            . "\n主体会员更新请先执行 php addon/hsx_lead/scripts/upgrade-entity-membership.php --check；通知任务表请先执行 php addon/hsx_lead/scripts/upgrade-notice-runtime.php --check；人工收款凭据表请先执行 php addon/hsx_lead/scripts/upgrade-manual-receipts.php --check，再按文档备份并执行 --apply；其他缺失字段需单独核对，勿卸载重装。");
+            . "\n主体会员更新请先执行 php addon/hsx_lead/scripts/upgrade-entity-membership.php --check；通知任务表请先执行 php addon/hsx_lead/scripts/upgrade-notice-runtime.php --check；人工收款凭据表请先执行 php addon/hsx_lead/scripts/upgrade-manual-receipts.php --check；虚拟支付表请先执行 php addon/hsx_lead/scripts/upgrade-virtual-payment.php --check，再按文档备份并执行 --apply；其他缺失字段需单独核对，勿卸载重装。");
         if (!Db::name('addon')->where('key', 'hsx_lead')->find()) throw new RuntimeException('插件尚未安装；本命令不执行安装，请先在平台正常安装');
         // A native menu refresh does not infer parent-directory grants for old roles.
         // Never silently migrate permissions from this general-purpose updater.

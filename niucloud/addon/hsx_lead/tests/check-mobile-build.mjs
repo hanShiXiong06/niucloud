@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import vm from 'node:vm'
-import os from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
@@ -39,7 +38,7 @@ const expectations = {
     CoopWalletPanel: ['coop-balance-card', 'coop-balance', 'coop-withdraw-entry', 'coop-income-summary', 'coop-wallet-entry', 'coop-menu-row', 'coop-loadmore'],
     CoopTaskDetail: ['coop-form-section', 'coop-customer-contact', 'coop-state-heading', 'coop-history-item', 'coop-footer-actions', 'coop-secondary', 'coop-primary'],
     CoopResponseDeadline: ['coop-response-deadline', 'coop-response-deadline__line', 'coop-response-deadline__digits', 'coop-response-deadline__hint'],
-    CoopConnectionPanel: ['coop-form-section', 'coop-form-row', 'coop-form-column', 'coop-detail-shop', 'coop-small-actions', 'coop-captcha-row', 'coop-consent', 'coop-connection-overview', 'coop-connection-status', 'coop-connection-history', 'coop-sync-log__toggle', 'coop-sync-log__detail', 'coop-connection-settings'],
+    CoopConnectionPanel: ['coop-form-section', 'coop-form-row', 'coop-form-column', 'coop-detail-shop', 'coop-small-actions', 'coop-captcha-row', 'coop-sms-input', 'coop-consent', 'coop-connection-overview', 'coop-connection-status', 'coop-connection-history', 'coop-sync-log__toggle', 'coop-sync-log__detail', 'coop-connection-settings'],
     CoopRegionFields: ['region-result', 'region-result__content', 'region-result__tail', 'region-level'],
     CoopTaskSheet: ['coop-sheet', 'coop-sheet__head', 'coop-sheet__body', 'coop-sheet__footer', 'coop-icon-button', 'coop-popup-mount'],
     CoopStorePicker: ['coop-store-picker', 'coop-region-search', 'coop-customer-location', 'coop-footer-note'],
@@ -247,13 +246,14 @@ assert.ok(paymentHelpOptions.usingComponents?.['u-popup']?.endsWith('/u-popup/u-
 // Parse actual generated WXSS with WeChat's own compiler, not just PostCSS.
 const wxssCompiler=process.env.WXSS_COMPILER||'/Applications/wechatwebdevtools.app/Contents/Resources/app.asar.unpacked/node_modules/wcc-exec/wcsc'
 assert.ok(fs.existsSync(wxssCompiler),'A real local WeChat WXSS compiler is required; native grammar validation cannot silently skip');checks++
-const compiledWxss=fs.mkdtempSync(path.join(os.tmpdir(),'hsx-notice-native-wxss-'))
-try{
- for(const relative of ['addon/hsx_lead/components/cooperation/CoopResponseDeadline.wxss','addon/hsx_lead/pages/notifications/index.wxss','addon/hsx_lead/components/cooperation/CoopProfilePanel.wxss','addon/hsx_lead/components/cooperation/CoopPaymentHelp.wxss']){
-  const result=spawnSync(wxssCompiler,['-lc','-pc','1','-o',path.join(compiledWxss,path.basename(path.dirname(relative))+'-'+path.basename(relative)+'.js'),'./'+relative],{cwd:output,encoding:'utf8',timeout:15000})
-  assert.ok(!result.error&&result.status===0,'Real WeChat WXSS grammar accepts '+relative+': '+(result.error?.message||result.stderr||result.stdout||'').slice(0,500));checks++
- }
-}finally{fs.rmSync(compiledWxss,{recursive:true,force:true})}
+// Every emitted plugin stylesheet (including imported CSS and app.wxss) must pass.
+// A small hand-picked subset missed a bare :first-child added to the SMS row.
+const wxssResult=spawnSync(process.execPath,[path.join(plugin,'scripts/check-wxss.mjs'),'--dir',output],{
+ encoding:'utf8',timeout:300000,maxBuffer:1024*1024,env:{...process.env,WXSS_COMPILER:wxssCompiler}
+})
+assert.ok(!wxssResult.error&&wxssResult.status===0,'Real WeChat WXSS grammar accepts every plugin stylesheet: '+(wxssResult.error?.message||wxssResult.stderr||wxssResult.stdout||'').slice(0,5000));checks++
+const wxssReport=JSON.parse(wxssResult.stdout.trim())
+assert.ok(wxssReport.passed===true&&wxssReport.wxss_files>Object.keys(expectations).length,'Native grammar gate covers more than the selected key components');checks++
 const nativeNoticeCalls=[],nativeNoticeReports=[],nativeNoticeEvents=['account_balance_changed','account_money_changed','account_commission_changed','cooperation_acceptance_reminder','cooperation_response_overdue','cooperation_assignment_accepted'].map((event_key,index)=>({event_key,name:'合成通知'+index,channels:['weapp','wechat','sms'].map(channel=>({channel,enabled:true,configured:true,authorization_required:channel==='weapp',...(channel==='weapp'?{template_id:'SYNTHETIC_NATIVE_TEMPLATE_'+index}:{})}))}))
 const actualVue=require('vue'),noticeVendor={...actualVue,index:{getStorageSync:()=>'',requestSubscribeMessage:options=>nativeNoticeCalls.push(options)}},nativeNoticeHook={exports:{}}
 vm.runInNewContext(fs.readFileSync(path.join(output,'addon/hsx_lead/composables/useAccountNoticePreferences.js'),'utf8'),{exports:nativeNoticeHook.exports,module:nativeNoticeHook,require:dependency=>{if(dependency.endsWith('/common/vendor.js'))return noticeVendor;if(dependency.endsWith('/utils/common.js'))return{getSiteId:()=>100005,getToken:()=> 'synthetic-native-member'};if(dependency.endsWith('/api/notice.js'))return{getAccountNoticePreferences:async()=>({data:{events:nativeNoticeEvents}}),reportAccountNoticeAuthorization:async keys=>nativeNoticeReports.push([...keys])};if(dependency.endsWith('/api/cooperation.js'))return{coopError:(e,f)=>e?.message||f};throw Error('Unexpected native notice dependency '+dependency)}},{timeout:1000})

@@ -497,6 +497,7 @@ final class PromotionService
                 $pay=Db::name('pay')->where('site_id',$site)->where('trade_type',PaymentService::TRADE_TYPE)->where('trade_id',$order['id'])->where('out_trade_no',$row['out_trade_no'])->find();
                 $reason='';
                 if ($order['status']!=='paid'||(string)$order['out_trade_no']!==(string)$row['out_trade_no']||(int)$order['member_id']!==(int)$row['payer_member_id']||!$pay||(int)$pay['status']!==(int)PayDict::STATUS_FINISH||$pay['main_type']!==PayDict::MEMBER||Rules::cents((string)$pay['money'])!==Rules::cents((string)$order['amount'])||(int)$pay['main_id']!==(int)$row['payer_member_id']) $reason='原业务或支付凭据变化，暂停结算，请核对';
+                elseif (!empty(Data::decode($order['rule_json'])['requires_manual_review'])) $reason='原付款业务存在待核对记录，暂停结算，请平台核对';
                 elseif (self::hasRefund($site,(string)$row['out_trade_no'])) $reason='原支付存在退款申请或已退款，暂停结算，请人工核对';
                 try {$member=self::member($site,(int)$row['provider_member_id'],true);}catch(CommonException $ignored){$reason=$reason?:'收益会员已停用或失效，请人工核对';$member=null;}
                 $amount=Rules::cents((string)$row['amount']);
@@ -559,6 +560,7 @@ final class PromotionService
             self::lockSite($site);$row=self::query($site)->where('id',$id)->lock(true)->find();
             if (!$row||$row['status']!=='held') throw new CommonException('仅暂停且尚未入账的奖励可恢复，请刷新核对；已入账不能再次结算');
             $order=Store::row('coop_order',$site,(int)$row['coop_order_id'],true);
+            if (!empty(Data::decode($order['rule_json'])['requires_manual_review'])) throw new CommonException('原付款业务仍待核对，不能恢复结算');
             $pay=Db::name('pay')->where('site_id',$site)->where('trade_type',PaymentService::TRADE_TYPE)->where('trade_id',$order['id'])->where('out_trade_no',$row['out_trade_no'])->find();
             if ($order['status']!=='paid'||$order['out_trade_no']!==$row['out_trade_no']||!$pay||(int)$pay['status']!==(int)PayDict::STATUS_FINISH||$pay['main_type']!==PayDict::MEMBER||(int)$pay['main_id']!==(int)$row['payer_member_id']||Rules::cents((string)$pay['money'])!==Rules::cents((string)$order['amount'])) throw new CommonException('原业务或付款凭据仍不一致，不能恢复结算');
             if (self::hasRefund($site,(string)$row['out_trade_no'])) throw new CommonException('原支付仍有待退款、退款中或已退款记录，不能恢复结算');

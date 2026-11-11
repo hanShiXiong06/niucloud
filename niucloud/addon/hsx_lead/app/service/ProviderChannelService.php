@@ -13,7 +13,7 @@ final class ProviderChannelService
 {
     public const KEY='HSX_LEAD_PROVIDER_CHANNELS';
     public const MESSAGE='关闭后停止该渠道的新授权与手动、自动采集，保留账号、任务和历史库存；重新开启仅按商户原同步开关恢复。';
-    private const DEFAULT_NAMES=['wanji'=>'W平台','soujike'=>'S平台','aiguanji'=>'A平台','jixiaoer'=>'J平台'];
+    private const DEFAULT_NAMES=['wanji'=>'W平台','soujike'=>'S平台','aiguanji'=>'A平台','jixiaoer'=>'J平台','jkb'=>'K平台'];
     public function __construct(private int $site) { if ($site<=0) throw new CommonException('无效的渠道配置站点'); }
 
     /** Display text only: never a provider identifier, login parameter or endpoint. */

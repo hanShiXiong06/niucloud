@@ -54,6 +54,9 @@ final class OrderPaymentReadService
     {
         $pay=self::payment($order);$types=PayDict::getPayType();$type=(string)($pay['type']??'');$channel=(string)($pay['channel']??'');
         $presented['payment_type']=$type;$presented['payment_type_name']=$type===PayDict::OFFLINEPAY?'线下确认收款':($type!==''?(string)($types[$type]['name']??'其他支付方式'):'尚未选择');
+        // Administration retains the actual channel; customer copy does not
+        // turn a server-side channel choice into another payment decision.
+        $presented['payment_display_name']=$type===\addon\hsx_lead\app\service\virtualpay\VirtualPaySettings::TYPE?'微信支付':$presented['payment_type_name'];
         $presented['payment_channel']=$channel;$presented['payment_channel_name']=$channel!==''?(ChannelDict::getType($channel)?:'其他支付终端'):'尚未确认';
         return array_replace($presented,PaymentRefundService::summary($order,$pay));
     }

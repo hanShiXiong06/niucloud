@@ -17,7 +17,7 @@ final class PaymentGatewayReconciler
     public function __construct(?callable $providerFactory=null){$this->providerFactory=$providerFactory===null?null:\Closure::fromCallable($providerFactory);}
     public static function supports(array $pay): bool
     {
-        return in_array($pay['type']??'',[PayDict::WECHATPAY,PayDict::ALIPAY],true)&&in_array($pay['channel']??'',['weapp','wechat','h5','pc','app'],true)&&is_string($pay['out_trade_no']??null)&&$pay['out_trade_no']!=='';
+        return in_array($pay['type']??'',[PayDict::WECHATPAY,PayDict::ALIPAY,\addon\hsx_lead\app\service\virtualpay\VirtualPaySettings::TYPE],true)&&in_array($pay['channel']??'',['weapp','wechat','h5','pc','app'],true)&&is_string($pay['out_trade_no']??null)&&$pay['out_trade_no']!=='';
     }
     public function reconcile(int $site,array $pay): array
     {

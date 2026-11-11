@@ -159,7 +159,7 @@ const region = computed({ get: () => form, set: value => Object.assign(form, val
     if (props.profile.id && current && !props.providers.some(item => item.key === current)) items.push({ key: current, name: profileProviderName(current) + '（已关闭，保留原选择）', disabled: true })
     return items
 }), providerIndex = computed(() => Math.max(0, providerOptions.value.findIndex(item => item.key === form.provider)))
-const connectionLabel = computed(() => props.profile.connection?.channel_enabled === false ? '渠道关闭·同步暂停' : props.profile.connection?.connected && !props.profile.connection?.enabled ? '同步已暂停' : props.profile.connection?.last_sync_status === 'completed' ? '已同步' : props.profile.connection?.enabled ? '查看进度' : '选填，不影响协作')
+const connectionLabel = computed(() => props.profile.connection?.channel_enabled === false ? '渠道关闭·同步暂停' : ['failed','interrupted'].includes(String(props.profile.connection?.last_sync_status)) ? '同步失败，查看处理' : props.profile.connection?.connected && !props.profile.connection?.enabled ? '同步已暂停' : props.profile.connection?.last_sync_status === 'completed' ? '已同步' : props.profile.connection?.enabled ? '查看进度' : '选填，不影响协作')
 function selectProvider(index: number) { const item = providerOptions.value[index]; if (!item) return; if (item.disabled && item.key !== form.provider) { localError.value = '该渠道已关闭，只能保留原选择或改用开放渠道'; return }; form.provider = item.key; localError.value = '' }
 
 const draftKey = () => profileDraftKey(formScope.value)

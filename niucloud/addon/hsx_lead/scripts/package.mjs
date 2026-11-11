@@ -27,7 +27,7 @@ if (!/^\d{8}$/.test(releaseDate)) throw new Error('Release date must be YYYYMMDD
 const runtimeDirectories = ['app', 'admin', 'uni-app', 'package', 'resource']
 const installationFiles = ['Addon.php', 'info.json', 'README.md', 'install.sql', 'uninstall.sql', 'sql/install.sql', 'sql/uninstall.sql']
 // Dedicated, additive runtime schema only. Do not allow arbitrary SQL files via an extension glob.
-const schemaFiles = ['sql/notice-runtime.sql', 'sql/manual-receipts.sql']
+const schemaFiles = ['sql/notice-runtime.sql', 'sql/manual-receipts.sql', 'sql/virtual-payment.sql']
 const guideFiles = ['docs/COOPERATION_GUIDE.md', 'docs/ERP_INTEGRATION.md', 'docs/CONFIGURATION.md', 'docs/DELIVERY_EXPERIENCE.md', 'docs/PROMOTION_INTEGRATION.md', 'docs/TEST_REPORT.md', 'docs/PHASE_ONE_GUIDE.md', 'docs/PHASE_ONE_TEST_REPORT.md', 'docs/LOCAL_ACCEPTANCE_20261105.md', 'docs/PAYMENT_PROFILE_DIY_20261105.md', 'docs/NATIVE_DIY_CONNECTION_UI_20261105.md', 'docs/BUSINESS_LICENSE_20261105.md', 'docs/MOBILE_UI_AUDIT_20261105.md', 'docs/UPGRADE_COMMAND_20261105.md']
 // Do not include the development scripts directory or temporary repair tools.
 guideFiles.push('docs/CATALOG_RETURN_FIX_20261105.md', 'docs/INVENTORY_INITIAL_LOAD_FIX_20261105.md', 'docs/ROLE_TABS_UI_20261105.md')
@@ -53,7 +53,10 @@ guideFiles.push('docs/PAYMENT_HELP_PHONE_SEARCH.md')
 guideFiles.push('docs/MANUAL_RECEIPTS_AND_MEMBERSHIP_REFUND.md')
 guideFiles.push('docs/MANUAL_FINANCE_REGRESSION.md')
 guideFiles.push('docs/MANUAL_BALANCE_PAYMENT.md')
-const maintenanceFiles = ['scripts/upgrade.php', 'scripts/upgrade-entity-membership.php', 'scripts/clean-retired-membership.php', 'scripts/diagnose-promotion-config.php', 'scripts/upgrade-notice-runtime.php', 'scripts/upgrade-menu-groups.php', 'scripts/upgrade-manual-receipts.php']
+guideFiles.push('docs/VIRTUAL_PAYMENT_DEVELOPMENT.md')
+guideFiles.push('docs/MEMBERSHIP_PRODUCT_ID_AND_EXPERIENCE.md')
+guideFiles.push('docs/JKB_INTEGRATION.md')
+const maintenanceFiles = ['scripts/upgrade.php', 'scripts/upgrade-entity-membership.php', 'scripts/clean-retired-membership.php', 'scripts/diagnose-promotion-config.php', 'scripts/upgrade-notice-runtime.php', 'scripts/upgrade-menu-groups.php', 'scripts/upgrade-manual-receipts.php', 'scripts/upgrade-virtual-payment.php']
 const bannedDirectories = new Set(['.git', 'node_modules', 'dist', 'build', 'output', 'tests', 'scripts', 'runtime', '.vite', '__MACOSX'])
 const allowedExtensions = new Set(['.php', '.vue', '.ts', '.js', '.mjs', '.json', '.css', '.scss', '.sass', '.less', '.png', '.svg', '.jpg', '.jpeg', '.webp', '.gif', '.ico', '.woff', '.woff2', '.ttf'])
 const files = []
@@ -124,6 +127,13 @@ const manualClean = manualSql.replace(/^\s*--[^\r\n]*$/gm, '')
 const manualStatement = /CREATE TABLE IF NOT EXISTS `\{\{prefix\}\}(hsx_lead_manual_receipt)`\s*\([\s\S]*?\)\s*ENGINE\s*=\s*InnoDB\s+DEFAULT\s+CHARSET\s*=\s*utf8mb4\s+COMMENT\s*=\s*'[^']*'\s*;/gi
 const manualStatements = [...manualClean.matchAll(manualStatement)]
 if (manualStatements.length !== 1 || manualClean.replace(manualStatement, '').trim() || !freshSchema.includes(manualStatements[0][0])) throw new Error('Manual receipt upgrade must be exactly its canonical CREATE TABLE, with no financial-data mutation')
+const virtualClean = (await readFile(path.join(plugin, 'sql/virtual-payment.sql'), 'utf8')).replace(/^\s*--[^\r\n]*$/gm, '')
+const virtualPattern = /CREATE TABLE IF NOT EXISTS `\{\{prefix\}\}(hsx_lead_virtual_[a-z_]+)`\s*\([\s\S]*?\)\s*ENGINE\s*=\s*InnoDB\s+DEFAULT\s+CHARSET\s*=\s*utf8mb4\s+COMMENT\s*=\s*'[^']*'\s*;/gi
+const virtualStatements = [...virtualClean.matchAll(virtualPattern)]
+const virtualTables = ['hsx_lead_virtual_order', 'hsx_lead_virtual_refund']
+if (virtualStatements.length !== 2 || virtualClean.replace(virtualPattern, '').trim()
+    || JSON.stringify(virtualStatements.map(match=>match[1]).sort()) !== JSON.stringify([...virtualTables].sort())
+    || virtualStatements.some(statement=>!freshSchema.includes(statement[0]))) throw new Error('Virtual payment schema must contain only its two canonical provider-record tables')
 
 const content = new Map()
 const fileManifest = []
@@ -141,6 +151,11 @@ const manifest = {
     plugin: 'hsx_lead', version, package_type: 'fresh-install-source', built_at: new Date().toISOString(),
     archive_root: prefix, framework_files: [],
     required_framework_updates: [
+        ...['niucloud/app/service/core/pay/CorePayChannelService.php','niucloud/app/dict/pay/PayChannelDict.php','niucloud/app/service/core/pay/CorePayService.php'].map(file=>({path:file,reason:'Optional driver metadata restricts terminal/trade scope and opts into pending-trade reuse. No plugin business rules are hardcoded. Ordinary payment drivers keep their existing behavior.'})),
+        ...['CoreWeappServeService.php','CoreWeappMessageSecurity.php','CoreWeappMessageEncryptor.php','CoreWeappAuthenticatedMessage.php'].map(file=>({path:'niucloud/app/service/core/weapp/'+file,reason:'Optional authenticated-message context reuses the effective native SDK message configuration and a single decrypt, isolates signed inner fields, and keeps the normal message chain; no plugin names or financial business rules.'})),
+        { path: 'niucloud/app/service/admin/wxoplatform/OplatformServerService.php', reason: 'The native authorized-miniapp message entry emits the same optional authenticated hook after unique tenant and signed authorizer binding; existing review handling remains unchanged.' },
+        { path: 'niucloud/app/service/admin/pay/PayChannelService.php', reason: 'Literal secret-mask preservation and optional PayType config_normalizer consume the owning driver extension; no membership catalog is hardcoded into the framework.' },
+        ...['components/pay/pay.vue','utils/virtual-payment.ts'].map(file=>({path:'uni-app/src/'+file,reason:'Optional generic cashier client_action obtains fresh WeChat login proof and invokes a native payment action; no plugin names or entitlement fulfillment in the framework client.'})),
         { path: 'niucloud/app/service/admin/member/MemberService.php', reason: 'List/detail use one optional batched member entitlement display extension, without changing personal levels.' },
         { path: 'niucloud/app/service/core/member/CoreMemberEntitlementDisplayService.php', reason: 'Generic read-only event aggregation, bounded batches and explicit unavailable presentation; no plugin queries in the framework.' },
         ...['views/member/member.vue','views/member/components/detail-member.vue','views/member/components/member-entitlements.vue','utils/member-entitlements.ts'].map(file=>({path:'admin/src/app/'+file,reason:'Generic optional entitlement rendering alongside unchanged personal membership; rebuild administration frontend.'})),
@@ -152,6 +167,14 @@ const manifest = {
         { path: 'uni-app/src/components/top-tabbar/top-tabbar.vue', reason: 'Earlier optional generic typography and H5 visibility support for the existing DIY header; not changed by this login fix. This source archive does not contain framework files.' }
     ],
     maintenance_entry: { path: prefix + '/scripts/upgrade.php', check: 'php addon/hsx_lead/scripts/upgrade.php --check', apply: 'php addon/hsx_lead/scripts/upgrade.php --apply', executes_ddl: false, compiles_frontends: false },
+    virtual_payment_schema_entry: {
+        path: prefix + '/scripts/upgrade-virtual-payment.php', sql: prefix + '/sql/virtual-payment.sql',
+        check: 'php addon/hsx_lead/scripts/upgrade-virtual-payment.php --check', apply: 'php addon/hsx_lead/scripts/upgrade-virtual-payment.php --apply',
+        executes_ddl: true, requires_explicit_apply: true, adds_tables: 2, adds_columns: 0, tables: virtualTables,
+        alters_existing_tables: false, clears_business_data: false, stores_secrets_or_sessions: false,
+        pre_ddl_backup: 'private_schema_metadata_only_not_a_full_database_backup', tested_live_provider: false,
+        fresh_install_already_contains_tables: true
+    },
     entity_schema_entry: { path: prefix + '/scripts/upgrade-entity-membership.php', check: 'php addon/hsx_lead/scripts/upgrade-entity-membership.php --check', apply: 'php addon/hsx_lead/scripts/upgrade-entity-membership.php --apply', executes_ddl: true, adds_tables: 1, adds_columns: 3, clears_business_data: false },
     notice_runtime_schema_entry: {
         path: prefix + '/scripts/upgrade-notice-runtime.php', sql: prefix + '/sql/notice-runtime.sql',
