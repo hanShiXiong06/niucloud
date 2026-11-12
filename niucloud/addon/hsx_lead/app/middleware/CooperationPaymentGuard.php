@@ -60,13 +60,14 @@ final class CooperationPaymentGuard
         if ((!is_int($id)&&!is_string($id))||!preg_match('/^[1-9][0-9]{0,17}$/D',(string)$id)) throw new CommonException('支付业务编号无效，请返回详情');
         $context=new Context($site,0,(int)$request->memberId());$service=new PaymentService($context);
         $service->order((int)$id);$order=Store::row('coop_order',$site,(int)$id);
-        $virtual=MembershipVirtualPayAdapter::usesVirtual($site,$order,$request->getChannel());
+        $virtualSelected=false;
         if ($action==='pay') {
             if (!$request->isPost()) throw new CommonException('请通过确认付款按钮提交，当前未发起支付');
             $selected=$request->param('type');
-            $allowed=$virtual?[VirtualPaySettings::TYPE]:[PayDict::WECHATPAY,PayDict::ALIPAY,PayDict::BALANCEPAY];
+            $allowed=MembershipVirtualPayAdapter::allowedTypes($site,$order,$request->getChannel());
             if (!in_array($selected,$allowed,true)) throw new CommonException('当前付款方式已更新，请重新打开付款窗口');
-            if($virtual){
+            $virtualSelected=$selected===VirtualPaySettings::TYPE;
+            if($virtualSelected){
                 if($request->getChannel()!=='weapp')throw new CommonException('请在微信小程序内完成本业务付款');
                 VirtualPaySettings::get($site,true);
                 $code=$request->param('login_code','');if(!is_string($code)||$code===''||strlen($code)>256)throw new CommonException('请重新点击微信支付获取登录凭据');
@@ -87,7 +88,7 @@ final class CooperationPaymentGuard
                 // receipt must remain committed even when we stop a second pay.
                 $recovered=(new PaymentOrderRecovery($context,$this->providerFactory))->resume((int)$id);
                 $this->assertRecovered($recovered);
-                $service->assertPayable((int)$id,$virtual);
+                $service->assertPayable((int)$id,$virtualSelected);
             } elseif (in_array($action,['close','info'],true)) $service->order((int)$id);
             else $service->assertPayable((int)$id);
             // A balance debit and its PaySuccess business hooks are one local

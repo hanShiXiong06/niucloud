@@ -20,7 +20,7 @@ use think\facade\Db;
  */
 final class MembershipVirtualPayAdapter
 {
-    /** Business policy chooses one rail; the channel settings only supply
+    /** Business policy chooses one WeChat rail; the channel settings only supply
      * account configuration and never decide which business may use it. */
     public static function usesVirtual(int $site, array $order, string $terminal = 'weapp'): bool
     {
@@ -28,13 +28,21 @@ final class MembershipVirtualPayAdapter
             && VirtualPaySettings::get($site, false)['payment_mode'] === 'virtual';
     }
 
+    /** Only the two WeChat rails are mutually exclusive. The existing wallet
+     * remains independently controlled by the framework's enabled channels. */
+    public static function allowedTypes(int $site, array $order, string $terminal): array
+    {
+        return self::usesVirtual($site, $order, $terminal)
+            ? [VirtualPaySettings::TYPE, PayDict::BALANCEPAY]
+            : [PayDict::WECHATPAY, PayDict::ALIPAY, PayDict::BALANCEPAY];
+    }
+
     /** Cashier presentation consumes an already owned original business. A
      * failed virtual attempt never silently falls back to ordinary payment. */
     public static function channels(int $site, ?array $order, array $list, string $terminal): array
     {
         if ($order === null) return [];
-        $virtual = self::usesVirtual($site, $order, $terminal);
-        $allowed = $virtual ? [VirtualPaySettings::TYPE] : ['wechatpay', 'alipay', 'balancepay'];
+        $allowed = self::allowedTypes($site, $order, $terminal);
         $result = [];
         foreach ($list as $item) {
             if (!is_array($item) || !in_array($item['key'] ?? '', $allowed, true)) continue;
@@ -112,7 +120,8 @@ final class MembershipVirtualPayAdapter
     public function requiresReview(int $site, int $id): bool
     {
         $current = Store::row('coop_order', $site, $id);
-        return $current['status'] !== 'paid' || !empty(Data::decode($current['rule_json'])['requires_manual_review']);
+        $rule=Data::decode($current['rule_json']);
+        return $current['status'] !== 'paid' || !empty($rule['requires_manual_review']) || !empty($rule['financial_requires_manual_review']);
     }
 
     /** A native original-route refund is not authorized by a provider number
@@ -139,6 +148,12 @@ final class MembershipVirtualPayAdapter
     {
         $business = $this->resolve($site, $pay, true);
         $rule = Data::decode($business['rule_json']);
+        if((string)$business['out_trade_no']!==''&&!hash_equals((string)$business['out_trade_no'],(string)$pay['out_trade_no'])) {
+            $this->additionalReceipt($business,$pay);
+            $rule['financial_requires_manual_review']=true;
+            Store::query('coop_order',$site)->where('id',$business['id'])->update(['rule_json'=>Data::json($rule),'update_time'=>time()]);
+            return;
+        }
         if (empty($rule['requires_manual_review'])) {
             $rule['requires_manual_review'] = 'virtual_external_refund_pending';
             Store::query('coop_order', $site)->where('id', $business['id'])->update([
@@ -151,7 +166,7 @@ final class MembershipVirtualPayAdapter
      * Caller holds the original channel/business transaction and preserves the
      * durable provider fact independently when any hook throws.
      *
-     * @return array{status:string,refund_no:string,requires_review:bool}
+     * @return array{status:string,refund_no:?string,requires_review:bool,projection?:string}
      */
     public function completeExternalRefund(int $site, array $pay, array $fact): array
     {
@@ -162,6 +177,7 @@ final class MembershipVirtualPayAdapter
             throw new CommonException('外部退款关联凭据不完整');
         }
         $rule = Data::decode($business['rule_json']);
+        if((string)$business['out_trade_no']!==''&&!hash_equals((string)$business['out_trade_no'],(string)$pay['out_trade_no']))return $this->completeAdditionalRefund($site,$business,$pay,$fact);
         $originals = Db::name('pay_refund')->where('site_id', $site)
             ->where('out_trade_no', $pay['out_trade_no'])->lock(true)->select()->toArray();
         foreach ($originals as $original) {
@@ -219,5 +235,48 @@ final class MembershipVirtualPayAdapter
             Data::audit($site, 0, (int)$business['member_id'], 'coop_order', (int)$business['id'], 'virtual_external_refund_review', [
                 'virtual_refund_id' => (int)$fact['id'], 'amount_cents' => (int)$fact['amount_cents'], 'out_trade_no' => $business['out_trade_no']]);
         }
+    }
+
+    /** An additional receipt can NEVER enter primary membership allocation. */
+    private function additionalReceipt(array $business,array $pay): array
+    {
+        $rule=Data::decode($business['rule_json']);$no=(string)$pay['out_trade_no'];
+        $receipt=$rule['additional_payment_receipts'][$no]??null;
+        if(!is_array($receipt)||(int)($receipt['pay_id']??0)!==(int)$pay['id']||($receipt['out_trade_no']??'')!==$no
+            ||($receipt['payment_type']??'')!==$pay['type']||($receipt['trade_no']??'')!==$pay['trade_no']
+            ||Rules::cents((string)($receipt['amount']??''))!==Rules::cents((string)$pay['money']))throw new CommonException('额外收款退款缺少一致的原付款凭据，不处理主会员退款');
+        return $receipt;
+    }
+
+    /** Record only an ALREADY verified external refund of extra money. This
+     * does not issue a refund, fabricate a framework refund, or undo the paid
+     * primary term, deposit, experience or invitation reward. */
+    private function completeAdditionalRefund(int $site,array $business,array $pay,array $fact): array
+    {
+        $receipt=$this->additionalReceipt($business,$pay);$no=(string)$pay['out_trade_no'];
+        $source=Db::name('hsx_lead_virtual_order')->where('site_id',$site)->where('id',(int)$fact['virtual_order_id'])
+            ->where('pay_id',(int)$pay['id'])->where('order_id',(int)$business['id'])->where('out_trade_no',$no)->lock(true)->find();
+        $stored=Db::name('hsx_lead_virtual_refund')->where('site_id',$site)->where('id',(int)$fact['id'])->lock(true)->find();
+        if(!$source||!$stored||$source['wx_order_id']!==$pay['trade_no']||(int)$stored['virtual_order_id']!==(int)$source['id']
+            ||$stored['source_kind']!=='platform'||!in_array($stored['status'],['reconciling','attention','success'],true)
+            ||(int)$stored['finish_time']<=0||(int)$stored['amount_cents']!==(int)$fact['amount_cents']
+            ||$stored['wx_refund_id']!==$fact['wx_refund_id']||empty($stored['wx_refund_id']))throw new CommonException('额外收款的外部退款未对应已核实的原渠道退款事实');
+        $refunds=is_array($receipt['external_refunds']??null)?$receipt['external_refunds']:[];
+        $key=(string)$stored['id'];$record=['virtual_refund_id'=>(int)$stored['id'],'wx_refund_id'=>(string)$stored['wx_refund_id'],
+            'amount'=>Rules::amount((int)$stored['amount_cents']),'confirmed_at'=>(int)$stored['finish_time']];
+        $new=!isset($refunds[$key]);
+        if(!$new&&$refunds[$key]!==$record)throw new CommonException('额外款退款回执与已记录事实不一致');
+        foreach($refunds as $id=>$previous)if((string)$id!==$key&&($previous['wx_refund_id']??'')===$record['wx_refund_id'])throw new CommonException('同一额外款退款回执不能重复计入');
+        $refunds[$key]=$record;$total=0;foreach($refunds as $part)$total+=Rules::cents((string)$part['amount']);
+        if($total>Rules::cents((string)$receipt['amount']))throw new CommonException('额外收款已确认退款累计超过该笔实收');
+        $receipt['external_refunds']=$refunds;$receipt['external_refunded_amount']=Rules::amount($total);
+        $receipt['financial_status']=$total===Rules::cents((string)$receipt['amount'])?'refunded':'attention';
+        $rule=Data::decode($business['rule_json']);$rule['additional_payment_receipts'][$no]=$receipt;$hold=false;
+        foreach($rule['additional_payment_receipts'] as $part)if(($part['financial_status']??'')!=='refunded'){$hold=true;break;}
+        if($hold)$rule['financial_requires_manual_review']=true;else unset($rule['financial_requires_manual_review']);
+        Store::query('coop_order',$site)->where('id',$business['id'])->update(['rule_json'=>Data::json($rule),'update_time'=>time()]);
+        if($new)Data::audit($site,0,(int)$business['member_id'],'coop_order',(int)$business['id'],'additional_payment_external_refund_confirmed',
+            ['virtual_refund_id'=>(int)$stored['id'],'out_trade_no'=>$no,'amount'=>(string)$record['amount'],'fully_refunded'=>$receipt['financial_status']==='refunded']);
+        return ['status'=>'success','refund_no'=>null,'projection'=>'additional_receipt','requires_review'=>$this->requiresReview($site,(int)$business['id'])];
     }
 }

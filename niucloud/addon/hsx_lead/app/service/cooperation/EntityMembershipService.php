@@ -13,6 +13,7 @@ final class EntityMembershipService
 {
     public const SNAPSHOT_SCHEMA='hsx_lead.entity_membership.v4';
     private const TTL=600;
+    private const FINANCIAL_HOLD_MESSAGE='门店存在额外到账款项待平台核对，原有效会员权益保留；核对完成前暂不创建新的会员收费';
     public function __construct(private Context $context) {}
 
     public static function state(int $site,int $merchant,array $config=[],?int $now=null,bool $lock=false): array
@@ -61,6 +62,12 @@ final class EntityMembershipService
         return$out;
     }
 
+    /** Financial reconciliation blocks a NEW charge, not existing paid rights. */
+    private static function financialReceiptHold(array $rows): bool
+    {
+        foreach($rows as $row)if(!empty($row['rule']['financial_requires_manual_review']))return true;
+        return false;
+    }
     private static function ledgerNeedsReview(array $rows):bool
     {
         foreach($rows as$row)if(!empty($row['review'])||!empty($row['refund_pending']))return true;
@@ -91,9 +98,11 @@ final class EntityMembershipService
         $m=TeamService::resolve($this->context);$site=$this->context->site;$id=(int)$m['id'];$config=(new ConfigService($this->context))->get();
         $state=self::state($site,$id,$config);$manage=(int)$m['member_id']===$this->context->memberId;
         $used=TeamService::usedAccounts($site,$m);
+        $financialHold=self::financialReceiptHold(self::ledger($site,$id));
         $experience=EntityExperienceService::summary($site,$id);$tiers=[];
-        foreach(EntityExperienceService::decorate($config['membership_levels']??[],$experience) as $tier) {$allowed=$manage&&$tier['experience_eligible'];$tier['cycles']=array_map(static fn(array $cycle):array=>$cycle+['can_purchase'=>$allowed&&!empty($cycle['enabled'])],$tier['cycles']);$tiers[]=$tier;}
+        foreach(EntityExperienceService::decorate($config['membership_levels']??[],$experience) as $tier) {$allowed=$manage&&$tier['experience_eligible']&&!$financialHold;$tier['cycles']=array_map(static fn(array $cycle):array=>$cycle+['can_purchase'=>$allowed&&!empty($cycle['enabled'])],$tier['cycles']);$tiers[]=$tier;}
         $costs=MembershipCostService::balances($site,$id);
+        if($financialHold){$costs['review_required']=true;$costs['review_message']=self::FINANCIAL_HOLD_MESSAGE;}
         return $state+['used_accounts'=>$used,'can_manage'=>$manage,'is_owner'=>$manage,'tiers'=>$tiers,'experience'=>$experience,'deposit_balance'=>$costs['balance'],'cost_review_required'=>$costs['review_required'],'cost_review_message'=>$costs['review_message'],'next_level'=>EntityExperienceService::nextLevel($tiers,$state,$experience),'catalog_configured'=>count($tiers)>0,'entry_configured'=>in_array(true,array_column($tiers,'is_entry'),true),'renewable'=>$manage&&$state['level_code']!==''&&in_array($state['level_code'],array_column($tiers,'code'),true),'upgrade_available'=>$manage&&count($tiers)>0]+MembershipDepositService::purchaseState($site,$id);
     }
 
@@ -102,8 +111,10 @@ final class EntityMembershipService
         $m=TeamService::assertOwner($this->context);$id=(int)$m['id'];$config=(new ConfigService($this->context))->get();$now=time();
         $experience=EntityExperienceService::summary($this->context->site,$id);
         $epoch=MembershipDepositService::membershipEpoch($this->context->site,$id);
-        $quote=self::calculate(self::ledger($this->context->site,$id),Store::partner($this->context->site,$id),$config['membership_levels']??[],$code,$cycle,$now,$experience,MembershipCostService::balances($this->context->site,$id),$buyExperience,$epoch);
+        $ledger=self::ledger($this->context->site,$id);
+        $quote=self::calculate($ledger,Store::partner($this->context->site,$id),$config['membership_levels']??[],$code,$cycle,$now,$experience,MembershipCostService::balances($this->context->site,$id),$buyExperience,$epoch);
         $quote['merchant_id']=$id;$quote['existing_order_id']=0;$quote['quote_token']='';
+        if(self::financialReceiptHold($ledger))return $quote;
         if(MembershipDepositService::purchaseState($this->context->site,$id)['deposit_purchase_blocked']){$quote['can_purchase']=false;$quote['reason']='门店退押金申请仍在审核、退款或核对中，处理完成后可重新开通';return $quote;}
         $pending=Store::query('coop_order',$this->context->site)->where('merchant_id',$id)->where('purpose','membership')->where('status','unpaid')->order('id')->find();
         if ($pending) {
@@ -168,6 +179,7 @@ final class EntityMembershipService
         if($epoch!=='')$out['membership_deposit_epoch']=$epoch;
         $out=array_replace($out,MembershipCostService::calculate($tier,$period,$experience,$deposit,$buyExperience));$out['cost_fingerprint']=$deposit['fingerprint']??hash('sha256','[]');
         if (empty($tier['enabled'])||empty($period['enabled'])||$full<=0) {$out['can_purchase']=false;$out['reason']='该等级尚未开通当前付费周期，请重新选择';return $out;}
+        if(self::financialReceiptHold($rows)){$out['can_purchase']=false;$out['reason']=self::FINANCIAL_HOLD_MESSAGE;return $out;}
         if(!empty($deposit['review_required'])||!empty($experience['cost_review_required'])){$out['can_purchase']=false;$out['reason']=!empty($deposit['review_message'])?$deposit['review_message']:'原押金、购买经验或退款待平台核对，暂不重复收费';return $out;}
         if (!$eligible&&!$buyExperience) {$out['can_purchase']=false;$out['reason']='当前门店经验'.$value.'，本等级需要'.$required.'；可通过真实成交积累'.(!empty($tier['experience_purchase_enabled'])?'，或选择购买本次缺少的经验':'');return $out;}
         if (($state['active']&&(int)$tier['rank']<$state['rank'])||$reservedRank>(int)$tier['rank']) {$out['can_purchase']=false;$out['reason']='已有有效或预付的更高等级期间，不能用低等级订单覆盖；到期后再选择';return $out;}
@@ -222,6 +234,7 @@ final class EntityMembershipService
         if (!self::catalogMatches($rule,MembershipCatalogService::levels($site,true))) throw new CommonException('原会员套餐已调整或停售，请先取消未支付单后重新选择；当前未发起支付');
         if ((int)($rule['quoted_at']??0)+self::TTL<time()) throw new CommonException('原会员报价已过期，请先取消未支付订单，再重新报价；当前未扣款');
         $rows=self::ledger($site,(int)$order['merchant_id'],true);$partner=Store::partner($site,(int)$order['merchant_id'],true);
+        if(self::financialReceiptHold($rows))throw new CommonException(self::FINANCIAL_HOLD_MESSAGE);
         if (!hash_equals((string)($rule['base_fingerprint']??''),self::fingerprint($rows,$partner))) throw new CommonException('主体权益或原付款状态已变化，请平台核对原订单，不会重新扣款');
         foreach($rows as $row) if (!empty($row['refund_pending'])||!empty($row['review'])) throw new CommonException('原权益正在退款或核对，暂不能继续付款');
         self::assertFunding($site,(int)$order['merchant_id'],$rule);

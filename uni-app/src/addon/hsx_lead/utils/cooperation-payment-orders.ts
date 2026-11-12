@@ -13,6 +13,15 @@ export function cooperationPaymentRefundDetail(value: unknown, id: number): Reco
     if (!item || Number(item.order_id) !== id || !cooperationPaymentRefundStates.includes(item.status) || typeof item.amount !== 'string' || !/^\d+(?:\.\d{1,2})?$/.test(item.amount)) throw new Error('退款资料未完整返回，请重新读取原申请')
     return item
 }
+export function cooperationPaymentOrderIsVirtual(order: Record<string, any>) {
+    return order.payment_type === 'hsx_lead_virtualpay'
+}
+/** Inspect the existing virtual attempt only; this URL never authorizes another charge. */
+export function cooperationPaymentOrderCheckUrl(order: Record<string, any>) {
+    const id = Number(order.id)
+    return Number.isSafeInteger(id) && id > 0 && order.status === 'unpaid' && order.purpose === 'membership' && cooperationPaymentOrderIsVirtual(order)
+        ? `/addon/hsx_lead/pages/membership/index?payment_order_id=${id}` : ''
+}
 /** Resume only a server-confirmed original order, never create a replacement. */
 export function cooperationPaymentOrderResumeUrl(order: Record<string, any>) {
     const id = Number(order.id)

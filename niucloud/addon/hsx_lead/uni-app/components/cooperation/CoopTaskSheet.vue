@@ -1,6 +1,6 @@
 <template>
     <view v-if="page && show" class="coop-sheet is-full is-page">
-        <CooperationNav :title="title" :subtitle="subtitle" back :disabled="busy" @back="close" />
+        <CooperationNav :title="title" :subtitle="subtitle" :actions="actions" back :disabled="busy" @back="close" @action="runAction" />
         <view v-if="$slots.filters" class="coop-sheet__filters"><slot name="filters" /></view>
         <view v-if="fixedBody" class="coop-sheet__body coop-sheet__body--fixed" @touchmove.stop><slot /></view>
         <scroll-view v-else :scroll-y="!inactive" :scroll-into-view="scrollIntoView" :scroll-with-animation="true" class="coop-sheet__body" @touchmove.stop><slot /></scroll-view>
@@ -9,7 +9,7 @@
     </view>
     <view v-else-if="!page" class="coop-popup-mount"><u-popup :show="show" mode="bottom" :round="12" :z-index="taskSheetZIndex" :safe-area-inset-bottom="false" :close-on-click-overlay="!busy" @close="close">
         <view class="coop-sheet" :class="{ 'is-full': full }" @touchmove.prevent.stop>
-            <CooperationNav v-if="full" :title="title" :subtitle="subtitle" back :disabled="busy" @back="close" />
+            <CooperationNav v-if="full" :title="title" :subtitle="subtitle" :actions="actions" back :disabled="busy" @back="close" @action="runAction" />
             <view v-else class="coop-sheet__head"><view><text class="coop-sheet__title">{{ title }}</text><view v-if="subtitle" class="coop-sheet__subtitle">{{ subtitle }}</view></view><button class="coop-icon-button" :disabled="busy" aria-label="关闭当前任务" @tap="close"><u-icon name="close" size="19" color="#7a818b" /></button></view>
             <view v-if="$slots.filters" class="coop-sheet__filters"><slot name="filters" /></view>
             <view v-if="fixedBody" class="coop-sheet__body coop-sheet__body--fixed" @touchmove.stop><slot /></view>
@@ -31,9 +31,10 @@ let taskSheetZIndex = 10090
 // Native uni picker/modal layers use 999. The parent already removes its Tabbar.
 taskSheetZIndex = 998
 // #endif
-const props = withDefaults(defineProps<{ show: boolean; title: string; subtitle?: string; busy?: boolean; full?: boolean; inactive?: boolean; page?: boolean; fixedBody?: boolean; scrollIntoView?: string }>(), { subtitle: '', busy: false, full: false, inactive: false, page: false, fixedBody: false, scrollIntoView: '' })
-const emit = defineEmits<{ (event: 'close'): void }>()
+const props = withDefaults(defineProps<{ show: boolean; title: string; subtitle?: string; busy?: boolean; full?: boolean; inactive?: boolean; page?: boolean; fixedBody?: boolean; scrollIntoView?: string; actions?: { key: string; icon?: string; label?: string; ariaLabel?: string; disabled?: boolean; loading?: boolean }[] }>(), { subtitle: '', busy: false, full: false, inactive: false, page: false, fixedBody: false, scrollIntoView: '', actions: () => [] })
+const emit = defineEmits<{ (event: 'close'): void; (event: 'action', key: string): void }>()
 function close() { if (!props.busy) emit('close') }
+function runAction(key: string) { if (!props.busy) emit('action', key) }
 </script>
 <style scoped lang="scss">
 /* Popup roots remain mounted for their native transition but must never share

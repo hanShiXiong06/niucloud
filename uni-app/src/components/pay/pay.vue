@@ -342,9 +342,9 @@ uni.$on('checkIsReturnAfterPayment', () => {
     }
 })
 const repeat = ref(false)
-const open = (tradeType: string, tradeId: number, payReturn: string = '', scene: string = '') => {
+const open = (tradeType: string, tradeId: number, payReturn: string = '', scene: string = ''): Promise<boolean> => {
 
-    if (repeat.value || loading.value) return
+    if (repeat.value || loading.value) return Promise.resolve(false)
     const attempt = ++paymentAttempt
     loading.value = false
     repeat.value = true
@@ -362,22 +362,25 @@ const open = (tradeType: string, tradeId: number, payReturn: string = '', scene:
     if (scene) {
         obj.scene = scene
     }
-    getPayInfo(tradeType, tradeId, obj).then((res: any) => {
-        if (attempt !== paymentAttempt) return
+    // Existing callers may ignore this promise. Awaiting pages can keep their
+    // own loading state until the native cashier is actually ready; this is
+    // not a payment-success result and never grants any business entitlement.
+    return Promise.resolve().then(() => getPayInfo(tradeType, tradeId, obj)).then((res: any) => {
+        if (attempt !== paymentAttempt) return false
         let { data } = res
 
         if (!data || typeof data !== 'object' || Array.isArray(data) || uni.$u.test.isEmpty(data)) {
             uni.showToast({ title: t('pay.notObtainedInfo'), icon: 'none' })
-            return
+            return false
         }
         if (data.money == 0) {
             payInfo.value = { ...data, pay_type_list: [] }
             toPayResult()
-            return
+            return true
         }
         if (!Array.isArray(data.pay_type_list) || data.pay_type_list.some((item: any) => !item || typeof item !== 'object' || typeof item.key !== 'string' || !item.key)) {
             uni.showToast({ title: t('pay.notObtainedInfo'), icon: 'none' })
-            return
+            return false
         }
         payInfo.value = data
         if(prop.ignorePay) {
@@ -387,7 +390,11 @@ const open = (tradeType: string, tradeId: number, payReturn: string = '', scene:
         }
         type.value = data.pay_type_list[0] ? data.pay_type_list[0].key : ''
         show.value = true
-    }).catch(() => {}).finally(() => {
+        return true
+    }).catch(() => {
+        if (attempt === paymentAttempt) uni.showToast({ title: '收银台加载未完成，请稍后重试', icon: 'none' })
+        return false
+    }).finally(() => {
         if (attempt === paymentAttempt) repeat.value = false
     })
 }
@@ -424,6 +431,7 @@ const handleClose = () => {
 
 defineExpose({
     open,
+    close: handleClose,
     payInfo
 })
 </script>

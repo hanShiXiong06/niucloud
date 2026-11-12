@@ -188,7 +188,30 @@ final class PaymentService
             OrderPaymentReadService::assertManualSource($order,$pay);
             if ($order['purpose']==='commission') self::assertCommissionRules($order);
             if ($order['status']==='paid') {
-                if (!hash_equals((string)$order['out_trade_no'],$no)) throw new CommonException('发现同一业务的另一笔支付流水，请人工核对；不会重复入账');
+                if (!hash_equals((string)$order['out_trade_no'],$no)) {
+                    // A second real receipt is a financial exception, not an
+                    // authority to grant a second term or to erase received
+                    // money by throwing through the native PaySuccess txn.
+                    // Keep this separate from requires_manual_review: that
+                    // entitlement flag would suspend the valid first term.
+                    $rule=Data::decode($order['rule_json']);
+                    $receipts=is_array($rule['additional_payment_receipts']??null)?$rule['additional_payment_receipts']:[];
+                    $fact=['pay_id'=>(int)$pay['id'],'out_trade_no'=>$no,'payment_type'=>(string)$pay['type'],
+                        'amount'=>(string)$pay['money'],'trade_no'=>(string)($pay['trade_no']??''),'pay_time'=>(int)$pay['pay_time']];
+                    if(isset($receipts[$no])) {
+                        // Ordinary native drivers stamp notification time on
+                        // replay. Keep the first recorded time, but require
+                        // the same immutable receipt identity and amount.
+                        foreach($fact as $key=>$value)if($key!=='pay_time'&&($receipts[$no][$key]??null)!==$value)throw new CommonException('额外收款凭据与已记录事实不一致，请核对原流水');
+                        return 0;
+                    }
+                    $receipts[$no]=$fact+['recorded_at'=>time()];
+                    $rule['additional_payment_receipts']=$receipts;
+                    $rule['financial_requires_manual_review']=true;
+                    Store::query('coop_order',$site)->where('id',$id)->update(['rule_json'=>Data::json($rule),'update_time'=>time()]);
+                    Data::audit($site,0,(int)$order['member_id'],'coop_order',$id,'additional_payment_receipt_review',
+                        $fact+['original_out_trade_no'=>(string)$order['out_trade_no']]);
+                }
                 return 0;
             }
             if($order['status']==='closed'){
@@ -427,7 +450,12 @@ final class PaymentService
     public static function presentOrder(array $row): array
     {
         $raw=$row;
-        $rule=Data::decode($row['rule_json']??null);$row['requires_manual_review']=!empty($rule['requires_manual_review']);
+        $rule=Data::decode($row['rule_json']??null);$row['financial_review_required']=!empty($rule['financial_requires_manual_review']);
+        $row['requires_manual_review']=!empty($rule['requires_manual_review'])||$row['financial_review_required'];
+        $additional=is_array($rule['additional_payment_receipts']??null)?$rule['additional_payment_receipts']:[];
+        $row['additional_payment_count']=count($additional);$additionalCents=0;
+        foreach($additional as $receipt)$additionalCents+=Rules::cents((string)$receipt['amount']);
+        $row['additional_payment_amount']=Rules::amount($additionalCents);
         $row['replacement_order_id']=(int)($rule['replacement_order_id']??0);$row['reprices_order_id']=(int)($rule['reprices_order_id']??0);
         $row['repricing_state']=(string)($rule['pricing_intent']['state']??'');$row['repricing_message']=(string)($rule['pricing_intent']['message']??'');
         $row['pricing_reason']=(string)($rule['price_override']['reason']??$rule['pricing_intent']['reason']??'');
@@ -473,6 +501,7 @@ final class PaymentService
     }
     public static function reviewMessage(array $rule): string
     {
+        if(empty($rule['requires_manual_review'])&&!empty($rule['financial_requires_manual_review']))return '本订单另有已确认到账的付款，额外款项待平台核对；原订单金额、已开通权益和已入账收益保留，未自动退款，请勿重复付款';
         return [
             'merchant_blocked_during_payment'=>'实际收款时门店已停止合作，未开通权益；请平台核对原支付流水并处理退款事宜',
             'commission_credit_capacity_exceeded'=>'本单已实际收款；发布方会员佣金账户达到金额精度上限，收益尚未入账，请平台核对处理，勿重复付款',

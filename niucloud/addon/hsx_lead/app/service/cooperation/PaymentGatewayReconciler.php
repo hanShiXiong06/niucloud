@@ -28,6 +28,13 @@ final class PaymentGatewayReconciler
             if(in_array($status,[OnlinePayDict::SUCCESS,OnlinePayDict::TRADE_FINISHED],true))return$this->paid($site,$pay);
             if($status===OnlinePayDict::CLOSED)return$this->closed($site,$pay);
             if($status!==OnlinePayDict::NOTPAY)return['state'=>'uncertain','message'=>'支付渠道尚未确认未付款或已关闭，请稍后核对原单，不要重复付款'];
+            // The virtual driver currently has no verified native close API:
+            // its close() only queries this same original again. Do not claim
+            // cancellation was requested or hold the transaction for three
+            // provider reads. NOTPAY is not evidence that a late receipt is
+            // impossible, so preserve the original and never create a retry.
+            if(($pay['type']??'')===\addon\hsx_lead\app\service\virtualpay\VirtualPaySettings::TYPE)
+                return['state'=>'uncertain','message'=>'本次付款尚未完成，订单未关闭。可返回继续使用；如已扣款，请核对付款结果，勿重复付款。'];
             // NOTPAY authorizes a close request, not a local cancellation. Even
             // close=true is not final evidence; a payer can win this race.
             try{$provider->close((string)$pay['out_trade_no']);}catch(\Throwable $ignored){}

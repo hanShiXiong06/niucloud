@@ -115,25 +115,29 @@ final class VirtualPayOrderService
         if($kind==='xpay_goods_deliver_notify'){
             $row=self::order($site,self::scalar($event,'OutTradeNo',32));$settings=$this->settings($site,false);self::assertSettings($row,$settings);self::assertEventIdentity($row,$event);
             $goods=$event['GoodsInfo']??null;$wx=$event['WeChatPayInfo']??null;
-            if(!is_array($goods)||!is_array($wx)||(string)($goods['ProductId']??'')!==$row['product_id']||self::integer($goods['Quantity']??null)!==1||!is_string($goods['Attach']??null)||!hash_equals($row['attach'],$goods['Attach']))throw new CommonException('虚拟支付回调商品与原单不一致');
-            $providerNumber=self::scalar($wx,'MchOrderNo',128);
-            // Callback monetary field availability has not been verified
-            // against the account's final official contract. Never infer a
-            // successful receipt from a guessed field name or status alone.
+            if(!is_array($goods)||(string)($goods['ProductId']??'')!==$row['product_id']||self::integer($goods['Quantity']??null)!==1||!is_string($goods['Attach']??null)||!hash_equals($row['attach'],$goods['Attach']))throw new CommonException('虚拟支付回调商品与原单不一致');
+            // Official enterprise virtual-payment notifications may omit
+            // WeChatPayInfo for non-WeChat channels, including Apple IAP.
+            // Its absence is never evidence of payment: query the frozen
+            // original instead. A supplied receipt must still match exactly.
+            if($wx!==null&&!is_array($wx))throw new CommonException('虚拟支付回调收款资料格式异常');
+            $callbackNumber=is_array($wx)&&$wx!==[]?self::scalar($wx,'MchOrderNo',128):null;
             if(isset($goods['ActualPrice'])&&self::integer($goods['ActualPrice'])!==(int)$row['amount_cents'])throw new CommonException('虚拟支付回调金额与原单不一致');
             if(isset($goods['OrigPrice'])&&self::integer($goods['OrigPrice'])!==(int)$row['amount_cents'])throw new CommonException('虚拟支付回调原价不匹配');
             // After the complete receipt+rights transaction committed, the
             // provider can replay delivery while already reporting status 4,
             // or while its query endpoint is unavailable. Acknowledge only
             // that exact frozen receipt, with no query, grant or new payment.
-            if($this->verifiedReceipt($site,$row,$providerNumber)){
+            $knownNumber=$callbackNumber??((int)$row['order_type']===7?(string)($row['wx_order_id']??''):'');
+            if($knownNumber!==''&&$this->verifiedReceipt($site,$row,$knownNumber)){
                 if(isset($event['OrderType'])&&self::integer($event['OrderType'])!==(int)$row['order_type'])throw new CommonException('重复回调终端与原收款不一致');
                 return;
             }
             $remote=$this->remote($site,$settings,$row);self::assertQuery($row,$remote);self::assertPaidQuery($row,$remote);
-            if((string)$remote['wx_order_id']!==$providerNumber)throw new CommonException('虚拟支付回调与查单凭据不一致');
+            if($callbackNumber!==null&&(string)$remote['wx_order_id']!==$callbackNumber)throw new CommonException('虚拟支付回调与查单凭据不一致');
+            if($callbackNumber===null&&((int)$remote['order_type']!==7||!isset($remote['paid_time'])))throw new CommonException('苹果付款通知的原渠道收款凭据或时间尚未核实');
             if(isset($event['OrderType'])&&self::integer($event['OrderType'])!==(int)$remote['order_type'])throw new CommonException('虚拟支付回调与查单终端不一致');
-            $this->confirmPayment($site,$row,$providerNumber,(int)$remote['order_type'],isset($remote['paid_time'])?self::integer($remote['paid_time']):time());
+            $this->confirmPayment($site,$row,(string)$remote['wx_order_id'],(int)$remote['order_type'],isset($remote['paid_time'])?self::integer($remote['paid_time']):time());
             return;
         }
         if($kind==='xpay_refund_notify'){$this->refundEvent($site,$event);return;}
@@ -301,6 +305,11 @@ final class VirtualPayOrderService
         if($record['status']==='success')return;
         $this->assertExternalRefundTotal($site,$order,$refundId,$amount);
         $result=$this->businessAdapter->completeExternalRefund($site,self::payment($site,$order['out_trade_no'],true),$record);
+        if(($result['projection']??'')==='additional_receipt'){
+            self::refunds($site)->where('id',$refundId)->update(['status'=>'success','framework_refund_no'=>null,'last_message'=>'已核实额外款原路退款；未改变原订单权益或收益','finish_time'=>(int)$record['finish_time'],'update_time'=>time()]);
+            self::orders($site)->where('id',$order['id'])->update(['status'=>$result['requires_review']?'attention':'paid','next_check_at'=>0,'last_message'=>'额外款退款事实已记录，原会员权益未改变','update_time'=>time()]);
+            return;
+        }
         if($result['status']==='attention'){
             $this->attention($site,(int)$order['id'],'已收到外部成功退款，业务与推广暂停待平台核对');
             self::refunds($site)->where('id',$refundId)->update(['status'=>'attention','last_message'=>'外部退款已核实，分项或原退款状态待平台核对','update_time'=>time()]);return;
@@ -364,7 +373,12 @@ final class VirtualPayOrderService
     {
         if(!is_int($remote['status']??null)||!isset($remote['order_id'])||!is_string($remote['order_id'])||$remote['order_id']!==$row['out_trade_no'])throw new CommonException('服务商查单与原单未唯一对应');
         if(isset($remote['env_type'])&&self::integer($remote['env_type'])!==((int)$row['env']===0?1:2))throw new CommonException('服务商查单环境不一致');
-        if(isset($remote['biz_meta'])&&$remote['biz_meta']!==$row['attach'])throw new CommonException('服务商查单透传资料不一致');
+        // requestVirtualPayment signs attach; its documented echo belongs to
+        // GoodsInfo.Attach in the authenticated delivery event (checked above).
+        // query_order.biz_meta is not a documented alias for that value. Do not
+        // make this unrelated metadata an identity gate or overwrite attach.
+        // The original account/env/OpenID query, exact order id, paid amount,
+        // provider receipt uniqueness and frozen local snapshot remain required.
     }
     private static function assertPaidQuery(array $row,array $remote): void
     {

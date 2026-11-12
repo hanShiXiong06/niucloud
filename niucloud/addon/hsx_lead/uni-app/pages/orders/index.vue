@@ -9,13 +9,14 @@
                     <view class="payment-order__number">{{ row.order_no }}</view>
                     <view class="payment-order__amount"><text>{{ row.status === 'unpaid' ? '待付金额' : row.status === 'paid' ? '已付金额' : '订单金额' }}</text><text>{{ coopMoney(row.amount) }}</text></view>
                     <view v-if="row.purpose === 'membership' && row.cost_schema" class="payment-order__costs"><text>服务费 {{ coopMoney(row.service_amount) }}</text><text>押金 {{ coopMoney(row.deposit_amount) }}</text><text>经验费 {{ coopMoney(row.experience_amount) }}</text></view>
-                    <view class="payment-order__payment"><text>{{ row.payment_display_name || row.payment_type_name || (row.status === 'paid' ? '支付方式待核对' : '尚未支付') }}</text><text v-if="row.payment_channel_name">{{ row.payment_channel_name }}</text></view>
+                    <view class="payment-order__payment"><text>{{ cooperationPaymentOrderIsVirtual(row) ? row.payment_type_name || '微信虚拟支付' : row.payment_display_name || row.payment_type_name || (row.status === 'paid' ? '支付方式待核对' : '尚未支付') }}</text><text v-if="row.payment_channel_name">{{ row.payment_channel_name }}</text></view>
+                    <view v-if="cooperationPaymentOrderIsVirtual(row)" class="payment-order__help"><button :aria-expanded="helpOrderId === Number(row.id)" @tap="helpOrderId = helpOrderId === Number(row.id) ? 0 : Number(row.id)">付款记录说明 {{ helpOrderId === Number(row.id) ? '收起' : '展开' }}</button><text v-if="helpOrderId === Number(row.id)">通过 Apple 完成的购买，请在 Apple 购买记录查询；已扣款但尚未开通时，请核对原付款结果，勿重复付款。</text></view>
                     <view v-if="row.refund_status && row.refund_status !== 'none'" class="payment-order__refund"><text>{{ row.refund_status_name || '退款待核对' }}</text><text v-if="Number(row.refunded_amount) > 0">已退 {{ coopMoney(row.refunded_amount) }}</text></view>
-                    <view class="payment-order__time">创建于 {{ coopDate(row.create_time) }}</view><view v-if="row.status === 'unpaid' && row.can_pay && row.expires_at" class="payment-order__expires">请于 {{ coopDate(row.expires_at) }} 前支付</view><view v-else-if="row.status === 'unpaid' && row.can_close && !row.can_pay" class="payment-order__expires">付款时限已过，可取消此单后重新核价</view><view v-else-if="row.status === 'closed' && row.closure_reason" class="payment-order__expires">{{ row.closure_reason }}</view>
+                    <view class="payment-order__time">创建于 {{ coopDate(row.create_time) }}</view><view v-if="row.status === 'unpaid' && cooperationPaymentOrderIsVirtual(row)" class="payment-order__expires">原付款结果待核对，请勿重复付款</view><view v-else-if="row.status === 'unpaid' && row.can_pay && row.expires_at" class="payment-order__expires">请于 {{ coopDate(row.expires_at) }} 前支付</view><view v-else-if="row.status === 'unpaid' && row.can_close && !row.can_pay" class="payment-order__expires">付款时限已过，可取消此单后重新核价</view><view v-else-if="row.status === 'closed' && row.closure_reason" class="payment-order__expires">{{ row.closure_reason }}</view>
                     <view v-if="row.requires_manual_review" class="payment-order__review">款项需平台核对，请勿重复支付</view>
                     <view v-if="row.status === 'paid' && row.can_request_refund !== true && row.refund_block_reason" class="payment-order__review">{{ row.refund_block_reason }}</view>
                     <view v-if="row.pricing_reason" class="payment-order__review">平台调价：{{ row.pricing_reason }}</view>
-                    <view v-if="row.status === 'unpaid' || cooperationPaymentReplacementId(row)" class="payment-order__actions"><button v-if="row.can_close" :disabled="!!busyId" @tap="cancelOrder(row)">{{ row.close_action_label || '取消付款单' }}</button><button v-if="row.can_pay || cooperationPaymentReplacementId(row)" class="is-primary" :disabled="!!busyId" @tap="continuePayment(row)">{{ busyId === row.id ? '核对中…' : cooperationPaymentReplacementId(row) ? '查看调整后付款单' : '继续支付' }}</button><text v-if="!row.can_close && !row.can_pay && !cooperationPaymentReplacementId(row)">{{ row.close_reason || '请刷新核对原付款状态' }}</text></view>
+                    <view v-if="row.status === 'unpaid' || cooperationPaymentReplacementId(row)" class="payment-order__actions"><button v-if="row.can_close && !cooperationPaymentOrderIsVirtual(row)" :disabled="!!busyId" :loading="busyId === Number(row.id) && busyAction === 'cancel'" @tap="cancelOrder(row)">{{ row.close_action_label || '取消付款单' }}</button><button v-if="cooperationPaymentOrderCheckUrl(row) || row.can_pay && !cooperationPaymentOrderIsVirtual(row) || cooperationPaymentReplacementId(row)" class="is-primary" :disabled="!!busyId" :loading="busyId === Number(row.id) && busyAction === 'check'" @tap="continuePayment(row)">{{ busyId === Number(row.id) && busyAction === 'check' ? '核对中…' : cooperationPaymentReplacementId(row) ? '查看调整后付款单' : cooperationPaymentOrderIsVirtual(row) ? '核对付款结果' : '继续支付' }}</button><text v-if="!cooperationPaymentOrderCheckUrl(row) && (!row.can_close || cooperationPaymentOrderIsVirtual(row)) && (!row.can_pay || cooperationPaymentOrderIsVirtual(row)) && !cooperationPaymentReplacementId(row)">{{ row.close_reason || '请刷新核对原付款状态' }}</text></view>
                     <view v-else-if="row.can_request_refund === true || row.refund_status && row.refund_status !== 'none'" class="payment-order__actions"><button :disabled="!!busyId" @tap="openRefund(row)">{{ row.can_request_refund === true ? '申请退款' : '查看退款进度' }}</button></view>
                 </view>
                 <template #empty="{ isLoadFailed }"><view class="orders-empty"><CoopState :error="isLoadFailed ? error || '付款单读取失败，请重试' : ''" title="暂无这类付款单" icon="order" @retry="refresh" /></view></template>
@@ -36,11 +37,12 @@ import CoopState from '../../components/cooperation/CoopState.vue'
 import CoopPaymentHelp from '../../components/cooperation/CoopPaymentHelp.vue'
 import PaymentRefundSheet from './components/PaymentRefundSheet.vue'
 import { cooperationOrders, cooperationOrder, closeCooperationOrder, cooperationOrderRefund, requestCooperationOrderRefund, refreshCooperationOrderRefund, cancelCooperationOrderRefund, coopRequestId, coopDate, coopMoney, coopError, type CoopRow } from '../../api/cooperation'
-import { cooperationPaymentOrderStatuses, cooperationPaymentOrderStatus, cooperationPaymentOrderResumeUrl, cooperationPaymentReplacementId, cooperationPaymentReplacementMatches, cooperationPaymentRefundDetail } from '../../utils/cooperation-payment-orders'
+import { cooperationPaymentOrderStatuses, cooperationPaymentOrderStatus, cooperationPaymentOrderResumeUrl, cooperationPaymentOrderIsVirtual, cooperationPaymentOrderCheckUrl, cooperationPaymentReplacementId, cooperationPaymentReplacementMatches, cooperationPaymentRefundDetail } from '../../utils/cooperation-payment-orders'
 import { cooperationButtonStyle } from '../../utils/mobile-ui'
 import { backCooperationTask } from '../../utils/cooperation-navigation'
 import { createCooperationPagingGuard } from '../../utils/cooperation-paging'
 const rows = ref<CoopRow[]>([]), status = ref('unpaid'), error = ref(''), busyId = ref(0), active = ref(false), loggedIn = ref(!!getToken()), revision = ref(0), pagingRef = ref<any>(null)
+const busyAction = ref(''), helpOrderId = ref(0)
 let sequence = 0, owner = ''
 const refundVisible = ref(false), refundOrder = ref<CoopRow>({}), refundDetail = ref<CoopRow>({}), refundLoading = ref(false), refundBusy = ref(false), refundReadRequired = ref(false), refundError = ref('')
 let refundSequence = 0
@@ -60,8 +62,8 @@ function refresh() { if (busyId.value) return; sequence++; pagingGuard.reset(); 
 function filter(value: string) { const next = cooperationPaymentOrderStatus(value); if (busyId.value || status.value === next) return; status.value = next; rows.value = []; refresh() }
 function orderStatusLabel(value: string) { return cooperationPaymentOrderStatuses.find(item => item.value === value)?.label || '状态待核对' }
 async function continuePayment(row: CoopRow) {
-    if (busyId.value || (row.can_pay !== true && !cooperationPaymentReplacementId(row)) || !current(owner)) return
-    const who = owner; busyId.value = Number(row.id)
+    if (busyId.value || (!cooperationPaymentOrderCheckUrl(row) && (row.can_pay !== true || cooperationPaymentOrderIsVirtual(row)) && !cooperationPaymentReplacementId(row)) || !current(owner)) return
+    const who = owner; busyId.value = Number(row.id); busyAction.value = 'check'
     try {
         let id = Number(row.id), previous: CoopRow | null = null, order: CoopRow = {}; const seen = new Set<number>()
         for (let hop = 0; hop < 6; hop++) {
@@ -71,14 +73,15 @@ async function continuePayment(row: CoopRow) {
             const replacement = cooperationPaymentReplacementId(order); if (!replacement) break; previous = order; id = replacement
             if (hop === 5) throw new Error('付款单多次调整，请刷新核对最新订单')
         }
-        const url = cooperationPaymentOrderResumeUrl(order); if (!url) throw new Error(order.status === 'paid' ? '这笔付款单已支付，无需重复付款' : order.close_reason || '这笔付款单当前不能继续支付，请刷新核对'); uni.navigateTo({ url })
+        if (order.status === 'paid') { rows.value = rows.value.map(item => Number(item.id) === Number(order.id) ? order : item); uni.showToast({ title: order.requires_manual_review ? '付款已确认，请查看订单核对提示' : '这笔付款单已支付，无需重复付款', icon: 'none' }); revision.value++; return }
+        const url = cooperationPaymentOrderCheckUrl(order) || (!cooperationPaymentOrderIsVirtual(order) ? cooperationPaymentOrderResumeUrl(order) : ''); if (!url) throw new Error(order.close_reason || '这笔付款单当前不能继续支付，请刷新核对'); uni.navigateTo({ url })
     }
     catch (cause) { if (current(who)) { uni.showToast({ title: coopError(cause, '暂不能继续支付，请核对原单'), icon: 'none' }); revision.value++ } }
-    finally { busyId.value = 0 }
+    finally { busyId.value = 0; busyAction.value = '' }
 }
 async function cancelOrder(row: CoopRow) {
-    if (busyId.value || row.can_close !== true || !current(owner)) return
-    const who = owner; busyId.value = Number(row.id)
+    if (busyId.value || row.can_close !== true || cooperationPaymentOrderIsVirtual(row) || !current(owner)) return
+    const who = owner; busyId.value = Number(row.id); busyAction.value = 'cancel'
     try {
         const confirmed = await new Promise<boolean>(resolve => uni.showModal({ title: row.close_requires_check ? '核对支付后取消？' : '取消待支付付款单？', content: `${row.title || row.order_no}，金额 ${coopMoney(row.amount)}。${row.close_requires_check ? '系统先核对渠道结果，已收款不会取消，结果不明时保留原单。' : '只取消这笔付款单，不会撤销客户线索。'}`, confirmText: row.close_requires_check ? '核对后取消' : '确认取消', cancelText: '暂不取消', success: result => resolve(result.confirm), fail: () => resolve(false) }))
         if (!confirmed || !current(who)) return
@@ -87,7 +90,7 @@ async function cancelOrder(row: CoopRow) {
         if (Number(order?.id) !== Number(row.id) || order.status !== 'closed') throw new Error(order?.close_message || '取消结果尚未确认，请刷新核对原单，勿重复操作')
         uni.showToast({ title: '付款单已取消', icon: 'none' }); revision.value++
     } catch (cause) { if (current(who)) { uni.showToast({ title: coopError(cause, '取消结果待核对，请刷新原单'), icon: 'none' }); revision.value++ } }
-    finally { busyId.value = 0 }
+    finally { busyId.value = 0; busyAction.value = '' }
 }
 function closeRefund() { if (!refundBusy.value) { refundVisible.value = false; refundSequence++; refundLoading.value = false } }
 async function openRefund(row: CoopRow) {
@@ -169,6 +172,7 @@ onHide(() => { active.value = false; sequence++; refundSequence++; refundLoading
 .payment-order { margin:12px;background:#fff;padding:16px;border-radius:10px; }.payment-order__head { display:flex;align-items:flex-start;justify-content:space-between;gap:16px; }.payment-order__title { flex:1;min-width:0;font-size:15px;font-weight:600;line-height:1.6;word-break:break-word; }.payment-order__status { flex:none;max-width:40%;text-align:right;font-size:12px;color:#8591a0;line-height:1.8; }.payment-order__status.is-unpaid { color:#9b7e4d; }.payment-order__status.is-paid { color:#658573; }
 .payment-order__number { margin-top:6px;font-size:11px;line-height:1.6;color:#9aa3af;word-break:break-all; }.payment-order__amount { display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:16px;font-size:13px;color:#828c9b; }.payment-order__amount>text:last-child { font-size:22px;font-weight:650;color:#293341;min-width:0;overflow-wrap:anywhere; }.payment-order__costs { display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:8px;font-size:11px;color:#8a95a3;line-height:1.7; }.payment-order__time,.payment-order__expires { margin-top:8px;font-size:11px;line-height:1.6;color:#9aa3af; }.payment-order__review { margin-top:12px;color:#a1604b;font-size:12px;line-height:1.7; }
 .payment-order__payment { display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:12px;font-size:12px;color:#748295;line-height:1.7; }.payment-order__payment>text+text { color:#9aa3af; }.payment-order__refund { display:flex;justify-content:space-between;gap:12px;margin-top:10px;color:#9a7651;font-size:12px;line-height:1.7; }
+.payment-order__help { margin-top:6px;font-size:11px;line-height:1.7;color:#8a95a3; }.payment-order__help button { display:inline-block;margin:0;padding:0;line-height:28px;background:transparent;color:#748295;font-size:11px;border:0; }.payment-order__help button::after { border:0; }.payment-order__help>text { display:block;padding-top:4px; }
 .payment-order__actions { display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:12px;padding-top:14px;margin-top:14px;border-top:1px solid #f0f1f4; }.payment-order__actions button { margin:0;padding:0 16px;min-height:40px;line-height:40px;font-size:13px;border:1px solid #dce2eb;border-radius:20px;background:#fff;color:#65748a; }.payment-order__actions button::after { border:0; }.payment-order__actions button.is-primary { color:#fff;background:var(--primary-color,#3978c2);border-color:var(--primary-color,#3978c2); }.payment-order__actions>text { font-size:12px;color:#8b95a3;line-height:1.7; }
 /* #ifdef H5 */
 @supports(height:100dvh){.payment-orders-page{height:calc(100dvh - var(--window-top,0px) - var(--window-bottom,0px));}}

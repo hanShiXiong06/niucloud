@@ -591,8 +591,36 @@ class CorePayService extends BaseCoreService
         $trade_type = $pay->trade_type;
         $trade_id = $pay->trade_id;
         $main_id = $pay->main_id;
+        $paid_at = time();
+        $definition = PayDict::getPayType([(string)$type])[(string)$type] ?? [];
+        if (($definition['provider_receipt_time'] ?? false) === true) {
+            // This optional driver capability accepts only a server-verified
+            // receipt time. API payment requests must never forward pay_time.
+            // Using reconciliation time here would invalidate an originally
+            // timely payment just because delivery was delayed.
+            $receipt_time = $params['pay_time'] ?? null;
+            $created_at = (int)$pay->getData('create_time');
+            $provider_number = $params['trade_no'] ?? null;
+            if (!is_int($receipt_time) || $receipt_time <= 0 || $receipt_time > $paid_at
+                || $created_at <= 0 || $receipt_time < $created_at
+                || !is_string($provider_number) || $provider_number === '' || strlen($provider_number) > 128
+                || preg_match('/[\x00-\x1f\x7f]/', $provider_number)
+                || (string)$pay->type !== (string)$type) {
+                throw new PayException('渠道已核实的原收款时间或凭据不完整，未改写付款记录');
+            }
+            if ((int)$pay->status === (int)PayDict::STATUS_FINISH) {
+                // Replaying an identical receipt must not renew its clock or
+                // dispatch business listeners for a second time.
+                if ((int)$pay->getData('pay_time') !== $receipt_time
+                    || !hash_equals((string)$pay->trade_no, $provider_number)) {
+                    throw new PayException('重复收款凭据与原交易不一致，未修改已确认付款');
+                }
+                return true;
+            }
+            $paid_at = $receipt_time;
+        }
         $data = array(
-            'pay_time' => time(),
+            'pay_time' => $paid_at,
             'status' => PayDict::STATUS_FINISH,
             'type' => $type,
             'trade_no' => $params[ 'trade_no' ] ?? '',
