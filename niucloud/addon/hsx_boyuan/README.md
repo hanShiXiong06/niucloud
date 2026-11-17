@@ -4,7 +4,9 @@
 
 本插件连接已经确认的 ERP 业务事实，不代替博远的库存和记账服务。模拟、测试、正式共用事件接收、校验、任务、回执核验、异常补偿与手机工作台。
 
-已按博远《开放平台API开发文档 v1.5.3》实现基础资料适配，并使用授权UAT完成实际只读拉取。结果只保存在本机隔离库。**尚未部署业务站点；博远新的单据接口仍在开发，没有完成真实单据、财务或生产验收。** 原模拟/自定义桥接契约继续用于离线测试，不要求博远照此开发。
+1.2.0 按博远《开放平台API开发文档 v1.5.4》增加采购入库半自动链路：ERP 入库后生成待核对任务，从博远已有资料选择关联，保存草稿不发送，明确提交后异步创建，再只读核验采购明细与入库串号。提供 PC 与手机核对页；后续自动模式复用同一链路，只作用于新捕获且关联齐全的任务。
+
+本轮只在独立 UAT 联调采购，不切换生产，不调用统一支付、真实退款或银行转账。**财务、销售及退货接口不属于本轮已验收能力；获取采购单号也不代表库存余额或财务已核对。** 原模拟/自定义桥接契约继续用于离线测试，不要求博远照此开发。详细操作及更新范围见 [采购入库 Beta 说明](docs/PURCHASE_BETA.txt)。
 
 基础资料配置、同步方向、UAT结果及现存边界见 [基础资料同步](docs/BASIC_DATA.md)。
 
@@ -25,6 +27,8 @@
 关闭财务同步会保留并停止尚未发出的财务任务，仍允许人工发起只读核验；已发出的请求无法通过开关撤回。
 
 ## 业务范围
+
+开放平台 1.2.0 Beta 当前只启用采购入库：买断设备、一机一行、单串号、同一任务一个博远仓库，`cash_term=0`，不自动新建供应商、不登记收付款。以下完整领域划分仍是原模拟/桥接契约及后续路线，不能当作这些开放平台接口已经完成真实验收。
 
 - 第一期：采购入库、采购退货、零售销售及退货、批发销售及退货。
 - 第二期独立开关：每机应付、每销售单应收、查询当前余额、单笔和合并收付款。多个独立真实转账仍分别登记。只记账，不调用银行转账。
@@ -47,15 +51,15 @@
 
 依赖已有 `hsx_erp`。通过 NiuCloud 正常插件安装流程执行 `sql/install.sql`、菜单和计划任务安装，不手工向正式库试跑 SQL。
 
-新增五张插件表：任务 `hsx_boyuan_task`、资料对应 `hsx_boyuan_mapping`、外部单及行关联 `hsx_boyuan_binding`、操作记录 `hsx_boyuan_log`、隔离模拟记录 `hsx_boyuan_mock_record`。均带实际系统表前缀。连接配置及运行心跳复用现有 `sys_config`。**不新增核心框架表或改写历史业务。**
+现有业务表：任务 `hsx_boyuan_task`、资料对应 `hsx_boyuan_mapping`、外部单及行关联 `hsx_boyuan_binding`、隔离模拟记录 `hsx_boyuan_mock_record`。均带实际系统表前缀。连接配置及运行心跳复用现有 `sys_config`。1.2.0 的操作及错误日志统一使用框架 `Log`，不再读写或新建 `hsx_boyuan_log`；既有历史日志表和记录不删除。**本轮不新增表或字段、不改写历史业务，无需手工执行 SQL。**
 
-1.1.0另增两张插件表：`hsx_boyuan_reference` 和 `hsx_boyuan_reference_sync`，分别保存脱敏档案与分页任务。总计七张。插件安装/升级钩子幂等执行 `sql/references.sql`；正常版本升级入口 `app/upgrade/v110/Upgrade.php` 同时刷新权限菜单。既有安装必须先执行插件升级，不能只热覆盖代码。新增权限仍需由管理员授予员工，不自动提权。
+1.1.0 已有两张插件表：`hsx_boyuan_reference` 和 `hsx_boyuan_reference_sync`，分别保存脱敏档案与分页任务。当前新安装共六张业务表。插件安装/升级钩子幂等执行 `sql/references.sql`；正常版本升级入口刷新权限菜单。既有安装必须先执行插件升级，不能只热覆盖代码。新增权限仍需由管理员授予员工，不自动提权。
 
 1.1.1不新增表或字段。`app/upgrade/v111/Upgrade.php` 仅刷新权限菜单，新增“批量处理同步任务”“查看批次结果”和“按手机号匹配人员”权限，仍需管理员按需授权；批量处理员工需同时有批次结果查看权。后端与手机源码镜像需一起更新并重新编译，不改核心框架。
 
 手机端把 `site-uniapp` 内源码同步到移动管理端对应插件目录，并把该目录的 `pages.json` 合并进应用 `subPackages`。当前仓库已注册页面 `/addon/hsx_boyuan/pages/workbench/index`。发布需重新编译手机管理端，不应只上传后端后就声称页面已经上线。
 
-`app/dict/adminapp` 注册手机入口；`app/dict/menu/site.php` 注册权限节点，PC 不新增一套桌面业务页面。异常员工需获相应权限。API 未挂原始请求体审计中间件，防止凭据被记入通用日志；插件自身记录脱敏操作审计。
+`app/dict/adminapp` 注册手机入口；`app/dict/menu/site.php` 注册权限节点及 PC 采购核对页。异常员工需获相应权限。API 未挂原始请求体审计中间件，防止凭据被记入通用日志；插件通过框架 Log 记录必要脱敏操作编号。
 
 ## ERP 与业务插件的必要更新
 
@@ -65,6 +69,7 @@
 | --- | --- |
 | ERP `ErpIntegrationDocumentService` | 在业务事务内冻结整单及设备行快照，并记录原单变更 |
 | ERP `ErpPurchaseService`、`ErpSaleService` | 确认采购和销售后保存通用出站事实 |
+| ERP `ErpPurchaseExtensionService`、PC/手机采购详情 | 1.2.0 通用可选事件提供采购同步入口；ERP 不硬编码博远路由 |
 | ERP `ErpPurchaseReturnService`、`ErpSaleReturnService` | 确认实物退货后保存原单和行关系 |
 | ERP `ErpExternalSaleRecordedService` | 商城销售记入 ERP 后保存统一销售事实 |
 | ERP `ErpFinanceService` | 结算事件补全采购行、销售单及资金方式引用 |
@@ -79,6 +84,9 @@
 
 ```bash
 php -d error_reporting=22527 niucloud/addon/hsx_boyuan/tests/unit.php
+php niucloud/addon/hsx_boyuan/tests/purchase-gateway.php
+php niucloud/addon/hsx_boyuan/tests/purchase-sync.php
+php -d allow_url_fopen=0 -d disable_functions=curl_exec,curl_multi_exec,fsockopen,pfsockopen,stream_socket_client,dns_get_record,gethostbyname,gethostbynamel niucloud/addon/hsx_boyuan/tests/purchase-integration.php --isolated-local-mysql
 php -d error_reporting=22527 -d disable_functions=curl_exec,curl_multi_exec,fsockopen,stream_socket_client niucloud/addon/hsx_boyuan/tests/integration.php --isolated-local-mysql
 php -d error_reporting=22527 -d disable_functions=curl_exec,curl_multi_exec,fsockopen,stream_socket_client niucloud/addon/hsx_boyuan/tests/references.php --isolated-local-mysql
 php -d error_reporting=22527 -d disable_functions=curl_exec,curl_multi_exec,fsockopen,stream_socket_client niucloud/addon/hsx_boyuan/tests/ux.php --isolated-local-mysql

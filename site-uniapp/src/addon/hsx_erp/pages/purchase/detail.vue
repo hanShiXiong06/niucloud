@@ -13,6 +13,10 @@
                 <!-- 采购单头部信息 -->
                 <view class="form-card" v-if="order">
                     <view class="form-card-title">采购信息</view>
+                    <view v-for="action in order.integration_actions || []" :key="action.key" class="field">
+                        <text class="label">外部系统</text>
+                        <u-button size="small" type="primary" plain :text="action.label" :customStyle="{ width:'auto', margin:'0' }" @click="openIntegration(action)" />
+                    </view>
                     <view class="field">
                         <text class="label">采购单号</text>
                         <text class="value">{{ order.purchase_no }}</text>
@@ -173,6 +177,10 @@ const items = ref<any[]>([])
 const loading = ref(true)
 const loadError = ref('')
 const purchaseOrderId = ref(0)
+const openIntegration = (action: any) => {
+    if (!/^\/addon\/[A-Za-z0-9_/-]+$/.test(String(action.mobile_path || ''))) return
+    uni.navigateTo({ url: `${action.mobile_path}?purchase_id=${Number(order.value?.id || purchaseOrderId.value)}` })
+}
 const purchaseNo = ref('')
 const detailLoaded = ref(false)
 const dicts = ref<ErpDictMap>(ERP_DICT_FALLBACK)

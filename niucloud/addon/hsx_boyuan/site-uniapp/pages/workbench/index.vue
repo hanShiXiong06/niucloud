@@ -6,25 +6,26 @@
         </view>
         <view v-if="configLoaded" class="connection" :class="{ paused: !config.enabled || config.paused || workerStale }">
             <u-icon :name="workerStale && !config.paused ? 'error-circle' : config.enabled && !config.paused ? 'checkmark-circle' : 'pause-circle'" size="17" />
-            <text>{{ isOpenApi ? '基础资料只读同步 · 单据投递未开启' : !config.enabled ? '尚未启用' : config.paused ? '投递已暂停，待处理记录保留' : workerStale ? '后台处理服务长时间未运行，请管理员检查' : config.mode === 'mock' ? '模拟运行，不向博远写入数据' : '自动同步已开启' }}</text>
+            <text>{{ isOpenApi ? !config.purchase_enabled ? '基础资料只读 · 采购待核对，不自动发送' : config.paused ? '采购投递已暂停，核对记录保留' : config.purchase_mode === 'automatic' ? '采购自动模式 · 按已确认的资料对应处理' : '采购人工核对 · 确认提交后才发送' : !config.enabled ? '尚未启用' : config.paused ? '投递已暂停，待处理记录保留' : workerStale ? '后台处理服务长时间未运行，请管理员检查' : config.mode === 'mock' ? '模拟运行，不向博远写入数据' : '自动同步已开启' }}</text>
         </view>
         <view v-if="configLoaded && (section === 'tasks' || section === 'archives')" class="summary"><button v-for="metric in summaryMetrics" :key="metric.key" :class="{ 'metric-alert': metric.alert }" @click="focusMetric(metric.key)"><view><text class="metric">{{ sectionLoaded ? metric.count : '—' }}</text><text class="metric-unit">{{ section === 'archives' ? '类' : '笔' }}</text></view><text class="muted">{{ metric.label }} <text aria-hidden="true">›</text></text></button></view>
         <view v-if="configLoaded" class="nav"><button v-for="item in sections" :key="item.key" :class="{ selected: section === item.key }" @click="changeSection(item.key)">{{ item.name }}</button></view>
 
         <view v-if="error" class="inline-alert"><u-icon name="error-circle" size="18" /><view><text>更新未完成，已保留当前内容</text><text class="muted">{{ error }}</text></view><button class="inline-action" @click="refresh">重试</button></view>
         <view v-if="!configLoaded && !error" class="loading"><u-loading-icon text="正在读取账套" /></view>
-        <view v-if="configLoaded && section === 'tasks'" class="scope-notice" :class="{ 'notice-warning': isOpenApi || workerStale }"><u-icon name="error-circle" size="17" /><view><text>{{ isOpenApi ? '当前只开放基础资料读取' : '本站业务通过当前账套同步' }}</text><text class="muted">{{ isOpenApi ? '博远单据接口未开放，不能在此提交业务；未执行旧ERP数据停用。' : '提交不等于完成。结果未知时先核验，不重复建单。' }}</text></view></view>
+        <view v-if="configLoaded && section === 'tasks'" class="scope-notice" :class="{ 'notice-warning': isOpenApi || workerStale }"><u-icon name="error-circle" size="17" /><view><text>{{ isOpenApi ? '采购入库先核对，再提交博远' : '本站业务通过当前账套同步' }}</text><text class="muted">{{ isOpenApi ? '选择博远已有档案，不自动创建资料。建单后继续核验串号，库存余额与财务不在本次验证范围。' : '提交不等于完成。结果未知时先核验，不重复建单。' }}</text></view></view>
         <template v-if="configLoaded && section === 'tasks'">
             <view class="search"><u-search v-model="keyword" placeholder="搜索业务单号" :show-action="false" @search="loadTasks(true)" @clear="loadTasks(true)" /></view>
             <scroll-view scroll-x class="filter-scroll"><view class="filters"><button v-for="filter in filters" :key="filter.value" :class="{ active: status === filter.value }" @click="selectStatus(filter.value)">{{ filter.label }}</button></view></scroll-view>
             <view class="list-toolbar"><text class="muted">{{ sectionLoaded ? total + ' 笔业务' : '读取业务中' }}</text><view class="toolbar-actions"><button v-if="batchResults.length" class="inline-action" @click="batchVisible = true">上次批次</button><button class="inline-action" :disabled="isOpenApi || !tasks.length" @click="toggleSelection">{{ selectionMode ? '退出多选' : '批量处理' }}</button></view></view>
             <view v-if="loading && !tasks.length" class="loading"><u-loading-icon text="加载中" /></view>
-            <view v-else-if="sectionLoaded && !tasks.length && !error" class="empty"><u-empty mode="list" :text="status || keyword ? '没有符合条件的业务' : '暂无对接任务'" /><button v-if="status || keyword" class="inline-action" @click="clearTaskFilter">清除筛选</button><text v-else class="muted">{{ isOpenApi ? '可先更新基础资料，等待博远开放单据接口。' : '接收的新业务会保留在这里，处理结果可持续查看。' }}</text></view>
+            <view v-else-if="sectionLoaded && !tasks.length && !error" class="empty"><u-empty mode="list" :text="status || keyword ? '没有符合条件的业务' : '暂无对接任务'" /><button v-if="status || keyword" class="inline-action" @click="clearTaskFilter">清除筛选</button><text v-else class="muted">{{ isOpenApi ? '本站采购入库后会生成待核对任务；也可从采购详情进入博远核对。' : '接收的新业务会保留在这里，处理结果可持续查看。' }}</text></view>
             <view class="task-list"><view v-for="task in tasks" :key="task.id" class="task" :class="{ 'task-selected': selectedIds.includes(task.id) }" @click="selectionMode ? toggleTask(task) : openTask(task.id)">
                 <view v-if="selectionMode" class="task-check" @click.stop><u-checkbox :used-alone="true" :checked="selectedIds.includes(task.id)" :disabled="!taskSelectable(task) || busy" :label="'选择 ' + task.business_no" :label-size="12" @change="toggleTask(task)" /></view>
-                <view class="row"><text class="task-title">{{ kindName(task.kind) }}</text><SyncState :status="task.status" /></view>
+                <view class="row"><text class="task-title">{{ kindName(task.kind) }}</text><SyncState :status="task.status" :label="purchaseStateLabel(task.status, task.kind)" /></view>
                 <text class="number">{{ task.business_no }}</text>
                 <text v-if="task.reason" class="reason">{{ task.reason }}</text>
+                <text v-if="task.status === 'awaiting_confirmation'" class="notice-caption">核对博远商品、仓库及采购资料 <text aria-hidden="true">›</text></text>
                 <text v-if="noticeText(task.notice_status) && needsAttention(task.status)" class="notice-caption">{{ noticeText(task.notice_status) }}</text>
                 <view class="row foot"><text>{{ modeName(task.mode) }} · {{ time(task.update_at) }}</text><u-icon name="arrow-right" size="13" /></view>
             </view></view>
@@ -54,11 +55,6 @@
             <view v-else-if="!mappings.length && !mappingView.error" class="empty"><u-empty mode="list" :text="'暂无' + mappingNames[mappingKind] + '对应'" /></view>
             <button v-for="map in mappings" :key="map.id" class="mapping-row" :aria-label="'编辑' + (map.local_name || map.local_ref) + '对应'" @click="editMapping(map)"><view><text class="task-title">{{ map.local_name || map.local_ref }}</text><view class="mapping-target"><u-icon name="arrow-right" size="12" /><text class="muted break">{{ map.external_name || map.external_code }}</text></view><text v-if="map.external_name && map.external_code" class="muted break">{{ map.external_code }}</text></view><u-icon name="edit-pen" size="19" /></button>
             <view class="load-more"><u-button v-if="mappings.length < mappingTotal" size="small" :loading="mappingView.loading" @click="loadMappings(false)">加载更多</u-button><text v-else-if="mappings.length" class="muted">共 {{ mappingTotal }} 项{{ mappingNames[mappingKind] }}对应</text></view>
-        </template>
-        <template v-else-if="section === 'logs'">
-            <view class="section-head"><view><text class="task-title">操作记录</text><text class="muted">保留处理过程，提醒入队不代表已送达</text></view></view>
-            <view v-if="!logs.length" class="empty"><u-empty mode="list" text="暂无操作记录" /></view>
-            <view v-for="log in logs" :key="log.id" class="log-row"><text class="log-dot" /><view><text>{{ log.message }}</text><text class="muted">{{ time(log.create_at) }}</text><button v-if="log.task_id" class="inline-action" @click="openTask(log.task_id)">查看相关业务</button></view></view>
         </template>
 
         <view v-if="section === 'tasks' && selectionMode" class="batch-bar"><view class="batch-select-all"><u-checkbox :used-alone="true" :checked="allVisibleSelected" label="本页可处理项" :label-size="12" :disabled="busy || !selectableTasks.length" @change="toggleAll" /><text class="muted">已选 {{ selectedIds.length }} 笔</text></view><u-button type="primary" :disabled="!selectedIds.length || busy" @click="openBatch">同步到博远</u-button></view>
@@ -93,8 +89,7 @@
                         <view class="detail-meta"><view class="row"><text>操作编号</text><text class="break">{{ detail.operation_id }}</text></view><view class="row"><text>博远单号</text><text class="break">{{ detail.external_no || '尚未取得' }}</text></view></view>
                         <view v-for="line in detail.snapshot?.lines || []" :key="line.source_line_id" class="device"><text class="task-title">{{ line.product_name }}</text><view class="row"><text class="muted break">{{ line.imei || line.sn || '缺少串号' }}</text><text class="amount">¥{{ line.amount }}</text></view></view>
                         <view v-if="detail.status === 'blocked' && requiredMaps.length" class="quick-maps"><text class="subheading">需要补充的资料</text><button v-for="item in requiredMaps" :key="item.kind + item.ref" class="mapping-choice" @click="mapFromTask(item)"><text>{{ mappingNames[item.kind] }} · {{ item.name }}</text><u-icon name="arrow-right" size="13" /></button></view>
-                        <view class="timeline"><text class="subheading">处理记录</text><view v-for="log in detail.logs" :key="log.id" class="log-row"><text class="log-dot" /><view><text>{{ log.message }}</text><text class="muted">{{ time(log.create_at) }}</text></view></view></view>
-                        <button class="text-button" @click="showPayload = !showPayload">{{ showPayload ? '收起技术回执' : '查看技术回执' }}</button><text v-if="showPayload" class="payload">{{ JSON.stringify(detail.result, null, 2) }}</text>
+                        <text class="notice">当前状态、失败原因及博远单号如上。详细诊断统一记录到框架日志。</text>
                         <template v-if="manualForm"><view class="form-field"><text>博远人工单号</text><u-input v-model="manualNo" placeholder="填写实际单号" /></view><view class="form-field"><text>处理说明</text><u-textarea v-model="manualNote" placeholder="填写已处理内容和核对依据，至少5字" :maxlength="1000" /></view><text class="notice">仅记录人工处理，不会标记为同步成功。</text></template>
                     </template>
                 </scroll-view>
@@ -114,7 +109,8 @@
         <u-popup :show="configVisible" mode="bottom" :round="8" closeable :close-on-click-overlay="false" @close="closeConfig">
             <view class="sheet"><view class="sheet-header"><text class="sheet-title">连接设置</text></view><scroll-view scroll-y class="sheet-body">
                 <view class="mode-tabs"><button v-for="mode in modes" :key="mode" :class="{ selected: draft.mode === mode }" @click="changeDraftMode(mode)">{{ modeName(mode) }}</button></view>
-                <template v-if="draft.mode === 'mock' || profile.protocol !== 'openapi_v153'"><view class="form-field inline"><text>接收新业务</text><u-switch v-model="draft.enabled" /></view><view class="form-field inline"><text>暂停外部投递</text><u-switch v-model="draft.paused" /></view></template>
+                <view class="form-field inline"><text>{{ draft.mode !== 'mock' && profile.protocol === 'openapi_v153' ? '业务总闸（接收新业务）' : '接收新业务' }}</text><u-switch v-model="draft.enabled" /></view><view class="form-field inline"><text>暂停外部投递</text><u-switch v-model="draft.paused" /></view>
+                <template v-if="draft.mode !== 'mock' && profile.protocol === 'openapi_v153'"><view class="form-field inline"><text>允许采购投递</text><u-switch v-model="draft.purchase_enabled" /></view><view class="form-field"><text>采购处理方式</text><picker :range="purchaseModes" range-key="label" @change="draft.purchase_mode = purchaseModes[Number($event.detail.value)].value"><view class="select-input">{{ purchaseModes.find(item => item.value === draft.purchase_mode)?.label || '人工核对后提交' }}</view></picker></view><text class="notice">默认不发送。人工模式每单核对；切换自动模式只影响后续操作，不会自动提交已保留的待核对任务。</text></template>
                 <view v-if="draft.mode === 'mock'" class="form-field"><text>模拟场景</text><picker :range="scenarios" range-key="label" @change="profile.scenario = scenarios[Number($event.detail.value)].value"><view class="select-input">{{ scenarios.find(s => s.value === profile.scenario)?.label }}</view></picker></view>
                 <template v-else>
                     <view class="form-field"><text>接入协议</text><picker :range="protocols" range-key="label" @change="changeProtocol(protocols[Number($event.detail.value)].value)"><view class="select-input">{{ protocols.find(p => p.value === profile.protocol)?.label }}</view></picker></view>
@@ -125,7 +121,8 @@
                         <view class="form-field"><text>AppSecret</text><u-input v-model="profile.app_secret" type="password" :placeholder="profile.app_secret_configured ? '已加密保存，留空不修改' : '博远提供的32位密钥'" /></view>
                         <view class="form-field"><text>账套代码 big_gsdm</text><u-input v-model="profile.account_id" placeholder="账套公司代码，不是门店UUID" /></view>
                         <view class="form-field"><text>会员档案起始日期</text><picker mode="date" :value="profile.member_since" @change="profile.member_since = $event.detail.value"><view class="select-input">{{ profile.member_since }}</view></picker></view>
-                        <view class="notice">接口版本 1.0 · MD5 · UTF-8<text class="muted">仅同步基础资料，不创建单据或收付款。</text></view>
+                        <view class="notice">接口版本 1.0 · MD5 · UTF-8<text class="muted">基础资料只读；采购须单独允许投递。收付款与财务同步未启用。</text></view>
+                        <view v-if="draft.purchase_enabled" class="form-field"><text>采购写入确认</text><u-input v-model="confirmAccount" placeholder="开启时重新输入目标账套代码" /></view>
                     </template>
                     <template v-else><view class="form-field"><text>目标账套编号</text><u-input v-model="profile.account_id" placeholder="博远授权对应的账套" /></view><view class="form-field"><text>接口授权</text><u-input v-model="profile.token" type="password" :placeholder="profile.token_configured ? '已加密保存，留空保留原授权' : '填写约定桥接服务Token'" /></view><view class="form-field inline"><text>接口契约已双方确认</text><u-switch v-model="profile.contract_confirmed" /></view><view v-if="draft.mode === 'production'" class="form-field"><text>真实测试验收单号</text><u-input v-model="profile.acceptance_ref" placeholder="填双方验收记录编号" /></view><view class="form-field"><text>启用写入确认</text><u-input v-model="confirmAccount" placeholder="启用时重新输入目标账套编号" /></view></template>
                     <u-button :loading="busy" @click="checkConnection">核验已保存账套</u-button><text class="muted">{{ profile.probe_at ? '最近核验：' + time(profile.probe_at) : '尚未核验' }}</text>
@@ -171,25 +168,31 @@
                 </view>
             </scroll-view><view class="sheet-footer"><u-button v-if="archiveCursor" :loading="archiveLoading" @click="loadArchive(true)">加载更多</u-button><u-button v-else @click="archiveVisible = false">关闭</u-button></view></view>
         </u-popup>
+        <PurchaseReview :task-id="purchaseTaskId" :task-ids="purchaseTaskIds" :config="config" @close="purchaseTaskId = 0; purchaseTaskIds = []" @switch="purchaseTaskId = $event" @changed="loadTasks(true)" />
     </view>
 </template>
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch, onUnmounted } from 'vue'
-import { onShow, onHide } from '@dcloudio/uni-app'
+import { onLoad, onShow, onHide } from '@dcloudio/uni-app'
 import * as api from '../../api/index'
 import SyncState from '../../components/SyncState.vue'
+import PurchaseReview from '../../components/PurchaseReview.vue'
+import { purchaseRouteId } from '../../utils/purchase-form'
 const modes = ['mock', 'test', 'production']
 const protocols = [{ value: 'openapi_v153', label: '博远开放平台 v1.5.3' }, { value: 'bridge_v1', label: '约定桥接接口 v1.0' }]
 const modeName = (mode: string) => ({ mock: '模拟模式', test: '测试模式', production: '正式模式' }[mode] || mode)
+const purchaseStateNames: Record<string, string> = { awaiting_confirmation: '待核对', created_review: '已建单待核验', needs_review: '需人工核验' }
+const purchaseStateLabel = (status: string, kind = '') => status === 'succeeded' && kind === 'purchase' ? '采购记录已核对' : purchaseStateNames[status]
 const kindName = (kind: string) => ({ purchase: '采购入库', sale: '销售出库', purchase_return: '采购退货', sale_return: '销售退货', party_resolve: '往来单位对应', financial_item_ensure: '应收应付关联', settlement_register: '收付款登记', manual_review: '原单变更待核对' }[kind] || kind)
 const mappingNames: Record<string, string> = { product: '商品', warehouse: '仓库', location: '库位', supplier: '供应商', customer: '客户', staff: '人员', method: '收付方式', account: '资金账户' }
 const mappingTabs = [{ kind: 'product', name: '商品' }, { kind: 'warehouse', name: '仓库' }, { kind: 'staff', name: '人员' }, { kind: 'customer', name: '客户' }, { kind: 'supplier', name: '供应商' }, { kind: 'method', name: '收付方式' }, { kind: 'account', name: '资金账户' }, { kind: 'location', name: '库位' }]
 const visibleMappingTabs = computed(() => isOpenApi.value ? mappingTabs.filter(item => ['product', 'staff', 'customer', 'supplier'].includes(item.kind)) : mappingTabs)
 const scenarios = [{ value: 'success', label: '正常成功' }, { value: 'rejected', label: '明确拒绝' }, { value: 'timeout_after_commit', label: '处理成功但响应丢失' }, { value: 'partial', label: '部分成功' }, { value: 'malformed', label: '回执不完整' }]
-const sections = [{ key: 'tasks', name: '同步任务' }, { key: 'archives', name: '基础资料' }, { key: 'mappings', name: '资料对应' }, { key: 'logs', name: '操作记录' }]
+const sections = [{ key: 'tasks', name: '同步任务' }, { key: 'archives', name: '基础资料' }, { key: 'mappings', name: '资料对应' }]
+const purchaseModes = [{ value: 'manual', label: '人工核对后提交' }, { value: 'automatic', label: '自动处理后续采购' }]
 const filters = [{ value: '', label: '全部' }, { value: 'ready', label: '待同步' }, { value: 'working', label: '处理中' }, { value: 'action_required', label: '需要处理' }, { value: 'completed', label: '已完成' }]
-const config = ref<any>({ mode: 'mock', enabled: false, paused: true, profiles: {} })
+const config = ref<any>({ mode: 'mock', enabled: false, purchase_enabled: false, purchase_mode: 'manual', paused: true, profiles: {} })
 const isOpenApi = computed(() => config.value.mode !== 'mock' && config.value.profiles[config.value.mode]?.protocol === 'openapi_v153')
 const configLoaded = ref(false), sectionLoaded = ref(false), archiveFilter = ref('')
 const visibleArchives = computed(() => archiveJobs.value.filter(item => !archiveFilter.value || (archiveFilter.value === 'attention' ? ['failed', 'needs_review'].includes(item.job?.status) : archiveFilter.value === 'working' ? ['queued', 'running', 'retry'].includes(item.job?.status) : item.job?.status === 'completed')))
@@ -208,14 +211,14 @@ const archiveMappingKinds = computed<string[]>(() => {
     return isOpenApi.value ? kinds.filter(kind => ['product', 'staff', 'customer', 'supplier'].includes(kind)) : kinds
 })
 const syncState = (status: string) => ({ queued: '待同步', running: '读取中', retry: '等待重试', failed: '同步中断', needs_review: '数量待核对', completed: '本轮完成' }[status] || status)
-const tasks = ref<any[]>([]), logs = ref<any[]>([]), counts = ref<Record<string, number>>({})
+const tasks = ref<any[]>([]), counts = ref<Record<string, number>>({})
 const loading = ref(false), error = ref(''), busy = ref(false), detailLoading = ref(false), detail = ref<any>(null)
 const keyword = ref(''), status = ref(''), section = ref('tasks'), page = ref(1), total = ref(0)
 const configVisible = ref(false), draft = ref<any>({ profiles: {} }), confirmAccount = ref(''), savedDraft = ref('')
 const profile = computed<any>(() => draft.value.profiles[draft.value.mode] || {})
 const staffOptions = ref<any[]>([{ uid: 0, label: '不发送员工提醒' }])
 const assigneeName = computed(() => !config.value.assignee_uid ? '未指定' : staffOptions.value.find(item => item.uid === config.value.assignee_uid)?.label || '已指定员工')
-const needsAttention = (value: string) => ['blocked', 'rejected', 'partial', 'attention', 'manual_pending', 'confirming'].includes(value)
+const needsAttention = (value: string) => ['awaiting_confirmation', 'created_review', 'needs_review', 'blocked', 'rejected', 'partial', 'attention', 'manual_pending', 'confirming'].includes(value)
 const noticeText = (value: string) => ({ queued: '提醒已入队，送达待确认', unavailable: '提醒未送出，请检查责任人和消息配置', retry: '提醒发送异常，待办仍保留', simulated: '模拟提醒，不发送真实消息' }[value] || '')
 const selectionMode = ref(false), selectedIds = ref<number[]>([]), batchVisible = ref(false), batchResults = ref<any[]>([]), batchError = ref('')
 const selectedTasks = computed(() => tasks.value.filter(task => selectedIds.value.includes(task.id)))
@@ -252,10 +255,10 @@ const lookupMode = ref(''), mappingError = ref(''), candidateLabel = ref(''), ca
 const canMatchPhone = computed(() => isOpenApi.value && !!mappingDraft.value.local_ref && ['staff', 'customer', 'supplier'].includes(mappingDraft.value.kind))
 let savedMapping = '', referenceRequest = 0, sourceRequest = 0
 const referenceResource = computed(() => ({ product: 'products', warehouse: 'warehouses', staff: 'staff', method: 'payment_methods', account: 'capital_accounts', customer: 'parties', supplier: 'parties' }[mappingDraft.value.kind] || ''))
-const manualForm = ref(false), manualNo = ref(''), manualNote = ref(''), showPayload = ref(false)
-const detailMessage = computed(() => detail.value?.reason || ({ simulated: '模拟回执已核验，未向博远写入', succeeded: '博远已确认业务生效', pending: '处理请求已保存，等待后台执行', retry: '等待后台按原任务继续处理', waiting: '原业务完成后将继续处理', processing: '后台正在核验，请勿重复提交', confirming: '结果尚未确认，将核验原操作，不重新建单' }[detail.value?.status] || '查看下方处理记录'))
+const manualForm = ref(false), manualNo = ref(''), manualNote = ref(''), purchaseTaskId = ref(0), purchaseTaskIds = ref<number[]>([])
+const detailMessage = computed(() => detail.value?.reason || ({ simulated: '模拟回执已核验，未向博远写入', succeeded: '博远已确认业务生效', pending: '处理请求已保存，等待后台执行', retry: '等待后台按原任务继续处理', waiting: '原业务完成后将继续处理', processing: '后台正在核验，请勿重复提交', confirming: '结果尚未确认，将核验原操作，不重新建单' }[detail.value?.status] || '查看当前任务状态和业务回执'))
 const pendingCount = computed(() => ['pending', 'processing', 'waiting', 'confirming', 'retry'].reduce((sum, key) => sum + (counts.value[key] || 0), 0))
-const attentionCount = computed(() => ['blocked', 'rejected', 'partial', 'attention', 'manual_pending'].reduce((sum, key) => sum + (counts.value[key] || 0), 0))
+const attentionCount = computed(() => ['awaiting_confirmation', 'created_review', 'needs_review', 'blocked', 'rejected', 'partial', 'attention', 'manual_pending'].reduce((sum, key) => sum + (counts.value[key] || 0), 0))
 const completedCount = computed(() => (counts.value.simulated || 0) + (counts.value.succeeded || 0))
 const summaryMetrics = computed(() => section.value === 'archives' ? [{ key: 'working', count: archiveStats.value.pending, label: '更新中', alert: false }, { key: 'attention', count: archiveStats.value.attention, label: '待核对', alert: true }, { key: 'completed', count: archiveStats.value.completed, label: '已更新', alert: false }] : [{ key: 'working', count: pendingCount.value, label: '处理中', alert: false }, { key: 'action_required', count: attentionCount.value, label: '需要处理', alert: true }, { key: 'completed', count: completedCount.value, label: config.value.mode === 'mock' ? '模拟完成' : '已同步', alert: false }])
 const workerStale = computed(() => config.value.enabled && Date.now() / 1000 - Number(config.value.worker_last_at || config.value.started_at) > 180)
@@ -268,7 +271,7 @@ let active = false
 let pendingReload = false
 let returnTaskId = 0
 let mappingDraftConnection = ''
-let initialized = false
+let initialPurchaseId = 0, initialTaskId = 0, entryOpened = false
 async function loadTasks(reset = true) {
     if (loading.value) { if (reset) pendingReload = true; return }
     loading.value = true
@@ -287,11 +290,21 @@ async function refresh() {
     try {
         config.value = (await api.getConfig()).data
         configLoaded.value = true
-        if (!initialized) { initialized = true; if (isOpenApi.value) section.value = 'archives' }
         if (section.value === 'tasks') await loadTasks(true)
         else if (section.value === 'archives') { archiveJobs.value = (await api.getReferenceJobs()).data; sectionLoaded.value = true; error.value = '' }
         else if (section.value === 'mappings') { await loadMappings(true); error.value = '' }
-        else { logs.value = (await api.getLogs()).data; error.value = '' }
+        if (!entryOpened && (initialPurchaseId || initialTaskId)) {
+            entryOpened = true
+            try {
+                if (initialTaskId) await openTask(initialTaskId)
+                else {
+                    const res: any = await api.capturePurchaseSource(initialPurchaseId)
+                    const id = purchaseRouteId(res.data?.task?.id || res.data?.id || res.data?.task_id)
+                    if (!id) throw new Error('尚未取得采购任务，请刷新后从采购详情重试')
+                    purchaseTaskIds.value = [...new Set<number>((res.data?.task_ids || [id]).map(purchaseRouteId).filter(Boolean))]; purchaseTaskId.value = id; await loadTasks(true)
+                }
+            } catch (err) { entryOpened = false; error.value = message(err) }
+        }
     } catch (err) { error.value = message(err) }
 }
 function selectStatus(value: string) { if (busy.value) return; selectedIds.value = []; status.value = value; loadTasks(true) }
@@ -349,8 +362,8 @@ async function refreshBatchResults() {
 }
 watch(batchVisible, visible => { if (batchTimer) clearInterval(batchTimer); if (visible) { refreshBatchResults(); batchTimer = setInterval(refreshBatchResults, 2500) } })
 async function openTask(id: number) {
-    detailLoading.value = true; manualForm.value = false; showPayload.value = false; manualNote.value = ''; manualNo.value = ''
-    try { detail.value = (await api.getTask(id)).data } catch (err) { toast(message(err)) } finally { detailLoading.value = false }
+    detailLoading.value = true; manualForm.value = false; manualNote.value = ''; manualNo.value = ''
+    try { const task: any = (await api.getTask(id)).data; if (task.request?.schema === 'boyuan.purchase.v154') { detail.value = null; purchaseTaskIds.value = [id]; purchaseTaskId.value = id } else detail.value = task } catch (err) { toast(message(err)) } finally { detailLoading.value = false }
 }
 function closeDetail() {
     if (busy.value) return
@@ -368,11 +381,11 @@ async function act(action: string) {
     } catch (err) { toast(message(err)) } finally { busy.value = false }
 }
 async function openConfig() {
-    draft.value = JSON.parse(JSON.stringify(config.value)); confirmAccount.value = ''; savedDraft.value = JSON.stringify(draft.value); configVisible.value = true
+    draft.value = { purchase_enabled: false, purchase_mode: 'manual', ...JSON.parse(JSON.stringify(config.value)) }; confirmAccount.value = ''; savedDraft.value = JSON.stringify(draft.value); configVisible.value = true
     try { staffOptions.value = [{ uid: 0, label: '不发送员工提醒' }, ...(await api.getStaff()).data.map((row: any) => ({ uid: row.uid, label: row.real_name || row.username }))] } catch (err) { toast(message(err)) }
 }
-function changeDraftMode(mode: string) { draft.value.mode = mode; draft.value.paused = true; confirmAccount.value = ''; if (profile.value.protocol === 'openapi_v153') { draft.value.enabled = false; draft.value.finance_enabled = false; if (!profile.value.endpoint) profile.value.endpoint = mode === 'test' ? 'https://open-api-uat.139erp.com/api' : 'https://open-api.139erp.com/api' } }
-function changeProtocol(protocol: string) { profile.value.protocol = protocol; draft.value.enabled = false; draft.value.paused = true; draft.value.finance_enabled = false }
+function changeDraftMode(mode: string) { draft.value.mode = mode; draft.value.paused = true; draft.value.purchase_enabled = false; confirmAccount.value = ''; if (profile.value.protocol === 'openapi_v153') { draft.value.enabled = false; draft.value.finance_enabled = false; if (!profile.value.endpoint) profile.value.endpoint = mode === 'test' ? 'https://open-api-uat.139erp.com/api' : 'https://open-api.139erp.com/api' } }
+function changeProtocol(protocol: string) { profile.value.protocol = protocol; draft.value.enabled = false; draft.value.purchase_enabled = false; draft.value.paused = true; draft.value.finance_enabled = false }
 function closeConfig() {
     if (busy.value) return
     if (JSON.stringify(draft.value) !== savedDraft.value) uni.showModal({ title: '放弃未保存的修改？', success: result => { if (result.confirm) configVisible.value = false } })
@@ -382,9 +395,8 @@ async function persistConfig() {
     if (busy.value) return
     busy.value = true
     try {
-        config.value = (await api.saveConfig({ revision: config.value.revision, mode: draft.value.mode, enabled: draft.value.enabled, paused: draft.value.paused, finance_enabled: draft.value.finance_enabled, assignee_uid: draft.value.assignee_uid, profile: profile.value, confirm_account: confirmAccount.value })).data
+        config.value = (await api.saveConfig({ revision: config.value.revision, mode: draft.value.mode, enabled: draft.value.enabled, purchase_enabled: draft.value.purchase_enabled, purchase_mode: draft.value.purchase_mode, paused: draft.value.paused, finance_enabled: draft.value.finance_enabled, assignee_uid: draft.value.assignee_uid, profile: profile.value, confirm_account: confirmAccount.value })).data
         draft.value = JSON.parse(JSON.stringify(config.value))
-        if (isOpenApi.value) section.value = 'archives'
         configVisible.value = false; await refresh(); toast('连接设置已保存')
     } catch (err) { toast(message(err)) } finally { busy.value = false }
 }
@@ -489,8 +501,9 @@ async function persistMapping() {
     busy.value = true
     try { await api.saveMapping({ ...mappingDraft.value, mode: config.value.mode, connection_key: config.value.profiles[config.value.mode]?.connection_key }); await loadMappings(true); busy.value = false; const fromTask = !!returnTaskId; finishMapping(); toast(fromTask ? '绑定已保存，请继续处理原业务' : '对应已保存') } catch (err) { mappingError.value = message(err) } finally { busy.value = false }
 }
+onLoad((options: any) => { initialPurchaseId = purchaseRouteId(options?.purchase_id); initialTaskId = purchaseRouteId(options?.taskid || options?.task_id) })
 onShow(() => { active = true; refresh(); if (!timer) timer = setInterval(async () => {
-    if (!active || configVisible.value || mappingVisible.value || archiveVisible.value || batchVisible.value || selectionMode.value || busy.value) return
+    if (!active || configVisible.value || mappingVisible.value || archiveVisible.value || batchVisible.value || purchaseTaskId.value || selectionMode.value || busy.value) return
     try {
         config.value = (await api.getConfig()).data
         if (section.value === 'tasks' && page.value === 1) await loadTasks(true)
@@ -503,7 +516,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); if (batchTimer) clearInterv
 </script>
 
 <style scoped lang="scss">
-.bridge { --brand: #2563eb; color: #20252d; background: #f5f6f8; min-height: 100vh; padding-bottom: calc(24px + env(safe-area-inset-bottom)); font-size: 14px; letter-spacing: 0; }
+.bridge { --brand: var(--primary-color, #2563eb); color: #20252d; background: #f5f6f8; min-height: 100vh; padding-bottom: calc(24px + env(safe-area-inset-bottom)); font-size: 14px; letter-spacing: 0; }
 button { margin: 0; padding: 0; font-size: inherit; line-height: 1.4; border: 0; background: transparent; color: inherit; &::after { border: 0; } }
 .toolbar { display: flex; align-items: center; justify-content: space-between; padding: 16px; background: #fff; }
 .heading, .tools, .row, .inline, .section-head { display: flex; align-items: center; gap: 8px; }.row { justify-content: space-between; }.heading { min-width: 0; }.title { font-size: 20px; font-weight: 700; }.mode { font-size: 11px; padding: 3px 7px; background: #eef2ff; color: #4558a2; border-radius: 4px; white-space: nowrap; }.mode.production { color: #b45309; background: #fff5df; }.mode.test { color: #0f766e; background: #e9f6f1; }
@@ -535,4 +548,5 @@ button { margin: 0; padding: 0; font-size: inherit; line-height: 1.4; border: 0;
 @media (prefers-reduced-motion: reduce) { .bridge *, .bridge *::before { transition: none !important; animation: none !important; } }
 /* #endif */
 @media (max-width: 350px) { .toolbar { padding: 12px; }.title { font-size: 18px; }.nav { gap: 22px; }.task { padding: 12px; }.state { font-size: 10px; }.sheet-body { padding: 0 12px; }.sheet-footer { padding-left: 12px; padding-right: 12px; } }
+@media (prefers-color-scheme: dark) { .bridge { color: #edf0f5; background: #12171e; }.toolbar, .summary, .nav, .search, .filter-scroll, .list-toolbar, .archive-row, .archive-filters, .mapping-tabs, .mapping-row, .task, .sheet, .batch-bar { color: #edf0f5; background: #1b212a; border-color: #39414d; }.muted, .number, .foot, .account-caption, .metric-unit, .technical-ids, .step-label, .archive-progress, .owner-tag { color: #bac4d1; }.nav button { color: #b2bdcc; }.nav .selected { color: #f0f3f8; }.filters button, .select-input, .notice { color: #cbd4e0; background: #27313f; border-color: #495565; }.filters button.active { color: #a9cdff; background: #243d61; }.scope-notice, .connection { background: #1c3440; color: #c0e3df; }.scope-notice .muted { color: #b1cbd9; }.connection.paused, .notice-warning, .inline-alert, .mapping-error, .mapping-notice { background: #372b1e; color: #f1ba80; }.notice-warning .muted { color: #dfbc93; }.reason, .notice-caption, .candidate-hint { color: #edbb84; }.inline-action, .text-button, .archive-filters .active { color: #a9cdff; }.task-selected { background: #25364e; }.device, .detail-meta, .sheet-header, .sheet-footer, .mapping-choice, .archive-item, .form-field, .responsibility, .binding-step, .batch-overview, .batch-item, .batch-result, .foot { border-color: #39414d; }.bridge :deep(.u-search__content), .bridge :deep(.u-search__content__input) { background-color: #27313f !important; color: #e7edf5 !important; }.bridge :deep(.u-input__content__field-wrapper__field) { color: #e7edf5 !important; } }
 </style>

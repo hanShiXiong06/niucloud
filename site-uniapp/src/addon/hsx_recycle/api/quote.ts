@@ -9,6 +9,11 @@ export function updateQuoteImage(categoryId: number, data: { images: string, exp
     return request.put(`recycle/recycle_category/${categoryId}/quote-image`, data, { showErrorMessage: false, showLoading: false })
 }
 
+/** 只修改客户展示状态，不通过完整分类编辑接口回写图片或其他资料。 */
+export function updateQuoteVisibility(categoryId: number, data: { is_show: 0 | 1, expected_is_show: 0 | 1 }) {
+    return request.put(`recycle/recycle_category/${categoryId}/quote-visibility`, data, { showErrorMessage: false, showLoading: false })
+}
+
 export function getQuoteHistory(categoryId: number, page = 1) {
     return request.get(`recycle/recycle_category/${categoryId}/quote_history`, { page, limit: 10 }, { showErrorMessage: false, showLoading: false })
 }

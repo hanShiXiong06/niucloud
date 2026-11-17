@@ -7,7 +7,7 @@ final class NoticeService
     public function send(int $site,int $id): void
     {
         $config=(new ConfigService())->get($site); $task=Db::name('hsx_boyuan_task')->where('site_id',$site)->where('id',$id)->find();
-        if (!$task || !in_array($task['status'],['blocked','rejected','partial','attention'],true) || $task['notice_at']>time()-900) return;
+        if (!$task || !in_array($task['status'],['blocked','rejected','partial','attention','needs_review'],true) || $task['notice_at']>time()-900) return;
         $where=[['site_id','=',$site],['id','=',$id],['notice_at','=',$task['notice_at']]];
         if (!Db::name('hsx_boyuan_task')->where($where)->update(['notice_at'=>time()])) return;
         $state='unavailable';

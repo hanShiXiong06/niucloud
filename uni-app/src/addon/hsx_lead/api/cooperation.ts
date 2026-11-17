@@ -31,6 +31,8 @@ export const createCooperationOrder = (data: CoopRow) => request.post(`${root}/o
 export const cooperationOrder = (id: number) => request.get(`${root}/orders/${id}`, {}, quiet)
 // Reconcile/close only an abandoned original cashier attempt; never creates a charge.
 export const resumeCooperationOrder = (id: number) => request.post(`${root}/orders/${id}/resume`, {}, quiet)
+/** Query/recover the original receipt only; never close, sign or debit a payment. */
+export const checkCooperationOrderPayment = (id: number) => request.post(`${root}/orders/${id}/check`, {}, quiet)
 export const cooperationOrders = (query: CoopRow) => request.get(`${root}/orders`, query, quiet)
 export const closeCooperationOrder = (id: number) => request.post(`${root}/orders/${id}/close`, { confirm: true }, quiet)
 export const cooperationOrderRefund = (id: number) => request.get(`${root}/orders/${id}/refund`, {}, quiet)

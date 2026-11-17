@@ -43,7 +43,7 @@ final class OrderPaymentReadService
     }
     public static function hasTable(string $table): bool
     {
-        if(!in_array($table,['pay','pay_refund'],true))return false;
+        if(!in_array($table,['pay','pay_refund','hsx_lead_virtual_order'],true))return false;
         $name=(string)Db::name($table)->getTable();
         $database=(string)Db::connect()->getConfig('database');$scope=$database.':'.$name;
         if(isset(self::$knownTables[$scope]))return true;
@@ -58,7 +58,11 @@ final class OrderPaymentReadService
         // turn a server-side channel choice into another payment decision.
         $presented['payment_display_name']=$type===\addon\hsx_lead\app\service\virtualpay\VirtualPaySettings::TYPE?'微信支付':$presented['payment_type_name'];
         $presented['payment_channel']=$channel;$presented['payment_channel_name']=$channel!==''?(ChannelDict::getType($channel)?:'其他支付终端'):'尚未确认';
-        return array_replace($presented,PaymentRefundService::summary($order,$pay));
+        $source=null;
+        if($pay&&$type===\addon\hsx_lead\app\service\virtualpay\VirtualPaySettings::TYPE&&self::hasTable('hsx_lead_virtual_order')){
+            $source=Db::name('hsx_lead_virtual_order')->where('site_id',(int)$order['site_id'])->where('pay_id',(int)$pay['id'])->where('order_id',(int)$order['id'])->find();
+        }
+        return PaymentOrderActions::present($order,$pay,$source,array_replace($presented,PaymentRefundService::summary($order,$pay)));
     }
     public static function filter($query,array $params,int $site): void
     {

@@ -78,6 +78,16 @@ class RecycleCategory extends BaseAdminController
         return success('EDIT_SUCCESS', (new RecycleCategoryService())->updateQuoteImage($id, $data));
     }
 
+    /** 只更新当前分类显示状态，不接收图片、子分类及会员限制等资料。 */
+    public function updateQuoteVisibility(int $id)
+    {
+        $data = $this->request->params([
+            ['is_show', null],
+            ['expected_is_show', null],
+        ]);
+        return success('EDIT_SUCCESS', (new RecycleCategoryService())->updateQuoteVisibility($id, $data));
+    }
+
     /**
      * 报价单历史列表（支持按分类、日期筛选）
      */

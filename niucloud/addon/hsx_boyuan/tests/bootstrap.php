@@ -40,3 +40,21 @@ function boyuanBoot(?string $existing=null): array
     }
     return [$app,$pdo,$schema,$site];
 }
+
+/** Inspect only this randomly isolated run's framework file log. */
+function boyuanLogCount(string $schema,string $action,?int $task=null): int
+{
+    if (!preg_match('/^hsx_boyuan_test_[a-f0-9]{16}$/D',$schema)) throw new RuntimeException('Unsafe log scope');
+    $path=sys_get_temp_dir().'/'.$schema.'/log';
+    if (!is_dir($path)) return 0;
+    $count=0;
+    foreach(new RecursiveIteratorIterator(new RecursiveDirectoryIterator($path,FilesystemIterator::SKIP_DOTS)) as $file) {
+        if (!$file->isFile() || $file->isLink()) continue;
+        foreach(file($file->getPathname(),FILE_IGNORE_NEW_LINES) as $line) {
+            $start=strpos($line,'hsx_boyuan {'); if ($start===false) continue;
+            $row=json_decode(substr($line,$start+11),true);
+            if (is_array($row) && ($row['action']??'')===$action && ($task===null || (int)($row['task_id']??0)===$task)) $count++;
+        }
+    }
+    return $count;
+}

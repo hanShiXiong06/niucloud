@@ -108,6 +108,24 @@ final class MembershipVirtualPayAdapter
         return MembershipCostService::pricingFingerprint($business, $rule);
     }
 
+    /** Called inside the channel delivery transaction, after authenticating and
+     * persisting the original receipt and locking its source/native binding.
+     * A temporary query failure is recoverable; financial/refund holds are not. */
+    public function beforeReceiptDelivery(int $site, array $pay, array $business): void
+    {
+        $current = $this->resolve($site, $pay, true);
+        if ((int)$current['id'] !== (int)($business['id'] ?? 0)) {
+            throw new CommonException('收款恢复与原会员订单不对应');
+        }
+        $rule = Data::decode($current['rule_json']);
+        if ($current['status'] === 'unpaid'
+            && ($rule['requires_manual_review'] ?? '') === 'gateway_payment_receipt_review') {
+            unset($rule['requires_manual_review']);
+            Store::query('coop_order', $site)->where('id', $current['id'])->update([
+                'rule_json' => Data::json($rule), 'update_time' => time()]);
+        }
+    }
+
     /** Native PaySuccess normally delivers this; retain an idempotent explicit
      * verification/recovery when hook cache or prior delivery was interrupted. */
     public function confirm(int $site, array $business, string $number): bool

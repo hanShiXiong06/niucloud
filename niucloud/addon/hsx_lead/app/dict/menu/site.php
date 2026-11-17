@@ -678,6 +678,7 @@ $menus = [
                             'parent_select_key'=>'','menu_type'=>'2','icon'=>'','api_url'=>$item[2],
                             'router_path'=>'','view_path'=>'','methods'=>$item[3],'sort'=>'80','status'=>'1','is_show'=>'0'];
                     },[
+                        ['核对到账与恢复开通','hsx_lead_cooperation_order_check','hsx_lead/cooperation/orders/<id>/check','post'],
                         ['确认线下收款','hsx_lead_cooperation_order_manual_receipt','hsx_lead/cooperation/orders/<id>/manual-receipt','post'],
                         ['预览线下收款','hsx_lead_cooperation_order_manual_receipt_preview','hsx_lead/cooperation/orders/<id>/manual-receipt','get'],
                         ['查看线下收款记录','hsx_lead_cooperation_order_manual_receipt_read','hsx_lead/cooperation/manual-receipts/<id>','get'],

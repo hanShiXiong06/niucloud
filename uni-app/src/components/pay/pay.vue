@@ -27,6 +27,7 @@
             </scroll-view>
             <view class="btn-wrap">
                 <button class="primary-btn-bg bg-[var(--primary-color)] btn" hover-class="none" :loading="loading" @click="confirmPay">{{ requiresOrderCheck ? '返回订单核对' : t('pay.confirmPay') }}</button>
+                <slot name="help" :busy="loading" :pending="requiresOrderCheck" />
             </view>
         </view>
     </u-popup>
@@ -112,6 +113,7 @@ const confirmPay = async () => {
     loading.value = true
 
     const attempt = ++paymentAttempt
+    const currentAttempt = () => attempt === paymentAttempt && show.value
     const tradeType = payInfo.value?.trade_type
     const tradeId = payInfo.value?.trade_id
     const selectedType = type.value
@@ -127,12 +129,18 @@ const confirmPay = async () => {
     }
     if (attempt !== paymentAttempt || !show.value) return
 
-    pay({
+    // The transport can also throw before returning a Promise (for example a
+    // request interceptor). Treat it like an asynchronous failure so the
+    // cashier never remains in its busy state.
+    Promise.resolve().then(() => {
+        if (!currentAttempt()) return null
+        return pay({
         trade_type: tradeType,
         trade_id: tradeId,
         type: selectedType,
         openid: uni.getStorageSync('openid') || '',
         ...clientParams
+        })
     }).then(async (res: any) => {
         if (attempt !== paymentAttempt || !show.value) return
         if (clientAction || (res.data && typeof res.data === 'object' && res.data.client_action)) {
@@ -144,16 +152,28 @@ const confirmPay = async () => {
             return
         }
         switch (selectedType) {
-            case 'wechatpay':
+            case 'wechatpay': {
+                const onWechatInterrupted = (cancelled: boolean) => {
+                    if (!currentAttempt()) return
+                    loading.value = false
+                    paymentFeedback.value = cancelled
+                        ? '已退出微信付款，订单尚未取消，请核对原订单后再操作。'
+                        : '本次微信付款结果未确认，请核对原订单；若已扣款，请勿重复付款。'
+                    uni.showToast({ title: cancelled ? '已退出微信付款' : '微信付款结果待核对', icon: 'none' })
+                    // The owning page may reconcile the original order. This
+                    // optional event never closes/locks legacy cashiers that
+                    // do not listen, and never asserts payment or closure.
+                    emits('check')
+                }
                 // #ifndef H5
                 uni.requestPayment({
                     provider: 'wxpay',
                     ...res.data,
                     success: (res: any) => {
-                        toPayResult()
+                        if (currentAttempt()) toPayResult()
                     },
                     fail: (res: any) => {
-                        loading.value = false
+                        onWechatInterrupted(String(res?.errMsg || '').toLowerCase().includes('cancel'))
                     }
                 })
                 // #endif
@@ -164,10 +184,13 @@ const confirmPay = async () => {
                     wechat.pay({
                         ...res.data,
                         success: () => {
-                            toPayResult()
+                            if (currentAttempt()) toPayResult()
                         },
                         cancel: () => {
-                            loading.value = false
+                            onWechatInterrupted(true)
+                        },
+                        fail: (res: any) => {
+                            onWechatInterrupted(String(res?.errMsg || '').toLowerCase().includes('cancel'))
                         }
                     })
                 } else {
@@ -179,6 +202,7 @@ const confirmPay = async () => {
                 }
                 // #endif
                 break;
+            }
             case 'alipay':
                 // #ifdef H5
                 if (isWeixinBrowser()) {
@@ -204,10 +228,10 @@ const confirmPay = async () => {
                     provider: 'alipay',
                     orderInfo: res.data,
                     success: (res: any) => {
-                        toPayResult()
+                        if (currentAttempt()) toPayResult()
                     },
                     fail: (res: any) => {
-                        loading.value = false
+                        if (currentAttempt()) loading.value = false
                     }
                 })
                 // #endif
@@ -221,10 +245,10 @@ const confirmPay = async () => {
                         provider: 'wxpay',
                         ...jsapi,
                         success: () => {
-                            toPayResult()
+                            if (currentAttempt()) toPayResult()
                         },
                         fail: () => {
-                            loading.value = false
+                            if (currentAttempt()) loading.value = false
                         }
                     })
                     return undefined
@@ -244,10 +268,10 @@ const confirmPay = async () => {
                     wechat.pay({
                         ...h5Jsapi,
                         success: () => {
-                            toPayResult()
+                            if (currentAttempt()) toPayResult()
                         },
                         cancel: () => {
-                            loading.value = false
+                            if (currentAttempt()) loading.value = false
                         }
                     })
                     return undefined
@@ -266,11 +290,12 @@ const confirmPay = async () => {
                         extraData: miniProgram.extraData || {},
                         envVersion: miniProgram.envVersion || 'release',
                         success: () => {
+                            if (!currentAttempt()) return
                             loading.value = false
                             show.value = false
                         },
                         fail: () => {
-                            loading.value = false
+                            if (currentAttempt()) loading.value = false
                         }
                     })
                     return
@@ -314,6 +339,9 @@ const confirmPay = async () => {
             paymentFeedback.value = error instanceof VirtualPaymentClientError && error.code === 'cancelled'
                 ? '已退出微信付款，原订单结果尚待核对。请返回订单查看，不要重复付款。'
                 : '本次付款结果尚未确认，请返回订单核对。系统不会自动切换付款方式。'
+            // Optional owning-page hook: reconcile the original immediately
+            // instead of requiring another tap. It is not a paid/closed event.
+            emits('check')
         }
         if (error instanceof VirtualPaymentClientError && error.code !== 'cancelled') {
             uni.showToast({ title: error.message, icon: 'none' })
@@ -399,15 +427,19 @@ const open = (tradeType: string, tradeId: number, payReturn: string = '', scene:
     })
 }
 
-const emits = defineEmits(['close', 'confirm'])
+const emits = defineEmits(['close', 'confirm', 'check'])
 
 const toPayResult = () => {
+    loading.value = false
+    requiresOrderCheck.value = true
+    paymentFeedback.value = '付款操作已返回，正在核对订单结果'
     emits('confirm')
     // console.log(prop.reformat)
     if(prop.reformat){
         redirect({
             url: prop.reformat,
-            mode: 'redirectTo'
+            mode: 'redirectTo',
+            fail: () => { uni.showToast({ title: '结果页暂未打开，请返回原订单核对付款结果', icon: 'none' }); emits('check') }
         })
         return
     }
@@ -415,7 +447,8 @@ const toPayResult = () => {
     redirect({
         url: '/app/pages/pay/result',
         param: { trade_type: payInfo.value?.trade_type, trade_id: payInfo.value?.trade_id },
-        mode: 'redirectTo'
+        mode: 'redirectTo',
+        fail: () => { uni.showToast({ title: '结果页暂未打开，请返回原订单核对付款结果', icon: 'none' }); emits('check') }
     })
 }
 

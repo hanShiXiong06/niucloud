@@ -25,7 +25,7 @@ try {
     ensure($result['results'][2]['status']==='skipped','completed business is not submitted twice');
     ensure($result['results'][3]['code']==='FINANCE_PAUSED','disabled finance guarded on server');
     ensure($result['results'][4]['code']==='TASK_MISSING','unknown or cross-site task rejected without leaking data');
-    ensure(Db::name('hsx_boyuan_log')->where('action','batch_submit')->count()===2,'each accepted batch action has audit trail');
+    ensure(boyuanLogCount($schema,'batch_submit')===2,'each accepted batch action uses framework file log, not database');
     ensure(Db::name('erp_asset')->count()===0 && Db::name('hsx_boyuan_mock_record')->count()===0,'batch submission neither creates inventory nor remote records');
     $states=$batch->states($site,$base+['ids'=>[$a,$b,99999999]]);
     ensure(count($states['items'])===2,'batch results retrieved in one scoped query without unknown rows');

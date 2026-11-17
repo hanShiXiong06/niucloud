@@ -104,7 +104,7 @@ try {
     };
     $timeout=$make('timeout_after_commit','TIMEOUT'); drain($site);
     $timeoutTask=Db::name('hsx_boyuan_task')->where('id',$timeout)->find(); check($timeoutTask['status']==='simulated','lost response recovered by original operation query');
-    check(Db::name('hsx_boyuan_log')->where('task_id',$timeout)->where('action','send')->count()===1,'timeout did not repeat POST');
+    check(boyuanLogCount($schema,'send',$timeout)===1,'file log confirms timeout did not repeat POST');
     $partial=$make('partial','PARTIAL'); drain($site); check(Db::name('hsx_boyuan_task')->where('id',$partial)->value('status')==='partial','partial is not whole success');
     try {$service->action($site,$partial,1,'retry'); check(false,'partial retry rejected');} catch(Problem $e){check($e->reason==='QUERY_REQUIRED','partial cannot be blindly retried');}
     $service->action($site,$partial,1,'record_manual','已在演示账套人工核对，尚未获得完整回执','SAMPLE_MANUAL_NO');

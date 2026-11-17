@@ -17,7 +17,21 @@
             <template #money="{row}"><div class="coop-cell"><strong class="coop-price">{{ coopMoney(row.amount) }}</strong><small v-if="row.purpose==='commission'">平台费 {{ coopMoney(row.fee_amount) }} · 净收益 {{ coopMoney(row.net_amount) }}</small><template v-else-if="row.purpose==='membership' && row.service_amount!==undefined"><small>押金 {{ coopMoney(row.deposit_amount) }} · 服务费 {{ coopMoney(row.service_amount) }}</small><small>补足经验 {{ coopMoney(row.experience_amount) }} · {{ row.experience_quantity }} 点</small><small>邀请计佣基数 {{ coopMoney(row.promotion_base_amount) }}</small></template></div></template>
             <template #status="{row}"><div class="coop-cell"><el-tag :type="coopTone(row.status)" size="small">{{ row.status==='paid'?'已确认支付':row.status==='closed'?'已关闭':'待支付' }}</el-tag><el-tag v-if="row.refund_status && row.refund_status!=='none'" :type="row.refund_status==='refunded'?'success':'warning'" size="small">{{ row.refund_status_name || '退款待核对' }}</el-tag><small v-if="Number(row.refunded_amount)>0">已退 {{ coopMoney(row.refunded_amount) }}</small><el-tag v-if="row.requires_manual_review" type="danger" size="small">已收款 · 待人工核对</el-tag></div></template>
             <template #pay="{row}"><div class="coop-cell"><strong>{{ row.payment_type_name || (row.status==='unpaid'?'尚未支付':'支付方式待核对') }}<template v-if="row.payment_channel_name"> · {{ row.payment_channel_name }}</template></strong><small>{{ row.out_trade_no || '尚无支付流水' }}</small><small>{{ row.pay_time ? `支付于 ${coopTime(row.pay_time)}` : `创建于 ${coopTime(row.create_time)}` }}</small><span v-if="row.requires_manual_review" class="coop-danger-copy">{{ row.review_message || '已收到款项，但收益入账或权益开通未完成。请核对支付流水与具体原因，避免重复收款或重复入账，再按实际结果人工处理。' }}</span></div></template>
-            <template #operation="{row}"><div class="coop-cell"><el-button link type="primary" @click="showDetail(row)">查看详情</el-button><el-button v-if="showManualReceipt(row)" link type="warning" :disabled="closing || pricing || loading" @click="openManualReceipt(row)">{{ manualReceiptActionLabel(row) }}</el-button><el-button v-if="showRefundAction(row)" link :type="row.refund_status==='pending' || row.can_admin_request_refund===true?'warning':'primary'" :disabled="closing || pricing || loading" @click="openRefund(row)">{{ refundActionLabel(row) }}</el-button><el-button v-if="canPrice && row.can_reprice===true" link type="primary" :disabled="closing || pricing || loading" @click="openPrice(row)">调整待付金额</el-button><el-button v-if="canPrice && row.can_resume_reprice===true" link type="warning" :disabled="closing || pricing || loading" @click="resumePrice(row)">继续原改价处理</el-button><el-button v-if="row.replacement_order_id" link type="primary" :disabled="pricing" @click="openRelated(row.replacement_order_id)">查看新付款单</el-button><el-button v-if="canClose && row.can_close===true" link :type="row.payment_type==='hsx_lead_virtualpay'?'primary':'danger'" :loading="closing && closingOrderId===Number(row.id)" :disabled="closing || pricing || loading" @click="closeOrder(row)">{{ closeActionLabel(row) }}</el-button><small v-else-if="row.status==='unpaid'">{{ row.close_reason || '请核对付款状态' }}</small><small v-if="row.repricing_message">{{ row.repricing_message }}</small></div></template>
+            <template #operation="{row}">
+                <div class="coop-cell">
+                    <el-button link type="primary" @click="showDetail(row)">查看详情</el-button>
+                    <el-button v-if="canCheck && row.can_check_payment===true" link type="primary" :loading="checking" :disabled="closing || pricing || loading" @click="checkPayment(row)">{{ row.payment_state==='paid_pending'?'恢复开通':'核对付款结果' }}</el-button>
+                    <el-button v-if="showManualReceipt(row)" link type="warning" :disabled="checking || closing || pricing || loading" @click="openManualReceipt(row)">{{ manualReceiptActionLabel(row) }}</el-button>
+                    <el-button v-if="showRefundAction(row)" link :type="row.refund_status==='pending' || row.can_admin_request_refund===true?'warning':'primary'" :disabled="checking || closing || pricing || loading" @click="openRefund(row)">{{ refundActionLabel(row) }}</el-button>
+                    <el-button v-if="canPrice && row.can_reprice===true" link type="primary" :disabled="checking || closing || pricing || loading" @click="openPrice(row)">调整待付金额</el-button>
+                    <el-button v-if="canPrice && row.can_resume_reprice===true" link type="warning" :disabled="checking || closing || pricing || loading" @click="resumePrice(row)">继续原改价处理</el-button>
+                    <el-button v-if="row.replacement_order_id" link type="primary" :disabled="pricing" @click="openRelated(row.replacement_order_id)">查看新付款单</el-button>
+                    <el-button v-if="canClose && row.can_close===true" link type="danger" :loading="closing && closingOrderId===Number(row.id)" :disabled="checking || closing || pricing || loading" @click="closeOrder(row)">{{ closeActionLabel(row) }}</el-button>
+                    <small v-if="row.payment_message && row.status==='unpaid'">{{ row.payment_message }}</small>
+                    <small v-else-if="row.status==='unpaid' && !row.can_close">{{ row.close_reason || '请核对付款状态' }}</small>
+                    <small v-if="row.repricing_message">{{ row.repricing_message }}</small>
+                </div>
+            </template>
         </HsxTable><div class="coop-pagination"><HsxPagination :current-page="query.page" :page-size="query.limit" :total="total" :disabled="loading" @change="changePage" /></div></div>
         <el-dialog v-model="detailVisible" title="支付订单详情" width="min(620px, 94vw)" @close="invalidateDetail">
             <el-descriptions :column="1" border>
@@ -33,6 +47,7 @@
                 <el-descriptions-item label="付款截止">{{ selected.expires_at ? coopTime(selected.expires_at) : '—' }}</el-descriptions-item>
                 <el-descriptions-item label="支付流水">{{ selected.out_trade_no || '尚无支付流水' }}</el-descriptions-item>
                 <el-descriptions-item label="支付方式 / 终端">{{ selected.payment_type_name || '尚未确认' }}<template v-if="selected.payment_channel_name"> / {{ selected.payment_channel_name }}</template></el-descriptions-item>
+                <el-descriptions-item v-if="selected.payment_message" label="付款处理进度">{{ selected.payment_message }}</el-descriptions-item>
                 <el-descriptions-item label="退款进度">{{ selected.refund_status_name || '未申请退款' }} · 已退 {{ coopMoney(selected.refunded_amount) }} · 剩余可退 {{ coopMoney(selected.refundable_amount) }}</el-descriptions-item>
                 <el-descriptions-item label="关闭时间">{{ selected.close_at ? coopTime(selected.close_at) : '—' }}</el-descriptions-item>
                 <el-descriptions-item label="关闭说明">{{ selected.closure_reason || selected.close_reason || '—' }}</el-descriptions-item>
@@ -66,7 +81,7 @@ import HsxPagination from '@/addon/hsx_components/components/HsxPagination/index
 import CooperationFilter from './CooperationFilter.vue'
 import OrderRefundDialog from './OrderRefundDialog.vue'
 import ManualReceiptDialog from './ManualReceiptDialog.vue'
-import { getCooperationOrders, closeCooperationOrder, repriceCooperationOrder, getOrderPricingLogs } from '../../api/cooperation'
+import { getCooperationOrders, closeCooperationOrder, checkCooperationOrderPayment, repriceCooperationOrder, getOrderPricingLogs } from '../../api/cooperation'
 import { businessAmountCents, cooperationFeePreview } from '../../composables/business'
 import { coopLabel, coopMoney, coopTime, coopTone, coopError, useCooperationAccess, useCooperationList, type CoopRow } from '../../composables/cooperation'
 const statuses=[{value:'unpaid',label:'待支付'},{value:'paid',label:'已确认支付'},{value:'closed',label:'已关闭'}],purpose=ref(''),reviewOnly=ref(false)
@@ -76,10 +91,11 @@ const {rows,total,loading,error,query,load,search:searchList,changePage}=useCoop
 function filterOptions(items:unknown):CoopRow[]{return Array.isArray(items)?items.filter(item=>typeof item?.value==='string'&&typeof item?.label==='string'):[]}
 const { allows } = useCooperationAccess(), canClose=computed(()=>allows('order_close')), closing=ref(false), closingOrderId=ref(0), detailVisible=ref(false), selected=ref<CoopRow>({})
 const canPrice=computed(()=>allows('order_price')&&canClose.value),canPriceLogs=computed(()=>allows('order_price_log'))
+const canCheck=computed(()=>allows('order_check')),checking=ref(false)
 const canRefundDetail=computed(()=>allows('order_refund_detail'))
 const canManualReceiptPreview=computed(()=>allows('finance')&&allows('order_manual_receipt_preview')),manualReceiptDialog=ref<InstanceType<typeof ManualReceiptDialog>|null>(null)
-function showManualReceipt(row:CoopRow){if(!canManualReceiptPreview.value)return false;const recorded=Number(row.manual_receipt_id)>0;if(row.status==='closed')return recorded;return row.status==='unpaid'||row.status==='paid'&&(recorded||row.payment_type==='offlinepay')}
-function manualReceiptActionLabel(row:CoopRow){return row.status==='unpaid'&&!Number(row.manual_receipt_id)?'确认线下收款':'查看收款记录'}
+function showManualReceipt(row:CoopRow){return canManualReceiptPreview.value&&(row.can_create_manual_receipt===true||row.can_view_manual_receipt===true)}
+function manualReceiptActionLabel(row:CoopRow){return row.can_create_manual_receipt===true?'确认线下收款':'查看收款记录'}
 function openManualReceipt(row:CoopRow){if(disposed||!showManualReceipt(row)||closing.value||pricing.value||loading.value)return;detailVisible.value=false;invalidateDetail();void manualReceiptDialog.value?.open(row)}
 async function manualReceiptChanged(){invalidateDetail();detailVisible.value=false;await load()}
 const priceVisible=ref(false),pricing=ref(false),priceOrder=ref<CoopRow>({}),priceAmount=ref<number|null>(null),priceReason=ref(''),priceError=ref(''),priceRequest=ref('')
@@ -108,15 +124,37 @@ async function showPricingLogs(row:CoopRow){if(!canPriceLogs.value)return;pricin
 async function loadPricingLogs(){const turn=++pricingLogSequence;pricingLogsLoading.value=true;pricingLogsError.value='';try{const result=await getOrderPricingLogs(pricingLogOrder.value,{page:pricingLogPage.value,limit:20});if(turn!==pricingLogSequence)return;if(!Array.isArray(result.data?.data))throw new Error('未返回有效订单日志');pricingLogs.value=result.data.data;pricingLogTotal.value=Number(result.data.total||0)}catch(cause){if(turn===pricingLogSequence)pricingLogsError.value=coopError(cause,'订单日志读取失败')}finally{if(turn===pricingLogSequence)pricingLogsLoading.value=false}}
 function changePricingLogPage(value:{page:number;limit:number}){pricingLogPage.value=value.page;return loadPricingLogs()}
 const pricingLogColumns=[{prop:'operator_name',label:'操作人 / 时间',slot:'operator',minWidth:180},{prop:'action',label:'处理与金额',slot:'change',minWidth:300}]
-function closeActionLabel(row:CoopRow){return row.payment_type==='hsx_lead_virtualpay'?'核对付款结果':'关闭未付订单'}
+function closeActionLabel(row:CoopRow){return row.close_requires_check?'核对并关闭':'关闭未付订单'}
+async function checkPayment(row:CoopRow){
+    if(checking.value||closing.value||pricing.value||!canCheck.value||row.can_check_payment!==true)return
+    checking.value=true
+    const turn=detailSequence
+    try{
+        const response=await checkCooperationOrderPayment(Number(row.id)),current=response?.data
+        if(Number(current?.id)!==Number(row.id))throw new Error('核对结果未完整返回，请刷新原单')
+        if(disposed)return
+        if(turn===detailSequence&&Number(selected.value.id)===Number(row.id)){
+            // The mutation returns a member-safe DTO, without administrative
+            // action flags. Do not retain collection/reprice actions from the
+            // previous state while loading the authoritative admin projection.
+            selected.value={...selected.value,...current,can_create_manual_receipt:false,can_reprice:false,can_resume_reprice:false}
+            const detail=await getCooperationOrders({id:Number(row.id),page:1,limit:1}),fresh=detail.data?.data?.[0]
+            if(Number(fresh?.id)!==Number(row.id))throw new Error('付款已核对，订单操作信息未完整读取，请刷新原单')
+            if(!disposed&&turn===detailSequence&&Number(selected.value.id)===Number(row.id))selected.value=fresh
+        }
+        if(disposed)return
+        if(current.status==='paid'&&!current.requires_manual_review)ElMessage.success('付款与业务结果已确认')
+        else ElMessage.info(current.payment_recovery?.message||current.payment_message||'原付款状态已更新')
+        await load()
+    }catch(cause){if(!disposed)ElMessage.error(coopError(cause,'暂时无法核对，请稍后重试'))}
+    finally{checking.value=false}
+}
 async function closeOrder(row:CoopRow){
     if(closing.value || pricing.value || loading.value || !canClose.value || row.can_close!==true)return
     closing.value=true;closingOrderId.value=Number(row.id)
     try{
-        const virtual=row.payment_type==='hsx_lead_virtualpay'
-        let reason='管理员核对原虚拟付款结果'
-        if(virtual)await ElMessageBox.confirm(`核对订单 ${row.order_no}（${coopMoney(row.amount)}）的原付款结果。已收款会恢复业务处理；只有渠道确认关闭，系统才会关闭订单。尚未确认时保留原单，不另行扣款。`,'核对付款结果',{confirmButtonText:'开始核对',cancelButtonText:'返回',type:'info',distinguishCancelAndClose:true})
-        else{const result=await ElMessageBox.prompt(`关闭订单 ${row.order_no}（${coopMoney(row.amount)}）？系统会先核对收款，不会撤销已到账款项。`,'关闭未付款订单',{inputPlaceholder:'填写关闭原因',inputType:'textarea',inputValidator:value=>String(value||'').trim().length>=4||'请填写至少4个字符的关闭原因',confirmButtonText:'核对并关闭',cancelButtonText:'取消',distinguishCancelAndClose:true});reason=result.value.trim()}
+        const result=await ElMessageBox.prompt(`关闭订单 ${row.order_no}（${coopMoney(row.amount)}）？系统会先核对收款，不会撤销已到账款项。`,'关闭未付款订单',{inputPlaceholder:'填写关闭原因',inputType:'textarea',inputValidator:value=>String(value||'').trim().length>=4||'请填写至少4个字符的关闭原因',confirmButtonText:'核对并关闭',cancelButtonText:'取消',distinguishCancelAndClose:true})
+        const reason=result.value.trim()
         const response=await closeCooperationOrder(Number(row.id),{confirm:true,reason})
         if(Number(response?.data?.id)!==Number(row.id)||!['closed','paid','unpaid'].includes(response?.data?.status))throw new Error('订单关闭结果未确认，请刷新核对，勿重复处理')
         if(response.data.status==='closed')ElMessage.success('未付订单已关闭');else ElMessage.warning(response.data.status==='paid'?'原订单已实际收款，未关闭订单':response.data.close_message||'原付款结果仍需核实，未关闭订单');await load()

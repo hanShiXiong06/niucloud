@@ -69,7 +69,7 @@ final class HttpTransport implements Transport
         if ($ok === false || $status >= 500 || $status === 429) throw new Problem('REMOTE_UNCERTAIN', '请求未获得确定结果，将先查询原操作，不能重复建单', 'unknown');
         if ($status >= 300 && $status < 400) throw new Problem('REDIRECT_DENIED', '博远地址发生跳转，已阻止携带授权跳转', 'unknown');
         try { $reply = Contract::decode($raw); } catch (\Throwable $e) { throw new Problem('RESPONSE_INVALID', '博远未返回有效JSON，请核对原操作', 'unknown'); }
-        $reply=Contract::redact($reply); $token=$this->token;
+        $reply=Contract::redactCredentials($reply); $token=$this->token;
         array_walk_recursive($reply,static function (&$value) use($token): void { if ($token!=='' && is_string($value)) $value=str_replace($token,'[已隐藏]',$value); });
         return $reply;
     }

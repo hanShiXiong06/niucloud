@@ -52,6 +52,7 @@ final class Cooperation extends BaseAdminController
     public function refreshOrderRefund(int $id) { return success((new \addon\hsx_lead\app\service\cooperation\PaymentRefundService($this->context()))->refresh($id,true)); }
     public function continueOrderRefund(int $id) { return success((new \addon\hsx_lead\app\service\cooperation\PaymentRefundService($this->context()))->continue($id,$this->request->param())); }
     public function closeOrder(int $id) { return success((new \addon\hsx_lead\app\service\cooperation\PaymentOrderLifecycle($this->context()))->close($id,$this->request->param(),true)); }
+    public function checkOrder(int $id) { return success((new \addon\hsx_lead\app\service\cooperation\PaymentOrderCheckService($this->context()))->check($id,true))->header(['Cache-Control'=>'private, no-store']); }
     public function repriceOrder(int $id) { return success((new \addon\hsx_lead\app\service\cooperation\OrderPricingService($this->context()))->reprice($id,$this->request->param())); }
     public function orderPricingLogs(int $id) { return success((new \addon\hsx_lead\app\service\cooperation\OrderPricingService($this->context()))->logs($id,$this->request->param())); }
     public function reviews() { return success((new ReviewService($this->context()))->lists($this->request->param())); }

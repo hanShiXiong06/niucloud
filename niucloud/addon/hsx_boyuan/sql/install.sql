@@ -28,13 +28,6 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_boyuan_binding` (
  `external_id` varchar(128) NOT NULL, `external_no` varchar(128) NOT NULL DEFAULT '', `detail_json` longtext NOT NULL,
  `update_at` int unsigned NOT NULL, PRIMARY KEY (`id`), UNIQUE KEY `identity` (`site_id`,`connection_key`,`kind`,`local_ref`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_boyuan_log` (
- `id` bigint unsigned NOT NULL AUTO_INCREMENT, `site_id` int unsigned NOT NULL, `connection_key` varchar(32) NOT NULL DEFAULT '',
- `task_id` bigint unsigned NOT NULL DEFAULT 0, `operation_id` varchar(128) NOT NULL DEFAULT '',
- `action` varchar(40) NOT NULL, `outcome` varchar(32) NOT NULL, `message` varchar(1000) NOT NULL,
- `detail_json` longtext NOT NULL, `operator_uid` int unsigned NOT NULL DEFAULT 0, `create_at` int unsigned NOT NULL,
- PRIMARY KEY (`id`), KEY `task` (`site_id`,`task_id`,`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_boyuan_mock_record` (
  `id` bigint unsigned NOT NULL AUTO_INCREMENT, `site_id` int unsigned NOT NULL, `connection_key` varchar(32) NOT NULL,
  `record_key` varchar(160) NOT NULL, `value_json` longtext NOT NULL, `update_at` int unsigned NOT NULL,

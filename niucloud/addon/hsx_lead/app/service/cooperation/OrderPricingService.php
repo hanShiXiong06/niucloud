@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace addon\hsx_lead\app\service\cooperation;
 
 use addon\hsx_lead\app\service\Context;
+use addon\hsx_lead\app\service\virtualpay\VirtualPaySettings;
 use addon\hsx_lead\app\support\Data;
 use core\exception\CommonException;
 use think\facade\{Db,Log};
@@ -14,11 +15,23 @@ final class OrderPricingService
     private ?\Closure $providerFactory;
     public function __construct(private Context $context,?callable $providerFactory=null){$this->providerFactory=$providerFactory===null?null:\Closure::fromCallable($providerFactory);}
 
-    public static function adminMetadata(array $row): array
+    /** Reuse the canonical payment DTO; these flags never replace mutation guards. */
+    public static function adminMetadata(array $row,array $payment): array
     {
-        $rule=Data::decode($row['rule_json']??null);$intent=$rule['pricing_intent']??[];$open=$row['status']==='unpaid'&&empty($rule['requires_manual_review']);
+        $rule=Data::decode($row['rule_json']??null);$intent=$rule['pricing_intent']??[];
+        $state=(string)($payment['payment_state']??'');
+        $virtualPending=($payment['payment_type']??'')===VirtualPaySettings::TYPE&&$state==='pending';
+        $review=!empty($rule['requires_manual_review'])||!empty($rule['financial_requires_manual_review'])||!empty($payment['requires_manual_review']);
+        // A pending virtual trade has no proven closure: neither a new receipt
+        // nor a new price may be offered as a way around the original payment.
+        $open=$row['status']==='unpaid'&&!$review&&in_array($state,['ready','pending'],true)&&!$virtualPending;
+        $recorded=(int)($row['manual_receipt_id']??0)>0;
         return ['can_reprice'=>$open&&!$intent&&($row['purpose']==='commission'||($rule['cost_schema']??'')===MembershipCostService::SCHEMA),
-            'can_resume_reprice'=>in_array($row['status'],['unpaid','closed'],true)&&empty($rule['requires_manual_review'])&&($intent['schema']??'')===self::SCHEMA&&empty($rule['replacement_order_id']),
+            // Existing evidence and original intent remain available for audit
+            // and guarded recovery. No new amount/receipt is created by viewing.
+            'can_create_manual_receipt'=>$open&&!$recorded&&!$intent&&(int)($payment['expires_at']??0)>time(),
+            'can_view_manual_receipt'=>$recorded||($row['status']==='paid'&&($payment['payment_type']??'')==='offlinepay'),
+            'can_resume_reprice'=>in_array($row['status'],['unpaid','closed'],true)&&!$review&&($intent['schema']??'')===self::SCHEMA&&empty($rule['replacement_order_id']),
             'pricing_request_id'=>(string)($intent['request_id']??''),'pricing_target_amount'=>(string)($intent['amount']??''),
             'pricing_target_service_amount'=>(string)($intent['service_amount']??''),'pricing_reason'=>(string)($intent['reason']??''),
             'pricing_minimum'=>(string)($rule['commission_minimum']??''),'pricing_fee_percent'=>(string)($rule['fee_percent']??''),'pricing_fee_minimum'=>(string)($rule['fee_minimum']??'')];
@@ -29,10 +42,10 @@ final class OrderPricingService
         Store::permission($this->context,'finance');$this->context->permission('hsx_lead_cooperation_order_price_log');
         if(!$this->context->ownership()->scope()['all_data'])throw new CommonException('查看支付处理日志需要全站业务查看权限');
         Store::row('coop_order',$this->context->site,$id);
-        $page=Data::page(Data::query('audit',$this->context->site)->where('entity_type','coop_order')->where('entity_id',$id)->whereIn('action',['repricing_requested','repriced','replaces_repriced_order','repricing_pending','closed']),$params);
+        $page=Data::page(Data::query('audit',$this->context->site)->where('entity_type','coop_order')->where('entity_id',$id)->whereIn('action',['repricing_requested','repriced','replaces_repriced_order','repricing_pending','closed','payment_checked']),$params);
         $uids=array_values(array_unique(array_filter(array_column($page['data'],'operator_uid'))));$names=[];
         if($uids)foreach(Db::name('sys_user')->whereIn('uid',$uids)->field('uid,username,real_name')->select()->toArray()as$user)$names[(int)$user['uid']]=(string)($user['real_name']?:$user['username']);
-        $labels=['repricing_requested'=>'申请改价','repriced'=>'已改价建新单','replaces_repriced_order'=>'由原单改价生成','repricing_pending'=>'改价待继续核对','closed'=>'原付款已关闭'];
+        $labels=['repricing_requested'=>'申请改价','repriced'=>'已改价建新单','replaces_repriced_order'=>'由原单改价生成','repricing_pending'=>'改价待继续核对','closed'=>'原付款已关闭','payment_checked'=>'核对到账与恢复开通'];
         $page['data']=array_map(static function(array $row)use($names,$labels):array {
             return ['id'=>(int)$row['id'],'operator_uid'=>(int)$row['operator_uid'],'operator_name'=>$names[(int)$row['operator_uid']]??'系统','create_time'=>(int)$row['create_time'],'action'=>$row['action'],'action_label'=>$labels[$row['action']]??'支付处理',
                 'detail'=>array_intersect_key(Data::decode($row['detail_json']??''),array_flip(['original_amount','amount','service_amount','reason','replacement_order_id','source_order_id','state','message']))];
@@ -159,6 +172,7 @@ final class OrderPricingService
         $old=Store::row('coop_order',$this->context->site,$id);$oldRule=Data::decode($old['rule_json']);$replacement=(int)($oldRule['replacement_order_id']??$replacement);
         $new=$replacement>0?Store::row('coop_order',$this->context->site,$replacement):null;
         if($new&&((int)$new['merchant_id']!==(int)$old['merchant_id']||(int)$new['member_id']!==(int)$old['member_id']||$new['purpose']!==$old['purpose']||(int)(Data::decode($new['rule_json'])['reprices_order_id']??0)!==$id))throw new CommonException('改价订单关联异常，请平台核对');
-        return ['repriced'=>$repriced&&$new!==null,'old_order'=>PaymentService::presentOrder($old)+self::adminMetadata($old),'replacement_order'=>$new?PaymentService::presentOrder($new)+self::adminMetadata($new):null,'replacement_id'=>$replacement,'message'=>$message];
+        $oldPayment=PaymentService::presentOrder($old);$newPayment=$new?PaymentService::presentOrder($new):null;
+        return ['repriced'=>$repriced&&$new!==null,'old_order'=>$oldPayment+self::adminMetadata($old,$oldPayment),'replacement_order'=>$new?$newPayment+self::adminMetadata($new,$newPayment):null,'replacement_id'=>$replacement,'message'=>$message];
     }
 }

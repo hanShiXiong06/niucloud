@@ -20,6 +20,7 @@ Route::group('hsx_lead/cooperation',function():void {
     Route::get('orders/options',$c.'orderOptions');Route::get('orders/:id/refund',$c.'orderRefund');Route::post('orders/:id/refund',$c.'requestOrderRefund');
     Route::post('orders/:id/refund/review',$c.'reviewOrderRefund');Route::post('orders/:id/refund/refresh',$c.'refreshOrderRefund');Route::post('orders/:id/refund/continue',$c.'continueOrderRefund');
     Route::post('orders/:id/close',$c.'closeOrder');
+    Route::post('orders/:id/check',$c.'checkOrder');
     Route::post('orders/:id/reprice',$c.'repriceOrder');Route::get('orders/:id/pricing/logs',$c.'orderPricingLogs');
     Route::get('reviews',$c.'reviews');Route::post('reviews',$c.'createReview');Route::post('reviews/:id/resolve',$c.'resolve');Route::post('attachments',$c.'attachment');
 })->middleware([SafeErrors::class,AdminCheckToken::class,AdminCheckRole::class,PermissionGate::class])->completeMatch();

@@ -31,6 +31,7 @@ final class Cooperation extends BaseApiController
     public function createOrder() { return success((new PaymentService($this->context()))->createOrder($this->request->param())); }
     public function order(int $id) { return success((new PaymentService($this->context()))->order($id)); }
     public function resumeOrder(int $id) { return success((new \addon\hsx_lead\app\service\cooperation\PaymentOrderRecovery($this->context()))->resume($id))->header(['Cache-Control'=>'private, no-store']); }
+    public function checkOrder(int $id) { return success((new \addon\hsx_lead\app\service\cooperation\PaymentOrderCheckService($this->context()))->check($id))->header(['Cache-Control'=>'private, no-store']); }
     public function orders() { return success((new \addon\hsx_lead\app\service\cooperation\PaymentOrderLifecycle($this->context()))->orders($this->request->param())); }
     public function orderOptions() { $this->context();return success(\addon\hsx_lead\app\service\cooperation\OrderPaymentReadService::options()); }
     public function orderRefund(int $id) { return success((new \addon\hsx_lead\app\service\cooperation\PaymentRefundService($this->context()))->detail($id)); }

@@ -250,7 +250,8 @@ final class EntityMembershipService
         if (!hash_equals((string)($rule['base_fingerprint']??''),self::fingerprint($rows,$partner))) throw new CommonException('原权益状态已变化，已收款须人工核对，不能覆盖新权益');
         foreach($rows as $row) if (!empty($row['refund_pending'])||!empty($row['review'])) throw new CommonException('原权益正在退款或核对，暂未授予新等级');
         self::assertFunding($site,(int)$order['merchant_id'],$rule,(int)$order['id']);
-        if ($paidAt<=0||$paidAt>time()+60||$paidAt<(int)$rule['quoted_at']||$paidAt>(int)$rule['quoted_at']+self::TTL) throw new CommonException('原会员付款时间超过报价有效期，请平台核对已收款');
+        if ($paidAt<=0||$paidAt>time()+60||$paidAt<(int)$rule['quoted_at']) throw new CommonException('原会员付款时间异常，请平台核对已收款');
+        if ($paidAt>(int)$rule['quoted_at']+self::TTL&&!self::signedVirtualReceipt($site,$order,$rule,$paidAt)) throw new CommonException('原会员付款时间超过报价有效期，且未核实原虚拟支付合同，请平台核对已收款');
         self::assertSources($rows,$rule);
         // Opening and upgrading start at the verified framework receipt time, not quotation/callback time.
         if ((int)$rule['period_start_at']<=(int)$rule['quoted_at']) {
@@ -258,6 +259,32 @@ final class EntityMembershipService
             $rule['period_start_at']=$paidAt;$rule['period_end_at']=Rules::addMonths($paidAt,(int)$rule['months']);
         }
         return ['membership_level'=>$rule['level_code'],'membership_until'=>(int)$rule['period_end_at']];
+    }
+
+    /** Quote TTL controls issuing a NEW charge, not delivery of a verified
+     * late receipt for an already signed, immutable virtual-payment contract.
+     * No caller/client flag can relax this: require the native successful
+     * receipt and the exact original server-side source prepared in time.
+     */
+    private static function signedVirtualReceipt(int $site,array $order,array $rule,int $paidAt): bool
+    {
+        $pays=Db::name('pay')->where('site_id',$site)->where('trade_type',PaymentService::TRADE_TYPE)
+            ->where('trade_id',(int)$order['id'])->where('status',PayDict::STATUS_FINISH)->lock(true)->select()->toArray();
+        if(count($pays)!==1)return false;
+        $pay=$pays[0];$type=\addon\hsx_lead\app\service\virtualpay\VirtualPaySettings::TYPE;
+        if(($pay['type']??'')!==$type||($pay['channel']??'')!=='weapp'||($pay['main_type']??'')!==PayDict::MEMBER
+            ||(int)$pay['main_id']!==(int)$order['member_id']||(int)$pay['pay_time']!==$paidAt
+            ||Rules::cents((string)$pay['money'])!==Rules::cents((string)$order['amount'])||(string)$pay['out_trade_no']==='')return false;
+        $source=Db::name('hsx_lead_virtual_order')->where('site_id',$site)->where('out_trade_no',(string)$pay['out_trade_no'])->lock(true)->find();
+        if(!$source||(int)$source['pay_id']!==(int)$pay['id']||(int)$source['order_id']!==(int)$order['id']
+            ||(int)$source['member_id']!==(int)$order['member_id']||(int)$source['amount_cents']!==Rules::cents((string)$order['amount'])
+            ||!in_array($source['status'],['prepared','pending','receipt_pending','delivery_pending','paid'],true))return false;
+        if(in_array($source['status'],['receipt_pending','delivery_pending','paid'],true)
+            &&((int)$source['paid_at']!==$paidAt||!is_string($source['wx_order_id'])||$source['wx_order_id']===''
+                ||!hash_equals($source['wx_order_id'],(string)($pay['trade_no']??''))))return false;
+        $preparedAt=(int)$source['create_time'];$quotedAt=(int)$rule['quoted_at'];
+        if($preparedAt<$quotedAt||$preparedAt<(int)$order['create_time']||$preparedAt>PaymentOrderLifecycle::expiresAt($order)||$preparedAt>$paidAt)return false;
+        return is_string($source['snapshot_hash'])&&hash_equals($source['snapshot_hash'],(new MembershipVirtualPayAdapter())->fingerprint($order));
     }
 
     public function closeUnpaid(int $id): array

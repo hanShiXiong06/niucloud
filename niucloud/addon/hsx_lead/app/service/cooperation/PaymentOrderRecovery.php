@@ -76,26 +76,14 @@ final class PaymentOrderRecovery
             foreach ($pays as $pay) {
                 if ((int)$pay['status'] === (int)PayDict::STATUS_WAIT) continue;
                 if ((int)$pay['status'] !== (int)PayDict::STATUS_ING) return $this->result($row, 'uncertain', '原支付结果尚未确认，请稍后重试核对，不要重新下单');
-                if(($pay['type']??'')===\addon\hsx_lead\app\service\virtualpay\VirtualPaySettings::TYPE
-                    &&MembershipVirtualPayAdapter::usesVirtual($site,$row)){
-                    try{
-                        $provider=$this->providerFactory?($this->providerFactory)($site,'weapp',(string)$pay['type']):(new \app\service\core\pay\CorePayEventService())->init($site,'weapp',(string)$pay['type']);
-                        $verified=$provider->getOrder((string)$pay['out_trade_no']);
-                    }catch(\Throwable $error){return $this->result(Store::row('coop_order',$site,$id),'uncertain','正在核对微信付款结果，请稍后重试，不会重复创建付款单');}
-                    if(is_array($verified)&&($verified['status']??'')===\app\dict\pay\OnlinePayDict::NOTPAY){
-                        // NOTPAY is not authority to reuse a virtual native
-                        // outTradeNo or to close it locally. Keep the exact
-                        // original visible instead of risking a second charge.
-                        return $this->result(Store::row('coop_order',$site,$id),'uncertain','微信原付款尚未结束，系统会继续核对；暂不重复发起扣款。');
-                    }
-                    if(is_array($verified)&&($verified['status']??'')===\app\dict\pay\OnlinePayDict::SUCCESS){
-                        return $this->result(Store::row('coop_order',$site,$id),'paid','微信付款结果已核实，请查看权益。');
-                    }
-                }
+                // Original attempts retain their own channel even after an
+                // administrator changes the current checkout configuration.
+                // A single reconciliation queries virtual payments only; it
+                // does not submit a second virtual attempt or close request.
                 $result = (new PaymentGatewayReconciler($this->providerFactory))->reconcile($site, $pay);
                 if ($result['state'] !== 'closed') {
                     return $this->result(Store::row('coop_order', $site, $id, true), (string)$result['state'],
-                        $result['state'] === 'uncertain' ? '暂未取得明确的支付结果。原付款单已保留，稍后点击“核对并继续付款”即可重试。' : (string)$result['message']);
+                        (string)$result['message']);
                 }
             }
             // A callback, repricing or cancellation can win while HTTP is in

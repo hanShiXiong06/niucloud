@@ -18,7 +18,7 @@
                     v-for="item in scanModes"
                     :key="item.value"
                     class="mode-tab"
-                    :class="{ 'mode-tab--active': scanMode === item.value }"
+                    :class="{ 'mode-tab--active': scanMode === item.value, 'mode-tab--busy': loading || scanning }"
                     @click="switchMode(item.value)"
                 >
                     <text :class="['nc-iconfont', item.icon, 'mode-tab__icon']"></text>
@@ -31,7 +31,7 @@
                     <text class="nc-iconfont nc-icon-saoyisaoV6xx"></text>
                 </view>
                 <view class="scan-button__main">
-                    <view class="scan-button__title">扫描设备码 / IMEI</view>
+                    <view class="scan-button__title">{{ scanning ? '扫描中…' : (deviceData?.id ? '扫描下一台' : `开始${currentMode.label}`) }}</view>
                     <view class="scan-button__desc">支持设备 ID、IMEI、SN 或链接二维码</view>
                 </view>
                 <text class="nc-iconfont nc-icon-youV6xx1 scan-button__arrow"></text>
@@ -50,7 +50,7 @@
                         confirm-type="search"
                         @confirm="handleManualSubmit"
                     />
-                    <view class="manual-btn" @click="handleManualSubmit">查询</view>
+                    <view class="manual-btn" @click="handleManualSubmit">{{ scanMode === 'query' ? '查询' : '进入' }}</view>
                 </view>
             </view>
         </view>
@@ -245,6 +245,7 @@ const manualText = ref('')
 const deviceData = ref<any>(null)
 const candidateDevices = ref<any[]>([])
 const loading = ref(false)
+const scanning = ref(false)
 const checkPopupVisible = ref(false)
 const pricePopupVisible = ref(false)
 const labelEditVisible = ref(false)
@@ -288,12 +289,19 @@ const {
     executePrintAction
 } = useRecyclePrintActions('device')
 
+// 页面入口预加载；立即点打标时复用同一请求，不把“还在加载”误判为未配置。
+let printActionsPromise: Promise<void> | null = null
+const ensureManualPrintActions = () => {
+    if (!printActionsPromise) printActionsPromise = loadManualPrintActions()
+    return printActionsPromise
+}
+
 const scanModes: Array<{ value: ScanMode, label: string, title: string, desc: string, tip: string, icon: string }> = [
     {
         value: 'process',
         label: '扫码处理',
         title: '扫码处理',
-        desc: '扫码后按设备状态自动打开质检或定价。',
+        desc: '点击即扫码，识别后直接进入质检或定价。',
         tip: '待质检打开质检，已质检/待确认打开定价。',
         icon: 'nc-icon-saoyisaoV6xx'
     },
@@ -301,7 +309,7 @@ const scanModes: Array<{ value: ScanMode, label: string, title: string, desc: st
         value: 'query',
         label: '扫码查询',
         title: '扫码查询',
-        desc: '扫码后定位设备所在订单，适合核对历史记录。',
+        desc: '点击即查询，识别后直接进入设备所在订单。',
         tip: '单台设备直接进入订单详情，多台设备先选择记录。',
         icon: 'nc-icon-sousuo-duanV6xx1'
     },
@@ -309,7 +317,7 @@ const scanModes: Array<{ value: ScanMode, label: string, title: string, desc: st
         value: 'label',
         label: '扫码打标',
         title: '扫码打标',
-        desc: '扫码后编辑打印标签，已回收等状态也可使用。',
+        desc: '识别后直接打开标签编辑，修改核对后再确认打印。',
         tip: '仅调整本次标签，不改变设备状态；打印模板和打印机沿用后台场景配置。',
         icon: 'nc-icon-dayinjiV6xx'
     }
@@ -341,16 +349,19 @@ onLoad((option: any) => {
         useLogin().setLoginBack({ url: '/addon/hsx_recycle/pages/check/scan', param: option || {} })
         return
     }
-    if (['process', 'query', 'label'].includes(String(option?.mode || ''))) {
+    const hasExplicitMode = ['process', 'query', 'label'].includes(String(option?.mode || ''))
+    if (hasExplicitMode) {
         scanMode.value = String(option.mode) as ScanMode
     }
-    loadManualPrintActions()
+    void ensureManualPrintActions()
 
     // A4/标签直达码使用记录 ID，而非 IMEI 模糊检索；同串号多次回收也能定位本次记录。
     const directTarget = parseDevicePrintTarget(option)
     if (directTarget) {
         openedFromQuery = true
-        void openPrintedDevice(directTarget)
+        // 从外部打开裸设备链接只查询；在本页点扫码按钮时才沿用用户选定的处理动作。
+        if (!hasExplicitMode) scanMode.value = 'query'
+        void openPrintedDevice(directTarget, hasExplicitMode)
         return
     }
 
@@ -368,46 +379,75 @@ onShow(() => {
 })
 
 const scanDevice = () => {
+    if (rejectBusyInput()) return
     closeLabelEdit()
-    uni.scanCode({
-        onlyFromCamera: false,
-        scanType: ['qrCode', 'barCode'],
-        success: (res) => {
-            const directTarget = parseDevicePrintTarget(res.result)
-            if (directTarget) { void openPrintedDevice(directTarget); return }
-            const keyword = parseScanKeyword(res.result || '')
-            if (!keyword) {
-                uni.showToast({ title: '未识别到设备码', icon: 'none' })
-                return
-            }
-            resolveScanKeyword(keyword, true)
-        },
-        fail: (error: any) => {
-            if (String(error?.errMsg || '').includes('cancel')) return
-            uni.showToast({ title: '扫码失败', icon: 'none' })
-        }
-    })
+    scanning.value = true
+    try {
+        uni.scanCode({
+            onlyFromCamera: false,
+            scanType: ['qrCode', 'barCode'],
+            success: (res) => {
+                scanning.value = false
+                const directTarget = parseDevicePrintTarget(res.result)
+                if (directTarget) { void openPrintedDevice(directTarget); return }
+                const keyword = parseScanKeyword(res.result || '')
+                if (!keyword) {
+                    uni.showToast({ title: '未识别到设备码', icon: 'none' })
+                    return
+                }
+                resolveScanKeyword(keyword, true)
+            },
+            fail: (error: any) => {
+                scanning.value = false
+                if (String(error?.errMsg || '').includes('cancel')) return
+                uni.showToast({ title: '扫码失败', icon: 'none' })
+            },
+            complete: () => { scanning.value = false }
+        })
+    } catch (_) {
+        scanning.value = false
+        uni.showToast({ title: '暂时无法打开扫码，请重试或手动输入', icon: 'none' })
+    }
 }
 
-const handleManualSubmit = () => {
+const rejectBusyInput = () => {
+    if (!loading.value && !scanning.value) return false
+    uni.showToast({ title: scanning.value ? '正在扫码，请完成或取消后重试' : '正在查询设备，请稍候', icon: 'none' })
+    return true
+}
+
+const handleManualSubmit = async () => {
+    if (rejectBusyInput()) return
     const directTarget = parseDevicePrintTarget(manualText.value)
-    if (directTarget) { void openPrintedDevice(directTarget); return }
+    if (directTarget) { await openPrintedDevice(directTarget); return }
     const keyword = parseScanKeyword(manualText.value)
     if (!keyword) {
         uni.showToast({ title: '请输入有效设备码', icon: 'none' })
         return
     }
-    resolveScanKeyword(keyword, true)
+    await resolveScanKeyword(keyword, true)
 }
 
-const switchMode = (value: ScanMode) => {
-    if (scanMode.value === value) return
+const switchMode = async (value: ScanMode) => {
+    if (rejectBusyInput()) return
     closeLabelEdit()
     scanMode.value = value
-    candidateDevices.value = []
+    // 多次回收的同一串号不能猜记录；切换动作后保留候选，选中即执行。
+    if (candidateDevices.value.length > 1) return
+    if (deviceData.value?.id) {
+        // 已输入另一台串号时先查新设备，不能把旧设备卡片当作本次操作对象。
+        if (manualText.value.trim() && manualText.value.trim() !== loadedDeviceId.value) {
+            await handleManualSubmit()
+            return
+        }
+        await runCurrentMode()
+        return
+    }
+    scanDevice()
 }
 
 const resolveScanKeyword = async (keyword: string, autoRun = false) => {
+    if (rejectBusyInput()) return
     closeLabelEdit()
     loading.value = true
     candidateDevices.value = []
@@ -424,7 +464,7 @@ const resolveScanKeyword = async (keyword: string, autoRun = false) => {
             candidateDevices.value = list
             return
         }
-        await selectCandidate(list[0], autoRun)
+        await loadDevice(String(list[0].id || ''), autoRun)
     } catch (error: any) {
         uni.showToast({ title: error?.msg || error?.message || '查询设备失败', icon: 'none' })
     } finally {
@@ -433,12 +473,13 @@ const resolveScanKeyword = async (keyword: string, autoRun = false) => {
 }
 
 const selectCandidate = async (item: any, autoRun = true) => {
+    if (rejectBusyInput()) return
     candidateDevices.value = []
-    await loadDevice(String(item.id || ''), false)
-    if (autoRun) runCurrentMode()
+    await loadDevice(String(item.id || ''), autoRun)
 }
 
-const openPrintedDevice = async (target: DevicePrintTarget) => {
+const openPrintedDevice = async (target: DevicePrintTarget, autoRun = true) => {
+    if (rejectBusyInput()) return
     closeLabelEdit()
     candidateDevices.value = []
     deviceData.value = null
@@ -447,17 +488,16 @@ const openPrintedDevice = async (target: DevicePrintTarget) => {
         uni.showModal({ title: '站点不匹配', content: '该设备属于其他站点，请登录对应门店的管理账号后重新扫码。', showCancel: false })
         return
     }
-    const labelMode = scanMode.value === 'label'
-    scanMode.value = labelMode ? 'label' : 'query'
-    // 普通直达码只查询；用户明确选择扫码打标时才打开标签编辑。
-    await loadDevice(target.deviceId, false)
-    if (labelMode && deviceData.value?.id) await openLabelAction()
+    // 二维码只提供设备身份，不覆盖本页当前动作，也不会直接提交或打印。
+    await loadDevice(target.deviceId, autoRun)
 }
 
 const loadDevice = async (id: string, autoOpen = false) => {
     if (!id) return
     closeLabelEdit()
     loading.value = true
+    deviceData.value = null
+    loadedDeviceId.value = ''
     try {
         const res: any = await getDevice(id)
         deviceData.value = res?.data || null
@@ -467,7 +507,7 @@ const loadDevice = async (id: string, autoOpen = false) => {
             uni.showToast({ title: '设备不存在', icon: 'none' })
             return
         }
-        if (autoOpen) runCurrentMode()
+        if (autoOpen) await runCurrentMode()
     } catch (error: any) {
         deviceData.value = null
         uni.showToast({ title: error?.msg || error?.message || '获取设备失败', icon: 'none' })
@@ -476,7 +516,7 @@ const loadDevice = async (id: string, autoOpen = false) => {
     }
 }
 
-const runCurrentMode = () => {
+const runCurrentMode = async () => {
     if (scanMode.value === 'process') {
         openDeviceAction()
         return
@@ -485,7 +525,7 @@ const runCurrentMode = () => {
         openOrderDetail()
         return
     }
-    openLabelAction()
+    await openLabelAction()
 }
 
 const openDeviceAction = () => {
@@ -525,6 +565,13 @@ const openLabelAction = async () => {
         uni.showToast({ title: '请先选择设备', icon: 'none' })
         return
     }
+
+    const deviceId = String(deviceData.value.id)
+    const orderId = String(deviceData.value.order_id || deviceData.value.order?.id || '')
+    const requestId = labelPlanRequestId
+    await ensureManualPrintActions()
+    if (requestId !== labelPlanRequestId || scanMode.value !== 'label' || String(deviceData.value?.id || '') !== deviceId
+        || String(deviceData.value?.order_id || deviceData.value?.order?.id || '') !== orderId) return
 
     const actions = getVisiblePrintActions(deviceData.value, { ignoreBusinessStatus: true })
         .filter((action: any) => action.template_type === 'device_label')
@@ -856,6 +903,7 @@ const formatScanTime = (value: any) => {
     border-color: #0f766e;
     color: #fff;
 }
+.mode-tab--busy { opacity: 0.65; }
 
 .scan-button {
     display: flex;

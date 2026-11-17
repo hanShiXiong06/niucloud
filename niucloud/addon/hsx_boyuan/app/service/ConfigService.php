@@ -19,7 +19,7 @@ final class ConfigService
     {
         $rows = SysConfig::where('site_id',$site)->where('config_key',self::KEY)->limit(2)->select()->toArray();
         if (count($rows)>1) throw new Problem('CONFIG_DUPLICATE','博远连接配置重复，请管理员核对');
-        $config = array_replace(['mode'=>'mock','enabled'=>false,'paused'=>true,'finance_enabled'=>false,'revision'=>0,'started_at'=>0,'assignee_uid'=>0,'profiles'=>[]],$rows[0]['value'] ?? []);
+        $config = array_replace(['mode'=>'mock','enabled'=>false,'paused'=>true,'finance_enabled'=>false,'purchase_enabled'=>false,'purchase_mode'=>'manual','purchase_started_at'=>0,'revision'=>0,'started_at'=>0,'assignee_uid'=>0,'profiles'=>[]],$rows[0]['value'] ?? []);
         foreach (self::MODES as $mode) {
             $saved=$config['profiles'][$mode]??[];
             $config['profiles'][$mode] = array_replace(['connection_key'=>'','endpoint'=>'','account_id'=>'','token_cipher'=>'','probe_at'=>0,'acceptance_ref'=>'','contract_confirmed'=>false,'scenario'=>'success',
@@ -78,17 +78,25 @@ final class ConfigService
             if (array_key_exists('contract_confirmed',$edit)) $profile['contract_confirmed']=(bool)$edit['contract_confirmed'];
             $new['mode']=$mode; $new['enabled']=(bool)($input['enabled']??$old['enabled']); $new['paused']=(bool)($input['paused']??$old['paused']);
             $new['finance_enabled']=(bool)($input['finance_enabled']??$old['finance_enabled']);
+            $new['purchase_enabled']=(bool)($input['purchase_enabled']??$old['purchase_enabled']);
+            $new['purchase_mode']=(string)($input['purchase_mode']??$old['purchase_mode']);
+            if (!in_array($new['purchase_mode'],['manual','automatic'],true)) throw new Problem('PURCHASE_MODE_INVALID','请选择人工确认或资料齐全自动同步');
+            if ($mode!=='mock' && $profile['protocol']==='openapi_v153' && $new['finance_enabled']) throw new Problem('FINANCE_UNAVAILABLE','本版仅开放采购入库，不开放财务同步');
             $new['assignee_uid']=max(0,(int)($input['assignee_uid']??$old['assignee_uid']));
             if ($new['assignee_uid']>0 && (!Db::name('sys_user_role')->where('site_id',$site)->where('uid',$new['assignee_uid'])->where('status',1)->count()
                 || !Db::name('sys_user')->where('uid',$new['assignee_uid'])->where('status',1)->count())) throw new Problem('ASSIGNEE_INVALID','请选择本站有效的异常责任人');
             if ($new['enabled'] && !$new['paused'] && $mode!=='mock') {
-                if($profile['protocol']==='openapi_v153') throw new Problem('OPENAPI_READ_ONLY','博远开放平台当前只接入基础资料，请保持业务投递暂停；基础资料同步可独立运行');
-                if ($profile['endpoint']==='' || $profile['account_id']==='' || $profile['token_cipher']==='' || !$profile['probe_at'] || !$profile['contract_confirmed']) throw new Problem('PREFLIGHT_REQUIRED','请先保存授权、确认契约并完成只读账套核验');
+                if($profile['protocol']==='openapi_v153') {
+                    if(!$new['purchase_enabled']) throw new Problem('PURCHASE_DISABLED','请先开启采购入库；其他业务及财务仍不投递');
+                    if ($profile['endpoint']==='' || $profile['account_id']==='' || $profile['app_id']==='' || $profile['app_secret_cipher']==='' || !$profile['probe_at'] || !$profile['contract_confirmed']) throw new Problem('PREFLIGHT_REQUIRED','请先保存开放平台授权、确认采购接口已开通并核验账套');
+                } elseif ($profile['endpoint']==='' || $profile['account_id']==='' || $profile['token_cipher']==='' || !$profile['probe_at'] || !$profile['contract_confirmed']) throw new Problem('PREFLIGHT_REQUIRED','请先保存授权、确认契约并完成只读账套核验');
                 if (($input['confirm_account']??'')!==$profile['account_id']) throw new Problem('ACCOUNT_CONFIRM_REQUIRED','启用真实写入前请填写目标账套编号确认');
                 if ($mode==='production' && trim($profile['acceptance_ref'])==='') throw new Problem('ACCEPTANCE_REQUIRED','正式启用前请登记真实测试验收单号');
             }
             $new['profiles'][$mode]=$profile; $new['revision']++;
             if ($new['enabled'] && (!$old['enabled'] || $old['mode']!==$mode || $changed)) $new['started_at']=time();
+            if ($new['purchase_enabled'] && (!$old['purchase_enabled'] || !$old['enabled'] || $old['mode']!==$mode || $changed
+                || $new['purchase_mode']!==$old['purchase_mode'])) $new['purchase_started_at']=time();
             $this->persist($site,$new);
             TaskService::audit($site,0,$profile['connection_key'],'config','saved','连接配置已保存，模式：'.$mode,$uid);
         });
@@ -104,7 +112,7 @@ final class ConfigService
         if ($mode==='mock') return new MockTransport($site,$profile['connection_key'],$profile['scenario']);
         if(($profile['protocol']??'')==='openapi_v153') {
             if($profile['endpoint']==='' || $profile['app_id']==='' || $profile['account_id']==='' || $profile['app_secret_cipher']==='') throw new Problem('AUTH_INVALID','请先保存服务地址、AppID、AppSecret和账套代码');
-            return new OpenApi($profile,Secret::open($profile['app_secret_cipher'],(string)env('app.auth_key',''),$site,$profile['connection_key'].':app_secret'));
+            return new OpenApi($profile,Secret::open($profile['app_secret_cipher'],(string)env('app.auth_key',''),$site,$profile['connection_key'].':app_secret'),null,$mode);
         }
         return new HttpTransport($profile,Secret::open($profile['token_cipher'],(string)env('app.auth_key',''),$site,$profile['connection_key']));
     }

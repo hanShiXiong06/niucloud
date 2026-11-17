@@ -18,6 +18,7 @@ Route::group('hsx_lead/cooperation',function():void {
     Route::post('orders',$c.'createOrder');Route::get('orders',$c.'orders');Route::get('orders/options',$c.'orderOptions');Route::get('orders/:id',$c.'order');Route::post('orders/:id/close',$c.'closeOrder');Route::get('wallet',$c.'wallet');
     Route::get('orders/:id/refund',$c.'orderRefund');Route::post('orders/:id/refund',$c.'requestOrderRefund');Route::post('orders/:id/refund/refresh',$c.'refreshOrderRefund');Route::post('orders/:id/refund/cancel',$c.'cancelOrderRefund');
     Route::post('orders/:id/resume',$c.'resumeOrder');
+    Route::post('orders/:id/check',$c.'checkOrder');
     Route::post('attachments',$c.'attachment');Route::post('storefront',$c.'storefront');Route::get('connection',$c.'connection');Route::post('connection/challenge',$c.'challenge');
     Route::post('business-license',$c.'businessLicenseUpload');Route::post('business-license/preview',$c.'businessLicensePreview');
     Route::post('connection/probe',$c.'probe');Route::post('connection/activate',$c.'activate');

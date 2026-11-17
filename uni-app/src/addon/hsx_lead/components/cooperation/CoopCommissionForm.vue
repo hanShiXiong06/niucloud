@@ -15,7 +15,7 @@
             <view v-if="locked" class="coop-payment-locked">已有待支付单，按原单金额继续支付。</view>
             <u-collapse :border="false"><u-collapse-item title="查看本单收费规则" name="fee-rule"><view class="coop-muted">{{ snapshot.known ? `按本单发布时规则：佣金的 ${snapshot.percent}% ，最低 ${coopMoney(snapshot.feeMinimum)}` : '本单收费快照不完整，请联系平台核对。' }}</view></u-collapse-item></u-collapse>
         </view>
-        <CoopPaymentHelp :active="show" :inset="16" :spacing="12" />
+        <CoopPaymentHelp ref="paymentHelpRef" :active="show" :order="order || {}" :payment-issue="paymentHelpRequested" :inset="16" :spacing="12" @ready="handlePaymentHelpReady" />
         <view v-if="localError || error" class="coop-inline-error coop-form-error" role="alert">{{ localError || error }}</view>
         <template #footer><u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" :text="blocked ? '付款信息需核对' : locked ? '继续支付原单' : '确认金额，去支付'" :loading="busy" :disabled="busy || blocked || (!locked && !snapshot.known)" @click="submit" /></template>
     </CoopTaskSheet>
@@ -26,15 +26,25 @@
 export default { options: { virtualHost: true } }
 </script>
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { coopMoney, type CoopRow } from '../../api/cooperation'
 import CoopTaskSheet from './CoopTaskSheet.vue'
 import CoopPaymentSummary from './CoopPaymentSummary.vue'
 import CoopPaymentHelp from './CoopPaymentHelp.vue'
 import { leadFeeSnapshot } from '../../utils/cooperation-business'
 import { cooperationButtonStyle } from '../../utils/mobile-ui'
-const props = defineProps<{ show: boolean; page?: boolean; lead: CoopRow; config: CoopRow; busy?: boolean; blocked?: boolean; error?: string }>()
-const emit = defineEmits<{ (event: 'close'): void; (event: 'submit', amount: string): void }>()
+const props = defineProps<{ show: boolean; page?: boolean; lead: CoopRow; order?: CoopRow; config: CoopRow; busy?: boolean; blocked?: boolean; error?: string }>()
+const emit = defineEmits<{ (event: 'close'): void; (event: 'submit', amount: string): void; (event: 'payment-help-ready', value: boolean): void }>()
+const paymentHelpRef = ref<any>(null), paymentHelpReady = ref(false), paymentHelpRequested = ref(false)
+function handlePaymentHelpReady(ready: boolean) { paymentHelpReady.value = props.show && ready === true; emit('payment-help-ready', paymentHelpReady.value) }
+function openPaymentHelp(): boolean {
+    if (!props.show || props.busy || !paymentHelpReady.value || paymentHelpRef.value?.open?.() !== true) return false
+    paymentHelpRequested.value = true
+    return true
+}
+watch(() => props.show, show => { if (!show) { paymentHelpRequested.value = false; handlePaymentHelpReady(false) } })
+onBeforeUnmount(() => handlePaymentHelpReady(false))
+defineExpose({ openPaymentHelp })
 const amount = ref(''), localError = ref(''), snapshot = computed(() => leadFeeSnapshot(props.lead)), minimum = computed(() => snapshot.value.minimum), locked = computed(() => Number(props.lead.payment_order_id) > 0)
 const presets = computed(() => [...new Set([minimum.value, minimum.value * 2, minimum.value * 3].filter(value => value > 0 && value >= minimum.value))])
 const feeCents = computed(() => { const cents = Math.round(Number(amount.value) * 100); if (!Number.isFinite(cents) || !snapshot.value.known) return null; return Math.min(cents, Math.max(Math.round(cents * snapshot.value.percent / 100), Math.round(snapshot.value.feeMinimum * 100))) })

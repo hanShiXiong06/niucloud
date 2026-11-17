@@ -591,6 +591,7 @@ class ErpPurchaseService extends BaseAdminService
         $partyRows = [$order];
         ErpPartyMemberNames::append($this->site_id, $partyRows);
         $order = $partyRows[0];
+        $order['integration_actions'] = ErpPurchaseExtensionService::actions((int)$this->site_id, $order);
         return $order;
     }
 

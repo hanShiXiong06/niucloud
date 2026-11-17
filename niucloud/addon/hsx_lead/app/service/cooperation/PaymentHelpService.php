@@ -128,12 +128,12 @@ final class PaymentHelpService
         if(!is_array($parts)||isset($parts['query'])||isset($parts['fragment'])||isset($parts['user'])||isset($parts['pass']))throw new CommonException('客服二维码不支持私有、临时或带参数的图片地址');
         $reference=$value;
         if(isset($parts['scheme'])||isset($parts['host'])){
-            if(!in_array(strtolower((string)($parts['scheme']??'')),['http','https'],true)||empty($parts['host'])||!filter_var($value,FILTER_VALIDATE_URL))throw new CommonException('客服二维码图片地址无效');
+            self::publicUrl($value);
         }else $reference=self::publicPath($value);
         $query=Db::name('sys_attachment')->where('site_id',$context->site)->where('att_type','image')
             ->where(function($query)use($value,$reference):void{$query->whereIn('path',array_values(array_unique([$value,$reference])))->whereOr('url',$value);});
         if($lock)$query->lock(true);
-        $rows=$query->field('att_id,path')->limit(2)->select()->toArray();
+        $rows=$query->field('att_id,path,url')->limit(2)->select()->toArray();
         if(count($rows)!==1)throw new CommonException('客服二维码不存在或不属于本站，请从本站公开图片素材中重新选择');
         $path=self::publicPath((string)$rows[0]['path']);
         // Lead evidence is not a public customer-service asset. Business
@@ -142,7 +142,26 @@ final class PaymentHelpService
             ->whereIn('entity_type',['cooperation_attachment','business_license'])->where('action','uploaded')->count()){
             throw new CommonException('不能将业务附件或私有证照用作公开客服二维码，请重新上传');
         }
+        // CoreUploadService stores the upload driver's public URL alongside
+        // its object path. Cloud object paths are not files on the SaaS host;
+        // use this same registered URL instead of rebuilding its domain.
+        // Resolve on reads as well, so an already saved relative reference
+        // works without changing configuration or attachment records.
+        $url=(string)($rows[0]['url']??'');
+        if($url==='')return $path;
+        $urlParts=parse_url($url);
+        if(is_array($urlParts)&&(isset($urlParts['scheme'])||isset($urlParts['host'])))return self::publicUrl($url);
+        if(self::publicPath($url)!==$path)throw new CommonException('客服二维码素材地址不一致，请重新选择本站图片');
         return $path;
+    }
+
+    private static function publicUrl(string $url): string
+    {
+        if(!mb_check_encoding($url,'UTF-8')||mb_strlen($url)>1000||preg_match('/[\s\x00-\x1F\x7F<>"\x27`{}();\\\\%]/u',$url))throw new CommonException('客服二维码图片地址无效');
+        $parts=parse_url($url);
+        if(!is_array($parts)||isset($parts['query'])||isset($parts['fragment'])||isset($parts['user'])||isset($parts['pass']))throw new CommonException('客服二维码不支持私有、临时或带参数的图片地址');
+        if(!in_array(strtolower((string)($parts['scheme']??'')),['http','https'],true)||empty($parts['host'])||!filter_var($url,FILTER_VALIDATE_URL))throw new CommonException('客服二维码图片地址无效');
+        return $url;
     }
 
     private static function publicPath(string $path): string

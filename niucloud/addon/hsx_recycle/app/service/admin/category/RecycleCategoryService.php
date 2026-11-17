@@ -138,7 +138,7 @@ class RecycleCategoryService extends BaseAdminService
         return $info;
     }
 
-    /** 移动端只消费报价分类，不开放分类增删改；权限不写入分类树缓存。 */
+    /** 移动端只消费报价分类，不开放完整分类增删改；权限不写入分类树缓存。 */
     public function quoteOptions(): array
     {
         $this->assertQuoteAccess(false);
@@ -216,6 +216,42 @@ class RecycleCategoryService extends BaseAdminService
         return $result;
     }
 
+    /**
+     * 仅修改本站报价分类的客户可见状态，不联动图片、历史快照或子分类。
+     * 两个状态均要求 JSON 整数 0/1，expected_is_show 用于阻止覆盖其他人的更新。
+     */
+    public function updateQuoteVisibility(int $id, array $data): array
+    {
+        $this->assertQuoteAccess(true);
+        if ($id <= 0) throw new AdminException('请选择有效的报价分类');
+        $isShow = $data['is_show'] ?? null;
+        $expected = $data['expected_is_show'] ?? null;
+        if (!in_array($isShow, [0, 1], true) || !in_array($expected, [0, 1], true)) {
+            throw new AdminException('报价显示状态参数无效，必须传入整数0或1，请刷新页面后重试');
+        }
+
+        $result = Db::transaction(function () use ($id, $isShow, $expected): array {
+            $category = $this->model->master(true)->where('category_id', $id)
+                ->where('site_id', (int)$this->site_id)->lock(true)->findOrEmpty()->toArray();
+            if (!$category) throw new AdminException('该报价分类不存在或不属于本站，公共报价分类只支持查看');
+            $current = (int)$category['is_show'];
+            // 当前已达目标时按幂等重试成功，不重复写入或重置更新时间。
+            if ($current === $isShow) {
+                return ['category_id' => $id, 'is_show' => $current, 'update_time' => (int)($category['update_time'] ?? 0), 'changed' => false];
+            }
+            if ($current !== $expected) {
+                throw new AdminException('当前显示状态已被其他操作更新，请刷新后重试，未覆盖现有显示状态');
+            }
+            $now = time();
+            $this->model->where('category_id', $id)->where('site_id', (int)$this->site_id)
+                ->update(['is_show' => $isShow, 'update_time' => $now]);
+            return ['category_id' => $id, 'is_show' => $isShow, 'update_time' => $now, 'changed' => true];
+        });
+        // 与图片更新共用同站点缓存；幂等重试也补清理已提交操作的缓存。
+        $this->clearCategoryCache();
+        return $result;
+    }
+
     private function assertQuoteAccess(bool $write): void
     {
         if ((int)$this->site_id <= 0) throw new AdminException('请进入业务站点查看和更新报价单');
@@ -228,7 +264,7 @@ class RecycleCategoryService extends BaseAdminService
             }
         }
         if (!$this->hasQuotePermission($write)) {
-            throw new AdminException($write ? '需要报价分类编辑权限才能更新报价图片' : '需要报价分类查看权限');
+            throw new AdminException($write ? '需要报价分类编辑权限才能更新报价单' : '需要报价分类查看权限');
         }
     }
 

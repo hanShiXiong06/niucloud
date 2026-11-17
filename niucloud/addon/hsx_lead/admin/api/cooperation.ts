@@ -23,6 +23,7 @@ export const getCooperationBusinessLicense = (id: number) => request.get(`${root
 export const blockCooperationPartner = (id: number, data: CoopRow) => request.post(`${root}/partners/${id}/block`, data, quiet)
 export const getCooperationOrders = (params: CoopRow = {}) => request.get(`${root}/orders`, { ...quiet, params })
 export const closeCooperationOrder = (id: number, data: CoopRow) => request.post(`${root}/orders/${id}/close`, data, quiet)
+export const checkCooperationOrderPayment = (id: number) => request.post(`${root}/orders/${id}/check`, {}, { ...quiet, timeout: 30000 })
 export const repriceCooperationOrder = (id: number, data: CoopRow) => request.post(`${root}/orders/${id}/reprice`, data, { ...quiet, timeout: 45000 })
 export const getOrderPricingLogs = (id: number, params: CoopRow = {}) => request.get(`${root}/orders/${id}/pricing/logs`, { ...quiet, params })
 export const getOrderRefund = (id: number) => request.get(`${root}/orders/${id}/refund`, quiet)

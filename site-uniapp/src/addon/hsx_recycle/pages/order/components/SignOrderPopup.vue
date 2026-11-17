@@ -1,5 +1,5 @@
 <template>
-    <u-popup :show="show" mode="bottom" round="20" :safeAreaInsetBottom="true" :closeOnClickOverlay="!submitting" @close="handleClose">
+    <u-popup :show="show" mode="bottom" round="20" :safeAreaInsetBottom="true" :closeOnClickOverlay="!operationBusy" @close="handleClose">
         <view class="sign-popup" :class="{ 'sign-popup--agent': isAgent }">
             <!-- 头部 -->
             <view class="popup-header">
@@ -31,10 +31,26 @@
                         </view>
                     </view>
                     <view v-if="deliveryType === '1'" class="agent-express">
-                        <ScanCodeInput v-model="expressNo" :disabled="Boolean(submitting || agentState.draftId || agentState.creatingUnknown)" :maxlength="80" placeholder="填写或扫描快递单号" inputAlign="left" border="none" />
+                        <ScanCodeInput v-model="expressNo" :disabled="Boolean(operationBusy || agentState.draftId || agentState.creatingUnknown)" :maxlength="80" placeholder="填写或扫描快递单号" inputAlign="left" border="none" />
                     </view>
+                    <view class="agent-total">
+                        <text class="agent-customer__label">本单总台数</text>
+                        <view class="agent-total__control">
+                            <view class="agent-total__input" :class="{ 'agent-total__input--locked': countConfirmed }">
+                                <u-input v-model="agentTotalInput" type="number" :maxlength="5" border="none" inputAlign="center"
+                                    :disabled="Boolean(operationBusy || agentState.draftId || agentState.creatingUnknown)"
+                                    fontSize="28rpx" placeholder="1" @confirm="confirmTotal" />
+                            </view>
+                            <text class="agent-total__unit">台</text>
+                            <text v-if="countConfirmed" class="agent-total__locked">已锁定</text>
+                            <u-button v-else type="primary" size="mini" :plain="true" :loading="confirmingTotal"
+                                :disabled="submitting || agentState.creatingUnknown" :customStyle="{ width: '112rpx', margin: 0, flexShrink: 0 }"
+                                @click="confirmTotal">确定</u-button>
+                        </view>
+                    </view>
+                    <view class="agent-total__hint">{{ countConfirmed ? `已录入 ${devices.length} / 共 ${agentState.confirmedCount} 台，标签按此总数编号` : '先确认总台数，用于标签 1/N；确认后本单不可修改。' }}</view>
                 </view>
-                <view v-if="isAgent && agentState.draftId" class="agent-notice">订单 {{ agentState.orderNo || agentState.draftId }} 已建立，客户及到货方式已锁定；继续提交不会新建订单。</view>
+                <view v-if="isAgent && agentState.draftId" class="agent-notice">订单 {{ agentState.orderNo || agentState.draftId }} 已建立，客户、到货方式及总台数已锁定；继续提交不会新建订单。</view>
                 <view v-if="isAgent && agentState.creatingUnknown" class="agent-notice agent-notice--error">
                     <text>创建结果未确认，请先到订单列表核对，避免重复下单。当前填写会保留。</text>
                     <view class="agent-retry" @click="confirmCreateRetry">已核对没有新订单，重新提交</view>
@@ -68,7 +84,7 @@
                 </view>
 
                 <!-- 添加设备 -->
-                <view class="add-btn" @click="addDevice">
+                <view class="add-btn" :class="{ 'add-btn--disabled': isAgent && (!countConfirmed || devices.length >= agentState.confirmedCount) }" @click="addDevice">
                     <text class="nc-iconfont nc-icon-tianjiaV6xx1 text-[28rpx] mr-[8rpx]"></text>
                     <text>添加设备</text>
                 </view>
@@ -78,8 +94,8 @@
 
             <!-- 底部 -->
             <view class="popup-footer">
-                <u-button @click="handleClose" :disabled="submitting" :customStyle="{ flex: 1 }">{{ isAgent && agentState.draftId ? '稍后继续' : '取消' }}</u-button>
-                <u-button type="primary" :loading="submitting" :disabled="isAgent && agentState.creatingUnknown" @click="handleSubmit" :customStyle="{ flex: 2 }">
+                <u-button @click="handleClose" :disabled="operationBusy" :customStyle="{ flex: 1 }">{{ isAgent && agentState.draftId ? '稍后继续' : '取消' }}</u-button>
+                <u-button type="primary" :loading="submitting" :disabled="confirmingTotal || (isAgent && (agentState.creatingUnknown || !countConfirmed))" @click="handleSubmit" :customStyle="{ flex: 2 }">
                     {{ isAgent ? (agentMemberError(Number(selectedMember?.member_id || 0)) ? '先选择客户' : '下单并签收') : '确认签收' }}
                 </u-button>
             </view>
@@ -277,7 +293,7 @@ import NextAssigneePicker from '@/addon/hsx_recycle/components/NextAssigneePicke
 import QuoteUserPicker from '@/addon/hsx_recycle/components/QuoteUserPicker.vue'
 import RecycleMemberPicker from '@/addon/hsx_recycle/components/RecycleMemberPicker.vue'
 import type { RecycleMemberOption } from '@/addon/hsx_recycle/components/RecycleMemberPicker.vue'
-import { agentMemberError, agentOrderError, deviceEntryError, newAgentOrderState, submitAgentOrder } from '@/addon/hsx_recycle/utils/agentOrder'
+import { agentMemberError, agentOrderError, confirmAgentOrderTotal, deviceEntryError, newAgentOrderState, submitAgentOrder } from '@/addon/hsx_recycle/utils/agentOrder'
 import { getDeviceModelLeafName } from '@/addon/hsx_recycle/utils/device'
 
 interface Props {
@@ -292,6 +308,8 @@ const emit = defineEmits(['update:visible', 'success', 'draft-saved'])
 
 const show = ref(false)
 const submitting = ref(false)
+const confirmingTotal = ref(false)
+const operationBusy = computed(() => submitting.value || confirmingTotal.value)
 const summaryLoading = ref(false) // 质检摘要字段加载中
 const summaryError = ref('')
 const summaryLoaded = ref(false)
@@ -308,6 +326,8 @@ const devices = ref<any[]>([])
 const nextAssigneeUid = ref(0)
 const isAgent = computed(() => props.mode === 'agent')
 const agentState = reactive(newAgentOrderState())
+const agentTotalInput = ref<string | number>(1)
+const countConfirmed = computed(() => agentState.draftId > 0 && agentState.confirmedCount > 0)
 const selectedMember = ref<RecycleMemberOption | null>(null)
 const memberPickerVisible = ref(false)
 const deliveryType = ref('2')
@@ -315,13 +335,13 @@ const expressNo = ref('')
 const submitError = ref('')
 const addAfterMember = ref(false)
 const openMemberPicker = () => {
-    if (!agentState.draftId && !agentState.creatingUnknown && !submitting.value) {
+    if (!agentState.draftId && !agentState.creatingUnknown && !operationBusy.value) {
         addAfterMember.value = false
         memberPickerVisible.value = true
     }
 }
 const selectMember = (member: RecycleMemberOption) => {
-    if (submitting.value || agentState.draftId || agentState.creatingUnknown) return
+    if (operationBusy.value || agentState.draftId || agentState.creatingUnknown) return
     const error = agentMemberError(Number(member?.member_id))
     if (error) { uni.showToast({ title: error, icon: 'none' }); return }
     const continueAdding = addAfterMember.value
@@ -337,13 +357,41 @@ const requireAgentCustomer = (continueAdding = false) => {
         ? '原订单客户尚未核对，请从订单列表查看，不会再次保存或打印。'
         : '请先选择客户，再保存设备，确保标签关联到正确的客户。'
     uni.showToast({ title: submitError.value, icon: 'none' })
-    if (!agentState.draftId && !agentState.creatingUnknown && !submitting.value) {
+    if (!agentState.draftId && !agentState.creatingUnknown && !operationBusy.value) {
         addAfterMember.value = continueAdding
         memberPickerVisible.value = true
     }
     return false
 }
-const selectDelivery = (type: string) => { if (!agentState.draftId && !agentState.creatingUnknown && !submitting.value) deliveryType.value = type }
+const selectDelivery = (type: string) => { if (!agentState.draftId && !agentState.creatingUnknown && !operationBusy.value) deliveryType.value = type }
+const requireAgentTotal = () => {
+    if (!isAgent.value || countConfirmed.value) return true
+    submitError.value = agentState.creatingUnknown
+        ? '创建结果未确认，请先核对订单列表，不要重复提交。'
+        : '请先确认本单总台数，再录入或保存设备。'
+    uni.showToast({ title: submitError.value, icon: 'none' })
+    return false
+}
+const confirmTotal = async () => {
+    if (!isAgent.value || operationBusy.value || countConfirmed.value) return
+    if (!requireAgentCustomer()) return
+    confirmingTotal.value = true
+    submitError.value = ''
+    uni.hideKeyboard()
+    try {
+        await confirmAgentOrderTotal(agentState, { create: createAgentOrder }, {
+            memberId: Number(selectedMember.value?.member_id || 0), deliveryType: deliveryType.value,
+            expressNo: expressNo.value, count: Number(agentTotalInput.value)
+        })
+        agentTotalInput.value = agentState.confirmedCount
+        uni.showToast({ title: `本单共 ${agentState.confirmedCount} 台已确认`, icon: 'success' })
+    } catch (error: any) {
+        submitError.value = agentState.creatingUnknown ? '创建结果未确认，请先核对订单列表，不要重复提交。' : (error?.msg || error?.message || '确认总台数失败，请重试')
+        uni.showToast({ title: submitError.value, icon: 'none' })
+    } finally {
+        confirmingTotal.value = false
+    }
+}
 const confirmCreateRetry = () => {
     uni.showModal({ title: '确认未创建订单', content: '请先在订单列表核对刚才所选客户。只有确认没有新订单时才能重新提交，否则可能重复下单。', confirmText: '确认未创建', success: result => {
         if (result.confirm) { agentState.creatingUnknown = false; submitError.value = '' }
@@ -555,7 +603,7 @@ watch(() => modelKeyword.value, () => {
 })
 
 const handleClose = () => {
-    if (submitting.value) return
+    if (operationBusy.value) return
     uni.hideKeyboard()
     invalidateSummaryLoad()
     if (isAgent.value && agentState.draftId) emit('draft-saved', agentState.draftId)
@@ -567,8 +615,13 @@ const handleClose = () => {
 }
 
 const addDevice = () => {
-    if (submitting.value) return
+    if (operationBusy.value) return
     if (!requireAgentCustomer(true)) return
+    if (!requireAgentTotal()) return
+    if (isAgent.value && devices.value.length >= agentState.confirmedCount) {
+        uni.showToast({ title: `本单共 ${agentState.confirmedCount} 台，不能继续添加`, icon: 'none' })
+        return
+    }
     invalidateSummaryLoad()
     editingIndex.value = -1
     editForm.value = { model: '', imei: '', user_sn: '', initial_price: '', initial_price_uid: 0, initial_price_name: '', category_id: 0, category_path: [], check_template_id: 0, summary_fields: [], summary_values: {} }
@@ -588,7 +641,7 @@ const extractDeviceSummaryValues = (device: any): Record<string, any> => {
 }
 
 const editDevice = (device: any, index: number) => {
-    if (submitting.value) return
+    if (operationBusy.value) return
     invalidateSummaryLoad()
     editingIndex.value = index
     editForm.value = {
@@ -614,7 +667,7 @@ const safeJson = (value: any) => {
 }
 
 const deleteDevice = (index: number) => {
-    if (submitting.value) return
+    if (operationBusy.value) return
     uni.showModal({
         title: '删除设备',
         content: '确定删除该设备？',
@@ -728,7 +781,13 @@ const searchModelKeyword = async () => {
 }
 
 const saveEdit = () => {
+    if (operationBusy.value) return
     if (!requireAgentCustomer()) return
+    if (!requireAgentTotal()) return
+    if (isAgent.value && editingIndex.value === -1 && devices.value.length >= agentState.confirmedCount) {
+        uni.showToast({ title: `本单共 ${agentState.confirmedCount} 台，不能继续添加`, icon: 'none' })
+        return
+    }
     if (summaryLoading.value || summaryError.value) {
         uni.showToast({ title: summaryLoading.value ? '设备摘要正在加载，请稍候' : '设备摘要加载失败，请重新加载后再保存', icon: 'none' })
         return
@@ -770,10 +829,11 @@ const handleImeiScan = () => {
 }
 
 const handleSubmit = async () => {
-    if (submitting.value) return
+    if (operationBusy.value) return
     submitError.value = ''
     if (isAgent.value) {
         if (!requireAgentCustomer()) return
+        if (!requireAgentTotal()) return
         const error = agentOrderError(Number(selectedMember.value?.member_id || 0), deliveryType.value, expressNo.value, devices.value)
         if (error) { submitError.value = error; uni.showToast({ title: error, icon: 'none' }); return }
     }
@@ -818,6 +878,7 @@ const handleSubmit = async () => {
         emit('update:visible', false)
         if (isAgent.value) {
             Object.assign(agentState, newAgentOrderState())
+            agentTotalInput.value = 1
             selectedMember.value = null
             devices.value = []
             deliveryType.value = '2'
@@ -857,6 +918,13 @@ onBeforeUnmount(() => { invalidateSummaryLoad(); if (modelSearchTimer) clearTime
 .agent-delivery__options > view { padding: 12rpx 24rpx; border-radius: 10rpx; border: 1rpx solid #e2e6ec; }
 .agent-delivery__options .agent-delivery--active { color: var(--hsx-primary); border-color: var(--hsx-primary); background: #f0f5ff; }
 .agent-express { padding: 0 0 22rpx; }
+.agent-total { display: flex; align-items: center; gap: 16rpx; padding: 20rpx 0 12rpx; border-top: 1rpx solid #f1f3f5; }
+.agent-total__control { display: flex; align-items: center; gap: 14rpx; flex: 1; min-width: 0; }
+.agent-total__input { width: 128rpx; padding: 8rpx 0; flex-shrink: 0; border: 1rpx solid #dce2eb; border-radius: 8rpx; background: #fff; }
+.agent-total__input--locked { background: #f4f6f9; border-color: #edf0f4; }
+.agent-total__unit { font-size: 26rpx; color: #697386; }
+.agent-total__locked { font-size: 24rpx; color: #8590a2; }
+.agent-total__hint { padding-bottom: 20rpx; font-size: 22rpx; line-height: 1.6; color: #8590a2; }
 .agent-notice { padding: 18rpx 20rpx; margin-bottom: 20rpx; border-radius: 10rpx; font-size: 24rpx; line-height: 1.6; background: #f4f7fc; color: #697386; }
 .agent-notice--error { color: #c45656; background: #fff3f2; }
 .agent-retry { color: var(--hsx-primary); padding-top: 14rpx; }
@@ -995,6 +1063,7 @@ onBeforeUnmount(() => { invalidateSummaryLoad(); if (modelSearchTimer) clearTime
     font-size: 26rpx;
     box-sizing: border-box;
 }
+.add-btn--disabled { color: #9aa4b3; border-color: #e1e5eb; background: #fafbfc; }
 
 .popup-footer {
     display: flex;

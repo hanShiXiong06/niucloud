@@ -79,21 +79,51 @@ final class VirtualPayOrderService
     public function query(int $site,string $number): array
     {
         $row=self::order($site,$number);$settings=$this->settings($site,false);self::assertSettings($row,$settings);
-        $remote=$this->remote($site,$settings,$row);self::assertQuery($row,$remote);
+        // A verified receipt is committed before running native business
+        // listeners. Retrying local delivery must not need another successful
+        // external query, nor create another payment attempt.
+        if($row['status']==='receipt_pending'&&self::hasReceiptFact($row))return$this->deliverReceipt($site,$row);
+        if(self::hasReceiptFact($row)){
+            [$knownPay,$knownBusiness]=$this->original($site,$number);
+            if((int)$knownPay['status']===(int)PayDict::STATUS_FINISH&&$knownBusiness['status']==='unpaid'&&empty(Data::decode($knownBusiness['rule_json'])['requires_manual_review']))return$this->deliverReceipt($site,$row);
+        }
+        try{$remote=$this->remote($site,$settings,$row);self::assertQuery($row,$remote);}
+        catch(\Throwable $error){
+            $row=self::order($site,$number);
+            if($row['status']==='receipt_pending'&&self::hasReceiptFact($row))return$this->deliverReceipt($site,$row);
+            if(self::hasReceiptFact($row)&&$this->verifiedReceipt($site,$row,(string)$row['wx_order_id'])){
+                self::orders($site)->where('id',$row['id'])->where('status','delivery_pending')->update(['next_check_at'=>time()+300,'last_message'=>'会员权益已开通，渠道发货状态稍后自动核对','update_time'=>time()]);
+                return$this->receiptResult($site,self::order($site,$number));
+            }
+            throw$error;
+        }
         $status=(int)$remote['status'];
+        // HTTP may race an authenticated callback on another worker. Never
+        // apply an older NOTPAY/CLOSED response over its durable cash receipt.
+        $snapshotHadReceipt=self::hasReceiptFact($row);$row=self::order($site,$number);
+        if(!$snapshotHadReceipt&&self::hasReceiptFact($row)&&$row['status']!=='receipt_pending')return$this->receiptResult($site,$row);
+        if($row['status']==='receipt_pending'&&self::hasReceiptFact($row)){
+            if(in_array($status,[5,7,8],true)){
+                $this->attention($site,(int)$row['id'],'原收款已核实，渠道退款状态需核对，暂不发放会员权益');
+                return['status'=>'UNKNOWN','virtual_state'=>'refund_review','receipt_received'=>true,'delivery_pending'=>false];
+            }
+            return$this->deliverReceipt($site,$row);
+        }
         // A delayed/replayed provider state cannot undo a verified local
         // receipt or authorize another deduction. Refunds remain independent.
         if($status!==2&&$this->verifiedReceipt($site,$row,(string)($row['wx_order_id']??''))){
             if(in_array($status,[1,6],true))$this->attention($site,(int)$row['id'],'已核实收款与服务商后续状态不一致，请核对原单');
-            return['status'=>OnlinePayDict::SUCCESS,'virtual_state'=>in_array($status,[5,7,8],true)?'refund_review':'paid','query_source'=>'local_verified_receipt'];
+            if($status===4)self::orders($site)->where('id',$row['id'])->where('status','delivery_pending')->update(['status'=>'paid','last_provider_status'=>4,'next_check_at'=>0,'last_message'=>'收款、权益及渠道发货均已核实','update_time'=>time()]);
+            elseif($row['status']==='delivery_pending')self::orders($site)->where('id',$row['id'])->where('status','delivery_pending')->update(['last_provider_status'=>$status,'next_check_at'=>time()+300,'update_time'=>time()]);
+            return$this->receiptResult($site,self::order($site,$number),'local_verified_receipt',in_array($status,[5,7,8],true)?'refund_review':null);
         }
         if(in_array($status,[2,4],true)){
             self::assertPaidQuery($row,$remote);
-            $this->confirmPayment($site,$row,(string)$remote['wx_order_id'],(int)$remote['order_type'],isset($remote['paid_time'])?self::integer($remote['paid_time']):time());
-            return['status'=>OnlinePayDict::SUCCESS,'virtual_state'=>'paid','query_source'=>'verified_query'];
+            return$this->confirmPayment($site,$row,(string)$remote['wx_order_id'],(int)$remote['order_type'],isset($remote['paid_time'])?self::integer($remote['paid_time']):time(),$status);
         }
         if($status===6){
-            Db::transaction(function()use($site,$row):void{$current=self::order($site,$row['out_trade_no'],true);$pay=self::payment($site,$row['out_trade_no'],true);if((int)$pay['status']!==(int)PayDict::STATUS_FINISH&&$current['status']!=='paid')self::orders($site)->where('id',$current['id'])->update(['status'=>'closed','last_provider_status'=>6,'last_message'=>'服务商已确认关闭','update_time'=>time()]);});
+            $receipt=Db::transaction(function()use($site,$row):?array{$current=self::order($site,$row['out_trade_no'],true);$pay=self::payment($site,$row['out_trade_no'],true);if(self::hasReceiptFact($current)||(int)$pay['status']===(int)PayDict::STATUS_FINISH)return$current;if($current['status']!=='paid')self::orders($site)->where('id',$current['id'])->update(['status'=>'closed','last_provider_status'=>6,'last_message'=>'服务商已确认关闭','update_time'=>time()]);return null;});
+            if($receipt!==null)return$receipt['status']==='receipt_pending'?$this->deliverReceipt($site,$receipt):$this->receiptResult($site,$receipt);
             return['status'=>OnlinePayDict::CLOSED,'virtual_state'=>'closed'];
         }
         self::orders($site)->where('id',$row['id'])->update(['last_provider_status'=>$status,'next_check_at'=>time()+300,'update_time'=>time()]);
@@ -127,17 +157,25 @@ final class VirtualPayOrderService
             // After the complete receipt+rights transaction committed, the
             // provider can replay delivery while already reporting status 4,
             // or while its query endpoint is unavailable. Acknowledge only
-            // that exact frozen receipt, with no query, grant or new payment.
+            // that exact frozen receipt without a new provider request. Only
+            // interrupted local delivery may run the idempotent hooks again.
             $knownNumber=$callbackNumber??((int)$row['order_type']===7?(string)($row['wx_order_id']??''):'');
-            if($knownNumber!==''&&$this->verifiedReceipt($site,$row,$knownNumber)){
+            if($knownNumber!==''&&self::hasReceiptFact($row)&&hash_equals((string)$row['wx_order_id'],$knownNumber)){
                 if(isset($event['OrderType'])&&self::integer($event['OrderType'])!==(int)$row['order_type'])throw new CommonException('重复回调终端与原收款不一致');
+                [, $knownBusiness]=$this->original($site,$row['out_trade_no']);
+                $fulfilled=$knownBusiness['status']==='paid'&&$row['status']==='paid'&&hash_equals((string)$knownBusiness['out_trade_no'],$row['out_trade_no'])&&empty(Data::decode($knownBusiness['rule_json'])['requires_manual_review']);
+                $returned=(int)self::refunds($site)->where('virtual_order_id',$row['id'])->where('status','success')->sum('amount_cents')>=(int)$row['amount_cents'];
+                if(!in_array($row['status'],['receipt_pending','delivery_pending'],true)&&($fulfilled||$returned)&&$this->verifiedReceipt($site,$row,$knownNumber))return;
+                $result=$this->deliverReceipt($site,$row,true);
+                if(($result['status']??'')!==OnlinePayDict::SUCCESS)throw new CommonException('原收款已核实，会员权益尚未确认完成，未确认渠道发货');
                 return;
             }
             $remote=$this->remote($site,$settings,$row);self::assertQuery($row,$remote);self::assertPaidQuery($row,$remote);
             if($callbackNumber!==null&&(string)$remote['wx_order_id']!==$callbackNumber)throw new CommonException('虚拟支付回调与查单凭据不一致');
             if($callbackNumber===null&&((int)$remote['order_type']!==7||!isset($remote['paid_time'])))throw new CommonException('苹果付款通知的原渠道收款凭据或时间尚未核实');
             if(isset($event['OrderType'])&&self::integer($event['OrderType'])!==(int)$remote['order_type'])throw new CommonException('虚拟支付回调与查单终端不一致');
-            $this->confirmPayment($site,$row,(string)$remote['wx_order_id'],(int)$remote['order_type'],isset($remote['paid_time'])?self::integer($remote['paid_time']):time());
+            $result=$this->confirmPayment($site,$row,(string)$remote['wx_order_id'],(int)$remote['order_type'],isset($remote['paid_time'])?self::integer($remote['paid_time']):time(),(int)$remote['status'],true);
+            if(($result['status']??'')!==OnlinePayDict::SUCCESS)throw new CommonException('渠道收款已核实，会员权益尚未确认完成，未确认渠道发货');
             return;
         }
         if($kind==='xpay_refund_notify'){$this->refundEvent($site,$event);return;}
@@ -192,8 +230,8 @@ final class VirtualPayOrderService
      * external refund facts. Never submits a payment or provider refund. */
     public function tick(int $limit=30): array
     {
-        $limit=max(1,min(100,$limit));$result=['examined'=>0,'paid'=>0,'closed'=>0,'pending'=>0,'attention'=>0,'refund_recovered'=>0,'refund_review'=>0];
-        $duePayments=static fn(int $count):array=>Db::name('hsx_lead_virtual_order')->whereIn('status',['prepared','pending'])->where('next_check_at','<=',time())->order('next_check_at,id')->limit($count)->field('id,site_id,out_trade_no')->select()->toArray();
+        $limit=max(1,min(100,$limit));$result=['examined'=>0,'paid'=>0,'closed'=>0,'pending'=>0,'attention'=>0,'receipt_pending'=>0,'delivery_pending'=>0,'refund_recovered'=>0,'refund_review'=>0];
+        $duePayments=static fn(int $count):array=>Db::name('hsx_lead_virtual_order')->whereIn('status',['prepared','pending','receipt_pending','delivery_pending'])->where('next_check_at','<=',time())->order('next_check_at,id')->limit($count)->field('id,site_id,out_trade_no')->select()->toArray();
         // A large refund backlog must not starve paid users waiting for their
         // entitlement receipt. A one-item run prefers a due payment; larger
         // runs reserve at least half their bound for payment queries.
@@ -208,7 +246,7 @@ final class VirtualPayOrderService
             $this->scheduleExternalRecovery($site,(int)$row['id']);if($result['examined']>=$refundBudget)break;
         }
         $rows=$single??$duePayments($limit-$result['examined']);
-        foreach($rows as$row){$result['examined']++;try{$state=$this->query((int)$row['site_id'],$row['out_trade_no']);$key=($state['status']??'')===OnlinePayDict::SUCCESS?'paid':(($state['status']??'')===OnlinePayDict::CLOSED?'closed':(($state['status']??'')===OnlinePayDict::NOTPAY?'pending':'attention'));$result[$key]++;}catch(\Throwable $error){$result['attention']++;self::orders((int)$row['site_id'])->where('id',$row['id'])->whereIn('status',['prepared','pending'])->update(['next_check_at'=>time()+300,'last_message'=>'查询暂未获得完整凭据，未重复收款或发放权益','update_time'=>time()]);}}
+        foreach($rows as$row){$result['examined']++;try{$state=$this->query((int)$row['site_id'],$row['out_trade_no']);$key=($state['status']??'')===OnlinePayDict::SUCCESS?'paid':(($state['status']??'')===OnlinePayDict::CLOSED?'closed':(($state['status']??'')===OnlinePayDict::NOTPAY?'pending':'attention'));$result[$key]++;if(in_array($state['virtual_state']??'',['receipt_pending','delivery_pending'],true))$result[$state['virtual_state']]++;}catch(\Throwable $error){$result['attention']++;self::orders((int)$row['site_id'])->where('id',$row['id'])->whereIn('status',['prepared','pending','receipt_pending','delivery_pending'])->update(['next_check_at'=>time()+300,'last_message'=>'查询暂未获得完整凭据，原收款事实保留，未重复扣款或发放权益','update_time'=>time()]);}}
         return$result;
     }
 
@@ -224,7 +262,7 @@ final class VirtualPayOrderService
                 // A verified external refund is a financial fact, not a new
                 // outbound refund request. Its exact original is reconciled
                 // through the native successful-refund hooks below.
-                if($code===0){if(!$this->verifiedReceipt($site,$locked,(string)$locked['wx_order_id']))throw new CommonException('外部退款尚未对应本地已核实收款');$this->assertExternalRefundTotal($site,$locked,0,$amount);}
+                if($code===0){if(!$this->recordedReceipt($site,$locked))throw new CommonException('外部退款尚未对应本地已核实收款');$this->assertExternalRefundTotal($site,$locked,0,$amount);}
                 $id=(int)self::refunds($site)->insertGetId(['site_id'=>$site,'virtual_order_id'=>$locked['id'],'framework_refund_no'=>null,'refund_order_id'=>$refundId,'wx_refund_id'=>$wxRefund,'amount_cents'=>$amount,'status'=>$code===0?'reconciling':'failed','source_kind'=>'platform','last_message'=>$code===0?'渠道退款已核实，正在同步本地权益':'外部退款未成功，不回退已付业务','finish_time'=>$code===0?time():0,'create_time'=>time(),'update_time'=>time()]);
                 if($code===0)$this->persistExternalRecovery($site,$locked);return$code===0?$id:0;
             }
@@ -233,7 +271,7 @@ final class VirtualPayOrderService
             if($refund['source_kind']!=='merchant'||empty($refund['framework_refund_no'])){
                 if((int)$refund['finish_time']>0&&$code!==0)throw new CommonException('外部成功退款收到相反结果，请核对原回执');
                 if($code===0){
-                    if(!$this->verifiedReceipt($site,$locked,(string)$locked['wx_order_id']))throw new CommonException('外部退款尚未对应本地已核实收款');$this->assertExternalRefundTotal($site,$locked,(int)$refund['id'],$amount);
+                    if(!$this->recordedReceipt($site,$locked))throw new CommonException('外部退款尚未对应本地已核实收款');$this->assertExternalRefundTotal($site,$locked,(int)$refund['id'],$amount);
                     self::refunds($site)->where('id',$refund['id'])->update(['status'=>'reconciling','finish_time'=>(int)$refund['finish_time']>0?(int)$refund['finish_time']:time(),'update_time'=>time()]);
                     $this->persistExternalRecovery($site,$locked);return(int)$refund['id'];
                 }
@@ -320,19 +358,80 @@ final class VirtualPayOrderService
         self::orders($site)->where('id',$order['id'])->update(['status'=>$review?'attention':'paid','last_message'=>$review?'渠道外部退款已核实，原业务仍有待核对事项':'渠道外部退款与原会员权益已同步','update_time'=>time()]);
     }
 
-    private function confirmPayment(int $site,array $snapshot,string $providerNumber,int $orderType,int $paidAt): void
+    /** Commit authenticated provider facts independently from fallible native
+     * listeners. Existing source fields and its provider-ID unique index form
+     * the durable receipt; no client can set this state. */
+    private function confirmPayment(int $site,array $snapshot,string $providerNumber,int $orderType,int $paidAt,int $providerStatus=2,bool $deliveryCallback=false): array
     {
-        if(!in_array($orderType,[0,7],true)||$providerNumber===''||strlen($providerNumber)>128||$paidAt<=0||$paidAt>time()+60)throw new CommonException('虚拟支付收款凭据不完整');
-        Db::transaction(function()use($site,$snapshot,$providerNumber,$orderType,$paidAt):void{
+        if(!in_array($orderType,[0,7],true)||$providerNumber===''||strlen($providerNumber)>128||preg_match('/[\x00-\x20\x7f]/',$providerNumber)||$paidAt<=0||$paidAt>time()+60)throw new CommonException('虚拟支付收款凭据不完整');
+        if(Db::connect()->getPdo()->inTransaction())throw new CommonException('已核实收款需要独立入账，请稍后自动核对原单');
+        $receipt=Db::transaction(function()use($site,$snapshot,$providerNumber,$orderType,$paidAt,$providerStatus):array{
             $row=self::order($site,$snapshot['out_trade_no'],true);[$pay,$business]=$this->original($site,$row['out_trade_no'],true);
             if((int)$row['pay_id']!==(int)$pay['id']||(int)$row['order_id']!==(int)$business['id']||(int)$row['member_id']!==(int)$pay['main_id']||(int)$row['amount_cents']!==Rules::cents((string)$pay['money'])||$row['snapshot_hash']!==$this->businessAdapter->fingerprint($business))throw new CommonException('虚拟支付收款与冻结原单不一致');
             if($row['wx_order_id']!==null&&!hash_equals((string)$row['wx_order_id'],$providerNumber))throw new CommonException('原单已关联另一笔服务商收款，未重复发放权益');
             $duplicate=Db::name('hsx_lead_virtual_order')->where('app_id',$row['app_id'])->where('env',$row['env'])->where('wx_order_id',$providerNumber)->where('id','<>',$row['id'])->find();
             if($duplicate)throw new CommonException('同一服务商收款已关联另一原单');
-            if((int)$pay['status']!==(int)PayDict::STATUS_FINISH)(new CorePayService())->paySuccess($site,['out_trade_no'=>$row['out_trade_no'],'type'=>self::TYPE,'trade_no'=>$providerNumber,'pay_time'=>$paidAt]);
-            $review=$this->businessAdapter->confirm($site,$business,$row['out_trade_no']);
-            self::orders($site)->where('id',$row['id'])->update(['wx_order_id'=>$providerNumber,'order_type'=>$orderType,'status'=>$review?'attention':'paid','last_provider_status'=>2,'last_message'=>$review?'已核实收款，原业务状态需平台核对':'收款与业务已核实','paid_at'=>$paidAt,'next_check_at'=>0,'update_time'=>time()]);
+            if(self::hasReceiptFact($row)){
+                if((int)$row['order_type']!==$orderType)throw new CommonException('已核实原收款终端不一致，未改写原交易');
+                $paidAt=(int)$row['paid_at']; // The first verified clock is immutable on replay.
+            }
+            $update=['wx_order_id'=>$providerNumber,'order_type'=>$orderType,'last_provider_status'=>$providerStatus,'paid_at'=>$paidAt,'update_time'=>time()];
+            if(!self::hasReceiptFact($row)||$row['status']==='receipt_pending')$update+=['status'=>'receipt_pending','next_check_at'=>time(),'last_message'=>'渠道收款已核实，正在同步原付款及会员权益'];
+            self::orders($site)->where('id',$row['id'])->update($update);
+            return array_replace($row,$update);
         });
+        return$this->deliverReceipt($site,$receipt,$deliveryCallback);
+    }
+
+    /** Local replay only. A listener failure can roll back its own native
+     * transaction, but never the independently committed provider receipt. */
+    private function deliverReceipt(int $site,array $snapshot,bool $deliveryCallback=false): array
+    {
+        try{
+            Db::transaction(function()use($site,$snapshot,$deliveryCallback):void{
+                $this->businessAdapter->lockSite($site);
+                $row=self::order($site,$snapshot['out_trade_no'],true);[$pay,$business]=$this->original($site,$row['out_trade_no'],true);
+                if(!self::hasReceiptFact($row)||(int)$row['pay_id']!==(int)$pay['id']||(int)$row['order_id']!==(int)$business['id']||(int)$row['member_id']!==(int)$pay['main_id']||(int)$row['amount_cents']!==Rules::cents((string)$pay['money'])||!hash_equals($row['snapshot_hash'],$this->businessAdapter->fingerprint($business)))throw new CommonException('已核实收款未匹配原冻结业务，未发放权益');
+                if(self::refunds($site)->where('virtual_order_id',$row['id'])->where('source_kind','platform')->where('finish_time','>',0)->whereIn('status',['reconciling','attention','success'])->lock(true)->find()){
+                    self::orders($site)->where('id',$row['id'])->update(['status'=>'attention','next_check_at'=>time()+300,'last_message'=>'已核实原路退款，暂停未完成的权益发放，正在同步原退款','update_time'=>time()]);
+                    return;
+                }
+                $this->businessAdapter->beforeReceiptDelivery($site,$pay,$business);
+                if((int)$pay['status']===(int)PayDict::STATUS_FINISH){
+                    if($pay['type']!==self::TYPE||!hash_equals((string)$pay['trade_no'],(string)$row['wx_order_id'])||(int)$pay['pay_time']!==(int)$row['paid_at'])throw new CommonException('原付款流水与已核实渠道收款不一致');
+                }else(new CorePayService())->paySuccess($site,['out_trade_no'=>$row['out_trade_no'],'type'=>self::TYPE,'trade_no'=>$row['wx_order_id'],'pay_time'=>(int)$row['paid_at']]);
+                $review=$this->businessAdapter->confirm($site,$business,$row['out_trade_no']);
+                $delivered=$deliveryCallback||(int)$row['last_provider_status']===4;
+                self::orders($site)->where('id',$row['id'])->update(['status'=>$review?'attention':($delivered?'paid':'delivery_pending'),'last_message'=>$review?'已核实收款，原业务状态需平台核对':($delivered?'收款、权益及渠道发货均已核实':'收款及会员权益已同步，正在核对渠道发货状态'),'next_check_at'=>$review||$delivered?0:time()+300,'update_time'=>time()]);
+            });
+        }catch(\Throwable $error){
+            self::orders($site)->where('id',$snapshot['id'])->whereIn('status',['prepared','pending','receipt_pending','paid','delivery_pending'])->update(['status'=>'receipt_pending','next_check_at'=>time()+60,'last_message'=>'渠道收款已保存，原权益稍后自动恢复；不会再次扣款','update_time'=>time()]);
+            return['status'=>'UNKNOWN','virtual_state'=>'receipt_pending','receipt_received'=>true,'delivery_pending'=>true,'query_source'=>'persisted_receipt'];
+        }
+        return$this->receiptResult($site,self::order($site,$snapshot['out_trade_no']),'persisted_receipt');
+    }
+
+    private static function hasReceiptFact(array $row): bool
+    {
+        return is_string($row['wx_order_id']??null)&&$row['wx_order_id']!==''&&(int)($row['paid_at']??0)>0&&in_array((int)($row['order_type']??-1),[0,7],true);
+    }
+
+    /** A successful incoming refund can overtake native business delivery.
+     * Preserve it against the already committed exact provider receipt, then
+     * hold delivery; do not erase it just because native hooks had failed. */
+    private function recordedReceipt(int $site,array $row): bool
+    {
+        if(!self::hasReceiptFact($row))return false;
+        [$pay,$business]=$this->original($site,$row['out_trade_no'],true);
+        if((int)$row['pay_id']!==(int)$pay['id']||(int)$row['order_id']!==(int)$business['id']||(int)$row['member_id']!==(int)$pay['main_id']||(int)$row['amount_cents']!==Rules::cents((string)$pay['money'])||!hash_equals($row['snapshot_hash'],$this->businessAdapter->fingerprint($business)))throw new CommonException('渠道退款未对应原已核实收款来源');
+        return true;
+    }
+
+    private function receiptResult(int $site,array $row,string $source='persisted_receipt',?string $state=null): array
+    {
+        $received=self::hasReceiptFact($row)&&$this->verifiedReceipt($site,$row,(string)$row['wx_order_id']);
+        $review=$received&&$this->businessAdapter->requiresReview($site,(int)$row['order_id']);
+        return['status'=>$received&&!$review?OnlinePayDict::SUCCESS:'UNKNOWN','virtual_state'=>$state??($review?'attention':(string)$row['status']),'receipt_received'=>self::hasReceiptFact($row),'delivery_pending'=>in_array($row['status'],['receipt_pending','delivery_pending'],true),'query_source'=>$source];
     }
 
     private function verifiedReceipt(int $site,array $snapshot,string $providerNumber): bool

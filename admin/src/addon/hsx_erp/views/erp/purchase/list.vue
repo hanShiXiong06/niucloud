@@ -726,6 +726,9 @@
 
         <HsxDrawer class="erp-desktop-overlay" v-model="detail.visible" title="采购单详情" size="76%" destroy-on-close>
             <div v-loading="detail.loading">
+                <div v-if="detail.data?.integration_actions?.length" class="mb-4 flex flex-wrap gap-2">
+                    <el-button v-for="action in detail.data.integration_actions" :key="action.key" type="primary" plain @click="openPurchaseIntegration(action)">{{ action.label }}</el-button>
+                </div>
                 <el-descriptions v-if="detail.data" :column="4" border>
                     <el-descriptions-item label="采购单号">{{ detail.data.purchase_no }}</el-descriptions-item>
                     <el-descriptions-item label="采购用户">{{ detail.data.party_name }}</el-descriptions-item>
@@ -873,6 +876,10 @@ const searchConditionCount = computed(() => Object.values(search).filter(value =
 const activeTab = ref('')
 const listMode = ref<'device' | 'standard'>('device')
 const router = useRouter()
+const openPurchaseIntegration = (action: any) => {
+    if (!/^\/[A-Za-z0-9_/-]+$/.test(String(action.pc_route || ''))) return
+    router.push({ path: action.pc_route, query: { purchase_id: Number(detail.data?.id) } })
+}
 
 function onTabChange(tab: string) {
     // Tab 映射：void 用 status 字段，其余用 finance_status

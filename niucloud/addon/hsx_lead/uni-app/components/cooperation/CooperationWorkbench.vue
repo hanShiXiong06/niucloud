@@ -61,13 +61,13 @@
 <CoopPublishForm ref="publishRef" :page="!!task" :initial-business-type="initialBusinessType" :merchant-id="ui.profile.value.id" :key="'publish-' + (ui.profile.value.id || 0)" :show="overlay === 'publish'" :config="ui.config.value" :busy="ui.busy.value" :error="ui.writeError.value" @close="closeOverlay" @submit="publish" />
         <CoopStorePicker :page="!!task" :config="ui.config.value" :show="overlay === 'select'" :lead="ui.detail.value" :profile="ui.profile.value" :busy="locked" :submission-error="ui.writeError.value || ui.detailError.value" @close="closeOverlay" @assign="assign" @reload="reloadDetail" />
         <CoopTaskDetail :page="!!task" :show="overlay === 'detail'" :lead="ui.detail.value" :config="ui.config.value" :loading="ui.detailLoading.value" :error="ui.detailError.value || ui.writeError.value" :busy="locked" :active="countdownActive" @close="closeOverlay" @reload="reloadDetail" @select="openSelection(Number(ui.detail.value.id))" @reselect="reselectStore" @membership="openMembership" @pay="openTask('commission', { collaboration_id: ui.detail.value.id })" @action="act" />
-        <CoopCommissionForm v-if="!commissionPaymentClosed" :page="!!task" :show="overlay === 'commission'" :lead="commissionLead" :config="ui.config.value" :busy="ui.busy.value || paymentChecking || paymentResuming" :blocked="!!paymentContextError" :error="paymentContextError || ui.detailError.value || ui.writeError.value" @close="closeOverlay" @submit="payCommission" />
+        <CoopCommissionForm v-if="!commissionPaymentClosed" ref="commissionRef" :page="!!task" :show="overlay === 'commission'" :lead="commissionLead" :order="paymentOrder" :config="ui.config.value" :busy="ui.busy.value || paymentChecking || paymentResuming" :blocked="!!paymentContextError" :error="paymentContextError || ui.detailError.value || ui.writeError.value" @payment-help-ready="paymentHelpReady = $event" @close="closeOverlay" @submit="payCommission" />
         <CoopTaskSheet v-else :page="!!task" :show="overlay === 'commission'" title="付款单已关闭" @close="closeOverlay"><CoopState title="原付款单已关闭" :hint="paymentContextError || paymentMessage || '请查看付款单并核对最新状态，不会按原金额重新下单。'" icon="order" /><template #footer><u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" text="查看我的付款单" @click="openPaymentOrders" /></template></CoopTaskSheet>
         <CoopTaskSheet v-if="overlay === 'erp-disabled'" page :show="true" title="门店协作" @close="closeOverlay"><CoopState title="该功能暂未开放" /><template #footer><u-button :custom-style="cooperationButtonStyle" text="返回协作" @click="closeOverlay" /></template></CoopTaskSheet>
         <CoopConnectionPanel v-if="ui.config.value.erp_visible !== false" :page="!!task" :show="overlay === 'connection'" :profile="ui.profile.value" :providers="ui.providers.value" @close="closeOverlay" @changed="changedConnection" />
         <CoopStoreInventory v-if="ui.config.value.erp_visible !== false" :page="!!task" :show="overlay === 'inventory'" :store="initialStoreId ? { id: initialStoreId } : ui.profile.value" @close="closeOverlay" />
         <CoopProfilePanel v-if="task === 'profile-edit' && ui.ready.value" ref="profileRef" page editing :profile="ui.profile.value" :onboarding-inviter="ui.onboardingInviter.value" :config="ui.config.value" :providers="ui.providers.value" :onboarding="!ui.profile.value.id" :busy="ui.busy.value" :error="ui.writeError.value" @submit="saveProfile" @close="closeOverlay" @promotion="openPromotion" @connection="openTask('connection')" />
-        <view class="coop-cashier-mount"><pay ref="payRef" :ignore-pay="['friendspay']" :reformat="cashierReturnUrl" @confirm="verifyPayment" @close="handlePaymentClose" /></view>
+        <view class="coop-cashier-mount"><pay ref="payRef" :ignore-pay="['friendspay']" :reformat="cashierReturnUrl" @confirm="verifyPayment" @close="handlePaymentClose" @check="handlePaymentCheck"><template #help="{ busy }"><button v-if="paymentHelpReady && overlay === 'commission'" class="coop-cashier-help" :disabled="busy || locked || paymentChecking || paymentResuming" @tap.stop="contactPaymentAdmin(busy)"><text>支付遇到问题？</text><text>联系管理员 ›</text></button></template></pay></view>
 </view>
     </view>
 </template>
@@ -105,6 +105,7 @@ const props = withDefaults(defineProps<{ initialId?: number; initialTab?: Cooper
 const ui = useCooperation(props.initialTab === 'stores' ? 'deliveries' : props.initialTab), pageUrl = cooperationPageUrls[props.initialTab], overlay = ref(''), childOverlay = ref(false), payRef = ref<any>(null), publishRef = ref<any>(null), profileRef = ref<any>(null), promotionRef = ref<any>(null), promotionTab = ref('overview'), confirming = ref(false), paymentId = ref(0), paymentMessage = ref(''), paymentChecking = ref(false), selectedId = ref(0), canonicalPending = ref(props.initialId > 0)
 ui.direction.value = props.initialDirection
 const paymentOrder = ref<CoopRow>({}), paymentCompleted = ref(false)
+const commissionRef = ref<any>(null), paymentHelpReady = ref(false)
 const visitorServices = ref<{ key: string; name: string; dimension?: string }[]>([]), visitorEnabled = ref<boolean | null>(null), visitorLoading = ref(false), visitorError = ref('')
 const leadPagingRef = ref<any>(null), leadPagingRevision = ref(0), leadKeyword = ref(''), leadFirstPageReady = ref(false)
 const managedDeliveries = computed(() => !props.task && ui.tab.value === 'deliveries')
@@ -302,6 +303,25 @@ function markChanged() { uni.setStorageSync('hsx_lead_coop_changed', Date.now())
 function openTask(task: string, params: CoopRow = {}) { if (['connection','inventory'].includes(task) && ui.config.value.erp_visible === false) { uni.showToast({title:'该功能暂未开放',icon:'none'}); return }; if (!locked.value) openCooperationTask(task, params) }
 function closeOverlay() { if (locked.value) return; ui.writeError.value = ''; if (props.task) { backCooperationTask(); return }; overlay.value = ''; canonicalPending.value = false }
 async function handlePaymentClose() { await verifyPayment() }
+function paymentPageCurrent() { return !disposed && pageActive && !!getToken() && !!identity && identity === ui.sessionScope() }
+function handlePaymentCheck() {
+    if (!paymentPageCurrent()) return
+    // The framework close event already rechecks the retained order. Do not
+    // start a second check, a replacement payment, or a financial close here.
+    if (typeof payRef.value?.close === 'function') payRef.value.close()
+    else void verifyPayment()
+}
+function contactPaymentAdmin(nativeBusy = false) {
+    if (nativeBusy || !paymentPageCurrent() || overlay.value !== 'commission' || !paymentHelpReady.value || locked.value || paymentChecking.value || paymentResuming.value) return
+    // Reuse the form's one current-tenant helper; opening it must succeed
+    // before the cashier is dismissed and its existing read-back runs.
+    if (commissionRef.value?.openPaymentHelp?.() !== true) {
+        paymentHelpReady.value = false
+        uni.showToast({ title: '管理员联系方式暂不可用，请重新读取页面', icon: 'none' })
+        return
+    }
+    if (typeof payRef.value?.close === 'function') payRef.value.close()
+}
 function filterStatus(value: string) { if (!leadListVisible.value || locked.value || ui.query.status === value) return; ui.query.status = value; reloadLeads() }
 async function focusTasks(direction: 'outgoing' | 'incoming', status: string) { if (ui.listLoading.value) return; if (ui.direction.value !== direction) { ui.direction.value = direction; leadKeyword.value = ''; ui.query.keyword = '' }; ui.query.status = status; reloadLeads() }
 function editProfile() { openTask('profile-edit') }
@@ -519,4 +539,7 @@ function pausePage() { countdownActive.value = false; if (pendingLeadPaging) int
 defineExpose({ resume: initialize, pause: pausePage, refresh, loadMore, openInvitation })
 onBeforeUnmount(() => { countdownActive.value = false; disposed = true; ui.dispose(); orderRequests.clear() })
 </script>
-<style lang="scss" scoped>@import './cooperation';.coop-onboarding-existing { margin:10px 0 0;line-height:44px;font-size:14px;color:#6685ae;background:transparent; }.coop-onboarding-existing::after { border:0; }</style>
+<style lang="scss" scoped>@import './cooperation';.coop-onboarding-existing { margin:10px 0 0;line-height:44px;font-size:14px;color:#6685ae;background:transparent; }.coop-onboarding-existing::after { border:0; }
+.coop-cashier-help { display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;width:100%;margin:8px 0 0;padding:8px 12px;border:1px solid #eedab7;border-radius:10px;background:#fff8e9;line-height:1.5;color:#765321;font-size:13px;box-sizing:border-box; }
+.coop-cashier-help>text:last-child { font-weight:600; }.coop-cashier-help::after { border:0; }
+</style>

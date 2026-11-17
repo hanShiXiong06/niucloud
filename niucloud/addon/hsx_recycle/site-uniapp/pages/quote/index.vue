@@ -5,7 +5,7 @@
                 <u-search v-model="keyword" placeholder="搜索报价分类" :show-action="false" bg-color="#f3f5f8" />
                 <view class="quote-tabs">
                     <view v-for="tab in tabs" :key="tab.value" class="quote-tab" :class="{ 'quote-tab--active': status === tab.value }" @click="changeStatus(tab.value)">{{ tab.label }}</view>
-                    <text class="quote-refresh" @click="loadOptions()">刷新</text>
+                    <text class="quote-refresh" :class="{ 'quote-link--disabled': switchingIds.length > 0 }" @click="loadOptions()">刷新</text>
                 </view>
             </view>
 
@@ -15,21 +15,42 @@
                     <text>{{ loadError }}</text>
                     <button class="quote-button quote-button--small" :disabled="loading" @click="loadOptions()">重新加载</button>
                 </view>
+                <view v-if="visibilityUncertainIds.length" class="quote-error quote-visibility-warning">
+                    <text>有显示设置尚未确认，请刷新核对后再操作；报价图片和历史记录不会删除。</text>
+                </view>
                 <template v-if="categories.length">
-                    <view class="quote-list-heading"><text>{{ filtered.length }} 个分类</text><text>{{ canEdit ? '选择分类更新报价图' : '当前账号仅可查看' }}</text></view>
-                    <view v-for="item in visibleCategories" :key="item.category_id" class="quote-category" @click="openCategory(item)">
-                        <view class="quote-category-thumb" :class="{ 'quote-category-thumb--ready': item.images }">
-                            <u-icon name="photo" size="25" :color="item.images ? '#1b73e8' : '#a2adbd'" />
+                    <view class="quote-list-heading">
+                        <text>共 {{ filtered.length }} 个分类</text>
+                        <text v-if="isFiltering" class="quote-text-muted">已展开匹配路径</text>
+                        <text v-else-if="hasBranches" class="quote-link" @click="toggleAllCategories">{{ allExpanded ? '全部收起' : '全部展开' }}</text>
+                    </view>
+                    <view class="quote-tree-help">{{ canEdit ? '展开查看子分类，点名称更新报价；开关控制客户显示。' : '展开查看子分类，当前账号仅可查看。' }}</view>
+                    <view v-for="item in visibleCategories" :key="item.category_id" class="quote-category quote-tree-row"
+                        :style="{ paddingLeft: `${20 + Math.min(Number(item.depth || 0), 4) * 22}rpx` }">
+                        <view v-if="hasTreeChildren(item)" class="quote-tree-toggle" @click="toggleCategory(item)">
+                            <u-icon :name="isExpanded(item) ? 'arrow-down' : 'arrow-right'" size="14" color="#77869a" />
                         </view>
-                        <view class="quote-category-info">
+                        <view v-else class="quote-tree-spacer"></view>
+                        <view class="quote-category-thumb" :class="{ 'quote-category-thumb--ready': item.images }" @click="openCategory(item)">
+                            <u-icon name="photo" size="19" :color="item.images ? '#1b73e8' : '#a2adbd'" />
+                        </view>
+                        <view class="quote-category-info" @click="openCategory(item)">
                             <text class="quote-category-name">{{ item.category_name }}</text>
-                            <text v-if="item.parentName" class="quote-category-path">{{ item.parentName }}</text>
-                            <view class="quote-category-status"><text :class="item.images ? 'quote-text-success' : 'quote-text-muted'">{{ item.images ? '已有报价图' : '待上传' }}</text><text v-if="item.site_id !== siteId" class="quote-readonly">公共 · 只读</text></view>
+                            <view class="quote-category-status">
+                                <text :class="item.images ? 'quote-text-success' : 'quote-text-muted'">{{ item.images ? '已有报价图' : '待上传' }}</text>
+                                <text v-if="item.site_id !== siteId" class="quote-readonly">公共 · 只读</text>
+                                <text v-else-if="parentHidden(item)" class="quote-text-muted">上级已隐藏</text>
+                            </view>
                         </view>
-                        <u-icon name="arrow-right" size="15" color="#a2adbd" />
+                        <view class="quote-visibility-control" @click.stop>
+                            <u-switch :model-value="isShown(item)" :async-change="true" :size="20"
+                                :loading="switchingIds.includes(item.category_id)" :disabled="visibilityDisabled(item)"
+                                @change="toggleVisibility(item, $event)" />
+                            <text class="quote-visibility-label">{{ visibilityUncertainIds.includes(item.category_id) ? '待核对' : (isShown(item) ? '显示' : '隐藏') }}</text>
+                        </view>
                     </view>
                     <view v-if="!filtered.length" class="quote-state">未找到匹配分类，试试其他关键词</view>
-                    <button v-if="filtered.length > displayLimit" class="quote-button quote-button--more" @click="displayLimit += 40">加载更多分类</button>
+                    <button v-if="treeRows.length > displayLimit" class="quote-button quote-button--more" @click="displayLimit += 40">加载更多分类</button>
                 </template>
                 <view v-else-if="!loading && !loadError" class="quote-state">暂无报价分类，请先在电脑端添加分类</view>
             </view>
@@ -44,7 +65,15 @@
 
             <view class="quote-content quote-content--detail">
                 <view v-if="!editable" class="quote-note">{{ selected.site_id !== siteId ? '公共分类仅可查看，请联系平台管理员更新报价。' : '当前账号没有报价编辑权限，可联系站点管理员授权。' }}</view>
-                <view v-if="Number(selected.is_show) === 0" class="quote-note">此分类暂未对客户展示，更新报价图不会自动开启展示。</view>
+                <view class="quote-card quote-display-card">
+                    <view class="quote-display-row">
+                        <view class="quote-display-copy"><text>客户显示</text><text class="quote-caption">{{ visibilityDescription(selected) }}</text></view>
+                        <u-switch :model-value="isShown(selected)" :async-change="true" :size="23"
+                            :loading="switchingIds.includes(selected.category_id)" :disabled="visibilityDisabled(selected)"
+                            @change="toggleVisibility(selected, $event)" />
+                    </view>
+                    <text v-if="visibilityUncertainIds.includes(selected.category_id)" class="quote-visibility-error" @click="refreshCurrent">保存结果未确认，点击刷新核对后再操作</text>
+                </view>
                 <view class="quote-card">
                     <view class="quote-section-heading"><text>当前报价</text><text class="quote-link" :class="{ 'quote-link--disabled': refreshingCurrent || saving }" @click="refreshCurrent">{{ refreshingCurrent ? '刷新中…' : '刷新当前报价' }}</text></view>
                     <view v-if="selected.images" class="quote-preview" @click="preview(selected.images)">
@@ -91,9 +120,9 @@
             <view v-if="editable" class="quote-footer">
                 <template v-if="draftLocal">
                     <view class="quote-footer-secondary"><u-button text="重新选图" :plain="true" :disabled="choosing || uploading || saving" @click="chooseImage" /></view>
-                    <view class="quote-footer-primary"><u-button :text="saving ? '正在更新…' : '确认更新报价'" type="primary" :loading="saving" :disabled="!draftPath || uploading || saving || refreshingCurrent" @click="saveQuote" /></view>
+                    <view class="quote-footer-primary"><u-button :text="saving ? '正在更新…' : '确认更新报价'" type="primary" :loading="saving" :disabled="!draftPath || uploading || saving || refreshingCurrent || switchingIds.length > 0 || visibilityUncertainIds.includes(selected.category_id)" @click="saveQuote" /></view>
                 </template>
-                <u-button v-else text="上传最新报价图" type="primary" :disabled="choosing" @click="chooseImage" />
+                <u-button v-else text="上传最新报价图" type="primary" :disabled="choosing || switchingIds.length > 0" @click="chooseImage" />
             </view>
         </template>
     </view>
@@ -105,8 +134,8 @@ import { onLoad, onUnload, onPullDownRefresh } from '@dcloudio/uni-app'
 import { uploadImage } from '@/app/api/system'
 import { img } from '@/utils/common'
 import { previewImages } from '@/addon/hsx_recycle/utils/preview'
-import { getQuoteOptions, updateQuoteImage, getQuoteHistory } from '@/addon/hsx_recycle/api/quote'
-import { flattenQuoteCategories, filterQuoteCategories, formatQuoteTime, withQuoteUploadTimeout } from '@/addon/hsx_recycle/utils/quote'
+import { getQuoteOptions, updateQuoteImage, updateQuoteVisibility, getQuoteHistory } from '@/addon/hsx_recycle/api/quote'
+import { flattenQuoteCategories, filterQuoteCategories, visibleQuoteTreeRows, formatQuoteTime, withQuoteUploadTimeout } from '@/addon/hsx_recycle/utils/quote'
 import type { QuoteCategory } from '@/addon/hsx_recycle/utils/quote'
 
 const categories = ref<QuoteCategory[]>([])
@@ -119,7 +148,14 @@ const status = ref('all')
 const displayLimit = ref(40)
 const tabs = [{ label: '全部', value: 'all' }, { label: '已有报价', value: 'ready' }, { label: '待上传', value: 'empty' }]
 const filtered = computed(() => filterQuoteCategories(categories.value, keyword.value, status.value))
-const visibleCategories = computed(() => filtered.value.slice(0, displayLimit.value))
+const expandedIds = ref<number[]>([])
+const isFiltering = computed(() => Boolean(keyword.value.trim()) || status.value !== 'all')
+const treeRows = computed(() => visibleQuoteTreeRows(categories.value, keyword.value, status.value, expandedIds.value))
+const visibleCategories = computed(() => treeRows.value.slice(0, displayLimit.value))
+const hasBranches = computed(() => categories.value.some(item => item.hasChildren))
+const allExpanded = computed(() => hasBranches.value && categories.value.filter(item => item.hasChildren).every(item => expandedIds.value.includes(item.category_id)))
+const switchingIds = ref<number[]>([])
+const visibilityUncertainIds = ref<number[]>([])
 const selected = ref<QuoteCategory | null>(null)
 const editable = computed(() => Boolean(selected.value && canEdit.value && siteId.value > 0 && selected.value.site_id === siteId.value))
 const expectedImages = ref('')
@@ -152,6 +188,7 @@ const confirm = (title: string, content: string): Promise<boolean> => new Promis
 const toast = (title: string) => uni.showToast({ title, icon: 'none' })
 
 const loadOptions = async () => {
+    if (switchingIds.value.length) { toast('正在保存显示设置，请稍候刷新'); return null }
     const token = ++loadToken
     loading.value = true
     loadError.value = ''
@@ -162,6 +199,13 @@ const loadOptions = async () => {
         categories.value = flattenQuoteCategories(res.data.categories)
         siteId.value = Number(res.data.site_id)
         canEdit.value = res.data.can_edit === true || res.data.can_edit === 1
+        expandedIds.value = expandedIds.value.filter(id => categories.value.some(item => item.category_id === id && item.hasChildren))
+        visibilityUncertainIds.value = []
+        // 刷新列表只反映显示状态，不覆盖尚未发布的新图或图片并发校验值。
+        if (selected.value) {
+            const fresh = categories.value.find(item => item.category_id === selected.value!.category_id)
+            if (fresh) selected.value.is_show = fresh.is_show
+        }
         if (initialCategoryId) {
             const category = categories.value.find(item => item.category_id === initialCategoryId)
             initialCategoryId = 0
@@ -178,6 +222,58 @@ const loadOptions = async () => {
 
 const changeStatus = (value: string) => { status.value = value; displayLimit.value = 40 }
 watch(keyword, () => { displayLimit.value = 40 })
+
+const isShown = (row: QuoteCategory) => Number(row.is_show ?? 1) === 1
+const canEditCategory = (row: QuoteCategory) => canEdit.value && siteId.value > 0 && row.site_id === siteId.value
+const parentHidden = (row: QuoteCategory) => (row.ancestorIds || []).some(id => categories.value.some(item => item.category_id === id && !isShown(item)))
+const hasTreeChildren = (row: QuoteCategory) => Boolean(row.hasChildren) && (!isFiltering.value || treeRows.value.some(item => (item.ancestorIds || []).includes(row.category_id)))
+const isExpanded = (row: QuoteCategory) => isFiltering.value || expandedIds.value.includes(row.category_id)
+const toggleCategory = (row: QuoteCategory) => {
+    if (!hasTreeChildren(row) || isFiltering.value) return
+    expandedIds.value = expandedIds.value.includes(row.category_id) ? expandedIds.value.filter(id => id !== row.category_id) : [...expandedIds.value, row.category_id]
+}
+const toggleAllCategories = () => {
+    expandedIds.value = allExpanded.value ? [] : categories.value.filter(item => item.hasChildren).map(item => item.category_id)
+    displayLimit.value = 40
+}
+const visibilityDisabled = (row: QuoteCategory) => !canEditCategory(row) || loading.value || saving.value || refreshingCurrent.value || uploading.value || choosing.value
+    || switchingIds.value.includes(row.category_id) || visibilityUncertainIds.value.includes(row.category_id)
+const visibilityDescription = (row: QuoteCategory) => {
+    if (visibilityUncertainIds.value.includes(row.category_id)) return '显示状态待核对，报价图片和历史记录保留。'
+    if (!isShown(row)) return '已隐藏，更新图片不会自动开启；图片和历史记录保留。'
+    if (parentHidden(row)) return '本分类已开启，但上级分类已隐藏，客户暂不可见。'
+    return row.hasChildren ? '开启后，子分类按各自开关展示；关闭会隐藏整条分类分支。' : '已开启，客户按原有查看权限浏览报价。'
+}
+const toggleVisibility = async (row: QuoteCategory, value: boolean | number) => {
+    if (visibilityDisabled(row)) return
+    if (![true, false, 1, 0].includes(value)) return
+    const next = (value === true || value === 1 ? 1 : 0) as 0 | 1
+    const previous = (isShown(row) ? 1 : 0) as 0 | 1
+    if (next === previous) return
+    const categoryId = row.category_id
+    switchingIds.value = [...switchingIds.value, categoryId]
+    try {
+        if (next === 0 && row.hasChildren && !await confirm('隐藏整个分类？', `关闭“${row.category_name}”后，该分类及其下级分类暂不对客户展示。子分类开关、报价图和历史记录都会保留。`)) return
+        if (!alive || !canEditCategory(row)) return
+        const res: any = await updateQuoteVisibility(categoryId, { is_show: next, expected_is_show: previous })
+        if (!alive) return
+        if (res?.code !== 1) throw res || new Error('显示设置返回异常，请刷新核对')
+        if (Number(res?.data?.category_id) !== categoryId || res?.data?.is_show !== next) throw new Error('显示设置返回异常，请刷新核对')
+        const current = categories.value.find(item => item.category_id === categoryId)
+        if (current) current.is_show = next
+        if (selected.value?.category_id === categoryId) selected.value.is_show = next
+        toast(next ? (parentHidden(row) ? '本分类已开启，上级仍隐藏，客户暂不可见' : '已开启客户显示') : '已隐藏，报价图片保留')
+    } catch (error: any) {
+        if (!alive) return
+        // 普通错误码也可能来自“数据库已提交、缓存清理失败”，不能断言未保存。
+        visibilityUncertainIds.value = [...new Set([...visibilityUncertainIds.value, categoryId])]
+        toast(typeof error?.code === 'number' && error.code !== 1
+            ? `${errorText(error, '显示设置未完成')}，请刷新核对`
+            : '显示设置结果未确认，请刷新核对，勿重复切换')
+    } finally {
+        if (alive) switchingIds.value = switchingIds.value.filter(id => id !== categoryId)
+    }
+}
 
 const resetHistory = () => {
     historyToken++
@@ -200,6 +296,7 @@ const clearDraft = () => {
 }
 
 const openCategory = (category: QuoteCategory) => {
+    expandedIds.value = [...new Set([...expandedIds.value, ...(category.ancestorIds || [])])]
     selected.value = { ...category }
     expectedImages.value = category.images
     currentUpdatedAt.value = ''
@@ -222,6 +319,7 @@ const closeCategory = async () => {
 
 const refreshCurrent = async () => {
     if (!selected.value || refreshingCurrent.value || saving.value) return
+    if (switchingIds.value.length) { toast('正在保存显示设置，请稍候刷新'); return }
     if (draftLocal.value && !await confirm('重新核对当前报价？', '将读取最新报价，新图草稿会保留。核对后仍需点击“确认更新报价”。')) return
     const categoryId = selected.value.category_id
     refreshingCurrent.value = true
@@ -247,7 +345,7 @@ const preview = (path: string, local = false) => {
 }
 
 const chooseImage = () => {
-    if (!editable.value || choosing.value || uploading.value || saving.value) return
+    if (!editable.value || choosing.value || uploading.value || saving.value || switchingIds.value.length) return
     const categoryId = selected.value!.category_id
     const token = ++chooseToken
     choosing.value = true
@@ -292,6 +390,7 @@ const uploadDraft = async () => {
 
 const saveQuote = async () => {
     if (!editable.value || !draftPath.value || uploading.value || saving.value || refreshingCurrent.value) return
+    if (switchingIds.value.length || visibilityUncertainIds.value.includes(selected.value!.category_id)) { toast('请先刷新核对显示设置，再更新报价'); return }
     saving.value = true
     saveError.value = ''
     try {
@@ -369,9 +468,12 @@ onUnload(() => { alive = false; loadToken++; uploadToken++; chooseToken++; histo
 .quote-refresh { margin-left: auto; color: #64748b; font-size: 24rpx; padding: 18rpx 0 18rpx 12rpx; }
 .quote-content { padding: 24rpx; }
 .quote-content--detail { padding-bottom: calc(160rpx + env(safe-area-inset-bottom)); }
-.quote-list-heading { display: flex; justify-content: space-between; gap: 16rpx; margin: 0 0 18rpx; color: #8b96a6; font-size: 23rpx; }
+.quote-list-heading { display: flex; justify-content: space-between; gap: 16rpx; margin: 0 0 14rpx; color: #8b96a6; font-size: 23rpx; }
 .quote-category { display: flex; align-items: center; gap: 20rpx; padding: 22rpx; margin-bottom: 16rpx; background: #fff; border-radius: 16rpx; }
-.quote-category-thumb { width: 90rpx; height: 100rpx; border-radius: 10rpx; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: #f2f5f9; overflow: hidden; }
+.quote-tree-help { margin-bottom: 18rpx; font-size: 22rpx; line-height: 1.6; color: #94a3b8; }
+.quote-tree-row { gap: 12rpx; padding: 20rpx 16rpx; margin-bottom: 10rpx; border: 1rpx solid #edf0f5; }
+.quote-tree-toggle, .quote-tree-spacer { width: 32rpx; height: 64rpx; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.quote-category-thumb { width: 56rpx; height: 64rpx; border-radius: 10rpx; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: #f2f5f9; overflow: hidden; }
 .quote-category-thumb--ready { background: #eef5ff; }
 .quote-category-info { flex: 1; min-width: 0; }
 .quote-category-name, .quote-category-path { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -381,6 +483,9 @@ onUnload(() => { alive = false; loadToken++; uploadToken++; chooseToken++; histo
 .quote-text-success { color: #21976b; }
 .quote-text-muted { color: #94a3b8; }
 .quote-readonly { color: #94a3b8; }
+.quote-visibility-control { display: flex; flex-direction: column; align-items: center; gap: 8rpx; flex-shrink: 0; min-width: 90rpx; padding-left: 8rpx; }
+.quote-visibility-label { color: #8592a4; font-size: 20rpx; line-height: 1.3; }
+.quote-visibility-warning { margin-bottom: 20rpx; }
 .quote-state { padding: 100rpx 20rpx; text-align: center; line-height: 1.7; color: #94a3b8; font-size: 26rpx; }
 .quote-button { margin: 0; padding: 0 24rpx; min-height: 64rpx; display: flex; align-items: center; justify-content: center; background: #fff; color: var(--hsx-primary, #1b73e8); font-size: 25rpx; line-height: 1.5; border: 1rpx solid #dbe3ee; border-radius: 10rpx; }
 .quote-button::after { border: 0; }
@@ -395,6 +500,10 @@ onUnload(() => { alive = false; loadToken++; uploadToken++; chooseToken++; histo
 .quote-detail-path { display: block; color: #94a3b8; margin-top: 8rpx; font-size: 24rpx; line-height: 1.6; overflow-wrap: anywhere; }
 .quote-note { margin-bottom: 20rpx; color: #7c8796; font-size: 24rpx; line-height: 1.7; }
 .quote-card { background: #fff; border-radius: 18rpx; padding: 24rpx; margin-bottom: 20rpx; }
+.quote-display-row { display: flex; align-items: center; justify-content: space-between; gap: 24rpx; }
+.quote-display-copy { flex: 1; min-width: 0; font-weight: 600; }
+.quote-display-copy .quote-caption { margin-top: 8rpx; font-weight: 400; }
+.quote-visibility-error { display: block; color: #bd552d; padding-top: 18rpx; font-size: 23rpx; line-height: 1.6; }
 .quote-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; margin-bottom: 22rpx; font-size: 28rpx; font-weight: 600; }
 .quote-link { flex-shrink: 0; font-size: 23rpx; color: var(--hsx-primary, #1b73e8); font-weight: 400; }
 .quote-link--disabled { color: #b2bdcc; }
@@ -419,4 +528,3 @@ onUnload(() => { alive = false; loadToken++; uploadToken++; chooseToken++; histo
 .quote-footer-secondary { width: 220rpx; flex-shrink: 0; }
 .quote-footer-primary { flex: 1; min-width: 0; }
 </style>
-

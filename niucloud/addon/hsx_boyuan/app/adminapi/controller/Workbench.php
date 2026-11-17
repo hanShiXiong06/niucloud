@@ -17,7 +17,7 @@ final class Workbench extends BaseAdminController
     }
     public function config() { return $this->run('get','config',fn($site)=>(new ConfigService())->get($site)); }
     public function saveConfig() {
-        $data=$this->request->params([['revision',-1],['mode','mock'],['enabled',false],['paused',true],['finance_enabled',false],['profile',[]],['assignee_uid',0],['confirm_account','']]);
+        $data=$this->request->params([['revision',-1],['mode','mock'],['enabled',false],['paused',true],['finance_enabled',false],['purchase_enabled',false],['purchase_mode','manual'],['profile',[]],['assignee_uid',0],['confirm_account','']]);
         return $this->run('post','config',fn($site,$uid)=>(new ConfigService())->save($site,$uid,$data));
     }
     public function probe() { return $this->run('post','probe',fn($site,$uid)=>(new ConfigService())->probe($site,$uid)); }
@@ -32,7 +32,7 @@ final class Workbench extends BaseAdminController
             $query=Db::name('hsx_boyuan_task')->where('site_id',$site)->where('connection_key',$active['connection_key']);
             if ($input['mode']!=='') $query->where('mode',$input['mode']);
             $counts=clone $query;
-            $groups=['ready'=>['pending','retry'],'working'=>['pending','retry','processing','waiting','confirming'],'action_required'=>['blocked','rejected','partial','attention','manual_pending'],'completed'=>['simulated','succeeded']];
+            $groups=['ready'=>['awaiting_confirmation','pending','retry'],'working'=>['pending','retry','processing','waiting','confirming'],'action_required'=>['blocked','rejected','partial','attention','manual_pending','created_review','needs_review'],'completed'=>['simulated','succeeded']];
             if(isset($groups[$input['status']])) $query->whereIn('status',$groups[$input['status']]);
             elseif ($input['status']!=='') $query->where('status',$input['status']);
             if (trim($input['keyword'])!=='') $query->where('business_no','like','%'.addcslashes(mb_substr(trim($input['keyword']),0,100),'%_\\').'%');
@@ -46,7 +46,7 @@ final class Workbench extends BaseAdminController
         foreach (['snapshot','request','result'] as $name) { $row[$name]=Contract::redact(Contract::decode($row[$name.'_json'])); unset($row[$name.'_json']); }
         unset($row['lease_token']);
         $row['missing_mappings']=$row['status']==='blocked'?TaskService::missingMappings($site,$row['connection_key'],$row['snapshot']):[];
-        $row['logs']=Db::name('hsx_boyuan_log')->where('site_id',$site)->where('task_id',$id)->order('id')->limit(200)->select()->toArray();
+        $row['logs']=[]; // Detailed operational logs are written only through the PHP Log channel.
         $config=(new ConfigService())->get($site); $row['active_connection']=$row['connection_key']===$config['profiles'][$config['mode']]['connection_key'] && $row['mode']===$config['mode'];
         return $row;
     }); }
@@ -122,5 +122,5 @@ final class Workbench extends BaseAdminController
         return $this->run('post','reference-sync',fn($site,$uid)=>(new ReferenceService())->start($site,$uid,(array)$input['resources']));
     }
     public function retryReference(int $id) { return $this->run('post','reference-sync/<id>/retry',function($site,$uid) use($id) {(new ReferenceService())->retry($site,$uid,$id); return ['queued'=>true];}); }
-    public function logs() { return $this->run('get','logs',fn($site)=>Db::name('hsx_boyuan_log')->where('site_id',$site)->field('id,task_id,action,outcome,message,operator_uid,create_at')->order('id desc')->limit(100)->select()->toArray()); }
+    public function logs() { return $this->run('get','logs',fn($site)=>[]); }
 }

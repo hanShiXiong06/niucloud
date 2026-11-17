@@ -201,7 +201,9 @@ const setConfigBtn = ref()
 // 获取原始数据
 const payConfigData = ref([])
 const checkPayConfigList = () => {
-    getPayConfigList().then(res => {
+    const actor = paymentActor()
+    return Promise.resolve().then(() => getPayConfigList()).then(res => {
+        if (!paymentPageAlive || actor !== paymentActor()) return false
         const payData = res.data
         for (const i in payData) {
             const payType = payData[i].pay_type
@@ -223,10 +225,17 @@ const checkPayConfigList = () => {
         payConfigData.value = payData
         payLoading.value = false
         nextTick(() => {
+            if (!paymentPageAlive || actor !== paymentActor()) return
             fieldBoxRefs.value.forEach((item, index) => {
                 sortableFn(item, index)
             })
         })
+        return true
+    }).catch(() => {
+        if (paymentPageAlive && actor === paymentActor()) ElMessage.error('支付配置读取失败，请重新读取后核对')
+        return false
+    }).finally(() => {
+        if (paymentPageAlive && actor === paymentActor()) payLoading.value = false
     })
 }
 checkPayConfigList()
@@ -331,7 +340,9 @@ const sortableFn = (item, index) => {
 // 保存
 const saveFn = () => {
     if (paymentEnableBusy.value) { ElMessage.warning('支付配置正在核对，请稍候再保存'); return }
+    if (payLoading.value) return
     payLoading.value = true
+    const actor = paymentActor()
     const data = cloneDeep(payConfigData.value)
     Object.values(data).forEach((item, index) => {
         item.pay_type.forEach((subItem:any, subIndex:any) => {
@@ -339,9 +350,19 @@ const saveFn = () => {
         })
     })
 
-    setPatConfig({ config: data }).then(res => {
-        checkPayConfigList()
+    return Promise.resolve().then(async () => {
+        if (!paymentPageAlive || actor !== paymentActor()) return false
+        await setPatConfig({ config: data })
+        return true
+    }).then(async saved => {
+        if (saved !== true) return
+        if (!paymentPageAlive || actor !== paymentActor()) return
+        if (!await checkPayConfigList()) return
+        if (!paymentPageAlive || actor !== paymentActor()) return
         isEdit.value = false
+    }).catch(() => {
+        if (paymentPageAlive && actor === paymentActor()) ElMessage.error('支付配置未能确认保存，请重新读取核对后再试')
+    }).finally(() => {
         payLoading.value = false
     })
 }

@@ -4,12 +4,23 @@ namespace addon\hsx_boyuan\app\service;
 use addon\hsx_boyuan\app\support\{Contract,Plan,Problem};
 use addon\hsx_boyuan\app\gateway\Transport;
 use think\facade\Db;
+use think\facade\Log;
 final class TaskService
 {
     public static function audit(int $site,int $task,string $connection,string $action,string $outcome,string $message,int $uid=0,array $detail=[]): void
     {
-        Db::name('hsx_boyuan_log')->insert(['site_id'=>$site,'task_id'=>$task,'connection_key'=>$connection,'operation_id'=>(string)($detail['operation_id']??''),
-            'action'=>$action,'outcome'=>$outcome,'message'=>mb_substr($message,0,1000),'detail_json'=>Contract::json(Contract::redact($detail)),'operator_uid'=>$uid,'create_at'=>time()]);
+        // Operational history belongs to the configured PHP log, not a business table.
+        // Never retain arbitrary request/response bodies (which can contain personal data).
+        $context=['site_id'=>$site,'task_id'=>$task,'connection_key'=>$connection,
+            'operation_id'=>(string)($detail['operation_id']??''),'action'=>$action,
+            'outcome'=>$outcome,'operator_uid'=>$uid];
+        foreach (['code','sync_id','cursor','rows','batch_id','external_no'] as $key) {
+            if (isset($detail[$key]) && is_scalar($detail[$key])) $context[$key]=$detail[$key];
+        }
+        $context['message']=mb_substr(preg_replace('/[\r\n]+/u',' ', $message)??'',0,1000);
+        $level=in_array($outcome,['failed','blocked','attention','needs_review','partial'],true)?'warning':'info';
+        try { Log::write('hsx_boyuan '.Contract::json(Contract::redact($context)),$level); }
+        catch (\Throwable $e) { error_log('hsx_boyuan log write failed; task_id='.$task.'; type='.get_class($e)); }
     }
     public function accept(array $event): array
     {
@@ -17,6 +28,10 @@ final class TaskService
         $site=(int)($event['site_id']??0); $configService=new ConfigService();
         if ($site<=0 || !$configService->installed($site)) return [];
         $config=$configService->get($site,false); $p=$config['profiles'][$config['mode']];
+        if ($config['mode']!=='mock' && ($p['protocol']??'')==='openapi_v153') {
+            // The beta must not run legacy automatic party creation or financial subtasks.
+            return (new PurchaseSyncService())->capture($site,$event);
+        }
         if (!$config['enabled'] || (int)($event['occurred_at']??0)<(int)$config['started_at']) return [];
         if (($event['event_version']??0)!==1 || empty($event['event_id'])) throw new Problem('EVENT_INVALID','ERP事件身份或版本无效');
         $snapshot=(array)($event['payload']??[]);
@@ -124,6 +139,10 @@ final class TaskService
     {
         $configService=new ConfigService(); if (!$configService->installed($site)) return false;
         $config=$configService->get($site,false); $profile=$config['profiles'][$config['mode']];
+        $candidate=Db::name('hsx_boyuan_task')->where('site_id',$site)->where('id',$id)->find();
+        if ($candidate && (Contract::decode($candidate['request_json'])['schema']??'')==='boyuan.purchase.v154') {
+            return (new PurchaseSyncService())->process($site,$id,$transport);
+        }
         if (!$config['enabled'] || $config['paused']) return false;
         $base=[['site_id','=',$site],['id','=',$id],['connection_key','=',$profile['connection_key']],['mode','=',$config['mode']]];
         if (!$config['finance_enabled']) {
@@ -235,6 +254,7 @@ final class TaskService
         Db::transaction(function () use ($site,$id,$uid,$action,$note,$externalNo): void {
             $where=[['site_id','=',$site],['id','=',$id]]; $task=Db::name('hsx_boyuan_task')->where($where)->lock(true)->find();
             if (!$task) throw new Problem('TASK_MISSING','任务不存在');
+            if ((Contract::decode($task['request_json'])['schema']??'')==='boyuan.purchase.v154') throw new Problem('PURCHASE_CONFIRM_REQUIRED','请使用入库核对表单提交或核验，不能通过旧任务操作重发');
             if ($task['status']==='processing' || ($action!=='query' && in_array($task['status'],['simulated','succeeded'],true))) throw new Problem('TASK_STATE','任务正在处理或已完成，不能重复操作');
             $values=['next_at'=>0,'update_at'=>time()];
             if ($action==='record_manual') {

@@ -19,6 +19,20 @@ final class PaymentGatewayReconciler
     {
         return in_array($pay['type']??'',[PayDict::WECHATPAY,PayDict::ALIPAY,\addon\hsx_lead\app\service\virtualpay\VirtualPaySettings::TYPE],true)&&in_array($pay['channel']??'',['weapp','wechat','h5','pc','app'],true)&&is_string($pay['out_trade_no']??null)&&$pay['out_trade_no']!=='';
     }
+    /** Foreground polling and operator checks never initiate a channel close. */
+    public function check(int $site,array $pay): array
+    {
+        if((int)($pay['site_id']??0)!==$site||!self::supports($pay))return['state'=>'uncertain','message'=>'原付款渠道信息待核对，未发起扣款或关闭订单'];
+        try{
+            $provider=$this->providerFactory?($this->providerFactory)($site,(string)$pay['channel'],(string)$pay['type']):(new CorePayEventService())->init($site,(string)$pay['channel'],(string)$pay['type']);
+            $result=$provider->getOrder((string)$pay['out_trade_no']);
+            $status=is_array($result)?($result['status']??''):'';
+            if(in_array($status,[OnlinePayDict::SUCCESS,OnlinePayDict::TRADE_FINISHED],true))return$this->paid($site,$pay);
+            if(is_array($result)&&!empty($result['receipt_received']))return['state'=>'paid_pending','message'=>'已核实收款，正在恢复开通；请勿重复付款'];
+            if($status===OnlinePayDict::CLOSED)return$this->closed($site,$pay);
+            return['state'=>'uncertain','message'=>'本次付款尚未确认完成，系统会继续核对；未重新扣款或关闭订单'];
+        }catch(\Throwable $error){return['state'=>'uncertain','message'=>'暂时无法核对支付渠道，原单已保留，请稍后重试'];}
+    }
     public function reconcile(int $site,array $pay): array
     {
         if((int)($pay['site_id']??0)!==$site||!self::supports($pay))return['state'=>'uncertain','message'=>'原支付渠道信息不完整，请由平台核对，未关闭订单'];
@@ -26,6 +40,7 @@ final class PaymentGatewayReconciler
             $provider=$this->providerFactory?($this->providerFactory)($site,(string)$pay['channel'],(string)$pay['type']):(new CorePayEventService())->init($site,(string)$pay['channel'],(string)$pay['type']);
             $result=$provider->getOrder((string)$pay['out_trade_no']);$status=is_array($result)?($result['status']??''):'';
             if(in_array($status,[OnlinePayDict::SUCCESS,OnlinePayDict::TRADE_FINISHED],true))return$this->paid($site,$pay);
+            if(is_array($result)&&!empty($result['receipt_received']))return['state'=>'paid_pending','message'=>'已核实收款，正在恢复开通；请勿重复付款'];
             if($status===OnlinePayDict::CLOSED)return$this->closed($site,$pay);
             if($status!==OnlinePayDict::NOTPAY)return['state'=>'uncertain','message'=>'支付渠道尚未确认未付款或已关闭，请稍后核对原单，不要重复付款'];
             // The virtual driver currently has no verified native close API:
@@ -56,20 +71,36 @@ final class PaymentGatewayReconciler
         }catch(\Throwable $error){}
         return['state'=>'paid_pending','message'=>'原单曾返回收款，当前业务仍待核对；未关闭或再次扣款'];
     }
+    public function recoverLocalReceipt(int $site,array $pay): array
+    {
+        $current=Db::name('pay')->where('site_id',$site)->where('id',(int)($pay['id']??0))->find();
+        if(!$current||(int)$current['status']!==(int)PayDict::STATUS_FINISH
+            ||$current['trade_type']!==PaymentService::TRADE_TYPE)
+            return['state'=>'uncertain','message'=>'本地尚无已确认收款凭据'];
+        return $this->paid($site,$current);
+    }
     private function closed(int $site,array $pay): array
     {
+        return Db::transaction(function()use($site,$pay):array{
+        PromotionService::lockSite($site);
         // A local successful receipt always wins over an obsolete close query.
         $current=Db::name('pay')->where('site_id',$site)->where('id',(int)$pay['id'])->lock(true)->find();
         if(!$current)return['state'=>'uncertain','message'=>'原支付记录已变化，未关闭业务'];
         if((int)$current['status']===(int)PayDict::STATUS_FINISH)return$this->paid($site,$current);
         if((int)$current['status']!==(int)PayDict::STATUS_CANCEL&&PaymentCloseScope::run($site,(string)$pay['out_trade_no'],static fn()=>(new CorePayService())->payClose($site,['out_trade_no'=>$pay['out_trade_no'],'reason'=>'渠道已确认关闭']))!==true)return['state'=>'uncertain','message'=>'渠道已关闭，本地付款状态仍待核对'];
         return['state'=>'closed','message'=>'支付渠道已确认关闭'];
+        });
     }
     private function paid(int $site,array $pay): array
     {
         try{
             $current=Db::name('pay')->where('site_id',$site)->where('id',(int)$pay['id'])->lock(true)->find();
             if(!$current)return['state'=>'paid_pending','message'=>'渠道已收款，原付款记录待平台核对；请勿再次付款'];
+            // Only the virtual driver holds and validates the signed source
+            // receipt. A status string alone must never mint a native receipt.
+            if(($pay['type']??'')===\addon\hsx_lead\app\service\virtualpay\VirtualPaySettings::TYPE
+                &&(int)$current['status']!==(int)PayDict::STATUS_FINISH)
+                return['state'=>'paid_pending','message'=>'原渠道收款仍在恢复中，请稍后核对；不会再次扣款'];
             $order=Store::row('coop_order',$site,(int)$pay['trade_id'],true);$rule=Data::decode($order['rule_json']);
             if($order['status']==='unpaid'&&($rule['requires_manual_review']??'')==='gateway_payment_receipt_review'){
                 unset($rule['requires_manual_review']);

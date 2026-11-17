@@ -12,4 +12,10 @@ Route::group('boyuan',function () {
     Route::post('reference-search',$c.'references');
     Route::post('task-batch',$c.'batch'); Route::post('mapping-candidates',$c.'mappingCandidates');
     Route::post('task-batch-status',$c.'batchStatus');
+    $purchase='addon\\hsx_boyuan\\app\\adminapi\\controller\\PurchaseSync@';
+    Route::get('purchases/:id',$purchase.'view');
+    Route::post('purchases/:id/draft',$purchase.'saveDraft');
+    Route::post('purchases/:id/submit',$purchase.'submit');
+    Route::post('purchases/:id/verify',$purchase.'verify');
+    Route::post('purchase-source/:id',$purchase.'capture');
 })->middleware([AdminCheckToken::class,AdminCheckRole::class]);

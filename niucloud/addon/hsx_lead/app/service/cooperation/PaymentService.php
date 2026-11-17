@@ -328,7 +328,11 @@ final class PaymentService
         if (in_array($params['requires_manual_review']??false,[true,1,'1'],true)) $q->whereLike('rule_json','%requires_manual_review%');
         if (in_array($params['promotion_review_required']??false,[true,1,'1'],true)) $q->whereLike('rule_json','%"promotion_review_required":true%');
         OrderPaymentReadService::filter($q,$params,$this->context->site);
-        $page=Data::page($q,$params);$page['data']=AdminKeywordSearch::orderContacts($page['data'],$this->context->site,$phoneNumbers,$params['mobile_scope']??'payer');$page['data']=self::adminManualReceipts($page['data'],$this->context->site);$page['data']=ManualPaymentService::withPendingScope($this->context->site,array_column($page['data'],'id'),fn():array=>array_map(fn(array $r):array=>array_replace(self::presentOrder($r)+OrderPricingService::adminMetadata($r),PaymentRefundService::adminSummary($r)),$page['data']));$page['filters']=OrderPaymentReadService::options();return $page;
+        $page=Data::page($q,$params);$page['data']=AdminKeywordSearch::orderContacts($page['data'],$this->context->site,$phoneNumbers,$params['mobile_scope']??'payer');$page['data']=self::adminManualReceipts($page['data'],$this->context->site);
+        $page['data']=ManualPaymentService::withPendingScope($this->context->site,array_column($page['data'],'id'),fn():array=>array_map(static function(array $row):array {
+            $payment=self::presentOrder($row);
+            return array_replace($payment+OrderPricingService::adminMetadata($row,$payment),PaymentRefundService::adminSummary($row));
+        },$page['data']));$page['filters']=OrderPaymentReadService::options();return $page;
     }
     /** Bounded page lookup; administrative contact/receipt details never enter the mobile DTO. */
     private static function adminManualReceipts(array $rows,int $site): array

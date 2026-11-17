@@ -16,16 +16,25 @@ export function cooperationPaymentRefundDetail(value: unknown, id: number): Reco
 export function cooperationPaymentOrderIsVirtual(order: Record<string, any>) {
     return order.payment_type === 'hsx_lead_virtualpay'
 }
+export function cooperationPaymentOrderCanPay(order: Record<string, any>) {
+    if (order.status !== 'unpaid' || order.can_pay !== true || order.requires_manual_review || order.quote_expired
+        || ['pending', 'paid_pending', 'attention', 'paid', 'closed'].includes(String(order.payment_state || ''))) return false
+    return !cooperationPaymentOrderIsVirtual(order) || order.payment_state === 'ready' || order.payment_recovery?.state === 'ready'
+}
 /** Inspect the existing virtual attempt only; this URL never authorizes another charge. */
 export function cooperationPaymentOrderCheckUrl(order: Record<string, any>) {
     const id = Number(order.id)
-    return Number.isSafeInteger(id) && id > 0 && order.status === 'unpaid' && order.purpose === 'membership' && cooperationPaymentOrderIsVirtual(order)
-        ? `/addon/hsx_lead/pages/membership/index?payment_order_id=${id}` : ''
+    if (!Number.isSafeInteger(id) || id <= 0 || !(order.status === 'unpaid' || order.payment_state === 'paid_pending')
+        || !(order.can_check_payment === true || order.purpose === 'membership' && cooperationPaymentOrderIsVirtual(order))) return ''
+    if (order.purpose === 'membership') return `/addon/hsx_lead/pages/membership/index?payment_order_id=${id}`
+    const lead = Number(order.lead_id)
+    return order.purpose === 'commission' && Number.isSafeInteger(lead) && lead > 0
+        ? cooperationTaskLink('commission', { collaboration_id: lead, payment_order_id: id }) : ''
 }
 /** Resume only a server-confirmed original order, never create a replacement. */
 export function cooperationPaymentOrderResumeUrl(order: Record<string, any>) {
     const id = Number(order.id)
-    if (!Number.isSafeInteger(id) || id <= 0 || order.can_pay !== true || order.status !== 'unpaid' || order.requires_manual_review) return ''
+    if (!Number.isSafeInteger(id) || id <= 0 || !cooperationPaymentOrderCanPay(order)) return ''
     if (order.purpose === 'membership') return `/addon/hsx_lead/pages/membership/index?payment_order_id=${id}`
     const lead = Number(order.lead_id)
     if (order.purpose === 'commission' && Number.isSafeInteger(lead) && lead > 0) return cooperationTaskLink('commission', { collaboration_id: lead, payment_order_id: id })
