@@ -17,5 +17,12 @@ Route::group('boyuan',function () {
     Route::post('purchases/:id/draft',$purchase.'saveDraft');
     Route::post('purchases/:id/submit',$purchase.'submit');
     Route::post('purchases/:id/verify',$purchase.'verify');
+    Route::post('purchases/:id/inventory-check',$purchase.'inventoryCheck');
     Route::post('purchase-source/:id',$purchase.'capture');
+    $payment='addon\\hsx_boyuan\\app\\adminapi\\controller\\PaymentSync@';
+    Route::get('purchases/:id/payment-candidates',$payment.'candidates');
+    Route::post('purchases/:id/payment-capture',$payment.'capture');
+    Route::get('payment-tasks/:id',$payment.'view');
+    Route::post('payment-tasks/:id/draft',$payment.'saveDraft');
+    Route::post('payment-tasks/:id/submit',$payment.'submit');
 })->middleware([AdminCheckToken::class,AdminCheckRole::class]);

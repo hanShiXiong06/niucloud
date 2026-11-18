@@ -68,6 +68,18 @@ try {
     $missing=TaskService::missingMappings($site,$key,['kind'=>'purchase','lines'=>[['product_ref'=>'model:UX','product_name'=>'待对应商品','warehouse_ref'=>'warehouse:UX']],'salesperson_ref'=>'staff:1','payment_method_ref'=>'method:cash']);
     ensure(count($missing)===1 && $missing[0]['kind']==='product','purchase only lists actual missing references, not mapped warehouse or unrelated staff');
     ensure(TaskService::missingMappings($site,$key,['outside_scope'=>true,'kind'=>'sale','lines'=>[['product_ref'=>'old']]])===[],'out-of-scope business does not offer misleading mapping fixes');
+    // A delayed WeCom message must check the actual child task, not its linked purchase.
+    $notice=['site_id'=>$site,'source_id'=>$funds,'source_type'=>'sync_task','source_plugin'=>'hsx_boyuan'];
+    $eventMap=require dirname(__DIR__).'/app/event.php';
+    foreach($eventMap['listen']['HsxBusinessTaskValidate'] as $listener) $app->event->listen('HsxBusinessTaskValidate',$listener);
+    $decision=static fn(array $event)=>event('HsxBusinessTaskValidate',$event)[0];
+    Db::name('hsx_boyuan_task')->where('id',$funds)->update(['kind'=>'purchase_payment','status'=>'attention']);
+    ensure($decision($notice)['valid']===true,'pending exception can notify finance');
+    Db::name('hsx_boyuan_task')->where('id',$funds)->update(['status'=>'registered_review']);
+    ensure($decision($notice)['valid']===false,'a delayed pending reminder is vetoed after registration');
+    ensure($decision(array_replace($notice,['site_id'=>$site+1]))['valid']===false,'never validates a missing task in another tenant');
+    ensure($decision(array_replace($notice,['source_plugin'=>'another_addon']))===[],'does not intercept another plugin notice');
+    ensure($decision(array_replace($notice,['source_type'=>'other']))===[],'does not intercept unrelated source types');
     $c=$cs->save($site,1,['revision'=>$c['revision'],'mode'=>'test','enabled'=>false,'paused'=>true,'profile'=>['protocol'=>'openapi_v153','endpoint'=>'https://open-api-uat.139erp.com/api','app_id'=>'123456','account_id'=>'TEST_ONLY']]);
     $blocked=$batch->submit($site,1,['ids'=>[$a],'mode'=>'test','connection_key'=>$c['profiles']['test']['connection_key'],'request_id'=>'UX_BATCH_002']);
     ensure($blocked['results'][0]['code']==='WRITE_UNAVAILABLE','unavailable vendor write API never pretends to submit');

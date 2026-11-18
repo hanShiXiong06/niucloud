@@ -11,12 +11,12 @@ if(filter_var(ini_get('allow_url_fopen'),FILTER_VALIDATE_BOOLEAN)) exit("Set all
 require __DIR__.'/bootstrap.php';
 
 use addon\hsx_boyuan\app\gateway\OpenApi;
-use addon\hsx_boyuan\app\service\{ConfigService,PurchaseSyncService,PurchaseClosureService,TaskService};
+use addon\hsx_boyuan\app\service\{ConfigService,PurchaseSyncService,PurchaseClosureService,PurchaseInventoryService,PaymentSyncService,TaskService,BatchService};
 use addon\hsx_boyuan\app\support\{Contract,Problem};
 use addon\hsx_erp\app\service\admin\{ErpIntegrationService,ErpPurchaseService,ErpFinanceService};
 use think\facade\Db;
 
-$checks=0; $failed=false; $pdo=null; $schema=''; $fakeCalls=0; $creates=0; $queries=0;
+$checks=0; $failed=false; $pdo=null; $schema=''; $fakeCalls=0; $creates=0; $queries=0; $stockQueries=0; $paymentCreates=0; $paymentTimeout=false;
 function piCheck(bool $ok,string $label): void { global $checks; if(!$ok) throw new RuntimeException('ASSERT '.$label); $checks++; }
 function piRejected(callable $callback,string $reason): void
 {
@@ -35,6 +35,15 @@ function piPatch(ConfigService $service,int $site,array $patch): array
     return $service->save($site,1,array_replace(['revision'=>(int)$current['revision'],'confirm_account'=>'ISOLATED_TEST_ACCOUNT'],$patch));
 }
 function piTask(int $site,int $id): array { return Db::name('hsx_boyuan_task')->where('site_id',$site)->where('id',$id)->find(); }
+function piWorkbenchIds(\think\App $app,string $status): array
+{
+    $original=$app->request;
+    try {
+        $app->instance('request',(new \app\Request())->withGet(['status'=>$status,'limit'=>100]));
+        $data=(new \addon\hsx_boyuan\app\adminapi\controller\Workbench($app))->tasks()->getData()['data']['data'];
+        return array_map('intval',array_column($data,'id'));
+    } finally { $app->instance('request',$original); }
+}
 function piReady(int $site,int $id): void { Db::name('hsx_boyuan_task')->where('site_id',$site)->where('id',$id)->update(['next_at'=>0]); }
 function piDispatch(int $site): void
 {
@@ -43,6 +52,25 @@ function piDispatch(int $site): void
         $reply=$service->dispatchDomainEvent((int)$id);
         piCheck(!empty($reply['ok']),'ERP confirmed event dispatched to actual addon listener');
     }
+}
+function piErpHash(int $site): string
+{
+    $rows=[]; foreach(['erp_purchase_order','erp_purchase_item','erp_asset','erp_payable','erp_settlement','erp_settlement_link','erp_money_ledger','erp_account_ledger','erp_asset_ledger'] as $table) $rows[$table]=Db::name($table)->where('site_id',$site)->order('id')->select()->toArray();
+    return hash('sha256',Contract::json($rows));
+}
+// Two independent PHP/PDO processes share only the explicitly named random test schema.
+$paymentWorker=array_search('--payment-capture-worker',$argv,true);
+if(($workerAt=array_search('--inventory-queue-worker',$argv,true))!==false || $paymentWorker!==false) {
+    try {
+        if($paymentWorker!==false) $workerAt=$paymentWorker;
+        $workerSchema=(string)($argv[$workerAt+1]??''); $parentId=(int)($argv[$workerAt+2]??0);
+        if(!preg_match('/^hsx_boyuan_test_[a-f0-9]{16}$/D',$workerSchema) || $parentId<=0) throw new RuntimeException('ASSERT unsafe inventory queue worker scope');
+        [$app,$workerPdo,$workerSchema,$site]=boyuanBoot($workerSchema); $app->env->set('queue.state',false); $app->env->set('app.auth_key','ISOLATED_BOYUAN_PURCHASE_TEST_KEY_2026');
+        $parent=piTask($site,$parentId); $version=['revision'=>(int)$parent['revision'],'mode'=>$parent['mode'],'connection_key'=>$parent['connection_key']];
+        if($paymentWorker!==false) { $reply=(new PaymentSyncService())->capture($site,$parentId,1,$version+['settlement_id'=>(int)($argv[$workerAt+3]??0)]); $taskId=$reply['task']['id']; }
+        else { $reply=(new PurchaseInventoryService())->queue($site,$parentId,1,$version); $taskId=$reply['inventory']['task_id']; }
+        echo json_encode(['passed'=>true,'task_id'=>$taskId])."\n"; exit(0);
+    } catch(Throwable $error) { fwrite(STDERR,'FAIL isolated inventory queue worker '.get_class($error).' at '.basename($error->getFile()).':'.$error->getLine()."\n"); exit(1); }
 }
 
 try {
@@ -55,6 +83,7 @@ try {
     });
     // Do not reuse the host's real encryption identity for synthetic credentials.
     $app->env->set('app.auth_key','ISOLATED_BOYUAN_PURCHASE_TEST_KEY_2026');
+    $app->env->set('queue.state',false); // Never dispatch a real queue or use synchronous queue fallback in tests.
     piCheck(Db::query('SELECT DATABASE() AS db')[0]['db']===$schema,'database connection is random isolated schema');
     $addon=new addon\hsx_boyuan\Addon(); piCheck($addon->install() && $addon->upgrade(),'current addon install and upgrade run only in isolated schema');
     $prefix=(string)Db::connect()->getConfig('prefix');
@@ -63,15 +92,25 @@ try {
 
     $secret=str_repeat('I',32); $configService=new ConfigService();
     $saved=$configService->save($site,1,['revision'=>0,'mode'=>'test','enabled'=>false,'paused'=>true,'purchase_enabled'=>false,'finance_enabled'=>false,'profile'=>[
-        'protocol'=>'openapi_v153','endpoint'=>'https://isolated-buyer.example.invalid/api','gateway_path'=>'/gateway.do','app_id'=>'1234567890',
+        'protocol'=>'openapi_v153','endpoint'=>PaymentSyncService::UAT_ENDPOINT,'gateway_path'=>'/gateway.do','app_id'=>'1234567890',
         'app_secret'=>$secret,'account_id'=>'ISOLATED_TEST_ACCOUNT','contract_confirmed'=>true,
     ]]);
     piCheck(!str_contains(Contract::json($saved),$secret),'synthetic app secret is not returned by config API');
-    $profile=$configService->get($site,false)['profiles']['test']; $created=[];
-    $exchange=function(string $path,array $params) use(&$fakeCalls,&$creates,&$queries,&$created): array {
+    $profile=$configService->get($site,false)['profiles']['test']; $created=[]; $stockMissing=false;
+    $exchange=function(string $path,array $params) use(&$fakeCalls,&$creates,&$queries,&$created,&$stockQueries,&$stockMissing,&$paymentCreates,&$paymentTimeout,$site): array {
         $fakeCalls++;
         piCheck($path==='/gateway.do' && ($params['big_gsdm']??'')==='ISOLATED_TEST_ACCOUNT','fake exchange is bound to synthetic account and official gateway');
         $service=$params['service']??'';
+        if($service==='boyuan.biz.bill.payment.generate') {
+            $paymentCreates++; $processing=Db::name('hsx_boyuan_task')->where('site_id',$site)->where('kind',PaymentSyncService::KIND)->where('status','processing')->find();
+            piCheck($processing && $processing['side_effect']==='unknown' && (int)$processing['attempts']===1,'payment intent and unknown side effect are durable before fake HTTP exchange');
+            if($paymentTimeout) throw new RuntimeException('Synthetic timeout after possible commit');
+            $biz=Contract::decode((string)$params['biz']); $head=$biz['head'];
+            piCheck($head['scope_flag']===3 && $head['is_auto_generate_supplier']===0 && $head['is_auto_generate_subject']===0,'payment uses same-company official scope without automatic party or subject creation');
+            $head+=['id'=>'PAY_HEAD_'.$paymentCreates,'bill_id'=>'PAY_ISOLATED_'.$paymentCreates,'bill_type'=>'PAYMENT','big_gsdm'=>'ISOLATED_TEST_ACCOUNT'];
+            $detail=$biz['payment_details']['add_details'][0]+['id'=>'PAY_LINE_'.$paymentCreates]; $head['bank_account']='MUST_NOT_LEAK'; $detail['voucher_url']='MUST_NOT_LEAK';
+            return ['return_code'=>'SUCCESS','api_response'=>['result'=>['head'=>$head,'payment_details'=>['add_details'=>[$detail]]]]];
+        }
         if($service==='boyuan.companys.get') return ['return_code'=>'SUCCESS','api_response'=>['total_results'=>1,'result_list'=>[
             ['id'=>'COMPANY_TEST','gsdm'=>'ISOLATED_TEST_ACCOUNT','name'=>'隔离公司','is_effective'=>1],
         ]]];
@@ -99,21 +138,30 @@ try {
             $page=(int)($params['page_no']??1); $size=(int)($params['page_size']??100);
             return ['return_code'=>'SUCCESS','api_response'=>['total_results'=>count($rows),'result_list'=>array_slice($rows,($page-1)*$size,$size)]];
         }
+        if($service==='boyuan.biz.inventory.imeidetails.query') {
+            $stockQueries++; $rows=[];
+            if(!$stockMissing) foreach($created as $document) foreach($document['imei'] as $line) if($line['imei1']===($params['imei']??'')) {
+                $rows[]=['gsdm'=>'COMPANY_TEST_CODE','company_id'=>'COMPANY_TEST','imei'=>$line['imei1'],'imei1'=>$line['imei1'],'imei2'=>null,'imei3'=>null,
+                    'product_id'=>$line['product_id'],'warehouse_id'=>$line['warehouse_id'],'supplier_id'=>$line['supplier_id'],'qty'=>1,'imei_in_stock_status'=>1];
+            }
+            return ['return_code'=>'SUCCESS','api_response'=>['total_results'=>count($rows),'result_list'=>$rows]];
+        }
         throw new RuntimeException('ASSERT unexpected fake service; no external transport is allowed');
     };
-    $api=new OpenApi($profile,$secret,$exchange,'test');
+    // Exercise the documented purchase contract explicitly; PAYMENT below uses a separate exact-UAT adapter.
+    $api=new OpenApi($profile,$secret,$exchange);
     piCheck($configService->probe($site,1,$api)['verified']===true,'real ConfigService accepts fake read-only company probe');
     piRejected(fn()=>piPatch($configService,$site,['enabled'=>true,'paused'=>false,'purchase_enabled'=>true,'confirm_account'=>'WRONG']),'ACCOUNT_CONFIRM_REQUIRED');
     $config=piPatch($configService,$site,['enabled'=>true,'paused'=>false,'purchase_enabled'=>true,'purchase_mode'=>'manual']);
     piCheck($config['mode']==='test' && $config['purchase_enabled'] && !$config['finance_enabled'] && $config['purchase_mode']==='manual','purchase-only test connection explicitly enabled');
     $key=$config['profiles']['test']['connection_key'];
 
-    foreach(['companies','parties','products','warehouses','staff'] as $resource) {
+    foreach(['companies','parties','products','warehouses','staff','capital_accounts'] as $resource) {
         $run=bin2hex(random_bytes(16));
         Db::name('hsx_boyuan_reference_sync')->insert(['site_id'=>$site,'connection_key'=>$key,'mode'=>'test','resource'=>$resource,'run_key'=>$run,'status'=>'completed',
             'scope_json'=>'{}','processed'=>1,'pages'=>1,'reported_total'=>1,'operator_uid'=>1,'create_at'=>time(),'update_at'=>time()]);
-        $id=['companies'=>'COMPANY_TEST','parties'=>'SUPPLIER_TEST','products'=>'PRODUCT_TEST','warehouses'=>'WAREHOUSE_TEST','staff'=>'BUYER_TEST'][$resource];
-        $extra=['companies'=>[],'parties'=>['is_supplier'=>1],'products'=>['imei_count'=>1,'imei_len'=>15,'memory'=>'256GB','color'=>'黑色'],'warehouses'=>['company_id'=>'COMPANY_TEST'],'staff'=>['is_buyer'=>1]][$resource];
+        $id=['companies'=>'COMPANY_TEST','parties'=>'SUPPLIER_TEST','products'=>'PRODUCT_TEST','warehouses'=>'WAREHOUSE_TEST','staff'=>'BUYER_TEST','capital_accounts'=>'PAY_ACCOUNT_TEST'][$resource];
+        $extra=['companies'=>['gsdm'=>'COMPANY_TEST_CODE'],'parties'=>['is_supplier'=>1],'products'=>['imei_count'=>1,'imei_len'=>15,'memory'=>'256GB','color'=>'黑色'],'warehouses'=>['company_id'=>'COMPANY_TEST'],'staff'=>['is_buyer'=>1,'gsdm'=>'COMPANY_TEST_CODE'],'capital_accounts'=>['gsdm'=>'COMPANY_TEST_CODE']][$resource];
         Db::name('hsx_boyuan_reference')->insert(['site_id'=>$site,'connection_key'=>$key,'resource'=>$resource,'external_id'=>$id,'code'=>$id,'name'=>'隔离'.$resource,'enabled'=>1,'extra_json'=>Contract::json($extra),'seen_run'=>$run,'update_at'=>time()]);
     }
     $supplier=(int)Db::name('erp_party')->insertGetId(['site_id'=>$site,'party_no'=>'ISOLATED_SUPPLIER','party_name'=>'隔离供应商','party_type'=>'supplier','status'=>1]);
@@ -259,7 +307,96 @@ try {
     piCheck($firstBatch['source']['device_count']===2 && $lastBatch['source']['device_count']===1 && $firstBatch['stages'][4]['count']===1 && $lastBatch['stages'][4]['count']===1,'batch identity and shared-payment count remain accurate without exposing payment details');
     $logCount->execute([$schema,$prefix.'hsx_boyuan_log']); piCheck((int)$logCount->fetchColumn()===0,'full lifecycle never recreates a database log table');
     piCheck(Db::name('hsx_boyuan_task')->where('site_id',$site)->where('kind','<>','purchase')->count()===0,'all actual addon tasks stay purchase-only after replay');
-    echo Contract::json(['passed'=>true,'checks'=>$checks,'fake_exchange_calls'=>$fakeCalls,'fake_creates'=>$creates,'fake_queries'=>$queries,'external_calls'=>0,'business_database_modified'=>false,'random_schema_dropped_on_exit'=>true])."\n";
+
+    $inventoryService=new PurchaseInventoryService(); $parentBefore=piTask($site,$id); $erpHash=piErpHash($site); $beforeCreates=$creates;
+    piRejected(fn()=>$inventoryService->queue($site,$draftId,1,piInput($sync->view($site,$draftId))),'INVENTORY_DEPENDENCY_REQUIRED');
+    $workers=[];
+    for($worker=0;$worker<2;$worker++) {
+        $pipes=[]; $process=proc_open([PHP_BINARY,'-d','allow_url_fopen=0','-d','disable_functions=curl_exec,curl_multi_exec,fsockopen,pfsockopen,stream_socket_client,dns_get_record,gethostbyname,gethostbynamel',__FILE__,'--isolated-local-mysql','--inventory-queue-worker',$schema,(string)$id],
+            [0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']],$pipes);
+        if(!is_resource($process)) throw new RuntimeException('ASSERT cannot start isolated inventory queue worker');
+        fclose($pipes[0]); $workers[]=[$process,$pipes];
+    }
+    $queuedIds=[];
+    foreach($workers as [$process,$pipes]) {
+        $output=stream_get_contents($pipes[1]); $stderr=stream_get_contents($pipes[2]); fclose($pipes[1]); fclose($pipes[2]); $code=proc_close($process);
+        $workerResult=json_decode(trim($output),true); piCheck($code===0 && !empty($workerResult['passed']) && $stderr==='','parallel isolated inventory queue worker succeeds without external transport');
+        $queuedIds[]=(int)$workerResult['task_id'];
+    }
+    $inventoryId=$queuedIds[0];
+    piCheck($inventoryId>0 && $queuedIds[0]===$queuedIds[1] && Db::name('hsx_boyuan_task')->where('site_id',$site)->where('kind',PurchaseInventoryService::KIND)->count()===1,'two concurrent PHP/PDO enqueue transactions reuse exactly one read-only inventory child');
+    $child=piTask($site,$inventoryId); $frozenInventory=$child['request_json'];
+    piCheck((int)$child['query_only']===1 && $child['snapshot_json']===$frozenInventory && Contract::decode($frozenInventory)['source_task_id']===$id,'inventory task freezes its own exact parent, date and source identity without touching original purchase');
+    piCheck(piTask($site,$id)===$parentBefore && piErpHash($site)===$erpHash && $stockQueries===0,'enqueue performs no stock lookup or local purchase, stock, money or source-task write');
+    piRejected(fn()=>$tasks->action($site,$inventoryId,1,'retry'),'INVENTORY_READ_ONLY_REQUIRED');
+    piCheck(BatchService::actionFor($child)==='','generic task batch never offers a bridge retry or write action for an inventory child');
+    $crossStock=$inventoryService->summary($site+1,$parentBefore); piCheck($crossStock['status']==='unavailable' && $crossStock['in_stock_count']===null,'inventory summary rejects cross-site source without a false zero');
+    piPatch($configService,$site,['paused'=>true]); piReady($site,$inventoryId); piCheck(!$tasks->process($site,$inventoryId,$api) && $stockQueries===0,'paused connection holds inventory child without HTTP');
+    piPatch($configService,$site,['paused'=>false]); piReady($site,$inventoryId); piCheck($tasks->process($site,$inventoryId,$api),'real TaskService routes inventory child into bounded read-only worker');
+    $stock=$sync->view($site,$id); $stockChild=piTask($site,$inventoryId); $stockResult=Contract::decode($stockChild['result_json']);
+    piCheck($stockChild['status']==='succeeded' && $stock['inventory']['status']==='succeeded' && $stock['inventory']['total_count']===2 && $stock['inventory']['in_stock_count']===2 && $stockQueries===2,'two actual gateway reads persist complete current batch evidence');
+    piCheck($stock['closure']['stages'][2]['label']==='本批次当前在库' && $stock['closure']['stages'][2]['status']==='verified' && !$stock['closure']['complete'] && $stock['closure']['stages'][5]['status']==='blocked','closure accepts only batch stock evidence, never whole-warehouse or finance completion');
+    piCheck(($stockResult['evidence']['source_task_id']??null)===$id && $stockResult['evidence']['source_snapshot_hash']===hash('sha256',$parentBefore['snapshot_json'])
+        && $stockResult['evidence']['whole_warehouse_reconciled']===false && $stockResult['evidence']['financial_posting_verified']===false && isset($stockResult['evidence']['scope_hash']),'minimal persisted inventory evidence retains exact source identity and negative verification limits');
+    $sameInventory=$inventoryService->queue($site,$id,1,piInput($stock));
+    piCheck($sameInventory['inventory']['task_id']===$inventoryId && $stockQueries===2 && !$tasks->process($site,$inventoryId,$api),'duplicate fresh-success request neither creates another task nor another stock query');
+    $oldStock=$stockResult; $oldStock['checked_at']=time()-301; Db::name('hsx_boyuan_task')->where('site_id',$site)->where('id',$inventoryId)->update(['result_json'=>Contract::json($oldStock)]);
+    $expired=$sync->view($site,$id); piCheck($expired['inventory']['status']==='stale' && $expired['inventory']['in_stock_count']===null && $expired['can_check_inventory'],'expired result is explicitly stale with no current count and permits a manual refresh');
+    $inventoryService->queue($site,$id,1,piInput($expired)); $stockMissing=true; piReady($site,$inventoryId); $tasks->process($site,$inventoryId,$api);
+    $missingStock=$sync->view($site,$id); piCheck($missingStock['inventory']['status']==='failed' && $missingStock['inventory']['in_stock_count']===null && $missingStock['closure']['stages'][2]['status']!=='verified','empty official inventory response is failed evidence, not zero stock or successful closure');
+    piCheck(piTask($site,$id)===$parentBefore && piErpHash($site)===$erpHash && $creates===$beforeCreates && piTask($site,$inventoryId)['request_json']===$frozenInventory,'all inventory worker outcomes leave local business tables, original frozen purchase and purchase create count unchanged');
+    // Registration consumes only actual ErpFinanceService-confirmed payment facts; it must never debit them again.
+    $payments=new PaymentSyncService(); $settlements=Db::name('erp_settlement')->where('site_id',$site)->where('status','confirmed')->order('id')->select()->toArray();
+    $firstSettlement=(int)$settlements[0]['id']; $secondSettlement=(int)$settlements[1]['id'];
+    piRejected(fn()=>$payments->capture($site,$id,1,piInput($sync->view($site,$id))+['settlement_id'=>$firstSettlement]),'PAYMENT_UAT_ONLY');
+    piRejected(fn()=>piPatch($configService,$site,['uat_payment_enabled'=>true,'confirm_account'=>'WRONG_ACCOUNT']),'PAYMENT_UAT_ACCOUNT_CONFIRM_REQUIRED');
+    piPatch($configService,$site,['uat_payment_enabled'=>true]);
+    $candidatePage=$payments->candidates($site,$id); piCheck($candidatePage['total']===2 && count($candidatePage['items'])===2 && !$candidatePage['has_more'],'actual same-batch confirmed partial and remaining payments are safe paged candidates');
+    $workers=[];
+    for($worker=0;$worker<2;$worker++) {
+        $pipes=[]; $process=proc_open([PHP_BINARY,'-d','allow_url_fopen=0','-d','disable_functions=curl_exec,curl_multi_exec,fsockopen,pfsockopen,stream_socket_client,dns_get_record,gethostbyname,gethostbynamel',__FILE__,'--isolated-local-mysql','--payment-capture-worker',$schema,(string)$id,(string)$firstSettlement],
+            [0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']],$pipes);
+        if(!is_resource($process)) throw new RuntimeException('ASSERT cannot start isolated payment capture worker'); fclose($pipes[0]); $workers[]=[$process,$pipes];
+    }
+    $paymentIds=[];
+    foreach($workers as [$process,$pipes]) { $out=stream_get_contents($pipes[1]); $err=stream_get_contents($pipes[2]); fclose($pipes[1]); fclose($pipes[2]); $exit=proc_close($process); $out=json_decode(trim($out),true); piCheck($exit===0 && !empty($out['passed']) && $err==='','parallel actual payment capture succeeds without gateway'); $paymentIds[]=(int)$out['task_id']; }
+    $paymentId=$paymentIds[0]; piCheck($paymentIds[0]===$paymentIds[1] && Db::name('hsx_boyuan_task')->where('site_id',$site)->where('kind',PaymentSyncService::KIND)->count()===1,'concurrent confirmed-payment capture reuses a single settlement task');
+    $payment=$payments->view($site,$paymentId); $choose=['creator_id'=>'BUYER_TEST','account_id'=>'PAY_ACCOUNT_TEST'];
+    piCheck(in_array($paymentId,piWorkbenchIds($app,'action_required'),true) && !in_array($paymentId,piWorkbenchIds($app,'completed'),true),'an unsent draft requiring user confirmation remains in the workbench action filter');
+    piCheck($payment['source']['amount']==='0.40' && $payment['source']['company_code']==='COMPANY_TEST_CODE' && $payment['task']['status']==='awaiting_confirmation' && $paymentCreates===0,'actual payment draft freezes exact confirmed decimal and company scope, not frontend amount');
+    $payment=$payments->saveDraft($site,$paymentId,1,piInput($payment)+['selection'=>$choose]);
+    piRejected(fn()=>$payments->submit($site,$paymentId,1,piInput($payment)+['selection'=>$choose,'confirm_registration'=>true]),'PAYMENT_AP_EVIDENCE_REQUIRED');
+    piCheck($payment['can_submit_experiment'] && !$payment['can_submit'] && !$payment['can_verify'] && $payment['ap_evidence']['status']==='rule_confirmed','UAT experiment separates official AP formation rule from unavailable balance and allocation proof');
+    $beforePayment=piErpHash($site); $parentPayment=piTask($site,$id); $paymentApi=new OpenApi($profile,$secret,$exchange,'test');
+    $payment=$payments->submit($site,$paymentId,1,piInput($payment)+['selection'=>$choose,'confirm_registration'=>true,'confirm_unverified_ap'=>true]);
+    $frozenPayment=piTask($site,$paymentId)['request_json'];
+    piRejected(fn()=>$tasks->action($site,$paymentId,1,'repair'),'PAYMENT_SINGLE_ATTEMPT_REQUIRED');
+    piCheck(BatchService::actionFor(piTask($site,$paymentId))==='' && $paymentCreates===0,'generic action and batch cannot unfreeze or invoke payment creation');
+    piPatch($configService,$site,['paused'=>true]); piReady($site,$paymentId); piCheck(!$tasks->process($site,$paymentId,$paymentApi) && $paymentCreates===0,'pause holds actual pending registration before gateway'); piPatch($configService,$site,['paused'=>false]);
+    piReady($site,$paymentId); piCheck((new addon\hsx_boyuan\app\job\PaymentProcess())->doJob($site,$paymentId,$paymentApi),'actual payment job executes frozen same-UAT gateway once');
+    $registered=$payments->view($site,$paymentId); piCheck($registered['task']['status']==='registered_review' && $registered['task']['external_no']==='PAY_ISOLATED_1' && $registered['result']['registered_amount']==='0.40' && !$registered['result']['allocation_applied_verified'],'matched receipt is persisted, not specific purchase allocation or full financial closure');
+    piCheck($registered['operator_complete'] && $registered['issues']===[] && !$registered['can_submit'] && !$registered['can_submit_experiment'],'operator has no remaining action after a matched receipt');
+    $notice=new \addon\hsx_boyuan\app\service\NoticeService();
+    $beforeNotice=piTask($site,$paymentId); $notice->send($site,$paymentId);
+    piCheck(piTask($site,$paymentId)===$beforeNotice,'even an explicit reminder call cannot enqueue or mark a completed registration');
+    piCheck(!str_contains(Contract::json($registered),'MUST_NOT_LEAK') && !$registered['result']['bank_transfer_verified'],'actual gateway and service exclude bank and voucher data and never imply funds transfer');
+    piCheck(piTask($site,$id)===$parentPayment && piErpHash($site)===$beforePayment && piTask($site,$paymentId)['request_json']===$frozenPayment,'registering remote accounting receipt does not change any original task or local purchase, stock, payable, payment, capital or ledger row');
+    piCheck(!$tasks->process($site,$paymentId,$paymentApi) && $paymentCreates===1 && Db::name('hsx_boyuan_binding')->where('site_id',$site)->where('kind','financial')->count()===0,'registered receipt cannot create twice or forge remote AP evidence');
+    $parentPaymentView=$sync->view($site,$id); piCheck($parentPaymentView['payment']['registered_amount']==='0.40' && $parentPaymentView['closure']['stages'][5]['status']==='partial' && !$parentPaymentView['closure']['operator_complete'] && !$parentPaymentView['closure']['complete'],'parent with two local settlements is not done on receipt for only one payment');
+    $other=$payments->capture($site,$id,1,piInput($parentPaymentView)+['settlement_id'=>$secondSettlement]); $otherId=$other['task']['id'];
+    $other=$payments->submit($site,$otherId,1,piInput($other)+['selection'=>$choose,'confirm_registration'=>true,'confirm_unverified_ap'=>true]); $paymentTimeout=true; piReady($site,$otherId); $tasks->process($site,$otherId,$paymentApi);
+    piCheck(piTask($site,$otherId)['status']==='attention' && piTask($site,$otherId)['side_effect']==='unknown' && (int)piTask($site,$otherId)['attempts']===1,'unknown possible payment write is held for manual review');
+    piReady($site,$otherId); piCheck(!$tasks->process($site,$otherId,$paymentApi) && $paymentCreates===2,'unknown payment create is never retried');
+    piCheck($payments->capture($site,$id,1,piInput($parentPaymentView)+['settlement_id'=>$secondSettlement])['task']['id']===$otherId,'repeat capture cannot bypass unknown single-attempt settlement identity');
+    piCheck(piTask($site,$id)===$parentPayment && piErpHash($site)===$beforePayment && $creates===$beforeCreates,'unknown remote registration leaves all local business and original purchase task unchanged');
+    piCheck(!$payments->view($site,$otherId)['operator_complete'] && !$sync->view($site,$id)['closure']['operator_complete'],'uncertain second receipt cannot complete either its operator task or the full batch');
+    $notice->send($site,$otherId);
+    piCheck((int)piTask($site,$otherId)['notice_at']>0,'registration with an unknown result remains eligible for staff notification');
+    $doneIds=piWorkbenchIds($app,'completed'); $todoIds=piWorkbenchIds($app,'action_required');
+    piCheck(in_array($paymentId,$doneIds,true) && !in_array($paymentId,$todoIds,true),'actual controller lists matched receipt as completed, never as outstanding');
+    piCheck(!in_array($otherId,$doneIds,true) && in_array($otherId,$todoIds,true),'actual controller lists uncertain result only as outstanding, never completed');
+    $logCount->execute([$schema,$prefix.'hsx_boyuan_log']); piCheck((int)$logCount->fetchColumn()===0,'payment lifecycle writes no database technical-log table');
+    echo Contract::json(['passed'=>true,'checks'=>$checks,'fake_exchange_calls'=>$fakeCalls,'fake_creates'=>$creates,'fake_queries'=>$queries,'fake_stock_queries'=>$stockQueries,'fake_payment_creates'=>$paymentCreates,'external_calls'=>0,'business_database_modified'=>false,'random_schema_dropped_on_exit'=>true])."\n";
 } catch(Throwable $error) {
     $failed=true; $detail=$error instanceof Problem?$error->reason:(str_starts_with($error->getMessage(),'ASSERT ')?$error->getMessage():'see exception location');
     fwrite(STDERR,'FAIL '.get_class($error).': '.$detail.' at '.basename($error->getFile()).':'.$error->getLine()."\n");

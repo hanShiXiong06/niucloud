@@ -4,20 +4,23 @@ namespace addon\hsx_boyuan\app\service;
 use think\facade\Db;
 final class NoticeService
 {
+    public const REMIND_STATUSES=['blocked','rejected','partial','attention','needs_review'];
     public function send(int $site,int $id): void
     {
         $config=(new ConfigService())->get($site); $task=Db::name('hsx_boyuan_task')->where('site_id',$site)->where('id',$id)->find();
-        if (!$task || !in_array($task['status'],['blocked','rejected','partial','attention','needs_review'],true) || $task['notice_at']>time()-900) return;
-        $where=[['site_id','=',$site],['id','=',$id],['notice_at','=',$task['notice_at']]];
+        if (!$task || !in_array($task['status'],self::REMIND_STATUSES,true) || $task['notice_at']>time()-900) return;
+        $where=[['site_id','=',$site],['id','=',$id],['status','=',$task['status']],['revision','=',$task['revision']],['notice_at','=',$task['notice_at']]];
         if (!Db::name('hsx_boyuan_task')->where($where)->update(['notice_at'=>time()])) return;
         $state='unavailable';
         if ($task['mode']==='mock') $state='simulated';
         elseif ($config['assignee_uid']>0) try {
+            $request=\addon\hsx_boyuan\app\support\Contract::decode($task['request_json']);
+            $targetId=in_array($request['schema']??'',[PaymentSyncService::SCHEMA,PurchaseInventoryService::SCHEMA],true)?(int)($request['source_task_id']??$id):$id;
             foreach (event('HsxBusinessTaskAssigned',[
                 'site_id'=>$site,'assignee_uid'=>$config['assignee_uid'],'event_id'=>'hsx_boyuan:'.$site.':'.$id.':'.$task['revision'],
                 'source_plugin'=>'hsx_boyuan','source_type'=>'sync_task','source_id'=>$id,'title'=>'博远对接需要处理','business_no'=>$task['business_no'],
                 'description'=>'请检查任务中的阻塞原因和博远实际结果，不要重复录单。',
-                'target'=>['plugin'=>'hsx_boyuan','route_key'=>'hsx_boyuan.workbench','web_path'=>'addon/hsx_boyuan/pages/workbench/index?task_id='.$id],
+                'target'=>['plugin'=>'hsx_boyuan','route_key'=>'hsx_boyuan.workbench','web_path'=>'addon/hsx_boyuan/pages/workbench/index?task_id='.$targetId],
             ]) as $result) if (is_array($result) && (!empty($result['queued']) || !empty($result['duplicate']))) $state='queued';
         } catch (\Throwable $e) { $state='retry'; }
         Db::name('hsx_boyuan_task')->where('site_id',$site)->where('id',$id)->update(['notice_status'=>$state]);

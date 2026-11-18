@@ -131,10 +131,13 @@ final class PurchaseSyncService
         if(!$enabled) $issues[]='采购投递未启用、已暂停或账套尚未核验';
         $public=array_intersect_key($task,array_flip(['id','revision','mode','connection_key','kind','business_no','status','reason','external_no','side_effect','attempts','create_at','update_at']));
         foreach(['id','revision','attempts','create_at','update_at'] as $key) $public[$key]=(int)$public[$key];
+        $inventory=(new PurchaseInventoryService())->summary($site,$task); $canCheckInventory=$inventory['can_check']; unset($inventory['can_check']);
+        $payment=(new PaymentSyncService())->summary($site,$task);
         return ['task'=>$public,'source'=>$this->publicSource($snapshot),'selection'=>$selection,'labels'=>$this->labels($site,$task['connection_key'],$selection),
             'editable'=>$editable,'can_submit'=>$editable && $enabled && !$issues,
             'can_verify'=>$active && $enabled && ($request['stage']??'')==='frozen' && !in_array($task['status'],['processing','succeeded'],true),
-            'issues'=>$issues,'result'=>$this->safeResult(Contract::decode($task['result_json'])),'closure'=>(new PurchaseClosureService())->view($site,$task)];
+            'inventory'=>$inventory,'can_check_inventory'=>$canCheckInventory,'payment'=>$payment,
+            'issues'=>$issues,'result'=>$this->safeResult(Contract::decode($task['result_json'])),'closure'=>(new PurchaseClosureService())->view($site,$task,$inventory,$payment)];
     }
 
     public function saveDraft(int $site,int $taskId,int $uid,array $input): array

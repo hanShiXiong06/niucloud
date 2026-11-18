@@ -140,6 +140,8 @@ final class TaskService
         $configService=new ConfigService(); if (!$configService->installed($site)) return false;
         $config=$configService->get($site,false); $profile=$config['profiles'][$config['mode']];
         $candidate=Db::name('hsx_boyuan_task')->where('site_id',$site)->where('id',$id)->find();
+        if ($candidate && (($candidate['kind']??'')===PaymentSyncService::KIND || (Contract::decode($candidate['request_json'])['schema']??'')===PaymentSyncService::SCHEMA)) return (new PaymentSyncService())->process($site,$id,$transport);
+        if ($candidate && (Contract::decode($candidate['request_json'])['schema']??'')===PurchaseInventoryService::SCHEMA) return (new PurchaseInventoryService())->process($site,$id,$transport);
         if ($candidate && (Contract::decode($candidate['request_json'])['schema']??'')==='boyuan.purchase.v154') {
             return (new PurchaseSyncService())->process($site,$id,$transport);
         }
@@ -254,6 +256,8 @@ final class TaskService
         Db::transaction(function () use ($site,$id,$uid,$action,$note,$externalNo): void {
             $where=[['site_id','=',$site],['id','=',$id]]; $task=Db::name('hsx_boyuan_task')->where($where)->lock(true)->find();
             if (!$task) throw new Problem('TASK_MISSING','任务不存在');
+            if(($task['kind']??'')===PaymentSyncService::KIND || (Contract::decode($task['request_json'])['schema']??'')===PaymentSyncService::SCHEMA) throw new Problem('PAYMENT_SINGLE_ATTEMPT_REQUIRED','付款登记仅能从专用核对表单确认一次；未知或已登记结果不得经通用任务操作重建');
+            if ((Contract::decode($task['request_json'])['schema']??'')===PurchaseInventoryService::SCHEMA) throw new Problem('INVENTORY_READ_ONLY_REQUIRED','请从原采购核对页查看或重新核对本批次当前在库；库存只读任务不能通过旧业务操作重发');
             if ((Contract::decode($task['request_json'])['schema']??'')==='boyuan.purchase.v154') throw new Problem('PURCHASE_CONFIRM_REQUIRED','请使用入库核对表单提交或核验，不能通过旧任务操作重发');
             if ($task['status']==='processing' || ($action!=='query' && in_array($task['status'],['simulated','succeeded'],true))) throw new Problem('TASK_STATE','任务正在处理或已完成，不能重复操作');
             $values=['next_at'=>0,'update_at'=>time()];

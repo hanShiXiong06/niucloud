@@ -13,10 +13,16 @@ final class BatchService
         foreach($ids as $id) if(!is_int($id) || $id<=0) throw new Problem('BATCH_INVALID','业务编号无效');
         $c=(new ConfigService())->get($site); $key=$c['profiles'][$c['mode']]['connection_key'];
         if(($input['mode']??'')!==$c['mode'] || ($input['connection_key']??'')!==$key || $key==='') throw new Problem('CONNECTION_CHANGED','目标账套已变化，请返回列表核对');
-        return ['items'=>Db::name('hsx_boyuan_task')->where('site_id',$site)->where('connection_key',$key)->where('mode',$c['mode'])->whereIn('id',$ids)->field('id,business_no,status,reason')->select()->toArray()];
+        $query=Db::name('hsx_boyuan_task')->where('site_id',$site)->where('connection_key',$key)->where('mode',$c['mode'])->whereIn('id',$ids);
+        try { (new PermissionService())->assertApi('get','erp/finance/payable/lists'); }
+        catch(\core\exception\CommonException $ignored) { $query->where('kind','<>',PaymentSyncService::KIND); }
+        $rows=$query->field('id,kind,business_no,status,reason')->select()->toArray();
+        foreach ($rows as &$row) { if(PaymentSyncService::isRegistered($row)) $row['reason']=PaymentSyncService::REGISTERED_REASON; unset($row['kind']); } unset($row);
+        return ['items'=>$rows];
     }
     public static function actionFor(array $task): string
     {
+        if(in_array($task['kind']??'',[PurchaseInventoryService::KIND,PaymentSyncService::KIND],true)) return '';
         if(in_array($task['status'],['processing','succeeded','simulated','manual_pending'],true) || $task['kind']==='manual_review') return '';
         if($task['side_effect']!=='none') return $task['request_json']!=='{}'?'query':'';
         return 'retry';

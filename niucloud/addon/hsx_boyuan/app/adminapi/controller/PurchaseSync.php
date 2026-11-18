@@ -2,7 +2,7 @@
 declare(strict_types=1);
 namespace addon\hsx_boyuan\app\adminapi\controller;
 
-use addon\hsx_boyuan\app\service\{PermissionService,PurchaseSyncService};
+use addon\hsx_boyuan\app\service\{PermissionService,PurchaseSyncService,PurchaseInventoryService};
 use addon\hsx_boyuan\app\support\Problem;
 use core\base\BaseAdminController;
 use core\exception\CommonException;
@@ -21,7 +21,7 @@ final class PurchaseSync extends BaseAdminController
             $limit=static function(array $view) use($canRemember,$canOperate): array {
                 $view['can_remember']=$canRemember && $canOperate;
                 $view['can_operate']=$canOperate;
-                if(!$canOperate) foreach(['editable','can_submit','can_verify'] as $flag) $view[$flag]=false;
+                if(!$canOperate) foreach(['editable','can_submit','can_verify','can_check_inventory'] as $flag) $view[$flag]=false;
                 return $view;
             };
             if(is_array($result) && isset($result['task'])) $result=$limit($result);
@@ -44,4 +44,5 @@ final class PurchaseSync extends BaseAdminController
     public function submit(int $id) { return $this->run('post','tasks/<id>/action',fn($site,$uid)=>(new PurchaseSyncService())->submit($site,$id,$uid,$this->input())); }
     public function verify(int $id) { return $this->run('post','tasks/<id>/action',fn($site,$uid)=>(new PurchaseSyncService())->queueVerify($site,$id,$uid,$this->input(true))); }
     public function capture(int $id) { return $this->run('post','tasks/<id>/action',fn($site,$uid)=>(new PurchaseSyncService())->capturePurchaseId($site,$uid,$id)); }
+    public function inventoryCheck(int $id) { return $this->run('post','tasks/<id>/action',fn($site,$uid)=>(new PurchaseInventoryService())->queue($site,$id,$uid,$this->request->params([['revision',-1],['mode',''],['connection_key','']]))); }
 }

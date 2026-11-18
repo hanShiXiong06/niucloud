@@ -40,6 +40,26 @@ final class OpenApi implements Transport
         return $this->signedForm($service,$params);
     }
     public function accountId(): string { return Contract::id($this->profile['account_id']??null); }
+    public function uatPaymentEnabled(): bool
+    {
+        return $this->mode==='test' && ($this->profile['endpoint']??'')==='https://open-api-uat.139erp.com/api'
+            && ($this->profile['gateway_path']??'')==='/gateway.do';
+    }
+    /** Only UAT accounting-voucher creation; never a unified-pay or transfer service. */
+    public function paymentCreate(array $biz): array
+    {
+        if(!$this->uatPaymentEnabled()) throw new Problem('PAYMENT_UAT_ONLY','付款单登记仅允许明确的UAT测试模式、地址和网关；生产及其他连接均禁止');
+        $head=$biz['head']??null; $details=$biz['payment_details']??null;
+        if(array_diff(array_keys($biz),['head','payment_details']) || !is_array($head) || !is_array($details)
+            || !in_array($head['scope_flag']??null,[3,'3'],true) || !in_array($head['is_auto_generate_supplier']??0,[0,'0'],true)
+            || !in_array($head['is_auto_generate_subject']??0,[0,'0'],true)) throw new Problem('PAYMENT_SCOPE_DENIED','仅支持所选公司范围的UAT付款登记，禁止自动创建供应商或科目');
+        $check=function(array $value) use (&$check): void {
+            if(array_intersect(array_keys($value),self::RESERVED)) throw new Problem('PARAM_INVALID','付款业务JSON不能覆盖身份和签名参数');
+            foreach($value as $item) if(is_array($item)) $check($item);
+        };
+        $check($biz);
+        return $this->signedForm('boyuan.biz.bill.payment.generate',['biz'=>Contract::json($biz)],true);
+    }
     /** Only the v1.5.4 purchase-create service, with one signed JSON biz value. */
     public function purchaseCreate(array $biz): array
     {
@@ -60,6 +80,18 @@ final class OpenApi implements Transport
         $allowed=['business_date_start','business_date_end','create_date_start','create_date_end','is_effective','page_no','page_size'];
         $allowed=array_merge($allowed,$kind==='details'?['modify_date_start','modify_date_end','trans_type']:['gsdm','bill_type','bill_id']);
         if(array_diff(array_keys($params),$allowed)) throw new Problem('PARAM_INVALID','采购核验包含未文档化的查询参数');
+        return $this->signedForm($services[$kind],$params);
+    }
+    /** Documented inventory reads only; no arbitrary service or bill/payment query. */
+    public function inventoryQuery(string $kind,array $params): array
+    {
+        $services=['aggregate'=>'boyuan.biz.inventories.query','imei'=>'boyuan.biz.inventory.imeidetails.query'];
+        if(!isset($services[$kind])) throw new Problem('INVENTORY_QUERY_INVALID','只支持库存汇总和库存串号只读查询');
+        $allowed=['query_date','gsdm','product_ids','category_codes','warehouse_ids','page_no','page_size'];
+        $allowed=array_merge($allowed,$kind==='aggregate'?['has_imei','show_zero','group_type']:['imei','imei_in_stock_status']);
+        if(array_diff(array_keys($params),$allowed)) throw new Problem('PARAM_INVALID','库存核验包含未文档化的参数或身份覆盖');
+        $date=$params['query_date']??null;
+        if(!is_string($date) || !preg_match('/^\d{4}-\d{2}-\d{2}$/D',$date) || !($parsed=\DateTimeImmutable::createFromFormat('!Y-m-d',$date)) || $parsed->format('Y-m-d')!==$date) throw new Problem('INVENTORY_DATE_INVALID','库存查询必须提供有效query_date，不能使用样例中的query_date_start');
         return $this->signedForm($services[$kind],$params);
     }
     private function signedForm(string $service,array $params,bool $write=false): array

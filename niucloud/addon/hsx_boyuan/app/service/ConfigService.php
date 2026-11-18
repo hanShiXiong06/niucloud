@@ -19,7 +19,7 @@ final class ConfigService
     {
         $rows = SysConfig::where('site_id',$site)->where('config_key',self::KEY)->limit(2)->select()->toArray();
         if (count($rows)>1) throw new Problem('CONFIG_DUPLICATE','博远连接配置重复，请管理员核对');
-        $config = array_replace(['mode'=>'mock','enabled'=>false,'paused'=>true,'finance_enabled'=>false,'purchase_enabled'=>false,'purchase_mode'=>'manual','purchase_started_at'=>0,'revision'=>0,'started_at'=>0,'assignee_uid'=>0,'profiles'=>[]],$rows[0]['value'] ?? []);
+        $config = array_replace(['mode'=>'mock','enabled'=>false,'paused'=>true,'finance_enabled'=>false,'purchase_enabled'=>false,'purchase_mode'=>'manual','purchase_started_at'=>0,'uat_payment_enabled'=>false,'revision'=>0,'started_at'=>0,'assignee_uid'=>0,'profiles'=>[]],$rows[0]['value'] ?? []);
         foreach (self::MODES as $mode) {
             $saved=$config['profiles'][$mode]??[];
             $config['profiles'][$mode] = array_replace(['connection_key'=>'','endpoint'=>'','account_id'=>'','token_cipher'=>'','probe_at'=>0,'acceptance_ref'=>'','contract_confirmed'=>false,'scenario'=>'success',
@@ -82,6 +82,14 @@ final class ConfigService
             $new['purchase_mode']=(string)($input['purchase_mode']??$old['purchase_mode']);
             if (!in_array($new['purchase_mode'],['manual','automatic'],true)) throw new Problem('PURCHASE_MODE_INVALID','请选择人工确认或资料齐全自动同步');
             if ($mode!=='mock' && $profile['protocol']==='openapi_v153' && $new['finance_enabled']) throw new Problem('FINANCE_UNAVAILABLE','本版仅开放采购入库，不开放财务同步');
+            $uat=$mode==='test' && $profile['protocol']==='openapi_v153' && $profile['endpoint']===PaymentSyncService::UAT_ENDPOINT && $profile['gateway_path']==='/gateway.do';
+            $new['uat_payment_enabled']=(bool)($input['uat_payment_enabled']??$old['uat_payment_enabled']);
+            if(!$uat && !empty($input['uat_payment_enabled'])) throw new Problem('PAYMENT_UAT_ONLY','付款登记实验开关仅允许精确UAT测试连接，不能用于正式环境');
+            if(!$uat || $changed || $old['mode']!==$mode || !empty($edit['app_secret']) || !empty($edit['token'])) $new['uat_payment_enabled']=false;
+            if($new['uat_payment_enabled']) {
+                if(!$profile['probe_at'] || !$profile['contract_confirmed']) throw new Problem('PAYMENT_UAT_PREFLIGHT_REQUIRED','请先核验UAT账套并确认接口契约，再开启付款登记实验');
+                if(!$old['uat_payment_enabled'] && ($input['confirm_account']??'')!==$profile['account_id']) throw new Problem('PAYMENT_UAT_ACCOUNT_CONFIRM_REQUIRED','开启UAT付款登记实验前，请填写目标账套编号确认；不开放真实转账或指定核销');
+            }
             $new['assignee_uid']=max(0,(int)($input['assignee_uid']??$old['assignee_uid']));
             if ($new['assignee_uid']>0 && (!Db::name('sys_user_role')->where('site_id',$site)->where('uid',$new['assignee_uid'])->where('status',1)->count()
                 || !Db::name('sys_user')->where('uid',$new['assignee_uid'])->where('status',1)->count())) throw new Problem('ASSIGNEE_INVALID','请选择本站有效的异常责任人');

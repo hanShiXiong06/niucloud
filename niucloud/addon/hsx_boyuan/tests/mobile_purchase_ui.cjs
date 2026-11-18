@@ -15,7 +15,7 @@ const helpers = helperModule.exports
 assert.equal(helpers.purchaseRouteId('23'), 23)
 assert.equal(helpers.purchaseRouteId(23), 23)
 for (const invalid of [0, -1, 1.2, '', '0', '01', '-2', '1e3', 'purchase:23', '9007199254740992', ['23'], { id: 23 }, null, undefined]) assert.equal(helpers.purchaseRouteId(invalid), 0)
-const source = { supplier_name: '本站供货方', buyer_name: '本站采购员', lines: [{ source_line_id: 'purchase_line:1', product_name: '手机一', imei: '123456789012345', quantity: 1, amount: '100.00' }, { source_line_id: 'purchase_line:2', product_name: '手机二', sn: 'SN-2', quantity: 1, amount: '200.00' }] }
+const source = { source_document_no: 'CG-X / 7', supplier_name: '本站供货方', buyer_name: '本站采购员', lines: [{ source_line_id: 'purchase_line:1', product_name: '手机一', imei: '123456789012345', quantity: 1, amount: '100.00' }, { source_line_id: 'purchase_line:2', product_name: '手机二', sn: 'SN-2', quantity: 1, amount: '200.00' }] }
 const completeSelection = { company_id: 'company-1', supplier_id: 'supplier-1', creator_id: 'creator-1', buyer_id: 'buyer-1', lines: source.lines.map((line, index) => ({ source_line_id: line.source_line_id, product_id: 'product-' + index, warehouse_id: 'warehouse-1', amount: '9999', imei: 'forged' })) }
 const clean = helpers.purchaseSelection({ ...completeSelection, amount: '9999' }, source)
 assert.equal(helpers.purchaseSelectionComplete(clean), true)
@@ -30,7 +30,11 @@ assert.match(helpers.purchaseStateMessage({ status: 'pending', external_no: 'BY-
 assert.match(helpers.purchaseStateMessage({ status: 'confirming', external_no: 'BY-MANUAL' }), /单号不代表成功/)
 assert.equal(helpers.purchaseSelectionComplete({ ...clean, buyer_id: '' }), true, 'buyer is optional in the official contract')
 assert.equal(helpers.purchaseSelectionComplete({ ...clean, creator_id: '' }), false, 'creator is mandatory and independent of optional buyer')
-assert.equal(helpers.purchaseStateMessage({ status: 'succeeded', external_no: 'BY-1' }), '入库串号明细已核对；库存余额与博远财务未验证')
+assert.match(helpers.purchaseStateMessage({ status: 'succeeded', external_no: 'BY-1' }), /入库串号明细已核对/)
+assert.equal(helpers.purchaseInventory(null).status, 'not_checked')
+assert.equal(helpers.purchaseInventory({ status: 'stale', total_count: 0, in_stock_count: 0 }).total_count, null)
+assert.equal(helpers.purchaseInventory({ status: 'succeeded', total_count: 1, in_stock_count: 1 }).status, 'unavailable', 'success requires quantities and query-time evidence')
+assert.equal(helpers.purchaseInventoryLabel(helpers.purchaseInventory({ status: 'failed', total_count: 2, in_stock_count: 1 })), '当前在库有差异')
 assert.equal(helpers.purchaseMoney(null), '未取得')
 assert.equal(helpers.purchaseMoney('0.00'), '0.00 元')
 assert.equal(helpers.purchaseMoney(undefined), '未取得')
@@ -39,6 +43,11 @@ const stageKeys = ['local_inbound', 'remote_purchase', 'remote_stock', 'local_pa
 const closureFixture = { schema: 'boyuan.purchase.closure.v1', available: true, complete: true, totals: { amount: '300.00', paid_amount: '100.00', unpaid_amount: '200.00' }, stages: stageKeys.map(key => ({ key, status: 'verified', amount: '300.00', paid_amount: '100.00', unpaid_amount: '200.00' })), warnings: [] }
 const blockedClosure = helpers.purchaseClosure({ ...closureFixture, stages: closureFixture.stages.map(stage => ({ ...stage, status: stage.key === 'remote_stock' ? 'unverified' : stage.key === 'remote_settlement' ? 'blocked' : stage.key === 'local_payment' ? 'partial' : 'verified' })) })
 assert.equal(blockedClosure.complete, false, 'purchase verification or partial payment is never all-green closure')
+assert.equal(blockedClosure.operatorComplete, false)
+const doneFixture = { ...closureFixture, complete: false, operator_complete: true, totals: { amount: '300.00', paid_amount: '300.00', unpaid_amount: '0.00' } }
+assert.equal(helpers.purchaseClosure(doneFixture).operatorComplete, true, 'operator coverage can finish without remote allocation verification')
+assert.equal(helpers.purchaseClosure(doneFixture).complete, false)
+assert.equal(helpers.purchaseClosure({ ...doneFixture, stages: doneFixture.stages.filter(stage => stage.key !== 'remote_settlement') }).operatorComplete, false, 'an incomplete view must not show a green completed badge based on one flag')
 assert.equal(blockedClosure.stages[4].status, 'partial')
 assert.equal(blockedClosure.totals.unpaid_amount, '200.00')
 const deniedClosure = helpers.purchaseClosure({ ...closureFixture, stages: closureFixture.stages.map(stage => ({ ...stage, status: stage.key === 'local_payable' ? 'permission_denied' : stage.status })) })
@@ -77,7 +86,7 @@ const mobileEntry = fs.readFileSync(path.join(root, 'site-uniapp/src/addon/hsx_e
 assert.match(mobileEntry, /action\.mobile_path\}\?purchase_id=\$\{Number\(order\.value\?\.id \|\| purchaseOrderId\.value\)\}/)
 assert.doesNotMatch(mobileEntry, /hsx_boyuan/)
 
-const calls = [], events = [], modalCalls = [], timerCallbacks = []
+const routes = [], calls = [], events = [], modalCalls = [], timerCallbacks = []
 let holdModal = false
 let current = { task: { id: 7, revision: 3, mode: 'test', connection_key: 'connection-A', status: 'awaiting_confirmation', side_effect: 'none', business_no: 'CG-7', external_no: '' }, source, selection: completeSelection, editable: true, can_submit: true, can_verify: false, can_remember: true, issues: [], labels: { company: { id: 'company-1', name: '测试公司' }, supplier: { id: 'supplier-1', name: '测试供应商' }, buyer: { id: 'buyer-1', name: '测试业务员' }, lines: source.lines.map(line => ({ source_line_id: line.source_line_id, product: { name: '已选商品' }, warehouse: { name: '同一仓库' } })) } }
 const clone = value => JSON.parse(JSON.stringify(value))
@@ -86,12 +95,13 @@ const api = {
     getReferences: async data => { calls.push(['references', clone(data)]); return { data: { code: 'OK', data: { items: data.cursor === '1' ? [{ id: 'supplier-2', name: '启用供应商', code: 'S2', enabled: true, extra: { is_supplier: true } }, { id: 'disabled', name: '停用', enabled: false }, { id: 'stale', name: '过期', enabled: true, stale: true }, { id: 'customer', name: '仅客户', enabled: true, extra: { is_cust: true } }] : [{ id: 'supplier-3', name: '下一页供应商', code: 'S3', enabled: true, extra: { is_supplier: true } }], next_cursor: data.cursor === '1' ? '2' : '' } } } },
     savePurchaseDraft: async (id, data) => { calls.push(['draft', id, clone(data)]); current = { ...current, selection: clone(data.selection), task: { ...current.task, revision: current.task.revision + 1 } }; return { data: clone(current) } },
     submitPurchase: async (id, data) => { calls.push(['submit', id, clone(data)]); current = { ...current, task: { ...current.task, revision: current.task.revision + 1, status: 'pending' }, editable: false, can_submit: false }; return { data: clone(current) } },
-    verifyPurchase: async (id, data) => { calls.push(['verify', id, clone(data)]); return { data: clone(current) } }
+    verifyPurchase: async (id, data) => { calls.push(['verify', id, clone(data)]); return { data: clone(current) } },
+    checkPurchaseInventory: async (id, data) => { calls.push(['inventory', id, clone(data)]); current = { ...current, inventory: { task_id: 71, status: 'pending', query_date: null, checked_at: null, total_count: null, in_stock_count: null, reason: '只读核对已排队' } }; return { data: clone(current) } }
 }
 const componentModule = { exports: {} }
 const lifecycle = { onShow: () => {}, onHide: () => {} }
 const fakeVue = { ...vue, onUnmounted: () => {} }
-vm.runInNewContext(transpile(componentScript), { exports: componentModule.exports, module: componentModule, require: name => name === 'vue' ? fakeVue : name === '@dcloudio/uni-app' ? lifecycle : name === '../api/index' ? api : name === '../utils/purchase-form' ? helpers : name.endsWith('.vue') ? {} : (() => { throw new Error(name) })(), setInterval: fn => { timerCallbacks.push(fn); return timerCallbacks.length }, clearInterval: () => {}, uni: { showToast: () => {}, showModal: data => { modalCalls.push(data); if (!holdModal) data.success({ confirm: true }) } }, console })
+vm.runInNewContext(transpile(componentScript), { exports: componentModule.exports, module: componentModule, require: name => name === 'vue' ? fakeVue : name === '@dcloudio/uni-app' ? lifecycle : name === '../api/index' ? api : name === '../utils/purchase-form' ? helpers : name.endsWith('.vue') ? {} : (() => { throw new Error(name) })(), setInterval: fn => { timerCallbacks.push(fn); return timerCallbacks.length }, clearInterval: () => {}, uni: { navigateTo: opts => { routes.push(opts.url); opts.complete() }, showToast: () => {}, showModal: data => { modalCalls.push(data); if (!holdModal) data.success({ confirm: true }) } }, console })
 const props = vue.reactive({ taskId: 7, config: { mode: 'test', enabled: true, paused: false, purchase_enabled: true, profiles: { test: { connection_key: 'connection-A', probe_at: 1 } } } })
 const ui = componentModule.exports.default.setup(props, { expose: () => {}, emit: event => events.push(event) })
 const flush = async () => { await Promise.resolve(); await Promise.resolve(); await vue.nextTick() }
@@ -154,11 +164,70 @@ async function run() {
     assert.equal(calls.filter(call => call[0] === 'submit').length, 1, 'frozen task must never resubmit')
     current = { ...current, can_verify: true, task: { ...current.task, status: 'created_review', external_no: 'BY-CREATED' }, result: { created: true } }
     timerCallbacks[0](); await flush()
-    assert.equal(ui.stateLabel.value, '已建单待核验', 'background polling must render creation as awaiting verification, not success')
+    assert.equal(ui.canVerify.value, true, 'created does not mean the purchase is verified')
+    assert.match(ui.nextStep.value.title, /核验.*原单/)
     current = { ...current, task: { ...current.task, status: 'succeeded' }, result: { verified: true, created: true } }
     timerCallbacks[0](); await flush()
-    assert.match(ui.stateMessage.value, /库存余额与博远财务未验证/)
+    assert.match(ui.stateMessage.value, /入库串号明细已核对/)
     assert.equal(ui.canVerify.value, false)
+    assert.equal(ui.canStartInventory.value, false, 'old responses without explicit capability do not expose an inventory action')
+    current = { ...current, can_check_inventory: true, inventory: { task_id: null, status: 'not_checked', query_date: null, checked_at: null, total_count: null, in_stock_count: null, reason: '' } }
+    await ui.reload()
+    assert.equal(ui.canStartInventory.value, true)
+    assert.notEqual(ui.nextStep.value.action, 'payable', 'a purchase receipt alone is not a payable')
+    assert.equal(ui.inventoryExpanded.value, false, 'current stock is optional unless opened via an inventory task')
+    assert.doesNotMatch(ui.nextStep.value.title, /核对本批次当前在库/)
+    const unpaidClosure = { ...closureFixture, complete: false, operator_complete: false,
+        totals: { amount: '300.00', paid_amount: '0.00', unpaid_amount: '300.00' },
+        stages: closureFixture.stages.map(s => ({ ...s, status: ['local_payment', 'remote_settlement'].includes(s.key) ? 'pending' : 'verified' })) }
+    current.closure = unpaidClosure
+    await ui.reload()
+    assert.match(ui.nextStep.value.title, /财务/)
+    assert.equal(ui.canViewPayable.value, true)
+    ui.openPayable()
+    assert.deepEqual(routes, ['/addon/hsx_erp/pages/payable/list?status=&source_no=CG-X%20%2F%207'])
+    current.closure = { ...unpaidClosure, stages: unpaidClosure.stages.map(s => ({...s, status: s.key === 'local_payable' ? 'permission_denied' : s.status})) }
+    await ui.reload(); ui.openPayable()
+    assert.equal(routes.length, 1, 'no route or amount without ERP finance read permission')
+    assert.equal(ui.canViewPayable.value, false)
+    assert.equal(ui.closure.value.totals.amount, null)
+    current.closure = doneFixture
+    current.payment = { status: 'attention', task_id: 58, operator_complete: false }
+    await ui.reload()
+    assert.equal(ui.nextStep.value.action, 'payment')
+    assert.equal(ui.isFinished.value, false, 'a pending investigation must not show Done even with a stale completed batch total')
+    current.payment = undefined
+    current.closure = undefined
+    await ui.reload()
+    const revisionBeforeInventory = current.task.revision
+    await Promise.all([ui.checkInventory(), ui.checkInventory()])
+    assert.equal(calls.filter(call => call[0] === 'inventory').length, 1, 'rapid repeated clicks queue only one read-only task')
+    const inventoryInput = calls.find(call => call[0] === 'inventory')[2]
+    assert.deepEqual(Object.keys(inventoryInput).sort(), ['connection_key', 'mode', 'revision'])
+    assert.equal(current.task.revision, revisionBeforeInventory)
+    assert.equal(ui.inventoryLabel.value, '已排队')
+    assert.equal(ui.canStartInventory.value, false)
+    await ui.checkInventory(); await ui.reload()
+    assert.equal(calls.filter(call => call[0] === 'inventory').length, 1, 'refresh never queues another inventory task')
+    current.inventory = { ...current.inventory, status: 'processing' }
+    timerCallbacks[0](); await flush()
+    assert.equal(ui.inventoryLabel.value, '核对中')
+    current.inventory = { ...current.inventory, status: 'succeeded', query_date: '2026-11-18', checked_at: 1794960000, total_count: 2, in_stock_count: 2, reason: '本批次2台均在库' }
+    timerCallbacks[0](); await flush()
+    assert.equal(ui.inventoryLabel.value, '本批次当前在库已核对')
+    assert.equal(ui.canStartInventory.value, false)
+    assert.match(ui.stateMessage.value, /采购记录与本批次当前在库已核对/)
+    assert.equal(ui.closure.value.complete, false, 'inventory success is not finance closure')
+    current.inventory = { ...current.inventory, status: 'failed', in_stock_count: 1, reason: '本批次1台未在当前库存结果内' }
+    await ui.reload()
+    assert.equal(ui.inventoryLabel.value, '当前在库有差异')
+    assert.equal(ui.canStartInventory.value, true)
+    current.inventory = { ...current.inventory, status: 'stale', total_count: 0, in_stock_count: 0 }
+    await ui.reload()
+    assert.equal(ui.inventory.value.total_count, null, 'expired result must not look like zero inventory')
+    current.can_check_inventory = false
+    await ui.reload(); await ui.checkInventory()
+    assert.equal(calls.filter(call => call[0] === 'inventory').length, 1, 'capability denial prevents inventory requests')
     current = { ...current, can_verify: true, task: { ...current.task, status: 'confirming', external_no: '' }, result: {} }
     await ui.reload()
     ui.externalNo.value = 'BY-KNOWN-7'
@@ -177,13 +246,37 @@ async function run() {
     await ui.verify()
     assert.equal(calls.filter(call => call[0] === 'verify').length, previousVerify, 'changed connection must not verify the old task')
     props.config.profiles.test.connection_key = 'connection-A'
-    ui.applyView({ ...clone(current), editable: true, can_verify: true, can_operate: false, can_remember: false, task: { ...clone(current.task), status: 'awaiting_confirmation' } })
-    const writeCount = calls.filter(call => ['draft', 'submit', 'verify'].includes(call[0])).length
+    ui.applyView({ ...clone(current), editable: true, can_verify: true, can_check_inventory: true, can_operate: false, can_remember: false, task: { ...clone(current.task), status: 'succeeded' } })
+    const writeCount = calls.filter(call => ['draft', 'submit', 'verify', 'inventory'].includes(call[0])).length
     assert.equal(ui.editable.value, false)
     assert.equal(ui.canSubmit.value, false)
     assert.equal(ui.canVerify.value, false)
-    await ui.saveDraft(); await ui.submit(); await ui.verify()
-    assert.equal(calls.filter(call => ['draft', 'submit', 'verify'].includes(call[0])).length, writeCount, 'read-only account cannot invoke write actions')
-    console.log('PASS: mobile SFC, closure/partial/permission/null-money boundaries, collapsed evidence, confirmation lock/cancel, paginated archives, no-send draft, frozen submit, manual/polling input preservation, connection fencing and read-only permissions')
+    assert.equal(ui.canStartInventory.value, false)
+    await ui.saveDraft(); await ui.submit(); await ui.verify(); await ui.checkInventory()
+    assert.equal(calls.filter(call => ['draft', 'submit', 'verify', 'inventory'].includes(call[0])).length, writeCount, 'read-only account cannot invoke restricted actions')
+    ui.closureExpanded.value = true; ui.detailsExpanded.value = true
+    props.focusInventory = true; props.taskId = 8; await flush()
+    assert.equal(ui.inventoryExpanded.value, true, 'inventory notification opens the current stock details')
+    assert.equal(ui.closureExpanded.value || ui.detailsExpanded.value, false, 'technical details do not leak into another task')
+    current = { ...current, can_operate: true, editable: true, can_submit: true, can_verify: false, task: { ...current.task, id: 8, status: 'awaiting_confirmation', external_no: '' } }
+    ui.applyView(clone(current))
+    ui.selection.value.lines[0].warehouse_id = 'new-warehouse'
+    api.submitPurchase = async () => { throw { code: 0, msg: '[WAREHOUSE_COMPANY_MISMATCH] 仓库与公司不符，请重新选择' } }
+    await ui.submit()
+    assert.equal(ui.awaitingReceipt.value, false)
+    assert.equal(ui.editable.value, true)
+    assert.match(ui.error.value, /未提交.*仓库与公司不符/)
+    assert.equal(ui.selection.value.lines[0].warehouse_id, 'new-warehouse', 'editable preflight rejection preserves unsaved archive adjustments')
+    let uncertainWrites = 0
+    api.submitPurchase = async () => { uncertainWrites++; throw Error('请求超时') }
+    await ui.submit()
+    assert.equal(ui.awaitingReceipt.value, true)
+    await ui.reload(true)
+    assert.match(ui.nextStep.value.title, /尚未收到/)
+    assert.equal(ui.canSubmit.value, false, 'receiving an old draft response does not unlock resubmission')
+    await ui.submit(); assert.equal(uncertainWrites, 1)
+    ui.applyView({ ...clone(current), editable: false, task: { ...current.task, status: 'created_review' } })
+    assert.equal(ui.awaitingReceipt.value, false, 'only the original task advancing clears the uncertainty latch')
+    console.log('PASS: mobile SFC/styles, financial closure boundaries, confirmation lock/cancel, no-send/frozen draft, input preservation, read-only inventory queue/poll/success/difference/stale and permissions')
 }
 run().catch(error => { console.error(error); process.exitCode = 1 })

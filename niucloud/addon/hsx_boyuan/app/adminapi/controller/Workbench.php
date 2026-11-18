@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 namespace addon\hsx_boyuan\app\adminapi\controller;
-use addon\hsx_boyuan\app\service\{ConfigService,TaskService,PermissionService,ReferenceService,BatchService,MappingCandidateService};
+use addon\hsx_boyuan\app\service\{ConfigService,TaskService,PermissionService,ReferenceService,BatchService,MappingCandidateService,PaymentSyncService};
 use addon\hsx_boyuan\app\support\{Contract,Problem};
 use core\base\BaseAdminController;
 use core\exception\CommonException;
@@ -13,12 +13,17 @@ final class Workbench extends BaseAdminController
         (new PermissionService())->assertApi($method,'boyuan/'.$api);
         try { return success($callback((int)$this->request->siteId(),(int)$this->request->uid())); }
         catch (Problem $e) { throw new CommonException('['.$e->reason.'] '.$e->getMessage()); }
+        catch (CommonException $e) { throw $e; }
         catch (\Throwable $e) { $info=$e instanceof \think\db\exception\PDOException ? ($e->getData()['PDO Error Info']??[]) : []; $driver=(int)($info['Driver Error Code']??0); Log::error('hsx_boyuan command error; type='.get_class($e).'; driver_code='.$driver.'; location='.basename($e->getFile()).':'.$e->getLine().($driver===1146?'; missing_table='.(preg_match("/Table '([a-zA-Z0-9_.]+)'/",(string)($info['Driver Error Message']??''),$m)?$m[1]:'unknown'):'')); throw new CommonException('操作未完成，请按任务编号核查插件安装和服务状态'); }
     }
     public function config() { return $this->run('get','config',fn($site)=>(new ConfigService())->get($site)); }
     public function saveConfig() {
-        $data=$this->request->params([['revision',-1],['mode','mock'],['enabled',false],['paused',true],['finance_enabled',false],['purchase_enabled',false],['purchase_mode','manual'],['profile',[]],['assignee_uid',0],['confirm_account','']]);
-        return $this->run('post','config',fn($site,$uid)=>(new ConfigService())->save($site,$uid,$data));
+        return $this->run('post','config',function($site,$uid) {
+            $old=(new ConfigService())->get($site,false);
+            $fields=[['revision',-1],['profile',[]],['confirm_account','']];
+            foreach(['mode','enabled','paused','finance_enabled','purchase_enabled','purchase_mode','uat_payment_enabled','assignee_uid'] as $key) $fields[]=[$key,$old[$key]];
+            return (new ConfigService())->save($site,$uid,$this->request->params($fields));
+        });
     }
     public function probe() { return $this->run('post','probe',fn($site,$uid)=>(new ConfigService())->probe($site,$uid)); }
     public function staff() { return $this->run('get','staff',function($site) {
@@ -30,21 +35,26 @@ final class Workbench extends BaseAdminController
         return $this->run('get','tasks',function($site) use($input) {
             $config=(new ConfigService())->get($site); $active=$config['profiles'][$config['mode']];
             $query=Db::name('hsx_boyuan_task')->where('site_id',$site)->where('connection_key',$active['connection_key']);
+            try { (new PermissionService())->assertApi('get','erp/finance/payable/lists'); }
+            catch(CommonException $ignored) { $query->where('kind','<>',\addon\hsx_boyuan\app\service\PaymentSyncService::KIND); }
             if ($input['mode']!=='') $query->where('mode',$input['mode']);
             $counts=clone $query;
-            $groups=['ready'=>['awaiting_confirmation','pending','retry'],'working'=>['pending','retry','processing','waiting','confirming'],'action_required'=>['blocked','rejected','partial','attention','manual_pending','created_review','needs_review'],'completed'=>['simulated','succeeded']];
+            $groups=['ready'=>['awaiting_confirmation','pending','retry'],'working'=>['pending','retry','processing','waiting','confirming'],'action_required'=>['awaiting_confirmation','blocked','rejected','partial','attention','manual_pending','created_review','needs_review'],'completed'=>['simulated','succeeded',PaymentSyncService::REGISTERED]];
             if(isset($groups[$input['status']])) $query->whereIn('status',$groups[$input['status']]);
             elseif ($input['status']!=='') $query->where('status',$input['status']);
             if (trim($input['keyword'])!=='') $query->where('business_no','like','%'.addcslashes(mb_substr(trim($input['keyword']),0,100),'%_\\').'%');
             $rows=(clone $query)->field('id,mode,kind,business_no,status,reason,external_no,attempts,notice_status,side_effect,request_json,create_at,update_at,connection_key')->order('id desc')->page(max(1,(int)$input['page']),min(100,max(1,(int)$input['limit'])))->select()->toArray();
-            foreach($rows as &$row) { $row['batch_action']=BatchService::actionFor($row); unset($row['request_json']); } unset($row);
+            foreach($rows as &$row) { $row['batch_action']=BatchService::actionFor($row); $request=Contract::decode($row['request_json']); if(in_array($request['schema']??'',[\addon\hsx_boyuan\app\service\PurchaseInventoryService::SCHEMA,PaymentSyncService::SCHEMA],true)) $row['parent_purchase_task_id']=(int)($request['source_task_id']??0); if(PaymentSyncService::isRegistered($row)) $row['reason']=PaymentSyncService::REGISTERED_REASON; unset($row['request_json']); } unset($row);
             return ['total'=>(clone $query)->count(),'data'=>$rows,'counts'=>$counts->field('status,COUNT(*) AS total')->group('status')->select()->toArray()];
         });
     }
     public function detail(int $id) { return $this->run('get','tasks/<id>',function($site) use($id) {
         $row=Db::name('hsx_boyuan_task')->where('site_id',$site)->where('id',$id)->find(); if (!$row) throw new Problem('TASK_MISSING','任务不存在');
+        if($row['kind']===\addon\hsx_boyuan\app\service\PaymentSyncService::KIND || (Contract::decode($row['request_json'])['schema']??'')===\addon\hsx_boyuan\app\service\PaymentSyncService::SCHEMA) (new PermissionService())->assertApi('get','erp/finance/payable/lists');
         foreach (['snapshot','request','result'] as $name) { $row[$name]=Contract::redact(Contract::decode($row[$name.'_json'])); unset($row[$name.'_json']); }
         unset($row['lease_token']);
+        if(PaymentSyncService::isRegistered($row)) $row['reason']=PaymentSyncService::REGISTERED_REASON;
+        if(in_array($row['request']['schema']??'',[\addon\hsx_boyuan\app\service\PurchaseInventoryService::SCHEMA,\addon\hsx_boyuan\app\service\PaymentSyncService::SCHEMA],true)) $row['parent_purchase_task_id']=(int)($row['request']['source_task_id']??0);
         $row['missing_mappings']=$row['status']==='blocked'?TaskService::missingMappings($site,$row['connection_key'],$row['snapshot']):[];
         $row['logs']=[]; // Detailed operational logs are written only through the PHP Log channel.
         $config=(new ConfigService())->get($site); $row['active_connection']=$row['connection_key']===$config['profiles'][$config['mode']]['connection_key'] && $row['mode']===$config['mode'];
