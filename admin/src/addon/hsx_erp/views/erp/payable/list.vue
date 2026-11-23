@@ -1,6 +1,9 @@
 <template>
     <ErpDesktopPage class="main-container">
         <section class="erp-list-surface">
+            <el-alert v-if="entryError" :closable="false" type="warning" :title="entryError">
+                <el-button type="primary" link @click="openFromOriginal(route.query.payable_id)">重新核对本机应付</el-button>
+            </el-alert>
             <ErpWorkspaceHeader page="payable" :filter-count="searchConditionCount">
                 <template #title>应付款</template>
                 <template #subtitle>统一处理采购、整备、销售退货与售后补差等支出；按业务来源和设备逐笔核对。</template>
@@ -139,7 +142,7 @@
             </div>
         </section>
 
-        <HsxDialog class="erp-desktop-overlay" :confirm-loading="pay.saving" v-model="pay.visible" :title="isNonDevicePay ? '财务确认经营付款' : '财务确认付款'" width="1080px" :destroy-on-close="false">
+        <HsxDialog class="erp-desktop-overlay" :confirm-loading="pay.saving" v-model="pay.visible" :title="isNonDevicePay ? '登记已付经营款' : '登记已付设备款'" width="1080px" :destroy-on-close="false">
             <div v-if="pay.row" class="mb-4 rounded bg-[var(--el-fill-color-light)] px-4 py-3 text-sm text-[color:var(--el-text-color-regular)]">
                 <div>{{ partyRoleLabel(pay.row, '付款对象') }}：<span class="font-medium text-[color:var(--el-text-color-primary)]">{{ pay.row.party_name }}</span></div>
                 <ErpFinanceSourceMeta :row="pay.row" compact class="mt-3" default-direction="expense" />
@@ -165,7 +168,7 @@
                     <div class="mt-1 font-medium text-[color:var(--el-color-danger)]">{{ money(paySelectedTotal) }}</div>
                 </div>
             </div>
-            <div class="mb-4 text-xs text-[color:var(--el-text-color-secondary)]">已选 {{ paySelectedCount }} {{ isNonDevicePay ? '笔' : '台' }}，本次付款后仍欠 {{ money(payAfterRemainTotal) }}。历史付款不重复支付；展开设备行可查看原付款记录。</div>
+            <div class="mb-4 text-sm text-[color:var(--el-text-color-regular)]">请在实际转款后登记，这里不会发起转账。已选 {{ paySelectedCount }} {{ isNonDevicePay ? '笔' : '台' }}，登记后剩余应付 {{ money(payAfterRemainTotal) }}。</div>
             <el-form label-width="100px">
                 <el-form-item label="付款账户">
                     <el-select v-model="pay.form.capital_account_id" clearable class="w-full" placeholder="选择银行卡/微信/支付宝">
@@ -245,7 +248,7 @@
             </el-form>
             <template #footer>
                 <el-button :disabled="pay.saving" @click="pay.visible = false">取消</el-button>
-                <el-button type="primary" :loading="pay.saving" :disabled="(!canSubmitPay) || (pay.saving)" @click="submitPay">确认付款并记账</el-button>
+                <el-button type="primary" :loading="pay.saving" :disabled="(!canSubmitPay) || (pay.saving)" @click="submitPay">已实际转款，确认登记</el-button>
             </template>
         </HsxDialog>
 
@@ -344,8 +347,9 @@
         </HsxDialog>
 
         <HsxDrawer class="erp-desktop-overlay" v-model="items.visible" title="应付详情" size="980px" destroy-on-close>
-            <ErpFinanceOverview v-if="items.row" :row="items.row" direction="expense" :party-label="partyRoleLabel(items.row, '付款对象')" :remaining="remain(items.row)" :status="partyStatusMeta(items.row)" />
-            <div class="erp-finance-section-heading"><h3>设备明细</h3><span>{{ items.total }} 台</span></div>
+            <ErpFinanceOverview v-if="items.row" :row="items.row" direction="expense" :party-label="partyRoleLabel(items.row, '付款对象')" :remaining="remain(items.row)" :status="{...partyStatusMeta(items.row), label: '本站' + partyStatusMeta(items.row).label}" />
+            <div class="erp-finance-section-heading"><h3>{{ items.row?._original ? '本机应付' : '设备明细' }}</h3><span>{{ items.total }} 台</span></div>
+            <el-alert v-if="items.error" :closable="false" type="warning" :title="items.error"><el-button link type="primary" @click="loadItems">重新读取</el-button></el-alert>
             <el-table :data="items.data" v-loading="items.loading" size="default" max-height="360" empty-text="暂无设备明细">
                 <el-table-column type="expand" width="44">
                     <template #default="{ row }">
@@ -354,6 +358,8 @@
                             <el-descriptions-item label="采购时间">{{ formatTime(row.purchase_at) }}</el-descriptions-item>
                             <el-descriptions-item label="库存位置">{{ [row.warehouse_name, row.location_name].filter(Boolean).join(' / ') || '-' }}</el-descriptions-item>
                             <el-descriptions-item label="应付单号"><ErpCopyText :value="row.payable_no" title="应付单号" /></el-descriptions-item>
+                            <el-descriptions-item label="财务下一步" :span="2">{{ payableHint(row) }}</el-descriptions-item>
+                            <el-descriptions-item v-if="row.integration_results?.length" label="关联回执" :span="2"><ErpDocumentSyncResult :results="row.integration_results" operator-view="payable" @refresh="loadItems" /></el-descriptions-item>
                         </el-descriptions>
                     </template>
                 </el-table-column>
@@ -363,21 +369,26 @@
                         <div class="erp-finance-secondary mt-1">{{ erpSerialText(row) }}</div>
                     </template>
                 </el-table-column>
-                <el-table-column label="应付" width="130" align="right"><template #default="{ row }">{{ money(row.payable_amount) }}</template></el-table-column>
-                <el-table-column label="已结算" width="130" align="right"><template #default="{ row }">{{ money(row.allocated_paid) }}</template></el-table-column>
-                <el-table-column label="剩余待付" width="130" align="right"><template #default="{ row }"><span class="text-[color:var(--el-color-warning)]">{{ money(row.allocated_remain) }}</span></template></el-table-column>
-                <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag size="small" :type="statusMeta(row.payable_status).type">{{ statusMeta(row.payable_status).label }}</el-tag></template></el-table-column>
+                <el-table-column label="本站应付" width="110" align="right"><template #default="{ row }">{{ row.payable_amount == null ? '待核对' : money(row.payable_amount) }}</template></el-table-column>
+                <el-table-column label="已结算" width="110" align="right"><template #default="{ row }">{{ row.allocated_paid == null ? '待核对' : money(row.allocated_paid) }}</template></el-table-column>
+                <el-table-column label="剩余待付" width="110" align="right"><template #default="{ row }"><span :class="Number(row.allocated_remain) > 0 ? 'text-[color:var(--el-color-warning)]' : ''">{{ row.allocated_remain == null ? '待核对' : money(row.allocated_remain) }}</span></template></el-table-column>
+                <el-table-column label="本站状态" width="110"><template #default="{ row }"><el-tag size="small" :type="statusMeta(row.payable_status).type">{{ statusMeta(row.payable_status).label }}</el-tag></template></el-table-column>
             </el-table>
             <div v-if="items.total > items.limit" class="mt-4 flex justify-end">
                 <el-pagination v-model:current-page="items.page" v-model:page-size="items.limit" layout="total, prev, pager, next" :total="items.total" @current-change="loadItems" />
             </div>
-            <HsxFold class="erp-finance-records" :title="`本页设备结算（${items.settlements.length}）`">
-                <ErpSettlementCards :rows="items.settlements" :loading="items.loading" />
+            <section v-if="!items.error && items.settlements.length === 1 && confirmedOutgoing(items.settlements[0])" aria-label="本笔付款凭证">
+                <div class="erp-finance-section-heading"><h3>{{ items.total > items.data.length ? '本页设备关联的付款凭证' : '本笔付款凭证' }}</h3></div>
+                <ErpSettlementCards finance-voucher :rows="items.settlements" :loading="items.loading" @refresh="loadItems" />
+            </section>
+            <HsxFold v-else-if="!items.error && items.settlements.length" class="erp-finance-records" :title="`本页设备结算（${items.settlements.length}）`">
+                <ErpSettlementCards finance-voucher :rows="items.settlements" :loading="items.loading" @refresh="loadItems" />
             </HsxFold>
             <template #footer>
                 <el-button @click="items.visible = false">关闭</el-button>
                 <el-button v-if="items.row && canOffset(items.row)" type="warning" plain @click="openOffset(items.row); items.visible = false">折账</el-button>
-                <el-button v-if="items.row && canConfirmPay(items.row)" type="primary" @click="openPay(items.row); items.visible = false">去付款</el-button>
+                <span v-if="!items.error && !items.loading && items.data.length === 1" class="erp-finance-secondary">{{ payableHint(items.data[0]) }}</span>
+                <el-button v-if="items.row && !items.error && !items.loading && items.data.length && canConfirmPay(items.row)" type="primary" @click="openPay(items.row); items.visible = false">登记已付款</el-button>
             </template>
         </HsxDrawer>
 
@@ -457,7 +468,9 @@
                     <el-button link type="primary" @click="settle.assetId = 0; settle.assetLabel = ''; reloadSettlement()">清除</el-button>
                 </span>
             </div>
-            <ErpSettlementCards :rows="settle.data" :loading="settle.loading" />
+            <ErpSettlementCards finance-voucher :rows="settle.data" :loading="settle.loading">
+                <template #voucher-actions="{ row }"><ErpPaymentVoucherSource v-if="financeOperator.rules.includes('hsx_erp_payable_party_items')" :voucher="row" /></template>
+            </ErpSettlementCards>
             <div class="settlement-pagination">
                 <el-pagination
                     v-model:current-page="settle.page"
@@ -476,10 +489,13 @@ import ErpDesktopPage from '@/addon/hsx_erp/components/ErpDesktopPage.vue'
 import ErpWorkspaceHeader from '@/addon/hsx_erp/components/ErpWorkspaceHeader.vue'
 import ErpDataTable from '@/addon/hsx_erp/components/ErpDataTable.vue'
 import ErpFinanceOverview from '@/addon/hsx_erp/components/ErpFinanceOverview.vue'
+import ErpDocumentSyncResult from '@/addon/hsx_erp/components/ErpDocumentSyncResult.vue'
 import { HsxSearchPanel, HsxDialog, HsxDrawer, useFeedback, HsxFold } from '@/addon/hsx_components/core'
 import { erpNamedLabel, erpSerialText } from '@/addon/hsx_erp/utils/display'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import useUserStore from '@/stores/modules/user'
+import { getErpPayableInfo } from '@/addon/hsx_erp/api/erp'
 import { ElMessageBox } from 'element-plus'
 import { Refresh, Search, Tickets } from '@element-plus/icons-vue'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
@@ -490,6 +506,8 @@ import { useErpPageRefresh } from '@/addon/hsx_erp/hooks/useErpPageRefresh'
 import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVoucherUpload.vue'
 import ErpImageGallery from '@/addon/hsx_erp/components/ErpImageGallery.vue'
 import ErpSettlementCards from '@/addon/hsx_erp/components/ErpSettlementCards.vue'
+import ErpPaymentVoucherSource from '@/addon/hsx_erp/components/ErpPaymentVoucherSource.vue'
+import { confirmedOutgoing, collectPageVouchers } from '@/addon/hsx_erp/utils/payable-voucher'
 import ErpFinanceSourceMeta from '@/addon/hsx_erp/components/ErpFinanceSourceMeta.vue'
 import ErpCopyText from '@/addon/hsx_erp/components/ErpCopyText.vue'
 import ErpPartySelect from '@/addon/hsx_erp/components/ErpPartySelect.vue'
@@ -500,6 +518,7 @@ const hsxFeedback = useFeedback()
 const payeeLookupVisible = ref(false)
 
 const route = useRoute()
+const financeOperator = useUserStore()
 
 const payableRoleFocus = [
     { role: '财务', focus: '采购、整备、售后等各类应付，付款账户与逐台核销明细' },
@@ -509,7 +528,7 @@ const payableRoleFocus = [
 
 const routeStatus = String(route.query.status || '')
 const activeStatus = ref(['', 'pending', 'partial', 'settled'].includes(routeStatus) ? routeStatus : '')
-const search = reactive({ keyword: '', party_id: null as number | null, party_name: '', source_no: String(route.query.source_no || ''), contact_mobile: '', finance_type_key: '', business_source_key: '', channel_code: '', can_offset: '' })
+const search = reactive({ keyword: typeof route.query.imei === 'string' ? route.query.imei : '', party_id: null as number | null, party_name: '', source_no: String(route.query.source_no || ''), contact_mobile: '', finance_type_key: '', business_source_key: '', channel_code: '', can_offset: '' })
 const advancedVisible = ref(false)
 const dateRange = ref<any[]>([])
 const searchConditionCount = computed(() => Object.entries(search).filter(([key, value]) => key !== 'party_name' && value !== '' && value !== null && value !== undefined).length + (dateRange.value?.length ? 1 : 0))
@@ -518,7 +537,24 @@ const accounts = ref<any[]>([])
 const registeredFinanceCategories = ref<any[]>([])
 const registeredChannels = ref<any[]>([])
 const pay = reactive({ visible: false, saving: false, loading: false, row: null as any, items: [] as any[], form: { capital_account_id: 0, remark: '', voucher_urls: '' } })
-const items = reactive({ visible: false, loading: false, row: null as any, data: [] as any[], settlements: [] as any[], page: 1, limit: 15, total: 0 })
+const items = reactive({ visible: false, loading: false, error: '', row: null as any, data: [] as any[], settlements: [] as any[], page: 1, limit: 15, total: 0 })
+const entryError = ref('')
+let entryVersion = 0, detailVersion = 0
+async function openFromOriginal(raw: unknown) {
+    const v = ++entryVersion
+    const readOnly = route.query.view === 'settlement'
+    entryError.value = ''
+    if (items.row?._original) { items.visible = false; items.row = null; ++detailVersion }
+    if (raw == null) return
+    if (typeof raw !== 'string' || !/^[1-9]\d*$/.test(raw) || !Number.isSafeInteger(Number(raw))) { entryError.value = '应付编号无效，请从回收原单重新进入。'; return }
+    try {
+        const {data}: any = await getErpPayableInfo(Number(raw))
+        if (v !== entryVersion) return
+        if (Number(data?.payable_id) !== Number(raw) || !data.party_id || data.source_type !== 'purchase' || !data.purchase_order_id) throw new Error()
+        openItems({...data, _original: true, _readOnly: readOnly})
+    } catch { if (v === entryVersion) entryError.value = '没有读到这台设备的原应付，请核对权限和关联；未发起付款。' }
+}
+watch([() => route.name === 'hsx_erp_payable' ? route.query.payable_id : undefined, () => route.query.view], ([id]) => openFromOriginal(id), { immediate: true })
 const ledger = reactive({ visible: false, loading: false, keyword: '', data: [] as any[], expanded: [] as Array<number | string>, page: 1, limit: 15, total: 0 })
 const offset = reactive({ visible: false, saving: false, loading: false, row: null as any, payables: [] as any[], receivables: [] as any[], form: { amount: 0, settle_diff: false, capital_account_id: 0, remark: '', voucher_urls: '' } })
 const settle = reactive({ visible: false, loading: false, keyword: '', type: '', assetId: 0, assetLabel: '', data: [] as any[], page: 1, limit: 15, total: 0 })
@@ -657,8 +693,10 @@ function handleReset() {
     handleSearch()
 }
 
+let payDraftVersion = 0
 async function openPay(row: any) {
     if (!canConfirmPay(row)) return
+    const v = ++payDraftVersion
     pay.row = row
     pay.items = []
     pay.form = { capital_account_id: accounts.value[0]?.id || 0, remark: row.source_meta?.business_reason || (row.source_type === 'sale_return' ? (row.sale_return_business_type === 'after_sale_compensation' ? `公司向客户【${row.party_name || '-'}】支付售后补差款` : `公司向客户【${row.party_name || '-'}】退还销售货款`) : (row.source_type === 'refurbish' ? `公司向整备服务商【${row.party_name || '-'}】支付设备整备费用` : '')), voucher_urls: '' }
@@ -672,25 +710,34 @@ async function openPay(row: any) {
             source_type: row.source_type || '',
             start_at: Number(dateRange.value?.[0] || 0),
             end_at: Number(dateRange.value?.[1] || 0) ? Number(dateRange.value[1]) + 86399 : 0,
+            ...(row._original ? { ...exactItemParams(row) } : {}),
             page: 1,
             limit: 200
         })
-        pay.items = (res?.data?.data || [])
-            .filter((item: any) => isNonDevicePay.value ? Number(item.payable_id || 0) > 0 : Number(item.asset_payable_id || 0) > 0)
+        if (v !== payDraftVersion || !pay.visible) return
+        const draftItems = res?.data?.data
+        if (!Array.isArray(draftItems) || (row._original && (draftItems.length !== 1 || Number(draftItems[0]?.payable_id) !== Number(row.payable_id)))) throw new Error()
+        pay.items = draftItems
+            .filter((item: any) => (!row._original || Number(item.payable_id) === Number(row.payable_id)) && (isNonDevicePay.value ? Number(item.payable_id || 0) > 0 : Number(item.asset_payable_id || 0) > 0))
             .map((item: any) => {
                 const payableRemain = Number(item.allocated_remain || 0)
                 return { ...item, checked: payableRemain > 0, pay_amount: payableRemain > 0 ? payableRemain : 0 }
             })
         if (!pay.items.length && remain(row) > 0) {
-            hsxFeedback.warning(isNonDevicePay.value ? '当前经营应付明细已变化，请刷新后重试' : '当前应付缺少设备级账目，请用新采购开单数据验证')
+            hsxFeedback.warning('没有可登记的应付明细。请核对原单和结算记录，不要另建采购单。')
         }
+    } catch {
+        if (v !== payDraftVersion || !pay.visible) return
+        pay.visible = false
+        hsxFeedback.warning('未能读取可登记的应付。已返回原单，没有执行付款。')
+        openItems(row)
     } finally {
-        pay.loading = false
+        if (v === payDraftVersion) pay.loading = false
     }
 }
 
 async function submitPay() {
-    if (!pay.row) return
+    if (!pay.row || pay.saving || confirmPayBusy) return
     const selected = pay.items
         .filter((row: any) => row.checked && Number(row.pay_amount || 0) > 0)
         .map((row: any) => ({ payable_id: Number(row.payable_id || 0), amount: Number(row.pay_amount || 0) }))
@@ -699,24 +746,39 @@ async function submitPay() {
     if (!pay.form.capital_account_id) return hsxFeedback.warning('请选择付款账户')
     if (pay.items.some((row: any) => row.checked && Number(row.pay_amount || 0) > Number(row.allocated_remain || 0))) return hsxFeedback.warning('本次付款不能大于设备剩余应付')
     const payAccount = accounts.value.find((item: any) => Number(item.id) === Number(pay.form.capital_account_id))
+    confirmPayBusy = true
     const payConfirmed = await ElMessageBox.confirm(
-        `确认向「${pay.row.party_name || '该付款对象'}」付款 ${money(paySelectedTotal.value)}，付款账户「${payAccount?.account_name || '所选账户'}」，核销 ${selected.length} ${isNonDevicePay.value ? '笔经营支出' : '台设备应付'}。确认后将写入资金流水，不能直接删除。`,
-        isNonDevicePay.value ? '确认经营付款' : '确认设备付款',
-        { type: 'warning', confirmButtonText: '确认付款并记账', cancelButtonText: '返回检查' }
+        `请核对实际转款：收款方「${pay.row.party_name || '该付款对象'}」，金额 ${money(paySelectedTotal.value)}，付款账户「${payAccount?.account_name || '所选账户'}」。这里只登记已付并核销 ${selected.length} 笔应付，不会发起银行转账。`,
+        isNonDevicePay.value ? '登记已付经营款' : '登记已付设备款',
+        { type: 'warning', confirmButtonText: '已转款，登记本次记录', cancelButtonText: '返回检查' }
     ).then(() => true).catch(() => false)
-    if (!payConfirmed) return
+    confirmPayBusy = false
+    if (!payConfirmed || pay.saving) return
     pay.saving = true
+    const body = { ...pay.form, items: selected }
+    const signature = JSON.stringify([pay.row.party_id,body])
+    if (!payRequest || payRequest.signature !== signature) payRequest = { signature, id: 'items-payment:' + crypto.getRandomValues(new Uint32Array(4)).join('-') }
     try {
-        await confirmErpPayableItemsPayment(pay.row.party_id, { ...pay.form, items: selected })
-        hsxFeedback.success('付款已确认')
+        await confirmErpPayableItemsPayment(pay.row.party_id, { ...body, request_id: payRequest.id })
+    } catch {
+        const original = pay.row
+        pay.visible = false
+        hsxFeedback.warning('未取得这次登记的成功回执。请先核对原应付和结算明细，不要再次转款。')
+        openItems(original)
+        return
+    } finally { pay.saving = false }
+    payRequest = undefined
+    hsxFeedback.success('已登记本站付款，不需要再次转款。')
+    try {
         pay.visible = false
         await loadList()
-        if (items.visible) await loadItems()
+        if (pay.row._original) await openFromOriginal(String(pay.row.payable_id))
+        else if (items.visible) await loadItems()
         await loadAccounts()
-    } finally {
-        pay.saving = false
-    }
+    } catch { hsxFeedback.warning('付款已登记，但列表未刷新；请重新查看原应付，不要重复登记。') }
 }
+let confirmPayBusy = false
+let payRequest: { signature: string; id: string } | undefined
 
 function payAfterRemain(row: any) {
     if (!row.checked) return Number(row.allocated_remain || 0)
@@ -754,7 +816,7 @@ async function openOffset(row: any) {
                 model: it.model || '',
                 imei: it.imei || '',
                 source_no: it.purchase_no || it.source_no || '',
-                remain: Number(it.allocated_remain ?? (Number(it.total_cost || 0) - Number(it.allocated_paid || 0))),
+                remain: Number(it.allocated_remain ?? 0),
                 checked: true
             }))
             .filter((it: any) => it.payable_id > 0 && it.remain > 0)
@@ -846,14 +908,28 @@ async function submitOffset() {
 
 function openItems(row: any) {
     items.row = row
+    items.data = []
+    items.total = 0
     items.page = 1
     items.settlements = []
     items.visible = true
     loadItems()
 }
 
+function exactItemParams(row: any) {
+    return { keyword: '', status: '', source_no: '', finance_type_key: '', business_source_key: '', channel_code: '', contact_mobile: '', can_offset: '',
+        start_at: 0, end_at: 0, payable_id: row.payable_id, purchase_order_id: row.purchase_order_id, source_type: 'purchase' }
+}
+function payableHint(row: any) {
+    if (!row.payable_id || !['pending','partial','settled'].includes(row.payable_status) || row.allocated_remain == null) return '未确认原应付状态，请财务核对，不要重新入库或付款。'
+    if (Number(row.allocated_remain) === 0) return row.payable_status === 'settled' ? '本站已结清，无需再次付款。' : '金额与状态不一致，请财务核对原单；不要再次付款。'
+    if (items.row?._readOnly) return '当前仅查看原结算凭证；本站剩余应付 ' + money(row.allocated_remain) + '。'
+    return '财务核对实际转款后，只登记尚欠的 ' + money(row.allocated_remain) + '。'
+}
 async function loadItems() {
     if (!items.row?.party_id) return
+    const v = ++detailVersion, target = items.row
+    items.error = ''
     items.loading = true
     try {
         const res: any = await getErpPayablePartyItems(items.row.party_id, {
@@ -863,26 +939,20 @@ async function loadItems() {
             source_type: items.row.source_type || '',
             start_at: Number(dateRange.value?.[0] || 0),
             end_at: Number(dateRange.value?.[1] || 0) ? Number(dateRange.value[1]) + 86399 : 0,
+            ...(target._original ? exactItemParams(target) : {}),
             page: items.page,
             limit: items.limit
         })
-        items.data = res?.data?.data || []
-        items.settlements = collectSettlements(items.data)
+        if (v !== detailVersion) return
+        const rows = res?.data?.data
+        if (!Array.isArray(rows) || (target._original && (rows.length !== 1 || Number(rows[0].payable_id) !== Number(target.payable_id)))) throw new Error()
+        items.data = rows
+        items.settlements = collectPageVouchers(items.data)
         items.total = res?.data?.total || 0
-    } finally {
-        items.loading = false
-    }
-}
-
-function collectSettlements(rows: any[]) {
-    const map = new Map<string, any>()
-    ;(rows || []).forEach((item: any) => {
-        ;(item.settlements || []).forEach((settlement: any) => {
-            const key = `${settlement.settlement_id}_${settlement.applied_amount}_${item.payable_id}`
-            if (!map.has(key)) map.set(key, { ...settlement, _view_key: key })
-        })
-    })
-    return Array.from(map.values())
+    } catch {
+        if (v !== detailVersion) return
+        items.data = []; items.total = 0; items.settlements = []; items.error = '未能确认应付明细，请刷新或让管理员核对原单。这里没有执行付款。'
+    } finally { if (v === detailVersion) items.loading = false }
 }
 
 function openLedger() {
@@ -935,15 +1005,17 @@ function remain(row: any) {
 }
 
 function canConfirmPay(row: any) {
-    return remain(row) > 0
+    return !row._readOnly && financeOperator.rules.includes('hsx_erp_payable_items_payment') && row.status !== 'void' && (!row._original || (['pending', 'partial'].includes(row.status) && Number(items.data[0]?.allocated_remain) > 0)) && remain(row) > 0
 }
 
 function canOffset(row: any) {
-    return Boolean(row.can_offset) && remain(row) > 0
+    return !row._readOnly && Boolean(row.can_offset) && remain(row) > 0
 }
 
 function statusMeta(status: string) {
     const map: any = {
+        review: { label: '待核对', type: 'warning' },
+        void: { label: '已作废', type: 'info' },
         pending: { label: '待付款', type: 'warning' },
         partial: { label: '部分付款', type: 'primary' },
         settled: { label: '已结清', type: 'success' }

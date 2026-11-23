@@ -10,6 +10,8 @@ const vue = require(path.join(app, 'node_modules/vue'))
 const transpile = source => ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText
 const helper = { exports: {} }
 vm.runInNewContext(transpile(fs.readFileSync(path.join(app, 'src/addon/hsx_boyuan/utils/purchase-form.ts'), 'utf8')), { module: helper, exports: helper.exports })
+const opening = { exports: {} }
+vm.runInNewContext(transpile(fs.readFileSync(path.join(app, 'src/addon/hsx_boyuan/utils/opening.ts'), 'utf8')), { module: opening, exports: opening.exports })
 const filename = path.join(app, 'src/addon/hsx_boyuan/pages/workbench/index.vue')
 const parsed = compiler.parse(fs.readFileSync(filename, 'utf8'), { filename })
 assert.equal(parsed.errors.length, 0)
@@ -29,7 +31,7 @@ const api = {
 const moduleFixture = { exports: {} }
 vm.runInNewContext(transpile(script.content), {
     exports: moduleFixture.exports, module: moduleFixture,
-    require: name => name === 'vue' ? { ...vue, onUnmounted: () => {} } : name === '@dcloudio/uni-app' ? { onLoad: fn => { lifecycle.onLoad = fn }, onShow: fn => { lifecycle.onShow = fn }, onHide: () => {} } : name === '../../api/index' ? api : name === '../../utils/purchase-form' ? helper.exports : name.endsWith('.vue') ? {} : (() => { throw new Error('Unexpected import ' + name) })(),
+    require: name => name === 'vue' ? { ...vue, onUnmounted: () => {} } : name === '@dcloudio/uni-app' ? { onLoad: fn => { lifecycle.onLoad = fn }, onShow: fn => { lifecycle.onShow = fn }, onHide: () => {} } : name === '../../api/index' ? api : name === '../../utils/purchase-form' ? helper.exports : name === '../../utils/opening' ? opening.exports : name.endsWith('.vue') ? {} : (() => { throw new Error('Unexpected import ' + name) })(),
     setInterval: () => 1, clearInterval: () => {}, uni: { showToast: data => toasts.push(data.title), showModal: data => data.success({ confirm: true }) }
 })
 const ui = moduleFixture.exports.default.setup({}, { expose: () => {} })

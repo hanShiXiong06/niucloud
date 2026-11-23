@@ -25,6 +25,7 @@ use addon\hsx_erp\app\model\ErpSaleReturnOrder;
 use addon\hsx_erp\app\model\ErpSettlement;
 use addon\hsx_erp\app\model\ErpSettlementLink;
 use addon\hsx_erp\app\model\ErpCapitalAccount;
+use addon\hsx_erp\app\support\ErpDevicePayableDisplay;
 use addon\hsx_erp\app\support\ErpIdempotency;
 use addon\hsx_erp\app\support\ErpMoney;
 use addon\hsx_erp\app\support\ErpPartyMemberNames;
@@ -459,6 +460,11 @@ class ErpFinanceService extends BaseAdminService
         $row['supplement_badge'] = $this->hasMallSupplementMarker((array)$row['items']) ? '商城补录资产' : '';
 
         $partyRows = [$row];
+        if ($saleOrderId > 0 && !empty($row['source_order']['sale_no'])) {
+            ErpPurchaseExtensionService::attachFinance((int)$this->site_id, 'receivable', $partyRows, [
+                $receivableId => ['document_id'=>$saleOrderId, 'number'=>$row['source_order']['sale_no'], 'asset_id'=>0, 'line_id'=>0, 'settlements'=>[]]
+            ]);
+        }
         ErpPartyMemberNames::append($this->site_id, $partyRows);
         $row = $partyRows[0];
 
@@ -1658,17 +1664,17 @@ class ErpFinanceService extends BaseAdminService
         $payableTable = (new ErpPayable())->getTable();
         $query = ErpAsset::alias('a')
             ->leftJoin($orderTable . ' o', 'o.id = a.purchase_order_id AND o.site_id = a.site_id')
-            ->leftJoin($payableTable . ' p', "p.source_type = 'purchase_asset' AND p.source_id = a.id AND p.site_id = a.site_id")
-            ->leftJoin($payableTable . ' po', "po.source_type = 'purchase' AND po.source_id = a.purchase_order_id AND po.site_id = a.site_id")
+            ->leftJoin($payableTable . ' p', ErpDevicePayableDisplay::originalJoin($payableTable, 'a', 'p'))
             ->where([['a.site_id', '=', $this->site_id], ['a.party_id', '=', $partyId]]);
         if (!empty($where['purchase_order_id'])) {
             $query->where('a.purchase_order_id', '=', (int)$where['purchase_order_id']);
         }
         if (!empty($where['payable_id'])) {
-            $query->whereRaw('IFNULL(p.id, po.id) = ' . (int)$where['payable_id']);
+            $query->where('p.id', '=', (int)$where['payable_id']);
         }
         $this->applyFinanceFilters($query, $where, 'a', 'o', 'p');
-        $page = $query->field([
+        $state = ErpDevicePayableDisplay::stateSql($payableTable, (new ErpPurchaseReturnItem())->getTable(), 'a', 'p');
+        $page = $query->fieldRaw("$state AS dp_state, p.id AS dp_id, p.amount AS dp_amount, p.settled_amount AS dp_paid")->field([
             'a.id',
             'a.asset_no',
             'a.imei',
@@ -1684,41 +1690,32 @@ class ErpFinanceService extends BaseAdminService
             'o.purchase_channel',
             'o.purchase_at',
             'o.total_cost as order_total_cost',
-            'IFNULL(p.id, po.id) as payable_id',
-            'COALESCE(p.payable_no, po.payable_no) as payable_no',
-            'IFNULL(p.amount, a.total_cost) as payable_amount',
-            'IFNULL(p.settled_amount, po.settled_amount) as settled_amount',
-            'IFNULL(p.status, po.status) as payable_status',
-            'p.id as asset_payable_id',
-            'po.id as order_payable_id',
-            'COALESCE(p.origin_plugin,po.origin_plugin,o.origin_plugin) as origin_plugin',
-            'COALESCE(p.origin_plugin_name,po.origin_plugin_name,o.origin_plugin_name) as origin_plugin_name',
-            'COALESCE(p.origin_type,po.origin_type,o.origin_type) as origin_type',
-            'COALESCE(p.origin_name,po.origin_name,o.origin_name) as origin_name',
-            'COALESCE(p.origin_id,po.origin_id,o.origin_id) as origin_id',
-            'COALESCE(p.origin_no,po.origin_no,o.origin_no) as origin_no',
-            'COALESCE(p.biz_scene,po.biz_scene) as biz_scene',
-            'COALESCE(p.category_key,po.category_key) as category_key',
-            'COALESCE(p.category_name,po.category_name) as category_name',
-            'COALESCE(p.category_statement_group,po.category_statement_group) as category_statement_group',
-            'COALESCE(p.category_source_plugin,po.category_source_plugin) as category_source_plugin',
-            'COALESCE(p.category_source_key,po.category_source_key) as category_source_key',
-            'COALESCE(p.channel_code,po.channel_code) as channel_code',
-            'COALESCE(p.channel_name,po.channel_name,o.purchase_channel) as channel_name',
-            'COALESCE(p.business_reason,po.business_reason) as business_reason',
+            'a.purchase_order_id',
+            'a.purchase_item_id',
+            'p.payable_no', '0 as order_payable_id',
+            'COALESCE(p.origin_plugin,o.origin_plugin) as origin_plugin',
+            'COALESCE(p.origin_plugin_name,o.origin_plugin_name) as origin_plugin_name',
+            'COALESCE(p.origin_type,o.origin_type) as origin_type',
+            'COALESCE(p.origin_name,o.origin_name) as origin_name',
+            'COALESCE(p.origin_id,o.origin_id) as origin_id',
+            'COALESCE(p.origin_no,o.origin_no) as origin_no',
+            'p.biz_scene', 'p.category_key', 'p.category_name', 'p.category_statement_group',
+            'p.category_source_plugin', 'p.category_source_key', 'p.channel_code',
+            'COALESCE(p.channel_name,o.purchase_channel) as channel_name', 'p.business_reason',
         ])->order('a.id desc')->paginate([
             'list_rows' => (int)($where['limit'] ?? 15),
             'page' => (int)($where['page'] ?? 1),
         ])->toArray();
         $fallbackPayeeMethods = $this->payeeMethodsForParty($partyId);
         foreach ($page['data'] as &$row) {
-            if (!empty($row['asset_payable_id'])) {
-                $row['allocated_paid'] = round((float)$row['settled_amount'], 2);
-                $row['allocated_remain'] = max(0, round((float)$row['payable_amount'] - (float)$row['allocated_paid'], 2));
-            } else {
-                $row['allocated_paid'] = $this->allocatedAmount((float)$row['total_cost'], (float)$row['order_total_cost'], (float)$row['settled_amount']);
-                $row['allocated_remain'] = max(0, round((float)$row['total_cost'] - (float)$row['allocated_paid'], 2));
-            }
+            // A batch balance or cost-based estimate is not evidence of a payment on this serial.
+            $hint = ErpDevicePayableDisplay::take($row);
+            $row['asset_payable_id'] = $row['payable_id'] = $hint['payable_id'] ?? null;
+            $row['payable_status'] = $hint['state'];
+            $row['payable_amount'] = $hint['amount'] ?? null;
+            $row['settled_amount'] = $row['allocated_paid'] = $hint['paid'] ?? null;
+            $row['allocated_remain'] = $hint['remaining'] ?? null;
+            if (!$row['payable_id']) $row['payable_no'] = null;
             $row['source_no'] = (string)($row['purchase_no'] ?? '');
             $row['source_type'] = 'purchase';
             $row['payee_methods'] = $this->payeeMethodsFromSpec($row['spec_json'] ?? '');
@@ -1749,6 +1746,15 @@ class ErpFinanceService extends BaseAdminService
             $row['latest_purchase_adjustment'] = $priceAdjustments[(int)$row['id']] ?? null;
         }
         unset($row);
+        $facts=[];
+        foreach($page['data'] as $entry) {
+            // An order-level payable is not a device-level payable. Never attribute a sibling's receipt.
+            $pid=(int)($entry['asset_payable_id']??0);
+            if($pid && (int)$entry['purchase_item_id']>0) $facts[$pid]=['document_id'=>(int)$entry['purchase_order_id'],'number'=>(string)$entry['purchase_no'],
+                'asset_id'=>(int)$entry['id'],'line_id'=>(int)$entry['purchase_item_id'],'settlements'=>array_map('intval',array_column(array_filter($entry['settlements'],
+                    static fn($s)=>($s['settlement_status']??'')==='confirmed' && ($s['settlement_type']??'')==='payment' && ($s['cash_direction']??'')==='out'),'settlement_id'))];
+        }
+        ErpPurchaseExtensionService::attachFinance((int)$this->site_id,'payable',$page['data'],$facts);
         return $page;
     }
 
@@ -2560,7 +2566,8 @@ class ErpFinanceService extends BaseAdminService
             $query->whereLike('p.party_name', '%' . trim((string)$where['party_name']) . '%');
         }
         if (!empty($where['source_no'])) {
-            $query->whereLike('p.source_no', '%' . trim((string)$where['source_no']) . '%');
+            // 回收逐机应付的来源单与 ERP 原采购单不一定是同一个单号。
+            $query->whereLike('p.source_no|p.origin_no|p.payable_no|o.purchase_no|sr.return_no', '%' . trim((string)$where['source_no']) . '%');
         }
         if (!empty($where['m_no'])) {
             $query->whereLike('party.m_no', '%' . trim((string)$where['m_no']) . '%');
@@ -3222,6 +3229,7 @@ class ErpFinanceService extends BaseAdminService
                 'l.applied_amount',
                 's.settlement_no',
                 's.settlement_type',
+                's.status as settlement_status',
                 's.amount',
                 's.cash_direction',
                 's.capital_account_id',
@@ -3898,6 +3906,10 @@ class ErpFinanceService extends BaseAdminService
             $requiredConsumers
         );
         $this->settlementOutboxIds[] = (int)$queued['id'];
+        // A voucher may span several devices: record it once. Never infer a per-device
+        // allocation from the list of all devices in a legacy order-level payable.
+        $auditAssetIds = \addon\hsx_erp\app\support\ErpRecycleOperationAudit::settlementAssetIds($targets);
+        \addon\hsx_erp\app\support\ErpRecycleOperationAudit::record('settlement', $settlement->getData(), $auditAssetIds);
     }
 
     /** 历史应收可能未固化origin字段，使用其销售单快照补齐跨插件身份。 */

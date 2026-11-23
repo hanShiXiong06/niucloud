@@ -5,6 +5,7 @@ return [
 
     ],
     'listen' => [
+        'HsxRecycleBusinessOperationRecorded' => ['addon\hsx_recycle\app\listener\audit\BusinessOperationRecorded'],
         // adminapp 旧核心命名空间兼容注册
         'AppInit' => [ 'addon\hsx_recycle\app\listener\system\AdminAppCompatListener' ],
        // 协议

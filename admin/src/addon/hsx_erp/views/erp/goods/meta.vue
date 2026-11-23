@@ -3,27 +3,33 @@
         <el-card class="!border-none" shadow="never">
             <HsxTitle size="page" collapsible-subtitle class="mb-4">
                 <template #default>商品目录</template>
-                <template #subtitle>统一维护一级品类、可选子品类、品牌、系列和型号；采购、库存与商城共同消费这套目录。</template>
+                <template #subtitle>{{ managed ? '商品分类取自'+policy.label+'；规格和成色仍由本站维护。' : policy ? '维护本站商品分类、型号、规格和成色。' : '查看商品分类、型号、规格和成色。' }}</template>
                 <template #extra><el-button :icon="Refresh" :loading="loading" @click="loadAll">刷新</el-button></template>
             </HsxTitle>
 
             <el-tabs v-model="activeTab" class="mt-5">
-                <el-tab-pane label="产品目录" name="catalog">
+                <el-tab-pane v-if="!policy || managed" label="商品分类" name="catalog">
+                    <el-skeleton v-if="!policy && !policyError" :rows="4" animated />
+                    <el-alert v-else-if="!policy" type="error" :title="policyError" :closable="false" show-icon><el-button link type="primary" @click="loadAll">重新读取</el-button></el-alert>
+                    <component v-else-if="externalPane" :is="externalPane" :key="policy.provider" />
+                    <el-alert v-else type="warning" :title="policy.reason" description="未加载到对应的资料组件，请管理员更新或重新编译管理端。" :closable="false" show-icon />
+                </el-tab-pane>
+                <el-tab-pane v-if="policy" :label="managed ? '本站已建型号' : '产品目录'" :name="managed ? 'models' : 'catalog'">
                     <div class="catalog-intro">
                         <div>
-                            <div class="font-medium text-gray-900">标准产品模板 + 本站独立目录</div>
-                            <div class="mt-1 text-sm text-gray-500">同款产品可复用标准模板；名称、分类、显示状态仍由当前站点独立管理。</div>
+                            <div class="font-medium text-gray-900">{{ managed ? '已建型号 · 只读' : '标准产品模板 + 本站独立目录' }}</div>
+                            <div class="mt-1 text-sm text-gray-500">{{ managed ? '这里保留采购、库存已经引用的型号。最新分类请查看「商品分类」。' : '同款产品可复用标准模板；名称、分类、显示状态仍由当前站点独立管理。' }}</div>
                         </div>
                         <div class="flex gap-2">
-                            <input ref="catalogFileInput" class="hidden" type="file" accept=".xlsx,.xls" @change="handleCatalogFile" />
+                            <template v-if="!managed"><input ref="catalogFileInput" class="hidden" type="file" accept=".xlsx,.xls" @change="handleCatalogFile" />
                             <el-button type="primary" :icon="Plus" @click="openCatalogProduct()">新增型号</el-button>
                             <el-button :icon="Upload" :loading="catalogImporting" @click="openCatalogImport">异步导入商品目录</el-button>
-                            <el-button @click="openCatalogTaskDialog">导入记录</el-button>
+                            <el-button @click="openCatalogTaskDialog">导入记录</el-button></template>
                             <el-button :icon="Download" :loading="catalogExporting" @click="exportCatalog">导出本站目录</el-button>
                         </div>
                     </div>
 
-                    <div v-if="latestCatalogTask" class="mb-4 rounded-lg border border-blue-100 bg-blue-50/50 px-4 py-3">
+                    <div v-if="!managed && latestCatalogTask" class="mb-4 rounded-lg border border-blue-100 bg-blue-50/50 px-4 py-3">
                         <div class="flex items-center justify-between gap-4">
                             <div class="min-w-0 flex-1">
                                 <div class="flex items-center gap-2">
@@ -62,11 +68,11 @@
                         <div class="catalog-tree-head">
                             <div>
                                 <strong>产品目录树</strong>
-                                <span>按“一级品类 → 可选一级子分类 → 品牌 → 系列 → 型号”逐级展开；排序值越大越靠前</span>
+                                <span>{{ managed ? '显示本站建档时保存的分类路径。' : '按品类、品牌、系列和型号逐级展开；排序值越大越靠前' }}</span>
                             </div>
-                            <el-tag effect="plain" type="info">目录唯一，不再维护旧分类表</el-tag>
+                            <el-tag effect="plain" type="info">{{ managed ? '本站记录' : '本站目录' }}</el-tag>
                         </div>
-                        <el-empty v-if="!catalogTree.length && !catalogLoading" description="暂无产品目录，可直接导入 Excel" />
+                        <el-empty v-if="!catalogTree.length && !catalogLoading" :description="managed ? '本站暂无已建型号' : '暂无产品目录，可直接导入 Excel'" />
                         <el-tree
                             v-else
                             :key="catalogTreeKey"
@@ -97,8 +103,8 @@
                                     <div class="catalog-tree-node__side">
                                         <el-tag v-if="data.node_type !== 'product'" size="small" effect="plain">{{ data.product_count || 0 }} 个型号</el-tag>
                                         <el-tag v-else :type="Number(data.is_enabled) === 1 ? 'success' : 'info'" size="small">{{ Number(data.is_enabled) === 1 ? '启用' : '停用' }}</el-tag>
-                                        <el-button link type="primary" @click.stop="openCatalogSort(data)">排序</el-button>
-                                        <template v-if="data.node_type === 'product'">
+                                        <el-button v-if="!managed" link type="primary" @click.stop="openCatalogSort(data)">排序</el-button>
+                                        <template v-if="!managed && data.node_type === 'product'">
                                             <el-button link type="primary" @click.stop="openCatalogProduct(data)">编辑</el-button>
                                             <el-button link type="danger" @click.stop="removeCatalogProduct(data)">删除</el-button>
                                         </template>
@@ -306,7 +312,7 @@
 
 <script setup lang="ts">
 import { HsxTitle, HsxPage, HsxDialog, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, defineAsyncComponent, onActivated, onDeactivated, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessageBox } from 'element-plus'
 import { Download, Plus, Refresh, Search, Upload } from '@element-plus/icons-vue'
 import * as XLSX from 'xlsx'
@@ -349,6 +355,14 @@ const catalogTree = ref<any[]>([])
 const catalogTreeKey = ref(0)
 const catalogTreeProps = { label: 'label', children: 'child_list', isLeaf: 'is_leaf' }
 const catalogSummary = ref<any>({ products: 0, enabled: 0, brands: 0, series: 0 })
+const policy = ref<{managed:boolean;provider:string;label:string;reason:string}|null>(null), policyError=ref('')
+const managed=computed(()=>policy.value?.managed===true)
+const directoryPanes=import.meta.glob('/src/addon/*/extensions/erp-catalog.vue')
+const externalPane=computed(()=>{
+    const loader=directoryPanes['/src/addon/'+policy.value?.provider+'/extensions/erp-catalog.vue']
+    return loader ? defineAsyncComponent(loader as any) : null
+})
+let needsReload=false, loadEpoch=0
 const catalogFilters = ref<any>({ brands: [], series: [] })
 const catalogQuery = reactive<any>({ keyword: '', brand_name: '', series_name: '' })
 const catalogProductDialog = reactive<any>({
@@ -387,16 +401,25 @@ const gradeDialog = reactive<any>({
 const latestCatalogTask = computed(() => catalogTasks.value.find(item => ['queued', 'processing', 'pending'].includes(item.status)) || catalogTasks.value[0] || null)
 
 onMounted(loadAll)
+onDeactivated(()=>{needsReload=true;loadEpoch++;stopCatalogTaskPolling()})
+onActivated(()=>{if(needsReload){needsReload=false;void loadAll()}})
 onBeforeUnmount(() => {
     stopCatalogTaskPolling()
 })
 
 async function loadAll() {
+    const epoch=++loadEpoch
+    policy.value=null; policyError.value=''
     loading.value = true
     try {
-        await Promise.all([loadSpecs(), loadCatalog(), loadCatalogSummary(), loadCatalogTasks()])
+        await loadCatalogSummary(epoch)
+        if(epoch!==loadEpoch)return
+        if (!managed.value && activeTab.value==='models') activeTab.value='catalog'
+        await Promise.all([loadSpecs(),loadCatalog(),...(managed.value?[]:[loadCatalogTasks()])])
+    } catch(e:any) {
+        if(epoch===loadEpoch && !policy.value)policyError.value=e?.msg || e?.message || '未能确认商品目录来源，请重新读取。'
     } finally {
-        loading.value = false
+        if(epoch===loadEpoch)loading.value = false
     }
 }
 
@@ -528,9 +551,12 @@ async function loadCatalogTreeNode(node: any, resolve: (rows: any[]) => void) {
     }
 }
 
-async function loadCatalogSummary() {
+async function loadCatalogSummary(epoch=loadEpoch) {
     const res: any = await getErpGoodsCatalogSummary()
-    catalogSummary.value = res?.data || { products: 0, enabled: 0, brands: 0, series: 0 }
+    if(epoch!==loadEpoch)return
+    const p=res?.data?.master_policy
+    if(typeof p?.managed!=='boolean' || (p.managed && (!p.provider || !p.label)))throw Error('没有取得商品目录来源，请确认 ERP 后端已更新。')
+    catalogSummary.value=res.data; policy.value=p
 }
 
 function resetCatalogFilter() {

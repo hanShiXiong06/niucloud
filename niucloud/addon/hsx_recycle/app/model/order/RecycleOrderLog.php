@@ -47,13 +47,14 @@ class RecycleOrderLog extends BaseModel
      */
     public function getOrderLogList(array $condition = [], int $page = 1, int $page_size = 10, string $order = 'create_at desc', string $field = '*'): array
     {
-        $data = $this->where($condition)
+        // Staff-only cross-system records have a dedicated, role-guarded reading endpoint.
+        $data = $this->where($condition)->whereNotIn('action',['audit_boyuan','audit_erp','audit_boyuan_link','audit_erp_link'])
             ->field($field)
             ->order($order)
             ->page($page, $page_size)
             ->select()
             ->toArray();
-        $count = $this->where($condition)->count();
+        $count = $this->where($condition)->whereNotIn('action',['audit_boyuan','audit_erp','audit_boyuan_link','audit_erp_link'])->count();
         return ['list' => $data, 'count' => $count];
     }
 

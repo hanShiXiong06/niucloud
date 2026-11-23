@@ -59,18 +59,27 @@ class CoreOfflineSaleService extends BaseCoreService
         try {
             // 同一出库单(outbound_no)的已有订单 → 追加明细；否则新建
             $orderModel = new Order();
-            $order = $outboundNo !== ''
-                ? $orderModel->where([
+            if (isset($d['cashier_order_no'])) {
+                $parent = (int)($d['cashier_parent_id'] ?? 0);
+                $order = $parent ? $orderModel->where(['site_id'=>$siteId,'order_id'=>$parent,'order_no'=>$d['cashier_order_no']])->lock(true)->findOrEmpty() : $orderModel->newInstance();
+                if ($parent && $order->isEmpty()) throw new \core\exception\CommonException('未找到本次交付原单，未新增订单');
+            } else {
+                $order = $outboundNo !== '' ? $orderModel->where([
                     ['site_id', '=', $siteId],
                     ['relate_source', '=', $outboundNo],
                     ['status', '<>', OrderDict::CLOSE],
                 ])->findOrEmpty()
                 : $orderModel->newInstance();
+            }
 
             if ($order->isEmpty()) {
-                $order = $orderModel->create([
+                $cashierFields = isset($d['cashier_order_no']) ? [
+                    'delivery_type' => OrderDeliveryDict::STORE,
+                    'taker_name' => mb_substr((string)$d['taker_name'],0,50),
+                ] : [];
+                $order = $orderModel->create($cashierFields + [
                     'site_id'          => $siteId,
-                    'order_no'         => create_no(),
+                    'order_no'         => $d['cashier_order_no'] ?? create_no(),
                     'order_type'       => OrderDict::TYPE,
                     'order_from'       => 'offline',
                     'status'           => $isCredit ? OrderDict::WAIT_TAKE : OrderDict::FINISH,
@@ -113,7 +122,10 @@ class CoreOfflineSaleService extends BaseCoreService
                 'order_goods_money' => $price,
                 'original_price'    => $price,
                 'goods_type'        => 'real',
-                'extend'            => json_encode(ErpDeviceSnapshot::extend([], $sku->toArray(), $goods->toArray())),
+                'extend'            => json_encode(ErpDeviceSnapshot::extend(
+                    isset($d['cashier_signature']) ? ['cashier_signature' => $d['cashier_signature']] : [],
+                    $sku->toArray(), $goods->toArray()
+                )),
                 'status'            => 0,
                 'delivery_status'   => $isCredit ? OrderDeliveryDict::DELIVERY_FINISH : OrderDeliveryDict::TAKED,
             ]]);
@@ -130,10 +142,7 @@ class CoreOfflineSaleService extends BaseCoreService
             ]);
 
             // 商品置 已售/锁定；已售则下架、库存清零(一物一码卖一台少一台)
-            $goodsUpdate = ['sale_status' => $resultStatus, 'update_time' => $now];
-            if ($resultStatus === 'sold') $goodsUpdate['status'] = 0;
-            (new Goods())->where([['site_id', '=', $siteId], ['goods_id', '=', $goodsId]])->update($goodsUpdate);
-            (new GoodsSku())->where([['site_id', '=', $siteId], ['sku_id', '=', $skuId]])->update(['stock' => 0]);
+            $lastSku = $this->markSkuUnavailable($siteId,$goodsId,$skuId,$resultStatus);
             Db::commit();
         } catch (\Throwable $e) {
             Db::rollback();
@@ -142,7 +151,7 @@ class CoreOfflineSaleService extends BaseCoreService
         }
 
         // 主站卖出(已售) -> 按主站商品ID精确下架关注副本。失败不影响成交。
-        if ($resultStatus === 'sold') {
+        if ($lastSku && $resultStatus === 'sold' && empty($d['cashier_order_no'])) {
             try {
                 (new \addon\phone_shop\app\service\core\agent\GoodsSyncService())->syncGoods((int)$goodsId, (int)$siteId, 0);
             } catch (\Throwable $e) {
@@ -152,6 +161,22 @@ class CoreOfflineSaleService extends BaseCoreService
 
         // TODO 推送客户：后续接 NoticeData（"您购买的 {型号} 已出库"）
         return ['ok' => true, 'order_id' => $orderId, 'sale_status' => $resultStatus];
+    }
+
+    /** 必须在业务事务中调用。只清本 SKU 库存；最后一台成交才下架整件商品。 */
+    public function markSkuUnavailable(int $site, int $goodsId, int $skuId, string $status): bool
+    {
+        $sku = (new GoodsSku())->where(['site_id'=>$site,'goods_id'=>$goodsId,'sku_id'=>$skuId])->lock(true)->findOrEmpty();
+        if ($sku->isEmpty()) throw new \core\exception\CommonException('商城设备不存在');
+        $goods = (new Goods())->where(['site_id'=>$site,'goods_id'=>$goodsId])->lock(true)->findOrEmpty();
+        if ($goods->isEmpty()) throw new \core\exception\CommonException('商城设备所属商品不存在');
+        $sku->save(['stock'=>0]);
+        (new CoreOrderInventoryService())->refreshGoods($site,$goodsId,false);
+        if ((new Goods())->where(['site_id'=>$site,'goods_id'=>$goodsId])->value('stock') > 0) return false;
+        $update=['sale_status'=>$status,'update_time'=>time()];
+        if ($status==='sold') $update['status']=0;
+        $goods->save($update);
+        return true;
     }
 
     /**

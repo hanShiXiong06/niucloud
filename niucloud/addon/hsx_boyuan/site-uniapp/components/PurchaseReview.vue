@@ -1,16 +1,16 @@
 <template>
     <u-popup :show="taskId > 0" mode="bottom" :round="8" closeable :close-on-click-overlay="false" @close="close">
         <view class="purchase-sheet" :class="{ compact: !editable && !lookup && !detailsExpanded && !closureExpanded && !inventoryExpanded && !canVerify }">
-            <view class="sheet-head"><text class="title">{{ lookup ? '选择博远' + lookup.name : '采购入库核对' }}</text><text class="muted">{{ view?.source?.source_document_no || view?.task?.business_no || '正在读取任务' }}</text><picker v-if="!lookup && (taskIds || []).length > 1" :disabled="interactionLocked" :range="batchOptions" range-key="label" @change="switchBatch(Number($event.detail.value))"><text class="batch-link">入库批次 {{ (taskIds || []).indexOf(taskId) + 1 }} / {{ taskIds?.length }} · 切换核对 ›</text></picker></view>
+            <view class="sheet-head"><text class="title">{{ lookup ? '选择博远' + lookup.name.replace(/^博远/, '') : '采购入库核对' }}</text><text class="muted">{{ view?.source?.source_document_no || view?.task?.business_no || '正在读取任务' }}</text><picker v-if="!lookup && (taskIds || []).length > 1" :disabled="interactionLocked" :range="batchOptions" range-key="label" @change="switchBatch(Number($event.detail.value))"><text class="batch-link">入库批次 {{ (taskIds || []).indexOf(taskId) + 1 }} / {{ taskIds?.length }} · 切换核对 ›</text></picker></view>
             <scroll-view scroll-y class="sheet-body">
                 <view v-if="loading && !view" class="empty"><u-loading-icon text="读取采购任务" /></view>
                 <template v-if="lookup">
-                    <text class="notice">只选择博远已有的启用资料，不自动创建档案。</text>
+                    <text class="notice">{{ productPickerHint || '只选择博远已有的启用资料，不自动创建档案。' }}</text>
                     <u-search v-model="lookupKeyword" bg-color="var(--boyuan-soft)" color="var(--boyuan-text)" placeholder-color="var(--boyuan-muted)" placeholder="搜索名称 / 编码" :show-action="false" @search="loadChoices(false)" @clear="loadChoices(false)" />
                     <view v-if="lookupError" class="issue"><text>{{ lookupError }}</text><button class="text-button" @click="loadChoices(false)">重新读取</button></view>
                     <button v-for="item in choices" :key="item.id" class="choice" :disabled="interactionLocked || !connectionMatches" @click="selectChoice(item)"><view><text class="choice-name">{{ item.name }}</text><text class="muted">{{ item.code }}<template v-if="item.extra?.company_name"> · {{ item.extra.company_name }}</template></text><text v-if="item.extra?.memory || item.extra?.color" class="muted">{{ item.extra.memory || '' }} {{ item.extra.color || '' }} {{ item.extra.version_type_name || '' }}</text></view><u-icon :name="selectedChoiceId === String(item.id) ? 'checkmark-circle' : 'arrow-right'" size="18" /></button>
                     <view v-if="choiceLoading" class="empty"><u-loading-icon text="正在读取" /></view>
-                    <text v-else-if="!choices.length && !lookupError" class="notice">没有匹配的启用资料。可调整搜索条件，或请管理员更新基础资料后再选。</text>
+                    <text v-else-if="!choices.length && !lookupError" class="notice">{{ lookupDevice ? '没有匹配商品。请调整搜索词，或在博远维护对应的单串号商品后同步。' : '没有匹配的启用资料，请调整搜索条件或更新基础资料。' }}</text>
                     <u-button v-if="choiceCursor" size="small" :loading="choiceLoading" @click="loadChoices(true)">加载更多资料</u-button>
                 </template>
                 <template v-else-if="view">
@@ -26,14 +26,21 @@
                     <PurchasePaymentReview v-if="view.task.status === 'succeeded' || props.originalPaymentTaskId" :purchase="view" :config="config" :original-payment-task-id="props.originalPaymentTaskId" @changed="reload(true); emit('changed')" @configure="emit('configure')" />
                     <view v-if="editable" class="association-head"><text class="section-title">入库资料</text><text class="muted">{{ missingFields.length ? '还需选择 ' + missingFields.length + ' 项' : '必填项已选齐' }} · 同一采购请选择同一仓库</text></view>
                     <button v-else class="details-toggle" :aria-expanded="detailsExpanded" @click="detailsExpanded = !detailsExpanded">采购资料与单号 <text>{{ detailsExpanded ? '收起' : '查看' }}</text></button>
+                    <button v-if="editable" class="details-toggle" :aria-expanded="matchedExpanded" @click="matchedExpanded = !matchedExpanded">核对 / 调整全部资料 <text>{{ matchedExpanded ? "收起" : "展开" }}</text></button>
                     <template v-if="editable || detailsExpanded">
-                    <view v-for="field in topFields" :key="field.key"><button class="association" :disabled="!editable || interactionLocked" @click="openLookup(field)"><text>{{ field.name }}{{ field.key !== 'buyer_id' ? ' *' : '' }}</text><view><text :class="{ placeholder: !hasSelection(field.key) }">{{ labelFor(field.key) }}</text><u-icon v-if="editable" name="arrow-right" size="13" /></view></button><button v-if="field.key === 'buyer_id' && selection.buyer_id && editable" class="text-button" :disabled="interactionLocked" @click="clearBuyer">清除选填业务员</button></view>
-                    <view v-for="(line, index) in sourceLines" :key="line.source_line_id" class="device">
-                        <view class="row"><text class="section-title">{{ index + 1 }}. {{ line.product_name || '采购设备' }}</text><text class="amount">¥{{ line.amount }}</text></view><text class="serial">{{ line.imei || line.sn || '缺少串号' }}</text><text class="muted">数量 {{ line.quantity || 1 }} · 本站仓库 {{ line.warehouse_name || '名称未提供' }}</text>
+                    <view v-if="pricingRequired" :class="pricing.status === 'known' ? 'notice' : 'issue'">
+                        <template v-if="!editable"><text>本站定价人：{{ pricing.name || '未记录唯一的定价人' }}。</text><text>博远采购业务员：{{ buyerReceiptLabel }}</text></template>
+                        <text v-else-if="pricing.status === 'known'">本站定价人：{{ pricing.name }}。{{ pricing.mapped_id ? '已按员工对应带入博远采购业务员。' : '请选择此人在博远的员工档案，提交时核对。' }}</text>
+                        <text v-else>{{ pricing.message || '未能确认唯一的定价人，暂不能提交。' }}</text>
+                    </view>
+                    <view v-for="field in visibleTopFields" :key="field.key"><button class="association" :disabled="!editable || interactionLocked || (field.key === 'buyer_id' && buyerLocked)" @click="openLookup(field)"><text>{{ field.key === 'buyer_id' && pricingRequired ? '采购业务员' : field.name }}{{ field.key !== 'buyer_id' || pricingRequired ? ' *' : '' }}</text><view><text :class="{ placeholder: !hasSelection(field.key) }">{{ labelFor(field.key) }}</text><u-icon v-if="editable && !(field.key === 'buyer_id' && buyerLocked)" name="arrow-right" size="13" /></view></button><button v-if="field.key === 'buyer_id' && !pricingRequired && selection.buyer_id && editable" class="text-button" :disabled="interactionLocked" @click="clearBuyer">清除选填业务员</button></view>
+                    <view v-for="line in visibleSourceLines" :key="line.source_line_id" class="device">
+                        <view class="row"><text class="section-title">{{ sourceLines.indexOf(line) + 1 }}. {{ line.product_name || '采购设备' }}</text><text class="amount">¥{{ line.amount }}</text></view><text class="serial">{{ line.imei || line.sn || '缺少串号' }}</text><text class="muted">数量 {{ line.quantity || 1 }} · 本站仓库 {{ line.warehouse_name || '名称未提供' }}</text>
                         <button v-for="field in lineFields" :key="field.key" class="association" :disabled="!editable || interactionLocked" @click="openLookup(field, line.source_line_id)"><text>{{ field.name }} *</text><view><text :class="{ placeholder: !lineSelection(line.source_line_id)?.[field.key] }">{{ labelFor(field.key, line.source_line_id) }}</text><u-icon v-if="editable" name="arrow-right" size="13" /></view></button>
                     </view>
                     </template>
                     <view v-if="editable" class="review-note"><u-checkbox v-if="view.can_remember === true" :used-alone="true" :checked="remember" :disabled="interactionLocked" label="以后采购沿用这些对应关系" :label-size="12" @change="remember = !remember" /><text v-if="!writeEnabled" class="issue">{{ config.paused ? '同步已暂停。可以先存草稿，请管理员恢复后再提交。' : '采购同步尚未就绪。可以先存草稿，请管理员核对连接。' }}</text></view>
+                    <text v-if="editable && remember && view.source?.purchase_source === 'ordinary_customer'" class="muted">只有能唯一核对的回收规格才会记住；规格不全或有重名歧义时，商品只用于本单。</text>
                     <button v-if="editable" class="details-toggle" :aria-expanded="detailsExpanded" @click="detailsExpanded = !detailsExpanded">原单信息 <text>{{ detailsExpanded ? '收起' : '查看' }}</text></button>
                     <view v-if="detailsExpanded" class="technical-details"><text>本站采购单 {{ view.source?.source_document_no || view.task.business_no }}</text><text>采购员 {{ view.source?.operator?.name || '未提供' }}</text><text>入库批次 {{ view.source?.batch_ref || '未提供' }}</text><text>任务编号 {{ view.task.id }}</text><text>博远采购单 {{ view.task.external_no || '尚未取得' }}</text><text v-if="!editable">{{ stateMessage }}</text></view>
                     <template v-if="!editable">
@@ -85,13 +92,32 @@ const inventoryWorking = computed(() => ['pending', 'processing'].includes(inven
 const canCheckInventory = computed(() => view.value?.can_check_inventory === true && view.value?.can_operate !== false && connectionMatches.value && view.value?.task?.status === 'succeeded')
 const canStartInventory = computed(() => canCheckInventory.value && !inventoryWorking.value && inventory.value.status !== 'succeeded')
 const inventoryActionLabel = computed(() => inventory.value.status === 'failed' ? '重新核对当前在库' : inventory.value.status === 'stale' ? '核对今天当前在库' : '核对当前在库')
-const canSubmit = computed(() => editable.value && !!props.config.enabled && !!props.config.purchase_enabled && !props.config.paused && !!props.config.profiles?.[props.config.mode]?.probe_at && purchaseSelectionComplete(selection.value))
+const pricing = computed(() => view.value?.pricing_buyer)
+const pricingRequired = computed(() => pricing.value?.required === true)
+const buyerReceiptLabel = computed(() => {
+    const p = pricing.value
+    if (p?.receipt_status === 'matched') {
+        const name = p.returned_name || '员工编号已核对'
+        return p.receipt_source === 'purchase_details' ? name + '（已核对博远采购明细）' : name
+    }
+    if (p?.receipt_status === 'not_supplied') return '原单未传采购业务员'
+    if (p?.receipt_status === 'mismatch') return (p.returned_name ? '回执：' + p.returned_name + '。' : '') + '与提交人员不一致，请核对原单，勿重发'
+    if (p?.receipt_status === 'not_sent') return '尚无博远回执'
+    return '博远未返回可核对的人员信息'
+})
+const buyerLocked = computed(() => pricingRequired.value && (pricing.value.status !== 'known' || !!pricing.value.mapped_id))
+const needsBuyerConfirmation = computed(() => pricingRequired.value && pricing.value.status === 'known' && !pricing.value.mapped_id)
+const canSubmit = computed(() => editable.value && !!props.config.enabled && !!props.config.purchase_enabled && !props.config.paused && !!props.config.profiles?.[props.config.mode]?.probe_at && purchaseSelectionComplete(selection.value, pricing.value))
 const writeEnabled = computed(() => !!props.config.enabled && !!props.config.purchase_enabled && !props.config.paused && !!props.config.profiles?.[props.config.mode]?.probe_at)
 const stateMessage = computed(() => purchaseStateMessage(view.value?.task, view.value?.result, view.value?.inventory))
-const missingFields = computed(() => purchaseMissingFields(selection.value))
+const missingFields = computed(() => purchaseMissingFields(selection.value, pricing.value))
+const matchedExpanded = ref(false)
+const showAllChoices = computed(() => !editable.value || matchedExpanded.value)
+const visibleTopFields = computed(() => topFields.filter(f => f.key === 'buyer_id' && pricingRequired.value ? editable.value && pricing.value.status === 'known' : showAllChoices.value || (f.key !== 'buyer_id' && !(selection.value as any)[f.key])))
+const visibleSourceLines = computed(() => sourceLines.value.filter(r => showAllChoices.value || lineFields.some(f => !lineSelection(String(r.source_line_id))?.[f.key])))
 const nextStep = computed(() => awaitingReceipt.value
     ? { title: '尚未收到入库回执', detail: '请刷新原任务或联系管理员核对，不要再次提交。', tone: 'warning', action: undefined }
-    : purchaseNextStep(view.value?.task, { editable: editable.value, canVerify: canVerify.value, complete: purchaseSelectionComplete(selection.value), enabled: writeEnabled.value, canOperate: view.value?.can_operate, operatorComplete: closure.value.operatorComplete, canCheckInventory: canCheckInventory.value, inventory: inventory.value, closure: closure.value, payment: view.value?.payment }))
+    : purchaseNextStep(view.value?.task, { editable: editable.value, canVerify: canVerify.value, complete: purchaseSelectionComplete(selection.value, pricing.value), enabled: writeEnabled.value, canOperate: view.value?.can_operate, operatorComplete: closure.value.operatorComplete, canCheckInventory: canCheckInventory.value, inventory: inventory.value, closure: closure.value, payment: view.value?.payment }))
 const closure = computed(() => purchaseClosure(view.value?.closure))
 const isFinished = computed(() => closure.value.operatorComplete && nextStep.value.action === 'receipt')
 const criticalReason = computed(() => ['attention', 'rejected', 'blocked', 'needs_review', 'confirming'].includes(view.value?.task?.status) ? String(view.value?.task?.reason || '') : '')
@@ -112,8 +138,9 @@ const issueMessage = (err: any) => String(err?.msg || err?.message || '操作未
 const labelKey = (key: string, lineId = '') => lineId + ':' + key
 function lineSelection(id: string): any { return selection.value.lines.find(line => line.source_line_id === String(id)) }
 function hasSelection(key: string) { return !!(selection.value as any)[key] }
-function labelFor(key: string, lineId = '') { const name = labels.value[labelKey(key, String(lineId))]?.name; if (name) return name; const selected = lineId ? lineSelection(lineId)?.[key] : (selection.value as any)[key]; return selected ? editable.value ? '已选择，请点开核对资料' : '档案名称暂不可用' : editable.value ? '请选择博远' + [...topFields, ...lineFields].find(field => field.key === key)?.name : '本次未指定' }
+function labelFor(key: string, lineId = '') { if (key === 'buyer_id' && pricingRequired.value && !hasSelection(key)) return editable.value ? '选择对应的博远员工' : '未记录业务员'; const name = labels.value[labelKey(key, String(lineId))]?.name; if (name) return name; const selected = lineId ? lineSelection(lineId)?.[key] : (selection.value as any)[key]; return selected ? editable.value ? '已选择，请点开核对资料' : '档案名称暂不可用' : editable.value ? '请选择博远' + ([...topFields, ...lineFields].find(field => field.key === key)?.name || '资料').replace(/^博远/, '') : '本次未指定' }
 function applyView(value: any, preserveExternal = false) {
+    if (view.value?.task?.id !== value.task.id) matchedExpanded.value = false
     if (value.task.status !== 'awaiting_confirmation') uncertainPurchaseKeys.value.delete(purchaseKey(value.task))
     const knownInput = preserveExternal && view.value?.task?.id === value.task.id && !value.task.external_no ? externalNo.value : ''
     view.value = value; selection.value = purchaseSelection(value.selection, value.source); externalNo.value = value.task.external_no || knownInput; remember.value = false
@@ -131,9 +158,11 @@ async function reload(silent = false) {
     finally { if (token === request) loading.value = false }
 }
 function exitLookup() { lookup.value = null; choiceRequest++; choiceLoading.value = false }
+const lookupDevice = computed(() => lookup.value?.key === 'product_id' ? sourceLines.value.find(line => String(line.source_line_id) === lookup.value?.sourceLineId) : null)
+const productPickerHint = computed(() => lookupDevice.value ? `本机：${lookupDevice.value.product_name || '采购设备'} · ${String(lookupDevice.value.imei || '').length} 位串号。只列出串号规则匹配的商品，请再核对型号和规格。` : '')
 function openLookup(field: LookupField, sourceLineId?: string) {
-    if (!editable.value || interactionLocked.value) return
-    lookup.value = { ...field, sourceLineId: sourceLineId === undefined ? undefined : String(sourceLineId) }; lookupKeyword.value = ''; choices.value = []; choiceCursor.value = ''; loadChoices(false)
+    if (!editable.value || interactionLocked.value || (field.key === 'buyer_id' && buyerLocked.value)) return
+    lookup.value = { ...field, ...(field.key === 'buyer_id' && pricingRequired.value ? { name: '采购业务员' } : {}), sourceLineId: sourceLineId === undefined ? undefined : String(sourceLineId) }; lookupKeyword.value = String(lookupDevice.value?.product_name || ''); choices.value = []; choiceCursor.value = ''; loadChoices(false)
 }
 async function loadChoices(append = false) {
     if (!lookup.value || !editable.value || (append && (choiceLoading.value || !choiceCursor.value))) return
@@ -142,7 +171,7 @@ async function loadChoices(append = false) {
     choiceLoading.value = true; lookupError.value = ''
     if (!append) { choices.value = []; choiceCursor.value = '' }
     try {
-        const res: any = await api.getReferences({ resource: field.resource, role: field.role || '', keyword: lookupKeyword.value.trim(), cursor, limit: 50, enabled_only: true })
+        const res: any = await api.getReferences({ resource: field.resource, role: field.key === 'product_id' ? 'purchase_product' : (field.role || ''), ...(field.key === 'product_id' ? { serial_length: String(lookupDevice.value?.imei || '').length } : {}), keyword: lookupKeyword.value.trim(), cursor, limit: 50, enabled_only: true, expected_connection_key: view.value.task.connection_key, ...(['staff','warehouses'].includes(field.resource) && selection.value.company_id ? { company_id: selection.value.company_id } : {}) })
         if (token !== choiceRequest || props.taskId !== id || !lookup.value || view.value?.task.connection_key !== connection || !connectionMatches.value) return
         if (res.data?.code && res.data.code !== 'OK') throw new Error(res.data.message || '基础资料读取未完成')
         const data = res.data?.data || {}, rows = (data.items || []).filter((item: any) => !!item.enabled && !item.stale && (field.role !== 'supplier' || !!item.extra?.is_supplier) && (field.role !== 'buyer' || !!item.extra?.is_buyer))
@@ -155,14 +184,24 @@ async function loadChoices(append = false) {
 function selectChoice(item: any) {
     if (!lookup.value || !editable.value || interactionLocked.value || !item.enabled || item.stale) return
     const field = lookup.value
+    if (field.key === 'buyer_id' && buyerLocked.value) return
+    if (field.key === 'company_id' && selection.value.company_id && selection.value.company_id !== String(item.id)) {
+        selection.value.creator_id = ''; delete labels.value[labelKey('creator_id')]
+        if (!buyerLocked.value) { selection.value.buyer_id = ''; delete labels.value[labelKey('buyer_id')] }
+        selection.value.lines.forEach(line => { line.warehouse_id = ''; delete labels.value[labelKey('warehouse_id', line.source_line_id)] })
+    }
+    if (field.key === 'warehouse_id' && !selection.value.company_id && item.company?.id && item.extra?.company_id === item.company.id) {
+        selection.value.company_id = item.company.id; labels.value[labelKey('company_id')] = item.company
+    }
     if (field.sourceLineId) { const line = lineSelection(field.sourceLineId); if (!line) return; line[field.key] = String(item.id) }
     else (selection.value as any)[field.key] = String(item.id)
     labels.value[labelKey(field.key, field.sourceLineId)] = { id: String(item.id), name: item.name, code: item.code }; error.value = ''; exitLookup()
 }
-function clearBuyer() { if (editable.value && !interactionLocked.value) { selection.value.buyer_id = ''; delete labels.value[labelKey('buyer_id')] } }
+function clearBuyer() { if (editable.value && !interactionLocked.value && !pricingRequired.value) { selection.value.buyer_id = ''; delete labels.value[labelKey('buyer_id')] } }
 function input() { return { revision: view.value.task.revision, mode: view.value.task.mode, connection_key: view.value.task.connection_key, selection: purchaseSelection(selection.value, view.value.source), remember: remember.value && view.value.can_remember === true } }
 async function saveDraft() {
     if (!editable.value || interactionLocked.value) return
+    if (needsBuyerConfirmation.value && selection.value.buyer_id && remember.value) { error.value = '要记住新的员工对应，请在提交时确认；只存草稿请取消“以后采购沿用这些对应关系”。'; return }
     busy.value = true; error.value = ''
     try { const res: any = await api.savePurchaseDraft(props.taskId, input()); applyView(res.data); emit('changed'); uni.showToast({ title: '核对已保存，尚未发送', icon: 'none' }) }
     catch (err) { error.value = issueMessage(err) }
@@ -170,14 +209,20 @@ async function saveDraft() {
 }
 function confirmSubmit() {
     if (!canSubmit.value || interactionLocked.value) return
+    const needs = needsBuyerConfirmation.value, person = String(pricing.value?.name || ''), buyer = String(labels.value[labelKey('buyer_id')]?.name || '')
+    if (needs && (!person || !buyer)) { error.value = '请核对本站定价人，重新选择能显示姓名的博远采购业务员。'; return }
+    const selectionKey = JSON.stringify([props.taskId, view.value.task.revision, pricing.value?.local_ref, selection.value.buyer_id])
+    const names = needs ? `\n确认本站定价人「${person}」就是博远采购业务员「${buyer}」。${remember.value ? '该员工对应将用于以后采购。' : '此选择仅用于本单。'}` : ''
     confirmingSubmit.value = true
-    uni.showModal({ title: '确认提交博远入库？', content: `${view.value.task.business_no} · ${sourceLines.value.length} 台。将按所选商品和仓库创建采购入库单，提交后不能再改关联。`, confirmText: '确认入库', cancelText: '返回核对', success: async result => { try { if (result.confirm) await submit() } finally { confirmingSubmit.value = false } }, fail: () => { confirmingSubmit.value = false } })
+    uni.showModal({ title: '确认提交博远入库？', content: `${view.value.task.business_no} · ${sourceLines.value.length} 台。将按所选商品和仓库创建采购入库单。${names}`, confirmText: '确认入库', cancelText: '返回核对', success: async result => {
+        try { if (result.confirm && selectionKey === JSON.stringify([props.taskId, view.value?.task.revision, pricing.value?.local_ref, selection.value.buyer_id])) await submit(needs) } finally { confirmingSubmit.value = false }
+    }, fail: () => { confirmingSubmit.value = false } })
 }
-async function submit() {
-    if (!canSubmit.value || busy.value) return
+async function submit(confirmedBuyer = false) {
+    if (!canSubmit.value || busy.value || (needsBuyerConfirmation.value && !confirmedBuyer)) return
     request++; loading.value = false
     busy.value = true; error.value = ''
-    try { const res: any = await api.submitPurchase(props.taskId, input()); applyView(res.data); emit('changed'); uni.showToast({ title: '已交后台处理，请等待核验', icon: 'none' }) }
+    try { const res: any = await api.submitPurchase(props.taskId, { ...input(), ...(needsBuyerConfirmation.value && confirmedBuyer ? { confirm_pricing_buyer: true } : {}) }); applyView(res.data); emit('changed'); uni.showToast({ title: '已交后台处理，请等待核验', icon: 'none' }) }
     catch (err) {
         const correction = purchaseSelectionProblem(err)
         if (correction) { error.value = '未提交：' + correction; return }

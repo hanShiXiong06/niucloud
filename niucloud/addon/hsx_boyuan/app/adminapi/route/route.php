@@ -12,6 +12,10 @@ Route::group('boyuan',function () {
     Route::post('reference-search',$c.'references');
     Route::post('task-batch',$c.'batch'); Route::post('mapping-candidates',$c.'mappingCandidates');
     Route::post('task-batch-status',$c.'batchStatus');
+    $opening='addon\\hsx_boyuan\\app\\adminapi\\controller\\Opening@';
+    Route::get('opening-check',$opening.'check');
+    Route::post('opening-preview',$opening.'preview');
+    Route::post('opening-apply',$opening.'apply');
     $purchase='addon\\hsx_boyuan\\app\\adminapi\\controller\\PurchaseSync@';
     Route::get('purchases/:id',$purchase.'view');
     Route::post('purchases/:id/draft',$purchase.'saveDraft');
@@ -19,10 +23,17 @@ Route::group('boyuan',function () {
     Route::post('purchases/:id/verify',$purchase.'verify');
     Route::post('purchases/:id/inventory-check',$purchase.'inventoryCheck');
     Route::post('purchase-source/:id',$purchase.'capture');
+    $sale='addon\\hsx_boyuan\\app\\adminapi\\controller\\Wholesale@';
+    Route::post('wholesale-source/:id',$sale.'capture');
+    Route::post('wholesale/:id/submit',$sale.'submit');
+    Route::post('wholesale/:id/verify',$sale.'verify');
     $payment='addon\\hsx_boyuan\\app\\adminapi\\controller\\PaymentSync@';
     Route::get('purchases/:id/payment-candidates',$payment.'candidates');
     Route::post('purchases/:id/payment-capture',$payment.'capture');
     Route::get('payment-tasks/:id',$payment.'view');
     Route::post('payment-tasks/:id/draft',$payment.'saveDraft');
     Route::post('payment-tasks/:id/submit',$payment.'submit');
+    $receipt='addon\\hsx_boyuan\\app\\adminapi\\controller\\SaleReceipt@';
+    Route::get('receipt-tasks/:id',$receipt.'view');
+    Route::post('receipt-tasks/:id/submit',$receipt.'submit');
 })->middleware([AdminCheckToken::class,AdminCheckRole::class]);

@@ -42,14 +42,14 @@ try {
     Db::name('sys_user')->where('uid',1)->update(['mobile'=>'13800000001']);
     $run=str_repeat('a',32);
     Db::name('hsx_boyuan_reference_sync')->insert(['site_id'=>$site,'connection_key'=>$key,'mode'=>'mock','resource'=>'staff','run_key'=>$run,'status'=>'completed','scope_json'=>'{}','operator_uid'=>1]);
-    $add=function(string $id,string $resource,string $hash,array $extra=[]) use($site,$key,$run): void {Db::name('hsx_boyuan_reference')->insert(['site_id'=>$site,'connection_key'=>$key,'resource'=>$resource,'external_id'=>$id,'code'=>$id,'name'=>'虚构候选 '.$id,'enabled'=>1,'phone_hash'=>$hash,'phone_masked'=>'138****0001','extra_json'=>Contract::json($extra),'seen_run'=>$run]);};
+    $add=function(string $id,string $resource,string $hash,array $extra=[]) use($site,$key,$run): void {\addon\hsx_boyuan\app\support\CatalogStore::query($resource)->insert(['site_id'=>$site,'connection_key'=>$key,'external_id'=>$id,'code'=>$id,'name'=>'虚构候选 '.$id,'enabled'=>1,'phone_hash'=>$hash,'phone_masked'=>'138****0001','extra_json'=>Contract::json($extra),'seen_run'=>$run]);};
     $hash=ReferenceService::phoneHash($site,'13800000001'); $add('STAFF_A','staff',$hash,['company_name'=>'虚构一店']); $add('STAFF_B','staff',$hash,['company_name'=>'虚构二店']);
     $candidates=new MappingCandidateService(); $rows=$candidates->search($site,'staff','staff:1');
     ensure($rows['match']==='ambiguous' && count($rows['items'])===2,'same phone returns candidates for explicit single selection');
     ensure(!str_contains(Contract::json($rows),'phone_hash') && !str_contains(Contract::json($rows),'13800000001'),'candidate response contains no phone plaintext or hash');
     ensure(Db::name('hsx_boyuan_mapping')->count()===0,'phone candidates do not silently bind accounts');
-    Db::name('hsx_boyuan_reference')->where('external_id','STAFF_B')->update(['enabled'=>0]); ensure($candidates->search($site,'staff','staff:1')['match']==='unique','disabled remote candidates excluded');
-    Db::name('hsx_boyuan_reference')->where('external_id','STAFF_A')->update(['seen_run'=>str_repeat('b',32)]); ensure($candidates->search($site,'staff','staff:1')['match']==='not_found','unconfirmed historical archive not suggested');
+    \addon\hsx_boyuan\app\support\CatalogStore::query('staff')->where('external_id','STAFF_B')->update(['enabled'=>0]); ensure($candidates->search($site,'staff','staff:1')['match']==='unique','disabled remote candidates excluded');
+    \addon\hsx_boyuan\app\support\CatalogStore::query('staff')->where('external_id','STAFF_A')->update(['seen_run'=>str_repeat('b',32)]); ensure($candidates->search($site,'staff','staff:1')['match']==='not_found','unconfirmed historical archive not suggested');
     Db::name('sys_user')->where('uid',1)->update(['mobile'=>'']); ensure($candidates->search($site,'staff','staff:1')['match']==='missing_phone','missing phone uses manual path');
     reject(fn()=>$candidates->search($site+1,'staff','staff:1'),'staff identity belongs to active tenant role');
     $party=(int)Db::name('erp_party')->insertGetId(['site_id'=>$site,'party_no'=>'UX_PARTY','party_name'=>'虚构多角色往来单位','party_type'=>'customer','role_flags'=>'sale_customer,purchase_supplier','contact_mobile'=>'13800000001','status'=>1]);

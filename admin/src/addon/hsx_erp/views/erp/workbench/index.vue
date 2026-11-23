@@ -4,6 +4,7 @@
             <ErpWorkspaceHeader page="workbench" region-label="顶部经营指标" @change="resizeCharts">
                 <template #title>经营工作台 <span class="period-caption">{{ periodLabel }}</span></template>
                 <template #extra>
+                    <IntegrationDeskLinks workbench />
                     <el-button :icon="Setting" @click="openKpiConfig">绩效配置</el-button>
                     <el-tooltip content="刷新经营数据"><el-button :icon="Refresh" circle :loading="loading" aria-label="刷新经营数据" @click="loadDashboard" /></el-tooltip>
                 </template>
@@ -118,6 +119,7 @@
 </template>
 
 <script setup lang="ts">
+import IntegrationDeskLinks from '@/addon/hsx_erp/components/IntegrationDeskLinks.vue'
 import { erpEnumLabel } from '@/addon/hsx_erp/utils/display'
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'

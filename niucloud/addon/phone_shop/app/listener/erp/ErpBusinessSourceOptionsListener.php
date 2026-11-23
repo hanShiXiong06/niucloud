@@ -19,6 +19,10 @@ class ErpBusinessSourceOptionsListener
                 'source_key' => 'mini_program_sale',
                 'enabled' => 1,
                 'sort' => 150,
+            ], [
+                'key' => 'phone_shop.cashier_sale', 'name' => '商城收银台',
+                'direction' => 'income', 'scene' => 'sale', 'source_plugin' => 'phone_shop',
+                'source_key' => 'cashier_sale', 'enabled' => 1, 'sort' => 151,
             ]],
         ];
     }

@@ -25,12 +25,18 @@ final class PaymentSync extends BaseAdminController
     {
         $fields=[['revision',-1],['mode',''],['connection_key','']];
         if($capture) $fields[]=['settlement_id',0];
-        else { $fields[]=['selection',[]]; $fields[]=['confirm_registration',false]; $fields[]=['confirm_unverified_ap',false]; }
+        else { $fields[]=['selection',[]]; $fields[]=['confirm_registration',false]; $fields[]=['confirm_unverified_ap',false]; $fields[]=['remember',false]; }
         return $this->request->params($fields);
     }
-    public function candidates(int $id) { return $this->run(false,fn($site)=>(new PaymentSyncService())->candidates($site,$id,$this->request->params([['page',1],['limit',20]]))); }
+    public function candidates(int $id) { return $this->run(false,fn($site)=>(new PaymentSyncService())->candidates($site,$id,$this->request->params([['page',1],['limit',20],['settlement_id',null]]))); }
     public function capture(int $id) { return $this->run(true,fn($site,$uid)=>(new PaymentSyncService())->capture($site,$id,$uid,$this->input(true))); }
     public function view(int $id) { return $this->run(false,fn($site)=>(new PaymentSyncService())->view($site,$id)); }
     public function saveDraft(int $id) { return $this->run(true,fn($site,$uid)=>(new PaymentSyncService())->saveDraft($site,$id,$uid,$this->input())); }
-    public function submit(int $id) { return $this->run(true,fn($site,$uid)=>(new PaymentSyncService())->submit($site,$id,$uid,$this->input())); }
+    public function submit(int $id) { return $this->run(true,function($site,$uid) use($id) {
+        $intent=$this->request->params([['intent','']])['intent']; $service=new PaymentSyncService();
+        if($intent==='process_current') return $service->processCurrent($site,$id,$uid,$this->request->params([
+            ['revision',-1],['mode',''],['connection_key',''],['account_code',''],['purchase_task_id',0],['settlement_id',0]]));
+        if($intent!=='') throw new Problem('PAYMENT_INTENT_INVALID','不支持的付款凭证操作');
+        return $service->submit($site,$id,$uid,$this->input());
+    }); }
 }

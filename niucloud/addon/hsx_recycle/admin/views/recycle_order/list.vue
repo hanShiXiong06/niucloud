@@ -275,6 +275,9 @@
       </template>
     </HsxDialog>
     <!-- 支付方式 -->
+    <HsxDrawer v-model="handoffVisible" title="本单入库与应付" size="lg" destroy-on-close>
+      <InboundPayablePanel v-if="handoffVisible" :order-id="handoffOrderId" :initial-scope="handoffScope" />
+    </HsxDrawer>
     <PaymentMethodDialog
       v-model:visible="paymentDialogVisible"
       :payment-info="paymentInfo"
@@ -350,7 +353,9 @@
 </template>
 
 <script setup lang="ts">
-import { HsxDialog, useFeedback, HsxTitle } from '@/addon/hsx_components/core'
+import { HsxDialog, HsxDrawer, useFeedback, HsxTitle } from '@/addon/hsx_components/core'
+import InboundPayablePanel from './components/InboundPayablePanel.vue'
+import type { InboundScope } from '@/addon/hsx_recycle/utils/inbound-handoff'
 import { ref, onMounted, onBeforeUnmount, computed,reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessageBox, ElLoading, ElNotification } from 'element-plus'
@@ -580,6 +585,8 @@ const expandRowKeys = computed(() => {
 
 const orderDialogVisible = ref(false);
 const paymentDialogVisible = ref(false);
+const handoffVisible = ref(false), handoffOrderId = ref<number | string>(0)
+const handoffScope = ref<InboundScope>()
 const currentOrderId = ref<number | string>(0);
 const currentOrderTotal = ref(0);
 const currentDevices = ref<any[]>([]);
@@ -704,6 +711,7 @@ const resetAllSearch = async () => {
 };
 
 const { handleAction } = useRecycleOrderActions({
+  showInboundPayables: (id, scope) => { handoffOrderId.value = id; handoffScope.value = scope; handoffVisible.value = true },
   list,
   pagination,
   getList,

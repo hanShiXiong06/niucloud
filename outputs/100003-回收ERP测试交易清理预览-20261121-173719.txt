@@ -1,0 +1,191 @@
+本地站点 100003 —— 测试交易清理预览（只读；不是删除脚本）
+时间：2026-11-21 17:37:19 Asia/Shanghai。来源：本机 MySQL 一致性只读快照，只查本地站点；外部系统未访问。
+粒度：采购、销售按原单；库存按设备；应收、应付按债项；付款收款按已确认凭证。回收付款与 ERP 付款是同一业务的不同记录，不累加。
+
+一、主单范围：11 张采购、12 台设备，4 张销售；2 张回收单、3 台回收设备全部落在 C。
+
+A｜无本地博远交易任务；仍引用绩效
+  采购原单 4：本地 ID 18、19、20、21
+  采购行 4：本地 ID 18、19、20、21
+  库存资产 4：本地 ID 428、429、430、431
+  销售原单 4：本地 ID 266、267、268、269
+  销售行 4：本地 ID 314、315、316、317
+  应付 4：本地 ID 153、154、155、156
+  应收 4：本地 ID 242、243、244、245
+  收付款凭证 8：本地 ID 114、115、116、117、118、119、120、121
+  凭证分摊 8：本地 ID 78、79、80、81、82、83、84、85
+  资产流水 8；资金流水 8；往来流水 16；ERP 发件事件 52；已有员工绩效事实 16。
+
+B｜有未发送的博远采购任务，且引用绩效
+  采购原单 4：本地 ID 22、23、24、25
+  采购行 4：本地 ID 22、23、24、25
+  库存资产 4：本地 ID 432、433、434、435
+  应付 4：本地 ID 157、158、159、160
+  收付款凭证 3：本地 ID 122、123、126
+  凭证分摊 3：本地 ID 86、87、90
+  博远任务 4：本地 ID 12、19、20、21
+  资产流水 4；资金流水 3；往来流水 7；ERP 发件事件 21；已有员工绩效事实 7。
+
+C｜已有博远单号，保留原单证据链
+  采购原单 3：本地 ID 26、27、28
+  采购行 4：本地 ID 26、27、28、29
+  库存资产 4：本地 ID 436、437、438、439
+  应付 4：本地 ID 161、162、163、164
+  收付款凭证 4：本地 ID 124、125、127、128
+  凭证分摊 4：本地 ID 88、89、91、92
+  回收单 2：本地 ID 25、26
+  回收设备 3：本地 ID 35、36、37
+  博远任务 6：本地 ID 13、14、15、16、17、18
+  博远业务单据/行绑定 7：本地 ID 11、12、13、14、15、16、17
+  资产流水 4；资金流水 4；往来流水 8；ERP 发件事件 24；已有员工绩效事实 14。
+
+二、资金、库存和外围关联
+采购成本 ¥5,566.00。应付 12 笔：11 笔已结 ¥5,446.00，1 笔 ¥120.00 未结（B 组，采购 #22）。销售总额 ¥2,506.00；4 笔应收均已结。本地收付：已确认付款 11 笔 ¥5,446.00，收款 4 笔 ¥2,506.00。
+8 台在库，合计成本 ¥3,563.00；4 台已售，成本 ¥2,003.00。回收 2 单共 ¥3.00，有 3 笔回收付款镜像，已包含在 ERP 付款中。
+4 个资金账户必须保留。1 个账户有 15 条资金流水，净额 −¥2,940.00，现余额 ¥60.00；其余三个余额为 0。首笔流水之前的余额按本地记录倒推为 ¥3,000.00，不能当成已确认的期初凭证或随意归零。期初批次及其明细均为 0。任何影响余额的实施都需先核准基线并重新核对保留流水的逐笔余额。
+本地查到员工绩效 37 条：ERP 设备 13、ERP 结算 15、回收设备 9。A/B/C 的每一张采购都被直接或经设备、凭证关联。员工绩效和日汇总不在本次默认删除范围；如选择物理清理 A+B，需另行确认其 23 条测试绩效如何处理并检查汇总。不直接删人员、绩效规则或工资数据。
+本次已查的同站商城 SKU / 商品入库表关联 ERP 资产、商城来源销售单或外部商品行、会员卡财务引用、回收营销事实、回收专用平台转账记录、回收原单的物流标识均未找到。未扫描第三方外部系统，不能据此判断外部库存/财务状态。
+
+三、外部回执与防重记录（仅来自本地，不核验博远）
+  博远任务 #13；采购 221737；本地原单 PO20261119150536068489684；本地保存状态 succeeded。
+  博远任务 #14；采购 221741；本地原单 PO20261119150536068489684；本地保存状态 created_review。
+  博远任务 #15；采购 221743；本地原单 PO20261119232055036120886；本地保存状态 succeeded。
+  博远任务 #17；采购 221745；本地原单 PO20261120003157435387466；本地保存状态 succeeded。
+  博远任务 #18；付款凭证 221747；本地原单 ST20261120003602924634592；本地保存状态 registered_review。
+5 条有外部号的任务。另有 5 条等待人工确认，发送次数为 0：B 组有 4 条采购；C 组还有 1 条付款任务，不能因没有外部号就删除。付款 221747 是已登记待核对，不证明 221745 的采购已结清。采购 221741 本地尚待核对。不得重发或以清理代替博远撤单。
+新集成桥业务任务、失败、汇总均为 0，连接/映射也均为 0。博远插件的原生资料及映射另计。ERP 发件事件 97 条都在本地标记 done，收件事件 3 条 processed；不能按站点一把删。队列基础设施不在范围，不全表清理。
+
+四、必须保留的档案和配置（有些是共用库；本次不动）
+  博远主档 2042 条，博远基础映射 389 条；外部业务绑定 7 条并非档案映射，但同样保留。博远资料同步批次 11（已完成 8，分类待核对 2，往来单位已排队 1）；不停止、不删除基础同步。
+  ERP 往来单位 182、会员关联 1、仓库 115、库位 115、资金账户 4、本站目录商品 6、成色等级 7、规格组 2、规格项 11；保留客户、员工、仓储、设备型号、回收分类与质检/打印模板、站点开关、全局/公共库、账套连接、账号及映射。
+  博远本地模拟记录 3 条单列，未据其判断外部结果，不在默认清单中。回收统计及人员日汇总不整体清空，需要时按保留交易重算。
+
+五、全站点数量核对（仅 100003；以下是盘点数量，不是 DELETE 表列表）
+  erp_account_ledger: 31
+  erp_asset: 12
+  erp_asset_ledger: 16
+  erp_capital_account: 4
+  erp_catalog_import_task: 0
+  erp_channel_attribute_mapping: 0
+  erp_channel_attribute_value_mapping: 0
+  erp_channel_category_mapping: 0
+  erp_channel_listing: 0
+  erp_goods_grade: 7
+  erp_goods_spec_group: 2
+  erp_goods_spec_item: 11
+  erp_inbox_event: 3
+  erp_integration_connection: 0
+  erp_integration_failure: 0
+  erp_integration_mapping: 0
+  erp_integration_sync_log: 0
+  erp_integration_sync_task: 0
+  erp_kpi_rule: 5
+  erp_money_ledger: 15
+  erp_offset: 0
+  erp_offset_link: 0
+  erp_opening_batch: 0
+  erp_opening_item: 0
+  erp_operation_log: 1
+  erp_outbox_event: 97
+  erp_party: 182
+  erp_party_member: 1
+  erp_payable: 12
+  erp_print_job: 0
+  erp_print_scene: 7
+  erp_print_template: 2
+  erp_printer: 0
+  erp_purchase_item: 12
+  erp_purchase_order: 11
+  erp_purchase_return: 0
+  erp_purchase_return_item: 0
+  erp_quantity_product: 0
+  erp_quantity_stock: 0
+  erp_quantity_stock_flow: 0
+  erp_receivable: 4
+  erp_sale_item: 4
+  erp_sale_order: 4
+  erp_sale_return: 0
+  erp_sale_return_item: 0
+  erp_settlement: 15
+  erp_settlement_link: 15
+  erp_site_catalog_product: 6
+  erp_stocktake: 0
+  erp_stocktake_item: 0
+  erp_warehouse: 115
+  erp_warehouse_location: 115
+  hsx_boyuan_binding: 7
+  hsx_boyuan_mapping: 389
+  hsx_boyuan_md_brand: 0
+  hsx_boyuan_md_capital_account: 31
+  hsx_boyuan_md_category: 59
+  hsx_boyuan_md_company: 54
+  hsx_boyuan_md_member: 178
+  hsx_boyuan_md_party: 181
+  hsx_boyuan_md_payment_method: 88
+  hsx_boyuan_md_product: 1213
+  hsx_boyuan_md_staff: 118
+  hsx_boyuan_md_warehouse: 120
+  hsx_boyuan_mock_record: 3
+  hsx_boyuan_reference_sync: 11
+  hsx_boyuan_reference_v123: 0
+  hsx_boyuan_task: 10
+  recycle_alert_rule: 0
+  recycle_category: 0
+  recycle_category_config: 0
+  recycle_category_quote_history: 0
+  recycle_check_dict: 0
+  recycle_check_field: 0
+  recycle_check_group: 0
+  recycle_check_import_batch: 0
+  recycle_check_option: 0
+  recycle_check_template: 0
+  recycle_consignment_log: 0
+  recycle_consignment_order: 0
+  recycle_dashboard_widget: 27
+  recycle_device: 3
+  recycle_device_brand: 0
+  recycle_device_cost_adjustment: 0
+  recycle_device_log: 45
+  recycle_device_model: 0
+  recycle_device_model_alias: 0
+  recycle_device_model_dict: 0
+  recycle_device_model_import_task: 0
+  recycle_device_payment: 3
+  recycle_device_price: 0
+  recycle_express_provider_config: 2
+  recycle_notice_log: 4
+  recycle_order: 2
+  recycle_order_log: 0
+  recycle_print_log: 11
+  recycle_print_scene: 5
+  recycle_print_task: 0
+  recycle_print_variable: 0
+  recycle_printer: 0
+  recycle_printer_template: 0
+  recycle_quotation_v2_capacity: 0
+  recycle_quotation_v2_dataset: 0
+  recycle_quotation_v2_field: 0
+  recycle_quotation_v2_model: 0
+  recycle_quotation_v2_note: 0
+  recycle_quotation_v2_price: 0
+  recycle_quotation_v2_sync_log: 0
+  recycle_quote_spider_category: 0
+  recycle_quote_spider_import_task: 0
+  recycle_quote_spider_item: 0
+  recycle_quote_spider_price_history: 0
+  recycle_quote_spider_row: 0
+  recycle_quote_spider_source: 0
+  recycle_quote_spider_sync_log: 0
+  recycle_return_order: 0
+  recycle_shop_address: 0
+  recycle_stat_current: 4
+  recycle_stat_daily: 28
+  recycle_stat_daily_dim: 0
+  recycle_task_assignment_log: 11
+  recycle_task_claim: 11
+  recycle_template_binding: 0
+  recycle_user_address: 0
+  recycle_user_pick_stat: 0
+  recycle_return_device 无 site_id；按回收退货单/设备归属正反两端核对，本站关联明细 0。全局型号、收款资料及共享队列不按全表统计/删除。
+
+建议：若只想清空店员列表，优先归档或隔离展示并保留可追溯原单，不误改财务或绩效。若要求物理清理，先解决 A+B 绩效、B 组待确认采购、账户余额及历史流水的处理，再执行预演；C 明确保留。快照不是执行许可；执行前必须重新检查任务和数量是否变化。

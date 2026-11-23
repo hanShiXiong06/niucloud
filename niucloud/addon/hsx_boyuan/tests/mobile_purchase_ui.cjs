@@ -118,6 +118,8 @@ async function run() {
     assert.equal(ui.remember.value, false)
     assert.equal(ui.canSubmit.value, true)
     assert.equal(ui.labelFor('company_id'), '测试公司')
+    assert.equal(ui.visibleTopFields.value.length,0); assert.equal(ui.visibleSourceLines.value.length,0)
+    ui.matchedExpanded.value=true; assert.equal(ui.visibleTopFields.value.length,4); ui.matchedExpanded.value=false
     assert.equal(ui.topFields.find(field => field.key === 'creator_id').resource, 'staff')
     assert.equal(ui.topFields.find(field => field.key === 'creator_id').role, undefined, 'creator must not use buyer-only staff filtering')
     ui.selection.value.creator_id = ''
@@ -126,7 +128,7 @@ async function run() {
     ui.openLookup(ui.topFields[1]); await flush()
     assert.equal(ui.choices.value.length, 1)
     assert.equal(ui.choiceCursor.value, '2')
-    assert.deepEqual(calls.find(call => call[0] === 'references')[1], { resource: 'parties', role: 'supplier', keyword: '', cursor: '1', limit: 50, enabled_only: true })
+    assert.deepEqual(calls.find(call => call[0] === 'references')[1], { resource: 'parties', role: 'supplier', keyword: '', cursor: '1', limit: 50, enabled_only: true, expected_connection_key: 'connection-A' })
     await ui.loadChoices(true)
     assert.equal(ui.choices.value.length, 2)
     assert.equal(ui.choiceCursor.value, '')
@@ -259,6 +261,33 @@ async function run() {
     assert.equal(ui.inventoryExpanded.value, true, 'inventory notification opens the current stock details')
     assert.equal(ui.closureExpanded.value || ui.detailsExpanded.value, false, 'technical details do not leak into another task')
     current = { ...current, can_operate: true, editable: true, can_submit: true, can_verify: false, task: { ...current.task, id: 8, status: 'awaiting_confirmation', external_no: '' } }
+    const pricing = { required: true, status: 'known', name: '实际定价人', local_ref: 'staff:19', mapped_id: '' }
+    const form = { ...clone(current), selection: clone(completeSelection), labels: { ...clone(current.labels), buyer: { id: 'buyer-1', name: '博远定价员' } }, pricing_buyer: pricing }
+    for (const status of ['missing', 'mixed', 'conflict']) {
+        ui.applyView({ ...form, pricing_buyer: { ...pricing, status } })
+        assert.equal(ui.canSubmit.value, false)
+        ui.openLookup(ui.topFields[3]); assert.equal(ui.lookup.value, null)
+    }
+    ui.applyView({ ...form, pricing_buyer: { ...pricing, mapped_id: 'buyer-1' } })
+    ui.clearBuyer(); ui.openLookup(ui.topFields[3])
+    assert.equal(ui.selection.value.buyer_id, 'buyer-1'); assert.equal(ui.lookup.value, null)
+    ui.applyView({ ...form, editable: false, pricing_buyer: { ...pricing, receipt_status: 'not_supplied' } })
+    assert.equal(ui.buyerReceiptLabel.value, '原单未传采购业务员')
+    ui.applyView({ ...form, editable: false, pricing_buyer: { ...pricing, receipt_status: 'matched', returned_name: '回执中的定价员' } })
+    assert.equal(ui.buyerReceiptLabel.value, '回执中的定价员')
+    ui.applyView({ ...form, editable: false, pricing_buyer: { ...pricing, receipt_status: 'matched', receipt_source: 'purchase_details', returned_name: '核单定价员' } })
+    assert.equal(ui.buyerReceiptLabel.value, '核单定价员（已核对博远采购明细）')
+    ui.applyView(form); holdModal = true
+    const writesBeforePricing = calls.filter(c => c[0] === 'submit').length
+    await ui.submit(); ui.confirmSubmit()
+    const pricingModal = modalCalls.at(-1)
+    assert.match(pricingModal.content, /实际定价人.*博远定价员/)
+    await pricingModal.success({ confirm: false }); assert.equal(calls.filter(c => c[0] === 'submit').length, writesBeforePricing)
+    const savedOriginal = clone(current)
+    ui.confirmSubmit(); await modalCalls.at(-1).success({ confirm: true }); await flush(); holdModal = false
+    assert.equal(calls.filter(c => c[0] === 'submit').length, writesBeforePricing + 1)
+    assert.equal(calls.filter(c => c[0] === 'submit').at(-1)[2].confirm_pricing_buyer, true)
+    current = savedOriginal
     ui.applyView(clone(current))
     ui.selection.value.lines[0].warehouse_id = 'new-warehouse'
     api.submitPurchase = async () => { throw { code: 0, msg: '[WAREHOUSE_COMPANY_MISMATCH] 仓库与公司不符，请重新选择' } }

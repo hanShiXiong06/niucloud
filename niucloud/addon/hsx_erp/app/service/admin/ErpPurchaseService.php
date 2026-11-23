@@ -17,6 +17,7 @@ use addon\hsx_erp\app\model\ErpPurchaseReturnOrder;
 use addon\hsx_erp\app\model\ErpQuantityStock;
 use addon\hsx_erp\app\model\ErpWarehouse;
 use addon\hsx_erp\app\support\ErpIdempotency;
+use addon\hsx_erp\app\support\ErpDevicePayableDisplay;
 use addon\hsx_erp\app\support\ErpListingFormContract;
 use addon\hsx_erp\app\support\ErpListingWorkflow;
 use addon\hsx_erp\app\support\ErpPartyMemberNames;
@@ -90,6 +91,8 @@ class ErpPurchaseService extends BaseAdminService
             ->leftJoin($orderTable . ' o', 'o.id = a.purchase_order_id AND o.site_id = a.site_id')
             ->leftJoin($partyTable . ' p', 'p.id = o.party_id AND p.site_id = o.site_id')
             ->where([['a.site_id', '=', $this->site_id]]);
+        $returnItemTable = (new ErpPurchaseReturnItem())->getTable();
+        ErpDevicePayableDisplay::attach($query, $payableTable, $returnItemTable, (string)($where['device_pay_state'] ?? ''));
         if (!empty($where['keyword'])) {
             $kw = trim((string)$where['keyword']);
             $query->whereLike('a.asset_no|a.imei|a.sn|a.model|a.spec|a.party_name|a.warehouse_name|a.location_name|o.purchase_no|o.m_no|p.m_no', '%' . $kw . '%');
@@ -105,11 +108,28 @@ class ErpPurchaseService extends BaseAdminService
                 $effectiveTotal = "CASE WHEN {$hasAssetPayableExpr} THEN COALESCE({$assetTotalExpr}, 0) ELSE COALESCE({$legacyTotalExpr}, 0) END";
                 $effectivePaid = "CASE WHEN {$hasAssetPayableExpr} THEN COALESCE({$assetPaidExpr}, 0) ELSE COALESCE({$legacyPaidExpr}, 0) END";
                 $statusExpr = "CASE WHEN {$effectiveTotal} <= 0 OR {$effectivePaid} >= {$effectiveTotal} THEN 'settled' WHEN {$effectivePaid} > 0 THEN 'partial' ELSE 'pending' END";
+                // The optional whole-order filter is not a substitute for verifying each machine.
+                $originalJoin = ErpDevicePayableDisplay::originalJoin($payableTable, 'sibling', 'sp');
+                $siblingState = ErpDevicePayableDisplay::stateSql($payableTable, $returnItemTable, 'sibling', 'sp');
+                $query->whereRaw("NOT EXISTS (SELECT 1 FROM $assetTable sibling LEFT JOIN $payableTable sp ON $originalJoin
+                    WHERE sibling.site_id = o.site_id AND sibling.purchase_order_id = o.id AND ($siblingState) = 'review')");
+                if ($financeStatus === ErpDict::STATUS_SETTLED) {
+                    $query->whereRaw("EXISTS (SELECT 1 FROM $assetTable sa INNER JOIN $payableTable live ON live.site_id = sa.site_id
+                        AND live.source_type = 'purchase_asset' AND live.source_id = sa.id AND live.status <> 'void'
+                        WHERE sa.site_id = o.site_id AND sa.purchase_order_id = o.id)");
+                }
                 $query->whereRaw("{$statusExpr} = '{$financeStatus}'");
             }
         }
         if (!empty($where['status'])) {
             $query->where('o.status', '=', (string)$where['status']);
+        }
+        $serial = trim((string)($where['serial'] ?? ''));
+        if ($serial !== '') {
+            $serialLike = '%' . addcslashes($serial, '\\%_') . '%';
+            $query->where(function ($q) use ($serialLike) {
+                $q->whereLike('a.imei', $serialLike)->whereOr('a.sn', 'like', $serialLike);
+            });
         }
         foreach ([
             'asset_no' => 'a.asset_no',
@@ -209,6 +229,7 @@ class ErpPurchaseService extends BaseAdminService
         $this->appendPurchasePaymentSummary($page['data']);
         $this->appendPurchaseReturnSummary($page['data']);
         ErpPartyMemberNames::append($this->site_id, $page['data']);
+        $page['cost_maintenance_hint']=ErpPurchaseExtensionService::costMaintenanceHint((int)$this->site_id);
         return $page;
     }
 
@@ -339,13 +360,13 @@ class ErpPurchaseService extends BaseAdminService
         }
         $orderAssets = empty($purchaseIds) ? [] : ErpAsset::where([['site_id', '=', $this->site_id]])
             ->whereIn('purchase_order_id', $purchaseIds)
-            ->field('id,purchase_order_id,purchase_cost,status')->select()->toArray();
+            ->field('id,party_id,purchase_order_id,purchase_cost,status')->select()->toArray();
         $allAssetIds = array_values(array_filter(array_map(static fn(array $row): int => (int)$row['id'], $orderAssets)));
         $payables = ErpPayable::where([
             ['site_id', '=', $this->site_id],
             ['source_type', '=', 'purchase_asset'],
         ])->whereIn('source_id', $allAssetIds ?: $assetIds)
-            ->field('source_id,amount,settled_amount,status')
+            ->field('id,source_id,asset_id,party_id,amount,settled_amount,status')
             ->select()
             ->toArray();
         $map = [];
@@ -387,16 +408,17 @@ class ErpPurchaseService extends BaseAdminService
         }
         foreach ($rows as &$row) {
             $payable = $map[(int)($row['id'] ?? 0)] ?? [];
+            $hint = $row['device_payment_hint'] = ErpDevicePayableDisplay::take($row);
             $amount = round((float)($payable['amount'] ?? $row['purchase_cost'] ?? 0), 2);
             $paid = round((float)($payable['settled_amount'] ?? 0), 2);
-            $row['asset_payable_amount'] = $amount;
-            $row['asset_paid_amount'] = $paid;
-            $row['asset_unpaid_amount'] = max(0, round($amount - $paid, 2));
+            $row['asset_payable_amount'] = $hint['amount'] ?? null;
+            $row['asset_paid_amount'] = $hint['paid'] ?? null;
+            $row['asset_unpaid_amount'] = $hint['remaining'] ?? null;
             $totals = $orderTotals[(int)($row['purchase_order_id'] ?? 0)] ?? ['amount' => 0.0, 'settled_amount' => 0.0];
             $row['order_effective_amount'] = round((float)$totals['amount'], 2);
             $row['paid_amount'] = round((float)$totals['settled_amount'], 2);
             $row['payable_amount'] = max(0, round((float)$totals['amount'] - (float)$totals['settled_amount'], 2));
-            $row['finance_status'] = ErpDict::financeStatus((float)$totals['amount'], (float)$totals['settled_amount']);
+            $row['finance_status'] = empty($totals['count']) ? 'review' : ErpDict::financeStatus((float)$totals['amount'], (float)$totals['settled_amount']);
             $state = $orderStates[(int)($row['purchase_order_id'] ?? 0)] ?? ['count' => 0, 'returned' => 0, 'void' => 0];
             $effectiveCount = max(0, (int)$state['count'] - (int)$state['returned'] - (int)$state['void']);
             $row['order_asset_count'] = (int)$state['count'];
@@ -466,13 +488,15 @@ class ErpPurchaseService extends BaseAdminService
     {
         $order = $this->findOrder($id)->toArray();
         $assetTable = (new ErpAsset())->getTable();
-        $order['items'] = ErpPurchaseItem::alias('i')
+        $itemQuery = ErpPurchaseItem::alias('i')
             ->leftJoin($assetTable . ' a', 'a.id = i.asset_id AND a.site_id = i.site_id')
+            ->leftJoin((new ErpPurchaseOrder())->getTable() . ' o', 'o.id = i.purchase_order_id AND o.site_id = i.site_id')
             ->where([
                 ['i.site_id', '=', $this->site_id],
                 ['i.purchase_order_id', '=', $id],
-            ])
-            ->field([
+            ]);
+        ErpDevicePayableDisplay::attach($itemQuery, (new ErpPayable())->getTable(), (new ErpPurchaseReturnItem())->getTable());
+        $order['items'] = $itemQuery->field([
                 'i.*',
                 'a.asset_no',
                 'a.status as asset_status',
@@ -491,6 +515,11 @@ class ErpPurchaseService extends BaseAdminService
             ->select()
             ->toArray();
         foreach ($order['items'] as &$item) {
+            $hint = ErpDevicePayableDisplay::take($item);
+            if (($item['item_type'] ?? 'device') !== 'standard') {
+                $item['device_payment_hint'] = $hint;
+                $item['order_status'] = $order['status'];
+            }
             if (!empty($item['asset_status'])) {
                 $item['status'] = $item['asset_status'];
             }
@@ -580,9 +609,17 @@ class ErpPurchaseService extends BaseAdminService
             $payable = $payableMap[$payableKey] ?? [];
             $amount = round((float)($payable['amount'] ?? $item['purchase_cost'] ?? 0), 2);
             $paid = round((float)($payable['settled_amount'] ?? 0), 2);
-            $item['payable_amount'] = $amount;
-            $item['paid_amount'] = $paid;
-            $item['unpaid_amount'] = max(0, round($amount - $paid, 2));
+            if (isset($item['device_payment_hint'])) {
+                $hint = $item['device_payment_hint'];
+                $item['payable_amount'] = $hint['amount'] ?? null;
+                $item['paid_amount'] = $hint['paid'] ?? null;
+                $item['unpaid_amount'] = $hint['remaining'] ?? null;
+                if ($hint['state'] === 'review') $order['finance_status'] = 'review';
+            } else {
+                $item['payable_amount'] = $amount;
+                $item['paid_amount'] = $paid;
+                $item['unpaid_amount'] = max(0, round($amount - $paid, 2));
+            }
             $item['return_flow'] = (string)($item['item_type'] ?? 'device') === 'standard'
                 ? ['allowed' => false, 'reason' => '标品退货请从数量库存退货入口处理']
                 : ErpPurchaseReturnPolicy::assess($item, $amount, $paid);
@@ -591,7 +628,8 @@ class ErpPurchaseService extends BaseAdminService
         $partyRows = [$order];
         ErpPartyMemberNames::append($this->site_id, $partyRows);
         $order = $partyRows[0];
-        $order['integration_actions'] = ErpPurchaseExtensionService::actions((int)$this->site_id, $order);
+        $order = array_replace($order,ErpPurchaseExtensionService::detail((int)$this->site_id,$order));
+        $order['cost_maintenance_hint']=ErpPurchaseExtensionService::costMaintenanceHint((int)$this->site_id);
         return $order;
     }
 
@@ -623,6 +661,8 @@ class ErpPurchaseService extends BaseAdminService
         $financeService = ErpFinanceService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username);
         try {
             Db::transaction(function () use ($data, $items, $partyName, $now, $erpRules, $financeService, $appendOrderId, &$orderId, &$createdAssetIds, &$cashSettlementCreated) {
+            if ((trim((string)($data['source_plugin']??''))?:'erp')==='erp' && (trim((string)($data['source_type']??''))?:'manual')==='manual')
+                $items=(new ErpGoodsCatalogService())->resolvePurchaseDevices((int)$this->site_id,$items);
             $order = null;
             if ($appendOrderId > 0) {
                 $order = $this->findOrder($appendOrderId, true);
@@ -953,7 +993,7 @@ class ErpPurchaseService extends BaseAdminService
                 $specJson = $this->normalizeSpecJson($item['spec_json'] ?? []);
                 $catalogProductId = max(0, (int)($item['catalog_product_id'] ?? 0));
                 $catalog = $catalogProductId > 0
-                    ? (new ErpGoodsCatalogService())->productSnapshot($catalogProductId)
+                    ? (new ErpGoodsCatalogService())->productSnapshot($catalogProductId, (int)$this->site_id)
                     : ['category_name' => '', 'category_path' => '', 'product_name' => ''];
                 $modelName = trim((string)($item['model'] ?? ''));
                 if ($catalogProductId > 0) {
@@ -1187,7 +1227,8 @@ class ErpPurchaseService extends BaseAdminService
                     'source_paid_reconciliation' => $useSourcePaidAllocation ? 1 : 0,
                 ]);
             }
-            ErpIntegrationDocumentService::record((int)$this->site_id, 'purchase', $orderId, $createdAssetIds);
+            ErpIntegrationDocumentService::record((int)$this->site_id, 'purchase', $orderId, $createdAssetIds, true,
+                ['uid' => (int)$this->uid, 'name' => (string)$this->username]);
             });
         } catch (\Throwable $e) {
             $existingId = $appendOrderId > 0 ? 0 : $this->existingPurchaseRequest($requestId);
@@ -1219,6 +1260,17 @@ class ErpPurchaseService extends BaseAdminService
             }
             ErpPrintService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username)->triggerSafely('asset_inbound', 'asset', $assetId);
         }
+
+        // 触发ERP集成事件
+        try {
+            event('ErpPurchaseCreated', ['purchase_id' => $orderId, 'site_id' => $this->site_id]);
+        } catch (\Throwable $e) {
+            Log::warning('ERP采购集成事件触发失败', [
+                'purchase_id' => $orderId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
         return $orderId;
     }
 

@@ -14,6 +14,9 @@ use app\adminapi\middleware\AdminCheckRole;
 use app\adminapi\middleware\AdminCheckToken;
 use app\adminapi\middleware\AdminLog;
 
+Route::get('recycle/operation_logs','addon\hsx_recycle\app\adminapi\controller\order\OperationAudit@lists')
+    ->middleware([AdminCheckToken::class, AdminCheckRole::class, AdminLog::class]);
+
 Route::group('recycle/catalog', function () {
     Route::get('config', 'addon\hsx_recycle\app\adminapi\controller\device\DeviceCatalog@info');
     Route::post('config', 'addon\hsx_recycle\app\adminapi\controller\device\DeviceCatalog@choose');

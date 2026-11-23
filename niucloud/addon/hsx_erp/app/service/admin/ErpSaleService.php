@@ -316,7 +316,7 @@ class ErpSaleService extends BaseAdminService
                 ['i.sale_order_id', '=', $id],
             ])->field([
                 'i.*',
-                'a.asset_no', 'a.sn', 'a.spec',
+                'a.asset_no', 'a.sn', 'a.spec', 'a.purchase_item_id AS origin_purchase_item_id',
                 "IF(i.item_type = 'standard', i.warehouse_id, a.warehouse_id) as display_warehouse_id",
                 "IF(i.item_type = 'standard', i.warehouse_name, a.warehouse_name) as display_warehouse_name",
                 "IF(i.item_type = 'standard', i.location_id, a.location_id) as display_location_id",
@@ -350,6 +350,7 @@ class ErpSaleService extends BaseAdminService
         $partyRows = [$order];
         ErpPartyMemberNames::append($this->site_id, $partyRows);
         $order = $partyRows[0];
+        $order = array_replace($order,ErpPurchaseExtensionService::detail((int)$this->site_id,$order,true));
         return $order;
     }
 
@@ -506,6 +507,11 @@ class ErpSaleService extends BaseAdminService
             $settleMode = in_array((string)($data['settle_mode'] ?? ''), ['credit', 'cash'], true)
                 ? (string)$data['settle_mode']
                 : (str_contains((string)($data['settle_method'] ?? ''), '现结') ? 'cash' : 'credit');
+            $splitReceipts = null;
+            if (isset($data['receipt_accounts'])) {
+                if ($settleMode !== 'cash' || ($data['payment_mode'] ?? '') !== 'offline_cash') throw new CommonException('当前销售不能登记分笔收款');
+                $splitReceipts = \addon\hsx_erp\app\support\ErpSaleReceiptAccounts::validate($data['receipt_accounts'], (float)($data['received_amount'] ?? 0));
+            }
             if ($settleMode === 'cash') {
                 $receivedAmount = round((float)($data['received_amount'] ?? 0), 2);
                 if ($receivedAmount <= 0 || $receivedAmount > round($totalAmount, 2) + 0.0001) {
@@ -623,6 +629,11 @@ class ErpSaleService extends BaseAdminService
                     'site_id' => $this->site_id,
                     'sale_order_id' => $orderId,
                     'asset_id' => (int)$asset->id,
+                    // Freeze the actual stock position at handover, before the asset can be returned or moved.
+                    'warehouse_id' => (int)$asset->warehouse_id,
+                    'warehouse_name' => (string)$asset->warehouse_name,
+                    'location_id' => (int)$asset->location_id,
+                    'location_name' => (string)$asset->location_name,
                     'imei' => (string)$asset->imei,
                     'model' => (string)$asset->model,
                     'external_line_id' => (string)$resolvedItem['external_line_id'],
@@ -771,16 +782,19 @@ class ErpSaleService extends BaseAdminService
             ], $financeSourceService->persistable($saleSource)));
             if ($settleMode === 'cash') {
                 $financeService = ErpFinanceService::forSite((int)$this->site_id, (int)$this->uid, (string)$this->username);
-                $settlementId = $financeService->confirmReceivableItemsInTransaction((int)$party->id, [[
-                    'receivable_id' => (int)$receivable->id,
-                    'amount' => round((float)$data['received_amount'], 2),
-                ]], [
-                    'request_id' => ErpIdempotency::child((string)($data['request_id'] ?? ''), 'sale-receipt') ?: null,
-                    'capital_account_id' => (int)($data['capital_account_id'] ?? 0),
-                    'voucher_urls' => $data['voucher_urls'] ?? '',
-                    'remark' => trim((string)($data['remark'] ?? '')) ?: '销售现结收款',
-                ]);
-                $this->recordOnlinePaymentAdjustments($data, $order, $party, $settlementId, $now);
+                $receipts = $splitReceipts ?? [['account_id'=>(int)$data['capital_account_id'],'amount'=>round((float)$data['received_amount'],2)]];
+                foreach ($receipts as $receipt) {
+                    $settlementId = $financeService->confirmReceivableItemsInTransaction((int)$party->id, [[
+                        'receivable_id' => (int)$receivable->id,
+                        'amount' => (float)$receipt['amount'],
+                    ]], [
+                        'request_id' => ErpIdempotency::child((string)($data['request_id'] ?? ''), $splitReceipts === null ? 'sale-receipt' : 'receipt-'.$receipt['account_id']) ?: null,
+                        'capital_account_id' => $receipt['account_id'],
+                        'voucher_urls' => $data['voucher_urls'] ?? '',
+                        'remark' => trim((string)($data['remark'] ?? '')) ?: '销售现结收款',
+                    ]);
+                }
+                if ($splitReceipts === null) $this->recordOnlinePaymentAdjustments($data, $order, $party, $settlementId, $now);
             }
             ErpIntegrationDocumentService::record((int)$this->site_id, 'sale', $orderId);
         });

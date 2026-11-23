@@ -16,12 +16,13 @@
             @clear="onClear"
             @visible-change="visible => visible && !options.length && onSearch('')"
         >
-            <el-option v-for="item in options" :key="item.member_id" :value="item.member_id" :label="labelOf(item)">
+            <el-option v-for="item in options" :key="item.pick_key" :value="item.pick_key" :label="labelOf(item)">
                 <div class="member-option">
                     <div class="member-option__info">
                         <span class="font-medium">{{ nameOf(item) }}</span>
                         <span class="ml-1 text-xs text-gray-400">{{ item.mobile || '无手机' }}</span>
-                        <el-tag v-if="item.party_name || item.counterparty_name" size="small" effect="plain" class="ml-2">{{ item.party_name || item.counterparty_name }}</el-tag>
+                        <el-tag v-if="item.source_kind === 'party'" size="small" effect="plain" class="ml-2">往来主体</el-tag>
+                        <el-tag v-else-if="item.party_name || item.counterparty_name" size="small" effect="plain" class="ml-2">{{ item.party_name || item.counterparty_name }}</el-tag>
                         <span v-else class="ml-2 text-xs text-orange-500">无主体 · 选后自动建</span>
                         <el-tag v-for="role in item.role_flags || []" :key="role" size="small" type="info" class="ml-1">{{ roleLabel(role) }}</el-tag>
                         <el-tag v-if="creditTag(item)" size="small" :type="creditTag(item).type" class="ml-1">{{ creditTag(item).label }}</el-tag>
@@ -30,7 +31,7 @@
                         <el-tooltip v-if="item.party_id && roleType === 'customer'" content="客户信用设置" placement="top">
                             <el-button link type="warning" :icon="Lock" aria-label="客户信用设置" @mousedown.stop @click.stop="openCredit(item)" />
                         </el-tooltip>
-                        <el-tooltip content="修改会员昵称" placement="top">
+                        <el-tooltip v-if="item.source_kind === 'member'" content="修改会员昵称" placement="top">
                             <el-button link type="primary" :icon="EditPen" aria-label="修改会员昵称" @mousedown.stop @click.stop="editMemberNickname(item)" />
                         </el-tooltip>
                     </div>
@@ -67,7 +68,7 @@ import { HsxDialog, useFeedback } from '@/addon/hsx_components/core'
 import { ref, watch } from 'vue'
 import { ElMessageBox } from 'element-plus'
 import { EditPen, Lock } from '@element-plus/icons-vue'
-import { getErpMemberOptions, quickCreateErpParty, resolveErpContact } from '@/addon/hsx_erp/api/counterparty'
+import { getErpCounterpartyOptions, getErpMemberOptions, quickCreateErpParty, resolveErpContact } from '@/addon/hsx_erp/api/counterparty'
 import { editMemberDetail } from '@/app/api/member'
 import ErpPartyCreditDialog from '@/addon/hsx_erp/components/ErpPartyCreditDialog.vue'
 const hsxFeedback = useFeedback()
@@ -85,12 +86,14 @@ const props = withDefaults(defineProps<{
     valueField: 'party_id'
 })
 
-const emit = defineEmits(['update:modelValue', 'resolved'])
+const emit = defineEmits(['update:modelValue', 'resolved', 'resolving-change'])
 
-const picked = ref<number | undefined>(undefined)
+const picked = ref<string | undefined>(undefined)
+let searchVersion = 0, pickVersion = 0
 const options = ref<any[]>([])
 const loading = ref(false)
 const resolving = ref(false)
+watch(resolving, value => emit('resolving-change', value), { flush: 'sync' })
 const creditVisible = ref(false)
 const creditParty = ref<any>(null)
 const roleFilter = ref('all')
@@ -105,39 +108,63 @@ const creditTag = (item: any) => {
     return null
 }
 
-const nameOf = (item: any) => item.nickname || item.username || item.member_name || '姓名未登记'
+const nameOf = (item: any) => item.source_kind === 'party' ? item.party_name : item.nickname || item.username || item.member_name || '姓名未登记'
 const labelOf = (item: any) => {
     const partyName = item.party_name || item.counterparty_name
-    return [nameOf(item), item.mobile, partyName].filter(Boolean).join(' / ')
+    return [...new Set([nameOf(item), item.mobile, partyName].filter(Boolean))].join(' / ')
+}
+
+const effectiveRole = () => roleFilter.value !== 'all' ? roleFilter.value : props.roleType
+// Never interpret a party key as a member ID, even on servers exposing the old member_id alias.
+function asOption(item: any, kind: 'member' | 'party') {
+    const id = Number(kind === 'party' ? item.party_id || item.id : item.member_id)
+    return { ...item, ...(kind === 'party' ? { party_id:id, member_id:0 } : {}), source_kind:kind, pick_key:kind + ':' + id }
 }
 
 async function onSearch(keyword: string) {
+    const version=++searchVersion
     loading.value = true
     try {
-        const res: any = await getErpMemberOptions({ keyword: keyword || '', role_filter: roleFilter.value })
-        options.value = res?.data || []
-    } catch (error: any) {
-        options.value = []
-        hsxFeedback.error(error?.msg || error?.message || '对接人列表加载失败')
+        const [parties, members] = await Promise.allSettled([
+            props.valueField === 'member_id' ? Promise.resolve({data:[]}) : getErpCounterpartyOptions({ keyword: keyword || '', role_type:effectiveRole() }),
+            getErpMemberOptions({ keyword: keyword || '', role_filter: roleFilter.value })
+        ])
+        if (version !== searchVersion) return
+        const rows = (res: PromiseSettledResult<any>) => res.status === 'fulfilled' && Array.isArray(res.value?.data) ? res.value.data : []
+        const memberRows = rows(members).filter((r:any) => Number(r.member_id)>0).map((r:any)=>asOption(r,'member'))
+        const represented = new Set(memberRows.map((r:any)=>Number(r.party_id)).filter(Boolean))
+        options.value = [...rows(parties).filter((r:any)=>Number(r.party_id || r.id)>0 && !represented.has(Number(r.party_id || r.id))).map((r:any)=>asOption(r,'party')), ...memberRows]
+        if (parties.status === 'rejected' || members.status === 'rejected') hsxFeedback.warning([parties.status === 'rejected' && '往来主体', members.status === 'rejected' && '会员'].filter(Boolean).join('、')+'未能读取，请重试或检查查看权限')
     } finally {
-        loading.value = false
+        if (version === searchVersion) loading.value = false
     }
 }
 
-async function onPick(memberId: number) {
-    if (!memberId) return onClear()
+async function onPick(key: string) {
+    if (!key) return onClear()
+    const item = options.value.find(o=>o.pick_key===key)
+    if (!item) return onClear()
+    const version=++pickVersion
+    if (item.source_kind === 'party') {
+        resolving.value = false
+        const data=normalize(item)
+        emit('update:modelValue', data[props.valueField] || 0); emit('resolved',data)
+        return
+    }
     resolving.value = true
     try {
-        const res: any = await resolveErpContact({ member_id: memberId, role_type: roleFilter.value !== 'all' ? roleFilter.value : props.roleType })
+        const res: any = await resolveErpContact({ member_id: Number(item.member_id), role_type:effectiveRole() })
+        if (version !== pickVersion) return
         const data = normalize(res?.data || {})
-        emit('update:modelValue', data[props.valueField] || data.party_id || 0)
+        emit('update:modelValue', data[props.valueField] || 0)
         emit('resolved', data)
         if (data.auto_created) hsxFeedback.success(`已为「${data.member_name || ''}」自动创建往来主体`)
     } catch (error: any) {
+        if (version !== pickVersion) return
         hsxFeedback.error(error?.msg || error?.message || '对接人解析失败')
         onClear()
     } finally {
-        resolving.value = false
+        if (version === pickVersion) resolving.value = false
     }
 }
 
@@ -182,6 +209,7 @@ function onCreditSaved(profile: any) {
 }
 
 function onClear() {
+    ++pickVersion; resolving.value=false
     picked.value = undefined
     emit('update:modelValue', 0)
     emit('resolved', null)
@@ -206,10 +234,11 @@ async function doCreate() {
             ? await resolveErpContact({ ...createForm.value, role_type: roleType })
             : await quickCreateErpParty({ ...createForm.value, role_type: roleType })
         const data = normalize(res?.data || {})
-        if (data.member_id) options.value = [{ member_id: data.member_id, nickname: data.member_name, mobile: data.mobile, party_name: data.party_name, m_no: data.m_no }, ...options.value]
-        picked.value = Number(data.member_id || 0) || undefined
-        emit('update:modelValue', data[props.valueField] || data.party_id || 0)
-        emit('resolved', data)
+        const choice=asOption(data,createMode.value==='member'?'member':'party')
+        options.value=[choice,...options.value.filter(row=>row.pick_key!==choice.pick_key)]
+        picked.value=choice.pick_key
+        emit('update:modelValue', choice[props.valueField] || 0)
+        emit('resolved', choice)
         createVisible.value = false
         hsxFeedback.success('对接人已创建并选用')
     } catch (error: any) {

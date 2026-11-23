@@ -50,10 +50,10 @@ $assert(str_contains($orderPayment, 'assertLocalPaymentAllowed((int)$this->site_
 $assert(str_contains($orderPayment, "['site_id', '=', \$this->site_id]") && str_contains($orderPayment, "['order_id', '=', \$order->id]")
     && str_contains($orderPayment, "->order('id asc')->lock(true)") && !str_contains($orderPayment, '$this->assertLocalPaymentAllowed();'), '整单交接必须在真实订单设备锁下检查归属，不能保留无上下文调用');
 $assert(str_contains($controller, 'paymentCapability') && str_contains($controller, "array_merge(['accounts'"), '能力接口必须返回ERP财务接管状态');
-$assert(str_contains($runtimeActions, 'getCapitalAccountOptions(row.id)') && str_contains($runtimeActions, "paymentOwner === 'self_erp'")
-    && str_contains($runtimeActions, '前往 ERP 应付款'), 'PC打款入口必须按当前订单实际ERP归属提示并引导到ERP');
+$assert(str_contains($runtimeActions, 'getCapitalAccountOptions(row.id, undefined, true)') && str_contains($runtimeActions, "paymentOwner === 'self_erp'")
+    && str_contains($runtimeActions, 'options.showInboundPayables(row.id, capability.data)'), 'PC办理回收款须先只读核对归属，从回收原单按台查看应付，不进入全站付款列表');
 $assert(str_contains($runtimeActions, 'if (!canOpenLocalPayment(capability.data || {}, orderPaymentMode))')
-    && str_contains($runtimeActions, "row.flow_mode || row.payment_mode || paymentMode.value || 'order'")
+    && str_contains($runtimeActions, "const orderPaymentMode = row.flow_mode || row.payment_mode || 'order'")
     && str_contains($runtimeActions, "payment_owner || 'unknown'")
     && str_contains($runtimeActions, '付款归属查询失败，尚未执行付款'), 'PC付款必须用真实归属及订单原模式判断，未知或查询失败不得默认放行');
 $assert(str_contains($paymentScope, "scope.payment_owner === 'local' && scope.local_allowed === true")

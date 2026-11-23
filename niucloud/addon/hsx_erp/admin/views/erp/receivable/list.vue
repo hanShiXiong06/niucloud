@@ -152,6 +152,7 @@
             <ErpFinanceOverview v-if="detail.row" :row="detail.row" direction="income" :party-label="partyRoleLabel(detail.row, '往来主体')" :remaining="remain(detail.row)" :status="statusMeta(detail.row.status)">
                 <template #details><div v-if="detail.row.source_order" class="erp-finance-secondary mt-2">{{ sourceOrderSummary(detail.row) }}</div></template>
             </ErpFinanceOverview>
+            <ErpDocumentSyncResult :results="detail.row?.integration_results" />
             <div v-if="detail.row?.is_mall_source" class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded border border-[color:var(--el-color-warning-light-8)] bg-[var(--el-color-warning-light-9)] px-4 py-3">
                 <div>
                     <div class="flex items-center gap-2 text-sm font-medium text-[color:var(--el-color-warning)]">
@@ -373,6 +374,7 @@ import ErpDesktopPage from '@/addon/hsx_erp/components/ErpDesktopPage.vue'
 import ErpWorkspaceHeader from '@/addon/hsx_erp/components/ErpWorkspaceHeader.vue'
 import ErpDataTable from '@/addon/hsx_erp/components/ErpDataTable.vue'
 import ErpFinanceOverview from '@/addon/hsx_erp/components/ErpFinanceOverview.vue'
+import ErpDocumentSyncResult from '@/addon/hsx_erp/components/ErpDocumentSyncResult.vue'
 import { HsxSearchPanel, HsxDialog, HsxDrawer, useFeedback, HsxFold } from '@/addon/hsx_components/core'
 import { erpEnumLabel, erpNamedLabel, erpSerialText } from '@/addon/hsx_erp/utils/display'
 import { computed, onMounted, reactive, ref } from 'vue'

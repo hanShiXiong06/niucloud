@@ -134,7 +134,8 @@ class CollectDeviceTraceListener
         }
         // 订单操作日志(签收/质检/定价/确认 状态流转, 同样不按 site_id 过滤)
         if ($orderId > 0) {
-            foreach (RecycleOrderLog::where([['order_id', '=', $orderId]])->order('id asc')->select()->toArray() as $lg) {
+            // Internal audit rows belong only to the dedicated staff-permissioned list.
+            foreach (RecycleOrderLog::where([['order_id', '=', $orderId]])->whereNotIn('action',['audit_erp','audit_boyuan','audit_erp_link','audit_boyuan_link'])->order('id asc')->select()->toArray() as $lg) {
                 // 认识的 action 给中文名; 不认识的用"订单·{目标状态}"兜底, 不丢弃
                 $title = $this->orderActionName((string)($lg['action'] ?? ''));
                 if ($title === '') {

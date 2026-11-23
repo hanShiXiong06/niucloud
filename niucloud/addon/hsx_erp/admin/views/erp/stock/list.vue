@@ -521,6 +521,7 @@
 
         <HsxDialog class="erp-desktop-overlay" :confirm-loading="expense.saving" v-model="expense.visible" title="设备成本调整" width="680px" destroy-on-close>
             <HsxNotice :title="costTypeTip" type="warning" :closable="false" />
+            <HsxNotice v-if="listCostHint" default-expanded type="warning" :title="listCostHint" :closable="false" />
             <div class="mt-4 rounded border border-[color:var(--el-border-color)] bg-[var(--el-fill-color-light)] px-4 py-3">
                 <div class="font-medium">{{ expense.row?.model || '-' }}</div>
                 <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">IMEI {{ expense.row?.imei || '-' }} · 当前成本 {{ money(expense.row?.total_cost) }}</div>
@@ -859,6 +860,7 @@ function onFlowCatalogChange(node: any) {
     flow.form.catalog_product_id = Number(node?.site_product_id || 0)
 }
 
+const listCostHint = ref('')
 async function loadList() {
     table.loading = true
     try {
@@ -867,6 +869,7 @@ async function loadList() {
             getErpStockTurnoverSummary()
         ])
         table.data = res?.data?.data || []
+        listCostHint.value = res?.data?.cost_maintenance_hint || ''
         table.total = res?.data?.total || 0
         turnoverSummary.value = turnoverRes?.data || { thresholds: {} }
         stockCapabilities.value = res?.data?.capabilities || turnoverRes?.data?.capabilities || stockCapabilities.value
@@ -984,7 +987,8 @@ async function submitExpense() {
             cost: afterCost, cost_type: costType, expense_type_key: '',
             party_id: expense.form.party_id, party_name: expense.form.party_name, reason: expense.form.reason
         })
-        feedback.success(costType === 'purchase_adjust' ? '调价已保存，原付款保留；如有差额请到应付款办理' : '设备成本已调整')
+        if (listCostHint.value) feedback.warning('本站成本已调整。' + listCostHint.value)
+        else feedback.success(costType === 'purchase_adjust' ? '调价已保存，原付款保留；如有差额请到应付款办理' : '设备成本已调整')
         expense.visible = false
         await loadList()
     } finally {

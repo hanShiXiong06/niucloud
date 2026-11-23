@@ -25,6 +25,7 @@ final class ErpLedgerFact
                     default => [],
                 },
             ]);
+        ErpRecycleOperationAudit::record($kind, $row);
     }
 
     private static function assetContext(array $row): array

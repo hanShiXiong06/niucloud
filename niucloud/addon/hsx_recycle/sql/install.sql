@@ -586,7 +586,9 @@ CREATE TABLE `{{prefix}}recycle_device_log` (
   `new_status` tinyint(1) NOT NULL DEFAULT 0 COMMENT '新状态',
   `remark` varchar(255) NOT NULL DEFAULT '' COMMENT '备注',
   `create_at` int NOT NULL DEFAULT 0 COMMENT '创建时间',
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  KEY `idx_timeline_site` (`site_id`,`create_at`,`id`),
+  KEY `idx_timeline_order` (`order_id`,`create_at`,`id`)
 ) COMMENT='回收设备日志表';
 
 -- 选择频次统计表（通用：按场景记录某用户被选中的次数，用于"常用优先"排序）
@@ -618,7 +620,12 @@ CREATE TABLE `{{prefix}}recycle_order_log` (
   `new_status` tinyint(1) NOT NULL DEFAULT 0 COMMENT '新状态',
   `remark` varchar(255) NOT NULL DEFAULT '' COMMENT '备注',
   `create_at` int NOT NULL DEFAULT 0 COMMENT '创建时间',
-  PRIMARY KEY (`id`)
+  `audit_key` char(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL COMMENT '内部消息去重标识',
+  `audit_data` text COMMENT '内部系统操作摘要（非接口原文）',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_order_audit` (`site_id`,`order_id`,`audit_key`),
+  KEY `idx_timeline_site` (`site_id`,`create_at`,`id`),
+  KEY `idx_timeline_order` (`order_id`,`create_at`,`id`)
 )  COMMENT='回收订单日志表';
 
 DROP TABLE IF EXISTS `{{prefix}}recycle_printer`;

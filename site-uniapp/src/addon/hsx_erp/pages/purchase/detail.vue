@@ -13,7 +13,7 @@
                 <!-- 采购单头部信息 -->
                 <view class="form-card" v-if="order">
                     <view class="form-card-title">采购信息</view>
-                    <view v-for="action in order.integration_actions || []" :key="action.key" class="field">
+                    <view v-for="action in mobileActions" :key="action.key" class="field">
                         <text class="label">外部系统</text>
                         <u-button size="small" type="primary" plain :text="action.label" :customStyle="{ width:'auto', margin:'0' }" @click="openIntegration(action)" />
                     </view>
@@ -173,6 +173,7 @@ import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
 import { ERP_DICT_FALLBACK, dictLabel, dictType, loadErpDicts, type ErpDictMap } from '@/addon/hsx_erp/api/dict'
 
 const order = ref<any>(null)
+const mobileActions = computed(() => (order.value?.integration_actions || []).filter((action: any) => /^\/addon\/[A-Za-z0-9_/-]+$/.test(String(action?.mobile_path || ''))))
 const items = ref<any[]>([])
 const loading = ref(true)
 const loadError = ref('')

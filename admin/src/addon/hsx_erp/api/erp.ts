@@ -216,6 +216,9 @@ export function deleteErpGoodsGrade(id: number) {
 export function getErpPayableList(params: Record<string, any>) {
     return request.get('erp/finance/payable/lists', { params })
 }
+export function getErpPayableInfo(id: number) {
+    return request.get(`erp/finance/payable/info/${id}`)
+}
 
 export function confirmErpPayment(id: number, data: Record<string, any>) {
     return request.post(`erp/finance/payable/${id}/confirm_payment`, withErpRequestId(data, 'payment'))

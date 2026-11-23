@@ -179,4 +179,5 @@ Route::group('erp', function () {
     AdminCheckToken::class,
     AdminCheckRole::class,
     AdminLog::class,
+    \addon\hsx_erp\app\adminapi\middleware\ErpOperationFailureAudit::class,
 ])->mergeRuleRegex(false);

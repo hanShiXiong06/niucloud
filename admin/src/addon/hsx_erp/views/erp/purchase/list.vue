@@ -1,32 +1,23 @@
 <template>
     <ErpDesktopPage class="main-container">
-        <section class="erp-list-surface">
-            <ErpWorkspaceHeader page="purchase" :filter-count="searchConditionCount">
-                <template #title>采购管理</template>
-                <template #subtitle>{{ listMode === 'device' ? '一机一码管理二手机采购、成本、位置和账目状态。' : '按数量管理壳、膜、配件和批量新机的采购入库。' }}</template>
-                <template #extra><div class="flex gap-2 flex-wrap">
-                        <el-button :icon="Refresh" :loading="table.loading" @click="loadList">刷新</el-button>
-                        <el-button type="primary" :icon="Plus" @click="openCreate">采购开单</el-button>
-                    <ErpRoleFocus :items="purchaseRoleFocus" /></div></template>
-
-            <template #toolbar>
-            <div class="erp-mode-switch flex items-center justify-between rounded-lg bg-[var(--el-fill-color-light)] p-2">
-                <el-radio-group v-model="listMode" @change="onListModeChange">
+        <el-alert v-if="lookup.sessionChanged.value" type="warning" :closable="false" show-icon role="alert">
+            <template #title>当前登录账号或店铺已切换</template>
+            <p>本页已停止开单。请刷新并核对店铺，原草稿不会带入其他店铺。 <el-button type="primary" link @click="lookup.reopen">刷新并核对店铺</el-button></p>
+        </el-alert>
+        <section v-else class="erp-list-surface">
+            <ErpTradeHeader page="purchase" title="采购入库" subtitle="回收设备入库后会生成采购单，按串号查原单即可，不用重新开单。" :advanced-count="advancedFilterCount" @search="handleSearch" @reset="handleReset">
+                <template #actions>
+                    <el-button :icon="Refresh" :loading="table.loading" @click="refreshWorkspace">刷新</el-button>
+                    <el-button type="primary" :icon="Plus" @click="openCreate">新建采购单</el-button>
+                    <ErpRoleFocus :items="purchaseRoleFocus" />
+                </template>
+                <template #mode><el-radio-group v-model="listMode" @change="onListModeChange">
                     <el-radio-button label="device">设备采购</el-radio-button>
                     <el-radio-button label="standard">标品采购</el-radio-button>
-                </el-radio-group>
-                <div class="pr-2 text-xs text-[color:var(--el-text-color-secondary)]">{{ listMode === 'device' ? '二手机 · 独立串号资产' : '壳膜配件 · 数量库存' }}</div>
-            </div>
-
-            </template>
-            <HsxSearchPanel :show-layout-switch="false" :summary="searchConditionCount ? searchConditionCount + ' 项筛选条件' : ''">
-                <template #extra>
-                    <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
-                    <el-button @click="handleReset">重置</el-button>
-                </template>
-                <el-form :inline="true" class="mt-2" @submit.prevent>
-                    <el-form-item v-if="listMode === 'device'" label="IMEI">
-                        <el-input v-model.trim="search.imei" clearable class="!w-[190px]" placeholder="输入 IMEI 查询" @keyup.enter="handleSearch" />
+                </el-radio-group></template>
+                <template #quick>
+                    <el-form-item v-if="listMode === 'device'" label="串号">
+                        <el-input v-model.trim="search.serial" clearable class="!w-[220px]" placeholder="输入 IMEI、SN 或尾号" />
                     </el-form-item>
                     <el-form-item label="供货商">
                         <ErpPartySelect
@@ -39,47 +30,48 @@
                         />
                     </el-form-item>
                     <el-form-item label="采购单">
-                        <el-input v-model.trim="search.purchase_no" clearable class="!w-[230px]" placeholder="输入采购单号" @keyup.enter="handleSearch" />
+                        <el-input v-model.trim="search.purchase_no" clearable class="!w-[230px]" placeholder="输入采购单号" />
+                    </el-form-item>
+                </template>
+                <template #advanced>
+                    <el-form-item v-if="listMode === 'device'" label="整单状态">
+                        <el-select v-model="search.finance_status" clearable class="!w-[160px]" placeholder="不限整单状态">
+                            <el-option label="整单待付款" value="pending" /><el-option label="整单部分付款" value="partial" />
+                            <el-option label="整单已结清" value="settled" /><el-option label="采购单已撤销" value="void" />
+                        </el-select>
                     </el-form-item>
                     <el-form-item label="仓库">
                         <el-select v-model="search.warehouse_id" clearable class="!w-[160px]" placeholder="全部仓库" @change="onSearchWarehouseChange">
                             <el-option v-for="item in warehouses" :key="item.id" :label="item.warehouse_name" :value="item.id" />
                         </el-select>
                     </el-form-item>
-                    <HsxFold title="更多筛选" summary="人员、时间与其他条件；收起不清空已填内容">
-                        <el-form-item label="库位">
+                    <el-form-item label="库位">
                             <el-select v-model="search.location_id" clearable class="!w-[160px]" placeholder="全部库位" :disabled="!search.warehouse_id">
                                 <el-option v-for="item in searchLocations" :key="item.id" :label="item.location_name" :value="item.id" />
                             </el-select>
                         </el-form-item>
-                        <el-form-item v-if="listMode === 'device'" label="商品型号">
+                    <el-form-item v-if="listMode === 'device'" label="商品型号">
                             <ErpCatalogProductSelect v-model="search.catalog_product_id" class="!w-[280px]" placeholder="搜索品牌、系列或型号" />
                         </el-form-item>
-                        <el-form-item label="采购员">
+                    <el-form-item label="采购员">
                             <el-select v-model="search.purchaser_uid" clearable filterable class="!w-[150px]" placeholder="全部">
                                 <el-option v-for="item in staffOptions" :key="item.uid" :label="staffName(item)" :value="item.uid" />
                             </el-select>
                         </el-form-item>
-                        <el-form-item label="采购时间">
+                    <el-form-item label="采购时间">
                             <el-date-picker v-model="search.dateRange" type="daterange" value-format="X" start-placeholder="开始" end-placeholder="结束" class="!w-[260px]" />
                         </el-form-item>
-                        <el-form-item label="成本">
+                    <el-form-item label="成本">
                             <el-input-number v-model="search.min_amount" :min="0" :precision="2" :controls="false" placeholder="最低" class="!w-[110px]" />
                             <span class="mx-1 text-[color:var(--el-text-color-secondary)]">-</span>
                             <el-input-number v-model="search.max_amount" :min="0" :precision="2" :controls="false" placeholder="最高" class="!w-[110px]" />
                         </el-form-item>
-                    </HsxFold>
-
-                </el-form>
-            </HsxSearchPanel>
-
-
-
-
-
-            <div class="mt-5 flex flex-wrap items-center justify-between gap-2 erp-summary-heading">
+                </template>
+                <template #summary>
+                    <p v-if="table.loading || listError" role="status">{{ table.loading ? '正在读取本页数据…' : '读取成功后显示汇总' }}</p>
+                    <template v-else><div class="mt-5 flex flex-wrap items-center justify-between gap-2 erp-summary-heading">
                 <div class="text-sm font-medium text-[color:var(--el-text-color-regular)]">本页有效采购汇总</div>
-                <div class="text-xs text-[color:var(--el-text-color-secondary)]">已退货、已作废货品不计入</div>
+                <div class="text-xs text-[color:var(--el-text-color-secondary)]">{{ summary.review ? '有 ' + summary.review + ' 台应付待核对，金额未计入汇总。' : '已退货、已作废货品不计入' }}</div>
             </div>
             <div class="mt-2 grid grid-cols-2 gap-3 md:grid-cols-4 erp-metrics">
                 <div class="summary-tile">
@@ -88,94 +80,83 @@
                 </div>
                 <div class="summary-tile">
                     <div class="summary-label">有效采购本金</div>
-                    <div class="summary-value">{{ money(summary.totalCost) }}</div>
+                    <div class="summary-value">{{ summary.review && !summary.known ? '—' : money(summary.totalCost) }}</div>
                 </div>
                 <div class="summary-tile">
                     <div class="summary-label">已结采购款</div>
-                    <div class="summary-value text-[color:var(--el-color-success)]">{{ money(summary.paid) }}</div>
+                    <div class="summary-value text-[color:var(--el-color-success)]">{{ summary.review && !summary.known ? '—' : money(summary.paid) }}</div>
                 </div>
                 <div class="summary-tile">
                     <div class="summary-label">待结采购款</div>
-                    <div class="summary-value text-[color:var(--el-color-warning)]">{{ money(summary.payable) }}</div>
+                    <div class="summary-value text-[color:var(--el-color-warning)]">{{ summary.review && !summary.known ? '—' : money(summary.payable) }}</div>
                 </div>
-            </div>
-
-            <!-- 状态快筛 Tab -->
-            </ErpWorkspaceHeader>
+            </div></template>
+                </template>
+            </ErpTradeHeader>
+            <el-alert v-if="listError" type="warning" :closable="false" show-icon>
+                <template #title>未能读取采购单。筛选条件已保留。 <el-button link type="primary" @click="loadList">重新读取</el-button></template>
+            </el-alert>
             <el-tabs v-model="activeTab" class="mt-4 erp-status-tabs" @tab-change="onTabChange">
                 <el-tab-pane label="全部" name="" />
-                <el-tab-pane label="待付款" name="pending" />
-                <el-tab-pane label="部分付款" name="partial" />
-                <el-tab-pane label="已结清" name="settled" />
-                <el-tab-pane label="已撤销" name="void" />
+                <el-tab-pane v-if="listMode === 'device'" label="本站待付" name="outstanding" />
+                <el-tab-pane v-if="listMode === 'standard'" label="待付款" name="pending" />
+                <el-tab-pane v-if="listMode === 'standard'" label="部分付款" name="partial" />
+                <el-tab-pane :label="listMode === 'device' ? '本站已结清' : '已结清'" name="settled" />
+                <el-tab-pane v-if="listMode === 'device'" label="原应付待核对" name="review" />
+                <el-tab-pane v-else label="已撤销" name="void" />
             </el-tabs>
 
-            <ErpDataTable v-if="listMode === 'device'" :data="table.data" v-loading="table.loading" :row-class-name="purchaseRowClassName">
-                <el-table-column label="设备" min-width="240">
+            <ErpDataTable v-if="listMode === 'device'" v-show="!listError" class="device-purchase-table" row-key="id"
+                :data="table.data" v-loading="table.loading" :expand-row-keys="expandedDeviceKeys" @expand-change="onDeviceExpand">
+                <template #empty><span>{{ table.loading ? '正在读取…' : '没有符合当前条件的设备采购记录' }}</span>
+                    <el-button v-if="!table.loading && (search.serial || search.party_id || search.purchase_no || advancedFilterCount || activeTab)" link type="primary" @click="handleReset">清除筛选</el-button></template>
+                <el-table-column type="expand" width="58" align="center" class-name="purchase-expander" label="资料">
                     <template #default="{ row }">
-                        <ErpDeviceIdentity :model="row.model" :spec="row.spec" :imei="row.imei" :sn="row.sn" :asset-no="row.asset_no" />
+                        <dl class="purchase-device-facts" aria-label="设备与批次资料">
+                            <div><dt>采购单号</dt><dd><el-button v-if="row.purchase_order_id && row.purchase_no" type="primary" link @click="openDetail(row)">{{ row.purchase_no }}</el-button><template v-else>未关联采购单</template></dd></div>
+                            <div v-for="fact in deviceRowFacts(row)" :key="fact[0]"><dt>{{ fact[0] }}</dt><dd>{{ fact[1] }}</dd></div>
+                        </dl>
                     </template>
                 </el-table-column>
-                <el-table-column label="供货商" min-width="160">
+                <el-table-column label="设备 / 串号" min-width="245">
+                    <template #default="{ row }"><ErpDeviceIdentity compact :model="row.model" :spec="row.spec" :imei="row.imei" :sn="row.sn" /></template>
+                </el-table-column>
+                <el-table-column label="供货商" min-width="120" show-overflow-tooltip>
+                    <template #default="{ row }">{{ row.party_name || '未登记' }}</template>
+                </el-table-column>
+                <el-table-column label="库存状态" min-width="105">
                     <template #default="{ row }">
-                        <div>{{ row.party_name || '-' }}</div>
-                        <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">M号：{{ row.m_no || '-' }}</div>
+                        <span class="purchase-stock" :class="{ 'purchase-stock--ready':row.status === 'in_stock', 'purchase-stock--attention':['void','returned'].includes(row.status) }">{{ row.status ? assetStatusMeta(row.status).label : '待核对' }}</span>
+                        <small v-if="row.order_status === 'void'" class="purchase-exception">采购单已撤销</small>
                     </template>
                 </el-table-column>
-                <el-table-column label="采购成本" min-width="180" align="right">
+                <el-table-column label="本机应付" min-width="155">
                     <template #default="{ row }">
-                        <div class="font-medium text-[color:var(--el-text-color-primary)]">{{ money(row.purchase_cost) }}</div>
-                        <div v-if="Number(row.adjust_cost)" class="mt-1 text-xs" :class="Number(row.adjust_cost) > 0 ? 'text-[color:var(--el-color-warning)]' : 'text-[color:var(--el-color-success)]'">供应商调价 {{ signedMoney(row.adjust_cost) }}</div>
-                        <div v-else class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">采购本金</div>
-                        <div v-if="Number(row.refurbish_cost)" class="mt-1 text-xs text-[color:var(--el-color-warning)]">整备支出 +{{ money(row.refurbish_cost) }}（独立应付）</div>
-                        <div v-if="Math.abs(Number(row.total_cost || 0) - Number(row.purchase_cost || 0)) > 0.0001" class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">当前总成本 {{ money(row.total_cost) }}</div>
+                        <ErpDevicePayableCell :state="rowPayState(row)" :label="devicePayLabel(row)" :can-view="canViewPayable(row)" @view="openDevicePayable(row)" />
                     </template>
                 </el-table-column>
-                <el-table-column label="位置" min-width="160">
-                    <template #default="{ row }">{{ [row.warehouse_name, row.location_name].filter(Boolean).join(' / ') || '-' }}</template>
-                </el-table-column>
-                <el-table-column label="采购批次" min-width="230">
-                    <template #default="{ row, $index }">
-                        <div class="flex items-center gap-2">
-                            <span class="batch-dot" :class="`batch-dot--${batchTone(row)}`"></span>
-                            <span class="font-medium">{{ row.purchase_no || '-' }}</span>
+                <el-table-column label="操作" fixed="right" width="165">
+                    <template #default="{ row }">
+                        <div class="purchase-row-actions">
+                            <el-button type="primary" link :disabled="!row.purchase_order_id" @click="openDetail(row)">查看采购单</el-button>
+                            <el-dropdown trigger="click" placement="bottom-end" @command="handleRowCommand($event, row)">
+                                <el-button link aria-haspopup="menu">更多 <el-icon><ArrowDown /></el-icon></el-button>
+                                <template #dropdown><el-dropdown-menu>
+                                    <el-dropdown-item command="facts">{{ expandedDeviceKeys.includes(String(row.id)) ? '收起设备资料' : '展开设备资料' }}</el-dropdown-item>
+                                    <el-dropdown-item divided command="adjust" :disabled="!canAdjustSupplierPrice(row)">
+                                        <div>供应商调价<small v-if="!canAdjustSupplierPrice(row)" class="purchase-menu-reason">{{ supplierAdjustBlockedReason(row) }}</small></div>
+                                    </el-dropdown-item>
+                                    <el-dropdown-item v-if="canReturnPurchase(row) || (row.status === 'in_stock' && row.return_flow?.returnable === false)" command="return" :disabled="!canReturnPurchase(row)">
+                                        <div>{{ purchaseReturnActionLabel(row) }}<small v-if="!canReturnPurchase(row)" class="purchase-menu-reason">{{ row.return_flow?.block_reason }}</small></div>
+                                    </el-dropdown-item>
+                                </el-dropdown-menu></template>
+                            </el-dropdown>
                         </div>
-                        <div v-if="isBatchFirst($index)" class="mt-1 text-xs font-medium text-[color:var(--erp-text-accent)]">本页同批 {{ batchPageSize(row) }} 台</div>
-                        <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">来源：{{ erpSourceLabel(row.origin_name, 'ERP采购') }}</div>
-                        <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">{{ formatTime(row.purchase_at) }}</div>
-                        <div class="batch-staff-line">
-                            <span>采购 {{ row.purchaser_name || '-' }}</span>
-                            <span v-if="row.inspector_name">质检 {{ row.inspector_name }}</span>
-                        </div>
-                        <div v-if="Number(row.retail_price || row.estimate_sale_price)" class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">销售价格：{{ money(row.retail_price || row.estimate_sale_price) }}</div>
-                    </template>
-                </el-table-column>
-                <el-table-column label="当前状态" min-width="175">
-                    <template #default="{ row }">
-                        <div class="purchase-status-stack">
-                            <el-tag :type="assetStatusMeta(row.status).type" effect="plain">{{ assetStatusMeta(row.status).label }}</el-tag>
-                            <span class="purchase-status-stack__business">订单 · {{ row.order_business_status_label || orderStatusMeta(row.order_status).label }}</span>
-                            <span class="purchase-status-stack__finance">采购款 · {{ financeStatusMeta(row.finance_status).label }}</span>
-                            <span v-if="row.order_status === 'void'" class="purchase-status-stack__exception">采购单已撤销</span>
-                            <span v-else-if="row.status === 'returned' && row.return_no" class="purchase-status-stack__source">{{ row.return_no }}</span>
-                        </div>
-                    </template>
-                </el-table-column>
-                <el-table-column label="操作" fixed="right" width="220" align="center">
-                    <template #default="{ row, $index }">
-                        <el-button type="primary" link @click="openDetail(row)">采购单</el-button>
-                        <el-button v-if="canAdjustSupplierPrice(row)" type="primary" link @click="openAdjust(row)">供应商调价</el-button>
-                        <el-tooltip v-else :content="supplierAdjustBlockedReason(row)" placement="top">
-                            <span class="supplier-adjust-disabled-wrap"><el-button type="primary" link disabled>供应商调价</el-button></span>
-                        </el-tooltip>
-                        <el-button v-if="canReturnPurchase(row)" class="purchase-return-action" type="warning" link @click="goReturn(row)">{{ purchaseReturnActionLabel(row) }}</el-button>
-                        <el-tooltip v-else-if="row.status === 'in_stock' && row.return_flow?.returnable === false" :content="row.return_flow?.block_reason" placement="top">
-                            <span class="purchase-return-disabled-wrap"><el-button class="purchase-return-action" type="warning" link disabled>{{ purchaseReturnActionLabel(row) }}</el-button></span>
-                        </el-tooltip>
                     </template>
                 </el-table-column>
             </ErpDataTable>
-            <ErpDataTable v-else :data="table.data" v-loading="table.loading" :row-class-name="purchaseRowClassName">
+            <ErpDataTable v-else v-show="!listError" :data="table.data" v-loading="table.loading" :row-class-name="purchaseRowClassName">
+                <template #empty><span>{{ table.loading ? '正在读取…' : '没有符合当前条件的采购记录' }}</span></template>
                 <el-table-column label="标品" min-width="250">
                     <template #default="{ row }">
                         <div class="font-medium text-[color:var(--el-text-color-primary)]">{{ row.model || '-' }}</div>
@@ -225,7 +206,7 @@
                 </el-table-column>
             </ErpDataTable>
 
-            <div class="mt-4 flex justify-end erp-pagination">
+            <div v-show="!listError" class="mt-4 flex justify-end erp-pagination">
                 <el-pagination
                     v-model:current-page="table.page"
                     v-model:page-size="table.limit"
@@ -240,22 +221,23 @@
         <HsxDialog :confirm-loading="create.saving"
             v-model="create.visible"
             title="采购开单"
-            width="94vw"
+            :width="entryStep === 1 ? 'min(94vw, 1440px)' : 'min(90vw, 800px)'"
             destroy-on-close
             class="erp-desktop-overlay create-purchase-dialog"
         >
             <el-form label-width="96px" class="create-purchase-form">
-                <div class="section-title">1. 用户</div>
-                <div class="grid grid-cols-1 gap-x-4 md:grid-cols-2">
-                    <el-form-item label="采购用户" required>
-                        <counterparty-select v-model="create.form.party_id" role-type="supplier" placeholder="搜索或新建采购用户" @resolved="onPartyResolved" />
+                <ErpTradeEntryGuide :step="entryStep" :labels="['选供货方', '录入货品', '核对结算']" :busy="create.saving" @choose="chooseStep" />
+                <p v-if="entryError" role="alert" class="trade-entry-error">{{ entryError }}</p>
+                <p v-if="lookup.errors.value.length" role="alert" class="trade-entry-error">{{ lookup.errors.value.join('、') }}未读取。<el-button type="primary" link @click="refreshWorkspace">重新读取资料</el-button></p>
+                <section v-show="entryStep === 0" aria-label="选择供货方">
+                    <el-form-item label="供货方" required>
+                        <counterparty-select v-model="create.form.party_id" role-type="supplier" placeholder="搜索会员、姓名或手机号" @resolving-change="partyResolving = $event" @resolved="onPartyResolved" />
                     </el-form-item>
-                    <el-form-item label="M号">
-                        <el-input v-model.trim="create.form.m_no" placeholder="客户M号/业务编号" />
-                    </el-form-item>
-                </div>
-
-                <div class="section-title">2. 采购货品</div>
+                    <HsxFold title="业务编号（选填）" :summary="create.form.m_no ? '已带入供货方编号' : ''">
+                        <el-form-item label="业务编号"><el-input v-model.trim="create.form.m_no" placeholder="客户 M 号或业务编号" /></el-form-item>
+                    </HsxFold>
+                </section>
+                <section v-show="entryStep === 1" aria-label="录入采购货品">
                 <el-form-item label="入库方式" required>
                     <el-radio-group v-model="create.form.item_type_mode" @change="onPurchaseItemModeChange">
                         <el-radio-button value="device">二手机 / 一机一码</el-radio-button>
@@ -483,9 +465,15 @@
                     <div v-if="create.form.item_type_mode === 'device'" class="mt-3 text-right text-sm text-[color:var(--el-text-color-secondary)]">本单采购成本合计：<span class="font-semibold text-[color:var(--el-text-color-primary)]">{{ money(createTotal) }}</span></div>
                 </div>
 
-                <div class="section-title">3. 账目</div>
+                </section>
+                <section v-show="entryStep === 2" aria-label="核对结算">
+                <div class="trade-checkout"><div><small>供货方</small><b>{{ create.form.party_name || '已选往来方' }}</b></div>
+                    <div><small>本单货品</small><b>{{ create.form.items.length + (create.form.item_type_mode === 'standard' ? ' 项' : ' 台') }}</b></div>
+                    <div><small>采购总额</small><b>{{ money(createTotal) }}</b></div></div>
+                <ErpTradeReviewLines :lines="reviewLines" />
+                <p class="trade-entry-hint">{{ create.form.settle_mode === 'credit' ? '挂账入库：生成采购应付，由财务核对实际付款后登记。' : '现结只登记已经付出的金额，这里不会转账。' }}</p>
                 <div class="grid grid-cols-1 gap-x-4 md:grid-cols-3">
-                    <el-form-item label="结算方式">
+                    <el-form-item class="trade-settlement-mode" label="结算方式">
                         <el-select v-model="create.form.settle_mode" class="w-full">
                             <el-option label="挂账，稍后付款" value="credit" />
                             <el-option label="现结，本次付款" value="cash" />
@@ -495,7 +483,7 @@
                         <el-input-number v-model="create.form.paid_amount" :min="0" :precision="2" :controls="false" class="!w-full" />
                     </el-form-item>
                     <el-form-item v-if="create.form.settle_mode === 'cash'" label="付款账户" required>
-                        <el-select v-model="create.form.capital_account_id" class="w-full" placeholder="选择账户">
+                        <el-select v-model="create.form.capital_account_id" class="w-full" :loading="accountLoading" placeholder="选择账户">
                             <el-option v-for="item in accounts" :key="item.id" :label="`${item.account_name}（${money(item.balance)}）`" :value="item.id" />
                         </el-select>
                     </el-form-item>
@@ -503,13 +491,18 @@
                         <ErpFinanceVoucherUpload v-model="create.form.voucher_urls" />
                     </el-form-item>
                 </div>
-                <el-form-item class="mt-4" label="备注">
+                <p v-if="create.form.settle_mode === 'cash' && accountError" role="alert" class="trade-entry-error">资金账户未能读取。<el-button link type="primary" @click="reloadAccounts">重新读取账户</el-button></p>
+                <p v-else-if="create.form.settle_mode === 'cash' && !accountLoading && !accounts.length" class="trade-entry-hint">没有可用的资金账户，请财务先在「资金账户」启用账户。<el-button link @click="reloadAccounts">刷新账户</el-button></p>
+                <HsxFold title="备注（选填）" :summary="create.form.remark ? '已填写' : ''"><el-form-item label="备注">
                     <el-input v-model.trim="create.form.remark" type="textarea" :rows="2" />
-                </el-form-item>
+                </el-form-item></HsxFold>
+            </section>
             </el-form>
             <template #footer>
                 <el-button :disabled="create.saving" @click="create.visible = false">取消</el-button>
-                <el-button :disabled="create.saving" type="primary" :loading="create.saving" @click="submitCreate">确认开单</el-button>
+                <el-button v-if="entryStep > 0" :disabled="create.saving" @click="chooseStep(entryStep - 1)">上一步</el-button>
+                <el-button v-if="entryStep < 2" type="primary" :loading="entryStep === 0 && partyResolving" @click="chooseStep(entryStep + 1)">{{ partyResolving ? '正在匹配…' : entryStep === 0 ? '下一步：录入货品' : '下一步：核对结算' }}</el-button>
+                <el-button v-else :disabled="create.saving" type="primary" :loading="create.saving" @click="submitCreate">确认开单</el-button>
             </template>
         </HsxDialog>
 
@@ -518,29 +511,16 @@
                 <div class="item-extra-drawer-title">
                     <div>
                         <div class="item-extra-title">编辑设备 {{ itemExtra.index + 1 }}</div>
-                        <div class="item-extra-sub">{{ purchaseOneStop ? '采购事实与销售资料在一个入口完成' : '当前岗位只录采购事实，销售资料将按团队分工自动流转' }}</div>
+                        <div class="item-extra-sub">{{ itemExtra.item ? [itemExtra.item.model, itemExtra.item.imei || itemExtra.item.sn].filter(Boolean).join(' · ') : '' }}</div>
                     </div>
                     <el-tag v-if="itemExtra.item" :type="deviceCoreReady(itemExtra.item) ? 'success' : 'warning'" effect="light">
                         {{ deviceCoreReady(itemExtra.item) ? (purchaseOneStop ? '本次资料已完整' : '采购事实已完整') : `待补 ${deviceCoreMissingCount(itemExtra.item)} 项` }}
                     </el-tag>
                 </div>
             </template>
-            <div v-if="itemExtra.item" class="item-extra-head">
-                <div class="min-w-0 flex-1">
-                    <div class="item-extra-title">{{ itemExtra.item.model || `第 ${itemExtra.index + 1} 台设备` }}</div>
-                    <div class="item-extra-sub">{{ compactItemSubTitle(itemExtra.item) }}</div>
-                    <div class="item-extra-tags">
-                        <el-tag v-if="itemExtra.item.category_name" effect="plain">{{ itemExtra.item.category_name }}</el-tag>
-                        <el-tag v-if="itemExtra.item.spec" type="success" effect="plain">{{ itemExtra.item.spec }}</el-tag>
-                        <el-tag v-if="itemExtra.item.warehouse_name" type="info" effect="plain">
-                            {{ itemExtra.item.warehouse_name }} / {{ itemExtra.item.location_name || '待选库位' }}
-                        </el-tag>
-                    </div>
-                </div>
-                <div class="item-extra-progress">
-                    <el-progress type="circle" :percentage="deviceMaterialCompletion(itemExtra.item)" :width="62" :stroke-width="6" />
-                    <span>资料完成度</span>
-                </div>
+            <div v-if="firstMissingField" class="trade-entry-hint" role="status">
+                下一项：{{ firstMissingField.label }}
+                <el-button v-if="itemExtra.activeTab !== firstMissingField.tab" link type="primary" @click="itemExtra.activeTab = firstMissingField.tab">去填写</el-button>
             </div>
 
             <el-tabs v-if="itemExtra.item" v-model="itemExtra.activeTab" class="item-extra-tabs" stretch>
@@ -549,22 +529,19 @@
                         <section class="item-extra-section">
                             <div class="item-extra-section__head">
                                 <div>
-                                    <div class="item-extra-section__title">设备与采购事实</div>
-                                    <div class="item-extra-section__desc">串号、采购成本和备注，属于本次采购的核心事实。</div>
+                                    <div class="item-extra-section__title">入库资料</div>
                                 </div>
-                                <el-tag type="warning" effect="plain">必填</el-tag>
                             </div>
                             <el-form label-position="top" class="drawer-mobile-form">
-                                <el-form-item label="商品分类 / 目录型号">
-                                    <ErpCatalogProductSelect
-                                        v-model="itemExtra.item.catalog_product_id"
+                                <el-form-item label="商品分类 / 目录型号" :required="purchaseOneStop && listingFieldRequired('catalog_product_id')">
+                                    <ErpPurchaseDeviceCatalogSelect
+                                        :key="itemExtra.index"
+                                        :model-value="itemExtra.item.catalog_product_id"
                                         :category-path="itemExtra.item.category_path"
-                                        placeholder="先选分类，可继续选择品牌、系列和型号"
+                                        :product-name="itemExtra.item.catalog_product_name"
+                                        :selection="itemExtra.item.catalog_reference"
                                         @change="node => onItemCatalogChange(itemExtra.item, node)"
                                     />
-                                    <div class="item-extra-section__desc">
-                                        分类用于缩小型号范围；选中标准型号会自动带入设备名称，团队模式也会保留这份归档信息。
-                                    </div>
                                 </el-form-item>
                                 <div class="spec-grid">
                                     <el-form-item label="设备名称 / 型号" required>
@@ -725,25 +702,56 @@
         </HsxDrawer>
 
         <HsxDrawer class="erp-desktop-overlay" v-model="detail.visible" title="采购单详情" size="76%" destroy-on-close>
-            <div v-loading="detail.loading">
+            <div v-loading="detail.loading" class="purchase-record">
+                <div v-if="detail.error" class="mb-4 flex items-center gap-3" role="alert">
+                    <span>{{ detail.error }}</span><el-button link type="primary" @click="loadDetail(detail.orderId)">重新读取</el-button>
+                </div>
+                <section v-if="handoff" class="purchase-handoff" :class="'purchase-handoff--'+handoff.tone" aria-label="本站采购下一步">
+                    <div class="purchase-handoff__source"><strong>{{ detail.data.purchase_no }}</strong><span>{{ detail.data.party_name || '未登记供货商' }}</span></div>
+                    <div class="purchase-handoff__title"><strong>{{ handoff.title }}</strong><span>{{ handoff.role }}</span></div>
+                    <p>{{ handoff.note }}</p>
+                </section>
+                <section v-if="detailDevices.length" class="purchase-devices" aria-label="按设备核对应付">
+                    <header><div><h3>设备明细 <small>{{ detailDevices.length }} 台</small></h3></div></header>
+                    <el-table :data="detailDevices" row-key="id" size="default" max-height="380" aria-label="本单设备应付明细">
+                        <el-table-column label="设备 / 串号" min-width="220">
+                            <template #default="{ row }"><ErpDeviceIdentity compact :model="row.model" :spec="row.spec" :imei="row.imei" :sn="row.sn" /></template>
+                        </el-table-column>
+                        <el-table-column label="采购成本" width="110" align="right">
+                            <template #default="{ row }">{{ row.purchase_cost == null ? '—' : money(row.purchase_cost) }}</template>
+                        </el-table-column>
+                        <el-table-column label="库存状态" width="110"><template #default="{ row }">{{ row.asset_status ? assetStatusMeta(row.asset_status).label : '待核对' }}</template></el-table-column>
+                        <el-table-column label="本站已结算" width="120" align="right">
+                            <template #default="{ row }">{{ deviceSettledText(row) }}</template>
+                        </el-table-column>
+                        <el-table-column label="本机剩余应付" min-width="185">
+                            <template #default="{ row }">
+                                <ErpDevicePayableCell :state="rowPayState(row)" :label="rowPayState(row) === 'settled' ? '¥0.00 · 已结清' : devicePayLabel(row)" :can-view="canViewPayable(row)" @view="openDevicePayable(row)" />
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                </section>
+                <ErpDocumentSyncResult ref="syncResult" operator-view="purchase" :results="detail.data?.integration_results" @refresh="loadDetail(detail.orderId)" />
                 <div v-if="detail.data?.integration_actions?.length" class="mb-4 flex flex-wrap gap-2">
                     <el-button v-for="action in detail.data.integration_actions" :key="action.key" type="primary" plain @click="openPurchaseIntegration(action)">{{ action.label }}</el-button>
                 </div>
-                <el-descriptions v-if="detail.data" :column="4" border>
+                <component v-if="detail.data" :is="detailDevices.length ? 'details' : 'div'" :key="detail.orderId" class="purchase-original">
+                <summary v-if="detailDevices.length">整单资料、设备备注与调价</summary>
+                <el-descriptions :column="4" border>
                     <el-descriptions-item label="采购单号">{{ detail.data.purchase_no }}</el-descriptions-item>
                     <el-descriptions-item label="采购用户">{{ detail.data.party_name }}</el-descriptions-item>
                     <el-descriptions-item label="M号">{{ detail.data.m_no || '-' }}</el-descriptions-item>
                     <el-descriptions-item label="业务来源">{{ erpSourceLabel(detail.data.origin_name, 'ERP采购') }}</el-descriptions-item>
                     <el-descriptions-item label="原业务单号">{{ detail.data.origin_no || detail.data.purchase_no || '-' }}</el-descriptions-item>
                     <el-descriptions-item label="业务状态">{{ detail.data.business_status_label || orderStatusMeta(detail.data.status).label }}</el-descriptions-item>
-                    <el-descriptions-item label="付款状态">
+                    <el-descriptions-item label="整单付款状态">
                         <el-tag :type="financeStatusMeta(detail.data.finance_status).type">{{ financeStatusMeta(detail.data.finance_status).label }}</el-tag>
                     </el-descriptions-item>
                     <el-descriptions-item label="原采购金额">{{ money(detail.data.original_total_cost ?? detail.data.total_cost) }}</el-descriptions-item>
-                    <el-descriptions-item label="退货冲减">{{ money(Math.max(0, Number(detail.data.original_total_cost || detail.data.total_cost || 0) - Number(detail.data.effective_purchase_amount || 0))) }}</el-descriptions-item>
-                    <el-descriptions-item label="有效采购本金">{{ money(detail.data.effective_purchase_amount) }}</el-descriptions-item>
-                    <el-descriptions-item label="已付款">{{ money(detail.data.paid_amount) }}</el-descriptions-item>
-                    <el-descriptions-item label="剩余应付">{{ money(detail.data.payable_amount) }}</el-descriptions-item>
+                    <el-descriptions-item label="退货冲减">{{ detail.data.finance_status === 'review' ? '待核对' : money(Math.max(0, Number(detail.data.original_total_cost || detail.data.total_cost || 0) - Number(detail.data.effective_purchase_amount || 0))) }}</el-descriptions-item>
+                    <el-descriptions-item label="有效采购本金">{{ detail.data.finance_status === 'review' ? '待核对' : money(detail.data.effective_purchase_amount) }}</el-descriptions-item>
+                    <el-descriptions-item label="整单已结算">{{ detail.data.finance_status === 'review' ? '待核对' : money(detail.data.paid_amount) }}</el-descriptions-item>
+                    <el-descriptions-item label="整单剩余应付">{{ detail.data.finance_status === 'review' ? '待核对' : money(detail.data.payable_amount) }}</el-descriptions-item>
                     <el-descriptions-item label="仓库">{{ detail.data.warehouse_name || '-' }}</el-descriptions-item>
                     <el-descriptions-item label="库位">{{ detail.data.location_name || '-' }}</el-descriptions-item>
                     <el-descriptions-item label="付款账户">{{ detail.data.capital_account_name || '-' }}</el-descriptions-item>
@@ -791,6 +799,7 @@
                         </template>
                     </el-table-column>
                 </el-table>
+                </component>
             </div>
         </HsxDrawer>
 
@@ -825,6 +834,7 @@
                     <div class="mt-1 text-xs text-[color:var(--el-text-color-secondary)]">只填正数；扣款会减少成本，补款会增加成本。</div>
                 </el-form-item>
                 <el-form-item label="影响说明">
+                    <HsxNotice v-if="adjustHint" default-expanded :closable="false" show-icon type="warning" :title="adjustHint" />
                     <HsxNotice default-expanded
                         :closable="false"
                         show-icon
@@ -846,15 +856,21 @@
 
 <script setup lang="ts">
 import ErpDesktopPage from '@/addon/hsx_erp/components/ErpDesktopPage.vue'
-import ErpWorkspaceHeader from '@/addon/hsx_erp/components/ErpWorkspaceHeader.vue'
+import ErpDocumentSyncResult from '@/addon/hsx_erp/components/ErpDocumentSyncResult.vue'
+import { sourceId, useSourceDocument } from '@/addon/hsx_erp/hooks/useSourceDocument'
+import useUserStore from '@/stores/modules/user'
+import ErpTradeHeader from '@/addon/hsx_erp/components/ErpTradeHeader.vue'
+import ErpTradeReviewLines from '@/addon/hsx_erp/components/ErpTradeReviewLines.vue'
+import ErpTradeEntryGuide from '@/addon/hsx_erp/components/ErpTradeEntryGuide.vue'
+import { useTradeDirectory, useTradeAccounts } from '@/addon/hsx_erp/hooks/useTradeDirectory'
 import ErpDataTable from '@/addon/hsx_erp/components/ErpDataTable.vue'
-import { HsxSearchPanel, HsxDialog, HsxDrawer, HsxNotice, useFeedback , HsxFold } from '@/addon/hsx_components/core'
+import { HsxDialog, HsxDrawer, HsxNotice, useFeedback, HsxFold } from '@/addon/hsx_components/core'
 import { erpEnumLabel, erpSourceLabel } from '@/addon/hsx_erp/utils/display'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVoucherUpload.vue'
-import { Plus, Refresh, Search } from '@element-plus/icons-vue'
+import { ArrowDown, Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 import { adjustErpPurchaseCost, createErpPurchase, getErpDicts, getErpGoodsSpecMeta, getErpPurchaseInfo, getErpPurchaseList, getErpStaffOptions } from '@/addon/hsx_erp/api/erp'
@@ -862,39 +878,48 @@ import { getErpConfig } from '@/addon/hsx_erp/api/config'
 import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/index.vue'
 import ErpPartySelect from '@/addon/hsx_erp/components/ErpPartySelect.vue'
 import ErpDeviceIdentity from '@/addon/hsx_erp/components/ErpDeviceIdentity.vue'
+import ErpDevicePayableCell from '@/addon/hsx_erp/components/ErpDevicePayableCell.vue'
+import { deviceBillState, purchaseHandoff } from '@/addon/hsx_erp/utils/purchase-handoff'
 import ErpCatalogProductSelect from '@/addon/hsx_erp/components/ErpCatalogProductSelect.vue'
+import ErpPurchaseDeviceCatalogSelect from '@/addon/hsx_erp/components/ErpPurchaseDeviceCatalogSelect.vue'
 import ErpQuantityProductSelect from '@/addon/hsx_erp/components/ErpQuantityProductSelect.vue'
 import ErpOverflowText from '@/addon/hsx_erp/components/ErpOverflowText.vue'
 import ErpRoleFocus from '@/addon/hsx_erp/components/ErpRoleFocus.vue'
 import ErpWarehouseLocationCascader from '@/addon/hsx_erp/components/ErpWarehouseLocationCascader.vue'
 import { useErpPageRefresh } from '@/addon/hsx_erp/hooks/useErpPageRefresh'
 const hsxFeedback = useFeedback()
+const lookup = useTradeDirectory()
+const partyResolving = ref(false)
+const entryStep = ref(0), entryError = ref(''), listError = ref(false)
+let listVersion = 0
+let confirmingEntry = false
+function refreshWorkspace(withList: boolean | Event = true) {
+    if (!lookup.sessionOK()) return
+    lookup.clear(); void loadWarehouses(); void loadStaffOptions(); void loadDicts(); void loadSpecMeta(); void loadRules()
+    if (withList !== false) void loadList()
+}
 
-const search = reactive<any>({ imei: '', party_id: null, purchase_no: '', finance_status: '', status: '', warehouse_id: '', location_id: '', catalog_product_id: '', purchaser_uid: '', dateRange: [], min_amount: undefined, max_amount: undefined })
+const search = reactive<any>({ serial: '', party_id: null, purchase_no: '', finance_status: '', status: '', warehouse_id: '', location_id: '', catalog_product_id: '', purchaser_uid: '', dateRange: [], min_amount: undefined, max_amount: undefined })
 const searchPartyName = ref('')
-const searchConditionCount = computed(() => Object.values(search).filter(value => Array.isArray(value) ? value.length > 0 : value !== '' && value !== null && value !== undefined).length)
+const advancedFilterCount = computed(() => [search.finance_status, search.warehouse_id, search.location_id, search.catalog_product_id, search.purchaser_uid, search.dateRange?.length || undefined, search.min_amount, search.max_amount].filter(v => v != null && v !== '').length)
 const activeTab = ref('')
 const listMode = ref<'device' | 'standard'>('device')
 const router = useRouter()
+const route = useRoute()
+const user = useUserStore()
+const expandedDeviceKeys = ref<string[]>([])
+const syncResult = ref<InstanceType<typeof ErpDocumentSyncResult>>()
 const openPurchaseIntegration = (action: any) => {
+    if (action?.query?.detail_extension) { syncResult.value?.openAction(action, Number(detail.data?.id)); return }
     if (!/^\/[A-Za-z0-9_/-]+$/.test(String(action.pc_route || ''))) return
-    router.push({ path: action.pc_route, query: { purchase_id: Number(detail.data?.id) } })
+    router.push({ path: action.pc_route, query: action.query?.purchase_no === detail.data?.purchase_no && action.query?.purchase_no ? { purchase_no: action.query.purchase_no } : { purchase_id: Number(detail.data?.id) } })
 }
 
-function onTabChange(tab: string) {
-    // Tab 映射：void 用 status 字段，其余用 finance_status
-    if (tab === 'void') {
-        search.finance_status = ''
-        search.status = 'void'
-    } else {
-        search.finance_status = tab
-        search.status = ''
-    }
+function onTabChange() {
     table.page = 1
     loadList()
 }
 const table = reactive({ loading: false, data: [] as any[], page: 1, limit: 15, total: 0 })
-const accounts = ref<any[]>([])
 const warehouses = ref<any[]>([])
 const specMeta = ref<any>({ groups: [], grades: [] })
 const staffOptions = ref<any[]>([])
@@ -916,8 +941,12 @@ const listingWorkspace = ref<any>({
 })
 const create = reactive({ visible: false, saving: false, form: defaultForm() })
 const itemExtra = reactive({ visible: false, index: -1, item: null as any, activeTab: 'base' })
-const detail = reactive({ visible: false, loading: false, data: null as any })
+const { detail, loadDetail } = useSourceDocument(getErpPurchaseInfo)
+const detailDevices = computed(() => (detail.data?.items || []).filter((item: any) => item.item_type !== 'standard'))
+const handoff = computed(() => purchaseHandoff(detailDevices.value, !!(detail.data?.integration_results?.length || detail.data?.integration_actions?.length)))
 const detailIsStandard = computed(() => Array.isArray(detail.data?.items) && detail.data.items.some((row: any) => row.item_type === 'standard'))
+const listCostHint = ref('')
+const adjustHint = ref('')
 const adjust = reactive({ visible: false, saving: false, itemId: 0, item: null as any, form: { type: 'deduct', amount: 0, remark: '' } })
 const erpDicts = ref<Record<string, any[]>>({})
 const purchaseRoleFocus = [
@@ -929,15 +958,18 @@ const purchaseRoleFocus = [
 const summary = computed(() => {
     return table.data.reduce((acc, row: any) => {
         const assetStatus = String(row.status || '')
+        if (listMode.value === 'device' && rowPayState(row) === 'review') acc.review++
         if (row.order_status === 'void' || Number(row.is_returned || 0) === 1 || assetStatus === 'returned' || assetStatus === 'void') return acc
+        acc.count += listMode.value === 'standard' ? Number(row.quantity || 0) : 1
+        if (listMode.value === 'device' && ['review','void'].includes(rowPayState(row))) return acc
+        acc.known++
         const paid = Number(row.asset_paid_amount || 0)
         const purchaseAmount = Number(row.asset_payable_amount ?? row.purchase_cost ?? 0)
-        acc.count += listMode.value === 'standard' ? Number(row.quantity || 0) : 1
         acc.totalCost += purchaseAmount
         acc.paid += paid
         acc.payable += Math.max(0, Number(row.asset_unpaid_amount ?? (purchaseAmount - paid)))
         return acc
-    }, { count: 0, totalCost: 0, paid: 0, payable: 0 })
+    }, { count: 0, known: 0, review: 0, totalCost: 0, paid: 0, payable: 0 })
 })
 const createTotal = computed(() => create.form.items.reduce((sum: number, row: any) =>
     sum + (row.item_type === 'standard' ? standardLineTotal(row) : Number(row.purchase_cost || 0)), 0))
@@ -967,7 +999,7 @@ watch(() => create.form.settle_mode, mode => {
 })
 
 onMounted(() => {
-    loadAccounts()
+    if (route.query.purchase_id) loadDetail(route.query.purchase_id)
     loadWarehouses()
     loadStaffOptions()
     loadSpecMeta()
@@ -975,7 +1007,17 @@ onMounted(() => {
     loadDicts()
 })
 useErpPageRefresh(loadList)
-
+const { accounts, accountError, accountLoading, reloadAccounts } = useTradeAccounts(
+    () => create.visible && entryStep.value === 2 && create.form.settle_mode === 'cash', () => lookup.scope.value, () => lookup.sessionOK() ? getCapitalAccounts() : Promise.reject(new Error('店铺已切换'))
+)
+watch(lookup.sessionChanged, changed => {
+    if (!changed) return
+    create.visible = false; detail.visible = false; warehouses.value = []; staffOptions.value = []; currentUid.value = 0
+    itemExtra.visible = false; adjust.visible = false; specMeta.value = { groups: [], grades: [] }; erpDicts.value = {}
+    ++listVersion; table.data = []; table.total = 0; table.loading = false
+    expandedDeviceKeys.value = []
+})
+watch(lookup.scope, (next, previous) => { if (next && !previous && lookup.sessionOK()) refreshWorkspace() })
 function defaultForm() {
     return {
         party_id: 0,
@@ -1034,6 +1076,7 @@ function blankItem(type = 'device') {
         battery: undefined,
         warranty: undefined,
         catalog_product_id: 0,
+        catalog_reference: null,
         catalog_product_name: '',
         category_name: '',
         category_names: [],
@@ -1067,47 +1110,55 @@ function onStandardProductChange(row: any, product: any | null) {
 }
 
 async function loadList() {
-    table.loading = true
+    if (!lookup.sessionOK()) return
+    const v = ++listVersion
+    expandedDeviceKeys.value = []
+    table.loading = true; listError.value = false; listCostHint.value = ''
     try {
         const res: any = await getErpPurchaseList({ ...buildSearchParams(), item_type: listMode.value, page: table.page, limit: table.limit })
-        table.data = res?.data?.data || []
-        table.total = res?.data?.total || 0
-    } finally {
-        table.loading = false
-    }
+        if (!lookup.sessionOK() || v !== listVersion) return
+        if (!Array.isArray(res?.data?.data)) throw new Error('incomplete list')
+        table.data = res.data.data
+        listCostHint.value = res.data.cost_maintenance_hint || ''
+        table.total = Number(res.data.total || 0)
+    } catch {
+        if (v === listVersion) { table.data = []; table.total = 0; listError.value = true }
+    } finally { if (v === listVersion) table.loading = false }
 }
 
 function onListModeChange() {
     table.page = 1
-    search.imei = ''
+    activeTab.value = ''
+    search.finance_status = ''
+    search.serial = ''
     search.catalog_product_id = ''
     loadList()
 }
 
-async function loadAccounts() {
-    const res: any = await getCapitalAccounts()
-    accounts.value = Array.isArray(res?.data) ? res.data : (res?.data?.list || [])
-}
 
 async function loadWarehouses() {
-    const res: any = await getErpWarehouseOptions()
+    const res: any = await lookup.read('warehouse-options', getErpWarehouseOptions, Array.isArray)
+    if (!res) return
     warehouses.value = Array.isArray(res?.data) ? res.data : []
     applyDefaultWarehouse()
 }
 
 async function loadStaffOptions() {
-    const res: any = await getErpStaffOptions()
+    const res: any = await lookup.live('制单员', getErpStaffOptions, v => Array.isArray(v?.users))
+    if (!res) return
     currentUid.value = Number(res?.data?.current_uid || 0)
     staffOptions.value = res?.data?.users || []
 }
 
 async function loadSpecMeta() {
-    const res: any = await getErpGoodsSpecMeta()
+    const res: any = await lookup.read('spec-options', getErpGoodsSpecMeta, (v: any) => v != null && typeof v === 'object')
+    if (!res) return
     specMeta.value = res?.data || { groups: [], grades: [] }
 }
 
 async function loadRules() {
-    const res: any = await getErpConfig()
+    const res: any = await lookup.live('开单规则', getErpConfig, v => v != null && typeof v === 'object' && !Array.isArray(v))
+    if (!res) return
     Object.assign(titleRules, res?.data?.product_title || {})
     listingWorkspace.value = {
         ...listingWorkspace.value,
@@ -1120,14 +1171,20 @@ async function loadRules() {
 }
 
 async function loadDicts() {
-    const res: any = await getErpDicts()
+    const res: any = await lookup.read('dicts', getErpDicts, (v: any) => v != null && typeof v === 'object')
+    if (!res) return
     erpDicts.value = res?.data || {}
 }
 
 function buildSearchParams() {
     const [start_at, end_at] = Array.isArray(search.dateRange) ? search.dateRange : []
+    const device = listMode.value === 'device'
+    const wholeOrder = device ? search.finance_status : activeTab.value
     return {
         ...search,
+        device_pay_state: device ? activeTab.value : undefined,
+        finance_status: wholeOrder === 'void' ? '' : wholeOrder,
+        status: wholeOrder === 'void' ? 'void' : '',
         start_at: start_at || '',
         end_at: end_at || '',
         dateRange: undefined
@@ -1140,7 +1197,7 @@ function handleSearch() {
 }
 
 function handleReset() {
-    Object.assign(search, { imei: '', party_id: null, purchase_no: '', finance_status: '', status: '', warehouse_id: '', location_id: '', catalog_product_id: '', purchaser_uid: '', dateRange: [], min_amount: undefined, max_amount: undefined })
+    Object.assign(search, { serial: '', party_id: null, purchase_no: '', finance_status: '', status: '', warehouse_id: '', location_id: '', catalog_product_id: '', purchaser_uid: '', dateRange: [], min_amount: undefined, max_amount: undefined })
     searchPartyName.value = ''
     activeTab.value = ''
     handleSearch()
@@ -1151,10 +1208,13 @@ function onSearchWarehouseChange() {
 }
 
 function openCreate() {
+    if (!lookup.sessionOK()) return
+    partyResolving.value = false
     create.form = defaultForm()
+    entryStep.value = 0; entryError.value = ''
+    if (listMode.value === 'standard') { create.form.item_type_mode = 'standard'; create.form.items = [blankItem('standard')] }
     create.form.purchaser_uid = currentUid.value || staffOptions.value[0]?.uid || 0
     create.visible = true
-    loadAccounts()
     loadWarehouses()
     loadStaffOptions()
     loadRules()
@@ -1305,7 +1365,7 @@ function finishItemExtra() {
     const incompleteTab = itemExtraIncompleteTab(itemExtra.item)
     if (incompleteTab) {
         itemExtra.activeTab = incompleteTab
-        hsxFeedback.warning(`当前设备还有 ${deviceCoreMissingCount(itemExtra.item)} 项入库必填资料未完成`)
+        hsxFeedback.warning(`请先填写：${firstMissingField.value?.label || '入库资料'}`)
         return
     }
     if (itemExtra.index < create.form.items.length - 1) {
@@ -1348,6 +1408,8 @@ function openGoodsMeta() {
 
 function onItemCatalogChange(item: any, node: any) {
     const isProduct = node?.node_type === 'product'
+    if (!isProduct && item.catalog_product_name && !item._model_manual) { item.model = ''; item._auto_model = '' }
+    item.catalog_reference = node?.catalog_reference || null
     item.catalog_product_id = isProduct ? Number(node?.site_product_id || 0) : 0
     item.catalog_product_name = isProduct ? String(node?.product_name || node?.label || '') : ''
     item.category_path = String(node?.category_path || '')
@@ -1507,69 +1569,30 @@ function itemCoreSummary(item: any) {
     ].filter(Boolean).join(' · ')
 }
 
-function deviceCoreMissingCount(item: any) {
-    const values = [
-        String(item?.imei || item?.sn || '').trim(),
-        String(item?.model || '').trim(),
-        Number(item?.purchase_cost || 0) > 0,
-        Number(item?.warehouse_id || 0) > 0,
-        Number(item?.location_id || 0) > 0
-    ]
+function requiredDeviceGaps(item: any): {label: string; tab: string}[] {
+    if (!item) return []
+    const missing: {label: string; tab: string}[] = []
+    if (!String(item.imei || item.sn || '').trim()) missing.push({label:'IMEI 或 SN',tab:'base'})
+    if (!String(item.model || '').trim()) missing.push({label:'设备名称 / 型号',tab:'base'})
+    if (!(Number(item.purchase_cost) > 0)) missing.push({label:'采购成本',tab:'base'})
+    if (!(Number(item.warehouse_id) > 0)) missing.push({label:'入库仓库',tab:'base'})
+    if (!(Number(item.location_id) > 0)) missing.push({label:'入库库位',tab:'base'})
     if (purchaseOneStop.value) {
-        const listingValues: Record<string, any> = {
-            catalog_product_id: Number(item?.catalog_product_id || 0) > 0,
-            spec: String(item?.spec || '').trim(),
-            image_urls: hasDeviceImage(item),
-            video_url: String(item?.video_url || '').trim(),
-            retail_price: Number(item?.retail_price || 0) > 0,
-            quality_remark: String(item?.quality_remark || '').trim(),
-            remark_public: String(item?.remark_public || '').trim(),
-            remark_internal: String(item?.remark_internal || '').trim(),
-        }
-        Object.entries(listingValues).forEach(([field, value]) => {
-            if (listingFieldRequired(field)) values.push(value)
-        })
+        for (const [key,label,tab] of [
+            ['catalog_product_id','目录型号','base'],['spec','设备规格','goods'],['remark_public','对外说明','goods'],
+            ['retail_price','销售定价','sales'],['image_urls','设备图片','sales'],['video_url','展示视频','sales'],
+            ['quality_remark','质检备注','sales'],['remark_internal','对内备注','sales']
+        ]) if (listingFieldRequired(key) && !listingFieldHasValue(item, key)) missing.push({label,tab})
     }
-    return values.filter((value: any) => !value).length
+    return missing
 }
-
-function deviceCoreReady(item: any) {
-    return deviceCoreMissingCount(item) === 0
-}
-
-function itemExtraIncompleteTab(item: any): string {
-    const baseReady = Boolean(String(item?.imei || item?.sn || '').trim())
-        && Boolean(String(item?.model || '').trim())
-        && Number(item?.purchase_cost || 0) > 0
-        && Number(item?.warehouse_id || 0) > 0
-        && Number(item?.location_id || 0) > 0
-    if (!baseReady) return 'base'
-    if (!purchaseOneStop.value) return ''
-    if (!String(item?.model || '').trim()) return 'goods'
-    if (listingFieldRequired('catalog_product_id') && Number(item?.catalog_product_id || 0) <= 0) return 'base'
-    if (listingFieldRequired('spec') && !String(item?.spec || '').trim()) return 'goods'
-    if (['image_urls', 'video_url', 'retail_price', 'quality_remark', 'remark_internal'].some(field => listingFieldRequired(field) && !listingFieldHasValue(item, field))) return 'sales'
-    if (listingFieldRequired('remark_public') && !String(item?.remark_public || '').trim()) return 'goods'
-    return ''
-}
+const firstMissingField = computed(() => requiredDeviceGaps(itemExtra.item)[0])
+function deviceCoreMissingCount(item: any) { return requiredDeviceGaps(item).length }
+function deviceCoreReady(item: any) { return deviceCoreMissingCount(item) === 0 }
+function itemExtraIncompleteTab(item: any) { return requiredDeviceGaps(item)[0]?.tab || '' }
 
 function hasDeviceImage(item: any) {
     return Boolean(String(item?.image_urls || '').trim())
-}
-
-function deviceMaterialCompletion(item: any) {
-    const checks = [
-        Boolean(String(item?.imei || item?.sn || '').trim()),
-        Number(item?.purchase_cost || 0) > 0,
-        Number(item?.warehouse_id || 0) > 0 && Number(item?.location_id || 0) > 0,
-        Boolean(String(item?.category_path || '').trim()),
-        Boolean(String(item?.model || '').trim()),
-        Boolean(String(item?.spec || '').trim()),
-        hasDeviceImage(item),
-        Number(item?.retail_price || 0) > 0
-    ]
-    const relevantChecks = purchaseOneStop.value ? checks : checks.slice(0, 3)
-    return Math.round(relevantChecks.filter(Boolean).length / relevantChecks.length * 100)
 }
 
 function listingFieldEnabled(field: string) {
@@ -1580,8 +1603,12 @@ function listingFieldRequired(field: string) {
     return listingFieldEnabled(field) && Number(listingWorkspace.value?.field_rules?.[field]?.required ?? 0) === 1
 }
 
+function hasCatalogProduct(item: any) {
+    return Number(item?.catalog_product_id || 0) > 0 || Boolean(item?.catalog_reference?.product_id && item?.catalog_reference?.revision)
+}
+
 function listingFieldHasValue(item: any, field: string) {
-    if (field === 'catalog_product_id') return Number(item?.catalog_product_id || 0) > 0
+    if (field === 'catalog_product_id') return hasCatalogProduct(item)
     if (field === 'retail_price') return Number(item?.retail_price || 0) > 0
     if (field === 'image_urls') return hasDeviceImage(item)
     return Boolean(String(item?.[field] || '').trim())
@@ -1607,14 +1634,6 @@ function purchaseItemPayload(item: any) {
     return payload
 }
 
-function compactItemSubTitle(item: any) {
-    return [
-        item.spec || '',
-        item.imei ? `IMEI ${item.imei}` : '',
-        item.sn ? `SN ${item.sn}` : ''
-    ].filter(Boolean).join(' · ') || '还没有填写规格和串号'
-}
-
 function formatDate(value: any) {
     const time = Number(value || 0)
     if (!time) return ''
@@ -1624,28 +1643,58 @@ function formatDate(value: any) {
     return `${date.getFullYear()}-${month}-${day}`
 }
 
-async function submitCreate() {
-    if (!create.form.party_id && !create.form.party_name) return hsxFeedback.warning('请选择采购渠道')
-    const isStandard = create.form.item_type_mode === 'standard'
-    if (!create.form.items.length || create.form.items.some((row: any) => isStandard
-        ? (!row.model || Number(row.quantity || 0) <= 0 || standardLineTotal(row) <= 0)
-        : (!row.model || (!row.imei && !row.sn) || Number(row.purchase_cost || 0) <= 0 || deviceCoreMissingCount(row) > 0))) {
-        return hsxFeedback.warning(isStandard ? '请补全商品名称、采购数量和采购总价' : (purchaseOneStop.value ? '请补全当前规则要求的采购及销售资料' : '请补全设备名称、IMEI/SN 和采购成本'))
+const reviewLines = computed(() => create.form.items.map((row: any) => ({
+    name: row.model || '未命名货品', identity: create.form.item_type_mode === 'standard' ? '数量 ' + quantityText(row.quantity) : (row.imei ? 'IMEI ' + row.imei : 'SN ' + row.sn),
+    amount: money(create.form.item_type_mode === 'standard' ? standardLineTotal(row) : row.purchase_cost)
+})))
+function entryIssue(n: number): string {
+    if (n === 0) {
+        if (partyResolving.value) return '正在匹配往来主体，请稍候'
+        if (!create.form.party_id && !create.form.party_name) return '请选择本单供货方'
+    } else if (n === 1) {
+        const isStandard = create.form.item_type_mode === 'standard'
+        if (lookup.errors.value.includes('开单规则')) return '开单规则未能读取，请先重新读取资料。'
+        if (!create.form.items.length) return '请先添加本次采购的货品'
+        for (const [i, row] of create.form.items.entries()) {
+            const label = isStandard ? `第 ${i+1} 项标品` : `第 ${i+1} 台设备`
+            if (!row.model) return label + '还没有商品名称或型号'
+            if (isStandard && (Number(row.quantity || 0) <= 0 || standardLineTotal(row) <= 0)) return label + '需要填写采购数量和总价'
+            if (!isStandard && !row.imei && !row.sn) return label + '需要填写 IMEI 或 SN'
+            if (!isStandard && Number(row.purchase_cost || 0) <= 0) return label + '需要填写采购成本'
+            if (!row.warehouse_id || !row.location_id) return label + '需要选择入库仓库和库位'
+            if (!isStandard && deviceCoreMissingCount(row) > 0) return label + '仍缺必填资料，请打开该行「一次完善」补齐'
+        }
     }
-    const missingLocationIndex = create.form.items.findIndex((row: any) => !row.warehouse_id || !row.location_id)
-    if (missingLocationIndex >= 0) return hsxFeedback.warning(`请为第 ${missingLocationIndex + 1} ${isStandard ? '项商品' : '台设备'}选择入库仓库和库位`)
+    return ''
+}
+function chooseStep(target: number) {
+    if (!lookup.sessionOK() || create.saving || target < 0 || target > 2) return
+    entryError.value = ''
+    for (let n = 0; n < target; n++) {
+        const message = entryIssue(n)
+        if (message) { entryStep.value = n; entryError.value = message; return }
+    }
+    entryStep.value = target
+}
+
+async function submitCreate() {
+    if (!lookup.sessionOK() || create.saving || confirmingEntry) return
+    for (const n of [0,1]) { const message = entryIssue(n); if (message) { entryStep.value = n; entryError.value = message; return } }
+    const isStandard = create.form.item_type_mode === 'standard'
     create.form.purchaser_uid = create.form.purchaser_uid || currentUid.value || staffOptions.value[0]?.uid || 0
     if (create.form.settle_mode === 'cash') {
         if (Number(create.form.paid_amount || 0) <= 0) return hsxFeedback.warning('请填写本次付款')
-        if (!create.form.capital_account_id) return hsxFeedback.warning('请选择付款账户')
+        if (accountLoading.value || accountError.value || !accounts.value.some(a => Number(a.id) === Number(create.form.capital_account_id))) return hsxFeedback.warning('请选择付款账户')
         if (Number(create.form.paid_amount || 0) > createTotal.value) return hsxFeedback.warning('付款不能大于采购成本')
     }
+    confirmingEntry = true
     const createConfirmed = await ElMessageBox.confirm(
-        `确认向「${create.form.party_name || '所选供货商'}」采购 ${create.form.items.length} ${isStandard ? '项标品' : '台设备'}，采购总额 ${money(createTotal.value)}。提交后将生成${isStandard ? '数量库存与采购应付' : '设备资产和设备应付'}；${create.form.settle_mode === 'cash' ? `立即从所选账户付款 ${money(create.form.paid_amount)}，无需再次到财务确认。` : '本次按挂账处理，后续到应付款结算。'}`,
+        `确认向「${create.form.party_name || '所选供货商'}」采购 ${create.form.items.length} ${isStandard ? '项标品' : '台设备'}，采购总额 ${money(createTotal.value)}。提交后将生成${isStandard ? '数量库存与采购应付' : '设备资产和设备应付'}；${create.form.settle_mode === 'cash' ? `在所选账户登记已付 ${money(create.form.paid_amount)}，无需再次到财务确认。` : '本次按挂账处理，后续到应付款结算。'}`,
         '确认采购开单',
         { type: 'warning', confirmButtonText: '确认开单', cancelButtonText: '返回检查' }
     ).then(() => true).catch(() => false)
-    if (!createConfirmed) return
+    confirmingEntry = false
+    if (!createConfirmed || !lookup.sessionOK()) return
     create.saving = true
     try {
         await createErpPurchase({
@@ -1659,7 +1708,7 @@ async function submitCreate() {
         })
         const remaining = Math.max(0, createTotal.value - Number(create.form.paid_amount || 0))
         hsxFeedback.success(create.form.settle_mode === 'cash'
-            ? (remaining > 0.0001 ? `采购已现付，剩余 ${money(remaining)} 进入应付款` : '采购入库与现结付款已完成')
+            ? (remaining > 0.0001 ? `采购已现付，剩余 ${money(remaining)} 进入应付款` : '采购已入库，现付款已登记')
             : '采购单已生成，等待财务付款')
         listMode.value = create.form.item_type_mode
         create.visible = false
@@ -1670,19 +1719,19 @@ async function submitCreate() {
 }
 
 function onPartyResolved(row: any) {
+    if (row) entryError.value = ''
     create.form.party_name = row?.party_name || row?.name || ''
     create.form.m_no = row?.m_no || create.form.m_no || ''
 }
 
-async function openDetail(row: any) {
-    detail.visible = true
-    detail.loading = true
-    try {
-        const res: any = await getErpPurchaseInfo(row.purchase_order_id || row.id)
-        detail.data = res?.data || null
-    } finally {
-        detail.loading = false
-    }
+function openDetail(row: any) {
+    return loadDetail(row.purchase_order_id || row.id)
+}
+
+function adjustmentItemId(row: any) {
+    // 列表的 id 是资产 ID；采购详情的 id 才是采购明细 ID。
+    if (row && Object.prototype.hasOwnProperty.call(row, 'purchase_item_id')) return sourceId(row.purchase_item_id)
+    return sourceId(row?.asset_id) ? sourceId(row?.id) : 0
 }
 
 function openAdjust(row: any) {
@@ -1690,14 +1739,16 @@ function openAdjust(row: any) {
         hsxFeedback.warning(supplierAdjustBlockedReason(row))
         return
     }
-    adjust.itemId = row.id
+    adjust.itemId = adjustmentItemId(row)
+    adjustHint.value = (detail.visible && detail.data?.cost_maintenance_hint) || listCostHint.value
     adjust.item = row
     adjust.form = { type: 'deduct', amount: 0, remark: '' }
     adjust.visible = true
 }
 
 function canAdjustSupplierPrice(row: any) {
-    return row?.status === 'in_stock'
+    return !!adjustmentItemId(row) && row?.status === 'in_stock'
+        && !['review','void'].includes(row?.device_payment_hint?.state)
         && row?.order_status !== 'void'
         && Number(row?.paid_amount || 0) <= 0.0001
 }
@@ -1707,7 +1758,11 @@ function supplierAdjustBlockedReason(row: any) {
     if (row?.status === 'sold') return '设备已经销售出库，不能再调整供应商采购价'
     if (row?.status !== 'in_stock') return '只有仍在库存中的设备可以调整供应商采购价'
     if (row?.order_status === 'void') return '采购单已作废，不能调整供应商采购价'
-    if (Number(row?.paid_amount || 0) > 0.0001) return '该设备已形成付款或折账，请走退款、补款或财务调账流程'
+    if (!adjustmentItemId(row)) return '未找到本机的采购明细，请核对原采购单'
+    if (['review','void'].includes(row?.device_payment_hint?.state)) return '本机无可确认的有效应付，请财务核对原单'
+    if (Number(row?.paid_amount || 0) > 0.0001) return Object.prototype.hasOwnProperty.call(row, 'purchase_item_id')
+        ? '本采购单已有付款或折账，请在采购单详情核对本机后处理'
+        : '该设备已形成付款或折账，请走退款、补款或财务调账流程'
     return '当前设备不能调整供应商采购价'
 }
 
@@ -1736,14 +1791,15 @@ async function submitAdjust() {
         '确认供应商调价',
         { type: 'warning', confirmButtonText: '确认调价并记账', cancelButtonText: '返回检查' }
     ).then(() => true).catch(() => false)
-    if (!adjustConfirmed) return
+    if (!adjustConfirmed || !lookup.sessionOK()) return
     adjust.saving = true
     try {
         await adjustErpPurchaseCost(adjust.itemId, {
             amount: adjustSignedAmount.value,
             remark: adjust.form.remark
         })
-        hsxFeedback.success('成本已调整')
+        if (adjustHint.value) hsxFeedback.warning('本站成本已调整。' + adjustHint.value)
+        else hsxFeedback.success('成本已调整')
         adjust.visible = false
         if (detail.data?.id) await openDetail(detail.data)
         loadList()
@@ -1752,7 +1808,60 @@ async function submitAdjust() {
     }
 }
 
+function rowPayState(row: any) {
+    return deviceBillState(row)
+}
+function devicePayLabel(row: any) {
+    switch (rowPayState(row)) {
+        case 'pending': return '待付 ' + money(row.device_payment_hint.remaining)
+        case 'partial': return '剩余待付 ' + money(row.device_payment_hint.remaining)
+        case 'settled': return '本站已结清'
+        case 'void': return '应付已作废'
+        default: return '应付待核对'
+    }
+}
+function deviceSettledText(row: any) {
+    const state = rowPayState(row), paid = row.device_payment_hint?.paid
+    if (state === 'void') return '—'
+    if (state === 'review' || paid == null || paid === '' || !Number.isFinite(Number(paid)) || Number(paid) < 0) return '待核对'
+    return money(paid)
+}
+function canViewPayable(row: any) {
+    return ['pending', 'partial', 'settled'].includes(rowPayState(row)) && !!sourceId(row.device_payment_hint?.payable_id) && !!sourceId(row.purchase_order_id)
+        && router.hasRoute('hsx_erp_payable') && ['hsx_erp_payable_info','hsx_erp_payable_party_items'].every(key => user.rules.includes(key))
+}
+function openDevicePayable(row: any) {
+    if (!lookup.sessionOK() || !canViewPayable(row)) return
+    if (detail.visible) detail.visible = false
+    router.push({ name:'hsx_erp_payable', query:{ payable_id:String(row.device_payment_hint.payable_id), ...(rowPayState(row) === 'settled' ? { view:'settlement' } : {}) } })
+}
+function onDeviceExpand(row: any, expanded: any[]) {
+    expandedDeviceKeys.value = expanded.some(item => item.id === row.id) ? [String(row.id)] : []
+}
+function handleRowCommand(command: string, row: any) {
+    if (!lookup.sessionOK()) return
+    if (command === 'facts') expandedDeviceKeys.value = expandedDeviceKeys.value.includes(String(row.id)) ? [] : [String(row.id)]
+    if (command === 'adjust' && canAdjustSupplierPrice(row)) openAdjust(row)
+    if (command === 'return' && canReturnPurchase(row)) goReturn(row)
+}
+function deviceRowFacts(row: any) {
+    const fields = [
+        ['采购成本', row.purchase_cost == null ? '—' : money(row.purchase_cost)],
+        ['本站已结算', deviceSettledText(row)],
+        ['业务来源', erpSourceLabel(row.origin_name, 'ERP采购')], ['本批设备', Number(row.order_asset_count) > 0 ? row.order_asset_count + ' 台' : ''],
+        ['仓库 / 库位', [row.warehouse_name,row.location_name].filter(Boolean).join(' / ') || '未登记'],
+        ['采购时间', row.purchase_at ? formatTime(row.purchase_at) : '未登记'], ['采购员', row.purchaser_name], ['质检员', row.inspector_name],
+        ['供货商 M 号', row.m_no],
+        ['整单状态', row.order_status === 'void' ? '采购单已撤销' : row.order_business_status_label], ['退货单号', row.return_no],
+        ['销售价', Number(row.retail_price || row.estimate_sale_price) ? money(row.retail_price || row.estimate_sale_price) : ''],
+        ['供应商调价', Number(row.adjust_cost) ? signedMoney(row.adjust_cost) : ''],
+        ['整备支出（独立应付）', Number(row.refurbish_cost) ? money(row.refurbish_cost) : ''],
+        ['当前总成本', row.total_cost != null && Number(row.total_cost) !== Number(row.purchase_cost) ? money(row.total_cost) : ''],
+    ]
+    return fields.filter(field => field[1] != null && field[1] !== '')
+}
 function financeStatusMeta(status: string) {
+    if (status === 'review') return { label: '待核对', type: 'warning' as const }
     return dictMeta('purchase_finance_status', status, {
         pending: { label: '待付款', type: 'warning' },
         partial: { label: '部分付款', type: 'primary' },
@@ -1820,17 +1929,14 @@ function isBatchFirst(index: number) {
     return batchKey(table.data[index]) !== batchKey(table.data[index - 1])
 }
 
-function batchPageSize(row: any) {
-    const key = batchKey(row)
-    return table.data.filter((item: any) => batchKey(item) === key).length
-}
-
 function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number }) {
     return [`erp-batch-tone-${batchTone(row)}`, isBatchFirst(rowIndex) ? 'erp-batch-start' : ''].filter(Boolean).join(' ')
 }
 </script>
 
 <style scoped>
+.trade-settlement-mode{grid-column:1 / -1}.trade-settlement-mode :deep(.el-select){max-width:240px}.trade-checkout{display:flex;flex-wrap:wrap;gap:16px 40px;background:var(--el-fill-color-light);padding:14px 18px;margin-bottom:14px}.trade-checkout small,.trade-checkout b{display:block}.trade-checkout small,.trade-entry-hint{color:var(--el-text-color-regular)}.trade-checkout b{font-size:16px;margin-top:4px}.trade-entry-error{color:var(--el-text-color-primary);border-left:3px solid var(--el-color-warning);padding:8px 12px;background:var(--el-color-warning-light-9);margin-bottom:12px}.trade-entry-hint{margin:0 0 14px;font-size:13px}
+
 .summary-tile {
     border-radius: 8px;
     background: var(--el-fill-color-light);
@@ -1866,29 +1972,45 @@ function purchaseRowClassName({ row, rowIndex }: { row: any; rowIndex: number })
     gap: 16px;
     margin-bottom: 10px;
 }
-.batch-dot {
-    width: 8px;
-    height: 8px;
-    flex: 0 0 auto;
-    border-radius: 50%;
-}
-.batch-dot--0 { background: var(--el-color-primary); }
-.batch-dot--1 { background: var(--el-color-success); }
-.batch-dot--2 { background: #a78bfa; }
-.batch-dot--3 { background: var(--el-color-warning); }
-.batch-staff-line { display:flex; flex-wrap:wrap; gap:4px 12px; margin-top:6px; color:var(--el-text-color-secondary); font-size:12px; }
-.purchase-status-stack { display:flex; align-items:flex-start; flex-direction:column; gap:5px; }
-.purchase-status-stack__business { color:var(--el-text-color-primary); font-size:12px; font-weight:600; }
-.purchase-status-stack__finance { color:var(--el-text-color-secondary); font-size:12px; }
-.purchase-status-stack__exception { color:var(--el-color-danger); font-size:12px; }
-.purchase-status-stack__source { overflow:hidden; max-width:160px; color:var(--el-text-color-secondary); font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
-.purchase-return-action { white-space: nowrap; }
-.supplier-adjust-disabled-wrap { display:inline-flex; margin-left:12px; vertical-align:middle; }
-.purchase-return-disabled-wrap { display: inline-flex; margin-left: 12px; vertical-align: middle; }
-:deep(.el-table__body tr.erp-batch-tone-0 > td.el-table__cell) { background: var(--el-color-primary-light-9); }
-:deep(.el-table__body tr.erp-batch-tone-1 > td.el-table__cell) { background: var(--el-color-success-light-9); }
-:deep(.el-table__body tr.erp-batch-tone-2 > td.el-table__cell) { background: var(--el-color-info-light-9); }
-:deep(.el-table__body tr.erp-batch-tone-3 > td.el-table__cell) { background: var(--el-color-warning-light-9); }
+.device-purchase-table { --el-table-row-hover-bg-color:var(--el-fill-color-light); }
+.device-purchase-table :deep(.purchase-expander .cell) {padding-inline:4px;white-space:nowrap}
+.device-purchase-table :deep(.el-table__body td.el-table__cell) {padding-top:7px;padding-bottom:7px}
+.device-purchase-table :deep(.el-table__expanded-cell.el-table__cell) {padding:0}
+.device-purchase-table :deep(.el-table__body tr:hover > td.el-table__cell) {background:var(--el-fill-color-light)!important}
+.purchase-price {font-variant-numeric:tabular-nums}
+.purchase-record {min-height:155px}
+.purchase-handoff {border:1px solid var(--el-border-color-lighter);border-radius:8px;margin-bottom:18px;padding:15px 18px;background:var(--el-fill-color-extra-light)}
+.purchase-handoff__source,.purchase-handoff__title {display:flex;align-items:center;flex-wrap:wrap;gap:5px 12px}
+.purchase-handoff__source {margin-bottom:10px;color:var(--el-text-color-regular);font-size:13px}
+.purchase-handoff__source strong {font-weight:500;font-variant-numeric:tabular-nums;color:var(--el-text-color-primary);overflow-wrap:anywhere}
+.purchase-handoff__source span {border-left:1px solid var(--el-border-color);padding-left:12px}
+.purchase-handoff__title strong {font-size:18px;line-height:1.45;color:var(--el-text-color-primary)}
+.purchase-handoff__title span {border-radius:4px;background:var(--el-fill-color);color:var(--el-text-color-regular);padding:1px 8px;font-size:12px}
+.purchase-handoff--settled .purchase-handoff__title span {background:var(--el-color-success-light-9);color:var(--el-color-success-dark-2)}
+.purchase-handoff--due .purchase-handoff__title span,.purchase-handoff--review .purchase-handoff__title span {background:var(--el-color-warning-light-9);color:var(--el-color-warning-dark-2)}
+.purchase-handoff p {margin:5px 0 0;color:var(--el-text-color-regular);font-size:13px;line-height:1.55}
+.purchase-devices {margin-bottom:20px}
+.purchase-devices header {display:flex;justify-content:space-between;align-items:center;gap:16px;margin:0 0 12px}
+.purchase-devices h3 {font-size:16px;font-weight:600;margin:0 0 2px;color:var(--el-text-color-primary)}
+.purchase-devices h3 small {font-size:12px;font-weight:400;color:var(--el-text-color-regular);margin-left:4px}
+.purchase-devices header span {color:var(--el-text-color-regular);font-size:13px}
+.purchase-original summary {cursor:pointer;color:var(--el-color-primary);padding:10px 0;font-weight:500}
+.purchase-stock {color:var(--el-text-color-regular)}
+.purchase-stock::before {content:'';display:inline-block;vertical-align:2px;margin-right:6px;width:6px;height:6px;border-radius:50%;background:var(--el-text-color-secondary)}
+.purchase-stock--ready::before {background:var(--el-color-success)}
+.purchase-stock--attention,.purchase-exception {color:var(--el-text-color-primary);font-weight:600}
+.purchase-exception {display:block;font-size:12px;line-height:18px;color:var(--el-text-color-regular)}
+.purchase-row-actions {display:flex;align-items:center;gap:10px;white-space:nowrap}
+.purchase-row-actions :deep(.el-button.is-link) {margin:0;padding-left:0;padding-right:0}
+.purchase-row-actions :deep(.el-icon){margin-left:3px;font-size:11px}
+.purchase-device-facts {display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin:0;gap:12px 22px;padding:15px 26px 15px 48px;background:var(--el-fill-color-lighter)}
+.purchase-device-facts>div {min-width:0}.purchase-device-facts dt {font-size:12px;color:var(--el-text-color-regular)}.purchase-device-facts dd {margin:2px 0 0;overflow-wrap:anywhere;color:var(--el-text-color-primary)}
+.purchase-device-facts :deep(.el-button.is-link) {padding:0;min-height:20px;white-space:normal;text-align:left}
+.purchase-menu-reason {display:block;max-width:250px;white-space:normal;font-size:12px;line-height:17px;color:var(--el-text-color-regular)}
+:deep(.el-table__body tr.erp-batch-tone-0 > td.el-table__cell) { background: var(--el-bg-color); }
+:deep(.el-table__body tr.erp-batch-tone-1 > td.el-table__cell) { background: var(--el-fill-color-lighter); }
+:deep(.el-table__body tr.erp-batch-tone-2 > td.el-table__cell) { background: var(--el-bg-color); }
+:deep(.el-table__body tr.erp-batch-tone-3 > td.el-table__cell) { background: var(--el-fill-color-lighter); }
 :deep(.el-table__body tr.erp-batch-start > td.el-table__cell) { border-top: 2px solid var(--el-border-color); }
 :deep(.el-table__body tr:hover > td.el-table__cell) { background: var(--el-color-primary-light-9) !important; }
 .create-purchase-dialog :deep(.el-dialog__body) {

@@ -29,6 +29,8 @@ class FakeRecycleIdentityService extends ErpRecycleDeviceIdentityService
     public array $assets = [];
     public array $items = [];
     public array $payables = [];
+    public array $recycleItems = [];
+    protected function loadRecyclePurchaseItems(int $siteId): array { return $this->recycleItems; }
     public bool $fail = false;
     protected function loadAssets(int $siteId): array
     {
@@ -36,7 +38,7 @@ class FakeRecycleIdentityService extends ErpRecycleDeviceIdentityService
         return $this->assets;
     }
     protected function loadPurchaseItems(int $siteId, array $assetIds): array { return $this->items; }
-    protected function loadPayables(int $siteId): array { return $this->payables; }
+    protected function loadPayables(int $siteId, array $assetIds, array $purchaseIds): array { return $this->payables; }
 }
 class FakeOwnershipListener extends RecycleErpPaymentOwnershipRequested
 {
@@ -128,10 +130,12 @@ $service->payables = [$payable, $payable,
 $ownership = $service->paymentOwnership(7, [42, 900]);
 $assert($ownership[42]['has_payable'] && !$ownership[42]['ambiguous'] && $ownership[42]['paid_amount'] === 250.0 && $ownership[42]['remaining_amount'] === 750.0, '兼容purchase_asset.source_id且按应付去重，排除作废/整备/跨站');
 $assert(!$ownership[900]['has_asset'] && !$ownership[900]['has_payable'], '不能把回收订单ID碰撞识别为设备归属');
+$assert($ownership[42]['purchase_payable_id'] === 201 && $ownership[42]['purchase_payable_status'] === 'partial' && $ownership[900]['purchase_payable_id'] === 0, '原应付入口只返回本站本机唯一有效的原单及其结算状态');
 $service->payables = [array_replace($payable, ['source_type' => 'consignment_sale', 'source_id' => 888, 'asset_id' => 101])];
 $assert($service->paymentOwnership(7, [42])[42]['remaining_amount'] === 750.0, '代卖成交通过明确asset_id关联，不把销售明细ID当资产ID');
 $service->payables = [array_replace($payable, ['source_type' => 'purchase', 'source_id' => 20])];
 $legacy = $service->paymentOwnership(7, [42])[42];
+$assert($legacy['purchase_payable_id'] === 0 && $legacy['purchase_payable_status'] === '', '不能根据歧义的整单应付生成逐台付款入口');
 $assert($legacy['ambiguous'] && $legacy['has_payable'] && $legacy['paid_amount'] === 0.0 && $legacy['remaining_amount'] === 0.0, '历史整单应付无法确证设备分配，不重复分摊整单金额');
 $service->payables = [$payable, array_replace($payable, ['id' => 206])];
 $assert($service->paymentOwnership(7, [42])[42]['ambiguous'], '重复有效设备采购应付必须报告歧义');
@@ -139,6 +143,10 @@ $service->payables = [$payable, array_replace($payable, ['id' => 207, 'source_ty
 $assert($service->paymentOwnership(7, [42])[42]['ambiguous'], '整单类型显式设备应付与设备级采购应付并存必须报告重复采购义务');
 $service->payables = [array_replace($payable, ['asset_id' => 999])];
 $assert($service->paymentOwnership(7, [42])[42]['ambiguous'], '应付显式asset_id与purchase_asset.source_id冲突必须报告歧义');
+
+$service->recycleItems = [['site_id'=>7, 'spec_json'=>['source_device_id'=>878, 'source_plugin'=>'hsx_recycle']]];
+$throws(fn() => $sync->handle(['site_id'=>7, 'source_device_id'=>878]), '先核对原采购明细');
+$assert($sync->handle(['site_id'=>7, 'source_device_id'=>879])['has_asset'] === false, '没有资产也无原采购时才允许补入库');
 
 $listener = new FakeOwnershipListener();
 $listener->service = $service;

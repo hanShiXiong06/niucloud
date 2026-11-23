@@ -33,6 +33,8 @@
         :dispose-status="deviceData.dispose_status"
       />
 
+      <InboundPayablePanel v-if="dialogVisible && Number(deviceData.status) === 5" class="ddd-section" :device-id="deviceData.id" />
+
       <!-- ===== 价格补充:成本调整 / 价格备注(主价格已上移到头部) ===== -->
       <div v-if="hasCostAdjustment || canAdjustCost || deviceData.price_remark" class="ddd-section ddd-price-section">
         <div v-if="hasCostAdjustment || canAdjustCost" class="ddd-cost-adjust">
@@ -350,6 +352,7 @@ import { adjustDeviceCost, getDeviceCostAdjustLogs } from '@/addon/hsx_recycle/a
 import useUserStore from '@/stores/modules/user'
 import DeviceInfoCard from './DeviceInfoCard.vue'
 import DownstreamProgress from './DownstreamProgress.vue'
+import InboundPayablePanel from './InboundPayablePanel.vue'
 import CheckResultPanel from './CheckResultPanel.vue'
 
 // 定义设备信息接口

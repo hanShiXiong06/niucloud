@@ -8,8 +8,9 @@ export type PurchaseSelection = {
 
 // These codes are returned by draft selection validation before its enqueue transaction commits.
 const correctableSelectionCodes = new Set([
+    'PURCHASE_PRICER_UNAVAILABLE', 'PURCHASE_BUYER_NAME_INVALID', 'PURCHASE_BUYER_CONFLICT', 'PRICING_BUYER_CONFIRM_REQUIRED',
     'PURCHASE_SELECTION_REQUIRED', 'PURCHASE_SELECTION_INVALID', 'ARCHIVE_STALE', 'ARCHIVE_ID_INVALID',
-    'CREATOR_NAME_INVALID', 'WAREHOUSE_COMPANY_MISMATCH', 'PURCHASE_MULTI_WAREHOUSE', 'SUPPLIER_ROLE_INVALID',
+    'PURCHASE_STAFF_SCOPE', 'CREATOR_NAME_INVALID', 'WAREHOUSE_COMPANY_MISMATCH', 'PURCHASE_MULTI_WAREHOUSE', 'SUPPLIER_ROLE_INVALID',
     'BUYER_ROLE_INVALID', 'PRODUCT_SERIAL_UNSUPPORTED', 'PRODUCT_SERIAL_LENGTH', 'MAPPING_CONFLICT', 'STAFF_ALREADY_BOUND'
 ])
 export function purchaseSelectionProblem(error: unknown): string | null {
@@ -43,7 +44,16 @@ export function purchaseSelection(selection: any = {}, source: any = {}): Purcha
     }
 }
 
-export function purchaseSelectionComplete(selection: PurchaseSelection): boolean {
+type PricingBuyer = { required?: boolean, status?: string, mapped_id?: string }
+function pricingBuyerIssue(selection: PurchaseSelection, pricing?: PricingBuyer): string {
+    if (!pricing?.required) return ''
+    if (pricing.status === 'mixed') return '按实际定价人拆分入库批次'
+    if (pricing.status !== 'known') return '核对原设备的实际定价人'
+    if (pricing.mapped_id && pricing.mapped_id !== selection.buyer_id) return '核对定价人与博远员工的对应关系'
+    return selection.buyer_id ? '' : '采购业务员（实际定价人）'
+}
+export function purchaseSelectionComplete(selection: PurchaseSelection, pricing?: PricingBuyer): boolean {
+    if (pricingBuyerIssue(selection, pricing)) return false
     return !!selection.company_id && !!selection.supplier_id && !!selection.creator_id && !!selection.lines.length
         && new Set(selection.lines.map(line => line.source_line_id)).size === selection.lines.length
         && selection.lines.every(line => !!line.source_line_id && !!line.product_id && !!line.warehouse_id)
@@ -59,8 +69,10 @@ export function purchaseStateMessage(task: any, result: any = {}, inventory?: an
     return '查看当前状态和失败原因，未确认成功前请勿重复建单'
 }
 
-export function purchaseMissingFields(selection: PurchaseSelection): string[] {
+export function purchaseMissingFields(selection: PurchaseSelection, pricing?: PricingBuyer): string[] {
     const missing: string[] = []
+    const buyerIssue = pricingBuyerIssue(selection, pricing)
+    if (buyerIssue) missing.push(buyerIssue)
     if (!selection.company_id) missing.push('公司')
     if (!selection.supplier_id) missing.push('供应商')
     if (!selection.creator_id) missing.push('博远制单人')
@@ -113,7 +125,7 @@ export function purchaseNextStep(task: any, options: NextStepOptions): PurchaseH
     if (options.canOperate === false) return { title: '当前账号仅可查看', detail: '请有采购核对权限的员工处理。', tone: 'neutral' }
     if (options.editable) {
         if (!options.enabled) return { title: '先保存核对，暂不发送', detail: '投递未开放、已暂停或账套未核验。已选资料可保存，开放后再确认提交。', tone: 'neutral' }
-        return options.complete ? { title: '资料已齐，可以提交入库', detail: '确认提交后将创建一张博远采购单。', tone: 'progress' } : { title: '请核对入库资料', detail: '选择博远已有的公司、供应商、制单人，并为每台设备选好商品和仓库。', tone: 'progress' }
+        return options.complete ? { title: '资料已齐，可以提交入库', detail: '确认提交后将创建一张博远采购单。', tone: 'progress' } : { title: '请核对入库资料', detail: '已匹配的资料已自动带出，只需补齐下方缺少的项目。', tone: 'progress' }
     }
     if (['pending', 'processing', 'retry'].includes(task?.status)) return { title: '等待后台处理', detail: '页面自动刷新结果。请勿重复提交或到博远另建一张采购单。', tone: 'progress' }
     if (options.canVerify) return task?.external_no ? { title: '核验这张博远原单', detail: '只查询原采购与入库串号，不重新创建，不登记付款。', tone: 'warning' } : { title: '查到原单号后再核验', detail: '创建结果未知。请先在博远确认原操作，再填写已知采购单号。', tone: 'warning' }

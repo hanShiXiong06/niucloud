@@ -12,6 +12,7 @@ use addon\hsx_erp\app\service\admin\ErpListingTaskService;
 use addon\hsx_erp\app\service\admin\ErpPurchaseService;
 use addon\hsx_erp\app\service\admin\ErpStockService;
 use addon\hsx_erp\app\support\ErpIdempotency;
+use addon\hsx_erp\app\support\RecycleInboundActor;
 use core\exception\CommonException;
 use think\facade\Db;
 use think\facade\Log;
@@ -480,6 +481,7 @@ class ErpDeviceInboundRequested
     protected function mapDeviceItem(array $device, int $warehouseId, int $locationId, float $cost, string $sourcePlugin, string $sourcePluginName): array
     {
         $check = (array)($device['check_snapshot'] ?? []);
+        $pricing = (array)($device['pricing_snapshot'] ?? $device['recycle_pricing_snapshot'] ?? []);
         $qcSnapshot = $this->buildQcSnapshot($device, $check, $sourcePlugin);
         $refurbishment = (array)($device['refurbishment'] ?? []);
         $refurbishmentReason = mb_substr(trim((string)($refurbishment['reason'] ?? '')), 0, 500);
@@ -536,9 +538,12 @@ class ErpDeviceInboundRequested
                 // 设备级保留真实定价人，避免同一回收订单分批确认、多人定价时
                 // 只剩采购单头的单一负责人快照。
                 'pricing_operator' => [
-                    'uid' => (int)(($device['pricing_snapshot']['price_uid'] ?? $device['recycle_pricing_snapshot']['price_uid'] ?? 0)),
-                    'priced_at' => (int)(($device['pricing_snapshot']['price_at'] ?? $device['recycle_pricing_snapshot']['price_at'] ?? 0)),
-                ],
+                    'uid' => (int)($pricing['price_uid'] ?? 0),
+                    'priced_at' => (int)($pricing['price_at'] ?? 0),
+                ] + ($sourcePlugin === 'hsx_recycle' ? [
+                    'source' => 'recycle_final_price',
+                    'name' => trim((string)($pricing['price_name'] ?? '')),
+                ] : []),
                 'payee_methods' => array_values(array_filter((array)($device['payment_methods'] ?? []), 'is_array')),
                 'consignment' => is_array($device['consignment'] ?? null) ? (array)$device['consignment'] : null,
                 'refurbishment_suggestion' => [
@@ -548,7 +553,7 @@ class ErpDeviceInboundRequested
                     'estimated_cost' => round((float)($refurbishment['estimated_cost'] ?? 0), 2),
                     'decision_source' => trim((string)($refurbishment['decision_source'] ?? $sourcePlugin)),
                 ],
-            ],
+            ] + ($sourcePlugin === 'hsx_recycle' && isset($device['inbound_operator']) ? ['inbound_operator' => $device['inbound_operator']] : []),
             'color' => $color,
             'battery' => $battery,
             'warranty' => $warranty,
@@ -677,10 +682,12 @@ class ErpDeviceInboundRequested
 
     protected function createPurchase(array $data): int
     {
+        $fromRecycle = ($data['origin_plugin'] ?? '') === 'hsx_recycle' && ($data['origin_type'] ?? '') === 'hsx_recycle.recycle_purchase';
+        $actor = $fromRecycle ? RecycleInboundActor::fromItems($data['items']) : null;
         return ErpPurchaseService::forSite(
             $this->currentSiteId(),
-            $this->operatorUid,
-            $this->operatorName
+            $actor['uid'] ?? ($fromRecycle ? 0 : $this->operatorUid),
+            $actor['name'] ?? ($fromRecycle ? '系统入库' : $this->operatorName)
         )->create($data);
     }
 

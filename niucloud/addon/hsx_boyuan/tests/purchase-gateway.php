@@ -4,6 +4,9 @@ declare(strict_types=1);
 if(PHP_SAPI!=='cli') exit("CLI only\n");
 require __DIR__.'/../app/support/Problem.php';
 require __DIR__.'/../app/support/Contract.php';
+require __DIR__.'/../app/support/ReceiptFacts.php';
+require __DIR__.'/../app/support/ProductionPurchasePilot.php';
+require __DIR__.'/../app/support/CatalogStore.php';
 require __DIR__.'/../app/gateway/Transport.php';
 require __DIR__.'/../app/gateway/OpenApi.php';
 require __DIR__.'/../app/gateway/PurchaseGateway.php';
@@ -73,6 +76,21 @@ function pgUatFixture(array $fixture): array
 
 try {
     $request=pgRequest(); $fixture=pgFixtures($request); $wire=[]; $api=pgApi($fixture,$wire); $gateway=new PurchaseGateway($api);
+    $orig=$request; $orig['original_event_id']='EV-OLD'; $orig['lines']=[$orig['lines'][0]];
+    $orig['biz']['product_details']['add_details']=[$orig['biz']['product_details']['add_details'][0]];
+    $sight=function(array $pur,array $inv)use($fixture) {
+        $w=[];return new PurchaseGateway(pgApi($fixture,$w,static function($p)use($pur,$inv) {
+            $service=$p['service']; if(!in_array($service,['boyuan.biz.purchase.imeidetails.query','boyuan.biz.inventory.imeidetails.query'],true))
+                throw new RuntimeException('This check may never create a document');
+            if($service==='boyuan.biz.inventory.imeidetails.query' && $p['imei']!=='000000000000001')throw new RuntimeException('Wrong serial');
+            return ['return_code'=>'SUCCESS','api_response'=>$service==='boyuan.biz.inventory.imeidetails.query'?$inv:$pur];
+        }));
+    };
+    $zero=['total_results'=>0,'result_list'=>[]];$sight($zero,$zero)->checkExistingSerial($orig);
+    pgDenied(fn()=>$sight(['total_results'=>1,'result_list'=>[$fixture['imei'][0]]],$zero)->checkExistingSerial($orig),'old PO duplicate must stop before issuing any purchase','ORIGINAL_PURCHASE_REMOTE_EXISTS','none');
+    pgDenied(fn()=>$sight($zero,['total_results'=>1,'result_list'=>[['imei'=>'000000000000001']]])->checkExistingSerial($orig),'serial found in current stock must block','ORIGINAL_PURCHASE_REMOTE_EXISTS','none');
+    pgDenied(fn()=>$sight(['total_results'=>2,'result_list'=>[]],$zero)->checkExistingSerial($orig),'unread pages cannot clear a purchase','PURCHASE_PAGE_INCOMPLETE','none');
+    pgDenied(fn()=>$sight($zero,[])->checkExistingSerial($orig),'missing inventory response cannot clear a purchase','ORIGINAL_PURCHASE_REMOTE_UNKNOWN','none');
     $created=$gateway->create($request);
     pgRule($created['created'] && $created['external_no']==='PUR00001' && $created['external_id']==='HEAD1','create returns known vendor identity only');
     pgRule(!isset($created['verified']) && !isset($created['inventory_applied']),'create never invents inventory or audit completion');
@@ -95,6 +113,24 @@ try {
     pgRule($result['evidence']['gsdm']==='80001' && $result['evidence']['company_id']==='SHOP1','shop code is not incorrectly equated with root account code');
     pgRule($wire[1]['params']['business_date_start']==='2026-11-17' && $wire[1]['params']['business_date_end']==='2026-11-17' && !isset($wire[1]['params']['bill_id']),'purchase-detail lookup uses documented date filters only');
     pgRule($wire[2]['params']['bill_id']==='PUR00001' && $wire[2]['params']['bill_type']==='PUR','IMEI lookup is restricted to the known purchase bill');
+    $priced=$request; $priced['biz']['head']+=['sales_id'=>'STAFF1','sales_name'=>'定价人'];
+    foreach([
+        [[['STAFF1','定价人'],['STAFF1','定价人']],'matched','STAFF1','定价人'],
+        [[['STAFF1',null],['STAFF1',null]],'matched','STAFF1',''],
+        [[[null,'定价人'],[null,'定价人']],'not_returned','','定价人'],
+        [[['STAFF1','定价人'],[null,null]],'not_returned','STAFF1','定价人'],
+        [[['STAFF1','定价人'],['OTHER','其他']],'mismatch','',''],
+        [[['OTHER','定价人'],['OTHER','定价人']],'mismatch','OTHER','定价人'],
+        [[['STAFF1','其他'],['STAFF1','其他']],'mismatch','STAFF1','其他'],
+        [[[null,null],[null,null]],'not_returned','',''],
+    ] as [$returned,$status,$id,$name]) {
+        $sample=$fixture;
+        foreach($returned as $index=>[$salesId,$salesName]) $sample['details'][$index]+=['sales_id'=>$salesId,'sales_name'=>$salesName,'private'=>'discard'];
+        $sample['details'][]=array_replace($sample['details'][0],['id'=>'FOREIGN_LINE','bill_id'=>'OTHER_PUR','sales_id'=>'unrelated','sales_name'=>'无关人员']);
+        $writes=[]; $read=(new PurchaseGateway(pgApi($sample,$writes)))->verify($priced+['external_id'=>'HEAD1'],'PUR00001');
+        pgRule($read['evidence']['pricing_buyer']===['source'=>'purchase_details','status'=>$status,'sales_id'=>$id,'sales_name'=>$name],'aggregate buyer only on exact, cross-checked purchase lines: '.$status.' '.$id);
+        pgRule(count($writes)===2 && in_array($writes[0]['params']['service'],['boyuan.biz.purchases.query'],true),'buyer readback is read-only');
+    }
     pgDenied(fn()=>$api->call('boyuan.biz.bill.purchase.generate'),'generic call cannot create','READ_ONLY_ONLY');
     pgDenied(fn()=>$api->call('boyuan.trade.unified.pay'),'generic call cannot pay','READ_ONLY_ONLY');
     pgDenied(fn()=>$api->purchaseQuery('payment',[]),'query kind cannot escape to another service','PURCHASE_QUERY_INVALID');

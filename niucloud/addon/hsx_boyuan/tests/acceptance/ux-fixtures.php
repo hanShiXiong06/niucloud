@@ -25,5 +25,5 @@ $c=$cs->save($site,1,['revision'=>$old['revision'],'mode'=>'test','enabled'=>fal
 $key=$c['profiles']['test']['connection_key']; $run=str_repeat('a',32);
 Db::name('sys_user')->where('uid',1)->update(['mobile'=>'13800000001','real_name'=>'虚构本站经办人']);
 Db::name('hsx_boyuan_reference_sync')->insert(['site_id'=>$site,'connection_key'=>$key,'mode'=>'test','resource'=>'staff','run_key'=>$run,'status'=>'completed','scope_json'=>'{}','operator_uid'=>1]);
-foreach(['UX_FAKE_USER_A'=>'虚构一店经办人','UX_FAKE_USER_B'=>'虚构二店经办人'] as $id=>$name) Db::name('hsx_boyuan_reference')->insert(['site_id'=>$site,'connection_key'=>$key,'resource'=>'staff','external_id'=>$id,'code'=>$id,'name'=>$name,'enabled'=>1,'seen_run'=>$run,'phone_hash'=>ReferenceService::phoneHash($site,'13800000001'),'phone_masked'=>'138****0001','extra_json'=>Contract::json(['company_name'=>'虚构门店'])]);
+foreach(['UX_FAKE_USER_A'=>'虚构一店经办人','UX_FAKE_USER_B'=>'虚构二店经办人'] as $id=>$name) \addon\hsx_boyuan\app\support\CatalogStore::query('staff')->insert(['site_id'=>$site,'connection_key'=>$key,'external_id'=>$id,'code'=>$id,'name'=>$name,'enabled'=>1,'seen_run'=>$run,'phone_hash'=>ReferenceService::phoneHash($site,'13800000001'),'phone_masked'=>'138****0001','extra_json'=>Contract::json(['company_name'=>'虚构门店'])]);
 echo "Fictional same-phone candidates prepared; no vendor calls.\n";

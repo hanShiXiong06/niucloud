@@ -100,11 +100,32 @@ class ErpIntegrationService extends BaseAdminService
             'last_error' => '',
             'results' => [],
         ];
-        $row = ErpOutboxEvent::create([
-            'site_id' => $this->site_id, 'event_id' => $eventId, 'event_name' => $eventName,
-            'payload_json' => json_encode($event, JSON_UNESCAPED_UNICODE), 'status' => 'pending',
-            'occurred_at' => $now, 'create_at' => $now, 'update_at' => $now,
-        ]);
+        $row = \think\facade\Db::transaction(function() use($event,$eventId,$eventName,$now) {
+            // Optional local-only handoff. A worker started before a plugin was installed may not
+            // have its listener loaded. No vendor delivery or financial operation belongs in here.
+            // The immutable ERP fact and the optional local links commit/roll back together.
+            $storedJson=json_encode($event,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
+            $row=ErpOutboxEvent::create([
+                'site_id'=>$this->site_id,'event_id'=>$eventId,'event_name'=>$eventName,
+                'payload_json'=>$storedJson,'status'=>'pending',
+                'occurred_at'=>$now,'create_at'=>$now,'update_at'=>$now,
+            ]);
+            try {
+                $failures=[];
+                // Every subscriber sees the same frozen JSON, including numeric types, as a queue replay.
+                foreach((array)event('HsxErpLocalOutboxStored',json_decode($storedJson,true,512,JSON_THROW_ON_ERROR)) as $ack) {
+                    if(is_array($ack) && ($ack['status']??'')==='failed' && preg_match('/^[a-z][a-z0-9_]{0,63}$/D',(string)($ack['consumer']??'')))
+                        $failures[]=$ack['consumer'];
+                }
+                if($failures) {
+                    $event['_delivery']['required_consumers']=array_values(array_unique(array_merge($event['_delivery']['required_consumers'],$failures)));
+                    $row->save(['payload_json'=>json_encode($event,JSON_UNESCAPED_UNICODE)]);
+                }
+            } catch(\Throwable $e) {
+                \think\facade\Log::warning('ERP 原始事件本地订阅未完成，保留发件箱待投递',['site_id'=>$this->site_id,'event_id'=>$eventId,'type'=>get_class($e)]);
+            }
+            return $row;
+        });
         return ['id' => (int)$row->id, 'event_id' => $eventId];
     }
 

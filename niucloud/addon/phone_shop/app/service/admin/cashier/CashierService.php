@@ -5,7 +5,6 @@
 
 namespace addon\phone_shop\app\service\admin\cashier;
 
-use addon\phone_shop\app\service\core\order\CoreOfflineSaleService;
 use addon\phone_shop\app\service\admin\goods\GoodsService;
 use addon\phone_shop\app\service\admin\MemberLevelNoService;
 use addon\phone_shop\app\model\goods\GoodsSku;
@@ -93,6 +92,11 @@ class CashierService extends BaseAdminService
             ->join((new Goods())->getTable() . ' goods', 'goods.goods_id = sku.goods_id')
             ->where([
                 ['goods.site_id', '=', $this->site_id],
+                ['sku.site_id', '=', $this->site_id],
+                ['sku.stock', '>', 0],
+                ['sku.erp_asset_id', '>', 0],
+                ['goods.sale_status', '=', 'available'],
+                ['goods.delete_time', '=', 0],
                 ['goods.status', '=', 1],
                 ['goods.is_online_sellable', '=', 1],
             ]);
@@ -193,100 +197,15 @@ class CashierService extends BaseAdminService
     }
 
     /**
-     * 代下单结算:直接对接 ERP 生成一张出货单(不建商城订单,ERP 为唯一事实源)。
-     *   - 买家 = 会员(本系统"往来单位锚 = member_id",counterparty_id 即 member_id)
-     *   - 现结(offline_cash → settle_mode=now):出库即收款入账,必须选收款户头(capital_account_id)
-     *   - 挂账(offline_credit → settle_mode=later):生成 ERP 应收,事后再结
-     *   - 批量:本次多台 = 同一出货单的多条明细;单台取消/整单退回走 ERP partialReturn/cancelOutbound
-     *   - 商城侧:对应商品仅下架(build_mall_order=false),退回时由 ERP→商城单向同步回在售
-     *
-     * @param array $data member_id, payment_mode(offline_cash|offline_credit), capital_account_id, items[{sku_id|asset_id,sale_price}]
-     * @return array
+     * 一次交付：商城原单、本地 ERP 销售明细和账款同成同败；博远不参与事务。
      */
     public function checkout(array $data): array
     {
-        $memberId = (int) ($data['member_id'] ?? 0);
-        if ($memberId <= 0) {
-            throw new AdminException('请选择会员(买家)');
-        }
-        $items = is_array($data['items'] ?? null) ? $data['items'] : [];
-        if (empty($items)) {
-            throw new AdminException('请先加入商品');
-        }
-
-        // 结算方式:现结=出库即收款入账 / 挂账=ERP 应收
-        $isCredit   = ((string) ($data['payment_mode'] ?? 'offline_cash')) === 'offline_credit';
-        $settleMode = $isCredit ? 'later' : 'now';
-        // 现结开关门控:后台「收款设置」关闭现结后,收银台只能挂账(账目由财务中心收款)。
-        if (!$isCredit
-            && class_exists('\addon\hsx_erp\app\service\core\ErpConfigService')
+        if (($data['payment_mode'] ?? '') === 'offline_cash'
+            && class_exists('\\addon\\hsx_erp\\app\\service\\core\\ErpConfigService')
             && !\addon\hsx_erp\app\service\core\ErpConfigService::instantSettleAllowed($this->site_id)) {
-            throw new AdminException('现结已被关闭,请改用「挂账」开单,款项由财务中心收取');
+            throw new AdminException('现结已被关闭，请改用挂账，交由财务收款');
         }
-        $capitalAccountId = (int) ($data['capital_account_id'] ?? 0);
-        // 多账户分笔现结:微信一笔、支付宝一笔…合计须等于成交额(由 ERP createOutbound 兜底校验)
-        $payments = [];
-        foreach (is_array($data['payments'] ?? null) ? $data['payments'] : [] as $pm) {
-            $accId = (int) ($pm['account_id'] ?? 0);
-            $amt   = round((float) ($pm['amount'] ?? 0), 2);
-            if ($accId > 0 && $amt > 0) {
-                $payments[] = ['account_id' => $accId, 'method' => (string) ($pm['method'] ?? ''), 'amount' => $amt];
-            }
-        }
-        if (!$isCredit && $capitalAccountId <= 0 && empty($payments)) {
-            throw new AdminException('现结需选择收款户头');
-        }
-
-        // 解析为 ERP 出库明细:每台 = {asset_id, sale_price}
-        $outItems = [];
-        $missing  = [];
-        foreach ($items as $it) {
-            $skuId = (int) ($it['sku_id'] ?? 0);
-            if ($skuId <= 0 && (int) ($it['goods_id'] ?? 0) > 0) {
-                $skuId = (int) (new GoodsSku())->where('goods_id', (int) $it['goods_id'])->order('sku_id asc')->value('sku_id');
-            }
-            $assetId = (int) ($it['asset_id'] ?? $it['erp_asset_id'] ?? 0);
-            if ($assetId <= 0 && $skuId > 0) {
-                $assetId = (int) (new GoodsSku())->where('sku_id', $skuId)->value('erp_asset_id');
-            }
-            if ($assetId <= 0) {
-                $missing[] = $skuId ?: '?';
-                continue;
-            }
-            $outItems[] = [
-                'asset_id'   => $assetId,
-                'sale_price' => round((float) ($it['sale_price'] ?? 0), 2),
-            ];
-        }
-        if (!empty($missing)) {
-            throw new AdminException('以下商品未关联 ERP 设备,无法出库(sku:' . implode(',', $missing) . ')');
-        }
-        if (empty($outItems)) {
-            throw new AdminException('没有可出库的设备');
-        }
-
-        $erpSvc = '\\addon\\hsx_erp\\app\\service\\admin\\ErpOutboundService';
-        if (!class_exists($erpSvc)) {
-            throw new AdminException('ERP 模块未启用,无法生成出货单');
-        }
-        $res = (new $erpSvc())->createOutbound([
-            'outbound_type'      => 'peer_sale',
-            'sale_channel'       => 'mall',       // 商城销售口径
-            'counterparty_id'    => $memberId,    // 往来单位锚 = 会员 member_id
-            'settle_mode'        => $settleMode,
-            'capital_account_id' => $capitalAccountId,
-            'payments'           => $payments,    // 多账户分笔现结(空则走单户头)
-            'items'              => $outItems,
-            // 建一张"ERP 托管展示单"(order_from=offline + relate_source=出库单号):仅展示+打单+物流,
-            // 不碰钱;关单/退款/取消/改价由护栏禁止,金额与收款一律以 ERP 为准。
-            'build_mall_order'   => true,
-        ]);
-
-        return [
-            'outbound_id' => (int) ($res['outbound_id'] ?? 0),
-            'outbound_no' => (string) ($res['outbound_no'] ?? ''),
-            'ok_count'    => count($outItems),
-            'settle_mode' => $settleMode,
-        ];
+        return (new CashierDeviceCheckout())->run((int)$this->site_id, (int)$this->uid, (string)$this->username, $data);
     }
 }

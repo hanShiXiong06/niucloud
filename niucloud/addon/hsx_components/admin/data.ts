@@ -1,5 +1,6 @@
 import './styles/theme.scss'
 
+export { default as HsxCatalogLayout } from './components/HsxCatalogLayout/index.vue'
 export { default as HsxColumnSetting } from './components/HsxColumnSetting/index.vue'
 export { default as HsxDetail } from './components/HsxDetail/index.vue'
 export { default as HsxExport } from './components/HsxExport/index.vue'

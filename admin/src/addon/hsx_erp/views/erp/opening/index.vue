@@ -7,6 +7,7 @@
                         把启用 ERP 前已有的设备库存、应收应付、资金余额和客户资料一次迁入；上传只校验，确认后才正式入账。
                 </template>
                 <template #extra><div class="head-actions">
+                        <IntegrationDeskLinks />
                         <el-button type="primary" plain @click="mallInventoryVisible = true">商城库存对账</el-button>
                         <el-button :icon="Download" @click="downloadTemplate">下载完整模板</el-button>
                         <el-button :icon="Refresh" :loading="loading" @click="loadBatches">刷新</el-button>
@@ -20,6 +21,7 @@
                     <div>
                         <div class="guide-title">准备基础资料</div>
                         <div class="guide-desc">先维护仓库、库位和商品目录，再下载模板。表格内名称必须与系统一致。</div>
+                        <el-button v-for="entry in openingEntries" :key="entry.routeName" class="mt-1" link type="primary" @click="openIntegration(entry.routeName)">{{ entry.label }}</el-button>
                     </div>
                 </div>
                 <div class="guide-card">
@@ -334,9 +336,11 @@
 </template>
 
 <script setup lang="ts">
+import IntegrationDeskLinks from '@/addon/hsx_erp/components/IntegrationDeskLinks.vue'
 import ErpMallInventoryDrawer from '@/addon/hsx_erp/components/ErpMallInventoryDrawer.vue'
 import { HsxTitle, HsxPage, HsxDialog, HsxDrawer, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import { Download, Refresh, Search, Upload, UploadFilled } from '@element-plus/icons-vue'
 import * as XLSX from 'xlsx'
@@ -350,6 +354,16 @@ import {
     uploadErpOpening
 } from '@/addon/hsx_erp/api/erp'
 const hsxFeedback = useFeedback()
+// Optional add-on contributions; a build without integrations keeps the Excel workflow unchanged.
+type OpeningEntry = { routeName: string; label: string }
+const candidates = Object.values(import.meta.glob<OpeningEntry>('/src/addon/*/extensions/erp-opening.ts', { eager: true, import: 'default' }))
+const router = useRouter()
+const openingEntries = computed(() => candidates.filter((e, i) => e && typeof e.routeName === 'string' &&
+    typeof e.label === 'string' && e.label.trim() && router.hasRoute(e.routeName) &&
+    candidates.findIndex(item => item?.routeName === e.routeName) === i))
+function openIntegration(name: string) {
+    if (openingEntries.value.some(e => e.routeName === name) && router.hasRoute(name)) router.push({ name })
+}
 const mallInventoryVisible = ref(false)
 
 

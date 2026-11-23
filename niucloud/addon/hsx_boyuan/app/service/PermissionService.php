@@ -7,6 +7,14 @@ use core\base\BaseAdminService;
 use core\exception\CommonException;
 final class PermissionService extends BaseAdminService
 {
+    /** The embedded switch is for an active staff role at this site, including site admins. */
+    public function assertManualDeliveryManager(): void
+    {
+        $this->assertApi('get','boyuan/config');
+        $this->assertApi('post','boyuan/config');
+        if (!SysUserRole::where('site_id',$this->site_id)->where('uid',$this->uid)->where('status',1)->count())
+            throw new CommonException('请使用本站已授权管理博远连接的员工账号');
+    }
     public function assertApi(string $method,string $api): void
     {
         if ($this->site_id<=0 || $this->uid<=0 || !SysUser::where('uid',$this->uid)->where('status',1)->count()) throw new CommonException('请登录本站有效员工账号');

@@ -72,7 +72,69 @@ class ErpWarehouseService extends BaseAdminService
         }, $this->getAll())));
     }
 
+    /** Optional, site-scoped master-data providers. No installed provider means the legacy manual workflow. */
+    private function authority(array $context = []): array
+    {
+        $owners = [];
+        foreach ((array)event('HsxErpWarehouseMasterPolicy', ['site_id' => (int)$this->site_id] + $context) as $claim) {
+            if ($claim === null || $claim === []) continue;
+            if (!is_array($claim) || empty($claim['provider']) || !is_string($claim['provider']) || !is_string($claim['label'] ?? null)) {
+                throw new CommonException('仓库资料归属未能核实，请暂缓新增并联系管理员');
+            }
+            $owners[$claim['provider']] = $claim;
+        }
+        if (count($owners) > 1) throw new CommonException('多个系统同时接管仓库资料，请管理员先核对归属');
+        return $owners ? reset($owners) : [];
+    }
+
+    public function masterPolicy(): array
+    {
+        $owner = $this->authority();
+        return ['managed' => (bool)$owner, 'provider' => (string)($owner['provider'] ?? ''), 'label' => (string)($owner['label'] ?? ''),
+            'reason' => (string)($owner['reason'] ?? ''), 'allow_manual_warehouse' => !$owner, 'allow_manual_location' => !$owner];
+    }
+
+    private function lockMasterSite(): void
+    {
+        // The same site lock also serializes provider adoption/configuration and opening-data imports.
+        if ((int)$this->site_id <= 0 || !Db::name('site')->master()->where('site_id', $this->site_id)->lock(true)->find()) {
+            throw new CommonException('仓库所属站点不存在');
+        }
+    }
+
+    private function manualCreate(callable $write): int
+    {
+        return Db::transaction(function () use ($write): int {
+            $this->lockMasterSite();
+            if ($owner = $this->authority(['action' => 'manual_create'])) {
+                throw new CommonException($owner['reason'] ?? '本站仓库、库位由外部主档维护，不支持手工新增');
+            }
+            return $write();
+        });
+    }
+
+    /** Internal plugin integration only. The active provider must attest the original archive; HTTP has no equivalent. */
+    public function createSyncedWarehouseWithDefaultLocation(string $provider,string $connection,string $externalId,array $data): int
+    {
+        return Db::transaction(function () use ($provider,$connection,$externalId,$data): int {
+            $this->lockMasterSite();
+            $owner = $this->authority(['action'=>'import_warehouse','provider'=>$provider,'connection'=>$connection,'external_id'=>$externalId,
+                'warehouse_name'=>(string)($data['warehouse_name']??''),'warehouse_code'=>(string)($data['warehouse_code']??'')]);
+            if (!$owner || $owner['provider'] !== $provider || ($owner['import_verified'] ?? false) !== true) {
+                throw new CommonException('没有取得本账套有效仓库原档的授权，未建仓或库位');
+            }
+            $warehouse = $this->writeWarehouse($data,0);
+            $this->writeLocation($warehouse,['location_code'=>'DEFAULT','location_name'=>'默认库位','status'=>1,'is_default'=>1,'manager_uid'=>0],0);
+            return $warehouse;
+        });
+    }
+
     public function saveWarehouse(array $data, int $id = 0): int
+    {
+        return $id > 0 ? $this->writeWarehouse($data,$id) : $this->manualCreate(fn() => $this->writeWarehouse($data,0));
+    }
+
+    private function writeWarehouse(array $data, int $id): int
     {
         $name = trim((string)($data['warehouse_name'] ?? ''));
         if ($name === '') {
@@ -94,7 +156,7 @@ class ErpWarehouseService extends BaseAdminService
         if ($managerUid <= 0) {
             throw new CommonException('请选择仓库负责人');
         }
-        $manager = (new ErpStaffService())->resolve($managerUid, '仓库负责人');
+        $manager = ErpStaffService::forSite((int)$this->site_id)->resolve($managerUid, '仓库负责人');
         $warehouseType = $this->normalizeWarehouseType((string)($data['warehouse_type'] ?? 'owned'));
         $defaultSaleTarget = $this->normalizeDefaultSaleTarget((string)($data['default_sale_target'] ?? 'unset'));
         $ownershipType = $warehouseType === 'consignment' ? 'consigned' : 'owned';
@@ -144,6 +206,11 @@ class ErpWarehouseService extends BaseAdminService
 
     public function saveLocation(int $warehouseId, array $data, int $id = 0): int
     {
+        return $id > 0 ? $this->writeLocation($warehouseId,$data,$id) : $this->manualCreate(fn() => $this->writeLocation($warehouseId,$data,0));
+    }
+
+    private function writeLocation(int $warehouseId, array $data, int $id): int
+    {
         $warehouse = $this->findWarehouse($warehouseId);
         $name = trim((string)($data['location_name'] ?? ''));
         if ($name === '') {
@@ -163,7 +230,7 @@ class ErpWarehouseService extends BaseAdminService
         $isDefault = $status === 1 && (int)($data['is_default'] ?? 0) === 1 ? 1 : 0;
         $managerUid = (int)($data['manager_uid'] ?? 0);
         if ($managerUid > 0) {
-            $manager = (new ErpStaffService())->resolve($managerUid, '库位负责人');
+            $manager = ErpStaffService::forSite((int)$this->site_id)->resolve($managerUid, '库位负责人');
         } else {
             if ((int)($warehouse->manager_uid ?? 0) <= 0) {
                 throw new CommonException('请先设置仓库负责人，或为库位单独选择负责人');

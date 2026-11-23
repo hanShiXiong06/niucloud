@@ -263,7 +263,6 @@ class RecycleDevicePaymentService extends BaseAdminService
             ['order_id', '=', $orderId],
         ])->select()->toArray();
 
-        $totalCount = count($devices);
         $paidCount = 0;
         $totalAmount = 0.0;
         $paidAmount = 0.0;
@@ -290,7 +289,8 @@ class RecycleDevicePaymentService extends BaseAdminService
             'payment_mode' => $mode,
             'payable_count' => (int)$flowSummary['payable_count'],
             'paid_count' => $paidCount,
-            'unpaid_count' => max(0, (int)$flowSummary['payable_count'] - $paidCount),
+            // payable_count 本身只包含已确认、尚未结清的设备，不能再减已付台数。
+            'unpaid_count' => (int)$flowSummary['payable_count'],
             'total_amount' => round($totalAmount, 2),
             'paid_amount' => round($paidAmount, 2),
             'unpaid_amount' => round(max(0, $totalAmount - $paidAmount), 2),

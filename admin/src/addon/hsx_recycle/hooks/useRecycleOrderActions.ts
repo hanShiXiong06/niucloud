@@ -1,7 +1,7 @@
 import { ElLoading, ElMessage, ElMessageBox } from 'element-plus'
 import type { Ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { canOpenLocalPayment } from '@/addon/hsx_recycle/utils/payment-scope'
+import type { InboundScope } from '@/addon/hsx_recycle/utils/inbound-handoff'
 import {
   deleteRecycleOrder,
   getCapitalAccountOptions,
@@ -26,6 +26,7 @@ interface UseRecycleOrderActionsOptions {
   checkDeviceLogVisible: Ref<boolean>
   priceDeviceLogVisible: Ref<boolean>
   paymentDialogVisible: Ref<boolean>
+  showInboundPayables: (orderId: number | string, scope: InboundScope) => void
   paymentInfo: Ref<any[]>
   paymentMode: Ref<'order' | 'device'>
   selectedPayTypeIndex: Ref<number>
@@ -43,7 +44,6 @@ const isDialogCanceled = (error: any) => {
 }
 
 export function useRecycleOrderActions(options: UseRecycleOrderActionsOptions) {
-  const router = useRouter()
   const {
     list,
     pagination,
@@ -226,28 +226,14 @@ export function useRecycleOrderActions(options: UseRecycleOrderActionsOptions) {
     order_payment: async (row: any) => {
       let capability: any
       try {
-        capability = await getCapitalAccountOptions(row.id)
+        capability = await getCapitalAccountOptions(row.id, undefined, true)
       } catch (error) {
         ElMessage.error('付款归属查询失败，尚未执行付款。请刷新后重试，不能自动改为回收端付款。')
         return
       }
       const paymentOwner = capability.data?.payment_owner || 'unknown'
       if (paymentOwner === 'self_erp') {
-        try {
-          await ElMessageBox.confirm(
-            capability.data?.message || '本订单由 ERP 结算，请到 ERP 应付款处理。切换联动方式后，实际已入 ERP 的设备仍由 ERP 处理。',
-            '本订单由 ERP 结算',
-            {
-              confirmButtonText: '前往 ERP 应付款',
-              cancelButtonText: '知道了',
-              type: 'info'
-            }
-          )
-        } catch (error) {
-          if (isDialogCanceled(error)) return
-          throw error
-        }
-        await router.push(capability.data?.payment_path || '/site/hsx_erp/payable')
+        options.showInboundPayables(row.id, capability.data)
         return
       }
       // 混合订单必须明确记录为按设备模式，不能用站点默认值替换历史订单模式。

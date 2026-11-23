@@ -335,7 +335,7 @@ const getRowActions = (row: any) => {
   const statusActions = props.orderStatusMap[row.status]?.action || []
   const actions = statusActions.map((action: any) => ({
     key: action.key,
-    value: action.value,
+    value: action.key === 'order_payment' ? '办理回收款' : action.value,
     type: 'order',
     icon: props.getActionIcon(action.key),
     raw: action,
@@ -347,7 +347,7 @@ const getRowActions = (row: any) => {
   ) {
     actions.push({
       key: 'order_payment',
-      value: '去打款',
+      value: '办理回收款',
       type: 'order',
       icon: props.getActionIcon('order_payment'),
       raw: { key: 'order_payment', value: '去打款' },

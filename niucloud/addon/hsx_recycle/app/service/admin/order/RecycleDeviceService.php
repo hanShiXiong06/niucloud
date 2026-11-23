@@ -39,6 +39,8 @@ use think\facade\Log;
  */
 class RecycleDeviceService extends BaseAdminService
 {
+    /** Exact audit rows produced by this staff confirmation, never by a customer or a later sync click. */
+    private array $inboundConfirmationLogIds = [];
     /**
      * 构造函数
      * @param int $site_id 站点ID
@@ -1771,7 +1773,7 @@ class RecycleDeviceService extends BaseAdminService
             if (!isset($this->logService)) {
                 $this->logService = new CoreRecycleDeviceLogService();
             }
-            $this->logService->logDeviceRecycle($id, $remark);
+            $this->inboundConfirmationLogIds[$id] = $this->logService->logDeviceRecycle($id, $remark);
             
             // 尝试同步更新订单状态
             $this->syncOrderStatus($device->order_id, RecycleOrderDict::DEVICE_STATUS_RECYCLED);
@@ -1857,7 +1859,9 @@ class RecycleDeviceService extends BaseAdminService
                     }
                     if ($device['owner'] !== 'self_erp') throw new CommonException(RecyclePaymentOwnershipService::message('unknown'));
                     Log::info('确认回收开始同步ERP', ['site_id' => $this->site_id, 'device_id' => $deviceId]);
-                    $result = (new RecycleDeviceErpSyncService())->dispatch([(int)$deviceId], ['self_erp']);
+                    $receipt = $this->inboundConfirmationLogIds[$deviceId] ?? 0;
+                    unset($this->inboundConfirmationLogIds[$deviceId]);
+                    $result = (new RecycleDeviceErpSyncService())->dispatch([(int)$deviceId], ['self_erp'], [], [$deviceId => $receipt]);
                     Log::info('确认回收同步ERP成功', ['site_id' => $this->site_id, 'device_id' => $deviceId,
                         'event_id' => (string)($result['event_id'] ?? ''), 'device_count' => (int)($result['device_count'] ?? 0)]);
                 } catch (\Throwable $deviceError) {

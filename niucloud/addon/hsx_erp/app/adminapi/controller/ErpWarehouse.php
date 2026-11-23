@@ -19,6 +19,9 @@ class ErpWarehouse extends BaseAdminController
 
     public function lists()
     {
+        if ((string)$this->request->param('with_policy', '0') === '1') {
+            return success(['warehouses' => $this->service->getAll(), 'master_policy' => $this->service->masterPolicy()]);
+        }
         return success($this->service->getAll());
     }
 

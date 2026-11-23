@@ -5,7 +5,6 @@
 
 namespace addon\phone_shop\app\listener\order;
 
-use addon\phone_shop\app\model\goods\Goods;
 use addon\phone_shop\app\model\goods\GoodsSku;
 use addon\phone_shop\app\service\core\order\CoreOfflineSaleService;
 use app\service\core\site\CoreSiteService;
@@ -85,14 +84,11 @@ class ErpAssetSoldListener
         $buildMallOrder = !array_key_exists('build_mall_order', $p) || (bool) $p['build_mall_order'];
         if (!$buildMallOrder) {
             $resultStatus = ((string) ($p['result_status'] ?? 'sold')) === 'locked' ? 'locked' : 'sold';
-            $goodsUpdate = ['sale_status' => $resultStatus, 'update_time' => time()];
-            if ($resultStatus === 'sold') $goodsUpdate['status'] = 0; // 下架
-            (new Goods())->where([['site_id', '=', $siteId], ['goods_id', '=', (int)$sku['goods_id']]])->update($goodsUpdate);
-            (new GoodsSku())->where([['site_id', '=', $siteId], ['sku_id', '=', (int)$sku['sku_id']]])->update(['stock' => 0]);
+            $lastSku = (new CoreOfflineSaleService())->markSkuUnavailable($siteId,(int)$sku['goods_id'],(int)$sku['sku_id'],$resultStatus);
             // 纯 ERP 出库不会经过商城建单服务，也必须把主站货源状态同步到关注从站。
             // sold 直接下架；locked 刷新副本的锁定状态，使其退出从站在售列表。
             try {
-                (new \addon\phone_shop\app\service\core\agent\GoodsSyncService())->syncGoods(
+                if ($lastSku) (new \addon\phone_shop\app\service\core\agent\GoodsSyncService())->syncGoods(
                     (int)$sku['goods_id'],
                     $siteId,
                     $resultStatus === 'sold' ? 0 : 1

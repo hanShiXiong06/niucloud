@@ -4,8 +4,13 @@
             <HsxTitle size="page" collapsible-subtitle class="mb-4">
                 <template #default>仓库库位</template>
                 <template #subtitle>采购入库必须落到仓库和库位，后续销售、盘点、调拨都以这里为准。</template>
-                <template #extra><el-button type="primary" :icon="Plus" @click="openWarehouse()">新增仓库</el-button></template>
+                <template #extra><el-button v-if="canCreateWarehouse" type="primary" :icon="Plus" @click="openWarehouse()">新增仓库</el-button></template>
             </HsxTitle>
+
+            <div v-if="policyError" class="flex items-center gap-2 text-sm text-orange-600" role="alert">
+                <span>{{ policyError }}</span><el-button text type="primary" :loading="loading" @click="loadData">重新读取</el-button>
+            </div>
+            <p v-else-if="policy?.managed" class="text-sm text-gray-500" role="status">{{ policy.reason || '仓库、库位由外部系统统一维护，本站不能手工新增。' }}</p>
 
             <el-table class="mt-5" :data="warehouses" v-loading="loading" row-key="id" size="large">
                 <el-table-column type="expand">
@@ -13,7 +18,7 @@
                         <div class="px-12 py-3">
                             <div class="mb-3 flex items-center justify-between">
                                 <span class="font-medium">库位</span>
-                                <el-button type="primary" link :icon="Plus" @click="openLocation(row)">新增库位</el-button>
+                                <el-button v-if="canCreateLocation" type="primary" link :icon="Plus" @click="openLocation(row)">新增库位</el-button>
                             </div>
                             <el-table :data="row.locations || []" border size="small" empty-text="暂无库位">
                                 <el-table-column prop="location_name" label="库位名称" min-width="160" />
@@ -159,15 +164,22 @@
 
 <script setup lang="ts">
 import { HsxTitle, HsxPage, HsxDialog, useFeedback } from '@/addon/hsx_components/core'
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getErpDicts, getErpStaffOptions } from '@/addon/hsx_erp/api/erp'
-import { deleteErpWarehouse, deleteErpWarehouseLocation, getErpWarehouseList, saveErpWarehouse, saveErpWarehouseLocation } from '@/addon/hsx_erp/api/warehouse'
+import { deleteErpWarehouse, deleteErpWarehouseLocation, getErpWarehouseManagement, saveErpWarehouse, saveErpWarehouseLocation } from '@/addon/hsx_erp/api/warehouse'
 const hsxFeedback = useFeedback()
 
 
 const loading = ref(false)
+let loadVersion = 0
+type MasterPolicy = { managed: boolean; reason: string; allow_manual_warehouse: boolean; allow_manual_location: boolean }
+const policy = ref<MasterPolicy | null>(null)
+const policyError = ref('')
+const canCreateWarehouse = computed(() => !loading.value && policy.value?.allow_manual_warehouse === true)
+const canCreateLocation = computed(() => !loading.value && policy.value?.allow_manual_location === true)
+const cannotCreate = () => hsxFeedback.warning(policyError.value || policy.value?.reason || '尚未确认本站是否允许手工新增，请刷新。')
 const warehouses = ref<any[]>([])
 const staffOptions = ref<any[]>([])
 const warehouseTypeOptions = ref<any[]>([])
@@ -185,18 +197,32 @@ const locationDialog = reactive<any>({
 })
 
 async function loadData() {
+    const current = ++loadVersion
     loading.value = true
+    policy.value = null
+    policyError.value = ''
     try {
-        const [warehouseRes, staffRes, dictRes]: any[] = await Promise.all([getErpWarehouseList(), getErpStaffOptions(), getErpDicts()])
-        warehouses.value = Array.isArray(warehouseRes?.data) ? warehouseRes.data : []
+        const [warehouseRes, staffRes, dictRes]: any[] = await Promise.all([getErpWarehouseManagement(), getErpStaffOptions().catch(() => null), getErpDicts().catch(() => null)])
+        if (current !== loadVersion) return
+        const data = warehouseRes?.data
+        warehouses.value = Array.isArray(data) ? data : (Array.isArray(data?.warehouses) ? data.warehouses : [])
         staffOptions.value = Array.isArray(staffRes?.data?.users) ? staffRes.data.users : []
         warehouseTypeOptions.value = Array.isArray(dictRes?.data?.warehouse_type) ? dictRes.data.warehouse_type : []
+        const p = data?.master_policy
+        if (!Array.isArray(data?.warehouses) || typeof p?.managed !== 'boolean' || typeof p.allow_manual_warehouse !== 'boolean' || typeof p.allow_manual_location !== 'boolean') {
+            policyError.value = '未取得仓库维护规则，暂不能新增。请重新读取；如仍提示，请检查 ERP 管理端和服务端版本。'
+            return
+        }
+        policy.value = p
+    } catch {
+        if (current === loadVersion) policyError.value = '仓库资料读取失败，暂不能新增。'
     } finally {
-        loading.value = false
+        if (current === loadVersion) loading.value = false
     }
 }
 
 function openWarehouse(row: any = {}) {
+    if (!row.id && !canCreateWarehouse.value) return cannotCreate()
     Object.assign(warehouseDialog.form, {
         id: Number(row.id || 0),
         warehouse_name: row.warehouse_name || '',
@@ -218,6 +244,7 @@ function openWarehouse(row: any = {}) {
 }
 
 async function submitWarehouse() {
+    if (!warehouseDialog.form.id && !canCreateWarehouse.value) return cannotCreate()
     if (!warehouseDialog.form.warehouse_name) return hsxFeedback.warning('请填写仓库名称')
     if (!warehouseDialog.form.manager_uid) return hsxFeedback.warning('请选择仓库负责人')
     warehouseDialog.loading = true
@@ -232,6 +259,7 @@ async function submitWarehouse() {
 }
 
 function openLocation(warehouse: any, row: any = {}) {
+    if (!row.id && !canCreateLocation.value) return cannotCreate()
     locationDialog.warehouseId = Number(warehouse.id)
     locationDialog.warehouseName = warehouse.warehouse_name
     Object.assign(locationDialog.form, {
@@ -248,6 +276,7 @@ function openLocation(warehouse: any, row: any = {}) {
 }
 
 async function submitLocation() {
+    if (!locationDialog.form.id && !canCreateLocation.value) return cannotCreate()
     if (!locationDialog.form.location_name) return hsxFeedback.warning('请填写库位名称')
     locationDialog.loading = true
     try {

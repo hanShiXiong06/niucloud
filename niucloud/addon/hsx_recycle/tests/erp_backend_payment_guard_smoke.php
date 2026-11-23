@@ -29,7 +29,9 @@ $assert(str_contains($localGate, "->claim(\$siteId, \$orderId, \$deviceIds, 'loc
 $assert(str_contains($localGate, 'catch (\\Throwable $e)') && str_contains($localGate, 'throw new CommonException(')
     && str_contains($localGate, 'if ($e instanceof CommonException) throw $e;'), '归属查询或认领失败必须上抛，不得放行本地付款');
 $assert(str_contains($localGate, "Log::error('回收插件无法确认ERP财务接管状态，本地打款已安全拦截'"), '后端归属拦截必须留下可排查的审计日志');
-$assert(str_contains($flow, "if (\$action === 'payment')") && str_contains($flow, '$this->getOrderInfo($orderId, $paymentSiteId, $action === \'payment\')'), '核心旧payment入口必须按付款站点读取并锁定真实订单');
+$assert(str_contains($flow, "if (\$action === 'payment')") && str_contains($flow, "if (\$paymentSiteId <= 0) throw")
+    && str_contains($flow, "\$orderSiteId = \$action === 'cancel' ? (int)\$context['site_id'] : \$paymentSiteId")
+    && str_contains($flow, "\$this->getOrderInfo(\$orderId, \$orderSiteId, \$action === 'payment' || \$action === 'sign')"), '付款必须使用真实付款站点和订单行锁；签收同样需要行锁');
 $flowOrder = $methodSource($flow, 'getOrderInfo');
 $assert(str_contains($flowOrder, "->where('site_id', \$siteId)") && str_contains($flowOrder, '->lock(true)'), '核心付款订单查询必须具有站点条件和行锁');
 $assert(str_contains($flow, "\$handlerResult['data']['device_ids']") && str_contains($flow, "\$context['devices'] = \$data['devices']"), '状态转换必须沿用处理器核实的付款集合，不能由请求上下文替换');

@@ -16,13 +16,15 @@ final class BatchService
         $query=Db::name('hsx_boyuan_task')->where('site_id',$site)->where('connection_key',$key)->where('mode',$c['mode'])->whereIn('id',$ids);
         try { (new PermissionService())->assertApi('get','erp/finance/payable/lists'); }
         catch(\core\exception\CommonException $ignored) { $query->where('kind','<>',PaymentSyncService::KIND); }
+        try { SaleReceiptSyncService::authorize(false); }
+        catch(\core\exception\CommonException $ignored) { $query->where('kind','<>',SaleReceiptSyncService::KIND); }
         $rows=$query->field('id,kind,business_no,status,reason')->select()->toArray();
         foreach ($rows as &$row) { if(PaymentSyncService::isRegistered($row)) $row['reason']=PaymentSyncService::REGISTERED_REASON; unset($row['kind']); } unset($row);
         return ['items'=>$rows];
     }
     public static function actionFor(array $task): string
     {
-        if(in_array($task['kind']??'',[PurchaseInventoryService::KIND,PaymentSyncService::KIND],true)) return '';
+        if(in_array($task['kind']??'',[PurchaseInventoryService::KIND,PaymentSyncService::KIND,WholesaleSyncService::KIND,SaleReceiptSyncService::KIND],true)) return '';
         if(in_array($task['status'],['processing','succeeded','simulated','manual_pending'],true) || $task['kind']==='manual_review') return '';
         if($task['side_effect']!=='none') return $task['request_json']!=='{}'?'query':'';
         return 'retry';

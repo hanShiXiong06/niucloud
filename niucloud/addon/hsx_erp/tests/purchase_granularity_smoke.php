@@ -63,18 +63,18 @@ $assert($refurbishedPolicy['returnable'] === false && str_contains($refurbishedP
 $assert($unclassifiedPolicy['returnable'] === false && $unclassifiedPolicy['unclassified_cost'] === 100.0, '未分类成本必须先归类再决定业务路径');
 
 $purchaseView = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/views/erp/purchase/list.vue');
-foreach (['入库位置', 'applyDefaultLocationToAll', 'purchaseRowClassName', '本页同批', 'ErpDeviceIdentity', 'ErpRoleFocus'] as $needle) {
+foreach (['入库位置', 'applyDefaultLocationToAll', 'deviceRowFacts(row)', '本批设备', 'ErpDeviceIdentity', 'ErpRoleFocus'] as $needle) {
     $assert(str_contains($purchaseView, $needle), '采购页缺少产品优化：' . $needle);
 }
-foreach (['search.imei', 'search.party_id', 'search.purchase_no', 'ErpPartySelect', 'label="当前状态"', 'assetStatusMeta'] as $needle) {
+foreach (['search.serial', 'search.party_id', 'search.purchase_no', 'ErpPartySelect', 'label="库存状态"', 'label="本机应付"', 'assetStatusMeta'] as $needle) {
     $assert(str_contains($purchaseView, $needle), '采购列表缺少精确筛选或状态信息收敛：' . $needle);
 }
 $assert(!str_contains($purchaseView, 'label="关键词"'), '采购列表不得继续使用含义混杂的综合关键词筛选');
-$assert(str_contains($purchaseView, 'missingLocationIndex'), 'PC采购开单必须逐台校验位置');
+$assert(str_contains($purchaseView, 'of create.form.items.entries()') && str_contains($purchaseView, "if (!row.warehouse_id || !row.location_id) return label + '需要选择入库仓库和库位'"), 'PC采购开单必须逐台校验仓库、库位并提示出错的行');
 $assert(!str_contains($purchaseView, '撤销批次'), '正常采购列表不得并列展示撤销批次与采购退货');
 $assert(str_contains($purchaseView, "return '采购退货'"), '采购列表退货入口必须使用统一业务文案');
-foreach (['purchase-return-disabled-wrap', 'disabled>{{ purchaseReturnActionLabel(row) }}', 'row.return_flow?.block_reason'] as $needle) {
-    $assert(str_contains($purchaseView, $needle), 'PC采购列表缺少禁用退货按钮或悬停原因：' . $needle);
+foreach (['<el-dropdown trigger="click"', 'command="return" :disabled="!canReturnPurchase(row)"', 'row.return_flow?.block_reason'] as $needle) {
+    $assert(str_contains($purchaseView, $needle), 'PC采购更多菜单必须保留禁用规则和可见的原因：' . $needle);
 }
 foreach (['有效采购本金', '已结采购款', '待结采购款', 'row.asset_paid_amount', 'row.purchase_cost', '整备支出', 'order_business_status_label'] as $needle) {
     $assert(str_contains($purchaseView, $needle), 'PC采购页缺少有效本金、独立整备或订单业务状态：' . $needle);
@@ -217,7 +217,7 @@ foreach ([
     '/niucloud/addon/hsx_erp/admin/views/erp/purchase/list.vue' => ['确认采购开单', '确认供应商调价'],
     '/niucloud/addon/hsx_erp/admin/views/erp/sale/list.vue' => ['确认销售出库'],
     '/niucloud/addon/hsx_erp/admin/views/erp/sale_return/list.vue' => ['确认发起销售退货'],
-    '/niucloud/addon/hsx_erp/admin/views/erp/payable/list.vue' => ['确认设备付款', '确认应付应收折账'],
+    '/niucloud/addon/hsx_erp/admin/views/erp/payable/list.vue' => ['const payConfirmed = await ElMessageBox.confirm(', '登记已付设备款', '已转款，登记本次记录', '确认应付应收折账'],
     '/niucloud/addon/hsx_erp/admin/views/erp/receivable/list.vue' => ['确认供货商退款到账', '确认应收应付折账'],
     '/niucloud/addon/hsx_erp/admin/views/erp/stock/list.vue' => ['确认更新设备流转'],
 ] as $relative => $needles) {
@@ -287,8 +287,10 @@ $assert(str_contains($pcSaleReturn, '选择客户后自动加载可退设备') &
 foreach (['sale-device-card', 'device-card-title', 'device-card-spec', 'device-imei', '原销售价', '本次退货价', 'sale-decision-panel'] as $needle) {
     $assert(str_contains($pcSaleReturn, $needle), '销售退货必须使用以设备关键信息为核心的卡片工作台：' . $needle);
 }
+$workspaceHeader = (string)file_get_contents($root . '/admin/components/ErpWorkspaceHeader.vue');
 foreach ([$pcReturn, $pcSaleReturn] as $returnWorkbench) {
-    foreach (['<el-tabs', 'erp-status-tabs', '<el-form :inline="true"', '<el-table', 'HsxTitle', "mode === 'create'", 'return-flow-guide', 'ErpPartySelect', 'ErpReturnDialog'] as $needle) {
+    $assert(str_contains($returnWorkbench, '<ErpWorkspaceHeader') && str_contains($workspaceHeader, '<HsxTitle'), '退货工作台应通过公共页头展示标准标题');
+    foreach (['<el-tabs', 'erp-status-tabs', '<el-form :inline="true"', '<el-table', "mode === 'create'", 'return-flow-guide', 'ErpPartySelect', 'ErpReturnDialog'] as $needle) {
         $assert(str_contains($returnWorkbench, $needle), '采购/销售退货必须使用统一的全宽工作台体验：' . $needle);
     }
     $assert(str_contains($returnWorkbench, 'ErpPartySelect'), '采购/销售退货筛选必须复用往来主体组件');

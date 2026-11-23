@@ -15,7 +15,7 @@ final class ErpIntegrationDocumentService
             'manual_required'=>'原业务已撤销或调整，请在博远核对原单并按约定冲销；'.$reason,
         ]);
     }
-    public static function record(int $site, string $kind, int $id, array $assetIds = [], bool $emit = true): ?array
+    public static function record(int $site, string $kind, int $id, array $assetIds = [], bool $emit = true, ?array $postingActor = null): ?array
     {
         $definitions = [
             'purchase' => ['erp_purchase_order', 'erp_purchase_item', 'purchase_order_id', 'purchase_no', 'purchase_cost'],
@@ -37,13 +37,22 @@ final class ErpIntegrationDocumentService
         $lines = [];
         foreach ($rows as $row) {
             $asset = Db::name('erp_asset')->where('site_id', $site)->where('id', (int)($row['asset_id'] ?? 0))->find() ?: [];
-            $purchaseLine = Db::name('erp_purchase_item')->where('site_id', $site)->where('asset_id', (int)($row['asset_id'] ?? 0))->find() ?: [];
+            $purchaseLineId = 0;
+            if ($asset) {
+                // A device's originating purchase is a persisted relationship, not a match on model or IMEI.
+                $origin = Db::name('erp_purchase_item')->where('site_id', $site)->where('asset_id', $asset['id']);
+                if ((int)($asset['purchase_order_id'] ?? 0) > 0) $origin->where('purchase_order_id', $asset['purchase_order_id']);
+                if ((int)($asset['purchase_item_id'] ?? 0) > 0) $origin->where('id', $asset['purchase_item_id']);
+                $ids = $origin->limit(2)->column('id');
+                if (count($ids) === 1) $purchaseLineId = (int)reset($ids);
+            }
+            $catalogId = (int)($asset['catalog_product_id'] ?? $row['catalog_product_id'] ?? 0);
             $product = [
                 'model' => (string)($asset['model'] ?? $row['model'] ?? ''),
                 'spec' => (string)($asset['spec'] ?? $row['spec'] ?? ''),
                 'color' => (string)($asset['color'] ?? $row['color'] ?? ''),
             ];
-            $lines[] = [
+            $line = [
                 'source_line_id' => $kind . '_line:' . $row['id'], 'device_ref' => 'asset:' . ($row['asset_id'] ?? 0),
                 'product_ref' => 'model:' . hash('sha256', json_encode($product, JSON_UNESCAPED_UNICODE)),
                 'product_name' => trim(implode(' ', $product)), 'attributes' => [
@@ -55,21 +64,46 @@ final class ErpIntegrationDocumentService
                 'location_ref' => 'location:' . ($kind === 'sale_return' ? ($head['return_to_location_id'] ?: ($asset['location_id'] ?? 0)) : ($row['location_id'] ?? $asset['location_id'] ?? 0)),
                 'quantity' => (string)($row['quantity'] ?? '1'), 'amount' => number_format((float)($row[$amountField] ?? 0), 2, '.', ''),
                 'ownership_type' => (string)($asset['ownership_type'] ?? 'owned'),
-                'inbound_line_ref' => 'purchase_line:' . ($purchaseLine['id'] ?? 0),
+                'inbound_line_ref' => 'purchase_line:' . $purchaseLineId,
                 'original_line_ref' => $kind === 'purchase_return' ? 'purchase_line:' . $row['purchase_item_id']
                     : ($kind === 'sale_return' ? 'sale_line:' . $row['sale_item_id'] : ''),
-            ];
+            ] + ($catalogId > 0 ? ['catalog_product_id' => $catalogId] : []);
+            // Read the immutable purchase line, not the current asset, the first batch's purchaser
+            // or the operator posting this batch. Previous snapshots are not retroactively rewritten.
+            if ($kind === 'purchase' && ($head['origin_plugin'] ?? '') === 'hsx_recycle' && ($head['origin_type'] ?? '') === 'hsx_recycle.recycle_purchase') {
+                $spec = $row['spec_json'] ?? null;
+                if (is_string($spec)) $spec = json_decode($spec, true);
+                $priced = $spec['pricing_operator'] ?? null;
+                if (is_array($priced) && ($priced['source'] ?? '') === 'recycle_final_price') {
+                    $uid = (int)($priced['uid'] ?? 0);
+                    $line['pricing_operator'] = ['ref' => $uid > 0 ? 'staff:' . $uid : '', 'name' => $uid > 0 ? (string)($priced['name'] ?? '') : ''];
+                }
+            }
+            $lines[] = $line;
         }
         $channel = strtolower((string)($originalSale['sale_channel_key'] ?? $originalSale['sale_channel'] ?? ''));
         // A missing/unknown channel is left unresolved for the receiving adapter, never guessed.
-        $saleType = in_array($channel, ['retail', '零售', 'mall', 'phone_shop', 'erp_store'], true) || ($originalSale['origin_plugin'] ?? '') === 'phone_shop'
-            ? 'retail' : (in_array($channel, ['wholesale', '批发', 'erp_peer'], true) ? 'wholesale' : '');
+        // 只有原商城收银单明确选择同行，并持有已解析的 ERP 往来单位时才按批发投影。
+        // 普通小程序/零售单不能因为买家是会员或挂账而被投到批发接口。
+        $cashierPeer = ($originalSale['origin_plugin'] ?? '') === 'phone_shop'
+            && ($originalSale['origin_type'] ?? '') === 'phone_shop.cashier_sale'
+            && $channel === 'erp_peer' && (int)($originalSale['party_id'] ?? 0) > 0;
+        $saleType = $cashierPeer ? 'wholesale' : (in_array($channel, ['retail', '零售', 'mall', 'phone_shop', 'erp_store'], true) || ($originalSale['origin_plugin'] ?? '') === 'phone_shop'
+            ? 'retail' : (in_array($channel, ['wholesale', '批发', 'erp_peer'], true) ? 'wholesale' : ''));
+        $actorUid = (int)($head['operator_uid'] ?? $head['operator_id'] ?? 0);
+        $actorName = (string)($head['operator_name'] ?? '');
+        // Appended devices may have a different clerk from the first batch. The service's actor is
+        // trusted context, not editable item/spec JSON, the subsequent syncing user, or the order's purchaser.
+        if ($kind === 'purchase' && $postingActor !== null && ($head['origin_plugin'] ?? '') === 'hsx_recycle' && ($head['origin_type'] ?? '') === 'hsx_recycle.recycle_purchase') {
+            $actorUid = (int)$postingActor['uid'];
+            $actorName = (string)$postingActor['name'];
+        }
         $document = [
             'kind' => $kind, 'source_document_id' => $kind . ':' . $id, 'source_document_no' => $head[$no],
             'batch_ref' => hash('sha256', implode('|', array_column($lines, 'source_line_id'))), 'sale_type' => $saleType,
             'purchase_source' => ($head['origin_plugin'] ?? '') === 'hsx_recycle' ? 'ordinary_customer' : 'wholesale_supplier',
-            'party' => ['ref' => ($originalSale['origin_plugin']??'')==='phone_shop' ? 'mall-customer:' . $originalSale['origin_id'] : ((int)$head['party_id']>0 ? 'party:' . $head['party_id'] : 'guest-sale:' . $id), 'name' => $head['party_name'], 'mobile' => (string)(($party['mobile']??'')?:($party['contact_mobile']??''))],
-            'operator' => ['operator_ref' => 'staff:' . ($head['operator_uid'] ?? $head['operator_id'] ?? 0), 'name' => (string)($head['operator_name'] ?? '')],
+            'party' => ['ref' => !$cashierPeer && ($originalSale['origin_plugin']??'')==='phone_shop' ? 'mall-customer:' . $originalSale['origin_id'] : ((int)$head['party_id']>0 ? 'party:' . $head['party_id'] : 'guest-sale:' . $id), 'name' => $head['party_name'], 'mobile' => (string)(($party['mobile']??'')?:($party['contact_mobile']??''))],
+            'operator' => ['operator_ref' => 'staff:'.$actorUid, 'name' => $actorName],
             'salesperson_ref' => 'staff:' . ($originalSale['salesman_uid'] ?? 0), 'salesperson_name' => (string)($originalSale['salesman_name'] ?? ''),
             'payment_method_ref' => 'method:' . (string)($originalSale['settle_method'] ?? $head['settle_method'] ?? ''),
             'occurred_at' => (int)($head['purchase_at'] ?? $head['sale_at'] ?? $head['occurred_at'] ?? time()),
@@ -100,7 +134,7 @@ final class ErpIntegrationDocumentService
             ];
         }
         if ($emit) {
-            $service = ErpIntegrationService::forSite($site, (int)($head['operator_uid'] ?? $head['operator_id'] ?? 0), (string)($head['operator_name'] ?? '系统'));
+            $service = ErpIntegrationService::forSite($site, $actorUid, $actorName ?: '系统');
             $service->enqueueDomainEvent('erp.integration.document.confirmed.v1', $kind, $id, $document);
         }
         return $document;

@@ -4,7 +4,7 @@ namespace addon\hsx_boyuan\app\gateway;
 
 use addon\hsx_boyuan\app\support\{Contract,Problem};
 
-/** UAT payment-voucher registration only. Never a bank transfer or allocation proof. */
+/** Accounting voucher only. Its receipt is neither a bank transfer nor proof of allocation. */
 final class PaymentGateway
 {
     public const SCHEMA='boyuan.purchase.payment.v1';
@@ -12,10 +12,11 @@ final class PaymentGateway
 
     public function create(array $request): array
     {
-        if(!$this->api->uatPaymentEnabled()) throw new Problem('PAYMENT_UAT_ONLY','仅允许固定UAT测试连接登记付款单，禁止生产及其他地址');
-        [$head,$detail,$amount]=$this->validate($request);
+        $production=$this->api->productionVoucher($request);
+        if(!$production && (!$this->api->uatPaymentEnabled() || ($request['mode']??'test')!=='test')) throw new Problem('PAYMENT_UAT_ONLY','付款凭证未与已开通的账套、环境及原凭证匹配，没有发送');
+        [$head,$detail,$amount]=self::validate($request);
         try {
-            $envelope=self::keys($this->api->paymentCreate($request['biz']));
+            $envelope=self::keys($production?$this->api->confirmedVoucherCreate($request):$this->api->paymentCreate($request['biz']));
             if(array_key_exists('head',$envelope) || array_key_exists('payment_details',$envelope)) self::fail('PAYMENT_RESPONSE_AMBIGUOUS','付款回执层级异常，须核对原操作，不得重复创建');
             $result=$envelope['result']??null; $actual=is_array($result)?($result['head']??null):null;
             if(!is_array($result) || !is_array($actual)) self::fail('PAYMENT_RESPONSE_INCOMPLETE','付款SUCCESS未返回有效result.head；结果未知，不能重复登记');
@@ -37,14 +38,14 @@ final class PaymentGateway
             if(!in_array($row['seq_no']??null,[1,'1'],true)) self::fail('PAYMENT_LINE_MISMATCH','付款回执单账户明细序号无效');
             $safeHead=array_intersect_key($actual,array_flip(['id','big_gsdm','bill_id','bill_type','company_id','supplier_cust_id','business_date','scope_flag','creater_id']));
             $safeRow=array_intersect_key($row,array_flip(['id','account_id','amounts','handling_fee','subject_id','payment_type_id','seq_no']));
-            return ['created'=>true,'payment_registered'=>true,'verified'=>false,'external_no'=>$externalNo,'external_id'=>$externalId,
+            return ['created'=>true,'payment_registered'=>true,'verified'=>false,'external_no'=>$externalNo,'external_id'=>$externalId,'provider_result'=>\addon\hsx_boyuan\app\support\ReceiptFacts::head($actual),
                 'amount'=>Contract::amount($amount),'verification_level'=>'payment_create_receipt_matched',
                 'financial_posting_verified'=>false,'allocation_applied_verified'=>false,'bank_transfer_verified'=>false,
                 'response'=>['head'=>$safeHead,'payment_details'=>['add_details'=>[$safeRow]]],
-                'evidence'=>['response_contract'=>'boyuan.payment.v154.documented','environment'=>'uat','scope_flag'=>3,
+                'evidence'=>['response_contract'=>'boyuan.payment.v154.documented','environment'=>$production?'production':'uat','scope_flag'=>3,
                     'company_id'=>$request['company_id'],'supplier_id'=>$request['supplier_id'],'account_id'=>$request['account_id'],
                     'amount'=>Contract::amount($amount),'checked_at'=>time(),'payment_service'=>'boyuan.biz.bill.payment.generate',
-                    'limitations'=>['仅表示UAT付款单创建回执身份和金额匹配，不表示审核过账或原采购已冲减',
+                    'limitations'=>['仅表示付款凭证身份和金额匹配，不表示审核过账或原采购已冲减',
                         '未调用统一支付、银行转账、撤销或退款接口；不作为实际资金支付凭证',
                         '原采购未结余额和核销效果须另行只读核对，不能把未结金额0直接解释为已付',
                         '付款接口未提供第三方幂等号；未知结果不能自动重发']],
@@ -53,7 +54,7 @@ final class PaymentGateway
         catch(\Throwable $error) { throw new Problem('PAYMENT_CREATE_UNKNOWN','付款登记未取得确定回执，请核对原操作；不得重复创建或发起真实支付','unknown'); }
     }
 
-    private function validate(array $request): array
+    public static function validate(array $request): array
     {
         if(($request['schema']??null)!==self::SCHEMA) throw new Problem('PAYMENT_SCHEMA_INVALID','付款登记协议无效');
         foreach(['company_id','supplier_id','account_id'] as $field) self::id($request[$field]??null,36,'request.'.$field);

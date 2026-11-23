@@ -42,6 +42,8 @@ class Cashier extends BaseAdminController
         $data = $this->request->params([
             [ 'member_id', 0 ],
             [ 'payment_mode', 'offline_cash' ],
+            [ 'sale_kind', 'retail' ],
+            [ 'request_id', '' ],
             [ 'capital_account_id', 0 ],
             [ 'payments', [] ], // 多账户分笔现结 [{account_id, method, amount}]
             [ 'items', [] ],

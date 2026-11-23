@@ -15,6 +15,7 @@ import HsxDetail from './components/HsxDetail/index.vue'
 import HsxDrawer from './components/HsxDrawer/index.vue'
 import HsxNotice from './components/HsxNotice/index.vue'
 import HsxFold from './components/HsxFold/index.vue'
+import HsxCatalogLayout from './components/HsxCatalogLayout/index.vue'
 import HsxDataArchive from './components/HsxDataArchive/index.vue'
 import HsxSearchPanel from './components/HsxSearchPanel/index.vue'
 import HsxExport from './components/HsxExport/index.vue'
@@ -77,6 +78,7 @@ const components = [
     HsxDrawer,
     HsxNotice,
     HsxFold,
+    HsxCatalogLayout,
     HsxDataArchive,
     HsxSearchPanel,
     HsxExport,
@@ -143,6 +145,7 @@ export {
     HsxDrawer,
     HsxNotice,
     HsxFold,
+    HsxCatalogLayout,
     HsxDataArchive,
     HsxSearchPanel,
     HsxExport,

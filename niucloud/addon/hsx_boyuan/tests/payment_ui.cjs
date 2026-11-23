@@ -13,12 +13,13 @@ const moduleFor = (file, imports, extras = {}) => { const target = { exports: {}
 const helper = moduleFor(path.join(app, 'src/addon/hsx_boyuan/utils/purchase-form.ts'), {})
 const timers = []
 const payment = moduleFor(path.join(app, 'src/addon/hsx_boyuan/utils/purchase-payment.ts'), { vue: { ...vue, onUnmounted: () => {} }, './purchase-form': helper }, { setInterval: callback => { timers.push(callback); return timers.length }, clearInterval: () => {} })
+const pcPayment = moduleFor(path.join(root,'admin/src/addon/hsx_boyuan/utils/purchase-payment.ts'), {vue:{...vue,onUnmounted:()=>{}},'./purchase-form':helper},{setInterval:()=>1,clearInterval:()=>{}})
 const baseConfig = { revision: 2, mode: 'test', enabled: true, purchase_enabled: true, paused: false, uat_payment_enabled: true, profiles: { test: { protocol: 'openapi_v153', endpoint: 'https://open-api-uat.139erp.com/api', gateway_path: '/gateway.do', connection_key: 'FIXTURE-UAT', account_id: 'FIXTURE-ACCOUNT', probe_at: 1800000000, contract_confirmed: true } } }
 const parent = { task: { id: 7, revision: 8, mode: 'test', connection_key: 'FIXTURE-UAT', status: 'succeeded' }, can_operate: true, payment: { uat_only: true, enabled: true, can_capture: true, task_id: null, ap_evidence: { verified: false, status: 'rule_confirmed', formation_expected: true, balance_verified: false, reason: '规则成立，但余额/核销未核验' } } }
 const baseView = { task: { id: 70, revision: 1, mode: 'test', connection_key: 'FIXTURE-UAT', kind: 'purchase_payment', parent_purchase_task_id: 7, status: 'awaiting_confirmation', external_no: '' }, parent_purchase_task_id: 7, source: { source_task_id: 7, source_document_no: 'FICTIONAL-CG', external_purchase_no: 'FICTIONAL-BY-CG', settlement_id: 80, settlement_no: 'FICTIONAL-FK-80', confirmed_at: 1800000000, amount: '100.00', currency: 'CNY', company_id: 'C1', company_code: '99000000001', supplier_id: 'S1', scope: 'single_purchase_batch' }, labels: { company: { id: 'C1', name: '虚构公司一' }, supplier: { id: 'S1', name: '虚构供应商一' }, creator: null, account: null }, selection: { creator_id: '', account_id: '' }, editable: true, can_submit: false, can_submit_experiment: false, can_verify: false, ap_evidence: parent.payment.ap_evidence, issues: ['实单应付及核销未核验'], result: { payment_registered: false, allocation_applied_verified: false, bank_transfer_verified: false } }
 const candidates = [{ settlement_id: 80, settlement_no: 'FICTIONAL-FK-80', confirmed_at: 1800000000, amount: '100.00', eligible: true }, { settlement_id: 81, settlement_no: 'FICTIONAL-FK-81', confirmed_at: 1800000000, amount: null, eligible: false, reason: '归属不符' }]
 const accounts = [{ id: 'A1', name: '虚构同公司账户', enabled: true, stale: false, extra: { gsdm: '99000000001' } }, { id: 'A2', name: '其他公司账户', enabled: true, extra: { gsdm: '99000000002' } }, { id: 'A3', name: '未知归属账户', enabled: true, extra: {} }, { id: 'A4', name: '双归属矛盾', enabled: true, extra: { company_id: 'C1', gsdm: '99000000002' } }]
-function fixture() {
+function fixture(client=payment) {
     const props = vue.reactive({ config: clone(baseConfig), purchase: clone(parent) }), calls = [], notices = []
     let current = clone(baseView), throwSubmit = false
     const api = {
@@ -29,7 +30,7 @@ function fixture() {
         savePaymentDraft: async (id, input) => { calls.push(['draft', id, clone(input)]); current = { ...current, selection: clone(input.selection), labels: { ...current.labels, account: { id: 'A1', name: '虚构同公司账户' }, creator: { id: 'U1', name: '虚构制单人' } }, can_submit_experiment: true, task: { ...current.task, revision: current.task.revision + 1 } }; return { data: clone(current) } },
         submitPaymentTask: async (id, input) => { calls.push(['submit', id, clone(input)]); if (throwSubmit) throw new Error('fake response lost'); current = { ...current, editable: false, can_submit_experiment: false, task: { ...current.task, status: 'pending', revision: current.task.revision + 1 } }; return { data: clone(current) } }
     }
-    const ui = payment.usePurchasePayment(props, api, value => notices.push(value), () => {})
+    const ui = client.usePurchasePayment(props, api, value => notices.push(value), () => {})
     return { props, calls, notices, ui, api, get current() { return current }, set current(value) { current = value }, failSubmit: () => { throwSubmit = true } }
 }
 const flush = async () => { for (let index = 0; index < 12; index++) await Promise.resolve(); await vue.nextTick() }
@@ -52,6 +53,40 @@ async function paymentDialogHtml(parsed, file, ui, props) {
     return require(path.join(app, 'node_modules/@vue/server-renderer')).renderToString(project)
 }
 async function run() {
+    // A click on a specific ERP payable must never pick the latest sibling voucher.
+    const exact = fixture(pcPayment)
+    exact.props.target = { settlementId: 80, taskId: 0 }
+    exact.props.purchase.payment.task_id = 999
+    await exact.ui.open()
+    assert.deepEqual(exact.calls.map(c => c[0]), ['candidates'])
+    assert.equal(exact.calls[0][2].settlement_id, 80)
+    assert.deepEqual(Array.from(exact.ui.candidates.value, r=>r.settlement_id), [80])
+    assert.equal(exact.ui.exactCandidate.value.settlement_no, 'FICTIONAL-FK-80', 'confirmed source appears directly instead of asking clerk to choose it again')
+    const exactReceipt = fixture(pcPayment)
+    exactReceipt.props.target = {settlementId:80, taskId:0}; exactReceipt.props.readOnly = true; exactReceipt.props.purchase.payment.can_capture = false
+    exactReceipt.api.getPurchasePaymentCandidates=async(id,input)=>{exactReceipt.calls.push(['candidates',id,clone(input)]);return {data:{items:[{...candidates[0],task_id:70,eligible:false}],total:1}}}
+    exactReceipt.current={...clone(baseView),task:{...baseView.task,status:'registered_review',external_no:'FIXTURE-PAY-70'},result:{payment_registered:true}}
+    await exactReceipt.ui.open()
+    assert.deepEqual(exactReceipt.calls.map(c=>c[0]),['candidates','get'],'open the precise existing receipt read-only, even when syncing is paused')
+    assert.equal(exactReceipt.ui.candidateMode.value,false);assert.equal(exactReceipt.ui.registrationDone.value,true);assert.equal(exactReceipt.ui.canSubmit.value,false)
+    const noMatch=fixture(pcPayment)
+    noMatch.props.target={settlementId:999,taskId:0};await noMatch.ui.open()
+    assert.equal(noMatch.ui.exactCandidate.value,null);assert.match(noMatch.ui.error.value,/未找到唯一匹配/);assert.deepEqual(noMatch.calls.map(c=>c[0]),['candidates'])
+    await exact.ui.capture({...candidates[0], settlement_id: 999})
+    assert.ok(!exact.calls.some(c => c[0] === 'capture'))
+    exact.props.target = { settlementId: 999, taskId: baseView.task.id }
+    await exact.ui.open(); assert.match(exact.ui.error.value,/不匹配/)
+    assert.equal(exact.ui.editable.value,false)
+    const readOnly = fixture(pcPayment); readOnly.props.readOnly = true
+    readOnly.ui.apply(baseView); assert.equal(readOnly.ui.editable.value,false); assert.equal(readOnly.ui.canCapture.value,false)
+    const locked=fixture(pcPayment), frozen={...clone(baseView),can_process_current:true,current_account_code:'FIXTURE-ACCOUNT',editable:false,task:{...baseView.task,status:'pending',attempts:0,side_effect:'none'}}
+    locked.ui.apply(frozen)
+    assert.equal(locked.ui.canProcessCurrent.value,true)
+    locked.api.submitPaymentTask=async (id,input)=>{ locked.calls.push(['process',id,clone(input)]); throw Error('fixture lost response') }
+    await Promise.all([locked.ui.processCurrent(),locked.ui.processCurrent()])
+    assert.deepEqual(locked.calls,[['process',70,{revision:1,mode:'test',connection_key:'FIXTURE-UAT',intent:'process_current',account_code:'FIXTURE-ACCOUNT',settlement_id:80,purchase_task_id:7}]])
+    locked.ui.apply(frozen);await locked.ui.processCurrent();assert.equal(locked.calls.length,1,'unknown outcome cannot cause repeat sends')
+    locked.ui.apply({...frozen,task:{...frozen.task,mode:'production',revision:2}});assert.equal(locked.ui.canProcessCurrent.value,false)
     assert.equal(payment.paymentAccountInScope(accounts[0], baseView.source), true)
     for (const row of accounts.slice(1)) assert.equal(payment.paymentAccountInScope(row, baseView.source), false)
     assert.match(payment.paymentApLabel(parent.payment.ap_evidence), /形成规则已确认.*未核验/)
@@ -95,6 +130,14 @@ async function run() {
     const prod = fixture(); prod.props.config.mode = 'production'; prod.props.purchase.task.mode = 'production'; prod.ui.apply({ ...clone(baseView), can_submit: true, can_submit_experiment: true }); prod.ui.experimentAck.value = true
     assert.equal(prod.ui.canCapture.value, false); assert.equal(prod.ui.editable.value, false); assert.equal(prod.ui.canSubmit.value, false)
     await prod.ui.capture(candidates[0]); await prod.ui.save(); await prod.ui.submit(async () => true); assert.equal(prod.calls.length, 0, 'production has no financial writes even with forged capability flags')
+    const live=fixture(pcPayment); live.props.config.mode='production'; Object.assign(live.props.purchase,{active_connection:true,write_enabled:true})
+    Object.assign(live.props.purchase.task,{mode:'production',connection_key:'FORMAL-KEY'})
+    Object.assign(live.props.purchase.payment,{production_context:true,uat_only:false}); live.ui.visible.value=true
+    const pv=clone(baseView);Object.assign(pv.task,{mode:'production',connection_key:'FORMAL-KEY'});pv.selection={creator_id:'U1',account_id:'A1'};pv.labels.creator={id:'U1',name:'制单人'};pv.labels.account={id:'A1',name:'原付款账户'};pv.can_submit=true;live.ui.apply(pv)
+    assert.equal(live.ui.canCapture.value,true);assert.equal(live.ui.editable.value,true);assert.equal(live.ui.canSubmit.value,true)
+    live.ui.apply({...pv,can_submit:false,can_submit_experiment:true});live.ui.experimentAck.value=true
+    assert.equal(live.ui.needsExperiment.value,false);assert.equal(live.ui.canSubmit.value,false,'formal task cannot use UAT experimental approval')
+    live.props.purchase.write_enabled=false;live.ui.apply(pv);assert.equal(live.ui.canCapture.value,false);assert.equal(live.ui.canSubmit.value,false,'pausing the connection permits viewing only')
     const readonly = fixture(); readonly.props.purchase.can_operate = false; readonly.ui.visible.value = true; readonly.ui.apply({ ...clone(baseView), can_submit: true })
     assert.equal(readonly.ui.canCapture.value, false); assert.equal(readonly.ui.editable.value, false); assert.equal(readonly.ui.canSubmit.value, false)
     const mixed = fixture()
@@ -146,6 +189,6 @@ async function run() {
     const mobileWorkbench = fs.readFileSync(path.join(app, 'src/addon/hsx_boyuan/pages/workbench/index.vue'), 'utf8')
     assert.match(mobileWorkbench, /uat_payment_enabled: false/)
     assert.match(mobileWorkbench, /uat_payment_enabled: draft\.value\.mode === 'test'/)
-    console.log('PASS: payment PC/mobile SFC/styles; real parent shape, paginated confirmed-only payments, strict company account scope, no editable amounts, distinct AP proof, explicit experiment risk, confirmation lock, unknown no-resubmit, receipt vs allocation, and production read-only')
+    console.log('PASS: payment views, confirmed-only vouchers, fixed amounts, scoped formal registration, no UAT override on formal, pause/readback, unknown no-resubmit, receipt distinct from allocation.')
 }
 run().catch(error => { console.error(error); process.exitCode = 1 })

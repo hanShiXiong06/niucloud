@@ -339,12 +339,12 @@ class RecycleOrder extends BaseAdminController
      */
     public function capitalAccountOptions()
     {
-        $params = $this->request->params([['order_id', 0], ['device_ids', []]]);
+        $params = $this->request->params([['order_id', 0], ['device_ids', []], ['scope_only', 0]]);
         $capability = (new RecycleErpCapabilityService())->paymentCapability(
             $this->request->siteId(), (int)$params['order_id'], (array)$params['device_ids']
         );
         $accounts = [];
-        if ($capability['payment_managed_by_erp'] && $capability['erp_connected']) {
+        if (!(int)$params['scope_only'] && $capability['payment_managed_by_erp'] && $capability['erp_connected']) {
             $accounts = (new RecycleErpFinanceBridgeService())->capitalAccountOptions($this->request->siteId());
         }
 

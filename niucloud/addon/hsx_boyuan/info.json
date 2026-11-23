@@ -1,5 +1,5 @@
 {
-  "title": "博远ERP对接", "key": "hsx_boyuan", "version": "1.2.0", "author": "hsx",
-  "desc": "博远v1.5.4采购入库半自动同步、资料核对及串号结果核验。",
+  "title": "博远ERP对接", "key": "hsx_boyuan", "version": "1.3.0", "author": "hsx",
+  "desc": "从博远同步基础资料、建立 ERP 期初主档，按串号核对采购入库与同行挂账出库。",
   "type": "addon", "support_app": "hsx_erp", "support_version": "1.2.4", "compile": []
 }

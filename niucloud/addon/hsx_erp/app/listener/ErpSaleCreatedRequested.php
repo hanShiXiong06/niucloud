@@ -175,7 +175,16 @@ class ErpSaleCreatedRequested
                 )))), 0, 6),
             ],
             'items' => $items,
-        ];
+        ] + (array_key_exists('receipt_accounts',$payment) ? [
+            'receipt_accounts' => $this->splitReceipts($payment),
+        ] : []);
+    }
+
+    private function splitReceipts(array $payment): array
+    {
+        if (($payment['mode'] ?? '') !== 'offline_cash' || ($payment['status'] ?? '') !== 'paid')
+            throw new CommonException('只有已收款的线下现结才能登记分笔收款');
+        return \addon\hsx_erp\app\support\ErpSaleReceiptAccounts::validate($payment['receipt_accounts'],(float)($payment['gross_amount'] ?? 0));
     }
 
     protected function saleData(array $payload): array
@@ -211,6 +220,7 @@ class ErpSaleCreatedRequested
             'settle_method' => $isCash ? ($isOnlinePaid ? '线上现结' : '现结') : '挂账',
             'received_amount' => $isCash ? $saleAmount : 0,
             'capital_account_id' => $capitalAccountId,
+            'receipt_accounts' => $payload['receipt_accounts'] ?? null,
             'voucher_urls' => (array)($payment['voucher_urls'] ?? []),
             'payment_mode' => (string)($payment['mode'] ?? ''),
             'payment_trade_no' => (string)($payment['out_trade_no'] ?? ''),

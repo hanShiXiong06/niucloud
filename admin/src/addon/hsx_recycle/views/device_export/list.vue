@@ -400,6 +400,7 @@ import { t } from '@/lang'
 import { FormInstance, ElImageViewer, ElMessageBox } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { getRecycleDeviceList, exportRecycleDevice, syncRecycleDevicesToErp, updateDevice, getDeviceSyncHealth, resyncRecycleDevice } from '@/addon/hsx_recycle/api/device_export'
+import { batchInboundFeedback, resyncFeedback } from '@/addon/hsx_recycle/utils/inbound-handoff'
 import { getSaleDestinationOptions } from '@/addon/hsx_recycle/api/recycle_order'
 import { img } from '@/utils/common'
 import { View, User, Picture, RefreshRight } from '@element-plus/icons-vue'
@@ -628,19 +629,11 @@ const handleResync = async (row: any) => {
     try {
         const placement = erpPlacementMissing(row) ? (defaultRepairPlacement.value || {}) : {}
         const res: any = await resyncRecycleDevice(row.id, placement)
-        const r = res?.data || {}
-        if (r.has_asset === false) {
-            hsxFeedback.warning('该设备尚未在 ERP 建立资产，已尝试重新入库同步，请稍候刷新查看')
-        } else if ((r.flushed || 0) > 0) {
-            hsxFeedback.success(`已重新投递 ${r.flushed} 条下游事件，中台拍照等步骤将补齐`)
-        } else if ((r.still_failed || 0) > 0) {
-            hsxFeedback.error(`仍有 ${r.still_failed} 条事件失败，请检查下游插件日志`)
-        } else {
-            hsxFeedback.success('已触发重新同步')
-        }
+        const tip = resyncFeedback(res?.data)
+        hsxFeedback[tip.tone](tip.message)
         loadDeviceList()
     } catch (error: any) {
-        hsxFeedback.error(error?.message || '重新同步失败')
+        hsxFeedback.error(error?.msg || error?.message || '同步结果未确认，请刷新核对原资产后处理。')
     } finally {
         resyncLoadingId.value = null
     }
@@ -761,10 +754,8 @@ const syncErpEvent = async () => {
         erpSyncLoading.value = true
         const placement = missingRows.length ? (defaultRepairPlacement.value || {}) : {}
         const res: any = await syncRecycleDevicesToErp(syncCandidates.map((row: any) => row.id), ['self_erp'], placement)
-        const result = (res?.data?.results || []).find((item: any) => item?.target === 'self_erp')
-        const created = Number(result?.created_count || 0)
-        const existing = Number(result?.existing_count || 0)
-        hsxFeedback.success(`ERP 同步完成：新增 ${created} 台，已存在 ${existing} 台`)
+        const tip = batchInboundFeedback(res?.data?.results, syncCandidates.length)
+        hsxFeedback[tip.tone](tip.message)
         selectedDevices.value = []
         loadDeviceList()
     } catch (error: any) {
@@ -786,13 +777,16 @@ const submitPlacementRepair = async () => {
     placementSubmitting.value = true
     try {
         if (placementMode.value === 'single') {
-            await resyncRecycleDevice(placementPendingRows.value[0].id, placement)
+            const res: any = await resyncRecycleDevice(placementPendingRows.value[0].id, placement)
+            const tip = resyncFeedback(res?.data)
+            hsxFeedback[tip.tone](tip.message)
         } else {
             const selectedIds = placementSyncRows.value.map((row: any) => row.id)
-            await syncRecycleDevicesToErp(selectedIds, ['self_erp'], placement)
+            const res: any = await syncRecycleDevicesToErp(selectedIds, ['self_erp'], placement)
+            const tip = batchInboundFeedback(res?.data?.results, selectedIds.length)
+            hsxFeedback[tip.tone](tip.message)
             selectedDevices.value = []
         }
-        hsxFeedback.success('入库位置已补全，ERP 同步已重新执行')
         placementDialogVisible.value = false
         loadDeviceList()
     } catch (error: any) {

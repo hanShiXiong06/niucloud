@@ -4,6 +4,8 @@ if(PHP_SAPI!=='cli') exit("CLI only\n");
 // Pure fake exchange: no framework, database or real HTTP transport is loaded.
 require __DIR__.'/../app/support/Problem.php';
 require __DIR__.'/../app/support/Contract.php';
+require __DIR__.'/../app/support/ReceiptFacts.php';
+require __DIR__.'/../app/support/ProductionVoucher.php';
 require __DIR__.'/../app/gateway/Transport.php';
 require __DIR__.'/../app/gateway/OpenApi.php';
 require __DIR__.'/../app/gateway/PaymentGateway.php';
@@ -74,6 +76,25 @@ try {
         payDenied(fn()=>$a->paymentCreate($request['biz']),'direct adapter also refuses non-UAT payment locally','none','PAYMENT_UAT_ONLY');
         payRule(!$w,'environment rejection performs zero exchanges');
     }
+    $prodProfile=['protocol'=>'openapi_v153','app_id'=>'123','app_secret_cipher'=>'fixture','account_id'=>'ACCOUNTROOT','connection_key'=>'formal-fixture',
+        'endpoint'=>'https://open-api.139erp.com/api','gateway_path'=>'/gateway.do','probe_at'=>1,'contract_confirmed'=>true,'acceptance_ref'=>'UAT-FIXTURE',
+        'voucher_release'=>['target'=>'formal-fixture','account'=>'ACCOUNTROOT','uid'=>1,'at'=>1]];
+    $formal=array_replace($request,['mode'=>'production','connection_key'=>'formal-fixture','target_account'=>'ACCOUNTROOT','scope'=>'confirmed_erp_voucher','uat_registration_experiment'=>false]);
+    $formalCalls=0;
+    $makeFormal=static function(array $profile)use(&$formalCalls,$response,$secret){return new OpenApi($profile,$secret,static function($path,$params)use(&$formalCalls,$response){
+        $formalCalls++; payRule($path==='/gateway.do' && $params['service']==='boyuan.biz.bill.payment.generate' && !str_contains($params['biz'],'account_no'),'only the accounting endpoint receives a formal copy');
+        return ['return_code'=>'SUCCESS','api_response'=>$response];
+    },'production');};
+    $formalApi=$makeFormal($prodProfile);$g=new PaymentGateway($formalApi);
+    $done=$g->create($formal);
+    payRule($done['external_no']==='PM00001' && $done['evidence']['environment']==='production' && !$done['allocation_applied_verified'] && !$done['bank_transfer_verified'],'matched formal voucher is not proof of allocation or transfer');
+    payDenied(fn()=>$formalApi->paymentCreate($formal['biz']),'raw formal payload is never accepted');
+    foreach([['target_account'=>'elsewhere'],['connection_key'=>'rotated'],['mode'=>'test'],['source_settlement_id'=>0],['scope'=>'bank'],['stage'=>'draft'],['uat_registration_experiment'=>true]] as $override)
+        payDenied(fn()=>$g->create(array_replace($formal,$override)),'mismatched or non-ledger formal intent');
+    foreach([['voucher_release'=>[]],['acceptance_ref'=>''],['probe_at'=>0],['account_id'=>'OTHER'],['endpoint'=>'https://open-api-uat.139erp.com/api']] as $override)
+        payDenied(fn()=>(new PaymentGateway($makeFormal(array_replace($prodProfile,$override))))->create($formal),'missing or stale formal release');
+    payDenied(fn()=>$gateway->create($formal),'a formal envelope never routes to UAT');
+    payRule($formalCalls===1,'all denial cases perform zero additional formal exchanges');
     foreach(['schema','zero','negative','fraction','number','company','supplier','account','amount','scope','autosupplier','autosubject','creator','creatoruid','creatorname','date','cash','bank','multiline','fee','sequence','reserved'] as $case) {
         $bad=$request;
         if($case==='schema') $bad['schema']='untrusted';

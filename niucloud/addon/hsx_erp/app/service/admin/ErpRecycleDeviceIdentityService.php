@@ -108,7 +108,12 @@ class ErpRecycleDeviceIdentityService
     public function paymentOwnership(int $siteId, array $deviceIds): array
     {
         $map = $this->deviceAssets($siteId, $deviceIds);
-        $payables = $map === [] ? [] : $this->loadPayables($siteId);
+        $assetIds = $purchaseIds = [];
+        foreach ($map as $entry) foreach ($entry['assets'] as $asset) {
+            $assetIds[(int)$asset['id']] = true;
+            if ((int)($asset['purchase_order_id'] ?? 0) > 0) $purchaseIds[(int)$asset['purchase_order_id']] = true;
+        }
+        $payables = !$assetIds ? [] : $this->loadPayables($siteId, array_keys($assetIds), array_keys($purchaseIds));
         $result = [];
         foreach ($map as $deviceId => $entry) {
             $paid = 0.0;
@@ -116,6 +121,8 @@ class ErpRecycleDeviceIdentityService
             $hasPayable = false;
             $seenPayables = [];
             $exactSources = [];
+            $purchasePayableId = 0;
+            $purchasePayableStatus = '';
             foreach ($payables as $payable) {
                 if ((int)($payable['site_id'] ?? 0) !== $siteId || (string)($payable['status'] ?? '') === 'void') continue;
                 $payableId = (int)($payable['id'] ?? 0);
@@ -132,6 +139,10 @@ class ErpRecycleDeviceIdentityService
                         $key = $obligation . ':' . (int)$asset['id'];
                         if (isset($exactSources[$key])) $entry['ambiguous'] = true;
                         $exactSources[$key] = true;
+                        if ($obligation === 'purchase') {
+                            $purchasePayableId = $payableId;
+                            $purchasePayableStatus = (string)($payable['status'] ?? '');
+                        }
                     }
                 }
                 if (!$linked) continue;
@@ -147,6 +158,9 @@ class ErpRecycleDeviceIdentityService
             $result[$deviceId] = [
                 'has_asset' => $entry['has_asset'], 'ambiguous' => $entry['ambiguous'],
                 'asset_ids' => $entry['asset_ids'], 'has_payable' => $hasPayable,
+                // 只有唯一、逐台且有效的采购应付才允许作为财务入口。整批旧账不猜分配。
+                'purchase_payable_id' => !$entry['ambiguous'] && count($seenPayables) === 1 ? $purchasePayableId : 0,
+                'purchase_payable_status' => !$entry['ambiguous'] && count($seenPayables) === 1 ? $purchasePayableStatus : '',
                 'paid_amount' => round($paid, 2), 'remaining_amount' => round($remaining, 2),
             ];
         }
@@ -187,9 +201,18 @@ class ErpRecycleDeviceIdentityService
             ->field('id,site_id,asset_id,purchase_order_id,spec_json')->select()->toArray();
     }
 
-    protected function loadPayables(int $siteId): array
+    protected function loadPayables(int $siteId, array $assetIds, array $purchaseIds): array
     {
-        return ErpPayable::where([['site_id', '=', $siteId]])
+        return ErpPayable::where([['site_id', '=', $siteId], ['status', '<>', 'void']])
+            ->whereIn('source_type', ['purchase', 'purchase_asset', 'consignment_sale'])
+            ->where(function ($q) use ($assetIds, $purchaseIds) {
+                $q->whereIn('asset_id', $assetIds)->whereOr(function ($item) use ($assetIds) {
+                    $item->where('source_type', 'purchase_asset')->whereIn('source_id', $assetIds);
+                });
+                if ($purchaseIds) $q->whereOr(function ($order) use ($purchaseIds) {
+                    $order->where('source_type', 'purchase')->whereIn('source_id', $purchaseIds);
+                });
+            })
             ->field('id,site_id,asset_id,source_type,source_id,origin_plugin,amount,settled_amount,status')->select()->toArray();
     }
 }

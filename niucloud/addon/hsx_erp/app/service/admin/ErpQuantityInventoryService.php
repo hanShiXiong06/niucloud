@@ -674,6 +674,11 @@ final class ErpQuantityInventoryService extends ErpExternalContractService
     /** @return array{category_name:string,category_path:string} */
     private function resolveCategory(string $path): array
     {
+        $owner=\addon\hsx_erp\app\support\ErpCatalogAuthority::owner((int)$this->site_id,['action'=>'leaf','path'=>$path]);
+        if ($owner) {
+            if (empty($owner['leaf'])) throw new CommonException('所选分类不是当前来源中的有效末级分类，请同步最新分类并重新选择');
+            return $owner['leaf'];
+        }
         $normalized = preg_replace('~[\\\\／＞>,，|｜]+~u', '/', trim($path)) ?? trim($path);
         $segments = array_values(array_filter(array_map(
             static fn(string $value): string => trim(preg_replace('/\s+/u', ' ', $value) ?? $value),

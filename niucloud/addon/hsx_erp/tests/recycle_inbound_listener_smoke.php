@@ -212,6 +212,12 @@ $event = [
     ],
 ];
 
+// Independent staff facts: final pricing (uid 27) is not the inbound confirming clerk (uid 34).
+$event['devices'][1]['pricing_snapshot']['price_uid'] = 28;
+$event['devices'][1]['pricing_snapshot']['price_name'] = '第二台定价员李四';
+foreach ([0=>11,1=>12] as $index=>$deviceId) $event['devices'][$index]['inbound_operator'] =
+    ['uid'=>34,'name'=>'原签收入库员','device_id'=>$deviceId,'log_id'=>9910+$index];
+
 $listener = new FakeRecycleInboundListener();
 $result = $listener->handle($event);
 $assert(($result['consumer'] ?? '') === 'hsx_erp', '返回值必须声明hsx_erp消费者');
@@ -222,6 +228,13 @@ $assert(($result['created_count'] ?? 0) === 3, '首次消费必须报告三台�
 $assert(count($listener->created) === 2, '监听器必须分组调用两次采购服务');
 
 $first = $listener->created[0];
+$actor = \addon\hsx_erp\app\support\RecycleInboundActor::fromItems($first['items']);
+$assert($actor === ['uid'=>34,'name'=>'原签收入库员'] && $first['purchaser_uid']===27, '采购入库制单人必须来自这批设备原确认日志，和定价采购员分别核对');
+$assert(\addon\hsx_erp\app\support\RecycleInboundActor::fromItems($listener->created[1]['items'])===null,'客户确认或没有原操作证据时不得拿定价员或当前登录人代签');
+$mixed = $first['items']; $mixed[1]['spec_json']['inbound_operator']['uid']=77;
+$assert(\addon\hsx_erp\app\support\RecycleInboundActor::fromItems($mixed)===null,'混合经办人不能猜一个人作为整批制单人');
+$wrongDevice = $first['items']; $wrongDevice[1]['spec_json']['inbound_operator']['device_id']=11;
+$assert(\addon\hsx_erp\app\support\RecycleInboundActor::fromItems($wrongDevice)===null,'另一台设备的原操作日志不能用来署名');
 $assert($first['items'][0]['quality_remark'] === '屏幕轻微划痕', '质检摘要不能拼接到人工备注中');
 $inspectionSnapshot = json_decode($first['items'][0]['qc_report'], true);
 $assert(($inspectionSnapshot['raw']['check_result'] ?? '') === '检测正常', '原始质检数据必须完整保留在独立快照中');
@@ -243,6 +256,7 @@ $assert(($first['items'][0]['warehouse_id'] ?? 0) === 1 && ($first['items'][0]['
 $assert(($first['items'][1]['warehouse_id'] ?? 0) === 2 && ($first['items'][1]['location_id'] ?? 0) === 22, '第二台设备必须保留自己的仓库库位');
 $assert(($first['items'][0]['spec_json']['source_device_id'] ?? 0) === 11, '设备快照必须保留原回收设备行ID');
 $assert(($first['items'][0]['spec_json']['pricing_operator']['uid'] ?? 0) === 27, '设备快照必须保留该设备的最终定价员');
+$assert($first['items'][1]['spec_json']['pricing_operator'] === ['uid'=>28,'priced_at'=>1783690012,'source'=>'recycle_final_price','name'=>'第二台定价员李四'], '同批不同人定价时，第二台快照取自己的最终定价人，不能继承单头或制单人');
 $assert(($first['items'][0]['source_paid_amount'] ?? 0) === 1000.0, '每台设备必须保留自己的已付金额，不能按订单顺序误核销');
 $assert(str_starts_with((string)($first['settlement_request_id'] ?? ''), 'source-paid:'), '来源已付核销必须有稳定幂等键');
 $assert(strlen((string)$first['request_id']) <= 80 && str_starts_with((string)$first['request_id'], 'source-purchase:'), '采购request_id必须由来源订单稳定派生且符合长度约束');

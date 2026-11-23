@@ -29,6 +29,7 @@ class ErpGoodsCatalog extends BaseAdminController
             ['node_type', 'root'], ['category_path', ''], ['brand_name', ''],
             ['series_name', ''], ['keyword', ''], ['site_product_id', 0], ['limit', 200],
             ['include_filters', 0], ['include_disabled', 0], ['category_only', 0],
+            ['scene', ''], ['category_id', ''], ['product_id', ''], ['expected_scope', ''], ['page', 1],
         ]);
         return success((new ErpGoodsCatalogService())->hierarchy($params));
     }

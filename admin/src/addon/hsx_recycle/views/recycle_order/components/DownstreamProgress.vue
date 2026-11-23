@@ -2,7 +2,7 @@
   <div class="ddp">
     <div class="ddp-header">
       <span class="ddp-title">流转进度</span>
-      <span class="ddp-sub">回收完成后，设备在 ERP / 数据中台的去向</span>
+      <span class="ddp-sub">这里显示设备去向，付款请看本机应付</span>
     </div>
 
     <div class="ddp-track">
@@ -23,7 +23,7 @@
     </div>
 
     <div v-if="isReturned" class="ddp-foot">设备已退回，不进入仓储流转。</div>
-    <div v-else-if="!recycleDone" class="ddp-foot">尚未完成回收，完成打款后进入仓储流转。</div>
+    <div v-else-if="!recycleDone" class="ddp-foot">尚未确认回收。入库与付款分别核对。</div>
     <div v-else-if="stage === 0" class="ddp-foot">已回收，等待 ERP 入库后开始流转。</div>
     <div v-else-if="stagedAt" class="ddp-foot">最近更新：{{ formatTime(stagedAt) }}</div>
   </div>

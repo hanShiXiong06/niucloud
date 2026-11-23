@@ -5,6 +5,7 @@ namespace addon\hsx_recycle\app\service\admin\order;
 
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
+use addon\hsx_recycle\app\model\order\RecycleDeviceLog;
 use addon\hsx_recycle\app\model\address\PhoneShopPaymentInfo;
 use addon\hsx_recycle\app\service\core\recycle_order\DeviceSummaryHelper;
 use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpCapabilityService;
@@ -30,7 +31,7 @@ class RecycleDeviceErpSyncService extends BaseAdminService
     /** @var array<int,array{id:int,name:string,historical:bool}> 最终定价人事实快照。 */
     private array $pricingOperatorCache = [];
 
-    public function dispatch(array $deviceIds, array $targets = ['self_erp'], array $placement = []): array
+    public function dispatch(array $deviceIds, array $targets = ['self_erp'], array $placement = [], array $confirmationLogIds = []): array
     {
         $deviceIds = RecyclePaymentOwnershipService::deviceIds($deviceIds);
         $targets = array_values(array_unique(array_filter(array_map('strval', $targets))));
@@ -68,7 +69,16 @@ class RecycleDeviceErpSyncService extends BaseAdminService
                     ($device->imei ?: $device->model ?: ('设备#' . $device->id)) . '尚未完成回收或代卖，不能同步入库'
                 );
             }
-            $snapshots[] = $this->buildSnapshot($device->toArray());
+            $snapshot = $this->buildSnapshot($device->toArray());
+            $logId = (int)($confirmationLogIds[(int)$device->id] ?? 0);
+            if ($logId > 0 && $status === RecycleOrderDict::DEVICE_STATUS_RECYCLED) {
+                $proof = RecycleDeviceLog::where(['site_id' => $this->site_id, 'id' => $logId, 'device_id' => (int)$device->id,
+                    'operation_type' => 'recycle', 'old_status' => RecycleOrderDict::DEVICE_STATUS_PENDING_CONFIRM,
+                    'new_status' => RecycleOrderDict::DEVICE_STATUS_RECYCLED])->where('operator_id', '>', 0)->field('operator_id,operator_name')->find();
+                if ($proof) $snapshot['inbound_operator'] = ['uid' => (int)$proof->operator_id, 'name' => (string)$proof->operator_name,
+                    'device_id' => (int)$device->id, 'log_id' => $logId];
+            }
+            $snapshots[] = $snapshot;
         }
 
         // 客户确认出售发生在 API 端，此时后台操作人 uid 固定为 0，不能把
@@ -264,19 +274,11 @@ class RecycleDeviceErpSyncService extends BaseAdminService
         (new RecyclePaymentOwnershipService())->claim($this->site_id, 0, [$deviceId], 'self_erp');
 
         $flush = function () use ($deviceId): array {
-            $merged = null;
             $results = (array)event('ResyncErpDevice', [
                 'site_id' => $this->site_id,
                 'source_device_id' => $deviceId,
             ]);
-            foreach ($results as $resp) {
-                if (is_array($resp) && array_key_exists('has_asset', $resp)) {
-                    $merged = $resp;
-                    break;
-                }
-            }
-            if ($merged === null) throw new CommonException('ERP 未响应同步核对，请重试；不会重复创建入库');
-            return $merged;
+            return self::verifiedAssetReceipt($results);
         };
 
         $result = $flush();
@@ -303,7 +305,7 @@ class RecycleDeviceErpSyncService extends BaseAdminService
         }
 
         // ERP 还没这台资产 → 入库同步根本没落地：重新 dispatch 入库，再 flush 一次
-        if (empty($result['has_asset'])) {
+        if ($result['has_asset'] === false) {
             try {
                 $this->dispatch([$deviceId], ['self_erp'], $placement);
             } catch (\Throwable $e) {
@@ -313,6 +315,23 @@ class RecycleDeviceErpSyncService extends BaseAdminService
         }
 
         return $result;
+    }
+
+    /** 不把超时、缺字段或互相矛盾的回执解释为“未入库”。 */
+    private static function verifiedAssetReceipt(array $results): array
+    {
+        $receipt = null;
+        foreach ($results as $r) {
+            if ($r === null) continue;
+            if ($receipt !== null || !is_array($r) || !is_bool($r['has_asset'] ?? null)
+                || !empty($r['ambiguous']) || !empty($r['unknown']) || !empty($r['error'])
+                || (!$r['has_asset'] && (!empty($r['asset_id']) || !empty($r['has_payable']) || !empty($r['has_purchase']) || !empty($r['still_failed'])))) {
+                throw new CommonException('未能唯一确认原资产，请按串号核对 ERP 原采购和同步日志，勿重复入库或付款');
+            }
+            $receipt = $r;
+        }
+        if ($receipt === null) throw new CommonException('ERP 未响应，请刷新核对原单，勿重复入库或付款');
+        return $receipt;
     }
 
     /**

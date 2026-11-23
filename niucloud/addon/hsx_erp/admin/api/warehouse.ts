@@ -4,6 +4,11 @@ export function getErpWarehouseList() {
     return request.get('erp/warehouse/lists')
 }
 
+// Only the maintenance page needs the creation policy; keep list consumers on their array contract.
+export function getErpWarehouseManagement() {
+    return request.get('erp/warehouse/lists', { params: { with_policy: 1 } })
+}
+
 export function getErpWarehouseOptions() {
     return request.get('erp/warehouse/options')
 }

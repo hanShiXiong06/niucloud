@@ -141,9 +141,9 @@ export function getMerchantPayInfo(memberId: number) {
 }
 
 // 按订单查询付款归属；不传订单时供资金账户候选等既有页面使用。
-export function getCapitalAccountOptions(orderId?: number | string, deviceIds?: Array<number | string>) {
+export function getCapitalAccountOptions(orderId?: number | string, deviceIds?: Array<number | string>, scopeOnly = false) {
   return request.get("/recycle/recycle_order/capital_accounts", {
-    params: { ...(orderId ? { order_id: orderId } : {}), ...(deviceIds ? { device_ids: deviceIds } : {}) },
+    params: { ...(orderId ? { order_id: orderId } : {}), ...(deviceIds ? { device_ids: deviceIds } : {}), ...(scopeOnly ? { scope_only: 1 } : {}) },
   });
 }
 

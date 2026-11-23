@@ -1,0 +1,11 @@
+{
+  "key": "hsx_erp_integration",
+  "title": "外部ERP集成框架",
+  "desc": "自有 ERP 原单对接与回执中心，首版提供博远人工对接；其他厂商可按适配器接口扩展。",
+  "version": "1.0.0",
+  "author": "HSX",
+  "type": "addon",
+  "support_app": "",
+  "compile": [],
+  "support_version": "1.2.4"
+}

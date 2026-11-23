@@ -1,0 +1,14661 @@
+目录
+博远开放平台API开发文档	III
+Boyuan(Chengmai) Technologies Co., Ltd.	III
+博远（澄迈）科技有限公司	III
+All rights reserved	III
+版权所有  侵权必究	III
+（V1.1.6 / 供合作方使用）	III
+修订记录	9
+1	引言	12
+1.1	文档概述	12
+1.2	业务术语	12
+2	交互模式	12
+2.1	请求/响应交互模式	12
+2.2	主动通知交互模式	13
+2.2.1	通知验证	13
+3	安全规范	13
+3.1	数字签名	13
+3.1.1	签名机制	13
+3.1.2	签名方式	14
+3.1.3	签名代码	14
+4	接口	15
+4.1	接口公共参数	16
+4.1.1	请求公共参数	16
+4.1.2	响应公共参数	16
+4.2	外部接入接口	17
+4.2.1	boyuan.companys.get（获取公司信息接口）	17
+4.2.2	boyuan.users.get（获取用户信息接口）	21
+4.2.3	boyuan.categorys.get（获取分类信息接口）	26
+4.2.4	boyuan.brands.get（获取品牌信息接口）	28
+4.2.5	boyuan.products.get（获取商品信息接口）	30
+4.2.6	boyuan.warehouses.get（获取仓库信息接口）	35
+4.2.7	boyuan.custsuppliers.get（获取往来单位信息接口）	38
+4.2.8	boyuan.biz.purchases.query（查询采购信息接口）	43
+4.2.9	boyuan.biz.purchase.imeidetails.query（查询入库串号明细接口）	49
+4.2.10	boyuan.biz.retails.query（查询零售信息接口）	53
+4.2.11	boyuan.biz.retail.cashdetails.query（查询零售收银明细信息接口）	62
+4.2.12	boyuan.biz.sales.query（查询批发信息信息接口）	66
+4.2.13	boyuan.cashinfos.get（获取收银类型信息接口）	72
+4.2.14	零售创建	75
+4.2.15	boyuan.biz.bill.retail.order.generate（生成零售订单接口）	91
+4.2.16	boyuan.biz.bill.retail.order.cancel（取消零售订单接口）	100
+4.2.17	boyuan.biz.bill.retail.order.return（退货接口）	101
+4.2.18	boyuan. mbpack.get（套餐查询接口）	102
+4.2.19	boyuan. stage.get（分期查询接口）	105
+4.2.20	boyuan. assurance.get（保障服务查询接口）	106
+4.2.21	boyuan.account.get(账户信息查询接口)	108
+4.2.22	boyuan.storecash.get(门店收银设置查询)	108
+4.2.23	boyuan.storecashAccount.get(门店收银账户设置查询)	109
+4.2.24	boyuan.virtualproduct.get（虚拟信息查询接口）	110
+4.2.25	boyuan.dictionaryType.get辅助类型查询接口	114
+4.2.26	boyuan.dictionary.get  辅助信息条件查询接口	116
+4.2.27	boyuan.biz.reportretails.query（零售单头部数据查询接口）	119
+4.2.60 采购单创建	123
+4.2.60.1 boyuan.biz.bill.purchase.generate（采购入库创建）	123
+4.2.60.2 boyuan.biz.bill. purchaseReturn.generate（采购退货创建）	125
+4.2.61 批发单创建	127
+4.2.61.1 boyuan.biz.bill.sale.generate（快速批发创建）	127
+4.2.61.2 boyuan.biz.bill.saleReturn.generate（批发退货创建）	130
+4.2.62 boyuan.biz.bill.payment.generate（生成付款单接口）	133
+4.2.64 boyuan.biz.bill.otherOut.generate（生成其他支出单接口）          接入方式：POST请求业务参数（以JSON串方式放入请求公共参数的biz字段）	137
+说明：	137
+响应业务参数说明：	139
+外部通知接口	139
+4.2.28	服务器异步通知接口	139
+5	通用结构	142
+5.1	零售单（Retail）结构	142
+5.2	零售订单（RetailOrder）结构	149
+5.3零售定金（DownPayment）结构	155
+5.4零售发票（InvoiceApply）结构	157
+5.5旧机回收（Recycle）结构	159
+5.6旧机回收/旧机退货订单（RecycleOrder）结构	161
+5.7采购入库（Purchase）结构	164
+5.8快速批发（Sale）结构	166
+5.9付款单（Payment）结构	169
+5.10收款单（Receipt）结构	171
+5.11其他支出单（OtherOut）结构	173
+6	附录	174
+6.1	结果码枚举表	174
+6.2	支付方式枚举表	175
+6.3	支付渠道枚举表	175
+6.4	交易状态枚举表	176
+6.5	退款状态枚举表	176
+
+
+
+
+
+
+
+
+
+
+博远开放平台API开发文档
+
+
+
+
+Boyuan(Chengmai) Technologies Co., Ltd. 
+博远（澄迈）科技有限公司
+All rights reserved
+版权所有  侵权必究
+
+（V1.1.6 / for use by partners）
+（V1.1.6 / 供合作方使用）
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+目录
+博远开放平台API开发文档	IV
+Boyuan(Chengmai) Technologies Co., Ltd.	IV
+博远（澄迈）科技有限公司	IV
+All rights reserved	IV
+版权所有  侵权必究	IV
+（V1.1.6 / 供合作方使用）	IV
+修订记录	9
+1	引言	12
+1.1	文档概述	12
+1.2	业务术语	12
+2	交互模式	12
+2.1	请求/响应交互模式	12
+2.2	主动通知交互模式	12
+2.2.1	通知验证	13
+3	安全规范	13
+3.1	数字签名	13
+3.1.1	签名机制	13
+3.1.2	签名方式	14
+3.1.3	签名代码	14
+4	接口	15
+4.1	接口公共参数	16
+4.1.1	请求公共参数	16
+4.1.2	响应公共参数	16
+4.2	外部接入接口	17
+4.2.1	boyuan.companys.get（获取公司信息接口）	17
+4.2.2	boyuan.users.get（获取用户信息接口）	21
+4.2.3	boyuan.categorys.get（获取分类信息接口）	26
+4.2.4	boyuan.brands.get（获取品牌信息接口）	28
+4.2.5	boyuan.products.get（获取商品信息接口）	30
+4.2.6	boyuan.warehouses.get（获取仓库信息接口）	35
+4.2.7	boyuan.custsuppliers.get（获取往来单位信息接口）	38
+4.2.8	boyuan.members.get（获取会员信息接口）	43
+4.2.9	boyuan.biz.purchases.query（查询采购信息接口）	48
+4.2.10	boyuan.biz.purchase.imeidetails.query（查询入库串号明细接口）	54
+4.2.11	boyuan.biz.retails.query（查询零售信息接口）	59
+4.2.12	boyuan.biz.retail.cashdetails.query（查询零售收银明细信息接口）	67
+4.2.13	boyuan.biz.sales.query（查询批发信息信息接口）	71
+4.2.14	boyuan.biz.otherouts.query（查询其他出库信息接口）	77
+4.2.15	boyuan.biz.retail.summaries.query（查询财务销售信息接口）	82
+4.2.16	boyuan.biz.allocs.query（查询移库信息接口）	83
+4.2.17	boyuan.biz.alloc.imeidetails.query（查询移库串号明细接口）	89
+4.2.18	boyuan.biz.inventories.query（查询库存信息接口）	94
+4.2.19	boyuan.biz.inventory.imeidetails.query（查询库存串号明细接口）	97
+4.2.20	boyuan.biz.bill.query（查询单据信息接口）	101
+4.2.21	boyuan.biz.member.points.query（查询会员积分明细接口）	105
+4.2.22	boyuan.biz.member.consume.query（查询会员消费明细接口）	108
+4.2.23	boyuan.cashinfos.get（获取收银类型信息接口）	113
+4.2.24	零售创建	116
+4.2.24.1  boyuan.biz.bill.retail.generate（生成零售单接口）	116
+4.2.24.2  boyuan.biz.bill.retailReturn.generate（生成零售退货接口）	125
+4.2.25	boyuan.biz.bill.retail.order.generate（生成零售订单接口）	132
+4.2.26	boyuan.biz.bill.retail.order.cancel（取消零售订单接口）	141
+4.2.27	boyuan.biz.bill.retail.order.return（退货接口）	141
+4.2.28	boyuan.trade.unified.pay（统一支付接口）	143
+4.2.29	boyuan.trade.unified.reverse（统一撤销订单接口）	146
+4.2.30	boyuan.trade.unified.refund（统一退款接口）	147
+4.2.31	boyuan.trade.unified.pay.query（统一支付查询接口）	149
+4.2.32	boyuan.trade.unified.reverse.query（统一撤销订单查询接口）	153
+4.2.33	boyuan.trade.unified.refund.query（统一退款查询接口）	155
+4.2.34	boyuan.trade.unified.merchant.auth.query（统一商户签约查询接口）	157
+4.2.35	boyuan. mbpack.get（套餐查询接口）	159
+4.2.36	boyuan. stage.get（分期查询接口）	161
+4.2.37	boyuan. assurance.get（保障服务查询接口）	163
+4.2.38	boyuan.account.get(账户信息查询接口)	164
+4.2.39	boyuan.storecash.get(门店收银设置查询)	165
+4.2.40	boyuan.storecashAccount.get(门店收银账户设置查询)	165
+4.2.41	boyuan.virtualproduct.get（虚拟信息查询接口）	166
+4.2.42	boyuan.dictionaryType.get辅助类型查询接口	170
+4.2.43	boyuan.dictionary.get  辅助信息条件查询接口	172
+4.2.44	boyuan.biz.reportretails.query（零售单头部数据查询接口）	175
+4.2.50 库存管理	179
+4.2.50.1  boyuan.purchase.purchaseReq.saveBill（门店要货）	179
+4.2.50.2  boyuan.alloc.allocOutBill.saveBill（移出库）	189
+4.2.50.3  boyuan.alloc.allocInBill.saveBill（移入库）	199
+4.2.51储值卡	209
+4.2.51.1  boyuan.comsumptionCard.check（储值卡校验）	209
+4.2.51.2  boyuan.comsumptionCardBalance.query（储值卡余额查询）	211
+4.2.51.3  boyuan.comsumptionCardConDetail.query（储值卡消费明细）	214
+4.2.52 铺货反馈	216
+4.2.51.1  boyuan.distributionFeedbackDetail.query（铺货反馈明细查询）	216
+4.2.53 零售定金	220
+4.2.53.1  boyuan.downpayment.available.query（可用零售定金列表）	220
+4.2.53.2  boyuan.downpayment.create（零售定金单创建）	221
+4.2.53.3  boyuan.downpayment.return.simplecreate（零售退定金创建）	223
+4.2.54 会员画像	223
+4.2.54.1  boyuan.member.consumeinterest.query（会员消费偏好查询）	224
+4.2.55 零售发票	224
+4.2.54.1  boyuan.retail.invoice.query（零售发票查询）	224
+4.2.56 用户权限	225
+4.2.56.1  boyuan.security.user.menu.query（用户菜单权限查询）	225
+4.2.57 数据中心	225
+4.2.57.1  boyuan.datacenter.report.export（报表导出操作）	225
+4.2.58 旧机回收	226
+4.2.58.1  boyuan.recycle.returnorder.create（旧机退货订单创建）	226
+4.2.58.2  boyuan.recycle.create（旧机回收创建）	227
+4.2.58.3  boyuan.recycle.return.check（旧机退货校验）	229
+4.2.58.4  boyuan.recycle.return.order.create（旧机退货订单创建）	229
+4.2.58.5  boyuan.recycle.return.order.simplecreate（旧机退货订单创建）	231
+4.2.59青果关闭	232
+4.2.59.1 boyuan.param.qguo.close（青果关闭同步）	232
+4.2.59.2 boyuan.member.qguo.synPoint（青果会员积分同步）	232
+4.2.45	boyuan.biz.bill.retail.order.updateSales(更新订单店员2)	232
+4.2.60 采购单创建	233
+4.2.60.1 boyuan.biz.bill.purchase.generate（采购入库创建）	233
+4.2.60.2 boyuan.biz.bill. purchaseReturn.generate（采购退货创建）	235
+4.2.61 批发单创建	237
+4.2.61.1 boyuan.biz.bill.sale.generate（快速批发创建）	237
+4.2.61.2 boyuan.biz.bill.saleReturn.generate（批发退货创建）	240
+4.2.62 boyuan.biz.bill.payment.generate（生成付款单接口）	243
+4.2.64 boyuan.biz.bill.otherOut.generate（生成其他支出单接口）          接入方式：POST请求业务参数（以JSON串方式放入请求公共参数的biz字段）	248
+说明：	248
+响应业务参数说明：	249
+外部通知接口	249
+4.2.46	服务器异步通知接口	249
+5	通用结构	253
+5.1	零售单（Retail）结构	253
+5.2	零售订单（RetailOrder）结构	259
+5.3零售定金（DownPayment）结构	265
+5.4零售发票（InvoiceApply）结构	267
+5.5旧机回收（Recycle）结构	269
+5.6旧机回收/旧机退货订单（RecycleOrder）结构	272
+5.7采购入库（Purchase）结构	274
+5.8快速批发（Sale）结构	276
+5.9付款单（Payment）结构	279
+5.10收款单（Receipt）结构	281
+5.11其他支出单（OtherOut）结构	283
+6	附录	285
+6.1	结果码枚举表	285
+6.2	支付方式枚举表	285
+6.3	支付渠道枚举表	286
+6.4	交易状态枚举表	286
+6.5	退款状态枚举表	286
+
+
+
+修订记录
+版本号
+修订人
+修订日期
+修订章节
+修订描述
+1.0.0
+沈锋
+2019/3/21
+
+初稿
+1.0.1
+沈锋
+2019/3/29
+
+修改响应参数结构
+增加查询移库串号明细接口
+增加查询库存信息接口
+增加查询库存串号明细接口
+1.0.2
+沈锋
+2019/3/30
+
+修改查询零售信息接口，去掉order_num/product_full_category_name字段
+增加4.2.13 查询批发信息接口
+增加4.2.14 查询其他出库信息接口
+1.0.3
+沈锋
+2019/4/02
+
+修改获取商品信息接口：增加创建日期起止/修改日期起止查询条件
+修改获取会员信息接口：增加创建日期起止/修改日期起止查询条件
+1.0.3
+沈锋
+2019/4/08
+
+修改获取商品信息接口：日期字段描述错误修改
+修改获取会员信息接口：日期字段描述错误修改
+1.0.3
+沈锋
+2019/4/15
+
+修改获取会员信息接口：注册日期非必填 
+
+1.0.4
+沈锋
+2019/5/6
+
+修改查询库存信息接口新增商品分类编码及显示库存为0两个查询条件
+查询库存串号明细接口新增商品分类编码查询条件
+1.0.5
+沈锋
+2019/5/7
+
+	•	新增统一支付相关接口
+	•	增加主动通知交互模式
+1.0.5
+沈锋
+2019/6/6
+
+完善统一支付相关接口
+1.0.5
+沈锋
+2019/6/17
+
+修改查询库存串号明细接口：新增在库状态字段
+1.0.6
+沈锋
+2019/6/18
+
+新增服务器异步通知接口
+1.0.7
+沈锋
+2019/7/24
+
+新增单据查询接口
+1.0.7
+沈锋
+2019/7/25
+
+单据查询新增公司代码查询条件
+1.0.8
+沈锋
+2019/8/13
+
+	•	修改ERP数据接口：统一增加big_gsdm查询条件，用于非ERP平台合作方调用（如新零售平台）
+	•	增加查询会员积分明细接口
+	•	增加查询会员消费信息接口
+1.0.8
+沈锋
+2019/8/15
+
+	•	请求公共参数POST模式下新增业务参数字段
+	•	新增获取门店收银方式列表接口
+	•	新增生成零售单接口
+1.0.9
+沈锋
+2019/11/18
+
+	•	新增生成零售订单接口
+1.0.9
+沈锋
+2019/11/20
+
+	•	生成零售订单接口仓库ID允许为空
+	•	增加测试环境接入URL地址
+1.1.0
+沈锋
+2019/11/22
+
+	•	修改生成零售订单接口：增加三方订单号
+	•	新增取消订单接口
+	•	新增退货接口
+	•	接口中帐套代码字段big_gsdm移到请求公共参数中
+1.1.0
+沈锋
+2019/11/25
+
+1、修改生成零售订单接口：增加单据总金额/已支付金额/未支付金额/优惠金额
+1.1.0
+沈锋
+2019/12/16
+
+	•	修改生成零售订单接口：增加门店代码字段，门店代码门店ID不能同时为空
+	•	修改生成零售订单接口：店员1ID可空
+1.1.1
+沈锋
+2019/12/31
+
+1、查询会员消费明细信息接口增加公司代码字段
+1.1.2
+沈锋
+2020/2/14
+
+1、新增统一商户签约查询接口
+1.1.3
+沈锋
+2020/2/24
+
+	•	修改生成零售订单接口：优惠明细列表增加折扣类型
+	•	修改生成零售订单接口：增加快递费字段，记录线上订单产生的快递费用
+	•	修改支付接口服务器异步通知接口：增加第三方支付平台交易号/第三方退款流水号
+1.1.3
+沈锋
+2020/3/2
+
+1、修改生成零售订单接口：订单类型增加3-门店配送类型
+1.1.3
+沈锋
+2020/3/24
+
+1、修改获取会员信息接口，响应消息增加公司代码字段
+1.1.4
+沈锋
+2020/5/6
+
+1、修改退货接口，增加商品详情列表，支持部分退货
+1.1.5
+沈锋
+2020/5/20
+
+1、修改获取商品信息接口，增加模糊匹配查询条件
+1.1.5
+沈锋
+2020/6/10
+
+1、修改退货接口，增加响应消息
+1.1.6
+沈锋
+2020/6/17
+
+	•	修改获取商品信息接口，增加品牌模糊、型号模糊、助记码模糊、商品全称模糊条件
+	•	修改生成零售订单接口，增加支付状态字段
+1.1.7
+王得志
+2020/7/23
+
+	•	获取商品信息接口添加了商品ID
+	•	查询库存信息接口添加分组类型
+	•	查询库存信息接口响应报文添加公司代码、公司名称
+1.1.8
+王得志
+2020/8/12
+
+新开通青果功能的公司账套同步会员历史消费信息时需要虚拟类的消费信息，套餐、分期、保障服务
+1.1.9
+王得志
+2020/8/14
+
+修改4.2.24生成零售单接口，添加套餐、分期、保障列表信息
+新增4.2.35 套餐查询接口
+新增4.2.36 分期查询接口
+新增4.2.37 保障服务查询接口
+1.1.10
+王得志
+2020/9/10
+
+4.2.24接口添加账户id (account_id)
+新增4.2.38 账户信息查询接口信息
+新增4.2.39 门店收银设置查询接口信息
+新增4.2.40 门店收银账户设置查询接口信息
+1.1.10
+夏效兵
+2020/9/17
+
+4.2.35至4.2.40接口中请求字段有变化
+1.1.10
+夏效兵
+2020/9/25
+
+4.2.24接口请求增加创建人id和修改人id
+1.1.10
+廖健健
+2020/10/27
+
+1：虚拟商品查询接口
+2:辅助类型接口
+3:辅助信息查询接口
+1.1.11
+夏效兵
+2021/03/01
+
+1、12号接口返回增加id和seqNo
+2、25号接口请求增加收银明细
+3、17号接口请求增加移出单创建时间和修改时间范围
+1.2
+夏效兵
+2021/10/15
+
+1、4.2.2接口请求增加id，返回增加电话号码。
+2、增加4.2.53零售定金相关接口
+3、增加4.2.54会员画像相关接口
+4、增加4.2.55零售发票相关接口
+1.3
+夏效兵
+2021/11/02
+
+	•	增加4.2.56用户权限相关接口
+	•	增加4.2.57数据中心相关接口
+	•	增加4.2.58旧机回收相关接口
+1.4
+夏效兵
+2021/11/17
+
+	•	增加了4.2.58.4旧机退货订单创建接口
+	•	增加了4.2.58.5根据原旧机回收单号旧机退货订单创建接口
+1.5
+夏效兵
+2021/11/30
+
+	•	增加了4.2.53.3根据原零售定金单号创建零售退定金
+	•	4.2.53.1可用定金查询接口增加了单据号条件
+1.5.1
+夏效兵
+2021/12/21
+
+4.2.3获取分类信息接口增加分类id和分类层级条件
+1.5.2
+夏效兵
+2022/1/17
+
+4.2.24生成零售单接口 请求参数增加 所属公司代码、零售订单号
+1.5.3
+夏效兵
+2022/12/5
+
+增加4.2.59青果关闭
+1.5.4
+吴子凡
+2026/11/13
+
+增加4.2.24.2 生成零售退货接口
+增加4.2.60.1 生成采购入库接口
+增加4.2.60.2 生成采购退货接口
+增加4.2.61.1 生成快速批发接口
+增加4.2.61.2 生成批发退货接口
+增加4.2.62 生成付款单接口
+增加4.2.63 生成收款单接口
+增加4.2.64 生成其他支出接口
+
+
+	•	引言
+	•	文档概述
+博远开放平台对外接口分为两种，一种是接收外部请求的接口，我们统称为外部接入接口。一种是主动通知外部系统的接口，我们统称为外部通知接口。
+外部服务接口主要目的是让外部合作伙伴主动使用我们的服务，如：获取基础数据（公司、仓库等）、获取采购、零售、财务销售信息等。外部通知接口的主要目的是为外部合作伙伴提供数据同步服务以及异步处理结果返回服务。
+阅读对象：购买博远ERP系统的客户方技术开发人员。
+	•	业务术语
+名称
+说明
+博远开放平台合作应用ID（AppID）
+客户与博远合作后在博远开放平台产生的应用 ID。
+签约后博远提供给合作客户
+博远数据开放平台合作密钥（AppSecret）
+客户与博远合作后在博远开放平台产生 32 位密钥。
+
+接口名称
+是博远开放开放平台针对一些外部接口业务的名字。（service）
+	•	
+	•	
+	•	
+	•	交互模式
+请求/响应交互模式
+ 请求/响应模式是最常用的一种交互模式。在这种交互模式下，客户系统向博远开放平台发送请求数据，并同步等待博远开放平台处理完毕后返回的响应数据。
+	 接入URL：
+https://open-api.139erp.com/api/gateway.do
+主动通知交互模式
+买家从合作伙伴网站或者收银台跳转到博远开放品台，博远开放平台调用三方支付接口完成支付或者跳转到三方支付页面完成最后操作后，博远开放平台会将合作伙伴关注的事件采用主动通知的方式提交给合作伙伴系统。
+这种交互模式如果需要异步返回结果，必须传递 notify_url 参数，以指定通知返回的地址；如果不需要异步返回结果，那可以不用传递 notify_url 参数。
+例如，通过合作伙伴系统创建交易，当交易状态（参见附录：交易状态枚举表）发生改变时，博远开放品台将最新的交易状态以及其它交易有关的信息主动通知给合作伙伴系统，达到使双方的系统业务联动的目的。
+
+	•	通知验证
+从系统健康性角度考虑，在接收到博远开放平台通知以后，验证博远开放平台通知的正确性（合法性）是非常有必要的。强烈建议合作伙伴系统加入此应用。为了保证该接口被合法利用，合作伙伴系统只能查找 1 分钟之内（目前为 1 分钟，以后若有调整，恕不另行通知）的通知。
+	程序在使用时按照以下要求发起一个 HTTPS 请求，获取该请求的结果即可，所有可能出现的结果见以下的输出参数表。
+	接入URL：
+https://open-api.139erp.com/gateway.do
+	一个完整的验证请求实例：
+https://open-api.139erp.com/gateway.do? service=boyuan.notify.verify&app_id=1234567890&notify_id=abcdefghijklmnopqrst
+	通知验证接口输出参数：
+输出内容
+说明
+invalid
+传入的参数无效
+true
+验证通过
+false
+验证失败
+
+
+	•	安全规范
+数字签名
+数据传输过程中的数据真实性和完整性，我们需要对数据迚行数字签名，在接收签名数据之后进行签名校验。
+	•	签名机制
+待签名数据是请求参数按照以下方式组装成的字符串：
+ 请求参数按照参数名字符升序排列，如果有重复参数名，那么重复的参数再按照参数值的字符升序排列。
+所有参数（除了 sign 和 sign_type）按照上面的排序用&连接起来，格式是：p1=v1&p2=v2。
+如调用某接口需要以下参数： service=boyuan.companys.get,app_id=20880063000,email=test@msn.com 那么待签名数据就是： app_id=20880063000&email=test@msn.com&service=boyuan.company.get
+注意事项：
+没有值的参数无需传递，也无需包含到待签名数据中。 签名时将字符转化成字节流时指定的字符集与_input_charset 保持一致。
+如果传递了_input_charset 参数， 这个参数也应该包含在待签名数据中。 根据 HTTP 协议要求，传递参数的值中如果存在特殊字符（如： &、 @等），那么该值需要做 URL Encoding，这样请求接收方才能接收到正确的参数值。这种情况下，待签名数据应该是原生值而不是 encoding 之后的值。 例如：调用某接口需要对请求参 数 email 进行数字签名，那么待签名数据应该是： email=test@msn.com， 而不是 email=test%40msn.com。
+	•	签名方式
+按照 sign_type 参数指定的签名算法对待签名数据进行签名。（博远开放平台暂时仅支持MD5加密： sign = MD5（待签名数据字符串+ AppSecret））。
+	•	签名代码
+import java.io.UnsupportedEncodingException;
+import java.security.SignatureException;
+import org.apache.commons.codec.digest.DigestUtils;
+public class MD5 {
+    /**
+     * 签名字符串
+     * @param text 需要签名的字符串
+     * @param key 密钥
+     * @param input_charset 编码格式
+     * @return 签名结果
+     */
+    public static String sign(String text, String key, String input_charset) {
+    	text = text + key;
+        return DigestUtils.md5Hex(getContentBytes(text, input_charset));
+    }
+    /**
+     * 签名字符串
+     * @param text 需要签名的字符串
+     * @param sign 签名结果
+     * @param key 密钥
+     * @param input_charset 编码格式
+     * @return 签名结果
+     */
+    public static boolean verify(String text, String sign, String key, String input_charset) {
+    	text = text + key;
+    	String mysign = DigestUtils.md5Hex(getContentBytes(text, input_charset));
+    	if(mysign.equals(sign)) {
+    		return true;
+    	}
+    	else {
+    		return false;
+    	}
+    }
+    /**
+     * @param content
+     * @param charset
+     * @return
+     * @throws SignatureException
+     * @throws UnsupportedEncodingException 
+     */
+    private static byte[] getContentBytes(String content, String charset) {
+        if (charset == null || "".equals(charset)) {
+            return content.getBytes();
+        }
+        try {
+            return content.getBytes(charset);
+        } catch (UnsupportedEncodingException e) {
+            throw new RuntimeException("MD5签名过程中出现错误,指定的编码集不对,您目前指定的编码集是:" + charset);
+        }
+    }
+}
+	•	接口
+测试环境接入URL：
+http://to2o.139erp.com/openapi/gateway.do
+
+ 沙箱环境接入URL：
+https://uat-open-api.139erp.com/api/gateway.do
+
+ 正式环境接入URL：
+https://open-api.139erp.com/api/gateway.do
+
+ 接口公共参数
+	•	请求公共参数
+调用任何一个API都必须传入的参数，目前支持的请求公共参数有：
+
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+service
+接口名称
+String(128)
+接口名称
+不可空
+boyuan.companys.get
+app_id
+应用ID
+String(32)
+应用ID
+不可空
+2014072300007148
+timestamp
+时间戳
+String(32)
+发送请求的时间，格式“yyyy-MM-dd HH:mm:ss”
+不可空
+2015-10-14 13:07:50
+version
+接口版本号
+String(10)
+调用的接口版本，目前为：1.0
+不可空
+1.0
+_input_charset
+参数字符编码
+String(10)
+请求使用的编码格式，如utf-8,gbk,gb2312等，目前仅支持utf-8
+可空，默认为utf-8
+utf-8
+sign_type
+签名类型
+String(10)
+客户系统生成签名字符串所使用的签名算法类型，目前支持MD5
+不可空
+MD5
+sign
+签名
+String(256)
+客户系统请求参数的签名串，相见：数字签名
+不可空
+
+big_gsdm
+帐套代码
+String(32)
+新零售平台请求时必填
+可空
+80001
+biz
+业务参数
+String(1024)
+仅支持POST类型接口的业务JSON串
+可空
+{“head”:“companyId”:“1”}
+	•	响应公共参数
+响应消息无特殊说明时，均以json格式返回，调用任何一个API都会响应如下参数，目前支持的响应公共参数有：
+
+参数
+参数名称
+父节点
+类型（字节长度）
+参数说明
+是否可为空
+样例
+return_code
+结果码
+
+String(32)
+结果码，详见：结果码枚举表
+不可空
+SUCCESS 
+return_msg
+结果描述
+
+String(256)
+结果描述
+可空
+成功
+api_response
+响应业务参数
+
+Object
+见各API业务响应参数，当且仅当return_code为SUCCESS时才有效
+可空
+
+total_results
+结果总数
+api_response
+Number
+分页情况返回
+可空
+
+result_list
+结果列表
+api_response
+Object[]
+Object见各接口描述，分页情况返回
+可空
+
+result
+结果对象
+api_response
+Object
+Object见各接口描述，非分页情况返回
+可空
+
+
+外部接入接口
+接口参数仅包含业务参数，请求公共参数在每个API中都需要存在。
+	•	boyuan.companys.get（获取公司信息接口）
+
+接入方式：GET/POST
+
+请求业务参数说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+gsdm
+公司代码
+String(32)
+公司代码，默认为公共参数中的公司帐套代码
+可空
+80001
+contain_sub
+是否包含下级
+Number
+0-不包含
+1-包含
+默认包含
+可空
+1
+is_store
+是否门店
+Number
+0-否
+1-是
+默认全部
+可空
+1
+is_online
+是否线上
+Number
+0-否
+1-是
+默认全部
+可空
+1
+is_effective
+是否启用
+Number
+0-否
+1-是
+默认全部
+可空
+1
+page_no
+页码
+Number
+传入值为1代表第一页，传入值为2代表第二页，依此类推。默认返回的数据是从第一页开始，即默认1
+可空
+1
+page_size
+每页条数
+Number
+每页返回最多返回1000条，默认值为100
+可空
+100
+响应业务参数说明：
+result_list为公司列表，详见公司（Company）信息。
+
+公司（Company）信息：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+id
+公司ID
+String(36)
+主键ID
+不可空
+1c85734c-4171-4a35-9e0d-eeae2477c4ce
+gsdm
+公司代码
+String(32)
+
+不可空
+80001
+name
+公司名称
+String(256)
+
+不可空
+总公司全称
+short_name
+公司简称
+String(128)
+
+不可空
+总公司简称
+spell_code
+拼音码
+String(256)
+
+可空
+公司全称拼音码
+company_type_id
+公司类型ID
+String(36)
+
+可空
+2235734c-4171-4a35-9e0d-eeae23423445
+company_type_name
+公司类型名称
+String(128)
+
+可空
+类型名称
+parent_id
+上级公司ID
+String(36)
+最上级公司parent_id为0
+不可空
+0
+parent_gsdm
+上级公司代码
+String(32)
+
+可空
+
+parent_name
+上级公司名称
+String(256)
+
+可空
+
+is_store
+是否门店
+Number
+0-否
+1-是
+默认否
+不可空
+0
+is_online
+是否线上
+Number
+0-否
+1-是
+null-否
+默认否
+可空
+0
+is_effective
+是否启用
+Number
+0-否
+1-是
+非空
+1
+acct_company_id
+核算公司ID
+String(36)
+
+不可空
+751cf063-14d9-4a9a-8448-60259f6d240a
+acct_company_name
+核算公司名称
+String(256)
+
+不可空
+总公司核算公司名称
+province_code
+省份编码
+String(20)
+
+不可空
+33
+province_name
+省份名称
+String(32)
+
+不可空
+浙江省
+city_code
+市编码
+String(20)
+
+不可空
+01
+city_name
+市名称
+String(32)
+
+不可空
+杭州市
+area_code
+区县编码
+String(20)
+
+不可空
+06
+area_name
+区县名称
+String(32)
+
+不可空
+西湖区
+address
+详细地址
+String(256)
+
+可空
+西湖国际科技大厦
+manager
+负责人
+String(64)
+
+可空
+负责人姓名
+contact_phone
+联系电话
+String(64)
+
+可空
+13888888888
+create_time
+创建时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+不可空
+2019-03-20 11:00:00
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+remark
+备注
+String(256)
+
+可空
+公司备注
+请求样例：
+service=boyuan.companys.get
+app_id=2014072300007148
+_input_charset=utf-8
+sign_type=MD5
+sign=85bf83f78d5cefb804bd805532fc688e
+timestamp=2019-03-20 13:42:50
+version=1.0
+is_effective=1
+page_no=1
+page_size=100
+响应样例：
+{
+    "return_code": "SUCCESS",
+"return_msg": "成功",
+"api_response": {
+    "total_results ": 50,
+        "result_list": 
+	    [
+		    {
+			    "id": "1c85734c-4171-4a35-9e0d-eeae2477c4ce",
+                "gsdm": "80001",
+                "name": "总公司全称",
+			    "short_name": "总公司简称",
+    "spell_code": "zgsqc",
+    "company_type_id": "2235734c-4171-4a35-9e0d-eeae23423445",
+    "company_type_name": "类型名称",
+    "parent_id": "0",
+    "parent_gsdm": null,
+    "parent_name": null,
+    "is_store": 0,
+    "is_online": 0,
+    "is_effective": 1,
+    "acct_company_id": "751cf063-14d9-4a9a-8448-60259f6d240a",
+    "acct_company_name": "总公司核算公司名称",
+                "province_code": "33",
+    "province_name": "浙江省",
+                "city_code": "01",
+    "city_name": "杭州市",
+                "area_code": "06",
+    "area_name": "西湖区",
+                "address": "西湖国际科技大厦",
+    "manager": "负责人姓名",
+    "contact_phone": "13888888888",
+    "create_time": "2019-03-20 11:00:00",
+    "modify_time": "2019-03-20 12:00:00",
+    "remark": "公司备注"
+		    },
+            {
+			    "id": "2283334c-4171-4a35-9e0d-eeae2477c422",
+                "gsdm": "8000101",
+                "name": "下级公司1全称",
+			    "short_name": "下级公司1简称",
+    "spell_code": "xjgs1qc",
+    "company_type_id": "2235734c-4171-4a35-9e0d-eeae23423445",
+    "company_type_name": "类型名称",
+    "parent_id": "1c85734c-4171-4a35-9e0d-eeae2477c4ce ",
+    "parent_gsdm": "80001",
+    "parent_name": "总公司全称",
+    "is_store": 0,
+    "is_online": 0,
+    "is_effective": 1,
+    "acct_company_id": "751cf063-14d9-4a9a-8448-60259f6d240a",
+    "acct_company_name": "总公司核算公司名称",
+                "province_code": "33",
+    "province_name": "浙江省",
+                "city_code": "01",
+    "city_name": "杭州市",
+                "area_code": "06",
+    "area_name": "西湖区",
+                "address": "西湖国际科技大厦",
+    "manager": "负责人姓名",
+    "contact_phone": "13888888888",
+    "create_time": "2019-03-20 11:00:00",
+    "modify_time": "2019-03-20 12:00:00",
+    "remark": "公司备注"
+		    }
+        ]
+}
+}
+	•	boyuan.users.get（获取用户信息接口）
+接入方式：GET/POST
+
+请求业务参数说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+id
+用户id
+String(36)
+
+
+2c85734c-4171-4a35-9e0d-eeae2477c4ce
+gsdm
+公司代码
+String(32)
+公司代码，默认为公共参数中的公司帐套代码
+可空
+80001
+contain_sub
+是否包含下级
+Number
+0-不包含
+1-包含
+默认包含
+可空
+1
+is_sales
+是否业务员
+Number
+0-否
+1-是
+默认全部
+可空
+
+is_buyer
+是否采购业务员
+Number
+0-否
+1-是
+默认全部
+可空
+
+is_engineer
+是否工程师
+Number
+0-否
+1-是
+默认全部
+可空
+
+is_effective
+是否启用
+Number
+0-否
+1-是
+默认全部
+可空
+
+is_wx_binded
+是否绑定微信
+Number
+0-否
+1-是
+默认全部
+可空
+
+wx_nickname
+微信昵称
+String(32)
+支持模糊查询
+可空
+
+page_no
+页码
+Number
+传入值为1代表第一页，传入值为2代表第二页，依此类推。默认返回的数据是从第一页开始，即默认1
+可空
+1
+page_size
+每页条数
+Number
+每页返回最多返回1000条，默认值为100
+可空
+100
+响应消息以json格式返回，响应业务参数说明：
+result_list为用户列表，详见用户（User）信息。
+
+用户（User）信息：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+id
+用户ID
+String(36)
+主键ID
+不可空
+2c85734c-4171-4a35-9e0d-eeae2477c4ce
+gsdm
+所属公司代码
+String(32)
+
+不可空
+8000101
+company_id
+所属公司ID
+String(32)
+
+不可空
+2283334c-4171-4a35-9e0d-eeae2477c422
+company_name
+所属公司名称
+String(256)
+
+不可空
+下级公司1全称
+login_name
+登录名
+String(64)
+
+不可空
+001
+real_name
+真实姓名
+String(64)
+
+不可空
+张三
+spell_code
+拼音码
+String(256)
+
+可空
+zs
+contact_phone
+手机号
+String(20)
+
+可空
+13888886666
+is_system
+是否系统
+Number
+0-否
+1-是
+可空，为空时代表否
+1
+is_sales
+是否业务员
+Number
+0-否
+1-是
+可空，为空时代表否
+0
+is_buyer
+是否采购业务员
+Number
+0-否
+1-是
+可空，为空时代表否
+0
+is_engineer
+是否售后工程师
+Number
+0-否
+1-是
+可空，为空时代表否
+0
+is_effective
+是否启用
+Number
+0-否
+1-是
+非空
+1
+role_ids
+所属岗位ID
+String(256)
+多个以英文逗号分隔
+可空
+
+role_names
+所属岗位名称
+String(256)
+多个以英文逗号分隔
+可空
+
+is_wx_binded
+是否已经绑定微信
+Number
+0-否
+1-是
+可空，为空时代表否
+1
+wx_id
+微信ID
+String(128)
+对应微信的unionid 
+可空
+oHTNV54PsOx7_xoMI7uC2SMaEBqM
+wx_nickname
+微信昵称
+String(128)
+
+可空
+Mercedes
+max_search_days
+最大查询天数
+Number
+为空或者0表示不限制查询天数
+可空
+30
+can_modify_other
+是否可修改他人单据
+Number
+0-否
+1-是
+可空，为空时代表否
+0
+can_show_supplier
+是否可以查看供应商
+Number
+0-否
+1-是
+可空，为空时代表否
+0
+can_show_pur_price
+是否可以查看采购价
+Number
+0-否
+1-是
+可空，为空时代表否
+0
+can_show_cost_price
+是否可以查看成本价
+Number
+0-否
+1-是
+可空，为空时代表否
+0
+can_show_cost_price
+是否可以查看成本价
+Number
+0-否
+1-是
+可空，为空时代表否
+0
+is_dayend_uncrolled
+是否不受日结控制
+Number
+0-否
+1-是
+为1代表即使单据日结了，该用户依然可以修改单据
+可空，为空时代表否
+0
+create_time
+创建时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+不可空
+2019-03-20 11:00:00
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+remark
+备注
+String(256)
+
+可空
+用户备注
+请求样例：
+service=boyuan.users.get
+app_id=2014072300007148
+_input_charset=utf-8
+sign_type=MD5
+sign=85bf83f78d5cefb804bd805532fc688e
+timestamp=2019-03-20 13:42:50
+version=1.0
+gsdm=8000101
+is_effective=1
+page_no=1
+page_size=100
+响应样例：
+{
+    "return_code": "SUCCESS",
+"return_msg": "成功",
+"api_response": {
+    "total_results": 50,
+        "result_list": 
+	    [
+		    {
+			    "id": "2c85734c-4171-4a35-9e0d-eeae2477c4ce",
+                "gsdm": "8000101",
+                "company_id": "2283334c-4171-4a35-9e0d-eeae2477c422",
+                "company_name": "下级公司1全称",
+                "login_name": "001",
+			    "real_name": "张三",
+    "spell_code": "zs", 
+    "is_system": 1,
+    "is_sales": 0,
+    "is_buyer": 0,
+    "is_engineer": 0,
+    "is_effective": 1,
+    "role_ids": "f19ce4ef-cb40-466c-9ce2-9d77bf95fdc2",
+    "role_names": "超级管理员",
+                "is_wx_binded": 1,
+    "wx_id": "oHTNV54PsOx7_xoMI7uC2SMaEBqM",
+    "wx_nickname": "Mercedes",
+    "max_search_days": 30,
+                "can_modify_other": 0,
+                "can_show_supplier": 0,
+    "can_show_pur_price": 0,
+                "can_show_cost_price": 0,
+    "is_dayend_uncrolled": 0,
+    "create_time": "2019-03-20 11:00:00",
+    "modify_time": "2019-03-20 12:00:00",
+    "remark": "用户备注"
+		    },
+            {
+			    "id": "3c85734c-4171-4a35-9e0d-eeae2477c4ce",
+                "gsdm": "8000101",
+                "company_id": "2283334c-4171-4a35-9e0d-eeae2477c422",
+                "company_name": "下级公司1全称",
+                "login_name": "002",
+			    "real_name": "李四",
+    "spell_code": "ls", 
+    "is_system": 0,
+    "is_sales": 0,
+    "is_buyer": 0,
+    "is_engineer": 0,
+    "is_effective": 1,
+    "role_ids": "f19ce4ef-cb40-466c-9ce2-9d77bf95fdc2",
+    "role_names": "超级管理员",
+                "is_wx_binded": 1,
+    "wx_id": "oHTNV54PsOx7_xoMI7uC2SMaEBqM",
+    "wx_nickname": "Mercedes",
+    "max_search_days": 30,
+                "can_modify_other": 0,
+                "can_show_supplier": 0,
+    "can_show_pur_price": 0,
+                "can_show_cost_price": 0,
+    "is_dayend_uncrolled": 0,
+    "create_time": "2019-03-20 11:00:00",
+    "modify_time": "2019-03-20 12:00:00",
+    "remark": "用户2备注"
+		    }
+        ]
+}
+}
+
+	•	boyuan.categorys.get（获取分类信息接口）
+接入方式：GET/POST
+
+请求业务参数说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+category_code
+分类编码
+String(32)
+
+可空
+01
+category_id
+分类id
+String(36)
+
+可空
+14fdb067-faf1-4f18-9799-b7102c16a0d4
+category_level
+分类层级
+int
+0所有，1只查一级分类，默认0
+可空，不传就是0
+0
+contain_sub
+是否包含下级
+Number
+0-不包含
+1-包含
+默认包含，
+可空
+1
+is_effective
+是否启用
+Number
+0-否
+1-是
+默认全部
+可空
+
+page_no
+页码
+Number
+传入值为1代表第一页，传入值为2代表第二页，依此类推。默认返回的数据是从第一页开始，即默认1
+可空
+1
+page_size
+每页条数
+Number
+每页返回最多返回1000条，默认值为100
+可空
+100
+响应业务参数说明：
+result_list为分类列表，详见分类（Category）信息。
+
+分类（Category）信息：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+id
+分类ID
+String(36)
+主键ID
+不可空
+a4fdb067-faf1-4d18-9799-b7102c16a0d4
+category_code
+分类编码
+String(32)
+
+不可空
+01
+name
+分类名称
+String(128)
+
+不可空
+手机
+parent_id
+上级分类ID
+String(36)
+最上级分类parent_id为0
+不可空
+0
+parent_category_code
+上级分类编码
+String(32)
+最上级分类时为空
+可空
+
+parent_name
+上级分类名称
+String(128)
+最上级分类时为空
+可空
+
+spell_code
+拼音码
+String(256)
+
+可空
+sj
+is_effective
+是否启用
+Number
+0-否
+1-是
+非空
+1
+create_time
+创建时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+不可空
+2019-03-20 11:00:00
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+remark
+备注
+String(256)
+
+可空
+分类备注
+请求样例：
+service=boyuan.categorys.get
+app_id=2014072300007148
+_input_charset=utf-8
+sign_type=MD5
+sign=85bf83f78d5cefb804bd805532fc688e
+timestamp=2019-03-20 13:42:50
+version=1.0
+is_effective=1
+page_no=1
+page_size=100
+响应样例：
+{
+    "return_code": "SUCCESS",
+"return_msg": "成功",
+"api_response": {
+    "total_results ": 50,
+        "result_list": 
+	    [
+		    {
+			    "id": "a4fdb067-faf1-4d18-9799-b7102c16a0d4",
+                "category_code": "01",
+                "name": "手机",
+                "parent_id": "0",
+                "parent_category_code": null,
+			    "parent_name": null,
+    "spell_code": "sj", 
+    "is_effective": 1,
+    "create_time": "2019-03-20 11:00:00",
+    "modify_time": "2019-03-20 12:00:00",
+    "remark": "分类1备注"
+		    },
+            {
+			    "id": "2c85734c-4171-4a35-9e0d-eeae2477c4ce",
+                "category_code": "0101",
+                "name": "手机-全网通",
+                "parent_id": "a4fdb067-faf1-4d18-9799-b7102c16a0d4",
+                "parent_category_code": "01",
+			    "parent_name": "手机",
+    "spell_code": "sj", 
+    "is_effective": 1,
+    "create_time": "2019-03-20 11:00:00",
+    "modify_time": "2019-03-20 12:00:00",
+    "remark": "分类2备注"
+		    }
+        ]
+}
+}
+
+	•	boyuan.brands.get（获取品牌信息接口）
+接入方式： GET/POST
+
+请求业务参数说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+is_effective
+是否启用
+Number
+0-否
+1-是
+默认全部
+可空
+
+page_no
+页码
+Number
+传入值为1代表第一页，传入值为2代表第二页，依此类推。默认返回的数据是从第一页开始，即默认1
+可空
+1
+page_size
+每页条数
+Number
+每页返回最多返回1000条，默认值为100
+可空
+100
+响应业务参数说明：
+result_list为品牌列表，详见品牌（Brand）信息。
+
+品牌（Brand）信息：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+id
+品牌ID
+String(36)
+主键ID
+不可空
+a4fdb067-faf1-4d18-9799-b7102c16a0d4
+name
+品牌名称
+String(128)
+
+不可空
+adidas
+spell_code
+拼音码
+String(256)
+
+可空
+adidas
+is_effective
+是否启用
+Number
+0-否
+1-是
+非空
+1
+create_time
+创建时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+不可空
+2019-03-20 11:00:00
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+remark
+备注
+String(256)
+
+可空
+品牌备注
+请求样例：
+service=boyuan.brands.get
+app_id=2014072300007148
+_input_charset=utf-8
+sign_type=MD5
+sign=85bf83f78d5cefb804bd805532fc688e
+timestamp=2019-03-20 13:42:50
+version=1.0
+is_effective=1
+page_no=1
+page_size=100
+响应样例：
+{
+    "return_code": "SUCCESS",
+"return_msg": "成功",
+"api_response": {
+    "total_results ": 50,
+        "result_list": 
+	    [
+		    {
+			    "id": "affd3379-dd9b-4351-a849-1d572df05788",
+                "name": "adidas",
+    "spell_code": "adidas", 
+    "is_effective": 1,
+    "create_time": "2019-03-20 11:00:00",
+    "modify_time": "2019-03-20 12:00:00",
+    "remark": "品牌1备注"
+		    },
+            {
+			    "id": "662c84e1-6dc2-4378-90c6-223cef317ec8",
+                "name": "alike",
+    "spell_code": "alike", 
+    "is_effective": 1,
+    "create_time": "2019-03-20 11:00:00",
+    "modify_time": "2019-03-20 12:00:00",
+    "remark": "品牌2备注"
+		    }
+        ]
+}
+}
+
+	•	boyuan.products.get（获取商品信息接口）
+接入方式：GET/POST
+
+请求业务参数说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+create_date_start
+创建时间起
+String(20)
+格式：yyyy-MM-dd，若为空，且create_date_end不为空，则默认create_date_end往前推7天（包含create_date_end）
+可空
+2019-03-15
+product_id
+商品ID
+String(64)
+
+可空
+
+create_date_end
+创建时间止
+String(20)
+格式：yyyy-MM-dd，若为空，且create_date_start不为空，则默认create_date_start往后推7天（包含create_date_start）
+可空
+2019-03-21
+modify_date_start
+修改时间起
+String(20)
+格式：yyyy-MM-dd，若为空，且modify_date_end不为空，则默认modify_date_end往前推7天（包含modify_date_end）
+可空
+2019-03-15
+modify_date_end
+修改时间止
+String(20)
+格式：yyyy-MM-dd，若为空，且modify_date_start不为空，则默认modify_date_start往后推7天（包含modify_date_start）
+可空
+2019-03-21
+category_code
+分类编码
+String(32)
+
+可空
+01
+contain_sub
+是否包含下级
+Number
+包含下级分类的商品
+0-不包含
+1-包含
+默认包含，
+可空
+1
+brand_id
+品牌ID
+String(36)
+
+可空
+ad687a86-433b-48d0-9533-b45e9e57e603
+product_name
+商品型号
+String(128)
+
+可空
+三星A1900
+imei_count
+串号模式
+Number
+0-无串号
+1-单串号
+2-双串号
+3-三串号
+可空
+
+is_support_quote_price
+是否支持报价
+Number
+0-不支持
+1-支持
+可空
+
+is_effective
+是否启用
+Number
+0-否
+1-是
+默认全部
+可空
+
+fuzzy_match
+模糊匹配
+String(128)
+全称/编码/拼音码/助记码/型号/品牌
+可空
+华为
+fuzzy_brand_name
+商品品牌模糊
+String(128)
+
+可空
+
+fuzzy_product_name
+商品型号模糊
+String(128)
+
+可空
+
+fuzzy_help_code
+商品助记码模糊
+String(128)
+
+可空
+
+fuzzy_product_full_name
+商品全称模糊
+String(128)
+
+可空
+
+page_no
+页码
+Number
+传入值为1代表第一页，传入值为2代表第二页，依此类推。默认返回的数据是从第一页开始，即默认1
+可空
+1
+page_size
+每页条数
+Number
+每页返回最多返回1000条，默认值为100
+可空
+100
+响应业务参数说明：
+result_list为商品列表，详见商品（Product）信息。
+
+商品（Product）信息：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+id
+商品ID
+String(36)
+主键ID
+不可空
+135eced4-faa2-464c-85a5-88f8ab79cadf
+help_code
+助记码
+String(128)
+
+可空
+csivvisk301xgpro2g16gqcbmgj
+code
+编码
+String(128)
+
+可空
+csivvisk301xgpro2g16gqcbmgj
+spell_code
+拼音码
+String(128)
+
+可空
+csivvisk301xgpro2g16gqcbmgj
+category_id
+分类ID
+String(36)
+
+不可空
+a4fdb067-faf1-4d18-9799-b7102c16a0d4
+category_code
+分类编码
+String(32)
+
+不可空
+01
+category_name
+分类名称
+String(128)
+
+不可空
+手机
+brand_id
+品牌ID
+String(36)
+
+不可空
+a4fdb067-faf1-4d18-9799-b7102c16a0d4
+brand_name
+品牌名称
+String(128)
+
+不可空
+adidas
+name
+商品型号
+Stirng(128)
+
+不可空
+测试ivvi-SK3-01小骨Pro
+memory
+内存
+Stirng(64)
+
+可空
+2G+16G
+version_type_id
+版本ID
+String(36)
+
+可空
+769012f5-7420-4340-b1bb-7d27a119d8ca
+version_type_name
+版本名称
+String(128)
+
+可空
+青春版
+color
+颜色
+String(64)
+
+可空
+玫瑰金
+full_name
+商品全称
+Stirng(128)
+
+不可空
+测试ivvi-SK3-01小骨Pro-(2G+16G)青春版玫瑰金
+imei_count
+串号模式
+Number
+0-无串号
+1-单串号
+2-双串号
+3-三串号
+可空
+
+imei_len
+串号1长度
+Number
+
+可空
+
+imei2_len
+串号2长度
+Number
+
+可空
+
+imei3_len
+串号3长度
+Number
+
+可空
+
+is_support_quote_price
+是否支持报价
+Number
+0-不支持
+1-支持
+可空
+
+is_effective
+是否启用
+Number
+0-否
+1-是
+非空
+1
+create_time
+创建时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+不可空
+2019-03-20 11:00:00
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+remark
+备注
+String(256)
+
+可空
+商品备注
+请求样例：
+service=boyuan.products.get
+app_id=2014072300007148
+_input_charset=utf-8
+sign_type=MD5
+sign=85bf83f78d5cefb804bd805532fc688e
+timestamp=2019-03-20 13:42:50
+version=1.0
+is_effective=1
+page_no=1
+page_size=100
+响应样例：
+{
+    "return_code": "SUCCESS",
+"return_msg": "成功",
+"api_response": {
+    "total_results ": 50,
+        "result_list": 
+	    [
+		    {
+			    "id": "135eced4-faa2-464c-85a5-88f8ab79cadf ",
+                "help_code": "csivvisk301xgpro2g16gqcbmgj",
+                "code": "csivvisk301xgpro2g16gqcbmgj",
+                "spell_code": "csivvisk301xgpro2g16gqcbmgj",
+                "category_id": "a4fdb067-faf1-4d18-9799-b7102c16a0d4",
+                "category_code": "01",
+                "category_name": "手机",
+                "brand_id": "a4fdb067-faf1-4d18-9799-b7102c16a0d4",
+			    "brand_name": "adidas",
+    "name ": "测试ivvi-SK3-01小骨Pro", 
+    "memory ": "4G+8G",
+    "version_type_id ": "769012f5-7420-4340-b1bb-7d27a119d8ca",
+    "version_type_name": "青春版",
+    "color ": "玫瑰金",
+    "full_name ": "测试ivvi-SK3-01小骨Pro-(2G+16G)青春版玫瑰金",
+    "imei_count ": 1,
+    "imei_len": 15,
+    "imei2_len": null,
+    "imei3_len": null,
+    "is_support_quote_price": 1,
+    "is_effective": 1,
+    "create_time": "2019-03-20 11:00:00",
+    "modify_time": "2019-03-20 12:00:00",
+    "remark": "商品1备注"
+		    },
+            {
+			    "id": "235eced4-faa2-464c-85a5-88f8ab79cadf ",
+                "help_code": "3sivvisk301xgpro2g16gqcbmgj",
+                "code": "3sivvisk301xgpro2g16gqcbmgj",
+                "spell_code": "3sivvisk301xgpro2g16gqcbmgj",
+                "category_id": "a4fdb067-faf1-4d18-9799-b7102c16a0d4",
+                "category_code": "01",
+                "category_name": "手机",
+                "brand_id": "a4fdb067-faf1-4d18-9799-b7102c16a0d4",
+			    "brand_name": "adidas",
+    "name ": "测试ivvi-SK3-01小骨Pro", 
+    "memory ": "4G+8G",
+    "version_type_id ": "769012f5-7420-4340-b1bb-7d27a119d8ca",
+    "version_type_name": "青春版",
+    "color ": "玫瑰金",
+    "full_name ": "测试ivvi-SK3-01小骨Pro-(2G+16G)青春版玫瑰金2",
+    "imei_count ": 1,
+    "imei_len": 15,
+    "imei2_len": null,
+    "imei3_len": null,
+    "is_support_quote_price": 1,
+    "is_effective": 1,
+    "create_time": "2019-03-20 11:00:00",
+    "modify_time": "2019-03-20 12:00:00",
+    "remark": "商品2备注"
+		    }
+        ]
+}
+}
+
+	•	boyuan.warehouses.get（获取仓库信息接口）
+接入方式：GET/POST
+
+请求业务参数说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+gsdm
+公司代码
+String(32)
+
+可空
+80001
+contain_sub
+是否包含下级
+Number
+包含下级公司的仓库
+0-不包含
+1-包含
+默认包含，
+可空
+1
+is_effective
+是否启用
+Number
+0-否
+1-是
+默认全部
+可空
+
+page_no
+页码
+Number
+传入值为1代表第一页，传入值为2代表第二页，依此类推。默认返回的数据是从第一页开始，即默认1
+可空
+1
+page_size
+每页条数
+Number
+每页返回最多返回1000条，默认值为100
+可空
+100
+响应业务参数说明：
+result_list为仓库列表，详见仓库（Warehouse）信息。
+
+商品（Warehouse）信息：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+id
+仓库ID
+String(36)
+主键ID
+不可空
+3c2401c4-44aa-4307-972d-2a2ce56badfd
+help_code
+助记码
+String(128)
+
+可空
+ckmc
+spell_code
+拼音码
+String(128)
+
+可空
+ckmc
+name
+仓库名称
+Stirng(128)
+
+不可空
+仓库名称
+gsdm
+所属公司编码
+String(36)
+
+不可空
+8000101
+company_id
+所属公司ID
+String(36)
+
+不可空
+2283334c-4171-4a35-9e0d-eeae2477c422
+company_name
+所属公司名称
+String(128)
+
+不可空
+下级公司1全称
+warehouse_type_id
+仓库类型ID
+String(36)
+
+可空
+645c4d9e-ed8e-4807-b0a1-dba1c72e541e
+warehouse_type_name
+仓库类型名称
+String(128)
+
+可空
+总仓
+is_allow_sales
+是否允许销售
+Number
+0-不允许
+1-允许
+可空，为空表示不允许
+0
+open_alloc_audit
+开启移库审批
+Number
+0-不开启
+1-开启
+可空，为空表示不开启
+0
+is_general
+是否总仓
+Number
+0-否
+1-是
+可空，为空表示否
+0
+inventory_status
+盘库状态
+Number
+1-盘库中
+其他-正常状态
+可空，为空表示正常状态
+1
+is_effective
+是否启用
+Number
+0-否
+1-是
+非空
+1
+create_time
+创建时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+不可空
+2019-03-20 11:00:00
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+remark
+备注
+String(256)
+
+可空
+仓库备注
+请求样例：
+service=boyuan.warehouses.get
+app_id=2014072300007148
+_input_charset=utf-8
+sign_type=MD5
+sign=85bf83f78d5cefb804bd805532fc688e
+timestamp=2019-03-20 13:42:50
+version=1.0
+is_effective=1
+page_no=1
+page_size=100
+响应样例：
+{
+    "return_code": "SUCCESS",
+"return_msg": "成功",
+"api_response": {
+    "total_results ": 50,
+        "result_list": 
+	    [
+		    {
+			    "id": "3c2401c4-44aa-4307-972d-2a2ce56badfd",
+                "help_code": "ck1mc",
+                "spell_code": "ck1mc",
+    "name ": "仓库1名称", 
+    "gsdm": "8000101",
+    "company_id ": "2283334c-4171-4a35-9e0d-eeae2477c422",
+    "company_name": "下级公司1全称",
+    "warehouse_type_id ": "645c4d9e-ed8e-4807-b0a1-dba1c72e541e",
+    "warehouse_type_name": "仓库类型名称",
+    "is_allow_sales": 1,
+    "open_alloc_audit": 0,
+    "is_general": 1,
+    "inventory_status": 0,
+    "is_effective": 1,
+    "create_time": "2019-03-20 11:00:00",
+    "modify_time": "2019-03-20 12:00:00",
+    "remark": "仓库1备注"
+		    },
+            {
+			    "id": "4c2401c4-44aa-4307-972d-2a2ce56badfd",
+                "help_code": "ck2mc",
+                "spell_code": "ck2mc",
+    "name ": "仓库2名称", 
+    "gsdm": "8000101",
+    "company_id ": "2283334c-4171-4a35-9e0d-eeae2477c422",
+    "company_name": "下级公司1全称",
+    "warehouse_type_id ": "645c4d9e-ed8e-4807-b0a1-dba1c72e541e",
+    "warehouse_type_name": "仓库类型名称",
+    "is_allow_sales": 1,
+    "open_alloc_audit": 0,
+    "is_general": 1,
+    "inventory_status": 0,
+    "is_effective": 1,
+    "create_time": "2019-03-20 11:00:00",
+    "modify_time": "2019-03-20 12:00:00",
+    "remark": "仓库2备注"
+		    }
+        ]
+}
+}
+
+	•	boyuan.custsuppliers.get（获取往来单位信息接口）
+接入方式：GET/POST
+
+请求业务参数说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+is_cust_or_supplier
+往来属性
+Number
+1-客户
+2-供应商
+默认全部
+可空
+
+sales_id
+业务员ID
+String(36)
+业务员类型用户的ID
+可空
+
+is_need_invoices
+是否开票
+Number
+0-否
+1-是
+默认全部
+可空
+
+is_effective
+是否启用
+Number
+0-否
+1-是
+默认全部
+可空
+
+page_no
+页码
+Number
+传入值为1代表第一页，传入值为2代表第二页，依此类推。默认返回的数据是从第一页开始，即默认1
+可空
+1
+page_size
+每页条数
+Number
+每页返回最多返回1000条，默认值为100
+可空
+100
+响应业务参数说明：
+result_list为往来单位列表，详见往来单位（CustSupplier）信息。
+
+往来单位（CustSupplier）信息：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+id
+往来单位ID
+String(36)
+主键ID
+不可空
+e13f0416-2765-47d4-8079-123f9f58d0b8
+help_code
+助记码
+String(128)
+
+可空
+helpcode
+spell_code
+编码
+String(128)
+
+可空
+code
+name
+往来单位名称
+Stirng(128)
+
+不可空
+往来单位名称
+is_cust
+是否客户
+Number
+0-否
+1-是
+可空，为空表示否
+
+is_supplier
+是否供应商
+Number
+0-否
+1-是
+可空，为空表示否
+
+channel_area_code
+渠道地区编码
+String(32)
+
+可空 
+010101
+channel_area_id
+渠道地区ID
+String(36)
+
+可空 
+7b5a0d35-bdc5-49c6-b0b0-ef31e12a862f
+channel_area_name
+渠道地区名称
+String(128)
+
+可空 
+杭州
+sales_id
+业务员ID
+String(36)
+业务员类型用户的ID
+可空 
+d75ada7b-6a8b-4911-80af-71597551fbc0
+sales_name
+业务员名称
+String(128)
+
+可空 
+博远
+province_code
+省份编码
+String(20)
+
+可空
+33
+province_name
+省份名称
+String(32)
+
+可空
+浙江省
+city_code
+市编码
+String(20)
+
+可空
+01
+city_name
+市名称
+String(32)
+
+可空
+杭州市
+area_code
+区县编码
+String(20)
+
+可空
+06
+area _name
+区县名称
+String(32)
+
+可空
+西湖区
+address
+详细地址
+String(256)
+
+可空
+西湖国际科技大厦
+manager
+负责人
+String(64)
+
+可空
+负责人姓名
+contact_phone
+联系电话
+String(64)
+
+可空
+13888888888
+bank_name
+银行名称
+String(64)
+
+可空
+中国银行
+account_no
+银行帐号
+String(64)
+
+可空
+5052
+weixin
+微信
+String(64)
+
+可空
+13888888888
+qq
+QQ
+String(64)
+
+可空
+888888888
+cust_grade
+客户级别
+Number
+1-1级
+2-2级
+3-3级
+4-4级
+5-5级
+可空，is_cust为1时有效
+1
+cust_account_period
+客户账期
+Number
+单位：天
+可空，is_cust为1时有效
+3
+cust_credit
+客户信用额度
+Number
+单位：元
+可空，is_cust为1时有效
+1000
+supplier_account_period
+供应商账期
+Number
+单位：天
+可空，is_supplier为1时有效
+10
+supplier_credit
+供应商信用额度
+Number
+单位：元
+可空，is_supplier为1时有效
+10000
+is_need_invoices
+是否开票
+Number
+0-否
+1-是
+可空，为空表示否
+1
+tax_rate
+税率
+Number
+单位：%
+可空
+16
+is_need_pur_order
+是否必须引订单入库
+Number
+0-否
+1-是
+可空，为空表示否，is_supplier为1时有效
+
+is_need_sale_order
+是否必须引订单出库
+Number
+0-否
+1-是
+可空，为空表示否，is_cust为1时有效
+
+is_effective
+是否启用
+Number
+0-否
+1-是
+非空
+1
+create_time
+创建时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+不可空
+2019-03-20 11:00:00
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+remark
+备注
+String(256)
+
+可空
+往来单位备注
+请求样例：
+service=boyuan.custsuppliers.get
+app_id=2014072300007148
+_input_charset=utf-8
+sign_type=MD5
+sign=85bf83f78d5cefb804bd805532fc688e
+timestamp=2019-03-20 13:42:50
+version=1.0
+is_effective=1
+page_no=1
+page_size=100
+响应样例：
+{
+    "return_code": "SUCCESS",
+"return_msg": "成功",
+"api_response": {
+    "total_results ": 50,
+        "result_list": 
+	    [
+		    {
+			    "id": "e13f0416-2765-47d4-8079-123f9f58d0b8",
+                "help_code": "helpcode",
+                "spell_code": "code",
+    "name ": "客户名称", 
+    "is_cust": 1,
+    "is_supplier": null, 
+    "channel_area_code ": "010101",
+    "channel_area_id ": "7b5a0d35-bdc5-49c6-b0b0-ef31e12a862f",
+    "channel_area_name": "杭州",
+    "sales_id ": "d75ada7b-6a8b-4911-80af-71597551fbc0",
+    "sales_name": "博远",
+                "province_code": "33",
+    "province_name": "浙江省",
+                "city_code": "01",
+    "city_name": "杭州市",
+                "area_code": "06",
+    "area_name": "西湖区",
+                "address": "西湖国际科技大厦",
+    "manager": "负责人姓名",
+    "contact_phone": "13888888888",
+    "bank_name": "中国银行",
+    "account_no ": "5052",
+    "weixin": "13888888888",
+    "qq ": "888888888",
+    "cust_grade ": 1,
+    "cust_account_period": 3,
+    "cust_credit": 1000,
+    "supplier_account_period": null,
+    "supplier_credit": null, 
+    "is_need_invoices": null,
+    "tax_rate": null, 
+    "is_need_pur_order": null,
+    "is_need_sale_order": 1,
+    "is_effective": 1,
+    "create_time": "2019-03-20 11:00:00",
+    "modify_time": "2019-03-20 12:00:00",
+    "remark": "客户备注"
+		    },
+            {
+			    "id": "w13f0416-2765-47d4-8079-123f9f58d0b8",
+                "help_code": "helpcode",
+                "spell_code": "code",
+    "name ": "供应商名称名称", 
+    "is_cust": null,
+    "is_supplier": 1, 
+    "channel_area_code ": "010101",
+    "channel_area_id ": "7b5a0d35-bdc5-49c6-b0b0-ef31e12a862f",
+    "channel_area_name": "杭州",
+    "sales_id ": "d75ada7b-6a8b-4911-80af-71597551fbc0",
+    "sales_name": "博远",
+                "province_code": "33",
+    "province_name": "浙江省",
+                "city_code": "01",
+    "city_name": "杭州市",
+                "area_code": "06",
+    "area_name": "西湖区",
+                "address": "西湖国际科技大厦",
+    "manager": "负责人姓名",
+    "contact_phone": "13888888888",
+    "bank_name": "中国银行",
+    "account_no ": "5052",
+    "weixin": "13888888888",
+    "qq ": "888888888",
+    "cust_grade ": null,
+    "cust_account_period": null,
+    "cust_credit": null,
+    "supplier_account_period": 10,
+    "supplier_credit": 10000, 
+    "is_need_invoices": 1,
+    "tax_rate": 16, 
+    "is_need_pur_order": 1,
+    "is_need_sale_order": null,
+    "is_effective": 1,
+    "create_time": "2019-03-20 11:00:00",
+    "modify_time": "2019-03-20 12:00:00",
+    "remark": "供应商备注"
+		    }
+        ]
+}
+}
+
+	•	boyuan.biz.purchases.query（查询采购信息接口）
+接入方式：GET/POST
+
+请求业务参数说明：
+发生日期/创建日期/修改日期三者不能同时为空
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+business_date_start
+发生日期起
+String(20)
+格式：yyyy-MM-dd，默认当天往前推7天（包含当天）
+可空
+2019-03-15
+business_date_end
+发生日期止
+String(20)
+格式：yyyy-MM-dd，默认当天
+可空
+2019-03-21
+create_date_start
+采购单创建时间起
+String(20)
+格式：yyyy-MM-dd，若为空，且create_date_end不为空，则默认create_date_end往前推7天（包含create_date_end）
+可空
+2019-03-15
+create_date_end
+采购单创建时间止
+String(20)
+格式：yyyy-MM-dd，若为空，且create_date_start不为空，则默认create_date_start往后推7天（包含create_date_start）
+可空
+2019-03-21
+modify_date_start
+采购单修改时间起
+String(20)
+格式：yyyy-MM-dd，若为空，且modify_date_end不为空，则默认modify_date_end往前推7天（包含modify_date_end）
+可空
+2019-03-15
+modify_date_end
+采购单修改时间止
+String(20)
+格式：yyyy-MM-dd，若为空，且modify_date_start不为空，则默认modify_date_start往后推7天（包含modify_date_start）
+可空
+2019-03-21
+trans_type
+事务类型
+String(32)
+取值范围：购/购退/购换
+多种类型用英文逗号分隔
+可空
+购,购退
+is_effective
+是否有效
+Number
+0-无效，已删除
+1-有效
+默认全部
+可空
+1
+page_no
+页码
+Number
+传入值为1代表第一页，传入值为2代表第二页，依此类推。默认返回的数据是从第一页开始，即默认1
+可空
+1
+page_size
+每页条数
+Number
+每页返回最多返回1000条，默认值为100
+可空
+100
+响应业务参数说明：
+result_list为采购明细列表，详见采购明细（PurchaseDetail）信息。
+
+采购明细（PurchaseDetail）信息：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+id
+采购明细行ID
+String(36)
+
+不可空
+b5426a2b-8e3a-468c-a4b1-800dbad43011
+head_id
+采购主表ID
+String(36)
+一张采购单可能对应多个商品明细行
+不可空
+bc2b613a-f9b9-4037-9aea-a0bef16c2a67
+company_id
+所属门店ID
+String(36)
+
+不可空
+f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb
+company_name
+所属门店名称
+String(128)
+
+不可空
+总公司
+bill_id
+单据号
+Stirng(32)
+
+不可空
+13169
+bill_type
+单据类型
+Stirng(32)
+PUR-采购入库
+PURR-采购退货
+PURE-采购换机
+不可空
+PUR
+business_date
+业务发生日期
+String(20)
+格式：yyyy-MM-dd
+不可空
+2019-03-21
+order_bill_id
+订单号
+String(32)
+
+可空
+13168
+order_num
+订单数量
+Number
+
+可空
+2
+manual_number
+手工单号
+String(64)
+
+可空 
+
+supplier_spell_code
+供应商编码
+String(128)
+
+可空
+gysbm
+supplier_id
+供应商ID
+String(36)
+对应boyuan.custsupplier.get接口的id字段
+不可空
+81a39cff-936b-45cf-a16a-b9d3c7d285b2
+supplier_name
+供应商名称
+String(128)
+
+不可空 
+供应商名称
+sales_id
+采购业务员ID
+String(36)
+采购业务员类型用户的ID，对应boyuan.users.get接口的id字段
+可空 
+d75ada7b-6a8b-4911-80af-71597551fbc0
+sales_name
+采购业务员名称
+String(128)
+
+可空 
+博远
+trans_type
+事务类型
+String(32)
+取值范围：购/购退/购换
+不可空
+购
+is_need_invoices
+是否开票
+Number
+0-否
+1-是
+
+可空，为空表示否 
+
+invoice_company_name
+发票抬头
+String(128)
+
+可空
+
+product_brandid
+商品品牌ID
+String(36)
+对应boyuan.brands.get接口的id字段
+不可空 
+65269cae-bdef-4213-9c52-941b29d3a184
+product_brand_name
+商品品牌名称
+String(128)
+
+不可空 
+商品品牌
+product_category_id
+商品分类ID
+String(36)
+对应boyuan.categorys.get接口的id字段
+不可空 
+96d98d1b-8aa0-4bf3-8066-a40e1dd84599
+product_category_name
+商品分类名称
+String(128)
+
+不可空 
+商品分类
+product_full_category_name
+商品全分类
+String(256)
+分类全路径，“.”号拼接
+可空
+商品分类1.商品分类2.商品分类3
+product_id
+商品ID
+String(36)
+对应boyuan.products.get接口的id字段
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+商品全称
+String(128)
+
+不可空 
+商品全称
+warehouse_id
+仓库ID
+String(36)
+对应boyuan.warehouses.get接口的id字段
+不可空 
+17273d63-90dc-4b5b-add3-971a78a5b879
+warehouse_name
+仓库名称
+String(128)
+
+不可空 
+仓库名称
+qty
+数量
+Number
+
+不可空
+1
+unit_price
+单价
+Double
+
+不可空
+1000.55
+amounts
+金额
+Double
+
+不可空 
+1000.55
+is_effective
+是否有效
+Number
+0-无效，已删除
+1-有效
+默认全部
+不可空
+1
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+不可空
+
+create_time
+创建时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+不可空
+2019-03-20 11:00:00
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+head_remark
+头备注
+String(256)
+
+可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+请求样例：
+service=boyuan.biz.purchases.query
+app_id=2014072300007148
+_input_charset=utf-8
+sign_type=MD5
+sign=85bf83f78d5cefb804bd805532fc688e
+timestamp=2019-03-20 13:42:50
+version=1.0
+business_date_start=2019-03-15
+business_date_end=2019-03-21
+page_no=1
+page_size=100
+响应样例：
+{
+    "return_code": "SUCCESS",
+"return_msg": "成功",
+"api_response": {
+    "total_results ": 50,
+        "result_list": 
+	    [
+		    {
+			    "id": "b5426a2b-8e3a-468c-a4b1-800dbad43011",
+    "head_id": "bc2b613a-f9b9-4037-9aea-a0bef16c2a67",
+    "company_id ": "f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb",
+                "company_name": "总公司",
+    "bill_id": "13169",
+    "bill_type": "PUR", 
+    "business_date": "2019-03-21", 
+    "order_bill_id": "13168", 
+    "order_num": 2,
+    "manual_number": null,
+    "supplier_spell_code": "gylmc",
+    "supplier_id": "81a39cff-936b-45cf-a16a-b9d3c7d285b2",
+    "supplier_name": "供应商名称",
+    "sales_id ": "d75ada7b-6a8b-4911-80af-71597551fbc0",
+    "sales_name": "博远",
+    "trans_type": "购",
+    "is_need_invoices": 0,
+    "invoice_company_name": null,
+    "product_brand_id": "65269cae-bdef-4213-9c52-941b29d3a184",
+    "product_brand_name": "商品品牌",
+    "product_category_id": "96d98d1b-8aa0-4bf3-8066-a40e1dd84599",
+    "product_category_name": "商品分类",
+    "product_full_category_name":"商品分类1.商品分类2.商品分类3",
+    "product_id": "e239dc42-40ba-4fe3-88f1-37dd56d4f034",
+    "product_full_name":"商品全称",
+    "warehouse_id": "17273d63-90dc-4b5b-add3-971a78a5b879",
+    "warehouse_name": "仓库名称",
+    "qty": 2,
+    "unit_price": 1000.00,
+    "amounts": 2000.00,
+    "is_effective": 1,
+    "seq_no ": 1,
+    "create_time": "2019-03-20 11:00:00",
+    "modify_time": "2019-03-20 12:00:00",
+    "head_remark": "头备注",
+    "remark": "明细行1备注"
+		    },
+            {
+			    "id": "b5426a2b-8e3a-468c-a4b1-800dbad43011",
+    "head_id": "bc2b613a-f9b9-4037-9aea-a0bef16c2a67",
+    "company_id ": "f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb",
+                "company_name": "总公司",
+    "bill_id": "13169",
+    "bill_type": "PUR", 
+    "business_date": "2019-03-21", 
+    "order_bill_id": "13168", 
+    "order_num": 2,
+    "manual_number": null,
+    "supplier_spell_code": "gylmc",
+    "supplier_id": "81a39cff-936b-45cf-a16a-b9d3c7d285b2",
+    "supplier_name": "供应商名称",
+    "sales_id ": "d75ada7b-6a8b-4911-80af-71597551fbc0",
+    "sales_name": "博远",
+    "trans_type": "购",
+    "is_need_invoices": 0,
+    "invoice_company_name": null,
+    "product_brand_id": "65269cae-bdef-4213-9c52-941b29d3a184",
+    "product_brand_name": "商品品牌",
+    "product_category_id": "96d98d1b-8aa0-4bf3-8066-a40e1dd84599",
+    "product_category_name": "商品分类",
+    "product_full_category_name":"商品分类1.商品分类2.商品分类3",
+    "product_id": "e239dc42-40ba-4fe3-88f1-37dd56d4f034",
+    "product_full_name":"商品全称",
+    "warehouse_id": "17273d63-90dc-4b5b-add3-971a78a5b879",
+    "warehouse_name": "仓库名称",
+    "qty": 1,
+    "unit_price": 3000.00,
+    "amounts": 3000.00,
+    "is_effective": 1,
+    "seq_no ": 2,
+    "create_time": "2019-03-20 12:00:00",
+    "modify_time": "2019-03-20 13:00:00",
+    "head_remark": "头备注",
+    "remark": "明细行2备注"
+		    }
+        ]
+}
+}
+
+	•	boyuan.biz.purchase.imeidetails.query（查询入库串号明细接口）
+接入方式：GET/POST
+
+请求业务参数说明：Bill_id/发生日期/创建日期/修改日期四者不能同时为空
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+business_date_start
+发生日期起
+String(20)
+与单据号不可同时为空
+格式：yyyy-MM-dd，默认当天往前推7天（包含当天）
+可空
+2019-03-15
+business_date_end
+发生日期止
+String(20)
+与单据号不可同时为空
+格式：yyyy-MM-dd，默认当天
+可空
+2019-03-21
+gsdm
+公司代码
+String(256)
+支持多个公司代码同时查询，以英文逗号分隔
+可空
+80001
+bill_type
+单据类型
+String(32)
+PUR-采购入库
+INIT_INVENTORY-期初库存
+PURR-采购退货
+PURE-采购换机
+OTHER_STOCK_IN-其他入库
+可空
+PUR
+bill_id
+单据号
+String(256)
+与发生日期起止不可同时为空
+支持多个单据号同时查询，以英文逗号分隔
+可空
+
+create_date_start
+串号入库创建时间起
+String(20)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+yyyy-MM-dd HH:mm:ss
+create_date_end
+串号入库创建时间止
+String(20)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+yyyy-MM-dd HH:mm:ss
+is_effective
+是否启用
+Number
+0-否
+1-是
+默认全部
+可空
+
+page_no
+页码
+Number
+传入值为1代表第一页，传入值为2代表第二页，依此类推。默认返回的数据是从第一页开始，即默认1
+可空
+1
+page_size
+每页条数
+Number
+每页返回最多返回1000条，默认值为100
+可空
+100
+响应业务参数说明：
+result_list为入库串号明细列表，详见入库串号明细（PurchaseImeiDetail）信息。
+
+入库串号明细（PurchaseImeiDetail）信息：
+包括采购入库/采购换机/采购退货/期初库存/其他入库
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+detail_id
+入库明细记录id
+String(32)
+
+不可空
+
+gsdm
+所属门店代码
+String(36)
+
+不可空
+80001
+company_id
+所属门店ID
+String(36)
+
+不可空
+f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb
+company_name
+所属门店名称
+String(128)
+
+不可空
+总公司
+bill_id
+单据号
+Stirng(32)
+
+不可空
+313137
+bill_type
+单据类型
+Stirng(32)
+PUR-采购入库
+INIT_INVENTORY-期初库存
+PURR-采购退货
+PURE-采购换机
+OTHER_STOCK_IN-其他入库
+不可空
+PUR
+business_date
+业务发生日期
+String(20)
+格式：yyyy-MM-dd
+不可空
+2019-03-21
+imei
+串号
+String(256)
+串号拼接字符串，英文逗号分隔
+不可空
+459793,730458
+imei1
+串号1
+String(64)
+
+不可空
+459793
+imei2
+串号2
+String(64)
+
+可空
+730458
+imei3
+串号3
+String(64)
+
+可空
+
+supplier_id
+供应商ID
+String(36)
+对应boyuan.custsupplier.get接口的id字段
+不可空
+81a39cff-936b-45cf-a16a-b9d3c7d285b2
+supplier_name
+供应商名称
+String(128)
+
+不可空 
+供应商名称
+trans_type
+事务类型
+String(32)
+取值范围：购/购退/购换
+不可空
+购
+product_brand_name
+商品品牌名称
+String(128)
+
+不可空 
+商品品牌
+product_category_name
+商品分类名称
+String(128)
+
+不可空 
+商品分类
+product_id
+商品ID
+String(36)
+对应boyuan.products.get接口的id字段
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+商品全称
+String(128)
+
+不可空 
+商品全称
+warehouse_id
+仓库ID
+String(36)
+对应boyuan.warehouses.get接口的id字段
+不可空 
+17273d63-90dc-4b5b-add3-971a78a5b879
+warehouse_name
+仓库名称
+String(128)
+
+不可空 
+仓库名称
+qty
+数量
+Number
+
+不可空
+1
+unit_price
+单价
+Double
+
+不可空
+1500.00
+amounts
+金额
+Double
+
+不可空 
+1500.00
+is_effective
+是否有效
+Number
+0-无效，已删除
+1-有效
+默认全部
+不可空
+1
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+不可空
+
+create_time
+创建时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+不可空
+2019-03-20 11:00:00
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+head_remark
+头备注
+String(256)
+
+可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+请求样例：
+service=boyuan.biz.purchases.query
+app_id=2014072300007148
+_input_charset=utf-8
+sign_type=MD5
+sign=85bf83f78d5cefb804bd805532fc688e
+timestamp=2019-03-20 13:42:50
+version=1.0
+business_date_start=2019-03-15
+business_date_end=2019-03-21
+page_no=1
+page_size=100
+响应样例：
+{
+    "return_code": "SUCCESS",
+"return_msg": "成功",
+"api_response": {
+    "total_results ": 50,
+        "result_list": 
+	    [
+		    {
+    "gsdm": "80001",
+    "company_id ": "f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb",
+                "company_name": "总公司",
+    "bill_id": "313137",
+    "bill_type": "PUR", 
+    "business_date": "2019-03-21", 
+    "imei": "459793,730458", 
+    "imei1": "459793",
+    "imei2": "730458",
+    "imei3": null, 
+    "supplier_id": "81a39cff-936b-45cf-a16a-b9d3c7d285b2",
+    "supplier_name": "供应商名称",
+    "trans_type": "购",
+    "product_brand_name": "商品品牌",
+    "product_category_name": "商品分类",
+    "product_id": "e239dc42-40ba-4fe3-88f1-37dd56d4f034",
+    "product_full_name":"商品全称",
+    "warehouse_id": "17273d63-90dc-4b5b-add3-971a78a5b879",
+    "warehouse_name": "仓库名称",
+    "qty": 1,
+    "unit_price": 1500.00,
+    "amounts": 1500.00,
+    "is_effective": 1,
+    "seq_no ": 1,
+    "create_time": "2019-03-20 11:00:00",
+    "modify_time": "2019-03-20 12:00:00",
+    "head_remark": "头备注",
+    "remark": "明细行备注"
+		    },
+            {
+    "gsdm": "80001",
+    "company_id ": "f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb",
+                "company_name": "总公司",
+    "bill_id": "313138",
+    "bill_type": "PUR", 
+    "business_date": "2019-03-21", 
+    "imei": "559793,530458", 
+    "imei1": "559793",
+    "imei2": "530458",
+    "imei3": null, 
+    "supplier_id": "81a39cff-936b-45cf-a16a-b9d3c7d285b2",
+    "supplier_name": "供应商名称",
+    "trans_type": "购",
+    "product_brand_name": "商品品牌",
+    "product_category_name": "商品分类",
+    "product_id": "e239dc42-40ba-4fe3-88f1-37dd56d4f034",
+    "product_full_name":"商品全称",
+    "warehouse_id": "17273d63-90dc-4b5b-add3-971a78a5b879",
+    "warehouse_name": "仓库名称",
+    "qty": 1,
+    "unit_price": 1500.00,
+    "amounts": 1500.00,
+    "is_effective": 1,
+    "seq_no ": 1,
+    "create_time": "2019-03-20 11:00:00",
+    "modify_time": "2019-03-20 12:00:00",
+    "head_remark": "头备注",
+    "remark": "明细行备注"
+		    }
+        ]
+}
+}
+
+	•	boyuan.biz.retails.query（查询零售信息接口）
+接入方式：GET/POST
+
+请求业务参数说明：
+发生日期/创建日期/修改日期三者不能同时为空
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+business_date_start
+发生日期起
+String(20)
+格式：yyyy-MM-dd，默认当天往前推7天（包含当天）
+可空
+2019-03-15
+business_date_end
+发生日期止
+String(20)
+格式：yyyy-MM-dd，默认当天
+可空
+2019-03-21
+create_date_start
+零售单创建时间起
+String(20)
+格式：yyyy-MM-dd，若为空，且create_date_end不为空，则默认create_date_end往前推7天（包含create_date_end）
+可空
+2019-03-15
+create_date_end
+零售单创建时间止
+String(20)
+格式：yyyy-MM-dd，若为空，且create_date_start不为空，则默认create_date_start往后推7天（包含create_date_start）
+可空
+2019-03-21
+modify_date_start
+零售单修改时间起
+String(20)
+格式：yyyy-MM-dd，若为空，且modify_date_end不为空，则默认modify_date_end往前推7天（包含modify_date_end）
+可空
+2019-03-15
+modify_date_end
+零售单修改时间止
+String(20)
+格式：yyyy-MM-dd，若为空，且modify_date_start不为空，则默认modify_date_start往后推7天（包含modify_date_start）
+可空
+2019-03-21
+trans_type
+事务类型
+String(32)
+取值范围：售/售退/售换
+多种类型用英文逗号分隔
+可空
+售,售退
+is_effective
+是否有效
+Number
+0-无效，已删除
+1-有效
+默认全部
+可空
+1
+page_no
+页码
+Number
+传入值为1代表第一页，传入值为2代表第二页，依此类推。默认返回的数据是从第一页开始，即默认1
+可空
+1
+page_size
+每页条数
+Number
+每页返回最多返回1000条，默认值为100
+可空
+100
+响应业务参数说明：
+result_list为零售明细列表，详见零售明细（RetailDetail）信息。
+
+零售明细（RetailDetail）信息：
+包括零售/零售换机/零售退货
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+id
+零售明细行ID
+String(36)
+
+不可空
+b5426a2b-8e3a-468c-a4b1-800dbad43011
+head_id
+零售主表ID
+String(36)
+一张零售单可能对应多个商品明细行
+不可空
+bc2b613a-f9b9-4037-9aea-a0bef16c2a67
+company_id
+所属门店ID
+String(36)
+
+不可空
+f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb
+company_name
+所属门店名称
+String(128)
+
+不可空
+总公司
+bill_id
+单据号
+Stirng(32)
+
+不可空
+13180
+bill_type
+单据类型
+Stirng(32)
+RETAIL-零售
+RETAILR-零售退货
+RETAILE-零售换机
+不可空
+RETAIL
+business_date
+业务发生日期
+String(20)
+格式：yyyy-MM-dd
+不可空
+2019-03-21
+trans_type
+事务类型
+String(32)
+取值范围：售/售退/售换
+不可空
+售
+classes_id
+班次ID
+String(36)
+
+可空
+2334dgaf-936b-45cf-a16a-b9d3c7d285b3
+classes_name
+班次名称
+String(64)
+
+可空 
+早班
+order_bill_id
+订单号
+String(32)
+
+可空
+13179
+dp_bill_id
+定金单号
+String(32)
+
+可空
+13178
+price_apply_bill_id
+特价申请单号
+String(32)
+
+可空
+13177
+relate_bill_id
+原零售单号
+String(32)
+trnas_type为售退/售换时有效
+可空 
+
+member_id
+会员ID
+String(36)
+对应boyuan.members.get接口id字段
+可空 
+7dd03188-5bc4-4af7-8167-2b5fb59e0baa
+member_name
+会员名称
+Stirng(128)
+
+可空
+张三
+member_mobile_phone
+会员手机号
+String(32)
+
+可空
+1388888888
+imei
+串号
+String(128)
+
+可空 
+866852017028405
+product_brandid
+商品品牌ID
+String(36)
+对应boyuan.brands.get接口的id字段
+可空 
+65269cae-bdef-4213-9c52-941b29d3a184
+product_brand_name
+商品品牌名称
+String(128)
+
+可空 
+商品品牌
+product_category_id
+商品分类ID
+String(36)
+对应boyuan.categorys.get接口的id字段
+可空 
+96d98d1b-8aa0-4bf3-8066-a40e1dd84599
+product_category_name
+商品分类名称
+String(128)
+
+可空 
+商品分类
+product_id
+商品ID
+String(36)
+对应boyuan.products.get接口的id字段
+product_type为0时表示商品ID
+product_type为1时表示套餐ID
+product_type为2时表示保障服务ID
+product_type为3时表示分期产品ID
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+商品全称
+String(128)
+product_type为0时表示商品全称
+product_type为1时表示套餐名称
+product_type为2时表示保障服务名称
+product_type为3时表示分期产品名称
+可空 
+商品全称
+warehouse_id
+仓库ID
+String(36)
+对应boyuan.warehouses.get接口的id字段
+不可空 
+17273d63-90dc-4b5b-add3-971a78a5b879
+warehouse_name
+仓库名称
+String(128)
+
+可空 
+仓库名称
+qty
+数量
+Number
+
+不可空
+1
+unit_price
+单价
+Double
+
+不可空
+1000.55
+amounts
+金额
+Double
+
+不可空 
+1000.55
+sales_id
+店员1ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+不可空 
+d75ada7b-6a8b-4911-80af-71597551fbc0
+sales_name
+店员1名称
+String(128)
+
+不可空 
+博远
+sales_id2
+店员2ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+可空 
+d75ada7b-6a8b-4911-80af-71597551fbc1
+sales_name2
+店员2名称
+String(128)
+
+可空 
+博远2
+product_type
+商品类型
+Number
+0-实物商品
+1-套餐
+2-保障服务
+3-分期
+4-虚拟商品
+不可空
+0
+product_mark
+商品标识
+String(64)
+1-主商品
+2-赠品
+3-搭售
+可空
+
+key_phone
+业务号码/业务单号
+String(64)
+套餐：业务号码
+保障服务与分期：业务单号
+可空
+18398011358
+mbpack_cust_type_id
+套餐客户类型ID
+String(36)
+
+可空
+d75ada7b-6a8b-4911-80af-71597551fbc1
+mbpack_cust_type_name
+套餐客户类型名称
+String(128)
+
+可空
+套餐客户类型名称
+mbpack_cc_type_id
+套餐业务类型ID
+String(36)
+product_type为1时有效
+可空
+d75ada7b-6a8b-4911-80af-71597551fbc2
+mbpack_cc_type_name
+套餐业务类型名称
+String(128)
+product_type为1时有效
+可空
+套餐业务类型名称
+mbpack_cust_type_id
+套餐客户类型ID
+String(36)
+product_type为1时有效
+可空
+d75ada7b-6a8b-4911-80af-71597551fbc1
+mbpack_cust_type_name
+套餐客户类型名称
+String(128)
+product_type为1时有效
+可空
+套餐客户类型名称
+relevance_imei
+关联串号
+String(128)
+product_type为1/2/3时不可空
+可空 
+866852017028405
+comm_rate
+佣金比例
+Double
+product_type为1/3时有效
+可空 
+0.1
+settle_amounts
+结算金额
+Double
+product_type为1/3时有效并不可空
+product_type为3时表示贷款金额
+可空 
+0.1
+mbpack_point
+套餐积分
+Double
+product_type为1时有效并不可空
+可空 
+10.0
+openning_date
+套餐开通日期
+String(20)
+product_type为1时有效并不可空
+格式：yyyy-MM-dd
+可空 
+2019-03-24
+mbpack_supplier_cust_id
+套餐结算单位ID
+String(36)
+product_type为1时有效并不可空
+对应boyuan.custsupplier.get接口的id字段
+可空
+81a39cff-936b-45cf-a16a-b9d3c7d285b2
+mbpack_supplier_cust_name
+套餐结算单位名称
+String(128)
+product_type为1时有效并不可空
+可空 
+结算单位名称
+is_effective
+是否有效
+Number
+0-无效，已删除
+1-有效
+默认全部
+不可空
+1
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+不可空
+
+create_time
+创建时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+不可空
+2019-03-20 11:00:00
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+head_remark
+头备注
+String(256)
+
+可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+请求样例：
+service=boyuan.biz.retails.query
+app_id=2014072300007148
+_input_charset=utf-8
+sign_type=MD5
+sign=85bf83f78d5cefb804bd805532fc688e
+timestamp=2019-03-20 13:42:50
+version=1.0
+business_date_start=2019-03-15
+business_date_end=2019-03-21
+page_no=1
+page_size=100
+响应样例：
+{
+    "return_code": "SUCCESS",
+"return_msg": "成功",
+"api_response": {
+    "total_results ": 50,
+        "result_list": 
+	    [
+		    {
+			    "id": "b5426a2b-8e3a-468c-a4b1-800dbad43011",
+    "head_id": "bc2b613a-f9b9-4037-9aea-a0bef16c2a67",
+    "company_id ": "f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb",
+                "company_name": "总公司",
+    "bill_id": "13169",
+    "bill_type": "RETAIL", 
+    "business_date": "2019-03-21", 
+    "trans_type": "售",
+    "classes_id": "2334dgaf-936b-45cf-a16a-b9d3c7d285b3",
+    "classes_name": "早班",
+    "order_bill_id": "13179", 
+    "dp_bill_id": "13178",
+    "price_apply_bill_id": "13177",
+    "relate_bill_id": null,
+    "member_id": "7dd03188-5bc4-4af7-8167-2b5fb59e0baa",
+    "member_name": "张三",
+    "member_mobile_phone": "1388888888",
+    "imei": "866852017028405",
+    "product_brand_id": "65269cae-bdef-4213-9c52-941b29d3a184",
+    "product_brand_name": "商品品牌",
+    "product_category_id": "96d98d1b-8aa0-4bf3-8066-a40e1dd84599",
+    "product_category_name": "商品分类",
+    "product_id": "e239dc42-40ba-4fe3-88f1-37dd56d4f034",
+    "product_full_name":"商品全称",
+    "warehouse_id": "17273d63-90dc-4b5b-add3-971a78a5b879",
+    "warehouse_name": "仓库名称",
+    "qty": 2,
+    "unit_price": 1000.00,
+    "amounts": 2000.00,
+    "sales_id": "d75ada7b-6a8b-4911-80af-71597551fbc0",
+    "sales_name": "博远",
+    "sales_id2": "d75ada7b-6a8b-4911-80af-71597551fbc2",
+    "sales_name2": "博远2",
+    "product_type": 0,
+    "key_phone": null,
+    "mbpack_cust_type_id": null ",
+    "mbpack_cust_type_name": null,
+    "mbpack_cc_type_id": null,
+    "mbpack_cc_type_name": null,
+    "relevance_imei": null,
+    "comm_rate": null,
+    "settle_amounts": null,
+    "mbpack_point": null,
+    "openning_date": null,
+    "mbpack_supplier_cust_id": null,
+    "mbpack_supplier_cust_name": null,
+    "is_effective": 1,
+    "seq_no ": 1,
+    "create_time": "2019-03-20 11:00:00",
+    "modify_time": "2019-03-20 12:00:00",
+    "head_remark": "头备注",
+    "remark": "商品行备注"
+		    },
+            {
+			    "id": "b5426a2b-8e3a-468c-a4b1-800dbad43022",
+    "head_id": "bc2b613a-f9b9-4037-9aea-a0bef16c2a67",
+    "company_id ": "f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb",
+                "company_name": "总公司",
+    "bill_id": "13169",
+    "bill_type": "RETAIL", 
+    "business_date": "2019-03-21", 
+    "trans_type": "售",
+    "classes_id": "2334dgaf-936b-45cf-a16a-b9d3c7d285b3",
+    "classes_name": "早班",
+    "order_bill_id": "13179", 
+    "order_num": 2,
+    "dp_bill_id": "13178",
+    "price_apply_bill_id": "13177",
+    "relate_bill_id": null,
+    "member_id": "7dd03188-5bc4-4af7-8167-2b5fb59e0baa",
+    "member_name": "张三",
+    "member_mobile_phone": "1388888888",
+    "imei": "866852017028405",
+    "product_brand_id": "65269cae-bdef-4213-9c52-941b29d3a184",
+    "product_brand_name": "商品品牌",
+    "product_category_id": "96d98d1b-8aa0-4bf3-8066-a40e1dd84599",
+    "product_category_name": "商品分类",
+    "product_full_category_name":"商品分类1.商品分类2.商品分类3",
+    "product_id": "e239dc42-40ba-4fe3-88f1-37dd56d4f034",
+    "product_full_name":"商品全称",
+    "warehouse_id": null,
+    "warehouse_name": null,
+    "qty": 2,
+    "unit_price": 0.00,
+    "amounts": 0.00,
+    "sales_id": "d75ada7b-6a8b-4911-80af-71597551fbc0",
+    "sales_name": "博远",
+    "sales_id2": "d75ada7b-6a8b-4911-80af-71597551fbc2",
+    "sales_name2": "博远2",
+    "product_type": 1,
+    "key_phone": "18398011358",
+    "mbpack_cust_type_id": "d75ada7b-6a8b-4911-80af-71597551fbc1",
+    "mbpack_cust_type_name": "套餐客户类型名称",
+    "mbpack_cc_type_id": "d75ada7b-6a8b-4911-80af-71597551fbc2",
+    "mbpack_cc_type_name": "套餐业务类型名称",
+    "relevance_imei": "866852017028405",
+    "comm_rate": 0.10,
+    "settle_amounts": 0.00,
+    "mbpack_point": 0,
+    "openning_date": "2019-03-24",
+    "mbpack_supplier_cust_id": "123edfg5-6a8b-4911-80af-7159erty64f5",
+    "mbpack_supplier_cust_name": "中国移动",
+    "is_effective": 1,
+    "seq_no ": 2,
+    "create_time": "2019-03-20 11:00:00",
+    "modify_time": "2019-03-20 12:00:00",
+    "head_remark": "头备注",
+    "remark": "套餐行备注"
+		    }
+        ]
+}
+}
+
+	•	boyuan.biz.retail.cashdetails.query（查询零售收银明细信息接口）
+接入方式：GET/POST
+
+请求业务参数说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+business_date_start
+发生日期起
+String(20)
+与单据号不可同时为空
+格式：yyyy-MM-dd，默认当天往前推7天（包含当天）
+可空
+2019-03-15
+business_date_end
+发生日期止
+String(20)
+与单据号不可同时为空
+格式：yyyy-MM-dd，默认当天
+可空
+2019-03-21
+gsdm
+公司代码
+String(256)
+支持多个公司代码同时查询，以英文逗号分隔
+可空
+80001
+bill_type
+单据类型
+String(32)
+RETAIL-零售
+RETAILE-零售换机
+RETAILR-零售退货
+RETAIL_DP-零售定金
+RETAIL_DP_R-零售退定金
+RECYCLE-旧机回收
+RECYCLER-旧机退货
+AFTERSALE_CASH-售后收银
+可空
+RETAIL
+bill_id
+单据号
+String(256)
+与发生日期起止不可同时为空
+支持多个单据号同时查询，以英文逗号分隔
+可空
+
+is_effective
+是否有效
+Number
+0-无效，已删除
+1-有效
+默认全部
+可空
+1
+page_no
+页码
+Number
+传入值为1代表第一页，传入值为2代表第二页，依此类推。默认返回的数据是从第一页开始，即默认1
+可空
+1
+page_size
+每页条数
+Number
+每页返回最多返回1000条，默认值为100
+可空
+100
+响应业务参数说明：
+result_list为零售明收银细列表，详见零售收银明细（RetailCashDetail）信息。
+
+零售收银明细（RetailCashDetail）信息：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+id
+收银记录的id
+String(36)
+收银记录的id
+不可空
+134dfddg-9d1b-4997-a2c2-6cd63ecfd6f1
+seq_no
+收银明细的行号
+int
+
+不可空
+1
+cash_id
+收银ID
+String(36)
+
+不可空
+234dfddg-9d1b-4997-a2c2-6cd68ecfd6fb
+cash_type
+收银类型
+String(64)
+
+不可空
+现金收入
+cash_name
+收银名称
+String(128)
+
+不可空
+POS
+company_id
+所属门店ID
+String(36)
+
+不可空
+f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb
+company_name
+所属门店名称
+String(128)
+
+不可空
+总公司
+bill_id
+单据号
+Stirng(32)
+
+不可空
+13180
+bill_type
+单据类型
+Stirng(32)
+RETAIL-零售
+RETAILE-零售换机
+RETAILR-零售退货
+RETAIL_DP-零售定金
+RETAIL_DP_R-零售退定金
+RECYCLE-旧机回收
+RECYCLER-旧机退货
+AFTERSALE_CASH-售后收银
+不可空
+RETAIL
+business_date
+业务发生日期
+String(20)
+格式：yyyy-MM-dd
+不可空
+2019-03-21
+amounts
+收银金额
+Double
+
+不可空 
+1000.00
+old_account_id
+默认账户ID
+String(36)
+
+可空 
+d75ada7b-6a8b-4911-80af-71597551fbc0
+old_account_name
+默认账户名称
+String(128)
+
+可空 
+默认账户
+account_id
+实收账户ID
+String(36)
+
+可空 
+d75ada7b-6a8b-4911-80af-71597551fbc0
+account_name
+实收账户名称
+String(128)
+
+可空 
+实收账户
+external_no
+外部单号
+String(128)
+
+可空
+1
+is_effective
+是否有效
+Number
+0-无效，已删除
+1-有效
+默认全部
+不可空
+1
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+不可空
+
+create_time
+创建时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+不可空
+2019-03-20 11:00:00
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+remark
+收银备注
+String(256)
+
+可空
+
+请求样例：
+service=boyuan.biz.retail.cashdetails.query
+app_id=2014072300007148
+_input_charset=utf-8
+sign_type=MD5
+sign=85bf83f78d5cefb804bd805532fc688e
+timestamp=2019-03-20 13:42:50
+version=1.0
+business_date_start=2019-03-15
+business_date_end=2019-03-21
+bill_id=13719
+page_no=1
+page_size=100
+响应样例：
+{
+    "return_code": "SUCCESS",
+"return_msg": "成功",
+"api_response": {
+    "total_results ": 50,
+        "result_list": 
+	    [
+		    {
+			    "cash_id": "b5426a2b-8e3a-468c-a4b1-800dbad43011",
+    "cash_type": "现金收入",
+                "cash_name": "POS",
+    "company_id ": "f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb",
+                "company_name": "总公司",
+    "bill_id": "13169",
+    "bill_type": "RETAIL", 
+    "business_date": "2019-03-21", 
+    "amounts": 2000.00,
+    "old_account_id": "d75ada7b-6a8b-4911-80af-71597551fbc0",
+    "old_account_name": "默认账户名称1",
+    "account_id": "d75ada7b-6a8b-4911-80af-71597551fbc2",
+    "account_name": "实收账户名称1",
+    "external_no": "外部单号1",
+    "is_effective": 1,
+    "seq_no ": 1,
+    "create_time": "2019-03-20 11:00:00",
+    "modify_time": "2019-03-20 12:00:00",
+    "remark": "收银备注"
+		    },
+            {
+			    "cash_id": "b5426a2b-8e3a-468c-a4b1-800dbad43011",
+    "cash_type": "现金收入",
+                "cash_name": "POS",
+    "company_id ": "f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb",
+                "company_name": "总公司",
+    "bill_id": "13169",
+    "bill_type": "RETAIL", 
+    "business_date": "2019-03-21", 
+    "amounts": 1000.00,
+    "old_account_id": "d75ada7b-6a8b-4911-80af-71597551fbc1",
+    "old_account_name": "默认账户名称2",
+    "account_id": "d75ada7b-6a8b-4911-80af-71597551fbc32",
+    "account_name": "实收账户名称2",
+    "external_no": "外部单号2",
+    "is_effective": 1,
+    "seq_no ": 1,
+    "create_time": "2019-03-20 11:00:00",
+    "modify_time": "2019-03-20 12:00:00",
+    "remark": "收银2备注"
+		    }
+        ]
+}
+}
+
+	•	boyuan.biz.sales.query（查询批发信息信息接口）
+接入方式：GET/POST
+
+请求业务参数说明：
+发生日期/创建日期/修改日期三者不能同时为空
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+business_date_start
+发生日期起
+String(20)
+格式：yyyy-MM-dd，默认当天往前推7天（包含当天）
+可空
+2019-03-15
+business_date_end
+发生日期止
+String(20)
+格式：yyyy-MM-dd，默认当天
+可空
+2019-03-21
+create_date_start
+批发单创建时间起
+String(20)
+格式：yyyy-MM-dd，若为空，且create_date_end不为空，则默认create_date_end往前推7天（包含create_date_end）
+可空
+2019-03-15
+create_date_end
+批发单创建时间止
+String(20)
+格式：yyyy-MM-dd，若为空，且create_date_start不为空，则默认create_date_start往后推7天（包含create_date_start）
+可空
+2019-03-21
+modify_date_start
+批发单修改时间起
+String(20)
+格式：yyyy-MM-dd，若为空，且modify_date_end不为空，则默认modify_date_end往前推7天（包含modify_date_end）
+可空
+2019-03-15
+modify_date_end
+批发单修改时间止
+String(20)
+格式：yyyy-MM-dd，若为空，且modify_date_start不为空，则默认modify_date_start往后推7天（包含modify_date_start）
+可空
+2019-03-21
+trans_type
+事务类型
+String(32)
+取值范围：售/售退/售换
+多种类型用英文逗号分隔
+可空
+售,售退
+is_effective
+是否有效
+Number
+0-无效，已删除
+1-有效
+默认全部
+可空
+1
+page_no
+页码
+Number
+传入值为1代表第一页，传入值为2代表第二页，依此类推。默认返回的数据是从第一页开始，即默认1
+可空
+1
+page_size
+每页条数
+Number
+每页返回最多返回1000条，默认值为100
+可空
+100
+响应业务参数说明：
+result_list为批发明细列表，详见批发明细（SaleDetail）信息。
+
+批发明细（SaleDetail）信息：
+包括快速批发/批发换机/批发退货
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+id
+批发明细行ID
+String(36)
+
+不可空
+b5426a2b-8e3a-468c-a4b1-800dbad43011
+head_id
+批发主表ID
+String(36)
+一张批发单可能对应多个商品明细行
+不可空
+bc2b613a-f9b9-4037-9aea-a0bef16c2a67
+company_id
+所属门店ID
+String(36)
+
+不可空
+f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb
+company_name
+所属门店名称
+String(128)
+
+不可空
+总公司
+bill_id
+单据号
+Stirng(32)
+
+不可空
+13180
+bill_type
+单据类型
+Stirng(32)
+WSA-批发
+WSAR-批发退货
+WSAE-批发换机
+不可空
+WAS
+business_date
+业务发生日期
+String(20)
+格式：yyyy-MM-dd
+不可空
+2019-03-21
+sale_way_id
+出库方式ID
+String(36)
+
+不可空
+2334dgaf-936b-45cf-a16a-b9d3c7d285b3
+sale_way_name
+出库方式名称
+String(64)
+
+不可空 
+经销
+manual_number
+手工单号
+String(64)
+
+可空 
+
+order_bill_id
+订单号
+String(32)
+
+可空
+13179
+price_apply_bill_id
+特权申请单号
+String(32)
+
+可空
+13177
+cust_id
+客户ID
+String(36)
+对应boyuan.custsuppliers.get接口id字段
+不可空 
+7dd03188-5bc4-4af7-8167-2b5fb59e0baa
+cust_name
+客户名称
+Stirng(128)
+
+不可空
+张三
+sales_id
+业务员ID
+String(36)
+对应boyuan.users.get接口id字段
+不可空 
+8dd03188-5bc4-4af7-8167-2b5fb59e0baa
+sales_name
+业务员名称
+Stirng(128)
+
+不可空
+李四
+cash_term
+是否现结
+Number
+0-否
+1-是
+默认否
+不可空
+0
+product_brandid
+商品品牌ID
+String(36)
+对应boyuan.brands.get接口的id字段
+可空 
+65269cae-bdef-4213-9c52-941b29d3a184
+product_brand_name
+商品品牌名称
+String(128)
+
+可空 
+商品品牌
+product_category_id
+商品分类ID
+String(36)
+对应boyuan.categorys.get接口的id字段
+可空 
+96d98d1b-8aa0-4bf3-8066-a40e1dd84599
+product_category_name
+商品分类名称
+String(128)
+
+可空 
+商品分类
+product_id
+商品ID
+String(36)
+对应boyuan.products.get接口的id字段
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+商品全称
+String(128)
+
+可空 
+商品全称
+warehouse_id
+仓库ID
+String(36)
+对应boyuan.warehouses.get接口的id字段
+不可空 
+17273d63-90dc-4b5b-add3-971a78a5b879
+warehouse_name
+仓库名称
+String(128)
+
+可空 
+仓库名称
+qty
+数量
+Number
+
+不可空
+1
+unit_price
+单价
+Double
+
+不可空
+1000.55
+amounts
+金额
+Double
+
+不可空 
+1000.55
+is_effective
+是否有效
+Number
+0-无效，已删除
+1-有效
+默认全部
+不可空
+1
+create_time
+创建时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+不可空
+2019-03-20 11:00:00
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+head_remark
+头备注
+String(256)
+
+可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+请求样例：
+service=boyuan.biz.sales.query
+app_id=2014072300007148
+_input_charset=utf-8
+sign_type=MD5
+sign=85bf83f78d5cefb804bd805532fc688e
+timestamp=2019-03-20 13:42:50
+version=1.0
+business_date_start=2019-03-15
+business_date_end=2019-03-21
+page_no=1
+page_size=100
+响应样例：
+{
+    "return_code": "SUCCESS",
+"return_msg": "成功",
+"api_response": {
+    "total_results ": 50,
+        "result_list": 
+	    [
+		    {
+			    "id": "b5426a2b-8e3a-468c-a4b1-800dbad43011",
+    "head_id": "bc2b613a-f9b9-4037-9aea-a0bef16c2a67",
+    "company_id ": "f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb",
+                "company_name": "总公司",
+    "bill_id": "13169",
+    "bill_type": "WSA", 
+    "business_date": "2019-03-21", 
+    "sale_way_id": "2334dgaf-936b-45cf-a16a-b9d3c7d285b3",
+    "sale_way_name": "经销",
+    "order_bill_id": "13179", 
+    "price_apply_bill_id": "13177",
+    "relate_bill_id": null,
+    "cust_id": "7dd03188-5bc4-4af7-8167-2b5fb59e0baa",
+    "cust_name": "张三",
+    "sales_id": "d75ada7b-6a8b-4911-80af-71597551fbc0",
+    "sales_name": "博远",
+    "cash_term": 0,
+    "product_brand_id": "65269cae-bdef-4213-9c52-941b29d3a184",
+    "product_brand_name": "商品品牌",
+    "product_category_id": "96d98d1b-8aa0-4bf3-8066-a40e1dd84599",
+    "product_category_name": "商品分类",
+    "product_id": "e239dc42-40ba-4fe3-88f1-37dd56d4f034",
+    "product_full_name":"商品全称",
+    "warehouse_id": "17273d63-90dc-4b5b-add3-971a78a5b879",
+    "warehouse_name": "仓库名称",
+    "qty": 2,
+    "unit_price": 1000.00,
+    "amounts": 2000.00, 
+    "is_effective": 1,
+    "create_time": "2019-03-20 11:00:00",
+    "modify_time": "2019-03-20 12:00:00",
+    "head_remark": "头备注",
+    "remark": "商品行1备注"
+		    },
+            {
+			    "id": "a5426a2b-8e3a-468c-a4b1-800dbad43011",
+    "head_id": "bc2b613a-f9b9-4037-9aea-a0bef16c2a67",
+    "company_id ": "f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb",
+                "company_name": "总公司",
+    "bill_id": "13169",
+    "bill_type": "WSA", 
+    "business_date": "2019-03-21", 
+    "sale_way_id": "2334dgaf-936b-45cf-a16a-b9d3c7d285b3",
+    "sale_way_name": "经销",
+    "order_bill_id": "13179", 
+    "price_apply_bill_id": "13177",
+    "relate_bill_id": null,
+    "cust_id": "7dd03188-5bc4-4af7-8167-2b5fb59e0baa",
+    "cust_name": "张三",
+    "sales_id": "d75ada7b-6a8b-4911-80af-71597551fbc0",
+    "sales_name": "博远",
+    "cash_term": 0,
+    "product_brand_id": "65269cae-bdef-4213-9c52-941b29d3a184",
+    "product_brand_name": "商品品牌",
+    "product_category_id": "96d98d1b-8aa0-4bf3-8066-a40e1dd84599",
+    "product_category_name": "商品分类",
+    "product_id": "e239dc42-40ba-4fe3-88f1-37dd56d4f034",
+    "product_full_name":"商品全称",
+    "warehouse_id": "17273d63-90dc-4b5b-add3-971a78a5b879",
+    "warehouse_name": "仓库名称",
+    "qty": 2,
+    "unit_price": 1000.00,
+    "amounts": 2000.00, 
+    "is_effective": 1,
+    "create_time": "2019-03-20 11:00:00",
+    "modify_time": "2019-03-20 12:00:00",
+    "head_remark": "头备注",
+    "remark": "商品行2备注"
+		    }
+        ]
+}
+}
+
+	•	boyuan.cashinfos.get（获取收银类型信息接口）
+接入方式：GET/POST
+
+请求业务参数说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+type
+收银分类
+String(32)
+现金收入
+银行收入
+虚拟收入
+结算收入
+可空
+现金收入
+name
+收银名称
+String(128)
+支持模糊匹配
+可空
+
+pay_in_tag
+是否自动缴款
+Number
+0-否
+1-是
+默认全部
+可空
+0
+is_effective
+是否启用
+Number
+0-否
+1-是
+默认全部
+可空
+
+page_no
+页码
+Number
+传入值为1代表第一页，传入值为2代表第二页，依此类推。默认返回的数据是从第一页开始，即默认1
+可空
+1
+page_size
+每页条数
+Number
+每页返回最多返回1000条，默认值为100
+可空
+100
+
+响应业务参数说明：
+result_list为收银类型列表，详见收银类型（CashInfo）信息。
+
+收银类型（CashInfo）信息：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+id
+往来单位ID
+String(36)
+主键ID
+不可空
+e13f0416-2765-47d4-8079-123f9f58d0b8
+cash_type
+收银分类
+String(32)
+现金收入
+银行收入
+虚拟收入
+结算收入
+不可空
+
+cash_name
+收银名称
+String(128)
+
+不可空
+
+cash_property_id
+收银类型属性ID
+String(36)
+
+可空
+
+cash_property_name
+收银类型属性名称
+Stirng(128)
+
+可空
+
+account_id
+默认收银账户ID
+String(36)
+
+可空
+
+account_name
+默认收银账户名称
+String(128)
+
+可空
+
+supplier_cust_id
+结算单位ID
+String(36)
+
+可空
+
+supplier_cust_name
+结算单位名称
+String(128)
+
+可空
+
+inout_tag
+结算方向
+Number
+-1-应付
+1-应收
+可空 
+0
+pay_way
+支付渠道
+String(36)
+WEBCHAT_PAY-微信
+ALIPAY-支付宝
+VIP_CARD_PAY-预缴费卡
+可空 
+
+pay_in_tag
+是否自动缴款
+Number
+0-否
+1-是
+为空表示否
+可空 
+
+seq_no
+显示顺序号
+Number
+
+可空 
+
+is_effective
+是否启用
+Number
+0-否
+1-是
+非空
+1
+system_tag
+是否系统
+Number
+0-否
+1-是
+为空表示否
+可空
+
+is_allowable_minus
+是否允许为负
+Number
+0-否
+1-是
+为空表示否
+可空
+
+create_time
+创建时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+不可空
+2019-03-20 11:00:00
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+remark
+备注
+String(256)
+
+可空
+往来单位备注
+
+请求样例：
+service=boyuan.cashinfos.get
+app_id=2014072300007148
+_input_charset=utf-8
+sign_type=MD5
+sign=85bf83f78d5cefb804bd805532fc688e
+timestamp=2019-03-20 13:42:50
+version=1.0
+is_effective=1
+page_no=1
+page_size=100
+响应样例：
+{
+    "return_code": "SUCCESS",
+"return_msg": "成功",
+"api_response": {
+    "total_results ": 50,
+        "result_list": 
+	    [
+		    {
+			    "id": "e13f0416-2765-47d4-8079-123f9f58d0b8",
+                "cash_type": "现金收入",
+                "cash_name": "现金",
+    "cash_property_id ": "7b5a0d35-bdc5-49c6-b0b0-ef31e12a862f", 
+    "cash_property_name": "属性名称",
+    "account_id": null, 
+    "channel_area_code ": "010101",
+    ""account_id ": "7b5a0d35-bdc5-49c6-b0b0-ef31e12a1245",
+    "account_name": "账户名称",
+    "supplier_cust_id ": "d75ada7b-6a8b-4911-80af-71597551fbc0",
+    "supplier_cust_name": "博远",
+                "inout_tag": 1,
+    "pay_way": "ALIPAY",
+                "pay_in_tag": 1,
+    "seq_no": 1,
+    "is_effective": 1,
+"system_tag": 0,
+"is_allowable_minus": 0,
+    "create_time": "2019-03-20 11:00:00",
+    "modify_time": "2019-03-20 12:00:00",
+    "remark": "备注"
+		    }
+        ]
+}
+}
+
+	•	零售创建
+4.2.24.1  boyuan.biz.bill.retail.generate（生成零售单接口）
+接入方式：POST
+
+请求业务参数（以JSON串方式放入请求公共参数的biz字段）说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+head         单据头信息
+company_code
+所属门店代码
+String(36)
+
+与company_id不能同时为空
+8000401
+company_id
+所属门店ID
+String(36)
+
+与company_code不能同时为空
+f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb
+company_name
+所属门店名称
+String(128)
+
+可空
+总公司
+business_date
+业务发生日期
+String(20)
+格式：yyyy-MM-dd
+不可空
+2019-03-21
+order_bill_id
+零售订单号
+String()
+
+可空
+15689
+consume_points
+使用积分
+int
+
+可空
+100
+classes_id
+班次ID
+String(36)
+
+可空
+2334dgaf-936b-45cf-a16a-b9d3c7d285b3
+classes_name
+班次名称
+String(64)
+
+可空 
+早班
+manual_number
+手工单号
+String(64)
+
+可空
+
+retail_way_id
+出库方式ID
+String(36)
+
+可空
+
+retail_way_name
+出库方式名称
+String(128)
+
+可空
+
+member_id
+会员ID
+String(36)
+对应boyuan.members.get接口id字段
+可空 
+7dd03188-5bc4-4af7-8167-2b5fb59e0baa
+member_name
+会员名称
+Stirng(128)
+
+可空
+张三
+member_mobile_phone
+会员手机号
+String(32)
+
+可空
+1388888888
+member_id_card
+会员证件号
+String(32)
+
+可空
+330105121212132313
+member_card_type_id
+会员证件类型id
+String(64)
+
+可空
+10fbf726-f2e1-4540-9ac3-0fb272a5654c
+member_card_type_name
+会员证件类型名称
+String(64)
+
+可空
+身份证
+creater_id
+创建人id
+String(64)
+
+可空
+007258ad-7956-45fa-81a9-15974c249adb
+modifier_id
+修改人id
+String(64)
+
+可空
+00fbf726-f2e1-4540-9ac2-0fb272a5654c
+remark
+头备注
+String(256)
+
+可空
+
+cash_details   收银明细信息
+add_details    收银明细新增列表，为cash_details子节点
+cash_id
+收银方式ID
+String(36)
+
+不可空 
+e79fdff1-6ede-46e6-86eb-66b906d77e68
+cash_name
+收银方式名称
+String(128)
+
+可空 
+现金
+cash_type
+收银类型
+String(64)
+
+可空 
+现金收入
+amounts
+收银金额
+Double
+
+不可空
+180.50
+account_id
+账户名称ID
+String(128)
+
+
+
+external_no
+外部单号
+String(128)
+
+可空 
+
+remark
+收银备注
+String(128)
+
+可空
+
+seq_no
+明细行序号
+Int
+
+可空
+1
+product_details   商品明细信息
+add_details      商品明细新增列表，为product_details子节点
+imei
+串号
+String(128)
+有串号商品不可空
+可空 
+05394824
+
+product_id
+商品ID
+String(36)
+对应boyuan.products.get接口的id字段
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+商品全称
+String(128)
+
+可空 
+商品全称
+warehouse_id
+仓库ID
+String(36)
+对应boyuan.warehouses.get接口的id字段
+不可空 
+17273d63-90dc-4b5b-add3-971a78a5b879
+warehouse_name
+仓库名称
+String(128)
+
+可空 
+仓库名称
+qty
+数量
+Number
+
+不可空
+1
+unit_price
+单价
+Double
+
+不可空
+1000.55
+amounts
+金额
+Double
+
+不可空 
+1000.55
+sales_id
+店员1ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+不可空 
+d75ada7b-6a8b-4911-80af-71597551fbc0
+sales_name
+店员1名称
+String(128)
+
+可空 
+博远
+sales_id2
+店员2ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+可空 
+d75ada7b-6a8b-4911-80af-71597551fbc1
+sales_name2
+店员2名称
+String(128)
+
+可空 
+博远2
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+mbpack_details   套餐明细信息
+add_details       套餐明细列表，为mbpack_details子节点
+key_phone
+业务号码
+String(64)
+
+不可空
+18398011358
+schema_id
+佣金方案ID
+String(36)
+
+可空
+
+schema_name
+佣金方案名称
+String(128)
+
+可空
+
+product_id
+套餐ID
+String(36)
+对应boyuan.products.get接口的id字段
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+套餐名称
+String(128)
+
+可空 
+套餐名称
+qty
+数量
+Number
+
+不可空
+1
+unit_price
+单价
+Double
+
+不可空
+1000.55
+amounts
+金额
+Double
+
+不可空 
+1000.55
+sales_id
+店员1ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+不可空 
+d75ada7b-6a8b-4911-80af-71597551fbc0
+sales_name
+店员1名称
+String(128)
+
+可空 
+博远
+sales_id2
+店员2ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+可空 
+d75ada7b-6a8b-4911-80af-71597551fbc1
+sales_name2
+店员2名称
+String(128)
+
+可空 
+博远2
+mbpack_cust_type_id
+套餐客户类型ID
+String(36)
+
+可空
+d75ada7b-6a8b-4911-80af-71597551fbc1
+mbpack_cust_type_name
+套餐客户类型名称
+String(128)
+
+可空
+套餐客户类型名称
+mbpack_cc_type_id
+套餐业务类型ID
+String(36)
+
+可空
+d75ada7b-6a8b-4911-80af-71597551fbc2
+mbpack_cc_type_name
+套餐业务类型名称
+String(128)
+
+可空
+套餐业务类型名称
+mbpack_cust_type_id
+套餐客户类型ID
+String(36)
+
+可空
+d75ada7b-6a8b-4911-80af-71597551fbc1
+mbpack_cust_type_name
+套餐客户类型名称
+String(128)
+
+可空
+套餐客户类型名称
+relevance_imei
+关联串号
+String(128)
+
+可空 
+866852017028405
+settle_amounts
+结算金额
+Double
+
+不可空 
+0.1
+point
+套餐积分
+Double
+
+可空 
+10.0
+openning_date
+套餐开通日期
+String(20)
+
+可空 
+2019-03-24
+ending_date
+套餐到期日期
+String(20)
+
+可空 
+
+supplier_cust_id
+套餐结算单位ID
+String(36)
+对应boyuan.custsupplier.get接口的id字段
+不可空
+81a39cff-936b-45cf-a16a-b9d3c7d285b2
+supplier_cust_name
+套餐结算单位名称
+String(128)
+product_type为1时有效并不可空
+可空 
+结算单位名称
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+stage_details   分期明细信息
+add_details    分期明细列表，为stage_details子节点
+product_id
+分期ID
+String(36)
+对应boyuan.products.get接口的id字段
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+分期名称
+String(128)
+
+可空 
+分期名称
+sales_id
+店员1ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+不可空 
+d75ada7b-6a8b-4911-80af-71597551fbc0
+sales_name
+店员1名称
+String(128)
+
+可空 
+博远
+sales_id2
+店员2ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+可空 
+d75ada7b-6a8b-4911-80af-71597551fbc1
+sales_name2
+店员2名称
+String(128)
+
+可空 
+博远2
+relevance_imei
+关联串号
+String(128)
+product_type为1/2/3时不可空
+可空 
+866852017028405
+comm_rate
+佣金比例
+Double
+
+可空 
+0.1
+settle_amounts
+贷款金额
+Double
+
+不可空 
+0.1
+key_phone
+业务单号
+String(64)
+
+不可空
+18398011358
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+assurance_details 保障服务明细信息
+add_details      保障服务明细列表，为assurance_details子节点
+product_id
+保障服务ID
+String(36)
+对应boyuan.products.get接口的id字段
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+保障服务名称
+String(128)
+
+可空 
+保障服务名称
+qty
+数量
+Number
+
+不可空
+1
+unit_price
+单价
+Double
+
+不可空
+1000.55
+amounts
+金额
+Double
+
+不可空 
+1000.55
+settle_amounts
+结算金额
+Double
+
+可空
+
+sales_id
+店员1ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+不可空 
+d75ada7b-6a8b-4911-80af-71597551fbc0
+sales_name
+店员1名称
+String(128)
+
+可空 
+博远
+sales_id2
+店员2ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+可空 
+d75ada7b-6a8b-4911-80af-71597551fbc1
+sales_name2
+店员2名称
+String(128)
+
+可空 
+博远2
+relevance_imei
+关联串号
+String(128)
+
+可空 
+866852017028405
+key_phone
+业务单号
+String(64)
+
+不可空
+18398011358
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+
+响应业务参数说明：
+result为保存后的零售单信息，见零售单（Retail）结构
+
+请求样例：
+service=boyuan.biz.bill.retail.generate
+app_id=2014072300007148
+_input_charset=utf-8
+sign_type=MD5
+sign=85bf83f78d5cefb804bd805532fc688e
+timestamp=2019-03-20 13:42:50
+version=1.0
+biz={...}
+响应样例：
+{
+	return_code:   "SUCCESS",
+	return_msg:   "成功",
+	api_response:  {
+		total_results:  null,
+		result_list:  null,
+		result:  {
+			head:  {
+				id:   "4d4928bf-7258-423a-ba73-14195edf16b0",
+				big_gsdm:   "80005",
+				create_time:   "2019-07-18 11:30:11",
+				modify_time:   "2019-07-18 15:07:14",
+				company_id:   "092970c3-6ed5-4175-acd6-77ef4ac81946",
+				company_name:   "湖北黄冈门店",
+				bill_id:   "1035657",
+				bill_type:   "RETAIL",
+				bill_type_name:   "零售",
+				business_date:   "2019-07-17",
+				audit_status:  0,
+				is_day_end:  false,
+				print_status:  0,
+				modify_count:  3,
+				classes_id:   "2a6958e2-97e2-4e0c-969b-bfefb7f3b398",
+				classes_name:   "早",
+				mobile_phone:   "",
+				trans_type:   "售",
+				relate_id:   "4d4928bf-7258-423a-ba73-14195edf16b0",
+				divide_tag:  -1,
+				divide_rate:  0,
+				company_phone:   "2323232",
+				company_address:   "天津市天津",
+				invoice_qrcode_url:   "http://yxx-liugehetao-image.oss-cn-hangzhou.aliyuncs.com/80005/1563420614181/80005/1035657.png?x-oss-process=image%2Fsharpen%2C100",
+				retail_way_id:   "1455e055-86ba-4e71-804d-375b65fa39d9",
+				retail_way_name:   "经销"
+			},
+			cash_details:  {
+				add_details:  [{
+					id:   "bb15be61-9397-4f9e-a0fd-56f9fa1c5cee",
+					big_gsdm:   "80005",
+					creater_id:   "d29c976b-655f-464c-8224-1ed42fa1b8ad",
+					create_time:   "2019-07-18 11:30:11",
+					modifier_id:   "d29c976b-655f-464c-8224-1ed42fa1b8ad",
+					modify_time:   "2019-07-18 11:32:55",
+					version:  1,
+					is_effective:  1,
+					company_id:   "092970c3-6ed5-4175-acd6-77ef4ac81946",
+					bill_id:   "1035657",
+					bill_type:   "RETAIL",
+					bill_type_name:   "零售",
+					business_date:   "2019-07-17",
+					head_id:   "4d4928bf-7258-423a-ba73-14195edf16b0",
+					seq_no:  1,
+					cash_id:   "a9eca1c2-52e5-4b08-ac9b-9823a481f875",
+					cash_name:   "现金",
+					cash_type:   "现金收入",
+					amounts:  394,
+					is_allowable_minus:  1
+				}]
+			},
+			product_details:  {
+				add_details:  [{
+					id:   "b1a3570a-0826-4f24-98c0-6d83737a8854",
+					big_gsdm:   "80005",
+					creater_id:   "d29c976b-655f-464c-8224-1ed42fa1b8ad",
+					create_time:   "2019-07-18 11:30:11",
+					version:  1,
+					is_effective:  1,
+					company_id:   "092970c3-6ed5-4175-acd6-77ef4ac81946",
+					bill_id:   "1035657",
+					head_id:   "4d4928bf-7258-423a-ba73-14195edf16b0",
+					seq_no:  1,
+					warehouse_id:   "69457467-12ea-4162-be13-d35d6e2a12a5",
+					warehouse_name:   "小总仓",
+					product_id:   "e79add93-b8db-4a02-90fb-db740e9783eb",
+					product_code:   "7777*",
+					product_brand_id:   "196353e7-66af-441e-bbcb-acfbe70ff57e",
+					product_category_id:   "98d6d312-e1d5-4b4e-9506-58a3d6ea4f78",
+					product_full_name:   "*预售1A1723全网演示宝石红",
+					imei_count:  1,
+					imei_len:  8,
+					imei2_len:  10,
+					imei3_len:  0,
+					qty:  1,
+					unit_price:  198,
+					amounts:  198,
+					sales_id:   "d564faae-fe25-41a2-acdb-9aa62f5ce693",
+					sales_name:   "203呀",
+					retail_price:  0,
+					mbpack_tag:  0,
+					openning_date:   "2019-07-18",
+					settle_amounts:  0,
+					policy_product_id:   "f1a0e114-e99e-4357-8ba2-a00e05d5319d",
+					manual_comms_amounts:  0,
+					comm_rate:  0,
+					point:  0,
+					imei:   "05394824",
+					account_tag:  0,
+					kickback_rate:  1,
+					partner_settle_amount:  200,
+					partner_product_code:   "1",
+					retail_display_tag:  0
+				}, {
+					id:   "36f0ba63-f50f-451e-bfcf-cfe27e2d0053",
+					big_gsdm:   "80005",
+					creater_id:   "d29c976b-655f-464c-8224-1ed42fa1b8ad",
+					create_time:   "2019-07-18 11:30:11",
+					modifier_id:   "d29c976b-655f-464c-8224-1ed42fa1b8ad",
+					modify_time:   "2019-07-18 11:32:55",
+					version:  1,
+					is_effective:  1,
+					company_id:   "092970c3-6ed5-4175-acd6-77ef4ac81946",
+					bill_id:   "1035657",
+					head_id:   "4d4928bf-7258-423a-ba73-14195edf16b0",
+					seq_no:  2,
+					warehouse_id:   "69457467-12ea-4162-be13-d35d6e2a12a5",
+					warehouse_name:   "小总仓",
+					product_id:   "e79add93-b8db-4a02-90fb-db740e9783eb",
+					product_code:   "7777*",
+					product_brand_id:   "196353e7-66af-441e-bbcb-acfbe70ff57e",
+					product_category_id:   "98d6d312-e1d5-4b4e-9506-58a3d6ea4f78",
+					product_full_name:   "*预售1A1723全网演示宝石红",
+					imei_count:  1,
+					imei_len:  8,
+					imei2_len:  10,
+					imei3_len:  0,
+					qty:  1,
+					unit_price:  196,
+					amounts:  196,
+					sales_id:   "d564faae-fe25-41a2-acdb-9aa62f5ce693",
+					sales_name:   "203呀",
+					retail_price:  0,
+					mbpack_tag:  0,
+					openning_date:   "2019-07-18",
+					settle_amounts:  0,
+					policy_product_id:   "f1a0e114-e99e-4357-8ba2-a00e05d5319d",
+					manual_comms_amounts:  0,
+					comm_rate:  0,
+					point:  0,
+					imei:   "05311863",
+					account_tag:  0,
+					kickback_rate:  2,
+					partner_settle_amount:  200,
+					partner_product_code:   "1",
+					retail_display_tag:  0
+				}]
+			},
+			mbpack_details:  {
+				add_details: []
+			},
+			assurance_details:  {
+				add_details: []
+			},
+			stage_details:  {
+				add_details: []
+			}
+		}
+	}
+}
+
+
+4.2.24.2  boyuan.biz.bill.retailReturn.generate（生成零售退货接口）
+接入方式：POST
+
+请求业务参数（以JSON串方式放入请求公共参数的biz字段）说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+head         单据头信息
+company_code
+所属门店代码
+String(36)
+
+与company_id不能同时为空
+8000401
+company_id
+所属门店ID
+String(36)
+
+与company_code不能同时为空
+f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb
+company_name
+所属门店名称
+String(128)
+
+可空
+总公司
+business_date
+业务发生日期
+String(20)
+格式：yyyy-MM-dd
+不可空
+2019-03-21
+order_bill_id
+退货订单号
+String()
+
+可空
+15689
+consume_points
+使用积分
+int
+
+可空
+100
+classes_id
+班次ID
+String(36)
+
+可空
+2334dgaf-936b-45cf-a16a-b9d3c7d285b3
+classes_name
+班次名称
+String(64)
+
+可空 
+早班
+manual_number
+手工单号
+String(64)
+
+可空
+
+retail_way_id
+出库方式ID
+String(36)
+
+可空
+
+retail_way_name
+出库方式名称
+String(128)
+
+可空
+
+member_id
+会员ID
+String(36)
+对应boyuan.members.get接口id字段
+可空 
+7dd03188-5bc4-4af7-8167-2b5fb59e0baa
+member_name
+会员名称
+Stirng(128)
+
+可空
+张三
+member_mobile_phone
+会员手机号
+String(32)
+
+可空
+1388888888
+member_id_card
+会员证件号
+String(32)
+
+可空
+330105121212132313
+member_card_type_id
+会员证件类型id
+String(64)
+
+可空
+10fbf726-f2e1-4540-9ac3-0fb272a5654c
+member_card_type_name
+会员证件类型名称
+String(64)
+
+可空
+身份证
+creater_id
+创建人id
+String(64)
+
+可空
+007258ad-7956-45fa-81a9-15974c249adb
+modifier_id
+修改人id
+String(64)
+
+可空
+00fbf726-f2e1-4540-9ac2-0fb272a5654c
+remark
+头备注
+String(256)
+
+可空
+
+cash_details   收银明细信息
+add_details    收银明细新增列表，为cash_details子节点
+cash_id
+收银方式ID
+String(36)
+
+与cash_name不能同时为空
+e79fdff1-6ede-46e6-86eb-66b906d77e68
+cash_name
+收银方式名称
+String(128)
+
+与cash_id不能同时为空
+现金
+cash_type
+收银类型
+String(64)
+
+可空 
+现金收入
+amounts
+收银金额
+Double
+
+不可空
+180.50
+account_id
+账户名称ID
+String(128)
+
+
+
+external_no
+外部单号
+String(128)
+
+可空 
+
+remark
+收银备注
+String(128)
+
+可空
+
+seq_no
+明细行序号
+Int
+
+可空
+1
+product_details   商品明细信息
+add_details      商品明细新增列表，为product_details子节点
+imei
+串号
+String(128)
+有串号商品不可空
+可空 
+05394824
+
+product_id
+商品ID
+String(36)
+对应boyuan.products.get接口的id字段
+与product_full_name不能同时为空
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+商品全称
+String(128)
+
+与product_id不能同时为空
+商品全称
+warehouse_id
+仓库ID
+String(36)
+对应boyuan.warehouses.get接口的id字段
+与warehouse_name不能同时为空
+17273d63-90dc-4b5b-add3-971a78a5b879
+warehouse_name
+仓库名称
+String(128)
+
+与warehouse_id不能同时为空
+仓库名称
+qty
+数量
+Number
+
+不可空
+1
+unit_price
+单价
+Double
+
+不可空
+1000.55
+amounts
+金额
+Double
+
+可空 
+1000.55
+sales_id
+店员1ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+与sales_name不能同时为空
+d75ada7b-6a8b-4911-80af-71597551fbc0
+sales_name
+店员1名称
+String(128)
+
+与sales_id不能同时为空
+博远
+sales_id2
+店员2ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+可空 
+d75ada7b-6a8b-4911-80af-71597551fbc1
+sales_name2
+店员2名称
+String(128)
+
+可空 
+博远2
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+mbpack_details   套餐明细信息
+add_details       套餐明细列表，为mbpack_details子节点
+key_phone
+业务号码
+String(64)
+
+不可空
+18398011358
+schema_id
+佣金方案ID
+String(36)
+
+可空
+
+schema_name
+佣金方案名称
+String(128)
+
+可空
+
+product_id
+套餐ID
+String(36)
+对应boyuan.products.get接口的id字段
+与product_full_name不能同时为空
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+套餐名称
+String(128)
+
+与product_id不能同时为空
+套餐名称
+qty
+数量
+Number
+
+不可空
+1
+unit_price
+单价
+Double
+
+不可空
+1000.55
+amounts
+金额
+Double
+
+可空 
+1000.55
+sales_id
+店员1ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+不可空 
+d75ada7b-6a8b-4911-80af-71597551fbc0
+sales_name
+店员1名称
+String(128)
+
+可空 
+博远
+sales_id2
+店员2ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+可空 
+d75ada7b-6a8b-4911-80af-71597551fbc1
+sales_name2
+店员2名称
+String(128)
+
+可空 
+博远2
+mbpack_cust_type_id
+套餐客户类型ID
+String(36)
+
+可空
+d75ada7b-6a8b-4911-80af-71597551fbc1
+mbpack_cust_type_name
+套餐客户类型名称
+String(128)
+
+可空
+套餐客户类型名称
+mbpack_cc_type_id
+套餐业务类型ID
+String(36)
+
+可空
+d75ada7b-6a8b-4911-80af-71597551fbc2
+mbpack_cc_type_name
+套餐业务类型名称
+String(128)
+
+可空
+套餐业务类型名称
+mbpack_cust_type_id
+套餐客户类型ID
+String(36)
+
+可空
+d75ada7b-6a8b-4911-80af-71597551fbc1
+mbpack_cust_type_name
+套餐客户类型名称
+String(128)
+
+可空
+套餐客户类型名称
+relevance_imei
+关联串号
+String(128)
+
+可空 
+866852017028405
+settle_amounts
+结算金额
+Double
+
+不可空 
+0.1
+point
+套餐积分
+Double
+
+可空 
+10.0
+openning_date
+套餐开通日期
+String(20)
+
+可空 
+2019-03-24
+ending_date
+套餐到期日期
+String(20)
+
+可空 
+
+supplier_cust_id
+套餐结算单位ID
+String(36)
+对应boyuan.custsupplier.get接口的id字段
+可空
+81a39cff-936b-45cf-a16a-b9d3c7d285b2
+supplier_cust_name
+套餐结算单位名称
+String(128)
+product_type为1时有效并不可空
+可空 
+结算单位名称
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+stage_details   分期明细信息
+add_details    分期明细列表，为stage_details子节点
+product_id
+分期ID
+String(36)
+对应boyuan.products.get接口的id字段
+与product_full_name不能同时为空
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+分期名称
+String(128)
+
+与product_id不能同时为空
+分期名称
+sales_id
+店员1ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+不可空 
+d75ada7b-6a8b-4911-80af-71597551fbc0
+sales_name
+店员1名称
+String(128)
+
+可空 
+博远
+sales_id2
+店员2ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+可空 
+d75ada7b-6a8b-4911-80af-71597551fbc1
+sales_name2
+店员2名称
+String(128)
+
+可空 
+博远2
+relevance_imei
+关联串号
+String(128)
+product_type为1/2/3时不可空
+可空 
+866852017028405
+comm_rate
+佣金比例
+Double
+
+可空 
+0.1
+settle_amounts
+贷款金额
+Double
+
+不可空 
+0.1
+key_phone
+业务单号
+String(64)
+
+不可空
+18398011358
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+assurance_details 保障服务明细信息
+add_details      保障服务明细列表，为assurance_details子节点
+product_id
+保障服务ID
+String(36)
+对应boyuan.products.get接口的id字段
+与product_full_name不能同时为空
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+保障服务名称
+String(128)
+
+与product_id不能同时为空
+保障服务名称
+qty
+数量
+Number
+
+不可空
+1
+unit_price
+单价
+Double
+
+不可空
+1000.55
+amounts
+金额
+Double
+
+可空 
+1000.55
+settle_amounts
+结算金额
+Double
+
+可空
+
+sales_id
+店员1ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+不可空 
+d75ada7b-6a8b-4911-80af-71597551fbc0
+sales_name
+店员1名称
+String(128)
+
+可空 
+博远
+sales_id2
+店员2ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+可空 
+d75ada7b-6a8b-4911-80af-71597551fbc1
+sales_name2
+店员2名称
+String(128)
+
+可空 
+博远2
+relevance_imei
+关联串号
+String(128)
+
+可空 
+866852017028405
+key_phone
+业务单号
+String(64)
+
+不可空
+18398011358
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+
+响应业务参数说明：
+result为保存后的零售单信息，见零售单（Retail）结构
+
+
+	•	boyuan.biz.bill.retail.order.generate（生成零售订单接口）
+接入方式：POST
+
+请求业务参数（以JSON串方式放入请求公共参数的biz字段）说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+head         单据头信息
+third_order_no
+三方订单号
+String(32)
+
+不可空
+
+company_id
+所属门店ID
+String(36)
+与门店代码不能同时为空
+可空
+f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb
+company_code
+所属门店代码
+String(36)
+与门店ID不能同时为空
+可空
+80005
+company_name
+所属门店名称
+String(128)
+
+可空
+总公司
+business_date
+业务发生日期
+String(20)
+格式：yyyy-MM-dd
+不可空
+2019-03-21
+creater_id
+制单人ID
+String(36)
+对应boyuan.users.get接口id字段
+可空，为空时对应单据将只能由拥有修改他人单据的用户才能修改
+2334dgaf-936b-45cf-a16a-b9d3c7d285b3
+creater_name
+制单人名称
+String(64)
+
+可空 
+李四
+classes_id
+班次ID
+String(36)
+
+可空
+2334dgaf-936b-45cf-a16a-b9d3c7d285b3
+classes_name
+班次名称
+String(64)
+
+可空 
+早班
+dp_bill_id
+定金单号
+String(32)
+
+可空
+13178
+order_type
+订单类型
+Int
+
+可空
+1-到店自提
+2-快递到家
+3-门店配送
+默认1
+
+member_id
+会员ID
+String(36)
+对应boyuan.members.get接口id字段
+可空 
+7dd03188-5bc4-4af7-8167-2b5fb59e0baa
+member_name
+会员名称
+Stirng(128)
+
+可空
+张三
+member_mobile_phone
+会员手机号
+String(32)
+
+可空
+1388888888
+member_phone
+会员电话号码
+String(20)
+
+可空
+
+member_id_card
+会员证件号
+String(64)
+
+可空
+
+member_sex
+会员性别
+Int
+1-男
+0-女
+可空
+0
+member_birthday
+会员生日
+String(10)
+
+可空
+2016-03-28
+member_card_no
+会员卡号
+String(32)
+
+可空
+
+remark
+头备注
+String(256)
+
+可空
+
+total_amounts
+订单总金额
+Double(12,2)
+商品明细金额之和加上快递费
+可空
+1000.0
+paid_amounts
+已支付金额
+Double(12,2)
+购买商品支付的金额加上快递费
+可空
+500.0
+discount_amounts
+优惠金额
+Double(12,2)
+
+可空
+200.0
+express_fee
+快递费
+Double(12,2)
+订单产生的快递费用
+可空
+5.0
+pay_status
+支付状态
+Int
+订单支付状态：
+1-未支付
+2-已支付
+3-部分支付（预留）
+可空
+1
+discount_details   优惠明细列表，当优惠金额不为空时不可空且列表总金额之和必须等于优惠金额
+type
+优惠类型
+Int
+1-卡券
+2-积分
+3-折扣
+不可空
+1
+code
+优惠代码
+String(32)
+当type为1时表示卡券代码且必填
+可空
+356122714845
+amounts
+优惠金额
+Double(12,2)
+
+不可空
+200.0
+cash_details收银明细信息
+add_details 收银明细信息新增列表，为cash_details子节点
+cash_id
+收银方式id
+String(64)
+对应boyuan.cashinfos.get接口的id字段 
+不可空
+1239dc42-40ba-4fe3-88f1-31dd56d4f034
+amounts
+收银金额
+Double(12,2)
+
+不可空
+12.5
+external_no
+外部单号
+String(64)
+
+可空
+12355
+product_details   商品明细信息
+add_details      商品明细新增列表，为product_details子节点
+imei
+串号
+String(128)
+
+可空 
+05394824
+
+product_id
+商品ID
+String(36)
+对应boyuan.products.get接口的id字段
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+商品全称
+String(128)
+
+可空 
+商品全称
+warehouse_id
+仓库ID
+String(36)
+对应boyuan.warehouses.get接口的id字段
+可空 
+17273d63-90dc-4b5b-add3-971a78a5b879
+warehouse_name
+仓库名称
+String(128)
+
+可空 
+仓库名称
+qty
+数量
+Number
+
+不可空
+1
+unit_price
+单价
+Double
+
+不可空
+1000.55
+amounts
+金额
+Double
+
+不可空 
+1000.55
+sales_id
+店员1ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+可空 
+d75ada7b-6a8b-4911-80af-71597551fbc0
+sales_name
+店员1名称
+String(128)
+
+可空 
+博远
+sales_id2
+店员2ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+可空 
+d75ada7b-6a8b-4911-80af-71597551fbc1
+sales_name2
+店员2名称
+String(128)
+
+可空 
+博远2
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+mbpack_details   套餐明细信息
+add_details       套餐明细列表，为mbpack_details子节点
+key_phone
+业务号码
+String(64)
+
+不可空
+18398011358
+schema_id
+佣金方案ID
+String(36)
+
+可空
+
+schema_name
+佣金方案名称
+String(128)
+
+可空
+
+product_id
+套餐ID
+String(36)
+对应boyuan.products.get接口的id字段
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+套餐名称
+String(128)
+
+可空 
+套餐名称
+qty
+数量
+Number
+
+不可空
+1
+unit_price
+单价
+Double
+
+不可空
+1000.55
+amounts
+金额
+Double
+
+不可空 
+1000.55
+sales_id
+店员1ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+不可空 
+d75ada7b-6a8b-4911-80af-71597551fbc0
+sales_name
+店员1名称
+String(128)
+
+可空 
+博远
+sales_id2
+店员2ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+可空 
+d75ada7b-6a8b-4911-80af-71597551fbc1
+sales_name2
+店员2名称
+String(128)
+
+可空 
+博远2
+mbpack_cust_type_id
+套餐客户类型ID
+String(36)
+
+可空
+d75ada7b-6a8b-4911-80af-71597551fbc1
+mbpack_cust_type_name
+套餐客户类型名称
+String(128)
+
+可空
+套餐客户类型名称
+mbpack_cc_type_id
+套餐业务类型ID
+String(36)
+
+可空
+d75ada7b-6a8b-4911-80af-71597551fbc2
+mbpack_cc_type_name
+套餐业务类型名称
+String(128)
+
+可空
+套餐业务类型名称
+mbpack_cust_type_id
+套餐客户类型ID
+String(36)
+
+可空
+d75ada7b-6a8b-4911-80af-71597551fbc1
+mbpack_cust_type_name
+套餐客户类型名称
+String(128)
+
+可空
+套餐客户类型名称
+relevance_imei
+关联串号
+String(128)
+
+可空 
+866852017028405
+settle_amounts
+结算金额
+Double
+
+不可空 
+0.1
+point
+套餐积分
+Double
+
+可空 
+10.0
+openning_date
+套餐开通日期
+String(20)
+
+可空 
+2019-03-24
+ending_date
+套餐到期日期
+String(20)
+
+可空 
+
+supplier_cust_id
+套餐结算单位ID
+String(36)
+对应boyuan.custsupplier.get接口的id字段
+不可空
+81a39cff-936b-45cf-a16a-b9d3c7d285b2
+supplier_cust_name
+套餐结算单位名称
+String(128)
+product_type为1时有效并不可空
+可空 
+结算单位名称
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+
+assurance_details 保障服务明细信息
+add_details      保障服务明细列表，为assurance_details子节点
+product_id
+保障服务ID
+String(36)
+对应boyuan.products.get接口的id字段
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+保障服务名称
+String(128)
+
+可空 
+保障服务名称
+qty
+数量
+Number
+
+不可空
+1
+unit_price
+单价
+Double
+
+不可空
+1000.55
+amounts
+金额
+Double
+
+不可空 
+1000.55
+settle_amounts
+结算金额
+Double
+
+可空
+
+sales_id
+店员1ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+不可空 
+d75ada7b-6a8b-4911-80af-71597551fbc0
+sales_name
+店员1名称
+String(128)
+
+可空 
+博远
+sales_id2
+店员2ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+可空 
+d75ada7b-6a8b-4911-80af-71597551fbc1
+sales_name2
+店员2名称
+String(128)
+
+可空 
+博远2
+relevance_imei
+关联串号
+String(128)
+
+可空 
+866852017028405
+key_phone
+业务单号
+String(64)
+
+不可空
+18398011358
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+
+响应业务参数说明：
+result为保存后的零售订单信息，见零售订单（RetailOrder）结构
+
+请求样例：
+service=boyuan.biz.bill.retail.order.generate
+app_id=2014072300007148
+_input_charset=utf-8
+sign_type=MD5
+sign=85bf83f78d5cefb804bd805532fc688e
+timestamp=2019-03-20 13:42:50
+version=1.0
+biz={...}
+响应样例：
+{
+	return_code:   "SUCCESS",
+	return_msg:   "成功",
+	api_response:  {
+		total_results:  null,
+		result_list:  null,
+		result:  {
+			head:  {
+				id:   "4d4928bf-7258-423a-ba73-14195edf16b0",
+				big_gsdm:   "80005",
+				create_time:   "2019-07-18 11:30:11",
+				modify_time:   "2019-07-18 15:07:14",
+				company_id:   "092970c3-6ed5-4175-acd6-77ef4ac81946",
+				company_name:   "湖北黄冈门店",
+                third_order_no: "111111",
+order_type:  1,
+				bill_id:   "1035657",
+				bill_type:   "RETAIL_ORDER",
+				bill_type_name:   "零售订单",
+				business_date:   "2019-07-17",
+				audit_status:  0,
+				is_day_end:  false,
+				print_status:  0,
+				modify_count:  3,
+				classes_id:   "2a6958e2-97e2-4e0c-969b-bfefb7f3b398",
+				classes_name:   "早",
+				mobile_phone:   ""
+			},
+			product_details:  {
+				add_details:  [{
+					id:   "b1a3570a-0826-4f24-98c0-6d83737a8854",
+					big_gsdm:   "80005",
+					creater_id:   "d29c976b-655f-464c-8224-1ed42fa1b8ad",
+					create_time:   "2019-07-18 11:30:11",
+					version:  1,
+					is_effective:  1,
+					company_id:   "092970c3-6ed5-4175-acd6-77ef4ac81946",
+					bill_id:   "1035657",
+					head_id:   "4d4928bf-7258-423a-ba73-14195edf16b0",
+					seq_no:  1,
+					warehouse_id:   "69457467-12ea-4162-be13-d35d6e2a12a5",
+					warehouse_name:   "小总仓",
+					product_id:   "e79add93-b8db-4a02-90fb-db740e9783eb",
+					product_code:   "7777*",
+					product_brand_id:   "196353e7-66af-441e-bbcb-acfbe70ff57e",
+					product_category_id:   "98d6d312-e1d5-4b4e-9506-58a3d6ea4f78",
+					product_full_name:   "*预售1A1723全网演示宝石红",
+					imei_count:  1,
+					imei_len:  8,
+					imei2_len:  10,
+					imei3_len:  0,
+					qty:  1,
+					unit_price:  198,
+					amounts:  198,
+					sales_id:   "d564faae-fe25-41a2-acdb-9aa62f5ce693",
+					sales_name:   "203呀",
+					retail_price:  0,
+					mbpack_tag:  0,
+					openning_date:   "2019-07-18",
+					settle_amounts:  0,
+					policy_product_id:   "f1a0e114-e99e-4357-8ba2-a00e05d5319d",
+					manual_comms_amounts:  0,
+					comm_rate:  0,
+					point:  0,
+					imei:   "05394824",
+					account_tag:  0,
+					kickback_rate:  1,
+					partner_settle_amount:  200,
+					partner_product_code:   "1",
+					retail_display_tag:  0
+				}, {
+					id:   "36f0ba63-f50f-451e-bfcf-cfe27e2d0053",
+					big_gsdm:   "80005",
+					creater_id:   "d29c976b-655f-464c-8224-1ed42fa1b8ad",
+					create_time:   "2019-07-18 11:30:11",
+					modifier_id:   "d29c976b-655f-464c-8224-1ed42fa1b8ad",
+					modify_time:   "2019-07-18 11:32:55",
+					version:  1,
+					is_effective:  1,
+					company_id:   "092970c3-6ed5-4175-acd6-77ef4ac81946",
+					bill_id:   "1035657",
+					head_id:   "4d4928bf-7258-423a-ba73-14195edf16b0",
+					seq_no:  2,
+					warehouse_id:   "69457467-12ea-4162-be13-d35d6e2a12a5",
+					warehouse_name:   "小总仓",
+					product_id:   "e79add93-b8db-4a02-90fb-db740e9783eb",
+					product_code:   "7777*",
+					product_brand_id:   "196353e7-66af-441e-bbcb-acfbe70ff57e",
+					product_category_id:   "98d6d312-e1d5-4b4e-9506-58a3d6ea4f78",
+					product_full_name:   "*预售1A1723全网演示宝石红",
+					imei_count:  1,
+					imei_len:  8,
+					imei2_len:  10,
+					imei3_len:  0,
+					qty:  1,
+					unit_price:  196,
+					amounts:  196,
+					sales_id:   "d564faae-fe25-41a2-acdb-9aa62f5ce693",
+					sales_name:   "203呀",
+					retail_price:  0,
+					mbpack_tag:  0,
+					openning_date:   "2019-07-18",
+					settle_amounts:  0,
+					policy_product_id:   "f1a0e114-e99e-4357-8ba2-a00e05d5319d",
+					manual_comms_amounts:  0,
+					comm_rate:  0,
+					point:  0,
+					imei:   "05311863",
+					account_tag:  0,
+					kickback_rate:  2,
+					partner_settle_amount:  200,
+					partner_product_code:   "1",
+					retail_display_tag:  0
+				}]
+			},
+			mbpack_details:  {
+				add_details: []
+			},
+			assurance_details:  {
+				add_details: []
+			},
+			stage_details:  {
+				add_details: []
+			}
+		}
+	}
+}
+
+
+	•	boyuan.biz.bill.retail.order.cancel（取消零售订单接口）
+接入方式：POST
+
+请求业务参数（以JSON串方式放入请求公共参数的biz字段）说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+head         单据头信息
+bill_id
+单据号
+String(32)
+boyuan.biz.bill.retail.order.generate接口返回的bill_id字段
+不可空
+1071938
+
+响应业务参数说明：
+仅包含是否成功响应，无业务响应参数
+
+请求样例：
+service=boyuan.biz.bill.retail.order.cancel
+app_id=2014072300007148
+_input_charset=utf-8
+sign_type=MD5
+sign=85bf83f78d5cefb804bd805532fc688e
+timestamp=2019-03-20 13:42:50
+version=1.0
+biz={head:{bill_id:"1071938"}}
+响应样例：
+{
+	return_code:   "SUCCESS",
+	return_msg:   "成功",
+	api_response:  {}
+}
+
+	•	boyuan.biz.bill.retail.order.return（退货接口）
+接入方式：POST
+
+请求业务参数（以JSON串方式放入请求公共参数的biz字段）说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+head         单据头信息
+bill_id
+单据号
+String(32)
+boyuan.biz.bill.retail.order.generate接口返回的bill_id字段
+不可空
+1071938
+product_details   商品明细信息
+add_details      退货商品明细列表，为product_details子节点
+imei
+串号
+String(128)
+
+可空 
+05394824
+
+product_id
+商品ID
+String(36)
+对应boyuan.products.get接口的id字段
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+商品全称
+String(128)
+
+可空 
+商品全称
+warehouse_id
+仓库ID
+String(36)
+对应boyuan.warehouses.get接口的id字段
+可空 
+17273d63-90dc-4b5b-add3-971a78a5b879
+warehouse_name
+仓库名称
+String(128)
+
+可空 
+仓库名称
+qty
+数量
+Number
+
+可空
+1
+unit_price
+单价
+Double
+
+可空
+1000.55
+amounts
+金额
+Double
+
+可空
+1000.55
+sales_id
+店员1ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+可空 
+d75ada7b-6a8b-4911-80af-71597551fbc0
+sales_name
+店员1名称
+String(128)
+
+可空 
+博远
+sales_id2
+店员2ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+可空 
+d75ada7b-6a8b-4911-80af-71597551fbc1
+sales_name2
+店员2名称
+String(128)
+
+可空 
+博远2
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+
+响应业务参数说明：
+result为保存后的零售退货订单信息，见零售订单（RetailOrder）结构
+注：此处成功响应仅代表已在ERP端成功生成零售退货订单，并不是实际已退货成功。
+
+请求样例：
+service=boyuan.biz.bill.retail.order.return
+app_id=2014072300007148
+_input_charset=utf-8
+sign_type=MD5
+sign=85bf83f78d5cefb804bd805532fc688e
+timestamp=2019-03-20 13:42:50
+version=1.0
+biz={head:{bill_id:"1071938"}}
+响应样例：
+{
+	return_code:   "SUCCESS",
+	return_msg:   "成功",
+	api_response:  {}
+}
+
+
+
+	•	boyuan. mbpack.get（套餐查询接口）
+接入方式：GET/POST
+请求参数说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+is_effective
+有效标志
+Integer
+1-有效；0-无效
+可空
+1-有效；0-无效
+create_date_start
+创建时间起
+String(20)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+yyyy-MM-dd HH:mm:ss
+create_date_end
+创建时间止
+String(20)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+yyyy-MM-dd HH:mm:ss
+modify_date_start
+修改时间起
+String(20)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+yyyy-MM-dd HH:mm:ss
+modify_date_end
+修改时间止
+String(20)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+yyyy-MM-dd HH:mm:ss
+响应业务参数说明：
+result_list为商品列表，详见商品（Product）信息。
+商品（Product）信息
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+id
+套餐名称ID
+String(36)
+主键ID
+不可空
+135eced4-faa2-464c-85a5-88f8ab79cadf
+full_name
+套餐名称
+String(128)
+　
+不可空
+　
+mbpack_category_id
+套餐分类
+String(64)
+　
+不可空
+　
+additional_tag
+加装包标记
+Integer
+　
+不可空
+　
+unit_price
+零售价
+Double
+　
+不可空
+　
+category_id
+分类ID
+String(36)
+　
+不可空
+a4fdb067-faf1-4d18-9799-b7102c16a0d4
+category_code
+商品分类代码
+String(32)
+　
+不可空
+1
+category_name
+商品分类名称
+String(128)
+　
+不可空
+手机
+brand_id
+品牌ID
+String(36)
+　
+不可空
+a4fdb067-faf1-4d18-9799-b7102c16a0d4
+brand_name
+品牌名称
+String(128)
+　
+不可空
+adidas
+cc_id
+运营商id
+String(64)
+　
+不可空
+　
+start_date
+有效期起
+String(20)
+　
+不可空
+　
+end_date
+有效期止
+String(20)
+　
+不可空
+　
+comm_rate
+佣金比例
+Double
+　
+不可空
+　
+point
+套餐积分
+Integer
+　
+不可空
+　
+monthly_rent
+套餐-月租
+Double
+　
+不可空
+　
+risk_tag
+是否风险金结算
+Integer
+　
+不可空
+　
+cash_id
+结算类型ID
+String
+　
+不可空
+　
+cash_unit_price
+结算金额
+Double
+　
+不可空
+　
+create_time
+创建时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+不可空
+2019/3/20 11:00
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019/3/20 12:00
+remark
+备注
+String(256)
+　
+可空
+商品备注
+used_tag
+有效标志
+Integer
+1-有效；0-无效
+可空
+1-有效；0-无效
+
+	•	boyuan. stage.get（分期查询接口）
+接入方式：GET/POST
+请求参数说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+is_effective
+有效标志
+Integer
+1-有效；0-无效
+可空
+1-有效；0-无效
+create_date_start
+创建时间起
+String(20)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+yyyy-MM-dd HH:mm:ss
+create_date_end
+创建时间止
+String(20)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+yyyy-MM-dd HH:mm:ss
+modify_date_start
+修改时间起
+String(20)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+yyyy-MM-dd HH:mm:ss
+modify_date_end
+修改时间止
+String(20)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+yyyy-MM-dd HH:mm:ss
+响应业务参数说明：
+result_list为商品列表，详见商品（Product）信息。
+商品（Product）信息
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+id
+分期产品ID
+String(36)
+主键ID
+不可空
+135eced4-faa2-464c-85a5-88f8ab79cadf
+full_name
+分期产品名称
+String(128)
+　
+不可空
+　
+category_code
+商品分类代码
+String(32)
+　
+不可空
+1
+category_name
+商品分类名称
+String(128)
+　
+不可空
+手机
+brand_id
+品牌ID
+String(36)
+　
+不可空
+a4fdb067-faf1-4d18-9799-b7102c16a0d4
+brand_name
+品牌名称
+String(128)
+　
+不可空
+adidas
+comm_rate
+佣金比例
+Double
+　
+不可空
+　
+cash_id
+结算类型ID
+String
+　
+不可空
+　
+create_time
+创建时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+不可空
+2019/3/20 11:00
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019/3/20 12:00
+remark
+备注
+String(256)
+　
+可空
+商品备注
+help_code
+助记码
+String(128)
+　
+可空
+csivvisk301xgpro2g16gqcbmgj
+code
+编码
+String(128)
+　
+可空
+csivvisk301xgpro2g16gqcbmgj
+used_tag
+有效标志
+Integer
+1-有效；0-无效
+可空
+1-有效；0-无效
+	•	boyuan. assurance.get（保障服务查询接口）
+接入方式：GET/POST
+请求参数说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+is_effective
+有效标志
+Integer
+1-有效；0-无效
+可空
+1-有效；0-无效
+create_date_start
+创建时间起
+String(20)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+yyyy-MM-dd HH:mm:ss
+create_date_end
+创建时间止
+String(20)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+yyyy-MM-dd HH:mm:ss
+modify_date_start
+修改时间起
+String(20)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+yyyy-MM-dd HH:mm:ss
+fuzzy_match
+模糊匹配
+String(128)
+名称/助记码/
+可空
+碎屏
+product_ids
+记录的id
+String(255)
+记录的id，多个逗号间隔
+可空
+
+modify_date_end
+修改时间止
+String(20)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+yyyy-MM-dd HH:mm:ss
+响应业务参数说明：
+result_list为商品列表，详见商品（Product）信息。
+商品（Product）信息
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+id
+保障服务ID
+String(36)
+主键ID
+不可空
+135eced4-faa2-464c-85a5-88f8ab79cadf
+full_name
+保障服务名称
+String(128)
+　
+不可空
+　
+category_code
+商品分类代码
+String(32)
+　
+不可空
+1
+category_name
+商品分类名称
+String(128)
+　
+不可空
+手机
+brand_id
+品牌ID
+String(36)
+　
+不可空
+a4fdb067-faf1-4d18-9799-b7102c16a0d4
+brand_name
+品牌名称
+String(128)
+　
+不可空
+adidas
+supplier_cust_id
+结算单位id
+String
+　
+不可空
+　
+inout_tag
+结算方向
+integer
+　
+不可空
+　
+cash_unit_price
+结算金额
+Double
+　
+不可空
+　
+create_time
+创建时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+不可空
+2019/3/20 11:00
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019/3/20 12:00
+remark
+备注
+String(256)
+　
+可空
+商品备注
+help_code
+助记码
+String(128)
+　
+可空
+csivvisk301xgpro2g16gqcbmgj
+code
+编码
+String(128)
+　
+可空
+csivvisk301xgpro2g16gqcbmgj
+used_tag
+有效标志
+Integer
+1-有效；0-无效
+可空
+1-有效；0-无效
+unit_price
+零售价
+Double
+　
+不可空
+　
+	•	boyuan.account.get(账户信息查询接口)
+接入方式：GET/POST
+请求参数说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+is_effective
+有效标志
+Integer
+1-有效；0-无效
+可空
+1-有效；0-无效
+fuzzy_match
+模糊匹配
+String(20)
+可匹配帐户名称、帐号、备注
+可空
+
+响应业务参数说明：
+result_list为账户列表
+账户（Account）信息
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+gsdm
+公司代码
+String(32)
+
+不可空
+80001
+company_name
+公司名称
+String(256)
+
+不可空
+总公司全称
+bank_name
+开户行
+String(128)
+
+不可空
+开行名称
+account_no
+账户号
+String(128)
+
+不可空
+
+name
+账户名称
+String(128)
+
+不可空
+
+account_type
+账户类型
+String(64)
+
+不可空
+
+is_effective
+有效标志
+Integer
+1-有效；0-无效
+可空
+1-有效；0-无效
+create_time
+创建时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+不可空
+2019/3/20 11:00
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019/3/20 12:00
+remark
+备注
+String(256)
+　
+可空
+账户备注
+	•	boyuan.storecash.get(门店收银设置查询)
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+company_id
+公司id
+String(64)
+
+可空
+
+name
+收银名称
+String(20)
+
+可空
+
+type
+收银分类
+String(20)
+固定四个选项：现金收入、银行收入、结算收入、虚拟收入
+可空
+
+响应业务参数说明：
+result_list为收银信息列表
+门店收银设置（storeCash）信息
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+gsdm
+公司代码
+String(32)
+
+不可空
+80001
+company_id
+公司id
+String(64)
+
+不可空
+
+company_name
+公司名称
+String(256)
+
+不可空
+公司名称
+cash_id
+收银方式ID
+String(36)
+
+不可空 
+e79fdff1-6ede-46e6-86eb-66b906d77e68
+cash_name
+收银方式名称
+String(128)
+
+不可空 
+现金
+cash_type
+收银分类
+String(20)
+
+不可空
+现金收入
+create_time
+创建时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+不可空
+2019/3/20 11:00
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019/3/20 12:00
+remark
+备注
+String(256)
+　
+可空
+收银备注
+	•	boyuan.storecashAccount.get(门店收银账户设置查询)
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+company_id
+公司id
+String(64)
+
+可空
+
+响应业务参数说明：
+result_list为收银账户信息列表
+门店收银账户设置（storecashAccount）信息
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+gsdm
+公司代码
+String(32)
+
+不可空
+80001
+company_id
+公司id
+String(64)
+
+不可空
+
+company_name
+公司名称
+String(256)
+
+不可空
+总公司全称
+cash_id
+收银方式ID
+String(36)
+
+不可空 
+e79fdff1-6ede-46e6-86eb-66b906d77e68
+cash_name
+收银方式名称
+String(128)
+
+不可空 
+现金
+cash_type
+收银方式分类
+String(20)
+
+不可空
+现金收入
+default_account_id
+默认账户名称ID
+String(128)
+
+
+
+default_account_name
+默认账户名称
+String(64)
+
+
+
+account_id
+账户名称ID
+String(128)
+
+
+
+account_name
+账户名称
+String(64)
+
+
+
+create_time
+创建时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+不可空
+2019/3/20 11:00
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019/3/20 12:00
+remark
+备注
+String(256)
+　
+可空
+门店收银账户设置备注
+
+
+	•	boyuan.virtualproduct.get（虚拟信息查询接口）
+接入方式：GET/POST
+请求示例：http://localhost:28088/api/gateway.do?big_gsdm=90009&service=boyuan.virtualproduct.get&app_id=20200106134633490009&timestamp=12342341&sign_type=MD5&sign=3Z6805W0DI62O080ORWV3A9JN5A9740H&version=12&create_date_start=2020-08-08 16:37:11&create_date_end=2020-08-15 18:37:11
+
+请求样例：
+big_gsdm=90009
+service=boyuan.virtualproduct.get
+app_id=20200106134633490009
+timestamp=12342341
+sign_type=MD5
+sign=3Z6805W0DI62O080ORWV3A9JN5A9740H
+version=12
+create_date_start=2020-08-08 16:37:11
+create_date_end=2020-08-15 18:37:11
+page_no=1
+page_size=100
+brand_id:e1374166-5877-486a-b771-d2e961e42f31
+category_id:11f61645-41da-4904-98d4-b8454a31002a
+app_id:2020102613456580004
+full_name:ttt虚拟
+
+
+请求业务参数说明：
+
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+create_date_start
+创建时间起
+String(20)
+创建开始时间：yyyy-MM-dd
+可空
+2019-03-15
+create_date_end
+创建时间止
+String(20)
+创建结束时间：yyyy-MM-dd，
+可空
+2019-03-21
+modify_date_start
+修改时间起
+String(20)
+开始修改时间格式：yyyy-MM-dd
+可空
+2019-03-15
+modify_date_end
+修改时间止
+String(20)
+结束修改时间格式：yyyy-MM-dd，
+可空
+2019-03-21
+brand_id
+商品品牌id
+
+String(36)
+
+可空
+7a0e424d-979e-442f-b502-667595f4eb7e4
+
+category_id
+
+
+商品分类id
+String(36)
+商品类型id
+可空
+11f61645-41da-4904-98d4-b8454a31002a
+
+full_name
+
+商品名称
+String(36)
+商品全称
+可空
+以旧换新
+
+product_ids
+记录的id
+String(255)
+记录id
+可空
+
+
+
+
+
+
+响应业务参数说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+id
+虚拟商品信息明细行ID
+String(36)
+
+ 
+b5426a2b-8e3a-468c-a4b1-800dbad43011
+big_gsdm
+所属门店代码
+String(36)
+
+
+900009
+create_time
+创建时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+
+2019-03-20 11:00:00
+modify_time
+修改时间
+Stirng(32)
+yyyy-MM-dd HH:mm:ss
+
+2019-03-20 11:00:00
+help_code
+助记码
+String(20)
+字符串
+ 
+
+001
+category_id
+商品分类ID
+String(64)
+字符串
+不可空
+81a39cff-936b-45cf-a16a-b9d3c7d285b2
+category_name
+商品分类名称
+String(32)
+字符串
+
+手机
+brand_id
+商品品牌ID
+String(64)
+字符串
+可空 
+
+brand_name
+商品品牌名称
+String(128)
+字符串
+可空
+gysbm
+cash_id
+收银方式ID
+String(36)
+字符串
+不可空
+81a39cff-936b-45cf-a16a-b9d3c7d285b2
+cash_name
+收银方式名称
+String(128)
+字符串
+不可空 
+现金
+price_list_tag
+
+是否报价
+String(128)
+是否报价：
+0不报价 
+1批发零售
+2零售 
+3批发
+
+可空 
+0
+comm_rate
+佣金比例
+Double(8,2)
+两位小数
+可空
+1.0
+remark
+备注
+String(32)
+备注
+不可空
+购
+is_effective
+是否启用
+Number
+0-否
+1-是
+
+可空，为空表示否 
+
+
+
+
+
+
+响应样例：
+{
+  "return_code": "SUCCESS",
+  "return_msg": "成功",
+  "api_response": {
+    "total_results": 3,
+    "result_list": [
+{
+                "id": "929af297-080f-4f39-831b-b7f8ca6ddcda",
+                "big_gsdm": "80004",
+                "creater_id": "8467a659-0905-414e-8960-48098fa87511",
+                "creater_name": "超级管理员",
+                "create_time": "2020-06-09 17:02:42",
+                "version": 1,
+                "is_effective": 1,
+                "full_name": "ttt虚拟111",
+                "price_list_tag": 1,
+                "negative_stock_tag": 1,
+                "mb_pack_tag": 4,
+                "additional_tag": 0,
+                "cash_relate_id": "929af297-080f-4f39-831b-b7f8ca6ddcda"
+            },
+            {
+                "id": "0062622a-9ab2-4dcd-a4cf-45048bc43f9b",
+                "big_gsdm": "80004",
+                "creater_id": "d2500b5c-f6cf-11e8-8ae4-00163e04029f",
+                "creater_name": "博远IT",
+                "create_time": "2019-01-10 19:28:40",
+                "modifier_id": "9d9b7033-d41d-4242-b8a7-339ea1cb2150",
+                "modifier_name": "cff",
+                "modify_time": "2020-09-14 10:26:55",
+                "version": 6,
+                "is_effective": 1,
+                "remark": "555656",
+                "category_id": "11f61645-41da-4904-98d4-b8454a31002a",
+                "category_name": "虚拟商品",
+                "category_code": "23",
+                "top_category_id": "11f61645-41da-4904-98d4-b8454a31002a",
+                "top_category_name": "虚拟商品",
+                "full_name": "以旧换新",
+                "price_list_tag": 1,
+                "negative_stock_tag": 1,
+                "mb_pack_tag": 4,
+                "full_category_name": "虚拟商品",
+                "additional_tag": 0,
+                "cash_id": "1905dfa2-a2c2-4994-8867-7d943d9bcd69",
+                "cash_name": "宽带批量结酬",
+                "comm_rate": 10.0,
+                "cash_type": "结算收入",
+                "retail_display_tag": 0,
+                "cash_relate_id": "0062622a-9ab2-4dcd-a4cf-45048bc43f9b"
+            }
+
+    ]
+  }
+}
+
+
+	•	 boyuan.dictionaryType.get辅助类型查询接口
+接入方式：GET/POST
+请求示例：http://localhost:28088/api/gateway.do?service=boyuan.dictionaryType.get&app_id=2020102613456580004&timestamp=12342341&sign_type=MD5&sign=3Z6805W0DI62O080ORWV3A9JN5A9740H&version=12&model_name=DI
+
+请求样例：
+service:boyuan.dictionaryType.get
+app_id:2020102613456580004
+timestamp:12342341
+sign_type:MD5
+sign:3Z6805W0DI62O080ORWV3A9JN5A9740H
+version:12
+model_name:DI
+
+请求业务参数说明：
+
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+model_name
+字典模块名常量
+string
+辅助信息
+不可空
+DI
+app_id
+appid
+string
+
+不可空
+2020102613456580004
+create_date_start
+创建时间起
+String(20)
+创建开始时间：yyyy-MM-dd
+可空
+2019-03-15
+create_date_end
+创建时间止
+String(20)
+创建结束时间：yyyy-MM-dd，
+可空
+2019-03-21
+modify_date_start
+修改时间起
+String(20)
+开始修改时间格式：yyyy-MM-dd
+可空
+2019-03-15
+modify_date_end
+修改时间止
+String(20)
+结束修改时间格式：yyyy-MM-dd，
+可空
+2019-03-21
+
+
+响应业务参数说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+id
+辅助类型id
+String(36)
+辅助类型id
+ 
+a4a4741c-de33-45b7-be41-02ab8dfdb7ee
+
+dict_type_name
+
+辅助类型名称
+String(20)
+字符串
+ 
+
+入库方式
+
+
+
+响应样例：
+       
+   {
+  "return_code": "SUCCESS",
+  "return_msg": "成功",
+  "api_response": {
+    "total_results": 55,
+    "result_list": [
+      {
+        "id": "0c95c27a-a7b5-46fc-8f37-67db87c73701",
+        "big_gsdm": "80004",
+        "creater_id": "92a47360-968c-4167-b97e-e45a8c12ab38",
+        "create_time": "2018-06-16 13:11:56",
+        "modifier_id": "b4938456-fae4-46eb-aafa-8759deff5d0a",
+        "modify_time": "2020-09-02 13:54:50",
+        "version": 10,
+        "is_effective": 1,
+        "remark": "11",
+        "dict_type_name": "用户柜组",
+        "model_code": "DI",
+        "model_name": "辅助信息",
+        "seq_no": 1
+      },
+      {
+        "id": "ec5bfc31-ece0-11ea-8b93-005056a836e8",
+        "big_gsdm": "80004",
+        "creater_id": "92a47360-968c-4167-b97e-e45a8c12ab38",
+        "create_time": "2020-09-02 13:55:37",
+        "version": 1,
+        "is_effective": 1,
+        "dict_type_name": "员工类别",
+        "model_code": "DI",
+        "model_name": "辅助信息",
+        "seq_no": 1
+      }
+    ]
+  }
+}
+
+
+	•	  boyuan.dictionary.get  辅助信息条件查询接口
+接入方式：GET/POST
+请求示例：http://localhost:28088/api/gateway.do?service=boyuan.dictionary.get&app_id=2020102613456580004&timestamp=12342341&sign_type=MD5&sign=3Z6805W0DI62O080ORWV3A9JN5A9740H&version=12&dic_type_id=a4a4741c-de33-45b7-be41-02ab8dfdb7ee&dic_value=5
+
+请求样例：
+service:boyuan.dictionary.get
+app_id:2020102613456580004
+timestamp:12342341
+sign_type:MD5
+sign:3Z6805W0DI62O080ORWV3A9JN5A9740H
+version:12
+dic_type_id:a4a4741c-de33-45b7-be41-02ab8dfdb7ee
+dic_value:5
+
+
+请求业务参数说明：
+
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+dict_type_id
+辅助类型id
+string
+
+可空
+0886fa7d-2299-479f-af87-f10c1b47069f
+dict_type_name
+
+辅助类型名称
+string
+
+可空
+付款方式
+dict_value
+辅助信息名称
+string
+
+可空
+国企
+
+
+
+响应业务参数说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+id
+名称id
+String(36)
+辅助类型id
+ 
+dcdfa18f-aa43-4f8d-9963-72820637ff84"
+big_gsdm
+所属门店代码
+String(36)
+
+
+900009
+create_time
+创建时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+
+2019-03-20 11:00:00
+modify_time
+修改时间
+Stirng(32)
+yyyy-MM-dd HH:mm:ss
+
+2019-03-20 11:00:00
+dict_type_name
+
+辅助类型名称
+String(20)
+字符串
+ 
+
+入库方式
+dict_type_id
+商品分类ID
+String(64)
+字符串
+不可空
+a4a4741c-de33-45b7-be41-02ab8dfdb7ee
+dict_value
+名称备注
+String(32)
+字符串
+
+55
+remark
+备注
+String(64)
+字符串
+可空 
+
+is_system
+是否系统
+Number
+0-否
+1-是
+
+可空，为空表示否 
+1
+is_default
+是否默认
+Number
+0-否
+1-是
+
+可空，为空表示否 
+1
+is_effective
+是否启用
+Number
+0-否
+1-是
+
+可空，为空表示否 
+1
+dic_config
+使用配置
+Number
+0-全部
+1-PC端
+2-移动端
+
+ 
+0
+
+
+响应样例：
+
+{
+    "return_code": "SUCCESS",
+    "return_msg": "成功",
+    "api_response": {
+        "total_results": 1,
+        "result_list": [
+            {
+                "null_fields": null,
+                "id": "6ba774b9-69b7-4e61-9100-ab6f018d02eb",
+                "big_gsdm": "80004",
+                "creater_id": "d29d1d64-1c49-4d74-a9d0-d9630adc052e",
+                "creater_name": null,
+                "create_time": "2018-12-19 14:29:56",
+                "modifier_id": null,
+                "modifier_name": null,
+                "modify_time": null,
+                "version": 1,
+                "is_effective": 0,
+                "remark": null,
+                "remark2": null,
+                "print_seq_no": null,
+                "bill_all_amounts": null,
+                "dict_type_id": "4c4d7c8c-f883-4f71-9fbd-124d88b07f95",
+                "dict_type_name": "套餐方案",
+                "dict_value": "业务销售",
+                "seq_no": 1,
+                "help_code": null,
+                "spell_code": "ywxs",
+                "is_default": null,
+                "is_system": 0,
+                "dic_config": "0"
+            }
+        ],
+        "result": null
+    }
+}
+
+
+	•	 boyuan.biz.reportretails.query（零售单头部数据查询接口）
+接入方式：GET/POST
+请求示例：
+http://localhost:28088/api/gateway.do?service=boyuan.biz.reportretails.query&app_id=2020102613456580004&timestamp=12342341&sign_type=MD5&sign=3Z6805W0DI62O080ORWV3A9JN5A9740H&version=12&trans_type=售&create_date_start=2020-11-12&create_date_end=2020-11-14&modify_date_start=2020-11-09&modify_date_end=2020-11-14
+
+请求样例：
+
+service:boyuan.biz.reportretails.query
+app_id:2020102613456580004
+timestamp:12342341
+sign_type:MD5
+sign:3Z6805W0DI62O080ORWV3A9JN5A9740H
+version:12
+bill_id:220501
+trans_type:售
+create_date_start:2020-11-12
+create_date_end:2020-11-14
+date_start:2020-11-12
+date_end:2020-11-14
+is_effective:1
+modify_date_start:2020-11-09
+modify_date_end:2020-11-14
+
+
+请求业务参数说明：起止创建时间/起止业务时间/起止修改时间不可同时为空
+
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+create_date_start
+创建时间起
+String(20)
+创建开始时间：yyyy-MM-dd 
+可空
+2021-04-28 19:50:12
+create_date_end
+创建时间止
+String(20)
+创建结束时间：yyyy-MM-dd
+可空
+2021-04-28 19:50:12
+modify_date_start
+修改时间起
+String(20)
+开始修改时间格式：yyyy-MM-dd
+可空
+2021-04-28 19:50:12
+modify_sate_end
+修改时间止
+String(20)
+结束修改时间格式：yyyy-MM-dd
+可空
+2021-04-28 19:50:12
+date_start
+业务时间起
+String(20)
+开始修改时间格式：yyyy-MM-dd
+可空
+2021-04-28 19:50:12
+date_end
+业务时间止
+String(20)
+结束修改时间格式：yyyy-MM-dd 
+可空
+2021-04-28 19:50:12
+bill_id
+单据号
+
+String(36)
+6位数字字符串
+可空
+220904
+trans_type 
+
+事务类型
+String(36)
+售，售退，售换
+可空
+售
+
+is_effective
+
+是否启用
+Number
+0 否
+1 是
+可空
+1
+
+
+响应样例：
+{
+    "return_code": "SUCCESS",
+    "return_msg": "成功",
+    "api_response": {
+        "total_results": 1,
+        "result_list": [
+            {
+                "id": "5c96a3af-207a-40b6-a5c7-28d6083fce87",
+                "creater_id": "e3035cf0-779b-4fc6-8244-41fae71637d4",
+                "creater_name": "茶茶",
+                "create_time": "2020-11-12T08:36:34.000+0000",
+                "modifier_id": "e3035cf0-779b-4fc6-8244-41fae71637d4",
+                "modifier_name": "茶茶",
+                "modify_time": "2020-11-12T08:38:35.000+0000",
+                "company_id": "2af21b27-2ce1-4400-b526-b05fa3d6c745",
+                "company_name": "总公司",
+                "bill_id": "220501",
+                "bill_type": "RETAIL",
+                "bill_type_name": "零售",
+                "business_date": "2020-11-12",
+                "audit_status": 0,
+                "is_day_end": false,
+                "is_month_end": false,
+                "print_status": 0,
+                "modify_count": 2,
+                "modify_price": false,
+                "modify_qty": false,
+                "classes_id": "790cb56f-483f-4e7e-950e-bf0e31bee4e0",
+                "classes_name": "晚班",
+                "mobile_phone": "",
+                "trans_type": "售",
+                "attachments_tag": 0,
+                "show_policy_price": false
+            }
+        ],
+        "result": null
+    }
+}
+
+响应业务参数说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+id
+零售头表ID
+String(36)
+
+ 
+b5426a2b-8e3a-468c-a4b1-800dbad43011
+big_gsdm
+公司ID
+String(36)
+
+
+900009
+create_time
+创建时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+
+2019-03-20 11:00:00
+modify_time
+修改时间
+Stirng(32)
+yyyy-MM-dd HH:mm:ss
+
+2019-03-20 11:00:00
+bill_id
+单据号
+String(20)
+字符串
+ 
+
+001
+company_name
+
+公司名称
+String(64)
+字符串
+
+81a39cff-936b-45cf-a16a-b9d3c7d285b2
+bill_type
+
+单据类型
+String(32)
+字符串
+
+RETAIL
+
+business_date
+
+发生日期
+String(64)
+时间字符串
+可空 
+"2020-11-13",
+
+creater_name
+
+制单人
+String(128)
+字符串
+可空
+gysbm
+create_time
+
+制单日期
+String(36)
+字符串
+不可空
+81a39cff-936b-45cf-a16a-b9d3c7d285b2
+modifier_name
+
+修改人
+String(128)
+字符串
+不可空 
+现金
+modify_time
+ 
+修改日期
+String(128)
+字符串
+可空 
+0
+print_user_name
+
+打印人
+String(128)
+字符串
+可空
+1.0
+print_count
+
+打印次数
+Integer
+整型数字
+不可空
+购
+print_time
+
+打印时间
+String(128)
+字符串
+可空，为空表示否 
+
+trans_type
+
+事务类型
+String(32)
+字符串
+
+手机
+classes_id
+
+班次id
+String(64)
+字符串
+可空 
+
+classes_name
+
+班次名称
+String(128)
+字符串
+可空
+gysbm
+sales_id
+
+出库方式id
+String(36)
+字符串
+不可空
+81a39cff-936b-45cf-a16a-b9d3c7d285b2
+sales_name
+
+出库方式名称
+String(128)
+字符串
+不可空 
+现金
+dp_id
+
+定金单号
+String(128)
+字符串
+可空 
+0
+price_apply_bill_id
+
+特权单号
+String(128)
+字符串
+可空
+1.0
+return_order_id
+
+退货单号
+String(32)
+字符串
+
+手机
+bill_id
+订单号
+String(64)
+字符串
+可空 
+
+presale_bill_id
+预售订单号
+String(128)
+字符串
+可空
+gysbm
+remark
+备注
+String(36)
+字符串
+可空
+81a39cff-936b-45cf-a16a-b9d3c7d285b2
+member_id
+
+会员ID
+String(128)
+字符串
+可空 
+现金
+name
+
+会员姓名
+String(36)
+是否报价：
+
+可空 
+0
+mobile_phone
+
+会员手机号
+String(36)
+两位小数
+可空
+1.0
+
+
+
+
+4.2.60 采购单创建
+4.2.60.1 boyuan.biz.bill.purchase.generate（采购入库创建）
+根据第三方信息创建erp中的采购入库。
+接入方式：POST
+请求参数说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+head         单据头信息
+warehouse_id
+仓库ID
+String(36)
+
+与warehouse_name不可都为空
+f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb
+warehouse_name
+仓库名称
+String(128)
+
+与warehouse_id不可都为空
+总仓
+third_no
+第三方订单号
+String(32)
+
+可空
+A325444
+business_date
+业务发生日期
+String(20)
+格式：yyyy-MM-dd
+不可空
+2019-03-21
+order_id
+订单号
+String(36)
+
+可空
+123456
+logistics_no
+物流单号
+String(64)
+
+可空
+123456
+cash_term
+是否现结
+int
+0 否 1是
+可空
+0
+is_auto_generate_supplier
+是否自动生成供应商
+int
+0 否 1是
+可空
+0
+supplier_id
+供应商id
+String(36)
+
+与supplier_name不可都为空
+7fd03188-5bc4-4af7-8167-2b5fb59e0baa
+supplier_name
+供应商名称
+String(64)
+
+与supplier_id不可都为空
+李四
+pur_way
+入库方式id
+String(36)
+辅助信息中的入库方式
+可空
+8dd03188-5bc4-4af7-8167-2b5fb59e0baa
+pur_way_name
+入库方式名称
+String(36)
+辅助辅助信息中的入库方式
+可空 
+经销
+pay_way
+付款方式id
+String(36)
+辅助信息中的付款方式
+可空
+8dd03188-5bc4-4af7-8167-2b5fb59e0baa
+pay_way_name
+付款方式名称
+String(36)
+辅助辅助信息中的付款方式
+可空 
+到付
+sales_id
+采购业务员id
+Stirng(36)
+
+可空
+1fd03188-5bc4-4af7-8167-2b5fb59e0baa
+sales_name
+采购业务员名称
+String(32)
+
+可空
+张三
+is_need_invioces
+是否开票
+int
+0不开票，1开票
+可空
+0
+remark
+头备注
+String(256)
+
+可空
+
+cash_details   收银明细信息(是否现结为1时必传，为0时不传)
+add_details      收银明细列表，为cashDetails子节点
+cash_id
+收银方式id
+String(36)
+
+与cash_name不可都为空 
+
+cash_name
+收方式名称
+String(128)
+
+与cash_id不可都为空
+
+amounts
+收银金额
+double(10,2)
+
+不可空
+12.00
+account_id
+账户ID
+String(36)
+
+可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+account_name
+账户名称
+String(128)
+
+可空 
+工行pos
+external_no
+外部单号
+String(64)
+一般为在线支付的流水号
+可空
+5464646
+remark
+明细行备注
+String(256)
+
+可空
+
+product_details   商品明细信息
+add_details      商品明细列表，为product_details子节点
+imei
+串号1
+String(128)
+
+有串号商品不可为空
+05394824
+
+imei2
+串号2
+String(128)
+
+可空
+
+imei3
+串号3
+String(128)
+
+可空
+
+Imei4
+串号4
+String(128)
+
+可空
+
+
+
+
+
+
+
+product_id
+商品ID
+String(36)
+对应boyuan.products.get接口的id字段
+与product_full_name不可都为空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+商品全称
+String(128)
+
+与product_id不可都为空 
+商品全称
+qty
+数量
+Number
+
+不可空
+1
+unit_price
+单价
+Double
+
+不可空且非负数
+1000.55
+amounts
+金额
+Double
+
+不可空 
+1000.55
+remark
+明细行备注
+String(256)
+
+可空
+
+
+响应业务参数说明：
+参见5.7采购入库结构
+
+4.2.60.2 boyuan.biz.bill. purchaseReturn.generate（采购退货创建）
+根据第三方信息创建erp中的采购退货。
+接入方式：POST
+请求参数说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+head         单据头信息
+warehouse_id
+仓库ID
+String(36)
+
+与warehouse_name不可都为空
+f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb
+warehouse_name
+仓库名称
+String(128)
+
+与warehouse_id不可都为空
+总仓
+third_no
+第三方订单号
+String(32)
+
+可空
+A325444
+business_date
+业务发生日期
+String(20)
+格式：yyyy-MM-dd
+不可空
+2019-03-21
+order_id
+订单号
+String(36)
+
+可空
+123456
+logistics_no
+物流单号
+String(64)
+
+可空
+123456
+cash_term
+是否现结
+int
+0 否 1是
+可空
+0
+supplier_id
+供应商id
+String(36)
+
+与supplier_name不可都为空
+7fd03188-5bc4-4af7-8167-2b5fb59e0baa
+supplier_name
+供应商名称
+String(64)
+
+与supplier_id不可都为空
+李四
+pur_way
+入库方式id
+String(36)
+辅助信息中的入库方式
+可空
+8dd03188-5bc4-4af7-8167-2b5fb59e0baa
+pur_way_name
+入库方式名称
+String(36)
+辅助辅助信息中的入库方式
+可空 
+经销
+pay_way
+付款方式id
+String(36)
+辅助信息中的付款方式
+可空
+8dd03188-5bc4-4af7-8167-2b5fb59e0baa
+pay_way_name
+付款方式名称
+String(36)
+辅助辅助信息中的付款方式
+可空 
+到付
+sales_id
+采购业务员id
+Stirng(36)
+
+可空
+1fd03188-5bc4-4af7-8167-2b5fb59e0baa
+sales_name
+采购业务员名称
+String(32)
+
+可空
+张三
+is_need_invioces
+是否开票
+int
+0不开票，1开票
+可空
+0
+remark
+头备注
+String(256)
+
+可空
+
+cash_details   收银明细信息(是否现结为1时必传，为0时不传)
+add_details      收银明细列表，为cashDetails子节点
+cash_id
+收银方式id
+String(36)
+
+与cash_name不可都为空 
+
+cash_name
+收方式名称
+String(128)
+
+与cash_id不可都为空
+
+amounts
+收银金额
+double(10,2)
+
+不可空
+12.00
+account_id
+账户ID
+String(36)
+
+可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+account_name
+账户名称
+String(128)
+
+可空 
+工行pos
+external_no
+外部单号
+String(64)
+一般为在线支付的流水号
+可空
+5464646
+remark
+明细行备注
+String(256)
+
+可空
+
+product_details   商品明细信息
+add_details      商品明细列表，为product_details子节点
+imei
+串号1
+String(128)
+
+有串号商品不可为空
+05394824
+
+product_id
+商品ID
+String(36)
+对应boyuan.products.get接口的id字段
+与product_full_name不可都为空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+商品全称
+String(128)
+
+与product_id不可都为空 
+商品全称
+qty
+数量
+Number
+
+不可空
+1
+unit_price
+单价
+Double
+
+不可空且非负数
+1000.55
+amounts
+金额
+Double
+
+不可空 
+1000.55
+remark
+明细行备注
+String(256)
+
+可空
+
+
+响应业务参数说明：
+参见5.7采购入库结构
+4.2.61 批发单创建
+4.2.61.1 boyuan.biz.bill.sale.generate（快速批发创建）
+根据第三方信息创建erp中的快速批发。
+接入方式：POST
+请求参数说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+head         单据头信息
+warehouse_id
+仓库ID
+String(36)
+
+与warehouse_name不可都为空
+f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb
+warehouse_name
+仓库名称
+String(128)
+
+与warehouse_id不可都为空
+总仓
+business_date
+业务发生日期
+String(20)
+格式：yyyy-MM-dd
+不可空
+2019-03-21
+manual_number
+手工单号
+String(64)
+
+可空
+123456
+order_id
+订单号
+String(20)
+
+可空
+123456
+logistics_no
+物流单号
+String(64)
+
+可空
+123456
+cash_term
+是否现结
+int
+0 否 1是
+可空
+0
+customer_phone
+联系方式
+String(64)
+
+可空 
+13022255111
+cust_id
+客户id
+Strring(36)
+
+与cust_name不可都为空
+7fd03188-5bc4-4af7-8167-2b5fb59e0baa
+cust_name
+客户名称
+String(64)
+
+与cust_id不可都为空
+李四
+is_auto_generate_cust
+是否自动生成客户
+int
+0 否 1是
+可空
+0
+is_need_invioces
+是否开票
+int
+0不开票，1开票
+可空
+0
+sales_id
+业务员id
+Stirng(36)
+
+可空
+1fd03188-5bc4-4af7-8167-2b5fb59e0baa
+sales_name
+业务员名称
+String(32)
+
+可空
+张三
+sales_id2
+业务员id2
+Stirng(36)
+
+可空
+1fd03188-5bc4-4af7-8167-2b5fb59e0baa
+sales_name2
+业务员名称2
+String(32)
+
+可空
+张三
+sale_way
+出库方式id
+String(36)
+辅助信息中的出库方式
+可空
+8dd03188-5bc4-4af7-8167-2b5fb59e0baa
+sale_way_name
+出库方式名称
+String(36)
+辅助辅助信息中的出库方式
+可空 
+经销
+pur_way
+付款方式id
+String(36)
+辅助信息中的付款方式
+可空
+8dd03188-5bc4-4af7-8167-2b5fb59e0baa
+pur_way_name
+付款方式名称
+String(36)
+辅助辅助信息中的付款方式
+可空 
+到付
+logistics_id
+物流公司id
+String(36)
+辅助信息中的物流公司
+可空
+8dd03188-5bc4-4af7-8167-2b5fb59e0baa
+logistics_name
+物流公司名称
+String(36)
+辅助辅助信息中的物流公司
+可空 
+EMS
+logistics_type_id
+物流方式id
+String(36)
+辅助信息中的物流方式
+可空
+8dd03188-5bc4-4af7-8167-2b5fb59e0baa
+logistics_type_name
+物流方式名称
+String(36)
+辅助辅助信息中的物流方式
+可空 
+同城
+scope_flag
+往来金额范围
+int(4)
+1-全公司2-同一核算公司3-所选公司
+可空
+1
+goods_weight
+商品重量
+String(20)
+
+可空 
+0
+province_name
+省
+String(20)
+
+可空 
+
+city_name
+市
+String(20)
+
+可空 
+
+area_name
+县/区
+String(20)
+
+可空 
+
+address
+地址
+String(128)
+
+可空 
+
+contactor
+收货人
+String(20)
+
+可空 
+
+contactor_phone
+电话
+String(20)
+
+可空 
+
+creater_id
+制单人ID
+String(36)
+
+可空 
+2334dgaf-936b-45cf-a16a-b9d3c7d285b3
+creater_name
+制单人名称
+String(64)
+
+可空 
+李四
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+remark
+头备注
+String(256)
+
+可空
+
+sale_cash_details   收银明细信息(是否现结为1时才有)
+add_details      收银明细列表，为saleCashDetails子节点
+cash_id
+收银方式id
+String(36)
+
+与cash_name不可都为空
+
+cash_name
+收银方式名称
+String(128)
+
+与cash_id不可都为空
+
+amounts
+收银金额
+double(10,2)
+
+不可空
+12.00
+account_id
+账户ID
+String(36)
+
+可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+account_name
+账户名称
+String(128)
+
+可空 
+工行pos
+external_no
+外部单号
+String(64)
+一般为在线支付的流水号
+可空
+5464646
+remark
+明细行备注
+String(256)
+
+可空
+
+product_details   商品明细信息
+add_details      商品明细列表，为product_details子节点
+imei
+串号1
+String(128)
+
+可空 
+05394824
+
+product_id
+商品ID
+String(36)
+对应boyuan.products.get接口的id字段
+与product_full_name不可都为空
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+商品全称
+String(128)
+
+与product_id不可都为空
+商品全称
+qty
+数量
+Number
+
+不可空且正整数
+1
+unit_price
+单价
+Double
+
+不可空且非负数
+1000.55
+amounts
+金额
+Double
+
+可空 
+1000.55
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+
+响应业务参数说明：
+参见5.8快速批发结构
+
+4.2.61.2 boyuan.biz.bill.saleReturn.generate（批发退货创建）
+根据第三方信息创建erp中的批发退货。
+接入方式：POST
+请求参数说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+head         单据头信息
+warehouse_id
+仓库ID
+String(36)
+
+与warehouse_name不可都为空
+f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb
+warehouse_name
+仓库名称
+String(128)
+
+与warehouse_id不可都为空
+总仓
+business_date
+业务发生日期
+String(20)
+格式：yyyy-MM-dd
+不可空
+2019-03-21
+manual_number
+手工单号
+String(64)
+
+可空
+123456
+order_id
+订单号
+String(20)
+
+可空
+123456
+relate_bill_id
+原单号
+String(20)
+
+可空
+123456
+logistics_no
+物流单号
+String(64)
+
+可空
+123456
+cash_term
+是否现结
+int
+0 否 1是
+可空
+0
+customer_phone
+联系方式
+String(64)
+
+可空 
+13022255111
+cust_id
+客户id
+Strring(36)
+
+不可空
+7fd03188-5bc4-4af7-8167-2b5fb59e0baa
+cust_name
+客户名称
+String(64)
+
+不可空
+李四
+is_need_invioces
+是否开票
+int
+0不开票，1开票
+可空
+0
+sales_id
+业务员id
+Stirng(36)
+
+可空
+1fd03188-5bc4-4af7-8167-2b5fb59e0baa
+sales_name
+业务员名称
+String(32)
+
+可空
+张三
+sales_id2
+业务员id2
+Stirng(36)
+
+可空
+1fd03188-5bc4-4af7-8167-2b5fb59e0baa
+sales_name2
+业务员名称2
+String(32)
+
+可空
+张三
+sale_way
+出库方式id
+String(36)
+辅助信息中的出库方式
+可空
+8dd03188-5bc4-4af7-8167-2b5fb59e0baa
+sale_way_name
+出库方式名称
+String(36)
+辅助辅助信息中的出库方式
+可空 
+经销
+pur_way
+付款方式id
+String(36)
+辅助信息中的付款方式
+可空
+8dd03188-5bc4-4af7-8167-2b5fb59e0baa
+pur_way_name
+付款方式名称
+String(36)
+辅助辅助信息中的付款方式
+可空 
+到付
+logistics_id
+物流公司id
+String(36)
+辅助信息中的物流公司
+可空
+8dd03188-5bc4-4af7-8167-2b5fb59e0baa
+logistics_name
+物流公司名称
+String(36)
+辅助辅助信息中的物流公司
+可空 
+EMS
+logistics_type_id
+物流方式id
+String(36)
+辅助信息中的物流方式
+可空
+8dd03188-5bc4-4af7-8167-2b5fb59e0baa
+logistics_type_name
+物流方式名称
+String(36)
+辅助辅助信息中的物流方式
+可空 
+同城
+goods_weight
+商品重量
+String(20)
+
+可空 
+0
+province_name
+省
+String(20)
+
+可空 
+
+city_name
+市
+String(20)
+
+可空 
+
+area_name
+县/区
+String(20)
+
+可空 
+
+address
+地址
+String(128)
+
+可空 
+
+contactor
+收货人
+String(20)
+
+可空 
+
+contactor_phone
+电话
+String(20)
+
+可空 
+
+creater_id
+制单人ID
+String(36)
+
+可空 
+2334dgaf-936b-45cf-a16a-b9d3c7d285b3
+creater_name
+制单人名称
+String(64)
+
+可空 
+李四
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+remark
+头备注
+String(256)
+
+可空
+
+sale_cash_details   收银明细信息(是否现结为1时才有)
+add_details      收银明细列表，为saleCashDetails子节点
+cash_id
+收银方式id
+String(36)
+
+与cash_name不可都为空
+
+cash_name
+收银方式名称
+String(128)
+
+与cash_id不可都为空
+
+amounts
+收银金额
+double(10,2)
+
+不可空
+12.00
+account_id
+账户ID
+String(36)
+
+可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+account_name
+账户名称
+String(128)
+
+可空 
+工行pos
+external_no
+外部单号
+String(64)
+一般为在线支付的流水号
+可空
+5464646
+remark
+明细行备注
+String(256)
+
+可空
+
+product_details   商品明细信息
+add_details      商品明细列表，为product_details子节点
+imei
+串号1
+String(128)
+
+可空 
+05394824
+
+product_id
+商品ID
+String(36)
+对应boyuan.products.get接口的id字段
+与product_full_name不可都为空
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+商品全称
+String(128)
+
+与product_id不可都为空
+商品全称
+qty
+数量
+Number
+
+不可空且负数
+-1
+unit_price
+单价
+Double
+
+不可空且非负数
+1000.55
+amounts
+金额
+Double
+
+可空 
+-1000.55
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+
+响应业务参数说明：
+参见5.8快速批发结构
+4.2.62 boyuan.biz.bill.payment.generate（生成付款单接口）
+接入方式：POST请求业务参数（以JSON串方式放入请求公共参数的biz字段）说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+head         单据头信息
+company_id
+公司ID
+String(36)
+
+与company_name不可都为空
+f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb
+company_name
+公司名称
+String(128)
+
+与company_id e不可都为空
+总仓
+business_date
+业务发生日期
+String(20)
+格式：yyyy-MM-dd
+不可空
+2019-03-21
+supplier_cust_id
+供应商id
+Strring(36)
+
+与supplier_cust_name不可都为空
+7fd03188-5bc4-4af7-8167-2b5fb59e0baa
+supplier_cust_name
+供应商名称
+String(64)
+
+与supplier_cust_id不可都为空
+李四
+is_auto_generate_supplier
+是否自动生成供应商
+int
+0 否 1是
+可空
+0
+is_auto_generate_subject
+是否自动生成科目
+int
+0 否 1是
+可空
+0
+bank_name
+银行名称
+String(64)
+
+可空
+
+account_no
+银行账户
+String(64)
+
+可空
+
+supplier_cust_account_name
+户名
+String(64)
+
+可空
+
+scope_flag
+往来金额范围
+int(4)
+1-全公司2-同一核算公司3-所选公司
+可空
+1
+broker_user_id
+
+经手人id
+Strring(36)
+
+可空
+7fd03188-5bc4-4af7-8167-2b5fb59e0baa
+broker_user_name
+经手人名称
+String(64)
+
+可空
+李四
+payment_item_id
+付款项目id
+Stirng(36)
+
+可空
+1fd03188-5bc4-4af7-8167-2b5fb59e0baa
+payment_item_name
+付款项目名称
+String(32)
+
+可空
+张三
+acct_department
+核算部门id
+Stirng(36)
+
+可空
+1fd03188-5bc4-4af7-8167-2b5fb59e0baa
+acct_department _name
+核算部门名称
+String(32)
+
+可空
+张三
+payment_type_id
+付款类型id
+String(36)
+
+可空
+8dd03188-5bc4-4af7-8167-2b5fb59e0baa
+payment_type_name
+付款类型名称
+String(36)
+
+可空 
+经销
+sales_id
+业务员id
+Stirng(36)
+
+可空
+1fd03188-5bc4-4af7-8167-2b5fb59e0baa
+sales_name
+业务员名称
+String(32)
+
+可空
+张三
+invoice_company_id
+发票抬头id
+Stirng(36)
+
+可空
+1fd03188-5bc4-4af7-8167-2b5fb59e0baa
+invoice_company_name
+发票抬头名称
+String(32)
+
+可空
+张三
+creater_id
+制单人ID
+String(36)
+
+可空 
+2334dgaf-936b-45cf-a16a-b9d3c7d285b3
+creater_name
+制单人名称
+String(64)
+
+可空 
+李四
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+remark
+头备注
+String(256)
+
+可空
+
+payment_details   账户明细信息
+add_details      账户明细列表，为payment_details子节点
+account_id
+账户ID
+String(36)
+
+与account_name不可都为空
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+account_name
+账户名称
+String(64)
+
+与account_id e不可都为空
+支付宝
+handling_fee
+手续费
+Double
+
+可空 
+1000.55
+amounts
+金额
+Double
+
+不可空 
+1000.55
+subject_id
+科目id
+String(64)
+
+可空
+
+subject_name
+科目名称
+String(64)
+
+可空
+
+fee_subject_id
+手续费科目id
+String(64)
+
+可空
+
+fee_subject_name
+手续费名称
+String(64)
+
+可空
+
+payment_type_id
+款项类型id
+Strring(36)
+
+可空
+7fd03188-5bc4-4af7-8167-2b5fb59e0baa
+payment_type_name
+款项类型名称
+String(64)
+
+可空
+李四
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+
+响应业务参数说明：
+result为保存后的付款单信息，见5.9付款单结构
+
+4.2.63 boyuan.biz.bill.receipt.generate（生成收款单接口）	    接入方式：POST请求业务参数（以JSON串方式放入请求公共参数的biz字段）
+说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+head         单据头信息
+company_id
+公司ID
+String(36)
+
+与company_name不可都为空
+f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb
+company_name
+公司名称
+String(128)
+
+与company_id e不可都为空
+总仓
+business_date
+业务发生日期
+String(20)
+格式：yyyy-MM-dd
+不可空
+2019-03-21
+supplier_cust_id
+客户id
+Strring(36)
+
+与supplier_cust_name不可都为空
+7fd03188-5bc4-4af7-8167-2b5fb59e0baa
+supplier_cust_name
+客户名称
+String(64)
+
+与supplier_cust_name不可都为空
+李四
+is_auto_generate_cust
+是否自动生成客户
+int
+0 否 1是
+可空
+0
+is_auto_generate_subject
+是否自动生成科目
+int
+0 否 1是
+可空
+0
+cust_bank_name
+客户银行名称
+String(64)
+
+可空
+
+cust_account_no
+客户银行账户
+String(64)
+
+可空
+
+payer_name
+打款人
+String(64)
+
+可空
+
+scope_flag
+往来金额范围
+int(4)
+1-全公司2-同一核算公司3-所选公司
+可空
+1
+broker_user_id
+
+经手人id
+Strring(36)
+
+可空
+7fd03188-5bc4-4af7-8167-2b5fb59e0baa
+broker_user_name
+经手人名称
+String(64)
+
+可空
+李四
+receipt_item_id
+收款项目id
+Stirng(36)
+
+可空
+1fd03188-5bc4-4af7-8167-2b5fb59e0baa
+receipt_item_name
+收款项目名称
+String(32)
+
+可空
+张三
+acct_department
+核算部门id
+Stirng(36)
+
+可空
+1fd03188-5bc4-4af7-8167-2b5fb59e0baa
+acct_department _name
+核算部门名称
+String(32)
+
+可空
+张三
+sales_id
+业务员id
+Stirng(36)
+
+可空
+1fd03188-5bc4-4af7-8167-2b5fb59e0baa
+sales_name
+业务员名称
+String(32)
+
+可空
+张三
+creater_id
+制单人ID
+String(36)
+
+可空 
+2334dgaf-936b-45cf-a16a-b9d3c7d285b3
+creater_name
+制单人名称
+String(64)
+
+可空 
+李四
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+remark
+头备注
+String(256)
+
+可空
+
+receipt_details   账户明细信息
+add_details      账户明细列表，为receipt_details子节点
+account_id
+账户ID
+String(36)
+
+与account_name不可都为空
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+account_name
+账户名称
+String(64)
+
+与account_id e不可都为空
+支付宝
+handling_fee
+手续费
+Double
+
+可空 
+1000.55
+amounts
+金额
+Double
+
+不可空 
+1000.55
+subject_id
+科目id
+String(64)
+
+可空
+
+subject_name
+科目名称
+String(64)
+
+可空
+
+fee_subject_id
+手续费科目id
+String(64)
+
+可空
+
+fee_subject_name
+手续费名称
+String(64)
+
+可空
+
+payment_type_id
+款项类型id
+Strring(36)
+
+可空
+7fd03188-5bc4-4af7-8167-2b5fb59e0baa
+payment_type_name
+款项类型名称
+String(64)
+
+可空
+李四
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+
+响应业务参数说明：
+result为保存后的收款单信息，见5.10收款单结构
+
+4.2.64 boyuan.biz.bill.otherOut.generate（生成其他支出单接口）          接入方式：POST请求业务参数（以JSON串方式放入请求公共参数的biz字段）
+说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+head         单据头信息
+company_id
+公司ID
+String(36)
+
+与company_name不可都为空
+f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb
+company_name
+公司名称
+String(128)
+
+与company_id e不可都为空
+总仓
+business_date
+业务发生日期
+String(20)
+格式：yyyy-MM-dd
+不可空
+2019-03-21
+is_need_invioces
+是否开票
+int
+0不开票，1开票
+可空
+0
+is_auto_generate_subject
+是否自动生成科目
+int
+0 否 1是
+可空
+0
+broker_user_id
+
+经手人id
+Strring(36)
+
+可空
+7fd03188-5bc4-4af7-8167-2b5fb59e0baa
+broker_user_name
+经手人名称
+String(64)
+
+可空
+李四
+payee_id
+
+收款方id
+Strring(36)
+
+可空
+
+payee_name
+收款方名称
+String(64)
+
+可空
+
+payee_bank
+收款方银行
+String(64)
+
+可空
+
+payee_account
+收款方账户
+String(64)
+
+可空
+
+creater_id
+制单人ID
+String(36)
+
+可空 
+2334dgaf-936b-45cf-a16a-b9d3c7d285b3
+creater_name
+制单人名称
+String(64)
+
+可空 
+李四
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+remark
+头备注
+String(256)
+
+可空
+
+other_out_details   账户明细信息
+add_details      账户明细列表，为other_out_details子节点
+account_id
+账户ID
+String(36)
+
+与account_name不可都为空
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+account_name
+账户名称
+String(64)
+
+与account_id e不可都为空
+支付宝
+handling_fee
+手续费
+Double
+
+可空 
+1000.55
+amounts
+金额
+Double
+
+不可空 
+1000.55
+subject_id
+科目id
+String(64)
+
+可空
+
+subject_name
+科目名称
+String(64)
+
+可空
+
+operator_user_id
+经办人id
+String(64)
+
+可空
+
+operator_user_name
+经办人名称
+String(64)
+
+可空
+
+payment_type_id
+款项类型id
+Strring(36)
+
+可空
+7fd03188-5bc4-4af7-8167-2b5fb59e0baa
+payment_type_name
+款项类型名称
+String(64)
+
+可空
+李四
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+响应业务参数说明：
+result为保存后的其他支出单信息，见5.11其他支出单结构
+
+
+	•	外部通知接口
+	•	服务器异步通知接口
+当某一笔交易状态发生改变时，如交易从创建交易变为交易成功，这时，博远开放平台将主动发起异步通知，取得通知参数，并同步至当前交易的notify_url。
+
+通知方式：POST
+通知参数说明：
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+基本参数
+notify_time
+通知时间
+String
+通知时间（博远开放平台服务器时间）。格式为yyyy-MM-dd HH:mm:ss。
+不可空
+2015-10-14 13:17:39
+notify_id
+通知校验ID
+String
+博远开放平台通知校验ID，合作伙伴可以用这个流水号询问博远开放平台该条通知的合法性
+不可空
+RqPnCoPT3K9%2Fvwbh3I%2BODmZS9o4qChHwPWbaS7UMBJpUnBJlzg42y9A8gQlzU6m3fOhG
+sign_type
+签名类型
+String(10)
+合作伙伴生成签名字符串所使用的签名算法类型，目前支持MD5
+不可空
+
+sign
+签名
+String(256)
+合作伙伴请求参数的签名串，相见：数字签名
+不可空
+
+业务参数
+out_trade_no
+合作伙伴系统唯一订单号
+String(64)
+对应合作伙伴系统的订单系统中的唯一订单号，非博远开放平台交易号。需保证在合作伙伴系统中的唯一性。是请求时对应的参数，原样返回
+不可空
+6402757654153618
+subject
+商品名称
+String(256)
+商品的标题/交易标题/订单标题/订单关键字等
+可空
+
+trade_no
+博远开放平台订单号
+String(64)
+该交易在博远开放平台系统中的订单号。最长64位
+不可空
+2014040311001004370000361525
+third_trade_no
+第三方支付平台交易号
+String(64)
+
+不可空
+4200000291201906119508912622
+trade_status
+交易状态
+String
+交易目前所处的状态。成功状态仅两种： TRADE_SUCCESS以及TRADE_FINISHED，详见：交易状态枚举表
+可空
+TRADE_SUCCESS
+gmt_create
+交易创建时间
+String
+该笔交易创建的时间。格式为yyyy-MM-dd HH:mm:ss
+可空
+2015-10-14 13:17:39
+gmt_payment
+交易付款时间
+String
+该笔交易的用户付款时间。格式为yyyy-MM-dd HH:mm:ss
+可空
+2015-10-14 13:17:39
+gmt_close
+交易关闭时间
+String
+交易关闭时间。格式为yyyy-MM-dd HH:mm:ss
+可空
+2015-10-14 13:17:39
+refund_no
+开放平台退款流水号
+String
+
+可空
+
+third_refund_no
+第三方退款流水号
+String
+
+可空
+
+out_refund_no
+合作伙伴退款流水号
+String
+
+可空
+
+refund_status
+退款状态
+String
+详见：退款状态
+可空
+REFUND_SUCCESS
+gmt_refund
+退款时间
+String
+用户退款的时间，退款通知时会发送。格式为yyyy-MM-dd HH:mm:ss
+可空
+2015-10-14 13:17:39
+total_fee
+交易金额
+int
+该笔订单的资金总额，单位为分。取值范围为对应支付方式取值范围
+可空
+200
+refund_fee
+申请退款金额
+int
+单位分
+可空
+
+settlement_refund_fee
+实际退款金额
+int
+单位分
+可空
+
+body
+商品描述
+String(1000)
+对一笔交易的具体描述信息。如果是多种商品，请将商品描述字符串累加传给body
+可空
+
+extra_common_param
+公用回传参数
+String(400)
+用于合作伙伴回传参数，该值不能包含“=”、“&”等特殊字符。如果用户请求时传递了该参数，则返回给合作伙伴时会回传该参数
+可空
+
+
+	•	服务器异步通知页面特性
+	•	博远开放平台使用POST方式发送通知信息，因此该页面中获取参数的方式，如：request.Form("out_trade_no")、$_POST['out_trade_no']；
+	•	博远开放平台主动发起通知，该方式才会被启用；
+	•	只有在博远开放平台的交易管理中存在该笔交易，且发生了交易状态的改变，博远开放平台才会通过该方式发起服务器通知（交易状态为“等待买家付款”的状态默认是不会发送通知的）；
+	•	服务器间的交互，不像页面跳转同步通知可以在页面上显示出来，这种交互方式是不可见的；
+	•	程序执行完后必须打印输出“success”（不包含引号）。如果商户反馈给博远开放平台的字符不是success这7个字符，博远开放平台服务器会不断重发通知，直到配置的重发次数为止；
+	•	程序执行完成后，该页面不能执行页面跳转。如果执行页面跳转，博远开放平台会收不到success字符，会被博远开放平台服务器判定为该页面程序运行出现异常，而重发处理结果通知；
+	•	cookies、session等在此页面会失效，即无法获取这些数据；
+	•	该方式的调试与运行必须在服务器上，即互联网上能访问；
+
+	•	通用结构
+零售单（Retail）结构
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+head         单据头信息
+id
+零售单ID
+String(36)
+
+不可空
+b5426a2b-8e3a-468c-a4b1-800dbad43011
+big_gsdm
+帐套代码
+String(20)
+
+不可空
+80005
+company_id
+所属门店ID
+String(36)
+
+不可空
+f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb
+company_name
+所属门店名称
+String(128)
+
+不可空
+总公司
+company_code
+所属门店编码
+String(30)
+
+不可空
+8000401
+company_phone
+门店电话
+String(36)
+
+可空
+15856854825
+
+company_address
+门店地址
+String(256)
+
+可空
+浙江省杭州市西湖区西湖国际科技大厦
+bill_id
+单据号
+Stirng(32)
+
+不可空
+1071938
+bill_type
+单据类型
+Stirng(32)
+RETAIL-零售
+RETAILR-零售退货
+RETAILE-零售换机
+不可空
+RETAIL
+business_date
+业务发生日期
+String(20)
+格式：yyyy-MM-dd
+不可空
+2019-03-21
+trans_type
+事务类型
+String(32)
+取值范围：售/售退/售换
+不可空
+售
+invoice_qrcode_url
+电子小票二维码图片地址
+String(256)
+
+可空
+http://yxx-liugehetao-image.oss-cn-hangzhou.aliyuncs.com/80005/1563420614181/80005/1035657.png?x-oss-process=image%2Fsharpen%2C100
+classes_id
+班次ID
+String(36)
+
+可空
+2334dgaf-936b-45cf-a16a-b9d3c7d285b3
+classes_name
+班次名称
+String(64)
+
+可空 
+早班
+manual_number
+手工单号
+String(64)
+
+可空
+
+retail_way_id
+出库方式ID
+String(36)
+
+可空
+
+retail_way_name
+出库方式名称
+String(128)
+
+可空
+
+order_bill_id
+订单号
+String(32)
+
+可空
+13179
+dp_bill_id
+定金单号
+String(32)
+
+可空
+13178
+consume_points
+使用积分
+int
+
+可空
+100
+price_apply_bill_id
+特价申请单号
+String(32)
+
+可空
+13177
+relate_bill_id
+原零售单号
+String(32)
+trans_type为售退/售换时有效
+可空 
+
+member_id
+会员ID
+String(36)
+对应boyuan.members.get接口id字段
+可空 
+7dd03188-5bc4-4af7-8167-2b5fb59e0baa
+member_name
+会员名称
+Stirng(128)
+
+可空
+张三
+member_mobile_phone
+会员手机号
+String(32)
+
+可空
+1388888888
+create_time
+创建时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+不可空
+2019-03-20 11:00:00
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+remark
+头备注
+String(256)
+
+可空
+
+cash_details   收银明细信息
+add_details    收银明细列表，为cash_details子节点
+id
+收银明细ID
+String(36)
+
+不可空 
+e79fdff1-6ede-46e6-86eb-66b906d77e67
+cash_id
+收银方式ID
+String(36)
+
+不可空 
+e79fdff1-6ede-46e6-86eb-66b906d77e68
+cash_name
+收银方式名称
+String(128)
+
+不可空 
+现金
+cash_type
+收银类型
+String(64)
+
+不可空 
+现金收入
+amounts
+收银金额
+Double
+
+不可空
+180.50
+account_id
+收银账户ID
+String(36)
+
+可空 
+e79fdff1-6ede-46e6-86eb-66b906d77e69
+account_name
+收银账户名称
+String(128)
+
+可空
+HZ-CS-A
+seq_no
+明细行序号
+Int
+
+不可空
+1
+product_details   商品明细信息
+add_details      商品明细列表，为product_details子节点
+id
+明细行ID
+String(36)
+
+不可空 
+8b8d447f-53ea-431a-94a6-670dc6f0c518
+imei
+串号1
+String(128)
+
+可空 
+有串号商品不可空
+05394824
+
+imei2
+串号2
+String(128)
+
+可空
+
+imei3
+串号3
+String(128)
+
+可空
+
+product_id
+商品ID
+String(36)
+对应boyuan.products.get接口的id字段
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+商品全称
+String(128)
+
+不可空 
+商品全称
+imei_count
+串号模式
+Int
+
+可空
+1-单串号
+2-双串号
+3-三串号
+imei_len
+串号1长度
+Int
+
+可空
+8
+imei2_len
+串号2长度
+Int
+
+可空
+10
+imei3_len
+串号3长度
+Int
+
+可空
+
+warehouse_id
+仓库ID
+String(36)
+对应boyuan.warehouses.get接口的id字段
+不可空 
+17273d63-90dc-4b5b-add3-971a78a5b879
+warehouse_name
+仓库名称
+String(128)
+
+不可空 
+仓库名称
+qty
+数量
+Number
+
+不可空
+1
+unit_price
+单价
+Double
+
+不可空
+1000.55
+amounts
+金额
+Double
+
+不可空 
+1000.55
+sales_id
+店员1ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+不可空 
+d75ada7b-6a8b-4911-80af-71597551fbc0
+sales_name
+店员1名称
+String(128)
+
+不可空 
+博远
+sales_id2
+店员2ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+可空 
+d75ada7b-6a8b-4911-80af-71597551fbc1
+sales_name2
+店员2名称
+String(128)
+
+可空 
+博远2
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+不可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+mbpack_details   套餐明细信息
+add_details       套餐明细列表，为mbpack_details子节点
+id
+明细行ID
+String(36)
+
+不可空 
+8b8d447f-53ea-431a-94a6-670dc6f0c518
+key_phone
+业务号码
+String(64)
+
+不可空
+18398011358
+schema_id
+佣金方案ID
+String(36)
+
+可空
+
+schema_name
+佣金方案名称
+String(128)
+
+可空
+
+product_id
+套餐ID
+String(36)
+对应boyuan.products.get接口的id字段
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+套餐名称
+String(128)
+
+不可空 
+套餐名称
+amounts
+金额
+Double
+
+不可空 
+1000.55
+sales_id
+店员1ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+不可空 
+d75ada7b-6a8b-4911-80af-71597551fbc0
+sales_name
+店员1名称
+String(128)
+
+不可空 
+博远
+sales_id2
+店员2ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+可空 
+d75ada7b-6a8b-4911-80af-71597551fbc1
+sales_name2
+店员2名称
+String(128)
+
+可空 
+博远2
+mbpack_cust_type_id
+套餐客户类型ID
+String(36)
+
+可空
+d75ada7b-6a8b-4911-80af-71597551fbc1
+mbpack_cust_type_name
+套餐客户类型名称
+String(128)
+
+可空
+套餐客户类型名称
+mbpack_cc_type_id
+套餐业务类型ID
+String(36)
+
+可空
+d75ada7b-6a8b-4911-80af-71597551fbc2
+mbpack_cc_type_name
+套餐业务类型名称
+String(128)
+
+可空
+套餐业务类型名称
+mbpack_cust_type_id
+套餐客户类型ID
+String(36)
+
+可空
+d75ada7b-6a8b-4911-80af-71597551fbc1
+mbpack_cust_type_name
+套餐客户类型名称
+String(128)
+
+可空
+套餐客户类型名称
+relevance_imei
+关联串号
+String(128)
+
+可空 
+866852017028405
+settle_amounts
+结算金额
+Double
+
+不可空 
+0.1
+mbpack_point
+套餐积分
+Double
+
+不可空 
+10.0
+openning_date
+套餐开通日期
+String(20)
+
+不可空 
+2019-03-24
+ending_date
+套餐到期日期
+String(20)
+
+可空 
+
+mbpack_supplier_cust_id
+套餐结算单位ID
+String(36)
+对应boyuan.custsupplier.get接口的id字段
+不可空
+81a39cff-936b-45cf-a16a-b9d3c7d285b2
+mbpack_supplier_cust_name
+套餐结算单位名称
+String(128)
+product_type为1时有效并不可空
+可空 
+结算单位名称
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+不可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+stage_details   分期明细信息
+add_details    分期明细列表，为stage_details子节点
+id
+明细行ID
+String(36)
+
+不可空 
+8b8d447f-53ea-431a-94a6-670dc6f0c518
+product_id
+分期ID
+String(36)
+对应boyuan.products.get接口的id字段
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+分期名称
+String(128)
+
+不可空 
+分期名称
+sales_id
+店员1ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+不可空 
+d75ada7b-6a8b-4911-80af-71597551fbc0
+sales_name
+店员1名称
+String(128)
+
+不可空 
+博远
+sales_id2
+店员2ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+可空 
+d75ada7b-6a8b-4911-80af-71597551fbc1
+sales_name2
+店员2名称
+String(128)
+
+可空 
+博远2
+relevance_imei
+关联串号
+String(128)
+product_type为1/2/3时不可空
+可空 
+866852017028405
+comm_rate
+佣金比例
+Double
+
+可空 
+0.1
+settle_amounts
+贷款金额
+Double
+
+不可空 
+0.1
+key_phone
+业务单号
+String(64)
+
+不可空
+18398011358
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+不可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+assurance_details 保障服务明细信息
+add_details      保障服务明细列表，为assurance_details子节点
+id
+明细行ID
+String(36)
+
+不可空 
+8b8d447f-53ea-431a-94a6-670dc6f0c518
+product_id
+保障服务ID
+String(36)
+对应boyuan.products.get接口的id字段
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+保障服务名称
+String(128)
+
+不可空 
+保障服务名称
+qty
+数量
+Number
+
+不可空
+1
+unit_price
+单价
+Double
+
+不可空
+1000.55
+amounts
+金额
+Double
+
+不可空 
+1000.55
+sales_id
+店员1ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+不可空 
+d75ada7b-6a8b-4911-80af-71597551fbc0
+sales_name
+店员1名称
+String(128)
+
+不可空 
+博远
+sales_id2
+店员2ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+可空 
+d75ada7b-6a8b-4911-80af-71597551fbc1
+sales_name2
+店员2名称
+String(128)
+
+可空 
+博远2
+relevance_imei
+关联串号
+String(128)
+
+可空 
+866852017028405
+key_phone
+业务单号
+String(64)
+
+不可空
+18398011358
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+不可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+
+零售订单（RetailOrder）结构
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+head         单据头信息
+id
+零售单ID
+String(36)
+
+不可空
+b5426a2b-8e3a-468c-a4b1-800dbad43011
+big_gsdm
+帐套代码
+String(20)
+
+不可空
+80005
+company_id
+所属门店ID
+String(36)
+
+不可空
+f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb
+company_name
+所属门店名称
+String(128)
+
+不可空
+总公司
+company_code
+所属门店编码
+String(30)
+
+不可空
+8000401
+company_phone
+门店电话
+String(36)
+
+可空
+15856854825
+
+company_address
+门店地址
+String(256)
+
+可空
+浙江省杭州市西湖区西湖国际科技大厦
+third_order_no
+三方订单号
+Stirng(32)
+
+不可空
+1071938
+bill_id
+单据号
+Stirng(32)
+
+不可空
+1071938
+bill_type
+单据类型
+Stirng(32)
+RETAIL-零售
+RETAILR-零售退货
+RETAILE-零售换机
+不可空
+RETAIL
+business_date
+业务发生日期
+String(20)
+格式：yyyy-MM-dd
+不可空
+2019-03-21
+dp_bill_id
+定金单号
+String(32)
+
+可空
+13178
+consume_points
+使用积分
+int
+
+可空
+100
+trans_type
+事务类型
+String(32)
+取值范围：售/售退/售换
+不可空
+售
+classes_id
+班次ID
+String(36)
+
+可空
+2334dgaf-936b-45cf-a16a-b9d3c7d285b3
+classes_name
+班次名称
+String(64)
+
+可空 
+早班
+member_id
+会员ID
+String(36)
+对应boyuan.members.get接口id字段
+可空 
+7dd03188-5bc4-4af7-8167-2b5fb59e0baa
+member_name
+会员名称
+Stirng(128)
+
+可空
+张三
+member_mobile_phone
+会员手机号
+String(32)
+
+可空
+1388888888
+member_phone
+会员电话号码
+String(20)
+
+可空
+
+member_id_card
+会员证件号
+String(64)
+
+可空
+
+member_sex
+会员性别
+Int
+1-男
+0-女
+可控
+0
+member_birthday
+会员生日
+String(10)
+
+可空
+2016-03-28
+member_card_no
+会员卡号
+String(32)
+
+可空
+
+create_time
+创建时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+不可空
+2019-03-20 11:00:00
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+remark
+头备注
+String(256)
+
+可空
+
+product_details   商品明细信息
+add_details      商品明细列表，为product_details子节点
+id
+明细行ID
+String(36)
+
+不可空 
+8b8d447f-53ea-431a-94a6-670dc6f0c518
+imei
+串号1
+String(128)
+
+可空 
+05394824
+
+imei2
+串号2
+String(128)
+
+可空
+
+imei3
+串号3
+String(128)
+
+可空
+
+product_id
+商品ID
+String(36)
+对应boyuan.products.get接口的id字段
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+商品全称
+String(128)
+
+不可空 
+商品全称
+imei_count
+串号模式
+Int
+
+可空
+1-单串号
+2-双串号
+3-三串号
+imei_len
+串号1长度
+Int
+
+可空
+8
+imei2_len
+串号2长度
+Int
+
+可空
+10
+imei3_len
+串号3长度
+Int
+
+可空
+
+warehouse_id
+仓库ID
+String(36)
+对应boyuan.warehouses.get接口的id字段
+不可空 
+17273d63-90dc-4b5b-add3-971a78a5b879
+warehouse_name
+仓库名称
+String(128)
+
+不可空 
+仓库名称
+qty
+数量
+Number
+
+不可空
+1
+unit_price
+单价
+Double
+
+不可空
+1000.55
+amounts
+金额
+Double
+
+不可空 
+1000.55
+sales_id
+店员1ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+不可空 
+d75ada7b-6a8b-4911-80af-71597551fbc0
+sales_name
+店员1名称
+String(128)
+
+不可空 
+博远
+sales_id2
+店员2ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+可空 
+d75ada7b-6a8b-4911-80af-71597551fbc1
+sales_name2
+店员2名称
+String(128)
+
+可空 
+博远2
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+不可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+mbpack_details   套餐明细信息
+add_details       套餐明细列表，为mbpack_details子节点
+id
+明细行ID
+String(36)
+
+不可空 
+8b8d447f-53ea-431a-94a6-670dc6f0c518
+key_phone
+业务号码
+String(64)
+
+不可空
+18398011358
+schema_id
+佣金方案ID
+String(36)
+
+可空
+
+schema_name
+佣金方案名称
+String(128)
+
+可空
+
+product_id
+套餐ID
+String(36)
+对应boyuan.products.get接口的id字段
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+套餐名称
+String(128)
+
+不可空 
+套餐名称
+amounts
+金额
+Double
+
+不可空 
+1000.55
+sales_id
+店员1ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+不可空 
+d75ada7b-6a8b-4911-80af-71597551fbc0
+sales_name
+店员1名称
+String(128)
+
+不可空 
+博远
+sales_id2
+店员2ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+可空 
+d75ada7b-6a8b-4911-80af-71597551fbc1
+sales_name2
+店员2名称
+String(128)
+
+可空 
+博远2
+mbpack_cust_type_id
+套餐客户类型ID
+String(36)
+
+可空
+d75ada7b-6a8b-4911-80af-71597551fbc1
+mbpack_cust_type_name
+套餐客户类型名称
+String(128)
+
+可空
+套餐客户类型名称
+mbpack_cc_type_id
+套餐业务类型ID
+String(36)
+
+可空
+d75ada7b-6a8b-4911-80af-71597551fbc2
+mbpack_cc_type_name
+套餐业务类型名称
+String(128)
+
+可空
+套餐业务类型名称
+mbpack_cust_type_id
+套餐客户类型ID
+String(36)
+
+可空
+d75ada7b-6a8b-4911-80af-71597551fbc1
+mbpack_cust_type_name
+套餐客户类型名称
+String(128)
+
+可空
+套餐客户类型名称
+relevance_imei
+关联串号
+String(128)
+
+可空 
+866852017028405
+settle_amounts
+结算金额
+Double
+
+不可空 
+0.1
+mbpack_point
+套餐积分
+Double
+
+不可空 
+10.0
+openning_date
+套餐开通日期
+String(20)
+
+不可空 
+2019-03-24
+ending_date
+套餐到期日期
+String(20)
+
+可空 
+
+mbpack_supplier_cust_id
+套餐结算单位ID
+String(36)
+对应boyuan.custsupplier.get接口的id字段
+不可空
+81a39cff-936b-45cf-a16a-b9d3c7d285b2
+mbpack_supplier_cust_name
+套餐结算单位名称
+String(128)
+product_type为1时有效并不可空
+可空 
+结算单位名称
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+不可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+stage_details   分期明细信息
+add_details    分期明细列表，为stage_details子节点
+id
+明细行ID
+String(36)
+
+不可空 
+8b8d447f-53ea-431a-94a6-670dc6f0c518
+product_id
+分期ID
+String(36)
+对应boyuan.products.get接口的id字段
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+分期名称
+String(128)
+
+不可空 
+分期名称
+sales_id
+店员1ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+不可空 
+d75ada7b-6a8b-4911-80af-71597551fbc0
+sales_name
+店员1名称
+String(128)
+
+不可空 
+博远
+sales_id2
+店员2ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+可空 
+d75ada7b-6a8b-4911-80af-71597551fbc1
+sales_name2
+店员2名称
+String(128)
+
+可空 
+博远2
+relevance_imei
+关联串号
+String(128)
+product_type为1/2/3时不可空
+可空 
+866852017028405
+comm_rate
+佣金比例
+Double
+
+可空 
+0.1
+settle_amounts
+贷款金额
+Double
+
+不可空 
+0.1
+key_phone
+业务单号
+String(64)
+
+不可空
+18398011358
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+不可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+assurance_details 保障服务明细信息
+add_details      保障服务明细列表，为assurance_details子节点
+id
+明细行ID
+String(36)
+
+不可空 
+8b8d447f-53ea-431a-94a6-670dc6f0c518
+product_id
+保障服务ID
+String(36)
+对应boyuan.products.get接口的id字段
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+保障服务名称
+String(128)
+
+不可空 
+保障服务名称
+qty
+数量
+Number
+
+不可空
+1
+unit_price
+单价
+Double
+
+不可空
+1000.55
+amounts
+金额
+Double
+
+不可空 
+1000.55
+sales_id
+店员1ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+不可空 
+d75ada7b-6a8b-4911-80af-71597551fbc0
+sales_name
+店员1名称
+String(128)
+
+不可空 
+博远
+sales_id2
+店员2ID
+String(36)
+业务员类型用户的ID，对应boyuan.users.get接口的id字段
+可空 
+d75ada7b-6a8b-4911-80af-71597551fbc1
+sales_name2
+店员2名称
+String(128)
+
+可空 
+博远2
+relevance_imei
+关联串号
+String(128)
+
+可空 
+866852017028405
+key_phone
+业务单号
+String(64)
+
+不可空
+18398011358
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+不可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+
+5.3零售定金（DownPayment）结构
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+head         单据头信息
+id
+定金单ID
+String(36)
+
+不可空
+b5426a2b-8e3a-468c-a4b1-800dbad43011
+big_gsdm
+帐套代码
+String(20)
+
+不可空
+80005
+company_id
+所属门店ID
+String(36)
+
+不可空
+f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb
+company_name
+所属门店名称
+String(128)
+
+不可空
+总公司
+company_code
+所属门店编码
+String(30)
+
+不可空
+8000401
+third_order_no
+第三方订单号
+String(32)
+
+可空
+A325444
+bill_id
+单据号
+Stirng(32)
+
+不可空
+1071938
+bill_type
+单据类型
+Stirng(32)
+RETAIL_DP零售定金
+RETAIL_DP_R零售退定金
+不可空
+RETAIL_DP
+business_date
+业务发生日期
+String(20)
+格式：yyyy-MM-dd
+不可空
+2019-03-21
+classes_id
+班次ID
+String(36)
+
+可空
+2334dgaf-936b-45cf-a16a-b9d3c7d285b3
+classes_name
+班次名称
+String(64)
+
+可空 
+早班
+payment_type_id
+定金类型id
+Strring(36)
+
+可空
+
+payment_type_name
+定金类型名称
+String(64)
+
+可空
+
+source_bill_id
+原定金单号
+String(30)
+退定金时用
+可空
+
+member_id
+会员ID
+String(36)
+对应boyuan.members.get接口id字段
+可空 
+7dd03188-5bc4-4af7-8167-2b5fb59e0baa
+member_name
+会员名称
+Stirng(128)
+
+可空
+张三
+member_mobile_phone
+会员手机号
+String(32)
+
+可空
+1388888888
+member_phone
+会员电话号码
+String(20)
+
+可空
+
+member_id_card
+会员证件号
+String(64)
+
+可空
+
+member_sex
+会员性别
+Int
+1-男
+0-女
+可控
+0
+member_birthday
+会员生日
+String(10)
+
+可空
+2016-03-28
+member_card_no
+会员卡号
+String(32)
+
+可空
+
+product_id
+商品id
+String(36)
+
+可空
+
+product_full_name
+商品名称
+String(128)
+
+可空
+华为P20-6+128-abcde星际黑
+sales_id
+店员id
+String(36)
+
+可空
+
+sales_name
+店员名称
+String(20)
+
+可空
+
+creater_id
+制单人ID
+String(36)
+
+可空 
+2334dgaf-936b-45cf-a16a-b9d3c7d285b3
+creater_name
+制单人名称
+String(64)
+
+可空 
+李四
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+remark
+头备注
+String(256)
+
+可空
+
+cash_details   收银明细信息
+add_details      收银明细列表，为cashDetails子节点
+id
+明细行ID
+String(36)
+
+不可空 
+8b8d447f-53ea-431a-94a6-670dc6f0c518
+cash_id
+收银方式id
+String(36)
+
+不可空 
+
+cash_name
+收方式名称
+String(128)
+
+不可空
+
+amounts
+收银金额
+double(10,2)
+
+不可空
+12.00
+account_id
+账户ID
+String(36)
+
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+account_name
+账户名称
+String(128)
+
+不可空 
+工行pos
+external_no
+外部单号
+String(64)
+一般为在线支付的流水号
+可空
+5464646
+remark
+明细行备注
+String(256)
+
+可空
+
+
+5.4零售发票（InvoiceApply）结构
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+head         单据头信息
+id
+零售发票ID
+String(36)
+
+不可空
+b5426a2b-8e3a-468c-a4b1-800dbad43011
+big_gsdm
+帐套代码
+String(20)
+
+不可空
+80005
+company_id
+门店ID
+String(36)
+
+不可空
+f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb
+company_name
+门店名称
+String(128)
+
+不可空
+总公司
+company_code
+所属门店编码
+String(30)
+
+不可空
+8000401
+relate_bill_id
+零售单号
+String(32)
+
+不可空
+325444
+relate_business_date
+零售日期
+String(20)
+格式：yyyy-MM-dd
+
+
+bill_id
+零售发票申请单号
+Stirng(32)
+
+不可空
+1071938
+bill_type
+单据类型
+Stirng(32)
+INVOICE_APPLY
+不可空
+INVOICE_APPLY
+business_date
+申请开票日期
+String(20)
+格式：yyyy-MM-dd
+不可空
+2019-03-21
+relate_business_amounts
+销售金额
+double(6,2)
+
+不可空
+100.00
+invoice_type_name
+发票类型名称
+String(36)
+纸质发票，电子发票
+可空
+纸质发票
+invoice_title_type_name
+发票抬头类型名称
+String(36)
+个人，企业，机关单位
+可空
+个人
+invoice_category_name
+发票种类名称
+String(64)
+普通发票，专用发票
+可空 
+普通发票
+invoice_title
+发票抬头
+String(64)
+
+可空
+
+tax_payer_id_number
+纳税人识别号
+Strring(36)
+
+可空
+
+bank_name
+开户银行
+String(64)
+
+可空
+
+bank_account
+银行账号
+String(30)
+
+可空
+
+address_phone
+地址电话
+String(36)
+
+可空 
+
+receiver_name
+收票人姓名
+Stirng(36)
+
+可空
+张三
+receiver_phone
+收票人电话
+String(32)
+
+可空
+1388888888
+receiver_address
+收票人地址
+String(128)
+
+可空
+
+email
+收票人邮箱
+String(64)
+
+可空
+
+status
+开票状态
+int
+0未开票	1已开票	 2已作废	3已终止 4-财务处理
+不可空
+0
+invoice_business_date
+开票日期
+String
+yyyy-MM-dd
+可空
+2016-03-28
+invoice_user
+开票人
+String(20)
+
+可空
+
+invoice_number
+发票号
+String(36)
+
+可空
+
+draw_invoice_title_name
+出票抬头名称
+String(36)
+
+可空
+
+summary
+价税合计
+double(10,2)
+
+可空
+
+tax_rate
+税率
+double(6,2)
+
+可空
+
+no_tax_amounts
+不含税金额
+double(8,2)
+
+可空
+
+tax_amounts
+税金
+double(8,2)
+
+可空
+
+creater_id
+制单人ID
+String(36)
+
+可空 
+2334dgaf-936b-45cf-a16a-b9d3c7d285b3
+creater_name
+制单人名称
+String(64)
+
+可空 
+李四
+create_time
+创建时间
+String(32)
+yyyy-MM-dd HH:mm:ss
+
+
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+remark
+头备注
+String(256)
+
+可空
+
+details   商品明细信息
+add_details      商品明细列表，为details子节点
+id
+明细行ID
+String(36)
+
+不可空 
+8b8d447f-53ea-431a-94a6-670dc6f0c518
+relate_id
+关联业务单id
+String(36)
+
+不可空 
+
+product_id
+商品id
+String(36)
+
+不可空
+
+product_full_name
+商品名称
+String(128)
+
+不可空
+
+imei
+串号
+String(60)
+
+可空
+
+qty
+数量
+int
+
+不可空
+
+unit_price
+单价
+double(10,2)
+
+不可空
+
+amounts
+金额
+double(10,2)
+
+不可空
+12.00
+warehouse_id
+仓库id
+String(36)
+
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+warehouse_name
+仓库名称
+String(64)
+
+不可空
+
+sales_id
+业务员id
+String(36)
+
+可空 
+
+sales_name
+业务员名称
+String(64)
+
+可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+
+5.5旧机回收（Recycle）结构
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+head         单据头信息
+id
+旧机回收单ID
+String(36)
+
+不可空
+b5426a2b-8e3a-468c-a4b1-800dbad43011
+big_gsdm
+帐套代码
+String(20)
+
+不可空
+80005
+warehouse_id
+仓库ID
+String(36)
+
+不可空
+f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb
+warehouse_name
+仓库名称
+String(128)
+
+不可空
+总仓
+third_no
+第三方订单号
+String(32)
+
+可空
+A325444
+bill_id
+单据号
+Stirng(32)
+
+不可空
+1071938
+bill_type
+单据类型
+Stirng(32)
+RECYCLE旧机回收
+不可空
+RECYCLE
+business_date
+业务发生日期
+String(20)
+格式：yyyy-MM-dd
+不可空
+2019-03-21
+customer_name
+顾客姓名
+String(36)
+
+可空
+张三
+customer_phone
+联系方式
+String(64)
+
+可空 
+13022255111
+supplier_id
+供应商id
+Strring(36)
+
+不可空
+7fd03188-5bc4-4af7-8167-2b5fb59e0baa
+supplier_name
+供应商名称
+String(64)
+
+不可空
+李四
+pur_way
+入库方式id
+String(36)
+辅助信息中的入库方式
+可空
+8dd03188-5bc4-4af7-8167-2b5fb59e0baa
+pur_way_name
+入库方式名称
+String(36)
+辅助辅助信息中的入库方式
+可空 
+经销
+sales_id
+业务员id
+Stirng(36)
+
+可空
+1fd03188-5bc4-4af7-8167-2b5fb59e0baa
+sales_name
+业务员名称
+String(32)
+
+可空
+张三
+is_need_invioces
+是否开票
+int
+0不开票，1开票
+可空
+0
+pur_type
+是否换新机
+String(10)
+0否，1是
+不可空
+0
+creater_id
+制单人ID
+String(36)
+
+可空 
+2334dgaf-936b-45cf-a16a-b9d3c7d285b3
+creater_name
+制单人名称
+String(64)
+
+可空 
+李四
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+remark
+头备注
+String(256)
+
+可空
+
+cash_details   收银明细信息(是否换新机为0时才有)
+add_details      收银明细列表，为cashDetails子节点
+id
+明细行ID
+String(36)
+
+不可空 
+8b8d447f-53ea-431a-94a6-670dc6f0c518
+cash_id
+收银方式id
+String(36)
+
+不可空 
+
+cash_name
+收方式名称
+String(128)
+
+不可空
+
+amounts
+收银金额
+double(10,2)
+
+不可空
+12.00
+account_id
+账户ID
+String(36)
+
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+account_name
+账户名称
+String(128)
+
+不可空 
+工行pos
+external_no
+外部单号
+String(64)
+一般为在线支付的流水号
+可空
+5464646
+remark
+明细行备注
+String(256)
+
+可空
+
+product_details   商品明细信息
+add_details      商品明细列表，为product_details子节点
+id
+明细行ID
+String(36)
+
+不可空 
+8b8d447f-53ea-431a-94a6-670dc6f0c518
+imei
+串号1
+String(128)
+
+可空 
+05394824
+
+imei2
+串号2
+String(128)
+
+可空
+
+imei3
+串号3
+String(128)
+
+可空
+
+product_id
+商品ID
+String(36)
+对应boyuan.products.get接口的id字段
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+商品全称
+String(128)
+
+不可空 
+商品全称
+imei_count
+串号模式
+Int
+
+可空
+1-单串号
+2-双串号
+3-三串号
+imei_len
+串号1长度
+Int
+
+可空
+8
+imei2_len
+串号2长度
+Int
+
+可空
+10
+imei3_len
+串号3长度
+Int
+
+可空
+
+qty
+数量
+Number
+
+不可空
+1
+unit_price
+单价
+Double
+
+不可空
+1000.55
+amounts
+金额
+Double
+
+不可空 
+1000.55
+advice_price
+报价金额
+double
+
+可空
+1000.00
+rebate_amounts
+返利金额
+double
+
+可空
+1000.00
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+不可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+
+5.6旧机回收/旧机退货订单（RecycleOrder）结构
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+head         单据头信息
+id
+旧机回收单ID
+String(36)
+
+不可空
+b5426a2b-8e3a-468c-a4b1-800dbad43011
+big_gsdm
+帐套代码
+String(20)
+
+不可空
+80005
+origin_relate_bill_id
+原旧机回收单号
+String(20)
+创建旧机退货订单时不可空
+可空
+25784
+warehouse_id
+仓库ID
+String(36)
+
+不可空
+f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb
+warehouse_name
+仓库名称
+String(128)
+
+不可空
+总仓
+third_no
+第三方订单号
+String(32)
+
+可空
+A325444
+bill_id
+单据号
+Stirng(32)
+
+不可空
+1071938
+bill_type
+单据类型
+Stirng(32)
+RECYCLE_ORDER旧机回收订单，RECYCLE_RETURN_ORDER旧机退货订单
+不可空
+RECYCLE_ORDER
+end_tag
+单据状态
+int
+0未引入，1已引入，-1已取消
+不可空
+0
+platform
+单据来源
+String(20)
+001ERP，010青果
+不可空
+001
+business_date
+业务发生日期
+String(20)
+格式：yyyy-MM-dd
+不可空
+2019-03-21
+relate_bill_id
+关联单据号
+String(30)
+引入了当前订单的旧机回收/旧机退货单号
+可空
+22541
+relate_bill_type
+关联单据类型
+String(30)
+引入了当前订单的旧机回收/旧机退货单据类型
+可空
+RECYCLE
+customer_name
+顾客姓名
+String(36)
+
+可空
+张三
+customer_phone
+联系方式
+String(64)
+
+可空 
+13022255111
+supplier_id
+供应商id
+Strring(36)
+
+不可空
+7fd03188-5bc4-4af7-8167-2b5fb59e0baa
+supplier_name
+供应商名称
+String(64)
+
+不可空
+李四
+pur_way
+入库方式id
+String(36)
+辅助信息中的入库方式
+可空
+8dd03188-5bc4-4af7-8167-2b5fb59e0baa
+pur_way_name
+入库方式名称
+String(36)
+辅助辅助信息中的入库方式
+可空 
+经销
+sales_id
+业务员id
+Stirng(36)
+
+可空
+1fd03188-5bc4-4af7-8167-2b5fb59e0baa
+sales_name
+业务员名称
+String(32)
+
+可空
+张三
+is_need_invioces
+是否开票
+int
+0不开票，1开票
+可空
+0
+recycle_tag_id
+回收标签id
+String(64)
+辅助信息中的回收标签id
+可空
+2fd03188-5bc4-4af7-7167-2b5fb59e0baa
+recycle_tag_name
+回收标签名称
+String(64)
+辅助信息中的回收标签名称
+可空
+以旧换新
+creater_id
+制单人ID
+String(36)
+
+可空 
+2334dgaf-936b-45cf-a16a-b9d3c7d285b3
+creater_name
+制单人名称
+String(64)
+
+可空 
+李四
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+remark
+头备注
+String(256)
+
+可空
+
+product_details   商品明细信息
+add_details      商品明细列表，为product_details子节点
+id
+明细行ID
+String(36)
+
+不可空 
+8b8d447f-53ea-431a-94a6-670dc6f0c518
+imei
+串号
+String(128)
+
+可空 
+05394824
+
+product_id
+商品ID
+String(36)
+对应boyuan.products.get接口的id字段
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+商品全称
+String(128)
+
+不可空 
+商品全称
+configuration
+商品配置
+String(64)
+
+可空
+6+128
+qty
+数量
+Number
+
+不可空
+1
+unit_price
+单价
+Double
+
+不可空
+1000.55
+amounts
+金额
+Double
+
+不可空 
+1000.55
+advice_price
+报价金额
+double
+
+可空
+1000.00
+rebate_amounts
+返利金额
+double
+
+可空
+1000.00
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+不可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+5.7采购入库（Purchase）结构
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+head         单据头信息
+id
+采购入库ID
+String(36)
+
+不可空
+b5426a2b-8e3a-468c-a4b1-800dbad43011
+big_gsdm
+帐套代码
+String(20)
+
+不可空
+80005
+warehouse_id
+仓库ID
+String(36)
+
+不可空
+f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb
+warehouse_name
+仓库名称
+String(128)
+
+不可空
+总仓
+third_no
+第三方订单号
+String(32)
+
+可空
+A325444
+bill_id
+单据号
+Stirng(32)
+
+不可空
+1071938
+bill_type
+单据类型
+Stirng(32)
+PUR-采购入库，PURR-采购退货
+
+不可空
+PUR
+business_date
+业务发生日期
+String(20)
+格式：yyyy-MM-dd
+不可空
+2019-03-21
+manual_number
+手工单号
+String(64)
+
+可空
+123456
+order_id
+订单号
+String(20)
+
+可空
+123456
+logistics_no
+物流单号
+String(64)
+
+可空
+123456
+cash_term
+是否现结
+int
+0 否 1是
+可空
+0
+customer_phone
+联系方式
+String(64)
+
+可空 
+13022255111
+supplier_id
+供应商id
+Strring(36)
+
+不可空
+7fd03188-5bc4-4af7-8167-2b5fb59e0baa
+supplier_name
+供应商名称
+String(64)
+
+不可空
+李四
+pur_way
+入库方式id
+String(36)
+辅助信息中的入库方式
+可空
+8dd03188-5bc4-4af7-8167-2b5fb59e0baa
+pur_way_name
+入库方式名称
+String(36)
+辅助辅助信息中的入库方式
+可空 
+经销
+pay_way
+付款方式id
+String(36)
+辅助信息中的付款方式
+可空
+8dd03188-5bc4-4af7-8167-2b5fb59e0baa
+pay_way_name
+付款方式名称
+String(36)
+辅助辅助信息中的付款方式
+可空 
+到付
+sales_id
+采购业务员id
+Stirng(36)
+
+可空
+1fd03188-5bc4-4af7-8167-2b5fb59e0baa
+sales_name
+采购业务员名称
+String(32)
+
+可空
+张三
+is_need_invioces
+是否开票
+int
+0不开票，1开票
+可空
+0
+creater_id
+制单人ID
+String(36)
+
+可空 
+2334dgaf-936b-45cf-a16a-b9d3c7d285b3
+creater_name
+制单人名称
+String(64)
+
+可空 
+李四
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+remark
+头备注
+String(256)
+
+可空
+
+cash_details   收银明细信息(是否现结为1才有)
+add_details      收银明细列表，为cashDetails子节点
+id
+明细行ID
+String(36)
+
+不可空 
+8b8d447f-53ea-431a-94a6-670dc6f0c518
+cash_id
+收银方式id
+String(36)
+
+不可空 
+
+cash_name
+收方式名称
+String(128)
+
+不可空
+
+amounts
+收银金额
+double(10,2)
+
+不可空
+12.00
+account_id
+账户ID
+String(36)
+
+可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+account_name
+账户名称
+String(128)
+
+可空 
+工行pos
+external_no
+外部单号
+String(64)
+一般为在线支付的流水号
+可空
+5464646
+remark
+明细行备注
+String(256)
+
+可空
+
+product_details   商品明细信息
+add_details      商品明细列表，为product_details子节点
+id
+明细行ID
+String(36)
+
+不可空 
+8b8d447f-53ea-431a-94a6-670dc6f0c518
+imei
+串号1
+String(128)
+
+可空 
+05394824
+
+imei2
+串号2
+String(128)
+
+可空
+
+imei3
+串号3
+String(128)
+
+可空
+
+product_id
+商品ID
+String(36)
+对应boyuan.products.get接口的id字段
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+商品全称
+String(128)
+
+不可空 
+商品全称
+imei_count
+串号模式
+Int
+
+可空
+1-单串号
+2-双串号
+3-三串号
+imei_len
+串号1长度
+Int
+
+可空
+8
+imei2_len
+串号2长度
+Int
+
+可空
+10
+imei3_len
+串号3长度
+Int
+
+可空
+
+qty
+数量
+Number
+
+不可空
+1
+unit_price
+单价
+Double
+
+不可空且非负数
+1000.55
+amounts
+金额
+Double
+
+不可空 
+1000.55
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+不可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+
+5.8快速批发（Sale）结构
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+head         单据头信息
+id
+快速批发ID
+String(36)
+
+不可空
+b5426a2b-8e3a-468c-a4b1-800dbad43011
+big_gsdm
+帐套代码
+String(20)
+
+不可空
+80005
+warehouse_id
+仓库ID
+String(36)
+
+不可空
+f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb
+warehouse_name
+仓库名称
+String(128)
+
+不可空
+总仓
+bill_id
+单据号
+Stirng(32)
+
+不可空
+1071938
+bill_type
+单据类型
+Stirng(32)
+WSA-快速批发，WSAR-批发退货
+
+不可空
+PUR
+business_date
+业务发生日期
+String(20)
+格式：yyyy-MM-dd
+不可空
+2019-03-21
+manual_number
+手工单号
+String(64)
+
+可空
+123456
+relate_bill_id
+原单号
+String(20)
+
+可空, 仅退货时存在
+123456
+order_id
+订单号
+String(20)
+
+可空
+123456
+logistics_no
+物流单号
+String(64)
+
+可空
+123456
+cash_term
+是否现结
+int
+0 否 1是
+可空
+0
+customer_phone
+联系方式
+String(64)
+
+可空 
+13022255111
+cust_id
+客户id
+Strring(36)
+
+不可空
+7fd03188-5bc4-4af7-8167-2b5fb59e0baa
+is_need_invioces
+是否开票
+int
+0不开票，1开票
+可空
+0
+cust_name
+客户名称
+String(64)
+
+不可空
+李四
+sales_id
+业务员id
+Stirng(36)
+
+可空
+1fd03188-5bc4-4af7-8167-2b5fb59e0baa
+sales_name
+业务员名称
+String(32)
+
+可空
+张三
+sales_id2
+业务员id2
+Stirng(36)
+
+可空
+1fd03188-5bc4-4af7-8167-2b5fb59e0baa
+sales_name2
+业务员名称2
+String(32)
+
+可空
+张三
+sale_way
+出库方式id
+String(36)
+辅助信息中的出库方式
+可空
+8dd03188-5bc4-4af7-8167-2b5fb59e0baa
+sale_way_name
+出库方式名称
+String(36)
+辅助辅助信息中的出库方式
+可空 
+经销
+pur_way
+付款方式id
+String(36)
+辅助信息中的付款方式
+可空
+8dd03188-5bc4-4af7-8167-2b5fb59e0baa
+pur_way_name
+付款方式名称
+String(36)
+辅助辅助信息中的付款方式
+可空 
+到付
+logistics_id
+物流公司id
+String(36)
+辅助信息中的物流公司
+可空
+8dd03188-5bc4-4af7-8167-2b5fb59e0baa
+logistics_name
+物流公司名称
+String(36)
+辅助辅助信息中的物流公司
+可空 
+EMS
+logistics_type_id
+物流方式id
+String(36)
+辅助信息中的物流方式
+可空
+8dd03188-5bc4-4af7-8167-2b5fb59e0baa
+logistics_type_name
+物流方式名称
+String(36)
+辅助辅助信息中的物流方式
+可空 
+同城
+goods_weight
+商品重量
+String(20)
+
+可空 
+0
+province_name
+省
+String(20)
+
+可空 
+
+city_name
+市
+String(20)
+
+可空 
+
+area_name
+县/区
+String(20)
+
+可空 
+
+address
+地址
+String(128)
+
+可空 
+
+contactor
+收货人
+String(20)
+
+可空 
+
+contactor_phone
+电话
+String(20)
+
+可空 
+
+creater_id
+制单人ID
+String(36)
+
+可空 
+2334dgaf-936b-45cf-a16a-b9d3c7d285b3
+creater_name
+制单人名称
+String(64)
+
+可空 
+李四
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+remark
+头备注
+String(256)
+
+可空
+
+sale_cash_details   收银明细信息(是否现结为1时才有)
+add_details      收银明细列表，为saleCashDetails子节点
+id
+明细行ID
+String(36)
+
+不可空 
+8b8d447f-53ea-431a-94a6-670dc6f0c518
+cash_id
+收银方式id
+String(36)
+
+不可空 
+
+cash_name
+收银方式名称
+String(128)
+
+不可空
+
+amounts
+收银金额
+double(10,2)
+
+不可空
+12.00
+account_id
+账户ID
+String(36)
+
+可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+account_name
+账户名称
+String(128)
+
+可空 
+工行pos
+external_no
+外部单号
+String(64)
+一般为在线支付的流水号
+可空
+5464646
+remark
+明细行备注
+String(256)
+
+可空
+
+product_details   商品明细信息
+add_details      商品明细列表，为product_details子节点
+id
+明细行ID
+String(36)
+
+不可空 
+8b8d447f-53ea-431a-94a6-670dc6f0c518
+imei
+串号1
+String(128)
+
+可空 
+05394824
+
+product_id
+商品ID
+String(36)
+对应boyuan.products.get接口的id字段
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+product_full_name
+商品全称
+String(128)
+
+不可空 
+商品全称
+qty
+数量
+Number
+
+不可空
+1
+unit_price
+单价
+Double
+
+不可空且非负数
+1000.55
+amounts
+金额
+Double
+
+不可空 
+1000.55
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+不可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+
+5.9付款单（Payment）结构
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+head         单据头信息
+id
+付款单ID
+String(36)
+
+不可空
+b5426a2b-8e3a-468c-a4b1-800dbad43011
+big_gsdm
+帐套代码
+String(20)
+
+不可空
+80005
+company_id
+公司ID
+String(36)
+
+不可空
+f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb
+company_name
+公司名称
+String(128)
+
+不可空
+总仓
+bill_id
+单据号
+Stirng(32)
+
+不可空
+1071938
+bill_type
+单据类型
+Stirng(32)
+PAYMENT
+
+不可空
+PUR
+business_date
+业务发生日期
+String(20)
+格式：yyyy-MM-dd
+不可空
+2019-03-21
+supplier_cust_id
+供应商id
+Strring(36)
+
+不可空
+7fd03188-5bc4-4af7-8167-2b5fb59e0baa
+supplier_cust_name
+供应商名称
+String(64)
+
+不可空
+李四
+bank_name
+银行名称
+String(64)
+
+可空
+
+account_no
+银行账户
+String(64)
+
+可空
+
+supplier_cust_account_name
+户名
+String(64)
+
+可空
+
+scope_flag
+往来金额范围
+int(4)
+1-全公司2-同一核算公司3-所选公司
+可空
+1
+broker_user_id
+
+经手人id
+Strring(36)
+
+可空
+7fd03188-5bc4-4af7-8167-2b5fb59e0baa
+broker_user_name
+经手人名称
+String(64)
+
+可空
+李四
+payment_item_id
+付款项目id
+Stirng(36)
+
+可空
+1fd03188-5bc4-4af7-8167-2b5fb59e0baa
+payment_item_name
+付款项目名称
+String(32)
+
+可空
+张三
+acct_department
+核算部门id
+Stirng(36)
+
+可空
+1fd03188-5bc4-4af7-8167-2b5fb59e0baa
+acct_department _name
+核算部门名称
+String(32)
+
+可空
+张三
+payment_type_id
+付款类型id
+String(36)
+
+可空
+8dd03188-5bc4-4af7-8167-2b5fb59e0baa
+payment_type_name
+付款类型名称
+String(36)
+
+可空 
+经销
+sales_id
+业务员id
+Stirng(36)
+
+可空
+1fd03188-5bc4-4af7-8167-2b5fb59e0baa
+sales_name
+业务员名称
+String(32)
+
+可空
+张三
+invoice_company_id
+发票抬头id
+Stirng(36)
+
+可空
+1fd03188-5bc4-4af7-8167-2b5fb59e0baa
+invoice_company_name
+发票抬头名称
+String(32)
+
+可空
+张三
+creater_id
+制单人ID
+String(36)
+
+可空 
+2334dgaf-936b-45cf-a16a-b9d3c7d285b3
+creater_name
+制单人名称
+String(64)
+
+可空 
+李四
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+remark
+头备注
+String(256)
+
+可空
+
+payment_details   账户明细信息
+add_details      账户明细列表，为payment_details子节点
+id
+明细行ID
+String(36)
+
+不可空 
+8b8d447f-53ea-431a-94a6-670dc6f0c518
+account_id
+账户ID
+String(36)
+
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+account_name
+账户名称
+String(64)
+
+不可空 
+支付宝
+handling_fee
+手续费
+Double
+
+可空 
+1000.55
+amounts
+金额
+Double
+
+不可空 
+1000.55
+subject_id
+科目id
+String(64)
+
+可空
+
+subject_name
+科目名称
+String(64)
+
+可空
+
+fee_subject_id
+手续费科目id
+String(64)
+
+可空
+
+fee_subject_name
+手续费名称
+String(64)
+
+可空
+
+payment_type_id
+款项类型id
+Strring(36)
+
+可空
+7fd03188-5bc4-4af7-8167-2b5fb59e0baa
+payment_type_name
+款项类型名称
+String(64)
+
+可空
+李四
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+不可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+5.10收款单（Receipt）结构
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+head         单据头信息
+id
+收款单ID
+String(36)
+
+不可空
+b5426a2b-8e3a-468c-a4b1-800dbad43011
+big_gsdm
+帐套代码
+String(20)
+
+不可空
+80005
+company_id
+公司ID
+String(36)
+
+不可空
+f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb
+company_name
+公司名称
+String(128)
+
+不可空
+总仓
+bill_id
+单据号
+Stirng(32)
+
+不可空
+1071938
+bill_type
+单据类型
+Stirng(32)
+RECEIPT
+
+不可空
+PUR
+business_date
+业务发生日期
+String(20)
+格式：yyyy-MM-dd
+不可空
+2019-03-21
+supplier_cust_id
+客户id
+Strring(36)
+
+不可空
+7fd03188-5bc4-4af7-8167-2b5fb59e0baa
+supplier_cust_name
+客户名称
+String(64)
+
+不可空
+李四
+cust_bank_name
+客户银行名称
+String(64)
+
+可空
+
+cust_account_no
+客户银行账户
+String(64)
+
+可空
+
+payer_name
+打款人
+String(64)
+
+可空
+
+scope_flag
+往来金额范围
+int(4)
+1-全公司2-同一核算公司3-所选公司
+可空
+1
+broker_user_id
+
+经手人id
+Strring(36)
+
+可空
+7fd03188-5bc4-4af7-8167-2b5fb59e0baa
+broker_user_name
+经手人名称
+String(64)
+
+可空
+李四
+receipt_item_id
+收款项目id
+Stirng(36)
+
+可空
+1fd03188-5bc4-4af7-8167-2b5fb59e0baa
+receipt_item_name
+收款项目名称
+String(32)
+
+可空
+张三
+acct_department
+核算部门id
+Stirng(36)
+
+可空
+1fd03188-5bc4-4af7-8167-2b5fb59e0baa
+acct_department _name
+核算部门名称
+String(32)
+
+可空
+张三
+sales_id
+业务员id
+Stirng(36)
+
+可空
+1fd03188-5bc4-4af7-8167-2b5fb59e0baa
+sales_name
+业务员名称
+String(32)
+
+可空
+张三
+creater_id
+制单人ID
+String(36)
+
+可空 
+2334dgaf-936b-45cf-a16a-b9d3c7d285b3
+creater_name
+制单人名称
+String(64)
+
+可空 
+李四
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+remark
+头备注
+String(256)
+
+可空
+
+receipt_details   账户明细信息
+add_details      账户明细列表，为receipt_details子节点
+id
+明细行ID
+String(36)
+
+不可空 
+8b8d447f-53ea-431a-94a6-670dc6f0c518
+account_id
+账户ID
+String(36)
+
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+account_name
+账户名称
+String(64)
+
+不可空 
+支付宝
+handling_fee
+手续费
+Double
+
+可空 
+1000.55
+amounts
+金额
+Double
+
+不可空 
+1000.55
+subject_id
+科目id
+String(64)
+
+可空
+
+subject_name
+科目名称
+String(64)
+
+可空
+
+fee_subject_id
+手续费科目id
+String(64)
+
+可空
+
+fee_subject_name
+手续费名称
+String(64)
+
+可空
+
+payment_type_id
+款项类型id
+Strring(36)
+
+可空
+7fd03188-5bc4-4af7-8167-2b5fb59e0baa
+payment_type_name
+款项类型名称
+String(64)
+
+可空
+李四
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+不可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+5.11其他支出单（OtherOut）结构
+参数
+参数名称
+类型（字节长度）
+参数说明
+是否可为空
+样例
+head         单据头信息
+id
+其他支出单ID
+String(36)
+
+不可空
+b5426a2b-8e3a-468c-a4b1-800dbad43011
+big_gsdm
+帐套代码
+String(20)
+
+不可空
+80005
+company_id
+公司ID
+String(36)
+
+不可空
+f0a84367-9d1b-4997-a2c2-6cd68ecfd6fb
+company_name
+公司名称
+String(128)
+
+不可空
+总仓
+bill_id
+单据号
+Stirng(32)
+
+不可空
+1071938
+bill_type
+单据类型
+Stirng(32)
+OTHER_OUT
+
+不可空
+PUR
+business_date
+业务发生日期
+String(20)
+格式：yyyy-MM-dd
+不可空
+2019-03-21
+is_need_invioces
+是否开票
+int
+0不开票，1开票
+可空
+0
+broker_user_id
+
+经手人id
+Strring(36)
+
+可空
+7fd03188-5bc4-4af7-8167-2b5fb59e0baa
+broker_user_name
+经手人名称
+String(64)
+
+可空
+李四
+payee_id
+
+收款方id
+Strring(36)
+
+可空
+
+payee_name
+收款方名称
+String(64)
+
+可空
+
+payee_bank
+收款方银行
+String(64)
+
+可空
+
+payee_account
+收款方账户
+String(64)
+
+可空
+
+creater_id
+制单人ID
+String(36)
+
+可空 
+2334dgaf-936b-45cf-a16a-b9d3c7d285b3
+creater_name
+制单人名称
+String(64)
+
+可空 
+李四
+modify_time
+修改时间
+String(32)
+格式：yyyy-MM-dd HH:mm:ss
+可空
+2019-03-20 12:00:00
+remark
+头备注
+String(256)
+
+可空
+
+other_out_details   账户明细信息
+add_details      账户明细列表，为other_out_details子节点
+id
+明细行ID
+String(36)
+
+不可空 
+8b8d447f-53ea-431a-94a6-670dc6f0c518
+account_id
+账户ID
+String(36)
+
+不可空 
+e239dc42-40ba-4fe3-88f1-37dd56d4f034
+account_name
+账户名称
+String(64)
+
+不可空 
+支付宝
+handling_fee
+手续费
+Double
+
+可空 
+1000.55
+amounts
+金额
+Double
+
+不可空 
+1000.55
+subject_id
+科目id
+String(64)
+
+可空
+
+subject_name
+科目名称
+String(64)
+
+可空
+
+operator_user_id
+经办人id
+String(64)
+
+可空
+
+operator_user_name
+经办人名称
+String(64)
+
+可空
+
+payment_type_id
+款项类型id
+Strring(36)
+
+可空
+7fd03188-5bc4-4af7-8167-2b5fb59e0baa
+payment_type_name
+款项类型名称
+String(64)
+
+可空
+李四
+seq_no
+明细行序号
+Number
+在当前单据中明细行显示的序号
+不可空
+
+remark
+明细行备注
+String(256)
+
+可空
+
+
+
+	•	附录
+结果码枚举表
+结果码
+描述
+
+SUCCESS
+成功
+
+APP_ID_NOT_EXIST
+应用ID不存在
+
+ILLEGAL_TIMESTAMP
+非法请求时间，系统时间相差前后五分钟以内为有效请求
+
+ILLEGAL_SIGN
+签名不正确
+
+ILLEGAL_ARGUMENT
+接口参数错误
+
+ILLEGAL_SIGN_TYPE
+签名类型不正确
+
+ILLEGAL_CHARSET
+字符集不合法
+
+ILLEGAL_NUMBER_FORMAT
+数字格式不合法
+
+ILLEGAL_DATE_FORMAT
+日期格式错误
+
+ILLEGAL_LENGTH
+参数值长度不合法
+
+PARAMTER_IS_NULL
+参数值为空
+
+SERVICE_NOT_FOUND
+接口不存在
+
+ERP_API_EXCEPTION
+ERP服务接口异常
+
+SERVER_INNER_ERROR
+系统内部异常
+
+
+
+
+PAY_SYSTEM_ERROR
+三方支付系统接口返回错误
+请立即调用查询订单API，查询当前订单的状态，并根据订单状态决定下一步的操作，如果多次调用依然报此错误码，请联系博远客服
+
+
+
+
+支付方式枚举表
+结果码
+描述
+SHIJI_CLOUD_PAY
+银石云支付
+WEBCHAT_PAY
+微信支付
+ALIPAY
+支付宝支付
+支付渠道枚举表
+结果码
+描述
+支付方式为SHIJI_CLOUD_PAY时
+27
+银行卡
+28
+支付宝
+29
+微信
+30
+银联二维码
+93
+银石预付卡
+999
+聚合扫码付
+支付方式为WEBCHAT_PAY时
+1001
+付款码支付
+1003
+Native支付
+支付方式为ALIPAY时
+2001
+条码支付
+2003
+扫码支付
+
+
+交易状态枚举表
+结果码
+描述
+WAIT_BUYER_PAY
+等待买家付款
+TRADE_PENDING
+等待卖家收款
+TRADE_SUCCESS
+交易成功
+TRADE_FINISHED
+交易结束（不可退款）
+TRADE_CLOSED
+交易关闭（未付款交易超时关闭，或支付完成后全额退款）
+TRADE_ERROR
+交易失败
+退款状态枚举表
+结果码
+描述
+REFUNDING
+退款中
+REFUND_SUCCESS
+退款成功
+REFUND_CHANGE
+退款异常
+REFUND_CLOSED
+退款关闭
+REFUND_ERROR
+退款失败
+
+

@@ -28,6 +28,7 @@ class ErpGoodsCatalogImportTaskService extends BaseAdminService
 
     public function upload($file, string $sourceKey = 'excel_product_catalog'): array
     {
+        \addon\hsx_erp\app\support\ErpCatalogAuthority::checkWrite((int)$this->site_id);
         if (!$file || !$file->isValid()) throw new CommonException('Excel 文件上传失败');
         $extension = strtolower((string)$file->getOriginalExtension());
         if (!in_array($extension, ['xls', 'xlsx'], true)) throw new CommonException('只支持上传 xls、xlsx 格式');
@@ -82,6 +83,7 @@ class ErpGoodsCatalogImportTaskService extends BaseAdminService
 
     public function retry(int $id): array
     {
+        \addon\hsx_erp\app\support\ErpCatalogAuthority::checkWrite((int)$this->site_id);
         $task = $this->getInfo($id);
         if (in_array($task['status'], ['queued', 'processing'], true)) throw new CommonException('任务正在执行，请勿重复提交');
         if (!is_file($this->absolutePath((string)$task['file_path']))) throw new CommonException('原始 Excel 文件已失效，请重新上传');

@@ -548,6 +548,7 @@ class ErpStockService extends BaseAdminService
         $page['data'] = $this->appendListingSyncState((array)$page['data']);
         $page['data'] = $visibility->sanitizeStockRows((array)$page['data']);
         $page['capabilities'] = $visibility->stockCapabilities();
+        $page['cost_maintenance_hint']=ErpPurchaseExtensionService::costMaintenanceHint((int)$this->site_id);
         return $page;
     }
 
@@ -2066,7 +2067,7 @@ class ErpStockService extends BaseAdminService
         if (array_key_exists('catalog_product_id', $data) && $data['catalog_product_id'] !== null) {
             $catalogProductId = max(0, (int)$data['catalog_product_id']);
             if ($catalogProductId !== (int)($asset->catalog_product_id ?? 0)) {
-                $catalog = (new ErpGoodsCatalogService())->productSnapshot($catalogProductId);
+                $catalog = (new ErpGoodsCatalogService())->productSnapshot($catalogProductId, (int)$this->site_id);
                 $save['catalog_product_id'] = $catalogProductId;
                 $save['category_name'] = $catalog['category_name'];
                 $save['category_path'] = $catalog['category_path'];

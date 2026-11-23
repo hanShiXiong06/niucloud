@@ -136,7 +136,7 @@ final class Contract
         $current=self::cents($row['current_amount']??null); $settled=self::cents($row['settled_amount']??null); $balance=self::cents($row['balance_amount']??null);
         if ($settled+$balance!==$current) throw new Problem('BALANCE_UNVERIFIED','往来余额与已结金额不平，请核对博远原账','unknown');
     }
-    /** Internal transport only: retain phone values until the archive hashes them. */
+    /** Internal transport only: preserve business values for archival and phone matching. */
     public static function redactCredentials(array $value): array
     {
         foreach ($value as $key=>&$item) {
@@ -150,6 +150,7 @@ final class Contract
     {
         foreach ($value as $key => &$item) {
             if (preg_match('/token|secret|password|cipher|authorization|lease_token/i', (string)$key) || in_array(strtolower((string)$key),['sign','appsec'],true)) $item = '[已隐藏]';
+            elseif ((string)$key==='_boyuan_help_code') $item='[已隐藏]';
             elseif (is_array($item)) $item = self::redact($item);
             elseif (preg_match('/(?:^|_)(?:mobile|phone)(?:$|_)/i',(string)$key) && is_string($item)) $item = strlen($item) > 6 ? substr($item, 0, 3) . '****' . substr($item, -4) : '***';
             elseif (in_array(strtolower((string)$key),['account_no','cust_account_no','payee_account','id_card','member_id_card','bank_name','payee_bank'],true)) $item='[已隐藏]';

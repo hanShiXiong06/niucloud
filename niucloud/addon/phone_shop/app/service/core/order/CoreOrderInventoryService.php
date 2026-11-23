@@ -118,7 +118,9 @@ class CoreOrderInventoryService
             // ERP出库的异步通知尚未运行时，商城也不能再次拍下这台设备；失败随ERP事务回滚。
             $sku->save(['stock' => 0]);
             $this->refreshGoods($siteId, (int)$sku->goods_id, false);
-            Goods::where('site_id', $siteId)->where('goods_id', (int)$sku->goods_id)->update(['sale_status' => 'locked']);
+            // 占用的是这一台设备，不是同一商品下的其他串号。也不能把已交付的 sold 降回 locked。
+            Goods::where('site_id', $siteId)->where('goods_id', (int)$sku->goods_id)
+                ->where('stock', 0)->where('sale_status', '<>', 'sold')->update(['sale_status' => 'locked']);
         }
         return ['allowed' => true, 'linked' => true];
     }

@@ -4,11 +4,10 @@
             <view class="heading"><view><text class="title">博远对接</text><text class="account-caption">{{ configLoaded ? '账套 ' + (config.profiles[config.mode]?.account_id || (config.mode === 'mock' ? '本地模拟' : '未提供')) : '正在读取连接' }}</text></view><text v-if="configLoaded" class="mode" :class="config.mode">{{ modeName(config.mode) }}</text></view>
             <view class="tools"><button class="icon-button" aria-label="刷新" :disabled="loading || !configLoaded" @click="refresh"><u-icon name="reload" size="21" /></button><button class="icon-button" aria-label="连接设置" :disabled="!configLoaded" @click="openConfig"><u-icon name="setting" size="21" /></button></view>
         </view>
-        <view v-if="configLoaded && connectionNotice" class="connection paused"><u-icon name="error-circle" size="17" /><text>{{ connectionNotice }}</text></view>
-        <view v-if="configLoaded && section === 'archives'" class="summary"><button v-for="metric in summaryMetrics" :key="metric.key" :class="{ 'metric-alert': metric.alert }" @click="focusMetric(metric.key)"><view><text class="metric">{{ sectionLoaded ? metric.count : '—' }}</text><text class="metric-unit">类</text></view><text class="muted">{{ metric.label }} <text aria-hidden="true">›</text></text></button></view>
+        <view v-if="configLoaded && section !== 'archives' && connectionNotice" class="connection paused"><u-icon name="error-circle" size="17" /><text>{{ connectionNotice }}</text></view>
         <view v-if="configLoaded" class="nav"><button v-for="item in sections" :key="item.key" :class="{ selected: section === item.key }" @click="changeSection(item.key)">{{ item.name }}</button></view>
 
-        <view v-if="error" class="inline-alert"><u-icon name="error-circle" size="18" /><view><text>更新未完成，已保留当前内容</text><text class="muted">{{ error }}</text></view><button class="inline-action" @click="refresh">重试</button></view>
+        <view v-if="error" class="inline-alert"><u-icon name="error-circle" size="18" /><view><text>{{ section === 'archives' ? '未取得最新同步状态' : '更新未完成，已保留当前内容' }}</text><text class="muted">{{ error }}</text></view><button class="inline-action" @click="refresh">重试</button></view>
         <view v-if="!configLoaded && !error" class="loading"><u-loading-icon text="正在读取账套" /></view>
         <template v-if="configLoaded && section === 'tasks'">
             <view class="search"><u-search v-model="keyword" placeholder="搜索业务单号" :show-action="false" @search="loadTasks(true)" @clear="loadTasks(true)" /></view>
@@ -27,28 +26,40 @@
             <view class="load-more"><u-button v-if="tasks.length < total" size="small" :loading="loading" @click="loadTasks(false)">加载更多</u-button><text v-else-if="tasks.length" class="muted">共 {{ total }} 条记录</text></view>
         </template>
         <template v-else-if="section === 'archives'">
-            <view class="section-head"><view><text class="task-title">基础资料</text><text class="muted">博远资料只读更新，不导入历史库存和单据</text></view><u-button size="small" type="primary" :loading="busy" @click="startSync()">更新全部</u-button></view>
-            <view class="archive-filters"><button :class="{ active: archiveFilter === '' }" @click="archiveFilter = ''">全部资料</button><button :class="{ active: archiveFilter === 'attention' }" @click="archiveFilter = 'attention'">待处理 {{ archiveStats.attention }}</button></view>
-            <view v-if="sectionLoaded && !visibleArchives.length" class="empty"><u-empty mode="list" text="暂无需要处理的资料" /><button class="inline-action" @click="archiveFilter = ''">查看全部资料</button></view>
-            <view v-for="archive in visibleArchives" :key="archive.resource" class="archive-row">
-                <view class="row"><button class="archive-name" @click="openArchive(archive)">{{ archive.name }}<text class="muted">{{ archive.count }} 条 · {{ archive.last_success_at ? '最近更新 ' + time(archive.last_success_at) : archive.job?.status === 'needs_review' ? '完整性待核对' : '尚未完成首次更新' }}</text></button><button class="icon-button" :aria-label="'同步' + archive.name" :disabled="busy" @click="startSync(archive.resource)"><u-icon name="reload" size="20" /></button></view>
-                <view class="row archive-top"><text class="owner-tag" :class="ownership(archive.resource).tone">{{ ownership(archive.resource).label }}</text><SyncState v-if="archive.job" :status="archive.job.status" /></view>
-                <view v-if="archive.job && ['queued', 'running', 'retry', 'failed'].includes(archive.job.status)" class="row archive-progress"><text>{{ syncState(archive.job.status) }} · 已读取 {{ archive.job.processed }} 条</text><u-button v-if="archive.job.status === 'failed'" size="small" :loading="busy" @click="resumeSync(archive.job.id)">继续更新</u-button></view>
-                <view v-if="archive.job?.reason" class="archive-issue"><text class="reason">{{ archive.job.reason }}</text><button class="inline-action" @click="openArchive(archive)">查看资料 <text aria-hidden="true">›</text></button></view>
-                <text v-if="archive.job?.warning" class="muted archive-warning">{{ archive.job.warning }}</text>
-                <text v-if="archive.resource === 'members' && archive.job" class="muted">注册日期 {{ archive.job.scope.since }} 至 {{ archive.job.scope.until }}</text>
+            <view class="opening-panel">
+                <text class="task-title">同步博远基础资料</text>
+                <text class="muted">{{ openingHint }}</text>
+                <view v-if="openingScoped" class="row opening-count"><text>挂账常用资料已取回 {{ coreDone }} / {{ coreResources.length }} 类</text><text v-if="opening.working">{{ opening.working }} 类进行中</text></view>
+                <view v-if="openingPrimary" class="opening-command"><u-button size="small" type="primary" :loading="busy" :disabled="busy || archiveJobsLoading" @click="openingAction">{{ openingPrimary }}</u-button></view>
             </view>
+            <view v-if="openingScoped" class="archive-filters"><button :class="{ active: archiveFilter === '' }" @click="archiveFilter = ''">挂账常用</button><button :class="{ active: archiveFilter === 'extra' }" @click="archiveFilter = 'extra'">其他资料</button><button v-if="opening.failed || opening.review || archiveFilter === 'attention'" :class="{ active: archiveFilter === 'attention' }" @click="archiveFilter = 'attention'">待处理 {{ opening.failed + opening.review }}</button></view>
+            <view v-if="openingScoped && !visibleArchives.length" class="empty"><u-empty mode="list" text="暂无需要处理的资料" /><button class="inline-action" @click="archiveFilter = ''">返回常用资料</button></view>
+            <view v-for="archive in visibleArchives" :key="archive.resource" class="archive-row">
+                <view class="row"><button class="archive-name" :disabled="!archiveAllowed('search')" @click="openArchive(archive)">{{ archive.name }}<text class="muted">{{ archive.count }} 条已保存<template v-if="archive.last_success_at"> · 最近完整同步 {{ time(archive.last_success_at) }}</template></text></button><view class="archive-top"><SyncState v-if="archive.job" :status="archive.job.status" /><text v-else class="muted">未同步</text></view></view>
+                <view v-if="archive.job && ['queued', 'running', 'retry', 'failed'].includes(archive.job.status)" class="archive-progress"><text>{{ syncState(archive.job.status) }} · 已读 {{ archive.job.pages }} 页 / {{ archive.job.processed }} 条</text></view>
+                <view v-if="archive.job?.reason" class="archive-issue"><text class="reason">{{ archive.job.reason }}</text></view>
+                <text v-if="archive.job?.warning" class="muted archive-warning">{{ archive.job.warning }}</text>
+                <text v-if="archive.resource === 'members' && archive.job?.scope?.since" class="muted">注册日期 {{ archive.job.scope.since }} 至 {{ archive.job.scope.until }}</text>
+                <button v-if="!archive.job && archiveAllowed('start')" class="inline-action" :disabled="busy || archiveJobsLoading" @click="startSync(archive.resource)">取回此项</button>
+                <button v-else-if="archive.job?.status === 'failed' && archiveAllowed('retry')" class="inline-action" :disabled="busy || archiveJobsLoading" @click="resumeSync(archive.job.id)">从中断处继续</button>
+                <button v-else-if="archive.job && ['completed','needs_review'].includes(archive.job.status) && archiveAllowed('start')" class="inline-action" :disabled="busy || archiveJobsLoading" @click="startSync(archive.resource)">{{ archive.job.status === 'needs_review' ? '核对后重同步本类' : '更新本类' }}</button>
+            </view>
+            <view v-if="archiveFilter === 'extra' && opening.ready && archiveAllowed('start')" class="load-more"><button class="inline-action" :disabled="busy || archiveJobsLoading" @click="startSync('all')">重新读取全部 10 类档案</button></view>
         </template>
         <template v-else-if="section === 'mappings'">
-            <view class="scope-notice"><u-icon name="checkmark-circle" size="17" /><view><text>只处理需要跨系统关联的资料</text><text class="muted">仓库、收付款账户在基础资料中查看，无需手工对应。实际业务来源切换尚未启用。</text></view></view>
+            <view class="scope-notice"><u-icon name="checkmark-circle" size="17" /><view><text>对应本站与博远的已有资料</text><text class="muted">本站还没有主档？请到电脑端「期初建账」核对并建档。</text></view></view>
             <view class="mapping-tabs"><u-tabs :list="visibleMappingTabs" :current="mappingTabIndex" :scrollable="true" lineColor="#2563eb" lineWidth="22" lineHeight="3" :activeStyle="{ color: '#20252d', fontWeight: '600', fontSize: '14px' }" :inactiveStyle="{ color: '#7a828e', fontSize: '14px' }" :itemStyle="{ height: '46px', padding: '0 16px' }" @change="changeMappingTab" /></view>
             <view class="section-head"><view><text class="task-title">{{ mappingNames[mappingKind] }}对应</text><text class="muted">{{ modeName(config.mode) }} · {{ mappingTotal }} 项</text></view><u-button size="small" type="primary" :disabled="mappingUnavailable" @click="editMapping()">新增对应</u-button></view>
-            <view v-if="mappingUnavailable" class="mapping-notice">博远当前未提供库位查询接口，暂不能新增库位对应。</view>
+            <view v-if="mappingUnavailable" class="mapping-notice">新仓建账时会自动配一个本站默认库位，不用在此关联。博远未提供外部库位查询。</view>
             <view class="search"><u-search v-model="mappingKeyword" :placeholder="'搜索' + mappingNames[mappingKind] + '名称 / 博远编码'" :show-action="false" @search="loadMappings(true)" @clear="loadMappings(true)" /></view>
             <view v-if="mappingView.error" class="mapping-error"><text>{{ mappingView.error }}</text><u-button size="small" :loading="mappingView.loading" @click="loadMappings(true)">重试</u-button></view>
             <view v-if="mappingView.loading && !mappings.length" class="loading"><u-loading-icon text="加载中" /></view>
             <view v-else-if="!mappings.length && !mappingView.error" class="empty"><u-empty mode="list" :text="'暂无' + mappingNames[mappingKind] + '对应'" /></view>
-            <button v-for="map in mappings" :key="map.id" class="mapping-row" :aria-label="'编辑' + (map.local_name || map.local_ref) + '对应'" @click="editMapping(map)"><view><text class="task-title">{{ map.local_name || map.local_ref }}</text><view class="mapping-target"><u-icon name="arrow-right" size="12" /><text class="muted break">{{ map.external_name || map.external_code }}</text></view><text v-if="map.external_name && map.external_code" class="muted break">{{ map.external_code }}</text></view><u-icon name="edit-pen" size="19" /></button>
+            <button v-for="map in mappings" :key="map.id" class="mapping-row" :disabled="isRecycleBinding(map)" :aria-label="(isRecycleBinding(map) ? '查看' : '编辑') + (map.local_name || map.local_ref) + '对应'" @click="editMapping(map)">
+                <view><text class="task-title">{{ map.local_name || (isRecycleBinding(map) ? '回收设备规格' : map.local_ref) }}</text><view class="mapping-target"><u-icon name="arrow-right" size="12" /><text class="muted break">{{ map.external_name || map.external_code }}</text></view>
+                    <text v-if="isRecycleBinding(map)" class="muted">回收规格 · 在原采购单核对时维护</text><text v-else-if="map.external_name && map.external_code" class="muted break">{{ map.external_code }}</text>
+                </view><u-icon v-if="!isRecycleBinding(map)" name="edit-pen" size="19" />
+            </button>
             <view class="load-more"><u-button v-if="mappings.length < mappingTotal" size="small" :loading="mappingView.loading" @click="loadMappings(false)">加载更多</u-button><text v-else-if="mappings.length" class="muted">共 {{ mappingTotal }} 项{{ mappingNames[mappingKind] }}对应</text></view>
         </template>
 
@@ -159,11 +170,12 @@
         <u-popup :show="archiveVisible" mode="bottom" :round="8" closeable @close="archiveVisible = false">
             <view class="sheet"><view class="sheet-header"><text class="sheet-title">{{ selectedArchive?.name }}</text><text class="muted">{{ ownership(selectedArchive?.resource).label }} · {{ ownership(selectedArchive?.resource).hint }}</text></view><scroll-view scroll-y class="sheet-body">
                 <view class="search"><u-search v-model="archiveKeyword" placeholder="搜索名称 / 编码 / 完整手机号" :show-action="false" @search="loadArchive(false)" @clear="loadArchive(false)" /></view>
-                <view v-if="!archiveRows.length && !archiveLoading" class="empty"><u-empty mode="list" text="暂无已同步资料" /></view>
-                <view v-for="item in archiveRows" :key="item.id" class="archive-item"><view class="row"><text class="task-title">{{ item.name }}</text><text class="state">{{ item.stale ? '待核对' : item.extra?.status_known === false ? '状态未提供' : item.enabled ? '启用' : '停用' }}</text></view><text class="muted break">{{ item.code }}</text><text v-if="item.phone_masked" class="muted">{{ item.phone_masked }}</text><text v-if="item.extra?.memory || item.extra?.color" class="muted">{{ item.extra.memory }} {{ item.extra.color }}</text>
+                <view v-if="archiveDetailError" class="inline-alert"><text>{{ archiveDetailError }}</text><button class="inline-action" @click="loadArchive(!!archiveCursor)">重试</button></view>
+                <view v-else-if="!archiveRows.length && !archiveLoading" class="empty"><u-empty mode="list" text="暂无已同步资料" /></view>
+                <view v-for="item in archiveRows" :key="item.id" class="archive-item"><view class="row"><text class="task-title">{{ item.name }}</text><text class="state">{{ item.stale ? '待核对' : item.extra?.status_known === false ? '状态未提供' : item.enabled ? '启用' : '停用' }}</text></view><text class="muted break">{{ item.code }}</text><text v-if="item.phone_field === 'help_code'" class="muted" selectable>{{ item.phone_state === 'refresh' ? '需重新读取客户供应商' : (item.phone_number || '未填写电话') }}</text><text v-else-if="item.phone_masked" class="muted">{{ item.phone_masked }}</text><text v-if="item.extra?.memory || item.extra?.color" class="muted">{{ item.extra.memory }} {{ item.extra.color }}</text>
                     <view v-if="item.enabled && !item.stale" class="row"><button v-for="kind in mappingKindsFor(item)" :key="kind" class="text-button" @click="mapArchive(item, kind)">对应{{ mappingNames[kind] }}</button></view>
                 </view>
-            </scroll-view><view class="sheet-footer"><u-button v-if="archiveCursor" :loading="archiveLoading" @click="loadArchive(true)">加载更多</u-button><u-button v-else @click="archiveVisible = false">关闭</u-button></view></view>
+            </scroll-view><view class="sheet-footer"><u-button v-if="archiveCursor" :loading="archiveLoading" @click="loadArchive(true)">加载更多</u-button><u-button v-else @click="archiveVisible = false">关闭</u-button><u-button v-if="canStartSelected" type="primary" :loading="busy" :disabled="busy || archiveJobsLoading" @click="startSync(selectedArchive.resource)">同步本类</u-button></view></view>
         </u-popup>
         <PurchaseReview :task-id="purchaseTaskId" :task-ids="purchaseTaskIds" :original-payment-task-id="originalPaymentTaskId" :focus-inventory="focusInventory" :config="config" @close="purchaseTaskId = 0; purchaseTaskIds = []; originalPaymentTaskId = 0; focusInventory = false" @switch="originalPaymentTaskId = 0; focusInventory = false; purchaseTaskId = $event" @changed="loadTasks(true)" @configure="purchaseTaskId = 0; purchaseTaskIds = []; originalPaymentTaskId = 0; focusInventory = false; openConfig()" />
     </view>
@@ -176,6 +188,7 @@ import * as api from '../../api/index'
 import SyncState from '../../components/SyncState.vue'
 import PurchaseReview from '../../components/PurchaseReview.vue'
 import { purchaseRouteId } from '../../utils/purchase-form'
+import { openingProgress } from '../../utils/opening'
 const modes = ['mock', 'test', 'production']
 const protocols = [{ value: 'openapi_v153', label: '博远开放平台 v1.5.3' }, { value: 'bridge_v1', label: '约定桥接接口 v1.0' }]
 const modeName = (mode: string) => ({ mock: '模拟模式', test: '测试模式', production: '正式模式' }[mode] || mode)
@@ -187,23 +200,59 @@ const mappingNames: Record<string, string> = { product: '商品', warehouse: '�
 const mappingTabs = [{ kind: 'product', name: '商品' }, { kind: 'warehouse', name: '仓库' }, { kind: 'staff', name: '人员' }, { kind: 'customer', name: '客户' }, { kind: 'supplier', name: '供应商' }, { kind: 'method', name: '收付方式' }, { kind: 'account', name: '资金账户' }, { kind: 'location', name: '库位' }]
 const visibleMappingTabs = computed(() => isOpenApi.value ? mappingTabs.filter(item => ['product', 'staff', 'customer', 'supplier'].includes(item.kind)) : mappingTabs)
 const scenarios = [{ value: 'success', label: '正常成功' }, { value: 'rejected', label: '明确拒绝' }, { value: 'timeout_after_commit', label: '处理成功但响应丢失' }, { value: 'partial', label: '部分成功' }, { value: 'malformed', label: '回执不完整' }]
-const sections = [{ key: 'tasks', name: '同步任务' }, { key: 'archives', name: '基础资料' }, { key: 'mappings', name: '资料对应' }]
+const sections = [{ key: 'tasks', name: '同步任务' }, { key: 'archives', name: '期初建账' }, { key: 'mappings', name: '资料对应' }]
 const purchaseModes = [{ value: 'manual', label: '人工核对后提交' }, { value: 'automatic', label: '自动处理后续采购' }]
 const filters = [{ value: '', label: '全部' }, { value: 'ready', label: '待同步' }, { value: 'working', label: '处理中' }, { value: 'action_required', label: '需要处理' }, { value: 'completed', label: '已办' }]
 const config = ref<any>({ mode: 'mock', enabled: false, purchase_enabled: false, purchase_mode: 'manual', uat_payment_enabled: false, paused: true, profiles: {} })
 const isOpenApi = computed(() => config.value.mode !== 'mock' && config.value.profiles[config.value.mode]?.protocol === 'openapi_v153')
 const configLoaded = ref(false), sectionLoaded = ref(false), archiveFilter = ref('')
-const visibleArchives = computed(() => archiveJobs.value.filter(item => !archiveFilter.value || (archiveFilter.value === 'attention' ? ['failed', 'needs_review'].includes(item.job?.status) : archiveFilter.value === 'working' ? ['queued', 'running', 'retry'].includes(item.job?.status) : item.job?.status === 'completed')))
+const coreResources = ['companies','warehouses','parties','products','staff']
+const visibleArchives = computed(() => {
+    if (!openingScoped.value) return []
+    if (archiveFilter.value === 'attention') return archiveJobs.value.filter(row => ['failed','needs_review'].includes(row.job?.status))
+    if (archiveFilter.value === 'extra') return archiveJobs.value.filter(row => !coreResources.includes(row.resource))
+    return coreResources.map(key => archiveJobs.value.find(row => row.resource === key)).filter(Boolean)
+})
+const coreDone = computed(() => archiveJobs.value.filter(row => coreResources.includes(row.resource) && row.job?.status === 'completed').length)
 const ownership = (resource: string) => ({
-    products: { label: '本站维护 · 结构化匹配', tone: 'local', hint: '按型号、内存、颜色及版本核对；当前只读取博远已有商品，建档接口待确认。' },
-    warehouses: { label: '博远提供 · 无需对应', tone: 'external', hint: '直接使用博远仓库身份，无需人工绑定；本站业务来源切换尚未启用。' },
-    capital_accounts: { label: '博远提供 · 无需对应', tone: 'external', hint: '博远收付款账户资料，不读取历史余额和流水；业务切换尚未启用。' },
+    products: { label: '博远商品档案', tone: 'external', hint: '这里查看已有博远商品；回收设备的商品规格在 ERP 原采购单核对，不会改写回收分类。' },
+    warehouses: { label: '博远仓库档案', tone: 'external', hint: '在这里查看博远仓库；此步骤不导入库存或库位。' },
+    capital_accounts: { label: '博远资金账户档案', tone: 'external', hint: '此处查看账户资料，不读取历史余额和流水。' },
     payment_methods: { label: '博远提供', tone: 'external', hint: '收银方式与资金账户分开管理，不代表已收款。' },
     staff: { label: '人员身份绑定', tone: 'binding', hint: '手机号匹配后确认同一人，不创建或合并登录账号。' },
     parties: { label: '往来单位 · 可兼多角色', tone: 'binding', hint: '客户、供应商共用往来主体。按手机号查找或创建的接口待博远确认。' },
 }[resource] || { label: '博远参考资料', tone: 'reference', hint: '仅供本站业务参考，不覆盖本地主档和历史记录。' })
 const archiveJobs = ref<any[]>([]), archiveVisible = ref(false), selectedArchive = ref<any>(null), archiveRows = ref<any[]>([]), archiveKeyword = ref(''), archiveCursor = ref(''), archiveLoading = ref(false)
-const archiveStats = computed(() => ({ pending: archiveJobs.value.filter(a => ['queued', 'running', 'retry'].includes(a.job?.status)).length, attention: archiveJobs.value.filter(a => ['failed', 'needs_review'].includes(a.job?.status)).length, completed: archiveJobs.value.filter(a => a.job?.status === 'completed').length }))
+const opening = computed(() => openingProgress(archiveJobs.value))
+const canStartSelected = computed(() => archiveAllowed('start') && !!selectedArchive.value && opening.value.initialResources.includes(selectedArchive.value.resource))
+const archiveJobsLoading = ref(false), archiveJobsScope = ref(''), archiveReadError = ref(''), archiveDetailError = ref('')
+let jobsSeq = 0, archiveSeq = 0
+const openingConnection = computed(() => config.value.profiles[config.value.mode]?.connection_key || '')
+const openingScoped = computed(() => section.value === 'archives' && sectionLoaded.value && !archiveReadError.value && opening.value.valid && archiveJobsScope.value === mappingConnection())
+function archiveAllowed(key: 'start'|'retry'|'search') {
+    const row = archiveJobs.value[0]
+    return !!(openingScoped.value && row?.capabilities?.[key] === true && (key === 'search' || row.ready === true && !!openingConnection.value))
+}
+const openingPrimary = computed(() => {
+    if (!openingScoped.value) return ''
+    if ((opening.value.failed || opening.value.review) && archiveFilter.value !== 'attention') return '查看待处理资料'
+    return ''
+})
+const openingHint = computed(() => {
+    if (archiveReadError.value) return '未取得最新进度，请重试。'
+    if (!sectionLoaded.value) return '正在读取本账套的同步进度…'
+    if (!openingScoped.value) return '当前账套的进度不完整，请刷新后再操作。'
+    const row = archiveJobs.value[0]
+    if (!row.ready) return String(row.blocking_reason || '请管理员先保存并核验博远账套。')
+    if (coreDone.value === coreResources.length) return config.value.mode === 'mock' ? '常用模拟档案已取回，未创建 ERP 主档。' : '常用档案已取回。要在本站建档，请到电脑端「期初建账」预览并确认；无需等所有类别取回。'
+    if (opening.value.failed || opening.value.review) return '有资料尚未同步完整，已完成的无需重来。可建入 ERP 的类别请在电脑端期初建账查看。'
+    if (opening.value.working) return '后台正在读取，可离开此页。这里不会记库存或往来余额。'
+    if (!archiveAllowed('start')) return '当前账号仅可查看，请有同步权限的管理员开始。'
+    return archiveFilter.value === 'extra' ? '分类、品牌按商品需要补充。只做挂账，无需先取回资金账户、收银方式或会员。' : '选择需要的资料，逐项取回到本站。取回不建单、不记账，也不改变库存。'
+})
+function openingAction() {
+    if (openingPrimary.value === '查看待处理资料') archiveFilter.value = 'attention'
+}
 const archiveMappingKinds = computed<string[]>(() => {
     const kinds = ({ products: ['product'], warehouses: ['warehouse'], staff: ['staff'], parties: ['customer', 'supplier'], payment_methods: ['method'], capital_accounts: ['account'] }[selectedArchive.value?.resource] || [])
     return isOpenApi.value ? kinds.filter(kind => ['product', 'staff', 'customer', 'supplier'].includes(kind)) : kinds
@@ -242,6 +291,12 @@ const mappingTabIndex = computed(() => Math.max(0, visibleMappingTabs.value.find
 const mappingUnavailable = computed(() => mappingKind.value === 'location')
 const mappingConnection = () => config.value.mode + ':' + (config.value.profiles[config.value.mode]?.connection_key || '')
 watch(mappingConnection, (connection, previous) => {
+    // Responses and open drawers from the previous account must not repopulate this one.
+    if (archiveJobsScope.value !== connection) {
+        archiveJobs.value = []; archiveReadError.value = ''; archiveVisible.value = false; selectedArchive.value = null
+        archiveRows.value = []; archiveCursor.value = ''; archiveDetailError.value = ''; archiveSeq++; archiveLoading.value = false
+        archiveFilter.value = ''; if (section.value === 'archives') sectionLoaded.value = false
+    }
     if (previous.endsWith(':')) return
     selectedIds.value = []; selectionMode.value = false; batchResults.value = []; batchVisible.value = false
     if (!visibleMappingTabs.value.some(tab => tab.kind === mappingKind.value)) mappingKind.value = 'product'
@@ -258,7 +313,6 @@ const detailMessage = computed(() => detail.value?.reason || ({ simulated: '模�
 const pendingCount = computed(() => ['pending', 'processing', 'waiting', 'confirming', 'retry'].reduce((sum, key) => sum + (counts.value[key] || 0), 0))
 const attentionCount = computed(() => ['awaiting_confirmation', 'created_review', 'needs_review', 'blocked', 'rejected', 'partial', 'attention', 'manual_pending'].reduce((sum, key) => sum + (counts.value[key] || 0), 0))
 const completedCount = computed(() => (counts.value.simulated || 0) + (counts.value.succeeded || 0) + (counts.value.registered_review || 0))
-const summaryMetrics = computed(() => section.value === 'archives' ? [{ key: 'working', count: archiveStats.value.pending, label: '更新中', alert: false }, { key: 'attention', count: archiveStats.value.attention, label: '待核对', alert: true }, { key: 'completed', count: archiveStats.value.completed, label: '已更新', alert: false }] : [{ key: 'working', count: pendingCount.value, label: '处理中', alert: false }, { key: 'action_required', count: attentionCount.value, label: '需要处理', alert: true }, { key: 'completed', count: completedCount.value, label: config.value.mode === 'mock' ? '模拟完成' : isOpenApi.value ? '已办' : '已同步', alert: false }])
 const workerStale = computed(() => config.value.enabled && Date.now() / 1000 - Number(config.value.worker_last_at || config.value.started_at) > 180)
 const connectionNotice = computed(() => !config.value.enabled ? '同步未启用' : config.value.paused ? '同步已暂停，现有任务会保留' : isOpenApi.value && !config.value.purchase_enabled ? '采购同步未开启，当前仅可核对资料' : workerStale.value ? '后台处理已延迟，请联系管理员检查同步服务' : config.value.mode === 'mock' ? '模拟模式，不会写入博远' : '')
 const time = (timestamp: number) => timestamp ? new Date(timestamp * 1000).toLocaleString('zh-CN', { hour12: false }) : '-'
@@ -290,7 +344,7 @@ async function refresh() {
         config.value = (await api.getConfig()).data
         configLoaded.value = true
         if (section.value === 'tasks') await loadTasks(true)
-        else if (section.value === 'archives') { archiveJobs.value = (await api.getReferenceJobs()).data; sectionLoaded.value = true; error.value = '' }
+        else if (section.value === 'archives') await readArchiveJobs()
         else if (section.value === 'mappings') { await loadMappings(true); error.value = '' }
         if (!entryOpened && (initialPurchaseId || initialTaskId)) {
             entryOpened = true
@@ -308,8 +362,7 @@ async function refresh() {
 }
 function selectStatus(value: string) { if (busy.value) return; selectedIds.value = []; status.value = value; loadTasks(true) }
 function clearTaskFilter() { keyword.value = ''; selectStatus('') }
-function changeSection(value: string) { if (busy.value) return; selectedIds.value = []; selectionMode.value = false; sectionLoaded.value = false; section.value = value; refresh() }
-function focusMetric(key: string) { if (section.value === 'archives') archiveFilter.value = key; else selectStatus(key) }
+function changeSection(value: string) { if (busy.value) return; selectedIds.value = []; selectionMode.value = false; sectionLoaded.value = false; section.value = value; error.value = ''; refresh() }
 function toggleSelection() { if (busy.value || isOpenApi.value) return; selectionMode.value = !selectionMode.value; selectedIds.value = [] }
 function toggleTask(task: any) {
     if (busy.value || !taskSelectable(task)) return
@@ -446,7 +499,9 @@ function changeMappingTab(tab: { index: number }) {
 }
 function finishMapping() { mappingVisible.value = false; referenceRequest++; sourceRequest++; if (returnTaskId) { const id = returnTaskId; returnTaskId = 0; openTask(id) } }
 function closeMapping() { if (busy.value) return; if (JSON.stringify(mappingDraft.value) !== savedMapping) uni.showModal({ title: '放弃未保存的对应修改？', success: result => { if (result.confirm) finishMapping() } }); else finishMapping() }
+function isRecycleBinding(map?: any) { return map?.kind === 'product' && /^recycle-sku:[a-f0-9]{64}$/i.test(map?.local_ref || '') }
 function editMapping(map?: any) {
+    if (isRecycleBinding(map)) return
     const kind = map?.kind || mappingKind.value
     if (kind === 'location') return toast('当前协议未提供库位查询，保留已有对应，暂不能新建或修改')
     if (isOpenApi.value && !['product', 'staff', 'customer', 'supplier'].includes(kind)) return toast('该类资料由博远提供，无需手工对应')
@@ -492,17 +547,67 @@ async function loadReferences(append = false) {
     referenceLoading.value = true; mappingError.value = ''; candidateLabel.value = ''; candidateHint.value = ''
     try { const res = await api.getReferences({ resource: referenceResource.value, keyword: referenceKeyword.value, cursor: append ? referenceCursor.value : '1', role: mappingDraft.value.kind, enabled_only: true, limit: 25 }); if (request !== referenceRequest || connection !== mappingConnection() || !mappingVisible.value) return; const rows = (res.data.data?.items || []).filter((item: any) => item.enabled && !item.stale); referenceRows.value = append ? [...referenceRows.value, ...rows] : rows; referenceCursor.value = res.data.data?.next_cursor || '' } catch (err) { if (request === referenceRequest) mappingError.value = message(err) } finally { if (request === referenceRequest) referenceLoading.value = false }
 }
-async function startSync(resource?: string) {
-    if (busy.value) return
-    busy.value = true
-    try { await api.syncReferences(resource ? [resource] : archiveJobs.value.map(item => item.resource)); archiveJobs.value = (await api.getReferenceJobs()).data; toast('资料同步已排队，可离开页面') } catch (err) { toast(message(err)) } finally { busy.value = false }
+async function readArchiveJobs() {
+    if (section.value !== 'archives') return
+    const seq = ++jobsSeq, context = mappingConnection(), scope = openingConnection.value, mode = config.value.mode
+    archiveJobsLoading.value = true
+    try {
+        const rows = (await api.getReferenceJobs()).data
+        if (seq !== jobsSeq || section.value !== 'archives' || context !== mappingConnection()) return
+        if (!Array.isArray(rows) || !rows.length || rows.some((row:any) => row?.connection_key !== scope || row?.mode !== mode)) throw new Error('账套信息不一致，请刷新；若仍有问题请检查插件版本。')
+        if (!openingProgress(rows).valid) throw new Error('基础资料进度不完整，请刷新后再操作。')
+        archiveJobs.value = rows; archiveJobsScope.value = context; archiveReadError.value = ''; error.value = ''; sectionLoaded.value = true
+    } catch (err) {
+        if (seq === jobsSeq && context === mappingConnection() && section.value === 'archives') {
+            archiveReadError.value = message(err); error.value = archiveReadError.value; sectionLoaded.value = false
+            archiveJobs.value = []; archiveJobsScope.value = ''; archiveVisible.value = false
+            archiveRows.value = []; selectedArchive.value = null; archiveCursor.value = ''; archiveSeq++; archiveLoading.value = false
+        }
+    } finally { if (seq === jobsSeq) archiveJobsLoading.value = false }
 }
-async function resumeSync(id: number) { if (busy.value) return; busy.value = true; try { await api.retryReference(id); archiveJobs.value = (await api.getReferenceJobs()).data; toast('已从失败分页继续') } catch (err) { toast(message(err)) } finally { busy.value = false } }
-async function openArchive(archive: any) { selectedArchive.value = archive; archiveKeyword.value = ''; archiveRows.value = []; archiveVisible.value = true; await loadArchive(false) }
+async function startSync(resource: string) {
+    if (!resource || busy.value || archiveJobsLoading.value || !archiveAllowed('start')) return
+    const all = resource === 'all', row = resource && archiveJobs.value.find(item => item.resource === resource)
+    const singleInitial = !!row && opening.value.initialResources.includes(row.resource)
+    if (all ? !opening.value.ready : !row || !singleInitial && !['needs_review','completed'].includes(row.job?.status)) return
+    const resources = all ? archiveJobs.value.map(row => row.resource) : [resource]
+    if (!resources.length) return
+    busy.value = true; const context = mappingConnection(), scope = openingConnection.value
+    try {
+        const response = (await api.syncReferences(resources, scope, singleInitial ? 'opening' : 'refresh'))?.data
+        if (context !== mappingConnection()) return
+        if (response?.queued === true) toast('已排队，可稍后查看取回进度')
+        else if (response?.queued === false && resources.every(key => !!response.skipped?.[key])) toast('状态已变化，未新建任务')
+        else toast('未确认是否受理，请先查看本类进度')
+    } catch (err) { if (context === mappingConnection()) toast(message(err)) }
+    finally { if (context === mappingConnection()) await readArchiveJobs(); busy.value = false }
+}
+async function resumeSync(id: number) {
+    if (busy.value || archiveJobsLoading.value || !archiveAllowed('retry') || !archiveJobs.value.some(row => row.job?.id === id && row.job.status === 'failed')) return
+    busy.value = true; const context = mappingConnection()
+    try { const response = (await api.retryReference(id))?.data; if (context === mappingConnection()) toast(response?.queued === true ? '已排队，将从中断处继续' : '未确认是否受理，请先查看本类进度') }
+    catch (err) { if (context === mappingConnection()) toast(message(err)) }
+    finally { if (context === mappingConnection()) await readArchiveJobs(); busy.value = false }
+}
+async function openArchive(archive: any) {
+    if (!archiveAllowed('search') || archiveJobs.value.every(row => row.resource !== archive.resource)) return
+    selectedArchive.value = archive; archiveKeyword.value = ''; archiveRows.value = []; archiveCursor.value = ''; archiveVisible.value = true
+    await loadArchive(false)
+}
 async function loadArchive(append: boolean) {
-    if (archiveLoading.value) return
+    if (append && archiveLoading.value || !archiveVisible.value || !selectedArchive.value || !archiveAllowed('search')) return
+    const seq = ++archiveSeq, context = mappingConnection(), resource = selectedArchive.value.resource
+    const current = () => seq === archiveSeq && context === mappingConnection() && archiveVisible.value && selectedArchive.value?.resource === resource
     archiveLoading.value = true
-    try { const res = await api.getReferences({ resource: selectedArchive.value.resource, cached: true, keyword: archiveKeyword.value, cursor: append ? archiveCursor.value : '1', limit: 25 }); archiveRows.value = append ? [...archiveRows.value, ...res.data.data.items] : res.data.data.items; archiveCursor.value = res.data.data.next_cursor || '' } catch (err) { toast(message(err)) } finally { archiveLoading.value = false }
+    archiveDetailError.value = ''
+    if (!append) { archiveRows.value = []; archiveCursor.value = '' }
+    try {
+        const res = await api.getReferences({ operation: 'archive_list', resource, cached: true, expected_connection_key: openingConnection.value, keyword: archiveKeyword.value, cursor: append ? archiveCursor.value : '1', limit: 25 })
+        if (!current()) return
+        if (res.data?.code !== 'OK' || res.data.data?.source !== 'local_archive' || !Array.isArray(res.data.data.items)) throw new Error('未取得本站档案，请重试。')
+        archiveRows.value = append ? [...archiveRows.value, ...res.data.data.items] : res.data.data.items; archiveCursor.value = res.data.data.next_cursor || ''
+    } catch (err) { if (current()) archiveDetailError.value = message(err) }
+    finally { if (seq === archiveSeq) archiveLoading.value = false }
 }
 function mapArchive(item: any, kind: string) { archiveVisible.value = false; editMapping({ kind, external_id: item.id, external_code: item.code, external_name: item.name }) }
 function mappingKindsFor(item: any) { return archiveMappingKinds.value.filter(kind => kind !== 'customer' && kind !== 'supplier' || !!item.extra?.[kind === 'customer' ? 'is_cust' : 'is_supplier']) }
@@ -513,13 +618,13 @@ async function persistMapping() {
     busy.value = true
     try { await api.saveMapping({ ...mappingDraft.value, mode: config.value.mode, connection_key: config.value.profiles[config.value.mode]?.connection_key }); await loadMappings(true); busy.value = false; const fromTask = !!returnTaskId; finishMapping(); toast(fromTask ? '绑定已保存，请继续处理原业务' : '对应已保存') } catch (err) { mappingError.value = message(err) } finally { busy.value = false }
 }
-onLoad((options: any) => { initialPurchaseId = purchaseRouteId(options?.purchase_id); initialTaskId = purchaseRouteId(options?.taskid || options?.task_id) })
+onLoad((options: any) => { initialPurchaseId = purchaseRouteId(options?.purchase_id); initialTaskId = purchaseRouteId(options?.taskid || options?.task_id); if (!initialPurchaseId && !initialTaskId && ['opening','archives'].includes(options?.section)) section.value = 'archives' })
 onShow(() => { active = true; refresh(); if (!timer) timer = setInterval(async () => {
     if (!active || configVisible.value || mappingVisible.value || archiveVisible.value || batchVisible.value || purchaseTaskId.value || selectionMode.value || busy.value) return
     try {
         config.value = (await api.getConfig()).data
         if (section.value === 'tasks' && page.value === 1) await loadTasks(true)
-        if (section.value === 'archives') { archiveJobs.value = (await api.getReferenceJobs()).data; sectionLoaded.value = true }
+        if (section.value === 'archives' && !archiveJobsLoading.value) await readArchiveJobs()
         if (detail.value) { const id = detail.value.id; const res = await api.getTask(id); if (detail.value?.id === id) detail.value = res.data }
     } catch (err) { error.value = message(err) }
 }, 10000) })
@@ -543,6 +648,10 @@ button { margin: 0; padding: 0; font-size: inherit; line-height: 1.4; border: 0;
 .archive-row { background: #fff; padding: 14px 16px; border-bottom: 1px solid #eef0f3; }.archive-name { text-align: left; min-width: 0; flex: 1; font-weight: 600; }.archive-progress { color: #7a828e; font-size: 12px; padding-top: 8px; }.archive-progress :deep(.u-button) { flex: initial; width: auto; margin: 0; }.archive-item { padding: 14px 0; border-bottom: 1px solid #eef0f3; }.archive-item .row .text-button { padding: 10px 0 0; }.nav { gap: 16px; justify-content: space-between; }
 .archive-name .muted { font-weight: 400; }
 .archive-warning { padding-top: 6px; }
+.opening-panel { margin: 12px; padding: 16px; background: #fff; border-radius: 8px; }
+.opening-panel .muted { margin-top: 6px; }.opening-count { font-size: 13px; margin-top: 12px; }.opening-command { margin-top: 12px; }
+.archive-filters .opening-refresh { margin-left: auto; color: var(--brand); }
+@media (prefers-color-scheme: dark) { .opening-panel { background: #1b212a; } }
 .mapping-tabs { background: #fff; border-bottom: 1px solid #eef0f3; }.mapping-target { display: flex; align-items: flex-start; gap: 6px; margin-top: 6px; }.mapping-target :deep(.u-icon) { margin-top: 4px; flex-shrink: 0; }.mapping-row { width: calc(100% - 24px); text-align: left; align-items: center; }.mapping-row > view { flex: 1; }.mapping-notice, .mapping-error { margin: 0 12px 10px; padding: 12px; font-size: 12px; line-height: 1.7; background: #fff5e9; color: #a36318; }.mapping-error { display: flex; align-items: center; gap: 12px; }.mapping-error > text { flex: 1; min-width: 0; }
 .mapping-error :deep(.u-button) { flex: 0 0 auto; width: auto; margin: 0; }
 .account-caption { display: block; font-size: 12px; line-height: 1.5; color: #747d89; margin-top: 4px; overflow-wrap: anywhere; }.icon-button { width: 44px; height: 44px; flex: 0 0 44px; }.tools { gap: 0; }

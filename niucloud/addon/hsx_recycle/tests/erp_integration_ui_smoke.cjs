@@ -12,7 +12,8 @@ const adminFiles = [
     'views/order_config/submit.vue', 'views/order_config/components/ErpIntegrationSettings.vue',
     'views/recycle_order/components/PaymentMethodDialog.vue',
     'views/recycle_order/components/PriceFormDialog.vue', 'views/recycle_order/list.vue', 'utils/payment-scope.ts',
-    'views/device_export/list.vue'
+    'views/device_export/list.vue', 'utils/inbound-handoff.ts',
+    ...['InboundPayablePanel', 'DownstreamProgress', 'OrderDetailDialog', 'DeviceDetailDialog'].map(s => 'views/recycle_order/components/' + s + '.vue')
 ]
 const mobileFiles = [
     'api/order.ts', 'pages/order/detail.vue', 'pages/order/components/PaymentConfirmPopup.vue',
@@ -45,11 +46,11 @@ function checkSyntax(project, files) {
     }
 }
 
-function loadScopeHelpers() {
+function loadScopeHelpers(name = 'payment-scope') {
     const projectRequire = createRequire(path.join(workspace, 'admin/package.json'))
     const ts = projectRequire('typescript')
     const exports = {}
-    vm.runInNewContext(ts.transpileModule(read('admin/src/addon/hsx_recycle/utils/payment-scope.ts'), {
+    vm.runInNewContext(ts.transpileModule(read('admin/src/addon/hsx_recycle/utils/' + name + '.ts'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS }
     }).outputText, { exports })
     return exports
@@ -88,6 +89,7 @@ async function checkPaymentEntry(scope, failure = false, mode = 'order') {
     const ref = value => ({ value })
     const row = { id: 71, devices: [], member_id: 5, flow_mode: mode }
     const options = {
+        showInboundPayables: id => calls.routes.push({ handoff: id }),
         list: ref([row]), pagination: ref({ page: 1 }), getList: async () => {},
         currentOrderId: ref(''), currentDevices: ref([]), orderDialogVisible: ref(false),
         checkDeviceLogVisible: ref(false), priceDeviceLogVisible: ref(false), paymentDialogVisible: ref(false),
@@ -102,7 +104,7 @@ async function checkPaymentEntry(scope, failure = false, mode = 'order') {
         assert.equal(calls.errors.length, 1)
     } else if (scope.payment_owner === 'self_erp') {
         assert.equal(options.paymentDialogVisible.value, false)
-        assert.deepEqual(calls.routes, ['/site/hsx_erp/payable'])
+        assert.deepEqual(calls.routes, [{handoff: 71}], 'ERP payment opens this order only without starting a payment')
     } else if ((scope.payment_owner === 'local' && scope.local_allowed === true) || (scope.payment_owner === 'mixed' && mode === 'device')) {
         assert.equal(options.paymentDialogVisible.value, true)
         assert.equal(calls.routes.length, 0)
@@ -279,7 +281,7 @@ async function checkSyncHealthFailure() {
         exports, console,
         require(name) {
             if (name === 'vue') return vue
-            if (name === 'vue-router') return { useRoute: () => ({ meta: { title: '设备导出' }, query: {} }) }
+            if (name === 'vue-router') return { useRoute: () => ({ meta: { title: '设备导出' }, query: {} }), useRouter: () => ({ hasRoute: () => false, push() {} }) }
             if (name === '@/lang') return { t: value => value }
             if (name === 'element-plus') return { ElMessage: { warning() {}, error() {}, success() {}, info() {} }, ElMessageBox: { async confirm() {} } }
             if (name === '@/addon/hsx_components/core') return { useFeedback: () => ({ warning() {}, error() {}, success() {}, info() {} }) }
@@ -326,6 +328,31 @@ async function checkSyncHealthFailure() {
 }
 
 async function main() {
+    const { inboundHandoff } = loadScopeHelpers('inbound-handoff')
+    const { resyncFeedback, batchInboundFeedback } = loadScopeHelpers('inbound-handoff')
+    for (const r of [undefined, {has_asset:0}, {has_asset:true, unknown:true}, {has_asset:false}, {has_asset:true, flushed:1, still_failed:1}]) assert.equal(resyncFeedback(r).tone, 'warning')
+    assert.equal(resyncFeedback({has_asset:true, still_failed:0}).tone, 'success')
+    const reply = {consumer:'hsx_erp', target:'self_erp', status:'processed', created_count:1, existing_count:1}
+    const notComplete = [undefined, [], [reply,reply], [{...reply, created_count:null}], [{...reply, status:'failed'}],
+        [{...reply, existing_count:0}], [{...reply, warnings:['需核对']}]]
+    for (const rows of notComplete) assert.equal(batchInboundFeedback(rows,2).tone, 'warning')
+    assert.equal(batchInboundFeedback([reply],2).tone, 'success')
+    const fact = {has_asset:true, has_payable:true, purchase_payable_id:161, purchase_payable_status:'pending', paid_amount:0, remaining_amount:1}
+    const flow = (erp, device = {}) => inboundHandoff({device_id:1, owner:'self_erp', status:5, has_placement:true, erp:{...fact, ...erp}, ...device})
+    assert.match(flow({}).next, /1\.00/)
+    assert.match(flow({paid_amount:1, remaining_amount:0, purchase_payable_status:'settled'}).next, /无需再次付款/)
+    assert.match(flow({paid_amount:1, remaining_amount:2, purchase_payable_status:'partial'}).label, /部分结清/)
+    assert.match(flow({remaining_amount:0}).label, /待核对/)
+    assert.equal(flow({remaining_amount:null}).action, 'none')
+    assert.equal(flow({ambiguous:true}).action, 'none')
+    assert.equal(flow({has_asset:false}).action, 'none')
+    assert.equal(flow({purchase_payable_id:0}).action, 'none')
+    assert.equal(flow({has_asset:undefined}).action, 'none')
+    assert.equal(flow({has_asset:false, has_payable:false}, {has_placement:false}).action, 'inbound')
+    assert.equal(flow({has_asset:false, has_payable:false}, {status:3}).action, 'none')
+    for(const status of [6,9]) assert.equal(flow({}, {status}).action, 'none')
+    assert.match(flow({}, {owner:'local'}).label, /回收端/)
+    assert.equal(flow({}, {owner:'unknown'}).action, 'none')
     checkSyntax('admin', adminFiles)
     checkSyntax('site-uniapp', mobileFiles)
     for (const file of adminFiles) {
@@ -359,7 +386,7 @@ async function main() {
     assert.doesNotMatch(mobilePayment, /不会.*转账|登记已付款/)
     assert.match(read('admin/src/addon/hsx_recycle/api/erp_integration.ts'), /mode, confirm: true/)
     assert.equal(read('admin/src/addon/hsx_recycle/utils/payment-scope.ts'), read('site-uniapp/src/addon/hsx_recycle/utils/payment-scope.ts'))
-    console.log('[PASS] recycle ERP UI: 15 Vue/TypeScript files, 8 payment ownership branches, PC mixed-device selection, 3 mobile submit-scope branches, device-scoped pricing on both clients, sync-health failure/retry/unknown guards, mirrored sources and confirmation contracts')
+    console.log('[PASS] recycle ERP UI: Vue/TypeScript sources and mirrors; device-level handoff, individual and batch receipt branches, mixed payment, mobile guard, partial failures, retry and unknown states')
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1 })

@@ -68,7 +68,13 @@
           </article>
         </div>
         <div v-if="goodsError" class="goods-error"><el-empty description="商品加载失败" :image-size="64" /><el-button :icon="Refresh" @click="loadGoods()">重试</el-button></div>
-        <el-empty v-else-if="!goodsLoading && !goods.length" description="暂无商品" :image-size="64" />
+        <el-empty v-else-if="!goodsLoading && !goods.length" :description="hasGoodsFilters ? '没有找到符合条件的设备' : '暂无可交付设备'" :image-size="64">
+          <el-button v-if="hasGoodsFilters" @click="clearGoodsFilters">清除筛选</el-button>
+          <template v-else>
+            <p class="goods-empty-tip">已入库的设备要先上架到商城，才能在这里选机交付。</p>
+            <el-button v-if="router.hasRoute('hsx_erp_stock')" link type="primary" @click="router.push({ name: 'hsx_erp_stock' })">查看库存设备</el-button>
+          </template>
+        </el-empty>
         </div>
         <div class="goods-pagination"><span>{{ goodsLimit }} 件/页</span><el-pagination v-model:current-page="goodsPage" :page-size="goodsLimit" :total="goodsTotal" :pager-count="5" layout="prev, pager, next" :disabled="goodsLoading" @current-change="loadGoods()" /></div>
       </main>
@@ -84,6 +90,13 @@
             <CashierMemberPicker v-model="memberId" @change="onMemberResolved" />
           </div>
           <div class="cart-top__row">
+            <span class="cart-top__lbl">销售</span>
+            <el-radio-group v-model="saleKind" size="small">
+              <el-radio-button label="retail">门店零售</el-radio-button>
+              <el-radio-button label="peer">同行销售</el-radio-button>
+            </el-radio-group>
+          </div>
+          <div class="cart-top__row">
             <span class="cart-top__lbl">结算</span>
             <el-radio-group v-model="paymentMode" size="small">
               <el-radio-button v-if="allowCash" label="offline_cash">现结</el-radio-button>
@@ -97,11 +110,16 @@
           <!-- 单笔:单个收款户头 -->
           <div v-if="paymentMode === 'offline_cash' && !splitPay" class="cart-top__row">
             <span class="cart-top__lbl">收款</span>
-            <el-select v-model="capitalAccountId" placeholder="收款户头" size="small" class="flex-1">
+            <el-select v-model="capitalAccountId" placeholder="收款户头" size="small" class="flex-1" :loading="accountsLoading" :disabled="!accountOptions.length">
               <el-option v-for="a in accountOptions" :key="a.id" :label="a.account_name || a.name" :value="a.id" />
             </el-select>
           </div>
           <!-- 分笔:多账户(微信一笔/支付宝一笔…),合计须=订单合计 -->
+          <div v-if="paymentMode === 'offline_cash' && !accountsLoading && !accountOptions.length" class="goods-empty-tip" role="status">
+            {{ accountsError ? '暂时读不到收款账户，请重试或核对权限。' : '本站还没有可用的收款账户。' }}
+            <el-button v-if="accountsError" link type="primary" @click="loadAccounts">重试</el-button>
+            <el-button v-else-if="router.hasRoute('hsx_erp_capital_account')" link type="primary" @click="router.push({ name: 'hsx_erp_capital_account' })">查看资金账户</el-button>
+          </div>
           <div v-if="paymentMode === 'offline_cash' && splitPay" class="cart-pay">
             <div v-for="(p, i) in payments" :key="i" class="pay-row">
               <el-select v-model="p.account_id" placeholder="收款户头(微信/支付宝…)" size="small" class="pay-acc">
@@ -132,7 +150,13 @@
             </div>
             <el-button :icon="Delete" link type="danger" @click="removeFromCart(i)" />
           </div>
-          <div v-if="!cart.length" class="cart-empty">点左侧商品加入</div>
+          <div v-if="!cart.length && lastSale" class="cart-empty" role="status">
+            <b>已交付 {{ lastSale.ok_count }} 台 · {{ lastSale.settle_mode === 'later' ? '已记应收，待收款' : '已登记收款' }}</b>
+            <p>ERP 销售单 {{ lastSale.outbound_no }}</p>
+            <el-button v-if="router.hasRoute('shop_order_detail')" link type="primary" @click="router.push({ name: 'shop_order_detail', query: { order_id: lastSale.order_id } })">查看商城原单</el-button>
+            <el-button v-if="lastSale.outbound_id && router.hasRoute('hsx_erp_sale')" link type="primary" @click="openSale">查看 ERP 原单</el-button>
+          </div>
+          <div v-else-if="!cart.length" class="cart-empty">选择买家，再点选本次实际交付的设备</div>
         </div>
         <div class="cart-foot">
           <div class="cart-total"><span>合计</span><b>¥{{ total }}</b></div>
@@ -187,6 +211,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useRouter } from 'vue-router'
 import { Search, Delete, View, Fold, Expand, Sort, SortUp, SortDown, Picture, Check, Plus, ShoppingCart, ArrowLeft, Refresh } from '@element-plus/icons-vue'
 import { img } from '@/utils/common'
 import { cashierGoods, cashierCheckout, cashierCategoryTree } from '@/addon/phone_shop/api/cashier'
@@ -240,6 +265,11 @@ const catBack = () => {
 }
 const filter = reactive<{ keyword: string; imei: string; memory_group: string[]; condition_grade: string[] }>({ keyword: '', imei: '', memory_group: [], condition_grade: [] })
 const memOptions = ref<string[]>([])
+const hasGoodsFilters = computed(() => Boolean(categoryId.value || filter.keyword || filter.imei || filter.memory_group.length || filter.condition_grade.length))
+const clearGoodsFilters = () => {
+  Object.assign(filter, { keyword: '', imei: '', memory_group: [], condition_grade: [] })
+  catStack.value = []; selectAllCats()
+}
 const gradeOptions = ref<string[]>([])
 
 const goods = ref<any[]>([])
@@ -252,6 +282,12 @@ let goodsRequest = 0
 const memberId = ref<number | undefined>(undefined)
 const selectedMember = ref<any>(null)
 const paymentMode = ref('offline_cash')
+const saleKind = ref<'retail' | 'peer'>('retail')
+const router = useRouter()
+const lastSale = ref<{ order_id: number; ok_count: number; outbound_no: string; outbound_id?: number; settle_mode: string }>()
+const openSale = () => router.push({ name: 'hsx_erp_sale', query: { sale_id: lastSale.value?.outbound_id } })
+let draftKey = ''
+let draftFacts = ''
 const allowCash = ref(true)   // 现结开关:后台「收款设置」关闭后,收银台只能挂账
 const loadSettleConfig = async () => {
   try {
@@ -262,6 +298,7 @@ const loadSettleConfig = async () => {
 }
 const capitalAccountId = ref<number | undefined>(undefined)
 const accountOptions = ref<any[]>([])
+const accountsLoading = ref(true), accountsError = ref(false)
 // 分笔现结:多账户收款(账户本身已区分微信/支付宝),合计须=订单合计
 const splitPay = ref(false)
 const payments = ref<Array<{ account_id: number | undefined; amount: number }>>([])
@@ -363,12 +400,24 @@ const removeFromCart = (i: number) => cart.value.splice(i, 1)
 const openDetail = (g: any) => { detail.row = g; detailImageIndex.value = 0; detail.visible = true }
 
 const loadAccounts = async () => {
-  try { const res: any = await getErpCapitalAccounts(); accountOptions.value = res.data?.data || res.data?.list || res.data || [] } catch (e) { /* ERP 未启用时忽略 */ }
+  accountsLoading.value = true; accountsError.value = false
+  try {
+    const res: any = await getErpCapitalAccounts(), rows = res.data?.list ?? res.data?.data ?? res.data
+    if (!Array.isArray(rows)) throw new Error('账户列表未返回')
+    const available = rows.filter(a => Number(a.status) === 1).map(a => ({ id: Number(a.id), account_name: a.account_name, is_default: Number(a.is_default) }))
+    accountOptions.value = available
+    if (!available.some(a => a.id === capitalAccountId.value)) {
+      const defaults = available.filter(a => a.is_default === 1)
+      capitalAccountId.value = defaults.length === 1 ? defaults[0].id : available.length === 1 ? available[0].id : undefined
+    }
+  } catch { accountOptions.value = []; capitalAccountId.value = undefined; accountsError.value = true }
+  finally { accountsLoading.value = false }
 }
 
 const accNameOf = (id: any) => { const a = accountOptions.value.find((x: any) => x.id === id); return a ? (a.account_name || a.name) : '' }
 
 const checkout = async () => {
+  if (submitting.value) return
   if (!memberId.value) { ElMessage.warning('请选择买家会员'); return }
   if (!cart.value.length) return
   const isCash = paymentMode.value === 'offline_cash'
@@ -385,39 +434,30 @@ const checkout = async () => {
   const isCredit = paymentMode.value === 'offline_credit'
   const buyer = selectedMember.value
   const buyerName = buyer ? memberLabel(buyer) : ('会员#' + memberId.value)
-  let settleLine = ''
-  if (isCredit) {
-    settleLine = '<span style="color:#e6a23c;font-weight:600">挂账</span>(生成 ERP 应收,事后结算)'
-  } else if (isSplit) {
-    const rows = payments.value.map((p) => `<div style="padding-left:12px">· ${accNameOf(p.account_id)}：<b>¥${Number(p.amount).toFixed(2)}</b></div>`).join('')
-    settleLine = `<span style="color:#67c23a;font-weight:600">现结·分笔</span>${rows}`
-  } else {
-    settleLine = `<span style="color:#67c23a;font-weight:600">现结</span> · 收款户头:<b>${accNameOf(capitalAccountId.value)}</b>`
-  }
-  const html = `
-    <div style="line-height:2;font-size:13px">
-      <div>买家:<b>${buyerName}</b></div>
-      <div>结算方式:${settleLine}</div>
-      <div>台数:<b>${cart.value.length}</b> 台 · 合计:<b style="color:#f56c6c">¥${total.value}</b></div>
-      <div style="color:#909399;margin-top:6px">确认后将直接生成 ERP 出货单${isCredit ? ',并挂应收' : '并即时收款入账'},此操作不可一键撤销(需到 ERP 退回)。</div>
-    </div>`
-  try {
-    await ElMessageBox.confirm(html, '确认开单', {
-      confirmButtonText: isCredit ? '确认挂账开单' : '确认现结开单',
-      cancelButtonText: '再看看',
-      type: 'warning',
-      dangerouslyUseHTMLString: true,
-    })
-  } catch (e) { return } // 取消
-
+  const accountText = isSplit ? payments.value.map(p => accNameOf(p.account_id) + ' ¥' + Number(p.amount).toFixed(2)).join('、') : accNameOf(capitalAccountId.value)
+  const note = isCredit ? '挂账，¥' + total.value + ' 将计入该买家的 ERP 应收。' : '已实际收款，入账至：' + accountText + '。'
   submitting.value = true
   try {
-    await cashierCheckout({
-      member_id: memberId.value, payment_mode: paymentMode.value,
+    await ElMessageBox.confirm('交给 ' + buyerName + ' · ' + cart.value.length + ' 台，合计 ¥' + total.value + '。' + note,
+      '确认所选设备已实际交付？', { confirmButtonText: isCredit ? '已交付，记应收' : '已交付，登记收款', cancelButtonText: '返回核对', type: 'warning' })
+  } catch { submitting.value = false; return }
+  try {
+    const payload = {
+      member_id: memberId.value, payment_mode: paymentMode.value, sale_kind: saleKind.value,
       capital_account_id: (isCash && !isSplit) ? capitalAccountId.value : 0,
       payments: isSplit ? payments.value.map((p) => ({ account_id: p.account_id, amount: Number(p.amount) })) : [],
       items: cart.value.map((it) => ({ sku_id: it.sku_id, goods_id: it.goods_id, asset_id: it.erp_asset_id, sale_price: it.sale_price })),
-    })
+    }
+    const facts = JSON.stringify(payload)
+    if (!draftKey || facts !== draftFacts) {
+      const bytes = new Uint8Array(16)
+      crypto.getRandomValues(bytes)
+      draftKey = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
+      draftFacts = facts
+    }
+    const result: any = await cashierCheckout({ ...payload, request_id: draftKey })
+    lastSale.value = result.data
+    draftKey = ''; draftFacts = ''
     cart.value = []; payments.value = []; splitPay.value = false; reloadGoods()
   } finally { submitting.value = false }
 }
@@ -516,6 +556,7 @@ onBeforeUnmount(() => { stopLayout(); goodsRequest++ })
 .goods-card__stock { font-size: 11px; color: var(--el-text-color-secondary); white-space: nowrap; }
 .goods-pagination { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; min-height: 44px; gap: 4px; font-size: 12px; color: var(--el-text-color-secondary); }
 .goods-error { display: flex; flex-direction: column; align-items: center; }
+.goods-empty-tip { color: var(--el-text-color-secondary); font-size: 13px; margin: 0 0 8px; }
 
 .cashier-cart { width: 320px; min-height: 0; flex-shrink: 0; border-left: 1px solid var(--el-border-color-lighter); display: flex; flex-direction: column; }
 .cashier-cart-rail { width: 76px; flex: none; border-left: 1px solid var(--el-border-color-lighter); padding: 12px 6px; display: flex; flex-direction: column; align-items: center; gap: 12px; font-size: 12px; color: var(--el-text-color-secondary); .el-button { margin: 0; } strong { color: var(--el-text-color-primary); font-size: 20px; } }

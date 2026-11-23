@@ -1,13 +1,14 @@
 <?php
 declare(strict_types=1);
 namespace addon\hsx_boyuan\app\service;
+use addon\hsx_boyuan\app\support\CatalogStore;
 
 use addon\hsx_boyuan\app\gateway\{OpenApi,PaymentGateway,Transport};
-use addon\hsx_boyuan\app\support\{Contract,Problem};
+use addon\hsx_boyuan\app\support\{ArchiveView,Contract,Problem,ProductionVoucher};
 use core\exception\CommonException;
 use think\facade\Db;
 
-/** UAT accounting registration only. Never confirms ERP payment or initiates a bank transfer. */
+/** Copy the already confirmed accounting fact; never confirm a local payment or send funds. */
 final class PaymentSyncService
 {
     public const SCHEMA='boyuan.purchase.payment.v1';
@@ -29,18 +30,22 @@ final class PaymentSyncService
         $id=Db::transaction(function() use($site,$parentId,$uid,$input): int {
             $this->lockSite($site); [$config,$profile]=$this->context($site,true); $parent=$this->parent($site,$parentId,true); $this->version($parent,$config,$profile,$input);
             $snapshot=$this->source($site,$parent,$input['settlement_id'],true); $fact='purchase-payment:settlement:'.$input['settlement_id'];
+            if($config['mode']==='production' && Db::name('hsx_boyuan_task')->where(['site_id'=>$site,'mode'=>'production','kind'=>self::KIND,'fact_key'=>$fact])->where('connection_key','<>',$profile['connection_key'])->count())
+                throw new Problem('PAYMENT_ALREADY_TRACKED','原付款凭证已在另一正式连接留下记录；请核对旧回执，不重复登记');
             $where=[['site_id','=',$site],['connection_key','=',$profile['connection_key']],['fact_key','=',$fact]]; $old=Db::name('hsx_boyuan_task')->where($where)->lock(true)->find();
             if($old) {
                 if($old['snapshot_json']!==Contract::json($snapshot)) throw new Problem('PAYMENT_FACT_CONFLICT','该结算单已用于其他来源或原事实变化，未新建或覆盖付款任务');
                 return (int)$old['id'];
             }
-            $selection=['creator_id'=>(string)(Contract::decode($parent['request_json'])['selection']['creator_id']??''),'account_id'=>''];
-            $id=(int)Db::name('hsx_boyuan_task')->insertGetId(['site_id'=>$site,'connection_key'=>$profile['connection_key'],'mode'=>'test','kind'=>self::KIND,'fact_key'=>$fact,
+            // Suggestions are read from the original voucher's current mappings when the draft is opened.
+            // Persist only explicit choices. The purchase author and the person syncing are not the payer.
+            $selection=['creator_id'=>'','account_id'=>''];
+            $id=(int)Db::name('hsx_boyuan_task')->insertGetId(['site_id'=>$site,'connection_key'=>$profile['connection_key'],'mode'=>$config['mode'],'kind'=>self::KIND,'fact_key'=>$fact,
                 'event_id'=>'payment:settlement:'.$input['settlement_id'],'operation_id'=>'BPAY_'.hash('sha256',$site.':'.$profile['connection_key'].':'.$fact),'business_no'=>$snapshot['settlement_no'],
-                'status'=>'awaiting_confirmation','reason'=>'UAT付款登记草稿：金额来自本站已确认付款，尚未向博远登记；不代表应付或指定核销已核验',
-                'snapshot_json'=>Contract::json($snapshot),'request_json'=>Contract::json(['schema'=>self::SCHEMA,'stage'=>'draft','source_task_id'=>$parentId,'selection'=>$selection]),'result_json'=>'{}',
+                'status'=>'awaiting_confirmation','reason'=>'原付款凭证已准备，金额来自本站已确认付款；尚未向博远登记',
+                'snapshot_json'=>Contract::json($snapshot),'request_json'=>Contract::json(['schema'=>self::SCHEMA,'stage'=>'draft','source_task_id'=>$parentId,'voucher_actor_uid'=>$snapshot['operator_uid'],'selection'=>$selection]),'result_json'=>'{}',
                 'next_at'=>0,'create_at'=>time(),'update_at'=>time()]);
-            TaskService::audit($site,$id,$profile['connection_key'],'payment_capture','awaiting_confirmation','仅接收已确认付款事实生成UAT登记草稿，未外发',$uid); return $id;
+            TaskService::audit($site,$id,$profile['connection_key'],'payment_capture','awaiting_confirmation','仅准备原付款凭证，未外发',$uid); return $id;
         });
         return $this->view($site,$id);
     }
@@ -49,6 +54,13 @@ final class PaymentSyncService
     {
         $this->permissions(false); [$config,$profile]=$this->context($site,false); $task=$this->task($site,$id); $snapshot=Contract::decode($task['snapshot_json']); $request=Contract::decode($task['request_json']);
         $selection=(array)($request['selection']??['creator_id'=>'','account_id'=>'']); $issues=[]; $selectionReady=false; $ap=$this->unverifiedAp(); $sourceCurrent=false;
+        $mapped=['creator_id'=>'','account_id'=>''];
+        if($task['status']==='awaiting_confirmation' && $task['side_effect']==='none' && (int)$task['attempts']===0 && ($request['stage']??'')==='draft') {
+            $mapped=$this->voucherMappings($site,$task['connection_key'],$snapshot);
+            // An older, unsent draft may contain a default copied from the buyer. Do not present it as finance's choice.
+            if(($request['voucher_actor_uid']??null)!==$snapshot['operator_uid']) $selection['creator_id']='';
+            foreach($mapped as $field=>$value) if($value!=='') $selection[$field]=$value;
+        }
         $registered=self::isRegistered($task);
         if($registered) {
             // A stored matched receipt survives later edits to master data, settings and AP proof expiry.
@@ -59,40 +71,61 @@ final class PaymentSyncService
                 $parent=$this->parent($site,(int)$snapshot['source_task_id']);
                 if(Contract::json($this->source($site,$parent,(int)$snapshot['settlement_id']))!==$task['snapshot_json']) throw new Problem('PAYMENT_SOURCE_CHANGED','本站付款或采购来源已变化；原快照不会覆盖');
                 $sourceCurrent=true; $ap=$this->apEvidence($site,$task,$snapshot); $this->prepare($site,$task,$selection,false); $selectionReady=$selection['creator_id']!=='' && $selection['account_id']!=='';
-                if(!$selectionReady) $issues[]='请选择博远制单人与本采购公司启用的付款账户';
+                if($selection['creator_id']==='') $issues[]='请选择原付款登记财务对应的博远员工';
+                if($selection['account_id']==='') $issues[]='请选择原付款账户对应的博远资金账户';
             } catch(Problem $error) { $issues[]=$error->getMessage(); }
         }
-        if(!$registered && !$ap['verified']) $issues[]=$ap['reason'];
+        $prod=$task['mode']==='production';
+        if(!$prod && !$registered && !$ap['verified']) $issues[]=$ap['reason'];
         $enabled=$this->enabled($config,$profile); $active=$task['mode']===$config['mode'] && $task['connection_key']===$profile['connection_key']; $canOperate=$this->mayOperate();
-        if(!$registered && (!$enabled || !$active)) $issues[]='付款登记仅限显式启用的精确UAT连接；正式环境不开放';
+        if(!$registered && (!$enabled || !$active)) $issues[]='本账套未开启手动付款凭证同步，或连接已暂停；原付款不受影响';
         $editable=$enabled && $active && $canOperate && $task['status']==='awaiting_confirmation' && $task['side_effect']==='none' && (int)$task['attempts']===0 && ($request['stage']??'')==='draft';
         $public=array_intersect_key($task,array_flip(['id','revision','mode','connection_key','kind','status','reason','external_no','business_no','attempts','side_effect','create_at','update_at']));
         foreach(['id','revision','attempts','create_at','update_at'] as $field) $public[$field]=(int)$public[$field]; $public['parent_purchase_task_id']=(int)$snapshot['source_task_id'];
         $result=$this->safeResult(Contract::decode($task['result_json']));
-        $source=array_intersect_key($snapshot,array_flip(['source_task_id','source_document_no','external_purchase_no','settlement_id','settlement_no','confirmed_at','amount','currency','company_id','company_code','supplier_id','scope'])); $source['parent_purchase_task_id']=(int)$snapshot['source_task_id'];
+        $source=array_intersect_key($snapshot,array_flip(['source_task_id','source_document_no','external_purchase_no','settlement_id','settlement_no','confirmed_at','amount','currency','company_id','company_code','supplier_id','scope','operator_uid','capital_account_id']))+$this->voucherNames($site,$snapshot);
+        $source['parent_purchase_task_id']=(int)$snapshot['source_task_id'];
         if($registered) $public['reason']=self::REGISTERED_REASON;
-        return ['task'=>$public,'source'=>$source,'operator_complete'=>$registered,
+        $canRemember=false;
+        if($editable) try { (new PermissionService())->assertApi('post','boyuan/mappings'); $canRemember=true; } catch(CommonException $e) {}
+        return ['task'=>$public,'source'=>$source,'operator_complete'=>$registered,'can_remember'=>$canRemember,'mapped_fields'=>array_map(static fn($v)=>$v!=='',$mapped),
+            'can_process_current'=>$sourceCurrent && $canOperate && self::currentEligible($config,$task),
+            'current_account_code'=>$active && $config['mode']==='test'?(string)$profile['account_id']:'',
             'parent_purchase_task_id'=>(int)$snapshot['source_task_id'],'selection'=>$selection,'labels'=>$this->labels($site,$task['connection_key'],$snapshot,$selection),'ap_evidence'=>$ap,
-            'editable'=>$editable,'can_submit'=>$editable && $selectionReady && $sourceCurrent && $ap['verified'],
-            'can_submit_experiment'=>$editable && $selectionReady && $sourceCurrent && !$ap['verified'],'can_verify'=>false,'issues'=>array_values(array_unique($issues)),'result'=>$result,
-            'uat_only'=>true,'query_unavailable_reason'=>'当前没有已验证的官方PAYMENT查单或指定核销契约；手填单号不能标记成功，未知结果必须人工查原单且不得重建'];
+            'editable'=>$editable,'can_submit'=>$editable && $selectionReady && $sourceCurrent && ($prod || $ap['verified']),
+            'can_submit_experiment'=>!$prod && $editable && $selectionReady && $sourceCurrent && !$ap['verified'],'can_verify'=>false,'issues'=>array_values(array_unique($issues)),'result'=>$result,
+            'uat_only'=>!$prod,'query_unavailable_reason'=>'当前没有已验证的官方PAYMENT查单或指定核销契约；手填单号不能标记成功，未知结果必须人工查原单且不得重建'];
     }
     public function saveDraft(int $site,int $id,int $uid,array $input): array { return $this->edit($site,$id,$uid,$input,false); }
     public function submit(int $site,int $id,int $uid,array $input): array { return $this->edit($site,$id,$uid,$input,true); }
     private function edit(int $site,int $id,int $uid,array $input,bool $submit): array
     {
-        $this->permissions(true); $this->keys($input,['revision','mode','connection_key','selection','confirm_registration','confirm_unverified_ap']);
+        $this->permissions(true); $this->keys($input,['revision','mode','connection_key','selection','confirm_registration','confirm_unverified_ap','remember']);
+        if(array_key_exists('remember',$input) && !is_bool($input['remember'])) throw new Problem('INPUT_INVALID','记住对应须为明确布尔选项');
+        if(!empty($input['remember'])) (new PermissionService())->assertApi('post','boyuan/mappings');
         foreach(['confirm_registration','confirm_unverified_ap'] as $flag) if(array_key_exists($flag,$input) && !is_bool($input[$flag])) throw new Problem('PAYMENT_CONFIRM_REQUIRED','付款登记风险确认必须为明确的布尔选项');
-        if($submit && ($input['confirm_registration']??null)!==true) throw new Problem('PAYMENT_CONFIRM_REQUIRED','请明确确认这是UAT账务登记，不是银行转账或完整核销');
+        if($submit && ($input['confirm_registration']??null)!==true) throw new Problem('PAYMENT_CONFIRM_REQUIRED','请确认只同步这张已有付款凭证，不是再次打款或确认核销');
         Db::transaction(function() use($site,$id,$uid,$input,$submit): void {
             $this->lockSite($site); [$config,$profile]=$this->context($site,true); $task=$this->task($site,$id,true); $this->version($task,$config,$profile,$input); $stored=Contract::decode($task['request_json']);
             if($task['status']!=='awaiting_confirmation' || $task['side_effect']!=='none' || (int)$task['attempts']!==0 || ($stored['stage']??'')!=='draft') throw new Problem('PAYMENT_FROZEN','付款登记已提交或可能已外发，不能修改、重复登记或按未知结果重建');
             $snapshot=Contract::decode($task['snapshot_json']); $parent=$this->parent($site,(int)$snapshot['source_task_id'],true);
             if(Contract::json($this->source($site,$parent,(int)$snapshot['settlement_id'],true))!==$task['snapshot_json']) throw new Problem('PAYMENT_SOURCE_CHANGED','本站已确认付款或采购来源已变化，未外发');
             $selection=$this->selection($input['selection']??null); $experiment=$submit && ($input['confirm_unverified_ap']??false)===true;
+            if($experiment && $task['mode']!=='test') throw new Problem('PAYMENT_UAT_ONLY','正式账套不支持测试实验');
+            foreach($this->voucherMappings($site,$task['connection_key'],$snapshot) as $field=>$mapped) {
+                if($mapped!=='' && $selection[$field]!==$mapped) throw new Problem('PAYMENT_MAPPING_CHANGED','原付款财务或账户已有有效对应，请刷新后按原付款凭证同步');
+            }
+            foreach(['creator_id'=>['staff','operator_uid'],'account_id'=>['account','capital_account_id']] as $field=>[$kind,$local]) {
+                $external=$selection[$field]; if($external==='') continue;
+                $ref=$kind.':'.$snapshot[$local];
+                if(Db::name('hsx_boyuan_mapping')->where(['site_id'=>$site,'connection_key'=>$task['connection_key'],'kind'=>$kind,'external_id'=>$external])
+                    ->where('local_ref','<>',$ref)->count() || ($kind==='staff' && $this->bridgeVoucherStaff($site,$task['connection_key'],$ref,$external)!==$external))
+                    throw new Problem('MAPPING_CONFLICT','所选博远人员或账户与原付款资料的对应关系冲突；请先核对资料，不会覆盖或重复投递');
+            }
+            if(!empty($input['remember'])) $this->rememberVoucherMappings($site,$task['connection_key'],$snapshot,$selection,$uid);
             $request=$this->prepare($site,$task,$selection,$submit,$experiment);
             Db::name('hsx_boyuan_task')->where('site_id',$site)->where('id',$id)->update(['request_json'=>Contract::json($request),'status'=>$submit?'pending':'awaiting_confirmation',
-                'reason'=>$submit?($experiment?'已显式确认UAT付款登记实验；应付形成及指定核销未证实，等待异步单次登记':'已确认UAT付款登记请求并冻结，等待异步单次登记；核销结果仍需独立核验'):'UAT付款登记选择已保存，尚未外发',
+                'reason'=>$submit?($experiment?'已确认UAT付款登记实验，等待单次登记':'已确认原付款凭证，等待博远登记；原采购核销待核对'):'已保存付款凭证选择，尚未外发',
                 'revision'=>(int)$task['revision']+1,'query_only'=>0,'next_at'=>$submit?time()+1:0,'update_at'=>time()]);
             TaskService::audit($site,$id,$task['connection_key'],$submit?'payment_submit':'payment_draft',$submit?'pending':'awaiting_confirmation',$submit?'付款登记已冻结，最多执行一次创建；不发起转账':'付款登记草稿已保存，未外发',$uid);
         });
@@ -106,6 +139,12 @@ final class PaymentSyncService
         $payables=Db::name('erp_payable')->where('site_id',$site)->where('source_type','purchase_asset')->whereIn('source_id',$assets)->column('id');
         $ids=$payables?Db::name('erp_settlement_link')->where('site_id',$site)->where('target_type','payable')->whereIn('target_id',$payables)->column('settlement_id'):[];
         $ids=array_values(array_unique(array_map('intval',$ids))); $page=max(1,(int)($input['page']??1)); $limit=min(20,max(1,(int)($input['limit']??20)));
+        if(isset($input['settlement_id'])) {
+            $filter=$input['settlement_id'];
+            if((!is_string($filter) && !is_int($filter)) || !preg_match('/^[1-9][0-9]*$/D',(string)$filter) || (string)(int)$filter!==(string)$filter)
+                throw new Problem('PAYMENT_SOURCE_REQUIRED','原付款单标识无效，请重新打开 ERP 原单');
+            $ids=in_array((int)$filter,$ids,true)?[(int)$filter]:[];
+        }
         $total=$ids?Db::name('erp_settlement')->where('site_id',$site)->whereIn('id',$ids)->where('status','confirmed')->where('settlement_type','payment')->where('cash_direction','out')->count():0;
         $rows=$ids?Db::name('erp_settlement')->where('site_id',$site)->whereIn('id',$ids)->where('status','confirmed')->where('settlement_type','payment')->where('cash_direction','out')->field('id,settlement_no,confirmed_at,amount')->order('id desc')->page($page,$limit)->select()->toArray():[];
         $items=[];
@@ -121,13 +160,15 @@ final class PaymentSyncService
     }
     public function summary(int $site,array $parent): array
     {
-        $empty=['uat_only'=>true,'enabled'=>false,'can_capture'=>false,'candidates'=>['items'=>[],'total'=>0,'has_more'=>false,'next_page'=>null],
-            'task_id'=>null,'status'=>'unavailable','operator_complete'=>false,'registered_amount'=>null,'allocation_verified'=>false,'bank_transfer_verified'=>false,'ap_evidence'=>$this->unverifiedAp(),'reason'=>'付款登记仅限精确UAT连接显式开启；正式环境不开放'];
+        $empty=['uat_only'=>($parent['mode']??'')!=='production','enabled'=>false,'can_capture'=>false,'candidates'=>['items'=>[],'total'=>0,'has_more'=>false,'next_page'=>null],
+            'task_id'=>null,'status'=>'unavailable','operator_complete'=>false,'registered_amount'=>null,'allocation_verified'=>false,'bank_transfer_verified'=>false,'ap_evidence'=>$this->unverifiedAp(),'reason'=>'本连接未启用原付款凭证同步'];
         if((int)($parent['site_id']??0)!==$site || ($parent['kind']??'')!=='purchase') return $empty;
         try {
-            $this->permissions(false); [$config,$profile]=$this->context($site,false); if(!$this->uat($config,$profile) || $parent['mode']!==$config['mode'] || $parent['connection_key']!==$profile['connection_key']) return $empty;
-            $empty['enabled']=$this->enabled($config,$profile); $empty['candidates']=$this->candidates($site,(int)$parent['id']);
-            $empty['status']='not_captured'; $empty['reason']='仅可选择本站财务已确认付款作UAT账务登记；不能输入金额或发起转账；博远应付形成与指定核销尚未核验';
+            $this->permissions(false); [$config,$profile]=$this->context($site,false);
+            $uat=$this->uat($config,$profile); $prod=$config['mode']==='production' && ProductionVoucher::profile($profile);
+            if((!$uat && !$prod) || $parent['mode']!==$config['mode'] || $parent['connection_key']!==$profile['connection_key']) return $empty;
+            $empty['uat_context']=$uat; $empty['production_context']=$prod; $empty['enabled']=$this->enabled($config,$profile); $empty['candidates']=$this->candidates($site,(int)$parent['id']);
+            $empty['status']='not_captured'; $empty['reason']='仅可同步本站财务已确认的付款凭证；不发起转账，核销另行核对';
             $empty['can_capture']=$empty['enabled'] && $this->mayOperate() && count(array_filter($empty['candidates']['items'],static fn($item)=>$item['eligible']))>0;
             $rows=Db::name('hsx_boyuan_task')->where('site_id',$site)->where('connection_key',$parent['connection_key'])->where('mode',$parent['mode'])->where('kind',self::KIND)->order('id desc')->select()->toArray();
             foreach($rows as $row) {
@@ -144,13 +185,48 @@ final class PaymentSyncService
         catch(\Throwable $error) { $this->log($site,(int)($parent['id']??0),$error); return $empty; }
     }
 
-    public function process(int $site,int $id,?Transport $transport=null): bool
+    /** Only a never-sent, already frozen UAT voucher. This is not a second submission or a retry. */
+    public static function currentEligible(array $config,array $task): bool
+    {
+        $r=Contract::decode($task['request_json']??''); $s=Contract::decode($task['snapshot_json']??''); $p=$config['profiles']['test']??[];
+        return ManualDocumentCommandService::eligible($config) && !empty($config['uat_payment_enabled']) && !empty($p['account_id'])
+            && ($task['mode']??null)==='test' && ($task['connection_key']??null)===$p['connection_key'] && ($task['kind']??null)===self::KIND
+            && ($task['status']??null)==='pending' && ($task['side_effect']??null)==='none' && (int)($task['attempts']??-1)===0
+            && empty($task['external_no']) && empty($task['resolution']) && empty($task['query_only']) && empty($task['lease_token']) && (int)($task['next_at']??PHP_INT_MAX)<=time()
+            && ($r['schema']??null)===self::SCHEMA && ($r['stage']??null)==='frozen' && ($r['connection_key']??null)===$p['connection_key']
+            && (int)($s['settlement_id']??0)>0 && (int)($s['source_task_id']??0)>0 && !empty($s['confirmed_at'])
+            && ($task['fact_key']??null)==='purchase-payment:settlement:'.$s['settlement_id'] && ($task['business_no']??null)===($s['settlement_no']??null)
+            && ($r['source_settlement_id']??null)===$s['settlement_id'] && ($r['source_task_id']??null)===$s['source_task_id'];
+    }
+    public function processCurrent(int $site,int $id,int $uid,array $input,?Transport $transport=null): array
+    {
+        $this->permissions(true); $this->keys($input,['revision','mode','connection_key','account_code','purchase_task_id','settlement_id']);
+        [$config,$profile]=$this->context($site,true); $task=$this->task($site,$id); $s=Contract::decode($task['snapshot_json']);
+        $this->version($task,$config,$profile,$input);
+        if($uid<1 || !self::currentEligible($config,$task) || ($input['account_code']??null)!==$profile['account_id']
+            || ($input['purchase_task_id']??null)!==$s['source_task_id'] || ($input['settlement_id']??null)!==$s['settlement_id'])
+            throw new Problem('PAYMENT_CURRENT_UNAVAILABLE','只可处理原 UAT 账套已确认且尚未发送的本笔凭证。请刷新核对，不要重提付款。');
+        $this->process($site,$id,$transport,$input+['config_revision'=>(int)$config['revision']]);
+        [$fresh,$p]=$this->context($site,false);
+        if($fresh['mode']!=='test' || $p['connection_key']!==$profile['connection_key'] || $p['account_id']!==$profile['account_id'])
+            throw new Problem('CONNECTION_CHANGED','账套已变化，请在原 UAT 账套核对付款回执，不要再次发送。');
+        return $this->view($site,$id);
+    }
+    public function process(int $site,int $id,?Transport $transport=null,?array $command=null): bool
     {
         try { [$config,$profile]=$this->context($site,true); } catch(Problem $error) { return false; }
         $task=null; $claimed=false; $lease=bin2hex(random_bytes(16)); $request=[];
         try {
-            Db::transaction(function() use($site,$id,$lease,&$task,&$claimed,&$config,&$profile,&$request): void {
+            Db::transaction(function() use($site,$id,$lease,$command,&$task,&$claimed,&$config,&$profile,&$request): void {
                 $this->lockSite($site); [$config,$profile]=$this->context($site,true); $task=$this->task($site,$id,true);
+                // A worker or a settings edit may have won the race since opening the dialog.
+                // In that case do not acquire the lease, update the task, or call the provider.
+                if($command!==null) {
+                    $s=Contract::decode($task['snapshot_json']);
+                    if(!self::currentEligible($config,$task) || $command['mode']!==$task['mode'] || $command['connection_key']!==$task['connection_key']
+                        || $command['config_revision']!==(int)$config['revision'] || $command['revision']!==(int)$task['revision']
+                        || $command['account_code']!==$profile['account_id'] || $command['purchase_task_id']!==$s['source_task_id'] || $command['settlement_id']!==$s['settlement_id']) return;
+                }
                 if($task['connection_key']!==$profile['connection_key'] || $task['mode']!==$config['mode'] || (int)$task['next_at']>time()) return;
                 $stale=$task['status']==='processing' && (int)$task['lease_until']<time(); if($task['status']!=='pending' && !$stale) return;
                 $request=Contract::decode($task['request_json']);
@@ -164,7 +240,7 @@ final class PaymentSyncService
             });
             if(!$claimed) return false;
             [$fresh,$freshProfile]=$this->context($site,true); if($fresh['mode']!==$config['mode'] || $freshProfile!==$profile) throw new Problem('PAYMENT_CONNECTION_CHANGED','发送前UAT连接配置已变化，停止登记','unknown');
-            $api=$transport??(new ConfigService())->transport($site,$profile,'test'); if(!$api instanceof OpenApi) throw new Problem('PAYMENT_PROTOCOL_REQUIRED','仅允许精确UAT官方网关','unknown');
+            $api=$transport??(new ConfigService())->transport($site,$profile,$config['mode'],\addon\hsx_boyuan\app\support\InterfaceTrace::task($task)); if(!$api instanceof OpenApi) throw new Problem('PAYMENT_PROTOCOL_REQUIRED','只允许当前账套的博远官方网关','unknown');
             $reply=(new PaymentGateway($api))->create($request); $result=$this->safeResult($reply);
             $result['ap_evidence_verified']=($request['ap_evidence_verified']??false)===true; $result['uat_registration_experiment']=($request['uat_registration_experiment']??false)===true;
             if(($reply['created']??false)!==true || ($reply['payment_registered']??false)!==true || ($reply['verification_level']??'')!=='payment_create_receipt_matched' || ($reply['amount']??null)!==$request['amount']
@@ -197,7 +273,8 @@ final class PaymentSyncService
             if(!$task) throw $error;
             $where=$claimed?$this->owned($site,$id,$task,$lease):[['site_id','=',$site],['id','=',$id],['connection_key','=',$task['connection_key']],['mode','=',$task['mode']],['revision','=',(int)$task['revision']],['status','=',$task['status']],['lease_token','=',$task['lease_token']],['lease_until','=',(int)$task['lease_until']],['attempts','=',(int)$task['attempts']]];
             $reason=$error instanceof Problem?$error->getMessage():'付款登记未取得确定回执，请人工核查；禁止重复登记';
-            Db::name('hsx_boyuan_task')->where($where)->update(['status'=>'attention','reason'=>mb_substr($reason,0,1000),'next_at'=>0,'lease_token'=>'','lease_until'=>0,'update_at'=>time()]);
+            $saved=Contract::decode($task['result_json']); $saved['last_issue']=\addon\hsx_boyuan\app\support\ReceiptFacts::issue($error,$claimed?'submit':'prepare');
+            Db::name('hsx_boyuan_task')->where($where)->update(['status'=>'attention','reason'=>mb_substr($reason,0,1000),'result_json'=>Contract::json($saved),'next_at'=>0,'lease_token'=>'','lease_until'=>0,'update_at'=>time()]);
             TaskService::audit($site,$id,$task['connection_key'],'payment_process','attention',$reason,0,['code'=>$error instanceof Problem?$error->reason:'LOCAL_ERROR']); if(!$error instanceof Problem) $this->log($site,$id,$error);
             return true;
         }
@@ -208,6 +285,13 @@ final class PaymentSyncService
     {
         $captured=Contract::decode($parent['snapshot_json']); $purchase=Contract::decode($parent['request_json']); $receipt=Contract::decode($parent['result_json']);
         if($parent['status']!=='succeeded' || ($purchase['schema']??'')!=='boyuan.purchase.v154' || ($receipt['verified']??false)!==true || ($receipt['verification_level']??'')!=='purchase_imei_records_matched') throw new Problem('PAYMENT_PURCHASE_REQUIRED','原采购记录尚未逐台核验，不能登记付款');
+        if($parent['mode']==='production') {
+            $head=$receipt['provider_result']??[];
+            if(($purchase['biz']['head']['cash_term']??null)!==0 || empty($parent['external_no']) || ($receipt['external_no']??null)!==$parent['external_no'] ||
+                ($receipt['evidence']['record_is_effective']??false)!==true || ($head['bill_id']??null)!==$parent['external_no'] ||
+                empty($receipt['external_id']) || ($head['id']??null)!==$receipt['external_id'] || ($head['bill_type']??'')!=='PUR' || ($head['cash_term']??null)!==0)
+                throw new Problem('PAYMENT_PURCHASE_REQUIRED','请先取得原采购的挂账回执；结算方式未确认或已现结时，不再向博远登记付款凭证。');
+        }
         (new PurchaseSyncService())->assertClosureSourceCurrent($site,$captured);
         $settlement=Db::name('erp_settlement')->where('site_id',$site)->where('id',$settlementId)->lock($lock)->field('id,settlement_no,party_id,settlement_type,amount,cash_direction,capital_account_id,status,operator_uid,confirmed_at')->find();
         if(!$settlement || $settlement['status']!=='confirmed' || $settlement['settlement_type']!=='payment' || $settlement['cash_direction']!=='out' || (int)$settlement['confirmed_at']<=0 || (int)$settlement['confirmed_at']>time()+300 || (int)$settlement['operator_uid']<=0 || (int)$settlement['capital_account_id']<=0) throw new Problem('PAYMENT_SOURCE_REQUIRED','仅支持本站有效员工已财务确认的payment/out结算，不接受临时金额或未确认付款');
@@ -243,7 +327,7 @@ final class PaymentSyncService
                 'external_document_id'=>$detail['external_document_id'],'external_line_id'=>$binding['external_id']]; $sum+=$applied;
         }
         if($sum!==$amount) throw new Problem('PAYMENT_TOTAL_MISMATCH','原付款金额与本批次全部真实分配合计不一致，未登记');
-        $company=Db::name('hsx_boyuan_reference')->where('site_id',$site)->where('connection_key',$parent['connection_key'])->where('resource','companies')->where('external_id',(string)$purchase['selection']['company_id'])->find();
+        $company=CatalogStore::query('companies')->where('site_id',$site)->where('connection_key',$parent['connection_key'])->where('external_id',(string)$purchase['selection']['company_id'])->find();
         $companyCode=$company?(string)(Contract::decode($company['extra_json'])['gsdm']??''):'';
         return ['kind'=>self::KIND,'scope'=>'single_purchase_batch','source_task_id'=>(int)$parent['id'],'source_snapshot_hash'=>hash('sha256',$parent['snapshot_json']),
             'source_request_hash'=>hash('sha256',$parent['request_json']),'source_document_id'=>$captured['source_document_id'],'source_document_no'=>$parent['business_no'],
@@ -251,6 +335,88 @@ final class PaymentSyncService
             'supplier_id'=>(string)$purchase['biz']['head']['supplier_id'],'settlement_id'=>(int)$settlement['id'],'settlement_no'=>$settlement['settlement_no'],
             'confirmed_at'=>(int)$settlement['confirmed_at'],'operator_uid'=>(int)$settlement['operator_uid'],'capital_account_id'=>(int)$settlement['capital_account_id'],
             'amount'=>Contract::amount($amount),'currency'=>'CNY','lines'=>$lines];
+    }
+
+    private function voucherNames(int $site,array $snapshot): array
+    {
+        $row=Db::name('erp_settlement')->where(['site_id'=>$site,'id'=>$snapshot['settlement_id'],'operator_uid'=>$snapshot['operator_uid'],'capital_account_id'=>$snapshot['capital_account_id']])->field('operator_name,capital_account_name')->find();
+        return ['operator_name'=>(string)($row['operator_name']??''),'capital_account_name'=>(string)($row['capital_account_name']??'')];
+    }
+
+    private function voucherMappings(int $site,string $key,array $snapshot): array
+    {
+        return ['creator_id'=>$this->mappedVoucherField($site,$key,$snapshot,'staff'),'account_id'=>$this->mappedVoucherField($site,$key,$snapshot,'account')];
+    }
+
+    private function voucherField(int $site,string $kind,array $snapshot): array
+    {
+        $staff=$kind==='staff'; $id=(int)$snapshot[$staff?'operator_uid':'capital_account_id']; $ref=$kind.':'.$id;
+        MappingSourceService::assertMatches($site,$kind,$ref);
+        if(!$staff && !Db::name('erp_capital_account')->where(['site_id'=>$site,'id'=>$id,'status'=>1])->where('account_no','not like','system:%')->count())
+            throw new Problem('PAYMENT_ACCOUNT_MAPPING_REQUIRED','原付款账户未启用或不是实际资金账户，不能记住对应');
+        return [$ref,$staff?'staff':'capital_accounts'];
+    }
+
+    private function mappedVoucherField(int $site,string $key,array $snapshot,string $kind,string $business='payment'): string
+    {
+        try {
+            [$ref,$resource]=$this->voucherField($site,$kind,$snapshot);
+            $links=Db::name('hsx_boyuan_mapping')->where(['site_id'=>$site,'connection_key'=>$key,'kind'=>$kind]);
+            $external=(string)(clone $links)->where('local_ref',$ref)->value('external_id');
+            if($kind==='staff') $external=$this->bridgeVoucherStaff($site,$key,$ref,$external,$business);
+            if($external==='' || (clone $links)->where('external_id',$external)->where('local_ref','<>',$ref)->count()) return '';
+            $latest=Db::name('hsx_boyuan_reference_sync')->where(['site_id'=>$site,'connection_key'=>$key,'resource'=>$resource])->order('id desc')->value('status');
+            if($latest!=='completed') return '';
+            $archive=$this->archive($site,$key,$resource,$external,true);
+            $this->companyScope($archive,$snapshot['company_id'],$snapshot['company_code'],'PAYMENT_MAPPING_SCOPE');
+            return $external;
+        } catch(Problem $e) { return ''; }
+    }
+
+    private function bridgeVoucherStaff(int $site,string $key,string $ref,string $native,string $business='payment'): string
+    {
+        $identity='staff:'.$ref;
+        return (string)(BridgeMasterSelections::merge($site,$key,$business,[$ref],[$identity=>$native])[$identity]??'');
+    }
+
+    /** Use the actual voucher author and capital account. A receipt is not a purchase payment. */
+    public function receiptSelections(int $site,string $key,array $snapshot,array $choice=[]):array
+    {
+        if(array_diff(array_keys($choice),['staff_id','account_id'])) throw new Problem('RECEIPT_SELECTION','只可选择缺失的制单人及资金账户');
+        $company=$this->archive($site,$key,'companies',$snapshot['company_id'],true);$snapshot['company_code']=(string)($company['extra']['gsdm']??'');
+        $selection=$labels=[];$missing=[];
+        foreach(['staff_id'=>'staff','account_id'=>'account'] as $field=>$kind){
+            $mapped=$this->mappedVoucherField($site,$key,$snapshot,$kind,'receipt');
+            $value=$choice[$field]??$mapped;
+            if(!is_string($value) || ($mapped!=='' && $value!==$mapped)) throw new Problem('RECEIPT_MAPPING_CHANGED','制单人或资金账户对应与原凭证不一致，请刷新后核对');
+            $selection[$field]=$value;$labels[$field]='';if($value===''){$missing[]=$field;continue;}
+            $archive=$this->archive($site,$key,$kind==='staff'?'staff':'capital_accounts',$value,true);
+            $this->companyScope($archive,$snapshot['company_id'],$snapshot['company_code'],'RECEIPT_COMPANY_SCOPE');
+            $labels[$field]=(string)$archive['name'];
+        }
+        return ['selection'=>$selection,'labels'=>$labels,'missing'=>$missing];
+    }
+
+    /** Explicit, same-transaction insert only. Never replace a different identity, even if it is stale. */
+    private function rememberVoucherMappings(int $site,string $key,array $snapshot,array $selection,int $uid): void
+    {
+        $names=$this->voucherNames($site,$snapshot);
+        foreach(['creator_id'=>'staff','account_id'=>'account'] as $field=>$kind) {
+            $external=$selection[$field]; if($external==='') continue;
+            // Do not duplicate a valid bridge staff mapping in the native store when only the account was missing.
+            if($this->mappedVoucherField($site,$key,$snapshot,$kind)===$external) continue;
+            [$ref,$resource]=$this->voucherField($site,$kind,$snapshot);
+            if(Db::name('hsx_boyuan_reference_sync')->where(['site_id'=>$site,'connection_key'=>$key,'resource'=>$resource])->order('id desc')->value('status')!=='completed')
+                throw new Problem('PAYMENT_MAPPING_STALE','请先完成博远员工或资金账户的资料同步，再记住本次对应');
+            $archive=$this->archive($site,$key,$resource,$external,true);
+            $this->companyScope($archive,$snapshot['company_id'],$snapshot['company_code'],'PAYMENT_MAPPING_SCOPE');
+            $keys=['site_id'=>$site,'connection_key'=>$key,'kind'=>$kind];
+            $old=Db::name('hsx_boyuan_mapping')->where($keys+['local_ref'=>$ref])->lock(true)->find();
+            if(($old && $old['external_id']!==$external) || Db::name('hsx_boyuan_mapping')->where($keys+['external_id'=>$external])->where('local_ref','<>',$ref)->count())
+                throw new Problem('MAPPING_CONFLICT','付款资料已有其他对应，请在资料对应中核对；本次没有覆盖或投递');
+            if(!$old) Db::name('hsx_boyuan_mapping')->insert($keys+['local_ref'=>$ref,'local_name'=>mb_substr($names[$kind==='staff'?'operator_name':'capital_account_name'],0,255),
+                'external_id'=>$external,'external_code'=>$archive['code'],'external_name'=>$archive['name'],'extra_json'=>'{}','revision'=>1,'operator_uid'=>$uid,'update_at'=>time()]);
+        }
     }
 
     private function prepare(int $site,array $task,array $selection,bool $complete,bool $experiment=false): array
@@ -264,14 +430,20 @@ final class PaymentSyncService
         if($creator) $this->companyScope($creator,$snapshot['company_id'],$companyCode,'PAYMENT_CREATOR_SCOPE');
         if($account) {
             $this->companyScope($account,$snapshot['company_id'],$companyCode,'PAYMENT_ACCOUNT_SCOPE');
+            if($task['mode']==='production' && $this->mappedVoucherField($site,$key,$snapshot,'account')!==$account['external_id'])
+                throw new Problem('PAYMENT_ACCOUNT_MAPPING_REQUIRED','请先将本站原付款账户与博远资金账户唯一关联，不能把这笔钱登记到另一个账户');
         }
-        if(!$complete) return ['schema'=>self::SCHEMA,'stage'=>'draft','source_task_id'=>(int)$snapshot['source_task_id'],'selection'=>$selection];
+        if(!$complete) return ['schema'=>self::SCHEMA,'stage'=>'draft','source_task_id'=>(int)$snapshot['source_task_id'],'voucher_actor_uid'=>$snapshot['operator_uid'],'selection'=>$selection];
         $proof=$this->apEvidence($site,$task,$snapshot);
-        if(!$proof['verified'] && !$experiment) throw new Problem('PAYMENT_AP_EVIDENCE_REQUIRED','尚无真实博远应付形成证据；标准登记阻断。仅经独立风险确认的UAT登记实验可继续，不代表核销');
+        $prod=$task['mode']==='production';
+        if($prod && $experiment) throw new Problem('PAYMENT_UAT_ONLY','正式凭证不能沿用实验确认');
+        if(!$prod && !$proof['verified'] && !$experiment) throw new Problem('PAYMENT_AP_EVIDENCE_REQUIRED','尚无真实博远应付形成证据；标准登记阻断。仅经独立风险确认的UAT登记实验可继续，不代表核销');
         $date=(new \DateTimeImmutable('@'.$snapshot['confirmed_at']))->setTimezone(new \DateTimeZone('Asia/Shanghai'))->format('Y-m-d');
         $head=['company_id'=>$snapshot['company_id'],'business_date'=>$date,'supplier_cust_id'=>$snapshot['supplier_id'],'is_auto_generate_supplier'=>0,'is_auto_generate_subject'=>0,
-            'scope_flag'=>3,'creater_id'=>$creator['external_id'],'creater_name'=>$creator['name'],'remark'=>mb_substr('UAT ERP付款登记 '.$snapshot['settlement_no'].' / 采购 '.$snapshot['source_document_no'].'；非银行转账，指定核销未核验',0,256)];
-        return ['schema'=>self::SCHEMA,'stage'=>'frozen','source_task_id'=>(int)$snapshot['source_task_id'],'source_snapshot_hash'=>$snapshot['source_snapshot_hash'],'connection_key'=>$task['connection_key'],
+            'scope_flag'=>3,'creater_id'=>$creator['external_id'],'creater_name'=>$creator['name'],'remark'=>mb_substr(($prod?'ERP已付凭证 ':'UAT ERP付款登记 ').$snapshot['settlement_no'].' / 采购 '.$snapshot['source_document_no'].'；非银行转账，指定核销未核验',0,256)];
+        $scope=[];
+        if($prod) { [$c,$p]=$this->context($site,true); if($c['mode']!=='production' || $key!==$p['connection_key']) throw new Problem('CONNECTION_CHANGED','正式连接已改变'); $scope=['scope'=>'confirmed_erp_voucher','mode'=>'production','target_account'=>$p['account_id']]; }
+        return $scope+['schema'=>self::SCHEMA,'stage'=>'frozen','source_task_id'=>(int)$snapshot['source_task_id'],'source_snapshot_hash'=>$snapshot['source_snapshot_hash'],'connection_key'=>$task['connection_key'],
             'company_id'=>$snapshot['company_id'],'supplier_id'=>$snapshot['supplier_id'],'account_id'=>$account['external_id'],'amount'=>$snapshot['amount'],'selection'=>$selection,
             'uat_registration_experiment'=>$experiment,'ap_evidence_verified'=>$proof['verified'],'source_settlement_id'=>(int)$snapshot['settlement_id'],
             'biz'=>['head'=>$head,'payment_details'=>['add_details'=>[['account_id'=>$account['external_id'],'handling_fee'=>'0.00','amounts'=>$snapshot['amount'],'seq_no'=>1]]]]];
@@ -301,8 +473,8 @@ final class PaymentSyncService
     {
         if($id==='') { if($required) throw new Problem('PAYMENT_SELECTION_REQUIRED','请选择博远制单人与本采购公司的启用付款账户'); return null; }
         Contract::id($id); if(strlen($id)>36) throw new Problem('PAYMENT_ARCHIVE_INVALID','博远档案身份超过官方字段长度');
-        $row=Db::name('hsx_boyuan_reference')->where('site_id',$site)->where('connection_key',$key)->where('resource',$resource)->where('external_id',$id)->where('enabled',1)->find(); $run=ReferenceService::latestRun($site,$key,$resource);
-        if(!$row || $run==='' || $row['seen_run']!==$run) throw new Problem('PAYMENT_ARCHIVE_STALE','请先完整同步并选择当前UAT连接最新启用档案'); $row['extra']=Contract::decode($row['extra_json']); return $row;
+        $row=CatalogStore::query($resource)->where('site_id',$site)->where('connection_key',$key)->where('external_id',$id)->where('enabled',1)->find(); $run=ReferenceService::latestRun($site,$key,$resource);
+        if(!$row || $run==='' || $row['seen_run']!==$run) throw new Problem('PAYMENT_ARCHIVE_STALE','请先完整同步并选择当前UAT连接最新启用档案'); $row['extra']=ArchiveView::extras($row['extra_json']); unset($row['extra_json']); return $row;
     }
     private function selection($value): array
     {
@@ -311,13 +483,14 @@ final class PaymentSyncService
     }
     private function labels(int $site,string $key,array $snapshot,array $selection): array
     {
-        $get=static function(string $resource,string $id) use($site,$key): ?array { if($id==='') return null; $row=Db::name('hsx_boyuan_reference')->where('site_id',$site)->where('connection_key',$key)->where('resource',$resource)->where('external_id',$id)->field('external_id,name,code')->find(); return $row?['id'=>$row['external_id'],'name'=>$row['name'],'code'=>$row['code']]:null; };
+        $get=static function(string $resource,string $id) use($site,$key): ?array { if($id==='') return null; $row=CatalogStore::query($resource)->where('site_id',$site)->where('connection_key',$key)->where('external_id',$id)->field('external_id,name,code')->find(); return $row?['id'=>$row['external_id'],'name'=>$row['name'],'code'=>$row['code']]:null; };
         return ['company'=>$get('companies',$snapshot['company_id']),'supplier'=>$get('parties',$snapshot['supplier_id']),'creator'=>$get('staff',(string)($selection['creator_id']??'')),'account'=>$get('capital_accounts',(string)($selection['account_id']??''))];
     }
     private function safeResult(array $reply): array
     {
         $safe=array_intersect_key($reply,array_flip(['created','payment_registered','verified','external_no','external_id','amount','verification_level','financial_posting_verified','allocation_applied_verified','bank_transfer_verified','ap_evidence_verified','uat_registration_experiment']));
         if(($safe['payment_registered']??false)===true) $safe['registered_amount']=$safe['amount']??null;
+        if(is_array($reply['provider_result']??null)) $safe['provider_result']=\addon\hsx_boyuan\app\support\ReceiptFacts::head($reply['provider_result']);
         if(isset($reply['response']) && is_array($reply['response'])) {
             $safe['response']['head']=array_intersect_key((array)($reply['response']['head']??[]),array_flip(['id','big_gsdm','bill_id','bill_type','company_id','supplier_cust_id','business_date','scope_flag','creater_id']));
             $safe['response']['payment_details']['add_details']=array_map(static fn($row)=>array_intersect_key((array)$row,array_flip(['id','account_id','amounts','handling_fee','subject_id','payment_type_id','seq_no'])),(array)($reply['response']['payment_details']['add_details']??[]));
@@ -327,10 +500,10 @@ final class PaymentSyncService
     private function context(int $site,bool $write): array
     {
         $service=new ConfigService(); if($site<=0 || !$service->installed($site)) throw new Problem('ADDON_MISSING','本站需安装ERP及博远插件'); $config=$service->get($site,false); $profile=$config['profiles'][$config['mode']];
-        if($write && !$this->enabled($config,$profile)) throw new Problem('PAYMENT_UAT_ONLY','付款登记仅限已核验且显式启用的精确UAT连接；正式环境和暂停状态禁止登记'); return [$config,$profile];
+        if($write && !$this->enabled($config,$profile)) throw new Problem('PAYMENT_UAT_ONLY','请先启用本账套的手动付款凭证同步；未核验或已暂停的连接不可提交'); return [$config,$profile];
     }
     private function uat(array $config,array $profile): bool { return $config['mode']==='test' && ($profile['protocol']??'')==='openapi_v153' && ($profile['endpoint']??'')===self::UAT_ENDPOINT && ($profile['gateway_path']??'')==='/gateway.do'; }
-    private function enabled(array $config,array $profile): bool { return $this->uat($config,$profile) && !empty($config['uat_payment_enabled']) && !empty($config['enabled']) && !empty($config['purchase_enabled']) && empty($config['paused']) && !empty($profile['probe_at']) && !empty($profile['contract_confirmed']); }
+    private function enabled(array $config,array $profile): bool { return (ProductionVoucher::ready($config,$profile) && ProductionVoucher::released($profile)) || ($this->uat($config,$profile) && !empty($config['uat_payment_enabled']) && !empty($config['enabled']) && !empty($config['purchase_enabled']) && empty($config['paused']) && !empty($profile['probe_at']) && !empty($profile['contract_confirmed'])); }
     private function permissions(bool $write): void
     {
         $permission=new PermissionService(); $permission->assertApi('get','boyuan/tasks/<id>'); $permission->assertApi('get','erp/finance/payable/lists');

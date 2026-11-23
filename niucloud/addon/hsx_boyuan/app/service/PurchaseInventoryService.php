@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 namespace addon\hsx_boyuan\app\service;
+use addon\hsx_boyuan\app\support\CatalogStore;
 
 use addon\hsx_boyuan\app\gateway\{InventoryGateway,OpenApi,Transport};
 use addon\hsx_boyuan\app\support\{Contract,Problem};
@@ -14,33 +15,43 @@ final class PurchaseInventoryService
     public const MAX_AGE=300;
     private const MAX_ATTEMPTS=3;
 
-    public function queue(int $site,int $parentId,int $uid,array $input): array
+    public function queue(int $site,int $parentId,int $uid,array $input,bool $interactive=false,?Transport $transport=null): array
     {
         if(array_diff(array_keys($input),['revision','mode','connection_key'])) throw new Problem('INVENTORY_INPUT_INVALID','库存核验只接收原采购版本及连接身份，不接收修改设备或库存的参数');
-        $queuedId=0;
-        Db::transaction(function() use($site,$parentId,$uid,$input,&$queuedId): void {
+        $queuedId=0; $guard=null;
+        Db::transaction(function() use($site,$parentId,$uid,$input,$interactive,&$guard,&$queuedId): void {
             $this->lockSite($site); [$config,$profile]=$this->context($site,true); $parent=$this->parent($site,$parentId,true);
             if(!is_int($input['revision']??null) || $input['revision']!==(int)$parent['revision']) throw new Problem('TASK_STALE','原采购任务已更新，请刷新后核验库存');
             if(($input['mode']??null)!==$parent['mode'] || ($input['connection_key']??null)!==$parent['connection_key']) throw new Problem('CONNECTION_CHANGED','原采购连接身份已变化，请刷新');
             $request=$this->request($site,$parent,$config,$profile); $fact=$this->fact($request);
+            if($interactive && ManualDocumentCommandService::eligible($config)) $guard=['mode'=>$parent['mode'],'connection_key'=>$parent['connection_key'],
+                'config_revision'=>(int)$config['revision'],'parent'=>$parentId,'fact'=>$fact];
             $where=[['site_id','=',$site],['connection_key','=',$parent['connection_key']],['fact_key','=',$fact]];
             $existing=Db::name('hsx_boyuan_task')->where($where)->lock(true)->find();
             if($existing) {
                 if($existing['request_json']!==Contract::json($request)) throw new Problem('INVENTORY_FACT_CONFLICT','既有库存核验冻结身份冲突，未覆盖原请求');
-                if(in_array($existing['status'],['pending','processing','confirming'],true) || $existing['status']==='succeeded' && $this->fresh(Contract::decode($existing['result_json']),$request)) return;
+                if(in_array($existing['status'],['pending','processing','confirming'],true) || $existing['status']==='succeeded' && $this->fresh(Contract::decode($existing['result_json']),$request)) {
+                    if($guard!==null && in_array($existing['status'],['pending','confirming'],true)) { $queuedId=(int)$existing['id']; $guard['revision']=(int)$existing['revision']; }
+                    return;
+                }
+                if($guard!==null) $guard['revision']=(int)$existing['revision']+1;
                 Db::name('hsx_boyuan_task')->where($where)->update(['status'=>'pending','reason'=>'已重新排队只读核验本批次当前在库，不重建采购','attempts'=>0,'query_only'=>1,'side_effect'=>'none',
-                    'result_json'=>'{}','revision'=>(int)$existing['revision']+1,'next_at'=>time()+1,'lease_token'=>'','lease_until'=>0,'update_at'=>time()]);
+                    'result_json'=>'{}','revision'=>(int)$existing['revision']+1,'next_at'=>time()+($guard===null?1:0),'lease_token'=>'','lease_until'=>0,'update_at'=>time()]);
                 $queuedId=(int)$existing['id'];
                 TaskService::audit($site,(int)$existing['id'],$parent['connection_key'],'inventory_queue','pending','重新排队本批次当前在库只读核验',$uid); return;
             }
             $id=(int)Db::name('hsx_boyuan_task')->insertGetId(['site_id'=>$site,'connection_key'=>$parent['connection_key'],'mode'=>$parent['mode'],'kind'=>self::KIND,
                 'fact_key'=>$fact,'event_id'=>'inventory:'.$parentId.':'.$request['query_date'],'operation_id'=>'BI_'.hash('sha256',$site.':'.$parent['connection_key'].':'.$fact),
                 'business_no'=>$parent['business_no'],'status'=>'pending','reason'=>'本批次当前在库只读核验已排队，不重建采购、不调整本站库存或款项','query_only'=>1,'side_effect'=>'none',
-                'snapshot_json'=>Contract::json($request),'request_json'=>Contract::json($request),'result_json'=>'{}','next_at'=>time()+1,'create_at'=>time(),'update_at'=>time()]);
+                'snapshot_json'=>Contract::json($request),'request_json'=>Contract::json($request),'result_json'=>'{}','next_at'=>time()+($guard===null?1:0),'create_at'=>time(),'update_at'=>time()]);
+            if($guard!==null) $guard['revision']=1;
             TaskService::audit($site,$id,$parent['connection_key'],'inventory_queue','pending','本批次当前在库只读核验已排队',$uid);
             $queuedId=$id;
         });
-        if($queuedId>0) $this->dispatchLater($site,$queuedId,1);
+        if($queuedId>0) {
+            if($guard!==null) $this->process($site,$queuedId,$transport,$guard);
+            else $this->dispatchLater($site,$queuedId,1);
+        }
         return (new PurchaseSyncService())->view($site,$parentId);
     }
 
@@ -70,8 +81,12 @@ final class PurchaseInventoryService
             $summary['expires_at']=$summary['checked_at']!==null?$summary['checked_at']+self::MAX_AGE:null;
             $summary['completed_count']=is_int($result['progress']['completed_count']??null)?$result['progress']['completed_count']:0;
             if(($captured['query_date']??'')!==$request['query_date'] || ($captured['company_code']??'')!==$request['company_code'] || ($captured['company_id']??'')!==$request['company_id']) return array_replace($summary,['status'=>'stale','total_count'=>null,'completed_count'=>null,'reason'=>'原核验日期或公司代码已变化，请显式重新核对本批次当前在库']);
-            if(in_array($child['status'],['pending','confirming','processing'],true)) return array_replace($summary,['status'=>$child['status']==='processing'?'processing':'pending','can_check'=>false,
-                'reason'=>'本批次当前在库只读核验已排队或正在查询，请刷新结果；不会重建采购']);
+            if(in_array($child['status'],['pending','confirming','processing'],true)) {
+                $canContinue=$summary['can_check'] && ManualDocumentCommandService::eligible($config) && $child['status']!=='processing' && (bool)$child['query_only']
+                    && (int)$child['next_at']<=time();
+                return array_replace($summary,['status'=>$child['status']==='processing'?'processing':'pending','can_check'=>$canContinue,'can_process_current'=>$canContinue,
+                    'reason'=>$canContinue?'可继续核对本批剩余设备，只查询库存，不重建采购。':'本批次当前在库只读核验已排队或正在查询，请刷新结果；不会重建采购']);
+            }
             if($child['status']==='succeeded') {
                 if(!$this->fresh($result,$captured) || $captured['query_date']!==$request['query_date']) return array_replace($summary,['status'=>'stale','reason'=>'上次库存证据已超过有效期或不是今天；请重新核对本批次当前在库']);
                 $this->receipt($result,$captured);
@@ -85,15 +100,17 @@ final class PurchaseInventoryService
         }
     }
 
-    public function process(int $site,int $id,?Transport $transport=null): bool
+    public function process(int $site,int $id,?Transport $transport=null,?array $guard=null): bool
     {
         try { [$config,$profile]=$this->context($site,true); } catch(Problem $error) { return false; }
         $lease=bin2hex(random_bytes(16)); $task=null; $request=[]; $claimed=false;
         try {
-            Db::transaction(function() use($site,$id,$lease,&$config,&$profile,&$task,&$request,&$claimed): void {
+            Db::transaction(function() use($site,$id,$lease,&$config,&$profile,&$task,&$request,&$claimed,$guard): void {
                 $this->lockSite($site); [$config,$profile]=$this->context($site,true);
                 $task=Db::name('hsx_boyuan_task')->where('site_id',$site)->where('id',$id)->lock(true)->find();
                 if(!$task || $task['kind']!==self::KIND || $task['connection_key']!==$profile['connection_key'] || $task['mode']!==$config['mode'] || (int)$task['next_at']>time()) return;
+                if($guard!==null && (!ManualDocumentCommandService::sameConfig($config,$guard) || $task['fact_key']!==$guard['fact'] || (int)$task['revision']!==$guard['revision']
+                    || !in_array($task['status'],['pending','confirming'],true) || !$task['query_only'] || (Contract::decode($task['request_json'])['source_task_id']??null)!==$guard['parent'])) return;
                 $stale=$task['status']==='processing' && (int)$task['lease_until']<time();
                 if(!in_array($task['status'],['pending','confirming'],true) && !$stale) return;
                 $request=Contract::decode($task['request_json']);
@@ -104,8 +121,8 @@ final class PurchaseInventoryService
             });
             if(!$claimed) return false;
             [$latest,$latestProfile]=$this->context($site,true);
-            if($latest['mode']!==$config['mode'] || $latestProfile!==$profile) throw new Problem('CONNECTION_CHANGED','查询前连接已变化，请从原采购页重新排队');
-            $api=$transport??(new ConfigService())->transport($site,$profile,$config['mode']);
+            if($latest['mode']!==$config['mode'] || $latestProfile!==$profile || ($guard!==null && !ManualDocumentCommandService::sameConfig($latest,$guard))) throw new Problem('CONNECTION_CHANGED','查询前连接已变化，请从原采购页重新排队');
+            $api=$transport??(new ConfigService())->transport($site,$profile,$config['mode'],\addon\hsx_boyuan\app\support\InterfaceTrace::task($task));
             if(!$api instanceof OpenApi) throw new Problem('INVENTORY_PROTOCOL_INVALID','当前在库核验仅允许官方开放平台只读接口');
             $gateway=new InventoryGateway($api); $prior=Contract::decode($task['result_json']); $steps=(array)($prior['steps']??[]); $offset=0;
             foreach($steps as $step) {
@@ -127,11 +144,11 @@ final class PurchaseInventoryService
                     'revision'=>(int)$row['revision']+1,'next_at'=>$complete?0:time()+1,'lease_token'=>'','lease_until'=>0,'update_at'=>time()]);
                 TaskService::audit($site,$id,$task['connection_key'],'inventory_result',$complete?'succeeded':'confirming',$complete?'本批次当前在库逐台只读核验完成':'本批次当前在库分步进度已保存');
             });
-            if(!$complete) $this->dispatchLater($site,$id,1);
+            if(!$complete && $guard===null) $this->dispatchLater($site,$id,1);
         } catch(\Throwable $error) {
             if(!$task || $task['kind']!==self::KIND) throw $error;
             $attempt=(int)$task['attempts']+($claimed?1:0);
-            $retry=$claimed && $attempt<self::MAX_ATTEMPTS && $this->transient($error);
+            $retry=$guard===null && $claimed && $attempt<self::MAX_ATTEMPTS && $this->transient($error);
             $where=$claimed?$this->owned($site,$id,$task,$lease):[['site_id','=',$site],['id','=',$id],['mode','=',$task['mode']],['connection_key','=',$task['connection_key']],['revision','=',(int)$task['revision']],['status','=',$task['status']],['lease_token','=',$task['lease_token']],['lease_until','=',(int)$task['lease_until']],['attempts','=',(int)$task['attempts']]];
             $reason=$error instanceof Problem?$error->getMessage():'库存只读查询暂未取得完整结果，请刷新或稍后重新核验';
             Db::name('hsx_boyuan_task')->where($where)->update(['status'=>$retry?'confirming':'attention','side_effect'=>'none','reason'=>mb_substr($reason,0,1000),'next_at'=>$retry?time()+30:0,'lease_token'=>'','lease_until'=>0,'update_at'=>time()]);
@@ -149,7 +166,7 @@ final class PurchaseInventoryService
         if(!$this->purchaseVerified($parent)) throw new Problem('INVENTORY_DEPENDENCY_REQUIRED','原采购尚未完成逐台记录核验，不能核对本批次当前在库');
         $snapshot=Contract::decode($parent['snapshot_json']); (new PurchaseSyncService())->assertClosureSourceCurrent($site,$snapshot);
         $purchase=Contract::decode($parent['request_json']); $companyId=(string)($purchase['selection']['company_id']??'');
-        $archive=Db::name('hsx_boyuan_reference')->where('site_id',$site)->where('connection_key',$parent['connection_key'])->where('resource','companies')->where('external_id',$companyId)->where('enabled',1)->find();
+        $archive=CatalogStore::query('companies')->where('site_id',$site)->where('connection_key',$parent['connection_key'])->where('external_id',$companyId)->where('enabled',1)->find();
         $run=ReferenceService::latestRun($site,$parent['connection_key'],'companies');
         if(!$archive || $run==='' || $archive['seen_run']!==$run) throw new Problem('INVENTORY_COMPANY_STALE','所选公司未在本连接最近完整同步中确认，请先同步公司档案');
         $extra=Contract::decode($archive['extra_json']); $code=$extra['gsdm']??null;

@@ -40,6 +40,7 @@ class Addon
     public function upgrade()
     {
         \app\service\core\addon\CoreAddonInstallService::executeSql(__DIR__ . '/sql/update_0.0.4.sql');
+        \addon\hsx_recycle\app\service\core\audit\OperationAuditSchema::apply();
         $this->installSystemColumns();
         $this->syncAdminappResources();
         $quoteSchedules = array_values(array_filter(require __DIR__ . '/app/dict/schedule/schedule.php',

@@ -15,7 +15,7 @@
       <template #actions><el-button v-if="paymentScopeError" link type="primary" @click="loadCapitalAccounts">重新核对</el-button></template>
     </HsxNotice>
     <HsxNotice v-if="paymentScope.payment_owner === 'mixed'" class="mb-4" type="warning" :closable="false" title="本次只能处理回收端负责的设备；ERP设备及归属待核对设备不可在此付款。" description="本订单包含不同付款归属。按设备模式只可选择由回收端处理且当前可付款的设备；请勿在两个入口重复付款。" />
-    <el-button v-if="hasErpDevices" class="mb-4" type="primary" plain @click="goToErpPayment">前往 ERP 处理其余设备</el-button>
+    <InboundPayablePanel v-if="hasErpDevices && dialogVisible && orderId" class="mb-4" :order-id="orderId" :initial-scope="paymentScope" />
     <div v-if="paymentInfoData && paymentInfoData.length > 0">
       <!-- 订单摘要信息卡片 -->
       <el-card v-if="currentPaymentInfo && currentPaymentInfo.order_summary" shadow="never" class="mb-4">
@@ -250,7 +250,7 @@
 import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue'
 import { HsxNotice, HsxFold, useFeedback } from '@/addon/hsx_components/core'
 const feedback = useFeedback()
-import { useRouter } from 'vue-router'
+import InboundPayablePanel from './InboundPayablePanel.vue'
 import FormDialog from '@/addon/hsx_recycle/components/FormDialog.vue'
 import { Picture, InfoFilled } from '@element-plus/icons-vue'
 import { getCapitalAccountOptions } from '@/addon/hsx_recycle/api/recycle_order'
@@ -338,13 +338,8 @@ const selectedCapitalAccountId = ref<number | undefined>(undefined)
 const paymentScopeLoading = ref(false)
 const paymentScopeError = ref('')
 const paymentScope = ref<PaymentScope>({})
-const router = useRouter()
 const localPaymentAllowed = computed(() => !paymentScopeError.value && canOpenLocalPayment(paymentScope.value, isDevicePaymentMode.value ? 'device' : 'order'))
 const hasErpDevices = computed(() => paymentScope.value.payment_owner === 'self_erp' || paymentScope.value.devices?.some(item => item.owner === 'self_erp'))
-const goToErpPayment = () => {
-  dialogVisible.value = false
-  router.push(paymentScope.value.payment_path || '/site/hsx_erp/payable')
-}
 
 // 仅当装了ERP且有启用账户时才显示户头选择
 const showCapitalAccount = computed(() => erpConnected.value && capitalAccounts.value.length > 0)

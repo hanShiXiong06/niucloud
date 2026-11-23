@@ -12,17 +12,19 @@ class ErpGoodsMetaService extends BaseAdminService
     {
         $shopMeta = $this->phoneShopMeta(0, []);
         $titleRules = $this->titleRules();
+        $authority=\addon\hsx_erp\app\support\ErpCatalogAuthority::policy((int)$this->site_id);
+        $categorySource=$authority['managed']?$authority['provider']:'erp_catalog';
         if ($shopMeta['available']) {
             return [
                 'source' => 'phone_shop',
                 'source_label' => '商城商品资料',
-                'category_source' => 'erp_catalog',
+                'category_source' => $categorySource,
                 'catalog_endpoint' => 'erp/goods/catalog/hierarchy',
                 'mode' => 'catalog_master',
                 'title_rules' => $titleRules,
                 'custom_fields' => $this->customFields(),
                 'tips' => [
-                    '商品目录只从 ERP 产品目录读取，商城不再作为分类主数据。',
+                    $authority['managed']?$authority['reason']:'商品目录只从 ERP 产品目录读取，商城不再作为分类主数据。',
                     '商城规格与成色只作为渠道属性，不再反向生成 ERP 分类。',
                 ],
                 'categories' => [],
@@ -33,14 +35,14 @@ class ErpGoodsMetaService extends BaseAdminService
         return [
             'source' => 'erp',
             'source_label' => 'ERP 本地资料',
-            'category_source' => 'erp_catalog',
+            'category_source' => $categorySource,
             'catalog_endpoint' => 'erp/goods/catalog/hierarchy',
             'mode' => 'catalog_master',
             'title_rules' => $titleRules,
             'custom_fields' => $this->customFields(),
             'tips' => [
                 '当前未检测到可用商城资料，ERP 使用本地默认规格。',
-                '本地规格不绑定分类，适合 ERP 单独安装时快速录入。',
+                $authority['managed']?$authority['reason']:'本地规格不绑定分类，适合 ERP 单独安装时快速录入。',
             ],
             'categories' => [],
             'specs' => $this->erpFallbackSpecs(),

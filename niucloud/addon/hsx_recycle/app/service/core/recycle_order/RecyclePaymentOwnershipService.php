@@ -109,6 +109,8 @@ class RecyclePaymentOwnershipService
             $owner = RecycleErpOwnershipPolicy::resolve($config, (int)($row['create_at'] ?? 0), $recorded[$id] ?? '', $fact, $lookupAvailable);
             $devices[$id] = ['device_id' => $id, 'order_id' => (int)$row['order_id'], 'owner' => $owner,
                 'recorded_owner' => $recorded[$id] ?? '', 'status' => (int)($row['status'] ?? 0),
+                'model' => (string)($row['model'] ?? ''), 'serial' => (string)(($row['imei'] ?? '') ?: ($row['sn'] ?? '')),
+                'has_placement' => (int)($row['target_warehouse_id'] ?? 0) > 0 && (int)($row['target_location_id'] ?? 0) > 0,
                 'pay_status' => (int)($row['pay_status'] ?? 0), 'pay_amount' => (float)($row['pay_amount'] ?? 0),
                 'pay_time' => (int)($row['pay_time'] ?? 0), 'erp' => $fact];
         }

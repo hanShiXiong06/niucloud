@@ -173,6 +173,21 @@ return [
                 'is_show' => '1',
                 'children' => [
                     [
+                        'menu_name' => '业务操作日志',
+                        'menu_key' => 'recycle_business_operation_logs',
+                        'menu_short_name' => '操作日志',
+                        'parent_select_key' => '',
+                        'menu_type' => '1',
+                        'icon' => '',
+                        'api_url' => 'recycle/operation_logs',
+                        'router_path' => 'recycle_order/operation_logs',
+                        'view_path' => 'recycle_order/operation_logs',
+                        'methods' => 'get',
+                        'sort' => '32',
+                        'status' => '1',
+                        'is_show' => '1',
+                    ],
+                    [
                         'menu_name' => '回收订单',
                         'menu_key' => 'recycle_order_list',
                         'menu_short_name' => '回收订单',

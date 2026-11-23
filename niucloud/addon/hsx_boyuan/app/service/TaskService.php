@@ -9,7 +9,7 @@ final class TaskService
 {
     public static function audit(int $site,int $task,string $connection,string $action,string $outcome,string $message,int $uid=0,array $detail=[]): void
     {
-        // Operational history belongs to the configured PHP log, not a business table.
+        // Preserve the full diagnostic in PHP Log. The optional recycle timeline receives only a safe action summary.
         // Never retain arbitrary request/response bodies (which can contain personal data).
         $context=['site_id'=>$site,'task_id'=>$task,'connection_key'=>$connection,
             'operation_id'=>(string)($detail['operation_id']??''),'action'=>$action,
@@ -17,10 +17,17 @@ final class TaskService
         foreach (['code','sync_id','cursor','rows','batch_id','external_no'] as $key) {
             if (isset($detail[$key]) && is_scalar($detail[$key])) $context[$key]=$detail[$key];
         }
+        if($task>0) $context['trace_id']='T'.$site.'-'.$task;
+        elseif(!empty($context['sync_id'])) $context['trace_id']='S'.$site.'-'.$context['sync_id'];
+        if(isset($context['trace_id'])) {
+            try { (new ConfigService())->traceTaskResult($site,$connection,$context); }
+            catch(\Throwable $ignored) { /* Keep the ordinary audit even if trace settings are unreadable. */ }
+        }
         $context['message']=mb_substr(preg_replace('/[\r\n]+/u',' ', $message)??'',0,1000);
         $level=in_array($outcome,['failed','blocked','attention','needs_review','partial'],true)?'warning':'info';
         try { Log::write('hsx_boyuan '.Contract::json(Contract::redact($context)),$level); }
         catch (\Throwable $e) { error_log('hsx_boyuan log write failed; task_id='.$task.'; type='.get_class($e)); }
+        \addon\hsx_boyuan\app\support\BusinessOperation::audit($site,$task,$connection,$action,$outcome,$uid,$detail);
     }
     public function accept(array $event): array
     {
@@ -28,8 +35,25 @@ final class TaskService
         $site=(int)($event['site_id']??0); $configService=new ConfigService();
         if ($site<=0 || !$configService->installed($site)) return [];
         $config=$configService->get($site,false); $p=$config['profiles'][$config['mode']];
+        if(!ConfigService::traceState($config)['window_id']) return $this->captureEvent($event,$site,$config,$p);
+        $input=(array)($event['payload']??[]);
+        $ctx=['kind'=>$input['kind']??'','business_no'=>$input['source_document_no']??$input['source_settlement_no']??'','event_name'=>$event['event_name'],'event_id'=>$event['event_id']??''];
+        try { $result=$this->captureEvent($event,$site,$config,$p); }
+        catch(\Throwable $e) {
+            $configService->trace($site,$p,$config['mode'],$ctx)->local('erp_event_blocked',$e instanceof Problem?$e->reason:'LOCAL_ERROR',$input);
+            throw $e;
+        }
+        $skipCode=$result?'':(empty($config['enabled'])?'SYNC_DISABLED':($config['mode']!=='mock' && $p['protocol']==='openapi_v153' && empty($config['purchase_enabled'])?'PURCHASE_DISABLED':'NO_APPLICABLE_TASK'));
+        $configService->trace($site,$p,$config['mode'],$ctx+['task_id'=>$result['task_id']??0])->local($result?'erp_event_accepted':'erp_event_skipped',$skipCode,$input,$result);
+        return $result;
+    }
+    private function captureEvent(array $event,int $site,array $config,array $p): array
+    {
         if ($config['mode']!=='mock' && ($p['protocol']??'')==='openapi_v153') {
             // The beta must not run legacy automatic party creation or financial subtasks.
+            if ($config['mode']==='test' && ($event['payload']['kind']??'')==='sale') return (new WholesaleSyncService())->capture($site,$event);
+            if ($config['mode']==='test' && str_starts_with((string)($event['payload']['original_document_ref']??''),'sale:'))
+                return (new WholesaleSyncService())->flagCorrection($site,$event);
             return (new PurchaseSyncService())->capture($site,$event);
         }
         if (!$config['enabled'] || (int)($event['occurred_at']??0)<(int)$config['started_at']) return [];
@@ -140,6 +164,8 @@ final class TaskService
         $configService=new ConfigService(); if (!$configService->installed($site)) return false;
         $config=$configService->get($site,false); $profile=$config['profiles'][$config['mode']];
         $candidate=Db::name('hsx_boyuan_task')->where('site_id',$site)->where('id',$id)->find();
+        if (($candidate['kind']??'')===SaleReceiptSyncService::KIND) return false; // Explicit original POST only, never a worker.
+        if (($candidate['kind']??'')===WholesaleSyncService::KIND) return (new WholesaleSyncService())->process($site,$id,$transport);
         if ($candidate && (($candidate['kind']??'')===PaymentSyncService::KIND || (Contract::decode($candidate['request_json'])['schema']??'')===PaymentSyncService::SCHEMA)) return (new PaymentSyncService())->process($site,$id,$transport);
         if ($candidate && (Contract::decode($candidate['request_json'])['schema']??'')===PurchaseInventoryService::SCHEMA) return (new PurchaseInventoryService())->process($site,$id,$transport);
         if ($candidate && (Contract::decode($candidate['request_json'])['schema']??'')==='boyuan.purchase.v154') {
@@ -172,7 +198,7 @@ final class TaskService
                     $child=Db::name('hsx_boyuan_task')->where('site_id',$site)->where('connection_key',$profile['connection_key'])->where('fact_key','party:'.$role.':'.$snapshot['party']['ref'].':initial')->find();
                     if ($child && in_array($child['status'],['pending','processing','waiting','confirming'],true)) throw new Problem('DEPENDENCY_PENDING','正在核对往来单位，完成后将自动继续');
                 }
-                if ($snapshot['kind']==='settlement_register') $this->refreshBalances($task,$snapshot,$profile,$transport??$configService->transport($site,$profile,$config['mode']));
+                if ($snapshot['kind']==='settlement_register') $this->refreshBalances($task,$snapshot,$profile,$transport??$configService->transport($site,$profile,$config['mode'],\addon\hsx_boyuan\app\support\InterfaceTrace::task($task)));
                 $request=Plan::build($snapshot,$this->maps($site,$profile['connection_key']),$this->bindings($site,$profile['connection_key']),$task['operation_id']);
                 Contract::request($request);
                 Db::name('hsx_boyuan_task')->where($owned)->update(['request_json'=>Contract::json($request)]);
@@ -180,7 +206,7 @@ final class TaskService
             $fresh=$configService->get($site,false);
             if ($fresh['paused'] || !$fresh['enabled'] || $fresh['mode']!==$config['mode'] || $fresh['profiles'][$fresh['mode']]['connection_key']!==$profile['connection_key']) throw new Problem('MODE_PAUSED','连接已暂停或切换，任务仍保留在原环境');
             if (!$fresh['finance_enabled'] && in_array($request['operation_type'],['financial_item_ensure','settlement_register'],true) && !$task['query_only']) throw new Problem('FINANCE_PAUSED','财务同步已关闭，款项任务保留且未继续写入');
-            $gateway=$transport??$configService->transport($site,$profile,$config['mode']);
+            $gateway=$transport??$configService->transport($site,$profile,$config['mode'],\addon\hsx_boyuan\app\support\InterfaceTrace::task($task));
             $reply=null;
             if ($task['side_effect']!=='none' || $previousAttempts>0) {
                 $reply=$gateway->send('GET',$profile['paths']['operations'].'/'.$task['operation_id']);
@@ -256,6 +282,8 @@ final class TaskService
         Db::transaction(function () use ($site,$id,$uid,$action,$note,$externalNo): void {
             $where=[['site_id','=',$site],['id','=',$id]]; $task=Db::name('hsx_boyuan_task')->where($where)->lock(true)->find();
             if (!$task) throw new Problem('TASK_MISSING','任务不存在');
+            if(($task['kind']??'')===SaleReceiptSyncService::KIND) throw new Problem('RECEIPT_SINGLE_ATTEMPT','只能从已有收款原凭证提交一次；不支持通用重发或手工填写回执');
+            if(($task['kind']??'')===WholesaleSyncService::KIND) throw new Problem('SALE_SINGLE_ATTEMPT_REQUIRED','请从销售出库核对查看原单，不能经通用操作重发');
             if(($task['kind']??'')===PaymentSyncService::KIND || (Contract::decode($task['request_json'])['schema']??'')===PaymentSyncService::SCHEMA) throw new Problem('PAYMENT_SINGLE_ATTEMPT_REQUIRED','付款登记仅能从专用核对表单确认一次；未知或已登记结果不得经通用任务操作重建');
             if ((Contract::decode($task['request_json'])['schema']??'')===PurchaseInventoryService::SCHEMA) throw new Problem('INVENTORY_READ_ONLY_REQUIRED','请从原采购核对页查看或重新核对本批次当前在库；库存只读任务不能通过旧业务操作重发');
             if ((Contract::decode($task['request_json'])['schema']??'')==='boyuan.purchase.v154') throw new Problem('PURCHASE_CONFIRM_REQUIRED','请使用入库核对表单提交或核验，不能通过旧任务操作重发');
@@ -289,7 +317,7 @@ final class TaskService
             if ($row->isEmpty()) \app\model\sys\SysConfig::create(['site_id'=>$site,'config_key'=>$key,'value'=>['at'=>time()]]); else $row->save(['value'=>['at'=>time()]]);
         });
         $config=(new ConfigService())->get($site); $p=$config['profiles'][$config['mode']]; $done=0;
-        $queue=Db::name('hsx_boyuan_task')->where('site_id',$site)->where('connection_key',$p['connection_key']);
+        $queue=Db::name('hsx_boyuan_task')->where('site_id',$site)->where('connection_key',$p['connection_key'])->where('kind','<>',SaleReceiptSyncService::KIND);
         if (!$config['finance_enabled']) $queue->where(function($q): void { $q->whereNotIn('kind',['financial_item_ensure','settlement_register'])->whereOr('query_only',1); });
         $ids=$queue->whereIn('status',['pending','retry','waiting','confirming','processing'])->where('next_at','<=',time())->order('id')->limit(min(100,max(1,$limit)))->column('id');
         foreach ($ids as $id) if ($this->process($site,(int)$id)) $done++;

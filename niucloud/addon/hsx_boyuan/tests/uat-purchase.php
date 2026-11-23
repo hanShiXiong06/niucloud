@@ -42,7 +42,7 @@ try {
     }
     foreach($reference->jobs($site) as $job) if(in_array($job['resource'],$resources,true) && ($job['job']['status']??'')!=='completed') throw new RuntimeException('Required UAT references incomplete: '.$job['resource']);
     $key=$cs->get($site)['profiles']['test']['connection_key'];
-    $archives=Db::name('hsx_boyuan_reference')->where('site_id',$site)->where('connection_key',$key)->where('enabled',1)->select()->toArray();
+    $archives=[]; foreach(\addon\hsx_boyuan\app\support\CatalogStore::kinds() as $kind)foreach(\addon\hsx_boyuan\app\support\CatalogStore::query($kind)->where('site_id',$site)->where('connection_key',$key)->where('enabled',1)->select()->toArray() as $a)$archives[]=$a+['resource'=>$kind];
     $companies=[]; $remoteWarehouse=null; $remoteSupplier=null; $remoteProduct=null; $remoteCreator=null;
     foreach($archives as $archive) if($archive['resource']==='companies') $companies[$archive['external_id']]=$archive;
     foreach($archives as $archive) {

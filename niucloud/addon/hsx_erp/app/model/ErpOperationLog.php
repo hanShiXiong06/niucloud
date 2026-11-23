@@ -10,4 +10,9 @@ class ErpOperationLog extends BaseModel
     protected $pk = 'id';
     protected $name = 'erp_operation_log';
     protected $autoWriteTimestamp = false;
+
+    protected static function onAfterInsert($model): void
+    {
+        \addon\hsx_erp\app\support\ErpRecycleOperationAudit::record('operation', $model->getData());
+    }
 }

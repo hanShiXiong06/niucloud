@@ -35,6 +35,9 @@ export default defineConfig({
         })
     ],
     resolve: {
+        // Linked addon sources live outside admin. Resolve shared UI/runtime packages
+        // from the host, including Element Plus component and style subpaths.
+        dedupe: ['vue', 'vue-router', 'pinia', 'element-plus', '@element-plus/icons-vue'],
         alias: {
             '@': fileURLToPath(new URL('./src', import.meta.url)),
             'assets': fileURLToPath(new URL('./src/assets', import.meta.url)),

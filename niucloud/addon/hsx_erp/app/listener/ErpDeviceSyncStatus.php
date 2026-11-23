@@ -48,6 +48,13 @@ class ErpDeviceSyncStatus
         if (isset($event['source_device_id'])) {
             $item = $map[(int)$event['source_device_id']] ?? null;
             $refreshed = false;
+            if ($item === null) {
+                $id = (int)$event['source_device_id'];
+                $link = $this->identityService()->infoCorrectionLinks($siteId, [$id])[$id] ?? [];
+                if (($link['has_asset'] ?? null) !== false || ($link['has_purchase'] ?? null) !== false || ($link['ambiguous'] ?? null) !== false) {
+                    throw new CommonException('原采购和资产未能对应，请先核对原采购明细，不要重新入库或付款');
+                }
+            }
             if (!empty($item['ambiguous'])) {
                 throw new CommonException('来源设备关联待核对，未执行重新同步或快照更新');
             }

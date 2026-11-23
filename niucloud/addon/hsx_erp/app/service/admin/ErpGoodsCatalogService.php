@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace addon\hsx_erp\app\service\admin;
 
+use addon\hsx_erp\app\support\ErpCatalogAuthority;
 use core\base\BaseAdminService;
 use core\exception\AdminException;
 use think\facade\Db;
@@ -15,16 +16,75 @@ use think\facade\Db;
  */
 class ErpGoodsCatalogService extends BaseAdminService
 {
-    public function productSnapshot(int $siteProductId): array
+    /** Only manual purchase entry calls this, inside its transaction. External IDs are never ERP IDs. */
+    public function resolvePurchaseDevices(int $site,array $items): array
+    {
+        $tagged=false; $usesCatalog=false;
+        foreach ($items as $row) {
+            if (($row['item_type']??'device')!=='device') continue;
+            if (!empty($row['catalog_reference'])) $tagged=true;
+            if (!empty($row['catalog_product_id']) || ($row['category_name']??'')!=='' || !empty($row['category_path'])) $usesCatalog=true;
+        }
+        // Keep independent sites on their original path, without taking an exclusive site lock for normal purchases.
+        if (!$tagged && (!$usesCatalog || !ErpCatalogAuthority::owner($site))) return $items;
+        $locked=false;
+        foreach ($items as &$item) {
+            if (($item['item_type']??'device')!=='device') continue;
+            $ref=$item['catalog_reference']??null;
+            if ($ref!==null && !is_array($ref)) throw new AdminException('目录选择无效，请重新选择型号');
+            $id=(int)($item['catalog_product_id']??0);
+            $path=$item['category_path']??'';
+            $path=is_string($path)&&trim($path)!==''?trim($path):trim((string)($item['category_name']??''));
+            if (!$ref && !$id && $path==='') continue;
+            if (!$locked) {
+                if (!Db::connect()->getPdo()->inTransaction()) throw new AdminException('请通过采购入库确认选用目录型号');
+                if (!Db::name('site')->master()->where('site_id',$site)->lock(true)->value('site_id')) throw new AdminException('采购站点不存在');
+                $locked=true;
+            }
+            $owner=ErpCatalogAuthority::owner($site,['action'=>'resolve_purchase_device','reference'=>$ref,
+                'site_product_id'=>$id,'path'=>$path]);
+            if (!$owner) {
+                if ($ref) throw new AdminException('商品目录来源已变更，请重新选择型号');
+                continue;
+            }
+            $r=$owner['resolution']??null;
+            if (!is_array($r) || ($r['category_path']??'')==='') throw new AdminException('未能确认所选目录，请核对资料来源');
+            $id=(int)$r['site_product_id'];
+            if (!empty($r['row'])) {
+                // Only a server-verified archive may materialize a previously unused model. Roll back with the order.
+                $stats=$this->importManagedRows([$r['row']],$r['source_key'],$site,$owner['provider'],$owner['connection']);
+                if ($stats['master_created']!==1 || $stats['site_created']!==1 || $stats['master_conflicts']!==0)
+                    throw new AdminException('商品资料刚发生变化，请重新选择');
+                $id=(int)Db::name('erp_site_catalog_product')->alias('sp')->join('erp_catalog_product_master mp','mp.master_product_id=sp.master_product_id')
+                    ->where(['sp.site_id'=>$site,'mp.created_site_id'=>$site,'mp.source_key'=>$r['source_key'],'mp.source_product_id'=>$r['row']['source_product_id']])->value('sp.site_product_id');
+                if (!$id) throw new AdminException('无法确认目录型号，本次采购未保存');
+            }
+            $item['catalog_product_id']=$id;
+            $item['category_name']=$r['category_name'];
+            $item['category_path']=$r['category_path'];
+        }
+        unset($item);
+        return $items;
+    }
+
+    public function productSnapshot(int $siteProductId, ?int $businessSiteId = null): array
     {
         if ($siteProductId <= 0) return [
             'catalog_product_id' => 0, 'category_name' => '', 'category_path' => '',
             'brand_name' => '', 'series_name' => '', 'product_name' => '',
         ];
-        $row = Db::name('erp_site_catalog_product')->where([
-            ['site_id', '=', $this->site_id], ['site_product_id', '=', $siteProductId], ['is_enabled', '=', 1],
-        ])->field('site_product_id,category_path,brand_name,series_name,product_name')->find();
+        $site=(int)($businessSiteId ?? $this->site_id);
+        $row = Db::name('erp_site_catalog_product')->alias('sp')->leftJoin('erp_catalog_product_master mp','mp.master_product_id=sp.master_product_id')->where([
+            ['sp.site_id', '=', $site], ['sp.site_product_id', '=', $siteProductId], ['sp.is_enabled', '=', 1],
+        ])->field('sp.site_product_id,sp.category_path,sp.brand_name,sp.series_name,sp.product_name,mp.created_site_id,mp.source_key,mp.category_source_id')->find();
         if (!$row) throw new AdminException('选择的商品型号不存在或已停用');
+        if ((int)$row['created_site_id']===$site && (string)$row['category_source_id']!=='') {
+            $owner=ErpCatalogAuthority::owner($site,['action'=>'product_category','source_key'=>$row['source_key'],'category_source_id'=>$row['category_source_id']]);
+            if (array_key_exists('current_path',$owner)) {
+                if ($owner['current_path']==='') throw new AdminException('该型号原分类已不可用，请在资料来源核对分类后重新同步');
+                $row['category_path']=$owner['current_path'];
+            }
+        }
         $parts = $this->catalogPathSegments((string)$row['category_path']);
         return [
             'catalog_product_id' => (int)$row['site_product_id'],
@@ -73,6 +133,7 @@ class ErpGoodsCatalogService extends BaseAdminService
         $series = (clone $query)->where('series_name', '<>', '')->column('series_name');
         return [
             'products' => (int)(clone $query)->count(),
+            'master_policy' => ErpCatalogAuthority::policy((int)$this->site_id),
             'enabled' => (int)(clone $query)->where('is_enabled', '=', 1)->count(),
             'brands' => count(array_unique(array_map('strval', $brands))),
             'series' => count(array_unique(array_map('strval', $series))),
@@ -82,11 +143,13 @@ class ErpGoodsCatalogService extends BaseAdminService
     /** 新增本站商品型号。平台主模板只保存来源事实，本站可独立维护展示数据。 */
     public function add(array $data): int
     {
+        ErpCatalogAuthority::checkWrite((int)$this->site_id);
         $payload = $this->catalogProductPayload($data);
         $this->assertSiteProductUnique($payload);
         $now = time();
         $siteProductId = 0;
         Db::transaction(function () use ($payload, $now, &$siteProductId) {
+            ErpCatalogAuthority::checkWrite((int)$this->site_id,true);
             $sourceProductId = sprintf('site:%d:%s:%04d', (int)$this->site_id, date('YmdHis', $now), random_int(0, 9999));
             $hashData = [$payload['category_path'], '', $payload['brand_name'], '', $payload['series_name'], $payload['product_name']];
             $masterId = (int)Db::name('erp_catalog_product_master')->insertGetId([
@@ -117,13 +180,15 @@ class ErpGoodsCatalogService extends BaseAdminService
     /** 编辑只修改本站覆盖数据，不污染其他站点共享的标准模板。 */
     public function edit(int $siteProductId, array $data): bool
     {
-        $current = $this->siteProduct($siteProductId);
-        $payload = $this->catalogProductPayload($data);
-        $this->assertSiteProductUnique($payload, $siteProductId);
-        Db::name('erp_site_catalog_product')->where([
-            ['site_id', '=', (int)$this->site_id],
-            ['site_product_id', '=', $siteProductId],
-        ])->update(array_merge($payload, ['update_at' => time()]));
+        $current=Db::transaction(function () use ($siteProductId,$data) {
+            ErpCatalogAuthority::checkWrite((int)$this->site_id,true);
+            $current=$this->siteProduct($siteProductId);
+            $payload=$this->catalogProductPayload($data);
+            $this->assertSiteProductUnique($payload,$siteProductId);
+            Db::name('erp_site_catalog_product')->where(['site_id'=>(int)$this->site_id,'site_product_id'=>$siteProductId])
+                ->update(array_merge($payload,['update_at'=>time()]));
+            return $current;
+        });
         $this->emitCatalogChanged('manual_update', [
             'site_product_id' => $siteProductId,
             'master_product_id' => (int)$current['master_product_id'],
@@ -134,6 +199,7 @@ class ErpGoodsCatalogService extends BaseAdminService
     /** 已进入采购或库存业务的型号保留审计关系，只允许停用，不能物理删除。 */
     public function delete(int $siteProductId): bool
     {
+        ErpCatalogAuthority::checkWrite((int)$this->site_id);
         $current = $this->siteProduct($siteProductId);
         $usedByAsset = (int)Db::name('erp_asset')->where([
             ['site_id', '=', (int)$this->site_id], ['catalog_product_id', '=', $siteProductId],
@@ -145,6 +211,7 @@ class ErpGoodsCatalogService extends BaseAdminService
             throw new AdminException('该型号已被采购或库存使用，不能删除；请编辑后将其停用');
         }
         Db::transaction(function () use ($siteProductId, $current) {
+            ErpCatalogAuthority::checkWrite((int)$this->site_id,true);
             Db::name('erp_site_catalog_product')->where([
                 ['site_id', '=', (int)$this->site_id], ['site_product_id', '=', $siteProductId],
             ])->delete();
@@ -166,6 +233,7 @@ class ErpGoodsCatalogService extends BaseAdminService
      */
     public function sortNode(array $data): int
     {
+        ErpCatalogAuthority::checkWrite((int)$this->site_id);
         $nodeType = trim((string)($data['node_type'] ?? ''));
         if (!in_array($nodeType, ['category', 'brand', 'series', 'product'], true)) {
             throw new AdminException('不支持调整该目录节点');
@@ -196,6 +264,7 @@ class ErpGoodsCatalogService extends BaseAdminService
         $delta = $targetSort - $currentMax;
         if ($delta !== 0) {
             Db::transaction(function () use ($rows, $delta) {
+                ErpCatalogAuthority::checkWrite((int)$this->site_id,true);
                 foreach ($rows as $row) {
                     $sort = max(-999999, min(999999, (int)$row['sort'] + $delta));
                     Db::name('erp_site_catalog_product')->where([
@@ -212,6 +281,16 @@ class ErpGoodsCatalogService extends BaseAdminService
     /** 产品目录懒加载层级：一级品类 -> 可选一级子品类 -> 品牌 -> 系列 -> 型号。 */
     public function hierarchy(array $where = []): array
     {
+        if (($where['scene']??'')==='purchase_device') {
+            $owner=ErpCatalogAuthority::owner((int)$this->site_id,['action'=>'purchase_catalog']+array_intersect_key($where,
+                array_flip(['node_type','category_id','product_id','expected_scope','keyword','page'])));
+            if (!$owner) {
+                if (!empty($where['expected_scope'])) throw new AdminException('商品目录来源已变更，请重新打开设备后选择');
+                return ['managed'=>false];
+            }
+            if (!is_array($owner['picker']??null)) throw new AdminException('采购目录暂不可用，请核对资料来源后重试');
+            return ['managed'=>true,'source_label'=>$owner['label']]+$owner['picker'];
+        }
         $nodeType = trim((string)($where['node_type'] ?? 'root')) ?: 'root';
         $categoryPath = trim((string)($where['category_path'] ?? ''), " /\t\n\r\0\x0B");
         $brandName = trim((string)($where['brand_name'] ?? ''));
@@ -220,6 +299,12 @@ class ErpGoodsCatalogService extends BaseAdminService
         $siteProductId = max(0, (int)($where['site_product_id'] ?? 0));
         $categoryOnly = (int)($where['category_only'] ?? 0) === 1;
         $limit = min(500, max(20, (int)($where['limit'] ?? 200)));
+        if ($categoryOnly && ($owner=ErpCatalogAuthority::owner((int)$this->site_id,[
+            'action'=>'categories','path'=>$categoryPath,'keyword'=>$keyword,'limit'=>$limit,
+        ]))) {
+            if (!is_array($owner['list']??null)) throw new AdminException('未能读取外部分类，请重新同步，不会改用本站分类');
+            return ['list'=>$owner['list'],'provider'=>$owner['provider']];
+        }
         $query = Db::name('erp_site_catalog_product')->alias('sp')
             ->leftJoin('erp_catalog_product_master mp', 'mp.master_product_id = sp.master_product_id')
             ->where('sp.site_id', '=', $this->site_id);
@@ -393,6 +478,17 @@ class ErpGoodsCatalogService extends BaseAdminService
      */
     public function importRowsForSite(array $rows, string $defaultSourceKey, int $siteId, bool $emitEvent = true): array
     {
+        return $this->writeImportedRows($rows,$defaultSourceKey,$siteId,$emitEvent,null);
+    }
+
+    /** Internal confirmed source import only; never derive provider/connection from an Excel row or HTTP parameters. */
+    public function importManagedRows(array $rows,string $sourceKey,int $site,string $provider,string $connection): array
+    {
+        return $this->writeImportedRows($rows,$sourceKey,$site,false,compact('provider','connection'));
+    }
+
+    private function writeImportedRows(array $rows,string $defaultSourceKey,int $siteId,bool $emitEvent,?array $origin): array
+    {
         if (!$rows) throw new AdminException('没有可导入的商品目录数据');
         if ($siteId <= 0) throw new AdminException('商品目录导入缺少有效站点');
 
@@ -401,7 +497,8 @@ class ErpGoodsCatalogService extends BaseAdminService
             'skipped' => 0, 'duplicate_skipped' => 0, 'invalid_skipped' => 0,
             'master_conflicts' => 0, 'conflict_samples' => [],
         ];
-        Db::transaction(function () use ($rows, $defaultSourceKey, $siteId, &$stats) {
+        Db::transaction(function () use ($rows, $defaultSourceKey, $siteId, $origin, &$stats) {
+            ErpCatalogAuthority::checkWrite($siteId,true,$origin);
             foreach ($rows as $raw) {
                 $row = $this->normalizeRow((array)$raw, $defaultSourceKey);
                 if ($row['product_name'] === '' || $row['category_path'] === '') {
@@ -409,7 +506,8 @@ class ErpGoodsCatalogService extends BaseAdminService
                     $stats['invalid_skipped']++;
                     continue;
                 }
-                $categoryPath = $this->normalizeCatalogPath($row['category_path']);
+                $categoryPath = $origin === null ? $this->normalizeCatalogPath($row['category_path']) : $row['category_path'];
+                if (mb_strlen($categoryPath)>255) throw new AdminException('商品分类路径过长，未截断保存');
                 $row['category_path'] = $categoryPath;
 
                 $hashData = [

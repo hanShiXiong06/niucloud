@@ -86,6 +86,9 @@ try {
     $app->env->set('queue.state',false); // Never dispatch a real queue or use synchronous queue fallback in tests.
     piCheck(Db::query('SELECT DATABASE() AS db')[0]['db']===$schema,'database connection is random isolated schema');
     $addon=new addon\hsx_boyuan\Addon(); piCheck($addon->install() && $addon->upgrade(),'current addon install and upgrade run only in isolated schema');
+    $hubAddon=new addon\hsx_erp_integration\Addon(); piCheck($hubAddon->upgrade(),'actual manual bridge schema upgrades on isolated MySQL');
+    Db::name('addon')->insert(['key'=>'hsx_boyuan','status'=>1,'title'=>'Fixture','type'=>'addon']);
+    Db::name('site')->where('site_id',$site)->update(['addons'=>Contract::json(['hsx_erp','hsx_boyuan','hsx_erp_integration'])]);
     $prefix=(string)Db::connect()->getConfig('prefix');
     $logCount=$pdo->prepare('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=? AND TABLE_NAME=?');
     $logCount->execute([$schema,$prefix.'hsx_boyuan_log']); piCheck((int)$logCount->fetchColumn()===0,'fresh schema has no database technical-log table');
@@ -106,6 +109,7 @@ try {
             piCheck($processing && $processing['side_effect']==='unknown' && (int)$processing['attempts']===1,'payment intent and unknown side effect are durable before fake HTTP exchange');
             if($paymentTimeout) throw new RuntimeException('Synthetic timeout after possible commit');
             $biz=Contract::decode((string)$params['biz']); $head=$biz['head'];
+            piCheck(($head['creater_id']??'')==='FINANCE_TEST' && ($head['creater_name']??'')==='隔离财务员工','voucher is authored by the original settlement finance employee, not the buyer or the synchronizing admin');
             piCheck($head['scope_flag']===3 && $head['is_auto_generate_supplier']===0 && $head['is_auto_generate_subject']===0,'payment uses same-company official scope without automatic party or subject creation');
             $head+=['id'=>'PAY_HEAD_'.$paymentCreates,'bill_id'=>'PAY_ISOLATED_'.$paymentCreates,'bill_type'=>'PAYMENT','big_gsdm'=>'ISOLATED_TEST_ACCOUNT'];
             $detail=$biz['payment_details']['add_details'][0]+['id'=>'PAY_LINE_'.$paymentCreates]; $head['bank_account']='MUST_NOT_LEAK'; $detail['voucher_url']='MUST_NOT_LEAK';
@@ -127,7 +131,7 @@ try {
                 $details[]=$identity+$money+['id'=>'PUR_DETAIL_'.$creates.'_'.$seq,'head_id'=>$headId];
                 $serials[]=$identity+$money+['detail_id'=>'IMEI_DETAIL_'.$creates.'_'.$seq,'gsdm'=>'TEST_SHOP','imei'=>$line['imei'],'imei1'=>$line['imei'],'imei2'=>null,'imei3'=>null];
             }
-            $reply=['head'=>$head+['id'=>$headId,'big_gsdm'=>'ISOLATED_TEST_ACCOUNT','bill_id'=>$no,'bill_type'=>'PUR'],'product_details'=>['add_details'=>$rows]];
+            $reply=['head'=>$head+['id'=>$headId,'big_gsdm'=>'ISOLATED_TEST_ACCOUNT','bill_id'=>$no,'bill_type'=>'PUR','audit_status'=>0,'un_settle_amounts'=>'0.00','private_note'=>'NOT_FOR_FINANCE_UI'],'product_details'=>['add_details'=>$rows]];
             $created[$no]=['reply'=>$reply,'details'=>$details,'imei'=>$serials];
             return ['return_code'=>'SUCCESS','api_response'=>['result'=>$reply]];
         }
@@ -162,7 +166,9 @@ try {
             'scope_json'=>'{}','processed'=>1,'pages'=>1,'reported_total'=>1,'operator_uid'=>1,'create_at'=>time(),'update_at'=>time()]);
         $id=['companies'=>'COMPANY_TEST','parties'=>'SUPPLIER_TEST','products'=>'PRODUCT_TEST','warehouses'=>'WAREHOUSE_TEST','staff'=>'BUYER_TEST','capital_accounts'=>'PAY_ACCOUNT_TEST'][$resource];
         $extra=['companies'=>['gsdm'=>'COMPANY_TEST_CODE'],'parties'=>['is_supplier'=>1],'products'=>['imei_count'=>1,'imei_len'=>15,'memory'=>'256GB','color'=>'黑色'],'warehouses'=>['company_id'=>'COMPANY_TEST'],'staff'=>['is_buyer'=>1,'gsdm'=>'COMPANY_TEST_CODE'],'capital_accounts'=>['gsdm'=>'COMPANY_TEST_CODE']][$resource];
-        Db::name('hsx_boyuan_reference')->insert(['site_id'=>$site,'connection_key'=>$key,'resource'=>$resource,'external_id'=>$id,'code'=>$id,'name'=>'隔离'.$resource,'enabled'=>1,'extra_json'=>Contract::json($extra),'seen_run'=>$run,'update_at'=>time()]);
+        if ($resource==='staff') $extra['company_id']='COMPANY_TEST';
+        \addon\hsx_boyuan\app\support\CatalogStore::query($resource)->insert(['site_id'=>$site,'connection_key'=>$key,'external_id'=>$id,'code'=>$id,'name'=>'隔离'.$resource,'enabled'=>1,'extra_json'=>Contract::json($extra),'seen_run'=>$run,'update_at'=>time()]);
+        if($resource==='staff') \addon\hsx_boyuan\app\support\CatalogStore::query('staff')->insert(['site_id'=>$site,'connection_key'=>$key,'external_id'=>'FINANCE_TEST','code'=>'FINANCE_TEST','name'=>'隔离财务员工','enabled'=>1,'extra_json'=>Contract::json($extra),'seen_run'=>$run,'update_at'=>time()]);
     }
     $supplier=(int)Db::name('erp_party')->insertGetId(['site_id'=>$site,'party_no'=>'ISOLATED_SUPPLIER','party_name'=>'隔离供应商','party_type'=>'supplier','status'=>1]);
     $warehouse=(int)Db::name('erp_warehouse')->insertGetId(['site_id'=>$site,'warehouse_name'=>'隔离设备仓','warehouse_type'=>'peer','status'=>1,'allow_direct_sale'=>1]);
@@ -175,28 +181,79 @@ try {
             ['imei'=>'00000000000'.$suffix.'02','model'=>'隔离测试手机','spec'=>'256GB','color'=>'黑色','purchase_cost'=>1,'retail_price'=>2,'warehouse_id'=>$warehouse,'location_id'=>$location,'image_urls'=>'["/static/fixture.png"]'],
         ]]);
     };
-    $initialCalls=$fakeCalls; $po=$makePurchase('01'); piDispatch($site);
-    $detail=$purchase->info($po); $actions=$detail['integration_actions']??[]; $entry=$actions[0]??[]; $observed=end($purchaseActionEvents);
+    $initialCalls=$fakeCalls; $po=$makePurchase('01');
+    $bridge=new \addon\hsx_boyuan\app\adapter\BoyuanErpAdapter();
+    $bridgeContext=['site_id'=>$site,'connection_id'=>1,'task_id'=>7,'operator_uid'=>1,'mode'=>'test','api_url'=>$profile['endpoint'],
+        'gateway_path'=>$profile['gateway_path'],'app_id'=>$profile['app_id'],'account_code'=>$profile['account_id'],'vendor_task_id'=>0];
+    $public=$bridge->originalProfile($site);
+    piCheck(array_keys($public)===['api_url','gateway_path','app_id','account_code','mode','checked'] && $public['checked']===true
+        && $public['account_code']===$profile['account_id'] && !str_contains(Contract::json($public),$secret) && $fakeCalls===$initialCalls,'profile binds only verified non-secret identity, without another probe');
+    Db::startTrans();
+    try {
+        $withoutProbe=$configService->get($site,false); $withoutProbe['profiles']['test']['probe_at']=0; $configService->persist($site,$withoutProbe);
+        $unverified=$bridge->originalProfile($site);
+        piCheck(!$unverified['checked'] && $unverified['reason']!=='' && $fakeCalls===$initialCalls,'absent native probe does not become verified through bridge');
+    } finally { Db::rollback(); }
+    $bridgeEvent=static function(string $name,int $source) use($site):array {
+        foreach(Db::name('erp_outbox_event')->where('site_id',$site)->where('event_name',$name)->column('payload_json') as $raw) {
+            $event=Contract::decode($raw); if((int)$event['aggregate_id']!==$source) continue;
+            unset($event['_delivery']); return $event;
+        }
+        throw new RuntimeException('ASSERT missing persisted fixture event');
+    };
+    $bridgePurchaseEvent=$bridgeEvent('erp.integration.document.confirmed.v1',$po);
+    $hubId=(int)Db::name('erp_integration_connection')->insertGetId(['site_id'=>$site,'adapter_code'=>'boyuan','adapter_name'=>'Fixture',
+        'sync_mode'=>'manual','status'=>'enabled','bridge_started_at'=>$bridgePurchaseEvent['occurred_at'],'config'=>Contract::json(array_diff_key($public,['checked'=>true])),
+        'business_types'=>Contract::json(['purchase','payment']),'last_test_result'=>'success','last_test_at'=>time()]);
+    $bus=new \addon\hsx_erp_integration\app\service\IntegrationBusService();
+    $manual=new \addon\hsx_erp_integration\app\service\ManualTaskService();
+    $hubCapture=static function(array $event) use($site,$hubId,$bus):int {
+        $first=$bus->acceptDomainEvent($event); $again=$bus->acceptDomainEvent($event);
+        if(($first['status']??'')!=='processed' || ($again['status']??'')!=='duplicate' || count($first['task_ids']??[])!==1 || $first['task_ids']!==$again['task_ids'])
+            throw new RuntimeException('ASSERT actual bridge bus captures this fact exactly once');
+        $id=(int)$first['task_ids'][0]; $row=Db::name('erp_integration_sync_task')->where(['id'=>$id,'site_id'=>$site,'connection_id'=>$hubId])->find();
+        if(!$row || $row['status']!=='awaiting_confirmation') throw new RuntimeException('ASSERT bridge task persisted in expected scope');
+        return $id;
+    };
+    $hubRow=static fn(int $id)=>Db::name('erp_integration_sync_task')->where(['id'=>$id,'site_id'=>$site,'connection_id'=>$hubId])->find();
+    $hubPurchaseTask=$hubCapture($bridgePurchaseEvent);
+    piCheck($bridge->originalDocument($bridgePurchaseEvent,$bridgeContext,true)['status']==='waiting' && !Db::name('hsx_boyuan_task')->where('site_id',$site)->count(),'bridge query on an uncaptured source has no side effects');
+    foreach(['site_id'=>$site+1,'account_code'=>'ANOTHER','api_url'=>'https://invalid.invalid','app_id'=>'ANOTHER','mode'=>'production','operator_uid'=>2,'vendor_task_id'=>1] as $field=>$bad) {
+        piCheck($bridge->originalDocument($bridgePurchaseEvent,array_replace($bridgeContext,[$field=>$bad]),false)['status']==='blocked','bridge rejects conflicting '.$field.' before capture');
+    }
+    $changed=$bridgePurchaseEvent; $changed['payload']['lines'][0]['amount']='99.00';
+    piCheck($bridge->originalDocument($changed,$bridgeContext,false)['status']==='blocked','source amounts cannot be forged in bridge');
+    piCheck(($bridge->syncPurchase([],[])['success']??true)===false && ($bridge->syncPayment([],[])['success']??true)===false,'no legacy aggregate quick-write for either capability');
+    $hubLinked=$manual->run($site,$hubPurchaseTask,1,false);
+    $linked=$bridge->originalDocument($bridgePurchaseEvent,$bridgeContext,false);
+    piCheck($hubLinked['vendor_task_id']===$linked['vendor_task_id'] && $hubRow($hubPurchaseTask)['status']==='linked' && $linked['external_no']==='',
+        'actual bridge operator prepares a single native draft and persists its vendor task id');
+    piCheck($linked['status']==='linked' && $linked['vendor_task_id']>0 && $fakeCalls===$initialCalls,'bridge prepares original manual task without remote exchange');
+    piDispatch($site);
+    piCheck((int)Db::name('hsx_boyuan_task')->where('site_id',$site)->count()===1 && $bridge->originalDocument($bridgePurchaseEvent,$bridgeContext,false)===$linked,'legacy listener and bridge hand off to one identical task');
+    $detail=$purchase->info($po); $actions=$detail['integration_results']??[]; $entry=$actions[0]??[]; $observed=end($purchaseActionEvents);
     piCheck((int)$detail['id']===$po && (int)($observed['purchase_id']??0)===$po && (int)($observed['site_id']??0)===$site,'actual ERP info emits the correct tenant-scoped purchase source ID');
-    piCheck(count($actions)===1 && ($entry['key']??'')==='boyuan_purchase','actual registered addon listener supplies exactly one purchase entry');
+    piCheck(count($actions)===1 && ($entry['task_id']??0)>0 && $entry['query']['task_id']===(string)$entry['task_id']
+        && array_column($detail['integration_actions'],'key')===['boyuan_exchange'] && ($detail['integration_actions'][0]['query']['purchase_no']??null)===$detail['purchase_no'],
+        'existing purchase has its task and a scoped read-only exchange link, never another capture action');
     piCheck(($entry['pc_route']??'')==='/hsx_boyuan/purchase' && ($entry['mobile_path']??'')==='/addon/hsx_boyuan/pages/workbench/index'
         && preg_match('#^/[A-Za-z0-9_/-]+$#D',$entry['pc_route'])===1 && preg_match('#^/addon/[A-Za-z0-9_/-]+$#D',$entry['mobile_path'])===1,'ERP purchase entry returns only safe internal PC and mobile paths');
     piCheck(!str_contains(Contract::json($actions),$secret) && $fakeCalls===$initialCalls,'rendering actual purchase actions discloses no credential and performs no vendor request');
     Db::name('sys_user')->insert(['uid'=>2,'username'=>'isolated-no-role','real_name'=>'无博远权限测试员','status'=>1]);
     request()->uid(2);
-    try { piCheck(($purchase->info($po)['integration_actions']??[])===[],'active user without a site role receives no Boyuan purchase entry'); }
+    try { piCheck(($purchase->info($po)['integration_results']??[])===[],'active user without a site role receives no Boyuan purchase result'); }
     finally { request()->uid(1); }
     Db::startTrans();
     try {
         $temporary=$configService->get($site,false); $temporary['profiles']['test']['protocol']='bridge_v1'; $configService->persist($site,$temporary);
-        piCheck(($purchase->info($po)['integration_actions']??[])===[],'non-OpenAPI connection receives no Boyuan purchase entry');
+        piCheck(($purchase->info($po)['integration_results']??[])===[],'non-OpenAPI connection receives no Boyuan purchase entry');
     } finally { Db::rollback(); }
     Db::startTrans();
     try {
         Db::name('erp_purchase_order')->where('site_id',$site)->where('id',$po)->update(['status'=>'void']);
-        piCheck(($purchase->info($po)['integration_actions']??[])===[],'void purchase receives no Boyuan purchase entry');
+        piCheck(array_column($purchase->info($po)['integration_actions']??[],'key')===['boyuan_exchange'],'void purchase retains only read-only exchanges, no submit or capture action');
     } finally { Db::rollback(); }
-    piCheck(count($purchase->info($po)['integration_actions']??[])===1 && $fakeCalls===$initialCalls,'rollback restores permitted purchase entry without any vendor request');
+    piCheck(count($purchase->info($po)['integration_results']??[])===1 && $fakeCalls===$initialCalls,'rollback restores permitted purchase entry without any vendor request');
     $task=Db::name('hsx_boyuan_task')->where('site_id',$site)->where('kind','purchase')->order('id')->find(); $id=(int)$task['id']; $immutable=$task['snapshot_json'];
     $snapshot=Contract::decode($immutable); $sync=new PurchaseSyncService(); $tasks=new TaskService();
     piCheck($task['status']==='awaiting_confirmation' && Contract::decode($task['request_json'])['stage']==='draft','real ERP transaction and outbox create a draft task');
@@ -221,11 +278,25 @@ try {
     piPatch($configService,$site,['enabled'=>true,'paused'=>false]); piReady($site,$id);
     piCheck($tasks->process($site,$id,$api),'actual worker routes frozen purchase into the official adapter');
     $task=piTask($site,$id); piCheck($task['status']==='created_review' && $task['external_no']==='PUR_ISOLATED_1' && $creates===1,'create persists vendor number but does not claim verified success');
+    piCheck($bridge->originalDocument($bridgePurchaseEvent,$bridgeContext,true)['status']==='linked','create-only receipt is not verified purchase on bridge');
     piCheck($task['snapshot_json']===$immutable && $task['request_json']===$frozen,'source and final request remain byte-for-byte immutable');
     $view=$sync->view($site,$id); $sync->queueVerify($site,$id,1,piInput($view)+['external_no'=>$task['external_no']]); piReady($site,$id);
     piCheck($tasks->process($site,$id,$api),'known number enters read-only purchase verification');
     $task=piTask($site,$id); $result=Contract::decode($task['result_json']);
+    $facts=$result['provider_result']??[];
+    piCheck(($facts['bill_id']??null)==='PUR_ISOLATED_1' && ($facts['audit_status']??null)===0 && ($facts['un_settle_amounts']??null)==='0.00' && !array_intersect(['amounts','private_note','remark'],array_keys($facts)),'verified purchase retains only returned business facts; zero preserved, missing not invented');
     piCheck($task['status']==='succeeded' && $creates===1 && $queries===2,'purchase and serial queries complete without repeat create');
+    $bridgePurchase=$bridge->originalDocument($bridgePurchaseEvent,array_replace($bridgeContext,['vendor_task_id'=>$id]),true);
+    piCheck($bridgePurchase['status']==='confirmed' && $bridgePurchase['external_no']===$task['external_no'],'verified lines and vendor receipt project as a confirmed purchase');
+    Db::startTrans();
+    try {
+        Db::name('hsx_boyuan_task')->where('site_id',$site)->where('id',$id)->update(['status'=>'confirming','external_no'=>'MANUAL-CANDIDATE','result_json'=>'{}']);
+        $candidate=$bridge->originalDocument($bridgePurchaseEvent,array_replace($bridgeContext,['vendor_task_id'=>$id]),true);
+        piCheck($candidate['status']==='unknown' && $candidate['external_no']==='','manually supplied lookup number is not returned as a native purchase receipt');
+    } finally {Db::rollback();}
+    $hubPurchase=$manual->run($site,$hubPurchaseTask,1,true); $persistedPurchase=$hubRow($hubPurchaseTask);
+    piCheck($hubPurchase['status']==='confirmed' && $persistedPurchase['external_doc_no']===$task['external_no'] && $persistedPurchase['status']==='succeeded'
+        && Contract::decode($persistedPurchase['receipt_json'])['vendor_task_id']===$id,'real bridge persists only verified original purchase receipt after signed fake-gateway lifecycle');
     piCheck(($result['verification_level']??'')==='purchase_imei_records_matched' && $result['stock_balance_verified']===false && $result['financial_posting_verified']===false,'success records explicit verification limits');
     piCheck(($result['evidence']['response_contract']??'')===OpenApi::PURCHASE_DIALECT_DOCUMENTED && ($result['evidence']['document_head_id_verified']??null)===true
         && ($result['evidence']['external_line_id_source']??'')==='purchase_detail.id','documented query contract and head-ID evidence persist without UAT fallback');
@@ -245,7 +316,9 @@ try {
     finally { request()->uid(1); }
     $capital=(int)Db::name('erp_capital_account')->insertGetId(['site_id'=>$site,'account_name'=>'PRIVATE_CLOSURE_ACCOUNT','account_type'=>'bank','balance'=>1000,'status'=>1]);
     $payables=Db::name('erp_payable')->where('site_id',$site)->where('source_type','purchase_asset')->whereIn('source_id',array_map(static fn($line)=>(int)substr($line['device_ref'],6),$snapshot['lines']))->order('id')->select()->toArray();
-    $finance=ErpFinanceService::forSite($site,1,'隔离财务测试员');
+    Db::name('sys_user')->insert(['uid'=>3,'username'=>'isolated-finance','real_name'=>'隔离财务测试员','status'=>1]);
+    Db::name('sys_user_role')->insert(['uid'=>3,'site_id'=>$site,'status'=>1,'is_admin'=>0]);
+    $finance=ErpFinanceService::forSite($site,3,'隔离财务测试员');
     $finance->confirmPayableItemsPayment($supplier,[['payable_id'=>(int)$payables[0]['id'],'amount'=>0.40]],['request_id'=>'CLOSURE_PARTIAL','capital_account_id'=>$capital,'voucher_urls'=>['PRIVATE_CLOSURE_VOUCHER']]);
     $closure=$closureService->view($site,piTask($site,$id));
     piCheck($closure['available'] && $closure['totals']['paid_amount']==='0.40' && $closure['totals']['unpaid_amount']==='1.60' && $closure['stages'][4]['status']==='partial','actual ERP partial settlement is reflected exactly without full-paid inference');
@@ -299,6 +372,7 @@ try {
     ]]);
     piDispatch($site); $appendTask=Db::name('hsx_boyuan_task')->where('site_id',$site)->where('kind','purchase')->order('id desc')->find();
     piCheck($appendPo===$secondPo && (int)$appendTask['id']!==$draftId,'real ERP append creates an independent source batch under the same purchase');
+    piCheck(array_column($purchase->info($secondPo)['integration_results'],'task_id')===[$draftId,(int)$appendTask['id']],'same-source append shows both and only its own batches, not a similarly dated purchase');
     $secondAssets=Db::name('erp_asset')->where('site_id',$site)->where('purchase_order_id',$secondPo)->column('id');
     $batchPayables=Db::name('erp_payable')->where('site_id',$site)->where('source_type','purchase_asset')->whereIn('source_id',$secondAssets)->select()->toArray();
     $finance->confirmPayableItemsPayment($supplier,array_map(static fn($payable)=>['payable_id'=>(int)$payable['id'],'amount'=>(float)$payable['amount']],$batchPayables),['request_id'=>'CLOSURE_SHARED_BATCH_PAYMENT','capital_account_id'=>$capital]);
@@ -352,6 +426,8 @@ try {
     piRejected(fn()=>piPatch($configService,$site,['uat_payment_enabled'=>true,'confirm_account'=>'WRONG_ACCOUNT']),'PAYMENT_UAT_ACCOUNT_CONFIRM_REQUIRED');
     piPatch($configService,$site,['uat_payment_enabled'=>true]);
     $candidatePage=$payments->candidates($site,$id); piCheck($candidatePage['total']===2 && count($candidatePage['items'])===2 && !$candidatePage['has_more'],'actual same-batch confirmed partial and remaining payments are safe paged candidates');
+    piCheck(array_column($payments->candidates($site,$id,['settlement_id'=>(string)$firstSettlement])['items'],'settlement_id')===[$firstSettlement]
+        && $payments->candidates($site,$id,['settlement_id'=>PHP_INT_MAX])['total']===0,'opening a specific ERP voucher never offers a different confirmed payment');
     $workers=[];
     for($worker=0;$worker<2;$worker++) {
         $pipes=[]; $process=proc_open([PHP_BINARY,'-d','allow_url_fopen=0','-d','disable_functions=curl_exec,curl_multi_exec,fsockopen,pfsockopen,stream_socket_client,dns_get_record,gethostbyname,gethostbynamel',__FILE__,'--isolated-local-mysql','--payment-capture-worker',$schema,(string)$id,(string)$firstSettlement],
@@ -361,10 +437,23 @@ try {
     $paymentIds=[];
     foreach($workers as [$process,$pipes]) { $out=stream_get_contents($pipes[1]); $err=stream_get_contents($pipes[2]); fclose($pipes[1]); fclose($pipes[2]); $exit=proc_close($process); $out=json_decode(trim($out),true); piCheck($exit===0 && !empty($out['passed']) && $err==='','parallel actual payment capture succeeds without gateway'); $paymentIds[]=(int)$out['task_id']; }
     $paymentId=$paymentIds[0]; piCheck($paymentIds[0]===$paymentIds[1] && Db::name('hsx_boyuan_task')->where('site_id',$site)->where('kind',PaymentSyncService::KIND)->count()===1,'concurrent confirmed-payment capture reuses a single settlement task');
-    $payment=$payments->view($site,$paymentId); $choose=['creator_id'=>'BUYER_TEST','account_id'=>'PAY_ACCOUNT_TEST'];
+    $paymentEvent=$bridgeEvent('erp.settlement.completed.v1',$firstSettlement); $fundsBeforeHub=piErpHash($site);
+    $hubPaymentTask=$hubCapture($paymentEvent); $hubVoucherDraft=$manual->run($site,$hubPaymentTask,1,false);
+    piCheck($hubVoucherDraft['status']==='linked' && $hubVoucherDraft['vendor_task_id']===$paymentId && $hubPaymentTask!==$hubPurchaseTask
+        && $paymentEvent['payload']['targets'][0]['source_line_ref']===$bridgePurchaseEvent['payload']['lines'][0]['source_line_id']
+        && $paymentEvent['payload']['targets'][0]['source_document_ref']===$bridgePurchaseEvent['payload']['source_document_id']
+        && $fundsBeforeHub===piErpHash($site),'real bridge finds the exact same purchased device, reuses native voucher and never changes the original ERP accounting');
+    $payment=$payments->view($site,$paymentId); $choose=['creator_id'=>'FINANCE_TEST','account_id'=>'PAY_ACCOUNT_TEST'];
+    piCheck($payment['source']['operator_uid']===3 && $payment['source']['operator_name']==='隔离财务测试员' && $payment['selection']['creator_id']===''
+        && !$payment['mapped_fields']['creator_id'] && $payment['can_remember'],'unmapped finance source does not inherit buyer or syncing admin; no mapping is written on read');
+    piRejected(fn()=>$payments->saveDraft($site,$paymentId,1,piInput($payment)+['selection'=>array_replace($choose,['creator_id'=>'BUYER_TEST']),'remember'=>true]),'MAPPING_CONFLICT');
     piCheck(in_array($paymentId,piWorkbenchIds($app,'action_required'),true) && !in_array($paymentId,piWorkbenchIds($app,'completed'),true),'an unsent draft requiring user confirmation remains in the workbench action filter');
     piCheck($payment['source']['amount']==='0.40' && $payment['source']['company_code']==='COMPANY_TEST_CODE' && $payment['task']['status']==='awaiting_confirmation' && $paymentCreates===0,'actual payment draft freezes exact confirmed decimal and company scope, not frontend amount');
-    $payment=$payments->saveDraft($site,$paymentId,1,piInput($payment)+['selection'=>$choose]);
+    $payment=$payments->saveDraft($site,$paymentId,1,piInput($payment)+['selection'=>$choose,'remember'=>true]);
+    piCheck($payment['mapped_fields']===['creator_id'=>true,'account_id'=>true] && $payment['selection']===$choose
+        && Db::name('hsx_boyuan_mapping')->where(['site_id'=>$site,'connection_key'=>$key,'kind'=>'staff','local_ref'=>'staff:3'])->value('external_id')==='FINANCE_TEST',
+        'explicit remember binds actual payer and original account in the current connection only');
+    piRejected(fn()=>$payments->saveDraft($site,$paymentId,1,piInput($payment)+['selection'=>array_replace($choose,['creator_id'=>'BUYER_TEST'])]),'PAYMENT_MAPPING_CHANGED');
     piRejected(fn()=>$payments->submit($site,$paymentId,1,piInput($payment)+['selection'=>$choose,'confirm_registration'=>true]),'PAYMENT_AP_EVIDENCE_REQUIRED');
     piCheck($payment['can_submit_experiment'] && !$payment['can_submit'] && !$payment['can_verify'] && $payment['ap_evidence']['status']==='rule_confirmed','UAT experiment separates official AP formation rule from unavailable balance and allocation proof');
     $beforePayment=piErpHash($site); $parentPayment=piTask($site,$id); $paymentApi=new OpenApi($profile,$secret,$exchange,'test');
@@ -373,8 +462,24 @@ try {
     piRejected(fn()=>$tasks->action($site,$paymentId,1,'repair'),'PAYMENT_SINGLE_ATTEMPT_REQUIRED');
     piCheck(BatchService::actionFor(piTask($site,$paymentId))==='' && $paymentCreates===0,'generic action and batch cannot unfreeze or invoke payment creation');
     piPatch($configService,$site,['paused'=>true]); piReady($site,$paymentId); piCheck(!$tasks->process($site,$paymentId,$paymentApi) && $paymentCreates===0,'pause holds actual pending registration before gateway'); piPatch($configService,$site,['paused'=>false]);
-    piReady($site,$paymentId); piCheck((new addon\hsx_boyuan\app\job\PaymentProcess())->doJob($site,$paymentId,$paymentApi),'actual payment job executes frozen same-UAT gateway once');
+    piReady($site,$paymentId); $pendingVoucher=$payments->view($site,$paymentId);
+    $current=piInput($pendingVoucher)+['account_code'=>$pendingVoucher['current_account_code'],'purchase_task_id'=>$pendingVoucher['parent_purchase_task_id'],'settlement_id'=>$pendingVoucher['source']['settlement_id']];
+    piCheck($pendingVoucher['can_process_current'],'authorized UAT finance can process this frozen voucher, not submit a new one');
+    piRejected(fn()=>$payments->processCurrent($site,$paymentId,1,array_replace($current,['settlement_id'=>0]),$paymentApi),'PAYMENT_CURRENT_UNAVAILABLE');
+    piRejected(fn()=>$payments->processCurrent($site,$paymentId,1,array_replace($current,['account_code'=>'other']),$paymentApi),'PAYMENT_CURRENT_UNAVAILABLE');
+    $payments->processCurrent($site,$paymentId,1,$current,$paymentApi);
+    piCheck($paymentCreates===1 && !(new addon\hsx_boyuan\app\job\PaymentProcess())->doJob($site,$paymentId,$paymentApi) && $paymentCreates===1,'UI and subsequent queue delivery share one lease and one creation');
     $registered=$payments->view($site,$paymentId); piCheck($registered['task']['status']==='registered_review' && $registered['task']['external_no']==='PAY_ISOLATED_1' && $registered['result']['registered_amount']==='0.40' && !$registered['result']['allocation_applied_verified'],'matched receipt is persisted, not specific purchase allocation or full financial closure');
+    $fundsBefore=piErpHash($site);
+    $bridgePaid=$bridge->originalDocument($paymentEvent,$bridgeContext,true);
+    piCheck($bridgePaid['status']==='confirmed' && $bridgePaid['vendor_task_id']===$paymentId && $bridgePaid['external_no']===$registered['task']['external_no']
+        && $bridgePaid['allocation']['verified']===false && $bridgePaid['allocation']['remaining_amount']===null,'registered original voucher is not a bank transfer or provider allocation');
+    $hubVoucher=$manual->run($site,$hubPaymentTask,1,true); $persistedVoucher=$hubRow($hubPaymentTask);
+    $storedVoucher=Contract::decode($persistedVoucher['receipt_json']);
+    piCheck($persistedVoucher['status']==='succeeded' && $hubVoucher['status']==='confirmed' && $persistedVoucher['external_doc_no']===$registered['task']['external_no']
+        && $storedVoucher['allocation']===['status'=>'pending','verified'=>false,'applied_amount'=>null,'remaining_amount'=>null]
+        && $storedVoucher['vendor_task_id']===$paymentId && $fundsBeforeHub===piErpHash($site) && $paymentCreates===1 && $creates===2,
+        'actual bridge persists registered receipt, leaves allocation unverified, preserves settled balances and makes no repeat gateway creates');
     piCheck($registered['operator_complete'] && $registered['issues']===[] && !$registered['can_submit'] && !$registered['can_submit_experiment'],'operator has no remaining action after a matched receipt');
     $notice=new \addon\hsx_boyuan\app\service\NoticeService();
     $beforeNotice=piTask($site,$paymentId); $notice->send($site,$paymentId);
@@ -383,10 +488,24 @@ try {
     piCheck(piTask($site,$id)===$parentPayment && piErpHash($site)===$beforePayment && piTask($site,$paymentId)['request_json']===$frozenPayment,'registering remote accounting receipt does not change any original task or local purchase, stock, payable, payment, capital or ledger row');
     piCheck(!$tasks->process($site,$paymentId,$paymentApi) && $paymentCreates===1 && Db::name('hsx_boyuan_binding')->where('site_id',$site)->where('kind','financial')->count()===0,'registered receipt cannot create twice or forge remote AP evidence');
     $parentPaymentView=$sync->view($site,$id); piCheck($parentPaymentView['payment']['registered_amount']==='0.40' && $parentPaymentView['closure']['stages'][5]['status']==='partial' && !$parentPaymentView['closure']['operator_complete'] && !$parentPaymentView['closure']['complete'],'parent with two local settlements is not done on receipt for only one payment');
+    $otherEvent=$bridgeEvent('erp.settlement.completed.v1',$secondSettlement);
+    Db::startTrans();
+    try {
+        Db::name('hsx_boyuan_binding')->where('site_id',$site)->where('task_id',$id)->where('kind','line')->delete();
+        piCheck($bridge->originalDocument($otherEvent,$bridgeContext,false)['status']==='waiting'
+            && (int)Db::name('hsx_boyuan_task')->where('site_id',$site)->where('kind',PaymentSyncService::KIND)->count()===1,
+            'out-of-order voucher waits on verified parent line receipts; no new voucher draft');
+    } finally { Db::rollback(); }
+    piCheck($bridge->originalDocument($otherEvent,$bridgeContext,true)['status']==='waiting','query alone cannot create second voucher');
+    $linkedPayment=$bridge->originalDocument($otherEvent,$bridgeContext,false);
     $other=$payments->capture($site,$id,1,piInput($parentPaymentView)+['settlement_id'=>$secondSettlement]); $otherId=$other['task']['id'];
+    piCheck($other['selection']===$choose && $other['mapped_fields']===['creator_id'=>true,'account_id'=>true],'subsequent draft defaults both mappings without prompting or inheriting procurement');
+    piCheck($linkedPayment['status']==='linked' && $linkedPayment['vendor_task_id']===$otherId && piErpHash($site)===$fundsBefore && $paymentCreates===1,'bridge and native desk reuse same second voucher; no bank, ERP or remote write');
     $other=$payments->submit($site,$otherId,1,piInput($other)+['selection'=>$choose,'confirm_registration'=>true,'confirm_unverified_ap'=>true]); $paymentTimeout=true; piReady($site,$otherId); $tasks->process($site,$otherId,$paymentApi);
     piCheck(piTask($site,$otherId)['status']==='attention' && piTask($site,$otherId)['side_effect']==='unknown' && (int)piTask($site,$otherId)['attempts']===1,'unknown possible payment write is held for manual review');
     piReady($site,$otherId); piCheck(!$tasks->process($site,$otherId,$paymentApi) && $paymentCreates===2,'unknown payment create is never retried');
+    $unknown=$bridge->originalDocument($otherEvent,array_replace($bridgeContext,['vendor_task_id'=>$otherId]),false);
+    piCheck($unknown['status']==='unknown' && $unknown['vendor_task_id']===$otherId && $paymentCreates===2 && piErpHash($site)===$fundsBefore,'uncertain original voucher remains query-only on bridge; no second attempt or debit');
     piCheck($payments->capture($site,$id,1,piInput($parentPaymentView)+['settlement_id'=>$secondSettlement])['task']['id']===$otherId,'repeat capture cannot bypass unknown single-attempt settlement identity');
     piCheck(piTask($site,$id)===$parentPayment && piErpHash($site)===$beforePayment && $creates===$beforeCreates,'unknown remote registration leaves all local business and original purchase task unchanged');
     piCheck(!$payments->view($site,$otherId)['operator_complete'] && !$sync->view($site,$id)['closure']['operator_complete'],'uncertain second receipt cannot complete either its operator task or the full batch');

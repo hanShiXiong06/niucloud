@@ -7,6 +7,8 @@ use addon\hsx_recycle\app\service\admin\device_export\DeviceExportService;
 use addon\hsx_recycle\app\service\admin\order\RecycleDeviceErpSyncService;
 use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpCapabilityService;
 use core\base\BaseAdminController;
+use core\exception\CommonException;
+use think\facade\Log;
 use think\Response;
 
 /**
@@ -105,6 +107,16 @@ class DeviceExportController extends BaseAdminController
         if (empty($placement)) {
             $placement = (new RecycleErpCapabilityService())->defaultInboundPlacement((int)$this->request->siteId());
         }
-        return success((new RecycleDeviceErpSyncService())->resync($id, $placement));
+        $siteId = (int)$this->request->siteId();
+        try {
+            $result = (new RecycleDeviceErpSyncService())->resync($id, $placement);
+            if (empty($result['has_asset']) || !empty($result['still_failed'])) {
+                Log::warning("回收入库待核对 site_id={$siteId} device_id={$id} still_failed=" . (int)($result['still_failed'] ?? 0));
+            }
+            return success($result);
+        } catch (\Throwable $e) {
+            Log::error("回收入库核对失败 site_id={$siteId} device_id={$id} " . ($e instanceof CommonException ? $e->getMessage() : get_class($e)));
+            throw $e;
+        }
     }
 }

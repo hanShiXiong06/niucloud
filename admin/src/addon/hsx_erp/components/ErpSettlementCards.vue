@@ -2,7 +2,20 @@
     <div class="settlement-cards" v-loading="loading">
         <el-empty v-if="!loading && !rows.length" :description="emptyText" :image-size="72" />
         <article v-for="row in rows" :key="settlementKey(row)" class="settlement-card" :class="`is-${row.settlement_type || 'other'}`">
-            <header class="card-head">
+            <template v-if="financeVoucher && confirmedOutgoing(row)">
+                <header class="card-head voucher-head">
+                    <div class="party-wrap"><small>本站付款凭证</small><strong>{{ row.settlement_no || '单号待核对' }}</strong></div>
+                    <div class="amount-wrap"><span>本站已登记</span><strong>{{ money(row.amount) }}</strong></div>
+                </header>
+                <dl class="voucher-meta">
+                    <div><dt>登记财务</dt><dd>{{ row.operator_name || '未记录' }}</dd></div>
+                    <div><dt>付款账户</dt><dd>{{ row.capital_account_name || '未记录' }}</dd></div>
+                    <div><dt>登记时间</dt><dd>{{ formatTime(row.confirmed_at) }}</dd></div>
+                </dl>
+                <p class="voucher-note">这笔付款已在本站登记，无需再付。<template v-if="row.applied_amount != null && Number(row.amount) !== Number(row.applied_amount)">当前明细分摊 {{ money(row.applied_amount) }}。</template></p>
+                <slot name="voucher-actions" :row="row" />
+            </template>
+            <header v-else class="card-head">
                 <div class="head-main">
                     <el-tag :type="typeMeta(row.settlement_type).tag" effect="light">{{ row.settlement_type_text || typeMeta(row.settlement_type).label }}</el-tag>
                     <div class="party-wrap">
@@ -16,20 +29,24 @@
                 </div>
             </header>
 
-            <div class="summary-grid">
+            <div v-if="!financeVoucher || !confirmedOutgoing(row)" class="summary-grid">
                 <div><span>怎么结</span><b>{{ row.pay_method_text || typeMeta(row.settlement_type).methodFallback }}</b></div>
                 <div><span>涉及范围</span><b>{{ scopeText(row) }}</b></div>
                 <div><span>经手与时间</span><b>{{ row.operator_name || '-' }} · {{ formatTime(row.confirmed_at || row.create_at) }}</b></div>
             </div>
 
+            <section v-if="row.integration_results?.length" class="receipt-panel" aria-label="本张付款凭证的外部登记">
+                <strong v-if="!financeVoucher || !confirmedOutgoing(row)">本张付款凭证 · {{ row.settlement_no }}</strong>
+                <ErpDocumentSyncResult :results="row.integration_results" :operator-view="financeVoucher && confirmedOutgoing(row) ? 'payable' : undefined" @refresh="emit('refresh')" />
+            </section>
             <el-collapse v-model="expanded">
                 <el-collapse-item :name="settlementKey(row)">
                     <template #title>
-                        <span class="expand-title">查看核销账款{{ deviceCount(row) > 0 ? '、设备' : '' }}和资金凭证</span>
+                        <span class="expand-title">{{ financeVoucher && confirmedOutgoing(row) ? '查看本站账款分摊与附件' : ('查看核销账款' + (deviceCount(row) > 0 ? '、设备' : '') + '和资金凭证') }}</span>
                     </template>
                     <div class="detail-grid">
                         <section class="detail-section">
-                            <div class="section-title">核销了哪些账</div>
+                            <div class="section-title">{{ financeVoucher && confirmedOutgoing(row) ? '这笔款在本站冲了哪些应付' : '核销了哪些账' }}</div>
                             <div v-if="targets(row).length" class="target-list">
                                 <article v-for="target in targets(row)" :key="`${target.target_type}_${target.target_id}`" class="target-card">
                                     <div class="target-head">
@@ -59,7 +76,9 @@
                                     <div v-else class="no-voucher">未上传资金凭证</div>
                                 </article>
                             </div>
-                            <div v-else class="offset-note">本次为账款相互抵扣，没有发生真实资金收入或支出。</div>
+                            <div v-else-if="row.settlement_type === 'offset'" class="offset-note">本次为账款相互抵扣，未查到关联资金流水。</div>
+                            <div v-else-if="confirmedOutgoing(row)" class="offset-note">付款已登记，但未查到关联资金流水。请核对原凭证，无需再次付款。</div>
+                            <div v-else class="offset-note">未查到关联资金流水，请核对原凭证。</div>
 
                             <dl class="document-meta">
                                 <div><dt>结算单号</dt><dd>{{ row.settlement_no || '-' }}</dd></div>
@@ -79,8 +98,11 @@
 import { ref } from 'vue'
 import { erpNamedLabel, erpSerialText } from '@/addon/hsx_erp/utils/display'
 import ErpImageGallery from '@/addon/hsx_erp/components/ErpImageGallery.vue'
+import ErpDocumentSyncResult from './ErpDocumentSyncResult.vue'
+import { confirmedOutgoing } from '../utils/payable-voucher'
 
-withDefaults(defineProps<{ rows?: any[]; loading?: boolean; emptyText?: string }>(), { rows: () => [], loading: false, emptyText: '暂无结算记录' })
+const emit=defineEmits<{(event:'refresh'):void}>()
+withDefaults(defineProps<{ rows?: any[]; loading?: boolean; emptyText?: string; financeVoucher?: boolean }>(), { rows: () => [], loading: false, emptyText: '暂无结算记录', financeVoucher: false })
 const expanded = ref<string[]>([])
 
 function settlementKey(row: any) { return String(row._view_key || row.id || row.settlement_id || row.settlement_no) }
@@ -122,6 +144,17 @@ function formatTime(value: any) { return Number(value || 0) ? new Date(Number(va
 </script>
 
 <style scoped>
+.receipt-panel { margin:0 18px 12px; }
+.settlement-card.is-payment:has(.voucher-head) { border-left:1px solid var(--el-border-color); }
+.voucher-head { align-items:flex-start; border-bottom:1px solid var(--el-border-color-lighter); }
+.voucher-head .party-wrap small,.voucher-meta dt { color:var(--el-text-color-secondary); font-size:12px; }
+.voucher-head .party-wrap strong { font-variant-numeric:tabular-nums; font-size:15px; white-space:normal; overflow-wrap:anywhere; }
+.voucher-head .amount-wrap strong { color:var(--el-text-color-primary); }
+.voucher-meta { display:flex; flex-wrap:wrap; gap:10px 28px; margin:12px 18px 6px; }
+.voucher-meta div { display:flex; gap:7px; align-items:baseline; }
+.voucher-meta dd { margin:0; color:var(--el-text-color-primary); font-size:13px; }
+.voucher-note { margin:8px 18px 12px; color:var(--el-text-color-regular); font-size:13px; }
+.receipt-panel > strong { display:block; margin-bottom:6px; font-size:13px; }
 .settlement-cards { display:flex; max-width:1040px; min-height:180px; margin:0 auto; flex-direction:column; gap:12px; }
 .settlement-card { overflow:hidden; border:1px solid var(--el-border-color); border-left:4px solid var(--el-text-color-secondary); border-radius:8px; background:var(--el-bg-color-overlay); }
 .settlement-card.is-payment { border-left-color:var(--el-color-danger); }

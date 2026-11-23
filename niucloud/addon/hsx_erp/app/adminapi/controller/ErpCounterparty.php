@@ -226,7 +226,9 @@ class ErpCounterparty extends BaseAdminController
         if (!$relation->isEmpty()) {
             $party = ErpParty::where([['site_id', '=', $this->siteId()], ['id', '=', (int)$relation->party_id]])->findOrEmpty();
             if (!$party->isEmpty()) {
-                $this->appendPartyRole($party, $this->normalizeRole((string)$params['role_type']));
+                if ($this->appendPartyRole($party, $this->normalizeRole((string)$params['role_type']))) {
+                    \addon\hsx_erp\app\support\ErpRecycleOperationAudit::markContactRoleChange();
+                }
                 return success($this->formatContact($member->toArray(), $party->toArray(), false));
             }
         }
@@ -316,13 +318,14 @@ class ErpCounterparty extends BaseAdminController
         ]);
     }
 
-    private function appendPartyRole(ErpParty $party, string $role): void
+    private function appendPartyRole(ErpParty $party, string $role): bool
     {
-        if ($role === '') return;
+        if ($role === '') return false;
         $roles = $this->csvValues((string)$party->role_flags);
-        if (in_array($role, $roles, true)) return;
+        if (in_array($role, $roles, true)) return false;
         $roles[] = $role;
         $party->save(['role_flags' => implode(',', $roles), 'update_at' => time()]);
+        return true;
     }
 
     private function csvValues(string $value): array

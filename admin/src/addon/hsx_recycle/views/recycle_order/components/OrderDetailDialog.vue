@@ -36,7 +36,13 @@
       </div>
 
       <HsxNotice v-if="isPaid" type="success" :closable="false" :title="paidSummary" />
+      <InboundPayablePanel v-if="dialogVisible && orderData.devices?.length && orderData.devices.some(d => [5, 9].includes(Number(d.status)))" :order-id="orderData.id" />
 
+      <el-collapse v-if="router.hasRoute('recycle_business_operation_logs')" v-model="auditSections">
+        <el-collapse-item name="operations" title="业务操作日志 · 本单">
+          <BusinessOperationList v-if="auditSections.includes('operations') && dialogVisible" :order-id="orderData.id" />
+        </el-collapse-item>
+      </el-collapse>
       <div class="odd-info-layout">
         <div class="odd-section" v-if="orderData.member">
           <div class="odd-section-header">
@@ -349,6 +355,10 @@
 <script setup lang="ts">
 import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue'
 import { HsxDrawer, HsxNotice } from '@/addon/hsx_components/core'
+import InboundPayablePanel from './InboundPayablePanel.vue'
+import {useRouter} from 'vue-router'
+import BusinessOperationList from '../../../components/BusinessOperationList.vue'
+const router=useRouter(), auditSections=ref<string[]>([])
 import { getReturnOrderList } from '@/addon/hsx_recycle/api/recycle_return_order'
 
 interface OrderDetail {

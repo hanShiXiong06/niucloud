@@ -42,14 +42,18 @@
             <view class="popup-search">
                 <u-search
                     v-model="keyword"
-                    :placeholder="existingOnly ? '搜索主体名称 / 联系人 / 手机 / M号' : '搜索姓名 / 手机号 / 会员号'"
+                    :placeholder="existingOnly || searchKind === 'party' ? '搜索主体名称 / 联系人 / 手机 / M号' : '搜索姓名 / 手机号 / 会员号'"
                     :showAction="false"
                     bgColor="#f1f5f9"
                     height="34"
                     @search="onSearch"
                     @clear="onSearch"
                 />
-                <text class="popup-hint">{{ existingOnly ? '选择已有往来主体进行精确筛选，不会新建或修改往来关系' : (roleType === 'supplier' ? '全部会员都可以作为供货商，选择后自动建立供应商往来关系' : '全部会员都可以作为客户，选择后自动建立客户往来关系') }}</text>
+                <view v-if="!existingOnly" class="role-filters">
+                    <view :class="{ active: searchKind === 'party' }" @click="switchKind('party')">已有往来主体</view>
+                    <view :class="{ active: searchKind === 'member' }" @click="switchKind('member')">从会员选择</view>
+                </view>
+                <text v-if="!existingOnly && searchKind === 'member'" class="popup-hint">选择没有往来主体的会员后，将建立关联。</text>
                 <view v-if="roleType === 'supplier'" class="role-filters">
                     <view v-for="item in supplierFilters" :key="item.value" :class="{ active: activeRoleFilter === item.value }" @click="setRoleFilter(item.value)">{{ item.label }}</view>
                 </view>
@@ -59,7 +63,7 @@
                 <template v-else>
                     <view
                         v-for="item in list"
-                        :key="item.member_id"
+                        :key="item.pick_key"
                         class="party-item"
                         :class="{ selected: item.party_id === partyId }"
                         @click="selectMember(item)"
@@ -70,7 +74,7 @@
                                     <text class="party-item__name">
                                         {{ item.party_name || item.counterparty_name || item.nickname || item.username || '未命名' }}
                                     </text>
-                                    <view v-if="!existingOnly" class="party-item__edit" @click.stop="beginMemberEdit(item)">
+                                    <view v-if="item.source_kind === 'member'" class="party-item__edit" @click.stop="beginMemberEdit(item)">
                                         <u-icon name="edit-pen" color="#2563eb" size="14" />
                                         <text>改会员名</text>
                                     </view>
@@ -93,8 +97,8 @@
 
                     </view>
                     <view class="popup-empty" v-if="!list.length && !loading">
-                        <u-empty mode="search" text="未找到匹配的会员" :image-size="60" />
-                        <text class="popup-empty__hint">请先在会员模块添加该用户</text>
+                        <u-empty mode="search" :text="readError || (searchKind === 'member' ? '未找到匹配的会员' : '未找到匹配的往来主体')" :image-size="60" />
+                        <text v-if="readError" class="popup-empty__hint" @click="onSearch">重新读取</text>
                     </view>
                     <view v-if="list.length" class="load-more">
                         <u-loading-icon v-if="loadingMore" size="18" text="加载更多" />
@@ -167,6 +171,8 @@ const supplierFilters = [
     { label: '整备服务商', value: 'refurbish_provider' as const },
 ]
 const page = ref(1)
+const searchKind = ref<'party'|'member'>('party'), readError=ref('')
+let searchRequest=0
 const hasMore = ref(true)
 const creditLabel = (item: any) => {
     const profile = item?.credit_profile
@@ -179,6 +185,7 @@ const creditLabel = (item: any) => {
 
 watch(() => props.show, (v) => {
     if (v) {
+        searchKind.value = 'party'
         keyword.value = ''
         showCreate.value = false
         editingMember.value = null
@@ -190,29 +197,31 @@ watch(() => props.show, (v) => {
 
 async function search(reset = true) {
     if (reset) { page.value = 1; hasMore.value = true; list.value = [] }
-    if (!hasMore.value || loading.value || loadingMore.value) return
+    if (!hasMore.value || (!reset && (loading.value || loadingMore.value))) return
+    const token=++searchRequest, parties=props.existingOnly || searchKind.value==='party'
+    readError.value=''
     if (reset) loading.value = true
     else loadingMore.value = true
     try {
-        // 筛选场景直接查询往来主体，避免一个主体绑定多个会员时出现重复项。
-        // 业务选择场景仍从会员入口解析/创建主体，保留原有快速建档能力。
-        const endpoint = props.existingOnly ? 'erp/counterparty/options' : 'erp/counterparty/member_options'
+        const endpoint = parties ? 'erp/counterparty/options' : 'erp/counterparty/member_options'
         const params: Record<string, any> = { keyword: keyword.value, page: page.value, limit: 30, paginate: 1 }
-        if (activeRoleFilter.value !== 'all') {
-            if (props.existingOnly) params.role_type = activeRoleFilter.value
-            else params.role_filter = activeRoleFilter.value
-        }
+        if (parties) params.role_type = props.roleContext || (activeRoleFilter.value !== 'all' ? activeRoleFilter.value : (props.existingOnly ? 'all' : props.roleType))
+        else if (activeRoleFilter.value !== 'all') params.role_filter = activeRoleFilter.value
         const res: any = await request.get(endpoint, params, { showLoading: false })
-        const rows = Array.isArray(res?.data) ? res.data : (res?.data?.data || [])
+        if(token!==searchRequest) return
+        const items = Array.isArray(res?.data) ? res.data : (res?.data?.data || [])
+        const rows=items.map((item:any)=>parties ? {...item,member_id:0,source_kind:'party',pick_key:'party:'+item.party_id}
+            : {...item,source_kind:'member',pick_key:'member:'+item.member_id})
         list.value = reset ? rows : [...list.value, ...rows]
         const current = Number(res?.data?.current_page || page.value)
         const last = Number(res?.data?.last_page || current)
         hasMore.value = current < last
         if (hasMore.value) page.value = current + 1
-    } catch { if (reset) list.value = [] }
-    finally { loading.value = false; loadingMore.value = false }
+    } catch { if (token===searchRequest) { if(reset) list.value=[]; readError.value='未能读取，请检查权限后重试' } }
+    finally { if(token===searchRequest) { loading.value = false; loadingMore.value = false } }
 }
 
+function switchKind(value:'member'|'party') { if(!props.existingOnly && searchKind.value!==value) { searchKind.value=value; search(true) } }
 function loadMore() { search(false) }
 function onSearch() { search(true) }
 function setRoleFilter(value: 'all' | 'purchase_supplier' | 'refurbish_provider') { activeRoleFilter.value = value; search(true) }
@@ -247,11 +256,11 @@ async function saveMemberNickname() {
 }
 
 async function selectMember(member: any) {
-    if (props.existingOnly) {
+    if (props.existingOnly || member.source_kind === 'party') {
         const partyId = Number(member?.party_id || member?.counterparty_id || 0)
         if (partyId <= 0) return uni.showToast({ title: '往来主体数据异常', icon: 'none' })
         const partyName = String(member.party_name || member.counterparty_name || '').trim()
-        const memberName = String(member.nickname || member.username || '').trim()
+        const memberName = String(member.member_name || member.nickname || member.username || '').trim()
         const party = { ...member, party_id: partyId, party_name: partyName, member_name: memberName }
         emit('update:partyId', partyId)
         emit('update:partyName', partyName)
@@ -301,7 +310,7 @@ async function createAndSelect() {
         emit('update:partyName', partyName)
         const memberName = String(party.member_name || (createMember.value ? createName.value.trim() : ''))
         emit('update:memberName', memberName)
-        emit('select', { ...party, party_id: partyId, party_name: partyName, member_name: memberName })
+        emit('select', { ...party, member_id:createMember.value ? Number(party.member_id || 0) : 0, party_id: partyId, party_name: partyName, member_name: memberName })
         createName.value = ''; createMobile.value = ''; close()
     } catch (e: any) { uni.showToast({ title: e?.message || '创建失败', icon: 'none' }) }
     finally { creating.value = false }
