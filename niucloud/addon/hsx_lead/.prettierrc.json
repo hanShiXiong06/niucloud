@@ -7,5 +7,11 @@
     "trailingComma": "none",
     "endOfLine": "auto",
     "vueIndentScriptAndStyle": false,
-    "htmlWhitespaceSensitivity": "strict"
+    "htmlWhitespaceSensitivity": "strict",
+    "overrides": [
+        {
+            "files": "*.vue",
+            "options": { "embeddedLanguageFormatting": "off" }
+        }
+    ]
 }
