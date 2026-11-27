@@ -1,0 +1,12 @@
+{
+    "name": "hsx-lead/format-tools",
+    "description": "Dev-only: AST equivalence check for the formatting pass. Not part of the plugin package.",
+    "type": "project",
+    "require": {
+        "php": ">=8.0",
+        "nikic/php-parser": "5.3.1"
+    },
+    "config": {
+        "vendor-dir": "vendor"
+    }
+}

@@ -1,0 +1,13 @@
+{
+    "name": "hsx-lead-format",
+    "private": true,
+    "description": "Dev-only formatter for the hsx_lead plugin source. Not part of the plugin package. Run from this directory.",
+    "scripts": {
+        "check": "prettier --plugin=@prettier/plugin-php --config ../../.prettierrc.json --ignore-path ../../.prettierignore --check",
+        "write": "prettier --plugin=@prettier/plugin-php --config ../../.prettierrc.json --ignore-path ../../.prettierignore --write"
+    },
+    "devDependencies": {
+        "prettier": "3.3.3",
+        "@prettier/plugin-php": "0.22.2"
+    }
+}

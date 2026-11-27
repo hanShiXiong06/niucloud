@@ -1,0 +1,87 @@
+hsx_lead 代码格式化（Q1）操作说明
+================================
+
+目标：只改排版（换行、缩进、空格），不改任何逻辑。拆开超长行（现有 242 行 PHP > 300 字符，最长 1076；
+Vue 865 行 > 300 字符），便于审查和 diff。
+
+工具（仅开发用，不进插件发布包；package.mjs 只打包 app/admin/uni-app/package/resource）：
+  ../../.prettierrc.json     格式规则：120 列、4 空格、单引号、无分号（与框架 admin 一致）；PHP 按 8.0 语法、PER-CS 括号、不加尾逗号
+  ../../.prettierignore      排除 package/ resource/ docs/ sql/ 语言包 json/md
+  package.json               固定版本 prettier 3.3.3 + @prettier/plugin-php 0.22.2
+  composer.json              固定 nikic/php-parser 5.3.1（只用于下面的 AST 对比）
+  ast-compare.php            对比格式化前后每个 PHP 文件的语法树，必须完全一致
+
+所有命令都在本目录（niucloud/addon/hsx_lead/tools/format）执行。
+
+
+一、准备
+--------
+  npm ci  （首次没有 lock 文件时用 npm install，并提交生成的 package-lock.json）
+  composer install
+  从最新 main 新建分支：git checkout -b style/hsx-lead-format
+
+
+二、分四批，每批单独提交
+------------------------
+  批次 A：app/ 下全部 PHP（业务代码，最重要）
+  批次 B：Addon.php、scripts/、tests/ 下的 PHP
+  批次 C：admin/ 下 .ts .vue .css
+  批次 D：uni-app/ 下 .ts .vue .scss .css
+
+每一批按同样步骤：
+
+  1. 保存格式化前快照（整个插件目录）：
+       rm -rf /tmp/hsx_before && cp -r ../.. /tmp/hsx_before
+
+  2. 只格式化本批路径，例如批次 A：
+       npm run write -- ../../app
+     批次 B：npm run write -- ../../Addon.php ../../scripts ../../tests
+     批次 C：npm run write -- ../../admin
+     批次 D：npm run write -- ../../uni-app
+
+  3. 本批含 PHP 时（A、B）：
+       php ast-compare.php /tmp/hsx_before ../..
+     必须输出 "OK: every AST is identical"。任何 AST CHANGED / PARSE ERROR 都要停下来报告，不要提交。
+     再对本批每个 PHP 文件跑 php -l（PHP 8.0）。
+
+  4. 本批是前端（C、D）：
+       跑插件 tests/*.mjs 全部；跑 tests/check-mobile-build.mjs、scripts/check-wxss.mjs；
+       能构建的话再跑一次框架 admin 构建和 uni-app 小程序构建。
+
+  5. 跑插件全部测试（tests/*.php 和 tests/*.mjs），与格式化前 main 的结果逐项对比。
+
+
+三、契约测试失败时的处理规则（重要）
+------------------------------------
+很多测试直接对源码文本做匹配（PHP 约 10 个文件 / 80 处 str_contains；前端 .mjs 有大量 .includes）。
+格式化后这些断言会因为空格、换行、引号变化而失败，这是预期的。
+
+  允许：修改测试，让文本匹配忽略空白。例如 PHP 测试里加一个辅助函数
+          function srcHas(string $src, string $needle): bool {
+              return str_contains(preg_replace('/\s+/', '', $src), preg_replace('/\s+/', '', $needle));
+          }
+        再把 str_contains($源码, '...') 换成 srcHas($源码, '...')；.mjs 同理（去掉 \s 后再 includes）。
+        如果是引号或分号变化导致不匹配，按格式化后的写法更新断言里的字符串。
+  禁止：为了让测试通过而回改业务代码，或删除、弱化断言的含义。
+  测试本身语义（检查什么）必须保持不变；修改测试的那部分放在本批同一个提交里，并在提交说明里列出改了哪些断言。
+
+  注意：旧 main 上已有一个"安装表数"断言失败，与格式化无关，保持原样并在报告里注明。
+
+
+四、提交
+--------
+  每批一个提交，提交说明写明：本批范围、ast-compare 结果（A/B）、测试结果、改了哪些契约断言。
+  全部完成后，在仓库根目录新建或追加 .git-blame-ignore-revs，写入四个格式化提交的完整哈希，
+  让 git blame 跳过纯格式化提交。单独提交这个文件。
+
+  合入 main 前确认：
+    - 四批 ast-compare（A、B）全部 OK
+    - 测试结果与格式化前一致（除旧的安装表数断言）
+    - npm run check -- ../../app ../../admin ../../uni-app ../../Addon.php ../../scripts ../../tests 无报错
+
+
+五、出问题时
+------------
+  - prettier 对某个文件报语法错误：跳过该文件（加进 .prettierignore 并注明原因），报告给开发，不要手改代码。
+  - ast-compare 报 AST CHANGED：说明格式化工具改了逻辑，本批作废（git checkout 本批路径），报告文件名和差异行。
+  - 前端构建或渲染测试失败：本批作废，报告失败的文件和错误。

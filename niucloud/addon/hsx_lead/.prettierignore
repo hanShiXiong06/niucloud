@@ -1,0 +1,15 @@
+# Only hand-written plugin source is formatted. Never touch data, build output or vendored assets.
+node_modules/
+tools/format/node_modules/
+package/
+resource/
+docs/
+sql/
+*.sql
+*.json
+*.md
+*.txt
+*.min.js
+*.min.css
+# Language packs are data, not code.
+admin/lang/
