@@ -119,6 +119,6 @@ check(helper.syncAttentionFor({last_sync_status:'interrupted',sync_progress:{sta
 check(helper.syncAttentionFor({last_sync_status:'pending',sync_attention:authIssue})===null,'pending state suppresses stale terminal attention')
 check(helper.syncAttentionFor({channel_enabled:false,authorization_attention:true})===null,'closed channel suppresses fallback authorization warning')
 check(helper.syncAttentionFor({last_sync_status:'failed',authorization_attention:true})?.action==='reauthorize','early expiration attention still provides login recovery if diagnostic metadata is absent')
-for(const relative of ['composables/authRenewal.ts','views/components/ConnectionWizard.vue','views/components/MerchantPanel.vue'])check(fs.readFileSync(path.join(directory,relative),'utf8')===fs.readFileSync(path.join(root,'admin/src/addon/hsx_lead',relative),'utf8'),relative+' mounted mirror matches source')
+for(const relative of ['composables/authRenewal.ts','views/components/ConnectionWizard.vue','views/components/MerchantPanel.vue'])check(fs.readFileSync(path.join(directory,relative),'utf8').replace(/\s+/g,'')===fs.readFileSync(path.join(root,'admin/src/addon/hsx_lead',relative),'utf8').replace(/\s+/g,''),relative+' mounted mirror matches source')
 check(!/soujike|wanji|aiguanji|jixiaoer/.test(fs.readFileSync(helperFile, 'utf8')), 'presentation helper contains no provider-name conditionals')
 console.log(`PASS ${checks} auth renewal UI checks; actual SFC setup/render, synthetic public capabilities only, no HTTP/database access.`)

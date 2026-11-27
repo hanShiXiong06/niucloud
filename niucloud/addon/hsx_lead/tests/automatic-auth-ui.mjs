@@ -176,7 +176,7 @@ check(!('store_id' in actions(h, 'start')[0].args[1].scope), 'changing account r
 // Settings exercise real setup, synthetic endpoints, no key persistence or billing.
 h = harness({ settings: true }); await settle(); s = h.state
 check(s.form.api_key === '' && s.config.value.configured && s.config.value.key_hint === '••••demo', 'saved settings display a mask, never recover a plaintext key')
-check(settingsSource.includes('<el-input-number v-input-number-a11y') && !!s.vInputNumberA11y, 'quota input binds the existing plugin accessibility directive after async loading')
+check(/<el-input-number\s+v-input-number-a11y/.test(settingsSource) && !!s.vInputNumberA11y, 'quota input binds the existing plugin accessibility directive after async loading')
 const attrs = { 'aria-disabled': 'true' }; let nativeChanges = 0, businessEvents = 0, focusChanges = 0
 const nativeInput = { get disabled() { return false }, set disabled(_value) { nativeChanges++ }, removeAttribute(name) { delete attrs[name] }, setAttribute(name, value) { attrs[name] = value }, dispatchEvent() { businessEvents++ }, focus() { focusChanges++ } }
 s.vInputNumberA11y.updated({ querySelectorAll: () => [nativeInput] }); await settle()

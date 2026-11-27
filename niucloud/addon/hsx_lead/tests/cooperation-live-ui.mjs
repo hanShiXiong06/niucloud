@@ -89,7 +89,7 @@ check(profile.includes('推广中心') && workbench.includes('@promotion="openPr
 check(workbench.includes('await processPromotionIntent()') && workbench.includes('pendingPromotion ? { promotion_invite: 1') && !workbench.includes('relation.bind'), 'invitation survives login and is delegated to server-backed confirmation, not local relation writes')
 for (const name of ['store-discovery', 'inventory', 'delivery-capability', 'reliable-wing']) check(fs.statSync(path.join(mobile, 'static/cooperation/visuals', name + '.png')).size > 100, 'original approved local artwork is bundled: ' + name)
 const avatar = source('CoopMerchantAvatar')
-check(avatar.includes('v-if="showHighlight" class="coop-merchant-avatar__wing') && !avatar.includes('coop-merchant-avatar__badge'), 'the pure highlighted avatar retains double wings without creating a certification badge')
+check(/v-if="showHighlight"\s+class="coop-merchant-avatar__wing/.test(avatar) && !avatar.includes('coop-merchant-avatar__badge'), 'the pure highlighted avatar retains double wings without creating a certification badge')
 for (const name of fs.readdirSync(components).filter(name => name.endsWith('.vue'))) {
     const text = fs.readFileSync(path.join(components, name), 'utf8')
     check(!/@prototype|@mobile|prototypeSession|simulatePay|readMobile|writeMobile/.test(text), name + ' has no prototype business-data dependency')

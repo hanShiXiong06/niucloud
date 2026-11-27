@@ -108,7 +108,7 @@ for (const name of fs.readdirSync(directory).filter(name => name.endsWith('.vue'
             for (const child of node.children || []) findActions(child)
         }
         findActions(dom.baseParse(template))
-        check(actions.length === 0 && template.includes('<CoopMembershipEntry '), 'profile replaces competing purchase rows with one component-owned entity membership entry')
+        check(actions.length === 0 && /<CoopMembershipEntry\s/.test(template), 'profile replaces competing purchase rows with one component-owned entity membership entry')
         check(template.includes("shown('showMembership')") && template.includes(':profile="profile"'), 'consolidated entity entry respects existing DIY visibility flags and uses real subject rights')
         check(template.includes('@open="$emit(\'membership\')"') && !template.includes("$emit('purchase'"), 'profile entry is read-only native navigation, not a competing instant-purchase action')
     }
