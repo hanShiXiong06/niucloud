@@ -281,12 +281,13 @@ function refresh(resetWatch = true) { if (busyId.value) return; paymentReadEpoch
 const presentations = computed(() => new Map(rows.value.map(row => [row, paymentOrderPresentation(row)])))
 function presentation(row: CoopRow) { return presentations.value.get(row) || paymentOrderPresentation(row) }
 // Update one card in place instead of remounting the pager, so the list keeps its scroll position.
-// A card whose status no longer matches the active tab leaves the list; an emptied list reloads to show the empty state.
-function applyOrder(order: CoopRow) {
+// Only when the same order stays in the active tab. If it left the tab or was replaced by another
+// order, the server-side pages have shifted (page-number paging), so reload the whole list as before;
+// removing the card locally would make the next page skip an order.
+function applyOrder(order: CoopRow, originalId = Number(order.id)) {
     const id = Number(order.id)
-    if (order.status !== status.value) rows.value = rows.value.filter(item => Number(item.id) !== id)
-    else rows.value = rows.value.map(item => Number(item.id) === id ? order : item)
-    if (!rows.value.length) revision.value++
+    if (order.status !== status.value || id !== originalId || !rows.value.some(item => Number(item.id) === id)) { revision.value++; return }
+    rows.value = rows.value.map(item => Number(item.id) === id ? order : item)
 }
 // Outcome uncertain: re-read only this order. If that read fails, fall back to the full reload.
 async function reloadOrder(id: number) {
@@ -295,7 +296,7 @@ async function reloadOrder(id: number) {
         const response: any = await cooperationOrder(id), order = response?.data
         if (!current(who) || view !== revision.value) return
         if (Number(order?.id) !== id) throw new Error('付款单资料不一致')
-        applyOrder(order)
+        applyOrder(order, id)
     } catch { if (current(who) && view === revision.value) revision.value++ }
 }
 function filter(value: string) { const next = cooperationPaymentOrderStatus(value); if (busyId.value || status.value === next) return; status.value = next; rows.value = []; detailOrderId.value = 0; refresh() }
@@ -314,7 +315,7 @@ async function continuePayment(row: CoopRow) {
             const replacement = cooperationPaymentReplacementId(order); if (!replacement) break; previous = order; id = replacement
             if (hop === 5) throw new Error('付款单多次调整，请刷新核对最新订单')
         }
-        if (order.status === 'paid' && order.payment_state !== 'paid_pending') { applyOrder(order); uni.showToast({ title: order.requires_manual_review ? '付款已确认，请查看订单核对提示' : '这笔付款单已支付，无需重复付款', icon: 'none' }); return }
+        if (order.status === 'paid' && order.payment_state !== 'paid_pending') { applyOrder(order, Number(row.id)); uni.showToast({ title: order.requires_manual_review ? '付款已确认，请查看订单核对提示' : '这笔付款单已支付，无需重复付款', icon: 'none' }); return }
         const url = cooperationPaymentOrderCheckUrl(order) || cooperationPaymentOrderResumeUrl(order); if (!url) throw new Error(order.close_reason || '这笔付款单当前不能继续支付，请刷新核对'); uni.navigateTo({ url })
     }
     catch (cause) { if (current(who)) { const message = coopError(cause, '暂不能继续支付，请核对原单'); actionErrors.value[Number(row.id)] = message; coopNotice(message, { inlineHint: '暂未完成，请查看该订单下方说明' }); void reloadOrder(Number(row.id)) } }
@@ -419,7 +420,7 @@ onBeforeUnmount(pausePaymentOrders)
 .payment-order__actions { display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:10px;padding-top:14px;margin-top:10px;border-top:1px solid #f0f1f4; }.payment-order__actions button { margin:0;padding:0 16px;min-height:44px;line-height:44px;font-size:13px;border:1px solid #dce2eb;border-radius:22px;background:#fff;color:#65748a; }.payment-order__actions button::after { border:0; }.payment-order__actions button.is-primary { color:#fff;background:var(--primary-color,#3978c2);border-color:var(--primary-color,#3978c2); }
 .payment-order__identity { flex:1;min-width:0; }.payment-order__caption { display:block;margin-top:3px;font-size:12px;line-height:1.6;color:#697586; }.payment-order__status { flex:none;max-width:40%;text-align:right;font-size:12px;line-height:1.8;padding:3px 8px;border-radius:5px;color:#697586;background:#f3f5f7; }.payment-order__status.is-warning { color:#8a5b13;background:#fff5df; }.payment-order__status.is-danger { color:#a13c2e;background:#fff0ec; }.payment-order__status.is-success { color:#276a4c;background:#edf8f1; }
 .payment-order__next { margin-top:14px;font-size:13px;line-height:1.7;color:#697586; }.payment-order__next.is-warning { color:#805c25; }.payment-order__next.is-danger { color:#a13c2e; }.payment-order__action-error { padding:10px 12px;margin-top:12px;background:#fff4f0;color:#963e2c;border-radius:6px;font-size:13px;line-height:1.7;word-break:break-word; }
-.payment-order__detail-toggle { display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:44px;margin:8px 0 0;padding:0;background:transparent;border:0;border-radius:0;text-align:left;color:#697586;font-size:12px;line-height:1.6; }.payment-order__detail-toggle::after { border:0; }.payment-order__detail-toggle>view { display:flex;align-items:center;gap:5px;flex:none; }.payment-order__details { padding:12px 0;border-top:1px solid #eef0f3; }.payment-order__number { display:flex;align-items:flex-start;gap:8px;color:#687586;font-size:12px;margin:0; }.payment-order__number>text:first-child { flex:none; }.payment-order__number>text:nth-child(2) { flex:1;min-width:0;word-break:break-all; }.payment-order__number button { flex:none;min-height:44px;margin:-12px 0 -6px;padding:0 8px;background:transparent;border:0;line-height:44px;color:var(--primary-color,#3978c2);font-size:12px; }.payment-order__number button::after { border:0; }
+.payment-order__detail-toggle { display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:44px;margin:8px 0 0;padding:0;background:transparent;border:0;border-radius:0;text-align:left;color:#697586;font-size:12px;line-height:1.6; }.payment-order__detail-toggle::after { border:0; }.payment-order__detail-toggle>view { display:flex;align-items:center;gap:5px;flex:none; }.payment-order__details { padding:12px 0;border-top:1px solid #eef0f3; }.payment-order__number { display:flex;align-items:flex-start;gap:8px;color:#687586;font-size:12px;margin:0; }.payment-order__number>text:first-child { flex:none; }.payment-order__number>text:nth-child(2) { flex:1;min-width:0;word-break:break-all; }.payment-order__number button { flex:none;min-width:44px;min-height:44px;margin:-12px 0 -6px;padding:0 8px;background:transparent;border:0;line-height:44px;color:var(--primary-color,#3978c2);font-size:12px; }.payment-order__number button::after { border:0; }
 .payment-order__costs { padding-top:8px;color:#687586;font-size:12px;line-height:1.7; }.payment-order__costs>view { display:flex;justify-content:space-between;gap:12px;padding:4px 0; }.payment-order__time,.payment-order__expires { margin-top:8px;line-height:1.6;color:#697586;font-size:12px; }.orders-empty__action { width:180px;min-height:44px;line-height:44px;margin:16px auto 0;padding:0 16px;border:1px solid #dce2eb;border-radius:22px;background:#fff;color:var(--primary-color,#3978c2);font-size:14px; }.orders-empty__action::after { border:0; }
 /* #ifdef H5 */
 @supports(height:100dvh){.payment-orders-page{height:calc(100dvh - var(--window-top,0px) - var(--window-bottom,0px));}}

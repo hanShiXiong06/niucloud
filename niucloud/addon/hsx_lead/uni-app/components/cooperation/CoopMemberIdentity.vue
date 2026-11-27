@@ -101,7 +101,7 @@ function copyNo() { if (!props.preview && memberNo.value) uni.setClipboardData({
 .coop-member-identity__settings { flex:none;display:flex;align-items:center;justify-content:center;align-self:flex-start;width:44px;min-height:44px;margin:-6px -8px 0 0;padding:0;background:transparent; }
 .coop-member-identity__links { display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:32px;margin-top:6px; }
 .coop-member-identity__account { flex:1;min-width:0;color:var(--lead-diy-subtle,#909399);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
-.coop-member-identity__links>button { display:flex;align-items:center;gap:4px;flex:none;min-height:44px;margin:-4px 0;padding:0;color:var(--lead-diy-text,#606266);font-size:12px;background:transparent; }
+.coop-member-identity__links>button { display:flex;align-items:center;gap:4px;flex:none;min-height:44px;margin:0;padding:0;color:var(--lead-diy-text,#606266);font-size:12px;background:transparent; }
 .coop-member-identity__metrics { display:flex;align-items:stretch;border-top:1px solid var(--lead-diy-border,#e4e8ef);padding-top:16px;margin-top:4px;gap:4px; }
 .coop-member-identity__metric { display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;flex:1;min-width:0;min-height:56px;padding:0;margin:0;background:transparent;color:var(--lead-diy-text,#606266);font-size:12px;line-height:18px; }
 .coop-member-identity__number { max-width:100%;overflow-wrap:anywhere;font-size:21px;font-weight:650;line-height:27px;color:var(--lead-diy-title,#202124);font-variant-numeric:tabular-nums; }
