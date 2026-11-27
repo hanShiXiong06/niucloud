@@ -5,6 +5,7 @@ declare(strict_types=1);
 $plugin=dirname(__DIR__);$root=dirname($plugin,3);$menu=require $plugin.'/app/dict/menu/site.php';
 $checks=0;
 function menuCheck(bool $ok,string $message): void {global $checks;if(!$ok)throw new RuntimeException($message);$checks++;}
+$srcHas = static fn(string $source, string $needle): bool => str_contains(preg_replace('/\s+/', '', $source), preg_replace('/\s+/', '', $needle));
 try {
     menuCheck(count($menu)===1&&$menu[0]['menu_key']==='hsx_lead','single plugin top-level directory');
     menuCheck($menu[0]['parent_key']===''&&(int)$menu[0]['menu_type']===0,'plugin directory remains top level');
@@ -63,7 +64,8 @@ try {
                 $key='hsx_lead_deposit_'.$action;menuCheck(isset($buttons[$key])&&$buttons[$key]['api_url']===$api&&$buttons[$key]['methods']===$method,'deposit action has its own exact route and method: '.$action);
             }
             $routes=file_get_contents($plugin.'/app/adminapi/route/deposit.php');
-            foreach(["Route::get('',\$c.'lists')","Route::get(':id',\$c.'detail')","Route::post(':id/review',\$c.'review')","Route::post(':id/refresh',\$c.'refresh')",'PermissionGate::class']as$part)menuCheck(str_contains($routes,$part),'deposit routes keep fail-closed native permission gates: '.$part);
+            foreach(["Route::get('',\$c.'lists')","Route::get(':id',\$c.'detail')","Route::post(':id/review',\$c.'review')","Route::post(':id/refresh',\$c.'refresh')"]as$part)menuCheck($srcHas($routes,$part),'deposit routes keep fail-closed native permission gates: '.$part);
+            menuCheck(str_contains($routes,'PermissionGate::class'),'deposit routes keep fail-closed native permission gates: PermissionGate::class');
             $service=file_get_contents($plugin.'/app/service/cooperation/MembershipDepositService.php');menuCheck(str_contains($service,"permission('hsx_lead_deposit_'.\$action)")&&str_contains($service,"scope()['all_data']"),'direct service invocation requires per-action and whole-site authority');
         } elseif (in_array($page['menu_key'],['hsx_lead_cooperation_home','hsx_lead_cooperation_profile_home'],true)) {
             menuCheck($page['api_url']===''&&$page['methods']===''&&$page['children']===[],'home decoration does not invent a plugin API or inherit config authority');
