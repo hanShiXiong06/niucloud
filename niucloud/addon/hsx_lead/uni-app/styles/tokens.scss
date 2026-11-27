@@ -1,0 +1,201 @@
+// hsx_lead 移动端设计令牌（唯一的颜色/字号/圆角/间距来源）
+//
+// 规范正文：niucloud/addon/hsx_lead/docs/MOBILE_DESIGN_SPEC.md
+// 用法：在组件 <style lang="scss"> 顶部
+//   @import '../../styles/tokens.scss';   // 路径按组件位置调整
+// 本文件只有 SCSS 变量和 mixin，不输出任何 CSS，引入多少次都不增加样式体积。
+//
+// 方法借鉴 CDS（open-claude-ui）的分层：surface / text / 语义色五件套 / 几何。
+// 外观保持本站蓝色主题与 NiuCloud / uview-plus，不引入陶土色。
+// 主色跟随站点主题：框架 themeColor() 在页面根节点注入 --primary-color。
+// 组件里禁止再写裸 hex；需要新颜色时先在这里加令牌，并更新规范文档。
+
+// ---------- 1. 表面（由低到高） ----------
+$hsx-surface-page: #f5f6f8;      // 页面底色
+$hsx-surface-card: #ffffff;      // 卡片、列表行、表单块
+$hsx-surface-sunken: #f7f8fa;    // 卡片内的次级区块、输入框底、分组背景
+$hsx-surface-overlay: #ffffff;   // 弹层、底部面板（配合 $hsx-shadow-overlay）
+$hsx-mask: rgba(15, 23, 42, .45); // 弹层遮罩
+
+// ---------- 2. 文字（不用 opacity 弱化文字） ----------
+$hsx-text-primary: #20252d;      // 标题、正文、金额
+$hsx-text-secondary: #5f6b7a;    // 辅助说明（默认的弱化档，白底对比度约 5.4:1）
+$hsx-text-muted: #7b8695;        // 仅用于元数据：时间、编号、占位符（约 3.9:1，不要用于需要阅读的句子）
+$hsx-text-disabled: #b4bcc7;
+$hsx-text-on-fill: #ffffff;      // 实心按钮/徽标上的文字
+
+// ---------- 3. 语义色（每种：fill 实心 / soft 淡底 / text 文字 / border 边框） ----------
+// accent = 用户主操作、链接、选中态。跟随站点主题色。
+$hsx-accent: var(--primary-color, #3978c2);
+$hsx-accent-soft: var(--primary-color-light, #edf4ff);
+$hsx-accent-text: var(--primary-color, #3978c2);
+
+$hsx-danger: #d93833;            // 删除、拒绝、失败
+$hsx-danger-soft: #fff0ec;
+$hsx-danger-text: #a13c2e;
+$hsx-danger-border: #f3c4bb;
+
+$hsx-warning: #f5a623;           // 待处理、即将超时、需人工核对
+$hsx-warning-soft: #fff5df;
+$hsx-warning-text: #8a5b13;
+$hsx-warning-border: #f1d9a6;
+
+$hsx-success: #2e9d62;           // 已完成、已到账、已接单
+$hsx-success-soft: #edf8f1;
+$hsx-success-text: #276a4c;
+$hsx-success-border: #bfe3cd;
+
+$hsx-neutral-soft: #f3f5f7;      // 中性状态标签底色（已关闭、已过期）
+$hsx-neutral-text: #5f6b7a;
+
+// ---------- 4. 边框与阴影 ----------
+$hsx-border: #edf0f4;            // 分隔线、卡片描边（1px）
+$hsx-border-strong: #dce2eb;     // 次要按钮、输入框描边
+$hsx-shadow-overlay: 0 -4px 24px rgba(15, 23, 42, .10);  // 只给弹层/底部面板
+$hsx-shadow-float: 0 4px 16px rgba(15, 23, 42, .08);     // 只给悬浮按钮、吸顶条
+
+// ---------- 5. 字号（最小 12px）与行高 ----------
+$hsx-font-caption: 12px;         // 元数据、标签、辅助说明
+$hsx-font-body-sm: 13px;         // 次要正文、按钮文字（次要按钮）
+$hsx-font-body: 14px;            // 正文、表单、主要按钮
+$hsx-font-title-sm: 15px;        // 卡片标题、列表主文字
+$hsx-font-title: 17px;           // 页面/面板标题
+$hsx-font-display: 24px;         // 金额、关键数字
+$hsx-line-height: 1.6;
+$hsx-line-height-tight: 1.35;    // 标题、金额
+$hsx-weight-regular: 400;
+$hsx-weight-medium: 500;
+$hsx-weight-bold: 600;
+
+// ---------- 6. 间距（4 的倍数） ----------
+$hsx-space-1: 4px;
+$hsx-space-2: 8px;
+$hsx-space-3: 12px;
+$hsx-space-4: 16px;              // 页面左右边距、卡片内边距
+$hsx-space-5: 20px;
+$hsx-space-6: 24px;              // 区块之间
+
+// ---------- 7. 圆角 ----------
+$hsx-radius-sm: 6px;             // 标签、小徽标
+$hsx-radius-md: 8px;             // 按钮、输入框、卡片内小块
+$hsx-radius-lg: 12px;            // 卡片、弹层顶角
+$hsx-radius-pill: 999px;         // 胶囊按钮、筛选标签
+
+// ---------- 8. 尺寸 ----------
+$hsx-tap-min: 44px;              // 任何可点击元素的最小点击尺寸（宽和高）
+$hsx-control-h: 44px;            // 按钮、输入框高度
+$hsx-control-h-sm: 36px;         // 卡片内的小按钮：视觉高度，点击区仍需 44px（见 mixin）
+$hsx-icon: 20px;
+
+// ---------- 9. 动效 ----------
+$hsx-duration-fast: 150ms;
+$hsx-duration: 220ms;
+$hsx-ease-out: cubic-bezier(.2, .8, .2, 1);
+
+// ======================= mixin =======================
+
+// 点击区域不小于 44×44，视觉尺寸不变。用伪元素扩大热区，不用负外边距
+// （负外边距在紧凑布局里会盖住相邻元素，2026-11-27 收益页实测误触）。
+// 注意：元素需要 position: relative；伪元素热区也不能与相邻可点击元素重叠，
+// 相邻元素间距不足时，直接把元素本身做到 44px。
+@mixin hsx-tap-target {
+    position: relative;
+    &::before {
+        content: '';
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: max(100%, #{$hsx-tap-min});
+        height: max(100%, #{$hsx-tap-min});
+        transform: translate(-50%, -50%);
+    }
+}
+
+// 去掉 uni-app button 的默认描边和外边距
+@mixin hsx-button-reset {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    line-height: inherit;
+    &::after { border: 0; }
+}
+
+// 主按钮：每个视图最多一个
+@mixin hsx-button-primary {
+    @include hsx-button-reset;
+    min-height: $hsx-control-h;
+    padding: 0 $hsx-space-4;
+    border-radius: $hsx-radius-pill;
+    background: $hsx-accent;
+    color: $hsx-text-on-fill;
+    font-size: $hsx-font-body;
+    font-weight: $hsx-weight-medium;
+}
+
+// 次要按钮：默认档
+@mixin hsx-button-secondary {
+    @include hsx-button-reset;
+    min-height: $hsx-control-h;
+    padding: 0 $hsx-space-4;
+    border: 1px solid $hsx-border-strong;
+    border-radius: $hsx-radius-pill;
+    background: $hsx-surface-card;
+    color: $hsx-text-secondary;
+    font-size: $hsx-font-body-sm;
+}
+
+// 文字按钮（链接样式）
+@mixin hsx-button-text {
+    @include hsx-button-reset;
+    @include hsx-tap-target;
+    color: $hsx-accent-text;
+    font-size: $hsx-font-body-sm;
+}
+
+// 卡片
+@mixin hsx-card {
+    background: $hsx-surface-card;
+    border-radius: $hsx-radius-lg;
+    padding: $hsx-space-4;
+}
+
+// 状态标签：$tone 取 accent / success / warning / danger / neutral
+@mixin hsx-status-tag($tone: neutral) {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px $hsx-space-2;
+    border-radius: $hsx-radius-sm;
+    font-size: $hsx-font-caption;
+    line-height: 1.6;
+    @if $tone == accent { background: $hsx-accent-soft; color: $hsx-accent-text; }
+    @else if $tone == success { background: $hsx-success-soft; color: $hsx-success-text; }
+    @else if $tone == warning { background: $hsx-warning-soft; color: $hsx-warning-text; }
+    @else if $tone == danger { background: $hsx-danger-soft; color: $hsx-danger-text; }
+    @else { background: $hsx-neutral-soft; color: $hsx-neutral-text; }
+}
+
+// 行内提示条（页面内说明、错误、警告）
+@mixin hsx-notice-bar($tone: warning) {
+    padding: $hsx-space-2 $hsx-space-3;
+    border-radius: $hsx-radius-md;
+    font-size: $hsx-font-body-sm;
+    line-height: $hsx-line-height;
+    word-break: break-word;
+    @if $tone == danger { background: $hsx-danger-soft; color: $hsx-danger-text; }
+    @else if $tone == success { background: $hsx-success-soft; color: $hsx-success-text; }
+    @else if $tone == accent { background: $hsx-accent-soft; color: $hsx-accent-text; }
+    @else { background: $hsx-warning-soft; color: $hsx-warning-text; }
+}
+
+// 金额、计数、倒计时等会变化的数字
+@mixin hsx-number {
+    font-variant-numeric: tabular-nums;
+}
+
+// 单行省略
+@mixin hsx-ellipsis {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
