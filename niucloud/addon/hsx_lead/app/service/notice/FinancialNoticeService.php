@@ -61,6 +61,7 @@ final class FinancialNoticeService
         $limit = max(1, min(200, $limit));
         $summary = ['sites' => 0, 'reconstructed' => 0, 'processed' => 0, 'failed_sites' => 0];
         $namespace = hash('sha256', (string) Db::connect()->getConfig('database').':'.(string) Db::connect()->getConfig('prefix'));
+        if ($siteId === null)$this->sendDueTasks($namespace, $limit, $summary);
         $sites = [$siteId];
         if ($siteId === null) {
             $cursor = (int) Cache::get('hsx_lead_fund_sites_'.$namespace, 0);
@@ -102,6 +103,39 @@ final class FinancialNoticeService
                 Log::warning('hsx_lead资金通知补偿未完成', ['site_id' => $site, 'error_type' => get_class($error)]);
             }
         }return $summary;
+    }
+
+    /**
+     * Timing first. Acceptance reminders have send windows of one to a few minutes (the 1-minute node expires
+     * at the deadline). The site rotation below visits only 10 sites per run, so with more sites a due reminder
+     * could expire before its site came round. The global idx_due (status,next_retry_at,id) finds every site that
+     * has a due task right now; send those first. Same policy check and per-site lock as the rotation.
+     */
+    private function sendDueTasks(string $namespace, int $limit, array &$summary): void
+    {
+        try {
+            $sites = Db::name('hsx_lead_notice_task')->whereIn('status', NoticeTaskRuntime::AUTO_STATUSES)
+                ->where('next_retry_at', '<=', time())->group('site_id')->limit(50)->column('site_id');
+        } catch (\Throwable $error) {
+            Log::warning('hsx_lead到期通知站点查询失败，改由轮转补偿', ['error_type' => get_class($error)]);
+            return;
+        }
+        foreach ($sites as $site) {
+            $site = (int) $site;
+            try {
+                if (!AccountNoticePolicyService::installed($site) || empty(AccountNoticePolicyService::raw($site)['enabled']))continue;
+                $lock = 'hsx_fn_'.substr(hash('sha256', $namespace.':'.$site), 0, 48);
+                if ((int) (Db::query('SELECT GET_LOCK(?,0) AS acquired', [$lock])[0]['acquired'] ?? 0) !== 1)continue;
+                try {
+                    $summary['processed'] += (new NoticeTaskRuntime($this->dispatcher))->recoverSite($site, $limit);
+                } finally {
+                    Db::query('SELECT RELEASE_LOCK(?) AS released', [$lock]);
+                }
+            } catch (\Throwable $error) {
+                $summary['failed_sites']++;
+                Log::warning('hsx_lead到期通知发送未完成', ['site_id' => $site, 'error_type' => get_class($error)]);
+            }
+        }
     }
 
     public function process(int $site, int $id): array

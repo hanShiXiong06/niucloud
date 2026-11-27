@@ -2,6 +2,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { getWeappTemplateId } from '@/app/api/system'
 import { getSiteId, getToken } from '@/utils/common'
 import { coopNotice } from '../utils/notice'
+import { reportCooperationNoticeAuthorization } from '../api/notice'
 
 const noticeKeys = 'hsx_lead_task_assigned,hsx_lead_task_changed'
 type SubscribeStatus =
@@ -143,6 +144,9 @@ export function useCooperationSubscribe(options: { enabled?: () => boolean } = {
                     tmplIds: ids,
                     success: (result) => {
                         const accepted = ids.filter((id) => (result as Record<string, any>)[id] === 'accept').length
+                        // Fresh quota: let the server resend work-order notices that WeChat rejected (43101) earlier.
+                        // Fire and forget; the subscription result shown to the user does not depend on it.
+                        if (accepted > 0 && current(who, turn)) void reportCooperationNoticeAuthorization().catch(() => {})
                         if (accepted === ids.length)
                             finish({ status: 'accepted', accepted, total: ids.length }, '已同意本次通知')
                         else if (accepted > 0)

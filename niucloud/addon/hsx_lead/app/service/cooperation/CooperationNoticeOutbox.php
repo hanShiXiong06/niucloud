@@ -31,6 +31,11 @@ final class CooperationNoticeOutbox
         $site = (int) ($event['site_id'] ?? 0);
         $id = self::record($site, (int) ($event['lead_id'] ?? 0), (string) ($event['action'] ?? ''));
         if (!$id)return;
+        self::dispatchIfQueued($site, $id);
+    }
+    /** Hand a pending event to the framework queue right away when one is running; otherwise the minute schedule picks it up. */
+    public static function dispatchIfQueued(int $site, int $id): void
+    {
         // A PaySuccess listener may still be inside the framework's outer
         // transaction. Never send externally before that transaction commits.
         // Dispatch falls back to synchronous execution when the framework
@@ -42,6 +47,27 @@ final class CooperationNoticeOutbox
         } catch (\Throwable $error) {
             Log::warning('协作通知已保留待补偿事件：site='.$site.', id='.$id.', type='.get_class($error));
         }
+    }
+    /**
+     * Put an already handled event back in the queue, so that per-channel claims the caller has set back to
+     * 'deferred' are submitted again by the normal path (which re-validates the work order and recipient).
+     * Returns the event id, or 0 when the event is past its notice TTL. Caller owns the transaction.
+     */
+    public static function reopen(int $site, int $leadId, string $action): int
+    {
+        // Dedupe key is (lead, current assignment version, current status, action): this finds the original event.
+        $id = self::record($site, $leadId, $action);
+        if (!$id)return 0;
+        $row = Data::row('audit', $site, $id, true);
+        if ($row['entity_type'] !== self::TYPE)return 0;
+        if ((int) $row['create_time'] + (int) AccountNoticePolicyService::raw($site)['ttl_seconds'] <= time())return 0;
+        if ($row['action'] === 'notice_pending')return $id;
+        $state = Data::decode($row['detail_json']);
+        $state['status'] = 'pending';
+        unset($state['next_retry_at']);
+        $state['message'] = '用户已重新订阅，补发未送达的通知';
+        Data::query('audit', $site)->where('id', $id)->update(['action' => 'notice_pending', 'detail_json' => Data::json($state), 'update_time' => time()]);
+        return $id;
     }
     public static function process(int $site, int $id, ?callable $dispatcher = null): bool
     {
@@ -157,8 +183,8 @@ final class CooperationNoticeOutbox
         $state['message'] = $message;
         Data::query('audit', $site)->where('id', $id)->update(['action' => 'notice_'.$status, 'detail_json' => Data::json($state), 'update_time' => time()]);
     }
-    /** A rotating site cursor plus existing (site_id,action,id) index bounds recovery. */
-    public static function recover(int $siteLimit = 5, int $eventLimit = 20, ?callable $dispatcher = null): array
+    /** Every active site is checked each run through the (site_id,action,id) index; $siteLimit caps sites with work per run. */
+    public static function recover(int $siteLimit = 50, int $eventLimit = 20, ?callable $dispatcher = null): array
     {
         $db = Db::connect();
         $scope = (string) $db->getConfig('database').':'.(string) $db->getConfig('prefix');
@@ -177,17 +203,28 @@ final class CooperationNoticeOutbox
             } catch (\Throwable $error) {
                 Log::warning('协作通知轮转缓存不可读，将从首个站点核对：type='.get_class($error));
             }
-            $sites = Db::name('site')->where('status', 1)->where('site_id', '>', $cursor)->order('site_id')->limit(max(1, min(20, $siteLimit)))->column('site_id');
-            if (!$sites)$sites = Db::name('site')->where('status', 1)->order('site_id')->limit(max(1, min(20, $siteLimit)))->column('site_id');
+            // Visit every active site each run, starting after the cursor, and only work on sites that have a due
+            // event. Rotating a fixed 5 sites per minute meant that with many sites an event could wait many
+            // minutes for its site's turn. The pending check uses idx_site_action (site_id,action,id), so idle
+            // sites cost one small index lookup. A time budget keeps a run inside its one-minute schedule; the
+            // cursor makes the next run continue where this one stopped.
+            $all = Db::name('site')->where('status', 1)->order('site_id')->column('site_id');
+            $sites = array_merge(array_filter($all, static fn ($s) => (int) $s > $cursor), array_filter($all, static fn ($s) => (int) $s <= $cursor));
+            $budgetEnds = microtime(true) + 45;
+            $busySites = 0;
             $result = ['examined' => 0, 'processed' => 0, 'busy' => false];
+            $visited = [];
             foreach ($sites as $site) {
+                if (microtime(true) > $budgetEnds || $busySites >= max(1, min(200, $siteLimit)))break;
                 $site = (int) $site;
+                $visited[] = $site;
                 // A fresh pending intent is safe on the next scheduled round.
                 // Only an in-flight worker owns the 180-second processing lease.
                 $ids = Data::query('audit', $site)->where('action', 'notice_pending')->where('entity_type', self::TYPE)
                     ->whereRaw("(JSON_UNQUOTE(JSON_EXTRACT(IF(JSON_VALID(detail_json),detail_json,'{}'),'$.status')) = 'pending' OR update_time <= :lease_before)", ['lease_before' => time() - 180])
                     ->whereRaw("COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(IF(JSON_VALID(detail_json),detail_json,'{}'),'$.next_retry_at')) AS UNSIGNED),0) <= :due_now", ['due_now' => time()])
                     ->order('id')->limit(max(1, min(50, $eventLimit)))->column('id');
+                if ($ids)$busySites++;
                 foreach ($ids as $id) {
                     $result['examined']++;
                     try {
@@ -197,8 +234,10 @@ final class CooperationNoticeOutbox
                     }
                 }
             }
-            if ($sites)try {
-                Cache::set($cursorKey, (int) end($sites), 86400);
+            // Whole list visited: restart from the first site next time. Cut short: continue after the last one visited.
+            $complete = count($visited) === count($sites);
+            if ($visited)try {
+                Cache::set($cursorKey, $complete ? 0 : (int) end($visited), 86400);
             } catch (\Throwable $error) {
                 Log::warning('协作通知轮转缓存不可写，业务通知记录未丢失：type='.get_class($error));
             }

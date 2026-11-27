@@ -9,4 +9,5 @@ Route::group('hsx_lead/notice', function (): void {
     Route::get('preferences', $controller.'preferences');
     Route::put('preferences', $controller.'savePreferences');
     Route::post('authorization', $controller.'authorization');
+    Route::post('cooperation-authorization', $controller.'cooperationAuthorization');
 })->middleware(SafeErrors::class)->middleware(ApiChannel::class)->middleware(ApiCheckToken::class, true)->completeMatch();

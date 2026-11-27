@@ -92,6 +92,69 @@ final class CooperationNoticeService
         if (!$claim) return;
         $this->dispatchClaim($claim);
     }
+    /**
+     * The member has just accepted the mini-program subscription for work-order notices. Every accepted template
+     * grants WeChat quota for one more message, so wake the newest weapp claim per notice key that WeChat rejected
+     * with 43101 (not subscribed / quota used up) while the work order is unchanged and the notice is inside its
+     * TTL. The claim goes back to 'deferred' and its event back to the outbox; the normal path re-validates the
+     * order and recipient before submitting. Only 43101 rejections qualify: nothing accepted, uncertain or sent
+     * through SMS is ever resent here. This is a wake-up hint; WeChat still enforces consent and quota.
+     */
+    public static function resumeAfterSubscription(int $site, int $member): array
+    {
+        if ($site <= 0 || $member <= 0)throw new CommonException('订阅账号无效，请重新登录');
+        try {
+            $merchant = TeamService::resolve(new Context($site, 0, $member), false);
+        } catch (CommonException $ignored) {
+            return ['resumed' => 0];
+        }
+        if (!$merchant)return ['resumed' => 0];
+        $since = time() - (int) AccountNoticePolicyService::raw($site)['ttl_seconds'];
+        $merchantId = (int) $merchant['id'];
+        $leadIds = Store::query('collaboration', $site)
+            ->where(function ($q) use ($merchantId): void {
+                $q->where('publisher_id', $merchantId)->whereOr('receiver_id', $merchantId);
+            })
+            ->where('update_time', '>=', $since)->order('id desc')->limit(200)->column('id');
+        if (!$leadIds)return ['resumed' => 0];
+        // idx_site_entity (site_id,entity_type,entity_id,id) bounds this to the member's recent work orders.
+        $rows = Data::query('audit', $site)->where('entity_type', 'collaboration_notice')->whereIn('entity_id', $leadIds)
+            ->where('action', 'notice_event')->where('create_time', '>', $since)->order('id desc')->limit(500)->select()->toArray();
+        $picked = [];
+        foreach ($rows as $row) {
+            $state = Data::decode($row['detail_json']);
+            $key = (string) ($state['notice_key'] ?? '');
+            if (($state['channel'] ?? '') !== 'weapp' || (int) ($state['member_id'] ?? 0) !== $member
+                || ($state['status'] ?? '') !== 'rejected' || (string) ($state['provider_code'] ?? '') !== '43101'
+                || !in_array($key, NoticeConfigService::PHASES, true) || isset($picked[$key]))continue;
+            $picked[$key] = $row;
+        }
+        $resumed = 0;
+        foreach ($picked as $row) {
+            $eventId = Db::transaction(function () use ($site, $row): int {
+                $lead = Store::row('collaboration', $site, (int) $row['entity_id'], true);
+                $claim = Data::row('audit', $site, (int) $row['id'], true);
+                $state = Data::decode($claim['detail_json']);
+                if (($state['status'] ?? '') !== 'rejected' || (string) ($state['provider_code'] ?? '') !== '43101'
+                    || (int) ($state['assignment_version'] ?? 0) !== (int) $lead['assignment_version']
+                    || ($state['lead_status'] ?? '') !== $lead['status'])return 0;
+                $eventId = CooperationNoticeOutbox::reopen($site, (int) $lead['id'], (string) ($state['event_action'] ?? ''));
+                if (!$eventId)return 0;
+                // channel() resumes only 'deferred' claims; that is the one automatic path back to submission.
+                $state['status'] = 'deferred';
+                $state['provider_code'] = '';
+                $state['message'] = '用户已重新订阅，等待补发';
+                $state['subscription_resumed_at'] = time();
+                Data::query('audit', $site)->where('id', (int) $claim['id'])->update(['detail_json' => Data::json($state), 'update_time' => time()]);
+                return $eventId;
+            });
+            if ($eventId > 0) {
+                CooperationNoticeOutbox::dispatchIfQueued($site, $eventId);
+                $resumed++;
+            }
+        }
+        return ['resumed' => $resumed];
+    }
     /** Every retry is an explicit administrative action on the original recipient/channel. */
     public function retry(Context $context, int $leadId, int $auditId, array $input): void
     {

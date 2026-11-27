@@ -10,7 +10,9 @@ use think\facade\Db;
 /** Shared typed notification delivery, leases, attempts and safe retries. Source adapters own business validation. */
 final class NoticeTaskRuntime
 {
-    public const SAFE_RETRY = ['pending_configuration', 'pending_recipient', 'pending_authorization', 'paused', 'retry_wait', 'rejected', 'exhausted'];
+    /** Statuses the scheduler may pick up and (re)submit on its own once next_retry_at is due. */
+    public const AUTO_STATUSES = ['pending', 'retry_wait', 'pending_configuration', 'pending_recipient', 'paused'];
+    public const SAFE_RETRY =['pending_configuration', 'pending_recipient', 'pending_authorization', 'paused', 'retry_wait', 'rejected', 'exhausted'];
     public const STATUSES = [
         'pending',
         'dispatching',
@@ -79,13 +81,7 @@ final class NoticeTaskRuntime
                 'update_time' => time()
             ]);
         foreach (Db::name('hsx_lead_notice_task')->where('site_id', $site)->where('status', 'dispatching')->where('lease_until', '<', time())->limit(max(1, min(200, $limit)))->column('id') as $id)$this->unknownExpiredLease($site, (int) $id);
-        $ids = Db::name('hsx_lead_notice_task')->where('site_id', $site)->whereIn('status', [
-                'pending',
-                'retry_wait',
-                'pending_configuration',
-                'pending_recipient',
-                'paused'
-            ])->where('next_retry_at', '<=', time())->order('next_retry_at,id')->limit(max(1, min(200, $limit)))->column('id');
+        $ids = Db::name('hsx_lead_notice_task')->where('site_id', $site)->whereIn('status', self::AUTO_STATUSES)->where('next_retry_at', '<=', time())->order('next_retry_at,id')->limit(max(1, min(200, $limit)))->column('id');
         foreach ($ids as $id)$this->process($site, (int) $id);
         return count($ids);
     }
@@ -95,7 +91,7 @@ final class NoticeTaskRuntime
         if (self::inTransaction())throw new CommonException('事务内不允许发送通知');
         $claim = Db::transaction(function () use ($site, $id) {
             $row = self::row($site, $id, true);
-            if (!in_array($row['status'], ['pending', 'retry_wait', 'pending_configuration', 'pending_recipient', 'paused'], true))return null;
+            if (!in_array($row['status'], self::AUTO_STATUSES, true))return null;
             if ((int) $row['next_retry_at'] > time())return null;
             if ((int) $row['expires_at'] <= time()) {
                 $this->pause($site, $id, 'expired', '通知已超过时效，不再补发');
