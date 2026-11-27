@@ -28,9 +28,9 @@ return (new PhpCsFixer\Config())
         'no_multiple_statements_per_line' => true,
         'statement_indentation' => true,
         'indentation_type' => true,
-        // Braces: position and presence (a braced body has the same AST as an unbraced one).
+        // Reposition existing braces only; inserting braces breaks layout-only source contracts.
         'braces_position' => true,
-        'control_structure_braces' => true,
+        'control_structure_braces' => false,
         'control_structure_continuation_position' => true,
         'no_unneeded_braces' => false,
         // Spaces around keywords, operators, commas, types.
