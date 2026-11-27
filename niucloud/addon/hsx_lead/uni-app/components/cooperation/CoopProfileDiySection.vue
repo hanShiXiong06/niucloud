@@ -14,8 +14,13 @@
             ><text v-if="context.preview.value" class="lead-profile-section__demo" title="示例门店与金额仅供布局预览"
                 >装修示例</text
             >
+            <CoopGuestIdentity
+                v-if="guest"
+                :appearance="resolvedAppearance"
+                @login="context.login(context.loginParams.value)"
+            />
             <CoopMemberIdentity
-                v-if="kind==='identity' && identityStyle==='member'"
+                v-else-if="kind==='identity' && identityStyle==='member'"
                 :profile="context.displayProfile.value"
                 :member="context.displayMember.value"
                 :appearance="resolvedAppearance"
@@ -56,6 +61,7 @@ import { cooperationDiyVars } from '../../utils/cooperation-diy-style'
 import { cooperationDiyFrame } from '../../utils/cooperation-diy-frame'
 import CoopProfilePanel from './CoopProfilePanel.vue'
 import CoopMemberIdentity from './CoopMemberIdentity.vue'
+import CoopGuestIdentity from './CoopGuestIdentity.vue'
 import { profileIdentityStyle } from '../../utils/profile-identity'
 const props = defineProps(['component', 'index', 'global', 'kind'])
 const emit = defineEmits(['update:componentIsShow'])
@@ -68,7 +74,9 @@ const visibleFlag=(key:string)=>![false,0,'0'].includes(settings.value[key])
 const identityStyle=computed(()=>context?.displayProfile.value.id ? profileIdentityStyle(settings.value.identityStyle) : 'member')
 const legacyToolKeys=['showProfile','showCapability','showInventory','showConnection']
 const availableToolKeys=computed(()=>['showNotice','showFeedback',...legacyToolKeys,'showMembers'].filter(key=>context?.displayConfig?.value?.erp_visible!==false||!['showInventory','showConnection'].includes(key)))
-const componentVisible=computed(()=>!!context?.displayable.value&&(['identity','promotion'].includes(props.kind)||!!context?.displayProfile.value.id)&&(props.kind==='benefits'?visibleFlag('showMembership'):props.kind==='tools'?availableToolKeys.value.some(key=>settings.value[key]===undefined?legacyToolKeys.includes(key):visibleFlag(key)):true))
+// Logged out (not the editor preview): the identity block becomes the sign-in header instead of disappearing.
+const guest=computed(()=>props.kind==='identity'&&!!context&&!context.preview.value&&!context.loggedIn.value)
+const componentVisible=computed(()=>guest.value||!!context?.displayable.value&&(['identity','promotion'].includes(props.kind)||!!context?.displayProfile.value.id)&&(props.kind==='benefits'?visibleFlag('showMembership'):props.kind==='tools'?availableToolKeys.value.some(key=>settings.value[key]===undefined?legacyToolKeys.includes(key):visibleFlag(key)):true))
 // The framework owns the schema and editor for backgrounds, images and radii.
 // Keep these values on the outer component instead of repainting an inner card.
 const frame = computed(() => cooperationDiyFrame(settings.value, img))

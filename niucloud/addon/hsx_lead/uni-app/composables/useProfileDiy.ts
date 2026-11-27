@@ -71,6 +71,7 @@ export function createProfileDiyContext() {
         ui.ready.value = false
         ui.error.value = ''
     }
+    const loginParams = ref<CoopRow>({})
     function login(params: CoopRow = {}) {
         if (preview.value) return
         useLogin().setLoginBack({ url: cooperationPageUrls.profile, param: params, mode: 'redirectTo' })
@@ -125,7 +126,7 @@ export function createProfileDiyContext() {
         if (preview.value || disposed || !active.value) return
         if (!getToken() || owner.value !== identity()) {
             clear()
-            login()
+            login(loginParams.value)
             return
         }
         if (!ready.value) {
@@ -199,6 +200,8 @@ export function createProfileDiyContext() {
         loading: computed(() => ui.loading.value || memberLoading.value),
         error: computed(() => ui.error.value || memberError.value),
         loggedIn: ui.loggedIn,
+        // Return target after login (work-order or invitation links). Set by the page, used by the guest header.
+        loginParams,
         action,
         login,
         refresh,

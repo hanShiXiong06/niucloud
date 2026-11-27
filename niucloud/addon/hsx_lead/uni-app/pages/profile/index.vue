@@ -4,46 +4,47 @@
         <view
             v-show="pageLoad.ready.value"
             class="diy-template-wrap bg-index"
-            :style="diy.pageStyle() + (!context.preview.value && !context.displayable.value ? 'min-height:0;' : '')"
+            :style="diy.pageStyle() + (!context.preview.value && !context.displayable.value && !guestHeader ? 'min-height:0;' : '')"
             ><diy-group ref="groupRef" :data="diy.data"
         /></view>
         <template v-if="pageLoad.ready.value && !context.preview.value">
-            <view v-if="!context.loggedIn.value" class="lead-profile-page__status"
-                ><CoopState
-                    title="欢迎来到商户协作"
-                    hint="登录后查看自己的门店、权益与协作收益"
-                    icon="account" /><u-button
-                    :custom-style="cooperationButtonStyle"
-                    type="primary"
-                    shape="circle"
-                    text="使用会员身份登录"
-                    @click="context.login(loginParams)"
-            /></view>
+            <view v-if="!context.loggedIn.value && !guestHeader" class="lead-profile-page__status">
+                <view class="lead-profile-welcome">
+                    <view class="lead-profile-welcome__avatar"><u-icon name="account-fill" size="30" color="currentColor" /></view>
+                    <text class="lead-profile-welcome__title">欢迎来到商户协作</text>
+                    <text class="lead-profile-welcome__hint">登录后管理门店、承接客户线索、查看协作收益</text>
+                    <button class="lead-profile-welcome__cta" hover-class="is-pressed" @tap="context.login(loginParams)">立即登录</button>
+                </view>
+            </view>
             <view v-else-if="context.loading.value || context.error.value" class="lead-profile-page__status"
                 ><CoopState :loading="context.loading.value" :error="context.error.value" @retry="context.refresh()"
             /></view>
             <view
                 v-else-if="context.ready.value && !context.profile.value.id && context.pendingEntity.value.status === 'pending'"
                 class="lead-profile-page__status"
-                ><CoopState title="等待负责人确认" :hint="context.pendingEntity.value.name" icon="clock" /><u-button
-                    :custom-style="cooperationButtonStyle"
-                    type="primary"
-                    shape="circle"
-                    text="查看加入申请"
-                    @click="openEntity"
-            /></view>
+                ><CoopState title="等待负责人确认" :hint="context.pendingEntity.value.name" icon="clock" /><view
+                    class="lead-profile-page__action"
+                    ><u-button
+                        :custom-style="cooperationButtonStyle"
+                        type="primary"
+                        shape="circle"
+                        text="查看加入申请"
+                        @click="openEntity" /></view
+            ></view>
             <view v-else-if="context.ready.value && !context.profile.value.id" class="lead-profile-page__status"
                 ><CoopState
                     title="创建或加入门店"
                     hint="已有门店的同事，使用负责人分享的主体码加入"
                     icon="home"
-                /><u-button
-                    :custom-style="cooperationButtonStyle"
-                    type="primary"
-                    shape="circle"
-                    text="创建我的门店"
-                    @click="context.action('profile')"
-                /><button class="lead-profile-page__join" @tap="openEntity">加入已有门店</button></view
+                /><view class="lead-profile-page__action"
+                    ><u-button
+                        :custom-style="cooperationButtonStyle"
+                        type="primary"
+                        shape="circle"
+                        text="创建我的门店"
+                        @click="context.action('profile')"
+                /></view
+                ><button class="lead-profile-page__join" @tap="openEntity">加入已有门店</button></view
             >
             <view v-if="context.profile.value.blocked_at" class="lead-profile-page__blocked" role="alert"
                 >合作已停用：{{ context.profile.value.block_reason || '请联系平台核对'
@@ -53,7 +54,7 @@
     </view>
 </template>
 <script setup lang="ts">
-import { onBeforeUnmount, provide, ref, unref } from 'vue'
+import { computed, onBeforeUnmount, provide, ref, unref } from 'vue'
 import { onHide, onLoad, onPullDownRefresh, onShow } from '@dcloudio/uni-app'
 import { useDiy } from '@/hooks/useDiy'
 import { useShare } from '@/hooks/useShare'
@@ -71,8 +72,12 @@ import { useCooperationDiyLoad } from '../../composables/useCooperationDiyLoad'
 import CoopDiyPageStatus from '../../components/cooperation/CoopDiyPageStatus.vue'
 const pageLoad = useCooperationDiyLoad('个人中心')
 const diy = useDiy({ name:'DIY_HSX_LEAD_MEMBER_INDEX', ...pageLoad.requestOptions }), groupRef = ref<any>(null)
-const context = createProfileDiyContext(), loginParams = ref<Record<string,any>>({}), { setShare, onShareAppMessage } = useShare()
+const context = createProfileDiyContext(), loginParams = context.loginParams, { setShare, onShareAppMessage } = useShare()
 provide(profileDiyKey,context)
+// When the decorated page has the identity block, it shows the sign-in header itself (CoopGuestIdentity);
+// the standalone welcome card below is only a fallback for layouts without that block.
+const hasIdentityBlock = computed(() => { const list = (diy.data as any)?.value?.value; return Array.isArray(list) && list.some((item: any) => item?.componentName === 'LeadProfileIdentity') })
+const guestHeader = computed(() => !context.preview.value && !context.loggedIn.value && hasIdentityBlock.value)
 onShareAppMessage()
 let pendingLead=0, pendingPromotion=false, pendingInviter=0, disposed=false, redirectingInvitation=false
 const positiveId=(value:unknown)=>{const number=Number(value);return Number.isSafeInteger(number)&&number>0&&number<=4294967295?number:0}
@@ -116,9 +121,63 @@ function openEntity(){uni.navigateTo({url:entityPageUrl+'?mode=join'})}
 <style scoped lang="scss">
 @import '@/styles/diy.scss';
 @import '../../components/cooperation/cooperation-diy-page';
-.lead-profile-page { min-height: 100vh; background:#f6f6f6; }
-.lead-profile-page__status { padding: 48rpx 30rpx 24rpx; }
-.lead-profile-page__status>.u-button { margin-top:24rpx; }
-.lead-profile-page__blocked { margin:20rpx 24rpx;padding:24rpx;border-radius:10rpx;background:#fff1e9;color:#a3654d;font-size:24rpx;line-height:1.8; }
-.lead-profile-page__join { margin:12px 0 0;line-height:44px;font-size:14px;color:#6685ae;background:transparent; }.lead-profile-page__join::after { border:0; }
+@import '../../styles/tokens.scss';
+.lead-profile-page { min-height: 100vh; background: $hsx-surface-page; }
+.lead-profile-page__status { padding: $hsx-space-6 $hsx-space-4 $hsx-space-4; }
+// u-button's root cannot be targeted from a scoped parent selector in mini programs; space it with a wrapper.
+.lead-profile-page__action { margin-top: $hsx-space-4; }
+.lead-profile-page__blocked { margin: $hsx-space-3 $hsx-space-4; @include hsx-notice-bar(danger); }
+.lead-profile-page__join {
+    @include hsx-button-reset;
+    display: block;
+    width: 100%;
+    min-height: $hsx-tap-min;
+    margin-top: $hsx-space-2;
+    line-height: $hsx-tap-min;
+    font-size: $hsx-font-body;
+    color: $hsx-accent-text;
+}
+
+// Fallback welcome card, only for decorated layouts that have no identity block.
+.lead-profile-welcome {
+    @include hsx-card;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: $hsx-space-6 $hsx-space-5 $hsx-space-5;
+    text-align: center;
+}
+.lead-profile-welcome__avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    border-radius: $hsx-radius-pill;
+    background: $hsx-accent-soft;
+    color: $hsx-accent;
+}
+.lead-profile-welcome__title {
+    margin-top: $hsx-space-4;
+    font-size: $hsx-font-title;
+    font-weight: $hsx-weight-bold;
+    line-height: $hsx-line-height-tight;
+    color: $hsx-text-primary;
+}
+.lead-profile-welcome__hint {
+    margin-top: $hsx-space-2;
+    font-size: $hsx-font-body-sm;
+    line-height: $hsx-line-height;
+    color: $hsx-text-secondary;
+}
+.lead-profile-welcome__cta {
+    @include hsx-button-primary;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    margin-top: $hsx-space-5;
+    transition: transform $hsx-duration-fast $hsx-ease-out, opacity $hsx-duration-fast $hsx-ease-out;
+    &.is-pressed { transform: scale(.98); opacity: .9; }
+}
 </style>
