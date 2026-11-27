@@ -1,36 +1,241 @@
 <template>
     <section class="entity-management">
-        <header class="coop-head"><div><h2>主体与成员</h2><p>查看门店共享的会员权益、账号名额和加入申请。</p></div></header>
-        <CooperationFilter :query="query" :loading="loading" :with-date="false" placeholder="搜索门店、主体码、负责人、手机号或会员编号" @search="search" @reload="load" @reset="resetLevel"><el-select v-if="levels.length" v-model="levelFilter" filterable clearable placeholder="全部会员等级" aria-label="主体会员等级" @change="search()"><el-option v-for="level in levels" :key="level.code" :label="level.name" :value="level.code" /></el-select><el-input v-else v-model="levelFilter" clearable placeholder="等级编码，如 ML2" aria-label="主体会员等级编码" @keyup.enter="search()" /></CooperationFilter>
-        <el-alert v-if="error" class="coop-error" :title="error" type="error" :closable="false" show-icon><template #default><el-button link type="primary" @click="load">重新读取</el-button></template></el-alert>
+        <header class="coop-head"
+            ><div><h2>主体与成员</h2><p>查看门店共享的会员权益、账号名额和加入申请。</p></div></header
+        >
+        <CooperationFilter
+            :query="query"
+            :loading="loading"
+            :with-date="false"
+            placeholder="搜索门店、主体码、负责人、手机号或会员编号"
+            @search="search"
+            @reload="load"
+            @reset="resetLevel"
+            ><el-select
+                v-if="levels.length"
+                v-model="levelFilter"
+                filterable
+                clearable
+                placeholder="全部会员等级"
+                aria-label="主体会员等级"
+                @change="search()"
+                ><el-option
+                    v-for="level in levels"
+                    :key="level.code"
+                    :label="level.name"
+                    :value="level.code" /></el-select
+            ><el-input
+                v-else
+                v-model="levelFilter"
+                clearable
+                placeholder="等级编码，如 ML2"
+                aria-label="主体会员等级编码"
+                @keyup.enter="search()"
+        /></CooperationFilter>
+        <el-alert v-if="error" class="coop-error" :title="error" type="error" :closable="false" show-icon
+            ><template #default><el-button link type="primary" @click="load">重新读取</el-button></template></el-alert
+        >
         <HsxTable :columns="columns" :data="rows" :loading="loading" row-key="id" empty-text="暂无匹配的门店主体">
-            <template #entity="{row}"><div class="coop-cell"><strong>{{ row.name }}</strong><small>{{ row.region_text || '未填写地区' }}</small></div></template>
-            <template #code="{row}"><div class="entity-code-cell"><code>{{ row.subject_code || '尚未生成' }}</code><el-button v-if="row.subject_code" link :icon="CopyDocument" aria-label="复制主体码" @click="copyCode(row.subject_code)" /></div></template>
+            <template #entity="{row}"
+                ><div class="coop-cell"
+                    ><strong>{{ row.name }}</strong
+                    ><small>{{ row.region_text || '未填写地区' }}</small></div
+                ></template
+            >
+            <template #code="{row}"
+                ><div class="entity-code-cell"
+                    ><code>{{ row.subject_code || '尚未生成' }}</code
+                    ><el-button
+                        v-if="row.subject_code"
+                        link
+                        :icon="CopyDocument"
+                        aria-label="复制主体码"
+                        @click="copyCode(row.subject_code)" /></div
+            ></template>
             <template #membership="{row}"><MembershipSummary :membership="row.membership" /></template>
-            <template #accounts="{row}"><div class="coop-cell"><strong>{{ entitySeatText(row.membership) }}</strong><small v-if="Number(row.pending_count)>0" class="entity-pending">{{ row.pending_count }} 人待审核</small></div></template>
-            <template #owner="{row}"><div class="coop-cell"><strong>{{ row.owner_name || '未返回负责人' }}</strong><small>{{ row.owner_mobile || '未填写手机' }}</small></div></template>
-            <template #actions="{row}"><el-button v-if="canDetail" link type="primary" @click="open(row)">查看成员<template v-if="Number(row.pending_count)>0">（{{ row.pending_count }}）</template></el-button><span v-else class="coop-muted">仅列表权限</span></template>
+            <template #accounts="{row}"
+                ><div class="coop-cell"
+                    ><strong>{{ entitySeatText(row.membership) }}</strong
+                    ><small v-if="Number(row.pending_count)>0" class="entity-pending"
+                        >{{ row.pending_count }} 人待审核</small
+                    ></div
+                ></template
+            >
+            <template #owner="{row}"
+                ><div class="coop-cell"
+                    ><strong>{{ row.owner_name || '未返回负责人' }}</strong
+                    ><small>{{ row.owner_mobile || '未填写手机' }}</small></div
+                ></template
+            >
+            <template #actions="{row}"
+                ><el-button v-if="canDetail" link type="primary" @click="open(row)"
+                    >查看成员<template v-if="Number(row.pending_count)>0"
+                        >（{{ row.pending_count }}）</template
+                    ></el-button
+                ><span v-else class="coop-muted">仅列表权限</span></template
+            >
         </HsxTable>
-        <HsxPagination :total="total" :current-page="query.page" :page-size="query.limit" class="coop-pagination" @change="changePage" />
+        <HsxPagination
+            :total="total"
+            :current-page="query.page"
+            :page-size="query.limit"
+            class="coop-pagination"
+            @change="changePage"
+        />
 
-        <HsxDrawer v-model="detailVisible" :title="detail.name ? `${detail.name} · 主体与成员` : '主体与成员'" size="lg" :confirm-loading="actionBusy" :body-loading="detailLoading" @closed="clearDetail">
-            <el-alert v-if="detailError" :title="detailError" type="error" :closable="false" show-icon class="coop-error"><template #default><el-button link type="primary" :disabled="actionBusy||detailLoading" @click="loadDetail">重新读取</el-button></template></el-alert>
+        <HsxDrawer
+            v-model="detailVisible"
+            :title="detail.name ? `${detail.name} · 主体与成员` : '主体与成员'"
+            size="lg"
+            :confirm-loading="actionBusy"
+            :body-loading="detailLoading"
+            @closed="clearDetail"
+        >
+            <el-alert
+                v-if="detailError"
+                :title="detailError"
+                type="error"
+                :closable="false"
+                show-icon
+                class="coop-error"
+                ><template #default
+                    ><el-button link type="primary" :disabled="actionBusy||detailLoading" @click="loadDetail"
+                        >重新读取</el-button
+                    ></template
+                ></el-alert
+            >
             <template v-if="detail.id">
                 <div class="entity-summary">
-                    <div><span class="entity-summary-label">主体码</span><div class="entity-code-cell"><strong>{{ detail.subject_code || '尚未生成' }}</strong><el-button v-if="detail.subject_code" link :icon="CopyDocument" aria-label="复制主体码" @click="copyCode(detail.subject_code)" /></div></div>
-                    <div><span class="entity-summary-label">共享等级</span><div class="coop-tags"><el-tag effect="plain">{{ detail.membership?.level_name || detail.membership?.level_code || '普通会员' }}</el-tag><el-tag :type="entityMembershipState(detail.membership).tone" effect="plain">{{ entityMembershipState(detail.membership).label }}</el-tag></div></div>
-                    <div><span class="entity-summary-label">账号名额</span><strong>{{ entitySeatText(detail.membership) }}</strong></div>
-                    <div><span class="entity-summary-label">有效期</span><span>{{ expiry(detail.membership) }}</span></div>
+                    <div
+                        ><span class="entity-summary-label">主体码</span
+                        ><div class="entity-code-cell"
+                            ><strong>{{ detail.subject_code || '尚未生成' }}</strong
+                            ><el-button
+                                v-if="detail.subject_code"
+                                link
+                                :icon="CopyDocument"
+                                aria-label="复制主体码"
+                                @click="copyCode(detail.subject_code)" /></div
+                    ></div>
+                    <div
+                        ><span class="entity-summary-label">共享等级</span
+                        ><div class="coop-tags"
+                            ><el-tag
+                                effect="plain"
+                                >{{ detail.membership?.level_name || detail.membership?.level_code || '普通会员' }}</el-tag
+                            ><el-tag
+                                :type="entityMembershipState(detail.membership).tone"
+                                effect="plain"
+                                >{{ entityMembershipState(detail.membership).label }}</el-tag
+                            ></div
+                        ></div
+                    >
+                    <div
+                        ><span class="entity-summary-label">账号名额</span
+                        ><strong>{{ entitySeatText(detail.membership) }}</strong></div
+                    >
+                    <div
+                        ><span class="entity-summary-label">有效期</span
+                        ><span>{{ expiry(detail.membership) }}</span></div
+                    >
                 </div>
-                <el-collapse class="entity-help"><el-collapse-item title="主体码、共享权益和成员管理说明" name="entity-help"><p class="coop-muted">负责人可在手机端“我的 → 门店与成员”找到主体码，复制或邀请员工加入。主体码只是查找门店的入口，提交申请后仍须负责人或有权限的管理员批准。账号名额包含负责人，待审核申请不占正式名额；批准时服务端重新核对剩余名额。移除成员只解除门店访问，不删除个人会员、历史订单或账款，负责人不能在这里移除。</p></el-collapse-item></el-collapse>
-                <div class="entity-member-toolbar"><el-input v-model="memberKeyword" :prefix-icon="Search" clearable placeholder="搜索成员姓名、手机或会员编号" aria-label="搜索主体成员" /><el-radio-group v-model="memberStatus" aria-label="成员状态"><el-radio-button value="">全部</el-radio-button><el-radio-button value="pending">待审核<template v-if="pendingCount">（{{ pendingCount }}）</template></el-radio-button><el-radio-button value="active">已加入</el-radio-button></el-radio-group></div>
-                <el-alert v-if="actionError" :title="actionError" :type="readRequired?'warning':'error'" :closable="false" show-icon class="coop-error"><template #default><el-button v-if="readRequired" link type="primary" :disabled="actionBusy||detailLoading" @click="loadDetail">核对最新成员状态</el-button></template></el-alert>
-                <HsxTable :columns="memberColumns" :data="visibleMembers" row-key="member_id" empty-text="暂无符合条件的成员或申请">
-                    <template #member="{row}"><div class="coop-cell"><strong>{{ row.name || row.nickname || '未填写姓名' }}</strong><small>{{ row.mobile || '未填写手机' }}</small></div></template>
-                    <template #role="{row}"><el-tag :type="row.role==='owner'?'primary':'info'" effect="plain">{{ row.role==='owner'?'负责人':'成员' }}</el-tag></template>
-                    <template #status="{row}"><el-tag :type="row.status==='active'?'success':row.status==='pending'?'warning':'info'" effect="plain">{{ memberStatusLabel(row.status) }}</el-tag></template>
-                    <template #time="{row}"><div class="coop-cell"><span>{{ coopTime(row.create_time) }}</span><small v-if="row.reviewed_at">处理 {{ coopTime(row.reviewed_at) }}</small></div></template>
-                    <template #actions="{row}"><div class="coop-actions"><template v-if="row.status==='pending'&&canReview"><el-button link type="primary" :disabled="actionBusy||detailLoading||readRequired" @click="review(row,true)">批准加入</el-button><el-button link :disabled="actionBusy||detailLoading||readRequired" @click="review(row,false)">拒绝</el-button></template><el-button v-else-if="row.status==='active'&&row.role!=='owner'&&canRemove" link type="danger" :disabled="actionBusy||detailLoading||readRequired" @click="remove(row)">移除成员</el-button><span v-else class="coop-muted">{{ row.role==='owner'?'负责人保留':'—' }}</span></div></template>
+                <el-collapse class="entity-help"
+                    ><el-collapse-item title="主体码、共享权益和成员管理说明" name="entity-help"
+                        ><p class="coop-muted"
+                            >负责人可在手机端“我的 →
+                            门店与成员”找到主体码，复制或邀请员工加入。主体码只是查找门店的入口，提交申请后仍须负责人或有权限的管理员批准。账号名额包含负责人，待审核申请不占正式名额；批准时服务端重新核对剩余名额。移除成员只解除门店访问，不删除个人会员、历史订单或账款，负责人不能在这里移除。</p
+                        ></el-collapse-item
+                    ></el-collapse
+                >
+                <div class="entity-member-toolbar"
+                    ><el-input
+                        v-model="memberKeyword"
+                        :prefix-icon="Search"
+                        clearable
+                        placeholder="搜索成员姓名、手机或会员编号"
+                        aria-label="搜索主体成员"
+                    /><el-radio-group v-model="memberStatus" aria-label="成员状态"
+                        ><el-radio-button value="">全部</el-radio-button
+                        ><el-radio-button value="pending"
+                            >待审核<template v-if="pendingCount">（{{ pendingCount }}）</template></el-radio-button
+                        ><el-radio-button value="active">已加入</el-radio-button></el-radio-group
+                    ></div
+                >
+                <el-alert
+                    v-if="actionError"
+                    :title="actionError"
+                    :type="readRequired?'warning':'error'"
+                    :closable="false"
+                    show-icon
+                    class="coop-error"
+                    ><template #default
+                        ><el-button
+                            v-if="readRequired"
+                            link
+                            type="primary"
+                            :disabled="actionBusy||detailLoading"
+                            @click="loadDetail"
+                            >核对最新成员状态</el-button
+                        ></template
+                    ></el-alert
+                >
+                <HsxTable
+                    :columns="memberColumns"
+                    :data="visibleMembers"
+                    row-key="member_id"
+                    empty-text="暂无符合条件的成员或申请"
+                >
+                    <template #member="{row}"
+                        ><div class="coop-cell"
+                            ><strong>{{ row.name || row.nickname || '未填写姓名' }}</strong
+                            ><small>{{ row.mobile || '未填写手机' }}</small></div
+                        ></template
+                    >
+                    <template #role="{row}"
+                        ><el-tag
+                            :type="row.role==='owner'?'primary':'info'"
+                            effect="plain"
+                            >{{ row.role==='owner'?'负责人':'成员' }}</el-tag
+                        ></template
+                    >
+                    <template #status="{row}"
+                        ><el-tag
+                            :type="row.status==='active'?'success':row.status==='pending'?'warning':'info'"
+                            effect="plain"
+                            >{{ memberStatusLabel(row.status) }}</el-tag
+                        ></template
+                    >
+                    <template #time="{row}"
+                        ><div class="coop-cell"
+                            ><span>{{ coopTime(row.create_time) }}</span
+                            ><small v-if="row.reviewed_at">处理 {{ coopTime(row.reviewed_at) }}</small></div
+                        ></template
+                    >
+                    <template #actions="{row}"
+                        ><div class="coop-actions"
+                            ><template v-if="row.status==='pending'&&canReview"
+                                ><el-button
+                                    link
+                                    type="primary"
+                                    :disabled="actionBusy||detailLoading||readRequired"
+                                    @click="review(row,true)"
+                                    >批准加入</el-button
+                                ><el-button
+                                    link
+                                    :disabled="actionBusy||detailLoading||readRequired"
+                                    @click="review(row,false)"
+                                    >拒绝</el-button
+                                ></template
+                            ><el-button
+                                v-else-if="row.status==='active'&&row.role!=='owner'&&canRemove"
+                                link
+                                type="danger"
+                                :disabled="actionBusy||detailLoading||readRequired"
+                                @click="remove(row)"
+                                >移除成员</el-button
+                            ><span v-else class="coop-muted">{{ row.role==='owner'?'负责人保留':'—' }}</span></div
+                        ></template
+                    >
                 </HsxTable>
             </template>
             <template #footer><el-button :disabled="actionBusy" @click="detailVisible=false">关闭</el-button></template>

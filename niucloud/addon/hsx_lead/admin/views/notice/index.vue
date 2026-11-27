@@ -1,73 +1,522 @@
 <template>
     <section class="account-notice-center">
-        <header class="notice-head"><div><h2>通知中心</h2><p>查看协作与账户提醒的发送结果，按场景配置通知渠道。</p></div><el-button :loading="activeTab === 'records' ? loading : settingsLoading" :disabled="busy || saving" @click="refreshCurrent">刷新</el-button></header>
-        <el-result v-if="!canRead" icon="warning" title="暂无通知中心访问权限" sub-title="请联系管理员开通通知记录读取权限" />
+        <header class="notice-head"
+            ><div><h2>通知中心</h2><p>查看协作与账户提醒的发送结果，按场景配置通知渠道。</p></div
+            ><el-button
+                :loading="activeTab === 'records' ? loading : settingsLoading"
+                :disabled="busy || saving"
+                @click="refreshCurrent"
+                >刷新</el-button
+            ></header
+        >
+        <el-result
+            v-if="!canRead"
+            icon="warning"
+            title="暂无通知中心访问权限"
+            sub-title="请联系管理员开通通知记录读取权限"
+        />
         <el-tabs v-else v-model="activeTab">
             <el-tab-pane label="发送记录" name="records">
-                <el-form class="notice-filters" label-position="top" :disabled="loading || busy" @submit.prevent="search">
-                    <el-form-item label="通知对象"><el-input v-model="filters.keyword" clearable placeholder="昵称、手机号或会员编号" @keyup.enter="search" @clear="search" /></el-form-item>
-                    <el-form-item label="场景"><el-select v-model="filters.event_key" clearable placeholder="全部场景"><el-option v-for="(label,key) in accountNoticeEvents" :key="key" :label="label" :value="key" /></el-select></el-form-item>
-                    <el-form-item label="渠道"><el-select v-model="filters.channel" clearable placeholder="全部渠道"><el-option v-for="(label,key) in accountNoticeChannels" :key="key" :label="label" :value="key" /></el-select></el-form-item>
-                    <el-form-item label="状态"><el-select v-model="filters.status" clearable placeholder="全部状态"><el-option v-for="(label,key) in accountNoticeStatuses" :key="key" :label="label" :value="key" /></el-select></el-form-item>
-                    <el-form-item label="时间范围" class="notice-filters__time"><el-date-picker v-model="dateRange" type="datetimerange" start-placeholder="开始时间" end-placeholder="结束时间" range-separator="至" :clearable="true" /></el-form-item>
-                    <div class="notice-filter-actions"><el-button @click="reset">重置</el-button><el-button type="primary" native-type="submit" :loading="loading">查询</el-button></div>
+                <el-form
+                    class="notice-filters"
+                    label-position="top"
+                    :disabled="loading || busy"
+                    @submit.prevent="search"
+                >
+                    <el-form-item label="通知对象"
+                        ><el-input
+                            v-model="filters.keyword"
+                            clearable
+                            placeholder="昵称、手机号或会员编号"
+                            @keyup.enter="search"
+                            @clear="search"
+                    /></el-form-item>
+                    <el-form-item label="场景"
+                        ><el-select v-model="filters.event_key" clearable placeholder="全部场景"
+                            ><el-option
+                                v-for="(label,key) in accountNoticeEvents"
+                                :key="key"
+                                :label="label"
+                                :value="key" /></el-select
+                    ></el-form-item>
+                    <el-form-item label="渠道"
+                        ><el-select v-model="filters.channel" clearable placeholder="全部渠道"
+                            ><el-option
+                                v-for="(label,key) in accountNoticeChannels"
+                                :key="key"
+                                :label="label"
+                                :value="key" /></el-select
+                    ></el-form-item>
+                    <el-form-item label="状态"
+                        ><el-select v-model="filters.status" clearable placeholder="全部状态"
+                            ><el-option
+                                v-for="(label,key) in accountNoticeStatuses"
+                                :key="key"
+                                :label="label"
+                                :value="key" /></el-select
+                    ></el-form-item>
+                    <el-form-item label="时间范围" class="notice-filters__time"
+                        ><el-date-picker
+                            v-model="dateRange"
+                            type="datetimerange"
+                            start-placeholder="开始时间"
+                            end-placeholder="结束时间"
+                            range-separator="至"
+                            :clearable="true"
+                    /></el-form-item>
+                    <div class="notice-filter-actions"
+                        ><el-button @click="reset">重置</el-button
+                        ><el-button type="primary" native-type="submit" :loading="loading">查询</el-button></div
+                    >
                 </el-form>
-                <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" class="notice-banner"><template #default><el-button link type="primary" :disabled="loading || busy" @click="loadTasks">重新读取</el-button></template></el-alert>
+                <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" class="notice-banner"
+                    ><template #default
+                        ><el-button link type="primary" :disabled="loading || busy" @click="loadTasks"
+                            >重新读取</el-button
+                        ></template
+                    ></el-alert
+                >
                 <div class="notice-surface">
-                    <HsxTable :columns="columns" :data="rows" :loading="loading" row-key="id" :empty-text="error ? '通知记录未能读取，请重新加载' : '暂无符合条件的通知'">
-                        <template #recipient="{row}"><div class="notice-cell"><strong>{{ row.nickname || '会员' }}</strong><small>{{ row.member_no || `会员 ID：${row.recipient_member_id}` }}</small><small v-if="row.mobile">{{ row.mobile }}</small></div></template>
-                        <template #event="{row}"><div class="notice-cell"><strong>{{ row.event_name || accountNoticeEvents[row.event_key] || '场景待核对' }}</strong><small v-if="String(row.event_key).startsWith('cooperation_')">{{ row.task_no || `线索 #${row.source_id || '待核对'}` }}</small><template v-else><small>{{ row.account_name || '账户类型待核对' }}</small><small v-if="row.source_id">流水 #{{ row.source_id }}</small></template></div></template>
-                        <template #amount="{row}"><div v-if="String(row.event_key).startsWith('cooperation_')" class="notice-cell"><strong>{{ row.store_name || '协作提醒' }}</strong><span>{{ row.notice_remark || '查看对应线索的当前状态' }}</span><small v-if="Number(row.remaining_minutes)>0">提醒节点：剩余 {{ row.remaining_minutes }} 分钟</small></div><div v-else class="notice-cell"><strong>{{ money(row.change_amount,true) }}</strong><small>变动后 {{ money(row.account_balance) }}</small></div></template>
+                    <HsxTable
+                        :columns="columns"
+                        :data="rows"
+                        :loading="loading"
+                        row-key="id"
+                        :empty-text="error ? '通知记录未能读取，请重新加载' : '暂无符合条件的通知'"
+                    >
+                        <template #recipient="{row}"
+                            ><div class="notice-cell"
+                                ><strong>{{ row.nickname || '会员' }}</strong
+                                ><small>{{ row.member_no || `会员 ID：${row.recipient_member_id}` }}</small
+                                ><small v-if="row.mobile">{{ row.mobile }}</small></div
+                            ></template
+                        >
+                        <template #event="{row}"
+                            ><div class="notice-cell"
+                                ><strong
+                                    >{{ row.event_name || accountNoticeEvents[row.event_key] || '场景待核对' }}</strong
+                                ><small
+                                    v-if="String(row.event_key).startsWith('cooperation_')"
+                                    >{{ row.task_no || `线索 #${row.source_id || '待核对'}` }}</small
+                                ><template v-else
+                                    ><small>{{ row.account_name || '账户类型待核对' }}</small
+                                    ><small v-if="row.source_id">流水 #{{ row.source_id }}</small></template
+                                ></div
+                            ></template
+                        >
+                        <template #amount="{row}"
+                            ><div v-if="String(row.event_key).startsWith('cooperation_')" class="notice-cell"
+                                ><strong>{{ row.store_name || '协作提醒' }}</strong
+                                ><span>{{ row.notice_remark || '查看对应线索的当前状态' }}</span
+                                ><small v-if="Number(row.remaining_minutes)>0"
+                                    >提醒节点：剩余 {{ row.remaining_minutes }} 分钟</small
+                                ></div
+                            ><div v-else class="notice-cell"
+                                ><strong>{{ money(row.change_amount,true) }}</strong
+                                ><small>变动后 {{ money(row.account_balance) }}</small></div
+                            ></template
+                        >
                         <template #channel="{row}">{{ accountNoticeChannels[row.channel] || '渠道待核对' }}</template>
-                        <template #status="{row}"><div class="notice-cell"><el-tag :type="accountNoticeStatusTone(row.status)" size="small" effect="plain">{{ accountNoticeStatuses[row.status] || '状态待核对' }}</el-tag><small>已尝试 {{ row.attempt_count ?? '—' }} 次</small><small v-if="row.next_retry_at && ['retry_wait','paused'].includes(row.status)">下次核对 {{ coopTime(row.next_retry_at) }}</small></div></template>
-                        <template #result="{row}"><div class="notice-cell"><span>{{ row.last_message || '尚未记录渠道说明' }}</span><small v-if="row.provider_code !== '' && row.provider_code != null">渠道返回码 {{ row.provider_code }}</small><small v-if="unverifiedIds.has(Number(row.id))">上次操作结果待核对，请先刷新。</small></div></template>
-                        <template #time="{row}"><div class="notice-cell"><span>{{ coopTime(row.occurred_at || row.create_time) }}</span><small v-if="row.expires_at">有效至 {{ coopTime(row.expires_at) }}</small></div></template>
-                        <template #actions="{row}"><div class="notice-row-actions"><el-button v-if="canAttempts" link type="primary" :disabled="busy" @click="openAttempts(row)">尝试明细</el-button><el-button v-if="retryAllowed(row)" link type="primary" :disabled="loading || busy" @click="beginRetry(row)">重新检查</el-button><span v-if="!canAttempts && !retryAllowed(row)" class="notice-muted">—</span></div></template>
+                        <template #status="{row}"
+                            ><div class="notice-cell"
+                                ><el-tag
+                                    :type="accountNoticeStatusTone(row.status)"
+                                    size="small"
+                                    effect="plain"
+                                    >{{ accountNoticeStatuses[row.status] || '状态待核对' }}</el-tag
+                                ><small>已尝试 {{ row.attempt_count ?? '—' }} 次</small
+                                ><small v-if="row.next_retry_at && ['retry_wait','paused'].includes(row.status)"
+                                    >下次核对 {{ coopTime(row.next_retry_at) }}</small
+                                ></div
+                            ></template
+                        >
+                        <template #result="{row}"
+                            ><div class="notice-cell"
+                                ><span>{{ row.last_message || '尚未记录渠道说明' }}</span
+                                ><small v-if="row.provider_code !== '' && row.provider_code != null"
+                                    >渠道返回码 {{ row.provider_code }}</small
+                                ><small v-if="unverifiedIds.has(Number(row.id))"
+                                    >上次操作结果待核对，请先刷新。</small
+                                ></div
+                            ></template
+                        >
+                        <template #time="{row}"
+                            ><div class="notice-cell"
+                                ><span>{{ coopTime(row.occurred_at || row.create_time) }}</span
+                                ><small v-if="row.expires_at">有效至 {{ coopTime(row.expires_at) }}</small></div
+                            ></template
+                        >
+                        <template #actions="{row}"
+                            ><div class="notice-row-actions"
+                                ><el-button
+                                    v-if="canAttempts"
+                                    link
+                                    type="primary"
+                                    :disabled="busy"
+                                    @click="openAttempts(row)"
+                                    >尝试明细</el-button
+                                ><el-button
+                                    v-if="retryAllowed(row)"
+                                    link
+                                    type="primary"
+                                    :disabled="loading || busy"
+                                    @click="beginRetry(row)"
+                                    >重新检查</el-button
+                                ><span v-if="!canAttempts && !retryAllowed(row)" class="notice-muted">—</span></div
+                            ></template
+                        >
                     </HsxTable>
-                    <div class="notice-pagination"><HsxPagination :current-page="query.page" :page-size="query.limit" :total="total" :disabled="loading || busy" @change="changePage" /></div>
+                    <div class="notice-pagination"
+                        ><HsxPagination
+                            :current-page="query.page"
+                            :page-size="query.limit"
+                            :total="total"
+                            :disabled="loading || busy"
+                            @change="changePage"
+                    /></div>
                 </div>
-                <p class="notice-footnote">渠道已受理不代表用户已读；提交中或结果待核实的记录不能重复发送。线索工单通知仍在对应线索详情中查看。</p>
+                <p class="notice-footnote"
+                    >渠道已受理不代表用户已读；提交中或结果待核实的记录不能重复发送。线索工单通知仍在对应线索详情中查看。</p
+                >
             </el-tab-pane>
             <el-tab-pane v-if="canSettings" label="通知规则" name="settings">
                 <el-skeleton v-if="settingsLoading && !settingsReady" :rows="6" animated />
-                <el-alert v-if="settingsError" :title="settingsError" type="error" show-icon :closable="false" class="notice-banner"><template #default><el-button link type="primary" :disabled="settingsLoading || saving" @click="loadSettings">重新读取</el-button></template></el-alert>
+                <el-alert
+                    v-if="settingsError"
+                    :title="settingsError"
+                    type="error"
+                    show-icon
+                    :closable="false"
+                    class="notice-banner"
+                    ><template #default
+                        ><el-button link type="primary" :disabled="settingsLoading || saving" @click="loadSettings"
+                            >重新读取</el-button
+                        ></template
+                    ></el-alert
+                >
                 <template v-if="settingsReady">
-                    <el-alert v-if="!policy.installed" title="本站未安装启用商户协作，当前不能启用通知" type="warning" :closable="false" show-icon class="notice-banner" />
-                    <el-form class="notice-policy" label-position="top" :disabled="!canSave || saving || settingsLoading || !policy.installed">
-                        <div class="notice-general"><el-form-item label="通知总开关"><el-switch v-model="policy.enabled" inline-prompt active-text="开启" inactive-text="关闭" /></el-form-item><el-form-item label="提醒有效期（分钟）"><el-input-number v-model="ttlMinutes" :min="5" :max="1440" :precision="0" /></el-form-item><el-form-item label="单条最多尝试次数"><el-input-number v-model="policy.max_attempts" :min="1" :max="5" :precision="0" /></el-form-item></div>
-                        <div class="notice-general"><el-form-item label="夜间免打扰"><el-switch v-model="policy.quiet_hours.enabled" active-text="开启" inactive-text="即时通知" /></el-form-item><el-form-item v-if="policy.quiet_hours.enabled" label="免打扰开始（北京时间）"><el-time-select v-model="policy.quiet_hours.start" start="00:00" step="00:15" end="23:45" placeholder="开始时间" /></el-form-item><el-form-item v-if="policy.quiet_hours.enabled" label="免打扰结束（北京时间）"><el-time-select v-model="policy.quiet_hours.end" start="00:00" step="00:15" end="23:45" placeholder="结束时间" /></el-form-item></div>
-                        <p v-if="policy.quiet_hours.enabled" class="notice-muted">此时段不发送新通知或重试；结束后重新核对业务与时效，已接单、已转交或过时的提醒不会补发。</p><p v-if="quietHoursError" class="notice-danger">{{ quietHoursError }}</p>
-                        <el-form-item v-if="hasCooperationEvents" label="接单提醒节点（剩余分钟）"><el-select v-model="policy.response_reminder_minutes" multiple filterable allow-create default-first-option placeholder="选择或输入1—1440分钟，最多8项" class="notice-reminder-select"><el-option v-for="minute in [30,10,5,1]" :key="minute" :label="`剩余${minute}分钟`" :value="minute" /></el-select><p v-if="responseNodesError" class="notice-danger">{{ responseNodesError }}</p></el-form-item>
-                        <el-collapse class="notice-help"><el-collapse-item title="启用、自动重试与渠道授权说明" name="help"><p>资金提醒仅通知启用后的新流水，不补发历史账目。提醒超时后停止发送。</p><p>接单节点提醒发给接收方；时间到但尚未接单时提醒发布方，仍保留原交付，不自动转派，也不禁止原门店接单。门店确认接单后再通知发布方。</p><p>接单节点留空仅关闭截止前的节点提醒，不影响单独开启的“门店尚未接单”和“接单成功”场景。</p><p>系统只在确认可重试时自动处理；结果待核实不会盲目重发。用户关闭偏好、拒绝订阅或未绑定渠道时，不会绕过授权。</p><p>短信可能计费，必须同时满足平台启用与用户主动开启偏好。</p></el-collapse-item></el-collapse>
+                    <el-alert
+                        v-if="!policy.installed"
+                        title="本站未安装启用商户协作，当前不能启用通知"
+                        type="warning"
+                        :closable="false"
+                        show-icon
+                        class="notice-banner"
+                    />
+                    <el-form
+                        class="notice-policy"
+                        label-position="top"
+                        :disabled="!canSave || saving || settingsLoading || !policy.installed"
+                    >
+                        <div class="notice-general"
+                            ><el-form-item label="通知总开关"
+                                ><el-switch
+                                    v-model="policy.enabled"
+                                    inline-prompt
+                                    active-text="开启"
+                                    inactive-text="关闭" /></el-form-item
+                            ><el-form-item label="提醒有效期（分钟）"
+                                ><el-input-number
+                                    v-model="ttlMinutes"
+                                    :min="5"
+                                    :max="1440"
+                                    :precision="0" /></el-form-item
+                            ><el-form-item label="单条最多尝试次数"
+                                ><el-input-number
+                                    v-model="policy.max_attempts"
+                                    :min="1"
+                                    :max="5"
+                                    :precision="0" /></el-form-item
+                        ></div>
+                        <div class="notice-general"
+                            ><el-form-item label="夜间免打扰"
+                                ><el-switch
+                                    v-model="policy.quiet_hours.enabled"
+                                    active-text="开启"
+                                    inactive-text="即时通知" /></el-form-item
+                            ><el-form-item v-if="policy.quiet_hours.enabled" label="免打扰开始（北京时间）"
+                                ><el-time-select
+                                    v-model="policy.quiet_hours.start"
+                                    start="00:00"
+                                    step="00:15"
+                                    end="23:45"
+                                    placeholder="开始时间" /></el-form-item
+                            ><el-form-item v-if="policy.quiet_hours.enabled" label="免打扰结束（北京时间）"
+                                ><el-time-select
+                                    v-model="policy.quiet_hours.end"
+                                    start="00:00"
+                                    step="00:15"
+                                    end="23:45"
+                                    placeholder="结束时间" /></el-form-item
+                        ></div>
+                        <p v-if="policy.quiet_hours.enabled" class="notice-muted"
+                            >此时段不发送新通知或重试；结束后重新核对业务与时效，已接单、已转交或过时的提醒不会补发。</p
+                        ><p v-if="quietHoursError" class="notice-danger">{{ quietHoursError }}</p>
+                        <el-form-item v-if="hasCooperationEvents" label="接单提醒节点（剩余分钟）"
+                            ><el-select
+                                v-model="policy.response_reminder_minutes"
+                                multiple
+                                filterable
+                                allow-create
+                                default-first-option
+                                placeholder="选择或输入1—1440分钟，最多8项"
+                                class="notice-reminder-select"
+                                ><el-option
+                                    v-for="minute in [30,10,5,1]"
+                                    :key="minute"
+                                    :label="`剩余${minute}分钟`"
+                                    :value="minute" /></el-select
+                            ><p
+                                v-if="responseNodesError"
+                                class="notice-danger"
+                                >{{ responseNodesError }}</p
+                            ></el-form-item
+                        >
+                        <el-collapse class="notice-help"
+                            ><el-collapse-item title="启用、自动重试与渠道授权说明" name="help"
+                                ><p>资金提醒仅通知启用后的新流水，不补发历史账目。提醒超时后停止发送。</p
+                                ><p
+                                    >接单节点提醒发给接收方；时间到但尚未接单时提醒发布方，仍保留原交付，不自动转派，也不禁止原门店接单。门店确认接单后再通知发布方。</p
+                                ><p
+                                    >接单节点留空仅关闭截止前的节点提醒，不影响单独开启的“门店尚未接单”和“接单成功”场景。</p
+                                ><p
+                                    >系统只在确认可重试时自动处理；结果待核实不会盲目重发。用户关闭偏好、拒绝订阅或未绑定渠道时，不会绕过授权。</p
+                                ><p>短信可能计费，必须同时满足平台启用与用户主动开启偏好。</p></el-collapse-item
+                            ></el-collapse
+                        >
                         <div v-for="event in policy.events" :key="event.event_key" class="notice-event-card">
-                            <div class="notice-event-head"><div><h3>{{ event.name || accountNoticeEvents[event.event_key] }}</h3><span class="notice-muted">{{ event.event_key === 'cooperation_acceptance_reminder' ? '接单提醒节点到达时通知接收方' : event.event_key === 'cooperation_response_overdue' ? '提醒时间到后通知发布方，不自动换店' : event.event_key === 'cooperation_assignment_accepted' ? '接单成功后通知发布方' : '仅通知流水所属会员本人' }}</span></div><el-switch v-model="event.enabled" :aria-label="`启用${event.name}`" /></div>
-                            <div v-for="(label,channel) in accountNoticeChannels" :key="channel" class="notice-channel-row"><div class="notice-channel-name"><strong>{{ label }}</strong><el-tag size="small" effect="plain" :type="readiness(event, String(channel)).tone">{{ readiness(event, String(channel)).label }}</el-tag></div><div class="notice-channel-actions"><el-button v-if="channel !== 'sms' && canSave" link type="primary" @click="editTemplate(event,String(channel))">{{ event[channel]?.tid || event[channel]?.temp_key ? '核对模板' : '配置模板' }}</el-button><el-button link type="primary" @click="openChannel(String(channel))">渠道设置</el-button><el-switch v-model="event.channels[channel]" :aria-label="`${event.name}${label}规则开关`" /></div></div>
+                            <div class="notice-event-head"
+                                ><div
+                                    ><h3>{{ event.name || accountNoticeEvents[event.event_key] }}</h3
+                                    ><span
+                                        class="notice-muted"
+                                        >{{ event.event_key === 'cooperation_acceptance_reminder' ? '接单提醒节点到达时通知接收方' : event.event_key === 'cooperation_response_overdue' ? '提醒时间到后通知发布方，不自动换店' : event.event_key === 'cooperation_assignment_accepted' ? '接单成功后通知发布方' : '仅通知流水所属会员本人' }}</span
+                                    ></div
+                                ><el-switch v-model="event.enabled" :aria-label="`启用${event.name}`"
+                            /></div>
+                            <div
+                                v-for="(label,channel) in accountNoticeChannels"
+                                :key="channel"
+                                class="notice-channel-row"
+                                ><div class="notice-channel-name"
+                                    ><strong>{{ label }}</strong
+                                    ><el-tag
+                                        size="small"
+                                        effect="plain"
+                                        :type="readiness(event, String(channel)).tone"
+                                        >{{ readiness(event, String(channel)).label }}</el-tag
+                                    ></div
+                                ><div class="notice-channel-actions"
+                                    ><el-button
+                                        v-if="channel !== 'sms' && canSave"
+                                        link
+                                        type="primary"
+                                        @click="editTemplate(event,String(channel))"
+                                        >{{ event[channel]?.tid || event[channel]?.temp_key ? '核对模板' : '配置模板' }}</el-button
+                                    ><el-button link type="primary" @click="openChannel(String(channel))"
+                                        >渠道设置</el-button
+                                    ><el-switch
+                                        v-model="event.channels[channel]"
+                                        :aria-label="`${event.name}${label}规则开关`" /></div
+                            ></div>
                         </div>
                     </el-form>
-                    <div class="notice-policy-footer"><span class="notice-muted">保存规则不代表已发送，也不会替用户授权。</span><el-button v-if="canSave" type="primary" :loading="saving" :disabled="!policy.installed || settingsLoading || !!settingsError || !!responseNodesError || !!quietHoursError" @click="saveSettings">保存通知规则</el-button></div>
+                    <div class="notice-policy-footer"
+                        ><span class="notice-muted">保存规则不代表已发送，也不会替用户授权。</span
+                        ><el-button
+                            v-if="canSave"
+                            type="primary"
+                            :loading="saving"
+                            :disabled="!policy.installed || settingsLoading || !!settingsError || !!responseNodesError || !!quietHoursError"
+                            @click="saveSettings"
+                            >保存通知规则</el-button
+                        ></div
+                    >
                 </template>
             </el-tab-pane>
         </el-tabs>
-        <HsxDrawer v-model="attemptsVisible" title="通知尝试明细" :subtitle="selectedTask.member_no || `任务 #${selectedTask.id || ''}`" size="lg" :body-loading="attemptsLoading">
-            <el-alert v-if="attemptsError" :title="attemptsError" type="error" show-icon :closable="false"><template #default><el-button link type="primary" @click="loadAttempts">重新读取</el-button></template></el-alert>
-            <template v-else-if="attemptsReady"><div class="notice-attempt-summary"><span>{{ accountNoticeEvents[selectedTask.event_key] || '资金提醒' }} · {{ accountNoticeChannels[selectedTask.channel] }}</span><el-tag size="small" :type="accountNoticeStatusTone(selectedTask.status)">{{ accountNoticeStatuses[selectedTask.status] || '待核对' }}</el-tag></div><HsxTable :columns="attemptColumns" :data="attempts" empty-text="尚无渠道提交记录"><template #trigger="{row}"><div class="notice-cell"><span>{{ row.trigger_type === 'manual' ? '人工复查' : '自动处理' }}</span><small v-if="row.operator_uid">操作员 #{{ row.operator_uid }}</small><small v-if="row.reason">{{ row.reason }}</small></div></template><template #result="{row}"><div class="notice-cell"><strong>{{ accountNoticeStatuses[row.status] || row.status || '状态待核对' }}</strong><span>{{ row.message || '未记录说明' }}</span><small v-if="row.provider_code !== '' && row.provider_code != null">返回码 {{ row.provider_code }}</small></div></template><template #time="{row}">{{ coopTime(row.create_time) }}</template></HsxTable></template>
+        <HsxDrawer
+            v-model="attemptsVisible"
+            title="通知尝试明细"
+            :subtitle="selectedTask.member_no || `任务 #${selectedTask.id || ''}`"
+            size="lg"
+            :body-loading="attemptsLoading"
+        >
+            <el-alert v-if="attemptsError" :title="attemptsError" type="error" show-icon :closable="false"
+                ><template #default
+                    ><el-button link type="primary" @click="loadAttempts">重新读取</el-button></template
+                ></el-alert
+            >
+            <template v-else-if="attemptsReady"
+                ><div class="notice-attempt-summary"
+                    ><span
+                        >{{ accountNoticeEvents[selectedTask.event_key] || '资金提醒' }} ·
+                        {{ accountNoticeChannels[selectedTask.channel] }}</span
+                    ><el-tag
+                        size="small"
+                        :type="accountNoticeStatusTone(selectedTask.status)"
+                        >{{ accountNoticeStatuses[selectedTask.status] || '待核对' }}</el-tag
+                    ></div
+                ><HsxTable :columns="attemptColumns" :data="attempts" empty-text="尚无渠道提交记录"
+                    ><template #trigger="{row}"
+                        ><div class="notice-cell"
+                            ><span>{{ row.trigger_type === 'manual' ? '人工复查' : '自动处理' }}</span
+                            ><small v-if="row.operator_uid">操作员 #{{ row.operator_uid }}</small
+                            ><small v-if="row.reason">{{ row.reason }}</small></div
+                        ></template
+                    ><template #result="{row}"
+                        ><div class="notice-cell"
+                            ><strong>{{ accountNoticeStatuses[row.status] || row.status || '状态待核对' }}</strong
+                            ><span>{{ row.message || '未记录说明' }}</span
+                            ><small v-if="row.provider_code !== '' && row.provider_code != null"
+                                >返回码 {{ row.provider_code }}</small
+                            ></div
+                        ></template
+                    ><template #time="{row}">{{ coopTime(row.create_time) }}</template></HsxTable
+                ></template
+            >
             <template #footer><el-button @click="attemptsVisible=false">关闭</el-button></template>
         </HsxDrawer>
-        <el-dialog v-model="retryVisible" title="重新检查通知" width="min(520px,94vw)" append-to-body :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy">
-            <p>{{ selectedRetry.nickname || selectedRetry.member_no || `会员 #${selectedRetry.recipient_member_id || ''}` }} · {{ accountNoticeEvents[selectedRetry.event_key] }} · {{ accountNoticeChannels[selectedRetry.channel] }}</p>
-            <el-alert title="只重新核对原通知，符合条件后排队发送；不改变业务与款项。" type="warning" :closable="false" show-icon />
-            <el-alert v-if="selectedRetry.channel==='sms'" title="短信提交后可能计费，请先核对接收人。" type="warning" :closable="false" show-icon class="notice-banner" />
-            <el-alert v-if="retryError" :title="retryError" type="error" :closable="false" show-icon class="notice-banner" />
-            <el-form label-position="top" class="notice-retry-form" :disabled="busy || retryUncertain"><el-form-item label="复查原因" required><el-input v-model="retryReason" type="textarea" :rows="3" maxlength="200" show-word-limit placeholder="如：已核对渠道设置，重新检查原提醒" /></el-form-item><el-checkbox v-model="retryConfirmed">已核对接收人与原因，确认重新检查</el-checkbox></el-form>
-            <template #footer><el-button :disabled="busy" @click="retryVisible=false">取消</el-button><el-button v-if="retryUncertain" type="primary" :loading="loading" @click="refreshRetry">刷新核对原记录</el-button><el-button v-else type="primary" :loading="busy" :disabled="!retryConfirmed || !retryReason.trim() || !retryAllowed(selectedRetry)" @click="submitRetry">确认重新检查</el-button></template>
+        <el-dialog
+            v-model="retryVisible"
+            title="重新检查通知"
+            width="min(520px,94vw)"
+            append-to-body
+            :close-on-click-modal="false"
+            :close-on-press-escape="!busy"
+            :show-close="!busy"
+        >
+            <p
+                >{{ selectedRetry.nickname || selectedRetry.member_no || `会员 #${selectedRetry.recipient_member_id || ''}` }}
+                · {{ accountNoticeEvents[selectedRetry.event_key] }} ·
+                {{ accountNoticeChannels[selectedRetry.channel] }}</p
+            >
+            <el-alert
+                title="只重新核对原通知，符合条件后排队发送；不改变业务与款项。"
+                type="warning"
+                :closable="false"
+                show-icon
+            />
+            <el-alert
+                v-if="selectedRetry.channel==='sms'"
+                title="短信提交后可能计费，请先核对接收人。"
+                type="warning"
+                :closable="false"
+                show-icon
+                class="notice-banner"
+            />
+            <el-alert
+                v-if="retryError"
+                :title="retryError"
+                type="error"
+                :closable="false"
+                show-icon
+                class="notice-banner"
+            />
+            <el-form label-position="top" class="notice-retry-form" :disabled="busy || retryUncertain"
+                ><el-form-item label="复查原因" required
+                    ><el-input
+                        v-model="retryReason"
+                        type="textarea"
+                        :rows="3"
+                        maxlength="200"
+                        show-word-limit
+                        placeholder="如：已核对渠道设置，重新检查原提醒" /></el-form-item
+                ><el-checkbox v-model="retryConfirmed">已核对接收人与原因，确认重新检查</el-checkbox></el-form
+            >
+            <template #footer
+                ><el-button :disabled="busy" @click="retryVisible=false">取消</el-button
+                ><el-button v-if="retryUncertain" type="primary" :loading="loading" @click="refreshRetry"
+                    >刷新核对原记录</el-button
+                ><el-button
+                    v-else
+                    type="primary"
+                    :loading="busy"
+                    :disabled="!retryConfirmed || !retryReason.trim() || !retryAllowed(selectedRetry)"
+                    @click="submitRetry"
+                    >确认重新检查</el-button
+                ></template
+            >
         </el-dialog>
-        <HsxDrawer v-model="templateVisible" :title="`${accountNoticeChannels[templateChannel]}模板`" :subtitle="accountNoticeEvents[templateEvent]" size="lg" show-footer confirm-text="应用到规则草稿" :confirm-disabled="!!templateError" @confirm="applyTemplate">
-            <el-alert title="仅使用本站实际可用的官方模板；更换映射后需保存规则，再到牛云渠道页获取模板并开启。" type="info" show-icon :closable="false" class="notice-banner" />
-            <WeappNoticeTemplatePicker v-if="templateChannel==='weapp' && canLibrary" :can-edit="true" :variables="variables" :scene-name="templateEventName" :request-library="getAccountNoticeTemplateLibrary" :field-pattern="ACCOUNT_NOTICE_FIELD_PATTERN" :variable-options="templateVariableOptions" :suggest-variable="templateVariableSuggestion" @select="applyLibrary" />
-            <el-collapse><el-collapse-item title="在官方后台哪里获取？" name="source"><p v-if="templateChannel==='weapp'">在微信公众平台 → 小程序 → 订阅消息中核对公共模板编号、关键词与所属类目；也可使用上方官方模板库。这里填写数字公共编号，不是已生成的长模板 ID。</p><p v-else>在微信公众平台 → 服务号 → 模板消息中核对模板库编号与关键词；保存映射后，到牛云公众号消息页获取本站模板并开启。</p><p>字段须对应真实模板，不要套用其他小程序或公众号的私有模板 ID。</p></el-collapse-item></el-collapse>
-            <el-form label-position="top" class="notice-template-form"><el-form-item :label="templateChannel==='weapp' ? '公共模板编号（tid）' : '公众号模板库编号（temp_key）'"><el-input v-if="templateChannel==='weapp'" v-model="templateDraft.tid" maxlength="20" placeholder="填写本站类目下的真实数字公共编号" /><el-input v-else v-model="templateDraft.temp_key" maxlength="64" placeholder="填写官方模板库编号" /></el-form-item><el-form-item v-if="templateChannel==='weapp'" label="已核验使用场景"><el-input v-model="templateDraft.scene_desc" maxlength="100" /></el-form-item>
-                <div v-for="(field,index) in templateDraft.fields" :key="index" class="notice-template-field"><el-form-item label="官方字段名"><el-input v-model="field.label" maxlength="30" placeholder="填写官方字段名称" /></el-form-item><el-form-item label="官方关键词"><el-input v-model="field.keyword" maxlength="30" placeholder="从官方模板复制，不自动编造" /></el-form-item><el-form-item label="对应通知内容"><el-select v-model="field.variable" placeholder="选择匹配的内容"><el-option v-for="item in templateVariableOptions(field.keyword,variables)" :key="item.key" :label="item.label" :value="item.key" /></el-select></el-form-item><el-button link type="danger" @click="templateDraft.fields.splice(index,1)">删除</el-button></div>
-                <el-button :disabled="templateDraft.fields.length>=10" @click="templateDraft.fields.push({label:'',keyword:'',variable:''})">添加真实字段</el-button><el-checkbox v-model="templateDraft.confirmed" class="notice-template-confirm">已逐项核对本站官方模板、关键词及对应内容</el-checkbox><p v-if="templateError" class="notice-danger" role="alert">{{ templateError }}</p>
+        <HsxDrawer
+            v-model="templateVisible"
+            :title="`${accountNoticeChannels[templateChannel]}模板`"
+            :subtitle="accountNoticeEvents[templateEvent]"
+            size="lg"
+            show-footer
+            confirm-text="应用到规则草稿"
+            :confirm-disabled="!!templateError"
+            @confirm="applyTemplate"
+        >
+            <el-alert
+                title="仅使用本站实际可用的官方模板；更换映射后需保存规则，再到牛云渠道页获取模板并开启。"
+                type="info"
+                show-icon
+                :closable="false"
+                class="notice-banner"
+            />
+            <WeappNoticeTemplatePicker
+                v-if="templateChannel==='weapp' && canLibrary"
+                :can-edit="true"
+                :variables="variables"
+                :scene-name="templateEventName"
+                :request-library="getAccountNoticeTemplateLibrary"
+                :field-pattern="ACCOUNT_NOTICE_FIELD_PATTERN"
+                :variable-options="templateVariableOptions"
+                :suggest-variable="templateVariableSuggestion"
+                @select="applyLibrary"
+            />
+            <el-collapse
+                ><el-collapse-item title="在官方后台哪里获取？" name="source"
+                    ><p v-if="templateChannel==='weapp'"
+                        >在微信公众平台 → 小程序 →
+                        订阅消息中核对公共模板编号、关键词与所属类目；也可使用上方官方模板库。这里填写数字公共编号，不是已生成的长模板
+                        ID。</p
+                    ><p v-else
+                        >在微信公众平台 → 服务号 →
+                        模板消息中核对模板库编号与关键词；保存映射后，到牛云公众号消息页获取本站模板并开启。</p
+                    ><p>字段须对应真实模板，不要套用其他小程序或公众号的私有模板 ID。</p></el-collapse-item
+                ></el-collapse
+            >
+            <el-form label-position="top" class="notice-template-form"
+                ><el-form-item
+                    :label="templateChannel==='weapp' ? '公共模板编号（tid）' : '公众号模板库编号（temp_key）'"
+                    ><el-input
+                        v-if="templateChannel==='weapp'"
+                        v-model="templateDraft.tid"
+                        maxlength="20"
+                        placeholder="填写本站类目下的真实数字公共编号" /><el-input
+                        v-else
+                        v-model="templateDraft.temp_key"
+                        maxlength="64"
+                        placeholder="填写官方模板库编号" /></el-form-item
+                ><el-form-item v-if="templateChannel==='weapp'" label="已核验使用场景"
+                    ><el-input v-model="templateDraft.scene_desc" maxlength="100"
+                /></el-form-item>
+                <div v-for="(field,index) in templateDraft.fields" :key="index" class="notice-template-field"
+                    ><el-form-item label="官方字段名"
+                        ><el-input v-model="field.label" maxlength="30" placeholder="填写官方字段名称" /></el-form-item
+                    ><el-form-item label="官方关键词"
+                        ><el-input
+                            v-model="field.keyword"
+                            maxlength="30"
+                            placeholder="从官方模板复制，不自动编造" /></el-form-item
+                    ><el-form-item label="对应通知内容"
+                        ><el-select v-model="field.variable" placeholder="选择匹配的内容"
+                            ><el-option
+                                v-for="item in templateVariableOptions(field.keyword,variables)"
+                                :key="item.key"
+                                :label="item.label"
+                                :value="item.key" /></el-select></el-form-item
+                    ><el-button link type="danger" @click="templateDraft.fields.splice(index,1)">删除</el-button></div
+                >
+                <el-button
+                    :disabled="templateDraft.fields.length>=10"
+                    @click="templateDraft.fields.push({label:'',keyword:'',variable:''})"
+                    >添加真实字段</el-button
+                ><el-checkbox v-model="templateDraft.confirmed" class="notice-template-confirm"
+                    >已逐项核对本站官方模板、关键词及对应内容</el-checkbox
+                ><p v-if="templateError" class="notice-danger" role="alert">{{ templateError }}</p>
             </el-form>
             <el-button type="danger" plain @click="clearTemplate">清空当前模板草稿</el-button>
         </HsxDrawer>

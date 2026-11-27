@@ -1,4 +1,26 @@
-<template><div v-show="diyStore.editTab==='content'" class="content-wrap"><div class="edit-attr-item-wrap"><h3>首页标题区</h3><el-form label-width="96px" class="px-[10px]"><el-form-item label="上方小标题"><el-input v-model="diyStore.editComponent.caption" maxlength="40" /></el-form-item><el-form-item label="主标题"><el-input v-model="diyStore.editComponent.title" maxlength="60" /></el-form-item><el-form-item label="补充说明"><el-input v-model="diyStore.editComponent.subtitle" maxlength="100" /></el-form-item><el-form-item label="标题标识线"><el-switch v-model="diyStore.editComponent.showAccent" :active-value="1" :inactive-value="0" /></el-form-item><el-form-item label="标识线颜色"><el-color-picker v-model="diyStore.editComponent.accentColor" /></el-form-item></el-form></div></div><div v-show="diyStore.editTab==='style'" class="style-wrap"><DiyAppearanceFields :allow-panel="false" :allow-border="false" /><slot name="style" /></div></template>
+<template>
+    <div v-show="diyStore.editTab==='content'" class="content-wrap"
+        ><div class="edit-attr-item-wrap"
+            ><h3>首页标题区</h3
+            ><el-form label-width="96px" class="px-[10px]"
+                ><el-form-item label="上方小标题"
+                    ><el-input v-model="diyStore.editComponent.caption" maxlength="40" /></el-form-item
+                ><el-form-item label="主标题"
+                    ><el-input v-model="diyStore.editComponent.title" maxlength="60" /></el-form-item
+                ><el-form-item label="补充说明"
+                    ><el-input v-model="diyStore.editComponent.subtitle" maxlength="100" /></el-form-item
+                ><el-form-item label="标题标识线"
+                    ><el-switch
+                        v-model="diyStore.editComponent.showAccent"
+                        :active-value="1"
+                        :inactive-value="0" /></el-form-item
+                ><el-form-item label="标识线颜色"
+                    ><el-color-picker
+                        v-model="diyStore.editComponent.accentColor" /></el-form-item></el-form></div></div
+    ><div v-show="diyStore.editTab==='style'" class="style-wrap"
+        ><DiyAppearanceFields :allow-panel="false" :allow-border="false" /><slot name="style"
+    /></div>
+</template>
 <script setup lang="ts">
 import {onMounted} from 'vue'
 import useDiyStore from '@/stores/modules/diy'

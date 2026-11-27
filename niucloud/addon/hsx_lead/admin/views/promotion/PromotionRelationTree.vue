@@ -1,30 +1,130 @@
 <template>
     <section class="promotion-tree" aria-label="推广关系树">
         <form class="tree-toolbar" role="search" @submit.prevent="search">
-            <el-input v-model="keyword" clearable :prefix-icon="Search" placeholder="搜索会员编号、姓名、手机号或门店" aria-label="搜索推广关系树" @clear="search" />
-            <el-select v-model="activityDays" aria-label="业务活跃统计周期" @change="search"><el-option :value="7" label="近7天业务" /><el-option :value="30" label="近30天业务" /></el-select>
+            <el-input
+                v-model="keyword"
+                clearable
+                :prefix-icon="Search"
+                placeholder="搜索会员编号、姓名、手机号或门店"
+                aria-label="搜索推广关系树"
+                @clear="search"
+            />
+            <el-select v-model="activityDays" aria-label="业务活跃统计周期" @change="search"
+                ><el-option :value="7" label="近7天业务" /><el-option :value="30" label="近30天业务"
+            /></el-select>
             <el-button type="primary" native-type="submit" :loading="root.loading">查询</el-button>
             <el-button :disabled="root.loading" @click="reset">重置</el-button>
         </form>
-        <div class="tree-caption"><span>{{ keyword.trim() ? '全站搜索结果 · 可继续展开下级' : '按邀请关系逐级展开' }}</span><el-tag v-if="rootMember && !keyword.trim()" closable effect="plain" @close="resetRoot">{{ rootMember.name || rootMember.member_no || '指定会员' }}的下级</el-tag><el-tooltip content="直属和二级人数来自当前邀请关系；佣金按原受益人统计。最近访问不代表当前在线，已入账不代表已提现。"><el-button link type="info">统计口径</el-button></el-tooltip></div>
-        <el-alert v-if="root.error" :title="root.error" type="error" :closable="false" show-icon><el-button link @click="readRoot()">重新加载</el-button></el-alert>
+        <div class="tree-caption"
+            ><span>{{ keyword.trim() ? '全站搜索结果 · 可继续展开下级' : '按邀请关系逐级展开' }}</span
+            ><el-tag v-if="rootMember && !keyword.trim()" closable effect="plain" @close="resetRoot"
+                >{{ rootMember.name || rootMember.member_no || '指定会员' }}的下级</el-tag
+            ><el-tooltip
+                content="直属和二级人数来自当前邀请关系；佣金按原受益人统计。最近访问不代表当前在线，已入账不代表已提现。"
+                ><el-button link type="info">统计口径</el-button></el-tooltip
+            ></div
+        >
+        <el-alert v-if="root.error" :title="root.error" type="error" :closable="false" show-icon
+            ><el-button link @click="readRoot()">重新加载</el-button></el-alert
+        >
         <el-skeleton v-if="root.loading && !root.data.length" :rows="4" animated />
-        <el-empty v-else-if="!root.error && !root.data.length" :description="keyword.trim() ? '未找到匹配会员' : '暂无可展示的邀请关系'" :image-size="72" />
-        <div v-if="root.data.length" class="tree-columns" aria-hidden="true"><span>会员 / 邀请关系</span><span>推广佣金</span><span>业务活跃</span></div>
+        <el-empty
+            v-else-if="!root.error && !root.data.length"
+            :description="keyword.trim() ? '未找到匹配会员' : '暂无可展示的邀请关系'"
+            :image-size="72"
+        />
+        <div v-if="root.data.length" class="tree-columns" aria-hidden="true"
+            ><span>会员 / 邀请关系</span><span>推广佣金</span><span>业务活跃</span></div
+        >
         <ul class="tree-rows" aria-label="会员邀请层级">
-            <li v-for="entry in visibleRows" :key="entry.key" :style="{ '--tree-indent': Math.min(entry.depth, 5) * 20 + 'px' }" :class="['tree-entry', { 'is-child': entry.depth > 0 }]">
+            <li
+                v-for="entry in visibleRows"
+                :key="entry.key"
+                :style="{ '--tree-indent': Math.min(entry.depth, 5) * 20 + 'px' }"
+                :class="['tree-entry', { 'is-child': entry.depth > 0 }]"
+            >
                 <template v-if="entry.node">
                     <div class="tree-identity">
-                        <el-button class="tree-toggle" text :disabled="!entry.node.has_children" :aria-label="`${expanded.has(entry.node.member_id) ? '收起' : '展开'}${entry.node.name || '会员'}的下级`" :aria-expanded="entry.node.has_children ? expanded.has(entry.node.member_id) : undefined" @click="toggle(entry.node)"><el-icon v-if="entry.node.has_children"><ArrowDown v-if="expanded.has(entry.node.member_id)" /><ArrowRight v-else /></el-icon><span v-else class="tree-leaf" /></el-button>
-                        <div class="tree-person"><div class="tree-name"><strong>{{ entry.node.merchant?.name || entry.node.name || '本站会员' }}</strong><el-tag v-if="entry.node.membership?.level_name" size="small" effect="plain">{{ entry.node.membership.level_name }}</el-tag><el-tag v-if="entry.node.payment?.status_label" size="small" :type="entry.node.payment.status==='paid'?'success':'info'" effect="plain">本人{{ entry.node.payment.status_label }}</el-tag></div><span>{{ entry.node.member_no || `UID ${entry.node.member_id}` }}<template v-if="entry.node.mobile_masked"> · {{ entry.node.mobile_masked }}</template></span><span class="tree-counts">直属 {{ count(entry.node.direct_invite_count) }} · 二级 {{ count(entry.node.indirect_invite_count) }} · 本人服务费净付 {{ money(entry.node.payment?.service_net) }}</span><span v-if="keyword.trim() && entry.node.path?.length" class="tree-path">{{ pathLabel(entry.node.path) }}</span></div>
+                        <el-button
+                            class="tree-toggle"
+                            text
+                            :disabled="!entry.node.has_children"
+                            :aria-label="`${expanded.has(entry.node.member_id) ? '收起' : '展开'}${entry.node.name || '会员'}的下级`"
+                            :aria-expanded="entry.node.has_children ? expanded.has(entry.node.member_id) : undefined"
+                            @click="toggle(entry.node)"
+                            ><el-icon v-if="entry.node.has_children"
+                                ><ArrowDown v-if="expanded.has(entry.node.member_id)" /><ArrowRight v-else /></el-icon
+                            ><span v-else class="tree-leaf"
+                        /></el-button>
+                        <div class="tree-person"
+                            ><div class="tree-name"
+                                ><strong>{{ entry.node.merchant?.name || entry.node.name || '本站会员' }}</strong
+                                ><el-tag
+                                    v-if="entry.node.membership?.level_name"
+                                    size="small"
+                                    effect="plain"
+                                    >{{ entry.node.membership.level_name }}</el-tag
+                                ><el-tag
+                                    v-if="entry.node.payment?.status_label"
+                                    size="small"
+                                    :type="entry.node.payment.status==='paid'?'success':'info'"
+                                    effect="plain"
+                                    >本人{{ entry.node.payment.status_label }}</el-tag
+                                ></div
+                            ><span
+                                >{{ entry.node.member_no || `UID ${entry.node.member_id}`
+                                }}<template v-if="entry.node.mobile_masked">
+                                    · {{ entry.node.mobile_masked }}</template
+                                ></span
+                            ><span class="tree-counts"
+                                >直属 {{ count(entry.node.direct_invite_count) }} · 二级
+                                {{ count(entry.node.indirect_invite_count) }} · 本人服务费净付
+                                {{ money(entry.node.payment?.service_net) }}</span
+                            ><span
+                                v-if="keyword.trim() && entry.node.path?.length"
+                                class="tree-path"
+                                >{{ pathLabel(entry.node.path) }}</span
+                            ></div
+                        >
                     </div>
-                    <div class="tree-money"><strong>{{ money(entry.node.rewards?.settled) }}</strong><span>已入账 · 待结算 {{ money(entry.node.rewards?.pending) }}</span><span v-if="Number(entry.node.rewards?.held) > 0">待核对 {{ money(entry.node.rewards.held) }}</span></div>
-                    <div class="tree-activity"><span>{{ visit(entry.node.activity?.last_visit_time) }}</span><span>近{{ activityDays }}天 · 发单 {{ count(entry.node.activity?.published_count) }} · 接单 {{ count(entry.node.activity?.accepted_count) }} · 成交 {{ count(entry.node.activity?.deal_count) }}</span></div>
+                    <div class="tree-money"
+                        ><strong>{{ money(entry.node.rewards?.settled) }}</strong
+                        ><span>已入账 · 待结算 {{ money(entry.node.rewards?.pending) }}</span
+                        ><span v-if="Number(entry.node.rewards?.held) > 0"
+                            >待核对 {{ money(entry.node.rewards.held) }}</span
+                        ></div
+                    >
+                    <div class="tree-activity"
+                        ><span>{{ visit(entry.node.activity?.last_visit_time) }}</span
+                        ><span
+                            >近{{ activityDays }}天 · 发单 {{ count(entry.node.activity?.published_count) }} · 接单
+                            {{ count(entry.node.activity?.accepted_count) }} · 成交
+                            {{ count(entry.node.activity?.deal_count) }}</span
+                        ></div
+                    >
                 </template>
-                <div v-else class="tree-branch-state" role="status"><span v-if="entry.state?.loading">正在读取下级…</span><template v-else-if="entry.state?.error"><span>{{ entry.state.error }}</span><el-button link type="primary" @click="readBranch(entry.parent, !entry.state.data.length)">重试读取</el-button></template><el-button v-else-if="entry.state && entry.state.data.length < entry.state.total" link type="primary" @click="readBranch(entry.parent, false)">加载更多下级（{{ entry.state.data.length }}/{{ entry.state.total }}）</el-button><span v-else>暂无下级</span></div>
+                <div v-else class="tree-branch-state" role="status"
+                    ><span v-if="entry.state?.loading">正在读取下级…</span
+                    ><template v-else-if="entry.state?.error"
+                        ><span>{{ entry.state.error }}</span
+                        ><el-button link type="primary" @click="readBranch(entry.parent, !entry.state.data.length)"
+                            >重试读取</el-button
+                        ></template
+                    ><el-button
+                        v-else-if="entry.state && entry.state.data.length < entry.state.total"
+                        link
+                        type="primary"
+                        @click="readBranch(entry.parent, false)"
+                        >加载更多下级（{{ entry.state.data.length }}/{{ entry.state.total }}）</el-button
+                    ><span v-else>暂无下级</span></div
+                >
             </li>
         </ul>
-        <div v-if="root.data.length < root.total && !root.error" class="tree-more"><el-button :loading="root.loading" @click="readRoot(false)">加载更多会员（{{ root.data.length }}/{{ root.total }}）</el-button></div>
+        <div v-if="root.data.length < root.total && !root.error" class="tree-more"
+            ><el-button :loading="root.loading" @click="readRoot(false)"
+                >加载更多会员（{{ root.data.length }}/{{ root.total }}）</el-button
+            ></div
+        >
     </section>
 </template>
 <script setup lang="ts">

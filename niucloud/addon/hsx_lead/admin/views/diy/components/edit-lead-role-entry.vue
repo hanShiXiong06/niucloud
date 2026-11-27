@@ -1,4 +1,30 @@
-<template><div v-show="diyStore.editTab==='content'" class="content-wrap"><div class="edit-attr-item-wrap"><h3>独立角色卡片</h3><el-form label-width="96px" class="px-[10px]"><el-form-item label="入口角色"><el-radio-group :model-value="diyStore.editComponent.role" @update:model-value="changeRole"><el-radio-button label="stores">找门店</el-radio-button><el-radio-button label="customers">找客户</el-radio-button></el-radio-group></el-form-item></el-form><RoleEntryEditorFields :model-value="diyStore.editComponent" :fallback="fallback" section="content" @update:model-value="update" /></div></div><div v-show="diyStore.editTab==='style'" class="style-wrap"><div class="edit-attr-item-wrap"><h3>本张卡片</h3><RoleEntryEditorFields :model-value="diyStore.editComponent" :fallback="fallback" section="style" @update:model-value="update" /></div><slot name="style" /></div></template>
+<template>
+    <div v-show="diyStore.editTab==='content'" class="content-wrap"
+        ><div class="edit-attr-item-wrap"
+            ><h3>独立角色卡片</h3
+            ><el-form label-width="96px" class="px-[10px]"
+                ><el-form-item label="入口角色"
+                    ><el-radio-group :model-value="diyStore.editComponent.role" @update:model-value="changeRole"
+                        ><el-radio-button label="stores">找门店</el-radio-button
+                        ><el-radio-button label="customers">找客户</el-radio-button></el-radio-group
+                    ></el-form-item
+                ></el-form
+            ><RoleEntryEditorFields
+                :model-value="diyStore.editComponent"
+                :fallback="fallback"
+                section="content"
+                @update:model-value="update" /></div></div
+    ><div v-show="diyStore.editTab==='style'" class="style-wrap"
+        ><div class="edit-attr-item-wrap"
+            ><h3>本张卡片</h3
+            ><RoleEntryEditorFields
+                :model-value="diyStore.editComponent"
+                :fallback="fallback"
+                section="style"
+                @update:model-value="update" /></div
+        ><slot name="style"
+    /></div>
+</template>
 <script setup lang="ts">
 import {computed,onMounted} from 'vue'
 import useDiyStore from '@/stores/modules/diy'

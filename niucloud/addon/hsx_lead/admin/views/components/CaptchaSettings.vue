@@ -1,22 +1,85 @@
 <template>
-    <HsxDrawer v-model="visible" title="自动登录设置" subtitle="本站共享 · 仅用于本次交互式登录" size="sm" :body-loading="loading" :confirm-loading="saving">
+    <HsxDrawer
+        v-model="visible"
+        title="自动登录设置"
+        subtitle="本站共享 · 仅用于本次交互式登录"
+        size="sm"
+        :body-loading="loading"
+        :confirm-loading="saving"
+    >
         <div class="lead-captcha-settings">
             <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" />
             <el-alert v-if="config.notice" :title="config.notice" type="info" :closable="false" />
             <el-form label-position="top" :disabled="loading || saving">
-                <el-form-item label="自动识别验证码"><el-switch v-model="form.enabled" /><span class="setting-caption">默认关闭；未启用时仍可手动填写验证码。</span></el-form-item>
+                <el-form-item label="自动识别验证码"
+                    ><el-switch v-model="form.enabled" /><span class="setting-caption"
+                        >默认关闭；未启用时仍可手动填写验证码。</span
+                    ></el-form-item
+                >
                 <el-form-item label="2captcha API Key" :required="form.enabled && !config.configured">
-                    <el-input v-model="form.api_key" type="password" show-password autocomplete="new-password" :maxlength="32" :placeholder="config.configured ? '已保存；留空保留，仅输入新值时替换' : '填写本站 32 位 2captcha API Key'" />
+                    <el-input
+                        v-model="form.api_key"
+                        type="password"
+                        show-password
+                        autocomplete="new-password"
+                        :maxlength="32"
+                        :placeholder="config.configured ? '已保存；留空保留，仅输入新值时替换' : '填写本站 32 位 2captcha API Key'"
+                    />
                     <p class="setting-caption">{{ keyStatus }}</p>
-                    <el-checkbox v-if="config.configured" v-model="form.clear_key" @change="value => { if (value) form.enabled = false }">清除密钥并关闭自动识别</el-checkbox>
+                    <el-checkbox
+                        v-if="config.configured"
+                        v-model="form.clear_key"
+                        @change="value => { if (value) form.enabled = false }"
+                        >清除密钥并关闭自动识别</el-checkbox
+                    >
                 </el-form-item>
-                <el-form-item label="每日提交次数上限"><el-input-number v-input-number-a11y v-model="form.daily_limit" :min="1" :max="1000" :precision="0" /><p class="setting-caption">今日已用 {{ config.used_today ?? '—' }} 次，剩余 {{ config.remaining_today ?? '—' }} 次。包含失败提交，不代表实际扣费金额。</p></el-form-item>
-                <div class="setting-consent"><el-checkbox v-model="consent">我同意启用第三方验证码识别</el-checkbox><p>仅把验证码图片发送给 2captcha，可能由人工识别，按识别次数扣费。ERP 密码不发送给识别服务，只在本次登录任务中短期加密保存；关闭或停止任务不退还已提交的识别费用。</p></div>
+                <el-form-item label="每日提交次数上限"
+                    ><el-input-number
+                        v-input-number-a11y
+                        v-model="form.daily_limit"
+                        :min="1"
+                        :max="1000"
+                        :precision="0"
+                    /><p class="setting-caption"
+                        >今日已用 {{ config.used_today ?? '—' }} 次，剩余
+                        {{ config.remaining_today ?? '—' }} 次。包含失败提交，不代表实际扣费金额。</p
+                    ></el-form-item
+                >
+                <div class="setting-consent"
+                    ><el-checkbox v-model="consent">我同意启用第三方验证码识别</el-checkbox
+                    ><p
+                        >仅把验证码图片发送给 2captcha，可能由人工识别，按识别次数扣费。ERP
+                        密码不发送给识别服务，只在本次登录任务中短期加密保存；关闭或停止任务不退还已提交的识别费用。</p
+                    ></div
+                >
             </el-form>
-            <div class="setting-balance"><el-button :loading="checking" :disabled="!config.configured || saving || loading || !!form.api_key || form.clear_key" @click="balance">查询已保存账号余额</el-button><span v-if="balanceText">{{ balanceText }}</span><p class="setting-caption">余额查询不提交验证码、不触发识别。修改密钥后请先保存。</p></div>
-            <el-collapse><el-collapse-item title="接入与费用说明"><p>在 2captcha 后台获取 API Key，并自行确认计费和隐私规则。本站使用异步查询，不需要填写公网回调地址。验证码识别成功不代表 ERP 登录成功，也不会自动启用商户接入。</p><a href="https://2captcha.com/api-docs/normal-captcha" target="_blank" rel="noopener noreferrer">查看 2captcha 官方说明 ↗</a></el-collapse-item></el-collapse>
+            <div class="setting-balance"
+                ><el-button
+                    :loading="checking"
+                    :disabled="!config.configured || saving || loading || !!form.api_key || form.clear_key"
+                    @click="balance"
+                    >查询已保存账号余额</el-button
+                ><span v-if="balanceText">{{ balanceText }}</span
+                ><p class="setting-caption">余额查询不提交验证码、不触发识别。修改密钥后请先保存。</p></div
+            >
+            <el-collapse
+                ><el-collapse-item title="接入与费用说明"
+                    ><p
+                        >在 2captcha 后台获取 API
+                        Key，并自行确认计费和隐私规则。本站使用异步查询，不需要填写公网回调地址。验证码识别成功不代表
+                        ERP 登录成功，也不会自动启用商户接入。</p
+                    ><a href="https://2captcha.com/api-docs/normal-captcha" target="_blank" rel="noopener noreferrer"
+                        >查看 2captcha 官方说明 ↗</a
+                    ></el-collapse-item
+                ></el-collapse
+            >
         </div>
-        <template #footer><el-button :disabled="saving" @click="visible = false">取消</el-button><el-button type="primary" :loading="saving" :disabled="loading" @click="save">保存设置</el-button></template>
+        <template #footer
+            ><el-button :disabled="saving" @click="visible = false">取消</el-button
+            ><el-button type="primary" :loading="saving" :disabled="loading" @click="save"
+                >保存设置</el-button
+            ></template
+        >
     </HsxDrawer>
 </template>
 <script setup lang="ts">

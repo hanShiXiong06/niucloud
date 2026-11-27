@@ -1,29 +1,92 @@
 <template>
-    <HsxDrawer v-model="visible" title="门店资料表单" subtitle="控制商户入驻与编辑时的资料要求" size="md" :body-loading="loading" :show-footer="true" :confirm-loading="saving" :confirm-disabled="!ready || loading || !canEdit" confirm-text="保存表单要求" @confirm="save">
-        <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="profile-settings-error"><template #default><el-button link type="primary" :disabled="saving || loading" @click="load">重新读取</el-button></template></el-alert>
+    <HsxDrawer
+        v-model="visible"
+        title="门店资料表单"
+        subtitle="控制商户入驻与编辑时的资料要求"
+        size="md"
+        :body-loading="loading"
+        :show-footer="true"
+        :confirm-loading="saving"
+        :confirm-disabled="!ready || loading || !canEdit"
+        confirm-text="保存表单要求"
+        @confirm="save"
+    >
+        <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="profile-settings-error"
+            ><template #default
+                ><el-button link type="primary" :disabled="saving || loading" @click="load"
+                    >重新读取</el-button
+                ></template
+            ></el-alert
+        >
         <template v-if="ready">
             <el-form label-position="top" :disabled="saving || loading || !canEdit">
                 <h3 class="profile-settings-title">照片与资质</h3>
                 <el-table :data="documentRows" class="profile-settings-docs">
                     <el-table-column label="资料" prop="label" min-width="120" />
-                    <el-table-column label="显示" width="90"><template #default="{row}"><el-switch v-model="fields[row.key].visible" @change="value => !value && (fields[row.key].required=false)" /></template></el-table-column>
-                    <el-table-column label="必填" width="90"><template #default="{row}"><el-switch v-model="fields[row.key].required" :disabled="!fields[row.key].visible" /></template></el-table-column>
-                    <el-table-column label="顺序" width="135"><template #default="{row}"><el-input-number v-model="fields[row.key].sort" :min="0" :max="999" :precision="0" controls-position="right" style="width:110px" /></template></el-table-column>
+                    <el-table-column label="显示" width="90"
+                        ><template #default="{row}"
+                            ><el-switch
+                                v-model="fields[row.key].visible"
+                                @change="value => !value && (fields[row.key].required=false)" /></template
+                    ></el-table-column>
+                    <el-table-column label="必填" width="90"
+                        ><template #default="{row}"
+                            ><el-switch
+                                v-model="fields[row.key].required"
+                                :disabled="!fields[row.key].visible" /></template
+                    ></el-table-column>
+                    <el-table-column label="顺序" width="135"
+                        ><template #default="{row}"
+                            ><el-input-number
+                                v-model="fields[row.key].sort"
+                                :min="0"
+                                :max="999"
+                                :precision="0"
+                                controls-position="right"
+                                style="width:110px" /></template
+                    ></el-table-column>
                 </el-table>
-                <p class="profile-settings-note">营业执照仍私密保存，仅负责人和授权平台人员可查看。关闭显示不会删除已上传资料。</p>
+                <p class="profile-settings-note"
+                    >营业执照仍私密保存，仅负责人和授权平台人员可查看。关闭显示不会删除已上传资料。</p
+                >
                 <h3 class="profile-settings-title">补充资料</h3>
                 <el-form-item label="启用万能表单"><el-switch v-model="extra.enabled" /></el-form-item>
                 <el-form-item v-if="extra.enabled" label="选择资料表单" required>
-                    <el-select v-model="selectedExtraForm" filterable placeholder="搜索并选择本站万能表单" style="width:100%">
-                        <el-option v-for="item in forms" :key="item.form_id" :value="Number(item.form_id)" :label="item.title || '表单 #'+item.form_id"><span>{{ item.title }}</span><span v-if="Number(item.status)!==1" class="profile-settings-option-state">未启用</span></el-option>
+                    <el-select
+                        v-model="selectedExtraForm"
+                        filterable
+                        placeholder="搜索并选择本站万能表单"
+                        style="width:100%"
+                    >
+                        <el-option
+                            v-for="item in forms"
+                            :key="item.form_id"
+                            :value="Number(item.form_id)"
+                            :label="item.title || '表单 #'+item.form_id"
+                            ><span>{{ item.title }}</span
+                            ><span v-if="Number(item.status)!==1" class="profile-settings-option-state"
+                                >未启用</span
+                            ></el-option
+                        >
                     </el-select>
                     <p class="profile-settings-note">字段名称、顺序、必填及选项在牛云万能表单中维护。</p>
                     <el-button link type="primary" @click="openForms">打开万能表单管理</el-button>
                 </el-form-item>
-                <el-collapse><el-collapse-item title="哪些资料由业务固定校验？" name="core"><p class="profile-settings-note">门店名称、联系人、联系电话、完整地区、详细地址与经营能力由协作业务校验，不能通过表单配置关闭。补充资料暂支持单行／多行文本、手机号、邮箱、数字、单选、多选和日期；不支持的字段会明确阻止保存。</p></el-collapse-item></el-collapse>
+                <el-collapse
+                    ><el-collapse-item title="哪些资料由业务固定校验？" name="core"
+                        ><p class="profile-settings-note"
+                            >门店名称、联系人、联系电话、完整地区、详细地址与经营能力由协作业务校验，不能通过表单配置关闭。补充资料暂支持单行／多行文本、手机号、邮箱、数字、单选、多选和日期；不支持的字段会明确阻止保存。</p
+                        ></el-collapse-item
+                    ></el-collapse
+                >
             </el-form>
         </template>
-        <template #footer><el-button :disabled="saving" @click="visible=false">关闭</el-button><el-button v-if="canEdit" type="primary" :disabled="!ready || loading" :loading="saving" @click="save">保存表单要求</el-button></template>
+        <template #footer
+            ><el-button :disabled="saving" @click="visible=false">关闭</el-button
+            ><el-button v-if="canEdit" type="primary" :disabled="!ready || loading" :loading="saving" @click="save"
+                >保存表单要求</el-button
+            ></template
+        >
     </HsxDrawer>
 </template>
 <script setup lang="ts">

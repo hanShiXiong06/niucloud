@@ -2,7 +2,13 @@
     <div class="coop-cell entity-membership-cell">
         <div class="entity-membership-cell__heading">
             <strong>{{ membership.level_name || membership.level_code || '普通会员' }}</strong>
-            <el-tag class="entity-membership-cell__status" :type="state.tone" size="small" effect="plain">{{ state.label }}</el-tag>
+            <el-tag
+                class="entity-membership-cell__status"
+                :type="state.tone"
+                size="small"
+                effect="plain"
+                >{{ state.label }}</el-tag
+            >
         </div>
         <small v-if="expiry">{{ expiry }}</small>
     </div>

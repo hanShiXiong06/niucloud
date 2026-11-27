@@ -1,4 +1,6 @@
-<template><PageShell permission="hsx_lead_cooperation_review"><Reviews :initial-lead-id="leadId" /></PageShell></template>
+<template>
+    <PageShell permission="hsx_lead_cooperation_review"><Reviews :initial-lead-id="leadId" /></PageShell>
+</template>
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'

@@ -1,25 +1,185 @@
 <template>
-    <el-dialog v-model="visible" title="订单退款" width="min(720px, 94vw)" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy" :before-close="beforeClose" @closed="clear">
-        <el-alert v-if="readError" :title="readError" type="error" :closable="false" show-icon class="refund-notice"><template #default><el-button link :disabled="busy || reading" @click="readDetail">重新读取</el-button></template></el-alert>
+    <el-dialog
+        v-model="visible"
+        title="订单退款"
+        width="min(720px, 94vw)"
+        :close-on-click-modal="false"
+        :close-on-press-escape="!busy"
+        :show-close="!busy"
+        :before-close="beforeClose"
+        @closed="clear"
+    >
+        <el-alert v-if="readError" :title="readError" type="error" :closable="false" show-icon class="refund-notice"
+            ><template #default
+                ><el-button link :disabled="busy || reading" @click="readDetail">重新读取</el-button></template
+            ></el-alert
+        >
         <div v-loading="reading" class="refund-content">
             <template v-if="detail.order_id">
-                <div class="refund-summary"><div><span>原支付订单</span><strong>{{ detail.order_no }}</strong></div><div><span>{{ detail.status==='refunded' ? '本次退款金额' : '本次拟退金额' }}</span><strong class="refund-amount">{{ coopMoney(detail.amount) }}</strong></div><div><span>处理进度</span><el-tag :type="statusTone(detail.status)" effect="plain">{{ detail.status_name || statusLabel(detail.status) }}</el-tag></div></div>
-                <el-alert v-if="actionError" :title="actionError" type="warning" :closable="false" show-icon class="refund-notice"><template #default><el-button link :disabled="busy || reading" @click="readDetail">核对最新进度</el-button></template></el-alert>
-                <el-alert v-if="detail.block_reason || detail.message" :title="detail.block_reason || detail.message" type="warning" :closable="false" show-icon class="refund-notice" />
+                <div class="refund-summary"
+                    ><div
+                        ><span>原支付订单</span><strong>{{ detail.order_no }}</strong></div
+                    ><div
+                        ><span>{{ detail.status==='refunded' ? '本次退款金额' : '本次拟退金额' }}</span
+                        ><strong class="refund-amount">{{ coopMoney(detail.amount) }}</strong></div
+                    ><div
+                        ><span>处理进度</span
+                        ><el-tag
+                            :type="statusTone(detail.status)"
+                            effect="plain"
+                            >{{ detail.status_name || statusLabel(detail.status) }}</el-tag
+                        ></div
+                    ></div
+                >
+                <el-alert
+                    v-if="actionError"
+                    :title="actionError"
+                    type="warning"
+                    :closable="false"
+                    show-icon
+                    class="refund-notice"
+                    ><template #default
+                        ><el-button link :disabled="busy || reading" @click="readDetail"
+                            >核对最新进度</el-button
+                        ></template
+                    ></el-alert
+                >
+                <el-alert
+                    v-if="detail.block_reason || detail.message"
+                    :title="detail.block_reason || detail.message"
+                    type="warning"
+                    :closable="false"
+                    show-icon
+                    class="refund-notice"
+                />
                 <el-descriptions :column="2" border size="small" class="refund-facts">
-                    <el-descriptions-item label="退款方式">{{ detail.manual_refund_required===true?'线下实际退款后登记':'原支付渠道退回' }}</el-descriptions-item><el-descriptions-item label="原退款单号">{{ detail.refund_no || '尚未创建' }}</el-descriptions-item>
-                    <el-descriptions-item v-if="detail.requested_at" label="申请时间">{{ coopTime(detail.requested_at) }}</el-descriptions-item><el-descriptions-item v-if="detail.review_at" label="审核时间">{{ coopTime(detail.review_at) }}</el-descriptions-item>
-                    <el-descriptions-item v-if="detail.reason" label="申请原因" :span="2">{{ detail.reason }}</el-descriptions-item><el-descriptions-item v-if="detail.review_reason" label="审核说明" :span="2">{{ detail.review_reason }}</el-descriptions-item>
-                    <el-descriptions-item v-if="detail.purpose==='membership' && detail.components" label="退款构成" :span="2">服务费 {{ coopMoney(detail.components.service) }}<template v-if="detail.components.deposit!==undefined"> · 押金 {{ coopMoney(detail.components.deposit) }}</template><template v-if="detail.components.experience!==undefined"> · 经验费 {{ coopMoney(detail.components.experience) }}</template></el-descriptions-item>
-                    <el-descriptions-item v-else-if="detail.purpose==='commission'" label="退款构成" :span="2">成交协作费 {{ coopMoney(detail.amount) }}</el-descriptions-item>
+                    <el-descriptions-item
+                        label="退款方式"
+                        >{{ detail.manual_refund_required===true?'线下实际退款后登记':'原支付渠道退回' }}</el-descriptions-item
+                    ><el-descriptions-item
+                        label="原退款单号"
+                        >{{ detail.refund_no || '尚未创建' }}</el-descriptions-item
+                    >
+                    <el-descriptions-item
+                        v-if="detail.requested_at"
+                        label="申请时间"
+                        >{{ coopTime(detail.requested_at) }}</el-descriptions-item
+                    ><el-descriptions-item
+                        v-if="detail.review_at"
+                        label="审核时间"
+                        >{{ coopTime(detail.review_at) }}</el-descriptions-item
+                    >
+                    <el-descriptions-item
+                        v-if="detail.reason"
+                        label="申请原因"
+                        :span="2"
+                        >{{ detail.reason }}</el-descriptions-item
+                    ><el-descriptions-item
+                        v-if="detail.review_reason"
+                        label="审核说明"
+                        :span="2"
+                        >{{ detail.review_reason }}</el-descriptions-item
+                    >
+                    <el-descriptions-item
+                        v-if="detail.purpose==='membership' && detail.components"
+                        label="退款构成"
+                        :span="2"
+                        >服务费
+                        {{ coopMoney(detail.components.service)
+                        }}<template v-if="detail.components.deposit!==undefined">
+                            · 押金 {{ coopMoney(detail.components.deposit) }}</template
+                        ><template v-if="detail.components.experience!==undefined">
+                            · 经验费 {{ coopMoney(detail.components.experience) }}</template
+                        ></el-descriptions-item
+                    >
+                    <el-descriptions-item v-else-if="detail.purpose==='commission'" label="退款构成" :span="2"
+                        >成交协作费 {{ coopMoney(detail.amount) }}</el-descriptions-item
+                    >
                 </el-descriptions>
-                <el-form v-if="showRequestForm || canReview && detail.can_review===true" label-position="top" :disabled="busy || reading || readRequired" class="refund-form"><el-form-item :label="showRequestForm ? '退款原因' : '审核说明'" required><el-input v-model="reason" type="textarea" :rows="3" maxlength="300" show-word-limit :placeholder="showRequestForm ? '请说明退款原因，至少4个字符' : '请填写审核说明，至少4个字符'" /></el-form-item></el-form>
-                <el-collapse class="refund-help"><el-collapse-item title="退款范围与处理规则" name="rules"><p>本次按原订单剩余可退金额退回，不修改原收款记录。会员退款会同步核对权益、经验及推广奖励；协作费已分出的收益须先核对可追回金额。</p><p>提交不代表退款到账。支付渠道结果不明确时，只核对原退款单，不重新申请。退出只退押金，请使用“押金退还”。</p></el-collapse-item></el-collapse>
-                <div v-if="logs.length" class="refund-log"><h3>处理记录</h3><el-timeline><el-timeline-item v-for="(log,index) in logs" :key="log.id || index" :timestamp="coopTime(log.create_time || log.at)"><strong>{{ log.action_label || log.label || log.action || '退款处理' }}</strong><span v-if="log.operator_name"> · {{ log.operator_name }}</span><p v-if="log.detail?.reason || log.reason || log.detail?.message || log.message">{{ log.detail?.reason || log.reason || log.detail?.message || log.message }}</p></el-timeline-item></el-timeline></div>
+                <el-form
+                    v-if="showRequestForm || canReview && detail.can_review===true"
+                    label-position="top"
+                    :disabled="busy || reading || readRequired"
+                    class="refund-form"
+                    ><el-form-item :label="showRequestForm ? '退款原因' : '审核说明'" required
+                        ><el-input
+                            v-model="reason"
+                            type="textarea"
+                            :rows="3"
+                            maxlength="300"
+                            show-word-limit
+                            :placeholder="showRequestForm ? '请说明退款原因，至少4个字符' : '请填写审核说明，至少4个字符'" /></el-form-item
+                ></el-form>
+                <el-collapse class="refund-help"
+                    ><el-collapse-item title="退款范围与处理规则" name="rules"
+                        ><p
+                            >本次按原订单剩余可退金额退回，不修改原收款记录。会员退款会同步核对权益、经验及推广奖励；协作费已分出的收益须先核对可追回金额。</p
+                        ><p
+                            >提交不代表退款到账。支付渠道结果不明确时，只核对原退款单，不重新申请。退出只退押金，请使用“押金退还”。</p
+                        ></el-collapse-item
+                    ></el-collapse
+                >
+                <div v-if="logs.length" class="refund-log"
+                    ><h3>处理记录</h3
+                    ><el-timeline
+                        ><el-timeline-item
+                            v-for="(log,index) in logs"
+                            :key="log.id || index"
+                            :timestamp="coopTime(log.create_time || log.at)"
+                            ><strong>{{ log.action_label || log.label || log.action || '退款处理' }}</strong
+                            ><span v-if="log.operator_name"> · {{ log.operator_name }}</span
+                            ><p
+                                v-if="log.detail?.reason || log.reason || log.detail?.message || log.message"
+                                >{{ log.detail?.reason || log.reason || log.detail?.message || log.message }}</p
+                            ></el-timeline-item
+                        ></el-timeline
+                    ></div
+                >
             </template>
             <el-empty v-else-if="!reading && !readError" description="尚未读取订单退款资料" :image-size="72" />
         </div>
-        <template #footer><div class="refund-footer"><el-button :disabled="busy" @click="close">关闭</el-button><el-button v-if="readRequired" type="primary" :loading="reading" :disabled="busy" @click="readDetail">重新核对原单</el-button><template v-else-if="detail.order_id && !reading"><template v-if="canReview && detail.can_review===true"><el-button :disabled="busy" @click="review('reject')">拒绝申请</el-button><el-button type="primary" :loading="busy" @click="review('approve')">{{ detail.manual_refund_required===true?'审核通过，待实际退款':'审核并申请退款' }}</el-button></template><el-button v-else-if="canManualRefund && (detail.can_confirm_manual_refund===true || Number(detail.manual_refund_receipt_id)>0)" type="primary" :disabled="busy" @click="openManualRefund">{{ detail.can_confirm_manual_refund===true?'登记已实际退款':'查看实际退款登记' }}</el-button><el-button v-else-if="canContinue && detail.can_continue===true" type="primary" :loading="busy" @click="continueRefund">继续原退款</el-button><el-button v-else-if="showRequestForm" type="primary" :loading="busy" @click="requestRefund">{{ detail.manual_refund_required===true?'提交退款申请':'确认申请原路退款' }}</el-button><el-button v-else-if="canRefresh && detail.can_refresh===true" type="primary" :loading="busy" @click="refresh">核对原退款进度</el-button></template></div></template>
+        <template #footer
+            ><div class="refund-footer"
+                ><el-button :disabled="busy" @click="close">关闭</el-button
+                ><el-button v-if="readRequired" type="primary" :loading="reading" :disabled="busy" @click="readDetail"
+                    >重新核对原单</el-button
+                ><template v-else-if="detail.order_id && !reading"
+                    ><template v-if="canReview && detail.can_review===true"
+                        ><el-button :disabled="busy" @click="review('reject')">拒绝申请</el-button
+                        ><el-button
+                            type="primary"
+                            :loading="busy"
+                            @click="review('approve')"
+                            >{{ detail.manual_refund_required===true?'审核通过，待实际退款':'审核并申请退款' }}</el-button
+                        ></template
+                    ><el-button
+                        v-else-if="canManualRefund && (detail.can_confirm_manual_refund===true || Number(detail.manual_refund_receipt_id)>0)"
+                        type="primary"
+                        :disabled="busy"
+                        @click="openManualRefund"
+                        >{{ detail.can_confirm_manual_refund===true?'登记已实际退款':'查看实际退款登记' }}</el-button
+                    ><el-button
+                        v-else-if="canContinue && detail.can_continue===true"
+                        type="primary"
+                        :loading="busy"
+                        @click="continueRefund"
+                        >继续原退款</el-button
+                    ><el-button
+                        v-else-if="showRequestForm"
+                        type="primary"
+                        :loading="busy"
+                        @click="requestRefund"
+                        >{{ detail.manual_refund_required===true?'提交退款申请':'确认申请原路退款' }}</el-button
+                    ><el-button
+                        v-else-if="canRefresh && detail.can_refresh===true"
+                        type="primary"
+                        :loading="busy"
+                        @click="refresh"
+                        >核对原退款进度</el-button
+                    ></template
+                ></div
+            ></template
+        >
     </el-dialog>
     <ManualRefundDialog ref="manualRefundDialog" @changed="manualRefundChanged" />
 </template>

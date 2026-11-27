@@ -1,9 +1,36 @@
 <template>
     <div class="lead-owner-select">
-        <el-select :model-value="modelValue === '' || modelValue == null ? undefined : Number(modelValue)" filterable remote clearable :remote-method="scheduleSearch" :loading="loading" :disabled="disabled" :teleported="teleported" :placeholder="placeholder" aria-label="搜索平台监管负责人" @focus="opened(true)" @visible-change="opened" @change="select">
+        <el-select
+            :model-value="modelValue === '' || modelValue == null ? undefined : Number(modelValue)"
+            filterable
+            remote
+            clearable
+            :remote-method="scheduleSearch"
+            :loading="loading"
+            :disabled="disabled"
+            :teleported="teleported"
+            :placeholder="placeholder"
+            aria-label="搜索平台监管负责人"
+            @focus="opened(true)"
+            @visible-change="opened"
+            @change="select"
+        >
             <el-option v-if="includeUnassigned" label="未指定监管负责人" :value="0" />
-            <el-option v-for="item in visibleOptions" :key="item.uid" :label="item.name" :value="item.uid" :disabled="Number(item.uid) === excludeUid" />
-            <template #footer><div class="lead-owner-select__footer"><span>{{ loading ? '正在查询…' : '已显示 ' + rows.length + ' / ' + total + ' 人' }}</span><el-button v-if="rows.length < total" link type="primary" :loading="loading" @click.stop="loadMore">加载更多</el-button><el-button v-else-if="error" link type="primary" @click.stop="load(false)">重试</el-button></div></template>
+            <el-option
+                v-for="item in visibleOptions"
+                :key="item.uid"
+                :label="item.name"
+                :value="item.uid"
+                :disabled="Number(item.uid) === excludeUid"
+            />
+            <template #footer
+                ><div class="lead-owner-select__footer"
+                    ><span>{{ loading ? '正在查询…' : '已显示 ' + rows.length + ' / ' + total + ' 人' }}</span
+                    ><el-button v-if="rows.length < total" link type="primary" :loading="loading" @click.stop="loadMore"
+                        >加载更多</el-button
+                    ><el-button v-else-if="error" link type="primary" @click.stop="load(false)">重试</el-button></div
+                ></template
+            >
         </el-select>
         <p v-if="error" class="lead-error" role="alert">{{ error }}</p>
     </div>

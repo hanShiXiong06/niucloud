@@ -1,5 +1,15 @@
 <template>
-    <HsxUpload v-model="items" :uploader="upload" :result-adapter="adapt" :limit="6" :max-size-mb="5" :preview-size="80" :disabled="disabled" accept="image/jpeg,image/png,image/webp" tip="最多6张，每张5MB；仅接收当前操作人通过本插件上传的附件。" />
+    <HsxUpload
+        v-model="items"
+        :uploader="upload"
+        :result-adapter="adapt"
+        :limit="6"
+        :max-size-mb="5"
+        :preview-size="80"
+        :disabled="disabled"
+        accept="image/jpeg,image/png,image/webp"
+        tip="最多6张，每张5MB；仅接收当前操作人通过本插件上传的附件。"
+    />
 </template>
 <script setup lang="ts">
 import { computed } from 'vue'

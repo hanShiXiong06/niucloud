@@ -1,4 +1,6 @@
-<template><PageShell permission="hsx_lead_manage_merchants"><MerchantPanel :initial-filter="filter" /></PageShell></template>
+<template>
+    <PageShell permission="hsx_lead_manage_merchants"><MerchantPanel :initial-filter="filter" /></PageShell>
+</template>
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'

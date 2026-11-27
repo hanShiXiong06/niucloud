@@ -4,9 +4,20 @@
             <span>渠道受理不代表用户已读；结果不明的通知不会重复发送。</span>
             <el-button link type="primary" :loading="loading" :disabled="busy" @click="load">刷新记录</el-button>
         </div>
-        <el-form class="notice-panel__filters" label-position="top" :disabled="loading || busy" @submit.prevent="search">
+        <el-form
+            class="notice-panel__filters"
+            label-position="top"
+            :disabled="loading || busy"
+            @submit.prevent="search"
+        >
             <el-form-item label="通知对象">
-                <el-input v-model="filters.recipient" clearable placeholder="姓名、会员编号或会员 ID" @keyup.enter="search" @clear="search" />
+                <el-input
+                    v-model="filters.recipient"
+                    clearable
+                    placeholder="姓名、会员编号或会员 ID"
+                    @keyup.enter="search"
+                    @clear="search"
+                />
             </el-form-item>
             <el-form-item label="渠道">
                 <el-select v-model="filters.channel" clearable placeholder="全部渠道">
@@ -15,7 +26,12 @@
             </el-form-item>
             <el-form-item label="状态">
                 <el-select v-model="filters.status" clearable placeholder="全部状态">
-                    <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
+                    <el-option
+                        v-for="item in statusOptions"
+                        :key="item.value"
+                        :label="item.label"
+                        :value="item.value"
+                    />
                 </el-select>
             </el-form-item>
             <div class="notice-panel__filter-actions">
@@ -24,36 +40,147 @@
             </div>
         </el-form>
         <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="notice-panel__error">
-            <template #default><el-button link type="primary" :disabled="loading || busy" @click="load">重新读取</el-button></template>
+            <template #default
+                ><el-button link type="primary" :disabled="loading || busy" @click="load">重新读取</el-button></template
+            >
         </el-alert>
-        <HsxTable :columns="columns" :data="rows" :loading="loading" :max-height="460" row-key="id" :empty-text="error ? '通知记录未能读取，请重试' : '暂无符合条件的通知记录'">
-            <template #time="{row}"><div class="notice-cell"><span>{{ coopTime(row.create_time) }}</span><small v-if="row.update_time && row.update_time !== row.create_time">更新 {{ coopTime(row.update_time) }}</small></div></template>
-            <template #event="{row}"><div class="notice-cell"><strong>{{ eventLabel(row) }}</strong><small>{{ phaseLabel(row.phase) }}</small></div></template>
-            <template #recipient="{row}"><div class="notice-cell"><strong>{{ row.recipient_label || (row.channel === 'queue' ? '通知任务' : '对象待核对') }}</strong><small v-if="row.recipient_member_id">会员 ID：{{ row.recipient_member_id }}</small></div></template>
+        <HsxTable
+            :columns="columns"
+            :data="rows"
+            :loading="loading"
+            :max-height="460"
+            row-key="id"
+            :empty-text="error ? '通知记录未能读取，请重试' : '暂无符合条件的通知记录'"
+        >
+            <template #time="{row}"
+                ><div class="notice-cell"
+                    ><span>{{ coopTime(row.create_time) }}</span
+                    ><small v-if="row.update_time && row.update_time !== row.create_time"
+                        >更新 {{ coopTime(row.update_time) }}</small
+                    ></div
+                ></template
+            >
+            <template #event="{row}"
+                ><div class="notice-cell"
+                    ><strong>{{ eventLabel(row) }}</strong
+                    ><small>{{ phaseLabel(row.phase) }}</small></div
+                ></template
+            >
+            <template #recipient="{row}"
+                ><div class="notice-cell"
+                    ><strong>{{ row.recipient_label || (row.channel === 'queue' ? '通知任务' : '对象待核对') }}</strong
+                    ><small v-if="row.recipient_member_id">会员 ID：{{ row.recipient_member_id }}</small></div
+                ></template
+            >
             <template #channel="{row}">{{ channelLabel(row.channel) }}</template>
-            <template #template="{row}"><div class="notice-cell"><strong>{{ row.notice_key || '未记录' }}</strong><small v-if="row.template_id">模板：{{ row.template_id }}</small></div></template>
-            <template #status="{row}"><div class="notice-cell"><el-tag :type="statusTone(row.status)" size="small" effect="plain">{{ statusLabel(row.status) }}</el-tag><small v-if="Number(row.retry_count)>0">已复查 {{ row.retry_count }} 次</small></div></template>
-            <template #result="{row}"><div class="notice-cell"><strong v-if="hasCode(row.provider_code)">渠道返回码：{{ row.provider_code }}</strong><span>{{ row.message || '未记录渠道说明' }}</span><small v-if="unverifiedNoticeIds.has(Number(row.id))">本次复查结果待核实，请先刷新记录。</small><small v-else-if="row.retry_block_reason">{{ row.retry_block_reason }}</small></div></template>
-            <template #actions="{row}"><el-button v-if="retryAllowed(row)" link type="primary" :disabled="loading || busy" @click="beginRetry(row)">重新检查并发送</el-button><span v-else class="notice-cell__muted">—</span></template>
+            <template #template="{row}"
+                ><div class="notice-cell"
+                    ><strong>{{ row.notice_key || '未记录' }}</strong
+                    ><small v-if="row.template_id">模板：{{ row.template_id }}</small></div
+                ></template
+            >
+            <template #status="{row}"
+                ><div class="notice-cell"
+                    ><el-tag
+                        :type="statusTone(row.status)"
+                        size="small"
+                        effect="plain"
+                        >{{ statusLabel(row.status) }}</el-tag
+                    ><small v-if="Number(row.retry_count)>0">已复查 {{ row.retry_count }} 次</small></div
+                ></template
+            >
+            <template #result="{row}"
+                ><div class="notice-cell"
+                    ><strong v-if="hasCode(row.provider_code)">渠道返回码：{{ row.provider_code }}</strong
+                    ><span>{{ row.message || '未记录渠道说明' }}</span
+                    ><small v-if="unverifiedNoticeIds.has(Number(row.id))">本次复查结果待核实，请先刷新记录。</small
+                    ><small v-else-if="row.retry_block_reason">{{ row.retry_block_reason }}</small></div
+                ></template
+            >
+            <template #actions="{row}"
+                ><el-button
+                    v-if="retryAllowed(row)"
+                    link
+                    type="primary"
+                    :disabled="loading || busy"
+                    @click="beginRetry(row)"
+                    >重新检查并发送</el-button
+                ><span v-else class="notice-cell__muted">—</span></template
+            >
         </HsxTable>
         <div class="notice-panel__pagination">
-            <HsxPagination :current-page="query.page" :page-size="query.limit" :total="total" :disabled="loading || busy" @change="changePage" />
+            <HsxPagination
+                :current-page="query.page"
+                :page-size="query.limit"
+                :total="total"
+                :disabled="loading || busy"
+                @change="changePage"
+            />
         </div>
-        <el-dialog v-model="retryVisible" title="重新检查并发送通知" width="min(520px, 94vw)" append-to-body :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy" :before-close="beforeCloseRetry" @closed="clearRetry">
+        <el-dialog
+            v-model="retryVisible"
+            title="重新检查并发送通知"
+            width="min(520px, 94vw)"
+            append-to-body
+            :close-on-click-modal="false"
+            :close-on-press-escape="!busy"
+            :show-close="!busy"
+            :before-close="beforeCloseRetry"
+            @closed="clearRetry"
+        >
             <template v-if="selected.id">
-                <p class="notice-panel__retry-summary">{{ selected.recipient_label || '所选通知对象' }} · {{ channelLabel(selected.channel) }} · {{ eventLabel(selected) }}</p>
-                <el-alert title="将重新核对原线索、通知对象和渠道配置；仅确认未发送时才提交，不会补发过时业务。" type="warning" :closable="false" show-icon />
-                <el-alert v-if="selected.channel==='sms'" title="短信提交后可能计费，请确认接收人和发送原因。" type="warning" :closable="false" show-icon class="notice-panel__error" />
-                <el-alert v-if="retryError" :title="retryError" type="error" :closable="false" show-icon class="notice-panel__error" />
+                <p class="notice-panel__retry-summary"
+                    >{{ selected.recipient_label || '所选通知对象' }} · {{ channelLabel(selected.channel) }} ·
+                    {{ eventLabel(selected) }}</p
+                >
+                <el-alert
+                    title="将重新核对原线索、通知对象和渠道配置；仅确认未发送时才提交，不会补发过时业务。"
+                    type="warning"
+                    :closable="false"
+                    show-icon
+                />
+                <el-alert
+                    v-if="selected.channel==='sms'"
+                    title="短信提交后可能计费，请确认接收人和发送原因。"
+                    type="warning"
+                    :closable="false"
+                    show-icon
+                    class="notice-panel__error"
+                />
+                <el-alert
+                    v-if="retryError"
+                    :title="retryError"
+                    type="error"
+                    :closable="false"
+                    show-icon
+                    class="notice-panel__error"
+                />
                 <el-form label-position="top" class="notice-panel__retry-form" :disabled="busy || readRequired">
-                    <el-form-item label="复查原因" required><el-input v-model="reason" type="textarea" :rows="3" maxlength="200" show-word-limit placeholder="请说明本次重新检查并发送的原因" /></el-form-item>
+                    <el-form-item label="复查原因" required
+                        ><el-input
+                            v-model="reason"
+                            type="textarea"
+                            :rows="3"
+                            maxlength="200"
+                            show-word-limit
+                            placeholder="请说明本次重新检查并发送的原因"
+                    /></el-form-item>
                     <el-checkbox v-model="confirmed">已核对通知对象，确认重新检查并发送</el-checkbox>
                 </el-form>
             </template>
             <template #footer>
                 <el-button :disabled="busy" @click="retryVisible=false">取消</el-button>
-                <el-button v-if="readRequired" type="primary" :loading="loading" @click="refreshAfterUnknown">重新读取记录</el-button>
-                <el-button v-else type="primary" :loading="busy" :disabled="!confirmed || !reason.trim() || !retryAllowed(selected) || loading" @click="retry">重新检查并发送</el-button>
+                <el-button v-if="readRequired" type="primary" :loading="loading" @click="refreshAfterUnknown"
+                    >重新读取记录</el-button
+                >
+                <el-button
+                    v-else
+                    type="primary"
+                    :loading="busy"
+                    :disabled="!confirmed || !reason.trim() || !retryAllowed(selected) || loading"
+                    @click="retry"
+                    >重新检查并发送</el-button
+                >
             </template>
         </el-dialog>
     </section>

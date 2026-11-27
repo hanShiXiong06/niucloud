@@ -1,48 +1,361 @@
 <template>
     <section>
-        <LeadSectionHeader title="合作商户" description="维护门店资料与交付能力，ERP 接入可选"><el-button type="primary" :icon="Plus" @click="open()">添加商户</el-button></LeadSectionHeader>
-        <el-alert v-if="error || providerError" :title="error || providerError" type="error" show-icon :closable="false" class="lead-error-banner" />
-        <div class="lead-card lead-table-card"><LeadFilterBar :query="query" :filters="filterOptions" :time-fields="timeFields" :total="total" :loading="loading" label="合作商户" search-label="门店或关联会员" placeholder="搜索门店、联系人、会员编号或手机号" @apply="applyFilters" @reload="load" />
-            <HsxTable :columns="columns" :data="rows" :loading="loading" :empty-text="error ? '列表未加载，请查看上方提示后重试' : filtered ? '没有符合当前筛选的商户，可清空筛选后查看全部' : '尚无商户，先添加门店资料即可'">
-                <template #merchant="{ row }"><div class="lead-cell"><strong>{{ row.name }}</strong><small>{{ region(row) }}</small></div></template>
-                <template #contact="{ row }"><div class="lead-cell"><strong>{{ row.contact_name }}</strong><small>{{ row.mobile }}</small></div></template>
-                <template #capabilities="{ row }"><div class="lead-cell"><div class="lead-actions"><el-tag v-for="capability in (row.business_capabilities || []).slice(0,3)" :key="capability.business_type" size="small" type="info" effect="plain">{{ capability.business_name || coopBusiness(capability.business_type) }} · {{ capability.option_count ?? '—' }}项</el-tag><small v-if="row.business_capabilities?.length>3">另{{ row.business_capabilities.length-3 }}项业务</small></div><small v-if="!row.business_capabilities?.length">尚未登记业务能力</small></div></template>
-                <template #ready="{ row }"><div class="lead-cell"><el-tooltip :content="row.ready_reason" :disabled="!row.ready_reason" placement="top" :show-after="300"><el-tag :type="row.ready_state === 'ready' ? 'success' : row.ready_state === 'attention' ? 'danger' : 'warning'">{{ readyLabels[row.ready_state] || '待完善资料' }}</el-tag></el-tooltip><small v-if="row.ready_state !== 'ready'">{{ row.ready_reason }}</small></div></template>
-                <template #connection="{ row }"><div class="lead-cell">
-                    <strong>{{ row.provider_name || providerName(row.provider) }}</strong>
-                    <el-tooltip v-if="row.channel_enabled === false" :content="row.channel_message || 'ERP渠道已关闭，采集暂停；账号及历史数据保留。'" placement="top"><small class="lead-renewal-attention">渠道已关闭 · 采集暂停</small></el-tooltip>
-                    <template v-else-if="syncAttentionFor(row)"><strong class="lead-sync-attention-title">{{ syncAttentionFor(row)?.action === 'reauthorize' ? '需要重新登录' : syncAttentionFor(row)?.action === 'contact_support' ? '需要平台协助' : '同步失败，可重试' }}</strong><small class="lead-renewal-attention">{{ syncAttentionFor(row)?.message }}</small></template>
-                    <small v-else>{{ row.connection_id ? syncLabel(row.last_sync_status) : '可选接入，不影响发单' }}</small>
-                    <el-tooltip v-if="row.connection_id && row.auth_renewal && row.channel_enabled !== false && !syncAttentionFor(row)" :content="row.auth_renewal.message" :disabled="!row.auth_renewal.message" placement="top" :show-after="300"><small :class="{ 'lead-renewal-attention': row.auth_renewal.ready !== true }">{{ authRenewalLabel(row.auth_renewal) }}</small></el-tooltip><LeadTimestamp v-if="row.connection_id" :value="row.last_sync_at" empty="尚未同步" compact />
-                </div></template>
-                <template #actions="{ row }"><div class="lead-actions"><el-button link type="primary" @click="open(row.id)">{{ row.ready_state === 'member_required' ? '绑定会员' : '资料' }}</el-button><el-button link type="primary" @click="connect(row)">{{ syncAttentionFor(row)?.action === 'reauthorize' ? '重新登录' : row.connection_id ? '接入管理' : '接入 ERP' }}</el-button><el-button v-if="row.connection_id" link type="primary" :disabled="Number(row.status) !== 1 || row.channel_enabled === false || !!syncAttentionFor(row) && syncAttentionFor(row)?.action !== 'retry'" @click="sync(row.id)">{{ syncAttentionFor(row)?.action === 'retry' ? '重试同步' : row.ready_state === 'sync_required' ? '首次同步' : '同步' }}</el-button><el-dropdown v-if="row.connection_id || row.last_run_id || row.active_run_id" trigger="click" @command="command => command === 'settings' ? openSettings(row) : showRun(row.last_run_id || row.active_run_id)"><el-button link type="primary" :aria-label="`${row.name}更多操作`">更多</el-button><template #dropdown><el-dropdown-menu><el-dropdown-item v-if="row.connection_id" command="settings">同步周期</el-dropdown-item><el-dropdown-item v-if="row.last_run_id || row.active_run_id" command="progress">查看同步进度</el-dropdown-item></el-dropdown-menu></template></el-dropdown></div></template>
-            </HsxTable><div class="lead-pagebar"><HsxPagination layout="sizes, prev, pager, next, jumper" v-model:current-page="query.page" v-model:page-size="query.limit" :total="total" @change="load" /></div>
+        <LeadSectionHeader title="合作商户" description="维护门店资料与交付能力，ERP 接入可选"
+            ><el-button type="primary" :icon="Plus" @click="open()">添加商户</el-button></LeadSectionHeader
+        >
+        <el-alert
+            v-if="error || providerError"
+            :title="error || providerError"
+            type="error"
+            show-icon
+            :closable="false"
+            class="lead-error-banner"
+        />
+        <div class="lead-card lead-table-card"
+            ><LeadFilterBar
+                :query="query"
+                :filters="filterOptions"
+                :time-fields="timeFields"
+                :total="total"
+                :loading="loading"
+                label="合作商户"
+                search-label="门店或关联会员"
+                placeholder="搜索门店、联系人、会员编号或手机号"
+                @apply="applyFilters"
+                @reload="load"
+            />
+            <HsxTable
+                :columns="columns"
+                :data="rows"
+                :loading="loading"
+                :empty-text="error ? '列表未加载，请查看上方提示后重试' : filtered ? '没有符合当前筛选的商户，可清空筛选后查看全部' : '尚无商户，先添加门店资料即可'"
+            >
+                <template #merchant="{ row }"
+                    ><div class="lead-cell"
+                        ><strong>{{ row.name }}</strong
+                        ><small>{{ region(row) }}</small></div
+                    ></template
+                >
+                <template #contact="{ row }"
+                    ><div class="lead-cell"
+                        ><strong>{{ row.contact_name }}</strong
+                        ><small>{{ row.mobile }}</small></div
+                    ></template
+                >
+                <template #capabilities="{ row }"
+                    ><div class="lead-cell"
+                        ><div class="lead-actions"
+                            ><el-tag
+                                v-for="capability in (row.business_capabilities || []).slice(0,3)"
+                                :key="capability.business_type"
+                                size="small"
+                                type="info"
+                                effect="plain"
+                                >{{ capability.business_name || coopBusiness(capability.business_type) }} ·
+                                {{ capability.option_count ?? '—' }}项</el-tag
+                            ><small v-if="row.business_capabilities?.length>3"
+                                >另{{ row.business_capabilities.length-3 }}项业务</small
+                            ></div
+                        ><small v-if="!row.business_capabilities?.length">尚未登记业务能力</small></div
+                    ></template
+                >
+                <template #ready="{ row }"
+                    ><div class="lead-cell"
+                        ><el-tooltip
+                            :content="row.ready_reason"
+                            :disabled="!row.ready_reason"
+                            placement="top"
+                            :show-after="300"
+                            ><el-tag
+                                :type="row.ready_state === 'ready' ? 'success' : row.ready_state === 'attention' ? 'danger' : 'warning'"
+                                >{{ readyLabels[row.ready_state] || '待完善资料' }}</el-tag
+                            ></el-tooltip
+                        ><small v-if="row.ready_state !== 'ready'">{{ row.ready_reason }}</small></div
+                    ></template
+                >
+                <template #connection="{ row }"
+                    ><div class="lead-cell">
+                        <strong>{{ row.provider_name || providerName(row.provider) }}</strong>
+                        <el-tooltip
+                            v-if="row.channel_enabled === false"
+                            :content="row.channel_message || 'ERP渠道已关闭，采集暂停；账号及历史数据保留。'"
+                            placement="top"
+                            ><small class="lead-renewal-attention">渠道已关闭 · 采集暂停</small></el-tooltip
+                        >
+                        <template v-else-if="syncAttentionFor(row)"
+                            ><strong
+                                class="lead-sync-attention-title"
+                                >{{ syncAttentionFor(row)?.action === 'reauthorize' ? '需要重新登录' : syncAttentionFor(row)?.action === 'contact_support' ? '需要平台协助' : '同步失败，可重试' }}</strong
+                            ><small
+                                class="lead-renewal-attention"
+                                >{{ syncAttentionFor(row)?.message }}</small
+                            ></template
+                        >
+                        <small
+                            v-else
+                            >{{ row.connection_id ? syncLabel(row.last_sync_status) : '可选接入，不影响发单' }}</small
+                        >
+                        <el-tooltip
+                            v-if="row.connection_id && row.auth_renewal && row.channel_enabled !== false && !syncAttentionFor(row)"
+                            :content="row.auth_renewal.message"
+                            :disabled="!row.auth_renewal.message"
+                            placement="top"
+                            :show-after="300"
+                            ><small
+                                :class="{ 'lead-renewal-attention': row.auth_renewal.ready !== true }"
+                                >{{ authRenewalLabel(row.auth_renewal) }}</small
+                            ></el-tooltip
+                        ><LeadTimestamp
+                            v-if="row.connection_id"
+                            :value="row.last_sync_at"
+                            empty="尚未同步"
+                            compact
+                        /> </div
+                ></template>
+                <template #actions="{ row }"
+                    ><div class="lead-actions"
+                        ><el-button
+                            link
+                            type="primary"
+                            @click="open(row.id)"
+                            >{{ row.ready_state === 'member_required' ? '绑定会员' : '资料' }}</el-button
+                        ><el-button
+                            link
+                            type="primary"
+                            @click="connect(row)"
+                            >{{ syncAttentionFor(row)?.action === 'reauthorize' ? '重新登录' : row.connection_id ? '接入管理' : '接入 ERP' }}</el-button
+                        ><el-button
+                            v-if="row.connection_id"
+                            link
+                            type="primary"
+                            :disabled="Number(row.status) !== 1 || row.channel_enabled === false || !!syncAttentionFor(row) && syncAttentionFor(row)?.action !== 'retry'"
+                            @click="sync(row.id)"
+                            >{{ syncAttentionFor(row)?.action === 'retry' ? '重试同步' : row.ready_state === 'sync_required' ? '首次同步' : '同步' }}</el-button
+                        ><el-dropdown
+                            v-if="row.connection_id || row.last_run_id || row.active_run_id"
+                            trigger="click"
+                            @command="command => command === 'settings' ? openSettings(row) : showRun(row.last_run_id || row.active_run_id)"
+                            ><el-button link type="primary" :aria-label="`${row.name}更多操作`">更多</el-button
+                            ><template #dropdown
+                                ><el-dropdown-menu
+                                    ><el-dropdown-item v-if="row.connection_id" command="settings"
+                                        >同步周期</el-dropdown-item
+                                    ><el-dropdown-item v-if="row.last_run_id || row.active_run_id" command="progress"
+                                        >查看同步进度</el-dropdown-item
+                                    ></el-dropdown-menu
+                                ></template
+                            ></el-dropdown
+                        ></div
+                    ></template
+                > </HsxTable
+            ><div class="lead-pagebar"
+                ><HsxPagination
+                    layout="sizes, prev, pager, next, jumper"
+                    v-model:current-page="query.page"
+                    v-model:page-size="query.limit"
+                    :total="total"
+                    @change="load"
+            /></div>
         </div>
-        <HsxDrawer v-model="visible" :title="form.id ? '商户资料' : '添加合作商户'" subtitle="只保存门店、服务范围和会员绑定，不修改 ERP 或中断同步。" size="md" :body-loading="detailLoading" :confirm-loading="saving">
-            <el-alert v-if="detailError" :title="detailError" type="error" :closable="false" class="lead-error-banner"><el-button link type="primary" @click="open(detailId)">重新加载资料</el-button></el-alert>
-            <el-form v-if="!detailLoading && !detailError" ref="formRef" :model="form" :rules="rules" label-position="top" class="lead-form" :disabled="saving">
-                <el-form-item label="商户 / 门店名称" prop="name"><el-input v-model.trim="form.name" maxlength="100" /></el-form-item>
-                <div class="lead-grid-2"><el-form-item label="联系人" prop="contact_name"><el-input v-model.trim="form.contact_name" maxlength="50" /></el-form-item><el-form-item label="联系电话" prop="mobile"><el-input v-model.trim="form.mobile" maxlength="30" /></el-form-item></div>
+        <HsxDrawer
+            v-model="visible"
+            :title="form.id ? '商户资料' : '添加合作商户'"
+            subtitle="只保存门店、服务范围和会员绑定，不修改 ERP 或中断同步。"
+            size="md"
+            :body-loading="detailLoading"
+            :confirm-loading="saving"
+        >
+            <el-alert v-if="detailError" :title="detailError" type="error" :closable="false" class="lead-error-banner"
+                ><el-button link type="primary" @click="open(detailId)">重新加载资料</el-button></el-alert
+            >
+            <el-form
+                v-if="!detailLoading && !detailError"
+                ref="formRef"
+                :model="form"
+                :rules="rules"
+                label-position="top"
+                class="lead-form"
+                :disabled="saving"
+            >
+                <el-form-item label="商户 / 门店名称" prop="name"
+                    ><el-input v-model.trim="form.name" maxlength="100"
+                /></el-form-item>
+                <div class="lead-grid-2"
+                    ><el-form-item label="联系人" prop="contact_name"
+                        ><el-input v-model.trim="form.contact_name" maxlength="50" /></el-form-item
+                    ><el-form-item label="联系电话" prop="mobile"
+                        ><el-input v-model.trim="form.mobile" maxlength="30" /></el-form-item
+                ></div>
                 <el-form-item label="门店地区" prop="district_id"><RegionSelect v-model="area" /></el-form-item>
                 <el-form-item label="详细地址"><el-input v-model.trim="form.address" maxlength="255" /></el-form-item>
-                <el-form-item label="服务范围"><el-select v-model="serviceScope"><el-option label="优先按所在地推荐（默认）" value="default" /><el-option label="仅本区县" value="district" /><el-option label="整个城市" value="city" /><el-option label="整个省份" value="province" /><el-option v-if="serviceScope === 'custom'" label="保留已登记范围" value="custom" /></el-select></el-form-item>
+                <el-form-item label="服务范围"
+                    ><el-select v-model="serviceScope"
+                        ><el-option label="优先按所在地推荐（默认）" value="default" /><el-option
+                            label="仅本区县"
+                            value="district" /><el-option label="整个城市" value="city" /><el-option
+                            label="整个省份"
+                            value="province" /><el-option
+                            v-if="serviceScope === 'custom'"
+                            label="保留已登记范围"
+                            value="custom" /></el-select
+                ></el-form-item>
                 <el-form-item label="商户会员身份（可稍后绑定）">
-                    <el-select v-model="form.member_id" filterable remote clearable remote-show-suffix :remote-method="searchMembers" :loading="membersLoading" loading-text="正在查找会员…" no-match-text="没有匹配的会员" :no-data-text="membersError ? '会员读取失败，请重试' : '没有匹配的会员，可换昵称、手机号或编号搜索'" aria-label="搜索并绑定商户会员" placeholder="搜索会员昵称、手机号、会员编号或 ID" @visible-change="value => value && loadMembers()">
-                        <el-option v-for="member in members" :key="member.member_id || member.id" :value="Number(member.member_id || member.id)" :label="memberOptionLabel(member)" />
-                        <template v-if="membersError" #footer><span class="lead-error">{{ membersError }}</span> <el-button link type="primary" :loading="membersLoading" @click.stop="loadMembers()">重新读取候选</el-button></template>
+                    <el-select
+                        v-model="form.member_id"
+                        filterable
+                        remote
+                        clearable
+                        remote-show-suffix
+                        :remote-method="searchMembers"
+                        :loading="membersLoading"
+                        loading-text="正在查找会员…"
+                        no-match-text="没有匹配的会员"
+                        :no-data-text="membersError ? '会员读取失败，请重试' : '没有匹配的会员，可换昵称、手机号或编号搜索'"
+                        aria-label="搜索并绑定商户会员"
+                        placeholder="搜索会员昵称、手机号、会员编号或 ID"
+                        @visible-change="value => value && loadMembers()"
+                    >
+                        <el-option
+                            v-for="member in members"
+                            :key="member.member_id || member.id"
+                            :value="Number(member.member_id || member.id)"
+                            :label="memberOptionLabel(member)"
+                        />
+                        <template v-if="membersError" #footer
+                            ><span class="lead-error">{{ membersError }}</span> <el-button link type="primary" :loading="membersLoading" @click.stop="loadMembers()"
+                                >重新读取候选</el-button
+                            ></template
+                        >
                     </el-select>
-                    <p class="lead-muted">使用原有会员登录；未绑定可先建档；绑定后可在手机端选择交付型号，不要求接入 ERP。</p><div v-if="membersError" class="lead-error" role="alert">{{ membersError }} <el-button link type="primary" :disabled="membersLoading" @click="loadMembers()">重新读取</el-button></div>
+                    <p class="lead-muted"
+                        >使用原有会员登录；未绑定可先建档；绑定后可在手机端选择交付型号，不要求接入 ERP。</p
+                    ><div v-if="membersError" class="lead-error" role="alert"
+                        >{{ membersError }}
+                        <el-button link type="primary" :disabled="membersLoading" @click="loadMembers()"
+                            >重新读取</el-button
+                        ></div
+                    >
                 </el-form-item>
-                <el-form-item label="合作状态"><el-radio-group v-model="form.status"><el-radio :value="1">合作中</el-radio><el-radio :value="0">暂停合作</el-radio></el-radio-group></el-form-item>
-                <el-form-item label="运营备注"><el-input v-model.trim="form.remark" type="textarea" :rows="3" maxlength="1000" /></el-form-item>
+                <el-form-item label="合作状态"
+                    ><el-radio-group v-model="form.status"
+                        ><el-radio :value="1">合作中</el-radio><el-radio :value="0">暂停合作</el-radio></el-radio-group
+                    ></el-form-item
+                >
+                <el-form-item label="运营备注"
+                    ><el-input v-model.trim="form.remark" type="textarea" :rows="3" maxlength="1000"
+                /></el-form-item>
             </el-form>
-            <el-form v-if="!detailLoading && !detailError" :disabled="saving || Number(form.status)!==1" label-position="top"><BusinessCapabilities v-model="form.business_capabilities" :definitions="businessDefinitions" /><p v-if="Number(form.status)!==1" class="lead-muted">暂停合作期间只保留原有能力，恢复合作后再调整能力。</p></el-form>
-            <section v-if="detailId && canViewExtraRecord" class="lead-profile-extra-record"><h3>商户补充资料</h3><el-skeleton v-if="extraRecordLoading" :rows="3" animated /><el-alert v-else-if="extraRecordError" :title="extraRecordError" type="error" :closable="false" show-icon><template #default><el-button link type="primary" @click="loadExtraRecord(detailId)">重新读取</el-button></template></el-alert><template v-else><p v-if="extraRecord.title" class="lead-muted">{{ extraRecord.title }} · 商户提交记录</p><dl v-if="extraRecord.fields?.length" class="lead-profile-extra-fields"><template v-for="field in extraRecord.fields" :key="field.id"><dt>{{ field.label }}</dt><dd>{{ field.display_value || '未填写' }}</dd></template></dl><p v-else class="lead-muted">尚未提交补充资料</p></template></section>
-            <template #footer><el-button :disabled="saving" @click="visible = false">取消</el-button><el-button :loading="saving" :disabled="detailLoading || !!detailError" @click="save(true)">保存后接入 ERP</el-button><el-button type="primary" :loading="saving" :disabled="detailLoading || !!detailError" @click="save(false)">保存商户资料</el-button></template>
+            <el-form
+                v-if="!detailLoading && !detailError"
+                :disabled="saving || Number(form.status)!==1"
+                label-position="top"
+                ><BusinessCapabilities v-model="form.business_capabilities" :definitions="businessDefinitions" /><p
+                    v-if="Number(form.status)!==1"
+                    class="lead-muted"
+                    >暂停合作期间只保留原有能力，恢复合作后再调整能力。</p
+                ></el-form
+            >
+            <section v-if="detailId && canViewExtraRecord" class="lead-profile-extra-record"
+                ><h3>商户补充资料</h3><el-skeleton v-if="extraRecordLoading" :rows="3" animated /><el-alert
+                    v-else-if="extraRecordError"
+                    :title="extraRecordError"
+                    type="error"
+                    :closable="false"
+                    show-icon
+                    ><template #default
+                        ><el-button link type="primary" @click="loadExtraRecord(detailId)"
+                            >重新读取</el-button
+                        ></template
+                    ></el-alert
+                ><template v-else
+                    ><p v-if="extraRecord.title" class="lead-muted">{{ extraRecord.title }} · 商户提交记录</p
+                    ><dl v-if="extraRecord.fields?.length" class="lead-profile-extra-fields"
+                        ><template v-for="field in extraRecord.fields" :key="field.id"
+                            ><dt>{{ field.label }}</dt
+                            ><dd>{{ field.display_value || '未填写' }}</dd></template
+                        ></dl
+                    ><p v-else class="lead-muted">尚未提交补充资料</p></template
+                ></section
+            >
+            <template #footer
+                ><el-button :disabled="saving" @click="visible = false">取消</el-button
+                ><el-button :loading="saving" :disabled="detailLoading || !!detailError" @click="save(true)"
+                    >保存后接入 ERP</el-button
+                ><el-button
+                    type="primary"
+                    :loading="saving"
+                    :disabled="detailLoading || !!detailError"
+                    @click="save(false)"
+                    >保存商户资料</el-button
+                ></template
+            >
         </HsxDrawer>
-        <ConnectionWizard v-model="connectionVisible" :merchant-id="selectedMerchant.id || 0" :merchant-name="selectedMerchant.name || ''" @changed="load" @sync="sync" />
+        <ConnectionWizard
+            v-model="connectionVisible"
+            :merchant-id="selectedMerchant.id || 0"
+            :merchant-name="selectedMerchant.name || ''"
+            @changed="load"
+            @sync="sync"
+        />
         <SyncProgressDrawer v-model="runVisible" :run-id="runId" @changed="load" />
-        <HsxDrawer v-model="settingsVisible" title="库存同步设置" subtitle="与门店资料独立保存，不重新提交 ERP 凭据。" size="sm" :body-loading="settingsLoading" show-footer :confirm-loading="settingsSaving" confirm-text="保存同步周期" @confirm="saveSettings"><el-alert v-if="settingsError" :title="settingsError" type="error" :closable="false" class="lead-error-banner" /><el-alert v-if="settingsChannel.enabled === false" title="该 ERP 渠道已关闭" :description="settingsChannel.message" type="warning" :closable="false" show-icon class="lead-banner" /><el-alert v-else-if="settingsAttention" title="同步需要处理" :description="settingsAttention.message" type="warning" :closable="false" show-icon class="lead-banner" /><el-alert v-else-if="settingsRenewal.message" :title="authRenewalLabel(settingsRenewal)" :description="settingsRenewal.message" :type="settingsRenewal.ready === true ? 'info' : 'warning'" :closable="false" show-icon class="lead-banner" /><el-form label-position="top" :disabled="settingsLoading || settingsSaving"><el-form-item label="商户自动同步开关"><el-switch v-model="settings.enabled" /><p v-if="settingsChannel.enabled === false" class="lead-muted">此处仅保留商户原设置；渠道恢复前不会采集。</p></el-form-item><el-form-item label="间隔（分钟）"><el-input-number v-model="settings.interval_minutes" :min="15" :max="1440" :precision="0" /></el-form-item><p class="lead-muted">默认 60 分钟。商户关闭自动同步后仍可手动同步；如果 ERP 渠道关闭，两种采集均暂停。</p></el-form></HsxDrawer>
+        <HsxDrawer
+            v-model="settingsVisible"
+            title="库存同步设置"
+            subtitle="与门店资料独立保存，不重新提交 ERP 凭据。"
+            size="sm"
+            :body-loading="settingsLoading"
+            show-footer
+            :confirm-loading="settingsSaving"
+            confirm-text="保存同步周期"
+            @confirm="saveSettings"
+            ><el-alert
+                v-if="settingsError"
+                :title="settingsError"
+                type="error"
+                :closable="false"
+                class="lead-error-banner"
+            /><el-alert
+                v-if="settingsChannel.enabled === false"
+                title="该 ERP 渠道已关闭"
+                :description="settingsChannel.message"
+                type="warning"
+                :closable="false"
+                show-icon
+                class="lead-banner"
+            /><el-alert
+                v-else-if="settingsAttention"
+                title="同步需要处理"
+                :description="settingsAttention.message"
+                type="warning"
+                :closable="false"
+                show-icon
+                class="lead-banner"
+            /><el-alert
+                v-else-if="settingsRenewal.message"
+                :title="authRenewalLabel(settingsRenewal)"
+                :description="settingsRenewal.message"
+                :type="settingsRenewal.ready === true ? 'info' : 'warning'"
+                :closable="false"
+                show-icon
+                class="lead-banner"
+            /><el-form label-position="top" :disabled="settingsLoading || settingsSaving"
+                ><el-form-item label="商户自动同步开关"
+                    ><el-switch v-model="settings.enabled" /><p
+                        v-if="settingsChannel.enabled === false"
+                        class="lead-muted"
+                        >此处仅保留商户原设置；渠道恢复前不会采集。</p
+                    ></el-form-item
+                ><el-form-item label="间隔（分钟）"
+                    ><el-input-number
+                        v-model="settings.interval_minutes"
+                        :min="15"
+                        :max="1440"
+                        :precision="0" /></el-form-item
+                ><p class="lead-muted"
+                    >默认 60 分钟。商户关闭自动同步后仍可手动同步；如果 ERP 渠道关闭，两种采集均暂停。</p
+                ></el-form
+            ></HsxDrawer
+        >
     </section>
 </template>
 <script setup lang="ts">

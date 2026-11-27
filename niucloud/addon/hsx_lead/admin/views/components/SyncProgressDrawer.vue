@@ -1,11 +1,36 @@
 <template>
-    <HsxDrawer v-model="visible" title="库存同步进度" subtitle="只有完整读取成功才发布库存快照；不会锁货。" size="sm" :body-loading="loading">
+    <HsxDrawer
+        v-model="visible"
+        title="库存同步进度"
+        subtitle="只有完整读取成功才发布库存快照；不会锁货。"
+        size="sm"
+        :body-loading="loading"
+    >
         <el-alert v-if="error" :title="error" type="error" :closable="false" class="lead-error-banner" />
-        <div class="lead-status-line"><el-tag :type="run.status === 'failed' ? 'danger' : run.status === 'completed' ? 'success' : 'info'">{{ syncLabel(run.status) }}</el-tag><span class="lead-muted">任务 #{{ run.id || run.run_id || runId }}</span></div>
+        <div class="lead-status-line"
+            ><el-tag
+                :type="run.status === 'failed' ? 'danger' : run.status === 'completed' ? 'success' : 'info'"
+                >{{ syncLabel(run.status) }}</el-tag
+            ><span class="lead-muted">任务 #{{ run.id || run.run_id || runId }}</span></div
+        >
         <p>{{ run.message || run.error_message || '正在读取任务状态…' }}</p>
-        <el-descriptions :column="1" border><el-descriptions-item label="已取分页">{{ run.page_count ?? 0 }} 页</el-descriptions-item><el-descriptions-item label="已取记录">{{ run.record_count ?? 0 }} 条</el-descriptions-item><el-descriptions-item label="开始时间">{{ time(run.started_at || run.create_time) }}</el-descriptions-item><el-descriptions-item label="结束时间">{{ time(run.finished_at) }}</el-descriptions-item></el-descriptions>
-        <el-alert :title="run.channel_enabled === false || run.status === 'paused' ? 'ERP渠道已关闭，本任务暂停；分页和旧完整库存保留。短暂停可继续，超过库存有效窗口会重新完整同步。' : '本页面逐页推进；离开后，需同时开启商户自动同步和牛云计划任务才会继续。未开启时可回到本页推进。暂停太久的暂存数据不会当作新库存发布。'" :type="run.channel_enabled === false || run.status === 'paused' ? 'warning' : 'info'" :closable="false" show-icon style="margin-top: 18px" />
-        <template #footer><el-button @click="visible = false">关闭</el-button><el-button :loading="loading" @click="poll">继续 / 刷新进度</el-button></template>
+        <el-descriptions :column="1" border
+            ><el-descriptions-item label="已取分页">{{ run.page_count ?? 0 }} 页</el-descriptions-item
+            ><el-descriptions-item label="已取记录">{{ run.record_count ?? 0 }} 条</el-descriptions-item
+            ><el-descriptions-item label="开始时间">{{ time(run.started_at || run.create_time) }}</el-descriptions-item
+            ><el-descriptions-item label="结束时间">{{ time(run.finished_at) }}</el-descriptions-item></el-descriptions
+        >
+        <el-alert
+            :title="run.channel_enabled === false || run.status === 'paused' ? 'ERP渠道已关闭，本任务暂停；分页和旧完整库存保留。短暂停可继续，超过库存有效窗口会重新完整同步。' : '本页面逐页推进；离开后，需同时开启商户自动同步和牛云计划任务才会继续。未开启时可回到本页推进。暂停太久的暂存数据不会当作新库存发布。'"
+            :type="run.channel_enabled === false || run.status === 'paused' ? 'warning' : 'info'"
+            :closable="false"
+            show-icon
+            style="margin-top: 18px"
+        />
+        <template #footer
+            ><el-button @click="visible = false">关闭</el-button
+            ><el-button :loading="loading" @click="poll">继续 / 刷新进度</el-button></template
+        >
     </HsxDrawer>
 </template>
 <script setup lang="ts">

@@ -11,7 +11,9 @@ export function calendarBoundary(value: string, end = false): number {
     if (!value) return 0
     const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
     if (!match) return NaN
-    const year = Number(match[1]), month = Number(match[2]), day = Number(match[3])
+    const year = Number(match[1]),
+        month = Number(match[2]),
+        day = Number(match[3])
     const date = new Date(year, month - 1, day)
     if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return NaN
     if (end) date.setHours(23, 59, 59, 0)
@@ -24,7 +26,14 @@ export function calendarPreset(days: number, yesterday = false, now = new Date()
     start.setDate(start.getDate() - Math.max(0, days - 1))
     return [calendarDate(start), calendarDate(end)]
 }
-export function filterIsActive(value: unknown): boolean { return value !== '' && value !== null && value !== undefined }
+export function filterIsActive(value: unknown): boolean {
+    return value !== '' && value !== null && value !== undefined
+}
 export function hasListFilters(query: Record<string, any>, keys: string[] = []): boolean {
-    return !!String(query.keyword || '').trim() || keys.some(key => filterIsActive(query[key])) || Number(query.start_time) > 0 || Number(query.end_time) > 0
+    return (
+        !!String(query.keyword || '').trim() ||
+        keys.some((key) => filterIsActive(query[key])) ||
+        Number(query.start_time) > 0 ||
+        Number(query.end_time) > 0
+    )
 }

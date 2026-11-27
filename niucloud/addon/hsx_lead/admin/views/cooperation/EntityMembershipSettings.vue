@@ -1,18 +1,70 @@
 <template>
     <section class="coop-surface entity-level-settings">
-        <div class="coop-section-caption"><div><h3>主体会员等级</h3><p class="coop-muted">统一使用会员等级中的“商户主体权益”</p></div><el-button type="primary" plain :disabled="disabled" @click="router.push('/member/level')">管理会员等级</el-button></div>
-        <el-alert v-if="modelValue.length && entryCount!==1" :title="entryCount===0?'尚未明确设置入门等级，请在会员等级中指定；其他等级仍按成长值门槛核验。':'入门等级配置不唯一，请在会员等级中核对。'" type="warning" :closable="false" show-icon class="entity-level-warning" />
+        <div class="coop-section-caption"
+            ><div><h3>主体会员等级</h3><p class="coop-muted">统一使用会员等级中的“商户主体权益”</p></div
+            ><el-button type="primary" plain :disabled="disabled" @click="router.push('/member/level')"
+                >管理会员等级</el-button
+            ></div
+        >
+        <el-alert
+            v-if="modelValue.length && entryCount!==1"
+            :title="entryCount===0?'尚未明确设置入门等级，请在会员等级中指定；其他等级仍按成长值门槛核验。':'入门等级配置不唯一，请在会员等级中核对。'"
+            type="warning"
+            :closable="false"
+            show-icon
+            class="entity-level-warning"
+        />
         <el-empty v-if="!modelValue.length" description="尚未配置可用的商户主体权益" :image-size="64" />
         <HsxTable v-else :columns="columns" :data="modelValue" row-key="code">
-            <template #name="{row}"><div class="coop-cell"><div class="entity-level-name"><span v-if="row.level_color" class="entity-level-color" :style="{backgroundColor:row.level_color}" aria-hidden="true" /><strong>{{ row.name }}</strong><el-tag v-if="row.is_entry" size="small" effect="plain">入门</el-tag></div><small>{{ row.code }}</small></div></template>
-            <template #experience="{row}"><span>{{ experienceText(row) }}</span></template>
-            <template #eligibility="{row}"><span class="coop-muted">{{ eligibilityText(row) }}</span></template>
+            <template #name="{row}"
+                ><div class="coop-cell"
+                    ><div class="entity-level-name"
+                        ><span
+                            v-if="row.level_color"
+                            class="entity-level-color"
+                            :style="{backgroundColor:row.level_color}"
+                            aria-hidden="true"
+                        /><strong>{{ row.name }}</strong
+                        ><el-tag v-if="row.is_entry" size="small" effect="plain">入门</el-tag></div
+                    ><small>{{ row.code }}</small></div
+                ></template
+            >
+            <template #experience="{row}"
+                ><span>{{ experienceText(row) }}</span></template
+            >
+            <template #eligibility="{row}"
+                ><span class="coop-muted">{{ eligibilityText(row) }}</span></template
+            >
             <template #accounts="{row}">{{ row.unlimited?'不限人数':row.account_limit+' 人' }}</template>
-            <template #cycles="{row}"><div class="coop-tags"><el-tag v-for="cycle in row.cycles.filter(item=>item.enabled)" :key="cycle.key" effect="plain">{{ cycle.name }} · {{ cycle.months }}个月 · ¥{{ cycle.price }}</el-tag><span v-if="!row.cycles.some(item=>item.enabled)" class="coop-muted">未开启购买周期</span></div></template>
-            <template #costs="{row}"><div class="coop-cell"><span>押金 ¥{{ row.deposit_amount }}</span><small>{{ row.experience_gate_enabled===false ? '无需补足经验' : row.experience_purchase_enabled ? '补足经验 ¥'+row.experience_unit_price+' / 点' : '未开放付费补足经验' }}</small></div></template>
-            <template #capabilities="{row}"><span>{{ capabilityText(row) }}</span></template>
+            <template #cycles="{row}"
+                ><div class="coop-tags"
+                    ><el-tag v-for="cycle in row.cycles.filter(item=>item.enabled)" :key="cycle.key" effect="plain"
+                        >{{ cycle.name }} · {{ cycle.months }}个月 · ¥{{ cycle.price }}</el-tag
+                    ><span v-if="!row.cycles.some(item=>item.enabled)" class="coop-muted">未开启购买周期</span></div
+                ></template
+            >
+            <template #costs="{row}"
+                ><div class="coop-cell"
+                    ><span>押金 ¥{{ row.deposit_amount }}</span
+                    ><small
+                        >{{ row.experience_gate_enabled===false ? '无需补足经验' : row.experience_purchase_enabled ? '补足经验 ¥'+row.experience_unit_price+' / 点' : '未开放付费补足经验' }}</small
+                    ></div
+                ></template
+            >
+            <template #capabilities="{row}"
+                ><span>{{ capabilityText(row) }}</span></template
+            >
         </HsxTable>
-        <el-collapse><el-collapse-item title="等级与经验门槛在哪里调整？" name="entity-level-rules"><p class="coop-muted">在“会员 → 会员等级”的“商户主体权益”中，可单独开启或关闭各等级经验门槛。开启后使用该会员等级的“成长值”作为门店门槛；关闭后可直接付费开通、升级或续费，不修改个人成长值。入门等级免经验核验。本页只读，不另存价格或门槛。</p><p class="coop-muted">门店经验来自承接门店实际支付的协作佣金，1元计1点，会员费不计，成功退款扣回；不向个人账户增加成长值。仅启用门槛的等级按实时经验核验，符合条件后由商户自愿支付；退款扣经验不提前终止已生效权益。全站目录未指定门店时不判断具体资格，最终能否购买以实时服务端报价为准。账号名额包含负责人；服务商仍独立审核管理。</p></el-collapse-item></el-collapse>
+        <el-collapse
+            ><el-collapse-item title="等级与经验门槛在哪里调整？" name="entity-level-rules"
+                ><p class="coop-muted"
+                    >在“会员 →
+                    会员等级”的“商户主体权益”中，可单独开启或关闭各等级经验门槛。开启后使用该会员等级的“成长值”作为门店门槛；关闭后可直接付费开通、升级或续费，不修改个人成长值。入门等级免经验核验。本页只读，不另存价格或门槛。</p
+                ><p class="coop-muted"
+                    >门店经验来自承接门店实际支付的协作佣金，1元计1点，会员费不计，成功退款扣回；不向个人账户增加成长值。仅启用门槛的等级按实时经验核验，符合条件后由商户自愿支付；退款扣经验不提前终止已生效权益。全站目录未指定门店时不判断具体资格，最终能否购买以实时服务端报价为准。账号名额包含负责人；服务商仍独立审核管理。</p
+                ></el-collapse-item
+            ></el-collapse
+        >
     </section>
 </template>
 <script setup lang="ts">

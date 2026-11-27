@@ -1,14 +1,60 @@
 <template>
-    <div class="edit-attr-item-wrap"><h3 class="mb-[10px]">内容外观</h3><el-form label-width="100px" class="px-[10px]">
-        <el-form-item v-for="field in mainColors.filter(item=>(allowPanel || item.key!=='panelColor') && (allowBorder || item.key!=='borderColor'))" :key="field.key" :label="field.label"><el-color-picker v-model="diyStore.editComponent[field.key]" :show-alpha="['panelColor','borderColor'].includes(field.key)" :predefine="diyStore.predefineColors" /><span v-if="field.key==='primaryColor'" class="appearance-note">留空跟随本站主题</span><span v-else-if="field.key==='panelColor'" class="appearance-note">留空使用框架背景</span><span v-else-if="field.key==='borderColor'" class="appearance-note">支持透明，仅影响已有入口细边框</span></el-form-item>
-        <el-collapse class="appearance-more"><el-collapse-item title="字体、按钮与内容间距" name="advanced">
-            <el-form-item label="标题字号"><el-input-number v-model="diyStore.editComponent.titleSize" :min="14" :max="28" :precision="0" controls-position="right" /><span class="appearance-unit">px</span></el-form-item>
-            <el-form-item label="正文字号"><el-input-number v-model="diyStore.editComponent.textSize" :min="12" :max="20" :precision="0" controls-position="right" /><span class="appearance-unit">px</span></el-form-item>
-            <el-form-item v-for="field in extraColors" :key="field.key" :label="field.label"><el-color-picker v-model="diyStore.editComponent[field.key]" :predefine="diyStore.predefineColors" /></el-form-item>
-            <el-form-item v-for="field in dimensions" :key="field.key" :label="field.label"><el-input-number v-model="diyStore.editComponent[field.key]" :min="0" :max="field.max" :precision="0" controls-position="right" /><span class="appearance-unit">px</span></el-form-item>
-        </el-collapse-item></el-collapse>
-        <p class="appearance-help">区块外层背景、背景图、圆角和外边距继续在下方牛云通用样式中设置。</p>
-    </el-form></div>
+    <div class="edit-attr-item-wrap"
+        ><h3 class="mb-[10px]">内容外观</h3
+        ><el-form label-width="100px" class="px-[10px]">
+            <el-form-item
+                v-for="field in mainColors.filter(item=>(allowPanel || item.key!=='panelColor') && (allowBorder || item.key!=='borderColor'))"
+                :key="field.key"
+                :label="field.label"
+                ><el-color-picker
+                    v-model="diyStore.editComponent[field.key]"
+                    :show-alpha="['panelColor','borderColor'].includes(field.key)"
+                    :predefine="diyStore.predefineColors"
+                /><span v-if="field.key==='primaryColor'" class="appearance-note">留空跟随本站主题</span
+                ><span v-else-if="field.key==='panelColor'" class="appearance-note">留空使用框架背景</span
+                ><span v-else-if="field.key==='borderColor'" class="appearance-note"
+                    >支持透明，仅影响已有入口细边框</span
+                ></el-form-item
+            >
+            <el-collapse class="appearance-more"
+                ><el-collapse-item title="字体、按钮与内容间距" name="advanced">
+                    <el-form-item label="标题字号"
+                        ><el-input-number
+                            v-model="diyStore.editComponent.titleSize"
+                            :min="14"
+                            :max="28"
+                            :precision="0"
+                            controls-position="right"
+                        /><span class="appearance-unit">px</span></el-form-item
+                    >
+                    <el-form-item label="正文字号"
+                        ><el-input-number
+                            v-model="diyStore.editComponent.textSize"
+                            :min="12"
+                            :max="20"
+                            :precision="0"
+                            controls-position="right"
+                        /><span class="appearance-unit">px</span></el-form-item
+                    >
+                    <el-form-item v-for="field in extraColors" :key="field.key" :label="field.label"
+                        ><el-color-picker
+                            v-model="diyStore.editComponent[field.key]"
+                            :predefine="diyStore.predefineColors"
+                    /></el-form-item>
+                    <el-form-item v-for="field in dimensions" :key="field.key" :label="field.label"
+                        ><el-input-number
+                            v-model="diyStore.editComponent[field.key]"
+                            :min="0"
+                            :max="field.max"
+                            :precision="0"
+                            controls-position="right"
+                        /><span class="appearance-unit">px</span></el-form-item
+                    >
+                </el-collapse-item></el-collapse
+            >
+            <p class="appearance-help">区块外层背景、背景图、圆角和外边距继续在下方牛云通用样式中设置。</p>
+        </el-form></div
+    >
 </template>
 <script setup lang="ts">
 import useDiyStore from '@/stores/modules/diy'

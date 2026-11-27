@@ -1,27 +1,155 @@
 <template>
     <section>
         <header class="coop-head"><h2>商户监管</h2></header>
-        <CooperationFilter :query="query" :loading="loading" :statuses="statuses" placeholder="搜索门店、联系人或电话" :with-date="false" @search="search" @reload="load" @reset="resetExtra">
-            <el-button :type="query.province_id?'primary':'default'" plain @click="openRegion">{{ regionLabel||'选择地区' }}</el-button>
-            <el-select v-model="levelFilter" filterable clearable placeholder="全部主体会员等级" aria-label="主体会员等级"><el-option v-for="level in levels" :key="level.code" :label="level.name" :value="level.code" /></el-select>
+        <CooperationFilter
+            :query="query"
+            :loading="loading"
+            :statuses="statuses"
+            placeholder="搜索门店、联系人或电话"
+            :with-date="false"
+            @search="search"
+            @reload="load"
+            @reset="resetExtra"
+        >
+            <el-button
+                :type="query.province_id?'primary':'default'"
+                plain
+                @click="openRegion"
+                >{{ regionLabel||'选择地区' }}</el-button
+            >
+            <el-select
+                v-model="levelFilter"
+                filterable
+                clearable
+                placeholder="全部主体会员等级"
+                aria-label="主体会员等级"
+                ><el-option v-for="level in levels" :key="level.code" :label="level.name" :value="level.code"
+            /></el-select>
         </CooperationFilter>
         <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="coop-error" />
         <HsxTable :columns="columns" :data="rows" :loading="loading" empty-text="没有符合条件的合作商户">
-            <template #merchant="{row}"><div class="coop-cell"><strong>{{ row.name }}</strong><small>{{ row.contact_name }} · {{ row.mobile }}</small><small>{{ row.region_text||'地区未填写' }}</small><div class="coop-tags"><el-tag v-for="business in (row.business_capabilities||[]).slice(0,3)" :key="business.business_type" size="small" type="info" effect="plain">{{ business.business_name||coopBusiness(business.business_type) }}</el-tag></div></div></template>
+            <template #merchant="{row}"
+                ><div class="coop-cell"
+                    ><strong>{{ row.name }}</strong
+                    ><small>{{ row.contact_name }} · {{ row.mobile }}</small
+                    ><small>{{ row.region_text||'地区未填写' }}</small
+                    ><div class="coop-tags"
+                        ><el-tag
+                            v-for="business in (row.business_capabilities||[]).slice(0,3)"
+                            :key="business.business_type"
+                            size="small"
+                            type="info"
+                            effect="plain"
+                            >{{ business.business_name||coopBusiness(business.business_type) }}</el-tag
+                        ></div
+                    ></div
+                ></template
+            >
             <template #membership="{row}"><MembershipSummary :membership="row.membership" /></template>
-            <template #inventory="{row}"><div class="coop-cell"><strong>{{ Number(row.inventory_count||0)>0?row.inventory_count+' 条可售快照':Number(row.manual_model_count||0)>0?'已登记交付能力':'待登记交付能力' }}</strong><small v-if="Number(row.manual_model_count||0)>0">{{ row.manual_model_count }} 个自主登记型号</small><small v-else>接单前仍需向门店核对现货</small></div></template>
-            <template #state="{row}"><el-tag :type="row.blocked_at?'danger':'success'" effect="plain">{{ row.blocked_at?'已停止合作':'合作中' }}</el-tag></template>
-            <template #actions="{row}"><div class="coop-actions"><el-button link type="primary" @click="open(row)">查看资料</el-button><el-button v-if="canBlock" link type="danger" :disabled="!!row.blocked_at||actionBusy" @click="block(row)">停止合作</el-button></div></template>
+            <template #inventory="{row}"
+                ><div class="coop-cell"
+                    ><strong
+                        >{{ Number(row.inventory_count||0)>0?row.inventory_count+' 条可售快照':Number(row.manual_model_count||0)>0?'已登记交付能力':'待登记交付能力' }}</strong
+                    ><small v-if="Number(row.manual_model_count||0)>0"
+                        >{{ row.manual_model_count }} 个自主登记型号</small
+                    ><small v-else>接单前仍需向门店核对现货</small></div
+                ></template
+            >
+            <template #state="{row}"
+                ><el-tag
+                    :type="row.blocked_at?'danger':'success'"
+                    effect="plain"
+                    >{{ row.blocked_at?'已停止合作':'合作中' }}</el-tag
+                ></template
+            >
+            <template #actions="{row}"
+                ><div class="coop-actions"
+                    ><el-button link type="primary" @click="open(row)">查看资料</el-button
+                    ><el-button
+                        v-if="canBlock"
+                        link
+                        type="danger"
+                        :disabled="!!row.blocked_at||actionBusy"
+                        @click="block(row)"
+                        >停止合作</el-button
+                    ></div
+                ></template
+            >
         </HsxTable>
-        <HsxPagination :page="query.page" :limit="query.limit" :total="total" class="coop-pagination" @pagination="changePage" />
+        <HsxPagination
+            :page="query.page"
+            :limit="query.limit"
+            :total="total"
+            class="coop-pagination"
+            @pagination="changePage"
+        />
         <HsxDrawer v-model="detailVisible" title="商户资料" :subtitle="selected.name||''" size="sm">
-            <section class="coop-partner-section"><h3>主体会员权益</h3><div v-if="selected.membership" class="coop-kv"><span>当前等级</span><span>{{ selected.membership.level_name||'普通会员' }}</span><span>权益状态</span><span>{{ entityMembershipState(selected.membership).label }}</span><span>有效期</span><span>{{ expiry(selected.membership) }}</span><span>账号名额</span><span>{{ entitySeatText(selected.membership) }}</span><span>协作权限</span><span>{{ capabilityText(selected.membership) }}</span></div><el-empty v-else description="尚未返回主体权益信息" :image-size="56" /></section>
-            <section class="coop-partner-section"><h3>交付资料</h3><div class="coop-kv"><span>联系人</span><span>{{ selected.contact_name||'未填写' }} · {{ selected.mobile||'未填写电话' }}</span><span>门店地区</span><span>{{ selected.region_text||'未填写地区' }}</span><span>登记业务</span><span>{{ (selected.business_capabilities||[]).map(item=>item.business_name||coopBusiness(item.business_type)).join('、')||'未登记' }}</span><span>库存参考</span><span>{{ selected.inventory_count??'未返回' }} 条可售快照</span><span>自主能力</span><span>{{ selected.manual_model_count??'未返回' }} 个型号</span></div></section>
-            <section v-if="canReadLicense" class="coop-partner-section"><div class="coop-license-review__heading"><h3>营业执照</h3><el-button text type="primary" :loading="licenseLoading" @click="readLicense">{{ licenseImage?'重新读取':'私密查看' }}</el-button></div><el-alert v-if="licenseError" :title="licenseError" type="error" :closable="false" show-icon /><el-image v-if="licenseImage" :src="licenseImage" :preview-src-list="[licenseImage]" fit="contain" class="coop-license-review__image" /><p v-else-if="licenseEmpty" class="coop-form-note">商户尚未上传营业执照</p></section>
-            <el-collapse><el-collapse-item title="会员配置与监管说明" name="partner-help"><p class="coop-muted">主体会员统一在“会员 → 会员等级”配置；商户自行购买、续费或升级。本页不授予另一套等级或期限。停止合作不会删除个人会员、历史记录或既有账款。</p></el-collapse-item></el-collapse>
+            <section class="coop-partner-section"
+                ><h3>主体会员权益</h3
+                ><div v-if="selected.membership" class="coop-kv"
+                    ><span>当前等级</span><span>{{ selected.membership.level_name||'普通会员' }}</span
+                    ><span>权益状态</span><span>{{ entityMembershipState(selected.membership).label }}</span
+                    ><span>有效期</span><span>{{ expiry(selected.membership) }}</span
+                    ><span>账号名额</span><span>{{ entitySeatText(selected.membership) }}</span
+                    ><span>协作权限</span><span>{{ capabilityText(selected.membership) }}</span></div
+                ><el-empty v-else description="尚未返回主体权益信息" :image-size="56"
+            /></section>
+            <section class="coop-partner-section"
+                ><h3>交付资料</h3
+                ><div class="coop-kv"
+                    ><span>联系人</span
+                    ><span>{{ selected.contact_name||'未填写' }} · {{ selected.mobile||'未填写电话' }}</span
+                    ><span>门店地区</span><span>{{ selected.region_text||'未填写地区' }}</span
+                    ><span>登记业务</span
+                    ><span
+                        >{{ (selected.business_capabilities||[]).map(item=>item.business_name||coopBusiness(item.business_type)).join('、')||'未登记' }}</span
+                    ><span>库存参考</span><span>{{ selected.inventory_count??'未返回' }} 条可售快照</span
+                    ><span>自主能力</span><span>{{ selected.manual_model_count??'未返回' }} 个型号</span></div
+                ></section
+            >
+            <section v-if="canReadLicense" class="coop-partner-section"
+                ><div class="coop-license-review__heading"
+                    ><h3>营业执照</h3
+                    ><el-button
+                        text
+                        type="primary"
+                        :loading="licenseLoading"
+                        @click="readLicense"
+                        >{{ licenseImage?'重新读取':'私密查看' }}</el-button
+                    ></div
+                ><el-alert
+                    v-if="licenseError"
+                    :title="licenseError"
+                    type="error"
+                    :closable="false"
+                    show-icon
+                /><el-image
+                    v-if="licenseImage"
+                    :src="licenseImage"
+                    :preview-src-list="[licenseImage]"
+                    fit="contain"
+                    class="coop-license-review__image"
+                /><p v-else-if="licenseEmpty" class="coop-form-note">商户尚未上传营业执照</p></section
+            >
+            <el-collapse
+                ><el-collapse-item title="会员配置与监管说明" name="partner-help"
+                    ><p class="coop-muted"
+                        >主体会员统一在“会员 →
+                        会员等级”配置；商户自行购买、续费或升级。本页不授予另一套等级或期限。停止合作不会删除个人会员、历史记录或既有账款。</p
+                    ></el-collapse-item
+                ></el-collapse
+            >
             <template #footer><el-button @click="detailVisible=false">关闭</el-button></template>
         </HsxDrawer>
-        <HsxDrawer v-model="regionVisible" title="按门店地区筛选" size="sm" show-footer confirm-text="应用地区" @confirm="applyRegion"><RegionSelect v-model="regionDraft" /></HsxDrawer>
+        <HsxDrawer
+            v-model="regionVisible"
+            title="按门店地区筛选"
+            size="sm"
+            show-footer
+            confirm-text="应用地区"
+            @confirm="applyRegion"
+            ><RegionSelect v-model="regionDraft"
+        /></HsxDrawer>
     </section>
 </template>
 <script setup lang="ts">

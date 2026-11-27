@@ -1,25 +1,184 @@
 <template>
     <section>
-        <header class="coop-head"><h2>业务配置</h2><div class="coop-actions"><el-button v-if="canViewProfileForm" :disabled="saving" @click="profileFormVisible=true">门店资料表单</el-button><el-button :disabled="saving" @click="channelsVisible=true">ERP 登录渠道</el-button><el-button v-if="canViewNotice" :disabled="saving" @click="noticeVisible=true">通知渠道</el-button><el-button v-if="canViewPaymentHelp" :disabled="saving" @click="paymentHelpVisible=true">支付帮助</el-button><el-button :icon="Refresh" :loading="loading" :disabled="saving" @click="reload">重新读取</el-button></div></header>
+        <header class="coop-head"
+            ><h2>业务配置</h2
+            ><div class="coop-actions"
+                ><el-button v-if="canViewProfileForm" :disabled="saving" @click="profileFormVisible=true"
+                    >门店资料表单</el-button
+                ><el-button :disabled="saving" @click="channelsVisible=true">ERP 登录渠道</el-button
+                ><el-button v-if="canViewNotice" :disabled="saving" @click="noticeVisible=true">通知渠道</el-button
+                ><el-button v-if="canViewPaymentHelp" :disabled="saving" @click="paymentHelpVisible=true"
+                    >支付帮助</el-button
+                ><el-button :icon="Refresh" :loading="loading" :disabled="saving" @click="reload"
+                    >重新读取</el-button
+                ></div
+            ></header
+        >
         <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="coop-error" />
         <el-skeleton v-if="loading&&!ready" :rows="8" animated />
         <template v-if="ready">
-            <el-alert v-if="!form.fee_confirmed" title="平台费规则尚未确认，商户不能创建协作佣金支付单。请先核对下方比例和最低费用，再明确确认。" type="warning" show-icon closable class="coop-error" />
+            <el-alert
+                v-if="!form.fee_confirmed"
+                title="平台费规则尚未确认，商户不能创建协作佣金支付单。请先核对下方比例和最低费用，再明确确认。"
+                type="warning"
+                show-icon
+                closable
+                class="coop-error"
+            />
             <el-form label-position="top" class="coop-form" :disabled="saving||loading">
                 <EntityMembershipSettings :model-value="form.membership_levels" :disabled="saving||loading" />
-                <BusinessSettings :model-value="form.businesses" :presets="form.business_presets" :fee-percent="form.fee_percent" :fee-minimum="form.fee_minimum" :disabled="saving||loading" :can-edit-catalog="canEditCatalog" @catalog="openCatalog" @fee-change="form.fee_confirmed=false" />
+                <BusinessSettings
+                    :model-value="form.businesses"
+                    :presets="form.business_presets"
+                    :fee-percent="form.fee_percent"
+                    :fee-minimum="form.fee_minimum"
+                    :disabled="saving||loading"
+                    :can-edit-catalog="canEditCatalog"
+                    @catalog="openCatalog"
+                    @fee-change="form.fee_confirmed=false"
+                />
                 <h3 style="margin:24px 0 14px">通用业务与费用规则</h3>
-                <section class="coop-surface" style="margin-bottom:14px"><el-form-item label="商户端显示 ERP 与库存参考"><el-switch v-model="form.erp_visible" /><p class="coop-form-note">关闭后隐藏授权、同步与库存参考入口，商户仍可手动登记交付能力。</p></el-form-item><el-collapse><el-collapse-item title="历史连接和自动同步如何处理？" name="erp-visibility"><p class="coop-muted">此开关只控制商户端可见性，不删除授权或库存，不更改后台同步。需要暂停采集时，请在「ERP 登录渠道」关闭对应渠道。</p></el-collapse-item></el-collapse></section>
-                <section class="coop-surface"><div class="coop-section-caption"><h3>业务开关</h3><el-switch v-model="form.enabled" active-text="允许商户协作" /></div><el-form-item label="发单与接单需有效主体会员"><el-switch v-model="form.publishing_required" /></el-form-item><el-collapse><el-collapse-item title="查看会员到期和服务商的适用范围" name="entity-scope"><p class="coop-muted">门店共享主体会员等级和有效期；未开通或到期仍可完善资料、查看历史、处理已接单结果和既有账款。服务商为独立人工审核的推广身份，不随购买主体会员自动开通。</p></el-collapse-item></el-collapse></section>
+                <section class="coop-surface" style="margin-bottom:14px"
+                    ><el-form-item label="商户端显示 ERP 与库存参考"
+                        ><el-switch v-model="form.erp_visible" /><p class="coop-form-note"
+                            >关闭后隐藏授权、同步与库存参考入口，商户仍可手动登记交付能力。</p
+                        ></el-form-item
+                    ><el-collapse
+                        ><el-collapse-item title="历史连接和自动同步如何处理？" name="erp-visibility"
+                            ><p class="coop-muted"
+                                >此开关只控制商户端可见性，不删除授权或库存，不更改后台同步。需要暂停采集时，请在「ERP
+                                登录渠道」关闭对应渠道。</p
+                            ></el-collapse-item
+                        ></el-collapse
+                    ></section
+                >
+                <section class="coop-surface"
+                    ><div class="coop-section-caption"
+                        ><h3>业务开关</h3><el-switch v-model="form.enabled" active-text="允许商户协作" /></div
+                    ><el-form-item label="发单与接单需有效主体会员"
+                        ><el-switch v-model="form.publishing_required" /></el-form-item
+                    ><el-collapse
+                        ><el-collapse-item title="查看会员到期和服务商的适用范围" name="entity-scope"
+                            ><p class="coop-muted"
+                                >门店共享主体会员等级和有效期；未开通或到期仍可完善资料、查看历史、处理已接单结果和既有账款。服务商为独立人工审核的推广身份，不随购买主体会员自动开通。</p
+                            ></el-collapse-item
+                        ></el-collapse
+                    ></section
+                >
 
-                <section class="coop-surface" style="margin-top:14px"><div class="coop-section-caption"><h3>成交付佣与平台维护费</h3><el-tag type="info" effect="plain">未成交不收费</el-tag></div><div class="coop-rule-grid"><el-form-item label="通用最低协作佣金（元）"><el-input-number v-model="form.commission_minimum" :min="0.01" :max="99999999.99" :precision="2" controls-position="right" @change="form.fee_confirmed=false" /><p class="coop-form-note">各业务可在上方单独设置，不要求填写成交额或利润。</p></el-form-item><el-form-item label="平台维护费比例（%）"><el-input-number v-model="form.fee_percent" :min="0" :max="99.99" :precision="2" controls-position="right" @change="form.fee_confirmed=false" /></el-form-item><el-form-item label="每笔最低平台维护费（元）"><el-input-number v-model="form.fee_minimum" :min="0" :max="99999999.99" :precision="2" controls-position="right" @change="form.fee_confirmed=false" /></el-form-item><el-form-item label="试算本笔付佣（元）"><el-input-number v-model="previewAmount" :min="0.01" :max="99999999.99" :precision="2" controls-position="right" /></el-form-item></div><div v-if="preview.valid" class="coop-readout">本笔付佣 {{ coopMoney(preview.amount) }} = 发布方净收益 {{ coopMoney(preview.net) }} + 平台维护费 {{ coopMoney(preview.fee) }}</div><el-alert v-else :title="preview.error" type="warning" :closable="false" show-icon /><el-collapse><el-collapse-item title="查看计算口径" name="fees"><p class="coop-muted">平台维护费取“本笔付佣 × 比例”与“最低平台维护费”中较高者，须低于本笔付佣；剩余金额归发布方。推广奖励另从平台收入中计算，不减少发布方净收益。以上只试算，不会付款。</p></el-collapse-item></el-collapse><el-checkbox v-model="form.fee_confirmed">我已核对金额分配，确认新支付单使用以上收费规则</el-checkbox></section>
+                <section class="coop-surface" style="margin-top:14px"
+                    ><div class="coop-section-caption"
+                        ><h3>成交付佣与平台维护费</h3><el-tag type="info" effect="plain">未成交不收费</el-tag></div
+                    ><div class="coop-rule-grid"
+                        ><el-form-item label="通用最低协作佣金（元）"
+                            ><el-input-number
+                                v-model="form.commission_minimum"
+                                :min="0.01"
+                                :max="99999999.99"
+                                :precision="2"
+                                controls-position="right"
+                                @change="form.fee_confirmed=false"
+                            /><p class="coop-form-note"
+                                >各业务可在上方单独设置，不要求填写成交额或利润。</p
+                            ></el-form-item
+                        ><el-form-item label="平台维护费比例（%）"
+                            ><el-input-number
+                                v-model="form.fee_percent"
+                                :min="0"
+                                :max="99.99"
+                                :precision="2"
+                                controls-position="right"
+                                @change="form.fee_confirmed=false" /></el-form-item
+                        ><el-form-item label="每笔最低平台维护费（元）"
+                            ><el-input-number
+                                v-model="form.fee_minimum"
+                                :min="0"
+                                :max="99999999.99"
+                                :precision="2"
+                                controls-position="right"
+                                @change="form.fee_confirmed=false" /></el-form-item
+                        ><el-form-item label="试算本笔付佣（元）"
+                            ><el-input-number
+                                v-model="previewAmount"
+                                :min="0.01"
+                                :max="99999999.99"
+                                :precision="2"
+                                controls-position="right" /></el-form-item></div
+                    ><div v-if="preview.valid" class="coop-readout"
+                        >本笔付佣 {{ coopMoney(preview.amount) }} = 发布方净收益 {{ coopMoney(preview.net) }} +
+                        平台维护费 {{ coopMoney(preview.fee) }}</div
+                    ><el-alert v-else :title="preview.error" type="warning" :closable="false" show-icon /><el-collapse
+                        ><el-collapse-item title="查看计算口径" name="fees"
+                            ><p class="coop-muted"
+                                >平台维护费取“本笔付佣 ×
+                                比例”与“最低平台维护费”中较高者，须低于本笔付佣；剩余金额归发布方。推广奖励另从平台收入中计算，不减少发布方净收益。以上只试算，不会付款。</p
+                            ></el-collapse-item
+                        ></el-collapse
+                    ><el-checkbox v-model="form.fee_confirmed"
+                        >我已核对金额分配，确认新支付单使用以上收费规则</el-checkbox
+                    ></section
+                >
 
-
-                <section class="coop-surface" style="margin-top:14px"><div class="coop-section-caption"><h3>跟进提醒与库存有效性</h3></div><div class="coop-rule-grid"><el-form-item label="接单提醒时限（分钟）"><el-input-number v-model="form.response_minutes" :min="0" :max="10080" :precision="0" controls-position="right" /><p class="coop-form-note">从交付给门店时开始计时。时间到后仍可接单，发布方可继续等待或重新选店；不会自动转派。填0表示不设置接单提醒时限。</p><el-link v-if="canViewNoticeCenter" href="/site/hsx_lead/notice" type="primary" :underline="false">前往通知中心配置提醒节点与渠道</el-link></el-form-item><el-form-item label="联系客户关注时限（小时）"><el-input-number v-model="form.contact_hours" :min="0" :max="720" :precision="0" controls-position="right" /></el-form-item><el-form-item label="结果回填关注时限（小时）"><el-input-number v-model="form.review_hours" :min="0" :max="2160" :precision="0" controls-position="right" /><p class="coop-form-note">供客服筛选跟进，不据此自动停用门店。</p></el-form-item><el-form-item label="库存快照有效期（小时）"><el-input-number v-model="form.inventory_fresh_hours" :min="1" :max="168" :precision="0" controls-position="right" /><p class="coop-form-note">超期或来源状态不明的库存不作为可交付现货依据。</p></el-form-item></div></section>
+                <section class="coop-surface" style="margin-top:14px"
+                    ><div class="coop-section-caption"><h3>跟进提醒与库存有效性</h3></div
+                    ><div class="coop-rule-grid"
+                        ><el-form-item label="接单提醒时限（分钟）"
+                            ><el-input-number
+                                v-model="form.response_minutes"
+                                :min="0"
+                                :max="10080"
+                                :precision="0"
+                                controls-position="right"
+                            /><p class="coop-form-note"
+                                >从交付给门店时开始计时。时间到后仍可接单，发布方可继续等待或重新选店；不会自动转派。填0表示不设置接单提醒时限。</p
+                            ><el-link
+                                v-if="canViewNoticeCenter"
+                                href="/site/hsx_lead/notice"
+                                type="primary"
+                                :underline="false"
+                                >前往通知中心配置提醒节点与渠道</el-link
+                            ></el-form-item
+                        ><el-form-item label="联系客户关注时限（小时）"
+                            ><el-input-number
+                                v-model="form.contact_hours"
+                                :min="0"
+                                :max="720"
+                                :precision="0"
+                                controls-position="right" /></el-form-item
+                        ><el-form-item label="结果回填关注时限（小时）"
+                            ><el-input-number
+                                v-model="form.review_hours"
+                                :min="0"
+                                :max="2160"
+                                :precision="0"
+                                controls-position="right"
+                            /><p class="coop-form-note">供客服筛选跟进，不据此自动停用门店。</p></el-form-item
+                        ><el-form-item label="库存快照有效期（小时）"
+                            ><el-input-number
+                                v-model="form.inventory_fresh_hours"
+                                :min="1"
+                                :max="168"
+                                :precision="0"
+                                controls-position="right"
+                            /><p class="coop-form-note">超期或来源状态不明的库存不作为可交付现货依据。</p></el-form-item
+                        ></div
+                    ></section
+                >
             </el-form>
-            <footer class="coop-config-footer"><p>只保存本站规则，不发起付款、通知、ERP同步或真实转账。</p><el-button type="primary" :loading="saving" :disabled="loading" @click="save">保存业务配置</el-button></footer>
+            <footer class="coop-config-footer"
+                ><p>只保存本站规则，不发起付款、通知、ERP同步或真实转账。</p
+                ><el-button type="primary" :loading="saving" :disabled="loading" @click="save"
+                    >保存业务配置</el-button
+                ></footer
+            >
         </template>
-        <CatalogDrawer v-if="canEditCatalog" v-model="catalogVisible" :business-type="catalogBusiness" :business-name="catalogDefinition?.name" @changed="load" />
+        <CatalogDrawer
+            v-if="canEditCatalog"
+            v-model="catalogVisible"
+            :business-type="catalogBusiness"
+            :business-name="catalogDefinition?.name"
+            @changed="load"
+        />
         <ProviderChannelsSettings v-model="channelsVisible" :can-edit="canManageChannels" />
         <NoticeSettings v-if="canViewNotice" v-model="noticeVisible" :can-edit="canEditNotice" />
         <ProfileFormSettings v-if="canViewProfileForm" v-model="profileFormVisible" :can-edit="canEditProfileForm" />

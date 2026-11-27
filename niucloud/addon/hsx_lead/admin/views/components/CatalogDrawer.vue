@@ -1,5 +1,16 @@
 <template>
-    <HsxDrawer v-model="visible" :title="`${businessName || '设备需求'}目录`" subtitle="维护当前业务的分类与选项" size="lg" :body-loading="loading" :confirm-loading="saving" :show-footer="activeTab==='import'" confirm-text="确认替换当前业务目录" :confirm-disabled="!previewReady || loading || !!fileError || !confirmed" @confirm="save">
+    <HsxDrawer
+        v-model="visible"
+        :title="`${businessName || '设备需求'}目录`"
+        subtitle="维护当前业务的分类与选项"
+        size="lg"
+        :body-loading="loading"
+        :confirm-loading="saving"
+        :show-footer="activeTab==='import'"
+        confirm-text="确认替换当前业务目录"
+        :confirm-disabled="!previewReady || loading || !!fileError || !confirmed"
+        @confirm="save"
+    >
         <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="lead-error-banner" />
         <el-tabs v-model="activeTab" @tab-change="changeTab">
             <el-tab-pane label="目录管理" name="items" />
@@ -8,49 +19,249 @@
         </el-tabs>
         <template v-if="activeTab==='items'">
             <div class="catalog-toolbar">
-                <el-input v-model="keyword" clearable placeholder="搜索名称、ID、品牌或分类" class="catalog-search" @keyup.enter="search" @clear="search" />
+                <el-input
+                    v-model="keyword"
+                    clearable
+                    placeholder="搜索名称、ID、品牌或分类"
+                    class="catalog-search"
+                    @keyup.enter="search"
+                    @clear="search"
+                />
                 <el-button :loading="loading" :disabled="busy" @click="search">查询</el-button>
-                <el-button v-if="canAdd" type="primary" :disabled="busy || !revision" @click="editItem()">新增选项</el-button>
+                <el-button v-if="canAdd" type="primary" :disabled="busy || !revision" @click="editItem()"
+                    >新增选项</el-button
+                >
             </div>
-            <HsxTable :columns="itemColumns" :data="items" row-key="id" :loading="loading" :empty-text="error ? '目录读取失败，请重试' : '暂无目录选项，可新增或批量导入'">
-                <template #name="{row}"><div class="catalog-cell"><strong>{{ row.title }}</strong><small>{{ row.brand || '未设置品牌' }}</small></div></template>
+            <HsxTable
+                :columns="itemColumns"
+                :data="items"
+                row-key="id"
+                :loading="loading"
+                :empty-text="error ? '目录读取失败，请重试' : '暂无目录选项，可新增或批量导入'"
+            >
+                <template #name="{row}"
+                    ><div class="catalog-cell"
+                        ><strong>{{ row.title }}</strong
+                        ><small>{{ row.brand || '未设置品牌' }}</small></div
+                    ></template
+                >
                 <template #path="{row}">{{ (row.path || []).join(' / ') || row.category_name || '—' }}</template>
-                <template #action="{row}"><el-button v-if="canEdit" link type="primary" :disabled="busy" @click="editItem(row)">编辑</el-button><el-button v-if="canDelete" link type="danger" :disabled="busy" @click="removeItem(row)">删除</el-button><span v-if="!canEdit&&!canDelete" class="lead-muted">仅查看</span></template>
+                <template #action="{row}"
+                    ><el-button v-if="canEdit" link type="primary" :disabled="busy" @click="editItem(row)"
+                        >编辑</el-button
+                    ><el-button v-if="canDelete" link type="danger" :disabled="busy" @click="removeItem(row)"
+                        >删除</el-button
+                    ><span v-if="!canEdit&&!canDelete" class="lead-muted">仅查看</span></template
+                >
             </HsxTable>
-            <div class="catalog-pagination"><HsxPagination :current-page="page" :page-size="limit" :total="total" :disabled="busy" @change="changePage" /></div>
+            <div class="catalog-pagination"
+                ><HsxPagination
+                    :current-page="page"
+                    :page-size="limit"
+                    :total="total"
+                    :disabled="busy"
+                    @change="changePage"
+            /></div>
             <p class="catalog-scope">仅影响此后新增选择；不会改写已保存的线索、商户能力或库存。</p>
         </template>
         <template v-else-if="activeTab==='import'">
-            <el-alert v-if="!loading && !previewSupported" title="服务器未确认支持预览，导入已禁用，请更新配套后端。" type="warning" :closable="false" show-icon class="lead-error-banner" />
-            <div class="catalog-toolbar"><el-upload accept=".xlsx,.csv,.json" :auto-upload="false" :show-file-list="false" :on-change="chooseFile" :disabled="busy || !previewSupported"><el-button>选择 Excel / CSV / JSON</el-button></el-upload><el-button @click="downloadTemplate">下载三级目录模板</el-button></div>
-            <el-collapse class="catalog-help"><el-collapse-item title="导入规则与影响范围" name="format"><p class="lead-muted">仅替换本站「{{ businessName || businessType || '二手机' }}」目录，不修改其他业务及既有记录。Excel原文件不超过2 MB，一个工作表、纯文本、最多5000项；不支持公式或外链。CSV / JSON不超过1 MB。可用“一级分类、二级分类、三级分类、名称、id、品牌、别名”，ID可留空，系统自动生成；已有ID导入后保持不变。CSV请用UTF-8。</p></el-collapse-item></el-collapse>
-            <el-alert v-if="fileError" :title="fileError" type="error" show-icon :closable="false" class="lead-error-banner" />
-            <section v-if="filename" class="catalog-pending"><div class="catalog-pending-head"><div><strong>{{ filename }}</strong><p class="lead-muted">{{ previewReady ? `校验通过，共${previewItems.length}项，尚未保存` : '文件已读取，尚未校验或保存' }}</p></div><el-button :loading="previewing" :disabled="saving || !content || !!fileError" @click="preview">校验并预览</el-button></div><template v-if="previewReady"><HsxTable :columns="columns" :data="previewItems.slice(0,100)" row-key="id" empty-text="文件没有可导入项"><template #path="{row}">{{ (row.path || []).join(' / ') || row.category_name || '—' }}</template></HsxTable><p v-if="previewItems.length>100" class="lead-muted">预览前100项，确认后替换完整{{ previewItems.length }}项。</p><el-checkbox v-model="confirmed">已核对{{ previewItems.length }}项，确认替换当前业务目录</el-checkbox></template></section>
+            <el-alert
+                v-if="!loading && !previewSupported"
+                title="服务器未确认支持预览，导入已禁用，请更新配套后端。"
+                type="warning"
+                :closable="false"
+                show-icon
+                class="lead-error-banner"
+            />
+            <div class="catalog-toolbar"
+                ><el-upload
+                    accept=".xlsx,.csv,.json"
+                    :auto-upload="false"
+                    :show-file-list="false"
+                    :on-change="chooseFile"
+                    :disabled="busy || !previewSupported"
+                    ><el-button>选择 Excel / CSV / JSON</el-button></el-upload
+                ><el-button @click="downloadTemplate">下载三级目录模板</el-button></div
+            >
+            <el-collapse class="catalog-help"
+                ><el-collapse-item title="导入规则与影响范围" name="format"
+                    ><p class="lead-muted"
+                        >仅替换本站「{{ businessName || businessType || '二手机'
+                        }}」目录，不修改其他业务及既有记录。Excel原文件不超过2
+                        MB，一个工作表、纯文本、最多5000项；不支持公式或外链。CSV / JSON不超过1
+                        MB。可用“一级分类、二级分类、三级分类、名称、id、品牌、别名”，ID可留空，系统自动生成；已有ID导入后保持不变。CSV请用UTF-8。</p
+                    ></el-collapse-item
+                ></el-collapse
+            >
+            <el-alert
+                v-if="fileError"
+                :title="fileError"
+                type="error"
+                show-icon
+                :closable="false"
+                class="lead-error-banner"
+            />
+            <section v-if="filename" class="catalog-pending"
+                ><div class="catalog-pending-head"
+                    ><div
+                        ><strong>{{ filename }}</strong
+                        ><p
+                            class="lead-muted"
+                            >{{ previewReady ? `校验通过，共${previewItems.length}项，尚未保存` : '文件已读取，尚未校验或保存' }}</p
+                        ></div
+                    ><el-button :loading="previewing" :disabled="saving || !content || !!fileError" @click="preview"
+                        >校验并预览</el-button
+                    ></div
+                ><template v-if="previewReady"
+                    ><HsxTable
+                        :columns="columns"
+                        :data="previewItems.slice(0,100)"
+                        row-key="id"
+                        empty-text="文件没有可导入项"
+                        ><template
+                            #path="{row}"
+                            >{{ (row.path || []).join(' / ') || row.category_name || '—' }}</template
+                        ></HsxTable
+                    ><p v-if="previewItems.length>100" class="lead-muted"
+                        >预览前100项，确认后替换完整{{ previewItems.length }}项。</p
+                    ><el-checkbox v-model="confirmed"
+                        >已核对{{ previewItems.length }}项，确认替换当前业务目录</el-checkbox
+                    ></template
+                ></section
+            >
         </template>
         <template v-else-if="activeTab==='logs'">
-            <div class="catalog-toolbar"><el-select v-model="logAction" clearable placeholder="全部操作" style="width:180px" @change="searchLogs"><el-option label="新增" value="created" /><el-option label="修改" value="updated" /><el-option label="删除" value="deleted" /><el-option label="导入替换" value="replaced" /></el-select><el-button :loading="logsLoading" :disabled="busy" @click="searchLogs">刷新日志</el-button></div>
-            <HsxTable :columns="logColumns" :data="logs" row-key="id" :loading="logsLoading" empty-text="暂无目录操作日志">
-                <template #operator="{row}"><div class="catalog-cell"><strong>{{ row.operator_name }}</strong><small>{{ displayTime(row.create_time) }}</small></div></template>
-                <template #change="{row}"><div class="catalog-cell"><strong>{{ row.action_label }}</strong><small>{{ logSummary(row) }}</small></div></template>
-                <template #action="{row}"><el-button link type="primary" @click="selectedLog=row;logVisible=true">查看变更</el-button></template>
+            <div class="catalog-toolbar"
+                ><el-select
+                    v-model="logAction"
+                    clearable
+                    placeholder="全部操作"
+                    style="width:180px"
+                    @change="searchLogs"
+                    ><el-option label="新增" value="created" /><el-option label="修改" value="updated" /><el-option
+                        label="删除"
+                        value="deleted" /><el-option label="导入替换" value="replaced" /></el-select
+                ><el-button :loading="logsLoading" :disabled="busy" @click="searchLogs">刷新日志</el-button></div
+            >
+            <HsxTable
+                :columns="logColumns"
+                :data="logs"
+                row-key="id"
+                :loading="logsLoading"
+                empty-text="暂无目录操作日志"
+            >
+                <template #operator="{row}"
+                    ><div class="catalog-cell"
+                        ><strong>{{ row.operator_name }}</strong
+                        ><small>{{ displayTime(row.create_time) }}</small></div
+                    ></template
+                >
+                <template #change="{row}"
+                    ><div class="catalog-cell"
+                        ><strong>{{ row.action_label }}</strong
+                        ><small>{{ logSummary(row) }}</small></div
+                    ></template
+                >
+                <template #action="{row}"
+                    ><el-button link type="primary" @click="selectedLog=row;logVisible=true"
+                        >查看变更</el-button
+                    ></template
+                >
             </HsxTable>
-            <div class="catalog-pagination"><HsxPagination :current-page="logPage" :page-size="20" :total="logTotal" :disabled="logsLoading" @change="changeLogPage" /></div>
+            <div class="catalog-pagination"
+                ><HsxPagination
+                    :current-page="logPage"
+                    :page-size="20"
+                    :total="logTotal"
+                    :disabled="logsLoading"
+                    @change="changeLogPage"
+            /></div>
         </template>
     </HsxDrawer>
-    <el-dialog v-model="editing" :title="editingId ? '编辑目录选项' : '新增目录选项'" width="min(600px, 94vw)" append-to-body :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving" :before-close="closeEditor">
-        <el-alert v-if="itemError" :title="itemError" type="error" :closable="false" show-icon class="lead-error-banner" />
+    <el-dialog
+        v-model="editing"
+        :title="editingId ? '编辑目录选项' : '新增目录选项'"
+        width="min(600px, 94vw)"
+        append-to-body
+        :close-on-click-modal="false"
+        :close-on-press-escape="!saving"
+        :show-close="!saving"
+        :before-close="closeEditor"
+    >
+        <el-alert
+            v-if="itemError"
+            :title="itemError"
+            type="error"
+            :closable="false"
+            show-icon
+            class="lead-error-banner"
+        />
         <el-form label-position="top" :disabled="saving" @submit.prevent>
-            <el-form-item label="名称 / 型号" required><el-input v-model="itemForm.title" maxlength="200" placeholder="填写客户看到的名称" /></el-form-item>
-            <div class="catalog-form-grid"><el-form-item label="一级分类"><el-input v-model="itemForm.first" maxlength="100" placeholder="例如 苹果" /></el-form-item><el-form-item label="二级分类"><el-input v-model="itemForm.second" maxlength="100" placeholder="例如 18系列" /></el-form-item><el-form-item label="三级分类"><el-input v-model="itemForm.third" maxlength="100" placeholder="例如 iPhone 18 Pro" /></el-form-item><el-form-item label="品牌（选填）"><el-input v-model="itemForm.brand" maxlength="100" /></el-form-item></div>
-            <el-form-item label="别名（选填）"><el-input v-model="itemForm.aliases" type="textarea" :rows="2" placeholder="多个别名用分号分隔，最多20个" /></el-form-item>
-            <el-collapse class="catalog-help"><el-collapse-item title="稳定ID" name="id"><el-input v-model="itemForm.id" maxlength="100" :disabled="!!editingId" placeholder="新增时可留空，由系统生成" /><p class="lead-muted">保存后ID保持不变，修改名称和分类不会更换ID。</p></el-collapse-item></el-collapse>
+            <el-form-item label="名称 / 型号" required
+                ><el-input v-model="itemForm.title" maxlength="200" placeholder="填写客户看到的名称"
+            /></el-form-item>
+            <div class="catalog-form-grid"
+                ><el-form-item label="一级分类"
+                    ><el-input v-model="itemForm.first" maxlength="100" placeholder="例如 苹果" /></el-form-item
+                ><el-form-item label="二级分类"
+                    ><el-input v-model="itemForm.second" maxlength="100" placeholder="例如 18系列" /></el-form-item
+                ><el-form-item label="三级分类"
+                    ><el-input
+                        v-model="itemForm.third"
+                        maxlength="100"
+                        placeholder="例如 iPhone 18 Pro" /></el-form-item
+                ><el-form-item label="品牌（选填）"><el-input v-model="itemForm.brand" maxlength="100" /></el-form-item
+            ></div>
+            <el-form-item label="别名（选填）"
+                ><el-input
+                    v-model="itemForm.aliases"
+                    type="textarea"
+                    :rows="2"
+                    placeholder="多个别名用分号分隔，最多20个"
+            /></el-form-item>
+            <el-collapse class="catalog-help"
+                ><el-collapse-item title="稳定ID" name="id"
+                    ><el-input
+                        v-model="itemForm.id"
+                        maxlength="100"
+                        :disabled="!!editingId"
+                        placeholder="新增时可留空，由系统生成"
+                    /><p class="lead-muted">保存后ID保持不变，修改名称和分类不会更换ID。</p></el-collapse-item
+                ></el-collapse
+            >
         </el-form>
-        <template #footer><el-button :disabled="saving" @click="closeEditor()">取消</el-button><el-button type="primary" :loading="saving" @click="saveItem">保存选项</el-button></template>
+        <template #footer
+            ><el-button :disabled="saving" @click="closeEditor()">取消</el-button
+            ><el-button type="primary" :loading="saving" @click="saveItem">保存选项</el-button></template
+        >
     </el-dialog>
     <el-dialog v-model="logVisible" title="目录变更详情" width="min(760px, 94vw)" append-to-body>
-        <div class="catalog-log-meta">{{ selectedLog.operator_name }} · {{ displayTime(selectedLog.create_time) }} · {{ selectedLog.action_label }}</div>
-        <template v-if="selectedLog.action==='replaced'"><p class="catalog-scope">{{ logSummary(selectedLog) }}</p><p v-if="selectedLog.detail?.changes_truncated" class="lead-muted">以下为前20项变更样例，数量统计包含本次全部变更。</p><div v-for="(change,index) in selectedLog.detail?.changes||[]" :key="index" class="catalog-log-change"><strong>{{ changeLabels[change.action] || change.action }}</strong><div class="catalog-change-grid"><section><span class="lead-muted">修改前</span><p>{{ itemDescription(change.before) }}</p></section><section><span class="lead-muted">修改后</span><p>{{ itemDescription(change.after) }}</p></section></div></div></template>
-        <div v-else class="catalog-change-grid"><section><h4>修改前</h4><p>{{ itemDescription(selectedLog.detail?.before) }}</p></section><section><h4>修改后</h4><p>{{ itemDescription(selectedLog.detail?.after) }}</p></section></div>
+        <div class="catalog-log-meta"
+            >{{ selectedLog.operator_name }} · {{ displayTime(selectedLog.create_time) }} ·
+            {{ selectedLog.action_label }}</div
+        >
+        <template v-if="selectedLog.action==='replaced'"
+            ><p class="catalog-scope">{{ logSummary(selectedLog) }}</p
+            ><p v-if="selectedLog.detail?.changes_truncated" class="lead-muted"
+                >以下为前20项变更样例，数量统计包含本次全部变更。</p
+            ><div v-for="(change,index) in selectedLog.detail?.changes||[]" :key="index" class="catalog-log-change"
+                ><strong>{{ changeLabels[change.action] || change.action }}</strong
+                ><div class="catalog-change-grid"
+                    ><section
+                        ><span class="lead-muted">修改前</span><p>{{ itemDescription(change.before) }}</p></section
+                    ><section
+                        ><span class="lead-muted">修改后</span><p>{{ itemDescription(change.after) }}</p></section
+                    ></div
+                ></div
+            ></template
+        >
+        <div v-else class="catalog-change-grid"
+            ><section
+                ><h4>修改前</h4><p>{{ itemDescription(selectedLog.detail?.before) }}</p></section
+            ><section
+                ><h4>修改后</h4><p>{{ itemDescription(selectedLog.detail?.after) }}</p></section
+            ></div
+        >
         <template #footer><el-button @click="logVisible=false">关闭</el-button></template>
     </el-dialog>
 </template>

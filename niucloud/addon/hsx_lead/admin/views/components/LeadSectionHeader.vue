@@ -1,6 +1,10 @@
 <template>
     <header class="lead-page-title lead-section-header">
-        <div class="lead-section-header__copy"><h2>{{ title }}</h2><p v-if="description">{{ description }}</p><slot name="hint" /></div>
+        <div class="lead-section-header__copy"
+            ><h2>{{ title }}</h2
+            ><p v-if="description">{{ description }}</p
+            ><slot name="hint"
+        /></div>
         <div v-if="$slots.default" class="lead-actions lead-section-header__actions"><slot /></div>
     </header>
 </template>

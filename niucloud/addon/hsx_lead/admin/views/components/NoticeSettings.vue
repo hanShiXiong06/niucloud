@@ -1,5 +1,12 @@
 <template>
-    <HsxDrawer v-model="visible" title="商户协作通知" subtitle="使用牛云通知渠道；交付记录始终保留在商户工作台，不以消息送达代替业务状态。" size="lg" :body-loading="loading" :confirm-loading="saving">
+    <HsxDrawer
+        v-model="visible"
+        title="商户协作通知"
+        subtitle="使用牛云通知渠道；交付记录始终保留在商户工作台，不以消息送达代替业务状态。"
+        size="lg"
+        :body-loading="loading"
+        :confirm-loading="saving"
+    >
         <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" class="lead-error-banner" />
         <el-tabs v-model="channel" class="notice-tabs">
             <el-tab-pane label="小程序" name="weapp" />
@@ -7,62 +14,230 @@
             <el-tab-pane label="短信" name="sms" />
         </el-tabs>
         <div class="notice-channel-summary">
-            <div><strong>{{ channelName }}</strong><p class="lead-muted">{{ currentSetting.message || channelHelp }}</p></div>
+            <div
+                ><strong>{{ channelName }}</strong
+                ><p class="lead-muted">{{ currentSetting.message || channelHelp }}</p></div
+            >
             <el-button @click="openFramework(channel)">打开框架配置</el-button>
         </div>
         <template v-if="channel !== 'sms'">
-            <el-alert :title="channel === 'wechat' ? '先在本站公众号核对真实模板，再登记下面的字段映射；保存后到框架获取本站模板并开启。商户会员还需关注并绑定同一公众号身份。' : '从本站微信官方模板库选择类目、标题和真实关键词，核对变量后保存映射；再到框架获取并开启，商户仍需主动订阅。不会自动启用或发送。'" type="info" :closable="false" show-icon class="lead-banner" />
+            <el-alert
+                :title="channel === 'wechat' ? '先在本站公众号核对真实模板，再登记下面的字段映射；保存后到框架获取本站模板并开启。商户会员还需关注并绑定同一公众号身份。' : '从本站微信官方模板库选择类目、标题和真实关键词，核对变量后保存映射；再到框架获取并开启，商户仍需主动订阅。不会自动启用或发送。'"
+                type="info"
+                :closable="false"
+                show-icon
+                class="lead-banner"
+            />
             <el-collapse class="notice-phases">
                 <el-collapse-item v-for="item in activeTemplates" :key="channel + item.phase" :name="item.phase">
-                    <template #title><div class="notice-phase-heading"><strong>{{ item.name || phases[item.phase] }}</strong><el-tag size="small" :type="channel === 'weapp' && !item.configured ? 'warning' : item.enabled ? 'success' : 'info'">{{ channel === 'weapp' && !item.configured ? '待核对模板' : item.enabled ? '框架已开启' : item.configured ? '待框架配置' : '未配置映射' }}</el-tag><el-tag v-if="isDirty(item, channel)" size="small" type="warning">未保存</el-tag></div></template>
-                    <p class="lead-muted">{{ item.message || '模板消息仅包含工单提示，不包含客户姓名、电话和地址。' }}</p>
+                    <template #title
+                        ><div class="notice-phase-heading"
+                            ><strong>{{ item.name || phases[item.phase] }}</strong
+                            ><el-tag
+                                size="small"
+                                :type="channel === 'weapp' && !item.configured ? 'warning' : item.enabled ? 'success' : 'info'"
+                                >{{ channel === 'weapp' && !item.configured ? '待核对模板' : item.enabled ? '框架已开启' : item.configured ? '待框架配置' : '未配置映射' }}</el-tag
+                            ><el-tag v-if="isDirty(item, channel)" size="small" type="warning">未保存</el-tag></div
+                        ></template
+                    >
+                    <p
+                        class="lead-muted"
+                        >{{ item.message || '模板消息仅包含工单提示，不包含客户姓名、电话和地址。' }}</p
+                    >
                     <template v-if="channel === 'weapp'">
-                        <WeappNoticeTemplatePicker :can-edit="canEdit && !saving && !loading" :variables="variables" :scene-name="item.name || phases[item.phase]" @select="applyWeappSelection(item, $event)" />
+                        <WeappNoticeTemplatePicker
+                            :can-edit="canEdit && !saving && !loading"
+                            :variables="variables"
+                            :scene-name="item.name || phases[item.phase]"
+                            @select="applyWeappSelection(item, $event)"
+                        />
                         <div v-if="item.tid" class="notice-selected-template">
-                            <strong>当前草稿：公共模板 {{ item.tid }}</strong><p class="lead-muted">关键词 {{ item.kid_list_text || '尚未选择' }} · {{ item.scene_desc || '尚未填写使用场景' }}</p>
-                            <div v-for="(field, index) in item.fields" :key="index" class="notice-mapping-preview"><span>{{ field.label || '未命名关键词' }} <code>{{ field.keyword }}</code></span><span>→ {{ variables.find(variable => variable.key === field.variable)?.label || field.variable || '未映射' }}</span></div>
+                            <strong>当前草稿：公共模板 {{ item.tid }}</strong
+                            ><p class="lead-muted"
+                                >关键词 {{ item.kid_list_text || '尚未选择' }} ·
+                                {{ item.scene_desc || '尚未填写使用场景' }}</p
+                            >
+                            <div v-for="(field, index) in item.fields" :key="index" class="notice-mapping-preview"
+                                ><span
+                                    >{{ field.label || '未命名关键词' }} <code>{{ field.keyword }}</code></span
+                                ><span
+                                    >→
+                                    {{ variables.find(variable => variable.key === field.variable)?.label || field.variable || '未映射' }}</span
+                                ></div
+                            >
                         </div>
                     </template>
                     <el-form label-position="top" class="lead-form" :disabled="saving || !canEdit">
-                        <el-collapse v-if="channel === 'weapp'" class="notice-advanced"><el-collapse-item title="高级映射（保留已有配置，用于异常核对）" name="advanced">
-                            <el-alert title="建议通过上方官方模板库选择。此处保留原手工映射供已有配置或异常核对，不会验证为微信已获取模板。" type="warning" :closable="false" class="lead-banner" />
-                            <el-form-item label="真实微信公共模板编号（tid）"><el-input v-model.trim="item.tid" placeholder="从本站小程序模板库核对，不填写私有模板 ID" @input="item.confirmed = false" /></el-form-item>
-                            <el-form-item label="关键词 ID 列表（kid_list）"><el-input v-model="item.kid_list_text" placeholder="填写该模板实际提供的关键词 ID，以逗号分隔" @input="item.confirmed = false" /></el-form-item>
-                            <el-form-item label="使用场景"><el-input v-model="item.scene_desc" maxlength="100" @input="item.confirmed = false" /></el-form-item>
-                            <el-form-item label="真实关键词与允许变量">
-                                <div v-for="(field, index) in item.fields" :key="index" class="notice-field-row">
-                                    <el-input v-model="field.label" aria-label="关键词名称" placeholder="真实关键词名称" maxlength="30" @input="item.confirmed = false" />
-                                    <el-input v-model="field.keyword" aria-label="关键词字段" placeholder="如 thing1，以实际模板为准" maxlength="40" @input="item.confirmed = false" />
-                                    <el-select v-model="field.variable" aria-label="通知变量" placeholder="选择匹配字段类型的通知变量" @change="item.confirmed = false"><el-option v-for="variable in weappVariableOptions(field)" :key="variable.key" :label="variable.label" :value="variable.key" /></el-select>
-                                    <el-button link type="danger" @click="item.fields.splice(index, 1); item.confirmed = false">移除</el-button>
-                                </div>
-                                <el-button link type="primary" :disabled="item.fields.length >= 10" @click="item.fields.push({ label: '', keyword: '', variable: '' }); item.confirmed = false">添加关键词映射（最多10项）</el-button>
-                            </el-form-item>
-                        </el-collapse-item></el-collapse>
+                        <el-collapse v-if="channel === 'weapp'" class="notice-advanced"
+                            ><el-collapse-item title="高级映射（保留已有配置，用于异常核对）" name="advanced">
+                                <el-alert
+                                    title="建议通过上方官方模板库选择。此处保留原手工映射供已有配置或异常核对，不会验证为微信已获取模板。"
+                                    type="warning"
+                                    :closable="false"
+                                    class="lead-banner"
+                                />
+                                <el-form-item label="真实微信公共模板编号（tid）"
+                                    ><el-input
+                                        v-model.trim="item.tid"
+                                        placeholder="从本站小程序模板库核对，不填写私有模板 ID"
+                                        @input="item.confirmed = false"
+                                /></el-form-item>
+                                <el-form-item label="关键词 ID 列表（kid_list）"
+                                    ><el-input
+                                        v-model="item.kid_list_text"
+                                        placeholder="填写该模板实际提供的关键词 ID，以逗号分隔"
+                                        @input="item.confirmed = false"
+                                /></el-form-item>
+                                <el-form-item label="使用场景"
+                                    ><el-input
+                                        v-model="item.scene_desc"
+                                        maxlength="100"
+                                        @input="item.confirmed = false"
+                                /></el-form-item>
+                                <el-form-item label="真实关键词与允许变量">
+                                    <div v-for="(field, index) in item.fields" :key="index" class="notice-field-row">
+                                        <el-input
+                                            v-model="field.label"
+                                            aria-label="关键词名称"
+                                            placeholder="真实关键词名称"
+                                            maxlength="30"
+                                            @input="item.confirmed = false"
+                                        />
+                                        <el-input
+                                            v-model="field.keyword"
+                                            aria-label="关键词字段"
+                                            placeholder="如 thing1，以实际模板为准"
+                                            maxlength="40"
+                                            @input="item.confirmed = false"
+                                        />
+                                        <el-select
+                                            v-model="field.variable"
+                                            aria-label="通知变量"
+                                            placeholder="选择匹配字段类型的通知变量"
+                                            @change="item.confirmed = false"
+                                            ><el-option
+                                                v-for="variable in weappVariableOptions(field)"
+                                                :key="variable.key"
+                                                :label="variable.label"
+                                                :value="variable.key"
+                                        /></el-select>
+                                        <el-button
+                                            link
+                                            type="danger"
+                                            @click="item.fields.splice(index, 1); item.confirmed = false"
+                                            >移除</el-button
+                                        >
+                                    </div>
+                                    <el-button
+                                        link
+                                        type="primary"
+                                        :disabled="item.fields.length >= 10"
+                                        @click="item.fields.push({ label: '', keyword: '', variable: '' }); item.confirmed = false"
+                                        >添加关键词映射（最多10项）</el-button
+                                    >
+                                </el-form-item>
+                            </el-collapse-item></el-collapse
+                        >
                         <template v-else>
-                            <el-form-item label="公众号模板库编号（temp_key）"><el-input v-model.trim="item.temp_key" placeholder="按本站公众号真实模板库编号填写，不编造默认值" /></el-form-item>
+                            <el-form-item label="公众号模板库编号（temp_key）"
+                                ><el-input
+                                    v-model.trim="item.temp_key"
+                                    placeholder="按本站公众号真实模板库编号填写，不编造默认值"
+                            /></el-form-item>
                             <el-form-item label="真实关键词与允许变量">
                                 <div v-for="(field, index) in item.fields" :key="index" class="notice-field-row">
-                                    <el-input v-model="field.label" aria-label="关键词名称" placeholder="真实关键词名称" maxlength="30" />
-                                    <el-input v-model="field.keyword" aria-label="关键词字段" placeholder="如 keyword1，以实际模板为准" maxlength="40" />
-                                    <el-select v-model="field.variable" aria-label="通知变量" placeholder="选择通知变量"><el-option v-for="variable in variables" :key="variable.key" :label="variable.label" :value="variable.key" /></el-select>
+                                    <el-input
+                                        v-model="field.label"
+                                        aria-label="关键词名称"
+                                        placeholder="真实关键词名称"
+                                        maxlength="30"
+                                    />
+                                    <el-input
+                                        v-model="field.keyword"
+                                        aria-label="关键词字段"
+                                        placeholder="如 keyword1，以实际模板为准"
+                                        maxlength="40"
+                                    />
+                                    <el-select v-model="field.variable" aria-label="通知变量" placeholder="选择通知变量"
+                                        ><el-option
+                                            v-for="variable in variables"
+                                            :key="variable.key"
+                                            :label="variable.label"
+                                            :value="variable.key"
+                                    /></el-select>
                                     <el-button link type="danger" @click="item.fields.splice(index, 1)">移除</el-button>
                                 </div>
-                                <el-button link type="primary" @click="item.fields.push({ label: '', keyword: '', variable: '' })">添加关键词映射</el-button>
+                                <el-button
+                                    link
+                                    type="primary"
+                                    @click="item.fields.push({ label: '', keyword: '', variable: '' })"
+                                    >添加关键词映射</el-button
+                                >
                             </el-form-item>
                         </template>
-                        <div class="notice-phase-footer"><el-checkbox v-model="item.confirmed">我已核对本阶段的真实模板与关键词</el-checkbox><el-button link type="danger" @click="clearPhase(item)">清空本阶段映射</el-button></div>
+                        <div class="notice-phase-footer"
+                            ><el-checkbox v-model="item.confirmed">我已核对本阶段的真实模板与关键词</el-checkbox
+                            ><el-button link type="danger" @click="clearPhase(item)">清空本阶段映射</el-button></div
+                        >
                     </el-form>
                 </el-collapse-item>
             </el-collapse>
-            <el-empty v-if="!loading && !activeTemplates.length && !error" description="尚未返回通知场景，请刷新后重试" :image-size="70" />
+            <el-empty
+                v-if="!loading && !activeTemplates.length && !error"
+                description="尚未返回通知场景，请刷新后重试"
+                :image-size="70"
+            />
         </template>
         <template v-else>
-            <div class="lead-card notice-sms-card"><h3>沿用框架短信设置，不另建一套发送服务</h3><ol><li>在“短信管理”配置本站短信服务商与真实模板。</li><li>在“通知设置”找到“商户新工单提醒”和“商户工单处理结果提醒”，配置短信内容并开启。</li><li>商户必须绑定本站会员，且该会员有有效手机号。短信按服务商规则计费。</li></ol><div class="lead-actions"><el-button type="primary" @click="openFramework('sms')">短信服务商配置</el-button><el-button @click="openFramework('notice')">通知场景与开关</el-button><el-button @click="openFramework('sms_records')">查看短信记录</el-button></div></div>
-            <el-descriptions v-if="currentSetting.phases?.length" :column="1" border><el-descriptions-item v-for="item in currentSetting.phases" :key="item.phase" :label="phases[item.phase]">{{ item.message || item.status || (item.enabled ? '已开启，请核对真实投递记录' : '尚未开启') }}</el-descriptions-item></el-descriptions>
+            <div class="lead-card notice-sms-card"
+                ><h3>沿用框架短信设置，不另建一套发送服务</h3
+                ><ol
+                    ><li>在“短信管理”配置本站短信服务商与真实模板。</li
+                    ><li>在“通知设置”找到“商户新工单提醒”和“商户工单处理结果提醒”，配置短信内容并开启。</li
+                    ><li>商户必须绑定本站会员，且该会员有有效手机号。短信按服务商规则计费。</li></ol
+                ><div class="lead-actions"
+                    ><el-button type="primary" @click="openFramework('sms')">短信服务商配置</el-button
+                    ><el-button @click="openFramework('notice')">通知场景与开关</el-button
+                    ><el-button @click="openFramework('sms_records')">查看短信记录</el-button></div
+                ></div
+            >
+            <el-descriptions v-if="currentSetting.phases?.length" :column="1" border
+                ><el-descriptions-item
+                    v-for="item in currentSetting.phases"
+                    :key="item.phase"
+                    :label="phases[item.phase]"
+                    >{{ item.message || item.status || (item.enabled ? '已开启，请核对真实投递记录' : '尚未开启') }}</el-descriptions-item
+                ></el-descriptions
+            >
         </template>
-        <el-collapse class="notice-extra"><el-collapse-item title="企业微信与站内待办说明"><p class="lead-muted">当前商户使用本站会员身份。企业微信通知面向已绑定的员工身份，不能把商户会员当作员工直接发送；本页不提供无绑定关系的企微开关。</p><p class="lead-muted">工单本身就是商户工作台的站内待办，目前不是独立站内信。配置齐全、已入队或框架有记录，都不等于客户已经收到通知。</p></el-collapse-item></el-collapse>
-        <template #footer><div class="notice-footer"><span class="lead-muted">{{ channel === 'sms' ? '短信在框架配置，本页不重复保存' : !canEdit ? '当前账号仅可查看通知配置' : changedTemplates.length ? '当前渠道有 ' + changedTemplates.length + ' 个阶段待保存；其他渠道不会被覆盖' : '当前渠道没有待保存修改' }}</span><div class="lead-actions"><el-button :disabled="saving" @click="visible = false">关闭</el-button><el-button :loading="loading" :disabled="saving" @click="load">刷新状态</el-button><el-button v-if="channel !== 'sms' && canEdit" type="primary" :loading="saving" :disabled="loading || !!error || !changedTemplates.length" @click="save">保存当前渠道映射</el-button></div></div></template>
+        <el-collapse class="notice-extra"
+            ><el-collapse-item title="企业微信与站内待办说明"
+                ><p class="lead-muted"
+                    >当前商户使用本站会员身份。企业微信通知面向已绑定的员工身份，不能把商户会员当作员工直接发送；本页不提供无绑定关系的企微开关。</p
+                ><p class="lead-muted"
+                    >工单本身就是商户工作台的站内待办，目前不是独立站内信。配置齐全、已入队或框架有记录，都不等于客户已经收到通知。</p
+                ></el-collapse-item
+            ></el-collapse
+        >
+        <template #footer
+            ><div class="notice-footer"
+                ><span
+                    class="lead-muted"
+                    >{{ channel === 'sms' ? '短信在框架配置，本页不重复保存' : !canEdit ? '当前账号仅可查看通知配置' : changedTemplates.length ? '当前渠道有 ' + changedTemplates.length + ' 个阶段待保存；其他渠道不会被覆盖' : '当前渠道没有待保存修改' }}</span
+                ><div class="lead-actions"
+                    ><el-button :disabled="saving" @click="visible = false">关闭</el-button
+                    ><el-button :loading="loading" :disabled="saving" @click="load">刷新状态</el-button
+                    ><el-button
+                        v-if="channel !== 'sms' && canEdit"
+                        type="primary"
+                        :loading="saving"
+                        :disabled="loading || !!error || !changedTemplates.length"
+                        @click="save"
+                        >保存当前渠道映射</el-button
+                    ></div
+                ></div
+            ></template
+        >
     </HsxDrawer>
 </template>
 <script setup lang="ts">

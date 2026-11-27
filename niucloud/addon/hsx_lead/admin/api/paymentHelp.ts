@@ -4,4 +4,5 @@ export type PaymentHelpSettings = { enabled: boolean; title: string; content: st
 const endpoint = 'hsx_lead/cooperation/config'
 const quiet = { showErrorMessage: false }
 export const getPaymentHelpSettings = () => request.get(endpoint, { ...quiet, params: { section: 'payment_help' } })
-export const savePaymentHelpSettings = (data: PaymentHelpSettings) => request.put(endpoint, { ...data, section: 'payment_help' }, quiet)
+export const savePaymentHelpSettings = (data: PaymentHelpSettings) =>
+    request.put(endpoint, { ...data, section: 'payment_help' }, quiet)

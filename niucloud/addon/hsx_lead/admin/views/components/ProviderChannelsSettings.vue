@@ -1,15 +1,81 @@
 <template>
-    <HsxDrawer v-model="visible" title="ERP 登录渠道" subtitle="设置商户看到的渠道名称及本站开关，不修改 ERP 账号密码。" size="md" :body-loading="loading" :confirm-loading="saving" :before-close="beforeClose">
+    <HsxDrawer
+        v-model="visible"
+        title="ERP 登录渠道"
+        subtitle="设置商户看到的渠道名称及本站开关，不修改 ERP 账号密码。"
+        size="md"
+        :body-loading="loading"
+        :confirm-loading="saving"
+        :before-close="beforeClose"
+    >
         <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="lead-error-banner" />
-        <el-alert title="关闭渠道会同时暂停该渠道已有连接的采集" :description="policy || defaultPolicy" type="info" :closable="false" show-icon class="lead-banner" />
+        <el-alert
+            title="关闭渠道会同时暂停该渠道已有连接的采集"
+            :description="policy || defaultPolicy"
+            type="info"
+            :closable="false"
+            show-icon
+            class="lead-banner"
+        />
         <HsxTable :columns="columns" :data="rows" row-key="key" empty-text="暂无可管理的 ERP 渠道">
-            <template #channel="{ row }"><div class="lead-cell lead-channel-name"><el-input v-model="row.display_name" maxlength="24" show-word-limit :disabled="!canEdit || loading || saving || awaitingReadback" :aria-label="`${row.name}的商户端展示名称`" placeholder="填写商户端展示名称" /><details class="lead-channel-technical"><summary>接口识别信息</summary><span>{{ row.technical_name }} · {{ row.key }}</span><small>{{ row.renewal?.automatic === true ? '支持账号密码自动续登' : '按渠道要求完成登录验证' }}</small></details></div></template>
-            <template #connections="{ row }"><div class="lead-cell"><span>{{ row.connection_count }} 个已接入连接</span><small>{{ row.automatic_sync_count }} 个原本开启自动同步</small></div></template>
-            <template #enabled="{ row }"><el-switch v-model="row.enabled" :disabled="!canEdit || loading || saving || awaitingReadback" :aria-label="`${row.name}登录渠道`" /><span class="lead-channel-state">{{ row.enabled ? '开启' : '关闭' }}</span></template>
+            <template #channel="{ row }"
+                ><div class="lead-cell lead-channel-name"
+                    ><el-input
+                        v-model="row.display_name"
+                        maxlength="24"
+                        show-word-limit
+                        :disabled="!canEdit || loading || saving || awaitingReadback"
+                        :aria-label="`${row.name}的商户端展示名称`"
+                        placeholder="填写商户端展示名称"
+                    /><details class="lead-channel-technical"
+                        ><summary>接口识别信息</summary><span>{{ row.technical_name }} · {{ row.key }}</span
+                        ><small
+                            >{{ row.renewal?.automatic === true ? '支持账号密码自动续登' : '按渠道要求完成登录验证' }}</small
+                        ></details
+                    ></div
+                ></template
+            >
+            <template #connections="{ row }"
+                ><div class="lead-cell"
+                    ><span>{{ row.connection_count }} 个已接入连接</span
+                    ><small>{{ row.automatic_sync_count }} 个原本开启自动同步</small></div
+                ></template
+            >
+            <template #enabled="{ row }"
+                ><el-switch
+                    v-model="row.enabled"
+                    :disabled="!canEdit || loading || saving || awaitingReadback"
+                    :aria-label="`${row.name}登录渠道`"
+                /><span class="lead-channel-state">{{ row.enabled ? '开启' : '关闭' }}</span></template
+            >
         </HsxTable>
-        <el-alert v-if="closing.length" :title="`本次将关闭：${closing.map(item => item.display_name).join('、')}`" :description="`涉及 ${impact.connections} 个连接，其中 ${impact.automatic} 个原本开启自动同步。保存后暂停采集，历史数据与已保存账号仍保留。`" type="warning" show-icon :closable="false" class="lead-channel-impact" />
-        <p v-if="!rows.some(item => item.enabled) && ready" class="lead-muted">全部关闭后，商户将没有可新增接入的 ERP 渠道；仍可查看历史资料。</p>
-        <template #footer><el-button :disabled="saving" @click="reload">{{ awaitingReadback ? '核对保存结果' : '重新读取' }}</el-button><el-button :disabled="saving" @click="requestClose">关闭</el-button><el-button v-if="canEdit" type="primary" :loading="saving" :disabled="loading || !ready || !dirty || awaitingReadback" @click="save">保存渠道设置</el-button></template>
+        <el-alert
+            v-if="closing.length"
+            :title="`本次将关闭：${closing.map(item => item.display_name).join('、')}`"
+            :description="`涉及 ${impact.connections} 个连接，其中 ${impact.automatic} 个原本开启自动同步。保存后暂停采集，历史数据与已保存账号仍保留。`"
+            type="warning"
+            show-icon
+            :closable="false"
+            class="lead-channel-impact"
+        />
+        <p v-if="!rows.some(item => item.enabled) && ready" class="lead-muted"
+            >全部关闭后，商户将没有可新增接入的 ERP 渠道；仍可查看历史资料。</p
+        >
+        <template #footer
+            ><el-button
+                :disabled="saving"
+                @click="reload"
+                >{{ awaitingReadback ? '核对保存结果' : '重新读取' }}</el-button
+            ><el-button :disabled="saving" @click="requestClose">关闭</el-button
+            ><el-button
+                v-if="canEdit"
+                type="primary"
+                :loading="saving"
+                :disabled="loading || !ready || !dirty || awaitingReadback"
+                @click="save"
+                >保存渠道设置</el-button
+            ></template
+        >
     </HsxDrawer>
 </template>
 <script setup lang="ts">

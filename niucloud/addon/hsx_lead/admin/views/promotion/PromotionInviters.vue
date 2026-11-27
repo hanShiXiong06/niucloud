@@ -2,26 +2,105 @@
     <section class="promotion-inviters" aria-label="推广人汇总">
         <div class="inviters-filter coop-surface">
             <form class="inviters-search" role="search" aria-label="搜索推广人" @submit.prevent="search">
-                <el-input v-model="query.keyword" clearable :prefix-icon="Search" placeholder="搜索推广人编号、姓名、手机号或 ID" aria-label="推广人搜索" @clear="search" />
-                <el-select v-model="query.role" clearable placeholder="全部推广身份" aria-label="推广人身份" @change="search"><el-option label="普通会员" value="normal" /><el-option label="服务商" value="provider" /></el-select>
-                <div class="inviters-search-actions"><el-button type="primary" native-type="submit" :loading="loading">查询</el-button><el-button :disabled="loading" @click="reset">重置</el-button></div>
+                <el-input
+                    v-model="query.keyword"
+                    clearable
+                    :prefix-icon="Search"
+                    placeholder="搜索推广人编号、姓名、手机号或 ID"
+                    aria-label="推广人搜索"
+                    @clear="search"
+                />
+                <el-select
+                    v-model="query.role"
+                    clearable
+                    placeholder="全部推广身份"
+                    aria-label="推广人身份"
+                    @change="search"
+                    ><el-option label="普通会员" value="normal" /><el-option label="服务商" value="provider"
+                /></el-select>
+                <div class="inviters-search-actions"
+                    ><el-button type="primary" native-type="submit" :loading="loading">查询</el-button
+                    ><el-button :disabled="loading" @click="reset">重置</el-button></div
+                >
             </form>
-            <div class="inviters-scope"><span>{{ loading ? '正在查询…' : error ? '读取失败，未返回统计' : `共 ${total} 位会员` }}</span><el-tooltip placement="top" effect="light" content="邀请和付费人数按当前直属关系统计；收益按原推广人累计，不会因更换邀请人转移。店员共享权益不算本人付费，已入账不代表已提现。"><el-button link type="info">统计说明</el-button></el-tooltip></div>
+            <div class="inviters-scope"
+                ><span>{{ loading ? '正在查询…' : error ? '读取失败，未返回统计' : `共 ${total} 位会员` }}</span
+                ><el-tooltip
+                    placement="top"
+                    effect="light"
+                    content="邀请和付费人数按当前直属关系统计；收益按原推广人累计，不会因更换邀请人转移。店员共享权益不算本人付费，已入账不代表已提现。"
+                    ><el-button link type="info">统计说明</el-button></el-tooltip
+                ></div
+            >
         </div>
-        <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="coop-error"><el-button link type="primary" @click="load">重新读取</el-button></el-alert>
+        <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="coop-error"
+            ><el-button link type="primary" @click="load">重新读取</el-button></el-alert
+        >
         <div class="coop-surface">
-            <HsxTable :columns="columns" :data="rows" :loading="loading" row-key="member_id" :empty-text="error ? '推广人汇总未加载，请重试' : hasFilters ? '没有符合条件的会员，可重置筛选后查看' : '暂无会员'">
-                <template #member="{row}"><div class="coop-cell inviters-person"><strong>{{ row.name || '本站会员' }}</strong><small>编号 {{ row.member_no || '尚未分配' }}</small><small v-if="row.mobile_masked">{{ row.mobile_masked }}</small></div></template>
-                <template #role="{row}"><el-tag size="small" :type="row.role==='provider'?'warning':'info'" effect="plain">{{ row.role==='provider'?'服务商':'普通会员' }}</el-tag></template>
-                <template #invites="{row}"><el-button link type="primary" class="inviters-number" @click="showRelations(row)">{{ count(row.direct_invite_count) }}<span>人</span></el-button></template>
-                <template #paid="{row}"><div class="coop-cell"><el-button link type="primary" class="inviters-number" @click="showRelations(row,true)">{{ count(row.paid_invitee_count) }}<span>人</span></el-button><small v-if="Number(row.review_invitee_count)>0">{{ row.review_invitee_count }} 人付费待核对</small></div></template>
-                <template #pending="{row}"><span class="inviters-money">{{ money(row.promotion?.pending) }}</span></template>
-                <template #settled="{row}"><div class="coop-cell"><strong class="inviters-money is-settled">{{ money(row.promotion?.settled) }}</strong><small v-if="row.promotion?.review_required">部分奖励记录待核对</small></div></template>
-                <template #held="{row}"><span class="inviters-money">{{ money(row.promotion?.held) }}</span></template>
-                <template #cancelled="{row}"><span class="inviters-money is-muted">{{ money(row.promotion?.cancelled) }}</span></template>
-                <template #actions="{row}"><el-button v-if="canViewRewards" link type="primary" @click="showRewards(row)">查看台账</el-button><span v-else class="coop-muted">仅关系查看权限</span></template>
+            <HsxTable
+                :columns="columns"
+                :data="rows"
+                :loading="loading"
+                row-key="member_id"
+                :empty-text="error ? '推广人汇总未加载，请重试' : hasFilters ? '没有符合条件的会员，可重置筛选后查看' : '暂无会员'"
+            >
+                <template #member="{row}"
+                    ><div class="coop-cell inviters-person"
+                        ><strong>{{ row.name || '本站会员' }}</strong
+                        ><small>编号 {{ row.member_no || '尚未分配' }}</small
+                        ><small v-if="row.mobile_masked">{{ row.mobile_masked }}</small></div
+                    ></template
+                >
+                <template #role="{row}"
+                    ><el-tag
+                        size="small"
+                        :type="row.role==='provider'?'warning':'info'"
+                        effect="plain"
+                        >{{ row.role==='provider'?'服务商':'普通会员' }}</el-tag
+                    ></template
+                >
+                <template #invites="{row}"
+                    ><el-button link type="primary" class="inviters-number" @click="showRelations(row)"
+                        >{{ count(row.direct_invite_count) }}<span>人</span></el-button
+                    ></template
+                >
+                <template #paid="{row}"
+                    ><div class="coop-cell"
+                        ><el-button link type="primary" class="inviters-number" @click="showRelations(row,true)"
+                            >{{ count(row.paid_invitee_count) }}<span>人</span></el-button
+                        ><small v-if="Number(row.review_invitee_count)>0"
+                            >{{ row.review_invitee_count }} 人付费待核对</small
+                        ></div
+                    ></template
+                >
+                <template #pending="{row}"
+                    ><span class="inviters-money">{{ money(row.promotion?.pending) }}</span></template
+                >
+                <template #settled="{row}"
+                    ><div class="coop-cell"
+                        ><strong class="inviters-money is-settled">{{ money(row.promotion?.settled) }}</strong
+                        ><small v-if="row.promotion?.review_required">部分奖励记录待核对</small></div
+                    ></template
+                >
+                <template #held="{row}"
+                    ><span class="inviters-money">{{ money(row.promotion?.held) }}</span></template
+                >
+                <template #cancelled="{row}"
+                    ><span class="inviters-money is-muted">{{ money(row.promotion?.cancelled) }}</span></template
+                >
+                <template #actions="{row}"
+                    ><el-button v-if="canViewRewards" link type="primary" @click="showRewards(row)">查看台账</el-button
+                    ><span v-else class="coop-muted">仅关系查看权限</span></template
+                >
             </HsxTable>
-            <div class="coop-pagination"><HsxPagination :current-page="query.page" :page-size="query.limit" :total="total" :disabled="loading" @change="changePage" /></div>
+            <div class="coop-pagination"
+                ><HsxPagination
+                    :current-page="query.page"
+                    :page-size="query.limit"
+                    :total="total"
+                    :disabled="loading"
+                    @change="changePage"
+            /></div>
         </div>
     </section>
 </template>

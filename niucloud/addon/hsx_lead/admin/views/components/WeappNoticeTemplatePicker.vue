@@ -1,49 +1,151 @@
 <template>
     <div class="weapp-template-picker">
-        <el-button type="primary" plain @click="open">{{ canEdit ? '从微信官方模板库选择' : '查看微信官方模板库' }}</el-button>
-        <p class="lead-muted">只读取本站小程序已开通类目的真实模板；应用后仅回填当前草稿，不获取私有模板、不启用或保存。</p>
-        <el-dialog v-model="visible" title="选择微信官方公共模板与关键词" width="min(920px, calc(100vw - 28px))" append-to-body :close-on-click-modal="false">
+        <el-button
+            type="primary"
+            plain
+            @click="open"
+            >{{ canEdit ? '从微信官方模板库选择' : '查看微信官方模板库' }}</el-button
+        >
+        <p class="lead-muted"
+            >只读取本站小程序已开通类目的真实模板；应用后仅回填当前草稿，不获取私有模板、不启用或保存。</p
+        >
+        <el-dialog
+            v-model="visible"
+            title="选择微信官方公共模板与关键词"
+            width="min(920px, calc(100vw - 28px))"
+            append-to-body
+            :close-on-click-modal="false"
+        >
             <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="picker-banner" />
             <div class="picker-category">
-                <el-select v-model="categoryId" aria-label="小程序服务类目" placeholder="先选择本站已开通的服务类目" :loading="categoryLoading" :disabled="categoryLoading" @change="changeCategory">
+                <el-select
+                    v-model="categoryId"
+                    aria-label="小程序服务类目"
+                    placeholder="先选择本站已开通的服务类目"
+                    :loading="categoryLoading"
+                    :disabled="categoryLoading"
+                    @change="changeCategory"
+                >
                     <el-option v-for="item in categories" :key="item.id" :label="item.name" :value="item.id" />
                 </el-select>
-                <el-button :loading="categoryLoading" :disabled="titleLoading || keywordLoading" @click="loadCategories">重新读取类目</el-button>
+                <el-button :loading="categoryLoading" :disabled="titleLoading || keywordLoading" @click="loadCategories"
+                    >重新读取类目</el-button
+                >
             </div>
-            <el-empty v-if="!categoryLoading && !categories.length" description="本站未返回可用类目，请核对小程序配置、服务类目和接口权限" :image-size="65" />
+            <el-empty
+                v-if="!categoryLoading && !categories.length"
+                description="本站未返回可用类目，请核对小程序配置、服务类目和接口权限"
+                :image-size="65"
+            />
             <div v-if="categoryId" class="picker-columns">
                 <section class="picker-titles" v-loading="titleLoading">
                     <h4>1. 选择模板标题</h4>
-                    <el-input v-model="titleFilter" aria-label="当前页模板标题搜索" placeholder="筛选当前页标题，可翻页继续查找" clearable />
+                    <el-input
+                        v-model="titleFilter"
+                        aria-label="当前页模板标题搜索"
+                        placeholder="筛选当前页标题，可翻页继续查找"
+                        clearable
+                    />
                     <p class="lead-muted">每页最多 {{ limit }} 条；标题筛选仅针对当前页。</p>
                     <div class="picker-title-list">
-                        <button v-for="item in filteredTitles" :key="item.tid" type="button" class="picker-title" :class="{ 'is-selected': selectedTitle?.tid === item.tid }" @click="loadKeywords(item)">
-                            <strong>{{ item.title }}</strong><span>公共模板 {{ item.tid }}</span>
+                        <button
+                            v-for="item in filteredTitles"
+                            :key="item.tid"
+                            type="button"
+                            class="picker-title"
+                            :class="{ 'is-selected': selectedTitle?.tid === item.tid }"
+                            @click="loadKeywords(item)"
+                        >
+                            <strong>{{ item.title }}</strong
+                            ><span>公共模板 {{ item.tid }}</span>
                         </button>
-                        <el-empty v-if="!titleLoading && !filteredTitles.length" :description="titles.length ? '当前页没有匹配标题，可清空筛选或翻页' : '此类目暂未返回公共模板'" :image-size="50" />
+                        <el-empty
+                            v-if="!titleLoading && !filteredTitles.length"
+                            :description="titles.length ? '当前页没有匹配标题，可清空筛选或翻页' : '此类目暂未返回公共模板'"
+                            :image-size="50"
+                        />
                     </div>
-                    <div class="picker-pagination"><el-button :disabled="titleLoading || start === 0" @click="loadTitles(start - limit)">上一页</el-button><span>第 {{ Math.floor(start / limit) + 1 }} 页 / 共 {{ total }} 条</span><el-button :disabled="titleLoading || start + limit >= total || start + limit > 9999" @click="loadTitles(start + limit)">下一页</el-button></div>
+                    <div class="picker-pagination"
+                        ><el-button :disabled="titleLoading || start === 0" @click="loadTitles(start - limit)"
+                            >上一页</el-button
+                        ><span>第 {{ Math.floor(start / limit) + 1 }} 页 / 共 {{ total }} 条</span
+                        ><el-button
+                            :disabled="titleLoading || start + limit >= total || start + limit > 9999"
+                            @click="loadTitles(start + limit)"
+                            >下一页</el-button
+                        ></div
+                    >
                 </section>
                 <section class="picker-keywords" v-loading="keywordLoading">
                     <h4>2. 选择真实关键词与通知变量</h4>
                     <template v-if="selectedTitle">
-                        <strong>{{ selectedTitle.title }}</strong><p class="lead-muted">公共模板 {{ selectedTitle.tid }}；勾选需要的关键词，最多 10 项。语义建议请逐项核对，变量不能重复。</p>
-                        <div v-for="item in keywords" :key="item.kid" class="picker-keyword" :class="{ 'is-unsupported': !item.supported }">
-                            <el-checkbox v-model="item.selected" :disabled="!canEdit || !item.supported || (!item.selected && selectedKeywords.length >= 10)" @change="keywordSelected(item)">{{ item.name }}（{{ item.rule || '未知类型' }} / {{ item.kid }}）</el-checkbox>
+                        <strong>{{ selectedTitle.title }}</strong
+                        ><p class="lead-muted"
+                            >公共模板 {{ selectedTitle.tid }}；勾选需要的关键词，最多 10
+                            项。语义建议请逐项核对，变量不能重复。</p
+                        >
+                        <div
+                            v-for="item in keywords"
+                            :key="item.kid"
+                            class="picker-keyword"
+                            :class="{ 'is-unsupported': !item.supported }"
+                        >
+                            <el-checkbox
+                                v-model="item.selected"
+                                :disabled="!canEdit || !item.supported || (!item.selected && selectedKeywords.length >= 10)"
+                                @change="keywordSelected(item)"
+                                >{{ item.name }}（{{ item.rule || '未知类型' }} / {{ item.kid }}）</el-checkbox
+                            >
                             <p v-if="item.example" class="lead-muted">官方示例：{{ item.example }}</p>
-                            <el-select v-if="item.supported" v-model="item.variable" aria-label="关键词通知变量" placeholder="核对或选择安全通知变量" :disabled="!canEdit || !item.selected">
-                                <el-option v-for="variable in variableOptions(item)" :key="variable.key" :label="variable.label" :value="variable.key" :disabled="selectedKeywords.some(row => row !== item && row.variable === variable.key)" />
+                            <el-select
+                                v-if="item.supported"
+                                v-model="item.variable"
+                                aria-label="关键词通知变量"
+                                placeholder="核对或选择安全通知变量"
+                                :disabled="!canEdit || !item.selected"
+                            >
+                                <el-option
+                                    v-for="variable in variableOptions(item)"
+                                    :key="variable.key"
+                                    :label="variable.label"
+                                    :value="variable.key"
+                                    :disabled="selectedKeywords.some(row => row !== item && row.variable === variable.key)"
+                                />
                             </el-select>
                             <p v-else class="picker-warning">此官方字段类型暂不支持安全映射，只展示，不可选择。</p>
                         </div>
-                        <el-empty v-if="!keywordLoading && !keywords.length" description="此模板未返回关键词，请重试或选择其他模板" :image-size="50" />
-                        <el-form label-position="top"><el-form-item label="使用场景（保存前仍需核对确认）"><el-input v-model="sceneDesc" maxlength="100" show-word-limit :disabled="!canEdit" /></el-form-item></el-form>
+                        <el-empty
+                            v-if="!keywordLoading && !keywords.length"
+                            description="此模板未返回关键词，请重试或选择其他模板"
+                            :image-size="50"
+                        />
+                        <el-form label-position="top"
+                            ><el-form-item label="使用场景（保存前仍需核对确认）"
+                                ><el-input
+                                    v-model="sceneDesc"
+                                    maxlength="100"
+                                    show-word-limit
+                                    :disabled="!canEdit" /></el-form-item
+                        ></el-form>
                         <p v-if="selectionError" class="picker-warning">{{ selectionError }}</p>
                     </template>
                     <el-empty v-else description="选择左侧标题后，再读取该模板的真实关键词" :image-size="65" />
                 </section>
             </div>
-            <template #footer><div class="picker-footer"><span class="lead-muted">不会保存配置、获取私有模板或发送消息</span><div><el-button @click="visible = false">取消</el-button><el-button type="primary" :disabled="!canEdit || categoryLoading || titleLoading || keywordLoading || !!selectionError" @click="applySelection">应用到当前草稿</el-button></div></div></template>
+            <template #footer
+                ><div class="picker-footer"
+                    ><span class="lead-muted">不会保存配置、获取私有模板或发送消息</span
+                    ><div
+                        ><el-button @click="visible = false">取消</el-button
+                        ><el-button
+                            type="primary"
+                            :disabled="!canEdit || categoryLoading || titleLoading || keywordLoading || !!selectionError"
+                            @click="applySelection"
+                            >应用到当前草稿</el-button
+                        ></div
+                    ></div
+                ></template
+            >
         </el-dialog>
     </div>
 </template>

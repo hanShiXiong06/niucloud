@@ -1,37 +1,171 @@
 <template>
-    <el-dialog v-model="visible" title="确认线下微信收款" width="min(520px, 94vw)" top="10vh" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy" :before-close="beforeClose" @closed="clearView">
-        <el-alert v-if="error" :title="error" type="warning" :closable="false" show-icon class="manual-receipt-notice"><template #default><el-button link :disabled="busy || loading" @click="read">核对原登记</el-button></template></el-alert>
-        <el-alert v-if="recoveredMessage" :title="recoveredMessage" type="info" :closable="false" show-icon class="manual-receipt-notice" />
+    <el-dialog
+        v-model="visible"
+        title="确认线下微信收款"
+        width="min(520px, 94vw)"
+        top="10vh"
+        :close-on-click-modal="false"
+        :close-on-press-escape="!busy"
+        :show-close="!busy"
+        :before-close="beforeClose"
+        @closed="clearView"
+    >
+        <el-alert v-if="error" :title="error" type="warning" :closable="false" show-icon class="manual-receipt-notice"
+            ><template #default
+                ><el-button link :disabled="busy || loading" @click="read">核对原登记</el-button></template
+            ></el-alert
+        >
+        <el-alert
+            v-if="recoveredMessage"
+            :title="recoveredMessage"
+            type="info"
+            :closable="false"
+            show-icon
+            class="manual-receipt-notice"
+        />
         <div v-loading="loading" class="manual-receipt-body">
             <template v-if="preview.order">
                 <el-descriptions :column="1" size="small" class="manual-receipt-summary">
                     <el-descriptions-item label="订单号">{{ preview.order.order_no }}</el-descriptions-item>
-                    <el-descriptions-item label="付款会员">{{ payer.name }}<span v-if="payer.no"> · UID：{{ payer.no }}</span><span v-else-if="payer.id"> · 会员ID：{{ payer.id }}</span></el-descriptions-item>
+                    <el-descriptions-item label="付款会员"
+                        >{{ payer.name }}<span v-if="payer.no"> · UID：{{ payer.no }}</span
+                        ><span v-else-if="payer.id"> · 会员ID：{{ payer.id }}</span></el-descriptions-item
+                    >
                     <el-descriptions-item label="付款手机号">{{ payer.mobile || '未登记' }}</el-descriptions-item>
-                    <el-descriptions-item label="订单应付"><strong>{{ coopMoney(orderAmount) }}</strong><span class="manual-receipt-purpose">{{ coopLabel(preview.order.purpose) }}</span></el-descriptions-item>
+                    <el-descriptions-item label="订单应付"
+                        ><strong>{{ coopMoney(orderAmount) }}</strong
+                        ><span
+                            class="manual-receipt-purpose"
+                            >{{ coopLabel(preview.order.purpose) }}</span
+                        ></el-descriptions-item
+                    >
                 </el-descriptions>
-                <el-alert v-if="isClosed" title="订单已关闭，不能确认收款、充值、重新开通或继续处理；不会新建或重开订单。" type="warning" :closable="false" show-icon class="manual-receipt-notice" />
+                <el-alert
+                    v-if="isClosed"
+                    title="订单已关闭，不能确认收款、充值、重新开通或继续处理；不会新建或重开订单。"
+                    type="warning"
+                    :closable="false"
+                    show-icon
+                    class="manual-receipt-notice"
+                />
                 <template v-if="receipt.id">
-                    <div class="manual-receipt-result"><el-tag :type="receipt.status==='posted'?'success':'warning'">{{ receipt.status_label || receiptStatus(receipt.status) }}</el-tag><strong>{{ coopMoney(receipt.amount) }}</strong></div>
-                    <el-alert :title="receipt.message || (receipt.status==='posted' ? '原收款处理记录已确认。' : '确认请求已记录，充值与本单支付结果待核对，请勿重复操作。')" :type="receipt.status==='posted'?'success':'warning'" :closable="false" show-icon class="manual-receipt-notice" />
+                    <div class="manual-receipt-result"
+                        ><el-tag
+                            :type="receipt.status==='posted'?'success':'warning'"
+                            >{{ receipt.status_label || receiptStatus(receipt.status) }}</el-tag
+                        ><strong>{{ coopMoney(receipt.amount) }}</strong></div
+                    >
+                    <el-alert
+                        :title="receipt.message || (receipt.status==='posted' ? '原收款处理记录已确认。' : '确认请求已记录，充值与本单支付结果待核对，请勿重复操作。')"
+                        :type="receipt.status==='posted'?'success':'warning'"
+                        :closable="false"
+                        show-icon
+                        class="manual-receipt-notice"
+                    />
                     <template v-if="isBalanceRecord && receipt.status==='posted'">
-                        <el-descriptions :column="1" border size="small"><el-descriptions-item label="线下来源">微信扫码收款（管理员确认）</el-descriptions-item><el-descriptions-item label="本次充值">{{ coopMoney(receipt.amount) }}</el-descriptions-item><el-descriptions-item label="本单支付">余额支付 {{ coopMoney(receipt.amount) }}</el-descriptions-item><el-descriptions-item label="可用余额">{{ coopMoney(receipt.balance_before) }} → {{ coopMoney(receipt.balance_after) }}</el-descriptions-item></el-descriptions>
+                        <el-descriptions :column="1" border size="small"
+                            ><el-descriptions-item label="线下来源">微信扫码收款（管理员确认）</el-descriptions-item
+                            ><el-descriptions-item
+                                label="本次充值"
+                                >{{ coopMoney(receipt.amount) }}</el-descriptions-item
+                            ><el-descriptions-item label="本单支付"
+                                >余额支付 {{ coopMoney(receipt.amount) }}</el-descriptions-item
+                            ><el-descriptions-item label="可用余额"
+                                >{{ coopMoney(receipt.balance_before) }} →
+                                {{ coopMoney(receipt.balance_after) }}</el-descriptions-item
+                            ></el-descriptions
+                        >
                     </template>
-                    <el-alert v-if="!isBalanceRecord" title="历史线下收款记录仅供核对，不会转换为当前余额流程再次充值。" type="info" :closable="false" show-icon class="manual-receipt-notice" />
-                    <el-collapse class="manual-receipt-ledger"><el-collapse-item title="查看处理记录" name="ledger"><el-descriptions :column="1" size="small"><el-descriptions-item :label="isBalanceRecord?'内部登记号':'历史凭证编号'">{{ receipt.registration_no || receipt.external_no || '尚未返回' }}</el-descriptions-item><el-descriptions-item v-if="receipt.received_at" label="登记时间">{{ coopTime(receipt.received_at) }}</el-descriptions-item><el-descriptions-item v-if="receipt.recharge_log_id" label="充值台账">#{{ receipt.recharge_log_id }}</el-descriptions-item><el-descriptions-item v-if="receipt.debit_log_id" label="支付台账">#{{ receipt.debit_log_id }}</el-descriptions-item></el-descriptions><p v-if="isBalanceRecord" class="manual-receipt-note">内部登记号用于系统核对，不是微信交易流水号。</p></el-collapse-item></el-collapse>
+                    <el-alert
+                        v-if="!isBalanceRecord"
+                        title="历史线下收款记录仅供核对，不会转换为当前余额流程再次充值。"
+                        type="info"
+                        :closable="false"
+                        show-icon
+                        class="manual-receipt-notice"
+                    />
+                    <el-collapse class="manual-receipt-ledger"
+                        ><el-collapse-item title="查看处理记录" name="ledger"
+                            ><el-descriptions :column="1" size="small"
+                                ><el-descriptions-item
+                                    :label="isBalanceRecord?'内部登记号':'历史凭证编号'"
+                                    >{{ receipt.registration_no || receipt.external_no || '尚未返回' }}</el-descriptions-item
+                                ><el-descriptions-item
+                                    v-if="receipt.received_at"
+                                    label="登记时间"
+                                    >{{ coopTime(receipt.received_at) }}</el-descriptions-item
+                                ><el-descriptions-item v-if="receipt.recharge_log_id" label="充值台账"
+                                    >#{{ receipt.recharge_log_id }}</el-descriptions-item
+                                ><el-descriptions-item v-if="receipt.debit_log_id" label="支付台账"
+                                    >#{{ receipt.debit_log_id }}</el-descriptions-item
+                                ></el-descriptions
+                            ><p v-if="isBalanceRecord" class="manual-receipt-note"
+                                >内部登记号用于系统核对，不是微信交易流水号。</p
+                            ></el-collapse-item
+                        ></el-collapse
+                    >
                 </template>
                 <template v-else-if="!isClosed">
-                    <el-alert :title="preview.message || '请先核实已实际收到线下微信款；确认后将充值至原付款会员余额，并立即用于本订单余额支付。'" type="info" :closable="false" show-icon class="manual-receipt-notice" />
-                    <el-form v-if="preview.can_confirm===true && canConfirm" ref="formRef" :model="form" :rules="rules" label-position="top" :disabled="busy || loading || readRequired || !!attempt" @submit.prevent>
-                        <el-form-item label="已实际收到的线下微信款（元）" prop="amount"><el-input v-model="form.amount" inputmode="decimal" maxlength="15"><template #prefix>¥</template></el-input></el-form-item>
-                        <el-alert v-if="amountMismatch" title="实收金额必须与订单应付金额一致；不一致时不充值、不扣款，也不调整订单价格。" type="warning" :closable="false" show-icon />
+                    <el-alert
+                        :title="preview.message || '请先核实已实际收到线下微信款；确认后将充值至原付款会员余额，并立即用于本订单余额支付。'"
+                        type="info"
+                        :closable="false"
+                        show-icon
+                        class="manual-receipt-notice"
+                    />
+                    <el-form
+                        v-if="preview.can_confirm===true && canConfirm"
+                        ref="formRef"
+                        :model="form"
+                        :rules="rules"
+                        label-position="top"
+                        :disabled="busy || loading || readRequired || !!attempt"
+                        @submit.prevent
+                    >
+                        <el-form-item label="已实际收到的线下微信款（元）" prop="amount"
+                            ><el-input v-model="form.amount" inputmode="decimal" maxlength="15"
+                                ><template #prefix>¥</template></el-input
+                            ></el-form-item
+                        >
+                        <el-alert
+                            v-if="amountMismatch"
+                            title="实收金额必须与订单应付金额一致；不一致时不充值、不扣款，也不调整订单价格。"
+                            type="warning"
+                            :closable="false"
+                            show-icon
+                        />
                     </el-form>
-                    <el-alert v-if="!canConfirm" title="当前账号仅可查看，不能确认收款或操作会员余额。" type="info" :closable="false" show-icon class="manual-receipt-notice" />
+                    <el-alert
+                        v-if="!canConfirm"
+                        title="当前账号仅可查看，不能确认收款或操作会员余额。"
+                        type="info"
+                        :closable="false"
+                        show-icon
+                        class="manual-receipt-notice"
+                    />
                 </template>
             </template>
             <el-empty v-else-if="!loading && !error" description="请先读取原订单" :image-size="72" />
         </div>
-        <template #footer><div class="manual-receipt-footer"><el-button :disabled="busy" @click="close">关闭</el-button><el-button v-if="readRequired" type="primary" :loading="loading" :disabled="busy" @click="read">核对原登记</el-button><el-button v-else-if="canContinue" type="primary" :loading="busy" :disabled="loading" @click="retry">核对并继续原处理</el-button><el-button v-else-if="!receipt.id && preview.can_confirm===true && canConfirm && !isClosed" type="primary" :loading="busy" :disabled="loading || amountMismatch" @click="submit">确认收款并支付本单</el-button><el-button v-else-if="receipt.id && canReadReceipt" :loading="loading" :disabled="busy" @click="read">刷新原记录</el-button></div></template>
+        <template #footer
+            ><div class="manual-receipt-footer"
+                ><el-button :disabled="busy" @click="close">关闭</el-button
+                ><el-button v-if="readRequired" type="primary" :loading="loading" :disabled="busy" @click="read"
+                    >核对原登记</el-button
+                ><el-button v-else-if="canContinue" type="primary" :loading="busy" :disabled="loading" @click="retry"
+                    >核对并继续原处理</el-button
+                ><el-button
+                    v-else-if="!receipt.id && preview.can_confirm===true && canConfirm && !isClosed"
+                    type="primary"
+                    :loading="busy"
+                    :disabled="loading || amountMismatch"
+                    @click="submit"
+                    >确认收款并支付本单</el-button
+                ><el-button v-else-if="receipt.id && canReadReceipt" :loading="loading" :disabled="busy" @click="read"
+                    >刷新原记录</el-button
+                ></div
+            ></template
+        >
     </el-dialog>
 </template>
 <script setup lang="ts">

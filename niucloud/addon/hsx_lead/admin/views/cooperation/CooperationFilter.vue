@@ -1,11 +1,45 @@
 <template>
     <HsxSearchPanel :collapsible="false" :show-layout-switch="false" class="coop-filter">
         <form class="coop-search" role="search" :aria-label="label" @submit.prevent="apply">
-            <el-input v-model="draft.keyword" :prefix-icon="Search" :placeholder="placeholder" clearable aria-label="搜索关键词" @clear="apply" />
-            <el-select v-if="statuses.length" v-model="draft.status" clearable placeholder="全部状态" aria-label="状态" @change="apply"><el-option v-for="item in statuses" :key="item.value" :value="item.value" :label="item.label" /></el-select>
-            <el-date-picker v-if="withDate" v-model="range" type="daterange" value-format="YYYY-MM-DD" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" unlink-panels :shortcuts="shortcuts" aria-label="创建时间范围" />
+            <el-input
+                v-model="draft.keyword"
+                :prefix-icon="Search"
+                :placeholder="placeholder"
+                clearable
+                aria-label="搜索关键词"
+                @clear="apply"
+            />
+            <el-select
+                v-if="statuses.length"
+                v-model="draft.status"
+                clearable
+                placeholder="全部状态"
+                aria-label="状态"
+                @change="apply"
+                ><el-option v-for="item in statuses" :key="item.value" :value="item.value" :label="item.label"
+            /></el-select>
+            <el-date-picker
+                v-if="withDate"
+                v-model="range"
+                type="daterange"
+                value-format="YYYY-MM-DD"
+                range-separator="至"
+                start-placeholder="开始日期"
+                end-placeholder="结束日期"
+                unlink-panels
+                :shortcuts="shortcuts"
+                aria-label="创建时间范围"
+            />
             <slot />
-            <div class="coop-search-actions"><el-button native-type="submit" type="primary" :loading="loading">查询</el-button><el-button :icon="Refresh" :disabled="loading" aria-label="刷新当前列表" @click="emit('reload')" /><el-button v-if="hasFilters" link @click="reset">清空</el-button></div>
+            <div class="coop-search-actions"
+                ><el-button native-type="submit" type="primary" :loading="loading">查询</el-button
+                ><el-button
+                    :icon="Refresh"
+                    :disabled="loading"
+                    aria-label="刷新当前列表"
+                    @click="emit('reload')"
+                /><el-button v-if="hasFilters" link @click="reset">清空</el-button></div
+            >
         </form>
         <div v-if="$slots.extra" class="coop-filter-extra"><slot name="extra" /></div>
     </HsxSearchPanel>

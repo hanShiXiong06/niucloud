@@ -1,6 +1,13 @@
 <template>
     <el-tooltip v-if="parts" :content="parts.full" placement="top" :show-after="400">
-        <time class="lead-timestamp" :class="{ 'lead-timestamp--compact': compact }" :datetime="parts.iso" :aria-label="parts.full"><span>{{ parts.date }}</span><small>{{ parts.clock }}</small></time>
+        <time
+            class="lead-timestamp"
+            :class="{ 'lead-timestamp--compact': compact }"
+            :datetime="parts.iso"
+            :aria-label="parts.full"
+            ><span>{{ parts.date }}</span
+            ><small>{{ parts.clock }}</small></time
+        >
     </el-tooltip>
     <span v-else class="lead-timestamp lead-timestamp--empty">{{ empty }}</span>
 </template>

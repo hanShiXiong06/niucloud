@@ -1,47 +1,195 @@
 <template>
     <section class="promotion-relations" aria-label="邀请关系与付费情况">
-        <div class="relations-view"><div><strong>邀请关系</strong><span>按关系展开，或按付费情况检索</span></div><el-radio-group v-model="view" aria-label="邀请关系展示方式"><el-radio-button label="tree">关系树</el-radio-button><el-radio-button label="list">明细列表</el-radio-button></el-radio-group></div>
+        <div class="relations-view"
+            ><div><strong>邀请关系</strong><span>按关系展开，或按付费情况检索</span></div
+            ><el-radio-group v-model="view" aria-label="邀请关系展示方式"
+                ><el-radio-button label="tree">关系树</el-radio-button
+                ><el-radio-button label="list">明细列表</el-radio-button></el-radio-group
+            ></div
+        >
         <PromotionRelationTree v-if="view==='tree'" ref="treeRef" :initial-inviter="props.initialInviter" />
         <template v-else>
-        <div class="relations-summary" aria-live="polite" :aria-busy="loading">
-            <div><span>邀请关系</span><strong>{{ metric('relation_count') }}<small>人</small></strong></div>
-            <div><span>已付费会员</span><strong>{{ metric('paid_count') }}<small>人</small></strong></div>
-            <div><span>会员服务费净收</span><strong>{{ amount('service_net') }}</strong></div>
-            <div><span>有效推广佣金</span><strong>{{ amount('promotion_total') }}</strong></div>
-        </div>
-        <div class="relations-filter coop-surface">
-            <form class="relations-search" role="search" aria-label="搜索邀请关系" @submit.prevent="search">
-                <el-input v-model="query.keyword" clearable :prefix-icon="Search" placeholder="被邀请人：编号、姓名、手机或门店" aria-label="被邀请人搜索" @clear="search" />
-                <el-input v-model="query.inviter_keyword" clearable :prefix-icon="Search" placeholder="邀请人：编号、姓名、手机或门店" aria-label="邀请人搜索" @clear="search" />
-                <el-select v-model="query.payment_state" clearable placeholder="全部付费情况" aria-label="付费情况" @change="search"><el-option v-for="item in filters.payment_states" :key="item.value" :value="item.value" :label="item.label" /></el-select>
-                <el-select v-model="query.membership_state" clearable placeholder="全部会员状态" aria-label="会员状态" @change="search"><el-option v-for="item in filters.membership_states" :key="item.value" :value="item.value" :label="item.label" /></el-select>
-                <div class="relations-search-actions"><el-button type="primary" native-type="submit" :loading="loading">查询</el-button><el-button :disabled="loading" @click="reset">重置</el-button></div>
-            </form>
-            <div class="relations-scope">
-                <span>{{ loading ? '正在查询…' : `共 ${total} 条关系` }}</span>
-                <el-tag v-if="query.inviter_member_id" closable effect="plain" @close="clearInviter">{{ selectedInviter }}的直属邀请</el-tag>
-                <span class="relations-scope-note">统计按当前筛选；会员权益与本人付费分别展示</span>
+            <div class="relations-summary" aria-live="polite" :aria-busy="loading">
+                <div
+                    ><span>邀请关系</span><strong>{{ metric('relation_count') }}<small>人</small></strong></div
+                >
+                <div
+                    ><span>已付费会员</span><strong>{{ metric('paid_count') }}<small>人</small></strong></div
+                >
+                <div
+                    ><span>会员服务费净收</span><strong>{{ amount('service_net') }}</strong></div
+                >
+                <div
+                    ><span>有效推广佣金</span><strong>{{ amount('promotion_total') }}</strong></div
+                >
             </div>
-        </div>
-        <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="coop-error"><el-button link type="primary" @click="load">重新加载</el-button></el-alert>
-        <div class="coop-surface relations-table">
-            <HsxTable :columns="columns" :data="rows" :loading="loading" row-key="member.member_id" :empty-text="error ? '邀请关系未加载，请重新读取' : hasFilters ? '没有符合条件的邀请关系，可重置筛选后查看' : '暂未建立邀请关系'">
-                <template #relation="{row}">
-                    <div class="relations-chain">
-                        <div class="coop-cell"><el-button link type="primary" class="relations-person" @click="showInviter(row.inviter)">{{ row.inviter?.name || '原邀请人不可用' }}</el-button><small>{{ row.inviter?.member_no || (row.inviter?.member_id ? `UID ${row.inviter.member_id}` : '—') }}</small><small>直属邀请 {{ row.inviter?.direct_invite_count ?? '—' }} 人</small></div>
-                        <el-icon class="relations-arrow" aria-label="邀请了"><Right /></el-icon>
-                        <div class="coop-cell"><strong>{{ row.merchant?.name || row.member?.name || '本站会员' }}</strong><small v-if="row.merchant?.name">{{ row.member?.name }}</small><small>{{ row.member?.member_no || `UID ${row.member?.member_id || '—'}` }} · {{ row.member?.mobile_masked || '未留电话' }}</small></div>
-                    </div>
-                </template>
-                <template #membership="{row}"><div class="coop-cell relations-status"><el-tag size="small" :type="tone(row.membership?.status)" effect="plain">{{ row.membership?.status_label || '待核对' }}</el-tag><strong v-if="row.membership?.level_name">{{ row.membership.level_name }}</strong><small v-if="row.merchant?.shared">共享所属门店权益</small><small v-if="row.membership?.expires_at">到期 {{ date(row.membership.expires_at) }}</small></div></template>
-                <template #payment="{row}"><div class="coop-cell relations-status"><el-tag size="small" :type="tone(row.payment?.status)" effect="plain">{{ row.payment?.status_label || '待核对' }}</el-tag><strong>实付净额 {{ fee(row.payment?.paid_net) }}</strong><small>其中服务费 {{ fee(row.payment?.service_net) }}</small><small v-if="Number(row.payment?.refunded_total)>0">已退款 {{ coopMoney(row.payment.refunded_total) }}</small><small v-if="row.payment?.refund_pending">退款处理中，金额待核对</small><small v-if="row.payment?.unpaid_order_count">待支付 {{ row.payment.unpaid_order_count }} 笔</small></div></template>
-                <template #promotion="{row}"><div class="coop-cell"><strong class="relations-money">{{ coopMoney(row.promotion?.total) }}</strong><small>已入账 {{ coopMoney(row.promotion?.settled) }}</small><small v-if="Number(row.promotion?.pending)>0">待结算 {{ coopMoney(row.promotion.pending) }}</small><small v-if="Number(row.promotion?.held)>0">待核对 {{ coopMoney(row.promotion.held) }}</small><small v-if="Number(row.promotion?.cancelled)>0">已取消 {{ coopMoney(row.promotion.cancelled) }}</small><small v-if="row.promotion?.review_required">佣金记录待核对</small></div></template>
-                <template #time="{row}"><div class="coop-cell"><small>注册 {{ date(row.create_time) }}</small><small v-if="row.bound_at">关联 {{ date(row.bound_at) }}</small><small v-if="row.payment?.last_paid_at">付款 {{ date(row.payment.last_paid_at) }}</small></div></template>
-                <template #action="{row}"><el-button link type="primary" @click="showInviter(row.member)">查看 TA 邀请的</el-button></template>
-            </HsxTable>
-            <div class="coop-pagination"><HsxPagination :current-page="query.page" :page-size="query.limit" :total="total" :disabled="loading" @change="changePage" /></div>
-        </div>
-        <el-collapse class="relations-help"><el-collapse-item title="付费与佣金如何核对？" name="definition"><p>明细列表按直属邀请关系展示；多级关系请切换关系树。店员加入共享主体权益，不作为推广入驻；共享会员不代表该账号本人已付款。</p><p>会员服务费净收扣除已退款部分，不含押金、经验费。推广佣金分别展示待结算、已入账和待核对；已取消金额不计入有效佣金，已入账不代表已提现。</p></el-collapse-item></el-collapse>
+            <div class="relations-filter coop-surface">
+                <form class="relations-search" role="search" aria-label="搜索邀请关系" @submit.prevent="search">
+                    <el-input
+                        v-model="query.keyword"
+                        clearable
+                        :prefix-icon="Search"
+                        placeholder="被邀请人：编号、姓名、手机或门店"
+                        aria-label="被邀请人搜索"
+                        @clear="search"
+                    />
+                    <el-input
+                        v-model="query.inviter_keyword"
+                        clearable
+                        :prefix-icon="Search"
+                        placeholder="邀请人：编号、姓名、手机或门店"
+                        aria-label="邀请人搜索"
+                        @clear="search"
+                    />
+                    <el-select
+                        v-model="query.payment_state"
+                        clearable
+                        placeholder="全部付费情况"
+                        aria-label="付费情况"
+                        @change="search"
+                        ><el-option
+                            v-for="item in filters.payment_states"
+                            :key="item.value"
+                            :value="item.value"
+                            :label="item.label"
+                    /></el-select>
+                    <el-select
+                        v-model="query.membership_state"
+                        clearable
+                        placeholder="全部会员状态"
+                        aria-label="会员状态"
+                        @change="search"
+                        ><el-option
+                            v-for="item in filters.membership_states"
+                            :key="item.value"
+                            :value="item.value"
+                            :label="item.label"
+                    /></el-select>
+                    <div class="relations-search-actions"
+                        ><el-button type="primary" native-type="submit" :loading="loading">查询</el-button
+                        ><el-button :disabled="loading" @click="reset">重置</el-button></div
+                    >
+                </form>
+                <div class="relations-scope">
+                    <span>{{ loading ? '正在查询…' : `共 ${total} 条关系` }}</span>
+                    <el-tag v-if="query.inviter_member_id" closable effect="plain" @close="clearInviter"
+                        >{{ selectedInviter }}的直属邀请</el-tag
+                    >
+                    <span class="relations-scope-note">统计按当前筛选；会员权益与本人付费分别展示</span>
+                </div>
+            </div>
+            <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="coop-error"
+                ><el-button link type="primary" @click="load">重新加载</el-button></el-alert
+            >
+            <div class="coop-surface relations-table">
+                <HsxTable
+                    :columns="columns"
+                    :data="rows"
+                    :loading="loading"
+                    row-key="member.member_id"
+                    :empty-text="error ? '邀请关系未加载，请重新读取' : hasFilters ? '没有符合条件的邀请关系，可重置筛选后查看' : '暂未建立邀请关系'"
+                >
+                    <template #relation="{row}">
+                        <div class="relations-chain">
+                            <div class="coop-cell"
+                                ><el-button
+                                    link
+                                    type="primary"
+                                    class="relations-person"
+                                    @click="showInviter(row.inviter)"
+                                    >{{ row.inviter?.name || '原邀请人不可用' }}</el-button
+                                ><small
+                                    >{{ row.inviter?.member_no || (row.inviter?.member_id ? `UID ${row.inviter.member_id}` : '—') }}</small
+                                ><small>直属邀请 {{ row.inviter?.direct_invite_count ?? '—' }} 人</small></div
+                            >
+                            <el-icon class="relations-arrow" aria-label="邀请了"><Right /></el-icon>
+                            <div class="coop-cell"
+                                ><strong>{{ row.merchant?.name || row.member?.name || '本站会员' }}</strong
+                                ><small v-if="row.merchant?.name">{{ row.member?.name }}</small
+                                ><small
+                                    >{{ row.member?.member_no || `UID ${row.member?.member_id || '—'}` }} ·
+                                    {{ row.member?.mobile_masked || '未留电话' }}</small
+                                ></div
+                            >
+                        </div>
+                    </template>
+                    <template #membership="{row}"
+                        ><div class="coop-cell relations-status"
+                            ><el-tag
+                                size="small"
+                                :type="tone(row.membership?.status)"
+                                effect="plain"
+                                >{{ row.membership?.status_label || '待核对' }}</el-tag
+                            ><strong v-if="row.membership?.level_name">{{ row.membership.level_name }}</strong
+                            ><small v-if="row.merchant?.shared">共享所属门店权益</small
+                            ><small v-if="row.membership?.expires_at"
+                                >到期 {{ date(row.membership.expires_at) }}</small
+                            ></div
+                        ></template
+                    >
+                    <template #payment="{row}"
+                        ><div class="coop-cell relations-status"
+                            ><el-tag
+                                size="small"
+                                :type="tone(row.payment?.status)"
+                                effect="plain"
+                                >{{ row.payment?.status_label || '待核对' }}</el-tag
+                            ><strong>实付净额 {{ fee(row.payment?.paid_net) }}</strong
+                            ><small>其中服务费 {{ fee(row.payment?.service_net) }}</small
+                            ><small v-if="Number(row.payment?.refunded_total)>0"
+                                >已退款 {{ coopMoney(row.payment.refunded_total) }}</small
+                            ><small v-if="row.payment?.refund_pending">退款处理中，金额待核对</small
+                            ><small v-if="row.payment?.unpaid_order_count"
+                                >待支付 {{ row.payment.unpaid_order_count }} 笔</small
+                            ></div
+                        ></template
+                    >
+                    <template #promotion="{row}"
+                        ><div class="coop-cell"
+                            ><strong class="relations-money">{{ coopMoney(row.promotion?.total) }}</strong
+                            ><small>已入账 {{ coopMoney(row.promotion?.settled) }}</small
+                            ><small v-if="Number(row.promotion?.pending)>0"
+                                >待结算 {{ coopMoney(row.promotion.pending) }}</small
+                            ><small v-if="Number(row.promotion?.held)>0"
+                                >待核对 {{ coopMoney(row.promotion.held) }}</small
+                            ><small v-if="Number(row.promotion?.cancelled)>0"
+                                >已取消 {{ coopMoney(row.promotion.cancelled) }}</small
+                            ><small v-if="row.promotion?.review_required">佣金记录待核对</small></div
+                        ></template
+                    >
+                    <template #time="{row}"
+                        ><div class="coop-cell"
+                            ><small>注册 {{ date(row.create_time) }}</small
+                            ><small v-if="row.bound_at">关联 {{ date(row.bound_at) }}</small
+                            ><small v-if="row.payment?.last_paid_at"
+                                >付款 {{ date(row.payment.last_paid_at) }}</small
+                            ></div
+                        ></template
+                    >
+                    <template #action="{row}"
+                        ><el-button link type="primary" @click="showInviter(row.member)"
+                            >查看 TA 邀请的</el-button
+                        ></template
+                    >
+                </HsxTable>
+                <div class="coop-pagination"
+                    ><HsxPagination
+                        :current-page="query.page"
+                        :page-size="query.limit"
+                        :total="total"
+                        :disabled="loading"
+                        @change="changePage"
+                /></div>
+            </div>
+            <el-collapse class="relations-help"
+                ><el-collapse-item title="付费与佣金如何核对？" name="definition"
+                    ><p
+                        >明细列表按直属邀请关系展示；多级关系请切换关系树。店员加入共享主体权益，不作为推广入驻；共享会员不代表该账号本人已付款。</p
+                    ><p
+                        >会员服务费净收扣除已退款部分，不含押金、经验费。推广佣金分别展示待结算、已入账和待核对；已取消金额不计入有效佣金，已入账不代表已提现。</p
+                    ></el-collapse-item
+                ></el-collapse
+            >
         </template>
     </section>
 </template>

@@ -1,34 +1,205 @@
 <template>
     <section class="deposit-requests">
-        <header class="coop-head"><div><h2>押金退还</h2></div></header>
-        <CooperationFilter :query="query" :loading="loading" :statuses="statuses" :with-date="false" placeholder="搜索门店或申请单号" @search="search" @reload="load" />
+        <header class="coop-head"
+            ><div><h2>押金退还</h2></div></header
+        >
+        <CooperationFilter
+            :query="query"
+            :loading="loading"
+            :statuses="statuses"
+            :with-date="false"
+            placeholder="搜索门店或申请单号"
+            @search="search"
+            @reload="load"
+        />
         <el-alert v-if="error" class="coop-error" :title="error" type="error" :closable="false" show-icon />
         <HsxTable :columns="columns" :data="rows" :loading="loading" row-key="id" empty-text="暂无符合条件的退押金申请">
-            <template #merchant="{row}"><div class="coop-cell"><strong>{{ row.merchant_name || row.name || '门店名称待核对' }}</strong><small>{{ row.request_no || row.order_no }}</small></div></template>
-            <template #amount="{row}"><strong class="coop-price">{{ coopMoney(row.amount) }}</strong></template>
-            <template #status="{row}"><el-tag :type="statusTone(row.status)" effect="plain">{{ statusLabel(row.status) }}</el-tag></template>
-            <template #time="{row}"><div class="coop-cell"><span>{{ coopTime(row.created_at || row.create_time) }}</span><small v-if="row.updated_at || row.update_time">更新 {{ coopTime(row.updated_at || row.update_time) }}</small></div></template>
-            <template #actions="{row}"><el-button v-if="canDetail" link type="primary" @click="open(row)">{{ row.status==='pending' && canReview ? '核对与审核' : '查看进度' }}</el-button></template>
+            <template #merchant="{row}"
+                ><div class="coop-cell"
+                    ><strong>{{ row.merchant_name || row.name || '门店名称待核对' }}</strong
+                    ><small>{{ row.request_no || row.order_no }}</small></div
+                ></template
+            >
+            <template #amount="{row}"
+                ><strong class="coop-price">{{ coopMoney(row.amount) }}</strong></template
+            >
+            <template #status="{row}"
+                ><el-tag :type="statusTone(row.status)" effect="plain">{{ statusLabel(row.status) }}</el-tag></template
+            >
+            <template #time="{row}"
+                ><div class="coop-cell"
+                    ><span>{{ coopTime(row.created_at || row.create_time) }}</span
+                    ><small v-if="row.updated_at || row.update_time"
+                        >更新 {{ coopTime(row.updated_at || row.update_time) }}</small
+                    ></div
+                ></template
+            >
+            <template #actions="{row}"
+                ><el-button
+                    v-if="canDetail"
+                    link
+                    type="primary"
+                    @click="open(row)"
+                    >{{ row.status==='pending' && canReview ? '核对与审核' : '查看进度' }}</el-button
+                ></template
+            >
         </HsxTable>
-        <HsxPagination class="coop-pagination" :current-page="query.page" :page-size="query.limit" :total="total" :disabled="loading" @change="changePage" />
-        <HsxDrawer v-model="visible" title="退押金核对" size="lg" :confirm-loading="busy" :body-loading="reading" @closed="clear">
-            <el-alert v-if="detailError" class="coop-error" :title="detailError" type="error" :closable="false" show-icon><template #default><el-button link :disabled="busy || reading" @click="readDetail">重新读取申请</el-button></template></el-alert>
+        <HsxPagination
+            class="coop-pagination"
+            :current-page="query.page"
+            :page-size="query.limit"
+            :total="total"
+            :disabled="loading"
+            @change="changePage"
+        />
+        <HsxDrawer
+            v-model="visible"
+            title="退押金核对"
+            size="lg"
+            :confirm-loading="busy"
+            :body-loading="reading"
+            @closed="clear"
+        >
+            <el-alert
+                v-if="detailError"
+                class="coop-error"
+                :title="detailError"
+                type="error"
+                :closable="false"
+                show-icon
+                ><template #default
+                    ><el-button link :disabled="busy || reading" @click="readDetail">重新读取申请</el-button></template
+                ></el-alert
+            >
             <template v-if="detail.id">
-                <div class="deposit-summary"><div><span>申请门店</span><strong>{{ detail.merchant_name || detail.name || '门店名称待核对' }}</strong></div><div><span>申请退押金</span><strong>{{ coopMoney(detail.amount) }}</strong></div><div><span>当前进度</span><el-tag :type="statusTone(detail.status)" effect="plain">{{ statusLabel(detail.status) }}</el-tag></div></div>
-                <el-alert v-if="detail.status==='pending'" :title="hasManualSources?'审核通过后，线下收款来源需经办人实际退款并逐笔登记；线上来源仍按原渠道申请。只退押金，不退服务费和经验费。':'审核通过将按原支付来源申请退押金；不退服务费和经验费。退款以渠道结果为准。'" type="warning" :closable="false" show-icon class="deposit-notice" />
-                <el-alert v-if="actionError" class="coop-error" :title="actionError" type="warning" :closable="false" show-icon><template #default><el-button link :disabled="busy || reading" @click="readDetail">核对最新进度</el-button></template></el-alert>
-                <div v-if="detail.reason" class="deposit-reason"><span>申请说明</span><p>{{ detail.reason }}</p></div>
-                <div v-if="detail.review_reason" class="deposit-reason"><span>审核说明</span><p>{{ detail.review_reason }}</p></div>
-                <HsxTable :columns="sourceColumns" :data="sources" row-key="order_id" empty-text="原付款来源尚未完整返回，不能审核">
-                    <template #source="{row}"><div class="coop-cell"><strong>{{ row.order_no || '原付款单' }}</strong><small>{{ row.refund_no || '尚未申请渠道退款' }}</small></div></template>
+                <div class="deposit-summary"
+                    ><div
+                        ><span>申请门店</span
+                        ><strong>{{ detail.merchant_name || detail.name || '门店名称待核对' }}</strong></div
+                    ><div
+                        ><span>申请退押金</span><strong>{{ coopMoney(detail.amount) }}</strong></div
+                    ><div
+                        ><span>当前进度</span
+                        ><el-tag
+                            :type="statusTone(detail.status)"
+                            effect="plain"
+                            >{{ statusLabel(detail.status) }}</el-tag
+                        ></div
+                    ></div
+                >
+                <el-alert
+                    v-if="detail.status==='pending'"
+                    :title="hasManualSources?'审核通过后，线下收款来源需经办人实际退款并逐笔登记；线上来源仍按原渠道申请。只退押金，不退服务费和经验费。':'审核通过将按原支付来源申请退押金；不退服务费和经验费。退款以渠道结果为准。'"
+                    type="warning"
+                    :closable="false"
+                    show-icon
+                    class="deposit-notice"
+                />
+                <el-alert
+                    v-if="actionError"
+                    class="coop-error"
+                    :title="actionError"
+                    type="warning"
+                    :closable="false"
+                    show-icon
+                    ><template #default
+                        ><el-button link :disabled="busy || reading" @click="readDetail"
+                            >核对最新进度</el-button
+                        ></template
+                    ></el-alert
+                >
+                <div v-if="detail.reason" class="deposit-reason"
+                    ><span>申请说明</span><p>{{ detail.reason }}</p></div
+                >
+                <div v-if="detail.review_reason" class="deposit-reason"
+                    ><span>审核说明</span><p>{{ detail.review_reason }}</p></div
+                >
+                <HsxTable
+                    :columns="sourceColumns"
+                    :data="sources"
+                    row-key="order_id"
+                    empty-text="原付款来源尚未完整返回，不能审核"
+                >
+                    <template #source="{row}"
+                        ><div class="coop-cell"
+                            ><strong>{{ row.order_no || '原付款单' }}</strong
+                            ><small>{{ row.refund_no || '尚未申请渠道退款' }}</small></div
+                        ></template
+                    >
                     <template #money="{row}">{{ coopMoney(row.amount) }}</template>
-                    <template #result="{row}"><div class="coop-cell"><span>{{ row.status_label || statusLabel(row.status) }}</span><small v-if="row.message">{{ row.message }}</small></div></template>
-                    <template #manual="{row}"><el-button v-if="canManualRefund && (row.can_confirm_manual_refund===true || Number(row.manual_refund_receipt_id)>0)" link type="warning" :disabled="busy || reading || readRequired" @click="openManualRefund(row)">{{ row.can_confirm_manual_refund===true?'登记已实际退款':'查看实际退款登记' }}</el-button><span v-else-if="row.manual_refund_required===true">{{ row.manual_refund_message || '待线下实际退款' }}</span><span v-else>—</span></template>
+                    <template #result="{row}"
+                        ><div class="coop-cell"
+                            ><span>{{ row.status_label || statusLabel(row.status) }}</span
+                            ><small v-if="row.message">{{ row.message }}</small></div
+                        ></template
+                    >
+                    <template #manual="{row}"
+                        ><el-button
+                            v-if="canManualRefund && (row.can_confirm_manual_refund===true || Number(row.manual_refund_receipt_id)>0)"
+                            link
+                            type="warning"
+                            :disabled="busy || reading || readRequired"
+                            @click="openManualRefund(row)"
+                            >{{ row.can_confirm_manual_refund===true?'登记已实际退款':'查看实际退款登记' }}</el-button
+                        ><span
+                            v-else-if="row.manual_refund_required===true"
+                            >{{ row.manual_refund_message || '待线下实际退款' }}</span
+                        ><span v-else>—</span></template
+                    >
                 </HsxTable>
-                <el-input v-if="detail.status==='pending' && canReview" v-model="reviewReason" type="textarea" :rows="3" maxlength="300" show-word-limit placeholder="填写审核说明；拒绝时必填" aria-label="退押金审核说明" class="deposit-review-input" />
-                <el-collapse class="deposit-help"><el-collapse-item title="申请、审核与到账的区别" name="deposit-help"><p>申请后暂停门店新接发，已存在业务和原账目仍保留。有未完结协作或待付佣时，系统会阻止申请与审核。拒绝申请后可恢复协作。</p><p>通过审核只代表开始退款，不代表到账；“核对退款进度”只核对已申请的原退款，不会创建新退款号。出现异常时保留原单和退款号，先核实，不能重复打款。</p></el-collapse-item></el-collapse>
+                <el-input
+                    v-if="detail.status==='pending' && canReview"
+                    v-model="reviewReason"
+                    type="textarea"
+                    :rows="3"
+                    maxlength="300"
+                    show-word-limit
+                    placeholder="填写审核说明；拒绝时必填"
+                    aria-label="退押金审核说明"
+                    class="deposit-review-input"
+                />
+                <el-collapse class="deposit-help"
+                    ><el-collapse-item title="申请、审核与到账的区别" name="deposit-help"
+                        ><p
+                            >申请后暂停门店新接发，已存在业务和原账目仍保留。有未完结协作或待付佣时，系统会阻止申请与审核。拒绝申请后可恢复协作。</p
+                        ><p
+                            >通过审核只代表开始退款，不代表到账；“核对退款进度”只核对已申请的原退款，不会创建新退款号。出现异常时保留原单和退款号，先核实，不能重复打款。</p
+                        ></el-collapse-item
+                    ></el-collapse
+                >
             </template>
-            <template #footer><div class="deposit-footer"><el-button :disabled="busy" @click="visible=false">关闭</el-button><template v-if="detail.status==='pending' && canReview"><el-button :disabled="busy || reading || readRequired || !sources.length" @click="review('reject')">拒绝申请</el-button><el-button type="primary" :loading="busy" :disabled="reading || readRequired || !sources.length" @click="review('approve')">通过并申请退押金</el-button></template><el-button v-else-if="detail.can_continue===true && canReview" type="primary" :loading="busy" :disabled="reading || readRequired" @click="review('approve')">继续已审核退款</el-button><el-button v-else-if="detail.id && canRefresh && ['approved','refunding','attention'].includes(detail.status)" type="primary" :loading="busy" :disabled="reading || readRequired" @click="refresh">核对退款进度</el-button></div></template>
+            <template #footer
+                ><div class="deposit-footer"
+                    ><el-button :disabled="busy" @click="visible=false">关闭</el-button
+                    ><template v-if="detail.status==='pending' && canReview"
+                        ><el-button
+                            :disabled="busy || reading || readRequired || !sources.length"
+                            @click="review('reject')"
+                            >拒绝申请</el-button
+                        ><el-button
+                            type="primary"
+                            :loading="busy"
+                            :disabled="reading || readRequired || !sources.length"
+                            @click="review('approve')"
+                            >通过并申请退押金</el-button
+                        ></template
+                    ><el-button
+                        v-else-if="detail.can_continue===true && canReview"
+                        type="primary"
+                        :loading="busy"
+                        :disabled="reading || readRequired"
+                        @click="review('approve')"
+                        >继续已审核退款</el-button
+                    ><el-button
+                        v-else-if="detail.id && canRefresh && ['approved','refunding','attention'].includes(detail.status)"
+                        type="primary"
+                        :loading="busy"
+                        :disabled="reading || readRequired"
+                        @click="refresh"
+                        >核对退款进度</el-button
+                    ></div
+                ></template
+            >
         </HsxDrawer>
         <ManualRefundDialog ref="manualRefundDialog" @changed="manualRefundChanged" />
     </section>

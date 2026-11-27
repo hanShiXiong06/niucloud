@@ -1,19 +1,75 @@
 <template>
     <div v-show="diyStore.editTab==='content'" class="content-wrap">
-        <div class="edit-attr-item-wrap"><h3 class="mb-[10px]">{{ definition.label }}</h3><el-form label-width="100px" class="px-[10px]">
-            <el-form-item v-if="kind==='identity'" label="展示版本"><el-radio-group v-model="diyStore.editComponent.identityStyle"><el-radio label="store">经典门店版</el-radio><el-radio label="member">会员中心版</el-radio></el-radio-group><p class="profile-editor-note">同一个组件切换展示，只显示选中的版本；设置入口沿用牛云的个人设置与退出登录。</p></el-form-item>
-            <el-form-item label="区块标题"><el-input v-model.trim="diyStore.editComponent.title" maxlength="30" show-word-limit /></el-form-item>
-            <el-form-item label="显示标题"><el-switch v-model="diyStore.editComponent.showTitle" :active-value="1" :inactive-value="0" /></el-form-item>
-            <el-form-item label="补充文字"><el-input v-model.trim="diyStore.editComponent.subtitle" maxlength="100" placeholder="选填，留空不显示" /></el-form-item>
-            <el-form-item v-for="field in definition.texts" :key="field.key" :label="field.label"><el-input v-model.trim="diyStore.editComponent[field.key]" maxlength="30" /></el-form-item>
-            <el-form-item v-if="kind!=='identity'" label="入口图片"><UploadImage v-model="diyStore.editComponent.entryImage" :limit="1" /><p class="profile-editor-note">选填，留空使用统一图标；不会替换门店真实门头或等级标识。</p></el-form-item>
-            <el-form-item v-if="kind==='tools'" label="通知入口图片"><UploadImage v-model="diyStore.editComponent.noticeImage" :limit="1" /></el-form-item>
-            <el-form-item v-for="field in definition.switches" :key="field.key" :label="field.label"><el-switch v-model="diyStore.editComponent[field.key]" :active-value="1" :inactive-value="0" /></el-form-item>
-            <el-collapse v-if="kind==='tools'" class="profile-editor-help"><el-collapse-item title="更多入口文案与素材" name="tools"><p class="profile-editor-note">普通菜单优先使用牛云“图文导航”修改。这里可按需打开额外入口，请避免与图文导航重复。</p><template v-for="field in toolEntries" :key="field.key"><el-form-item :label="field.label"><el-switch v-model="diyStore.editComponent[field.show]" :active-value="1" :inactive-value="0" /></el-form-item><template v-if="diyStore.editComponent[field.show]===1"><el-form-item label="入口文字"><el-input v-model.trim="diyStore.editComponent[field.key]" maxlength="30" /></el-form-item><el-form-item label="入口图片"><UploadImage v-model="diyStore.editComponent[field.image]" :limit="1" /></el-form-item></template></template></el-collapse-item></el-collapse>
-        </el-form></div>
-        <el-collapse class="profile-editor-help"><el-collapse-item title="展示与业务规则" name="rules"><p>这里只调整文案、图标与外观。真实门店名称、等级、有效期、金额、权限和通知结果由业务返回；隐藏入口不会改变业务权限或已形成的状态。</p></el-collapse-item></el-collapse>
+        <div class="edit-attr-item-wrap"
+            ><h3 class="mb-[10px]">{{ definition.label }}</h3
+            ><el-form label-width="100px" class="px-[10px]">
+                <el-form-item v-if="kind==='identity'" label="展示版本"
+                    ><el-radio-group v-model="diyStore.editComponent.identityStyle"
+                        ><el-radio label="store">经典门店版</el-radio
+                        ><el-radio label="member">会员中心版</el-radio></el-radio-group
+                    ><p class="profile-editor-note"
+                        >同一个组件切换展示，只显示选中的版本；设置入口沿用牛云的个人设置与退出登录。</p
+                    ></el-form-item
+                >
+                <el-form-item label="区块标题"
+                    ><el-input v-model.trim="diyStore.editComponent.title" maxlength="30" show-word-limit
+                /></el-form-item>
+                <el-form-item label="显示标题"
+                    ><el-switch v-model="diyStore.editComponent.showTitle" :active-value="1" :inactive-value="0"
+                /></el-form-item>
+                <el-form-item label="补充文字"
+                    ><el-input
+                        v-model.trim="diyStore.editComponent.subtitle"
+                        maxlength="100"
+                        placeholder="选填，留空不显示"
+                /></el-form-item>
+                <el-form-item v-for="field in definition.texts" :key="field.key" :label="field.label"
+                    ><el-input v-model.trim="diyStore.editComponent[field.key]" maxlength="30"
+                /></el-form-item>
+                <el-form-item v-if="kind!=='identity'" label="入口图片"
+                    ><UploadImage v-model="diyStore.editComponent.entryImage" :limit="1" /><p
+                        class="profile-editor-note"
+                        >选填，留空使用统一图标；不会替换门店真实门头或等级标识。</p
+                    ></el-form-item
+                >
+                <el-form-item v-if="kind==='tools'" label="通知入口图片"
+                    ><UploadImage v-model="diyStore.editComponent.noticeImage" :limit="1"
+                /></el-form-item>
+                <el-form-item v-for="field in definition.switches" :key="field.key" :label="field.label"
+                    ><el-switch v-model="diyStore.editComponent[field.key]" :active-value="1" :inactive-value="0"
+                /></el-form-item>
+                <el-collapse v-if="kind==='tools'" class="profile-editor-help"
+                    ><el-collapse-item title="更多入口文案与素材" name="tools"
+                        ><p class="profile-editor-note"
+                            >普通菜单优先使用牛云“图文导航”修改。这里可按需打开额外入口，请避免与图文导航重复。</p
+                        ><template v-for="field in toolEntries" :key="field.key"
+                            ><el-form-item :label="field.label"
+                                ><el-switch
+                                    v-model="diyStore.editComponent[field.show]"
+                                    :active-value="1"
+                                    :inactive-value="0" /></el-form-item
+                            ><template v-if="diyStore.editComponent[field.show]===1"
+                                ><el-form-item label="入口文字"
+                                    ><el-input
+                                        v-model.trim="diyStore.editComponent[field.key]"
+                                        maxlength="30" /></el-form-item
+                                ><el-form-item label="入口图片"
+                                    ><UploadImage
+                                        v-model="diyStore.editComponent[field.image]"
+                                        :limit="1" /></el-form-item></template></template></el-collapse-item
+                ></el-collapse> </el-form
+        ></div>
+        <el-collapse class="profile-editor-help"
+            ><el-collapse-item title="展示与业务规则" name="rules"
+                ><p
+                    >这里只调整文案、图标与外观。真实门店名称、等级、有效期、金额、权限和通知结果由业务返回；隐藏入口不会改变业务权限或已形成的状态。</p
+                ></el-collapse-item
+            ></el-collapse
+        >
     </div>
-    <div v-show="diyStore.editTab==='style'" class="style-wrap"><DiyAppearanceFields :allow-border="false" /><slot name="style" /></div>
+    <div v-show="diyStore.editTab==='style'" class="style-wrap"
+        ><DiyAppearanceFields :allow-border="false" /><slot name="style"
+    /></div>
 </template>
 <script setup lang="ts">
 import { computed,onMounted } from 'vue'
@@ -47,4 +103,6 @@ onMounted(()=>{
     }
 })
 </script>
-<style scoped>.profile-editor-help{margin:12px 10px}.profile-editor-help p,.profile-editor-note{font-size:12px;line-height:1.8;color:var(--el-text-color-secondary);margin:6px 0 0}</style>
+<style scoped>
+.profile-editor-help{margin:12px 10px}.profile-editor-help p,.profile-editor-note{font-size:12px;line-height:1.8;color:var(--el-text-color-secondary);margin:6px 0 0}
+</style>

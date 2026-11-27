@@ -1,32 +1,171 @@
 <template>
     <div class="business-editor">
         <div v-show="diyStore.editTab==='content'" class="business-content-tab">
-        <div class="edit-attr-item-wrap"><h3>内容与排列</h3><el-form label-width="100px" class="px-[10px]">
-            <el-form-item label="显示标题"><el-switch v-model="component.showTitle" :active-value="1" :inactive-value="0" /></el-form-item>
-            <el-form-item v-if="component.showTitle===1" label="标题"><el-input v-model="component.title" maxlength="30" /></el-form-item>
-            <el-form-item label="副标题"><el-input v-model="component.subtitle" maxlength="80" /></el-form-item>
-            <el-form-item label="排列"><el-radio-group v-model="component.layoutPreset"><el-radio-button label="compact">网格</el-radio-button><el-radio-button label="list">列表</el-radio-button><el-radio-button label="slide">横向滑动</el-radio-button></el-radio-group></el-form-item>
-            <el-form-item v-if="component.layoutPreset==='compact'" label="每行数量"><el-radio-group v-model="component.columns"><el-radio-button :label="3">3个</el-radio-button><el-radio-button :label="4">4个</el-radio-button><el-radio-button :label="5">5个</el-radio-button></el-radio-group></el-form-item>
-            <el-form-item v-if="component.layoutPreset==='slide'" label="入口宽度"><el-input-number v-model="component.itemWidth" :min="72" :max="160" /> px</el-form-item>
-            <el-form-item label="图标尺寸"><el-input-number v-model="component.iconSize" :min="24" :max="64" /> px</el-form-item>
-        </el-form></div>
-        <div class="edit-attr-item-wrap"><h3>各业务外观</h3><el-alert :title="previewMessage" :type="previewState==='error'?'error':previewState==='denied'?'warning':'info'" :closable="false" show-icon><template #default><el-button v-if="canReadConfig" link type="primary" :loading="previewLoading" @click="loadPreview">刷新启用业务</el-button></template></el-alert>
-            <el-collapse class="business-items"><el-collapse-item v-for="row in businesses" :key="row.key" :name="row.key" :title="item(row.key).title||row.name"><el-form label-width="100px">
-                <el-form-item label="显示名称"><el-input :model-value="item(row.key).title" :placeholder="row.name" maxlength="30" @update:model-value="patchItem(row.key,'title',$event)" /></el-form-item>
-                <el-form-item label="图标方式"><el-select :model-value="item(row.key).iconMode" @update:model-value="patchItem(row.key,'iconMode',$event)"><el-option label="彩色线性图标" value="css" /><el-option label="原版图片" value="original" /><el-option label="图标库" value="library" /><el-option label="上传图片" value="image" /><el-option label="只显示文字" value="none" /></el-select></el-form-item>
-                <el-form-item v-if="item(row.key).iconMode==='image'" label="图标图片"><UploadImage :model-value="item(row.key).image" @update:model-value="patchItem(row.key,'image',$event)" /></el-form-item>
-                <el-form-item v-if="item(row.key).iconMode==='library'" label="图标"><el-select :model-value="item(row.key).icon" @update:model-value="patchItem(row.key,'icon',$event)"><el-option v-for="icon in iconOptions" :key="icon.value" :label="icon.label" :value="icon.value" /></el-select></el-form-item>
-                <el-form-item v-if="!['image','original','none'].includes(item(row.key).iconMode)" label="图标颜色"><el-color-picker :model-value="item(row.key).iconColor" @update:model-value="patchItem(row.key,'iconColor',$event||'')" /></el-form-item>
-                <el-form-item v-if="item(row.key).iconMode!=='none'" label="图标底色"><el-color-picker :model-value="item(row.key).iconBgColor" show-alpha @update:model-value="patchItem(row.key,'iconBgColor',$event||'')" /></el-form-item>
-                <el-form-item label="文字颜色"><el-color-picker :model-value="item(row.key).titleColor" @update:model-value="patchItem(row.key,'titleColor',$event||'')" /></el-form-item>
-                <el-form-item label="角标"><el-radio-group :model-value="item(row.key).badgeMode" @update:model-value="patchItem(row.key,'badgeMode',$event)"><el-radio-button label="none">无</el-radio-button><el-radio-button label="hot">HOT</el-radio-button><el-radio-button label="new">NEW</el-radio-button><el-radio-button label="custom">自定义</el-radio-button></el-radio-group></el-form-item>
-                <template v-if="item(row.key).badgeMode!=='none'"><el-form-item v-if="item(row.key).badgeMode==='custom'" label="角标文字"><el-input :model-value="item(row.key).badgeText" maxlength="8" @update:model-value="patchItem(row.key,'badgeText',$event)" /></el-form-item><el-form-item label="角标颜色"><el-color-picker :model-value="item(row.key).badgeColor" @update:model-value="patchItem(row.key,'badgeColor',$event||'')" /></el-form-item><el-form-item label="角标背景"><el-color-picker :model-value="item(row.key).badgeBgColor" @update:model-value="patchItem(row.key,'badgeBgColor',$event||'')" /></el-form-item></template>
-            </el-form></el-collapse-item></el-collapse>
+            <div class="edit-attr-item-wrap"
+                ><h3>内容与排列</h3
+                ><el-form label-width="100px" class="px-[10px]">
+                    <el-form-item label="显示标题"
+                        ><el-switch v-model="component.showTitle" :active-value="1" :inactive-value="0"
+                    /></el-form-item>
+                    <el-form-item v-if="component.showTitle===1" label="标题"
+                        ><el-input v-model="component.title" maxlength="30"
+                    /></el-form-item>
+                    <el-form-item label="副标题"><el-input v-model="component.subtitle" maxlength="80" /></el-form-item>
+                    <el-form-item label="排列"
+                        ><el-radio-group v-model="component.layoutPreset"
+                            ><el-radio-button label="compact">网格</el-radio-button
+                            ><el-radio-button label="list">列表</el-radio-button
+                            ><el-radio-button label="slide">横向滑动</el-radio-button></el-radio-group
+                        ></el-form-item
+                    >
+                    <el-form-item v-if="component.layoutPreset==='compact'" label="每行数量"
+                        ><el-radio-group v-model="component.columns"
+                            ><el-radio-button :label="3">3个</el-radio-button
+                            ><el-radio-button :label="4">4个</el-radio-button
+                            ><el-radio-button :label="5">5个</el-radio-button></el-radio-group
+                        ></el-form-item
+                    >
+                    <el-form-item v-if="component.layoutPreset==='slide'" label="入口宽度"
+                        ><el-input-number v-model="component.itemWidth" :min="72" :max="160" /> px</el-form-item
+                    >
+                    <el-form-item label="图标尺寸"
+                        ><el-input-number v-model="component.iconSize" :min="24" :max="64" /> px</el-form-item
+                    >
+                </el-form></div
+            >
+            <div class="edit-attr-item-wrap"
+                ><h3>各业务外观</h3
+                ><el-alert
+                    :title="previewMessage"
+                    :type="previewState==='error'?'error':previewState==='denied'?'warning':'info'"
+                    :closable="false"
+                    show-icon
+                    ><template #default
+                        ><el-button
+                            v-if="canReadConfig"
+                            link
+                            type="primary"
+                            :loading="previewLoading"
+                            @click="loadPreview"
+                            >刷新启用业务</el-button
+                        ></template
+                    ></el-alert
+                >
+                <el-collapse class="business-items"
+                    ><el-collapse-item
+                        v-for="row in businesses"
+                        :key="row.key"
+                        :name="row.key"
+                        :title="item(row.key).title||row.name"
+                        ><el-form label-width="100px">
+                            <el-form-item label="显示名称"
+                                ><el-input
+                                    :model-value="item(row.key).title"
+                                    :placeholder="row.name"
+                                    maxlength="30"
+                                    @update:model-value="patchItem(row.key,'title',$event)"
+                            /></el-form-item>
+                            <el-form-item label="图标方式"
+                                ><el-select
+                                    :model-value="item(row.key).iconMode"
+                                    @update:model-value="patchItem(row.key,'iconMode',$event)"
+                                    ><el-option label="彩色线性图标" value="css" /><el-option
+                                        label="原版图片"
+                                        value="original" /><el-option label="图标库" value="library" /><el-option
+                                        label="上传图片"
+                                        value="image" /><el-option label="只显示文字" value="none" /></el-select
+                            ></el-form-item>
+                            <el-form-item v-if="item(row.key).iconMode==='image'" label="图标图片"
+                                ><UploadImage
+                                    :model-value="item(row.key).image"
+                                    @update:model-value="patchItem(row.key,'image',$event)"
+                            /></el-form-item>
+                            <el-form-item v-if="item(row.key).iconMode==='library'" label="图标"
+                                ><el-select
+                                    :model-value="item(row.key).icon"
+                                    @update:model-value="patchItem(row.key,'icon',$event)"
+                                    ><el-option
+                                        v-for="icon in iconOptions"
+                                        :key="icon.value"
+                                        :label="icon.label"
+                                        :value="icon.value" /></el-select
+                            ></el-form-item>
+                            <el-form-item
+                                v-if="!['image','original','none'].includes(item(row.key).iconMode)"
+                                label="图标颜色"
+                                ><el-color-picker
+                                    :model-value="item(row.key).iconColor"
+                                    @update:model-value="patchItem(row.key,'iconColor',$event||'')"
+                            /></el-form-item>
+                            <el-form-item v-if="item(row.key).iconMode!=='none'" label="图标底色"
+                                ><el-color-picker
+                                    :model-value="item(row.key).iconBgColor"
+                                    show-alpha
+                                    @update:model-value="patchItem(row.key,'iconBgColor',$event||'')"
+                            /></el-form-item>
+                            <el-form-item label="文字颜色"
+                                ><el-color-picker
+                                    :model-value="item(row.key).titleColor"
+                                    @update:model-value="patchItem(row.key,'titleColor',$event||'')"
+                            /></el-form-item>
+                            <el-form-item label="角标"
+                                ><el-radio-group
+                                    :model-value="item(row.key).badgeMode"
+                                    @update:model-value="patchItem(row.key,'badgeMode',$event)"
+                                    ><el-radio-button label="none">无</el-radio-button
+                                    ><el-radio-button label="hot">HOT</el-radio-button
+                                    ><el-radio-button label="new">NEW</el-radio-button
+                                    ><el-radio-button label="custom">自定义</el-radio-button></el-radio-group
+                                ></el-form-item
+                            >
+                            <template v-if="item(row.key).badgeMode!=='none'"
+                                ><el-form-item v-if="item(row.key).badgeMode==='custom'" label="角标文字"
+                                    ><el-input
+                                        :model-value="item(row.key).badgeText"
+                                        maxlength="8"
+                                        @update:model-value="patchItem(row.key,'badgeText',$event)" /></el-form-item
+                                ><el-form-item label="角标颜色"
+                                    ><el-color-picker
+                                        :model-value="item(row.key).badgeColor"
+                                        @update:model-value="patchItem(row.key,'badgeColor',$event||'')" /></el-form-item
+                                ><el-form-item label="角标背景"
+                                    ><el-color-picker
+                                        :model-value="item(row.key).badgeBgColor"
+                                        @update:model-value="patchItem(row.key,'badgeBgColor',$event||'')" /></el-form-item
+                            ></template> </el-form></el-collapse-item
+                ></el-collapse>
+            </div>
         </div>
-        </div>
-        <div v-show="diyStore.editTab==='style'" class="business-style-tab"><div class="edit-attr-item-wrap"><h3>内容外观</h3><el-form label-width="100px"><el-form-item v-for="field in styleColors.filter(row=>row.key!=='borderColor'||component.layoutPreset==='list')" :key="field.key" :label="field.label"><el-color-picker v-model="component[field.key]" :show-alpha="field.key==='borderColor'" /></el-form-item><el-form-item v-for="field in styleSizes" :key="field.key" :label="field.label"><el-input-number v-model="component[field.key]" :min="field.min" :max="field.max" :precision="0" /> px</el-form-item></el-form></div>
-        <el-collapse class="business-help"><el-collapse-item title="外观、背景与业务开关" name="help"><p>这里只调整本站已启用业务的展示，不会开通业务或修改客户表单、费用。容器背景色、背景图与圆角使用下方牛云通用样式设置。彩色线性图标使用内置绘制样式，可单独修改颜色，不接受任意代码。</p></el-collapse-item></el-collapse>
-        <slot name="style" />
+        <div v-show="diyStore.editTab==='style'" class="business-style-tab"
+            ><div class="edit-attr-item-wrap"
+                ><h3>内容外观</h3
+                ><el-form label-width="100px"
+                    ><el-form-item
+                        v-for="field in styleColors.filter(row=>row.key!=='borderColor'||component.layoutPreset==='list')"
+                        :key="field.key"
+                        :label="field.label"
+                        ><el-color-picker
+                            v-model="component[field.key]"
+                            :show-alpha="field.key==='borderColor'" /></el-form-item
+                    ><el-form-item v-for="field in styleSizes" :key="field.key" :label="field.label"
+                        ><el-input-number
+                            v-model="component[field.key]"
+                            :min="field.min"
+                            :max="field.max"
+                            :precision="0"
+                        />
+                        px</el-form-item
+                    ></el-form
+                ></div
+            >
+            <el-collapse class="business-help"
+                ><el-collapse-item title="外观、背景与业务开关" name="help"
+                    ><p
+                        >这里只调整本站已启用业务的展示，不会开通业务或修改客户表单、费用。容器背景色、背景图与圆角使用下方牛云通用样式设置。彩色线性图标使用内置绘制样式，可单独修改颜色，不接受任意代码。</p
+                    ></el-collapse-item
+                ></el-collapse
+            >
+            <slot name="style" />
         </div>
     </div>
 </template>
@@ -59,4 +198,6 @@ onMounted(()=>{mounted=true;Object.entries({...appearanceDefaults,title:'服务�
 watch(()=>`${activeSite()}:${canReadConfig.value?'1':'0'}`,()=>{if(!mounted||disposed)return;sequence++;previewLoading.value=false;businesses.value=[];preview=businessPreview('waiting',[],'正在重新核对本站业务');site=activeSite();sendPreview();void loadPreview()})
 onBeforeUnmount(()=>{disposed=true;sequence++;if(typeof window!=='undefined')window.removeEventListener('message',previewRequested)})
 </script>
-<style scoped>.business-editor h3{margin-bottom:14px}.business-items,.business-help{margin:12px 10px}.business-help p{font-size:12px;line-height:1.6;color:var(--el-text-color-secondary)}.business-editor :deep(.el-radio-group){display:flex;flex-wrap:wrap;gap:4px}.business-editor :deep(.el-form-item__content){min-width:0}</style>
+<style scoped>
+.business-editor h3{margin-bottom:14px}.business-items,.business-help{margin:12px 10px}.business-help p{font-size:12px;line-height:1.6;color:var(--el-text-color-secondary)}.business-editor :deep(.el-radio-group){display:flex;flex-wrap:wrap;gap:4px}.business-editor :deep(.el-form-item__content){min-width:0}
+</style>

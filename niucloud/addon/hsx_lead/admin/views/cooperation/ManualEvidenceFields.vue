@@ -1,11 +1,76 @@
 <template>
-    <el-form ref="formRef" :model="modelValue" :rules="rules" label-position="top" :disabled="disabled" class="manual-evidence-form" @submit.prevent>
-        <el-form-item :label="refund ? '本笔实际退款（元）' : '实际已收金额（元）'" prop="amount"><el-input :model-value="modelValue.amount" :readonly="amountReadonly" inputmode="decimal" maxlength="15" @update:model-value="update('amount',$event)"><template #prefix>¥</template></el-input></el-form-item>
-        <div class="manual-evidence-row"><el-form-item :label="refund ? '实际退款方式' : '实际收款方式'" prop="method"><el-select :model-value="modelValue.method" placeholder="按实际凭证选择" @update:model-value="update('method',$event)"><el-option v-for="item in methods" :key="item.value" :value="item.value" :label="item.label" /></el-select></el-form-item><el-form-item label="实际到账时间" prop="received_at"><el-date-picker :model-value="modelValue.received_at" type="datetime" value-format="X" placeholder="选择实际到账时间" :disabled-date="futureDate" @update:model-value="update('received_at',$event || '')" /></el-form-item></div>
-        <el-form-item :label="refund ? '实际退款账户 / 经办信息' : '实际收款账户 / 经办信息'" prop="account_label"><el-input :model-value="modelValue.account_label" maxlength="100" show-word-limit placeholder="填写账户名称与必要尾号；现金填写经办信息" @update:model-value="update('account_label',$event)" /></el-form-item>
-        <el-form-item label="交易流水号 / 现金收据号" prop="external_no"><el-input :model-value="modelValue.external_no" maxlength="100" show-word-limit placeholder="按实际交易凭证填写，现金也需要收据号" @update:model-value="update('external_no',$event)" /></el-form-item>
-        <el-form-item label="核对说明" prop="reason"><el-input :model-value="modelValue.reason" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="说明到账核对依据；金额有变化时说明调整原因" @update:model-value="update('reason',$event)" /></el-form-item>
-        <el-form-item prop="confirm"><el-checkbox :model-value="modelValue.confirm" @update:model-value="update('confirm',$event === true)">{{ refund ? '我已核实款项已实际退还给客户，确认登记以上退款信息' : '我已核实款项已实际到账，确认登记以上收款信息' }}</el-checkbox></el-form-item>
+    <el-form
+        ref="formRef"
+        :model="modelValue"
+        :rules="rules"
+        label-position="top"
+        :disabled="disabled"
+        class="manual-evidence-form"
+        @submit.prevent
+    >
+        <el-form-item :label="refund ? '本笔实际退款（元）' : '实际已收金额（元）'" prop="amount"
+            ><el-input
+                :model-value="modelValue.amount"
+                :readonly="amountReadonly"
+                inputmode="decimal"
+                maxlength="15"
+                @update:model-value="update('amount',$event)"
+                ><template #prefix>¥</template></el-input
+            ></el-form-item
+        >
+        <div class="manual-evidence-row"
+            ><el-form-item :label="refund ? '实际退款方式' : '实际收款方式'" prop="method"
+                ><el-select
+                    :model-value="modelValue.method"
+                    placeholder="按实际凭证选择"
+                    @update:model-value="update('method',$event)"
+                    ><el-option
+                        v-for="item in methods"
+                        :key="item.value"
+                        :value="item.value"
+                        :label="item.label" /></el-select></el-form-item
+            ><el-form-item label="实际到账时间" prop="received_at"
+                ><el-date-picker
+                    :model-value="modelValue.received_at"
+                    type="datetime"
+                    value-format="X"
+                    placeholder="选择实际到账时间"
+                    :disabled-date="futureDate"
+                    @update:model-value="update('received_at',$event || '')" /></el-form-item
+        ></div>
+        <el-form-item :label="refund ? '实际退款账户 / 经办信息' : '实际收款账户 / 经办信息'" prop="account_label"
+            ><el-input
+                :model-value="modelValue.account_label"
+                maxlength="100"
+                show-word-limit
+                placeholder="填写账户名称与必要尾号；现金填写经办信息"
+                @update:model-value="update('account_label',$event)"
+        /></el-form-item>
+        <el-form-item label="交易流水号 / 现金收据号" prop="external_no"
+            ><el-input
+                :model-value="modelValue.external_no"
+                maxlength="100"
+                show-word-limit
+                placeholder="按实际交易凭证填写，现金也需要收据号"
+                @update:model-value="update('external_no',$event)"
+        /></el-form-item>
+        <el-form-item label="核对说明" prop="reason"
+            ><el-input
+                :model-value="modelValue.reason"
+                type="textarea"
+                :rows="3"
+                maxlength="500"
+                show-word-limit
+                placeholder="说明到账核对依据；金额有变化时说明调整原因"
+                @update:model-value="update('reason',$event)"
+        /></el-form-item>
+        <el-form-item prop="confirm"
+            ><el-checkbox
+                :model-value="modelValue.confirm"
+                @update:model-value="update('confirm',$event === true)"
+                >{{ refund ? '我已核实款项已实际退还给客户，确认登记以上退款信息' : '我已核实款项已实际到账，确认登记以上收款信息' }}</el-checkbox
+            ></el-form-item
+        >
     </el-form>
 </template>
 <script setup lang="ts">

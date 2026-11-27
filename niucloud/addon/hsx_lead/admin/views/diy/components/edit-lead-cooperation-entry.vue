@@ -1,31 +1,144 @@
 <template>
     <div v-show="diyStore.editTab==='content'" class="content-wrap">
-        <div v-if="!businessMode" class="edit-attr-item-wrap"><h3 class="mb-[10px]">角色入口预设</h3><div class="preset-editor"><el-radio-group v-model="presetChoice"><el-radio-button v-for="preset in leadHomePresets" :key="preset.key" :label="preset.key">{{ preset.name }}</el-radio-button></el-radio-group><p class="editor-note">{{ selectedPreset?.description }}。选择后点击应用才生效，已有自定义配色不会自动改变。</p><el-button type="primary" plain :loading="applyingPreset" @click="applyPreset">应用此预设</el-button></div></div>
-        <div class="edit-attr-item-wrap"><h3 class="mb-[10px]">{{ businessMode?'业务快捷入口':'角色入口内容' }}</h3><el-form label-width="96px" class="px-[10px]">
-            <el-form-item label="显示标题"><el-switch v-model="diyStore.editComponent.showTitle" :active-value="1" :inactive-value="0" /></el-form-item>
-            <el-form-item label="首页标题"><el-input v-model.trim="diyStore.editComponent.title" maxlength="30" show-word-limit /></el-form-item>
-            <el-form-item label="辅助说明"><el-input v-model.trim="diyStore.editComponent.subtitle" maxlength="60" show-word-limit /></el-form-item>
-            <el-form-item v-if="businessMode" label="业务布局"><el-radio-group v-model="diyStore.editComponent.layoutPreset"><el-radio-button label="compact">快捷网格</el-radio-button><el-radio-button label="list">列表</el-radio-button></el-radio-group></el-form-item>
-            <template v-if="!businessMode">
-            <el-form-item label="门店入口标题"><el-input v-model.trim="diyStore.editComponent.storeTitle" maxlength="12" show-word-limit /></el-form-item>
-            <el-form-item label="门店入口说明"><el-input v-model.trim="diyStore.editComponent.storeSubtitle" maxlength="60" placeholder="选填，留空不显示" /></el-form-item>
-            <el-form-item label="门店行动文字"><el-input v-model.trim="diyStore.editComponent.storeActionText" maxlength="20" placeholder="选填，留空不显示" /></el-form-item>
-            <el-form-item label="门店入口图片"><UploadImage v-model="diyStore.editComponent.storeImage" :limit="1" /><p class="editor-note">自定义图片优先；留空时可使用预设素材或统一图标。</p></el-form-item>
-            <el-form-item label="客户入口标题"><el-input v-model.trim="diyStore.editComponent.customerTitle" maxlength="12" show-word-limit /></el-form-item>
-            <el-form-item label="客户入口说明"><el-input v-model.trim="diyStore.editComponent.customerSubtitle" maxlength="60" placeholder="选填，留空不显示" /></el-form-item>
-            <el-form-item label="客户行动文字"><el-input v-model.trim="diyStore.editComponent.customerActionText" maxlength="20" placeholder="选填，留空不显示" /></el-form-item>
-            <el-form-item label="客户入口图片"><UploadImage v-model="diyStore.editComponent.customerImage" :limit="1" /></el-form-item>
-            <el-form-item label="使用预设素材"><el-switch v-model="diyStore.editComponent.usePresetImages" :active-value="1" :inactive-value="0" /></el-form-item>
-            <el-form-item label="显示业务入口"><el-switch v-model="diyStore.editComponent.showBusinesses" :active-value="1" :inactive-value="0" /></el-form-item>
-            <el-form-item v-if="diyStore.editComponent.showBusinesses===1" label="业务分组标题"><el-input v-model.trim="diyStore.editComponent.businessTitle" maxlength="30" /></el-form-item>
-            <el-form-item label="显示底部工具"><el-switch v-model="diyStore.editComponent.showTools" :active-value="1" :inactive-value="0" /></el-form-item>
-            <template v-if="diyStore.editComponent.showTools===1"><el-form-item label="门店工具入口"><el-input v-model.trim="diyStore.editComponent.profileText" maxlength="30" /></el-form-item><el-form-item label="收益工具入口"><el-input v-model.trim="diyStore.editComponent.walletText" maxlength="30" /></el-form-item></template>
-            <el-form-item label="轻动效"><el-switch v-model="diyStore.editComponent.animate" :active-value="1" :inactive-value="0" /></el-form-item>
-            </template>
-        </el-form></div>
-        <el-collapse v-if="!businessMode" class="preview-help"><el-collapse-item title="找门店卡片 · 单独调整" name="stores-appearance"><RoleEntryEditorFields :model-value="diyStore.editComponent.storesAppearance||{}" :fallback="comboRoleFallback(diyStore.editComponent,'stores')" nested @update:model-value="updateCard('storesAppearance',$event)" /></el-collapse-item><el-collapse-item title="找客户卡片 · 单独调整" name="customers-appearance"><RoleEntryEditorFields :model-value="diyStore.editComponent.customersAppearance||{}" :fallback="comboRoleFallback(diyStore.editComponent,'customers')" nested @update:model-value="updateCard('customersAppearance',$event)" /></el-collapse-item></el-collapse>
-        <el-collapse class="preview-help"><el-collapse-item title="业务预览与生效范围" name="preview"><p class="editor-note">业务入口由本站启用业务决定；装修只改呈现，不修改费用或客户表单。</p>
-        <el-alert :title="previewMessage" :type="previewState==='denied' ? 'warning' : previewState==='error' ? 'error' : 'info'" :closable="false" show-icon class="preview-status"><template #default><el-button v-if="canReadConfig" link type="primary" :loading="previewLoading" @click="loadPreview">刷新业务预览</el-button></template></el-alert></el-collapse-item></el-collapse>
+        <div v-if="!businessMode" class="edit-attr-item-wrap"
+            ><h3 class="mb-[10px]">角色入口预设</h3
+            ><div class="preset-editor"
+                ><el-radio-group v-model="presetChoice"
+                    ><el-radio-button
+                        v-for="preset in leadHomePresets"
+                        :key="preset.key"
+                        :label="preset.key"
+                        >{{ preset.name }}</el-radio-button
+                    ></el-radio-group
+                ><p class="editor-note"
+                    >{{ selectedPreset?.description }}。选择后点击应用才生效，已有自定义配色不会自动改变。</p
+                ><el-button type="primary" plain :loading="applyingPreset" @click="applyPreset"
+                    >应用此预设</el-button
+                ></div
+            ></div
+        >
+        <div class="edit-attr-item-wrap"
+            ><h3 class="mb-[10px]">{{ businessMode?'业务快捷入口':'角色入口内容' }}</h3
+            ><el-form label-width="96px" class="px-[10px]">
+                <el-form-item label="显示标题"
+                    ><el-switch v-model="diyStore.editComponent.showTitle" :active-value="1" :inactive-value="0"
+                /></el-form-item>
+                <el-form-item label="首页标题"
+                    ><el-input v-model.trim="diyStore.editComponent.title" maxlength="30" show-word-limit
+                /></el-form-item>
+                <el-form-item label="辅助说明"
+                    ><el-input v-model.trim="diyStore.editComponent.subtitle" maxlength="60" show-word-limit
+                /></el-form-item>
+                <el-form-item v-if="businessMode" label="业务布局"
+                    ><el-radio-group v-model="diyStore.editComponent.layoutPreset"
+                        ><el-radio-button label="compact">快捷网格</el-radio-button
+                        ><el-radio-button label="list">列表</el-radio-button></el-radio-group
+                    ></el-form-item
+                >
+                <template v-if="!businessMode">
+                    <el-form-item label="门店入口标题"
+                        ><el-input v-model.trim="diyStore.editComponent.storeTitle" maxlength="12" show-word-limit
+                    /></el-form-item>
+                    <el-form-item label="门店入口说明"
+                        ><el-input
+                            v-model.trim="diyStore.editComponent.storeSubtitle"
+                            maxlength="60"
+                            placeholder="选填，留空不显示"
+                    /></el-form-item>
+                    <el-form-item label="门店行动文字"
+                        ><el-input
+                            v-model.trim="diyStore.editComponent.storeActionText"
+                            maxlength="20"
+                            placeholder="选填，留空不显示"
+                    /></el-form-item>
+                    <el-form-item label="门店入口图片"
+                        ><UploadImage v-model="diyStore.editComponent.storeImage" :limit="1" /><p class="editor-note"
+                            >自定义图片优先；留空时可使用预设素材或统一图标。</p
+                        ></el-form-item
+                    >
+                    <el-form-item label="客户入口标题"
+                        ><el-input v-model.trim="diyStore.editComponent.customerTitle" maxlength="12" show-word-limit
+                    /></el-form-item>
+                    <el-form-item label="客户入口说明"
+                        ><el-input
+                            v-model.trim="diyStore.editComponent.customerSubtitle"
+                            maxlength="60"
+                            placeholder="选填，留空不显示"
+                    /></el-form-item>
+                    <el-form-item label="客户行动文字"
+                        ><el-input
+                            v-model.trim="diyStore.editComponent.customerActionText"
+                            maxlength="20"
+                            placeholder="选填，留空不显示"
+                    /></el-form-item>
+                    <el-form-item label="客户入口图片"
+                        ><UploadImage v-model="diyStore.editComponent.customerImage" :limit="1"
+                    /></el-form-item>
+                    <el-form-item label="使用预设素材"
+                        ><el-switch
+                            v-model="diyStore.editComponent.usePresetImages"
+                            :active-value="1"
+                            :inactive-value="0"
+                    /></el-form-item>
+                    <el-form-item label="显示业务入口"
+                        ><el-switch
+                            v-model="diyStore.editComponent.showBusinesses"
+                            :active-value="1"
+                            :inactive-value="0"
+                    /></el-form-item>
+                    <el-form-item v-if="diyStore.editComponent.showBusinesses===1" label="业务分组标题"
+                        ><el-input v-model.trim="diyStore.editComponent.businessTitle" maxlength="30"
+                    /></el-form-item>
+                    <el-form-item label="显示底部工具"
+                        ><el-switch v-model="diyStore.editComponent.showTools" :active-value="1" :inactive-value="0"
+                    /></el-form-item>
+                    <template v-if="diyStore.editComponent.showTools===1"
+                        ><el-form-item label="门店工具入口"
+                            ><el-input v-model.trim="diyStore.editComponent.profileText" maxlength="30" /></el-form-item
+                        ><el-form-item label="收益工具入口"
+                            ><el-input v-model.trim="diyStore.editComponent.walletText" maxlength="30" /></el-form-item
+                    ></template>
+                    <el-form-item label="轻动效"
+                        ><el-switch v-model="diyStore.editComponent.animate" :active-value="1" :inactive-value="0"
+                    /></el-form-item>
+                </template> </el-form
+        ></div>
+        <el-collapse v-if="!businessMode" class="preview-help"
+            ><el-collapse-item title="找门店卡片 · 单独调整" name="stores-appearance"
+                ><RoleEntryEditorFields
+                    :model-value="diyStore.editComponent.storesAppearance||{}"
+                    :fallback="comboRoleFallback(diyStore.editComponent,'stores')"
+                    nested
+                    @update:model-value="updateCard('storesAppearance',$event)" /></el-collapse-item
+            ><el-collapse-item title="找客户卡片 · 单独调整" name="customers-appearance"
+                ><RoleEntryEditorFields
+                    :model-value="diyStore.editComponent.customersAppearance||{}"
+                    :fallback="comboRoleFallback(diyStore.editComponent,'customers')"
+                    nested
+                    @update:model-value="updateCard('customersAppearance',$event)" /></el-collapse-item
+        ></el-collapse>
+        <el-collapse class="preview-help"
+            ><el-collapse-item title="业务预览与生效范围" name="preview"
+                ><p class="editor-note">业务入口由本站启用业务决定；装修只改呈现，不修改费用或客户表单。</p>
+                <el-alert
+                    :title="previewMessage"
+                    :type="previewState==='denied' ? 'warning' : previewState==='error' ? 'error' : 'info'"
+                    :closable="false"
+                    show-icon
+                    class="preview-status"
+                    ><template #default
+                        ><el-button
+                            v-if="canReadConfig"
+                            link
+                            type="primary"
+                            :loading="previewLoading"
+                            @click="loadPreview"
+                            >刷新业务预览</el-button
+                        ></template
+                    ></el-alert
+                ></el-collapse-item
+            ></el-collapse
+        >
     </div>
     <div v-show="diyStore.editTab==='style'" class="style-wrap">
         <DiyAppearanceFields :allow-panel="false" /><slot name="style" />
@@ -79,4 +192,6 @@ onMounted(()=>{mounted=true;diyStore.editComponent.ignore=Array.isArray(diyStore
 watch(()=>`${activeSite()}:${canReadConfig.value?'1':'0'}`,()=>{if(!mounted||disposed)return;previewSequence++;previewLoading.value=false;previewSite=activeSite();previewValue=businessPreview('error',[],'站点或权限已变化，正在重新核对业务预览。');sendPreview();void loadPreview()})
 onBeforeUnmount(()=>{disposed=true;previewSequence++;if(typeof window!=='undefined')window.removeEventListener('message',previewRequested)})
 </script>
-<style scoped>.editor-note{font-size:12px;line-height:1.6;color:var(--el-text-color-secondary);margin-top:8px} .preview-status{margin-top:12px}.preview-help{margin:12px 10px}.preset-editor{padding:0 10px 12px}.preset-editor :deep(.el-radio-group){display:flex;flex-wrap:wrap;gap:6px}.preset-editor :deep(.el-radio-button__inner){border:1px solid var(--el-border-color);border-radius:4px}</style>
+<style scoped>
+.editor-note{font-size:12px;line-height:1.6;color:var(--el-text-color-secondary);margin-top:8px} .preview-status{margin-top:12px}.preview-help{margin:12px 10px}.preset-editor{padding:0 10px 12px}.preset-editor :deep(.el-radio-group){display:flex;flex-wrap:wrap;gap:6px}.preset-editor :deep(.el-radio-button__inner){border:1px solid var(--el-border-color);border-radius:4px}
+</style>

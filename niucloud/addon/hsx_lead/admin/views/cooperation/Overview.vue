@@ -1,10 +1,27 @@
 <template>
     <section>
-        <header class="coop-head"><h2>工作台</h2><el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button></header>
+        <header class="coop-head"
+            ><h2>工作台</h2><el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button></header
+        >
         <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="coop-error" />
-        <el-alert v-if="setupMessage" :title="setupMessage" type="warning" :closable="false" show-icon class="coop-error"><template #default><el-button link type="primary" @click="navigate('settings')">配置业务规则</el-button></template></el-alert>
+        <el-alert
+            v-if="setupMessage"
+            :title="setupMessage"
+            type="warning"
+            :closable="false"
+            show-icon
+            class="coop-error"
+            ><template #default
+                ><el-button link type="primary" @click="navigate('settings')">配置业务规则</el-button></template
+            ></el-alert
+        >
         <div class="coop-facts">
-            <HsxStatCard title="协作线索" :value="value('leads_total','total')" :loading="loading" description="当前可见范围" />
+            <HsxStatCard
+                title="协作线索"
+                :value="value('leads_total','total')"
+                :loading="loading"
+                description="当前可见范围"
+            />
             <HsxStatCard title="等待接单" :value="value('assigned')" :loading="loading" />
             <HsxStatCard title="跟进中" :value="value('following')" :loading="loading" />
             <HsxStatCard title="成交待付佣" :value="value('unpaid')" :loading="loading" />
@@ -12,9 +29,15 @@
         <div v-if="canLeads || canReview" class="coop-surface">
             <div class="coop-section-caption"><h3>待办处理</h3></div>
             <div class="coop-overview-todos">
-                <button v-if="canLeads" type="button" @click="navigate('leads',{status:'assigned'})"><b>跟进交付</b><span>{{ value('assigned') }} 条待接单</span></button>
-                <button v-if="canLeads" type="button" @click="navigate('leads',{status:'unpaid'})"><b>成交待付佣</b><span>{{ value('unpaid') }} 条</span></button>
-                <button v-if="canReview" type="button" @click="navigate('reviews')"><b>客服待复核</b><span>{{ value('pending_reviews') }} 条</span></button>
+                <button v-if="canLeads" type="button" @click="navigate('leads',{status:'assigned'})"
+                    ><b>跟进交付</b><span>{{ value('assigned') }} 条待接单</span></button
+                >
+                <button v-if="canLeads" type="button" @click="navigate('leads',{status:'unpaid'})"
+                    ><b>成交待付佣</b><span>{{ value('unpaid') }} 条</span></button
+                >
+                <button v-if="canReview" type="button" @click="navigate('reviews')"
+                    ><b>客服待复核</b><span>{{ value('pending_reviews') }} 条</span></button
+                >
             </div>
         </div>
     </section>

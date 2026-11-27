@@ -1,16 +1,88 @@
 <template>
-    <el-dialog v-model="visible" title="确认线下实际退款" width="min(640px, 94vw)" top="8vh" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy" :before-close="beforeClose" @closed="clearView">
-        <el-alert v-if="error" :title="error" type="warning" :closable="false" show-icon class="manual-refund-notice"><template #default><el-button link :disabled="busy || loading" @click="read">核对原退款</el-button></template></el-alert>
-        <el-alert v-if="recoveredMessage" :title="recoveredMessage" type="info" :closable="false" show-icon class="manual-refund-notice" />
+    <el-dialog
+        v-model="visible"
+        title="确认线下实际退款"
+        width="min(640px, 94vw)"
+        top="8vh"
+        :close-on-click-modal="false"
+        :close-on-press-escape="!busy"
+        :show-close="!busy"
+        :before-close="beforeClose"
+        @closed="clearView"
+    >
+        <el-alert v-if="error" :title="error" type="warning" :closable="false" show-icon class="manual-refund-notice"
+            ><template #default
+                ><el-button link :disabled="busy || loading" @click="read">核对原退款</el-button></template
+            ></el-alert
+        >
+        <el-alert
+            v-if="recoveredMessage"
+            :title="recoveredMessage"
+            type="info"
+            :closable="false"
+            show-icon
+            class="manual-refund-notice"
+        />
         <div v-loading="loading" class="manual-refund-body">
-            <el-descriptions v-if="source.order_id" :column="1" border size="small"><el-descriptions-item label="原收款单">{{ source.order_no || '#'+source.order_id }}</el-descriptions-item><el-descriptions-item label="已批准退款号">{{ source.refund_no }}</el-descriptions-item><el-descriptions-item label="本笔退款金额">{{ coopMoney(source.amount) }}</el-descriptions-item></el-descriptions>
-            <el-alert v-if="!terminal" :title="attempt || Number(source.manual_refund_receipt_id)>0 ? '本笔已提交实际退款登记，请核对原结果，不要再次转账。' : source.manual_refund_message || '请先在系统外完成实际退款、核实对方已收到款项，再登记交易流水。本窗口不会自动转账。'" type="warning" :closable="false" show-icon class="manual-refund-notice" />
-            <el-alert v-if="result.message" :title="result.message" :type="terminal?'success':'warning'" :closable="false" show-icon class="manual-refund-notice" />
+            <el-descriptions v-if="source.order_id" :column="1" border size="small"
+                ><el-descriptions-item
+                    label="原收款单"
+                    >{{ source.order_no || '#'+source.order_id }}</el-descriptions-item
+                ><el-descriptions-item label="已批准退款号">{{ source.refund_no }}</el-descriptions-item
+                ><el-descriptions-item
+                    label="本笔退款金额"
+                    >{{ coopMoney(source.amount) }}</el-descriptions-item
+                ></el-descriptions
+            >
+            <el-alert
+                v-if="!terminal"
+                :title="attempt || Number(source.manual_refund_receipt_id)>0 ? '本笔已提交实际退款登记，请核对原结果，不要再次转账。' : source.manual_refund_message || '请先在系统外完成实际退款、核实对方已收到款项，再登记交易流水。本窗口不会自动转账。'"
+                type="warning"
+                :closable="false"
+                show-icon
+                class="manual-refund-notice"
+            />
+            <el-alert
+                v-if="result.message"
+                :title="result.message"
+                :type="terminal?'success':'warning'"
+                :closable="false"
+                show-icon
+                class="manual-refund-notice"
+            />
             <el-tag v-if="terminal" type="success">实际退款已确认</el-tag>
-            <ManualEvidenceFields v-else-if="source.can_confirm_manual_refund===true || attempt" ref="evidenceRef" v-model="evidence" refund amount-readonly :disabled="busy || loading || readRequired || !!attempt" />
-            <el-alert v-if="attempt && !terminal" title="已保留本次实际退款信息，只能核对或继续同一登记；请勿再次向客户转账。" type="info" :closable="false" show-icon class="manual-refund-notice" />
+            <ManualEvidenceFields
+                v-else-if="source.can_confirm_manual_refund===true || attempt"
+                ref="evidenceRef"
+                v-model="evidence"
+                refund
+                amount-readonly
+                :disabled="busy || loading || readRequired || !!attempt"
+            />
+            <el-alert
+                v-if="attempt && !terminal"
+                title="已保留本次实际退款信息，只能核对或继续同一登记；请勿再次向客户转账。"
+                type="info"
+                :closable="false"
+                show-icon
+                class="manual-refund-notice"
+            />
         </div>
-        <template #footer><div class="manual-refund-footer"><el-button :disabled="busy" @click="close">关闭</el-button><el-button v-if="readRequired" type="primary" :loading="loading" :disabled="busy" @click="read">核对原退款</el-button><el-button v-else-if="!terminal && (source.can_confirm_manual_refund===true || attempt)" type="primary" :loading="busy" :disabled="loading || !canOperate" @click="submit">{{ attempt ? '继续原退款登记' : '已实际退款，确认登记' }}</el-button><el-button v-else :loading="loading" :disabled="busy" @click="read">刷新原退款结果</el-button></div></template>
+        <template #footer
+            ><div class="manual-refund-footer"
+                ><el-button :disabled="busy" @click="close">关闭</el-button
+                ><el-button v-if="readRequired" type="primary" :loading="loading" :disabled="busy" @click="read"
+                    >核对原退款</el-button
+                ><el-button
+                    v-else-if="!terminal && (source.can_confirm_manual_refund===true || attempt)"
+                    type="primary"
+                    :loading="busy"
+                    :disabled="loading || !canOperate"
+                    @click="submit"
+                    >{{ attempt ? '继续原退款登记' : '已实际退款，确认登记' }}</el-button
+                ><el-button v-else :loading="loading" :disabled="busy" @click="read">刷新原退款结果</el-button></div
+            ></template
+        >
     </el-dialog>
 </template>
 <script setup lang="ts">

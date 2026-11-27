@@ -1,5 +1,10 @@
 <template>
-    <el-dialog v-model="showDialog" title="会员微信收款方式" width="min(920px, calc(100vw - 32px))" :destroy-on-close="true">
+    <el-dialog
+        v-model="showDialog"
+        title="会员微信收款方式"
+        width="min(920px, calc(100vw - 32px))"
+        :destroy-on-close="true"
+    >
         <el-form :model="formData" label-position="top" class="virtual-pay-form" :disabled="loading">
             <el-form-item label="本业务微信收款方式">
                 <el-radio-group v-model="formData.config.payment_mode">
@@ -10,77 +15,327 @@
             </el-form-item>
 
             <template v-if="formData.config.payment_mode === 'virtual'">
-                <el-alert title="仅用于本业务的会员订单；成交协作费和其他业务不切换。配置保存不代表支付权限已恢复。" type="info" :closable="false" show-icon class="virtual-pay-alert" />
+                <el-alert
+                    title="仅用于本业务的会员订单；成交协作费和其他业务不切换。配置保存不代表支付权限已恢复。"
+                    type="info"
+                    :closable="false"
+                    show-icon
+                    class="virtual-pay-alert"
+                />
                 <div class="virtual-pay-grid">
                     <el-form-item label="支付环境">
                         <el-select v-model="formData.config.env">
                             <el-option label="开发测试（沙箱）" :value="1" />
                             <el-option label="正式环境" :value="0" />
                         </el-select>
-                        <p class="form-tip">{{ formData.config.env === 1 ? '当前为开发测试环境。正式收款前请切换正式环境，并填写正式 AppKey。' : '当前为正式环境，请核对正式 AppKey 及已发布商品；保存配置不会发起付款。' }}</p>
+                        <p
+                            class="form-tip"
+                            >{{ formData.config.env === 1 ? '当前为开发测试环境。正式收款前请切换正式环境，并填写正式 AppKey。' : '当前为正式环境，请核对正式 AppKey 及已发布商品；保存配置不会发起付款。' }}</p
+                        >
                     </el-form-item>
                     <el-form-item label="OfferID" required>
-                        <el-input v-model.trim="formData.config.offer_id" placeholder="虚拟支付基本配置中的 OfferID" maxlength="64" autocomplete="off" />
+                        <el-input
+                            v-model.trim="formData.config.offer_id"
+                            placeholder="虚拟支付基本配置中的 OfferID"
+                            maxlength="64"
+                            autocomplete="off"
+                        />
                     </el-form-item>
                 </div>
                 <el-form-item :label="formData.config.env === 1 ? '沙箱 AppKey' : '正式 AppKey'" required>
-                    <el-input v-if="formData.config.env === 1" v-model.trim="formData.config.sandbox_app_key" type="password" show-password autocomplete="new-password" placeholder="填写新值可替换已保存的密钥" />
-                    <el-input v-else v-model.trim="formData.config.app_key" type="password" show-password autocomplete="new-password" placeholder="填写新值可替换已保存的密钥" />
-                    <p class="form-tip">密钥仅在服务端使用；已保存的掩码无需重新输入。小程序 AppID 沿用本站小程序配置，不在这里另填。</p>
+                    <el-input
+                        v-if="formData.config.env === 1"
+                        v-model.trim="formData.config.sandbox_app_key"
+                        type="password"
+                        show-password
+                        autocomplete="new-password"
+                        placeholder="填写新值可替换已保存的密钥"
+                    />
+                    <el-input
+                        v-else
+                        v-model.trim="formData.config.app_key"
+                        type="password"
+                        show-password
+                        autocomplete="new-password"
+                        placeholder="填写新值可替换已保存的密钥"
+                    />
+                    <p class="form-tip"
+                        >密钥仅在服务端使用；已保存的掩码无需重新输入。小程序 AppID
+                        沿用本站小程序配置，不在这里另填。</p
+                    >
                 </el-form-item>
 
-                <div class="virtual-pay-section-heading"><h3>关联微信商品</h3><el-link href="/site/member/level" target="_blank" rel="noopener">管理会员等级</el-link></div>
-                <p class="form-tip">会员等级、周期和价格沿用会员权益。填写微信后台已发布的商品 ID，核对同价后再勾选启用；这里只修改关联，不创建或修改微信商品，也不重建会员等级和价格。</p>
-                <el-alert v-if="levelLoadError" :title="levelLoadError" type="warning" :closable="false" class="virtual-pay-alert" />
-                <el-alert v-else-if="productCoverageWarning" :title="productCoverageWarning" type="warning" :closable="false" class="virtual-pay-alert" />
+                <div class="virtual-pay-section-heading"
+                    ><h3>关联微信商品</h3
+                    ><el-link href="/site/member/level" target="_blank" rel="noopener">管理会员等级</el-link></div
+                >
+                <p class="form-tip"
+                    >会员等级、周期和价格沿用会员权益。填写微信后台已发布的商品
+                    ID，核对同价后再勾选启用；这里只修改关联，不创建或修改微信商品，也不重建会员等级和价格。</p
+                >
+                <el-alert
+                    v-if="levelLoadError"
+                    :title="levelLoadError"
+                    type="warning"
+                    :closable="false"
+                    class="virtual-pay-alert"
+                />
+                <el-alert
+                    v-else-if="productCoverageWarning"
+                    :title="productCoverageWarning"
+                    type="warning"
+                    :closable="false"
+                    class="virtual-pay-alert"
+                />
                 <div class="virtual-pay-products">
-                    <el-table v-loading="catalogLoading" :data="catalogRows" :empty-text="catalogLoading ? '正在读取已有会员周期' : '暂无已开启的购买周期，请先在会员等级中配置'" row-key="key">
-                        <el-table-column label="发布确认" width="155"><template #default="{ row }"><el-checkbox :model-value="row.enabled" :disabled="!validProductId(row.product_id) || row.conflict" @update:model-value="updateBinding(row,'enabled',$event)">已发布并核价</el-checkbox></template></el-table-column>
-                        <el-table-column label="会员等级" min-width="145"><template #default="{ row }"><strong>{{ row.level_name }}</strong><span class="form-tip">{{ row.level_code }}</span></template></el-table-column>
-                        <el-table-column label="购买周期" min-width="120"><template #default="{ row }">{{ row.cycle_name }}<span class="form-tip">{{ row.months }}个月</span></template></el-table-column>
-                        <el-table-column label="当前服务费" min-width="145"><template #default="{ row }"><strong>{{ productPrice(row) }}</strong><span v-if="row.price_changed" class="form-tip virtual-pay-error">原绑定 {{ formatPrice(row.binding_amount_cents) }}</span></template></el-table-column>
-                        <el-table-column label="微信已发布商品 ID" min-width="270"><template #default="{ row }">
-                            <div class="virtual-pay-product-id"><el-input :model-value="row.product_id" maxlength="20" :disabled="row.conflict" placeholder="例如 lead_v1_year99" @update:model-value="updateBinding(row,'product_id',$event)" /><el-button :disabled="!row.product_id" @click="copyProductId(row.product_id)">复制</el-button></div>
-                            <span v-if="row.conflict" class="form-tip virtual-pay-error">已有重复关联，请联系平台核对</span>
-                            <template v-else>
-                                <span class="form-tip">{{ row.product_id && !validProductId(row.product_id) ? '仅支持1～20位字母、数字和下划线，不支持短横线或空格' : row.enabled ? '已确认在微信发布并核价，保存后启用' : '填写后仍未启用，请核对发布状态与价格后勾选' }}</span>
-                                <el-checkbox v-if="row.price_changed" :model-value="row.confirm_price_change" @update:model-value="updateBinding(row,'confirm_price_change',$event)">已在微信核对当前价格</el-checkbox>
-                            </template>
-                        </template></el-table-column>
+                    <el-table
+                        v-loading="catalogLoading"
+                        :data="catalogRows"
+                        :empty-text="catalogLoading ? '正在读取已有会员周期' : '暂无已开启的购买周期，请先在会员等级中配置'"
+                        row-key="key"
+                    >
+                        <el-table-column label="发布确认" width="155"
+                            ><template #default="{ row }"
+                                ><el-checkbox
+                                    :model-value="row.enabled"
+                                    :disabled="!validProductId(row.product_id) || row.conflict"
+                                    @update:model-value="updateBinding(row,'enabled',$event)"
+                                    >已发布并核价</el-checkbox
+                                ></template
+                            ></el-table-column
+                        >
+                        <el-table-column label="会员等级" min-width="145"
+                            ><template #default="{ row }"
+                                ><strong>{{ row.level_name }}</strong
+                                ><span class="form-tip">{{ row.level_code }}</span></template
+                            ></el-table-column
+                        >
+                        <el-table-column label="购买周期" min-width="120"
+                            ><template #default="{ row }"
+                                >{{ row.cycle_name }}<span class="form-tip">{{ row.months }}个月</span></template
+                            ></el-table-column
+                        >
+                        <el-table-column label="当前服务费" min-width="145"
+                            ><template #default="{ row }"
+                                ><strong>{{ productPrice(row) }}</strong
+                                ><span v-if="row.price_changed" class="form-tip virtual-pay-error"
+                                    >原绑定 {{ formatPrice(row.binding_amount_cents) }}</span
+                                ></template
+                            ></el-table-column
+                        >
+                        <el-table-column label="微信已发布商品 ID" min-width="270"
+                            ><template #default="{ row }">
+                                <div class="virtual-pay-product-id"
+                                    ><el-input
+                                        :model-value="row.product_id"
+                                        maxlength="20"
+                                        :disabled="row.conflict"
+                                        placeholder="例如 lead_v1_year99"
+                                        @update:model-value="updateBinding(row,'product_id',$event)"
+                                    /><el-button :disabled="!row.product_id" @click="copyProductId(row.product_id)"
+                                        >复制</el-button
+                                    ></div
+                                >
+                                <span v-if="row.conflict" class="form-tip virtual-pay-error"
+                                    >已有重复关联，请联系平台核对</span
+                                >
+                                <template v-else>
+                                    <span
+                                        class="form-tip"
+                                        >{{ row.product_id && !validProductId(row.product_id) ? '仅支持1～20位字母、数字和下划线，不支持短横线或空格' : row.enabled ? '已确认在微信发布并核价，保存后启用' : '填写后仍未启用，请核对发布状态与价格后勾选' }}</span
+                                    >
+                                    <el-checkbox
+                                        v-if="row.price_changed"
+                                        :model-value="row.confirm_price_change"
+                                        @update:model-value="updateBinding(row,'confirm_price_change',$event)"
+                                        >已在微信核对当前价格</el-checkbox
+                                    >
+                                </template>
+                            </template></el-table-column
+                        >
                     </el-table>
                 </div>
-                <p class="form-tip">价格由会员配置读取，支付前仍核验实际报价；不会自动创建微信商品。已绑定价格发生变化时，须先在微信核对再确认关联。</p>
+                <p class="form-tip"
+                    >价格由会员配置读取，支付前仍核验实际报价；不会自动创建微信商品。已绑定价格发生变化时，须先在微信核对再确认关联。</p
+                >
 
                 <el-collapse class="virtual-pay-more">
-                    <el-collapse-item :title="`特殊报价及其他已保存关联（${specialProducts.length}）`" name="special-quotes">
-                        <p class="form-tip">原有补差、押金及经验费报价关联原样保留，不会被当前会员价格覆盖。新增关联须选择已存在的会员订单，只引用其冻结报价，不创建订单、不恢复已关闭订单，也不发起付款。</p>
-                        <el-table v-if="specialProducts.length" :data="specialProducts" row-key="_key"><el-table-column label="会员等级" prop="level_code" min-width="120" /><el-table-column label="周期" prop="cycle" min-width="110" /><el-table-column label="原绑定金额" min-width="135"><template #default="{ row }">{{ productPrice(row) }}</template></el-table-column><el-table-column label="微信商品 ID" prop="product_id" min-width="190" /><el-table-column label="状态" min-width="85"><template #default="{ row }">{{ row.enabled ? '已启用' : '未启用' }}</template></el-table-column></el-table>
+                    <el-collapse-item
+                        :title="`特殊报价及其他已保存关联（${specialProducts.length}）`"
+                        name="special-quotes"
+                    >
+                        <p class="form-tip"
+                            >原有补差、押金及经验费报价关联原样保留，不会被当前会员价格覆盖。新增关联须选择已存在的会员订单，只引用其冻结报价，不创建订单、不恢复已关闭订单，也不发起付款。</p
+                        >
+                        <el-table v-if="specialProducts.length" :data="specialProducts" row-key="_key"
+                            ><el-table-column label="会员等级" prop="level_code" min-width="120" /><el-table-column
+                                label="周期"
+                                prop="cycle"
+                                min-width="110"
+                            /><el-table-column label="原绑定金额" min-width="135"
+                                ><template #default="{ row }">{{ productPrice(row) }}</template></el-table-column
+                            ><el-table-column label="微信商品 ID" prop="product_id" min-width="190" /><el-table-column
+                                label="状态"
+                                min-width="85"
+                                ><template
+                                    #default="{ row }"
+                                    >{{ row.enabled ? '已启用' : '未启用' }}</template
+                                ></el-table-column
+                            ></el-table
+                        >
                         <h4 class="virtual-pay-quote-title">从已有会员订单关联</h4>
-                        <el-form-item label="已有会员订单"><el-select v-model="selectedQuoteOrder" filterable remote clearable :remote-method="quoteCandidates.search" :loading="quoteCandidates.loading.value" placeholder="搜索单号、门店、会员或手机号" no-data-text="未找到可引用的会员订单" class="virtual-pay-quote-select" @visible-change="open => open && openQuoteOrders()"><el-option v-for="item in quoteCandidates.options.value" :key="item.id" :value="Number(item.id)" :label="quoteOrderLabel(item)" :disabled="!item.quote_amount_cents" /></el-select><p v-if="quoteCandidates.error.value" class="form-tip virtual-pay-error" role="alert">{{ quoteCandidates.error.value }} <el-button link type="primary" :loading="quoteCandidates.loading.value" @click="quoteCandidates.load()">重新读取</el-button></p><p class="form-tip">可选择待付、已付或已关闭的合法历史报价；查不到订单或没有权限时，请到 <el-link href="/site/hsx_lead/cooperation/orders" target="_blank" rel="noopener">支付订单</el-link> 核对。</p></el-form-item>
-                        <div v-if="chosenQuoteOrder" class="virtual-pay-quote-summary"><strong>{{ quoteOrderLabel(chosenQuoteOrder) }}</strong><span>等级、周期及金额由原订单读取，不在此处修改。</span></div>
-                        <el-form-item label="对应的微信已发布商品 ID"><div class="virtual-pay-product-id"><el-input v-model="quoteProductId" maxlength="20" :disabled="!chosenQuoteOrder" placeholder="填写与原单总价一致的已发布商品 ID" /><el-button :disabled="!quoteProductId" @click="copyProductId(quoteProductId)">复制</el-button></div><el-checkbox v-model="quotePublished" :disabled="!chosenQuoteOrder || !validProductId(quoteProductId)" class="virtual-pay-quote-confirm">此商品已在微信发布，且价格与原单金额一致</el-checkbox><el-button :disabled="!chosenQuoteOrder || !validProductId(quoteProductId) || !quotePublished || quoteCandidates.loading.value" class="virtual-pay-quote-add" @click="addOrderQuote">加入本次关联</el-button><p class="form-tip">ID仅支持1～20位字母、数字和下划线。只加入当前编辑草稿，点击底部“保存配置”才会保存；不会创建或修改微信商品。</p></el-form-item>
-                        <el-alert v-if="quoteDraftError" :title="quoteDraftError" type="warning" :closable="false" class="virtual-pay-alert" />
-                        <el-table v-if="orderQuoteDrafts.length" :data="orderQuoteDrafts" row-key="order_id"><el-table-column label="本次引用订单" prop="order_no" min-width="190" /><el-table-column label="原单金额" min-width="120"><template #default="{ row }">{{ productPrice(row) }}</template></el-table-column><el-table-column label="微信商品 ID" prop="product_id" min-width="190" /><el-table-column label="操作" width="125"><template #default="{ row }"><el-button link type="danger" @click="removeOrderQuote(row.order_id)">移除本次关联</el-button></template></el-table-column></el-table>
+                        <el-form-item label="已有会员订单"
+                            ><el-select
+                                v-model="selectedQuoteOrder"
+                                filterable
+                                remote
+                                clearable
+                                :remote-method="quoteCandidates.search"
+                                :loading="quoteCandidates.loading.value"
+                                placeholder="搜索单号、门店、会员或手机号"
+                                no-data-text="未找到可引用的会员订单"
+                                class="virtual-pay-quote-select"
+                                @visible-change="open => open && openQuoteOrders()"
+                                ><el-option
+                                    v-for="item in quoteCandidates.options.value"
+                                    :key="item.id"
+                                    :value="Number(item.id)"
+                                    :label="quoteOrderLabel(item)"
+                                    :disabled="!item.quote_amount_cents" /></el-select
+                            ><p v-if="quoteCandidates.error.value" class="form-tip virtual-pay-error" role="alert"
+                                >{{ quoteCandidates.error.value }}
+                                <el-button
+                                    link
+                                    type="primary"
+                                    :loading="quoteCandidates.loading.value"
+                                    @click="quoteCandidates.load()"
+                                    >重新读取</el-button
+                                ></p
+                            ><p class="form-tip"
+                                >可选择待付、已付或已关闭的合法历史报价；查不到订单或没有权限时，请到
+                                <el-link href="/site/hsx_lead/cooperation/orders" target="_blank" rel="noopener"
+                                    >支付订单</el-link
+                                >
+                                核对。</p
+                            ></el-form-item
+                        >
+                        <div v-if="chosenQuoteOrder" class="virtual-pay-quote-summary"
+                            ><strong>{{ quoteOrderLabel(chosenQuoteOrder) }}</strong
+                            ><span>等级、周期及金额由原订单读取，不在此处修改。</span></div
+                        >
+                        <el-form-item label="对应的微信已发布商品 ID"
+                            ><div class="virtual-pay-product-id"
+                                ><el-input
+                                    v-model="quoteProductId"
+                                    maxlength="20"
+                                    :disabled="!chosenQuoteOrder"
+                                    placeholder="填写与原单总价一致的已发布商品 ID"
+                                /><el-button :disabled="!quoteProductId" @click="copyProductId(quoteProductId)"
+                                    >复制</el-button
+                                ></div
+                            ><el-checkbox
+                                v-model="quotePublished"
+                                :disabled="!chosenQuoteOrder || !validProductId(quoteProductId)"
+                                class="virtual-pay-quote-confirm"
+                                >此商品已在微信发布，且价格与原单金额一致</el-checkbox
+                            ><el-button
+                                :disabled="!chosenQuoteOrder || !validProductId(quoteProductId) || !quotePublished || quoteCandidates.loading.value"
+                                class="virtual-pay-quote-add"
+                                @click="addOrderQuote"
+                                >加入本次关联</el-button
+                            ><p class="form-tip"
+                                >ID仅支持1～20位字母、数字和下划线。只加入当前编辑草稿，点击底部“保存配置”才会保存；不会创建或修改微信商品。</p
+                            ></el-form-item
+                        >
+                        <el-alert
+                            v-if="quoteDraftError"
+                            :title="quoteDraftError"
+                            type="warning"
+                            :closable="false"
+                            class="virtual-pay-alert"
+                        />
+                        <el-table v-if="orderQuoteDrafts.length" :data="orderQuoteDrafts" row-key="order_id"
+                            ><el-table-column label="本次引用订单" prop="order_no" min-width="190" /><el-table-column
+                                label="原单金额"
+                                min-width="120"
+                                ><template #default="{ row }">{{ productPrice(row) }}</template></el-table-column
+                            ><el-table-column label="微信商品 ID" prop="product_id" min-width="190" /><el-table-column
+                                label="操作"
+                                width="125"
+                                ><template #default="{ row }"
+                                    ><el-button link type="danger" @click="removeOrderQuote(row.order_id)"
+                                        >移除本次关联</el-button
+                                    ></template
+                                ></el-table-column
+                            ></el-table
+                        >
                     </el-collapse-item>
                     <el-collapse-item title="消息推送与安全配置" name="callback">
                         <el-form-item label="当前站点消息回调 URL">
-                            <div class="virtual-pay-callback"><el-input :model-value="callbackUrl" readonly :placeholder="callbackLoading ? '正在读取当前小程序回调地址' : callbackManaged ? '已沿用开放平台消息事件地址' : '点击读取，沿用本站小程序消息服务器地址'" /><el-button :loading="callbackLoading" @click="readCallbackUrl">{{ callbackUrl || callbackManaged ? '重新读取' : '读取地址' }}</el-button><el-button :disabled="!callbackUrl || callbackLoading" @click="copyCallbackUrl">复制</el-button></div>
-                            <p v-if="callbackManaged" class="form-tip" role="status">当前小程序通过开放平台授权，沿用平台已配置的消息事件地址，无需在这里另填回调。</p>
-                            <p v-if="callbackError" class="form-tip virtual-pay-error" role="alert">{{ callbackError }}</p>
-                            <p class="form-tip">沿用牛云小程序消息服务器地址，使用安全模式、XML 格式。这里只读取和复制，不修改已配置的消息服务器、Token 或 EncodingAESKey。</p>
+                            <div class="virtual-pay-callback"
+                                ><el-input
+                                    :model-value="callbackUrl"
+                                    readonly
+                                    :placeholder="callbackLoading ? '正在读取当前小程序回调地址' : callbackManaged ? '已沿用开放平台消息事件地址' : '点击读取，沿用本站小程序消息服务器地址'"
+                                /><el-button
+                                    :loading="callbackLoading"
+                                    @click="readCallbackUrl"
+                                    >{{ callbackUrl || callbackManaged ? '重新读取' : '读取地址' }}</el-button
+                                ><el-button :disabled="!callbackUrl || callbackLoading" @click="copyCallbackUrl"
+                                    >复制</el-button
+                                ></div
+                            >
+                            <p v-if="callbackManaged" class="form-tip" role="status"
+                                >当前小程序通过开放平台授权，沿用平台已配置的消息事件地址，无需在这里另填回调。</p
+                            >
+                            <p
+                                v-if="callbackError"
+                                class="form-tip virtual-pay-error"
+                                role="alert"
+                                >{{ callbackError }}</p
+                            >
+                            <p class="form-tip"
+                                >沿用牛云小程序消息服务器地址，使用安全模式、XML
+                                格式。这里只读取和复制，不修改已配置的消息服务器、Token 或 EncodingAESKey。</p
+                            >
                         </el-form-item>
-                        <p class="form-tip">Token、EncodingAESKey 及消息加密方式直接沿用牛云当前小程序消息服务，不再重复填写；虚拟支付 AppKey 与消息配置不是同一把密钥。</p><el-link href="/site/channel/weapp/config" target="_blank" rel="noopener">查看小程序消息配置</el-link>
+                        <p class="form-tip"
+                            >Token、EncodingAESKey 及消息加密方式直接沿用牛云当前小程序消息服务，不再重复填写；虚拟支付
+                            AppKey 与消息配置不是同一把密钥。</p
+                        ><el-link href="/site/channel/weapp/config" target="_blank" rel="noopener"
+                            >查看小程序消息配置</el-link
+                        >
                     </el-collapse-item>
                     <el-collapse-item title="押金和购买经验的适用范围" name="costs">
-                        <el-form-item label="允许包含押金"><el-switch v-model="formData.config.allow_deposit" /></el-form-item>
-                        <el-form-item label="允许包含购买经验费用"><el-switch v-model="formData.config.allow_experience" /></el-form-item>
-                        <p class="form-tip">默认关闭。仅在腾讯已明确核准对应收费项与退款方式后开启；勾选不是申请开通，也不会改变分项账务或邀请分佣基数。</p>
+                        <el-form-item label="允许包含押金"
+                            ><el-switch v-model="formData.config.allow_deposit"
+                        /></el-form-item>
+                        <el-form-item label="允许包含购买经验费用"
+                            ><el-switch v-model="formData.config.allow_experience"
+                        /></el-form-item>
+                        <p class="form-tip"
+                            >默认关闭。仅在腾讯已明确核准对应收费项与退款方式后开启；勾选不是申请开通，也不会改变分项账务或邀请分佣基数。</p
+                        >
                     </el-collapse-item>
                 </el-collapse>
             </template>
-            <el-alert v-else title="会员订单沿用本站普通微信支付配置，其他业务的收款方式不变。" type="info" :closable="false" show-icon />
+            <el-alert
+                v-else
+                title="会员订单沿用本站普通微信支付配置，其他业务的收款方式不变。"
+                type="info"
+                :closable="false"
+                show-icon
+            />
         </el-form>
-        <template #footer><el-button :disabled="loading" @click="cancel">取消</el-button><el-button type="primary" :loading="loading || formData.config.payment_mode === 'virtual' && catalogLoading" @click="confirm">保存配置</el-button></template>
+        <template #footer
+            ><el-button :disabled="loading" @click="cancel">取消</el-button
+            ><el-button
+                type="primary"
+                :loading="loading || formData.config.payment_mode === 'virtual' && catalogLoading"
+                @click="confirm"
+                >保存配置</el-button
+            ></template
+        >
     </el-dialog>
 </template>
 

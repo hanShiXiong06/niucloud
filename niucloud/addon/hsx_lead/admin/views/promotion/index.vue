@@ -1,6 +1,11 @@
 <template>
     <PageShell permission="hsx_lead_promotion_manage">
-        <header class="coop-head"><div><h2>推广管理</h2><p class="promotion-subtitle">邀请关系、付费情况、服务商审核与奖励结算</p></div><div class="coop-actions"><el-button :icon="Refresh" :loading="activeLoading" @click="reloadActive">刷新当前页</el-button></div></header>
+        <header class="coop-head"
+            ><div><h2>推广管理</h2><p class="promotion-subtitle">邀请关系、付费情况、服务商审核与奖励结算</p></div
+            ><div class="coop-actions"
+                ><el-button :icon="Refresh" :loading="activeLoading" @click="reloadActive">刷新当前页</el-button></div
+            ></header
+        >
         <el-tabs v-model="tab" @tab-change="loadTab">
             <el-tab-pane v-if="canRelations" label="推广人汇总" name="inviters" />
             <el-tab-pane v-if="canRelations" label="邀请关系" name="relations" />
@@ -9,76 +14,672 @@
             <el-tab-pane v-if="canConfigRead" label="推广规则" name="rules" />
         </el-tabs>
 
-        <PromotionInviters v-if="tab==='inviters' && canRelations" ref="invitersPanel" :can-view-rewards="canRewards" @relations="showInviterRelations" @rewards="showInviterRewards" />
-        <PromotionRelations v-else-if="tab==='relations' && canRelations" ref="relationsPanel" :initial-inviter="selectedInviter" />
+        <PromotionInviters
+            v-if="tab==='inviters' && canRelations"
+            ref="invitersPanel"
+            :can-view-rewards="canRewards"
+            @relations="showInviterRelations"
+            @rewards="showInviterRewards"
+        />
+        <PromotionRelations
+            v-else-if="tab==='relations' && canRelations"
+            ref="relationsPanel"
+            :initial-inviter="selectedInviter"
+        />
         <template v-else-if="tab==='providers'">
-            <div class="promotion-filters"><HsxSearchInput v-model="providerQuery.keyword" placeholder="搜索会员、门店或手机号" class="promotion-keyword" :disabled="providerLoading" :show-button="false" @search="searchProviders" /><el-select v-model="providerQuery.application_status" clearable placeholder="全部申请状态" :disabled="providerLoading" aria-label="申请状态"><el-option v-for="item in applicationStatuses" :key="item.value" :label="item.label" :value="item.value" /></el-select><el-select v-model="providerQuery.role" clearable placeholder="全部推广身份" :disabled="providerLoading" aria-label="推广身份"><el-option label="普通会员" value="normal" /><el-option label="服务商" value="provider" /></el-select><el-button type="primary" :disabled="providerLoading" @click="searchProviders">查询</el-button><el-button :disabled="providerLoading" @click="showPendingProviders">查看待审核</el-button></div>
-            <el-alert v-if="providerError" :title="providerError" type="error" :closable="false" show-icon class="coop-error" />
-            <div class="coop-surface"><HsxTable :columns="providerColumns" :data="providers" :loading="providerLoading" row-key="member_id" empty-text="没有符合条件的会员，可调整搜索条件">
-                <template #member="{row}"><div class="coop-cell"><strong>{{ row.merchant_name || row.name || '本站会员' }}</strong><small>{{ row.name }} · {{ row.mobile_masked || '未留电话' }}</small><small>{{ row.region_text || '门店资料待完善' }}</small></div></template>
-                <template #qualification="{row}"><div class="coop-cell"><div class="promotion-badges"><el-tag :type="applicationTag(row)" effect="plain">{{ applicationLabel(row) }}</el-tag><el-tag type="info" effect="plain">{{ row.role==='provider'?'服务商档':'普通会员档' }}</el-tag></div><small>{{ row.city || row.application?.city || '未指定推广城市' }}</small><small v-if="applicationStatus(row)==='disabled'">{{ row.application?.disabled_mode==='blocked'?'已禁止新的推广奖励':'后续按普通会员规则参与推广' }}</small><small v-if="applicationStatus(row)==='pending'">申请于 {{ coopTime(row.application?.submitted_at) }}</small></div></template>
-                <template #upstream="{row}"><div class="coop-cell"><strong>{{ row.upstream_name || '暂无邀请人' }}</strong><small>直属关系由框架会员归属确定</small></div></template>
-                <template #action="{row}"><el-button link type="primary" @click="editProvider(row)">{{ canProviderReview&&applicationStatus(row)==='pending'?'审核申请':'查看详情' }}</el-button></template>
-            </HsxTable><div class="coop-pagination"><HsxPagination :current-page="providerQuery.page" :page-size="providerQuery.limit" :total="providerTotal" :disabled="providerLoading" @change="providerPage" /></div></div>
+            <div class="promotion-filters"
+                ><HsxSearchInput
+                    v-model="providerQuery.keyword"
+                    placeholder="搜索会员、门店或手机号"
+                    class="promotion-keyword"
+                    :disabled="providerLoading"
+                    :show-button="false"
+                    @search="searchProviders"
+                /><el-select
+                    v-model="providerQuery.application_status"
+                    clearable
+                    placeholder="全部申请状态"
+                    :disabled="providerLoading"
+                    aria-label="申请状态"
+                    ><el-option
+                        v-for="item in applicationStatuses"
+                        :key="item.value"
+                        :label="item.label"
+                        :value="item.value" /></el-select
+                ><el-select
+                    v-model="providerQuery.role"
+                    clearable
+                    placeholder="全部推广身份"
+                    :disabled="providerLoading"
+                    aria-label="推广身份"
+                    ><el-option label="普通会员" value="normal" /><el-option
+                        label="服务商"
+                        value="provider" /></el-select
+                ><el-button type="primary" :disabled="providerLoading" @click="searchProviders">查询</el-button
+                ><el-button :disabled="providerLoading" @click="showPendingProviders">查看待审核</el-button></div
+            >
+            <el-alert
+                v-if="providerError"
+                :title="providerError"
+                type="error"
+                :closable="false"
+                show-icon
+                class="coop-error"
+            />
+            <div class="coop-surface"
+                ><HsxTable
+                    :columns="providerColumns"
+                    :data="providers"
+                    :loading="providerLoading"
+                    row-key="member_id"
+                    empty-text="没有符合条件的会员，可调整搜索条件"
+                >
+                    <template #member="{row}"
+                        ><div class="coop-cell"
+                            ><strong>{{ row.merchant_name || row.name || '本站会员' }}</strong
+                            ><small>{{ row.name }} · {{ row.mobile_masked || '未留电话' }}</small
+                            ><small>{{ row.region_text || '门店资料待完善' }}</small></div
+                        ></template
+                    >
+                    <template #qualification="{row}"
+                        ><div class="coop-cell"
+                            ><div class="promotion-badges"
+                                ><el-tag :type="applicationTag(row)" effect="plain">{{ applicationLabel(row) }}</el-tag
+                                ><el-tag
+                                    type="info"
+                                    effect="plain"
+                                    >{{ row.role==='provider'?'服务商档':'普通会员档' }}</el-tag
+                                ></div
+                            ><small>{{ row.city || row.application?.city || '未指定推广城市' }}</small
+                            ><small
+                                v-if="applicationStatus(row)==='disabled'"
+                                >{{ row.application?.disabled_mode==='blocked'?'已禁止新的推广奖励':'后续按普通会员规则参与推广' }}</small
+                            ><small v-if="applicationStatus(row)==='pending'"
+                                >申请于 {{ coopTime(row.application?.submitted_at) }}</small
+                            ></div
+                        ></template
+                    >
+                    <template #upstream="{row}"
+                        ><div class="coop-cell"
+                            ><strong>{{ row.upstream_name || '暂无邀请人' }}</strong
+                            ><small>直属关系由框架会员归属确定</small></div
+                        ></template
+                    >
+                    <template #action="{row}"
+                        ><el-button
+                            link
+                            type="primary"
+                            @click="editProvider(row)"
+                            >{{ canProviderReview&&applicationStatus(row)==='pending'?'审核申请':'查看详情' }}</el-button
+                        ></template
+                    > </HsxTable
+                ><div class="coop-pagination"
+                    ><HsxPagination
+                        :current-page="providerQuery.page"
+                        :page-size="providerQuery.limit"
+                        :total="providerTotal"
+                        :disabled="providerLoading"
+                        @change="providerPage" /></div
+            ></div>
         </template>
 
         <template v-else-if="tab==='rewards'">
-            <div class="promotion-selected-inviter"><el-select v-model="rewardQuery.commission_level" clearable placeholder="全部奖励层级" :disabled="rewardLoading" style="width:180px" @change="searchRewards"><el-option label="一级 · 直接邀请" :value="1" /><el-option label="二级 · 间接邀请" :value="2" /></el-select><span>同笔订单可能分别生成两级奖励，按实际受益人独立记账</span></div>
-            <div v-if="rewardQuery.provider_member_id" class="promotion-selected-inviter"><el-tag closable effect="plain" @close="clearRewardInviter">{{ rewardInviterName }}的分佣台账</el-tag><span>按原推广人核对每笔奖励，不含店员加入记录</span></div>
-            <div class="promotion-filters"><HsxSearchInput v-model="rewardQuery.keyword" class="promotion-keyword" placeholder="搜索推广人、来源会员或业务单号" :disabled="rewardLoading" :show-button="false" @search="searchRewards" /><el-select v-model="rewardQuery.status" clearable placeholder="全部奖励状态" :disabled="rewardLoading"><el-option v-for="item in statuses" :key="item.value" :label="item.label" :value="item.value" /></el-select><el-select v-model="rewardQuery.source" clearable placeholder="全部收益来源" :disabled="rewardLoading"><el-option v-for="item in sources" :key="item.key" :label="item.label" :value="item.key" /></el-select><el-date-picker v-model="rewardDates" type="datetimerange" value-format="X" start-placeholder="产生时间起" end-placeholder="产生时间止" :disabled="rewardLoading" /><el-button type="primary" :disabled="rewardLoading" @click="searchRewards">查询</el-button><el-button v-if="canSettle" :loading="settling" :disabled="rewardLoading || settling || holding || retrying>0" @click="settle">结算已到期奖励</el-button></div>
-            <el-alert v-if="rewardError" :title="rewardError" type="error" :closable="false" show-icon class="coop-error" />
-            <el-collapse v-if="paymentReviewTotal>0" v-model="reviewExpanded" class="promotion-explainer promotion-payment-reviews"><el-collapse-item :title="`待核对付款 · ${paymentReviewTotal} 笔`" name="payments"><HsxTable :columns="paymentReviewColumns" :data="paymentReviews" row-key="id"><template #business="{row}"><div class="coop-cell"><strong>{{ purposeLabel(row.purpose) }} · {{ coopMoney(row.amount) }}</strong><small>{{ row.order_no }}</small><small>已付款 {{ coopTime(row.pay_time) }}</small></div></template><template #issue="{row}"><span>{{ row.message || '推广奖励尚未核对完成' }}</span></template><template #action="{row}"><el-button v-if="canRetry&&row.can_retry" link type="primary" :disabled="settling||holding||retrying>0||retryReadRequired" :loading="retrying===Number(row.id)" @click="retryPayment(row)">{{ retryReadRequired?'请先刷新核对':'按原付款快照恢复' }}</el-button><span v-else class="coop-muted">{{ row.can_retry?'需结算与恢复权限':'需人工核对原单' }}</span></template></HsxTable><p class="coop-form-note">这里只列最近10笔待核对付款，不受下方奖励筛选影响；恢复不会重新扣款，也不按当前比例补算。没有原快照的付款需人工核对。</p></el-collapse-item></el-collapse>
-            <div class="coop-surface"><HsxTable :columns="rewardColumns" :data="rewards" :loading="rewardLoading" row-key="id" empty-text="暂无符合条件的奖励记录">
-                <template #people="{row}"><div class="coop-cell"><strong>{{ row.provider_name || '推广会员' }}</strong><small>来源：{{ row.payer_name || '本站会员' }}</small></div></template>
-                <template #business="{row}"><div class="coop-cell"><strong>{{ sourceLabel(row.source, row.source_label) }}</strong><small>{{ row.order_no || row.source_order_no || '来源单据详见记录' }}</small></div></template>
-                <template #amount="{row}"><div class="coop-cell"><strong>{{ coopMoney(row.amount) }}</strong><small>基数 {{ coopMoney(row.base_amount) }} × {{ row.rate }}%</small></div></template>
-                <template #state="{row}"><div class="coop-cell"><el-tag :type="row.status==='settled'?'success':row.status==='held'?'warning':'info'" effect="plain">{{ row.status_label || statusLabel(row.status) }}</el-tag><small v-if="row.reason">{{ row.reason }}</small></div></template>
-                <template #time="{row}"><div class="coop-cell"><small>产生 {{ coopTime(row.create_time) }}</small><small>可结算 {{ coopTime(row.available_at) }}</small></div></template>
-                <template #action="{row}"><el-button v-if="canHold && row.status==='pending'" link type="warning" :disabled="holding || settling || retrying>0" @click="hold(row)">暂缓结算</el-button><el-button v-else-if="canResume && row.status==='held'" link type="primary" :disabled="holding || settling || retrying>0" @click="resume(row)">核实并恢复</el-button><span v-else class="coop-muted">{{ row.status==='settled' ? '已入会员佣金' : '保留记录' }}</span></template>
-            </HsxTable><div class="coop-pagination"><HsxPagination :current-page="rewardQuery.page" :page-size="rewardQuery.limit" :total="rewardTotal" :disabled="rewardLoading" @change="rewardPage" /></div></div>
+            <div class="promotion-selected-inviter"
+                ><el-select
+                    v-model="rewardQuery.commission_level"
+                    clearable
+                    placeholder="全部奖励层级"
+                    :disabled="rewardLoading"
+                    style="width:180px"
+                    @change="searchRewards"
+                    ><el-option label="一级 · 直接邀请" :value="1" /><el-option
+                        label="二级 · 间接邀请"
+                        :value="2" /></el-select
+                ><span>同笔订单可能分别生成两级奖励，按实际受益人独立记账</span></div
+            >
+            <div v-if="rewardQuery.provider_member_id" class="promotion-selected-inviter"
+                ><el-tag closable effect="plain" @close="clearRewardInviter">{{ rewardInviterName }}的分佣台账</el-tag
+                ><span>按原推广人核对每笔奖励，不含店员加入记录</span></div
+            >
+            <div class="promotion-filters"
+                ><HsxSearchInput
+                    v-model="rewardQuery.keyword"
+                    class="promotion-keyword"
+                    placeholder="搜索推广人、来源会员或业务单号"
+                    :disabled="rewardLoading"
+                    :show-button="false"
+                    @search="searchRewards"
+                /><el-select v-model="rewardQuery.status" clearable placeholder="全部奖励状态" :disabled="rewardLoading"
+                    ><el-option
+                        v-for="item in statuses"
+                        :key="item.value"
+                        :label="item.label"
+                        :value="item.value" /></el-select
+                ><el-select v-model="rewardQuery.source" clearable placeholder="全部收益来源" :disabled="rewardLoading"
+                    ><el-option
+                        v-for="item in sources"
+                        :key="item.key"
+                        :label="item.label"
+                        :value="item.key" /></el-select
+                ><el-date-picker
+                    v-model="rewardDates"
+                    type="datetimerange"
+                    value-format="X"
+                    start-placeholder="产生时间起"
+                    end-placeholder="产生时间止"
+                    :disabled="rewardLoading"
+                /><el-button type="primary" :disabled="rewardLoading" @click="searchRewards">查询</el-button
+                ><el-button
+                    v-if="canSettle"
+                    :loading="settling"
+                    :disabled="rewardLoading || settling || holding || retrying>0"
+                    @click="settle"
+                    >结算已到期奖励</el-button
+                ></div
+            >
+            <el-alert
+                v-if="rewardError"
+                :title="rewardError"
+                type="error"
+                :closable="false"
+                show-icon
+                class="coop-error"
+            />
+            <el-collapse
+                v-if="paymentReviewTotal>0"
+                v-model="reviewExpanded"
+                class="promotion-explainer promotion-payment-reviews"
+                ><el-collapse-item :title="`待核对付款 · ${paymentReviewTotal} 笔`" name="payments"
+                    ><HsxTable :columns="paymentReviewColumns" :data="paymentReviews" row-key="id"
+                        ><template #business="{row}"
+                            ><div class="coop-cell"
+                                ><strong>{{ purposeLabel(row.purpose) }} · {{ coopMoney(row.amount) }}</strong
+                                ><small>{{ row.order_no }}</small
+                                ><small>已付款 {{ coopTime(row.pay_time) }}</small></div
+                            ></template
+                        ><template #issue="{row}"
+                            ><span>{{ row.message || '推广奖励尚未核对完成' }}</span></template
+                        ><template #action="{row}"
+                            ><el-button
+                                v-if="canRetry&&row.can_retry"
+                                link
+                                type="primary"
+                                :disabled="settling||holding||retrying>0||retryReadRequired"
+                                :loading="retrying===Number(row.id)"
+                                @click="retryPayment(row)"
+                                >{{ retryReadRequired?'请先刷新核对':'按原付款快照恢复' }}</el-button
+                            ><span
+                                v-else
+                                class="coop-muted"
+                                >{{ row.can_retry?'需结算与恢复权限':'需人工核对原单' }}</span
+                            ></template
+                        ></HsxTable
+                    ><p class="coop-form-note"
+                        >这里只列最近10笔待核对付款，不受下方奖励筛选影响；恢复不会重新扣款，也不按当前比例补算。没有原快照的付款需人工核对。</p
+                    ></el-collapse-item
+                ></el-collapse
+            >
+            <div class="coop-surface"
+                ><HsxTable
+                    :columns="rewardColumns"
+                    :data="rewards"
+                    :loading="rewardLoading"
+                    row-key="id"
+                    empty-text="暂无符合条件的奖励记录"
+                >
+                    <template #people="{row}"
+                        ><div class="coop-cell"
+                            ><strong>{{ row.provider_name || '推广会员' }}</strong
+                            ><small>来源：{{ row.payer_name || '本站会员' }}</small></div
+                        ></template
+                    >
+                    <template #business="{row}"
+                        ><div class="coop-cell"
+                            ><strong>{{ sourceLabel(row.source, row.source_label) }}</strong
+                            ><small>{{ row.order_no || row.source_order_no || '来源单据详见记录' }}</small></div
+                        ></template
+                    >
+                    <template #amount="{row}"
+                        ><div class="coop-cell"
+                            ><strong>{{ coopMoney(row.amount) }}</strong
+                            ><small>基数 {{ coopMoney(row.base_amount) }} × {{ row.rate }}%</small></div
+                        ></template
+                    >
+                    <template #state="{row}"
+                        ><div class="coop-cell"
+                            ><el-tag
+                                :type="row.status==='settled'?'success':row.status==='held'?'warning':'info'"
+                                effect="plain"
+                                >{{ row.status_label || statusLabel(row.status) }}</el-tag
+                            ><small v-if="row.reason">{{ row.reason }}</small></div
+                        ></template
+                    >
+                    <template #time="{row}"
+                        ><div class="coop-cell"
+                            ><small>产生 {{ coopTime(row.create_time) }}</small
+                            ><small>可结算 {{ coopTime(row.available_at) }}</small></div
+                        ></template
+                    >
+                    <template #action="{row}"
+                        ><el-button
+                            v-if="canHold && row.status==='pending'"
+                            link
+                            type="warning"
+                            :disabled="holding || settling || retrying>0"
+                            @click="hold(row)"
+                            >暂缓结算</el-button
+                        ><el-button
+                            v-else-if="canResume && row.status==='held'"
+                            link
+                            type="primary"
+                            :disabled="holding || settling || retrying>0"
+                            @click="resume(row)"
+                            >核实并恢复</el-button
+                        ><span
+                            v-else
+                            class="coop-muted"
+                            >{{ row.status==='settled' ? '已入会员佣金' : '保留记录' }}</span
+                        ></template
+                    > </HsxTable
+                ><div class="coop-pagination"
+                    ><HsxPagination
+                        :current-page="rewardQuery.page"
+                        :page-size="rewardQuery.limit"
+                        :total="rewardTotal"
+                        :disabled="rewardLoading"
+                        @change="rewardPage" /></div
+            ></div>
         </template>
 
         <template v-else>
-            <el-alert v-if="configError" :title="configError" type="error" :closable="false" show-icon class="coop-error" />
-            <el-alert v-if="configReady && configRequiresReview" :title="configReviewMessage" type="warning" :closable="false" show-icon class="coop-error" />
+            <el-alert
+                v-if="configError"
+                :title="configError"
+                type="error"
+                :closable="false"
+                show-icon
+                class="coop-error"
+            />
+            <el-alert
+                v-if="configReady && configRequiresReview"
+                :title="configReviewMessage"
+                type="warning"
+                :closable="false"
+                show-icon
+                class="coop-error"
+            />
             <el-skeleton v-if="configLoading && !configReady" :rows="7" animated />
-            <el-form v-if="configReady" label-position="top" class="coop-form" :disabled="configSaving || configLoading || !canConfigWrite">
-                <section class="coop-surface"><div class="coop-section-caption"><h3>推广奖励</h3><el-switch v-model="config.enabled" active-text="允许产生新的推广奖励" /></div><div class="coop-rule-grid"><el-form-item label="奖励层级"><el-radio-group v-model="config.max_level"><el-radio :value="1">仅一级</el-radio><el-radio :value="2">开启二级</el-radio></el-radio-group><p class="coop-form-note">A 邀请 B，B 邀请 C：C 付款后 B 获一级奖励，A 获二级奖励。各级独立计提，不向上跳级。</p></el-form-item><el-form-item label="结算等待期（天）"><el-input-number v-model="config.settlement_days" :min="0" :max="365" :precision="0" controls-position="right" /></el-form-item><el-form-item label="获佣期限"><el-radio-group v-model="permanentEligibility"><el-radio :value="true">长期有效</el-radio><el-radio :value="false">指定月数</el-radio></el-radio-group><el-input-number v-if="!permanentEligibility" v-model="config.eligibility_months" :min="1" :max="120" :precision="0" controls-position="right" /></el-form-item></div><p class="coop-form-note">仅影响保存后新建的付款订单；原订单与已生成奖励不重新计算。退款按原奖励逐级冲回，押金、经验费不计佣。</p></section>
-                <section class="coop-surface promotion-rule-section"><div class="coop-section-caption"><h3>配置当前层级比例</h3><el-radio-group v-model="rateLevel"><el-radio-button :value="1">一级 · 直接邀请</el-radio-button><el-radio-button :value="2" :disabled="Number(config.max_level)!==2">二级 · 间接邀请</el-radio-button></el-radio-group></div><p class="coop-form-note">下方比例与会员等级设置仅编辑{{ rateLevel===2?'二级':'一级' }}。两级按同笔实收计佣基数分别计算；各档最高比例合计不得超过 100%。</p></section>
-                <section class="coop-surface promotion-rule-section"><div class="coop-section-caption"><h3>参与收入与默认比例</h3></div><p class="promotion-rule-intro">普通用户无需购买会员即可邀请得佣；服务商通过审核后，按服务商比例计算，不与会员比例叠加。</p><HsxTable :columns="ruleColumns" :data="sourceRows" row-key="key">
-                    <template #source="{row}"><div class="coop-cell"><strong>{{ row.label }}</strong><small>{{ row.key==='maintenance'?'按平台维护费计算，不减少发布方净收益':'仅按实付服务费计算，不含押金、经验费' }}</small></div></template>
-                    <template #enabled="{row}"><el-switch :model-value="row.enabled" @update:model-value="config.sources[row.key].enabled=$event" /></template>
-                    <template #normal_rate="{row}"><el-input-number :model-value="row.normal_rate" :min="0" :max="100" :precision="2" controls-position="right" :disabled="!row.enabled" :aria-label="`${rateLevel}级${row.label}普通会员比例`" @update:model-value="editableRate(row.key).normal_rate=$event" /><span class="promotion-unit">%</span></template>
-                    <template #provider_rate="{row}"><el-input-number :model-value="row.provider_rate" :min="0" :max="100" :precision="2" controls-position="right" :disabled="!row.enabled" :aria-label="`${rateLevel}级${row.label}服务商比例`" @update:model-value="editableRate(row.key).provider_rate=$event" /><span class="promotion-unit">%</span></template>
-                    <template #renewal="{row}"><el-switch v-if="row.key!=='maintenance'" :model-value="row.renewal" :disabled="!row.enabled" active-text="续费也参与" @update:model-value="config.sources[row.key].renewal=$event" /><span v-else class="coop-muted">每笔符合条件的业务</span></template>
-                </HsxTable></section>
+            <el-form
+                v-if="configReady"
+                label-position="top"
+                class="coop-form"
+                :disabled="configSaving || configLoading || !canConfigWrite"
+            >
+                <section class="coop-surface"
+                    ><div class="coop-section-caption"
+                        ><h3>推广奖励</h3><el-switch v-model="config.enabled" active-text="允许产生新的推广奖励" /></div
+                    ><div class="coop-rule-grid"
+                        ><el-form-item label="奖励层级"
+                            ><el-radio-group v-model="config.max_level"
+                                ><el-radio :value="1">仅一级</el-radio
+                                ><el-radio :value="2">开启二级</el-radio></el-radio-group
+                            ><p class="coop-form-note"
+                                >A 邀请 B，B 邀请 C：C 付款后 B 获一级奖励，A 获二级奖励。各级独立计提，不向上跳级。</p
+                            ></el-form-item
+                        ><el-form-item label="结算等待期（天）"
+                            ><el-input-number
+                                v-model="config.settlement_days"
+                                :min="0"
+                                :max="365"
+                                :precision="0"
+                                controls-position="right" /></el-form-item
+                        ><el-form-item label="获佣期限"
+                            ><el-radio-group v-model="permanentEligibility"
+                                ><el-radio :value="true">长期有效</el-radio
+                                ><el-radio :value="false">指定月数</el-radio></el-radio-group
+                            ><el-input-number
+                                v-if="!permanentEligibility"
+                                v-model="config.eligibility_months"
+                                :min="1"
+                                :max="120"
+                                :precision="0"
+                                controls-position="right" /></el-form-item></div
+                    ><p class="coop-form-note"
+                        >仅影响保存后新建的付款订单；原订单与已生成奖励不重新计算。退款按原奖励逐级冲回，押金、经验费不计佣。</p
+                    ></section
+                >
+                <section class="coop-surface promotion-rule-section"
+                    ><div class="coop-section-caption"
+                        ><h3>配置当前层级比例</h3
+                        ><el-radio-group v-model="rateLevel"
+                            ><el-radio-button :value="1">一级 · 直接邀请</el-radio-button
+                            ><el-radio-button :value="2" :disabled="Number(config.max_level)!==2"
+                                >二级 · 间接邀请</el-radio-button
+                            ></el-radio-group
+                        ></div
+                    ><p class="coop-form-note"
+                        >下方比例与会员等级设置仅编辑{{ rateLevel===2?'二级':'一级'
+                        }}。两级按同笔实收计佣基数分别计算；各档最高比例合计不得超过 100%。</p
+                    ></section
+                >
+                <section class="coop-surface promotion-rule-section"
+                    ><div class="coop-section-caption"><h3>参与收入与默认比例</h3></div
+                    ><p class="promotion-rule-intro"
+                        >普通用户无需购买会员即可邀请得佣；服务商通过审核后，按服务商比例计算，不与会员比例叠加。</p
+                    ><HsxTable :columns="ruleColumns" :data="sourceRows" row-key="key">
+                        <template #source="{row}"
+                            ><div class="coop-cell"
+                                ><strong>{{ row.label }}</strong
+                                ><small
+                                    >{{ row.key==='maintenance'?'按平台维护费计算，不减少发布方净收益':'仅按实付服务费计算，不含押金、经验费' }}</small
+                                ></div
+                            ></template
+                        >
+                        <template #enabled="{row}"
+                            ><el-switch
+                                :model-value="row.enabled"
+                                @update:model-value="config.sources[row.key].enabled=$event"
+                        /></template>
+                        <template #normal_rate="{row}"
+                            ><el-input-number
+                                :model-value="row.normal_rate"
+                                :min="0"
+                                :max="100"
+                                :precision="2"
+                                controls-position="right"
+                                :disabled="!row.enabled"
+                                :aria-label="`${rateLevel}级${row.label}普通会员比例`"
+                                @update:model-value="editableRate(row.key).normal_rate=$event"
+                            /><span class="promotion-unit">%</span></template
+                        >
+                        <template #provider_rate="{row}"
+                            ><el-input-number
+                                :model-value="row.provider_rate"
+                                :min="0"
+                                :max="100"
+                                :precision="2"
+                                controls-position="right"
+                                :disabled="!row.enabled"
+                                :aria-label="`${rateLevel}级${row.label}服务商比例`"
+                                @update:model-value="editableRate(row.key).provider_rate=$event"
+                            /><span class="promotion-unit">%</span></template
+                        >
+                        <template #renewal="{row}"
+                            ><el-switch
+                                v-if="row.key!=='maintenance'"
+                                :model-value="row.renewal"
+                                :disabled="!row.enabled"
+                                active-text="续费也参与"
+                                @update:model-value="config.sources[row.key].renewal=$event"
+                            /><span v-else class="coop-muted">每笔符合条件的业务</span></template
+                        >
+                    </HsxTable></section
+                >
                 <section class="coop-surface promotion-rule-section">
-                    <div class="coop-section-caption"><h3>会员等级分佣比例</h3><el-tag effect="plain" type="info">按邀请人等级</el-tag></div>
-                    <p class="promotion-rule-intro">沿用普通比例，或为某一等级单独设置。服务商始终使用上方服务商比例。</p>
-                    <HsxTable v-if="memberLevels.length" :columns="levelRateColumns" :data="levelRateRows" row-key="code">
-                        <template #level="{row}"><div class="coop-cell"><strong>{{ row.name }}</strong><small>有效主体会员权益</small></div></template>
-                        <template #membership="{row}"><div class="promotion-level-rate"><el-switch :model-value="row.membership.overridden" active-text="单独设置" inactive-text="沿用普通" :disabled="!config.sources.membership.enabled" :aria-label="`${row.name}会员服务费单独设置`" @update:model-value="setLevelOverride(row.code,'membership',$event)" /><div v-if="row.membership.overridden" class="promotion-level-rate-input"><el-input-number :model-value="row.membership.rate" :min="0" :max="100" :precision="2" controls-position="right" :disabled="!config.sources.membership.enabled" :aria-label="`${row.name}会员服务费推广比例`" @update:model-value="setLevelRate(row.code,'membership',$event)" /><span class="promotion-unit">%</span></div><span v-else class="coop-muted">当前 {{ row.membership.rate }}%</span></div></template>
-                        <template #maintenance="{row}"><div class="promotion-level-rate"><el-switch :model-value="row.maintenance.overridden" active-text="单独设置" inactive-text="沿用普通" :disabled="!config.sources.maintenance.enabled" :aria-label="`${row.name}平台维护费单独设置`" @update:model-value="setLevelOverride(row.code,'maintenance',$event)" /><div v-if="row.maintenance.overridden" class="promotion-level-rate-input"><el-input-number :model-value="row.maintenance.rate" :min="0" :max="100" :precision="2" controls-position="right" :disabled="!config.sources.maintenance.enabled" :aria-label="`${row.name}平台维护费推广比例`" @update:model-value="setLevelRate(row.code,'maintenance',$event)" /><span class="promotion-unit">%</span></div><span v-else class="coop-muted">当前 {{ row.maintenance.rate }}%</span></div></template>
+                    <div class="coop-section-caption"
+                        ><h3>会员等级分佣比例</h3><el-tag effect="plain" type="info">按邀请人等级</el-tag></div
+                    >
+                    <p class="promotion-rule-intro"
+                        >沿用普通比例，或为某一等级单独设置。服务商始终使用上方服务商比例。</p
+                    >
+                    <HsxTable
+                        v-if="memberLevels.length"
+                        :columns="levelRateColumns"
+                        :data="levelRateRows"
+                        row-key="code"
+                    >
+                        <template #level="{row}"
+                            ><div class="coop-cell"
+                                ><strong>{{ row.name }}</strong
+                                ><small>有效主体会员权益</small></div
+                            ></template
+                        >
+                        <template #membership="{row}"
+                            ><div class="promotion-level-rate"
+                                ><el-switch
+                                    :model-value="row.membership.overridden"
+                                    active-text="单独设置"
+                                    inactive-text="沿用普通"
+                                    :disabled="!config.sources.membership.enabled"
+                                    :aria-label="`${row.name}会员服务费单独设置`"
+                                    @update:model-value="setLevelOverride(row.code,'membership',$event)"
+                                /><div v-if="row.membership.overridden" class="promotion-level-rate-input"
+                                    ><el-input-number
+                                        :model-value="row.membership.rate"
+                                        :min="0"
+                                        :max="100"
+                                        :precision="2"
+                                        controls-position="right"
+                                        :disabled="!config.sources.membership.enabled"
+                                        :aria-label="`${row.name}会员服务费推广比例`"
+                                        @update:model-value="setLevelRate(row.code,'membership',$event)"
+                                    /><span class="promotion-unit">%</span></div
+                                ><span v-else class="coop-muted">当前 {{ row.membership.rate }}%</span></div
+                            ></template
+                        >
+                        <template #maintenance="{row}"
+                            ><div class="promotion-level-rate"
+                                ><el-switch
+                                    :model-value="row.maintenance.overridden"
+                                    active-text="单独设置"
+                                    inactive-text="沿用普通"
+                                    :disabled="!config.sources.maintenance.enabled"
+                                    :aria-label="`${row.name}平台维护费单独设置`"
+                                    @update:model-value="setLevelOverride(row.code,'maintenance',$event)"
+                                /><div v-if="row.maintenance.overridden" class="promotion-level-rate-input"
+                                    ><el-input-number
+                                        :model-value="row.maintenance.rate"
+                                        :min="0"
+                                        :max="100"
+                                        :precision="2"
+                                        controls-position="right"
+                                        :disabled="!config.sources.maintenance.enabled"
+                                        :aria-label="`${row.name}平台维护费推广比例`"
+                                        @update:model-value="setLevelRate(row.code,'maintenance',$event)"
+                                    /><span class="promotion-unit">%</span></div
+                                ><span v-else class="coop-muted">当前 {{ row.maintenance.rate }}%</span></div
+                            ></template
+                        >
                     </HsxTable>
                     <el-empty v-else description="尚未配置可购买的主体会员等级" :image-size="64" />
-                    <el-collapse class="promotion-level-help"><el-collapse-item title="等级未单独设置、已到期时，如何计算？" name="level-fallback"><p class="coop-form-note">未购买会员、会员已到期或该等级未单独配置时，沿用普通用户比例。单独设为0%表示该等级不参与该项分佣。停用等级后保留既有配置，不补算历史付款。</p></el-collapse-item></el-collapse>
+                    <el-collapse class="promotion-level-help"
+                        ><el-collapse-item title="等级未单独设置、已到期时，如何计算？" name="level-fallback"
+                            ><p class="coop-form-note"
+                                >未购买会员、会员已到期或该等级未单独配置时，沿用普通用户比例。单独设为0%表示该等级不参与该项分佣。停用等级后保留既有配置，不补算历史付款。</p
+                            ></el-collapse-item
+                        ></el-collapse
+                    >
                 </section>
             </el-form>
-            <div v-if="configReady&&Number(config.max_level)===2" class="promotion-filters"><span>试算中二级邀请人的身份</span><el-select v-model="trialSecondIdentity" aria-label="二级试算身份"><el-option label="普通用户（无需付费）" value="normal" /><el-option label="审核通过的服务商" value="provider" /><el-option v-for="level in memberLevels" :key="level.code" :label="level.name" :value="level.code" /></el-select><span class="coop-muted">下表按相同的二级邀请人身份，比较不同一级身份</span></div>
-            <section v-if="configReady" class="coop-surface promotion-trial"><div class="coop-section-caption"><h3>保存前金额试算</h3><el-tag effect="plain" type="info">只预览，不产生账目</el-tag></div><div class="promotion-trial-controls"><el-select v-model="trialSource" aria-label="试算收入来源"><el-option v-for="item in sources" :key="item.key" :label="item.label" :value="item.key" /></el-select><el-input-number v-model="trialAmounts[trialSource]" :min="0" :max="99999999.99" :precision="2" controls-position="right" :aria-label="trialSource==='maintenance'?'本笔平台维护费金额':'本笔会员服务费金额（不含押金、经验费）'" /><span class="coop-muted">{{ trialSource==='maintenance'?'元平台维护费（不是整笔协作佣金）':'元会员服务费（不含押金、经验费）' }}</span></div><el-alert v-if="trialError" :title="trialError" type="warning" :closable="false" show-icon /><template v-else><div v-if="!config.enabled||!config.sources[trialSource].enabled" class="promotion-trial-note">当前收入来源或推广总开关已关闭，不产生新的推广奖励。</div><HsxTable :columns="trialColumns" :data="trialRows" row-key="role"><template #identity="{row}"><div class="coop-cell"><strong>{{ row.label }}</strong><small v-if="row.inherited">沿用普通比例</small></div></template><template #rate="{row}">{{ row.rate }}%</template><template #reward="{row}"><strong class="promotion-money">{{ coopMoney(row.reward) }}</strong></template><template #secondReward="{row}"><div class="coop-cell"><strong>{{ coopMoney(row.secondReward) }}</strong><small>{{ row.secondRate }}%</small></div></template><template #retained="{row}">{{ coopMoney(row.retained) }}</template></HsxTable><p class="coop-form-note">每行是一种一级邀请人身份，二级身份使用上方选择。各级不叠加身份；参与收入 {{ coopMoney(trialAmounts[trialSource]) }} = 一级奖励 + 二级奖励 + 平台留存。</p></template></section>
-            <el-collapse class="promotion-explainer"><el-collapse-item title="保存、结算和提现分别意味着什么？" name="rules"><div class="promotion-help">配置只影响新业务的奖励资格；历史记录保留付款时快照。结算仅将已到期、可核对的奖励记入框架会员佣金账户，不代替提现审核，不代表银行打款。若业务存在退款或争议，先暂缓待结算奖励并核对事实；已经入账的款项不能在这里假装撤回。</div></el-collapse-item></el-collapse>
-            <footer v-if="configReady" class="coop-config-footer"><p>保存不会发起支付、结算或真实打款。</p><el-button v-if="canConfigWrite" type="primary" :loading="configSaving" :disabled="configLoading" @click="saveRules">保存推广规则</el-button><span v-else class="coop-muted">当前仅有查看权限</span></footer>
+            <div v-if="configReady&&Number(config.max_level)===2" class="promotion-filters"
+                ><span>试算中二级邀请人的身份</span
+                ><el-select v-model="trialSecondIdentity" aria-label="二级试算身份"
+                    ><el-option label="普通用户（无需付费）" value="normal" /><el-option
+                        label="审核通过的服务商"
+                        value="provider" /><el-option
+                        v-for="level in memberLevels"
+                        :key="level.code"
+                        :label="level.name"
+                        :value="level.code" /></el-select
+                ><span class="coop-muted">下表按相同的二级邀请人身份，比较不同一级身份</span></div
+            >
+            <section v-if="configReady" class="coop-surface promotion-trial"
+                ><div class="coop-section-caption"
+                    ><h3>保存前金额试算</h3><el-tag effect="plain" type="info">只预览，不产生账目</el-tag></div
+                ><div class="promotion-trial-controls"
+                    ><el-select v-model="trialSource" aria-label="试算收入来源"
+                        ><el-option
+                            v-for="item in sources"
+                            :key="item.key"
+                            :label="item.label"
+                            :value="item.key" /></el-select
+                    ><el-input-number
+                        v-model="trialAmounts[trialSource]"
+                        :min="0"
+                        :max="99999999.99"
+                        :precision="2"
+                        controls-position="right"
+                        :aria-label="trialSource==='maintenance'?'本笔平台维护费金额':'本笔会员服务费金额（不含押金、经验费）'"
+                    /><span
+                        class="coop-muted"
+                        >{{ trialSource==='maintenance'?'元平台维护费（不是整笔协作佣金）':'元会员服务费（不含押金、经验费）' }}</span
+                    ></div
+                ><el-alert v-if="trialError" :title="trialError" type="warning" :closable="false" show-icon /><template
+                    v-else
+                    ><div v-if="!config.enabled||!config.sources[trialSource].enabled" class="promotion-trial-note"
+                        >当前收入来源或推广总开关已关闭，不产生新的推广奖励。</div
+                    ><HsxTable :columns="trialColumns" :data="trialRows" row-key="role"
+                        ><template #identity="{row}"
+                            ><div class="coop-cell"
+                                ><strong>{{ row.label }}</strong
+                                ><small v-if="row.inherited">沿用普通比例</small></div
+                            ></template
+                        ><template #rate="{row}">{{ row.rate }}%</template
+                        ><template #reward="{row}"
+                            ><strong class="promotion-money">{{ coopMoney(row.reward) }}</strong></template
+                        ><template #secondReward="{row}"
+                            ><div class="coop-cell"
+                                ><strong>{{ coopMoney(row.secondReward) }}</strong
+                                ><small>{{ row.secondRate }}%</small></div
+                            ></template
+                        ><template #retained="{row}">{{ coopMoney(row.retained) }}</template></HsxTable
+                    ><p class="coop-form-note"
+                        >每行是一种一级邀请人身份，二级身份使用上方选择。各级不叠加身份；参与收入
+                        {{ coopMoney(trialAmounts[trialSource]) }} = 一级奖励 + 二级奖励 + 平台留存。</p
+                    ></template
+                ></section
+            >
+            <el-collapse class="promotion-explainer"
+                ><el-collapse-item title="保存、结算和提现分别意味着什么？" name="rules"
+                    ><div class="promotion-help"
+                        >配置只影响新业务的奖励资格；历史记录保留付款时快照。结算仅将已到期、可核对的奖励记入框架会员佣金账户，不代替提现审核，不代表银行打款。若业务存在退款或争议，先暂缓待结算奖励并核对事实；已经入账的款项不能在这里假装撤回。</div
+                    ></el-collapse-item
+                ></el-collapse
+            >
+            <footer v-if="configReady" class="coop-config-footer"
+                ><p>保存不会发起支付、结算或真实打款。</p
+                ><el-button
+                    v-if="canConfigWrite"
+                    type="primary"
+                    :loading="configSaving"
+                    :disabled="configLoading"
+                    @click="saveRules"
+                    >保存推广规则</el-button
+                ><span v-else class="coop-muted">当前仅有查看权限</span></footer
+            >
         </template>
 
-        <HsxDrawer v-model="providerVisible" :title="providerMode==='manual'?'管理服务商资格':applicationStatus(selectedProvider)==='pending'?'服务商申请审核':'服务商资料'" :subtitle="selectedProvider.merchant_name || selectedProvider.name || ''" size="sm" :before-close="beforeProviderClose" :confirm-loading="providerSaving">
-            <el-alert v-if="providerSaveError" :title="providerSaveError" type="error" :closable="false" show-icon class="coop-error" />
-            <div class="promotion-application"><div class="promotion-badges"><el-tag :type="applicationTag(selectedProvider)">{{ applicationLabel(selectedProvider) }}</el-tag><el-tag effect="plain" type="info">{{ selectedProvider.role==='provider'?'服务商档':'普通会员档' }}</el-tag></div><dl><dt>申请门店</dt><dd>{{ selectedProvider.application?.merchant_name || selectedProvider.merchant_name || '未登记门店' }}</dd><dt>联系人</dt><dd>{{ selectedProvider.application?.contact_name || selectedProvider.name || '未填写' }}</dd><dt>联系电话</dt><dd>{{ selectedProvider.application?.mobile_masked || selectedProvider.mobile_masked || '未填写' }}</dd><dt>负责城市</dt><dd>{{ selectedProvider.application?.city || selectedProvider.city || '未填写' }}</dd><dt>申请时间</dt><dd>{{ coopTime(selectedProvider.application?.submitted_at) }}</dd><dt>处理时间</dt><dd>{{ coopTime(selectedProvider.application?.reviewed_at) }}</dd><template v-if="selectedProvider.application?.reason"><dt>上次处理说明</dt><dd>{{ selectedProvider.application.reason }}</dd></template></dl></div>
+        <HsxDrawer
+            v-model="providerVisible"
+            :title="providerMode==='manual'?'管理服务商资格':applicationStatus(selectedProvider)==='pending'?'服务商申请审核':'服务商资料'"
+            :subtitle="selectedProvider.merchant_name || selectedProvider.name || ''"
+            size="sm"
+            :before-close="beforeProviderClose"
+            :confirm-loading="providerSaving"
+        >
+            <el-alert
+                v-if="providerSaveError"
+                :title="providerSaveError"
+                type="error"
+                :closable="false"
+                show-icon
+                class="coop-error"
+            />
+            <div class="promotion-application"
+                ><div class="promotion-badges"
+                    ><el-tag :type="applicationTag(selectedProvider)">{{ applicationLabel(selectedProvider) }}</el-tag
+                    ><el-tag
+                        effect="plain"
+                        type="info"
+                        >{{ selectedProvider.role==='provider'?'服务商档':'普通会员档' }}</el-tag
+                    ></div
+                ><dl
+                    ><dt>申请门店</dt
+                    ><dd
+                        >{{ selectedProvider.application?.merchant_name || selectedProvider.merchant_name || '未登记门店' }}</dd
+                    ><dt>联系人</dt
+                    ><dd>{{ selectedProvider.application?.contact_name || selectedProvider.name || '未填写' }}</dd
+                    ><dt>联系电话</dt
+                    ><dd
+                        >{{ selectedProvider.application?.mobile_masked || selectedProvider.mobile_masked || '未填写' }}</dd
+                    ><dt>负责城市</dt
+                    ><dd>{{ selectedProvider.application?.city || selectedProvider.city || '未填写' }}</dd
+                    ><dt>申请时间</dt><dd>{{ coopTime(selectedProvider.application?.submitted_at) }}</dd
+                    ><dt>处理时间</dt><dd>{{ coopTime(selectedProvider.application?.reviewed_at) }}</dd
+                    ><template v-if="selectedProvider.application?.reason"
+                        ><dt>上次处理说明</dt><dd>{{ selectedProvider.application.reason }}</dd></template
+                    ></dl
+                ></div
+            >
             <el-form label-position="top" :disabled="providerSaving||providerReadRequired">
-                <template v-if="providerMode==='manual'"><el-form-item label="服务商资格"><el-radio-group v-model="providerForm.status"><el-radio value="approved">开通服务商</el-radio><el-radio value="disabled">停用服务商</el-radio></el-radio-group></el-form-item><el-form-item v-if="providerForm.status==='disabled'" label="停用后如何处理"><el-radio-group v-model="providerForm.disabled_mode" class="promotion-disabled-modes"><el-radio value="normal">降为普通会员，仍可按普通档推广</el-radio><el-radio value="blocked">禁止产生新的推广奖励</el-radio></el-radio-group></el-form-item><el-form-item v-else label="负责城市"><el-input v-model="providerForm.city" maxlength="120" placeholder="填写服务商负责的城市" :disabled="!!selectedProvider.application?.city" /></el-form-item><el-form-item label="后台备注（选填）"><el-input v-model="providerForm.remark" maxlength="1000" placeholder="长期管理备注，不向会员展示" /></el-form-item></template>
-                <el-form-item v-if="providerMode==='manual'||(canProviderReview&&applicationStatus(selectedProvider)==='pending')" :label="providerMode==='manual'?'本次操作原因（必填）':'审核说明（拒绝时必填）'"><el-input v-model="providerForm.reason" type="textarea" :rows="3" maxlength="1000" :placeholder="providerMode==='manual'?'说明开通或停用的原因':'拒绝时请说明需要补充或调整的内容'" /></el-form-item>
+                <template v-if="providerMode==='manual'"
+                    ><el-form-item label="服务商资格"
+                        ><el-radio-group v-model="providerForm.status"
+                            ><el-radio value="approved">开通服务商</el-radio
+                            ><el-radio value="disabled">停用服务商</el-radio></el-radio-group
+                        ></el-form-item
+                    ><el-form-item v-if="providerForm.status==='disabled'" label="停用后如何处理"
+                        ><el-radio-group v-model="providerForm.disabled_mode" class="promotion-disabled-modes"
+                            ><el-radio value="normal">降为普通会员，仍可按普通档推广</el-radio
+                            ><el-radio value="blocked">禁止产生新的推广奖励</el-radio></el-radio-group
+                        ></el-form-item
+                    ><el-form-item v-else label="负责城市"
+                        ><el-input
+                            v-model="providerForm.city"
+                            maxlength="120"
+                            placeholder="填写服务商负责的城市"
+                            :disabled="!!selectedProvider.application?.city" /></el-form-item
+                    ><el-form-item label="后台备注（选填）"
+                        ><el-input
+                            v-model="providerForm.remark"
+                            maxlength="1000"
+                            placeholder="长期管理备注，不向会员展示" /></el-form-item
+                ></template>
+                <el-form-item
+                    v-if="providerMode==='manual'||(canProviderReview&&applicationStatus(selectedProvider)==='pending')"
+                    :label="providerMode==='manual'?'本次操作原因（必填）':'审核说明（拒绝时必填）'"
+                    ><el-input
+                        v-model="providerForm.reason"
+                        type="textarea"
+                        :rows="3"
+                        maxlength="1000"
+                        :placeholder="providerMode==='manual'?'说明开通或停用的原因':'拒绝时请说明需要补充或调整的内容'"
+                /></el-form-item>
             </el-form>
-            <el-collapse class="promotion-drawer-help"><el-collapse-item title="查看对推广、历史收益的影响" name="scope"><p class="coop-muted">开通后，新业务按服务商档计算；停用后的新业务按所选处理方式执行。不改变上下级，也不补算历史奖励；既有奖励和已入账余额保留。服务商资格与靠谱商家认证是两回事。</p></el-collapse-item></el-collapse>
-            <template #footer="{close}"><div class="promotion-drawer-actions"><el-button :disabled="providerSaving" @click="close">{{ providerReadRequired?'关闭后刷新列表':'取消' }}</el-button><template v-if="!providerReadRequired"><template v-if="canReviewSelected&&providerMode!=='manual'"><el-button :disabled="providerSaving" @click="reviewProvider('reject')">拒绝申请</el-button><el-button type="primary" :loading="providerSaving" @click="reviewProvider('approve')">通过申请</el-button></template><el-button v-else-if="providerMode==='manual'" type="primary" :loading="providerSaving" @click="saveProvider">保存资格</el-button><el-button v-else-if="canProviderWrite&&applicationStatus(selectedProvider)!=='pending'" type="primary" @click="providerMode='manual'">管理资格</el-button></template></div></template>
+            <el-collapse class="promotion-drawer-help"
+                ><el-collapse-item title="查看对推广、历史收益的影响" name="scope"
+                    ><p class="coop-muted"
+                        >开通后，新业务按服务商档计算；停用后的新业务按所选处理方式执行。不改变上下级，也不补算历史奖励；既有奖励和已入账余额保留。服务商资格与靠谱商家认证是两回事。</p
+                    ></el-collapse-item
+                ></el-collapse
+            >
+            <template #footer="{close}"
+                ><div class="promotion-drawer-actions"
+                    ><el-button
+                        :disabled="providerSaving"
+                        @click="close"
+                        >{{ providerReadRequired?'关闭后刷新列表':'取消' }}</el-button
+                    ><template v-if="!providerReadRequired"
+                        ><template v-if="canReviewSelected&&providerMode!=='manual'"
+                            ><el-button :disabled="providerSaving" @click="reviewProvider('reject')">拒绝申请</el-button
+                            ><el-button type="primary" :loading="providerSaving" @click="reviewProvider('approve')"
+                                >通过申请</el-button
+                            ></template
+                        ><el-button
+                            v-else-if="providerMode==='manual'"
+                            type="primary"
+                            :loading="providerSaving"
+                            @click="saveProvider"
+                            >保存资格</el-button
+                        ><el-button
+                            v-else-if="canProviderWrite&&applicationStatus(selectedProvider)!=='pending'"
+                            type="primary"
+                            @click="providerMode='manual'"
+                            >管理资格</el-button
+                        ></template
+                    ></div
+                ></template
+            >
         </HsxDrawer>
     </PageShell>
 </template>

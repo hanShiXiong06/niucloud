@@ -1,10 +1,38 @@
 import { onBeforeUnmount, reactive, ref } from 'vue'
 
 export type Row = Record<string, any>
-export const readyLabels: Record<string, string> = { member_required: '待绑会员', membership_required: '待开通入驻权益', capability_required: '待设置交付型号', connection_required: '待设置交付能力', sync_required: '库存同步中', ready: '可接收线索', attention: '需要处理', paused: '已暂停' }
-export const syncLabel = (status: string) => ({ idle: '尚未同步', pending: '等待处理', queued: '等待处理', running: '逐页同步中', completed: '同步完成', success: '同步完成', failed: '同步失败', cancelled: '任务已取消', interrupted: '同步已中断', paused: '渠道已关闭 · 采集暂停' }[status] || '尚未同步')
-export const money = (value: any) => `¥${Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-export const time = (value: any) => value ? new Date(typeof value === 'number' || /^\d+$/.test(value) ? Number(value) * 1000 : value).toLocaleString('zh-CN', { hour12: false }) : '尚未记录'
+export const readyLabels: Record<string, string> = {
+    member_required: '待绑会员',
+    membership_required: '待开通入驻权益',
+    capability_required: '待设置交付型号',
+    connection_required: '待设置交付能力',
+    sync_required: '库存同步中',
+    ready: '可接收线索',
+    attention: '需要处理',
+    paused: '已暂停'
+}
+export const syncLabel = (status: string) =>
+    ({
+        idle: '尚未同步',
+        pending: '等待处理',
+        queued: '等待处理',
+        running: '逐页同步中',
+        completed: '同步完成',
+        success: '同步完成',
+        failed: '同步失败',
+        cancelled: '任务已取消',
+        interrupted: '同步已中断',
+        paused: '渠道已关闭 · 采集暂停'
+    })[status] || '尚未同步'
+export const money = (value: any) =>
+    `¥${Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+export const time = (value: any) =>
+    value
+        ? new Date(typeof value === 'number' || /^\d+$/.test(value) ? Number(value) * 1000 : value).toLocaleString(
+              'zh-CN',
+              { hour12: false }
+          )
+        : '尚未记录'
 /** A compact table timestamp; the full value remains available to assistive tech and hover. */
 export function timestampParts(value: any) {
     if (!value) return null
@@ -15,30 +43,56 @@ export function timestampParts(value: any) {
     const clock = `${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`
     return { date, clock, full: `${date} ${clock}:${pad(parsed.getSeconds())}`, iso: parsed.toISOString() }
 }
-export const region = (row: Row) => [row.province_name, row.city_name, row.district_name].filter(Boolean).join(' / ') || '未填写地区'
+export const region = (row: Row) =>
+    [row.province_name, row.city_name, row.district_name].filter(Boolean).join(' / ') || '未填写地区'
 export function errorText(error: any, fallback = '操作未完成，请稍后重试。') {
     return String(error?.msg || error?.response?.data?.msg || error?.message || fallback)
 }
 /** Keep failed reads visibly distinct from a genuinely empty list. */
 export function useLeadList(request: (params: Row) => Promise<any>, initial: Row = {}) {
-    const rows = ref<Row[]>([]), total = ref(0), loading = ref(false), error = ref('')
+    const rows = ref<Row[]>([]),
+        total = ref(0),
+        loading = ref(false),
+        error = ref('')
     const query = reactive<Row>({ page: 1, limit: 20, keyword: '', ...initial })
-    let sequence = 0, disposed = false
+    let sequence = 0,
+        disposed = false
     async function load() {
         const current = ++sequence
-        loading.value = true; error.value = ''
+        loading.value = true
+        error.value = ''
         try {
             const result = await request({ ...query })
             if (current !== sequence || disposed) return
             const page = result?.data
-            if (!page || !Array.isArray(page.data) || !['string', 'number'].includes(typeof page.total) || String(page.total).trim() === '' || !Number.isSafeInteger(Number(page.total)) || Number(page.total) < 0) throw new Error('返回的列表格式不完整，请核对配套后端')
+            if (
+                !page ||
+                !Array.isArray(page.data) ||
+                !['string', 'number'].includes(typeof page.total) ||
+                String(page.total).trim() === '' ||
+                !Number.isSafeInteger(Number(page.total)) ||
+                Number(page.total) < 0
+            )
+                throw new Error('返回的列表格式不完整，请核对配套后端')
             rows.value = page.data
             total.value = Number(page.total)
         } catch (cause) {
-            if (current === sequence && !disposed) { rows.value = []; total.value = 0; error.value = errorText(cause, '列表加载失败，请检查访问权限并重试。') }
-        } finally { if (current === sequence && !disposed) loading.value = false }
+            if (current === sequence && !disposed) {
+                rows.value = []
+                total.value = 0
+                error.value = errorText(cause, '列表加载失败，请检查访问权限并重试。')
+            }
+        } finally {
+            if (current === sequence && !disposed) loading.value = false
+        }
     }
-    function search() { query.page = 1; return load() }
-    onBeforeUnmount(() => { disposed = true; sequence++ })
+    function search() {
+        query.page = 1
+        return load()
+    }
+    onBeforeUnmount(() => {
+        disposed = true
+        sequence++
+    })
     return { rows, total, loading, error, query, load, search }
 }

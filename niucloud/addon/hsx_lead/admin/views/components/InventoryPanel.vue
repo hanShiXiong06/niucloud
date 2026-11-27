@@ -1,63 +1,300 @@
 <template>
     <section>
-        <LeadSectionHeader title="库存快照"><el-button :icon="Refresh" :loading="loading" @click="load">刷新快照</el-button></LeadSectionHeader>
-        <el-alert title="默认只看在售有货；库存快照不锁货，接单前请核对实物。" type="info" show-icon closable class="lead-banner" />
+        <LeadSectionHeader title="库存快照"
+            ><el-button :icon="Refresh" :loading="loading" @click="load">刷新快照</el-button></LeadSectionHeader
+        >
+        <el-alert
+            title="默认只看在售有货；库存快照不锁货，接单前请核对实物。"
+            type="info"
+            show-icon
+            closable
+            class="lead-banner"
+        />
         <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" class="lead-error-banner" />
         <div class="lead-card lead-table-card">
-            <LeadFilterBar :query="query" :time-fields="timeFields" :reset-values="resetValues" :extra-active-count="Number(regionActive) + Number(!!query.merchant_id) + Number(query.inventory_scope !== 'sellable')" default-time-field="fetched_at" :total="total" :loading="loading" label="库存快照" search-label="商品或规格" placeholder="搜索型号、规格或商品名称" @apply="applyFilters" @reload="load">
+            <LeadFilterBar
+                :query="query"
+                :time-fields="timeFields"
+                :reset-values="resetValues"
+                :extra-active-count="Number(regionActive) + Number(!!query.merchant_id) + Number(query.inventory_scope !== 'sellable')"
+                default-time-field="fetched_at"
+                :total="total"
+                :loading="loading"
+                label="库存快照"
+                search-label="商品或规格"
+                placeholder="搜索型号、规格或商品名称"
+                @apply="applyFilters"
+                @reload="load"
+            >
                 <template #filters>
-                    <el-popover v-model:visible="inventoryScopeOpened" trigger="click" placement="bottom-start" :width="280" popper-class="hsx-lead-filter-popper" @show="beginInventoryScope">
-                        <template #reference><el-button class="lead-filter-bar__chip" :class="{ 'is-active': query.inventory_scope !== 'all' }" :aria-expanded="inventoryScopeOpened" aria-haspopup="dialog" aria-label="筛选库存范围"><span>{{ inventoryScopeLabel }}</span><el-icon><ArrowDown /></el-icon></el-button></template>
-                        <section role="dialog" aria-label="库存范围筛选" class="lead-inventory-scope-filter" @keydown.esc.stop.prevent="inventoryScopeOpened = false">
+                    <el-popover
+                        v-model:visible="inventoryScopeOpened"
+                        trigger="click"
+                        placement="bottom-start"
+                        :width="280"
+                        popper-class="hsx-lead-filter-popper"
+                        @show="beginInventoryScope"
+                    >
+                        <template #reference
+                            ><el-button
+                                class="lead-filter-bar__chip"
+                                :class="{ 'is-active': query.inventory_scope !== 'all' }"
+                                :aria-expanded="inventoryScopeOpened"
+                                aria-haspopup="dialog"
+                                aria-label="筛选库存范围"
+                                ><span>{{ inventoryScopeLabel }}</span
+                                ><el-icon><ArrowDown /></el-icon></el-button
+                        ></template>
+                        <section
+                            role="dialog"
+                            aria-label="库存范围筛选"
+                            class="lead-inventory-scope-filter"
+                            @keydown.esc.stop.prevent="inventoryScopeOpened = false"
+                        >
                             <header><strong>库存范围</strong><small>其他状态仅供核对，不计入库存匹配。</small></header>
-                            <el-radio-group v-model="inventoryScopeDraft" class="lead-inventory-scope-options" aria-label="库存范围选项"><el-radio v-for="option in inventoryScopeOptions" :key="option.value" :value="option.value">{{ option.label }}</el-radio></el-radio-group>
-                            <footer><el-button @click="inventoryScopeOpened = false">取消</el-button><el-button type="primary" @click="applyInventoryScope">应用</el-button></footer>
+                            <el-radio-group
+                                v-model="inventoryScopeDraft"
+                                class="lead-inventory-scope-options"
+                                aria-label="库存范围选项"
+                                ><el-radio
+                                    v-for="option in inventoryScopeOptions"
+                                    :key="option.value"
+                                    :value="option.value"
+                                    >{{ option.label }}</el-radio
+                                ></el-radio-group
+                            >
+                            <footer
+                                ><el-button @click="inventoryScopeOpened = false">取消</el-button
+                                ><el-button type="primary" @click="applyInventoryScope">应用</el-button></footer
+                            >
                         </section>
                     </el-popover>
-                    <el-popover v-model:visible="regionOpened" trigger="click" placement="bottom-start" :width="360" popper-class="hsx-lead-filter-popper" @show="beginRegion">
-                        <template #reference><el-button class="lead-filter-bar__chip" :class="{ 'is-active': regionActive }" :aria-expanded="regionOpened" aria-haspopup="dialog" aria-label="按门店地区筛选"><span>地区</span><strong v-if="regionActive">{{ regionSummary }}</strong><el-icon><ArrowDown /></el-icon></el-button></template>
-                        <section role="dialog" aria-label="门店地区筛选" class="lead-inventory-region-filter" @keydown.esc.stop.prevent="regionOpened = false">
-                            <header><strong>按门店所在地筛选</strong><small>可只选省份或城市，不必选到区县。</small></header>
-                            <RegionSelect :model-value="regionDraft" :teleported="false" @update:model-value="value => Object.assign(regionDraft, value)" />
+                    <el-popover
+                        v-model:visible="regionOpened"
+                        trigger="click"
+                        placement="bottom-start"
+                        :width="360"
+                        popper-class="hsx-lead-filter-popper"
+                        @show="beginRegion"
+                    >
+                        <template #reference
+                            ><el-button
+                                class="lead-filter-bar__chip"
+                                :class="{ 'is-active': regionActive }"
+                                :aria-expanded="regionOpened"
+                                aria-haspopup="dialog"
+                                aria-label="按门店地区筛选"
+                                ><span>地区</span><strong v-if="regionActive">{{ regionSummary }}</strong
+                                ><el-icon><ArrowDown /></el-icon></el-button
+                        ></template>
+                        <section
+                            role="dialog"
+                            aria-label="门店地区筛选"
+                            class="lead-inventory-region-filter"
+                            @keydown.esc.stop.prevent="regionOpened = false"
+                        >
+                            <header
+                                ><strong>按门店所在地筛选</strong
+                                ><small>可只选省份或城市，不必选到区县。</small></header
+                            >
+                            <RegionSelect
+                                :model-value="regionDraft"
+                                :teleported="false"
+                                @update:model-value="value => Object.assign(regionDraft, value)"
+                            />
                             <p>地区来自商户登记的地址，不使用 ERP 的地区编号。</p>
-                            <footer><el-button link @click="clearRegion">不限地区</el-button><span /><el-button @click="regionOpened = false">取消</el-button><el-button type="primary" @click="applyRegion">应用</el-button></footer>
+                            <footer
+                                ><el-button link @click="clearRegion">不限地区</el-button><span /><el-button
+                                    @click="regionOpened = false"
+                                    >取消</el-button
+                                ><el-button type="primary" @click="applyRegion">应用</el-button></footer
+                            >
                         </section>
                     </el-popover>
-                    <el-popover v-model:visible="merchantOpened" trigger="click" placement="bottom-start" :width="360" popper-class="hsx-lead-filter-popper" @show="beginMerchants">
-                        <template #reference><el-button class="lead-filter-bar__chip" :class="{ 'is-active': !!query.merchant_id }" :aria-expanded="merchantOpened" aria-haspopup="dialog" aria-label="筛选所属门店"><span>所属门店</span><strong v-if="query.merchant_id">{{ query.merchant_label || '已选择' }}</strong><el-icon><ArrowDown /></el-icon></el-button></template>
-                        <section role="dialog" aria-label="所属门店筛选" class="lead-inventory-merchant-filter" @keydown.esc.stop.prevent="merchantOpened = false">
-                            <header><strong>选择所属门店</strong><small>{{ regionActive ? regionSummary : '当前不限地区' }}</small></header>
-                            <el-input v-model="merchantKeyword" clearable :prefix-icon="Search" aria-label="搜索门店名称、联系人或手机号" placeholder="搜索门店名称、联系人或手机号" @input="scheduleMerchantSearch" @keydown.enter.stop.prevent="searchMerchantsNow" />
-                            <el-radio-group v-model="merchantDraft" class="lead-inventory-merchant-options" aria-label="门店选项">
+                    <el-popover
+                        v-model:visible="merchantOpened"
+                        trigger="click"
+                        placement="bottom-start"
+                        :width="360"
+                        popper-class="hsx-lead-filter-popper"
+                        @show="beginMerchants"
+                    >
+                        <template #reference
+                            ><el-button
+                                class="lead-filter-bar__chip"
+                                :class="{ 'is-active': !!query.merchant_id }"
+                                :aria-expanded="merchantOpened"
+                                aria-haspopup="dialog"
+                                aria-label="筛选所属门店"
+                                ><span>所属门店</span
+                                ><strong v-if="query.merchant_id">{{ query.merchant_label || '已选择' }}</strong
+                                ><el-icon><ArrowDown /></el-icon></el-button
+                        ></template>
+                        <section
+                            role="dialog"
+                            aria-label="所属门店筛选"
+                            class="lead-inventory-merchant-filter"
+                            @keydown.esc.stop.prevent="merchantOpened = false"
+                        >
+                            <header
+                                ><strong>选择所属门店</strong
+                                ><small>{{ regionActive ? regionSummary : '当前不限地区' }}</small></header
+                            >
+                            <el-input
+                                v-model="merchantKeyword"
+                                clearable
+                                :prefix-icon="Search"
+                                aria-label="搜索门店名称、联系人或手机号"
+                                placeholder="搜索门店名称、联系人或手机号"
+                                @input="scheduleMerchantSearch"
+                                @keydown.enter.stop.prevent="searchMerchantsNow"
+                            />
+                            <el-radio-group
+                                v-model="merchantDraft"
+                                class="lead-inventory-merchant-options"
+                                aria-label="门店选项"
+                            >
                                 <el-radio value="" @change="merchantSelection = {}">全部门店</el-radio>
-                                <el-radio v-for="item in merchants" :key="item.id" :value="item.id" @change="merchantSelection = item"><span class="lead-inventory-merchant-option"><strong>{{ item.name }}</strong><small>{{ [item.contact_name, item.mobile].filter(Boolean).join(' · ') }}</small><small>{{ item.region_text || region(item) }}</small></span></el-radio>
+                                <el-radio
+                                    v-for="item in merchants"
+                                    :key="item.id"
+                                    :value="item.id"
+                                    @change="merchantSelection = item"
+                                    ><span class="lead-inventory-merchant-option"
+                                        ><strong>{{ item.name }}</strong
+                                        ><small
+                                            >{{ [item.contact_name, item.mobile].filter(Boolean).join(' · ') }}</small
+                                        ><small>{{ item.region_text || region(item) }}</small></span
+                                    ></el-radio
+                                >
                             </el-radio-group>
-                            <p v-if="merchantError" role="alert" class="lead-error">{{ merchantError }} <el-button link type="primary" @click="loadMerchantOptions(true)">重试</el-button></p>
+                            <p v-if="merchantError" role="alert" class="lead-error"
+                                >{{ merchantError }}
+                                <el-button link type="primary" @click="loadMerchantOptions(true)">重试</el-button></p
+                            >
                             <p v-else-if="merchantLoading">正在查询门店…</p>
                             <p v-else-if="!merchants.length">当前地区没有匹配门店，可调整地区或搜索词。</p>
-                            <div v-if="merchantTotal" class="lead-inventory-merchant-pages"><small>已显示 {{ merchants.length }} / {{ merchantTotal }} 家</small><el-button v-if="merchants.length < merchantTotal" link type="primary" :loading="merchantLoading" @click="loadMerchantOptions(false)">加载更多</el-button></div>
-                            <footer><el-button @click="merchantOpened = false">取消</el-button><el-button type="primary" :disabled="merchantLoading" @click="applyMerchant">应用</el-button></footer>
+                            <div v-if="merchantTotal" class="lead-inventory-merchant-pages"
+                                ><small>已显示 {{ merchants.length }} / {{ merchantTotal }} 家</small
+                                ><el-button
+                                    v-if="merchants.length < merchantTotal"
+                                    link
+                                    type="primary"
+                                    :loading="merchantLoading"
+                                    @click="loadMerchantOptions(false)"
+                                    >加载更多</el-button
+                                ></div
+                            >
+                            <footer
+                                ><el-button @click="merchantOpened = false">取消</el-button
+                                ><el-button type="primary" :disabled="merchantLoading" @click="applyMerchant"
+                                    >应用</el-button
+                                ></footer
+                            >
                         </section>
                     </el-popover>
                 </template>
             </LeadFilterBar>
-            <HsxTable :columns="columns" :data="rows" :loading="loading" :empty-text="error ? '列表未加载，请查看上方提示后重试' : canExpandSearch ? '在售有货范围内没有匹配资料' : filtered ? '没有符合当前筛选的库存，可清空筛选后查看在售有货设备' : '暂无在售且有货的快照，可切换库存范围核对，或更新商户 ERP 库存'">
-                <template #product="{ row }"><div class="lead-cell"><strong>{{ row.model || row.name || '未识别型号' }}</strong><small>{{ [row.memory, row.color, row.grade].filter(Boolean).join(' · ') || '规格未返回' }}</small></div></template>
-                <template #price="{ row }"><span :class="row.price !== null && row.price !== undefined ? 'lead-money' : 'lead-muted'">{{ row.price === null || row.price === undefined || row.price === '' ? '—' : money(row.price) }}</span></template>
-                <template #merchant="{ row }"><div class="lead-cell"><strong>{{ row.merchant_name }}</strong><small>{{ row.region_text || region(row) }}</small></div></template>
-                <template #availability="{ row }"><div class="lead-cell"><el-tag :type="inventoryTone(row)" effect="plain">{{ row.sale_status_label || '状态待核实' }}</el-tag><small>{{ row.stock_status_label || '库存待核实' }}</small></div></template>
-                <template #updated="{ row }"><div class="lead-cell"><LeadTimestamp :value="row.last_sync_at || row.source_updated_at || row.fetched_at" /><el-tag v-if="row.is_stale" type="warning" size="small">数据已过期</el-tag></div></template>
-                <template #actions="{ row }"><el-button link type="primary" @click="detail = row; drawer = true">查看快照</el-button></template>
+            <HsxTable
+                :columns="columns"
+                :data="rows"
+                :loading="loading"
+                :empty-text="error ? '列表未加载，请查看上方提示后重试' : canExpandSearch ? '在售有货范围内没有匹配资料' : filtered ? '没有符合当前筛选的库存，可清空筛选后查看在售有货设备' : '暂无在售且有货的快照，可切换库存范围核对，或更新商户 ERP 库存'"
+            >
+                <template #product="{ row }"
+                    ><div class="lead-cell"
+                        ><strong>{{ row.model || row.name || '未识别型号' }}</strong
+                        ><small
+                            >{{ [row.memory, row.color, row.grade].filter(Boolean).join(' · ') || '规格未返回' }}</small
+                        ></div
+                    ></template
+                >
+                <template #price="{ row }"
+                    ><span
+                        :class="row.price !== null && row.price !== undefined ? 'lead-money' : 'lead-muted'"
+                        >{{ row.price === null || row.price === undefined || row.price === '' ? '—' : money(row.price) }}</span
+                    ></template
+                >
+                <template #merchant="{ row }"
+                    ><div class="lead-cell"
+                        ><strong>{{ row.merchant_name }}</strong
+                        ><small>{{ row.region_text || region(row) }}</small></div
+                    ></template
+                >
+                <template #availability="{ row }"
+                    ><div class="lead-cell"
+                        ><el-tag
+                            :type="inventoryTone(row)"
+                            effect="plain"
+                            >{{ row.sale_status_label || '状态待核实' }}</el-tag
+                        ><small>{{ row.stock_status_label || '库存待核实' }}</small></div
+                    ></template
+                >
+                <template #updated="{ row }"
+                    ><div class="lead-cell"
+                        ><LeadTimestamp :value="row.last_sync_at || row.source_updated_at || row.fetched_at" /><el-tag
+                            v-if="row.is_stale"
+                            type="warning"
+                            size="small"
+                            >数据已过期</el-tag
+                        ></div
+                    ></template
+                >
+                <template #actions="{ row }"
+                    ><el-button link type="primary" @click="detail = row; drawer = true">查看快照</el-button></template
+                >
             </HsxTable>
             <div v-if="canExpandSearch" class="lead-inventory-search-fallback" role="status">
                 <span>可查询全部已同步资料；待核实记录不代表可售，也不参与匹配。</span>
                 <el-button link type="primary" @click="expandSearch">在全部来源资料中查找（含待核实）</el-button>
             </div>
-            <div class="lead-pagebar"><HsxPagination layout="sizes, prev, pager, next, jumper" v-model:current-page="query.page" v-model:page-size="query.limit" :total="total" @change="load" /></div>
+            <div class="lead-pagebar"
+                ><HsxPagination
+                    layout="sizes, prev, pager, next, jumper"
+                    v-model:current-page="query.page"
+                    v-model:page-size="query.limit"
+                    :total="total"
+                    @change="load"
+            /></div>
         </div>
-        <HsxDrawer v-model="drawer" title="商品快照" subtitle="仅展示最近一次同步结果，实际库存以门店确认结果为准。" size="sm">
-            <el-descriptions :column="1" border><el-descriptions-item label="型号">{{ detail.model || detail.name || '未返回' }}</el-descriptions-item><el-descriptions-item label="品牌">{{ detail.brand || '未返回' }}</el-descriptions-item><el-descriptions-item label="规格">{{ [detail.memory, detail.color, detail.grade].filter(Boolean).join(' · ') || '未返回' }}</el-descriptions-item><el-descriptions-item label="快照价格">{{ detail.price == null || detail.price === '' ? '—' : money(detail.price) }}</el-descriptions-item><el-descriptions-item label="上架状态">{{ detail.sale_status_label || '状态待核实' }}</el-descriptions-item><el-descriptions-item label="库存状态">{{ detail.stock_status_label || '库存待核实' }}</el-descriptions-item><el-descriptions-item label="快照数量">{{ detail.quantity ?? '未返回' }}</el-descriptions-item><el-descriptions-item label="所属门店">{{ detail.merchant_name }}</el-descriptions-item><el-descriptions-item label="门店地区">{{ detail.region_text || region(detail) }}</el-descriptions-item><el-descriptions-item label="同步时间">{{ time(detail.last_sync_at || detail.source_updated_at || detail.fetched_at) }}</el-descriptions-item><el-descriptions-item label="实物核对">接单前仍需门店确认，不会自动锁货</el-descriptions-item></el-descriptions>
-            <el-alert v-if="detail.is_stale" title="该快照已过期，请先同步最新库存。" type="warning" :closable="false" style="margin-top: 18px" />
+        <HsxDrawer
+            v-model="drawer"
+            title="商品快照"
+            subtitle="仅展示最近一次同步结果，实际库存以门店确认结果为准。"
+            size="sm"
+        >
+            <el-descriptions :column="1" border
+                ><el-descriptions-item label="型号">{{ detail.model || detail.name || '未返回' }}</el-descriptions-item
+                ><el-descriptions-item label="品牌">{{ detail.brand || '未返回' }}</el-descriptions-item
+                ><el-descriptions-item
+                    label="规格"
+                    >{{ [detail.memory, detail.color, detail.grade].filter(Boolean).join(' · ') || '未返回' }}</el-descriptions-item
+                ><el-descriptions-item
+                    label="快照价格"
+                    >{{ detail.price == null || detail.price === '' ? '—' : money(detail.price) }}</el-descriptions-item
+                ><el-descriptions-item
+                    label="上架状态"
+                    >{{ detail.sale_status_label || '状态待核实' }}</el-descriptions-item
+                ><el-descriptions-item
+                    label="库存状态"
+                    >{{ detail.stock_status_label || '库存待核实' }}</el-descriptions-item
+                ><el-descriptions-item label="快照数量">{{ detail.quantity ?? '未返回' }}</el-descriptions-item
+                ><el-descriptions-item label="所属门店">{{ detail.merchant_name }}</el-descriptions-item
+                ><el-descriptions-item label="门店地区">{{ detail.region_text || region(detail) }}</el-descriptions-item
+                ><el-descriptions-item
+                    label="同步时间"
+                    >{{ time(detail.last_sync_at || detail.source_updated_at || detail.fetched_at) }}</el-descriptions-item
+                ><el-descriptions-item label="实物核对"
+                    >接单前仍需门店确认，不会自动锁货</el-descriptions-item
+                ></el-descriptions
+            >
+            <el-alert
+                v-if="detail.is_stale"
+                title="该快照已过期，请先同步最新库存。"
+                type="warning"
+                :closable="false"
+                style="margin-top: 18px"
+            />
         </HsxDrawer>
     </section>
 </template>

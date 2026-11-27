@@ -1,37 +1,180 @@
 <template>
     <HsxSearchPanel :collapsible="false" :show-layout-switch="false" class="lead-filter-bar">
         <form class="lead-filter-bar__row" role="search" :aria-label="`${label}筛选`" @submit.prevent="searchKeyword">
-            <el-input v-model="keyword" class="lead-filter-bar__keyword" :aria-label="searchLabel" :placeholder="placeholder" clearable :prefix-icon="Search" @clear="clearKeyword" />
+            <el-input
+                v-model="keyword"
+                class="lead-filter-bar__keyword"
+                :aria-label="searchLabel"
+                :placeholder="placeholder"
+                clearable
+                :prefix-icon="Search"
+                @clear="clearKeyword"
+            />
             <div class="lead-filter-bar__chips" role="group" aria-label="筛选条件">
-                <el-popover v-for="filter in filters" :key="filter.key" v-model:visible="opened[filter.key]" trigger="click" placement="bottom-start" :width="264" popper-class="hsx-lead-filter-popper" @show="beginOption(filter)">
-                    <template #reference><el-button :ref="value => setButton(filter.key, value)" class="lead-filter-bar__chip" :class="{ 'is-active': isActive(query[filter.key]) }" :aria-expanded="!!opened[filter.key]" aria-haspopup="dialog" @keydown.esc.stop.prevent="closeFilter(filter.key)"><span>{{ filter.label }}</span><strong v-if="isActive(query[filter.key])">{{ optionLabel(filter) }}</strong><el-icon><ArrowDown /></el-icon></el-button></template>
-                    <section role="dialog" :aria-label="`${filter.label}筛选`" class="lead-filter-popover" @keydown.esc.stop.prevent="closeFilter(filter.key)">
-                        <header><strong>{{ filter.label }}</strong><span>选择后点击应用</span></header>
-                        <el-input v-if="filter.options.length > 8" v-model="optionSearch[filter.key]" :aria-label="`搜索${filter.label}选项`" :placeholder="`搜索${filter.label}`" clearable :prefix-icon="Search" class="lead-filter-popover__option-search" />
-                        <el-radio-group v-model="drafts[filter.key]" class="lead-filter-popover__options" :aria-label="filter.label" :disabled="filter.loading">
-                            <el-radio value="">全部</el-radio><el-radio v-for="option in visibleOptions(filter)" :key="String(option.value)" :value="option.value">{{ option.label }}</el-radio>
+                <el-popover
+                    v-for="filter in filters"
+                    :key="filter.key"
+                    v-model:visible="opened[filter.key]"
+                    trigger="click"
+                    placement="bottom-start"
+                    :width="264"
+                    popper-class="hsx-lead-filter-popper"
+                    @show="beginOption(filter)"
+                >
+                    <template #reference
+                        ><el-button
+                            :ref="value => setButton(filter.key, value)"
+                            class="lead-filter-bar__chip"
+                            :class="{ 'is-active': isActive(query[filter.key]) }"
+                            :aria-expanded="!!opened[filter.key]"
+                            aria-haspopup="dialog"
+                            @keydown.esc.stop.prevent="closeFilter(filter.key)"
+                            ><span>{{ filter.label }}</span
+                            ><strong v-if="isActive(query[filter.key])">{{ optionLabel(filter) }}</strong
+                            ><el-icon><ArrowDown /></el-icon></el-button
+                    ></template>
+                    <section
+                        role="dialog"
+                        :aria-label="`${filter.label}筛选`"
+                        class="lead-filter-popover"
+                        @keydown.esc.stop.prevent="closeFilter(filter.key)"
+                    >
+                        <header
+                            ><strong>{{ filter.label }}</strong
+                            ><span>选择后点击应用</span></header
+                        >
+                        <el-input
+                            v-if="filter.options.length > 8"
+                            v-model="optionSearch[filter.key]"
+                            :aria-label="`搜索${filter.label}选项`"
+                            :placeholder="`搜索${filter.label}`"
+                            clearable
+                            :prefix-icon="Search"
+                            class="lead-filter-popover__option-search"
+                        />
+                        <el-radio-group
+                            v-model="drafts[filter.key]"
+                            class="lead-filter-popover__options"
+                            :aria-label="filter.label"
+                            :disabled="filter.loading"
+                        >
+                            <el-radio value="">全部</el-radio
+                            ><el-radio
+                                v-for="option in visibleOptions(filter)"
+                                :key="String(option.value)"
+                                :value="option.value"
+                                >{{ option.label }}</el-radio
+                            >
                         </el-radio-group>
-                        <p v-if="optionSearch[filter.key] && !visibleOptions(filter).length" class="lead-filter-popover__note">没有匹配的选项，可换个关键词。</p>
+                        <p
+                            v-if="optionSearch[filter.key] && !visibleOptions(filter).length"
+                            class="lead-filter-popover__note"
+                            >没有匹配的选项，可换个关键词。</p
+                        >
                         <p v-if="filter.loading" class="lead-filter-popover__note">正在读取选项…</p>
-                        <footer><el-button @click="closeFilter(filter.key)">取消</el-button><el-button type="primary" :disabled="filter.loading" @click="applyOption(filter)">应用</el-button></footer>
+                        <footer
+                            ><el-button @click="closeFilter(filter.key)">取消</el-button
+                            ><el-button type="primary" :disabled="filter.loading" @click="applyOption(filter)"
+                                >应用</el-button
+                            ></footer
+                        >
                     </section>
                 </el-popover>
                 <slot name="filters" />
-                <el-popover v-model:visible="dateOpened" trigger="click" placement="bottom-start" :width="420" popper-class="hsx-lead-filter-popper" @show="beginDate">
-                    <template #reference><el-button :ref="value => setButton('date', value)" class="lead-filter-bar__chip" :class="{ 'is-active': dateActive }" :aria-expanded="dateOpened" aria-haspopup="dialog" :icon="Calendar" @keydown.esc.stop.prevent="closeDate"><span>{{ dateActive ? dateSummary : '时间范围' }}</span><el-icon><ArrowDown /></el-icon></el-button></template>
-                    <section role="dialog" class="lead-filter-popover" aria-label="时间范围筛选" @keydown.esc.stop.prevent="closeDate">
+                <el-popover
+                    v-model:visible="dateOpened"
+                    trigger="click"
+                    placement="bottom-start"
+                    :width="420"
+                    popper-class="hsx-lead-filter-popper"
+                    @show="beginDate"
+                >
+                    <template #reference
+                        ><el-button
+                            :ref="value => setButton('date', value)"
+                            class="lead-filter-bar__chip"
+                            :class="{ 'is-active': dateActive }"
+                            :aria-expanded="dateOpened"
+                            aria-haspopup="dialog"
+                            :icon="Calendar"
+                            @keydown.esc.stop.prevent="closeDate"
+                            ><span>{{ dateActive ? dateSummary : '时间范围' }}</span
+                            ><el-icon><ArrowDown /></el-icon></el-button
+                    ></template>
+                    <section
+                        role="dialog"
+                        class="lead-filter-popover"
+                        aria-label="时间范围筛选"
+                        @keydown.esc.stop.prevent="closeDate"
+                    >
                         <header><strong>按时间检索</strong><span>按当前设备时区，包含起止当天</span></header>
-                        <div class="lead-filter-popover__field"><span>时间维度</span><el-select v-model="dateDraft.field" :teleported="false" aria-label="时间维度"><el-option v-for="field in timeFields" :key="field.value" :value="field.value" :label="field.label" /></el-select></div>
-                        <div class="lead-filter-popover__presets" role="group" aria-label="快捷日期"><el-button v-for="preset in presets" :key="preset.label" size="small" @click="selectPreset(preset.days, preset.yesterday)">{{ preset.label }}</el-button></div>
-                        <div class="lead-filter-popover__dates"><div class="lead-filter-popover__field"><span>开始日期</span><el-date-picker v-model="dateDraft.start" type="date" value-format="YYYY-MM-DD" format="YYYY-MM-DD" clearable :teleported="false" aria-label="开始日期" placeholder="不限开始日期" /></div><span>至</span><div class="lead-filter-popover__field"><span>结束日期</span><el-date-picker v-model="dateDraft.end" type="date" value-format="YYYY-MM-DD" format="YYYY-MM-DD" clearable :teleported="false" aria-label="结束日期" placeholder="不限结束日期" /></div></div>
+                        <div class="lead-filter-popover__field"
+                            ><span>时间维度</span
+                            ><el-select v-model="dateDraft.field" :teleported="false" aria-label="时间维度"
+                                ><el-option
+                                    v-for="field in timeFields"
+                                    :key="field.value"
+                                    :value="field.value"
+                                    :label="field.label" /></el-select
+                        ></div>
+                        <div class="lead-filter-popover__presets" role="group" aria-label="快捷日期"
+                            ><el-button
+                                v-for="preset in presets"
+                                :key="preset.label"
+                                size="small"
+                                @click="selectPreset(preset.days, preset.yesterday)"
+                                >{{ preset.label }}</el-button
+                            ></div
+                        >
+                        <div class="lead-filter-popover__dates"
+                            ><div class="lead-filter-popover__field"
+                                ><span>开始日期</span
+                                ><el-date-picker
+                                    v-model="dateDraft.start"
+                                    type="date"
+                                    value-format="YYYY-MM-DD"
+                                    format="YYYY-MM-DD"
+                                    clearable
+                                    :teleported="false"
+                                    aria-label="开始日期"
+                                    placeholder="不限开始日期" /></div
+                            ><span>至</span
+                            ><div class="lead-filter-popover__field"
+                                ><span>结束日期</span
+                                ><el-date-picker
+                                    v-model="dateDraft.end"
+                                    type="date"
+                                    value-format="YYYY-MM-DD"
+                                    format="YYYY-MM-DD"
+                                    clearable
+                                    :teleported="false"
+                                    aria-label="结束日期"
+                                    placeholder="不限结束日期" /></div
+                        ></div>
                         <p v-if="dateError" role="alert" class="lead-filter-popover__error">{{ dateError }}</p>
-                        <footer><el-button link @click="dateDraft.start = ''; dateDraft.end = ''; dateError = ''">清空日期</el-button><span class="lead-filter-popover__spacer" /><el-button @click="closeDate">取消</el-button><el-button type="primary" @click="applyDate">应用</el-button></footer>
+                        <footer
+                            ><el-button link @click="dateDraft.start = ''; dateDraft.end = ''; dateError = ''"
+                                >清空日期</el-button
+                            ><span class="lead-filter-popover__spacer" /><el-button @click="closeDate">取消</el-button
+                            ><el-button type="primary" @click="applyDate">应用</el-button></footer
+                        >
                     </section>
                 </el-popover>
             </div>
-            <div class="lead-filter-bar__actions"><el-button type="primary" native-type="submit" :loading="loading">查询</el-button><el-tooltip content="保留当前筛选，重新获取数据" placement="top"><el-button :icon="Refresh" :disabled="loading" aria-label="刷新列表" @click="emit('reload')" /></el-tooltip></div>
+            <div class="lead-filter-bar__actions"
+                ><el-button type="primary" native-type="submit" :loading="loading">查询</el-button
+                ><el-tooltip content="保留当前筛选，重新获取数据" placement="top"
+                    ><el-button
+                        :icon="Refresh"
+                        :disabled="loading"
+                        aria-label="刷新列表"
+                        @click="emit('reload')" /></el-tooltip
+            ></div>
         </form>
-        <div class="lead-filter-bar__summary" aria-live="polite"><span class="lead-filter-bar__count">{{ loading ? '正在查询…' : `共 ${total} 条` }}</span><el-button v-if="activeCount" link type="primary" @click="reset">清空筛选</el-button></div>
+        <div class="lead-filter-bar__summary" aria-live="polite"
+            ><span class="lead-filter-bar__count">{{ loading ? '正在查询…' : `共 ${total} 条` }}</span
+            ><el-button v-if="activeCount" link type="primary" @click="reset">清空筛选</el-button></div
+        >
         <slot />
     </HsxSearchPanel>
 </template>
