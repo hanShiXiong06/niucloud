@@ -1,7 +1,9 @@
 @import './cooperation-shared';
+@import '../../styles/tokens.scss';
 
 .hsx-cooperation {
-    --coop-primary: var(--primary-color, #d93833);
+    // Fallback used to be red (#d93833) when a site had no theme colour; follow the spec's accent instead.
+    --coop-primary: #{$hsx-accent};
     height: calc(100vh - var(--window-top, 0px) - var(--window-bottom, 0px));
     min-height: 0;
     background: #f5f6f8;
@@ -70,10 +72,6 @@
 .coop-delivery-controls .coop-list-tools {
     padding-top: 14rpx;
 }
-.coop-delivery-controls.is-pending .coop-status-tabs {
-    opacity: 0.55;
-    pointer-events: none;
-}
 // The framework has two internal spacers. Reserve only the actual fixed bar plus safe area.
 // Keep native fixed positioning intact; do not depend on selectors inside framework components.
 .coop-framework-tabbar {
@@ -88,28 +86,13 @@
     bottom: 0;
     height: 0;
 }
+// Search sits in the padded tools row; CoopStatusTabs below it carries its own 12px inset.
 .coop-list-tools {
-    padding: 22rpx 30rpx 0;
+    padding: 22rpx 0 0;
 }
-.coop-status-tabs {
-    margin-top: 10rpx;
-}
-.coop-status-tabs__inner {
-    display: flex;
-    align-items: center;
-    gap: 32rpx;
-    width: max-content;
-}
-.coop-status-tabs__inner > text {
-    white-space: nowrap;
-    min-height: 78rpx;
-    line-height: 78rpx;
-    color: #88929e;
-    font-size: 24rpx;
-}
-.coop-status-tabs__inner > text.active {
-    color: #202124;
-    font-weight: 650;
+// A wrapper view: scoped selectors cannot reach a child component's root in mini programs.
+.coop-list-search {
+    padding: 0 30rpx;
 }
 .coop-lead-list {
     padding: 0 24rpx 20rpx;
@@ -120,94 +103,9 @@
     background: #f5f6f8;
     flex: none;
 }
-.coop-warning,
-.coop-payment-status {
-    margin: 20rpx 24rpx;
-    padding: 19rpx 22rpx;
-    border-radius: 10rpx;
-    font-size: 23rpx;
-    line-height: 1.7;
-    background: #fff3e9;
-    color: #9a6e48;
-}
-.coop-payment-status {
-    background: #edf3fa;
-    color: #617795;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 14rpx;
-    justify-content: space-between;
-}
-.coop-payment-status > text:last-child {
-    font-weight: 600;
-}
 .coop-login {
     padding: 0 60rpx;
 }
 .coop-profile-wrap {
     padding-top: 18rpx;
-}
-.coop-work-overview {
-    display: flex;
-    gap: 14rpx;
-    padding: 25rpx 24rpx 20rpx;
-    background: #fff;
-}
-.coop-work-overview > view {
-    display: flex;
-    align-items: center;
-    gap: 12rpx;
-    flex: 1;
-    min-width: 0;
-}
-.coop-work-overview__icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 65rpx;
-    height: 65rpx;
-    border-radius: 14rpx;
-    flex: none;
-}
-.coop-work-overview__icon.is-select {
-    background: #fff2df;
-}
-.coop-work-overview__icon.is-receive {
-    background: #edf3fc;
-}
-.coop-work-overview__icon.is-follow {
-    background: #eaf6ee;
-}
-.coop-work-overview > view > view:last-child {
-    display: flex;
-    flex-direction: column;
-    gap: 5rpx;
-    min-width: 0;
-    font-size: 21rpx;
-    color: #8994a4;
-    line-height: 1.5;
-}
-.coop-work-overview > view > view:last-child > text:first-child {
-    color: #303b4b;
-    font-size: 31rpx;
-    font-weight: 650;
-}
-.coop-subscribe-entry {
-    display: flex;
-    align-items: center;
-    gap: 10rpx;
-    padding: 17rpx 25rpx;
-    background: #fff8ec;
-    font-size: 22rpx;
-    line-height: 1.6;
-    color: #8c7756;
-}
-.coop-subscribe-entry > text:first-of-type {
-    min-width: 0;
-    flex: 1;
-}
-.coop-subscribe-entry > text:last-child {
-    white-space: nowrap;
-    flex: none;
-    color: #a87e3d;
 }
