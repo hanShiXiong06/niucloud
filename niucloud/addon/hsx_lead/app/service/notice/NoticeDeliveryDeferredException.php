@@ -6,6 +6,13 @@ namespace addon\hsx_lead\app\service\notice;
 final class NoticeDeliveryDeferredException extends \RuntimeException
 {
     private int $until;
-    public function __construct(int $until) { $this->until=$until;parent::__construct(NoticeDeliveryWindow::message($until)); }
-    public function until(): int { return$this->until; }
+    public function __construct(int $until)
+    {
+        $this->until = $until;
+        parent::__construct(NoticeDeliveryWindow::message($until));
+    }
+    public function until(): int
+    {
+        return $this->until;
+    }
 }

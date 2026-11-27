@@ -26,7 +26,10 @@ final class JixiaoerProvider extends AbstractProvider
         'batteryCycleCount' => '电池循环次数', 'system_version' => '系统版本',
     ];
 
-    public function key(): string { return 'jixiaoer'; }
+    public function key(): string
+    {
+        return 'jixiaoer';
+    }
 
     public function login(#[\SensitiveParameter] array $credentials): array
     {
@@ -44,7 +47,7 @@ final class JixiaoerProvider extends AbstractProvider
         $this->assertBusinessSuccess($page);
         $token = $this->responseCookie($response['headers']);
         $identityResponse = $this->request('GET', self::IDENTITY_ENDPOINT,
-            ['Accept' => 'text/html', 'Cookie' => self::COOKIE_NAME . '=' . $token], [], 'query');
+            ['Accept' => 'text/html', 'Cookie' => self::COOKIE_NAME.'='.$token], [], 'query');
         $identity = $this->htmlIdentity($identityResponse['body']);
         return ['access_token' => $token, 'expires_at' => null, 'identity' => $identity,
             'warnings' => ['ERP 未提供已核验的授权有效期；会话到期后需重新登录']];
@@ -71,7 +74,8 @@ final class JixiaoerProvider extends AbstractProvider
         }
         $fingerprint = hash('sha256', json_encode([$store, $tenant, $size, $start, $end], JSON_THROW_ON_ERROR));
         $state = $this->state($cursor, $page, $size, $fingerprint, $store ?? $tenant);
-        $phase = $state['phase']; $phasePage = $state['phase_page'];
+        $phase = $state['phase'];
+        $phasePage = $state['phase_page'];
         $query = $this->query($phase, $phasePage, $size, $start, $end);
         $endpoint = ['catalog' => self::CATALOG_ENDPOINT, 'listed' => self::LISTED_ENDPOINT, 'stock' => self::STOCK_ENDPOINT][$phase];
         $referer = ['catalog' => 'https://jx2.guanql.cn/mall/goods',
@@ -96,25 +100,31 @@ final class JixiaoerProvider extends AbstractProvider
         $hasMore = $more;
         if (!$more) {
             if ($phase === 'catalog' && $state['parents'] !== []) {
-                $state['phase'] = 'listed'; $hasMore = true;
+                $state['phase'] = 'listed';
+                $hasMore = true;
             } elseif ($phase === 'listed' && $state['listed'] !== []) {
-                $state['phase'] = 'stock'; $state['parents'] = []; $hasMore = true;
+                $state['phase'] = 'stock';
+                $state['parents'] = [];
+                $hasMore = true;
             } else {
                 if ($phase === 'stock' && $state['listed'] !== []) {
                     throw new ProviderException('schema_changed', '机小二上架设备与当前库存未能完整对应，本轮未发布，请核对原系统后重新同步');
                 }
-                $state['phase'] = 'done'; $state['parents'] = []; $state['listed'] = [];
+                $state['phase'] = 'done';
+                $state['parents'] = [];
+                $state['listed'] = [];
             }
-            $state['phase_page'] = 1; $state['expected_total'] = null;
+            $state['phase_page'] = 1;
+            $state['expected_total'] = null;
         }
         if ($hasMore && $page >= self::MAX_PAGES) {
             throw new ProviderException('invalid_scope', '机小二同步超过100页安全上限，本轮未发布');
         }
         $this->checkStateSize($state);
         $note = ['catalog' => '核对上架型号', 'listed' => '核对上架设备', 'stock' => '匹配当前库存'][$phase]
-            . '：第' . $phasePage . '页，来源共' . $total . '条';
+            .'：第'.$phasePage.'页，来源共'.$total.'条';
         if ($phase !== 'stock') $note .= '；正在预读上架规则，此时未输出设备不代表零库存';
-        if ($state['skipped_parent'] > 0) $note .= '；已排除未上架父商品的设备' . $state['skipped_parent'] . '条';
+        if ($state['skipped_parent'] > 0) $note .= '；已排除未上架父商品的设备'.$state['skipped_parent'].'条';
         return ['rows' => $rows, 'has_more' => $hasMore, 'cursor' => $state, 'note' => $note];
     }
 
@@ -129,8 +139,8 @@ final class JixiaoerProvider extends AbstractProvider
         // aggregate available quantity and must not be copied into quantity.
         $stockNumber = $safe['stock_list_history_imei']['stock_num'] ?? null;
         $validStock = (is_int($stockNumber) || is_string($stockNumber))
-            && preg_match('/^-?[0-9]+(?:\.[0-9]+)?$/D', (string)$stockNumber) === 1;
-        $inStock = $validStock && !(str_starts_with((string)$stockNumber, '-') && preg_match('/[1-9]/', (string)$stockNumber));
+            && preg_match('/^-?[0-9]+(?:\.[0-9]+)?$/D', (string) $stockNumber) === 1;
+        $inStock = $validStock && !(str_starts_with((string) $stockNumber, '-') && preg_match('/[1-9]/', (string) $stockNumber));
         $stockStatus = $inStock ? 'in_stock' : ($validStock ? 'out_of_stock' : 'unknown');
         return $this->common($safe, $context, [
             'id' => $safe['id'], 'store_id' => $safe['shop_id'], 'tenant_id' => $safe['shop_id'],
@@ -202,8 +212,11 @@ final class JixiaoerProvider extends AbstractProvider
 
     private function checkStateSize(array $state): void
     {
-        try { $bytes = strlen(json_encode($state, JSON_THROW_ON_ERROR)); }
-        catch (\Throwable $error) { throw new ProviderException('invalid_scope', '机小二同步进度格式异常'); }
+        try {
+            $bytes = strlen(json_encode($state, JSON_THROW_ON_ERROR));
+        } catch (\Throwable $error) {
+            throw new ProviderException('invalid_scope', '机小二同步进度格式异常');
+        }
         if ($bytes > self::MAX_CURSOR_BYTES) throw new ProviderException('invalid_scope', '机小二同步进度超过安全大小，本轮未发布');
     }
 
@@ -217,11 +230,12 @@ final class JixiaoerProvider extends AbstractProvider
 
     private function indexParent(array $row, array &$state): void
     {
-        $shop = $this->id($row['shop_id'] ?? null, '机小二商品门店'); $this->shop($shop, $state);
+        $shop = $this->id($row['shop_id'] ?? null, '机小二商品门店');
+        $this->shop($shop, $state);
         $id = $this->id($row['id'] ?? null, '机小二父商品标识');
         $goods = $this->id($row['goods_id'] ?? null, '机小二型号标识');
         if ((string) ($row['status'] ?? '') !== '1') throw new ProviderException('schema_changed', '机小二上架型号返回了非上架记录，本轮未发布');
-        $key = 'p:' . $id;
+        $key = 'p:'.$id;
         if (isset($state['parents'][$key])) throw new ProviderException('schema_changed', '机小二上架型号分页重复，本轮未发布');
         $state['parents'][$key] = ['id' => $id, 'goods_id' => $goods, 'shop_id' => $shop, 'status' => 1];
     }
@@ -235,8 +249,11 @@ final class JixiaoerProvider extends AbstractProvider
         $seenKey = hash('sha256', json_encode([$parentId, $goods, $imei], JSON_THROW_ON_ERROR));
         if (isset($state['seen_listed'][$seenKey])) throw new ProviderException('schema_changed', '机小二上架设备分页重复，本轮未发布');
         $state['seen_listed'][$seenKey] = true;
-        $parent = $state['parents']['p:' . $parentId] ?? null;
-        if ($parent === null) { $state['skipped_parent']++; return; }
+        $parent = $state['parents']['p:'.$parentId] ?? null;
+        if ($parent === null) {
+            $state['skipped_parent']++;
+            return;
+        }
         if (($parent['goods_id'] ?? null) !== $goods || ($parent['shop_id'] ?? null) !== $state['shop_id']) {
             throw new ProviderException('scope_mismatch', '机小二上架设备与父商品归属不一致，本轮未发布');
         }
@@ -250,21 +267,25 @@ final class JixiaoerProvider extends AbstractProvider
 
     private function joinStock(array $row, array &$state): ?array
     {
-        $safe = $this->safeSnapshot($row); $this->shop($safe['shop_id'], $state);
+        $safe = $this->safeSnapshot($row);
+        $this->shop($safe['shop_id'], $state);
         $goods = $this->id($safe['goods_id'] ?? null, '机小二库存型号标识');
         $imei = $this->id($safe['imei'] ?? null, '机小二库存完整串号');
-        $idKey = 's:' . $safe['id']; $key = $this->joinKey($goods, $imei);
+        $idKey = 's:'.$safe['id'];
+        $key = $this->joinKey($goods, $imei);
         if (isset($state['seen_stock'][$idKey]) || isset($state['seen_join'][$key])) {
             throw new ProviderException('schema_changed', '机小二库存分页出现重复或歧义设备，本轮未发布');
         }
-        $state['seen_stock'][$idKey] = true; $state['seen_join'][$key] = true;
+        $state['seen_stock'][$idKey] = true;
+        $state['seen_join'][$key] = true;
         if (!isset($state['listed'][$key])) return null;
         $num = $safe['stock_list_history_imei']['stock_num'] ?? null;
         if ((!is_string($num) && !is_int($num)) || !preg_match('/^-?[0-9]+(?:\.[0-9]+)?$/D', (string) $num)
             || (str_starts_with((string) $num, '-') && preg_match('/[1-9]/', (string) $num))) {
             throw new ProviderException('schema_changed', '机小二已上架设备的当前在库状态未能确认，本轮未发布');
         }
-        $safe['listing'] = $state['listed'][$key]; unset($state['listed'][$key]);
+        $safe['listing'] = $state['listed'][$key];
+        unset($state['listed'][$key]);
         return $safe;
     }
 
@@ -342,15 +363,19 @@ final class JixiaoerProvider extends AbstractProvider
         if ($input === null || $input === '') return [];
         if (is_string($input)) {
             if (strlen($input) > 65536) throw new ProviderException('schema_changed', '机小二设备属性超过安全大小');
-            try { $input = json_decode($input, true, 32, JSON_THROW_ON_ERROR | JSON_BIGINT_AS_STRING); }
-            catch (\Throwable $error) { throw new ProviderException('schema_changed', '机小二设备属性格式变化'); }
+            try {
+                $input = json_decode($input, true, 32, JSON_THROW_ON_ERROR | JSON_BIGINT_AS_STRING);
+            } catch (\Throwable $error) {
+                throw new ProviderException('schema_changed', '机小二设备属性格式变化');
+            }
         }
         if (!is_array($input) || !\addon\hsx_lead\app\support\PhpRuntime::isList($input)) throw new ProviderException('schema_changed', '机小二设备属性结构变化');
         $result = [];
         foreach ($input as $property) {
             if (!is_array($property) || !is_string($property['key'] ?? null)
                 || !array_key_exists($property['key'], self::PROPERTY_LABELS)) continue;
-            $key = $property['key']; $value = $this->scalar($property['value'] ?? null);
+            $key = $property['key'];
+            $value = $this->scalar($property['value'] ?? null);
             if (isset($result[$key]) && $result[$key]['value'] !== $value) {
                 throw new ProviderException('schema_changed', '机小二设备属性存在矛盾的重复值');
             }
@@ -375,7 +400,7 @@ final class JixiaoerProvider extends AbstractProvider
         $secretTrace = \addon\hsx_lead\app\support\PhpRuntime::guardSecrets();
         return ['Accept' => 'application/json', 'Content-Type' => 'application/json',
             'X-Requested-With' => 'XMLHttpRequest', 'Referer' => $referer,
-            'Cookie' => self::COOKIE_NAME . '=' . $this->cookieToken($token)];
+            'Cookie' => self::COOKIE_NAME.'='.$this->cookieToken($token)];
     }
 
     private function cookieToken(#[\SensitiveParameter] string $token): string
@@ -396,8 +421,11 @@ final class JixiaoerProvider extends AbstractProvider
             if (!is_string($name) || strcasecmp($name, 'Set-Cookie') !== 0) continue;
             foreach (is_array($values) ? $values : [$values] as $value) {
                 if (!is_string($value)) continue;
-                try { $cookie = SetCookie::fromString($value); }
-                catch (\Throwable $error) { continue; }
+                try {
+                    $cookie = SetCookie::fromString($value);
+                } catch (\Throwable $error) {
+                    continue;
+                }
                 if ($cookie->getName() === self::COOKIE_NAME) {
                     $tokens[] = $this->cookieToken((string) $cookie->getValue());
                 }
@@ -417,7 +445,7 @@ final class JixiaoerProvider extends AbstractProvider
         $previous = libxml_use_internal_errors(true);
         try {
             $document = new \DOMDocument();
-            if (!$document->loadHTML('<?xml encoding="utf-8"?>' . $html, LIBXML_NONET | LIBXML_NOWARNING | LIBXML_NOERROR)) {
+            if (!$document->loadHTML('<?xml encoding="utf-8"?>'.$html, LIBXML_NONET | LIBXML_NOWARNING | LIBXML_NOERROR)) {
                 throw new ProviderException('schema_changed', '机小二认证门店页面结构变化');
             }
             $xpath = new \DOMXPath($document);
@@ -430,7 +458,8 @@ final class JixiaoerProvider extends AbstractProvider
             return ['tenant_id' => $shop, 'store_id' => $shop,
                 'store_name' => $this->text($option->textContent), 'verified' => true];
         } finally {
-            libxml_clear_errors(); libxml_use_internal_errors($previous);
+            libxml_clear_errors();
+            libxml_use_internal_errors($previous);
         }
     }
 

@@ -15,20 +15,20 @@ final class SafeExceptionHandle extends Handle
         if ($error instanceof CommonException || $error instanceof AuthException || $error instanceof ProviderException) return;
         try {
             // Deliberately exclude message, trace, request parameters, SQL and previous exception.
-            $site=(int)$this->app->request->siteId();
+            $site = (int) $this->app->request->siteId();
             $this->app->log->error('hsx_lead request failed; type='.get_class($error).'; site='.$site);
-        } catch(\Throwable $ignored) {
+        } catch (\Throwable $ignored) {
             // Logging availability must never leak the original error or trigger core reporting.
         }
     }
 
-    public function render($request,\Throwable $error): Response
+    public function render($request, \Throwable $error): Response
     {
-        if ($error instanceof AuthException) return fail($error->getMessage(),[], $error->getCode()?:403);
-        if ($error instanceof CommonException) return fail($error->getMessage(),[],400);
+        if ($error instanceof AuthException) return fail($error->getMessage(), [], $error->getCode() ?: 403);
+        if ($error instanceof CommonException) return fail($error->getMessage(), [], 400);
         // Classify user guidance without rewriting adapter diagnostics, source
         // names or business facts; even a local message may name an ERP brand.
-        if ($error instanceof ProviderException) return fail(ProviderPublicMessage::forReason($error->reason()),[],400);
-        return fail('操作未完成，请联系管理员核对服务状态；没有返回原始错误或凭据',[],500);
+        if ($error instanceof ProviderException) return fail(ProviderPublicMessage::forReason($error->reason()), [], 400);
+        return fail('操作未完成，请联系管理员核对服务状态；没有返回原始错误或凭据', [], 500);
     }
 }

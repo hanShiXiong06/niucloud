@@ -9,7 +9,7 @@ final class Region extends BaseApiController
 {
     public function search()
     {
-        $context=new Context((int)$this->request->siteId(),0,(int)$this->request->memberId());
+        $context = new Context((int) $this->request->siteId(), 0, (int) $this->request->memberId());
         (new StorefrontService($context))->assertUploadAllowed();
         return success((new RegionSearchService())->search($this->request->param()));
     }

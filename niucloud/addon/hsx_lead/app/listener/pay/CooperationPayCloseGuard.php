@@ -15,8 +15,8 @@ final class CooperationPayCloseGuard
 {
     public function handle(array $event): bool
     {
-        if(($event['trade_type']??'')!==PaymentService::TRADE_TYPE)return true;
-        if(!PaymentCloseScope::allowed((int)($event['site_id']??0),(string)($event['out_trade_no']??'')))throw new CommonException('此付款需先核对渠道状态，请在支付订单中核对后取消，当前未关闭原支付');
+        if (($event['trade_type'] ?? '') !== PaymentService::TRADE_TYPE)return true;
+        if (!PaymentCloseScope::allowed((int) ($event['site_id'] ?? 0), (string) ($event['out_trade_no'] ?? '')))throw new CommonException('此付款需先核对渠道状态，请在支付订单中核对后取消，当前未关闭原支付');
         return true;
     }
 }

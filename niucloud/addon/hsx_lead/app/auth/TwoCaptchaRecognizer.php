@@ -46,8 +46,11 @@ final class TwoCaptchaRecognizer implements CaptchaRecognizerContract
             'case' => true, 'numeric' => 0, 'minLength' => $length, 'maxLength' => $length]];
         $response = $this->call('createTask', $body);
         $this->assertSuccess($response, true);
-        try { return $this->taskId($response['taskId'] ?? null); }
-        catch (ProviderException $error) { $this->fail('captcha_submit_unknown'); }
+        try {
+            return $this->taskId($response['taskId'] ?? null);
+        } catch (ProviderException $error) {
+            $this->fail('captcha_submit_unknown');
+        }
     }
 
     public function result(#[\SensitiveParameter] string $apiKey, string $taskId, int $length = 4): array
@@ -103,8 +106,11 @@ final class TwoCaptchaRecognizer implements CaptchaRecognizerContract
             'image/png' => str_starts_with($bytes, "\x89PNG\r\n\x1a\n"),
             'image/gif' => str_starts_with($bytes, 'GIF87a') || str_starts_with($bytes, 'GIF89a'),
         };
-        try { $size = @getimagesizefromstring($bytes); }
-        catch (\Throwable $error) { $this->fail('captcha_invalid_image'); }
+        try {
+            $size = @getimagesizefromstring($bytes);
+        } catch (\Throwable $error) {
+            $this->fail('captcha_invalid_image');
+        }
         if (!$magic || !is_array($size) || ($size['mime'] ?? null) !== $match[1] ||
             ($size[0] ?? 0) < 1 || ($size[1] ?? 0) < 1 || $size[0] > 600 || $size[1] > 600) {
             $this->fail('captcha_invalid_image');
@@ -129,8 +135,11 @@ final class TwoCaptchaRecognizer implements CaptchaRecognizerContract
             if (!is_finite($value)) return null;
             // Other transport implementations may decode the official JSON number as a float.
             // Accept only its stable ordinary decimal form; never round it into apparent precision.
-            try { $value = json_encode($value, JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR); }
-            catch (\JsonException $error) { return null; }
+            try {
+                $value = json_encode($value, JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR);
+            } catch (\JsonException $error) {
+                return null;
+            }
         }
         return is_string($value) && preg_match('/^(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,8})?$/D', $value) === 1 ? $value : null;
     }
@@ -138,12 +147,15 @@ final class TwoCaptchaRecognizer implements CaptchaRecognizerContract
     private function call(string $method, #[\SensitiveParameter] array $body): array
     {
         $secretTrace = \addon\hsx_lead\app\support\PhpRuntime::guardSecrets();
-        try { return $this->transport->post($method, $body); }
-        catch (ProviderException $error) {
+        try {
+            return $this->transport->post($method, $body);
+        } catch (ProviderException $error) {
             $reason = $error->reason();
             if (!isset(self::MESSAGES[$reason])) $reason = $method === 'createTask' ? 'captcha_submit_unknown' : 'captcha_temporary';
             $this->fail($reason);
-        } catch (\Throwable $error) { $this->fail($method === 'createTask' ? 'captcha_submit_unknown' : 'captcha_temporary'); }
+        } catch (\Throwable $error) {
+            $this->fail($method === 'createTask' ? 'captcha_submit_unknown' : 'captcha_temporary');
+        }
     }
 
     private function assertSuccess(#[\SensitiveParameter] array $response, bool $submitting = false): void

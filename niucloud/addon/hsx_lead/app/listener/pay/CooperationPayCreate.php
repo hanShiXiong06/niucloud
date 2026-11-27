@@ -6,7 +6,7 @@ final class CooperationPayCreate
 {
     public function handle(array $event)
     {
-        if (($event['trade_type']??'')!==PaymentService::TRADE_TYPE) return null;
-        return PaymentService::paymentInfo((int)$event['site_id'],(int)$event['trade_id']);
+        if (($event['trade_type'] ?? '') !== PaymentService::TRADE_TYPE) return null;
+        return PaymentService::paymentInfo((int) $event['site_id'], (int) $event['trade_id']);
     }
 }

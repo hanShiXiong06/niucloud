@@ -13,28 +13,30 @@ use think\exception\Handle;
  */
 final class SafeErrors
 {
-    public function __construct(private ?App $app=null) {}
-
-    public function handle($request,Closure $next)
+    public function __construct(private ?App $app = null)
     {
-        $app=$this->app??app();
-        $previous=$app->make(Handle::class);
-        $safe=new SafeExceptionHandle($app);
+    }
+
+    public function handle($request, Closure $next)
+    {
+        $app = $this->app ?? app();
+        $previous = $app->make(Handle::class);
+        $safe = new SafeExceptionHandle($app);
         // ThinkPHP's nested route/controller pipelines consume exceptions before
         // they reach an outer try/catch. Replace only this request's handler instance
         // while the plugin pipeline executes; never replace the framework binding.
-        $app->instance(Handle::class,$safe);
-        $secretTrace=null;
+        $app->instance(Handle::class, $safe);
+        $secretTrace = null;
         try {
-            $secretTrace=PhpRuntime::guardSecrets();
+            $secretTrace = PhpRuntime::guardSecrets();
             return $next($request);
-        } catch(\Throwable $error) {
+        } catch (\Throwable $error) {
             $safe->report($error);
-            return $safe->render($request,$error);
+            return $safe->render($request, $error);
         } finally {
             // Also restore on success, rendering failure, or a nested plugin boundary.
-            $app->instance(Handle::class,$previous);
-            if ($secretTrace!==null) $secretTrace->close();
+            $app->instance(Handle::class, $previous);
+            if ($secretTrace !== null) $secretTrace->close();
         }
     }
 }

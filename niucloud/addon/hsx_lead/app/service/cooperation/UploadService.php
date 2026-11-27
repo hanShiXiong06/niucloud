@@ -9,10 +9,13 @@ use think\facade\Db;
 /** Framework storage driver plus plugin ownership evidence; no new attachment table. */
 final class UploadService
 {
-    public function __construct(private Context $context) {}
+    public function __construct(private Context $context)
+    {
+    }
     public function image(): array
     {
-        if ($this->context->uid>0) Store::permission($this->context,'review');else (new PartnerService($this->context))->own(true);
+        if ($this->context->uid > 0) Store::permission($this->context, 'review');
+        else (new PartnerService($this->context))->own(true);
         return $this->upload('cooperation_attachment');
     }
     public function storefront(): array
@@ -22,23 +25,24 @@ final class UploadService
     }
     private function upload(string $entity): array
     {
-        $owner=$this->context->uid>0?'u'.$this->context->uid:'m'.$this->context->memberId;
-        $upload=new CoreUploadService(true);$upload->setValidate(['ext'=>['jpg','jpeg','png','webp'],'mime'=>['image/jpeg','image/png','image/webp'],'size'=>5*1024*1024]);
-        $result=$upload->image('file',$this->context->site,'hsx_lead/'.$this->context->site.'/'.$owner.'/'.date('Ym/d'));
-        $row=Db::name('sys_attachment')->where('site_id',$this->context->site)->where('att_id',(int)($result['att_id']??0))->find();
+        $owner = $this->context->uid > 0 ? 'u'.$this->context->uid : 'm'.$this->context->memberId;
+        $upload = new CoreUploadService(true);
+        $upload->setValidate(['ext' => ['jpg', 'jpeg', 'png', 'webp'], 'mime' => ['image/jpeg', 'image/png', 'image/webp'], 'size' => 5 * 1024 * 1024]);
+        $result = $upload->image('file', $this->context->site, 'hsx_lead/'.$this->context->site.'/'.$owner.'/'.date('Ym/d'));
+        $row = Db::name('sys_attachment')->where('site_id', $this->context->site)->where('att_id', (int) ($result['att_id'] ?? 0))->find();
         if (!$row) throw new CommonException('图片已上传但素材登记未完成，请重新上传后提交');
         // Published clients use `path` both for preview and form submission.
         // A cloud object key is not a file on the application server. Only
         // public storefront images may expose their registered display URL;
         // private lead evidence retains its existing reference contract.
-        $path=$row['path'];
-        if ($entity===StorefrontService::UPLOAD_ENTITY) {
-            $path=StorefrontService::displayReference($row);
-            if ($path==='') throw new CommonException('门头图片已上传，但图片访问地址未配置正确，请联系管理员核对存储域名；原照片未替换');
+        $path = $row['path'];
+        if ($entity === StorefrontService::UPLOAD_ENTITY) {
+            $path = StorefrontService::displayReference($row);
+            if ($path === '') throw new CommonException('门头图片已上传，但图片访问地址未配置正确，请联系管理员核对存储域名；原照片未替换');
         }
-        $this->context->audit($entity,(int)$row['att_id'],'uploaded',[]);
-        $response=['url'=>$result['url'],'path'=>$path,'att_id'=>(int)$row['att_id']];
-        if ($entity===StorefrontService::UPLOAD_ENTITY) $response['storage_path']=$row['path'];
+        $this->context->audit($entity, (int) $row['att_id'], 'uploaded', []);
+        $response = ['url' => $result['url'], 'path' => $path, 'att_id' => (int) $row['att_id']];
+        if ($entity === StorefrontService::UPLOAD_ENTITY) $response['storage_path'] = $row['path'];
         return $response;
     }
 }

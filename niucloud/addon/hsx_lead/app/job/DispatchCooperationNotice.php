@@ -5,5 +5,8 @@ use addon\hsx_lead\app\service\cooperation\CooperationNoticeOutbox;
 use core\base\BaseJob;
 final class DispatchCooperationNotice extends BaseJob
 {
-    public function doJob(array $data): bool { return CooperationNoticeOutbox::process((int)$data['site_id'],(int)$data['id']); }
+    public function doJob(array $data): bool
+    {
+        return CooperationNoticeOutbox::process((int) $data['site_id'], (int) $data['id']);
+    }
 }

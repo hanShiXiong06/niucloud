@@ -14,7 +14,10 @@ final class WanjiProvider extends AbstractProvider
         'buyChannel', 'guarantee', 'batteryHealth', 'batterycycles', 'fineness', 'storeWarranty', 'systemVersion', 'skuName',
         'retailAmount', 'wholesaleAmount'];
 
-    public function key(): string { return 'wanji'; }
+    public function key(): string
+    {
+        return 'wanji';
+    }
 
     public function login(#[\SensitiveParameter] array $credentials): array
     {
@@ -61,7 +64,7 @@ final class WanjiProvider extends AbstractProvider
         $secretTrace = \addon\hsx_lead\app\support\PhpRuntime::guardSecrets();
         $parts = explode('.', $token);
         if (count($parts) !== 3 || strlen($parts[1]) > 32768 || !preg_match('/^[A-Za-z0-9_\-]+$/D', $parts[1])) return null;
-        $payload = base64_decode(strtr($parts[1], '-_', '+/') . str_repeat('=', (4 - strlen($parts[1]) % 4) % 4), true);
+        $payload = base64_decode(strtr($parts[1], '-_', '+/').str_repeat('=', (4 - strlen($parts[1]) % 4) % 4), true);
         if ($payload === false) return null;
         try {
             $claims = json_decode($payload, true, 32, JSON_THROW_ON_ERROR | JSON_BIGINT_AS_STRING);
@@ -88,7 +91,7 @@ final class WanjiProvider extends AbstractProvider
             'colorList' => [], 'memoryList' => [], 'ownerId' => '', 'finenessList' => [], 'buyChannelList' => [], 'memoryLikeList' => [],
         ], $query, ['shopId' => $store, 'pageNum' => $pageNum, 'pageSize' => $pageSize]);
         if (($scope['omit_machine_type'] ?? false) === true) unset($body['machineType']);
-        $page = $this->transport->post(self::STOCK_ENDPOINT, $this->headers($credentials) + ['Authorization' => 'Bearer ' . $this->accessToken($credentials)], $body);
+        $page = $this->transport->post(self::STOCK_ENDPOINT, $this->headers($credentials) + ['Authorization' => 'Bearer '.$this->accessToken($credentials)], $body);
         $this->assertBusinessSuccess($page);
         if (!isset($page['rows']) || !is_array($page['rows']) || !\addon\hsx_lead\app\support\PhpRuntime::isList($page['rows']) ||
             !is_bool($page['hasMore'] ?? null) || (string) ($page['pageNum'] ?? '') !== (string) $pageNum ||
@@ -109,7 +112,7 @@ final class WanjiProvider extends AbstractProvider
                 throw new ProviderException('scope_mismatch', '万机返回数据与绑定租户或门店不一致，已停止同步');
             }
             $observedTenant = $actualTenant;
-            $key = $actualTenant . ':' . $actualStore . ':' . $id;
+            $key = $actualTenant.':'.$actualStore.':'.$id;
             if (isset($seen[$key])) throw new ProviderException('schema_changed', '万机单页出现重复设备，已停止同步');
             $seen[$key] = true;
             $rows[] = $this->safeSnapshot($row);

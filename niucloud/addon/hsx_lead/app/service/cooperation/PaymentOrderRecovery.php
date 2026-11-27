@@ -25,46 +25,50 @@ final class PaymentOrderRecovery
         $site = $this->context->site;
         $connection = Db::connect();
         if ($connection->getPdo()->inTransaction()) throw new CommonException('付款核对需要独立执行，请结束当前业务操作后重试');
-        $scope = (string)$connection->getConfig('database') . ':' . (string)$connection->getConfig('prefix');
-        $key = 'lead_coop_pay:' . substr(hash('sha256', $scope . ':' . $site . ':' . $id), 0, 40);
+        $scope = (string) $connection->getConfig('database').':'.(string) $connection->getConfig('prefix');
+        $key = 'lead_coop_pay:'.substr(hash('sha256', $scope.':'.$site.':'.$id), 0, 40);
         $locked = $connection->query('SELECT GET_LOCK(:lock_key, 3) AS acquired', ['lock_key' => $key], true);
-        if ((int)($locked[0]['acquired'] ?? 0) !== 1) throw new CommonException('正在核对这笔付款，请稍后重试，不会重新下单');
+        if ((int) ($locked[0]['acquired'] ?? 0) !== 1) throw new CommonException('正在核对这笔付款，请稍后重试，不会重新下单');
         try {
             // Take only a short, tenant-scoped snapshot under row locks. Never
             // hold the site/financial transaction while waiting for a gateway.
             $snapshot = Db::transaction(function () use ($site, $id): array {
                 PromotionService::lockSite($site);
                 $row = Store::row('coop_order', $site, $id, true);
-                if ((int)$row['member_id'] !== $this->context->memberId) throw new CommonException('只能核对本人创建的付款订单');
-                if ($row['status'] !== 'unpaid') return ['result'=>$this->result($row, $row['status'] === 'paid' ? 'paid' : 'closed', '原付款单已关闭，请核对订单结果')];
+                if ((int) $row['member_id'] !== $this->context->memberId) throw new CommonException('只能核对本人创建的付款订单');
+                if ($row['status'] !== 'unpaid') return ['result' => $this->result($row, $row['status'] === 'paid' ? 'paid' : 'closed', '原付款单已关闭，请核对订单结果')];
                 $rule = Data::decode($row['rule_json']);
-                if (!empty($rule['requires_manual_review'])) return ['result'=>$this->result($row, 'attention', PaymentService::reviewMessage($rule))];
-                if (!empty($rule['pricing_intent'])) return ['result'=>$this->result($row, 'uncertain', '平台正在调整本单金额，请稍后刷新原付款单')];
+                if (!empty($rule['requires_manual_review'])) return ['result' => $this->result($row, 'attention', PaymentService::reviewMessage($rule))];
+                if (!empty($rule['pricing_intent'])) return ['result' => $this->result($row, 'uncertain', '平台正在调整本单金额，请稍后刷新原付款单')];
                 if (!in_array($row['purpose'], ['membership', 'commission'], true)) throw new CommonException('未知付款业务，未重新发起付款');
 
                 $pays = Db::name('pay')->where('site_id', $site)->where('trade_type', PaymentService::TRADE_TYPE)
                     ->where('trade_id', $id)->where('status', '<>', PayDict::STATUS_CANCEL)->order('id')->lock(true)->select()->toArray();
                 foreach ($pays as $pay) {
-                    if (($pay['main_type'] ?? '') !== PayDict::MEMBER || (int)$pay['main_id'] !== (int)$row['member_id']
-                        || Rules::cents((string)$pay['money']) !== Rules::cents((string)$row['amount'])) {
+                    if (($pay['main_type'] ?? '') !== PayDict::MEMBER || (int) $pay['main_id'] !== (int) $row['member_id']
+                        || Rules::cents((string) $pay['money']) !== Rules::cents((string) $row['amount'])) {
                         throw new CommonException('原支付归属或金额不一致，当前未重新发起付款');
                     }
                 }
-                if (count($pays) > 1) return ['result'=>$this->result($row, 'uncertain', '发现多笔原付款记录，暂不重复付款，请核对原付款结果')];
-                return ['row'=>$row,'pays'=>$pays];
+                if (count($pays) > 1) return ['result' => $this->result($row, 'uncertain', '发现多笔原付款记录，暂不重复付款，请核对原付款结果')];
+                return ['row' => $row, 'pays' => $pays];
             });
             if (isset($snapshot['result'])) return $snapshot['result'];
-            $row=$snapshot['row'];$pays=$snapshot['pays'];
+            $row = $snapshot['row'];
+            $pays = $snapshot['pays'];
             foreach ($pays as $pay) {
-                if ((int)$pay['status'] === (int)PayDict::STATUS_FINISH) {
-                    try { PaymentService::confirm(['site_id' => $site, 'trade_type' => PaymentService::TRADE_TYPE, 'trade_id' => $id, 'out_trade_no' => $pay['out_trade_no']]); }
-                    catch (\Throwable $error) { return $this->result(Store::row('coop_order', $site, $id, true), 'paid_pending', '已确认收款，正在恢复会员权益，请稍后重试核对，不要再次付款'); }
+                if ((int) $pay['status'] === (int) PayDict::STATUS_FINISH) {
+                    try {
+                        PaymentService::confirm(['site_id' => $site, 'trade_type' => PaymentService::TRADE_TYPE, 'trade_id' => $id, 'out_trade_no' => $pay['out_trade_no']]);
+                    } catch (\Throwable $error) {
+                        return $this->result(Store::row('coop_order', $site, $id, true), 'paid_pending', '已确认收款，正在恢复会员权益，请稍后重试核对，不要再次付款');
+                    }
                     return $this->result(Store::row('coop_order', $site, $id, true), 'paid', '支付已确认，权益已更新');
                 }
             }
             foreach ($pays as $pay) {
-                if (PaymentService::hasUnconfirmedBalanceDebit($site,$pay)) {
-                    return $this->result($row,'attention','发现本次付款的账户扣款记录，请联系平台核对，暂勿重复支付');
+                if (PaymentService::hasUnconfirmedBalanceDebit($site, $pay)) {
+                    return $this->result($row, 'attention', '发现本次付款的账户扣款记录，请联系平台核对，暂勿重复支付');
                 }
             }
             // A persisted successful receipt wins over quote expiration.
@@ -74,46 +78,51 @@ final class PaymentOrderRecovery
                 return (new PaymentOrderLifecycle($this->context, $this->providerFactory))->expireOwn($id);
             }
             foreach ($pays as $pay) {
-                if ((int)$pay['status'] === (int)PayDict::STATUS_WAIT) continue;
-                if ((int)$pay['status'] !== (int)PayDict::STATUS_ING) return $this->result($row, 'uncertain', '原支付结果尚未确认，请稍后重试核对，不要重新下单');
+                if ((int) $pay['status'] === (int) PayDict::STATUS_WAIT) continue;
+                if ((int) $pay['status'] !== (int) PayDict::STATUS_ING) return $this->result($row, 'uncertain', '原支付结果尚未确认，请稍后重试核对，不要重新下单');
                 // Original attempts retain their own channel even after an
                 // administrator changes the current checkout configuration.
                 // A single reconciliation queries virtual payments only; it
                 // does not submit a second virtual attempt or close request.
                 $result = (new PaymentGatewayReconciler($this->providerFactory))->reconcile($site, $pay);
                 if ($result['state'] !== 'closed') {
-                    return $this->result(Store::row('coop_order', $site, $id, true), (string)$result['state'],
-                        (string)$result['message']);
+                    return $this->result(Store::row('coop_order', $site, $id, true), (string) $result['state'],
+                        (string) $result['message']);
                 }
             }
             // A callback, repricing or cancellation can win while HTTP is in
             // flight. Recheck current ownership, amount and attempts before
             // exposing a payable button; never return the stale snapshot.
-            return Db::transaction(function () use ($site,$id,$payments): array {
+            return Db::transaction(function () use ($site, $id, $payments): array {
                 PromotionService::lockSite($site);
-                $current=Store::row('coop_order',$site,$id,true);
-                if ((int)$current['member_id']!==$this->context->memberId) throw new CommonException('只能核对本人创建的付款订单');
-                if ($current['status']!=='unpaid') return $this->result($current,$current['status']==='paid'?'paid':'closed','原付款单状态已更新');
-                $rule=Data::decode($current['rule_json']);
-                if (!empty($rule['requires_manual_review'])) return $this->result($current,'attention',PaymentService::reviewMessage($rule));
-                if (!empty($rule['pricing_intent'])) return $this->result($current,'uncertain','平台正在调整本单金额，请稍后刷新原付款单');
-                $fresh=Db::name('pay')->where('site_id',$site)->where('trade_type',PaymentService::TRADE_TYPE)
-                    ->where('trade_id',$id)->where('status','<>',PayDict::STATUS_CANCEL)->order('id')->lock(true)->select()->toArray();
-                if (count($fresh)>1) return $this->result($current,'uncertain','发现多笔原付款记录，暂不重复付款，请核对原付款结果');
+                $current = Store::row('coop_order', $site, $id, true);
+                if ((int) $current['member_id'] !== $this->context->memberId) throw new CommonException('只能核对本人创建的付款订单');
+                if ($current['status'] !== 'unpaid') return $this->result($current, $current['status'] === 'paid' ? 'paid' : 'closed', '原付款单状态已更新');
+                $rule = Data::decode($current['rule_json']);
+                if (!empty($rule['requires_manual_review'])) return $this->result($current, 'attention', PaymentService::reviewMessage($rule));
+                if (!empty($rule['pricing_intent'])) return $this->result($current, 'uncertain', '平台正在调整本单金额，请稍后刷新原付款单');
+                $fresh = Db::name('pay')->where('site_id', $site)->where('trade_type', PaymentService::TRADE_TYPE)
+                    ->where('trade_id', $id)->where('status', '<>', PayDict::STATUS_CANCEL)->order('id')->lock(true)->select()->toArray();
+                if (count($fresh) > 1) return $this->result($current, 'uncertain', '发现多笔原付款记录，暂不重复付款，请核对原付款结果');
                 foreach ($fresh as $pay) {
-                    if (($pay['main_type']??'')!==PayDict::MEMBER||(int)$pay['main_id']!==(int)$current['member_id']
-                        ||Rules::cents((string)$pay['money'])!==Rules::cents((string)$current['amount'])) throw new CommonException('原支付归属或金额已变化，请刷新核对');
-                    if ((int)$pay['status']===(int)PayDict::STATUS_FINISH) return $this->result($current,'paid_pending','已核实原单收款，正在恢复权益，请勿再次付款');
-                    if ((int)$pay['status']!==(int)PayDict::STATUS_WAIT) return $this->result($current,'uncertain','原付款状态已变化，请稍后核对，不会重复创建付款单');
-                    if (PaymentService::hasUnconfirmedBalanceDebit($site,$pay)) return $this->result($current,'attention','发现本次付款的账户扣款记录，请联系平台核对，暂勿重复支付');
+                    if (($pay['main_type'] ?? '') !== PayDict::MEMBER || (int) $pay['main_id'] !== (int) $current['member_id']
+                        || Rules::cents((string) $pay['money']) !== Rules::cents((string) $current['amount'])) throw new CommonException('原支付归属或金额已变化，请刷新核对');
+                    if ((int) $pay['status'] === (int) PayDict::STATUS_FINISH) return $this->result($current, 'paid_pending', '已核实原单收款，正在恢复权益，请勿再次付款');
+                    if ((int) $pay['status'] !== (int) PayDict::STATUS_WAIT) return $this->result($current, 'uncertain', '原付款状态已变化，请稍后核对，不会重复创建付款单');
+                    if (PaymentService::hasUnconfirmedBalanceDebit($site, $pay)) return $this->result($current, 'attention', '发现本次付款的账户扣款记录，请联系平台核对，暂勿重复支付');
                 }
-                try {$payments->assertPayable($id,true);}
-                catch (CommonException $error) {return $this->result($current,'blocked',$error->getMessage());}
-                return $this->result($current,'ready','上次付款尚未完成，可继续支付当前订单，不会重复创建开通订单。');
+                try {
+                    $payments->assertPayable($id, true);
+                } catch (CommonException $error) {
+                    return $this->result($current, 'blocked', $error->getMessage());
+                }
+                return $this->result($current, 'ready', '上次付款尚未完成，可继续支付当前订单，不会重复创建开通订单。');
             });
         } finally {
-            try { $connection->query('SELECT RELEASE_LOCK(:lock_key) AS released', ['lock_key' => $key], true); }
-            catch (\Throwable $ignored) { /* The connection also releases advisory locks on close. */ }
+            try {
+                $connection->query('SELECT RELEASE_LOCK(:lock_key) AS released', ['lock_key' => $key], true);
+            } catch (\Throwable $ignored) { /* The connection also releases advisory locks on close. */
+            }
         }
     }
 

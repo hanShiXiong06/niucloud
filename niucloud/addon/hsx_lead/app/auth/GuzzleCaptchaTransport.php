@@ -26,7 +26,7 @@ final class GuzzleCaptchaTransport implements CaptchaTransportContract
         }
         $this->validateBody($method, $body);
         try {
-            $response = $this->client->request('POST', 'https://api.2captcha.com/' . $method, [
+            $response = $this->client->request('POST', 'https://api.2captcha.com/'.$method, [
                 'headers' => ['Accept' => 'application/json', 'Content-Type' => 'application/json'],
                 'json' => $body, 'verify' => true, 'allow_redirects' => false, 'cookies' => false,
                 'http_errors' => false, 'debug' => false, 'stream' => true,
@@ -42,7 +42,9 @@ final class GuzzleCaptchaTransport implements CaptchaTransportContract
                     $json .= $chunk;
                     if (strlen($json) > self::MAX_BYTES) throw new \RuntimeException('Response limit');
                 }
-            } finally { $stream->close(); }
+            } finally {
+                $stream->close();
+            }
             return self::decode($json);
         } catch (\Throwable $error) {
             // A timed-out create may already have incurred a charge. Never silently resubmit.
@@ -55,7 +57,9 @@ final class GuzzleCaptchaTransport implements CaptchaTransportContract
     private function validateBody(string $method, #[\SensitiveParameter] array $body): void
     {
         $secretTrace = \addon\hsx_lead\app\support\PhpRuntime::guardSecrets();
-        $allowed = match ($method) { 'createTask' => ['clientKey', 'task'], 'getTaskResult' => ['clientKey', 'taskId'], default => ['clientKey'] };
+        $allowed = match ($method) {
+            'createTask' => ['clientKey', 'task'], 'getTaskResult' => ['clientKey', 'taskId'], default => ['clientKey']
+        };
         if (array_diff(array_keys($body), $allowed) !== [] || array_diff($allowed, array_keys($body)) !== [] ||
             !is_string($body['clientKey']) || preg_match('/^[a-fA-F0-9]{32}$/D', $body['clientKey']) !== 1) {
             throw new ProviderException('captcha_invalid_request', '识别服务请求参数不合法');
@@ -80,7 +84,7 @@ final class GuzzleCaptchaTransport implements CaptchaTransportContract
         // Preserve numeric balance/cost lexemes instead of making money out of binary floats.
         json_decode($json, true, 32, JSON_THROW_ON_ERROR | JSON_BIGINT_AS_STRING);
         $exact = preg_replace_callback('/"(?:\\\\.|[^"\\\\])*"(*SKIP)(*F)|-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+\-]?[0-9]+)?/',
-            static fn (array $match): string => strpbrk($match[0], '.eE') === false ? $match[0] : '"' . $match[0] . '"', $json);
+            static fn (array $match): string => strpbrk($match[0], '.eE') === false ? $match[0] : '"'.$match[0].'"', $json);
         $decoded = json_decode($exact ?? '', true, 32, JSON_THROW_ON_ERROR | JSON_BIGINT_AS_STRING);
         if (!is_array($decoded) || \addon\hsx_lead\app\support\PhpRuntime::isList($decoded)) throw new \RuntimeException('Invalid response shape');
         return $decoded;

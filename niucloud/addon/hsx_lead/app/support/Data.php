@@ -9,7 +9,7 @@ final class Data
 {
     public static function query(string $table, int $site)
     {
-        if (!in_array($table, ['merchant','connection','inventory','sync_run','audit'], true) || $site <= 0) {
+        if (!in_array($table, ['merchant', 'connection', 'inventory', 'sync_run', 'audit'], true) || $site <= 0) {
             throw new CommonException('无效的站点或数据范围');
         }
         return Db::name('hsx_lead_'.$table)->where('site_id', $site);
@@ -29,7 +29,7 @@ final class Data
         $secretTrace = PhpRuntime::guardSecrets();
         $raw = $input[$key] ?? '';
         if (!is_string($raw) && !is_numeric($raw)) throw new CommonException('字段格式错误：'.$key);
-        $value = trim((string)$raw);
+        $value = trim((string) $raw);
         if (($required && $value === '') || mb_strlen($value) > $limit) throw new CommonException('请检查字段内容和长度：'.$key);
         return $value;
     }
@@ -37,10 +37,10 @@ final class Data
     public static function amount($value, bool $nullable = false): ?string
     {
         if ($nullable && ($value === null || $value === '')) return null;
-        if ((!is_string($value) && !is_int($value) && !is_float($value)) || !preg_match('/^\d{1,12}(?:\.\d{1,2})?$/D', (string)$value)) {
+        if ((!is_string($value) && !is_int($value) && !is_float($value)) || !preg_match('/^\d{1,12}(?:\.\d{1,2})?$/D', (string) $value)) {
             throw new CommonException('金额必须为非负数字，最多两位小数');
         }
-        return bcadd((string)$value, '0', 2);
+        return bcadd((string) $value, '0', 2);
     }
 
     public static function json(#[\SensitiveParameter] array $value): string
@@ -59,23 +59,25 @@ final class Data
 
     public static function page($query, array $params = []): array
     {
-        $page = max(1, (int)($params['page'] ?? 1));
-        $size = max(1, min(100, (int)($params['limit'] ?? $params['page_size'] ?? 20)));
+        $page = max(1, (int) ($params['page'] ?? 1));
+        $size = max(1, min(100, (int) ($params['limit'] ?? $params['page_size'] ?? 20)));
         return ['data' => (clone $query)->order('id desc')->page($page, $size)->select()->toArray(),
-            'total' => (int)(clone $query)->count(), 'per_page' => $size, 'current_page' => $page];
+            'total' => (int) (clone $query)->count(), 'per_page' => $size, 'current_page' => $page];
     }
 
     public static function region(#[\SensitiveParameter] array $input): array
     {
         $secretTrace = PhpRuntime::guardSecrets();
-        $result = []; $parent = 0;
-        foreach (['province_id','city_id','district_id'] as $index => $field) {
-            $id = (int)($input[$field] ?? 0);
+        $result = [];
+        $parent = 0;
+        foreach (['province_id', 'city_id', 'district_id'] as $index => $field) {
+            $id = (int) ($input[$field] ?? 0);
             $area = Db::name('sys_area')->where('id', $id)->field('id,pid,level')->find();
-            if (!$area || (int)$area['level'] !== $index + 1 || (int)$area['pid'] !== $parent) {
+            if (!$area || (int) $area['level'] !== $index + 1 || (int) $area['pid'] !== $parent) {
                 throw new CommonException('请选择有效且对应的省、市、区县');
             }
-            $result[$field] = $id; $parent = $id;
+            $result[$field] = $id;
+            $parent = $id;
         }
         return $result;
     }
@@ -83,8 +85,8 @@ final class Data
     public static function regionNames(array $row): array
     {
         $names = [];
-        foreach (['province','city','district'] as $field) {
-            $name = (string)(Db::name('sys_area')->where('id', (int)($row[$field.'_id'] ?? 0))->value('name') ?? '');
+        foreach (['province', 'city', 'district'] as $field) {
+            $name = (string) (Db::name('sys_area')->where('id', (int) ($row[$field.'_id'] ?? 0))->value('name') ?? '');
             $row[$field.'_name'] = $name;
             if ($name !== '') $names[] = $name;
         }
@@ -96,33 +98,39 @@ final class Data
     public static function serviceArea(#[\SensitiveParameter] array $input): array
     {
         $secretTrace = PhpRuntime::guardSecrets();
-        $result=['province_id'=>0,'city_id'=>0,'district_id'=>0]; $parent=0; $ended=false;
-        foreach(array_keys($result) as $index=>$field) {
-            $id=(int)($input[$field]??0);
-            if ($id===0 && $index>0) { $ended=true; continue; }
-            if ($ended || $id<=0) throw new CommonException('服务地区需要先选择省份，再逐级选择城市和区县');
-            $area=Db::name('sys_area')->where('id',$id)->field('id,pid,level')->find();
-            if (!$area || (int)$area['level']!==$index+1 || (int)$area['pid']!==$parent) throw new CommonException('服务地区上下级不对应');
-            $result[$field]=$id; $parent=$id;
+        $result = ['province_id' => 0, 'city_id' => 0, 'district_id' => 0];
+        $parent = 0;
+        $ended = false;
+        foreach (array_keys($result) as $index => $field) {
+            $id = (int) ($input[$field] ?? 0);
+            if ($id === 0 && $index > 0) {
+                $ended = true;
+                continue;
+            }
+            if ($ended || $id <= 0) throw new CommonException('服务地区需要先选择省份，再逐级选择城市和区县');
+            $area = Db::name('sys_area')->where('id', $id)->field('id,pid,level')->find();
+            if (!$area || (int) $area['level'] !== $index + 1 || (int) $area['pid'] !== $parent) throw new CommonException('服务地区上下级不对应');
+            $result[$field] = $id;
+            $parent = $id;
         }
         return $result;
     }
 
     /** Passwords are opaque strings; trimming can make a valid remote password unusable. */
-    public static function secret(#[\SensitiveParameter] array $input,string $key,int $maxBytes): string
+    public static function secret(#[\SensitiveParameter] array $input, string $key, int $maxBytes): string
     {
         $secretTrace = PhpRuntime::guardSecrets();
-        $value=$input[$key]??'';
-        if (!is_string($value) || strlen($value)>$maxBytes) throw new CommonException('请检查凭据格式及长度');
+        $value = $input[$key] ?? '';
+        if (!is_string($value) || strlen($value) > $maxBytes) throw new CommonException('请检查凭据格式及长度');
         return $value;
     }
 
     public static function audit(int $site, int $uid, int $memberId, string $entity, int $id, string $action, array $safe = []): void
     {
         // Callers construct this whitelist; never pass an HTTP request or provider response.
-        self::query('audit', $site)->insert(['site_id'=>$site, 'entity_type'=>$entity, 'entity_id'=>$id,
-            'action'=>$action, 'operator_uid'=>$uid, 'operator_member_id'=>$memberId,
-            'detail_json'=>self::json($safe), 'create_time'=>time(), 'update_time'=>time()]);
+        self::query('audit', $site)->insert(['site_id' => $site, 'entity_type' => $entity, 'entity_id' => $id,
+            'action' => $action, 'operator_uid' => $uid, 'operator_member_id' => $memberId,
+            'detail_json' => self::json($safe), 'create_time' => time(), 'update_time' => time()]);
     }
 
     public static function number(string $prefix): string

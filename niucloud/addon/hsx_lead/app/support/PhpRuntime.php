@@ -66,7 +66,9 @@ final class PhpRuntime
         $this->close();
     }
 
-    private function __clone() {}
+    private function __clone()
+    {
+    }
 
     private static function enabled(string $value): bool
     {

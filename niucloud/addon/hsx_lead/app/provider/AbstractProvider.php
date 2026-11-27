@@ -26,7 +26,7 @@ abstract class AbstractProvider implements ProviderContract
     {
         if ($optional && ($value === null || $value === '')) return null;
         if ((!is_string($value) && !is_int($value)) || trim((string) $value) === '' || strlen((string) $value) > 191) {
-            throw new ProviderException('invalid_scope', $label . '缺失或格式不正确');
+            throw new ProviderException('invalid_scope', $label.'缺失或格式不正确');
         }
         return trim((string) $value);
     }
@@ -50,7 +50,7 @@ abstract class AbstractProvider implements ProviderContract
         if (!preg_match('/^[0-9]{1,14}(?:\.[0-9]{1,2})?$/D', $raw)) return null;
         $parts = explode('.', $raw, 2);
         $whole = ltrim($parts[0], '0');
-        return ($whole === '' ? '0' : $whole) . '.' . str_pad($parts[1] ?? '', 2, '0');
+        return ($whole === '' ? '0' : $whole).'.'.str_pad($parts[1] ?? '', 2, '0');
     }
 
     protected function url(mixed $value): ?string
@@ -111,7 +111,7 @@ abstract class AbstractProvider implements ProviderContract
         if (!is_string($fetchedAt) || !preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+\-]\d{2}:\d{2})$/D', $fetchedAt) || strtotime($fetchedAt) === false) {
             throw new ProviderException('invalid_scope', '库存采集时间格式不正确');
         }
-        $images = array_values(array_unique(array_filter(array_map(fn($url) => $this->url($url), $mapped['images'] ?? []))));
+        $images = array_values(array_unique(array_filter(array_map(fn ($url) => $this->url($url), $mapped['images'] ?? []))));
         // Only an adapter's verified source contract can supply these states. The
         // generic list boundary must never turn an arbitrary record into stock.
         $listing = in_array($mapped['listing_status'] ?? null, ['listed', 'unlisted', 'unknown'], true)
@@ -129,10 +129,12 @@ abstract class AbstractProvider implements ProviderContract
         // "One current, listed device" is a verified per-adapter unit proof,
         // not a substitute for an absent aggregate source quantity column.
         if ($quantityBasis === 'listed_stock_device' && ($saleableQuantity !== '1.000' || $quantity !== null)) {
-            $saleableQuantity = null; $quantityBasis = 'unknown';
+            $saleableQuantity = null;
+            $quantityBasis = 'unknown';
         }
         if ($quantityBasis === 'source_quantity' && ($quantity === null || $saleableQuantity !== $quantity)) {
-            $saleableQuantity = null; $quantityBasis = 'unknown';
+            $saleableQuantity = null;
+            $quantityBasis = 'unknown';
         }
         if ($quantityBasis === 'unknown') $saleableQuantity = null;
         // A proven sale is distinct from mere unlisting or a zero stock count.
@@ -175,9 +177,9 @@ abstract class AbstractProvider implements ProviderContract
     protected function stockQuantity(mixed $value): ?string
     {
         if (!is_int($value) && !is_string($value)) return null;
-        $raw = trim((string)$value);
+        $raw = trim((string) $value);
         if (!preg_match('/^[0-9]{1,11}(?:\.[0-9]{1,3})?$/D', $raw)) return null;
         [$whole, $fraction] = array_pad(explode('.', $raw, 2), 2, '');
-        return (ltrim($whole, '0') ?: '0') . '.' . str_pad($fraction, 3, '0');
+        return (ltrim($whole, '0') ?: '0').'.'.str_pad($fraction, 3, '0');
     }
 }

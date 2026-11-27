@@ -6,7 +6,7 @@ final class CooperationPaySuccess
 {
     public function handle(array $event)
     {
-        if (($event['trade_type']??'')!==PaymentService::TRADE_TYPE) return true;
+        if (($event['trade_type'] ?? '') !== PaymentService::TRADE_TYPE) return true;
         return PaymentService::confirm($event);
     }
 }

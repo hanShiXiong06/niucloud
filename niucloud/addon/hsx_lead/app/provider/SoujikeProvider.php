@@ -13,7 +13,10 @@ final class SoujikeProvider extends AbstractProvider
         'tradePrice', 'createTime', 'brandName', 'phoneVersion', 'battery', 'isNew', 'imei', 'renovateName',
         'renovateDesc', 'firstResIsVideo', 'saleStatus', 'shelfStatus', 'shelfStatusName'];
 
-    public function key(): string { return 'soujike'; }
+    public function key(): string
+    {
+        return 'soujike';
+    }
 
     public function login(#[\SensitiveParameter] array $credentials): array
     {
@@ -23,7 +26,7 @@ final class SoujikeProvider extends AbstractProvider
         if ($mode !== null && !in_array($mode, ['password', 'token'], true)) {
             throw new ProviderException('invalid_credentials', '请选择有效的搜机客授权方式');
         }
-        $hasPasswordInput = array_key_exists('username',$credentials) || array_key_exists('password',$credentials);
+        $hasPasswordInput = array_key_exists('username', $credentials) || array_key_exists('password', $credentials);
         if ($mode === 'token' || ($mode === null && !$hasPasswordInput)) {
             // Explicit temporary administrator fallback; a token is not a profile proof.
             return ['access_token' => $this->accessToken($credentials), 'identity' => $this->identity($credentials) + ['verified' => false]];
@@ -85,7 +88,7 @@ final class SoujikeProvider extends AbstractProvider
         $secretTrace = \addon\hsx_lead\app\support\PhpRuntime::guardSecrets();
         [$pageNum, $pageSize] = $this->pagination($cursor, $scope);
         if (array_key_exists('source_total', $cursor) && ((!is_int($cursor['source_total']) && !is_string($cursor['source_total']))
-            || !preg_match('/^(?:0|[1-9][0-9]{0,7})$/D', (string)$cursor['source_total']))) {
+            || !preg_match('/^(?:0|[1-9][0-9]{0,7})$/D', (string) $cursor['source_total']))) {
             throw new ProviderException('invalid_scope', '搜机客分页校验信息无效');
         }
         $store = $this->id($scope['store_id'] ?? null, '搜机客来源门店标识');
@@ -110,12 +113,12 @@ final class SoujikeProvider extends AbstractProvider
             throw new ProviderException('schema_changed', '搜机客库存分页结构变化，已停止同步');
         }
         $total = (int) $data['total'];
-        if (array_key_exists('source_total', $cursor) && $total !== (int)$cursor['source_total']) {
+        if (array_key_exists('source_total', $cursor) && $total !== (int) $cursor['source_total']) {
             throw new ProviderException('schema_changed', '搜机客分页期间商品总量发生变化，本轮未发布，请重新同步');
         }
         if (array_key_exists('pages', $data) && ((!is_int($data['pages']) && !is_string($data['pages']))
-            || !preg_match('/^(?:0|[1-9][0-9]{0,7})$/D', (string)$data['pages'])
-            || (int)$data['pages'] !== (int)ceil($total / $pageSize))) {
+            || !preg_match('/^(?:0|[1-9][0-9]{0,7})$/D', (string) $data['pages'])
+            || (int) $data['pages'] !== (int) ceil($total / $pageSize))) {
             throw new ProviderException('schema_changed', '搜机客库存总页数不一致，已停止同步');
         }
         $expected = min($pageSize, max(0, $total - ($pageNum - 1) * $pageSize));
@@ -191,7 +194,7 @@ final class SoujikeProvider extends AbstractProvider
             if (!is_array($item)) continue;
             $url = $this->url($item['url'] ?? null);
             if ($url === null || ($index === 0 && ($row['firstResIsVideo'] ?? null) !== false)) continue;
-            if ($index > 0 && !preg_match('/\.(?:jpe?g|png|webp|gif|avif)$/i', (string)parse_url($url, PHP_URL_PATH))) continue;
+            if ($index > 0 && !preg_match('/\.(?:jpe?g|png|webp|gif|avif)$/i', (string) parse_url($url, PHP_URL_PATH))) continue;
             $photos[$url] = ['url' => $url];
         }
         $cover = ($row['firstResIsVideo'] ?? null) === false ? $this->url($row['coverImage'] ?? null) : null;

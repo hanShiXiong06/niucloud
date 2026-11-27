@@ -45,12 +45,12 @@ final class GuzzleJsonTransport implements RequestTransportContract
         if (!in_array($endpoint, self::ENDPOINTS, true)) {
             throw new ProviderException('forbidden_endpoint', '未允许的 ERP 接口地址');
         }
-        $response=$this->request('POST', $endpoint, $headers, $body, 'json');
+        $response = $this->request('POST', $endpoint, $headers, $body, 'json');
         // Legacy JSON callers still require HTTP 200. Only the optional raw auth
         // adapter may inspect bounded validation errors returned with non-200 status.
-        if ($response['status']!==200) {
-            $reason=in_array($response['status'],[401,403],true)?'auth_required':'http_error';
-            throw new ProviderException($reason,'ERP接口 HTTP '.$response['status'].'，本次授权未完成');
+        if ($response['status'] !== 200) {
+            $reason = in_array($response['status'], [401, 403], true) ? 'auth_required' : 'http_error';
+            throw new ProviderException($reason, 'ERP接口 HTTP '.$response['status'].'，本次授权未完成');
         }
         return self::decode($response['body']);
     }
@@ -60,11 +60,11 @@ final class GuzzleJsonTransport implements RequestTransportContract
     {
         $secretTrace = \addon\hsx_lead\app\support\PhpRuntime::guardSecrets();
         if (!(($method === 'POST' && $encoding === 'json' && in_array($endpoint, self::ENDPOINTS, true))
-            || in_array($method . ' ' . $encoding . ' ' . $endpoint, self::EXTRA_REQUESTS, true))) {
+            || in_array($method.' '.$encoding.' '.$endpoint, self::EXTRA_REQUESTS, true))) {
             throw new ProviderException('forbidden_endpoint', '未允许的 ERP 请求方法或接口地址');
         }
         foreach ($headers as $name => $value) {
-            if (!is_string($name) || !is_string($value) || preg_match('/[\r\n]/', $name . $value)) {
+            if (!is_string($name) || !is_string($value) || preg_match('/[\r\n]/', $name.$value)) {
                 throw new ProviderException('invalid_credentials', 'ERP 请求头不合法');
             }
         }
@@ -81,7 +81,9 @@ final class GuzzleJsonTransport implements RequestTransportContract
                 'read_timeout' => 30,
                 'stream' => true,
             ];
-            $options[match ($encoding) { 'json' => 'json', 'form' => 'form_params', 'query' => 'query' }] =
+            $options[match ($encoding) {
+                'json' => 'json', 'form' => 'form_params', 'query' => 'query'
+            }] =
                 $endpoint === 'https://api.aiguanji.com/api/v1/index/index' && $data === [] ? new \stdClass() : $data;
             $response = $this->client->request($method, $endpoint, $options);
             $status = $response->getStatusCode();
@@ -89,16 +91,16 @@ final class GuzzleJsonTransport implements RequestTransportContract
             // failures. Preserve those only for this fixed endpoint; redirects and all
             // other providers retain fail-closed semantics. The adapter must reject
             // non-200 "success" and expose only its own safe error classifications.
-            $authValidation=$method==='POST' && $encoding==='json'
-                && $endpoint==='https://api.aiguanji.com/api/v1/index/login'
-                && in_array($status,[400,401,403,422,429,500],true);
+            $authValidation = $method === 'POST' && $encoding === 'json'
+                && $endpoint === 'https://api.aiguanji.com/api/v1/index/login'
+                && in_array($status, [400, 401, 403, 422, 429, 500], true);
             if (!$authValidation && ($status === 401 || $status === 403)) {
                 $response->getBody()->close();
                 throw new ProviderException('auth_required', 'ERP 授权已失效，请重新授权');
             }
             if (!$authValidation && $status !== 200) {
                 $response->getBody()->close();
-                throw new ProviderException('http_error', 'ERP 接口 HTTP ' . $status . '，未更新库存');
+                throw new ProviderException('http_error', 'ERP 接口 HTTP '.$status.'，未更新库存');
             }
             $stream = $response->getBody();
             $json = '';
@@ -130,7 +132,7 @@ final class GuzzleJsonTransport implements RequestTransportContract
             json_decode($json, true, 512, JSON_THROW_ON_ERROR | JSON_BIGINT_AS_STRING);
             $exact = preg_replace_callback(
                 '/"(?:\\\\.|[^"\\\\])*"(*SKIP)(*F)|-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+\-]?[0-9]+)?/',
-                static fn(array $match): string => strpbrk($match[0], '.eE') === false ? $match[0] : '"' . $match[0] . '"',
+                static fn (array $match): string => strpbrk($match[0], '.eE') === false ? $match[0] : '"'.$match[0].'"',
                 $json
             );
             $decoded = json_decode($exact ?? '', true, 512, JSON_THROW_ON_ERROR | JSON_BIGINT_AS_STRING);

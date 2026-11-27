@@ -18,7 +18,10 @@ final class AiguanjiProvider extends AbstractProvider implements InteractiveAuth
     private const AUTH_STATE_VERSION = 1;
     private const ATTRIBUTES = ['内存', '颜色', '国别', '保修期', '充电次数', '电池健康度'];
 
-    public function key(): string { return 'aiguanji'; }
+    public function key(): string
+    {
+        return 'aiguanji';
+    }
 
     public function beginAuthorization(): array
     {
@@ -26,7 +29,7 @@ final class AiguanjiProvider extends AbstractProvider implements InteractiveAuth
             throw new ProviderException('unsupported_transport', '当前读取服务不支持正常验证码授权，请更新插件后端');
         }
         $response = $this->transport->request('GET', self::CAPTCHA_ENDPOINT, [],
-            ['v' => '0.' . str_pad((string) random_int(0, 9999999999999999), 16, '0', STR_PAD_LEFT)], 'query');
+            ['v' => '0.'.str_pad((string) random_int(0, 9999999999999999), 16, '0', STR_PAD_LEFT)], 'query');
         if (($response['status'] ?? null) !== 200 || !is_array($response['headers'] ?? null) ||
             !is_string($response['body'] ?? null)) {
             throw new ProviderException('auth_challenge', '验证码暂未加载成功，请稍后重新获取');
@@ -53,7 +56,7 @@ final class AiguanjiProvider extends AbstractProvider implements InteractiveAuth
         if (count($types) !== 1 || !($magic[$types[0]] ?? false) || strlen($body) > self::MAX_CAPTCHA_BYTES) {
             throw new ProviderException('schema_changed', '验证码不是受支持的安全图片，请重新获取或联系管理员');
         }
-        return ['public' => ['captcha_image' => 'data:' . $types[0] . ';base64,' . base64_encode($body), 'expires_in' => 180],
+        return ['public' => ['captcha_image' => 'data:'.$types[0].';base64,'.base64_encode($body), 'expires_in' => 180],
             'state' => ['version' => self::AUTH_STATE_VERSION, 'stage' => 'captcha', 'device_id' => bin2hex(random_bytes(16))]];
     }
 
@@ -152,8 +155,9 @@ final class AiguanjiProvider extends AbstractProvider implements InteractiveAuth
         if (!is_string($bytes) || $bytes === '' || strlen($bytes) > self::MAX_LOGIN_BYTES) {
             throw new ProviderException('http_error', '爱管机登录响应异常，请稍后重新获取验证码');
         }
-        try { $response = json_decode($bytes, true, 32, JSON_THROW_ON_ERROR); }
-        catch (\JsonException $error) {
+        try {
+            $response = json_decode($bytes, true, 32, JSON_THROW_ON_ERROR);
+        } catch (\JsonException $error) {
             throw new ProviderException('http_error', '爱管机登录响应异常，请稍后重新获取验证码');
         }
         if (!is_array($response) || \addon\hsx_lead\app\support\PhpRuntime::isList($response)) {
@@ -232,7 +236,9 @@ final class AiguanjiProvider extends AbstractProvider implements InteractiveAuth
             (isset($cursor['total']) && (!$this->unsigned($cursor['total']) || (int) $cursor['total'] !== $total))) {
             throw new ProviderException('schema_changed', '爱管机分页总数或在售清单发生变化，请重新同步；旧库存保持不变');
         }
-        $rows = []; $seen = []; $company = $expectedCompany;
+        $rows = [];
+        $seen = [];
+        $company = $expectedCompany;
         foreach ($data['data'] as $row) {
             if (!is_array($row)) throw new ProviderException('schema_changed', '爱管机在售记录格式变化');
             $actualCompany = $this->id($row['company_id'] ?? null, '爱管机来源公司标识');
@@ -332,16 +338,21 @@ final class AiguanjiProvider extends AbstractProvider implements InteractiveAuth
         if (!is_array($teams) || !\addon\hsx_lead\app\support\PhpRuntime::isList($teams) || $teams === [] || count($teams) > 50) {
             throw new ProviderException('schema_changed', '授权公司候选格式变化，请联系管理员核对');
         }
-        $result = []; $seen = [];
+        $result = [];
+        $seen = [];
         foreach ($teams as $team) {
             if (!is_array($team)) throw new ProviderException('schema_changed', '授权公司候选格式变化，请联系管理员核对');
-            try { $id = $this->companyId($team['id'] ?? null); }
-            catch (ProviderException $error) { throw new ProviderException('schema_changed', '授权公司候选格式变化，请联系管理员核对'); }
+            try {
+                $id = $this->companyId($team['id'] ?? null);
+            } catch (ProviderException $error) {
+                throw new ProviderException('schema_changed', '授权公司候选格式变化，请联系管理员核对');
+            }
             $name = $this->text($team['name'] ?? null);
             if ($name === null || preg_match('/^[^\x00-\x1f\x7f]{1,120}$/uD', $name) !== 1 || isset($seen[$id])) {
                 throw new ProviderException('schema_changed', '授权公司候选格式变化，请联系管理员核对');
             }
-            $seen[$id] = true; $result[] = ['id' => $id, 'name' => $name];
+            $seen[$id] = true;
+            $result[] = ['id' => $id, 'name' => $name];
         }
         return $result;
     }
