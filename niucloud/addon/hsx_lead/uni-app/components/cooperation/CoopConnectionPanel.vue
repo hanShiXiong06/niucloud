@@ -703,7 +703,7 @@ onBeforeUnmount(() => { sequence++; driving = false; stopPolling(); clearSecret(
 .coop-connection-overview { padding: 16px; }
 .coop-connection-provider { flex-wrap: wrap; gap: 8px; }
 .coop-connection-provider>view:nth-child(2) { min-width: 100px; }
-.coop-connection-auto { max-width: 100%; font-size: 11px; line-height: 18px; }
+.coop-connection-auto { max-width: 100%; font-size:12px; line-height: 18px; }
 .coop-connection-status { font-size: 19px; line-height: 28px; margin-top: 16px; }
 .coop-connection-summary { font-size: 13px; line-height: 21px; margin-top: 8px; }
 .coop-connection-metrics { gap: 12px; margin-top: 12px; padding-top: 12px; }

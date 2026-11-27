@@ -60,7 +60,7 @@ const percentage = computed(() => { const value = props.nextLevel?.progress_perc
 .coop-experience__value { display:flex;align-items:baseline;gap:6px;margin:5px 0 12px; }
 .coop-experience__value>text:first-child { font-size:27px;font-weight:700;line-height:34px;color:var(--experience-color,var(--primary-color,#ff4444)); }
 .coop-experience__value>text:last-child { font-size:12px;color:#777; }
-.coop-experience__sources { display:flex;flex-wrap:wrap;gap:5px 16px;color:#888;font-size:11px;line-height:18px;margin:-6px 0 12px; }
+.coop-experience__sources { display:flex;flex-wrap:wrap;gap:5px 16px;color:#888;font-size:12px;line-height:18px;margin:-6px 0 12px; }
 .coop-experience__target { font-size:12px;color:#555;margin-bottom:8px; }
 .coop-experience__target>text:first-child { flex:1;min-width:0;overflow-wrap:break-word; }
 .coop-experience__target>text:last-child { flex:none;white-space:nowrap; }

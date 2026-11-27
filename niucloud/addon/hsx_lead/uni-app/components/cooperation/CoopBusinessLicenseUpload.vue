@@ -143,15 +143,15 @@ onBeforeUnmount(() => { disposed = true; generation++; clearPreview() })
 <style scoped lang="scss">
 .coop-license-upload { padding: 16px 0; border-bottom: 1px solid #edf1f6; }
 .coop-license-upload__heading { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; font-size: 14px; line-height: 22px; color: #34465f; font-weight: 550; }
-.coop-license-upload__optional { color: #91a0b3; font-size: 11px; font-weight: 400; }
-.coop-license-upload__privacy { display: flex; align-items: center; gap: 4px; flex-basis: 100%; color: #71849c; font-weight: 400; font-size: 11px; }
+.coop-license-upload__optional { color: #91a0b3; font-size:12px; font-weight: 400; }
+.coop-license-upload__privacy { display: flex; align-items: center; gap: 4px; flex-basis: 100%; color: #71849c; font-weight: 400; font-size:12px; }
 .coop-license-upload__content { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .coop-license-upload__tile { position: relative; flex-shrink: 0; width: 128px; height: 92px; border: 1px solid #dfe7f2; border-radius: 10px; overflow: hidden; background: #f5f8fc; box-sizing: border-box; }
 .coop-license-upload__tile>image { display: block; width: 100%; height: 100%; }
 .coop-license-upload__placeholder,.coop-license-upload__choose { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: #6a85aa; font-size: 12px; line-height: 18px; }
 .coop-license-upload__placeholder { height: 100%; }
 .coop-license-upload__choose { border-style: dashed; }
-.coop-license-upload__caption { display: flex; flex-direction: column; gap: 7px; min-width: 0; color: #71829a; font-size: 11px; line-height: 18px; }
+.coop-license-upload__caption { display: flex; flex-direction: column; gap: 7px; min-width: 0; color: #71829a; font-size:12px; line-height: 18px; }
 .coop-license-upload__more { position: absolute; top: 0; right: 0; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; margin: 0; border: 0; background: transparent; z-index: 1; }
 .coop-license-upload__more>view { width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(34,47,65,.55); }
 .coop-license-upload__more::after { border: 0; }

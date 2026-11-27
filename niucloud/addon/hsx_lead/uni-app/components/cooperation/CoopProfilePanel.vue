@@ -714,7 +714,7 @@ defineExpose({ open, close, clearDraft })
 .coop-profile-theme .coop-profile-tool>view { min-width:0; }
 .coop-profile-theme .coop-profile-tool__image { width:32px;height:32px;flex:none; }
 .coop-profile-theme .coop-profile-tool__label { display:block;font-size:12px;line-height:20px;color:var(--lead-diy-text,#606266);overflow-wrap:anywhere; }
-.coop-profile-theme .coop-profile-tool__hint { display:block;margin-top:2px;font-size:11px;line-height:16px;color:var(--lead-diy-subtle,#909399);overflow-wrap:anywhere; }
+.coop-profile-theme .coop-profile-tool__hint { display:block;margin-top:2px;font-size:12px;line-height:16px;color:var(--lead-diy-subtle,#909399);overflow-wrap:anywhere; }
 .coop-profile-theme .coop-profile-tools.is-list { grid-template-columns:minmax(0,1fr);gap:0; }
 .coop-profile-theme .coop-profile-tools.is-list .coop-profile-tool { min-height:52px;flex-direction:row;justify-content:flex-start;text-align:left;padding:8px 0;gap:12px; }
 .coop-profile-theme .coop-profile-tools.is-list .coop-profile-tool__label { font-size:var(--lead-diy-text-size,14px); }
@@ -782,7 +782,7 @@ defineExpose({ open, close, clearDraft })
 }
 .coop-profile-inviter__bound>view { display:flex;align-items:center;gap:8px;min-width:0; }
 .coop-profile-inviter__bound>view>text:first-child { min-width:0;overflow-wrap:anywhere;color:#4b607c; }
-.coop-profile-inviter__bound>view>text:last-child { flex:none;font-size:11px;color:#668678; }
+.coop-profile-inviter__bound>view>text:last-child { flex:none;font-size:12px;color:#668678; }
 .coop-onboarding-join { display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:44px;background:#f0f6fe;color:#6683a9;border-radius:7px;padding:0 12px;margin-bottom:18px;font-size:13px; }
 .coop-profile-erp { padding: 4px 12px; }
 .coop-profile-promotion-entry { display: flex; align-items: center; gap: 7px; min-height: 44px; margin: 12px; padding: 0 14px; border-radius: 8px; background: #edf4ff; color: #577aa9; font-size: 13px; }.coop-profile-promotion-entry>text { flex: 1; min-width: 0; }
@@ -796,7 +796,7 @@ defineExpose({ open, close, clearDraft })
 .coop-profile-identity { flex: 1; min-width: 0; }.coop-profile-identity .coop-muted { margin-top: 7rpx; }.coop-profile-identity .coop-profile-badges { margin: 12rpx 0 0; }
 .coop-connected-source { display: flex; justify-content: space-between; align-items: center; gap: 18rpx; font-size: 26rpx; color: #5d7189; background: #edf3fa; padding: 20rpx; border-radius: 8rpx; }.coop-connected-source>text:last-child { flex: none; color: var(--primary-color, #d93833); font-size: 23rpx; }
 .coop-profile-card--identity { padding: 28rpx 24rpx 0; }.coop-profile-title { padding: 10rpx 6rpx 26rpx; }.coop-profile-badges>text { padding: 4rpx 11rpx; }.coop-profile-tools { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16rpx; margin: 0 0 8rpx; }.coop-form-section { border-radius: 12rpx; margin: 20rpx 24rpx; border: 1rpx solid #e8edf4; }.coop-profile-name { color: #26364d; }.coop-profile-identity .coop-muted { color: #8492a5; }
-.coop-connection-source { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 5px; }.coop-connection-source>text:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 550; color: #3e587b; }.coop-connection-state { font-size: 11px; color: #668678; line-height: 18px; }.coop-connection-state.is-paused { color: #a18458; }.coop-connected-source { gap: 12px; padding: 13px 14px; border-radius: 8px; background: #f1f6fd; }.coop-connected-source>text:last-child { min-height: 44px; display: flex; align-items: center; font-size: 12px; }.coop-profile-help { border-top: 1px solid #edf1f6; margin-top: 14px; }.coop-profile-help :deep(.u-cell__body) { padding: 11px 0; }.coop-profile-help :deep(.u-cell__title-text) { color: #7b8da5; font-size: 12px; }.coop-profile-help :deep(.u-collapse-item__content__text) { padding: 0; }.coop-profile-help-body { color: #7b8ba1; font-size: 12px; line-height: 1.8; padding: 0 0 10px; }.coop-profile-help-body>view+view { margin-top: 7px; }
+.coop-connection-source { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 5px; }.coop-connection-source>text:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 550; color: #3e587b; }.coop-connection-state { font-size:12px; color: #668678; line-height: 18px; }.coop-connection-state.is-paused { color: #a18458; }.coop-connected-source { gap: 12px; padding: 13px 14px; border-radius: 8px; background: #f1f6fd; }.coop-connected-source>text:last-child { min-height: 44px; display: flex; align-items: center; font-size: 12px; }.coop-profile-help { border-top: 1px solid #edf1f6; margin-top: 14px; }.coop-profile-help :deep(.u-cell__body) { padding: 11px 0; }.coop-profile-help :deep(.u-cell__title-text) { color: #7b8da5; font-size: 12px; }.coop-profile-help :deep(.u-collapse-item__content__text) { padding: 0; }.coop-profile-help-body { color: #7b8ba1; font-size: 12px; line-height: 1.8; padding: 0 0 10px; }.coop-profile-help-body>view+view { margin-top: 7px; }
 </style>
 
 <style scoped>

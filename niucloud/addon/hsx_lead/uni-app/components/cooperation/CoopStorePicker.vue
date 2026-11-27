@@ -254,14 +254,14 @@ defineExpose({ load, applyRegion })
 .coop-footer-note.has-selection { color: #455e7d; }
 .coop-internal-members { margin:-4rpx 0 22rpx;padding:12px 14px;border:1px solid #e4eaf2;border-radius:8px;background:#fff; }
 .coop-internal-members__heading { display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;font-size:14px;font-weight:600;line-height:22px;color:#2d3d52; }
-.coop-internal-members__heading>text:last-child { font-size:11px;font-weight:400;color:#6c7e92; }
+.coop-internal-members__heading>text:last-child { font-size:12px;font-weight:400;color:#6c7e92; }
 .coop-internal-member { display:flex;align-items:center;gap:10px;min-height:58px;width:100%;margin:0;padding:8px 0;border:0;border-radius:0;background:#fff;text-align:left;box-sizing:border-box; }
 .coop-internal-member+.coop-internal-member { border-top:1px solid #edf1f5; }
 .coop-internal-member::after { border:0; }
 .coop-internal-member__avatar { display:flex;align-items:center;justify-content:center;flex:none;width:34px;height:34px;border-radius:50%;background:#edf3fc;color:#5b789f;font-size:15px;line-height:1; }
 .coop-internal-member__copy { flex:1;min-width:0; }
 .coop-internal-member__copy>text { display:block;font-size:14px;line-height:22px;color:#33465f;overflow-wrap:anywhere; }
-.coop-internal-member__copy>text+text { font-size:11px;line-height:18px;color:#8391a3; }
+.coop-internal-member__copy>text+text { font-size:12px;line-height:18px;color:#8391a3; }
 .coop-internal-member.is-selected .coop-internal-member__copy>text:first-child { color:var(--primary-color,#3478cc);font-weight:600; }
 .coop-internal-members__empty { display:block;padding:8px 0;font-size:13px;line-height:22px;color:#748398; }
 .coop-discovery-types>text { display: inline-flex; align-items: center; min-height: 44px; padding: 0 6px; box-sizing: border-box; }

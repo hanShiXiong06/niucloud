@@ -73,7 +73,7 @@ function go() {
 .coop-role-card__copy { flex:1;min-width:0; }
 .coop-role-card__title { display:block;font-size:var(--lead-diy-title-size,20px);font-weight:650;line-height:1.5;overflow-wrap:anywhere; }
 .coop-role-card__subtitle { display:block;margin-top:6px;color:var(--lead-diy-text,#606266);font-size:var(--lead-diy-text-size,13px);line-height:1.7;overflow-wrap:anywhere; }
-.coop-role-card__button { display:inline-flex;align-items:center;justify-content:center;gap:8px;margin:14px 0 0;padding:0 15px;min-height:38px;line-height:1.5;font-size:13px;font-weight:600;border:0;border-radius:var(--lead-diy-button-radius,6px); }
+.coop-role-card__button { display:inline-flex;align-items:center;justify-content:center;gap:8px;margin:14px 0 0;padding:0 15px;min-height:44px;line-height:1.5;font-size:13px;font-weight:600;border:0;border-radius:var(--lead-diy-button-radius,6px); }
 .coop-role-card__button::after { border:0; }
 .coop-role-card__button.is-solid { background:var(--lead-diy-button,var(--primary-color,#398aff));color:var(--lead-diy-button-text,#fff); }
 .coop-role-card__button.is-link { background:transparent;padding:0;color:var(--lead-diy-button,var(--primary-color,#398aff)); }

@@ -790,7 +790,7 @@ function openTeam() { uni.navigateTo({ url: entityPageUrl }) }
 .membership-experience-offer__row>view { min-width:0;flex:1; }
 .membership-experience-offer__row text { display:block;font-size:12px;color:#777;line-height:20px; }
 .membership-experience-offer__row text:first-child { font-size:14px;font-weight:500;color:#333;margin-bottom:3px; }
-.membership-experience-offer__hint { margin-top:9px;color:#999;font-size:11px;line-height:18px; }
+.membership-experience-offer__hint { margin-top:9px;color:#999;font-size:12px;line-height:18px; }
 .membership-section { padding:16px;background:#fff;border-radius:12px;margin:16px 0; }
 .membership-section__title { font-size:16px;font-weight:650;line-height:24px;margin-bottom:8px;overflow-wrap:break-word; }
 .membership-money-row { display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 0;font-size:13px;color:#666; }

@@ -66,6 +66,6 @@ function writeAddress(event: any) { if (props.disabled) return; emit('update:mod
 .coop-business-field__address { padding: 12px; border: 1px solid #dfe6ee; border-radius: 6px; box-sizing: border-box; background: #fff; }
 .coop-business-field__address>textarea { display: block; width: 100%; min-height: 62px; color: #35465c; font-size: 14px; line-height: 22px; box-sizing: border-box; }
 .coop-business-field__placeholder { color: #9aa6b5; }
-.coop-business-field__count { display: block; text-align: right; color: #97a2b0; font-size: 11px; line-height: 18px; }
+.coop-business-field__count { display: block; text-align: right; color: #97a2b0; font-size:12px; line-height: 18px; }
 .is-disabled { opacity: .6; background: #f7f9fb; }
 </style>

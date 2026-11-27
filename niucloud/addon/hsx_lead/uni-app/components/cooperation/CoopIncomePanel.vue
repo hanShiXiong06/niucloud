@@ -198,19 +198,19 @@ defineExpose({ refresh })
 .income-account__heading { display:flex;align-items:center;justify-content:space-between;font-size:13px;color:#6b7687; }
 .income-account button { margin:0;padding:0;border:0;background:transparent; }
 .income-account button::after,.income-types button::after { border:0; }
-.income-account__heading button { width:44px;height:36px;margin:-8px -12px -8px 0;display:flex;align-items:center;justify-content:center; }
+.income-account__heading button { width:44px;height:44px;margin:-12px -12px -12px 0;display:flex;align-items:center;justify-content:center; }
 .income-account__main { display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:8px; }
 .income-account__balance { font-size:32px;line-height:1.4;font-weight:700;min-width:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums; }
 .income-account .income-withdraw { display:flex;align-items:center;justify-content:center;min-width:72px;min-height:44px;padding:0 14px;box-sizing:border-box;font-size:14px;background:var(--primary-color,#3978c2);color:#fff;border-radius:22px;flex:none; }
 .income-account .income-withdraw[disabled] { background:#edf0f4;color:#9ba4b2; }
 .income-account__foot { display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:#8993a2; }
-.income-account__foot button { display:flex;align-items:center;justify-content:flex-end;min-height:36px;gap:4px;color:#65748a;font-size:12px; }
+.income-account__foot button { display:flex;align-items:center;justify-content:flex-end;min-height:44px;margin-top:-4px;margin-bottom:-4px;gap:4px;color:#65748a;font-size:12px; }
 .income-filter { flex:none;padding:8px 12px 0; }
 .income-types { white-space:nowrap;width:100%; }
 .income-types__inner { display:flex;align-items:center;gap:8px; }
 .income-types button { flex:none;padding:0 13px;margin:0;min-height:44px;line-height:44px;border:0;border-radius:8px;background:transparent;font-size:13px;color:#748094; }
 .income-types button.is-active { color:var(--primary-color,#3978c2);background:#fff;font-weight:600; }
-.income-list-heading { flex:none;display:flex;align-items:center;justify-content:space-between;padding:2px 16px 0;font-size:12px;color:#8993a2; }.income-list-heading button { margin:0 -8px 0 0;padding:0 8px;min-height:36px;display:flex;align-items:center;gap:5px;font-size:12px;color:#7b8696;background:transparent;border:0; }.income-list-heading button::after { border:0; }
+.income-list-heading { flex:none;display:flex;align-items:center;justify-content:space-between;padding:2px 16px 0;font-size:12px;color:#8993a2; }.income-list-heading button { margin:-4px -8px -4px 0;padding:0 8px;min-height:44px;display:flex;align-items:center;gap:5px;font-size:12px;color:#7b8696;background:transparent;border:0; }.income-list-heading button::after { border:0; }
 .income-list-area { flex:1 1 0;min-height:0; }
 .income-pager { height:100%;min-height:0; }
 .income-row { display:flex;gap:12px;padding:18px 16px;background:#fff;border-bottom:1px solid #f0f1f4; }
@@ -219,11 +219,11 @@ defineExpose({ refresh })
 .income-row__content { flex:1;min-width:0; }
 .income-row__title { display:flex;align-items:flex-start;justify-content:space-between;gap:12px;font-size:14px;font-weight:600;line-height:1.6; }
 .income-row__title>text:first-child { flex:1;min-width:0; }
-.income-row__level { display:inline-block;margin-left:6px;font-size:10px;font-weight:400;line-height:18px;padding:0 5px;border-radius:4px;color:var(--primary-color,#3978c2);background:var(--primary-color-light,#edf4fc);vertical-align:middle; }.income-detail__level { padding:16px 20px 0;background:#fff;font-size:12px;line-height:1.7;color:#7b8696; }
+.income-row__level { display:inline-block;margin-left:6px;font-size:12px;font-weight:400;line-height:18px;padding:0 5px;border-radius:4px;color:var(--primary-color,#3978c2);background:var(--primary-color-light,#edf4fc);vertical-align:middle; }.income-detail__level { padding:16px 20px 0;background:#fff;font-size:12px;line-height:1.7;color:#7b8696; }
 .income-row__amount { max-width:50%;overflow-wrap:anywhere;font-size:16px;font-variant-numeric:tabular-nums; }
 .income-row__amount.is-credited { color:#303b4a; }
 .income-row__person { font-size:12px;color:#7b8696;line-height:1.6;margin-top:3px;overflow-wrap:anywhere; }
-.income-row__meta { display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-top:8px;font-size:11px;color:#9aa2af;line-height:1.6; }
+.income-row__meta { display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-top:8px;font-size:12px;color:#9aa2af;line-height:1.6; }
 .income-row__meta>text:last-child { flex:none;max-width:40%;text-align:right; }.income-row__meta .is-pending { color:#9b7e4d; }
 .income-empty { padding:24px 16px; }.income-read-error { padding:12px 16px;font-size:12px;line-height:1.6;color:#a1604b; }
 .income-detail { padding:12px 20px 24px;background:#fff; }.income-detail__amount { text-align:center;margin-top:12px;font-size:32px;font-weight:700;overflow-wrap:anywhere; }.income-detail__status { text-align:center;font-size:13px;color:#7b8696;margin:6px 0 20px; }

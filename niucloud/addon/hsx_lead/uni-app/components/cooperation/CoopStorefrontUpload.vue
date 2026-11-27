@@ -107,7 +107,7 @@ onBeforeUnmount(() => { disposed = true })
 .coop-storefront-upload { margin: 0 0 10px; padding: 0 0 16px; border-bottom: 1px solid #edf1f6; }
 .coop-storefront-upload__row { display: block; }
 .coop-storefront-upload__title { display: flex; align-items: baseline; gap: 7px; font-size: 14px; line-height: 22px; color: #34465f; font-weight: 550; margin-bottom: 12px; }
-.coop-storefront-upload__title>text { font-weight: 400; color: #91a0b3; font-size: 11px; }
+.coop-storefront-upload__title>text { font-weight: 400; color: #91a0b3; font-size:12px; }
 .coop-storefront-upload__controls { display: block; width: 112px; max-width: 100%; }
 .coop-storefront-upload__tile { width: 112px; height: 96px; max-width: 100%; position: relative; border-radius: 12px; box-sizing: border-box; overflow: hidden; }
 .coop-storefront-upload__choose { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; border: 1px dashed #bfcfe4; background: #f3f7fc; color: #5d7fae; font-size: 12px; line-height: 18px; white-space: nowrap; }
