@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace addon\hsx_recycle\app\service\admin\printer\template;
 
 use core\base\BaseAdminService;
+use core\exception\CommonException;
 
 /**
  * 模板转换服务类
@@ -107,6 +108,7 @@ class TemplateConverterService extends BaseAdminService
      */
     private function convertElementToXml(array $element): string
     {
+        $element = self::normalizeElementPosition($element);
         $type = $element['type'] ?? 'text';
         $x = $element['x'] ?? 0;
         $y = $element['y'] ?? 0;
@@ -134,6 +136,26 @@ class TemplateConverterService extends BaseAdminService
             default:
                 return '';
         }
+    }
+
+    /** 编辑器坐标已经是 dot；只在输出打印指令或预览时对齐到最近的打印点。 */
+    public static function normalizeElementPosition(array $element): array
+    {
+        $keys = in_array($element['type'] ?? '', ['rectangle', 'seq'], true)
+            ? ['x', 'y', 'xe', 'ye'] : ['x', 'y'];
+        foreach ($keys as $key) {
+            if (!isset($element[$key]) || is_int($element[$key])) continue;
+            $value = $element[$key];
+            if (!is_numeric($value)) {
+                throw new CommonException("打印模板的 {$key} 坐标必须是数字");
+            }
+            $dot = round((float)$value);
+            if (!is_finite($dot) || $dot >= (float)PHP_INT_MAX || $dot < PHP_INT_MIN) {
+                throw new CommonException("打印模板的 {$key} 坐标超出范围");
+            }
+            $element[$key] = (int)$dot;
+        }
+        return $element;
     }
 
     /**

@@ -7,6 +7,14 @@ use think\facade\Db;
 /** Explicit-site portal links for workers; never fall back to a request's localhost. */
 final class NoticePortalEntry
 {
+    /** Newly generated cards target the real detail page; historical desk links remain supported. */
+    public static function forLead(int $site,int $leadId): array
+    {
+        $entry=self::get($site);if($leadId<=0)return$entry;
+        $page='addon/hsx_lead/pages/task/index?task=detail&collaboration_id='.$leadId.'&from=notice';
+        $base=$entry['h5_url']!==''?substr($entry['h5_url'],0,-strlen($entry['miniapp_path'])):'';
+        return array_replace($entry,['miniapp_path'=>$page,'h5_url'=>$base!==''?$base.$page:'']);
+    }
     public static function get(int $site): array
     {
         $page='addon/hsx_lead/pages/workbench/index';

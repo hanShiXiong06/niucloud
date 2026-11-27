@@ -13,7 +13,7 @@ final class CooperationNoticeReadService
     private Context $context;
     private ?\Closure $dispatcher;
     private const CHANNELS=['queue','weapp','wechat','sms'];
-    private const STATUSES=['pending','processing','processed','obsolete','failed','disabled','pending_configuration','pending_recipient','dispatching','submitted','accepted','rejected','not_submitted','uncertain'];
+    private const STATUSES=['pending','processing','processed','obsolete','expired','deferred','failed','disabled','pending_configuration','pending_recipient','dispatching','submitted','accepted','rejected','not_submitted','uncertain'];
     public function __construct(Context $context,?callable $dispatcher=null)
     {
         $this->context=$context;$this->dispatcher=$dispatcher===null?null:\Closure::fromCallable($dispatcher);

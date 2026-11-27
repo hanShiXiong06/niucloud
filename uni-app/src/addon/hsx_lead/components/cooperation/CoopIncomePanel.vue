@@ -12,12 +12,13 @@
                 <view v-if="ui.error.value && ui.rows.value.length" class="income-read-error" role="alert">{{ ui.error.value }}</view>
                 <view v-for="item in ui.rows.value" :key="cooperationIncomeKey(item)" class="income-row" role="button" @tap="openDetail(item)">
                     <view class="income-row__icon" :class="'is-' + item.income_type"><u-icon :name="item.income_type === 'publisher' ? 'order' : 'share'" size="19" :color="item.income_type === 'publisher' ? '#9d7b4c' : 'var(--primary-color,#3978c2)'" /></view>
-                    <view class="income-row__content"><view class="income-row__title"><text>{{ cooperationIncomeLabel(item.income_type) }}</text><text class="income-row__amount" :class="{ 'is-credited': cooperationIncomeCredited(item) }">{{ cooperationIncomeCredited(item) ? '+' : '' }}{{ coopMoney(item.amount) }}</text></view><view class="income-row__person">{{ item.payer_name || item.customer_name || '协作收入' }}</view><view class="income-row__meta"><text>{{ coopDate(item.create_time) }}</text><text :class="{ 'is-pending': item.status === 'pending' }">{{ cooperationIncomeStatus(item) }}</text></view></view>
+                    <view class="income-row__content"><view class="income-row__title"><text>{{ cooperationIncomeLabel(item.income_type) }}<text v-if="rewardLevel(item)" class="income-row__level">{{ rewardLevel(item) }}</text></text><text class="income-row__amount" :class="{ 'is-credited': cooperationIncomeCredited(item) }">{{ cooperationIncomeCredited(item) ? '+' : '' }}{{ coopMoney(item.amount) }}</text></view><view class="income-row__person">{{ item.payer_name || item.customer_name || '协作收入' }}</view><view class="income-row__meta"><text>{{ coopDate(item.create_time) }}</text><text :class="{ 'is-pending': item.status === 'pending' }">{{ cooperationIncomeStatus(item) }}</text></view></view>
                 </view>
                 <template #empty="{ isLoadFailed }"><view class="income-empty"><CoopState :error="isLoadFailed ? ui.error.value || '收益读取失败，请重试' : ''" title="还没有这类收益" hint="符合规则的付款后，收益会记录在这里" icon="order" @retry="refresh" /></view></template>
             </z-paging>
         </view>
         <CoopTaskSheet :show="!!detail" title="收益详情" @close="detail = null">
+            <view v-if="detail && rewardLevel(detail)" class="income-detail__level">{{ rewardLevel(detail) }} · 按原订单的有效计佣金额计算</view>
             <view v-if="detail" class="income-detail"><view class="income-detail__amount">{{ coopMoney(detail.amount) }}</view><view class="income-detail__status">{{ cooperationIncomeStatus(detail) }}</view><view class="income-detail__row"><text>收益类型</text><text>{{ cooperationIncomeLabel(detail.income_type) }}</text></view><view class="income-detail__row"><text>{{ detail.income_type === 'publisher' ? '客户' : '付费会员' }}</text><text>{{ detail.payer_name || detail.customer_name || '—' }}</text></view><template v-if="detail.income_type !== 'publisher'"><view class="income-detail__row"><text>计佣基数</text><text>{{ coopMoney(detail.base_amount) }}</text></view><view class="income-detail__row"><text>付款时比例</text><text>{{ detail.rate }}%</text></view></template><view class="income-detail__row"><text>产生时间</text><text>{{ coopDate(detail.create_time) }}</text></view><view v-if="Number(detail.available_at) > 0" class="income-detail__row"><text>预计可结算</text><text>{{ coopDate(detail.available_at) }}</text></view><view v-if="detail.reason" class="income-detail__reason">{{ detail.reason }}</view><view v-if="detail.income_type === 'membership'" class="income-detail__basis">只按实付服务费计算，不含押金和经验费</view></view>
         </CoopTaskSheet>
     </view>
@@ -56,6 +57,7 @@ function refresh() { pagingGuard.reset(); ui.pause(); ui.resume(); revision.valu
 function selectType(value: string) { if (ui.filter(value)) refresh() }
 function selectStatus() { uni.showActionSheet({ itemList: statusOptions.map(item => item.label), success: result => { const next = statusOptions[result.tapIndex]?.value; if (next === undefined || next === ui.status.value) return; ui.status.value = next; ui.rows.value = []; ui.total.value = 0; refresh() } }) }
 function openDetail(row: CoopRow) { detail.value = { ...row } }
+function rewardLevel(row: CoopRow) { return row.income_type!=='publisher'&&[1,2].includes(Number(row.commission_level)) ? Number(row.commission_level)===1?'直接邀请奖励':'推广奖励' : '' }
 function withdraw() { if (!ui.ready.value || ui.error.value || ui.loading.value || Number(ui.account.value.available || 0) <= 0) return; uni.setStorageSync('cashOutAccountType', 'commission'); redirect({ url: '/app/pages/member/apply_cash_out' }) }
 function cashOutRecords() { uni.setStorageSync('cashOutAccountType', 'commission'); redirect({ url: '/app/pages/member/cash_out' }) }
 function showAccountHelp() { uni.showModal({ title: '会员佣金账户', content: '收益沿用本站会员佣金账户。待结算、待核对的记录尚不可提现；账户也可能包含本站其他业务的佣金。提现条件以申请页为准。', showCancel: false }) }
@@ -91,6 +93,7 @@ defineExpose({ refresh })
 .income-row__content { flex:1;min-width:0; }
 .income-row__title { display:flex;align-items:flex-start;justify-content:space-between;gap:12px;font-size:14px;font-weight:600;line-height:1.6; }
 .income-row__title>text:first-child { flex:1;min-width:0; }
+.income-row__level { display:inline-block;margin-left:6px;font-size:10px;font-weight:400;line-height:18px;padding:0 5px;border-radius:4px;color:var(--primary-color,#3978c2);background:var(--primary-color-light,#edf4fc);vertical-align:middle; }.income-detail__level { padding:16px 20px 0;background:#fff;font-size:12px;line-height:1.7;color:#7b8696; }
 .income-row__amount { max-width:50%;overflow-wrap:anywhere;font-size:16px;font-variant-numeric:tabular-nums; }
 .income-row__amount.is-credited { color:#303b4a; }
 .income-row__person { font-size:12px;color:#7b8696;line-height:1.6;margin-top:3px;overflow-wrap:anywhere; }

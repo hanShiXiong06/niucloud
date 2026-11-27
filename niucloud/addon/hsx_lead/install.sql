@@ -130,7 +130,8 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_audit` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_site_dedupe` (`site_id`,`dedupe_key`),
   KEY `idx_site_entity` (`site_id`,`entity_type`,`entity_id`,`id`),
-  KEY `idx_site_action` (`site_id`,`action`,`id`)
+  KEY `idx_site_action` (`site_id`,`action`,`id`),
+  KEY `idx_member_activity` (`site_id`,`operator_member_id`,`create_time`,`entity_type`,`action`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Safe plugin business audit';
 
 -- Merchant collaboration, entitlements, framework payments and customer sampling.
@@ -260,6 +261,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_promotion_reward` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `site_id` int unsigned NOT NULL,
   `coop_order_id` bigint unsigned NOT NULL,
+  `commission_level` tinyint unsigned NOT NULL DEFAULT 1,
   `out_trade_no` varchar(64) NOT NULL DEFAULT '',
   `source` varchar(24) NOT NULL,
   `payer_member_id` int unsigned NOT NULL,
@@ -277,11 +279,11 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_promotion_reward` (
   `create_time` int unsigned NOT NULL DEFAULT 0,
   `update_time` int unsigned NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_site_order` (`site_id`,`coop_order_id`),
+  UNIQUE KEY `uk_site_order_level` (`site_id`,`coop_order_id`,`commission_level`),
   KEY `idx_provider_status` (`site_id`,`provider_member_id`,`status`,`id`),
   KEY `idx_due` (`status`,`available_at`,`site_id`,`id`),
   KEY `idx_receipt` (`site_id`,`out_trade_no`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='First-level promotion award audit; money remains in framework member commission';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Bounded two-level promotion audit; money remains in framework member commission';
 
 -- Structured runtime facts; rules/templates remain in the framework configuration.
 CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_notice_task` (

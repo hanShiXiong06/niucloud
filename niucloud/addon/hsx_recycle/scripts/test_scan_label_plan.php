@@ -7,6 +7,7 @@ namespace ScanLabelPlanFixture {
     final class Store {
         public static int $status = 5;
         public static bool $deviceAvailable = true, $templateAvailable = true, $printerAvailable = true;
+        public static string $signTime = '';
         public static array $forwarded = [];
     }
     final class Request {
@@ -18,7 +19,7 @@ namespace ScanLabelPlanFixture {
     final class TemplateService {
         public function getDevicePrintData(int $id): array {
             if (!Store::$deviceAvailable || $id !== 3036) throw new \core\exception\AdminException('设备不存在');
-            return ['device_id' => 3036, 'order_id' => 2527, 'order_no' => 'R2527', 'model' => '苹果 iPhone 14 Pro', 'imei' => '353938205192374', 'color' => '黑色', 'status_name' => '已回收'];
+            return ['device_id' => 3036, 'order_id' => 2527, 'order_no' => 'R2527', 'model' => '苹果 iPhone 14 Pro', 'imei' => '353938205192374', 'color' => '黑色', 'status_name' => '已回收', 'sign_time' => Store::$signTime];
         }
         public function getInfo(int $id): array { return ['template_id' => $id, 'status' => Store::$templateAvailable ? 1 : 0, 'template_name' => '测试标签', 'template_type' => 'device_label', 'instruction_content' => '{{model}} {{imei}} {{color}}', 'width' => 50, 'printer_id' => 3]; }
         public function getDefaultPrinter(int $id): array { return Store::$printerAvailable ? ['printer_id' => $id, 'printer_name' => '测试打印机', 'sn' => 'TEST', 'brand' => 'test', 'type' => 'label'] : []; }
@@ -44,6 +45,7 @@ namespace {
     function fail($message, $data = null): array { return ['code' => 0, 'msg' => $message, 'data' => $data]; }
     if (!function_exists('mb_check_encoding')) { function mb_check_encoding($value, $encoding): bool { return preg_match('//u', $value) === 1; } }
     require dirname(__DIR__) . '/app/service/admin/printer/RecyclePrintSceneService.php';
+    require dirname(__DIR__) . '/app/service/admin/printer/template/VariableReplaceService.php';
     require dirname(__DIR__) . '/app/adminapi/controller/printer/PrintScene.php';
     final class FixtureService extends RecyclePrintSceneService {
         public array $scene;
@@ -94,5 +96,37 @@ namespace {
     $same($controller->plan('label-test')['code'], 1, 'actual plan controller forwards scoped entry');
     $controller->print('label-test');
     $same(Store::$forwarded['entry'], 'scan_label', 'actual print controller forwards scoped entry');
-    echo '[通过] ' . $count . " 项扫码打标后端隔离回归；实际计划与控制器，不连接数据库、不实际打印。\n";
+
+    // PC 逐台保存先于整单签收，手机整单提交后已有 sign_time；两种路径必须都有标签日期。
+    $signScene = new FixtureService();
+    $signScene->scene['trigger_key'] = 'device.sign.saved';
+    $signScene->scene['auto_print'] = 1;
+    Store::$signTime = '';
+    $startedAt = time();
+    $plan = $signScene->resolvePlanBySceneKey('label-test', $payload, true);
+    $finishedAt = time();
+    $same($plan['can_print'], true, 'PC save produces an automatic label plan');
+    $signedAt = strtotime((string)($plan['print_data']['sign_time'] ?? ''));
+    $same($signedAt !== false && $signedAt >= $startedAt && $signedAt <= $finishedAt, true, 'PC label uses this device-save event time before whole-order signing');
+    $same($plan['device_data']['sign_time'], $plan['print_data']['sign_time'], 'task and print variable snapshots agree');
+    $replace = new \addon\hsx_recycle\app\service\admin\printer\template\VariableReplaceService();
+    $same($replace->replaceVariables('签收日期：{{sign_time}}', $plan['print_data']), '签收日期：' . $plan['print_data']['sign_time'], 'actual template substitution includes receipt date');
+    $same(Store::$signTime, '', 'printing does not write an early order signature');
+
+    Store::$signTime = '2026-11-20 09:10:11';
+    $plan = $signScene->resolvePlanBySceneKey('label-test', $payload, true);
+    $same($plan['print_data']['sign_time'], Store::$signTime, 'mobile/previously signed order preserves actual receipt time, not print time');
+
+    Store::$signTime = '';
+    $signScene->scene['trigger_key'] = 'device.check.saved';
+    $plan = $signScene->resolvePlanBySceneKey('label-test', $payload, true);
+    $same($plan['print_data']['sign_time'], '', 'other automatic events must not invent a signature time');
+    $signScene->scene['condition_config'] = ['trigger' => ['key' => 'device.sign.saved']];
+    $plan = $signScene->resolvePlanBySceneKey('label-test', $payload, true);
+    $same(trim($plan['print_data']['sign_time']) !== '', true, 'configured trigger takes precedence over legacy scene trigger');
+    $plan = $signScene->resolvePlanBySceneKey('label-test', $payload + ['entry' => 'scan_label']);
+    $same($plan['print_data']['sign_time'], '', 'manual unsigned label keeps time empty rather than pretending today was receipt day');
+    $signScene->scene['auto_print'] = 0;
+    $same($signScene->resolvePlanBySceneKey('label-test', $payload, true)['can_print'], false, 'date completion does not bypass automatic print switch');
+    echo '[通过] ' . $count . " 项扫码打标与签收日期后端隔离回归；实际计划、变量替换与控制器，不连接数据库、不实际打印。\n";
 }

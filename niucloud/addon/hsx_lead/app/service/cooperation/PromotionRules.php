@@ -4,14 +4,14 @@ namespace addon\hsx_lead\app\service\cooperation;
 
 use core\exception\CommonException;
 
-/** One-level promotion uses integer cents. It never reduces the publisher's cooperation income. */
+/** Bounded two-level promotion uses integer cents, never the publisher's cooperation income. */
 final class PromotionRules
 {
     public static function defaults(): array
     {
-        return ['enabled'=>false,'settlement_days'=>3,'eligibility_months'=>0,'sources'=>[
-            'membership'=>['enabled'=>false,'normal_rate'=>'0.00','provider_rate'=>'0.00','level_rates'=>[],'renewal'=>false],
-            'maintenance'=>['enabled'=>false,'normal_rate'=>'0.00','provider_rate'=>'0.00','level_rates'=>[],'renewal'=>true],
+        return ['enabled'=>false,'max_level'=>1,'settlement_days'=>3,'eligibility_months'=>0,'sources'=>[
+            'membership'=>['enabled'=>false,'normal_rate'=>'0.00','provider_rate'=>'0.00','level_rates'=>[],'renewal'=>false,'second_level'=>['normal_rate'=>'0.00','provider_rate'=>'0.00','level_rates'=>[]]],
+            'maintenance'=>['enabled'=>false,'normal_rate'=>'0.00','provider_rate'=>'0.00','level_rates'=>[],'renewal'=>true,'second_level'=>['normal_rate'=>'0.00','provider_rate'=>'0.00','level_rates'=>[]]],
         ]];
     }
     public static function source(string $purpose): string
@@ -45,6 +45,9 @@ final class PromotionRules
     public static function config(array $input): array
     {
         $next=self::defaults();$next['enabled']=self::bool($input['enabled']??false);
+        $depth=$input['max_level']??1;
+        if(!in_array($depth,[1,2,'1','2'],true))throw new CommonException('推广最多支持一级或二级，请明确选择');
+        $next['max_level']=(int)$depth;
         foreach(['settlement_days'=>[0,365],'eligibility_months'=>[0,120]] as $key=>$range) {
             $value=$input[$key]??$next[$key];
             if ((!is_int($value)&&!is_string($value))||!preg_match('/^(?:0|[1-9][0-9]{0,2})$/D',(string)$value)||(int)$value>$range[1]) throw new CommonException('推广期限设置不正确：'.$key);
@@ -66,21 +69,36 @@ final class PromotionRules
             }
             $next['sources'][$source]=['enabled'=>self::bool($row['enabled']??false),'normal_rate'=>Rules::amount($normal),
                 'provider_rate'=>Rules::amount($provider),'level_rates'=>$normalizedRates,
-                'renewal'=>$source==='maintenance'?true:self::bool($row['renewal']??false)];
+                'renewal'=>$source==='maintenance'?true:self::bool($row['renewal']??false),'second_level'=>self::rates($row['second_level']??[])];
+            $second=$next['sources'][$source]['second_level'];
+            if($next['max_level']===2&&max($normal,$provider,...array_map([Rules::class,'cents'],array_values($normalizedRates?:['0.00'])))
+                +max(Rules::cents($second['normal_rate']),Rules::cents($second['provider_rate']),...array_map([Rules::class,'cents'],array_values($second['level_rates']?:['0.00'])))>10000){
+                throw new CommonException('一级与二级各档最高比例合计不能超过100%，请核对平台留存');
+            }
         }
         return $next;
     }
     /** Exactly one tier applies; service-provider and normal rewards never stack. */
-    public static function rateFor(array $config,string $source,string $role,string $levelCode=''): string
+    public static function rateFor(array $config,string $source,string $role,string $levelCode='',int $commissionLevel=1): string
     {
-        if (!in_array($role,['normal','provider'],true)||!isset($config['sources'][$source])) throw new CommonException('推广身份或收入来源无效');
-        $row=$config['sources'][$source];
+        if (!in_array($role,['normal','provider'],true)||!isset($config['sources'][$source])||!in_array($commissionLevel,[1,2],true)) throw new CommonException('推广身份、层级或收入来源无效');
+        if($commissionLevel===2&&(int)($config['max_level']??1)<2)return '0.00';
+        $row=$commissionLevel===1?$config['sources'][$source]:($config['sources'][$source]['second_level']??[]);
         // A free member uses normal_rate; a paid entity tier may override it.
         // Provider qualification wins, never normal + tier + provider stacking.
         $value=$role==='provider'?($row['provider_rate']??'0.00'):($row['level_rates'][$levelCode]??$row['normal_rate']??'0.00');
         $rate=Rules::cents($value);
         if ($rate>10000) throw new CommonException('推广比例须在0—100%之间');
         return Rules::amount($rate);
+    }
+    private static function rates($row):array
+    {
+        if(!is_array($row))throw new CommonException('二级推广比例格式不正确');
+        $out=['normal_rate'=>'0.00','provider_rate'=>'0.00','level_rates'=>[]];
+        foreach(['normal_rate','provider_rate']as$key){$rate=Rules::cents($row[$key]??'0.00');if($rate>10000)throw new CommonException('二级推广比例须在0—100%之间');$out[$key]=Rules::amount($rate);}
+        $levels=$row['level_rates']??[];if(!is_array($levels)||count($levels)>1000)throw new CommonException('二级等级推广比例请使用最多1000项配置');
+        foreach($levels as$code=>$value){if(!MembershipCatalogService::validCode($code))throw new CommonException('二级比例必须关联有效会员等级编号');$rate=Rules::cents($value);if($rate>10000)throw new CommonException('二级等级比例须在0—100%之间');$out['level_rates'][$code]=Rules::amount($rate);}
+        return$out;
     }
     public static function reward(int $base,string $rate): int
     {

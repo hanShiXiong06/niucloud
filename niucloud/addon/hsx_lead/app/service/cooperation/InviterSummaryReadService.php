@@ -31,14 +31,16 @@ final class InviterSummaryReadService
             $query->where(function($part)use($like,$owners,$memberId):void{$part->whereLike('nickname|username|mobile|member_no',$like);if($memberId!==null)$part->whereOr('member_id',$memberId);if($owners)$part->whereOr('member_id','in',$owners);});
         }
         $page=max(1,(int)($params['page']??1));$limit=max(1,min(100,(int)($params['limit']??20)));$total=(int)(clone$query)->count();
-        $members=$query->field('member_id,member_no,nickname,username,mobile')->order('member_id desc')->page($page,$limit)->select()->toArray();
+        $members=$query->field('member_id,member_no,nickname,username,mobile,last_visit_time,login_time,login_count')->order('member_id desc')->page($page,$limit)->select()->toArray();
         $ids=array_map('intval',array_column($members,'member_id'));
-        $relationships=$this->relationshipTotals($ids);$rewards=$this->rewardTotals($ids);$rows=[];
+        $relationships=$this->relationshipTotals($ids);$rewards=(new PromotionTreeReadService($this->context))->rewardTotals($ids);$indirect=[];$prefix=(string)config('database.connections.mysql.prefix');
+        if($ids)foreach(Db::name('member')->alias('c')->join([$prefix.'member'=>'p'],'p.site_id=c.site_id AND p.member_id=c.pid')->where('c.site_id',$site)->whereIn('p.pid',$ids)->where('c.is_del',0)->where('c.delete_time',0)->where('p.is_del',0)->where('p.delete_time',0)->whereRaw('c.member_id<>p.pid AND p.member_id<>p.pid AND c.member_id<>c.pid')->field('p.pid,COUNT(*) AS n')->group('p.pid')->select()->toArray()as$row)$indirect[(int)$row['pid']]=(int)$row['n'];$rows=[];
         foreach($members as$member){$id=(int)$member['member_id'];$phone=(string)$member['mobile'];
             $rows[]=['member_id'=>$id,'member_no'=>(string)$member['member_no'],'name'=>trim((string)$member['nickname'])?:trim((string)$member['username'])?:'本站会员',
                 'mobile_masked'=>strlen($phone)>=7?substr($phone,0,3).'****'.substr($phone,-4):'',
                 'role'=>in_array($id,$providerIds,true)?'provider':'normal',
-                'direct_invite_count'=>$relationships[$id]['total']??0,'paid_invitee_count'=>$relationships[$id]['paid']??0,'review_invitee_count'=>$relationships[$id]['review']??0,
+                'direct_invite_count'=>$relationships[$id]['total']??0,'indirect_invite_count'=>$indirect[$id]??0,'paid_invitee_count'=>$relationships[$id]['paid']??0,'review_invitee_count'=>$relationships[$id]['review']??0,
+                'activity'=>['last_visit_time'=>(int)$member['last_visit_time'],'login_time'=>(int)$member['login_time'],'login_count'=>(int)$member['login_count'],'active_30d'=>max((int)$member['last_visit_time'],(int)$member['login_time'])>=time()-30*86400],
                 'promotion'=>$rewards[$id]??PromotionRelationsReadService::emptyRewards()];
         }
         return['data'=>$rows,'total'=>$total,'current_page'=>$page,'per_page'=>$limit,
@@ -71,16 +73,4 @@ final class InviterSummaryReadService
         }while(count($children)===self::CHUNK);return$totals;
     }
 
-    private function rewardTotals(array $providerIds):array
-    {
-        if(!$providerIds)return[];$out=[];$cursor=0;$prefix=(string)config('database.connections.mysql.prefix');
-        $query=Db::name('hsx_lead_promotion_reward')->alias('r')->leftJoin([$prefix.'hsx_lead_coop_order'=>'o'],'o.site_id=r.site_id AND o.id=r.coop_order_id')
-            ->where('r.site_id',$this->context->site)->whereIn('r.provider_member_id',$providerIds)
-            ->field('r.id,r.provider_member_id,r.status,r.amount,r.review_required,o.rule_json');
-        do{
-            $rows=(clone$query)->where('r.id','>',$cursor)->order('r.id')->limit(self::CHUNK)->select()->toArray();
-            if(!$rows)break;$cursor=(int)end($rows)['id'];
-            foreach($rows as$row){$id=(int)$row['provider_member_id'];$out[$id]=PromotionRelationsReadService::accumulateReward($out[$id]??PromotionRelationsReadService::emptyRewards(),$row);}
-        }while(count($rows)===self::CHUNK);return$out;
-    }
 }

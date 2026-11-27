@@ -160,8 +160,8 @@ try {
     coopNoticeCheck(count(array_filter($sent,static fn(array $r):bool=>$r['event']['to']['member_id']===102&&$r['event']['key']===NoticeConfigService::PHASES['assigned']))===3,'new assignment targets only its current receiving merchant');
     coopNoticeCheck(count(array_filter($sent,static fn(array $r):bool=>$r['event']['to']['member_id']===101&&$r['event']['key']===NoticeConfigService::PHASES['changed']))===3,'publisher receives changed notices, not the receiving work reminder');
     foreach($resolved as $data) {
-        coopNoticeCheck($data['vars']['__weapp_page']==='addon/hsx_lead/pages/workbench/index?collaboration_id='.$id,'miniapp link uses the current collaboration_id');
-        coopNoticeCheck($data['vars']['__wechat_page']==='https://notice-one.example.test/wap/addon/hsx_lead/pages/workbench/index?collaboration_id='.$id,'public-account link uses this tenant HTTPS entry and collaboration_id');
+        coopNoticeCheck($data['vars']['__weapp_page']==='addon/hsx_lead/pages/task/index?task=detail&collaboration_id='.$id.'&from=notice','new miniapp card targets the real detail page and current collaboration_id');
+        coopNoticeCheck($data['vars']['__wechat_page']==='https://notice-one.example.test/wap/addon/hsx_lead/pages/task/index?task=detail&collaboration_id='.$id.'&from=notice','public-account card uses this tenant HTTPS detail entry and collaboration_id');
     }
     foreach($sent as $row) {
         $channel=$row['channel'];$out=$row['event'];

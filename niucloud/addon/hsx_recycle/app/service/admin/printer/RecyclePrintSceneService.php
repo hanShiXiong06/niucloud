@@ -447,6 +447,15 @@ class RecyclePrintSceneService extends BaseAdminService
             }
 
             $bizInfo = $this->resolveBizPrintData((string)($scene['biz_type'] ?? 'device'), $payload);
+            $triggerKey = (string)($scene['condition_config']['trigger']['key'] ?? $scene['trigger_key'] ?? '');
+            if ($requireAuto && $triggerKey === 'device.sign.saved'
+                && ($scene['biz_type'] ?? 'device') === 'device'
+                && ($scene['template_type'] ?? '') === 'device_label'
+                && trim((string)($bizInfo['print_data']['sign_time'] ?? '')) === '') {
+                // PC 逐台保存先打标签，整单 sign_at 此时尚未生成；仅补本次签收保存时间到打印快照。
+                // 已有签收时间仍优先使用，不提前修改订单状态，也不影响其他场景或手动补打。
+                $bizInfo['print_data']['sign_time'] = date('Y-m-d H:i:s');
+            }
             $templateBinding = $this->resolveTemplateBinding($scene, $bizInfo);
             $bizInfo = $this->applyPrintDataOverride($bizInfo, $payload['print_data_override'] ?? []);
 

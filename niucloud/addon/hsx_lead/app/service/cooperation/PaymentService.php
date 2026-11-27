@@ -77,6 +77,8 @@ final class PaymentService
             if ($lead) self::assertCommissionCapacity($this->context->site,$lead,Rules::cents($split['net_amount']));
             $snapshot=$replaced?$ruleConfig:array_replace($ruleConfig,['purpose'=>'commission','fee_percent'=>$ruleConfig['fee_percent'],'fee_minimum'=>$ruleConfig['fee_minimum'],
                 'commission_minimum'=>$ruleConfig['commission_minimum'],'fee_confirmed'=>(bool)$ruleConfig['fee_confirmed']]);
+            $snapshot['promotion_policy']=PromotionService::policyForNewOrder($this->context->site);
+            unset($snapshot['promotion_snapshot'],$snapshot['promotion_review_required'],$snapshot['promotion_review_message']);
             $id=(int)Store::query('coop_order',$this->context->site)->insertGetId($split+[
                 'site_id'=>$this->context->site,'order_no'=>Data::number('CO'),'purpose'=>$purpose,
                 'lead_id'=>$lead?(int)$lead['id']:0,'merchant_id'=>(int)$merchant['id'],'member_id'=>$this->context->memberId,
@@ -375,6 +377,7 @@ final class PaymentService
         if(!$active||(int)$active['id']!==(int)$old['id'])throw new CommonException('该协作已有其他支付单，请先核对原单，不会重复改价');
         Store::query('coop_order',$site)->where('id',$old['id'])->where('status','closed')->update(['business_key'=>'closed:'.$old['id'].':'.hash('sha256',$key),'update_time'=>time()]);
         $rule['reprices_order_id']=(int)$old['id'];$rule['price_override']=$provenance+['source_order_id'=>(int)$old['id'],'original_amount'=>(string)$old['amount'],'amount'=>$prepared['split']['amount']];
+        $rule['promotion_policy']=PromotionService::policyForNewOrder($site);
         $now=time();$id=(int)Store::query('coop_order',$site)->insertGetId($prepared['split']+['site_id'=>$site,'order_no'=>Data::number('CO'),'purpose'=>'commission','lead_id'=>$old['lead_id'],'merchant_id'=>$old['merchant_id'],'member_id'=>$old['member_id'],'business_key'=>$key,'request_id'=>$request,'rule_json'=>Data::json($rule),'status'=>'unpaid','create_time'=>$now,'update_time'=>$now]);
         Store::query('collaboration',$site)->where('id',$lead['id'])->update(['payment_order_id'=>$id,'commission_amount'=>$prepared['split']['amount'],'fee_amount'=>$prepared['split']['fee_amount'],'net_amount'=>$prepared['split']['net_amount'],'rule_json'=>Data::json($rule),'update_time'=>$now]);
         return Store::row('coop_order',$site,$id,true);

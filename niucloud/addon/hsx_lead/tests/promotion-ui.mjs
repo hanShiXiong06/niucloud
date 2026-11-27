@@ -10,7 +10,7 @@ const plugin=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..'),roo
 const Vue=require('vue'),ts=require('typescript'),compiler=require('@vue/compiler-sfc'),sass=require('sass'),postcss=require('postcss'),selectorParser=require('postcss-selector-parser')
 let checks=0
 const check=(value,label)=>{assert.ok(value,label);checks++}
-function execute(source,deps){const module={exports:{}},js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;vm.runInNewContext(`(function(require,module,exports){${js}\n})`,{Date,Math,Number,String,Map,Promise,console})(key=>{if(!(key in deps))throw Error('Unexpected dependency '+key);return deps[key]},module,module.exports);return module.exports}
+function execute(source,deps){const module={exports:{}},js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;vm.runInNewContext(`(function(require,module,exports){${js}\n})`,{Date,Math,Number,String,Map,Promise,console,uni:{getStorageSync:()=>100006}})(key=>{if(!(key in deps))throw Error('Unexpected dependency '+key);return deps[key]},module,module.exports);return module.exports}
 const read=relative=>fs.readFileSync(path.join(plugin,relative),'utf8'),apiCalls=[]
 const request=Object.fromEntries(['get','post'].map(method=>[method,async(url,data)=>{apiCalls.push({method,url,data});return{data:{}}}]))
 const api=execute(read('uni-app/api/promotion.ts'),{'@/utils/request':{default:request}})
@@ -19,7 +19,7 @@ check(apiCalls.filter(call=>call.method==='get').length===4,'all display APIs ar
 check(apiCalls[4].method==='post'&&apiCalls[4].url==='hsx_lead/promotion/bind'&&apiCalls[4].data.confirm===true,'binding is an explicit confirmed POST, never a read side effect')
 const summary={enabled:true,member:{member_id:11,name:'合成测试会员'},provider:{enabled:true},upstream:null,stats:{team_count:3,pending:'1.98',settled:'8.00',held:'0.00'},account:{available:'20.00',framework_cash_out:true},rules:{enabled:true,sources:{}},share:{mid:11,path:'/addon/hsx_lead/pages/profile/index?mid=11&promotion_invite=1'}}
 let identity='member-a',calls=[],overviewWork=async()=>({data:summary}),teamWork=async query=>({data:{data:query.page===1?[{member_id:20}]:[{member_id:20},{member_id:21}],total:2}}),rewardWork=async()=>({data:{data:[],total:0}}),bindingWork=async()=>({data:{member_id:19}}),invitationWork=async mid=>({data:{can_bind:true,inviter:{member_id:mid,name:'合成邀请人'}}})
-const stateModule=execute(read('uni-app/composables/usePromotion.ts'),{vue:Vue,'@/utils/common':{getToken:()=>identity},'../api/cooperation':{coopError:(cause,fallback)=>cause?.msg||cause?.message||fallback},'../api/promotion':{
+const stateModule=execute(read('uni-app/composables/usePromotion.ts'),{vue:Vue,'@/utils/common':{getSiteId:value=>value,getToken:()=>identity},'../api/cooperation':{coopError:(cause,fallback)=>cause?.msg||cause?.message||fallback},'../api/promotion':{
     promotionOverview:async()=>{calls.push('overview');return overviewWork()},promotionTeam:async query=>{calls.push({type:'team',...query});return teamWork(query)},promotionRewards:async query=>{calls.push({type:'rewards',...query});return rewardWork(query)},promotionInvitation:async mid=>{calls.push({type:'invitation',mid});return invitationWork(mid)},bindPromotionInviter:async mid=>{calls.push({type:'bind',mid});return bindingWork(mid)},
 }})
 const s=stateModule.usePromotion()

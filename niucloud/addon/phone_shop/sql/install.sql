@@ -623,6 +623,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}phone_shop_goods_sku`
     `condition_grade` varchar(50)    NOT NULL DEFAULT '' COMMENT '成色等级(整机SKU)',
     `device_snapshot` text COMMENT '设备质检/成色快照json(下架留痕)',
     PRIMARY KEY (`sku_id`),
+    KEY               `idx_goods_sku_product` (`goods_id`),
     KEY               `idx_goods_sku_erp_asset_id` (`erp_asset_id`),
     KEY               `idx_goods_sku_is_default` (`is_default`),
     KEY               `idx_goods_sku_price` (`price`),
@@ -689,7 +690,8 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}phone_shop_goods_stat`
     `collect_num`              INT(11) NOT NULL DEFAULT 0 COMMENT '收藏数量',
     `evaluate_num`             INT(11) NOT NULL DEFAULT 0 COMMENT '评论数量',
     `goods_visit_member_count` INT(11) NOT NULL DEFAULT 0 COMMENT '商品访客数',
-    PRIMARY KEY (`id`)
+    PRIMARY KEY (`id`),
+    KEY `idx_goods_stat_product_day` (`goods_id`, `date_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_general_ci COMMENT='商品数据统计';
 
 

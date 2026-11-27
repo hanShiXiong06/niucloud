@@ -27,6 +27,13 @@ final class PromotionRelationsReadService
         $ids=[];foreach($memberIds as$id)$ids[]=OwnershipScope::ownerId($id);
         return$ids?$this->payments(array_values(array_unique($ids))):[];
     }
+    /** Only the visible tree page; reuses receipt and subject truth, never lists() scans. */
+    public function memberFacts(array $memberIds):array
+    {
+        $payments=$this->memberPaymentFacts($memberIds);if(!$memberIds)return[];$subjects=$this->subjects(array_map('intval',$memberIds));$rows=[];
+        foreach($subjects as$id=>$subject)$rows[$id]=['merchant'=>$subject,'membership'=>self::membershipView(null,$subject),'payment'=>$payments[$id]];
+        $this->attachMembership($rows);return$rows;
+    }
 
     public function lists(array $params=[]): array
     {

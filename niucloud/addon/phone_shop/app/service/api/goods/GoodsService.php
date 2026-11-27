@@ -32,6 +32,7 @@ use addon\phone_shop\app\service\core\goods\CoreGoodsActivePriceService;
 use addon\phone_shop\app\service\core\goods\CoreGoodsConfigService;
 use addon\phone_shop\app\service\core\goods\CoreDeviceAttributeService;
 use addon\phone_shop\app\service\core\goods\CoreMemoryFilterService;
+use addon\phone_shop\app\service\core\goods\CoreModelSpecFacetService;
 use addon\phone_shop\app\service\core\goods\CoreGoodsDescriptionService;
 use addon\phone_shop\app\service\core\goods\CoreGoodsStatService;
 use addon\phone_shop\app\service\core\goods\CoreGoodsLimitBuyService;
@@ -111,9 +112,21 @@ class GoodsService extends BaseApiService
 
         // 二手机:内存 / 成色等级 筛选(支持数组或逗号串)
         if (!empty($where[ 'memory_group' ])) {
-            $mem = is_array($where[ 'memory_group' ]) ? $where[ 'memory_group' ] : array_filter(array_map('trim', explode(',', (string) $where[ 'memory_group' ])));
-            $mem = (new CoreMemoryFilterService())->filterValues((int)$this->site_id, $mem);
-            if (!empty($mem)) $sku_where[] = [ 'goods.memory_group', 'in', array_values($mem) ];
+            $catalog = new CoreMemoryFilterService();
+            $siteId = (int)$this->site_id;
+            $selected = $this->normalizeMultiValue($where['memory_group']);
+            $categories = $this->normalizeMultiValue($where['goods_category'] ?? '');
+            $groups = $categories ? $catalog->groups($siteId, $categories) : [];
+            if ($groups && $selected) {
+                // 旧商品可能只有标题写明容量/表径。筛选项、颜色和点选后的列表共用同一个判定。
+                $facet = (new CoreModelSpecFacetService())->read($siteId, $catalog, $groups, $categories,
+                    $this->normalizeMultiValue($where['brand_id'] ?? ''), $this->normalizeMultiValue($where['condition_grade'] ?? ''),
+                    $this->normalizeMultiValue($where['device_color'] ?? ''), $selected, true);
+                $sku_where[] = ['goods.goods_id', 'in', $facet['ids'] ?: [0]];
+            } else {
+                $mem = $catalog->filterValues($siteId, $selected);
+                if ($mem) $sku_where[] = [ 'goods.memory_group', 'in', $mem ];
+            }
         }
         if (!empty($where[ 'condition_grade' ])) {
             $grade = is_array($where[ 'condition_grade' ]) ? $where[ 'condition_grade' ] : array_filter(array_map('trim', explode(',', (string) $where[ 'condition_grade' ])));
@@ -257,32 +270,17 @@ class GoodsService extends BaseApiService
         $optionGrades = $this->normalizeMultiValue($where['condition_grade'] ?? '');
         $memoryService = new CoreMemoryFilterService();
         $memoryGroups = $memoryService->groups((int)$this->site_id, $optionCategoryIds);
-        $memories = $memoryService->flatten($memoryGroups);
-
-        // 颜色只返回当前分类/型号范围内真实存在的值，避免苹果型号展示安卓颜色等无效噪音。
-        $colorQuery = (new Goods())->where([
-            ['site_id', '=', $this->site_id],
-            ['status', '=', 1],
-            ['sale_status', '=', 'available'],
-            ['delete_time', '=', 0],
-            ['device_color', '<>', ''],
-        ]);
-        $categoryIds = $optionCategoryIds;
-        if ($categoryIds) {
-            $colorQuery->where(function ($query) use ($categoryIds) {
-                foreach ($categoryIds as $index => $categoryId) {
-                    $method = $index === 0 ? 'where' : 'whereOr';
-                    $query->$method('goods_category', 'like', '%"' . (int)$categoryId . '"%');
-                }
-            });
-        }
-        $brandIds = $optionBrandIds;
-        if ($brandIds) $colorQuery->whereIn('brand_id', array_map('intval', $brandIds));
         $optionMemories = $this->normalizeMultiValue($where['memory_group'] ?? '');
-        $optionMemories = $memoryService->filterValues((int)$this->site_id, $optionMemories);
-        if ($optionMemories) $colorQuery->whereIn('memory_group', $optionMemories);
-        if ($optionGrades) $colorQuery->whereIn('condition_grade', $optionGrades);
-        $colors = $colorQuery->field('device_color')->group('device_color')->order('device_color asc')->column('device_color');
+        if ($optionCategoryIds && $memoryGroups) {
+            $facet = (new CoreModelSpecFacetService())->read((int)$this->site_id, $memoryService, $memoryGroups,
+                $optionCategoryIds, $optionBrandIds, $optionGrades, $this->normalizeMultiValue($where['device_color'] ?? ''), $optionMemories);
+            $memoryGroups = $facet['groups'];
+            $colors = $facet['colors'];
+        } else {
+            $colors = $this->catalogColors($optionCategoryIds, $optionBrandIds, $optionGrades,
+                $memoryService->filterValues((int)$this->site_id, $optionMemories));
+        }
+        $memories = $memoryService->flatten($memoryGroups);
         $deviceAttributes = new CoreDeviceAttributeService();
 
         $grades = (new GoodsGrade())
@@ -407,6 +405,19 @@ class GoodsService extends BaseApiService
         ];
     }
 
+    private function catalogColors(array $categoryIds, array $brandIds, array $grades, array $memories): array
+    {
+        $query = (new Goods())->where([
+            ['site_id', '=', $this->site_id], ['status', '=', 1], ['sale_status', '=', 'available'],
+            ['delete_time', '=', 0], ['device_color', '<>', ''],
+        ]);
+        if ($categoryIds) $query->withSearch(['goods_category'], ['goods_category' => $categoryIds]);
+        if ($brandIds) $query->whereIn('brand_id', array_map('intval', $brandIds));
+        if ($memories) $query->whereIn('memory_group', $memories);
+        if ($grades) $query->whereIn('condition_grade', $grades);
+        return $query->group('device_color')->order('device_color asc')->column('device_color');
+    }
+
     private function applyDeviceRangeFilters($query, array $where): void
     {
         $attributeService = new CoreDeviceAttributeService();
@@ -467,6 +478,13 @@ class GoodsService extends BaseApiService
      */
     public function getDetail(array $data)
     {
+        $start = $last = hrtime(true);
+        $timings = [];
+        $mark = static function (string $phase) use (&$last, &$timings) {
+            $now = hrtime(true);
+            $timings[$phase] = round(($now - $last) / 1e6, 1);
+            $last = $now;
+        };
         $sku_id = $data[ 'sku_id' ];
         $goods_id = $data[ 'goods_id' ];
         if (!empty($goods_id)) {
@@ -476,18 +494,16 @@ class GoodsService extends BaseApiService
 
         $goods_sku_model = new GoodsSku();
 
-        if (empty($sku_id) && !empty($goods_id)) {
-            // 查询默认规格项
-            $default_sku_info = $goods_sku_model->where([ [ 'goods_id', '=', $goods_id ], [ 'site_id', '=', $this->site_id ], [ 'is_default', '=', 1 ] ], 'sku_id')
-                ->field('sku_id')->findOrEmpty()->toArray();
-            if (!empty($default_sku_info)) {
-                $sku_id = $default_sku_info[ 'sku_id' ];
-            }
-        }
+        $sku_where = [ [ 'site_id', '=', $this->site_id ] ];
+        if (!empty($goods_id)) $sku_where[] = [ 'goods_id', '=', $goods_id ];
+        $sku_where[] = empty($sku_id) && !empty($goods_id)
+            ? [ 'is_default', '=', 1 ]
+            : [ 'sku_id', '=', $sku_id ];
+        $mark('goods_lookup');
 
         $field = 'sku_id, sku_name, sku_image, sku_no, goods_id, site_id, sku_spec_format, price, market_price, sale_price, stock, weight, volume, sale_num, is_default,member_price';
 
-        $info = $goods_sku_model->where([ [ 'sku_id', '=', $sku_id ], [ 'site_id', '=', $this->site_id ] ])
+        $record = $goods_sku_model->where($sku_where)
             ->field($field)
             ->with([
                 'goods' => function ($query) {
@@ -504,7 +520,10 @@ class GoodsService extends BaseApiService
                 },
             ])
             ->append([ 'sku_image_thumb_small', 'sku_image_thumb_mid', 'sku_image_thumb_big' ])
-            ->findOrEmpty()->toArray();
+            ->findOrEmpty();
+        $mark('sku_relations');
+        $info = $record->toArray();
+        $mark('format_images');
         if (!empty($info) && !empty($info[ 'goods' ])) {
             // 成色等级在商品表中保存的是名称快照，详情页仍需要消费等级中心维护的
             // 图片与说明。按站点和名称读取，避免把后台等级表的主键耦合进商品数据。
@@ -532,6 +551,7 @@ class GoodsService extends BaseApiService
             $info['goods']['goods_desc'] = (new CoreGoodsDescriptionService())
                 ->sanitize((string)($info['goods']['goods_desc'] ?? ''));
             $info[ 'type' ] = $data[ 'type' ] ?? '';
+            $mark('grade_description');
 
             $goods_active_price_service = ( new CoreGoodsActivePriceService() );
             //获取展示信息（价格 标签）
@@ -544,12 +564,16 @@ class GoodsService extends BaseApiService
                 foreach ($info[ 'skuList' ] as &$value) {
                     $value[ 'type' ] = $data[ 'type' ] ?? '';
                     $value[ 'member_discount' ] = $info[ 'goods' ][ 'member_discount' ] ?? '';
-                    $list_show_price = $goods_active_price_service->getShowPrice($value, $this->site_id, $this->member_id);
+                    // 当前 SKU 与列表项取自同一行，用本次请求刚算好的报价，不跨请求缓存价格。
+                    $list_show_price = (int)$value['sku_id'] === (int)$info['sku_id']
+                        ? $detail_show_price
+                        : $goods_active_price_service->getShowPrice($value, $this->site_id, $this->member_id);
                     $value[ 'show_price' ] = $list_show_price[ 'show_price' ];
                     $value[ 'show_type' ] = $list_show_price[ 'show_type' ];
                 }
             }
 
+            $mark('pricing');
             if (!empty($info[ 'goods' ][ 'service_ids' ])) {
                 // 商品服务
                 $info[ 'service' ] = $this->getGoodsService($info[ 'goods' ][ 'service_ids' ]);
@@ -613,22 +637,32 @@ class GoodsService extends BaseApiService
             $core_order_config_service = new CoreOrderConfigService();
             $evaluate_config = $core_order_config_service->getEvaluateConfig($this->site_id);
             $info[ 'evaluate_is_show' ] = $evaluate_config[ 'evaluate_is_show' ];
+            $mark('labels_member_config');
 
             // 商品统计-浏览次数
             CoreGoodsStatService::addStat([ 'site_id' => $this->site_id, 'goods_id' => $info[ 'goods' ][ 'goods_id' ], 'access_num' => 1 ]);
             ( new CoreGoodsAccessNumService() )->inc([ 'goods_id' => $info[ 'goods' ][ 'goods_id' ], 'access_num' => 1 ]);
+            $mark('view_stats');
 
             // 种草秀数据查询
             $info[ 'sow_show_list' ] = event('SowShowData', [ 'relate_id' => $info[ 'goods_id' ], 'relate_type' => 'phone_shop', 'limit' => 3 ])[ 0 ] ?? [];
+            $mark('sow_show');
 
             //自定义详情模版
             $info[ 'diy_detail_info' ] = ( new DiyService() )->getInfo([ 'id' => $info[ 'goods' ][ 'diy_detail_id' ], 'name' => 'DIY_PHONE_SHOP_GOODS_DETAIL' ]);
 
             //获取商品主图第一张图片宽高
-            $first_goods_image = explode(',',$info['goods']['goods_image'])[0] ?? '';
             $info['goods']['image_size'] = ['width' => $info['goods']['goods_image_width'] ?? 800, 'height' => $info['goods']['goods_image_height'] ?? 800];
+            $mark('diy_template');
         }
 
+        $total_ms = round((hrtime(true) - $start) / 1e6, 1);
+        if ($total_ms >= 500) {
+            \think\facade\Log::info('[phone_shop.goods.detail.slow] ' . json_encode([
+                'site_id' => (int)$this->site_id, 'goods_id' => (int)($info['goods_id'] ?? $goods_id),
+                'total_ms' => $total_ms, 'phases_ms' => $timings,
+            ]));
+        }
         return $info;
     }
 

@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace addon\hsx_lead\app\service\cooperation;
 use addon\hsx_lead\app\service\{Context,FrameworkNoticeGateway,NoticeConfigService,NoticePortalEntry,NoticePreflightException};
 use addon\hsx_lead\app\support\Data;
+use addon\hsx_lead\app\service\notice\{AccountNoticePolicyService,NoticeDeliveryWindow,NoticeDeliveryDeferredException};
 use core\exception\{CommonException,NoticeDeliveryException};
 use think\facade\Db;
 
@@ -20,6 +21,7 @@ final class CooperationNoticeService
         $site=(int)($event['site_id']??0);$id=(int)($event['lead_id']??0);$action=(string)($event['action']??'');
         $lead=Store::row('collaboration',$site,$id);
         if(isset($event['assignment_version'])&&((int)$event['assignment_version']!==(int)$lead['assignment_version']||($event['lead_status']??'')!==$lead['status']))return;
+        NoticeDeliveryWindow::assertOpen($site);
         $assignment=TeamService::internalAssignment($lead,true);
         if ($assignment!==null) {
             $merchantId=(int)$lead['publisher_id'];$merchant=Data::row('merchant',$site,$merchantId);
@@ -45,7 +47,15 @@ final class CooperationNoticeService
             $current=Store::row('collaboration',$site,(int)$lead['id'],true);
             if ((int)$current['assignment_version']!==(int)$lead['assignment_version']||$current['status']!==$lead['status']
                 ||(int)$current['publisher_id']!==(int)$lead['publisher_id']||(int)$current['receiver_id']!==(int)$lead['receiver_id']) return null;
-            if (Data::query('audit',$site)->where('dedupe_key',$dedupe)->find()) return null;
+            $existing=Data::query('audit',$site)->where('dedupe_key',$dedupe)->lock(true)->find();
+            if($existing){
+                $saved=Data::decode($existing['detail_json']);if(($saved['status']??'')!=='deferred')return null;
+                // Only locally proven non-submission may resume automatically.
+                $saved['attempts']=(int)($saved['attempts']??0)+1;
+                [$saved,$template]=$this->prepare($site,$lead,$saved);
+                Data::query('audit',$site)->where('id',$existing['id'])->update(['detail_json'=>Data::json($saved),'update_time'=>time()]);
+                return$template===null?null:$this->payload($site,$lead,(int)$existing['id'],$saved,$template);
+            }
             $state=['phase'=>$phase,'channel'=>$channel,'member_id'=>$memberId,'recipient_role'=>$role,'merchant_id'=>$merchantId,'notice_key'=>$key,
                 'assignment_version'=>(int)$lead['assignment_version'],'lead_status'=>$lead['status'],'event_action'=>$action,'attempts'=>1,'retry_count'=>0,'provider_code'=>''];
             [$state,$template]=$this->prepare($site,$lead,$state);
@@ -61,6 +71,7 @@ final class CooperationNoticeService
     {
         if($context->uid<=0)throw new CommonException('仅平台管理人员可以核对并重试通知');
         Store::permission($context,'notice_retry');
+        try{NoticeDeliveryWindow::assertOpen($context->site);}catch(NoticeDeliveryDeferredException$error){throw new CommonException($error->getMessage());}
         if(\addon\hsx_lead\app\service\notice\NoticeTaskRuntime::inTransaction())throw new CommonException('请在业务保存完成后再重试通知，本次未提交渠道');
         if(($input['confirm']??null)!==true)throw new CommonException('请明确确认重试本条通知；短信可能计费');
         $reason=Data::text($input,'reason',200,true);$site=$context->site;
@@ -81,8 +92,10 @@ final class CooperationNoticeService
     public static function retryBlockReason(int $site,array $lead,array $row,array $state,array &$cache=[]): string
     {
         if($row['entity_type']!=='collaboration_notice'||(int)$row['entity_id']!==(int)$lead['id'])return'这不是当前工单的渠道通知记录';
+        if(!isset($cache['ttl_seconds']))$cache['ttl_seconds']=(int)AccountNoticePolicyService::raw($site)['ttl_seconds'];
+        if((int)$row['create_time']+$cache['ttl_seconds']<=time())return'通知已超过时效，不再重发；请查看工单当前状态';
         if(!in_array($state['channel']??'',['weapp','wechat','sms'],true)||!isset(NoticeConfigService::PHASES[$state['phase']??''])||($state['notice_key']??'')!==NoticeConfigService::PHASES[$state['phase']])return'通知场景记录不完整，暂不能重试';
-        if(!in_array($state['status']??'',['disabled','pending_configuration','pending_recipient','not_submitted','rejected'],true))return'仅明确未提交或被服务商拒绝的通知可重试；已受理或结果未知时不能重复发送';
+        if(!in_array($state['status']??'',['disabled','pending_configuration','pending_recipient','not_submitted','rejected','deferred'],true))return'仅明确未提交或被服务商拒绝的通知可重试；已受理或结果未知时不能重复发送';
         if((int)($state['retry_count']??0)>=3)return'本条通知已重试3次，请先核对渠道日志';
         if((int)($state['assignment_version']??0)!==(int)$lead['assignment_version']||($state['lead_status']??'')!==$lead['status'])return'工单已变化，不再发送过时提醒';
         $merchantId=(int)($state['merchant_id']??0);$action=(string)($state['event_action']??'');
@@ -103,6 +116,7 @@ final class CooperationNoticeService
     }
     private function prepare(int $site,array $lead,array $state): array
     {
+        NoticeDeliveryWindow::assertOpen($site);
         $channel=(string)$state['channel'];$key=(string)$state['notice_key'];$merchant=Data::row('merchant',$site,(int)$state['merchant_id']);
         NoticeConfigService::syncSite($site);$config=Db::name('sys_notice')->where('site_id',$site)->where('key',$key)->find()?:[];
         $mapping=match($channel){'weapp'=>NoticeConfigService::weappForSite($site),'wechat'=>NoticeConfigService::wechatForSite($site),'sms'=>require dirname(__DIR__,2).'/dict/notice/sms.php'};
@@ -127,24 +141,28 @@ final class CooperationNoticeService
     {
         $site=(int)$claim['site_id'];
         $id=(int)$claim['data']['notice_audit_id'];
-        $attempt=(int)$claim['data']['notice_attempt'];$providerCode='';
+        $attempt=(int)$claim['data']['notice_attempt'];$providerCode='';$deferred=null;
         try {
             $result=$this->dispatcher?($this->dispatcher)($claim):(new FrameworkNoticeGateway())->dispatch($claim);
             $accepted=is_array($result)&&($result['accepted']??null)===true&&($result['channel']??'')===$claim['channel']&&($result['provider_code']??null)==='0';
             $status=$result===false?'uncertain':($accepted?'accepted':'submitted');
             $providerCode=$accepted?'0':'';
             $message=$result===false?'结果待核实，请先核对框架日志，不盲目重发':($accepted?'服务商已受理，不代表用户已查看或终端已送达':'已交牛云通知通道，未返回可核实的服务商回执；不代表终端已收到');
-        } catch(NoticePreflightException $error){$status='not_submitted';$message='发送前校验未通过，本次未提交服务商；请核对渠道配置和原接收账号';}
+        } catch(NoticeDeliveryDeferredException $error){$deferred=$error;$status='deferred';$message=$error->getMessage();}
+        catch(NoticePreflightException $error){$status='not_submitted';$message='发送前校验未通过，本次未提交服务商；请核对渠道配置和原接收账号';}
         catch(NoticeDeliveryException $error){
             $status=$error->channel()!==$claim['channel']?'uncertain':match($error->deliveryStatus()){'rejected'=>'rejected','not_submitted'=>'not_submitted',default=>'uncertain'};
             $code=$error->providerCode();$providerCode=preg_match('/^[A-Za-z0-9_.-]{1,40}$/D',$code)?$code:'';
             $message=self::deliveryMessage($status,$providerCode);
         } catch (\Throwable $error) {$status='uncertain';$message='渠道处理异常，可能已提交；请核对框架日志，业务已保存';}
-        Db::transaction(function()use($site,$id,$attempt,$status,$message,$providerCode):void {
+        Db::transaction(function()use($site,$id,$attempt,$status,$message,$providerCode,$deferred):void {
             $row=Data::row('audit',$site,$id,true);$state=Data::decode($row['detail_json']);
             if(($state['status']??'')!=='dispatching'||(int)($state['attempts']??1)!==$attempt)return;
-            $state['status']=$status;$state['message']=$message;$state['provider_code']=$providerCode;Data::query('audit',$site)->where('id',$id)->update(['detail_json'=>Data::json($state),'update_time'=>time()]);
+            $state['status']=$status;$state['message']=$message;$state['provider_code']=$providerCode;
+            if($deferred!==null){$state['next_retry_at']=$deferred->until();$state['attempts']=max(0,$attempt-1);}
+            Data::query('audit',$site)->where('id',$id)->update(['detail_json'=>Data::json($state),'update_time'=>time()]);
         });
+        if($deferred!==null)throw$deferred;
     }
     private static function deliveryMessage(string $status,string $code): string
     {
@@ -189,7 +207,9 @@ final class CooperationNoticeService
     }
     public static function templateData(int $site,int $leadId,int $auditId,string $channel,string $expectedKey,int $expectedAttempt=0): array
     {
+        NoticeDeliveryWindow::assertOpen($site);
         $audit=Data::row('audit',$site,$auditId);$state=Data::decode($audit['detail_json']);
+        if((int)$audit['create_time']+(int)AccountNoticePolicyService::raw($site)['ttl_seconds']<=time())throw new NoticePreflightException('通知已超过时效，未发送');
         if ($audit['entity_type']!=='collaboration_notice'||(int)$audit['entity_id']!==$leadId||($state['channel']??'')!==$channel||($state['status']??'')!=='dispatching'
             ||($expectedAttempt>0&&$expectedAttempt!==(int)($state['attempts']??1))) throw new NoticePreflightException('通知与原协作记录不对应，未发送');
         $key=NoticeConfigService::PHASES[$state['phase']??'']??'';
@@ -215,8 +235,8 @@ final class CooperationNoticeService
         if (!$member||$identity===''||empty($member[$identity])) throw new NoticePreflightException('通知接收账号已停用或渠道身份失效，未发送');
         // A returned receiver may know the outcome, but no longer has access to
         // the customer record. Its reminder opens only the authenticated desk.
-        $entry=NoticePortalEntry::get($site);$query=$returned?'':'?collaboration_id='.$leadId;
-        $page=$entry['miniapp_path'].$query;$url=$entry['h5_url']!==''?$entry['h5_url'].$query:'';
+        $entry=$returned?NoticePortalEntry::get($site):NoticePortalEntry::forLead($site,$leadId);
+        $page=$entry['miniapp_path'];$url=$entry['h5_url'];
         $internalComplete=(int)$lead['publisher_id']>0&&(int)$lead['publisher_id']===(int)$lead['receiver_id']&&$lead['status']==='paid';
         $vars=['__weapp_page'=>$page,'__wechat_page'=>$url,'url'=>$url,'__hsx_lead_notice_id'=>(string)$auditId,'__hsx_lead_notice_channel'=>$channel,'__hsx_lead_notice_attempt'=>(string)max(1,(int)($state['attempts']??1)),
             '__hsx_lead_notice_merchant_id'=>(string)$state['merchant_id'],

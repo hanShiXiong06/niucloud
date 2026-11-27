@@ -63,6 +63,7 @@ final class FrameworkNoticeGateway
                 '__hsx_lead_notice_id','__hsx_lead_notice_channel','__hsx_lead_notice_attempt']));
             $event['vars']=$smsVars;
         }
+        \addon\hsx_lead\app\service\notice\NoticeDeliveryWindow::assertOpen((int)$payload['site_id']);
         if($this->sender)return($this->sender)($channel,$event);
         $sender=match($channel){'weapp'=>new \app\listener\notice\Weapp(),'wechat'=>new \app\listener\notice\Wechat(),'sms'=>new \app\listener\notice\Sms()};
         return$sender->handle($event);

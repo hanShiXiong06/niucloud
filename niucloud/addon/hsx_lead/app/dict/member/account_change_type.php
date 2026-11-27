@@ -20,7 +20,7 @@ return [
             'is_change_get' => 1,
         ],
         'hsx_lead_promotion_income' => [
-            'name' => '商户一级推广奖励',
+            'name' => '商户推广奖励',
             'inc' => 1,
             'dec' => 0,
             'is_change_get' => 1,

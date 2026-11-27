@@ -105,7 +105,7 @@ try {
     $expires=$payments->createOrder(['purpose'=>'commission','lead_id'=>$expiredLead['id'],'amount'=>'50.00','request_id'=>'promotion-expiry-fixture']);
     (new CoreConfigService())->setConfig($site,PromotionService::RELATION_PREFIX.'102',['pid'=>101,'bound_at'=>Rules::addMonths(time(),1)-90*86400]);
     $config['eligibility_months']=1;$admin->saveConfig($config);PaymentService::confirm($fact($expires,'PROMOTION_EXPIRED_PAY'));
-    promotionCheck(Db::name('hsx_lead_promotion_reward')->where('coop_order_id',$expires['id'])->count()===0,'eligibility window enforced at actual payment');
+    promotionCheck(Db::name('hsx_lead_promotion_reward')->where('coop_order_id',$expires['id'])->count()===1,'new order retains its creation-time unlimited policy when administrator changes rules before payment');
     promotionCheck(!method_exists($promoter,'withdraw'),'promotion delegates withdrawals to framework');
     $held=Db::name('hsx_lead_promotion_reward')->where('coop_order_id',$pending['id'])->find();
     promotionDeny(fn()=>$admin->resume((int)$held['id'],['reason'=>'Unverified refund']),'active refund cannot be overridden by review recovery');
@@ -116,7 +116,7 @@ try {
     promotionCheck($resumed['status']==='pending'&&$resumed['amount']===$held['amount']&&$resumed['rate']===$held['rate']&&(int)$resumed['provider_member_id']===(int)$held['provider_member_id'],'review recovery keeps amount and inviter snapshot');
     promotionCheck((string)Db::name('member')->where('member_id',101)->value('commission')===$balance,'resuming alone does not credit or transfer money');
     promotionDeny(fn()=>$admin->resume((int)$held['id'],['reason'=>'repeat']),'same pending reward cannot be resumed twice');
-    promotionCheck($admin->settle()['settled']===1,'reviewed original award can complete settlement');
+    promotionCheck($admin->settle()['settled']>=1&&Db::name('hsx_lead_promotion_reward')->where('id',$held['id'])->value('status')==='settled','reviewed original award can complete settlement alongside other eligible frozen orders');
     promotionDeny(fn()=>$admin->resume((int)$held['id'],['reason'=>'already credited']),'settled reward never returns to pending');
     echo 'PASS '.$checks." promotion database/finance checks; random owned localhost schema only; external network disabled; no real payment.\n";
 }catch(Throwable $error){$failed=true;fwrite(STDERR,'After '.$checks.' checks: '.$error->getMessage().' '.$error->getFile().':'.$error->getLine()."\n");}

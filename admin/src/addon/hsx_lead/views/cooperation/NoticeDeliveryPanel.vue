@@ -73,7 +73,7 @@ const user=useUserStore()
 const canRead=computed(()=>hasLeadPagePermission(user,'hsx_lead_cooperation_notice_list'))
 const canRetry=computed(()=>canRead.value&&hasLeadPagePermission(user,'hsx_lead_cooperation_notice_retry'))
 const channels=[{value:'weapp',label:'小程序'},{value:'wechat',label:'公众号'},{value:'sms',label:'短信'},{value:'queue',label:'通知任务'}]
-const statuses:Record<string,string>={pending:'等待处理',processing:'处理中',processed:'任务处理完成',obsolete:'业务已过时',failed:'处理失败，待核对',submitted:'已交框架，渠道未核实',accepted:'渠道已受理',rejected:'渠道明确拒绝',not_submitted:'未提交渠道',uncertain:'结果待核实',dispatching:'提交结果待核实',disabled:'渠道未开启',pending_configuration:'待配置模板',pending_recipient:'接收人待绑定'}
+const statuses:Record<string,string>={pending:'等待处理',processing:'处理中',processed:'任务处理完成',obsolete:'业务已过时',expired:'通知已过时',deferred:'等待发送时段',failed:'处理失败，待核对',submitted:'已交框架，渠道未核实',accepted:'渠道已受理',rejected:'渠道明确拒绝',not_submitted:'未提交渠道',uncertain:'结果待核实',dispatching:'提交结果待核实',disabled:'渠道未开启',pending_configuration:'待配置模板',pending_recipient:'接收人待绑定'}
 const statusOptions=Object.entries(statuses).map(([value,label])=>({value,label}))
 const channelLabel=(value:string)=>channels.find(item=>item.value===value)?.label||'未知渠道'
 const statusLabel=(value:string)=>statuses[value]||'状态待核对'

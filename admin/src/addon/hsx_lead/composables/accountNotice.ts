@@ -1,7 +1,7 @@
 export type NoticeRow = Record<string, any>;
 export const accountNoticeEvents: Record<string, string> = { account_balance_changed: '余额变动', account_money_changed: '可提现余额变动', account_commission_changed: '佣金变动', cooperation_acceptance_reminder: '接单倒计时提醒', cooperation_response_overdue: '门店尚未接单提醒', cooperation_assignment_accepted: '门店接单成功提醒' };
 export const accountNoticeChannels: Record<string, string> = { weapp: '微信小程序', wechat: '微信公众号', sms: '短信' };
-export const accountNoticeStatuses: Record<string, string> = { pending: '等待发送', dispatching: '提交中，待核实', accepted: '渠道已受理', unknown: '结果待核实', pending_configuration: '待配置模板', pending_recipient: '接收人待绑定', pending_authorization: '待用户订阅', paused: '规则或偏好已关闭', retry_wait: '等待自动重试', rejected: '渠道明确拒绝', expired: '已过期', exhausted: '已达尝试上限', obsolete: '交付已变更' };
+export const accountNoticeStatuses: Record<string, string> = { pending: '等待发送', dispatching: '提交中，待核实', accepted: '渠道已受理', unknown: '结果待核实', pending_configuration: '待配置模板', pending_recipient: '接收人待绑定', pending_authorization: '待用户订阅', paused: '已暂停或等待发送时段', retry_wait: '等待自动重试', rejected: '渠道明确拒绝', expired: '已过期', exhausted: '已达尝试上限', obsolete: '交付已变更' };
 export const accountNoticeVariables: Record<string, string> = { account_name: '账户类型', change_direction: '变动方向', change_amount: '变动金额', account_balance: '变动后余额', occurred_at: '变动时间', record_no: '账目编号' };
 export const cooperationNoticeVariables: Record<string, string> = { task_no: '线索编号', status_text: '处理状态', notice_remark: '操作提示', occurred_at: '发生时间', response_deadline: '接单提醒时间', remaining_minutes: '剩余分钟', store_name: '相关门店' };
 export const ACCOUNT_NOTICE_FIELD_PATTERN = /^(thing|character_string|time|date|phrase|number)([1-9]\d{0,2})$/;
@@ -27,6 +27,12 @@ export function normalizeResponseReminderMinutes(value: unknown): number[] {
     if (!Array.isArray(value) || value.length > 8 || value.some(item => !['number', 'string'].includes(typeof item) || !/^\d{1,4}$/.test(String(item)) || !Number.isInteger(Number(item)) || Number(item) < 1 || Number(item) > 1440)) throw Error('接单提醒节点请设置1—1440分钟内的整数，最多8项');
     return [...new Set(value.map(Number))].sort((left, right) => right - left);
 }
+export function normalizeNoticeQuietHours(value: unknown): NoticeRow {
+    if(value === undefined) return { enabled:false, start:'22:00', end:'08:00', timezone:'Asia/Shanghai' };
+    const rule=value as NoticeRow;
+    if(!rule || Array.isArray(rule) || typeof rule.enabled!=='boolean' || rule.timezone!=='Asia/Shanghai' || ![rule.start,rule.end].every(time=>typeof time==='string'&&/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/.test(time)) || rule.start===rule.end) throw Error('请核对免打扰开关、起止时间；开始和结束时间不能相同');
+    return {enabled:rule.enabled,start:rule.start,end:rule.end,timezone:'Asia/Shanghai'};
+}
 export function parseAccountNoticeSettings(value: any): NoticeRow {
     if (!value || typeof value.enabled !== 'boolean' || typeof value.installed !== 'boolean' || !Number.isInteger(value.ttl_seconds) || value.ttl_seconds < 300 || value.ttl_seconds > 86400 || !Number.isInteger(value.max_attempts) || value.max_attempts < 1 || value.max_attempts > 5 || !Array.isArray(value.events) || !value.events.length || value.events.length > 32)
         throw Error('通知规则返回不完整，请核对配套后端后重新读取');
@@ -43,7 +49,7 @@ export function parseAccountNoticeSettings(value: any): NoticeRow {
                 throw Error('通知渠道状态返回不完整，请重新读取');
     }
     if (value.events.some((event: NoticeRow) => String(event.event_key).startsWith('cooperation_'))) normalizeResponseReminderMinutes(value.response_reminder_minutes);
-    return JSON.parse(JSON.stringify(value));
+    return JSON.parse(JSON.stringify({...value,quiet_hours:normalizeNoticeQuietHours(value.quiet_hours)}));
 }
 export function accountTemplatePayload(channel: string, draft: NoticeRow): NoticeRow {
     const fields = (draft.fields || []).map((field: NoticeRow) => ({ keyword: String(field.keyword || '').trim(), variable: String(field.variable || ''), label: String(field.label || '').trim() }));

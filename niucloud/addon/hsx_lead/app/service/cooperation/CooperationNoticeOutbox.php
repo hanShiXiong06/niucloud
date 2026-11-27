@@ -4,6 +4,7 @@ namespace addon\hsx_lead\app\service\cooperation;
 
 use addon\hsx_lead\app\job\DispatchCooperationNotice;
 use addon\hsx_lead\app\support\Data;
+use addon\hsx_lead\app\service\notice\{AccountNoticePolicyService,NoticeDeliveryWindow,NoticeDeliveryDeferredException};
 use think\facade\{Cache,Db,Log};
 
 /** Durable business intents; NiuCloud owns the queue, templates and senders. */
@@ -46,6 +47,7 @@ final class CooperationNoticeOutbox
             $row=Data::row('audit',$site,$id,true);if($row['entity_type']!==self::TYPE||$row['action']!=='notice_pending')return null;
             $state=Data::decode($row['detail_json']);
             if(($state['status']??'')==='processing'&&(int)$row['update_time']>time()-180)return null;
+            if((int)($state['next_retry_at']??0)>time())return null;
             $lead=Store::query('collaboration',$site)->where('id',(int)$row['entity_id'])->find();
             // Missing business facts are not a transient provider error. Keep a
             // visible terminal record so one orphan cannot poison every later
@@ -58,6 +60,10 @@ final class CooperationNoticeOutbox
             if((int)$lead['assignment_version']!==(int)$state['assignment_version']||$lead['status']!==$state['lead_status']){
                 self::finish($site,$id,$state,'obsolete','工单已更新，不发送过时提醒');return null;
             }
+            $policy=AccountNoticePolicyService::raw($site);$expires=(int)$row['create_time']+(int)$policy['ttl_seconds'];
+            if($expires<=time()){self::finish($site,$id,$state,'expired','通知已超过时效，不再补发');return null;}
+            $next=NoticeDeliveryWindow::nextAllowed($policy);
+            if($next>time()){self::defer($site,$id,$state,$next,$expires);return null;}
             if((int)($state['attempts']??0)>=10){self::finish($site,$id,$state,'failed','通知处理多次未完成，请平台核对框架通知日志');return null;}
             $state['status']='processing';$state['attempts']=(int)($state['attempts']??0)+1;$state['message']='通知任务处理中';
             Data::query('audit',$site)->where('id',$id)->update(['detail_json'=>Data::json($state),'update_time'=>time()]);
@@ -79,6 +85,11 @@ final class CooperationNoticeOutbox
                 }
                 self::finish($site,$id,$state,'processed','事件已处理，各渠道结果以通知日志为准');return true;
             });
+        }catch(NoticeDeliveryDeferredException $error){
+            Db::transaction(function()use($site,$id,$event,$error):void{$row=Data::row('audit',$site,$id,true);$state=Data::decode($row['detail_json']);
+                if(!self::ownsAttempt($row,$state,$event))return;
+                $state['attempts']=max(0,(int)$state['attempts']-1);
+                self::defer($site,$id,$state,$error->until(),(int)$row['create_time']+(int)AccountNoticePolicyService::raw($site)['ttl_seconds']);});return false;
         }catch(\Throwable $error){
             Db::transaction(function()use($site,$id,$event):void{$row=Data::row('audit',$site,$id,true);$state=Data::decode($row['detail_json']);if(!self::ownsAttempt($row,$state,$event))return;$state['status']='pending';$state['message']='业务已保存，通知等待再次处理';Data::query('audit',$site)->where('id',$id)->update(['detail_json'=>Data::json($state),'update_time'=>time()]);});
             Log::warning('协作通知事件待补偿：site='.$site.', id='.$id.', type='.get_class($error));return false;
@@ -87,6 +98,12 @@ final class CooperationNoticeOutbox
     private static function ownsAttempt(array $row,array $state,array $event): bool
     {
         return $row['action']==='notice_pending'&&($state['status']??'')==='processing'&&(int)($state['attempts']??0)===(int)$event['outbox_attempt'];
+    }
+    private static function defer(int $site,int $id,array $state,int $until,int $expires): void
+    {
+        if($until>=$expires){self::finish($site,$id,$state,'expired','通知会在免打扰结束前过时，不再发送');return;}
+        $state['status']='pending';$state['next_retry_at']=$until;$state['message']=NoticeDeliveryWindow::message($until);
+        Data::query('audit',$site)->where('id',$id)->update(['detail_json'=>Data::json($state),'update_time'=>time()]);
     }
     private static function finish(int $site,int $id,array $state,string $status,string $message): void
     {
@@ -114,6 +131,7 @@ final class CooperationNoticeOutbox
                 // Only an in-flight worker owns the 180-second processing lease.
                 $ids=Data::query('audit',$site)->where('action','notice_pending')->where('entity_type',self::TYPE)
                     ->whereRaw("(JSON_UNQUOTE(JSON_EXTRACT(IF(JSON_VALID(detail_json),detail_json,'{}'),'$.status')) = 'pending' OR update_time <= :lease_before)",['lease_before'=>time()-180])
+                    ->whereRaw("COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(IF(JSON_VALID(detail_json),detail_json,'{}'),'$.next_retry_at')) AS UNSIGNED),0) <= :due_now",['due_now'=>time()])
                     ->order('id')->limit(max(1,min(50,$eventLimit)))->column('id');
                 foreach($ids as$id){
                     $result['examined']++;

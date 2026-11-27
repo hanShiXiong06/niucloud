@@ -148,6 +148,7 @@ final class OrderPricingService
         $existing=Store::query('coop_order',$this->context->site)->where('merchant_id',$old['merchant_id'])->where('request_id',$request)->lock(true)->find();
         if($existing){$snapshot=Data::decode($existing['rule_json']);if((int)($snapshot['reprices_order_id']??0)!==(int)$old['id']||Rules::cents((string)$existing['amount'])!==Rules::cents($intent['amount']))throw new CommonException('改价请求已关联其他会员付款，请核对');return $existing;}
         $rule=$quote['rule'];$rule['reprices_order_id']=(int)$old['id'];$now=time();
+        $rule['promotion_policy']=PromotionService::policyForNewOrder($this->context->site);
         $id=(int)Store::query('coop_order',$this->context->site)->insertGetId(['site_id'=>$this->context->site,'order_no'=>Data::number('CO'),'purpose'=>'membership','lead_id'=>0,'merchant_id'=>$old['merchant_id'],'member_id'=>$old['member_id'],'business_key'=>'membership:'.$old['merchant_id'].':'.substr(hash('sha256',$request),0,48),'request_id'=>$request,'amount'=>$quote['amount'],'fee_amount'=>'0.00','net_amount'=>'0.00','rule_json'=>Data::json($rule),'status'=>'unpaid','create_time'=>$now,'update_time'=>$now]);
         return Store::row('coop_order',$this->context->site,$id,true);
     }

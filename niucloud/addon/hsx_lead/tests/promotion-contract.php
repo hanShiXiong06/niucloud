@@ -25,7 +25,7 @@ $check(str_contains(file_get_contents($plugin.'/app/event.php'),'PromotionRefund
 $check(str_contains(file_get_contents($plugin.'/Addon.php'),'promotionStatus')&&str_contains(file_get_contents($plugin.'/app/dict/schedule/schedule.php'),'hsx_lead_promotion_settle'),'separate scheduled settlement is registered and preserved/default-off');
 $sql=file_get_contents($plugin.'/sql/install.sql');
 $check(substr_count($sql,'CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_promotion_reward`')===1,'one new reward audit table only');
-$check(str_contains($sql,'UNIQUE KEY `uk_site_order` (`site_id`,`coop_order_id`)'),'database enforces per-site source idempotency');
+$check(str_contains($sql,'UNIQUE KEY `uk_site_order_level` (`site_id`,`coop_order_id`,`commission_level`)'),'database enforces per-site per-order per-level source idempotency');
 $check(!str_contains($sql,'hsx_lead_wallet')&&!str_contains($sql,'hsx_lead_withdrawal'),'no new wallet or withdrawal table');
 $menus=require $plugin.'/app/dict/menu/site.php';$keys=[];$walk=function(array $rows)use(&$walk,&$keys):void{foreach($rows as $row){$keys[$row['menu_key']]=$row;if(!empty($row['children']))$walk($row['children']);}};$walk($menus);
 foreach(['manage','rewards','config','config_save','providers','providers_save','provider_review','settle','retry','hold','resume'] as $key)$check(isset($keys['hsx_lead_promotion_'.$key]),'explicit menu/API permission '.$key);

@@ -212,9 +212,14 @@ class CoreRefundActionService extends BaseCoreService
         $order_goods_list = $check_data[ 'order_goods_list' ];
 
         // ERP 托管单(有 relate_source):退款由 ERP 管控,商城侧禁止
-        $order_ids = array_values(array_unique(array_column($order_goods_list, 'order_id')));
+        $order_ids = array_values(array_unique($order_goods_list->column('order_id')));
         if (!empty($order_ids) && ( new Order() )->whereIn('order_id', $order_ids)->where('relate_source', '<>', '')->count() > 0) {
             throw new CommonException('此订单由 ERP 统一管理,退款 / 退货请到 ERP 操作');
+        }
+
+        // 商家主动退款按勾选商品逐项全退；金额已变化时需要重新确认。
+        if (bccomp((string) $shop_active_refund_money, number_format($check_data['refund_money'], 2, '.', ''), 2) !== 0) {
+            throw new CommonException('退款金额与所选商品当前可退金额不一致，请刷新订单、核对金额后重试');
         }
 
         foreach ($order_goods_list as $order_goods_info) {

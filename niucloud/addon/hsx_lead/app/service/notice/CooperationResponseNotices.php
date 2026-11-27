@@ -129,10 +129,10 @@ final class CooperationResponseNotices
     }
     public static function variables(array $task,array $lead): array
     {
-        $snapshot=Data::decode($task['payload_json']??'');$entry=NoticePortalEntry::get((int)$task['site_id']);$query='?collaboration_id='.$lead['id'];
+        $snapshot=Data::decode($task['payload_json']??'');$entry=NoticePortalEntry::forLead((int)$task['site_id'],(int)$lead['id']);
         $variables=['task_no'=>mb_substr((string)$lead['lead_no'],0,32),'status_text'=>$task['event_key']===self::ACCEPTED?'已接单':'待接单',
             'notice_remark'=>self::remark($task['event_key']),'occurred_at'=>date('Y-m-d H:i:s',(int)$snapshot['occurred_at']),
-            'store_name'=>mb_substr((string)$snapshot['store_name'],0,20),'__weapp_page'=>$entry['miniapp_path'].$query,'__wechat_page'=>$entry['h5_ready']?$entry['h5_url'].$query:''];
+            'store_name'=>mb_substr((string)$snapshot['store_name'],0,20),'__weapp_page'=>$entry['miniapp_path'],'__wechat_page'=>$entry['h5_ready']?$entry['h5_url']:''];
         if($task['event_key']!==self::ACCEPTED){if((int)$lead['response_deadline']<=0)throw new NoticePreflightException('原交付未设置接单提醒时间，未发送');
             $variables['response_deadline']=date('Y-m-d H:i:s',(int)$lead['response_deadline']);$variables['remaining_minutes']=(string)max(0,(int)ceil(((int)$lead['response_deadline']-time())/60));}
         return$variables;

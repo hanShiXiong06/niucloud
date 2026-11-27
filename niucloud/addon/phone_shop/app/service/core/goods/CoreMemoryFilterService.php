@@ -6,14 +6,14 @@ namespace addon\phone_shop\app\service\core\goods;
 use addon\phone_shop\app\model\goods\Category;
 use addon\phone_shop\app\model\goods\GoodsSpecGroup;
 use addon\phone_shop\app\model\goods\GoodsSpecItem;
-use addon\phone_shop\app\service\core\intake\CoreListingMappingService;
+use addon\phone_shop\app\support\GoodsMemorySpec;
+use app\service\core\sys\CoreConfigService;
 
 /** 内存/表盘/其他规格筛选只消费本站维护的规格字典，不从库存反推候选项。 */
 class CoreMemoryFilterService
 {
     private array $catalogs = [];
     private array $categories = [];
-    private array $mappingConfigs = [];
     private array $variants = [];
 
     public function groups(int $siteId, array $categoryIds = []): array
@@ -38,18 +38,21 @@ class CoreMemoryFilterService
         $values = [];
         $selected = array_values(array_unique(array_filter(array_map(static fn($v) => is_scalar($v) ? trim((string)$v) : '', $selected), static fn($v) => $v !== '')));
         if ($selected === []) return [];
-        if (!isset($this->mappingConfigs[$siteId])) {
-            $this->mappingConfigs[$siteId] = (new CoreListingMappingService())->getConfig($siteId);
-        }
         if (!isset($this->variants[$siteId])) {
-            $mapper = new CoreListingMappingService();
-            $aliases = (array)($this->mappingConfigs[$siteId]['memory_aliases'] ?? []);
+            $config = (new CoreConfigService())->getConfigValue($siteId, GoodsMemorySpec::CONFIG_KEY);
+            $aliases = is_array($config) ? (array)($config['memory_aliases'] ?? []) : [];
             $known = [];
             foreach ($this->groups($siteId) as $group) {
                 foreach ($group['items'] as $item) {
                     $raw = (string)$item['value'];
-                    $normal = $mapper->normalizeMemory($raw, $aliases);
+                    $normal = GoodsMemorySpec::normalize($raw, $aliases);
                     $variants = array_values(array_unique(array_filter([$raw, $normal], static fn($v) => $v !== '')));
+                    // 后台写 1TB、存量商品写 1T 时，展示和点击查询要能双向匹配。
+                    // 只扩展单容量的单位，不拆开 12GB+256GB 或改写手表尺寸。
+                    if (preg_match('/^\d+[gt]b?$/iD', $raw) && preg_match('/^(\d+[GT])B$/D', $normal, $m)
+                        && GoodsMemorySpec::normalize($m[1], $aliases) === $normal && !in_array($m[1], $variants, true)) {
+                        $variants[] = $m[1];
+                    }
                     foreach ($variants as $variant) $known[$variant] = array_values(array_unique(array_merge($known[$variant] ?? [], $variants)));
                 }
             }
@@ -60,6 +63,53 @@ class CoreMemoryFilterService
             foreach ($this->variants[$siteId][$value] ?? [$value] as $variant) $values[$variant] = true;
         }
         return array_map('strval', array_keys($values));
+    }
+
+    /** 给一批在售商品复用的分类归属查询。并选手机和手表时，各自只消费自己分类的字典。 */
+    public function bindings(int $siteId, array $groups): callable
+    {
+        $groupIds = array_column($groups, 'group_id');
+        $inScope = array_fill_keys($groupIds, true);
+        $bound = [];
+        foreach ($this->catalogs[$siteId][0] ?? [] as $group) {
+            $gid = (int)$group['group_id'];
+            if (!isset($inScope[$gid])) continue;
+            $ids = $group['category_ids'] ?? [];
+            if (is_string($ids)) $ids = explode(',', $ids);
+            $ids = is_array($ids) ? $ids : [];
+            $ids[] = $group['category_id'] ?? 0;
+            foreach ($ids as $id) {
+                if ((int)$id > 0) $bound[(int)$id][$gid] = true;
+            }
+        }
+        $parents = array_column($this->categories[$siteId] ?? [], 'pid', 'category_id');
+        $byCategory = [];
+        return static function ($path) use ($bound, $parents, &$byCategory, $groupIds): array {
+            $ids = is_array($path) ? $path : json_decode((string)$path, true);
+            $nodes = $ancestors = [];
+            foreach ((array)$ids as $id) {
+                $id = (int)$id;
+                if (!isset($parents[$id])) continue;
+                if (!isset($byCategory[$id])) {
+                    $node = $id;
+                    $nearest = $visited = [];
+                    while ($node > 0 && isset($parents[$node]) && !isset($visited[$node])) {
+                        $visited[$node] = true;
+                        if (!$nearest && isset($bound[$node])) $nearest = $bound[$node];
+                        $node = (int)$parents[$node];
+                    }
+                    unset($visited[$id]);
+                    $byCategory[$id] = [$nearest, $visited];
+                }
+                $nodes[$id] = true;
+                $ancestors += $byCategory[$id][1];
+            }
+            // 商品常保存完整路径。手表叶子已有自己的表径组时，不再叠加上级的通用苹果容量组。
+            // 多条独立挂类路径分别继承自己的最近绑定。
+            $allowed = [];
+            foreach (array_diff_key($nodes, $ancestors) as $leaf => $_) $allowed += $byCategory[$leaf][0];
+            return array_values(array_intersect($groupIds, array_keys($allowed)));
+        };
     }
 
     /** 纯组合逻辑供接口与隔离回归复用；再次核对站点，避免关系查询漏隔离。 */

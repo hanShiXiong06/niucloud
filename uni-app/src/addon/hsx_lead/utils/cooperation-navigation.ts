@@ -6,14 +6,14 @@ export function cooperationTaskLink(task: string, params: Record<string, unknown
     return `${cooperationTaskUrl}?${query}`
 }
 const openingTasks = new Set<string>()
-export function openCooperationTask(task: string, params: Record<string, unknown> = {}) {
+export function openCooperationTask(task: string, params: Record<string, unknown> = {}, onResult?: (opened: boolean) => void) {
     const url = cooperationTaskLink(task, params)
     if (openingTasks.has(url)) return false
     openingTasks.add(url)
     try {
-        uni.navigateTo({ url, complete: () => openingTasks.delete(url), fail: () => uni.showToast({ title: '页面未打开，请重试', icon: 'none' }) })
+        uni.navigateTo({ url, success: () => onResult?.(true), complete: () => openingTasks.delete(url), fail: () => { onResult?.(false); uni.showToast({ title: '页面未打开，请重试', icon: 'none' }) } })
         return true
-    } catch (_) { openingTasks.delete(url); uni.showToast({ title: '页面未打开，请重试', icon: 'none' }); return false }
+    } catch (_) { openingTasks.delete(url); onResult?.(false); uni.showToast({ title: '页面未打开，请重试', icon: 'none' }); return false }
 }
 export function backCooperationTask() {
     const pages = getCurrentPages()

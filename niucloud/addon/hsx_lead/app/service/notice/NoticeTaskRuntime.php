@@ -2,7 +2,7 @@
 declare(strict_types=1);
 namespace addon\hsx_lead\app\service\notice;
 
-use addon\hsx_lead\app\service\{Context,FrameworkNoticeGateway,NoticeConfigService,NoticePreflightException};
+use addon\hsx_lead\app\service\{Context,FrameworkNoticeGateway,NoticeConfigService,NoticePortalEntry,NoticePreflightException};
 use addon\hsx_lead\app\support\Data;
 use core\exception\{CommonException,NoticeDeliveryException};
 use think\facade\Db;
@@ -52,6 +52,7 @@ final class NoticeTaskRuntime
             catch(ObsoleteNoticeException $error){$this->pause($site,$id,'obsolete','交付已变化或节点过时，不再发送');return null;}
             catch(NoticePreflightException $error){$this->pause($site,$id,'rejected','原业务记录或通知快照不一致，未发送');return null;}
             if($status!=='ready'){$this->pause($site,$id,$status,$message);return null;}
+            $next=NoticeDeliveryWindow::nextAllowed($policy);if($next>time()){$this->defer($row,$next);return null;}
             $queued=Db::name('hsx_lead_notice_attempt')->where('site_id',$site)->where('task_id',$id)->where('status','queued')->lock(true)->order('id desc')->find();
             $token=bin2hex(random_bytes(16));$attemptNo=(int)Db::name('hsx_lead_notice_attempt')->where('site_id',$site)->where('task_id',$id)->max('attempt_no')+1;
             if($attemptNo>20){$this->pause($site,$id,'exhausted','本条通知已达到安全发送上限');return null;}
@@ -63,10 +64,11 @@ final class NoticeTaskRuntime
                 'data'=>['financial_task_id'=>$id,'financial_attempt_id'=>$attemptId,'notice_attempt'=>$attemptNo,'lease_token'=>$token]];
         });
         if(!$claim)return self::row($site,$id);
-        $status='unknown';$code='';$message='发送结果尚未核实，不自动重发';
+        $status='unknown';$code='';$message='发送结果尚未核实，不自动重发';$deferredUntil=0;
         try{$result=$this->dispatcher?($this->dispatcher)($claim):(new FrameworkNoticeGateway())->dispatch($claim);
             if(is_array($result)&&($result['accepted']??null)===true&&($result['channel']??'')===$claim['channel']&&($result['provider_code']??null)==='0'){$status='accepted';$code='0';$message='服务商已受理，不代表用户已收到或查看';}
-        }catch(ObsoleteNoticeException $error){$status='obsolete';$message='交付已变化，本次未提交，不再发送过时提醒';}
+        }catch(NoticeDeliveryDeferredException $error){$status='paused';$deferredUntil=$error->until();$message=$error->getMessage();}
+        catch(ObsoleteNoticeException $error){$status='obsolete';$message='交付已变化，本次未提交，不再发送过时提醒';}
         catch(NoticePreflightException $error){$status='pending_configuration';$message='发送前校验未通过，未提交服务商；请核对原配置和接收身份';}
         catch(NoticeDeliveryException $error){
             if($error->channel()===$claim['channel']){$code=$error->providerCode();
@@ -80,7 +82,7 @@ final class NoticeTaskRuntime
                         default=>['rejected','服务商明确拒绝，需核对后由管理员安全重试']};}
             }
         }catch(\Throwable $error){$status='unknown';$message='渠道处理异常，可能已经提交；请核对框架记录，不重复发送';}
-        $this->finish($claim,$status,$code,$message);return self::row($site,$id);
+        $this->finish($claim,$status,$code,$message,$deferredUntil);return self::row($site,$id);
     }
 
     private function prepare(array $row,array $policy): array
@@ -103,16 +105,24 @@ final class NoticeTaskRuntime
     {
         Db::name('hsx_lead_notice_task')->where('site_id',$site)->where('id',$id)->update(['status'=>$status,'last_message'=>$message,'next_retry_at'=>time()+300,'lease_token'=>'','lease_until'=>0,'update_time'=>time()]);
     }
-    private function finish(array $claim,string $status,string $code,string $message): void
+    private function defer(array $row,int $until): void
     {
-        Db::transaction(function()use($claim,$status,$code,$message){$site=(int)$claim['site_id'];$id=(int)$claim['data']['financial_task_id'];$row=self::row($site,$id,true);
+        $expired=$until>=(int)$row['expires_at'];
+        Db::name('hsx_lead_notice_task')->where('site_id',$row['site_id'])->where('id',$row['id'])->update([
+            'status'=>$expired?'expired':'paused','last_message'=>$expired?'通知会在免打扰结束前过时，不再发送':NoticeDeliveryWindow::message($until),
+            'next_retry_at'=>$until,'lease_token'=>'','lease_until'=>0,'update_time'=>time()]);
+    }
+    private function finish(array $claim,string $status,string $code,string $message,int $deferredUntil=0): void
+    {
+        Db::transaction(function()use($claim,$status,$code,$message,$deferredUntil){$site=(int)$claim['site_id'];$id=(int)$claim['data']['financial_task_id'];$row=self::row($site,$id,true);
             if($row['status']!=='dispatching'||$row['lease_token']!==$claim['data']['lease_token'])return;
-            $paused=in_array($status,['pending_authorization','pending_configuration','pending_recipient'],true);$count=(int)$row['attempt_count']+($paused?0:1);$policy=AccountNoticePolicyService::raw($site);
+            $paused=$deferredUntil>0||in_array($status,['pending_authorization','pending_configuration','pending_recipient'],true);$count=(int)$row['attempt_count']+($paused?0:1);$policy=AccountNoticePolicyService::raw($site);
+            if($deferredUntil>=(int)$row['expires_at']){$status='expired';$message='通知会在免打扰结束前过时，不再发送';}
             if($status==='retry_wait'&&$count>=(int)$policy['max_attempts']){$status='exhausted';$message='已达到自动尝试上限，请核对明确失败原因';}
             $delay=[60,300,1800,3600,7200][min(4,max(0,$count-1))];$logId=self::frameworkLogId($row,(int)$claim['data']['notice_attempt']);
-            Db::name('hsx_lead_notice_task')->where('site_id',$site)->where('id',$id)->update(['status'=>$status,'attempt_count'=>$count,'next_retry_at'=>time()+$delay,
+            Db::name('hsx_lead_notice_task')->where('site_id',$site)->where('id',$id)->update(['status'=>$status,'attempt_count'=>$count,'next_retry_at'=>$deferredUntil>0?$deferredUntil:time()+$delay,
                 'lease_token'=>'','lease_until'=>0,'provider_code'=>$code,'framework_log_id'=>$logId,'last_message'=>$message,'update_time'=>time()]);
-            Db::name('hsx_lead_notice_attempt')->where('site_id',$site)->where('id',$claim['data']['financial_attempt_id'])->where('lease_token',$claim['data']['lease_token'])->update(['status'=>$status,'provider_code'=>$code,'message'=>$message,'framework_log_id'=>$logId,'finish_time'=>time()]);
+            Db::name('hsx_lead_notice_attempt')->where('site_id',$site)->where('id',$claim['data']['financial_attempt_id'])->where('lease_token',$claim['data']['lease_token'])->update(['status'=>$deferredUntil>0?'paused':$status,'provider_code'=>$code,'message'=>$message,'framework_log_id'=>$logId,'finish_time'=>time()]);
         });
     }
     public function unknownExpiredLease(int $site,int $id): void
@@ -132,6 +142,8 @@ final class NoticeTaskRuntime
     {
         $task=self::row($site,$id);$attempt=Db::name('hsx_lead_notice_attempt')->where('site_id',$site)->where('id',$attemptId)->where('task_id',$id)->find();
         if(!$attempt||$task['status']!=='dispatching'||$attempt['status']!=='dispatching'||$task['lease_token']!==$token||$attempt['lease_token']!==$token||$task['channel']!==$channel||NoticeEventCatalog::key($task['event_key'])!==$key)throw new NoticePreflightException('通知执行身份不一致，未发送');
+        if((int)$task['expires_at']<=time())throw new ObsoleteNoticeException('通知已超过时效，未发送');
+        NoticeDeliveryWindow::assertOpen($site);
         [$state]=(new self())->prepare($task,AccountNoticePolicyService::raw($site));if($state!=='ready')throw new NoticePreflightException('通知配置或接收身份已变化，未发送');
         $source=NoticeSourceRegistry::verify($task);$vars=NoticeSourceRegistry::variables($task,$source)+[
             '__hsx_lead_notice_id'=>(string)$id,'__hsx_lead_notice_channel'=>$channel,'__hsx_lead_notice_attempt'=>(string)$attempt['attempt_no'],'__hsx_lead_notice_lease'=>$token];
@@ -175,6 +187,7 @@ final class NoticeTaskRuntime
     public function retry(Context $context,int $id,array $input): array
     {
         $context->permission('hsx_lead_notice_center_retry');if(($input['confirm']??false)!==true)throw new CommonException('请确认本次仅重试明确未受理的通知');
+        try{NoticeDeliveryWindow::assertOpen($context->site);}catch(NoticeDeliveryDeferredException$error){throw new CommonException($error->getMessage());}
         $reason=trim((string)($input['reason']??''));if($reason===''||mb_strlen($reason)>200)throw new CommonException('请填写200字以内的重试原因');
         $requestKey=(string)($input['request_key']??bin2hex(random_bytes(16)));if(!preg_match('/^[A-Za-z0-9_-]{8,64}$/D',$requestKey))throw new CommonException('重试请求编号格式不正确');
         Db::transaction(function()use($context,$id,$reason,$requestKey){$site=$context->site;$row=self::row($site,$id,true);

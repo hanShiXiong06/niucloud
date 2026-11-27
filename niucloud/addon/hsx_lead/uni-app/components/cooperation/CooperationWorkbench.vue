@@ -55,6 +55,7 @@
 <view v-if="showFrameworkTabbar" class="coop-framework-tabbar-mount"><FrameworkTabbar addon="hsx_lead" /></view>
 </view>
         </template>
+        <CoopPendingEntry :active="pendingEntryReady && !task && managedDeliveries && ui.loggedIn.value && ui.ready.value && !!ui.profile.value.id && !overlay && !childOverlay && !locked && !canonicalPending" :member-id="ui.memberId.value" @publish="openPublish" />
         <template v-if="task && !overlay"><CooperationNav title="商户协作" back @back="closeOverlay" /><CoopState :loading="ui.loading.value" :error="ui.error.value" :title="ui.loading.value ? '正在读取…' : '请先完善门店资料'" @retry="refresh" /><u-button :custom-style="cooperationButtonStyle" v-if="ui.ready.value && !ui.profile.value.id && task !== 'profile-edit'" text="完善门店资料" @click="editProfile" /></template>
         <view class="coop-overlay-root" :class="{ 'is-task-page': !!task }">
 <CoopPromotionPanel ref="promotionRef" :page="!!task" :show="overlay === 'promotion'" :initial-tab="promotionTab" @close="closeOverlay" @changed="markChanged" />
@@ -84,6 +85,7 @@ import { useCooperation } from '../../composables/useCooperation'
 import { cooperationAccess, cooperationOrder, cooperationPageUrls, coopError, coopMoney, coopRequestId, type CooperationTab, type CoopRow, type LeadAction } from '../../api/cooperation'
 import CoopState from './CoopState.vue'
 import CoopGuestWorkspace from './CoopGuestWorkspace.vue'
+import CoopPendingEntry from './CoopPendingEntry.vue'
 import CoopLeadCard from './CoopLeadCard.vue'
 import CoopPublishForm from './CoopPublishForm.vue'
 import CoopStorePicker from './CoopStorePicker.vue'
@@ -116,6 +118,7 @@ const leadControlsVisible = computed(() => managedDeliveries.value && ui.loggedI
 type LeadPagingQuery = { page: number; size: number; from: string; readingList: boolean; signature: string }
 let leadPagingEpoch = 0, pageActive = true, leadPagingPlanned = false, pendingLeadPaging: LeadPagingQuery | null = null, interruptedLeadPaging: LeadPagingQuery | null = null, appliedLeadSignature = ''
 const countdownActive = ref(true)
+const pendingEntryReady = ref(false)
 const leadPagingSignature = () => JSON.stringify([identity, ui.direction.value, ui.query.keyword, ui.query.status])
 // The request hook owns rows. Do not accept z-paging's delayed model emissions as
 // business data; an old instance can emit after its nextTick/setTimeout boundary.
@@ -201,7 +204,7 @@ function needsMembershipNow(capability:'can_publish'|'can_accept' = ui.direction
 }
 const needsMembershipEntitlement = computed(() => needsMembershipNow())
 
-const orderRequests = new Map<string, string>(); let reviewNotifiedId = 0; let identity = '', disposed = false, starting: Promise<void> | null = null, pendingId = props.initialId, handledInitialId = 0, resumeSequence = 0
+const orderRequests = new Map<string, string>(); let reviewNotifiedId = 0; let identity = '', disposed = false, starting: Promise<void> | null = null, pendingId = props.initialId, handledInitialId = 0, resumeSequence = 0, leadIntentOpening = false
 let pendingPromotion = props.initialPromotion, pendingInviter = props.initialInviter
 const storageKey = (context: CooperationPaymentContext | null = null) => Number.isSafeInteger(ui.memberId.value) && ui.memberId.value > 0 && ui.siteId() ? `hsx_lead_coop_pay:${ui.siteId()}:${ui.memberId.value}:${ui.profile.value.id || 0}${context ? ':' + context.purpose + ':' + context.leadId : ''}` : ''
 function login(intent?: { task?: 'publish' | 'profile-edit'; business_type?: string }) {
@@ -220,6 +223,7 @@ async function initialize() {
     const turn = ++resumeSequence
     starting = (async () => {
         pageActive = true
+        pendingEntryReady.value = false
         countdownActive.value = true
         if (managedDeliveries.value) uni.setNavigationBarTitle?.({ title: workspaceTitle.value })
         const token = ui.resume()
@@ -270,6 +274,7 @@ async function initialize() {
             if (managedDeliveries.value && pageActive && !leadFirstPageReady.value && !leadPagingPlanned && !pendingLeadPaging && !ui.listLoading.value && !ui.listError.value) reloadLeads()
             if (!overlay.value && ['detail', 'select', 'commission'].includes(props.task)) overlay.value = ui.detail.value.id ? props.task : 'detail'
             if (paymentId.value) await verifyPayment()
+            if (!props.task) await processEntryIntents()
             return // Keep the mounted list, filter, scroll position and form draft.
         }
         const loaded = props.task ? await ui.bootstrap() : await refreshBusinessData()
@@ -287,8 +292,7 @@ async function initialize() {
             overlay.value = detailLoaded ? props.task : 'detail'
             if (props.task === 'promotion' && props.initialInviter) { await nextTick(); await promotionRef.value?.openInvitation?.(props.initialInviter) }
         } else {
-            await processPromotionIntent()
-            if (pendingId && pendingId !== handledInitialId) { handledInitialId = pendingId; canonicalPending.value = false; openTask('detail', { collaboration_id: pendingId }) }
+            await processEntryIntents()
         }
         if (!ui.profile.value.id) return
         const context = expectedPaymentContext.value
@@ -298,9 +302,31 @@ async function initialize() {
     })().finally(() => { if (turn === resumeSequence) starting = null })
     return starting
 }
-async function refresh() { if (ui.loading.value) return; if (!ui.loggedIn.value || !ui.ready.value) await initialize(); else { await refreshBusinessData(); if (props.task && selectedId.value) await reloadDetail() } }
+async function refresh() { if (ui.loading.value) return; if (!ui.loggedIn.value || !ui.ready.value) await initialize(); else { const loaded = await refreshBusinessData(); if (!loaded || disposed || !pageActive) return; if (props.task && selectedId.value) await reloadDetail(); else if (!props.task) await processEntryIntents() } }
 function markChanged() { uni.setStorageSync('hsx_lead_coop_changed', Date.now()) }
-function openTask(task: string, params: CoopRow = {}) { if (['connection','inventory'].includes(task) && ui.config.value.erp_visible === false) { uni.showToast({title:'该功能暂未开放',icon:'none'}); return }; if (!locked.value) openCooperationTask(task, params) }
+function openTask(task: string, params: CoopRow = {}) { if (['connection','inventory'].includes(task) && ui.config.value.erp_visible === false) { uni.showToast({title:'该功能暂未开放',icon:'none'}); return false }; return !locked.value && openCooperationTask(task, params) }
+function processLeadIntent() {
+    if (props.task || !pendingId || pendingId === handledInitialId || leadIntentOpening || locked.value || disposed || !pageActive || !ui.ready.value || !ui.profile.value.id) return false
+    const id = pendingId, who = identity
+    canonicalPending.value = true; leadIntentOpening = true
+    const started = openCooperationTask('detail', { collaboration_id: id }, opened => {
+        leadIntentOpening = false
+        if (disposed || who !== identity || id !== pendingId) return
+        // Do not consume a card intent when native navigation failed. A normal
+        // resume or refresh can retry it, without duplicating a successful push.
+        if (opened) { handledInitialId = id; canonicalPending.value = false }
+    })
+    if (!started) leadIntentOpening = false
+    return started
+}
+async function processEntryIntents() {
+    if (disposed || !pageActive || props.task) return
+    // A notification's concrete order always wins over promotion or a general
+    // pending summary; never issue two competing native navigations.
+    if (pendingId && pendingId !== handledInitialId) { pendingPromotion = false; pendingInviter = 0; processLeadIntent(); return }
+    if (pendingPromotion) { await processPromotionIntent(); return }
+    pendingEntryReady.value = true
+}
 function closeOverlay() { if (locked.value) return; ui.writeError.value = ''; if (props.task) { backCooperationTask(); return }; overlay.value = ''; canonicalPending.value = false }
 async function handlePaymentClose() { await verifyPayment() }
 function paymentPageCurrent() { return !disposed && pageActive && !!getToken() && !!identity && identity === ui.sessionScope() }
@@ -530,14 +556,14 @@ async function verifyPayment() {
 }
 const subscribeState = useCooperationSubscribe()
 function subscribe() { return subscribeState.request() }
-watch(() => props.initialId, id => { if (Number.isSafeInteger(id) && id > 0) { canonicalPending.value = true; pendingId = id; if (ui.ready.value && ui.profile.value.id) void openDetail(id) } })
+watch(() => props.initialId, id => { if (Number.isSafeInteger(id) && id > 0 && id <= 4294967295) { pendingEntryReady.value = false; canonicalPending.value = true; pendingId = id; processLeadIntent() } })
 watch(() => props.initialDirection, direction => { if (props.task || ui.tab.value !== 'deliveries' || direction === ui.direction.value) return; if (ui.ready.value && ui.profile.value.id) changeLeadDirection(direction); else ui.direction.value = direction })
-watch(() => [props.initialPromotion, props.initialInviter] as const, ([show, mid]) => { if (!show) return; pendingPromotion = true; pendingInviter = Number(mid) || 0; void processPromotionIntent() })
-watch(locked, value => { if (!value && pendingPromotion) void processPromotionIntent() })
+watch(() => [props.initialPromotion, props.initialInviter] as const, ([show, mid]) => { if (!show) return; pendingPromotion = true; pendingInviter = Number(mid) || 0; void processEntryIntents() })
+watch(locked, value => { if (!value) void processEntryIntents() })
 onMounted(initialize)
-function pausePage() { countdownActive.value = false; if (pendingLeadPaging) interruptedLeadPaging = { ...pendingLeadPaging, readingList: ui.listLoading.value }; pendingLeadPaging = null; leadPagingPlanned = false; visitorLoading.value = false; pageActive = false; leadPagingEpoch++; resumeSequence++; ui.pause(); starting = null }
+function pausePage() { pendingEntryReady.value = false; countdownActive.value = false; if (pendingLeadPaging) interruptedLeadPaging = { ...pendingLeadPaging, readingList: ui.listLoading.value }; pendingLeadPaging = null; leadPagingPlanned = false; visitorLoading.value = false; pageActive = false; leadPagingEpoch++; resumeSequence++; ui.pause(); starting = null }
 defineExpose({ resume: initialize, pause: pausePage, refresh, loadMore, openInvitation })
-onBeforeUnmount(() => { countdownActive.value = false; disposed = true; ui.dispose(); orderRequests.clear() })
+onBeforeUnmount(() => { pendingEntryReady.value = false; countdownActive.value = false; disposed = true; ui.dispose(); orderRequests.clear() })
 </script>
 <style lang="scss" scoped>@import './cooperation';.coop-onboarding-existing { margin:10px 0 0;line-height:44px;font-size:14px;color:#6685ae;background:transparent; }.coop-onboarding-existing::after { border:0; }
 .coop-cashier-help { display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;width:100%;margin:8px 0 0;padding:8px 12px;border:1px solid #eedab7;border-radius:10px;background:#fff8e9;line-height:1.5;color:#765321;font-size:13px;box-sizing:border-box; }

@@ -63,7 +63,10 @@ final class UpgradeCommand
             foreach (array_diff($fields[1], $names) as $field) $missing[] = $table[1] . '.' . $field;
         }
         if ($missing) throw new RuntimeException("基础表结构未齐全，升级已阻止，不自动建表/加字段：\n- " . implode("\n- ", $missing)
-            . "\n主体会员更新请先执行 php addon/hsx_lead/scripts/upgrade-entity-membership.php --check；通知任务表请先执行 php addon/hsx_lead/scripts/upgrade-notice-runtime.php --check；人工收款凭据表请先执行 php addon/hsx_lead/scripts/upgrade-manual-receipts.php --check；虚拟支付表请先执行 php addon/hsx_lead/scripts/upgrade-virtual-payment.php --check，再按文档备份并执行 --apply；其他缺失字段需单独核对，勿卸载重装。");
+            . "\n主体会员更新请先执行 php addon/hsx_lead/scripts/upgrade-entity-membership.php --check；通知任务表请先执行 php addon/hsx_lead/scripts/upgrade-notice-runtime.php --check；人工收款凭据表请先执行 php addon/hsx_lead/scripts/upgrade-manual-receipts.php --check；虚拟支付表请先执行 php addon/hsx_lead/scripts/upgrade-virtual-payment.php --check；推广层级字段/唯一索引请先执行 php addon/hsx_lead/scripts/upgrade-promotion-levels.php --check，再按文档备份并执行 --apply；其他缺失字段需单独核对，勿卸载重装。");
+        if (!defined('HSX_LEAD_PROMOTION_LEVELS_LIBRARY_ONLY')) define('HSX_LEAD_PROMOTION_LEVELS_LIBRARY_ONLY',true);
+        require_once $this->plugin.'/scripts/upgrade-promotion-levels.php';
+        if((new PromotionLevelsUpgrade($this->backend))->check()['pending_statements']>0)throw new RuntimeException('推广层级字段或唯一索引尚未升级；先执行 php addon/hsx_lead/scripts/upgrade-promotion-levels.php --check，再备份并执行 --apply，勿卸载重装');
         if (!Db::name('addon')->where('key', 'hsx_lead')->find()) throw new RuntimeException('插件尚未安装；本命令不执行安装，请先在平台正常安装');
         // A native menu refresh does not infer parent-directory grants for old roles.
         // Never silently migrate permissions from this general-purpose updater.

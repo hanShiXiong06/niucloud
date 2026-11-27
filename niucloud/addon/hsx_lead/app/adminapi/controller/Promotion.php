@@ -20,6 +20,7 @@ final class Promotion extends BaseAdminController
         $params=$this->request->param();$view=(string)($params['view']??'');
         $context=new Context((int)$this->request->siteId(),(int)$this->request->uid());
         if($view==='inviters')return success((new \addon\hsx_lead\app\service\cooperation\InviterSummaryReadService($context))->lists($params));
+        if($view==='tree')return success((new \addon\hsx_lead\app\service\cooperation\PromotionTreeReadService($context))->lists($params));
         if($view!=='')throw new \core\exception\CommonException('请选择有效的推广关系视图');
         return success((new PromotionRelationsReadService($context))->lists($params));
     }

@@ -298,6 +298,7 @@ final class PaymentRefundService
             elseif(empty(Data::decode($order['rule_json'])['requires_manual_review'])&&Rules::cents((string)$order['net_amount'])>0)throw new CommonException('原发布方入账记录缺失，请先人工核对');
         }
         foreach(Db::name('hsx_lead_promotion_reward')->where('site_id',$site)->where('coop_order_id',$order['id'])->lock(true)->select()->toArray()as$reward){
+            PromotionService::assertRewardSnapshot($site,$order,$reward);
             if((int)$reward['account_log_id']<=0){if($reward['status']==='settled')throw new CommonException('原推广奖励流水缺失，未发起退款');continue;}
             $logs=Db::name('member_account_log')->where('site_id',$site)->where('account_type',MemberAccountTypeDict::COMMISSION)->where('from_type',PromotionService::INCOME_TYPE)->where('related_id',(string)$reward['id'])->lock(true)->select()->toArray();
             if(count($logs)!==1||(int)$logs[0]['id']!==(int)$reward['account_log_id']||(int)$logs[0]['member_id']!==(int)$reward['provider_member_id']||Rules::cents((string)$logs[0]['account_data'])!==Rules::cents((string)$reward['amount']))throw new CommonException('原推广奖励与佣金流水不符，未发起退款');

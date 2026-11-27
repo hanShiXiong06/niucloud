@@ -18,6 +18,7 @@ use addon\phone_shop\app\service\core\goods\CoreDeviceAttributeService;
 use addon\phone_shop\app\support\InspectionGoodsAttributes;
 use addon\phone_shop\app\support\IntakeMaterialTask;
 use addon\phone_shop\app\support\GoodsWarrantySubtitle;
+use addon\phone_shop\app\support\GoodsMemorySpec;
 use addon\phone_shop\app\support\ListingGoodsTitle;
 
 use app\service\core\sys\CoreConfigService;
@@ -26,7 +27,7 @@ use core\base\BaseCoreService;
 class CoreListingMappingService extends BaseCoreService
 {
     /** 站点配置键 */
-    const CONFIG_KEY = 'PHONE_SHOP_LISTING_MAPPING';
+    const CONFIG_KEY = GoodsMemorySpec::CONFIG_KEY;
 
     /**
      * 内置默认配置(无站点配置时生效)。改默认走站点配置,不动这里。
@@ -241,28 +242,7 @@ class CoreListingMappingService extends BaseCoreService
     /** 内存归一化:别名优先;否则把 g/G 规范成 GB,去空格,8+256 → 8GB+256GB */
     public function normalizeMemory(string $raw, array $aliases): string
     {
-        $m = trim($raw);
-        if ($m === '') return '';
-        $key = mb_strtolower(str_replace(' ', '', $m));
-        foreach ($aliases as $ak => $av) {
-            if (mb_strtolower(str_replace(' ', '', (string)$ak)) === $key) return (string)$av;
-        }
-        $norm = str_replace(' ', '', $m);
-        // 统一大小写单位
-        $norm = preg_replace_callback('/(\d+)\s*(tb|gb|g|t)\b/iu', function ($x) {
-            $num = $x[1];
-            $unit = strtoupper($x[2]);
-            if ($unit === 'G') $unit = 'GB';
-            if ($unit === 'T') $unit = 'TB';
-            return $num . $unit;
-        }, $norm);
-        // 8+256 这种没带单位的数字加 GB
-        if (preg_match('/^\d+\+\d+$/', $norm)) {
-            $norm = preg_replace('/(\d+)/', '$1GB', $norm);
-        } elseif (preg_match('/^\d+$/', $norm)) {
-            $norm .= 'GB';
-        }
-        return $norm;
+        return GoodsMemorySpec::normalize($raw, $aliases);
     }
 
     /** qc_info 统一成关联数组 {检测项: 值} */

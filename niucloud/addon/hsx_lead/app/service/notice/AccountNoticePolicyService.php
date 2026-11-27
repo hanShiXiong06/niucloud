@@ -28,7 +28,7 @@ final class AccountNoticePolicyService
         foreach(NoticeEventCatalog::EVENTS as$key=>$definition)$events[$key]=array_replace([
             'event_key'=>$key,'enabled'=>false,'channels'=>array_fill_keys(NoticeEventCatalog::CHANNELS,false),
             'weapp'=>[],'wechat'=>[]],is_array($saved['events'][$key]??null)?$saved['events'][$key]:[]);
-        return array_replace(['enabled'=>false,'enabled_at'=>0,'source_after_id'=>0,'resume_after_id'=>0,'ttl_seconds'=>86400,'max_attempts'=>3,'response_reminder_minutes'=>[30,10,5,1]],$saved,['events'=>$events]);
+        return array_replace(['enabled'=>false,'enabled_at'=>0,'source_after_id'=>0,'resume_after_id'=>0,'ttl_seconds'=>86400,'max_attempts'=>3,'response_reminder_minutes'=>[30,10,5,1],'quiet_hours'=>NoticeDeliveryWindow::defaults()],$saved,['events'=>$events]);
     }
     public function get(int $site): array
     {
@@ -50,6 +50,7 @@ final class AccountNoticePolicyService
         Db::transaction(function()use($context,$site,$input){
             Db::name('site')->where('site_id',$site)->lock(true)->find();$current=self::raw($site);$saved=$current;
             foreach(['enabled']as$field)if(array_key_exists($field,$input)){if(!is_bool($input[$field]))throw new CommonException('通知开关格式不正确');$saved[$field]=$input[$field];}
+            if(array_key_exists('quiet_hours',$input))$saved['quiet_hours']=NoticeDeliveryWindow::normalize($input['quiet_hours']);
             foreach(['ttl_seconds'=>[300,86400],'max_attempts'=>[1,5]]as$field=>$range)if(array_key_exists($field,$input)){
                 if(!is_int($input[$field])||$input[$field]<$range[0]||$input[$field]>$range[1])throw new CommonException('通知时效或次数不在允许范围');$saved[$field]=$input[$field];}
             if(array_key_exists('response_reminder_minutes',$input)){

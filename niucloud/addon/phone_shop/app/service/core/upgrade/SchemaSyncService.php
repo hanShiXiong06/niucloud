@@ -77,6 +77,9 @@ class SchemaSyncService
                 $existingIdx = $this->tableIndexes($table);
                 $addedIdx = [];
                 foreach ($schema['idx'] as $name => $idx) {
+                    // 详情专项迁移支持异名等效索引与在线 DDL；不要在这里按名称另建重复索引。
+                    $logical = substr($table, strlen($this->prefix));
+                    if ((GoodsDetailIndexes::INDEXES[$logical][0] ?? null) === $name) continue;
                     if (in_array($name, $existingIdx, true)) continue;
                     $unique = $idx['unique'] ? 'UNIQUE ' : '';
                     Db::execute("ALTER TABLE `{$table}` ADD {$unique}INDEX `{$name}` ({$idx['cols']})");
@@ -90,6 +93,13 @@ class SchemaSyncService
                 $report[$table] = 'error: ' . $e->getMessage();
                 Log::write("[phone_shop SchemaSync] {$table} 失败: " . $e->getMessage());
             }
+        }
+        try {
+            (new GoodsDetailIndexes())->handle();
+            $report['goods_detail_indexes'] = 'ok';
+        } catch (\Throwable $e) {
+            $report['goods_detail_indexes'] = 'error: ' . $e->getMessage();
+            Log::write('[phone_shop SchemaSync] 商品详情索引未就绪: ' . $e->getMessage());
         }
         try {
             $report['device_intake_index_migrate'] = $this->migrateDeviceIntakeIndexes();

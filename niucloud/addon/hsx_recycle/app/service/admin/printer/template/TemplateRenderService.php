@@ -79,6 +79,7 @@ class TemplateRenderService extends BaseAdminService
      */
     private function renderElement(array $element, array $variables = [], float $scale = 1.0): string
     {
+        $element = TemplateConverterService::normalizeElementPosition($element);
         $type = $element['type'] ?? 'text';
         
         // 坐标转换：dot转px

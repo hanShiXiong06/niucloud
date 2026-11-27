@@ -19,7 +19,7 @@
                         <template #event="{row}"><div class="notice-cell"><strong>{{ row.event_name || accountNoticeEvents[row.event_key] || '场景待核对' }}</strong><small v-if="String(row.event_key).startsWith('cooperation_')">{{ row.task_no || `线索 #${row.source_id || '待核对'}` }}</small><template v-else><small>{{ row.account_name || '账户类型待核对' }}</small><small v-if="row.source_id">流水 #{{ row.source_id }}</small></template></div></template>
                         <template #amount="{row}"><div v-if="String(row.event_key).startsWith('cooperation_')" class="notice-cell"><strong>{{ row.store_name || '协作提醒' }}</strong><span>{{ row.notice_remark || '查看对应线索的当前状态' }}</span><small v-if="Number(row.remaining_minutes)>0">提醒节点：剩余 {{ row.remaining_minutes }} 分钟</small></div><div v-else class="notice-cell"><strong>{{ money(row.change_amount,true) }}</strong><small>变动后 {{ money(row.account_balance) }}</small></div></template>
                         <template #channel="{row}">{{ accountNoticeChannels[row.channel] || '渠道待核对' }}</template>
-                        <template #status="{row}"><div class="notice-cell"><el-tag :type="accountNoticeStatusTone(row.status)" size="small" effect="plain">{{ accountNoticeStatuses[row.status] || '状态待核对' }}</el-tag><small>已尝试 {{ row.attempt_count ?? '—' }} 次</small><small v-if="row.next_retry_at && row.status === 'retry_wait'">下次 {{ coopTime(row.next_retry_at) }}</small></div></template>
+                        <template #status="{row}"><div class="notice-cell"><el-tag :type="accountNoticeStatusTone(row.status)" size="small" effect="plain">{{ accountNoticeStatuses[row.status] || '状态待核对' }}</el-tag><small>已尝试 {{ row.attempt_count ?? '—' }} 次</small><small v-if="row.next_retry_at && ['retry_wait','paused'].includes(row.status)">下次核对 {{ coopTime(row.next_retry_at) }}</small></div></template>
                         <template #result="{row}"><div class="notice-cell"><span>{{ row.last_message || '尚未记录渠道说明' }}</span><small v-if="row.provider_code !== '' && row.provider_code != null">渠道返回码 {{ row.provider_code }}</small><small v-if="unverifiedIds.has(Number(row.id))">上次操作结果待核对，请先刷新。</small></div></template>
                         <template #time="{row}"><div class="notice-cell"><span>{{ coopTime(row.occurred_at || row.create_time) }}</span><small v-if="row.expires_at">有效至 {{ coopTime(row.expires_at) }}</small></div></template>
                         <template #actions="{row}"><div class="notice-row-actions"><el-button v-if="canAttempts" link type="primary" :disabled="busy" @click="openAttempts(row)">尝试明细</el-button><el-button v-if="retryAllowed(row)" link type="primary" :disabled="loading || busy" @click="beginRetry(row)">重新检查</el-button><span v-if="!canAttempts && !retryAllowed(row)" class="notice-muted">—</span></div></template>
@@ -35,6 +35,8 @@
                     <el-alert v-if="!policy.installed" title="本站未安装启用商户协作，当前不能启用通知" type="warning" :closable="false" show-icon class="notice-banner" />
                     <el-form class="notice-policy" label-position="top" :disabled="!canSave || saving || settingsLoading || !policy.installed">
                         <div class="notice-general"><el-form-item label="通知总开关"><el-switch v-model="policy.enabled" inline-prompt active-text="开启" inactive-text="关闭" /></el-form-item><el-form-item label="提醒有效期（分钟）"><el-input-number v-model="ttlMinutes" :min="5" :max="1440" :precision="0" /></el-form-item><el-form-item label="单条最多尝试次数"><el-input-number v-model="policy.max_attempts" :min="1" :max="5" :precision="0" /></el-form-item></div>
+                        <div class="notice-general"><el-form-item label="夜间免打扰"><el-switch v-model="policy.quiet_hours.enabled" active-text="开启" inactive-text="即时通知" /></el-form-item><el-form-item v-if="policy.quiet_hours.enabled" label="免打扰开始（北京时间）"><el-time-select v-model="policy.quiet_hours.start" start="00:00" step="00:15" end="23:45" placeholder="开始时间" /></el-form-item><el-form-item v-if="policy.quiet_hours.enabled" label="免打扰结束（北京时间）"><el-time-select v-model="policy.quiet_hours.end" start="00:00" step="00:15" end="23:45" placeholder="结束时间" /></el-form-item></div>
+                        <p v-if="policy.quiet_hours.enabled" class="notice-muted">此时段不发送新通知或重试；结束后重新核对业务与时效，已接单、已转交或过时的提醒不会补发。</p><p v-if="quietHoursError" class="notice-danger">{{ quietHoursError }}</p>
                         <el-form-item v-if="hasCooperationEvents" label="接单提醒节点（剩余分钟）"><el-select v-model="policy.response_reminder_minutes" multiple filterable allow-create default-first-option placeholder="选择或输入1—1440分钟，最多8项" class="notice-reminder-select"><el-option v-for="minute in [30,10,5,1]" :key="minute" :label="`剩余${minute}分钟`" :value="minute" /></el-select><p v-if="responseNodesError" class="notice-danger">{{ responseNodesError }}</p></el-form-item>
                         <el-collapse class="notice-help"><el-collapse-item title="启用、自动重试与渠道授权说明" name="help"><p>资金提醒仅通知启用后的新流水，不补发历史账目。提醒超时后停止发送。</p><p>接单节点提醒发给接收方；时间到但尚未接单时提醒发布方，仍保留原交付，不自动转派，也不禁止原门店接单。门店确认接单后再通知发布方。</p><p>接单节点留空仅关闭截止前的节点提醒，不影响单独开启的“门店尚未接单”和“接单成功”场景。</p><p>系统只在确认可重试时自动处理；结果待核实不会盲目重发。用户关闭偏好、拒绝订阅或未绑定渠道时，不会绕过授权。</p><p>短信可能计费，必须同时满足平台启用与用户主动开启偏好。</p></el-collapse-item></el-collapse>
                         <div v-for="event in policy.events" :key="event.event_key" class="notice-event-card">
@@ -42,7 +44,7 @@
                             <div v-for="(label,channel) in accountNoticeChannels" :key="channel" class="notice-channel-row"><div class="notice-channel-name"><strong>{{ label }}</strong><el-tag size="small" effect="plain" :type="readiness(event, String(channel)).tone">{{ readiness(event, String(channel)).label }}</el-tag></div><div class="notice-channel-actions"><el-button v-if="channel !== 'sms' && canSave" link type="primary" @click="editTemplate(event,String(channel))">{{ event[channel]?.tid || event[channel]?.temp_key ? '核对模板' : '配置模板' }}</el-button><el-button link type="primary" @click="openChannel(String(channel))">渠道设置</el-button><el-switch v-model="event.channels[channel]" :aria-label="`${event.name}${label}规则开关`" /></div></div>
                         </div>
                     </el-form>
-                    <div class="notice-policy-footer"><span class="notice-muted">保存规则不代表已发送，也不会替用户授权。</span><el-button v-if="canSave" type="primary" :loading="saving" :disabled="!policy.installed || settingsLoading || !!settingsError || !!responseNodesError" @click="saveSettings">保存通知规则</el-button></div>
+                    <div class="notice-policy-footer"><span class="notice-muted">保存规则不代表已发送，也不会替用户授权。</span><el-button v-if="canSave" type="primary" :loading="saving" :disabled="!policy.installed || settingsLoading || !!settingsError || !!responseNodesError || !!quietHoursError" @click="saveSettings">保存通知规则</el-button></div>
                 </template>
             </el-tab-pane>
         </el-tabs>
@@ -84,7 +86,7 @@ import WeappNoticeTemplatePicker from '../components/WeappNoticeTemplatePicker.v
 import { getAccountNoticeSettings, saveAccountNoticeSettings, getAccountNoticeTasks, getAccountNoticeAttempts, retryAccountNotice, getAccountNoticeTemplateLibrary } from '../../api/notice';
 import { hasLeadPagePermission } from '../../composables/navigation';
 import { coopError, coopTime } from '../../composables/cooperation';
-import { ACCOUNT_NOTICE_FIELD_PATTERN, accountNoticeEvents, accountNoticeChannels, accountNoticeStatuses, accountNoticeStatusTone, accountRetryAllowed, parseAccountNoticeSettings, accountTemplatePayload, accountTemplateError, accountVariableOptions, suggestAccountVariable, noticeVariablesForEvent, normalizeResponseReminderMinutes, type NoticeRow } from '../../composables/accountNotice';
+import { ACCOUNT_NOTICE_FIELD_PATTERN, accountNoticeEvents, accountNoticeChannels, accountNoticeStatuses, accountNoticeStatusTone, accountRetryAllowed, parseAccountNoticeSettings, accountTemplatePayload, accountTemplateError, accountVariableOptions, suggestAccountVariable, noticeVariablesForEvent, normalizeResponseReminderMinutes, normalizeNoticeQuietHours, type NoticeRow } from '../../composables/accountNotice';
 const user = useUserStore(), router = useRouter(), allowed = (key: string) => hasLeadPagePermission(user, key);
 const canRead = computed(() => allowed('hsx_lead_notice_center_read')), canSettings = computed(() => canRead.value && allowed('hsx_lead_notice_settings')), canSave = computed(() => canSettings.value && allowed('hsx_lead_notice_center_save')), canRetry = computed(() => canRead.value && allowed('hsx_lead_notice_center_retry')), canAttempts = computed(() => canRead.value && allowed('hsx_lead_notice_attempts')), canLibrary = computed(() => canSettings.value && allowed('hsx_lead_notice_library'));
 const activeTab = ref('records'), filters = reactive({ keyword: '', event_key: '', channel: '', status: '' }), query = reactive({ page: 1, limit: 20, keyword: '', event_key: '', channel: '', status: '', start_time: 0, end_time: 0 }), dateRange = ref<Date[] | null>(null);
@@ -95,6 +97,7 @@ const retryAllowed = (row: NoticeRow) => canRetry.value && accountRetryAllowed(r
 const policy = ref<NoticeRow>({}), settingsReady = ref(false), settingsLoading = ref(false), settingsError = ref(''), saving = ref(false), templateChanges = reactive(new Set<string>());
 const hasCooperationEvents = computed(() => (policy.value.events || []).some((event:NoticeRow) => String(event.event_key).startsWith('cooperation_')));
 const responseNodesError = computed(() => { if(!hasCooperationEvents.value)return '';try{normalizeResponseReminderMinutes(policy.value.response_reminder_minutes);return ''}catch(error){return coopError(error,'请核对接单提醒节点')} });
+const quietHoursError = computed(() => { if(!settingsReady.value)return '';try{normalizeNoticeQuietHours(policy.value.quiet_hours);return ''}catch(error){return coopError(error,'请核对免打扰时段')} });
 const ttlMinutes = computed({ get: () => Number(policy.value.ttl_seconds) / 60, set: value => {
         policy.value.ttl_seconds = Number(value) * 60;
     } });
@@ -182,12 +185,12 @@ async function loadSettings() {
     }
 }
 async function saveSettings() {
-    if (!canSave.value || !settingsReady.value || settingsLoading.value || saving.value || settingsError.value || responseNodesError.value || !policy.value.installed)
+    if (!canSave.value || !settingsReady.value || settingsLoading.value || saving.value || settingsError.value || responseNodesError.value || quietHoursError.value || !policy.value.installed)
         return;
     const actor = identity();
     saving.value = true;
     settingsError.value = '';
-    const snapshot = { enabled: policy.value.enabled, ttl_seconds: policy.value.ttl_seconds, max_attempts: policy.value.max_attempts, ...(hasCooperationEvents.value ? {response_reminder_minutes:normalizeResponseReminderMinutes(policy.value.response_reminder_minutes)} : {}), events: policy.value.events.map((event: NoticeRow) => {
+    const snapshot = { enabled: policy.value.enabled, ttl_seconds: policy.value.ttl_seconds, max_attempts: policy.value.max_attempts, quiet_hours:normalizeNoticeQuietHours(policy.value.quiet_hours), ...(hasCooperationEvents.value ? {response_reminder_minutes:normalizeResponseReminderMinutes(policy.value.response_reminder_minutes)} : {}), events: policy.value.events.map((event: NoticeRow) => {
             const row: NoticeRow = { event_key: event.event_key, enabled: event.enabled, channels: { ...event.channels } };
             for (const channel of ['weapp', 'wechat'])
                 if (templateChanges.has(`${event.event_key}:${channel}`))
