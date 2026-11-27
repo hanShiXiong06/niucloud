@@ -1,4 +1,6 @@
 # Only hand-written plugin source is formatted. Never touch data, build output or vendored assets.
+# PHP is formatted by php-cs-fixer (tools/format/.php-cs-fixer.dist.php), never by prettier.
+*.php
 node_modules/
 tools/format/node_modules/
 package/

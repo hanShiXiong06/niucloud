@@ -5,11 +5,18 @@ hsx_lead 代码格式化（Q1）操作说明
 Vue 865 行 > 300 字符），便于审查和 diff。
 
 工具（仅开发用，不进插件发布包；package.mjs 只打包 app/admin/uni-app/package/resource）：
-  ../../.prettierrc.json     格式规则：120 列、4 空格、单引号、无分号（与框架 admin 一致）；PHP 按 8.0 语法、PER-CS 括号、不加尾逗号
-  ../../.prettierignore      排除 package/ resource/ docs/ sql/ 语言包 json/md
-  package.json               固定版本 prettier 3.3.3 + @prettier/plugin-php 0.22.2
-  composer.json              固定 nikic/php-parser 5.3.1（只用于下面的 AST 对比）
+  .php-cs-fixer.dist.php     PHP 规则：只调空白/换行/大括号，一行一条语句；不启用任何规则集，
+                             显式关闭 elseif、括号、引号、数组语法等会改 AST 的规则
+  ../../.prettierrc.json     前端规则：120 列、4 空格、单引号、无分号（与框架 admin 一致）
+  ../../.prettierignore      排除 *.php（PHP 不用 prettier）、package/ resource/ docs/ sql/ 语言包 json/md
+  package.json               固定版本 prettier 3.3.3（只用于 TS/Vue/CSS）
+  composer.json              固定 friendsofphp/php-cs-fixer 3.64.0、nikic/php-parser 5.3.1
   ast-compare.php            对比格式化前后每个 PHP 文件的语法树，必须完全一致
+
+为什么 PHP 不用 prettier：@prettier/plugin-php 0.22.2 在首轮 A 批中把 app/dict/diy/pages.php:37 的
+(require ...)['key'] 去掉了括号（运行时 TypeError），并强制把 else if 改成 elseif，无法配置关闭。
+已弃用。php-cs-fixer 按 token 改空白，不重新打印代码。
+已知取舍：php-cs-fixer 不会折行长表达式，超长 if 条件仍是长行；主要收益是拆开"一行多条语句"。
 
 所有命令都在本目录（niucloud/addon/hsx_lead/tools/format）执行。
 
@@ -19,6 +26,14 @@ Vue 865 行 > 300 字符），便于审查和 diff。
   npm ci  （首次没有 lock 文件时用 npm install，并提交生成的 package-lock.json）
   composer install
   从最新 main 新建分支：git checkout -b style/hsx-lead-format
+
+  先做工具验证（必须通过才开始 A 批）：
+       rm -rf /tmp/hsx_before && cp -r ../.. /tmp/hsx_before
+       vendor/bin/php-cs-fixer fix --config=.php-cs-fixer.dist.php ../../app/dict/diy/pages.php ../../app/service/cooperation/PaymentRefundService.php
+       php ast-compare.php /tmp/hsx_before ../..        → 必须 OK
+       用 PHP 8.0 运行原版与格式化版 pages.php 的页面读取，结果一致（上轮为 2 个页面）
+       验证后 git checkout -- ../../app 还原，再正式开始 A 批。
+     若这一步仍有 AST CHANGED：报告是哪条规则造成的（可用 --rules 单条重跑定位），不要继续。
 
 
 二、分四批，每批单独提交
@@ -33,9 +48,9 @@ Vue 865 行 > 300 字符），便于审查和 diff。
   1. 保存格式化前快照（整个插件目录）：
        rm -rf /tmp/hsx_before && cp -r ../.. /tmp/hsx_before
 
-  2. 只格式化本批路径，例如批次 A：
-       npm run write -- ../../app
-     批次 B：npm run write -- ../../Addon.php ../../scripts ../../tests
+  2. 只格式化本批路径：
+     批次 A：vendor/bin/php-cs-fixer fix --config=.php-cs-fixer.dist.php ../../app
+     批次 B：vendor/bin/php-cs-fixer fix --config=.php-cs-fixer.dist.php ../../Addon.php ../../scripts ../../tests
      批次 C：npm run write -- ../../admin
      批次 D：npm run write -- ../../uni-app
 
@@ -77,11 +92,14 @@ Vue 865 行 > 300 字符），便于审查和 diff。
   合入 main 前确认：
     - 四批 ast-compare（A、B）全部 OK
     - 测试结果与格式化前一致（除旧的安装表数断言）
-    - npm run check -- ../../app ../../admin ../../uni-app ../../Addon.php ../../scripts ../../tests 无报错
+    - npm run check -- ../../admin ../../uni-app 无报错
+    - vendor/bin/php-cs-fixer fix --config=.php-cs-fixer.dist.php --dry-run ../../app ../../Addon.php ../../scripts ../../tests 无待改文件
 
 
 五、出问题时
 ------------
-  - prettier 对某个文件报语法错误：跳过该文件（加进 .prettierignore 并注明原因），报告给开发，不要手改代码。
-  - ast-compare 报 AST CHANGED：说明格式化工具改了逻辑，本批作废（git checkout 本批路径），报告文件名和差异行。
+  - 格式化工具对某个文件报语法错误：跳过该文件，报告给开发，不要手改代码。
+  - ast-compare 报 AST CHANGED：说明格式化工具改了逻辑，本批作废（git checkout 本批路径），报告文件名、
+    差异行和造成差异的规则（php-cs-fixer 可用 --rules='{"规则名":true}' 单条重跑定位）。
+    不要通过忽略文件或放宽 AST 检查来绕过。
   - 前端构建或渲染测试失败：本批作废，报告失败的文件和错误。

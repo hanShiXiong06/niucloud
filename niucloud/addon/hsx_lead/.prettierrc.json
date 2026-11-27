@@ -7,16 +7,5 @@
     "trailingComma": "none",
     "endOfLine": "auto",
     "vueIndentScriptAndStyle": false,
-    "htmlWhitespaceSensitivity": "strict",
-    "overrides": [
-        {
-            "files": "*.php",
-            "options": {
-                "phpVersion": "8.0",
-                "trailingCommaPHP": false,
-                "braceStyle": "per-cs",
-                "singleQuote": true
-            }
-        }
-    ]
+    "htmlWhitespaceSensitivity": "strict"
 }
